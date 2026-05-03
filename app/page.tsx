@@ -1,13 +1,20 @@
-export default function HomePage() {
+import { AuthBlock } from "@/components/landing/AuthBlock";
+import { ClosingBlock } from "@/components/landing/ClosingBlock";
+import { ContextBlock } from "@/components/landing/ContextBlock";
+import { HeroBlock } from "@/components/landing/HeroBlock";
+import { ModulesPreview } from "@/components/landing/ModulesPreview";
+
+export default function LandingPage() {
   return (
     <main
-      data-testid="home"
-      className="mx-auto flex min-h-screen max-w-3xl flex-col items-start justify-center gap-6 px-6 py-24"
+      data-testid="landing"
+      className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 px-4 pb-16 sm:px-8"
     >
-      <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">WAIA</h1>
-      <p className="text-lg text-muted-foreground">
-        Open AI infrastructure for humans, businesses and society.
-      </p>
+      <HeroBlock />
+      <AuthBlock />
+      <ContextBlock />
+      <ModulesPreview />
+      <ClosingBlock />
     </main>
   );
 }
