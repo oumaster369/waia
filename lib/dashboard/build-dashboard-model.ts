@@ -1,6 +1,7 @@
 import { computeReadinessResult } from "@/lib/readiness/readiness";
 import type { ReadinessInput } from "@/lib/readiness/types";
 
+import { buildIndicatorPresentation } from "@/lib/dashboard/indicator-ui";
 import type { DashboardClientProps } from "@/lib/dashboard/types";
 import type { TwinDialogueSignals } from "@/lib/dashboard/readiness-snapshot-default";
 
@@ -14,6 +15,7 @@ export function buildDashboardViewModel(
     identityLabel,
     hasMeaningfulExchange: twinSignals.hasMeaningfulExchange,
     indicators: r.indicators,
+    indicatorPresentation: buildIndicatorPresentation(r.indicators),
     totalCompletionPercent: r.totalCompletionPercent,
     diaryTabUnlocked: r.diaryTabUnlocked,
     societyTabUnlocked: r.societyTabUnlocked,

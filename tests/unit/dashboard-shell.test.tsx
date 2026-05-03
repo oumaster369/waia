@@ -81,6 +81,27 @@ describe("DashboardShell", () => {
     expect(screen.getByTestId("dashboard-twin-invitation-placeholder")).toBeInTheDocument();
   });
 
+  it("maps six indicators to data-threshold bands and shows deterministic hints", () => {
+    const model = buildTestModel({ indicators: [0, 33, 67, 100, 0, 100] });
+    render(<DashboardShell model={model} />);
+    expect(screen.getByTestId("dashboard-indicator-values")).toHaveAttribute("data-threshold", "low");
+    expect(screen.getByTestId("dashboard-indicator-behavior")).toHaveAttribute("data-threshold", "medium");
+    expect(screen.getByTestId("dashboard-indicator-thinking")).toHaveAttribute("data-threshold", "medium");
+    expect(screen.getByTestId("dashboard-indicator-emotions")).toHaveAttribute("data-threshold", "high");
+    expect(screen.getByTestId("dashboard-indicator-interests")).toHaveAttribute("data-threshold", "low");
+    expect(screen.getByTestId("dashboard-indicator-goals")).toHaveAttribute("data-threshold", "high");
+    expect(screen.getByText(/Share a guiding principle/i)).toBeInTheDocument();
+  });
+
+  it("updates Values indicator threshold when readiness vector rerenders", () => {
+    const low = buildTestModel({ indicators: [0, 33, 33, 33, 33, 33] });
+    const high = buildTestModel({ indicators: [100, 33, 33, 33, 33, 33] });
+    const { rerender } = render(<DashboardShell model={low} />);
+    expect(screen.getByTestId("dashboard-indicator-values")).toHaveAttribute("data-threshold", "low");
+    rerender(<DashboardShell model={high} />);
+    expect(screen.getByTestId("dashboard-indicator-values")).toHaveAttribute("data-threshold", "high");
+  });
+
   it("unlocks Diary when computeReadinessResult unlocks diary (total ≥ 60)", () => {
     const model = buildTestModel({
       indicators: [67, 67, 67, 67, 67, 33],
