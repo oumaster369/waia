@@ -1,5 +1,6 @@
 /**
- * Temporary default readiness + Twin dialogue signals until DEE-16 API / DEE-25 storage.
+ * Default readiness + Twin dialogue placeholder values used by dashboard-readiness-source (DEE-16)
+ * until authenticated persistence (DEE-25) replaces the snapshot loader.
  * Input layer is not mixed with dialogue formulas here.
  */
 import type { ReadinessInput } from "@/lib/readiness/types";
