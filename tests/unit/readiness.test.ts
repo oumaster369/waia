@@ -5,8 +5,8 @@ import {
   computeTotalCompletionPercent,
   parseIndicatorVector,
   type ReadinessInput,
+  ReadinessValidationError,
 } from "@/lib/readiness";
-import { ReadinessValidationError } from "@/lib/readiness/types";
 
 function input(partial: Omit<ReadinessInput, "socializationCompleted" | "finalStateMessageShown"> & Partial<Pick<ReadinessInput, "socializationCompleted" | "finalStateMessageShown">>): ReadinessInput {
   return {
