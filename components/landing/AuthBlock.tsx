@@ -2,16 +2,18 @@
 
 import * as React from "react";
 
+import { useRouter } from "next/navigation";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { isLikelyEmail, normalizeEmail } from "@/lib/auth/email";
 
 // Provisional placeholder until DEE-12 wires real auth and `design` finalises copy.
 const FAILURE_MESSAGE = "Не удалось войти. Попробуйте ещё раз.";
 
-// Mocked latency for the local-stub flow. No network is contacted; this exists
-// only so the VisitorIdle -> AuthInProgress -> AuthFailure transition is observable.
-const STUB_DELAY_MS = 800;
+/** OAuth buttons remain stub-only (DEE-10 scope). Short delay preserves observable state transitions. */
+const PROVIDER_STUB_MS = 0;
 
 type LandingState = "VisitorIdle" | "AuthInProgress" | "AuthFailure";
 
@@ -23,7 +25,78 @@ const PROVIDER_LABELS: Record<AuthProvider, string> = {
   telegram: "Войти через Telegram",
 };
 
+type AuthOkResponse = {
+  ok: true;
+  redirect: string;
+};
+
+function isAuthSuccess(json: unknown): json is AuthOkResponse {
+  if (typeof json !== "object" || json === null) return false;
+  const obj = json as Record<string, unknown>;
+  return obj.ok === true && typeof obj.redirect === "string";
+}
+
+type SessionEstablishResult =
+  | { outcome: "success"; redirectPath: string }
+  | { outcome: "failure" };
+
+async function establishSessionViaEmail(params: {
+  email: string;
+  password: string;
+}): Promise<SessionEstablishResult> {
+  const signIn = await fetch("/api/auth/sign-in", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: params.email, password: params.password }),
+  });
+
+  let signInJson: unknown;
+  try {
+    signInJson = await signIn.json();
+  } catch {
+    signInJson = null;
+  }
+
+  if (signIn.ok && isAuthSuccess(signInJson)) {
+    return {
+      outcome: "success",
+      redirectPath:
+        typeof (signInJson as AuthOkResponse).redirect === "string"
+          ? (signInJson as AuthOkResponse).redirect
+          : "/dashboard",
+    };
+  }
+
+  const signUp = await fetch("/api/auth/sign-up", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: params.email, password: params.password }),
+  });
+
+  let signUpJson: unknown;
+  try {
+    signUpJson = await signUp.json();
+  } catch {
+    signUpJson = null;
+  }
+
+  if (signUp.ok && isAuthSuccess(signUpJson)) {
+    return {
+      outcome: "success",
+      redirectPath:
+        typeof (signUpJson as AuthOkResponse).redirect === "string"
+          ? (signUpJson as AuthOkResponse).redirect
+          : "/dashboard",
+    };
+  }
+
+  return { outcome: "failure" };
+}
+
 export function AuthBlock() {
+  const router = useRouter();
   const [identity, setIdentity] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [status, setStatus] = React.useState<LandingState>("VisitorIdle");
@@ -37,35 +110,59 @@ export function AuthBlock() {
     };
   }, []);
 
-  const beginStubbedSubmission = React.useCallback(() => {
-    setStatus("AuthInProgress");
+  const resetProviderStubTimer = React.useCallback(() => {
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
-    }
-    timerRef.current = setTimeout(() => {
-      setPassword("");
-      setStatus("AuthFailure");
       timerRef.current = null;
-    }, STUB_DELAY_MS);
+    }
   }, []);
 
+  const finishProviderStub = React.useCallback(() => {
+    setPassword("");
+    setStatus("AuthFailure");
+    timerRef.current = null;
+  }, []);
+
+  const beginOAuthStub = React.useCallback(() => {
+    setStatus("AuthInProgress");
+    resetProviderStubTimer();
+    timerRef.current = setTimeout(finishProviderStub, PROVIDER_STUB_MS);
+  }, [finishProviderStub, resetProviderStubTimer]);
+
   const handleSubmit = React.useCallback(
-    (event: React.FormEvent<HTMLFormElement>) => {
+    async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (status === "AuthInProgress") {
         return;
       }
-      beginStubbedSubmission();
-    },
-    [status, beginStubbedSubmission],
+      const emailNorm = normalizeEmail(identity);
+      if (!isLikelyEmail(emailNorm)) {
+        setStatus("AuthFailure");
+        return;
+      }
+      setStatus("AuthInProgress");
+      try {
+        const result = await establishSessionViaEmail({ email: emailNorm, password });
+        if (result.outcome === "success") {
+          router.replace(result.redirectPath || "/dashboard");
+          return;
+        }
+
+        setPassword("");
+        setStatus("AuthFailure");
+      } catch {
+        setPassword("");
+        setStatus("AuthFailure");
+      }    },
+    [identity, password, router, status],
   );
 
   const handleProviderClick = React.useCallback(() => {
     if (status === "AuthInProgress") {
       return;
     }
-    beginStubbedSubmission();
-  }, [status, beginStubbedSubmission]);
+    beginOAuthStub();
+  }, [beginOAuthStub, status]);
 
   const isLoading = status === "AuthInProgress";
   const hasError = status === "AuthFailure";
