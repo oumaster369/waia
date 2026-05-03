@@ -1,20 +1,14 @@
-import type { DashboardShellDemoSnapshot, ModeId } from "@/components/dashboard/types";
+import type { DashboardClientProps } from "@/lib/dashboard/types";
+import type { ModeId } from "@/components/dashboard/types";
 
 export type DashboardDialogueAreaProps = {
-  snapshot: DashboardShellDemoSnapshot;
+  model: DashboardClientProps;
   selectedMode: ModeId;
 };
 
-export function DashboardDialogueArea({ snapshot, selectedMode }: DashboardDialogueAreaProps) {
-  const diaryUnlocked = snapshot.totalCompletionPercent >= 60;
-  const societyUnlocked = snapshot.socializationCompleted;
-  const readyForSocialization =
-    snapshot.totalCompletionPercent === 100 && !snapshot.socializationCompleted;
-
-  const showFinalBannerPlaceholder =
-    snapshot.totalCompletionPercent === 100 &&
-    snapshot.socializationCompleted &&
-    !snapshot.finalStateMessageShown;
+export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogueAreaProps) {
+  const { diaryTabUnlocked, societyTabUnlocked, readyForSocialization, showFinalTwinCompletionState } =
+    model;
 
   const lockedBanner = (
     <p data-testid="dashboard-workspace-locked-note" className="text-muted-foreground text-sm">
@@ -23,7 +17,7 @@ export function DashboardDialogueArea({ snapshot, selectedMode }: DashboardDialo
   );
 
   if (selectedMode === "diary") {
-    if (!diaryUnlocked) {
+    if (!diaryTabUnlocked) {
       return (
         <section data-testid="dashboard-dialogue-area" className="flex flex-1 flex-col p-6">
           {lockedBanner}
@@ -43,7 +37,7 @@ export function DashboardDialogueArea({ snapshot, selectedMode }: DashboardDialo
   }
 
   if (selectedMode === "society") {
-    if (!societyUnlocked) {
+    if (!societyTabUnlocked) {
       return (
         <section data-testid="dashboard-dialogue-area" className="flex flex-1 flex-col p-6">
           {lockedBanner}
@@ -62,7 +56,7 @@ export function DashboardDialogueArea({ snapshot, selectedMode }: DashboardDialo
     );
   }
 
-  if (!snapshot.hasMeaningfulExchange) {
+  if (!model.hasMeaningfulExchange) {
     return (
       <section
         data-testid="dashboard-dialogue-area"
@@ -100,7 +94,7 @@ export function DashboardDialogueArea({ snapshot, selectedMode }: DashboardDialo
     );
   }
 
-  if (snapshot.socializationCompleted && snapshot.finalStateMessageShown) {
+  if (model.socializationCompleted && model.finalStateMessageShown) {
     return (
       <section
         data-testid="dashboard-dialogue-area"
@@ -112,7 +106,7 @@ export function DashboardDialogueArea({ snapshot, selectedMode }: DashboardDialo
     );
   }
 
-  if (snapshot.socializationCompleted) {
+  if (model.socializationCompleted) {
     return (
       <section
         data-testid="dashboard-dialogue-area"
@@ -120,7 +114,7 @@ export function DashboardDialogueArea({ snapshot, selectedMode }: DashboardDialo
         aria-label="Twin dialogue after Socialization before final flag"
       >
         <div>Twin dialogue workspace after successful Socialization (stub).</div>
-        {showFinalBannerPlaceholder && (
+        {showFinalTwinCompletionState && (
           <div
             data-testid="dashboard-final-message-placeholder"
             className="rounded-xl border border-border bg-accent/40 p-4 text-sm"
