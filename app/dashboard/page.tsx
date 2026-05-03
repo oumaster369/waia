@@ -3,22 +3,20 @@ import type { Metadata } from "next";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { buildDashboardViewModel } from "@/lib/dashboard/build-dashboard-model";
-import {
-  DEFAULT_DASHBOARD_IDENTITY_LABEL,
-  DEFAULT_READINESS_INPUT,
-  DEFAULT_TWIN_DIALOGUE_SIGNALS,
-} from "@/lib/dashboard/readiness-snapshot-default";
+import { getDashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-source";
 
 export const metadata: Metadata = {
   title: "Dashboard",
   description: "AI-Twin dashboard workspace.",
 };
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  // Loads the same snapshot as GET /api/dashboard/readiness via getDashboardReadinessPayload (single server source).
+  const payload = await getDashboardReadinessPayload();
   const model = buildDashboardViewModel(
-    DEFAULT_READINESS_INPUT,
-    DEFAULT_TWIN_DIALOGUE_SIGNALS,
-    DEFAULT_DASHBOARD_IDENTITY_LABEL,
+    payload.readinessInput,
+    payload.twinSignals,
+    payload.identityLabel,
   );
 
   return (
