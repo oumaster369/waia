@@ -1,5 +1,6 @@
-import type { DashboardClientProps } from "@/lib/dashboard/types";
+import { TwinDialogueWorkspace } from "@/components/dashboard/twin-dialogue-workspace";
 import type { ModeId } from "@/components/dashboard/types";
+import type { DashboardClientProps } from "@/lib/dashboard/types";
 
 export type DashboardDialogueAreaProps = {
   model: DashboardClientProps;
@@ -28,7 +29,7 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
     return (
       <section
         data-testid="dashboard-dialogue-area"
-        className="flex flex-1 flex-col gap-4 p-6"
+        className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Diary workspace"
       >
         <p data-testid="dashboard-diary-placeholder">Diary workspace (stub — DEE-54).</p>
@@ -48,7 +49,7 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
     return (
       <section
         data-testid="dashboard-dialogue-area"
-        className="flex flex-1 flex-col gap-4 p-6"
+        className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Society workspace"
       >
         <p data-testid="dashboard-society-placeholder">Society workspace (stub — DEE-55).</p>
@@ -60,16 +61,10 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
     return (
       <section
         data-testid="dashboard-dialogue-area"
-        className="flex flex-1 flex-col gap-4 p-6"
+        className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Twin dialogue empty state"
       >
-        <div
-          data-testid="dashboard-twin-invitation-placeholder"
-          className="rounded-2xl border border-dashed border-border bg-muted/20 p-6 text-muted-foreground text-sm"
-        >
-          You have not started a dialogue yet. A system-authored invitation opens the Twin
-          conversation when chat is wired (DEE-20 / DEE-19).
-        </div>
+        <TwinDialogueWorkspace hasMeaningfulExchange={model.hasMeaningfulExchange} />
       </section>
     );
   }
@@ -78,12 +73,10 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
     return (
       <section
         data-testid="dashboard-dialogue-area"
-        className="flex flex-1 flex-col gap-4 p-6"
+        className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Twin dialogue with Socialization stub"
       >
-        <div data-testid="dashboard-twin-active-stub">
-          Twin dialogue workspace (stub — persisted history DEE-19).
-        </div>
+        <TwinDialogueWorkspace hasMeaningfulExchange={model.hasMeaningfulExchange} />
         <div
           data-testid="dashboard-socialization-placeholder"
           className="rounded-xl border border-border bg-accent/40 p-4 text-sm"
@@ -98,10 +91,10 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
     return (
       <section
         data-testid="dashboard-dialogue-area"
-        className="flex flex-1 flex-col gap-4 p-6"
+        className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Twin dialogue final steady state"
       >
-        <div>Twin dialogue — steady state after socialization (final message already shown).</div>
+        <TwinDialogueWorkspace hasMeaningfulExchange={model.hasMeaningfulExchange} />
       </section>
     );
   }
@@ -110,10 +103,10 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
     return (
       <section
         data-testid="dashboard-dialogue-area"
-        className="flex flex-1 flex-col gap-4 p-6"
+        className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Twin dialogue after Socialization before final flag"
       >
-        <div>Twin dialogue workspace after successful Socialization (stub).</div>
+        <TwinDialogueWorkspace hasMeaningfulExchange={model.hasMeaningfulExchange} />
         {showFinalTwinCompletionState && (
           <div
             data-testid="dashboard-final-message-placeholder"
@@ -129,12 +122,10 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
   return (
     <section
       data-testid="dashboard-dialogue-area"
-      className="flex flex-1 flex-col gap-4 p-6"
+      className="flex min-h-0 flex-1 flex-col gap-4 p-6"
       aria-label="Twin dialogue active state"
     >
-      <div data-testid="dashboard-twin-active-stub">
-        Twin dialogue workspace (stub — DEE-19).
-      </div>
+      <TwinDialogueWorkspace hasMeaningfulExchange={model.hasMeaningfulExchange} />
     </section>
   );
 }

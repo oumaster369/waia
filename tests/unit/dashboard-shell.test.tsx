@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
+import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/components/dashboard/twin-dialogue-workspace";
 import { buildDashboardViewModel } from "@/lib/dashboard/build-dashboard-model";
 import {
   DEFAULT_READINESS_INPUT,
@@ -79,6 +80,8 @@ describe("DashboardShell", () => {
 
     expect(screen.getByTestId("dashboard-dialogue-area")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-twin-invitation-placeholder")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-twin-message-list")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-twin-message-input")).toBeInTheDocument();
   });
 
   it("maps six indicators to data-threshold bands and shows deterministic hints", () => {
@@ -166,7 +169,28 @@ describe("DashboardShell", () => {
     expect(screen.getByTestId("dashboard-diary-placeholder")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("mode-tab-twin"));
-    expect(screen.getByTestId("dashboard-twin-active-stub")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-twin-dialogue-workspace")).toBeInTheDocument();
+  });
+
+  it("does not show empty Twin invitation when hasMeaningfulExchange is already true", () => {
+    const model = buildTestModel({}, { hasMeaningfulExchange: true });
+    render(<DashboardShell model={model} />);
+    expect(screen.queryByTestId("dashboard-twin-invitation-placeholder")).not.toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-twin-dialogue-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-twin-message-input")).toBeInTheDocument();
+  });
+
+  it("appends Twin stub assistant reply after the user submits a draft", () => {
+    const model = buildTestModel();
+    render(<DashboardShell model={model} />);
+    fireEvent.change(screen.getByTestId("dashboard-twin-message-input"), {
+      target: { value: "Hello twin" },
+    });
+    fireEvent.click(screen.getByTestId("dashboard-twin-send"));
+    expect(screen.getByText("Hello twin")).toBeInTheDocument();
+    expect(screen.getByText(TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE)).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-twin-msg-user-0")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-twin-msg-assistant-1")).toBeInTheDocument();
   });
 
   it("surfaces Final-state banner when showFinalTwinCompletionState from readiness result", () => {
