@@ -6,13 +6,42 @@ export const users = sqliteTable(
     id: text("id").primaryKey(),
     identityLabel: text("identity_label").notNull(),
     email: text("email").notNull(),
-    passwordHash: text("password_hash").notNull(),
+    /** Null for OAuth-only accounts (password sign-in not available). */
+    passwordHash: text("password_hash"),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
       .$defaultFn(() => new Date()),
   },
   (t) => [uniqueIndex("users_email_unique").on(t.email)],
 );
+
+export const oauthProviderEnum = ["google", "apple", "telegram"] as const;
+export type OauthProvider = (typeof oauthProviderEnum)[number];
+
+export const oauthAccounts = sqliteTable(
+  "oauth_accounts",
+  {
+    provider: text("provider", {
+      enum: [...oauthProviderEnum],
+    }).notNull(),
+    providerUserId: text("provider_user_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("oauth_accounts_provider_subject_unique").on(t.provider, t.providerUserId)],
+);
+
+/** OAuth CSRF state + PKCE verifier (nullable for Telegram). Deleted after callback. */
+export const oauthStates = sqliteTable("oauth_states", {
+  state: text("state").primaryKey(),
+  provider: text("provider", { enum: [...oauthProviderEnum] }).notNull(),
+  codeVerifier: text("code_verifier"),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+});
 
 export const sessions = sqliteTable(
   "sessions",

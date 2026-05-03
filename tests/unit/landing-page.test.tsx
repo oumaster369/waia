@@ -1,11 +1,12 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { AuthBlock } from "@/components/landing/AuthBlock";
 import { LandingPageContent } from "@/components/landing/landing-page-content";
 
-const { mockReplace } = vi.hoisted(() => ({
+const { mockReplace, mockLocationAssign } = vi.hoisted(() => ({
   mockReplace: vi.fn(),
+  mockLocationAssign: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -182,30 +183,36 @@ describe("AuthBlock state machine", () => {
     });
   });
 
-  describe("OAuth stub", () => {
+  describe("OAuth start navigation", () => {
     beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it("transitions to AuthInProgress when an OAuth provider button is clicked", () => {
-      render(<AuthBlock />);
-      fireEvent.click(screen.getByTestId("landing-auth-provider-telegram"));
-      const block = screen.getByTestId("landing-auth");
-      expect(block.dataset.status).toBe("AuthInProgress");
-      expect(screen.getByTestId("landing-auth-provider-telegram")).toBeDisabled();
-    });
-
-    it("falls through to AuthFailure after OAuth stub timer", () => {
-      render(<AuthBlock />);
-      fireEvent.click(screen.getByTestId("landing-auth-provider-telegram"));
-      act(() => {
-        vi.runAllTimers();
+      mockLocationAssign.mockClear();
+      vi.stubGlobal("location", {
+        assign: mockLocationAssign,
+        replace: vi.fn(),
+        reload: vi.fn(),
+        href: "http://localhost/",
       });
-      expect(screen.getByTestId("landing-auth").dataset.status).toBe("AuthFailure");
+    });
+
+    it("assigns Google SSO to the WAIA OAuth start route", () => {
+      render(<AuthBlock />);
+      fireEvent.click(screen.getByTestId("landing-auth-provider-google"));
+      expect(screen.getByTestId("landing-auth").dataset.status).toBe("AuthInProgress");
+      expect(mockLocationAssign).toHaveBeenCalledWith("/api/auth/oauth/google/start");
+    });
+
+    it("assigns Apple SSO to the WAIA OAuth start route", () => {
+      render(<AuthBlock />);
+      fireEvent.click(screen.getByTestId("landing-auth-provider-apple"));
+      expect(screen.getByTestId("landing-auth").dataset.status).toBe("AuthInProgress");
+      expect(mockLocationAssign).toHaveBeenCalledWith("/api/auth/oauth/apple/start");
+    });
+
+    it("assigns Telegram SSO to the WAIA OAuth start route", () => {
+      render(<AuthBlock />);
+      fireEvent.click(screen.getByTestId("landing-auth-provider-telegram"));
+      expect(screen.getByTestId("landing-auth").dataset.status).toBe("AuthInProgress");
+      expect(mockLocationAssign).toHaveBeenCalledWith("/api/auth/oauth/telegram/start");
     });
   });
 });
