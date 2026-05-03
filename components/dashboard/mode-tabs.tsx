@@ -7,20 +7,20 @@ import type { ModeId } from "@/components/dashboard/types";
 export type DashboardModeTabsProps = {
   selectedMode: ModeId;
   onSelectMode: (mode: ModeId) => void;
-  diaryLocked: boolean;
-  societyLocked: boolean;
+  diaryTabUnlocked: boolean;
+  societyTabUnlocked: boolean;
 };
 
 export function DashboardModeTabs({
   selectedMode,
   onSelectMode,
-  diaryLocked,
-  societyLocked,
+  diaryTabUnlocked,
+  societyTabUnlocked,
 }: DashboardModeTabsProps) {
   const tabs: { id: ModeId; label: string; locked: boolean }[] = [
     { id: "twin", label: "Twin", locked: false },
-    { id: "diary", label: "Diary", locked: diaryLocked },
-    { id: "society", label: "Society", locked: societyLocked },
+    { id: "diary", label: "Diary", locked: !diaryTabUnlocked },
+    { id: "society", label: "Society", locked: !societyTabUnlocked },
   ];
 
   return (
@@ -43,6 +43,7 @@ export function DashboardModeTabs({
           <Button
             key={tab.id}
             data-testid={`mode-tab-${tab.id}`}
+            data-state={tab.locked ? "locked" : "unlocked"}
             type="button"
             role="tab"
             aria-selected={isSelected}
@@ -51,7 +52,11 @@ export function DashboardModeTabs({
             variant={isSelected ? "secondary" : "ghost"}
             size="sm"
             onClick={onClick}
-            className={tab.locked ? "opacity-70" : undefined}
+            className={
+              tab.locked
+                ? "cursor-not-allowed opacity-60 text-muted-foreground"
+                : undefined
+            }
           >
             {tab.label}
             {tab.locked ? " (locked)" : ""}

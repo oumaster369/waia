@@ -1,11 +1,11 @@
-import type { DashboardShellDemoSnapshot } from "@/components/dashboard/types";
 import { INDICATOR_KEYS } from "@/components/dashboard/types";
 
 export type DashboardTopBlockProps = {
-  snapshot: Pick<DashboardShellDemoSnapshot, "indicatorPercents" | "totalCompletionPercent">;
+  indicators: readonly [number, number, number, number, number, number];
+  totalCompletionPercent: number;
 };
 
-export function DashboardTopBlock({ snapshot }: DashboardTopBlockProps) {
+export function DashboardTopBlock({ indicators, totalCompletionPercent }: DashboardTopBlockProps) {
   return (
     <header
       data-testid="dashboard-top-block"
@@ -23,7 +23,7 @@ export function DashboardTopBlock({ snapshot }: DashboardTopBlockProps) {
           {INDICATOR_KEYS.map((key, idx) => (
             <div key={key} data-testid={`dashboard-indicator-${key.toLowerCase()}`}>
               <p className="text-muted-foreground text-xs">{key}</p>
-              <p className="font-medium tabular-nums">{snapshot.indicatorPercents[idx]}%</p>
+              <p className="font-medium tabular-nums">{indicators[idx]}%</p>
             </div>
           ))}
           <div
@@ -33,9 +33,7 @@ export function DashboardTopBlock({ snapshot }: DashboardTopBlockProps) {
             <p className="text-muted-foreground text-xs uppercase tracking-wide">
               Total readiness
             </p>
-            <p className="font-semibold text-lg tabular-nums">
-              {snapshot.totalCompletionPercent}%
-            </p>
+            <p className="font-semibold text-lg tabular-nums">{totalCompletionPercent}%</p>
           </div>
         </div>
       </div>
