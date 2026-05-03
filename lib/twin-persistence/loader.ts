@@ -1,0 +1,213 @@
+import "server-only";
+
+import {
+  twinDialogueTurns,
+  twinProfiles,
+  twinReadinessState,
+  users,
+} from "@/db/schema";
+import type { DashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-api.types";
+import {
+  DEFAULT_DASHBOARD_IDENTITY_LABEL,
+  DEFAULT_READINESS_INPUT,
+  type TwinDialogueSignals,
+} from "@/lib/dashboard/readiness-snapshot-default";
+import { NULL_HINTS_BY_INDICATOR } from "@/lib/dashboard/null-hints";
+import { DEV_TWIN_PROFILE_ID, DEV_USER_ID } from "@/lib/twin-persistence/constants";
+import { parseIndicatorVector } from "@/lib/readiness/readiness";
+import type { ReadinessInput } from "@/lib/readiness/types";
+import { and, eq, sql } from "drizzle-orm";
+import type * as WaiaSchema from "@/db/schema";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+
+export type WaiaSqliteDb = BetterSQLite3Database<typeof WaiaSchema>;
+
+/** Idempotent seed: one row per dev user/twin/readiness projection. */
+export function seedDevTwinIfNeeded(db: WaiaSqliteDb): void {
+  const existing = db.select({ id: users.id }).from(users).where(eq(users.id, DEV_USER_ID)).get();
+  if (!existing) {
+    db.insert(users).values({
+      id: DEV_USER_ID,
+      identityLabel: DEFAULT_DASHBOARD_IDENTITY_LABEL,
+    }).run();
+    db.insert(twinProfiles).values({
+      id: DEV_TWIN_PROFILE_ID,
+      userId: DEV_USER_ID,
+    }).run();
+    db.insert(twinReadinessState)
+      .values({
+        twinProfileId: DEV_TWIN_PROFILE_ID,
+        indicatorsJson: JSON.stringify(DEFAULT_READINESS_INPUT.indicators),
+        socializationCompleted: DEFAULT_READINESS_INPUT.socializationCompleted,
+        finalStateMessageShown: DEFAULT_READINESS_INPUT.finalStateMessageShown,
+      })
+      .run();
+  } else {
+    const twinRow = db
+      .select({ id: twinProfiles.id })
+      .from(twinProfiles)
+      .where(eq(twinProfiles.userId, DEV_USER_ID))
+      .get();
+    if (!twinRow) {
+      db.insert(twinProfiles).values({
+        id: DEV_TWIN_PROFILE_ID,
+        userId: DEV_USER_ID,
+      }).run();
+    }
+    const stateRow = db
+      .select({ twinProfileId: twinReadinessState.twinProfileId })
+      .from(twinReadinessState)
+      .where(eq(twinReadinessState.twinProfileId, DEV_TWIN_PROFILE_ID))
+      .get();
+    if (!stateRow) {
+      db.insert(twinReadinessState)
+        .values({
+          twinProfileId: DEV_TWIN_PROFILE_ID,
+          indicatorsJson: JSON.stringify(DEFAULT_READINESS_INPUT.indicators),
+          socializationCompleted: DEFAULT_READINESS_INPUT.socializationCompleted,
+          finalStateMessageShown: DEFAULT_READINESS_INPUT.finalStateMessageShown,
+        })
+        .run();
+    }
+  }
+}
+
+function rowToReadinessInput(
+  indicatorsJson: string,
+  socializationCompleted: boolean,
+  finalStateMessageShown: boolean,
+): ReadinessInput {
+  const parsed = JSON.parse(indicatorsJson) as unknown;
+  if (!Array.isArray(parsed) || parsed.length !== 6) {
+    throw new ReadinessSerializationError(
+      `indicators_json must be a JSON array of length 6, got ${JSON.stringify(parsed)}.`,
+    );
+  }
+  const indicators = parseIndicatorVector(parsed as Iterable<number>);
+  return {
+    indicators,
+    socializationCompleted,
+    finalStateMessageShown,
+  };
+}
+
+export class ReadinessSerializationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReadinessSerializationError";
+  }
+}
+
+/** Append one dialogue row; deterministic sequence via max(sequence)+1 (sync transaction). */
+export function appendTwinDialogueTurn(
+  db: WaiaSqliteDb,
+  params: {
+    twinProfileId: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    idempotencyKey?: string | null;
+  },
+): void {
+  const id = crypto.randomUUID();
+  db.transaction((tx) => {
+    if (params.idempotencyKey != null && params.idempotencyKey !== "") {
+      const existing = tx
+        .select({ id: twinDialogueTurns.id })
+        .from(twinDialogueTurns)
+        .where(
+          and(
+            eq(twinDialogueTurns.twinProfileId, params.twinProfileId),
+            eq(twinDialogueTurns.idempotencyKey, params.idempotencyKey),
+          ),
+        )
+        .get();
+      if (existing) {
+        return;
+      }
+    }
+
+    const [agg] = tx
+      .select({
+        maxSeq: sql<number>`coalesce(max(${twinDialogueTurns.sequence}), 0)`.mapWith(Number),
+      })
+      .from(twinDialogueTurns)
+      .where(eq(twinDialogueTurns.twinProfileId, params.twinProfileId))
+      .all();
+    const nextSeq = Number(agg?.maxSeq ?? 0) + 1;
+
+    tx.insert(twinDialogueTurns)
+      .values({
+        id,
+        twinProfileId: params.twinProfileId,
+        sequence: nextSeq,
+        role: params.role,
+        content: params.content,
+        idempotencyKey: params.idempotencyKey ?? null,
+      })
+      .run();
+  });
+}
+
+export function countUserDialogueTurns(db: WaiaSqliteDb, twinProfileId: string): number {
+  const [row] = db
+    .select({ c: sql<number>`count(*)`.mapWith(Number) })
+    .from(twinDialogueTurns)
+    .where(
+      and(eq(twinDialogueTurns.twinProfileId, twinProfileId), eq(twinDialogueTurns.role, "user")),
+    )
+    .all();
+  return row?.c ?? 0;
+}
+
+export function listTwinDialogueTurnsChronological(db: WaiaSqliteDb, twinProfileId: string) {
+  return db
+    .select({
+      sequence: twinDialogueTurns.sequence,
+      role: twinDialogueTurns.role,
+      content: twinDialogueTurns.content,
+      idempotencyKey: twinDialogueTurns.idempotencyKey,
+      createdAt: twinDialogueTurns.createdAt,
+    })
+    .from(twinDialogueTurns)
+    .where(eq(twinDialogueTurns.twinProfileId, twinProfileId))
+    .orderBy(twinDialogueTurns.sequence)
+    .all();
+}
+
+export function loadDashboardReadinessPayloadFromDb(db: WaiaSqliteDb): DashboardReadinessPayload {
+  seedDevTwinIfNeeded(db);
+
+  const row = db
+    .select({
+      indicatorsJson: twinReadinessState.indicatorsJson,
+      socializationCompleted: twinReadinessState.socializationCompleted,
+      finalStateMessageShown: twinReadinessState.finalStateMessageShown,
+      identityLabel: users.identityLabel,
+    })
+    .from(users)
+    .innerJoin(twinProfiles, eq(twinProfiles.userId, users.id))
+    .innerJoin(twinReadinessState, eq(twinReadinessState.twinProfileId, twinProfiles.id))
+    .where(eq(users.id, DEV_USER_ID))
+    .get();
+
+  if (!row) {
+    throw new Error("[waia] dev twin readiness row missing after seed");
+  }
+
+  const readinessInput = rowToReadinessInput(
+    row.indicatorsJson,
+    row.socializationCompleted,
+    row.finalStateMessageShown,
+  );
+  const userTurnCount = countUserDialogueTurns(db, DEV_TWIN_PROFILE_ID);
+  const twinSignals: TwinDialogueSignals = {
+    hasMeaningfulExchange: userTurnCount > 0,
+  };
+
+  return {
+    readinessInput,
+    twinSignals,
+    identityLabel: row.identityLabel,
+    hintsByIndicator: NULL_HINTS_BY_INDICATOR,
+  };
+}

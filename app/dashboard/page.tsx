@@ -5,6 +5,8 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { buildDashboardViewModel } from "@/lib/dashboard/build-dashboard-model";
 import { getDashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-source";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Dashboard",
   description: "AI-Twin dashboard workspace.",

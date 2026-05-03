@@ -49,3 +49,6 @@ yarn-error.log*
 
 # Cloudflare Pages local
 .wrangler/
+
+# Local SQLite (WAIA persistence)
+.data/
