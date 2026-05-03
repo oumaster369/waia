@@ -1,0 +1,39 @@
+---
+description: TypeScript / React / Next code style for WAIA
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# Code style
+
+## TypeScript
+
+- `strict: true` always. No `any` unless paired with a `// eslint-disable-next-line` and a comment explaining why.
+- Prefer `type` for unions and `interface` for object contracts that may be extended.
+- Use the `@/*` import alias for project-internal imports (`@/components/ui/button`, `@/lib/utils`).
+
+## React / Next
+
+- Server Components by default. Add `"use client"` only when you need state, effects, or browser APIs.
+- Prefer composition (small components) over prop explosions.
+- Co-locate files: `app/<route>/page.tsx` + `app/<route>/_components/`.
+- Use `<Link>` from `next/link` for in-app navigation, `<Image>` from `next/image` for images.
+
+## Styling
+
+- Tailwind v4 utility classes — no separate CSS files except `app/globals.css`.
+- Use `cn()` from `@/lib/utils` to merge classes:
+
+  ```tsx
+  import { cn } from "@/lib/utils";
+
+  <button className={cn("px-4 py-2", isActive && "bg-primary text-primary-foreground")} />
+  ```
+
+- Prefer shadcn primitives (`@/components/ui/*`) over hand-rolled equivalents.
+
+## Anti-patterns
+
+- No default exports for utilities — only for Next route files (`page.tsx`, `layout.tsx`, etc.).
+- No inline `style={{}}` unless the value is dynamic and can't be expressed in Tailwind.
+- No `useEffect` for fetching in Server Components — fetch directly.

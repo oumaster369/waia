@@ -1,0 +1,33 @@
+---
+description: Git workflow agents must follow
+alwaysApply: true
+---
+
+# Git workflow (mandatory)
+
+## Branches
+
+- `main` — production, deployed to Cloudflare Pages by the user. **Never push directly.**
+- `dev` — integration, protected. **Never push directly.**
+- `feature/<scope>-<slug>` — all agent work happens here.
+
+## Required steps for every change
+
+1. `git checkout dev && git pull origin dev`
+2. `git checkout -b feature/<scope>-<slug>`
+3. Implement, run `pnpm lint && pnpm typecheck && pnpm test -- --run`
+4. `git add -A && git commit -m "<conventional-commits-message>"`
+5. `git push -u origin feature/<scope>-<slug>`
+6. `gh pr create --base dev --fill` using the PR template
+
+## Conventional Commits
+
+Use `type(scope): subject` — e.g. `feat(home): add hero section`, `fix(lint): drop unused import`, `chore(ci): bump node to 22`.
+
+## Hard rules
+
+- If you are unsure — STOP and ask before any git operation.
+- Never run `git push --force`, `git reset --hard origin/...`, or rewrite history on shared branches.
+- Never commit `.env*` files, secrets, or anything matching `*.key`/`*.pem`.
+- Never check in `node_modules/`, `.next/`, `playwright-report/`, `test-results/`.
+- One feature = one branch = one PR. Don't pile unrelated work into the same PR.

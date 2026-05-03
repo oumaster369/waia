@@ -1,0 +1,35 @@
+---
+description: WAIA project overview and tech stack
+alwaysApply: true
+---
+
+# WAIA — project overview
+
+WAIA = "Open AI infrastructure for humans, businesses and society."
+
+## Tech stack
+
+- **Framework**: Next.js 16 App Router, Turbopack, RSC by default
+- **Language**: TypeScript (strict)
+- **UI**: Tailwind CSS v4, shadcn/ui (`components/ui/`), Lucide icons
+- **State / animation** (when needed): React 19 hooks, framer-motion (if added)
+- **Package manager**: pnpm (with `node-linker=hoisted` — required by Tailwind v4 + shadcn)
+- **Testing**: Vitest + @testing-library/react (unit, `tests/unit/`), Playwright (e2e, `tests/e2e/`)
+- **Lint / format**: ESLint 9 flat config, Prettier
+- **Deploy**: Cloudflare Pages from `main` (manual `dev` -> `main` merge by the user)
+
+## Repo layout
+
+- `app/` — Next.js routes
+- `components/` — shared React components, `components/ui/` for shadcn primitives
+- `lib/` — pure utilities (`lib/utils.ts` exports `cn()`)
+- `tests/unit/`, `tests/e2e/` — tests
+- `docs/` — human-readable documentation
+- `.cursor/` — agent rules, hooks, commands, MCP (committed)
+- `.github/` — CI, PR/issue templates, CODEOWNERS
+
+## Source of truth
+
+- Workflow: `docs/DEVELOPMENT_WORKFLOW.md`
+- Agent contract: `AGENTS.md` (root)
+- Plan files agents produce: `.cursor/plans/` (gitignored)
