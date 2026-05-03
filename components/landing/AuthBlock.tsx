@@ -6,16 +6,21 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { isLikelyEmail, normalizeEmail } from "@/lib/auth/email";
+import { establishEmailAuthSession } from "@/lib/landing/email-auth-session";
+import { cn } from "@/lib/utils";
 
-// Provisional placeholder until DEE-12 wires real auth and `design` finalises copy.
+/** Email/password uses `/api/auth/*` (DEE-10). Secondary providers stay stubbed until DEE-11 OAuth initiation exists. */
 const FAILURE_MESSAGE = "Не удалось войти. Попробуйте ещё раз.";
 
-/** OAuth buttons remain stub-only (DEE-10 scope). Short delay preserves observable state transitions. */
+/** Keeps deterministic AuthInProgress -> AuthFailure OAuth stub observable in tests until DEE-11. */
 const PROVIDER_STUB_MS = 0;
 
-type LandingState = "VisitorIdle" | "AuthInProgress" | "AuthFailure";
+export type LandingAuthState =
+  | "VisitorIdle"
+  | "AuthInProgress"
+  | "AuthFailure"
+  | "AuthenticatedRedirect";
 
 type AuthProvider = "google" | "apple" | "telegram";
 
@@ -25,81 +30,11 @@ const PROVIDER_LABELS: Record<AuthProvider, string> = {
   telegram: "Войти через Telegram",
 };
 
-type AuthOkResponse = {
-  ok: true;
-  redirect: string;
-};
-
-function isAuthSuccess(json: unknown): json is AuthOkResponse {
-  if (typeof json !== "object" || json === null) return false;
-  const obj = json as Record<string, unknown>;
-  return obj.ok === true && typeof obj.redirect === "string";
-}
-
-type SessionEstablishResult =
-  | { outcome: "success"; redirectPath: string }
-  | { outcome: "failure" };
-
-async function establishSessionViaEmail(params: {
-  email: string;
-  password: string;
-}): Promise<SessionEstablishResult> {
-  const signIn = await fetch("/api/auth/sign-in", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: params.email, password: params.password }),
-  });
-
-  let signInJson: unknown;
-  try {
-    signInJson = await signIn.json();
-  } catch {
-    signInJson = null;
-  }
-
-  if (signIn.ok && isAuthSuccess(signInJson)) {
-    return {
-      outcome: "success",
-      redirectPath:
-        typeof (signInJson as AuthOkResponse).redirect === "string"
-          ? (signInJson as AuthOkResponse).redirect
-          : "/dashboard",
-    };
-  }
-
-  const signUp = await fetch("/api/auth/sign-up", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: params.email, password: params.password }),
-  });
-
-  let signUpJson: unknown;
-  try {
-    signUpJson = await signUp.json();
-  } catch {
-    signUpJson = null;
-  }
-
-  if (signUp.ok && isAuthSuccess(signUpJson)) {
-    return {
-      outcome: "success",
-      redirectPath:
-        typeof (signUpJson as AuthOkResponse).redirect === "string"
-          ? (signUpJson as AuthOkResponse).redirect
-          : "/dashboard",
-    };
-  }
-
-  return { outcome: "failure" };
-}
-
 export function AuthBlock() {
   const router = useRouter();
   const [identity, setIdentity] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [status, setStatus] = React.useState<LandingState>("VisitorIdle");
+  const [status, setStatus] = React.useState<LandingAuthState>("VisitorIdle");
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
@@ -132,7 +67,7 @@ export function AuthBlock() {
   const handleSubmit = React.useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (status === "AuthInProgress") {
+      if (status === "AuthInProgress" || status === "AuthenticatedRedirect") {
         return;
       }
       const emailNorm = normalizeEmail(identity);
@@ -142,9 +77,13 @@ export function AuthBlock() {
       }
       setStatus("AuthInProgress");
       try {
-        const result = await establishSessionViaEmail({ email: emailNorm, password });
+        const result = await establishEmailAuthSession({ email: emailNorm, password });
         if (result.outcome === "success") {
-          router.replace(result.redirectPath || "/dashboard");
+          const path = result.redirectPath || "/dashboard";
+          setStatus("AuthenticatedRedirect");
+          queueMicrotask(() => {
+            router.replace(path);
+          });
           return;
         }
 
@@ -153,18 +92,21 @@ export function AuthBlock() {
       } catch {
         setPassword("");
         setStatus("AuthFailure");
-      }    },
+      }
+    },
     [identity, password, router, status],
   );
 
   const handleProviderClick = React.useCallback(() => {
-    if (status === "AuthInProgress") {
+    if (status === "AuthInProgress" || status === "AuthenticatedRedirect") {
       return;
     }
     beginOAuthStub();
   }, [beginOAuthStub, status]);
 
   const isLoading = status === "AuthInProgress";
+  const isRedirectTerminal = status === "AuthenticatedRedirect";
+  const interactionLocked = isLoading || isRedirectTerminal;
   const hasError = status === "AuthFailure";
 
   return (
@@ -185,7 +127,7 @@ export function AuthBlock() {
             autoComplete="username"
             value={identity}
             onChange={(event) => setIdentity(event.target.value)}
-            disabled={isLoading}
+            disabled={interactionLocked}
             aria-invalid={hasError || undefined}
           />
         </label>
@@ -198,7 +140,7 @@ export function AuthBlock() {
             autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            disabled={isLoading}
+            disabled={interactionLocked}
             aria-invalid={hasError || undefined}
           />
         </label>
@@ -206,8 +148,8 @@ export function AuthBlock() {
           data-testid="landing-auth-submit"
           type="submit"
           size="lg"
-          disabled={isLoading}
-          aria-disabled={isLoading || undefined}
+          disabled={interactionLocked}
+          aria-disabled={interactionLocked || undefined}
           className={cn("mt-2 w-full", isLoading && "cursor-progress")}
         >
           {isLoading ? "…" : "Войти"}
@@ -236,8 +178,8 @@ export function AuthBlock() {
             variant="outline"
             size="lg"
             onClick={handleProviderClick}
-            disabled={isLoading}
-            aria-disabled={isLoading || undefined}
+            disabled={interactionLocked}
+            aria-disabled={interactionLocked || undefined}
             className="w-full"
           >
             {PROVIDER_LABELS[provider]}

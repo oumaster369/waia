@@ -151,7 +151,7 @@ describe("AuthBlock state machine", () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it("redirects to dashboard when sign-in succeeds", async () => {
+  it("transitions VisitorIdle -> AuthInProgress -> AuthenticatedRedirect then navigates when sign-in succeeds", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -170,6 +170,12 @@ describe("AuthBlock state machine", () => {
       target: { value: "password12" },
     });
     fireEvent.click(screen.getByTestId("landing-auth-submit"));
+
+    const block = screen.getByTestId("landing-auth");
+
+    await waitFor(() => {
+      expect(block.dataset.status).toBe("AuthenticatedRedirect");
+    });
 
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith("/dashboard");
