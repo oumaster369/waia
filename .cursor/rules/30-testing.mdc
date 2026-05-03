@@ -1,0 +1,33 @@
+---
+description: Testing policy
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# Testing policy
+
+## What to test
+
+- **Unit (Vitest, `tests/unit/`)**: pure functions in `lib/`, presentational components, hooks.
+- **E2E (Playwright, `tests/e2e/`)**: user-visible flows — navigation, forms, auth, important interactions.
+
+## What NOT to test
+
+- Trivial wrappers around `cn()` or shadcn primitives.
+- Third-party library internals.
+
+## Conventions
+
+- File naming: `<subject>.test.ts(x)` for unit, `<flow>.spec.ts` for e2e.
+- Use `screen.getByRole(...)` / `getByLabelText(...)` — accessibility-first selectors.
+- Add `data-testid` only as a last resort and prefix with the feature: `data-testid="home"`.
+- Keep tests deterministic — no real network calls, mock at the boundary if needed.
+- Don't snapshot-test entire trees — assert behavior, not markup.
+
+## Before opening a PR
+
+```bash
+pnpm lint && pnpm typecheck && pnpm test -- --run && pnpm build
+```
+
+E2E (`pnpm test:e2e`) is required when the change touches `app/**`, `components/**`, or affects user-visible behavior.

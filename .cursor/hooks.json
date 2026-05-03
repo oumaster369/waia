@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/guard-shell.sh",
+        "failClosed": true,
+        "timeout": 5
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/format-edit.sh",
+        "matcher": "Write",
+        "timeout": 30
+      }
+    ],
+    "stop": [
+      {
+        "command": ".cursor/hooks/log-event.sh"
+      }
+    ],
+    "subagentStop": [
+      {
+        "command": ".cursor/hooks/log-event.sh"
+      }
+    ]
+  }
+}
