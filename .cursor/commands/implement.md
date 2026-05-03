@@ -11,11 +11,13 @@ Switch to **Agent Mode** with Claude Sonnet 4.5 (default) and execute the plan f
    git checkout dev && git pull --ff-only origin dev
    ```
 
-3. Create the feature branch from the plan slug:
+3. Create the feature branch using the canonical WAIA convention from `AGENTS.md` ("Branching and PR Rules"): `dee-<NN>-<slug>`, where `<NN>` is the Linear issue number zero-padded to two digits and `<slug>` is a kebab-case summary of the goal:
 
    ```bash
-   git checkout -b feature/<scope>-<slug>
+   git checkout -b dee-<NN>-<slug>
    ```
+
+   Example: `dee-37-implement-readiness-service`. `AGENTS.md` is the source of truth; do not invent alternative branch templates.
 
 4. Implement the plan **file by file** following `.cursor/rules/20-code-style.mdc`.
 5. After each meaningful chunk, run:
