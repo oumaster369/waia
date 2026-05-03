@@ -10,11 +10,8 @@ import { isLikelyEmail, normalizeEmail } from "@/lib/auth/email";
 import { establishEmailAuthSession } from "@/lib/landing/email-auth-session";
 import { cn } from "@/lib/utils";
 
-/** Email/password uses `/api/auth/*` (DEE-10). Secondary providers stay stubbed until DEE-11 OAuth initiation exists. */
+/** Email/password uses `/api/auth/*` (DEE-10). SSO uses `/api/auth/oauth/{provider}/start` (DEE-11). */
 const FAILURE_MESSAGE = "Не удалось войти. Попробуйте ещё раз.";
-
-/** Keeps deterministic AuthInProgress -> AuthFailure OAuth stub observable in tests until DEE-11. */
-const PROVIDER_STUB_MS = 0;
 
 export type LandingAuthState =
   | "VisitorIdle"
@@ -35,34 +32,14 @@ export function AuthBlock() {
   const [identity, setIdentity] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [status, setStatus] = React.useState<LandingAuthState>("VisitorIdle");
-  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  React.useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current);
-      }
-    };
-  }, []);
-
-  const resetProviderStubTimer = React.useCallback(() => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
+  const beginOAuthProvider = React.useCallback((p: AuthProvider) => {
+    if (status === "AuthInProgress" || status === "AuthenticatedRedirect") {
+      return;
     }
-  }, []);
-
-  const finishProviderStub = React.useCallback(() => {
-    setPassword("");
-    setStatus("AuthFailure");
-    timerRef.current = null;
-  }, []);
-
-  const beginOAuthStub = React.useCallback(() => {
     setStatus("AuthInProgress");
-    resetProviderStubTimer();
-    timerRef.current = setTimeout(finishProviderStub, PROVIDER_STUB_MS);
-  }, [finishProviderStub, resetProviderStubTimer]);
+    globalThis.location.assign(`/api/auth/oauth/${p}/start`);
+  }, [status]);
 
   const handleSubmit = React.useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
@@ -96,13 +73,6 @@ export function AuthBlock() {
     },
     [identity, password, router, status],
   );
-
-  const handleProviderClick = React.useCallback(() => {
-    if (status === "AuthInProgress" || status === "AuthenticatedRedirect") {
-      return;
-    }
-    beginOAuthStub();
-  }, [beginOAuthStub, status]);
 
   const isLoading = status === "AuthInProgress";
   const isRedirectTerminal = status === "AuthenticatedRedirect";
@@ -177,7 +147,7 @@ export function AuthBlock() {
             type="button"
             variant="outline"
             size="lg"
-            onClick={handleProviderClick}
+            onClick={() => beginOAuthProvider(provider)}
             disabled={interactionLocked}
             aria-disabled={interactionLocked || undefined}
             className="w-full"
