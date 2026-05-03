@@ -1,20 +1,13 @@
-import { AuthBlock } from "@/components/landing/AuthBlock";
-import { ClosingBlock } from "@/components/landing/ClosingBlock";
-import { ContextBlock } from "@/components/landing/ContextBlock";
-import { HeroBlock } from "@/components/landing/HeroBlock";
-import { ModulesPreview } from "@/components/landing/ModulesPreview";
+import { redirect } from "next/navigation";
 
-export default function LandingPage() {
-  return (
-    <main
-      data-testid="landing"
-      className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 px-4 pb-16 sm:px-8"
-    >
-      <HeroBlock />
-      <AuthBlock />
-      <ContextBlock />
-      <ModulesPreview />
-      <ClosingBlock />
-    </main>
-  );
+import { LandingPageContent } from "@/components/landing/landing-page-content";
+import { getOptionalSessionUserId } from "@/lib/auth/session-user";
+
+export default async function LandingPage() {
+  const uid = await getOptionalSessionUserId();
+  if (uid) {
+    redirect("/dashboard");
+  }
+
+  return <LandingPageContent />;
 }

@@ -1,7 +1,4 @@
-import Link from "next/link";
-
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { SidebarSignOut } from "@/components/dashboard/sidebar-sign-out";
 
 export type DashboardSidebarProps = {
   identityLabel: string;
@@ -24,13 +21,7 @@ export function DashboardSidebar({ identityLabel }: DashboardSidebarProps) {
         </p>
       </div>
       <div className="mt-auto pt-8">
-        <Link
-          data-testid="dashboard-sidebar-sign-out"
-          href="/"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "inline-flex w-full justify-center")}
-        >
-          Sign out
-        </Link>
+        <SidebarSignOut />
       </div>
     </aside>
   );

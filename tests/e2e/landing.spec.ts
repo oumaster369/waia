@@ -28,16 +28,29 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-auth-provider-telegram")).toBeVisible();
   });
 
-  test("enters AuthFailure with the canonical state attribute on submit", async ({ page }) => {
+  test("enters AuthFailure with the canonical state attribute on wrong password for an existing account", async ({
+    page,
+  }) => {
+    const email = `e2e-failure-${Date.now()}@example.com`;
+    const password = "correctpass123";
+
     await page.goto("/");
-    await page.getByTestId("landing-auth-identity").fill("e2e@example.com");
-    await page.getByTestId("landing-auth-password").fill("secret");
+    await page.getByTestId("landing-auth-identity").fill(email);
+    await page.getByTestId("landing-auth-password").fill(password);
+    await page.getByTestId("landing-auth-submit").click();
+    await page.waitForURL("**/dashboard", { timeout: 15_000 });
+
+    await page.getByTestId("dashboard-sidebar-sign-out").click();
+    await page.waitForURL("**/", { timeout: 15_000 });
+
+    await page.getByTestId("landing-auth-identity").fill(email);
+    await page.getByTestId("landing-auth-password").fill("wrong-password-value");
     await page.getByTestId("landing-auth-submit").click();
     const auth = page.getByTestId("landing-auth");
-    await expect(auth).toHaveAttribute("data-status", "AuthFailure", { timeout: 5_000 });
+    await expect(auth).toHaveAttribute("data-status", "AuthFailure", { timeout: 15_000 });
     await expect(page.getByTestId("landing-auth-error")).toBeVisible();
     await expect(page.getByTestId("landing-auth-password")).toHaveValue("");
-    await expect(page.getByTestId("landing-auth-identity")).toHaveValue("e2e@example.com");
+    await expect(page.getByTestId("landing-auth-identity")).toHaveValue(email);
   });
 
   test("never surfaces an AI-Trader module card per DEE-8 §9.4", async ({ page }) => {

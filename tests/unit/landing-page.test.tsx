@@ -1,12 +1,20 @@
-import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import LandingPage from "@/app/page";
 import { AuthBlock } from "@/components/landing/AuthBlock";
+import { LandingPageContent } from "@/components/landing/landing-page-content";
+
+const { mockReplace } = vi.hoisted(() => ({
+  mockReplace: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: mockReplace }),
+}));
 
 describe("LandingPage", () => {
   it("renders all five blocks in order", () => {
-    render(<LandingPage />);
+    render(<LandingPageContent />);
     expect(screen.getByTestId("landing-hero")).toBeInTheDocument();
     expect(screen.getByTestId("landing-auth")).toBeInTheDocument();
     expect(screen.getByTestId("landing-context")).toBeInTheDocument();
@@ -15,7 +23,7 @@ describe("LandingPage", () => {
   });
 
   it("renders the canonical Hero copy verbatim", () => {
-    render(<LandingPage />);
+    render(<LandingPageContent />);
     expect(screen.getByTestId("landing-hero-tagline")).toHaveTextContent(
       "Между тобой. И тобой.",
     );
@@ -25,7 +33,7 @@ describe("LandingPage", () => {
   });
 
   it("renders the canonical Context copy verbatim", () => {
-    render(<LandingPage />);
+    render(<LandingPageContent />);
     expect(screen.getByTestId("landing-context-anchor")).toHaveTextContent(
       "Вы здесь, в пространстве WAIA.",
     );
@@ -35,7 +43,7 @@ describe("LandingPage", () => {
   });
 
   it("renders the canonical Closing copy verbatim", () => {
-    render(<LandingPage />);
+    render(<LandingPageContent />);
     expect(screen.getByTestId("landing-closing-anchor")).toHaveTextContent(
       "Всё согласовано.",
     );
@@ -45,7 +53,7 @@ describe("LandingPage", () => {
   });
 
   it("renders all three module cards in fixed order with canonical copy", () => {
-    render(<LandingPage />);
+    render(<LandingPageContent />);
     const aiTwin = screen.getByTestId("landing-module-ai-twin");
     const business = screen.getByTestId("landing-module-3p-business");
     const marketplace = screen.getByTestId("landing-module-ai-marketplace");
@@ -70,12 +78,12 @@ describe("LandingPage", () => {
   });
 
   it("never renders an AI-Trader card per DEE-8 §9.4", () => {
-    render(<LandingPage />);
+    render(<LandingPageContent />);
     expect(screen.queryByText(/AI-Trader/i)).not.toBeInTheDocument();
   });
 
   it("renders the canonical Auth Block CTA, divider, and provider buttons", () => {
-    render(<LandingPage />);
+    render(<LandingPageContent />);
     expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Войти");
     expect(screen.getByTestId("landing-auth-divider")).toHaveTextContent("или");
     expect(screen.getByTestId("landing-auth-provider-google")).toBeInTheDocument();
@@ -86,11 +94,11 @@ describe("LandingPage", () => {
 
 describe("AuthBlock state machine", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    mockReplace.mockClear();
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it("starts in VisitorIdle with empty fields and no error", () => {
@@ -103,41 +111,95 @@ describe("AuthBlock state machine", () => {
     expect(screen.getByTestId("landing-auth-submit")).not.toBeDisabled();
   });
 
-  it("transitions VisitorIdle -> AuthInProgress -> AuthFailure on submit", () => {
+  it("transitions VisitorIdle -> AuthInProgress -> AuthFailure on submit when server rejects", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: { code: "INVALID_CREDENTIALS" } }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: { code: "WEAK_PASSWORD" } }), { status: 400 }),
+        ),
+    );
+
     render(<AuthBlock />);
     fireEvent.change(screen.getByTestId("landing-auth-identity"), {
       target: { value: "test@example.com" },
     });
     fireEvent.change(screen.getByTestId("landing-auth-password"), {
-      target: { value: "secret" },
+      target: { value: "short" },
     });
 
     fireEvent.click(screen.getByTestId("landing-auth-submit"));
 
     const block = screen.getByTestId("landing-auth");
     expect(block.dataset.status).toBe("AuthInProgress");
-    expect(screen.getByTestId("landing-auth-submit")).toBeDisabled();
-    expect(screen.getByTestId("landing-auth-identity")).toBeDisabled();
-    expect(screen.getByTestId("landing-auth-password")).toBeDisabled();
-    expect(screen.queryByTestId("landing-auth-error")).not.toBeInTheDocument();
 
-    act(() => {
-      vi.advanceTimersByTime(1000);
+    await waitFor(() => {
+      expect(block.dataset.status).toBe("AuthFailure");
     });
 
-    expect(block.dataset.status).toBe("AuthFailure");
     expect(screen.getByTestId("landing-auth-error")).toBeInTheDocument();
     expect(screen.getByTestId("landing-auth-identity")).toHaveValue("test@example.com");
     expect(screen.getByTestId("landing-auth-password")).toHaveValue("");
     expect(screen.getByTestId("landing-auth-submit")).not.toBeDisabled();
-    expect(screen.getByTestId("landing-auth-provider-google")).not.toBeDisabled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it("transitions to AuthInProgress when an OAuth provider button is clicked", () => {
+  it("redirects to dashboard when sign-in succeeds", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ok: true, redirect: "/dashboard" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
     render(<AuthBlock />);
-    fireEvent.click(screen.getByTestId("landing-auth-provider-telegram"));
-    const block = screen.getByTestId("landing-auth");
-    expect(block.dataset.status).toBe("AuthInProgress");
-    expect(screen.getByTestId("landing-auth-provider-telegram")).toBeDisabled();
+    fireEvent.change(screen.getByTestId("landing-auth-identity"), {
+      target: { value: "ok@example.com" },
+    });
+    fireEvent.change(screen.getByTestId("landing-auth-password"), {
+      target: { value: "password12" },
+    });
+    fireEvent.click(screen.getByTestId("landing-auth-submit"));
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/dashboard");
+    });
+  });
+
+  describe("OAuth stub", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("transitions to AuthInProgress when an OAuth provider button is clicked", () => {
+      render(<AuthBlock />);
+      fireEvent.click(screen.getByTestId("landing-auth-provider-telegram"));
+      const block = screen.getByTestId("landing-auth");
+      expect(block.dataset.status).toBe("AuthInProgress");
+      expect(screen.getByTestId("landing-auth-provider-telegram")).toBeDisabled();
+    });
+
+    it("falls through to AuthFailure after OAuth stub timer", () => {
+      render(<AuthBlock />);
+      fireEvent.click(screen.getByTestId("landing-auth-provider-telegram"));
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(screen.getByTestId("landing-auth").dataset.status).toBe("AuthFailure");
+    });
   });
 });

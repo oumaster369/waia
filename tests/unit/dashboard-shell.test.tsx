@@ -38,12 +38,12 @@ function buildTestModel(
 }
 
 describe("DashboardSidebar", () => {
-  it("renders brand, identity, and Sign out linking to landing", () => {
+  it("renders brand, identity, and Sign out control", () => {
     render(<DashboardSidebar identityLabel="Alex" />);
     expect(screen.getByTestId("dashboard-sidebar-brand")).toHaveTextContent("WAIA");
     expect(screen.getByTestId("dashboard-sidebar-identity")).toHaveTextContent("Alex");
     const signOut = screen.getByTestId("dashboard-sidebar-sign-out");
-    expect(signOut).toHaveAttribute("href", "/");
+    expect(signOut).toHaveAttribute("type", "button");
   });
 
   it("does not expose mode navigation rows (dashboard shell §6.3)", () => {

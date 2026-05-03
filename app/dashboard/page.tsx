@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
+import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { buildDashboardViewModel } from "@/lib/dashboard/build-dashboard-model";
-import { getDashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-source";
+import { getDashboardReadinessPayloadForUser } from "@/lib/dashboard/dashboard-readiness-source";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +15,12 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardPage() {
-  // Loads the same snapshot as GET /api/dashboard/readiness via getDashboardReadinessPayload (single server source).
-  const payload = await getDashboardReadinessPayload();
+  const userId = await getOptionalSessionUserId();
+  if (!userId) {
+    redirect("/");
+  }
+
+  const payload = await getDashboardReadinessPayloadForUser(userId);
   const model = buildDashboardViewModel(
     payload.readinessInput,
     payload.twinSignals,
