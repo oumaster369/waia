@@ -22,5 +22,6 @@ export default defineConfig({
     include: ["tests/unit/**/*.{test,spec}.{ts,tsx}"],
     exclude: ["tests/e2e/**", "node_modules/**", ".next/**"],
     css: false,
+    fileParallelism: false,
   },
 });

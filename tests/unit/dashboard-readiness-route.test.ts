@@ -1,15 +1,47 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { GET } from "@/app/api/dashboard/readiness/route";
+import { resetWaiaSqliteSingleton } from "@/db/client";
 import type { DashboardReadinessApiResponse } from "@/lib/dashboard/dashboard-readiness-api.types";
+import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
+import { computeReadinessResult } from "@/lib/readiness";
 import {
   ALLOWED_INDICATOR_PERCENTS,
   INDICATOR_KEYS_ORDER,
   type IndicatorKey,
 } from "@/lib/readiness/types";
-import { computeReadinessResult } from "@/lib/readiness";
 
 describe("GET /api/dashboard/readiness", () => {
+  let tmpRoot: string;
+  let prevDb: string | undefined;
+
+  beforeAll(() => {
+    prevDb = process.env.DATABASE_URL;
+    tmpRoot = mkdtempSync(path.join(tmpdir(), "waia-route-"));
+    const dbPath = path.join(tmpRoot, "walita.sqlite");
+    mkdirSync(tmpRoot, { recursive: true });
+    process.env.DATABASE_URL = `file:${dbPath}`;
+    migrateDatabaseFromEnv();
+  });
+
+  afterAll(() => {
+    resetWaiaSqliteSingleton();
+    if (prevDb === undefined) {
+      delete process.env.DATABASE_URL;
+    } else {
+      process.env.DATABASE_URL = prevDb;
+    }
+    try {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    } catch {
+      /* temp cleanup best-effort */
+    }
+  });
+
   it("returns 200 with readinessResult aligned to computeReadinessResult(readinessInput), hints stubs, no-store cache", async () => {
     const res = await GET();
 
