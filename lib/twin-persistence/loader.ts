@@ -85,8 +85,17 @@ export class ReadinessSerializationError extends Error {
   }
 }
 
+export type AppendTwinDialogueTurnResult = {
+  id: string;
+  sequence: number;
+  createdAt: Date;
+  content: string;
+  /** True when an existing row was returned via idempotency key match. */
+  replayed: boolean;
+};
+
 /** Append one dialogue row; deterministic sequence via max(sequence)+1 (sync transaction). */
-export function appendTwinDialogueTurn(
+export function appendTwinDialogueTurnResult(
   db: WaiaSqliteDb,
   params: {
     twinProfileId: string;
@@ -94,12 +103,16 @@ export function appendTwinDialogueTurn(
     content: string;
     idempotencyKey?: string | null;
   },
-): void {
-  const id = crypto.randomUUID();
-  db.transaction((tx) => {
+): AppendTwinDialogueTurnResult {
+  return db.transaction((tx) => {
     if (params.idempotencyKey != null && params.idempotencyKey !== "") {
       const existing = tx
-        .select({ id: twinDialogueTurns.id })
+        .select({
+          id: twinDialogueTurns.id,
+          sequence: twinDialogueTurns.sequence,
+          createdAt: twinDialogueTurns.createdAt,
+          content: twinDialogueTurns.content,
+        })
         .from(twinDialogueTurns)
         .where(
           and(
@@ -109,9 +122,17 @@ export function appendTwinDialogueTurn(
         )
         .get();
       if (existing) {
-        return;
+        return {
+          id: existing.id,
+          sequence: existing.sequence,
+          createdAt: existing.createdAt,
+          content: existing.content,
+          replayed: true,
+        };
       }
     }
+
+    const id = crypto.randomUUID();
 
     const [agg] = tx
       .select({
@@ -132,7 +153,39 @@ export function appendTwinDialogueTurn(
         idempotencyKey: params.idempotencyKey ?? null,
       })
       .run();
+
+    const row = tx
+      .select({
+        createdAt: twinDialogueTurns.createdAt,
+      })
+      .from(twinDialogueTurns)
+      .where(eq(twinDialogueTurns.id, id))
+      .get();
+
+    if (!row) {
+      throw new Error("[waia] twin dialogue insert row missing immediately after insert");
+    }
+
+    return {
+      id,
+      sequence: nextSeq,
+      createdAt: row.createdAt,
+      content: params.content,
+      replayed: false,
+    };
   });
+}
+
+export function appendTwinDialogueTurn(
+  db: WaiaSqliteDb,
+  params: {
+    twinProfileId: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    idempotencyKey?: string | null;
+  },
+): void {
+  appendTwinDialogueTurnResult(db, params);
 }
 
 export function countUserDialogueTurns(db: WaiaSqliteDb, twinProfileId: string): number {
