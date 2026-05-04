@@ -56,7 +56,7 @@ export function AuthBlock() {
       try {
         const result = await establishEmailAuthSession({ email: emailNorm, password });
         if (result.outcome === "success") {
-          const path = result.redirectPath || "/dashboard";
+          const path = result.redirectPath;
           setStatus("AuthenticatedRedirect");
           queueMicrotask(() => {
             router.replace(path);

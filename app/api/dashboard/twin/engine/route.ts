@@ -96,6 +96,9 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    throw err;
+    return NextResponse.json(
+      validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."),
+      { status: 500 },
+    );
   }
 }

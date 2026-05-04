@@ -3,6 +3,12 @@ import { expect, test } from "@playwright/test";
 import { signUpAndOpenDashboard } from "./helpers/auth-dashboard";
 
 test.describe("/dashboard smoke", () => {
+  test("redirects unauthenticated visitors to /", async ({ page }) => {
+    await page.goto("/dashboard");
+    await expect(page).toHaveURL("/");
+    await expect(page.getByTestId("landing-auth")).toBeVisible();
+  });
+
   test("renders sidebar, tabs, Twin selected, dialogue region after sign-up", async ({ page }) => {
     const email = `e2e-dashboard-${Date.now()}@example.com`;
     await signUpAndOpenDashboard(page, email);

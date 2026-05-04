@@ -10,6 +10,7 @@ import { twinPredictionVerifications } from "@/db/schema";
 import { MAX_SCENARIO_CHARS } from "@/lib/dashboard/twin-contradiction-detector-api.types";
 import { TWIN_ENGINE_SCHEMA_VERSION } from "@/lib/dashboard/twin-engine-api.types";
 import * as sessionUser from "@/lib/auth/session-user";
+import * as twinEngine from "@/lib/reasoning/twin-engine";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
@@ -97,5 +98,22 @@ describe("POST /api/dashboard/twin/engine (DEE-36)", () => {
     expect(res.status).toBe(400);
     const j = (await res.json()) as { error: { code: string } };
     expect(j.error.code).toBe("SCENARIO_TOO_LONG");
+  });
+
+  it("returns 500 INTERNAL_ERROR without echoing internal exception text", async () => {
+    vi.mocked(sessionUser.getOptionalSessionUserId).mockResolvedValue(ROUTE_USER);
+    const spy = vi.spyOn(twinEngine, "runTwinEngine").mockImplementation(() => {
+      throw new Error("SECRET_INTERNAL_DETAIL");
+    });
+    try {
+      const res = await POST(reqPost({}));
+      expect(res.status).toBe(500);
+      const raw = await res.text();
+      expect(raw).not.toContain("SECRET_INTERNAL");
+      const j = JSON.parse(raw) as { error: { code: string } };
+      expect(j.error.code).toBe("INTERNAL_ERROR");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
