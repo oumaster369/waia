@@ -174,6 +174,32 @@ export const twinPredictionVerifications = sqliteTable(
   ],
 );
 
+/** Repeatability signals over verification + scenario (DEE-28); no FK to predictions. */
+export const twinRepeatabilityRecords = sqliteTable(
+  "twin_repeatability_records",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    twinProfileId: text("twin_profile_id")
+      .notNull()
+      .references(() => twinProfiles.id, { onDelete: "cascade" }),
+    scenarioHash: text("scenario_hash").notNull(),
+    patternType: text("pattern_type").notNull(),
+    predictionOutcome: text("prediction_outcome").notNull(),
+    verificationResult: text("verification_result").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("twin_repeatability_records_user_created_idx").on(t.userId, t.createdAt),
+    index("twin_repeatability_records_scenario_hash_idx").on(t.scenarioHash),
+    index("twin_repeatability_records_pattern_type_idx").on(t.patternType),
+  ],
+);
+
 /** Stub: verification feedback (future). */
 export const verificationFeedback = sqliteTable("verification_feedback", {
   id: text("id").primaryKey(),

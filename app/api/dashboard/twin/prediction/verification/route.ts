@@ -15,6 +15,7 @@ import {
   appendTwinPredictionVerificationForUser,
   isTwinPredictionVerificationKind,
 } from "@/lib/twin-persistence/twin-prediction-verifications";
+import { recordRepeatabilityAfterVerification } from "@/lib/twin-persistence/twin-repeatability";
 
 export const dynamic = "force-dynamic";
 
@@ -134,6 +135,11 @@ export async function POST(request: Request) {
     scenario: scenarioTrimmed,
     verification,
     correction,
+  });
+
+  recordRepeatabilityAfterVerification(db, userId, {
+    scenarioTrimmed,
+    verification,
   });
 
   const body: TwinPredictionVerificationAppendApiResponse = {
