@@ -1,5 +1,7 @@
 /** Browser-only email auth against DEE-10 `/api/auth/sign-in` and `/api/auth/sign-up`. OAuth is wired in DEE-11+. */
 
+import { safeInternalRedirectPath } from "@/lib/landing/safe-internal-redirect";
+
 export type EmailAuthSessionResult =
   | { outcome: "success"; redirectPath: string }
   | { outcome: "failure"; debug?: { lastStatus?: number; lastJson?: unknown } };
@@ -13,7 +15,9 @@ export function parseAuthOkResponse(json: unknown): AuthOkBody | null {
   if (typeof json !== "object" || json === null) return null;
   const obj = json as Record<string, unknown>;
   if (obj.ok !== true || typeof obj.redirect !== "string") return null;
-  return { ok: true, redirect: obj.redirect };
+  const redirect = safeInternalRedirectPath(obj.redirect);
+  if (redirect == null) return null;
+  return { ok: true, redirect };
 }
 
 async function parseResponseJsonSafe(res: Response): Promise<unknown> {
@@ -37,9 +41,15 @@ export async function establishEmailAuthSession(params: {
   });
 
   const signInJson = await parseResponseJsonSafe(signIn);
-  const signedInOk = parseAuthOkResponse(signInJson);
-  if (signIn.ok && signedInOk) {
-    return { outcome: "success", redirectPath: signedInOk.redirect };
+  if (signIn.ok) {
+    const signedInOk = parseAuthOkResponse(signInJson);
+    if (signedInOk) {
+      return { outcome: "success", redirectPath: signedInOk.redirect };
+    }
+    return {
+      outcome: "failure",
+      debug: { lastStatus: signIn.status, lastJson: signInJson },
+    };
   }
 
   const signUp = await fetch("/api/auth/sign-up", {
@@ -50,9 +60,15 @@ export async function establishEmailAuthSession(params: {
   });
 
   const signUpJson = await parseResponseJsonSafe(signUp);
-  const signedUpOk = parseAuthOkResponse(signUpJson);
-  if (signUp.ok && signedUpOk) {
-    return { outcome: "success", redirectPath: signedUpOk.redirect };
+  if (signUp.ok) {
+    const signedUpOk = parseAuthOkResponse(signUpJson);
+    if (signedUpOk) {
+      return { outcome: "success", redirectPath: signedUpOk.redirect };
+    }
+    return {
+      outcome: "failure",
+      debug: { lastStatus: signUp.status, lastJson: signUpJson },
+    };
   }
 
   return {

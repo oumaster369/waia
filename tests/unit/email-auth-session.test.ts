@@ -15,6 +15,12 @@ describe("parseAuthOkResponse", () => {
     expect(parseAuthOkResponse({ ok: false })).toBeNull();
     expect(parseAuthOkResponse({ ok: true, redirect: 1 })).toBeNull();
   });
+
+  it("rejects unsafe redirect strings", () => {
+    expect(parseAuthOkResponse({ ok: true, redirect: "//evil.example/x" })).toBeNull();
+    expect(parseAuthOkResponse({ ok: true, redirect: "https://evil/x" })).toBeNull();
+    expect(parseAuthOkResponse({ ok: true, redirect: "\t/dashboard" })).toBeNull();
+  });
 });
 
 describe("establishEmailAuthSession", () => {
@@ -38,6 +44,25 @@ describe("establishEmailAuthSession", () => {
       password: "password12",
     });
     expect(r).toEqual({ outcome: "success", redirectPath: "/dashboard" });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call sign-up when sign-in returns 200 with an unsafe redirect body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ok: true, redirect: "//evil.example" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    const r = await establishEmailAuthSession({
+      email: "a@b.co",
+      password: "password12",
+    });
+    expect(r.outcome).toBe("failure");
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 
