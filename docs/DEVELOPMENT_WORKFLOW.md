@@ -108,12 +108,14 @@ git branch
 
 ---
 
-## Deployment (next step)
+## Deployment
 
-* Cloudflare Pages will be connected
-* Auto-deploy from `dev` branch
+**Cloudflare Workers** + **OpenNext** (`@opennextjs/cloudflare`), not static Pages-only export.
 
-```
+See [docs/cloudflare-deploy.md](cloudflare-deploy.md) (commands and limitations), [docs/cloudflare-env-vars.md](cloudflare-env-vars.md), and [.dev.vars.example](../.dev.vars.example).
+
+CI/Git auto-deploy wiring is a separate follow-up.
+
 
 
 
