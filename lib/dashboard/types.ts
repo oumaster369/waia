@@ -1,3 +1,4 @@
+import type { DiaryMemoryEntryDto } from "@/lib/dashboard/diary-memory-api.types";
 import type { IndicatorPresentationRow } from "@/lib/dashboard/indicator-ui";
 import type { TwinReadinessEventDescriptor } from "@/lib/dashboard/twin-readiness-event-api.types";
 import type { TwinReadinessResult } from "@/lib/dashboard/twin-readiness-api.types";
@@ -37,5 +38,7 @@ export type DashboardClientProps = {
   finalStateMessageShown: boolean;
   /** Twin dialogue turns from persistence (user + assistant); empty for new Twin. */
   initialTwinDialogueTurns: DashboardTwinDialogueInitialTurn[];
+  /** Diary memory entries from persistence (SSR); client refetches on mount. */
+  initialDiaryEntries?: DiaryMemoryEntryDto[];
   twinGrowth?: DashboardTwinGrowthBundle;
 };
