@@ -1,6 +1,7 @@
 import type { DiaryMemoryEntryDto } from "@/lib/dashboard/diary-memory-api.types";
 import type { IndicatorPresentationRow } from "@/lib/dashboard/indicator-ui";
 import type { TwinReadinessEventDescriptor } from "@/lib/dashboard/twin-readiness-event-api.types";
+import type { TwinProfile } from "@/lib/dashboard/twin-profile-api.types";
 import type { TwinReadinessResult } from "@/lib/dashboard/twin-readiness-api.types";
 import type { TwinUnlockState } from "@/lib/dashboard/twin-unlock-api.types";
 
@@ -14,6 +15,8 @@ export type DashboardTwinGrowthBundle = {
   readiness: TwinReadinessResult;
   unlockState: TwinUnlockState;
   events?: TwinReadinessEventDescriptor[];
+  /** Optional override for Society preview (tests / future SSR); synthetic profile applies when omitted. */
+  twinProfile?: TwinProfile;
 };
 
 /** Serialized Twin messages for hydrating TwinDialogueWorkspace from RSC (DEE-26). */
