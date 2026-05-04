@@ -2,14 +2,24 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { DashboardDialogueArea } from "@/components/dashboard/dialogue-area";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
+import { TAB_ORDER } from "@/components/dashboard/types";
 import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/components/dashboard/twin-dialogue-workspace";
 import { buildDashboardViewModel } from "@/lib/dashboard/build-dashboard-model";
 import {
   DEFAULT_READINESS_INPUT,
   DEFAULT_TWIN_DIALOGUE_SIGNALS,
 } from "@/lib/dashboard/readiness-snapshot-default";
+import {
+  buildDashboardTabPresentations,
+  FEATURE_GROWTH_CATALOG,
+  tabUiForbiddenPhraseRegex,
+} from "@/lib/dashboard/twin-unlock-tab-ui";
+import { resolveDashboardTwinGrowth } from "@/components/dashboard/twin-growth-placeholder";
 import type { ReadinessInput } from "@/lib/readiness";
+import type { TwinReadinessResult } from "@/lib/dashboard/twin-readiness-api.types";
+import type { TwinUnlockState } from "@/lib/dashboard/twin-unlock-api.types";
 import { computeReadinessResult, parseIndicatorVector } from "@/lib/readiness";
 
 function input(partial: Partial<ReadinessInput> & Pick<ReadinessInput, "indicators">): ReadinessInput {
@@ -55,7 +65,7 @@ describe("DashboardSidebar", () => {
 });
 
 describe("DashboardShell", () => {
-  it("defaults to Twin tab selected with Diary and Society tabs disabled for new stub user", () => {
+  it("defaults to Twin tab selected with non-Twin tabs disabled for new stub user (five-tab order)", () => {
     const model = buildTestModel();
     const r = computeReadinessResult({
       indicators: DEFAULT_READINESS_INPUT.indicators,
@@ -65,23 +75,113 @@ describe("DashboardShell", () => {
     expect(model.diaryTabUnlocked).toBe(r.diaryTabUnlocked);
     expect(model.societyTabUnlocked).toBe(r.societyTabUnlocked);
 
-    render(<DashboardShell model={model} />);
+    const { container } = render(<DashboardShell model={model} />);
+    expect(container.textContent ?? "").not.toMatch(tabUiForbiddenPhraseRegex());
+
     const twin = screen.getByTestId("mode-tab-twin");
     const diary = screen.getByTestId("mode-tab-diary");
+    const predictions = screen.getByTestId("mode-tab-predictions");
+    const personality = screen.getByTestId("mode-tab-personality_insights");
     const society = screen.getByTestId("mode-tab-society");
+
+    expect(TAB_ORDER.map((id) => screen.getByTestId(`mode-tab-${id}`))).toEqual([
+      twin,
+      diary,
+      predictions,
+      personality,
+      society,
+    ]);
 
     expect(twin).toHaveAttribute("aria-selected", "true");
     expect(diary).toHaveAttribute("aria-selected", "false");
+    expect(predictions).toHaveAttribute("aria-selected", "false");
+    expect(personality).toHaveAttribute("aria-selected", "false");
     expect(society).toHaveAttribute("aria-selected", "false");
+
+    expect(twin).not.toBeDisabled();
     expect(diary).toBeDisabled();
+    expect(predictions).toBeDisabled();
+    expect(personality).toBeDisabled();
     expect(society).toBeDisabled();
+
     expect(diary).toHaveAttribute("data-state", "locked");
+    expect(predictions).toHaveAttribute("data-state", "locked");
+    expect(personality).toHaveAttribute("data-state", "locked");
     expect(society).toHaveAttribute("data-state", "locked");
+    expect(twin).toHaveAttribute("data-phase", "unlocked");
+    expect(diary).toHaveAttribute("data-phase");
+    expect(predictions).toHaveAttribute("data-phase");
 
     expect(screen.getByTestId("dashboard-dialogue-area")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-twin-invitation-placeholder")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-twin-message-list")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-twin-message-input")).toBeInTheDocument();
+  });
+
+  it("shows mandated growth journey lines for Predictions / Personality when placeholder-locked", () => {
+    const model = buildTestModel();
+    const tabPresentations = buildDashboardTabPresentations(resolveDashboardTwinGrowth(model));
+
+    const { unmount } = render(
+      <DashboardDialogueArea
+        model={model}
+        selectedMode="predictions"
+        tabPresentations={tabPresentations}
+      />,
+    );
+    expect(screen.getByTestId("dashboard-workspace-growth-gate")).toHaveTextContent(
+      FEATURE_GROWTH_CATALOG.predictions.journeyLine,
+    );
+    unmount();
+
+    render(
+      <DashboardDialogueArea
+        model={model}
+        selectedMode="personality_insights"
+        tabPresentations={tabPresentations}
+      />,
+    );
+    expect(screen.getByTestId("dashboard-workspace-growth-gate")).toHaveTextContent(
+      FEATURE_GROWTH_CATALOG.personality_insights.journeyLine,
+    );
+  });
+
+  it("does not surface forbidden phrasing in RTL layout wrapper", () => {
+    const model = buildTestModel();
+    const { container } = render(
+      <div dir="rtl">
+        <DashboardShell model={model} />
+      </div>,
+    );
+    expect(container.textContent ?? "").not.toMatch(tabUiForbiddenPhraseRegex());
+  });
+
+  it("respects optional SSR twinGrowth unlock flags (hand-built bundle)", () => {
+    const model = buildTestModel({}, { hasMeaningfulExchange: true });
+    const readiness: TwinReadinessResult = {
+      schemaVersion: "twin-readiness-v1",
+      overall: 0.95,
+      level: "high",
+      scores: {
+        baseModel: 0.9,
+        memory: 0.85,
+        patterns: 0.8,
+        contradictions: 0.75,
+        consistency: 0.85,
+        feedback: 0.82,
+      },
+    };
+    const unlockState: TwinUnlockState = {
+      diary: { unlocked: true, reason: "ready" },
+      personality_insights: { unlocked: true, reason: "ready" },
+      predictions: { unlocked: true, reason: "ready" },
+      society: { unlocked: false, reason: "not yet" },
+      twin_chat: { unlocked: true, reason: "ready" },
+    };
+    render(<DashboardShell model={{ ...model, twinGrowth: { readiness, unlockState } }} />);
+    expect(screen.getByTestId("mode-tab-predictions")).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId("mode-tab-predictions"));
+    expect(screen.getByTestId("dashboard-predictions-placeholder")).toBeInTheDocument();
   });
 
   it("maps six indicators to data-threshold bands and shows deterministic hints", () => {

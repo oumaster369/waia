@@ -17,6 +17,10 @@ test.describe("/dashboard smoke", () => {
     await expect(page.getByTestId("mode-tab-twin")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByTestId("mode-tab-diary")).toBeDisabled();
     await expect(page.getByTestId("mode-tab-diary")).toHaveAttribute("data-state", "locked");
+    await expect(page.getByTestId("mode-tab-predictions")).toBeDisabled();
+    await expect(page.getByTestId("mode-tab-predictions")).toHaveAttribute("data-state", "locked");
+    await expect(page.getByTestId("mode-tab-personality_insights")).toBeDisabled();
+    await expect(page.getByTestId("mode-tab-personality_insights")).toHaveAttribute("data-state", "locked");
     await expect(page.getByTestId("mode-tab-society")).toBeDisabled();
     await expect(page.getByTestId("mode-tab-society")).toHaveAttribute("data-state", "locked");
 

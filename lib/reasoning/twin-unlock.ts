@@ -13,30 +13,16 @@ import type {
 } from "@/lib/dashboard/twin-unlock-api.types";
 import { TWIN_UNLOCK_FEATURES, TWIN_UNLOCK_SCHEMA_VERSION } from "@/lib/dashboard/twin-unlock-api.types";
 import type { TwinReadinessScores } from "@/lib/dashboard/twin-readiness-api.types";
+import { TWIN_UNLOCK_RULES } from "@/lib/dashboard/twin-unlock-thresholds";
 
 export { TWIN_UNLOCK_SCHEMA_VERSION, TWIN_UNLOCK_FEATURES };
+export { TWIN_UNLOCK_RULES };
 
 const ADVANCED_FEATURES = new Set<TwinUnlockFeature>([
   "predictions",
   "personality_insights",
   "society",
 ]);
-
-export const TWIN_UNLOCK_RULES = {
-  globalMinBaseModel: 0.2,
-  diaryMinBaseModel: 0.3,
-  twinChatMinMemory: 0.2,
-  predictionsMinOverall: 0.4,
-  predictionsMinFeedback: 0.2,
-  personalityMinPatterns: 0.3,
-  personalityMinContradictions: 0.2,
-  societyMinOverall: 0.6,
-  societyMinConsistency: 0.5,
-  societyMinFeedback: 0.4,
-  /** Anti-fake: block advanced features when memory is high but base model is still thin. */
-  memorySpikeThreshold: 0.55,
-  baseCeilingWhenMemorySpike: 0.35,
-} as const;
 
 const REASON_GLOBAL_BASE = "Base model maturity is below the minimum required before any feature unlocks.";
 const REASON_MEMORY_SPIKE =

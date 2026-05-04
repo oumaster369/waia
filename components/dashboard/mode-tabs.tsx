@@ -3,26 +3,20 @@
 import { Button } from "@/components/ui/button";
 
 import type { ModeId } from "@/components/dashboard/types";
+import { TAB_ORDER } from "@/components/dashboard/types";
+import type { TwinTabPresentation } from "@/lib/dashboard/twin-unlock-tab-ui";
 
 export type DashboardModeTabsProps = {
   selectedMode: ModeId;
   onSelectMode: (mode: ModeId) => void;
-  diaryTabUnlocked: boolean;
-  societyTabUnlocked: boolean;
+  tabPresentations: Record<ModeId, TwinTabPresentation>;
 };
 
 export function DashboardModeTabs({
   selectedMode,
   onSelectMode,
-  diaryTabUnlocked,
-  societyTabUnlocked,
+  tabPresentations,
 }: DashboardModeTabsProps) {
-  const tabs: { id: ModeId; label: string; locked: boolean }[] = [
-    { id: "twin", label: "Twin", locked: false },
-    { id: "diary", label: "Diary", locked: !diaryTabUnlocked },
-    { id: "society", label: "Society", locked: !societyTabUnlocked },
-  ];
-
   return (
     <div
       role="tablist"
@@ -30,36 +24,38 @@ export function DashboardModeTabs({
       data-testid="dashboard-mode-tabs"
       className="flex flex-wrap gap-2 border-border border-b bg-background px-6 py-3"
     >
-      {tabs.map((tab) => {
-        const isSelected = selectedMode === tab.id;
+      {TAB_ORDER.map((id) => {
+        const pres = tabPresentations[id];
+        const clickable = pres.unlocked;
+        const isSelected = selectedMode === id;
+        const dataState = clickable ? "unlocked" : "locked";
+
         const onClick = () => {
-          if (tab.locked) {
+          if (!clickable) {
             return;
           }
-          onSelectMode(tab.id);
+          onSelectMode(id);
         };
 
         return (
           <Button
-            key={tab.id}
-            data-testid={`mode-tab-${tab.id}`}
-            data-state={tab.locked ? "locked" : "unlocked"}
+            key={id}
+            data-testid={`mode-tab-${id}`}
+            data-state={dataState}
+            data-phase={pres.phase}
             type="button"
             role="tab"
             aria-selected={isSelected}
-            aria-disabled={tab.locked}
-            disabled={tab.locked}
+            aria-disabled={!clickable}
+            disabled={!clickable}
             variant={isSelected ? "secondary" : "ghost"}
             size="sm"
             onClick={onClick}
             className={
-              tab.locked
-                ? "cursor-not-allowed opacity-60 text-muted-foreground"
-                : undefined
+              !clickable ? "cursor-not-allowed opacity-60 text-muted-foreground" : undefined
             }
           >
-            {tab.label}
-            {tab.locked ? " (locked)" : ""}
+            {pres.label}
           </Button>
         );
       })}
