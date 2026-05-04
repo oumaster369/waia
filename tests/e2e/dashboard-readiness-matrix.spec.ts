@@ -81,7 +81,8 @@ test.describe("Dashboard readiness + unlock matrix", () => {
 
     await assertDashboardMatrix(page, readinessInput, { hasMeaningfulExchange: false });
     await page.getByTestId("mode-tab-diary").click();
-    await expect(page.getByTestId("dashboard-diary-placeholder")).toBeVisible();
+    await expect(page.getByTestId("dashboard-diary-workspace")).toBeVisible();
+    await expect(page.getByTestId("dashboard-diary-textarea")).toBeVisible();
 
     await expect(page.getByTestId("mode-tab-predictions")).toBeDisabled();
     await expect(page.getByTestId("mode-tab-personality_insights")).toBeDisabled();

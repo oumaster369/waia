@@ -8,8 +8,8 @@ import type {
   DiaryEntryAppendApiResponse,
   DiaryMemoryEntryDto,
 } from "@/lib/dashboard/diary-memory-api.types";
+import { MAX_DIARY_BODY_CHARS } from "@/lib/dashboard/diary-body-limits";
 import {
-  MAX_DIARY_BODY_CHARS,
   appendDiaryEntryForUser,
   listDiaryEntriesForUser,
 } from "@/lib/twin-persistence/diary-memory";

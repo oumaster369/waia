@@ -1,3 +1,4 @@
+import { DiaryWorkspace } from "@/components/dashboard/diary-workspace";
 import { TwinDialogueWorkspace } from "@/components/dashboard/twin-dialogue-workspace";
 import type { ModeId } from "@/components/dashboard/types";
 import type { DashboardClientProps } from "@/lib/dashboard/types";
@@ -89,7 +90,7 @@ export function DashboardDialogueArea({
         className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Diary workspace"
       >
-        <p data-testid="dashboard-diary-placeholder">Diary workspace (stub — DEE-54).</p>
+        <DiaryWorkspace initialEntries={model.initialDiaryEntries} />
       </section>
     );
   }

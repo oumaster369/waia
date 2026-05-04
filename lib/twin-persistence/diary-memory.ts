@@ -9,10 +9,10 @@ import {
   serializeEmbeddingJson,
   TWIN_MEMORY_EMBEDDING_MODEL_ID,
 } from "@/lib/embeddings/twin-memory-embeddings";
+import { MAX_DIARY_BODY_CHARS } from "@/lib/dashboard/diary-body-limits";
 import { ensureUserTwinSeed, type WaiaSqliteDb } from "@/lib/twin-persistence/loader";
 
-/** Mirrors Twin dialogue POST body limit (characters). */
-export const MAX_DIARY_BODY_CHARS = 16_384;
+export { MAX_DIARY_BODY_CHARS };
 export const MAX_SCENARIO_KEY_CHARS = 256;
 /** Max serialized JSON length for scenario `payload`. */
 export const MAX_SCENARIO_PAYLOAD_JSON_CHARS = 16_384;

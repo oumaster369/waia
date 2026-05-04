@@ -259,14 +259,30 @@ describe("DashboardShell", () => {
     expect(screen.getByTestId("dashboard-society-placeholder")).toBeInTheDocument();
   });
 
-  it("switches Dialogue Area away from Diary when Twin tab is clicked", () => {
+  it("switches Dialogue Area away from Diary when Twin tab is clicked", async () => {
     const model = buildTestModel(
       { indicators: [67, 67, 67, 67, 67, 33] },
       { hasMeaningfulExchange: true },
     );
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? "GET";
+      if (url.includes("/api/dashboard/diary/entries") && method === "GET") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ entries: [] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      return Promise.resolve(new Response("", { status: 404 }));
+    });
     render(<DashboardShell model={model} />);
     fireEvent.click(screen.getByTestId("mode-tab-diary"));
-    expect(screen.getByTestId("dashboard-diary-placeholder")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("dashboard-diary-workspace")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("dashboard-diary-textarea")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("mode-tab-twin"));
     expect(screen.getByTestId("dashboard-twin-dialogue-workspace")).toBeInTheDocument();
