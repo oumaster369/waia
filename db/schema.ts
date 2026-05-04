@@ -107,31 +107,41 @@ export const twinDialogueTurns = sqliteTable(
   ],
 );
 
-/** Stub: diary source (DEE-54+); no UI in this task. */
-export const diaryEntries = sqliteTable("diary_entries", {
-  id: text("id").primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  twinProfileId: text("twin_profile_id").references(() => twinProfiles.id, { onDelete: "cascade" }),
-  bodyPlaceholder: text("body_placeholder"),
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+/** Diary source persistence (AI-Twin memory v1 — DEE-27). */
+export const diaryEntries = sqliteTable(
+  "diary_entries",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    twinProfileId: text("twin_profile_id").references(() => twinProfiles.id, { onDelete: "cascade" }),
+    body: text("body"),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("diary_entries_user_created_idx").on(t.userId, t.createdAt)],
+);
 
-/** Stub: scenario answers (future engine). */
-export const scenarioAnswers = sqliteTable("scenario_answers", {
-  id: text("id").primaryKey(),
-  twinProfileId: text("twin_profile_id")
-    .notNull()
-    .references(() => twinProfiles.id, { onDelete: "cascade" }),
-  scenarioKey: text("scenario_key").notNull(),
-  payloadJson: text("payload_json").notNull(),
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+/** Scenario answers persisted per twin profile (AI-Twin memory v1 — DEE-27). */
+export const scenarioAnswers = sqliteTable(
+  "scenario_answers",
+  {
+    id: text("id").primaryKey(),
+    twinProfileId: text("twin_profile_id")
+      .notNull()
+      .references(() => twinProfiles.id, { onDelete: "cascade" }),
+    scenarioKey: text("scenario_key").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("scenario_answers_profile_created_idx").on(t.twinProfileId, t.createdAt)],
+);
 
 /** Stub: verification feedback (future). */
 export const verificationFeedback = sqliteTable("verification_feedback", {
