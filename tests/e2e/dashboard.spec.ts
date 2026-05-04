@@ -1,13 +1,11 @@
 import { expect, test } from "@playwright/test";
 
+import { signUpAndOpenDashboard } from "./helpers/auth-dashboard";
+
 test.describe("/dashboard smoke", () => {
   test("renders sidebar, tabs, Twin selected, dialogue region after sign-up", async ({ page }) => {
-    await page.goto("/");
     const email = `e2e-dashboard-${Date.now()}@example.com`;
-    await page.getByTestId("landing-auth-identity").fill(email);
-    await page.getByTestId("landing-auth-password").fill("password123!");
-    await page.getByTestId("landing-auth-submit").click();
-    await page.waitForURL("**/dashboard", { timeout: 15_000 });
+    await signUpAndOpenDashboard(page, email);
 
     await expect(page.getByTestId("dashboard-sidebar")).toBeVisible();
     await expect(page.getByTestId("dashboard-top-block")).toBeVisible();
