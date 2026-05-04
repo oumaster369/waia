@@ -149,6 +149,31 @@ export const scenarioAnswers = sqliteTable(
   (t) => [index("scenario_answers_profile_created_idx").on(t.twinProfileId, t.createdAt)],
 );
 
+/** User verification of twin predictions (DEE-34); optional client predictionId, no FK. */
+export const twinPredictionVerifications = sqliteTable(
+  "twin_prediction_verifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    twinProfileId: text("twin_profile_id")
+      .notNull()
+      .references(() => twinProfiles.id, { onDelete: "cascade" }),
+    predictionId: text("prediction_id"),
+    scenario: text("scenario").notNull(),
+    verification: text("verification").notNull(),
+    correction: text("correction"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("twin_prediction_verifications_user_created_idx").on(t.userId, t.createdAt),
+    index("twin_prediction_verifications_profile_created_idx").on(t.twinProfileId, t.createdAt),
+  ],
+);
+
 /** Stub: verification feedback (future). */
 export const verificationFeedback = sqliteTable("verification_feedback", {
   id: text("id").primaryKey(),
