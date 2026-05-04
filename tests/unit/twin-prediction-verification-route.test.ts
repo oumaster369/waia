@@ -3,11 +3,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { count, eq } from "drizzle-orm";
 
 import { GET as GET_LIST } from "@/app/api/dashboard/twin/prediction/verifications/route";
 import { POST } from "@/app/api/dashboard/twin/prediction/verification/route";
 import { getDb, resetWaiaSqliteSingleton } from "@/db/client";
-import { twinPredictionVerifications } from "@/db/schema";
+import { twinPredictionVerifications, twinRepeatabilityRecords } from "@/db/schema";
 import * as sessionUser from "@/lib/auth/session-user";
 import {
   MAX_VERIFICATION_CORRECTION_CHARS,
@@ -70,6 +71,7 @@ describe("twin prediction verification API routes (DEE-34)", () => {
 
   beforeEach(() => {
     vi.mocked(sessionUser.getOptionalSessionUserId).mockReset();
+    getDb().delete(twinRepeatabilityRecords).run();
     getDb().delete(twinPredictionVerifications).run();
   });
 
@@ -140,6 +142,29 @@ describe("twin prediction verification API routes (DEE-34)", () => {
     expect(body.verification.correction).toBeNull();
     expect(body.verification.id.length).toBeGreaterThan(10);
     expect(() => new Date(body.verification.createdAt).toISOString()).not.toThrow();
+
+    const repCount =
+      getDb()
+        .select({ n: count() })
+        .from(twinRepeatabilityRecords)
+        .where(eq(twinRepeatabilityRecords.userId, ROUTE_USER))
+        .get()?.n ?? 0;
+    expect(repCount).toBe(1);
+  });
+
+  it("POST dedupes repeatability rows for same scenario+verification within the window", async () => {
+    vi.mocked(sessionUser.getOptionalSessionUserId).mockResolvedValue(ROUTE_USER);
+    const body = { scenario: "repeat dedup scenario text", verification: "accurate" as const };
+    await POST(reqPost(body));
+    await POST(reqPost(body));
+
+    const repCount =
+      getDb()
+        .select({ n: count() })
+        .from(twinRepeatabilityRecords)
+        .where(eq(twinRepeatabilityRecords.userId, ROUTE_USER))
+        .get()?.n ?? 0;
+    expect(repCount).toBe(1);
   });
 
   it("POST 200 partially_accurate with correction", async () => {
