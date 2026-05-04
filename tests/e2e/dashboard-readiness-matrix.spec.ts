@@ -171,6 +171,6 @@ test.describe("Dashboard readiness + unlock matrix", () => {
     await assertDashboardMatrix(page, readinessInput, { hasMeaningfulExchange: false });
     await expect(page.getByTestId("mode-tab-society")).not.toBeDisabled();
     await page.getByTestId("mode-tab-society").click();
-    await expect(page.getByTestId("dashboard-society-placeholder")).toBeVisible();
+    await expect(page.getByTestId("dashboard-society-workspace")).toBeVisible();
   });
 });

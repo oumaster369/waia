@@ -243,7 +243,7 @@ describe("DashboardShell", () => {
     expect(screen.getByTestId("dashboard-socialization-placeholder")).toBeInTheDocument();
   });
 
-  it("shows Society workspace stub after socialization succeeds", () => {
+  it("shows Society workspace after socialization succeeds", () => {
     const model = buildTestModel(
       {
         indicators: [100, 100, 100, 100, 100, 100],
@@ -256,7 +256,7 @@ describe("DashboardShell", () => {
     expect(societyTab).not.toBeDisabled();
     expect(societyTab).toHaveAttribute("data-state", "unlocked");
     fireEvent.click(societyTab);
-    expect(screen.getByTestId("dashboard-society-placeholder")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-society-workspace")).toBeInTheDocument();
   });
 
   it("switches Dialogue Area away from Diary when Twin tab is clicked", async () => {

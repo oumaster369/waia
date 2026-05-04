@@ -1,4 +1,5 @@
 import { DiaryWorkspace } from "@/components/dashboard/diary-workspace";
+import { SocietyWorkspace } from "@/components/dashboard/society-workspace";
 import { TwinDialogueWorkspace } from "@/components/dashboard/twin-dialogue-workspace";
 import type { ModeId } from "@/components/dashboard/types";
 import type { DashboardClientProps } from "@/lib/dashboard/types";
@@ -106,7 +107,7 @@ export function DashboardDialogueArea({
         className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Society workspace"
       >
-        <p data-testid="dashboard-society-placeholder">Society workspace (stub — DEE-55).</p>
+        <SocietyWorkspace model={model} />
       </section>
     );
   }
