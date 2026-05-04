@@ -43,6 +43,8 @@ export function DashboardModeTabs({
             data-testid={`mode-tab-${id}`}
             data-state={dataState}
             data-phase={pres.phase}
+            data-journey-line={pres.journeyLine}
+            {...(pres.hint != null ? { "data-hint": pres.hint } : {})}
             type="button"
             role="tab"
             aria-selected={isSelected}
