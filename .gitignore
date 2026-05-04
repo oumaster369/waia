@@ -5,6 +5,7 @@ node_modules/
 
 # Build / framework output
 .next/
+.open-next/
 out/
 build/
 dist/
@@ -23,6 +24,7 @@ test-results/
 .env
 .env.*
 !.env.example
+.dev.vars
 *.local
 *.pem
 *.key
@@ -52,3 +54,6 @@ yarn-error.log*
 
 # Local SQLite (WAIA persistence)
 .data/
+
+# Wrangler typegen output (large; run `pnpm cf-typegen`)
+cloudflare-env.d.ts

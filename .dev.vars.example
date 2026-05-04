@@ -1,0 +1,31 @@
+# Copy to `.dev.vars` in the `waia-app/` root for `pnpm cloudflare:preview` / Wrangler local dev.
+# `.dev.vars` is gitignored. Do not put real production secrets in this file if you copy it elsewhere.
+#
+# Reference: https://developers.cloudflare.com/workers/testing/local-development/
+# Full inventory: docs/cloudflare-env-vars.md
+
+# OpenNext / Next env file selection for local Workers preview (optional)
+NEXTJS_ENV=development
+
+# Public site origin (no trailing slash)
+NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000
+
+# OAuth redirect base — must match preview URL when testing OAuth locally
+OAUTH_PUBLIC_BASE_URL=http://127.0.0.1:3000
+
+# Local SQLite (Worker preview still cannot run better-sqlite3; see docs/cloudflare-deploy.md)
+DATABASE_URL=file:./.data/waia.dev.db
+
+# Optional: session TTL in seconds (omit for default)
+# AUTH_SESSION_MAX_AGE_SECONDS=
+
+# OAuth — set only what you test; never commit production values
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+
+# APPLE_TEAM_ID=
+# APPLE_KEY_ID=
+# APPLE_CLIENT_ID=
+# APPLE_PRIVATE_KEY=
+
+# TELEGRAM_BOT_TOKEN=
