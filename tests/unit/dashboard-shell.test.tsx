@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
@@ -180,17 +180,59 @@ describe("DashboardShell", () => {
     expect(screen.getByTestId("dashboard-twin-message-input")).toBeInTheDocument();
   });
 
-  it("appends Twin stub assistant reply after the user submits a draft", () => {
+  it("appends Twin stub assistant reply after the user submits a draft", async () => {
+    const userTurn = {
+      id: "persisted-user-msg-id",
+      sequence: 1,
+      role: "user" as const,
+      content: "Hello twin",
+      createdAt: new Date().toISOString(),
+    };
+    const successBody = {
+      userTurn,
+      twinSignals: { hasMeaningfulExchange: true },
+      assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(successBody), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
     const model = buildTestModel();
     render(<DashboardShell model={model} />);
     fireEvent.change(screen.getByTestId("dashboard-twin-message-input"), {
       target: { value: "Hello twin" },
     });
     fireEvent.click(screen.getByTestId("dashboard-twin-send"));
-    expect(screen.getByText("Hello twin")).toBeInTheDocument();
-    expect(screen.getByText(TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText("Hello twin")).toBeInTheDocument();
+      expect(screen.getByText(TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE)).toBeInTheDocument();
+    });
     expect(screen.getByTestId("dashboard-twin-msg-user-0")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-twin-msg-assistant-1")).toBeInTheDocument();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/dashboard/twin-dialogue/turn"),
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const opts = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(opts.body))).toEqual(
+      expect.objectContaining({
+        message: "Hello twin",
+      }),
+    );
+    expect(JSON.parse(String(opts.body))).toMatchObject({
+      idempotencyKey: expect.any(String),
+    });
+
+    fetchMock.mockRestore();
   });
 
   it("surfaces Final-state banner when showFinalTwinCompletionState from readiness result", () => {
