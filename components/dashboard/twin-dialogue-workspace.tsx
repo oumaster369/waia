@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
-import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
+import { submitTwinDialogueTurnClient } from "@/lib/dashboard/submit-twin-dialogue-turn-client";
 import { cn } from "@/lib/utils";
 
 export type TwinDialogueMessage = {
@@ -24,10 +24,23 @@ export type TwinDialogueWorkspaceProps = {
 export function TwinDialogueWorkspace({ hasMeaningfulExchange }: TwinDialogueWorkspaceProps) {
   const [messages, setMessages] = React.useState<TwinDialogueMessage[]>([]);
   const [draft, setDraft] = React.useState("");
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [postSignalsMeaningful, setPostSignalsMeaningful] = React.useState(false);
+
   const listRef = React.useRef<HTMLDivElement>(null);
 
-  const showInvitation = !hasMeaningfulExchange && messages.length === 0;
-  const showActiveHistoryHint = hasMeaningfulExchange && messages.length === 0;
+  const meaningfulForWorkspace = hasMeaningfulExchange || postSignalsMeaningful;
+
+  const showInvitation = !meaningfulForWorkspace && messages.length === 0;
+  const showActiveHistoryHint = meaningfulForWorkspace && messages.length === 0;
+
+  const textareaDescribedby = [
+    showInvitation ? "dashboard-twin-invitation-desc" : null,
+    submitError ? "dashboard-twin-dialogue-error-desc" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   React.useLayoutEffect(() => {
     const node = listRef.current;
@@ -40,17 +53,37 @@ export function TwinDialogueWorkspace({ hasMeaningfulExchange }: TwinDialogueWor
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = draft.trim();
-    if (!text) {
+    if (!text || isSubmitting) {
       return;
     }
-    const userId = crypto.randomUUID();
-    const assistantId = crypto.randomUUID();
-    setDraft("");
-    setMessages((prev) => [
-      ...prev,
-      { id: userId, role: "user", text },
-      { id: assistantId, role: "assistant", text: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE },
-    ]);
+    setSubmitError(null);
+    setIsSubmitting(true);
+    const idempotencyKey = crypto.randomUUID();
+
+    void (async () => {
+      const result = await submitTwinDialogueTurnClient({ message: text, idempotencyKey });
+      setIsSubmitting(false);
+      if (result.kind === "ok") {
+        const assistantLocalId = crypto.randomUUID();
+        setDraft("");
+        setPostSignalsMeaningful((prev) => prev || result.body.twinSignals.hasMeaningfulExchange);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: result.body.userTurn.id,
+            role: "user",
+            text: result.body.userTurn.content,
+          },
+          {
+            id: assistantLocalId,
+            role: "assistant",
+            text: result.body.assistantPlaceholder,
+          },
+        ]);
+        return;
+      }
+      setSubmitError(result.displayMessage);
+    })();
   };
 
   const textareaId = "dashboard-twin-composer-field";
@@ -75,8 +108,19 @@ export function TwinDialogueWorkspace({ hasMeaningfulExchange }: TwinDialogueWor
 
       {showActiveHistoryHint && (
         <p className="text-center text-muted-foreground text-xs">
-          Your saved turns will appear here once dialogue persistence is wired.
+          Earlier saved turns load again when you return; new messages persist as you send.
         </p>
+      )}
+
+      {submitError && (
+        <div
+          id="dashboard-twin-dialogue-error-desc"
+          data-testid="dashboard-twin-dialogue-error"
+          role="alert"
+          className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-destructive text-sm"
+        >
+          {submitError}
+        </div>
       )}
 
       <div
@@ -118,20 +162,28 @@ export function TwinDialogueWorkspace({ hasMeaningfulExchange }: TwinDialogueWor
           id={textareaId}
           data-testid="dashboard-twin-message-input"
           value={draft}
+          disabled={isSubmitting}
           onChange={(e) => {
             setDraft(e.target.value);
           }}
           rows={2}
           placeholder="Write to your Twin..."
-          aria-describedby={showInvitation ? "dashboard-twin-invitation-desc" : undefined}
+          aria-describedby={textareaDescribedby.length > 0 ? textareaDescribedby : undefined}
           className={cn(
             "min-h-[2.75rem] w-full shrink rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs",
             "placeholder:text-muted-foreground",
             "focus-visible:outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+            "disabled:cursor-not-allowed disabled:opacity-50",
           )}
         />
-        <Button type="submit" data-testid="dashboard-twin-send" className="sm:w-auto">
-          Send
+        <Button
+          type="submit"
+          data-testid="dashboard-twin-send"
+          aria-busy={isSubmitting}
+          disabled={isSubmitting || draft.trim().length === 0}
+          className="sm:w-auto"
+        >
+          {isSubmitting ? "Sending..." : "Send"}
         </Button>
       </form>
     </div>
