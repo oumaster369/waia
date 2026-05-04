@@ -3,6 +3,12 @@ import "server-only";
 import { and, asc, eq } from "drizzle-orm";
 
 import { diaryEntries, scenarioAnswers } from "@/db/schema";
+import {
+  composeScenarioEmbedInput,
+  embedTwinMemoryText,
+  serializeEmbeddingJson,
+  TWIN_MEMORY_EMBEDDING_MODEL_ID,
+} from "@/lib/embeddings/twin-memory-embeddings";
 import { ensureUserTwinSeed, type WaiaSqliteDb } from "@/lib/twin-persistence/loader";
 
 /** Mirrors Twin dialogue POST body limit (characters). */
@@ -100,6 +106,9 @@ export function appendDiaryEntryForUser(
     }
 
     const id = crypto.randomUUID();
+    const embeddingVec = embedTwinMemoryText(body);
+    const embeddingJson = serializeEmbeddingJson(embeddingVec);
+    const embeddingModel = embeddingVec ? TWIN_MEMORY_EMBEDDING_MODEL_ID : null;
     sqlite
       .insert(diaryEntries)
       .values({
@@ -108,6 +117,8 @@ export function appendDiaryEntryForUser(
         twinProfileId,
         body,
         idempotencyKey: idem,
+        embeddingJson,
+        embeddingModel,
       })
       .run();
 
@@ -172,6 +183,10 @@ export function appendScenarioAnswerForUser(
     }
 
     const id = crypto.randomUUID();
+    const scenarioEmbedIn = composeScenarioEmbedInput(params.scenarioKey, params.payloadJson);
+    const embeddingVec = embedTwinMemoryText(scenarioEmbedIn);
+    const embeddingJson = serializeEmbeddingJson(embeddingVec);
+    const embeddingModel = embeddingVec ? TWIN_MEMORY_EMBEDDING_MODEL_ID : null;
     sqlite
       .insert(scenarioAnswers)
       .values({
@@ -180,6 +195,8 @@ export function appendScenarioAnswerForUser(
         scenarioKey: params.scenarioKey,
         payloadJson: params.payloadJson,
         idempotencyKey: idem,
+        embeddingJson,
+        embeddingModel,
       })
       .run();
 

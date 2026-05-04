@@ -14,6 +14,12 @@ import {
 import { NULL_HINTS_BY_INDICATOR } from "@/lib/dashboard/null-hints";
 import { parseIndicatorVector } from "@/lib/readiness/readiness";
 import type { ReadinessInput } from "@/lib/readiness/types";
+import {
+  composeTwinDialogueTurnEmbedInput,
+  embedTwinMemoryText,
+  serializeEmbeddingJson,
+  TWIN_MEMORY_EMBEDDING_MODEL_ID,
+} from "@/lib/embeddings/twin-memory-embeddings";
 import { and, eq, sql } from "drizzle-orm";
 import type * as WaiaSchema from "@/db/schema";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -151,6 +157,11 @@ function appendTwinDialogueTurnInsideExecutor(
     .all();
   const nextSeq = Number(agg?.maxSeq ?? 0) + 1;
 
+  const embedInput = composeTwinDialogueTurnEmbedInput(params.role, params.content);
+  const embeddingVec = embedTwinMemoryText(embedInput);
+  const embeddingJson = serializeEmbeddingJson(embeddingVec);
+  const embeddingModel = embeddingVec ? TWIN_MEMORY_EMBEDDING_MODEL_ID : null;
+
   ex.insert(twinDialogueTurns).values({
     id,
     twinProfileId: params.twinProfileId,
@@ -158,6 +169,8 @@ function appendTwinDialogueTurnInsideExecutor(
     role: params.role,
     content: params.content,
     idempotencyKey: params.idempotencyKey ?? null,
+    embeddingJson,
+    embeddingModel,
   }).run();
 
   const row = ex
