@@ -36,6 +36,13 @@
       "when": 1777836000000,
       "tag": "0004_twin_memory_embeddings",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1777840000000,
+      "tag": "0005_twin_prediction_verifications",
+      "breakpoints": true
     }
   ]
 }
