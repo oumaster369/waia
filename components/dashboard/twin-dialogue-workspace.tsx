@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import type { DashboardTwinDialogueInitialTurn } from "@/lib/dashboard/types";
 import { submitTwinDialogueTurnClient } from "@/lib/dashboard/submit-twin-dialogue-turn-client";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +13,10 @@ export type TwinDialogueMessage = {
   text: string;
 };
 
+function hydrateMessages(initial: DashboardTwinDialogueInitialTurn[]): TwinDialogueMessage[] {
+  return initial.map((t) => ({ id: t.id, role: t.role, text: t.text }));
+}
+
 export {
   TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
 } from "@/lib/dashboard/twin-dialogue-stub";
@@ -19,10 +24,17 @@ export {
 export type TwinDialogueWorkspaceProps = {
   /** From server Twin signals: first meaningful exchange already recorded in persistence. */
   hasMeaningfulExchange: boolean;
+  /** SSR/RSC seeded turns from `twin_dialogue_turns` (DEE-26). */
+  initialTwinDialogueTurns?: DashboardTwinDialogueInitialTurn[];
 };
 
-export function TwinDialogueWorkspace({ hasMeaningfulExchange }: TwinDialogueWorkspaceProps) {
-  const [messages, setMessages] = React.useState<TwinDialogueMessage[]>([]);
+export function TwinDialogueWorkspace({
+  hasMeaningfulExchange,
+  initialTwinDialogueTurns = [],
+}: TwinDialogueWorkspaceProps) {
+  const [messages, setMessages] = React.useState<TwinDialogueMessage[]>(() =>
+    hydrateMessages(initialTwinDialogueTurns),
+  );
   const [draft, setDraft] = React.useState("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
@@ -64,7 +76,10 @@ export function TwinDialogueWorkspace({ hasMeaningfulExchange }: TwinDialogueWor
       const result = await submitTwinDialogueTurnClient({ message: text, idempotencyKey });
       setIsSubmitting(false);
       if (result.kind === "ok") {
-        const assistantLocalId = crypto.randomUUID();
+        const assistantTurn = result.body.assistantTurn;
+        const assistantId = assistantTurn?.id ?? crypto.randomUUID();
+        const assistantText =
+          assistantTurn?.content ?? result.body.assistantPlaceholder;
         setDraft("");
         setPostSignalsMeaningful((prev) => prev || result.body.twinSignals.hasMeaningfulExchange);
         setMessages((prev) => [
@@ -75,9 +90,9 @@ export function TwinDialogueWorkspace({ hasMeaningfulExchange }: TwinDialogueWor
             text: result.body.userTurn.content,
           },
           {
-            id: assistantLocalId,
+            id: assistantId,
             role: "assistant",
-            text: result.body.assistantPlaceholder,
+            text: assistantText,
           },
         ]);
         return;

@@ -3,9 +3,21 @@ import { redirect } from "next/navigation";
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
+import { getDb } from "@/db/client";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { buildDashboardViewModel } from "@/lib/dashboard/build-dashboard-model";
+import type { DashboardTwinDialogueInitialTurn } from "@/lib/dashboard/types";
 import { getDashboardReadinessPayloadForUser } from "@/lib/dashboard/dashboard-readiness-source";
+import {
+  listTwinDialogueTurnsForUser,
+  type TwinDialogueMemoryRow,
+} from "@/lib/twin-persistence/loader";
+
+function isUserOrAssistantRole(
+  row: TwinDialogueMemoryRow,
+): row is TwinDialogueMemoryRow & { role: "user" | "assistant" } {
+  return row.role === "user" || row.role === "assistant";
+}
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +33,15 @@ export default async function DashboardPage() {
   }
 
   const payload = await getDashboardReadinessPayloadForUser(userId);
+  const memoryRows = listTwinDialogueTurnsForUser(getDb(), userId);
+  const initialTwinDialogueTurns: DashboardTwinDialogueInitialTurn[] = memoryRows
+    .filter(isUserOrAssistantRole)
+    .map((t) => ({ id: t.id, role: t.role, text: t.content }));
   const model = buildDashboardViewModel(
     payload.readinessInput,
     payload.twinSignals,
     payload.identityLabel,
+    initialTwinDialogueTurns,
   );
 
   return (

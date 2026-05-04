@@ -64,7 +64,10 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
         className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Twin dialogue empty state"
       >
-        <TwinDialogueWorkspace hasMeaningfulExchange={model.hasMeaningfulExchange} />
+        <TwinDialogueWorkspace
+          hasMeaningfulExchange={model.hasMeaningfulExchange}
+          initialTwinDialogueTurns={model.initialTwinDialogueTurns}
+        />
       </section>
     );
   }
@@ -76,7 +79,10 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
         className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Twin dialogue with Socialization stub"
       >
-        <TwinDialogueWorkspace hasMeaningfulExchange={model.hasMeaningfulExchange} />
+        <TwinDialogueWorkspace
+          hasMeaningfulExchange={model.hasMeaningfulExchange}
+          initialTwinDialogueTurns={model.initialTwinDialogueTurns}
+        />
         <div
           data-testid="dashboard-socialization-placeholder"
           className="rounded-xl border border-border bg-accent/40 p-4 text-sm"
@@ -94,7 +100,10 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
         className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Twin dialogue final steady state"
       >
-        <TwinDialogueWorkspace hasMeaningfulExchange={model.hasMeaningfulExchange} />
+        <TwinDialogueWorkspace
+          hasMeaningfulExchange={model.hasMeaningfulExchange}
+          initialTwinDialogueTurns={model.initialTwinDialogueTurns}
+        />
       </section>
     );
   }
@@ -106,7 +115,10 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
         className="flex min-h-0 flex-1 flex-col gap-4 p-6"
         aria-label="Twin dialogue after Socialization before final flag"
       >
-        <TwinDialogueWorkspace hasMeaningfulExchange={model.hasMeaningfulExchange} />
+        <TwinDialogueWorkspace
+          hasMeaningfulExchange={model.hasMeaningfulExchange}
+          initialTwinDialogueTurns={model.initialTwinDialogueTurns}
+        />
         {showFinalTwinCompletionState && (
           <div
             data-testid="dashboard-final-message-placeholder"
@@ -125,7 +137,10 @@ export function DashboardDialogueArea({ model, selectedMode }: DashboardDialogue
       className="flex min-h-0 flex-1 flex-col gap-4 p-6"
       aria-label="Twin dialogue active state"
     >
-      <TwinDialogueWorkspace hasMeaningfulExchange={model.hasMeaningfulExchange} />
+      <TwinDialogueWorkspace
+        hasMeaningfulExchange={model.hasMeaningfulExchange}
+        initialTwinDialogueTurns={model.initialTwinDialogueTurns}
+      />
     </section>
   );
 }

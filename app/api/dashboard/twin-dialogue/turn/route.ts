@@ -6,9 +6,9 @@ import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import type { TwinDialogueTurnSubmitApiResponse } from "@/lib/dashboard/twin-dialogue-turn-api.types";
 import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
 import {
-  appendTwinDialogueTurnResult,
   countUserDialogueTurns,
   ensureUserTwinSeed,
+  persistUserTwinExchangeWithAssistantStub,
 } from "@/lib/twin-persistence/loader";
 
 export const dynamic = "force-dynamic";
@@ -93,25 +93,37 @@ export async function POST(request: Request) {
   const db = getDb();
   const twinProfileId = ensureUserTwinSeed(db, userId);
 
-  const persisted = appendTwinDialogueTurnResult(db, {
+  const persisted = persistUserTwinExchangeWithAssistantStub(db, {
     twinProfileId,
-    role: "user",
-    content: trimmed,
-    idempotencyKey: idempotencyKey ?? null,
+    userContent: trimmed,
+    userIdempotencyKey: idempotencyKey ?? null,
+    assistantContent: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
   });
 
   const twinSignals = {
     hasMeaningfulExchange: countUserDialogueTurns(db, twinProfileId) > 0,
   };
 
+  const at = persisted.assistantTurn;
+
   const body: TwinDialogueTurnSubmitApiResponse = {
     userTurn: {
-      id: persisted.id,
-      sequence: persisted.sequence,
+      id: persisted.userTurn.id,
+      sequence: persisted.userTurn.sequence,
       role: "user",
-      content: persisted.content,
-      createdAt: persisted.createdAt.toISOString(),
+      content: persisted.userTurn.content,
+      createdAt: persisted.userTurn.createdAt.toISOString(),
     },
+    assistantTurn:
+      at != null
+        ? {
+            id: at.id,
+            sequence: at.sequence,
+            role: "assistant",
+            content: at.content,
+            createdAt: at.createdAt.toISOString(),
+          }
+        : null,
     twinSignals,
     assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
   };
