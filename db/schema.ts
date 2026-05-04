@@ -97,6 +97,8 @@ export const twinDialogueTurns = sqliteTable(
     role: text("role", { enum: ["user", "assistant", "system"] }).notNull(),
     content: text("content").notNull(),
     idempotencyKey: text("idempotency_key"),
+    embeddingJson: text("embedding_json"),
+    embeddingModel: text("embedding_model"),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -118,6 +120,8 @@ export const diaryEntries = sqliteTable(
     twinProfileId: text("twin_profile_id").references(() => twinProfiles.id, { onDelete: "cascade" }),
     body: text("body"),
     idempotencyKey: text("idempotency_key"),
+    embeddingJson: text("embedding_json"),
+    embeddingModel: text("embedding_model"),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -136,6 +140,8 @@ export const scenarioAnswers = sqliteTable(
     scenarioKey: text("scenario_key").notNull(),
     payloadJson: text("payload_json").notNull(),
     idempotencyKey: text("idempotency_key"),
+    embeddingJson: text("embedding_json"),
+    embeddingModel: text("embedding_model"),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
       .$defaultFn(() => new Date()),
