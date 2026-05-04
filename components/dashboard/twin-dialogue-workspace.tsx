@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
 import { cn } from "@/lib/utils";
 
 export type TwinDialogueMessage = {
@@ -11,9 +12,9 @@ export type TwinDialogueMessage = {
   text: string;
 };
 
-/** Visible stub until DEE-39 dialogue endpoint responds. */
-export const TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE =
-  "Twin response placeholder — dialogue service will stream here once wired (stub).";
+export {
+  TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+} from "@/lib/dashboard/twin-dialogue-stub";
 
 export type TwinDialogueWorkspaceProps = {
   /** From server Twin signals: first meaningful exchange already recorded in persistence. */
