@@ -27,6 +27,13 @@ describe("TwinDialogueWorkspace POST submit", () => {
       new Response(
         JSON.stringify({
           userTurn,
+          assistantTurn: {
+            id: "server-assistant-turn-id",
+            sequence: userTurn.sequence + 1,
+            role: "assistant",
+            content: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+            createdAt: "2026-01-02T03:04:05.010Z",
+          },
           twinSignals: { hasMeaningfulExchange: true },
           assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
         }),
@@ -61,6 +68,13 @@ describe("TwinDialogueWorkspace POST submit", () => {
             role: "user" as const,
             content: "second message",
             createdAt: "2026-01-02T03:05:05.000Z",
+          },
+          assistantTurn: {
+            id: "turn-2-asst",
+            sequence: 44,
+            role: "assistant" as const,
+            content: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+            createdAt: "2026-01-02T03:05:05.010Z",
           },
           twinSignals: { hasMeaningfulExchange: true },
           assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
@@ -112,6 +126,13 @@ describe("TwinDialogueWorkspace POST submit", () => {
             content: "lost session",
             createdAt: "2026-01-02T00:00:00.000Z",
           },
+          assistantTurn: {
+            id: "ok-asst",
+            sequence: 2,
+            role: "assistant",
+            content: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+            createdAt: "2026-01-02T00:00:00.010Z",
+          },
           twinSignals: { hasMeaningfulExchange: true },
           assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
         }),
@@ -161,6 +182,13 @@ describe("TwinDialogueWorkspace POST submit", () => {
             content: "anything",
             createdAt: "2026-01-02T00:01:00.000Z",
           },
+          assistantTurn: {
+            id: "fix-asst",
+            sequence: 12,
+            role: "assistant",
+            content: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+            createdAt: "2026-01-02T00:01:00.010Z",
+          },
           twinSignals: { hasMeaningfulExchange: true },
           assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
         }),
@@ -202,6 +230,13 @@ describe("TwinDialogueWorkspace POST submit", () => {
             content: "blocked",
             createdAt: "2026-01-02T00:02:00.000Z",
           },
+          assistantTurn: {
+            id: "delayed-asst",
+            sequence: 100,
+            role: "assistant",
+            content: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+            createdAt: "2026-01-02T00:02:00.010Z",
+          },
           twinSignals: { hasMeaningfulExchange: true },
           assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
         }),
@@ -215,5 +250,21 @@ describe("TwinDialogueWorkspace POST submit", () => {
       expect(screen.getByTestId("dashboard-twin-message-input")).not.toBeDisabled();
     });
     expect(screen.getByTestId("dashboard-twin-send")).toBeDisabled();
+  });
+
+  it("renders persisted initial turns from initialTwinDialogueTurns", () => {
+    render(
+      <TwinDialogueWorkspace
+        hasMeaningfulExchange
+        initialTwinDialogueTurns={[
+          { id: "seed-u", role: "user", text: "From SSR" },
+          { id: "seed-a", role: "assistant", text: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("From SSR")).toBeInTheDocument();
+    expect(screen.getByText(TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE)).toBeInTheDocument();
+    expect(screen.queryByTestId("dashboard-twin-invitation-placeholder")).not.toBeInTheDocument();
   });
 });

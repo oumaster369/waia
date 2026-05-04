@@ -1,5 +1,8 @@
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
-import type { TwinDialogueTurnSubmitApiResponse } from "@/lib/dashboard/twin-dialogue-turn-api.types";
+import type {
+  TwinDialogueAssistantSubmittedTurnDto,
+  TwinDialogueTurnSubmitApiResponse,
+} from "@/lib/dashboard/twin-dialogue-turn-api.types";
 
 export const TWIN_DIALOGUE_TURN_PATH = "/api/dashboard/twin-dialogue/turn";
 
@@ -19,6 +22,38 @@ export type SubmitTwinDialogueTurnErr = {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function parseAssistantTurn(
+  at: unknown,
+): TwinDialogueAssistantSubmittedTurnDto | null | "invalid" {
+  if (at === null) {
+    return null;
+  }
+  if (!isRecord(at)) {
+    return "invalid";
+  }
+  const rid = at.id;
+  const rsequence = at.sequence;
+  const rrole = at.role;
+  const rcontent = at.content;
+  const rcreatedAt = at.createdAt;
+  if (
+    typeof rid !== "string" ||
+    typeof rsequence !== "number" ||
+    rrole !== "assistant" ||
+    typeof rcontent !== "string" ||
+    typeof rcreatedAt !== "string"
+  ) {
+    return "invalid";
+  }
+  return {
+    id: rid,
+    sequence: rsequence,
+    role: "assistant",
+    content: rcontent,
+    createdAt: rcreatedAt,
+  };
 }
 
 function narrowSuccess(raw: unknown): TwinDialogueTurnSubmitApiResponse | null {
@@ -51,7 +86,26 @@ function narrowSuccess(raw: unknown): TwinDialogueTurnSubmitApiResponse | null {
     return null;
   }
 
-  return raw as TwinDialogueTurnSubmitApiResponse;
+  if (!("assistantTurn" in raw)) {
+    return null;
+  }
+  const assistantParsed = parseAssistantTurn(raw.assistantTurn);
+  if (assistantParsed === "invalid") {
+    return null;
+  }
+
+  return {
+    userTurn: {
+      id,
+      sequence,
+      role: "user",
+      content,
+      createdAt,
+    },
+    assistantTurn: assistantParsed,
+    twinSignals: { hasMeaningfulExchange: tsRaw.hasMeaningfulExchange },
+    assistantPlaceholder: ap,
+  };
 }
 
 function parseEnvelope(raw: unknown): ApiErrorEnvelope | null {

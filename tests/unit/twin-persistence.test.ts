@@ -12,7 +12,9 @@ import { DEFAULT_READINESS_INPUT } from "@/lib/dashboard/readiness-snapshot-defa
 import {
   appendTwinDialogueTurn,
   listTwinDialogueTurnsChronological,
+  listTwinDialogueTurnsForUser,
   loadDashboardReadinessPayloadFromDb,
+  persistUserTwinExchangeWithAssistantStub,
 } from "@/lib/twin-persistence/loader";
 import { eq, sql } from "drizzle-orm";
 
@@ -105,5 +107,44 @@ describe("twin persistence loader", () => {
       .where(eq(twinDialogueTurns.idempotencyKey, "dup"))
       .all();
     expect(agg?.c).toBe(1);
+  });
+
+  it("listTwinDialogueTurnsForUser returns rows with ids, ISO timestamps, user then assistant pairing", () => {
+    const db = getDb();
+    const twin = persistUserTwinExchangeWithAssistantStub(db, {
+      twinProfileId,
+      userContent: "pair me unique",
+      userIdempotencyKey: "dee26-pair-uniq",
+      assistantContent: "stub reply",
+    });
+    expect(twin.userTurn.replayed).toBe(false);
+    expect(twin.assistantTurn).not.toBeNull();
+    const uSeq = twin.userTurn.sequence;
+    const aSeq = twin.assistantTurn!.sequence;
+
+    const pairRows = listTwinDialogueTurnsForUser(db, TEST_USER_ID)
+      .filter((t) => t.sequence === uSeq || t.sequence === aSeq)
+      .sort((a, b) => a.sequence - b.sequence);
+    expect(pairRows).toHaveLength(2);
+    expect(pairRows[0]?.role).toBe("user");
+    expect(pairRows[0]?.content).toBe("pair me unique");
+    expect(pairRows[1]?.role).toBe("assistant");
+    expect(pairRows[1]?.content).toBe("stub reply");
+    expect(pairRows.every((r) => typeof r.id === "string" && r.id.length > 0)).toBe(true);
+    expect(pairRows.every((r) => typeof r.createdAt === "string")).toBe(true);
+  });
+
+  it("listTwinDialogueTurnsChronological exposes id column on each row", () => {
+    const db = getDb();
+    appendTwinDialogueTurn(db, {
+      twinProfileId,
+      role: "user",
+      content: "with id column",
+      idempotencyKey: "id-col-test",
+    });
+    const rows = listTwinDialogueTurnsChronological(db, twinProfileId);
+    const mine = rows.find((r) => r.content === "with id column");
+    expect(mine?.id).toBeTruthy();
+    expect(typeof mine?.sequence).toBe("number");
   });
 });

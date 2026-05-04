@@ -94,6 +94,93 @@ export type AppendTwinDialogueTurnResult = {
   replayed: boolean;
 };
 
+/** Raw row from SQLite (Twin dialogue memory v1 — DEE-26). */
+export type TwinDialogueTurnDbRow = {
+  id: string;
+  sequence: number;
+  role: "user" | "assistant" | "system";
+  content: string;
+  idempotencyKey: string | null;
+  createdAt: Date;
+};
+
+function appendTwinDialogueTurnInsideExecutor(
+  ex: WaiaSqliteDb,
+  params: {
+    twinProfileId: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    idempotencyKey?: string | null;
+  },
+): AppendTwinDialogueTurnResult {
+  if (params.idempotencyKey != null && params.idempotencyKey !== "") {
+    const existing = ex
+      .select({
+        id: twinDialogueTurns.id,
+        sequence: twinDialogueTurns.sequence,
+        createdAt: twinDialogueTurns.createdAt,
+        content: twinDialogueTurns.content,
+      })
+      .from(twinDialogueTurns)
+      .where(
+        and(
+          eq(twinDialogueTurns.twinProfileId, params.twinProfileId),
+          eq(twinDialogueTurns.idempotencyKey, params.idempotencyKey),
+        ),
+      )
+      .get();
+    if (existing) {
+      return {
+        id: existing.id,
+        sequence: existing.sequence,
+        createdAt: existing.createdAt,
+        content: existing.content,
+        replayed: true,
+      };
+    }
+  }
+
+  const id = crypto.randomUUID();
+
+  const [agg] = ex
+    .select({
+      maxSeq: sql<number>`coalesce(max(${twinDialogueTurns.sequence}), 0)`.mapWith(Number),
+    })
+    .from(twinDialogueTurns)
+    .where(eq(twinDialogueTurns.twinProfileId, params.twinProfileId))
+    .all();
+  const nextSeq = Number(agg?.maxSeq ?? 0) + 1;
+
+  ex.insert(twinDialogueTurns).values({
+    id,
+    twinProfileId: params.twinProfileId,
+    sequence: nextSeq,
+    role: params.role,
+    content: params.content,
+    idempotencyKey: params.idempotencyKey ?? null,
+  }).run();
+
+  const row = ex
+    .select({
+      createdAt: twinDialogueTurns.createdAt,
+    })
+    .from(twinDialogueTurns)
+    .where(eq(twinDialogueTurns.id, id))
+    .get();
+
+  if (!row) {
+    throw new Error("[waia] twin dialogue insert row missing immediately after insert");
+  }
+
+  return {
+    id,
+    sequence: nextSeq,
+    createdAt: row.createdAt,
+    content: params.content,
+    replayed: false,
+  };
+}
+
 /** Append one dialogue row; deterministic sequence via max(sequence)+1 (sync transaction). */
 export function appendTwinDialogueTurnResult(
   db: WaiaSqliteDb,
@@ -104,75 +191,49 @@ export function appendTwinDialogueTurnResult(
     idempotencyKey?: string | null;
   },
 ): AppendTwinDialogueTurnResult {
+  return db.transaction((tx) =>
+    appendTwinDialogueTurnInsideExecutor(tx as WaiaSqliteDb, params),
+  );
+}
+
+export type PersistUserTwinExchangeWithAssistantResult = {
+  userTurn: AppendTwinDialogueTurnResult;
+  assistantTurn: AppendTwinDialogueTurnResult | null;
+};
+
+/**
+ * Atomically persists a user turn and a paired assistant stub when the user turn is freshly inserted (DEE-26).
+ * Readiness/countUserDialogueTurns still counts user rows only.
+ */
+export function persistUserTwinExchangeWithAssistantStub(
+  db: WaiaSqliteDb,
+  params: {
+    twinProfileId: string;
+    userContent: string;
+    userIdempotencyKey?: string | null;
+    assistantContent: string;
+  },
+): PersistUserTwinExchangeWithAssistantResult {
   return db.transaction((tx) => {
-    if (params.idempotencyKey != null && params.idempotencyKey !== "") {
-      const existing = tx
-        .select({
-          id: twinDialogueTurns.id,
-          sequence: twinDialogueTurns.sequence,
-          createdAt: twinDialogueTurns.createdAt,
-          content: twinDialogueTurns.content,
-        })
-        .from(twinDialogueTurns)
-        .where(
-          and(
-            eq(twinDialogueTurns.twinProfileId, params.twinProfileId),
-            eq(twinDialogueTurns.idempotencyKey, params.idempotencyKey),
-          ),
-        )
-        .get();
-      if (existing) {
-        return {
-          id: existing.id,
-          sequence: existing.sequence,
-          createdAt: existing.createdAt,
-          content: existing.content,
-          replayed: true,
-        };
-      }
-    }
+    const executor = tx as WaiaSqliteDb;
+    const userTurn = appendTwinDialogueTurnInsideExecutor(executor, {
+      twinProfileId: params.twinProfileId,
+      role: "user",
+      content: params.userContent,
+      idempotencyKey: params.userIdempotencyKey ?? null,
+    });
 
-    const id = crypto.randomUUID();
-
-    const [agg] = tx
-      .select({
-        maxSeq: sql<number>`coalesce(max(${twinDialogueTurns.sequence}), 0)`.mapWith(Number),
-      })
-      .from(twinDialogueTurns)
-      .where(eq(twinDialogueTurns.twinProfileId, params.twinProfileId))
-      .all();
-    const nextSeq = Number(agg?.maxSeq ?? 0) + 1;
-
-    tx.insert(twinDialogueTurns)
-      .values({
-        id,
+    let assistantTurn: AppendTwinDialogueTurnResult | null = null;
+    if (!userTurn.replayed) {
+      assistantTurn = appendTwinDialogueTurnInsideExecutor(executor, {
         twinProfileId: params.twinProfileId,
-        sequence: nextSeq,
-        role: params.role,
-        content: params.content,
-        idempotencyKey: params.idempotencyKey ?? null,
-      })
-      .run();
-
-    const row = tx
-      .select({
-        createdAt: twinDialogueTurns.createdAt,
-      })
-      .from(twinDialogueTurns)
-      .where(eq(twinDialogueTurns.id, id))
-      .get();
-
-    if (!row) {
-      throw new Error("[waia] twin dialogue insert row missing immediately after insert");
+        role: "assistant",
+        content: params.assistantContent,
+        idempotencyKey: `${userTurn.id}:assistant`,
+      });
     }
 
-    return {
-      id,
-      sequence: nextSeq,
-      createdAt: row.createdAt,
-      content: params.content,
-      replayed: false,
-    };
+    return { userTurn, assistantTurn };
   });
 }
 
@@ -199,9 +260,22 @@ export function countUserDialogueTurns(db: WaiaSqliteDb, twinProfileId: string):
   return row?.c ?? 0;
 }
 
-export function listTwinDialogueTurnsChronological(db: WaiaSqliteDb, twinProfileId: string) {
+/** Twin dialogue memory v1 rows for APIs and RSC hydrate (ISO `createdAt`). */
+export type TwinDialogueMemoryRow = {
+  id: string;
+  sequence: number;
+  role: "user" | "assistant" | "system";
+  content: string;
+  createdAt: string;
+};
+
+export function listTwinDialogueTurnsChronological(
+  db: WaiaSqliteDb,
+  twinProfileId: string,
+): TwinDialogueTurnDbRow[] {
   return db
     .select({
+      id: twinDialogueTurns.id,
       sequence: twinDialogueTurns.sequence,
       role: twinDialogueTurns.role,
       content: twinDialogueTurns.content,
@@ -212,6 +286,19 @@ export function listTwinDialogueTurnsChronological(db: WaiaSqliteDb, twinProfile
     .where(eq(twinDialogueTurns.twinProfileId, twinProfileId))
     .orderBy(twinDialogueTurns.sequence)
     .all();
+}
+
+/** Twin dialogue memory for this user — read-only after ensureUserTwinSeed. */
+export function listTwinDialogueTurnsForUser(db: WaiaSqliteDb, userId: string): TwinDialogueMemoryRow[] {
+  const twinProfileId = ensureUserTwinSeed(db, userId);
+  const rows = listTwinDialogueTurnsChronological(db, twinProfileId);
+  return rows.map((r) => ({
+    id: r.id,
+    sequence: r.sequence,
+    role: r.role,
+    content: r.content,
+    createdAt: r.createdAt.toISOString(),
+  }));
 }
 
 export function loadDashboardReadinessPayloadFromDb(

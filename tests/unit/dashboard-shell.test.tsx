@@ -190,6 +190,13 @@ describe("DashboardShell", () => {
     };
     const successBody = {
       userTurn,
+      assistantTurn: {
+        id: "persisted-assistant-msg-id",
+        sequence: userTurn.sequence + 1,
+        role: "assistant" as const,
+        content: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+        createdAt: new Date().toISOString(),
+      },
       twinSignals: { hasMeaningfulExchange: true },
       assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
     };
@@ -233,6 +240,24 @@ describe("DashboardShell", () => {
     });
 
     fetchMock.mockRestore();
+  });
+
+  it("renders Twin dialogue messages hydrated from initialTwinDialogueTurns on the model", () => {
+    const model = buildTestModel({}, { hasMeaningfulExchange: true });
+    render(
+      <DashboardShell
+        model={{
+          ...model,
+          initialTwinDialogueTurns: [
+            { id: "ssr-user", role: "user", text: "Hydrated hi" },
+            { id: "ssr-asst", role: "assistant", text: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Hydrated hi")).toBeInTheDocument();
+    expect(screen.getByText(TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE)).toBeInTheDocument();
   });
 
   it("surfaces Final-state banner when showFinalTwinCompletionState from readiness result", () => {

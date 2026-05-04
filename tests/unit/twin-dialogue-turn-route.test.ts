@@ -7,10 +7,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { POST } from "@/app/api/dashboard/twin-dialogue/turn/route";
 import type { TwinDialogueTurnSubmitApiResponse } from "@/lib/dashboard/twin-dialogue-turn-api.types";
 import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
-import * as sessionUser from "@/lib/auth/session-user";
 import { getDb, resetWaiaSqliteSingleton } from "@/db/client";
 import { twinDialogueTurns } from "@/db/schema";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
+import * as sessionUser from "@/lib/auth/session-user";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 import { loadDashboardReadinessPayloadFromDb } from "@/lib/twin-persistence/loader";
@@ -124,7 +124,7 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
     expect(((await res.json()) as ApiErrorEnvelope).error.code).toBe("INVALID_BODY");
   });
 
-  it("persists turn and returns 200 with twinSignals and assistantPlaceholder", async () => {
+  it("persists user and assistant stub turns, returns twinSignals, assistantTurn, and assistantPlaceholder", async () => {
     const res = await POST(postJson({ message: " Hello twin " }));
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toContain("no-store");
@@ -137,16 +137,28 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
     expect(typeof body.userTurn.createdAt).toBe("string");
     expect(body.twinSignals.hasMeaningfulExchange).toBe(true);
     expect(body.assistantPlaceholder).toBe(TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE);
+    expect(body.assistantTurn).not.toBeNull();
+    expect(body.assistantTurn!.role).toBe("assistant");
+    expect(body.assistantTurn!.content).toBe(TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE);
+    expect(body.assistantTurn!.sequence).toBe(2);
+    expect(body.assistantTurn!.id).toBeTruthy();
 
     const payload = loadDashboardReadinessPayloadFromDb(getDb(), ROUTE_USER_ID);
     expect(payload.twinSignals.hasMeaningfulExchange).toBe(true);
 
-    const [countRow] = getDb()
+    const [userCount] = getDb()
       .select({ c: sql<number>`count(*)`.mapWith(Number) })
       .from(twinDialogueTurns)
       .where(eq(twinDialogueTurns.role, "user"))
       .all();
-    expect(countRow?.c).toBe(1);
+    expect(userCount?.c).toBe(1);
+
+    const [assistantCount] = getDb()
+      .select({ c: sql<number>`count(*)`.mapWith(Number) })
+      .from(twinDialogueTurns)
+      .where(eq(twinDialogueTurns.role, "assistant"))
+      .all();
+    expect(assistantCount?.c).toBe(1);
   });
 
   it("does not duplicate when idempotencyKey repeats", async () => {
@@ -161,12 +173,26 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
     expect(secondBody.userTurn.content).toBe("first");
     expect(secondBody.userTurn.id).toBe(firstBody.userTurn.id);
     expect(secondBody.userTurn.sequence).toBe(firstBody.userTurn.sequence);
+    expect(secondBody.assistantTurn).toBeNull();
 
-    const [countRow] = getDb()
+    const [userCount] = getDb()
       .select({ c: sql<number>`count(*)`.mapWith(Number) })
       .from(twinDialogueTurns)
       .where(eq(twinDialogueTurns.role, "user"))
       .all();
-    expect(countRow?.c).toBe(1);
+    expect(userCount?.c).toBe(1);
+
+    const [assistantCount] = getDb()
+      .select({ c: sql<number>`count(*)`.mapWith(Number) })
+      .from(twinDialogueTurns)
+      .where(eq(twinDialogueTurns.role, "assistant"))
+      .all();
+    expect(assistantCount?.c).toBe(1);
+
+    const [total] = getDb()
+      .select({ c: sql<number>`count(*)`.mapWith(Number) })
+      .from(twinDialogueTurns)
+      .all();
+    expect(total?.c).toBe(2);
   });
 });
