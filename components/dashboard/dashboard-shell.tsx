@@ -29,6 +29,8 @@ export function DashboardShell({ model }: DashboardShellProps) {
       <DashboardModeTabs
         tabPresentations={tabPresentations}
         selectedMode={selectedMode}
+        totalCompletionPercent={model.totalCompletionPercent}
+        readyForSocialization={model.readyForSocialization}
         onSelectMode={(mode) => {
           setSelectedMode(mode);
         }}

@@ -40,4 +40,22 @@ describe("AvatarReadinessStatusBlock", () => {
     rerender(<AvatarReadinessStatusBlock statusText="x" readinessPercent={NaN} />);
     expect(screen.getByTestId("dashboard-avatar-readiness-percent")).toHaveTextContent("0%");
   });
+
+  it("applies formation-complete chrome when isFormationComplete", () => {
+    render(
+      <AvatarReadinessStatusBlock
+        statusText="AI-Twin formation complete · Alex"
+        readinessPercent={100}
+        isFormationComplete
+      />,
+    );
+    const block = screen.getByTestId("dashboard-avatar-status-block");
+    expect(block).toHaveAttribute("data-formation-complete", "true");
+
+    const placeholder = screen.getByTestId("dashboard-avatar-placeholder");
+    expect(placeholder).toHaveClass("ring-2");
+    expect(placeholder).toHaveClass("rounded-full");
+
+    expect(screen.getByTestId("dashboard-avatar-status-text")).toHaveClass("font-medium");
+  });
 });

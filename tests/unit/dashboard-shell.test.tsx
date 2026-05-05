@@ -247,6 +247,24 @@ describe("DashboardShell", () => {
     render(<DashboardShell model={model} />);
     expect(screen.getByTestId("mode-tab-society")).toBeDisabled();
     expect(screen.getByTestId("mode-tab-society")).toHaveAttribute("data-state", "locked");
+    expect(screen.getByTestId("mode-tab-society")).toHaveAttribute(
+      "data-next-socialization-highlight",
+      "true",
+    );
+    expect(screen.getByTestId("mode-tab-society")).not.toHaveClass("opacity-60");
+    expect(screen.getByTestId("dashboard-avatar-status-text")).toHaveTextContent(
+      "AI-Twin formation complete · Dev user",
+    );
+    expect(screen.getByTestId("dashboard-top-block")).toHaveAttribute("data-formation-complete", "true");
+    expect(screen.getByTestId("dashboard-avatar-status-block")).toHaveAttribute(
+      "data-formation-complete",
+      "true",
+    );
+    expect(screen.getByTestId("dashboard-indicator-values")).toHaveAttribute(
+      "data-formation-complete",
+      "true",
+    );
+    expect(screen.getByTestId("dashboard-indicator-values")).not.toHaveAttribute("data-threshold");
     expect(screen.getByTestId("dashboard-socialization-placeholder")).toBeInTheDocument();
   });
 
@@ -262,6 +280,7 @@ describe("DashboardShell", () => {
     const societyTab = screen.getByTestId("mode-tab-society");
     expect(societyTab).not.toBeDisabled();
     expect(societyTab).toHaveAttribute("data-state", "unlocked");
+    expect(societyTab).not.toHaveAttribute("data-next-socialization-highlight");
     fireEvent.click(societyTab);
     expect(screen.getByTestId("dashboard-society-workspace")).toBeInTheDocument();
   });
