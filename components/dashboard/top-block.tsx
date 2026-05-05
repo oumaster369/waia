@@ -1,7 +1,9 @@
+import { AvatarReadinessStatusBlock } from "@/components/dashboard/avatar-readiness-status";
 import type { IndicatorPresentationRow, IndicatorThresholdBand } from "@/lib/dashboard/indicator-ui";
 import { cn } from "@/lib/utils";
 
 export type DashboardTopBlockProps = {
+  avatarStatusText: string;
   indicatorPresentation: readonly IndicatorPresentationRow[];
   totalCompletionPercent: number;
 };
@@ -37,6 +39,7 @@ function thresholdPercentClass(band: IndicatorThresholdBand): string {
 }
 
 export function DashboardTopBlock({
+  avatarStatusText,
   indicatorPresentation,
   totalCompletionPercent,
 }: DashboardTopBlockProps) {
@@ -46,14 +49,11 @@ export function DashboardTopBlock({
       className="border-border border-b bg-background px-6 py-4"
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
-        <div
-          data-testid="dashboard-avatar-placeholder"
-          aria-hidden="true"
-          className="flex h-32 w-full max-w-[12rem] items-center justify-center rounded-2xl border border-dashed border-border bg-muted/30 text-muted-foreground text-sm lg:shrink-0"
-        >
-          Avatar placeholder
-        </div>
-        <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 md:grid-cols-6">
+        <AvatarReadinessStatusBlock
+          statusText={avatarStatusText}
+          readinessPercent={totalCompletionPercent}
+        />
+        <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 md:grid-cols-6 md:justify-items-stretch">
           {indicatorPresentation.map((row) => {
             const labelId = `dashboard-indicator-${row.key}-label`;
             const hintId = `dashboard-indicator-${row.key}-hint`;
@@ -83,15 +83,6 @@ export function DashboardTopBlock({
               </div>
             );
           })}
-          <div
-            data-testid="dashboard-total-readiness"
-            className="col-span-full mt-1 border-border border-t pt-3 md:col-span-1 md:mt-0 md:border-t-0 md:border-none md:pt-0"
-          >
-            <p className="text-muted-foreground text-xs uppercase tracking-wide">
-              Total readiness
-            </p>
-            <p className="font-semibold text-lg tabular-nums">{totalCompletionPercent}%</p>
-          </div>
         </div>
       </div>
     </header>

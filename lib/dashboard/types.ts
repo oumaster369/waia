@@ -28,6 +28,8 @@ export type DashboardTwinDialogueInitialTurn = {
 
 export type DashboardClientProps = {
   identityLabel: string;
+  /** One-line copy for avatar status (DEE-15); derived in buildDashboardViewModel from identityLabel only. */
+  avatarStatusText: string;
   hasMeaningfulExchange: boolean;
   indicators: readonly [number, number, number, number, number, number];
   /** Derived in buildDashboardViewModel for threshold UI + hints (DEE-17). */

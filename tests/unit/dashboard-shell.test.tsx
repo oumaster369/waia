@@ -78,6 +78,13 @@ describe("DashboardShell", () => {
     const { container } = render(<DashboardShell model={model} />);
     expect(container.textContent ?? "").not.toMatch(tabUiForbiddenPhraseRegex());
 
+    expect(screen.getByTestId("dashboard-avatar-status-text")).toHaveTextContent(
+      "AI-Twin workspace · Dev user",
+    );
+    expect(screen.getByTestId("dashboard-avatar-readiness-percent")).toHaveTextContent(
+      `${model.totalCompletionPercent}%`,
+    );
+
     const twin = screen.getByTestId("mode-tab-twin");
     const diary = screen.getByTestId("mode-tab-diary");
     const predictions = screen.getByTestId("mode-tab-predictions");
