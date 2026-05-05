@@ -31,23 +31,20 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
-        working-directory: waia-app
       - run: mkdir -p .data && pnpm db:migrate
-        working-directory: waia-app
       - run: pnpm cloudflare:build
-        working-directory: waia-app
       - name: Debug build output
         shell: bash
         run: |
-          echo "Listing waia-app:"
-          ls -la waia-app
-          echo "Listing waia-app/.open-next:"
-          ls -la waia-app/.open-next || echo "No .open-next found"
-      # upload-artifact paths are always repo-root-relative; not affected by run working-directory.
+          echo "Listing repository root:"
+          ls -la
+          echo "Listing .open-next:"
+          ls -la .open-next || echo "No .open-next found"
+      # upload-artifact paths are repo-root-relative (same as checkout root for this repository).
       - uses: actions/upload-artifact@v4
         with:
           name: opennext-dist
-          path: waia-app/.open-next
+          path: .open-next
           retention-days: 3
           if-no-files-found: error
 
@@ -67,7 +64,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        working-directory: waia-app
         run: |
           if [[ -n "${CLOUDFLARE_API_TOKEN}" && -n "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
             echo "has_cloudflare_secrets=true" >> "$GITHUB_OUTPUT"
@@ -77,7 +73,6 @@ jobs:
 
       - name: Preview deploy skipped (Cloudflare secrets not configured)
         if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets != 'true' }}
-        working-directory: waia-app
         run: |
           echo "::notice title=Cloudflare preview skipped::Preview Worker deploy was skipped because CLOUDFLARE_API_TOKEN and/or CLOUDFLARE_ACCOUNT_ID are not set in repository Actions secrets. The opennext-bundle job already validated the OpenNext Workers bundle."
 
@@ -90,23 +85,20 @@ jobs:
         with:
           node-version: 22
       - if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
-        working-directory: waia-app
         run: pnpm install --frozen-lockfile
 
       - uses: actions/download-artifact@v4
         if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
         with:
           name: opennext-dist
-          path: waia-app/.open-next
+          path: .open-next
 
       - name: Temporary wrangler config for preview Worker
         if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
-        working-directory: waia-app
         run: jq --arg n "$PREVIEW_NAME" '.name = $n | .services[0].service = $n' wrangler.jsonc > wrangler.preview.jsonc
 
       - name: wrangler deploy
         if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
-        working-directory: waia-app
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -117,7 +109,6 @@ jobs:
       - name: Extract preview URL
         id: url
         if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
-        working-directory: waia-app
         shell: bash
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -153,7 +144,7 @@ jobs:
 
             const worker = process.env.PREVIEW_NAME;
             const previewUrl = (process.env.PREVIEW_URL || "").trim();
-            const docLink = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/blob/${context.sha}/waia-app/docs/cloudflare-preview-deploys.md`;
+            const docLink = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/blob/${context.sha}/docs/cloudflare-preview-deploys.md`;
 
             const urlLine =
               previewUrl.length > 0

@@ -12,12 +12,12 @@ Related: [cloudflare-deploy.md](cloudflare-deploy.md) (manual/production-oriente
 ## What runs on each PR
 
 1. **Cloudflare bundle (always for in-scope PRs)**  
-   Job `opennext-bundle`: **`run` steps** use **`working-directory: waia-app`** so install, SQLite migrate (`pnpm db:migrate`), and `pnpm cloudflare:build` run in the Next app root. Upload path **`waia-app/.open-next`** is repository-root–relative (`actions/upload-artifact` ignores shell cwd) with 3-day retention. A debug listing runs before upload to confirm `.open-next` exists.
+   Job `opennext-bundle`: in this repository the **checkout root is the Next app** (there is **no** nested `waia-app/` directory on GitHub). Steps run **`pnpm install`**, **`pnpm db:migrate`**, and **`pnpm cloudflare:build`** at the repo root; OpenNext emits **`.open-next/`** beside `package.json`. The artifact uploads **`.open-next`** (repository-root–relative paths; `upload-artifact` does not honor shell cwd) with 3-day retention. A debug `ls` runs before upload to confirm the bundle folder exists.
 
 2. **Deploy preview Worker (conditional)**  
    Job `deploy-cloudflare-preview` is **skipped entirely** only for **fork** PRs (`head.repo` must equal this repository).
 
-   When the PR is from this repo, the job starts; a **`Check Cloudflare secrets`** step then sets `has_cloudflare_secrets`. If **`CLOUDFLARE_API_TOKEN`** or **`CLOUDFLARE_ACCOUNT_ID`** is unset or empty, a notice step logs that preview deploy was skipped — **later deploy steps do not run** and the workflow still **passes**. When both secrets exist, the workflow downloads the bundle into **`waia-app/.open-next`** and runs **`wrangler deploy`** from **`waia-app/`**. The bundle job always validates the OpenNext build independently.
+   When the PR is from this repo, the job starts; a **`Check Cloudflare secrets`** step then sets `has_cloudflare_secrets`. If **`CLOUDFLARE_API_TOKEN`** or **`CLOUDFLARE_ACCOUNT_ID`** is unset or empty, a notice step logs that preview deploy was skipped — **later deploy steps do not run** and the workflow still **passes**. When both secrets exist, the workflow downloads the bundle into **`.open-next`** at the repo root and runs **`wrangler deploy`** there (alongside **`wrangler.jsonc`**). The bundle job always validates the OpenNext build independently.
 
 **Production** `waia-app` deploys are **not** triggered by this workflow (no `push` to `dev` deploy here).
 
