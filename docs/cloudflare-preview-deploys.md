@@ -15,12 +15,9 @@ Related: [cloudflare-deploy.md](cloudflare-deploy.md) (manual/production-oriente
    Job `opennext-bundle`: installs deps, migrates SQLite for CI (parity with [`ci.yml`](../.github/workflows/ci.yml)), runs `pnpm cloudflare:build`, uploads `.open-next` as a short-lived artifact (3-day retention).
 
 2. **Deploy preview Worker (conditional)**  
-   Job `deploy-cloudflare-preview` runs **only** when **all** are true:
+   Job `deploy-cloudflare-preview` is **skipped entirely** only for **fork** PRs (`head.repo` must equal this repository).
 
-   - The PR branch is **not from a fork** (`head.repo` equals this repository).
-   - GitHub Actions secrets **`CLOUDFLARE_API_TOKEN`** and **`CLOUDFLARE_ACCOUNT_ID`** are configured and non-empty.
-
-   If secrets are missing (or the PR is from a fork), **no deploy occurs** — the deploy job is **skipped** (not failed). The bundle job still validates the OpenNext build.
+   When the PR is from this repo, the job starts; a **`Check Cloudflare secrets`** step then sets `has_cloudflare_secrets`. If **`CLOUDFLARE_API_TOKEN`** or **`CLOUDFLARE_ACCOUNT_ID`** is unset or empty, a notice step logs that preview deploy was skipped — **later deploy steps do not run** and the workflow still **passes**. When both secrets exist, Workers deploy runs as before. The bundle job always validates the OpenNext build independently.
 
 **Production** `waia-app` deploys are **not** triggered by this workflow (no `push` to `dev` deploy here).
 

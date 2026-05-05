@@ -45,42 +45,68 @@ jobs:
     name: Deploy Cloudflare preview Worker
     needs: [opennext-bundle]
     runs-on: ubuntu-latest
-    if: |
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      secrets.CLOUDFLARE_API_TOKEN != '' &&
-      secrets.CLOUDFLARE_ACCOUNT_ID != ''
+    # secrets.* is invalid in job-level `if`; gate deploy steps with outputs from "Check Cloudflare secrets".
+    if: github.event.pull_request.head.repo.full_name == github.repository
     env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       PREVIEW_NAME: waia-app-pr-${{ github.event.pull_request.number }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check Cloudflare secrets
+        id: cloudflare_secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -n "${CLOUDFLARE_API_TOKEN}" && -n "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            echo "has_cloudflare_secrets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_cloudflare_secrets=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Preview deploy skipped (Cloudflare secrets not configured)
+        if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets != 'true' }}
+        run: |
+          echo "::notice title=Cloudflare preview skipped::Preview Worker deploy was skipped because CLOUDFLARE_API_TOKEN and/or CLOUDFLARE_ACCOUNT_ID are not set in repository Actions secrets. The opennext-bundle job already validated the OpenNext Workers bundle."
+
       - uses: pnpm/action-setup@v4
+        if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
         with:
           version: 10
       - uses: actions/setup-node@v4
+        if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
         with:
           node-version: 22
           cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
+        run: pnpm install --frozen-lockfile
 
       - uses: actions/download-artifact@v4
+        if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
         with:
           name: opennext-dist
           path: .open-next
 
       - name: Temporary wrangler config for preview Worker
+        if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
         run: jq --arg n "$PREVIEW_NAME" '.name = $n | .services[0].service = $n' wrangler.jsonc > wrangler.preview.jsonc
 
       - name: wrangler deploy
+        if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
           pnpm exec wrangler deploy --config wrangler.preview.jsonc --message "PR ${{ github.event.pull_request.number }} @ ${{ github.sha }}" 2>&1 | tee deploy.log
 
       - name: Extract preview URL
         id: url
+        if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
         shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
           URL=""
@@ -97,6 +123,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - uses: actions/github-script@v7
+        if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
         env:
           PREVIEW_URL: ${{ steps.url.outputs.preview_url }}
           PREVIEW_NAME: ${{ env.PREVIEW_NAME }}
