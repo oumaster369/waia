@@ -15,9 +15,13 @@ export function buildDashboardViewModel(
   initialTwinDialogueTurns: DashboardTwinDialogueInitialTurn[] = [],
 ): DashboardClientProps {
   const r = computeReadinessResult(readinessInput);
+  const avatarStatusText =
+    r.totalCompletionPercent === 100
+      ? `AI-Twin formation complete · ${identityLabel}`
+      : `AI-Twin workspace · ${identityLabel}`;
   return {
     identityLabel,
-    avatarStatusText: `AI-Twin workspace · ${identityLabel}`,
+    avatarStatusText,
     hasMeaningfulExchange: twinSignals.hasMeaningfulExchange,
     indicators: r.indicators,
     indicatorPresentation: buildIndicatorPresentation(r.indicators),

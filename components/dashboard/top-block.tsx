@@ -38,20 +38,34 @@ function thresholdPercentClass(band: IndicatorThresholdBand): string {
   }
 }
 
+/** Unified panel when questionnaire formation is complete (100% aggregate). */
+const formationCompletePanelClass =
+  "border-emerald-500/45 bg-emerald-500/8 dark:border-emerald-400/40 dark:bg-emerald-500/12";
+
+const formationCompletePercentClass = "text-emerald-600 dark:text-emerald-400";
+
 export function DashboardTopBlock({
   avatarStatusText,
   indicatorPresentation,
   totalCompletionPercent,
 }: DashboardTopBlockProps) {
+  const isFormationComplete = totalCompletionPercent === 100;
+
   return (
     <header
       data-testid="dashboard-top-block"
-      className="border-border border-b bg-background px-6 py-4"
+      data-formation-complete={isFormationComplete ? "true" : undefined}
+      className={cn(
+        "border-border border-b bg-background px-6 py-4",
+        isFormationComplete &&
+          "bg-gradient-to-br from-emerald-500/[0.04] via-background to-background dark:from-emerald-500/[0.07]",
+      )}
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
         <AvatarReadinessStatusBlock
           statusText={avatarStatusText}
           readinessPercent={totalCompletionPercent}
+          isFormationComplete={isFormationComplete}
         />
         <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 md:grid-cols-6 md:justify-items-stretch">
           {indicatorPresentation.map((row) => {
@@ -61,10 +75,14 @@ export function DashboardTopBlock({
               <div
                 key={row.key}
                 data-testid={`dashboard-indicator-${row.key}`}
-                data-threshold={row.band}
+                {...(isFormationComplete
+                  ? { "data-formation-complete": "true" }
+                  : { "data-threshold": row.band })}
                 className={cn(
                   "flex flex-col gap-1 rounded-md border px-2 py-2",
-                  thresholdPanelClass(row.band),
+                  isFormationComplete
+                    ? formationCompletePanelClass
+                    : thresholdPanelClass(row.band),
                 )}
                 aria-describedby={hintId}
               >
@@ -72,7 +90,12 @@ export function DashboardTopBlock({
                   {row.label}
                 </p>
                 <p
-                  className={cn("font-semibold tabular-nums", thresholdPercentClass(row.band))}
+                  className={cn(
+                    "font-semibold tabular-nums",
+                    isFormationComplete
+                      ? formationCompletePercentClass
+                      : thresholdPercentClass(row.band),
+                  )}
                   aria-labelledby={labelId}
                 >
                   {row.percent}%
