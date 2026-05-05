@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build / framework output
+.next/
+.open-next/
+out/
+build/
+dist/
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+.playwright/
+.vitest-cache/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+*.local
+*.pem
+*.key
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cursor agent runtime artifacts (config IS committed; runtime logs are not)
+.cursor/agent-log.jsonl
+.cursor/agent-log.*.jsonl
+.cursor/plans/
+
+# Cloudflare Pages local
+.wrangler/
+
+# Local SQLite (WAIA persistence)
+.data/
+
+# Wrangler typegen output (large; run `pnpm cf-typegen`)
+cloudflare-env.d.ts
