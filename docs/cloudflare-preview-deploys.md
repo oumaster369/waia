@@ -12,7 +12,7 @@ Related: [cloudflare-deploy.md](cloudflare-deploy.md) (manual/production-oriente
 ## What runs on each PR
 
 1. **Cloudflare bundle (always for in-scope PRs)**  
-   Job `opennext-bundle`: runs from the **`waia-app/`** directory (Next app root), installs deps, migrates SQLite for CI (parity with [`ci.yml`](../.github/workflows/ci.yml)), runs `pnpm cloudflare:build`, uploads **`waia-app/.open-next`** as a short-lived artifact (3-day retention). The upload path is repository-root–relative because `actions/upload-artifact` does not use `defaults.run.working-directory`.
+   Job `opennext-bundle`: **`run` steps** use **`working-directory: waia-app`** so install, SQLite migrate (`pnpm db:migrate`), and `pnpm cloudflare:build` run in the Next app root. Upload path **`waia-app/.open-next`** is repository-root–relative (`actions/upload-artifact` ignores shell cwd) with 3-day retention. A debug listing runs before upload to confirm `.open-next` exists.
 
 2. **Deploy preview Worker (conditional)**  
    Job `deploy-cloudflare-preview` is **skipped entirely** only for **fork** PRs (`head.repo` must equal this repository).
