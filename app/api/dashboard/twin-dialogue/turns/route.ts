@@ -20,7 +20,7 @@ export async function GET() {
   }
 
   const db = getDb();
-  const turns = listTwinDialogueTurnsForUser(db, userId);
+  const turns = await listTwinDialogueTurnsForUser(db, userId);
 
   const body: TwinDialogueTurnsMemoryApiResponse = { turns };
   return NextResponse.json(body, {
