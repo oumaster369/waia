@@ -33,18 +33,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data && pnpm db:migrate
       - run: pnpm cloudflare:build
-      - name: Debug build output
+      - name: Verify OpenNext bundle (.open-next)
         shell: bash
         run: |
-          echo "Listing repository root:"
+          set -euo pipefail
+          echo "PWD=$(pwd)"
+          echo "--- repository root ---"
           ls -la
-          echo "Listing .open-next:"
-          ls -la .open-next || echo "No .open-next found"
-      # upload-artifact paths are repo-root-relative (same as checkout root for this repository).
+          if [[ ! -d .open-next ]] || [[ -z "$(ls -A .open-next 2>/dev/null || true)" ]]; then
+            echo "::error title=Missing OpenNext bundle::Expected a non-empty .open-next directory at the repository root after pnpm cloudflare:build."
+            exit 1
+          fi
+          echo "--- .open-next ---"
+          ls -la .open-next
+      # upload-artifact v4.4+ excludes hidden paths by default; .open-next is a dot-directory.
       - uses: actions/upload-artifact@v4
         with:
           name: opennext-dist
           path: .open-next
+          include-hidden-files: true
           retention-days: 3
           if-no-files-found: error
 

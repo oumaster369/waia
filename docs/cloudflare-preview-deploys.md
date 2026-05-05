@@ -12,7 +12,7 @@ Related: [cloudflare-deploy.md](cloudflare-deploy.md) (manual/production-oriente
 ## What runs on each PR
 
 1. **Cloudflare bundle (always for in-scope PRs)**  
-   Job `opennext-bundle`: in this repository the **checkout root is the Next app** (there is **no** nested `waia-app/` directory on GitHub). Steps run **`pnpm install`**, **`pnpm db:migrate`**, and **`pnpm cloudflare:build`** at the repo root; OpenNext emits **`.open-next/`** beside `package.json`. The artifact uploads **`.open-next`** (repository-root–relative paths; `upload-artifact` does not honor shell cwd) with 3-day retention. A debug `ls` runs before upload to confirm the bundle folder exists.
+   Job `opennext-bundle`: in this repository the **checkout root is the Next app** (there is **no** nested `waia-app/` directory on GitHub). Steps run **`pnpm install`**, **`pnpm db:migrate`**, and **`pnpm cloudflare:build`** at the repo root; OpenNext emits **`.open-next/`** beside `package.json`. The artifact uploads **`.open-next`** (repository-root–relative paths; `upload-artifact` does not honor shell cwd) with 3-day retention. A verify step asserts **`.open-next`** exists before upload. **`upload-artifact` v4.4+** ignores hidden paths unless **`include-hidden-files: true`** (required because the directory name starts with `.`).
 
 2. **Deploy preview Worker (conditional)**  
    Job `deploy-cloudflare-preview` is **skipped entirely** only for **fork** PRs (`head.repo` must equal this repository).
