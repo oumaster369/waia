@@ -48,20 +48,20 @@ describe("session boundary", () => {
     }
   });
 
-  it("resolves user id from a non-expired session row", () => {
+  it("resolves user id from a non-expired session row", async () => {
     const db = getDb();
     const sessionId = crypto.randomUUID();
     const expiresAtMs = Date.now() + 60_000;
     createSessionRow(db, { sessionId, userId: SESSION_USER_ID, expiresAtMs });
-    expect(resolveUserIdFromSessionId(db, sessionId)).toBe(SESSION_USER_ID);
-    deleteSessionById(db, sessionId);
-    expect(resolveUserIdFromSessionId(db, sessionId)).toBeNull();
+    expect(await resolveUserIdFromSessionId(db, sessionId)).toBe(SESSION_USER_ID);
+    await deleteSessionById(db, sessionId);
+    expect(await resolveUserIdFromSessionId(db, sessionId)).toBeNull();
   });
 
-  it("returns null for expired sessions", () => {
+  it("returns null for expired sessions", async () => {
     const db = getDb();
     const sessionId = crypto.randomUUID();
     createSessionRow(db, { sessionId, userId: SESSION_USER_ID, expiresAtMs: Date.now() - 1000 });
-    expect(resolveUserIdFromSessionId(db, sessionId)).toBeNull();
+    expect(await resolveUserIdFromSessionId(db, sessionId)).toBeNull();
   });
 });

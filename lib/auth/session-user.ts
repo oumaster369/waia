@@ -14,7 +14,7 @@ async function resolveOptionalSessionUserId(): Promise<string | null> {
     return null;
   }
   const db = getDb();
-  return resolveUserIdFromSessionId(db, token);
+  return await resolveUserIdFromSessionId(db, token);
 }
 
 /** Dedup session lookup within one RSC / handler tree. */
