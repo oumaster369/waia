@@ -1,31 +1,39 @@
-# Copy to `.dev.vars` in the `waia-app/` root for `pnpm cloudflare:preview` / Wrangler local dev.
-# `.dev.vars` is gitignored. Do not put real production secrets in this file if you copy it elsewhere.
+# Copy to `.dev.vars` in the `waia-app/` root for `pnpm cloudflare:preview` / Wrangler local Workers dev.
+# `.dev.vars` is gitignored — never commit production secrets here.
+#
+# Legend: PUBLIC = safe for NEXT_PUBLIC_* in Workers; SECRET = server-only (Wrangler secrets in production).
 #
 # Reference: https://developers.cloudflare.com/workers/testing/local-development/
 # Full inventory: docs/cloudflare-env-vars.md
+# Operator runbook: docs/supabase-auth-postgres.md
 
 # OpenNext / Next env file selection for local Workers preview (optional)
 NEXTJS_ENV=development
 
-# Public site origin (no trailing slash)
+# PUBLIC — match the origin you open in the browser for preview
 NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000
 
-# OAuth redirect base — must match preview URL when testing OAuth locally
+# PUBLIC — planned Supabase project URL (placeholder until SSR / client wiring exists).
+# NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+
+# PUBLIC — Supabase anon key for future browser-safe usage (placeholder).
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=
+
+# SECRET — MUST NEVER be exposed to browser/client code. Worker-only in production (`wrangler secret put`).
+# SUPABASE_SERVICE_ROLE_KEY=
+
+# PUBLIC — OAuth redirect base for existing MVP routes (OAuth itself out of scope for DEE-61).
 OAUTH_PUBLIC_BASE_URL=http://127.0.0.1:3000
 
-# Local SQLite (Worker preview still cannot run better-sqlite3; see docs/cloudflare-deploy.md)
+# Local SQLite string for Node-side expectations; Workers cannot run better-sqlite3 today (see docs/cloudflare-deploy.md).
 DATABASE_URL=file:./.data/waia.dev.db
+
+# SECRET — Postgres for Workers once persistence is wired: prefer Supabase **transaction pooler** (often port 6543, IPv4-friendly)
+# or a **Hyperdrive**-backed connection string. Decision is engineering-owned — see docs/cloudflare-env-vars.md.
+# DATABASE_URL=
+
+# SECRET — direct OpenAI API. MUST NOT ship to browser/client bundles.
+# OPENAI_API_KEY=
 
 # Optional: session TTL in seconds (omit for default)
 # AUTH_SESSION_MAX_AGE_SECONDS=
-
-# OAuth — set only what you test; never commit production values
-# GOOGLE_CLIENT_ID=
-# GOOGLE_CLIENT_SECRET=
-
-# APPLE_TEAM_ID=
-# APPLE_KEY_ID=
-# APPLE_CLIENT_ID=
-# APPLE_PRIVATE_KEY=
-
-# TELEGRAM_BOT_TOKEN=
