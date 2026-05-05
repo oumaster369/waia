@@ -16,7 +16,7 @@ export async function POST() {
 
   if (token != null && token !== "") {
     const db = getDb();
-    deleteSessionById(db, token);
+    await deleteSessionById(db, token);
   }
 
   clearSessionCookie(res);

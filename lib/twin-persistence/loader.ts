@@ -8,7 +8,6 @@ import {
 } from "@/db/schema";
 import type { DashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-api.types";
 import {
-  DEFAULT_READINESS_INPUT,
   type TwinDialogueSignals,
 } from "@/lib/dashboard/readiness-snapshot-default";
 import { NULL_HINTS_BY_INDICATOR } from "@/lib/dashboard/null-hints";
@@ -21,49 +20,12 @@ import {
   TWIN_MEMORY_EMBEDDING_MODEL_ID,
 } from "@/lib/embeddings/twin-memory-embeddings";
 import { and, eq, sql } from "drizzle-orm";
-import type * as WaiaSchema from "@/db/schema";
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { WaiaDb } from "@/db/types";
+import { ensureUserTwinSeed } from "./user-twin-seed";
 
-export type WaiaSqliteDb = BetterSQLite3Database<typeof WaiaSchema>;
+export type { WaiaDb, WaiaSqliteDb } from "@/db/types";
 
-/**
- * Idempotent: ensures one twin profile + readiness projection for an existing user row.
- * Does not create the user (sign-up / fixtures own that).
- */
-export function ensureUserTwinSeed(db: WaiaSqliteDb, userId: string): string {
-  const existingTwin = db
-    .select({ id: twinProfiles.id })
-    .from(twinProfiles)
-    .where(eq(twinProfiles.userId, userId))
-    .get();
-
-  const twinId =
-    existingTwin?.id ??
-    (() => {
-      const id = crypto.randomUUID();
-      db.insert(twinProfiles).values({ id, userId }).run();
-      return id;
-    })();
-
-  const stateRow = db
-    .select({ twinProfileId: twinReadinessState.twinProfileId })
-    .from(twinReadinessState)
-    .where(eq(twinReadinessState.twinProfileId, twinId))
-    .get();
-
-  if (!stateRow) {
-    db.insert(twinReadinessState)
-      .values({
-        twinProfileId: twinId,
-        indicatorsJson: JSON.stringify(DEFAULT_READINESS_INPUT.indicators),
-        socializationCompleted: DEFAULT_READINESS_INPUT.socializationCompleted,
-        finalStateMessageShown: DEFAULT_READINESS_INPUT.finalStateMessageShown,
-      })
-      .run();
-  }
-
-  return twinId;
-}
+export { ensureUserTwinSeed };
 
 function rowToReadinessInput(
   indicatorsJson: string,
@@ -111,7 +73,7 @@ export type TwinDialogueTurnDbRow = {
 };
 
 function appendTwinDialogueTurnInsideExecutor(
-  ex: WaiaSqliteDb,
+  ex: WaiaDb,
   params: {
     twinProfileId: string;
     role: "user" | "assistant" | "system";
@@ -196,7 +158,7 @@ function appendTwinDialogueTurnInsideExecutor(
 
 /** Append one dialogue row; deterministic sequence via max(sequence)+1 (sync transaction). */
 export function appendTwinDialogueTurnResult(
-  db: WaiaSqliteDb,
+  db: WaiaDb,
   params: {
     twinProfileId: string;
     role: "user" | "assistant" | "system";
@@ -205,7 +167,7 @@ export function appendTwinDialogueTurnResult(
   },
 ): AppendTwinDialogueTurnResult {
   return db.transaction((tx) =>
-    appendTwinDialogueTurnInsideExecutor(tx as WaiaSqliteDb, params),
+    appendTwinDialogueTurnInsideExecutor(tx as WaiaDb, params),
   );
 }
 
@@ -219,7 +181,7 @@ export type PersistUserTwinExchangeWithAssistantResult = {
  * Readiness/countUserDialogueTurns still counts user rows only.
  */
 export function persistUserTwinExchangeWithAssistantStub(
-  db: WaiaSqliteDb,
+  db: WaiaDb,
   params: {
     twinProfileId: string;
     userContent: string;
@@ -228,7 +190,7 @@ export function persistUserTwinExchangeWithAssistantStub(
   },
 ): PersistUserTwinExchangeWithAssistantResult {
   return db.transaction((tx) => {
-    const executor = tx as WaiaSqliteDb;
+    const executor = tx as WaiaDb;
     const userTurn = appendTwinDialogueTurnInsideExecutor(executor, {
       twinProfileId: params.twinProfileId,
       role: "user",
@@ -251,7 +213,7 @@ export function persistUserTwinExchangeWithAssistantStub(
 }
 
 export function appendTwinDialogueTurn(
-  db: WaiaSqliteDb,
+  db: WaiaDb,
   params: {
     twinProfileId: string;
     role: "user" | "assistant" | "system";
@@ -262,7 +224,7 @@ export function appendTwinDialogueTurn(
   appendTwinDialogueTurnResult(db, params);
 }
 
-export function countUserDialogueTurns(db: WaiaSqliteDb, twinProfileId: string): number {
+export function countUserDialogueTurns(db: WaiaDb, twinProfileId: string): number {
   const [row] = db
     .select({ c: sql<number>`count(*)`.mapWith(Number) })
     .from(twinDialogueTurns)
@@ -283,7 +245,7 @@ export type TwinDialogueMemoryRow = {
 };
 
 export function listTwinDialogueTurnsChronological(
-  db: WaiaSqliteDb,
+  db: WaiaDb,
   twinProfileId: string,
 ): TwinDialogueTurnDbRow[] {
   return db
@@ -302,7 +264,7 @@ export function listTwinDialogueTurnsChronological(
 }
 
 /** Twin dialogue memory for this user — read-only after ensureUserTwinSeed. */
-export function listTwinDialogueTurnsForUser(db: WaiaSqliteDb, userId: string): TwinDialogueMemoryRow[] {
+export function listTwinDialogueTurnsForUser(db: WaiaDb, userId: string): TwinDialogueMemoryRow[] {
   const twinProfileId = ensureUserTwinSeed(db, userId);
   const rows = listTwinDialogueTurnsChronological(db, twinProfileId);
   return rows.map((r) => ({
@@ -315,7 +277,7 @@ export function listTwinDialogueTurnsForUser(db: WaiaSqliteDb, userId: string): 
 }
 
 export function loadDashboardReadinessPayloadFromDb(
-  db: WaiaSqliteDb,
+  db: WaiaDb,
   userId: string,
 ): DashboardReadinessPayload {
   ensureUserTwinSeed(db, userId);
