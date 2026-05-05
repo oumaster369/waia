@@ -106,5 +106,6 @@ pnpm build
 
 ## Related docs
 
-- [cloudflare-env-vars.md](cloudflare-env-vars.md) — variable inventory and secrets policy  
+- [cloudflare-preview-deploys.md](cloudflare-preview-deploys.md) — **PR preview** GitHub Actions + optional Workers deploy (DEE-51).
+- [cloudflare-env-vars.md](cloudflare-env-vars.md) — variable inventory and secrets policy
 - [security-dee52-auth-review.md](security-dee52-auth-review.md) — session and OAuth URL hardening
