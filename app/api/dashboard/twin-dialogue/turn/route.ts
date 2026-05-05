@@ -93,7 +93,7 @@ export async function POST(request: Request) {
   const db = getDb();
   const twinProfileId = ensureUserTwinSeed(db, userId);
 
-  const persisted = persistUserTwinExchangeWithAssistantStub(db, {
+  const persisted = await persistUserTwinExchangeWithAssistantStub(db, {
     twinProfileId,
     userContent: trimmed,
     userIdempotencyKey: idempotencyKey ?? null,

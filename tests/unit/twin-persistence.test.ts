@@ -70,23 +70,23 @@ describe("twin persistence loader", () => {
 
   it("appends turns in order, sets meaningful exchange after a user role, and ignores duplicate idempotency keys", async () => {
     const db = getDb();
-    appendTwinDialogueTurn(db, {
+    await appendTwinDialogueTurn(db, {
       twinProfileId,
       role: "user",
       content: "hello",
     });
-    appendTwinDialogueTurn(db, {
+    await appendTwinDialogueTurn(db, {
       twinProfileId,
       role: "assistant",
       content: "hi",
     });
-    appendTwinDialogueTurn(db, {
+    await appendTwinDialogueTurn(db, {
       twinProfileId,
       role: "user",
       content: "first",
       idempotencyKey: "dup",
     });
-    appendTwinDialogueTurn(db, {
+    await appendTwinDialogueTurn(db, {
       twinProfileId,
       role: "user",
       content: "retry",
@@ -111,7 +111,7 @@ describe("twin persistence loader", () => {
 
   it("listTwinDialogueTurnsForUser returns rows with ids, ISO timestamps, user then assistant pairing", async () => {
     const db = getDb();
-    const twin = persistUserTwinExchangeWithAssistantStub(db, {
+    const twin = await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId,
       userContent: "pair me unique",
       userIdempotencyKey: "dee26-pair-uniq",
@@ -136,7 +136,7 @@ describe("twin persistence loader", () => {
 
   it("listTwinDialogueTurnsChronological exposes id column on each row", async () => {
     const db = getDb();
-    appendTwinDialogueTurn(db, {
+    await appendTwinDialogueTurn(db, {
       twinProfileId,
       role: "user",
       content: "with id column",

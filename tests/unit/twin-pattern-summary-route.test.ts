@@ -89,7 +89,7 @@ describe("GET /api/dashboard/twin/pattern-summary", () => {
   it("returns 200 with non-empty summaries when seeded memory exists", async () => {
     const db = getDb();
     const twinProfileId = ensureUserTwinSeed(db, USER_A);
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId,
       userContent: "I worry about timelines and deadlines at work frequently",
       userIdempotencyKey: null,

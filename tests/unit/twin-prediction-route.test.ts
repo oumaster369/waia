@@ -102,7 +102,7 @@ describe("POST /api/dashboard/twin/prediction", () => {
   it("returns projection with bounded confidence when user has seeded memory", async () => {
     const db = getDb();
     const twinProfileId = ensureUserTwinSeed(db, USER_A);
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId,
       userContent: "Worried about the deadline sprint next week calmly",
       userIdempotencyKey: null,

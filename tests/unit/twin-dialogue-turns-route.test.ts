@@ -77,7 +77,7 @@ describe("GET /api/dashboard/twin-dialogue/turns", () => {
   it("returns 200 with ISO turns, chronological order, and private no-store cache", async () => {
     const db = getDb();
     const twinA = ensureUserTwinSeed(db, ROUTE_USER_A);
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId: twinA,
       userContent: "hello memory",
       userIdempotencyKey: "idem-a",
@@ -106,7 +106,7 @@ describe("GET /api/dashboard/twin-dialogue/turns", () => {
   it("does not expose user A dialogue rows to user B session", async () => {
     const db = getDb();
     const twinA = ensureUserTwinSeed(db, ROUTE_USER_A);
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId: twinA,
       userContent: "private to A",
       userIdempotencyKey: "idem-b-isolation",

@@ -20,7 +20,7 @@ import {
   TWIN_MEMORY_EMBEDDING_MODEL_ID,
 } from "@/lib/embeddings/twin-memory-embeddings";
 import { and, eq, sql } from "drizzle-orm";
-import type { WaiaDb } from "@/db/types";
+import { runSqliteTransaction, type WaiaDb } from "@/db/types";
 import { ensureUserTwinSeed } from "./user-twin-seed";
 
 export type { WaiaDb, WaiaSqliteDb } from "@/db/types";
@@ -157,7 +157,7 @@ function appendTwinDialogueTurnInsideExecutor(
 }
 
 /** Append one dialogue row; deterministic sequence via max(sequence)+1 (sync transaction). */
-export function appendTwinDialogueTurnResult(
+export async function appendTwinDialogueTurnResult(
   db: WaiaDb,
   params: {
     twinProfileId: string;
@@ -165,8 +165,8 @@ export function appendTwinDialogueTurnResult(
     content: string;
     idempotencyKey?: string | null;
   },
-): AppendTwinDialogueTurnResult {
-  return db.transaction((tx) =>
+): Promise<AppendTwinDialogueTurnResult> {
+  return runSqliteTransaction(db, (tx) =>
     appendTwinDialogueTurnInsideExecutor(tx as WaiaDb, params),
   );
 }
@@ -180,7 +180,7 @@ export type PersistUserTwinExchangeWithAssistantResult = {
  * Atomically persists a user turn and a paired assistant stub when the user turn is freshly inserted (DEE-26).
  * Readiness/countUserDialogueTurns still counts user rows only.
  */
-export function persistUserTwinExchangeWithAssistantStub(
+export async function persistUserTwinExchangeWithAssistantStub(
   db: WaiaDb,
   params: {
     twinProfileId: string;
@@ -188,8 +188,8 @@ export function persistUserTwinExchangeWithAssistantStub(
     userIdempotencyKey?: string | null;
     assistantContent: string;
   },
-): PersistUserTwinExchangeWithAssistantResult {
-  return db.transaction((tx) => {
+): Promise<PersistUserTwinExchangeWithAssistantResult> {
+  return runSqliteTransaction(db, (tx) => {
     const executor = tx as WaiaDb;
     const userTurn = appendTwinDialogueTurnInsideExecutor(executor, {
       twinProfileId: params.twinProfileId,
@@ -212,7 +212,7 @@ export function persistUserTwinExchangeWithAssistantStub(
   });
 }
 
-export function appendTwinDialogueTurn(
+export async function appendTwinDialogueTurn(
   db: WaiaDb,
   params: {
     twinProfileId: string;
@@ -220,8 +220,8 @@ export function appendTwinDialogueTurn(
     content: string;
     idempotencyKey?: string | null;
   },
-): void {
-  appendTwinDialogueTurnResult(db, params);
+): Promise<void> {
+  await appendTwinDialogueTurnResult(db, params);
 }
 
 export function countUserDialogueTurns(db: WaiaDb, twinProfileId: string): number {
