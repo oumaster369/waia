@@ -93,10 +93,10 @@ describe("runTwinContradictionDetectorForUser (DEE-30)", () => {
     expect(r.scenarioUsed).toBe(false);
   });
 
-  it("scenario path uses single retrieval seed count and retrieval top-N cap", () => {
+  it("scenario path uses single retrieval seed count and retrieval top-N cap", async () => {
     const db = getDb();
     const twinProfileId = ensureUserTwinSeed(db, USER_STATED);
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId,
       userContent: "nightly coding drills for skills",
       userIdempotencyKey: null,
@@ -150,10 +150,10 @@ describe("runTwinContradictionDetectorForUser (DEE-30)", () => {
     expect(r.verificationItemsConsidered).toBe(2);
   });
 
-  it("produces identical output for identical invocation (deterministic)", () => {
+  it("produces identical output for identical invocation (deterministic)", async () => {
     const db = getDb();
     const twinProfileId = ensureUserTwinSeed(db, USER_STATED);
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId,
       userContent: "nightly coding drills for skills practice",
       userIdempotencyKey: null,

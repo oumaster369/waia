@@ -157,10 +157,10 @@ describe("twin engine (DEE-36)", () => {
     expect(Array.isArray(r.personalityModel.model.contradictionProfile)).toBe(true);
   });
 
-  it("user isolation: seeded user differs from empty user", () => {
+  it("user isolation: seeded user differs from empty user", async () => {
     const db = getDb();
     const twinA = ensureUserTwinSeed(db, USER_SEED_A);
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId: twinA,
       userContent: "I value consistency and calm planning before big decisions.",
       userIdempotencyKey: null,

@@ -76,12 +76,12 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
     }
   });
 
-  it("stores embedding_json + model on fresh twin dialogue inserts (user + assistant)", () => {
+  it("stores embedding_json + model on fresh twin dialogue inserts (user + assistant)", async () => {
     const db = getDb();
     const twinProfileId = ensureUserTwinSeed(db, USER_A);
     db.delete(twinDialogueTurns).run();
 
-    const res = persistUserTwinExchangeWithAssistantStub(db, {
+    const res = await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId,
       userContent: "persist embed message",
       userIdempotencyKey: null,
@@ -113,12 +113,12 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
     expect(asstRow?.embeddingModel).toBe("stub-deterministic-v1");
   });
 
-  it("does not change embedding_json on idempotent replay of twin exchange", () => {
+  it("does not change embedding_json on idempotent replay of twin exchange", async () => {
     const db = getDb();
     ensureUserTwinSeed(db, USER_A);
     db.delete(twinDialogueTurns).run();
 
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId: getTwinProfile(db, USER_A)!,
       userContent: "replay check",
       userIdempotencyKey: "idem-embed-twice",
@@ -134,7 +134,7 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
       .where(eq(twinDialogueTurns.idempotencyKey, "idem-embed-twice"))
       .get();
 
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId: getTwinProfile(db, USER_A)!,
       userContent: "different body ignored",
       userIdempotencyKey: "idem-embed-twice",
