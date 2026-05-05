@@ -59,6 +59,62 @@ Until Postgres is wired into [`db/client.ts`](../db/client.ts), `DATABASE_URL` i
 
 ---
 
+## Local Postgres migration validation (DEE-65)
+
+Use an **empty** Postgres instance — **never** `waia-prod`, staging Supabase, or any production-like `DATABASE_URL`. This path only verifies that Drizzle Postgres migrations apply cleanly against a disposable database.
+
+### 1. Start empty Postgres (Docker)
+
+Either run your own Postgres 16 container, or use the optional compose helper at the repo root:
+
+```bash
+docker compose -f docker-compose.postgres-validate.yml up -d postgres-validate
+```
+
+Wait until the container is healthy (`pg_isready`).
+
+Example connection (matches the compose defaults):
+
+```bash
+export DATABASE_URL_POSTGRES="postgresql://waia_validate:waia_validate_local_only@127.0.0.1:54329/waia_validate"
+```
+
+### 2. Apply the auth prelude (stub)
+
+Bare Postgres has no Supabase **`auth`** schema. Our migration `0001_auth_users_fk.sql` references `auth.users(id)`. Apply the minimal stub **before** Drizzle migrate:
+
+```bash
+psql "$DATABASE_URL_POSTGRES" -v ON_ERROR_STOP=1 \
+  -f scripts/postgres-validation/prelude-auth-stub.sql
+```
+
+### 3. Run Postgres migrations
+
+Uses [`drizzle.postgres.config.ts`](../drizzle.postgres.config.ts) and `DATABASE_URL_POSTGRES`:
+
+```bash
+pnpm db:migrate:postgres
+```
+
+### 4. Optional quick assertions (`psql`)
+
+```sql
+\d public.users
+\d auth.users
+```
+
+Confirm `users_id_fk_auth_users` exists on `public.users` (FK to `auth.users`).
+
+### 5. Teardown
+
+```bash
+docker compose -f docker-compose.postgres-validate.yml down -v
+```
+
+Unset `DATABASE_URL_POSTGRES` in your shell if you no longer need it.
+
+---
+
 ## OpenAI direct API
 
 Optional **SECRET** worker var:
@@ -71,6 +127,8 @@ No **AI Gateway** or OpenNext-specific AI binding is documented in DEE-61; add r
 
 ## Related files
 
+- [docker-compose.postgres-validate.yml](../docker-compose.postgres-validate.yml) (optional local validator)
+- [scripts/postgres-validation/prelude-auth-stub.sql](../scripts/postgres-validation/prelude-auth-stub.sql)
 - [.env.example](../.env.example)
 - [.dev.vars.example](../.dev.vars.example)
 - [cloudflare-env-vars.md](cloudflare-env-vars.md)
