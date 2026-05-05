@@ -1,0 +1,17 @@
+# Ephemeral Postgres for validating `db/migrations_postgres` locally (DEE-65).
+# Do not use for production.
+
+services:
+  postgres-validate:
+    image: postgres:16-alpine
+    ports:
+      - "54329:5432"
+    environment:
+      POSTGRES_USER: waia_validate
+      POSTGRES_PASSWORD: waia_validate_local_only
+      POSTGRES_DB: waia_validate
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
