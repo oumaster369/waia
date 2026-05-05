@@ -17,7 +17,7 @@ Related: [cloudflare-deploy.md](cloudflare-deploy.md) (manual/production-oriente
 2. **Deploy preview Worker (conditional)**  
    Job `deploy-cloudflare-preview` is **skipped entirely** only for **fork** PRs (`head.repo` must equal this repository).
 
-   When the PR is from this repo, the job starts; a **`Check Cloudflare secrets`** step then sets `has_cloudflare_secrets`. If **`CLOUDFLARE_API_TOKEN`** or **`CLOUDFLARE_ACCOUNT_ID`** is unset or empty, a notice step logs that preview deploy was skipped — **later deploy steps do not run** and the workflow still **passes**. When both secrets exist, Workers deploy runs as before. The bundle job always validates the OpenNext build independently.
+   When the PR is from this repo, the job starts; a **`Check Cloudflare secrets`** step then sets `has_cloudflare_secrets`. If **`CLOUDFLARE_API_TOKEN`** or **`CLOUDFLARE_ACCOUNT_ID`** is unset or empty, a notice step logs that preview deploy was skipped — **later deploy steps do not run** and the workflow still **passes**. When both secrets exist, the workflow downloads the bundle into **`waia-app/.open-next`** and runs **`wrangler deploy`** from **`waia-app/`**. The bundle job always validates the OpenNext build independently.
 
 **Production** `waia-app` deploys are **not** triggered by this workflow (no `push` to `dev` deploy here).
 
