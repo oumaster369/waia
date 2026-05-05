@@ -143,7 +143,7 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
     expect(body.assistantTurn!.sequence).toBe(2);
     expect(body.assistantTurn!.id).toBeTruthy();
 
-    const payload = loadDashboardReadinessPayloadFromDb(getDb(), ROUTE_USER_ID);
+    const payload = await loadDashboardReadinessPayloadFromDb(getDb(), ROUTE_USER_ID);
     expect(payload.twinSignals.hasMeaningfulExchange).toBe(true);
 
     const [userCount] = getDb()

@@ -9,5 +9,5 @@ export async function getDashboardReadinessPayloadForUser(
   userId: string,
 ): Promise<DashboardReadinessPayload> {
   const db = getDb();
-  return loadDashboardReadinessPayloadFromDb(db, userId);
+  return await loadDashboardReadinessPayloadFromDb(db, userId);
 }

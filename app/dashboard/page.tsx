@@ -34,7 +34,7 @@ export default async function DashboardPage() {
   }
 
   const payload = await getDashboardReadinessPayloadForUser(userId);
-  const memoryRows = listTwinDialogueTurnsForUser(getDb(), userId);
+  const memoryRows = await listTwinDialogueTurnsForUser(getDb(), userId);
   const initialTwinDialogueTurns: DashboardTwinDialogueInitialTurn[] = memoryRows
     .filter(isUserOrAssistantRole)
     .map((t) => ({ id: t.id, role: t.role, text: t.content }));

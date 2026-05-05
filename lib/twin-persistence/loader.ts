@@ -244,11 +244,11 @@ export type TwinDialogueMemoryRow = {
   createdAt: string;
 };
 
-export function listTwinDialogueTurnsChronological(
+export async function listTwinDialogueTurnsChronological(
   db: WaiaDb,
   twinProfileId: string,
-): TwinDialogueTurnDbRow[] {
-  return db
+): Promise<TwinDialogueTurnDbRow[]> {
+  return await db
     .select({
       id: twinDialogueTurns.id,
       sequence: twinDialogueTurns.sequence,
@@ -259,14 +259,16 @@ export function listTwinDialogueTurnsChronological(
     })
     .from(twinDialogueTurns)
     .where(eq(twinDialogueTurns.twinProfileId, twinProfileId))
-    .orderBy(twinDialogueTurns.sequence)
-    .all();
+    .orderBy(twinDialogueTurns.sequence);
 }
 
 /** Twin dialogue memory for this user — read-only after ensureUserTwinSeed. */
-export function listTwinDialogueTurnsForUser(db: WaiaDb, userId: string): TwinDialogueMemoryRow[] {
+export async function listTwinDialogueTurnsForUser(
+  db: WaiaDb,
+  userId: string,
+): Promise<TwinDialogueMemoryRow[]> {
   const twinProfileId = ensureUserTwinSeed(db, userId);
-  const rows = listTwinDialogueTurnsChronological(db, twinProfileId);
+  const rows = await listTwinDialogueTurnsChronological(db, twinProfileId);
   return rows.map((r) => ({
     id: r.id,
     sequence: r.sequence,
@@ -276,13 +278,13 @@ export function listTwinDialogueTurnsForUser(db: WaiaDb, userId: string): TwinDi
   }));
 }
 
-export function loadDashboardReadinessPayloadFromDb(
+export async function loadDashboardReadinessPayloadFromDb(
   db: WaiaDb,
   userId: string,
-): DashboardReadinessPayload {
+): Promise<DashboardReadinessPayload> {
   ensureUserTwinSeed(db, userId);
 
-  const row = db
+  const rows = await db
     .select({
       indicatorsJson: twinReadinessState.indicatorsJson,
       socializationCompleted: twinReadinessState.socializationCompleted,
@@ -294,7 +296,9 @@ export function loadDashboardReadinessPayloadFromDb(
     .innerJoin(twinProfiles, eq(twinProfiles.userId, users.id))
     .innerJoin(twinReadinessState, eq(twinReadinessState.twinProfileId, twinProfiles.id))
     .where(eq(users.id, userId))
-    .get();
+    .limit(1);
+
+  const row = rows[0];
 
   if (!row) {
     throw new Error(`[waia] twin readiness row missing for user ${userId} after seed`);
