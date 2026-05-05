@@ -1,0 +1,154 @@
+name: cloudflare-preview
+
+# PR-only: verify OpenNext bundle and optionally deploy isolated preview Workers (not production).
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+concurrency:
+  group: cloudflare-preview-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  DATABASE_URL: file:./.data/ci-opennext.sqlite
+
+jobs:
+  opennext-bundle:
+    name: Cloudflare bundle (OpenNext)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data && pnpm db:migrate
+      - run: pnpm cloudflare:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opennext-dist
+          path: .open-next
+          retention-days: 3
+          if-no-files-found: error
+
+  deploy-cloudflare-preview:
+    name: Deploy Cloudflare preview Worker
+    needs: [opennext-bundle]
+    runs-on: ubuntu-latest
+    if: |
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      secrets.CLOUDFLARE_API_TOKEN != '' &&
+      secrets.CLOUDFLARE_ACCOUNT_ID != ''
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      PREVIEW_NAME: waia-app-pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: opennext-dist
+          path: .open-next
+
+      - name: Temporary wrangler config for preview Worker
+        run: jq --arg n "$PREVIEW_NAME" '.name = $n | .services[0].service = $n' wrangler.jsonc > wrangler.preview.jsonc
+
+      - name: wrangler deploy
+        run: |
+          set -euo pipefail
+          pnpm exec wrangler deploy --config wrangler.preview.jsonc --message "PR ${{ github.event.pull_request.number }} @ ${{ github.sha }}" 2>&1 | tee deploy.log
+
+      - name: Extract preview URL
+        id: url
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL=""
+          if [[ -f deploy.log ]]; then
+            URL=$(grep -oE 'https://[a-zA-Z0-9_.-]+\.workers\.dev/?' deploy.log | head -n1 || true)
+          fi
+          if [[ -z "$URL" ]]; then
+            URL=$(pnpm exec wrangler deployments list --name "$PREVIEW_NAME" --json 2>/dev/null | jq -r '[.. | objects | .url?] | map(select(. != null and . != "")) | first // empty' || true)
+          fi
+          {
+            echo "preview_url<<EOF_PREVIEW_URL"
+            echo "$URL"
+            echo "EOF_PREVIEW_URL"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.url.outputs.preview_url }}
+          PREVIEW_NAME: ${{ env.PREVIEW_NAME }}
+        with:
+          script: |
+            const marker = "<!-- waia-cloudflare-preview -->";
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.setFailed("Missing pull_request context");
+              return;
+            }
+
+            const worker = process.env.PREVIEW_NAME;
+            const previewUrl = (process.env.PREVIEW_URL || "").trim();
+            const docLink = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/blob/${context.sha}/docs/cloudflare-preview-deploys.md`;
+
+            const urlLine =
+              previewUrl.length > 0
+                ? previewUrl
+                : `_(No workers.dev URL parsed from logs; open Cloudflare Dashboard → Workers → \`${worker}\`.)_`;
+
+            const body =
+              `${marker}\n### Cloudflare preview Worker\n\n` +
+              `- **Worker:** \`${worker}\`\n` +
+              `- **Preview URL:** ${urlLine}\n\n` +
+              `Bundle deploy only. Database-backed routes may fail on Workers (\`better-sqlite3\` / file SQLite) until persistence moves to D1 or Postgres — see [cloudflare-preview-deploys.md](${docLink}).\n\n` +
+              `_Workflow: ${context.workflow} run ${context.runId} · \`${context.sha}\`_`;
+
+            const { owner, repo } = context.repo;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: pr.number,
+              per_page: 100,
+            });
+
+            const existing = comments.find(
+              (c) => typeof c.body === "string" && c.body.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pr.number,
+                body,
+              });
+            }
