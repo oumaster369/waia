@@ -17,6 +17,7 @@ export function buildDashboardViewModel(
   const r = computeReadinessResult(readinessInput);
   return {
     identityLabel,
+    avatarStatusText: `AI-Twin workspace · ${identityLabel}`,
     hasMeaningfulExchange: twinSignals.hasMeaningfulExchange,
     indicators: r.indicators,
     indicatorPresentation: buildIndicatorPresentation(r.indicators),
