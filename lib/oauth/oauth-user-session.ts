@@ -2,11 +2,11 @@ import "server-only";
 
 import { and, eq } from "drizzle-orm";
 
+import type { WaiaDb } from "@/db/types";
 import { oauthAccounts, users, type OauthProvider } from "@/db/schema";
 import { authSessionMaxAgeSeconds } from "@/lib/auth/constants";
 import { createSessionRow } from "@/lib/auth/session-service";
 import { ensureUserTwinSeed } from "@/lib/twin-persistence/loader";
-import type { WaiaSqliteDb } from "@/lib/twin-persistence/loader";
 
 export type OauthLoginIdentity = {
   provider: OauthProvider;
@@ -20,10 +20,10 @@ export type PersistOauthLoginResult =
   | { ok: false; denied: true };
 
 export function persistOauthLoginInTransaction(
-  tx: WaiaSqliteDb,
+  tx: WaiaDb,
   identity: OauthLoginIdentity,
 ): PersistOauthLoginResult {
-  const link = tx
+  const linkRows = tx
     .select({ userId: oauthAccounts.userId })
     .from(oauthAccounts)
     .where(
@@ -32,7 +32,9 @@ export function persistOauthLoginInTransaction(
         eq(oauthAccounts.providerUserId, identity.providerUserId),
       ),
     )
-    .get();
+    .limit(1)
+    .all();
+  const link = linkRows[0];
 
   const sessionId = crypto.randomUUID();
   const expiresAtMs = Date.now() + authSessionMaxAgeSeconds() * 1000;
@@ -44,11 +46,13 @@ export function persistOauthLoginInTransaction(
     return { ok: true, sessionId };
   }
 
-  const existingByEmail = tx
+  const existingByEmailRows = tx
     .select({ id: users.id })
     .from(users)
     .where(eq(users.email, identity.email))
-    .get();
+    .limit(1)
+    .all();
+  const existingByEmail = existingByEmailRows[0];
 
   if (existingByEmail) {
     return { ok: false, denied: true };
