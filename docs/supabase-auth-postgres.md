@@ -115,6 +115,28 @@ Unset `DATABASE_URL_POSTGRES` in your shell if you no longer need it.
 
 ---
 
+## DEE-64A — Drizzle + postgres.js smoke (preflight)
+
+Goal: prove **`postgres`** + **`drizzle-orm/postgres-js`** + [`db/schema.postgres.ts`](../db/schema.postgres.ts) against the **same disposable local** database as DEE-65. This does **not** change [`db/client.ts`](../db/client.ts), `getDb`, or app routes.
+
+**Rules:** use **only** `127.0.0.1` / `localhost` / `::1` in `DATABASE_URL_POSTGRES` (the smoke script rejects other hosts). Do **not** point this at **waia-prod** or remote Supabase.
+
+### One-shot flow
+
+After steps 1–3 in [Local Postgres migration validation (DEE-65)](#local-postgres-migration-validation-dee-65) (Docker up, prelude, `pnpm db:migrate:postgres`):
+
+```bash
+pnpm db:smoke:postgres
+```
+
+**Pass:** prints `[DEE-64A] OK: …` and exits **0**.
+
+**Fail:** prints `[DEE-64A] Fail: …` and exits **non-zero** (missing env, blocked host, FK/migration mismatch, or DB error).
+
+The script inserts a deterministic test row into **`auth.users`**, then **`public.users`** (same `id` to satisfy the FK), verifies a **select**, deletes both rows, and deletes first on entry so **repeated runs** stay clean.
+
+---
+
 ## OpenAI direct API
 
 Optional **SECRET** worker var:
@@ -129,6 +151,7 @@ No **AI Gateway** or OpenNext-specific AI binding is documented in DEE-61; add r
 
 - [docker-compose.postgres-validate.yml](../docker-compose.postgres-validate.yml) (optional local validator)
 - [scripts/postgres-validation/prelude-auth-stub.sql](../scripts/postgres-validation/prelude-auth-stub.sql)
+- [scripts/postgres-validation/drizzle-pg-smoke.ts](../scripts/postgres-validation/drizzle-pg-smoke.ts) (DEE-64A Drizzle + postgres.js smoke)
 - [.env.example](../.env.example)
 - [.dev.vars.example](../.dev.vars.example)
 - [cloudflare-env-vars.md](cloudflare-env-vars.md)
