@@ -1,46 +1,43 @@
 import { and, eq, gt } from "drizzle-orm";
 
-import { oauthStates } from "@/db/schema";
-import type { WaiaSqliteDb } from "@/lib/twin-persistence/loader";
-import type { OauthProvider } from "@/db/schema";
+import type { WaiaDb } from "@/db/types";
+import { oauthStates, type OauthProvider } from "@/db/schema";
 
 /** CSRF OAuth state TTL (SQLite row expiry). */
 export const OAUTH_STATE_TTL_MS = 15 * 60 * 1000;
 
-export function insertOauthState(
-  tx: WaiaSqliteDb,
+export async function insertOauthState(
+  db: WaiaDb,
   params: { state: string; provider: OauthProvider; codeVerifier: string | null },
-): void {
-  tx
-    .insert(oauthStates)
-    .values({
-      state: params.state,
-      provider: params.provider,
-      codeVerifier: params.codeVerifier,
-      expiresAt: new Date(Date.now() + OAUTH_STATE_TTL_MS),
-    })
-    .run();
+): Promise<void> {
+  await db.insert(oauthStates).values({
+    state: params.state,
+    provider: params.provider,
+    codeVerifier: params.codeVerifier,
+    expiresAt: new Date(Date.now() + OAUTH_STATE_TTL_MS),
+  });
 }
 
 /** Read a valid pending OAuth row without consuming it (used before token exchange over the network). */
-export function findValidOauthState(
-  db: WaiaSqliteDb,
+export async function findValidOauthState(
+  db: WaiaDb,
   state: string | null | undefined,
   expectedProvider: OauthProvider,
-): { codeVerifier: string | null } | null {
+): Promise<{ codeVerifier: string | null } | null> {
   if (!state || state.trim() === "") {
     return null;
   }
 
   const now = new Date();
-  const row = db
+  const rows = await db
     .select({
       provider: oauthStates.provider,
       codeVerifier: oauthStates.codeVerifier,
     })
     .from(oauthStates)
     .where(and(eq(oauthStates.state, state), gt(oauthStates.expiresAt, now)))
-    .get();
+    .limit(1);
+  const row = rows[0];
 
   if (!row || row.provider !== expectedProvider) {
     return null;
@@ -51,7 +48,7 @@ export function findValidOauthState(
 
 /** Deletes consumed CSRF row only when state exists, matches provider, and is unexpired. */
 export function consumeOauthStateStrict(
-  tx: WaiaSqliteDb,
+  tx: WaiaDb,
   state: string,
   expectedProvider: OauthProvider,
 ): boolean {

@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 
 import { applySessionCookie } from "@/lib/auth/cookie-response";
 import { getDb } from "@/db/client";
+import { runSqliteTransaction } from "@/db/types";
 import type { OauthProvider } from "@/db/schema";
-import type { WaiaSqliteDb } from "@/lib/twin-persistence/loader";
 import { exchangeAppleAuthCodeAndProfile } from "@/lib/oauth/apple-oauth";
 import {
   exchangeGoogleAuthCode,
@@ -27,7 +27,7 @@ export async function oauthCallbackResponse(
     case "apple":
       return await appleCallback(requestUrl);
     case "telegram":
-      return telegramCallback(requestUrl);
+      return await telegramCallback(requestUrl);
   }
 }
 
@@ -43,8 +43,8 @@ async function googleCallback(requestUrl: string): Promise<NextResponse> {
     return oauthFailureRedirect("OAUTH_TOKEN");
   }
 
-  const db = getDb() as WaiaSqliteDb;
-  const pending = findValidOauthState(db, state, "google");
+  const db = getDb();
+  const pending = await findValidOauthState(db, state, "google");
   if (!pending?.codeVerifier) {
     return oauthFailureRedirect("OAUTH_INVALID_STATE");
   }
@@ -58,8 +58,7 @@ async function googleCallback(requestUrl: string): Promise<NextResponse> {
   }
 
   try {
-    return db.transaction((inner) => {
-      const tx = inner as WaiaSqliteDb;
+    return await runSqliteTransaction(db, (tx) => {
       if (!consumeOauthStateStrict(tx, state, "google")) {
         return oauthFailureRedirect("OAUTH_INVALID_STATE");
       }
@@ -93,8 +92,8 @@ async function appleCallback(requestUrl: string): Promise<NextResponse> {
     return oauthFailureRedirect("OAUTH_TOKEN");
   }
 
-  const db = getDb() as WaiaSqliteDb;
-  const pending = findValidOauthState(db, state, "apple");
+  const db = getDb();
+  const pending = await findValidOauthState(db, state, "apple");
   if (!pending?.codeVerifier) {
     return oauthFailureRedirect("OAUTH_INVALID_STATE");
   }
@@ -107,8 +106,7 @@ async function appleCallback(requestUrl: string): Promise<NextResponse> {
   }
 
   try {
-    return db.transaction((inner) => {
-      const tx = inner as WaiaSqliteDb;
+    return await runSqliteTransaction(db, (tx) => {
       if (!consumeOauthStateStrict(tx, state, "apple")) {
         return oauthFailureRedirect("OAUTH_INVALID_STATE");
       }
@@ -130,7 +128,7 @@ async function appleCallback(requestUrl: string): Promise<NextResponse> {
   }
 }
 
-function telegramCallback(requestUrl: string): NextResponse {
+async function telegramCallback(requestUrl: string): Promise<NextResponse> {
   const url = new URL(requestUrl);
   const sp = url.searchParams;
   const state = sp.get("state");
@@ -157,8 +155,9 @@ function telegramCallback(requestUrl: string): NextResponse {
     return oauthFailureRedirect("OAUTH_TOKEN");
   }
 
-  const db = getDb() as WaiaSqliteDb;
-  if (!findValidOauthState(db, state, "telegram")) {
+  const db = getDb();
+  const pending = await findValidOauthState(db, state, "telegram");
+  if (!pending) {
     return oauthFailureRedirect("OAUTH_INVALID_STATE");
   }
 
@@ -166,8 +165,7 @@ function telegramCallback(requestUrl: string): NextResponse {
   const identityLabel = telegramIdentityLabel(record);
 
   try {
-    return db.transaction((inner) => {
-      const tx = inner as WaiaSqliteDb;
+    return await runSqliteTransaction(db, (tx) => {
       if (!consumeOauthStateStrict(tx, state, "telegram")) {
         return oauthFailureRedirect("OAUTH_INVALID_STATE");
       }

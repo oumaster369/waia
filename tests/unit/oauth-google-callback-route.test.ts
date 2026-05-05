@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { GET as oauthCallbackGet } from "@/app/api/auth/oauth/[provider]/callback/route";
 import { resetWaiaSqliteSingleton, getDb } from "@/db/client";
 import { oauthAccounts, oauthStates, twinProfiles } from "@/db/schema";
-import type { WaiaSqliteDb } from "@/lib/twin-persistence/loader";
+import type { WaiaDb } from "@/db/types";
 import { OAUTH_ERROR_QUERY } from "@/lib/oauth/oauth-error-codes";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 
@@ -92,7 +92,7 @@ describe("GET /api/auth/oauth/google/callback", () => {
 
     vi.stubGlobal("fetch", stubFetch);
 
-    const db = getDb() as WaiaSqliteDb;
+    const db = getDb() as WaiaDb;
     const state = "test-oauth-state-static";
     const verifier = "0123456789abcdef0123456789abcdef0123456789abcd";
     db.insert(oauthStates)
@@ -124,21 +124,30 @@ describe("GET /api/auth/oauth/google/callback", () => {
         : (res.headers.get("set-cookie") ?? "");
     expect(cookieJoined).toMatch(/waia_session=/);
 
-    const rowConsumed = db.select().from(oauthStates).where(eq(oauthStates.state, state)).get();
-    expect(rowConsumed).toBeUndefined();
+    const rowConsumedRows = db
+      .select()
+      .from(oauthStates)
+      .where(eq(oauthStates.state, state))
+      .limit(1)
+      .all();
+    expect(rowConsumedRows[0]).toBeUndefined();
 
-    const link = db
+    const linkRows = db
       .select()
       .from(oauthAccounts)
       .where(eq(oauthAccounts.providerUserId, "google-test-subject"))
-      .get();
+      .limit(1)
+      .all();
+    const link = linkRows[0];
     expect(link).toBeDefined();
 
-    const twin = db
+    const twinRows = db
       .select()
       .from(twinProfiles)
       .where(eq(twinProfiles.userId, link!.userId))
-      .get();
+      .limit(1)
+      .all();
+    const twin = twinRows[0];
     expect(twin).toBeDefined();
 
     expect(stubFetch).toHaveBeenCalled();
