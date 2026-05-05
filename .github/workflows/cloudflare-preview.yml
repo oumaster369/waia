@@ -22,6 +22,9 @@ jobs:
   opennext-bundle:
     name: Cloudflare bundle (OpenNext)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: waia-app
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -31,13 +34,15 @@ jobs:
         with:
           node-version: 22
           cache: "pnpm"
+          cache-dependency-path: waia-app/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data && pnpm db:migrate
       - run: pnpm cloudflare:build
+      # upload-artifact path is repo-root-relative; defaults.run.working-directory does not apply.
       - uses: actions/upload-artifact@v4
         with:
           name: opennext-dist
-          path: .open-next
+          path: waia-app/.open-next
           retention-days: 3
           if-no-files-found: error
 
@@ -45,6 +50,9 @@ jobs:
     name: Deploy Cloudflare preview Worker
     needs: [opennext-bundle]
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: waia-app
     # secrets.* is invalid in job-level `if`; gate deploy steps with outputs from "Check Cloudflare secrets".
     if: github.event.pull_request.head.repo.full_name == github.repository
     env:
@@ -78,6 +86,7 @@ jobs:
         with:
           node-version: 22
           cache: "pnpm"
+          cache-dependency-path: waia-app/pnpm-lock.yaml
       - if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
         run: pnpm install --frozen-lockfile
 
@@ -85,7 +94,7 @@ jobs:
         if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
         with:
           name: opennext-dist
-          path: .open-next
+          path: waia-app/.open-next
 
       - name: Temporary wrangler config for preview Worker
         if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
@@ -138,7 +147,7 @@ jobs:
 
             const worker = process.env.PREVIEW_NAME;
             const previewUrl = (process.env.PREVIEW_URL || "").trim();
-            const docLink = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/blob/${context.sha}/docs/cloudflare-preview-deploys.md`;
+            const docLink = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/blob/${context.sha}/waia-app/docs/cloudflare-preview-deploys.md`;
 
             const urlLine =
               previewUrl.length > 0
