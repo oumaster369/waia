@@ -33,8 +33,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: "pnpm"
-          cache-dependency-path: waia-app/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data && pnpm db:migrate
       - run: pnpm cloudflare:build
@@ -85,8 +83,6 @@ jobs:
         if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
         with:
           node-version: 22
-          cache: "pnpm"
-          cache-dependency-path: waia-app/pnpm-lock.yaml
       - if: ${{ steps.cloudflare_secrets.outputs.has_cloudflare_secrets == 'true' }}
         run: pnpm install --frozen-lockfile
 
