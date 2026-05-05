@@ -22,6 +22,11 @@ describe("parseIndicatorVector / computeTotalCompletionPercent", () => {
     expect(computeTotalCompletionPercent(v)).toBe(33);
   });
 
+  it("treats all-zero questionnaire vector as 0% total (§9 boundary)", () => {
+    const v = parseIndicatorVector([0, 0, 0, 0, 0, 0]);
+    expect(computeTotalCompletionPercent(v)).toBe(0);
+  });
+
   it("implements readiness model §9.2 Diary threshold sequence", () => {
     const mid1 = parseIndicatorVector([67, 67, 67, 33, 33, 33]);
     expect(computeTotalCompletionPercent(mid1)).toBe(50);
@@ -51,6 +56,18 @@ describe("parseIndicatorVector / computeTotalCompletionPercent", () => {
 });
 
 describe("computeReadinessResult", () => {
+  it("zeros aggregate: total 0%, Diary off, not ready for socialization, Society gated by flag", () => {
+    const r = computeReadinessResult(
+      input({
+        indicators: [0, 0, 0, 0, 0, 0],
+      }),
+    );
+    expect(r.totalCompletionPercent).toBe(0);
+    expect(r.diaryTabUnlocked).toBe(false);
+    expect(r.readyForSocialization).toBe(false);
+    expect(r.societyTabUnlocked).toBe(false);
+  });
+
   it("surfaces Diary unlock strictly at totals >=60 (§7.3)", () => {
     const below59 = computeReadinessResult(
       input({
