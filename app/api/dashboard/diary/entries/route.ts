@@ -45,7 +45,7 @@ export async function GET() {
   }
 
   const db = getDb();
-  const entries = listDiaryEntriesForUser(db, userId);
+  const entries = await listDiaryEntriesForUser(db, userId);
   const body: DiaryEntriesListApiResponse = { entries };
   return NextResponse.json(body, {
     status: 200,
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
     idempotencyKey = trimmedKey.length > 0 ? trimmedKey : null;
   }
 
-  const persisted = appendDiaryEntryForUser(getDb(), {
+  const persisted = await appendDiaryEntryForUser(getDb(), {
     userId,
     body: trimmed,
     idempotencyKey: idempotencyKey ?? null,

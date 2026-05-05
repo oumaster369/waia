@@ -54,7 +54,7 @@ export async function GET() {
   }
 
   const db = getDb();
-  const answers = listScenarioAnswersForUser(db, userId);
+  const answers = await listScenarioAnswersForUser(db, userId);
   const body: ScenarioAnswersListApiResponse = { answers };
   return NextResponse.json(body, {
     status: 200,
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
     idempotencyKey = trimmedKey.length > 0 ? trimmedKey : null;
   }
 
-  const persisted = appendScenarioAnswerForUser(getDb(), {
+  const persisted = await appendScenarioAnswerForUser(getDb(), {
     userId,
     scenarioKey,
     payloadJson,

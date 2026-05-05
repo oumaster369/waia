@@ -61,18 +61,18 @@ describe("diary-memory persistence", () => {
     expect(stringifyScenarioPayloadForStorage({ n: BigInt(1) })).toBeNull();
   });
 
-  it("appends and lists diary entries with idempotent replay scoped to user_id", () => {
+  it("appends and lists diary entries with idempotent replay scoped to user_id", async () => {
     const db = getDb();
     db.delete(diaryEntries).run();
 
-    const a = appendDiaryEntryForUser(db, {
+    const a = await appendDiaryEntryForUser(db, {
       userId: MEMORY_USER_ID,
       body: "one",
       idempotencyKey: "d1",
     });
     expect(a.replayed).toBe(false);
 
-    const b = appendDiaryEntryForUser(db, {
+    const b = await appendDiaryEntryForUser(db, {
       userId: MEMORY_USER_ID,
       body: "should not apply",
       idempotencyKey: "d1",
@@ -81,19 +81,19 @@ describe("diary-memory persistence", () => {
     expect(b.id).toBe(a.id);
     expect(b.body).toBe("one");
 
-    const rows = listDiaryEntriesForUser(db, MEMORY_USER_ID);
+    const rows = await listDiaryEntriesForUser(db, MEMORY_USER_ID);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.body).toBe("one");
   });
 
-  it("appends scenario answers with idempotent replay scoped to twin profile", () => {
+  it("appends scenario answers with idempotent replay scoped to twin profile", async () => {
     const db = getDb();
     db.delete(scenarioAnswers).run();
 
     const json = stringifyScenarioPayloadForStorage({ k: "v" });
     expect(json).toBeTruthy();
 
-    const first = appendScenarioAnswerForUser(db, {
+    const first = await appendScenarioAnswerForUser(db, {
       userId: MEMORY_USER_ID,
       scenarioKey: "s1",
       payloadJson: json!,
@@ -101,7 +101,7 @@ describe("diary-memory persistence", () => {
     });
     expect(first.replayed).toBe(false);
 
-    const second = appendScenarioAnswerForUser(db, {
+    const second = await appendScenarioAnswerForUser(db, {
       userId: MEMORY_USER_ID,
       scenarioKey: "s2",
       payloadJson: stringifyScenarioPayloadForStorage({ other: true })!,
@@ -110,7 +110,7 @@ describe("diary-memory persistence", () => {
     expect(second.replayed).toBe(true);
     expect(second.scenarioKey).toBe("s1");
 
-    const listed = listScenarioAnswersForUser(db, MEMORY_USER_ID);
+    const listed = await listScenarioAnswersForUser(db, MEMORY_USER_ID);
     expect(listed).toHaveLength(1);
     expect(listed[0]?.payload).toEqual({ k: "v" });
   });

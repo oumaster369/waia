@@ -38,7 +38,7 @@ export default async function DashboardPage() {
   const initialTwinDialogueTurns: DashboardTwinDialogueInitialTurn[] = memoryRows
     .filter(isUserOrAssistantRole)
     .map((t) => ({ id: t.id, role: t.role, text: t.content }));
-  const diaryRows = listDiaryEntriesForUser(getDb(), userId);
+  const diaryRows = await listDiaryEntriesForUser(getDb(), userId);
   const initialDiaryEntries = diaryRows.map((row) => ({
     id: row.id,
     body: row.body,

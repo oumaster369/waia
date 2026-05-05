@@ -108,7 +108,7 @@ describe("POST /api/dashboard/twin/prediction", () => {
       userIdempotencyKey: null,
       assistantContent: "Let us prioritize scope calmly",
     });
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_A,
       body: "relationships friendships planning tradeoffs calmly",
       idempotencyKey: null,
@@ -139,12 +139,12 @@ describe("POST /api/dashboard/twin/prediction", () => {
 
   it("does not expose another user diary tokens in projections", async () => {
     const db = getDb();
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_A,
       body: "onlyaunique999 planning calmly deadline stress calmly goals",
       idempotencyKey: null,
     });
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_B,
       body: "onlybunique888 calmly weekend hobby tradeoffs calmly",
       idempotencyKey: null,
