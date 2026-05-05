@@ -15,7 +15,6 @@ import {
   jsonb,
   pgEnum,
   pgTable,
-  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -58,7 +57,7 @@ export const oauthAccounts = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.provider, t.providerUserId], name: "oauth_accounts_provider_subject_pk" })],
+  (t) => [uniqueIndex("oauth_accounts_provider_subject_unique").on(t.provider, t.providerUserId)],
 );
 
 /** OAuth CSRF state + PKCE verifier (nullable for Telegram). Deleted after callback. */
