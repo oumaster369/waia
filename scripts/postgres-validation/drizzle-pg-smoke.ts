@@ -4,9 +4,12 @@
  */
 
 import { eq, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
 
+import {
+  getPostgresDrizzle,
+  getPostgresSql,
+  resetPostgresSingletonForTests,
+} from "@/db/postgres-client";
 import * as pgSchema from "@/db/schema.postgres";
 
 const SMOKE_ID = "00000000-0000-4000-8000-00000000640a";
@@ -29,21 +32,21 @@ function assertLocalPostgres(connectionString: string): void {
   }
 }
 
-async function cleanup(client: postgres.Sql): Promise<void> {
+async function cleanup(client: ReturnType<typeof getPostgresSql>): Promise<void> {
   await client.unsafe(`DELETE FROM public.users WHERE id = $1`, [SMOKE_ID]);
   await client.unsafe(`DELETE FROM auth.users WHERE id = $1`, [SMOKE_ID]);
 }
 
 async function main(): Promise<void> {
-  const databaseUrlPostgres = process.env.DATABASE_URL_POSTGRES;
-  if (!databaseUrlPostgres || databaseUrlPostgres.trim() === "") {
+  const databaseUrlPostgres = process.env.DATABASE_URL_POSTGRES?.trim();
+  if (!databaseUrlPostgres) {
     throw new Error("DATABASE_URL_POSTGRES is not set.");
   }
 
   assertLocalPostgres(databaseUrlPostgres);
 
-  const client = postgres(databaseUrlPostgres, { max: 1 });
-  const db = drizzle(client, { schema: pgSchema });
+  const db = getPostgresDrizzle();
+  const client = getPostgresSql();
 
   try {
     await cleanup(client);
@@ -75,7 +78,7 @@ async function main(): Promise<void> {
     }
     throw e;
   } finally {
-    await client.end({ timeout: 5 });
+    await resetPostgresSingletonForTests();
   }
 }
 
