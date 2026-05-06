@@ -1,6 +1,6 @@
 # Postgres development and testing (DEE-64 D6-pre)
 
-This document defines how WAIA’s **Postgres** side (parallel to SQLite) is bootstrapped for **local development**, **migrations**, and **optional integration tests**. **D6-core** added `runWaiaPostgresTransaction`; **DEE-72.1** adds an explicit **Postgres twin/diary persistence boundary** (`PostgresTwinPersistence` / `createPostgresTwinPersistence`). **Production routing remains SQLite-first**; no production route migration ships in DEE-72.1.
+This document defines how WAIA’s **Postgres** side (parallel to SQLite) is bootstrapped for **local development**, **migrations**, and **optional integration tests**. **D6-core** added `runWaiaPostgresTransaction`; **DEE-72.1** adds an explicit **Postgres twin/diary persistence boundary** (`PostgresTwinPersistence` / `createPostgresTwinPersistence`). **DEE-72.2** extends that boundary with **twin prediction verifications** (`appendTwinPredictionVerificationForUser`, `listTwinPredictionVerificationsForUser` on `PostgresTwinPersistence`), still without production route migration. **Production routing remains SQLite-first**; no production route migration ships in **DEE-72.1** or **DEE-72.2**.
 
 ## Honest current state
 
@@ -60,7 +60,7 @@ pnpm db:postgres:down
 - **Default `pnpm test` / CI unit job**: SQLite only; **no** Postgres required.
 - **Opt-in Postgres tests**: set `WAIA_PG_INTEGRATION=1` and a valid `DATABASE_URL_POSTGRES`. Tests live under [`tests/integration/`](../tests/integration/).
 - **D6-core rollback validation**: [`postgres-transaction-rollback.test.ts`](../tests/integration/postgres-transaction-rollback.test.ts) proves commit/throw/reject semantics using **separate raw postgres sessions** for reads. **No claim of SQLite/Postgres parity**.
-- **DEE-72.1 twin/diary persistence**: [`postgres-twin-persistence.test.ts`](../tests/integration/postgres-twin-persistence.test.ts) exercises **`PostgresTwinPersistence`** (dialogue, diary, scenario, chronological reads, readiness load, rollback). Same **opt-in** gate (`WAIA_PG_INTEGRATION=1` + `DATABASE_URL_POSTGRES`). **Does not** test production runtime routing.
+- **DEE-72.1 / DEE-72.2 twin/diary/verifications persistence**: [`postgres-twin-persistence.test.ts`](../tests/integration/postgres-twin-persistence.test.ts) exercises **`PostgresTwinPersistence`** (dialogue, diary, scenario, prediction verifications append/list, chronological reads, readiness load, rollback). Same **opt-in** gate (`WAIA_PG_INTEGRATION=1` + `DATABASE_URL_POSTGRES`). **Does not** test production runtime routing.
 - **CI**: optional workflow [`.github/workflows/postgres-integration.yml`](../.github/workflows/postgres-integration.yml) runs on `workflow_dispatch` (manual) so Postgres does not slow every PR until you promote it.
 
 ## Security and environment hygiene
