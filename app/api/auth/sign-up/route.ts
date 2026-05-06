@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 
 import { users } from "@/db/schema";
-import { runSqliteTransaction } from "@/db/types";
+import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
 import { getDb } from "@/db/client";
 import { applySessionCookie, clearSessionCookie } from "@/lib/auth/cookie-response";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
   const maxAgeSec = authSessionMaxAgeSeconds();
   const expiresAtMs = Date.now() + maxAgeSec * 1000;
 
-  await runSqliteTransaction(db, (tx) => {
+  await runWaiaSqliteLegacyTransaction(db, (tx) => {
     tx.insert(users).values({ id: userId, identityLabel, email, passwordHash }).run();
     ensureUserTwinSeed(tx, userId);
     createSessionRow(tx, { sessionId, userId, expiresAtMs });

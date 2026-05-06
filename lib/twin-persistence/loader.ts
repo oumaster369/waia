@@ -20,7 +20,8 @@ import {
   TWIN_MEMORY_EMBEDDING_MODEL_ID,
 } from "@/lib/embeddings/twin-memory-embeddings";
 import { and, eq, sql } from "drizzle-orm";
-import { runSqliteTransaction, type WaiaDb } from "@/db/types";
+import { type WaiaDb } from "@/db/types";
+import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
 import { ensureUserTwinSeed } from "./user-twin-seed";
 
 export type { WaiaDb, WaiaSqliteDb } from "@/db/types";
@@ -166,7 +167,7 @@ export async function appendTwinDialogueTurnResult(
     idempotencyKey?: string | null;
   },
 ): Promise<AppendTwinDialogueTurnResult> {
-  return runSqliteTransaction(db, (tx) =>
+  return runWaiaSqliteLegacyTransaction(db, (tx) =>
     appendTwinDialogueTurnInsideExecutor(tx as WaiaDb, params),
   );
 }
@@ -189,7 +190,7 @@ export async function persistUserTwinExchangeWithAssistantStub(
     assistantContent: string;
   },
 ): Promise<PersistUserTwinExchangeWithAssistantResult> {
-  return runSqliteTransaction(db, (tx) => {
+  return runWaiaSqliteLegacyTransaction(db, (tx) => {
     const executor = tx as WaiaDb;
     const userTurn = appendTwinDialogueTurnInsideExecutor(executor, {
       twinProfileId: params.twinProfileId,
