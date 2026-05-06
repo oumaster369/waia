@@ -12,7 +12,7 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **D6-core** adds **explicit Postgres transaction runner** (`db/waia-postgres-transaction.ts`, async-only callback, rollback integration tests). **Still no** `runWaiaTransaction`, **still no** production route migration to Postgres persistence.
 
-**DEE-72.1** adds **`PostgresTwinPersistence`** / **`createPostgresTwinPersistence(db)`** in `lib/persistence/postgres/*`, transactional writes via **`runWaiaPostgresTransaction`**, and **`resolveTwinPersistence`** overloads so a Postgres **`WaiaRuntimeDb`** handle resolves to the Postgres boundary. **DEE-72.2** adds **prediction verification** append/list on **`PostgresTwinPersistence`**. **DEE-72.3** adds **read-only** **`searchTwinMemoriesByText`** (full-scan + JS cosine; **no transactions** on the read path). **SQLite production paths and SQLite transaction semantics are unchanged.** **Deferred:** repeatability Postgres support, prediction *routes* / **`lib/reasoning/*`** on Postgres wiring, **pgvector**/SQL-side retrieval, and any backend-neutral repository layer.
+**DEE-72.1** adds **`PostgresTwinPersistence`** / **`createPostgresTwinPersistence(db)`** in `lib/persistence/postgres/*`, transactional writes via **`runWaiaPostgresTransaction`**, and **`resolveTwinPersistence`** overloads so a Postgres **`WaiaRuntimeDb`** handle resolves to the Postgres boundary. **DEE-72.2** adds **prediction verification** append/list on **`PostgresTwinPersistence`**. **DEE-72.3** adds **read-only** **`searchTwinMemoriesByText`** (full-scan + JS cosine; **no transactions** on the read path). **DEE-72.4** adds **reasoning-local** **`TwinMemorySearchPort`** + **`TwinVerificationListPort`** with SQLite + **`PostgresTwinPersistence`** adapters under `lib/reasoning/*`, **shared memory fusion** (`fuseMemorySearchSlices`), and **additive `*Async`** entrypoints (`getTwinPatternSummaryForUserAsync`, `runTwinContradictionDetectorForUserAsync`, `runTwinPredictionForUserAsync`) — **production routes and `runTwinEngine` remain SQLite/sync**; **`runTwinEngineAsync`**, Postgres repeatability, and route rewiring remain deferred.
 
 ## Completed Slices
 
@@ -85,7 +85,7 @@ production callers
 
 ### DEE-72
 
-- **DEE-72.1 / DEE-72.2 / DEE-72.3:** Postgres-specific **`PostgresTwinPersistence`** (twin/diary + **prediction verifications** + **read-only memory search**) + resolver enablement + opt-in integration tests. **Not done:** production route migration; reasoning/repeatability Postgres paths; neutral `runWaiaTransaction`.
+- **DEE-72.1 / DEE-72.2 / DEE-72.3:** Postgres-specific **`PostgresTwinPersistence`** (twin/diary + **prediction verifications** + **read-only memory search**) + resolver enablement + opt-in integration tests. **DEE-72.4:** narrow **reasoning retrieval ports** + **`*Async`** reasoning functions (additive; callers opt in). **Still not done:** production route migration; Postgres **`runTwinEngine`** / repeatability wiring; neutral `runWaiaTransaction`.
 
 ### DEE-85
 

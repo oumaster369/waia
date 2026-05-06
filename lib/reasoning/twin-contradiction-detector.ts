@@ -7,15 +7,23 @@ import "server-only";
 
 import type { TwinContradictionDetectorApiResponse } from "@/lib/dashboard/twin-contradiction-detector-api.types";
 import { TWIN_CONTRADICTION_DETECTOR_SCHEMA_VERSION } from "@/lib/dashboard/twin-contradiction-detector-api.types";
+import type { TwinMemorySearchHit } from "@/lib/twin-persistence/twin-memory-retrieval";
+import { searchTwinMemoriesByText } from "@/lib/twin-persistence/twin-memory-retrieval";
+import type { WaiaSqliteDb } from "@/lib/twin-persistence/loader";
+import { listTwinPredictionVerificationsForUser } from "@/lib/twin-persistence/twin-prediction-verifications";
 import {
   evaluateTwinContradictionRules,
   type TwinContradictionPatternSummarySlice,
 } from "@/lib/reasoning/twin-contradiction-rules";
-import { getTwinPatternSummaryForUser } from "@/lib/reasoning/twin-pattern-summary";
-import type { TwinMemorySearchHit } from "@/lib/twin-persistence/twin-memory-retrieval";
-import { searchTwinMemoriesByText } from "@/lib/twin-persistence/twin-memory-retrieval";
-import { listTwinPredictionVerificationsForUser } from "@/lib/twin-persistence/twin-prediction-verifications";
-import type { WaiaSqliteDb } from "@/lib/twin-persistence/loader";
+import { fuseMemorySearchSlices } from "@/lib/reasoning/twin-memory-search-fusion";
+import {
+  getTwinPatternSummaryForUser,
+  getTwinPatternSummaryForUserAsync,
+} from "@/lib/reasoning/twin-pattern-summary";
+import type {
+  TwinMemorySearchPort,
+  TwinVerificationListPort,
+} from "@/lib/reasoning/twin-reasoning-ports";
 
 export const CONTRADICTION_DETECTOR_SEED_QUERIES = [
   "conflict between intention and action",
@@ -30,31 +38,23 @@ const MAX_FUSED_ITEMS = 40;
 const SCENARIO_TOP_N = 16;
 const VERIFICATION_LIST_LIMIT = 50;
 
-function hitKey(h: TwinMemorySearchHit): string {
-  return `${h.source}:${h.id}`;
+function fusedHitsFromSeedQueries(db: WaiaSqliteDb, userId: string): TwinMemorySearchHit[] {
+  const slices = CONTRADICTION_DETECTOR_SEED_QUERIES.map((seed) =>
+    searchTwinMemoriesByText(db, userId, seed, PER_SEED_TOP_N),
+  );
+  return fuseMemorySearchSlices(slices, MAX_FUSED_ITEMS);
 }
 
-function fusedHitsFromSeedQueries(db: WaiaSqliteDb, userId: string): TwinMemorySearchHit[] {
-  const merged = new Map<string, TwinMemorySearchHit>();
-  for (const seed of CONTRADICTION_DETECTOR_SEED_QUERIES) {
-    const slice = searchTwinMemoriesByText(db, userId, seed, PER_SEED_TOP_N);
-    for (const hit of slice) {
-      const k = hitKey(hit);
-      const prev = merged.get(k);
-      if (prev === undefined || hit.score > prev.score) {
-        merged.set(k, hit);
-      }
-    }
-  }
-  const fused = [...merged.values()].sort((a, b) => {
-    if (b.score !== a.score) {
-      return b.score - a.score;
-    }
-    const ka = `${a.source}\0${a.id}`;
-    const kb = `${b.source}\0${b.id}`;
-    return ka.localeCompare(kb);
-  });
-  return fused.slice(0, MAX_FUSED_ITEMS);
+async function fusedHitsFromSeedQueriesAsync(
+  memoryPort: TwinMemorySearchPort,
+  userId: string,
+): Promise<TwinMemorySearchHit[]> {
+  const slices = await Promise.all(
+    CONTRADICTION_DETECTOR_SEED_QUERIES.map((seed) =>
+      memoryPort.searchByText(userId, seed, PER_SEED_TOP_N),
+    ),
+  );
+  return fuseMemorySearchSlices(slices, MAX_FUSED_ITEMS);
 }
 
 export type RunTwinContradictionDetectorOptions = {
@@ -93,6 +93,59 @@ export function runTwinContradictionDetectorForUser(
   };
 
   const dtoRows = listTwinPredictionVerificationsForUser(db, userId, VERIFICATION_LIST_LIMIT);
+  const verifications = dtoRows.map((r) => ({
+    verification: r.verification,
+    scenario: r.scenario,
+    correction: r.correction,
+  }));
+
+  const ruled = evaluateTwinContradictionRules({
+    scenarioText: scenarioUsed ? trimmedScenario : "",
+    patternSummary,
+    memoryHits,
+    verifications,
+  });
+
+  return {
+    schemaVersion: TWIN_CONTRADICTION_DETECTOR_SCHEMA_VERSION,
+    contradictions: ruled.contradictions.map((c) => ({
+      type: c.type,
+      description: c.description,
+      evidence: c.evidence,
+      severity: c.severity,
+    })),
+    memoryItemsConsidered: memoryHits.length,
+    verificationItemsConsidered: dtoRows.length,
+    seedQueryCount,
+    scenarioUsed,
+  };
+}
+
+export async function runTwinContradictionDetectorForUserAsync(
+  memoryPort: TwinMemorySearchPort,
+  verificationPort: TwinVerificationListPort,
+  userId: string,
+  options?: RunTwinContradictionDetectorOptions,
+): Promise<TwinContradictionDetectorApiResponse> {
+  const trimmedScenario = options?.scenarioForRulesAndRetrieval ?? "";
+  const scenarioUsed = trimmedScenario.length > 0;
+
+  const memoryHits: TwinMemorySearchHit[] = scenarioUsed
+    ? await memoryPort.searchByText(userId, trimmedScenario, SCENARIO_TOP_N)
+    : await fusedHitsFromSeedQueriesAsync(memoryPort, userId);
+
+  const seedQueryCount = scenarioUsed ? 1 : CONTRADICTION_DETECTOR_SEED_QUERIES.length;
+
+  const fullSummary = await getTwinPatternSummaryForUserAsync(memoryPort, userId);
+  const patternSummary: TwinContradictionPatternSummarySlice = {
+    repeatedBehaviors: fullSummary.repeatedBehaviors,
+    emotionalPatterns: fullSummary.emotionalPatterns,
+    decisionTendencies: fullSummary.decisionTendencies,
+    contradictions: fullSummary.contradictions,
+    dominantThemes: fullSummary.dominantThemes,
+  };
+
+  const dtoRows = await verificationPort.listPredictionVerifications(userId, VERIFICATION_LIST_LIMIT);
   const verifications = dtoRows.map((r) => ({
     verification: r.verification,
     scenario: r.scenario,
