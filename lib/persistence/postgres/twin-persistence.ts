@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 
 import type { DashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-api.types";
 import type {
@@ -15,7 +15,9 @@ import { NULL_HINTS_BY_INDICATOR } from "@/lib/dashboard/null-hints";
 import {
   composeTwinDialogueTurnEmbedInput,
   composeScenarioEmbedInput,
+  cosineSimilarity,
   embedTwinMemoryText,
+  parseEmbeddingJson,
   serializeEmbeddingJson,
   TWIN_MEMORY_EMBEDDING_MODEL_ID,
 } from "@/lib/embeddings/twin-memory-embeddings";
@@ -53,6 +55,187 @@ export {
 };
 
 type PgTx = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
+
+/**
+ * Mirrors `TwinMemorySearchHit` in `lib/twin-persistence/twin-memory-retrieval.ts` (DEE-72.3 —
+ * do not import that module here).
+ */
+export type TwinMemorySearchHit = {
+  source: "dialogue" | "diary" | "scenario";
+  id: string;
+  /** Cosine similarity in approximately [-1, 1]; higher is closer. */
+  score: number;
+  previewText: string;
+};
+
+/** Mirrors `MAX_TOP_N` in `twin-memory-retrieval.ts` — keep in sync manually. */
+const TWIN_MEMORY_SEARCH_MAX_TOP_N = 100;
+/** Diary preview cap — mirrors SQLite `twin-memory-retrieval.ts`. */
+const TWIN_MEMORY_DIARY_PREVIEW_MAX_CHARS = 200;
+const TWIN_MEMORY_DIARY_PREVIEW_SLICE_END = 197;
+/** Scenario payload preview cap — mirrors SQLite. */
+const TWIN_MEMORY_SCENARIO_PAYLOAD_PREVIEW_MAX_CHARS = 160;
+const TWIN_MEMORY_SCENARIO_PAYLOAD_PREVIEW_SLICE_END = 157;
+
+function twinMemoryEmbeddingJsonToParseString(value: unknown): string | null {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === "string") {
+    const t = value.trim();
+    return t.length === 0 ? null : value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+}
+
+function scenarioPayloadJsonForMemoryPreview(payloadJson: unknown): string {
+  if (typeof payloadJson === "string") {
+    return payloadJson;
+  }
+  try {
+    return JSON.stringify(payloadJson);
+  } catch {
+    return "";
+  }
+}
+
+async function resolveExistingTwinProfileIdPg(
+  db: WaiaPostgresDb,
+  userId: string,
+): Promise<string | null> {
+  const rows = await db
+    .select({ id: pgSchema.twinProfiles.id })
+    .from(pgSchema.twinProfiles)
+    .where(eq(pgSchema.twinProfiles.userId, userId))
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
+/** Read-only; no seed, no transactions (DEE-72.3). Semantics mirror SQLite `searchTwinMemoriesByText`. */
+async function searchTwinMemoriesByTextPg(
+  db: WaiaPostgresDb,
+  userId: string,
+  queryText: string,
+  topN?: number,
+): Promise<TwinMemorySearchHit[]> {
+  const queryVec = embedTwinMemoryText(queryText);
+  if (queryVec === null) {
+    return [];
+  }
+
+  const limit = Number.isFinite(topN)
+    ? Math.min(Math.max(1, Math.floor(topN as number)), TWIN_MEMORY_SEARCH_MAX_TOP_N)
+    : 10;
+
+  const twinProfileId = await resolveExistingTwinProfileIdPg(db, userId);
+  const candidates: TwinMemorySearchHit[] = [];
+
+  if (twinProfileId !== null) {
+    const turns = await db
+      .select({
+        id: pgSchema.twinDialogueTurns.id,
+        role: pgSchema.twinDialogueTurns.role,
+        content: pgSchema.twinDialogueTurns.content,
+        embeddingJson: pgSchema.twinDialogueTurns.embeddingJson,
+      })
+      .from(pgSchema.twinDialogueTurns)
+      .where(
+        and(
+          eq(pgSchema.twinDialogueTurns.twinProfileId, twinProfileId),
+          isNotNull(pgSchema.twinDialogueTurns.embeddingJson),
+        ),
+      );
+
+    for (const t of turns) {
+      const raw = twinMemoryEmbeddingJsonToParseString(t.embeddingJson);
+      const v = raw === null ? null : parseEmbeddingJson(raw);
+      if (v === null) {
+        continue;
+      }
+      const score = cosineSimilarity(queryVec, v);
+      candidates.push({
+        source: "dialogue",
+        id: t.id,
+        score,
+        previewText: `${t.role}: ${t.content}`,
+      });
+    }
+  }
+
+  const diaries = await db
+    .select({
+      id: pgSchema.diaryEntries.id,
+      body: pgSchema.diaryEntries.body,
+      embeddingJson: pgSchema.diaryEntries.embeddingJson,
+    })
+    .from(pgSchema.diaryEntries)
+    .where(
+      and(eq(pgSchema.diaryEntries.userId, userId), isNotNull(pgSchema.diaryEntries.embeddingJson)),
+    );
+
+  for (const d of diaries) {
+    const raw = twinMemoryEmbeddingJsonToParseString(d.embeddingJson);
+    const v = raw === null ? null : parseEmbeddingJson(raw);
+    if (v === null) {
+      continue;
+    }
+    const score = cosineSimilarity(queryVec, v);
+    const body = d.body ?? "";
+    candidates.push({
+      source: "diary",
+      id: d.id,
+      score,
+      previewText:
+        body.length > TWIN_MEMORY_DIARY_PREVIEW_MAX_CHARS
+          ? `${body.slice(0, TWIN_MEMORY_DIARY_PREVIEW_SLICE_END)}…`
+          : body,
+    });
+  }
+
+  if (twinProfileId !== null) {
+    const scenarios = await db
+      .select({
+        id: pgSchema.scenarioAnswers.id,
+        scenarioKey: pgSchema.scenarioAnswers.scenarioKey,
+        payloadJson: pgSchema.scenarioAnswers.payloadJson,
+        embeddingJson: pgSchema.scenarioAnswers.embeddingJson,
+      })
+      .from(pgSchema.scenarioAnswers)
+      .where(
+        and(
+          eq(pgSchema.scenarioAnswers.twinProfileId, twinProfileId),
+          isNotNull(pgSchema.scenarioAnswers.embeddingJson),
+        ),
+      );
+
+    for (const s of scenarios) {
+      const raw = twinMemoryEmbeddingJsonToParseString(s.embeddingJson);
+      const v = raw === null ? null : parseEmbeddingJson(raw);
+      if (v === null) {
+        continue;
+      }
+      const score = cosineSimilarity(queryVec, v);
+      const pj = scenarioPayloadJsonForMemoryPreview(s.payloadJson);
+      const truncated =
+        pj.length > TWIN_MEMORY_SCENARIO_PAYLOAD_PREVIEW_MAX_CHARS
+          ? `${pj.slice(0, TWIN_MEMORY_SCENARIO_PAYLOAD_PREVIEW_SLICE_END)}…`
+          : pj;
+      candidates.push({
+        source: "scenario",
+        id: s.id,
+        score,
+        previewText: `${s.scenarioKey}: ${truncated}`,
+      });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates.slice(0, limit);
+}
 
 /** Mirrors `lib/twin-persistence/twin-prediction-verifications.ts` (DEE-72.2 — avoid SQLite import). */
 const DEFAULT_VERIFICATION_LIST_LIMIT = 50;
@@ -697,8 +880,9 @@ async function listTwinPredictionVerificationsForUserPg(
 }
 
 /**
- * Postgres AI-Twin / diary persistence boundary (DEE-72.1, DEE-72.2).
+ * Postgres AI-Twin / diary persistence boundary (DEE-72.1, DEE-72.2, DEE-72.3).
  * Async semantics; transactional writes use {@link runWaiaPostgresTransaction}.
+ * Memory search is read-only and does not use that helper.
  */
 export type PostgresTwinPersistence = {
   readonly db: WaiaPostgresDb;
@@ -745,6 +929,11 @@ export type PostgresTwinPersistence = {
     userId: string,
     limit?: number,
   ) => Promise<TwinPredictionVerificationItemDto[]>;
+  searchTwinMemoriesByText: (
+    userId: string,
+    queryText: string,
+    topN?: number,
+  ) => Promise<TwinMemorySearchHit[]>;
   stringifyScenarioPayloadForStorage: typeof stringifyScenarioPayloadForStorage;
 };
 
@@ -770,6 +959,8 @@ export function createPostgresTwinPersistence(db: WaiaPostgresDb): PostgresTwinP
       appendTwinPredictionVerificationForUserPg(db, params),
     listTwinPredictionVerificationsForUser: (userId, limit) =>
       listTwinPredictionVerificationsForUserPg(db, userId, limit),
+    searchTwinMemoriesByText: (userId, queryText, topN) =>
+      searchTwinMemoriesByTextPg(db, userId, queryText, topN),
     stringifyScenarioPayloadForStorage,
   };
 }
