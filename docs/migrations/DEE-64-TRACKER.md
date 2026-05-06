@@ -8,9 +8,9 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 ## Current Status
 
-**D1, D2, D3, D3b, and D4 are complete and merged** on `dev`.
+**D1, D2, D3, D3b, D4, and D5a are complete and merged** on `dev`.
 
-**D5a (SQLite persistence boundary)** is in progress: explicit `lib/persistence/sqlite/*` modules that delegate to existing twin/diary helpers, optional `resolveTwinPersistence(handle)` guarded for Postgres (throws before any SQLite work). No production caller migration.
+**D6-pre** adds Postgres migration/bootstrap/testing **foundation only** (`docs/postgres-development.md`, Docker helpers, optional integration tests, manual CI workflow). **No** `runWaiaPostgresTransaction`, **no** production Postgres routing, **no** `WAIA_DB_BACKEND` behavior changes.
 
 ## Completed Slices
 
@@ -47,6 +47,12 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 - Postgres branch rejects explicitly (`Promise.reject` with a stable `[waia]` message; callback is never invoked)
 - No production callers migrated
 
+### D5a
+
+- Added `lib/persistence/sqlite/twin-persistence.ts` with `createSqliteTwinPersistence(db)` delegating to `lib/twin-persistence/*` (no behavior change; explicit SQLite naming).
+- Added guarded `resolveTwinPersistence(handle: WaiaRuntimeDb)` in `lib/persistence/runtime.ts`: SQLite returns the boundary; Postgres throws immediately (no twin/diary persistence callbacks).
+- Transaction orchestration remains in `db/waia-transaction.ts`; persistence modules do not own transaction policy.
+
 ## Current Runtime Transaction Path
 
 **Production path today:**
@@ -64,12 +70,10 @@ production callers
 
 ## Remaining Work
 
-### D5a (in flight — SQLite-only persistence boundary)
+### D6-pre
 
-- Added `lib/persistence/sqlite/twin-persistence.ts` with `createSqliteTwinPersistence(db)` delegating to `lib/twin-persistence/*` (no behavior change; explicit SQLite naming).
-- Added optional guarded `resolveTwinPersistence(handle: WaiaRuntimeDb)` in `lib/persistence/runtime.ts`: SQLite returns the boundary; Postgres throws immediately (no twin/diary persistence callbacks).
-- Transaction orchestration remains in `db/waia-transaction.ts`; persistence modules do not own transaction policy.
-- **Explicit non-goals for D5a:** no Postgres persistence, no production route/OAuth/twin-write migration, no `runWaiaTransaction`, no backend-neutral repositories.
+- Postgres migration/bootstrap/testing foundation: [`docs/postgres-development.md`](../postgres-development.md), `pnpm db:postgres:*` helpers, [`tests/integration/`](../../tests/integration/) (opt-in via `WAIA_PG_INTEGRATION=1`), [`.github/workflows/postgres-integration.yml`](../../.github/workflows/postgres-integration.yml) (`workflow_dispatch` only).
+- **Explicit non-goals:** no `runWaiaPostgresTransaction`, no Postgres `db.transaction` wrapper, no production/runtime routing changes, no DEE-72 persistence migration.
 
 ### D5 (remainder after D5a)
 
@@ -122,4 +126,5 @@ production callers
 
 ## Related Docs
 
+- [Postgres development / migrations (D6-pre)](../postgres-development.md)
 - [Transaction architecture contract](../architecture/transactions.md)

@@ -60,6 +60,12 @@ D3 ships only this contract. The following sequence is the ratified plan; each s
 - Migrate callers to runtime handles only on paths where Postgres semantics are validated end-to-end (including rollback).
 - Existing sync SQLite helpers remain valid for the SQLite path.
 
+### D6-pre - Postgres foundation (infrastructure only; implemented)
+
+- **Goal:** repeatable local/CI Postgres bootstrap + migration apply + opt-in integration tests **before** any real Postgres transaction runner exists.
+- Deliverables: [`docs/postgres-development.md`](../postgres-development.md), `pnpm db:postgres:*` scripts, optional `WAIA_PG_INTEGRATION=1` tests under `tests/integration/`, manual [`postgres-integration`](../.github/workflows/postgres-integration.yml) workflow.
+- **Non-goals:** `runWaiaPostgresTransaction`, routing `runWaiaTransactionOnRuntime` for Postgres, production caller migration, SQLite changes.
+
 ### D6 - Genuine Postgres transaction runner
 - Add `runWaiaPostgresTransaction(db, async fn)` once schema-bound persistence on `schema.postgres.ts` exists and rollback is verified.
 - Only at this point does `runWaiaTransactionOnRuntime` route on backend instead of throwing on Postgres.

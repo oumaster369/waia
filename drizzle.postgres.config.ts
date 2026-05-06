@@ -7,7 +7,7 @@ import { defineConfig } from "drizzle-kit";
  * - Use `DATABASE_URL_POSTGRES` for Supabase / Postgres (pooler or direct). Example:
  *   `postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres`
  *
- * **DEE-62:** schema only — do not run `generate` / `migrate` until DEE-63.
+ * **D6-pre:** versioned SQL in `db/migrations_postgres` is the apply target; see `docs/postgres-development.md`.
  */
 const url =
   process.env.DATABASE_URL_POSTGRES ?? "postgresql://127.0.0.1:5432/waia_postgres_schema_placeholder";
