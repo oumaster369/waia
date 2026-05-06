@@ -28,7 +28,7 @@ These constraints define the honest boundary between what is supportable today a
 - Schema duality. Persistence helpers (`twin-persistence/*`, `oauth-user-session.ts`, `auth/session-service.ts`) reference SQLite schema tables. They cannot transparently run against a Postgres `tx` without backend-specific repositories.
 - Sync helpers inside tx. `ensureUserTwinSeed`, `createSessionRow`, `appendTwinDialogueTurnInsideExecutor`, etc., are deliberately synchronous so they remain valid inside the SQLite transaction. Promoting them to async would break SQLite semantics.
 - Runtime initialization gap. `getWaiaRuntimeDb()` is async and currently used only at the request boundary; persistence call sites still depend on the sync `getDb()` shape.
-- Transaction policy is centralized (D1+D2) but type policy is not. There is no shared transaction-callback type yet, on purpose.
+- Transaction entrypoints are centralized (D1+D2). D3b adds `WaiaSqliteTransactionCallback<T>` as the explicit SQLite-only transaction body type; no cross-backend or async callback contract exists yet.
 - Pragma assumptions. `journal_mode = WAL` and `foreign_keys = ON` in `db/client.ts` are SQLite-specific and must not be silently assumed by runtime-aware code.
 - Honest abstraction line. Until Postgres has migrations applied in-app, repositories on `schema.postgres`, RLS policy, and verified rollback semantics, any unified transaction runner would either silently degrade Postgres or pretend Postgres exists.
 
@@ -37,8 +37,8 @@ These constraints define the honest boundary between what is supportable today a
 D3 ships only this contract. The following sequence is the ratified plan; each slice must respect the acceptance bar in section 4.
 
 ### D3b - Types-only contract reinforcement
-- Co-locate a single SQLite-shaped callback alias `WaiaTransactionCallback<T> = (tx: WaiaDb) => T` in `db/waia-transaction.ts`.
-- JSDoc updates that name `WaiaSqliteDb` and `runWaiaSqliteLegacyTransaction` as the explicit SQLite branch of the future router.
+- Co-locate a single SQLite-shaped callback alias `WaiaSqliteTransactionCallback<T> = (tx: WaiaDb) => T` in `db/waia-transaction.ts`.
+- JSDoc updates that name `runWaiaSqliteLegacyTransaction` and the callback type as the explicit SQLite legacy branch (not portable to Postgres).
 - No new runtime functions. No async callback type. No new tests beyond type assertions.
 
 ### D4 - Runtime-handle seam, SQLite-only guardrail
