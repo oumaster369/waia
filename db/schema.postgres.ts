@@ -222,3 +222,14 @@ export const verificationFeedback = pgTable("verification_feedback", {
   payloadJson: jsonb("payload_json").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
+
+/**
+ * Postgres transaction integration validation table (DEE-64 D6-core).
+ * Used only by opt-in `tests/integration/postgres-transaction-rollback.test.ts` to verify commit/rollback semantics.
+ * No foreign keys; disposable ephemeral data.
+ */
+export const waiaPostgresTxValidation = pgTable("waia_postgres_tx_validation", {
+  id: uuid("id").primaryKey(),
+  payload: text("payload").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});

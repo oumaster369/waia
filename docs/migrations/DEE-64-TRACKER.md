@@ -8,9 +8,9 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 ## Current Status
 
-**D1, D2, D3, D3b, D4, and D5a are complete and merged** on `dev`.
+**D1, D2, D3, D3b, D4, D5a, and D6-pre are complete and merged** on `dev`.
 
-**D6-pre** adds Postgres migration/bootstrap/testing **foundation only** (`docs/postgres-development.md`, Docker helpers, optional integration tests, manual CI workflow). **No** `runWaiaPostgresTransaction`, **no** production Postgres routing, **no** `WAIA_DB_BACKEND` behavior changes.
+**D6-core** adds **explicit Postgres transaction runner** (`db/waia-postgres-transaction.ts`, async-only callback, rollback integration tests). **Still no** `runWaiaTransaction`, **still no** production runtime routing, **still no** caller migration.
 
 ## Completed Slices
 
@@ -70,23 +70,16 @@ production callers
 
 ## Remaining Work
 
-### D6-pre
-
-- Postgres migration/bootstrap/testing foundation: [`docs/postgres-development.md`](../postgres-development.md), `pnpm db:postgres:*` helpers, [`tests/integration/`](../../tests/integration/) (opt-in via `WAIA_PG_INTEGRATION=1`), [`.github/workflows/postgres-integration.yml`](../../.github/workflows/postgres-integration.yml) (`workflow_dispatch` only).
-- **Explicit non-goals:** no `runWaiaPostgresTransaction`, no Postgres `db.transaction` wrapper, no production/runtime routing changes, no DEE-72 persistence migration.
-
 ### D5 (remainder after D5a)
 
 - Backend-specific repositories / runtime-aware persistence boundaries
 - Do not create fake backend-neutral persistence
 - Prepare validated paths for future Postgres behavior
 
-### D6
+### D6 (remainder after D6-core)
 
-- Real Postgres transaction support
-- Async transaction semantics
-- Rollback validation
-- Only then consider neutral `runWaiaTransaction`
+- Consider routing `runWaiaTransactionOnRuntime` Postgres branch (separate slice; optional)
+- Consider neutral `runWaiaTransaction` only after explicit policy + both backends validated
 
 ### DEE-72
 
