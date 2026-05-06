@@ -16,7 +16,7 @@ runtime callers
 - SQLite-only handle: `WaiaDb = BetterSQLite3Database<typeof WaiaSQLiteSchema>` in `db/types.ts`.
 - Five migrated callers: `lib/oauth/oauth-callback.ts`, `app/api/auth/sign-up/route.ts`, `app/api/auth/sign-in/route.ts`, `lib/twin-persistence/loader.ts`, `lib/twin-persistence/diary-memory.ts`.
 - Runtime resolver `getWaiaRuntimeDb` (`db/waia-runtime-db.ts`) returns a discriminated `WaiaRuntimeDb` but is consumed only by `app/api/health/database/route.ts`. It is intentionally not bound to the transaction layer.
-- Postgres Drizzle singleton (`db/postgres-client.ts`) and parallel schema (`db/schema.postgres.ts`) exist but are not wired to persistence.
+- Postgres Drizzle singleton (`db/postgres-client.ts`) and parallel schema (`db/schema.postgres.ts`) support **DEE-72.1** twin/diary persistence in **`lib/persistence/postgres/*`** (async writes via **`runWaiaPostgresTransaction`**). This is **not** production route migration; SQLite remains authoritative for default production.
 
 ## 2. Architectural constraints
 
@@ -52,7 +52,7 @@ D3 ships only this contract. The following sequence is the ratified plan; each s
 ### D5a - SQLite persistence boundary (additive; production callers unchanged)
 
 - `lib/persistence/sqlite/*` exposes `createSqliteTwinPersistence(db: WaiaDb)` — delegates to existing twin/diary modules; transaction policy stays in `db/waia-transaction.ts`.
-- Optional `lib/persistence/runtime.ts` may expose `resolveTwinPersistence(handle: WaiaRuntimeDb)` — SQLite returns the SQLite boundary; Postgres throws before any persistence work (mirrors D4 guard pattern for transactions).
+- `lib/persistence/runtime.ts` exposes `resolveTwinPersistence(handle: WaiaRuntimeDb)` with typed overloads — SQLite returns the SQLite boundary; **DEE-72.1** returns the Postgres boundary for `kind: "postgres"` (explicit handle `db` only).
 - No `runWaiaTransactionOnRuntime` requirement for persistence; resolution is separate from transaction orchestration.
 
 ### D5+ - Backend-specific persistence repositories
@@ -70,7 +70,13 @@ D3 ships only this contract. The following sequence is the ratified plan; each s
 
 - Added [`db/waia-postgres-transaction.ts`](../../db/waia-postgres-transaction.ts): `runWaiaPostgresTransaction(db, fn)` where `db` is explicit `PostgresJsDatabase<typeof pgSchema>` and `fn` is `WaiaPostgresTransactionCallback<T>` (async-only, schema-bound via Drizzle `Parameters` extraction).
 - Rollback validated via opt-in [`tests/integration/postgres-transaction-rollback.test.ts`](../../tests/integration/postgres-transaction-rollback.test.ts) (commit/throw/reject; separate-session reads).
-- **Still no:** `runWaiaTransactionOnRuntime` Postgres routing, `runWaiaTransaction`, production caller migration, DEE-72 persistence.
+- **Still no:** `runWaiaTransactionOnRuntime` Postgres routing, `runWaiaTransaction`, production caller migration.
+
+### DEE-72.1 — Postgres twin/diary persistence boundary (implemented)
+
+- **`PostgresTwinPersistence`** / **`createPostgresTwinPersistence(db)`** in `lib/persistence/postgres/twin-persistence.ts` (and optional `index.ts` barrel). Method surface aligns with **`SqliteTwinPersistence`** (D5a); Postgres methods are **async** and **writes** use **`runWaiaPostgresTransaction`** only (no `runWaiaSqliteLegacyTransaction`, no shared callback type with SQLite).
+- **`resolveTwinPersistence`** (`lib/persistence/runtime.ts`) uses typed overloads: SQLite → SQLite boundary; Postgres → Postgres boundary. **Explicit `db` on the handle** — no hidden singleton in the resolver.
+- **Non-goals for this slice:** neutral `runWaiaTransaction`, production route migration, **`lib/reasoning/*`** on Postgres, repeatability / prediction / memory-search Postgres support, backend-neutral repositories.
 
 ### D6 (remainder after D6-core)
 
@@ -96,9 +102,9 @@ TypeScript / TSX only (`--glob "*.{ts,tsx}"`):
 - `runWaiaSqliteLegacyTransaction\(` -> only the five migrated call sites and the facade definition in `db/waia-transaction.ts`, plus internal use from `runWaiaTransactionOnRuntime`.
 - `runWaiaTransaction\b` -> no matches.
 - `runWaiaTransactionOnRuntime\b` -> only `db/waia-transaction.ts` and `tests/unit/waia-transaction.test.ts`.
-- `runWaiaPostgresTransaction\b` -> only `db/waia-postgres-transaction.ts` and `tests/integration/postgres-transaction-rollback.test.ts`.
+- `runWaiaPostgresTransaction\b` -> `db/waia-postgres-transaction.ts`, `lib/persistence/postgres/**/*.ts`, and `tests/integration/*.test.ts` (opt-in Postgres integration tests only).
 - `WaiaPostgresTransactionCallback\b` -> only `db/waia-postgres-transaction.ts`.
-- `WaiaRuntimeDb` -> `db/waia-runtime-db.ts`, `db/waia-transaction.ts` (type import / parameter), `lib/persistence/runtime.ts` (D5a persistence resolution), `app/api/health/database/route.ts`, `tests/unit/waia-runtime-db.test.ts`, `tests/unit/health-database-route.test.ts`, `tests/unit/waia-transaction.test.ts`, `tests/unit/sqlite-twin-persistence-boundary.test.ts`.
+- `WaiaRuntimeDb` -> `db/waia-runtime-db.ts`, `db/waia-transaction.ts` (type import / parameter), `lib/persistence/runtime.ts` (D5a / DEE-72.1 persistence resolution), `app/api/health/database/route.ts`, `tests/unit/waia-runtime-db.test.ts`, `tests/unit/health-database-route.test.ts`, `tests/unit/waia-transaction.test.ts`, `tests/unit/sqlite-twin-persistence-boundary.test.ts`, `tests/integration/postgres-twin-persistence.test.ts` (opt-in).
 
 ## 6. Rollback
 

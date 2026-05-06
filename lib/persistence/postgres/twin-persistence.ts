@@ -1,0 +1,629 @@
+import "server-only";
+
+import { and, asc, eq, sql } from "drizzle-orm";
+
+import type { DashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-api.types";
+import type { TwinDialogueSignals } from "@/lib/dashboard/readiness-snapshot-default";
+import { DEFAULT_READINESS_INPUT } from "@/lib/dashboard/readiness-snapshot-default";
+import { NULL_HINTS_BY_INDICATOR } from "@/lib/dashboard/null-hints";
+import {
+  composeTwinDialogueTurnEmbedInput,
+  composeScenarioEmbedInput,
+  embedTwinMemoryText,
+  serializeEmbeddingJson,
+  TWIN_MEMORY_EMBEDDING_MODEL_ID,
+} from "@/lib/embeddings/twin-memory-embeddings";
+import { parseIndicatorVector } from "@/lib/readiness/readiness";
+import type { ReadinessInput } from "@/lib/readiness/types";
+import * as pgSchema from "@/db/schema.postgres";
+import {
+  runWaiaPostgresTransaction,
+  type WaiaPostgresDb,
+} from "@/db/waia-postgres-transaction";
+import {
+  ReadinessSerializationError,
+  type AppendTwinDialogueTurnResult,
+  type PersistUserTwinExchangeWithAssistantResult,
+  type TwinDialogueMemoryRow,
+  type TwinDialogueTurnDbRow,
+} from "@/lib/twin-persistence/loader";
+import {
+  stringifyScenarioPayloadForStorage,
+  MAX_DIARY_BODY_CHARS,
+  MAX_SCENARIO_KEY_CHARS,
+  MAX_SCENARIO_PAYLOAD_JSON_CHARS,
+  type AppendDiaryEntryResult,
+  type AppendScenarioAnswerResult,
+  type DiaryMemoryRow,
+  type ScenarioAnswerMemoryRow,
+} from "@/lib/twin-persistence/diary-memory";
+
+export type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+
+export {
+  MAX_DIARY_BODY_CHARS,
+  MAX_SCENARIO_KEY_CHARS,
+  MAX_SCENARIO_PAYLOAD_JSON_CHARS,
+};
+
+type PgTx = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
+
+function normalizeIdempotencyKey(k: string | null | undefined): string | null {
+  if (k == null || typeof k !== "string") {
+    return null;
+  }
+  const trimmed = k.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function rowToReadinessInputFromDb(
+  indicatorsJson: unknown,
+  socializationCompleted: boolean,
+  finalStateMessageShown: boolean,
+): ReadinessInput {
+  const parsed =
+    typeof indicatorsJson === "string" ? (JSON.parse(indicatorsJson) as unknown) : indicatorsJson;
+  if (!Array.isArray(parsed) || parsed.length !== 6) {
+    throw new ReadinessSerializationError(
+      `indicators_json must be a JSON array of length 6, got ${JSON.stringify(parsed)}.`,
+    );
+  }
+  const indicators = parseIndicatorVector(parsed as Iterable<number>);
+  return {
+    indicators,
+    socializationCompleted,
+    finalStateMessageShown,
+  };
+}
+
+/**
+ * Idempotent twin profile + readiness inside a Postgres transaction (DEE-72.1).
+ */
+async function ensureUserTwinSeedInsideExecutorPg(tx: PgTx, userId: string): Promise<string> {
+  const existingTwinRows = await tx
+    .select({ id: pgSchema.twinProfiles.id })
+    .from(pgSchema.twinProfiles)
+    .where(eq(pgSchema.twinProfiles.userId, userId))
+    .limit(1);
+
+  const existingTwin = existingTwinRows[0];
+
+  const twinId =
+    existingTwin?.id ??
+    (await (async () => {
+      const id = crypto.randomUUID();
+      await tx.insert(pgSchema.twinProfiles).values({ id, userId });
+      return id;
+    })());
+
+  const stateRows = await tx
+    .select({ twinProfileId: pgSchema.twinReadinessState.twinProfileId })
+    .from(pgSchema.twinReadinessState)
+    .where(eq(pgSchema.twinReadinessState.twinProfileId, twinId))
+    .limit(1);
+
+  if (!stateRows[0]) {
+    await tx.insert(pgSchema.twinReadinessState).values({
+      twinProfileId: twinId,
+      indicatorsJson: DEFAULT_READINESS_INPUT.indicators,
+      socializationCompleted: DEFAULT_READINESS_INPUT.socializationCompleted,
+      finalStateMessageShown: DEFAULT_READINESS_INPUT.finalStateMessageShown,
+    });
+  }
+
+  return twinId;
+}
+
+async function appendTwinDialogueTurnInsideExecutorPg(
+  ex: PgTx,
+  params: {
+    twinProfileId: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    idempotencyKey?: string | null;
+  },
+): Promise<AppendTwinDialogueTurnResult> {
+  if (params.idempotencyKey != null && params.idempotencyKey !== "") {
+    const existingRows = await ex
+      .select({
+        id: pgSchema.twinDialogueTurns.id,
+        sequence: pgSchema.twinDialogueTurns.sequence,
+        createdAt: pgSchema.twinDialogueTurns.createdAt,
+        content: pgSchema.twinDialogueTurns.content,
+      })
+      .from(pgSchema.twinDialogueTurns)
+      .where(
+        and(
+          eq(pgSchema.twinDialogueTurns.twinProfileId, params.twinProfileId),
+          eq(pgSchema.twinDialogueTurns.idempotencyKey, params.idempotencyKey),
+        ),
+      )
+      .limit(1);
+    const existing = existingRows[0];
+    if (existing) {
+      return {
+        id: existing.id,
+        sequence: existing.sequence,
+        createdAt: existing.createdAt,
+        content: existing.content,
+        replayed: true,
+      };
+    }
+  }
+
+  const id = crypto.randomUUID();
+
+  const aggRows = await ex
+    .select({
+      maxSeq: sql<number>`coalesce(max(${pgSchema.twinDialogueTurns.sequence}), 0)`.mapWith(Number),
+    })
+    .from(pgSchema.twinDialogueTurns)
+    .where(eq(pgSchema.twinDialogueTurns.twinProfileId, params.twinProfileId));
+
+  const nextSeq = Number(aggRows[0]?.maxSeq ?? 0) + 1;
+
+  const embedInput = composeTwinDialogueTurnEmbedInput(params.role, params.content);
+  const embeddingVec = embedTwinMemoryText(embedInput);
+  const embeddingJson = serializeEmbeddingJson(embeddingVec);
+  const embeddingModel = embeddingVec ? TWIN_MEMORY_EMBEDDING_MODEL_ID : null;
+
+  await ex.insert(pgSchema.twinDialogueTurns).values({
+    id,
+    twinProfileId: params.twinProfileId,
+    sequence: nextSeq,
+    role: params.role,
+    content: params.content,
+    idempotencyKey: params.idempotencyKey ?? null,
+    embeddingJson,
+    embeddingModel,
+  });
+
+  const rowRows = await ex
+    .select({
+      createdAt: pgSchema.twinDialogueTurns.createdAt,
+    })
+    .from(pgSchema.twinDialogueTurns)
+    .where(eq(pgSchema.twinDialogueTurns.id, id))
+    .limit(1);
+
+  const row = rowRows[0];
+
+  if (!row) {
+    throw new Error("[waia] twin dialogue insert row missing immediately after insert");
+  }
+
+  return {
+    id,
+    sequence: nextSeq,
+    createdAt: row.createdAt,
+    content: params.content,
+    replayed: false,
+  };
+}
+
+async function appendTwinDialogueTurnResultPg(
+  db: WaiaPostgresDb,
+  params: {
+    twinProfileId: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    idempotencyKey?: string | null;
+  },
+): Promise<AppendTwinDialogueTurnResult> {
+  return runWaiaPostgresTransaction(db, async (tx) =>
+    appendTwinDialogueTurnInsideExecutorPg(tx, params),
+  );
+}
+
+async function persistUserTwinExchangeWithAssistantStubPg(
+  db: WaiaPostgresDb,
+  params: {
+    twinProfileId: string;
+    userContent: string;
+    userIdempotencyKey?: string | null;
+    assistantContent: string;
+  },
+): Promise<PersistUserTwinExchangeWithAssistantResult> {
+  return runWaiaPostgresTransaction(db, async (tx) => {
+    const userTurn = await appendTwinDialogueTurnInsideExecutorPg(tx, {
+      twinProfileId: params.twinProfileId,
+      role: "user",
+      content: params.userContent,
+      idempotencyKey: params.userIdempotencyKey ?? null,
+    });
+
+    let assistantTurn: AppendTwinDialogueTurnResult | null = null;
+    if (!userTurn.replayed) {
+      assistantTurn = await appendTwinDialogueTurnInsideExecutorPg(tx, {
+        twinProfileId: params.twinProfileId,
+        role: "assistant",
+        content: params.assistantContent,
+        idempotencyKey: `${userTurn.id}:assistant`,
+      });
+    }
+
+    return { userTurn, assistantTurn };
+  });
+}
+
+async function appendTwinDialogueTurnPg(
+  db: WaiaPostgresDb,
+  params: {
+    twinProfileId: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    idempotencyKey?: string | null;
+  },
+): Promise<void> {
+  await appendTwinDialogueTurnResultPg(db, params);
+}
+
+async function countUserDialogueTurnsPg(db: WaiaPostgresDb, twinProfileId: string): Promise<number> {
+  const rows = await db
+    .select({ c: sql<number>`count(*)`.mapWith(Number) })
+    .from(pgSchema.twinDialogueTurns)
+    .where(
+      and(
+        eq(pgSchema.twinDialogueTurns.twinProfileId, twinProfileId),
+        eq(pgSchema.twinDialogueTurns.role, "user"),
+      ),
+    );
+  return rows[0]?.c ?? 0;
+}
+
+async function listTwinDialogueTurnsChronologicalPg(
+  db: WaiaPostgresDb,
+  twinProfileId: string,
+): Promise<TwinDialogueTurnDbRow[]> {
+  return await db
+    .select({
+      id: pgSchema.twinDialogueTurns.id,
+      sequence: pgSchema.twinDialogueTurns.sequence,
+      role: pgSchema.twinDialogueTurns.role,
+      content: pgSchema.twinDialogueTurns.content,
+      idempotencyKey: pgSchema.twinDialogueTurns.idempotencyKey,
+      createdAt: pgSchema.twinDialogueTurns.createdAt,
+    })
+    .from(pgSchema.twinDialogueTurns)
+    .where(eq(pgSchema.twinDialogueTurns.twinProfileId, twinProfileId))
+    .orderBy(pgSchema.twinDialogueTurns.sequence);
+}
+
+async function ensureUserTwinSeedPg(db: WaiaPostgresDb, userId: string): Promise<string> {
+  return runWaiaPostgresTransaction(db, async (tx) => ensureUserTwinSeedInsideExecutorPg(tx, userId));
+}
+
+async function listTwinDialogueTurnsForUserPg(
+  db: WaiaPostgresDb,
+  userId: string,
+): Promise<TwinDialogueMemoryRow[]> {
+  const twinProfileId = await ensureUserTwinSeedPg(db, userId);
+  const rows = await listTwinDialogueTurnsChronologicalPg(db, twinProfileId);
+  return rows.map((r) => ({
+    id: r.id,
+    sequence: r.sequence,
+    role: r.role,
+    content: r.content,
+    createdAt: r.createdAt.toISOString(),
+  }));
+}
+
+async function loadDashboardReadinessPayloadFromDbPg(
+  db: WaiaPostgresDb,
+  userId: string,
+): Promise<DashboardReadinessPayload> {
+  await ensureUserTwinSeedPg(db, userId);
+
+  const rows = await db
+    .select({
+      indicatorsJson: pgSchema.twinReadinessState.indicatorsJson,
+      socializationCompleted: pgSchema.twinReadinessState.socializationCompleted,
+      finalStateMessageShown: pgSchema.twinReadinessState.finalStateMessageShown,
+      identityLabel: pgSchema.users.identityLabel,
+      twinProfileId: pgSchema.twinProfiles.id,
+    })
+    .from(pgSchema.users)
+    .innerJoin(pgSchema.twinProfiles, eq(pgSchema.twinProfiles.userId, pgSchema.users.id))
+    .innerJoin(
+      pgSchema.twinReadinessState,
+      eq(pgSchema.twinReadinessState.twinProfileId, pgSchema.twinProfiles.id),
+    )
+    .where(eq(pgSchema.users.id, userId))
+    .limit(1);
+
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error(`[waia] twin readiness row missing for user ${userId} after seed`);
+  }
+
+  const readinessInput = rowToReadinessInputFromDb(
+    row.indicatorsJson,
+    row.socializationCompleted,
+    row.finalStateMessageShown,
+  );
+  const userTurnCount = await countUserDialogueTurnsPg(db, row.twinProfileId);
+  const twinSignals: TwinDialogueSignals = {
+    hasMeaningfulExchange: userTurnCount > 0,
+  };
+
+  return {
+    readinessInput,
+    twinSignals,
+    identityLabel: row.identityLabel,
+    hintsByIndicator: NULL_HINTS_BY_INDICATOR,
+  };
+}
+
+async function appendDiaryEntryForUserPg(
+  db: WaiaPostgresDb,
+  params: {
+    userId: string;
+    body: string;
+    idempotencyKey?: string | null;
+  },
+): Promise<AppendDiaryEntryResult> {
+  const body = params.body.trim();
+  const idem = normalizeIdempotencyKey(params.idempotencyKey);
+  const userId = params.userId;
+
+  return runWaiaPostgresTransaction(db, async (tx) => {
+    const twinProfileId = await ensureUserTwinSeedInsideExecutorPg(tx, userId);
+
+    if (idem) {
+      const existingRows = await tx
+        .select({
+          id: pgSchema.diaryEntries.id,
+          body: pgSchema.diaryEntries.body,
+          createdAt: pgSchema.diaryEntries.createdAt,
+        })
+        .from(pgSchema.diaryEntries)
+        .where(and(eq(pgSchema.diaryEntries.userId, userId), eq(pgSchema.diaryEntries.idempotencyKey, idem)))
+        .limit(1);
+      const existing = existingRows[0];
+      if (existing) {
+        return {
+          id: existing.id,
+          body: existing.body ?? "",
+          createdAt: existing.createdAt,
+          replayed: true,
+        };
+      }
+    }
+
+    const id = crypto.randomUUID();
+    const embeddingVec = embedTwinMemoryText(body);
+    const embeddingJson = serializeEmbeddingJson(embeddingVec);
+    const embeddingModel = embeddingVec ? TWIN_MEMORY_EMBEDDING_MODEL_ID : null;
+
+    await tx.insert(pgSchema.diaryEntries).values({
+      id,
+      userId,
+      twinProfileId,
+      body,
+      idempotencyKey: idem,
+      embeddingJson,
+      embeddingModel,
+    });
+
+    const rowRows = await tx
+      .select({ createdAt: pgSchema.diaryEntries.createdAt })
+      .from(pgSchema.diaryEntries)
+      .where(eq(pgSchema.diaryEntries.id, id))
+      .limit(1);
+
+    const row = rowRows[0];
+
+    if (!row) {
+      throw new Error("[waia] diary entry insert row missing after insert");
+    }
+
+    return {
+      id,
+      body,
+      createdAt: row.createdAt,
+      replayed: false,
+    };
+  });
+}
+
+async function appendScenarioAnswerForUserPg(
+  db: WaiaPostgresDb,
+  params: {
+    userId: string;
+    scenarioKey: string;
+    payloadJson: string;
+    idempotencyKey?: string | null;
+  },
+): Promise<AppendScenarioAnswerResult> {
+  const idem = normalizeIdempotencyKey(params.idempotencyKey);
+  const scenarioKeyParam = params.scenarioKey;
+  const payloadJsonParam = params.payloadJson;
+
+  return runWaiaPostgresTransaction(db, async (tx) => {
+    const twinProfileId = await ensureUserTwinSeedInsideExecutorPg(tx, params.userId);
+
+    if (idem) {
+      const existingRows = await tx
+        .select({
+          id: pgSchema.scenarioAnswers.id,
+          scenarioKey: pgSchema.scenarioAnswers.scenarioKey,
+          payloadJson: pgSchema.scenarioAnswers.payloadJson,
+          createdAt: pgSchema.scenarioAnswers.createdAt,
+        })
+        .from(pgSchema.scenarioAnswers)
+        .where(
+          and(
+            eq(pgSchema.scenarioAnswers.twinProfileId, twinProfileId),
+            eq(pgSchema.scenarioAnswers.idempotencyKey, idem),
+          ),
+        )
+        .limit(1);
+      const existing = existingRows[0];
+      if (existing) {
+        return {
+          id: existing.id,
+          scenarioKey: existing.scenarioKey,
+          payload:
+            typeof existing.payloadJson === "string"
+              ? (JSON.parse(existing.payloadJson) as unknown)
+              : (existing.payloadJson as unknown),
+          createdAt: existing.createdAt,
+          replayed: true,
+        };
+      }
+    }
+
+    const id = crypto.randomUUID();
+    const scenarioEmbedIn = composeScenarioEmbedInput(scenarioKeyParam, payloadJsonParam);
+    const embeddingVec = embedTwinMemoryText(scenarioEmbedIn);
+    const embeddingJson = serializeEmbeddingJson(embeddingVec);
+    const embeddingModel = embeddingVec ? TWIN_MEMORY_EMBEDDING_MODEL_ID : null;
+
+    await tx.insert(pgSchema.scenarioAnswers).values({
+      id,
+      twinProfileId,
+      scenarioKey: scenarioKeyParam,
+      payloadJson: payloadJsonParam,
+      idempotencyKey: idem,
+      embeddingJson,
+      embeddingModel,
+    });
+
+    const rowRows = await tx
+      .select({ createdAt: pgSchema.scenarioAnswers.createdAt })
+      .from(pgSchema.scenarioAnswers)
+      .where(eq(pgSchema.scenarioAnswers.id, id))
+      .limit(1);
+
+    const row = rowRows[0];
+
+    if (!row) {
+      throw new Error("[waia] scenario answer insert row missing after insert");
+    }
+
+    return {
+      id,
+      scenarioKey: scenarioKeyParam,
+      payload: JSON.parse(payloadJsonParam) as unknown,
+      createdAt: row.createdAt,
+      replayed: false,
+    };
+  });
+}
+
+async function listDiaryEntriesForUserPg(
+  db: WaiaPostgresDb,
+  userId: string,
+): Promise<DiaryMemoryRow[]> {
+  await ensureUserTwinSeedPg(db, userId);
+  const rows = await db
+    .select({
+      id: pgSchema.diaryEntries.id,
+      body: pgSchema.diaryEntries.body,
+      createdAt: pgSchema.diaryEntries.createdAt,
+    })
+    .from(pgSchema.diaryEntries)
+    .where(eq(pgSchema.diaryEntries.userId, userId))
+    .orderBy(asc(pgSchema.diaryEntries.createdAt));
+
+  return rows.map((r) => ({
+    id: r.id,
+    body: r.body ?? "",
+    createdAt: r.createdAt.toISOString(),
+  }));
+}
+
+async function listScenarioAnswersForUserPg(
+  db: WaiaPostgresDb,
+  userId: string,
+): Promise<ScenarioAnswerMemoryRow[]> {
+  const twinProfileId = await ensureUserTwinSeedPg(db, userId);
+  const rows = await db
+    .select({
+      id: pgSchema.scenarioAnswers.id,
+      scenarioKey: pgSchema.scenarioAnswers.scenarioKey,
+      payloadJson: pgSchema.scenarioAnswers.payloadJson,
+      createdAt: pgSchema.scenarioAnswers.createdAt,
+    })
+    .from(pgSchema.scenarioAnswers)
+    .where(eq(pgSchema.scenarioAnswers.twinProfileId, twinProfileId))
+    .orderBy(asc(pgSchema.scenarioAnswers.createdAt));
+
+  return rows.map((r) => ({
+    id: r.id,
+    scenarioKey: r.scenarioKey,
+    payload:
+      typeof r.payloadJson === "string"
+        ? (JSON.parse(r.payloadJson) as unknown)
+        : (r.payloadJson as unknown),
+    createdAt: r.createdAt.toISOString(),
+  }));
+}
+
+/**
+ * Postgres AI-Twin / diary persistence boundary (DEE-72.1).
+ * Async semantics; transactional writes use {@link runWaiaPostgresTransaction}.
+ */
+export type PostgresTwinPersistence = {
+  readonly db: WaiaPostgresDb;
+  ensureUserTwinSeed: (userId: string) => Promise<string>;
+  appendTwinDialogueTurnResult: (params: {
+    twinProfileId: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    idempotencyKey?: string | null;
+  }) => Promise<AppendTwinDialogueTurnResult>;
+  persistUserTwinExchangeWithAssistantStub: (params: {
+    twinProfileId: string;
+    userContent: string;
+    userIdempotencyKey?: string | null;
+    assistantContent: string;
+  }) => Promise<PersistUserTwinExchangeWithAssistantResult>;
+  appendTwinDialogueTurn: (params: {
+    twinProfileId: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    idempotencyKey?: string | null;
+  }) => Promise<void>;
+  countUserDialogueTurns: (twinProfileId: string) => Promise<number>;
+  listTwinDialogueTurnsChronological: (twinProfileId: string) => Promise<TwinDialogueTurnDbRow[]>;
+  listTwinDialogueTurnsForUser: (userId: string) => Promise<TwinDialogueMemoryRow[]>;
+  loadDashboardReadinessPayloadFromDb: (userId: string) => Promise<DashboardReadinessPayload>;
+  appendDiaryEntryForUser: (params: {
+    userId: string;
+    body: string;
+    idempotencyKey?: string | null;
+  }) => Promise<AppendDiaryEntryResult>;
+  appendScenarioAnswerForUser: (params: {
+    userId: string;
+    scenarioKey: string;
+    payloadJson: string;
+    idempotencyKey?: string | null;
+  }) => Promise<AppendScenarioAnswerResult>;
+  listDiaryEntriesForUser: (userId: string) => Promise<DiaryMemoryRow[]>;
+  listScenarioAnswersForUser: (userId: string) => Promise<ScenarioAnswerMemoryRow[]>;
+  stringifyScenarioPayloadForStorage: typeof stringifyScenarioPayloadForStorage;
+};
+
+export function createPostgresTwinPersistence(db: WaiaPostgresDb): PostgresTwinPersistence {
+  return {
+    db,
+    ensureUserTwinSeed: (userId) => ensureUserTwinSeedPg(db, userId),
+    appendTwinDialogueTurnResult: (params) => appendTwinDialogueTurnResultPg(db, params),
+    persistUserTwinExchangeWithAssistantStub: (params) =>
+      persistUserTwinExchangeWithAssistantStubPg(db, params),
+    appendTwinDialogueTurn: (params) => appendTwinDialogueTurnPg(db, params),
+    countUserDialogueTurns: (twinProfileId) => countUserDialogueTurnsPg(db, twinProfileId),
+    listTwinDialogueTurnsChronological: (twinProfileId) =>
+      listTwinDialogueTurnsChronologicalPg(db, twinProfileId),
+    listTwinDialogueTurnsForUser: (userId) => listTwinDialogueTurnsForUserPg(db, userId),
+    loadDashboardReadinessPayloadFromDb: (userId) =>
+      loadDashboardReadinessPayloadFromDbPg(db, userId),
+    appendDiaryEntryForUser: (params) => appendDiaryEntryForUserPg(db, params),
+    appendScenarioAnswerForUser: (params) => appendScenarioAnswerForUserPg(db, params),
+    listDiaryEntriesForUser: (userId) => listDiaryEntriesForUserPg(db, userId),
+    listScenarioAnswersForUser: (userId) => listScenarioAnswersForUserPg(db, userId),
+    stringifyScenarioPayloadForStorage,
+  };
+}
