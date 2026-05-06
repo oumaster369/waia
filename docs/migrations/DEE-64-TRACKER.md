@@ -10,6 +10,8 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **D1, D2, D3, D3b, and D4 are complete and merged** on `dev`.
 
+**D5a (SQLite persistence boundary)** is in progress: explicit `lib/persistence/sqlite/*` modules that delegate to existing twin/diary helpers, optional `resolveTwinPersistence(handle)` guarded for Postgres (throws before any SQLite work). No production caller migration.
+
 ## Completed Slices
 
 ### D1
@@ -62,7 +64,14 @@ production callers
 
 ## Remaining Work
 
-### D5
+### D5a (in flight — SQLite-only persistence boundary)
+
+- Added `lib/persistence/sqlite/twin-persistence.ts` with `createSqliteTwinPersistence(db)` delegating to `lib/twin-persistence/*` (no behavior change; explicit SQLite naming).
+- Added optional guarded `resolveTwinPersistence(handle: WaiaRuntimeDb)` in `lib/persistence/runtime.ts`: SQLite returns the boundary; Postgres throws immediately (no twin/diary persistence callbacks).
+- Transaction orchestration remains in `db/waia-transaction.ts`; persistence modules do not own transaction policy.
+- **Explicit non-goals for D5a:** no Postgres persistence, no production route/OAuth/twin-write migration, no `runWaiaTransaction`, no backend-neutral repositories.
+
+### D5 (remainder after D5a)
 
 - Backend-specific repositories / runtime-aware persistence boundaries
 - Do not create fake backend-neutral persistence
@@ -96,7 +105,7 @@ production callers
 ## Invariants
 
 - `runWaiaTransaction` absent in TypeScript source until D6 or later
-- `runWaiaTransactionOnRuntime` limited to the transaction seam module and tests until caller migration is explicitly approved
+- `runWaiaTransactionOnRuntime` limited to the transaction seam module and tests until caller migration is explicitly approved (D5a may add `lib/persistence/runtime.ts` for persistence resolution only; it must not broaden transaction callback semantics).
 - `runSqliteTransaction` limited to `db/types.ts` and `db/waia-transaction.ts`
 - `WaiaSqliteTransactionCallback` remains SQLite-shaped and synchronous
 - Postgres branch must reject before callback execution (callback must never run for `kind: "postgres"`)
