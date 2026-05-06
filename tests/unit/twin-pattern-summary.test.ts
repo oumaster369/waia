@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { TWIN_PATTERN_SUMMARY_SCHEMA_VERSION } from "@/lib/dashboard/twin-pattern-summary-api.types";
 import type { TwinMemorySearchHit } from "@/lib/twin-persistence/twin-memory-retrieval";
-import { buildTwinPatternSummaryFromHits } from "@/lib/reasoning/twin-pattern-summary";
+import {
+  buildTwinPatternSummaryFromHits,
+  PATTERN_SUMMARY_SEED_QUERIES,
+  retrieveMemoriesForPatternSummaryAsync,
+} from "@/lib/reasoning/twin-pattern-summary";
+import type { TwinMemorySearchPort } from "@/lib/reasoning/twin-reasoning-ports";
 
 function hit(o: Omit<TwinMemorySearchHit, "score"> & { score?: number }): TwinMemorySearchHit {
   return {
@@ -79,5 +84,25 @@ describe("buildTwinPatternSummaryFromHits", () => {
     expect(
       r.contradictions.some((c) => c.includes("anxious") && c.includes("calm")),
     ).toBe(true);
+  });
+});
+
+describe("retrieveMemoriesForPatternSummaryAsync", () => {
+  it("fuses one hit per seed from a mock port (deterministic)", async () => {
+    const perSeed = PATTERN_SUMMARY_SEED_QUERIES.map((seed, idx) =>
+      hit({ source: "diary", id: String(idx), previewText: seed, score: idx * 0.01 }),
+    );
+    let call = 0;
+    const port: TwinMemorySearchPort = {
+      searchByText: async () => [perSeed[call++]!],
+    };
+
+    const got = await retrieveMemoriesForPatternSummaryAsync(port, "user-1");
+    expect(call).toBe(PATTERN_SUMMARY_SEED_QUERIES.length);
+    expect(got).toHaveLength(PATTERN_SUMMARY_SEED_QUERIES.length);
+    const ids = [...got].sort((a, b) => Number(a.id) - Number(b.id)).map((h) => h.id);
+    expect(ids).toEqual(PATTERN_SUMMARY_SEED_QUERIES.map((_, i) => String(i)));
+    const sortedByScore = [...got].sort((a, b) => b.score - a.score);
+    expect(got).toEqual(sortedByScore);
   });
 });

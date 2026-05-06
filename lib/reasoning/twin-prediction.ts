@@ -16,7 +16,8 @@ import {
   searchTwinMemoriesByText,
 } from "@/lib/twin-persistence/twin-memory-retrieval";
 import type { WaiaSqliteDb } from "@/lib/twin-persistence/loader";
-import { getTwinPatternSummaryForUser } from "@/lib/reasoning/twin-pattern-summary";
+import type { TwinMemorySearchPort } from "@/lib/reasoning/twin-reasoning-ports";
+import { getTwinPatternSummaryForUser, getTwinPatternSummaryForUserAsync } from "@/lib/reasoning/twin-pattern-summary";
 
 export const MAX_SCENARIO_CHARS = 16_384;
 const TOP_N_SCENARIO = 16;
@@ -231,5 +232,19 @@ export function runTwinPredictionForUser(
   const normalized = normalizeTwinPredictionScenario(scenarioTrimmed);
   const hits = searchTwinMemoriesByText(db, userId, scenarioTrimmed, TOP_N_SCENARIO);
   const summary = getTwinPatternSummaryForUser(db, userId);
+  return buildTwinPredictionFromInputs(normalized, summary, hits);
+}
+
+/** DEE-72.4: Postgres/async-capable path — mirrors sync semantics via memory port + async pattern summary. */
+export async function runTwinPredictionForUserAsync(
+  memoryPort: TwinMemorySearchPort,
+  userId: string,
+  scenarioTrimmed: string,
+): Promise<TwinPredictionApiResponse> {
+  const normalized = normalizeTwinPredictionScenario(scenarioTrimmed);
+  const [hits, summary] = await Promise.all([
+    memoryPort.searchByText(userId, scenarioTrimmed, TOP_N_SCENARIO),
+    getTwinPatternSummaryForUserAsync(memoryPort, userId),
+  ]);
   return buildTwinPredictionFromInputs(normalized, summary, hits);
 }
