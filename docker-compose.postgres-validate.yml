@@ -1,4 +1,4 @@
-# Ephemeral Postgres for validating `db/migrations_postgres` locally (DEE-65).
+# Ephemeral Postgres for local validation and optional integration tests (DEE-64 D6-pre).
 # Do not use for production.
 
 services:
