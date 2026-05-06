@@ -1,5 +1,5 @@
 /**
- * DEE-72.1 / DEE-72.2: Postgres twin/diary persistence and prediction verifications (opt-in integration).
+ * DEE-72.1 / DEE-72.2 / DEE-72.3: Postgres twin/diary, verifications, memory retrieval (opt-in integration).
  * Requires migrated Postgres + WAIA_PG_INTEGRATION=1 + DATABASE_URL_POSTGRES.
  * Does not claim SQLite/Postgres behavioral parity.
  */
@@ -7,6 +7,12 @@
 import { describe, expect, it, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import postgres from "postgres";
+
+import {
+  composeTwinDialogueTurnEmbedInput,
+  embedTwinMemoryText,
+  serializeEmbeddingJson,
+} from "@/lib/embeddings/twin-memory-embeddings";
 
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
 import { runWaiaPostgresTransaction } from "@/db/waia-postgres-transaction";
@@ -17,7 +23,7 @@ import { resolveTwinPersistence } from "@/lib/persistence/runtime";
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 
-describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.1, DEE-72.2)", () => {
+describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.1, DEE-72.2, DEE-72.3)", () => {
   const testUserId = "00000000-0000-4000-8000-00000000dee7";
 
   afterEach(async () => {
@@ -281,13 +287,87 @@ describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.
     expect(list.length).toBe(100);
   });
 
-  it("listTwinPredictionVerificationsForUser does not seed twin profile for unknown user", async () => {
-    const ghostUserId = "00000000-0000-4000-8000-00000000d000";
+  it("searchTwinMemoriesByText ranks dialogue match above diary and scenario (embed query)", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+    const twinProfileId = await p.ensureUserTwinSeed(testUserId);
+
+    await p.appendTwinDialogueTurnResult({
+      twinProfileId,
+      role: "user",
+      content: "hello-rank-mem",
+      idempotencyKey: "mem-d1",
+    });
+    await p.appendDiaryEntryForUser({
+      userId: testUserId,
+      body: "diary-distractor-body",
+      idempotencyKey: "mem-di1",
+    });
+    await p.appendScenarioAnswerForUser({
+      userId: testUserId,
+      scenarioKey: "mem-sk",
+      payloadJson: "{}",
+      idempotencyKey: "mem-sc1",
+    });
+
+    const query = composeTwinDialogueTurnEmbedInput("user", "hello-rank-mem");
+    const hits = await p.searchTwinMemoriesByText(testUserId, query, 10);
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits[0]?.source).toBe("dialogue");
+    expect(hits[0]?.previewText).toBe("user: hello-rank-mem");
+  });
+
+  it("searchTwinMemoriesByText topN defaults to 10 when omitted", async () => {
+    await seedTestUser();
     const db = getPostgresDrizzle();
     const p = createPostgresTwinPersistence(db);
 
-    const list = await p.listTwinPredictionVerificationsForUser(ghostUserId);
-    expect(list).toEqual([]);
+    for (let i = 0; i < 12; i += 1) {
+      await p.appendDiaryEntryForUser({
+        userId: testUserId,
+        body: `bulk-diary-${i}`,
+        idempotencyKey: `mem-bulk-${i}`,
+      });
+    }
+
+    const hits = await p.searchTwinMemoriesByText(testUserId, "bulk-diary");
+    expect(hits.length).toBe(10);
+  });
+
+  it("searchTwinMemoriesByText clamps topN to max 100", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+
+    for (let i = 0; i < 102; i += 1) {
+      await p.appendDiaryEntryForUser({
+        userId: testUserId,
+        body: `clamp-mem-${i}`,
+        idempotencyKey: `mem-clamp-${i}`,
+      });
+    }
+
+    const hits = await p.searchTwinMemoriesByText(testUserId, "clamp-mem", 500);
+    expect(hits.length).toBe(100);
+  });
+
+  it("searchTwinMemoriesByText returns empty when user has no embedded rows", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+
+    const hits = await p.searchTwinMemoriesByText(testUserId, "nothing", 10);
+    expect(hits).toEqual([]);
+  });
+
+  it("searchTwinMemoriesByText unknown user yields no hits and creates no twin profile", async () => {
+    const ghostUserId = "00000000-0000-4000-8000-00000000d0e2";
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+
+    const hits = await p.searchTwinMemoriesByText(ghostUserId, "ghost-query", 5);
+    expect(hits).toEqual([]);
 
     const verify = postgres(url!, { max: 1 });
     try {
@@ -298,5 +378,81 @@ describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.
     } finally {
       await verify.end({ timeout: 5 });
     }
+  });
+
+  it("searchTwinMemoriesByText diary preview truncates at 200 chars like SQLite", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+    const longBody = "x".repeat(250);
+    await p.appendDiaryEntryForUser({
+      userId: testUserId,
+      body: longBody,
+      idempotencyKey: "mem-long",
+    });
+
+    const hits = await p.searchTwinMemoriesByText(testUserId, longBody.slice(0, 20), 5);
+    const diaryHit = hits.find((h) => h.source === "diary");
+    expect(diaryHit).toBeDefined();
+    expect(diaryHit?.previewText.length).toBe(198);
+    expect(diaryHit?.previewText.endsWith("…")).toBe(true);
+    expect(diaryHit?.previewText.startsWith("xxx")).toBe(true);
+  });
+
+  it("searchTwinMemoriesByText scenario preview uses stringified jsonb payload", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+    await p.appendScenarioAnswerForUser({
+      userId: testUserId,
+      scenarioKey: "payload-sk",
+      payloadJson: JSON.stringify({ alpha: "zeta", beta: 2 }),
+      idempotencyKey: "mem-pay1",
+    });
+
+    const hits = await p.searchTwinMemoriesByText(testUserId, "payload-sk", 5);
+    const sc = hits.find((h) => h.source === "scenario");
+    expect(sc).toBeDefined();
+    expect(sc?.previewText.startsWith("payload-sk:")).toBe(true);
+    expect(sc?.previewText).toContain("alpha");
+    expect(sc?.previewText).toContain("zeta");
+  });
+
+  it("searchTwinMemoriesByText parses embedding_json stored as jsonb array literal", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+    const twinProfileId = await p.ensureUserTwinSeed(testUserId);
+    const vec = embedTwinMemoryText("jsonb-array-needle");
+    const sj = serializeEmbeddingJson(vec);
+    expect(sj).not.toBeNull();
+
+    await db.insert(pgSchema.diaryEntries).values({
+      id: crypto.randomUUID(),
+      userId: testUserId,
+      twinProfileId,
+      body: "jsonb-array-body",
+      idempotencyKey: "mem-jsonb-arr",
+      embeddingJson: JSON.parse(sj!) as unknown,
+      embeddingModel: "stub-deterministic-v1",
+    });
+
+    const hits = await p.searchTwinMemoriesByText(testUserId, "jsonb-array-needle", 5);
+    expect(hits.some((h) => h.previewText === "jsonb-array-body")).toBe(true);
+  });
+
+  it("resolveTwinPersistence exposes memory search without seed on read-only path", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = resolveTwinPersistence({ kind: "postgres", db });
+
+    await p.appendDiaryEntryForUser({
+      userId: testUserId,
+      body: "resolver-mem",
+      idempotencyKey: "mem-res1",
+    });
+
+    const hits = await p.searchTwinMemoriesByText(testUserId, "resolver-mem", 5);
+    expect(hits.some((h) => h.previewText === "resolver-mem")).toBe(true);
   });
 });

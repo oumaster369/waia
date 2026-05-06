@@ -16,7 +16,7 @@ runtime callers
 - SQLite-only handle: `WaiaDb = BetterSQLite3Database<typeof WaiaSQLiteSchema>` in `db/types.ts`.
 - Five migrated callers: `lib/oauth/oauth-callback.ts`, `app/api/auth/sign-up/route.ts`, `app/api/auth/sign-in/route.ts`, `lib/twin-persistence/loader.ts`, `lib/twin-persistence/diary-memory.ts`.
 - Runtime resolver `getWaiaRuntimeDb` (`db/waia-runtime-db.ts`) returns a discriminated `WaiaRuntimeDb` but is consumed only by `app/api/health/database/route.ts`. It is intentionally not bound to the transaction layer.
-- Postgres Drizzle singleton (`db/postgres-client.ts`) and parallel schema (`db/schema.postgres.ts`) support **DEE-72.1 / DEE-72.2** twin/diary/**prediction verification** persistence in **`lib/persistence/postgres/*`** (async writes via **`runWaiaPostgresTransaction`**). This is **not** production route migration; SQLite remains authoritative for default production.
+- Postgres Drizzle singleton (`db/postgres-client.ts`) and parallel schema (`db/schema.postgres.ts`) support **DEE-72.1 / DEE-72.2 / DEE-72.3** twin/diary/**prediction verification**/read-only **memory search** in **`lib/persistence/postgres/*`** (async **writes** via **`runWaiaPostgresTransaction`**; memory search is **read-only** without that helper). This is **not** production route migration; SQLite remains authoritative for default production.
 
 ## 2. Architectural constraints
 
@@ -76,12 +76,17 @@ D3 ships only this contract. The following sequence is the ratified plan; each s
 
 - **`PostgresTwinPersistence`** / **`createPostgresTwinPersistence(db)`** in `lib/persistence/postgres/twin-persistence.ts` (and optional `index.ts` barrel). Twin/diary methods match **`SqliteTwinPersistence`** (D5a); **DEE-72.2** adds **Postgres-only** prediction verification methods (see below). Postgres methods are **async** and **writes** use **`runWaiaPostgresTransaction`** only (no `runWaiaSqliteLegacyTransaction`, no shared callback type with SQLite).
 - **`resolveTwinPersistence`** (`lib/persistence/runtime.ts`) uses typed overloads: SQLite → SQLite boundary; Postgres → Postgres boundary. **Explicit `db` on the handle** — no hidden singleton in the resolver.
-- **Non-goals for this slice:** neutral `runWaiaTransaction`, production route migration, **`lib/reasoning/*`** on Postgres, repeatability / prediction routes / memory-search Postgres support, backend-neutral repositories.
+- **Non-goals for this slice:** neutral `runWaiaTransaction`, production route migration, **`lib/reasoning/*`** on Postgres, repeatability / prediction routes Postgres support, Postgres **memory search** wiring (added in **DEE-72.3**), backend-neutral repositories.
 
 ### DEE-72.2 — Postgres twin prediction verifications persistence (implemented)
 
 - **Additive** methods on **`PostgresTwinPersistence`**: **`appendTwinPredictionVerificationForUser`**, **`listTwinPredictionVerificationsForUser`** (mirrors SQLite semantics in [`lib/twin-persistence/twin-prediction-verifications.ts`](../../lib/twin-persistence/twin-prediction-verifications.ts); **writes** run inside **`runWaiaPostgresTransaction`** after **`ensureUserTwinSeedInsideExecutorPg`**; **reads** user-scoped, no implicit seed).
 - **Non-goals:** production API route migration, **`lib/reasoning/*`** on Postgres, repeatability Postgres slice, SQLite module changes beyond unchanged behavior contract.
+
+### DEE-72.3 — Postgres twin memory retrieval (read-only; implemented)
+
+- **`searchTwinMemoriesByText`** on **`PostgresTwinPersistence`**: mirrors SQLite [`twin-memory-retrieval.ts`](../../lib/twin-persistence/twin-memory-retrieval.ts) **scoring and limits** but stays **read-only** — **does not** seed twin/readiness, **does not** use **`runWaiaPostgresTransaction`**, **no pgvector** — full candidate load + JS **cosine similarity** MVP.
+- **Non-goals:** production route migration, reasoning module migration, SQL-side ANN / similarity.
 
 ### D6 (remainder after D6-core)
 
