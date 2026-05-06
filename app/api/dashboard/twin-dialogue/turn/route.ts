@@ -100,8 +100,9 @@ export async function POST(request: Request) {
     assistantContent: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
   });
 
+  const userTurnCount = await countUserDialogueTurns(db, twinProfileId);
   const twinSignals = {
-    hasMeaningfulExchange: countUserDialogueTurns(db, twinProfileId) > 0,
+    hasMeaningfulExchange: userTurnCount > 0,
   };
 
   const at = persisted.assistantTurn;

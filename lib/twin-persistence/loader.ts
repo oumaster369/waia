@@ -224,15 +224,17 @@ export async function appendTwinDialogueTurn(
   await appendTwinDialogueTurnResult(db, params);
 }
 
-export function countUserDialogueTurns(db: WaiaDb, twinProfileId: string): number {
-  const [row] = db
+export async function countUserDialogueTurns(
+  db: WaiaDb,
+  twinProfileId: string,
+): Promise<number> {
+  const rows = await db
     .select({ c: sql<number>`count(*)`.mapWith(Number) })
     .from(twinDialogueTurns)
     .where(
       and(eq(twinDialogueTurns.twinProfileId, twinProfileId), eq(twinDialogueTurns.role, "user")),
-    )
-    .all();
-  return row?.c ?? 0;
+    );
+  return rows[0]?.c ?? 0;
 }
 
 /** Twin dialogue memory v1 rows for APIs and RSC hydrate (ISO `createdAt`). */
@@ -309,7 +311,7 @@ export async function loadDashboardReadinessPayloadFromDb(
     row.socializationCompleted,
     row.finalStateMessageShown,
   );
-  const userTurnCount = countUserDialogueTurns(db, row.twinProfileId);
+  const userTurnCount = await countUserDialogueTurns(db, row.twinProfileId);
   const twinSignals: TwinDialogueSignals = {
     hasMeaningfulExchange: userTurnCount > 0,
   };
