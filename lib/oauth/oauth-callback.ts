@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 import { applySessionCookie } from "@/lib/auth/cookie-response";
 import { getDb } from "@/db/client";
-import { runSqliteTransaction } from "@/db/types";
+import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
 import type { OauthProvider } from "@/db/schema";
 import { exchangeAppleAuthCodeAndProfile } from "@/lib/oauth/apple-oauth";
 import {
@@ -58,7 +58,7 @@ async function googleCallback(requestUrl: string): Promise<NextResponse> {
   }
 
   try {
-    return await runSqliteTransaction(db, (tx) => {
+    return await runWaiaSqliteLegacyTransaction(db, (tx) => {
       if (!consumeOauthStateStrict(tx, state, "google")) {
         return oauthFailureRedirect("OAUTH_INVALID_STATE");
       }
@@ -106,7 +106,7 @@ async function appleCallback(requestUrl: string): Promise<NextResponse> {
   }
 
   try {
-    return await runSqliteTransaction(db, (tx) => {
+    return await runWaiaSqliteLegacyTransaction(db, (tx) => {
       if (!consumeOauthStateStrict(tx, state, "apple")) {
         return oauthFailureRedirect("OAUTH_INVALID_STATE");
       }
@@ -165,7 +165,7 @@ async function telegramCallback(requestUrl: string): Promise<NextResponse> {
   const identityLabel = telegramIdentityLabel(record);
 
   try {
-    return await runSqliteTransaction(db, (tx) => {
+    return await runWaiaSqliteLegacyTransaction(db, (tx) => {
       if (!consumeOauthStateStrict(tx, state, "telegram")) {
         return oauthFailureRedirect("OAUTH_INVALID_STATE");
       }

@@ -2,7 +2,8 @@ import "server-only";
 
 import { and, asc, eq } from "drizzle-orm";
 
-import { runSqliteTransaction, type WaiaDb } from "@/db/types";
+import { type WaiaDb } from "@/db/types";
+import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
 import { diaryEntries, scenarioAnswers } from "@/db/schema";
 import {
   composeScenarioEmbedInput,
@@ -85,7 +86,7 @@ export async function appendDiaryEntryForUser(
   const idem = normalizeIdempotencyKey(params.idempotencyKey);
   const userId = params.userId;
 
-  return runSqliteTransaction(db, (tx) => {
+  return runWaiaSqliteLegacyTransaction(db, (tx) => {
     const sqlite = tx as WaiaDb;
     if (idem) {
       const existing = sqlite
@@ -157,7 +158,7 @@ export async function appendScenarioAnswerForUser(
   const scenarioKeyParam = params.scenarioKey;
   const payloadJsonParam = params.payloadJson;
 
-  return runSqliteTransaction(db, (tx) => {
+  return runWaiaSqliteLegacyTransaction(db, (tx) => {
     const sqlite = tx as WaiaDb;
     if (idem) {
       const existing = sqlite
