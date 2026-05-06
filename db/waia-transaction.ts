@@ -1,6 +1,10 @@
 import "server-only";
 
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import { runSqliteTransaction, type WaiaDb } from "@/db/types";
+
+const WAIA_POSTGRES_TRANSACTION_UNSUPPORTED =
+  "[waia] Postgres transactions are not supported yet (DEE-64 D6+). Use WAIA_DB_BACKEND=sqlite or call runWaiaSqliteLegacyTransaction with a WaiaDb until Postgres transaction support ships.";
 
 /**
  * Transaction body for the **SQLite legacy branch** only.
@@ -32,4 +36,23 @@ export function runWaiaSqliteLegacyTransaction<T>(
   fn: WaiaSqliteTransactionCallback<T>,
 ): Promise<T> {
   return runSqliteTransaction(db, fn);
+}
+
+/**
+ * Runtime-handle seam for transaction policy (DEE-64 D4). **Not** a cross-backend transaction API.
+ *
+ * - **`fn` is used only when `handle.kind === "sqlite"`** — it receives a SQLite-shaped {@link WaiaDb}
+ *   inside {@link runWaiaSqliteLegacyTransaction} / {@link runSqliteTransaction}.
+ * - **`handle.kind === "postgres"`** rejects the returned promise immediately with a fixed error:
+ *   {@link WaiaSqliteTransactionCallback} does not apply; **`fn` is never invoked**. Postgres
+ *   transaction support will use separate types (D6+).
+ */
+export function runWaiaTransactionOnRuntime<T>(
+  handle: WaiaRuntimeDb,
+  fn: WaiaSqliteTransactionCallback<T>,
+): Promise<T> {
+  if (handle.kind === "sqlite") {
+    return runWaiaSqliteLegacyTransaction(handle.db, fn);
+  }
+  return Promise.reject(new Error(WAIA_POSTGRES_TRANSACTION_UNSUPPORTED));
 }

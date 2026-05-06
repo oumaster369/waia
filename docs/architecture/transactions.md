@@ -41,13 +41,13 @@ D3 ships only this contract. The following sequence is the ratified plan; each s
 - JSDoc updates that name `runWaiaSqliteLegacyTransaction` and the callback type as the explicit SQLite legacy branch (not portable to Postgres).
 - No new runtime functions. No async callback type. No new tests beyond type assertions.
 
-### D4 - Runtime-handle seam, SQLite-only guardrail
-- Add `runWaiaTransactionOnRuntime(handle: WaiaRuntimeDb, fn): Promise<T>`.
+### D4 - Runtime-handle seam, SQLite-only guardrail (implemented)
+- `runWaiaTransactionOnRuntime(handle: WaiaRuntimeDb, fn: WaiaSqliteTransactionCallback<T>)` lives in `db/waia-transaction.ts`.
 - Behavior:
   - `kind: "sqlite"` -> delegate to `runWaiaSqliteLegacyTransaction(handle.db, fn)`.
-  - `kind: "postgres"` -> throw an explicit, named error (Postgres transactions are not yet supported).
+  - `kind: "postgres"` -> reject the returned `Promise` with a fixed `[waia]` error (Postgres transactions are not yet supported); **`fn` is never invoked**.
 - No call site migration. The existing 5 callers continue to use `runWaiaSqliteLegacyTransaction` directly.
-- New tests assert the explicit-throw on the Postgres branch.
+- Unit tests in `tests/unit/waia-transaction.test.ts` cover the Postgres rejection path and SQLite delegation.
 
 ### D5+ - Backend-specific persistence repositories
 - Introduce SQLite and Postgres repositories with async-aware helpers, parameterized over the active schema module.
@@ -63,7 +63,7 @@ D3 ships only this contract. The following sequence is the ratified plan; each s
 
 Any slice that touches the transaction layer must satisfy all of the following until Postgres support is genuinely complete:
 
-- Any new runtime function that accepts `WaiaRuntimeDb` MUST throw on `kind: "postgres"` until D6 wires it.
+- Any new runtime function that accepts `WaiaRuntimeDb` MUST reject (return a rejected Promise) or throw on `kind: "postgres"` until D6 wires it — and MUST NOT invoke a SQLite-shaped callback on that branch.
 - New tests MUST assert the explicit Postgres-throw behavior whenever a runtime-handle entrypoint is added.
 - New type aliases for transaction callbacks MUST be SQLite-shaped (`(tx: WaiaDb) => T`) until async persistence exists.
 - The pre-existing cast `tx as WaiaDb` inside `runSqliteTransaction` is acknowledged debt and must not be conflated with abstraction work.
@@ -72,12 +72,13 @@ Any slice that touches the transaction layer must satisfy all of the following u
 
 ## 5. Invariant grep checks
 
-These checks should remain stable until D4 lands. They form the ratification baseline.
+TypeScript / TSX only (`--glob "*.{ts,tsx}"`):
 
 - `runSqliteTransaction\(` -> only `db/waia-transaction.ts` (delegate). Definition in `db/types.ts` uses `<` and is excluded from this regex.
-- `runWaiaSqliteLegacyTransaction\(` -> only the five migrated call sites and the facade definition.
+- `runWaiaSqliteLegacyTransaction\(` -> only the five migrated call sites and the facade definition in `db/waia-transaction.ts`, plus internal use from `runWaiaTransactionOnRuntime`.
 - `runWaiaTransaction\b` -> no matches.
-- `WaiaRuntimeDb` -> only `db/waia-runtime-db.ts`, `app/api/health/database/route.ts`, `tests/unit/waia-runtime-db.test.ts`, `tests/unit/health-database-route.test.ts`.
+- `runWaiaTransactionOnRuntime\b` -> only `db/waia-transaction.ts` and `tests/unit/waia-transaction.test.ts`.
+- `WaiaRuntimeDb` -> `db/waia-runtime-db.ts`, `db/waia-transaction.ts` (type import / parameter), `app/api/health/database/route.ts`, `tests/unit/waia-runtime-db.test.ts`, `tests/unit/health-database-route.test.ts`, `tests/unit/waia-transaction.test.ts`.
 
 ## 6. Rollback
 
