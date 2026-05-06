@@ -9,8 +9,8 @@ This document defines how WAIA’s **Postgres** side (parallel to SQLite) is boo
 | Drizzle schema | [`db/schema.postgres.ts`](../db/schema.postgres.ts) — source of truth for **types and generator input**. |
 | SQL migrations | [`db/migrations_postgres/`](../db/migrations_postgres/) — **authoritative apply target** for shared environments (Drizzle Kit `migrate`). |
 | `drizzle-kit push` | **Not** the team workflow for canonical schema. `push` mutates a DB without leaving versioned SQL in-repo; use only for personal experiments and **do not** treat pushed DBs as reproducible. |
-| Production app | Still **SQLite** by default (`DATABASE_URL`, `getDb()`). `WAIA_DB_BACKEND=postgres` is **not** a supported production path in D6-pre. |
-| Transactions | **Not** implemented for Postgres (`runWaiaPostgresTransaction` does not exist yet). SQLite semantics are unchanged. |
+| Production app | Still **SQLite** by default (`DATABASE_URL`, `getDb()`). `WAIA_DB_BACKEND=postgres` is **not** a supported production path yet (see DEE-72 / tracker). |
+| Transactions | **D6-core:** [`db/waia-postgres-transaction.ts`](../db/waia-postgres-transaction.ts) provides `runWaiaPostgresTransaction` with async semantics. **Explicit backend-specific API only** — no production runtime routing yet. SQLite semantics unchanged. |
 | RLS / Supabase `auth` | [`schema.postgres.ts`](../db/schema.postgres.ts) documents gaps. Migrations include stubs for local CI only. |
 
 If generated migrations drift from `schema.postgres.ts`, **document the gap** and regenerate with `pnpm db:generate:postgres` before merging (review SQL by hand).
@@ -55,11 +55,11 @@ pnpm db:postgres:down
 
 **Reset flow** (destructive): `docker compose -f docker-compose.postgres-validate.yml down -v`, then `up`, prelude, migrate again.
 
-## Integration-test strategy (D6-pre → D6-core)
+## Integration-test strategy
 
 - **Default `pnpm test` / CI unit job**: SQLite only; **no** Postgres required.
 - **Opt-in Postgres tests**: set `WAIA_PG_INTEGRATION=1` and a valid `DATABASE_URL_POSTGRES`. Tests live under [`tests/integration/`](../tests/integration/).
-- **D6-pre guard test**: two **independent** `postgres` clients run `SELECT 1` — proves multiple sessions exist for future **rollback visibility** (D6-core will add real transaction tests). **No** rollback assertions in D6-pre.
+- **D6-core rollback validation**: [`postgres-transaction-rollback.test.ts`](../tests/integration/postgres-transaction-rollback.test.ts) proves commit/throw/reject semantics using **separate raw postgres sessions** for reads. **No claim of SQLite/Postgres parity**.
 - **CI**: optional workflow [`.github/workflows/postgres-integration.yml`](../.github/workflows/postgres-integration.yml) runs on `workflow_dispatch` (manual) so Postgres does not slow every PR until you promote it.
 
 ## Security and environment hygiene

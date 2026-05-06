@@ -66,10 +66,16 @@ D3 ships only this contract. The following sequence is the ratified plan; each s
 - Deliverables: [`docs/postgres-development.md`](../postgres-development.md), `pnpm db:postgres:*` scripts, optional `WAIA_PG_INTEGRATION=1` tests under `tests/integration/`, manual [`postgres-integration`](../.github/workflows/postgres-integration.yml) workflow.
 - **Non-goals:** `runWaiaPostgresTransaction`, routing `runWaiaTransactionOnRuntime` for Postgres, production caller migration, SQLite changes.
 
-### D6 - Genuine Postgres transaction runner
-- Add `runWaiaPostgresTransaction(db, async fn)` once schema-bound persistence on `schema.postgres.ts` exists and rollback is verified.
-- Only at this point does `runWaiaTransactionOnRuntime` route on backend instead of throwing on Postgres.
-- A neutral `runWaiaTransaction` name is reserved for this slice or later; introducing it earlier would lie about what is supported.
+### D6-core - Genuine Postgres transaction runner (implemented)
+
+- Added [`db/waia-postgres-transaction.ts`](../../db/waia-postgres-transaction.ts): `runWaiaPostgresTransaction(db, fn)` where `db` is explicit `PostgresJsDatabase<typeof pgSchema>` and `fn` is `WaiaPostgresTransactionCallback<T>` (async-only, schema-bound via Drizzle `Parameters` extraction).
+- Rollback validated via opt-in [`tests/integration/postgres-transaction-rollback.test.ts`](../../tests/integration/postgres-transaction-rollback.test.ts) (commit/throw/reject; separate-session reads).
+- **Still no:** `runWaiaTransactionOnRuntime` Postgres routing, `runWaiaTransaction`, production caller migration, DEE-72 persistence.
+
+### D6 (remainder after D6-core)
+
+- Optional: route `runWaiaTransactionOnRuntime` Postgres branch (separate slice; requires explicit approval).
+- A neutral `runWaiaTransaction` name is reserved for **after** both backends have validated semantics and an explicit caller migration policy exists; introducing it earlier would lie about what is supported.
 
 ## 4. Acceptance bar for future slices
 
@@ -90,6 +96,8 @@ TypeScript / TSX only (`--glob "*.{ts,tsx}"`):
 - `runWaiaSqliteLegacyTransaction\(` -> only the five migrated call sites and the facade definition in `db/waia-transaction.ts`, plus internal use from `runWaiaTransactionOnRuntime`.
 - `runWaiaTransaction\b` -> no matches.
 - `runWaiaTransactionOnRuntime\b` -> only `db/waia-transaction.ts` and `tests/unit/waia-transaction.test.ts`.
+- `runWaiaPostgresTransaction\b` -> only `db/waia-postgres-transaction.ts` and `tests/integration/postgres-transaction-rollback.test.ts`.
+- `WaiaPostgresTransactionCallback\b` -> only `db/waia-postgres-transaction.ts`.
 - `WaiaRuntimeDb` -> `db/waia-runtime-db.ts`, `db/waia-transaction.ts` (type import / parameter), `lib/persistence/runtime.ts` (D5a persistence resolution), `app/api/health/database/route.ts`, `tests/unit/waia-runtime-db.test.ts`, `tests/unit/health-database-route.test.ts`, `tests/unit/waia-transaction.test.ts`, `tests/unit/sqlite-twin-persistence-boundary.test.ts`.
 
 ## 6. Rollback
