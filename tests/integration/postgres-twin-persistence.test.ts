@@ -1,5 +1,5 @@
 /**
- * DEE-72.1: Postgres twin/diary persistence (opt-in integration).
+ * DEE-72.1 / DEE-72.2: Postgres twin/diary persistence and prediction verifications (opt-in integration).
  * Requires migrated Postgres + WAIA_PG_INTEGRATION=1 + DATABASE_URL_POSTGRES.
  * Does not claim SQLite/Postgres behavioral parity.
  */
@@ -17,7 +17,7 @@ import { resolveTwinPersistence } from "@/lib/persistence/runtime";
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 
-describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.1)", () => {
+describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.1, DEE-72.2)", () => {
   const testUserId = "00000000-0000-4000-8000-00000000dee7";
 
   afterEach(async () => {
@@ -30,6 +30,7 @@ describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.
       await sql.unsafe(`DELETE FROM scenario_answers WHERE twin_profile_id IN (SELECT id FROM twin_profiles WHERE user_id = $1)`, [
         testUserId,
       ]);
+      await sql.unsafe(`DELETE FROM twin_prediction_verifications WHERE user_id = $1`, [testUserId]);
       await sql.unsafe(`DELETE FROM diary_entries WHERE user_id = $1`, [testUserId]);
       await sql.unsafe(`DELETE FROM twin_readiness_state WHERE twin_profile_id IN (SELECT id FROM twin_profiles WHERE user_id = $1)`, [
         testUserId,
@@ -205,5 +206,97 @@ describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.
     const rows = await db.select().from(pgSchema.diaryEntries).where(eq(pgSchema.diaryEntries.userId, testUserId));
     expect(rows.length).toBe(1);
     expect(rows[0]?.body).toBe("via resolver");
+  });
+
+  it("prediction verification append persists (separate session)", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+    const dto = await p.appendTwinPredictionVerificationForUser({
+      userId: testUserId,
+      scenario: "scenario-pg",
+      verification: "accurate",
+      predictionId: "pred-1",
+      correction: " c ",
+    });
+
+    const verify = postgres(url!, { max: 1 });
+    try {
+      const rows = await verify<
+        { prediction_id: string | null; correction: string | null; verification: string }[]
+      >`
+        SELECT prediction_id, correction, verification FROM twin_prediction_verifications
+        WHERE user_id = ${testUserId} AND id = ${dto.id}
+      `;
+      expect(rows.length).toBe(1);
+      expect(rows[0]?.prediction_id).toBe("pred-1");
+      expect(rows[0]?.correction).toBe("c");
+      expect(rows[0]?.verification).toBe("accurate");
+    } finally {
+      await verify.end({ timeout: 5 });
+    }
+  });
+
+  it("prediction verification list is newest-first with limit", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+
+    await p.appendTwinPredictionVerificationForUser({
+      userId: testUserId,
+      scenario: "older",
+      verification: "partially_accurate",
+    });
+    await new Promise((r) => setTimeout(r, 15));
+    await p.appendTwinPredictionVerificationForUser({
+      userId: testUserId,
+      scenario: "newer",
+      verification: "inaccurate",
+    });
+
+    const list = await p.listTwinPredictionVerificationsForUser(testUserId);
+    expect(list.length).toBe(2);
+    expect(list[0]?.scenario).toBe("newer");
+    expect(list[1]?.scenario).toBe("older");
+
+    const one = await p.listTwinPredictionVerificationsForUser(testUserId, 1);
+    expect(one.length).toBe(1);
+    expect(one[0]?.scenario).toBe("newer");
+  });
+
+  it("prediction verification list clamps limit to 100", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+
+    for (let i = 0; i < 102; i += 1) {
+      await p.appendTwinPredictionVerificationForUser({
+        userId: testUserId,
+        scenario: `clamp-${i}`,
+        verification: "accurate",
+      });
+    }
+
+    const list = await p.listTwinPredictionVerificationsForUser(testUserId, 200);
+    expect(list.length).toBe(100);
+  });
+
+  it("listTwinPredictionVerificationsForUser does not seed twin profile for unknown user", async () => {
+    const ghostUserId = "00000000-0000-4000-8000-00000000d000";
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+
+    const list = await p.listTwinPredictionVerificationsForUser(ghostUserId);
+    expect(list).toEqual([]);
+
+    const verify = postgres(url!, { max: 1 });
+    try {
+      const rows = await verify<{ n: string }[]>`
+        SELECT count(*)::text AS n FROM twin_profiles WHERE user_id = ${ghostUserId}
+      `;
+      expect(rows[0]?.n).toBe("0");
+    } finally {
+      await verify.end({ timeout: 5 });
+    }
   });
 });

@@ -12,7 +12,7 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **D6-core** adds **explicit Postgres transaction runner** (`db/waia-postgres-transaction.ts`, async-only callback, rollback integration tests). **Still no** `runWaiaTransaction`, **still no** production route migration to Postgres persistence.
 
-**DEE-72.1** adds **`PostgresTwinPersistence`** / **`createPostgresTwinPersistence(db)`** in `lib/persistence/postgres/*`, transactional writes via **`runWaiaPostgresTransaction`**, and **`resolveTwinPersistence`** overloads so a Postgres **`WaiaRuntimeDb`** handle resolves to the Postgres boundary. **SQLite production paths and SQLite transaction semantics are unchanged.** **Deferred:** repeatability, prediction/memory-search Postgres support, `lib/reasoning/*` on Postgres, and any backend-neutral repository layer.
+**DEE-72.1** adds **`PostgresTwinPersistence`** / **`createPostgresTwinPersistence(db)`** in `lib/persistence/postgres/*`, transactional writes via **`runWaiaPostgresTransaction`**, and **`resolveTwinPersistence`** overloads so a Postgres **`WaiaRuntimeDb`** handle resolves to the Postgres boundary. **DEE-72.2** adds **prediction verification** append/list on **`PostgresTwinPersistence`** (same transaction pattern for writes). **SQLite production paths and SQLite transaction semantics are unchanged.** **Deferred:** repeatability Postgres support, prediction *routes* / **`lib/reasoning/*`** on Postgres, memory-search Postgres support, and any backend-neutral repository layer.
 
 ## Completed Slices
 
@@ -52,7 +52,7 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 ### D5a
 
 - Added `lib/persistence/sqlite/twin-persistence.ts` with `createSqliteTwinPersistence(db)` delegating to `lib/twin-persistence/*` (no behavior change; explicit SQLite naming).
-- Added `resolveTwinPersistence(handle: WaiaRuntimeDb)` in `lib/persistence/runtime.ts`: SQLite returns the SQLite boundary (D5a); **DEE-72.1** extends resolution so Postgres returns **`createPostgresTwinPersistence(handle.db)`** with **D5a-equivalent method surface** (async Postgres semantics).
+- Added `resolveTwinPersistence(handle: WaiaRuntimeDb)` in `lib/persistence/runtime.ts`: SQLite returns the SQLite boundary (D5a); **DEE-72.1** extends resolution so Postgres returns **`createPostgresTwinPersistence(handle.db)`** with **twin/diary** surface matching D5a (**async** Postgres semantics). **DEE-72.2** adds **Postgres-only** prediction verification methods on **`PostgresTwinPersistence`** (SQLite verifications stay in `lib/twin-persistence/twin-prediction-verifications.ts` until route migration).
 - SQLite transaction orchestration remains in `db/waia-transaction.ts`. Postgres twin/diary **writes** in the Postgres boundary use **`runWaiaPostgresTransaction`** (explicit Postgres ownership); no `runWaiaTransaction`.
 
 ## Current Runtime Transaction Path
@@ -85,7 +85,7 @@ production callers
 
 ### DEE-72
 
-- **DEE-72.1 (partial):** Postgres-specific twin/diary persistence boundary + resolver enablement + opt-in integration tests. **Not done:** production route migration; reasoning/repeatability Postgres paths; neutral `runWaiaTransaction`.
+- **DEE-72.1 / DEE-72.2:** Postgres-specific **`PostgresTwinPersistence`** (twin/diary + **prediction verifications** persistence) + resolver enablement + opt-in integration tests. **Not done:** production route migration; reasoning/repeatability Postgres paths; neutral `runWaiaTransaction`.
 
 ### DEE-85
 

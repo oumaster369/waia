@@ -1,8 +1,14 @@
 import "server-only";
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import type { DashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-api.types";
+import type {
+  TwinPredictionVerificationItemDto,
+  TwinPredictionVerificationKind,
+  TwinPredictionVerificationSubmitBody,
+} from "@/lib/dashboard/twin-prediction-verification-api.types";
+import { TWIN_PREDICTION_VERIFICATION_KINDS } from "@/lib/dashboard/twin-prediction-verification-api.types";
 import type { TwinDialogueSignals } from "@/lib/dashboard/readiness-snapshot-default";
 import { DEFAULT_READINESS_INPUT } from "@/lib/dashboard/readiness-snapshot-default";
 import { NULL_HINTS_BY_INDICATOR } from "@/lib/dashboard/null-hints";
@@ -47,6 +53,66 @@ export {
 };
 
 type PgTx = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
+
+/** Mirrors `lib/twin-persistence/twin-prediction-verifications.ts` (DEE-72.2 — avoid SQLite import). */
+const DEFAULT_VERIFICATION_LIST_LIMIT = 50;
+const MAX_VERIFICATION_LIST_LIMIT = 100;
+const PREDICTION_VERIFICATION_KIND_SET = new Set<string>(TWIN_PREDICTION_VERIFICATION_KINDS);
+
+function isTwinPredictionVerificationKindPg(value: string): value is TwinPredictionVerificationKind {
+  return PREDICTION_VERIFICATION_KIND_SET.has(value);
+}
+
+function clampVerificationListLimitPg(limit?: number): number {
+  if (limit == null || !Number.isFinite(limit)) {
+    return DEFAULT_VERIFICATION_LIST_LIMIT;
+  }
+  const n = Math.floor(limit);
+  return Math.min(Math.max(1, n), MAX_VERIFICATION_LIST_LIMIT);
+}
+
+function normalizeOptionalPredictionIdPg(predictionId: string | null | undefined): string | null {
+  if (predictionId == null) {
+    return null;
+  }
+  if (typeof predictionId !== "string") {
+    return null;
+  }
+  const t = predictionId.trim();
+  return t.length > 0 ? t : null;
+}
+
+function normalizeCorrectionPg(correction: string | null | undefined): string | null {
+  if (correction == null) {
+    return null;
+  }
+  if (typeof correction !== "string") {
+    return null;
+  }
+  const t = correction.trim();
+  return t.length > 0 ? t : null;
+}
+
+function predictionVerificationRowToDtoPg(row: {
+  id: string;
+  predictionId: string | null;
+  scenario: string;
+  verification: string;
+  correction: string | null;
+  createdAt: Date;
+}): TwinPredictionVerificationItemDto {
+  if (!isTwinPredictionVerificationKindPg(row.verification)) {
+    throw new Error(`[waia] invalid verification kind in row: ${row.verification}`);
+  }
+  return {
+    id: row.id,
+    predictionId: row.predictionId,
+    scenario: row.scenario,
+    verification: row.verification,
+    correction: row.correction,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
 
 function normalizeIdempotencyKey(k: string | null | undefined): string | null {
   if (k == null || typeof k !== "string") {
@@ -561,8 +627,77 @@ async function listScenarioAnswersForUserPg(
   }));
 }
 
+async function appendTwinPredictionVerificationForUserPg(
+  db: WaiaPostgresDb,
+  params: { userId: string } & TwinPredictionVerificationSubmitBody,
+): Promise<TwinPredictionVerificationItemDto> {
+  const userId = params.userId;
+  const predictionId = normalizeOptionalPredictionIdPg(params.predictionId);
+  const correction = normalizeCorrectionPg(params.correction);
+
+  return runWaiaPostgresTransaction(db, async (tx) => {
+    const twinProfileId = await ensureUserTwinSeedInsideExecutorPg(tx, userId);
+    const id = crypto.randomUUID();
+
+    await tx.insert(pgSchema.twinPredictionVerifications).values({
+      id,
+      userId,
+      twinProfileId,
+      predictionId,
+      scenario: params.scenario,
+      verification: params.verification,
+      correction,
+    });
+
+    const rowRows = await tx
+      .select({
+        id: pgSchema.twinPredictionVerifications.id,
+        predictionId: pgSchema.twinPredictionVerifications.predictionId,
+        scenario: pgSchema.twinPredictionVerifications.scenario,
+        verification: pgSchema.twinPredictionVerifications.verification,
+        correction: pgSchema.twinPredictionVerifications.correction,
+        createdAt: pgSchema.twinPredictionVerifications.createdAt,
+      })
+      .from(pgSchema.twinPredictionVerifications)
+      .where(eq(pgSchema.twinPredictionVerifications.id, id))
+      .limit(1);
+
+    const row = rowRows[0];
+
+    if (!row) {
+      throw new Error("[waia] twin prediction verification insert missing after insert");
+    }
+
+    return predictionVerificationRowToDtoPg(row);
+  });
+}
+
+async function listTwinPredictionVerificationsForUserPg(
+  db: WaiaPostgresDb,
+  userId: string,
+  limit?: number,
+): Promise<TwinPredictionVerificationItemDto[]> {
+  const lim = clampVerificationListLimitPg(limit);
+
+  const rows = await db
+    .select({
+      id: pgSchema.twinPredictionVerifications.id,
+      predictionId: pgSchema.twinPredictionVerifications.predictionId,
+      scenario: pgSchema.twinPredictionVerifications.scenario,
+      verification: pgSchema.twinPredictionVerifications.verification,
+      correction: pgSchema.twinPredictionVerifications.correction,
+      createdAt: pgSchema.twinPredictionVerifications.createdAt,
+    })
+    .from(pgSchema.twinPredictionVerifications)
+    .where(eq(pgSchema.twinPredictionVerifications.userId, userId))
+    .orderBy(desc(pgSchema.twinPredictionVerifications.createdAt))
+    .limit(lim);
+
+  return rows.map((r) => predictionVerificationRowToDtoPg(r));
+}
+
 /**
- * Postgres AI-Twin / diary persistence boundary (DEE-72.1).
+ * Postgres AI-Twin / diary persistence boundary (DEE-72.1, DEE-72.2).
  * Async semantics; transactional writes use {@link runWaiaPostgresTransaction}.
  */
 export type PostgresTwinPersistence = {
@@ -603,6 +738,13 @@ export type PostgresTwinPersistence = {
   }) => Promise<AppendScenarioAnswerResult>;
   listDiaryEntriesForUser: (userId: string) => Promise<DiaryMemoryRow[]>;
   listScenarioAnswersForUser: (userId: string) => Promise<ScenarioAnswerMemoryRow[]>;
+  appendTwinPredictionVerificationForUser: (
+    params: { userId: string } & TwinPredictionVerificationSubmitBody,
+  ) => Promise<TwinPredictionVerificationItemDto>;
+  listTwinPredictionVerificationsForUser: (
+    userId: string,
+    limit?: number,
+  ) => Promise<TwinPredictionVerificationItemDto[]>;
   stringifyScenarioPayloadForStorage: typeof stringifyScenarioPayloadForStorage;
 };
 
@@ -624,6 +766,10 @@ export function createPostgresTwinPersistence(db: WaiaPostgresDb): PostgresTwinP
     appendScenarioAnswerForUser: (params) => appendScenarioAnswerForUserPg(db, params),
     listDiaryEntriesForUser: (userId) => listDiaryEntriesForUserPg(db, userId),
     listScenarioAnswersForUser: (userId) => listScenarioAnswersForUserPg(db, userId),
+    appendTwinPredictionVerificationForUser: (params) =>
+      appendTwinPredictionVerificationForUserPg(db, params),
+    listTwinPredictionVerificationsForUser: (userId, limit) =>
+      listTwinPredictionVerificationsForUserPg(db, userId, limit),
     stringifyScenarioPayloadForStorage,
   };
 }
