@@ -49,6 +49,12 @@ D3 ships only this contract. The following sequence is the ratified plan; each s
 - No call site migration. The existing 5 callers continue to use `runWaiaSqliteLegacyTransaction` directly.
 - Unit tests in `tests/unit/waia-transaction.test.ts` cover the Postgres rejection path and SQLite delegation.
 
+### D5a - SQLite persistence boundary (additive; production callers unchanged)
+
+- `lib/persistence/sqlite/*` exposes `createSqliteTwinPersistence(db: WaiaDb)` — delegates to existing twin/diary modules; transaction policy stays in `db/waia-transaction.ts`.
+- Optional `lib/persistence/runtime.ts` may expose `resolveTwinPersistence(handle: WaiaRuntimeDb)` — SQLite returns the SQLite boundary; Postgres throws before any persistence work (mirrors D4 guard pattern for transactions).
+- No `runWaiaTransactionOnRuntime` requirement for persistence; resolution is separate from transaction orchestration.
+
 ### D5+ - Backend-specific persistence repositories
 - Introduce SQLite and Postgres repositories with async-aware helpers, parameterized over the active schema module.
 - Migrate callers to runtime handles only on paths where Postgres semantics are validated end-to-end (including rollback).
@@ -78,7 +84,7 @@ TypeScript / TSX only (`--glob "*.{ts,tsx}"`):
 - `runWaiaSqliteLegacyTransaction\(` -> only the five migrated call sites and the facade definition in `db/waia-transaction.ts`, plus internal use from `runWaiaTransactionOnRuntime`.
 - `runWaiaTransaction\b` -> no matches.
 - `runWaiaTransactionOnRuntime\b` -> only `db/waia-transaction.ts` and `tests/unit/waia-transaction.test.ts`.
-- `WaiaRuntimeDb` -> `db/waia-runtime-db.ts`, `db/waia-transaction.ts` (type import / parameter), `app/api/health/database/route.ts`, `tests/unit/waia-runtime-db.test.ts`, `tests/unit/health-database-route.test.ts`, `tests/unit/waia-transaction.test.ts`.
+- `WaiaRuntimeDb` -> `db/waia-runtime-db.ts`, `db/waia-transaction.ts` (type import / parameter), `lib/persistence/runtime.ts` (D5a persistence resolution), `app/api/health/database/route.ts`, `tests/unit/waia-runtime-db.test.ts`, `tests/unit/health-database-route.test.ts`, `tests/unit/waia-transaction.test.ts`, `tests/unit/sqlite-twin-persistence-boundary.test.ts`.
 
 ## 6. Rollback
 
