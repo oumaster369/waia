@@ -1,6 +1,6 @@
 # Postgres development and testing (DEE-64 D6-pre)
 
-This document defines how WAIA’s **Postgres** side (parallel to SQLite) is bootstrapped for **local development**, **migrations**, and **optional integration tests**. It is **infrastructure-only**: no real Postgres transaction runner, no production runtime switch, no DEE-72 persistence migration.
+This document defines how WAIA’s **Postgres** side (parallel to SQLite) is bootstrapped for **local development**, **migrations**, and **optional integration tests**. **D6-core** added `runWaiaPostgresTransaction`; **DEE-72.1** adds an explicit **Postgres twin/diary persistence boundary** (`PostgresTwinPersistence` / `createPostgresTwinPersistence`). **Production routing remains SQLite-first**; no production route migration ships in DEE-72.1.
 
 ## Honest current state
 
@@ -9,7 +9,7 @@ This document defines how WAIA’s **Postgres** side (parallel to SQLite) is boo
 | Drizzle schema | [`db/schema.postgres.ts`](../db/schema.postgres.ts) — source of truth for **types and generator input**. |
 | SQL migrations | [`db/migrations_postgres/`](../db/migrations_postgres/) — **authoritative apply target** for shared environments (Drizzle Kit `migrate`). |
 | `drizzle-kit push` | **Not** the team workflow for canonical schema. `push` mutates a DB without leaving versioned SQL in-repo; use only for personal experiments and **do not** treat pushed DBs as reproducible. |
-| Production app | Still **SQLite** by default (`DATABASE_URL`, `getDb()`). `WAIA_DB_BACKEND=postgres` is **not** a supported production path yet (see DEE-72 / tracker). |
+| Production app | Still **SQLite** by default (`DATABASE_URL`, `getDb()`). **`resolveTwinPersistence`** can return **`PostgresTwinPersistence`** when the caller supplies a Postgres `WaiaRuntimeDb` handle (DEE-72.1); that does **not** switch production routes. `WAIA_DB_BACKEND=postgres` remains **not** a supported end-user production path until a later slice. |
 | Transactions | **D6-core:** [`db/waia-postgres-transaction.ts`](../db/waia-postgres-transaction.ts) provides `runWaiaPostgresTransaction` with async semantics. **Explicit backend-specific API only** — no production runtime routing yet. SQLite semantics unchanged. |
 | RLS / Supabase `auth` | [`schema.postgres.ts`](../db/schema.postgres.ts) documents gaps. Migrations include stubs for local CI only. |
 
@@ -60,6 +60,7 @@ pnpm db:postgres:down
 - **Default `pnpm test` / CI unit job**: SQLite only; **no** Postgres required.
 - **Opt-in Postgres tests**: set `WAIA_PG_INTEGRATION=1` and a valid `DATABASE_URL_POSTGRES`. Tests live under [`tests/integration/`](../tests/integration/).
 - **D6-core rollback validation**: [`postgres-transaction-rollback.test.ts`](../tests/integration/postgres-transaction-rollback.test.ts) proves commit/throw/reject semantics using **separate raw postgres sessions** for reads. **No claim of SQLite/Postgres parity**.
+- **DEE-72.1 twin/diary persistence**: [`postgres-twin-persistence.test.ts`](../tests/integration/postgres-twin-persistence.test.ts) exercises **`PostgresTwinPersistence`** (dialogue, diary, scenario, chronological reads, readiness load, rollback). Same **opt-in** gate (`WAIA_PG_INTEGRATION=1` + `DATABASE_URL_POSTGRES`). **Does not** test production runtime routing.
 - **CI**: optional workflow [`.github/workflows/postgres-integration.yml`](../.github/workflows/postgres-integration.yml) runs on `workflow_dispatch` (manual) so Postgres does not slow every PR until you promote it.
 
 ## Security and environment hygiene

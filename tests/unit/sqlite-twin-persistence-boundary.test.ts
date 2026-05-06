@@ -16,7 +16,16 @@ vi.mock("@/lib/persistence/sqlite/twin-persistence", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/persistence/postgres/twin-persistence", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@/lib/persistence/postgres/twin-persistence")>();
+  return {
+    ...mod,
+    createPostgresTwinPersistence: vi.fn(mod.createPostgresTwinPersistence),
+  };
+});
+
 import { createSqliteTwinPersistence } from "@/lib/persistence/sqlite/twin-persistence";
+import { createPostgresTwinPersistence } from "@/lib/persistence/postgres/twin-persistence";
 
 describe("SQLite twin persistence boundary (DEE-64 D5a)", () => {
   afterEach(() => {
@@ -74,23 +83,25 @@ describe("SQLite twin persistence boundary (DEE-64 D5a)", () => {
     expect(vi.mocked(createSqliteTwinPersistence).mock.calls[0]?.[0]).toBe(db);
   });
 
-  it("resolveTwinPersistence throws before createSqliteTwinPersistence runs for Postgres handles", () => {
+  it("resolveTwinPersistence returns Postgres boundary via createPostgresTwinPersistence (DEE-72.1)", () => {
     const mockPg = drizzle.mock({ schema: pgSchema });
     const handle: WaiaRuntimeDb = { kind: "postgres", db: mockPg };
     vi.mocked(createSqliteTwinPersistence).mockClear();
+    vi.mocked(createPostgresTwinPersistence).mockClear();
 
-    expect(() => resolveTwinPersistence(handle)).toThrow(
-      "[waia] Postgres twin/diary persistence is not supported yet",
-    );
+    const persistence = resolveTwinPersistence(handle);
+    expect(persistence.db).toBe(mockPg);
     expect(createSqliteTwinPersistence).not.toHaveBeenCalled();
+    expect(createPostgresTwinPersistence).toHaveBeenCalledOnce();
+    expect(vi.mocked(createPostgresTwinPersistence).mock.calls[0]?.[0]).toBe(mockPg);
   });
 
-  it("resolveTwinPersistence postgres path does not invoke loader persistence", () => {
+  it("resolveTwinPersistence postgres path does not invoke SQLite loader persistence", () => {
     const mockPg = drizzle.mock({ schema: pgSchema });
     const handle: WaiaRuntimeDb = { kind: "postgres", db: mockPg };
     const loaderSpy = vi.spyOn(twinLoader, "ensureUserTwinSeed");
 
-    expect(() => resolveTwinPersistence(handle)).toThrow();
+    resolveTwinPersistence(handle);
     expect(loaderSpy).not.toHaveBeenCalled();
   });
 });
