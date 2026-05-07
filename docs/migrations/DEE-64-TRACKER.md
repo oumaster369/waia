@@ -16,6 +16,8 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **DEE-72.6** adds **`runTwinEnginePostgresAsync`** in `lib/reasoning/twin-engine-postgres.ts`: **sequential, additive** async orchestration that mirrors **`runTwinEngine`** call order and response shape using **`PostgresTwinPersistence`** + existing async reasoning APIs (pattern, contradiction, repeatability, verifications, personality, optional prediction). **Non-goals:** no production API route wiring, no **`runWaiaTransaction`**, no changes to **`lib/persistence/runtime.ts`** or sync **`runTwinEngine`**; no promise that Postgres output text matches SQLite. Opt-in integration: `tests/integration/postgres-twin-engine.test.ts` (`WAIA_PG_INTEGRATION=1` + `DATABASE_URL_POSTGRES`).
 
+**DEE-93** adds the repeatability migration **audit** (Postgres as consumed by the Twin Engine): [`DEE-93-REPEATABILITY-MIGRATION-AUDIT.md`](DEE-93-REPEATABILITY-MIGRATION-AUDIT.md). **Does not** implement routing or repeatability writer migration; verification / repeatability **GET** alignment with the engine store is deferred to **DEE-95+**.
+
 **DEE-94** adds the planning document for a **future runtime-dispatched Twin Engine** facade (async boundary, SQLite wrap + Postgres `await`, sequential guarantee, parallelization policy): [`DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md`](DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md). **Does not** implement routing or new orchestration code.
 
 ## Completed Slices
@@ -125,5 +127,6 @@ production callers
 
 ## Related Docs
 
+- [Linear closeout handoff (DEE-72.6 / DEE-93 / DEE-94)](DEE-64-LINEAR-CLOSEOUT.md)
 - [Postgres development / migrations (D6-pre)](../postgres-development.md)
 - [Transaction architecture contract](../architecture/transactions.md)
