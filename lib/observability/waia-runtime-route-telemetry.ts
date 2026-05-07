@@ -1,5 +1,10 @@
 import "server-only";
 
+/**
+ * Structured stdout telemetry for `getWaiaRuntimeDb`-aware API routes (DEE-95f).
+ *
+ * @see docs/migrations/DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md — field meanings, triage, limitations.
+ */
 /** Stable route keys for `getWaiaRuntimeDb`-aware handlers (DEE-95f). */
 export type WaiaRuntimeRouteKey =
   | "twin_engine"
