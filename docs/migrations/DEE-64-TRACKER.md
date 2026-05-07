@@ -20,11 +20,13 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **DEE-94** adds the planning document for a **future runtime-dispatched Twin Engine** facade (async boundary, SQLite wrap + Postgres `await`, sequential guarantee, parallelization policy): [`DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md`](DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md). **Does not** implement routing or new orchestration code.
 
-**DEE-95** adds the **runtime routing strategy** for backend migration (dispatch boundary, env/rollback, alignment requirements, phased implementation — **planning only**): [`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](DEE-95-RUNTIME-ROUTING-STRATEGY.md). **Does not** wire `POST /api/dashboard/twin/engine` or change production behavior.
+**DEE-95** adds the **runtime routing strategy** for backend migration (dispatch boundary, env/rollback, alignment requirements, phased implementation — **planning**): [`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](DEE-95-RUNTIME-ROUTING-STRATEGY.md). **95c** implements Twin Engine route wiring per that strategy; the doc itself does not change production code.
 
-**DEE-95a** adds **`runTwinEngineForRuntimeAsync(handle, input)`** in [`lib/reasoning/twin-engine-runtime.ts`](../../lib/reasoning/twin-engine-runtime.ts): async **library** dispatch (SQLite → sync `runTwinEngine`, Postgres → `resolveTwinPersistence` + `runTwinEnginePostgresAsync`). **Does not** change the production Twin Engine route or default runtime behavior (`POST …/twin/engine` remains `getDb()` + `runTwinEngine` until 95c).
+**DEE-95a** adds **`runTwinEngineForRuntimeAsync(handle, input)`** in [`lib/reasoning/twin-engine-runtime.ts`](../../lib/reasoning/twin-engine-runtime.ts): async **library** dispatch (SQLite → sync `runTwinEngine`, Postgres → `resolveTwinPersistence` + `runTwinEnginePostgresAsync`). **Does not** change the production Twin Engine route by itself (**DEE-95c** wires the route to the facade).
 
 **DEE-95b** adds [**runtime facade hardening / pre-95c planning**](./DEE-95B-RUNTIME-FACADE-HARDENING.md): risks, parity limits, test and observability recommendations, rollback, and go/no-go criteria before Twin Engine route wiring. **Does not** wire production routes or change runtime behavior by itself.
+
+**DEE-95c** wires **`POST /api/dashboard/twin/engine`** to **`getWaiaRuntimeDb()`** + **`runTwinEngineForRuntimeAsync`**: runtime facade dispatch with **SQLite default** when `WAIA_DB_BACKEND` is unset or `sqlite`. **Does not** migrate verification or repeatability routes (**DEE-95d** still required before treating Postgres-backed Twin Engine traffic as fully aligned with those writers; see DEE-93 / strategy §9).
 
 ## Completed Slices
 
