@@ -24,6 +24,8 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **DEE-95a** adds **`runTwinEngineForRuntimeAsync(handle, input)`** in [`lib/reasoning/twin-engine-runtime.ts`](../../lib/reasoning/twin-engine-runtime.ts): async **library** dispatch (SQLite → sync `runTwinEngine`, Postgres → `resolveTwinPersistence` + `runTwinEnginePostgresAsync`). **Does not** change the production Twin Engine route or default runtime behavior (`POST …/twin/engine` remains `getDb()` + `runTwinEngine` until 95c).
 
+**DEE-95b** adds [**runtime facade hardening / pre-95c planning**](./DEE-95B-RUNTIME-FACADE-HARDENING.md): risks, parity limits, test and observability recommendations, rollback, and go/no-go criteria before Twin Engine route wiring. **Does not** wire production routes or change runtime behavior by itself.
+
 ## Completed Slices
 
 ### D1
