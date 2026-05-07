@@ -47,13 +47,13 @@ Merged on dev: c170fb6 / PR #89. Deliverable docs/migrations/DEE-94-ASYNC-TWIN-E
 
 ## 2. DEE-95 — keep **In Progress** or **Todo** (not Done)
 
-- **Repo evidence:** [`DEE-64-TRACKER.md`](DEE-64-TRACKER.md) — “Still not done: production route migration (**DEE-95+**)”, unified facade **implementation**, verification/repeatability alignment with engine reads.
+- **Repo evidence:** [`DEE-64-TRACKER.md`](DEE-64-TRACKER.md) — “Still not done: **implementation** of production route migration…” after DEE-95 **planning** doc merges. Strategy (planning only): [`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](DEE-95-RUNTIME-ROUTING-STRATEGY.md).
 - **Code evidence:** [`app/api/dashboard/twin/engine/route.ts`](../../app/api/dashboard/twin/engine/route.ts) still uses `getDb()` + sync `runTwinEngine`.
-- **Blocking / inputs:** DEE-94 plan (orchestration); DEE-93 writer/reader gap; env/flags/rollback (to be defined in DEE-95 scope).
+- **Blocking / inputs:** DEE-94 orchestration contract; DEE-93 writer/reader alignment; DEE-95 strategy phases for implementation PRs.
 - **Suggested Linear comment (optional):**
 
 ```text
-Not merged: production Twin Engine routing + unified async facade per DEE-94 plan still pending. Tracker DEE-64 Remaining Work references DEE-95+. Next slice: define routing strategy, flags, and aligned routes.
+Planning merged: see docs/migrations/DEE-95-RUNTIME-ROUTING-STRATEGY.md on dev (PR link in merge comment). Implementation still pending: production Twin Engine routing + unified async facade per DEE-94 + DEE-95 phases; align verification/repeatability routes. Do not mark Done until implementation merges to dev.
 ```
 
 ---
