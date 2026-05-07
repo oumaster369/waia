@@ -30,6 +30,8 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **DEE-95d** — **Planning** merged as [`DEE-95D-RUNTIME-ALIGNMENT-PLAN.md`](./DEE-95D-RUNTIME-ALIGNMENT-PLAN.md) (Linear: DEE-98). **Implementation** wires **`POST …/prediction/verification`**, **`GET …/prediction/verifications`**, and **`GET …/repeatability`** through **`getWaiaRuntimeDb()`** (SQLite default unchanged; Postgres env-gated via `WAIA_DB_BACKEND` / `DATABASE_URL_POSTGRES`). **Does not** enable broad Postgres rollout — ops/observability sign-off remains required (DEE-95e / strategy). Implementation tracked in Linear **DEE-99**.
 
+**DEE-95e** adds [**operational readiness planning**](./DEE-95E-OPERATIONAL-READINESS-PLAN.md): telemetry expectations, rollback/kill-switch, rollout stages, gating criteria, health/integration strategy, remaining `getDb()` route inventory, success criteria for Postgres production readiness — **planning only**; **does not** implement observability code, change runtime behavior, or enable broad Postgres rollout.
+
 ## Completed Slices
 
 ### D1

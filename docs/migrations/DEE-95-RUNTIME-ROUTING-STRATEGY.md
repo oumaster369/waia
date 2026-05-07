@@ -16,6 +16,13 @@
 - Orchestration plan: [`DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md`](DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md)
 - Repeatability audit: [`DEE-93-REPEATABILITY-MIGRATION-AUDIT.md`](DEE-93-REPEATABILITY-MIGRATION-AUDIT.md)
 - Facade hardening (pre-95c): [`DEE-95B-RUNTIME-FACADE-HARDENING.md`](DEE-95B-RUNTIME-FACADE-HARDENING.md)
+- Operational readiness (post-95d): [`DEE-95E-OPERATIONAL-READINESS-PLAN.md`](DEE-95E-OPERATIONAL-READINESS-PLAN.md)
+
+---
+
+## 0. Repository truth after DEE-95c / DEE-95d
+
+**As of DEE-95c / DEE-95d:** `POST /api/dashboard/twin/engine` plus **prediction verification** and **repeatability** dashboard routes use **`await getWaiaRuntimeDb()`** with **`runTwinEngineForRuntimeAsync`** or **`resolveTwinPersistence`** (see tracker). **§§1–3** below describe the **historical baseline** (`getDb()` + sync `runTwinEngine` at the Twin Engine route) useful for migration context; they are **not** an exact description of those handlers after 95c/95d. For **operational** rollout gates and telemetry expectations, see [`DEE-95E-OPERATIONAL-READINESS-PLAN.md`](./DEE-95E-OPERATIONAL-READINESS-PLAN.md).
 
 ---
 
@@ -223,7 +230,7 @@ DEE-94 is the **non-negotiable** design reference for the **next** implementatio
 | **95b** | Facade **hardening program** + parity/observability criteria: [`DEE-95B-RUNTIME-FACADE-HARDENING.md`](DEE-95B-RUNTIME-FACADE-HARDENING.md); optional follow-up PRs for extra unit/integration tests; default path still SQLite |
 | **95c** | Wire `POST …/twin/engine` through **`getWaiaRuntimeDb`** + **`runTwinEngineForRuntimeAsync`**; **default SQLite** when `WAIA_DB_BACKEND` is unset or `sqlite`; Postgres only when `WAIA_DB_BACKEND=postgres` with valid Postgres env (**landed** in [`app/api/dashboard/twin/engine/route.ts`](../../app/api/dashboard/twin/engine/route.ts)). |
 | **95d** | Align **`POST …/prediction/verification`**, **`GET …/prediction/verifications`**, and **`GET …/repeatability`** with the same runtime policy — **implementation:** `getWaiaRuntimeDb` + sqlite helpers / `resolveTwinPersistence` ([`DEE-95D-RUNTIME-ALIGNMENT-PLAN.md`](./DEE-95D-RUNTIME-ALIGNMENT-PLAN.md), Linear **DEE-99**). **Broad Postgres rollout** still requires DEE-95e / ops sign-off. |
-| **95e** | Observability, runbooks, staged rollout, kill-switch validation |
+| **95e** | **Planning:** operational readiness for staged Postgres rollout — [`DEE-95E-OPERATIONAL-READINESS-PLAN.md`](./DEE-95E-OPERATIONAL-READINESS-PLAN.md) (telemetry/runbook/rollback **expectations** only; **no** implementation in planning PR). **Implementation** slices follow separately. |
 
 Exact PR boundaries are team choice; **phases must not skip** writer alignment unless risk is accepted.
 
