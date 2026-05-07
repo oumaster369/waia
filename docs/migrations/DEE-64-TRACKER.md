@@ -22,6 +22,8 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **DEE-95** adds the **runtime routing strategy** for backend migration (dispatch boundary, env/rollback, alignment requirements, phased implementation — **planning only**): [`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](DEE-95-RUNTIME-ROUTING-STRATEGY.md). **Does not** wire `POST /api/dashboard/twin/engine` or change production behavior.
 
+**DEE-95a** adds **`runTwinEngineForRuntimeAsync(handle, input)`** in [`lib/reasoning/twin-engine-runtime.ts`](../../lib/reasoning/twin-engine-runtime.ts): async **library** dispatch (SQLite → sync `runTwinEngine`, Postgres → `resolveTwinPersistence` + `runTwinEnginePostgresAsync`). **Does not** change the production Twin Engine route or default runtime behavior (`POST …/twin/engine` remains `getDb()` + `runTwinEngine` until 95c).
+
 ## Completed Slices
 
 ### D1
