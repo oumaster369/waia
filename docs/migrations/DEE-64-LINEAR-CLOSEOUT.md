@@ -1,6 +1,6 @@
 # DEE-64 migration — Linear closeout handoff (reconciliation)
 
-**Purpose:** Reconcile **repository truth** with **Linear** for **DEE-64–era** migration slices (including **DEE-72.x**, **DEE-93**, **DEE-94**, and **DEE-95** phases **through 95d**). Copy comments below into each issue when moving status. **Automation:** This file does not change Linear; an operator updates Linear manually.
+**Purpose:** Reconcile **repository truth** with **Linear** for **DEE-64–era** migration slices (including **DEE-72.x**, **DEE-93**, **DEE-94**, and **DEE-95** phases **through 95g**). Copy comments below into each issue when moving status. **Automation:** This file does not change Linear; an operator updates Linear manually.
 
 **Baseline (verify before closeout):** `origin/dev` should include at least:
 
@@ -14,6 +14,9 @@
 | DEE-95b | `7d87896` — PR **#93** |
 | DEE-95c | `517f887` — PR **#94** |
 | DEE-95d (implementation) | `b70e044` — PR **#96** |
+| DEE-95e (operational readiness **planning**) | `2cf1b26` — PR **#98** |
+| DEE-95f (stdout runtime telemetry) | `f0cd379` — PR **#99** |
+| DEE-95g (telemetry ops docs) | `34b092d` — PR **#100** |
 
 Run: `git fetch origin && git log origin/dev -10 --oneline`
 
@@ -50,7 +53,7 @@ Merged on dev: c170fb6 / PR #89. Deliverable docs/migrations/DEE-94-ASYNC-TWIN-E
 
 ---
 
-## 2. DEE-95 runtime routing — **current truth** (after 95c / 95d)
+## 2. DEE-95 runtime routing — **current truth** (after 95c / 95d / 95e–95g)
 
 **DEE-95 (planning issue / strategy document):** **Done** when Definition of Done = strategy merged to `dev`. Authoritative doc: [`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](./DEE-95-RUNTIME-ROUTING-STRATEGY.md) (`3e247eb` / PR **#91**). Summary: [`DEE-64-TRACKER.md`](./DEE-64-TRACKER.md).
 
@@ -62,10 +65,13 @@ Merged on dev: c170fb6 / PR #89. Deliverable docs/migrations/DEE-94-ASYNC-TWIN-E
 | **95b** | Facade hardening **planning**: [`DEE-95B-RUNTIME-FACADE-HARDENING.md`](./DEE-95B-RUNTIME-FACADE-HARDENING.md) | `7d87896` — PR **#93** |
 | **95c** | **Twin Engine route** uses **`getWaiaRuntimeDb()`** + **`runTwinEngineForRuntimeAsync`** (not `getDb()` + sync `runTwinEngine` at the route boundary) | `517f887` — PR **#94** |
 | **95d** | **Verification** POST, **verifications** GET, **repeatability** GET use the **same** runtime backend policy as the engine; planning: [`DEE-95D-RUNTIME-ALIGNMENT-PLAN.md`](./DEE-95D-RUNTIME-ALIGNMENT-PLAN.md) (Linear **DEE-98**); implementation closeout **DEE-99** | `b70e044` — PR **#96** |
+| **95e** | Operational readiness **planning**: [`DEE-95E-OPERATIONAL-READINESS-PLAN.md`](./DEE-95E-OPERATIONAL-READINESS-PLAN.md) (Linear **DEE-100**) | `2cf1b26` — PR **#98** |
+| **95f** | Stdout **`waia_runtime_route`** telemetry for runtime-aware routes (Linear **DEE-101**) | `f0cd379` — PR **#99** |
+| **95g** | Telemetry **ops docs**: runbook, log-dashboard spec, staging checklist (Linear **DEE-102**); **docs-only** | `34b092d` — PR **#100** |
 
 **Umbrella / program:** **DEE-92** (WAIA architectural migration log) remains **In Progress**.
 
-**Broad Postgres rollout:** **Still blocked** pending **DEE-95e**-style observability, runbooks, staged rollout, **ops sign-off**, and **broader route alignment** (many APIs under `app/api` still call `getDb()` directly — see strategy doc and tracker). DEE-95c/95d **do not** imply production Postgres promotion without that work.
+**Broad Postgres rollout:** **Still blocked** for **production-wide** promotion: many APIs still use `getDb()`; **live** dashboards/alerts/SLOs in your log stack (per [`DEE-95G-LOG-DASHBOARD-SPEC.md`](./DEE-95G-LOG-DASHBOARD-SPEC.md)) and **ops sign-off** remain. **Progress:** DEE-95e **planning** merged (PR **#98**); DEE-95f **stdout telemetry** (PR **#99**); DEE-95g **runbook + dashboard spec + staging checklist** (PR **#100**, Linear **DEE-102**) — **docs-only** for 95g; **no** vendors, **no** in-app dashboards, **no** route migration, **no** API behavior changes. DEE-95c/95d/95f **do not** alone justify broad Postgres promotion.
 
 **Paste as Linear comment (95c):**
 
@@ -77,6 +83,19 @@ Merged on dev: 517f887 / PR #94. POST /api/dashboard/twin/engine uses getWaiaRun
 
 ```text
 Merged on dev: b70e044 / PR #96. POST …/prediction/verification, GET …/prediction/verifications, GET …/repeatability use getWaiaRuntimeDb + sqlite helpers or resolveTwinPersistence; same runtime policy as Twin Engine. Broad Postgres rollout still requires DEE-95e / ops / observability and broader route alignment.
+```
+
+### DEE-95g — telemetry operational docs (closeout template)
+
+- **Linear:** **DEE-102** (parent **DEE-92**).
+- **Why Done:** Operator-facing scaffolding for DEE-95f stdout JSON only.
+- **Merge evidence:** `34b092d` — PR **#100** (`docs/migrations/DEE-95G-*.md`, DEE-64-TRACKER + DEE-95E cross-links, JSDoc `@see` on telemetry helper).
+- **Validation (post-merge):** `pnpm lint` OK · `pnpm typecheck` OK · `pnpm exec vitest run` — 390 passed, 34 skipped.
+- **Non-goals confirmed:** No Datadog/OpenTelemetry/Sentry; no dashboard **implementation**; no `getDb()` route migration; no runtime/API contract changes.
+- **Paste as Linear comment (95g):**
+
+```text
+Merged on dev: 34b092d / PR #100 (Linear DEE-102 Done). DEE-95g: DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md, DEE-95G-LOG-DASHBOARD-SPEC.md, DEE-95G-STAGING-CHECKLIST.md; tracker + DEE-95E doc control 1.2; telemetry helper JSDoc @see only. Validation: pnpm lint/typecheck OK; vitest 390 passed / 34 skipped. No vendors, dashboards, route migrations, or API behavior changes. Next wave: twin-dialogue turn/turns → getWaiaRuntimeDb + telemetry.
 ```
 
 ---
