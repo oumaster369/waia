@@ -1,5 +1,5 @@
 /**
- * DEE-72.1 / DEE-72.2 / DEE-72.3: Postgres twin/diary, verifications, memory retrieval (opt-in integration).
+ * DEE-72.1 / DEE-72.2 / DEE-72.3 / DEE-72.5: Postgres twin/diary, verifications, memory retrieval, repeatability (opt-in integration).
  * Requires migrated Postgres + WAIA_PG_INTEGRATION=1 + DATABASE_URL_POSTGRES.
  * Does not claim SQLite/Postgres behavioral parity.
  */
@@ -17,13 +17,15 @@ import {
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
 import { runWaiaPostgresTransaction } from "@/db/waia-postgres-transaction";
 import * as pgSchema from "@/db/schema.postgres";
+import { TWIN_REPEATABILITY_SCHEMA_VERSION } from "@/lib/dashboard/twin-repeatability-api.types";
 import { createPostgresTwinPersistence } from "@/lib/persistence/postgres/twin-persistence";
 import { resolveTwinPersistence } from "@/lib/persistence/runtime";
+import { hashTwinScenarioRepeatabilityHex, inferRepeatabilityPatternType } from "@/lib/twin-persistence/twin-repeatability";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 
-describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.1, DEE-72.2, DEE-72.3)", () => {
+describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.1, DEE-72.2, DEE-72.3, DEE-72.5)", () => {
   const testUserId = "00000000-0000-4000-8000-00000000dee7";
 
   afterEach(async () => {
@@ -37,6 +39,7 @@ describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.
         testUserId,
       ]);
       await sql.unsafe(`DELETE FROM twin_prediction_verifications WHERE user_id = $1`, [testUserId]);
+      await sql.unsafe(`DELETE FROM twin_repeatability_records WHERE user_id = $1`, [testUserId]);
       await sql.unsafe(`DELETE FROM diary_entries WHERE user_id = $1`, [testUserId]);
       await sql.unsafe(`DELETE FROM twin_readiness_state WHERE twin_profile_id IN (SELECT id FROM twin_profiles WHERE user_id = $1)`, [
         testUserId,
@@ -454,5 +457,82 @@ describe.skipIf(!integrationEnabled || !url)("postgres twin persistence (DEE-72.
 
     const hits = await p.searchTwinMemoriesByText(testUserId, "resolver-mem", 5);
     expect(hits.some((h) => h.previewText === "resolver-mem")).toBe(true);
+  });
+
+  it("appendRepeatabilityRecordForUser + analyzeRepeatabilityForUser aggregate by pattern type (DEE-72.5)", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+
+    const scenarioA = "neutral topic one";
+    const scenarioB = "neutral topic two";
+    const patternType = inferRepeatabilityPatternType(
+      hashTwinScenarioRepeatabilityHex(scenarioA).normalized,
+    );
+
+    const r1 = await p.appendRepeatabilityRecordForUser({
+      userId: testUserId,
+      scenarioTrimmed: scenarioA,
+      verificationResult: "accurate",
+      predictionOutcomeOverride: "outcome-a",
+    });
+    const r2 = await p.appendRepeatabilityRecordForUser({
+      userId: testUserId,
+      scenarioTrimmed: scenarioB,
+      verificationResult: "accurate",
+      predictionOutcomeOverride: "outcome-b",
+    });
+    expect(r1.status).toBe("inserted");
+    expect(r2.status).toBe("inserted");
+
+    const analyzed = await p.analyzeRepeatabilityForUser(testUserId);
+    expect(analyzed.schemaVersion).toBe(TWIN_REPEATABILITY_SCHEMA_VERSION);
+    const agg = analyzed.repeatedPatterns.find((x) => x.patternType === patternType);
+    expect(agg?.occurrences).toBe(2);
+    expect(agg?.lastSeenAt).toMatch(/^\d{4}-/);
+  });
+
+  it("appendRepeatabilityRecordForUser dedupes identical tuple within window (DEE-72.5)", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+    const scenario = "dedup window scenario pg";
+    const a = await p.appendRepeatabilityRecordForUser({
+      userId: testUserId,
+      scenarioTrimmed: scenario,
+      verificationResult: "partially_accurate",
+      predictionOutcomeOverride: "o1",
+    });
+    const b = await p.appendRepeatabilityRecordForUser({
+      userId: testUserId,
+      scenarioTrimmed: scenario,
+      verificationResult: "partially_accurate",
+      predictionOutcomeOverride: "o2",
+    });
+    expect(a.status).toBe("inserted");
+    expect(b.status).toBe("deduped");
+  });
+
+  it("analyzeRepeatabilityForUser respects scenario filter (DEE-72.5)", async () => {
+    await seedTestUser();
+    const db = getPostgresDrizzle();
+    const p = createPostgresTwinPersistence(db);
+    await p.appendRepeatabilityRecordForUser({
+      userId: testUserId,
+      scenarioTrimmed: "only filter scenario pg",
+      verificationResult: "accurate",
+      predictionOutcomeOverride: "a",
+    });
+    await p.appendRepeatabilityRecordForUser({
+      userId: testUserId,
+      scenarioTrimmed: "other topic entirely pg",
+      verificationResult: "accurate",
+      predictionOutcomeOverride: "b",
+    });
+    const filtered = await p.analyzeRepeatabilityForUser(testUserId, {
+      scenarioText: "only filter scenario pg",
+    });
+    expect(filtered.repeatedPatterns.length).toBe(1);
+    expect(filtered.repeatedPatterns[0]?.occurrences).toBe(1);
   });
 });

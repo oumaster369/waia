@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 
 import type { DashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-api.types";
 import type {
@@ -45,6 +45,15 @@ import {
   type DiaryMemoryRow,
   type ScenarioAnswerMemoryRow,
 } from "@/lib/twin-persistence/diary-memory";
+import type { AppendRepeatabilityRecordInput, AppendRepeatabilityRecordResult } from "@/lib/twin-persistence/twin-repeatability";
+import {
+  TWIN_REPEATABILITY_DEDUP_WINDOW_MS,
+  hashTwinScenarioRepeatabilityHex,
+  inferRepeatabilityPatternType,
+} from "@/lib/twin-persistence/twin-repeatability";
+import { analyzeRepeatabilityForUserAsync, type AnalyzeRepeatabilityOptions } from "@/lib/reasoning/twin-repeatability-analyzer";
+import { runTwinPredictionForUserAsync } from "@/lib/reasoning/twin-prediction";
+import type { TwinRepeatabilityApiResponse } from "@/lib/dashboard/twin-repeatability-api.types";
 
 export type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 
@@ -880,7 +889,70 @@ async function listTwinPredictionVerificationsForUserPg(
 }
 
 /**
- * Postgres AI-Twin / diary persistence boundary (DEE-72.1, DEE-72.2, DEE-72.3).
+ * DEE-72.5: Append repeatability row with dedup. Prediction outcome (when not overridden) is
+ * computed **before** {@link runWaiaPostgresTransaction} so memory/reasoning work never runs
+ * inside the transaction callback.
+ */
+async function appendRepeatabilityRecordForUserPg(
+  db: WaiaPostgresDb,
+  userId: string,
+  input: AppendRepeatabilityRecordInput,
+): Promise<AppendRepeatabilityRecordResult> {
+  const twinProfileId = await ensureUserTwinSeedPg(db, userId);
+  const { normalized, scenarioHashHex } = hashTwinScenarioRepeatabilityHex(input.scenarioTrimmed);
+  const patternType = inferRepeatabilityPatternType(normalized);
+
+  const predictionOutcome =
+    input.predictionOutcomeOverride ??
+    (
+      await runTwinPredictionForUserAsync(
+        {
+          searchByText: (uid: string, queryText: string, topN: number) =>
+            searchTwinMemoriesByTextPg(db, uid, queryText, topN),
+        },
+        userId,
+        input.scenarioTrimmed,
+      )
+    ).outcome;
+
+  return runWaiaPostgresTransaction(db, async (tx) => {
+    const cutoff = new Date(Date.now() - TWIN_REPEATABILITY_DEDUP_WINDOW_MS);
+    const dupRows = await tx
+      .select({ id: pgSchema.twinRepeatabilityRecords.id })
+      .from(pgSchema.twinRepeatabilityRecords)
+      .where(
+        and(
+          eq(pgSchema.twinRepeatabilityRecords.userId, userId),
+          eq(pgSchema.twinRepeatabilityRecords.scenarioHash, scenarioHashHex),
+          eq(pgSchema.twinRepeatabilityRecords.patternType, patternType),
+          eq(pgSchema.twinRepeatabilityRecords.verificationResult, input.verificationResult),
+          gte(pgSchema.twinRepeatabilityRecords.createdAt, cutoff),
+        ),
+      )
+      .limit(1);
+
+    if (dupRows[0] != null) {
+      return { status: "deduped" as const };
+    }
+
+    const id = crypto.randomUUID();
+    await tx.insert(pgSchema.twinRepeatabilityRecords).values({
+      id,
+      userId,
+      twinProfileId,
+      scenarioHash: scenarioHashHex,
+      patternType,
+      predictionOutcome,
+      verificationResult: input.verificationResult,
+      createdAt: new Date(),
+    });
+
+    return { status: "inserted" as const, id };
+  });
+}
+
+/**
+ * Postgres AI-Twin / diary persistence boundary (DEE-72.1, DEE-72.2, DEE-72.3, DEE-72.5).
  * Async semantics; transactional writes use {@link runWaiaPostgresTransaction}.
  * Memory search is read-only and does not use that helper.
  */
@@ -934,6 +1006,13 @@ export type PostgresTwinPersistence = {
     queryText: string,
     topN?: number,
   ) => Promise<TwinMemorySearchHit[]>;
+  appendRepeatabilityRecordForUser: (
+    params: { userId: string } & AppendRepeatabilityRecordInput,
+  ) => Promise<AppendRepeatabilityRecordResult>;
+  analyzeRepeatabilityForUser: (
+    userId: string,
+    options?: AnalyzeRepeatabilityOptions,
+  ) => Promise<TwinRepeatabilityApiResponse>;
   stringifyScenarioPayloadForStorage: typeof stringifyScenarioPayloadForStorage;
 };
 
@@ -961,6 +1040,14 @@ export function createPostgresTwinPersistence(db: WaiaPostgresDb): PostgresTwinP
       listTwinPredictionVerificationsForUserPg(db, userId, limit),
     searchTwinMemoriesByText: (userId, queryText, topN) =>
       searchTwinMemoriesByTextPg(db, userId, queryText, topN),
+    appendRepeatabilityRecordForUser: (params) =>
+      appendRepeatabilityRecordForUserPg(db, params.userId, {
+        scenarioTrimmed: params.scenarioTrimmed,
+        verificationResult: params.verificationResult,
+        predictionOutcomeOverride: params.predictionOutcomeOverride,
+      }),
+    analyzeRepeatabilityForUser: (userId, options) =>
+      analyzeRepeatabilityForUserAsync(db, userId, options),
     stringifyScenarioPayloadForStorage,
   };
 }
