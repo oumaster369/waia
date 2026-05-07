@@ -1,45 +1,12 @@
-# WAIA AI Development Rules
+# WAIA — redirect
 
-## Core workflow
+**Do not use this file as a workflow source.** It exists so older tooling that expects `CLAUDE.md` lands on the canonical entrypoints:
 
-- Do NOT push directly to `dev` or `main`
-- Always use feature branches
-- Always create Pull Requests
+| What | Where |
+|------|--------|
+| Agent execution contract, Linear, branching, phases | **[`AGENTS.md`](AGENTS.md)** |
+| Governance index | [`docs/waia-governance/README.md`](docs/waia-governance/README.md) |
+| Branch naming detail | [`docs/waia-governance/BRANCHING-STRATEGY.md`](docs/waia-governance/BRANCHING-STRATEGY.md) |
+| Git ergonomics / deploy snippets | [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) (non-authoritative adjunct) |
 
-## Steps
-
-1. Checkout dev:
-   git checkout dev
-   git pull origin dev
-
-2. Create branch:
-   git checkout -b feature/<task-name>
-
-3. Work and commit:
-   git add .
-   git commit -m "clear message"
-
-4. Push:
-   git push origin feature/<task-name>
-
-5. Create Pull Request → dev
-
-## Safety
-
-- Never commit:
-  - .env
-  - node_modules
-  - .next
-  - secrets / keys
-
-- Always check before actions:
-  git status
-  git branch
-
-## Repo info
-
-- Repo: git@github.com:oumaster369/waia.git
-- Base branch: dev
-- Protected branches: dev, main
-
-If unsure — STOP and ask before doing git operations.
+**Branches:** **`dee-<NN>-<slug>`** linked to Linear — not legacy `feature/*`.

@@ -11,7 +11,7 @@ Open a Pull Request targeting `dev` from the current feature branch.
    git branch --show-current
    ```
 
-   The branch must start with `feature/`. If not — STOP and ask.
+   The branch name must match **`dee-<NN>-<slug>`** (Linear issue id + kebab-case summary), per [`AGENTS.md`](../../AGENTS.md) and [`docs/waia-governance/BRANCHING-STRATEGY.md`](../../docs/waia-governance/BRANCHING-STRATEGY.md). If it does not — STOP and ask (legacy `feature/` requires Architect approval documented in the PR).
 
 2. Stage and commit any remaining changes using Conventional Commits:
 
