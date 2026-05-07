@@ -2,14 +2,41 @@
 
 This file defines the repository-specific execution contract for all AI coding agents working on this codebase.
 
-Read this file first before planning or implementing any change.
+Read this file first before planning or implementing any change. **Operational routing hub** — detailed canon lives in **`docs/waia-governance/**`**, **`docs/product/**`**, and ADRs; extend rules there when policies change materially, then keep this file succinctly aligned.
+
+---
+
+# WAIA DEV OS — governance hub
+
+| Resource | Location |
+|---------|----------|
+| Product MVP onboarding (index) | [`docs/product/WAIA-V1-MVP-SPEC.md`](docs/product/WAIA-V1-MVP-SPEC.md) |
+| Execution contract + tiers | [`docs/waia-governance/EXECUTION-CONTRACT.md`](docs/waia-governance/EXECUTION-CONTRACT.md), [`docs/waia-governance/RISK-TIERS.md`](docs/waia-governance/RISK-TIERS.md) |
+| Roles & emergency override | [`docs/waia-governance/AGENT-ROLES.md`](docs/waia-governance/AGENT-ROLES.md), [`docs/waia-governance/HUMAN-OVERRIDE.md`](docs/waia-governance/HUMAN-OVERRIDE.md) |
+| Governance docs index | [`docs/waia-governance/README.md`](docs/waia-governance/README.md) |
+| Architecture decisions (ADR) | [`docs/adr/README.md`](docs/adr/README.md) |
+| Principles & coherence | [`docs/waia-governance/CORE-PRINCIPLES.md`](docs/waia-governance/CORE-PRINCIPLES.md), [`docs/waia-governance/SYSTEM-MAP.md`](docs/waia-governance/SYSTEM-MAP.md) |
+
+---
+
+## When guidance conflicts (heuristic)
+
+Use this **recovery order**, then escalate—see [`docs/waia-governance/EXECUTION-CONTRACT.md`](docs/waia-governance/EXECUTION-CONTRACT.md):
+
+1. **Product specs** (`docs/product/**`) for user-visible meaning.
+2. **Governance** (`docs/waia-governance/**`, ADRs) for process and boundary rules.
+3. **Migration doctrine / trackers** for rollout truth ([`docs/waia-governance/MIGRATION-GOVERNANCE.md`](docs/waia-governance/MIGRATION-GOVERNANCE.md), `DEE-*` strategy docs).
+4. **Linear issue** — executed scope on this task.
+5. **Existing code/comments** — may lag; never override 1–3 silently.
+
+**This file (`AGENTS.md`) vs execution contract:** per [`EXECUTION-CONTRACT.md`](docs/waia-governance/EXECUTION-CONTRACT.md), **this baseline wins unless a deliberate PR updates both**—the list above prioritizes interpretation, not a separate legal ladder.
 
 ---
 
 # TL;DR
 
 1. Never push directly to `main` or `dev`.
-2. Always work from a feature branch and open a PR.
+2. Always work from a **`dee-<NN>-<slug>`** branch linked to Linear and open a PR (see branching section).
 3. Never commit secrets or environment values.
 4. Follow the 4-phase workflow without skipping steps.
 5. Linear project WAIA is the single source of truth for executable work.
@@ -24,14 +51,9 @@ This repository is part of the WAIA ecosystem.
 
 WAIA is not a standard application.
 
-It is a modular AI system composed of interconnected layers:
+WAIA comprises **several named future ecosystem layers** (Business / 3P, AI-Trader, AI-Marketplace, AI-Twin)—**delivery focus here is deliberately narrow.**
 
-- AI-Twin (personal intelligence layer)
-- Business (3P system)
-- AI-Trader (financial intelligence)
-- AI-Marketplace (economic layer)
-
-Current implementation focus:
+**Delivered now:** AI-Twin **v1** plus **backend/runtime stabilization** aligned with MVP. Other named layers remain **explicitly deferred** unless a scoped product-issue expands scope—[`NON-GOALS.md`](docs/waia-governance/NON-GOALS.md).
 
 ## AI-Twin v1
 
@@ -39,8 +61,8 @@ AI-Twin is a system that builds a structured digital personality model of the us
 
 - dialogue
 - diary input
-- behavioral analysis
-- pattern extraction
+- behavioral reflection and pattern continuity anchored in readiness/product semantics (distinct from profiling-as-product inference as a standalone goal)
+
 
 Core outputs:
 
@@ -57,7 +79,7 @@ Agents must treat every feature as part of this system.
 
 - Never push directly to `main`
 - Never push directly to `dev`
-- Always create a feature branch
+- Always create a **Linear-linked** branch (`dee-<NN>-<slug>`)
 - Always open a PR
 - Always reference the Linear issue ID in:
   - branch name

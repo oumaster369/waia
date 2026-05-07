@@ -7,7 +7,7 @@ This document describes the multi-agent setup the project uses for the loop **pl
 ```
 User
  ├─ /plan-feature  (Plan Mode, Opus 4.x)        -> .cursor/plans/<slug>.md
- ├─ /implement     (Agent Mode, Sonnet 4.5)     -> code on feature/<slug>
+ ├─ /implement     (Agent Mode, Sonnet 4.5)     -> code on `dee-<NN>-<slug>` branch
  ├─ /test-and-fix  (Agent Mode + Playwright MCP)-> green local gates
  └─ /prepare-pr    (Agent Mode + gh CLI)        -> PR into dev
                                                     │
@@ -38,6 +38,10 @@ Configured in user `settings.json` (`cursor.agent.allowList` / `denyList`) and e
 
 - **Allowed without prompt**: `pnpm (lint|typecheck|test|build|format) ...`, `pnpm exec ...`, `gh (pr|issue|repo) ...`
 - **Always denied**: `git push --force`, direct push to `dev`/`main`, `rm -rf /` or `rm -rf $HOME`
+
+## Expanded execution narrative
+
+Formal 12-step loop + five-memory continuity expectations: [`waia-governance/AUTONOMOUS-EXECUTION-LOOP.md`](waia-governance/AUTONOMOUS-EXECUTION-LOOP.md) and [`waia-governance/DOCUMENTATION-STANDARDS.md`](waia-governance/DOCUMENTATION-STANDARDS.md).
 
 ## What the user does manually (not automated)
 

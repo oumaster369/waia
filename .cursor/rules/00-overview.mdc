@@ -30,6 +30,9 @@ WAIA = "Open AI infrastructure for humans, businesses and society."
 
 ## Source of truth
 
-- Workflow: `docs/DEVELOPMENT_WORKFLOW.md`
-- Agent contract: `AGENTS.md` (root)
-- Plan files agents produce: `.cursor/plans/` (gitignored)
+- **Agents & workflow canon:** **`AGENTS.md`** (branching, Linear, phases, merge posture)
+- **Governance corpus:** **`docs/waia-governance/README.md`**
+- **Git commands / deploy snippets:** **`docs/DEVELOPMENT_WORKFLOW.md`** (adjunct — does not override **AGENTS.md**)
+- **MVP onboarding index:** **`docs/product/WAIA-V1-MVP-SPEC.md`**
+- **Architectural decisions (why):** **`docs/adr/README.md`**
+- **Plan files agents produce:** `.cursor/plans/` (gitignored)

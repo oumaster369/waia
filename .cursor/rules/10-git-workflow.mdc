@@ -9,15 +9,16 @@ alwaysApply: true
 
 - `main` — production, deployed to Cloudflare Pages by the user. **Never push directly.**
 - `dev` — integration, protected. **Never push directly.**
-- `feature/<scope>-<slug>` — all agent work happens here.
+- **`dee-<NN>-<slug>`** — canonical branch for WAIA work tied to Linear **`DEE-NN`** (see [`AGENTS.md`](../../AGENTS.md) and [`docs/waia-governance/BRANCHING-STRATEGY.md`](../../docs/waia-governance/BRANCHING-STRATEGY.md)).
+- **`feature/<scope>-<slug>`** — **legacy** naming; avoid for new work unless Architect-approved and noted in the PR.
 
 ## Required steps for every change
 
 1. `git checkout dev && git pull origin dev`
-2. `git checkout -b feature/<scope>-<slug>`
-3. Implement, run `pnpm lint && pnpm typecheck && pnpm test -- --run`
+2. `git checkout -b dee-<NN>-<slug>`
+3. Implement, run `pnpm lint && pnpm typecheck && pnpm test -- --run` (full chain incl. `pnpm build` before PR per [`AGENTS.md`](../../AGENTS.md) + `/test-and-fix`)
 4. `git add -A && git commit -m "<conventional-commits-message>"`
-5. `git push -u origin feature/<scope>-<slug>`
+5. `git push -u origin dee-<NN>-<slug>`
 6. `gh pr create --base dev --fill` using the PR template
 
 ## Conventional Commits
