@@ -8,13 +8,19 @@ import { count, eq } from "drizzle-orm";
 import { GET as GET_LIST } from "@/app/api/dashboard/twin/prediction/verifications/route";
 import { POST } from "@/app/api/dashboard/twin/prediction/verification/route";
 import { getDb, resetWaiaSqliteSingleton } from "@/db/client";
+import * as waiaRuntimeDb from "@/db/waia-runtime-db";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
+import * as pgSchema from "@/db/schema.postgres";
 import { twinPredictionVerifications, twinRepeatabilityRecords } from "@/db/schema";
 import * as sessionUser from "@/lib/auth/session-user";
 import {
   MAX_VERIFICATION_CORRECTION_CHARS,
   MAX_VERIFICATION_SCENARIO_CHARS,
   TWIN_PREDICTION_VERIFICATION_SCHEMA_VERSION,
+  type TwinPredictionVerificationItemDto,
 } from "@/lib/dashboard/twin-prediction-verification-api.types";
+import * as runtimePersistence from "@/lib/persistence/runtime";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
@@ -40,9 +46,12 @@ function reqGet(limit?: string): Request {
 describe("twin prediction verification API routes (DEE-34)", () => {
   let tmpRoot: string;
   let prevDb: string | undefined;
+  let prevBackend: string | undefined;
 
   beforeAll(() => {
     prevDb = process.env.DATABASE_URL;
+    prevBackend = process.env.WAIA_DB_BACKEND;
+    delete process.env.WAIA_DB_BACKEND;
     tmpRoot = mkdtempSync(path.join(tmpdir(), "waia-tpv-route-"));
     const dbPath = path.join(tmpRoot, "walita.sqlite");
     mkdirSync(tmpRoot, { recursive: true });
@@ -57,6 +66,11 @@ describe("twin prediction verification API routes (DEE-34)", () => {
 
   afterAll(() => {
     resetWaiaSqliteSingleton();
+    if (prevBackend === undefined) {
+      delete process.env.WAIA_DB_BACKEND;
+    } else {
+      process.env.WAIA_DB_BACKEND = prevBackend;
+    }
     if (prevDb === undefined) {
       delete process.env.DATABASE_URL;
     } else {
@@ -70,6 +84,7 @@ describe("twin prediction verification API routes (DEE-34)", () => {
   });
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.mocked(sessionUser.getOptionalSessionUserId).mockReset();
     getDb().delete(twinRepeatabilityRecords).run();
     getDb().delete(twinPredictionVerifications).run();
@@ -243,5 +258,112 @@ describe("twin prediction verification API routes (DEE-34)", () => {
     vi.mocked(sessionUser.getOptionalSessionUserId).mockResolvedValue(null);
     const res = await GET_LIST(reqGet());
     expect(res.status).toBe(401);
+  });
+
+  it("POST dispatches through getWaiaRuntimeDb with sqlite handle by default", async () => {
+    vi.mocked(sessionUser.getOptionalSessionUserId).mockResolvedValue(ROUTE_USER);
+    const spy = vi.spyOn(waiaRuntimeDb, "getWaiaRuntimeDb");
+    const res = await POST(reqPost({ scenario: "hello", verification: "accurate" }));
+    expect(res.status).toBe(200);
+    expect(spy).toHaveBeenCalledOnce();
+    const handle = (await spy.mock.results[0]!.value) as WaiaRuntimeDb;
+    expect(handle).toMatchObject({ kind: "sqlite" });
+  });
+
+  it("GET verifications dispatches through getWaiaRuntimeDb with sqlite handle by default", async () => {
+    vi.mocked(sessionUser.getOptionalSessionUserId).mockResolvedValue(ROUTE_USER);
+    const spy = vi.spyOn(waiaRuntimeDb, "getWaiaRuntimeDb");
+    const res = await GET_LIST(reqGet());
+    expect(res.status).toBe(200);
+    expect(spy).toHaveBeenCalledOnce();
+    const handle = (await spy.mock.results[0]!.value) as WaiaRuntimeDb;
+    expect(handle).toMatchObject({ kind: "sqlite" });
+  });
+
+  it("POST uses Postgres twin persistence when runtime is postgres (mocked)", async () => {
+    vi.mocked(sessionUser.getOptionalSessionUserId).mockResolvedValue(ROUTE_USER);
+    const mockPg = drizzle.mock({ schema: pgSchema });
+    const pgHandle: WaiaRuntimeDb = { kind: "postgres", db: mockPg };
+    const runtimeSpy = vi.spyOn(waiaRuntimeDb, "getWaiaRuntimeDb").mockResolvedValue(pgHandle);
+
+    const sampleDto: TwinPredictionVerificationItemDto = {
+      id: "pg-ver-1",
+      predictionId: null,
+      scenario: "ship tomorrow calmly",
+      verification: "accurate",
+      correction: null,
+      createdAt: "2026-01-01T12:00:00.000Z",
+    };
+    const appendMock = vi.fn().mockResolvedValue(sampleDto);
+    const repeatMock = vi.fn().mockResolvedValue({ status: "inserted" as const, id: "rep-1" });
+    const resolveSpy = vi.spyOn(runtimePersistence, "resolveTwinPersistence").mockReturnValue({
+      appendTwinPredictionVerificationForUser: appendMock,
+      appendRepeatabilityRecordForUser: repeatMock,
+    } as unknown as ReturnType<typeof runtimePersistence.resolveTwinPersistence>);
+
+    try {
+      const res = await POST(
+        reqPost({ scenario: " ship tomorrow calmly ", predictionId: null, verification: "accurate" }),
+      );
+      expect(res.status).toBe(200);
+      expect(runtimeSpy).toHaveBeenCalledOnce();
+      expect(resolveSpy).toHaveBeenCalledWith(pgHandle);
+      expect(appendMock).toHaveBeenCalledWith({
+        userId: ROUTE_USER,
+        scenario: "ship tomorrow calmly",
+        verification: "accurate",
+        predictionId: undefined,
+        correction: undefined,
+      });
+      expect(repeatMock).toHaveBeenCalledWith({
+        userId: ROUTE_USER,
+        scenarioTrimmed: "ship tomorrow calmly",
+        verificationResult: "accurate",
+      });
+      expect(appendMock.mock.invocationCallOrder[0]).toBeLessThan(
+        repeatMock.mock.invocationCallOrder[0]!,
+      );
+      await expect(res.json()).resolves.toMatchObject({
+        schemaVersion: TWIN_PREDICTION_VERIFICATION_SCHEMA_VERSION,
+        verification: sampleDto,
+      });
+    } finally {
+      runtimeSpy.mockRestore();
+      resolveSpy.mockRestore();
+    }
+  });
+
+  it("GET verifications uses Postgres list when runtime is postgres (mocked)", async () => {
+    vi.mocked(sessionUser.getOptionalSessionUserId).mockResolvedValue(ROUTE_USER);
+    const mockPg = drizzle.mock({ schema: pgSchema });
+    const pgHandle: WaiaRuntimeDb = { kind: "postgres", db: mockPg };
+    const runtimeSpy = vi.spyOn(waiaRuntimeDb, "getWaiaRuntimeDb").mockResolvedValue(pgHandle);
+
+    const sampleDto: TwinPredictionVerificationItemDto = {
+      id: "pg-vlist-1",
+      predictionId: "pred-1",
+      scenario: "alpha",
+      verification: "accurate",
+      correction: null,
+      createdAt: "2026-02-02T15:00:00.000Z",
+    };
+    const listMock = vi.fn().mockResolvedValue([sampleDto]);
+    const resolveSpy = vi.spyOn(runtimePersistence, "resolveTwinPersistence").mockReturnValue({
+      listTwinPredictionVerificationsForUser: listMock,
+    } as unknown as ReturnType<typeof runtimePersistence.resolveTwinPersistence>);
+
+    try {
+      const res = await GET_LIST(reqGet("10"));
+      expect(res.status).toBe(200);
+      expect(resolveSpy).toHaveBeenCalledWith(pgHandle);
+      expect(listMock).toHaveBeenCalledWith(ROUTE_USER, 10);
+      await expect(res.json()).resolves.toMatchObject({
+        schemaVersion: TWIN_PREDICTION_VERIFICATION_SCHEMA_VERSION,
+        verifications: [sampleDto],
+      });
+    } finally {
+      runtimeSpy.mockRestore();
+      resolveSpy.mockRestore();
+    }
   });
 });

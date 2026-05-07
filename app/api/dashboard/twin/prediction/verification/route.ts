@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import {
@@ -11,6 +11,7 @@ import {
   type TwinPredictionVerificationAppendApiResponse,
   type TwinPredictionVerificationKind,
 } from "@/lib/dashboard/twin-prediction-verification-api.types";
+import { resolveTwinPersistence } from "@/lib/persistence/runtime";
 import {
   appendTwinPredictionVerificationForUser,
   isTwinPredictionVerificationKind,
@@ -128,19 +129,39 @@ export async function POST(request: Request) {
     correction = rawCorrection;
   }
 
-  const db = getDb();
+  const runtime = await getWaiaRuntimeDb();
 
-  const dto = appendTwinPredictionVerificationForUser(db, userId, {
-    predictionId,
-    scenario: scenarioTrimmed,
-    verification,
-    correction,
-  });
-
-  recordRepeatabilityAfterVerification(db, userId, {
-    scenarioTrimmed,
-    verification,
-  });
+  let dto;
+  if (runtime.kind === "sqlite") {
+    dto = appendTwinPredictionVerificationForUser(runtime.db, userId, {
+      predictionId,
+      scenario: scenarioTrimmed,
+      verification,
+      correction,
+    });
+    recordRepeatabilityAfterVerification(runtime.db, userId, {
+      scenarioTrimmed,
+      verification,
+    });
+  } else {
+    const p = resolveTwinPersistence(runtime);
+    dto = await p.appendTwinPredictionVerificationForUser({
+      userId,
+      scenario: scenarioTrimmed,
+      verification,
+      predictionId,
+      correction,
+    });
+    try {
+      await p.appendRepeatabilityRecordForUser({
+        userId,
+        scenarioTrimmed,
+        verificationResult: verification,
+      });
+    } catch {
+      /* best-effort: verification row already persisted */
+    }
+  }
 
   const body: TwinPredictionVerificationAppendApiResponse = {
     schemaVersion: TWIN_PREDICTION_VERIFICATION_SCHEMA_VERSION,
