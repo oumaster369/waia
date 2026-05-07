@@ -216,8 +216,8 @@ DEE-94 is the **non-negotiable** design reference for the **next** implementatio
 
 | Phase | Deliverable |
 |-------|-------------|
-| **95a** | Implement async **facade** `(WaiaRuntimeDb, TwinEngineRunInput) => Promise<TwinEngineApiResponse>` per DEE-94 |
-| **95b** | Unit + integration tests; default path still SQLite |
+| **95a** | Implement async **facade** `(WaiaRuntimeDb, TwinEngineRunInput) => Promise<TwinEngineApiResponse>` per DEE-94 — **landed** in [`lib/reasoning/twin-engine-runtime.ts`](../../lib/reasoning/twin-engine-runtime.ts) (library only; route wiring remains **95c**). |
+| **95b** | Unit + integration tests beyond facade-focused coverage; default path still SQLite |
 | **95c** | Wire `POST …/twin/engine` behind env/flag; **default off** |
 | **95d** | Migrate **`POST …/prediction/verification`** + **`GET …/repeatability`** to match engine backend |
 | **95e** | Observability, runbooks, staged rollout, kill-switch validation |
@@ -263,3 +263,4 @@ Exact PR boundaries are team choice; **phases must not skip** writer alignment u
 | Version | Slice | Notes |
 |---------|--------|------|
 | 1.0 | DEE-95 | Initial runtime routing strategy (planning only). |
+| 1.1 | DEE-95a | **95a facade** implemented (`runTwinEngineForRuntimeAsync`); production route unchanged. |
