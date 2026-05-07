@@ -27,7 +27,7 @@ All emitted objects use `event: "waia_runtime_route"` (stable filter key).
 | `event` | string | Always `waia_runtime_route` |
 | `route` | string | Route key (see mapping table below) |
 | `waia_db_backend` | `"sqlite"` \| `"postgres"` | Present when [`getWaiaRuntimeDb`](../../db/waia-runtime-db.ts) returned a handle before the request finished or threw in the instrumented block |
-| `http_status` | number | HTTP semantics aligned with the response, or **500** when the handler logs then **rethrows** (non-engine routes) |
+| `http_status` | number | Intended HTTP status for the client response when known (often matches log); **500** is typical for logged `config_error` / `internal_error` even when some handlers **rethrow** and the edge formats the body |
 | `outcome` | string | See [Outcome semantics](#outcome-semantics) |
 | `duration_ms` | number | Wall time (ms) for the instrumented `try` block at the route layer — **not** full edge RTT |
 | `error_class` | string (optional) | **`Error.prototype.name` only** — never stack or message text |
@@ -37,6 +37,8 @@ All emitted objects use `event: "waia_runtime_route"` (stable filter key).
 | `route` | HTTP |
 |---------|------|
 | `twin_engine` | `POST /api/dashboard/twin/engine` |
+| `twin_dialogue_turn` | `POST /api/dashboard/twin-dialogue/turn` |
+| `twin_dialogue_turns` | `GET /api/dashboard/twin-dialogue/turns` |
 | `prediction_verification` | `POST /api/dashboard/twin/prediction/verification` |
 | `prediction_verifications` | `GET /api/dashboard/twin/prediction/verifications` |
 | `repeatability` | `GET /api/dashboard/twin/repeatability` |
@@ -58,6 +60,8 @@ All emitted objects use `event: "waia_runtime_route"` (stable filter key).
 **HTTP vs log (Twin Engine):** For some misconfig paths the log may show `config_error` while the API still returns **500** with a generic `INTERNAL_ERROR` envelope — use logs for **triage**, HTTP for **client contract**.
 
 **Rethrow routes:** `prediction_verification`, `prediction_verifications`, `repeatability`, `health_database` log `internal_error` / `config_error` with `http_status: 500`, then **rethrow** — the framework may format the final HTTP response. Treat the log line as the **authoritative structured signal** for that failure.
+
+**JSON 500 routes (no rethrow):** `twin_engine`, `twin_dialogue_turn`, and `twin_dialogue_turns` emit telemetry then return a generic **`INTERNAL_ERROR`** JSON envelope — HTTP status matches the log’s `http_status`.
 
 ---
 
@@ -145,3 +149,4 @@ WAIA intentionally keeps telemetry **vendor-neutral**: one JSON line per event. 
 | Version | Slice | Notes |
 |---------|--------|------|
 | 1.0 | DEE-95g | Initial runbook for stdout `waia_runtime_route` telemetry. |
+| 1.1 | DEE-95h | Route keys `twin_dialogue_turn`, `twin_dialogue_turns`; clarify JSON-500 vs rethrow handlers. |
