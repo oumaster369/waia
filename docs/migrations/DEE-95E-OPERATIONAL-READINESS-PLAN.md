@@ -13,6 +13,7 @@
 - [`DEE-95D-RUNTIME-ALIGNMENT-PLAN.md`](./DEE-95D-RUNTIME-ALIGNMENT-PLAN.md)
 - [`DEE-64-TRACKER.md`](./DEE-64-TRACKER.md)
 - [`DEE-64-LINEAR-CLOSEOUT.md`](./DEE-64-LINEAR-CLOSEOUT.md)
+- **DEE-95g (ops docs):** [`DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md`](./DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md), [`DEE-95G-LOG-DASHBOARD-SPEC.md`](./DEE-95G-LOG-DASHBOARD-SPEC.md), [`DEE-95G-STAGING-CHECKLIST.md`](./DEE-95G-STAGING-CHECKLIST.md)
 
 **Related code:**
 
@@ -21,7 +22,7 @@
 - Health probe: [`app/api/health/database/route.ts`](../../app/api/health/database/route.ts)
 - **DEE-95f:** Route telemetry helper: [`lib/observability/waia-runtime-route-telemetry.ts`](../../lib/observability/waia-runtime-route-telemetry.ts)
 
-**Implementation status:** **DEE-95f** adds **stdout JSON** backend attribution logs for Twin Engine, verification, verifications, repeatability, and health/database routes (see §4–§5). **Does not** satisfy full operational readiness, metrics, staging alerts, or broad Postgres rollout.
+**Implementation status:** **DEE-95f** adds **stdout JSON** backend attribution logs for Twin Engine, verification, verifications, repeatability, and health/database routes (see §4–§5). **DEE-95g** adds operator-facing **runbook**, **derived-metric spec**, and **staging checklist** for reading that telemetry (see Related documents) — **not** dashboards in product, **not** broad Postgres rollout. Full readiness still requires external log aggregation, thresholds with ops, and remaining route waves.
 
 ---
 
@@ -78,7 +79,7 @@ This document treats **broad rollout** as the **program gated outcome** — not 
 
 **Privacy:** Do **not** log raw scenario / diary text in production unless explicitly approved ([`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](./DEE-95-RUNTIME-ROUTING-STRATEGY.md) §11; DEE-95B §8).
 
-**Implementation note:** **DEE-95f** implements **minimal** structured logs (`event: waia_runtime_route`) from the five `getWaiaRuntimeDb`-aware API routes via [`lib/observability/waia-runtime-route-telemetry.ts`](../../lib/observability/waia-runtime-route-telemetry.ts): backend (from resolved handle), route key, outcome, `duration_ms`, `http_status`, `error_class` (`Error.prototype.name` only). **No** raw scenario/diary text, **no** external vendors. **Remaining:** sampling, correlation IDs, metrics, dashboards, and broader route coverage per §4 / §11.
+**Implementation note:** **DEE-95f** implements **minimal** structured logs (`event: waia_runtime_route`) from the five `getWaiaRuntimeDb`-aware API routes via [`lib/observability/waia-runtime-route-telemetry.ts`](../../lib/observability/waia-runtime-route-telemetry.ts): backend (from resolved handle), route key, outcome, `duration_ms`, `http_status`, `error_class` (`Error.prototype.name` only). **No** raw scenario/diary text, **no** external vendors. **DEE-95g** documents how operators use these logs ([runbook](./DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md), [dashboard spec](./DEE-95G-LOG-DASHBOARD-SPEC.md), [staging checklist](./DEE-95G-STAGING-CHECKLIST.md)). **Remaining:** live dashboards in your log stack, sampling, correlation IDs, numeric SLOs with ops, and broader route coverage per §4 / §11.
 
 **Log vs HTTP triage:** Some **`config_error`** logs (e.g. invalid `WAIA_DB_BACKEND`) may still map to **HTTP 500** on routes that use a generic error envelope — logs are **triage-forward** until response mapping is refined in a later slice.
 
@@ -283,7 +284,7 @@ Engineering and ops **jointly** record sign-off when:
 ## 24. Recommended execution sequencing after 95e
 
 1. **Implementation slice (partial — DEE-95f):** Structured **stdout JSON** logging for Twin Engine, verification, verifications, repeatability, health/database + shared helper. **Still open:** metrics, sampling, correlation IDs, staging dashboards.
-2. **Staging hardening:** Dashboards, alerts, health integration, runbook v1.
+2. **Staging hardening:** Dashboards, alerts, health integration — **partial:** DEE-95g dashboard **spec** + staging **checklist**; **implementation** in log stack remains with ops.
 3. **Route migration waves:** Dialogue / prediction / pattern / contradictions / diary — one slice per PR where possible.
 4. **Expand integration CI:** Coherence chains and optional nightly Postgres job.
 5. **Production canary:** Limited promotion → full promotion after §11 criteria.
@@ -306,3 +307,4 @@ Each step is a **separate PR** to `dev`; this planning doc does **not** implemen
 |---------|--------|------|
 | 1.0 | DEE-95e | Initial **operational readiness planning** (governance, telemetry expectations, rollout/rollback, inventory — **no** code changes). |
 | 1.1 | DEE-95f | **Backend attribution telemetry:** stdout JSON from runtime-aware routes + helper; **no** broad Postgres rollout or `getDb()` migration. |
+| 1.2 | DEE-95g | **Telemetry ops docs:** runbook, log-derived dashboard spec, staging checklist — **no** vendors, **no** in-app dashboards. |
