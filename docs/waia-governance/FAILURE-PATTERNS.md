@@ -27,6 +27,8 @@ Format: **Id · Symptom · Root cause · Recovery · Prevent**
 
 | **FP-006** | **Symptom:** Flaky Playwright masking real regression. **Root cause:** environment timing. **Recovery:** rerun isolated; stabilize test. **Prevent:** track flakes in Linear `qa` commentary. |
 
+| **FP-007** | **Symptom:** CI fails on transient edge/host fetch (e.g. Cloudflare toolchain flake); PR unchanged. **Root cause:** infra noise. **Recovery:** one clean workflow rerun before escalating; treat repeat failures as real. **Prevent:** no standing policy beyond rerun-first heuristic — escalate only if reproducible. |
+
 ## Related
 
 - [`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md)

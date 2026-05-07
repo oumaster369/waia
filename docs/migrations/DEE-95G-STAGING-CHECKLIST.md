@@ -18,7 +18,7 @@
 
 - [ ] Exercise `POST /api/dashboard/twin/engine` (authenticated smoke) — **one** `waia_runtime_route` line with `route: "twin_engine"`.
 - [ ] Exercise prediction verification POST and verifications GET — lines with `prediction_verification` / `prediction_verifications`.
-- [ ] Exercise repeatability GET — line with `route: "repeatability"`.
+- [ ] Exercise **`POST /api/dashboard/twin-dialogue/turn`** and **`GET /api/dashboard/twin-dialogue/turns`** (after **DEE-95h**) — lines with `twin_dialogue_turn` / `twin_dialogue_turns`.
 - [ ] Health check produces `route: "health_database"`.
 - [ ] Confirm **`waia_db_backend`** matches expected `sqlite` or `postgres`.
 
@@ -26,7 +26,7 @@
 
 - [ ] Log pipeline shows newline JSON (not double-encoded).
 - [ ] No expectation of `waia_runtime_route` on **`getDb()`-only** routes (diary, auth, standalone prediction APIs, dashboard RSC `getDb()` reads, etc.) until migrated.
-- [ ] After **DEE-95h:** smoke `POST /api/dashboard/twin-dialogue/turn` and `GET /api/dashboard/twin-dialogue/turns` — each success emits `route: "twin_dialogue_turn"` / `"twin_dialogue_turns"` with expected `waia_db_backend`.
+- [ ] After **DEE-95h:** smoke `POST /api/dashboard/twin-dialogue/turn` and `GET /api/dashboard/twin-dialogue/turns` — each success emits `route: "twin_dialogue_turn"` / `"twin_dialogue_turns"` with expected `waia_db_backend`. (**Also listed in §B**.)
 - [ ] CI noise understood — filter test workers if needed.
 
 ## D. Before a migration wave PR merges to staging

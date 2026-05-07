@@ -6,7 +6,7 @@
 
 **Prerequisites:** [`DEE-95f`](../../lib/observability/waia-runtime-route-telemetry.ts) is merged — structured **`waia_runtime_route`** events exist on runtime-aware routes only. [`DEE-95E-OPERATIONAL-READINESS-PLAN.md`](./DEE-95E-OPERATIONAL-READINESS-PLAN.md) remains the program-level rollout plan; this document narrows to **reading and acting on stdout telemetry**.
 
-**Split-runtime context:** Many APIs still use `getDb()` only; they **do not** emit `waia_runtime_route`. Absence of telemetry on those paths is expected until migrated.
+**Split-runtime context:** Routes not yet wired through **`getWaiaRuntimeDb()`** (auth, diary, standalone twin reasoning APIs, OAuth helpers, **dashboard RSC direct `getDb()`**) **do not** emit `waia_runtime_route`. Twin-dialogue **HTTP** routes (**DEE-95h**) **do** emit; SSR hydrate may still bypass telemetry until that path migrates.
 
 ---
 
@@ -149,4 +149,4 @@ WAIA intentionally keeps telemetry **vendor-neutral**: one JSON line per event. 
 | Version | Slice | Notes |
 |---------|--------|------|
 | 1.0 | DEE-95g | Initial runbook for stdout `waia_runtime_route` telemetry. |
-| 1.1 | DEE-95h | Route keys `twin_dialogue_turn`, `twin_dialogue_turns`; clarify JSON-500 vs rethrow handlers. |
+| 1.1 | DEE-95h | Route keys `twin_dialogue_turn`, `twin_dialogue_turns`; clarify JSON-500 vs rethrow handlers; split-runtime note reflects twin-dialogue HTTP migrated. |
