@@ -25,7 +25,8 @@
 ## C. Telemetry sanity
 
 - [ ] Log pipeline shows newline JSON (not double-encoded).
-- [ ] No expectation of `waia_runtime_route` on **`getDb()`-only** routes (dialogue, diary, auth, etc.) until migrated.
+- [ ] No expectation of `waia_runtime_route` on **`getDb()`-only** routes (diary, auth, standalone prediction APIs, dashboard RSC `getDb()` reads, etc.) until migrated.
+- [ ] After **DEE-95h:** smoke `POST /api/dashboard/twin-dialogue/turn` and `GET /api/dashboard/twin-dialogue/turns` — each success emits `route: "twin_dialogue_turn"` / `"twin_dialogue_turns"` with expected `waia_db_backend`.
 - [ ] CI noise understood — filter test workers if needed.
 
 ## D. Before a migration wave PR merges to staging

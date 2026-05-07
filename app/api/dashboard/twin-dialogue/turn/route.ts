@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import type { TwinDialogueTurnSubmitApiResponse } from "@/lib/dashboard/twin-dialogue-turn-api.types";
 import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
 import {
-  countUserDialogueTurns,
-  ensureUserTwinSeed,
-  persistUserTwinExchangeWithAssistantStub,
-} from "@/lib/twin-persistence/loader";
+  emitWaiaRuntimeRouteTelemetry,
+  isWaiaConfigError,
+  safeTelemetryErrorClass,
+} from "@/lib/observability/waia-runtime-route-telemetry";
+import { resolveTwinPersistence } from "@/lib/persistence/runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -90,47 +92,97 @@ export async function POST(request: Request) {
     idempotencyKey = trimmedKey.length > 0 ? trimmedKey : null;
   }
 
-  const db = getDb();
-  const twinProfileId = ensureUserTwinSeed(db, userId);
+  let resolvedRuntime: WaiaRuntimeDb | undefined;
+  const telemetryStart = Date.now();
+  try {
+    const runtime = await getWaiaRuntimeDb();
+    resolvedRuntime = runtime;
 
-  const persisted = await persistUserTwinExchangeWithAssistantStub(db, {
-    twinProfileId,
-    userContent: trimmed,
-    userIdempotencyKey: idempotencyKey ?? null,
-    assistantContent: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
-  });
+    let twinProfileId: string;
+    let persisted: {
+      userTurn: { id: string; sequence: number; createdAt: Date; content: string };
+      assistantTurn: { id: string; sequence: number; createdAt: Date; content: string } | null;
+    };
+    let userTurnCount: number;
 
-  const userTurnCount = await countUserDialogueTurns(db, twinProfileId);
-  const twinSignals = {
-    hasMeaningfulExchange: userTurnCount > 0,
-  };
+    if (runtime.kind === "sqlite") {
+      const p = resolveTwinPersistence(runtime);
+      twinProfileId = p.ensureUserTwinSeed(userId);
+      persisted = await p.persistUserTwinExchangeWithAssistantStub({
+        twinProfileId,
+        userContent: trimmed,
+        userIdempotencyKey: idempotencyKey ?? null,
+        assistantContent: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+      });
+      userTurnCount = await p.countUserDialogueTurns(twinProfileId);
+    } else {
+      const p = resolveTwinPersistence(runtime);
+      twinProfileId = await p.ensureUserTwinSeed(userId);
+      persisted = await p.persistUserTwinExchangeWithAssistantStub({
+        twinProfileId,
+        userContent: trimmed,
+        userIdempotencyKey: idempotencyKey ?? null,
+        assistantContent: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+      });
+      userTurnCount = await p.countUserDialogueTurns(twinProfileId);
+    }
 
-  const at = persisted.assistantTurn;
+    const twinSignals = {
+      hasMeaningfulExchange: userTurnCount > 0,
+    };
 
-  const body: TwinDialogueTurnSubmitApiResponse = {
-    userTurn: {
-      id: persisted.userTurn.id,
-      sequence: persisted.userTurn.sequence,
-      role: "user",
-      content: persisted.userTurn.content,
-      createdAt: persisted.userTurn.createdAt.toISOString(),
-    },
-    assistantTurn:
-      at != null
-        ? {
-            id: at.id,
-            sequence: at.sequence,
-            role: "assistant",
-            content: at.content,
-            createdAt: at.createdAt.toISOString(),
-          }
-        : null,
-    twinSignals,
-    assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
-  };
+    const at = persisted.assistantTurn;
 
-  return NextResponse.json(body, {
-    status: 200,
-    headers: { "Cache-Control": "private, no-store" },
-  });
+    const body: TwinDialogueTurnSubmitApiResponse = {
+      userTurn: {
+        id: persisted.userTurn.id,
+        sequence: persisted.userTurn.sequence,
+        role: "user",
+        content: persisted.userTurn.content,
+        createdAt: persisted.userTurn.createdAt.toISOString(),
+      },
+      assistantTurn:
+        at != null
+          ? {
+              id: at.id,
+              sequence: at.sequence,
+              role: "assistant",
+              content: at.content,
+              createdAt: at.createdAt.toISOString(),
+            }
+          : null,
+      twinSignals,
+      assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+    };
+
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "twin_dialogue_turn",
+      waia_db_backend: runtime.kind,
+      http_status: 200,
+      outcome: "success",
+      duration_ms: Date.now() - telemetryStart,
+    });
+
+    return NextResponse.json(body, {
+      status: 200,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (err) {
+    const outcome =
+      !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "twin_dialogue_turn",
+      waia_db_backend: resolvedRuntime?.kind,
+      http_status: 500,
+      outcome,
+      duration_ms: Date.now() - telemetryStart,
+      error_class: safeTelemetryErrorClass(err),
+    });
+    return NextResponse.json(
+      validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."),
+      { status: 500 },
+    );
+  }
 }

@@ -68,6 +68,7 @@ Merged on dev: c170fb6 / PR #89. Deliverable docs/migrations/DEE-94-ASYNC-TWIN-E
 | **95e** | Operational readiness **planning**: [`DEE-95E-OPERATIONAL-READINESS-PLAN.md`](./DEE-95E-OPERATIONAL-READINESS-PLAN.md) (Linear **DEE-100**) | `2cf1b26` — PR **#98** |
 | **95f** | Stdout **`waia_runtime_route`** telemetry for runtime-aware routes (Linear **DEE-101**) | `f0cd379` — PR **#99** |
 | **95g** | Telemetry **ops docs**: runbook, log-dashboard spec, staging checklist (Linear **DEE-102**); **docs-only** | `34b092d` — PR **#100** |
+| **95h** | Twin-dialogue **`POST …/turn`** + **`GET …/turns`** use **`getWaiaRuntimeDb`** + **`resolveTwinPersistence`** + **`waia_runtime_route`** (`twin_dialogue_turn` / `twin_dialogue_turns`) | Linear **DEE-104** — merge SHA recorded after PR lands |
 
 **Umbrella / program:** **DEE-92** (WAIA architectural migration log) remains **In Progress**.
 

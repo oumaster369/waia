@@ -36,6 +36,8 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **DEE-95g** adds **operational scaffolding** for that telemetry (docs only): operator [**runbook**](./DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md), [**log-derived dashboard spec**](./DEE-95G-LOG-DASHBOARD-SPEC.md) (implementation TBD), and [**staging checklist**](./DEE-95G-STAGING-CHECKLIST.md). **Does not** add vendors, metric backends, tracing, or route migrations.
 
+**DEE-95h** (Linear **DEE-104**) wires **`POST /api/dashboard/twin-dialogue/turn`** and **`GET /api/dashboard/twin-dialogue/turns`** through **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** (aligned with Twin Engine when `WAIA_DB_BACKEND=postgres`), and emits **`waia_runtime_route`** for route keys **`twin_dialogue_turn`** / **`twin_dialogue_turns`**. **Does not** migrate dashboard RSC reads (`app/dashboard/page.tsx` still uses `getDb()` for dialogue/diary hydrate — **follow-up slice** to close split-brain in Postgres mode), auth, diary writer routes, or standalone reasoning APIs.
+
 ## Completed Slices
 
 ### D1
@@ -93,6 +95,10 @@ production callers
 - `runWaiaTransactionOnRuntime(handle, fn)` — `handle` from `getWaiaRuntimeDb()` / `WaiaRuntimeDb`; **`fn` remains `WaiaSqliteTransactionCallback` (SQLite-shaped, synchronous)**. SQLite delegates to the legacy facade; Postgres rejects before `fn` runs.
 
 ## Remaining Work
+
+### Runtime HTTP layer (post–DEE-95h)
+
+- **`app/dashboard/page.tsx`** SSR hydrate still uses **`getDb()`** for Twin dialogue and diary listing — **residual split-brain** when `WAIA_DB_BACKEND=postgres` until this path uses **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** or consumes only runtime-aware APIs.
 
 ### D5 (remainder after D5a)
 

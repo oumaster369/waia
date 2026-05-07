@@ -79,7 +79,7 @@ This document treats **broad rollout** as the **program gated outcome** — not 
 
 **Privacy:** Do **not** log raw scenario / diary text in production unless explicitly approved ([`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](./DEE-95-RUNTIME-ROUTING-STRATEGY.md) §11; DEE-95B §8).
 
-**Implementation note:** **DEE-95f** implements **minimal** structured logs (`event: waia_runtime_route`) from the five `getWaiaRuntimeDb`-aware API routes via [`lib/observability/waia-runtime-route-telemetry.ts`](../../lib/observability/waia-runtime-route-telemetry.ts): backend (from resolved handle), route key, outcome, `duration_ms`, `http_status`, `error_class` (`Error.prototype.name` only). **No** raw scenario/diary text, **no** external vendors. **DEE-95g** documents how operators use these logs ([runbook](./DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md), [dashboard spec](./DEE-95G-LOG-DASHBOARD-SPEC.md), [staging checklist](./DEE-95G-STAGING-CHECKLIST.md)). **Remaining:** live dashboards in your log stack, sampling, correlation IDs, numeric SLOs with ops, and broader route coverage per §4 / §11.
+**Implementation note:** **DEE-95f** implements **minimal** structured logs (`event: waia_runtime_route`) from the **`getWaiaRuntimeDb`-aware API routes** at that slice (initially five handlers; route keys expand as migration waves land — see [`WaiaRuntimeRouteKey`](../../lib/observability/waia-runtime-route-telemetry.ts)) via [`lib/observability/waia-runtime-route-telemetry.ts`](../../lib/observability/waia-runtime-route-telemetry.ts): backend (from resolved handle), route key, outcome, `duration_ms`, `http_status`, `error_class` (`Error.prototype.name` only). **No** raw scenario/diary text, **no** external vendors. **DEE-95g** documents how operators use these logs ([runbook](./DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md), [dashboard spec](./DEE-95G-LOG-DASHBOARD-SPEC.md), [staging checklist](./DEE-95G-STAGING-CHECKLIST.md)). **Remaining:** live dashboards in your log stack, sampling, correlation IDs, numeric SLOs with ops, and broader route coverage per §4 / §11.
 
 **Log vs HTTP triage:** Some **`config_error`** logs (e.g. invalid `WAIA_DB_BACKEND`) may still map to **HTTP 500** on routes that use a generic error envelope — logs are **triage-forward** until response mapping is refined in a later slice.
 
@@ -233,7 +233,7 @@ Routes under `app/api` still using **`getDb()`** directly (as of this planning s
 | Area | Paths | Risk note |
 |------|-------|-----------|
 | Auth | `sign-in`, `sign-up`, `sign-out` | User/session store; orthogonal to twin engine but part of same app |
-| Twin dialogue | `twin-dialogue/turn`, `twin-dialogue/turns` | Core twin memory — **high** alignment priority if dashboard uses Postgres for engine |
+| Twin dialogue | `twin-dialogue/turn`, `twin-dialogue/turns` | **Runtime-wired (DEE-95h):** `getWaiaRuntimeDb` + telemetry at API boundary. **`app/dashboard/page.tsx` SSR hydrate** may still read SQLite via `getDb()` — treat as **residual split-brain** until that path is migrated or refactored to API-only data |
 | Twin reasoning APIs | `twin/prediction`, `twin/pattern-summary`, `twin/contradictions` | **High** — can disagree with engine inputs on Postgres |
 | Diary | `diary/entries`, `diary/scenario-answers` | **High** for persona readiness — engine may read diary from Postgres persistence paths internally |
 
@@ -243,7 +243,7 @@ Prioritization for **implementation waves** should be tracked in the tracker / L
 
 ## 20. Remaining architectural debt
 
-- **Partial runtime coverage:** Only the four routes above use `getWaiaRuntimeDb` at the HTTP layer; others remain SQLite-singleton assumptions.
+- **Partial runtime coverage:** Twin Engine, prediction verification / verifications, repeatability, health/database, and **twin-dialogue turn + turns** use `getWaiaRuntimeDb` at the HTTP layer; others remain SQLite-singleton assumptions; dashboard RSC may still call `getDb()` for dialogue/diary listing.
 - **No `runWaiaTransaction`:** By design (DEE-64); SQLite + Postgres transaction helpers remain separate.
 - **No backend-neutral repositories:** `SqliteTwinPersistence` / `PostgresTwinPersistence` via `resolveTwinPersistence` — intentional.
 - **Naming / orchestration debt:** “`runTwinEngineAsync`” as a future umbrella rename remains deferred; facade is `runTwinEngineForRuntimeAsync`.
@@ -308,3 +308,4 @@ Each step is a **separate PR** to `dev`; this planning doc does **not** implemen
 | 1.0 | DEE-95e | Initial **operational readiness planning** (governance, telemetry expectations, rollout/rollback, inventory — **no** code changes). |
 | 1.1 | DEE-95f | **Backend attribution telemetry:** stdout JSON from runtime-aware routes + helper; **no** broad Postgres rollout or `getDb()` migration. |
 | 1.2 | DEE-95g | **Telemetry ops docs:** runbook, log-derived dashboard spec, staging checklist — **no** vendors, **no** in-app dashboards. |
+| 1.3 | DEE-95h | Twin-dialogue **`turn` / `turns`** runtime wiring + telemetry route keys; inventory §19 / §20 alignment; dashboard SSR residual split-brain called out. |
