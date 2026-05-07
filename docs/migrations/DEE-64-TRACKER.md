@@ -32,6 +32,8 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **DEE-95e** adds [**operational readiness planning**](./DEE-95E-OPERATIONAL-READINESS-PLAN.md): telemetry expectations, rollback/kill-switch, rollout stages, gating criteria, health/integration strategy, remaining `getDb()` route inventory, success criteria for Postgres production readiness — **planning only**; **does not** implement observability code, change runtime behavior, or enable broad Postgres rollout.
 
+**DEE-95f** adds **backend attribution telemetry** for `getWaiaRuntimeDb`-aware routes: one **stdout JSON** line per handled request (`waia_runtime_route`) with `waia_db_backend`, route key, outcome, `duration_ms`, `http_status`, optional `error_class` — [`lib/observability/waia-runtime-route-telemetry.ts`](../../lib/observability/waia-runtime-route-telemetry.ts) + Twin Engine / verification / verifications / repeatability / health/database handlers. **Does not** enable broad Postgres rollout, migrate remaining `getDb()` routes, add external observability vendors, or change response JSON contracts.
+
 ## Completed Slices
 
 ### D1

@@ -19,6 +19,9 @@
 - Runtime handle: [`db/waia-runtime-db.ts`](../../db/waia-runtime-db.ts), [`db/runtime-backend.ts`](../../db/runtime-backend.ts)
 - Facade: [`lib/reasoning/twin-engine-runtime.ts`](../../lib/reasoning/twin-engine-runtime.ts)
 - Health probe: [`app/api/health/database/route.ts`](../../app/api/health/database/route.ts)
+- **DEE-95f:** Route telemetry helper: [`lib/observability/waia-runtime-route-telemetry.ts`](../../lib/observability/waia-runtime-route-telemetry.ts)
+
+**Implementation status:** **DEE-95f** adds **stdout JSON** backend attribution logs for Twin Engine, verification, verifications, repeatability, and health/database routes (see §4–§5). **Does not** satisfy full operational readiness, metrics, staging alerts, or broad Postgres rollout.
 
 ---
 
@@ -75,7 +78,9 @@ This document treats **broad rollout** as the **program gated outcome** — not 
 
 **Privacy:** Do **not** log raw scenario / diary text in production unless explicitly approved ([`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](./DEE-95-RUNTIME-ROUTING-STRATEGY.md) §11; DEE-95B §8).
 
-**Implementation note:** Today, runtime-wired routes do not uniformly emit structured telemetry — **implementation is a follow-up slice**, not this planning PR.
+**Implementation note:** **DEE-95f** implements **minimal** structured logs (`event: waia_runtime_route`) from the five `getWaiaRuntimeDb`-aware API routes via [`lib/observability/waia-runtime-route-telemetry.ts`](../../lib/observability/waia-runtime-route-telemetry.ts): backend (from resolved handle), route key, outcome, `duration_ms`, `http_status`, `error_class` (`Error.prototype.name` only). **No** raw scenario/diary text, **no** external vendors. **Remaining:** sampling, correlation IDs, metrics, dashboards, and broader route coverage per §4 / §11.
+
+**Log vs HTTP triage:** Some **`config_error`** logs (e.g. invalid `WAIA_DB_BACKEND`) may still map to **HTTP 500** on routes that use a generic error envelope — logs are **triage-forward** until response mapping is refined in a later slice.
 
 ---
 
@@ -277,7 +282,7 @@ Engineering and ops **jointly** record sign-off when:
 
 ## 24. Recommended execution sequencing after 95e
 
-1. **Implementation slice:** Structured logging/metrics for the four runtime routes + shared helper.
+1. **Implementation slice (partial — DEE-95f):** Structured **stdout JSON** logging for Twin Engine, verification, verifications, repeatability, health/database + shared helper. **Still open:** metrics, sampling, correlation IDs, staging dashboards.
 2. **Staging hardening:** Dashboards, alerts, health integration, runbook v1.
 3. **Route migration waves:** Dialogue / prediction / pattern / contradictions / diary — one slice per PR where possible.
 4. **Expand integration CI:** Coherence chains and optional nightly Postgres job.
@@ -300,3 +305,4 @@ Each step is a **separate PR** to `dev`; this planning doc does **not** implemen
 | Version | Slice | Notes |
 |---------|--------|------|
 | 1.0 | DEE-95e | Initial **operational readiness planning** (governance, telemetry expectations, rollout/rollback, inventory — **no** code changes). |
+| 1.1 | DEE-95f | **Backend attribution telemetry:** stdout JSON from runtime-aware routes + helper; **no** broad Postgres rollout or `getDb()` migration. |
