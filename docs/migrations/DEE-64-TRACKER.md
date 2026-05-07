@@ -28,6 +28,8 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **DEE-95c** wires **`POST /api/dashboard/twin/engine`** to **`getWaiaRuntimeDb()`** + **`runTwinEngineForRuntimeAsync`**: runtime facade dispatch with **SQLite default** when `WAIA_DB_BACKEND` is unset or `sqlite`. **Does not** migrate verification or repeatability routes (**DEE-95d** still required before treating Postgres-backed Twin Engine traffic as fully aligned with those writers; see DEE-93 / strategy §9).
 
+**DEE-95d** adds [**runtime route alignment planning**](./DEE-95D-RUNTIME-ALIGNMENT-PLAN.md): strategy for aligning **`POST …/prediction/verification`**, **`GET …/prediction/verifications`**, and **`GET …/repeatability`** with `getWaiaRuntimeDb` / Postgres parity — **planning only**; **does not** migrate routes or change runtime behavior.
+
 ## Completed Slices
 
 ### D1

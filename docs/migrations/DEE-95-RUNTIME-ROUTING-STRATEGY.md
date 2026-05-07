@@ -220,7 +220,7 @@ DEE-94 is the **non-negotiable** design reference for the **next** implementatio
 | **95a** | Implement async **facade** `(WaiaRuntimeDb, TwinEngineRunInput) => Promise<TwinEngineApiResponse>` per DEE-94 — **landed** in [`lib/reasoning/twin-engine-runtime.ts`](../../lib/reasoning/twin-engine-runtime.ts) (library only; route wiring remains **95c**). |
 | **95b** | Facade **hardening program** + parity/observability criteria: [`DEE-95B-RUNTIME-FACADE-HARDENING.md`](DEE-95B-RUNTIME-FACADE-HARDENING.md); optional follow-up PRs for extra unit/integration tests; default path still SQLite |
 | **95c** | Wire `POST …/twin/engine` through **`getWaiaRuntimeDb`** + **`runTwinEngineForRuntimeAsync`**; **default SQLite** when `WAIA_DB_BACKEND` is unset or `sqlite`; Postgres only when `WAIA_DB_BACKEND=postgres` with valid Postgres env (**landed** in [`app/api/dashboard/twin/engine/route.ts`](../../app/api/dashboard/twin/engine/route.ts)). **DEE-95d** still required before broad Postgres rollout with sibling routes aligned. |
-| **95d** | Migrate **`POST …/prediction/verification`** + **`GET …/repeatability`** to match engine backend |
+| **95d** | Align **`POST …/prediction/verification`**, **`GET …/prediction/verifications`**, and **`GET …/repeatability`** with engine backend — **planning:** [`DEE-95D-RUNTIME-ALIGNMENT-PLAN.md`](DEE-95D-RUNTIME-ALIGNMENT-PLAN.md); implementation slice(s) follow |
 | **95e** | Observability, runbooks, staged rollout, kill-switch validation |
 
 Exact PR boundaries are team choice; **phases must not skip** writer alignment unless risk is accepted.
@@ -266,3 +266,4 @@ Exact PR boundaries are team choice; **phases must not skip** writer alignment u
 | 1.0 | DEE-95 | Initial runtime routing strategy (planning only). |
 | 1.1 | DEE-95a | **95a facade** implemented (`runTwinEngineForRuntimeAsync`); production route unchanged. |
 | 1.3 | DEE-95c | **95c route wiring:** `POST …/twin/engine` uses `getWaiaRuntimeDb` + `runTwinEngineForRuntimeAsync`; default SQLite. |
+| 1.4 | DEE-95d | **95d planning:** [`DEE-95D-RUNTIME-ALIGNMENT-PLAN.md`](DEE-95D-RUNTIME-ALIGNMENT-PLAN.md) (verification + repeatability route alignment; no route migration in planning PR). |
