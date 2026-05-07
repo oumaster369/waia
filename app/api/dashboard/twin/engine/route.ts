@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { MAX_SCENARIO_CHARS } from "@/lib/dashboard/twin-contradiction-detector-api.types";
-import {
-  runTwinEngine,
-  TwinEngineScenarioTooLongError,
-} from "@/lib/reasoning/twin-engine";
+import { TwinEngineScenarioTooLongError } from "@/lib/reasoning/twin-engine";
+import { runTwinEngineForRuntimeAsync } from "@/lib/reasoning/twin-engine-runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -75,9 +73,9 @@ export async function POST(request: Request) {
     includePrediction = parsed.includePrediction;
   }
 
-  const db = getDb();
   try {
-    const body = runTwinEngine(db, {
+    const runtimeDb = await getWaiaRuntimeDb();
+    const body = await runTwinEngineForRuntimeAsync(runtimeDb, {
       userId,
       scenario,
       includePrediction,

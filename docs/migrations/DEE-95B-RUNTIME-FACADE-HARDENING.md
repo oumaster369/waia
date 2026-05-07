@@ -28,7 +28,9 @@
 | `sqlite` | Calls synchronous `runTwinEngine(handle.db, input)` inside an `async` function — return value is the same `TwinEngineApiResponse` as today. |
 | `postgres` | Calls `resolveTwinPersistence(handle)` → `PostgresTwinPersistence`, then `runTwinEnginePostgresAsync(persistence, input)`. |
 
-**Production:** [`app/api/dashboard/twin/engine/route.ts`](../../app/api/dashboard/twin/engine/route.ts) is **unchanged**: it uses `getDb()` and `runTwinEngine` directly. No `getWaiaRuntimeDb()`, no facade import.
+**Production:** [`app/api/dashboard/twin/engine/route.ts`](../../app/api/dashboard/twin/engine/route.ts) uses **`getWaiaRuntimeDb()`** and **`runTwinEngineForRuntimeAsync`** (**DEE-95c**). Sibling routes (verification, repeatability) remain on their prior SQLite/runtime paths until **DEE-95d**.
+
+**Before 95c (historical):** the route used `getDb()` and `runTwinEngine` directly.
 
 **Tests shipped in 95a:** SQLite parity (empty scenario path) vs direct `runTwinEngine`; SQLite `TwinEngineScenarioTooLongError`; Postgres delegation via mocked `runTwinEnginePostgresAsync`; Postgres scenario-too-long via real async path after persistence resolution.
 

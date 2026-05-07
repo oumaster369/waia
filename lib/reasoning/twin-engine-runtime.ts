@@ -3,7 +3,7 @@ import "server-only";
 /**
  * DEE-95a: Runtime dispatch facade for Twin Engine — async boundary per DEE-94 / DEE-95.
  * SQLite delegates to sync {@link runTwinEngine}; Postgres to {@link runTwinEnginePostgresAsync}.
- * Production HTTP route remains on {@link runTwinEngine} until an explicit wiring slice (95c).
+ * Production HTTP route uses this facade via `getWaiaRuntimeDb` + `runTwinEngineForRuntimeAsync` (DEE-95c).
  */
 
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
