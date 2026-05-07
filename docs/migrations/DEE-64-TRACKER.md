@@ -20,6 +20,8 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **DEE-94** adds the planning document for a **future runtime-dispatched Twin Engine** facade (async boundary, SQLite wrap + Postgres `await`, sequential guarantee, parallelization policy): [`DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md`](DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md). **Does not** implement routing or new orchestration code.
 
+**DEE-95** adds the **runtime routing strategy** for backend migration (dispatch boundary, env/rollback, alignment requirements, phased implementation — **planning only**): [`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](DEE-95-RUNTIME-ROUTING-STRATEGY.md). **Does not** wire `POST /api/dashboard/twin/engine` or change production behavior.
+
 ## Completed Slices
 
 ### D1
@@ -91,7 +93,7 @@ production callers
 
 ### DEE-72
 
-- **DEE-72.1 / DEE-72.2 / DEE-72.3:** Postgres-specific **`PostgresTwinPersistence`** (twin/diary + **prediction verifications** + **read-only memory search**) + resolver enablement + opt-in integration tests. **DEE-72.4:** narrow **reasoning retrieval ports** + **`*Async`** reasoning functions (additive; callers opt in). **DEE-72.4b:** **Postgres-only** opt-in integration tests for **async prediction** + **async pattern summary** via ports (`postgres-twin-reasoning-prediction.test.ts`). **DEE-72.5:** **`PostgresTwinPersistence`** repeatability append + analyze + **`analyzeRepeatabilityForUserAsync`**; opt-in coverage in **`postgres-twin-persistence.test.ts`**. **DEE-72.6:** additive **`runTwinEnginePostgresAsync`** (`twin-engine-postgres.ts`) — **not** production-wired. **DEE-93:** repeatability migration audit — [`DEE-93-REPEATABILITY-MIGRATION-AUDIT.md`](DEE-93-REPEATABILITY-MIGRATION-AUDIT.md). **DEE-94:** async Twin Engine orchestration **plan** (facade design, sequential/parallel policy) — [`DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md`](DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md). **Still not done:** production route migration (**DEE-95+**); Postgres writer paths for verification/repeatability GET aligned with engine reads; **implementation** of unified runtime Twin Engine facade per DEE-94; neutral `runWaiaTransaction`.
+- **DEE-72.1 / DEE-72.2 / DEE-72.3:** Postgres-specific **`PostgresTwinPersistence`** (twin/diary + **prediction verifications** + **read-only memory search**) + resolver enablement + opt-in integration tests. **DEE-72.4:** narrow **reasoning retrieval ports** + **`*Async`** reasoning functions (additive; callers opt in). **DEE-72.4b:** **Postgres-only** opt-in integration tests for **async prediction** + **async pattern summary** via ports (`postgres-twin-reasoning-prediction.test.ts`). **DEE-72.5:** **`PostgresTwinPersistence`** repeatability append + analyze + **`analyzeRepeatabilityForUserAsync`**; opt-in coverage in **`postgres-twin-persistence.test.ts`**. **DEE-72.6:** additive **`runTwinEnginePostgresAsync`** (`twin-engine-postgres.ts`) — **not** production-wired. **DEE-93:** repeatability migration audit — [`DEE-93-REPEATABILITY-MIGRATION-AUDIT.md`](DEE-93-REPEATABILITY-MIGRATION-AUDIT.md). **DEE-94:** async Twin Engine orchestration **plan** — [`DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md`](DEE-94-ASYNC-TWIN-ENGINE-ORCHESTRATION-PLAN.md). **DEE-95:** runtime routing **strategy** (planning) — [`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](DEE-95-RUNTIME-ROUTING-STRATEGY.md). **Still not done:** **implementation** of production route migration / unified async facade per DEE-94 + DEE-95 phases; Postgres writer paths for verification/repeatability GET aligned with engine reads; neutral `runWaiaTransaction`.
 
 ### DEE-85
 
@@ -128,5 +130,6 @@ production callers
 ## Related Docs
 
 - [Linear closeout handoff (DEE-72.6 / DEE-93 / DEE-94)](DEE-64-LINEAR-CLOSEOUT.md)
+- [Runtime routing strategy (DEE-95 planning)](DEE-95-RUNTIME-ROUTING-STRATEGY.md)
 - [Postgres development / migrations (D6-pre)](../postgres-development.md)
 - [Transaction architecture contract](../architecture/transactions.md)
