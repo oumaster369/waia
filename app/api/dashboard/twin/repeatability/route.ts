@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import type { TwinRepeatabilityApiResponse } from "@/lib/dashboard/twin-repeatability-api.types";
+import { resolveTwinPersistence } from "@/lib/persistence/runtime";
 import { analyzeRepeatability } from "@/lib/reasoning/twin-repeatability-analyzer";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +25,11 @@ export async function GET(request: Request) {
   const scenarioText =
     scenarioParam != null && scenarioParam.trim().length > 0 ? scenarioParam : undefined;
 
-  const db = getDb();
-  const body: TwinRepeatabilityApiResponse = analyzeRepeatability(db, userId, {
-    scenarioText,
-  });
+  const runtime = await getWaiaRuntimeDb();
+  const body: TwinRepeatabilityApiResponse =
+    runtime.kind === "sqlite"
+      ? analyzeRepeatability(runtime.db, userId, { scenarioText })
+      : await resolveTwinPersistence(runtime).analyzeRepeatabilityForUser(userId, { scenarioText });
 
   return NextResponse.json(body, {
     status: 200,

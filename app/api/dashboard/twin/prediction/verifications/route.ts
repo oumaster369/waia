@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import type { TwinPredictionVerificationListApiResponse } from "@/lib/dashboard/twin-prediction-verification-api.types";
 import { TWIN_PREDICTION_VERIFICATION_SCHEMA_VERSION } from "@/lib/dashboard/twin-prediction-verification-api.types";
+import { resolveTwinPersistence } from "@/lib/persistence/runtime";
 import { listTwinPredictionVerificationsForUser } from "@/lib/twin-persistence/twin-prediction-verifications";
 
 export const dynamic = "force-dynamic";
@@ -38,8 +39,11 @@ export async function GET(request: Request) {
     limit = n;
   }
 
-  const db = getDb();
-  const verifications = listTwinPredictionVerificationsForUser(db, userId, limit);
+  const runtime = await getWaiaRuntimeDb();
+  const verifications =
+    runtime.kind === "sqlite"
+      ? listTwinPredictionVerificationsForUser(runtime.db, userId, limit)
+      : await resolveTwinPersistence(runtime).listTwinPredictionVerificationsForUser(userId, limit);
 
   const body: TwinPredictionVerificationListApiResponse = {
     schemaVersion: TWIN_PREDICTION_VERIFICATION_SCHEMA_VERSION,

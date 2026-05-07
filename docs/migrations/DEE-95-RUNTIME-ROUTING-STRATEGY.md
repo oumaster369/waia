@@ -131,14 +131,16 @@
 
 ## 9. Verification + repeatability alignment (DEE-93)
 
-**Problem:** Twin Engine on Postgres reads **`twin_repeatability_records`** via `analyzeRepeatabilityForUserAsync`. Today, **`POST …/prediction/verification`** and **`GET …/repeatability`** use **`getDb()`** + SQLite paths.
+**Problem (historical):** Twin Engine on Postgres reads **`twin_repeatability_records`** via `analyzeRepeatabilityForUserAsync`. Until **DEE-95d**, **`POST …/prediction/verification`** and **`GET …/repeatability`** (and **`GET …/verifications`**) used **`getDb()`** + SQLite-only paths while **`WAIA_DB_BACKEND=postgres`**, risking stale or empty aggregates vs the engine store.
 
-**If** Twin Engine routes to Postgres **without** migrating those writers:
+**Post DEE-95d:** those three dashboard routes use **`getWaiaRuntimeDb()`** with the same policy as **`POST …/twin/engine`**. **Other** APIs may still be SQLite-only until individually migrated.
+
+**If** Twin Engine routes to Postgres **without** migrating those writers (**resolved for the three routes above**; **still** a risk for other routes):
 
 - Repeatability aggregates on Postgres can be **empty** or **stale** vs user actions.
 - Personality inputs that depend on repeatability **skew**.
 
-**Requirement for any Postgres-first Twin Engine rollout:** Either (**a**) migrate verification + repeatability **read** routes in the **same program phase** as the engine, or (**b**) document **explicit** product acceptance of wrong/stale repeatability until follow-up (not recommended for production without sign-off).
+**Requirement for any Postgres-first Twin Engine rollout:** Either (**a**) migrate verification + repeatability **read** routes in the **same program phase** as the engine, or (**b**) document **explicit** product acceptance of wrong/stale repeatability until follow-up (not recommended for production without sign-off). **DEE-95d satisfies (a)** for **`POST …/verification`**, **`GET …/verifications`**, and **`GET …/repeatability`** only.
 
 ---
 
@@ -207,7 +209,7 @@ DEE-94 is the **non-negotiable** design reference for the **next** implementatio
 
 ## 16. What must NOT migrate together
 
-- **Postgres Twin Engine dispatch** without **verification / repeatability** alignment (DEE-93), unless explicitly accepted.
+- **Postgres Twin Engine dispatch** without **verification / repeatability dashboard route** alignment (**DEE-93**) — **mitigated for** `POST …/prediction/verification`, **`GET …/verifications`**, **`GET …/repeatability`** by **DEE-95d**; **other** routes may still require phased work unless risk is explicitly accepted.
 - **Route dispatch** + introduction of **`runWaiaTransaction`** or **`Promise.all`** orchestration refactors (forbidden per current program guardrails).
 - **Global** “neutral repository” replacing `SqliteTwinPersistence` / `PostgresTwinPersistence` with untyped stores.
 
@@ -219,8 +221,8 @@ DEE-94 is the **non-negotiable** design reference for the **next** implementatio
 |-------|-------------|
 | **95a** | Implement async **facade** `(WaiaRuntimeDb, TwinEngineRunInput) => Promise<TwinEngineApiResponse>` per DEE-94 — **landed** in [`lib/reasoning/twin-engine-runtime.ts`](../../lib/reasoning/twin-engine-runtime.ts) (library only; route wiring remains **95c**). |
 | **95b** | Facade **hardening program** + parity/observability criteria: [`DEE-95B-RUNTIME-FACADE-HARDENING.md`](DEE-95B-RUNTIME-FACADE-HARDENING.md); optional follow-up PRs for extra unit/integration tests; default path still SQLite |
-| **95c** | Wire `POST …/twin/engine` through **`getWaiaRuntimeDb`** + **`runTwinEngineForRuntimeAsync`**; **default SQLite** when `WAIA_DB_BACKEND` is unset or `sqlite`; Postgres only when `WAIA_DB_BACKEND=postgres` with valid Postgres env (**landed** in [`app/api/dashboard/twin/engine/route.ts`](../../app/api/dashboard/twin/engine/route.ts)). **DEE-95d** still required before broad Postgres rollout with sibling routes aligned. |
-| **95d** | Align **`POST …/prediction/verification`**, **`GET …/prediction/verifications`**, and **`GET …/repeatability`** with engine backend — **planning:** [`DEE-95D-RUNTIME-ALIGNMENT-PLAN.md`](DEE-95D-RUNTIME-ALIGNMENT-PLAN.md); implementation slice(s) follow |
+| **95c** | Wire `POST …/twin/engine` through **`getWaiaRuntimeDb`** + **`runTwinEngineForRuntimeAsync`**; **default SQLite** when `WAIA_DB_BACKEND` is unset or `sqlite`; Postgres only when `WAIA_DB_BACKEND=postgres` with valid Postgres env (**landed** in [`app/api/dashboard/twin/engine/route.ts`](../../app/api/dashboard/twin/engine/route.ts)). |
+| **95d** | Align **`POST …/prediction/verification`**, **`GET …/prediction/verifications`**, and **`GET …/repeatability`** with the same runtime policy — **implementation:** `getWaiaRuntimeDb` + sqlite helpers / `resolveTwinPersistence` ([`DEE-95D-RUNTIME-ALIGNMENT-PLAN.md`](./DEE-95D-RUNTIME-ALIGNMENT-PLAN.md), Linear **DEE-99**). **Broad Postgres rollout** still requires DEE-95e / ops sign-off. |
 | **95e** | Observability, runbooks, staged rollout, kill-switch validation |
 
 Exact PR boundaries are team choice; **phases must not skip** writer alignment unless risk is accepted.
@@ -267,3 +269,4 @@ Exact PR boundaries are team choice; **phases must not skip** writer alignment u
 | 1.1 | DEE-95a | **95a facade** implemented (`runTwinEngineForRuntimeAsync`); production route unchanged. |
 | 1.3 | DEE-95c | **95c route wiring:** `POST …/twin/engine` uses `getWaiaRuntimeDb` + `runTwinEngineForRuntimeAsync`; default SQLite. |
 | 1.4 | DEE-95d | **95d planning:** [`DEE-95D-RUNTIME-ALIGNMENT-PLAN.md`](DEE-95D-RUNTIME-ALIGNMENT-PLAN.md) (verification + repeatability route alignment; no route migration in planning PR). |
+| 1.5 | DEE-95d | **95d implementation:** three dashboard routes use `getWaiaRuntimeDb` (Linear **DEE-99**). **Broad** Postgres rollout still gated on DEE-95e / ops. |
