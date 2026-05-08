@@ -23,6 +23,10 @@ Architect opens PR via GitHub UI: Compare → base `dev` → branch `dee-…`; p
 
 Agents must **not** `gh pr merge` by default workflow (see [.cursor/commands/prepare-pr](../../.cursor/commands/prepare-pr.md)).
 
+### Default PR readiness after implementation
+
+After local validation succeeds, agents **normally** finish by pushing the `dee-*` branch to `origin`, printing the **GitHub compare URL** (`dev` … feature branch), PR title/body for paste, and validation results — then **halt** for human PR open/review/merge. This is bundled into `/test-and-fix` completion; `/prepare-pr` remains for standalone retries. Same **no-merge** rule: proposing a PR URL or optionally running **`gh pr create`** does **not** grant merge authority.
+
 ### Auto-merge (humans — optional)
 
 **Maintainers** may turn on GitHub auto-merge **only** for **`T0`/`T1`** PRs that meet [`RISK-TIERS.md`](RISK-TIERS.md) merge-eligibility (checks green, no gate, no meaning shift, no runtime/migration/auth/infra in scope, no escalation). **Do not** use auto-merge for semantic/product governance changes, AI-Twin / readiness / autonomy / Society semantics, **`T2+`**, active Architect gates, or unresolved ambiguity—[`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md).

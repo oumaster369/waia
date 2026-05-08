@@ -30,4 +30,6 @@ Run the full local test suite, fix anything red, and loop until everything is gr
 - A type error points to an upstream library bug -> ask before pinning workarounds.
 - A test contradicts the plan -> stop and re-plan; do not silently change tests to make them pass.
 
-After the loop is green, hand off to `/prepare-pr`.
+After the loop is green twice, **perform PR readiness by default** — same checklist as [`/prepare-pr`](prepare-pr.md) (clean tree, push `dee-*` to `origin` with `-u` if needed, compare URL `dev...HEAD`, PR creation via that link, paste-ready title/body, report validation, **stop before merge**). No separate “now run /prepare-pr” prompt is required for normal task completion.
+
+Use `/prepare-pr` only when you need a standalone retry (e.g. push failed earlier) without re-running the full test loop.
