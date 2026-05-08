@@ -63,7 +63,20 @@ pnpm db:postgres:down
 - **DEE-72.1 / DEE-72.2 / DEE-72.3 / DEE-72.5 twin/diary/verifications/memory/repeatability persistence**: [`postgres-twin-persistence.test.ts`](../tests/integration/postgres-twin-persistence.test.ts) exercises **`PostgresTwinPersistence`** (dialogue, diary, scenario, prediction verifications append/list, **read-only memory search**, **repeatability** append + analyze, chronological reads, readiness load, rollback). Same **opt-in** gate (`WAIA_PG_INTEGRATION=1` + `DATABASE_URL_POSTGRES`). **Does not** test production runtime routing.
 - **DEE-72.4b async reasoning on Postgres**: [`postgres-twin-reasoning-prediction.test.ts`](../tests/integration/postgres-twin-reasoning-prediction.test.ts) exercises **`createTwinMemorySearchPortPostgres`** with **`runTwinPredictionForUserAsync`** and **`getTwinPatternSummaryForUserAsync`** (no SQLite `getDb()`). Same opt-in gate; **does not** claim SQLite/Postgres parity.
 - **DEE-72.6 Postgres async twin engine**: [`postgres-twin-engine.test.ts`](../tests/integration/postgres-twin-engine.test.ts) exercises **`runTwinEnginePostgresAsync`** for response shape, **`modulesRun`**, and prediction null rules (opt-in; **structural** assertions only).
+- **DEE-105 (Linear) Postgres coherence slice** (DEE-95D §14 / DEE-95E §11–§14): [`postgres-runtime-coherence.test.ts`](../tests/integration/postgres-runtime-coherence.test.ts) chains **append prediction verification → list verifications → analyze repeatability → `runTwinEnginePostgresAsync`** on a **single** **`PostgresTwinPersistence`** / `DATABASE_URL_POSTGRES` boundary. Same opt-in gate; **does not** invoke HTTP routes or change `WAIA_DB_BACKEND` defaults; **no required CI job** for Postgres.
 - **CI**: optional workflow [`.github/workflows/postgres-integration.yml`](../.github/workflows/postgres-integration.yml) runs on `workflow_dispatch` (manual) so Postgres does not slow every PR until you promote it.
+
+### Run DEE-105 coherence test locally
+
+Prerequisites: local Postgres with WAIA migrations applied (see [Local Postgres (Docker)](#local-postgres-docker) above).
+
+```bash
+export DATABASE_URL_POSTGRES='postgresql://waia_validate:waia_validate_local_only@127.0.0.1:54329/waia_validate'
+export WAIA_PG_INTEGRATION=1
+pnpm test -- tests/integration/postgres-runtime-coherence.test.ts --run
+```
+
+Unset `WAIA_PG_INTEGRATION` (or leave it unset) to confirm the default suite skips this file without requiring Postgres.
 
 ## Security and environment hygiene
 
