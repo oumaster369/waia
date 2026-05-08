@@ -7,7 +7,7 @@ Run the full local test suite, fix anything red, and loop until everything is gr
 1. Run all gates:
 
    ```bash
-   pnpm lint && pnpm typecheck && pnpm test -- --run && pnpm build
+   pnpm lint && pnpm typecheck && pnpm test --run && pnpm build
    ```
 
 2. If a gate fails:

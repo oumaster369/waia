@@ -362,7 +362,7 @@ Before opening a PR, run full validation:
 ```bash
 pnpm lint
 pnpm typecheck
-pnpm test -- --run
+pnpm test --run
 pnpm build
 ```
 

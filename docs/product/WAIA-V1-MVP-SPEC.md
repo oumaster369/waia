@@ -86,7 +86,7 @@ _Product (high level)_
 - Implemented surfaces match authoritative flow + shell docs for MVP states. **No contradiction** unlock ordering.
 
 _Engineering_  
-- Tests & CI patterns per [`AGENTS.md`](../../AGENTS.md): `pnpm lint`, `pnpm typecheck`, `pnpm test -- --run`, `pnpm build` (+ e2e if UI-critical).  
+- Tests & CI patterns per [`AGENTS.md`](../../AGENTS.md): `pnpm lint`, `pnpm typecheck`, `pnpm test --run`, `pnpm build` (+ e2e if UI-critical).  
 - Runtime/migration alterations carry tracker memory lines when applicable ([`DOCUMENTATION-STANDARDS`](../waia-governance/DOCUMENTATION-STANDARDS.md)).
 
 _Governance readiness_  

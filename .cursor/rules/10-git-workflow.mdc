@@ -16,7 +16,7 @@ alwaysApply: true
 
 1. `git checkout dev && git pull origin dev`
 2. `git checkout -b dee-<NN>-<slug>`
-3. Implement, run `pnpm lint && pnpm typecheck && pnpm test -- --run` (full chain incl. `pnpm build` before PR per [`AGENTS.md`](../../AGENTS.md) + `/test-and-fix`)
+3. Implement, run `pnpm lint && pnpm typecheck && pnpm test --run` (full chain incl. `pnpm build` before PR per [`AGENTS.md`](../../AGENTS.md) + `/test-and-fix`)
 4. `git add -A && git commit -m "<conventional-commits-message>"`
 5. `git push -u origin dee-<NN>-<slug>`
 6. `gh pr create --base dev --fill` using the PR template
