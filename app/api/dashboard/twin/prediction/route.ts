@@ -1,10 +1,25 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import type { TwinPredictionApiResponse } from "@/lib/dashboard/twin-prediction-api.types";
-import { MAX_SCENARIO_CHARS, normalizeTwinPredictionScenario, runTwinPredictionForUser } from "@/lib/reasoning/twin-prediction";
+import {
+  emitWaiaRuntimeRouteTelemetry,
+  isWaiaConfigError,
+  safeTelemetryErrorClass,
+} from "@/lib/observability/waia-runtime-route-telemetry";
+import { resolveTwinPersistence } from "@/lib/persistence/runtime";
+import {
+  MAX_SCENARIO_CHARS,
+  normalizeTwinPredictionScenario,
+  runTwinPredictionForUser,
+  runTwinPredictionForUserAsync,
+} from "@/lib/reasoning/twin-prediction";
+import {
+  createTwinMemorySearchPortPostgres,
+} from "@/lib/reasoning/twin-reasoning-ports";
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +83,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const db = getDb();
   if (normalizeTwinPredictionScenario(trimmed).length === 0) {
     return NextResponse.json(
       validationErrorEnvelope("INVALID_BODY", "scenario normalizes to empty text."),
@@ -76,10 +90,49 @@ export async function POST(request: Request) {
     );
   }
 
-  const body: TwinPredictionApiResponse = runTwinPredictionForUser(db, userId, trimmed);
+  let resolvedRuntime: WaiaRuntimeDb | undefined;
+  const telemetryStart = Date.now();
+  try {
+    const runtime = await getWaiaRuntimeDb();
+    resolvedRuntime = runtime;
 
-  return NextResponse.json(body, {
-    status: 200,
-    headers: { "Cache-Control": "private, no-store" },
-  });
+    let body: TwinPredictionApiResponse;
+    if (runtime.kind === "sqlite") {
+      body = runTwinPredictionForUser(runtime.db, userId, trimmed);
+    } else {
+      const p = resolveTwinPersistence(runtime);
+      const memoryPort = createTwinMemorySearchPortPostgres(p);
+      body = await runTwinPredictionForUserAsync(memoryPort, userId, trimmed);
+    }
+
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "twin_prediction",
+      waia_db_backend: runtime.kind,
+      http_status: 200,
+      outcome: "success",
+      duration_ms: Date.now() - telemetryStart,
+    });
+
+    return NextResponse.json(body, {
+      status: 200,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (err) {
+    const outcome =
+      !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "twin_prediction",
+      waia_db_backend: resolvedRuntime?.kind,
+      http_status: 500,
+      outcome,
+      duration_ms: Date.now() - telemetryStart,
+      error_class: safeTelemetryErrorClass(err),
+    });
+    return NextResponse.json(
+      validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."),
+      { status: 500 },
+    );
+  }
 }

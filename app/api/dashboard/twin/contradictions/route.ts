@@ -1,13 +1,25 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { MAX_SCENARIO_CHARS } from "@/lib/dashboard/twin-contradiction-detector-api.types";
 import type { TwinContradictionDetectorApiResponse } from "@/lib/dashboard/twin-contradiction-detector-api.types";
 import {
+  emitWaiaRuntimeRouteTelemetry,
+  isWaiaConfigError,
+  safeTelemetryErrorClass,
+} from "@/lib/observability/waia-runtime-route-telemetry";
+import { resolveTwinPersistence } from "@/lib/persistence/runtime";
+import {
   runTwinContradictionDetectorForUser,
+  runTwinContradictionDetectorForUserAsync,
 } from "@/lib/reasoning/twin-contradiction-detector";
+import {
+  createTwinMemorySearchPortPostgres,
+  createTwinVerificationListPortPostgres,
+} from "@/lib/reasoning/twin-reasoning-ports";
 
 export const dynamic = "force-dynamic";
 
@@ -77,15 +89,59 @@ export async function POST(request: Request) {
     }
   }
 
-  const db = getDb();
-  const body: TwinContradictionDetectorApiResponse = runTwinContradictionDetectorForUser(
-    db,
-    userId,
-    scenarioForDetector ? { scenarioForRulesAndRetrieval: scenarioForDetector } : {},
-  );
+  const detectorOpts = scenarioForDetector
+    ? { scenarioForRulesAndRetrieval: scenarioForDetector }
+    : {};
 
-  return NextResponse.json(body, {
-    status: 200,
-    headers: { "Cache-Control": "private, no-store" },
-  });
+  let resolvedRuntime: WaiaRuntimeDb | undefined;
+  const telemetryStart = Date.now();
+  try {
+    const runtime = await getWaiaRuntimeDb();
+    resolvedRuntime = runtime;
+
+    let body: TwinContradictionDetectorApiResponse;
+    if (runtime.kind === "sqlite") {
+      body = runTwinContradictionDetectorForUser(runtime.db, userId, detectorOpts);
+    } else {
+      const p = resolveTwinPersistence(runtime);
+      const memoryPort = createTwinMemorySearchPortPostgres(p);
+      const verificationPort = createTwinVerificationListPortPostgres(p);
+      body = await runTwinContradictionDetectorForUserAsync(
+        memoryPort,
+        verificationPort,
+        userId,
+        detectorOpts,
+      );
+    }
+
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "twin_contradictions",
+      waia_db_backend: runtime.kind,
+      http_status: 200,
+      outcome: "success",
+      duration_ms: Date.now() - telemetryStart,
+    });
+
+    return NextResponse.json(body, {
+      status: 200,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (err) {
+    const outcome =
+      !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "twin_contradictions",
+      waia_db_backend: resolvedRuntime?.kind,
+      http_status: 500,
+      outcome,
+      duration_ms: Date.now() - telemetryStart,
+      error_class: safeTelemetryErrorClass(err),
+    });
+    return NextResponse.json(
+      validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."),
+      { status: 500 },
+    );
+  }
 }

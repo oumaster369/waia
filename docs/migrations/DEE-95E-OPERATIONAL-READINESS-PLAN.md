@@ -226,24 +226,24 @@ Align with phased implementation intent in [`DEE-95-RUNTIME-ROUTING-STRATEGY.md`
 
 ---
 
-## 19. Remaining route migration inventory
+## 19. Route migration inventory (runtime vs `getDb()`)
 
-Routes under `app/api` still using **`getDb()`** directly (as of this planning slice) — **split-brain risk** if Twin Engine is on Postgres while these stay SQLite-only for their data paths:
+**HTTP routes still using `getDb()` directly** — **split-brain risk** when other Twin paths use Postgres via **`getWaiaRuntimeDb()`**:
 
-| Area | Paths | Risk note |
-|------|-------|-----------|
-| Auth | `sign-in`, `sign-up`, `sign-out` | User/session store; orthogonal to twin engine but part of same app |
-| Twin dialogue | `twin-dialogue/turn`, `twin-dialogue/turns` | **Runtime-wired (DEE-95h):** `getWaiaRuntimeDb` + telemetry. **`app/dashboard/page.tsx`** hydrate uses **`loadDashboardPageDataForUser`** (**DEE-105**) — same resolver as dialogue APIs (no `getDb()` on dashboard SSR for twin dialogue listing). |
-| Twin reasoning APIs | `twin/prediction`, `twin/pattern-summary`, `twin/contradictions` | **High** — can disagree with engine inputs on Postgres |
-| Diary | `diary/entries`, `diary/scenario-answers` | **`diary/entries` GET/POST runtime-wired (DEE-105)** + telemetry **`diary_entries`**. **`scenario-answers`** still **`getDb()`** — residual split-brain for that path until migrated |
+| Area | Paths | Notes |
+|------|-------|--------|
+| Auth | `sign-in`, `sign-up`, `sign-out` | Session/user store; intentionally deferred from runtime waves |
+| OAuth | OAuth start/callback helpers | Deferred per program scope |
 
-Prioritization for **implementation waves** should be tracked in the tracker / Linear; this table is **inventory only**.
+**Twin / dashboard HTTP surfaces aligned to `getWaiaRuntimeDb()`** (non-exhaustive; see tracker): Twin Engine; **`twin/prediction`**, **`twin/pattern-summary`**, **`twin/contradictions`** (async reasoning ports on Postgres); prediction verification / verifications; repeatability; twin-dialogue turn(s); **`GET /api/dashboard/readiness`**; **`GET`/`POST /api/dashboard/diary/entries`**; **`GET`/`POST /api/dashboard/diary/scenario-answers`**; health/database. Telemetry keys include **`twin_prediction`**, **`twin_pattern_summary`**, **`twin_contradictions`**, **`diary_scenario_answers`**, plus earlier DEE-95f keys. **`app/dashboard/page.tsx`** hydrate uses **`loadDashboardPageDataForUser`** (no `getDb()` on that SSR path).
+
+Prioritization for further waves: migration tracker / Linear; auth and OAuth remain **explicitly deferred** unless escalated.
 
 ---
 
 ## 20. Remaining architectural debt
 
-- **Partial runtime coverage:** Twin Engine, prediction verification / verifications, repeatability, health/database, **twin-dialogue turn + turns**, **`GET /api/dashboard/readiness`**, **`GET`/`POST /api/dashboard/diary/entries`**, and **dashboard `page.tsx` hydrate** (`loadDashboardPageDataForUser`) use **`getWaiaRuntimeDb`** / **`resolveTwinPersistence`** at their boundaries (**DEE-105** for dashboard read-plane). Auth, **`diary/scenario-answers`**, standalone twin reasoning APIs, OAuth helpers, and other **`getDb()`** routes remain SQLite-singleton assumptions until migrated.
+- **Partial runtime coverage:** Twin Engine, standalone **Twin reasoning** routes (`twin/prediction`, `twin/pattern-summary`, `twin/contradictions`), prediction verification / verifications, repeatability, health/database, **twin-dialogue turn + turns**, **`GET /api/dashboard/readiness`**, **`GET`/`POST` diary **`entries`** and **`scenario-answers`**, and **dashboard `page.tsx` hydrate** (`loadDashboardPageDataForUser`) use **`getWaiaRuntimeDb`** / **`resolveTwinPersistence`** at their HTTP or SSR boundaries. Auth, OAuth helpers, and other **`getDb()`** routes (see tracker inventory) remain SQLite-singleton assumptions until migrated.
 - **No `runWaiaTransaction`:** By design (DEE-64); SQLite + Postgres transaction helpers remain separate.
 - **No backend-neutral repositories:** `SqliteTwinPersistence` / `PostgresTwinPersistence` via `resolveTwinPersistence` — intentional.
 - **Naming / orchestration debt:** “`runTwinEngineAsync`” as a future umbrella rename remains deferred; facade is `runTwinEngineForRuntimeAsync`.
@@ -310,4 +310,4 @@ Each step is a **separate PR** to `dev`; this planning doc does **not** implemen
 | 1.2 | DEE-95g | **Telemetry ops docs:** runbook, log-derived dashboard spec, staging checklist — **no** vendors, **no** in-app dashboards. |
 | 1.3 | DEE-95h | Twin-dialogue **`turn` / `turns`** runtime wiring + telemetry route keys; inventory §19 / §20 alignment; dashboard SSR residual split-brain called out. |
 | 1.4 | DEE-105 | Dashboard read-plane: readiness API + diary **`entries`** + **`page.tsx`** hydrate via runtime resolver; telemetry keys **`dashboard_readiness`**, **`diary_entries`**; **`scenario-answers`** still `getDb()`. |
-| 1.5 | Post-merge (DEE-105) | **Merged `dev`:** **`fef1e83`** — GitHub **PR #104** (squash; feature tip **`2515db9`**). Inventory §19 / §20 + deferred **`scenario-answers`** unchanged. |
+| 1.6 | Twin cognition + scenario-answers runtime | **`twin/prediction`**, **`pattern-summary`**, **`contradictions`**, **`diary/scenario-answers`** — `getWaiaRuntimeDb` + telemetry keys **`twin_prediction`**, **`twin_pattern_summary`**, **`twin_contradictions`**, **`diary_scenario_answers`**; inventory §19 / §20 refresh. |

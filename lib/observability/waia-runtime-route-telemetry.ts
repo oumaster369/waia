@@ -8,10 +8,14 @@ import "server-only";
 /** Stable route keys for `getWaiaRuntimeDb`-aware handlers (DEE-95f). */
 export type WaiaRuntimeRouteKey =
   | "twin_engine"
+  | "twin_prediction"
+  | "twin_pattern_summary"
+  | "twin_contradictions"
   | "twin_dialogue_turn"
   | "twin_dialogue_turns"
   | "dashboard_readiness"
   | "diary_entries"
+  | "diary_scenario_answers"
   | "prediction_verification"
   | "prediction_verifications"
   | "repeatability"
