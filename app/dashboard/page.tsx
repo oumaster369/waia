@@ -3,16 +3,11 @@ import { redirect } from "next/navigation";
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
-import { getDb } from "@/db/client";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { buildDashboardViewModel } from "@/lib/dashboard/build-dashboard-model";
+import { loadDashboardPageDataForUser } from "@/lib/dashboard/dashboard-readiness-source";
 import type { DashboardTwinDialogueInitialTurn } from "@/lib/dashboard/types";
-import { getDashboardReadinessPayloadForUser } from "@/lib/dashboard/dashboard-readiness-source";
-import {
-  listTwinDialogueTurnsForUser,
-  type TwinDialogueMemoryRow,
-} from "@/lib/twin-persistence/loader";
-import { listDiaryEntriesForUser } from "@/lib/twin-persistence/diary-memory";
+import type { TwinDialogueMemoryRow } from "@/lib/twin-persistence/loader";
 
 function isUserOrAssistantRole(
   row: TwinDialogueMemoryRow,
@@ -33,13 +28,11 @@ export default async function DashboardPage() {
     redirect("/");
   }
 
-  const payload = await getDashboardReadinessPayloadForUser(userId);
-  const memoryRows = await listTwinDialogueTurnsForUser(getDb(), userId);
-  const initialTwinDialogueTurns: DashboardTwinDialogueInitialTurn[] = memoryRows
+  const { payload, dialogueTurns, diaryEntries } = await loadDashboardPageDataForUser(userId);
+  const initialTwinDialogueTurns: DashboardTwinDialogueInitialTurn[] = dialogueTurns
     .filter(isUserOrAssistantRole)
     .map((t) => ({ id: t.id, role: t.role, text: t.content }));
-  const diaryRows = await listDiaryEntriesForUser(getDb(), userId);
-  const initialDiaryEntries = diaryRows.map((row) => ({
+  const initialDiaryEntries = diaryEntries.map((row) => ({
     id: row.id,
     body: row.body,
     createdAt: row.createdAt,

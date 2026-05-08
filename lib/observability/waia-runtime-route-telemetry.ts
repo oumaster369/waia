@@ -10,6 +10,8 @@ export type WaiaRuntimeRouteKey =
   | "twin_engine"
   | "twin_dialogue_turn"
   | "twin_dialogue_turns"
+  | "dashboard_readiness"
+  | "diary_entries"
   | "prediction_verification"
   | "prediction_verifications"
   | "repeatability"

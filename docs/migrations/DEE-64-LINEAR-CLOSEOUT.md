@@ -1,6 +1,6 @@
 # DEE-64 migration — Linear closeout handoff (reconciliation)
 
-**Purpose:** Reconcile **repository truth** with **Linear** for **DEE-64–era** migration slices (including **DEE-72.x**, **DEE-93**, **DEE-94**, and **DEE-95** phases **through 95h**). Copy comments below into each issue when moving status. **Automation:** This file does not change Linear; an operator updates Linear manually.
+**Purpose:** Reconcile **repository truth** with **Linear** for **DEE-64–era** migration slices (including **DEE-72.x**, **DEE-93**, **DEE-94**, and **DEE-95** phases **through 95h**, plus **DEE-105 / dashboard read-plane**). Copy comments below into each issue when moving status. **Automation:** This file does not change Linear; an operator updates Linear manually.
 
 **Baseline (verify before closeout):** `origin/dev` should include at least:
 
@@ -18,8 +18,9 @@
 | DEE-95f (stdout runtime telemetry) | `f0cd379` — PR **#99** |
 | DEE-95g (telemetry ops docs) | `34b092d` — PR **#100** |
 | DEE-95h (twin-dialogue runtime wiring + telemetry) | `1abdc4d` — PR **#103** (Linear **DEE-104**) |
+| DEE-105 (dashboard read-plane) | **Pending merge to dev:** branch **`dee-105-dashboard-read-plane-runtime`** — PR **`#???`** (Linear **DEE-105**); record squash SHA after merge |
 
-Run: `git fetch origin && git log origin/dev -10 --oneline`
+Run: `git fetch origin && git log origin/dev -15 --oneline`
 
 ---
 
@@ -54,7 +55,7 @@ Merged on dev: c170fb6 / PR #89. Deliverable docs/migrations/DEE-94-ASYNC-TWIN-E
 
 ---
 
-## 2. DEE-95 runtime routing — **current truth** (after 95c / 95d / 95e–95h)
+## 2. DEE-95 runtime routing — **current truth** (after 95c / 95d / 95e–95h / **DEE-105**)
 
 **DEE-95 (planning issue / strategy document):** **Done** when Definition of Done = strategy merged to `dev`. Authoritative doc: [`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](./DEE-95-RUNTIME-ROUTING-STRATEGY.md) (`3e247eb` / PR **#91**). Summary: [`DEE-64-TRACKER.md`](./DEE-64-TRACKER.md).
 
@@ -70,10 +71,11 @@ Merged on dev: c170fb6 / PR #89. Deliverable docs/migrations/DEE-94-ASYNC-TWIN-E
 | **95f** | Stdout **`waia_runtime_route`** telemetry for runtime-aware routes (Linear **DEE-101**) | `f0cd379` — PR **#99** |
 | **95g** | Telemetry **ops docs**: runbook, log-dashboard spec, staging checklist (Linear **DEE-102**); **docs-only** | `34b092d` — PR **#100** |
 | **95h** | Twin-dialogue **`POST …/turn`** + **`GET …/turns`** use **`getWaiaRuntimeDb`** + **`resolveTwinPersistence`** + **`waia_runtime_route`** (`twin_dialogue_turn` / `twin_dialogue_turns`) | `1abdc4d` — PR **#103** (Linear **DEE-104**) |
+| **DEE-105** | Dashboard read-plane: **`GET /api/dashboard/readiness`**, **`GET`/`POST /api/dashboard/diary/entries`**, **`loadDashboardPageDataForUser`** for **`app/dashboard/page.tsx`**; telemetry **`dashboard_readiness`** / **`diary_entries`** | **Pending merge:** branch **`dee-105-dashboard-read-plane-runtime`**; squash SHA + PR # after **`dev`** |
 
 **Umbrella / program:** **DEE-92** (WAIA architectural migration log) remains **In Progress**.
 
-**Broad Postgres rollout:** **Still blocked** for **production-wide** promotion: many APIs (auth, diary, standalone twin reasoning APIs, OAuth helpers) and **dashboard RSC `getDb()` hydrate** still bypass the runtime resolver; **live** dashboards/alerts/SLOs in your log stack (per [`DEE-95G-LOG-DASHBOARD-SPEC.md`](./DEE-95G-LOG-DASHBOARD-SPEC.md)) and **ops sign-off** remain. **Progress:** Twin-dialogue **HTTP** routes are runtime-wired (**DEE-95h** / PR **#103**); **`app/dashboard/page.tsx`** dialogue/diary SSR remains a **split-brain seam** under Postgres until migrated. DEE-95e **planning** merged (PR **#98**); DEE-95f **stdout telemetry** (PR **#99**); DEE-95g **runbook + dashboard spec + staging checklist** (PR **#100**, Linear **DEE-102**) — **docs-only** for 95g. DEE-95c/95d/95f/95h **do not** alone justify broad Postgres promotion.
+**Broad Postgres rollout:** **Still blocked** for **production-wide** promotion: many APIs (auth, **`diary/scenario-answers`**, standalone twin reasoning APIs, OAuth helpers) still bypass the runtime resolver at the HTTP boundary; **live** dashboards/alerts/SLOs in your log stack (per [`DEE-95G-LOG-DASHBOARD-SPEC.md`](./DEE-95G-LOG-DASHBOARD-SPEC.md)) and **ops sign-off** remain. **Progress:** Twin-dialogue routes (**DEE-95h**), **dashboard hydrate** + **readiness** + **`diary/entries`** (**DEE-105**) share **`getWaiaRuntimeDb`** with twin-dialogue POST/GET; **`waia_runtime_route`** still **does not** cover **`page.tsx`** RSC (HTTP routes only). DEE-95e **planning** merged (PR **#98**); DEE-95f **stdout telemetry** (PR **#99**); DEE-95g **runbook + dashboard spec + staging checklist** (PR **#100**, Linear **DEE-102**) — **docs-only** for 95g. Prior slices **do not** alone justify broad Postgres promotion.
 
 **Paste as Linear comment (95c):**
 
@@ -106,11 +108,24 @@ Merged on dev: 34b092d / PR #100 (Linear DEE-102 Done). DEE-95g: DEE-95G-RUNTIME
 - **Why Done:** Twin-dialogue dashboard APIs share **`getWaiaRuntimeDb`** policy with prior runtime slices; stdout **`waia_runtime_route`** includes **`twin_dialogue_turn`** / **`twin_dialogue_turns`**.
 - **Merge evidence:** `1abdc4d` — PR **#103** (`app/api/dashboard/twin-dialogue/*`, telemetry route keys, tracker + DEE-95E / runbook / staging checklist).
 - **Validation (post-merge reconciliation):** `pnpm lint` OK · `pnpm typecheck` OK · `pnpm exec vitest run` — 390 passed, 34 skipped · `pnpm build` OK.
-- **Residual split-brain:** **`app/dashboard/page.tsx`** SSR still lists dialogue/diary via **`getDb()`** — migrate in a **follow-up slice** under **DEE-92** before claiming Postgres parity for dashboard hydrate.
+- **Dashboard hydrate follow-up:** **`app/dashboard/page.tsx`** SSR alignment landed in **DEE-105** (`loadDashboardPageDataForUser`). **DEE-95h** delivered twin-dialogue **HTTP** only.
 - **Paste as Linear comment (95h / DEE-104):**
 
 ```text
-Merged on dev: 1abdc4d / PR #103 (Linear DEE-104 Done). DEE-95h: POST …/twin-dialogue/turn + GET …/twin-dialogue/turns → getWaiaRuntimeDb + resolveTwinPersistence; waia_runtime_route keys twin_dialogue_turn / twin_dialogue_turns. Docs synced (tracker, DEE-95E §19–§20 + doc control 1.3, runbook, staging checklist). Post-merge validation: lint/typecheck/vitest 390p/34s/build OK. Follow-up: dashboard/page.tsx getDb hydrate + remaining getDb() APIs per DEE-92 / DEE-95E inventory.
+Merged on dev: 1abdc4d / PR #103 (Linear DEE-104 Done). DEE-95h: POST …/twin-dialogue/turn + GET …/twin-dialogue/turns → getWaiaRuntimeDb + resolveTwinPersistence; waia_runtime_route keys twin_dialogue_turn / twin_dialogue_turns. Docs synced (tracker, DEE-95E §19–§20 + doc control 1.3, runbook, staging checklist). Post-merge validation: lint/typecheck/vitest 390p/34s/build OK. Follow-up (DEE-105): dashboard read-plane — page.tsx hydrate + readiness API + diary/entries GET/POST + telemetry dashboard_readiness / diary_entries.
+```
+
+### DEE-105 — dashboard read-plane (closeout template)
+
+- **Linear:** **DEE-105** (parent **DEE-92**).
+- **Why Done:** Dashboard **`page.tsx`** hydrate uses **`loadDashboardPageDataForUser`** (one **`getWaiaRuntimeDb`** resolve); **`GET /api/dashboard/readiness`** and **`GET`/`POST /api/dashboard/diary/entries`** share the same resolver + **`waia_runtime_route`** keys **`dashboard_readiness`** / **`diary_entries`**.
+- **Merge evidence:** Branch **`dee-105-dashboard-read-plane-runtime`** (`lib/dashboard/dashboard-readiness-source.ts`, `app/dashboard/page.tsx`, diary/readiness routes, telemetry keys, docs). **After squash merge to `dev`**, record GitHub squash SHA + PR number here.
+- **Validation:** `pnpm lint` · `pnpm typecheck` · `pnpm exec vitest run` · `pnpm build` on merge branch.
+- **Deferred:** **`diary/scenario-answers`** still **`getDb()`**; auth/OAuth; standalone **`twin/prediction`**, **`pattern-summary`**, **`contradictions`** routes.
+- **Paste as Linear comment (DEE-105):**
+
+```text
+Merged on dev: [SQUASH_SHA] / PR #??? (Linear DEE-105 Done). Dashboard read-plane: loadDashboardPageDataForUser for page.tsx; GET readiness + GET/POST diary/entries → getWaiaRuntimeDb + resolveTwinPersistence; waia_runtime_route dashboard_readiness / diary_entries. Docs: tracker, DEE-95E §19–§20 doc control 1.4, runbook 1.2, staging checklist 1.1. Validation: lint/typecheck/vitest/build OK. Deferred: diary/scenario-answers getDb(); reasoning APIs per inventory.
 ```
 
 ---

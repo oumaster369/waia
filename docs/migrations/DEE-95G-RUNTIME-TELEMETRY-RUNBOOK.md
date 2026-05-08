@@ -6,7 +6,7 @@
 
 **Prerequisites:** [`DEE-95f`](../../lib/observability/waia-runtime-route-telemetry.ts) is merged — structured **`waia_runtime_route`** events exist on runtime-aware routes only. [`DEE-95E-OPERATIONAL-READINESS-PLAN.md`](./DEE-95E-OPERATIONAL-READINESS-PLAN.md) remains the program-level rollout plan; this document narrows to **reading and acting on stdout telemetry**.
 
-**Split-runtime context:** Routes not yet wired through **`getWaiaRuntimeDb()`** (auth, diary, standalone twin reasoning APIs, OAuth helpers, **dashboard RSC direct `getDb()`**) **do not** emit `waia_runtime_route`. Twin-dialogue **HTTP** routes (**DEE-95h**) **do** emit; SSR hydrate may still bypass telemetry until that path migrates.
+**Split-runtime context:** Routes not yet wired through **`getWaiaRuntimeDb()`** (auth, **`diary/scenario-answers`**, standalone twin reasoning APIs, OAuth helpers) **do not** emit `waia_runtime_route`. **`app/dashboard/page.tsx`** RSC hydrate uses runtime persistence **without** emitting **`waia_runtime_route`** (instrumentation is HTTP-route-only today). Twin-dialogue, readiness, and **`diary/entries`** API routes **do** emit when handled.
 
 ---
 
@@ -39,6 +39,8 @@ All emitted objects use `event: "waia_runtime_route"` (stable filter key).
 | `twin_engine` | `POST /api/dashboard/twin/engine` |
 | `twin_dialogue_turn` | `POST /api/dashboard/twin-dialogue/turn` |
 | `twin_dialogue_turns` | `GET /api/dashboard/twin-dialogue/turns` |
+| `dashboard_readiness` | `GET /api/dashboard/readiness` |
+| `diary_entries` | `GET` / `POST /api/dashboard/diary/entries` |
 | `prediction_verification` | `POST /api/dashboard/twin/prediction/verification` |
 | `prediction_verifications` | `GET /api/dashboard/twin/prediction/verifications` |
 | `repeatability` | `GET /api/dashboard/twin/repeatability` |
@@ -61,7 +63,7 @@ All emitted objects use `event: "waia_runtime_route"` (stable filter key).
 
 **Rethrow routes:** `prediction_verification`, `prediction_verifications`, `repeatability`, `health_database` log `internal_error` / `config_error` with `http_status: 500`, then **rethrow** — the framework may format the final HTTP response. Treat the log line as the **authoritative structured signal** for that failure.
 
-**JSON 500 routes (no rethrow):** `twin_engine`, `twin_dialogue_turn`, and `twin_dialogue_turns` emit telemetry then return a generic **`INTERNAL_ERROR`** JSON envelope — HTTP status matches the log’s `http_status`.
+**JSON 500 routes (no rethrow):** `twin_engine`, `twin_dialogue_turn`, `twin_dialogue_turns`, **`dashboard_readiness`**, **`diary_entries`** emit telemetry then return a generic **`INTERNAL_ERROR`** JSON envelope — HTTP status matches the log’s `http_status`.
 
 ---
 
@@ -96,7 +98,7 @@ Internal error after backend resolved:
 ## Staging expectations
 
 - **`WAIA_DB_BACKEND` unset or `sqlite`:** Expect `waia_db_backend: "sqlite"` on instrumented routes under normal operation.
-- **Staging Postgres:** Set `WAIA_DB_BACKEND=postgres` and valid `DATABASE_URL_POSTGRES`; expect `waia_db_backend: "postgres"` on the **same** routes. Other APIs may still hit SQLite via `getDb()` — **split brain** until those routes are migrated.
+- **Staging Postgres:** Set `WAIA_DB_BACKEND=postgres` and valid `DATABASE_URL_POSTGRES`; expect `waia_db_backend: "postgres"` on the **same** routes. Other APIs may still hit SQLite via `getDb()` — **split brain** until those routes are migrated (**e.g.** auth, **`diary/scenario-answers`**, standalone reasoning APIs).
 - **Health:** `GET /api/health/database` returns `{ backend, ok }` in JSON; telemetry should **agree** with `backend` on success paths.
 
 ---
@@ -150,3 +152,4 @@ WAIA intentionally keeps telemetry **vendor-neutral**: one JSON line per event. 
 |---------|--------|------|
 | 1.0 | DEE-95g | Initial runbook for stdout `waia_runtime_route` telemetry. |
 | 1.1 | DEE-95h | Route keys `twin_dialogue_turn`, `twin_dialogue_turns`; clarify JSON-500 vs rethrow handlers; split-runtime note reflects twin-dialogue HTTP migrated. |
+| 1.2 | DEE-105 | Route keys **`dashboard_readiness`**, **`diary_entries`**; JSON-500 list extended; split-runtime note — dashboard RSC hydrate is runtime-aligned but **not** stdout-instrumented. |
