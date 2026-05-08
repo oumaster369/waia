@@ -27,7 +27,7 @@ alwaysApply: false
 ## Before opening a PR
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test -- --run && pnpm build
+pnpm lint && pnpm typecheck && pnpm test --run && pnpm build
 ```
 
 E2E (`pnpm test:e2e`) is required when the change touches `app/**`, `components/**`, or affects user-visible behavior.

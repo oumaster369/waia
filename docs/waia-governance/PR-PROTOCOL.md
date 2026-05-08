@@ -53,7 +53,7 @@ For **`T2` and above** ([`RISK-TIERS.md`](RISK-TIERS.md))—routes, persistence 
 
 [`AGENTS.md`](../../AGENTS.md):  
 
-`pnpm lint && pnpm typecheck && pnpm test -- --run && pnpm build`
+`pnpm lint && pnpm typecheck && pnpm test --run && pnpm build`
 
 UI-visible flows: Playwright suite per `.cursor/commands/test-and-fix`.
 
