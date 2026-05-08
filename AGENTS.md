@@ -101,19 +101,20 @@ Commit example:
 Do not skip phases.
 
 
-| Phase      | Command       | Mode       | Model  |
-| ---------- | ------------- | ---------- | ------ |
-| Plan       | /plan-feature | Plan Mode  | Opus   |
-| Implement  | /implement    | Agent Mode | Sonnet |
-| Test & Fix | /test-and-fix | Agent Mode | Sonnet |
-| PR         | /prepare-pr   | Agent Mode | Sonnet |
+| Phase           | Command       | Mode       | Model  |
+| --------------- | ------------- | ---------- | ------ |
+| Plan            | /plan-feature | Plan Mode  | Opus   |
+| Implement       | /implement    | Agent Mode | Sonnet |
+| Test & Fix      | /test-and-fix | Agent Mode | Sonnet |
+| PR *(optional)* | /prepare-pr   | Agent Mode | Sonnet |
 
+**Default completion:** when `/test-and-fix` finishes successfully, the agent **immediately** executes **PR readiness** per [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md): confirm clean tree, push the current **`dee-*`** branch to `origin` (set upstream if missing), provide compare URL **`dev…branch`**, PR creation URL (same compare flow), paste-ready title/body, report validation — then **stop**. Humans open/review the PR and merge; agents **never** merge. Invoke `/prepare-pr` only as a standalone retry without re-running tests.
 
 Rules:
 
 - Complete Plan before Implement
 - Complete Implement before Test & Fix
-- Complete Test & Fix before PR
+- Complete Test & Fix (including default PR readiness) before considering the implementation task done
 - If a phase fails, fix it before continuing
 
 ---
