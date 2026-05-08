@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import type {
@@ -10,9 +11,11 @@ import type {
 } from "@/lib/dashboard/diary-memory-api.types";
 import { MAX_DIARY_BODY_CHARS } from "@/lib/dashboard/diary-body-limits";
 import {
-  appendDiaryEntryForUser,
-  listDiaryEntriesForUser,
-} from "@/lib/twin-persistence/diary-memory";
+  emitWaiaRuntimeRouteTelemetry,
+  isWaiaConfigError,
+  safeTelemetryErrorClass,
+} from "@/lib/observability/waia-runtime-route-telemetry";
+import { resolveTwinPersistence } from "@/lib/persistence/runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -44,13 +47,48 @@ export async function GET() {
     return NextResponse.json(unauthorizedEnvelope(), { status: 401 });
   }
 
-  const db = getDb();
-  const entries = await listDiaryEntriesForUser(db, userId);
-  const body: DiaryEntriesListApiResponse = { entries };
-  return NextResponse.json(body, {
-    status: 200,
-    headers: { "Cache-Control": "private, no-store" },
-  });
+  let resolvedRuntime: WaiaRuntimeDb | undefined;
+  const telemetryStart = Date.now();
+  try {
+    const runtime = await getWaiaRuntimeDb();
+    resolvedRuntime = runtime;
+    const p =
+      runtime.kind === "sqlite"
+        ? resolveTwinPersistence(runtime)
+        : resolveTwinPersistence(runtime);
+    const rows = await p.listDiaryEntriesForUser(userId);
+    const body: DiaryEntriesListApiResponse = { entries: rows };
+
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "diary_entries",
+      waia_db_backend: runtime.kind,
+      http_status: 200,
+      outcome: "success",
+      duration_ms: Date.now() - telemetryStart,
+    });
+
+    return NextResponse.json(body, {
+      status: 200,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (err) {
+    const outcome =
+      !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "diary_entries",
+      waia_db_backend: resolvedRuntime?.kind,
+      http_status: 500,
+      outcome,
+      duration_ms: Date.now() - telemetryStart,
+      error_class: safeTelemetryErrorClass(err),
+    });
+    return NextResponse.json(
+      validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."),
+      { status: 500 },
+    );
+  }
 }
 
 /** POST /api/dashboard/diary/entries — append one diary entry (DEE-27). */
@@ -119,19 +157,54 @@ export async function POST(request: Request) {
     idempotencyKey = trimmedKey.length > 0 ? trimmedKey : null;
   }
 
-  const persisted = await appendDiaryEntryForUser(getDb(), {
-    userId,
-    body: trimmed,
-    idempotencyKey: idempotencyKey ?? null,
-  });
+  let resolvedRuntime: WaiaRuntimeDb | undefined;
+  const telemetryStart = Date.now();
+  try {
+    const runtime = await getWaiaRuntimeDb();
+    resolvedRuntime = runtime;
+    const p =
+      runtime.kind === "sqlite"
+        ? resolveTwinPersistence(runtime)
+        : resolveTwinPersistence(runtime);
+    const persisted = await p.appendDiaryEntryForUser({
+      userId,
+      body: trimmed,
+      idempotencyKey: idempotencyKey ?? null,
+    });
 
-  const dto: DiaryEntryAppendApiResponse = {
-    entry: toEntryDto(persisted),
-    replayed: persisted.replayed,
-  };
+    const dto: DiaryEntryAppendApiResponse = {
+      entry: toEntryDto(persisted),
+      replayed: persisted.replayed,
+    };
 
-  return NextResponse.json(dto, {
-    status: 200,
-    headers: { "Cache-Control": "private, no-store" },
-  });
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "diary_entries",
+      waia_db_backend: runtime.kind,
+      http_status: 200,
+      outcome: "success",
+      duration_ms: Date.now() - telemetryStart,
+    });
+
+    return NextResponse.json(dto, {
+      status: 200,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (err) {
+    const outcome =
+      !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "diary_entries",
+      waia_db_backend: resolvedRuntime?.kind,
+      http_status: 500,
+      outcome,
+      duration_ms: Date.now() - telemetryStart,
+      error_class: safeTelemetryErrorClass(err),
+    });
+    return NextResponse.json(
+      validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."),
+      { status: 500 },
+    );
+  }
 }

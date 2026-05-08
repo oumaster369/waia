@@ -36,7 +36,9 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **DEE-95g** adds **operational scaffolding** for that telemetry (docs only): operator [**runbook**](./DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md), [**log-derived dashboard spec**](./DEE-95G-LOG-DASHBOARD-SPEC.md) (implementation TBD), and [**staging checklist**](./DEE-95G-STAGING-CHECKLIST.md). **Does not** add vendors, metric backends, tracing, or route migrations.
 
-**DEE-95h** (Linear **DEE-104**) wires **`POST /api/dashboard/twin-dialogue/turn`** and **`GET /api/dashboard/twin-dialogue/turns`** through **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** (aligned with Twin Engine when `WAIA_DB_BACKEND=postgres`), and emits **`waia_runtime_route`** for route keys **`twin_dialogue_turn`** / **`twin_dialogue_turns`**. **Does not** migrate dashboard RSC reads (`app/dashboard/page.tsx` still uses `getDb()` for dialogue/diary hydrate — **follow-up slice** to close split-brain in Postgres mode), auth, diary writer routes, or standalone reasoning APIs.
+**DEE-95h** (Linear **DEE-104**) wires **`POST /api/dashboard/twin-dialogue/turn`** and **`GET /api/dashboard/twin-dialogue/turns`** through **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** (aligned with Twin Engine when `WAIA_DB_BACKEND=postgres`), and emits **`waia_runtime_route`** for route keys **`twin_dialogue_turn`** / **`twin_dialogue_turns`**. **Does not** migrate auth, **`diary/scenario-answers`**, or standalone reasoning APIs; **dashboard read-plane** closure for SSR + **`GET /api/dashboard/readiness`** + **`diary/entries`** is **DEE-105** (below).
+
+**DEE-105 / dashboard read-plane:** **`lib/dashboard/dashboard-readiness-source.ts`** uses **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** for readiness payloads (`getDashboardReadinessPayloadForUser`, shared by **`GET /api/dashboard/readiness`** with **`dashboard_readiness`** telemetry). **`loadDashboardPageDataForUser`** serves **`app/dashboard/page.tsx`** with one runtime resolve for readiness + dialogue + diary lists (no `getDb()` on dashboard hydrate). **`GET`/`POST /api/dashboard/diary/entries`** use the same runtime policy + **`diary_entries`** telemetry. **Deferred:** **`app/api/dashboard/diary/scenario-answers`** remains `getDb()`-first; auth/OAuth/twin reasoning **prediction/pattern-summary/contradictions** routes unchanged.
 
 ## Completed Slices
 
@@ -96,9 +98,10 @@ production callers
 
 ## Remaining Work
 
-### Runtime HTTP layer (post–DEE-95h)
+### Runtime HTTP layer (post–DEE-105)
 
-- **`app/dashboard/page.tsx`** SSR hydrate still uses **`getDb()`** for Twin dialogue and diary listing — **residual split-brain** when `WAIA_DB_BACKEND=postgres` until this path uses **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** or consumes only runtime-aware APIs.
+- Dashboard **`page.tsx`** hydrate uses **`loadDashboardPageDataForUser`** — **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** (aligned with twin-dialogue/diary APIs when Postgres is enabled).
+- **`app/api/dashboard/diary/scenario-answers`** remains **`getDb()`** at the route boundary until a dedicated slice.
 
 ### D5 (remainder after D5a)
 

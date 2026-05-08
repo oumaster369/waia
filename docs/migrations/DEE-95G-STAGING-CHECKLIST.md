@@ -19,14 +19,16 @@
 - [ ] Exercise `POST /api/dashboard/twin/engine` (authenticated smoke) — **one** `waia_runtime_route` line with `route: "twin_engine"`.
 - [ ] Exercise prediction verification POST and verifications GET — lines with `prediction_verification` / `prediction_verifications`.
 - [ ] Exercise **`POST /api/dashboard/twin-dialogue/turn`** and **`GET /api/dashboard/twin-dialogue/turns`** (after **DEE-95h**) — lines with `twin_dialogue_turn` / `twin_dialogue_turns`.
+- [ ] Exercise **`GET /api/dashboard/readiness`** and **`GET`/`POST /api/dashboard/diary/entries`** (after **DEE-105**) — lines with `dashboard_readiness` / `diary_entries`.
 - [ ] Health check produces `route: "health_database"`.
 - [ ] Confirm **`waia_db_backend`** matches expected `sqlite` or `postgres`.
 
 ## C. Telemetry sanity
 
 - [ ] Log pipeline shows newline JSON (not double-encoded).
-- [ ] No expectation of `waia_runtime_route` on **`getDb()`-only** routes (diary, auth, standalone prediction APIs, dashboard RSC `getDb()` reads, etc.) until migrated.
+- [ ] No expectation of `waia_runtime_route` on **`getDb()`-only** routes (auth, **`diary/scenario-answers`**, standalone prediction APIs, **`page.tsx` RSC hydrate**, etc.) until migrated or explicitly instrumented.
 - [ ] After **DEE-95h:** smoke `POST /api/dashboard/twin-dialogue/turn` and `GET /api/dashboard/twin-dialogue/turns` — each success emits `route: "twin_dialogue_turn"` / `"twin_dialogue_turns"` with expected `waia_db_backend`. (**Also listed in §B**.)
+- [ ] After **DEE-105:** smoke **`GET /api/dashboard/readiness`** and **`GET /api/dashboard/diary/entries`** — success emits `route: "dashboard_readiness"` / `"diary_entries"` with expected `waia_db_backend`. (**Also listed in §B**.)
 - [ ] CI noise understood — filter test workers if needed.
 
 ## D. Before a migration wave PR merges to staging
@@ -60,3 +62,4 @@
 | Version | Slice | Notes |
 |---------|--------|------|
 | 1.0 | DEE-95g | Initial staging checklist for stdout telemetry + waves. |
+| 1.1 | DEE-105 | §B–§C: **`dashboard_readiness`** / **`diary_entries`** smoke lines; clarify RSC hydrate still **no** stdout telemetry. |
