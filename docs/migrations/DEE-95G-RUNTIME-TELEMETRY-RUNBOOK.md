@@ -152,4 +152,4 @@ WAIA intentionally keeps telemetry **vendor-neutral**: one JSON line per event. 
 |---------|--------|------|
 | 1.0 | DEE-95g | Initial runbook for stdout `waia_runtime_route` telemetry. |
 | 1.1 | DEE-95h | Route keys `twin_dialogue_turn`, `twin_dialogue_turns`; clarify JSON-500 vs rethrow handlers; split-runtime note reflects twin-dialogue HTTP migrated. |
-| 1.2 | DEE-105 | Route keys **`dashboard_readiness`**, **`diary_entries`**; JSON-500 list extended; split-runtime note — dashboard RSC hydrate is runtime-aligned but **not** stdout-instrumented. |
+| 1.2 | DEE-105 | Route keys **`dashboard_readiness`**, **`diary_entries`**; JSON-500 list extended; split-runtime note — dashboard RSC hydrate is runtime-aligned but **not** stdout-instrumented. **Merged:** GitHub **PR #104** → **`dev`** **`fef1e83`**. |

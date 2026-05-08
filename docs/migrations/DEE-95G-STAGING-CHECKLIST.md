@@ -62,4 +62,4 @@
 | Version | Slice | Notes |
 |---------|--------|------|
 | 1.0 | DEE-95g | Initial staging checklist for stdout telemetry + waves. |
-| 1.1 | DEE-105 | §B–§C: **`dashboard_readiness`** / **`diary_entries`** smoke lines; clarify RSC hydrate still **no** stdout telemetry. |
+| 1.1 | DEE-105 | §B–§C: **`dashboard_readiness`** / **`diary_entries`** smoke lines; clarify RSC hydrate still **no** stdout telemetry. **Merged:** GitHub **PR #104** → **`dev`** **`fef1e83`**. |

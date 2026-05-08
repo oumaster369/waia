@@ -310,3 +310,4 @@ Each step is a **separate PR** to `dev`; this planning doc does **not** implemen
 | 1.2 | DEE-95g | **Telemetry ops docs:** runbook, log-derived dashboard spec, staging checklist — **no** vendors, **no** in-app dashboards. |
 | 1.3 | DEE-95h | Twin-dialogue **`turn` / `turns`** runtime wiring + telemetry route keys; inventory §19 / §20 alignment; dashboard SSR residual split-brain called out. |
 | 1.4 | DEE-105 | Dashboard read-plane: readiness API + diary **`entries`** + **`page.tsx`** hydrate via runtime resolver; telemetry keys **`dashboard_readiness`**, **`diary_entries`**; **`scenario-answers`** still `getDb()`. |
+| 1.5 | Post-merge (DEE-105) | **Merged `dev`:** **`fef1e83`** — GitHub **PR #104** (squash; feature tip **`2515db9`**). Inventory §19 / §20 + deferred **`scenario-answers`** unchanged. |
