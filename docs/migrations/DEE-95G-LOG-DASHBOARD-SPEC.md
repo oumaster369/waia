@@ -19,7 +19,7 @@
 
 | Dimension | Source field | Notes |
 |-----------|--------------|--------|
-| Route | `route` | `twin_engine`, `prediction_verification`, `prediction_verifications`, `repeatability`, `health_database` |
+| Route | `route` | Keys from [`WaiaRuntimeRouteKey`](../../lib/observability/waia-runtime-route-telemetry.ts) — e.g. `twin_engine`, `twin_prediction`, `twin_pattern_summary`, `twin_contradictions`, `twin_dialogue_turn`, `twin_dialogue_turns`, `dashboard_readiness`, `diary_entries`, `diary_scenario_answers`, `prediction_verification`, `prediction_verifications`, `repeatability`, `health_database` |
 | Outcome | `outcome` | `success`, `client_error`, `config_error`, `internal_error` |
 | Backend | `waia_db_backend` | May be **empty / null** in ingest when field omitted — bucket as `unknown` or `unspecified` |
 | HTTP status | `http_status` | Useful for reconciling with edge/access logs |

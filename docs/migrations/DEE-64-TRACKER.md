@@ -38,7 +38,9 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 **DEE-95h** (Linear **DEE-104**) wires **`POST /api/dashboard/twin-dialogue/turn`** and **`GET /api/dashboard/twin-dialogue/turns`** through **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** (aligned with Twin Engine when `WAIA_DB_BACKEND=postgres`), and emits **`waia_runtime_route`** for route keys **`twin_dialogue_turn`** / **`twin_dialogue_turns`**. **Does not** migrate auth, **`diary/scenario-answers`**, or standalone reasoning APIs; **dashboard read-plane** closure for SSR + **`GET /api/dashboard/readiness`** + **`diary/entries`** is **DEE-105** (below).
 
-**DEE-105 / dashboard read-plane** (**merged `dev`:** **`fef1e83`**, GitHub **PR #104**; pre-squash tip **`2515db9`**): **`lib/dashboard/dashboard-readiness-source.ts`** uses **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** for readiness payloads (`getDashboardReadinessPayloadForUser`, shared by **`GET /api/dashboard/readiness`** with **`dashboard_readiness`** telemetry). **`loadDashboardPageDataForUser`** serves **`app/dashboard/page.tsx`** with one runtime resolve for readiness + dialogue + diary lists (no `getDb()` on dashboard hydrate). **`GET`/`POST /api/dashboard/diary/entries`** use the same runtime policy + **`diary_entries`** telemetry. **Deferred:** **`app/api/dashboard/diary/scenario-answers`** remains `getDb()`-first; auth/OAuth/twin reasoning **prediction/pattern-summary/contradictions** routes unchanged.
+**DEE-105 / dashboard read-plane** (**merged `dev`:** **`fef1e83`**, GitHub **PR #104**; pre-squash tip **`2515db9`**): **`lib/dashboard/dashboard-readiness-source.ts`** uses **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** for readiness payloads (`getDashboardReadinessPayloadForUser`, shared by **`GET /api/dashboard/readiness`** with **`dashboard_readiness`** telemetry). **`loadDashboardPageDataForUser`** serves **`app/dashboard/page.tsx`** with one runtime resolve for readiness + dialogue + diary lists (no `getDb()` on dashboard hydrate). **`GET`/`POST /api/dashboard/diary/entries`** use the same runtime policy + **`diary_entries`** telemetry.
+
+**Post–DEE-105 / Twin cognition + diary scenario HTTP alignment:** **`POST /api/dashboard/twin/prediction`**, **`GET /api/dashboard/twin/pattern-summary`**, **`POST /api/dashboard/twin/contradictions`**, and **`GET`/`POST /api/dashboard/diary/scenario-answers`** use **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** (SQLite sync helpers / Postgres async ports for reasoning routes), with **`waia_runtime_route`** keys **`twin_prediction`**, **`twin_pattern_summary`**, **`twin_contradictions`**, **`diary_scenario_answers`**. **Deferred:** auth/OAuth **`getDb()`** routes per program scope.
 
 ## Completed Slices
 
@@ -101,7 +103,7 @@ production callers
 ### Runtime HTTP layer (post–DEE-105)
 
 - Dashboard **`page.tsx`** hydrate uses **`loadDashboardPageDataForUser`** — **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** (aligned with twin-dialogue/diary APIs when Postgres is enabled).
-- **`app/api/dashboard/diary/scenario-answers`** remains **`getDb()`** at the route boundary until a dedicated slice.
+- **`app/api/dashboard/diary/scenario-answers`** and standalone Twin reasoning routes (**`twin/prediction`**, **`pattern-summary`**, **`contradictions`**) use the same runtime resolver + telemetry (see **DEE-95e** §19, **DEE-95G** runbook route table).
 
 ### D5 (remainder after D5a)
 

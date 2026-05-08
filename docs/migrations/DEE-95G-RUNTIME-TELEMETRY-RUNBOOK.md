@@ -6,7 +6,7 @@
 
 **Prerequisites:** [`DEE-95f`](../../lib/observability/waia-runtime-route-telemetry.ts) is merged — structured **`waia_runtime_route`** events exist on runtime-aware routes only. [`DEE-95E-OPERATIONAL-READINESS-PLAN.md`](./DEE-95E-OPERATIONAL-READINESS-PLAN.md) remains the program-level rollout plan; this document narrows to **reading and acting on stdout telemetry**.
 
-**Split-runtime context:** Routes not yet wired through **`getWaiaRuntimeDb()`** (auth, **`diary/scenario-answers`**, standalone twin reasoning APIs, OAuth helpers) **do not** emit `waia_runtime_route`. **`app/dashboard/page.tsx`** RSC hydrate uses runtime persistence **without** emitting **`waia_runtime_route`** (instrumentation is HTTP-route-only today). Twin-dialogue, readiness, and **`diary/entries`** API routes **do** emit when handled.
+**Split-runtime context:** Routes not yet wired through **`getWaiaRuntimeDb()`** (auth, OAuth helpers, and other legacy `getDb()` surfaces per migration inventory) **do not** emit `waia_runtime_route`. **Twin cognition** (`twin_prediction`, `twin_pattern_summary`, `twin_contradictions`) and **`diary/scenario-answers`** are runtime-wired and emit. **`app/dashboard/page.tsx`** RSC hydrate uses runtime persistence **without** emitting **`waia_runtime_route`** (instrumentation is HTTP-route-only today).
 
 ---
 
@@ -37,10 +37,14 @@ All emitted objects use `event: "waia_runtime_route"` (stable filter key).
 | `route` | HTTP |
 |---------|------|
 | `twin_engine` | `POST /api/dashboard/twin/engine` |
+| `twin_prediction` | `POST /api/dashboard/twin/prediction` |
+| `twin_pattern_summary` | `GET /api/dashboard/twin/pattern-summary` |
+| `twin_contradictions` | `POST /api/dashboard/twin/contradictions` |
 | `twin_dialogue_turn` | `POST /api/dashboard/twin-dialogue/turn` |
 | `twin_dialogue_turns` | `GET /api/dashboard/twin-dialogue/turns` |
 | `dashboard_readiness` | `GET /api/dashboard/readiness` |
 | `diary_entries` | `GET` / `POST /api/dashboard/diary/entries` |
+| `diary_scenario_answers` | `GET` / `POST /api/dashboard/diary/scenario-answers` |
 | `prediction_verification` | `POST /api/dashboard/twin/prediction/verification` |
 | `prediction_verifications` | `GET /api/dashboard/twin/prediction/verifications` |
 | `repeatability` | `GET /api/dashboard/twin/repeatability` |
@@ -63,7 +67,7 @@ All emitted objects use `event: "waia_runtime_route"` (stable filter key).
 
 **Rethrow routes:** `prediction_verification`, `prediction_verifications`, `repeatability`, `health_database` log `internal_error` / `config_error` with `http_status: 500`, then **rethrow** — the framework may format the final HTTP response. Treat the log line as the **authoritative structured signal** for that failure.
 
-**JSON 500 routes (no rethrow):** `twin_engine`, `twin_dialogue_turn`, `twin_dialogue_turns`, **`dashboard_readiness`**, **`diary_entries`** emit telemetry then return a generic **`INTERNAL_ERROR`** JSON envelope — HTTP status matches the log’s `http_status`.
+**JSON 500 routes (no rethrow):** `twin_engine`, `twin_dialogue_turn`, `twin_dialogue_turns`, **`dashboard_readiness`**, **`diary_entries`**, **`twin_prediction`**, **`twin_pattern_summary`**, **`twin_contradictions`**, **`diary_scenario_answers`** emit telemetry then return a generic **`INTERNAL_ERROR`** JSON envelope — HTTP status matches the log’s `http_status`.
 
 ---
 
