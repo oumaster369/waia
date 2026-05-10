@@ -26,6 +26,8 @@ WAIA DEV OS operational layer:
 | [`AGENT-ROLES.md`](AGENT-ROLES.md) | Planner/executor/etc. |
 | [`FAILURE-PATTERNS.md`](FAILURE-PATTERNS.md) | Incident knowledge |
 | [`HUMAN-OVERRIDE.md`](HUMAN-OVERRIDE.md) | Emergency path |
+| [`CONSTITUTIONAL-DOCTRINE.md`](CONSTITUTIONAL-DOCTRINE.md) | Pointer to active constitutional doctrine + status semantics (no new binding rules) |
+| [`constitutional-history/`](constitutional-history/README.md) | Append-only constitutional artifacts: VISION / ADVISORY / DOCTRINE lineage |
 
 Architectural WHY: [`../adr/`](../adr/README.md).
 
