@@ -77,4 +77,4 @@ Twin + Diary raw content privacy vs Society derived-only outputs per [`../produc
 
 ## Related docs
 
-[`../product/WAIA-V1-MVP-SPEC.md`](../product/WAIA-V1-MVP-SPEC.md) · [`MIGRATION-GOVERNANCE.md`](MIGRATION-GOVERNANCE.md)
+[`../product/WAIA-V1-MVP-SPEC.md`](../product/WAIA-V1-MVP-SPEC.md) · [`MIGRATION-GOVERNANCE.md`](MIGRATION-GOVERNANCE.md) · [`../architecture/DEE-76-AI-GATEWAY-ARCHITECTURE.md`](../architecture/DEE-76-AI-GATEWAY-ARCHITECTURE.md) (Twin dialogue AI Gateway — planning)
