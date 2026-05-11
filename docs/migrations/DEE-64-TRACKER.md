@@ -100,6 +100,10 @@ production callers
 
 ## Remaining Work
 
+### AI Gateway (Twin dialogue integration — planning only)
+
+- **DEE-76** defines bounded **AI Gateway** architecture for OpenAI-class Twin dialogue completion (provider port, runtime placement, lifecycle, observability, kill-switch, token/memory boundaries): [`../architecture/DEE-76-AI-GATEWAY-ARCHITECTURE.md`](../architecture/DEE-76-AI-GATEWAY-ARCHITECTURE.md). **Does not** implement SDK wiring, new routes, schema changes, or autonomous agent loops—implementation is deferred to explicit follow-on issues.
+
 ### Runtime HTTP layer (post–DEE-105)
 
 - Dashboard **`page.tsx`** hydrate uses **`loadDashboardPageDataForUser`** — **`getWaiaRuntimeDb()`** + **`resolveTwinPersistence`** (aligned with twin-dialogue/diary APIs when Postgres is enabled).
