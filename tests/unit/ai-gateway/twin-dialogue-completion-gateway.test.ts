@@ -102,6 +102,7 @@ describe("resolveTwinDialogueAssistantText", () => {
       foundation: "fake_stub",
       providerId: "fake",
       providerOutcome: "ok",
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     });
     if (out.telemetry.foundation === "fake_stub") {
       expect(out.telemetry.provider_phase_ms).toBeGreaterThanOrEqual(0);
@@ -163,6 +164,8 @@ describe("resolveTwinDialogueAssistantText", () => {
       foundation: "live",
       providerId: "openai-compatible",
       providerOutcome: "ok",
+      usage: { promptTokens: 2, completionTokens: 4, totalTokens: 6 },
+      providerRequestId: "chatcmpl-gateway",
     });
   });
 });

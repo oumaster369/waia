@@ -201,7 +201,7 @@ describe("OpenAiCompatibleCompletionProvider", () => {
     if (!r.ok) expect(r.code).toBe("TIMEOUT");
   });
 
-  it("maps user AbortSignal abort to PROVIDER_ERROR", async () => {
+  it("maps pre-aborted user AbortSignal to PROVIDER_ERROR", async () => {
     process.env.WAIA_AI_OPENAI_API_KEY = "k";
     vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
       return new Promise((_resolve, reject) => {
@@ -224,6 +224,35 @@ describe("OpenAiCompatibleCompletionProvider", () => {
         maxOutputTokens: 1,
       },
       ac.signal,
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("PROVIDER_ERROR");
+  });
+
+  it("maps mid-flight user AbortSignal abort to PROVIDER_ERROR", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "k";
+    const userAc = new AbortController();
+
+    vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
+      return new Promise((_resolve, reject) => {
+        const sig = init?.signal;
+        if (!(sig instanceof AbortSignal)) {
+          reject(new Error("expected AbortSignal"));
+          return;
+        }
+        sig.addEventListener("abort", () => reject(new Error("aborted")));
+        queueMicrotask(() => userAc.abort());
+      });
+    });
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    const r = await p.complete(
+      {
+        model: "m",
+        messages: [{ role: "user", content: "x" }],
+        maxOutputTokens: 1,
+      },
+      userAc.signal,
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("PROVIDER_ERROR");

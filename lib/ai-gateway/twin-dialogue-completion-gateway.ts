@@ -18,6 +18,9 @@ export type TwinDialogueGatewayFoundationActiveTelemetry = {
   providerOutcome: WaiaAiGatewayProviderOutcomeTelemetry;
   provider_phase_ms: number;
   degraded?: boolean;
+  /** Present when the completion adapter returned usage metadata (DEE-79). */
+  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
+  providerRequestId?: string;
 };
 
 function buildTwinDialogueCompletionRequest(
@@ -104,6 +107,12 @@ export async function resolveTwinDialogueAssistantText(input: {
     };
   }
 
+  const usageFromOk = result.usage;
+  const providerRequestIdFromOk =
+    typeof result.providerRequestId === "string" && result.providerRequestId.trim() !== ""
+      ? result.providerRequestId.trim()
+      : undefined;
+
   if (providerId === "openai-compatible") {
     return {
       text: result.text,
@@ -112,6 +121,10 @@ export async function resolveTwinDialogueAssistantText(input: {
         providerId,
         providerOutcome: "ok",
         provider_phase_ms,
+        ...(usageFromOk !== undefined ? { usage: usageFromOk } : {}),
+        ...(providerRequestIdFromOk !== undefined
+          ? { providerRequestId: providerRequestIdFromOk }
+          : {}),
       },
     };
   }
@@ -123,6 +136,8 @@ export async function resolveTwinDialogueAssistantText(input: {
       providerId,
       providerOutcome: "ok",
       provider_phase_ms,
+      ...(usageFromOk !== undefined ? { usage: usageFromOk } : {}),
+      ...(providerRequestIdFromOk !== undefined ? { providerRequestId: providerRequestIdFromOk } : {}),
     },
   };
 }

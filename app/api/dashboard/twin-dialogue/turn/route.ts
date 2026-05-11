@@ -4,13 +4,17 @@ import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
-import { resolveTwinDialogueAssistantText } from "@/lib/ai-gateway/twin-dialogue-completion-gateway";
+import {
+  resolveTwinDialogueAssistantText,
+  type TwinDialogueGatewayFoundationTelemetry,
+} from "@/lib/ai-gateway/twin-dialogue-completion-gateway";
 import type { TwinDialogueTurnSubmitApiResponse } from "@/lib/dashboard/twin-dialogue-turn-api.types";
 import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
 import {
   emitWaiaRuntimeRouteTelemetry,
   isWaiaConfigError,
   safeTelemetryErrorClass,
+  type WaiaRuntimeRouteTelemetryPayload,
 } from "@/lib/observability/waia-runtime-route-telemetry";
 import { resolveTwinPersistence } from "@/lib/persistence/runtime";
 
@@ -25,6 +29,49 @@ type SubmitBodyJson = {
 
 function validationErrorEnvelope(code: string, message: string): ApiErrorEnvelope {
   return { error: { code, message } };
+}
+
+/** Maps gateway usage / request id into stdout telemetry fields (content-free, DEE-79). */
+function aiGatewayProviderTelemetryExtras(
+  gatewayTelemetry: TwinDialogueGatewayFoundationTelemetry,
+): Partial<
+  Pick<
+    WaiaRuntimeRouteTelemetryPayload,
+    | "ai_gateway_provider_prompt_tokens"
+    | "ai_gateway_provider_completion_tokens"
+    | "ai_gateway_provider_total_tokens"
+    | "ai_gateway_provider_request_id"
+  >
+> {
+  if (gatewayTelemetry.foundation === "off") {
+    return {};
+  }
+  const out: Partial<
+    Pick<
+      WaiaRuntimeRouteTelemetryPayload,
+      | "ai_gateway_provider_prompt_tokens"
+      | "ai_gateway_provider_completion_tokens"
+      | "ai_gateway_provider_total_tokens"
+      | "ai_gateway_provider_request_id"
+    >
+  > = {};
+  const u = gatewayTelemetry.usage;
+  if (u?.promptTokens !== undefined && Number.isFinite(u.promptTokens)) {
+    out.ai_gateway_provider_prompt_tokens = u.promptTokens;
+  }
+  if (u?.completionTokens !== undefined && Number.isFinite(u.completionTokens)) {
+    out.ai_gateway_provider_completion_tokens = u.completionTokens;
+  }
+  if (u?.totalTokens !== undefined && Number.isFinite(u.totalTokens)) {
+    out.ai_gateway_provider_total_tokens = u.totalTokens;
+  }
+  if (
+    gatewayTelemetry.providerRequestId !== undefined &&
+    gatewayTelemetry.providerRequestId !== ""
+  ) {
+    out.ai_gateway_provider_request_id = gatewayTelemetry.providerRequestId;
+  }
+  return out;
 }
 
 /** POST /api/dashboard/twin-dialogue/turn — persist one user-role Twin dialogue turn (DEE-39). */
@@ -102,6 +149,7 @@ export async function POST(request: Request) {
     const { text: assistantContent, telemetry: gatewayTelemetry } =
       await resolveTwinDialogueAssistantText({
         userContent: trimmed,
+        signal: request.signal,
       });
 
     let twinProfileId: string;
@@ -176,6 +224,7 @@ export async function POST(request: Request) {
             ai_gateway_provider_outcome: gatewayTelemetry.providerOutcome,
             ai_gateway_provider_phase_ms: gatewayTelemetry.provider_phase_ms,
             ...(gatewayTelemetry.degraded ? { ai_gateway_degraded: true as const } : {}),
+            ...aiGatewayProviderTelemetryExtras(gatewayTelemetry),
           }),
     });
 

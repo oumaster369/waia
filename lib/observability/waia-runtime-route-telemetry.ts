@@ -4,6 +4,7 @@ import "server-only";
  * Structured stdout telemetry for `getWaiaRuntimeDb`-aware API routes (DEE-95f).
  *
  * @see docs/migrations/DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md — field meanings, triage, limitations.
+ * @see docs/migrations/DEE-79-AI-GATEWAY-ACTIVATION-RUNBOOK.md — staging inference activation (operator).
  */
 /** Stable route keys for `getWaiaRuntimeDb`-aware handlers (DEE-95f). */
 export type WaiaRuntimeRouteKey =
@@ -60,6 +61,14 @@ export type WaiaRuntimeRouteTelemetryPayload = {
   ai_gateway_provider_phase_ms?: number;
   /** True when fake provider failed and assistant text fell back to product stub. */
   ai_gateway_degraded?: boolean;
+  /**
+   * Provider-reported token counts when present (DEE-79). Content-free; twin_dialogue_turn only.
+   */
+  ai_gateway_provider_prompt_tokens?: number;
+  ai_gateway_provider_completion_tokens?: number;
+  ai_gateway_provider_total_tokens?: number;
+  /** Vendor correlation id when returned by adapter — never user text (DEE-79). */
+  ai_gateway_provider_request_id?: string;
 };
 
 export type WaiaRuntimeRouteTelemetrySink = (line: string) => void;
