@@ -27,6 +27,15 @@ export type WaiaRuntimeRouteOutcome =
   | "config_error"
   | "internal_error";
 
+/** Twin dialogue gateway provider outcome — content-free (DEE-78). */
+export type WaiaAiGatewayProviderOutcomeTelemetry =
+  | "ok"
+  | "rate_limit"
+  | "timeout"
+  | "provider_error"
+  | "config"
+  | "degraded";
+
 export type WaiaRuntimeRouteTelemetryPayload = {
   event: "waia_runtime_route";
   route: WaiaRuntimeRouteKey;
@@ -38,11 +47,16 @@ export type WaiaRuntimeRouteTelemetryPayload = {
   /** `Error.prototype.name` only — never log message text (privacy / PII). */
   error_class?: string;
   /**
-   * Twin dialogue AI Gateway foundation path (DEE-77). Content-free; no user text.
+   * Twin dialogue AI Gateway foundation path (DEE-77 / DEE-78). Content-free; no user text.
+   * `live` — foundation enabled and OpenAI-compatible adapter returned assistant text.
    * Omitted on routes other than `twin_dialogue_turn` unless extended intentionally.
    */
-  ai_gateway_foundation?: "off" | "fake_stub";
-  /** Wall time for provider-phase completion call when foundation path uses fake adapter. */
+  ai_gateway_foundation?: "off" | "fake_stub" | "live";
+  /** Which completion backend handled the request when foundation path is active (DEE-78). */
+  ai_gateway_provider?: "fake" | "openai-compatible";
+  /** Provider-phase classification — never includes raw messages or user text (DEE-78). */
+  ai_gateway_provider_outcome?: WaiaAiGatewayProviderOutcomeTelemetry;
+  /** Wall time for provider-phase completion call when foundation path runs a provider. */
   ai_gateway_provider_phase_ms?: number;
   /** True when fake provider failed and assistant text fell back to product stub. */
   ai_gateway_degraded?: boolean;

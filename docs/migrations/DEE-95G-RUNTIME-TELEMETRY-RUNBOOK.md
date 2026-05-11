@@ -31,6 +31,25 @@ All emitted objects use `event: "waia_runtime_route"` (stable filter key).
 | `outcome` | string | See [Outcome semantics](#outcome-semantics) |
 | `duration_ms` | number | Wall time (ms) for the instrumented `try` block at the route layer — **not** full edge RTT |
 | `error_class` | string (optional) | **`Error.prototype.name` only** — never stack or message text |
+| `ai_gateway_foundation` | string (optional) | **`twin_dialogue_turn` only** (DEE-77 / DEE-78). `off` — legacy inline stub path; `fake_stub` — gateway foundation path using fake provider or stub fallback; `live` — OpenAI-compatible adapter returned model text (no user/content fields). |
+| `ai_gateway_provider` | string (optional) | **`twin_dialogue_turn` only** when foundation ≠ `off`. `fake` \| `openai-compatible` — which completion backend was selected (content-free). |
+| `ai_gateway_provider_outcome` | string (optional) | **`twin_dialogue_turn` only** when foundation ≠ `off`. See [Twin dialogue provider outcome](#twin-dialogue-provider-outcome-d78). |
+| `ai_gateway_provider_phase_ms` | number (optional) | **`twin_dialogue_turn` only** when foundation ≠ `off`. Wall time for the provider `complete` call. |
+| `ai_gateway_degraded` | boolean (optional) | **`twin_dialogue_turn` only**. `true` when assistant text fell back to the product stub after a provider failure (still HTTP 200). |
+
+### Twin dialogue provider outcome (DEE-78)
+
+When `route === "twin_dialogue_turn"` and AI Gateway foundation is enabled (`ai_gateway_foundation` ≠ `off`), `ai_gateway_provider_outcome` is content-free and reflects the **completion phase** (never raw messages):
+
+| Value | Meaning |
+|-------|--------|
+| `ok` | Provider returned acceptable assistant text. |
+| `config` | Misconfiguration (e.g. missing **`WAIA_AI_OPENAI_API_KEY`** when **`WAIA_AI_PROVIDER=openai-compatible`**). |
+| `rate_limit` | HTTP **429** from provider. |
+| `timeout` | Request aborted due to **`WAIA_AI_OPENAI_REQUEST_TIMEOUT_MS`** (or equivalent timeout path). |
+| `provider_error` | Parse / HTTP / network-class failure from the adapter (including client **`AbortSignal`** on the fake provider path). |
+
+When the handler still returns HTTP **200** but assistant text fell back to the product stub after a provider failure, **`ai_gateway_degraded: true`** is set alongside the outcome above (the outcome stays **`config`** / **`provider_error`** / etc., not a separate `"degraded"` enum value).
 
 ### Route key ↔ HTTP path
 
@@ -157,3 +176,4 @@ WAIA intentionally keeps telemetry **vendor-neutral**: one JSON line per event. 
 | 1.0 | DEE-95g | Initial runbook for stdout `waia_runtime_route` telemetry. |
 | 1.1 | DEE-95h | Route keys `twin_dialogue_turn`, `twin_dialogue_turns`; clarify JSON-500 vs rethrow handlers; split-runtime note reflects twin-dialogue HTTP migrated. |
 | 1.2 | DEE-105 | Route keys **`dashboard_readiness`**, **`diary_entries`**; JSON-500 list extended; split-runtime note — dashboard RSC hydrate is runtime-aligned but **not** stdout-instrumented. **Merged:** GitHub **PR #104** → **`dev`** **`fef1e83`**. |
+| 1.3 | DEE-78 | Optional **`ai_gateway_*`** fields on **`twin_dialogue_turn`** (`ai_gateway_foundation`, provider id/outcome, phase ms, degraded flag); provider outcome taxonomy ([Twin dialogue provider outcome (DEE-78)](#twin-dialogue-provider-outcome-dee-78)). |

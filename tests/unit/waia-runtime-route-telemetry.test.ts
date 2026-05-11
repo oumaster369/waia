@@ -5,6 +5,7 @@ import {
   isWaiaConfigError,
   safeTelemetryErrorClass,
   type WaiaRuntimeRouteTelemetryPayload,
+  type WaiaAiGatewayProviderOutcomeTelemetry,
 } from "@/lib/observability/waia-runtime-route-telemetry";
 
 describe("waia-runtime-route-telemetry", () => {
@@ -55,5 +56,29 @@ describe("waia-runtime-route-telemetry", () => {
     const parsed = JSON.parse(lines[0]!) as Record<string, unknown>;
     expect(parsed.waia_db_backend).toBeUndefined();
     expect(parsed.error_class).toBe("Error");
+  });
+
+  it("accepts twin_dialogue_turn gateway extensions without message bodies", () => {
+    const lines: string[] = [];
+    const outcome: WaiaAiGatewayProviderOutcomeTelemetry = "ok";
+    const payload: WaiaRuntimeRouteTelemetryPayload = {
+      event: "waia_runtime_route",
+      route: "twin_dialogue_turn",
+      waia_db_backend: "sqlite",
+      http_status: 200,
+      outcome: "success",
+      duration_ms: 40,
+      ai_gateway_foundation: "live",
+      ai_gateway_provider: "openai-compatible",
+      ai_gateway_provider_outcome: outcome,
+      ai_gateway_provider_phase_ms: 38,
+    };
+    emitWaiaRuntimeRouteTelemetry(payload, (line) => lines.push(line));
+    const parsed = JSON.parse(lines[0]!) as Record<string, unknown>;
+    expect(parsed.ai_gateway_foundation).toBe("live");
+    expect(parsed.ai_gateway_provider).toBe("openai-compatible");
+    expect(parsed.ai_gateway_provider_outcome).toBe("ok");
+    expect(parsed.ai_gateway_provider_phase_ms).toBe(38);
+    expect(parsed).not.toHaveProperty("message");
   });
 });
