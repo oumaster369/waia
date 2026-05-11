@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 
 import { users } from "@/db/schema";
+import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
 import { getDb } from "@/db/client";
 import { applySessionCookie, clearSessionCookie } from "@/lib/auth/cookie-response";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
@@ -10,7 +11,6 @@ import { verifyPassword } from "@/lib/auth/password";
 import { authSessionMaxAgeSeconds } from "@/lib/auth/constants";
 import { createSessionRow } from "@/lib/auth/session-service";
 import { ensureUserTwinSeed } from "@/lib/twin-persistence/loader";
-import type { WaiaSqliteDb } from "@/lib/twin-persistence/loader";
 
 export const dynamic = "force-dynamic";
 
@@ -57,11 +57,12 @@ export async function POST(request: Request) {
   }
 
   const db = getDb();
-  const userRow = db
+  const rows = await db
     .select({ id: users.id, passwordHash: users.passwordHash })
     .from(users)
     .where(eq(users.email, email))
-    .get();
+    .limit(1);
+  const userRow = rows[0];
 
   if (!userRow) {
     verifyPassword(password, undefined);
@@ -77,10 +78,9 @@ export async function POST(request: Request) {
   const maxAgeSec = authSessionMaxAgeSeconds();
   const expiresAtMs = Date.now() + maxAgeSec * 1000;
 
-  db.transaction((tx) => {
-    const t = tx as WaiaSqliteDb;
-    ensureUserTwinSeed(t, userRow.id);
-    createSessionRow(t, { sessionId, userId: userRow.id, expiresAtMs });
+  await runWaiaSqliteLegacyTransaction(db, (tx) => {
+    ensureUserTwinSeed(tx, userRow.id);
+    createSessionRow(tx, { sessionId, userId: userRow.id, expiresAtMs });
   });
 
   const res = NextResponse.json({ ok: true as const, redirect: "/dashboard" }, { status: 200 });

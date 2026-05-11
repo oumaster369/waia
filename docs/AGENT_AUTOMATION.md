@@ -7,13 +7,14 @@ This document describes the multi-agent setup the project uses for the loop **pl
 ```
 User
  ├─ /plan-feature  (Plan Mode, Opus 4.x)        -> .cursor/plans/<slug>.md
- ├─ /implement     (Agent Mode, Sonnet 4.5)     -> code on feature/<slug>
- ├─ /test-and-fix  (Agent Mode + Playwright MCP)-> green local gates
- └─ /prepare-pr    (Agent Mode + gh CLI)        -> PR into dev
+ ├─ /implement     (Agent Mode, Sonnet 4.5)     -> code on `dee-<NN>-<slug>` branch
+ ├─ /test-and-fix  (Agent Mode + Playwright MCP)-> green local gates + default PR readiness
+ │                                                 (push branch, compare/PR URLs, title/body; agent stops — no merge)
+ └─ /prepare-pr    (optional retry)           -> same PR readiness checklist without full test loop
                                                     │
-                                                    ├─ GitHub Actions CI (lint/typecheck/test/build/e2e)
+                                                    ├─ CI on the PR (as configured by maintainers — not introduced by agents)
                                                     ├─ Cursor Bugbot review
-                                                    └─ User merges dev -> main -> Cloudflare Pages deploys
+                                                    └─ User merges PR and dev -> main -> Cloudflare Pages deploys
 ```
 
 ## Models
@@ -39,10 +40,14 @@ Configured in user `settings.json` (`cursor.agent.allowList` / `denyList`) and e
 - **Allowed without prompt**: `pnpm (lint|typecheck|test|build|format) ...`, `pnpm exec ...`, `gh (pr|issue|repo) ...`
 - **Always denied**: `git push --force`, direct push to `dev`/`main`, `rm -rf /` or `rm -rf $HOME`
 
+## Expanded execution narrative
+
+Formal 12-step loop + five-memory continuity expectations: [`waia-governance/AUTONOMOUS-EXECUTION-LOOP.md`](waia-governance/AUTONOMOUS-EXECUTION-LOOP.md) and [`waia-governance/DOCUMENTATION-STANDARDS.md`](waia-governance/DOCUMENTATION-STANDARDS.md).
+
 ## What the user does manually (not automated)
 
 - Cursor Pro login + model selection in Cursor Settings -> Models.
 - Install Cursor's GitHub App (Settings -> Integrations -> GitHub) so Bugbot can comment on PRs.
 - `gh auth login` once.
 - Merging `dev` -> `main` to trigger Cloudflare Pages deploy.
-- Approving / rejecting PRs created by agents.
+- Reviewing PRs proposed by agents (opening from compare URL when needed), approving / rejecting, and merging (`AGENTS.md` — agents never merge).

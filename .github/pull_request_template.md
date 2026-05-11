@@ -7,7 +7,31 @@
 
 ## Linked issue / plan
 
-<!-- Closes #123 / Plan: .cursor/plans/<file>.md -->
+**Linear:** `DEE-NN` <!-- link -->
+
+<!-- Closes GitHub issue #123 if applicable -->
+
+**Plan:** <!-- `.cursor/plans/<file>.md` or `n/a` -->
+
+## Risk tier
+
+<!-- T0 … T4 per `docs/waia-governance/RISK-TIERS.md` -->
+
+**Tier:**
+
+## ADR
+
+<!-- Link to `docs/adr/NNNN-*.md`, or note `ADR: n/a (<one-line rationale>)` -->
+
+## Human gate / ambiguity
+
+<!-- `Human gate: no` OR `yes — <why>` -->
+
+**Architectural ambiguity surfaced during work:** <!-- `no` OR describe + escalation path -->
+
+## Migration impacted
+
+<!-- `no` OR `yes` + sentence pointing to tracker / docs/migrations -->
 
 ## Test plan
 

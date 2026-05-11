@@ -60,43 +60,43 @@ describe("twin persistence loader", () => {
     }
   });
 
-  it("seeds defaults and flags no meaningful exchange until a user turn exists", () => {
+  it("seeds defaults and flags no meaningful exchange until a user turn exists", async () => {
     const db = getDb();
-    const payload = loadDashboardReadinessPayloadFromDb(db, TEST_USER_ID);
+    const payload = await loadDashboardReadinessPayloadFromDb(db, TEST_USER_ID);
 
     expect(payload.readinessInput).toEqual(DEFAULT_READINESS_INPUT);
     expect(payload.twinSignals.hasMeaningfulExchange).toBe(false);
   });
 
-  it("appends turns in order, sets meaningful exchange after a user role, and ignores duplicate idempotency keys", () => {
+  it("appends turns in order, sets meaningful exchange after a user role, and ignores duplicate idempotency keys", async () => {
     const db = getDb();
-    appendTwinDialogueTurn(db, {
+    await appendTwinDialogueTurn(db, {
       twinProfileId,
       role: "user",
       content: "hello",
     });
-    appendTwinDialogueTurn(db, {
+    await appendTwinDialogueTurn(db, {
       twinProfileId,
       role: "assistant",
       content: "hi",
     });
-    appendTwinDialogueTurn(db, {
+    await appendTwinDialogueTurn(db, {
       twinProfileId,
       role: "user",
       content: "first",
       idempotencyKey: "dup",
     });
-    appendTwinDialogueTurn(db, {
+    await appendTwinDialogueTurn(db, {
       twinProfileId,
       role: "user",
       content: "retry",
       idempotencyKey: "dup",
     });
 
-    const payload = loadDashboardReadinessPayloadFromDb(db, TEST_USER_ID);
+    const payload = await loadDashboardReadinessPayloadFromDb(db, TEST_USER_ID);
     expect(payload.twinSignals.hasMeaningfulExchange).toBe(true);
 
-    const rows = listTwinDialogueTurnsChronological(db, twinProfileId);
+    const rows = await listTwinDialogueTurnsChronological(db, twinProfileId);
     for (let i = 1; i < rows.length; i++) {
       expect(rows[i]!.sequence).toBeGreaterThan(rows[i - 1]!.sequence);
     }
@@ -109,9 +109,9 @@ describe("twin persistence loader", () => {
     expect(agg?.c).toBe(1);
   });
 
-  it("listTwinDialogueTurnsForUser returns rows with ids, ISO timestamps, user then assistant pairing", () => {
+  it("listTwinDialogueTurnsForUser returns rows with ids, ISO timestamps, user then assistant pairing", async () => {
     const db = getDb();
-    const twin = persistUserTwinExchangeWithAssistantStub(db, {
+    const twin = await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId,
       userContent: "pair me unique",
       userIdempotencyKey: "dee26-pair-uniq",
@@ -122,9 +122,9 @@ describe("twin persistence loader", () => {
     const uSeq = twin.userTurn.sequence;
     const aSeq = twin.assistantTurn!.sequence;
 
-    const pairRows = listTwinDialogueTurnsForUser(db, TEST_USER_ID)
-      .filter((t) => t.sequence === uSeq || t.sequence === aSeq)
-      .sort((a, b) => a.sequence - b.sequence);
+    const pairRows = (await listTwinDialogueTurnsForUser(db, TEST_USER_ID)).filter(
+      (t) => t.sequence === uSeq || t.sequence === aSeq,
+    ).sort((a, b) => a.sequence - b.sequence);
     expect(pairRows).toHaveLength(2);
     expect(pairRows[0]?.role).toBe("user");
     expect(pairRows[0]?.content).toBe("pair me unique");
@@ -134,15 +134,15 @@ describe("twin persistence loader", () => {
     expect(pairRows.every((r) => typeof r.createdAt === "string")).toBe(true);
   });
 
-  it("listTwinDialogueTurnsChronological exposes id column on each row", () => {
+  it("listTwinDialogueTurnsChronological exposes id column on each row", async () => {
     const db = getDb();
-    appendTwinDialogueTurn(db, {
+    await appendTwinDialogueTurn(db, {
       twinProfileId,
       role: "user",
       content: "with id column",
       idempotencyKey: "id-col-test",
     });
-    const rows = listTwinDialogueTurnsChronological(db, twinProfileId);
+    const rows = await listTwinDialogueTurnsChronological(db, twinProfileId);
     const mine = rows.find((r) => r.content === "with id column");
     expect(mine?.id).toBeTruthy();
     expect(typeof mine?.sequence).toBe("number");

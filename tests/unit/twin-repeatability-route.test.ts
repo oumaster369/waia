@@ -7,8 +7,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { GET } from "@/app/api/dashboard/twin/repeatability/route";
 import { POST as POST_VERIFY } from "@/app/api/dashboard/twin/prediction/verification/route";
 import { getDb, resetWaiaSqliteSingleton } from "@/db/client";
+import * as waiaRuntimeDb from "@/db/waia-runtime-db";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
+import * as pgSchema from "@/db/schema.postgres";
 import { twinRepeatabilityRecords } from "@/db/schema";
 import { TWIN_REPEATABILITY_SCHEMA_VERSION } from "@/lib/dashboard/twin-repeatability-api.types";
+import * as runtimePersistence from "@/lib/persistence/runtime";
+import { drizzle } from "drizzle-orm/postgres-js";
 import * as sessionUser from "@/lib/auth/session-user";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
@@ -38,9 +43,12 @@ function reqPostVerify(body: unknown): Request {
 describe("GET /api/dashboard/twin/repeatability (DEE-28)", () => {
   let tmpRoot: string;
   let prevDb: string | undefined;
+  let prevBackend: string | undefined;
 
   beforeAll(() => {
     prevDb = process.env.DATABASE_URL;
+    prevBackend = process.env.WAIA_DB_BACKEND;
+    delete process.env.WAIA_DB_BACKEND;
     tmpRoot = mkdtempSync(path.join(tmpdir(), "waia-rep-route-"));
     const dbPath = path.join(tmpRoot, "walita.sqlite");
     mkdirSync(tmpRoot, { recursive: true });
@@ -55,6 +63,11 @@ describe("GET /api/dashboard/twin/repeatability (DEE-28)", () => {
 
   afterAll(() => {
     resetWaiaSqliteSingleton();
+    if (prevBackend === undefined) {
+      delete process.env.WAIA_DB_BACKEND;
+    } else {
+      process.env.WAIA_DB_BACKEND = prevBackend;
+    }
     if (prevDb === undefined) {
       delete process.env.DATABASE_URL;
     } else {
@@ -68,6 +81,7 @@ describe("GET /api/dashboard/twin/repeatability (DEE-28)", () => {
   });
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.mocked(sessionUser.getOptionalSessionUserId).mockReset();
     getDb().delete(twinRepeatabilityRecords).run();
   });
@@ -106,5 +120,45 @@ describe("GET /api/dashboard/twin/repeatability (DEE-28)", () => {
       repeatedPatterns: { patternType: string; occurrences: number }[];
     };
     expect(body.repeatedPatterns.reduce((s, p) => s + p.occurrences, 0)).toBe(1);
+  });
+
+  it("GET repeatability dispatches through getWaiaRuntimeDb with sqlite handle by default", async () => {
+    vi.mocked(sessionUser.getOptionalSessionUserId).mockResolvedValue(R_USER);
+    await POST_VERIFY(reqPostVerify({ scenario: "deadline pressure", verification: "accurate" }));
+    const spy = vi.spyOn(waiaRuntimeDb, "getWaiaRuntimeDb");
+    const res = await GET(reqGet());
+    expect(res.status).toBe(200);
+    expect(spy).toHaveBeenCalledOnce();
+    const handle = (await spy.mock.results[0]!.value) as WaiaRuntimeDb;
+    expect(handle).toMatchObject({ kind: "sqlite" });
+  });
+
+  it("GET repeatability uses Postgres analyze when runtime is postgres (mocked)", async () => {
+    vi.mocked(sessionUser.getOptionalSessionUserId).mockResolvedValue(R_USER);
+    const mockPg = drizzle.mock({ schema: pgSchema });
+    const pgHandle: WaiaRuntimeDb = { kind: "postgres", db: mockPg };
+    const runtimeSpy = vi.spyOn(waiaRuntimeDb, "getWaiaRuntimeDb").mockResolvedValue(pgHandle);
+
+    const stubBody = {
+      schemaVersion: TWIN_REPEATABILITY_SCHEMA_VERSION,
+      repeatedPatterns: [
+        { patternType: "delay", occurrences: 2, lastSeenAt: "2026-03-03T10:00:00.000Z" },
+      ],
+    };
+    const analyzeMock = vi.fn().mockResolvedValue(stubBody);
+    const resolveSpy = vi.spyOn(runtimePersistence, "resolveTwinPersistence").mockReturnValue({
+      analyzeRepeatabilityForUser: analyzeMock,
+    } as unknown as ReturnType<typeof runtimePersistence.resolveTwinPersistence>);
+
+    try {
+      const res = await GET(reqGet("weekly planning"));
+      expect(res.status).toBe(200);
+      expect(resolveSpy).toHaveBeenCalledWith(pgHandle);
+      expect(analyzeMock).toHaveBeenCalledWith(R_USER, { scenarioText: "weekly planning" });
+      await expect(res.json()).resolves.toEqual(stubBody);
+    } finally {
+      runtimeSpy.mockRestore();
+      resolveSpy.mockRestore();
+    }
   });
 });

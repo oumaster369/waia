@@ -12,6 +12,8 @@ import { TWIN_PATTERN_SUMMARY_SCHEMA_VERSION } from "@/lib/dashboard/twin-patter
 import type { TwinMemorySearchHit } from "@/lib/twin-persistence/twin-memory-retrieval";
 import { searchTwinMemoriesByText } from "@/lib/twin-persistence/twin-memory-retrieval";
 import type { WaiaSqliteDb } from "@/lib/twin-persistence/loader";
+import { fuseMemorySearchSlices } from "@/lib/reasoning/twin-memory-search-fusion";
+import type { TwinMemorySearchPort } from "@/lib/reasoning/twin-reasoning-ports";
 
 export const PATTERN_SUMMARY_SEED_QUERIES = [
   "habits routines daily behavior patterns",
@@ -180,10 +182,6 @@ CONTRAST_PAIRS_ROWS.sort((a, b) =>
 
 const CONTRAST_PAIRS = CONTRAST_PAIRS_ROWS;
 
-function hitKey(h: TwinMemorySearchHit): string {
-  return `${h.source}:${h.id}`;
-}
-
 function tokenize(normText: string): string[] {
   const parts = normText.split(/\P{L}+/u).filter(Boolean);
   const out: string[] = [];
@@ -217,29 +215,23 @@ export function retrieveMemoriesForPatternSummary(
   db: WaiaSqliteDb,
   userId: string,
 ): TwinMemorySearchHit[] {
-  const merged = new Map<string, TwinMemorySearchHit>();
+  const slices = PATTERN_SUMMARY_SEED_QUERIES.map((seed) =>
+    searchTwinMemoriesByText(db, userId, seed, PER_SEED_TOP_N),
+  );
+  return fuseMemorySearchSlices(slices, MAX_FUSED_ITEMS);
+}
 
-  for (const seed of PATTERN_SUMMARY_SEED_QUERIES) {
-    const slice = searchTwinMemoriesByText(db, userId, seed, PER_SEED_TOP_N);
-    for (const hit of slice) {
-      const k = hitKey(hit);
-      const prev = merged.get(k);
-      if (prev === undefined || hit.score > prev.score) {
-        merged.set(k, hit);
-      }
-    }
-  }
-
-  const fused = [...merged.values()].sort((a, b) => {
-    if (b.score !== a.score) {
-      return b.score - a.score;
-    }
-    const ka = `${a.source}\0${a.id}`;
-    const kb = `${b.source}\0${b.id}`;
-    return ka.localeCompare(kb);
-  });
-
-  return fused.slice(0, MAX_FUSED_ITEMS);
+/** DEE-72.4: Postgres/async-capable retrieval — same fusion as sync SQLite path via port. */
+export async function retrieveMemoriesForPatternSummaryAsync(
+  memoryPort: TwinMemorySearchPort,
+  userId: string,
+): Promise<TwinMemorySearchHit[]> {
+  const slices = await Promise.all(
+    PATTERN_SUMMARY_SEED_QUERIES.map((seed) =>
+      memoryPort.searchByText(userId, seed, PER_SEED_TOP_N),
+    ),
+  );
+  return fuseMemorySearchSlices(slices, MAX_FUSED_ITEMS);
 }
 
 /** Core summarizer — pure and deterministic given input order + hit contents. */
@@ -366,6 +358,18 @@ export function getTwinPatternSummaryForUser(
   userId: string,
 ): TwinPatternSummaryApiResponse {
   const hits = retrieveMemoriesForPatternSummary(db, userId);
+  const core = buildTwinPatternSummaryFromHits(hits);
+  return {
+    ...core,
+    seedQueryCount: PATTERN_SUMMARY_SEED_QUERIES.length,
+  };
+}
+
+export async function getTwinPatternSummaryForUserAsync(
+  memoryPort: TwinMemorySearchPort,
+  userId: string,
+): Promise<TwinPatternSummaryApiResponse> {
+  const hits = await retrieveMemoriesForPatternSummaryAsync(memoryPort, userId);
   const core = buildTwinPatternSummaryFromHits(hits);
   return {
     ...core,

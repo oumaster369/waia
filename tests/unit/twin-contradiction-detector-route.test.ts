@@ -138,12 +138,12 @@ describe("POST /api/dashboard/twin/contradictions (DEE-30)", () => {
   });
 
   it("does not leak other users diary tokens", async () => {
-    appendDiaryEntryForUser(getDb(), {
+    await appendDiaryEntryForUser(getDb(), {
       userId: USER_A,
       body: "alphauniqueYYY streak calmly planning values goals calmly",
       idempotencyKey: null,
     });
-    appendDiaryEntryForUser(getDb(), {
+    await appendDiaryEntryForUser(getDb(), {
       userId: USER_B,
       body: "betauniqueZZZ lone calmly values goals calmly",
       idempotencyKey: null,

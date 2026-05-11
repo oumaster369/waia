@@ -76,12 +76,12 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
     }
   });
 
-  it("stores embedding_json + model on fresh twin dialogue inserts (user + assistant)", () => {
+  it("stores embedding_json + model on fresh twin dialogue inserts (user + assistant)", async () => {
     const db = getDb();
     const twinProfileId = ensureUserTwinSeed(db, USER_A);
     db.delete(twinDialogueTurns).run();
 
-    const res = persistUserTwinExchangeWithAssistantStub(db, {
+    const res = await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId,
       userContent: "persist embed message",
       userIdempotencyKey: null,
@@ -113,12 +113,12 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
     expect(asstRow?.embeddingModel).toBe("stub-deterministic-v1");
   });
 
-  it("does not change embedding_json on idempotent replay of twin exchange", () => {
+  it("does not change embedding_json on idempotent replay of twin exchange", async () => {
     const db = getDb();
     ensureUserTwinSeed(db, USER_A);
     db.delete(twinDialogueTurns).run();
 
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId: getTwinProfile(db, USER_A)!,
       userContent: "replay check",
       userIdempotencyKey: "idem-embed-twice",
@@ -134,7 +134,7 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
       .where(eq(twinDialogueTurns.idempotencyKey, "idem-embed-twice"))
       .get();
 
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId: getTwinProfile(db, USER_A)!,
       userContent: "different body ignored",
       userIdempotencyKey: "idem-embed-twice",
@@ -152,12 +152,12 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
     expect(db.select().from(twinDialogueTurns).all()).toHaveLength(2);
   });
 
-  it("stores embeddings on diary and scenario inserts; preserves on replay", () => {
+  it("stores embeddings on diary and scenario inserts; preserves on replay", async () => {
     const db = getDb();
     db.delete(diaryEntries).run();
     db.delete(scenarioAnswers).run();
 
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_A,
       body: "diary embedding line",
       idempotencyKey: "diary-idem-x",
@@ -170,7 +170,7 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
     const dEj = dRow?.embeddingJson;
     expect(dEj).not.toBe(null);
 
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_A,
       body: "other",
       idempotencyKey: "diary-idem-x",
@@ -187,7 +187,7 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
       embedTwinMemoryText(composeScenarioEmbedInput("scenario-e", payloadJson)),
     );
 
-    appendScenarioAnswerForUser(db, {
+    await appendScenarioAnswerForUser(db, {
       userId: USER_A,
       scenarioKey: "scenario-e",
       payloadJson,
@@ -202,7 +202,7 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
     expect(scenarioEmbedExpectedJson).not.toBe(null);
     expect(sRow?.embeddingJson).toBe(scenarioEmbedExpectedJson);
 
-    appendScenarioAnswerForUser(db, {
+    await appendScenarioAnswerForUser(db, {
       userId: USER_A,
       scenarioKey: "other",
       payloadJson: "{}",
@@ -216,7 +216,7 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
     expect(sRow?.embeddingJson).toBe(scenarioEmbedExpectedJson);
   });
 
-  it("searchTwinMemoriesByText ranks nearer content higher and preserves user isolation", () => {
+  it("searchTwinMemoriesByText ranks nearer content higher and preserves user isolation", async () => {
     const db = getDb();
     ensureUserTwinSeed(db, USER_A);
     db.delete(diaryEntries).run();
@@ -224,12 +224,12 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
     db.delete(twinDialogueTurns).run();
 
     const uniqueToken = `retrieval_anchor_TOKEN_${Math.random().toString(36).slice(2)}`;
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_A,
       body: uniqueToken,
       idempotencyKey: null,
     });
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_A,
       body: "!@#^*".repeat(40),
       idempotencyKey: null,
@@ -244,7 +244,7 @@ describe("DEE-32 Twin memory embeddings persistence and retrieval", () => {
       expect(hitsA[0]!.score).toBeGreaterThanOrEqual(noiseHit.score);
     }
 
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_B,
       body: `${uniqueToken} ghost for B`,
       idempotencyKey: null,

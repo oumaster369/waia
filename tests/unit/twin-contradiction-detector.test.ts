@@ -93,10 +93,10 @@ describe("runTwinContradictionDetectorForUser (DEE-30)", () => {
     expect(r.scenarioUsed).toBe(false);
   });
 
-  it("scenario path uses single retrieval seed count and retrieval top-N cap", () => {
+  it("scenario path uses single retrieval seed count and retrieval top-N cap", async () => {
     const db = getDb();
     const twinProfileId = ensureUserTwinSeed(db, USER_STATED);
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId,
       userContent: "nightly coding drills for skills",
       userIdempotencyKey: null,
@@ -111,14 +111,14 @@ describe("runTwinContradictionDetectorForUser (DEE-30)", () => {
     expect(r.contradictions.some((c) => c.type === "stated_intention_vs_past_behavior")).toBe(true);
   });
 
-  it("pattern summary lexical contradictions surface emotional_inconsistency (high severity)", () => {
+  it("pattern summary lexical contradictions surface emotional_inconsistency (high severity)", async () => {
     const db = getDb();
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_EMOTION,
       body: "Today I remain calm about the rollout plan",
       idempotencyKey: null,
     });
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_EMOTION,
       body: "Later I grew anxious waiting for uptime quietly",
       idempotencyKey: null,
@@ -150,10 +150,10 @@ describe("runTwinContradictionDetectorForUser (DEE-30)", () => {
     expect(r.verificationItemsConsidered).toBe(2);
   });
 
-  it("produces identical output for identical invocation (deterministic)", () => {
+  it("produces identical output for identical invocation (deterministic)", async () => {
     const db = getDb();
     const twinProfileId = ensureUserTwinSeed(db, USER_STATED);
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId,
       userContent: "nightly coding drills for skills practice",
       userIdempotencyKey: null,
@@ -168,14 +168,14 @@ describe("runTwinContradictionDetectorForUser (DEE-30)", () => {
     expect(a).toEqual(b);
   });
 
-  it("orders contradictions by severity high before medium before low", () => {
+  it("orders contradictions by severity high before medium before low", async () => {
     const db = getDb();
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_EMOTION,
       body: "Today calm about work then anxious spike later",
       idempotencyKey: null,
     });
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_EMOTION,
       body: "Opposite mood swings during project calm anxious",
       idempotencyKey: null,

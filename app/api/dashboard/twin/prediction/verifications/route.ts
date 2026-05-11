@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import type { TwinPredictionVerificationListApiResponse } from "@/lib/dashboard/twin-prediction-verification-api.types";
 import { TWIN_PREDICTION_VERIFICATION_SCHEMA_VERSION } from "@/lib/dashboard/twin-prediction-verification-api.types";
+import {
+  emitWaiaRuntimeRouteTelemetry,
+  isWaiaConfigError,
+  safeTelemetryErrorClass,
+} from "@/lib/observability/waia-runtime-route-telemetry";
+import { resolveTwinPersistence } from "@/lib/persistence/runtime";
 import { listTwinPredictionVerificationsForUser } from "@/lib/twin-persistence/twin-prediction-verifications";
 
 export const dynamic = "force-dynamic";
@@ -38,16 +45,46 @@ export async function GET(request: Request) {
     limit = n;
   }
 
-  const db = getDb();
-  const verifications = listTwinPredictionVerificationsForUser(db, userId, limit);
+  let resolvedRuntime: WaiaRuntimeDb | undefined;
+  const telemetryStart = Date.now();
+  try {
+    const runtime = await getWaiaRuntimeDb();
+    resolvedRuntime = runtime;
+    const verifications =
+      runtime.kind === "sqlite"
+        ? listTwinPredictionVerificationsForUser(runtime.db, userId, limit)
+        : await resolveTwinPersistence(runtime).listTwinPredictionVerificationsForUser(userId, limit);
 
-  const body: TwinPredictionVerificationListApiResponse = {
-    schemaVersion: TWIN_PREDICTION_VERIFICATION_SCHEMA_VERSION,
-    verifications,
-  };
+    const body: TwinPredictionVerificationListApiResponse = {
+      schemaVersion: TWIN_PREDICTION_VERIFICATION_SCHEMA_VERSION,
+      verifications,
+    };
 
-  return NextResponse.json(body, {
-    status: 200,
-    headers: { "Cache-Control": "private, no-store" },
-  });
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "prediction_verifications",
+      waia_db_backend: runtime.kind,
+      http_status: 200,
+      outcome: "success",
+      duration_ms: Date.now() - telemetryStart,
+    });
+
+    return NextResponse.json(body, {
+      status: 200,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (err) {
+    const outcome =
+      !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "prediction_verifications",
+      waia_db_backend: resolvedRuntime?.kind,
+      http_status: 500,
+      outcome,
+      duration_ms: Date.now() - telemetryStart,
+      error_class: safeTelemetryErrorClass(err),
+    });
+    throw err;
+  }
 }

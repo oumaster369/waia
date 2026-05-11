@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import {
@@ -11,6 +12,12 @@ import {
   type TwinPredictionVerificationAppendApiResponse,
   type TwinPredictionVerificationKind,
 } from "@/lib/dashboard/twin-prediction-verification-api.types";
+import {
+  emitWaiaRuntimeRouteTelemetry,
+  isWaiaConfigError,
+  safeTelemetryErrorClass,
+} from "@/lib/observability/waia-runtime-route-telemetry";
+import { resolveTwinPersistence } from "@/lib/persistence/runtime";
 import {
   appendTwinPredictionVerificationForUser,
   isTwinPredictionVerificationKind,
@@ -128,27 +135,74 @@ export async function POST(request: Request) {
     correction = rawCorrection;
   }
 
-  const db = getDb();
+  let resolvedRuntime: WaiaRuntimeDb | undefined;
+  const telemetryStart = Date.now();
+  try {
+    const runtime = await getWaiaRuntimeDb();
+    resolvedRuntime = runtime;
 
-  const dto = appendTwinPredictionVerificationForUser(db, userId, {
-    predictionId,
-    scenario: scenarioTrimmed,
-    verification,
-    correction,
-  });
+    let dto;
+    if (runtime.kind === "sqlite") {
+      dto = appendTwinPredictionVerificationForUser(runtime.db, userId, {
+        predictionId,
+        scenario: scenarioTrimmed,
+        verification,
+        correction,
+      });
+      recordRepeatabilityAfterVerification(runtime.db, userId, {
+        scenarioTrimmed,
+        verification,
+      });
+    } else {
+      const p = resolveTwinPersistence(runtime);
+      dto = await p.appendTwinPredictionVerificationForUser({
+        userId,
+        scenario: scenarioTrimmed,
+        verification,
+        predictionId,
+        correction,
+      });
+      try {
+        await p.appendRepeatabilityRecordForUser({
+          userId,
+          scenarioTrimmed,
+          verificationResult: verification,
+        });
+      } catch {
+        /* best-effort: verification row already persisted */
+      }
+    }
 
-  recordRepeatabilityAfterVerification(db, userId, {
-    scenarioTrimmed,
-    verification,
-  });
+    const body: TwinPredictionVerificationAppendApiResponse = {
+      schemaVersion: TWIN_PREDICTION_VERIFICATION_SCHEMA_VERSION,
+      verification: dto,
+    };
 
-  const body: TwinPredictionVerificationAppendApiResponse = {
-    schemaVersion: TWIN_PREDICTION_VERIFICATION_SCHEMA_VERSION,
-    verification: dto,
-  };
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "prediction_verification",
+      waia_db_backend: runtime.kind,
+      http_status: 200,
+      outcome: "success",
+      duration_ms: Date.now() - telemetryStart,
+    });
 
-  return NextResponse.json(body, {
-    status: 200,
-    headers: { "Cache-Control": "private, no-store" },
-  });
+    return NextResponse.json(body, {
+      status: 200,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (err) {
+    const outcome =
+      !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "prediction_verification",
+      waia_db_backend: resolvedRuntime?.kind,
+      http_status: 500,
+      outcome,
+      duration_ms: Date.now() - telemetryStart,
+      error_class: safeTelemetryErrorClass(err),
+    });
+    throw err;
+  }
 }

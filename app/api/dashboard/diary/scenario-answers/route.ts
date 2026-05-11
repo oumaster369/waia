@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import type {
@@ -9,10 +10,14 @@ import type {
   ScenarioAnswersListApiResponse,
 } from "@/lib/dashboard/scenario-memory-api.types";
 import {
+  emitWaiaRuntimeRouteTelemetry,
+  isWaiaConfigError,
+  safeTelemetryErrorClass,
+} from "@/lib/observability/waia-runtime-route-telemetry";
+import { resolveTwinPersistence } from "@/lib/persistence/runtime";
+import {
   MAX_SCENARIO_KEY_CHARS,
   MAX_SCENARIO_PAYLOAD_JSON_CHARS,
-  appendScenarioAnswerForUser,
-  listScenarioAnswersForUser,
   stringifyScenarioPayloadForStorage,
 } from "@/lib/twin-persistence/diary-memory";
 
@@ -53,13 +58,48 @@ export async function GET() {
     return NextResponse.json(unauthorizedEnvelope(), { status: 401 });
   }
 
-  const db = getDb();
-  const answers = listScenarioAnswersForUser(db, userId);
-  const body: ScenarioAnswersListApiResponse = { answers };
-  return NextResponse.json(body, {
-    status: 200,
-    headers: { "Cache-Control": "private, no-store" },
-  });
+  let resolvedRuntime: WaiaRuntimeDb | undefined;
+  const telemetryStart = Date.now();
+  try {
+    const runtime = await getWaiaRuntimeDb();
+    resolvedRuntime = runtime;
+    const p =
+      runtime.kind === "sqlite"
+        ? resolveTwinPersistence(runtime)
+        : resolveTwinPersistence(runtime);
+    const answers = await p.listScenarioAnswersForUser(userId);
+    const body: ScenarioAnswersListApiResponse = { answers };
+
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "diary_scenario_answers",
+      waia_db_backend: runtime.kind,
+      http_status: 200,
+      outcome: "success",
+      duration_ms: Date.now() - telemetryStart,
+    });
+
+    return NextResponse.json(body, {
+      status: 200,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (err) {
+    const outcome =
+      !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "diary_scenario_answers",
+      waia_db_backend: resolvedRuntime?.kind,
+      http_status: 500,
+      outcome,
+      duration_ms: Date.now() - telemetryStart,
+      error_class: safeTelemetryErrorClass(err),
+    });
+    return NextResponse.json(
+      validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."),
+      { status: 500 },
+    );
+  }
 }
 
 /** POST /api/dashboard/diary/scenario-answers — append one scenario answer (DEE-27). */
@@ -154,20 +194,55 @@ export async function POST(request: Request) {
     idempotencyKey = trimmedKey.length > 0 ? trimmedKey : null;
   }
 
-  const persisted = appendScenarioAnswerForUser(getDb(), {
-    userId,
-    scenarioKey,
-    payloadJson,
-    idempotencyKey: idempotencyKey ?? null,
-  });
+  let resolvedRuntime: WaiaRuntimeDb | undefined;
+  const telemetryStart = Date.now();
+  try {
+    const runtime = await getWaiaRuntimeDb();
+    resolvedRuntime = runtime;
+    const p =
+      runtime.kind === "sqlite"
+        ? resolveTwinPersistence(runtime)
+        : resolveTwinPersistence(runtime);
+    const persisted = await p.appendScenarioAnswerForUser({
+      userId,
+      scenarioKey,
+      payloadJson,
+      idempotencyKey: idempotencyKey ?? null,
+    });
 
-  const dto: ScenarioAnswerAppendApiResponse = {
-    answer: toAnswerDto(persisted),
-    replayed: persisted.replayed,
-  };
+    const dto: ScenarioAnswerAppendApiResponse = {
+      answer: toAnswerDto(persisted),
+      replayed: persisted.replayed,
+    };
 
-  return NextResponse.json(dto, {
-    status: 200,
-    headers: { "Cache-Control": "private, no-store" },
-  });
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "diary_scenario_answers",
+      waia_db_backend: runtime.kind,
+      http_status: 200,
+      outcome: "success",
+      duration_ms: Date.now() - telemetryStart,
+    });
+
+    return NextResponse.json(dto, {
+      status: 200,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (err) {
+    const outcome =
+      !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "diary_scenario_answers",
+      waia_db_backend: resolvedRuntime?.kind,
+      http_status: 500,
+      outcome,
+      duration_ms: Date.now() - telemetryStart,
+      error_class: safeTelemetryErrorClass(err),
+    });
+    return NextResponse.json(
+      validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."),
+      { status: 500 },
+    );
+  }
 }

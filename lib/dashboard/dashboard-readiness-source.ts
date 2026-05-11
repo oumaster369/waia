@@ -1,13 +1,49 @@
 import "server-only";
 
-import { getDb } from "@/db/client";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { DashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-api.types";
-import { loadDashboardReadinessPayloadFromDb } from "@/lib/twin-persistence/loader";
+import { resolveTwinPersistence } from "@/lib/persistence/runtime";
+import type { TwinDialogueMemoryRow } from "@/lib/twin-persistence/loader";
+import type { DiaryMemoryRow } from "@/lib/twin-persistence/diary-memory";
 
-/** HTTP contract: GET /api/dashboard/readiness and `/dashboard` RSC (single persisted source per userId). */
+/** Loads readiness payload using an already-resolved runtime handle (avoids duplicate `getWaiaRuntimeDb` per request). */
+export async function loadDashboardReadinessPayloadFromRuntime(
+  runtime: WaiaRuntimeDb,
+  userId: string,
+): Promise<DashboardReadinessPayload> {
+  const p =
+    runtime.kind === "sqlite"
+      ? resolveTwinPersistence(runtime)
+      : resolveTwinPersistence(runtime);
+  return await p.loadDashboardReadinessPayloadFromDb(userId);
+}
+
+/**
+ * HTTP contract: GET /api/dashboard/readiness — persisted readiness + twin signals (same semantic source as dashboard RSC).
+ */
 export async function getDashboardReadinessPayloadForUser(
   userId: string,
 ): Promise<DashboardReadinessPayload> {
-  const db = getDb();
-  return loadDashboardReadinessPayloadFromDb(db, userId);
+  const runtime = await getWaiaRuntimeDb();
+  return loadDashboardReadinessPayloadFromRuntime(runtime, userId);
+}
+
+/** Dashboard RSC: single runtime resolve for readiness + dialogue + diary reads (Postgres/SQLite policy aligned with twin APIs). */
+export async function loadDashboardPageDataForUser(userId: string): Promise<{
+  payload: DashboardReadinessPayload;
+  dialogueTurns: TwinDialogueMemoryRow[];
+  diaryEntries: DiaryMemoryRow[];
+}> {
+  const runtime = await getWaiaRuntimeDb();
+  const p =
+    runtime.kind === "sqlite"
+      ? resolveTwinPersistence(runtime)
+      : resolveTwinPersistence(runtime);
+  const [payload, dialogueTurns, diaryEntries] = await Promise.all([
+    p.loadDashboardReadinessPayloadFromDb(userId),
+    p.listTwinDialogueTurnsForUser(userId),
+    p.listDiaryEntriesForUser(userId),
+  ]);
+  return { payload, dialogueTurns, diaryEntries };
 }

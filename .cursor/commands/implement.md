@@ -23,10 +23,10 @@ Switch to **Agent Mode** with Claude Sonnet 4.5 (default) and execute the plan f
 5. After each meaningful chunk, run:
 
    ```bash
-   pnpm lint && pnpm typecheck && pnpm test -- --run
+   pnpm lint && pnpm typecheck && pnpm test --run
    ```
 
-6. When the implementation is complete, hand off to `/test-and-fix`.
+6. When the implementation is complete, hand off to `/test-and-fix`. That phase runs local gates then, by default, **PR readiness** (push branch + compare/PR URLs + title/body; [`/prepare-pr`](prepare-pr.md)) — humans still open/review/merge; agents **never** merge.
 
 ## Hard rules
 

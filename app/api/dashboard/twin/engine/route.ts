@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { MAX_SCENARIO_CHARS } from "@/lib/dashboard/twin-contradiction-detector-api.types";
 import {
-  runTwinEngine,
-  TwinEngineScenarioTooLongError,
-} from "@/lib/reasoning/twin-engine";
+  emitWaiaRuntimeRouteTelemetry,
+  isWaiaConfigError,
+  safeTelemetryErrorClass,
+} from "@/lib/observability/waia-runtime-route-telemetry";
+import { TwinEngineScenarioTooLongError } from "@/lib/reasoning/twin-engine";
+import { runTwinEngineForRuntimeAsync } from "@/lib/reasoning/twin-engine-runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -75,19 +79,39 @@ export async function POST(request: Request) {
     includePrediction = parsed.includePrediction;
   }
 
-  const db = getDb();
+  let resolvedRuntime: WaiaRuntimeDb | undefined;
+  const telemetryStart = Date.now();
   try {
-    const body = runTwinEngine(db, {
+    resolvedRuntime = await getWaiaRuntimeDb();
+    const body = await runTwinEngineForRuntimeAsync(resolvedRuntime, {
       userId,
       scenario,
       includePrediction,
+    });
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "twin_engine",
+      waia_db_backend: resolvedRuntime.kind,
+      http_status: 200,
+      outcome: "success",
+      duration_ms: Date.now() - telemetryStart,
     });
     return NextResponse.json(body, {
       status: 200,
       headers: { "Cache-Control": "private, no-store" },
     });
   } catch (err) {
+    const duration_ms = Date.now() - telemetryStart;
     if (err instanceof TwinEngineScenarioTooLongError) {
+      emitWaiaRuntimeRouteTelemetry({
+        event: "waia_runtime_route",
+        route: "twin_engine",
+        waia_db_backend: resolvedRuntime?.kind,
+        http_status: 400,
+        outcome: "client_error",
+        duration_ms,
+        error_class: safeTelemetryErrorClass(err),
+      });
       return NextResponse.json(
         validationErrorEnvelope(
           "SCENARIO_TOO_LONG",
@@ -96,6 +120,17 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    const outcome =
+      !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    emitWaiaRuntimeRouteTelemetry({
+      event: "waia_runtime_route",
+      route: "twin_engine",
+      waia_db_backend: resolvedRuntime?.kind,
+      http_status: 500,
+      outcome,
+      duration_ms,
+      error_class: safeTelemetryErrorClass(err),
+    });
     return NextResponse.json(
       validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."),
       { status: 500 },

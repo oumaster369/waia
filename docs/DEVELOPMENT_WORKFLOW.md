@@ -1,44 +1,33 @@
+# WAIA development workflow — operational adjunct
 
+**Canonical workflow, branching rules, phases, and agent contract:** [`AGENTS.md`](../AGENTS.md) · [`docs/waia-governance/BRANCHING-STRATEGY.md`](waia-governance/BRANCHING-STRATEGY.md) · [`docs/waia-governance/PR-PROTOCOL.md`](waia-governance/PR-PROTOCOL.md).
 
-
-# WAIA Development Workflow
-
-## Overview
-
-This project uses a protected Git workflow.
-
-Direct pushes to `dev` and `main` are not allowed.  
-All changes must go through Pull Requests.
+This page keeps **additive** ergonomics: git commands, stack, deployment pointers—not duplicate governance prose.
 
 ---
 
-## Branch Structure
+## Branch names (summary)
 
-- `main` — production (reserved)
-- `dev` — main working branch
-- `feature/*` — development branches
-
-Examples:
-
-- feature/initial-waia-app
-- feature/auth-system
-- feature/ai-twin-core
+- **`dee-<NN>-<slug>`** — development (Linear `DEE-NN`; full rules in **BRANCHING-STRATEGY** above).
+- **`dev`** — integration (**no direct push**).
+- **`main`** — production (**no direct push**).
+- `feature/*` — legacy only; avoid for new work.
 
 ---
 
-## Development Flow
+## Git flow (mechanical)
 
-### 1. Sync with dev
+### 1. Sync with `dev`
 
 ```bash
 git checkout dev
 git pull origin dev
-````
+```
 
-### 2. Create feature branch
+### 2. Create branch
 
 ```bash
-git checkout -b feature/<task-name>
+git checkout -b dee-<NN>-<task-slug>
 ```
 
 ### 3. Work and commit
@@ -51,30 +40,23 @@ git commit -m "clear and meaningful message"
 ### 4. Push branch
 
 ```bash
-git push origin feature/<task-name>
+git push origin dee-<NN>-<task-slug>
 ```
 
-### 5. Create Pull Request
+### 5. Pull request
 
-* base: `dev`
-* compare: `feature/<task-name>`
-
----
-
-## Merge Process
-
-* Pull Request must be created for all changes
-* Merge is done via GitHub UI
-* Squash merge is preferred
-* After merge, feature branch can be deleted
+- **Base:** `dev`
+- **Compare:** `dee-<NN>-…`
+- Merge process: **[`PR-PROTOCOL.md`](waia-governance/PR-PROTOCOL.md)**
 
 ---
 
-## Repository Rules
+## Before any Git action
 
-* Protected branches: `dev`, `main`
-* Direct push is blocked
-* Pull Request is required
+```bash
+git status
+git branch
+```
 
 ---
 
@@ -87,18 +69,14 @@ git push origin feature/<task-name>
 
 ---
 
-## Before any Git action
+## Repository rules
 
-Always check:
-
-```bash
-git status
-git branch
-```
+* Protected branches: `dev`, `main`
+* Pull requests required (see **AGENTS.md**)
 
 ---
 
-## Tech Stack
+## Tech stack
 
 * Next.js
 * TypeScript
@@ -112,27 +90,6 @@ git branch
 
 **Cloudflare Workers** + **OpenNext** (`@opennextjs/cloudflare`), not static Pages-only export.
 
-See [docs/cloudflare-deploy.md](cloudflare-deploy.md) (commands and limitations), [docs/cloudflare-env-vars.md](cloudflare-env-vars.md), and [.dev.vars.example](../.dev.vars.example).
+See [cloudflare-deploy.md](cloudflare-deploy.md), [cloudflare-env-vars.md](cloudflare-env-vars.md), and [.dev.vars.example](../.dev.vars.example).
 
 CI/Git auto-deploy wiring is a separate follow-up.
-
-
-
-
-
-
-
-
-
- 
-
-
-
-
-
-
-
-
-
-
-

@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1777989873065,
+      "tag": "0000_fast_talisman",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777989873066,
+      "tag": "0001_auth_users_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778076449217,
+      "tag": "0002_useful_machine_man",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+# Optional Postgres integration checks (DEE-64 D6-pre).
+# Not run on every PR — start from Actions tab (workflow_dispatch) or enable on demand.
+# Default CI remains SQLite-only (see ci.yml).
+
+name: postgres-integration
+
+on:
+  workflow_dispatch:
+
+env:
+  DATABASE_URL_POSTGRES: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_it
+  WAIA_PG_INTEGRATION: "1"
+
+jobs:
+  integration:
+    name: postgres migrate + integration guard
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waia_it
+          POSTGRES_PASSWORD: waia_it
+          POSTGRES_DB: waia_it
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_it -d waia_it"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Auth prelude + apply Postgres migrations
+        run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
+      - name: Unit + integration tests (integration skipped unless WAIA_PG_INTEGRATION=1)
+        run: pnpm exec vitest run

@@ -2,6 +2,8 @@ import "server-only";
 
 import { and, asc, eq } from "drizzle-orm";
 
+import { type WaiaDb } from "@/db/types";
+import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
 import { diaryEntries, scenarioAnswers } from "@/db/schema";
 import {
   composeScenarioEmbedInput,
@@ -10,7 +12,7 @@ import {
   TWIN_MEMORY_EMBEDDING_MODEL_ID,
 } from "@/lib/embeddings/twin-memory-embeddings";
 import { MAX_DIARY_BODY_CHARS } from "@/lib/dashboard/diary-body-limits";
-import { ensureUserTwinSeed, type WaiaSqliteDb } from "@/lib/twin-persistence/loader";
+import { ensureUserTwinSeed } from "@/lib/twin-persistence/loader";
 
 export { MAX_DIARY_BODY_CHARS };
 export const MAX_SCENARIO_KEY_CHARS = 256;
@@ -71,20 +73,21 @@ export function stringifyScenarioPayloadForStorage(payload: unknown): string | n
   }
 }
 
-export function appendDiaryEntryForUser(
-  db: WaiaSqliteDb,
+export async function appendDiaryEntryForUser(
+  db: WaiaDb,
   params: {
     userId: string;
     body: string;
     idempotencyKey?: string | null;
   },
-): AppendDiaryEntryResult {
+): Promise<AppendDiaryEntryResult> {
   const twinProfileId = ensureUserTwinSeed(db, params.userId);
   const body = params.body.trim();
   const idem = normalizeIdempotencyKey(params.idempotencyKey);
+  const userId = params.userId;
 
-  return db.transaction((tx) => {
-    const sqlite = tx as WaiaSqliteDb;
+  return runWaiaSqliteLegacyTransaction(db, (tx) => {
+    const sqlite = tx as WaiaDb;
     if (idem) {
       const existing = sqlite
         .select({
@@ -93,7 +96,7 @@ export function appendDiaryEntryForUser(
           createdAt: diaryEntries.createdAt,
         })
         .from(diaryEntries)
-        .where(and(eq(diaryEntries.userId, params.userId), eq(diaryEntries.idempotencyKey, idem)))
+        .where(and(eq(diaryEntries.userId, userId), eq(diaryEntries.idempotencyKey, idem)))
         .get();
       if (existing) {
         return {
@@ -113,7 +116,7 @@ export function appendDiaryEntryForUser(
       .insert(diaryEntries)
       .values({
         id,
-        userId: params.userId,
+        userId,
         twinProfileId,
         body,
         idempotencyKey: idem,
@@ -141,20 +144,22 @@ export function appendDiaryEntryForUser(
   });
 }
 
-export function appendScenarioAnswerForUser(
-  db: WaiaSqliteDb,
+export async function appendScenarioAnswerForUser(
+  db: WaiaDb,
   params: {
     userId: string;
     scenarioKey: string;
     payloadJson: string;
     idempotencyKey?: string | null;
   },
-): AppendScenarioAnswerResult {
+): Promise<AppendScenarioAnswerResult> {
   const twinProfileId = ensureUserTwinSeed(db, params.userId);
   const idem = normalizeIdempotencyKey(params.idempotencyKey);
+  const scenarioKeyParam = params.scenarioKey;
+  const payloadJsonParam = params.payloadJson;
 
-  return db.transaction((tx) => {
-    const sqlite = tx as WaiaSqliteDb;
+  return runWaiaSqliteLegacyTransaction(db, (tx) => {
+    const sqlite = tx as WaiaDb;
     if (idem) {
       const existing = sqlite
         .select({
@@ -183,7 +188,7 @@ export function appendScenarioAnswerForUser(
     }
 
     const id = crypto.randomUUID();
-    const scenarioEmbedIn = composeScenarioEmbedInput(params.scenarioKey, params.payloadJson);
+    const scenarioEmbedIn = composeScenarioEmbedInput(scenarioKeyParam, payloadJsonParam);
     const embeddingVec = embedTwinMemoryText(scenarioEmbedIn);
     const embeddingJson = serializeEmbeddingJson(embeddingVec);
     const embeddingModel = embeddingVec ? TWIN_MEMORY_EMBEDDING_MODEL_ID : null;
@@ -192,8 +197,8 @@ export function appendScenarioAnswerForUser(
       .values({
         id,
         twinProfileId,
-        scenarioKey: params.scenarioKey,
-        payloadJson: params.payloadJson,
+        scenarioKey: scenarioKeyParam,
+        payloadJson: payloadJsonParam,
         idempotencyKey: idem,
         embeddingJson,
         embeddingModel,
@@ -212,17 +217,17 @@ export function appendScenarioAnswerForUser(
 
     return {
       id,
-      scenarioKey: params.scenarioKey,
-      payload: JSON.parse(params.payloadJson) as unknown,
+      scenarioKey: scenarioKeyParam,
+      payload: JSON.parse(payloadJsonParam) as unknown,
       createdAt: row.createdAt,
       replayed: false,
     };
   });
 }
 
-export function listDiaryEntriesForUser(db: WaiaSqliteDb, userId: string): DiaryMemoryRow[] {
+export async function listDiaryEntriesForUser(db: WaiaDb, userId: string): Promise<DiaryMemoryRow[]> {
   ensureUserTwinSeed(db, userId);
-  const rows = db
+  const rows = await db
     .select({
       id: diaryEntries.id,
       body: diaryEntries.body,
@@ -230,8 +235,7 @@ export function listDiaryEntriesForUser(db: WaiaSqliteDb, userId: string): Diary
     })
     .from(diaryEntries)
     .where(eq(diaryEntries.userId, userId))
-    .orderBy(asc(diaryEntries.createdAt))
-    .all();
+    .orderBy(asc(diaryEntries.createdAt));
 
   return rows.map((r) => ({
     id: r.id,
@@ -240,9 +244,12 @@ export function listDiaryEntriesForUser(db: WaiaSqliteDb, userId: string): Diary
   }));
 }
 
-export function listScenarioAnswersForUser(db: WaiaSqliteDb, userId: string): ScenarioAnswerMemoryRow[] {
+export async function listScenarioAnswersForUser(
+  db: WaiaDb,
+  userId: string,
+): Promise<ScenarioAnswerMemoryRow[]> {
   const twinProfileId = ensureUserTwinSeed(db, userId);
-  const rows = db
+  const rows = await db
     .select({
       id: scenarioAnswers.id,
       scenarioKey: scenarioAnswers.scenarioKey,
@@ -251,8 +258,7 @@ export function listScenarioAnswersForUser(db: WaiaSqliteDb, userId: string): Sc
     })
     .from(scenarioAnswers)
     .where(eq(scenarioAnswers.twinProfileId, twinProfileId))
-    .orderBy(asc(scenarioAnswers.createdAt))
-    .all();
+    .orderBy(asc(scenarioAnswers.createdAt));
 
   return rows.map((r) => ({
     id: r.id,

@@ -4,7 +4,7 @@ Switch to **Plan Mode** and use the strongest reasoning model available (e.g. Cl
 
 ## What you must do
 
-1. Read `AGENTS.md`, `docs/DEVELOPMENT_WORKFLOW.md`, and `.cursor/rules/*` first.
+1. Read **`AGENTS.md`**, skim **`docs/waia-governance/README.md`**, and `.cursor/rules/*` first. **`docs/DEVELOPMENT_WORKFLOW.md`** is for git ergonomics / deploy snippets only—canonical workflow remains **`AGENTS.md`**.
 2. Restate the goal in 1-2 sentences. Confirm assumptions explicitly.
 3. Explore the relevant parts of the codebase (`app/`, `components/`, `lib/`, existing tests). Cite specific files.
 4. Produce a plan with:

@@ -89,18 +89,18 @@ describe("GET /api/dashboard/twin/pattern-summary", () => {
   it("returns 200 with non-empty summaries when seeded memory exists", async () => {
     const db = getDb();
     const twinProfileId = ensureUserTwinSeed(db, USER_A);
-    persistUserTwinExchangeWithAssistantStub(db, {
+    await persistUserTwinExchangeWithAssistantStub(db, {
       twinProfileId,
       userContent: "I worry about timelines and deadlines at work frequently",
       userIdempotencyKey: null,
       assistantContent: "Let us prioritize scope next week calmly",
     });
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_A,
       body: "Prefer planning over rushing decisions calmly then anxious mornings",
       idempotencyKey: null,
     });
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_A,
       body: "Relationships matter more than short stress bursts",
       idempotencyKey: null,
@@ -125,13 +125,13 @@ describe("GET /api/dashboard/twin/pattern-summary", () => {
 
   it("does not leak other users memory tokens across sessions", async () => {
     const db = getDb();
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_A,
       body:
         "alphauniqueAAA streak alphauniqueAAA values goals friendships stress calmly happy moment",
       idempotencyKey: null,
     });
-    appendDiaryEntryForUser(db, {
+    await appendDiaryEntryForUser(db, {
       userId: USER_B,
       body: "betauniqueBBB lone betauniqueBBB values goals calmly",
       idempotencyKey: null,
