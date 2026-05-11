@@ -118,6 +118,43 @@ Rules:
 - Complete Test & Fix (including default PR readiness) before considering the implementation task done
 - If a phase fails, fix it before continuing
 
+## Safe auto-advance after green validation
+
+This subsection codifies the **default completion** semantics above. It does **not** waive any STOP, escalation, risk tier, merge, or governance gate; it only closes the gap between green validation and PR readiness when **all** preconditions hold.
+
+When **every** precondition is satisfied, the agent continues automatically into **commit → push → Linear `In Review` → PR readiness** without waiting for a follow-up prompt.
+
+### Preconditions (all required)
+
+- Implementation finished and `/test-and-fix` gates green: `pnpm lint`, `pnpm typecheck`, `pnpm test --run`, `pnpm build` — plus Playwright e2e when the change touches `app/**`, `components/**`, or user-visible behavior per [`.cursor/rules/30-testing.mdc`](.cursor/rules/30-testing.mdc).
+- Diff contains **only in-scope files** for the active Linear issue. `git status` shows no unrelated dirty files.
+- Branch name matches `dee-<NN>-<slug>` and the Linear ID `DEE-NN` resolves in the WAIA project.
+- Risk tier per [`docs/waia-governance/RISK-TIERS.md`](docs/waia-governance/RISK-TIERS.md) does **not** require additional Architect approval (T0/T1 baseline; T2 only when the issue text does not call for an Architect hold; **never** T3/T4).
+- No open STOP condition and no governance escalation in flight ([`docs/waia-governance/EXECUTION-CONTRACT.md`](docs/waia-governance/EXECUTION-CONTRACT.md)).
+- No unresolved TODO/blocker comment in the diff or PR body.
+
+### Authorized auto-advance (only when all preconditions hold)
+
+- Commit in-scope changes with a Conventional Commits message including `DEE-NN` per [`docs/waia-governance/BRANCHING-STRATEGY.md`](docs/waia-governance/BRANCHING-STRATEGY.md) (use `git add` on **named** in-scope paths, not blanket `git add -A`, unless every dirty file is in scope).
+- `git push -u origin <branch>` to set upstream on first push for the `dee-*` branch.
+- Move the Linear issue to **`In Review`** (existing DEE status) and add a PR-ready comment linking the compare URL.
+- Print the GitHub compare URL (`dev…<branch>`), PR create URL, paste-ready PR title (with `DEE-NN`), PR body, and validation summary per [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md) and [`docs/waia-governance/PR-PROTOCOL.md`](docs/waia-governance/PR-PROTOCOL.md).
+- **Stop.** Wait for a human to open / review / merge the PR.
+
+### Never allowed under this rule
+
+- `gh pr merge`, any auto-merge flow, or treating merge as the agent's call ([`docs/waia-governance/PR-PROTOCOL.md`](docs/waia-governance/PR-PROTOCOL.md), [`docs/waia-governance/RISK-TIERS.md`](docs/waia-governance/RISK-TIERS.md)).
+- Direct push to `main` or `dev` ([`.cursor/rules/10-git-workflow.mdc`](.cursor/rules/10-git-workflow.mdc), [`docs/waia-governance/BRANCHING-STRATEGY.md`](docs/waia-governance/BRANCHING-STRATEGY.md)).
+- Creating or using fabricated Linear IDs (`DEE-NN` must resolve in Linear; see [`docs/waia-governance/FAILURE-PATTERNS.md`](docs/waia-governance/FAILURE-PATTERNS.md) `FP-005`).
+- Committing files outside the active issue's scope — open a new Linear issue instead.
+- Proceeding when any required validation failed or was skipped ([`docs/waia-governance/FAILURE-PATTERNS.md`](docs/waia-governance/FAILURE-PATTERNS.md) `FP-002`).
+- Bypassing human approval gates ([`docs/waia-governance/EXECUTION-CONTRACT.md`](docs/waia-governance/EXECUTION-CONTRACT.md)).
+- Broadening scope after validation. Scope expansion requires a new Linear issue.
+- Starting the next Linear issue automatically. Work selection remains a human-initiated step.
+- Bypassing this rule's preconditions when any STOP condition is open or the constitutional doctrine (e.g. [`docs/waia-governance/constitutional-history/2026-05-10-constitutional-acceptance-v1.0.md`](docs/waia-governance/constitutional-history/2026-05-10-constitutional-acceptance-v1.0.md)) calls for an Architect hold.
+
+If any precondition is **not** satisfied, do not auto-advance: surface the blocker, follow the `STOP` payload format in [`docs/waia-governance/EXECUTION-CONTRACT.md`](docs/waia-governance/EXECUTION-CONTRACT.md), and wait for the human.
+
 ---
 
 # Linear Integration (CRITICAL)
@@ -149,9 +186,10 @@ Rules:
 7. Follow issue dependencies strictly
 8. If `Dependencies` is empty, treat the issue as unblocked
 9. Update issue status using the real DEE workflow:
-  - `Backlog` → `Todo` → `In Progress` → `Done`
+  - `Backlog` → `Todo` → `In Progress` → `In Review` → `Done`
+  - `In Review` is the existing DEE status entered when PR readiness completes (see [Safe auto-advance after green validation](#safe-auto-advance-after-green-validation)); `Done` is set after merge per [`docs/waia-governance/POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md).
 10. `Canceled` and `Duplicate` are terminal states
-11. Do not invent missing statuses such as `Ready` or `Review` if they do not exist in Linear
+11. Do not invent missing statuses (e.g. a `Ready` status that does not exist in Linear). DEE statuses currently include `Backlog`, `Todo`, `In Progress`, `In Review`, `Done`, `Canceled`, `Duplicate`.
 
 ---
 
