@@ -100,9 +100,10 @@ production callers
 
 ## Remaining Work
 
-### AI Gateway (Twin dialogue integration — planning only)
+### AI Gateway (Twin dialogue)
 
-- **DEE-76** defines bounded **AI Gateway** architecture for OpenAI-class Twin dialogue completion (provider port, runtime placement, lifecycle, observability, kill-switch, token/memory boundaries): [`../architecture/DEE-76-AI-GATEWAY-ARCHITECTURE.md`](../architecture/DEE-76-AI-GATEWAY-ARCHITECTURE.md). **Does not** implement SDK wiring, new routes, schema changes, or autonomous agent loops—implementation is deferred to explicit follow-on issues.
+- **DEE-76** defines bounded **AI Gateway** architecture for OpenAI-class Twin dialogue completion (provider port, runtime placement, lifecycle, observability, kill-switch, token/memory boundaries): [`../architecture/DEE-76-AI-GATEWAY-ARCHITECTURE.md`](../architecture/DEE-76-AI-GATEWAY-ARCHITECTURE.md). **Does not** implement SDK wiring, schema changes, or autonomous agent loops beyond explicitly scoped slices.
+- **DEE-77** lands thin **runtime foundation** under `lib/ai-gateway/*`: `CompletionProviderPort`, no-network `FakeCompletionProvider`, `resolveTwinDialogueAssistantText`, env **`WAIA_AI_GATEWAY_FOUNDATION`** (default off = legacy inline stub path; opt-in exercises gateway + fake adapter with **identical stub UX**). Extends **`waia_runtime_route`** for `twin_dialogue_turn` with content-free `ai_gateway_*` fields. **Does not** add OpenAI/SDK, outbound HTTP, retrieval, or cognition.
 
 ### Runtime HTTP layer (post–DEE-105)
 

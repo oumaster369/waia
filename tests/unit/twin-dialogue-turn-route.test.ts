@@ -64,6 +64,7 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
   });
 
   beforeEach(() => {
+    delete process.env.WAIA_AI_GATEWAY_FOUNDATION;
     vi.mocked(sessionUser.getOptionalSessionUserId).mockReset();
     const db = getDb();
     db.delete(twinDialogueTurns).run();
@@ -194,5 +195,39 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
       .from(twinDialogueTurns)
       .all();
     expect(total?.c).toBe(2);
+  });
+
+  it("emits ai_gateway_foundation off when foundation env unset", async () => {
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const res = await POST(postJson({ message: "telemetry path off" }));
+      expect(res.status).toBe(200);
+      const payloads = spy.mock.calls.map((c) => JSON.parse(String(c[0])));
+      const routePayload = payloads.find(
+        (p: { event?: string }) => p.event === "waia_runtime_route",
+      );
+      expect(routePayload?.ai_gateway_foundation).toBe("off");
+      expect(routePayload?.ai_gateway_provider_phase_ms).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("emits ai_gateway_foundation fake_stub when WAIA_AI_GATEWAY_FOUNDATION=1", async () => {
+    process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const res = await POST(postJson({ message: "telemetry path fake" }));
+      expect(res.status).toBe(200);
+      const payloads = spy.mock.calls.map((c) => JSON.parse(String(c[0])));
+      const routePayload = payloads.find(
+        (p: { event?: string }) => p.event === "waia_runtime_route",
+      );
+      expect(routePayload?.ai_gateway_foundation).toBe("fake_stub");
+      expect(routePayload?.ai_gateway_provider_phase_ms).toBeGreaterThanOrEqual(0);
+    } finally {
+      spy.mockRestore();
+      delete process.env.WAIA_AI_GATEWAY_FOUNDATION;
+    }
   });
 });
