@@ -14,6 +14,7 @@ Format: **Id · Symptom · Root cause · Recovery · Prevent**
 
 | **FP-002** | **Symptom:** PR lacks `pnpm build` before CI. **Root cause:** phased validation skipped. **Recovery:** Run full chain per [`../../AGENTS.md`](../../AGENTS.md) Validation + **[`PR-PROTOCOL.md`](PR-PROTOCOL.md)** before green. **Prevent:** Executor follows `/test-and-fix`. |
 | **FP-003** | **Symptom:** Invented Todo status tasks; board has no `Todo`. **Root cause:** `AGENTS.md` vs Linear reality drift. **Recovery:** Align issue status to board OR amend `AGENTS` with Architect approval. **Prevent:** [`LINEAR-GOVERNANCE.md`](LINEAR-GOVERNANCE.md). |
+| **FP-008** | **Symptom:** Agent finishes `/test-and-fix` green but stops with a dirty working tree, requiring a follow-up prompt to commit, push, update Linear, and prepare PR readiness. **Root cause:** the commit step between green validation and PR readiness was implicit in `AGENTS.md` "Default completion"; agents conservatively halted instead of committing. **Recovery:** Architect prompts a manual commit + push + Linear update, or invokes `/prepare-pr` after a manual commit. **Prevent:** [`../../AGENTS.md`](../../AGENTS.md) "Safe auto-advance after green validation" + [`../../.cursor/commands/test-and-fix.md`](../../.cursor/commands/test-and-fix.md) explicit commit step. Auto-advance is bounded by enumerated preconditions; auto-merge and scope expansion remain forbidden. |
 
 ## Migration doctrine
 

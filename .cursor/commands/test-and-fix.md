@@ -30,6 +30,31 @@ Run the full local test suite, fix anything red, and loop until everything is gr
 - A type error points to an upstream library bug -> ask before pinning workarounds.
 - A test contradicts the plan -> stop and re-plan; do not silently change tests to make them pass.
 
-After the loop is green twice, **perform PR readiness by default** — same checklist as [`/prepare-pr`](prepare-pr.md) (clean tree, push `dee-*` to `origin` with `-u` if needed, compare URL `dev...HEAD`, PR creation via that link, paste-ready title/body, report validation, **stop before merge**). No separate “now run /prepare-pr” prompt is required for normal task completion.
+After the loop is green twice, **safe auto-advance** per [`AGENTS.md`](../../AGENTS.md) "Safe auto-advance after green validation":
 
-Use `/prepare-pr` only when you need a standalone retry (e.g. push failed earlier) without re-running the full test loop.
+1. **Verify only in-scope files are dirty.**
+
+   ```bash
+   git status
+   ```
+
+   If any **unrelated** file is dirty (outside the active Linear issue's scope), **STOP** and ask. Do not commit unrelated changes; do not blanket `git add -A` when the working tree mixes scopes.
+
+2. **Commit in-scope changes** with a Conventional Commits message that includes the active Linear id, e.g.:
+
+   ```bash
+   git add <named in-scope paths>
+   git commit -m "DEE-NN type(scope): subject"
+   ```
+
+   `git add -A` is acceptable **only** when every dirty path is genuinely in scope for the active issue.
+
+3. **Continue into PR readiness** — same checklist as [`/prepare-pr`](prepare-pr.md): push `dee-*` to `origin` with `-u` if needed, compare URL `dev...HEAD`, PR creation via that link, paste-ready title/body, report validation, **stop before merge**.
+
+4. **Move the Linear issue to `In Review`** (existing DEE status) and add a PR-ready comment with the compare URL.
+
+5. **Stop before merge.** Humans open/review/merge.
+
+No separate "now run /prepare-pr" prompt is required for normal task completion. If any auto-advance precondition fails (validation, scope, branch, Linear id, risk tier, open STOP, constitutional Architect hold), do **not** auto-advance — surface the blocker.
+
+Use `/prepare-pr` only when you need a standalone retry (e.g. push failed earlier) without re-running the full test loop; its §1 STOP remains the safety net if the tree is unexpectedly dirty.
