@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { isWaiaAiGatewayFoundationEnabled } from "@/lib/ai-gateway/config";
 import { FakeCompletionProvider } from "@/lib/ai-gateway/fake-completion-provider";
@@ -63,13 +63,26 @@ describe("FakeCompletionProvider", () => {
 });
 
 describe("resolveTwinDialogueAssistantText", () => {
-  const prev = process.env.WAIA_AI_GATEWAY_FOUNDATION;
+  const prevFoundation = process.env.WAIA_AI_GATEWAY_FOUNDATION;
+  const prevProvider = process.env.WAIA_AI_PROVIDER;
+  const prevOpenAiKey = process.env.WAIA_AI_OPENAI_API_KEY;
 
   afterEach(() => {
-    if (prev === undefined) {
+    vi.restoreAllMocks();
+    if (prevFoundation === undefined) {
       delete process.env.WAIA_AI_GATEWAY_FOUNDATION;
     } else {
-      process.env.WAIA_AI_GATEWAY_FOUNDATION = prev;
+      process.env.WAIA_AI_GATEWAY_FOUNDATION = prevFoundation;
+    }
+    if (prevProvider === undefined) {
+      delete process.env.WAIA_AI_PROVIDER;
+    } else {
+      process.env.WAIA_AI_PROVIDER = prevProvider;
+    }
+    if (prevOpenAiKey === undefined) {
+      delete process.env.WAIA_AI_OPENAI_API_KEY;
+    } else {
+      process.env.WAIA_AI_OPENAI_API_KEY = prevOpenAiKey;
     }
   });
 
@@ -82,16 +95,22 @@ describe("resolveTwinDialogueAssistantText", () => {
 
   it("uses fake provider path when foundation enabled", async () => {
     process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
+    delete process.env.WAIA_AI_PROVIDER;
     const out = await resolveTwinDialogueAssistantText({ userContent: "hello" });
     expect(out.text).toBe(TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE);
-    expect(out.telemetry.foundation).toBe("fake_stub");
+    expect(out.telemetry).toMatchObject({
+      foundation: "fake_stub",
+      providerId: "fake",
+      providerOutcome: "ok",
+    });
     if (out.telemetry.foundation === "fake_stub") {
       expect(out.telemetry.provider_phase_ms).toBeGreaterThanOrEqual(0);
     }
   });
 
-  it("degrades to stub when signal aborted under foundation path", async () => {
+  it("degrades to stub when signal aborted under foundation fake path", async () => {
     process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
+    delete process.env.WAIA_AI_PROVIDER;
     const ac = new AbortController();
     ac.abort();
     const out = await resolveTwinDialogueAssistantText({
@@ -101,7 +120,49 @@ describe("resolveTwinDialogueAssistantText", () => {
     expect(out.text).toBe(TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE);
     expect(out.telemetry).toMatchObject({
       foundation: "fake_stub",
+      providerId: "fake",
+      providerOutcome: "provider_error",
       degraded: true,
+    });
+  });
+
+  it("degrades with CONFIG when openai-compatible selected without API key", async () => {
+    process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
+    process.env.WAIA_AI_PROVIDER = "openai-compatible";
+    delete process.env.WAIA_AI_OPENAI_API_KEY;
+
+    const out = await resolveTwinDialogueAssistantText({ userContent: "hello" });
+    expect(out.text).toBe(TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE);
+    expect(out.telemetry).toMatchObject({
+      foundation: "fake_stub",
+      providerId: "openai-compatible",
+      providerOutcome: "config",
+      degraded: true,
+    });
+  });
+
+  it("returns live assistant text when openai-compatible succeeds", async () => {
+    process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
+    process.env.WAIA_AI_PROVIDER = "openai-compatible";
+    process.env.WAIA_AI_OPENAI_API_KEY = "test-key";
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl-gateway",
+          choices: [{ message: { role: "assistant", content: " Twin dialogue reply " } }],
+          usage: { prompt_tokens: 2, completion_tokens: 4, total_tokens: 6 },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const out = await resolveTwinDialogueAssistantText({ userContent: "user asks" });
+    expect(out.text).toBe("Twin dialogue reply");
+    expect(out.telemetry).toMatchObject({
+      foundation: "live",
+      providerId: "openai-compatible",
+      providerOutcome: "ok",
     });
   });
 });

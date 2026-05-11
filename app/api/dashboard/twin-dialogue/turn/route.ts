@@ -168,14 +168,15 @@ export async function POST(request: Request) {
       http_status: 200,
       outcome: "success",
       duration_ms: Date.now() - telemetryStart,
-      ai_gateway_foundation:
-        gatewayTelemetry.foundation === "off" ? "off" : "fake_stub",
-      ...(gatewayTelemetry.foundation === "fake_stub"
-        ? {
+      ...(gatewayTelemetry.foundation === "off"
+        ? { ai_gateway_foundation: "off" as const }
+        : {
+            ai_gateway_foundation: gatewayTelemetry.foundation,
+            ai_gateway_provider: gatewayTelemetry.providerId,
+            ai_gateway_provider_outcome: gatewayTelemetry.providerOutcome,
             ai_gateway_provider_phase_ms: gatewayTelemetry.provider_phase_ms,
             ...(gatewayTelemetry.degraded ? { ai_gateway_degraded: true as const } : {}),
-          }
-        : {}),
+          }),
     });
 
     return NextResponse.json(body, {
