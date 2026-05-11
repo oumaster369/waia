@@ -11,7 +11,7 @@
 ## 1. Scope
 
 - **In scope:** A **single staging environment** where operators deliberately enable OpenAI-compatible completion for **`POST /api/dashboard/twin-dialogue/turn`** only, observe **stdout `waia_runtime_route`** telemetry, then disable egress again.
-- **Out of scope:** Production activation (requires a **separate** Architect sign-off and change record). CI live integration tests, retries, streaming, tool calls, retrieval, new routes, and AI-gateway DB tables (DEE-107).
+- **Out of scope:** Production activation (requires a **separate** Architect sign-off and change record; scaffold **[DEE-80-AI-GATEWAY-PRODUCTION-INFERENCE-ROLLOUT.md](./DEE-80-AI-GATEWAY-PRODUCTION-INFERENCE-ROLLOUT.md)**). CI live integration tests, retries, streaming, tool calls, retrieval, new routes, and AI-gateway DB tables (DEE-107).
 
 ---
 
