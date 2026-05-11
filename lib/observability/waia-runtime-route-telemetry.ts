@@ -37,6 +37,15 @@ export type WaiaRuntimeRouteTelemetryPayload = {
   duration_ms: number;
   /** `Error.prototype.name` only — never log message text (privacy / PII). */
   error_class?: string;
+  /**
+   * Twin dialogue AI Gateway foundation path (DEE-77). Content-free; no user text.
+   * Omitted on routes other than `twin_dialogue_turn` unless extended intentionally.
+   */
+  ai_gateway_foundation?: "off" | "fake_stub";
+  /** Wall time for provider-phase completion call when foundation path uses fake adapter. */
+  ai_gateway_provider_phase_ms?: number;
+  /** True when fake provider failed and assistant text fell back to product stub. */
+  ai_gateway_degraded?: boolean;
 };
 
 export type WaiaRuntimeRouteTelemetrySink = (line: string) => void;

@@ -4,6 +4,7 @@ import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
+import { resolveTwinDialogueAssistantText } from "@/lib/ai-gateway/twin-dialogue-completion-gateway";
 import type { TwinDialogueTurnSubmitApiResponse } from "@/lib/dashboard/twin-dialogue-turn-api.types";
 import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
 import {
@@ -98,6 +99,11 @@ export async function POST(request: Request) {
     const runtime = await getWaiaRuntimeDb();
     resolvedRuntime = runtime;
 
+    const { text: assistantContent, telemetry: gatewayTelemetry } =
+      await resolveTwinDialogueAssistantText({
+        userContent: trimmed,
+      });
+
     let twinProfileId: string;
     let persisted: {
       userTurn: { id: string; sequence: number; createdAt: Date; content: string };
@@ -112,7 +118,7 @@ export async function POST(request: Request) {
         twinProfileId,
         userContent: trimmed,
         userIdempotencyKey: idempotencyKey ?? null,
-        assistantContent: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+        assistantContent,
       });
       userTurnCount = await p.countUserDialogueTurns(twinProfileId);
     } else {
@@ -122,7 +128,7 @@ export async function POST(request: Request) {
         twinProfileId,
         userContent: trimmed,
         userIdempotencyKey: idempotencyKey ?? null,
-        assistantContent: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+        assistantContent,
       });
       userTurnCount = await p.countUserDialogueTurns(twinProfileId);
     }
@@ -162,6 +168,14 @@ export async function POST(request: Request) {
       http_status: 200,
       outcome: "success",
       duration_ms: Date.now() - telemetryStart,
+      ai_gateway_foundation:
+        gatewayTelemetry.foundation === "off" ? "off" : "fake_stub",
+      ...(gatewayTelemetry.foundation === "fake_stub"
+        ? {
+            ai_gateway_provider_phase_ms: gatewayTelemetry.provider_phase_ms,
+            ...(gatewayTelemetry.degraded ? { ai_gateway_degraded: true as const } : {}),
+          }
+        : {}),
     });
 
     return NextResponse.json(body, {
