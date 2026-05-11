@@ -36,6 +36,10 @@ All emitted objects use `event: "waia_runtime_route"` (stable filter key).
 | `ai_gateway_provider_outcome` | string (optional) | **`twin_dialogue_turn` only** when foundation ≠ `off`. See [Twin dialogue provider outcome](#twin-dialogue-provider-outcome-d78). |
 | `ai_gateway_provider_phase_ms` | number (optional) | **`twin_dialogue_turn` only** when foundation ≠ `off`. Wall time for the provider `complete` call. |
 | `ai_gateway_degraded` | boolean (optional) | **`twin_dialogue_turn` only**. `true` when assistant text fell back to the product stub after a provider failure (still HTTP 200). |
+| `ai_gateway_provider_prompt_tokens` | number (optional) | **`twin_dialogue_turn` only** when foundation ≠ `off` and vendor returned usage (DEE-79). |
+| `ai_gateway_provider_completion_tokens` | number (optional) | **`twin_dialogue_turn` only** — same as above. |
+| `ai_gateway_provider_total_tokens` | number (optional) | **`twin_dialogue_turn` only** — same as above. |
+| `ai_gateway_provider_request_id` | string (optional) | **`twin_dialogue_turn` only** — vendor correlation id when returned (content-free). |
 
 ### Twin dialogue provider outcome (DEE-78)
 
@@ -166,6 +170,7 @@ WAIA intentionally keeps telemetry **vendor-neutral**: one JSON line per event. 
 - [`DEE-95-RUNTIME-ROUTING-STRATEGY.md`](./DEE-95-RUNTIME-ROUTING-STRATEGY.md) — kill-switch, env, sequencing.
 - [`DEE-95G-LOG-DASHBOARD-SPEC.md`](./DEE-95G-LOG-DASHBOARD-SPEC.md) — derived metrics spec.
 - [`DEE-95G-STAGING-CHECKLIST.md`](./DEE-95G-STAGING-CHECKLIST.md) — pre-flight checks before route waves.
+- [`DEE-79-AI-GATEWAY-ACTIVATION-RUNBOOK.md`](./DEE-79-AI-GATEWAY-ACTIVATION-RUNBOOK.md) — **staging-only** first outbound inference activation for Twin dialogue (operator procedure).
 
 ---
 
@@ -177,3 +182,4 @@ WAIA intentionally keeps telemetry **vendor-neutral**: one JSON line per event. 
 | 1.1 | DEE-95h | Route keys `twin_dialogue_turn`, `twin_dialogue_turns`; clarify JSON-500 vs rethrow handlers; split-runtime note reflects twin-dialogue HTTP migrated. |
 | 1.2 | DEE-105 | Route keys **`dashboard_readiness`**, **`diary_entries`**; JSON-500 list extended; split-runtime note — dashboard RSC hydrate is runtime-aligned but **not** stdout-instrumented. **Merged:** GitHub **PR #104** → **`dev`** **`fef1e83`**. |
 | 1.3 | DEE-78 | Optional **`ai_gateway_*`** fields on **`twin_dialogue_turn`** (`ai_gateway_foundation`, provider id/outcome, phase ms, degraded flag); provider outcome taxonomy ([Twin dialogue provider outcome (DEE-78)](#twin-dialogue-provider-outcome-dee-78)). |
+| 1.4 | DEE-79 | Optional provider **`ai_gateway_provider_*_tokens`** + **`ai_gateway_provider_request_id`** on **`twin_dialogue_turn`** when usage/metadata returned; staging activation procedure — [`DEE-79-AI-GATEWAY-ACTIVATION-RUNBOOK.md`](./DEE-79-AI-GATEWAY-ACTIVATION-RUNBOOK.md). |

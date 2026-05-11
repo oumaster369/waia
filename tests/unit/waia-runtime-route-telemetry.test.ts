@@ -72,6 +72,10 @@ describe("waia-runtime-route-telemetry", () => {
       ai_gateway_provider: "openai-compatible",
       ai_gateway_provider_outcome: outcome,
       ai_gateway_provider_phase_ms: 38,
+      ai_gateway_provider_prompt_tokens: 1,
+      ai_gateway_provider_completion_tokens: 2,
+      ai_gateway_provider_total_tokens: 3,
+      ai_gateway_provider_request_id: "chatcmpl-test",
     };
     emitWaiaRuntimeRouteTelemetry(payload, (line) => lines.push(line));
     const parsed = JSON.parse(lines[0]!) as Record<string, unknown>;
@@ -79,6 +83,10 @@ describe("waia-runtime-route-telemetry", () => {
     expect(parsed.ai_gateway_provider).toBe("openai-compatible");
     expect(parsed.ai_gateway_provider_outcome).toBe("ok");
     expect(parsed.ai_gateway_provider_phase_ms).toBe(38);
+    expect(parsed.ai_gateway_provider_prompt_tokens).toBe(1);
+    expect(parsed.ai_gateway_provider_completion_tokens).toBe(2);
+    expect(parsed.ai_gateway_provider_total_tokens).toBe(3);
+    expect(parsed.ai_gateway_provider_request_id).toBe("chatcmpl-test");
     expect(parsed).not.toHaveProperty("message");
   });
 });

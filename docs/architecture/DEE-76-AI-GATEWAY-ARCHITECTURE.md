@@ -362,3 +362,4 @@ pnpm build
 |---------|--------|------|
 | 1.0 | DEE-76 | Initial bounded AI Gateway architecture (planning only). |
 | 1.1 | DEE-78 | Bounded network slice: OpenAI-compatible **`fetch`** adapter behind `CompletionProviderPort`, **`WAIA_AI_PROVIDER`** selector (default non-network), additive stdout telemetry fields — documented in code + **DEE-95G** runbook. Does not decide persistence for usage/events (deferred). |
+| 1.2 | DEE-79 | Pre-activation hardening: optional **`ai_gateway_provider_*_tokens`** + **`ai_gateway_provider_request_id`** on **`twin_dialogue_turn`**; client **`AbortSignal`** propagation from route handler; staging activation runbook (**[`DEE-79-AI-GATEWAY-ACTIVATION-RUNBOOK.md`](../migrations/DEE-79-AI-GATEWAY-ACTIVATION-RUNBOOK.md)**). |

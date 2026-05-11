@@ -214,6 +214,10 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
       expect(routePayload?.ai_gateway_provider).toBeUndefined();
       expect(routePayload?.ai_gateway_provider_outcome).toBeUndefined();
       expect(routePayload?.ai_gateway_provider_phase_ms).toBeUndefined();
+      expect(routePayload?.ai_gateway_provider_prompt_tokens).toBeUndefined();
+      expect(routePayload?.ai_gateway_provider_completion_tokens).toBeUndefined();
+      expect(routePayload?.ai_gateway_provider_total_tokens).toBeUndefined();
+      expect(routePayload?.ai_gateway_provider_request_id).toBeUndefined();
     } finally {
       spy.mockRestore();
     }
@@ -233,6 +237,10 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
       expect(routePayload?.ai_gateway_provider).toBe("fake");
       expect(routePayload?.ai_gateway_provider_outcome).toBe("ok");
       expect(routePayload?.ai_gateway_provider_phase_ms).toBeGreaterThanOrEqual(0);
+      expect(routePayload?.ai_gateway_provider_prompt_tokens).toBe(0);
+      expect(routePayload?.ai_gateway_provider_completion_tokens).toBe(0);
+      expect(routePayload?.ai_gateway_provider_total_tokens).toBe(0);
+      expect(routePayload?.ai_gateway_provider_request_id).toBeUndefined();
     } finally {
       spy.mockRestore();
       delete process.env.WAIA_AI_GATEWAY_FOUNDATION;
@@ -256,10 +264,57 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
       expect(routePayload?.ai_gateway_provider).toBe("openai-compatible");
       expect(routePayload?.ai_gateway_provider_outcome).toBe("config");
       expect(routePayload?.ai_gateway_degraded).toBe(true);
+      expect(routePayload?.ai_gateway_provider_prompt_tokens).toBeUndefined();
+      expect(routePayload?.ai_gateway_provider_completion_tokens).toBeUndefined();
+      expect(routePayload?.ai_gateway_provider_total_tokens).toBeUndefined();
+      expect(routePayload?.ai_gateway_provider_request_id).toBeUndefined();
     } finally {
       spy.mockRestore();
       delete process.env.WAIA_AI_GATEWAY_FOUNDATION;
       delete process.env.WAIA_AI_PROVIDER;
+    }
+  });
+
+  it("emits provider token + request id telemetry when openai-compatible succeeds", async () => {
+    process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
+    process.env.WAIA_AI_PROVIDER = "openai-compatible";
+    process.env.WAIA_AI_OPENAI_API_KEY = "test-key";
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl-route",
+          choices: [{ message: { role: "assistant", content: " Route reply " } }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const res = await POST(postJson({ message: "openai telemetry smoke" }));
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as TwinDialogueTurnSubmitApiResponse;
+      expect(body.assistantTurn?.content).toBe("Route reply");
+
+      const payloads = spy.mock.calls.map((c) => JSON.parse(String(c[0])));
+      const routePayload = payloads.find(
+        (p: { event?: string }) => p.event === "waia_runtime_route",
+      );
+      expect(routePayload?.ai_gateway_foundation).toBe("live");
+      expect(routePayload?.ai_gateway_provider).toBe("openai-compatible");
+      expect(routePayload?.ai_gateway_provider_outcome).toBe("ok");
+      expect(routePayload?.ai_gateway_provider_prompt_tokens).toBe(10);
+      expect(routePayload?.ai_gateway_provider_completion_tokens).toBe(20);
+      expect(routePayload?.ai_gateway_provider_total_tokens).toBe(30);
+      expect(routePayload?.ai_gateway_provider_request_id).toBe("chatcmpl-route");
+    } finally {
+      spy.mockRestore();
+      fetchSpy.mockRestore();
+      delete process.env.WAIA_AI_GATEWAY_FOUNDATION;
+      delete process.env.WAIA_AI_PROVIDER;
+      delete process.env.WAIA_AI_OPENAI_API_KEY;
     }
   });
 });

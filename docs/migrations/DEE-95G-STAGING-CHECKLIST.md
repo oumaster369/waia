@@ -18,7 +18,7 @@
 
 - [ ] Exercise `POST /api/dashboard/twin/engine` (authenticated smoke) — **one** `waia_runtime_route` line with `route: "twin_engine"`.
 - [ ] Exercise prediction verification POST and verifications GET — lines with `prediction_verification` / `prediction_verifications`.
-- [ ] Exercise **`POST /api/dashboard/twin-dialogue/turn`** and **`GET /api/dashboard/twin-dialogue/turns`** (after **DEE-95h**) — lines with `twin_dialogue_turn` / `twin_dialogue_turns`.
+- [ ] Exercise **`POST /api/dashboard/twin-dialogue/turn`** and **`GET /api/dashboard/twin-dialogue/turns`** (after **DEE-95h**) — lines with `twin_dialogue_turn` / `twin_dialogue_turns`. When staging validates live inference (**DEE-79**), confirm optional **`ai_gateway_provider_*_tokens`** / **`ai_gateway_provider_request_id`** appear on **`live`** outcomes per [`DEE-79-AI-GATEWAY-ACTIVATION-RUNBOOK.md`](./DEE-79-AI-GATEWAY-ACTIVATION-RUNBOOK.md).
 - [ ] Exercise **`GET /api/dashboard/readiness`** and **`GET`/`POST /api/dashboard/diary/entries`** (after **DEE-105**) — lines with `dashboard_readiness` / `diary_entries`.
 - [ ] Exercise **`POST /api/dashboard/twin/prediction`**, **`GET /api/dashboard/twin/pattern-summary`**, **`POST /api/dashboard/twin/contradictions`**, and **`GET`/`POST /api/dashboard/diary/scenario-answers`** — lines with `twin_prediction` / `twin_pattern_summary` / `twin_contradictions` / `diary_scenario_answers`.
 - [ ] Health check produces `route: "health_database"`.
@@ -65,4 +65,5 @@
 |---------|--------|------|
 | 1.0 | DEE-95g | Initial staging checklist for stdout telemetry + waves. |
 | 1.2 | Twin cognition + scenario-answers | §B–§C: smoke **`twin_prediction`**, **`twin_pattern_summary`**, **`twin_contradictions`**, **`diary_scenario_answers`**; §C removes outdated “scenario-answers not instrumented” note. |
+| 1.3 | DEE-79 | §B: **`twin_dialogue_turn`** optional token + request-id fields when validating live inference — link to [`DEE-79-AI-GATEWAY-ACTIVATION-RUNBOOK.md`](./DEE-79-AI-GATEWAY-ACTIVATION-RUNBOOK.md). |
 | 1.1 | DEE-105 | §B–§C: **`dashboard_readiness`** / **`diary_entries`** smoke lines; clarify RSC hydrate still **no** stdout telemetry. **Merged:** GitHub **PR #104** → **`dev`** **`fef1e83`**. |
