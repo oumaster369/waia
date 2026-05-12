@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
 
 import { users } from "@/db/schema";
 import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
@@ -11,6 +10,12 @@ import { hashPassword, validatePasswordPolicy } from "@/lib/auth/password";
 import { createSessionRow } from "@/lib/auth/session-service";
 import { authSessionMaxAgeSeconds } from "@/lib/auth/constants";
 import { ensureUserTwinSeed } from "@/lib/twin-persistence/loader";
+import { syncAppUserRowFromSupabaseAuth } from "@/lib/auth/supabase-app-user-sync";
+import { isSupabaseAuthConfigured } from "@/lib/supabase/config";
+import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
+import type { SupabaseCookiePatch } from "@/lib/supabase/server";
+import { applySupabaseCookiePatches } from "@/lib/supabase/apply-response-cookies";
+import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +59,63 @@ export async function POST(request: Request) {
     return jsonError(400, {
       error: { code: "WEAK_PASSWORD", message: "Password too short." },
     });
+  }
+
+  if (isSupabaseAuthConfigured()) {
+    const pendingCookies: SupabaseCookiePatch[] = [];
+    const supabase = await createSupabaseRouteHandlerClient(pendingCookies);
+    if (supabase) {
+      const identityLabel = deriveIdentityLabelFromEmail(email);
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { identity_label: identityLabel },
+        },
+      });
+
+      if (error) {
+        if (error.message.toLowerCase().includes("already") || error.code === "user_already_exists") {
+          return jsonError(409, {
+            error: { code: "EMAIL_TAKEN", message: "Email already registered." },
+          });
+        }
+        return jsonError(400, {
+          error: { code: "SIGN_UP_FAILED", message: error.message },
+        });
+      }
+
+      if (!data.user) {
+        return jsonError(400, {
+          error: { code: "SIGN_UP_FAILED", message: "Could not create user." },
+        });
+      }
+
+      await syncAppUserRowFromSupabaseAuth({
+        supabaseUserId: data.user.id,
+        email,
+        identityLabel,
+      });
+
+      if (!data.session) {
+        const res = NextResponse.json(
+          {
+            ok: true as const,
+            needsEmailConfirmation: true as const,
+            redirect: "/dashboard",
+          },
+          { status: 201 },
+        );
+        applySupabaseCookiePatches(res, pendingCookies);
+        clearSessionCookie(res);
+        return res;
+      }
+
+      const res = NextResponse.json({ ok: true as const, redirect: "/dashboard" }, { status: 201 });
+      applySupabaseCookiePatches(res, pendingCookies);
+      clearSessionCookie(res);
+      return res;
+    }
   }
 
   const db = getDb();
