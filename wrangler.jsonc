@@ -16,5 +16,11 @@
       "binding": "WORKER_SELF_REFERENCE",
       "service": "waia-app"
     }
-  ]
+  ],
+  "vars": {
+    "NEXT_PUBLIC_SITE_URL": "https://waia-app.oumaster369.workers.dev",
+    "WAIA_DB_BACKEND": "postgres",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://wdsnuvldxyrkqcjxvuxp.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_wXZ5eaR4l6UKYXQMxr4fuw_cxz-Kk58"
+  }
 }
