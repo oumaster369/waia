@@ -25,12 +25,18 @@ NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000
 # PUBLIC — OAuth redirect base for existing MVP routes (OAuth itself out of scope for DEE-61).
 OAUTH_PUBLIC_BASE_URL=http://127.0.0.1:3000
 
-# Local SQLite string for Node-side expectations; Workers cannot run better-sqlite3 today (see docs/cloudflare-deploy.md).
+# Local SQLite string for Node `pnpm dev` / legacy paths. Workers cannot run better-sqlite3 (see docs/cloudflare-deploy.md).
 DATABASE_URL=file:./.data/waia.dev.db
 
-# SECRET — Postgres for Workers once persistence is wired: prefer Supabase **transaction pooler** (often port 6543, IPv4-friendly)
-# or a **Hyperdrive**-backed connection string. Decision is engineering-owned — see docs/cloudflare-env-vars.md.
-# DATABASE_URL=
+# ─── Postgres runtime on Workers (DEE-74) — matches db/runtime-backend.ts + db/postgres-client.ts ───
+# When set to postgres, getWaiaRuntimeDb() uses DATABASE_URL_POSTGRES only (never opens SQLite on that path).
+# WAIA_DB_BACKEND=postgres
+#
+# SECRET — Supabase **transaction pooler** URI (recommended first path for Workers; often host …pooler.supabase.com, port 6543).
+# Paste from Supabase Dashboard → Connect → Transaction pooler. Use `wrangler secret put` in production.
+# DATABASE_URL_POSTGRES=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+#
+# Optional later hardening: Cloudflare **Hyperdrive** in front of Postgres — not required for DEE-74; same env contract (connection string) once wired.
 
 # SECRET — direct OpenAI API. MUST NOT ship to browser/client bundles.
 # OPENAI_API_KEY=

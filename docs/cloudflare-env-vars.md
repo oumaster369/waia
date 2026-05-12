@@ -62,17 +62,28 @@ Redirect URLs and email confirmation belong in the **Supabase dashboard** ([supa
 |----------|------------------|------|--------------------|
 | `DATABASE_URL` | Yes for full app today | SQLite path, e.g. `file:./.data/waia.db` ([client.ts](../db/client.ts)) | **`better-sqlite3` / file SQLite is not supported** — see limitations below |
 
-### Postgres / Supabase (migration out of operational scope here)
+### Workers runtime: Postgres via `getWaiaRuntimeDb` (DEE-74)
 
-Choosing how Workers reach Postgres is an **infra decision** documented for operators only:
+These variables are read by [`runtime-backend.ts`](../db/runtime-backend.ts) and [`postgres-client.ts`](../db/postgres-client.ts). When configured, [`getWaiaRuntimeDb()`](../db/waia-runtime-db.ts) returns **`{ kind: "postgres" }`** and **does not** call `getDb()` / SQLite on that path.
+
+| Variable | When | Role | Cloudflare |
+|----------|------|------|------------|
+| `WAIA_DB_BACKEND` | Set to `postgres` | Selects Postgres runtime for `getWaiaRuntimeDb()` instead of default SQLite. | Plain env (e.g. `postgres` in dashboard or `.dev.vars`) |
+| `DATABASE_URL_POSTGRES` | Required when `WAIA_DB_BACKEND=postgres` | **Secret** — Postgres connection URI for Drizzle + `postgres` driver. | `wrangler secret put DATABASE_URL_POSTGRES` or encrypted dashboard env |
+
+**First supported path (DEE-74 slice):** **Supabase transaction pooler** — use the **Transaction pooler** connection string from the Supabase dashboard (often host `…pooler.supabase.com`, port **6543**, IPv4-friendly for Workers). Paste the full URI into **`DATABASE_URL_POSTGRES`**.
+
+**Optional later hardening:** **Cloudflare Hyperdrive** in front of Postgres — **not** required for DEE-74; may reduce connection churn in production. Same logical contract: a **secret** connection string the Worker can use as **`DATABASE_URL_POSTGRES`** (or a binding-mapped equivalent when implemented). See [Hyperdrive docs](https://developers.cloudflare.com/hyperdrive/).
+
+**Other Postgres entry styles (operator choice):**
 
 | Option | Notes |
 | ------ | ----- |
-| **Supabase transaction pooler** | Connection string often uses host `aws-…pooler.supabase.com` / port **6543** — designed for IPv4 egress from many clouds (friendly to Workers). Treat URI as **Secret**. |
-| **Direct DB connection** | Port **5432** on `db.PROJECT.supabase.co` — higher concurrent connection churn for short-lived Workers; may still work with careful pooling. **Secret**. |
-| **Cloudflare Hyperdrive** | Pooling / caching in front of Postgres; Worker env references Hyperdrive binding or generated connection string. **Secret** path; pair with [Hyperdrive docs](https://developers.cloudflare.com/hyperdrive/). |
+| **Direct DB connection** | Port **5432** on `db.PROJECT.supabase.co` — may work but higher churn for short-lived Workers. **Secret**. |
 
-**DEE-61 does not migrate `db/client.ts` or schema.** Until Postgres is wired, expect **runtime failures** on any route that calls `getDb()` when Workers cannot use SQLite ([cloudflare-deploy.md](cloudflare-deploy.md)).
+Document **preview/staging** values in [`.dev.vars.example`](../.dev.vars.example) (copy to gitignored `.dev.vars`); never commit real URIs.
+
+If `WAIA_DB_BACKEND` is unset or `sqlite`, Workers still hit **`getDb()`** for dashboard routes — expect **runtime failures** on Workers ([cloudflare-deploy.md](cloudflare-deploy.md)).
 
 ---
 
