@@ -3,7 +3,11 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
+import {
+  disposeWaiaRuntimeDb,
+  getWaiaRuntimeDb,
+  type WaiaRuntimeDb,
+} from "@/db/waia-runtime-db";
 import { users } from "@/db/schema";
 import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
 import { syncAppUserRowFromSupabaseAuthPostgres } from "@/lib/persistence/postgres/twin-persistence";
@@ -24,43 +28,48 @@ export async function syncAppUserRowFromSupabaseAuth(params: {
   email: string;
   identityLabel: string;
 }): Promise<void> {
-  const runtime = await getWaiaRuntimeDb();
-  if (runtime.kind === "postgres") {
-    await syncAppUserRowFromSupabaseAuthPostgres(runtime.db, params);
-    return;
-  }
-
+  let runtime: WaiaRuntimeDb | undefined;
   try {
-    const db = getDb();
+    runtime = await getWaiaRuntimeDb();
+    if (runtime.kind === "postgres") {
+      await syncAppUserRowFromSupabaseAuthPostgres(runtime.db, params);
+      return;
+    }
 
-    const byId = await db.select({ id: users.id }).from(users).where(eq(users.id, params.supabaseUserId)).limit(1);
-    if (byId[0]) {
+    try {
+      const db = getDb();
+
+      const byId = await db.select({ id: users.id }).from(users).where(eq(users.id, params.supabaseUserId)).limit(1);
+      if (byId[0]) {
+        await runWaiaSqliteLegacyTransaction(db, (tx) => {
+          ensureUserTwinSeed(tx, params.supabaseUserId);
+        });
+        return;
+      }
+
+      const byEmail = await db.select({ id: users.id }).from(users).where(eq(users.email, params.email)).limit(1);
+      if (byEmail[0]) {
+        /** Legacy SQLite user with same email but different id — do not auto-link in MVP slice. */
+        return;
+      }
+
       await runWaiaSqliteLegacyTransaction(db, (tx) => {
+        tx
+          .insert(users)
+          .values({
+            id: params.supabaseUserId,
+            identityLabel: params.identityLabel,
+            email: params.email,
+            passwordHash: null,
+          })
+          .run();
         ensureUserTwinSeed(tx, params.supabaseUserId);
       });
-      return;
+    } catch (err) {
+      logSqliteSyncFailure(err);
+      throw err;
     }
-
-    const byEmail = await db.select({ id: users.id }).from(users).where(eq(users.email, params.email)).limit(1);
-    if (byEmail[0]) {
-      /** Legacy SQLite user with same email but different id — do not auto-link in MVP slice. */
-      return;
-    }
-
-    await runWaiaSqliteLegacyTransaction(db, (tx) => {
-      tx
-        .insert(users)
-        .values({
-          id: params.supabaseUserId,
-          identityLabel: params.identityLabel,
-          email: params.email,
-          passwordHash: null,
-        })
-        .run();
-      ensureUserTwinSeed(tx, params.supabaseUserId);
-    });
-  } catch (err) {
-    logSqliteSyncFailure(err);
-    throw err;
+  } finally {
+    await disposeWaiaRuntimeDb(runtime);
   }
 }
