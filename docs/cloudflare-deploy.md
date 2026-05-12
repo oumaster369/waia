@@ -70,6 +70,10 @@ The app uses **`better-sqlite3`** and a **local SQLite file** ([`db/client.ts`](
 
 The **OpenNext production bundle build** for this repo **does succeed** (see “Build validation” below); the limitation is **persistence and native SQLite at runtime**, not necessarily the Next compile step.
 
+### Postgres on Workers (DEE-74)
+
+To run **dashboard/API persistence** on Workers without SQLite, set **`WAIA_DB_BACKEND=postgres`** and a non-empty **`DATABASE_URL_POSTGRES`** (see [cloudflare-env-vars.md](cloudflare-env-vars.md)). **Supabase transaction pooler** is the first supported URI style. Local verification: **`pnpm cloudflare:preview`** with `.dev.vars` copied from [`.dev.vars.example`](../.dev.vars.example), then **`GET /api/health/database`** — expect **`{"backend":"postgres","ok":true}`** when Postgres is reachable.
+
 ### Cloudflare Images
 
 [`wrangler.jsonc`](../wrangler.jsonc) omits the optional `images` binding. If you enable Next image optimization features that require Cloudflare Images, add the binding per [OpenNext image docs](https://opennext.js.org/cloudflare/howtos/image).
