@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
-import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
+import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { MAX_SCENARIO_CHARS } from "@/lib/dashboard/twin-contradiction-detector-api.types";
 import type { TwinContradictionDetectorApiResponse } from "@/lib/dashboard/twin-contradiction-detector-api.types";
 import {
+  attachPostgresLifecycleToTelemetry,
   emitWaiaRuntimeRouteTelemetry,
   isWaiaConfigError,
   safeTelemetryErrorClass,
+  type WaiaRuntimeRouteTelemetryPayload,
 } from "@/lib/observability/waia-runtime-route-telemetry";
 import { resolveTwinPersistence } from "@/lib/persistence/runtime";
 import {
@@ -94,6 +96,7 @@ export async function POST(request: Request) {
     : {};
 
   let resolvedRuntime: WaiaRuntimeDb | undefined;
+  let telemetryPayload: WaiaRuntimeRouteTelemetryPayload | undefined;
   const telemetryStart = Date.now();
   try {
     const runtime = await getWaiaRuntimeDb();
@@ -114,14 +117,14 @@ export async function POST(request: Request) {
       );
     }
 
-    emitWaiaRuntimeRouteTelemetry({
+    telemetryPayload = {
       event: "waia_runtime_route",
       route: "twin_contradictions",
       waia_db_backend: runtime.kind,
       http_status: 200,
       outcome: "success",
       duration_ms: Date.now() - telemetryStart,
-    });
+    };
 
     return NextResponse.json(body, {
       status: 200,
@@ -130,7 +133,7 @@ export async function POST(request: Request) {
   } catch (err) {
     const outcome =
       !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
-    emitWaiaRuntimeRouteTelemetry({
+    telemetryPayload = {
       event: "waia_runtime_route",
       route: "twin_contradictions",
       waia_db_backend: resolvedRuntime?.kind,
@@ -138,10 +141,16 @@ export async function POST(request: Request) {
       outcome,
       duration_ms: Date.now() - telemetryStart,
       error_class: safeTelemetryErrorClass(err),
-    });
+    };
     return NextResponse.json(
       validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."),
       { status: 500 },
     );
+  } finally {
+    const pgClose = await disposeWaiaRuntimeDb(resolvedRuntime);
+    if (telemetryPayload) {
+      attachPostgresLifecycleToTelemetry(telemetryPayload, resolvedRuntime, pgClose);
+      emitWaiaRuntimeRouteTelemetry(telemetryPayload);
+    }
   }
 }
