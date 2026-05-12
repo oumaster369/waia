@@ -6,12 +6,15 @@ import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
 import { getDb } from "@/db/client";
 import { applySessionCookie, clearSessionCookie } from "@/lib/auth/cookie-response";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
-import { isLikelyEmail, normalizeEmail } from "@/lib/auth/email";
+import { deriveIdentityLabelFromEmail, isLikelyEmail, normalizeEmail } from "@/lib/auth/email";
 import { verifyPassword } from "@/lib/auth/password";
 import { authSessionMaxAgeSeconds } from "@/lib/auth/constants";
 import { createSessionRow } from "@/lib/auth/session-service";
 import { ensureUserTwinSeed } from "@/lib/twin-persistence/loader";
-
+import { syncAppUserRowFromSupabaseAuth } from "@/lib/auth/supabase-app-user-sync";
+import { isSupabaseAuthConfigured } from "@/lib/supabase/config";
+import { createSupabaseRouteHandlerClient, type SupabaseCookiePatch } from "@/lib/supabase/server";
+import { applySupabaseCookiePatches } from "@/lib/supabase/apply-response-cookies";
 export const dynamic = "force-dynamic";
 
 type SignInBody = {
@@ -54,6 +57,29 @@ export async function POST(request: Request) {
   const email = normalizeEmail(rawEmail);
   if (!isLikelyEmail(email)) {
     return invalidCredentials();
+  }
+
+  if (isSupabaseAuthConfigured()) {
+    const pendingCookies: SupabaseCookiePatch[] = [];
+    const supabase = await createSupabaseRouteHandlerClient(pendingCookies);
+    if (supabase) {
+      const { error, data } = await supabase.auth.signInWithPassword({ email, password });
+      if (error || !data.user) {
+        return invalidCredentials();
+      }
+      const userId = data.user.id;
+      const identityLabel = deriveIdentityLabelFromEmail(email);
+      await syncAppUserRowFromSupabaseAuth({
+        supabaseUserId: userId,
+        email,
+        identityLabel,
+      });
+
+      const res = NextResponse.json({ ok: true as const, redirect: "/dashboard" }, { status: 200 });
+      applySupabaseCookiePatches(res, pendingCookies);
+      clearSessionCookie(res);
+      return res;
+    }
   }
 
   const db = getDb();

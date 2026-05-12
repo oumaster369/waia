@@ -1,4 +1,12 @@
-import "server-only";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const skipServerOnlyGuard =
+  process.env.WAIA_POSTGRES_CLI === "1" || process.env.VITEST === "true";
+
+if (!skipServerOnlyGuard) {
+  require("server-only");
+}
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";

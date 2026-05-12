@@ -15,6 +15,8 @@ export function parseAuthOkResponse(json: unknown): AuthOkBody | null {
   if (typeof json !== "object" || json === null) return null;
   const obj = json as Record<string, unknown>;
   if (obj.ok !== true || typeof obj.redirect !== "string") return null;
+  /** Supabase email confirmation flow — no session cookie yet */
+  if (obj.needsEmailConfirmation === true) return null;
   const redirect = safeInternalRedirectPath(obj.redirect);
   if (redirect == null) return null;
   return { ok: true, redirect };
