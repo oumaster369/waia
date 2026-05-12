@@ -40,6 +40,8 @@ All emitted objects use `event: "waia_runtime_route"` (stable filter key).
 | `ai_gateway_provider_completion_tokens` | number (optional) | **`twin_dialogue_turn` only** — same as above. |
 | `ai_gateway_provider_total_tokens` | number (optional) | **`twin_dialogue_turn` only** — same as above. |
 | `ai_gateway_provider_request_id` | string (optional) | **`twin_dialogue_turn` only** — vendor correlation id when returned (content-free). |
+| `pg_client_lifecycle` | string (optional) | **Postgres paths only** (DEE-110). `per_request` — handle carried `_sql` and used the per-request driver path; `singleton` — legacy rollback (`WAIA_POSTGRES_PER_REQUEST_CLIENT` off) or handle without `_sql`. Omitted for SQLite or when `getWaiaRuntimeDb` never resolved. |
+| `pg_close_outcome` | string (optional) | **Per-request Postgres only.** Result of bounded teardown (`disposePostgresClientSafely`): `ok`, `timeout`, or `error`. **Omitted** when close was deferred via Cloudflare **`waitUntil`** (no inline outcome), or for SQLite / singleton Postgres. |
 
 ### Twin dialogue provider outcome (DEE-78)
 

@@ -1,5 +1,8 @@
 import "server-only";
 
+import type { PostgresDisposeOutcome } from "@/db/postgres-client";
+import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
+
 /**
  * Structured stdout telemetry for `getWaiaRuntimeDb`-aware API routes (DEE-95f).
  *
@@ -69,6 +72,15 @@ export type WaiaRuntimeRouteTelemetryPayload = {
   ai_gateway_provider_total_tokens?: number;
   /** Vendor correlation id when returned by adapter — never user text (DEE-79). */
   ai_gateway_provider_request_id?: string;
+  /**
+   * Postgres client lifecycle (DEE-110). Omitted when backend is SQLite or handle unresolved.
+   */
+  pg_client_lifecycle?: "per_request" | "singleton";
+  /**
+   * Result of {@link disposePostgresClientSafely} for per-request mode only.
+   * Omitted when deferred via `waitUntil`, or for singleton / SQLite.
+   */
+  pg_close_outcome?: PostgresDisposeOutcome;
 };
 
 export type WaiaRuntimeRouteTelemetrySink = (line: string) => void;
@@ -94,4 +106,19 @@ export function safeTelemetryErrorClass(err: unknown): string | undefined {
     return err.name;
   }
   return undefined;
+}
+
+/** Attach DEE-110 lifecycle fields after dispose (typically in route `finally`). */
+export function attachPostgresLifecycleToTelemetry(
+  payload: WaiaRuntimeRouteTelemetryPayload,
+  resolved: WaiaRuntimeDb | undefined,
+  pgCloseOutcome: PostgresDisposeOutcome | undefined,
+): void {
+  if (resolved?.kind !== "postgres") {
+    return;
+  }
+  payload.pg_client_lifecycle = resolved._sql ? "per_request" : "singleton";
+  if (resolved._sql !== undefined) {
+    payload.pg_close_outcome = pgCloseOutcome;
+  }
 }
