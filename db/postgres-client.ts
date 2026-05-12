@@ -21,6 +21,21 @@ type GlobalPostgres = typeof globalThis & {
 
 const globalStore = globalThis as GlobalPostgres;
 
+/**
+ * Driver options for `postgres.js` against Supabase **transaction pooler** (and similar PgBouncer
+ * transaction modes): prepared statements are unsafe/disallowed — Workers observed hung requests
+ * until Cloudflare canceled them (`prepare: false` fixes that path).
+ *
+ * Opt into prepared statements locally only: `WAIA_POSTGRES_PREPARE_STATEMENTS=true` (direct Postgres /
+ * session pooler).
+ */
+export function waiaPostgresJsDriverOptions(): { max: number; prepare: boolean } {
+  return {
+    max: 1,
+    prepare: process.env.WAIA_POSTGRES_PREPARE_STATEMENTS === "true",
+  };
+}
+
 function ensurePostgresSingleton(): {
   sql: postgres.Sql;
   db: PostgresJsDatabase<typeof pgSchema>;
@@ -30,7 +45,7 @@ function ensurePostgresSingleton(): {
     if (!url) {
       throw new Error("[waia] DATABASE_URL_POSTGRES is not set or empty.");
     }
-    const sql = postgres(url, { max: 1 });
+    const sql = postgres(url, waiaPostgresJsDriverOptions());
     const db = drizzle(sql, { schema: pgSchema });
     globalStore.__waia_postgres_js__ = sql;
     globalStore.__waia_postgres_drizzle__ = db;
