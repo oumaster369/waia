@@ -3,19 +3,33 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
+import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import { users } from "@/db/schema";
 import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
+import { syncAppUserRowFromSupabaseAuthPostgres } from "@/lib/persistence/postgres/twin-persistence";
 import { ensureUserTwinSeed } from "@/lib/twin-persistence/loader";
+
+function logSqliteSyncFailure(err: unknown): void {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error("[waia] syncAppUserRowFromSupabaseAuth SQLite path failed:", message);
+}
 
 /**
  * Ensures a `users` row exists for the Supabase Auth user id (DEE-70 alignment: `users.id` = `auth.users.id`).
- * Best-effort: on Cloudflare Workers without SQLite, this no-ops (Supabase session still valid; twin data needs Postgres/D1 later).
+ *
+ * DEE-75: When `WAIA_DB_BACKEND=postgres`, upserts `public.users` and runs Postgres twin seed; SQLite path unchanged for local dev.
  */
 export async function syncAppUserRowFromSupabaseAuth(params: {
   supabaseUserId: string;
   email: string;
   identityLabel: string;
 }): Promise<void> {
+  const runtime = await getWaiaRuntimeDb();
+  if (runtime.kind === "postgres") {
+    await syncAppUserRowFromSupabaseAuthPostgres(runtime.db, params);
+    return;
+  }
+
   try {
     const db = getDb();
 
@@ -45,7 +59,8 @@ export async function syncAppUserRowFromSupabaseAuth(params: {
         .run();
       ensureUserTwinSeed(tx, params.supabaseUserId);
     });
-  } catch {
-    /* Workers / no SQLite: deferred to Postgres runtime slice */
+  } catch (err) {
+    logSqliteSyncFailure(err);
+    throw err;
   }
 }

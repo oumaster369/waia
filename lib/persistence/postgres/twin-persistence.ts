@@ -372,6 +372,62 @@ async function ensureUserTwinSeedInsideExecutorPg(tx: PgTx, userId: string): Pro
   return twinId;
 }
 
+/**
+ * DEE-75: Mirror `syncAppUserRowFromSupabaseAuth` for the Postgres runtime — ensure `public.users`
+ * (id = Supabase Auth user id) and idempotent twin/readiness seed. Requires a matching `auth.users`
+ * row (Supabase creates this before app code runs).
+ */
+export async function syncAppUserRowFromSupabaseAuthPostgres(
+  db: WaiaPostgresDb,
+  params: {
+    supabaseUserId: string;
+    email: string;
+    identityLabel: string;
+  },
+): Promise<void> {
+  await runWaiaPostgresTransaction(db, async (tx) => {
+    const byIdRows = await tx
+      .select({ id: pgSchema.users.id })
+      .from(pgSchema.users)
+      .where(eq(pgSchema.users.id, params.supabaseUserId))
+      .limit(1);
+
+    if (byIdRows[0]) {
+      await ensureUserTwinSeedInsideExecutorPg(tx, params.supabaseUserId);
+      return;
+    }
+
+    const byEmailRows = await tx
+      .select({ id: pgSchema.users.id })
+      .from(pgSchema.users)
+      .where(eq(pgSchema.users.email, params.email))
+      .limit(1);
+
+    const emailHit = byEmailRows[0];
+    if (emailHit && emailHit.id !== params.supabaseUserId) {
+      return;
+    }
+
+    await tx
+      .insert(pgSchema.users)
+      .values({
+        id: params.supabaseUserId,
+        identityLabel: params.identityLabel,
+        email: params.email,
+        passwordHash: null,
+      })
+      .onConflictDoUpdate({
+        target: pgSchema.users.id,
+        set: {
+          identityLabel: params.identityLabel,
+          email: params.email,
+        },
+      });
+
+    await ensureUserTwinSeedInsideExecutorPg(tx, params.supabaseUserId);
+  });
+}
+
 async function appendTwinDialogueTurnInsideExecutorPg(
   ex: PgTx,
   params: {
