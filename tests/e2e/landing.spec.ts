@@ -69,4 +69,11 @@ test.describe("WAIA landing page", () => {
     await page.goto("/");
     await expect(page.getByText(/AI-Trader/i)).toHaveCount(0);
   });
+
+  test("surfaces oauth_error query as inline auth message", async ({ page }) => {
+    await page.goto("/?oauth_error=OAUTH_DENIED");
+    await expect(page.getByTestId("landing-auth-error")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("landing-auth-error")).toContainText(/cancelled|isn/i);
+    await expect(page).not.toHaveURL(/\?oauth_error=/);
+  });
 });
