@@ -23,6 +23,9 @@ export type SqliteTwinPersistence = {
   listTwinDialogueTurnsChronological: BoundSqliteTwinMethod<
     typeof twinLoader.listTwinDialogueTurnsChronological
   >;
+  listTwinDialogueTurnsTailForContinuity: BoundSqliteTwinMethod<
+    typeof twinLoader.listTwinDialogueTurnsTailForContinuity
+  >;
   listTwinDialogueTurnsForUser: BoundSqliteTwinMethod<typeof twinLoader.listTwinDialogueTurnsForUser>;
   loadDashboardReadinessPayloadFromDb: BoundSqliteTwinMethod<
     typeof twinLoader.loadDashboardReadinessPayloadFromDb
@@ -48,6 +51,8 @@ export function createSqliteTwinPersistence(db: WaiaDb): SqliteTwinPersistence {
     countUserDialogueTurns: (twinProfileId) => twinLoader.countUserDialogueTurns(db, twinProfileId),
     listTwinDialogueTurnsChronological: (twinProfileId) =>
       twinLoader.listTwinDialogueTurnsChronological(db, twinProfileId),
+    listTwinDialogueTurnsTailForContinuity: (twinProfileId, rowLimit) =>
+      twinLoader.listTwinDialogueTurnsTailForContinuity(db, twinProfileId, rowLimit),
     listTwinDialogueTurnsForUser: (userId) => twinLoader.listTwinDialogueTurnsForUser(db, userId),
     loadDashboardReadinessPayloadFromDb: (userId) =>
       twinLoader.loadDashboardReadinessPayloadFromDb(db, userId),
