@@ -6,6 +6,10 @@ This document is the canonical, system-level definition of the WAIA landing page
 
 This document refines Step 1 ("Landing") and the entry side of Step 2 ("Auth") of [docs/product/ai-twin-user-flow.md](ai-twin-user-flow.md). It does not redefine any concept that already exists upstream; it references the upstream definition.
 
+> **Partner preview implementation note ([DEE-111](https://linear.app/deepsense/issue/DEE-111/add-visible-create-twin-email-registration-cta-on-landing)):** WAIA **v1 partner-preview** ships an **English-first** landing (`HeroBlock`, `ContextBlock`, modules, closing copy) plus an Auth Block that defaults to **Create Twin** (`POST /api/auth/sign-up` only) versus **Sign in** (`POST /api/auth/sign-in` only). **OAuth CTAs render only when** that provider is configured (see `/api/auth/oauth/availability`). If none are configured, explanatory copy replaces misleading provider buttons.
+>
+> Sections §6 onward still record the historic **Russian verbatim** landing contract from DEE-8. A **full rewrite** of this product spec for English-first wording and dual-mode auth is intentionally **not** bundled into DEE-111; longer-term multilingual direction is tracked separately (**[DEE-120](https://linear.app/deepsense/issue/DEE-120/ai-assisted-language-adaptation-language-switcher)**).
+
 ## 1. Header / Metadata
 
 | Field | Value |
