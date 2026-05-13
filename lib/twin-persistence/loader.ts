@@ -11,6 +11,8 @@ import {
   type TwinDialogueSignals,
 } from "@/lib/dashboard/readiness-snapshot-default";
 import { NULL_HINTS_BY_INDICATOR } from "@/lib/dashboard/null-hints";
+import { planDemoReadinessAdvancement } from "@/lib/readiness/demo-indicator-progression";
+import type { ReadinessDemoAdvanceResult } from "@/lib/readiness/readiness-demo-advance-types";
 import { parseIndicatorVector } from "@/lib/readiness/readiness";
 import type { ReadinessInput } from "@/lib/readiness/types";
 import {
@@ -210,6 +212,72 @@ export async function persistUserTwinExchangeWithAssistantStub(
     }
 
     return { userTurn, assistantTurn };
+  });
+}
+
+/**
+ * One bounded monotonic readiness step for v1 demos (Kill-switch in route via WAIA_READINESS_WRITER).
+ * Not the DEE-37 readiness service — deterministic heuristic only.
+ */
+export async function applyReadinessDemoAdvanceForSubstantiveTurnSqlite(
+  db: WaiaDb,
+  params: { twinProfileId: string; userMessage: string },
+): Promise<ReadinessDemoAdvanceResult> {
+  return runWaiaSqliteLegacyTransaction(db, (tx) => {
+    const executor = tx as WaiaDb;
+    const row = executor
+      .select({ indicatorsJson: twinReadinessState.indicatorsJson })
+      .from(twinReadinessState)
+      .where(eq(twinReadinessState.twinProfileId, params.twinProfileId))
+      .get();
+
+    if (!row) {
+      return { status: "skipped", reason: "missing_state" };
+    }
+
+    let indicators;
+    try {
+      const parsed = JSON.parse(row.indicatorsJson) as unknown;
+      indicators = parseIndicatorVector(parsed as Iterable<number>);
+    } catch {
+      return { status: "skipped", reason: "not_eligible" };
+    }
+
+    const plan = planDemoReadinessAdvancement(indicators, params.userMessage);
+    if (!plan) {
+      if (indicators.every((v) => v === 100)) {
+        return { status: "skipped", reason: "all_indicators_confirmed" };
+      }
+      return { status: "skipped", reason: "not_eligible" };
+    }
+
+    const next = [...indicators] as [number, number, number, number, number, number];
+    next[plan.indicatorIndex] = plan.to;
+
+    const result = executor
+      .update(twinReadinessState)
+      .set({
+        indicatorsJson: JSON.stringify(next),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(twinReadinessState.twinProfileId, params.twinProfileId),
+          sql`json_extract(${twinReadinessState.indicatorsJson}, ${sql.raw(`'$[${plan.indicatorIndex}]'`)}) = ${plan.from}`,
+        ),
+      )
+      .run();
+
+    if (result.changes === 0) {
+      return { status: "noop", reason: "stale_state" };
+    }
+
+    return {
+      status: "applied",
+      indicatorIndex: plan.indicatorIndex,
+      from: plan.from,
+      to: plan.to,
+    };
   });
 }
 

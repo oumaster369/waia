@@ -10,6 +10,7 @@ import {
 } from "@/lib/ai-gateway/twin-dialogue-completion-gateway";
 import type { TwinDialogueTurnSubmitApiResponse } from "@/lib/dashboard/twin-dialogue-turn-api.types";
 import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
+import { isReadinessWriterEnabled } from "@/lib/readiness/readiness-writer-config";
 import {
   attachPostgresLifecycleToTelemetry,
   emitWaiaRuntimeRouteTelemetry,
@@ -18,10 +19,22 @@ import {
   type WaiaRuntimeRouteTelemetryPayload,
 } from "@/lib/observability/waia-runtime-route-telemetry";
 import { resolveTwinPersistence } from "@/lib/persistence/runtime";
+import type { PostgresTwinPersistence } from "@/lib/persistence/postgres/twin-persistence";
+import type { SqliteTwinPersistence } from "@/lib/persistence/sqlite/twin-persistence";
+import type { PersistUserTwinExchangeWithAssistantResult } from "@/lib/twin-persistence/loader";
 
 export const dynamic = "force-dynamic";
 
 const MAX_MESSAGE_CHARS = 16_384;
+
+/** Content-free telemetry outcome for readiness demo writer (`twin_dialogue_turn`). */
+type ReadinessWriterTelemetryOutcome =
+  | "disabled"
+  | "replay_skipped"
+  | "skipped"
+  | "applied"
+  | "noop"
+  | "error";
 
 type SubmitBodyJson = {
   message?: unknown;
@@ -155,32 +168,57 @@ export async function POST(request: Request) {
       });
 
     let twinProfileId: string;
-    let persisted: {
-      userTurn: { id: string; sequence: number; createdAt: Date; content: string };
-      assistantTurn: { id: string; sequence: number; createdAt: Date; content: string } | null;
-    };
+    let persisted: PersistUserTwinExchangeWithAssistantResult;
     let userTurnCount: number;
 
+    let twinPersistence: SqliteTwinPersistence | PostgresTwinPersistence;
+
     if (runtime.kind === "sqlite") {
-      const p = resolveTwinPersistence(runtime);
-      twinProfileId = p.ensureUserTwinSeed(userId);
-      persisted = await p.persistUserTwinExchangeWithAssistantStub({
+      twinPersistence = resolveTwinPersistence(runtime);
+      twinProfileId = twinPersistence.ensureUserTwinSeed(userId);
+      persisted = await twinPersistence.persistUserTwinExchangeWithAssistantStub({
         twinProfileId,
         userContent: trimmed,
         userIdempotencyKey: idempotencyKey ?? null,
         assistantContent,
       });
-      userTurnCount = await p.countUserDialogueTurns(twinProfileId);
+      userTurnCount = await twinPersistence.countUserDialogueTurns(twinProfileId);
     } else {
-      const p = resolveTwinPersistence(runtime);
-      twinProfileId = await p.ensureUserTwinSeed(userId);
-      persisted = await p.persistUserTwinExchangeWithAssistantStub({
+      twinPersistence = resolveTwinPersistence(runtime);
+      twinProfileId = await twinPersistence.ensureUserTwinSeed(userId);
+      persisted = await twinPersistence.persistUserTwinExchangeWithAssistantStub({
         twinProfileId,
         userContent: trimmed,
         userIdempotencyKey: idempotencyKey ?? null,
         assistantContent,
       });
-      userTurnCount = await p.countUserDialogueTurns(twinProfileId);
+      userTurnCount = await twinPersistence.countUserDialogueTurns(twinProfileId);
+    }
+
+    let readiness_writer_invoked = false;
+    let readiness_writer_outcome: ReadinessWriterTelemetryOutcome = "disabled";
+
+    const writerOptIn = isReadinessWriterEnabled();
+    if (!writerOptIn) {
+      readiness_writer_outcome = "disabled";
+    } else if (persisted.userTurn.replayed) {
+      readiness_writer_outcome = "replay_skipped";
+    } else {
+      readiness_writer_invoked = true;
+      try {
+        const adv = await twinPersistence.applyReadinessDemoAdvanceForSubstantiveTurn({
+          twinProfileId,
+          userMessage: trimmed,
+        });
+        readiness_writer_outcome =
+          adv.status === "applied"
+            ? "applied"
+            : adv.status === "noop"
+              ? "noop"
+              : "skipped";
+      } catch {
+        readiness_writer_outcome = "error";
+      }
     }
 
     const twinSignals = {
@@ -228,6 +266,8 @@ export async function POST(request: Request) {
             ...(gatewayTelemetry.degraded ? { ai_gateway_degraded: true as const } : {}),
             ...aiGatewayProviderTelemetryExtras(gatewayTelemetry),
           }),
+      readiness_writer_invoked,
+      readiness_writer_outcome,
     };
 
     return NextResponse.json(body, {

@@ -32,6 +32,9 @@ export type SqliteTwinPersistence = {
   listDiaryEntriesForUser: BoundSqliteTwinMethod<typeof diaryMemory.listDiaryEntriesForUser>;
   listScenarioAnswersForUser: BoundSqliteTwinMethod<typeof diaryMemory.listScenarioAnswersForUser>;
   stringifyScenarioPayloadForStorage: typeof diaryMemory.stringifyScenarioPayloadForStorage;
+  applyReadinessDemoAdvanceForSubstantiveTurn: BoundSqliteTwinMethod<
+    typeof twinLoader.applyReadinessDemoAdvanceForSubstantiveTurnSqlite
+  >;
 };
 
 export function createSqliteTwinPersistence(db: WaiaDb): SqliteTwinPersistence {
@@ -55,5 +58,7 @@ export function createSqliteTwinPersistence(db: WaiaDb): SqliteTwinPersistence {
     listScenarioAnswersForUser: (userId) =>
       diaryMemory.listScenarioAnswersForUser(db, userId),
     stringifyScenarioPayloadForStorage: diaryMemory.stringifyScenarioPayloadForStorage,
+    applyReadinessDemoAdvanceForSubstantiveTurn: (params) =>
+      twinLoader.applyReadinessDemoAdvanceForSubstantiveTurnSqlite(db, params),
   };
 }

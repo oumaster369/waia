@@ -8,8 +8,9 @@ import { POST } from "@/app/api/dashboard/twin-dialogue/turn/route";
 import type { TwinDialogueTurnSubmitApiResponse } from "@/lib/dashboard/twin-dialogue-turn-api.types";
 import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
 import { getDb, resetWaiaSqliteSingleton } from "@/db/client";
-import { twinDialogueTurns } from "@/db/schema";
+import { twinDialogueTurns, twinProfiles, twinReadinessState } from "@/db/schema";
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
+import { DEFAULT_READINESS_INPUT } from "@/lib/dashboard/readiness-snapshot-default";
 import * as sessionUser from "@/lib/auth/session-user";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
@@ -69,9 +70,25 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
     delete process.env.WAIA_AI_OPENAI_API_KEY;
     delete process.env.WAIA_AI_OPENAI_BASE_URL;
     delete process.env.WAIA_AI_OPENAI_REQUEST_TIMEOUT_MS;
+    delete process.env.WAIA_READINESS_WRITER;
     vi.mocked(sessionUser.getOptionalSessionUserId).mockReset();
     const db = getDb();
     db.delete(twinDialogueTurns).run();
+    const profile = db
+      .select({ id: twinProfiles.id })
+      .from(twinProfiles)
+      .where(eq(twinProfiles.userId, ROUTE_USER_ID))
+      .get();
+    if (profile) {
+      db.update(twinReadinessState)
+        .set({
+          indicatorsJson: JSON.stringify(DEFAULT_READINESS_INPUT.indicators),
+          socializationCompleted: DEFAULT_READINESS_INPUT.socializationCompleted,
+          finalStateMessageShown: DEFAULT_READINESS_INPUT.finalStateMessageShown,
+        })
+        .where(eq(twinReadinessState.twinProfileId, profile.id))
+        .run();
+    }
     vi.mocked(sessionUser.getOptionalSessionUserId).mockResolvedValue(ROUTE_USER_ID);
   });
 
@@ -218,8 +235,91 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
       expect(routePayload?.ai_gateway_provider_completion_tokens).toBeUndefined();
       expect(routePayload?.ai_gateway_provider_total_tokens).toBeUndefined();
       expect(routePayload?.ai_gateway_provider_request_id).toBeUndefined();
+      expect(routePayload?.readiness_writer_invoked).toBe(false);
+      expect(routePayload?.readiness_writer_outcome).toBe("disabled");
     } finally {
       spy.mockRestore();
+    }
+  });
+
+  const SUBSTANTIVE_SELF_REF_MESSAGE =
+    "I think this describes my stance well enough for the twin readiness demo.";
+
+  it("with WAIA_READINESS_WRITER bumps lowest indicator on substantive self-ref turn", async () => {
+    process.env.WAIA_READINESS_WRITER = "1";
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const res = await POST(postJson({ message: SUBSTANTIVE_SELF_REF_MESSAGE }));
+      expect(res.status).toBe(200);
+      const payload = await loadDashboardReadinessPayloadFromDb(getDb(), ROUTE_USER_ID);
+      expect(payload.readinessInput.indicators[0]).toBe(33);
+      expect(payload.readinessInput.indicators.slice(1)).toEqual([0, 0, 0, 0, 0]);
+
+      const payloads = spy.mock.calls.map((c) => JSON.parse(String(c[0])));
+      const routePayload = payloads.find(
+        (p: { event?: string }) => p.event === "waia_runtime_route",
+      );
+      expect(routePayload?.readiness_writer_invoked).toBe(true);
+      expect(routePayload?.readiness_writer_outcome).toBe("applied");
+    } finally {
+      spy.mockRestore();
+      delete process.env.WAIA_READINESS_WRITER;
+    }
+  });
+
+  it("skips replayed idempotent Twin turns without double-bump telemetry", async () => {
+    process.env.WAIA_READINESS_WRITER = "1";
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const key = "readiness-demo-idem";
+    try {
+      const first = await POST(
+        postJson({ message: SUBSTANTIVE_SELF_REF_MESSAGE, idempotencyKey: key }),
+      );
+      expect(first.status).toBe(200);
+
+      const second = await POST(
+        postJson({
+          message: "Ignore this different substantive text without replay bump.",
+          idempotencyKey: key,
+        }),
+      );
+      expect(second.status).toBe(200);
+
+      const snapshot = await loadDashboardReadinessPayloadFromDb(getDb(), ROUTE_USER_ID);
+      expect(snapshot.readinessInput.indicators[0]).toBe(33);
+
+      const routePayloads = spy.mock.calls
+        .map((c) => JSON.parse(String(c[0])))
+        .filter((p: { event?: string }) => p.event === "waia_runtime_route");
+      expect(routePayloads[0]?.readiness_writer_outcome).toBe("applied");
+      expect(routePayloads[1]?.readiness_writer_invoked).toBe(false);
+      expect(routePayloads[1]?.readiness_writer_outcome).toBe("replay_skipped");
+    } finally {
+      spy.mockRestore();
+      delete process.env.WAIA_READINESS_WRITER;
+    }
+  });
+
+  it("with writer enabled reports skipped when dialogue message is not writer-eligible", async () => {
+    process.env.WAIA_READINESS_WRITER = "1";
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const longSansSelf =
+      "This is deliberately written as a neutral note without qualifying pronouns.";
+    try {
+      const res = await POST(postJson({ message: longSansSelf }));
+      expect(res.status).toBe(200);
+      const payload = await loadDashboardReadinessPayloadFromDb(getDb(), ROUTE_USER_ID);
+      expect(payload.readinessInput.indicators).toEqual([0, 0, 0, 0, 0, 0]);
+
+      const payloads = spy.mock.calls.map((c) => JSON.parse(String(c[0])));
+      const routePayload = payloads.find(
+        (p: { event?: string }) => p.event === "waia_runtime_route",
+      );
+      expect(routePayload?.readiness_writer_invoked).toBe(true);
+      expect(routePayload?.readiness_writer_outcome).toBe("skipped");
+    } finally {
+      spy.mockRestore();
+      delete process.env.WAIA_READINESS_WRITER;
     }
   });
 
