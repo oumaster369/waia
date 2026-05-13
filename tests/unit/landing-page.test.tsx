@@ -128,6 +128,7 @@ describe("AuthBlock state machine", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -180,6 +181,7 @@ describe("AuthBlock state machine", () => {
     });
 
     expect(screen.getByTestId("landing-auth-error")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-auth-error")).toHaveTextContent(/at least 8 characters/i);
     expect(screen.getByTestId("landing-auth-identity")).toHaveValue("test@example.com");
     expect(screen.getByTestId("landing-auth-password")).toHaveValue("");
     expect(screen.getByTestId("landing-auth-submit")).not.toBeDisabled();
@@ -261,6 +263,127 @@ describe("AuthBlock state machine", () => {
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith("/dashboard");
     });
+  });
+
+  it("surfaces oauth_error query param and clears it with replaceState", async () => {
+    vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
+    Object.defineProperty(window, "location", {
+      writable: true,
+      configurable: true,
+      value: {
+        pathname: "/",
+        search: "?oauth_error=OAUTH_DENIED",
+      },
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      fetchWithOauthAvailability(() => {
+        throw new Error("Unexpected fetch");
+      }),
+    );
+
+    render(<AuthBlock />);
+    await waitFor(() => {
+      expect(screen.getByTestId("landing-auth-error")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("landing-auth-error").textContent).toMatch(/cancelled|isn/i);
+    expect(window.history.replaceState).toHaveBeenCalledWith(null, "", "/");
+  });
+
+  it("shows email confirmation notice and switches to Sign in after sign-up needs confirmation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fetchWithOauthAvailability((input) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("/api/auth/sign-up")) {
+          return jsonResponse(
+            { ok: true, needsEmailConfirmation: true, redirect: "/dashboard" },
+            201,
+          );
+        }
+        return oauthAvailableResponse();
+      }),
+    );
+
+    render(<AuthBlock />);
+    await waitFor(() => {
+      expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create your Twin");
+    });
+    fireEvent.change(screen.getByTestId("landing-auth-identity"), {
+      target: { value: "new@example.com" },
+    });
+    fireEvent.change(screen.getByTestId("landing-auth-password"), {
+      target: { value: "password12" },
+    });
+    fireEvent.click(screen.getByTestId("landing-auth-submit"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("landing-auth-email-confirmation")).toBeInTheDocument();
+    });
+    const block = screen.getByTestId("landing-auth");
+    expect(block.dataset.mode).toBe("signIn");
+    expect(block.dataset.status).toBe("VisitorIdle");
+    expect(screen.queryByTestId("landing-auth-error")).not.toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("shows password policy hint only in Create Twin mode", async () => {
+    vi.stubGlobal("fetch", fetchWithOauthAvailability(() => oauthAvailableResponse()));
+
+    render(<AuthBlock />);
+    await waitFor(() => {
+      expect(screen.getByTestId("landing-auth-provider-google")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("landing-auth-password-policy-hint")).toHaveTextContent(/8 characters/);
+    fireEvent.click(screen.getByTestId("landing-auth-mode-sign-in"));
+    await waitFor(() => {
+      expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Sign in");
+    });
+    expect(screen.queryByTestId("landing-auth-password-policy-hint")).not.toBeInTheDocument();
+  });
+
+  it("shows neutral copy when OAuth availability fetch fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("/api/auth/oauth/availability")) {
+          return Promise.reject(new Error("network"));
+        }
+        return Promise.reject(new Error("Unexpected fetch"));
+      }),
+    );
+
+    render(<AuthBlock />);
+    await waitFor(() => {
+      expect(screen.getByTestId("landing-auth-oauth-availability-error")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("landing-auth-oauth-availability-error")).toHaveTextContent(
+      /Couldn.*t load sign-in options/i,
+    );
+    expect(screen.queryByTestId("landing-auth-oauth-unavailable")).not.toBeInTheDocument();
+  });
+
+  it("shows preview message when server reports all OAuth providers disabled", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("/api/auth/oauth/availability")) {
+          return Promise.resolve(
+            jsonResponse({ google: false, apple: false, telegram: false }, 200),
+          );
+        }
+        return Promise.reject(new Error("Unexpected fetch"));
+      }),
+    );
+
+    render(<AuthBlock />);
+    await waitFor(() => {
+      expect(screen.getByTestId("landing-auth-oauth-unavailable")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("landing-auth-oauth-availability-error")).not.toBeInTheDocument();
   });
 
   describe("OAuth start navigation", () => {

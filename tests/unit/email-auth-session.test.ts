@@ -5,6 +5,7 @@ import {
   establishEmailSignInOnly,
   establishEmailSignUpOnly,
   parseAuthOkResponse,
+  parseNeedsEmailConfirmation,
 } from "@/lib/landing/email-auth-session";
 
 describe("parseAuthOkResponse", () => {
@@ -25,6 +26,24 @@ describe("parseAuthOkResponse", () => {
     expect(parseAuthOkResponse({ ok: true, redirect: "//evil.example/x" })).toBeNull();
     expect(parseAuthOkResponse({ ok: true, redirect: "https://evil/x" })).toBeNull();
     expect(parseAuthOkResponse({ ok: true, redirect: "\t/dashboard" })).toBeNull();
+  });
+
+  it("rejects ok body when email confirmation is required", () => {
+    expect(
+      parseAuthOkResponse({
+        ok: true,
+        needsEmailConfirmation: true,
+        redirect: "/dashboard",
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("parseNeedsEmailConfirmation", () => {
+  it("detects Supabase confirmation envelope", () => {
+    expect(parseNeedsEmailConfirmation({ ok: true, needsEmailConfirmation: true })).toBe(true);
+    expect(parseNeedsEmailConfirmation({ ok: true, redirect: "/dashboard" })).toBe(false);
+    expect(parseNeedsEmailConfirmation(null)).toBe(false);
   });
 });
 
@@ -71,6 +90,28 @@ describe("establishEmailSignUpOnly", () => {
     expect(r).toEqual({ outcome: "success", redirectPath: "/dashboard" });
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith("/api/auth/sign-up", expect.any(Object));
+  });
+
+  it("returns needsEmailConfirmation when sign-up succeeds without session", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            needsEmailConfirmation: true,
+            redirect: "/dashboard",
+          }),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    const r = await establishEmailSignUpOnly({ email: "a@b.co", password: "password12" });
+    expect(r).toEqual({ outcome: "needsEmailConfirmation" });
   });
 });
 
@@ -141,6 +182,40 @@ describe("establishEmailAuthSession", () => {
       password: "password12",
     });
     expect(r.outcome).toBe("success");
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns needsEmailConfirmation when sign-up requires email verification", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: { code: "INVALID_CREDENTIALS" } }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              ok: true,
+              needsEmailConfirmation: true,
+              redirect: "/dashboard",
+            }),
+            {
+              status: 201,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+    );
+
+    const r = await establishEmailAuthSession({
+      email: "a@b.co",
+      password: "password12",
+    });
+    expect(r).toEqual({ outcome: "needsEmailConfirmation" });
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
   });
 
