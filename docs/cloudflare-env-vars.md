@@ -70,6 +70,7 @@ These variables are read by [`runtime-backend.ts`](../db/runtime-backend.ts) and
 |----------|------|------|------------|
 | `WAIA_DB_BACKEND` | Set to `postgres` | Selects Postgres runtime for `getWaiaRuntimeDb()` instead of default SQLite. | Plain env (e.g. `postgres` in dashboard or `.dev.vars`) |
 | `DATABASE_URL_POSTGRES` | Required when `WAIA_DB_BACKEND=postgres` | **Secret** — Postgres connection URI for Drizzle + `postgres` driver. | `wrangler secret put DATABASE_URL_POSTGRES` or encrypted dashboard env |
+| `WAIA_POSTGRES_PER_REQUEST_CLIENT` | Optional (DEE-110) | Default **on** (`true` / `1` / `yes` / `on` / unset): one `postgres.js` client per request (recommended on Workers). Set **`false`**, **`0`**, **`no`**, or **`off`** to roll back to the legacy global singleton (emergency only). | Plain env |
 
 **First supported path (DEE-74 slice):** **Supabase transaction pooler** — use the **Transaction pooler** connection string from the Supabase dashboard (often host `…pooler.supabase.com`, port **6543**, IPv4-friendly for Workers). Paste the full URI into **`DATABASE_URL_POSTGRES`**.
 
