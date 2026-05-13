@@ -168,4 +168,43 @@ describe("resolveTwinDialogueAssistantText", () => {
       providerRequestId: "chatcmpl-gateway",
     });
   });
+
+  it("includes prior replay roles before current user message for openai-compatible", async () => {
+    process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
+    process.env.WAIA_AI_PROVIDER = "openai-compatible";
+    process.env.WAIA_AI_OPENAI_API_KEY = "test-key";
+
+    type OpenAiRequestBody = { messages?: Array<{ role: string; content: string }> };
+    let parsed: OpenAiRequestBody | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (typeof init?.body === "string") {
+        parsed = JSON.parse(init.body) as OpenAiRequestBody;
+      }
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-replay",
+          choices: [{ message: { role: "assistant", content: "ok" } }],
+          usage: {},
+        }),
+        { status: 200 },
+      );
+    });
+
+    await resolveTwinDialogueAssistantText({
+      userContent: "now",
+      priorReplayMessages: [
+        { role: "user", content: "past-user" },
+        { role: "assistant", content: "past-ai" },
+      ],
+    });
+
+    expect(parsed).not.toBeNull();
+    const msgs = parsed!.messages;
+    expect(Array.isArray(msgs)).toBe(true);
+    expect(msgs!.map((m: { role: string }) => m.role).join("|")).toBe(
+      "system|user|assistant|user",
+    );
+    expect(msgs![3]!.content).toBe("now");
+    expect(msgs![0]!.content).toContain("Continue naturally");
+  });
 });

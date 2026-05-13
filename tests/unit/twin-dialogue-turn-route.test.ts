@@ -71,6 +71,7 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
     delete process.env.WAIA_AI_OPENAI_BASE_URL;
     delete process.env.WAIA_AI_OPENAI_REQUEST_TIMEOUT_MS;
     delete process.env.WAIA_READINESS_WRITER;
+    delete process.env.WAIA_TWIN_DIALOGUE_CONTINUITY;
     vi.mocked(sessionUser.getOptionalSessionUserId).mockReset();
     const db = getDb();
     db.delete(twinDialogueTurns).run();
@@ -237,6 +238,10 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
       expect(routePayload?.ai_gateway_provider_request_id).toBeUndefined();
       expect(routePayload?.readiness_writer_invoked).toBe(false);
       expect(routePayload?.readiness_writer_outcome).toBe("disabled");
+      expect(routePayload?.dialogue_continuity_mode).toBe("off");
+      expect(routePayload?.dialogue_continuity_replay_roles_injected).toBe(0);
+      expect(routePayload?.dialogue_continuity_replay_chars).toBe(0);
+      expect(routePayload?.dialogue_continuity_replay_truncated).toBe(false);
     } finally {
       spy.mockRestore();
     }
@@ -320,6 +325,91 @@ describe("POST /api/dashboard/twin-dialogue/turn", () => {
     } finally {
       spy.mockRestore();
       delete process.env.WAIA_READINESS_WRITER;
+    }
+  });
+
+  it("reports replay_v1_standby when continuity enabled but gateway foundation off", async () => {
+    process.env.WAIA_TWIN_DIALOGUE_CONTINUITY = "1";
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const res = await POST(postJson({ message: "Continuity standby path" }));
+      expect(res.status).toBe(200);
+      const routePayload = spy.mock.calls.map((c) => JSON.parse(String(c[0])))[
+        spy.mock.calls.length - 1
+      ]!;
+      expect(routePayload.dialogue_continuity_mode).toBe("replay_v1_standby");
+      expect(routePayload.dialogue_continuity_replay_roles_injected).toBe(0);
+      expect(routePayload.dialogue_continuity_replay_chars).toBe(0);
+      expect(routePayload.dialogue_continuity_replay_truncated).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("injects persisted turns into completion request when continuity and gateway foundation on", async () => {
+    process.env.WAIA_TWIN_DIALOGUE_CONTINUITY = "replay_v1";
+    process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
+    process.env.WAIA_AI_PROVIDER = "openai-compatible";
+    process.env.WAIA_AI_OPENAI_API_KEY = "test-key";
+
+    let lastOpenAiBody = "";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
+      if (
+        typeof init?.body === "string" &&
+        (url.includes("/v1/chat/completions") || url.includes("/chat/completions"))
+      ) {
+        lastOpenAiBody = init.body;
+      }
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-continuity",
+          choices: [
+            {
+              message: { role: "assistant", content: "Ack with continuity" },
+            },
+          ],
+          usage: { prompt_tokens: 3, completion_tokens: 5, total_tokens: 8 },
+        }),
+        { status: 200 },
+      );
+    });
+
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await POST(postJson({ message: "one" }));
+      await POST(postJson({ message: "two" }));
+
+      const res = await POST(postJson({ message: "three" }));
+      expect(res.status).toBe(200);
+      expect(lastOpenAiBody).not.toBe("");
+      const reqJson = JSON.parse(lastOpenAiBody) as {
+        messages: Array<{ role: string; content: string }>;
+      };
+      expect(reqJson.messages.some((m) => m.role === "system")).toBe(true);
+      expect(reqJson.messages.some((m) => m.role === "user" && m.content === "one")).toBe(true);
+      expect(reqJson.messages.some((m) => m.role === "user" && m.content === "two")).toBe(true);
+      expect(reqJson.messages.some((m) => m.role === "user" && m.content === "three")).toBe(true);
+      expect(
+        reqJson.messages.findLast((m) => m.role === "user")?.content ?? "",
+      ).toBe("three");
+      expect(
+        reqJson.messages.some(
+          (m) => typeof m.content === "string" && m.content.includes("Continue naturally"),
+        ),
+      ).toBe(true);
+
+      const routePayloads = spy.mock.calls
+        .map((c) => JSON.parse(String(c[0])))
+        .filter((p: { event?: string }) => p.event === "waia_runtime_route");
+      const last = routePayloads[routePayloads.length - 1]!;
+      expect(last.dialogue_continuity_mode).toBe("replay_v1");
+      expect(last.dialogue_continuity_replay_roles_injected).toBeGreaterThanOrEqual(2);
+      expect(last.dialogue_continuity_replay_truncated).toBe(false);
+    } finally {
+      spy.mockRestore();
+      fetchSpy.mockRestore();
+      delete process.env.WAIA_TWIN_DIALOGUE_CONTINUITY;
     }
   });
 

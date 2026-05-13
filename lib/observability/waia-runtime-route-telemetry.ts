@@ -84,6 +84,17 @@ export type WaiaRuntimeRouteTelemetryPayload = {
     | "noop"
     | "error";
   /**
+   * DEE-109 bounded dialogue continuity (content-free). `off` env off; `replay_v1_standby` env on but gateway foundation off (no SQL read); `replay_v1` active path.
+   */
+  dialogue_continuity_mode?: "off" | "replay_v1" | "replay_v1_standby";
+  /** Prior replay roles injected into provider messages (excluding current user turn); 0 when not active */
+  dialogue_continuity_replay_roles_injected?: number;
+  /** Total characters in replay injection only */
+  dialogue_continuity_replay_chars?: number;
+  /** True when builder clipped turns or omitted older replay due to caps */
+  dialogue_continuity_replay_truncated?: boolean;
+
+  /**
    * Postgres client lifecycle (DEE-110). Omitted when backend is SQLite or handle unresolved.
    */
   pg_client_lifecycle?: "per_request" | "singleton";

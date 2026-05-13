@@ -605,6 +605,41 @@ async function listTwinDialogueTurnsChronologicalPg(
     .orderBy(pgSchema.twinDialogueTurns.sequence);
 }
 
+async function listTwinDialogueTurnsTailForContinuityPg(
+  db: WaiaPostgresDb,
+  twinProfileId: string,
+  rowLimit: number,
+): Promise<TwinDialogueTurnDbRow[]> {
+  if (!Number.isFinite(rowLimit) || rowLimit <= 0) {
+    return [];
+  }
+
+  const rows = await db
+    .select({
+      id: pgSchema.twinDialogueTurns.id,
+      sequence: pgSchema.twinDialogueTurns.sequence,
+      role: pgSchema.twinDialogueTurns.role,
+      content: pgSchema.twinDialogueTurns.content,
+      idempotencyKey: pgSchema.twinDialogueTurns.idempotencyKey,
+      createdAt: pgSchema.twinDialogueTurns.createdAt,
+    })
+    .from(pgSchema.twinDialogueTurns)
+    .where(eq(pgSchema.twinDialogueTurns.twinProfileId, twinProfileId))
+    .orderBy(desc(pgSchema.twinDialogueTurns.sequence))
+    .limit(rowLimit);
+
+  return rows
+    .map((r) => ({
+      id: r.id,
+      sequence: r.sequence,
+      role: r.role,
+      content: r.content,
+      idempotencyKey: r.idempotencyKey,
+      createdAt: r.createdAt,
+    }))
+    .reverse();
+}
+
 async function ensureUserTwinSeedPg(db: WaiaPostgresDb, userId: string): Promise<string> {
   return runWaiaPostgresTransaction(db, async (tx) => ensureUserTwinSeedInsideExecutorPg(tx, userId));
 }
@@ -1102,6 +1137,10 @@ export type PostgresTwinPersistence = {
   }) => Promise<void>;
   countUserDialogueTurns: (twinProfileId: string) => Promise<number>;
   listTwinDialogueTurnsChronological: (twinProfileId: string) => Promise<TwinDialogueTurnDbRow[]>;
+  listTwinDialogueTurnsTailForContinuity: (
+    twinProfileId: string,
+    rowLimit: number,
+  ) => Promise<TwinDialogueTurnDbRow[]>;
   listTwinDialogueTurnsForUser: (userId: string) => Promise<TwinDialogueMemoryRow[]>;
   loadDashboardReadinessPayloadFromDb: (userId: string) => Promise<DashboardReadinessPayload>;
   appendDiaryEntryForUser: (params: {
@@ -1154,6 +1193,8 @@ export function createPostgresTwinPersistence(db: WaiaPostgresDb): PostgresTwinP
     countUserDialogueTurns: (twinProfileId) => countUserDialogueTurnsPg(db, twinProfileId),
     listTwinDialogueTurnsChronological: (twinProfileId) =>
       listTwinDialogueTurnsChronologicalPg(db, twinProfileId),
+    listTwinDialogueTurnsTailForContinuity: (twinProfileId, rowLimit) =>
+      listTwinDialogueTurnsTailForContinuityPg(db, twinProfileId, rowLimit),
     listTwinDialogueTurnsForUser: (userId) => listTwinDialogueTurnsForUserPg(db, userId),
     loadDashboardReadinessPayloadFromDb: (userId) =>
       loadDashboardReadinessPayloadFromDbPg(db, userId),

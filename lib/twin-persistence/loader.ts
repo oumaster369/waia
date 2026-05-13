@@ -21,7 +21,7 @@ import {
   serializeEmbeddingJson,
   TWIN_MEMORY_EMBEDDING_MODEL_ID,
 } from "@/lib/embeddings/twin-memory-embeddings";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { type WaiaDb } from "@/db/types";
 import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
 import { ensureUserTwinSeed } from "./user-twin-seed";
@@ -331,6 +331,36 @@ export async function listTwinDialogueTurnsChronological(
     .from(twinDialogueTurns)
     .where(eq(twinDialogueTurns.twinProfileId, twinProfileId))
     .orderBy(twinDialogueTurns.sequence);
+}
+
+/**
+ * Bounded tail read for Twin dialogue continuity (DEE-109): newest-first SQL `LIMIT`,
+ * returned in chronological order (oldest→newest within the tail segment).
+ */
+export async function listTwinDialogueTurnsTailForContinuity(
+  db: WaiaDb,
+  twinProfileId: string,
+  rowLimit: number,
+): Promise<TwinDialogueTurnDbRow[]> {
+  if (!Number.isFinite(rowLimit) || rowLimit <= 0) {
+    return [];
+  }
+
+  const rows = await db
+    .select({
+      id: twinDialogueTurns.id,
+      sequence: twinDialogueTurns.sequence,
+      role: twinDialogueTurns.role,
+      content: twinDialogueTurns.content,
+      idempotencyKey: twinDialogueTurns.idempotencyKey,
+      createdAt: twinDialogueTurns.createdAt,
+    })
+    .from(twinDialogueTurns)
+    .where(eq(twinDialogueTurns.twinProfileId, twinProfileId))
+    .orderBy(desc(twinDialogueTurns.sequence))
+    .limit(rowLimit);
+
+  return rows.slice().reverse();
 }
 
 /** Twin dialogue memory for this user — read-only after ensureUserTwinSeed. */
