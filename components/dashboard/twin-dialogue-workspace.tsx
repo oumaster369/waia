@@ -116,8 +116,9 @@ export function TwinDialogueWorkspace({
           id="dashboard-twin-invitation-desc"
           className="rounded-2xl border border-dashed border-border bg-muted/20 p-4 text-muted-foreground text-sm leading-relaxed"
         >
-          Welcome to Twin mode. Chat below to build your AI-Twin—the flow stays conversational, not a
-          questionnaire. Twin replies appear as stubs until the dialogue service connects.
+          Welcome to Twin mode. Chat below to shape your AI-Twin—keep it conversational, not a
+          questionnaire. When you send a message, the Twin replies here (it may take a few
+          seconds). It uses your recent turns in this workspace—it&apos;s not browsing the web.
         </div>
       )}
 
