@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 
 import { getDb } from "@/db/client";
-import { getWaiaRuntimeDb } from "@/db/waia-runtime-db";
+import { disposeWaiaRuntimeDb, getWaiaRuntimeDb, type WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import { WAIA_SESSION_COOKIE } from "@/lib/auth/constants";
 import {
   deriveIdentityLabelFromEmail,
@@ -12,7 +12,7 @@ import {
   normalizeEmail,
 } from "@/lib/auth/email";
 import { resolveUserIdFromSessionId } from "@/lib/auth/session-service";
-import { syncAppUserRowFromSupabaseAuth } from "@/lib/auth/supabase-app-user-sync";
+import { syncAppUserRowFromSupabaseAuthPostgres } from "@/lib/persistence/postgres/twin-persistence";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/config";
 import { createSupabaseServerReadOnly } from "@/lib/supabase/server";
 
@@ -25,20 +25,23 @@ async function resolveOptionalSessionUserId(): Promise<string | null> {
         error,
       } = await supabase.auth.getUser();
       if (!error && user?.id) {
-        const runtime = await getWaiaRuntimeDb();
-        if (
-          runtime.kind === "postgres" &&
-          typeof user.email === "string" &&
-          user.email.trim() !== ""
-        ) {
-          const email = normalizeEmail(user.email);
-          if (isLikelyEmail(email)) {
-            await syncAppUserRowFromSupabaseAuth({
-              supabaseUserId: user.id,
-              email,
-              identityLabel: deriveIdentityLabelFromEmail(email),
-            });
+        let runtime: WaiaRuntimeDb | undefined;
+        try {
+          runtime = await getWaiaRuntimeDb();
+          if (runtime.kind === "postgres") {
+            if (typeof user.email === "string" && user.email.trim() !== "") {
+              const email = normalizeEmail(user.email);
+              if (isLikelyEmail(email)) {
+                await syncAppUserRowFromSupabaseAuthPostgres(runtime.db, {
+                  supabaseUserId: user.id,
+                  email,
+                  identityLabel: deriveIdentityLabelFromEmail(email),
+                });
+              }
+            }
           }
+        } finally {
+          await disposeWaiaRuntimeDb(runtime);
         }
         return user.id;
       }
