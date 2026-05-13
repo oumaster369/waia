@@ -73,6 +73,17 @@ export type WaiaRuntimeRouteTelemetryPayload = {
   /** Vendor correlation id when returned by adapter — never user text (DEE-79). */
   ai_gateway_provider_request_id?: string;
   /**
+   * V1 demo readiness writer (`WAIA_READINESS_WRITER`). `twin_dialogue_turn` only; content-free.
+   */
+  readiness_writer_invoked?: boolean;
+  readiness_writer_outcome?:
+    | "disabled"
+    | "replay_skipped"
+    | "skipped"
+    | "applied"
+    | "noop"
+    | "error";
+  /**
    * Postgres client lifecycle (DEE-110). Omitted when backend is SQLite or handle unresolved.
    */
   pg_client_lifecycle?: "per_request" | "singleton";

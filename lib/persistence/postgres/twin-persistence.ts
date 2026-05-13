@@ -21,6 +21,8 @@ import {
   serializeEmbeddingJson,
   TWIN_MEMORY_EMBEDDING_MODEL_ID,
 } from "@/lib/embeddings/twin-memory-embeddings";
+import { planDemoReadinessAdvancement } from "@/lib/readiness/demo-indicator-progression";
+import type { ReadinessDemoAdvanceResult } from "@/lib/readiness/readiness-demo-advance-types";
 import { parseIndicatorVector } from "@/lib/readiness/readiness";
 import type { ReadinessInput } from "@/lib/readiness/types";
 import * as pgSchema from "@/db/schema.postgres";
@@ -1007,6 +1009,71 @@ async function appendRepeatabilityRecordForUserPg(
   });
 }
 
+async function applyReadinessDemoAdvanceForSubstantiveTurnPg(
+  db: WaiaPostgresDb,
+  params: { twinProfileId: string; userMessage: string },
+): Promise<ReadinessDemoAdvanceResult> {
+  const sel = await db
+    .select({ indicatorsJson: pgSchema.twinReadinessState.indicatorsJson })
+    .from(pgSchema.twinReadinessState)
+    .where(eq(pgSchema.twinReadinessState.twinProfileId, params.twinProfileId))
+    .limit(1);
+
+  const hit = sel[0];
+  if (!hit) {
+    return { status: "skipped", reason: "missing_state" };
+  }
+
+  let indicators;
+  try {
+    const parsed =
+      typeof hit.indicatorsJson === "string"
+        ? (JSON.parse(hit.indicatorsJson) as unknown)
+        : hit.indicatorsJson;
+    indicators = parseIndicatorVector(parsed as Iterable<number>);
+  } catch {
+    return { status: "skipped", reason: "not_eligible" };
+  }
+
+  const plan = planDemoReadinessAdvancement(indicators, params.userMessage);
+  if (!plan) {
+    if (indicators.every((v) => v === 100)) {
+      return { status: "skipped", reason: "all_indicators_confirmed" };
+    }
+    return { status: "skipped", reason: "not_eligible" };
+  }
+
+  const nextTuple = [...indicators] as [number, number, number, number, number, number];
+  nextTuple[plan.indicatorIndex] = plan.to;
+  const idx = plan.indicatorIndex;
+  const fromVal = plan.from;
+
+  const updated = await db
+    .update(pgSchema.twinReadinessState)
+    .set({
+      indicatorsJson: nextTuple,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(pgSchema.twinReadinessState.twinProfileId, params.twinProfileId),
+        sql`(${pgSchema.twinReadinessState.indicatorsJson}->${sql.raw(String(idx))})::int = ${fromVal}`,
+      ),
+    )
+    .returning({ twinProfileId: pgSchema.twinReadinessState.twinProfileId });
+
+  if (updated.length === 0) {
+    return { status: "noop", reason: "stale_state" };
+  }
+
+  return {
+    status: "applied",
+    indicatorIndex: plan.indicatorIndex,
+    from: plan.from,
+    to: plan.to,
+  };
+}
+
 /**
  * Postgres AI-Twin / diary persistence boundary (DEE-72.1, DEE-72.2, DEE-72.3, DEE-72.5).
  * Async semantics; transactional writes use {@link runWaiaPostgresTransaction}.
@@ -1070,6 +1137,10 @@ export type PostgresTwinPersistence = {
     options?: AnalyzeRepeatabilityOptions,
   ) => Promise<TwinRepeatabilityApiResponse>;
   stringifyScenarioPayloadForStorage: typeof stringifyScenarioPayloadForStorage;
+  applyReadinessDemoAdvanceForSubstantiveTurn: (params: {
+    twinProfileId: string;
+    userMessage: string;
+  }) => Promise<ReadinessDemoAdvanceResult>;
 };
 
 export function createPostgresTwinPersistence(db: WaiaPostgresDb): PostgresTwinPersistence {
@@ -1105,5 +1176,7 @@ export function createPostgresTwinPersistence(db: WaiaPostgresDb): PostgresTwinP
     analyzeRepeatabilityForUser: (userId, options) =>
       analyzeRepeatabilityForUserAsync(db, userId, options),
     stringifyScenarioPayloadForStorage,
+    applyReadinessDemoAdvanceForSubstantiveTurn: (params) =>
+      applyReadinessDemoAdvanceForSubstantiveTurnPg(db, params),
   };
 }
