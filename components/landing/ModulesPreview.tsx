@@ -9,20 +9,21 @@ const MODULES: ReadonlyArray<ModuleCard> = [
   {
     id: "ai-twin",
     name: "AI-Twin",
-    description: "Твой персональный цифровой двойник, который растёт через диалог и дневник.",
-    role: "Personal intelligence layer ecosystem WAIA. Доступен сразу после входа.",
+    description:
+      "Your personal digital twin that grows through dialogue and—later—diary-style reflection.",
+    role: "Personal intelligence layer in the WAIA ecosystem. Available right after you sign in.",
   },
   {
     id: "3p-business",
     name: "3P (Business)",
-    description: "Бизнес-слой WAIA по логике Provision, Promotion, Production.",
-    role: "Business layer для компаний и команд. Подключается позднее.",
+    description: "The WAIA business layer built around Provision, Promotion, and Production.",
+    role: "For companies and teams. Connects in a later phase.",
   },
   {
     id: "ai-marketplace",
     name: "AI-Marketplace",
-    description: "Экономический и маркетплейс-слой WAIA-экосистемы.",
-    role: "Marketplace layer для обмена ценностью между AI-Twins и бизнесами. Подключается позднее.",
+    description: "The economic and marketplace layer of the WAIA ecosystem.",
+    role: "For value exchange between AI-Twins and businesses. Connects in a later phase.",
   },
 ];
 

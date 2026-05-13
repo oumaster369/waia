@@ -1,5 +1,15 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/auth/oauth/availability", (route) => {
+    void route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ google: true, apple: true, telegram: true }),
+    });
+  });
+});
+
 test.describe("WAIA landing page", () => {
   test("renders all five blocks and canonical anchors", async ({ page }) => {
     await page.goto("/");
@@ -10,25 +20,24 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-modules")).toBeVisible();
     await expect(page.getByTestId("landing-closing")).toBeVisible();
 
-    await expect(page.getByTestId("landing-hero-tagline")).toHaveText(
-      "Между тобой. И тобой.",
-    );
-    await expect(page.getByTestId("landing-context-anchor")).toHaveText(
-      "Вы здесь, в пространстве WAIA.",
-    );
-    await expect(page.getByTestId("landing-closing-anchor")).toHaveText("Всё согласовано.");
+    await expect(page.getByTestId("landing-hero-tagline")).toHaveText("Between you. And you.");
+    await expect(page.getByTestId("landing-context-anchor")).toHaveText("You're in the WAIA space.");
+    await expect(page.getByTestId("landing-closing-anchor")).toHaveText("Stay aligned.");
   });
 
-  test("exposes all four entry actions in VisitorIdle", async ({ page }) => {
+  test("shows Create Twin by default plus OAuth entry actions after availability loads", async ({
+    page,
+  }) => {
     await page.goto("/");
-    await expect(page.getByTestId("landing-auth-submit")).toHaveText("Войти");
-    await expect(page.getByTestId("landing-auth-divider")).toHaveText("или");
+    await expect(page.getByTestId("landing-auth-submit")).toHaveText("Create your Twin");
+    await expect(page.getByTestId("landing-auth-divider")).toHaveText("Or continue with");
     await expect(page.getByTestId("landing-auth-provider-google")).toBeVisible();
     await expect(page.getByTestId("landing-auth-provider-apple")).toBeVisible();
     await expect(page.getByTestId("landing-auth-provider-telegram")).toBeVisible();
+    await expect(page.getByTestId("landing-auth-mode-sign-in")).toBeVisible();
   });
 
-  test("enters AuthFailure with the canonical state attribute on wrong password for an existing account", async ({
+  test("enters AuthFailure on wrong password for an existing account in Sign-in mode", async ({
     page,
   }) => {
     const email = `e2e-failure-${Date.now()}@example.com`;
@@ -42,6 +51,9 @@ test.describe("WAIA landing page", () => {
 
     await page.getByTestId("dashboard-sidebar-sign-out").click();
     await page.waitForURL("**/", { timeout: 15_000 });
+
+    await page.getByTestId("landing-auth-mode-sign-in").click();
+    await expect(page.getByTestId("landing-auth-submit")).toHaveText("Sign in");
 
     await page.getByTestId("landing-auth-identity").fill(email);
     await page.getByTestId("landing-auth-password").fill("wrong-password-value");

@@ -9,14 +9,14 @@ export function ContextBlock() {
         data-testid="landing-context-anchor"
         className="text-xl font-medium tracking-tight sm:text-2xl"
       >
-        Вы здесь, в пространстве WAIA.
+        {"You're in the WAIA space."}
       </p>
       <p
         data-testid="landing-context-description"
         className="text-balance text-base text-muted-foreground sm:text-lg"
       >
-        WAIA — это модульная AI-экосистема: персональный AI-Twin, бизнес-слой, финансовый слой и
-        маркетплейс. Сначала ты создаёшь свой AI-Twin, дальше открываются остальные слои.
+        WAIA is a modular AI ecosystem: a personal AI-Twin, a business layer, finance, and a marketplace.
+        You start by building your AI-Twin; the other layers unlock as you grow.
       </p>
     </section>
   );
