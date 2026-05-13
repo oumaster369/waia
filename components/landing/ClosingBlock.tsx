@@ -9,14 +9,14 @@ export function ClosingBlock() {
         data-testid="landing-closing-anchor"
         className="text-2xl font-semibold tracking-tight sm:text-3xl"
       >
-        Всё согласовано.
+        Stay aligned.
       </p>
       <p
         data-testid="landing-closing-narrative"
         className="text-balance text-base text-muted-foreground sm:text-lg"
       >
-        Сначала ты согласован с собой, затем с другими, затем с системой. WAIA выстраивает эту
-        последовательность.
+        First with yourself, then with others, then with the systems you rely on. WAIA is built for that
+        sequence.
       </p>
     </section>
   );
