@@ -147,18 +147,31 @@ describe("resolveTwinDialogueAssistantText", () => {
     process.env.WAIA_AI_PROVIDER = "openai-compatible";
     process.env.WAIA_AI_OPENAI_API_KEY = "test-key";
 
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    type OpenAiRequestBody = { messages?: Array<{ role: string; content: string }> };
+    let parsed: OpenAiRequestBody | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (typeof init?.body === "string") {
+        parsed = JSON.parse(init.body) as OpenAiRequestBody;
+      }
+      return new Response(
         JSON.stringify({
           id: "chatcmpl-gateway",
           choices: [{ message: { role: "assistant", content: " Twin dialogue reply " } }],
           usage: { prompt_tokens: 2, completion_tokens: 4, total_tokens: 6 },
         }),
         { status: 200 },
-      ),
-    );
+      );
+    });
 
     const out = await resolveTwinDialogueAssistantText({ userContent: "user asks" });
+    expect(parsed).not.toBeNull();
+    const sys = parsed!.messages?.find((m) => m.role === "system")?.content ?? "";
+    const sysLower = sys.toLowerCase();
+    expect(sysLower).toMatch(/reflective|notice/);
+    expect(sysLower).not.toContain("roleplay");
+    expect(sysLower).not.toContain("therapist");
+    expect(sysLower).not.toContain("assistant ready to help");
+
     expect(out.text).toBe("Twin dialogue reply");
     expect(out.telemetry).toMatchObject({
       foundation: "live",
@@ -206,5 +219,10 @@ describe("resolveTwinDialogueAssistantText", () => {
     );
     expect(msgs![3]!.content).toBe("now");
     expect(msgs![0]!.content).toContain("Continue naturally");
+    const replaySysLower = msgs![0]!.content.toLowerCase();
+    expect(replaySysLower).toMatch(/reflective|notice/);
+    expect(replaySysLower).not.toContain("roleplay");
+    expect(replaySysLower).not.toContain("therapist");
+    expect(replaySysLower).not.toContain("assistant ready to help");
   });
 });

@@ -15,13 +15,20 @@ describe("TwinDialogueWorkspace POST submit", () => {
     render(<TwinDialogueWorkspace hasMeaningfulExchange={hasMeaningfulExchange} />);
   }
 
-  it("Twin invitation avoids legacy stub/stream/service-connect phrasing", () => {
+  it("Twin invitation avoids legacy stub/stream/service-connect phrasing and matches DEE-116 doctrine guards", () => {
     mountWorkspace(false);
     const inv = screen.getByTestId("dashboard-twin-invitation-placeholder");
     const raw = inv.textContent ?? "";
     expect(raw.toLowerCase()).not.toContain("stub");
     expect(raw).not.toContain("stream here once wired");
     expect(raw).not.toContain("dialogue service connects");
+    const lower = raw.toLowerCase();
+    expect(lower).toMatch(/calm|notice/);
+    expect(lower).not.toContain("soul");
+    expect(lower).not.toContain("awaken");
+    expect(lower).not.toContain("therapist");
+    expect(lower).not.toContain("how can i help");
+    expect(lower).not.toContain("i am your ai assistant");
   });
 
   it("appends persisted user message and assistant placeholder on 200 response", async () => {
