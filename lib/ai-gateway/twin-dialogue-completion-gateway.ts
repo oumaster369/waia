@@ -6,7 +6,10 @@ import type { WaiaAiGatewayProviderOutcomeTelemetry } from "@/lib/observability/
 import { isWaiaAiGatewayFoundationEnabled } from "./config";
 import type { CompletionRequest, ProviderMessage } from "./completion-types";
 import { resolveWaiaAiCompletionBinding, type WaiaAiProviderId } from "./provider-selector";
-import { resolveWaiaAiOpenAiDefaultModel } from "./openai-compatible-completion-provider";
+import {
+  resolveWaiaAiOpenAiDefaultModel,
+  resolveWaiaAiOpenAiTwinDialogueTemperature,
+} from "./openai-compatible-completion-provider";
 
 /**
  * DEE-116 / DEE-119 / DEE-121 / DEE-122 / DEE-123 / DEE-124 / DEE-125 — First encounter + presence + conversational gravity + non-interpretive register + conversational co-presence + direct response initiation + social presence and register;
@@ -16,7 +19,8 @@ import { resolveWaiaAiOpenAiDefaultModel } from "./openai-compatible-completion-
  * docs/architecture/DEE-122-NON-INTERPRETIVE-REGISTER.md,
  * docs/architecture/DEE-123-CONVERSATIONAL-CO-PRESENCE.md,
  * docs/architecture/DEE-124-DIRECT-RESPONSE-INITIATION.md,
- * docs/architecture/DEE-125-SOCIAL-PRESENCE-AND-REGISTER.md.
+ * docs/architecture/DEE-125-SOCIAL-PRESENCE-AND-REGISTER.md,
+ * docs/architecture/DEE-126-OPENAI-MODEL-SAMPLING-EVAL.md (model/sampling env only — prompt unchanged).
  */
 const TWIN_DIALOGUE_SYSTEM_BASE = [
   "You are WAIA Twin dialogue — a reflective intelligence that helps the person hear themselves more clearly.",
@@ -134,7 +138,7 @@ function buildTwinDialogueCompletionRequest(
     model: resolveWaiaAiOpenAiDefaultModel(),
     messages: [{ role: "system", content: systemText }, ...historyMessages],
     maxOutputTokens: 256,
-    temperature: 0,
+    temperature: resolveWaiaAiOpenAiTwinDialogueTemperature(),
   };
 }
 

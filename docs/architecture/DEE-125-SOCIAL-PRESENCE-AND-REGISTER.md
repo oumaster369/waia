@@ -81,7 +81,7 @@ Capture **one** real before/after pair per language on Linear **DEE-125**.
 
 ## 6. Forbidden deltas (this slice)
 
-Same non-goals as DEE-124 §6 / DEE-119 §6: no new envelope categories, retrieval/embeddings, DEE-109 cap edits, DEE-112 stub edits, synthetic-turn persistence hacks, **no new env flags for model or temperature**.
+Same non-goals as DEE-124 §6 / DEE-119 §6: no new envelope categories, retrieval/embeddings, DEE-109 cap edits, DEE-112 stub edits, synthetic-turn persistence hacks, **no new env flags for model or temperature in this slice** (optional `WAIA_AI_OPENAI_TEMPERATURE` is **DEE-126**).
 
 **Additionally:** no model swap and no sampling (`temperature`) changes — **DEE-126** evaluates OpenAI-only model and sampling on the walkthrough Worker **after** DEE-125 evidence is captured.
 
@@ -100,8 +100,7 @@ Revert the PR landing DEE-125: removes this doc, the DEE-124 §8 link line, the 
 - Non-interpretive register (DEE-122): [`DEE-122-NON-INTERPRETIVE-REGISTER.md`](./DEE-122-NON-INTERPRETIVE-REGISTER.md)
 - Conversational gravity (DEE-121): [`DEE-121-CONVERSATIONAL-GRAVITY.md`](./DEE-121-CONVERSATIONAL-GRAVITY.md)
 - Presence + first-start (DEE-119): [`DEE-119-PRESENCE-CALIBRATION.md`](./DEE-119-PRESENCE-CALIBRATION.md)
-
-**Next slice (not part of DEE-125):** DEE-126 — OpenAI-only model + sampling evaluation on the isolated walkthrough Worker only, prompt held constant.
+- Model + sampling evaluation (DEE-126): [`DEE-126-OPENAI-MODEL-SAMPLING-EVAL.md`](./DEE-126-OPENAI-MODEL-SAMPLING-EVAL.md)
 
 ---
 
