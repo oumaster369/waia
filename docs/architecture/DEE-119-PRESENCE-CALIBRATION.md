@@ -4,7 +4,7 @@
 
 **Audience:** Product / Architect — Twin dialogue **tone**, **first-start consent ritual**, and **optimistic send UX** while gateway inference may be on or off.
 
-**Alignment:** [`DEE-80-PROMPT-ENVELOPE-DOCTRINE-V1.md`](./DEE-80-PROMPT-ENVELOPE-DOCTRINE-V1.md) (§2 product-owned system template), [`DEE-116-FIRST-ENCOUNTER-DOCTRINE.md`](./DEE-116-FIRST-ENCOUNTER-DOCTRINE.md) (voice boundaries; extended here), DEE-109 bounded replay (caps unchanged), DEE-112 dashboard honesty (stub unchanged).
+**Alignment:** [`DEE-80-PROMPT-ENVELOPE-DOCTRINE-V1.md`](./DEE-80-PROMPT-ENVELOPE-DOCTRINE-V1.md) (§2 product-owned system template), [`DEE-116-FIRST-ENCOUNTER-DOCTRINE.md`](./DEE-116-FIRST-ENCOUNTER-DOCTRINE.md) (voice boundaries; extended here), DEE-109 bounded replay (caps unchanged), DEE-112 dashboard honesty (stub unchanged). **Extended by DEE-121** — conversational gravity register: [`DEE-121-CONVERSATIONAL-GRAVITY.md`](./DEE-121-CONVERSATIONAL-GRAVITY.md).
 
 ---
 
@@ -80,6 +80,7 @@ Revert the PR / commit that lands DEE-119: restores prior system-template base t
 
 ## 8. Related docs
 
+- Conversational gravity (DEE-121): [`DEE-121-CONVERSATIONAL-GRAVITY.md`](./DEE-121-CONVERSATIONAL-GRAVITY.md)
 - First encounter: [`DEE-116-FIRST-ENCOUNTER-DOCTRINE.md`](./DEE-116-FIRST-ENCOUNTER-DOCTRINE.md)
 - Prompt envelope: [`DEE-80-PROMPT-ENVELOPE-DOCTRINE-V1.md`](./DEE-80-PROMPT-ENVELOPE-DOCTRINE-V1.md)
 
@@ -90,3 +91,4 @@ Revert the PR / commit that lands DEE-119: restores prior system-template base t
 | Version | Notes |
 |---------|--------|
 | 1.0 | DEE-119 — Presence calibration + first-start ritual. |
+| 1.1 | Cross-link to DEE-121 conversational gravity (prompt delta only). |
