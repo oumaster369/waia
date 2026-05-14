@@ -13,6 +13,39 @@ const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com";
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
+/** GPT-5 / o-series Chat Completions use `max_completion_tokens` (counts reasoning + visible). Plain `max_tokens` is deprecated and can yield empty assistant `content` when reasoning exhausts a small budget (OpenAI reasoning guide). */
+const DEFAULT_REASONING_COMPLETION_TOKEN_FLOOR = 4096;
+
+function resolveReasoningCompletionTokenFloor(): number {
+  const raw = process.env.WAIA_AI_OPENAI_REASONING_MIN_COMPLETION_TOKENS?.trim();
+  if (raw === undefined || raw === "") {
+    return DEFAULT_REASONING_COMPLETION_TOKEN_FLOOR;
+  }
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) {
+    return DEFAULT_REASONING_COMPLETION_TOKEN_FLOOR;
+  }
+  return n;
+}
+
+/** Heuristic: reasoning models need `max_completion_tokens` headroom; see OpenAI Chat Completions + reasoning docs. */
+export function isOpenAiReasoningChatModelId(model: string): boolean {
+  const m = model.trim().toLowerCase();
+  return (
+    m.startsWith("gpt-5") ||
+    m.startsWith("o1") ||
+    m.startsWith("o3") ||
+    m.startsWith("o4")
+  );
+}
+
+export function resolveEffectiveMaxCompletionTokens(model: string, maxOutputTokens: number): number {
+  if (!isOpenAiReasoningChatModelId(model)) {
+    return maxOutputTokens;
+  }
+  return Math.max(maxOutputTokens, resolveReasoningCompletionTokenFloor());
+}
+
 function normalizeOpenAiBaseUrl(raw: string | undefined): string {
   const base = (raw ?? DEFAULT_OPENAI_BASE_URL).trim().replace(/\/+$/, "");
   return base.length > 0 ? base : DEFAULT_OPENAI_BASE_URL;
@@ -33,11 +66,15 @@ function resolveTimeoutMs(): number {
 type ChatCompletionApiResponse = {
   id?: string;
   choices?: Array<{
+    finish_reason?: string;
     message?: {
       role?: string;
       /** Legacy models: string. GPT-5 family and others may return a content-parts array (API: `ChatCompletionContentPartText | refusal`). */
       content?: string | null | OpenAiChatCompletionAssistantContentPart[];
+      /** Top-level refusal string on the assistant message (Chat Completions schema). */
       refusal?: string | null;
+      tool_calls?: unknown;
+      annotations?: unknown;
     };
   }>;
   usage?: {
@@ -53,15 +90,80 @@ type OpenAiChatCompletionAssistantContentPart = {
   refusal?: string;
 };
 
+function isParseDiagnosticsEnabled(): boolean {
+  const v = process.env.WAIA_AI_OPENAI_PARSE_DIAGNOSTICS?.trim();
+  return v === "1" || v === "true";
+}
+
 /**
- * DEE-126 — Chat Completions assistant `message.content` may be a string or an array of parts
- * (`{ type: "text", text }` / `{ type: "refusal", refusal }`) on newer OpenAI models.
- * This path previously required `typeof content === "string"`, causing fast `provider_error` stubs for `gpt-5.5`.
+ * Redacted summary for Worker logs when assistant text cannot be extracted (no user request text).
+ * Enable with `WAIA_AI_OPENAI_PARSE_DIAGNOSTICS=1`.
+ */
+export function summarizeOpenAiAssistantParseFailure(
+  parsed: unknown,
+  model: string,
+): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    waia_ai_diag: "openai_assistant_parse_failure",
+    request_model: model,
+  };
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ...base, parsed_kind: parsed === null ? "null" : typeof parsed };
+  }
+  const o = parsed as ChatCompletionApiResponse;
+  const choice0 = o.choices?.[0];
+  const msg = choice0?.message;
+  const content = msg?.content;
+  const partTypes: string[] = [];
+  const partKeySets: string[][] = [];
+  if (Array.isArray(content)) {
+    for (const part of content) {
+      if (part === null || typeof part !== "object") {
+        partTypes.push(typeof part);
+        continue;
+      }
+      const p = part as Record<string, unknown>;
+      partTypes.push(typeof p.type === "string" ? p.type : "(missing_type)");
+      partKeySets.push(Object.keys(p).sort());
+    }
+  }
+  return {
+    ...base,
+    provider_request_id: typeof o.id === "string" ? o.id : undefined,
+    finish_reason: typeof choice0?.finish_reason === "string" ? choice0.finish_reason : undefined,
+    has_message: msg !== undefined,
+    message_keys: msg !== undefined ? Object.keys(msg).sort() : undefined,
+    content_kind:
+      content === null
+        ? "null"
+        : content === undefined
+          ? "undefined"
+          : Array.isArray(content)
+            ? "array"
+            : typeof content,
+    content_array_length: Array.isArray(content) ? content.length : undefined,
+    content_array_part_types: Array.isArray(content) ? partTypes : undefined,
+    content_array_part_keys: Array.isArray(content) ? partKeySets : undefined,
+    message_refusal_len:
+      typeof msg?.refusal === "string" ? msg.refusal.length : msg?.refusal === null ? 0 : undefined,
+    has_tool_calls: msg?.tool_calls !== undefined && msg.tool_calls !== null,
+  };
+}
+
+/**
+ * DEE-126 — Chat Completions assistant `message.content` may be a string or an array of parts.
+ * Supported part types for extractable text: `text`, `output_text`, `summary_text` (string `text` field).
+ * Refusal: top-level `message.refusal`, or a part with `type: "refusal"` (no assistant text).
+ * Mixed text + refusal arrays are rejected if any refusal part is present (OpenAI: refusal is exclusive).
  */
 function coerceOpenAiAssistantMessageContentToTrimmedString(message: {
   content?: string | null | OpenAiChatCompletionAssistantContentPart[];
   refusal?: string | null;
 }): string | undefined {
+  if (typeof message.refusal === "string" && message.refusal.trim().length > 0) {
+    return undefined;
+  }
+
   const raw = message.content;
 
   if (typeof raw === "string") {
@@ -76,7 +178,6 @@ function coerceOpenAiAssistantMessageContentToTrimmedString(message: {
     return undefined;
   }
 
-  const textPieces: string[] = [];
   for (const part of raw) {
     if (part === null || typeof part !== "object") {
       continue;
@@ -85,8 +186,18 @@ function coerceOpenAiAssistantMessageContentToTrimmedString(message: {
     if (t === "refusal") {
       return undefined;
     }
-    if (t === "text" && typeof part.text === "string") {
-      textPieces.push(part.text);
+  }
+
+  const textPieces: string[] = [];
+  for (const part of raw) {
+    if (part === null || typeof part !== "object") {
+      continue;
+    }
+    const t = part.type;
+    if (t === "text" || t === "output_text" || t === "summary_text") {
+      if (typeof part.text === "string") {
+        textPieces.push(part.text);
+      }
     }
   }
 
@@ -128,10 +239,11 @@ export class OpenAiCompatibleCompletionProvider implements CompletionProviderPor
     const baseUrl = normalizeOpenAiBaseUrl(process.env.WAIA_AI_OPENAI_BASE_URL);
     const url = `${baseUrl}/v1/chat/completions`;
 
+    const maxCompletionTokens = resolveEffectiveMaxCompletionTokens(req.model, req.maxOutputTokens);
     const body = {
       model: req.model,
       messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
-      max_tokens: req.maxOutputTokens,
+      max_completion_tokens: maxCompletionTokens,
       ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
     };
 
@@ -186,6 +298,11 @@ export class OpenAiCompatibleCompletionProvider implements CompletionProviderPor
     const trimmed =
       message !== undefined ? coerceOpenAiAssistantMessageContentToTrimmedString(message) : undefined;
     if (trimmed === undefined) {
+      if (isParseDiagnosticsEnabled()) {
+        console.warn(
+          JSON.stringify(summarizeOpenAiAssistantParseFailure(parsed, req.model)),
+        );
+      }
       return { ok: false, code: "PROVIDER_ERROR", retryable: false };
     }
 
