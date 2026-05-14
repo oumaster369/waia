@@ -129,6 +129,7 @@ export function summarizeOpenAiAssistantParseFailure(
   }
   return {
     ...base,
+    choices_length: Array.isArray(o.choices) ? o.choices.length : undefined,
     provider_request_id: typeof o.id === "string" ? o.id : undefined,
     finish_reason: typeof choice0?.finish_reason === "string" ? choice0.finish_reason : undefined,
     has_message: msg !== undefined,
@@ -147,7 +148,41 @@ export function summarizeOpenAiAssistantParseFailure(
     message_refusal_len:
       typeof msg?.refusal === "string" ? msg.refusal.length : msg?.refusal === null ? 0 : undefined,
     has_tool_calls: msg?.tool_calls !== undefined && msg.tool_calls !== null,
+    visible_text_extracted: false,
   };
+}
+
+/** Redacted top-level keys for OpenAI JSON error bodies (never request messages). */
+export function summarizeOpenAiHttpErrorBody(parsed: unknown): Record<string, unknown> {
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { error_body_kind: parsed === null ? "null" : typeof parsed };
+  }
+  const o = parsed as Record<string, unknown>;
+  const errRaw = o.error;
+  if (errRaw === null || typeof errRaw !== "object" || Array.isArray(errRaw)) {
+    return {
+      error_body_keys: Object.keys(o).sort(),
+      error_object_kind:
+        errRaw === null ? "null" : errRaw === undefined ? "undefined" : typeof errRaw,
+    };
+  }
+  const err = errRaw as Record<string, unknown>;
+  const msg = err.message;
+  return {
+    error_body_keys: Object.keys(o).sort(),
+    openai_error_keys: Object.keys(err).sort(),
+    openai_error_type: typeof err.type === "string" ? err.type : undefined,
+    openai_error_code: typeof err.code === "string" ? err.code : undefined,
+    openai_error_param: typeof err.param === "string" ? err.param : undefined,
+    openai_error_message_len: typeof msg === "string" ? msg.length : undefined,
+  };
+}
+
+function logOpenAiProviderDiagnostics(payload: Record<string, unknown>): void {
+  if (!isParseDiagnosticsEnabled()) {
+    return;
+  }
+  console.warn(JSON.stringify({ waia_ai_diag: "openai_provider_runtime", ...payload }));
 }
 
 /**
@@ -217,10 +252,20 @@ export class OpenAiCompatibleCompletionProvider implements CompletionProviderPor
   async complete(req: CompletionRequest, signal?: AbortSignal): Promise<CompletionResult> {
     const apiKey = process.env.WAIA_AI_OPENAI_API_KEY?.trim();
     if (apiKey === undefined || apiKey === "") {
+      logOpenAiProviderDiagnostics({
+        internal_error_category: "config_missing_api_key",
+        result_code: "CONFIG",
+        request_model: req.model,
+      });
       return { ok: false, code: "CONFIG", retryable: false };
     }
 
     if (signal?.aborted) {
+      logOpenAiProviderDiagnostics({
+        internal_error_category: "client_signal_aborted_before_fetch",
+        result_code: "PROVIDER_ERROR",
+        request_model: req.model,
+      });
       return { ok: false, code: "PROVIDER_ERROR", retryable: false };
     }
 
@@ -261,11 +306,26 @@ export class OpenAiCompatibleCompletionProvider implements CompletionProviderPor
     } catch {
       clearTimeout(timeoutId);
       if (signal?.aborted) {
+        logOpenAiProviderDiagnostics({
+          internal_error_category: "fetch_aborted",
+          result_code: "PROVIDER_ERROR",
+          request_model: req.model,
+        });
         return { ok: false, code: "PROVIDER_ERROR", retryable: false };
       }
       if (timedOut) {
+        logOpenAiProviderDiagnostics({
+          internal_error_category: "fetch_timeout",
+          result_code: "TIMEOUT",
+          request_model: req.model,
+        });
         return { ok: false, code: "TIMEOUT", retryable: false };
       }
+      logOpenAiProviderDiagnostics({
+        internal_error_category: "fetch_network_or_unknown",
+        result_code: "PROVIDER_ERROR",
+        request_model: req.model,
+      });
       return { ok: false, code: "PROVIDER_ERROR", retryable: false };
     }
 
@@ -273,12 +333,31 @@ export class OpenAiCompatibleCompletionProvider implements CompletionProviderPor
 
     const status = response.status;
     if (status === 401 || status === 403) {
+      logOpenAiProviderDiagnostics({
+        internal_error_category: "http_auth_config",
+        http_status: status,
+        result_code: "CONFIG",
+        request_model: req.model,
+      });
       return { ok: false, code: "CONFIG", retryable: false };
     }
     if (status === 429) {
+      logOpenAiProviderDiagnostics({
+        internal_error_category: "http_rate_limit",
+        http_status: status,
+        result_code: "RATE_LIMIT",
+        request_model: req.model,
+      });
       return { ok: false, code: "RATE_LIMIT", retryable: false };
     }
     if (status >= 500) {
+      logOpenAiProviderDiagnostics({
+        internal_error_category: "http_server_error",
+        http_status: status,
+        result_code: "PROVIDER_ERROR",
+        retryable: true,
+        request_model: req.model,
+      });
       return { ok: false, code: "PROVIDER_ERROR", retryable: true };
     }
 
@@ -286,10 +365,26 @@ export class OpenAiCompatibleCompletionProvider implements CompletionProviderPor
     try {
       parsed = await response.json();
     } catch {
+      logOpenAiProviderDiagnostics({
+        internal_error_category: "response_body_not_json",
+        http_status: status,
+        result_code: "PROVIDER_ERROR",
+        request_model: req.model,
+      });
       return { ok: false, code: "PROVIDER_ERROR", retryable: false };
     }
 
     if (!response.ok || parsed === null || typeof parsed !== "object") {
+      logOpenAiProviderDiagnostics({
+        internal_error_category: "http_non_success_or_non_object_body",
+        http_status: status,
+        response_ok: response.ok,
+        parsed_kind: parsed === null ? "null" : typeof parsed,
+        result_code: "PROVIDER_ERROR",
+        retryable: status >= 500,
+        request_model: req.model,
+        ...summarizeOpenAiHttpErrorBody(parsed),
+      });
       return { ok: false, code: "PROVIDER_ERROR", retryable: status >= 500 };
     }
 
@@ -298,15 +393,25 @@ export class OpenAiCompatibleCompletionProvider implements CompletionProviderPor
     const trimmed =
       message !== undefined ? coerceOpenAiAssistantMessageContentToTrimmedString(message) : undefined;
     if (trimmed === undefined) {
-      if (isParseDiagnosticsEnabled()) {
-        console.warn(
-          JSON.stringify(summarizeOpenAiAssistantParseFailure(parsed, req.model)),
-        );
-      }
+      const maxCompletionTokens = resolveEffectiveMaxCompletionTokens(req.model, req.maxOutputTokens);
+      logOpenAiProviderDiagnostics({
+        ...summarizeOpenAiAssistantParseFailure(parsed, req.model),
+        max_completion_tokens_effective: maxCompletionTokens,
+        is_reasoning_model_id: isOpenAiReasoningChatModelId(req.model),
+        internal_error_category: "assistant_visible_text_empty_or_unparsed",
+        result_code: "PROVIDER_ERROR",
+      });
       return { ok: false, code: "PROVIDER_ERROR", retryable: false };
     }
 
     if (trimmed.length > WAIA_AI_MAX_ASSISTANT_OUTPUT_CHARS) {
+      logOpenAiProviderDiagnostics({
+        internal_error_category: "assistant_output_exceeds_waia_cap",
+        assistant_text_len: trimmed.length,
+        waia_cap: WAIA_AI_MAX_ASSISTANT_OUTPUT_CHARS,
+        result_code: "PROVIDER_ERROR",
+        request_model: req.model,
+      });
       return { ok: false, code: "PROVIDER_ERROR", retryable: false };
     }
 
