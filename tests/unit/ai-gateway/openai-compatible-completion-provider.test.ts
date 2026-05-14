@@ -85,6 +85,125 @@ describe("OpenAiCompatibleCompletionProvider", () => {
     expect(parsedBody.temperature).toBe(0);
   });
 
+  it("accepts GPT-5-style assistant message content as array of text parts (DEE-126)", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "secret-key";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl-gpt55",
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: [{ type: "text", text: " Hello from parts " }],
+              },
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    const r = await p.complete({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "hi" }],
+      maxOutputTokens: 64,
+    });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.text).toBe("Hello from parts");
+  });
+
+  it("concatenates multiple GPT-5-style text content parts", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "k";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: [
+                  { type: "text", text: "First" },
+                  { type: "text", text: "Second" },
+                ],
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    const r = await p.complete({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "x" }],
+      maxOutputTokens: 10,
+    });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.text).toBe("FirstSecond");
+  });
+
+  it("maps refusal-only content part to PROVIDER_ERROR", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "k";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: [{ type: "refusal", refusal: "I can't help with that." }],
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    const r = await p.complete({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "x" }],
+      maxOutputTokens: 10,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("PROVIDER_ERROR");
+  });
+
+  it("maps assistant content array with only non-text parts to PROVIDER_ERROR", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "k";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: [{ type: "image_url", image_url: { url: "https://example.com/x.png" } }],
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    const r = await p.complete({
+      model: "m",
+      messages: [{ role: "user", content: "x" }],
+      maxOutputTokens: 10,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("PROVIDER_ERROR");
+  });
+
   it("maps 401 to CONFIG", async () => {
     process.env.WAIA_AI_OPENAI_API_KEY = "bad";
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 401 }));
