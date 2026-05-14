@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "waia-app-dee114-walkthrough",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-12-01",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "waia-app-dee114-walkthrough"
+    }
+  ],
+  "vars": {
+    "NEXT_PUBLIC_SITE_URL": "https://waia-app-dee114-walkthrough.oumaster369.workers.dev",
+    "WAIA_DB_BACKEND": "postgres",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://wdsnuvldxyrkqcjxvuxp.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_wXZ5eaR4l6UKYXQMxr4fuw_cxz-Kk58",
+    "OAUTH_PUBLIC_BASE_URL": "https://waia-app-dee114-walkthrough.oumaster369.workers.dev",
+    "WAIA_AI_GATEWAY_FOUNDATION": "1",
+    "WAIA_AI_PROVIDER": "openai-compatible",
+    "WAIA_TWIN_DIALOGUE_CONTINUITY": "replay_v1"
+  }
+}
