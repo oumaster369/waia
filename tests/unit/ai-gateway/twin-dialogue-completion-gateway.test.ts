@@ -5,6 +5,34 @@ import { FakeCompletionProvider } from "@/lib/ai-gateway/fake-completion-provide
 import { resolveTwinDialogueAssistantText } from "@/lib/ai-gateway/twin-dialogue-completion-gateway";
 import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
 
+function assertTwinDialogueLiveSystemPromptAnchors(sysLower: string) {
+  expect(sysLower).toMatch(/reflective|notice/);
+  expect(sysLower).toMatch(/at most one question/);
+  expect(sysLower).toMatch(/tentative/);
+  expect(sysLower).toMatch(/reply in the language the person is writing in/);
+  expect(sysLower).toContain("paraphrase");
+  expect(sysLower).toContain("default question count is zero");
+  expect(sysLower).toContain("quotation");
+  expect(sysLower).toContain("one short sentence is a complete reply");
+  expect(sysLower).toContain("tension");
+  expect(sysLower).toContain("как ты себя чувствуешь");
+  expect(sysLower).toContain("что это значит для тебя");
+  expect(sysLower).toContain("я слышу, что");
+  expect(sysLower).toContain("warmth through attention");
+  expect(sysLower).toContain("coldness");
+  expect(sysLower).toContain("address the person directly");
+  expect(sysLower).toContain("art installation");
+  expect(sysLower).toContain("that must be hard");
+  expect(sysLower).not.toContain("roleplay");
+  expect(sysLower).not.toContain("therapist");
+  expect(sysLower).not.toContain("assistant ready to help");
+  expect(sysLower).not.toContain("journey");
+  expect(sysLower).not.toContain("soul");
+  expect(sysLower).not.toContain("awaken");
+  expect(sysLower).not.toContain("true self");
+  expect(sysLower).not.toContain("destiny");
+}
+
 describe("isWaiaAiGatewayFoundationEnabled", () => {
   const prev = process.env.WAIA_AI_GATEWAY_FOUNDATION;
 
@@ -167,19 +195,7 @@ describe("resolveTwinDialogueAssistantText", () => {
     expect(parsed).not.toBeNull();
     const sys = parsed!.messages?.find((m) => m.role === "system")?.content ?? "";
     const sysLower = sys.toLowerCase();
-    expect(sysLower).toMatch(/reflective|notice/);
-    expect(sysLower).toMatch(/at most one question/);
-    expect(sysLower).toMatch(/tentative/);
-    expect(sysLower).toMatch(/reply in the language the person is writing in/);
-    expect(sysLower).toContain("that must be hard");
-    expect(sysLower).not.toContain("roleplay");
-    expect(sysLower).not.toContain("therapist");
-    expect(sysLower).not.toContain("assistant ready to help");
-    expect(sysLower).not.toContain("journey");
-    expect(sysLower).not.toContain("soul");
-    expect(sysLower).not.toContain("awaken");
-    expect(sysLower).not.toContain("true self");
-    expect(sysLower).not.toContain("destiny");
+    assertTwinDialogueLiveSystemPromptAnchors(sysLower);
 
     expect(out.text).toBe("Twin dialogue reply");
     expect(out.telemetry).toMatchObject({
@@ -229,17 +245,7 @@ describe("resolveTwinDialogueAssistantText", () => {
     expect(msgs![3]!.content).toBe("now");
     expect(msgs![0]!.content).toContain("Continue naturally");
     const replaySysLower = msgs![0]!.content.toLowerCase();
-    expect(replaySysLower).toMatch(/reflective|notice/);
-    expect(replaySysLower).toMatch(/at most one question/);
-    expect(replaySysLower).toMatch(/tentative/);
-    expect(replaySysLower).toContain("that must be hard");
-    expect(replaySysLower).not.toContain("roleplay");
-    expect(replaySysLower).not.toContain("therapist");
-    expect(replaySysLower).not.toContain("assistant ready to help");
-    expect(replaySysLower).not.toContain("journey");
-    expect(replaySysLower).not.toContain("soul");
-    expect(replaySysLower).not.toContain("awaken");
-    expect(replaySysLower).not.toContain("true self");
-    expect(replaySysLower).not.toContain("destiny");
+    assertTwinDialogueLiveSystemPromptAnchors(replaySysLower);
+    expect(replaySysLower).toContain("without repeating verbatim");
   });
 });
