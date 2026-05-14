@@ -118,6 +118,33 @@ describe("OpenAiCompatibleCompletionProvider", () => {
     const parsedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
     expect(parsedBody.max_completion_tokens).toBe(4096);
     expect(parsedBody).not.toHaveProperty("max_tokens");
+    expect(parsedBody).not.toHaveProperty("temperature");
+  });
+
+  it("omits temperature for o-series reasoning Chat Completions model ids", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "secret-key";
+    process.env.WAIA_AI_OPENAI_BASE_URL = "https://example.invalid";
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { role: "assistant", content: "ok" } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    await p.complete({
+      model: "o4-mini",
+      messages: [{ role: "user", content: "x" }],
+      maxOutputTokens: 100,
+      temperature: 0.5,
+    });
+
+    const init = fetchSpy.mock.calls[0]![1];
+    const parsedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(parsedBody).not.toHaveProperty("temperature");
   });
 
   it("accepts output_text assistant content parts (Responses-style parity)", async () => {

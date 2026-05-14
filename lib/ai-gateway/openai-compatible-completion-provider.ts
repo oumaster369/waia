@@ -285,11 +285,13 @@ export class OpenAiCompatibleCompletionProvider implements CompletionProviderPor
     const url = `${baseUrl}/v1/chat/completions`;
 
     const maxCompletionTokens = resolveEffectiveMaxCompletionTokens(req.model, req.maxOutputTokens);
+    const reasoningModel = isOpenAiReasoningChatModelId(req.model);
+    /** GPT-5.x / o-series Chat Completions reject `temperature` (400 unsupported_value); omit the field entirely. */
     const body = {
       model: req.model,
       messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
       max_completion_tokens: maxCompletionTokens,
-      ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+      ...(req.temperature !== undefined && !reasoningModel ? { temperature: req.temperature } : {}),
     };
 
     let response: Response;
