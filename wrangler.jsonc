@@ -3,24 +3,22 @@
   "name": "waia-app",
   "main": ".open-next/worker.js",
   "compatibility_date": "2025-12-01",
-  "compatibility_flags": [
-    "nodejs_compat",
-    "global_fetch_strictly_public"
-  ],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
     "directory": ".open-next/assets",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
   },
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "waia-app"
-    }
+      "service": "waia-app",
+    },
   ],
   "vars": {
-    "NEXT_PUBLIC_SITE_URL": "https://waia-app.oumaster369.workers.dev",
+    "NEXT_PUBLIC_SITE_URL": "https://waia.life",
+    "OAUTH_PUBLIC_BASE_URL": "https://waia.life",
     "WAIA_DB_BACKEND": "postgres",
     "NEXT_PUBLIC_SUPABASE_URL": "https://wdsnuvldxyrkqcjxvuxp.supabase.co",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_wXZ5eaR4l6UKYXQMxr4fuw_cxz-Kk58"
-  }
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_wXZ5eaR4l6UKYXQMxr4fuw_cxz-Kk58",
+  },
 }
