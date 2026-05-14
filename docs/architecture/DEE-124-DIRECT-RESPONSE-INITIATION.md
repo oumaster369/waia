@@ -111,6 +111,7 @@ Revert the PR landing DEE-124: removes this doc, the DEE-123 §8 link line, the 
 
 ## 8. Related docs
 
+- Social presence and register (DEE-125): [`DEE-125-SOCIAL-PRESENCE-AND-REGISTER.md`](./DEE-125-SOCIAL-PRESENCE-AND-REGISTER.md)
 - Conversational co-presence (DEE-123): [`DEE-123-CONVERSATIONAL-CO-PRESENCE.md`](./DEE-123-CONVERSATIONAL-CO-PRESENCE.md)
 - Non-interpretive register (DEE-122): [`DEE-122-NON-INTERPRETIVE-REGISTER.md`](./DEE-122-NON-INTERPRETIVE-REGISTER.md)
 - Conversational gravity (DEE-121): [`DEE-121-CONVERSATIONAL-GRAVITY.md`](./DEE-121-CONVERSATIONAL-GRAVITY.md)
