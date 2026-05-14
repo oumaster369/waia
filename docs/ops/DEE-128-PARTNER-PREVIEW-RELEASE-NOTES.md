@@ -8,7 +8,8 @@
 ## Repository alignment (this PR)
 
 - **[`wrangler.jsonc`](../wrangler.jsonc)** (production Worker **`waia-app`** only): `NEXT_PUBLIC_SITE_URL` and **`OAUTH_PUBLIC_BASE_URL`** set to **`https://waia.life`** so committed config matches partner-preview origin and OAuth callback base ([`lib/oauth/public-url.ts`](../lib/oauth/public-url.ts)).
-- **Unchanged:** [`wrangler.dee114-walkthrough.jsonc`](../wrangler.dee114-walkthrough.jsonc), prompt stack, model/sampling code paths.
+- **AI runtime plain vars (DEE-129):** same **`WAIA_AI_*` / continuity** tuple as [`wrangler.dee114-walkthrough.jsonc`](../wrangler.dee114-walkthrough.jsonc) so production Workers builds get gateway foundation + OpenAI-compatible + `gpt-5.5` without relying on dashboard-only env drift. Secrets (**`WAIA_AI_OPENAI_API_KEY`**) remain **`wrangler secret put`** / dashboard only — **not** in this file.
+- **Unchanged:** [`wrangler.dee114-walkthrough.jsonc`](../wrangler.dee114-walkthrough.jsonc) content (parity via matching var **names/values** in production file only), prompt stack, model/sampling **code** paths.
 
 ---
 
