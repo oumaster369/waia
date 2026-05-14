@@ -156,3 +156,19 @@ export function resolveWaiaAiOpenAiDefaultModel(): string {
   const raw = process.env.WAIA_AI_OPENAI_MODEL?.trim();
   return raw !== undefined && raw !== "" ? raw : DEFAULT_OPENAI_MODEL;
 }
+
+/**
+ * Twin dialogue sampling temperature for OpenAI-compatible chat completions (DEE-126).
+ * Unset or invalid → `0` (matches pre–DEE-126 hardcoded behavior). Clamped to [0, 2].
+ */
+export function resolveWaiaAiOpenAiTwinDialogueTemperature(): number {
+  const raw = process.env.WAIA_AI_OPENAI_TEMPERATURE?.trim();
+  if (raw === undefined || raw === "") {
+    return 0;
+  }
+  const n = Number.parseFloat(raw);
+  if (!Number.isFinite(n)) {
+    return 0;
+  }
+  return Math.min(2, Math.max(0, n));
+}

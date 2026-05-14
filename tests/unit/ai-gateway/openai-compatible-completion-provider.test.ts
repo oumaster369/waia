@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   OpenAiCompatibleCompletionProvider,
+  resolveWaiaAiOpenAiTwinDialogueTemperature,
   WAIA_AI_MAX_ASSISTANT_OUTPUT_CHARS,
 } from "@/lib/ai-gateway/openai-compatible-completion-provider";
 
@@ -9,6 +10,7 @@ describe("OpenAiCompatibleCompletionProvider", () => {
   const prevKey = process.env.WAIA_AI_OPENAI_API_KEY;
   const prevBase = process.env.WAIA_AI_OPENAI_BASE_URL;
   const prevTimeout = process.env.WAIA_AI_OPENAI_REQUEST_TIMEOUT_MS;
+  const prevTemperature = process.env.WAIA_AI_OPENAI_TEMPERATURE;
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -18,6 +20,8 @@ describe("OpenAiCompatibleCompletionProvider", () => {
     else process.env.WAIA_AI_OPENAI_BASE_URL = prevBase;
     if (prevTimeout === undefined) delete process.env.WAIA_AI_OPENAI_REQUEST_TIMEOUT_MS;
     else process.env.WAIA_AI_OPENAI_REQUEST_TIMEOUT_MS = prevTimeout;
+    if (prevTemperature === undefined) delete process.env.WAIA_AI_OPENAI_TEMPERATURE;
+    else process.env.WAIA_AI_OPENAI_TEMPERATURE = prevTemperature;
   });
 
   it("returns CONFIG when API key missing", async () => {
@@ -256,5 +260,41 @@ describe("OpenAiCompatibleCompletionProvider", () => {
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("PROVIDER_ERROR");
+  });
+});
+
+describe("resolveWaiaAiOpenAiTwinDialogueTemperature", () => {
+  const prevTemperature = process.env.WAIA_AI_OPENAI_TEMPERATURE;
+
+  afterEach(() => {
+    if (prevTemperature === undefined) delete process.env.WAIA_AI_OPENAI_TEMPERATURE;
+    else process.env.WAIA_AI_OPENAI_TEMPERATURE = prevTemperature;
+  });
+
+  it("returns 0 when unset", () => {
+    delete process.env.WAIA_AI_OPENAI_TEMPERATURE;
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(0);
+  });
+
+  it("returns 0 when empty after trim", () => {
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "   ";
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(0);
+  });
+
+  it("parses finite values", () => {
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "0.35";
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(0.35);
+  });
+
+  it("returns 0 for non-finite strings", () => {
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "not-a-number";
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(0);
+  });
+
+  it("clamps to [0, 2]", () => {
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "-1";
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(0);
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "3";
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(2);
   });
 });

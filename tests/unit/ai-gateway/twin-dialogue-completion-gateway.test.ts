@@ -116,6 +116,7 @@ describe("resolveTwinDialogueAssistantText", () => {
   const prevFoundation = process.env.WAIA_AI_GATEWAY_FOUNDATION;
   const prevProvider = process.env.WAIA_AI_PROVIDER;
   const prevOpenAiKey = process.env.WAIA_AI_OPENAI_API_KEY;
+  const prevOpenAiTemperature = process.env.WAIA_AI_OPENAI_TEMPERATURE;
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -133,6 +134,11 @@ describe("resolveTwinDialogueAssistantText", () => {
       delete process.env.WAIA_AI_OPENAI_API_KEY;
     } else {
       process.env.WAIA_AI_OPENAI_API_KEY = prevOpenAiKey;
+    }
+    if (prevOpenAiTemperature === undefined) {
+      delete process.env.WAIA_AI_OPENAI_TEMPERATURE;
+    } else {
+      process.env.WAIA_AI_OPENAI_TEMPERATURE = prevOpenAiTemperature;
     }
   });
 
@@ -196,8 +202,12 @@ describe("resolveTwinDialogueAssistantText", () => {
     process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
     process.env.WAIA_AI_PROVIDER = "openai-compatible";
     process.env.WAIA_AI_OPENAI_API_KEY = "test-key";
+    delete process.env.WAIA_AI_OPENAI_TEMPERATURE;
 
-    type OpenAiRequestBody = { messages?: Array<{ role: string; content: string }> };
+    type OpenAiRequestBody = {
+      messages?: Array<{ role: string; content: string }>;
+      temperature?: number;
+    };
     let parsed: OpenAiRequestBody | null = null;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       if (typeof init?.body === "string") {
@@ -215,6 +225,7 @@ describe("resolveTwinDialogueAssistantText", () => {
 
     const out = await resolveTwinDialogueAssistantText({ userContent: "user asks" });
     expect(parsed).not.toBeNull();
+    expect(parsed!.temperature).toBe(0);
     const sys = parsed!.messages?.find((m) => m.role === "system")?.content ?? "";
     const sysLower = sys.toLowerCase();
     assertTwinDialogueLiveSystemPromptAnchors(sysLower);
@@ -227,6 +238,33 @@ describe("resolveTwinDialogueAssistantText", () => {
       usage: { promptTokens: 2, completionTokens: 4, totalTokens: 6 },
       providerRequestId: "chatcmpl-gateway",
     });
+  });
+
+  it("passes WAIA_AI_OPENAI_TEMPERATURE through on openai-compatible requests", async () => {
+    process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
+    process.env.WAIA_AI_PROVIDER = "openai-compatible";
+    process.env.WAIA_AI_OPENAI_API_KEY = "test-key";
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "0.35";
+
+    type OpenAiRequestBody = { temperature?: number };
+    let parsed: OpenAiRequestBody | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (typeof init?.body === "string") {
+        parsed = JSON.parse(init.body) as OpenAiRequestBody;
+      }
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-temp",
+          choices: [{ message: { role: "assistant", content: "ok" } }],
+          usage: {},
+        }),
+        { status: 200 },
+      );
+    });
+
+    await resolveTwinDialogueAssistantText({ userContent: "x" });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.temperature).toBe(0.35);
   });
 
   it("includes prior replay roles before current user message for openai-compatible", async () => {
