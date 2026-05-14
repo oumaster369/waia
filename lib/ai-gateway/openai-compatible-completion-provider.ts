@@ -32,13 +32,71 @@ function resolveTimeoutMs(): number {
 
 type ChatCompletionApiResponse = {
   id?: string;
-  choices?: Array<{ message?: { role?: string; content?: string | null } }>;
+  choices?: Array<{
+    message?: {
+      role?: string;
+      /** Legacy models: string. GPT-5 family and others may return a content-parts array (API: `ChatCompletionContentPartText | refusal`). */
+      content?: string | null | OpenAiChatCompletionAssistantContentPart[];
+      refusal?: string | null;
+    };
+  }>;
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
   };
 };
+
+type OpenAiChatCompletionAssistantContentPart = {
+  type?: string;
+  text?: string;
+  refusal?: string;
+};
+
+/**
+ * DEE-126 — Chat Completions assistant `message.content` may be a string or an array of parts
+ * (`{ type: "text", text }` / `{ type: "refusal", refusal }`) on newer OpenAI models.
+ * This path previously required `typeof content === "string"`, causing fast `provider_error` stubs for `gpt-5.5`.
+ */
+function coerceOpenAiAssistantMessageContentToTrimmedString(message: {
+  content?: string | null | OpenAiChatCompletionAssistantContentPart[];
+  refusal?: string | null;
+}): string | undefined {
+  const raw = message.content;
+
+  if (typeof raw === "string") {
+    return raw.trim().length > 0 ? raw.trim() : undefined;
+  }
+
+  if (raw === null || raw === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+
+  const textPieces: string[] = [];
+  for (const part of raw) {
+    if (part === null || typeof part !== "object") {
+      continue;
+    }
+    const t = part.type;
+    if (t === "refusal") {
+      return undefined;
+    }
+    if (t === "text" && typeof part.text === "string") {
+      textPieces.push(part.text);
+    }
+  }
+
+  const joined = textPieces.join("").trim();
+  if (joined.length > 0) {
+    return joined;
+  }
+
+  return undefined;
+}
 
 /**
  * OpenAI `v1/chat/completions` over HTTPS via `fetch` — OpenAI-compatible base URLs supported (DEE-78).
@@ -124,13 +182,14 @@ export class OpenAiCompatibleCompletionProvider implements CompletionProviderPor
     }
 
     const obj = parsed as ChatCompletionApiResponse;
-    const content = obj.choices?.[0]?.message?.content;
-    if (typeof content !== "string") {
+    const message = obj.choices?.[0]?.message;
+    const trimmed =
+      message !== undefined ? coerceOpenAiAssistantMessageContentToTrimmedString(message) : undefined;
+    if (trimmed === undefined) {
       return { ok: false, code: "PROVIDER_ERROR", retryable: false };
     }
 
-    const trimmed = content.trim();
-    if (trimmed.length === 0 || trimmed.length > WAIA_AI_MAX_ASSISTANT_OUTPUT_CHARS) {
+    if (trimmed.length > WAIA_AI_MAX_ASSISTANT_OUTPUT_CHARS) {
       return { ok: false, code: "PROVIDER_ERROR", retryable: false };
     }
 
