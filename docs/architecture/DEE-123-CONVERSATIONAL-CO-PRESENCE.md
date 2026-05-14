@@ -98,6 +98,7 @@ Revert the PR landing DEE-123: removes this doc, the DEE-122 §8 link line, the 
 
 ## 8. Related docs
 
+- Direct response initiation (DEE-124): [`DEE-124-DIRECT-RESPONSE-INITIATION.md`](./DEE-124-DIRECT-RESPONSE-INITIATION.md)
 - Non-interpretive register (DEE-122): [`DEE-122-NON-INTERPRETIVE-REGISTER.md`](./DEE-122-NON-INTERPRETIVE-REGISTER.md)
 - Conversational gravity (DEE-121): [`DEE-121-CONVERSATIONAL-GRAVITY.md`](./DEE-121-CONVERSATIONAL-GRAVITY.md)
 - Presence + first-start (DEE-119): [`DEE-119-PRESENCE-CALIBRATION.md`](./DEE-119-PRESENCE-CALIBRATION.md)

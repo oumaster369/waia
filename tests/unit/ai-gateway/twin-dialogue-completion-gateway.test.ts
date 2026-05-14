@@ -30,6 +30,13 @@ function assertTwinDialogueLiveSystemPromptAnchors(sysLower: string) {
   expect(sysLower).toContain("speak as someone in the conversation");
   expect(sysLower).toContain("do not narrate the person impersonally");
   expect(sysLower).toContain("do not attribute emotional or mental states");
+  expect(sysLower).toContain("direct response initiation");
+  expect(sysLower).toContain("enter the moment directly");
+  expect(sysLower).toContain(
+    "does not need to demonstrate understanding before becoming present",
+  );
+  expect(sysLower).toContain("do not begin most replies by restating");
+  expect(sysLower).toContain("note written about the moment");
   expect(sysLower).not.toContain("of sorts");
   expect(sysLower).not.toContain("internal tension");
   expect(sysLower).toContain("that must be hard");
