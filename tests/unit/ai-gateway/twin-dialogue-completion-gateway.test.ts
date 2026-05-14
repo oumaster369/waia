@@ -22,6 +22,11 @@ function assertTwinDialogueLiveSystemPromptAnchors(sysLower: string) {
   expect(sysLower).toContain("coldness");
   expect(sysLower).toContain("address the person directly");
   expect(sysLower).toContain("art installation");
+  expect(sysLower).toContain("non-interpretive register");
+  expect(sysLower).toContain("это может указывать");
+  expect(sysLower).toContain("this may reflect");
+  expect(sysLower).toContain("quote-then-interpret-then-question");
+  expect(sysLower).not.toContain("internal tension");
   expect(sysLower).toContain("that must be hard");
   expect(sysLower).not.toContain("roleplay");
   expect(sysLower).not.toContain("therapist");
