@@ -100,6 +100,7 @@ test.describe("Dashboard readiness + unlock matrix", () => {
       finalStateMessageShown: false,
     };
 
+    await page.getByTestId("dashboard-twin-start-cta").click();
     await page.getByTestId("dashboard-twin-message-input").fill("e2e matrix twin hello");
     await page.getByTestId("dashboard-twin-send").click();
     await expect(page.getByText("e2e matrix twin hello")).toBeVisible({ timeout: 20_000 });
