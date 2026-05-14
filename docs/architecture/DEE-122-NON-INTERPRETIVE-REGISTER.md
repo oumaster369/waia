@@ -102,6 +102,7 @@ Revert the PR that lands DEE-122: removes this doc, the cross-link line in DEE-1
 
 ## 8. Related docs
 
+- Conversational co-presence (DEE-123): [`DEE-123-CONVERSATIONAL-CO-PRESENCE.md`](./DEE-123-CONVERSATIONAL-CO-PRESENCE.md)
 - Conversational gravity (DEE-121): [`DEE-121-CONVERSATIONAL-GRAVITY.md`](./DEE-121-CONVERSATIONAL-GRAVITY.md)
 - Presence + first-start: [`DEE-119-PRESENCE-CALIBRATION.md`](./DEE-119-PRESENCE-CALIBRATION.md)
 - First encounter: [`DEE-116-FIRST-ENCOUNTER-DOCTRINE.md`](./DEE-116-FIRST-ENCOUNTER-DOCTRINE.md)
