@@ -93,7 +93,6 @@ export type WaiaRuntimeRouteTelemetryPayload = {
   dialogue_continuity_replay_chars?: number;
   /** True when builder clipped turns or omitted older replay due to caps */
   dialogue_continuity_replay_truncated?: boolean;
-
   /**
    * Postgres client lifecycle (DEE-110). Omitted when backend is SQLite or handle unresolved.
    */
