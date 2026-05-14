@@ -80,6 +80,7 @@ Revert the PR / commit that lands DEE-116: restores prior system-template consta
 
 - Prompt envelope baseline: [`DEE-80-PROMPT-ENVELOPE-DOCTRINE-V1.md`](./DEE-80-PROMPT-ENVELOPE-DOCTRINE-V1.md)
 - AI gateway architecture: [`DEE-76-AI-GATEWAY-ARCHITECTURE.md`](./DEE-76-AI-GATEWAY-ARCHITECTURE.md)
+- Twin presence calibration (first-start ritual, optimistic send, system prompt v2): [`DEE-119-PRESENCE-CALIBRATION.md`](./DEE-119-PRESENCE-CALIBRATION.md)
 
 ---
 

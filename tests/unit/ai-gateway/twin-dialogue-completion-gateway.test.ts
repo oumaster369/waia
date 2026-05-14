@@ -168,9 +168,18 @@ describe("resolveTwinDialogueAssistantText", () => {
     const sys = parsed!.messages?.find((m) => m.role === "system")?.content ?? "";
     const sysLower = sys.toLowerCase();
     expect(sysLower).toMatch(/reflective|notice/);
+    expect(sysLower).toMatch(/at most one question/);
+    expect(sysLower).toMatch(/tentative/);
+    expect(sysLower).toMatch(/reply in the language the person is writing in/);
+    expect(sysLower).toContain("that must be hard");
     expect(sysLower).not.toContain("roleplay");
     expect(sysLower).not.toContain("therapist");
     expect(sysLower).not.toContain("assistant ready to help");
+    expect(sysLower).not.toContain("journey");
+    expect(sysLower).not.toContain("soul");
+    expect(sysLower).not.toContain("awaken");
+    expect(sysLower).not.toContain("true self");
+    expect(sysLower).not.toContain("destiny");
 
     expect(out.text).toBe("Twin dialogue reply");
     expect(out.telemetry).toMatchObject({
@@ -221,8 +230,16 @@ describe("resolveTwinDialogueAssistantText", () => {
     expect(msgs![0]!.content).toContain("Continue naturally");
     const replaySysLower = msgs![0]!.content.toLowerCase();
     expect(replaySysLower).toMatch(/reflective|notice/);
+    expect(replaySysLower).toMatch(/at most one question/);
+    expect(replaySysLower).toMatch(/tentative/);
+    expect(replaySysLower).toContain("that must be hard");
     expect(replaySysLower).not.toContain("roleplay");
     expect(replaySysLower).not.toContain("therapist");
     expect(replaySysLower).not.toContain("assistant ready to help");
+    expect(replaySysLower).not.toContain("journey");
+    expect(replaySysLower).not.toContain("soul");
+    expect(replaySysLower).not.toContain("awaken");
+    expect(replaySysLower).not.toContain("true self");
+    expect(replaySysLower).not.toContain("destiny");
   });
 });

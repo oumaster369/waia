@@ -351,6 +351,7 @@ describe("DashboardShell", () => {
 
     const model = buildTestModel();
     render(<DashboardShell model={model} />);
+    fireEvent.click(screen.getByTestId("dashboard-twin-start-cta"));
     fireEvent.change(screen.getByTestId("dashboard-twin-message-input"), {
       target: { value: "Hello twin" },
     });

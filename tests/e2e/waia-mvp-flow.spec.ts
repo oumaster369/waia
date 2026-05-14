@@ -46,6 +46,10 @@ test.describe("WAIA MVP core journey", () => {
     });
     await expectDashboardTabsMatchPresentations(page, presBefore);
 
+    await expect(page.getByTestId("dashboard-twin-invitation-placeholder")).toBeVisible();
+    await page.getByTestId("dashboard-twin-start-cta").click();
+    await expect(page.getByTestId("dashboard-twin-welcome-bubble")).toBeVisible();
+
     await page.getByTestId("dashboard-twin-message-input").fill(userLine);
     await page.getByTestId("dashboard-twin-send").click();
 

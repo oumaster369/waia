@@ -146,7 +146,7 @@ Every step uses the same four sub-headings: **Trigger**, **Result**, **Next stat
 
 ### Step 4 — AI-Twin dialogue in Twin mode
 
-- **Trigger:** User sends or receives a message in Twin mode for the first time after Step 3.
+- **Trigger:** User taps **Start creating your AI-Twin** (consent to begin), then sends a first message in Twin mode (welcome copy in the dialogue area is UI-only and is not auto-sent by the system).
 - **Result:** A continuous dialogue session is established between the user and the AI-Twin creation system. The dialogue feels conversational, not form-like.
 - **Next state:** User remains in Step 4 throughout the AI-Twin creation lifecycle. Each meaningful exchange contributes to Step 5 (Readiness progression). Step 4 is the substrate that drives every later unlock.
 - **Edge cases:**
