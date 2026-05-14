@@ -17,7 +17,8 @@ See also: [cloudflare-deploy.md](cloudflare-deploy.md) (commands, limitations), 
 **Critical (DEE-61)**
 
 - **`SUPABASE_SERVICE_ROLE_KEY`** — Secret — **never** exposed to browser or client bundles; bypasses Row Level Security.
-- **`OPENAI_API_KEY`** — Secret — **never** exposed to browser or client code.
+- **`WAIA_AI_OPENAI_API_KEY`** — Secret — **Twin / OpenAI-compatible** path reads this ([`openai-compatible-completion-provider.ts`](../lib/ai-gateway/openai-compatible-completion-provider.ts)); **never** in client bundles.
+- **`OPENAI_API_KEY`** — Secret — legacy name in some docs/deployments; **do not** rely on it alone for the current gateway path. Production may keep both until a chartered migration removes legacy usage.
 
 Wrangler local preview uses [`.dev.vars`](https://developers.cloudflare.com/workers/testing/local-development/) (gitignored). Copy from [`.dev.vars.example`](../.dev.vars.example) using **placeholder names only**.
 
@@ -92,7 +93,8 @@ If `WAIA_DB_BACKEND` is unset or `sqlite`, Workers still hit **`getDb()`** for d
 
 | Variable | Public / Secret | Role | Cloudflare |
 |----------|-----------------|------|------------|
-| `OPENAI_API_KEY` | **Secret** | Server-side calls to `api.openai.com` (or regional equivalent). **Never** in client bundles. | `wrangler secret put OPENAI_API_KEY` |
+| `WAIA_AI_OPENAI_API_KEY` | **Secret** | **Required** for Twin dialogue when **`WAIA_AI_PROVIDER=openai-compatible`**. **Never** in client bundles. | `wrangler secret put WAIA_AI_OPENAI_API_KEY` |
+| `OPENAI_API_KEY` | **Secret** | Legacy / alternate naming; some environments still set it. **Twin gateway code does not read this key.** | Optional; do not remove in a given deploy without Architect sign-off |
 
 **Out of scope for DEE-61:** Cloudflare AI Gateway bindings, OpenNext AI routes, or managed gateway env indirection—add rows here when those features land.
 
