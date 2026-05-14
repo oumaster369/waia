@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   OpenAiCompatibleCompletionProvider,
+  resolveWaiaAiOpenAiTwinDialogueTemperature,
+  summarizeOpenAiAssistantParseFailure,
   WAIA_AI_MAX_ASSISTANT_OUTPUT_CHARS,
 } from "@/lib/ai-gateway/openai-compatible-completion-provider";
 
@@ -9,6 +11,9 @@ describe("OpenAiCompatibleCompletionProvider", () => {
   const prevKey = process.env.WAIA_AI_OPENAI_API_KEY;
   const prevBase = process.env.WAIA_AI_OPENAI_BASE_URL;
   const prevTimeout = process.env.WAIA_AI_OPENAI_REQUEST_TIMEOUT_MS;
+  const prevTemperature = process.env.WAIA_AI_OPENAI_TEMPERATURE;
+  const prevDiag = process.env.WAIA_AI_OPENAI_PARSE_DIAGNOSTICS;
+  const prevReasoningFloor = process.env.WAIA_AI_OPENAI_REASONING_MIN_COMPLETION_TOKENS;
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -18,6 +23,12 @@ describe("OpenAiCompatibleCompletionProvider", () => {
     else process.env.WAIA_AI_OPENAI_BASE_URL = prevBase;
     if (prevTimeout === undefined) delete process.env.WAIA_AI_OPENAI_REQUEST_TIMEOUT_MS;
     else process.env.WAIA_AI_OPENAI_REQUEST_TIMEOUT_MS = prevTimeout;
+    if (prevTemperature === undefined) delete process.env.WAIA_AI_OPENAI_TEMPERATURE;
+    else process.env.WAIA_AI_OPENAI_TEMPERATURE = prevTemperature;
+    if (prevDiag === undefined) delete process.env.WAIA_AI_OPENAI_PARSE_DIAGNOSTICS;
+    else process.env.WAIA_AI_OPENAI_PARSE_DIAGNOSTICS = prevDiag;
+    if (prevReasoningFloor === undefined) delete process.env.WAIA_AI_OPENAI_REASONING_MIN_COMPLETION_TOKENS;
+    else process.env.WAIA_AI_OPENAI_REASONING_MIN_COMPLETION_TOKENS = prevReasoningFloor;
   });
 
   it("returns CONFIG when API key missing", async () => {
@@ -77,8 +88,261 @@ describe("OpenAiCompatibleCompletionProvider", () => {
     );
     const parsedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
     expect(parsedBody.model).toBe("gpt-test");
-    expect(parsedBody.max_tokens).toBe(128);
+    expect(parsedBody.max_completion_tokens).toBe(128);
     expect(parsedBody.temperature).toBe(0);
+  });
+
+  it("uses max_completion_tokens floor for gpt-5 reasoning models (reasoning + visible budget)", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "secret-key";
+    process.env.WAIA_AI_OPENAI_BASE_URL = "https://example.invalid";
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl-r",
+          choices: [{ message: { role: "assistant", content: " ok " } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    await p.complete({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "hello" }],
+      maxOutputTokens: 256,
+      temperature: 0,
+    });
+
+    const init = fetchSpy.mock.calls[0]![1];
+    const parsedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(parsedBody.max_completion_tokens).toBe(4096);
+    expect(parsedBody).not.toHaveProperty("max_tokens");
+    expect(parsedBody).not.toHaveProperty("temperature");
+  });
+
+  it("omits temperature for o-series reasoning Chat Completions model ids", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "secret-key";
+    process.env.WAIA_AI_OPENAI_BASE_URL = "https://example.invalid";
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { role: "assistant", content: "ok" } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    await p.complete({
+      model: "o4-mini",
+      messages: [{ role: "user", content: "x" }],
+      maxOutputTokens: 100,
+      temperature: 0.5,
+    });
+
+    const init = fetchSpy.mock.calls[0]![1];
+    const parsedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(parsedBody).not.toHaveProperty("temperature");
+  });
+
+  it("accepts output_text assistant content parts (Responses-style parity)", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "secret-key";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: [{ type: "output_text", text: " Visible line " }],
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    const r = await p.complete({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "hi" }],
+      maxOutputTokens: 64,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.text).toBe("Visible line");
+  });
+
+  it("maps top-level assistant message refusal to PROVIDER_ERROR", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "k";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: null,
+                refusal: "Policy decline.",
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    const r = await p.complete({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "x" }],
+      maxOutputTokens: 10,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("PROVIDER_ERROR");
+  });
+
+  it("summarizeOpenAiAssistantParseFailure is redacted (structure only)", () => {
+    const parsed = {
+      id: "chatcmpl-x",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: [{ type: "mystery_part", foo: 1 }],
+            refusal: null,
+            tool_calls: [],
+          },
+        },
+      ],
+    };
+    const s = summarizeOpenAiAssistantParseFailure(parsed, "gpt-5.5");
+    expect(s.request_model).toBe("gpt-5.5");
+    expect(s.finish_reason).toBe("stop");
+    expect(s.content_array_part_types).toEqual(["mystery_part"]);
+    expect(s).not.toHaveProperty("foo");
+  });
+
+  it("accepts GPT-5-style assistant message content as array of text parts (DEE-126)", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "secret-key";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl-gpt55",
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: [{ type: "text", text: " Hello from parts " }],
+              },
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    const r = await p.complete({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "hi" }],
+      maxOutputTokens: 64,
+    });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.text).toBe("Hello from parts");
+  });
+
+  it("concatenates multiple GPT-5-style text content parts", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "k";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: [
+                  { type: "text", text: "First" },
+                  { type: "text", text: "Second" },
+                ],
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    const r = await p.complete({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "x" }],
+      maxOutputTokens: 10,
+    });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.text).toBe("FirstSecond");
+  });
+
+  it("maps refusal-only content part to PROVIDER_ERROR", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "k";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: [{ type: "refusal", refusal: "I can't help with that." }],
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    const r = await p.complete({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "x" }],
+      maxOutputTokens: 10,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("PROVIDER_ERROR");
+  });
+
+  it("maps assistant content array with only non-text parts to PROVIDER_ERROR", async () => {
+    process.env.WAIA_AI_OPENAI_API_KEY = "k";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: [{ type: "image_url", image_url: { url: "https://example.com/x.png" } }],
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const p = new OpenAiCompatibleCompletionProvider();
+    const r = await p.complete({
+      model: "m",
+      messages: [{ role: "user", content: "x" }],
+      maxOutputTokens: 10,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("PROVIDER_ERROR");
   });
 
   it("maps 401 to CONFIG", async () => {
@@ -256,5 +520,41 @@ describe("OpenAiCompatibleCompletionProvider", () => {
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("PROVIDER_ERROR");
+  });
+});
+
+describe("resolveWaiaAiOpenAiTwinDialogueTemperature", () => {
+  const prevTemperature = process.env.WAIA_AI_OPENAI_TEMPERATURE;
+
+  afterEach(() => {
+    if (prevTemperature === undefined) delete process.env.WAIA_AI_OPENAI_TEMPERATURE;
+    else process.env.WAIA_AI_OPENAI_TEMPERATURE = prevTemperature;
+  });
+
+  it("returns 0 when unset", () => {
+    delete process.env.WAIA_AI_OPENAI_TEMPERATURE;
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(0);
+  });
+
+  it("returns 0 when empty after trim", () => {
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "   ";
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(0);
+  });
+
+  it("parses finite values", () => {
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "0.35";
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(0.35);
+  });
+
+  it("returns 0 for non-finite strings", () => {
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "not-a-number";
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(0);
+  });
+
+  it("clamps to [0, 2]", () => {
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "-1";
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(0);
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "3";
+    expect(resolveWaiaAiOpenAiTwinDialogueTemperature()).toBe(2);
   });
 });

@@ -23,6 +23,9 @@ export type SqliteTwinPersistence = {
   listTwinDialogueTurnsChronological: BoundSqliteTwinMethod<
     typeof twinLoader.listTwinDialogueTurnsChronological
   >;
+  listTwinDialogueTurnsTailForContinuity: BoundSqliteTwinMethod<
+    typeof twinLoader.listTwinDialogueTurnsTailForContinuity
+  >;
   listTwinDialogueTurnsForUser: BoundSqliteTwinMethod<typeof twinLoader.listTwinDialogueTurnsForUser>;
   loadDashboardReadinessPayloadFromDb: BoundSqliteTwinMethod<
     typeof twinLoader.loadDashboardReadinessPayloadFromDb
@@ -32,6 +35,9 @@ export type SqliteTwinPersistence = {
   listDiaryEntriesForUser: BoundSqliteTwinMethod<typeof diaryMemory.listDiaryEntriesForUser>;
   listScenarioAnswersForUser: BoundSqliteTwinMethod<typeof diaryMemory.listScenarioAnswersForUser>;
   stringifyScenarioPayloadForStorage: typeof diaryMemory.stringifyScenarioPayloadForStorage;
+  applyReadinessDemoAdvanceForSubstantiveTurn: BoundSqliteTwinMethod<
+    typeof twinLoader.applyReadinessDemoAdvanceForSubstantiveTurnSqlite
+  >;
 };
 
 export function createSqliteTwinPersistence(db: WaiaDb): SqliteTwinPersistence {
@@ -45,6 +51,8 @@ export function createSqliteTwinPersistence(db: WaiaDb): SqliteTwinPersistence {
     countUserDialogueTurns: (twinProfileId) => twinLoader.countUserDialogueTurns(db, twinProfileId),
     listTwinDialogueTurnsChronological: (twinProfileId) =>
       twinLoader.listTwinDialogueTurnsChronological(db, twinProfileId),
+    listTwinDialogueTurnsTailForContinuity: (twinProfileId, rowLimit) =>
+      twinLoader.listTwinDialogueTurnsTailForContinuity(db, twinProfileId, rowLimit),
     listTwinDialogueTurnsForUser: (userId) => twinLoader.listTwinDialogueTurnsForUser(db, userId),
     loadDashboardReadinessPayloadFromDb: (userId) =>
       twinLoader.loadDashboardReadinessPayloadFromDb(db, userId),
@@ -55,5 +63,7 @@ export function createSqliteTwinPersistence(db: WaiaDb): SqliteTwinPersistence {
     listScenarioAnswersForUser: (userId) =>
       diaryMemory.listScenarioAnswersForUser(db, userId),
     stringifyScenarioPayloadForStorage: diaryMemory.stringifyScenarioPayloadForStorage,
+    applyReadinessDemoAdvanceForSubstantiveTurn: (params) =>
+      twinLoader.applyReadinessDemoAdvanceForSubstantiveTurnSqlite(db, params),
   };
 }

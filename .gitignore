@@ -48,6 +48,8 @@ yarn-error.log*
 .cursor/agent-log.jsonl
 .cursor/agent-log.*.jsonl
 .cursor/plans/
+# Ad-hoc telemetry tail exports — local scratch only (do not commit)
+.cursor-agent-tail-sample.txt
 
 # Cloudflare Pages local
 .wrangler/

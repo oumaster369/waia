@@ -5,6 +5,56 @@ import { FakeCompletionProvider } from "@/lib/ai-gateway/fake-completion-provide
 import { resolveTwinDialogueAssistantText } from "@/lib/ai-gateway/twin-dialogue-completion-gateway";
 import { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
 
+function assertTwinDialogueLiveSystemPromptAnchors(sysLower: string) {
+  expect(sysLower).toMatch(/reflective|notice/);
+  expect(sysLower).toMatch(/at most one question/);
+  expect(sysLower).toMatch(/tentative/);
+  expect(sysLower).toMatch(/reply in the language the person is writing in/);
+  expect(sysLower).toContain("paraphrase");
+  expect(sysLower).toContain("default question count is zero");
+  expect(sysLower).toContain("quotation");
+  expect(sysLower).toContain("one short sentence is a complete reply");
+  expect(sysLower).toContain("tension");
+  expect(sysLower).toContain("как ты себя чувствуешь");
+  expect(sysLower).toContain("что это значит для тебя");
+  expect(sysLower).toContain("я слышу, что");
+  expect(sysLower).toContain("warmth through attention");
+  expect(sysLower).toContain("coldness");
+  expect(sysLower).toContain("co-presence caps above apply");
+  expect(sysLower).toContain("social presence and register");
+  expect(sysLower).toContain("meeting them is the work");
+  expect(sysLower).toContain("default to «ты»");
+  expect(sysLower).toContain("not from performing it");
+  expect(sysLower).toContain("service-agent register");
+  expect(sysLower).toContain("art installation");
+  expect(sysLower).toContain("non-interpretive register");
+  expect(sysLower).toContain("это может указывать");
+  expect(sysLower).toContain("this may reflect");
+  expect(sysLower).toContain("quote-then-interpret-then-question");
+  expect(sysLower).toContain("conversational co-presence");
+  expect(sysLower).toContain("speak as someone in the conversation");
+  expect(sysLower).toContain("do not narrate the person impersonally");
+  expect(sysLower).toContain("do not attribute emotional or mental states");
+  expect(sysLower).toContain("direct response initiation");
+  expect(sysLower).toContain("enter the moment directly");
+  expect(sysLower).toContain(
+    "does not need to demonstrate understanding before becoming present",
+  );
+  expect(sysLower).toContain("do not begin most replies by restating");
+  expect(sysLower).toContain("note written about the moment");
+  expect(sysLower).not.toContain("of sorts");
+  expect(sysLower).not.toContain("internal tension");
+  expect(sysLower).toContain("that must be hard");
+  expect(sysLower).not.toContain("roleplay");
+  expect(sysLower).not.toContain("therapist");
+  expect(sysLower).not.toContain("assistant ready to help");
+  expect(sysLower).not.toContain("journey");
+  expect(sysLower).not.toContain("soul");
+  expect(sysLower).not.toContain("awaken");
+  expect(sysLower).not.toContain("true self");
+  expect(sysLower).not.toContain("destiny");
+}
+
 describe("isWaiaAiGatewayFoundationEnabled", () => {
   const prev = process.env.WAIA_AI_GATEWAY_FOUNDATION;
 
@@ -66,6 +116,7 @@ describe("resolveTwinDialogueAssistantText", () => {
   const prevFoundation = process.env.WAIA_AI_GATEWAY_FOUNDATION;
   const prevProvider = process.env.WAIA_AI_PROVIDER;
   const prevOpenAiKey = process.env.WAIA_AI_OPENAI_API_KEY;
+  const prevOpenAiTemperature = process.env.WAIA_AI_OPENAI_TEMPERATURE;
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -83,6 +134,11 @@ describe("resolveTwinDialogueAssistantText", () => {
       delete process.env.WAIA_AI_OPENAI_API_KEY;
     } else {
       process.env.WAIA_AI_OPENAI_API_KEY = prevOpenAiKey;
+    }
+    if (prevOpenAiTemperature === undefined) {
+      delete process.env.WAIA_AI_OPENAI_TEMPERATURE;
+    } else {
+      process.env.WAIA_AI_OPENAI_TEMPERATURE = prevOpenAiTemperature;
     }
   });
 
@@ -146,19 +202,34 @@ describe("resolveTwinDialogueAssistantText", () => {
     process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
     process.env.WAIA_AI_PROVIDER = "openai-compatible";
     process.env.WAIA_AI_OPENAI_API_KEY = "test-key";
+    delete process.env.WAIA_AI_OPENAI_TEMPERATURE;
 
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    type OpenAiRequestBody = {
+      messages?: Array<{ role: string; content: string }>;
+      temperature?: number;
+    };
+    let parsed: OpenAiRequestBody | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (typeof init?.body === "string") {
+        parsed = JSON.parse(init.body) as OpenAiRequestBody;
+      }
+      return new Response(
         JSON.stringify({
           id: "chatcmpl-gateway",
           choices: [{ message: { role: "assistant", content: " Twin dialogue reply " } }],
           usage: { prompt_tokens: 2, completion_tokens: 4, total_tokens: 6 },
         }),
         { status: 200 },
-      ),
-    );
+      );
+    });
 
     const out = await resolveTwinDialogueAssistantText({ userContent: "user asks" });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.temperature).toBe(0);
+    const sys = parsed!.messages?.find((m) => m.role === "system")?.content ?? "";
+    const sysLower = sys.toLowerCase();
+    assertTwinDialogueLiveSystemPromptAnchors(sysLower);
+
     expect(out.text).toBe("Twin dialogue reply");
     expect(out.telemetry).toMatchObject({
       foundation: "live",
@@ -167,5 +238,74 @@ describe("resolveTwinDialogueAssistantText", () => {
       usage: { promptTokens: 2, completionTokens: 4, totalTokens: 6 },
       providerRequestId: "chatcmpl-gateway",
     });
+  });
+
+  it("passes WAIA_AI_OPENAI_TEMPERATURE through on openai-compatible requests", async () => {
+    process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
+    process.env.WAIA_AI_PROVIDER = "openai-compatible";
+    process.env.WAIA_AI_OPENAI_API_KEY = "test-key";
+    process.env.WAIA_AI_OPENAI_TEMPERATURE = "0.35";
+
+    type OpenAiRequestBody = { temperature?: number };
+    let parsed: OpenAiRequestBody | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (typeof init?.body === "string") {
+        parsed = JSON.parse(init.body) as OpenAiRequestBody;
+      }
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-temp",
+          choices: [{ message: { role: "assistant", content: "ok" } }],
+          usage: {},
+        }),
+        { status: 200 },
+      );
+    });
+
+    await resolveTwinDialogueAssistantText({ userContent: "x" });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.temperature).toBe(0.35);
+  });
+
+  it("includes prior replay roles before current user message for openai-compatible", async () => {
+    process.env.WAIA_AI_GATEWAY_FOUNDATION = "1";
+    process.env.WAIA_AI_PROVIDER = "openai-compatible";
+    process.env.WAIA_AI_OPENAI_API_KEY = "test-key";
+
+    type OpenAiRequestBody = { messages?: Array<{ role: string; content: string }> };
+    let parsed: OpenAiRequestBody | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (typeof init?.body === "string") {
+        parsed = JSON.parse(init.body) as OpenAiRequestBody;
+      }
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-replay",
+          choices: [{ message: { role: "assistant", content: "ok" } }],
+          usage: {},
+        }),
+        { status: 200 },
+      );
+    });
+
+    await resolveTwinDialogueAssistantText({
+      userContent: "now",
+      priorReplayMessages: [
+        { role: "user", content: "past-user" },
+        { role: "assistant", content: "past-ai" },
+      ],
+    });
+
+    expect(parsed).not.toBeNull();
+    const msgs = parsed!.messages;
+    expect(Array.isArray(msgs)).toBe(true);
+    expect(msgs!.map((m: { role: string }) => m.role).join("|")).toBe(
+      "system|user|assistant|user",
+    );
+    expect(msgs![3]!.content).toBe("now");
+    expect(msgs![0]!.content).toContain("Continue naturally");
+    const replaySysLower = msgs![0]!.content.toLowerCase();
+    assertTwinDialogueLiveSystemPromptAnchors(replaySysLower);
+    expect(replaySysLower).toContain("without repeating verbatim");
   });
 });

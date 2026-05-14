@@ -1,4 +1,8 @@
-/** Non-AI placeholder copy until dialogue generation is wired (DEE-39 response + DEE-19 UI). */
+/**
+ * Fallback assistant copy when the Twin cannot return model text this turn — still surfaced as
+ * `assistantPlaceholder` on success responses when `assistantTurn` is null, and used as degraded
+ * assistant text after provider/config failures (live gateway path preserves HTTP 200; DEE-79).
+ */
 
 export const TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE =
-  "Twin response placeholder — dialogue service will stream here once wired (stub).";
+  "The Twin couldn't reply this time—your words may still be saved. Try again shortly.";

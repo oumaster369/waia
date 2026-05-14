@@ -11,6 +11,8 @@ import {
   type TwinDialogueSignals,
 } from "@/lib/dashboard/readiness-snapshot-default";
 import { NULL_HINTS_BY_INDICATOR } from "@/lib/dashboard/null-hints";
+import { planDemoReadinessAdvancement } from "@/lib/readiness/demo-indicator-progression";
+import type { ReadinessDemoAdvanceResult } from "@/lib/readiness/readiness-demo-advance-types";
 import { parseIndicatorVector } from "@/lib/readiness/readiness";
 import type { ReadinessInput } from "@/lib/readiness/types";
 import {
@@ -19,7 +21,7 @@ import {
   serializeEmbeddingJson,
   TWIN_MEMORY_EMBEDDING_MODEL_ID,
 } from "@/lib/embeddings/twin-memory-embeddings";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { type WaiaDb } from "@/db/types";
 import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
 import { ensureUserTwinSeed } from "./user-twin-seed";
@@ -213,6 +215,72 @@ export async function persistUserTwinExchangeWithAssistantStub(
   });
 }
 
+/**
+ * One bounded monotonic readiness step for v1 demos (Kill-switch in route via WAIA_READINESS_WRITER).
+ * Not the DEE-37 readiness service — deterministic heuristic only.
+ */
+export async function applyReadinessDemoAdvanceForSubstantiveTurnSqlite(
+  db: WaiaDb,
+  params: { twinProfileId: string; userMessage: string },
+): Promise<ReadinessDemoAdvanceResult> {
+  return runWaiaSqliteLegacyTransaction(db, (tx) => {
+    const executor = tx as WaiaDb;
+    const row = executor
+      .select({ indicatorsJson: twinReadinessState.indicatorsJson })
+      .from(twinReadinessState)
+      .where(eq(twinReadinessState.twinProfileId, params.twinProfileId))
+      .get();
+
+    if (!row) {
+      return { status: "skipped", reason: "missing_state" };
+    }
+
+    let indicators;
+    try {
+      const parsed = JSON.parse(row.indicatorsJson) as unknown;
+      indicators = parseIndicatorVector(parsed as Iterable<number>);
+    } catch {
+      return { status: "skipped", reason: "not_eligible" };
+    }
+
+    const plan = planDemoReadinessAdvancement(indicators, params.userMessage);
+    if (!plan) {
+      if (indicators.every((v) => v === 100)) {
+        return { status: "skipped", reason: "all_indicators_confirmed" };
+      }
+      return { status: "skipped", reason: "not_eligible" };
+    }
+
+    const next = [...indicators] as [number, number, number, number, number, number];
+    next[plan.indicatorIndex] = plan.to;
+
+    const result = executor
+      .update(twinReadinessState)
+      .set({
+        indicatorsJson: JSON.stringify(next),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(twinReadinessState.twinProfileId, params.twinProfileId),
+          sql`json_extract(${twinReadinessState.indicatorsJson}, ${sql.raw(`'$[${plan.indicatorIndex}]'`)}) = ${plan.from}`,
+        ),
+      )
+      .run();
+
+    if (result.changes === 0) {
+      return { status: "noop", reason: "stale_state" };
+    }
+
+    return {
+      status: "applied",
+      indicatorIndex: plan.indicatorIndex,
+      from: plan.from,
+      to: plan.to,
+    };
+  });
+}
+
 export async function appendTwinDialogueTurn(
   db: WaiaDb,
   params: {
@@ -263,6 +331,36 @@ export async function listTwinDialogueTurnsChronological(
     .from(twinDialogueTurns)
     .where(eq(twinDialogueTurns.twinProfileId, twinProfileId))
     .orderBy(twinDialogueTurns.sequence);
+}
+
+/**
+ * Bounded tail read for Twin dialogue continuity (DEE-109): newest-first SQL `LIMIT`,
+ * returned in chronological order (oldest→newest within the tail segment).
+ */
+export async function listTwinDialogueTurnsTailForContinuity(
+  db: WaiaDb,
+  twinProfileId: string,
+  rowLimit: number,
+): Promise<TwinDialogueTurnDbRow[]> {
+  if (!Number.isFinite(rowLimit) || rowLimit <= 0) {
+    return [];
+  }
+
+  const rows = await db
+    .select({
+      id: twinDialogueTurns.id,
+      sequence: twinDialogueTurns.sequence,
+      role: twinDialogueTurns.role,
+      content: twinDialogueTurns.content,
+      idempotencyKey: twinDialogueTurns.idempotencyKey,
+      createdAt: twinDialogueTurns.createdAt,
+    })
+    .from(twinDialogueTurns)
+    .where(eq(twinDialogueTurns.twinProfileId, twinProfileId))
+    .orderBy(desc(twinDialogueTurns.sequence))
+    .limit(rowLimit);
+
+  return rows.slice().reverse();
 }
 
 /** Twin dialogue memory for this user — read-only after ensureUserTwinSeed. */

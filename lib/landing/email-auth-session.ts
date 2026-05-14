@@ -4,6 +4,7 @@ import { safeInternalRedirectPath } from "@/lib/landing/safe-internal-redirect";
 
 export type EmailAuthSessionResult =
   | { outcome: "success"; redirectPath: string }
+  | { outcome: "needsEmailConfirmation" }
   | { outcome: "failure"; debug?: { lastStatus?: number; lastJson?: unknown } };
 
 type AuthOkBody = {
@@ -22,6 +23,13 @@ export function parseAuthOkResponse(json: unknown): AuthOkBody | null {
   return { ok: true, redirect };
 }
 
+/** Supabase sign-up returning HTTP success without session until email is confirmed. */
+export function parseNeedsEmailConfirmation(json: unknown): boolean {
+  if (typeof json !== "object" || json === null) return false;
+  const obj = json as Record<string, unknown>;
+  return obj.ok === true && obj.needsEmailConfirmation === true;
+}
+
 async function parseResponseJsonSafe(res: Response): Promise<unknown> {
   try {
     return await res.json();
@@ -30,19 +38,71 @@ async function parseResponseJsonSafe(res: Response): Promise<unknown> {
   }
 }
 
-/** Sign-in first; on non-success attempt sign-up (implicit registration UX). Same order as MVP landing contract. */
+async function postAuthJson(path: string, email: string, password: string): Promise<{
+  response: Response;
+  json: unknown;
+}> {
+  const response = await fetch(path, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const json = await parseResponseJsonSafe(response);
+  return { response, json };
+}
+
+/** Sign-in only — used when the user chose “Sign in”. */
+export async function establishEmailSignInOnly(params: {
+  email: string;
+  password: string;
+}): Promise<EmailAuthSessionResult> {
+  const { response, json } = await postAuthJson(
+    "/api/auth/sign-in",
+    params.email,
+    params.password,
+  );
+  if (response.ok) {
+    const parsed = parseAuthOkResponse(json);
+    if (parsed) {
+      return { outcome: "success", redirectPath: parsed.redirect };
+    }
+  }
+  return { outcome: "failure", debug: { lastStatus: response.status, lastJson: json } };
+}
+
+/** Sign-up only — used when the user chose “Create your Twin”. Does not fall back to sign-in. */
+export async function establishEmailSignUpOnly(params: {
+  email: string;
+  password: string;
+}): Promise<EmailAuthSessionResult> {
+  const { response, json } = await postAuthJson(
+    "/api/auth/sign-up",
+    params.email,
+    params.password,
+  );
+  if (response.ok) {
+    if (parseNeedsEmailConfirmation(json)) {
+      return { outcome: "needsEmailConfirmation" };
+    }
+    const parsed = parseAuthOkResponse(json);
+    if (parsed) {
+      return { outcome: "success", redirectPath: parsed.redirect };
+    }
+  }
+  return { outcome: "failure", debug: { lastStatus: response.status, lastJson: json } };
+}
+
+/** Sign-in first; on non-success attempt sign-up (implicit registration UX). Legacy combined path. */
 export async function establishEmailAuthSession(params: {
   email: string;
   password: string;
 }): Promise<EmailAuthSessionResult> {
-  const signIn = await fetch("/api/auth/sign-in", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: params.email, password: params.password }),
-  });
-
-  const signInJson = await parseResponseJsonSafe(signIn);
+  const { response: signIn, json: signInJson } = await postAuthJson(
+    "/api/auth/sign-in",
+    params.email,
+    params.password,
+  );
   if (signIn.ok) {
     const signedInOk = parseAuthOkResponse(signInJson);
     if (signedInOk) {
@@ -54,15 +114,15 @@ export async function establishEmailAuthSession(params: {
     };
   }
 
-  const signUp = await fetch("/api/auth/sign-up", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: params.email, password: params.password }),
-  });
-
-  const signUpJson = await parseResponseJsonSafe(signUp);
+  const { response: signUp, json: signUpJson } = await postAuthJson(
+    "/api/auth/sign-up",
+    params.email,
+    params.password,
+  );
   if (signUp.ok) {
+    if (parseNeedsEmailConfirmation(signUpJson)) {
+      return { outcome: "needsEmailConfirmation" };
+    }
     const signedUpOk = parseAuthOkResponse(signUpJson);
     if (signedUpOk) {
       return { outcome: "success", redirectPath: signedUpOk.redirect };
