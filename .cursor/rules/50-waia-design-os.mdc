@@ -21,6 +21,7 @@ alwaysApply: false
 4. **Accent budget:** one dominant warm glow focal per viewport; avoid competing halos.
 5. **`prefers-reduced-motion`:** implement calm degradations when adding motion; see Design OS motion tiering.
 6. Do not drift toward cyberpunk/neon, crypto gold, gaming HUD, or gratuitous glass stacks—Design OS §14.
+7. **Copy / register anti-drift:** Design vocabulary in product copy, marketing pages, partner decks, and onboarding text must avoid techno-spiritual, luxury-mystic, or cultic register. Re-anchor on [`WAIA-NORTH-STAR.md`](../../docs/waia-governance/WAIA-NORTH-STAR.md) §3 (human-centered constraints) and §6 (anti-drift guardrails), not Design OS §1–§2 elevated vocabulary alone.
 
 ## Typography
 
