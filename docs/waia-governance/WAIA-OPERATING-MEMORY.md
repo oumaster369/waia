@@ -10,6 +10,8 @@
 
 ## 1. Current system identity
 
+WAIA exists to help people clarify alignment—with themselves, with others, and with what is actually so—through structured AI-assisted reflection, coordination, and understanding.
+
 | Fact | Source of truth |
 |------|-----------------|
 | **WAIA DEV OS** — governed human–agent–Linear–Git workflow that ships the product | [`WAIA-DEV-OS.md`](WAIA-DEV-OS.md), [`AGENTS.md`](../../AGENTS.md) |
