@@ -35,6 +35,7 @@ For Linear MCP tool calls in this Cursor runtime, use server id **`plugin-linear
 ## Source of truth
 
 - **Agents & workflow canon:** **`AGENTS.md`** (branching, Linear, phases, merge posture)
+- **Visual / design canon:** **`docs/DESIGN_OS_V1.md`** · **`docs/DESIGN_FOUNDATION_V1.md`** (`app/design/tokens-waia.css`, `app/globals.css`)
 - **Governance corpus:** **`docs/waia-governance/README.md`**
 - **Git commands / deploy snippets:** **`docs/DEVELOPMENT_WORKFLOW.md`** (adjunct — does not override **AGENTS.md**)
 - **MVP onboarding index:** **`docs/product/WAIA-V1-MVP-SPEC.md`**
