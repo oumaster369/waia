@@ -19,12 +19,6 @@
   --waia-color-field-mid: var(--waia-primitive-midnight-900);
   --waia-color-elevated: var(--waia-primitive-midnight-800);
   --waia-color-veil: oklch(0.2 0.045 268 / 0.58);
-  /* Landing auth — submerged into oceanic field (not a floating panel) */
-  --waia-color-auth-field-veil: color-mix(
-    in oklch,
-    var(--waia-color-veil) 36%,
-    var(--waia-ceremony-ocean-mid) 22%
-  );
   --waia-color-fg-primary: var(--waia-primitive-snow-50);
   --waia-color-fg-muted: var(--waia-primitive-mist-100);
   --waia-color-fg-subtle: oklch(0.56 0.03 268);
@@ -101,6 +95,13 @@
     transparent 34%,
     oklch(0.14 0.06 258 / 0.32) 68%,
     oklch(0.118 0.056 262 / 0.62) 100%
+  );
+
+  /* Landing auth — submerged into oceanic field (not a floating panel) */
+  --waia-color-auth-field-veil: color-mix(
+    in oklch,
+    var(--waia-color-veil) 36%,
+    var(--waia-ceremony-ocean-mid) 22%
   );
 
   /* --- Typography scale (fluid display; fixed UI steps) ---
