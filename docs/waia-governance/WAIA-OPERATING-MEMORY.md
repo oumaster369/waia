@@ -2,15 +2,15 @@
 
 **Status:** Operational synchronization snapshot — not doctrine, not vision, not an implementation log.  
 **Role:** Single place to answer *what is true for execution right now* without rereading the whole corpus.  
-**Authority:** Subordinate to [`AGENTS.md`](../../AGENTS.md), [`WAIA-DEV-OS.md`](WAIA-DEV-OS.md), [`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md), active constitutional doctrine ([`CONSTITUTIONAL-DOCTRINE.md`](CONSTITUTIONAL-DOCTRINE.md)), product specs (`docs/product/**`), and migration trackers (`docs/migrations/**`). On conflict, those sources win — update this file or file a STOP, do not “interpret around” them.
+**Authority:** Subordinate to [`AGENTS.md`](../../AGENTS.md), [`WAIA-DEV-OS.md`](WAIA-DEV-OS.md), [`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md), active constitutional doctrine ([`CONSTITUTIONAL-DOCTRINE.md`](CONSTITUTIONAL-DOCTRINE.md)), product specs (`docs/product/**`), and migration trackers (`docs/migrations/**`). On conflict, those sources win — update this file or file a STOP, do not “interpret around” them. **Ecosystem orientation** (interpretive only): [`WAIA-NORTH-STAR.md`](WAIA-NORTH-STAR.md) — does not override the binding stack above.
 
-**Layer 2 means:** Stable enough to align Architect, Cursor, and future agents on current truth; compact enough to skim before work; **replaced or patched** when reality moves — not append-only history and not a north-star essay.
+**Layer 2 means:** Stable enough to align Architect, Cursor, and future agents on current truth; compact enough to skim before work; **replaced or patched** when reality moves — not append-only history; **not** the canonical orientation artifact (see North Star).
 
 ---
 
 ## 1. Current system identity
 
-WAIA exists to help people clarify alignment—with themselves, with others, and with what is actually so—through structured AI-assisted reflection, coordination, and understanding.
+**WAIA intent (ecosystem orientation, slow-moving):** [`WAIA-NORTH-STAR.md`](WAIA-NORTH-STAR.md) — clarity, honest alignment, consensual coordination, grounded understanding; anti-drift guardrails for contributors and agents.
 
 | Fact | Source of truth |
 |------|-----------------|
@@ -146,7 +146,7 @@ From active constitutional acceptance (**binding within stated scope**): DEV OS 
 
 **Maintenance shape:** Prefer **small surgical edits** to numbered sections; bump **Last reconciled** below; avoid append-only appendices.
 
-**Last reconciled:** 2026-05-15 — aligned to repository state under `waia-app` (trackers, governance index, AGENTS baseline, DEE-128 ops notes).
+**Last reconciled:** 2026-05-15 — aligned to repository state under `waia-app` (North Star canonization, trackers, governance index, AGENTS baseline, DEE-128 ops notes).
 
 ---
 
