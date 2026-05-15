@@ -20,7 +20,7 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-modules")).toBeVisible();
     await expect(page.getByTestId("landing-closing")).toBeVisible();
 
-    await expect(page.getByTestId("landing-hero-tagline")).toHaveText("Between you. And you.");
+    await expect(page.getByTestId("landing-hero-tagline")).toHaveText("Between you and you");
     await expect(page.getByTestId("landing-context-anchor")).toHaveText("You're in the WAIA space.");
     await expect(page.getByTestId("landing-closing-anchor")).toHaveText("Stay aligned.");
   });
@@ -29,8 +29,8 @@ test.describe("WAIA landing page", () => {
     page,
   }) => {
     await page.goto("/");
-    await expect(page.getByTestId("landing-auth-submit")).toHaveText("Create your Twin");
-    await expect(page.getByTestId("landing-auth-divider")).toHaveText("Or continue with");
+    await expect(page.getByTestId("landing-auth-submit")).toHaveText("Create Twin");
+    await expect(page.getByTestId("landing-auth-divider")).toHaveText(/or continue with/i);
     await expect(page.getByTestId("landing-auth-provider-google")).toBeVisible();
     await expect(page.getByTestId("landing-auth-provider-apple")).toBeVisible();
     await expect(page.getByTestId("landing-auth-provider-telegram")).toBeVisible();

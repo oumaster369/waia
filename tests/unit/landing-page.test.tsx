@@ -68,9 +68,9 @@ describe("LandingPage", () => {
 
   it("renders the canonical Hero copy", async () => {
     await renderLandingPage();
-    expect(screen.getByTestId("landing-hero-tagline")).toHaveTextContent("Between you. And you.");
+    expect(screen.getByTestId("landing-hero-tagline")).toHaveTextContent("Between you and you");
     expect(screen.getByTestId("landing-hero-positioning")).toHaveTextContent(
-      /helps you reconnect with yourself/i,
+      /blur between thought and feeling/i,
     );
   });
 
@@ -114,8 +114,8 @@ describe("LandingPage", () => {
 
   it("renders Create Twin as default email CTA plus OAuth when availability returns providers", async () => {
     await renderLandingPage();
-    expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create your Twin");
-    expect(screen.getByTestId("landing-auth-divider")).toHaveTextContent("Or continue with");
+    expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create Twin");
+    expect(screen.getByTestId("landing-auth-divider")).toHaveTextContent(/or continue with/i);
     expect(screen.getByTestId("landing-auth-provider-google")).toBeInTheDocument();
     expect(screen.getByTestId("landing-auth-provider-apple")).toBeInTheDocument();
     expect(screen.getByTestId("landing-auth-provider-telegram")).toBeInTheDocument();
@@ -142,6 +142,7 @@ describe("AuthBlock state machine", () => {
     const block = screen.getByTestId("landing-auth");
     expect(block.dataset.status).toBe("VisitorIdle");
     expect(block.dataset.mode).toBe("createTwin");
+    expect(screen.getByTestId("landing-auth-display-name")).toHaveValue("");
     expect(screen.getByTestId("landing-auth-identity")).toHaveValue("");
     expect(screen.getByTestId("landing-auth-password")).toHaveValue("");
     expect(screen.queryByTestId("landing-auth-error")).not.toBeInTheDocument();
@@ -162,7 +163,7 @@ describe("AuthBlock state machine", () => {
 
     render(<AuthBlock />);
     await waitFor(() => {
-      expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create your Twin");
+      expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create Twin");
     });
     fireEvent.change(screen.getByTestId("landing-auth-identity"), {
       target: { value: "test@example.com" },
@@ -202,7 +203,7 @@ describe("AuthBlock state machine", () => {
 
     render(<AuthBlock />);
     await waitFor(() => {
-      expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create your Twin");
+      expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create Twin");
     });
     fireEvent.change(screen.getByTestId("landing-auth-identity"), {
       target: { value: "ok@example.com" },
@@ -308,7 +309,7 @@ describe("AuthBlock state machine", () => {
 
     render(<AuthBlock />);
     await waitFor(() => {
-      expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create your Twin");
+      expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create Twin");
     });
     fireEvent.change(screen.getByTestId("landing-auth-identity"), {
       target: { value: "new@example.com" },
@@ -404,7 +405,7 @@ describe("AuthBlock state machine", () => {
 
     const providerCases = [
       ["Google", "google"],
-      ["Apple", "apple"],
+      ["Apple ID", "apple"],
       ["Telegram", "telegram"],
     ] as const;
 

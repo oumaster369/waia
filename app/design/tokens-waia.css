@@ -19,6 +19,12 @@
   --waia-color-field-mid: var(--waia-primitive-midnight-900);
   --waia-color-elevated: var(--waia-primitive-midnight-800);
   --waia-color-veil: oklch(0.2 0.045 268 / 0.58);
+  /* Landing auth — submerged into oceanic field (not a floating panel) */
+  --waia-color-auth-field-veil: color-mix(
+    in oklch,
+    var(--waia-color-veil) 36%,
+    var(--waia-ceremony-ocean-mid) 22%
+  );
   --waia-color-fg-primary: var(--waia-primitive-snow-50);
   --waia-color-fg-muted: var(--waia-primitive-mist-100);
   --waia-color-fg-subtle: oklch(0.56 0.03 268);
@@ -52,9 +58,57 @@
     oklch(0.12 0.055 268 / 0.72) 100%
   );
 
-  /* --- Typography scale (fluid display; fixed UI steps) --- */
-  --font-waia-serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino,
-    Georgia, serif;
+  /* Ceremonial landing only — oceanic midnight field (not flat black; still WAIA token family) */
+  --waia-ceremony-ocean-high: oklch(0.155 0.062 256);
+  --waia-ceremony-ocean-mid: oklch(0.132 0.058 258);
+  --waia-ceremony-ocean-deep: oklch(0.115 0.056 262);
+  --waia-ceremony-field: linear-gradient(
+    168deg,
+    var(--waia-ceremony-ocean-high) 0%,
+    var(--waia-ceremony-ocean-mid) 45%,
+    var(--waia-ceremony-ocean-deep) 100%
+  );
+  /* Upper environmental read — secondary to chest origin; shapes air without a spotlight */
+  --waia-ceremony-upper-well: radial-gradient(
+    ellipse 118% 62% at 50% 7%,
+    oklch(0.21 0.05 262 / 0.16) 0%,
+    oklch(0.17 0.044 268 / 0.07) 40%,
+    transparent 70%
+  );
+  /* Dimensional haze: soft vertical read, no hard spotlight */
+  --waia-ceremony-haze-vertical: linear-gradient(
+    180deg,
+    oklch(0.25 0.046 265 / 0.09) 0%,
+    oklch(0.18 0.04 262 / 0.04) 16%,
+    transparent 30%,
+    transparent 70%,
+    oklch(0.15 0.052 262 / 0.28) 100%
+  );
+  /* Lateral depth — cool strata at edges only */
+  --waia-ceremony-edge-left: radial-gradient(
+    ellipse 85% 70% at 0% 48%,
+    oklch(0.18 0.052 268 / 0.22) 0%,
+    transparent 58%
+  );
+  --waia-ceremony-edge-right: radial-gradient(
+    ellipse 85% 70% at 100% 52%,
+    oklch(0.17 0.048 272 / 0.18) 0%,
+    transparent 58%
+  );
+  /* Vignette: deep blue falloff, not void black */
+  --waia-ceremony-vignette: radial-gradient(
+    circle at 50% 42%,
+    transparent 34%,
+    oklch(0.14 0.06 258 / 0.32) 68%,
+    oklch(0.118 0.056 262 / 0.62) 100%
+  );
+
+  /* --- Typography scale (fluid display; fixed UI steps) ---
+   * Loaded faces: next/font sets --font-waia-ui-sans, --font-waia-brand-serif, --font-waia-ui-mono on <html>.
+   */
+  --waia-font-stack-serif: var(--font-waia-brand-serif), ui-serif, "Iowan Old Style",
+    "Palatino Linotype", Palatino, Georgia, serif;
+  --font-waia-serif: var(--waia-font-stack-serif);
   --waia-type-display: clamp(2.25rem, 5vw, 3.5rem);
   --waia-type-title: clamp(1.5rem, 3vw, 2rem);
   --waia-type-heading: 1.25rem;
@@ -62,6 +116,9 @@
   --waia-type-body-lg: 1.0625rem;
   --waia-type-caption: 0.8125rem;
   --waia-type-mono: 0.875rem;
+  --waia-type-dialogue: clamp(1rem, 0.35vw + 0.94rem, 1.0625rem);
+  --waia-type-dialogue-lh: 1.55;
+  --waia-type-ui-sm: var(--waia-type-caption);
   --waia-type-display-lh: 1.1;
   --waia-type-title-lh: 1.15;
   --waia-type-heading-lh: 1.3;

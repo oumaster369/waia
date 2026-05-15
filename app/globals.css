@@ -8,10 +8,19 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans:
+    var(--font-waia-ui-sans), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono:
+    var(--font-waia-ui-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
   --font-heading: var(--font-sans);
-  --font-waia-serif: var(--font-waia-serif);
+  --font-waia-serif: var(--waia-font-stack-serif);
+
+  --text-waia-dialogue: var(--waia-type-dialogue);
+  --text-waia-dialogue--line-height: var(--waia-type-dialogue-lh);
+  --text-waia-ui-sm: var(--waia-type-ui-sm);
+  --text-waia-ui-sm--line-height: var(--waia-type-caption-lh);
 
   --color-waia-field: var(--waia-color-field);
   --color-waia-field-mid: var(--waia-color-field-mid);
@@ -182,3 +191,112 @@
     @apply font-sans;
   }
 }
+
+/* Ceremonial landing shell — ocean base + subliminal air */
+.waia-ceremony-root {
+  background: var(--waia-ceremony-field);
+}
+
+@keyframes waia-ceremony-dust-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.042;
+  }
+  50% {
+    transform: translate3d(0.35%, -0.2%, 0);
+    opacity: 0.074;
+  }
+}
+
+/* Landing hero — micro ambient motion only when motion is OK */
+@keyframes waia-field-drift {
+  0%,
+  100% {
+    opacity: 0.34;
+  }
+  50% {
+    opacity: 0.43;
+  }
+}
+
+@keyframes waia-emblem-convergence-breathe {
+  0%,
+  100% {
+    opacity: 0.88;
+  }
+  50% {
+    opacity: 0.97;
+  }
+}
+
+@keyframes waia-emblem-origin-core-pulse {
+  0%,
+  100% {
+    opacity: 0.88;
+  }
+  50% {
+    opacity: 0.96;
+  }
+}
+
+@keyframes waia-emblem-chest-field-breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.52;
+  }
+}
+
+@keyframes waia-silhouette-soft {
+  0%,
+  100% {
+    opacity: 0.91;
+    filter: brightness(0.992);
+  }
+  50% {
+    opacity: 0.945;
+    filter: brightness(1.008);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .waia-ceremony-dust-mote {
+    animation: waia-ceremony-dust-drift linear infinite;
+  }
+
+  .waia-hero-field-drift {
+    animation: waia-field-drift 48s ease-in-out infinite alternate;
+  }
+
+  .waia-emblem-convergence-bloom {
+    animation: waia-emblem-convergence-breathe 36s ease-in-out infinite;
+  }
+
+  .waia-emblem-origin-core {
+    animation: waia-emblem-origin-core-pulse 44s ease-in-out infinite;
+  }
+
+  .waia-emblem-chest-field {
+    animation: waia-emblem-chest-field-breathe 56s ease-in-out infinite alternate;
+  }
+
+  .waia-silhouette-warm,
+  .waia-silhouette-cool {
+    animation: waia-silhouette-soft 36s ease-in-out infinite alternate;
+  }
+
+  .waia-silhouette-cool {
+    animation-delay: -18s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waia-ceremony-dust-mote {
+    animation: none;
+    opacity: 0.048;
+  }
+}
+
