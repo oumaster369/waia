@@ -11,6 +11,7 @@ Read this file first before planning or implementing any change. **Operational r
 | Resource | Location |
 |---------|----------|
 | **WAIA DEV OS constitution** | [`docs/waia-governance/WAIA-DEV-OS.md`](docs/waia-governance/WAIA-DEV-OS.md) |
+| **Operational memory (Layer 2)** | [`docs/waia-governance/WAIA-OPERATING-MEMORY.md`](docs/waia-governance/WAIA-OPERATING-MEMORY.md) |
 | Product MVP onboarding (index) | [`docs/product/WAIA-V1-MVP-SPEC.md`](docs/product/WAIA-V1-MVP-SPEC.md) |
 | Execution contract + tiers | [`docs/waia-governance/EXECUTION-CONTRACT.md`](docs/waia-governance/EXECUTION-CONTRACT.md), [`docs/waia-governance/RISK-TIERS.md`](docs/waia-governance/RISK-TIERS.md) |
 | Roles & emergency override | [`docs/waia-governance/AGENT-ROLES.md`](docs/waia-governance/AGENT-ROLES.md), [`docs/waia-governance/HUMAN-OVERRIDE.md`](docs/waia-governance/HUMAN-OVERRIDE.md) |
