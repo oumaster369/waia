@@ -24,6 +24,7 @@
 ## 2. Current MVP truth
 
 - **Journey:** Landing → Auth → Dashboard; Twin tab active first; Diary locked until total readiness ≥ **60%**; at **100%** readiness, Socialization appears while Society remains gated per product flow; post-Socialization, Society usable — detail and edge cases in [`../product/ai-twin-user-flow.md`](../product/ai-twin-user-flow.md), not reinterpreted here.
+- **Landing (on `dev`, post–PR #154 / `49b47a2`):** First block is a single responsive WebP hero (desktop `/brand/heap_comp_1.webp`, mobile `/brand/head_mobile_1.webp`); cinematic dark field + glass/gold auth; **Create Twin** requires **Your Name** (`fullName` maps via existing `identityLabel` / `identity_label` path — **no** schema migration); **Manrope** for UI/forms, **Cormorant Garamond** for ceremonial headings. Promotion to `main`/production is **out of band** for this memory line.
 - **Center:** Dialogue + Diary (when unlocked) + readiness model drive the MVP narrative; infrastructure work is **enabling**, not the product story ([`WAIA-V1-MVP-SPEC.md`](../product/WAIA-V1-MVP-SPEC.md)).
 - **Explicitly deferred:** Business / 3P, AI-Trader, AI-Marketplace, speculative multi-agent choreography ([`NON-GOALS.md`](NON-GOALS.md)).
 
@@ -146,7 +147,7 @@ From active constitutional acceptance (**binding within stated scope**): DEV OS 
 
 **Maintenance shape:** Prefer **small surgical edits** to numbered sections; bump **Last reconciled** below; avoid append-only appendices.
 
-**Last reconciled:** 2026-05-15 — aligned to repository state under `waia-app` (North Star canonization, trackers, governance index, AGENTS baseline, DEE-128 ops notes).
+**Last reconciled:** 2026-05-16 — landing hero/auth stabilization merged to `dev` (PR #154); Operating Memory §2 pointer only.
 
 ---
 
