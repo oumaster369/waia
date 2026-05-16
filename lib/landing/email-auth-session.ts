@@ -1,5 +1,6 @@
 /** Browser-only email auth against DEE-10 `/api/auth/sign-in` and `/api/auth/sign-up`. OAuth is wired in DEE-11+. */
 
+import { createAbortTimeout } from "@/lib/http/create-abort-timeout";
 import { safeInternalRedirectPath } from "@/lib/landing/safe-internal-redirect";
 
 export type EmailAuthSessionResult =
@@ -42,14 +43,40 @@ async function postAuthJson(path: string, email: string, password: string): Prom
   response: Response;
   json: unknown;
 }> {
-  const response = await fetch(path, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  const json = await parseResponseJsonSafe(response);
-  return { response, json };
+  const { signal, cancel } = createAbortTimeout(25_000);
+  try {
+    const response = await fetch(path, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+      signal,
+    });
+    const json = await parseResponseJsonSafe(response);
+    return { response, json };
+  } finally {
+    cancel();
+  }
+}
+
+async function postSignUpJson(email: string, password: string, fullName: string): Promise<{
+  response: Response;
+  json: unknown;
+}> {
+  const { signal, cancel } = createAbortTimeout(25_000);
+  try {
+    const response = await fetch("/api/auth/sign-up", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, fullName }),
+      signal,
+    });
+    const json = await parseResponseJsonSafe(response);
+    return { response, json };
+  } finally {
+    cancel();
+  }
 }
 
 /** Sign-in only — used when the user chose “Sign in”. */
@@ -75,12 +102,9 @@ export async function establishEmailSignInOnly(params: {
 export async function establishEmailSignUpOnly(params: {
   email: string;
   password: string;
+  fullName: string;
 }): Promise<EmailAuthSessionResult> {
-  const { response, json } = await postAuthJson(
-    "/api/auth/sign-up",
-    params.email,
-    params.password,
-  );
+  const { response, json } = await postSignUpJson(params.email, params.password, params.fullName);
   if (response.ok) {
     if (parseNeedsEmailConfirmation(json)) {
       return { outcome: "needsEmailConfirmation" };

@@ -8,10 +8,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --font-waia-serif: var(--font-waia-serif);
+  --font-sans: var(--font-waia-sans);
+  --font-heading: var(--font-waia-sans);
+  --font-mono: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
 
   --color-waia-field: var(--waia-color-field);
   --color-waia-field-mid: var(--waia-color-field-mid);
@@ -178,7 +177,10 @@
   body {
     @apply bg-background text-foreground;
   }
-  html {
-    @apply font-sans;
+}
+
+@layer utilities {
+  .font-waia-serif {
+    font-family: var(--font-waia-serif);
   }
 }

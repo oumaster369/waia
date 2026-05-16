@@ -22,6 +22,8 @@ export const dynamic = "force-dynamic";
 type SignUpBody = {
   email?: string;
   password?: string;
+  /** Display name from landing Create Twin — persisted via existing `identity_label` when present. */
+  fullName?: string;
 };
 
 function jsonError(status: number, body: ApiErrorEnvelope) {
@@ -61,11 +63,15 @@ export async function POST(request: Request) {
     });
   }
 
+  const rawName = parsed.fullName;
+  const trimmedFullName =
+    typeof rawName === "string" && rawName.trim().length > 0 ? rawName.trim().slice(0, 200) : "";
+  const identityLabel = trimmedFullName || deriveIdentityLabelFromEmail(email);
+
   if (isSupabaseAuthConfigured()) {
     const pendingCookies: SupabaseCookiePatch[] = [];
     const supabase = await createSupabaseRouteHandlerClient(pendingCookies);
     if (supabase) {
-      const identityLabel = deriveIdentityLabelFromEmail(email);
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -129,7 +135,6 @@ export async function POST(request: Request) {
   }
 
   const userId = crypto.randomUUID();
-  const identityLabel = deriveIdentityLabelFromEmail(email);
   const passwordHash = hashPassword(password);
 
   const sessionId = crypto.randomUUID();

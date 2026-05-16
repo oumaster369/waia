@@ -5,6 +5,7 @@ import type { Page } from "@playwright/test";
  */
 export async function signUpAndOpenDashboard(page: Page, email: string): Promise<void> {
   await page.goto("/");
+  await page.getByTestId("landing-auth-full-name").fill("E2E User");
   await page.getByTestId("landing-auth-identity").fill(email);
   await page.getByTestId("landing-auth-password").fill("password123!");
   await page.getByTestId("landing-auth-submit").click();

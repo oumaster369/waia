@@ -86,7 +86,11 @@ describe("establishEmailSignUpOnly", () => {
       ),
     );
 
-    const r = await establishEmailSignUpOnly({ email: "a@b.co", password: "password12" });
+    const r = await establishEmailSignUpOnly({
+      email: "a@b.co",
+      password: "password12",
+      fullName: "Ada Lovelace",
+    });
     expect(r).toEqual({ outcome: "success", redirectPath: "/dashboard" });
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith("/api/auth/sign-up", expect.any(Object));
@@ -110,7 +114,11 @@ describe("establishEmailSignUpOnly", () => {
       ),
     );
 
-    const r = await establishEmailSignUpOnly({ email: "a@b.co", password: "password12" });
+    const r = await establishEmailSignUpOnly({
+      email: "a@b.co",
+      password: "password12",
+      fullName: "Ada Lovelace",
+    });
     expect(r).toEqual({ outcome: "needsEmailConfirmation" });
   });
 });
