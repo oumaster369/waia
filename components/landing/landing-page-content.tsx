@@ -16,15 +16,14 @@ export function LandingPageContent({
   return (
     <main
       data-testid="landing"
-      className="flex min-h-screen w-full flex-col bg-[#030813] pt-0 font-sans text-waia-fg-muted"
+      className="flex min-h-screen w-full flex-col bg-[#030813] pt-0 font-sans text-[rgba(210,205,195,0.9)]"
     >
       <div className="relative w-full">
         <HeroBlock />
         {/*
-          Overlap: mobile uses extra -80px vs prior -mt-10 so the form sits higher in the wave band only;
-          tablet/desktop unchanged.
+          Overlap sits on lower dark band of hero; margins tuned so wordmark/tagline in art stay clear (esp. mobile).
         */}
-        <div className="relative z-10 -mt-[120px] mx-auto flex w-full max-w-md justify-center px-4 pb-10 md:-mt-28 lg:-mt-[7.5rem]">
+        <div className="relative z-10 -mt-[56px] mx-auto flex w-[calc(100%-32px)] max-w-[560px] justify-center pb-10 sm:-mt-[72px] md:-mt-24 lg:-mt-[6rem]">
           <AuthBlock className="w-full" initialOauthErrorCode={initialOauthErrorCode} />
         </div>
       </div>

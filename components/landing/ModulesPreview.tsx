@@ -39,27 +39,27 @@ export function ModulesPreview() {
           <article
             key={module.id}
             data-testid={`landing-module-${module.id}`}
-            className="flex flex-col gap-3 rounded-xl border border-waia-accent-warm-muted/15 bg-waia-field/40 p-6 text-waia-fg-muted backdrop-blur-[var(--waia-blur-veil-sm)]"
+            className="flex flex-col gap-3 rounded-2xl border border-[rgba(218,200,160,0.28)] bg-[rgba(3,8,19,0.52)] p-6 font-sans shadow-[inset_0_1px_0_rgba(255,252,245,0.06)] backdrop-blur-[12px]"
           >
-            <h2 className="text-lg font-semibold text-waia-accent-cool-muted">
+            <h2 className="text-lg font-semibold tracking-tight text-[#ebe4d4]">
               {module.name}
             </h2>
             <p
               data-testid={`landing-module-${module.id}-description`}
-              className="text-sm font-normal text-waia-fg-muted"
+              className="text-sm font-normal leading-relaxed text-[rgba(210,205,195,0.92)]"
             >
               {module.description}
             </p>
             <p
               data-testid={`landing-module-${module.id}-role`}
-              className="text-sm font-normal text-waia-fg-subtle"
+              className="text-sm font-normal leading-relaxed text-[rgba(180,175,168,0.88)]"
             >
               {module.role}
             </p>
             {module.id !== "ai-twin" && (
               <p
                 data-testid={`landing-module-${module.id}-status`}
-                className="mt-auto text-xs font-medium text-waia-accent-warm-muted/90"
+                className="mt-auto text-xs font-semibold tracking-wide text-[#c9a96e]"
               >
                 Coming soon
               </p>
