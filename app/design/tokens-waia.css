@@ -52,9 +52,11 @@
     oklch(0.12 0.055 268 / 0.72) 100%
   );
 
+  /* --- Typography: next/font sets --font-manrope / --font-cormorant on <html> (see app/layout.tsx) --- */
+  --font-waia-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-waia-serif: var(--font-cormorant), "Cormorant Garamond", ui-serif, Georgia, serif;
+
   /* --- Typography scale (fluid display; fixed UI steps) --- */
-  --font-waia-serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino,
-    Georgia, serif;
   --waia-type-display: clamp(2.25rem, 5vw, 3.5rem);
   --waia-type-title: clamp(1.5rem, 3vw, 2rem);
   --waia-type-heading: 1.25rem;
