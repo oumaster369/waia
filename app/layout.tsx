@@ -34,7 +34,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${manrope.variable} ${cormorantGaramond.variable} bg-[#030813]`}
+      className={`dark ${manrope.variable} ${cormorantGaramond.variable} bg-[#030813]`}
     >
       <body
         className={`${manrope.className} m-0 min-h-screen bg-[#030813] p-0 text-foreground antialiased`}

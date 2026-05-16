@@ -265,7 +265,7 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
   const showInlineAlert = failureMessage != null;
 
   const fieldClass =
-    "font-sans border-waia-divider/50 bg-waia-field/40 text-waia-fg-primary shadow-none placeholder:text-waia-fg-subtle/80 focus-visible:border-waia-accent-warm focus-visible:ring-2 focus-visible:ring-waia-accent-warm/30 aria-invalid:border-waia-danger aria-invalid:ring-waia-danger/25";
+    "h-12 min-h-12 rounded-xl border border-[rgba(215,195,155,0.32)] bg-[rgba(3,8,19,0.5)] px-3.5 text-[0.9375rem] font-normal font-sans text-[rgba(246,242,235,0.96)] shadow-none outline-none transition-[box-shadow,border-color] placeholder:text-[rgba(175,170,160,0.72)] focus-visible:border-[rgba(224,198,130,0.55)] focus-visible:ring-2 focus-visible:ring-[rgba(212,184,122,0.22)] disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-[rgba(232,110,100,0.55)] aria-invalid:ring-2 aria-invalid:ring-[rgba(232,100,90,0.18)]";
 
   return (
     <section
@@ -275,17 +275,17 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
       aria-label="WAIA authentication"
       aria-busy={isLoading}
       className={cn(
-        "mx-auto flex w-full max-w-md flex-col gap-4 rounded-xl border border-waia-accent-warm-muted/25 font-sans",
-        "bg-waia-field/50 p-6 text-waia-fg-muted shadow-waia-glow-warm backdrop-blur-[var(--waia-blur-veil-sm)] sm:p-8",
-        "[box-shadow:inset_0_1px_0_oklch(0.92_0.05_82/0.14),var(--waia-shadow-glow-warm-soft)]",
+        "mx-auto flex w-full max-w-[560px] flex-col gap-5 rounded-2xl border p-6 font-sans sm:gap-6 sm:p-8",
+        "border-[rgba(218,200,160,0.38)] bg-[rgba(3,8,19,0.68)] backdrop-blur-[14px]",
+        "shadow-[inset_0_1px_0_rgba(255,252,245,0.11),0_0_0_1px_rgba(255,255,255,0.04),0_28px_56px_-16px_rgba(0,0,0,0.5),0_0_72px_-24px_rgba(190,155,85,0.14)]",
         className,
       )}
     >
-      <header className="flex flex-col gap-1 text-center">
-        <h2 className="font-waia-serif text-xl font-medium leading-snug text-waia-accent-warm-muted sm:text-[1.3125rem]">
+      <header className="flex flex-col gap-2 text-center">
+        <h2 className="font-waia-serif text-[1.35rem] font-medium leading-snug tracking-tight text-[#e8dcc4] sm:text-[1.5rem]">
           {mode === "createTwin" ? "Create your AI-Twin" : "Sign in"}
         </h2>
-        <p className="text-sm font-normal text-waia-fg-subtle">
+        <p className="text-sm font-normal leading-relaxed text-[rgba(210,204,195,0.9)]">
           {mode === "createTwin"
             ? "Use your email to start partner preview onboarding."
             : "Welcome back. Sign in with the email on your WAIA account."}
@@ -296,22 +296,22 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
         <div
           data-testid="landing-auth-email-confirmation"
           role="status"
-          className="rounded-lg border border-waia-accent-warm-muted/20 bg-waia-field/40 px-3 py-2 text-sm font-normal text-waia-fg-muted leading-snug"
+          className="rounded-xl border border-[rgba(218,200,160,0.3)] bg-[rgba(3,8,19,0.45)] px-3.5 py-2.5 text-sm font-normal leading-snug text-[rgba(220,214,205,0.92)]"
         >
           Account created. Check your inbox to confirm before signing in.
         </div>
       ) : null}
 
-      <div className="flex justify-center rounded-lg border border-waia-divider/60 bg-waia-field/35 p-1 text-sm font-medium">
+      <div className="flex justify-center rounded-xl border border-[rgba(215,195,155,0.28)] bg-[rgba(3,8,19,0.45)] p-1 text-sm font-semibold tracking-tight">
         <button
           type="button"
           data-testid="landing-auth-mode-create"
           onClick={() => switchMode("createTwin")}
           className={cn(
-            "min-w-[7rem] flex-1 rounded-md px-3 py-2 transition-colors duration-waia-base ease-waia-settle",
+            "min-w-[7.5rem] flex-1 rounded-lg px-3 py-2.5 transition-all duration-200 ease-out",
             mode === "createTwin"
-              ? "bg-waia-elevated/90 text-waia-accent-warm shadow-sm"
-              : "text-waia-fg-subtle hover:text-waia-fg-muted",
+              ? "bg-[rgba(10,14,24,0.96)] text-[#d4b87a] shadow-[inset_0_0_0_1px_rgba(212,184,122,0.4),0_0_20px_-6px_rgba(200,160,80,0.18)]"
+              : "text-[rgba(215,210,200,0.9)] hover:bg-[rgba(255,255,255,0.045)] hover:text-[rgba(236,232,224,0.98)]",
           )}
         >
           Create Twin
@@ -321,20 +321,22 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
           data-testid="landing-auth-mode-sign-in"
           onClick={() => switchMode("signIn")}
           className={cn(
-            "min-w-[7rem] flex-1 rounded-md px-3 py-2 transition-colors duration-waia-base ease-waia-settle",
+            "min-w-[7.5rem] flex-1 rounded-lg px-3 py-2.5 transition-all duration-200 ease-out",
             mode === "signIn"
-              ? "bg-waia-elevated/90 text-waia-accent-warm shadow-sm"
-              : "text-waia-fg-subtle hover:text-waia-fg-muted",
+              ? "bg-[rgba(10,14,24,0.96)] text-[#d4b87a] shadow-[inset_0_0_0_1px_rgba(212,184,122,0.4),0_0_20px_-6px_rgba(200,160,80,0.18)]"
+              : "text-[rgba(215,210,200,0.9)] hover:bg-[rgba(255,255,255,0.045)] hover:text-[rgba(236,232,224,0.98)]",
           )}
         >
           Sign in
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3 font-sans" noValidate>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 font-sans" noValidate>
         {mode === "createTwin" ? (
-          <label className="flex flex-col gap-1.5 text-sm font-normal">
-            <span className="text-waia-fg-subtle">Your Name</span>
+          <label className="flex flex-col gap-2 text-sm font-normal">
+            <span className="text-[0.8125rem] font-medium tracking-wide text-[rgba(232,228,218,0.92)]">
+              Your Name
+            </span>
             <Input
               data-testid="landing-auth-full-name"
               name="fullName"
@@ -348,8 +350,10 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
             />
           </label>
         ) : null}
-        <label className="flex flex-col gap-1.5 text-sm font-normal">
-          <span className="text-waia-fg-subtle">Email</span>
+        <label className="flex flex-col gap-2 text-sm font-normal">
+          <span className="text-[0.8125rem] font-medium tracking-wide text-[rgba(232,228,218,0.92)]">
+            Email
+          </span>
           <Input
             data-testid="landing-auth-identity"
             name="identity"
@@ -363,8 +367,10 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
             className={fieldClass}
           />
         </label>
-        <label className="flex flex-col gap-1.5 text-sm font-normal">
-          <span className="text-waia-fg-subtle">Password</span>
+        <label className="flex flex-col gap-2 text-sm font-normal">
+          <span className="text-[0.8125rem] font-medium tracking-wide text-[rgba(232,228,218,0.92)]">
+            Password
+          </span>
           <Input
             data-testid="landing-auth-password"
             name="password"
@@ -377,7 +383,7 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
             className={fieldClass}
           />
           {mode === "createTwin" ? (
-            <span data-testid="landing-auth-password-policy-hint" className="text-xs font-normal text-waia-fg-subtle">
+            <span data-testid="landing-auth-password-policy-hint" className="text-xs font-normal text-[rgba(188,182,172,0.88)]">
               Use at least {PASSWORD_MIN_LENGTH} characters.
             </span>
           ) : null}
@@ -389,7 +395,9 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
           disabled={interactionLocked}
           aria-disabled={interactionLocked || undefined}
           className={cn(
-            "mt-2 w-full border border-waia-accent-warm/30 bg-waia-accent-warm font-sans font-medium text-waia-on-accent-warm shadow-none hover:bg-waia-accent-warm/88 focus-visible:border-waia-accent-warm focus-visible:ring-2 focus-visible:ring-waia-accent-warm/40",
+            "mt-1 h-12 min-h-12 w-full rounded-xl border border-[rgba(200,170,95,0.5)] text-base font-semibold tracking-tight shadow-none",
+            "bg-[linear-gradient(180deg,#dcc065_0%,#b8942e_98%)] text-[#0b1018] hover:brightness-[1.06]",
+            "focus-visible:border-[rgba(224,198,130,0.7)] focus-visible:ring-2 focus-visible:ring-[rgba(212,184,122,0.35)]",
             isLoading && "cursor-progress",
           )}
         >
@@ -399,7 +407,7 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
           <p
             data-testid="landing-auth-error"
             role="alert"
-            className="text-sm font-normal text-waia-danger-fg"
+            className="text-sm font-normal leading-snug text-[rgba(255,182,168,0.95)]"
           >
             {failureMessage}
           </p>
@@ -412,7 +420,7 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
           ? (
               <p
                 data-testid="landing-auth-oauth-availability-error"
-                className="text-center text-xs font-normal text-waia-fg-subtle"
+                className="text-center text-xs font-normal leading-relaxed text-[rgba(195,190,180,0.82)]"
               >
                 Couldn&apos;t load sign-in options. You can still use email above. Refresh the page to try again.
               </p>
@@ -420,10 +428,10 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
           : enabledOauthProviders.length > 0
             ? (
                 <>
-                  <div className="flex items-center gap-3 text-xs font-normal tracking-normal text-waia-fg-subtle">
-                    <span aria-hidden="true" className="h-px flex-1 bg-waia-divider/80" />
+                  <div className="flex items-center gap-3 text-xs font-normal tracking-normal text-[rgba(190,185,175,0.8)]">
+                    <span aria-hidden="true" className="h-px flex-1 bg-[rgba(218,200,160,0.25)]" />
                     <span data-testid="landing-auth-divider">Or continue with</span>
-                    <span aria-hidden="true" className="h-px flex-1 bg-waia-divider/80" />
+                    <span aria-hidden="true" className="h-px flex-1 bg-[rgba(218,200,160,0.25)]" />
                   </div>
                   <div className="flex flex-col gap-2">
                     {enabledOauthProviders.map((provider) => (
@@ -436,7 +444,7 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
                         onClick={() => beginOAuthProvider(provider)}
                         disabled={interactionLocked}
                         aria-disabled={interactionLocked || undefined}
-                        className="w-full border-waia-divider/70 bg-waia-field/35 font-sans font-medium text-waia-fg-muted hover:bg-waia-field/55 hover:text-waia-fg-primary focus-visible:border-waia-accent-warm focus-visible:ring-2 focus-visible:ring-waia-accent-warm/25"
+                        className="h-12 min-h-12 w-full rounded-xl border-[rgba(218,200,160,0.32)] bg-[rgba(3,8,19,0.35)] font-sans text-[0.9375rem] font-semibold text-[rgba(232,228,220,0.95)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(248,244,238,0.98)] focus-visible:border-[rgba(224,198,130,0.5)] focus-visible:ring-2 focus-visible:ring-[rgba(212,184,122,0.2)]"
                       >
                         {oauthLabel(provider)}
                       </Button>
@@ -447,20 +455,20 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
             : (
                 <p
                   data-testid="landing-auth-oauth-unavailable"
-                  className="text-center text-xs font-normal text-waia-fg-subtle"
+                  className="text-center text-xs font-normal leading-relaxed text-[rgba(195,190,180,0.78)]"
                 >
                   OAuth providers are not configured for this preview. Email sign-in works as usual above.
                 </p>
               )}
 
-      <p className="text-center text-sm font-normal text-waia-fg-subtle">
+      <p className="text-center text-sm font-normal leading-relaxed text-[rgba(205,200,190,0.88)]">
         {mode === "createTwin" ? (
           <>
             Already have an account?{" "}
             <button
               type="button"
               data-testid="landing-auth-switch-to-sign-in"
-              className="font-medium text-waia-accent-warm-muted underline underline-offset-4 transition-colors hover:text-waia-accent-warm"
+              className="font-semibold text-[#dcc69a] underline decoration-[rgba(220,198,154,0.5)] underline-offset-4 transition-colors hover:text-[#ecd9b0]"
               onClick={() => switchMode("signIn")}
             >
               Sign in
@@ -472,7 +480,7 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
             <button
               type="button"
               data-testid="landing-auth-switch-to-create-twin"
-              className="font-medium text-waia-accent-warm-muted underline underline-offset-4 transition-colors hover:text-waia-accent-warm"
+              className="font-semibold text-[#dcc69a] underline decoration-[rgba(220,198,154,0.5)] underline-offset-4 transition-colors hover:text-[#ecd9b0]"
               onClick={() => switchMode("createTwin")}
             >
               Create your Twin
