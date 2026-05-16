@@ -4,13 +4,17 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AuthBlock } from "@/components/landing/AuthBlock";
 import { LandingPageContent } from "@/components/landing/landing-page-content";
 
-const { mockReplace, mockLocationAssign } = vi.hoisted(() => ({
-  mockReplace: vi.fn(),
-  mockLocationAssign: vi.fn(),
-}));
+const { mockReplace, mockLocationAssign, routerStub } = vi.hoisted(() => {
+  const mockReplace = vi.fn();
+  return {
+    mockReplace,
+    mockLocationAssign: vi.fn(),
+    routerStub: { replace: mockReplace },
+  };
+});
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: mockReplace }),
+  useRouter: () => routerStub,
 }));
 
 function jsonResponse(body: unknown, status = 200) {
@@ -38,6 +42,15 @@ function fetchWithOauthAvailability(
 
 describe("LandingPage", () => {
   beforeEach(() => {
+    mockReplace.mockClear();
+    Object.defineProperty(window, "location", {
+      writable: true,
+      configurable: true,
+      value: {
+        pathname: "/",
+        search: "",
+      },
+    });
     vi.stubGlobal(
       "fetch",
       fetchWithOauthAvailability(() => {
@@ -66,12 +79,15 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("landing-closing")).toBeInTheDocument();
   });
 
-  it("renders the canonical Hero copy", async () => {
+  it("loads prepared hero web assets (desktop fallback + mobile source)", async () => {
     await renderLandingPage();
-    expect(screen.getByTestId("landing-hero-tagline")).toHaveTextContent("Between you. And you.");
-    expect(screen.getByTestId("landing-hero-positioning")).toHaveTextContent(
-      /helps you reconnect with yourself/i,
-    );
+    const img = screen.getByTestId("landing-hero-image");
+    expect(img).toHaveAttribute("src", "/brand/heap_comp_1.webp");
+    const mobileSource = screen.getByTestId("landing-hero-source-mobile");
+    expect(mobileSource).toHaveAttribute("srcset", "/brand/head_mobile_1.webp");
+    expect(screen.queryByTestId("landing-hero-logo")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("landing-hero-tagline")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("landing-hero-positioning")).not.toBeInTheDocument();
   });
 
   it("renders the canonical Context copy", async () => {
@@ -125,6 +141,14 @@ describe("LandingPage", () => {
 describe("AuthBlock state machine", () => {
   beforeEach(() => {
     mockReplace.mockClear();
+    Object.defineProperty(window, "location", {
+      writable: true,
+      configurable: true,
+      value: {
+        pathname: "/",
+        search: "",
+      },
+    });
   });
 
   afterEach(() => {
@@ -142,10 +166,40 @@ describe("AuthBlock state machine", () => {
     const block = screen.getByTestId("landing-auth");
     expect(block.dataset.status).toBe("VisitorIdle");
     expect(block.dataset.mode).toBe("createTwin");
+    expect(screen.getByTestId("landing-auth-full-name")).toHaveValue("");
     expect(screen.getByTestId("landing-auth-identity")).toHaveValue("");
     expect(screen.getByTestId("landing-auth-password")).toHaveValue("");
     expect(screen.queryByTestId("landing-auth-error")).not.toBeInTheDocument();
     expect(screen.getByTestId("landing-auth-submit")).not.toBeDisabled();
+  });
+
+  it("blocks Create Twin submit when name is empty without calling sign-up", async () => {
+    const fetchSpy = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/api/auth/oauth/availability")) {
+        return Promise.resolve(oauthAvailableResponse());
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    render(<AuthBlock />);
+    await waitFor(() => {
+      expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create your Twin");
+    });
+
+    fireEvent.change(screen.getByTestId("landing-auth-identity"), {
+      target: { value: "n@example.com" },
+    });
+    fireEvent.change(screen.getByTestId("landing-auth-password"), {
+      target: { value: "password12" },
+    });
+    fireEvent.click(screen.getByTestId("landing-auth-submit"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("landing-auth-error")).toHaveTextContent(/Enter your name/i);
+    });
+    expect(fetchSpy.mock.calls.map((c) => c[0])).not.toContain("/api/auth/sign-up");
   });
 
   it("transitions VisitorIdle -> AuthInProgress -> AuthFailure on sign-up rejection in Create mode", async () => {
@@ -163,6 +217,9 @@ describe("AuthBlock state machine", () => {
     render(<AuthBlock />);
     await waitFor(() => {
       expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create your Twin");
+    });
+    fireEvent.change(screen.getByTestId("landing-auth-full-name"), {
+      target: { value: "Test User" },
     });
     fireEvent.change(screen.getByTestId("landing-auth-identity"), {
       target: { value: "test@example.com" },
@@ -203,6 +260,9 @@ describe("AuthBlock state machine", () => {
     render(<AuthBlock />);
     await waitFor(() => {
       expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create your Twin");
+    });
+    fireEvent.change(screen.getByTestId("landing-auth-full-name"), {
+      target: { value: "Ok User" },
     });
     fireEvent.change(screen.getByTestId("landing-auth-identity"), {
       target: { value: "ok@example.com" },
@@ -265,7 +325,8 @@ describe("AuthBlock state machine", () => {
     });
   });
 
-  it("surfaces oauth_error query param and clears it with replaceState", async () => {
+  it("surfaces oauth_error and clears query via replaceState", async () => {
+    mockReplace.mockClear();
     vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
     Object.defineProperty(window, "location", {
       writable: true,
@@ -283,12 +344,14 @@ describe("AuthBlock state machine", () => {
       }),
     );
 
-    render(<AuthBlock />);
+    render(<AuthBlock initialOauthErrorCode="OAUTH_DENIED" />);
     await waitFor(() => {
       expect(screen.getByTestId("landing-auth-error")).toBeInTheDocument();
     });
     expect(screen.getByTestId("landing-auth-error").textContent).toMatch(/cancelled|isn/i);
-    expect(window.history.replaceState).toHaveBeenCalledWith(null, "", "/");
+    await waitFor(() => {
+      expect(window.history.replaceState).toHaveBeenCalledWith(window.history.state, "", "/");
+    });
   });
 
   it("shows email confirmation notice and switches to Sign in after sign-up needs confirmation", async () => {
@@ -309,6 +372,9 @@ describe("AuthBlock state machine", () => {
     render(<AuthBlock />);
     await waitFor(() => {
       expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create your Twin");
+    });
+    fireEvent.change(screen.getByTestId("landing-auth-full-name"), {
+      target: { value: "New User" },
     });
     fireEvent.change(screen.getByTestId("landing-auth-identity"), {
       target: { value: "new@example.com" },

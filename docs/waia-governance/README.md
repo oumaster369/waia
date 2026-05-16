@@ -5,6 +5,8 @@ WAIA DEV OS operational layer:
 | Doc | Topic |
 |-----|-------|
 | [**`WAIA-DEV-OS.md`**](WAIA-DEV-OS.md) | **Constitution — roles, lifecycle, gates, MCP, validation canon** |
+| [`WAIA-NORTH-STAR.md`](WAIA-NORTH-STAR.md) | **Ecosystem orientation — purpose field (interpretive; non-binding)** |
+| [`WAIA-OPERATING-MEMORY.md`](WAIA-OPERATING-MEMORY.md) | **Layer 2 — current operational truth snapshot (sync hub)** |
 | [`CORE-PRINCIPLES.md`](CORE-PRINCIPLES.md) | Ethos |
 | [`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md) | Gates & escalation |
 | [`AUTONOMOUS-EXECUTION-LOOP.md`](AUTONOMOUS-EXECUTION-LOOP.md) | 12-step loop |

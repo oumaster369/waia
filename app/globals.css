@@ -1,15 +1,67 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./design/tokens-waia.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-waia-sans);
+  --font-heading: var(--font-waia-sans);
+  --font-mono: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+
+  --color-waia-field: var(--waia-color-field);
+  --color-waia-field-mid: var(--waia-color-field-mid);
+  --color-waia-elevated: var(--waia-color-elevated);
+  --color-waia-veil: var(--waia-color-veil);
+  --color-waia-fg: var(--waia-color-fg-primary);
+  --color-waia-fg-muted: var(--waia-color-fg-muted);
+  --color-waia-fg-subtle: var(--waia-color-fg-subtle);
+  --color-waia-accent-warm: var(--waia-color-accent-warm);
+  --color-waia-accent-warm-muted: var(--waia-color-accent-warm-muted);
+  --color-waia-accent-cool: var(--waia-color-accent-cool);
+  --color-waia-accent-cool-muted: var(--waia-color-accent-cool-muted);
+  --color-waia-on-accent-warm: var(--waia-color-on-accent-warm);
+  --color-waia-rim: var(--waia-color-rim);
+  --color-waia-divider: var(--waia-color-divider);
+  --color-waia-danger: var(--waia-color-danger);
+  --color-waia-danger-fg: var(--waia-color-danger-fg);
+  --color-waia-warning: var(--waia-color-warning);
+  --color-waia-success: var(--waia-color-success);
+
+  --spacing-waia-1: var(--waia-space-1);
+  --spacing-waia-2: var(--waia-space-2);
+  --spacing-waia-3: var(--waia-space-3);
+  --spacing-waia-4: var(--waia-space-4);
+  --spacing-waia-6: var(--waia-space-6);
+  --spacing-waia-8: var(--waia-space-8);
+  --spacing-waia-12: var(--waia-space-12);
+  --spacing-waia-20: var(--waia-space-20);
+
+  --radius-waia-control: var(--waia-radius-control-sm);
+  --radius-waia-surface: var(--waia-radius-surface-md);
+  --radius-waia-ceremonial: var(--waia-radius-ceremonial-lg);
+
+  --blur-waia-veil-sm: var(--waia-blur-veil-sm);
+  --blur-waia-veil-lg: var(--waia-blur-veil-lg);
+
+  --shadow-waia-glow-warm: var(--waia-shadow-glow-warm-soft);
+
+  --max-width-waia-prose: var(--waia-layout-prose-width);
+  --max-width-waia-form: var(--waia-layout-form-width);
+
+  --ease-waia-settle: var(--waia-ease-settle);
+  --ease-waia-enter: var(--waia-ease-enter);
+  --ease-waia-exit: var(--waia-ease-exit);
+
+  --duration-waia-instant: var(--waia-duration-instant);
+  --duration-waia-fast: var(--waia-duration-fast);
+  --duration-waia-base: var(--waia-duration-base);
+  --duration-waia-slow: var(--waia-duration-slow);
+  --duration-waia-ceremony: var(--waia-duration-ceremony);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -83,38 +135,39 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
+/* Dark theme: shadcn compatibility variables bridge to WAIA Design Foundation tokens. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: var(--waia-color-field);
+  --foreground: var(--waia-color-fg-primary);
+  --card: var(--waia-color-field-mid);
+  --card-foreground: var(--waia-color-fg-primary);
+  --popover: var(--waia-color-field-mid);
+  --popover-foreground: var(--waia-color-fg-primary);
+  --primary: var(--waia-color-accent-warm);
+  --primary-foreground: var(--waia-color-on-accent-warm);
+  --secondary: oklch(1 0 0 / 0.06);
+  --secondary-foreground: var(--waia-color-fg-primary);
+  --muted: oklch(1 0 0 / 0.06);
+  --muted-foreground: var(--waia-color-fg-muted);
+  --accent: oklch(1 0 0 / 0.08);
+  --accent-foreground: var(--waia-color-accent-cool-muted);
+  --destructive: var(--waia-color-danger);
+  --border: var(--waia-color-divider);
+  --input: oklch(1 0 0 / 0.12);
+  --ring: var(--waia-light-focus);
+  --chart-1: var(--waia-primitive-platinum-200);
+  --chart-2: var(--waia-color-accent-warm-muted);
+  --chart-3: var(--waia-color-accent-cool);
+  --chart-4: var(--waia-primitive-platinum-400);
+  --chart-5: var(--waia-color-fg-subtle);
+  --sidebar: var(--waia-color-field-mid);
+  --sidebar-foreground: var(--waia-color-fg-primary);
+  --sidebar-primary: var(--waia-color-accent-cool);
+  --sidebar-primary-foreground: var(--waia-color-field);
+  --sidebar-accent: oklch(1 0 0 / 0.06);
+  --sidebar-accent-foreground: var(--waia-color-fg-primary);
+  --sidebar-border: var(--waia-color-divider);
+  --sidebar-ring: var(--waia-light-focus);
 }
 
 @layer base {
@@ -124,7 +177,10 @@
   body {
     @apply bg-background text-foreground;
   }
-  html {
-    @apply font-sans;
+}
+
+@layer utilities {
+  .font-waia-serif {
+    font-family: var(--font-waia-serif);
   }
 }

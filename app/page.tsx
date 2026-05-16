@@ -2,12 +2,24 @@ import { redirect } from "next/navigation";
 
 import { LandingPageContent } from "@/components/landing/landing-page-content";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
+import { OAUTH_ERROR_QUERY } from "@/lib/oauth/oauth-error-codes";
 
-export default async function LandingPage() {
+export default async function LandingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const uid = await getOptionalSessionUserId();
   if (uid) {
     redirect("/dashboard");
   }
 
-  return <LandingPageContent />;
+  const resolved = searchParams ? await searchParams : {};
+  const raw = resolved[OAUTH_ERROR_QUERY];
+  const initialOauthErrorCode =
+    typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
+
+  return (
+    <LandingPageContent initialOauthErrorCode={initialOauthErrorCode ?? null} />
+  );
 }
