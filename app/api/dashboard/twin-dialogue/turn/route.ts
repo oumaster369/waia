@@ -97,18 +97,20 @@ function aiGatewayProviderTelemetryExtras(
 export async function POST(request: Request) {
   const userId = await getOptionalSessionUserId();
   if (!userId) {
-    return NextResponse.json(validationErrorEnvelope("UNAUTHORIZED", "Session required."), {
-      status: 401,
-    });
+    return NextResponse.json(
+      validationErrorEnvelope("UNAUTHORIZED", "Session required."),
+      { status: 401 },
+    );
   }
 
   let parsed: SubmitBodyJson;
   try {
     parsed = (await request.json()) as SubmitBodyJson;
   } catch {
-    return NextResponse.json(validationErrorEnvelope("INVALID_BODY", "Expected JSON body."), {
-      status: 400,
-    });
+    return NextResponse.json(
+      validationErrorEnvelope("INVALID_BODY", "Expected JSON body."),
+      { status: 400 },
+    );
   }
 
   if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -120,9 +122,10 @@ export async function POST(request: Request) {
 
   const rawMessage = parsed.message;
   if (typeof rawMessage !== "string") {
-    return NextResponse.json(validationErrorEnvelope("INVALID_BODY", "message must be a string."), {
-      status: 400,
-    });
+    return NextResponse.json(
+      validationErrorEnvelope("INVALID_BODY", "message must be a string."),
+      { status: 400 },
+    );
   }
 
   const trimmed = rawMessage.trim();
@@ -196,7 +199,8 @@ export async function POST(request: Request) {
       dialogueContinuityReplayRolesInjected = built.replayRolesInjected;
       dialogueContinuityReplayChars = built.replayCharsTotal;
       dialogueContinuityReplayTruncated = built.replayTruncated;
-      priorReplayMessages = built.priorMessages.length > 0 ? built.priorMessages : undefined;
+      priorReplayMessages =
+        built.priorMessages.length > 0 ? built.priorMessages : undefined;
     } else if (continuityEnvEnabled) {
       dialogueContinuityMode = "replay_v1_standby";
     }
@@ -232,7 +236,11 @@ export async function POST(request: Request) {
           userMessage: trimmed,
         });
         readiness_writer_outcome =
-          adv.status === "applied" ? "applied" : adv.status === "noop" ? "noop" : "skipped";
+          adv.status === "applied"
+            ? "applied"
+            : adv.status === "noop"
+              ? "noop"
+              : "skipped";
       } catch {
         readiness_writer_outcome = "error";
       }
@@ -296,7 +304,8 @@ export async function POST(request: Request) {
       headers: { "Cache-Control": "private, no-store" },
     });
   } catch (err) {
-    const outcome = !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    const outcome =
+      !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
     telemetryPayload = {
       event: "waia_runtime_route",
       route: "twin_dialogue_turn",
@@ -306,9 +315,10 @@ export async function POST(request: Request) {
       duration_ms: Date.now() - telemetryStart,
       error_class: safeTelemetryErrorClass(err),
     };
-    return NextResponse.json(validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."), {
-      status: 500,
-    });
+    return NextResponse.json(
+      validationErrorEnvelope("INTERNAL_ERROR", "Something went wrong."),
+      { status: 500 },
+    );
   } finally {
     const pgClose = await disposeWaiaRuntimeDb(resolvedRuntime);
     if (telemetryPayload) {

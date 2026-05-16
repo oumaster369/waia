@@ -1,29 +1,33 @@
+const HERO_DESKTOP = "/brand/heap_comp_1.webp";
+const HERO_MOBILE = "/brand/head_mobile_1.webp";
+
+/**
+ * Single prepared hero — responsive art via `<picture>`.
+ * Wordmark and slogan live in the artwork only (no duplicate HTML copy).
+ */
 export function HeroBlock() {
   return (
     <section
       data-testid="landing-hero"
       aria-label="WAIA hero"
-      className="flex flex-col items-center gap-4 py-12 text-center sm:py-20"
+      className="w-full bg-[#030813] pt-0 pb-0"
     >
-      <div
-        data-testid="landing-hero-logo"
-        aria-label="WAIA"
-        className="text-3xl font-semibold tracking-tight sm:text-4xl"
-      >
-        WAIA
+      <div className="relative mx-auto w-full max-w-[1600px]">
+        <picture data-testid="landing-hero-picture">
+          <source
+            data-testid="landing-hero-source-mobile"
+            media="(max-width: 767px)"
+            srcSet={HERO_MOBILE}
+          />
+          <img
+            data-testid="landing-hero-image"
+            src={HERO_DESKTOP}
+            alt="WAIA hero artwork including wordmark and tagline."
+            className="mx-auto block h-auto w-full max-w-[1600px] object-contain object-bottom select-none"
+            draggable={false}
+          />
+        </picture>
       </div>
-      <h1
-        data-testid="landing-hero-tagline"
-        className="text-balance text-4xl font-semibold tracking-tight sm:text-6xl"
-      >
-        Between you. And you.
-      </h1>
-      <p
-        data-testid="landing-hero-positioning"
-        className="max-w-2xl text-balance text-base text-muted-foreground sm:text-lg"
-      >
-        WAIA helps you reconnect with yourself so you stay aligned—with people, work, and the world around you.
-      </p>
     </section>
   );
 }
