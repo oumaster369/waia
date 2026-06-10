@@ -27,7 +27,8 @@ User provides `DEE-NN` or pastes the issue body.
 4. Check **atomicity**: one verifiable outcome; flag mixed ownership (UI + DB + AI in one card).
 5. Check **risk tier** hint in description or infer T0–T4 per [`RISK-TIERS.md`](../../docs/waia-governance/RISK-TIERS.md); flag T3/T4 for human hold.
 6. Verify `Files` paths exist or are clearly to-be-created; cross-check against execution label ([`AGENT-EXECUTION-LABELS.md`](../../docs/waia-governance/AGENT-EXECUTION-LABELS.md)).
-7. Output a **Groom Report**:
+7. Verify **branch/title alignment**: proposed `dee-<NN>-<slug>` must match this issue id; PR will require explicit `**Linear:** \`DEE-NN\`` ([`validate-pr-linear-id.sh`](../../scripts/linear/validate-pr-linear-id.sh), [`LINEAR-ID-COLLISION-RECOVERY.md`](../../docs/waia-governance/LINEAR-ID-COLLISION-RECOVERY.md)).
+8. Output a **Groom Report**:
 
    - **Ready** / **Blocked**
    - Missing fields (smallest ask)

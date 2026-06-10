@@ -1,6 +1,6 @@
 name: pr-governance
 
-# Advisory checks: branch naming + Linear ID in PR body. Non-blocking comments only.
+# Blocking P0 checks: explicit Linear field, ID consistency, disclaimer collision, scope match.
 
 on:
   pull_request:
@@ -12,52 +12,98 @@ permissions:
   pull-requests: write
 
 jobs:
-  advisory:
-    name: PR governance (advisory)
+  governance:
+    name: PR governance
     runs-on: ubuntu-latest
     steps:
-      - name: Check branch name and Linear reference
+      - uses: actions/checkout@v4
+
+      - name: Validate Linear ID consistency (blocking)
+        id: validate
+        env:
+          MODE: pr-governance
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/linear/validate-pr-linear-id.sh
+          : > validate-errors.txt
+          if [[ -n "${LINEAR_API_KEY:-}" ]]; then
+            echo "api_configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "api_configured=false" >> "$GITHUB_OUTPUT"
+          fi
+          if ! printf '%s' "$PR_BODY" | grep -q '\*\*Tier:\*\*'; then
+            echo "PR body missing **Tier:** field from pull_request_template.md." >> validate-errors.txt
+          fi
+          if scripts/linear/validate-pr-linear-id.sh 2>>validate-errors.txt; then
+            if [[ -s validate-errors.txt ]]; then
+              while IFS= read -r line; do
+                [[ -n "$line" ]] && echo "::error title=PR governance::$line"
+              done < validate-errors.txt
+              echo "passed=false" >> "$GITHUB_OUTPUT"
+              {
+                echo 'report<<EOF_GOV_REPORT'
+                cat validate-errors.txt
+                echo 'EOF_GOV_REPORT'
+              } >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+            echo "passed=true" >> "$GITHUB_OUTPUT"
+            echo "report=All P0 Linear governance checks passed." >> "$GITHUB_OUTPUT"
+          else
+            while IFS= read -r line; do
+              [[ -n "$line" ]] && echo "::error title=PR governance::$line"
+            done < validate-errors.txt
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            {
+              echo 'report<<EOF_GOV_REPORT'
+              cat validate-errors.txt
+              echo 'EOF_GOV_REPORT'
+            } >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Post governance comment
+        if: always()
         uses: actions/github-script@v7
+        env:
+          PASSED: ${{ steps.validate.outputs.passed }}
+          REPORT: ${{ steps.validate.outputs.report }}
+          API_CONFIGURED: ${{ steps.validate.outputs.api_configured }}
         with:
           script: |
             const marker = "<!-- waia-pr-governance -->";
             const pr = context.payload.pull_request;
             if (!pr) return;
 
-            const branch = pr.head.ref || "";
-            const body = pr.body || "";
-            const title = pr.title || "";
+            const passed = process.env.PASSED === "true";
+            const report = (process.env.REPORT || "").trim();
+            const apiConfigured = process.env.API_CONFIGURED === "true";
 
-            const issues = [];
-            const deeBranch = /^dee-\d{2,}-[a-z0-9-]+$/.test(branch);
-            if (!deeBranch) {
-              issues.push(
-                `Branch \`${branch}\` does not match \`dee-<NN>-<slug>\`. See AGENTS.md / BRANCHING-STRATEGY.md.`,
-              );
-            }
-
-            const deeRef = /DEE-\d+/i.test(`${title}\n${body}`);
-            if (!deeRef) {
-              issues.push(
-                "PR title/body missing Linear id `DEE-NN`. Add it per PR-PROTOCOL.md.",
-              );
-            }
-
-            const tierRef = /\*\*Tier:\*\*/i.test(body);
-            if (!tierRef) {
-              issues.push(
-                "PR body missing **Tier:** field from pull_request_template.md.",
-              );
-            }
-
-            let advisory = `${marker}\n### PR governance (advisory)\n\n`;
-            if (issues.length === 0) {
-              advisory +=
-                "Branch name and Linear reference look good. This check is advisory only.\n";
+            let body = `${marker}\n### PR governance (P0 — blocking)\n\n`;
+            if (passed) {
+              body +=
+                "All checks passed: explicit **Linear:** field, title/branch ID alignment, no disclaimer collision";
+              if (apiConfigured) {
+                body += ", Linear issue scope verified via API.";
+              } else {
+                body +=
+                  ". _LINEAR_API_KEY not set — API scope check skipped; configure secret for full verification._";
+              }
+              body += "\n";
             } else {
-              advisory += issues.map((i) => `- ${i}`).join("\n") + "\n";
-              advisory +=
-                "\n_Server-side rulesets on `dev`/`main` still enforce required CI checks and reviews._\n";
+              body += "**Failed** — merge blocked until resolved:\n\n```\n";
+              body += report || "(see workflow logs)";
+              body += "\n```\n\n";
+              body +=
+                "See [`LINEAR-ID-COLLISION-RECOVERY.md`](https://github.com/" +
+                context.repo.owner +
+                "/" +
+                context.repo.repo +
+                "/blob/dev/docs/waia-governance/LINEAR-ID-COLLISION-RECOVERY.md) and run `/groom` before changing title/branch.\n";
             }
 
             const { owner, repo } = context.repo;
@@ -76,13 +122,13 @@ jobs:
                 owner,
                 repo,
                 comment_id: existing.id,
-                body: advisory,
+                body,
               });
             } else {
               await github.rest.issues.createComment({
                 owner,
                 repo,
                 issue_number: pr.number,
-                body: advisory,
+                body,
               });
             }

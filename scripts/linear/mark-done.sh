@@ -27,7 +27,7 @@ issue_json="$(
   curl -sf "$API" \
     -H "Content-Type: application/json" \
     -H "Authorization: ${LINEAR_API_KEY}" \
-    -d "$(jq -nc --arg id "$IDENTIFIER" '{query: $lookup_query, variables: {id: $id}}')"
+    -d "$(jq -nc --arg id "$IDENTIFIER" --arg query "$lookup_query" '{query: $query, variables: {id: $id}}')"
 )"
 
 issue_id="$(printf '%s' "$issue_json" | jq -r '.data.issue.id // empty')"
@@ -44,7 +44,7 @@ states_json="$(
   curl -sf "$API" \
     -H "Content-Type: application/json" \
     -H "Authorization: ${LINEAR_API_KEY}" \
-    -d "$(jq -nc --arg teamId "$team_id" '{query: $status_query, variables: {teamId: $teamId}}')"
+    -d "$(jq -nc --arg teamId "$team_id" --arg query "$status_query" '{query: $query, variables: {teamId: $teamId}}')"
 )"
 
 done_state_id="$(
@@ -78,7 +78,8 @@ if [[ -n "$comment" ]]; then
         --arg id "$issue_id" \
         --arg stateId "$done_state_id" \
         --arg comment "$comment" \
-        '{query: $update_mutation, variables: {id: $id, stateId: $stateId, comment: $comment}}')"
+        --arg query "$update_mutation" \
+        '{query: $query, variables: {id: $id, stateId: $stateId, comment: $comment}}')"
   )"
 else
   update_mutation='mutation($id: String!, $stateId: String!) {
@@ -91,7 +92,8 @@ else
       -d "$(jq -nc \
         --arg id "$issue_id" \
         --arg stateId "$done_state_id" \
-        '{query: $update_mutation, variables: {id: $id, stateId: $stateId}}')"
+        --arg query "$update_mutation" \
+        '{query: $query, variables: {id: $id, stateId: $stateId}}')"
   )"
 fi
 

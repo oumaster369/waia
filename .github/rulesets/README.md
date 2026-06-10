@@ -24,8 +24,11 @@ Must match job `name:` values in [`.github/workflows/ci.yml`](../workflows/ci.ym
 | `unit tests` | unit tests |
 | `build` | build |
 | `e2e tests` | e2e tests |
+| `PR governance` | PR governance |
 
 If CI job names change, update **both** `ci.yml` and `dev-main-protection.json`, then re-run the apply script.
+
+`PR governance` enforces explicit **Linear:** field, title/branch/id alignment, disclaimer collision detection, and (when `LINEAR_API_KEY` is set) Linear issue scope verification — see [`scripts/linear/validate-pr-linear-id.sh`](../../scripts/linear/validate-pr-linear-id.sh).
 
 ## Advisory PR governance
 

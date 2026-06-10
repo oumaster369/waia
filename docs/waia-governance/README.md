@@ -26,6 +26,7 @@ WAIA DEV OS operational layer:
 | [`EXECUTABLE-GOVERNANCE-HOOKS.md`](EXECUTABLE-GOVERNANCE-HOOKS.md) | CI/Cursor/GitHub hooks |
 | [`AGENT-EXECUTION-LABELS.md`](AGENT-EXECUTION-LABELS.md) | Label ownership matrix |
 | [`AGENT-AUTO-ADVANCE.md`](AGENT-AUTO-ADVANCE.md) | Safe auto-advance preconditions |
+| [`LINEAR-ID-COLLISION-RECOVERY.md`](LINEAR-ID-COLLISION-RECOVERY.md) | ID collision incident playbook |
 | [`GOVERNANCE-VERSIONING.md`](GOVERNANCE-VERSIONING.md) | Evolution log |
 | [`AGENT-ROLES.md`](AGENT-ROLES.md) | Planner/executor/etc. |
 | [`FAILURE-PATTERNS.md`](FAILURE-PATTERNS.md) | Incident knowledge |
