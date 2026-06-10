@@ -40,6 +40,9 @@ jobs:
           fi
           if scripts/linear/validate-pr-linear-id.sh 2>>validate-errors.txt; then
             if [[ -s validate-errors.txt ]]; then
+              while IFS= read -r line; do
+                [[ -n "$line" ]] && echo "::error title=PR governance::$line"
+              done < validate-errors.txt
               echo "passed=false" >> "$GITHUB_OUTPUT"
               {
                 echo 'report<<EOF_GOV_REPORT'
@@ -51,6 +54,9 @@ jobs:
             echo "passed=true" >> "$GITHUB_OUTPUT"
             echo "report=All P0 Linear governance checks passed." >> "$GITHUB_OUTPUT"
           else
+            while IFS= read -r line; do
+              [[ -n "$line" ]] && echo "::error title=PR governance::$line"
+            done < validate-errors.txt
             echo "passed=false" >> "$GITHUB_OUTPUT"
             {
               echo 'report<<EOF_GOV_REPORT'

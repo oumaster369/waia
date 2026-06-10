@@ -39,7 +39,30 @@ warnings=()
 add_failure() { failures+=("$1"); }
 add_warning() { warnings+=("$1"); }
 
-upper_id() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+linear_graphql() {
+  local query="$1"
+  local id="$2"
+  local api='https://api.linear.app/graphql'
+  curl -sf "$api" \
+    -H 'Content-Type: application/json' \
+    -H "Authorization: ${LINEAR_API_KEY}" \
+    -d "$(jq -nc --arg query "$query" --arg id "$id" '{query: $query, variables: {id: $id}}')"
+}
+
+dee_numeric() {
+  local id="$1"
+  if [[ "$id" =~ [Dd][Ee][Ee]-0*([0-9]+) ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  printf ''
+}
+
+dee_ids_equal() {
+  local a="$1"
+  local b="$2"
+  [[ -n "$(dee_numeric "$a")" && "$(dee_numeric "$a")" == "$(dee_numeric "$b")" ]]
+}
 
 extract_first_dee() {
   printf '%s' "$1" | grep -oiE 'DEE-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]' || true
@@ -92,16 +115,16 @@ normalize_tokens() {
     | sed -E 's/`//g; s/\*\*//g; s/[^a-z0-9]+/ /g' \
     | tr ' ' '\n' \
     | grep -E '.{3,}' \
-    | grep -viE '^(the|and|for|with|from|into|dee|fix|feat|docs|chore|infra|implement|add|update|merge|pull|request|waia|dev|os)$' \
+    | grep -viE '^(the|and|for|with|from|into|dee|fix|feat|docs|chore|infra|implement|add|update|merge|pull|request)$' \
     | sort -u \
     || true
 }
 
 scope_overlap_ok() {
-  local issue_title="$1"
+  local issue_context="$1"
   local pr_title="$2"
-  local issue_tokens pr_tokens shared count
-  issue_tokens="$(normalize_tokens "$issue_title")"
+  local issue_tokens pr_tokens shared
+  issue_tokens="$(normalize_tokens "$issue_context")"
   pr_tokens="$(normalize_tokens "$pr_title")"
   if [[ -z "$issue_tokens" || -z "$pr_tokens" ]]; then
     return 0
@@ -113,10 +136,38 @@ scope_overlap_ok() {
       | wc -l \
       | tr -d ' '
   )"
-  if [[ "$shared" -ge 1 ]]; then
-    return 0
+  [[ "$shared" -ge 1 ]]
+}
+
+extract_markdown_section() {
+  local text="$1"
+  local heading="$2"
+  printf '%s' "$text" \
+    | sed -n "/^## ${heading}\$/,/^## /p" \
+    | tail -n +2 \
+    | sed '/^## /d' \
+    | head -40
+}
+
+fetch_linear_scope_context() {
+  local identifier="$1"
+  local gql='query($id: String!) { issue(id: $id) { title description parent { title } } }'
+  local json title parent_title description goal scope context
+
+  json="$(linear_graphql "$gql" "$identifier" 2>/dev/null || true)"
+  title="$(printf '%s' "$json" | jq -r '.data.issue.title // empty' 2>/dev/null || true)"
+  if [[ -z "$title" ]]; then
+    return 1
   fi
-  return 1
+
+  parent_title="$(printf '%s' "$json" | jq -r '.data.issue.parent.title // empty' 2>/dev/null || true)"
+  description="$(printf '%s' "$json" | jq -r '.data.issue.description // empty' 2>/dev/null || true)"
+  goal="$(extract_markdown_section "$description" "Goal")"
+  scope="$(extract_markdown_section "$description" "Scope")"
+
+  context="${title} ${parent_title} ${goal} ${scope}"
+  printf '%s' "$context"
+  return 0
 }
 
 check_disclaimer_collision() {
@@ -137,30 +188,10 @@ check_disclaimer_collision() {
   fi
   title_id="$(extract_first_dee "$title")"
   branch_id="$(extract_branch_nn "$branch")"
-  if [[ "$disclaimer_id" == "$title_id" || "$disclaimer_id" == "$branch_id" ]]; then
+  if dee_ids_equal "$disclaimer_id" "$title_id" || dee_ids_equal "$disclaimer_id" "$branch_id"; then
     add_failure "PR body disclaims \`${disclaimer_id}\` (\"do NOT use\") but PR title/branch still references the same id."
     return 1
   fi
-  return 0
-}
-
-fetch_linear_title() {
-  local identifier="$1"
-  local api='https://api.linear.app/graphql'
-  local query='query($id: String!) { issue(id: $id) { identifier title } }'
-  local json title
-  json="$(
-    curl -sf "$api" \
-      -H 'Content-Type: application/json' \
-      -H "Authorization: ${LINEAR_API_KEY}" \
-      -d "$(jq -nc --arg id "$identifier" '{query: $query, variables: {id: $id}}')" \
-      2>/dev/null || true
-  )"
-  title="$(printf '%s' "$json" | jq -r '.data.issue.title // empty' 2>/dev/null || true)"
-  if [[ -z "$title" ]]; then
-    return 1
-  fi
-  printf '%s' "$title"
   return 0
 }
 
@@ -174,11 +205,11 @@ if [[ -z "$explicit_id" ]]; then
   add_failure 'PR body missing explicit **Linear:** `DEE-NN` field (required — do not rely on title/branch alone).'
 fi
 
-if [[ -n "$title_id" && -n "$explicit_id" && "$title_id" != "$explicit_id" ]]; then
+if [[ -n "$title_id" && -n "$explicit_id" ]] && ! dee_ids_equal "$title_id" "$explicit_id"; then
   add_failure "PR title references \`${title_id}\` but **Linear:** field declares \`${explicit_id}\`."
 fi
 
-if [[ -n "$branch_id" && -n "$explicit_id" && "$branch_id" != "$explicit_id" ]]; then
+if [[ -n "$branch_id" && -n "$explicit_id" ]] && ! dee_ids_equal "$branch_id" "$explicit_id"; then
   add_failure "Branch \`${PR_BRANCH}\` implies \`${branch_id}\` but **Linear:** field declares \`${explicit_id}\`."
 fi
 
@@ -198,13 +229,12 @@ check_disclaimer_collision "$PR_BODY" "$PR_TITLE" "$PR_BRANCH" || true
 resolved_id="$explicit_id"
 
 if [[ -n "$resolved_id" && -n "${LINEAR_API_KEY:-}" ]]; then
-  issue_title="$(fetch_linear_title "$resolved_id" || true)"
-  if [[ -z "$issue_title" ]]; then
-    add_failure "Linear issue \`${resolved_id}\` could not be resolved via API."
-  else
-    if ! scope_overlap_ok "$issue_title" "$PR_TITLE"; then
-      add_failure "Linear issue title materially differs from PR scope: issue=\"${issue_title}\" vs PR title=\"${PR_TITLE}\"."
-    fi
+  issue_context="$(fetch_linear_scope_context "$resolved_id" || true)"
+  if [[ -z "$issue_context" ]]; then
+    add_failure "Linear issue \`${resolved_id}\` could not be resolved via API (check LINEAR_API_KEY and issue id)."
+  elif ! scope_overlap_ok "$issue_context" "$PR_TITLE"; then
+    issue_title="$(printf '%s' "$issue_context" | awk '{print $1, $2, $3, $4, $5}')"
+    add_failure "Linear issue scope materially differs from PR title (no token overlap). Issue context starts: \"${issue_title}…\" vs PR title=\"${PR_TITLE}\"."
   fi
 elif [[ -n "$resolved_id" ]]; then
   add_warning 'LINEAR_API_KEY not set — skipping Linear API title/scope verification.'
