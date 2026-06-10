@@ -1,0 +1,88 @@
+name: pr-governance
+
+# Advisory checks: branch naming + Linear ID in PR body. Non-blocking comments only.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [dev, main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  advisory:
+    name: PR governance (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name and Linear reference
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = "<!-- waia-pr-governance -->";
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+
+            const branch = pr.head.ref || "";
+            const body = pr.body || "";
+            const title = pr.title || "";
+
+            const issues = [];
+            const deeBranch = /^dee-\d{2,}-[a-z0-9-]+$/.test(branch);
+            if (!deeBranch) {
+              issues.push(
+                `Branch \`${branch}\` does not match \`dee-<NN>-<slug>\`. See AGENTS.md / BRANCHING-STRATEGY.md.`,
+              );
+            }
+
+            const deeRef = /DEE-\d+/i.test(`${title}\n${body}`);
+            if (!deeRef) {
+              issues.push(
+                "PR title/body missing Linear id `DEE-NN`. Add it per PR-PROTOCOL.md.",
+              );
+            }
+
+            const tierRef = /\*\*Tier:\*\*/i.test(body);
+            if (!tierRef) {
+              issues.push(
+                "PR body missing **Tier:** field from pull_request_template.md.",
+              );
+            }
+
+            let advisory = `${marker}\n### PR governance (advisory)\n\n`;
+            if (issues.length === 0) {
+              advisory +=
+                "Branch name and Linear reference look good. This check is advisory only.\n";
+            } else {
+              advisory += issues.map((i) => `- ${i}`).join("\n") + "\n";
+              advisory +=
+                "\n_Server-side rulesets on `dev`/`main` still enforce required CI checks and reviews._\n";
+            }
+
+            const { owner, repo } = context.repo;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: pr.number,
+              per_page: 100,
+            });
+            const existing = comments.find(
+              (c) => typeof c.body === "string" && c.body.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: advisory,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pr.number,
+                body: advisory,
+              });
+            }
