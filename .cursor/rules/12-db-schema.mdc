@@ -1,0 +1,13 @@
+---
+description: Drizzle schema and migration discipline
+globs: "db/**"
+alwaysApply: false
+---
+
+# db/ persistence
+
+Read [`db/AGENTS.md`](../../db/AGENTS.md) when editing this tree.
+
+- Prefer additive migrations; document rollback in the Linear issue.
+- Follow `docs/waia-governance/MIGRATION-GOVERNANCE.md`.
+- Run `pnpm db:migrate && pnpm test --run` before PR readiness.

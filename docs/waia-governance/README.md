@@ -23,7 +23,9 @@ WAIA DEV OS operational layer:
 | [`SYSTEM-MAP.md`](SYSTEM-MAP.md) | Topology |
 | [`NON-GOALS.md`](NON-GOALS.md) | Explicit non-scope |
 | [`ADR-POLICY.md`](ADR-POLICY.md) | ADRs |
-| [`EXECUTABLE-GOVERNANCE-HOOKS.md`](EXECUTABLE-GOVERNANCE-HOOKS.md) | Future hooks |
+| [`EXECUTABLE-GOVERNANCE-HOOKS.md`](EXECUTABLE-GOVERNANCE-HOOKS.md) | CI/Cursor/GitHub hooks |
+| [`AGENT-EXECUTION-LABELS.md`](AGENT-EXECUTION-LABELS.md) | Label ownership matrix |
+| [`AGENT-AUTO-ADVANCE.md`](AGENT-AUTO-ADVANCE.md) | Safe auto-advance preconditions |
 | [`GOVERNANCE-VERSIONING.md`](GOVERNANCE-VERSIONING.md) | Evolution log |
 | [`AGENT-ROLES.md`](AGENT-ROLES.md) | Planner/executor/etc. |
 | [`FAILURE-PATTERNS.md`](FAILURE-PATTERNS.md) | Incident knowledge |

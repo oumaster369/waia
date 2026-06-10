@@ -1,0 +1,48 @@
+name: linear-done
+
+# On merge to dev: transition linked Linear issue (DEE-NN) to Done.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [dev]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  mark-done:
+    name: Linear Done on merge
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract DEE id and mark Done
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${LINEAR_API_KEY:-}" ]]; then
+            echo "::notice::LINEAR_API_KEY secret not configured — skipping Linear Done automation."
+            exit 0
+          fi
+
+          DEE_ID="$(
+            printf '%s\n%s\n%s\n' "$PR_TITLE" "$PR_BODY" "$PR_BRANCH" \
+              | grep -oiE 'DEE-[0-9]+' \
+              | head -1 \
+              | tr '[:lower:]' '[:upper:]'
+          )"
+
+          if [[ -z "$DEE_ID" ]]; then
+            echo "::warning::No DEE-NN found in PR title/body/branch — skipping Linear Done."
+            exit 0
+          fi
+
+          chmod +x scripts/linear/mark-done.sh
+          ./scripts/linear/mark-done.sh "$DEE_ID" "$PR_URL"

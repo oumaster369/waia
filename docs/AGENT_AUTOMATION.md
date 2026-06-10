@@ -1,53 +1,76 @@
 # Agent automation in WAIA
 
-This document describes the multi-agent setup the project uses for the loop **plan -> develop -> test/fix -> PR**.
+Multi-agent setup for **groom → plan → develop → test/fix → PR → merge hygiene**.
 
 ## Topology
 
 ```
-User
- ├─ /plan-feature  (Plan Mode, Opus 4.x)        -> .cursor/plans/<slug>.md
- ├─ /implement     (Agent Mode, Sonnet 4.5)     -> code on `dee-<NN>-<slug>` branch
- ├─ /test-and-fix  (Agent Mode + Playwright MCP)-> green local gates + default PR readiness
- │                                                 (push branch, compare/PR URLs, title/body; agent stops — no merge)
- └─ /prepare-pr    (optional retry)           -> same PR readiness checklist without full test loop
+User / Linear
+ ├─ /groom           (Plan/Ask)              → Task Contract validation
+ ├─ /decompose       (Plan)                  → atomic child issues via Linear MCP
+ ├─ /plan-feature    (Plan, Opus)            → .cursor/plans/<slug>.md
+ ├─ /implement       (Agent, Sonnet)         → code on dee-<NN>-<slug>
+ ├─ /test-and-fix    (Agent + Playwright MCP)→ green gates + default PR readiness
+ ├─ /bg-test-and-fix (Background Agent)      → same loop unattended → stop before merge
+ ├─ /fix-ci          (Background Agent)      → triage failing PR checks
+ ├─ /diagnose        (Agent + Cloudflare MCP)→ prod/preview deploy investigation
+ ├─ /parallel-implement (Agent + worktrees)  → N independent issues in parallel
+ └─ /prepare-pr      (retry)                 → PR package without full test loop
                                                     │
-                                                    ├─ CI on the PR (as configured by maintainers — not introduced by agents)
+                                                    ├─ CI + pr-governance (advisory)
+                                                    ├─ ci-failure-triage → /fix-ci hint
+                                                    ├─ linear-done on merge (if LINEAR_API_KEY set)
                                                     ├─ Cursor Bugbot review
-                                                    └─ User merges PR and dev -> main -> Cloudflare Pages deploys
+                                                    └─ Human merges → release.yml on main
 ```
 
 ## Models
 
-- **Default for code**: Claude Sonnet 4.5 (Cursor settings -> Models -> set as default for Agent Mode).
-- **Planning / hard debug**: Claude Opus 4.x (thinking).
-- Disable other models you don't intentionally use, so the agent can't silently switch under cost pressure.
+- **Default for code**: Claude Sonnet (Agent Mode).
+- **Planning / groom / decompose**: Claude Opus (Plan Mode).
+- Disable unused models in Cursor Settings so agents cannot silently switch.
 
 ## Observability
 
 | Signal | Where | Purpose |
 |--------|-------|---------|
-| Chat transcripts | Cursor "@ History" sidebar; files in `~/.cursor/projects/.../agent-transcripts/` | Full replay of any agent session |
-| JSONL audit log | `.cursor/agent-log.jsonl` (gitignored) | One line per agent stop / subagent stop with timestamp + branch |
-| Status line | CLI `~/.cursor/cli-config.json` (set up via `statusline` skill) | At-a-glance: current model + branch + context % |
-| PR comments | GitHub PR view | Bugbot review, CI statuses |
-| Hooks tab | Cursor Settings -> Hooks | See which hooks fired and their stdout/stderr |
+| Chat transcripts | Cursor History; `~/.cursor/projects/.../agent-transcripts/` | Session replay |
+| JSONL audit log | `.cursor/agent-log.jsonl` (gitignored) | Agent stop events + branch |
+| Status line | CLI `~/.cursor/cli-config.json` | Model + branch + context % |
+| PR comments | GitHub | Bugbot, Cloudflare preview, governance, CI triage |
+| Hooks tab | Cursor Settings → Hooks | Hook fire diagnostics |
+
+## MCP
+
+| Server | Config | Use |
+|--------|--------|-----|
+| Playwright | [`.cursor/mcp.json`](../.cursor/mcp.json) | e2e during test-and-fix |
+| Linear | Cursor plugin `plugin-linear-linear` | groom, decompose, In Review / Done |
+| Cloudflare | Cursor plugins (builds, observability, bindings, docs) | `/diagnose` |
 
 ## Allowed / denied agent actions
 
-Configured in user `settings.json` (`cursor.agent.allowList` / `denyList`) and enforced by `.cursor/hooks/guard-shell.sh`:
+User `settings.json` allow/deny lists + [`.cursor/hooks/guard-shell.sh`](../.cursor/hooks/guard-shell.sh):
 
-- **Allowed without prompt**: `pnpm (lint|typecheck|test|build|format) ...`, `pnpm exec ...`, `gh (pr|issue|repo) ...`
-- **Always denied**: `git push --force`, direct push to `dev`/`main`, `rm -rf /` or `rm -rf $HOME`
+- **Allowed**: `pnpm (lint|typecheck|test|build|format)…`, `gh (pr|issue|repo)…`
+- **Denied**: `git push --force`, direct push to `dev`/`main`, destructive `rm -rf`
+
+**Server-side:** GitHub rulesets on `dev`/`main` — apply via [`scripts/github/apply-branch-rulesets.sh`](../scripts/github/apply-branch-rulesets.sh).
+
+## Background and parallel agents
+
+- **`/bg-test-and-fix`**: unattended green loop; bounded by hooks + branch protection.
+- **`/parallel-implement`**: [`scripts/worktrees/parallel-issue.sh`](../scripts/worktrees/parallel-issue.sh) + one agent per atomic issue.
+- **`/fix-ci`**: triggered manually or via [`ci-failure-triage.yml`](../.github/workflows/ci-failure-triage.yml) comment.
 
 ## Expanded execution narrative
 
-Formal 12-step loop + five-memory continuity expectations: [`waia-governance/AUTONOMOUS-EXECUTION-LOOP.md`](waia-governance/AUTONOMOUS-EXECUTION-LOOP.md) and [`waia-governance/DOCUMENTATION-STANDARDS.md`](waia-governance/DOCUMENTATION-STANDARDS.md).
+12-step loop: [`waia-governance/AUTONOMOUS-EXECUTION-LOOP.md`](waia-governance/AUTONOMOUS-EXECUTION-LOOP.md).
 
-## What the user does manually (not automated)
+## What remains manual
 
-- Cursor Pro login + model selection in Cursor Settings -> Models.
-- Install Cursor's GitHub App (Settings -> Integrations -> GitHub) so Bugbot can comment on PRs.
-- `gh auth login` once.
-- Merging `dev` -> `main` to trigger Cloudflare Pages deploy.
-- Reviewing PRs proposed by agents (opening from compare URL when needed), approving / rejecting, and merging (`AGENTS.md` — agents never merge).
+- Cursor login + model selection.
+- GitHub App / Bugbot integration.
+- `gh auth login`, ruleset apply (one-time maintainer).
+- `LINEAR_API_KEY` in GitHub Actions secrets for Done automation.
+- **Merging** PRs and `dev` → `main` promotion (human authority per `AGENTS.md`).

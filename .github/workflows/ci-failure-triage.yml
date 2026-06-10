@@ -1,0 +1,75 @@
+name: ci-failure-triage
+
+# When CI fails on a PR, post a triage comment pointing agents to /fix-ci.
+
+on:
+  workflow_run:
+    workflows: [ci, cloudflare-preview]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  triage:
+    name: CI failure triage comment
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'failure'
+          && github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment with fix-ci instructions
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = "<!-- waia-ci-failure-triage -->";
+            const run = context.payload.workflow_run;
+            if (!run || run.conclusion !== "failure") return;
+
+            const prs = run.pull_requests || [];
+            if (prs.length === 0) {
+              core.info("No PR associated with workflow run");
+              return;
+            }
+
+            const prNumber = prs[0].number;
+            const failedUrl = run.html_url;
+            const workflowName = run.name || run.workflow_id;
+
+            const body =
+              `${marker}\n### CI failure triage\n\n` +
+              `Workflow **${workflowName}** failed: [run logs](${failedUrl})\n\n` +
+              `**Agent:** run \`/fix-ci\` on branch \`${run.head_branch}\` (Background Agent recommended).\n\n` +
+              `Reproduce locally:\n\`\`\`bash\n` +
+              `pnpm lint && pnpm typecheck && pnpm test --run && pnpm build\n` +
+              `\`\`\`\n\n` +
+              `_Humans still review and merge — agents never merge._`;
+
+            const { owner, repo } = context.repo;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            const recent = comments.find(
+              (c) =>
+                typeof c.body === "string" &&
+                c.body.includes(marker) &&
+                c.created_at > new Date(Date.now() - 3600000).toISOString(),
+            );
+
+            if (recent) {
+              core.info("Recent triage comment already exists");
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body,
+            });

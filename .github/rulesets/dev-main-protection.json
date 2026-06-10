@@ -1,0 +1,37 @@
+{
+  "name": "WAIA dev + main protection",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": ["refs/heads/dev", "refs/heads/main"]
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 1,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "required_status_checks": [
+          { "context": "lint" },
+          { "context": "typecheck" },
+          { "context": "unit tests" },
+          { "context": "build" },
+          { "context": "e2e tests" }
+        ],
+        "strict_required_status_checks_policy": true
+      }
+    }
+  ]
+}
