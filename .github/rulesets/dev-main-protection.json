@@ -28,7 +28,8 @@
           { "context": "typecheck" },
           { "context": "unit tests" },
           { "context": "build" },
-          { "context": "e2e tests" }
+          { "context": "e2e tests" },
+          { "context": "PR governance" }
         ],
         "strict_required_status_checks_policy": true
       }
