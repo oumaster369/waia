@@ -22,7 +22,8 @@ If generated migrations drift from `schema.postgres.ts`, **document the gap** an
    - `pnpm db:generate:postgres`  
    - Config: [`drizzle.postgres.config.ts`](../drizzle.postgres.config.ts) → output [`db/migrations_postgres`](../db/migrations_postgres/).
 3. **Apply** migrations to a target database:
-   - `DATABASE_URL_POSTGRES=<url> pnpm db:migrate:postgres`
+   - `pnpm db:migrate:postgres` — reads `DATABASE_URL_POSTGRES` from `.env.local` (same as `pnpm dev`) when not exported in the shell
+   - `DATABASE_URL_POSTGRES=<url> pnpm db:migrate:postgres` — optional override for CI or one-off targets
 4. **Auth stub for Docker / empty Postgres**: migrations reference `auth.users` for FK alignment with future Supabase. Bare Postgres has no `auth` schema; apply the prelude **before** first migrate (or after wiping DB):
    - `pnpm db:postgres:auth-prelude`
 
@@ -36,8 +37,8 @@ Compose file: [`docker-compose.postgres-validate.yml`](../docker-compose.postgre
 # Start and wait for healthcheck
 pnpm db:postgres:up
 
-# Connection string / env for tools and smoke scripts
-export DATABASE_URL_POSTGRES='postgresql://waia_validate:waia_validate_local_only@127.0.0.1:54329/waia_validate'
+# Put the Docker URL in `.env.local` (or export for this shell only):
+# DATABASE_URL_POSTGRES=postgresql://waia_validate:waia_validate_local_only@127.0.0.1:54329/waia_validate
 
 # One-time per empty database (auth stub), then apply migrations
 pnpm db:postgres:auth-prelude
