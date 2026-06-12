@@ -1,5 +1,14 @@
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+import {
+  auditActorTypeEnum,
+  organizationKindEnum,
+  organizationMemberRoleEnum,
+  platformRoleEnum,
+  subscriptionStatusEnum,
+  waiaModuleEnum,
+} from "@/db/core-enums";
+
 export const users = sqliteTable(
   "users",
   {
@@ -13,6 +22,147 @@ export const users = sqliteTable(
       .$defaultFn(() => new Date()),
   },
   (t) => [uniqueIndex("users_email_unique").on(t.email)],
+);
+
+/** WAIA Core: 1:1 identity extension (WC-E1). */
+export const profiles = sqliteTable(
+  "profiles",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull(),
+    locale: text("locale").notNull().default("en"),
+    avatarRef: text("avatar_ref"),
+    settingsJson: text("settings_json"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("profiles_user_id_unique").on(t.userId)],
+);
+
+/** WAIA Core: tenant boundary (WC-E2). */
+export const organizations = sqliteTable(
+  "organizations",
+  {
+    id: text("id").primaryKey(),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: [...organizationKindEnum] }).notNull(),
+    name: text("name"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("organizations_owner_user_id_idx").on(t.ownerUserId)],
+);
+
+/** WAIA Core: user ↔ organization membership (WC-E2). */
+export const organizationMembers = sqliteTable(
+  "organization_members",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    memberRole: text("member_role", { enum: [...organizationMemberRoleEnum] }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("organization_members_org_user_unique").on(t.organizationId, t.userId)],
+);
+
+/** WAIA Core: platform-wide role per user (WC-E3). */
+export const userPlatformRoles = sqliteTable("user_platform_roles", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  role: text("role", { enum: [...platformRoleEnum] }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/** WAIA Core: per-organization module subscription (WC-E4). */
+export const organizationSubscriptions = sqliteTable(
+  "organization_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    module: text("module", { enum: [...waiaModuleEnum] }).notNull(),
+    status: text("status", { enum: [...subscriptionStatusEnum] }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("organization_subscriptions_org_module_unique").on(t.organizationId, t.module),
+  ],
+);
+
+/** WAIA Core: derived entitlement flags per organization (WC-E4). */
+export const organizationEntitlements = sqliteTable(
+  "organization_entitlements",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    entitlementKey: text("entitlement_key").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull(),
+    sourceModule: text("source_module", { enum: [...waiaModuleEnum] }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("organization_entitlements_org_key_unique").on(t.organizationId, t.entitlementKey),
+  ],
+);
+
+/** WAIA Core: append-only platform audit stream (WC-E5). */
+export const auditLogs = sqliteTable(
+  "audit_logs",
+  {
+    id: text("id").primaryKey(),
+    actorType: text("actor_type", { enum: [...auditActorTypeEnum] }).notNull(),
+    actorId: text("actor_id"),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id"),
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "set null",
+    }),
+    metadataJson: text("metadata_json").notNull().default("{}"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("audit_logs_org_created_idx").on(t.organizationId, t.createdAt),
+    index("audit_logs_entity_idx").on(t.entityType, t.entityId),
+  ],
 );
 
 export const oauthProviderEnum = ["google", "apple", "telegram"] as const;
@@ -117,7 +267,9 @@ export const diaryEntries = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    twinProfileId: text("twin_profile_id").references(() => twinProfiles.id, { onDelete: "cascade" }),
+    twinProfileId: text("twin_profile_id").references(() => twinProfiles.id, {
+      onDelete: "cascade",
+    }),
     body: text("body"),
     idempotencyKey: text("idempotency_key"),
     embeddingJson: text("embedding_json"),

@@ -12,6 +12,7 @@
     "db:postgres:auth-prelude": "tsx scripts/postgres-validation/apply-auth-prelude.ts",
     "db:postgres:bootstrap": "pnpm db:postgres:up && pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres",
     "db:smoke:postgres": "WAIA_POSTGRES_CLI=1 tsx scripts/postgres-validation/drizzle-pg-smoke.ts",
+    "waia:core:backfill": "WAIA_POSTGRES_CLI=1 node --import tsx --conditions=react-server scripts/waia-core/backfill.ts",
     "db:studio": "drizzle-kit studio",
     "dev": "next dev",
     "build": "next build",
