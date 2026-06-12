@@ -23,6 +23,11 @@ export {
   checkEntitlementSqlite,
   checkEntitlementPostgres,
 } from "@/lib/waia-core/entitlements/resolve";
+export {
+  hasModuleEntitlementSqlite,
+  hasModuleEntitlementPostgres,
+} from "@/lib/waia-core/entitlements/authoritative";
+export type { ModuleEntitlementQuery } from "@/lib/waia-core/entitlements/authoritative";
 export { writeAuditLogSqlite, writeAuditLogPostgres } from "@/lib/waia-core/audit/write";
 export {
   listAuditLogsForAdminSqlite,
