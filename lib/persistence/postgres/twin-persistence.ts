@@ -26,10 +26,7 @@ import type { ReadinessDemoAdvanceResult } from "@/lib/readiness/readiness-demo-
 import { parseIndicatorVector } from "@/lib/readiness/readiness";
 import type { ReadinessInput } from "@/lib/readiness/types";
 import * as pgSchema from "@/db/schema.postgres";
-import {
-  runWaiaPostgresTransaction,
-  type WaiaPostgresDb,
-} from "@/db/waia-postgres-transaction";
+import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   ReadinessSerializationError,
   type AppendTwinDialogueTurnResult,
@@ -47,23 +44,25 @@ import {
   type DiaryMemoryRow,
   type ScenarioAnswerMemoryRow,
 } from "@/lib/twin-persistence/diary-memory";
-import type { AppendRepeatabilityRecordInput, AppendRepeatabilityRecordResult } from "@/lib/twin-persistence/twin-repeatability";
+import type {
+  AppendRepeatabilityRecordInput,
+  AppendRepeatabilityRecordResult,
+} from "@/lib/twin-persistence/twin-repeatability";
 import {
   TWIN_REPEATABILITY_DEDUP_WINDOW_MS,
   hashTwinScenarioRepeatabilityHex,
   inferRepeatabilityPatternType,
 } from "@/lib/twin-persistence/twin-repeatability";
-import { analyzeRepeatabilityForUserAsync, type AnalyzeRepeatabilityOptions } from "@/lib/reasoning/twin-repeatability-analyzer";
+import {
+  analyzeRepeatabilityForUserAsync,
+  type AnalyzeRepeatabilityOptions,
+} from "@/lib/reasoning/twin-repeatability-analyzer";
 import { runTwinPredictionForUserAsync } from "@/lib/reasoning/twin-prediction";
 import type { TwinRepeatabilityApiResponse } from "@/lib/dashboard/twin-repeatability-api.types";
 
 export type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 
-export {
-  MAX_DIARY_BODY_CHARS,
-  MAX_SCENARIO_KEY_CHARS,
-  MAX_SCENARIO_PAYLOAD_JSON_CHARS,
-};
+export { MAX_DIARY_BODY_CHARS, MAX_SCENARIO_KEY_CHARS, MAX_SCENARIO_PAYLOAD_JSON_CHARS };
 
 type PgTx = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
 
@@ -253,7 +252,9 @@ const DEFAULT_VERIFICATION_LIST_LIMIT = 50;
 const MAX_VERIFICATION_LIST_LIMIT = 100;
 const PREDICTION_VERIFICATION_KIND_SET = new Set<string>(TWIN_PREDICTION_VERIFICATION_KINDS);
 
-function isTwinPredictionVerificationKindPg(value: string): value is TwinPredictionVerificationKind {
+function isTwinPredictionVerificationKindPg(
+  value: string,
+): value is TwinPredictionVerificationKind {
   return PREDICTION_VERIFICATION_KIND_SET.has(value);
 }
 
@@ -369,6 +370,22 @@ async function ensureUserTwinSeedInsideExecutorPg(tx: PgTx, userId: string): Pro
       socializationCompleted: DEFAULT_READINESS_INPUT.socializationCompleted,
       finalStateMessageShown: DEFAULT_READINESS_INPUT.finalStateMessageShown,
     });
+  }
+
+  try {
+    const userRows = await tx
+      .select({ identityLabel: pgSchema.users.identityLabel })
+      .from(pgSchema.users)
+      .where(eq(pgSchema.users.id, userId))
+      .limit(1);
+    const { ensureUserCoreSeedPostgres } = await import("@/lib/waia-core/provisioning/postgres");
+    await ensureUserCoreSeedPostgres(tx, {
+      userId,
+      displayName: userRows[0]?.identityLabel ?? "User",
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[waia] ensureUserCoreSeedPostgres failed (fail-open for AI-TWIN):", message);
   }
 
   return twinId;
@@ -574,7 +591,10 @@ async function appendTwinDialogueTurnPg(
   await appendTwinDialogueTurnResultPg(db, params);
 }
 
-async function countUserDialogueTurnsPg(db: WaiaPostgresDb, twinProfileId: string): Promise<number> {
+async function countUserDialogueTurnsPg(
+  db: WaiaPostgresDb,
+  twinProfileId: string,
+): Promise<number> {
   const rows = await db
     .select({ c: sql<number>`count(*)`.mapWith(Number) })
     .from(pgSchema.twinDialogueTurns)
@@ -641,7 +661,9 @@ async function listTwinDialogueTurnsTailForContinuityPg(
 }
 
 async function ensureUserTwinSeedPg(db: WaiaPostgresDb, userId: string): Promise<string> {
-  return runWaiaPostgresTransaction(db, async (tx) => ensureUserTwinSeedInsideExecutorPg(tx, userId));
+  return runWaiaPostgresTransaction(db, async (tx) =>
+    ensureUserTwinSeedInsideExecutorPg(tx, userId),
+  );
 }
 
 async function listTwinDialogueTurnsForUserPg(
@@ -729,7 +751,12 @@ async function appendDiaryEntryForUserPg(
           createdAt: pgSchema.diaryEntries.createdAt,
         })
         .from(pgSchema.diaryEntries)
-        .where(and(eq(pgSchema.diaryEntries.userId, userId), eq(pgSchema.diaryEntries.idempotencyKey, idem)))
+        .where(
+          and(
+            eq(pgSchema.diaryEntries.userId, userId),
+            eq(pgSchema.diaryEntries.idempotencyKey, idem),
+          ),
+        )
         .limit(1);
       const existing = existingRows[0];
       if (existing) {
