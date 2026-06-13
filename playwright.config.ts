@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const PLAYWRIGHT_PORT = Number(process.env.PLAYWRIGHT_PORT ?? 3199);
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${PLAYWRIGHT_PORT}`;
+const E2E_DATABASE_URL = process.env.DATABASE_URL ?? "file:./.data/waia.db";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -36,7 +37,7 @@ export default defineConfig({
       `NEXT_PUBLIC_SITE_URL=http://127.0.0.1:${PLAYWRIGHT_PORT}`,
       `NEXT_PUBLIC_TRADER_URL=http://trader.localhost:${PLAYWRIGHT_PORT}`,
       `WAIA_DB_BACKEND=sqlite`,
-      `DATABASE_URL=file:./.data/waia.db`,
+      `DATABASE_URL=${E2E_DATABASE_URL}`,
       `NEXT_PUBLIC_SUPABASE_URL=`,
       `NEXT_PUBLIC_SUPABASE_ANON_KEY=`,
       `WAIA_PRIMARY_HOST=127.0.0.1`,
@@ -47,7 +48,7 @@ export default defineConfig({
       `NEXT_PUBLIC_SITE_URL=http://127.0.0.1:${PLAYWRIGHT_PORT}`,
       `NEXT_PUBLIC_TRADER_URL=http://trader.localhost:${PLAYWRIGHT_PORT}`,
       `WAIA_DB_BACKEND=sqlite`,
-      `DATABASE_URL=file:./.data/waia.db`,
+      `DATABASE_URL=${E2E_DATABASE_URL}`,
       `NEXT_PUBLIC_SUPABASE_URL=`,
       `NEXT_PUBLIC_SUPABASE_ANON_KEY=`,
       `WAIA_PRIMARY_HOST=127.0.0.1`,
@@ -64,7 +65,7 @@ export default defineConfig({
       NEXT_PUBLIC_SUPABASE_URL: "",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "",
       WAIA_DB_BACKEND: "sqlite",
-      DATABASE_URL: "file:./.data/waia.db",
+      DATABASE_URL: E2E_DATABASE_URL,
       NEXT_PUBLIC_SITE_URL: `http://127.0.0.1:${PLAYWRIGHT_PORT}`,
       WAIA_PRIMARY_HOST: "127.0.0.1",
       WAIA_TRADER_HOST: "trader.localhost",
