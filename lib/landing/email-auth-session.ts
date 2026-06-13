@@ -1,7 +1,7 @@
 /** Browser-only email auth against DEE-10 `/api/auth/sign-in` and `/api/auth/sign-up`. OAuth is wired in DEE-11+. */
 
 import { createAbortTimeout } from "@/lib/http/create-abort-timeout";
-import { safeInternalRedirectPath } from "@/lib/landing/safe-internal-redirect";
+import { safeAuthRedirectTarget } from "@/lib/landing/safe-auth-redirect";
 
 export type EmailAuthSessionResult =
   | { outcome: "success"; redirectPath: string }
@@ -19,7 +19,7 @@ export function parseAuthOkResponse(json: unknown): AuthOkBody | null {
   if (obj.ok !== true || typeof obj.redirect !== "string") return null;
   /** Supabase email confirmation flow — no session cookie yet */
   if (obj.needsEmailConfirmation === true) return null;
-  const redirect = safeInternalRedirectPath(obj.redirect);
+  const redirect = safeAuthRedirectTarget(obj.redirect);
   if (redirect == null) return null;
   return { ok: true, redirect };
 }
@@ -39,7 +39,11 @@ async function parseResponseJsonSafe(res: Response): Promise<unknown> {
   }
 }
 
-async function postAuthJson(path: string, email: string, password: string): Promise<{
+async function postAuthJson(
+  path: string,
+  email: string,
+  password: string,
+): Promise<{
   response: Response;
   json: unknown;
 }> {
@@ -59,7 +63,11 @@ async function postAuthJson(path: string, email: string, password: string): Prom
   }
 }
 
-async function postSignUpJson(email: string, password: string, fullName: string): Promise<{
+async function postSignUpJson(
+  email: string,
+  password: string,
+  fullName: string,
+): Promise<{
   response: Response;
   json: unknown;
 }> {
@@ -84,11 +92,7 @@ export async function establishEmailSignInOnly(params: {
   email: string;
   password: string;
 }): Promise<EmailAuthSessionResult> {
-  const { response, json } = await postAuthJson(
-    "/api/auth/sign-in",
-    params.email,
-    params.password,
-  );
+  const { response, json } = await postAuthJson("/api/auth/sign-in", params.email, params.password);
   if (response.ok) {
     const parsed = parseAuthOkResponse(json);
     if (parsed) {

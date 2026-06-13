@@ -108,6 +108,48 @@ pnpm build
 
 ---
 
+## Trader subdomain (AT-E1 S2)
+
+The AI-TRADER module portal is served at **`trader.waia.life`** on the **same** `waia-app` Worker as `waia.life` ([ADR-0006](../adr/0006-ai-trader-repository-strategy.md)). No second deployment or Pages project.
+
+### Topology
+
+- `waia.life` — primary origin (AI-TWIN dashboard, Society **mode**, main app).
+- `trader.waia.life` — trader module portal (`/trader` workspace; host-aware landing at `/`).
+- Host-conditioned redirects in `next.config.ts` perform **topology-only** isolation (trader host `/dashboard` and `/api/dashboard/*` → primary origin). Middleware classifies the module host only (`x-waia-module`). Auth and entitlement remain in server layouts.
+
+### Operator checklist (production — human gate)
+
+**The implementation PR does not perform these steps.** Complete before relying on the trader subdomain in production:
+
+1. **DNS:** `trader.waia.life` CNAME (or equivalent) → same Worker route as `waia.life`.
+2. **Cloudflare Workers:** Attach `trader.waia.life` as a custom domain on `waia-app` (Dashboard → Workers → `waia-app` → Custom Domains).
+3. **Worker env vars:** set `NEXT_PUBLIC_TRADER_URL=https://trader.waia.life`, `WAIA_TRADER_HOST=trader.waia.life` alongside existing `NEXT_PUBLIC_SITE_URL=https://waia.life`.
+4. **Supabase dashboard:** add `https://trader.waia.life/**` to **Redirect URLs**; keep **Site URL** `https://waia.life` ([DEE-59 checklist](ops/DEE-59-SUPABASE-DASHBOARD-CHECKLIST.md)).
+5. **Optional:** `WAIA_COOKIE_DOMAIN=.waia.life` only if intentionally enabling seamless `*.waia.life` session sharing (not required for M2; revert by unsetting).
+6. **Smoke:** sign in on each host → entitled user sees trader workspace at `https://trader.waia.life/trader`.
+
+### Rollback
+
+- Remove the `trader.waia.life` custom domain attachment.
+- Set `WAIA_TRADER_HOST_ROUTING=0` on the Worker to disable topology middleware without redeploying routes.
+- Unset `WAIA_COOKIE_DOMAIN` to revert the optional cookie enhancement.
+
+### Local dev
+
+```bash
+# /etc/hosts
+127.0.0.1 trader.localhost
+
+# .env.local
+WAIA_TRADER_HOST=trader.localhost
+NEXT_PUBLIC_TRADER_URL=http://trader.localhost:3000
+```
+
+Do **not** set `WAIA_COOKIE_DOMAIN` locally. Verify middleware under `pnpm cloudflare:preview` when changing host routing.
+
+---
+
 ## Related docs
 
 - [cloudflare-preview-deploys.md](cloudflare-preview-deploys.md) — **PR preview** GitHub Actions + optional Workers deploy (DEE-51).

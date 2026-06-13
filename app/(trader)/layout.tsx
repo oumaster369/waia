@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
+import { buildModuleUrl } from "@/lib/hosts/resolve";
 import { hasTraderAccessForUser } from "@/lib/trader/access-gate";
 
 export default async function TraderModuleLayout({
@@ -15,7 +16,7 @@ export default async function TraderModuleLayout({
 
   const allowed = await hasTraderAccessForUser(userId);
   if (!allowed) {
-    redirect("/dashboard");
+    redirect(buildModuleUrl("primary", "/dashboard"));
   }
 
   return <>{children}</>;

@@ -93,9 +93,10 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
   const [confirmationNotice, setConfirmationNotice] = React.useState(false);
   const [status, setStatus] = React.useState<LandingAuthState>("VisitorIdle");
 
-  const [oauthAvailabilityState, setOauthAvailabilityState] = React.useState<OauthAvailabilityState>({
-    kind: "pending",
-  });
+  const [oauthAvailabilityState, setOauthAvailabilityState] =
+    React.useState<OauthAvailabilityState>({
+      kind: "pending",
+    });
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -195,7 +196,11 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
           setConfirmationNotice(false);
           setStatus("AuthenticatedRedirect");
           queueMicrotask(() => {
-            router.replace(path);
+            if (path.startsWith("http://") || path.startsWith("https://")) {
+              globalThis.location.assign(path);
+            } else {
+              router.replace(path);
+            }
           });
           return;
         }
@@ -253,8 +258,7 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
   const isRedirectTerminal = status === "AuthenticatedRedirect";
   const interactionLocked = isLoading || isRedirectTerminal;
 
-  const oauthReady =
-    oauthAvailabilityState.kind === "ready" ? oauthAvailabilityState.map : null;
+  const oauthReady = oauthAvailabilityState.kind === "ready" ? oauthAvailabilityState.map : null;
 
   const enabledOauthProviders: ReadonlyArray<AuthProvider> = oauthReady
     ? (Object.keys(oauthReady) as ReadonlyArray<AuthProvider>).filter((p) => oauthReady[p])
@@ -282,10 +286,10 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
       )}
     >
       <header className="flex flex-col gap-2 text-center">
-        <h2 className="font-waia-serif text-[1.35rem] font-medium leading-snug tracking-tight text-[#e8dcc4] sm:text-[1.5rem]">
+        <h2 className="font-waia-serif text-[1.35rem] leading-snug font-medium tracking-tight text-[#e8dcc4] sm:text-[1.5rem]">
           {mode === "createTwin" ? "Create your AI-Twin" : "Sign in"}
         </h2>
-        <p className="text-sm font-normal leading-relaxed text-[rgba(210,204,195,0.9)]">
+        <p className="text-sm leading-relaxed font-normal text-[rgba(210,204,195,0.9)]">
           {mode === "createTwin"
             ? "Use your email to start partner preview onboarding."
             : "Welcome back. Sign in with the email on your WAIA account."}
@@ -296,7 +300,7 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
         <div
           data-testid="landing-auth-email-confirmation"
           role="status"
-          className="rounded-xl border border-[rgba(218,200,160,0.3)] bg-[rgba(3,8,19,0.45)] px-3.5 py-2.5 text-sm font-normal leading-snug text-[rgba(220,214,205,0.92)]"
+          className="rounded-xl border border-[rgba(218,200,160,0.3)] bg-[rgba(3,8,19,0.45)] px-3.5 py-2.5 text-sm leading-snug font-normal text-[rgba(220,214,205,0.92)]"
         >
           Account created. Check your inbox to confirm before signing in.
         </div>
@@ -383,7 +387,10 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
             className={fieldClass}
           />
           {mode === "createTwin" ? (
-            <span data-testid="landing-auth-password-policy-hint" className="text-xs font-normal text-[rgba(188,182,172,0.88)]">
+            <span
+              data-testid="landing-auth-password-policy-hint"
+              className="text-xs font-normal text-[rgba(188,182,172,0.88)]"
+            >
               Use at least {PASSWORD_MIN_LENGTH} characters.
             </span>
           ) : null}
@@ -407,61 +414,57 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
           <p
             data-testid="landing-auth-error"
             role="alert"
-            className="text-sm font-normal leading-snug text-[rgba(255,182,168,0.95)]"
+            className="text-sm leading-snug font-normal text-[rgba(255,182,168,0.95)]"
           >
             {failureMessage}
           </p>
         ) : null}
       </form>
 
-      {oauthAvailabilityState.kind === "pending"
-        ? null
-        : oauthAvailabilityState.kind === "fetchFailed"
-          ? (
-              <p
-                data-testid="landing-auth-oauth-availability-error"
-                className="text-center text-xs font-normal leading-relaxed text-[rgba(195,190,180,0.82)]"
+      {oauthAvailabilityState.kind === "pending" ? null : oauthAvailabilityState.kind ===
+        "fetchFailed" ? (
+        <p
+          data-testid="landing-auth-oauth-availability-error"
+          className="text-center text-xs leading-relaxed font-normal text-[rgba(195,190,180,0.82)]"
+        >
+          Couldn&apos;t load sign-in options. You can still use email above. Refresh the page to try
+          again.
+        </p>
+      ) : enabledOauthProviders.length > 0 ? (
+        <>
+          <div className="flex items-center gap-3 text-xs font-normal tracking-normal text-[rgba(190,185,175,0.8)]">
+            <span aria-hidden="true" className="h-px flex-1 bg-[rgba(218,200,160,0.25)]" />
+            <span data-testid="landing-auth-divider">Or continue with</span>
+            <span aria-hidden="true" className="h-px flex-1 bg-[rgba(218,200,160,0.25)]" />
+          </div>
+          <div className="flex flex-col gap-2">
+            {enabledOauthProviders.map((provider) => (
+              <Button
+                key={provider}
+                data-testid={`landing-auth-provider-${provider}`}
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={() => beginOAuthProvider(provider)}
+                disabled={interactionLocked}
+                aria-disabled={interactionLocked || undefined}
+                className="h-12 min-h-12 w-full rounded-xl border-[rgba(218,200,160,0.32)] bg-[rgba(3,8,19,0.35)] font-sans text-[0.9375rem] font-semibold text-[rgba(232,228,220,0.95)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(248,244,238,0.98)] focus-visible:border-[rgba(224,198,130,0.5)] focus-visible:ring-2 focus-visible:ring-[rgba(212,184,122,0.2)]"
               >
-                Couldn&apos;t load sign-in options. You can still use email above. Refresh the page to try again.
-              </p>
-            )
-          : enabledOauthProviders.length > 0
-            ? (
-                <>
-                  <div className="flex items-center gap-3 text-xs font-normal tracking-normal text-[rgba(190,185,175,0.8)]">
-                    <span aria-hidden="true" className="h-px flex-1 bg-[rgba(218,200,160,0.25)]" />
-                    <span data-testid="landing-auth-divider">Or continue with</span>
-                    <span aria-hidden="true" className="h-px flex-1 bg-[rgba(218,200,160,0.25)]" />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {enabledOauthProviders.map((provider) => (
-                      <Button
-                        key={provider}
-                        data-testid={`landing-auth-provider-${provider}`}
-                        type="button"
-                        variant="outline"
-                        size="lg"
-                        onClick={() => beginOAuthProvider(provider)}
-                        disabled={interactionLocked}
-                        aria-disabled={interactionLocked || undefined}
-                        className="h-12 min-h-12 w-full rounded-xl border-[rgba(218,200,160,0.32)] bg-[rgba(3,8,19,0.35)] font-sans text-[0.9375rem] font-semibold text-[rgba(232,228,220,0.95)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(248,244,238,0.98)] focus-visible:border-[rgba(224,198,130,0.5)] focus-visible:ring-2 focus-visible:ring-[rgba(212,184,122,0.2)]"
-                      >
-                        {oauthLabel(provider)}
-                      </Button>
-                    ))}
-                  </div>
-                </>
-              )
-            : (
-                <p
-                  data-testid="landing-auth-oauth-unavailable"
-                  className="text-center text-xs font-normal leading-relaxed text-[rgba(195,190,180,0.78)]"
-                >
-                  OAuth providers are not configured for this preview. Email sign-in works as usual above.
-                </p>
-              )}
+                {oauthLabel(provider)}
+              </Button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p
+          data-testid="landing-auth-oauth-unavailable"
+          className="text-center text-xs leading-relaxed font-normal text-[rgba(195,190,180,0.78)]"
+        >
+          OAuth providers are not configured for this preview. Email sign-in works as usual above.
+        </p>
+      )}
 
-      <p className="text-center text-sm font-normal leading-relaxed text-[rgba(205,200,190,0.88)]">
+      <p className="text-center text-sm leading-relaxed font-normal text-[rgba(205,200,190,0.88)]">
         {mode === "createTwin" ? (
           <>
             Already have an account?{" "}
