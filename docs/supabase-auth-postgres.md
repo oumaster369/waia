@@ -90,7 +90,7 @@ psql "$DATABASE_URL_POSTGRES" -v ON_ERROR_STOP=1 \
 
 ### 3. Run Postgres migrations
 
-Uses [`drizzle.postgres.config.ts`](../drizzle.postgres.config.ts) and `DATABASE_URL_POSTGRES`:
+Uses [`drizzle.postgres.config.ts`](../drizzle.postgres.config.ts) — reads `DATABASE_URL_POSTGRES` from `.env.local` when not exported (shell / CI export still wins):
 
 ```bash
 pnpm db:migrate:postgres

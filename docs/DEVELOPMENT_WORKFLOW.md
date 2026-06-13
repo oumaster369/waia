@@ -71,8 +71,15 @@ git branch
 
 ## Repository rules
 
-* Protected branches: `dev`, `main`
-* Pull requests required (see **AGENTS.md**)
+* Protected branches: `dev`, `main` (GitHub rulesets — apply once):
+
+  ```bash
+  ./scripts/github/apply-branch-rulesets.sh
+  ./scripts/github/configure-merge-settings.sh
+  ```
+
+* Pull requests required; squash merge into `dev` (see **AGENTS.md**, **BRANCHING-STRATEGY**)
+* `LINEAR_API_KEY` GitHub secret → auto **Done** on merge ([`linear-done.yml`](../.github/workflows/linear-done.yml))
 
 ---
 

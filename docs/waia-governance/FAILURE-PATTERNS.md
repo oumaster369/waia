@@ -24,6 +24,8 @@ Format: **Id · Symptom · Root cause · Recovery · Prevent**
 
 | **FP-005** | **Symptom:** Agent claims Linear issue Done when Backlog. **Root cause:** stale chat context. **Recovery:** Refresh `list_issues` / Architect check. **Prevent:** Mandatory Linked issue URL in PR. |
 
+| **FP-009** | **Symptom:** PR merges against wrong `DEE-NN` (branch/title id ≠ issue scope); wrong issue closed Done. **Root cause:** branch number reused without `get_issue`; Linear GitHub linkback trusts PR title. **Recovery:** Revert wrong issue to Todo; create canonical issue; cross-link — see [`LINEAR-ID-COLLISION-RECOVERY.md`](LINEAR-ID-COLLISION-RECOVERY.md). **Prevent:** `/groom` scope check; PR title must match groomed issue; disallow `dee-NN` branch without Linear confirmation. |
+
 ## UX / CI
 
 | **FP-006** | **Symptom:** Flaky Playwright masking real regression. **Root cause:** environment timing. **Recovery:** rerun isolated; stabilize test. **Prevent:** track flakes in Linear `qa` commentary. |

@@ -3,8 +3,9 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import type { WaiaDb } from "@/db/types";
-import { twinProfiles, twinReadinessState } from "@/db/schema";
+import { twinProfiles, twinReadinessState, users } from "@/db/schema";
 import { DEFAULT_READINESS_INPUT } from "@/lib/dashboard/readiness-snapshot-default";
+import { ensureUserCoreSeed } from "@/lib/waia-core/provisioning";
 
 /**
  * Idempotent: ensures one twin profile + readiness projection for an existing user row.
@@ -48,6 +49,18 @@ export function ensureUserTwinSeed(db: WaiaDb, userId: string): string {
       })
       .run();
   }
+
+  const userRow = db
+    .select({ identityLabel: users.identityLabel })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+    .all()[0];
+
+  ensureUserCoreSeed(db, {
+    userId,
+    displayName: userRow?.identityLabel ?? "User",
+  });
 
   return twinId;
 }

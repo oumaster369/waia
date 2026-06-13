@@ -11,6 +11,7 @@ import { createSessionRow } from "@/lib/auth/session-service";
 import { authSessionMaxAgeSeconds } from "@/lib/auth/constants";
 import { ensureUserTwinSeed } from "@/lib/twin-persistence/loader";
 import { syncAppUserRowFromSupabaseAuth } from "@/lib/auth/supabase-app-user-sync";
+import { resolvePostAuthRedirect, resolvePostSignUpRedirect } from "@/lib/auth/post-auth-redirect";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/config";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
 import type { SupabaseCookiePatch } from "@/lib/supabase/server";
@@ -81,7 +82,10 @@ export async function POST(request: Request) {
       });
 
       if (error) {
-        if (error.message.toLowerCase().includes("already") || error.code === "user_already_exists") {
+        if (
+          error.message.toLowerCase().includes("already") ||
+          error.code === "user_already_exists"
+        ) {
           return jsonError(409, {
             error: { code: "EMAIL_TAKEN", message: "Email already registered." },
           });
@@ -108,7 +112,7 @@ export async function POST(request: Request) {
           {
             ok: true as const,
             needsEmailConfirmation: true as const,
-            redirect: "/dashboard",
+            redirect: resolvePostSignUpRedirect(request),
           },
           { status: 201 },
         );
@@ -117,7 +121,9 @@ export async function POST(request: Request) {
         return res;
       }
 
-      const res = NextResponse.json({ ok: true as const, redirect: "/dashboard" }, { status: 201 });
+      const redirectTo = await resolvePostAuthRedirect(request, data.user.id);
+
+      const res = NextResponse.json({ ok: true as const, redirect: redirectTo }, { status: 201 });
       applySupabaseCookiePatches(res, pendingCookies);
       clearSessionCookie(res);
       return res;
@@ -147,7 +153,9 @@ export async function POST(request: Request) {
     createSessionRow(tx, { sessionId, userId, expiresAtMs });
   });
 
-  const res = NextResponse.json({ ok: true as const, redirect: "/dashboard" }, { status: 201 });
+  const redirectTo = resolvePostSignUpRedirect(request);
+
+  const res = NextResponse.json({ ok: true as const, redirect: redirectTo }, { status: 201 });
   applySessionCookie(res, sessionId);
   return res;
 }

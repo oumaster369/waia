@@ -2,10 +2,16 @@ import type { NextConfig } from "next";
 
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
+import { buildTraderHostIsolationRedirects } from "./lib/hosts/cross-host-redirects";
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   serverExternalPackages: ["better-sqlite3"],
+
+  async redirects() {
+    return buildTraderHostIsolationRedirects();
+  },
 
   async headers() {
     return [

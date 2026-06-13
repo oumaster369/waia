@@ -1,0 +1,13 @@
+---
+description: Shared lib module boundaries
+globs: "lib/**"
+alwaysApply: false
+---
+
+# lib/ modules
+
+Read [`lib/AGENTS.md`](../../lib/AGENTS.md) when editing this tree.
+
+- Use `server-only` for server-only modules.
+- Respect execution-label ownership (`backend` vs `ai` vs `infra`).
+- Colocate or mirror unit tests under `tests/unit/`.

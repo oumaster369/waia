@@ -1,0 +1,59 @@
+name: release
+
+# On push to main: tag and draft GitHub Release with DEE-NN changelog.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Override tag (default: vYYYY.MM.DD.<short-sha>)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ inputs.tag_name }}" ]]; then
+            TAG="${{ inputs.tag_name }}"
+          else
+            TAG="v$(date -u +%Y.%m.%d).$(git rev-parse --short HEAD)"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Tag: ${TAG}"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          chmod +x scripts/github/generate-release-notes.sh
+          NOTES="$(./scripts/github/generate-release-notes.sh)"
+          {
+            echo "body<<EOF_RELEASE_BODY"
+            echo "$NOTES"
+            echo "EOF_RELEASE_BODY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: WAIA ${{ steps.tag.outputs.tag }}
+          body: ${{ steps.notes.outputs.body }}
+          generate_release_notes: false
+          draft: false
+          prerelease: false

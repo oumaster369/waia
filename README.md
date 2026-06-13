@@ -2,11 +2,16 @@
 
 WAIA (this repo’s slice): **human-centered AI-Twin v1** work plus **backend/runtime stabilization** toward MVP. Longer ecosystem modules stay roadmap-named; delivery focus is narrow—see [`docs/product/WAIA-V1-MVP-SPEC.md`](docs/product/WAIA-V1-MVP-SPEC.md) and [`docs/waia-governance/NON-GOALS.md`](docs/waia-governance/NON-GOALS.md).
 
+## Getting Started
+
+**New developers and agents:** start with **[`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md)** (Mode C / `pnpm dev` production parity). Then read **[`AGENTS.md`](AGENTS.md)** before implementing. Doc drift: [`docs/documentation-audit-2026.md`](docs/documentation-audit-2026.md).
+
 ## Where to start
 
 | Role | Read first |
 |------|------------|
-| **AI agents / implementers** | **[`AGENTS.md`](AGENTS.md)** — branching, Linear, phases, validation |
+| **New developers / recovery** | **[`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md)** |
+| **AI agents / implementers** | **[`AGENTS.md`](AGENTS.md)** |
 | **Product meaning (MVP hub)** | [`docs/product/WAIA-V1-MVP-SPEC.md`](docs/product/WAIA-V1-MVP-SPEC.md) |
 | **Governance & autonomy** | [`docs/waia-governance/README.md`](docs/waia-governance/README.md) |
 | **Git / deploy commands** | [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) (adjunct to **AGENTS.md**) |

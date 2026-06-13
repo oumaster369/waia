@@ -37,7 +37,29 @@ Wrangler local preview uses [`.dev.vars`](https://developers.cloudflare.com/work
 
 | Variable | Required | Role | Local dev | Cloudflare |
 |----------|----------|------|-----------|------------|
-| `NEXT_PUBLIC_SITE_URL` | Yes | Public site origin (no trailing slash). | `http://127.0.0.1:3000` | `https://your-worker-host` |
+| `NEXT_PUBLIC_SITE_URL` | Yes | Primary WAIA origin (no trailing slash). | `http://127.0.0.1:3000` | `https://waia.life` |
+
+---
+
+## Module host routing (AT-E1 S2)
+
+Single Worker serves **both** `waia.life` (primary) and `trader.waia.life` (trader module portal). Host logic is config-driven via [`lib/hosts/`](../lib/hosts/).
+
+| Variable | Required | Role | Local dev | Cloudflare |
+|----------|----------|------|-----------|------------|
+| `NEXT_PUBLIC_TRADER_URL` | Yes (prod) | Trader portal public origin. | `http://trader.localhost:3000` | `https://trader.waia.life` |
+| `WAIA_PRIMARY_HOST` | Optional | Server-side primary hostname match. | `localhost` | `waia.life` |
+| `WAIA_TRADER_HOST` | Optional | Server-side trader hostname match. | `trader.localhost` | `trader.waia.life` |
+| `WAIA_TRADER_HOST_ROUTING` | Optional | Kill-switch for trader-host topology redirects (`0`/`false`/`off` disables). | omit (default on) | omit unless rolling back |
+| `WAIA_COOKIE_DOMAIN` | **Optional** | Production-only reversible UX enhancement for `*.waia.life` session sharing. **Not required for M2. Not the WAIA SSO strategy.** Partner-domain SSO is a future redirect/token design. | **Leave unset** | Set to `.waia.life` only if intentionally enabling seamless subdomain sessions |
+
+**Operator (production, human gate — not automated in app PR):**
+
+1. Attach `trader.waia.life` as a **custom domain** on the existing `waia-app` Worker (same deployment as `waia.life`).
+2. Add `https://trader.waia.life/**` to Supabase **Redirect URLs**; keep Site URL `https://waia.life`.
+3. Set Worker env: `NEXT_PUBLIC_TRADER_URL`, `WAIA_TRADER_HOST` (and `WAIA_COOKIE_DOMAIN` only if enabling the optional cookie enhancement).
+
+See [cloudflare-deploy.md § Trader subdomain](cloudflare-deploy.md#trader-subdomain-at-e1-s2).
 
 ---
 

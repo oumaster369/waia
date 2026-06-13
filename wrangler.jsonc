@@ -16,6 +16,8 @@
   ],
   "vars": {
     "NEXT_PUBLIC_SITE_URL": "https://waia.life",
+    "NEXT_PUBLIC_TRADER_URL": "https://trader.waia.life",
+    "WAIA_TRADER_HOST": "trader.waia.life",
     "OAUTH_PUBLIC_BASE_URL": "https://waia.life",
     "WAIA_DB_BACKEND": "postgres",
     "WAIA_AI_GATEWAY_FOUNDATION": "1",

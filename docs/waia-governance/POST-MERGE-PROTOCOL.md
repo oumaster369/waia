@@ -20,6 +20,8 @@ Move issue **`Done`** (or board terminal success) plus abbreviated **five-memory
 
 Link merged PR URL.
 
+**Automation:** when repository secret `LINEAR_API_KEY` is set, [`.github/workflows/linear-done.yml`](../../.github/workflows/linear-done.yml) transitions `DEE-NN` to **Done** on merge to `dev` (parsed from PR title/body/branch). Humans still paste five-memory closeout when semantics warrant it.
+
 ## Tracker / docs
 
 If runtime/migration semantics changed:
@@ -34,3 +36,5 @@ If the merged PR **changed product or governance meaning** (same classes as sema
 ## `dev` → `main`
 
 Human-driven promotion for Cloudflare production per [`docs/cloudflare-deploy.md`](../cloudflare-deploy.md); not automated agents.
+
+On push to **`main`**, [`.github/workflows/release.yml`](../../.github/workflows/release.yml) creates a dated GitHub Release with `DEE-NN` changelog ([`scripts/github/generate-release-notes.sh`](../../scripts/github/generate-release-notes.sh)).

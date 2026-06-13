@@ -21,6 +21,15 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import {
+  auditActorTypeEnum,
+  organizationKindEnum,
+  organizationMemberRoleEnum,
+  platformRoleEnum,
+  subscriptionStatusEnum,
+  waiaModuleEnum,
+} from "@/db/core-enums";
+
 /** Aligned with legacy [`db/schema.ts`](./schema.ts) string union. */
 export const oauthProviderEnum = ["google", "apple", "telegram"] as const;
 export type OauthProvider = (typeof oauthProviderEnum)[number];
@@ -28,6 +37,15 @@ export type OauthProvider = (typeof oauthProviderEnum)[number];
 export const oauthProviderEnumPg = pgEnum("oauth_provider", [...oauthProviderEnum]);
 
 export const dialogueRoleEnumPg = pgEnum("dialogue_role", ["user", "assistant", "system"]);
+
+export const organizationKindEnumPg = pgEnum("organization_kind", [...organizationKindEnum]);
+export const organizationMemberRoleEnumPg = pgEnum("organization_member_role", [
+  ...organizationMemberRoleEnum,
+]);
+export const platformRoleEnumPg = pgEnum("platform_role", [...platformRoleEnum]);
+export const waiaModuleEnumPg = pgEnum("waia_module", [...waiaModuleEnum]);
+export const subscriptionStatusEnumPg = pgEnum("subscription_status", [...subscriptionStatusEnum]);
+export const auditActorTypeEnumPg = pgEnum("audit_actor_type", [...auditActorTypeEnum]);
 
 /**
  * Application user row in `public.users`.
@@ -45,6 +63,125 @@ export const users = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("users_email_unique").on(t.email)],
+);
+
+/** WAIA Core: 1:1 identity extension (WC-E1). */
+export const profiles = pgTable(
+  "profiles",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull(),
+    locale: text("locale").notNull().default("en"),
+    avatarRef: text("avatar_ref"),
+    settingsJson: jsonb("settings_json"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("profiles_user_id_unique").on(t.userId)],
+);
+
+/** WAIA Core: tenant boundary (WC-E2). */
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: uuid("id").primaryKey(),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: organizationKindEnumPg("kind").notNull(),
+    name: text("name"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("organizations_owner_user_id_idx").on(t.ownerUserId)],
+);
+
+/** WAIA Core: user ↔ organization membership (WC-E2). */
+export const organizationMembers = pgTable(
+  "organization_members",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    memberRole: organizationMemberRoleEnumPg("member_role").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("organization_members_org_user_unique").on(t.organizationId, t.userId)],
+);
+
+/** WAIA Core: platform-wide role per user (WC-E3). */
+export const userPlatformRoles = pgTable("user_platform_roles", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  role: platformRoleEnumPg("role").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
+
+/** WAIA Core: per-organization module subscription (WC-E4). */
+export const organizationSubscriptions = pgTable(
+  "organization_subscriptions",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    module: waiaModuleEnumPg("module").notNull(),
+    status: subscriptionStatusEnumPg("status").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("organization_subscriptions_org_module_unique").on(t.organizationId, t.module),
+  ],
+);
+
+/** WAIA Core: derived entitlement flags per organization (WC-E4). */
+export const organizationEntitlements = pgTable(
+  "organization_entitlements",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    entitlementKey: text("entitlement_key").notNull(),
+    enabled: boolean("enabled").notNull(),
+    sourceModule: waiaModuleEnumPg("source_module"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("organization_entitlements_org_key_unique").on(t.organizationId, t.entitlementKey),
+  ],
+);
+
+/** WAIA Core: append-only platform audit stream (WC-E5). */
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey(),
+    actorType: auditActorTypeEnumPg("actor_type").notNull(),
+    actorId: text("actor_id"),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id"),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "set null",
+    }),
+    metadataJson: jsonb("metadata_json").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("audit_logs_org_created_idx").on(t.organizationId, t.createdAt),
+    index("audit_logs_entity_idx").on(t.entityType, t.entityId),
+  ],
 );
 
 export const oauthAccounts = pgTable(
@@ -138,7 +275,9 @@ export const diaryEntries = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    twinProfileId: uuid("twin_profile_id").references(() => twinProfiles.id, { onDelete: "cascade" }),
+    twinProfileId: uuid("twin_profile_id").references(() => twinProfiles.id, {
+      onDelete: "cascade",
+    }),
     body: text("body"),
     idempotencyKey: text("idempotency_key"),
     embeddingJson: jsonb("embedding_json"),

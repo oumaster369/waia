@@ -1,0 +1,13 @@
+---
+description: Next.js App Router conventions for WAIA
+globs: "app/**"
+alwaysApply: false
+---
+
+# app/ routes
+
+Read [`app/AGENTS.md`](../../app/AGENTS.md) when editing this tree.
+
+- RSC by default; `"use client"` only when required.
+- User-visible changes need e2e per `30-testing.mdc`.
+- Design canon: `50-waia-design-os.mdc`, `docs/DESIGN_OS_V1.md`.

@@ -7,9 +7,11 @@
 
 ## Linked issue / plan
 
-**Linear:** `DEE-NN` <!-- link -->
+**Linear:** `DEE-NN` <!-- REQUIRED — canonical issue id; must match PR title + branch `dee-NN-*` -->
 
-<!-- Closes GitHub issue #123 if applicable -->
+<!-- Example: **Linear:** `DEE-153` https://linear.app/deepsense/issue/DEE-153/... -->
+
+**Linear groom verified:** <!-- yes (via /groom) OR n/a with Architect approval -->
 
 **Plan:** <!-- `.cursor/plans/<file>.md` or `n/a` -->
 

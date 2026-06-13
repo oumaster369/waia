@@ -147,7 +147,37 @@ From active constitutional acceptance (**binding within stated scope**): DEV OS 
 
 **Maintenance shape:** Prefer **small surgical edits** to numbered sections; bump **Last reconciled** below; avoid append-only appendices.
 
-**Last reconciled:** 2026-05-16 — landing hero/auth stabilization merged to `dev` (PR #154); Operating Memory §2 pointer only.
+**Last reconciled:** 2026-05-17 — Git remote + Cloudflare Worker hygiene recorded (§15); landing line unchanged (§2).
+
+---
+
+## 15. Git and Cloudflare hygiene (recorded)
+
+**GitHub — facts (post-cleanup):**
+
+- **Long-lived remotes:** only **`dev`** and **`main`**.
+- **Stale design branch removed:** `dee-109-ceremonial-landing-atmosphere` **archived** as tag **`archive/dee-109-ceremonial-landing-atmosphere`** at **`0e81e4130294ee71a3c945b0138892e39944f30d`**, then the remote branch **deleted**.
+- **`origin/main` and `origin/dev`:** **identical file trees**; **`origin/main` is an ancestor of `origin/dev`** after **PR #159** (`main` history merged into `dev` with a **real merge commit**).
+- **UI noise:** GitHub may still show **`main` as “commits behind” `dev`** — that is **history count only**, not content drift.
+- **Branch roles:** **production source = `main`**; **integration / development = `dev`**.
+
+**Git — operational rules:**
+
+- **Long-lived branches:** only **`dev`** and **`main`** on the remote.
+- **Temporary branches** (`dee-*`, promotion, fix, chore): **merge**, **archive** (e.g. `git tag archive/…` on the tip), or **delete** when finished — do not let orphans accumulate.
+- **After a `dev` → `main` release**, if **`main` must be joined back into `dev` for a clean DAG: merge with GitHub **Create a merge commit** — **not** squash merge and **not** rebase merge — so `main` becomes an ancestor of `dev` and comparisons stay honest.
+
+**Cloudflare — facts (post-cleanup):**
+
+- **`waia-app`:** production Worker for **`waia.life`**; active production deployment on **`main`** commit **`536a288`**, **100% traffic** (recorded at cleanup reconciliation).
+- **Deleted after dashboard confirmation** (no custom domain, no routes, no meaningful traffic, no undeclared deps): **`waia-app-dee109-staging`**; **`waia-app-pr-130`** (legacy DEE-79 preview/sandbox).
+- **Kept intentionally:** **`waia-app-dee114-walkthrough`** — walkthrough / eval Worker ([`wrangler.dee114-walkthrough.jsonc`](../../wrangler.dee114-walkthrough.jsonc); see architecture docs).
+- **Untouched:** **`legco-landing`** — separate project; not WAIA app repo scope.
+
+**Cloudflare — operational rules:**
+
+- **Production `waia-app`** must remain tied to **`main`** commits promoted through the normal release path; **preview / `dev` / PR Workers** must **not** receive **`waia.life`** (or other production hostnames) unless deliberately reconfigured with full ops sign-off.
+- **Stale preview or staging Workers** (`waia-app-pr-*`, ad-hoc staging names): **audit periodically**; **delete only after** dashboard confirmation of **no custom domains, no production routes, negligible or zero traffic, and no dependency** (OAuth callbacks, bookmarks, internal runbooks, bindings to other services).
 
 ---
 

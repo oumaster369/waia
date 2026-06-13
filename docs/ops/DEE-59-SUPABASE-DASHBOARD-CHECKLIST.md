@@ -5,8 +5,8 @@ Complete these steps **before** relying on `NEXT_PUBLIC_SUPABASE_*` in Workers o
 1. Open the Supabase project for WAIA.
 2. **Authentication → Providers → Email** — enable Email provider; configure confirmation email behavior (disable confirmation for dev/staging smoke if the program wants immediate sign-in).
 3. **Authentication → URL configuration**
-   - **Site URL:** production origin (e.g. `https://waia.life`).
-   - **Redirect URLs:** include local dev, staging Worker origin, and production. Include OAuth callback paths when OAuth is migrated later (`/api/auth/oauth/.../callback` per app routes).
+   - **Site URL:** production primary origin (e.g. `https://waia.life`).
+   - **Redirect URLs:** include local dev, staging Worker origin, production primary, and **`https://trader.waia.life/**`** (AT-E1 S2 trader portal). Include OAuth callback paths when OAuth is migrated later (`/api/auth/oauth/.../callback` per app routes).
 
 4. Copy **Project URL** and **anon key** into deployment env as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (see `.env.example`).
 
