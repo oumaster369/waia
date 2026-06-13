@@ -21,6 +21,12 @@
 
 **Tier:**
 
+## Merge strategy
+
+<!-- `squash` for feature/fix/governance PRs (default). `merge-commit` REQUIRED for release-promotion (dev→main) and back-sync (main→dev) PRs — squash drops the second parent and re-creates ancestry drift. See `docs/waia-governance/BRANCHING-STRATEGY.md`. -->
+
+**Merge strategy:** squash <!-- squash | merge-commit -->
+
 ## ADR
 
 <!-- Link to `docs/adr/NNNN-*.md`, or note `ADR: n/a (<one-line rationale>)` -->

@@ -181,6 +181,30 @@ is_release_linear_na() {
   printf '%s' "$body" | grep -qE '\*\*Linear:\*\*[[:space:]]*`?n/a[[:space:]]*\(release promotion\)`?'
 }
 
+# Determine the required merge method by PR class (BRANCHING-STRATEGY.md).
+# Release promotion (base=main) and back-sync (dee-*-release-back-sync-*) require a
+# real merge commit; everything else uses squash. Informational only (stdout, never
+# blocking) — emitted as MERGE_STRATEGY=... so downstream tools/humans get deterministic
+# guidance without affecting governance pass/fail.
+detect_merge_strategy() {
+  if [[ "$PR_BASE" == "main" ]] \
+    || [[ "$PR_BRANCH" =~ ^dee-[0-9]+-release-(back-sync|promote) ]] \
+    || [[ "$PR_BRANCH" == "dev" && "$PR_BASE" == "main" ]]; then
+    printf 'merge-commit'
+  else
+    printf 'squash'
+  fi
+}
+
+emit_merge_strategy_note() {
+  local strategy
+  strategy="$(detect_merge_strategy)"
+  printf 'MERGE_STRATEGY=%s\n' "$strategy"
+  if [[ "$strategy" == "merge-commit" ]]; then
+    printf 'MERGE_STRATEGY_NOTE=release/back-sync PR — merge with "Create a merge commit", NOT squash (BRANCHING-STRATEGY.md FP-010)\n'
+  fi
+}
+
 check_disclaimer_collision() {
   local body="$1"
   local title="$2"
@@ -294,6 +318,7 @@ fi
 if [[ -z "$resolved_id" ]]; then
   if [[ "$release_promotion" == true && "$release_linear_na" == true ]]; then
     printf 'RESOLVED_DEE_ID=RELEASE_PROMOTION\n'
+    emit_merge_strategy_note
     if [[ "$MODE" == "linear-done" ]]; then
       printf 'SKIP_LINEAR_DONE=1\n'
       printf 'SKIP_REASON=release_promotion_pr\n'
@@ -310,6 +335,7 @@ if [[ -z "$resolved_id" ]]; then
 fi
 
 printf 'RESOLVED_DEE_ID=%s\n' "$resolved_id"
+emit_merge_strategy_note
 
 if [[ "$MODE" == "linear-done" ]]; then
   exit 0

@@ -76,7 +76,8 @@ AI-Twin builds a structured digital personality via dialogue, diary, and behavio
 - Branch: `dee-<NN>-<slug>` · Commit: `DEE-NN type(scope): subject`
 - Reference `DEE-NN` in branch, commits, PR title/body.
 - Merge: human only; agents **never** `gh pr merge`.
-- Details: [`BRANCHING-STRATEGY.md`](docs/waia-governance/BRANCHING-STRATEGY.md), [`PR-PROTOCOL.md`](docs/waia-governance/PR-PROTOCOL.md)
+- **Merge method by class:** feature/fix/governance → `dev` = **squash**; release promotion (`dev→main`) and back-sync (`main→dev`) = **Create a merge commit** (never squash — squash drops the second parent and drifts ancestry). After every release promotion, immediately open a `dee-<NN>-release-back-sync-*` PR.
+- Details: [`BRANCHING-STRATEGY.md`](docs/waia-governance/BRANCHING-STRATEGY.md), [`PR-PROTOCOL.md`](docs/waia-governance/PR-PROTOCOL.md), [`POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md)
 
 ---
 
@@ -95,7 +96,7 @@ AI-Twin builds a structured digital personality via dialogue, diary, and behavio
 | Diagnose deploy | `/diagnose` | Agent | Sonnet |
 | Parallel fan-out | `/parallel-implement` | Agent | Sonnet |
 
-**Default completion:** green `/test-and-fix` → PR readiness per [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md) → stop. Humans review/merge.
+**Default completion:** green `/test-and-fix` → PR readiness per [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md) → close with the **agent completion protocol** report ([`POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md): Linear, branch, PR URL, CI, governance, exact human merge instruction, post-merge verification, whether promotion/back-sync is now due, next task) → stop. Humans review/merge; agents wait for explicit confirmation before the next task.
 
 **Auto-advance:** when all preconditions in [`AGENT-AUTO-ADVANCE.md`](docs/waia-governance/AGENT-AUTO-ADVANCE.md) hold, commit → push → Linear `In Review` → PR package without waiting.
 
