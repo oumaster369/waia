@@ -15,9 +15,10 @@ run_case() {
   local title="$1"
   local body="$2"
   local branch="$3"
+  local base="${4:-}"
 
   set +e
-  MODE=pr-governance PR_TITLE="$title" PR_BODY="$body" PR_BRANCH="$branch" \
+  MODE=pr-governance PR_TITLE="$title" PR_BODY="$body" PR_BRANCH="$branch" PR_BASE="$base" \
     "$VALIDATOR" >/dev/null 2>&1
   local code=$?
   set -e
@@ -26,7 +27,7 @@ run_case() {
     printf 'PASS  %s (exit %s)\n' "$name" "$code"
   else
     printf 'FAIL  %s (expected exit %s, got %s)\n' "$name" "$expect_exit" "$code" >&2
-    MODE=pr-governance PR_TITLE="$title" PR_BODY="$body" PR_BRANCH="$branch" \
+    MODE=pr-governance PR_TITLE="$title" PR_BODY="$body" PR_BRANCH="$branch" PR_BASE="$base" \
       "$VALIDATOR" 2>&1 | sed 's/^/      /' >&2 || true
     return 1
   fi
@@ -56,6 +57,27 @@ run_case "zero-pad id equivalence" 0 \
   "**Linear:** \`DEE-7\`
 **Tier:** T1" \
   "dee-07-something" || fail=1
+
+run_case "release promotion with n/a linear" 0 \
+  "Release: promote dev to main for AT-E1 production activation" \
+  "**Linear:** n/a (release promotion)
+**Tier:** T3
+Release drivers: DEE-225, DEE-192, DEE-226, DEE-227" \
+  "dev" \
+  "main" || fail=1
+
+run_case "release promotion missing linear" 1 \
+  "Release: promote dev to main" \
+  "**Tier:** T3" \
+  "dev" \
+  "main" || fail=1
+
+run_case "dev branch to dev base still requires dee branch" 1 \
+  "Release: promote dev to main" \
+  "**Linear:** n/a (release promotion)
+**Tier:** T3" \
+  "dev" \
+  "dev" || fail=1
 
 if [[ "$fail" -ne 0 ]]; then
   echo "Some tests failed." >&2

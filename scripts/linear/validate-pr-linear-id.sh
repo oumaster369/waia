@@ -2,7 +2,7 @@
 # Validate PR ↔ Linear ID consistency (P0 governance).
 #
 # Usage:
-#   MODE=pr-governance PR_TITLE=... PR_BODY=... PR_BRANCH=... ./scripts/linear/validate-pr-linear-id.sh
+#   MODE=pr-governance PR_TITLE=... PR_BODY=... PR_BRANCH=... PR_BASE=... ./scripts/linear/validate-pr-linear-id.sh
 #   MODE=linear-done  PR_TITLE=... PR_BODY=... PR_BRANCH=... ./scripts/linear/validate-pr-linear-id.sh
 #
 # Env:
@@ -10,6 +10,7 @@
 #   PR_TITLE      PR title
 #   PR_BODY       PR body (markdown)
 #   PR_BRANCH     head branch name
+#   PR_BASE       base branch name (optional; enables dev→main release promotion mode)
 #   LINEAR_API_KEY  optional; enables Linear title/scope verification
 #
 # Exit codes (pr-governance):
@@ -26,6 +27,7 @@ MODE="${MODE:-}"
 PR_TITLE="${PR_TITLE:-}"
 PR_BODY="${PR_BODY:-}"
 PR_BRANCH="${PR_BRANCH:-}"
+PR_BASE="${PR_BASE:-}"
 LINEAR_API_KEY="${LINEAR_API_KEY:-}"
 
 if [[ -z "$MODE" ]]; then
@@ -170,6 +172,15 @@ fetch_linear_scope_context() {
   return 0
 }
 
+is_release_promotion_pr() {
+  [[ "$PR_BRANCH" == "dev" && "$PR_BASE" == "main" ]]
+}
+
+is_release_linear_na() {
+  local body="$1"
+  printf '%s' "$body" | grep -qE '\*\*Linear:\*\*[[:space:]]*`?n/a[[:space:]]*\(release promotion\)`?'
+}
+
 check_disclaimer_collision() {
   local body="$1"
   local title="$2"
@@ -197,38 +208,56 @@ check_disclaimer_collision() {
 
 # --- validation ---
 
+release_promotion=false
+release_linear_na=false
+if is_release_promotion_pr; then
+  release_promotion=true
+  if is_release_linear_na "$PR_BODY"; then
+    release_linear_na=true
+  fi
+fi
+
 explicit_id="$(extract_explicit_linear "$PR_BODY")"
 title_id="$(extract_first_dee "$PR_TITLE")"
 branch_id="$(extract_branch_nn "$PR_BRANCH")"
 
-if [[ -z "$explicit_id" ]]; then
-  add_failure 'PR body missing explicit **Linear:** `DEE-NN` field (required — do not rely on title/branch alone).'
-fi
+if [[ "$release_promotion" == true ]]; then
+  if [[ "$release_linear_na" != true && -z "$explicit_id" ]]; then
+    add_failure 'Release promotion PR body must include **Linear:** `DEE-NN` or **Linear:** n/a (release promotion).'
+  fi
+else
+  if [[ -z "$explicit_id" ]]; then
+    add_failure 'PR body missing explicit **Linear:** `DEE-NN` field (required — do not rely on title/branch alone).'
+  fi
 
-if [[ -n "$title_id" && -n "$explicit_id" ]] && ! dee_ids_equal "$title_id" "$explicit_id"; then
-  add_failure "PR title references \`${title_id}\` but **Linear:** field declares \`${explicit_id}\`."
-fi
+  if [[ -n "$title_id" && -n "$explicit_id" ]] && ! dee_ids_equal "$title_id" "$explicit_id"; then
+    add_failure "PR title references \`${title_id}\` but **Linear:** field declares \`${explicit_id}\`."
+  fi
 
-if [[ -n "$branch_id" && -n "$explicit_id" ]] && ! dee_ids_equal "$branch_id" "$explicit_id"; then
-  add_failure "Branch \`${PR_BRANCH}\` implies \`${branch_id}\` but **Linear:** field declares \`${explicit_id}\`."
-fi
+  if [[ -n "$branch_id" && -n "$explicit_id" ]] && ! dee_ids_equal "$branch_id" "$explicit_id"; then
+    add_failure "Branch \`${PR_BRANCH}\` implies \`${branch_id}\` but **Linear:** field declares \`${explicit_id}\`."
+  fi
 
-dee_branch_ok=false
-if [[ "$PR_BRANCH" =~ ^dee-[0-9]{2,}-[a-z0-9-]+$ ]]; then
-  dee_branch_ok=true
-elif [[ -n "$PR_BRANCH" ]]; then
-  add_failure "Branch \`${PR_BRANCH}\` does not match \`dee-<NN>-<slug>\`."
-fi
+  dee_branch_ok=false
+  if [[ "$PR_BRANCH" =~ ^dee-[0-9]{2,}-[a-z0-9-]+$ ]]; then
+    dee_branch_ok=true
+  elif [[ -n "$PR_BRANCH" ]]; then
+    add_failure "Branch \`${PR_BRANCH}\` does not match \`dee-<NN>-<slug>\`."
+  fi
 
-if [[ "$dee_branch_ok" == true && -z "$branch_id" && -n "$explicit_id" ]]; then
-  add_failure "Could not parse issue number from branch \`${PR_BRANCH}\`."
+  if [[ "$dee_branch_ok" == true && -z "$branch_id" && -n "$explicit_id" ]]; then
+    add_failure "Could not parse issue number from branch \`${PR_BRANCH}\`."
+  fi
 fi
 
 check_disclaimer_collision "$PR_BODY" "$PR_TITLE" "$PR_BRANCH" || true
 
 resolved_id="$explicit_id"
+if [[ "$release_promotion" == true && "$release_linear_na" == true ]]; then
+  resolved_id=""
+fi
 
-if [[ -n "$resolved_id" && -n "${LINEAR_API_KEY:-}" ]]; then
+if [[ -n "$resolved_id" && -n "${LINEAR_API_KEY:-}" && "$release_promotion" != true ]]; then
   issue_context="$(fetch_linear_scope_context "$resolved_id" || true)"
   if [[ -z "$issue_context" ]]; then
     add_failure "Linear issue \`${resolved_id}\` could not be resolved via API (check LINEAR_API_KEY and issue id)."
@@ -236,8 +265,10 @@ if [[ -n "$resolved_id" && -n "${LINEAR_API_KEY:-}" ]]; then
     issue_title="$(printf '%s' "$issue_context" | awk '{print $1, $2, $3, $4, $5}')"
     add_failure "Linear issue scope materially differs from PR title (no token overlap). Issue context starts: \"${issue_title}…\" vs PR title=\"${PR_TITLE}\"."
   fi
-elif [[ -n "$resolved_id" ]]; then
+elif [[ -n "$resolved_id" && "$release_promotion" != true ]]; then
   add_warning 'LINEAR_API_KEY not set — skipping Linear API title/scope verification.'
+elif [[ "$release_promotion" == true ]]; then
+  add_warning 'Release promotion PR — skipping Linear API title/scope verification.'
 fi
 
 # --- output ---
@@ -263,6 +294,15 @@ if [[ ${#failures[@]} -gt 0 ]]; then
 fi
 
 if [[ -z "$resolved_id" ]]; then
+  if [[ "$release_promotion" == true && "$release_linear_na" == true ]]; then
+    printf 'RESOLVED_DEE_ID=RELEASE_PROMOTION\n'
+    if [[ "$MODE" == "linear-done" ]]; then
+      printf 'SKIP_LINEAR_DONE=1\n'
+      printf 'SKIP_REASON=release_promotion_pr\n'
+      exit 2
+    fi
+    exit 0
+  fi
   if [[ "$MODE" == "linear-done" ]]; then
     printf 'SKIP_LINEAR_DONE=1\n'
     printf 'SKIP_REASON=missing_explicit_linear_field\n'
