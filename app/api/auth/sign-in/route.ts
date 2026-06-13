@@ -12,9 +12,11 @@ import { authSessionMaxAgeSeconds } from "@/lib/auth/constants";
 import { createSessionRow } from "@/lib/auth/session-service";
 import { ensureUserTwinSeed } from "@/lib/twin-persistence/loader";
 import { syncAppUserRowFromSupabaseAuth } from "@/lib/auth/supabase-app-user-sync";
+import { resolvePostAuthRedirect } from "@/lib/auth/post-auth-redirect";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/config";
 import { createSupabaseRouteHandlerClient, type SupabaseCookiePatch } from "@/lib/supabase/server";
 import { applySupabaseCookiePatches } from "@/lib/supabase/apply-response-cookies";
+
 export const dynamic = "force-dynamic";
 
 type SignInBody = {
@@ -40,7 +42,9 @@ export async function POST(request: Request) {
     parsed = (await request.json()) as SignInBody;
   } catch {
     return NextResponse.json(
-      { error: { code: "INVALID_BODY", message: "Expected JSON body." } } satisfies ApiErrorEnvelope,
+      {
+        error: { code: "INVALID_BODY", message: "Expected JSON body." },
+      } satisfies ApiErrorEnvelope,
       { status: 400 },
     );
   }
@@ -49,7 +53,9 @@ export async function POST(request: Request) {
   const password = parsed.password;
   if (typeof rawEmail !== "string" || typeof password !== "string") {
     return NextResponse.json(
-      { error: { code: "INVALID_BODY", message: "email and password are required." } } satisfies ApiErrorEnvelope,
+      {
+        error: { code: "INVALID_BODY", message: "email and password are required." },
+      } satisfies ApiErrorEnvelope,
       { status: 400 },
     );
   }
@@ -75,7 +81,9 @@ export async function POST(request: Request) {
         identityLabel,
       });
 
-      const res = NextResponse.json({ ok: true as const, redirect: "/dashboard" }, { status: 200 });
+      const redirectTo = await resolvePostAuthRedirect(request, userId);
+
+      const res = NextResponse.json({ ok: true as const, redirect: redirectTo }, { status: 200 });
       applySupabaseCookiePatches(res, pendingCookies);
       clearSessionCookie(res);
       return res;
@@ -109,7 +117,9 @@ export async function POST(request: Request) {
     createSessionRow(tx, { sessionId, userId: userRow.id, expiresAtMs });
   });
 
-  const res = NextResponse.json({ ok: true as const, redirect: "/dashboard" }, { status: 200 });
+  const redirectTo = await resolvePostAuthRedirect(request, userRow.id);
+
+  const res = NextResponse.json({ ok: true as const, redirect: redirectTo }, { status: 200 });
   applySessionCookie(res, sessionId);
   return res;
 }

@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const PLAYWRIGHT_PORT = Number(process.env.PLAYWRIGHT_PORT ?? 3199);
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${PLAYWRIGHT_PORT}`;
+const E2E_DATABASE_URL = process.env.DATABASE_URL ?? "file:./.data/waia.db";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -20,10 +21,40 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      testIgnore: /trader-host\.spec\.ts/,
+    },
+    {
+      name: "trader-host",
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: `http://trader.localhost:${PLAYWRIGHT_PORT}`,
+      },
+      testMatch: /trader-host\.spec\.ts/,
     },
   ],
   webServer: {
-    command: "pnpm build && pnpm start",
+    command: [
+      `NEXT_PUBLIC_SITE_URL=http://127.0.0.1:${PLAYWRIGHT_PORT}`,
+      `NEXT_PUBLIC_TRADER_URL=http://trader.localhost:${PLAYWRIGHT_PORT}`,
+      `WAIA_DB_BACKEND=sqlite`,
+      `DATABASE_URL=${E2E_DATABASE_URL}`,
+      `NEXT_PUBLIC_SUPABASE_URL=`,
+      `NEXT_PUBLIC_SUPABASE_ANON_KEY=`,
+      `WAIA_PRIMARY_HOST=127.0.0.1`,
+      `WAIA_TRADER_HOST=trader.localhost`,
+      `pnpm build`,
+      `&&`,
+      `PORT=${PLAYWRIGHT_PORT}`,
+      `NEXT_PUBLIC_SITE_URL=http://127.0.0.1:${PLAYWRIGHT_PORT}`,
+      `NEXT_PUBLIC_TRADER_URL=http://trader.localhost:${PLAYWRIGHT_PORT}`,
+      `WAIA_DB_BACKEND=sqlite`,
+      `DATABASE_URL=${E2E_DATABASE_URL}`,
+      `NEXT_PUBLIC_SUPABASE_URL=`,
+      `NEXT_PUBLIC_SUPABASE_ANON_KEY=`,
+      `WAIA_PRIMARY_HOST=127.0.0.1`,
+      `WAIA_TRADER_HOST=trader.localhost`,
+      `pnpm start`,
+    ].join(" "),
     url: BASE_URL,
     /** Avoid stale local servers skipping `pnpm build && pnpm start` (causes flaky OAuth/sign-up E2E). Opt-in via PLAYWRIGHT_REUSE_SERVER=1. */
     reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === "1",
@@ -33,6 +64,12 @@ export default defineConfig({
       /** Deterministic sqlite email auth for E2E (avoid Supabase “confirm email” stall when keys exist locally). */
       NEXT_PUBLIC_SUPABASE_URL: "",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "",
+      WAIA_DB_BACKEND: "sqlite",
+      DATABASE_URL: E2E_DATABASE_URL,
+      NEXT_PUBLIC_SITE_URL: `http://127.0.0.1:${PLAYWRIGHT_PORT}`,
+      WAIA_PRIMARY_HOST: "127.0.0.1",
+      WAIA_TRADER_HOST: "trader.localhost",
+      NEXT_PUBLIC_TRADER_URL: `http://trader.localhost:${PLAYWRIGHT_PORT}`,
     },
   },
 });
