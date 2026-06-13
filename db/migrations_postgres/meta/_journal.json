@@ -36,6 +36,13 @@
       "when": 1778100000002,
       "tag": "0004_audit_logs_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778200000001,
+      "tag": "0005_trader_org_scaffolding",
+      "breakpoints": true
     }
   ]
 }
