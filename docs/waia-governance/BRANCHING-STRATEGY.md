@@ -20,10 +20,21 @@ Local [`.cursor/hooks/guard-shell.sh`](../../.cursor/hooks/guard-shell.sh) is no
 
 Required CI checks: `lint`, `typecheck`, `unit tests`, `build`, `e2e tests` (see [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)).
 
-## Merge strategy
+## Merge strategy (by PR class)
 
-- **Squash merge** into `dev` (one commit per atomic `dee-*` issue).
-- Configure via `configure-merge-settings.sh` or GitHub → Settings → Pull Requests.
+WAIA merges depend on the PR **class**. This is deliberate: squash keeps `dev` history clean per atomic issue, but squash **cannot preserve a second parent**, so release-promotion and back-sync PRs **must** use a real merge commit or `dev`/`main` ancestry silently drifts (see [`FAILURE-PATTERNS.md`](FAILURE-PATTERNS.md) FP-010).
+
+| PR class | Branch → base | Merge method | Why |
+|----------|---------------|--------------|-----|
+| **Feature / fix / governance** | `dee-<NN>-<slug>` → `dev` | **Squash and merge** | One commit per atomic `dee-*` issue. |
+| **Release promotion** | `dee-<NN>-release-promote-<slug>` (or `dev`) → `main` | **Create a merge commit** | Preserve `dev` ancestry in `main`. |
+| **Release back-sync** | `dee-<NN>-release-back-sync-<slug>` → `dev` | **Create a merge commit** | Preserve `main` ancestry in `dev` after a squash-promoted release. |
+
+**Hard rule:** never **squash** a release-promotion or back-sync PR. Squashing drops the second parent and re-introduces ancestry drift.
+
+### Repository setting
+
+Both squash and merge-commit must be **available** in repo settings so humans can pick the correct method per class. Maintainers apply this via [`configure-merge-settings.sh`](../../scripts/github/configure-merge-settings.sh) (`allow_squash_merge=true`, `allow_merge_commit=true`, squash remains the default title/message). Rebase merges stay disabled. **Consequence:** because merge commits are enabled repo-wide, humans must consciously keep using **Squash** for feature PRs — only release/back-sync PRs use **Create a merge commit**. Rolling this out is a one-time admin action and requires Architect approval.
 
 ## Legacy / exceptions
 
