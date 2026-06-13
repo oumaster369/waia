@@ -267,8 +267,6 @@ if [[ -n "$resolved_id" && -n "${LINEAR_API_KEY:-}" && "$release_promotion" != t
   fi
 elif [[ -n "$resolved_id" && "$release_promotion" != true ]]; then
   add_warning 'LINEAR_API_KEY not set — skipping Linear API title/scope verification.'
-elif [[ "$release_promotion" == true ]]; then
-  add_warning 'Release promotion PR — skipping Linear API title/scope verification.'
 fi
 
 # --- output ---
