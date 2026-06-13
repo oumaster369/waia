@@ -165,6 +165,24 @@ export const auditLogs = sqliteTable(
   ],
 );
 
+/** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */
+export const traderOrgProfiles = sqliteTable(
+  "trader_org_profiles",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("trader_org_profiles_organization_id_unique").on(t.organizationId)],
+);
+
 export const oauthProviderEnum = ["google", "apple", "telegram"] as const;
 export type OauthProvider = (typeof oauthProviderEnum)[number];
 
