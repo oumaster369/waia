@@ -184,6 +184,20 @@ export const auditLogs = pgTable(
   ],
 );
 
+/** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */
+export const traderOrgProfiles = pgTable(
+  "trader_org_profiles",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("trader_org_profiles_organization_id_unique").on(t.organizationId)],
+);
+
 export const oauthAccounts = pgTable(
   "oauth_accounts",
   {
