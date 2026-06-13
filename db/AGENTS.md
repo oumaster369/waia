@@ -50,6 +50,19 @@ feature change.
 - Do not change UI in the same issue unless the Linear card explicitly spans both (prefer split issues).
 - Auth schema changes may need `security` review — see [`docs/security-dee52-auth-review.md`](../docs/security-dee52-auth-review.md).
 
+## AI-TRADER schema namespace (AT-E1 / DEE-193)
+
+Trader-owned tables use the `trader_*` prefix and **must** carry `organization_id` referencing Core `organizations` (see [`docs/ai-trader/AI-TRADER-INTEGRATION.md`](../docs/ai-trader/AI-TRADER-INTEGRATION.md) §1.3).
+
+| Migration | Table | Purpose |
+|-----------|-------|---------|
+| SQLite `0008_trader_org_scaffolding` | `trader_org_profiles` | Org-scoped module anchor (1:1 per organization) |
+| Postgres `0005_trader_org_scaffolding` | `trader_org_profiles` | Same |
+
+**Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
+
+**Production apply:** targeted SQL only on `waia-prod` (no blind `pnpm db:migrate:postgres` — see WAIA Core M1 runbook).
+
 ## Validation
 
 ```bash
