@@ -1,3 +1,6 @@
+import type { ConnectorCredentialInput } from "@/lib/trader/connectors/types";
+import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provider";
+import type { TraderAuditInput } from "@/lib/trader/types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 export type ExchangeCredentialStatus = "active" | "revoked";
@@ -47,4 +50,52 @@ export type ExchangeCredentialRepository = {
     context: OrgContext,
     credentialId: string,
   ): ExchangeCredentialRow | null | Promise<ExchangeCredentialRow | null>;
+};
+
+/** Metadata returned by credential lifecycle methods — never includes secrets. */
+export type CredentialMetadata = {
+  id: string;
+  venue: string;
+  exchangeAccountId: string;
+  apiKeyMasked: string | null;
+  status: ExchangeCredentialStatus;
+  permissionMetadata: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+  revokedAt: Date | null;
+};
+
+export type StoreCredentialsInput = {
+  venue: string;
+  exchangeAccountId: string;
+  credentials: ConnectorCredentialInput;
+  permissionMetadata?: Record<string, unknown> | null;
+  actorType?: TraderAuditInput["actorType"];
+  actorId?: string | null;
+};
+
+export type RevokeCredentialsInput = {
+  actorType?: TraderAuditInput["actorType"];
+  actorId?: string | null;
+};
+
+export type CredentialServiceDeps = {
+  repository: ExchangeCredentialRepository;
+  writeAudit: (input: TraderAuditInput) => string | Promise<string>;
+  createProvider?: () => Promise<MasterKeyProvider>;
+  assertMembership?: (context: OrgContext & { userId: string }) => void | Promise<void>;
+};
+
+export type CredentialService = {
+  storeCredentials(context: OrgContext, input: StoreCredentialsInput): Promise<CredentialMetadata>;
+  getDecryptedCredentials(
+    context: OrgContext,
+    credentialId: string,
+  ): Promise<ConnectorCredentialInput>;
+  revokeCredentials(
+    context: OrgContext,
+    credentialId: string,
+    input?: RevokeCredentialsInput,
+  ): Promise<CredentialMetadata>;
+  listCredentialMetadata(context: OrgContext): Promise<CredentialMetadata[]>;
 };

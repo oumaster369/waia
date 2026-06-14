@@ -12,14 +12,20 @@ export {
 export { ensureTraderOrgProfileSqlite } from "@/lib/trader/provisioning/sqlite";
 export { ensureTraderOrgProfilePostgres } from "@/lib/trader/provisioning/postgres";
 export {
+  createCredentialService,
+  createPostgresCredentialService,
+  createSqliteCredentialService,
   getCredentialRowByIdPostgres,
   getCredentialRowByIdSqlite,
   insertCredentialRowPostgres,
   insertCredentialRowSqlite,
   listCredentialRowsForOrgPostgres,
   listCredentialRowsForOrgSqlite,
+  maskApiKey,
   revokeCredentialRowPostgres,
   revokeCredentialRowSqlite,
+  type CredentialMetadata,
+  type CredentialService,
   type ExchangeCredentialRow,
   type ExchangeCredentialStatus,
   type InsertExchangeCredentialRowInput,
