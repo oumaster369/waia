@@ -165,6 +165,45 @@ export const auditLogs = sqliteTable(
   ],
 );
 
+export const exchangeCredentialStatusEnum = ["active", "revoked"] as const;
+export type ExchangeCredentialStatus = (typeof exchangeCredentialStatusEnum)[number];
+
+/** AI-TRADER: envelope-encrypted exchange API credentials (DEE-233 / AT-E2). */
+export const exchangeCredentials = sqliteTable(
+  "exchange_credentials",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    apiKeyMasked: text("api_key_masked"),
+    encryptedPayload: text("encrypted_payload"),
+    payloadKeyVersion: text("payload_key_version"),
+    wrappedDekKeyVersion: text("wrapped_dek_key_version"),
+    wrappedDekKey: text("wrapped_dek_key"),
+    permissionMetadata: text("permission_metadata"),
+    status: text("status", { enum: [...exchangeCredentialStatusEnum] })
+      .notNull()
+      .default("active"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    index("exchange_credentials_org_venue_account_idx").on(
+      t.organizationId,
+      t.venue,
+      t.exchangeAccountId,
+    ),
+  ],
+);
+
 /** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */
 export const traderOrgProfiles = sqliteTable(
   "trader_org_profiles",
