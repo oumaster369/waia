@@ -287,6 +287,69 @@ export const traderRiskLimits = pgTable(
   ],
 );
 
+export const killSwitchScopeTypeEnumPg = pgEnum("kill_switch_scope_type", [
+  "platform",
+  "organization",
+  "venue",
+  "strategy",
+  "account",
+  "instrument",
+]);
+
+export const killSwitchTypeEnumPg = pgEnum("kill_switch_type", [
+  "EMERGENCY_STOP",
+  "CLOSE_ONLY",
+  "PAUSE",
+  "DATA_QUALITY",
+  "CONTROL_PLANE_LOSS",
+  "STALE_STATE",
+  "RECON_MISMATCH",
+  "ABNORMAL_SLIPPAGE",
+  "UNKNOWN_POSITION",
+]);
+
+export const killSwitchEnforcementModeEnumPg = pgEnum("kill_switch_enforcement_mode", [
+  "STOP_ACCOUNT",
+  "CLOSE_ONLY",
+  "REJECT",
+]);
+
+export const killSwitchStateEnumPg = pgEnum("kill_switch_state", [
+  "ACTIVE",
+  "CLEARING",
+  "INACTIVE",
+]);
+
+export const killSwitchOriginEnumPg = pgEnum("kill_switch_origin", ["manual", "automatic"]);
+
+/** AI-TRADER: kill switch state (DEE-206A / AT-E7). Single row per scope; history in audit. */
+export const traderKillSwitches = pgTable(
+  "trader_kill_switches",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    scopeType: killSwitchScopeTypeEnumPg("scope_type").notNull(),
+    scopeRef: text("scope_ref").notNull().default(""),
+    switchType: killSwitchTypeEnumPg("switch_type").notNull(),
+    enforcementMode: killSwitchEnforcementModeEnumPg("enforcement_mode").notNull(),
+    state: killSwitchStateEnumPg("state").notNull(),
+    origin: killSwitchOriginEnumPg("origin").notNull(),
+    reason: text("reason").notNull().default(""),
+    clearingStartedAt: timestamp("clearing_started_at", { withTimezone: true, mode: "date" }),
+    coolingOffMs: integer("cooling_off_ms"),
+    trippedAt: timestamp("tripped_at", { withTimezone: true, mode: "date" }),
+    clearedAt: timestamp("cleared_at", { withTimezone: true, mode: "date" }),
+    stateVersion: integer("state_version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_kill_switches_org_scope_state_idx").on(t.organizationId, t.scopeType, t.state),
+  ],
+);
+
 /** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */
 export const traderOrgProfiles = pgTable(
   "trader_org_profiles",
