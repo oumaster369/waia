@@ -55,6 +55,37 @@ pnpm db:migrate:postgres   # applies 0003_waia_core_m1, then 0004_audit_logs_rls
 
 **Verify migration applied** (see §3).
 
+### Postgres connection role (`DATABASE_URL_POSTGRES`) — DEE-225 R3 / ADR-0007
+
+The WAIA server connects to Postgres through **`DATABASE_URL_POSTGRES`** (Drizzle +
+`postgres.js`). That URI must use a **privileged service role**, not Supabase JWT
+session roles.
+
+| Environment | Required role in URI | Why |
+|-------------|----------------------|-----|
+| **Local Docker validate** (`docker-compose.postgres-validate.yml`) | `waia_validate` (DB owner) | Table owner bypasses RLS; matches `0004_audit_logs_rls` intent for service-layer writes. |
+| **Supabase staging / production** | **`postgres`** via **Transaction pooler** (URI form `postgresql://postgres.<project-ref>:…@…pooler.supabase.com:6543/postgres`) | Server-side app writes (`writeAuditLogPostgres`, Core provisioning) must not use JWT roles blocked by `0004_audit_logs_rls.sql`. |
+| **Migrations / backfill CLI** | Same privileged role as runtime for that target | `pnpm db:migrate:postgres` and `pnpm waia:core:backfill --backend=postgres` need DDL/DML beyond `authenticated`/`anon`. |
+
+**Do not** point `DATABASE_URL_POSTGRES` at Supabase **`authenticated`** or **`anon`**
+roles (PostgREST / user-scoped JWT connections). Migration `0004_audit_logs_rls.sql`
+denies those roles `INSERT` and `SELECT` on `audit_logs`; the app service layer
+still appends audit rows through Drizzle (`lib/waia-core/audit/write.ts`).
+
+**Append-only guarantee** is independent of connection role: triggers
+`audit_logs_block_update` / `audit_logs_block_delete` reject mutations for every role
+(including `postgres`). RLS is defense-in-depth only (ADR-0007).
+
+**Operator check (Postgres):** after migrate, confirm audit writes succeed from the
+same URI the Worker uses:
+
+```bash
+WAIA_PG_INTEGRATION=1 pnpm test --run postgres-waia-core-parity
+```
+
+See also [`db/AGENTS.md`](../../db/AGENTS.md) and
+[`docs/postgres-development.md`](../postgres-development.md).
+
 ---
 
 ## 2. Backfill
@@ -163,6 +194,7 @@ behavior, not to drop schema.
 ## 5. Operator checklist
 
 - [ ] Human operational sign-off recorded (ADR-0002), correct backend confirmed.
+- [ ] `DATABASE_URL_POSTGRES` uses a **privileged service role** (not `authenticated` / `anon`) — see §1 Postgres connection role.
 - [ ] `WAIA_CORE_ENFORCEMENT` is **off**; `WAIA_CORE_SHADOW` is **on**.
 - [ ] Backup / snapshot of target DB taken.
 - [ ] Step 1 migrate completed; §3a verification passes.
