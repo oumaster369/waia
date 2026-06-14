@@ -372,21 +372,17 @@ async function ensureUserTwinSeedInsideExecutorPg(tx: PgTx, userId: string): Pro
     });
   }
 
-  try {
-    const userRows = await tx
-      .select({ identityLabel: pgSchema.users.identityLabel })
-      .from(pgSchema.users)
-      .where(eq(pgSchema.users.id, userId))
-      .limit(1);
-    const { ensureUserCoreSeedPostgres } = await import("@/lib/waia-core/provisioning/postgres");
-    await ensureUserCoreSeedPostgres(tx, {
-      userId,
-      displayName: userRows[0]?.identityLabel ?? "User",
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[waia] ensureUserCoreSeedPostgres failed (fail-open for AI-TWIN):", message);
-  }
+  const userRows = await tx
+    .select({ identityLabel: pgSchema.users.identityLabel })
+    .from(pgSchema.users)
+    .where(eq(pgSchema.users.id, userId))
+    .limit(1);
+  const { ensureUserCoreSeedPostgresFailOpenInTx } =
+    await import("@/lib/waia-core/provisioning/postgres-fail-open");
+  await ensureUserCoreSeedPostgresFailOpenInTx(tx, {
+    userId,
+    displayName: userRows[0]?.identityLabel ?? "User",
+  });
 
   return twinId;
 }
