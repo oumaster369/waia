@@ -34,7 +34,7 @@ Store output in password manager / split custody — **offline encrypted backup 
 
 ```bash
 npx wrangler secrets-store store create waia-ai-trader-secrets --remote
-# Record STORE_ID from output → replace <WAIA_SECRETS_STORE_ID> in wrangler.jsonc
+# Record STORE_ID from output for step D below
 ```
 
 ### C. Upload production secret (Workers scope)
@@ -49,7 +49,7 @@ npx wrangler secrets-store secret create <STORE_ID> \
 
 ### D. Bind Worker
 
-Confirm `wrangler.jsonc` contains:
+**Add** the following block to `wrangler.jsonc` (not present in git until real `store_id` exists — placeholder values break Workers Builds):
 
 ```jsonc
 "secrets_store_secrets": [
@@ -61,7 +61,7 @@ Confirm `wrangler.jsonc` contains:
 ]
 ```
 
-Deploy production Worker/Pages with binding.
+Replace `<WAIA_SECRETS_STORE_ID>` with the store ID from step B, commit if desired, then deploy production Worker/Pages with binding.
 
 ### E. Production readiness env
 
