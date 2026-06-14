@@ -85,6 +85,13 @@
       "when": 1778500000000,
       "tag": "0011_trader_risk_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1778600000000,
+      "tag": "0012_trader_kill_switches",
+      "breakpoints": true
     }
   ]
 }

@@ -277,6 +277,72 @@ export const traderRiskLimits = sqliteTable(
   ],
 );
 
+export const killSwitchScopeTypeEnum = [
+  "platform",
+  "organization",
+  "venue",
+  "strategy",
+  "account",
+  "instrument",
+] as const;
+export type KillSwitchScopeType = (typeof killSwitchScopeTypeEnum)[number];
+
+export const killSwitchTypeEnum = [
+  "EMERGENCY_STOP",
+  "CLOSE_ONLY",
+  "PAUSE",
+  "DATA_QUALITY",
+  "CONTROL_PLANE_LOSS",
+  "STALE_STATE",
+  "RECON_MISMATCH",
+  "ABNORMAL_SLIPPAGE",
+  "UNKNOWN_POSITION",
+] as const;
+export type KillSwitchType = (typeof killSwitchTypeEnum)[number];
+
+export const killSwitchEnforcementModeEnum = ["STOP_ACCOUNT", "CLOSE_ONLY", "REJECT"] as const;
+export type KillSwitchEnforcementMode = (typeof killSwitchEnforcementModeEnum)[number];
+
+export const killSwitchStateEnum = ["ACTIVE", "CLEARING", "INACTIVE"] as const;
+export type KillSwitchState = (typeof killSwitchStateEnum)[number];
+
+export const killSwitchOriginEnum = ["manual", "automatic"] as const;
+export type KillSwitchOrigin = (typeof killSwitchOriginEnum)[number];
+
+/** AI-TRADER: kill switch state (DEE-206A / AT-E7). Single row per scope; history in audit. */
+export const traderKillSwitches = sqliteTable(
+  "trader_kill_switches",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    scopeType: text("scope_type", { enum: [...killSwitchScopeTypeEnum] }).notNull(),
+    scopeRef: text("scope_ref").notNull().default(""),
+    switchType: text("switch_type", { enum: [...killSwitchTypeEnum] }).notNull(),
+    enforcementMode: text("enforcement_mode", {
+      enum: [...killSwitchEnforcementModeEnum],
+    }).notNull(),
+    state: text("state", { enum: [...killSwitchStateEnum] }).notNull(),
+    origin: text("origin", { enum: [...killSwitchOriginEnum] }).notNull(),
+    reason: text("reason").notNull().default(""),
+    clearingStartedAt: integer("clearing_started_at", { mode: "timestamp_ms" }),
+    coolingOffMs: integer("cooling_off_ms"),
+    trippedAt: integer("tripped_at", { mode: "timestamp_ms" }),
+    clearedAt: integer("cleared_at", { mode: "timestamp_ms" }),
+    stateVersion: integer("state_version").notNull().default(1),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_kill_switches_org_scope_state_idx").on(t.organizationId, t.scopeType, t.state),
+  ],
+);
+
 /** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */
 export const traderOrgProfiles = sqliteTable(
   "trader_org_profiles",
