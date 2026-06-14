@@ -276,7 +276,8 @@ describe("kill switch automatic trigger (DEE-245)", () => {
 
     it("re-arms INACTIVE switch to ACTIVE with origin automatic", async () => {
       const db = getDb();
-      const service = createSqliteKillSwitchService(db);
+      let now = Date.now();
+      const service = createSqliteKillSwitchService(db, { nowMs: () => now });
       const dispatcher = createSqliteAutomaticTriggerDispatcher(db, { killSwitchService: service });
       const target = orgTarget(orgA);
       const key = {
@@ -294,10 +295,11 @@ describe("kill switch automatic trigger (DEE-245)", () => {
         requireOrgContext(orgA),
         target,
         key,
-        { expectedStateVersion: tripped.row.stateVersion },
+        { expectedStateVersion: tripped.row.stateVersion, coolingOffMs: 1 },
       );
+      now += 1;
       const cleared = await service.finalizeClear(
-        SERVICE_ACTOR,
+        { actorType: "user", actorId: USER_A },
         requireOrgContext(orgA),
         target,
         key,

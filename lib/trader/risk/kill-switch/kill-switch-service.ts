@@ -11,11 +11,14 @@ import { writeAuditLogPostgres, writeAuditLogSqlite } from "@/lib/waia-core/audi
 import {
   assertPlatformKillSwitchAuthorityPostgres,
   assertPlatformKillSwitchAuthoritySqlite,
+  assertRecoveryConfirmAuthorityPostgres,
+  assertRecoveryConfirmAuthoritySqlite,
 } from "@/lib/trader/risk/kill-switch/authorization";
 import {
   KILL_SWITCH_ALREADY_ACTIVE,
   KillSwitchAuthorizationError,
   KillSwitchConcurrencyError,
+  KillSwitchCoolingOffNotElapsedError,
   KillSwitchNotFoundError,
   UnsupportedKillSwitchScopeError,
 } from "@/lib/trader/risk/kill-switch/errors";
@@ -38,6 +41,7 @@ import type {
 import {
   assertV0WritableTarget,
   auditOrganizationIdForTarget,
+  effectiveCoolingOffMs,
   toKillSwitchView,
 } from "@/lib/trader/risk/kill-switch/types";
 import { traderAuditActions, traderEntityTypes } from "@/lib/trader/types";
@@ -96,7 +100,20 @@ function buildAuditMetadata(
   previousStateVersion: number | null,
   actor: KillSwitchActor,
   actingPlatformRole: string | null,
+  options?: {
+    confirmedAt?: string;
+    recoveryActor?: KillSwitchActor;
+    eligibleAt?: string | null;
+  },
 ): Record<string, unknown> {
+  const effectiveMs = effectiveCoolingOffMs(row.coolingOffMs);
+  const eligibleAt =
+    options?.eligibleAt !== undefined
+      ? options.eligibleAt
+      : row.clearingStartedAt !== null
+        ? new Date(row.clearingStartedAt.getTime() + effectiveMs).toISOString()
+        : null;
+
   return {
     killSwitchId: row.id,
     scopeType: row.scopeType,
@@ -113,9 +130,12 @@ function buildAuditMetadata(
     actorId: actor.actorId,
     actingPlatformRole,
     clearingStartedAt: row.clearingStartedAt?.toISOString() ?? null,
-    coolingOffMs: row.coolingOffMs,
+    coolingOffMs: effectiveMs,
+    eligibleAt,
     trippedAt: row.trippedAt?.toISOString() ?? null,
     clearedAt: row.clearedAt?.toISOString() ?? null,
+    confirmedAt: options?.confirmedAt ?? null,
+    recoveryActor: options?.recoveryActor ?? null,
   };
 }
 
@@ -151,6 +171,11 @@ export function createKillSwitchService(deps: KillSwitchServiceDeps): KillSwitch
     context: OrgContext | undefined,
     existing: KillSwitchRow | null,
     patch: KillSwitchTransitionPatch,
+    auditOptions?: {
+      confirmedAt?: string;
+      recoveryActor?: KillSwitchActor;
+      eligibleAt?: string | null;
+    },
   ): Promise<KillSwitchTransitionResult> {
     assertV0WritableTarget(target);
     assertKeyMatchesTarget(target, key);
@@ -199,7 +224,14 @@ export function createKillSwitchService(deps: KillSwitchServiceDeps): KillSwitch
         entityType: traderEntityTypes.killSwitch,
         entityId: row.id,
         organizationId: auditOrganizationIdForTarget(target),
-        metadata: buildAuditMetadata(row, previousState, previousStateVersion, actor, null),
+        metadata: buildAuditMetadata(
+          row,
+          previousState,
+          previousStateVersion,
+          actor,
+          null,
+          auditOptions,
+        ),
       });
 
       return {
@@ -310,6 +342,7 @@ export function createKillSwitchService(deps: KillSwitchServiceDeps): KillSwitch
         state: "CLEARING",
         reason: input.reason ?? existing.reason,
         clearingStartedAt: new Date(deps.nowMs()),
+        coolingOffMs: input.coolingOffMs !== undefined ? input.coolingOffMs : existing.coolingOffMs,
       });
     },
 
@@ -340,12 +373,44 @@ export function createKillSwitchService(deps: KillSwitchServiceDeps): KillSwitch
         throw new KillSwitchConcurrencyError();
       }
 
-      return applyTransition(actor, target, key, writeContext, existing, {
-        state: "INACTIVE",
-        reason: input.reason ?? existing.reason,
-        clearingStartedAt: null,
-        clearedAt: new Date(deps.nowMs()),
-      });
+      if (existing.state === "CLEARING") {
+        if (!existing.clearingStartedAt) {
+          throw new KillSwitchCoolingOffNotElapsedError();
+        }
+        const effectiveMs = effectiveCoolingOffMs(existing.coolingOffMs);
+        if (deps.nowMs() < existing.clearingStartedAt.getTime() + effectiveMs) {
+          throw new KillSwitchCoolingOffNotElapsedError();
+        }
+        if (deps.assertRecoveryConfirmAuthority) {
+          await deps.assertRecoveryConfirmAuthority(actor, target);
+        }
+      }
+
+      const confirmedAt = new Date(deps.nowMs()).toISOString();
+      const effectiveMsForAudit = effectiveCoolingOffMs(existing.coolingOffMs);
+      const eligibleAtIso =
+        existing.clearingStartedAt !== null
+          ? new Date(existing.clearingStartedAt.getTime() + effectiveMsForAudit).toISOString()
+          : null;
+
+      return applyTransition(
+        actor,
+        target,
+        key,
+        writeContext,
+        existing,
+        {
+          state: "INACTIVE",
+          reason: input.reason ?? existing.reason,
+          clearingStartedAt: null,
+          clearedAt: new Date(deps.nowMs()),
+        },
+        {
+          confirmedAt,
+          recoveryActor: actor,
+          eligibleAt: eligibleAtIso,
+        },
+      );
     },
   };
 }
@@ -368,6 +433,11 @@ export function createSqliteKillSwitchService(
       ((actor) => {
         assertPlatformKillSwitchAuthoritySqlite(db, actor);
       }),
+    assertRecoveryConfirmAuthority:
+      deps.assertRecoveryConfirmAuthority ??
+      ((actor, target) => {
+        assertRecoveryConfirmAuthoritySqlite(db, actor, target);
+      }),
   });
 }
 
@@ -388,6 +458,11 @@ export function createPostgresKillSwitchService(
       deps.assertPlatformKillSwitchAuthority ??
       (async (actor) => {
         await assertPlatformKillSwitchAuthorityPostgres(ex, actor);
+      }),
+    assertRecoveryConfirmAuthority:
+      deps.assertRecoveryConfirmAuthority ??
+      (async (actor, target) => {
+        await assertRecoveryConfirmAuthorityPostgres(ex, actor, target);
       }),
     runMutation: deps.runMutation ?? ((fn) => fn()),
   });

@@ -47,3 +47,23 @@ export class KillSwitchNotFoundError extends KillSwitchError {
     this.name = "KillSwitchNotFoundError";
   }
 }
+
+export class KillSwitchCoolingOffNotElapsedError extends KillSwitchError {
+  constructor(message = "KILL_SWITCH_COOLING_OFF_NOT_ELAPSED") {
+    super(message);
+    this.name = "KillSwitchCoolingOffNotElapsedError";
+  }
+}
+
+export class KillSwitchValidationError extends KillSwitchError {
+  constructor(message = "KILL_SWITCH_VALIDATION_ERROR") {
+    super(message);
+    this.name = "KillSwitchValidationError";
+  }
+}
+
+export function isCoolingOffNotElapsedError(
+  error: unknown,
+): error is KillSwitchCoolingOffNotElapsedError {
+  return error instanceof KillSwitchCoolingOffNotElapsedError;
+}

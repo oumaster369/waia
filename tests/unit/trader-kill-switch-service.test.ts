@@ -9,6 +9,7 @@ import { auditLogs, userPlatformRoles } from "@/db/schema";
 import {
   KillSwitchAuthorizationError,
   KillSwitchConcurrencyError,
+  KillSwitchCoolingOffNotElapsedError,
   createSqliteKillSwitchService,
 } from "@/lib/trader/risk/kill-switch";
 import { traderAuditActions } from "@/lib/trader/types";
@@ -20,6 +21,7 @@ import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 const USER_A = "00000000-0000-4000-8000-0000000243c";
 const ADMIN_USER = "00000000-0000-4000-8000-0000000243d";
 const SERVICE_ACTOR = { actorType: "service" as const, actorId: null };
+const OWNER_ACTOR = (userId: string) => ({ actorType: "user" as const, actorId: userId });
 
 const ORG_KEY = {
   scopeType: "organization" as const,
@@ -113,7 +115,8 @@ describe("kill switch service (DEE-243)", () => {
 
   it("runs clear lifecycle and rejects stale expectedStateVersion", async () => {
     const db = getDb();
-    const service = createSqliteKillSwitchService(db);
+    let now = Date.now();
+    const service = createSqliteKillSwitchService(db, { nowMs: () => now });
     const target = { scopeType: "organization" as const, organizationId: orgA };
     const key = { ...ORG_KEY, switchType: "CLOSE_ONLY" as const };
 
@@ -124,6 +127,7 @@ describe("kill switch service (DEE-243)", () => {
 
     const clearing = await service.beginClear(SERVICE_ACTOR, requireOrgContext(orgA), target, key, {
       expectedStateVersion: tripped.row.stateVersion,
+      coolingOffMs: 1_000,
     });
     expect(clearing.row.state).toBe("CLEARING");
 
@@ -145,12 +149,21 @@ describe("kill switch service (DEE-243)", () => {
       key,
       {
         expectedStateVersion: cancelled.row.stateVersion,
+        coolingOffMs: 1_000,
       },
     );
     expect(clearingAgain.row.state).toBe("CLEARING");
 
+    await expect(
+      service.finalizeClear(OWNER_ACTOR(USER_A), requireOrgContext(orgA), target, key, {
+        expectedStateVersion: clearingAgain.row.stateVersion,
+      }),
+    ).rejects.toThrow(KillSwitchCoolingOffNotElapsedError);
+
+    now += 1_000;
+
     const cleared = await service.finalizeClear(
-      SERVICE_ACTOR,
+      OWNER_ACTOR(USER_A),
       requireOrgContext(orgA),
       target,
       key,
@@ -161,10 +174,34 @@ describe("kill switch service (DEE-243)", () => {
     expect(cleared.row.state).toBe("INACTIVE");
 
     await expect(
-      service.finalizeClear(SERVICE_ACTOR, requireOrgContext(orgA), target, key, {
+      service.finalizeClear(OWNER_ACTOR(USER_A), requireOrgContext(orgA), target, key, {
         expectedStateVersion: tripped.row.stateVersion,
       }),
     ).rejects.toThrow(KillSwitchConcurrencyError);
+  });
+
+  it("rejects service actor on finalizeClear", async () => {
+    const db = getDb();
+    let now = Date.now();
+    const service = createSqliteKillSwitchService(db, { nowMs: () => now });
+    const target = { scopeType: "organization" as const, organizationId: orgA };
+    const key = { ...ORG_KEY, switchType: "DATA_QUALITY" as const };
+
+    const tripped = await service.trip(SERVICE_ACTOR, requireOrgContext(orgA), target, key, {
+      enforcementMode: "REJECT",
+      origin: "manual",
+    });
+    const clearing = await service.beginClear(SERVICE_ACTOR, requireOrgContext(orgA), target, key, {
+      expectedStateVersion: tripped.row.stateVersion,
+      coolingOffMs: 1,
+    });
+    now += 1;
+
+    await expect(
+      service.finalizeClear(SERVICE_ACTOR, requireOrgContext(orgA), target, key, {
+        expectedStateVersion: clearing.row.stateVersion,
+      }),
+    ).rejects.toThrow(KillSwitchAuthorizationError);
   });
 
   it("allows admin human actor for platform scope and writes null org audit", async () => {
