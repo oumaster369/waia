@@ -1,4 +1,5 @@
 export * from "@/lib/trader/types";
+export * from "@/lib/trader/connectors";
 export { writeTraderAuditLogSqlite, writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
 export {
   getTraderOrgProfileSqlite,
