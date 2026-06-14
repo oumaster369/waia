@@ -85,6 +85,20 @@
       "when": 1778500000002,
       "tag": "0011_trader_risk_limits_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1778600000001,
+      "tag": "0012_trader_kill_switches",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1778600000002,
+      "tag": "0013_trader_kill_switches_rls",
+      "breakpoints": true
     }
   ]
 }
