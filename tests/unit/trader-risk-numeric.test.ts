@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  absDecimal,
   compareDecimal,
   divideDecimal,
   formatDecimal,
@@ -36,6 +37,11 @@ describe("trader risk numeric helpers (DEE-238)", () => {
     expect(() => parseDecimal("")).toThrow(InvalidDecimalError);
     expect(() => parseDecimal("1.2.3")).toThrow(InvalidDecimalError);
     expect(() => parseDecimal("1.123456789")).toThrow(InvalidDecimalError);
+  });
+
+  it("absDecimal returns magnitude", () => {
+    expect(absDecimal("-150.00")).toBe("150");
+    expect(absDecimal("150.00")).toBe("150");
   });
 });
 

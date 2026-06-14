@@ -117,3 +117,8 @@ export function addDecimal(a: string, b: string): string {
 export function subtractDecimal(a: string, b: string): string {
   return formatDecimal(parseDecimal(a) - parseDecimal(b));
 }
+
+export function absDecimal(value: string): string {
+  const scaled = parseDecimal(value);
+  return formatDecimal(scaled < 0n ? -scaled : scaled);
+}

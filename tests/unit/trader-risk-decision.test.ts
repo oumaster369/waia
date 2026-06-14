@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   approveDecision,
   buildRiskSnapshot,
+  closeOnlyDecision,
   isTerminalReject,
   mergeReasonCodes,
   rejectDecision,
   resizeDecision,
   riskReasonCodes,
+  stopAccountDecision,
 } from "@/lib/trader/risk";
 
 const BASE_ORDER = {
@@ -95,5 +97,35 @@ describe("trader risk decision contract (DEE-238)", () => {
         [riskReasonCodes.symbolNotAllowed, riskReasonCodes.orderRateExceeded],
       ),
     ).toEqual([riskReasonCodes.symbolNotAllowed, riskReasonCodes.orderRateExceeded]);
+  });
+
+  it("closeOnlyDecision returns CLOSE_ONLY with reason codes", () => {
+    const snapshot = buildRiskSnapshot({
+      order: BASE_ORDER,
+      checksApplied: ["position"],
+    });
+    const decision = closeOnlyDecision(
+      [riskReasonCodes.maxPositionPerSymbolExceeded],
+      snapshot,
+      "2026-06-14T12:00:00.000Z",
+    );
+
+    expect(decision.outcome).toBe("CLOSE_ONLY");
+    expect(decision.reasonCodes).toEqual([riskReasonCodes.maxPositionPerSymbolExceeded]);
+  });
+
+  it("stopAccountDecision returns STOP_ACCOUNT with reason codes", () => {
+    const snapshot = buildRiskSnapshot({
+      order: BASE_ORDER,
+      checksApplied: ["drawdown"],
+    });
+    const decision = stopAccountDecision(
+      [riskReasonCodes.maxDrawdownExceeded],
+      snapshot,
+      "2026-06-14T12:00:00.000Z",
+    );
+
+    expect(decision.outcome).toBe("STOP_ACCOUNT");
+    expect(decision.reasonCodes).toEqual([riskReasonCodes.maxDrawdownExceeded]);
   });
 });

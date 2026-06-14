@@ -5,7 +5,16 @@ import type { RiskReasonCode } from "@/lib/trader/risk/reason-codes";
 /** Risk decision outcomes aligned with Master Spec §13. */
 export type RiskDecisionOutcome = "APPROVE" | "RESIZE" | "REJECT" | "CLOSE_ONLY" | "STOP_ACCOUNT";
 
-export type RiskCheckName = "allowlist" | "notional" | "rate" | "collar";
+export type RiskCheckName =
+  | "allowlist"
+  | "notional"
+  | "rate"
+  | "collar"
+  | "position"
+  | "dailyLoss"
+  | "drawdown"
+  | "openOrders"
+  | "quoteExposure";
 
 export type RiskSnapshot = {
   symbol: string;
