@@ -63,3 +63,21 @@ export type {
   TradeAbuseLimitsConfig,
 } from "@/lib/trader/risk/trade-abuse.types";
 export { evaluateTradeAbuse } from "@/lib/trader/risk/trade-abuse-evaluator";
+export {
+  createPostgresRiskLimitsService,
+  createRiskLimitsService,
+  createSqliteRiskLimitsService,
+  DEFAULT_ORG_RISK_LIMITS,
+  diffRiskLimitsConfig,
+  normalizeAndValidateRiskLimitsInput,
+  RiskLimitsValidationError,
+  riskLimitsConfigEquals,
+  toCapitalLimitsConfig,
+  toOrgRiskLimitsMetadata,
+  toTradeAbuseLimitsConfig,
+  type NormalizedRiskLimitsConfig,
+  type OrgRiskLimitsMetadata,
+  type RiskLimitsRepository,
+  type RiskLimitsService,
+  type UpsertOrgRiskLimitsInput,
+} from "@/lib/trader/risk/limits";

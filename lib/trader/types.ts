@@ -5,6 +5,8 @@ export const traderAuditActions = {
   credentialRotated: "trader.credential.rotated",
   credentialRevoked: "trader.credential.revoked",
   balanceSnapshotCreated: "trader.balance_snapshot.created",
+  riskLimitsCreated: "trader.risk_limits.created",
+  riskLimitsUpdated: "trader.risk_limits.updated",
 } as const;
 
 export type TraderAuditAction = (typeof traderAuditActions)[keyof typeof traderAuditActions];
@@ -14,6 +16,7 @@ export const traderEntityTypes = {
   orgProfile: "trader.org_profile",
   exchangeCredential: "trader.exchange_credential",
   balanceSnapshot: "trader.balance_snapshot",
+  riskLimits: "trader.risk_limits",
 } as const;
 
 export type TraderEntityType = (typeof traderEntityTypes)[keyof typeof traderEntityTypes];
