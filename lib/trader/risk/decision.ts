@@ -65,6 +65,32 @@ export function resizeDecision(
   };
 }
 
+export function closeOnlyDecision(
+  reasonCodes: RiskReasonCode[],
+  snapshot: RiskSnapshot,
+  evaluatedAt: string,
+): RiskDecision {
+  return {
+    outcome: "CLOSE_ONLY",
+    reasonCodes: [...reasonCodes],
+    snapshot,
+    evaluatedAt,
+  };
+}
+
+export function stopAccountDecision(
+  reasonCodes: RiskReasonCode[],
+  snapshot: RiskSnapshot,
+  evaluatedAt: string,
+): RiskDecision {
+  return {
+    outcome: "STOP_ACCOUNT",
+    reasonCodes: [...reasonCodes],
+    snapshot,
+    evaluatedAt,
+  };
+}
+
 export function isTerminalReject(outcome: RiskDecisionOutcome): boolean {
   return outcome === "REJECT" || outcome === "CLOSE_ONLY" || outcome === "STOP_ACCOUNT";
 }

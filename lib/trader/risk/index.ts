@@ -7,6 +7,8 @@ export type {
 } from "@/lib/trader/risk/types";
 export {
   riskReasonCodes,
+  capitalReasonCodes,
+  tradeAbuseReasonCodes,
   type CapitalLimitsReasonCode,
   type RiskReasonCode,
   type TradeAbuseReasonCode,
@@ -14,16 +16,19 @@ export {
 export {
   approveDecision,
   buildRiskSnapshot,
+  closeOnlyDecision,
   isTerminalReject,
   mergeReasonCodes,
   rejectDecision,
   resizeDecision,
+  stopAccountDecision,
   type BuildRiskSnapshotInput,
 } from "@/lib/trader/risk/decision";
 export {
   DECIMAL_SCALE,
   DECIMAL_SCALE_FACTOR,
   InvalidDecimalError,
+  absDecimal,
   addDecimal,
   compareDecimal,
   divideDecimal,
@@ -41,6 +46,15 @@ export {
   createInMemoryOrderRateStore,
   InMemoryOrderRateStore,
 } from "@/lib/trader/risk/order-rate-store";
+export type {
+  AccountRiskState,
+  CapitalLimitsConfig,
+  CapitalLimitsEvaluationInput,
+  CapitalLimitsEvaluationResult,
+  CapitalLimitsEvaluatorDeps,
+  PositionSnapshot,
+} from "@/lib/trader/risk/capital-limits.types";
+export { evaluateCapitalLimits } from "@/lib/trader/risk/capital-limits-evaluator";
 export type {
   OrderRateStore,
   TradeAbuseEvaluationInput,
