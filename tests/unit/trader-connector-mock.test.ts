@@ -28,8 +28,11 @@ describe("trader connector registry (DEE-194)", () => {
   });
 
   it("createExchangeConnectorFromId rejects unknown venue", () => {
-    expect(() => createExchangeConnectorFromId("htx")).toThrow(UnknownConnectorVenueError);
     expect(() => createExchangeConnectorFromId("binance")).toThrow(UnknownConnectorVenueError);
+  });
+
+  it("createExchangeConnectorFromId requires credentials for htx", () => {
+    expect(() => createExchangeConnectorFromId("htx")).toThrow(/requires credentials/);
   });
 });
 

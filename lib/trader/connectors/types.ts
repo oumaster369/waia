@@ -1,4 +1,4 @@
-/** Supported connector venues. Only `"mock"` is implemented in DEE-194. */
+/** Supported connector venues (`"mock"` DEE-194, `"htx"` DEE-195). */
 export type ConnectorVenueId = "mock" | "htx";
 
 export type ConnectorMarketType = "spot" | "futures";
