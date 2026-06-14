@@ -45,6 +45,20 @@ feature change.
 - Follow [`docs/waia-governance/MIGRATION-GOVERNANCE.md`](../docs/waia-governance/MIGRATION-GOVERNANCE.md) and update trackers when runtime semantics change.
 - Postgres rollout discipline: [`docs/adr/0002-staged-postgres-runtime-rollout-discipline.md`](../docs/adr/0002-staged-postgres-runtime-rollout-discipline.md).
 
+## Postgres connection role (DEE-225 R3)
+
+`DATABASE_URL_POSTGRES` must use a **privileged service role** (table owner /
+`postgres` superuser on Supabase), **not** Supabase JWT `authenticated` or `anon`
+roles. Migration `0004_audit_logs_rls.sql` denies those JWT roles direct access to
+`audit_logs`; the app service layer still inserts audit rows via Drizzle.
+
+| Target | Role in connection URI |
+|--------|------------------------|
+| Local Docker validate | `waia_validate` |
+| Supabase (staging/prod) | `postgres` via transaction pooler (`postgres.<ref>@…pooler…:6543/postgres`) |
+
+Full operator guidance: [`docs/waia-core/WAIA-CORE-M1-DEPLOYMENT-RUNBOOK.md`](../docs/waia-core/WAIA-CORE-M1-DEPLOYMENT-RUNBOOK.md) §1 (Postgres connection role). Cross-ref: [ADR-0007](../docs/adr/0007-targeted-rls-strategy.md).
+
 ## Boundaries
 
 - Do not change UI in the same issue unless the Linear card explicitly spans both (prefer split issues).

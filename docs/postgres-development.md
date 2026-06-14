@@ -11,7 +11,7 @@ This document defines how WAIA’s **Postgres** side (parallel to SQLite) is boo
 | `drizzle-kit push` | **Not** the team workflow for canonical schema. `push` mutates a DB without leaving versioned SQL in-repo; use only for personal experiments and **do not** treat pushed DBs as reproducible. |
 | Production app | Still **SQLite** by default (`DATABASE_URL`, `getDb()`). **`resolveTwinPersistence`** can return **`PostgresTwinPersistence`** when the caller supplies a Postgres `WaiaRuntimeDb` handle (DEE-72.1); that does **not** switch production routes. `WAIA_DB_BACKEND=postgres` remains **not** a supported end-user production path until a later slice. |
 | Transactions | **D6-core:** [`db/waia-postgres-transaction.ts`](../db/waia-postgres-transaction.ts) provides `runWaiaPostgresTransaction` with async semantics. **Explicit backend-specific API only** — no production runtime routing yet. SQLite semantics unchanged. |
-| RLS / Supabase `auth` | [`schema.postgres.ts`](../db/schema.postgres.ts) documents gaps. Migrations include stubs for local CI only. |
+| RLS / Supabase `auth` | [`schema.postgres.ts`](../db/schema.postgres.ts) documents gaps. Migrations include stubs for local CI only. **`DATABASE_URL_POSTGRES` role contract:** privileged service role only — see [`db/AGENTS.md`](../db/AGENTS.md) and [WAIA Core M1 runbook §1](../waia-core/WAIA-CORE-M1-DEPLOYMENT-RUNBOOK.md). |
 
 If generated migrations drift from `schema.postgres.ts`, **document the gap** and regenerate with `pnpm db:generate:postgres` before merging (review SQL by hand).
 
