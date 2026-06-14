@@ -51,3 +51,22 @@ export {
   listCredentialRowsForOrgSqlite,
   revokeCredentialRowSqlite,
 } from "@/lib/trader/credentials/repository-sqlite";
+export type {
+  CredentialMetadataDto,
+  ExchangeCredentialsListResponse,
+  HtxConnectRequestBody,
+  HtxConnectSuccessResponse,
+  HtxConnectVenue,
+} from "@/lib/trader/credentials/connect-api.types";
+export {
+  HTX_CONNECT_ERROR_CODES,
+  HTX_CONNECT_VENUE,
+  toCredentialMetadataDto,
+} from "@/lib/trader/credentials/connect-api.types";
+export {
+  createProductionConnectDeps,
+  handleExchangeCredentialsGet,
+  handleHtxConnectPost,
+  type ConnectHandlerDeps,
+  type ConnectHandlerResult,
+} from "@/lib/trader/credentials/connect-handler";
