@@ -43,3 +43,9 @@ DATABASE_URL=file:./.data/waia.dev.db
 
 # Optional: session TTL in seconds (omit for default)
 # AUTH_SESSION_MAX_AGE_SECONDS=
+
+# ─── AI-TRADER master key (DEE-220) — local Workers preview ONLY ───
+# SECRET — 256-bit AES key base64 (`openssl rand -base64 32`). Never production key.
+# AI_TRADER_MASTER_KEY_DEV=
+# AI_TRADER_MASTER_KEY_MODE=dev
+# WAIA_DEPLOYMENT_TIER=local
