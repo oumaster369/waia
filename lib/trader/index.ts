@@ -30,3 +30,15 @@ export {
   type ExchangeCredentialStatus,
   type InsertExchangeCredentialRowInput,
 } from "@/lib/trader/credentials";
+export {
+  createBalanceSnapshotService,
+  createPostgresBalanceSnapshotService,
+  createSqliteBalanceSnapshotService,
+  handleBalanceSnapshotsGet,
+  handleBalanceSyncPost,
+  HTX_BALANCE_SYNC_ERROR_CODES,
+  toBalanceSnapshotDto,
+  type BalanceSnapshotDto,
+  type BalanceSnapshotMetadata,
+  type BalanceSnapshotService,
+} from "@/lib/trader/balances";
