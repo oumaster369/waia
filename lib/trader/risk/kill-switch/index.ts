@@ -1,16 +1,21 @@
 export {
   assertPlatformKillSwitchAuthorityPostgres,
   assertPlatformKillSwitchAuthoritySqlite,
+  assertRecoveryConfirmAuthorityPostgres,
+  assertRecoveryConfirmAuthoritySqlite,
 } from "@/lib/trader/risk/kill-switch/authorization";
 export {
   KillSwitchAuthorizationError,
   KillSwitchConcurrencyError,
+  KillSwitchCoolingOffNotElapsedError,
+  KillSwitchValidationError,
   KillSwitchError,
   KillSwitchNotFoundError,
   IllegalKillSwitchTransitionError,
   UnsupportedKillSwitchScopeError,
   KILL_SWITCH_ALREADY_ACTIVE,
   isAlreadyActiveError,
+  isCoolingOffNotElapsedError,
 } from "@/lib/trader/risk/kill-switch/errors";
 export {
   createAutomaticTriggerDispatcher,
@@ -32,6 +37,14 @@ export {
   type TriggerOutcome,
 } from "@/lib/trader/risk/kill-switch/automatic-trigger";
 export {
+  buildRecoveryPreview,
+  createGovernedRecoveryService,
+  createPostgresGovernedRecoveryService,
+  createSqliteGovernedRecoveryService,
+  type GovernedRecoveryFactoryDeps,
+  type GovernedRecoveryServiceDeps,
+} from "@/lib/trader/risk/kill-switch/governed-recovery";
+export {
   createKillSwitchService,
   createPostgresKillSwitchService,
   createSqliteKillSwitchService,
@@ -52,9 +65,11 @@ export {
   mostRestrictiveEnforcementMode,
 } from "@/lib/trader/risk/kill-switch/transitions";
 export type {
+  BeginClearInput,
   EffectiveContribution,
   EffectiveKillSwitchState,
   EscalateKillSwitchInput,
+  GovernedRecoveryService,
   InsertKillSwitchRowInput,
   KillSwitchActor,
   KillSwitchListFilter,
@@ -69,6 +84,8 @@ export type {
   KillSwitchTransitionPatch,
   KillSwitchTransitionResult,
   KillSwitchView,
+  RecoveryPreview,
+  RequestClearInput,
   TripKillSwitchInput,
   TransitionKillSwitchInput,
   KillSwitchEnforcementMode,
@@ -80,6 +97,8 @@ export type {
 export {
   assertV0WritableTarget,
   auditOrganizationIdForTarget,
+  DEFAULT_RECOVERY_COOLING_OFF_MS,
+  effectiveCoolingOffMs,
   isV0ResolvableScopeType,
   scopeRefFromDb,
   scopeRefToDb,

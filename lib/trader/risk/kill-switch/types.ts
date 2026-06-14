@@ -131,6 +131,67 @@ export type TransitionKillSwitchInput = {
   expectedStateVersion: number;
 };
 
+export type BeginClearInput = TransitionKillSwitchInput & {
+  coolingOffMs?: number | null;
+};
+
+/** Default cooling-off period for governed recovery (15 minutes). */
+export const DEFAULT_RECOVERY_COOLING_OFF_MS = 900_000;
+
+export function effectiveCoolingOffMs(coolingOffMs: number | null | undefined): number {
+  return coolingOffMs ?? DEFAULT_RECOVERY_COOLING_OFF_MS;
+}
+
+export type RequestClearInput = {
+  reason?: string;
+  expectedStateVersion: number;
+  coolingOffMs?: number;
+};
+
+export type RecoveryPreview = {
+  switchType: KillSwitchType;
+  scopeType: KillSwitchScopeType;
+  scopeRef: string | null;
+  state: KillSwitchState;
+  origin: KillSwitchOrigin;
+  reason: string;
+  clearingStartedAt: Date | null;
+  coolingOffMs: number;
+  eligibleAt: Date | null;
+  remainingMs: number;
+  confirmable: boolean;
+  stateVersion: number;
+};
+
+export type GovernedRecoveryService = {
+  requestClear(
+    actor: KillSwitchActor,
+    context: OrgContext | null,
+    target: KillSwitchTarget,
+    key: KillSwitchScopeKey,
+    input: RequestClearInput,
+  ): Promise<KillSwitchTransitionResult>;
+  previewRecovery(
+    context: OrgContext | null,
+    target: KillSwitchTarget,
+    key: KillSwitchScopeKey,
+  ): Promise<RecoveryPreview>;
+  confirmClear(
+    actor: KillSwitchActor,
+    context: OrgContext | null,
+    target: KillSwitchTarget,
+    key: KillSwitchScopeKey,
+    input: TransitionKillSwitchInput,
+  ): Promise<KillSwitchTransitionResult>;
+  cancelClear(
+    actor: KillSwitchActor,
+    context: OrgContext | null,
+    target: KillSwitchTarget,
+    key: KillSwitchScopeKey,
+    input: TransitionKillSwitchInput,
+  ): Promise<KillSwitchTransitionResult>;
+};
+
 export type KillSwitchTransitionResult = {
   row: KillSwitchView;
   auditId: string;
@@ -166,6 +227,10 @@ export type KillSwitchServiceDeps = {
   nowMs: () => number;
   assertOrgMembership?: (context: OrgContext & { userId: string }) => void | Promise<void>;
   assertPlatformKillSwitchAuthority: (actor: KillSwitchActor) => void | Promise<void>;
+  assertRecoveryConfirmAuthority?: (
+    actor: KillSwitchActor,
+    target: KillSwitchTarget,
+  ) => void | Promise<void>;
   runMutation?: <T>(fn: () => T | Promise<T>) => T | Promise<T>;
 };
 
@@ -196,7 +261,7 @@ export type KillSwitchService = {
     context: OrgContext | null,
     target: KillSwitchTarget,
     key: KillSwitchScopeKey,
-    input: TransitionKillSwitchInput,
+    input: BeginClearInput,
   ): Promise<KillSwitchTransitionResult>;
   cancelClear(
     actor: KillSwitchActor,
