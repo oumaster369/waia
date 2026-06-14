@@ -184,6 +184,41 @@ export const auditLogs = pgTable(
   ],
 );
 
+export const exchangeCredentialStatusEnumPg = pgEnum("exchange_credential_status", [
+  "active",
+  "revoked",
+]);
+
+/** AI-TRADER: envelope-encrypted exchange API credentials (DEE-233 / AT-E2). */
+export const exchangeCredentials = pgTable(
+  "exchange_credentials",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    apiKeyMasked: text("api_key_masked"),
+    encryptedPayload: text("encrypted_payload"),
+    payloadKeyVersion: text("payload_key_version"),
+    wrappedDekKeyVersion: text("wrapped_dek_key_version"),
+    wrappedDekKey: text("wrapped_dek_key"),
+    permissionMetadata: text("permission_metadata"),
+    status: exchangeCredentialStatusEnumPg("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+  },
+  (t) => [
+    index("exchange_credentials_org_venue_account_idx").on(
+      t.organizationId,
+      t.venue,
+      t.exchangeAccountId,
+    ),
+  ],
+);
+
 /** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */
 export const traderOrgProfiles = pgTable(
   "trader_org_profiles",

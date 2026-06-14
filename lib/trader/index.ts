@@ -11,3 +11,16 @@ export {
 } from "@/lib/trader/persistence/org-profile";
 export { ensureTraderOrgProfileSqlite } from "@/lib/trader/provisioning/sqlite";
 export { ensureTraderOrgProfilePostgres } from "@/lib/trader/provisioning/postgres";
+export {
+  getCredentialRowByIdPostgres,
+  getCredentialRowByIdSqlite,
+  insertCredentialRowPostgres,
+  insertCredentialRowSqlite,
+  listCredentialRowsForOrgPostgres,
+  listCredentialRowsForOrgSqlite,
+  revokeCredentialRowPostgres,
+  revokeCredentialRowSqlite,
+  type ExchangeCredentialRow,
+  type ExchangeCredentialStatus,
+  type InsertExchangeCredentialRowInput,
+} from "@/lib/trader/credentials";

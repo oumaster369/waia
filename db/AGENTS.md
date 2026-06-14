@@ -72,6 +72,9 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 |-----------|-------|---------|
 | SQLite `0008_trader_org_scaffolding` | `trader_org_profiles` | Org-scoped module anchor (1:1 per organization) |
 | Postgres `0005_trader_org_scaffolding` | `trader_org_profiles` | Same |
+| SQLite `0009_exchange_credentials` | `exchange_credentials` | Org-scoped encrypted credential storage (schema only in DEE-233) |
+| Postgres `0006_exchange_credentials` | `exchange_credentials` | Same |
+| Postgres `0007_exchange_credentials_rls` | `exchange_credentials` RLS | ADR-0007 deny authenticated/anon |
 
 **Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 
