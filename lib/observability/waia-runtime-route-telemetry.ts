@@ -23,7 +23,9 @@ export type WaiaRuntimeRouteKey =
   | "prediction_verification"
   | "prediction_verifications"
   | "repeatability"
-  | "health_database";
+  | "health_database"
+  | "trader_exchange_credentials_connect"
+  | "trader_exchange_credentials_list";
 
 export type WaiaRuntimeRouteOutcome =
   | "success"
