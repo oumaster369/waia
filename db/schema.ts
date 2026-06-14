@@ -1,4 +1,12 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  foreignKey,
+  index,
+  integer,
+  sqliteTable,
+  text,
+  unique,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 import {
   auditActorTypeEnum,
@@ -340,6 +348,139 @@ export const traderKillSwitches = sqliteTable(
   },
   (t) => [
     index("trader_kill_switches_org_scope_state_idx").on(t.organizationId, t.scopeType, t.state),
+  ],
+);
+
+export const orderSideEnum = ["buy", "sell"] as const;
+export type OrderSideDb = (typeof orderSideEnum)[number];
+
+export const orderTypeEnum = ["limit", "market"] as const;
+export type OrderTypeDb = (typeof orderTypeEnum)[number];
+
+export const orderStateEnum = [
+  "CREATED",
+  "RISK_APPROVED",
+  "SENT_TO_EXCHANGE",
+  "ACCEPTED",
+  "PARTIALLY_FILLED",
+  "FILLED",
+  "CANCEL_REQUESTED",
+  "CANCELLED",
+  "REJECTED",
+  "EXPIRED",
+  "FAILED",
+  "RECONCILIATION_REQUIRED",
+] as const;
+export type OrderStateDb = (typeof orderStateEnum)[number];
+
+export const orderExecutionModeEnum = ["mock", "paper", "live"] as const;
+export type OrderExecutionModeDb = (typeof orderExecutionModeEnum)[number];
+
+/** AI-TRADER: durable order header (DEE-247 / AT-E8 S1). */
+export const traderOrders = sqliteTable(
+  "trader_orders",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: text("credential_id").references(() => exchangeCredentials.id, {
+      onDelete: "set null",
+    }),
+    venue: text("venue").notNull(),
+    executionMode: text("execution_mode", { enum: [...orderExecutionModeEnum] }).notNull(),
+    symbol: text("symbol").notNull(),
+    side: text("side", { enum: [...orderSideEnum] }).notNull(),
+    type: text("type", { enum: [...orderTypeEnum] }).notNull(),
+    price: text("price"),
+    quantity: text("quantity").notNull(),
+    filledQuantity: text("filled_quantity").notNull().default("0"),
+    avgFillPrice: text("avg_fill_price"),
+    state: text("state", { enum: [...orderStateEnum] }).notNull(),
+    stateVersion: integer("state_version").notNull().default(1),
+    exchangeOrderId: text("exchange_order_id"),
+    clientOrderId: text("client_order_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    riskDecisionId: text("risk_decision_id").notNull(),
+    strategySignalId: text("strategy_signal_id"),
+    allocationDecisionId: text("allocation_decision_id"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_orders_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_orders_org_client_order_id_unique").on(t.organizationId, t.clientOrderId),
+    uniqueIndex("trader_orders_org_idempotency_key_unique").on(t.organizationId, t.idempotencyKey),
+    index("trader_orders_org_state_idx").on(t.organizationId, t.state),
+    index("trader_orders_org_execution_mode_state_idx").on(
+      t.organizationId,
+      t.executionMode,
+      t.state,
+    ),
+    index("trader_orders_org_venue_symbol_idx").on(t.organizationId, t.venue, t.symbol),
+    index("trader_orders_exchange_order_id_idx").on(t.exchangeOrderId),
+  ],
+);
+
+/** AI-TRADER: append-only order lifecycle events (DEE-247 / AT-E8 S1). */
+export const traderOrderEvents = sqliteTable(
+  "trader_order_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: text("order_id").notNull(),
+    seq: integer("seq").notNull(),
+    fromState: text("from_state", { enum: [...orderStateEnum] }),
+    toState: text("to_state", { enum: [...orderStateEnum] }).notNull(),
+    eventType: text("event_type").notNull(),
+    payload: text("payload"),
+    occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.orderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("trader_order_events_order_seq_unique").on(t.orderId, t.seq),
+    index("trader_order_events_org_order_seq_idx").on(t.organizationId, t.orderId, t.seq),
+  ],
+);
+
+/** AI-TRADER: per-fill rows for partial fills and reconciliation (DEE-247 / AT-E8 S1). */
+export const traderFills = sqliteTable(
+  "trader_fills",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: text("order_id").notNull(),
+    exchangeTradeId: text("exchange_trade_id").notNull(),
+    price: text("price").notNull(),
+    quantity: text("quantity").notNull(),
+    fee: text("fee").notNull().default("0"),
+    feeAsset: text("fee_asset").notNull().default(""),
+    executedAt: integer("executed_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.orderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("trader_fills_order_exchange_trade_id_unique").on(t.orderId, t.exchangeTradeId),
+    index("trader_fills_org_order_idx").on(t.organizationId, t.orderId),
   ],
 );
 

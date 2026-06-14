@@ -99,6 +99,20 @@
       "when": 1778600000002,
       "tag": "0013_trader_kill_switches_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1778700000001,
+      "tag": "0014_trader_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1778700000002,
+      "tag": "0015_trader_orders_rls",
+      "breakpoints": true
     }
   ]
 }

@@ -117,3 +117,20 @@ export {
   type BalanceSnapshotMetadata,
   type BalanceSnapshotService,
 } from "@/lib/trader/balances";
+export {
+  assertTransition,
+  isLegalTransition,
+  isTerminal,
+  mapConnectorStatusToOrderState,
+  ORDER_TRANSITIONS,
+  TERMINAL_ORDER_STATES,
+  IllegalOrderTransitionError,
+  orderEventTypeEnum,
+  orderExecutionModeEnum,
+  orderStateEnum,
+  type OrderEventType,
+  type OrderExecutionMode,
+  type OrderSide,
+  type OrderState,
+  type OrderType,
+} from "@/lib/trader/execution";
