@@ -10,6 +10,7 @@
 
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -17,6 +18,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -347,6 +349,124 @@ export const traderKillSwitches = pgTable(
   },
   (t) => [
     index("trader_kill_switches_org_scope_state_idx").on(t.organizationId, t.scopeType, t.state),
+  ],
+);
+
+export const orderSideEnumPg = pgEnum("order_side", ["buy", "sell"]);
+export const orderTypeEnumPg = pgEnum("order_type", ["limit", "market"]);
+export const orderStateEnumPg = pgEnum("order_state", [
+  "CREATED",
+  "RISK_APPROVED",
+  "SENT_TO_EXCHANGE",
+  "ACCEPTED",
+  "PARTIALLY_FILLED",
+  "FILLED",
+  "CANCEL_REQUESTED",
+  "CANCELLED",
+  "REJECTED",
+  "EXPIRED",
+  "FAILED",
+  "RECONCILIATION_REQUIRED",
+]);
+export const orderExecutionModeEnumPg = pgEnum("order_execution_mode", ["mock", "paper", "live"]);
+
+/** AI-TRADER: durable order header (DEE-247 / AT-E8 S1). */
+export const traderOrders = pgTable(
+  "trader_orders",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: uuid("credential_id").references(() => exchangeCredentials.id, {
+      onDelete: "set null",
+    }),
+    venue: text("venue").notNull(),
+    executionMode: orderExecutionModeEnumPg("execution_mode").notNull(),
+    symbol: text("symbol").notNull(),
+    side: orderSideEnumPg("side").notNull(),
+    type: orderTypeEnumPg("type").notNull(),
+    price: text("price"),
+    quantity: text("quantity").notNull(),
+    filledQuantity: text("filled_quantity").notNull().default("0"),
+    avgFillPrice: text("avg_fill_price"),
+    state: orderStateEnumPg("state").notNull(),
+    stateVersion: integer("state_version").notNull().default(1),
+    exchangeOrderId: text("exchange_order_id"),
+    clientOrderId: text("client_order_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    riskDecisionId: text("risk_decision_id").notNull(),
+    strategySignalId: text("strategy_signal_id"),
+    allocationDecisionId: text("allocation_decision_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_orders_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_orders_org_client_order_id_unique").on(t.organizationId, t.clientOrderId),
+    uniqueIndex("trader_orders_org_idempotency_key_unique").on(t.organizationId, t.idempotencyKey),
+    index("trader_orders_org_state_idx").on(t.organizationId, t.state),
+    index("trader_orders_org_execution_mode_state_idx").on(
+      t.organizationId,
+      t.executionMode,
+      t.state,
+    ),
+    index("trader_orders_org_venue_symbol_idx").on(t.organizationId, t.venue, t.symbol),
+    index("trader_orders_exchange_order_id_idx").on(t.exchangeOrderId),
+  ],
+);
+
+/** AI-TRADER: append-only order lifecycle events (DEE-247 / AT-E8 S1). */
+export const traderOrderEvents = pgTable(
+  "trader_order_events",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id").notNull(),
+    seq: integer("seq").notNull(),
+    fromState: orderStateEnumPg("from_state"),
+    toState: orderStateEnumPg("to_state").notNull(),
+    eventType: text("event_type").notNull(),
+    payload: text("payload"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true, mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.orderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("trader_order_events_order_seq_unique").on(t.orderId, t.seq),
+    index("trader_order_events_org_order_seq_idx").on(t.organizationId, t.orderId, t.seq),
+  ],
+);
+
+/** AI-TRADER: per-fill rows for partial fills and reconciliation (DEE-247 / AT-E8 S1). */
+export const traderFills = pgTable(
+  "trader_fills",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id").notNull(),
+    exchangeTradeId: text("exchange_trade_id").notNull(),
+    price: text("price").notNull(),
+    quantity: text("quantity").notNull(),
+    fee: text("fee").notNull().default("0"),
+    feeAsset: text("fee_asset").notNull().default(""),
+    executedAt: timestamp("executed_at", { withTimezone: true, mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.orderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("trader_fills_order_exchange_trade_id_unique").on(t.orderId, t.exchangeTradeId),
+    index("trader_fills_org_order_idx").on(t.organizationId, t.orderId),
   ],
 );
 
