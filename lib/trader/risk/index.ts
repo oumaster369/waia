@@ -8,8 +8,10 @@ export type {
 export {
   riskReasonCodes,
   capitalReasonCodes,
+  engineReasonCodes,
   tradeAbuseReasonCodes,
   type CapitalLimitsReasonCode,
+  type EngineReasonCode,
   type RiskReasonCode,
   type TradeAbuseReasonCode,
 } from "@/lib/trader/risk/reason-codes";
@@ -63,6 +65,17 @@ export type {
   TradeAbuseLimitsConfig,
 } from "@/lib/trader/risk/trade-abuse.types";
 export { evaluateTradeAbuse } from "@/lib/trader/risk/trade-abuse-evaluator";
+export {
+  createPostgresRiskEngineService,
+  createRiskEngineService,
+  createSqliteRiskEngineService,
+} from "@/lib/trader/risk/risk-engine-service";
+export type {
+  EvaluateOrderRequestInput,
+  RiskEngineDecision,
+  RiskEngineService,
+  RiskEngineServiceDeps,
+} from "@/lib/trader/risk/evaluate.types";
 export {
   createPostgresRiskLimitsService,
   createRiskLimitsService,
