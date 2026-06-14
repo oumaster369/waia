@@ -15,9 +15,20 @@ export const capitalReasonCodes = {
   maxQuoteExposureExceeded: "RISK_MAX_QUOTE_EXPOSURE",
 } as const;
 
+/**
+ * Engine-level fail-closed reason codes (DEE-241). Emitted by the risk engine
+ * orchestrator when an order cannot be evaluated safely — not by an individual evaluator.
+ */
+export const engineReasonCodes = {
+  limitsNotConfigured: "RISK_LIMITS_NOT_CONFIGURED",
+  accountStateUnavailable: "RISK_ACCOUNT_STATE_UNAVAILABLE",
+  evaluationError: "RISK_EVALUATION_ERROR",
+} as const;
+
 export const riskReasonCodes = {
   ...tradeAbuseReasonCodes,
   ...capitalReasonCodes,
+  ...engineReasonCodes,
 } as const;
 
 export type TradeAbuseReasonCode =
@@ -25,4 +36,6 @@ export type TradeAbuseReasonCode =
 
 export type CapitalLimitsReasonCode = (typeof capitalReasonCodes)[keyof typeof capitalReasonCodes];
 
-export type RiskReasonCode = TradeAbuseReasonCode | CapitalLimitsReasonCode;
+export type EngineReasonCode = (typeof engineReasonCodes)[keyof typeof engineReasonCodes];
+
+export type RiskReasonCode = TradeAbuseReasonCode | CapitalLimitsReasonCode | EngineReasonCode;
