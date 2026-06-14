@@ -204,6 +204,36 @@ export const exchangeCredentials = sqliteTable(
   ],
 );
 
+/** AI-TRADER: point-in-time balance snapshots (DEE-237 / AT-E2). */
+export const traderBalanceSnapshots = sqliteTable(
+  "trader_balance_snapshots",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: text("credential_id")
+      .notNull()
+      .references(() => exchangeCredentials.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    balances: text("balances").notNull(),
+    assetCount: integer("asset_count").notNull(),
+    syncedAt: integer("synced_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_balance_snapshots_org_cred_synced_idx").on(
+      t.organizationId,
+      t.credentialId,
+      t.syncedAt,
+    ),
+    index("trader_balance_snapshots_org_synced_idx").on(t.organizationId, t.syncedAt),
+  ],
+);
+
 /** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */
 export const traderOrgProfiles = sqliteTable(
   "trader_org_profiles",

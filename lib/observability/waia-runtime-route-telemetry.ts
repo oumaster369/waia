@@ -25,7 +25,9 @@ export type WaiaRuntimeRouteKey =
   | "repeatability"
   | "health_database"
   | "trader_exchange_credentials_connect"
-  | "trader_exchange_credentials_list";
+  | "trader_exchange_credentials_list"
+  | "trader_exchange_credentials_sync_balances"
+  | "trader_balance_snapshots_list";
 
 export type WaiaRuntimeRouteOutcome =
   | "success"

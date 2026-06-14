@@ -219,6 +219,34 @@ export const exchangeCredentials = pgTable(
   ],
 );
 
+/** AI-TRADER: point-in-time balance snapshots (DEE-237 / AT-E2). */
+export const traderBalanceSnapshots = pgTable(
+  "trader_balance_snapshots",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: uuid("credential_id")
+      .notNull()
+      .references(() => exchangeCredentials.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    balances: text("balances").notNull(),
+    assetCount: integer("asset_count").notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true, mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_balance_snapshots_org_cred_synced_idx").on(
+      t.organizationId,
+      t.credentialId,
+      t.syncedAt,
+    ),
+    index("trader_balance_snapshots_org_synced_idx").on(t.organizationId, t.syncedAt),
+  ],
+);
+
 /** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */
 export const traderOrgProfiles = pgTable(
   "trader_org_profiles",
