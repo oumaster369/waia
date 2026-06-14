@@ -9,9 +9,11 @@ export {
   riskReasonCodes,
   capitalReasonCodes,
   engineReasonCodes,
+  killSwitchReasonCodes,
   tradeAbuseReasonCodes,
   type CapitalLimitsReasonCode,
   type EngineReasonCode,
+  type KillSwitchReasonCode,
   type RiskReasonCode,
   type TradeAbuseReasonCode,
 } from "@/lib/trader/risk/reason-codes";
@@ -72,10 +74,16 @@ export {
 } from "@/lib/trader/risk/risk-engine-service";
 export type {
   EvaluateOrderRequestInput,
+  KillSwitchResolverPort,
   RiskEngineDecision,
   RiskEngineService,
   RiskEngineServiceDeps,
 } from "@/lib/trader/risk/evaluate.types";
+export {
+  buildKillSwitchAuditMetadata,
+  mapEffectiveStateToDecision,
+  type KillSwitchEnforcementResult,
+} from "@/lib/trader/risk/kill-switch-enforcement";
 export {
   createPostgresRiskLimitsService,
   createRiskLimitsService,

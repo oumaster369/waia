@@ -11,6 +11,8 @@ import postgres from "postgres";
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
 import * as pgSchema from "@/db/schema.postgres";
 import { createPostgresKillSwitchService } from "@/lib/trader/risk/kill-switch";
+import { killSwitchReasonCodes } from "@/lib/trader/risk/reason-codes";
+import { createPostgresRiskEngineService } from "@/lib/trader/risk/risk-engine-service";
 import { traderAuditActions } from "@/lib/trader/types";
 import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -115,5 +117,38 @@ describe.skipIf(!integrationEnabled || !url)("postgres kill switch parity (DEE-2
     expect(effective.blocked).toBe(true);
     expect(effective.enforcementMode).toBe("STOP_ACCOUNT");
     expect(effective.contributors.some((c) => c.scopeType === "platform")).toBe(true);
+  });
+
+  it("risk engine enforces tripped org switch via postgres resolver (DEE-244)", async () => {
+    const db = getPostgresDrizzle();
+    const killSwitchService = createPostgresKillSwitchService(db);
+
+    await killSwitchService.trip(
+      SERVICE_ACTOR,
+      requireOrgContext(orgA),
+      { scopeType: "organization", organizationId: orgA },
+      { scopeType: "organization", scopeRef: null, switchType: "CLOSE_ONLY" },
+      { enforcementMode: "CLOSE_ONLY", origin: "manual", reason: "engine enforcement parity" },
+    );
+
+    const engine = createPostgresRiskEngineService(db);
+    const result = await engine.evaluateOrderRequest({
+      context: requireOrgContext(orgA),
+      order: {
+        clientOrderId: "pg-engine-1",
+        symbol: "BTC/USDT",
+        side: "buy",
+        type: "limit",
+        price: "100",
+        quantity: "0.1",
+      },
+      referencePrice: "100",
+      accountKey: "acct-pg-1",
+    });
+
+    expect(result.decision.outcome).toBe("CLOSE_ONLY");
+    expect(result.decision.reasonCodes).toEqual([killSwitchReasonCodes.killSwitchActive]);
+    expect(result.configVersion).toBeNull();
+    expect(result.decision.snapshot.checksApplied).toEqual([]);
   });
 });

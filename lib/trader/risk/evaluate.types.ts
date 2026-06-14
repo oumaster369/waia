@@ -1,6 +1,7 @@
 import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
 
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
+import type { EffectiveKillSwitchState } from "@/lib/trader/risk/kill-switch/types";
 import type { OrderRateStore } from "@/lib/trader/risk/trade-abuse.types";
 import type { RiskDecision } from "@/lib/trader/risk/types";
 import type { RiskLimitsService } from "@/lib/trader/risk/limits/types";
@@ -34,8 +35,13 @@ export type RiskEngineDecision = {
   decision: RiskDecision;
 };
 
+export type KillSwitchResolverPort = {
+  getEffectiveState(context: OrgContext): Promise<EffectiveKillSwitchState>;
+};
+
 export type RiskEngineServiceDeps = {
   limitsService: RiskLimitsService;
+  killSwitchResolver: KillSwitchResolverPort;
   rateStore: OrderRateStore;
   writeAudit: (input: TraderAuditInput) => string | Promise<string>;
   nowMs: () => number;
