@@ -25,10 +25,17 @@ export const engineReasonCodes = {
   evaluationError: "RISK_EVALUATION_ERROR",
 } as const;
 
+/** Kill-switch enforcement reason codes (DEE-244). */
+export const killSwitchReasonCodes = {
+  killSwitchActive: "RISK_KILL_SWITCH_ACTIVE",
+  killSwitchUnavailable: "RISK_KILL_SWITCH_UNAVAILABLE",
+} as const;
+
 export const riskReasonCodes = {
   ...tradeAbuseReasonCodes,
   ...capitalReasonCodes,
   ...engineReasonCodes,
+  ...killSwitchReasonCodes,
 } as const;
 
 export type TradeAbuseReasonCode =
@@ -38,4 +45,11 @@ export type CapitalLimitsReasonCode = (typeof capitalReasonCodes)[keyof typeof c
 
 export type EngineReasonCode = (typeof engineReasonCodes)[keyof typeof engineReasonCodes];
 
-export type RiskReasonCode = TradeAbuseReasonCode | CapitalLimitsReasonCode | EngineReasonCode;
+export type KillSwitchReasonCode =
+  (typeof killSwitchReasonCodes)[keyof typeof killSwitchReasonCodes];
+
+export type RiskReasonCode =
+  | TradeAbuseReasonCode
+  | CapitalLimitsReasonCode
+  | EngineReasonCode
+  | KillSwitchReasonCode;

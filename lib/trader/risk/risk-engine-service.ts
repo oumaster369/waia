@@ -47,6 +47,15 @@ import {
   createSqliteRiskLimitsService,
 } from "@/lib/trader/risk/limits/limits-service";
 import { toCapitalLimitsConfig, toTradeAbuseLimitsConfig } from "@/lib/trader/risk/limits/types";
+import {
+  buildKillSwitchAuditMetadata,
+  mapEffectiveStateToDecision,
+} from "@/lib/trader/risk/kill-switch-enforcement";
+import {
+  createKillSwitchResolver,
+  createPostgresKillSwitchRepository,
+  createSqliteKillSwitchRepository,
+} from "@/lib/trader/risk/kill-switch";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import { engineReasonCodes, type RiskReasonCode } from "@/lib/trader/risk/reason-codes";
 import { evaluateTradeAbuse } from "@/lib/trader/risk/trade-abuse-evaluator";
@@ -144,62 +153,77 @@ export function createRiskEngineService(deps: RiskEngineServiceDeps): RiskEngine
       const riskDecisionId = deps.newDecisionId();
       const evaluatedAt = new Date(deps.nowMs()).toISOString();
 
+      const effectiveKillSwitch = await deps.killSwitchResolver.getEffectiveState(orgContext);
+      const killSwitchEnforcement = mapEffectiveStateToDecision(
+        effectiveKillSwitch,
+        input.order,
+        evaluatedAt,
+      );
+
       let configVersion: number | null = null;
       let decision: RiskDecision;
 
-      try {
-        const metadata = await deps.limitsService.getLimitsForOrg(limitsContext);
+      if (killSwitchEnforcement.enforced && killSwitchEnforcement.decision) {
+        decision = killSwitchEnforcement.decision;
+      } else {
+        try {
+          const metadata = await deps.limitsService.getLimitsForOrg(limitsContext);
 
-        if (!metadata) {
-          decision = failClosedDecision(
-            input.order,
-            engineReasonCodes.limitsNotConfigured,
-            evaluatedAt,
-          );
-        } else {
-          configVersion = metadata.configVersion;
-
-          if (!input.accountState) {
+          if (!metadata) {
             decision = failClosedDecision(
               input.order,
-              engineReasonCodes.accountStateUnavailable,
+              engineReasonCodes.limitsNotConfigured,
               evaluatedAt,
             );
           } else {
-            const tradeAbuse = evaluateTradeAbuse(
-              {
-                order: input.order,
-                referencePrice: input.referencePrice,
-                accountKey: input.accountKey,
-              },
-              toTradeAbuseLimitsConfig(metadata),
-              { nowMs: deps.nowMs, rateStore: deps.rateStore },
-            );
+            configVersion = metadata.configVersion;
 
-            if (isTerminalReject(tradeAbuse.outcome)) {
-              decision = tradeAbuse;
+            if (!input.accountState) {
+              decision = failClosedDecision(
+                input.order,
+                engineReasonCodes.accountStateUnavailable,
+                evaluatedAt,
+              );
             } else {
-              const evaluatedOrder =
-                tradeAbuse.outcome === "RESIZE" && tradeAbuse.resize
-                  ? { ...input.order, quantity: tradeAbuse.resize.quantity }
-                  : input.order;
-
-              const capital = evaluateCapitalLimits(
+              const tradeAbuse = evaluateTradeAbuse(
                 {
-                  order: evaluatedOrder,
+                  order: input.order,
                   referencePrice: input.referencePrice,
-                  accountState: input.accountState,
+                  accountKey: input.accountKey,
                 },
-                toCapitalLimitsConfig(metadata),
-                { nowMs: deps.nowMs },
+                toTradeAbuseLimitsConfig(metadata),
+                { nowMs: deps.nowMs, rateStore: deps.rateStore },
               );
 
-              decision = mergeDecisions(tradeAbuse, capital, evaluatedAt);
+              if (isTerminalReject(tradeAbuse.outcome)) {
+                decision = tradeAbuse;
+              } else {
+                const evaluatedOrder =
+                  tradeAbuse.outcome === "RESIZE" && tradeAbuse.resize
+                    ? { ...input.order, quantity: tradeAbuse.resize.quantity }
+                    : input.order;
+
+                const capital = evaluateCapitalLimits(
+                  {
+                    order: evaluatedOrder,
+                    referencePrice: input.referencePrice,
+                    accountState: input.accountState,
+                  },
+                  toCapitalLimitsConfig(metadata),
+                  { nowMs: deps.nowMs },
+                );
+
+                decision = mergeDecisions(tradeAbuse, capital, evaluatedAt);
+              }
             }
           }
+        } catch {
+          decision = failClosedDecision(
+            input.order,
+            engineReasonCodes.evaluationError,
+            evaluatedAt,
+          );
         }
-      } catch {
-        decision = failClosedDecision(input.order, engineReasonCodes.evaluationError, evaluatedAt);
       }
 
       const auditMetadata: Record<string, unknown> = {
@@ -211,6 +235,7 @@ export function createRiskEngineService(deps: RiskEngineServiceDeps): RiskEngine
         configVersion,
         scopeType: "organization",
         checksApplied: decision.snapshot.checksApplied,
+        killSwitch: buildKillSwitchAuditMetadata(effectiveKillSwitch),
       };
 
       await deps.writeAudit({
@@ -237,12 +262,19 @@ export function createSqliteRiskEngineService(
   db: WaiaDb,
   deps: Partial<RiskEngineServiceDeps> = {},
 ): RiskEngineService {
+  const nowMs = deps.nowMs ?? (() => Date.now());
   return createRiskEngineService({
     limitsService: deps.limitsService ?? createSqliteRiskLimitsService(db),
+    killSwitchResolver:
+      deps.killSwitchResolver ??
+      createKillSwitchResolver({
+        repository: createSqliteKillSwitchRepository(db),
+        nowMs,
+      }),
     rateStore: deps.rateStore ?? createInMemoryOrderRateStore(),
     writeAudit:
       deps.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogSqlite(db, input)),
-    nowMs: deps.nowMs ?? (() => Date.now()),
+    nowMs,
     newDecisionId: deps.newDecisionId ?? (() => crypto.randomUUID()),
   });
 }
@@ -251,12 +283,19 @@ export function createPostgresRiskEngineService(
   ex: PgRiskEngineExecutor,
   deps: Partial<RiskEngineServiceDeps> = {},
 ): RiskEngineService {
+  const nowMs = deps.nowMs ?? (() => Date.now());
   return createRiskEngineService({
     limitsService: deps.limitsService ?? createPostgresRiskLimitsService(ex),
+    killSwitchResolver:
+      deps.killSwitchResolver ??
+      createKillSwitchResolver({
+        repository: createPostgresKillSwitchRepository(ex),
+        nowMs,
+      }),
     rateStore: deps.rateStore ?? createInMemoryOrderRateStore(),
     writeAudit:
       deps.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogPostgres(ex, input)),
-    nowMs: deps.nowMs ?? (() => Date.now()),
+    nowMs,
     newDecisionId: deps.newDecisionId ?? (() => crypto.randomUUID()),
   });
 }

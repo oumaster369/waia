@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
-import type { EvaluateOrderRequestInput } from "@/lib/trader/risk/evaluate.types";
+import type {
+  EvaluateOrderRequestInput,
+  KillSwitchResolverPort,
+} from "@/lib/trader/risk/evaluate.types";
+import type { EffectiveKillSwitchState } from "@/lib/trader/risk/kill-switch/types";
 import type {
   NormalizedRiskLimitsConfig,
   OrgRiskLimitsMetadata,
@@ -12,6 +16,7 @@ import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store
 import {
   capitalReasonCodes,
   engineReasonCodes,
+  killSwitchReasonCodes,
   tradeAbuseReasonCodes,
 } from "@/lib/trader/risk/reason-codes";
 import { createRiskEngineService } from "@/lib/trader/risk/risk-engine-service";
@@ -52,6 +57,21 @@ const EMPTY_STATE: AccountRiskState = {
   quoteExposureByCurrency: {},
 };
 
+function defaultEffective(
+  overrides: Partial<EffectiveKillSwitchState> = {},
+): EffectiveKillSwitchState {
+  return {
+    organizationId: CONTEXT.organizationId,
+    blocked: false,
+    enforcementMode: null,
+    bindingState: null,
+    resolutionStatus: "ok",
+    contributors: [],
+    resolvedAt: new Date(NOW).toISOString(),
+    ...overrides,
+  };
+}
+
 function stubLimitsService(meta: OrgRiskLimitsMetadata | null): RiskLimitsService {
   return {
     getLimitsForOrg: async () => meta,
@@ -64,16 +84,33 @@ function stubLimitsService(meta: OrgRiskLimitsMetadata | null): RiskLimitsServic
   };
 }
 
-function makeEngine(meta: OrgRiskLimitsMetadata | null, newDecisionId = () => "rd-1") {
+function stubKillSwitchResolver(
+  effective: EffectiveKillSwitchState = defaultEffective(),
+): KillSwitchResolverPort {
+  return {
+    getEffectiveState: async () => effective,
+  };
+}
+
+function makeEngine(
+  meta: OrgRiskLimitsMetadata | null,
+  options: {
+    newDecisionId?: () => string;
+    killSwitch?: EffectiveKillSwitchState;
+    limitsService?: RiskLimitsService;
+  } = {},
+) {
+  const limitsService = options.limitsService ?? stubLimitsService(meta);
   const writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-id");
   const service = createRiskEngineService({
-    limitsService: stubLimitsService(meta),
+    limitsService,
+    killSwitchResolver: stubKillSwitchResolver(options.killSwitch ?? defaultEffective()),
     rateStore: createInMemoryOrderRateStore(),
     writeAudit,
     nowMs: () => NOW,
-    newDecisionId,
+    newDecisionId: options.newDecisionId ?? (() => "rd-1"),
   });
-  return { service, writeAudit };
+  return { service, writeAudit, limitsService };
 }
 
 function order(overrides: Partial<PlaceOrderInput> = {}): PlaceOrderInput {
@@ -122,7 +159,6 @@ describe("risk engine service (DEE-241)", () => {
 
     expect(result.decision.outcome).toBe("REJECT");
     expect(result.decision.reasonCodes).toEqual([tradeAbuseReasonCodes.symbolNotAllowed]);
-    // INV-4: capital never executed, so only the allowlist check is recorded.
     expect(result.decision.snapshot.checksApplied).toEqual(["allowlist"]);
     expect(result.decision.resize).toBeUndefined();
   });
@@ -137,9 +173,7 @@ describe("risk engine service (DEE-241)", () => {
     expect(result.decision.outcome).toBe("RESIZE");
     expect(result.decision.resize).toEqual({ quantity: "100", notional: "10000" });
     expect(result.decision.reasonCodes).toContain(tradeAbuseReasonCodes.maxNotionalExceeded);
-    // INV-5: snapshot reflects the original request; trim lives only in the hint.
     expect(result.decision.snapshot.requestedQuantity).toBe("200");
-    // INV-5: checks from both stages, deduped and order-preserving.
     expect(result.decision.snapshot.checksApplied).toEqual([
       "allowlist",
       "notional",
@@ -202,7 +236,6 @@ describe("risk engine service (DEE-241)", () => {
   it("fails closed (REJECT) when an evaluator throws", async () => {
     const { service } = makeEngine(metadata());
 
-    // Limit order with zero price makes the evaluator throw.
     const result = await service.evaluateOrderRequest(request({ order: order({ price: "0" }) }));
 
     expect(result.decision.outcome).toBe("REJECT");
@@ -210,7 +243,9 @@ describe("risk engine service (DEE-241)", () => {
   });
 
   it("writes a metadata-only audit event with no order secrets", async () => {
-    const { service, writeAudit } = makeEngine(metadata({ configVersion: 3 }), () => "rd-fixed");
+    const { service, writeAudit } = makeEngine(metadata({ configVersion: 3 }), {
+      newDecisionId: () => "rd-fixed",
+    });
 
     const result = await service.evaluateOrderRequest(request());
 
@@ -231,6 +266,13 @@ describe("risk engine service (DEE-241)", () => {
       clientOrderId: "coid-1",
       configVersion: 3,
       scopeType: "organization",
+      killSwitch: {
+        blocked: false,
+        enforcementMode: null,
+        bindingState: null,
+        resolutionStatus: "ok",
+        contributors: [],
+      },
     });
     expect(meta).not.toHaveProperty("price");
     expect(meta).not.toHaveProperty("quantity");
@@ -244,5 +286,89 @@ describe("risk engine service (DEE-241)", () => {
     await expect(
       service.evaluateOrderRequest(request({ context: { organizationId: "" } })),
     ).rejects.toThrow();
+  });
+});
+
+describe("risk engine kill switch pre-gate (DEE-244)", () => {
+  it.each([
+    ["REJECT", "REJECT"],
+    ["CLOSE_ONLY", "CLOSE_ONLY"],
+    ["STOP_ACCOUNT", "STOP_ACCOUNT"],
+  ] as const)("blocks with enforcementMode %s -> outcome %s", async (enforcementMode, outcome) => {
+    const limitsService = stubLimitsService(metadata());
+    const getLimitsForOrg = vi.spyOn(limitsService, "getLimitsForOrg");
+    const { service } = makeEngine(metadata(), {
+      limitsService,
+      killSwitch: defaultEffective({
+        blocked: true,
+        enforcementMode,
+        bindingState: "ACTIVE",
+      }),
+    });
+
+    const result = await service.evaluateOrderRequest(request());
+
+    expect(result.decision.outcome).toBe(outcome);
+    expect(result.decision.reasonCodes).toEqual([killSwitchReasonCodes.killSwitchActive]);
+    expect(result.decision.snapshot.checksApplied).toEqual([]);
+    expect(result.configVersion).toBeNull();
+    expect(getLimitsForOrg).not.toHaveBeenCalled();
+  });
+
+  it("fail_closed resolution yields STOP_ACCOUNT without running evaluators", async () => {
+    const limitsService = stubLimitsService(metadata());
+    const getLimitsForOrg = vi.spyOn(limitsService, "getLimitsForOrg");
+    const { service } = makeEngine(metadata(), {
+      limitsService,
+      killSwitch: defaultEffective({
+        blocked: true,
+        enforcementMode: "STOP_ACCOUNT",
+        bindingState: "ACTIVE",
+        resolutionStatus: "fail_closed",
+      }),
+    });
+
+    const result = await service.evaluateOrderRequest(request());
+
+    expect(result.decision.outcome).toBe("STOP_ACCOUNT");
+    expect(result.decision.reasonCodes).toEqual([killSwitchReasonCodes.killSwitchUnavailable]);
+    expect(result.decision.snapshot.checksApplied).toEqual([]);
+    expect(result.configVersion).toBeNull();
+    expect(getLimitsForOrg).not.toHaveBeenCalled();
+  });
+
+  it("includes killSwitch contributor metadata in audit on blocked path", async () => {
+    const { service, writeAudit } = makeEngine(metadata(), {
+      killSwitch: defaultEffective({
+        blocked: true,
+        enforcementMode: "REJECT",
+        bindingState: "ACTIVE",
+        contributors: [
+          {
+            killSwitchId: "ks-org-1",
+            organizationId: "org-engine-1",
+            scopeType: "organization",
+            scopeRef: null,
+            switchType: "EMERGENCY_STOP",
+            enforcementMode: "REJECT",
+            state: "ACTIVE",
+            stateVersion: 3,
+            reason: "manual trip",
+          },
+        ],
+      }),
+    });
+
+    await service.evaluateOrderRequest(request());
+
+    expect(writeAudit).toHaveBeenCalledTimes(1);
+    const killSwitch = writeAudit.mock.calls[0]![0].metadata?.killSwitch as {
+      blocked: boolean;
+      contributors: Array<{ killSwitchId: string; stateVersion: number }>;
+    };
+    expect(killSwitch.blocked).toBe(true);
+    expect(killSwitch.contributors).toEqual([
+      expect.objectContaining({ killSwitchId: "ks-org-1", stateVersion: 3 }),
+    ]);
   });
 });
