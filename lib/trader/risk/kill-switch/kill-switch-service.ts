@@ -13,6 +13,7 @@ import {
   assertPlatformKillSwitchAuthoritySqlite,
 } from "@/lib/trader/risk/kill-switch/authorization";
 import {
+  KILL_SWITCH_ALREADY_ACTIVE,
   KillSwitchAuthorizationError,
   KillSwitchConcurrencyError,
   KillSwitchNotFoundError,
@@ -255,7 +256,7 @@ export function createKillSwitchService(deps: KillSwitchServiceDeps): KillSwitch
       }
 
       if (existing.state === "ACTIVE") {
-        throw new KillSwitchConcurrencyError("KILL_SWITCH_ALREADY_ACTIVE");
+        throw new KillSwitchConcurrencyError(KILL_SWITCH_ALREADY_ACTIVE);
       }
 
       if (

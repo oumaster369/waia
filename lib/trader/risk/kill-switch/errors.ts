@@ -26,11 +26,19 @@ export class IllegalKillSwitchTransitionError extends KillSwitchError {
   }
 }
 
+export const KILL_SWITCH_ALREADY_ACTIVE = "KILL_SWITCH_ALREADY_ACTIVE";
+
 export class KillSwitchConcurrencyError extends KillSwitchError {
   constructor(message = "KILL_SWITCH_CONCURRENCY_CONFLICT") {
     super(message);
     this.name = "KillSwitchConcurrencyError";
   }
+}
+
+export function isAlreadyActiveError(error: unknown): error is KillSwitchConcurrencyError {
+  return (
+    error instanceof KillSwitchConcurrencyError && error.message === KILL_SWITCH_ALREADY_ACTIVE
+  );
 }
 
 export class KillSwitchNotFoundError extends KillSwitchError {

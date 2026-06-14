@@ -9,7 +9,28 @@ export {
   KillSwitchNotFoundError,
   IllegalKillSwitchTransitionError,
   UnsupportedKillSwitchScopeError,
+  KILL_SWITCH_ALREADY_ACTIVE,
+  isAlreadyActiveError,
 } from "@/lib/trader/risk/kill-switch/errors";
+export {
+  createAutomaticTriggerDispatcher,
+  createPostgresAutomaticTriggerDispatcher,
+  createSqliteAutomaticTriggerDispatcher,
+  CANONICAL_AUTO_TRIGGER_REASONS,
+  TRUSTED_AUTOMATIC_TRIGGER_ACTOR,
+  deriveContextFromTriggerTarget,
+  triggerSignalToSwitchPlan,
+  type AnomalySwitchType,
+  type AutomaticTriggerDispatcher,
+  type AutomaticTriggerDispatcherDeps,
+  type AutomaticTriggerDispatcherFactoryDeps,
+  type CanonicalAutoTriggerReason,
+  type KillSwitchTriggerBase,
+  type KillSwitchTriggerPlan,
+  type KillSwitchTriggerPort,
+  type KillSwitchTriggerSignal,
+  type TriggerOutcome,
+} from "@/lib/trader/risk/kill-switch/automatic-trigger";
 export {
   createKillSwitchService,
   createPostgresKillSwitchService,

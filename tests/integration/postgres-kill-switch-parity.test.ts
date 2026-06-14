@@ -10,7 +10,10 @@ import postgres from "postgres";
 
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
 import * as pgSchema from "@/db/schema.postgres";
-import { createPostgresKillSwitchService } from "@/lib/trader/risk/kill-switch";
+import {
+  createPostgresKillSwitchService,
+  createPostgresAutomaticTriggerDispatcher,
+} from "@/lib/trader/risk/kill-switch";
 import { killSwitchReasonCodes } from "@/lib/trader/risk/reason-codes";
 import { createPostgresRiskEngineService } from "@/lib/trader/risk/risk-engine-service";
 import { traderAuditActions } from "@/lib/trader/types";
@@ -150,5 +153,37 @@ describe.skipIf(!integrationEnabled || !url)("postgres kill switch parity (DEE-2
     expect(result.decision.reasonCodes).toEqual([killSwitchReasonCodes.killSwitchActive]);
     expect(result.configVersion).toBeNull();
     expect(result.decision.snapshot.checksApplied).toEqual([]);
+  });
+
+  it("automatic trigger dispatcher trips org switch with origin automatic (DEE-245)", async () => {
+    const db = getPostgresDrizzle();
+    const dispatcher = createPostgresAutomaticTriggerDispatcher(db);
+
+    const result = await dispatcher.activate({
+      category: "mismatch",
+      target: { scopeType: "organization", organizationId: orgA },
+    });
+
+    expect(result.status).toBe("tripped");
+    if (result.status !== "tripped") {
+      return;
+    }
+
+    const switchRows = await db
+      .select()
+      .from(pgSchema.traderKillSwitches)
+      .where(eq(pgSchema.traderKillSwitches.id, result.killSwitchId));
+
+    expect(switchRows[0]?.state).toBe("ACTIVE");
+    expect(switchRows[0]?.origin).toBe("automatic");
+    expect(switchRows[0]?.reason).toBe("auto:mismatch");
+
+    const auditRows = await db
+      .select()
+      .from(pgSchema.auditLogs)
+      .where(eq(pgSchema.auditLogs.id, result.auditId));
+
+    expect(auditRows[0]?.action).toBe(traderAuditActions.killSwitchTripped);
+    expect(auditRows).toHaveLength(1);
   });
 });
