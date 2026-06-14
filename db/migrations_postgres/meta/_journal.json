@@ -71,6 +71,20 @@
       "when": 1778400000002,
       "tag": "0009_trader_balance_snapshots_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778500000001,
+      "tag": "0010_trader_risk_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778500000002,
+      "tag": "0011_trader_risk_limits_rls",
+      "breakpoints": true
     }
   ]
 }

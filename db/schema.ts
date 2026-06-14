@@ -234,6 +234,49 @@ export const traderBalanceSnapshots = sqliteTable(
   ],
 );
 
+export const riskLimitsScopeTypeEnum = ["organization", "venue", "strategy"] as const;
+export type RiskLimitsScopeType = (typeof riskLimitsScopeTypeEnum)[number];
+
+/** AI-TRADER: org-scoped risk limit configuration (DEE-239 / AT-E7). */
+export const traderRiskLimits = sqliteTable(
+  "trader_risk_limits",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    scopeType: text("scope_type", { enum: [...riskLimitsScopeTypeEnum] })
+      .notNull()
+      .default("organization"),
+    scopeRef: text("scope_ref").notNull().default(""),
+    allowedSymbolsJson: text("allowed_symbols_json").notNull(),
+    maxNotional: text("max_notional").notNull(),
+    maxOrdersPerWindow: integer("max_orders_per_window").notNull(),
+    windowMs: integer("window_ms").notNull(),
+    collarBps: integer("collar_bps").notNull(),
+    maxPositionPerSymbol: text("max_position_per_symbol").notNull(),
+    maxDailyLoss: text("max_daily_loss").notNull(),
+    maxDrawdown: text("max_drawdown").notNull(),
+    maxOpenOrders: integer("max_open_orders").notNull(),
+    maxQuoteExposure: text("max_quote_exposure").notNull(),
+    configVersion: integer("config_version").notNull().default(1),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("trader_risk_limits_org_scope_unique").on(
+      t.organizationId,
+      t.scopeType,
+      t.scopeRef,
+    ),
+    index("trader_risk_limits_org_scope_type_idx").on(t.organizationId, t.scopeType),
+  ],
+);
+
 /** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */
 export const traderOrgProfiles = sqliteTable(
   "trader_org_profiles",
