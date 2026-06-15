@@ -35,6 +35,7 @@ export {
   createPostgresOrderExecutionServiceFromExecutor,
   createSqliteOrderExecutionService,
   canDispatch,
+  createDefaultConnectorForMode,
 } from "@/lib/trader/execution/execution-service";
 export {
   LiveExecutionNotSupportedError,
@@ -47,6 +48,30 @@ export type {
   SubmitOrderInput,
   SubmitOrderResult,
 } from "@/lib/trader/execution/execution-service.types";
+export {
+  classifyReconciliation,
+  classifyReconciliationForOrder,
+  type ConnectorView,
+} from "@/lib/trader/execution/reconciliation-classification";
+export {
+  createReconciliationServiceFromDeps,
+  createPostgresReconciliationService,
+  createPostgresReconciliationServiceFromExecutor,
+  createSqliteReconciliationService,
+} from "@/lib/trader/execution/reconciliation-service";
+export {
+  POST_DISPATCH_RECONCILABLE_STATES,
+  emptyReconciliationCounts,
+  isPostDispatchReconcilable,
+  isPreDispatchState,
+  reconciliationClassificationEnum,
+  type OrderReconciliationOutcome,
+  type ReconciliationClassification,
+  type ReconciliationReport,
+  type ReconciliationService,
+  type ReconciliationServiceDeps,
+  type ReconcileTarget,
+} from "@/lib/trader/execution/reconciliation.types";
 export {
   IllegalOrderTransitionError,
   orderEventTypeEnum,
