@@ -14,6 +14,7 @@ import {
 } from "@/db/schema";
 import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connector";
 import type { Order } from "@/lib/trader/connectors/types";
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import {
   createReconciliationServiceFromDeps,
   createSqliteOrderRepository,
@@ -98,18 +99,46 @@ function stubConnector(
   };
 }
 
-function createRunnerWithConnector(repo: OrderRepository, connector: ExchangeConnector) {
+type ReconciliationTelemetryEvent = {
+  event: string;
+  kind: string;
+  outcome: string;
+  severity?: string;
+  organization_id?: string;
+  escalations_attempted?: number;
+};
+
+function captureTelemetrySink() {
+  const lines: string[] = [];
+  const sink: WaiaTraderTelemetrySink = (line) => lines.push(line);
+  return { lines, sink };
+}
+
+function parseReconciliationEvents(lines: string[]): ReconciliationTelemetryEvent[] {
+  return lines
+    .map((line) => JSON.parse(line) as ReconciliationTelemetryEvent)
+    .filter((event) => event.event === "waia_trader_event" && event.kind === "reconciliation");
+}
+
+function createRunnerWithConnector(
+  repo: OrderRepository,
+  connector: ExchangeConnector,
+  telemetrySink?: WaiaTraderTelemetrySink,
+) {
   const reconciliationService = createReconciliationServiceFromDeps({
     orderRepository: repo,
     connectorForMode: () => connector,
     writeAudit: vi.fn((input) => input.entityId ?? "audit"),
     nowMs: () => NOW,
+    reconciliationTelemetrySink: telemetrySink,
   });
   const triggerPort = createSqliteAutomaticTriggerDispatcher(getDb());
 
   return createStartupReconciliationRunnerFromDeps({
     reconciliationService,
     triggerPort,
+    reconciliationTelemetrySink: telemetrySink,
+    nowMs: () => NOW,
   });
 }
 
@@ -436,5 +465,63 @@ describe("trader order reconciliation startup drill (DEE-252)", () => {
     expect(result.organizationId).toBe(orgA);
     expect(result.reconciliation).toBeDefined();
     expect(result.escalation).toBeDefined();
+  });
+
+  it("startup drill emits one startup_complete and does not duplicate critical mismatch events", async () => {
+    const context = requireOrgContext(orgA);
+    const created = await repo.createOrder(
+      context,
+      baseCreateInput({
+        clientOrderId: "startup-telemetry-255",
+        idempotencyKey: "idem-startup-telemetry-255",
+      }),
+    );
+    await advanceTo(repo, context, created, ["RISK_APPROVED", "SENT_TO_EXCHANGE"]);
+
+    const { lines, sink } = captureTelemetrySink();
+    const runner = createRunnerWithConnector(repo, stubConnector(), sink);
+    const result = await runner.runStartupReconciliation(context, "mock");
+
+    const events = parseReconciliationEvents(lines);
+    const runComplete = events.filter((event) => event.outcome === "run_complete");
+    const startupComplete = events.filter((event) => event.outcome === "startup_complete");
+    const critical = events.filter(
+      (event) => event.outcome !== "run_complete" && event.outcome !== "startup_complete",
+    );
+
+    expect(runComplete).toHaveLength(1);
+    expect(startupComplete).toHaveLength(1);
+    expect(startupComplete[0]?.severity).toBe("info");
+    expect(startupComplete[0]?.escalations_attempted).toBe(result.escalation.escalationsAttempted);
+    expect(critical.length).toBe(
+      result.reconciliation.outcomes.filter((o) =>
+        ["NOT_FOUND_AT_VENUE", "UNKNOWN_POSITION", "AMBIGUOUS_STALE", "TERMINAL_DRIFT"].includes(
+          o.classification,
+        ),
+      ).length,
+    );
+    expect(JSON.stringify(events)).not.toContain(created.id);
+  });
+
+  it("startup_complete includes escalations_attempted when escalation fires", async () => {
+    const context = requireOrgContext(orgA);
+    const created = await repo.createOrder(
+      context,
+      baseCreateInput({
+        clientOrderId: "startup-escalation-telemetry-255",
+        idempotencyKey: "idem-startup-escalation-telemetry-255",
+      }),
+    );
+    await advanceTo(repo, context, created, ["RISK_APPROVED", "SENT_TO_EXCHANGE"]);
+
+    const { lines, sink } = captureTelemetrySink();
+    const runner = createRunnerWithConnector(repo, stubConnector(), sink);
+    const result = await runner.runStartupReconciliation(context, "mock");
+
+    const startupComplete = parseReconciliationEvents(lines).find(
+      (event) => event.outcome === "startup_complete",
+    );
+    expect(result.escalation.escalationsAttempted).toBeGreaterThanOrEqual(1);
+    expect(startupComplete?.escalations_attempted).toBe(result.escalation.escalationsAttempted);
   });
 });

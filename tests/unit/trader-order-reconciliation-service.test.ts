@@ -7,6 +7,7 @@ import { getDb } from "@/db/client";
 import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connector";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import type { Order } from "@/lib/trader/connectors/types";
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import {
   OrderVersionConflictError,
   createReconciliationServiceFromDeps,
@@ -86,6 +87,42 @@ function stubConnector(
     getFuturesPositions: vi.fn(),
     placeFuturesOrder: vi.fn(),
   };
+}
+
+type ReconciliationTelemetryEvent = {
+  event: string;
+  kind: string;
+  outcome: string;
+  severity?: string;
+  organization_id?: string;
+  duration_ms?: number;
+  target_kind?: string;
+  count_not_found_at_venue?: number;
+  count_unknown_position?: number;
+  count_terminal_drift?: number;
+  escalation_kind?: string;
+};
+
+function captureTelemetrySink() {
+  const lines: string[] = [];
+  const sink: WaiaTraderTelemetrySink = (line) => lines.push(line);
+  return { lines, sink };
+}
+
+function parseReconciliationEvents(lines: string[]): ReconciliationTelemetryEvent[] {
+  return lines
+    .map((line) => JSON.parse(line) as ReconciliationTelemetryEvent)
+    .filter((event) => event.event === "waia_trader_event" && event.kind === "reconciliation");
+}
+
+function runCompleteEvents(events: ReconciliationTelemetryEvent[]) {
+  return events.filter((event) => event.outcome === "run_complete");
+}
+
+function criticalMismatchEvents(events: ReconciliationTelemetryEvent[]) {
+  return events.filter(
+    (event) => event.outcome !== "run_complete" && event.outcome !== "startup_complete",
+  );
 }
 
 describe("trader order reconciliation service (DEE-250)", () => {
@@ -176,11 +213,13 @@ describe("trader order reconciliation service (DEE-250)", () => {
     const sent = await advanceTo(repo, context, created, ["RISK_APPROVED", "SENT_TO_EXCHANGE"]);
 
     const writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit");
+    const { lines, sink } = captureTelemetrySink();
     const service = createReconciliationServiceFromDeps({
       orderRepository: repo,
       connectorForMode: () => stubConnector(),
       writeAudit,
       nowMs: () => NOW,
+      reconciliationTelemetrySink: sink,
     });
 
     const report = await service.reconcile(context, { kind: "order", orderId: sent.id });
@@ -188,6 +227,14 @@ describe("trader order reconciliation service (DEE-250)", () => {
 
     expect(outcome?.classification).toBe("NOT_FOUND_AT_VENUE");
     expect(outcome?.markedReconciliationRequired).toBe(true);
+
+    const events = parseReconciliationEvents(lines);
+    expect(runCompleteEvents(events)).toHaveLength(1);
+    expect(criticalMismatchEvents(events)).toHaveLength(1);
+    expect(criticalMismatchEvents(events)[0]?.outcome).toBe("NOT_FOUND_AT_VENUE");
+    expect(criticalMismatchEvents(events)[0]?.severity).toBe("critical");
+    expect(runCompleteEvents(events)[0]?.count_not_found_at_venue).toBeGreaterThanOrEqual(1);
+    expect(JSON.stringify(events)).not.toContain(sent.id);
 
     const updated = await repo.getOrderById(context, sent.id);
     expect(updated?.state).toBe("RECONCILIATION_REQUIRED");
@@ -225,6 +272,7 @@ describe("trader order reconciliation service (DEE-250)", () => {
     };
 
     const writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit");
+    const { lines, sink } = captureTelemetrySink();
     const service = createReconciliationServiceFromDeps({
       orderRepository: repo,
       connectorForMode: () =>
@@ -233,6 +281,7 @@ describe("trader order reconciliation service (DEE-250)", () => {
         }),
       writeAudit,
       nowMs: () => NOW,
+      reconciliationTelemetrySink: sink,
     });
 
     const report = await service.reconcile(context, { kind: "open", executionMode: "mock" });
@@ -241,6 +290,21 @@ describe("trader order reconciliation service (DEE-250)", () => {
     expect(unknown?.clientOrderId).toBe("phantom-client-250");
     expect(unknown?.orderId).toBeUndefined();
     expect(unknown?.markedReconciliationRequired).toBe(false);
+
+    const events = parseReconciliationEvents(lines);
+    expect(runCompleteEvents(events)).toHaveLength(1);
+    expect(
+      criticalMismatchEvents(events).some((event) => event.outcome === "UNKNOWN_POSITION"),
+    ).toBe(true);
+    expect(criticalMismatchEvents(events)).toHaveLength(
+      report.outcomes.filter((o) =>
+        ["NOT_FOUND_AT_VENUE", "UNKNOWN_POSITION", "AMBIGUOUS_STALE", "TERMINAL_DRIFT"].includes(
+          o.classification,
+        ),
+      ).length,
+    );
+    expect(runCompleteEvents(events)[0]?.count_unknown_position).toBeGreaterThanOrEqual(1);
+    expect(JSON.stringify(events)).not.toContain("phantom-client-250");
 
     expect(writeAudit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -281,6 +345,7 @@ describe("trader order reconciliation service (DEE-250)", () => {
     };
 
     const writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit");
+    const { lines, sink } = captureTelemetrySink();
     const service = createReconciliationServiceFromDeps({
       orderRepository: repo,
       connectorForMode: () =>
@@ -289,6 +354,7 @@ describe("trader order reconciliation service (DEE-250)", () => {
         }),
       writeAudit,
       nowMs: () => NOW,
+      reconciliationTelemetrySink: sink,
     });
 
     const report = await service.reconcile(context, { kind: "order", orderId: filled.id });
@@ -296,6 +362,13 @@ describe("trader order reconciliation service (DEE-250)", () => {
 
     expect(drift?.markedReconciliationRequired).toBe(false);
     expect(drift?.escalationKind).toBe("phantom_open");
+
+    const events = parseReconciliationEvents(lines);
+    expect(runCompleteEvents(events)).toHaveLength(1);
+    expect(criticalMismatchEvents(events)).toHaveLength(1);
+    expect(criticalMismatchEvents(events)[0]?.outcome).toBe("TERMINAL_DRIFT");
+    expect(criticalMismatchEvents(events)[0]?.escalation_kind).toBe("phantom_open");
+    expect(runCompleteEvents(events)[0]?.count_terminal_drift).toBeGreaterThanOrEqual(1);
     const stillTerminal = await repo.getOrderById(context, filled.id);
     expect(stillTerminal?.state).toBe("FILLED");
 
@@ -468,5 +541,49 @@ describe("trader order reconciliation service (DEE-250)", () => {
     expect(first.outcomes[0]?.classification).toBe("IN_SYNC");
     expect(second.outcomes[0]?.classification).toBe("IN_SYNC");
     expect(second.outcomes[0]?.recordedFills).toHaveLength(0);
+  });
+
+  it("IN_SYNC reconcile emits one run_complete and zero critical mismatch events", async () => {
+    const context = requireOrgContext(orgA);
+    const connector = new MockExchangeConnector();
+    await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
+
+    const clientOrderId = "recon-telemetry-in-sync-255";
+    const placed = await connector.placeOrder({
+      clientOrderId,
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "65000",
+      quantity: "0.1",
+    });
+
+    const created = await repo.createOrder(
+      context,
+      baseCreateInput({ clientOrderId, idempotencyKey: "idem-telemetry-in-sync-255" }),
+    );
+    const sent = await advanceTo(repo, context, created, ["RISK_APPROVED", "SENT_TO_EXCHANGE"]);
+    const accepted = await repo.transitionOrder(context, {
+      orderId: sent.id,
+      expectedStateVersion: sent.stateVersion,
+      toState: "ACCEPTED",
+      exchangeOrderId: placed.orderId,
+    });
+
+    const { lines, sink } = captureTelemetrySink();
+    const service = createSqliteReconciliationService(getDb(), {
+      connectorForMode: () => connector,
+      nowMs: () => NOW,
+      reconciliationTelemetrySink: sink,
+    });
+
+    await service.reconcile(context, { kind: "order", orderId: accepted.id });
+
+    const events = parseReconciliationEvents(lines);
+    expect(runCompleteEvents(events)).toHaveLength(1);
+    expect(criticalMismatchEvents(events)).toHaveLength(0);
+    expect(runCompleteEvents(events)[0]?.severity).toBe("info");
+    expect(runCompleteEvents(events)[0]?.target_kind).toBe("order");
+    expect(runCompleteEvents(events)[0]?.duration_ms).toBeGreaterThanOrEqual(0);
   });
 });

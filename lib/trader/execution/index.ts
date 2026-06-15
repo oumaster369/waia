@@ -8,6 +8,20 @@ export type {
   ExecutionTransitionEventInput,
 } from "@/lib/trader/execution/execution-telemetry";
 export {
+  buildReconciliationCountFields,
+  CRITICAL_RECONCILIATION_CLASSIFICATIONS,
+  emitReconciliationCriticalMismatch,
+  emitReconciliationRunComplete,
+  emitReconciliationStartupComplete,
+  isCriticalReconciliationClassification,
+} from "@/lib/trader/execution/reconciliation-telemetry";
+export type {
+  CriticalReconciliationClassification,
+  ReconciliationCriticalMismatchInput,
+  ReconciliationRunCompleteInput,
+  ReconciliationStartupCompleteInput,
+} from "@/lib/trader/execution/reconciliation-telemetry";
+export {
   assertTransition,
   isLegalTransition,
   isTerminal,

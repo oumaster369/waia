@@ -1,3 +1,4 @@
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import type { ReconciliationEscalationReport } from "@/lib/trader/execution/reconciliation-escalation.types";
 import type {
   ReconciliationReport,
@@ -20,6 +21,8 @@ export type StartupReconciliationResult = {
 export type StartupReconciliationDeps = {
   reconciliationService: ReconciliationService;
   triggerPort: KillSwitchTriggerPort;
+  reconciliationTelemetrySink?: WaiaTraderTelemetrySink;
+  nowMs?: () => number;
 };
 
 export type StartupReconciliationRunner = {
