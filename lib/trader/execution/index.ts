@@ -30,6 +30,24 @@ export {
   createSqliteOrderRepository,
 } from "@/lib/trader/execution/repository-adapters";
 export {
+  createOrderExecutionServiceFromDeps,
+  createPostgresOrderExecutionService,
+  createPostgresOrderExecutionServiceFromExecutor,
+  createSqliteOrderExecutionService,
+  canDispatch,
+} from "@/lib/trader/execution/execution-service";
+export {
+  LiveExecutionNotSupportedError,
+  UnsupportedExecutionModeError,
+} from "@/lib/trader/execution/execution-service.errors";
+export type {
+  OrderExecutionService,
+  OrderExecutionServiceDeps,
+  SubmissionAuditIds,
+  SubmitOrderInput,
+  SubmitOrderResult,
+} from "@/lib/trader/execution/execution-service.types";
+export {
   IllegalOrderTransitionError,
   orderEventTypeEnum,
   orderExecutionModeEnum,
