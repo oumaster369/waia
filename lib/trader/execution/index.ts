@@ -51,8 +51,18 @@ export type {
 export {
   classifyReconciliation,
   classifyReconciliationForOrder,
+  deriveTerminalDriftEscalationKind,
   type ConnectorView,
 } from "@/lib/trader/execution/reconciliation-classification";
+export {
+  mapOutcomeToTriggerSignals,
+  dedupeTriggerSignals,
+  processReconciliationEscalation,
+} from "@/lib/trader/execution/reconciliation-escalation";
+export type {
+  EscalationActivationOutcome,
+  ReconciliationEscalationReport,
+} from "@/lib/trader/execution/reconciliation-escalation.types";
 export {
   createReconciliationServiceFromDeps,
   createPostgresReconciliationService,
@@ -67,6 +77,7 @@ export {
   reconciliationClassificationEnum,
   type OrderReconciliationOutcome,
   type ReconciliationClassification,
+  type ReconciliationEscalationKind,
   type ReconciliationReport,
   type ReconciliationService,
   type ReconciliationServiceDeps,

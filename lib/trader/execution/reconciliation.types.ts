@@ -18,6 +18,8 @@ export const reconciliationClassificationEnum = [
 
 export type ReconciliationClassification = (typeof reconciliationClassificationEnum)[number];
 
+export type ReconciliationEscalationKind = "phantom_open" | "terminal_fact_drift";
+
 export type ReconcileTarget =
   | { kind: "open"; executionMode: "mock" | "paper" }
   | { kind: "order"; orderId: string };
@@ -31,6 +33,8 @@ export type OrderReconciliationOutcome = {
   recordedFills: string[];
   markedReconciliationRequired: boolean;
   detail?: string;
+  /** Set by S4 on TERMINAL_DRIFT outcomes only — semantic escalation hint for S5. */
+  escalationKind?: ReconciliationEscalationKind;
 };
 
 export type ReconciliationReport = {

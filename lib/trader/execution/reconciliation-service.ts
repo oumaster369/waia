@@ -18,6 +18,7 @@ import { ORDER_TRANSITIONS, isTerminal } from "@/lib/trader/execution/order-stat
 import {
   classifyReconciliation,
   classifyReconciliationForOrder,
+  deriveTerminalDriftEscalationKind,
   type ConnectorView,
 } from "@/lib/trader/execution/reconciliation-classification";
 import type {
@@ -343,6 +344,10 @@ function createReconciliationService(deps: ReconciliationServiceDeps): Reconcili
         toState: order.state,
         recordedFills,
         markedReconciliationRequired: false,
+        escalationKind:
+          classification === "TERMINAL_DRIFT"
+            ? deriveTerminalDriftEscalationKind(order, connectorView)
+            : undefined,
       };
     }
 
@@ -539,6 +544,10 @@ function createReconciliationService(deps: ReconciliationServiceDeps): Reconcili
         toState: order.state,
         recordedFills: [],
         markedReconciliationRequired: false,
+        escalationKind:
+          classification === "TERMINAL_DRIFT"
+            ? deriveTerminalDriftEscalationKind(order, connectorView)
+            : undefined,
       };
     }
 
