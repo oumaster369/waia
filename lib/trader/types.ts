@@ -18,6 +18,10 @@ export const traderAuditActions = {
   orderConnectorUncertain: "trader.order.connector_uncertain",
   orderConnectorRejected: "trader.order.connector_rejected",
   orderConnectorFilled: "trader.order.connector_filled",
+  orderReconciliationMismatch: "trader.order.reconciliation_mismatch",
+  orderReconciliationRequired: "trader.order.reconciliation_required",
+  orderReconciliationUnknownPosition: "trader.order.reconciliation_unknown_position",
+  orderReconciliationTerminalDrift: "trader.order.reconciliation_terminal_drift",
 } as const;
 
 export type TraderAuditAction = (typeof traderAuditActions)[keyof typeof traderAuditActions];

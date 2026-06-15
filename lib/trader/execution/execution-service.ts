@@ -186,7 +186,7 @@ function lazyValidatedMockConnector(inner: MockExchangeConnector): ExchangeConne
   };
 }
 
-function createDefaultConnectorForMode(): OrderExecutionServiceDeps["connectorForMode"] {
+export function createDefaultConnectorForMode(): OrderExecutionServiceDeps["connectorForMode"] {
   const connectors = new Map<OrderExecutionMode, ExchangeConnector>();
 
   return (executionMode) => {
