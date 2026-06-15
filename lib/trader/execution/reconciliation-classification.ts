@@ -2,7 +2,10 @@ import type { Order, Trade } from "@/lib/trader/connectors/types";
 import { mapConnectorStatusToOrderState } from "@/lib/trader/execution/connector-status-map";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
 import { isTerminal } from "@/lib/trader/execution/order-state-machine";
-import type { ReconciliationClassification } from "@/lib/trader/execution/reconciliation.types";
+import type {
+  ReconciliationClassification,
+  ReconciliationEscalationKind,
+} from "@/lib/trader/execution/reconciliation.types";
 import type { OrderState } from "@/lib/trader/execution/types";
 
 export type ConnectorView = {
@@ -182,4 +185,18 @@ export function classifyReconciliationForOrder(
   }
 
   return classifyReconciliation(order, connector);
+}
+
+/**
+ * Derives TERMINAL_DRIFT escalation kind from classifier context (S4-owned, DEE-251 / AT-E8 S5).
+ */
+export function deriveTerminalDriftEscalationKind(
+  order: OrderRow,
+  connector: ConnectorView,
+): ReconciliationEscalationKind {
+  const connectorOrder = connector.order;
+  if (connectorShowsOpenActivity(connectorOrder)) {
+    return "phantom_open";
+  }
+  return "terminal_fact_drift";
 }

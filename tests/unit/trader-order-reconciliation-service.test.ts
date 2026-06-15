@@ -295,6 +295,7 @@ describe("trader order reconciliation service (DEE-250)", () => {
     const drift = report.outcomes.find((o) => o.classification === "TERMINAL_DRIFT");
 
     expect(drift?.markedReconciliationRequired).toBe(false);
+    expect(drift?.escalationKind).toBe("phantom_open");
     const stillTerminal = await repo.getOrderById(context, filled.id);
     expect(stillTerminal?.state).toBe("FILLED");
 

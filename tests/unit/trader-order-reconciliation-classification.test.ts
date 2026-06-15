@@ -4,6 +4,7 @@ import type { Order } from "@/lib/trader/connectors/types";
 import {
   classifyReconciliation,
   classifyReconciliationForOrder,
+  deriveTerminalDriftEscalationKind,
   type ConnectorView,
 } from "@/lib/trader/execution/reconciliation-classification";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
@@ -126,5 +127,22 @@ describe("trader order reconciliation classification (DEE-250)", () => {
     expect(
       classifyReconciliationForOrder(baseOrder({ state: "RISK_APPROVED" }), view(null)),
     ).toBeNull();
+  });
+
+  it("deriveTerminalDriftEscalationKind returns phantom_open for connector open activity on terminal DB", () => {
+    const order = baseOrder({ state: "FILLED", filledQuantity: "0.1" });
+    expect(deriveTerminalDriftEscalationKind(order, view(connectorOrder({ status: "open" })))).toBe(
+      "phantom_open",
+    );
+  });
+
+  it("deriveTerminalDriftEscalationKind returns terminal_fact_drift for state mismatch", () => {
+    const order = baseOrder({ state: "FILLED", filledQuantity: "0.1", exchangeOrderId: "ex-1" });
+    expect(
+      deriveTerminalDriftEscalationKind(
+        order,
+        view(connectorOrder({ status: "filled", filledQuantity: "0.05", orderId: "ex-1" })),
+      ),
+    ).toBe("terminal_fact_drift");
   });
 });
