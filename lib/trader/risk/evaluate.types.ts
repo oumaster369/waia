@@ -1,4 +1,5 @@
 import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import type { EffectiveKillSwitchState } from "@/lib/trader/risk/kill-switch/types";
@@ -46,6 +47,7 @@ export type RiskEngineServiceDeps = {
   writeAudit: (input: TraderAuditInput) => string | Promise<string>;
   nowMs: () => number;
   newDecisionId: () => string;
+  riskTelemetrySink?: WaiaTraderTelemetrySink;
 };
 
 export type RiskEngineService = {

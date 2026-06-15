@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import type {
   EvaluateOrderRequestInput,
@@ -98,10 +99,14 @@ function makeEngine(
     newDecisionId?: () => string;
     killSwitch?: EffectiveKillSwitchState;
     limitsService?: RiskLimitsService;
+    riskTelemetrySink?: WaiaTraderTelemetrySink;
   } = {},
 ) {
   const limitsService = options.limitsService ?? stubLimitsService(meta);
   const writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-id");
+  const telemetryLines: string[] = [];
+  const riskTelemetrySink =
+    options.riskTelemetrySink ?? ((line: string) => telemetryLines.push(line));
   const service = createRiskEngineService({
     limitsService,
     killSwitchResolver: stubKillSwitchResolver(options.killSwitch ?? defaultEffective()),
@@ -109,8 +114,15 @@ function makeEngine(
     writeAudit,
     nowMs: () => NOW,
     newDecisionId: options.newDecisionId ?? (() => "rd-1"),
+    riskTelemetrySink,
   });
-  return { service, writeAudit, limitsService };
+  return { service, writeAudit, limitsService, telemetryLines, riskTelemetrySink };
+}
+
+function parseCounterLines(lines: string[]): Array<Record<string, unknown>> {
+  return lines
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((parsed) => parsed.kind === "counter");
 }
 
 function order(overrides: Partial<PlaceOrderInput> = {}): PlaceOrderInput {
@@ -286,6 +298,92 @@ describe("risk engine service (DEE-241)", () => {
     await expect(
       service.evaluateOrderRequest(request({ context: { organizationId: "" } })),
     ).rejects.toThrow();
+  });
+});
+
+describe("risk engine counter telemetry (DEE-256)", () => {
+  it("APPROVE path emits zero counter lines", async () => {
+    const { service, telemetryLines } = makeEngine(metadata());
+
+    await service.evaluateOrderRequest(request());
+
+    expect(parseCounterLines(telemetryLines)).toEqual([]);
+  });
+
+  it("symbol reject emits one RISK_SYMBOL_NOT_ALLOWED counter", async () => {
+    const { service, telemetryLines } = makeEngine(metadata());
+
+    await service.evaluateOrderRequest(request({ order: order({ symbol: "DOGE/USDT" }) }));
+
+    expect(parseCounterLines(telemetryLines)).toEqual([
+      expect.objectContaining({
+        kind: "counter",
+        domain: "risk",
+        code: tradeAbuseReasonCodes.symbolNotAllowed,
+        organization_id: CONTEXT.organizationId,
+        delta: 1,
+        severity: "info",
+      }),
+    ]);
+  });
+
+  it("RESIZE + capital REJECT emits two distinct reason-code counters", async () => {
+    const { service, telemetryLines } = makeEngine(metadata({ maxQuoteExposure: "5000" }));
+
+    await service.evaluateOrderRequest(request({ order: order({ quantity: "200" }) }));
+
+    const counters = parseCounterLines(telemetryLines);
+    expect(counters).toHaveLength(2);
+    expect(counters.map((line) => line.code)).toEqual([
+      tradeAbuseReasonCodes.maxNotionalExceeded,
+      capitalReasonCodes.maxQuoteExposureExceeded,
+    ]);
+  });
+
+  it("kill-switch blocked path emits RISK_KILL_SWITCH_ACTIVE counter", async () => {
+    const { service, telemetryLines } = makeEngine(metadata(), {
+      killSwitch: defaultEffective({
+        blocked: true,
+        enforcementMode: "REJECT",
+        bindingState: "ACTIVE",
+      }),
+    });
+
+    await service.evaluateOrderRequest(request());
+
+    expect(parseCounterLines(telemetryLines)).toEqual([
+      expect.objectContaining({
+        domain: "risk",
+        code: killSwitchReasonCodes.killSwitchActive,
+      }),
+    ]);
+  });
+
+  it("fail-closed no limits emits RISK_LIMITS_NOT_CONFIGURED counter", async () => {
+    const { service, telemetryLines } = makeEngine(null);
+
+    await service.evaluateOrderRequest(request());
+
+    expect(parseCounterLines(telemetryLines)).toEqual([
+      expect.objectContaining({
+        domain: "risk",
+        code: engineReasonCodes.limitsNotConfigured,
+      }),
+    ]);
+  });
+
+  it("emits exactly one counter per reason code in the final decision", async () => {
+    const approve = makeEngine(metadata());
+    await approve.service.evaluateOrderRequest(request());
+    expect(parseCounterLines(approve.telemetryLines)).toHaveLength(0);
+
+    const reject = makeEngine(metadata());
+    const rejectResult = await reject.service.evaluateOrderRequest(
+      request({ order: order({ symbol: "DOGE/USDT" }) }),
+    );
+    expect(parseCounterLines(reject.telemetryLines)).toHaveLength(
+      rejectResult.decision.reasonCodes.length,
+    );
   });
 });
 
