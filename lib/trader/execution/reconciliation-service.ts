@@ -21,6 +21,11 @@ import {
   deriveTerminalDriftEscalationKind,
   type ConnectorView,
 } from "@/lib/trader/execution/reconciliation-classification";
+import {
+  emitReconciliationCriticalMismatch,
+  emitReconciliationRunComplete,
+  isCriticalReconciliationClassification,
+} from "@/lib/trader/execution/reconciliation-telemetry";
 import type {
   OrderReconciliationOutcome,
   ReconciliationClassification,
@@ -104,7 +109,13 @@ function markedReconciliationRequired(classification: ReconciliationClassificati
 }
 
 function createReconciliationService(deps: ReconciliationServiceDeps): ReconciliationService {
-  const { orderRepository, connectorForMode, writeAudit, nowMs } = deps;
+  const {
+    orderRepository,
+    connectorForMode,
+    writeAudit,
+    nowMs,
+    reconciliationTelemetrySink: telemetrySink,
+  } = deps;
 
   async function transitionOrConflict(
     context: OrgContext,
@@ -741,10 +752,41 @@ function createReconciliationService(deps: ReconciliationServiceDeps): Reconcili
     };
   }
 
+  function finishReconcile(
+    report: ReconciliationReport,
+    runStartedMs: number,
+    target: ReconcileTarget,
+  ): ReconciliationReport {
+    emitReconciliationRunComplete(
+      {
+        organizationId: report.organizationId,
+        target,
+        counts: report.counts,
+        durationMs: Math.max(0, nowMs() - runStartedMs),
+      },
+      telemetrySink,
+    );
+
+    for (const outcome of report.outcomes) {
+      if (isCriticalReconciliationClassification(outcome.classification)) {
+        emitReconciliationCriticalMismatch(
+          {
+            organizationId: report.organizationId,
+            classification: outcome.classification,
+            escalationKind: outcome.escalationKind,
+          },
+          telemetrySink,
+        );
+      }
+    }
+
+    return report;
+  }
+
   return {
     async reconcile(context: OrgContext, target: ReconcileTarget): Promise<ReconciliationReport> {
       const orgContext = requireOrgContext(context.organizationId);
-      const runStartedAt = new Date(nowMs());
+      const runStartedMs = nowMs();
 
       let outcomes: OrderReconciliationOutcome[];
       if (target.kind === "open") {
@@ -753,7 +795,8 @@ function createReconciliationService(deps: ReconciliationServiceDeps): Reconcili
         outcomes = await reconcileSingleOrder(orgContext, target.orderId);
       }
 
-      return buildReport(orgContext.organizationId, outcomes, runStartedAt);
+      const report = buildReport(orgContext.organizationId, outcomes, new Date(runStartedMs));
+      return finishReconcile(report, runStartedMs, target);
     },
   };
 }
@@ -775,6 +818,7 @@ export function createSqliteReconciliationService(
     writeAudit:
       overrides.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogSqlite(db, input)),
     nowMs,
+    reconciliationTelemetrySink: overrides.reconciliationTelemetrySink,
   });
 }
 
@@ -789,6 +833,7 @@ export function createPostgresReconciliationService(
     writeAudit:
       overrides.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogPostgres(db, input)),
     nowMs,
+    reconciliationTelemetrySink: overrides.reconciliationTelemetrySink,
   });
 }
 
@@ -803,5 +848,6 @@ export function createPostgresReconciliationServiceFromExecutor(
     writeAudit:
       overrides.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogPostgres(ex, input)),
     nowMs,
+    reconciliationTelemetrySink: overrides.reconciliationTelemetrySink,
   });
 }

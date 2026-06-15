@@ -8,6 +8,7 @@ if (process.env.VITEST !== "true") {
 import type { WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { processReconciliationEscalation } from "@/lib/trader/execution/reconciliation-escalation";
+import { emitReconciliationStartupComplete } from "@/lib/trader/execution/reconciliation-telemetry";
 import {
   createPostgresReconciliationService,
   createPostgresReconciliationServiceFromExecutor,
@@ -35,6 +36,9 @@ export async function runStartupReconciliation(
   executionMode: StartupExecutionMode,
   deps: StartupReconciliationDeps,
 ): Promise<StartupReconciliationResult> {
+  const nowMs = deps.nowMs ?? Date.now;
+  const drillStartedMs = nowMs();
+
   const reconciliation = await deps.reconciliationService.reconcile(context, {
     kind: "open",
     executionMode,
@@ -46,13 +50,26 @@ export async function runStartupReconciliation(
     deps.triggerPort,
   );
 
-  return {
+  const result: StartupReconciliationResult = {
     organizationId: context.organizationId,
     executionMode,
     runStartedAt: reconciliation.runStartedAt,
     reconciliation,
     escalation,
   };
+
+  emitReconciliationStartupComplete(
+    {
+      organizationId: context.organizationId,
+      executionMode,
+      counts: reconciliation.counts,
+      durationMs: Math.max(0, nowMs() - drillStartedMs),
+      escalationsAttempted: escalation.escalationsAttempted,
+    },
+    deps.reconciliationTelemetrySink,
+  );
+
+  return result;
 }
 
 export function createStartupReconciliationRunnerFromDeps(
@@ -70,9 +87,14 @@ export function createSqliteStartupReconciliationRunner(
   db: WaiaDb,
   overrides: Partial<StartupReconciliationDeps> = {},
 ): StartupReconciliationRunner {
+  const sink = overrides.reconciliationTelemetrySink;
   return createStartupReconciliationRunnerFromDeps({
-    reconciliationService: overrides.reconciliationService ?? createSqliteReconciliationService(db),
+    reconciliationService:
+      overrides.reconciliationService ??
+      createSqliteReconciliationService(db, { reconciliationTelemetrySink: sink }),
     triggerPort: overrides.triggerPort ?? createSqliteAutomaticTriggerDispatcher(db),
+    reconciliationTelemetrySink: sink,
+    nowMs: overrides.nowMs,
   });
 }
 
@@ -80,10 +102,14 @@ export function createPostgresStartupReconciliationRunner(
   db: WaiaPostgresDb,
   overrides: Partial<StartupReconciliationDeps> = {},
 ): StartupReconciliationRunner {
+  const sink = overrides.reconciliationTelemetrySink;
   return createStartupReconciliationRunnerFromDeps({
     reconciliationService:
-      overrides.reconciliationService ?? createPostgresReconciliationService(db),
+      overrides.reconciliationService ??
+      createPostgresReconciliationService(db, { reconciliationTelemetrySink: sink }),
     triggerPort: overrides.triggerPort ?? createPostgresAutomaticTriggerDispatcher(db),
+    reconciliationTelemetrySink: sink,
+    nowMs: overrides.nowMs,
   });
 }
 
@@ -91,9 +117,13 @@ export function createPostgresStartupReconciliationRunnerFromExecutor(
   ex: PgStartupReconciliationExecutor,
   overrides: Partial<StartupReconciliationDeps> = {},
 ): StartupReconciliationRunner {
+  const sink = overrides.reconciliationTelemetrySink;
   return createStartupReconciliationRunnerFromDeps({
     reconciliationService:
-      overrides.reconciliationService ?? createPostgresReconciliationServiceFromExecutor(ex),
+      overrides.reconciliationService ??
+      createPostgresReconciliationServiceFromExecutor(ex, { reconciliationTelemetrySink: sink }),
     triggerPort: overrides.triggerPort ?? createPostgresAutomaticTriggerDispatcher(ex),
+    reconciliationTelemetrySink: sink,
+    nowMs: overrides.nowMs,
   });
 }

@@ -7,6 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { traderKillSwitches } from "@/db/schema";
 import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connector";
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import {
   emptyReconciliationCounts,
   createReconciliationServiceFromDeps,
@@ -181,5 +182,59 @@ describe("trader order reconciliation startup tenant isolation (DEE-252 / ADR-00
       )
       .all()[0];
     expect(orgBRow).toBeUndefined();
+  });
+
+  it("startup telemetry lines are scoped to the drill organization only", async () => {
+    const db = getDb();
+    const repoB = createSqliteOrderRepository(db);
+    const lines: string[] = [];
+    const sink: WaiaTraderTelemetrySink = (line) => lines.push(line);
+
+    const runner = createStartupReconciliationRunnerFromDeps({
+      reconciliationService: createReconciliationServiceFromDeps({
+        orderRepository: repoB,
+        connectorForMode: () => stubConnector(),
+        writeAudit: () => "audit",
+        nowMs: () => NOW,
+        reconciliationTelemetrySink: sink,
+      }),
+      triggerPort: createSqliteAutomaticTriggerDispatcher(db),
+      reconciliationTelemetrySink: sink,
+      nowMs: () => NOW,
+    });
+
+    const contextB = requireOrgContext(orgB);
+    const created = await repoB.createOrder(contextB, {
+      venue: "mock",
+      executionMode: "mock",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "65000",
+      quantity: "0.1",
+      clientOrderId: "iso-startup-telemetry-b",
+      idempotencyKey: "iso-startup-telemetry-b-idem",
+      riskDecisionId: crypto.randomUUID(),
+    });
+    const approved = await repoB.transitionOrder(contextB, {
+      orderId: created.id,
+      expectedStateVersion: created.stateVersion,
+      toState: "RISK_APPROVED",
+    });
+    await repoB.transitionOrder(contextB, {
+      orderId: approved.id,
+      expectedStateVersion: approved.stateVersion,
+      toState: "SENT_TO_EXCHANGE",
+    });
+
+    await runner.runStartupReconciliation(contextB, "mock");
+
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      const parsed = JSON.parse(line) as { organization_id?: string; kind?: string };
+      expect(parsed.kind).toBe("reconciliation");
+      expect(parsed.organization_id).toBe(orgB);
+      expect(line).not.toContain(orgA);
+    }
   });
 });
