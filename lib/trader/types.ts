@@ -13,6 +13,11 @@ export const traderAuditActions = {
   killSwitchClearingStarted: "trader.kill_switch.clearing_started",
   killSwitchClearCancelled: "trader.kill_switch.clear_cancelled",
   killSwitchCleared: "trader.kill_switch.cleared",
+  orderSubmissionStarted: "trader.order.submission_started",
+  orderSubmitBlocked: "trader.order.submit_blocked",
+  orderConnectorUncertain: "trader.order.connector_uncertain",
+  orderConnectorRejected: "trader.order.connector_rejected",
+  orderConnectorFilled: "trader.order.connector_filled",
 } as const;
 
 export type TraderAuditAction = (typeof traderAuditActions)[keyof typeof traderAuditActions];
@@ -25,6 +30,7 @@ export const traderEntityTypes = {
   riskLimits: "trader.risk_limits",
   riskDecision: "trader.risk_decision",
   killSwitch: "trader.kill_switch",
+  order: "trader.order",
 } as const;
 
 export type TraderEntityType = (typeof traderEntityTypes)[keyof typeof traderEntityTypes];
