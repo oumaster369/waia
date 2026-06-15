@@ -1,5 +1,13 @@
 export { mapConnectorStatusToOrderState } from "@/lib/trader/execution/connector-status-map";
 export {
+  emitExecutionTerminalEvent,
+  emitExecutionTransitionEvent,
+} from "@/lib/trader/execution/execution-telemetry";
+export type {
+  ExecutionTerminalEventInput,
+  ExecutionTransitionEventInput,
+} from "@/lib/trader/execution/execution-telemetry";
+export {
   assertTransition,
   isLegalTransition,
   isTerminal,

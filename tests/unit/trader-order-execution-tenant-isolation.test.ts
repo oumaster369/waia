@@ -87,6 +87,7 @@ describe("trader order execution tenant isolation (DEE-249 / ADR-0007)", () => {
     const nowMs = () => Date.now();
     const connector = new MockExchangeConnector();
     await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
+    const telemetryLines: string[] = [];
 
     const service = createOrderExecutionServiceFromDeps({
       riskEngine: createSqliteRiskEngineService(db, { nowMs }),
@@ -98,6 +99,7 @@ describe("trader order execution tenant isolation (DEE-249 / ADR-0007)", () => {
       connectorForMode: () => connector,
       writeAudit: () => "audit",
       nowMs,
+      executionTelemetrySink: (line) => telemetryLines.push(line),
     });
 
     const result = await service.submitOrder(requireOrgContext(orgB), {
@@ -122,6 +124,12 @@ describe("trader order execution tenant isolation (DEE-249 / ADR-0007)", () => {
     if (result.status === "submitted") {
       expect(result.order.organizationId).toBe(orgB);
       expect(result.order.id).not.toBe(orgAOrderId);
+    }
+
+    for (const line of telemetryLines) {
+      const parsed = JSON.parse(line) as { organization_id?: string };
+      expect(parsed.organization_id).toBe(orgB);
+      expect(line).not.toContain(orgA);
     }
   });
 

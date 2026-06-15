@@ -1,3 +1,4 @@
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
 import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connector";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
@@ -55,6 +56,7 @@ export type OrderExecutionServiceDeps = {
   connectorForMode: (executionMode: OrderExecutionMode) => ExchangeConnector;
   writeAudit: (input: TraderAuditInput) => string | Promise<string>;
   nowMs: () => number;
+  executionTelemetrySink?: WaiaTraderTelemetrySink;
 };
 
 export type OrderExecutionService = {
