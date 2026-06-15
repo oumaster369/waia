@@ -124,4 +124,30 @@ describe("risk engine tenant isolation (DEE-241 / ADR-0007)", () => {
   it("empty organization id throws OrgScopeError", () => {
     expect(() => requireOrgContext("")).toThrow(OrgScopeError);
   });
+
+  it("counter telemetry lines are scoped to the evaluated organization only", async () => {
+    const db = getDb();
+    const telemetryLines: string[] = [];
+    const engine = createSqliteRiskEngineService(db, {
+      riskTelemetrySink: (line) => telemetryLines.push(line),
+    });
+
+    await engine.evaluateOrderRequest({
+      context: requireOrgContext(orgA),
+      order: order({ symbol: "DOGE/USDT" }),
+      referencePrice: "100",
+      accountKey: "acct-a-telemetry",
+      accountState: EMPTY_STATE,
+    });
+
+    const counters = telemetryLines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((parsed) => parsed.kind === "counter");
+
+    expect(counters).toHaveLength(1);
+    for (const counter of counters) {
+      expect(counter.organization_id).toBe(orgA);
+      expect(JSON.stringify(counter)).not.toContain(orgB);
+    }
+  });
 });

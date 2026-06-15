@@ -18,6 +18,7 @@ import {
   triggerSignalToSwitchPlan,
   type KillSwitchTriggerSignal,
 } from "@/lib/trader/risk/kill-switch";
+import { KILL_SWITCH_DATA_QUALITY_COUNTER_CODE } from "@/lib/trader/risk/risk-telemetry";
 import { traderAuditActions } from "@/lib/trader/types";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
@@ -34,6 +35,20 @@ function orgTarget(organizationId: string) {
 
 function countAuditRows(db: ReturnType<typeof getDb>): number {
   return db.select().from(auditLogs).all().length;
+}
+
+function captureTelemetrySink() {
+  const lines: string[] = [];
+  return {
+    lines,
+    sink: (line: string) => lines.push(line),
+  };
+}
+
+function parseCounterLines(lines: string[]): Array<Record<string, unknown>> {
+  return lines
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((parsed) => parsed.kind === "counter");
 }
 
 describe("kill switch automatic trigger (DEE-245)", () => {
@@ -399,6 +414,57 @@ describe("kill switch automatic trigger (DEE-245)", () => {
         .all()[0];
       expect(row?.scopeType).toBe("platform");
       expect(row?.origin).toBe("automatic");
+    });
+
+    it("data_quality first activate emits one critical kill_switch counter", async () => {
+      const db = getDb();
+      const { lines, sink } = captureTelemetrySink();
+      const dispatcher = createSqliteAutomaticTriggerDispatcher(db, { riskTelemetrySink: sink });
+
+      const result = await dispatcher.activate({
+        category: "data_quality",
+        target: orgTarget(orgB),
+      });
+
+      expect(result.status).toBe("tripped");
+      expect(parseCounterLines(lines)).toEqual([
+        expect.objectContaining({
+          kind: "counter",
+          domain: "kill_switch",
+          code: KILL_SWITCH_DATA_QUALITY_COUNTER_CODE,
+          organization_id: orgB,
+          severity: "critical",
+          delta: 1,
+        }),
+      ]);
+    });
+
+    it("data_quality already_active emits a second counter line", async () => {
+      const db = getDb();
+      const { lines, sink } = captureTelemetrySink();
+      const dispatcher = createSqliteAutomaticTriggerDispatcher(db, { riskTelemetrySink: sink });
+      const signal: KillSwitchTriggerSignal = {
+        category: "data_quality",
+        target: orgTarget(orgA),
+      };
+
+      await dispatcher.activate(signal);
+      await dispatcher.activate(signal);
+
+      expect(parseCounterLines(lines)).toHaveLength(2);
+    });
+
+    it("mismatch activate emits zero counter lines", async () => {
+      const db = getDb();
+      const { lines, sink } = captureTelemetrySink();
+      const dispatcher = createSqliteAutomaticTriggerDispatcher(db, { riskTelemetrySink: sink });
+
+      await dispatcher.activate({
+        category: "mismatch",
+        target: orgTarget(orgA),
+      });
+
+      expect(parseCounterLines(lines)).toEqual([]);
     });
   });
 });

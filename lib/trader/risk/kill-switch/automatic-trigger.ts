@@ -7,6 +7,7 @@ if (process.env.VITEST !== "true") {
 
 import type { WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import { isAlreadyActiveError } from "@/lib/trader/risk/kill-switch/errors";
 import {
   createPostgresKillSwitchService,
@@ -21,6 +22,7 @@ import type {
   KillSwitchType,
 } from "@/lib/trader/risk/kill-switch/types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import { emitKillSwitchDataQualityCounter } from "@/lib/trader/risk/risk-telemetry";
 
 export type AnomalySwitchType = Extract<
   KillSwitchType,
@@ -152,6 +154,7 @@ export function triggerSignalToSwitchPlan(signal: KillSwitchTriggerSignal): Kill
 export type AutomaticTriggerDispatcherDeps = {
   killSwitchService: KillSwitchService;
   actor: KillSwitchActor;
+  riskTelemetrySink?: WaiaTraderTelemetrySink;
 };
 
 export function createAutomaticTriggerDispatcher(
@@ -161,6 +164,13 @@ export function createAutomaticTriggerDispatcher(
     async activate(signal) {
       const plan = triggerSignalToSwitchPlan(signal);
       const context = deriveContextFromTriggerTarget(signal.target);
+
+      if (signal.category === "data_quality" && context !== null) {
+        emitKillSwitchDataQualityCounter(
+          { organizationId: context.organizationId },
+          deps.riskTelemetrySink,
+        );
+      }
 
       try {
         const result = await deps.killSwitchService.trip(
@@ -200,6 +210,7 @@ type PgAutomaticTriggerExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "up
 export type AutomaticTriggerDispatcherFactoryDeps = {
   killSwitchService?: KillSwitchService;
   actor?: KillSwitchActor;
+  riskTelemetrySink?: WaiaTraderTelemetrySink;
 };
 
 export function createSqliteAutomaticTriggerDispatcher(
@@ -209,6 +220,7 @@ export function createSqliteAutomaticTriggerDispatcher(
   return createAutomaticTriggerDispatcher({
     killSwitchService: deps.killSwitchService ?? createSqliteKillSwitchService(db),
     actor: deps.actor ?? TRUSTED_AUTOMATIC_TRIGGER_ACTOR,
+    riskTelemetrySink: deps.riskTelemetrySink,
   });
 }
 
@@ -219,5 +231,6 @@ export function createPostgresAutomaticTriggerDispatcher(
   return createAutomaticTriggerDispatcher({
     killSwitchService: deps.killSwitchService ?? createPostgresKillSwitchService(ex),
     actor: deps.actor ?? TRUSTED_AUTOMATIC_TRIGGER_ACTOR,
+    riskTelemetrySink: deps.riskTelemetrySink,
   });
 }

@@ -72,6 +72,14 @@ export {
   createRiskEngineService,
   createSqliteRiskEngineService,
 } from "@/lib/trader/risk/risk-engine-service";
+export {
+  emitKillSwitchDataQualityCounter,
+  emitRiskReasonCodeCounter,
+  KILL_SWITCH_DATA_QUALITY_COUNTER_CODE,
+  RISK_COUNTER_CODES,
+  type EmitKillSwitchDataQualityCounterInput,
+  type EmitRiskReasonCodeCounterInput,
+} from "@/lib/trader/risk/risk-telemetry";
 export type {
   EvaluateOrderRequestInput,
   KillSwitchResolverPort,

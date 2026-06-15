@@ -58,6 +58,7 @@ import {
 } from "@/lib/trader/risk/kill-switch";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import { engineReasonCodes, type RiskReasonCode } from "@/lib/trader/risk/reason-codes";
+import { emitRiskReasonCodeCounter } from "@/lib/trader/risk/risk-telemetry";
 import { evaluateTradeAbuse } from "@/lib/trader/risk/trade-abuse-evaluator";
 import type {
   RiskCheckName,
@@ -143,6 +144,14 @@ function failClosedDecision(
 }
 
 export function createRiskEngineService(deps: RiskEngineServiceDeps): RiskEngineService {
+  const telemetrySink = deps.riskTelemetrySink;
+
+  function finishRiskEvaluation(organizationId: string, decision: RiskDecision): void {
+    for (const code of decision.reasonCodes) {
+      emitRiskReasonCodeCounter({ organizationId, code }, telemetrySink);
+    }
+  }
+
   return {
     async evaluateOrderRequest(input: EvaluateOrderRequestInput): Promise<RiskEngineDecision> {
       const orgContext = requireOrgContext(input.context.organizationId);
@@ -248,6 +257,8 @@ export function createRiskEngineService(deps: RiskEngineServiceDeps): RiskEngine
         metadata: auditMetadata,
       });
 
+      finishRiskEvaluation(orgContext.organizationId, decision);
+
       return {
         riskDecisionId,
         organizationId: orgContext.organizationId,
@@ -276,6 +287,7 @@ export function createSqliteRiskEngineService(
       deps.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogSqlite(db, input)),
     nowMs,
     newDecisionId: deps.newDecisionId ?? (() => crypto.randomUUID()),
+    riskTelemetrySink: deps.riskTelemetrySink,
   });
 }
 
@@ -297,5 +309,6 @@ export function createPostgresRiskEngineService(
       deps.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogPostgres(ex, input)),
     nowMs,
     newDecisionId: deps.newDecisionId ?? (() => crypto.randomUUID()),
+    riskTelemetrySink: deps.riskTelemetrySink,
   });
 }
