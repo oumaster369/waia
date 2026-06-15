@@ -28,6 +28,18 @@ import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
 import { isTerminal } from "@/lib/trader/execution/order-state-machine";
 import type { OrderExecutionMode, OrderState } from "@/lib/trader/execution/types";
 import {
+  emitExecutionTerminalEvent,
+  emitExecutionTransitionEvent,
+} from "@/lib/trader/execution/execution-telemetry";
+import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
+import { isTerminalReject } from "@/lib/trader/risk/decision";
+import type { RiskEngineDecision } from "@/lib/trader/risk/evaluate.types";
+import {
+  createPostgresRiskEngineService,
+  createSqliteRiskEngineService,
+} from "@/lib/trader/risk/risk-engine-service";
+import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/lib/trader/types";
+import {
   createPostgresOrderRepository,
   createPostgresOrderRepositoryFromExecutor,
   createSqliteOrderRepository,
@@ -37,14 +49,6 @@ import {
   createPostgresKillSwitchRepository,
   createSqliteKillSwitchRepository,
 } from "@/lib/trader/risk/kill-switch";
-import { isTerminalReject } from "@/lib/trader/risk/decision";
-import type { RiskEngineDecision } from "@/lib/trader/risk/evaluate.types";
-import {
-  createPostgresRiskEngineService,
-  createSqliteRiskEngineService,
-} from "@/lib/trader/risk/risk-engine-service";
-import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/lib/trader/types";
-import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 
 type PgExecutionExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
 
@@ -206,8 +210,33 @@ export function createDefaultConnectorForMode(): OrderExecutionServiceDeps["conn
 }
 
 function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExecutionService {
-  const { riskEngine, orderRepository, killSwitchResolver, connectorForMode, writeAudit, nowMs } =
-    deps;
+  const {
+    riskEngine,
+    orderRepository,
+    killSwitchResolver,
+    connectorForMode,
+    writeAudit,
+    nowMs,
+    executionTelemetrySink: telemetrySink,
+  } = deps;
+
+  function finishSubmitOrder(
+    orgContext: OrgContext,
+    input: SubmitOrderInput,
+    startedMs: number,
+    result: SubmitOrderResult,
+  ): SubmitOrderResult {
+    emitExecutionTerminalEvent(
+      {
+        organizationId: orgContext.organizationId,
+        executionMode: input.executionMode,
+        result,
+        durationMs: Math.max(0, nowMs() - startedMs),
+      },
+      telemetrySink,
+    );
+    return result;
+  }
 
   async function transitionOrConflict(
     context: OrgContext,
@@ -231,6 +260,15 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
         eventPayload: extras?.eventPayload,
         occurredAt: new Date(nowMs()),
       });
+      emitExecutionTransitionEvent(
+        {
+          organizationId: context.organizationId,
+          fromState: order.state,
+          toState,
+          executionMode: order.executionMode,
+        },
+        telemetrySink,
+      );
       return { order: updated };
     } catch (error) {
       if (error instanceof OrderVersionConflictError) {
@@ -433,6 +471,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
   return {
     async submitOrder(context: OrgContext, input: SubmitOrderInput): Promise<SubmitOrderResult> {
       const orgContext = requireOrgContext(context.organizationId);
+      const startedMs = nowMs();
 
       if (input.executionMode === "live") {
         throw new LiveExecutionNotSupportedError("live");
@@ -452,15 +491,23 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
       if (existing) {
         const resume = resumeResultForExistingOrder(existing);
         if (resume) {
-          return resume;
+          return finishSubmitOrder(orgContext, input, startedMs, resume);
         }
 
         const approved = await ensureRiskApproved(orgContext, existing);
         if ("conflict" in approved) {
-          return { status: "conflict", orderId: approved.orderId };
+          return finishSubmitOrder(orgContext, input, startedMs, {
+            status: "conflict",
+            orderId: approved.orderId,
+          });
         }
 
-        return dispatchToConnector(orgContext, approved.order, input);
+        return finishSubmitOrder(
+          orgContext,
+          input,
+          startedMs,
+          await dispatchToConnector(orgContext, approved.order, input),
+        );
       }
 
       const placeInput = placeOrderInputFromSubmit(input, input.clientOrderId);
@@ -473,7 +520,11 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
       });
 
       if (isTerminalReject(riskDecision.decision.outcome)) {
-        return { status: "risk_rejected", riskDecision, order: null };
+        return finishSubmitOrder(orgContext, input, startedMs, {
+          status: "risk_rejected",
+          riskDecision,
+          order: null,
+        });
       }
 
       const quantity =
@@ -512,10 +563,18 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
 
       const approved = await transitionOrConflict(orgContext, created, "RISK_APPROVED");
       if ("conflict" in approved) {
-        return { status: "conflict", orderId: approved.orderId };
+        return finishSubmitOrder(orgContext, input, startedMs, {
+          status: "conflict",
+          orderId: approved.orderId,
+        });
       }
 
-      return dispatchToConnector(orgContext, approved.order, input, riskDecision, auditIds);
+      return finishSubmitOrder(
+        orgContext,
+        input,
+        startedMs,
+        await dispatchToConnector(orgContext, approved.order, input, riskDecision, auditIds),
+      );
     },
   };
 }

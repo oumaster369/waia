@@ -28,6 +28,7 @@ import { rejectDecision, buildRiskSnapshot } from "@/lib/trader/risk/decision";
 import { createRiskEngineService } from "@/lib/trader/risk/risk-engine-service";
 import { engineReasonCodes } from "@/lib/trader/risk/reason-codes";
 import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/lib/trader/types";
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
@@ -217,11 +218,15 @@ function makeService(
     riskEngine?: RiskEngineService;
     killSwitch?: EffectiveKillSwitchState;
     connector?: ExchangeConnector;
+    executionTelemetrySink?: WaiaTraderTelemetrySink;
   } = {},
 ) {
   const writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-id");
   const riskEngine = options.riskEngine ?? makeRiskEngine(orgId);
   const connector = options.connector ?? minimalConnectorStub();
+  const telemetryLines: string[] = [];
+  const executionTelemetrySink =
+    options.executionTelemetrySink ?? ((line: string) => telemetryLines.push(line));
 
   const service = createOrderExecutionServiceFromDeps({
     riskEngine,
@@ -232,9 +237,35 @@ function makeService(
     connectorForMode: () => connector,
     writeAudit,
     nowMs: () => NOW,
+    executionTelemetrySink,
   });
 
-  return { service, writeAudit, riskEngine, connector, repo };
+  return { service, writeAudit, riskEngine, connector, repo, telemetryLines };
+}
+
+type ExecutionTelemetryEvent = {
+  event: string;
+  kind: string;
+  outcome: string;
+  severity?: string;
+  organization_id?: string;
+  from_state?: string;
+  to_state?: string;
+  block_reason?: string;
+};
+
+function parseExecutionEvents(lines: string[]): ExecutionTelemetryEvent[] {
+  return lines
+    .map((line) => JSON.parse(line) as ExecutionTelemetryEvent)
+    .filter((event) => event.event === "waia_trader_event" && event.kind === "execution");
+}
+
+function terminalEvents(events: ExecutionTelemetryEvent[]) {
+  return events.filter((event) => event.outcome !== "state_transition");
+}
+
+function transitionEvents(events: ExecutionTelemetryEvent[]) {
+  return events.filter((event) => event.outcome === "state_transition");
 }
 
 describe("trader order execution service (DEE-249)", () => {
@@ -667,5 +698,188 @@ describe("trader order execution service (DEE-249)", () => {
     );
 
     expect(connector.placeOrder).toHaveBeenCalledWith(expect.objectContaining({ clientOrderId }));
+  });
+});
+
+describe("trader order execution telemetry (DEE-254)", () => {
+  let orgA: string;
+  let repo: OrderRepository;
+
+  beforeAll(async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "waia-order-exec-tel-"));
+    process.env.DATABASE_URL = `file:${path.join(tmpDir, "order-exec-tel.sqlite")}`;
+    migrateDatabaseFromEnv();
+    const db = getDb();
+
+    insertEmailPasswordUser(db, {
+      id: USER_A,
+      email: "order-exec-tel-a@waia.invalid",
+      password: "password123",
+      identityLabel: "Order Exec Tel Org A",
+    });
+
+    orgA = ensureUserCoreSeedSqlite(db, { userId: USER_A, displayName: "Order Exec Tel Org A" });
+    await createSqliteRiskLimitsService(db).upsertLimitsForOrg(requireOrgContext(orgA), {
+      ...DEFAULT_ORG_RISK_LIMITS,
+    });
+
+    repo = createSqliteOrderRepository(db);
+  });
+
+  it("risk_rejected emits one terminal event and no transitions", async () => {
+    const context = requireOrgContext(orgA);
+    const { service, telemetryLines } = makeService(orgA, repo, {
+      riskEngine: makeRiskEngine(orgA, { reject: true }),
+    });
+
+    await service.submitOrder(
+      context,
+      submitInput({ clientOrderId: "tel-reject-254", idempotencyKey: "idem-tel-reject-254" }),
+    );
+
+    const events = parseExecutionEvents(telemetryLines);
+    expect(terminalEvents(events)).toEqual([
+      expect.objectContaining({ outcome: "risk_rejected", severity: "info" }),
+    ]);
+    expect(transitionEvents(events)).toHaveLength(0);
+  });
+
+  it("submit_blocked emits terminal block_reason and transition to REJECTED", async () => {
+    const context = requireOrgContext(orgA);
+    const { service, telemetryLines } = makeService(orgA, repo, {
+      killSwitch: defaultEffective({
+        organizationId: orgA,
+        blocked: true,
+        enforcementMode: "REJECT",
+      }),
+    });
+
+    await service.submitOrder(
+      context,
+      submitInput({
+        clientOrderId: "tel-ks-254",
+        idempotencyKey: "idem-tel-ks-254",
+        type: "limit",
+        price: "65000",
+      }),
+    );
+
+    const events = parseExecutionEvents(telemetryLines);
+    expect(terminalEvents(events)).toEqual([
+      expect.objectContaining({
+        outcome: "submit_blocked",
+        block_reason: "kill_switch",
+        severity: "info",
+      }),
+    ]);
+    expect(transitionEvents(events).some((event) => event.to_state === "REJECTED")).toBe(true);
+  });
+
+  it("conflict emits one critical terminal without orderId", async () => {
+    const context = requireOrgContext(orgA);
+    const realRepo = repo;
+    const repoWithConflict: OrderRepository = {
+      ...realRepo,
+      transitionOrder: async (ctx, transitionInput) => {
+        if (transitionInput.toState === "SENT_TO_EXCHANGE") {
+          throw new OrderVersionConflictError(
+            transitionInput.orderId,
+            transitionInput.expectedStateVersion,
+          );
+        }
+        return realRepo.transitionOrder(ctx, transitionInput);
+      },
+    };
+
+    const { service, telemetryLines } = makeService(orgA, repoWithConflict);
+
+    await service.submitOrder(
+      context,
+      submitInput({
+        clientOrderId: "tel-conflict-254",
+        idempotencyKey: "idem-tel-conflict-254",
+        type: "limit",
+        price: "65000",
+      }),
+    );
+
+    const terminal = terminalEvents(parseExecutionEvents(telemetryLines));
+    expect(terminal).toHaveLength(1);
+    expect(terminal[0]).toMatchObject({ outcome: "conflict", severity: "critical" });
+    expect(terminal[0]).not.toHaveProperty("orderId");
+    expect(terminal[0]).not.toHaveProperty("order_id");
+  });
+
+  it("connector throw emits connector_uncertain and RECONCILIATION_REQUIRED transition", async () => {
+    const context = requireOrgContext(orgA);
+    const connector = minimalConnectorStub({
+      placeOrder: vi.fn().mockRejectedValue(new Error("timeout")),
+    });
+    const { service, telemetryLines } = makeService(orgA, repo, { connector });
+
+    await service.submitOrder(
+      context,
+      submitInput({
+        clientOrderId: "tel-throw-254",
+        idempotencyKey: "idem-tel-throw-254",
+        type: "limit",
+        price: "65000",
+      }),
+    );
+
+    const events = parseExecutionEvents(telemetryLines);
+    expect(terminalEvents(events)).toEqual([
+      expect.objectContaining({ outcome: "connector_uncertain", severity: "info" }),
+    ]);
+    expect(
+      transitionEvents(events).some((event) => event.to_state === "RECONCILIATION_REQUIRED"),
+    ).toBe(true);
+  });
+
+  it("market submit emits four transitions and one submitted terminal", async () => {
+    const context = requireOrgContext(orgA);
+    const { service, telemetryLines } = makeService(orgA, repo);
+
+    await service.submitOrder(
+      context,
+      submitInput({
+        clientOrderId: "tel-market-254",
+        idempotencyKey: "idem-tel-market-254",
+        type: "market",
+      }),
+    );
+
+    const events = parseExecutionEvents(telemetryLines);
+    expect(terminalEvents(events)).toEqual([
+      expect.objectContaining({ outcome: "submitted", severity: "info" }),
+    ]);
+    expect(transitionEvents(events).map((event) => event.to_state)).toEqual([
+      "RISK_APPROVED",
+      "SENT_TO_EXCHANGE",
+      "ACCEPTED",
+      "FILLED",
+    ]);
+  });
+
+  it("lookup-first resubmit emits one submitted terminal and no transitions", async () => {
+    const context = requireOrgContext(orgA);
+    const { service, telemetryLines } = makeService(orgA, repo);
+    const input = submitInput({
+      clientOrderId: "tel-resubmit-254",
+      idempotencyKey: "idem-tel-resubmit-254",
+      type: "limit",
+      price: "65000",
+    });
+
+    await service.submitOrder(context, input);
+    telemetryLines.length = 0;
+
+    await service.submitOrder(context, input);
+
+    const events = parseExecutionEvents(telemetryLines);
+    expect(terminalEvents(events)).toEqual([
+      expect.objectContaining({ outcome: "submitted", severity: "info" }),
+    ]);
+    expect(transitionEvents(events)).toHaveLength(0);
   });
 });
