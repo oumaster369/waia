@@ -7,6 +7,29 @@ export {
   TERMINAL_ORDER_STATES,
 } from "@/lib/trader/execution/order-state-machine";
 export {
+  DuplicateOrderError,
+  FillConflictError,
+  OrderNotFoundError,
+  OrderVersionConflictError,
+} from "@/lib/trader/execution/order-repository.errors";
+export {
+  fillPayloadMatches,
+  orderPayloadMatches,
+  type CreateOrderInput,
+  type FillRow,
+  type OpenOrdersFilter,
+  type OrderEventRow,
+  type OrderRepository,
+  type OrderRow,
+  type RecordFillInput,
+  type TransitionOrderInput,
+} from "@/lib/trader/execution/order-repository.types";
+export {
+  createPostgresOrderRepository,
+  createPostgresOrderRepositoryFromExecutor,
+  createSqliteOrderRepository,
+} from "@/lib/trader/execution/repository-adapters";
+export {
   IllegalOrderTransitionError,
   orderEventTypeEnum,
   orderExecutionModeEnum,
