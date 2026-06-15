@@ -70,6 +70,19 @@ export {
   createSqliteReconciliationService,
 } from "@/lib/trader/execution/reconciliation-service";
 export {
+  createPostgresStartupReconciliationRunner,
+  createPostgresStartupReconciliationRunnerFromExecutor,
+  createSqliteStartupReconciliationRunner,
+  createStartupReconciliationRunnerFromDeps,
+  runStartupReconciliation,
+} from "@/lib/trader/execution/reconciliation-startup";
+export type {
+  StartupReconciliationDeps,
+  StartupReconciliationResult,
+  StartupReconciliationRunner,
+  StartupExecutionMode,
+} from "@/lib/trader/execution/reconciliation-startup.types";
+export {
   POST_DISPATCH_RECONCILABLE_STATES,
   emptyReconciliationCounts,
   isPostDispatchReconcilable,
