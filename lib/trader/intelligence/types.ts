@@ -1,3 +1,5 @@
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
+
 /** Canonical spot symbol for MVP intelligence slice (HTX-style slash form). */
 export const BTC_USDT = "BTC/USDT" as const;
 
@@ -161,6 +163,7 @@ export type EvaluationCycleInput = {
   quote?: Quote;
   evaluatedAt?: string;
   newId?: () => string;
+  telemetrySink?: WaiaTraderTelemetrySink;
 };
 
 export type EvaluationCycleResult = {

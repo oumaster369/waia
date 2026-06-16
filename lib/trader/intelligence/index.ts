@@ -13,6 +13,12 @@ export {
 } from "@/lib/trader/intelligence/cde-v0";
 export { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 export {
+  emitStrategyReasonCodeCounter,
+  emitStrategySignalCounters,
+  STRATEGY_COUNTER_CODES,
+  type EmitStrategyReasonCodeCounterInput,
+} from "@/lib/trader/intelligence/strategy-telemetry";
+export {
   evaluateMeanReversionV0,
   ZSCORE_BUY_THRESHOLD,
 } from "@/lib/trader/intelligence/strategies/mean-reversion-v0";

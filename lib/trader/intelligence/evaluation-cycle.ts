@@ -1,6 +1,7 @@
 import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
 import { evaluateMeanReversionV0 } from "@/lib/trader/intelligence/strategies/mean-reversion-v0";
+import { emitStrategySignalCounters } from "@/lib/trader/intelligence/strategy-telemetry";
 import type { EvaluationCycleInput, EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 
 /**
@@ -19,6 +20,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     organizationId: input.organizationId,
     newId,
   });
+  emitStrategySignalCounters(signal, input.telemetrySink);
 
   return { features, msv, signal };
 }
