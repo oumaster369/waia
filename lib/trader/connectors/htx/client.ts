@@ -8,6 +8,8 @@ import type {
   HtxAccountBalance,
   HtxAccountRow,
   HtxApiKeyRow,
+  HtxKlineResponse,
+  HtxKlineRow,
   HtxLegacyResponse,
   HtxMarketMergedResponse,
   HtxMatchResultRow,
@@ -130,6 +132,34 @@ export class HtxRestClient {
       throw new HtxApiError("http-error", `HTTP ${response.status} for market detail`);
     }
     return (await response.json()) as HtxMarketMergedResponse;
+  }
+
+  async getMarketHistoryKline(input: {
+    symbol: string;
+    period: string;
+    size?: number;
+  }): Promise<HtxKlineRow[]> {
+    const params = new URLSearchParams({
+      symbol: input.symbol,
+      period: input.period,
+      size: String(input.size ?? 25),
+    });
+    const url = `${this.restHost}${HTX_ENDPOINTS.marketHistoryKline}?${params.toString()}`;
+    const response = await this.fetchImpl(url, { method: "GET" });
+    if (!response.ok) {
+      throw new HtxApiError("http-error", `HTTP ${response.status} for market history kline`);
+    }
+    const body = (await response.json()) as HtxKlineResponse;
+    if (body.status === "error") {
+      throw new HtxApiError(
+        body["err-code"] ?? "unknown",
+        body["err-msg"] ?? "HTX market history kline error",
+      );
+    }
+    if (body.status !== "ok") {
+      throw new HtxApiError("invalid-response", "Unexpected HTX market history kline response");
+    }
+    return body.data ?? [];
   }
 
   private async signedGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {

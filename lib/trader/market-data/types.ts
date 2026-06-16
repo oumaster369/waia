@@ -1,4 +1,5 @@
-import type { Bar, Quote } from "@/lib/trader/intelligence/types";
+import type { Bar, Quote, InstrumentId } from "@/lib/trader/intelligence/types";
+import type { HtxFetchFn } from "@/lib/trader/connectors/htx/client";
 
 export type BarReplayMode = "full" | "expand";
 
@@ -17,10 +18,24 @@ export type BarReplaySource = {
   reset(): void;
 };
 
+export type BarPollSource = {
+  fetchSnapshot(): Promise<MarketSnapshot>;
+  reset(): void;
+};
+
 export type FixtureBarReplayOptions = {
   fixturePath?: string;
   mode?: BarReplayMode;
   cycleIdPrefix?: string;
+};
+
+export type HtxBarPollOptions = {
+  internalSymbol?: InstrumentId;
+  size?: number;
+  period?: string;
+  cycleIdPrefix?: string;
+  restHost?: string;
+  fetchImpl?: HtxFetchFn;
 };
 
 export type TraderFixtureFile = {
