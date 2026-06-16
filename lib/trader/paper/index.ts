@@ -6,6 +6,7 @@ export {
   cycleOrderKeys,
   runFixturePaperCycles,
   runPaperCycleOnce,
+  runPollPaperCycles,
 } from "@/lib/trader/paper/paper-cycle-runner";
 export { runFixturePaperCyclesHarness } from "@/lib/trader/paper/run-fixture-paper-cycles";
 export type {
@@ -17,4 +18,7 @@ export type {
   RunFixturePaperCyclesHarnessInput,
   RunFixturePaperCyclesInput,
   RunFixturePaperCyclesResult,
+  RunMultiPaperCyclesResult,
+  RunMultiPaperCyclesSharedInput,
+  RunPollPaperCyclesInput,
 } from "@/lib/trader/paper/paper-cycle.types";

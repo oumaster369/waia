@@ -6,7 +6,8 @@ import type {
   PaperCycleInput,
   PaperCycleResult,
   RunFixturePaperCyclesInput,
-  RunFixturePaperCyclesResult,
+  RunMultiPaperCyclesResult,
+  RunPollPaperCyclesInput,
 } from "@/lib/trader/paper/paper-cycle.types";
 
 /**
@@ -104,7 +105,7 @@ export async function runPaperCycleOnce(
 
 export async function runFixturePaperCycles(
   input: RunFixturePaperCyclesInput,
-): Promise<RunFixturePaperCyclesResult> {
+): Promise<RunMultiPaperCyclesResult> {
   const results: PaperCycleResult[] = [];
 
   for (let index = 0; index < input.n; index += 1) {
@@ -118,6 +119,31 @@ export async function runFixturePaperCycles(
     const result = await runPaperCycleOnce(input.deps, {
       context: input.context,
       snapshot: next.snapshot,
+      accountKey: input.accountKey,
+      defaultQuantity: input.defaultQuantity,
+      executionMode: input.executionMode,
+      accountState: input.accountState,
+      telemetrySink: input.telemetrySink,
+      newId: input.newId,
+    });
+
+    results.push(result);
+  }
+
+  return { results };
+}
+
+export async function runPollPaperCycles(
+  input: RunPollPaperCyclesInput,
+): Promise<RunMultiPaperCyclesResult> {
+  const results: PaperCycleResult[] = [];
+
+  for (let index = 0; index < input.n; index += 1) {
+    const snapshot = await input.poll.fetchSnapshot();
+
+    const result = await runPaperCycleOnce(input.deps, {
+      context: input.context,
+      snapshot,
       accountKey: input.accountKey,
       defaultQuantity: input.defaultQuantity,
       executionMode: input.executionMode,

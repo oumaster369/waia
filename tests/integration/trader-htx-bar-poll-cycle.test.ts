@@ -15,7 +15,7 @@ import {
   createSqliteReconciliationService,
 } from "@/lib/trader/execution";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
-import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
+import { runPaperCycleOnce, runPollPaperCycles } from "@/lib/trader/paper/paper-cycle-runner";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
@@ -169,5 +169,48 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
     expect(result.execution.order.clientOrderId).toBe("client-paper-cycle-test-htx-poll-0");
     expect(result.execution.order.state).toBe("FILLED");
     expect(result.reconciliation?.outcomes[0]?.classification).toBe("IN_SYNC");
+  });
+
+  it("runs 3 mocked HTX poll cycles via runPollPaperCycles with unique client order IDs", async () => {
+    const context = requireOrgContext(orgA);
+    const db = getDb();
+    const deps = buildPaperCycleDeps(db, connector, writeAudit);
+    const fixture = loadHtxFixture();
+    const poll = new HtxBarPollSource({
+      fetchImpl: createMockFetch(fixture),
+      cycleIdPrefix: "test-htx-poll-multi",
+    });
+
+    const { results } = await runPollPaperCycles({
+      deps,
+      context,
+      n: 3,
+      poll,
+      accountKey: "acct-htx-poll-multi",
+      defaultQuantity: "0.01",
+      executionMode: "mock",
+      accountState: EMPTY_STATE,
+      newId: () => crypto.randomUUID(),
+    });
+
+    expect(results).toHaveLength(3);
+
+    const idempotencyKeys = new Set<string>();
+    for (const result of results) {
+      expect(result.evaluation.signal.outcome).toBe("SIGNAL");
+      expect(result.submitBlocked).toBe(false);
+      expect(result.execution?.status).toBe("submitted");
+      if (result.execution?.status !== "submitted") {
+        continue;
+      }
+      expect(result.execution.order.state).toBe("FILLED");
+      expect(result.reconciliation?.outcomes[0]?.classification).toBe("IN_SYNC");
+      idempotencyKeys.add(result.execution.order.clientOrderId);
+    }
+
+    expect(idempotencyKeys.size).toBe(3);
+    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-0")).toBe(true);
+    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-1")).toBe(true);
+    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-2")).toBe(true);
   });
 });
