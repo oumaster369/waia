@@ -198,3 +198,26 @@ export {
   type OrderState,
   type OrderType,
 } from "@/lib/trader/execution";
+export {
+  computeFeatureSnapshot,
+  buildMsvEnvelope,
+  runEvaluationCycle,
+  evaluateMeanReversionV0,
+  BTC_USDT,
+  MEAN_REVERSION_V0,
+  MEAN_REVERSION_V0_VERSION,
+  FEATURE_ENGINE_QUALITY_THRESHOLD,
+  ZSCORE_BUY_THRESHOLD,
+  cdeReasonCodes,
+  featureReasonCodes,
+  strategyReasonCodes,
+  type Bar,
+  type EvaluationCycleInput,
+  type EvaluationCycleResult,
+  type FeatureSnapshot,
+  type MsvEnvelope,
+  type Quote,
+  type StrategySignal,
+  type TradingPermission,
+} from "@/lib/trader/intelligence";
+export { mapSignalToSubmitOrder, type MapSignalToSubmitOrderInput } from "@/lib/trader/paper";
