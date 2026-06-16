@@ -13,6 +13,12 @@ export {
 } from "@/lib/trader/intelligence/cde-v0";
 export { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 export {
+  emitDecisionReasonCodeCounter,
+  emitMsvDecisionCounters,
+  DECISION_COUNTER_CODES,
+  type EmitDecisionReasonCodeCounterInput,
+} from "@/lib/trader/intelligence/decision-telemetry";
+export {
   emitStrategyReasonCodeCounter,
   emitStrategySignalCounters,
   STRATEGY_COUNTER_CODES,
