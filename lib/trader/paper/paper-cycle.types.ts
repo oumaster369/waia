@@ -7,6 +7,7 @@ import type { ReconciliationReport } from "@/lib/trader/execution/reconciliation
 import type { OrderExecutionMode } from "@/lib/trader/execution/types";
 import type { EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 import type {
+  BarPollSource,
   BarReplayMode,
   BarReplaySource,
   MarketSnapshot,
@@ -47,11 +48,11 @@ export type PaperCycleResult = {
   reconciliation: ReconciliationReport | null;
 };
 
-export type RunFixturePaperCyclesInput = {
+/** Shared N-cycle runner context (fixture replay + poll sources). */
+export type RunMultiPaperCyclesSharedInput = {
   deps: PaperCycleDeps;
   context: OrgContext;
   n: number;
-  replay: BarReplaySource;
   accountKey: string;
   defaultQuantity: string;
   executionMode?: PaperCycleExecutionMode;
@@ -60,9 +61,19 @@ export type RunFixturePaperCyclesInput = {
   newId?: () => string;
 };
 
-export type RunFixturePaperCyclesResult = {
+export type RunFixturePaperCyclesInput = RunMultiPaperCyclesSharedInput & {
+  replay: BarReplaySource;
+};
+
+export type RunPollPaperCyclesInput = RunMultiPaperCyclesSharedInput & {
+  poll: BarPollSource;
+};
+
+export type RunMultiPaperCyclesResult = {
   results: PaperCycleResult[];
 };
+
+export type RunFixturePaperCyclesResult = RunMultiPaperCyclesResult;
 
 export type RunFixturePaperCyclesHarnessInput = {
   deps: PaperCycleDeps;

@@ -8,10 +8,12 @@ import type { ReconciliationReport } from "@/lib/trader/execution/reconciliation
 import * as evaluationCycleModule from "@/lib/trader/intelligence/evaluation-cycle";
 import type { Bar, EvaluationCycleResult, Quote } from "@/lib/trader/intelligence/types";
 import { FixtureBarReplaySource } from "@/lib/trader/market-data/fixture-bar-replay-source";
+import type { BarPollSource } from "@/lib/trader/market-data/types";
 import {
   cycleOrderKeys,
   runFixturePaperCycles,
   runPaperCycleOnce,
+  runPollPaperCycles,
 } from "@/lib/trader/paper/paper-cycle-runner";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
@@ -270,6 +272,36 @@ describe("paper cycle runner (DEE-260)", () => {
       context: requireOrgContext(ORG),
       n: 3,
       replay,
+      accountKey: "acct-260",
+      defaultQuantity: "0.01",
+      accountState: EMPTY_STATE,
+    });
+
+    expect(results).toHaveLength(3);
+    expect(deps.execution.submitOrder).toHaveBeenCalledTimes(3);
+    expect(deps.reconciliation.reconcile).toHaveBeenCalledTimes(3);
+  });
+
+  it("runPollPaperCycles runs N cycles with shared poll source", async () => {
+    const deps = mockDeps();
+    vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue(mockEvaluation());
+    const replay = new FixtureBarReplaySource({ mode: "full", cycleIdPrefix: "poll-batch" });
+    const poll: BarPollSource = {
+      reset: () => replay.reset(),
+      fetchSnapshot: async () => {
+        const next = replay.next();
+        if (next.done) {
+          throw new Error("[test] poll source exhausted");
+        }
+        return next.snapshot;
+      },
+    };
+
+    const { results } = await runPollPaperCycles({
+      deps,
+      context: requireOrgContext(ORG),
+      n: 3,
+      poll,
       accountKey: "acct-260",
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
