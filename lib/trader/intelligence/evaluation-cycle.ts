@@ -1,4 +1,5 @@
 import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
+import { emitMsvDecisionCounters } from "@/lib/trader/intelligence/decision-telemetry";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
 import { evaluateMeanReversionV0 } from "@/lib/trader/intelligence/strategies/mean-reversion-v0";
 import { emitStrategySignalCounters } from "@/lib/trader/intelligence/strategy-telemetry";
@@ -16,6 +17,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     newId,
   });
   const msv = buildMsvEnvelope({ features, newId });
+  emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
   const signal = evaluateMeanReversionV0(msv, features, {
     organizationId: input.organizationId,
     newId,

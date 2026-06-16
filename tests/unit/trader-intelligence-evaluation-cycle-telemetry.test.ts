@@ -5,7 +5,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as cdeModule from "@/lib/trader/intelligence/cde-v0";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
-import { strategyReasonCodes, type Bar, type Quote } from "@/lib/trader/intelligence/types";
+import {
+  cdeReasonCodes,
+  strategyReasonCodes,
+  type Bar,
+  type Quote,
+} from "@/lib/trader/intelligence/types";
 
 const ORG = "00000000-0000-4000-8000-0000000258";
 
@@ -70,8 +75,10 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(1);
-    expect(parseCounter(lines[0]!)).toMatchObject({
+    expect(lines).toHaveLength(3);
+    expect(parseCounter(lines[0]!).domain).toBe("decision");
+    expect(parseCounter(lines[1]!).domain).toBe("decision");
+    expect(parseCounter(lines[2]!)).toMatchObject({
       event: "waia_trader_event",
       kind: "counter",
       organization_id: ORG,
@@ -81,6 +88,8 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       delta: 1,
       severity: "info",
     });
+    expect(parseCounter(lines[0]!).code).toBe(cdeReasonCodes.qualityAllowTrading);
+    expect(parseCounter(lines[1]!).code).toBe(cdeReasonCodes.regimeTrendBear);
   });
 
   it("STOP_TRADING MSV emits STRAT_MR_PERMISSION_BLOCKED", () => {
@@ -107,8 +116,8 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(1);
-    expect(parseCounter(lines[0]!).code).toBe(strategyReasonCodes.permissionBlocked);
+    expect(lines).toHaveLength(3);
+    expect(parseCounter(lines.at(-1)!).code).toBe(strategyReasonCodes.permissionBlocked);
   });
 
   it("strategy not allowed emits STRAT_MR_STRATEGY_NOT_ALLOWED", () => {
@@ -135,8 +144,8 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(1);
-    expect(parseCounter(lines[0]!).code).toBe(strategyReasonCodes.strategyNotAllowed);
+    expect(lines).toHaveLength(3);
+    expect(parseCounter(lines.at(-1)!).code).toBe(strategyReasonCodes.strategyNotAllowed);
   });
 
   it("neutral z-score emits STRAT_MR_ZSCORE_NEUTRAL", () => {
@@ -157,8 +166,8 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(1);
-    expect(parseCounter(lines[0]!).code).toBe(strategyReasonCodes.zscoreNeutral);
+    expect(lines).toHaveLength(3);
+    expect(parseCounter(lines.at(-1)!).code).toBe(strategyReasonCodes.zscoreNeutral);
   });
 
   it("omitted telemetrySink does not break evaluation cycle", () => {
