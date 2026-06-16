@@ -57,8 +57,32 @@ Optionally include `?expand=1` on the compare URL if you want the rich compare v
 
 ### 6. PR title and body (ready to paste)
 
-- **Title:** Conventional-commit style preferred; include **Linear ID** (`DEE-NN`) per [`docs/waia-governance/PR-PROTOCOL.md`](../../docs/waia-governance/PR-PROTOCOL.md).
-- **Body:** Follow [`.github/pull_request_template`](../../.github/pull_request_template.md) (if present): risk tier, Linear link, validation summary, semantic-impact line when required by protocol.
+1. **Read** [`.github/pull_request_template.md`](../../.github/pull_request_template.md) — the **only** canonical PR body source. Do **not** invent a compact YAML-style metadata header.
+2. **Copy** the template structure verbatim; fill placeholders (Summary, Linked issue, Risk tier, Test plan, etc.).
+3. **Required field syntax** (validator-enforced — plain text fails CI):
+
+   | Rejected | Required |
+   |----------|----------|
+   | `Linear: DEE-NN` | `**Linear:** \`DEE-NN\`` (+ optional Linear URL) |
+   | `Tier: T1` | `**Tier:** T1` |
+   | `Parent: DEE-NN` | `**Parent:** \`DEE-NN\`` (optional; child issues only) |
+
+   Metadata belongs under `## Linked issue / plan` and `## Risk tier` — not a separate top-level block.
+
+4. **Write** the rendered body to `.cursor/pr-body-DEE-NN.md` (gitignored temp path).
+5. **Preflight** (mandatory — do **not** hand off if this fails):
+
+   ```bash
+   PR_TITLE="DEE-NN type(scope): subject" \
+   PR_BRANCH="$(git branch --show-current)" \
+   PR_BASE=dev \
+   ./scripts/linear/preflight-pr-governance.sh --body-file .cursor/pr-body-DEE-NN.md
+   ```
+
+6. **Title:** Conventional-commit style; include **Linear ID** (`DEE-NN`) per [`docs/waia-governance/PR-PROTOCOL.md`](../../docs/waia-governance/PR-PROTOCOL.md).
+7. **Deliver** only after preflight passes:
+   - **Preferred:** `gh pr create --base dev --title "..." --body-file .cursor/pr-body-DEE-NN.md`
+   - **Fallback:** paste-ready body in agent report (same content that passed preflight)
 
 Checkbox rule: only check template items **actually verified**.
 
@@ -74,13 +98,13 @@ Do **not** merge. Hand off to a human for PR open (if using links only), review,
 
 ## Optional: GitHub CLI shortcut
 
-Only if **`gh` is authenticated** and the operator wants the agent to open the PR form in one step:
+Only if **`gh` is authenticated** and the operator wants the agent to open the PR form in one step — **after preflight passes**:
 
 ```bash
-gh pr create --base dev --fill --draft=false
+gh pr create --base dev --title "DEE-NN type(scope): subject" --body-file .cursor/pr-body-DEE-NN.md --draft=false
 ```
 
-Still **never** `gh pr merge`. If `gh` is missing or auth fails, fall back to the compare URL + paste title/body — no requirement to use `gh` for PR readiness.
+Do **not** use `--fill` alone when a pre-rendered body file exists — it bypasses the filled template you validated. Still **never** `gh pr merge`.
 
 ## Hard rules
 

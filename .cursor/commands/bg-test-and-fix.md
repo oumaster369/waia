@@ -19,15 +19,15 @@ Run [`/test-and-fix`](test-and-fix.md) as a **Background Agent** (or Cloud Agent
    - Commit in-scope paths
    - `git push -u origin <branch>`
    - Linear → `In Review` + compare URL comment
-   - [`prepare-pr`](prepare-pr.md) package (compare URL, title/body)
+   - [`prepare-pr`](prepare-pr.md) package (compare URL, title/body) — **after** `preflight-pr-governance.sh` passes on rendered body
 5. **Stop before merge.**
 
 ## Optional: open PR via CLI
 
-If `gh` is authenticated:
+If `gh` is authenticated — **after preflight passes** ([`prepare-pr.md`](prepare-pr.md) §6):
 
 ```bash
-gh pr create --base dev --fill --draft=false
+gh pr create --base dev --title "DEE-NN type(scope): subject" --body-file .cursor/pr-body-DEE-NN.md --draft=false
 ```
 
 Never `gh pr merge`.

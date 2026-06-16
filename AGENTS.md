@@ -127,3 +127,5 @@ pnpm build
 ```
 
 Plus `pnpm test:e2e` when UI/user-visible behavior changes.
+
+Before PR readiness, run PR governance preflight on the rendered body: `./scripts/linear/preflight-pr-governance.sh` (see [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md)). Regression tests: `pnpm validate:pr-governance`.

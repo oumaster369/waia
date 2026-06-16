@@ -10,6 +10,7 @@ Operational aids that enforce WAIA DEV OS at CI/GitHub/Cursor boundaries. **Advi
 | Auto-format on file edit | [`.cursor/hooks/format-edit.sh`](../../.cursor/hooks/format-edit.sh) | Best-effort |
 | Branch ruleset `dev` + `main` | [`.github/rulesets/`](../../.github/rulesets/) + apply script | Blocking (GitHub) |
 | PR Linear ID P0 validation | [`.github/workflows/pr-governance.yml`](../../.github/workflows/pr-governance.yml) + [`validate-pr-linear-id.sh`](../../scripts/linear/validate-pr-linear-id.sh) | **Blocking** (ruleset) |
+| PR body preflight (local) | [`preflight-pr-governance.sh`](../../scripts/linear/preflight-pr-governance.sh) + [`.cursor/commands/prepare-pr.md`](../../.cursor/commands/prepare-pr.md) | **Mandatory** (agent handoff) |
 | Linear Done on merge (explicit **Linear:** field) | [`.github/workflows/linear-done.yml`](../../.github/workflows/linear-done.yml) | Automated; skips + warns on ambiguity |
 | CI failure → `/fix-ci` hint | [`.github/workflows/ci-failure-triage.yml`](../../.github/workflows/ci-failure-triage.yml) | Advisory |
 
