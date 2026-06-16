@@ -78,3 +78,23 @@ export type HtxMarketMergedResponse = {
   ts?: number;
   tick?: HtxMarketMergedTick;
 };
+
+export type HtxKlineRow = {
+  id: number;
+  open: number;
+  close: number;
+  low: number;
+  high: number;
+  amount: number;
+  vol: number;
+  count: number;
+};
+
+export type HtxKlineResponse = {
+  status: "ok" | "error";
+  "err-code"?: string;
+  "err-msg"?: string;
+  ch?: string;
+  ts?: number;
+  data?: HtxKlineRow[];
+};

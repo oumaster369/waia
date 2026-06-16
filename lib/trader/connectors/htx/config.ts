@@ -17,6 +17,7 @@ export const HTX_ENDPOINTS = {
   userUid: "/v2/user/uid",
   userApiKey: "/v2/user/api-key",
   marketDetailMerged: "/market/detail/merged",
+  marketHistoryKline: "/market/history/kline",
 } as const;
 
 /** HTX matchresults query window (ms). */

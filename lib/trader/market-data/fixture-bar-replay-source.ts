@@ -1,16 +1,14 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import type { Bar, Quote } from "@/lib/trader/intelligence/types";
-
 import type {
   BarReplayMode,
   BarReplayNextResult,
   BarReplaySource,
   FixtureBarReplayOptions,
-  MarketSnapshot,
   TraderFixtureFile,
 } from "@/lib/trader/market-data/types";
+import { buildMarketSnapshot } from "@/lib/trader/market-data/market-snapshot";
 
 export const DEFAULT_GOLDEN_FIXTURE_PATH = path.join(
   process.cwd(),
@@ -24,22 +22,6 @@ export const EXPAND_MIN_BARS = 20;
 
 function loadFixtureFile(fixturePath: string): TraderFixtureFile {
   return JSON.parse(readFileSync(fixturePath, "utf8")) as TraderFixtureFile;
-}
-
-function buildSnapshot(
-  bars: readonly Bar[],
-  quote: Quote,
-  cycleIndex: number,
-  cycleIdPrefix: string,
-): MarketSnapshot {
-  const lastBar = bars.at(-1)!;
-  return {
-    bars,
-    quote,
-    evaluatedAt: lastBar.barCloseTime,
-    cycleIndex,
-    cycleId: `${cycleIdPrefix}-${cycleIndex}`,
-  };
 }
 
 export class FixtureBarReplaySource implements BarReplaySource {
@@ -71,7 +53,7 @@ export class FixtureBarReplaySource implements BarReplaySource {
 
   next(): BarReplayNextResult {
     if (this.mode === "full") {
-      const snapshot = buildSnapshot(
+      const snapshot = buildMarketSnapshot(
         this.fixture.bars,
         this.fixture.latestQuote,
         this.cycleIndex,
@@ -86,7 +68,7 @@ export class FixtureBarReplaySource implements BarReplaySource {
     }
 
     const windowBars = this.fixture.bars.slice(0, this.expandBarCount);
-    const snapshot = buildSnapshot(
+    const snapshot = buildMarketSnapshot(
       windowBars,
       this.fixture.latestQuote,
       this.cycleIndex,
