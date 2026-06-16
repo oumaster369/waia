@@ -11,6 +11,8 @@
 
 <!-- Example: **Linear:** `DEE-153` https://linear.app/deepsense/issue/DEE-153/... -->
 
+<!-- Optional child issues: **Parent:** `DEE-NN` (same bold/backtick syntax; not required or validated) -->
+
 **Linear groom verified:** <!-- yes (via /groom) OR n/a with Architect approval -->
 
 **Plan:** <!-- `.cursor/plans/<file>.md` or `n/a` -->

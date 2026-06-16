@@ -48,13 +48,16 @@ A normal feature/governance PR to `dev` (including this protocol's own PRs, unle
 
 ## PR body essentials
 
-| Field | Notes |
-|-------|-------|
-| `Linear` | Issue URL / `DEE-NN` |
-| `Risk tier` | [`RISK-TIERS.md`](RISK-TIERS.md) `T0`–`T4` |
-| `ADR` | Link or **`n/a`** + rationale if Tier ≤ `T1` small change |
-| `Human gate` | `no`/`yes — reason` |
-| `Migration impacted` | `no`/`yes — tracker link sentence` |
+Canonical structure: [`.github/pull_request_template.md`](../../.github/pull_request_template.md). Agents must run [`preflight-pr-governance.sh`](../../scripts/linear/preflight-pr-governance.sh) before PR handoff ([`.cursor/commands/prepare-pr.md`](../../.cursor/commands/prepare-pr.md)).
+
+| Field | Required syntax |
+|-------|-----------------|
+| Linear | `**Linear:** \`DEE-NN\`` (+ optional URL) |
+| Tier | `**Tier:** T0`–`T4` per [`RISK-TIERS.md`](RISK-TIERS.md) |
+| Parent (optional) | `**Parent:** \`DEE-NN\`` — child issues only; not validated |
+| ADR | Link or **`n/a`** + rationale if Tier ≤ `T1` small change |
+| Human gate | `no`/`yes — reason` |
+| Migration impacted | `no`/`yes — tracker link sentence` |
 
 ### Semantic-impact signal **(when touched)**
 

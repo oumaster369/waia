@@ -96,6 +96,19 @@ run_case "release-promote dee branch to main passes" 0 \
   "dee-231-release-promote-trader" \
   "main" || fail=1
 
+run_case "plain Linear field rejected" 1 \
+  "DEE-261 infra(governance): test" \
+  "Linear: DEE-261
+Parent: DEE-103
+Tier: T1" \
+  "dee-261-governance-pr-body-preflight" || fail=1
+
+run_case "plain Linear with bold Tier still fails Linear" 1 \
+  "DEE-261 infra(governance): test" \
+  "Linear: DEE-261
+**Tier:** T1" \
+  "dee-261-governance-pr-body-preflight" || fail=1
+
 if [[ "$fail" -ne 0 ]]; then
   echo "Some tests failed." >&2
   exit 1

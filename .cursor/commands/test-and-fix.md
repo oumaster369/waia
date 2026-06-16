@@ -49,7 +49,7 @@ After the loop is green twice, **safe auto-advance** per [`AGENTS.md`](../../AGE
 
    `git add -A` is acceptable **only** when every dirty path is genuinely in scope for the active issue.
 
-3. **Continue into PR readiness** — same checklist as [`/prepare-pr`](prepare-pr.md): push `dee-*` to `origin` with `-u` if needed, compare URL `dev...HEAD`, PR creation via that link, paste-ready title/body, report validation, **stop before merge**.
+3. **Continue into PR readiness** — same checklist as [`/prepare-pr`](prepare-pr.md): push `dee-*` to `origin` with `-u` if needed, render PR body from [`.github/pull_request_template.md`](../../.github/pull_request_template.md), run `./scripts/linear/preflight-pr-governance.sh --body-file .cursor/pr-body-DEE-NN.md` (must pass), compare URL `dev...HEAD`, paste-ready title/body or `--body-file`, report validation, **stop before merge**.
 
 4. **Move the Linear issue to `In Review`** (existing DEE status) and add a PR-ready comment with the compare URL.
 
