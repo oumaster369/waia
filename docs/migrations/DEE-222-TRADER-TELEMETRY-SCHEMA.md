@@ -24,7 +24,7 @@ Both emit **one JSON object per line** via `console.info` (stdout). During paper
 | Field | Required | Type | Meaning |
 |-------|----------|------|---------|
 | `event` | yes | `"waia_trader_event"` | Stable filter key |
-| `kind` | yes | `execution` \| `reconciliation` \| `counter` | Event taxonomy |
+| `kind` | yes | `execution` \| `reconciliation` \| `counter` \| `paper_loop` | Event taxonomy |
 | `organization_id` | yes | string | Org UUID from `OrgContext` |
 | `outcome` | yes | string | Kind-specific status token |
 | `severity` | yes | `info` \| `critical` | M7 surfacing without alerting automation |
@@ -133,6 +133,47 @@ Fixed helper shape via `incrementTraderCounter()`:
   "delta": 1
 }
 ```
+
+---
+
+## Kind: `paper_loop` (DEE-266 / AT-E9 S7)
+
+Orchestrator-level bar-close loop telemetry from `runPaperBarCloseLoop`. Metadata-only soak correlation — not M7 completion, not paper book.
+
+`outcome` tokens: `cycle_complete` (one per bar-close cycle), `rollup` (optional every N cycles when configured).
+
+**Golden example (`cycle_complete`):**
+
+```json
+{
+  "event": "waia_trader_event",
+  "kind": "paper_loop",
+  "organization_id": "00000000-0000-4000-8000-000000000001",
+  "outcome": "cycle_complete",
+  "severity": "info",
+  "duration_ms": 120,
+  "cycle_id": "test-account-state-0",
+  "cycles_run": 1,
+  "execution_mode": "mock",
+  "signal_outcome": "SIGNAL",
+  "skip_reason": null,
+  "execution_status": "submitted",
+  "risk_outcome": null,
+  "reconciliation_classification": "IN_SYNC",
+  "state_refreshed": true,
+  "open_order_count": 0,
+  "position_symbol_count": 1
+}
+```
+
+**Grep examples:**
+
+```bash
+grep '"kind":"paper_loop"' | grep '"outcome":"cycle_complete"'
+grep '"cycle_id":"test-account-state-0"'
+```
+
+See also [DEE-266-PAPER-LOOP-SOAK-GREP.md](./DEE-266-PAPER-LOOP-SOAK-GREP.md).
 
 ---
 

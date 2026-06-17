@@ -1,6 +1,16 @@
-import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
+import {
+  safeTraderTelemetryErrorClass,
+  type WaiaTraderTelemetrySink,
+} from "@/lib/observability/waia-trader-telemetry";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import type { BarPollSource } from "@/lib/trader/market-data/types";
+import {
+  buildPaperBarCloseCycleCompletePayload,
+  createPaperBarCloseRollupCounters,
+  emitPaperBarCloseCycleComplete,
+  emitPaperBarCloseRollup,
+  updatePaperBarCloseRollupCounters,
+} from "@/lib/trader/paper/paper-bar-close-loop-telemetry";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
@@ -21,6 +31,8 @@ export type PaperBarCloseLoopConfig = {
   orderRepository?: OrderRepository;
   refreshAccountState?: (input: RefreshAccountStateInput) => Promise<AccountRiskState>;
   telemetrySink?: WaiaTraderTelemetrySink;
+  /** When set (>= 2), emits an additional `paper_loop` rollup event every N cycles. */
+  rollupEveryCycles?: number;
   barIntervalMs?: number;
   maxCycles?: number;
   nowMs?: () => number;
@@ -78,6 +90,10 @@ export async function runPaperBarCloseLoop(
     throw new Error("[paper-bar-close-loop] maxCycles must be positive when set");
   }
 
+  if (config.rollupEveryCycles !== undefined && config.rollupEveryCycles < 2) {
+    throw new Error("[paper-bar-close-loop] rollupEveryCycles must be >= 2 when set");
+  }
+
   if (config.refreshAccountState && !config.orderRepository) {
     throw new Error(
       "[paper-bar-close-loop] orderRepository is required when refreshAccountState is set",
@@ -87,6 +103,7 @@ export async function runPaperBarCloseLoop(
   let accountState = config.accountState;
 
   let cyclesRun = 0;
+  const rollupCounters = createPaperBarCloseRollupCounters();
 
   while (true) {
     if (config.abortSignal?.aborted) {
@@ -102,9 +119,10 @@ export async function runPaperBarCloseLoop(
       return { cyclesRun, aborted: true };
     }
 
+    const cycleStartedMs = nowMs();
     const snapshot = await config.poll.fetchSnapshot();
 
-    await runPaperCycleOnce(config.deps, {
+    const result = await runPaperCycleOnce(config.deps, {
       context: config.context,
       snapshot,
       accountKey: config.accountKey,
@@ -117,11 +135,64 @@ export async function runPaperBarCloseLoop(
 
     cyclesRun += 1;
 
-    if (config.refreshAccountState && config.orderRepository) {
-      accountState = await config.refreshAccountState({
-        context: config.context,
-        orderRepository: config.orderRepository,
-      });
+    let stateRefreshed = false;
+    try {
+      if (config.refreshAccountState && config.orderRepository) {
+        accountState = await config.refreshAccountState({
+          context: config.context,
+          orderRepository: config.orderRepository,
+        });
+        stateRefreshed = true;
+      }
+    } catch (err) {
+      emitPaperBarCloseCycleComplete(
+        {
+          organizationId: config.context.organizationId,
+          cycleId: snapshot.cycleId,
+          cyclesRun,
+          durationMs: nowMs() - cycleStartedMs,
+          result,
+          stateRefreshed: false,
+          accountStateAfterCycle: accountState,
+          errorClass: safeTraderTelemetryErrorClass(err),
+        },
+        telemetrySink,
+      );
+      throw err;
+    }
+
+    const cycleCompletePayloadInput = {
+      organizationId: config.context.organizationId,
+      cycleId: snapshot.cycleId,
+      cyclesRun,
+      durationMs: nowMs() - cycleStartedMs,
+      result,
+      stateRefreshed,
+      accountStateAfterCycle: accountState,
+    };
+
+    emitPaperBarCloseCycleComplete(cycleCompletePayloadInput, telemetrySink);
+
+    if (config.rollupEveryCycles !== undefined) {
+      const cyclePayload = buildPaperBarCloseCycleCompletePayload(cycleCompletePayloadInput);
+      updatePaperBarCloseRollupCounters(rollupCounters, cyclePayload);
+
+      if (cyclesRun % config.rollupEveryCycles === 0) {
+        emitPaperBarCloseRollup(
+          {
+            organizationId: config.context.organizationId,
+            cyclesRun,
+            rollupEvery: config.rollupEveryCycles,
+            countCycleComplete: rollupCounters.countCycleComplete,
+            countSignal: rollupCounters.countSignal,
+            countNoSignal: rollupCounters.countNoSignal,
+            countSubmitted: rollupCounters.countSubmitted,
+            countRiskRejected: rollupCounters.countRiskRejected,
+            countReconCritical: rollupCounters.countReconCritical,
+          },
+          telemetrySink,
+        );
+      }
     }
 
     if (config.maxCycles !== undefined && cyclesRun >= config.maxCycles) {

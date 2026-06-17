@@ -2,11 +2,20 @@
  * AT-E9 / S5 — Paper loop bar-close orchestrator CLI (mock execution only).
  *
  * Waits for 1m bar-close cadence, polls HTX snapshot, runs one mock paper cycle per bar.
- * Does not complete M7 or AT-E9 FG — enables timed paper-loop runs for future soak validation.
+ * Does not complete M7, AT-E9 FG, or DEE-209 — enables timed paper-loop runs for soak validation.
  *
  * Usage:
  *   pnpm trader:paper:loop -- --org-id=<uuid> --account-key=acct-paper-loop
  *   pnpm trader:paper:loop -- --org-id=<uuid> --account-key=acct-paper-loop --max-cycles=1
+ *
+ * Unbounded soak (omit --max-cycles; stop with SIGINT/SIGTERM after current cycle):
+ *   pnpm trader:paper:loop -- --org-id=<uuid> --account-key=acct-paper-loop
+ *
+ * Soak log grep (stdout JSON; one cycle_complete line per bar-close cycle — DEE-266):
+ *   grep '"kind":"paper_loop"' | grep '"outcome":"cycle_complete"'
+ *   grep '"cycle_id":"<prefix>-0"'
+ *
+ * Soak analysis is a separate human step — this CLI does not validate or pass M7.
  *
  * Requires DATABASE_URL (SQLite) and WAIA_TRADER_CLI=1 (set by package.json script).
  * Sleeps to the next bar-close boundary before each fetch (default 60s interval).

@@ -269,4 +269,36 @@ describe("paper bar-close loop (AT-E9 S5)", () => {
       }),
     ).rejects.toThrow(/maxCycles must be positive/);
   });
+
+  it("emits exactly two paper_loop cycle_complete events for maxCycles 2", async () => {
+    const deps = mockDeps();
+    vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue(mockEvaluation());
+    const poll = mockPollFromReplay("bar-close-telemetry");
+    const lines: string[] = [];
+    const telemetrySink = (line: string) => lines.push(line);
+
+    const result = await runPaperBarCloseLoop({
+      deps,
+      poll,
+      context: requireOrgContext(ORG),
+      accountKey: "acct-bar-close",
+      defaultQuantity: "0.01",
+      accountState: EMPTY_STATE,
+      maxCycles: 2,
+      sleep: async () => {},
+      nowMs: () => 0,
+      telemetrySink,
+    });
+
+    expect(result).toEqual({ cyclesRun: 2, aborted: false });
+
+    const cycleCompleteLines = lines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((event) => event.kind === "paper_loop" && event.outcome === "cycle_complete");
+
+    expect(cycleCompleteLines).toHaveLength(2);
+    expect(cycleCompleteLines[0]?.cycles_run).toBe(1);
+    expect(cycleCompleteLines[1]?.cycles_run).toBe(2);
+    expect(cycleCompleteLines[0]?.execution_status).toBe("submitted");
+  });
 });
