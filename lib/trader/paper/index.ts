@@ -3,6 +3,12 @@ export {
   type MapSignalToSubmitOrderInput,
 } from "@/lib/trader/paper/signal-to-order";
 export {
+  msUntilNextBarClose,
+  runPaperBarCloseLoop,
+  type PaperBarCloseLoopConfig,
+  type PaperBarCloseLoopResult,
+} from "@/lib/trader/paper/paper-bar-close-loop";
+export {
   cycleOrderKeys,
   runFixturePaperCycles,
   runPaperCycleOnce,
