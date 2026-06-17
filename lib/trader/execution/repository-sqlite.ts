@@ -181,6 +181,28 @@ export function listOpenOrdersSqlite(
     .map(mapOrderRow);
 }
 
+export function listOrdersSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  filter?: OpenOrdersFilter,
+): OrderRow[] {
+  const conditions = [orgOrderConditions(context)];
+
+  if (filter?.executionMode) {
+    conditions.push(eq(traderOrders.executionMode, filter.executionMode));
+  }
+  if (filter?.venue) {
+    conditions.push(eq(traderOrders.venue, filter.venue));
+  }
+
+  return db
+    .select()
+    .from(traderOrders)
+    .where(and(...conditions))
+    .all()
+    .map(mapOrderRow);
+}
+
 export function listEventsSqlite(
   db: WaiaDb,
   context: OrgContext,

@@ -107,6 +107,7 @@ export interface OrderRepository {
   findOrderByClientOrderId(context: OrgContext, clientOrderId: string): Promise<OrderRow | null>;
   findOrderByIdempotencyKey(context: OrgContext, idempotencyKey: string): Promise<OrderRow | null>;
   listOpenOrders(context: OrgContext, filter?: OpenOrdersFilter): Promise<OrderRow[]>;
+  listOrders(context: OrgContext, filter?: OpenOrdersFilter): Promise<OrderRow[]>;
   transitionOrder(context: OrgContext, input: TransitionOrderInput): Promise<OrderRow>;
   recordFill(context: OrgContext, input: RecordFillInput): Promise<FillRow>;
   listEvents(context: OrgContext, orderId: string): Promise<OrderEventRow[]>;

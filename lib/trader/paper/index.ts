@@ -3,10 +3,15 @@ export {
   type MapSignalToSubmitOrderInput,
 } from "@/lib/trader/paper/signal-to-order";
 export {
+  deriveAccountRiskStateFromMockOrders,
+  type DeriveAccountRiskStateInput,
+} from "@/lib/trader/paper/account-risk-state-from-orders";
+export {
   msUntilNextBarClose,
   runPaperBarCloseLoop,
   type PaperBarCloseLoopConfig,
   type PaperBarCloseLoopResult,
+  type RefreshAccountStateInput,
 } from "@/lib/trader/paper/paper-bar-close-loop";
 export {
   cycleOrderKeys,

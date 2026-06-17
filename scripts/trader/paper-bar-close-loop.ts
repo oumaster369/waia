@@ -23,6 +23,7 @@ import {
   createSqliteReconciliationService,
 } from "@/lib/trader/execution";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
+import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import { runPaperBarCloseLoop } from "@/lib/trader/paper/paper-bar-close-loop";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
@@ -187,6 +188,7 @@ async function main(): Promise<void> {
   await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
 
   const writeAudit = (input: TraderAuditInput) => writeTraderAuditLogSqlite(db, input);
+  const orderRepository = createSqliteOrderRepository(db);
   const deps = buildPaperCycleDeps(db, connector, writeAudit);
 
   const poll = new HtxBarPollSource({ cycleIdPrefix: parsed.cyclePrefix });
@@ -210,6 +212,13 @@ async function main(): Promise<void> {
     accountKey: parsed.accountKey,
     defaultQuantity: parsed.quantity,
     accountState: EMPTY_STATE,
+    orderRepository,
+    refreshAccountState: ({ context: refreshContext, orderRepository: repo }) =>
+      deriveAccountRiskStateFromMockOrders({
+        context: refreshContext,
+        orderRepository: repo,
+        executionMode: "mock",
+      }),
     barIntervalMs: parsed.barIntervalMs,
     maxCycles: parsed.maxCycles,
     abortSignal: abortController.signal,
