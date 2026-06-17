@@ -88,7 +88,7 @@ describe("TwinDialogueWorkspace POST submit", () => {
 
   it("clicking Start shows welcome bubble, focuses textarea, and hides invitation card", async () => {
     mountWorkspace(false);
-    const input = screen.getByTestId("dashboard-twin-message-input");
+    const input = screen.getByRole("textbox", { name: "Message to Twin" });
     expect(input).toBeDisabled();
     clickStartRitual();
     expect(screen.queryByTestId("dashboard-twin-invitation-placeholder")).not.toBeInTheDocument();
@@ -98,6 +98,10 @@ describe("TwinDialogueWorkspace POST submit", () => {
     await waitFor(() => {
       expect(input).toHaveFocus();
     });
+    expect(screen.getByTestId("dashboard-twin-message-list")).toHaveAttribute(
+      "data-slot",
+      "waia-surface",
+    );
   });
 
   it("does not send welcome text in the Twin turn POST body", async () => {
@@ -232,12 +236,16 @@ describe("TwinDialogueWorkspace POST submit", () => {
   });
 
   it("shows an auth-safe message when the API returns UNAUTHORIZED", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch")
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Session required." } }), {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Session required." } }),
+          {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
       )
       .mockResolvedValueOnce(
         new Response(
@@ -277,9 +285,7 @@ describe("TwinDialogueWorkspace POST submit", () => {
       /Sign in required to save/i,
     );
     expect(screen.getByTestId("dashboard-twin-message-input")).toHaveValue("");
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Retry/i })).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /Retry/i })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /Retry/i }));
 
@@ -294,39 +300,39 @@ describe("TwinDialogueWorkspace POST submit", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     fetchSpy
       .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          error: {
-            code: "EMPTY_MESSAGE",
-            message: "message must not be empty or whitespace.",
-          },
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      ),
-    )
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "EMPTY_MESSAGE",
+              message: "message must not be empty or whitespace.",
+            },
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        ),
+      )
       .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          userTurn: {
-            id: "fix-id",
-            sequence: 11,
-            role: "user",
-            content: "anything",
-            createdAt: "2026-01-02T00:01:00.000Z",
-          },
-          assistantTurn: {
-            id: "fix-asst",
-            sequence: 12,
-            role: "assistant",
-            content: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
-            createdAt: "2026-01-02T00:01:00.010Z",
-          },
-          twinSignals: { hasMeaningfulExchange: true },
-          assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
+        new Response(
+          JSON.stringify({
+            userTurn: {
+              id: "fix-id",
+              sequence: 11,
+              role: "user",
+              content: "anything",
+              createdAt: "2026-01-02T00:01:00.000Z",
+            },
+            assistantTurn: {
+              id: "fix-asst",
+              sequence: 12,
+              role: "assistant",
+              content: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+              createdAt: "2026-01-02T00:01:00.010Z",
+            },
+            twinSignals: { hasMeaningfulExchange: true },
+            assistantPlaceholder: TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
 
     mountWorkspace(false);
     clickStartRitual();
@@ -340,9 +346,7 @@ describe("TwinDialogueWorkspace POST submit", () => {
         /message must not be empty/i,
       );
     });
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Retry/i })).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /Retry/i })).toBeInTheDocument());
 
     const retryBtn = screen.getByRole("button", { name: /Retry/i });
     fireEvent.click(retryBtn);
@@ -370,7 +374,10 @@ describe("TwinDialogueWorkspace POST submit", () => {
     expect(screen.getByTestId("dashboard-twin-pending-reply")).toHaveTextContent(
       TWIN_PENDING_REPLY_LABEL,
     );
-    expect(screen.getByTestId("dashboard-twin-pending-reply")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByTestId("dashboard-twin-pending-reply")).toHaveAttribute(
+      "aria-live",
+      "polite",
+    );
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^Sending$/ })).toBeDisabled();
@@ -428,7 +435,10 @@ describe("TwinDialogueWorkspace POST submit", () => {
     fireEvent.click(screen.getByTestId("dashboard-twin-send"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("dashboard-twin-msg-user-0")).toHaveAttribute("data-failed", "true");
+      expect(screen.getByTestId("dashboard-twin-msg-user-0")).toHaveAttribute(
+        "data-failed",
+        "true",
+      );
     });
 
     const firstBody = JSON.parse(String((fetchSpy.mock.calls[0]?.[1] as RequestInit).body)) as {
