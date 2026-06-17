@@ -3,6 +3,8 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { WaiaSurface } from "@/components/waia/waia-surface";
 import type { DashboardTwinDialogueInitialTurn } from "@/lib/dashboard/types";
 import { submitTwinDialogueTurnClient } from "@/lib/dashboard/submit-twin-dialogue-turn-client";
 import { cn } from "@/lib/utils";
@@ -64,16 +66,17 @@ function assertNoForbiddenTokensInUiCopy(_label: string, raw: string): void {
   }
 }
 
-assertNoForbiddenTokensInUiCopy("welcome", TWIN_OPENING_WELCOME_MESSAGE + TWIN_FIRST_START_FRAMING_COPY);
+assertNoForbiddenTokensInUiCopy(
+  "welcome",
+  TWIN_OPENING_WELCOME_MESSAGE + TWIN_FIRST_START_FRAMING_COPY,
+);
 assertNoForbiddenTokensInUiCopy("pending", TWIN_PENDING_REPLY_LABEL);
 
 function hydrateMessages(initial: DashboardTwinDialogueInitialTurn[]): TwinDialogueMessage[] {
   return initial.map((t) => ({ id: t.id, role: t.role, text: t.text }));
 }
 
-export {
-  TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE,
-} from "@/lib/dashboard/twin-dialogue-stub";
+export { TWIN_DIALOGUE_ASSISTANT_STUB_MESSAGE } from "@/lib/dashboard/twin-dialogue-stub";
 
 export type TwinDialogueWorkspaceProps = {
   /** From server Twin signals: first meaningful exchange already recorded in persistence. */
@@ -102,10 +105,8 @@ export function TwinDialogueWorkspace({
 
   const meaningfulForWorkspace = hasMeaningfulExchange || postSignalsMeaningful;
 
-  const showFramingAndCta =
-    !meaningfulForWorkspace && initialSnapshotEmpty && !hasRitualStarted;
-  const showWelcomeBubble =
-    hasRitualStarted && !meaningfulForWorkspace && initialSnapshotEmpty;
+  const showFramingAndCta = !meaningfulForWorkspace && initialSnapshotEmpty && !hasRitualStarted;
+  const showWelcomeBubble = hasRitualStarted && !meaningfulForWorkspace && initialSnapshotEmpty;
 
   const showActiveHistoryHint = meaningfulForWorkspace && messages.length === 0;
 
@@ -128,49 +129,43 @@ export function TwinDialogueWorkspace({
     node.scrollTop = node.scrollHeight;
   }, [messages.length, isSubmitting, showWelcomeBubble]);
 
-  const submitText = React.useCallback(
-    (text: string, idempotencyKey: string) => {
-      setSubmitError(null);
-      setIsSubmitting(true);
+  const submitText = React.useCallback((text: string, idempotencyKey: string) => {
+    setSubmitError(null);
+    setIsSubmitting(true);
 
-      void (async () => {
-        const result = await submitTwinDialogueTurnClient({ message: text, idempotencyKey });
-        setIsSubmitting(false);
-        if (result.kind === "ok") {
-          const assistantTurn = result.body.assistantTurn;
-          const assistantId = assistantTurn?.id ?? crypto.randomUUID();
-          const assistantText =
-            assistantTurn?.content ?? result.body.assistantPlaceholder;
-          setPostSignalsMeaningful((prev) => prev || result.body.twinSignals.hasMeaningfulExchange);
-          setMessages((prev) => {
-            const next = prev.map((m) =>
-              m.id === idempotencyKey && m.role === "user"
-                ? { ...m, id: result.body.userTurn.id, pending: false, failed: false }
-                : m,
-            );
-            return [
-              ...next,
-              {
-                id: assistantId,
-                role: "assistant" as const,
-                text: assistantText,
-              },
-            ];
-          });
-          return;
-        }
-        setMessages((prev) =>
-          prev.map((m) =>
+    void (async () => {
+      const result = await submitTwinDialogueTurnClient({ message: text, idempotencyKey });
+      setIsSubmitting(false);
+      if (result.kind === "ok") {
+        const assistantTurn = result.body.assistantTurn;
+        const assistantId = assistantTurn?.id ?? crypto.randomUUID();
+        const assistantText = assistantTurn?.content ?? result.body.assistantPlaceholder;
+        setPostSignalsMeaningful((prev) => prev || result.body.twinSignals.hasMeaningfulExchange);
+        setMessages((prev) => {
+          const next = prev.map((m) =>
             m.id === idempotencyKey && m.role === "user"
-              ? { ...m, pending: false, failed: true }
+              ? { ...m, id: result.body.userTurn.id, pending: false, failed: false }
               : m,
-          ),
-        );
-        setSubmitError(result.displayMessage);
-      })();
-    },
-    [],
-  );
+          );
+          return [
+            ...next,
+            {
+              id: assistantId,
+              role: "assistant" as const,
+              text: assistantText,
+            },
+          ];
+        });
+        return;
+      }
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === idempotencyKey && m.role === "user" ? { ...m, pending: false, failed: true } : m,
+        ),
+      );
+      setSubmitError(result.displayMessage);
+    })();
+  }, []);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -179,10 +174,7 @@ export function TwinDialogueWorkspace({
       return;
     }
     const idempotencyKey = crypto.randomUUID();
-    setMessages((prev) => [
-      ...prev,
-      { id: idempotencyKey, role: "user", text, pending: true },
-    ]);
+    setMessages((prev) => [...prev, { id: idempotencyKey, role: "user", text, pending: true }]);
     setDraft("");
     submitText(text, idempotencyKey);
   };
@@ -215,10 +207,11 @@ export function TwinDialogueWorkspace({
       aria-label="Twin dialogue"
     >
       {showFramingAndCta && (
-        <div
+        <WaiaSurface
+          variant="invitation"
           data-testid="dashboard-twin-invitation-placeholder"
           id="dashboard-twin-invitation-desc"
-          className="flex flex-col gap-3 rounded-2xl border border-dashed border-border bg-muted/20 p-4 text-muted-foreground text-sm leading-relaxed"
+          className="text-muted-foreground flex flex-col gap-3 p-4 text-sm leading-relaxed"
         >
           <p className="whitespace-pre-line">{TWIN_FIRST_START_FRAMING_COPY}</p>
           <Button
@@ -229,11 +222,11 @@ export function TwinDialogueWorkspace({
           >
             Start creating your AI-Twin
           </Button>
-        </div>
+        </WaiaSurface>
       )}
 
       {showActiveHistoryHint && (
-        <p className="text-center text-muted-foreground text-xs">
+        <p className="text-muted-foreground text-center text-xs">
           Earlier saved turns load again when you return; new messages persist as you send.
         </p>
       )}
@@ -243,19 +236,20 @@ export function TwinDialogueWorkspace({
           id="dashboard-twin-dialogue-error-desc"
           data-testid="dashboard-twin-dialogue-error"
           role="alert"
-          className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-destructive text-sm"
+          className="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border px-3 py-2 text-sm"
         >
           {submitError}
         </div>
       )}
 
-      <div
+      <WaiaSurface
         ref={listRef}
+        variant="raised"
         data-testid="dashboard-twin-message-list"
         role="log"
         aria-relevant="additions"
         aria-live="polite"
-        className="flex max-h-[min(50vh,24rem)] min-h-[6rem] flex-1 flex-col gap-3 overflow-y-auto rounded-lg border border-border bg-muted/10 p-3"
+        className="flex max-h-[min(50vh,24rem)] min-h-[6rem] flex-1 flex-col gap-3 overflow-y-auto p-3"
       >
         {showWelcomeBubble && (
           <article
@@ -265,7 +259,7 @@ export function TwinDialogueWorkspace({
             role="article"
             data-role="assistant"
             aria-label="Twin"
-            className="self-start whitespace-pre-line rounded-lg bg-card px-3 py-2 text-card-foreground text-sm ring-1 ring-border"
+            className="bg-card text-card-foreground ring-border self-start rounded-lg px-3 py-2 text-sm whitespace-pre-line ring-1"
           >
             {TWIN_OPENING_WELCOME_MESSAGE}
           </article>
@@ -283,15 +277,15 @@ export function TwinDialogueWorkspace({
               "rounded-lg px-3 py-2 text-sm",
               msg.role === "user"
                 ? cn(
-                    "self-end bg-primary text-primary-foreground",
-                    msg.failed && "opacity-90 ring-2 ring-destructive/60",
+                    "bg-primary text-primary-foreground self-end",
+                    msg.failed && "ring-destructive/60 opacity-90 ring-2",
                   )
-                : "self-start bg-card text-card-foreground ring-1 ring-border",
+                : "bg-card text-card-foreground ring-border self-start ring-1",
             )}
           >
             <div className="whitespace-pre-wrap">{msg.text}</div>
             {msg.failed && (
-              <div className="mt-2 flex flex-wrap items-center gap-2 border-current/20 border-t pt-2 text-primary-foreground/90 text-xs">
+              <div className="text-primary-foreground/90 mt-2 flex flex-wrap items-center gap-2 border-t border-current/20 pt-2 text-xs">
                 <span>Not sent</span>
                 <button
                   type="button"
@@ -316,7 +310,7 @@ export function TwinDialogueWorkspace({
             {TWIN_PENDING_REPLY_LABEL}
           </p>
         )}
-      </div>
+      </WaiaSurface>
 
       <form
         onSubmit={handleSubmit}
@@ -326,7 +320,7 @@ export function TwinDialogueWorkspace({
         <label htmlFor={textareaId} className="sr-only">
           Message to Twin
         </label>
-        <textarea
+        <Textarea
           ref={textareaRef}
           id={textareaId}
           data-testid="dashboard-twin-message-input"
@@ -338,20 +332,13 @@ export function TwinDialogueWorkspace({
           rows={2}
           placeholder="Write to your Twin..."
           aria-describedby={textareaDescribedby.length > 0 ? textareaDescribedby : undefined}
-          className={cn(
-            "min-h-[2.75rem] w-full shrink rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs",
-            "placeholder:text-muted-foreground",
-            "focus-visible:outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-          )}
+          className="bg-background dark:bg-background min-h-[2.75rem] w-full shrink px-3 text-sm shadow-xs"
         />
         <Button
           type="submit"
           data-testid="dashboard-twin-send"
           aria-busy={isSubmitting}
-          disabled={
-            isSubmitting || draft.trim().length === 0 || mustCompleteFirstStart
-          }
+          disabled={isSubmitting || draft.trim().length === 0 || mustCompleteFirstStart}
           className="sm:w-auto"
         >
           {isSubmitting ? "Sending" : "Send"}
