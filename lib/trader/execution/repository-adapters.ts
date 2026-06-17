@@ -16,6 +16,7 @@ import {
   listEventsPostgres,
   listFillsPostgres,
   listOpenOrdersPostgres,
+  listOrdersPostgres,
   recordFillPostgres,
   transitionOrderPostgres,
 } from "@/lib/trader/execution/repository-postgres";
@@ -27,6 +28,7 @@ import {
   listEventsSqlite,
   listFillsSqlite,
   listOpenOrdersSqlite,
+  listOrdersSqlite,
   recordFillSqlite,
   transitionOrderSqlite,
 } from "@/lib/trader/execution/repository-sqlite";
@@ -51,6 +53,7 @@ export function createSqliteOrderRepository(db: WaiaDb): OrderRepository {
     findOrderByIdempotencyKey: (context, idempotencyKey) =>
       toPromise(() => findOrderByIdempotencyKeySqlite(db, context, idempotencyKey)),
     listOpenOrders: (context, filter) => toPromise(() => listOpenOrdersSqlite(db, context, filter)),
+    listOrders: (context, filter) => toPromise(() => listOrdersSqlite(db, context, filter)),
     transitionOrder: (context, input) =>
       runSqliteTransaction(db, (tx) => transitionOrderSqlite(tx, context, input)),
     recordFill: (context, input) => toPromise(() => recordFillSqlite(db, context, input)),
@@ -69,6 +72,7 @@ export function createPostgresOrderRepository(db: WaiaPostgresDb): OrderReposito
     findOrderByIdempotencyKey: (context, idempotencyKey) =>
       findOrderByIdempotencyKeyPostgres(db, context, idempotencyKey),
     listOpenOrders: (context, filter) => listOpenOrdersPostgres(db, context, filter),
+    listOrders: (context, filter) => listOrdersPostgres(db, context, filter),
     transitionOrder: (context, input) =>
       runWaiaPostgresTransaction(db, (tx) => transitionOrderPostgres(tx, context, input)),
     recordFill: (context, input) => recordFillPostgres(db, context, input),
@@ -86,6 +90,7 @@ export function createPostgresOrderRepositoryFromExecutor(ex: PgOrderExecutor): 
     findOrderByIdempotencyKey: (context, idempotencyKey) =>
       findOrderByIdempotencyKeyPostgres(ex, context, idempotencyKey),
     listOpenOrders: (context, filter) => listOpenOrdersPostgres(ex, context, filter),
+    listOrders: (context, filter) => listOrdersPostgres(ex, context, filter),
     transitionOrder: (context, input) => transitionOrderPostgres(ex, context, input),
     recordFill: (context, input) => recordFillPostgres(ex, context, input),
     listEvents: (context, orderId) => listEventsPostgres(ex, context, orderId),

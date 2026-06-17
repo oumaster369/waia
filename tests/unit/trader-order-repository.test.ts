@@ -321,6 +321,68 @@ describe("trader order repository (DEE-248)", () => {
     );
   });
 
+  it("listOrders returns all org orders including terminal states", async () => {
+    const context = requireOrgContext(orgA);
+    const openOrder = await repo.createOrder(
+      context,
+      baseCreateInput({
+        clientOrderId: "list-all-open-265",
+        idempotencyKey: "list-all-open-265",
+      }),
+    );
+    const terminalOrder = await repo.createOrder(
+      context,
+      baseCreateInput({
+        clientOrderId: "list-all-terminal-265",
+        idempotencyKey: "list-all-terminal-265",
+      }),
+    );
+    await repo.transitionOrder(context, {
+      orderId: terminalOrder.id,
+      expectedStateVersion: 1,
+      toState: "RISK_APPROVED",
+    });
+    await repo.transitionOrder(context, {
+      orderId: terminalOrder.id,
+      expectedStateVersion: 2,
+      toState: "REJECTED",
+    });
+
+    const all = await repo.listOrders(context);
+    const allIds = all.map((row) => row.id);
+
+    expect(allIds).toContain(openOrder.id);
+    expect(allIds).toContain(terminalOrder.id);
+
+    const openOnly = await repo.listOpenOrders(context);
+    expect(openOnly.map((row) => row.id)).not.toContain(terminalOrder.id);
+  });
+
+  it("filters listOrders by executionMode and venue only", async () => {
+    const context = requireOrgContext(orgA);
+    await repo.createOrder(context, {
+      ...baseCreateInput({
+        clientOrderId: "list-orders-mock-265",
+        idempotencyKey: "list-orders-mock-265",
+      }),
+      venue: "mock",
+      executionMode: "mock",
+    });
+    await repo.createOrder(context, {
+      ...baseCreateInput({
+        clientOrderId: "list-orders-paper-265",
+        idempotencyKey: "list-orders-paper-265",
+      }),
+      venue: "htx",
+      executionMode: "paper",
+    });
+
+    const mockOrders = await repo.listOrders(context, { executionMode: "mock", venue: "mock" });
+    expect(mockOrders.every((row) => row.executionMode === "mock" && row.venue === "mock")).toBe(
+      true,
+    );
+  });
+
   it("throws OrderNotFoundError for missing order on transition and fill", async () => {
     const context = requireOrgContext(orgA);
     const missingId = crypto.randomUUID();

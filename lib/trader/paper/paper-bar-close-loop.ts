@@ -1,9 +1,15 @@
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
+import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import type { BarPollSource } from "@/lib/trader/market-data/types";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+
+export type RefreshAccountStateInput = {
+  context: OrgContext;
+  orderRepository: OrderRepository;
+};
 
 export type PaperBarCloseLoopConfig = {
   poll: BarPollSource;
@@ -12,6 +18,8 @@ export type PaperBarCloseLoopConfig = {
   accountKey: string;
   defaultQuantity: string;
   accountState: AccountRiskState;
+  orderRepository?: OrderRepository;
+  refreshAccountState?: (input: RefreshAccountStateInput) => Promise<AccountRiskState>;
   telemetrySink?: WaiaTraderTelemetrySink;
   barIntervalMs?: number;
   maxCycles?: number;
@@ -70,6 +78,14 @@ export async function runPaperBarCloseLoop(
     throw new Error("[paper-bar-close-loop] maxCycles must be positive when set");
   }
 
+  if (config.refreshAccountState && !config.orderRepository) {
+    throw new Error(
+      "[paper-bar-close-loop] orderRepository is required when refreshAccountState is set",
+    );
+  }
+
+  let accountState = config.accountState;
+
   let cyclesRun = 0;
 
   while (true) {
@@ -93,13 +109,20 @@ export async function runPaperBarCloseLoop(
       snapshot,
       accountKey: config.accountKey,
       defaultQuantity: config.defaultQuantity,
-      accountState: config.accountState,
+      accountState,
       executionMode: "mock",
       telemetrySink,
       newId,
     });
 
     cyclesRun += 1;
+
+    if (config.refreshAccountState && config.orderRepository) {
+      accountState = await config.refreshAccountState({
+        context: config.context,
+        orderRepository: config.orderRepository,
+      });
+    }
 
     if (config.maxCycles !== undefined && cyclesRun >= config.maxCycles) {
       return { cyclesRun, aborted: false };

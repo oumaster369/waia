@@ -187,6 +187,28 @@ export async function listOpenOrdersPostgres(
   return rows.map(mapOrderRow);
 }
 
+export async function listOrdersPostgres(
+  ex: PgReadExecutor,
+  context: OrgContext,
+  filter?: OpenOrdersFilter,
+): Promise<OrderRow[]> {
+  const conditions = [orgOrderConditions(context)];
+
+  if (filter?.executionMode) {
+    conditions.push(eq(pgSchema.traderOrders.executionMode, filter.executionMode));
+  }
+  if (filter?.venue) {
+    conditions.push(eq(pgSchema.traderOrders.venue, filter.venue));
+  }
+
+  const rows = await ex
+    .select()
+    .from(pgSchema.traderOrders)
+    .where(and(...conditions));
+
+  return rows.map(mapOrderRow);
+}
+
 export async function listEventsPostgres(
   ex: PgReadExecutor,
   context: OrgContext,

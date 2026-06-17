@@ -106,6 +106,14 @@ describe("trader order repository tenant isolation (DEE-248 / ADR-0007)", () => 
     expect(orgBOpen.some((row) => row.id === orgBOrder.id)).toBe(true);
     expect(orgBOpen.some((row) => row.id === orgAOrderId)).toBe(false);
 
+    const orgAList = await repo.listOrders(requireOrgContext(orgA));
+    const orgBList = await repo.listOrders(requireOrgContext(orgB));
+
+    expect(orgAList.some((row) => row.id === orgAOrderId)).toBe(true);
+    expect(orgAList.some((row) => row.id === orgBOrder.id)).toBe(false);
+    expect(orgBList.some((row) => row.id === orgBOrder.id)).toBe(true);
+    expect(orgBList.some((row) => row.id === orgAOrderId)).toBe(false);
+
     const orgAEvents = await repo.listEvents(requireOrgContext(orgA), orgAOrderId);
     const orgBFillsOnA = await repo.listFills(requireOrgContext(orgB), orgAOrderId);
 
