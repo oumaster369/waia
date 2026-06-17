@@ -14,6 +14,11 @@ export {
   type RefreshAccountStateInput,
 } from "@/lib/trader/paper/paper-bar-close-loop";
 export {
+  buildPaperBarCloseCycleCompletePayload,
+  emitPaperBarCloseCycleComplete,
+  type PaperBarCloseCycleCompleteInput,
+} from "@/lib/trader/paper/paper-bar-close-loop-telemetry";
+export {
   cycleOrderKeys,
   runFixturePaperCycles,
   runPaperCycleOnce,
