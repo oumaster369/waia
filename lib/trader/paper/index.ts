@@ -7,6 +7,16 @@ export {
   type DeriveAccountRiskStateInput,
 } from "@/lib/trader/paper/account-risk-state-from-orders";
 export {
+  derivePaperBook,
+  netPositionsFromFilledOrders,
+  type DerivePaperBookInput,
+} from "@/lib/trader/paper/derive-paper-book";
+export type {
+  PaperBook,
+  PaperBookExecutionMode,
+  PaperPosition,
+} from "@/lib/trader/paper/paper-book.types";
+export {
   msUntilNextBarClose,
   runPaperBarCloseLoop,
   type PaperBarCloseLoopConfig,
