@@ -30,7 +30,7 @@ export type DerivePaperPnLInput = {
   markPrices?: PaperPnLMarkPrices;
 };
 
-type FillEvent = {
+export type PaperPnLFillEvent = {
   fill: FillRow;
   order: OrderRow;
 };
@@ -40,6 +40,14 @@ type SymbolLedger = {
   avgCost: string;
   realizedPnl: string;
   sellFees: string;
+};
+
+export type PaperPnLWalkResult = {
+  ledgerBySymbol: Map<string, SymbolLedger>;
+  feesByAsset: Record<string, string>;
+  valuationGaps: string[];
+  realizedPnl: string;
+  totalFees: string;
 };
 
 function parseQuoteCurrency(symbol: string): string {
@@ -54,7 +62,7 @@ function isFilledOrder(order: OrderRow): boolean {
   return order.state === "FILLED" && compareDecimal(order.filledQuantity, "0") > 0;
 }
 
-function sortFillEvents(events: readonly FillEvent[]): FillEvent[] {
+function sortFillEvents(events: readonly PaperPnLFillEvent[]): PaperPnLFillEvent[] {
   return [...events].sort((a, b) => {
     const timeDelta = a.fill.executedAt.getTime() - b.fill.executedAt.getTime();
     if (timeDelta !== 0) {
@@ -86,6 +94,23 @@ function accumulateFee(
     `Non-quote fee asset ${feeAsset} on fill ${fillId} recorded in feesByAsset only`,
   );
   return { quoteFee: "0" };
+}
+
+function createEmptyLedger(): SymbolLedger {
+  return {
+    openQty: "0",
+    avgCost: "0",
+    realizedPnl: "0",
+    sellFees: "0",
+  };
+}
+
+function cloneLedgerMap(source: Map<string, SymbolLedger>): Map<string, SymbolLedger> {
+  const clone = new Map<string, SymbolLedger>();
+  for (const [symbol, ledger] of source) {
+    clone.set(symbol, { ...ledger });
+  }
+  return clone;
 }
 
 function applyBuyFill(
@@ -132,18 +157,17 @@ function applySellFill(
 
 /**
  * Pure avg-cost fill walk. Exported for deterministic ordering tests.
+ *
+ * When `initialLedgerBySymbol` is supplied, the map is cloned before mutation.
  */
 export function walkFillsForPnL(
-  events: readonly FillEvent[],
+  events: readonly PaperPnLFillEvent[],
   quoteCurrencyBySymbol: Readonly<Record<string, string>>,
-): {
-  ledgerBySymbol: Map<string, SymbolLedger>;
-  feesByAsset: Record<string, string>;
-  valuationGaps: string[];
-  realizedPnl: string;
-  totalFees: string;
-} {
-  const ledgerBySymbol = new Map<string, SymbolLedger>();
+  initialLedgerBySymbol?: Map<string, SymbolLedger>,
+): PaperPnLWalkResult {
+  const ledgerBySymbol = initialLedgerBySymbol
+    ? cloneLedgerMap(initialLedgerBySymbol)
+    : new Map<string, SymbolLedger>();
   const feesByAsset: Record<string, string> = {};
   const valuationGaps: string[] = [];
 
@@ -164,12 +188,7 @@ export function walkFillsForPnL(
 
     let ledger = ledgerBySymbol.get(order.symbol);
     if (!ledger) {
-      ledger = {
-        openQty: "0",
-        avgCost: "0",
-        realizedPnl: "0",
-        sellFees: "0",
-      };
+      ledger = createEmptyLedger();
       ledgerBySymbol.set(order.symbol, ledger);
     }
 
@@ -275,39 +294,62 @@ function buildOpenPositions(
   return { positions, unrealizedPnl: aggregateUnrealized };
 }
 
-/**
- * Idempotent derived Paper PnL from persisted mock/paper orders and fills.
- *
- * Operational read model — not billing, HWM, equity, or accounting ledger.
- */
-export async function derivePaperPnL(input: DerivePaperPnLInput): Promise<PaperPnL> {
-  const executionMode = input.executionMode ?? "mock";
-  if (executionMode !== "mock" && executionMode !== "paper") {
-    throw new PaperPnLScopeError(`execution mode ${executionMode} is out of scope for paper PnL`);
+function openPositionsFromLedger(
+  ledgerBySymbol: Map<string, SymbolLedger>,
+): { symbol: string; quantity: string }[] {
+  return [...ledgerBySymbol.entries()]
+    .filter(([, ledger]) => compareDecimal(ledger.openQty, "0") > 0)
+    .sort(([symbolA], [symbolB]) => symbolA.localeCompare(symbolB))
+    .map(([symbol, ledger]) => ({ symbol, quantity: ledger.openQty }));
+}
+
+function computeUnrealizedFromLedger(
+  ledgerBySymbol: Map<string, SymbolLedger>,
+  markPrices: PaperPnLMarkPrices,
+  valuationGaps: string[],
+): string | null {
+  const openPositions = openPositionsFromLedger(ledgerBySymbol);
+  if (openPositions.length === 0) {
+    return "0";
   }
 
-  const [book, orders] = await Promise.all([
-    derivePaperBook({
-      context: input.context,
-      orderRepository: input.orderRepository,
-      executionMode,
-    }),
-    input.orderRepository.listOrders(input.context, { executionMode }),
-  ]);
+  let aggregateUnrealized: string | null = "0";
+  for (const position of openPositions) {
+    const ledger = ledgerBySymbol.get(position.symbol);
+    if (!ledger) {
+      continue;
+    }
+    const mark = markPrices.marks[position.symbol];
+    if (mark === undefined) {
+      valuationGaps.push(`Missing mark price for open symbol ${position.symbol}`);
+      return null;
+    }
+    const costBasis = multiplyDecimal(position.quantity, ledger.avgCost);
+    const marketValue = multiplyDecimal(position.quantity, mark);
+    const unrealizedPnl = subtractDecimal(marketValue, costBasis);
+    if (aggregateUnrealized !== null) {
+      aggregateUnrealized = addDecimal(aggregateUnrealized, unrealizedPnl);
+    }
+  }
 
+  return aggregateUnrealized;
+}
+
+export type LoadPaperFillEventsInput = {
+  context: OrgContext;
+  orderRepository: OrderRepository;
+  executionMode: PaperBookExecutionMode;
+};
+
+export async function loadPaperFillEvents(
+  input: LoadPaperFillEventsInput,
+): Promise<{ fillEvents: PaperPnLFillEvent[]; filledOrders: OrderRow[] }> {
+  const orders = await input.orderRepository.listOrders(input.context, {
+    executionMode: input.executionMode,
+  });
   const filledOrders = orders.filter(isFilledOrder);
-  const symbols = [
-    ...new Set([
-      ...book.positions.map((position) => position.symbol),
-      ...filledOrders.map((order) => order.symbol),
-    ]),
-  ];
-  const quoteCurrency = resolveQuoteCurrency(symbols, input.markPrices);
-  const quoteCurrencyBySymbol = Object.fromEntries(
-    symbols.map((symbol) => [symbol, parseQuoteCurrency(symbol)]),
-  );
+  const fillEvents: PaperPnLFillEvent[] = [];
 
-  const fillEvents: FillEvent[] = [];
   for (const order of filledOrders) {
     const fills = await input.orderRepository.listFills(input.context, order.id);
     let fillQtySum = "0";
@@ -322,27 +364,120 @@ export async function derivePaperPnL(input: DerivePaperPnLInput): Promise<PaperP
     }
   }
 
-  const walk = walkFillsForPnL(fillEvents, quoteCurrencyBySymbol);
-  const { positions, unrealizedPnl } = buildOpenPositions(
-    book.positions,
-    walk.ledgerBySymbol,
-    input.markPrices,
-    walk.valuationGaps,
-  );
+  return { fillEvents, filledOrders };
+}
 
-  const totalPnl = unrealizedPnl === null ? null : addDecimal(walk.realizedPnl, unrealizedPnl);
+export function resolvePaperPnLQuoteCurrency(
+  symbols: readonly string[],
+  markPrices: PaperPnLMarkPrices | undefined,
+): string {
+  return resolveQuoteCurrency(symbols, markPrices);
+}
+
+export function buildQuoteCurrencyBySymbol(symbols: readonly string[]): Record<string, string> {
+  return Object.fromEntries(symbols.map((symbol) => [symbol, parseQuoteCurrency(symbol)]));
+}
+
+export type BuildPaperPnLFromLedgerInput = {
+  organizationId: string;
+  executionMode: PaperBookExecutionMode;
+  quoteCurrency: string;
+  walk: PaperPnLWalkResult;
+  markPrices?: PaperPnLMarkPrices;
+  derivedAt?: Date;
+};
+
+/** Build a PaperPnL snapshot from a completed fill walk (as-of boundary ledger). */
+export function buildPaperPnLFromLedger(input: BuildPaperPnLFromLedgerInput): PaperPnL {
+  const valuationGaps = [...input.walk.valuationGaps];
+  const openPositions = openPositionsFromLedger(input.walk.ledgerBySymbol);
+  const { positions, unrealizedPnl } = buildOpenPositions(
+    openPositions,
+    input.walk.ledgerBySymbol,
+    input.markPrices,
+    valuationGaps,
+  );
+  const totalPnl =
+    unrealizedPnl === null ? null : addDecimal(input.walk.realizedPnl, unrealizedPnl);
 
   return {
+    organizationId: input.organizationId,
+    executionMode: input.executionMode,
+    quoteCurrency: input.quoteCurrency,
+    realizedPnl: input.walk.realizedPnl,
+    unrealizedPnl,
+    totalFees: input.walk.totalFees,
+    totalPnl,
+    positions,
+    feesByAsset: { ...input.walk.feesByAsset },
+    valuationGaps,
+    derivedAt: input.derivedAt ?? new Date(),
+  };
+}
+
+export function computeUnrealizedFromLedgerForMarks(
+  ledgerBySymbol: Map<string, SymbolLedger>,
+  markPrices: PaperPnLMarkPrices,
+  valuationGaps: string[],
+): string | null {
+  return computeUnrealizedFromLedger(ledgerBySymbol, markPrices, valuationGaps);
+}
+
+/**
+ * Idempotent derived Paper PnL from persisted mock/paper orders and fills.
+ *
+ * Operational read model — not billing, HWM, equity, or accounting ledger.
+ */
+export async function derivePaperPnL(input: DerivePaperPnLInput): Promise<PaperPnL> {
+  const executionMode = input.executionMode ?? "mock";
+  if (executionMode !== "mock" && executionMode !== "paper") {
+    throw new PaperPnLScopeError(`execution mode ${executionMode} is out of scope for paper PnL`);
+  }
+
+  const [book, { fillEvents, filledOrders }] = await Promise.all([
+    derivePaperBook({
+      context: input.context,
+      orderRepository: input.orderRepository,
+      executionMode,
+    }),
+    loadPaperFillEvents({
+      context: input.context,
+      orderRepository: input.orderRepository,
+      executionMode,
+    }),
+  ]);
+
+  const symbols = [
+    ...new Set([
+      ...book.positions.map((position) => position.symbol),
+      ...filledOrders.map((order) => order.symbol),
+    ]),
+  ];
+  const quoteCurrency = resolveQuoteCurrency(symbols, input.markPrices);
+  const quoteCurrencyBySymbol = buildQuoteCurrencyBySymbol(symbols);
+
+  const walk = walkFillsForPnL(fillEvents, quoteCurrencyBySymbol);
+  const endSnapshot = buildPaperPnLFromLedger({
     organizationId: input.context.organizationId,
     executionMode,
     quoteCurrency,
-    realizedPnl: walk.realizedPnl,
-    unrealizedPnl,
-    totalFees: walk.totalFees,
-    totalPnl,
-    positions,
-    feesByAsset: walk.feesByAsset,
-    valuationGaps: walk.valuationGaps,
-    derivedAt: new Date(),
-  };
+    walk,
+    markPrices: input.markPrices,
+  });
+
+  for (const bookPosition of book.positions) {
+    const ledger = walk.ledgerBySymbol.get(bookPosition.symbol);
+    if (!ledger) {
+      throw new PaperPnLReconciliationError(
+        `paper book position ${bookPosition.symbol} missing from fill walk`,
+      );
+    }
+    if (compareDecimal(ledger.openQty, bookPosition.quantity) !== 0) {
+      throw new PaperPnLReconciliationError(
+        `quantity mismatch for ${bookPosition.symbol}: book=${bookPosition.quantity} walk=${ledger.openQty}`,
+      );
+    }
+  }
+
+  return endSnapshot;
 }
