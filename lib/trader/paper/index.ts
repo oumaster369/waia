@@ -38,6 +38,34 @@ export {
   type DerivePaperStrategyEvaluationsInput,
 } from "@/lib/trader/paper/derive-paper-strategy-eval";
 export {
+  buildPaperEvaluationExport,
+  buildPaperEvaluationExportDocument,
+} from "@/lib/trader/paper/build-paper-evaluation-export";
+export {
+  canonicalJsonString,
+  canonicalizePaperEvaluationEvidenceBody,
+  computePaperEvaluationExportDigest,
+  serializePaperPnL,
+  serializePaperPnLPeriodRollup,
+  serializePaperStrategyEvaluation,
+  toPaperEvaluationExportDocument,
+} from "@/lib/trader/paper/serialize-paper-evaluation-export";
+export { PaperEvaluationExportError } from "@/lib/trader/paper/paper-evaluation-export.errors";
+export {
+  PAPER_EVALUATION_EXPORT_SCHEMA_VERSION,
+  type PaperEvaluationDataQuality,
+  type PaperEvaluationEvidenceSlot,
+  type PaperEvaluationExportBundle,
+  type PaperEvaluationExportDocument,
+  type PaperEvaluationExportEvidenceBody,
+  type PaperEvaluationExportInput,
+  type PaperEvaluationExportSchemaVersion,
+  type PaperEvaluationProvenance,
+  type SerializedPaperClosedTrade,
+  type SerializedPaperPnL,
+  type SerializedPaperPnLWindow,
+} from "@/lib/trader/paper/paper-evaluation-export.types";
+export {
   PaperPnLReconciliationError,
   PaperPnLScopeError,
   PaperPnLWindowError,

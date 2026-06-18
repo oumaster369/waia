@@ -24,6 +24,9 @@ export type DerivePaperPnLPeriodInput = {
   executionMode?: PaperBookExecutionMode;
   window: PaperPnLWindow;
   markPrices?: PaperPnLMarkPrices;
+  /** Skip repository load when batching with strategy evaluation export. */
+  fillEvents?: PaperPnLFillEvent[];
+  derivedAt?: Date;
 };
 
 function assertValidWindow(window: PaperPnLWindow): void {
@@ -79,11 +82,14 @@ export async function derivePaperPnLPeriod(
 
   assertValidWindow(input.window);
 
-  const { fillEvents } = await loadPaperFillEvents({
-    context: input.context,
-    orderRepository: input.orderRepository,
-    executionMode,
-  });
+  const { fillEvents } =
+    input.fillEvents !== undefined
+      ? { fillEvents: input.fillEvents }
+      : await loadPaperFillEvents({
+          context: input.context,
+          orderRepository: input.orderRepository,
+          executionMode,
+        });
 
   const symbols = collectSymbols(fillEvents);
   const quoteCurrency = resolvePaperPnLQuoteCurrency(symbols, input.markPrices);
@@ -103,7 +109,7 @@ export async function derivePaperPnLPeriod(
   const periodFeesByAsset = { ...endWalk.feesByAsset };
   const periodValuationGaps = [...endWalk.valuationGaps];
 
-  const derivedAt = new Date();
+  const derivedAt = input.derivedAt ?? new Date();
   const endSnapshot = buildPaperPnLFromLedger({
     organizationId: input.context.organizationId,
     executionMode,
