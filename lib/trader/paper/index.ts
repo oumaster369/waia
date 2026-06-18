@@ -19,16 +19,24 @@ export {
   resolvePaperPnLQuoteCurrency,
   buildQuoteCurrencyBySymbol,
   computeUnrealizedFromLedgerForMarks,
+  extractInWindowClosedTrades,
   type DerivePaperPnLInput,
   type PaperPnLFillEvent,
   type PaperPnLWalkResult,
   type BuildPaperPnLFromLedgerInput,
   type LoadPaperFillEventsInput,
+  type PaperFillClosedTrade,
 } from "@/lib/trader/paper/derive-paper-pnl";
 export {
   derivePaperPnLPeriod,
   type DerivePaperPnLPeriodInput,
 } from "@/lib/trader/paper/derive-paper-pnl-period";
+export {
+  derivePaperStrategyEvaluation,
+  derivePaperStrategyEvaluations,
+  type DerivePaperStrategyEvaluationInput,
+  type DerivePaperStrategyEvaluationsInput,
+} from "@/lib/trader/paper/derive-paper-strategy-eval";
 export {
   PaperPnLReconciliationError,
   PaperPnLScopeError,
@@ -43,6 +51,10 @@ export type {
   PaperPnLPeriodRollup,
   PaperPnLWindow,
 } from "@/lib/trader/paper/paper-pnl-period.types";
+export type {
+  PaperClosedTrade,
+  PaperStrategyEvaluation,
+} from "@/lib/trader/paper/paper-strategy-eval.types";
 export type {
   PaperBook,
   PaperBookExecutionMode,

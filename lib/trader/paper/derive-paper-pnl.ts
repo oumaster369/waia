@@ -209,6 +209,80 @@ export function walkFillsForPnL(
   return { ledgerBySymbol, feesByAsset, valuationGaps, realizedPnl, totalFees };
 }
 
+export type PaperFillClosedTrade = {
+  fillId: string;
+  orderId: string;
+  symbol: string;
+  executedAt: Date;
+  quantity: string;
+  price: string;
+  tradePnl: string;
+};
+
+/**
+ * Walk opening + in-window fills and record per-sell trade PnL for in-window sells only.
+ * Uses the same avg-cost economics as `walkFillsForPnL`.
+ */
+export function extractInWindowClosedTrades(
+  openingEvents: readonly PaperPnLFillEvent[],
+  inWindowEvents: readonly PaperPnLFillEvent[],
+  quoteCurrencyBySymbol: Readonly<Record<string, string>>,
+): PaperFillClosedTrade[] {
+  const inWindowFillIds = new Set(inWindowEvents.map((event) => event.fill.id));
+  const openingWalk = walkFillsForPnL(openingEvents, quoteCurrencyBySymbol);
+  const ledgerBySymbol = cloneLedgerMap(openingWalk.ledgerBySymbol);
+  const feesByAsset: Record<string, string> = { ...openingWalk.feesByAsset };
+  const valuationGaps: string[] = [...openingWalk.valuationGaps];
+  const closedTrades: PaperFillClosedTrade[] = [];
+
+  for (const { fill, order } of sortFillEvents([...openingEvents, ...inWindowEvents])) {
+    const quoteCurrency = quoteCurrencyBySymbol[order.symbol];
+    if (!quoteCurrency) {
+      throw new Error(`[trader/paper/pnl] missing quote currency for symbol ${order.symbol}`);
+    }
+
+    const { quoteFee } = accumulateFee(
+      feesByAsset,
+      valuationGaps,
+      fill.feeAsset,
+      fill.fee,
+      quoteCurrency,
+      fill.id,
+    );
+
+    let ledger = ledgerBySymbol.get(order.symbol);
+    if (!ledger) {
+      ledger = createEmptyLedger();
+      ledgerBySymbol.set(order.symbol, ledger);
+    }
+
+    if (order.side === "buy") {
+      applyBuyFill(ledger, fill.price, fill.quantity, quoteFee);
+      continue;
+    }
+
+    const proceeds = multiplyDecimal(fill.price, fill.quantity);
+    const cost = multiplyDecimal(fill.quantity, ledger.avgCost);
+    const tradePnl = subtractDecimal(subtractDecimal(proceeds, cost), quoteFee);
+
+    if (inWindowFillIds.has(fill.id)) {
+      closedTrades.push({
+        fillId: fill.id,
+        orderId: order.id,
+        symbol: order.symbol,
+        executedAt: fill.executedAt,
+        quantity: fill.quantity,
+        price: fill.price,
+        tradePnl,
+      });
+    }
+
+    applySellFill(ledger, fill.price, fill.quantity, quoteFee);
+  }
+
+  return closedTrades;
+}
+
 function resolveQuoteCurrency(
   symbols: readonly string[],
   markPrices: PaperPnLMarkPrices | undefined,
