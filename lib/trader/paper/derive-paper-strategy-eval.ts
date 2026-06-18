@@ -45,6 +45,7 @@ export type DerivePaperStrategyEvaluationsInput = {
   executionMode?: PaperBookExecutionMode;
   markPrices?: PaperPnLMarkPrices;
   fillEvents?: PaperPnLFillEvent[];
+  derivedAt?: Date;
 };
 
 function assertValidWindow(window: PaperPnLWindow): void {
@@ -360,7 +361,7 @@ export async function derivePaperStrategyEvaluations(
       })
     ).fillEvents;
 
-  const derivedAt = new Date();
+  const derivedAt = input.derivedAt ?? new Date();
   return input.strategySignalIds.map((strategySignalId) =>
     derivePaperStrategyEvaluationFromEvents({
       organizationId: input.context.organizationId,
