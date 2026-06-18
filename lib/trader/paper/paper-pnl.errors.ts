@@ -15,3 +15,12 @@ export class PaperPnLScopeError extends Error {
     this.name = "PaperPnLScopeError";
   }
 }
+
+export class PaperPnLWindowError extends Error {
+  readonly code = "PAPER_PNL_WINDOW";
+
+  constructor(message: string) {
+    super(`[trader/paper/pnl] ${message}`);
+    this.name = "PaperPnLWindowError";
+  }
+}

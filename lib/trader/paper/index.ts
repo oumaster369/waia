@@ -14,17 +14,35 @@ export {
 export {
   derivePaperPnL,
   walkFillsForPnL,
+  buildPaperPnLFromLedger,
+  loadPaperFillEvents,
+  resolvePaperPnLQuoteCurrency,
+  buildQuoteCurrencyBySymbol,
+  computeUnrealizedFromLedgerForMarks,
   type DerivePaperPnLInput,
+  type PaperPnLFillEvent,
+  type PaperPnLWalkResult,
+  type BuildPaperPnLFromLedgerInput,
+  type LoadPaperFillEventsInput,
 } from "@/lib/trader/paper/derive-paper-pnl";
+export {
+  derivePaperPnLPeriod,
+  type DerivePaperPnLPeriodInput,
+} from "@/lib/trader/paper/derive-paper-pnl-period";
 export {
   PaperPnLReconciliationError,
   PaperPnLScopeError,
+  PaperPnLWindowError,
 } from "@/lib/trader/paper/paper-pnl.errors";
 export type {
   PaperPnL,
   PaperPnLMarkPrices,
   PaperPositionPnL,
 } from "@/lib/trader/paper/paper-pnl.types";
+export type {
+  PaperPnLPeriodRollup,
+  PaperPnLWindow,
+} from "@/lib/trader/paper/paper-pnl-period.types";
 export type {
   PaperBook,
   PaperBookExecutionMode,
