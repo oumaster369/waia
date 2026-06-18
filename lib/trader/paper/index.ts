@@ -11,6 +11,20 @@ export {
   netPositionsFromFilledOrders,
   type DerivePaperBookInput,
 } from "@/lib/trader/paper/derive-paper-book";
+export {
+  derivePaperPnL,
+  walkFillsForPnL,
+  type DerivePaperPnLInput,
+} from "@/lib/trader/paper/derive-paper-pnl";
+export {
+  PaperPnLReconciliationError,
+  PaperPnLScopeError,
+} from "@/lib/trader/paper/paper-pnl.errors";
+export type {
+  PaperPnL,
+  PaperPnLMarkPrices,
+  PaperPositionPnL,
+} from "@/lib/trader/paper/paper-pnl.types";
 export type {
   PaperBook,
   PaperBookExecutionMode,
