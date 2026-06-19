@@ -22,6 +22,11 @@ export const traderAuditActions = {
   orderReconciliationRequired: "trader.order.reconciliation_required",
   orderReconciliationUnknownPosition: "trader.order.reconciliation_unknown_position",
   orderReconciliationTerminalDrift: "trader.order.reconciliation_terminal_drift",
+  promotionRequested: "trader.strategy_promotion.requested",
+  promotionConfirmed: "trader.strategy_promotion.confirmed",
+  promotionEffective: "trader.strategy_promotion.effective",
+  promotionCancelled: "trader.strategy_promotion.cancelled",
+  promotionDemoted: "trader.strategy_promotion.demoted",
 } as const;
 
 export type TraderAuditAction = (typeof traderAuditActions)[keyof typeof traderAuditActions];
@@ -35,6 +40,7 @@ export const traderEntityTypes = {
   riskDecision: "trader.risk_decision",
   killSwitch: "trader.kill_switch",
   order: "trader.order",
+  strategyPromotion: "trader.strategy_promotion",
 } as const;
 
 export type TraderEntityType = (typeof traderEntityTypes)[keyof typeof traderEntityTypes];

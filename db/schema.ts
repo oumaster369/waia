@@ -351,6 +351,70 @@ export const traderKillSwitches = sqliteTable(
   ],
 );
 
+export const promotionGovernanceStateEnum = [
+  "DRAFT",
+  "PENDING_CONFIRM",
+  "COOLING_OFF",
+  "EFFECTIVE",
+  "CANCELLED",
+  "REVOKED",
+] as const;
+export type PromotionGovernanceState = (typeof promotionGovernanceStateEnum)[number];
+
+export const strategyTargetDeploymentStateEnum = ["LIVE_LIMITED"] as const;
+export type StrategyTargetDeploymentState = (typeof strategyTargetDeploymentStateEnum)[number];
+
+/** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
+export const traderStrategyPromotionRecords = sqliteTable(
+  "trader_strategy_promotion_records",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    gitCommitSha: text("git_commit_sha").notNull(),
+    targetDeploymentState: text("target_deployment_state", {
+      enum: [...strategyTargetDeploymentStateEnum],
+    }).notNull(),
+    hypothesis: text("hypothesis").notNull(),
+    intendedRegime: text("intended_regime").notNull(),
+    costModelJson: text("cost_model_json").notNull(),
+    failureModesJson: text("failure_modes_json").notNull(),
+    reasonCodeDistributionJson: text("reason_code_distribution_json").notNull(),
+    paperTradingEvidenceJson: text("paper_trading_evidence_json").notNull(),
+    evidenceContentDigest: text("evidence_content_digest").notNull(),
+    confidenceAttestationJson: text("confidence_attestation_json").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    state: text("state", { enum: [...promotionGovernanceStateEnum] }).notNull(),
+    actorId: text("actor_id"),
+    requestedAt: integer("requested_at", { mode: "timestamp_ms" }),
+    confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
+    coolingOffEndsAt: integer("cooling_off_ends_at", { mode: "timestamp_ms" }),
+    effectiveAt: integer("effective_at", { mode: "timestamp_ms" }),
+    cancelledAt: integer("cancelled_at", { mode: "timestamp_ms" }),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    supersededByRecordId: text("superseded_by_record_id"),
+    stateVersion: integer("state_version").notNull().default(1),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_strategy_promotion_org_strategy_state_idx").on(
+      t.organizationId,
+      t.strategyId,
+      t.state,
+    ),
+  ],
+);
+
 export const orderSideEnum = ["buy", "sell"] as const;
 export type OrderSideDb = (typeof orderSideEnum)[number];
 

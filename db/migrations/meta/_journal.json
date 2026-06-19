@@ -99,6 +99,13 @@
       "when": 1778700000000,
       "tag": "0013_trader_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1778800000000,
+      "tag": "0014_trader_strategy_promotion_records",
+      "breakpoints": true
     }
   ]
 }

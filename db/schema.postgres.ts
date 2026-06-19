@@ -352,6 +352,64 @@ export const traderKillSwitches = pgTable(
   ],
 );
 
+export const promotionGovernanceStateEnumPg = pgEnum("strategy_promotion_governance_state", [
+  "DRAFT",
+  "PENDING_CONFIRM",
+  "COOLING_OFF",
+  "EFFECTIVE",
+  "CANCELLED",
+  "REVOKED",
+]);
+
+export const strategyTargetDeploymentStateEnumPg = pgEnum("strategy_target_deployment_state", [
+  "LIVE_LIMITED",
+]);
+
+/** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
+export const traderStrategyPromotionRecords = pgTable(
+  "trader_strategy_promotion_records",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    gitCommitSha: text("git_commit_sha").notNull(),
+    targetDeploymentState: strategyTargetDeploymentStateEnumPg("target_deployment_state").notNull(),
+    hypothesis: text("hypothesis").notNull(),
+    intendedRegime: text("intended_regime").notNull(),
+    costModelJson: jsonb("cost_model_json").notNull(),
+    failureModesJson: jsonb("failure_modes_json").notNull(),
+    reasonCodeDistributionJson: jsonb("reason_code_distribution_json").notNull(),
+    paperTradingEvidenceJson: jsonb("paper_trading_evidence_json").notNull(),
+    evidenceContentDigest: text("evidence_content_digest").notNull(),
+    confidenceAttestationJson: jsonb("confidence_attestation_json").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    state: promotionGovernanceStateEnumPg("state").notNull(),
+    actorId: text("actor_id"),
+    requestedAt: timestamp("requested_at", { withTimezone: true, mode: "date" }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true, mode: "date" }),
+    coolingOffEndsAt: timestamp("cooling_off_ends_at", { withTimezone: true, mode: "date" }),
+    effectiveAt: timestamp("effective_at", { withTimezone: true, mode: "date" }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true, mode: "date" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    supersededByRecordId: uuid("superseded_by_record_id"),
+    stateVersion: integer("state_version").notNull().default(1),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_strategy_promotion_org_strategy_state_idx").on(
+      t.organizationId,
+      t.strategyId,
+      t.state,
+    ),
+  ],
+);
+
 export const orderSideEnumPg = pgEnum("order_side", ["buy", "sell"]);
 export const orderTypeEnumPg = pgEnum("order_type", ["limit", "market"]);
 export const orderStateEnumPg = pgEnum("order_state", [
