@@ -51,6 +51,15 @@ To ensure no architectural intent is lost before Foundation, Community, and Open
 
 ---
 
+### PH2-KNW-01 — `KNOWLEDGE-GOVERNANCE.md`
+
+- **Purpose:** define the conditions under which WAIA may introduce an **external knowledge layer** while preserving the **Repository-First** discipline ([`SOURCES-OF-TRUTH.md`](SOURCES-OF-TRUTH.md)) and preventing Source-of-Truth fragmentation — including when an external knowledge base is justified, how canonical authority stays in the repository, and how drift/duplication between repository canon and any external layer is prevented.
+- **Status:** Phase 2 Knowledge Placeholder (not authorized).
+- **Dependencies:** Community Layer; Voice of Humanity; Narrative Governance.
+- **Creates no roadmap commitment.** No external knowledge base, integration, tooling, or Source-of-Truth change is implied or authorized by this entry; until then the repository remains the single Knowledge Source of Truth.
+
+---
+
 ## Future Linear Migration
 
 These placeholders must later become Linear initiatives **only after explicit Founders Council authorization** of the corresponding phase. They are not Linear issues today, and creating them is a future, separately gated act.
