@@ -44,5 +44,6 @@ grep '"kind":"paper_loop"' paper-loop-soak.log | grep '"outcome":"rollup"'
 
 ## Related
 
+- [DEE-170-48H-PAPER-SOAK-CLOSURE-REPORT.md](../ops/DEE-170-48H-PAPER-SOAK-CLOSURE-REPORT.md) — canonical 48h soak closure audit (DEE-170 / M7)
 - [DEE-222-TRADER-TELEMETRY-SCHEMA.md](./DEE-222-TRADER-TELEMETRY-SCHEMA.md) — base envelope and `paper_loop` golden example
 - [DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md](./DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md) — where stdout appears
