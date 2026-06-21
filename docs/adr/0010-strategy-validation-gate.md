@@ -33,5 +33,6 @@ Neutral: introduces no quantitative thresholds and no new product scope.
 
 - [AI-TRADER Roadmap v2](../ai-trader/AI-TRADER-ROADMAP-v2.md)
 - [AI-TRADER Master Spec v2](../ai-trader/AI-TRADER-MASTER-SPEC-v2.md)
+- [DEE-170 — M7 Milestone Hygiene & Governance Review](../ops/DEE-170-M7-MILESTONE-HYGIENE-GOVERNANCE-REVIEW.md) — M7.5 Linear milestone hygiene and operator execution plan
 - [ADR-0011 Single Operator Governance Model](0011-single-operator-governance-model.md)
 - [ADR-0009 Regulatory posture](0009-regulatory-posture.md)
