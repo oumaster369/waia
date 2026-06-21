@@ -33,8 +33,16 @@ Anchors cite canonical docs. **Do not redefine** upstream product wording—link
 | **Governance** | Executable conventions in `docs/waia-governance/**` + repo `AGENTS.md`. |
 | **Autonomy** | Agent automation boundary per [`RISK-TIERS.md`](RISK-TIERS.md). |
 | **Human approval gate** | Architect/human-required decision checkpoints ([`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md)). |
-| **WAIA Architect** | Human **final authority** for architecture, semantics, and governance merges; escalation destination. See [§ WAIA Architect](#waia-architect), [`AGENT-ROLES.md`](AGENT-ROLES.md). |
+| **WAIA Architect** | Human authority for architecture, semantics, and governance merges; escalation destination. Under the Founders Council layer, the Architect operates as **execution delegate** (binding from PR2). See [§ WAIA Architect](#waia-architect), [`AGENT-ROLES.md`](AGENT-ROLES.md), [`FOUNDERS-COUNCIL.md`](FOUNDERS-COUNCIL.md). |
 | **ADR** | Lightweight Architecture Decision Record (see [`ADR-POLICY.md`](ADR-POLICY.md)). |
+| **Founders Council** | Apex authority layer (Aleksey Kalinichenko, Nataly Guseva); holds reserved decisions. Binding from PR2. See [`FOUNDERS-COUNCIL.md`](FOUNDERS-COUNCIL.md). |
+| **English canon** | English is authoritative for governance docs; translations informational; English prevails (product/UI copy + user examples carved out). See [`DOCUMENTATION-STANDARDS.md`](DOCUMENTATION-STANDARDS.md), [ADR-0012](../adr/0012-governance-integration-founders-council-and-english-canon.md). |
+| **Sources of Truth** | Canonical system per information class; Repository-First for knowledge. See [`SOURCES-OF-TRUTH.md`](SOURCES-OF-TRUTH.md). |
+| **Repository-First** | The repository is the Knowledge Base for Phase 0–1; external KB deferred. See [`SOURCES-OF-TRUTH.md`](SOURCES-OF-TRUTH.md). |
+| **Financial Sustainability First** | Decisions account for ecosystem sustainability; AI-Twin v1 default primary; AI-Trader activation reserved. See [`WAIA-GOVERNANCE-INTEGRATION-MASTER-PLAN-v1.0.md`](WAIA-GOVERNANCE-INTEGRATION-MASTER-PLAN-v1.0.md) §5. |
+| **Agent Charter** | Canonical agent-control doctrine (Gate A); agents advisory only. See [`AGENT-CHARTER.md`](AGENT-CHARTER.md). |
+| **Doctrine stack** | Two coexisting DOCTRINE acceptances with disjoint scopes (v1.0 agent governance; v2.0 governance integration); neither supersedes the other. See [`CONSTITUTIONAL-DOCTRINE.md`](CONSTITUTIONAL-DOCTRINE.md). |
+| **Constitutional Intake Procedure** | Classifies each external-constitution claim into EXECUTABLE NOW / DEFERRED / VISION ONLY / FOUNDERS-RESERVED. See [`constitutional-history/2026-06-21-constitutional-acceptance-v2.0.md`](constitutional-history/2026-06-21-constitutional-acceptance-v2.0.md). |
 
 ## Canonical definitions
 

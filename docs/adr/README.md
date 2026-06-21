@@ -19,5 +19,6 @@ See policy: [`../waia-governance/ADR-POLICY.md`](../waia-governance/ADR-POLICY.m
 | [0009](0009-regulatory-posture.md) | Regulatory posture for managed trading + performance fees | Accepted (Posture) — gates external live trading | AI-TRADER Baseline v1.2 |
 | [0010](0010-strategy-validation-gate.md) | Strategy Validation Gate (paper → live) | Accepted | AI-TRADER Baseline v1.2 |
 | [0011](0011-single-operator-governance-model.md) | Single Operator Governance Model (replaces dual-control) | Accepted | AI-TRADER Baseline v1.2 |
+| [0012](0012-governance-integration-founders-council-and-english-canon.md) | Governance Integration: Founders Council apex authority and English canon | Accepted | Phase 0 Governance Integration; Acceptance v2.0 |
 
 Add rows as new decisions land.**Superseded** decisions keep file for history — index notes replacement.

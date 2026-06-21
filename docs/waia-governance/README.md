@@ -34,6 +34,17 @@ WAIA DEV OS operational layer:
 | [`CONSTITUTIONAL-DOCTRINE.md`](CONSTITUTIONAL-DOCTRINE.md) | Pointer to active constitutional doctrine + status semantics (no new binding rules) |
 | [`constitutional-history/`](constitutional-history/README.md) | Append-only constitutional artifacts: VISION / ADVISORY / DOCTRINE lineage |
 
+### Phase 0 — Governance Integration (additive; authority reconciliation lands in PR2)
+
+| Doc | Topic |
+|-----|-------|
+| [`WAIA-GOVERNANCE-INTEGRATION-MASTER-PLAN-v1.0.md`](WAIA-GOVERNANCE-INTEGRATION-MASTER-PLAN-v1.0.md) | Phase 0 System of Record — **non-binding execution plan** |
+| [`FOUNDERS-COUNCIL.md`](FOUNDERS-COUNCIL.md) | Apex authority layer + reserved decisions (binding from PR2) |
+| [`FOUNDERS-COUNCIL-RATIFICATION-RECORD.md`](FOUNDERS-COUNCIL-RATIFICATION-RECORD.md) | GI-01 / GI-02 / GI-03 ratification record |
+| [`SOURCES-OF-TRUTH.md`](SOURCES-OF-TRUTH.md) | Sources of Truth + Repository-First Knowledge Strategy |
+| [`AGENT-CHARTER.md`](AGENT-CHARTER.md) | Agent-control doctrine (Gate A); agents advisory only |
+| [`FUTURE-GOVERNANCE-BACKLOG.md`](FUTURE-GOVERNANCE-BACKLOG.md) | Informational future placeholders — **authorizes nothing** |
+
 Architectural WHY: [`../adr/`](../adr/README.md).
 
 Product onboarding hub: [`../product/WAIA-V1-MVP-SPEC.md`](../product/WAIA-V1-MVP-SPEC.md).
