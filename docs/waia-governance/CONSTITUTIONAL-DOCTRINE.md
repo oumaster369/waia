@@ -20,15 +20,25 @@ Each artifact in `constitutional-history/` declares its own status header.
 
 ---
 
-## 2. Current head of doctrine
+## 2. Doctrine stack (active)
+
+Doctrine is **not** a single linear head. WAIA DEV OS carries a **doctrine stack**: two accepted DOCTRINE artifacts with **disjoint scopes**. Neither supersedes the other; each binds only within its own scope.
+
+| Doctrine | Artifact | Scope | Status |
+|----------|----------|-------|--------|
+| **Acceptance v1.0** | [`constitutional-history/2026-05-10-constitutional-acceptance-v1.0.md`](constitutional-history/2026-05-10-constitutional-acceptance-v1.0.md) | **Agent Governance Foundation** — agent doctrine, Gate A–D model, "Agents may comment. Humans decide." | DOCTRINE |
+| **Acceptance v2.0** | [`constitutional-history/2026-06-21-constitutional-acceptance-v2.0.md`](constitutional-history/2026-06-21-constitutional-acceptance-v2.0.md) | **Governance Integration Foundation** — WAIA Operations System v2.0 intake, Founders Council layer, Sources of Truth, English canon | DOCTRINE |
+
+> **"v2.0" is not a successor index to "v1.0".** It denotes acceptance of *WAIA Operations System v2.0* as the Ecosystem Constitution / Strategic Vision above the executable Governance Core. The two acceptances **coexist**; v2.0 leaves every v1.0 agent constraint intact.
+
+**Supporting artifacts (non-doctrine):**
 
 | Slot | Artifact | Status |
 |------|----------|--------|
-| **Active doctrine** | [`constitutional-history/2026-05-10-constitutional-acceptance-v1.0.md`](constitutional-history/2026-05-10-constitutional-acceptance-v1.0.md) | DOCTRINE — Acceptance v1.0 |
 | **Underlying review** | [`constitutional-history/2026-05-10-constitutional-review.md`](constitutional-history/2026-05-10-constitutional-review.md) | ADVISORY |
 | **Source vision** | [`constitutional-history/2026-05-10-agent-society-roadmap.md`](constitutional-history/2026-05-10-agent-society-roadmap.md) | VISION |
 
-**Read order for high-context sessions:** active doctrine → underlying review → source vision. For day-to-day execution, consult the operational canon directly.
+**Read order for high-context sessions:** both doctrine artifacts → underlying review → source vision. For day-to-day execution, consult the operational canon directly. Authority reconciliation for the Founders Council / Sources of Truth layer lands in **PR2 (GI-05)**; until then the operational canon governs.
 
 ---
 
@@ -62,7 +72,7 @@ These principles are **already binding via the active doctrine artifact**; they 
 
 | Gate | Name | Authorization status |
 |------|------|----------------------|
-| **A** | Doctrine — Agent Charter & roadmap demotion | Authorized to plan; not yet executed. See [Article 4](constitutional-history/2026-05-10-constitutional-acceptance-v1.0.md#article-4--approved-next-bounded-milestone) of the active doctrine. |
+| **A** | Doctrine — Agent Charter & roadmap demotion | Charter **authored** additively in PR1 ([`AGENT-CHARTER.md`](AGENT-CHARTER.md)); **binding from PR2**. No agent identity, runtime, or gate execution authorized. See [Article 4](constitutional-history/2026-05-10-constitutional-acceptance-v1.0.md#article-4--approved-next-bounded-milestone) of Acceptance v1.0. |
 | **B** | Single Advisory Identity (read + comment only) | Not authorized. Awaits Gate A merge + Charter prerequisites (Article 5). |
 | **C** | Telemetry baseline (observation only) | Not authorized. Awaits Gate B observable stability. |
 | **D** | Selective enforcement / second advisory identity | Not authorized. Awaits Gates B and C. |
