@@ -1,6 +1,6 @@
 import "server-only";
 
-import { desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 
 import type { WaiaDb } from "@/db/types";
 import { auditLogs, userPlatformRoles } from "@/db/schema";
@@ -60,6 +60,80 @@ export function listAuditLogsForAdminSqlite(
     entityId: row.entityId ?? null,
     organizationId: row.organizationId ?? null,
     metadata: JSON.parse(row.metadataJson ?? "{}") as Record<string, unknown>,
+    createdAt: new Date(row.createdAt),
+  }));
+}
+
+export type EntityAuditLogParams = {
+  organizationId: string;
+  entityType: string;
+  entityId: string;
+  limit?: number;
+};
+
+/**
+ * Read-only, org+entity-scoped audit log read for operator verification (e.g. the
+ * Strategy Validation Gate runway). Ordered ASCENDING by `createdAt` so the lifecycle
+ * chain (requested -> confirmed -> effective) is visible in order. Does not write.
+ */
+export function listAuditLogsForEntitySqlite(
+  db: WaiaDb,
+  params: EntityAuditLogParams,
+): AuditLogRow[] {
+  const rows = db
+    .select()
+    .from(auditLogs)
+    .where(
+      and(
+        eq(auditLogs.organizationId, params.organizationId),
+        eq(auditLogs.entityType, params.entityType),
+        eq(auditLogs.entityId, params.entityId),
+      ),
+    )
+    .orderBy(asc(auditLogs.createdAt))
+    .limit(params.limit ?? 100)
+    .all();
+
+  return rows.map((row) => ({
+    id: row.id,
+    actorType: row.actorType,
+    actorId: row.actorId ?? null,
+    action: row.action,
+    entityType: row.entityType,
+    entityId: row.entityId ?? null,
+    organizationId: row.organizationId ?? null,
+    metadata: JSON.parse(row.metadataJson ?? "{}") as Record<string, unknown>,
+    createdAt: new Date(row.createdAt),
+  }));
+}
+
+/** Postgres parity for {@link listAuditLogsForEntitySqlite}. */
+export async function listAuditLogsForEntityPostgres(
+  ex: PgReadExecutor,
+  params: EntityAuditLogParams,
+): Promise<AuditLogRow[]> {
+  const rows = await ex
+    .select()
+    .from(pgSchema.auditLogs)
+    .where(
+      and(
+        eq(pgSchema.auditLogs.organizationId, params.organizationId),
+        eq(pgSchema.auditLogs.entityType, params.entityType),
+        eq(pgSchema.auditLogs.entityId, params.entityId),
+      ),
+    )
+    .orderBy(asc(pgSchema.auditLogs.createdAt))
+    .limit(params.limit ?? 100);
+
+  return rows.map((row) => ({
+    id: row.id,
+    actorType: row.actorType,
+    actorId: row.actorId ?? null,
+    action: row.action,
+    entityType: row.entityType,
+    entityId: row.entityId ?? null,
+    organizationId: row.organizationId ?? null,
+    metadata: (row.metadataJson ?? {}) as Record<string, unknown>,
     createdAt: new Date(row.createdAt),
   }));
 }

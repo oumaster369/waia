@@ -59,3 +59,19 @@ export {
 } from "@/lib/trader/validation-gate/promotion-service";
 
 export { assertStrategyLiveAuthorized } from "@/lib/trader/validation-gate/assert-strategy-live-authorized";
+
+export {
+  OperatorEvidenceError,
+  parsePaperEvaluationExportDocument,
+  summarizePaperEvidence,
+  type EvidenceSummary,
+} from "@/lib/trader/validation-gate/operator-evidence";
+
+export {
+  REQUIRED_EFFECTIVE_ACK,
+  OperatorRunwayInputError,
+  parseOperatorPromotionInputs,
+  assertEffectiveAck,
+  buildAssembleInput,
+  type OperatorPromotionInputs,
+} from "@/lib/trader/validation-gate/operator-promotion-inputs";
