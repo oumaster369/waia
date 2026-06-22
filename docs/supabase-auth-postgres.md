@@ -81,12 +81,18 @@ export DATABASE_URL_POSTGRES="postgresql://waia_validate:waia_validate_local_onl
 
 ### 2. Apply the auth prelude (stub)
 
-Bare Postgres has no Supabase **`auth`** schema. Our migration `0001_auth_users_fk.sql` references `auth.users(id)`. Apply the minimal stub **before** Drizzle migrate:
+Bare Postgres has no Supabase **`auth`** schema and none of the Supabase database roles. Our migrations reference `auth.users(id)` (`0001_auth_users_fk.sql`) and the `authenticated` / `anon` roles in RLS policies (`0004_audit_logs_rls.sql` onward). Apply the minimal, validation-only stub (NOLOGIN role stubs + `auth.users`) **before** Drizzle migrate:
 
 ```bash
+# Programmatic (single source of truth; host-guarded to localhost):
+pnpm db:postgres:auth-prelude
+
+# Or run the same SQL directly:
 psql "$DATABASE_URL_POSTGRES" -v ON_ERROR_STOP=1 \
   -f scripts/postgres-validation/prelude-auth-stub.sql
 ```
+
+The role stubs are `NOLOGIN` with **no grants** — they exist only so `CREATE POLICY ... TO authenticated, anon` resolves on bare Postgres, and cannot be confused with production Supabase auth.
 
 ### 3. Run Postgres migrations
 

@@ -17,9 +17,9 @@ CREATE TABLE "trader_mi_measurement" (
 --> statement-breakpoint
 ALTER TABLE "trader_mi_measurement" ADD CONSTRAINT "trader_mi_measurement_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
-ALTER TABLE "trader_mi_measurement" ADD CONSTRAINT "trader_mi_measurement_revision_of_organization_id_trader_mi_measurement_id_organization_id_fk" FOREIGN KEY ("revision_of","organization_id") REFERENCES "public"."trader_mi_measurement"("id","organization_id") ON DELETE no action ON UPDATE no action;
---> statement-breakpoint
 CREATE UNIQUE INDEX "trader_mi_measurement_id_organization_unique" ON "trader_mi_measurement" USING btree ("id","organization_id");
+--> statement-breakpoint
+ALTER TABLE "trader_mi_measurement" ADD CONSTRAINT "trader_mi_measurement_revision_of_organization_id_trader_mi_measurement_id_organization_id_fk" FOREIGN KEY ("revision_of","organization_id") REFERENCES "public"."trader_mi_measurement"("id","organization_id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 CREATE UNIQUE INDEX "trader_mi_measurement_org_key_seq_unique" ON "trader_mi_measurement" USING btree ("organization_id","measurement_key","version_seq");
 --> statement-breakpoint

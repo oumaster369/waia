@@ -34,13 +34,13 @@ CREATE TABLE "trader_mi_pattern_lifecycle" (
 --> statement-breakpoint
 ALTER TABLE "trader_mi_pattern" ADD CONSTRAINT "trader_mi_pattern_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
+CREATE UNIQUE INDEX "trader_mi_pattern_id_organization_unique" ON "trader_mi_pattern" USING btree ("id","organization_id");
+--> statement-breakpoint
 ALTER TABLE "trader_mi_pattern" ADD CONSTRAINT "trader_mi_pattern_revision_of_organization_id_trader_mi_pattern_id_organization_id_fk" FOREIGN KEY ("revision_of","organization_id") REFERENCES "public"."trader_mi_pattern"("id","organization_id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "trader_mi_pattern_lifecycle" ADD CONSTRAINT "trader_mi_pattern_lifecycle_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "trader_mi_pattern_lifecycle" ADD CONSTRAINT "trader_mi_pattern_lifecycle_pattern_id_organization_id_trader_mi_pattern_id_organization_id_fk" FOREIGN KEY ("pattern_id","organization_id") REFERENCES "public"."trader_mi_pattern"("id","organization_id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
-CREATE UNIQUE INDEX "trader_mi_pattern_id_organization_unique" ON "trader_mi_pattern" USING btree ("id","organization_id");
 --> statement-breakpoint
 CREATE UNIQUE INDEX "trader_mi_pattern_org_key_seq_unique" ON "trader_mi_pattern" USING btree ("organization_id","pattern_key","version_seq");
 --> statement-breakpoint
