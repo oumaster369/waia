@@ -365,6 +365,73 @@ export const strategyTargetDeploymentStateEnumPg = pgEnum("strategy_target_deplo
   "LIVE_LIMITED",
 ]);
 
+export const miSourceStatusEnumPg = pgEnum("mi_source_status", ["active", "deprecated"]);
+
+/** AI-TRADER MI: org-scoped market intelligence source registry (DEE-279 / LD-2a). */
+export const traderMiSource = pgTable(
+  "trader_mi_source",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    feedKind: text("feed_kind").notNull(),
+    symbol: text("symbol"),
+    description: text("description"),
+    status: miSourceStatusEnumPg("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_source_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_mi_source_org_status_idx").on(t.organizationId, t.status),
+  ],
+);
+
+/** AI-TRADER MI: append-only PIT trust history (DEE-279 / LD-2a). */
+export const traderMiSourceTrust = pgTable(
+  "trader_mi_source_trust",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sourceId: uuid("source_id").notNull(),
+    trustScore: text("trust_score").notNull(),
+    rationale: text("rationale").notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    revisionOf: uuid("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
+    revisionSeq: integer("revision_seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_source_trust_id_organization_unique").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.sourceId, t.organizationId],
+      foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("trader_mi_source_trust_org_source_seq_unique").on(
+      t.organizationId,
+      t.sourceId,
+      t.revisionSeq,
+    ),
+    index("trader_mi_source_trust_org_source_seq_idx").on(
+      t.organizationId,
+      t.sourceId,
+      t.revisionSeq,
+    ),
+    index("trader_mi_source_trust_org_source_event_time_idx").on(
+      t.organizationId,
+      t.sourceId,
+      t.eventTime,
+    ),
+  ],
+);
+
 /** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
 export const traderStrategyPromotionRecords = pgTable(
   "trader_strategy_promotion_records",
