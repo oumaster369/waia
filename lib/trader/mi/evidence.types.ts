@@ -47,7 +47,13 @@ export type MiEvidence = {
   createdAt: Date;
 };
 
-/** Closed typed input — no payload field; reserved refs not accepted (always NULL at insert). */
+/**
+ * Closed typed input — no free-form payload.
+ *
+ * `nullComparatorRef` / `regimeContextRef` remain reserved (always NULL until LD-5b/5c).
+ * `trialRegistrationRef` is accepted from LD-5a.2b: an optional version-exact link to an
+ * in-org Trial Registration (validated + enforced by composite FK / guard trigger).
+ */
 export type RecordEvidenceInput = {
   evidenceKind?: MiEvidenceKind;
   direction: MiEvidenceDirection;
@@ -58,6 +64,7 @@ export type RecordEvidenceInput = {
   eventTime: Date;
   ingestTime: Date;
   recordedBy: string;
+  trialRegistrationRef?: string | null;
 };
 
 export type MiEvidenceSummary = {

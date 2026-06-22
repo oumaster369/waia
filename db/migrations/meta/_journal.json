@@ -148,6 +148,13 @@
       "when": 1779400000000,
       "tag": "0020_trader_mi_evidence",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1779500000000,
+      "tag": "0021_trader_mi_trial",
+      "breakpoints": true
     }
   ]
 }

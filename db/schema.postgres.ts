@@ -722,6 +722,44 @@ export const traderMiEvidence = pgTable(
   ],
 );
 
+/**
+ * AI-TRADER MI: append-only Trial Registration ledger (DEE-289 / LD-5a.2b).
+ *
+ * Immutable pre-registration of an evaluation attempt against a hypothesis version.
+ * Pin-only; integrity derived (no stored column); `research_program` inert free-text.
+ * `trader_mi_evidence.trial_registration_ref` composite FK to this table enforced in migration SQL.
+ */
+export const traderMiTrial = pgTable(
+  "trader_mi_trial",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hypothesisId: uuid("hypothesis_id").notNull(), // composite FK enforced in migration SQL
+    hypothesisKey: text("hypothesis_key").notNull(),
+    hypothesisDefinitionDigest: text("hypothesis_definition_digest").notNull(),
+    researchProgram: text("research_program"),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    registeredBy: text("registered_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_trial_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_trial_org_key_seq_unique").on(t.organizationId, t.hypothesisKey, t.seq),
+    index("trader_mi_trial_org_hypothesis_idx").on(t.organizationId, t.hypothesisId),
+    index("trader_mi_trial_org_key_seq_idx").on(t.organizationId, t.hypothesisKey, t.seq),
+    index("trader_mi_trial_org_key_event_time_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.eventTime,
+    ),
+  ],
+);
+
 /** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
 export const traderStrategyPromotionRecords = pgTable(
   "trader_strategy_promotion_records",

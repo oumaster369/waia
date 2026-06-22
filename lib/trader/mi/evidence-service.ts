@@ -42,6 +42,10 @@ import {
   createSqliteMiObservationRepository,
 } from "@/lib/trader/mi/observation-repository-adapters";
 import {
+  createPostgresMiTrialRepository,
+  createSqliteMiTrialRepository,
+} from "@/lib/trader/mi/trial-repository-adapters";
+import {
   buildEvidenceContentDigest,
   serializeMeasurementRefsJson,
   serializeObservationRefsJson,
@@ -52,6 +56,7 @@ import type {
   MiHypothesisRepository,
   MiMeasurementRepository,
   MiObservationRepository,
+  MiTrialRepository,
   RecordEvidenceServiceInput,
 } from "@/lib/trader/mi/types";
 import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/lib/trader/types";
@@ -225,6 +230,26 @@ async function assertObservationPins(
   }
 }
 
+function normalizeTrialRegistrationRef(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+async function assertTrialPin(
+  context: OrgContext,
+  trialRepo: MiTrialRepository,
+  trialRegistrationRef: string | null,
+): Promise<void> {
+  if (trialRegistrationRef === null) return;
+  const trial = await trialRepo.findTrialById(context, trialRegistrationRef);
+  if (!trial) {
+    throw new MiEvidenceRefError(
+      `MI_EVIDENCE_REF_INVALID: trial '${trialRegistrationRef}' does not resolve within organization scope`,
+    );
+  }
+}
+
 function isSeqUniqueViolation(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message.toLowerCase();
@@ -239,6 +264,7 @@ function createService(
   hypothesisRepo: MiHypothesisRepository,
   measurementRepo: MiMeasurementRepository,
   observationRepo: MiObservationRepository,
+  trialRepo: MiTrialRepository,
   deps: MiEvidenceServiceDeps,
   writeAudit: (input: TraderAuditInput) => Promise<string> | string,
 ): MiEvidenceService {
@@ -259,6 +285,9 @@ function createService(
       await assertMeasurementPins(scoped, measurementRepo, parsed.measurementRefs);
       await assertObservationPins(scoped, observationRepo, parsed.observationRefs);
 
+      const trialRegistrationRef = normalizeTrialRegistrationRef(input.trialRegistrationRef);
+      await assertTrialPin(scoped, trialRepo, trialRegistrationRef);
+
       const measurementRefsJson = serializeMeasurementRefsJson(parsed.measurementRefs);
       const observationRefsJson = serializeObservationRefsJson(parsed.observationRefs);
       const contentDigest = buildEvidenceContentDigest({
@@ -274,7 +303,7 @@ function createService(
         recordedBy: input.recordedBy,
         nullComparatorRef: null,
         regimeContextRef: null,
-        trialRegistrationRef: null,
+        trialRegistrationRef,
       });
 
       const now = new Date();
@@ -300,7 +329,7 @@ function createService(
             contentDigest,
             nullComparatorRef: null,
             regimeContextRef: null,
-            trialRegistrationRef: null,
+            trialRegistrationRef,
             createdAt: now,
           });
 
@@ -317,6 +346,7 @@ function createService(
                 seq: evidence.seq,
                 measurementRefsCount: parsed.measurementRefs.length,
                 observationRefsCount: parsed.observationRefs.length,
+                trialRegistrationRef: evidence.trialRegistrationRef,
                 contentDigest: evidence.contentDigest,
               },
               input.actorType ?? deps.actorType ?? "service",
@@ -390,11 +420,13 @@ export function createSqliteMiEvidenceService(
   const hypothesisRepository = createSqliteMiHypothesisRepository(db);
   const measurementRepository = createSqliteMiMeasurementRepository(db);
   const observationRepository = createSqliteMiObservationRepository(db);
+  const trialRepository = createSqliteMiTrialRepository(db);
   const evidence = createService(
     evidenceRepository,
     hypothesisRepository,
     measurementRepository,
     observationRepository,
+    trialRepository,
     deps,
     (input) => writeTraderAuditLogSqlite(db, input),
   );
@@ -409,11 +441,13 @@ export function createPostgresMiEvidenceService(
   const hypothesisRepository = createPostgresMiHypothesisRepository(ex);
   const measurementRepository = createPostgresMiMeasurementRepository(ex);
   const observationRepository = createPostgresMiObservationRepository(ex);
+  const trialRepository = createPostgresMiTrialRepository(ex);
   const evidence = createService(
     evidenceRepository,
     hypothesisRepository,
     measurementRepository,
     observationRepository,
+    trialRepository,
     deps,
     (input) => writeTraderAuditLogPostgres(ex, input),
   );

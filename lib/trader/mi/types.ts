@@ -26,6 +26,7 @@ import type {
   MiEvidenceKind,
   RecordEvidenceInput,
 } from "@/lib/trader/mi/evidence.types";
+import type { MiTrial, RegisterTrialInput } from "@/lib/trader/mi/trial.types";
 import type {
   AppendPatternVersionInput,
   MiPattern,
@@ -449,5 +450,44 @@ export type MiEvidenceServiceDeps = {
 
 export type RecordEvidenceServiceInput = RecordEvidenceInput & {
   actorType?: MiEvidenceServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type InsertTrialRow = {
+  id: string;
+  hypothesisId: string;
+  hypothesisKey: string;
+  hypothesisDefinitionDigest: string;
+  researchProgram: string | null;
+  eventTime: Date;
+  ingestTime: Date;
+  registeredBy: string;
+  seq: number;
+  contentDigest: string;
+  createdAt: Date;
+};
+
+export type MiTrialRepository = {
+  getLatestTrial: (
+    context: OrgContext,
+    hypothesisKey: string,
+  ) => Promise<MiTrial | null> | MiTrial | null;
+  listTrials: (context: OrgContext, hypothesisKey: string) => Promise<MiTrial[]> | MiTrial[];
+  listTrialsByHypothesisId: (
+    context: OrgContext,
+    hypothesisId: string,
+  ) => Promise<MiTrial[]> | MiTrial[];
+  findTrialById: (context: OrgContext, trialId: string) => Promise<MiTrial | null> | MiTrial | null;
+  insertTrial: (context: OrgContext, row: InsertTrialRow) => Promise<MiTrial> | MiTrial;
+};
+
+export type MiTrialServiceDeps = {
+  assertMembership?: (context: OrgContext & { userId: string }) => Promise<void> | void;
+  actorType?: "user" | "admin" | "agent" | "service" | "system";
+  actorId?: string | null;
+};
+
+export type RegisterTrialServiceInput = RegisterTrialInput & {
+  actorType?: MiTrialServiceDeps["actorType"];
   actorId?: string | null;
 };

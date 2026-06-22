@@ -186,3 +186,31 @@ export class MiEvidenceSeqConflictError extends Error {
     this.name = "MiEvidenceSeqConflictError";
   }
 }
+
+export class MiTrialNotFoundError extends Error {
+  constructor(message = "MI_TRIAL_NOT_FOUND") {
+    super(message);
+    this.name = "MiTrialNotFoundError";
+  }
+}
+
+export class MiTrialInputValidationError extends Error {
+  constructor(message = "MI_TRIAL_INPUT_INVALID") {
+    super(message);
+    this.name = "MiTrialInputValidationError";
+  }
+}
+
+export class MiTrialRefError extends Error {
+  constructor(message = "MI_TRIAL_REF_INVALID") {
+    super(message);
+    this.name = "MiTrialRefError";
+  }
+}
+
+export class MiTrialSeqConflictError extends Error {
+  constructor(message = "MI_TRIAL_SEQ_CONFLICT") {
+    super(message);
+    this.name = "MiTrialSeqConflictError";
+  }
+}
