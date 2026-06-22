@@ -1,6 +1,7 @@
 # AI-TRADER — LD-5a Hypothesis + Evidence Ledger Doctrine (Knowledge-First)
 
-> **Status: Ratified doctrine v1.0 (LD-5a).**
+> **Status: Ratified doctrine v1.1 (LD-5a).**
+> **v1.1 (DEE-290 / LD-5a.2c.0):** reconciliation update — §5.2 ratifies R1 (pin-only) and R2 (derived integrity) as shipped in DEE-289; new §5.2.1 ratifies the closed Trial Integrity reason taxonomy, fold rule, and digest contract; Open Question #6 closed. Additive; no record type added, no governance gate weakened.
 > **Subordinate to the [AI-TRADER Market Intelligence Architecture](AI-TRADER-MARKET-INTELLIGENCE-ARCHITECTURE.md) and the [AI-TRADER Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md); bounded by [ADR-0009](../adr/0009-regulatory-posture.md) / [ADR-0010](../adr/0010-strategy-validation-gate.md) / [ADR-0011](../adr/0011-single-operator-governance-model.md).**
 > **Additive only — it overrides nothing and weakens no governance gate.**
 > **No engines.** LD-5a delivers persisted records, registers, and derived read-models only. It adds no automation, no statistical model, no autonomous generation, and no live-trading path.
@@ -114,9 +115,11 @@ The Evidence Ledger is a single append-only spine containing exactly four ratifi
 
 **2. Trial Registration.** An immutable record that an evaluation attempt was pre-registered against a hypothesis version.
 
-- Pins the hypothesis version, the declared nulls, and the falsification conditions in force at registration.
-- Carries an `integrity_status` (valid, or integrity-invalidated with an audited reason) and an optional free-text `research_program` label.
+- **Hypothesis pin (R1).** Pins the hypothesis version **only** (`hypothesis_id` + `hypothesis_definition_digest`). The declared nulls and the falsification conditions are **not snapshotted on the trial row**; they are sealed transitively inside `hypothesis_definition_digest` and **resolved at read time** from the pinned, immutable hypothesis version.
+- **Integrity (R2).** Integrity is a **derived read-model**, not a stored column. The default derived value is `valid`; a trial becomes `invalidated` **only** through appended Trial Integrity events (see §5.2.1). There is **no mutable `integrity_status` column** (consistent with §6). The record also carries an optional free-text `research_program` label.
 - Records **only that an attempt occurred**. It does **not** classify success or failure, does not adjudicate outcome, and does not enforce any budget.
+
+> **Ratification note (DEE-290 / LD-5a.2c.0).** The two bullets above ratify the corrections made when Trial Registration shipped (DEE-289 / LD-5a.2b): **R1** (pin-only; nulls/falsification resolved at read time, never snapshotted) and **R2** (integrity derived; no stored column). They supersede the original v1.0 wording, which described an `integrity_status` attribute and a declared-nulls/falsification snapshot carried on the trial.
 
 **3. Confidence Judgment.** A recorded human judgment of belief in a hypothesis given its evidence.
 
@@ -127,6 +130,27 @@ The Evidence Ledger is a single append-only spine containing exactly four ratifi
 **4. Invalidation Flag.** An appended marker that an upstream source or measurement has been revised, flagging dependent evidence for human re-examination.
 
 - Never edits or removes the affected evidence; it appends a re-examination signal. It does not itself change any recorded judgment.
+
+### 5.2.1 Trial Integrity (derived; LD-5a.2c)
+
+Trial integrity is the **derived `integrity_status` attribute of a Trial Registration** (record type 2). It is **not** a fifth Evidence Ledger record type and **not** a separate ledger — the Evidence Ledger remains exactly the four record types above. Integrity is derived from an **append-only Trial Integrity event substrate** that belongs to the same category as the hypothesis/pattern lifecycle records of §7: *derivation substrate*, not Ledger record types.
+
+**Closed reason taxonomy (Open Question #6 — ratified).** A trial may be integrity-invalidated only for one of these attempt-local reasons:
+
+- `look_ahead_contamination` — future/leaked data discovered in the evaluation (a point-in-time violation found after the fact).
+- `pre_registration_breach` — the evaluation deviated from the sealed pre-registration protocol.
+- `computation_defect` — a defect in the evaluation harness invalidated the attempt.
+- `provenance_gap` — required provenance was found missing or unverifiable (the §4 precondition failed).
+
+The list is **closed**; growth requires a new ratified version of this document plus an additive migration. Upstream source/measurement **revision** is deliberately **not** a trial-integrity reason — it is the domain of the **Invalidation Flag** (record type 4, implemented in LD-5a.3b), which flags dependent *evidence* for re-examination. There is **no `operator_error` catch-all** (an unverifiable, unremovable survivorship surface).
+
+**Derived-state fold rule (ratified).** Current integrity is the resulting status of the **most recent** integrity transition for the trial, ordered by `seq`; `since` is the timestamp of the most recent transition **into** the current status. A trial with **no** integrity events derives `valid`. This latest-transition rule is forward-compatible with a future `reinstated` event type (deferred from MVP).
+
+**Content-digest contract (ratified).** Each Trial Integrity event's `content_digest` binds exactly: `schemaVersion`, `organizationId`, `trialId`, `eventType`, `reasonCode`, `rationale`, `causeRef` (null until LD-5a.3b), `eventTime`, `ingestTime`, `recordedBy`. It **excludes** `seq`, derived state, and any denormalized `trialHypothesisKey`.
+
+**Anti-survivorship guarantees.** Integrity invalidation **never** refunds or removes a trial from trial counts, **never** edits or deletes Evidence, and **never** transitions hypothesis lifecycle. It records an audited re-examination/trust fact — never a back door (§11).
+
+**Boundary — two distinct "integrity" concepts.** *Trial integrity invalidation* is **per-attempt** (this substrate). The §7 *hypothesis integrity break* → `QUARANTINED` is a **per-claim**, human-recorded lifecycle transition. **Neither auto-triggers the other.**
 
 ---
 
@@ -237,7 +261,7 @@ These do not block the doctrine. Each is a field/contract decision owned by its 
 3. **Required-null declaration vocabulary** — aligned to MI Architecture §7.3; locked at the Hypothesis slice (LD-5a.1).
 4. **Trial-to-evidence cardinality** — confirmed before LD-5a.3.
 5. **`supersedes` lineage in MVP** — recorded as a bare fact (no displacement policy) or deferred; confirmed at LD-5a.1.
-6. **Integrity-invalidation reason taxonomy** — closed list ratified before LD-5a.3 to keep it from becoming a survivorship back door.
+6. **Integrity-invalidation reason taxonomy** — **CLOSED (DEE-290 / LD-5a.2c.0).** Ratified as the closed four-reason taxonomy in §5.2.1 (`look_ahead_contamination`, `pre_registration_breach`, `computation_defect`, `provenance_gap`); upstream-revision deferred to the Invalidation Flag (LD-5a.3b); no `operator_error`. The derived-state fold rule and content-digest contract are ratified in the same subsection.
 
 ---
 
