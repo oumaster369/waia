@@ -214,3 +214,17 @@ export class MiTrialSeqConflictError extends Error {
     this.name = "MiTrialSeqConflictError";
   }
 }
+
+export class MiTrialIntegrityInputValidationError extends Error {
+  constructor(message = "MI_TRIAL_INTEGRITY_INPUT_INVALID") {
+    super(message);
+    this.name = "MiTrialIntegrityInputValidationError";
+  }
+}
+
+export class MiTrialIntegritySeqConflictError extends Error {
+  constructor(message = "MI_TRIAL_INTEGRITY_SEQ_CONFLICT") {
+    super(message);
+    this.name = "MiTrialIntegritySeqConflictError";
+  }
+}

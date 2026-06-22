@@ -106,6 +106,9 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | SQLite `0021_trader_mi_trial` | `trader_mi_trial` (+ `trader_mi_evidence` guard trigger) | MI Layer-5a Trial Registration + Evidence→Trial link (DEE-289 / LD-5a.2b) |
 | Postgres `0031_trader_mi_trial` | `trader_mi_trial` (+ `trader_mi_evidence` composite FK) | Same |
 | Postgres `0032_trader_mi_trial_rls` | `trader_mi_trial` RLS | ADR-0007 deny authenticated/anon |
+| SQLite `0022_trader_mi_trial_integrity` | `trader_mi_trial_integrity_event` | MI Layer-5a Trial Integrity invalidation ledger (DEE-291 / LD-5a.2c) |
+| Postgres `0033_trader_mi_trial_integrity` | `trader_mi_trial_integrity_event` | Same |
+| Postgres `0034_trader_mi_trial_integrity_rls` | `trader_mi_trial_integrity_event` RLS | ADR-0007 deny authenticated/anon |
 
 **Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 
