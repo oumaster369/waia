@@ -144,3 +144,17 @@ export class MiHypothesisSupersedesError extends Error {
     this.name = "MiHypothesisSupersedesError";
   }
 }
+
+export class MiHypothesisLifecycleError extends Error {
+  constructor(message = "MI_HYPOTHESIS_LIFECYCLE_INVALID") {
+    super(message);
+    this.name = "MiHypothesisLifecycleError";
+  }
+}
+
+export class MiHypothesisLifecycleAuthorizationError extends Error {
+  constructor(message = "MI_HYPOTHESIS_LIFECYCLE_UNAUTHORIZED") {
+    super(message);
+    this.name = "MiHypothesisLifecycleAuthorizationError";
+  }
+}

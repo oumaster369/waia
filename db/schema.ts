@@ -613,7 +613,14 @@ export const traderMiPatternLifecycle = sqliteTable(
 export const miHypothesisKindEnum = ["market_claim"] as const;
 export type MiHypothesisKindDb = (typeof miHypothesisKindEnum)[number];
 
-export const miHypothesisLifecycleStateEnum = ["PROPOSED"] as const;
+export const miHypothesisLifecycleStateEnum = [
+  "PROPOSED",
+  "VALIDATING",
+  "VALIDATED",
+  "DECAYING",
+  "RETIRED",
+  "QUARANTINED",
+] as const;
 export type MiHypothesisLifecycleStateDb = (typeof miHypothesisLifecycleStateEnum)[number];
 
 /** AI-TRADER MI: append-only versioned hypothesis registry (DEE-285 / LD-5a.1a). */

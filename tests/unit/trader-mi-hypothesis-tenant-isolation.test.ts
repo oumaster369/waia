@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { getDb } from "@/db/client";
+import { MiHypothesisNotFoundError } from "@/lib/trader/mi/errors";
 import { createSqliteMiHypothesisService } from "@/lib/trader/mi/hypothesis-service";
 import type {
   HypothesisMeasurementRef,
@@ -145,5 +146,53 @@ describe("trader mi hypothesis tenant isolation (DEE-285 / ADR-0007)", () => {
 
   it("empty organization id throws OrgScopeError", () => {
     expect(() => requireOrgContext("")).toThrow(OrgScopeError);
+  });
+
+  it("org B cannot transition or read org A lifecycle state", async () => {
+    const db = getDb();
+    const serviceA = createSqliteMiHypothesisService(db, {
+      actorType: "user",
+      actorId: USER_A,
+    }).hypothesis;
+    const serviceB = createSqliteMiHypothesisService(db, {
+      actorType: "user",
+      actorId: USER_B,
+    }).hypothesis;
+
+    const registered = await serviceA.registerHypothesis(
+      { organizationId: orgA },
+      {
+        hypothesisKind: "market_claim",
+        name: "iso_lifecycle",
+        definition: buildDefinition(),
+        authoredBy: USER_A,
+      },
+    );
+
+    const crossState = await serviceB.getCurrentLifecycleState(
+      { organizationId: orgB },
+      registered.hypothesisKey,
+    );
+    expect(crossState).toBeNull();
+
+    await expect(
+      serviceB.transitionHypothesisLifecycle(
+        { organizationId: orgB },
+        {
+          hypothesisKey: registered.hypothesisKey,
+          toState: "VALIDATING",
+          rationale: "cross-org attempt",
+          recordedBy: USER_B,
+          actorType: "user",
+          actorId: USER_B,
+        },
+      ),
+    ).rejects.toThrow(MiHypothesisNotFoundError);
+
+    const orgAState = await serviceA.getCurrentLifecycleState(
+      { organizationId: orgA },
+      registered.hypothesisKey,
+    );
+    expect(orgAState).toBe("PROPOSED");
   });
 });

@@ -99,6 +99,7 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | SQLite `0019_trader_mi_hypothesis` | `trader_mi_hypothesis`, `trader_mi_hypothesis_lifecycle` | MI Layer-5a hypothesis registry + PROPOSED lifecycle bootstrap (DEE-285) |
 | Postgres `0026_trader_mi_hypothesis` | `trader_mi_hypothesis`, `trader_mi_hypothesis_lifecycle` | Same |
 | Postgres `0027_trader_mi_hypothesis_rls` | MI hypothesis + lifecycle RLS | ADR-0007 deny authenticated/anon |
+| Postgres `0028_trader_mi_hypothesis_lifecycle_states` | `mi_hypothesis_lifecycle_state` enum extension | LD-5a.1b doctrine §7 states (DEE-286) |
 
 **Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 

@@ -593,6 +593,11 @@ export const traderMiPatternLifecycle = pgTable(
 export const miHypothesisKindEnumPg = pgEnum("mi_hypothesis_kind", ["market_claim"]);
 export const miHypothesisLifecycleStateEnumPg = pgEnum("mi_hypothesis_lifecycle_state", [
   "PROPOSED",
+  "VALIDATING",
+  "VALIDATED",
+  "DECAYING",
+  "RETIRED",
+  "QUARANTINED",
 ]);
 
 /** AI-TRADER MI: append-only versioned hypothesis registry (DEE-285 / LD-5a.1a). */
