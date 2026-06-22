@@ -22,6 +22,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 | 8 | [AI-TRADER Billing & HWM](AI-TRADER-BILLING-HWM.md) | Single source of truth for fees / high-water mark. |
 | 9 | [AI-TRADER Integration](AI-TRADER-INTEGRATION.md) | Relationships with Core, AI-TWIN, future modules. |
 | 10 | [AI-TRADER User Journey v2](AI-TRADER-USER-JOURNEY-v2.md) | End-to-end user flow for the reconciled MVP. |
+| 11 | [AI-TRADER Market Intelligence Architecture](AI-TRADER-MARKET-INTELLIGENCE-ARCHITECTURE.md) | **Accepted doctrine** (2026-06-22) — knowledge-first Market Intelligence architecture; peer of the Grandmaster Framework, subordinate + additive to the Master Spec and ADRs. |
 
 ---
 
