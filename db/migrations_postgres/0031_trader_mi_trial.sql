@@ -18,7 +18,7 @@ ALTER TABLE "trader_mi_trial" ADD CONSTRAINT "trader_mi_trial_organization_id_or
 --> statement-breakpoint
 CREATE UNIQUE INDEX "trader_mi_trial_id_organization_unique" ON "trader_mi_trial" USING btree ("id","organization_id");
 --> statement-breakpoint
-ALTER TABLE "trader_mi_trial" ADD CONSTRAINT "trader_mi_trial_hypothesis_id_organization_id_trader_mi_hypothesis_id_organization_id_fk" FOREIGN KEY ("hypothesis_id","organization_id") REFERENCES "public"."trader_mi_hypothesis"("id","organization_id") ON DELETE no action ON UPDATE no action;
+ALTER TABLE "trader_mi_trial" ADD CONSTRAINT "trader_mi_trial_hypothesis_org_fk" FOREIGN KEY ("hypothesis_id","organization_id") REFERENCES "public"."trader_mi_hypothesis"("id","organization_id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 CREATE UNIQUE INDEX "trader_mi_trial_org_key_seq_unique" ON "trader_mi_trial" USING btree ("organization_id","hypothesis_key","seq");
 --> statement-breakpoint
@@ -48,4 +48,8 @@ CREATE TRIGGER trader_mi_trial_block_delete
   BEFORE DELETE ON public.trader_mi_trial
   FOR EACH ROW EXECUTE FUNCTION public.waia_mi_trial_block_mutation();
 --> statement-breakpoint
-ALTER TABLE "trader_mi_evidence" ADD CONSTRAINT "trader_mi_evidence_trial_registration_ref_organization_id_trader_mi_trial_id_organization_id_fk" FOREIGN KEY ("trial_registration_ref","organization_id") REFERENCES "public"."trader_mi_trial"("id","organization_id") ON DELETE no action ON UPDATE no action;
+-- The reserved seam shipped as text (DEE-288) and is always NULL until now; re-type to uuid
+-- so the composite FK matches trader_mi_trial(id, organization_id).
+ALTER TABLE "trader_mi_evidence" ALTER COLUMN "trial_registration_ref" TYPE uuid USING "trial_registration_ref"::uuid;
+--> statement-breakpoint
+ALTER TABLE "trader_mi_evidence" ADD CONSTRAINT "trader_mi_evidence_trial_org_fk" FOREIGN KEY ("trial_registration_ref","organization_id") REFERENCES "public"."trader_mi_trial"("id","organization_id") ON DELETE no action ON UPDATE no action;

@@ -697,7 +697,8 @@ export const traderMiEvidence = pgTable(
     contentDigest: text("content_digest").notNull(),
     nullComparatorRef: text("null_comparator_ref"),
     regimeContextRef: text("regime_context_ref"),
-    trialRegistrationRef: text("trial_registration_ref"),
+    // Re-typed text -> uuid in migration 0031 to carry the composite FK to trader_mi_trial.
+    trialRegistrationRef: uuid("trial_registration_ref"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
