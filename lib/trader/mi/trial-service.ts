@@ -28,7 +28,6 @@ import {
 import {
   type MiTrial,
   type MiTrialCounts,
-  type MiTrialIntegrityStatus,
   type MiTrialPinnedClaim,
 } from "@/lib/trader/mi/trial.types";
 import type {
@@ -59,11 +58,6 @@ export type MiTrialService = {
     hypothesisKey: string,
     hypothesisId: string,
   ) => Promise<MiTrialCounts>;
-  /** Derived integrity (LD-5a.2b / R2) — constant `valid` for an existing trial, else null. */
-  getTrialIntegrity: (
-    context: OrgContext,
-    trialId: string,
-  ) => Promise<MiTrialIntegrityStatus | null>;
   /** Read-time resolution of nulls/falsification from the pinned hypothesis (LD-5a.2b / R1). */
   getTrialPinnedClaim: (context: OrgContext, trialId: string) => Promise<MiTrialPinnedClaim | null>;
 };
@@ -278,17 +272,6 @@ function createService(
         byHypothesisId: byId.length,
         latestSeq,
       };
-    },
-
-    async getTrialIntegrity(context, trialId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
-      const trial = await trialRepo.findTrialById(scoped, trialId);
-      if (!trial) return null;
-      // R2: derived from the append-only log. No invalidation events exist in this slice,
-      // so every persisted trial derives `valid`. LD-5a.2c replaces this with a
-      // ledger-backed derivation.
-      return "valid";
     },
 
     async getTrialPinnedClaim(context, trialId) {

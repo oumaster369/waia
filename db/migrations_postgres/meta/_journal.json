@@ -232,6 +232,20 @@
       "when": 1779600000002,
       "tag": "0032_trader_mi_trial_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1779700000001,
+      "tag": "0033_trader_mi_trial_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1779700000002,
+      "tag": "0034_trader_mi_trial_integrity_rls",
+      "breakpoints": true
     }
   ]
 }

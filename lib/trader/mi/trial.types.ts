@@ -5,17 +5,6 @@ export const MI_TRIAL_SCHEMA_VERSION = "mi-trial-v1" as const;
 export type MiTrialSchemaVersion = typeof MI_TRIAL_SCHEMA_VERSION;
 
 /**
- * Derived integrity status (LD-5a.2b / R2).
- *
- * No stored column — integrity is computed from the append-only log. This slice always
- * derives the constant `valid`; LD-5a.2c replaces this with a ledger-backed derivation
- * (invalidation events + reason taxonomy, doctrine Open Q #6).
- */
-export const miTrialIntegrityStatusValues = ["valid"] as const;
-
-export type MiTrialIntegrityStatus = (typeof miTrialIntegrityStatusValues)[number];
-
-/**
  * Append-only Trial Registration (DEE-289 / LD-5a.2b).
  *
  * Immutable record that an evaluation attempt was pre-registered against a hypothesis

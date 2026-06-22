@@ -28,6 +28,10 @@ import type {
 } from "@/lib/trader/mi/evidence.types";
 import type { MiTrial, RegisterTrialInput } from "@/lib/trader/mi/trial.types";
 import type {
+  InvalidateTrialInput,
+  MiTrialIntegrityEvent,
+} from "@/lib/trader/mi/trial-integrity.types";
+import type {
   AppendPatternVersionInput,
   MiPattern,
   MiPatternKind,
@@ -489,5 +493,52 @@ export type MiTrialServiceDeps = {
 
 export type RegisterTrialServiceInput = RegisterTrialInput & {
   actorType?: MiTrialServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type InsertTrialIntegrityEventRow = {
+  id: string;
+  trialId: string;
+  eventType: "invalidated" | "reinstated";
+  reasonCode:
+    | "look_ahead_contamination"
+    | "pre_registration_breach"
+    | "computation_defect"
+    | "provenance_gap"
+    | null;
+  rationale: string;
+  causeRef: string | null;
+  schemaVersion: string;
+  eventTime: Date;
+  ingestTime: Date;
+  recordedBy: string;
+  seq: number;
+  contentDigest: string;
+  createdAt: Date;
+};
+
+export type MiTrialIntegrityRepository = {
+  getLatestEvent: (
+    context: OrgContext,
+    trialId: string,
+  ) => Promise<MiTrialIntegrityEvent | null> | MiTrialIntegrityEvent | null;
+  listEvents: (
+    context: OrgContext,
+    trialId: string,
+  ) => Promise<MiTrialIntegrityEvent[]> | MiTrialIntegrityEvent[];
+  insertEvent: (
+    context: OrgContext,
+    row: InsertTrialIntegrityEventRow,
+  ) => Promise<MiTrialIntegrityEvent> | MiTrialIntegrityEvent;
+};
+
+export type MiTrialIntegrityServiceDeps = {
+  assertMembership?: (context: OrgContext & { userId: string }) => Promise<void> | void;
+  actorType?: "user" | "admin" | "agent" | "service" | "system";
+  actorId?: string | null;
+};
+
+export type InvalidateTrialServiceInput = InvalidateTrialInput & {
+  actorType?: MiTrialIntegrityServiceDeps["actorType"];
   actorId?: string | null;
 };

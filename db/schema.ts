@@ -795,6 +795,43 @@ export const traderMiTrial = sqliteTable(
   ],
 );
 
+export const traderMiTrialIntegrityEvent = sqliteTable(
+  "trader_mi_trial_integrity_event",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    trialId: text("trial_id").notNull(), // composite FK enforced in migration SQL
+    eventType: text("event_type").notNull(),
+    reasonCode: text("reason_code"),
+    rationale: text("rationale").notNull(),
+    causeRef: text("cause_ref"),
+    schemaVersion: text("schema_version").notNull(),
+    eventTime: integer("event_time", { mode: "timestamp_ms" }).notNull(),
+    ingestTime: integer("ingest_time", { mode: "timestamp_ms" }).notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_mi_trial_integrity_event_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_trial_integrity_event_org_trial_seq_unique").on(
+      t.organizationId,
+      t.trialId,
+      t.seq,
+    ),
+    index("trader_mi_trial_integrity_event_org_trial_seq_idx").on(
+      t.organizationId,
+      t.trialId,
+      t.seq,
+    ),
+  ],
+);
+
 /** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
 export const traderStrategyPromotionRecords = sqliteTable(
   "trader_strategy_promotion_records",

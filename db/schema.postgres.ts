@@ -761,6 +761,53 @@ export const traderMiTrial = pgTable(
   ],
 );
 
+export const miTrialIntegrityEventTypeEnumPg = pgEnum("mi_trial_integrity_event_type", [
+  "invalidated",
+  "reinstated",
+]);
+export const miTrialIntegrityReasonCodeEnumPg = pgEnum("mi_trial_integrity_reason_code", [
+  "look_ahead_contamination",
+  "pre_registration_breach",
+  "computation_defect",
+  "provenance_gap",
+]);
+
+/** AI-TRADER MI: append-only Trial Integrity invalidation ledger (DEE-291 / LD-5a.2c). */
+export const traderMiTrialIntegrityEvent = pgTable(
+  "trader_mi_trial_integrity_event",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    trialId: uuid("trial_id").notNull(), // composite FK enforced in migration SQL
+    eventType: miTrialIntegrityEventTypeEnumPg("event_type").notNull(),
+    reasonCode: miTrialIntegrityReasonCodeEnumPg("reason_code"),
+    rationale: text("rationale").notNull(),
+    causeRef: text("cause_ref"),
+    schemaVersion: text("schema_version").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_trial_integrity_event_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_trial_integrity_event_org_trial_seq_unique").on(
+      t.organizationId,
+      t.trialId,
+      t.seq,
+    ),
+    index("trader_mi_trial_integrity_event_org_trial_seq_idx").on(
+      t.organizationId,
+      t.trialId,
+      t.seq,
+    ),
+  ],
+);
+
 /** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
 export const traderStrategyPromotionRecords = pgTable(
   "trader_strategy_promotion_records",

@@ -325,19 +325,6 @@ describe("trader mi trial (DEE-289 / LD-5a.2b)", () => {
     expect(counts.latestSeq).toBe(stream[stream.length - 1].seq);
   });
 
-  it("derives integrity status valid for an existing trial, null when absent", async () => {
-    const trial = createTrialService();
-    const stream = await trial.listTrials({ organizationId }, hypothesisKey);
-    const integrity = await trial.getTrialIntegrity({ organizationId }, stream[0].id);
-    expect(integrity).toBe("valid");
-
-    const missing = await trial.getTrialIntegrity(
-      { organizationId },
-      "00000000-0000-4000-8000-0000000000ff",
-    );
-    expect(missing).toBeNull();
-  });
-
   it("resolves nulls and falsification from the pinned hypothesis at read time", async () => {
     const trial = createTrialService();
     const stream = await trial.listTrials({ organizationId }, hypothesisKey);
