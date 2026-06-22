@@ -100,9 +100,12 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | Postgres `0026_trader_mi_hypothesis` | `trader_mi_hypothesis`, `trader_mi_hypothesis_lifecycle` | Same |
 | Postgres `0027_trader_mi_hypothesis_rls` | MI hypothesis + lifecycle RLS | ADR-0007 deny authenticated/anon |
 | Postgres `0028_trader_mi_hypothesis_lifecycle_states` | `mi_hypothesis_lifecycle_state` enum extension | LD-5a.1b doctrine §7 states (DEE-286) |
-| SQLite `0020_trader_mi_evidence` | `trader_mi_evidence` | MI Layer-5a Evidence Record spine (DEE-289) |
+| SQLite `0020_trader_mi_evidence` | `trader_mi_evidence` | MI Layer-5a Evidence Record spine (DEE-288) |
 | Postgres `0029_trader_mi_evidence` | `trader_mi_evidence` | Same |
 | Postgres `0030_trader_mi_evidence_rls` | MI evidence RLS | ADR-0007 deny authenticated/anon |
+| SQLite `0021_trader_mi_trial` | `trader_mi_trial` (+ `trader_mi_evidence` guard trigger) | MI Layer-5a Trial Registration + Evidence→Trial link (DEE-289 / LD-5a.2b) |
+| Postgres `0031_trader_mi_trial` | `trader_mi_trial` (+ `trader_mi_evidence` composite FK) | Same |
+| Postgres `0032_trader_mi_trial_rls` | `trader_mi_trial` RLS | ADR-0007 deny authenticated/anon |
 
 **Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 

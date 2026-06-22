@@ -218,6 +218,20 @@
       "when": 1779500000002,
       "tag": "0030_trader_mi_evidence_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1779600000001,
+      "tag": "0031_trader_mi_trial",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1779600000002,
+      "tag": "0032_trader_mi_trial_rls",
+      "breakpoints": true
     }
   ]
 }

@@ -752,6 +752,49 @@ export const traderMiEvidence = sqliteTable(
   ],
 );
 
+/**
+ * AI-TRADER MI: append-only Trial Registration ledger (DEE-289 / LD-5a.2b).
+ *
+ * Immutable pre-registration of an evaluation attempt against a hypothesis version.
+ * Pin-only (hypothesis_id + hypothesis_definition_digest); nulls/falsification are
+ * sealed transitively via the hypothesis digest and resolved at read time (no snapshot).
+ * Integrity is derived (constant `valid`); no stored integrity column (doctrine §6).
+ * `research_program` is inert free-text (no enum, no grouping index). Records only that
+ * an attempt occurred — no outcome/success/failure/budget/score.
+ */
+export const traderMiTrial = sqliteTable(
+  "trader_mi_trial",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hypothesisId: text("hypothesis_id").notNull(), // composite FK enforced in migration SQL
+    hypothesisKey: text("hypothesis_key").notNull(),
+    hypothesisDefinitionDigest: text("hypothesis_definition_digest").notNull(),
+    researchProgram: text("research_program"),
+    eventTime: integer("event_time", { mode: "timestamp_ms" }).notNull(),
+    ingestTime: integer("ingest_time", { mode: "timestamp_ms" }).notNull(),
+    registeredBy: text("registered_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_mi_trial_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_trial_org_key_seq_unique").on(t.organizationId, t.hypothesisKey, t.seq),
+    index("trader_mi_trial_org_hypothesis_idx").on(t.organizationId, t.hypothesisId),
+    index("trader_mi_trial_org_key_seq_idx").on(t.organizationId, t.hypothesisKey, t.seq),
+    index("trader_mi_trial_org_key_event_time_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.eventTime,
+    ),
+  ],
+);
+
 /** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
 export const traderStrategyPromotionRecords = sqliteTable(
   "trader_strategy_promotion_records",

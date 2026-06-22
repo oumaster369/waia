@@ -42,6 +42,7 @@ export const traderAuditActions = {
   miHypothesisRevised: "trader.mi_hypothesis.revised",
   miHypothesisLifecycleTransitioned: "trader.mi_hypothesis.lifecycle_transitioned",
   miEvidenceRecorded: "trader.mi_evidence.recorded",
+  miTrialRegistered: "trader.mi_trial.registered",
 } as const;
 
 export type TraderAuditAction = (typeof traderAuditActions)[keyof typeof traderAuditActions];
@@ -65,6 +66,7 @@ export const traderEntityTypes = {
   miHypothesis: "trader.mi_hypothesis",
   miHypothesisLifecycle: "trader.mi_hypothesis_lifecycle",
   miEvidence: "trader.mi_evidence",
+  miTrial: "trader.mi_trial",
 } as const;
 
 export type TraderEntityType = (typeof traderEntityTypes)[keyof typeof traderEntityTypes];
