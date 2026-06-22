@@ -141,6 +141,20 @@
       "when": 1778900000002,
       "tag": "0019_trader_mi_source_provenance_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779000000001,
+      "tag": "0020_trader_mi_observation",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1779000000002,
+      "tag": "0021_trader_mi_observation_rls",
+      "breakpoints": true
     }
   ]
 }

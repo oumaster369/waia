@@ -440,6 +440,58 @@ export const traderMiSourceTrust = sqliteTable(
   ],
 );
 
+export const miObservationKindEnum = ["msv_envelope"] as const;
+export type MiObservationKindDb = (typeof miObservationKindEnum)[number];
+
+/** AI-TRADER MI: append-only PIT observations (DEE-281 / LD-2b). */
+export const traderMiObservation = sqliteTable(
+  "trader_mi_observation",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sourceId: text("source_id").notNull(),
+    observationKind: text("observation_kind", { enum: [...miObservationKindEnum] }).notNull(),
+    observationKey: text("observation_key").notNull(),
+    subjectRef: text("subject_ref").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    eventTime: integer("event_time", { mode: "timestamp_ms" }).notNull(),
+    ingestTime: integer("ingest_time", { mode: "timestamp_ms" }).notNull(),
+    observedBy: text("observed_by").notNull(),
+    revisionOf: text("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
+    revisionSeq: integer("revision_seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_mi_observation_id_organization_unique").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.sourceId, t.organizationId],
+      foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("trader_mi_observation_org_key_seq_unique").on(
+      t.organizationId,
+      t.observationKey,
+      t.revisionSeq,
+    ),
+    index("trader_mi_observation_org_kind_subject_idx").on(
+      t.organizationId,
+      t.observationKind,
+      t.subjectRef,
+    ),
+    index("trader_mi_observation_org_key_seq_idx").on(
+      t.organizationId,
+      t.observationKey,
+      t.revisionSeq,
+    ),
+    index("trader_mi_observation_org_event_time_idx").on(t.organizationId, t.eventTime),
+  ],
+);
+
 /** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
 export const traderStrategyPromotionRecords = sqliteTable(
   "trader_strategy_promotion_records",
