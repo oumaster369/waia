@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -65,6 +65,37 @@ describe("trader mi measurement (DEE-282 / LD-3)", () => {
       .measurement;
   }
 
+  it("schema exposes definition-registry fields only — no value/PIT/source columns (M1, M4)", () => {
+    const columns = Object.keys(getTableColumns(traderMiMeasurement));
+    expect(columns.sort()).toEqual(
+      [
+        "id",
+        "organizationId",
+        "measurementKind",
+        "measurementKey",
+        "name",
+        "schemaVersion",
+        "definitionJson",
+        "definitionDigest",
+        "versionSeq",
+        "revisionOf",
+        "authoredBy",
+        "createdAt",
+      ].sort(),
+    );
+    for (const forbidden of [
+      "value",
+      "result",
+      "output",
+      "computedValue",
+      "eventTime",
+      "ingestTime",
+      "sourceId",
+    ]) {
+      expect(columns).not.toContain(forbidden);
+    }
+  });
+
   it("measurement_key is deterministic and independent of the definition body (M2)", () => {
     const keyA = computeMeasurementKey({
       organizationId,
@@ -84,6 +115,29 @@ describe("trader mi measurement (DEE-282 / LD-3)", () => {
       name: "sma50",
     });
     expect(differentName).not.toBe(keyA);
+  });
+
+  it("same family inputs with different definitions: same key, different digest (M2)", () => {
+    const keyArgs = {
+      organizationId,
+      measurementKind: "feature_transform" as const,
+      name: "family_identity_probe",
+    };
+    const keyA = computeMeasurementKey(keyArgs);
+    const keyB = computeMeasurementKey(keyArgs);
+    expect(keyA).toBe(keyB);
+
+    const digestA = buildMeasurementDigestFromDefinition({
+      ...keyArgs,
+      measurementKey: keyA,
+      definition: buildDefinition({ params: { window: 20 } }),
+    });
+    const digestB = buildMeasurementDigestFromDefinition({
+      ...keyArgs,
+      measurementKey: keyB,
+      definition: buildDefinition({ params: { window: 50 } }),
+    });
+    expect(digestA).not.toBe(digestB);
   });
 
   it("definition_digest is reproducible and changes on definitional change (M3)", () => {
@@ -139,6 +193,54 @@ describe("trader mi measurement (DEE-282 / LD-3)", () => {
       definition: buildDefinition({ params: { window: 20.0 } }),
     });
     expect(floatDigest).toBe(intDigest);
+  });
+
+  it("definition_digest excludes id, created_at, version_seq, revision_of (M3)", async () => {
+    const measurement = createService();
+    const first = await measurement.registerMeasurement(
+      { organizationId },
+      {
+        measurementKind: "feature_transform",
+        name: "digest_exclusion_probe",
+        definition: buildDefinition({ params: { window: 14 } }),
+        authoredBy: USER_ID,
+      },
+    );
+    const second = await measurement.appendMeasurementVersion(
+      { organizationId },
+      {
+        measurementKey: first.measurementKey,
+        measurementKind: "feature_transform",
+        name: "digest_exclusion_probe",
+        definition: buildDefinition({ params: { window: 28 } }),
+        authoredBy: USER_ID,
+      },
+    );
+
+    // Two persisted rows differ in id / created_at / version_seq / revision_of,
+    // yet a digest re-derived from the SAME definitional inputs is identical —
+    // proving none of those row/wall-clock fields contaminate the digest.
+    expect(second.versionSeq).not.toBe(first.versionSeq);
+    expect(second.id).not.toBe(first.id);
+    expect(second.revisionOf).toBe(first.id);
+
+    const reDerivedFromFirst = buildMeasurementDigestFromDefinition({
+      organizationId,
+      measurementKey: first.measurementKey,
+      measurementKind: "feature_transform",
+      name: "digest_exclusion_probe",
+      definition: buildDefinition({ params: { window: 14 } }),
+    });
+    const reDerivedFromSecond = buildMeasurementDigestFromDefinition({
+      organizationId,
+      measurementKey: second.measurementKey,
+      measurementKind: "feature_transform",
+      name: "digest_exclusion_probe",
+      definition: buildDefinition({ params: { window: 14 } }),
+    });
+    expect(reDerivedFromFirst).toBe(first.definitionDigest);
+    expect(reDerivedFromSecond).toBe(first.definitionDigest);
+    expect(reDerivedFromSecond).not.toBe(second.definitionDigest);
   });
 
   it("registers version 1 and round-trips the definition", async () => {

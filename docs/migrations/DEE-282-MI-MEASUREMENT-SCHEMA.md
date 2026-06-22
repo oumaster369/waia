@@ -33,6 +33,15 @@ The registry stores **definitions only** — never computed values (those are PI
 - **Inert registry (M7):** `definition_json` is declarative metadata with no evaluator; no runtime wiring; Feature Engine and `runEvaluationCycle` untouched.
 - **Tenant isolation:** `organization_id` on all rows; composite FKs; Postgres RLS deny `authenticated`/`anon`; release-blocking `*tenant-isolation*` tests.
 
+## Digest contract — `MEASUREMENT_PARAM_PRECISION = 8` (locked)
+
+`definition_digest` (M3) normalizes **every** numeric value in the definition to a fixed-precision decimal string via `Number#toFixed(8)` before canonical JSON + SHA-256 (`lib/trader/mi/serialize-measurement.ts` → `MEASUREMENT_PARAM_PRECISION`). This constant is **part of the digest contract**, not an implementation detail:
+
+- **Changing the precision changes digest semantics.** The same authored definition would hash to a different `definition_digest`, breaking reproducibility and any future LD-5 Evidence pin (`evidence pins a version`).
+- **It is rounding to 8 decimal places.** Numeric parameters that differ only beyond `1e-8` collide to the same digest by design; authored params must stay within this resolution.
+- **Treat as an immutable contract once any row exists.** A future change to the precision (or the normalization scheme) is a **schema-version evolution** — it requires bumping `MI_MEASUREMENT_SCHEMA_VERSION` (and a migration/backfill strategy), never an in-place edit of the constant.
+- **`definition_digest` is not `sha256(definition_json)`.** `definition_json` is stored as authored (raw); the digest is derived from the canonicalized + normalized form plus the envelope fields. Re-derive only via `buildMeasurementDigestFromDefinition`.
+
 ## Rollback
 
 Additive only. Rollback = drop triggers/policies/function then drop table and enum (no existing table modified).
