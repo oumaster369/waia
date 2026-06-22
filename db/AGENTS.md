@@ -93,6 +93,9 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | SQLite `0017_trader_mi_measurement` | `trader_mi_measurement` | MI Layer-2 versioned transform-definition registry (DEE-282) |
 | Postgres `0022_trader_mi_measurement` | `trader_mi_measurement` | Same |
 | Postgres `0023_trader_mi_measurement_rls` | MI measurement RLS | ADR-0007 deny authenticated/anon |
+| SQLite `0018_trader_mi_pattern` | `trader_mi_pattern`, `trader_mi_pattern_lifecycle` | MI Layer-4 recurring-structure registry + ACTIVE/ARCHIVED lifecycle ledger (DEE-283) |
+| Postgres `0024_trader_mi_pattern` | `trader_mi_pattern`, `trader_mi_pattern_lifecycle` | Same |
+| Postgres `0025_trader_mi_pattern_rls` | MI pattern + lifecycle RLS | ADR-0007 deny authenticated/anon |
 
 **Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 

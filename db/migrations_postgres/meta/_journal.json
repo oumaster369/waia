@@ -169,6 +169,20 @@
       "when": 1779100000002,
       "tag": "0023_trader_mi_measurement_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1779200000001,
+      "tag": "0024_trader_mi_pattern",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1779200000002,
+      "tag": "0025_trader_mi_pattern_rls",
+      "breakpoints": true
     }
   ]
 }

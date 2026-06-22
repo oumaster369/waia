@@ -34,6 +34,10 @@ export const traderAuditActions = {
   miObservationRevised: "trader.mi_observation.revised",
   miMeasurementRegistered: "trader.mi_measurement.registered",
   miMeasurementRevised: "trader.mi_measurement.revised",
+  miPatternRegistered: "trader.mi_pattern.registered",
+  miPatternRevised: "trader.mi_pattern.revised",
+  miPatternArchived: "trader.mi_pattern.archived",
+  miPatternReactivated: "trader.mi_pattern.reactivated",
 } as const;
 
 export type TraderAuditAction = (typeof traderAuditActions)[keyof typeof traderAuditActions];
@@ -52,6 +56,8 @@ export const traderEntityTypes = {
   miSourceTrust: "trader.mi_source_trust",
   miObservation: "trader.mi_observation",
   miMeasurement: "trader.mi_measurement",
+  miPattern: "trader.mi_pattern",
+  miPatternLifecycle: "trader.mi_pattern_lifecycle",
 } as const;
 
 export type TraderEntityType = (typeof traderEntityTypes)[keyof typeof traderEntityTypes];
