@@ -183,6 +183,20 @@
       "when": 1779200000002,
       "tag": "0025_trader_mi_pattern_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1779300000001,
+      "tag": "0026_trader_mi_hypothesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1779300000002,
+      "tag": "0027_trader_mi_hypothesis_rls",
+      "breakpoints": true
     }
   ]
 }
