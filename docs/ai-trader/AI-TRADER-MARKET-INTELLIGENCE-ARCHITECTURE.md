@@ -145,6 +145,8 @@ Each layer is one persisted object with a stable id, an upward lineage reference
 
 A Hypothesis is **regime-scoped**, carries an explicit `relationshipType` (`correlational | predictive | causal-conjecture`), an explicit prior, **mandatory null comparators by type**, and pre-registered falsification/invalidation conditions. Its lifecycle: `PROPOSED → VALIDATING → VALIDATED → DECAYING → RETIRED | QUARANTINED`. **Confidence is a recorded ordinal judgment plus an uncertainty band — not a computed probability** in the MVP. Causal claims are flagged speculative and demand far more evidence; a causal graph is Long-term only and never authoritative for sizing.
 
+> See also (non-authoritative): the ratified [LD-5a Hypothesis + Evidence Ledger doctrine](AI-TRADER-HYPOTHESIS-EVIDENCE-LEDGER.md) elaborates this object.
+
 ### 7.2 Pattern — structure without a claim
 
 A Pattern records that a structure recurs. It makes **no claim that it pays**, tracks a trial-budget counter, and auto-archives if it goes unreferenced. Patterns become beliefs only by being promoted into Hypotheses, where they meet nulls and pre-registration.
@@ -170,6 +172,8 @@ The Evidence Ledger is the **append-only, immutable spine** of the system. It re
 - **Invalidation propagation:** when a source or measurement is revised, dependent evidence is flagged for re-examination.
 - The current-state view is a **materialized read model** over the immutable event log.
 - **Firewall:** the Research Journal (notes, rejected ideas, postmortems) can *reference* the Ledger but can **never be evidence**; the gate ignores the journal entirely.
+
+> See also (non-authoritative): the ratified [LD-5a Hypothesis + Evidence Ledger doctrine](AI-TRADER-HYPOTHESIS-EVIDENCE-LEDGER.md) elaborates this object and its four record types.
 
 ---
 
