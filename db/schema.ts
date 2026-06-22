@@ -492,6 +492,50 @@ export const traderMiObservation = sqliteTable(
   ],
 );
 
+export const miMeasurementKindEnum = ["feature_transform"] as const;
+export type MiMeasurementKindDb = (typeof miMeasurementKindEnum)[number];
+
+/** AI-TRADER MI: append-only versioned transform-definition registry (DEE-282 / LD-3). */
+export const traderMiMeasurement = sqliteTable(
+  "trader_mi_measurement",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    measurementKind: text("measurement_kind", { enum: [...miMeasurementKindEnum] }).notNull(),
+    measurementKey: text("measurement_key").notNull(),
+    name: text("name").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    definitionJson: text("definition_json").notNull(),
+    definitionDigest: text("definition_digest").notNull(),
+    versionSeq: integer("version_seq").notNull(),
+    revisionOf: text("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
+    authoredBy: text("authored_by").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_mi_measurement_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_measurement_org_key_seq_unique").on(
+      t.organizationId,
+      t.measurementKey,
+      t.versionSeq,
+    ),
+    index("trader_mi_measurement_org_kind_name_idx").on(
+      t.organizationId,
+      t.measurementKind,
+      t.name,
+    ),
+    index("trader_mi_measurement_org_key_seq_idx").on(
+      t.organizationId,
+      t.measurementKey,
+      t.versionSeq,
+    ),
+  ],
+);
+
 /** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
 export const traderStrategyPromotionRecords = sqliteTable(
   "trader_strategy_promotion_records",

@@ -39,3 +39,24 @@ export class MiObservationNotFoundError extends Error {
     this.name = "MiObservationNotFoundError";
   }
 }
+
+export class MiMeasurementDuplicateError extends Error {
+  constructor(message = "MI_MEASUREMENT_DUPLICATE") {
+    super(message);
+    this.name = "MiMeasurementDuplicateError";
+  }
+}
+
+export class MiMeasurementNotFoundError extends Error {
+  constructor(message = "MI_MEASUREMENT_NOT_FOUND") {
+    super(message);
+    this.name = "MiMeasurementNotFoundError";
+  }
+}
+
+export class MiMeasurementInputValidationError extends Error {
+  constructor(message = "MI_MEASUREMENT_INPUT_INVALID") {
+    super(message);
+    this.name = "MiMeasurementInputValidationError";
+  }
+}
