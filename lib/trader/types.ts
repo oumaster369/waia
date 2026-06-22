@@ -30,6 +30,8 @@ export const traderAuditActions = {
   miSourceCreated: "trader.mi_source.created",
   miSourceStatusChanged: "trader.mi_source.status_changed",
   miSourceTrustAppended: "trader.mi_source_trust.appended",
+  miObservationRecorded: "trader.mi_observation.recorded",
+  miObservationRevised: "trader.mi_observation.revised",
 } as const;
 
 export type TraderAuditAction = (typeof traderAuditActions)[keyof typeof traderAuditActions];
@@ -46,6 +48,7 @@ export const traderEntityTypes = {
   strategyPromotion: "trader.strategy_promotion",
   miSource: "trader.mi_source",
   miSourceTrust: "trader.mi_source_trust",
+  miObservation: "trader.mi_observation",
 } as const;
 
 export type TraderEntityType = (typeof traderEntityTypes)[keyof typeof traderEntityTypes];

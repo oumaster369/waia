@@ -1,5 +1,11 @@
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import type {
+  AppendObservationRevisionInput,
+  MiObservationKind,
+  PitObservation,
+  RecordObservationInput,
+} from "@/lib/trader/mi/observation.types";
+import type {
   CreateMiSourceInput,
   MiSourceIdentity,
   MiSourceStatus,
@@ -77,5 +83,57 @@ export type CreateSourceServiceInput = CreateMiSourceInput & {
 
 export type AppendTrustRevisionServiceInput = AppendTrustRevisionInput & {
   actorType?: MiSourceProvenanceServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type InsertObservationRow = {
+  id: string;
+  sourceId: string;
+  observationKind: MiObservationKind;
+  observationKey: string;
+  subjectRef: string;
+  schemaVersion: string;
+  payloadJson: string;
+  eventTime: Date;
+  ingestTime: Date;
+  observedBy: string;
+  revisionOf: string | null;
+  revisionSeq: number;
+  contentDigest: string;
+  createdAt: Date;
+};
+
+export type MiObservationRepository = {
+  getLatestObservation: (
+    context: OrgContext,
+    observationKey: string,
+  ) => Promise<PitObservation | null> | PitObservation | null;
+  listObservationHistory: (
+    context: OrgContext,
+    observationKey: string,
+  ) => Promise<PitObservation[]> | PitObservation[];
+  listObservations: (
+    context: OrgContext,
+    observationKind?: MiObservationKind,
+  ) => Promise<PitObservation[]> | PitObservation[];
+  insertObservation: (
+    context: OrgContext,
+    row: InsertObservationRow,
+  ) => Promise<PitObservation> | PitObservation;
+};
+
+export type MiObservationServiceDeps = {
+  assertMembership?: (context: OrgContext & { userId: string }) => Promise<void> | void;
+  actorType?: "user" | "admin" | "agent" | "service" | "system";
+  actorId?: string | null;
+};
+
+export type RecordObservationServiceInput = RecordObservationInput & {
+  actorType?: MiObservationServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type AppendObservationRevisionServiceInput = AppendObservationRevisionInput & {
+  actorType?: MiObservationServiceDeps["actorType"];
   actorId?: string | null;
 };

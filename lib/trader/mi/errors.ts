@@ -18,3 +18,24 @@ export class MiSourceNotFoundError extends Error {
     this.name = "MiSourceNotFoundError";
   }
 }
+
+export class EventTimeNotKnowableError extends Error {
+  constructor(message = "EVENT_TIME_NOT_KNOWABLE") {
+    super(message);
+    this.name = "EventTimeNotKnowableError";
+  }
+}
+
+export class MiObservationDuplicateError extends Error {
+  constructor(message = "MI_OBSERVATION_DUPLICATE") {
+    super(message);
+    this.name = "MiObservationDuplicateError";
+  }
+}
+
+export class MiObservationNotFoundError extends Error {
+  constructor(message = "MI_OBSERVATION_NOT_FOUND") {
+    super(message);
+    this.name = "MiObservationNotFoundError";
+  }
+}
