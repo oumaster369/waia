@@ -93,6 +93,27 @@ export function listObservationsSqlite(
     .map(mapObservation);
 }
 
+export function findObservationByIdSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  observationId: string,
+): PitObservation | null {
+  const scoped = requireOrgContext(context.organizationId);
+  const row = db
+    .select()
+    .from(traderMiObservation)
+    .where(
+      and(
+        eq(traderMiObservation.id, observationId),
+        orgScopedWhere(traderMiObservation.organizationId, scoped),
+      ),
+    )
+    .limit(1)
+    .all()[0];
+
+  return row ? mapObservation(row) : null;
+}
+
 export function insertObservationSqlite(
   db: WaiaDb,
   context: OrgContext,

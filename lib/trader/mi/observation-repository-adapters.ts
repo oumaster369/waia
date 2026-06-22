@@ -8,12 +8,14 @@ if (process.env.VITEST !== "true") {
 import type { WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
+  findObservationByIdPostgres,
   getLatestObservationPostgres,
   insertObservationPostgres,
   listObservationHistoryPostgres,
   listObservationsPostgres,
 } from "@/lib/trader/mi/observation-repository-postgres";
 import {
+  findObservationByIdSqlite,
   getLatestObservationSqlite,
   insertObservationSqlite,
   listObservationHistorySqlite,
@@ -31,6 +33,8 @@ export function createSqliteMiObservationRepository(db: WaiaDb): MiObservationRe
       listObservationHistorySqlite(db, context, observationKey),
     listObservations: (context, observationKind) =>
       listObservationsSqlite(db, context, observationKind),
+    findObservationById: (context, observationId) =>
+      findObservationByIdSqlite(db, context, observationId),
     insertObservation: (context, row) => insertObservationSqlite(db, context, row),
   };
 }
@@ -45,6 +49,8 @@ export function createPostgresMiObservationRepository(
       listObservationHistoryPostgres(ex, context, observationKey),
     listObservations: (context, observationKind) =>
       listObservationsPostgres(ex, context, observationKind),
+    findObservationById: (context, observationId) =>
+      findObservationByIdPostgres(ex, context, observationId),
     insertObservation: (context, row) => insertObservationPostgres(ex, context, row),
   };
 }
