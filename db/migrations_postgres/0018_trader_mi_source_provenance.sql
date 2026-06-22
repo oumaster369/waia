@@ -39,9 +39,9 @@ ALTER TABLE "trader_mi_source_trust" ADD CONSTRAINT "trader_mi_source_trust_orga
 --> statement-breakpoint
 ALTER TABLE "trader_mi_source_trust" ADD CONSTRAINT "trader_mi_source_trust_source_id_organization_id_trader_mi_source_id_organization_id_fk" FOREIGN KEY ("source_id","organization_id") REFERENCES "public"."trader_mi_source"("id","organization_id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
-ALTER TABLE "trader_mi_source_trust" ADD CONSTRAINT "trader_mi_source_trust_revision_of_organization_id_trader_mi_source_trust_id_organization_id_fk" FOREIGN KEY ("revision_of","organization_id") REFERENCES "public"."trader_mi_source_trust"("id","organization_id") ON DELETE no action ON UPDATE no action;
---> statement-breakpoint
 CREATE UNIQUE INDEX "trader_mi_source_trust_id_organization_unique" ON "trader_mi_source_trust" USING btree ("id","organization_id");
+--> statement-breakpoint
+ALTER TABLE "trader_mi_source_trust" ADD CONSTRAINT "trader_mi_source_trust_revision_of_organization_id_trader_mi_source_trust_id_organization_id_fk" FOREIGN KEY ("revision_of","organization_id") REFERENCES "public"."trader_mi_source_trust"("id","organization_id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 CREATE UNIQUE INDEX "trader_mi_source_trust_org_source_seq_unique" ON "trader_mi_source_trust" USING btree ("organization_id","source_id","revision_seq");
 --> statement-breakpoint
