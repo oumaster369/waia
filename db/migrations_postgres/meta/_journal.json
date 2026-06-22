@@ -127,6 +127,20 @@
       "when": 1778800000002,
       "tag": "0017_trader_strategy_promotion_records_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778900000001,
+      "tag": "0018_trader_mi_source_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1778900000002,
+      "tag": "0019_trader_mi_source_provenance_rls",
+      "breakpoints": true
     }
   ]
 }
