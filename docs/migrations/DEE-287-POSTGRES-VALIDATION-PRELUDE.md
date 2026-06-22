@@ -79,6 +79,28 @@ Detection of the full blast radius (and a zero-remaining guard) was done by scan
 `db/migrations_postgres/*.sql` for composite FKs whose backing unique index is created
 later in the same file.
 
+## Deferred (out of scope for DEE-287): opt-in integration-suite fixture parity
+
+With migration-apply restored, the `postgres-integration` workflow ran the opt-in
+`WAIA_PG_INTEGRATION=1` suite (`tests/integration/postgres-*.test.ts`) for the first time
+and surfaced **pre-existing, DEE-287-unrelated** test-fixture parity failures (twin
+persistence, twin engine, reasoning, runtime coherence, order/kill-switch/reconciliation
+parity). Confirmed root causes, none related to the prelude or the migration reorder:
+
+- **Non-canonical UUID literals** — fixtures use SQLite-tolerant ids like
+  `00000000-0000-4000-8000-00000000105co` / `...247g1` / 14-char tail segments; Postgres
+  `uuid` rejects them (`invalid input syntax for type uuid`).
+- **Missing `auth.users` seed** — tests insert `public.users` without the matching
+  `auth.users` row, hitting `users_id_fk_auth_users`.
+- **`text = uuid` comparisons** — loose typing works on SQLite, fails on Postgres
+  (`operator does not exist: text = uuid`).
+
+These are genuine test-quality gaps that only ever surface against real Postgres. Because
+DEE-287 is scoped to **migration validation** (and explicitly excludes product/test parity
+work), the gating workflow runs **migrate + smoke** only; the parity suite is **not** gated
+here. Recommend a dedicated follow-up issue ("Postgres integration-test fixture parity")
+to fix the fixtures and then re-enable the suite in CI.
+
 ## Security posture
 
 - Role stubs are `NOLOGIN` with **no** `GRANT`s → cannot authenticate, hold no privileges.
