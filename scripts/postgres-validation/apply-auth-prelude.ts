@@ -1,9 +1,20 @@
 /**
- * Applies the minimal `auth.users` stub required for `db/migrations_postgres` FKs
- * on bare Postgres (see prelude-auth-stub.sql). Local / CI only — not production auth.
+ * Applies the Postgres migration-validation prelude (see prelude-auth-stub.sql):
+ *   * NOLOGIN `authenticated` / `anon` role stubs (RLS policies from 0004 onward)
+ *   * minimal `auth.users` stub (migration FKs)
+ *
+ * The SQL file is the single source of truth — this script reads and executes it
+ * verbatim so the programmatic path and the documented `psql -f` path cannot drift.
+ *
+ * Local / CI only — not production auth. Host guard restricts to localhost.
  */
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import postgres from "postgres";
+
+const PRELUDE_SQL_PATH = fileURLToPath(new URL("./prelude-auth-stub.sql", import.meta.url));
 
 function assertLocalPostgres(connectionString: string): void {
   let host: string;
@@ -29,11 +40,15 @@ async function main(): Promise<void> {
 
   assertLocalPostgres(databaseUrlPostgres);
 
+  const preludeSql = readFileSync(PRELUDE_SQL_PATH, "utf8");
+
   const sql = postgres(databaseUrlPostgres, { max: 1 });
   try {
-    await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS auth`);
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS auth.users ( id uuid PRIMARY KEY )`);
-    console.log("[waia] Postgres auth prelude applied (auth.users stub).");
+    // Simple query protocol so the multi-statement prelude (DO block + DDL) runs as one batch.
+    await sql.unsafe(preludeSql).simple();
+    console.log(
+      "[waia] Postgres auth prelude applied (authenticated/anon roles + auth.users stub).",
+    );
   } finally {
     await sql.end({ timeout: 5 });
   }

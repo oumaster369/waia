@@ -112,3 +112,11 @@ pnpm db:migrate && pnpm test --run
 # Postgres path when in scope:
 pnpm db:postgres:bootstrap && pnpm db:smoke:postgres
 ```
+
+**Migration-bearing PRs (`db/migrations_postgres/**`)** auto-trigger the path-filtered
+[`postgres-integration`](../.github/workflows/postgres-integration.yml) workflow, which applies every
+migration from an empty DB and runs `db:smoke:postgres`. The validation prelude
+([`scripts/postgres-validation/prelude-auth-stub.sql`](../scripts/postgres-validation/prelude-auth-stub.sql))
+creates NOLOGIN `authenticated`/`anon` role stubs + `auth.users` so RLS migrations (`0004+`) apply on
+bare Postgres — validation-only, never production (DEE-287). If you cannot run Postgres locally
+(no Docker), rely on this workflow rather than waiving Postgres validation.

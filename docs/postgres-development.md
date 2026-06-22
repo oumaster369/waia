@@ -24,10 +24,12 @@ If generated migrations drift from `schema.postgres.ts`, **document the gap** an
 3. **Apply** migrations to a target database:
    - `pnpm db:migrate:postgres` — reads `DATABASE_URL_POSTGRES` from `.env.local` (same as `pnpm dev`) when not exported in the shell
    - `DATABASE_URL_POSTGRES=<url> pnpm db:migrate:postgres` — optional override for CI or one-off targets
-4. **Auth stub for Docker / empty Postgres**: migrations reference `auth.users` for FK alignment with future Supabase. Bare Postgres has no `auth` schema; apply the prelude **before** first migrate (or after wiping DB):
+4. **Auth stub for Docker / empty Postgres**: migrations reference `auth.users` (FK alignment) and the Supabase roles `authenticated` / `anon` (RLS policies, from `0004_audit_logs_rls.sql` onward). Bare Postgres has neither; apply the prelude **before** first migrate (or after wiping DB):
    - `pnpm db:postgres:auth-prelude`
 
-The prelude **duplicates** [`scripts/postgres-validation/prelude-auth-stub.sql`](../scripts/postgres-validation/prelude-auth-stub.sql); keep them aligned.
+   The prelude creates **NOLOGIN, no-privilege** role stubs for `authenticated` / `anon` plus the minimal `auth.users` table — validation-only, idempotent, and never to be applied to production / Supabase.
+
+[`scripts/postgres-validation/apply-auth-prelude.ts`](../scripts/postgres-validation/apply-auth-prelude.ts) reads and executes [`scripts/postgres-validation/prelude-auth-stub.sql`](../scripts/postgres-validation/prelude-auth-stub.sql) verbatim, so the SQL file is the **single source of truth** (the programmatic path and the documented `psql -f` path cannot drift).
 
 ## Local Postgres (Docker)
 
@@ -65,7 +67,7 @@ pnpm db:postgres:down
 - **DEE-72.4b async reasoning on Postgres**: [`postgres-twin-reasoning-prediction.test.ts`](../tests/integration/postgres-twin-reasoning-prediction.test.ts) exercises **`createTwinMemorySearchPortPostgres`** with **`runTwinPredictionForUserAsync`** and **`getTwinPatternSummaryForUserAsync`** (no SQLite `getDb()`). Same opt-in gate; **does not** claim SQLite/Postgres parity.
 - **DEE-72.6 Postgres async twin engine**: [`postgres-twin-engine.test.ts`](../tests/integration/postgres-twin-engine.test.ts) exercises **`runTwinEnginePostgresAsync`** for response shape, **`modulesRun`**, and prediction null rules (opt-in; **structural** assertions only).
 - **DEE-105 (Linear) Postgres coherence slice** (DEE-95D §14 / DEE-95E §11–§14): [`postgres-runtime-coherence.test.ts`](../tests/integration/postgres-runtime-coherence.test.ts) chains **append prediction verification → list verifications → analyze repeatability → `runTwinEnginePostgresAsync`** on a **single** **`PostgresTwinPersistence`** / `DATABASE_URL_POSTGRES` boundary. Same opt-in gate; **does not** invoke HTTP routes or change `WAIA_DB_BACKEND` defaults; **no required CI job** for Postgres.
-- **CI**: optional workflow [`.github/workflows/postgres-integration.yml`](../.github/workflows/postgres-integration.yml) runs on `workflow_dispatch` (manual) so Postgres does not slow every PR until you promote it.
+- **CI**: workflow [`.github/workflows/postgres-integration.yml`](../.github/workflows/postgres-integration.yml) runs on `workflow_dispatch` (manual full run) **and** auto-runs on **migration-bearing PRs** (path-filtered: `db/migrations_postgres/**`, `db/schema.postgres.ts`, `scripts/postgres-validation/**`, `drizzle.postgres.config.ts`). It applies every migration from an empty DB, runs `db:smoke:postgres`, then the opt-in integration suite. Default unit CI stays SQLite-only so non-migration PRs are not slowed (DEE-287).
 
 ### Run DEE-105 coherence test locally
 
