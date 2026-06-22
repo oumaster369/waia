@@ -668,6 +668,60 @@ export const traderMiHypothesisLifecycle = pgTable(
   ],
 );
 
+export const miEvidenceDirectionEnumPg = pgEnum("mi_evidence_direction", [
+  "FOR",
+  "AGAINST",
+  "NEUTRAL",
+]);
+export const miEvidenceKindEnumPg = pgEnum("mi_evidence_kind", ["observed"]);
+
+/** AI-TRADER MI: append-only Evidence ledger (DEE-289 / LD-5a.2a). */
+export const traderMiEvidence = pgTable(
+  "trader_mi_evidence",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    evidenceKind: miEvidenceKindEnumPg("evidence_kind").notNull(),
+    direction: miEvidenceDirectionEnumPg("direction").notNull(),
+    hypothesisId: uuid("hypothesis_id").notNull(), // composite FK enforced in migration SQL
+    hypothesisKey: text("hypothesis_key").notNull(),
+    hypothesisDefinitionDigest: text("hypothesis_definition_digest").notNull(),
+    measurementRefsJson: text("measurement_refs_json").notNull(),
+    observationRefsJson: text("observation_refs_json").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    nullComparatorRef: text("null_comparator_ref"),
+    regimeContextRef: text("regime_context_ref"),
+    trialRegistrationRef: text("trial_registration_ref"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_evidence_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_evidence_org_key_seq_unique").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+    index("trader_mi_evidence_org_hypothesis_idx").on(t.organizationId, t.hypothesisId),
+    index("trader_mi_evidence_org_key_seq_idx").on(t.organizationId, t.hypothesisKey, t.seq),
+    index("trader_mi_evidence_org_key_event_time_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.eventTime,
+    ),
+    index("trader_mi_evidence_org_key_direction_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.direction,
+    ),
+  ],
+);
+
 /** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
 export const traderStrategyPromotionRecords = pgTable(
   "trader_strategy_promotion_records",

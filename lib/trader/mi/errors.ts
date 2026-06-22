@@ -158,3 +158,31 @@ export class MiHypothesisLifecycleAuthorizationError extends Error {
     this.name = "MiHypothesisLifecycleAuthorizationError";
   }
 }
+
+export class MiEvidenceNotFoundError extends Error {
+  constructor(message = "MI_EVIDENCE_NOT_FOUND") {
+    super(message);
+    this.name = "MiEvidenceNotFoundError";
+  }
+}
+
+export class MiEvidenceInputValidationError extends Error {
+  constructor(message = "MI_EVIDENCE_INPUT_INVALID") {
+    super(message);
+    this.name = "MiEvidenceInputValidationError";
+  }
+}
+
+export class MiEvidenceRefError extends Error {
+  constructor(message = "MI_EVIDENCE_REF_INVALID") {
+    super(message);
+    this.name = "MiEvidenceRefError";
+  }
+}
+
+export class MiEvidenceSeqConflictError extends Error {
+  constructor(message = "MI_EVIDENCE_SEQ_CONFLICT") {
+    super(message);
+    this.name = "MiEvidenceSeqConflictError";
+  }
+}

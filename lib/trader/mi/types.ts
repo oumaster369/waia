@@ -21,6 +21,12 @@ import type {
   RegisterHypothesisInput,
 } from "@/lib/trader/mi/hypothesis.types";
 import type {
+  MiEvidence,
+  MiEvidenceDirection,
+  MiEvidenceKind,
+  RecordEvidenceInput,
+} from "@/lib/trader/mi/evidence.types";
+import type {
   AppendPatternVersionInput,
   MiPattern,
   MiPatternKind,
@@ -140,6 +146,10 @@ export type MiObservationRepository = {
     context: OrgContext,
     observationKind?: MiObservationKind,
   ) => Promise<PitObservation[]> | PitObservation[];
+  findObservationById: (
+    context: OrgContext,
+    observationId: string,
+  ) => Promise<PitObservation | null> | PitObservation | null;
   insertObservation: (
     context: OrgContext,
     row: InsertObservationRow,
@@ -387,5 +397,57 @@ export type AppendHypothesisVersionServiceInput = AppendHypothesisVersionInput &
 
 export type HypothesisLifecycleTransitionServiceInput = HypothesisLifecycleTransitionInput & {
   actorType?: MiHypothesisServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type InsertEvidenceRow = {
+  id: string;
+  evidenceKind: MiEvidenceKind;
+  direction: MiEvidenceDirection;
+  hypothesisId: string;
+  hypothesisKey: string;
+  hypothesisDefinitionDigest: string;
+  measurementRefsJson: string;
+  observationRefsJson: string;
+  eventTime: Date;
+  ingestTime: Date;
+  recordedBy: string;
+  seq: number;
+  contentDigest: string;
+  nullComparatorRef: string | null;
+  regimeContextRef: string | null;
+  trialRegistrationRef: string | null;
+  createdAt: Date;
+};
+
+export type MiEvidenceRepository = {
+  getLatestEvidence: (
+    context: OrgContext,
+    hypothesisKey: string,
+  ) => Promise<MiEvidence | null> | MiEvidence | null;
+  listEvidence: (
+    context: OrgContext,
+    hypothesisKey: string,
+  ) => Promise<MiEvidence[]> | MiEvidence[];
+  listEvidenceByDirection: (
+    context: OrgContext,
+    hypothesisKey: string,
+    direction: MiEvidenceDirection,
+  ) => Promise<MiEvidence[]> | MiEvidence[];
+  findEvidenceById: (
+    context: OrgContext,
+    evidenceId: string,
+  ) => Promise<MiEvidence | null> | MiEvidence | null;
+  insertEvidence: (context: OrgContext, row: InsertEvidenceRow) => Promise<MiEvidence> | MiEvidence;
+};
+
+export type MiEvidenceServiceDeps = {
+  assertMembership?: (context: OrgContext & { userId: string }) => Promise<void> | void;
+  actorType?: "user" | "admin" | "agent" | "service" | "system";
+  actorId?: string | null;
+};
+
+export type RecordEvidenceServiceInput = RecordEvidenceInput & {
+  actorType?: MiEvidenceServiceDeps["actorType"];
   actorId?: string | null;
 };

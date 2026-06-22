@@ -95,6 +95,26 @@ export async function listObservationsPostgres(
   return rows.map(mapObservation);
 }
 
+export async function findObservationByIdPostgres(
+  ex: PgReadExecutor,
+  context: OrgContext,
+  observationId: string,
+): Promise<PitObservation | null> {
+  const scoped = requireOrgContext(context.organizationId);
+  const rows = await ex
+    .select()
+    .from(pgSchema.traderMiObservation)
+    .where(
+      and(
+        eq(pgSchema.traderMiObservation.id, observationId),
+        orgScopedWhere(pgSchema.traderMiObservation.organizationId, scoped),
+      ),
+    )
+    .limit(1);
+
+  return rows[0] ? mapObservation(rows[0]) : null;
+}
+
 export async function insertObservationPostgres(
   ex: PgWriteExecutor,
   context: OrgContext,

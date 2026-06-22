@@ -204,6 +204,20 @@
       "when": 1779400000001,
       "tag": "0028_trader_mi_hypothesis_lifecycle_states",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1779500000001,
+      "tag": "0029_trader_mi_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1779500000002,
+      "tag": "0030_trader_mi_evidence_rls",
+      "breakpoints": true
     }
   ]
 }
