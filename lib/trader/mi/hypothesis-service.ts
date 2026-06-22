@@ -12,6 +12,8 @@ import {
   MiHypothesisDuplicateError,
   MiHypothesisFirewallError,
   MiHypothesisInputValidationError,
+  MiHypothesisLifecycleAuthorizationError,
+  MiHypothesisLifecycleError,
   MiHypothesisNotFoundError,
   MiHypothesisRefError,
   MiHypothesisSupersedesError,
@@ -29,6 +31,7 @@ import {
   type MiHypothesisKind,
   type MiHypothesisLifecycleEvent,
   type MiHypothesisLifecycleState,
+  type MiHypothesisWithCurrentState,
 } from "@/lib/trader/mi/hypothesis.types";
 import {
   createPostgresMiMeasurementRepository,
@@ -44,10 +47,13 @@ import {
   computeHypothesisKey,
   deriveMandatoryNullFloor,
   findForbiddenDefinitionKey,
+  HYPOTHESIS_LIFECYCLE_TERMINAL_STATES,
+  isAllowedHypothesisTransition,
   serializeHypothesisDefinitionJson,
 } from "@/lib/trader/mi/serialize-hypothesis";
 import type {
   AppendHypothesisVersionServiceInput,
+  HypothesisLifecycleTransitionServiceInput,
   MiHypothesisRepository,
   MiHypothesisServiceDeps,
   MiMeasurementRepository,
@@ -87,6 +93,14 @@ export type MiHypothesisService = {
     context: OrgContext,
     hypothesisKey: string,
   ) => Promise<MiHypothesisLifecycleEvent[]>;
+  transitionHypothesisLifecycle: (
+    context: OrgContext,
+    input: HypothesisLifecycleTransitionServiceInput,
+  ) => Promise<MiHypothesisLifecycleEvent>;
+  getHypothesisWithCurrentState: (
+    context: OrgContext,
+    hypothesisKey: string,
+  ) => Promise<MiHypothesisWithCurrentState | null>;
 };
 
 export type MiHypothesisServiceBundle = {
@@ -96,6 +110,51 @@ export type MiHypothesisServiceBundle = {
 };
 
 const NULL_KIND_SET = new Set<string>(miHypothesisNullKindValues);
+
+const HUMAN_LIFECYCLE_ACTOR_TYPES = new Set<TraderAuditInput["actorType"]>(["user", "admin"]);
+
+function assertHumanLifecycleActor(
+  input: HypothesisLifecycleTransitionServiceInput,
+  deps: MiHypothesisServiceDeps,
+): { actorType: "user" | "admin"; actorId: string | null } {
+  const actorType = input.actorType ?? deps.actorType;
+  if (!actorType || !HUMAN_LIFECYCLE_ACTOR_TYPES.has(actorType)) {
+    throw new MiHypothesisLifecycleAuthorizationError(
+      "MI_HYPOTHESIS_LIFECYCLE_UNAUTHORIZED: lifecycle transitions require actorType user or admin",
+    );
+  }
+  if (!input.recordedBy?.trim()) {
+    throw new MiHypothesisLifecycleAuthorizationError(
+      "MI_HYPOTHESIS_LIFECYCLE_UNAUTHORIZED: recordedBy is required for lifecycle transitions",
+    );
+  }
+  const humanActorType = actorType as "user" | "admin";
+  return {
+    actorType: humanActorType,
+    actorId: input.actorId ?? deps.actorId ?? null,
+  };
+}
+
+function assertLifecycleTransitionAllowed(
+  currentState: MiHypothesisLifecycleState,
+  toState: MiHypothesisLifecycleState,
+): void {
+  if (currentState === toState) {
+    throw new MiHypothesisLifecycleError(
+      `MI_HYPOTHESIS_LIFECYCLE_INVALID: hypothesis is already ${toState}`,
+    );
+  }
+  if (HYPOTHESIS_LIFECYCLE_TERMINAL_STATES.has(currentState)) {
+    throw new MiHypothesisLifecycleError(
+      `MI_HYPOTHESIS_LIFECYCLE_INVALID: hypothesis is terminal (${currentState}); no transitions allowed`,
+    );
+  }
+  if (!isAllowedHypothesisTransition(currentState, toState)) {
+    throw new MiHypothesisLifecycleError(
+      `MI_HYPOTHESIS_LIFECYCLE_INVALID: transition ${currentState} → ${toState} is forbidden`,
+    );
+  }
+}
 
 async function assertMembershipIfNeeded(
   context: OrgContext,
@@ -479,6 +538,91 @@ function createService(
       const scoped = requireOrgContext(context.organizationId);
       await assertMembershipIfNeeded(scoped, deps.assertMembership);
       return repo.listLifecycleEvents(scoped, hypothesisKey);
+    },
+
+    async transitionHypothesisLifecycle(context, input) {
+      const scoped = requireOrgContext(context.organizationId);
+      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const actor = assertHumanLifecycleActor(input, deps);
+
+      const latestHypothesis = await repo.getLatestHypothesis(scoped, input.hypothesisKey);
+      if (!latestHypothesis) {
+        throw new MiHypothesisNotFoundError();
+      }
+
+      const latestEvent = await repo.getLatestLifecycleEvent(scoped, input.hypothesisKey);
+      if (!latestEvent) {
+        throw new MiHypothesisLifecycleError(
+          "MI_HYPOTHESIS_LIFECYCLE_INVALID: no lifecycle ledger head exists for hypothesis",
+        );
+      }
+
+      const currentState = latestEvent.lifecycleState;
+      assertLifecycleTransitionAllowed(currentState, input.toState);
+
+      const seq = latestEvent.seq + 1;
+      const now = new Date();
+      const event = await repo.insertLifecycleEvent(scoped, {
+        id: crypto.randomUUID(),
+        hypothesisId: latestHypothesis.id,
+        hypothesisKey: input.hypothesisKey,
+        lifecycleState: input.toState,
+        rationale: input.rationale,
+        recordedBy: input.recordedBy,
+        seq,
+        contentDigest: buildLifecycleContentDigest({
+          organizationId: scoped.organizationId,
+          hypothesisKey: input.hypothesisKey,
+          lifecycleState: input.toState,
+          seq,
+          rationale: input.rationale,
+          recordedBy: input.recordedBy,
+        }),
+        createdAt: now,
+      });
+
+      writeAudit(
+        buildAuditInput(
+          scoped,
+          traderEntityTypes.miHypothesisLifecycle,
+          event.id,
+          traderAuditActions.miHypothesisLifecycleTransitioned,
+          {
+            hypothesisKey: event.hypothesisKey,
+            hypothesisId: event.hypothesisId,
+            fromState: currentState,
+            toState: event.lifecycleState,
+            seq: event.seq,
+            rationale: event.rationale,
+          },
+          actor.actorType,
+          actor.actorId,
+        ),
+      );
+
+      return event;
+    },
+
+    async getHypothesisWithCurrentState(context, hypothesisKey) {
+      const scoped = requireOrgContext(context.organizationId);
+      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+
+      const hypothesis = await repo.getLatestHypothesis(scoped, hypothesisKey);
+      if (!hypothesis) {
+        return null;
+      }
+
+      const latestEvent = await repo.getLatestLifecycleEvent(scoped, hypothesisKey);
+      if (!latestEvent) {
+        throw new MiHypothesisLifecycleError(
+          "MI_HYPOTHESIS_LIFECYCLE_INVALID: no lifecycle ledger head exists for hypothesis",
+        );
+      }
+
+      return {
+        hypothesis,
+        currentState: latestEvent.lifecycleState,
+      };
     },
   };
 }

@@ -6,8 +6,15 @@ export const miHypothesisKindValues = ["market_claim"] as const;
 
 export type MiHypothesisKind = (typeof miHypothesisKindValues)[number];
 
-/** Only PROPOSED in LD-5a.1a; extended in LD-5a.1b. */
-export const miHypothesisLifecycleStateValues = ["PROPOSED"] as const;
+/** Ratified LD-5a doctrine §7 lifecycle states (DEE-286 / LD-5a.1b). */
+export const miHypothesisLifecycleStateValues = [
+  "PROPOSED",
+  "VALIDATING",
+  "VALIDATED",
+  "DECAYING",
+  "RETIRED",
+  "QUARANTINED",
+] as const;
 
 export type MiHypothesisLifecycleState = (typeof miHypothesisLifecycleStateValues)[number];
 
@@ -118,4 +125,16 @@ export type AppendHypothesisVersionInput = {
   name: string;
   definition: HypothesisDefinition;
   authoredBy: string;
+};
+
+export type HypothesisLifecycleTransitionInput = {
+  hypothesisKey: string;
+  toState: MiHypothesisLifecycleState;
+  rationale: string;
+  recordedBy: string;
+};
+
+export type MiHypothesisWithCurrentState = {
+  hypothesis: MiHypothesis;
+  currentState: MiHypothesisLifecycleState;
 };

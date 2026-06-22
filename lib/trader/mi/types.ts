@@ -13,6 +13,7 @@ import type {
 } from "@/lib/trader/mi/measurement.types";
 import type {
   AppendHypothesisVersionInput,
+  HypothesisLifecycleTransitionInput,
   MiHypothesis,
   MiHypothesisKind,
   MiHypothesisLifecycleEvent,
@@ -380,6 +381,11 @@ export type RegisterHypothesisServiceInput = RegisterHypothesisInput & {
 };
 
 export type AppendHypothesisVersionServiceInput = AppendHypothesisVersionInput & {
+  actorType?: MiHypothesisServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type HypothesisLifecycleTransitionServiceInput = HypothesisLifecycleTransitionInput & {
   actorType?: MiHypothesisServiceDeps["actorType"];
   actorId?: string | null;
 };

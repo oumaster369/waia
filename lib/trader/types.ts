@@ -40,6 +40,7 @@ export const traderAuditActions = {
   miPatternReactivated: "trader.mi_pattern.reactivated",
   miHypothesisRegistered: "trader.mi_hypothesis.registered",
   miHypothesisRevised: "trader.mi_hypothesis.revised",
+  miHypothesisLifecycleTransitioned: "trader.mi_hypothesis.lifecycle_transitioned",
 } as const;
 
 export type TraderAuditAction = (typeof traderAuditActions)[keyof typeof traderAuditActions];

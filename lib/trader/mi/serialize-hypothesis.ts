@@ -211,6 +211,29 @@ export function deriveMandatoryNullFloor(claimShape: ClaimShape): MiHypothesisNu
   return floor;
 }
 
+/** Frozen transition matrix (LD-5a doctrine §7 / DEE-286). */
+export const HYPOTHESIS_LIFECYCLE_TRANSITIONS: Readonly<
+  Record<MiHypothesisLifecycleState, readonly MiHypothesisLifecycleState[]>
+> = {
+  PROPOSED: ["VALIDATING"],
+  VALIDATING: ["VALIDATED", "QUARANTINED"],
+  VALIDATED: ["DECAYING", "QUARANTINED"],
+  DECAYING: ["VALIDATED", "RETIRED"],
+  RETIRED: [],
+  QUARANTINED: [],
+};
+
+export const HYPOTHESIS_LIFECYCLE_TERMINAL_STATES: ReadonlySet<MiHypothesisLifecycleState> =
+  new Set(["RETIRED", "QUARANTINED"]);
+
+/** Returns true when doctrine §7 permits from → to. */
+export function isAllowedHypothesisTransition(
+  from: MiHypothesisLifecycleState,
+  to: MiHypothesisLifecycleState,
+): boolean {
+  return HYPOTHESIS_LIFECYCLE_TRANSITIONS[from].includes(to);
+}
+
 /** Reproducible content fingerprint of a single lifecycle event. */
 export function buildLifecycleContentDigest(input: HypothesisLifecycleContentDigestInput): string {
   const canonical = sortKeysDeep({
