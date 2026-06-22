@@ -12,6 +12,14 @@ import type {
   RegisterMeasurementInput,
 } from "@/lib/trader/mi/measurement.types";
 import type {
+  AppendHypothesisVersionInput,
+  MiHypothesis,
+  MiHypothesisKind,
+  MiHypothesisLifecycleEvent,
+  MiHypothesisLifecycleState,
+  RegisterHypothesisInput,
+} from "@/lib/trader/mi/hypothesis.types";
+import type {
   AppendPatternVersionInput,
   MiPattern,
   MiPatternKind,
@@ -291,5 +299,87 @@ export type AppendPatternVersionServiceInput = AppendPatternVersionInput & {
 
 export type PatternLifecycleTransitionServiceInput = PatternLifecycleTransitionInput & {
   actorType?: MiPatternServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type InsertHypothesisRow = {
+  id: string;
+  hypothesisKind: MiHypothesisKind;
+  hypothesisKey: string;
+  name: string;
+  schemaVersion: string;
+  definitionJson: string;
+  definitionDigest: string;
+  supersedesJson: string | null;
+  versionSeq: number;
+  revisionOf: string | null;
+  authoredBy: string;
+  createdAt: Date;
+};
+
+export type InsertHypothesisLifecycleRow = {
+  id: string;
+  hypothesisId: string;
+  hypothesisKey: string;
+  lifecycleState: MiHypothesisLifecycleState;
+  rationale: string;
+  recordedBy: string;
+  seq: number;
+  contentDigest: string;
+  createdAt: Date;
+};
+
+export type MiHypothesisRepository = {
+  getLatestHypothesis: (
+    context: OrgContext,
+    hypothesisKey: string,
+  ) => Promise<MiHypothesis | null> | MiHypothesis | null;
+  listHypothesisHistory: (
+    context: OrgContext,
+    hypothesisKey: string,
+  ) => Promise<MiHypothesis[]> | MiHypothesis[];
+  listHypotheses: (
+    context: OrgContext,
+    hypothesisKind?: MiHypothesisKind,
+  ) => Promise<MiHypothesis[]> | MiHypothesis[];
+  findHypothesisByDigest: (
+    context: OrgContext,
+    definitionDigest: string,
+  ) => Promise<MiHypothesis | null> | MiHypothesis | null;
+  findHypothesisById: (
+    context: OrgContext,
+    hypothesisId: string,
+  ) => Promise<MiHypothesis | null> | MiHypothesis | null;
+  insertHypothesisVersion: (
+    context: OrgContext,
+    row: InsertHypothesisRow,
+  ) => Promise<MiHypothesis> | MiHypothesis;
+  getLatestLifecycleEvent: (
+    context: OrgContext,
+    hypothesisKey: string,
+  ) => Promise<MiHypothesisLifecycleEvent | null> | MiHypothesisLifecycleEvent | null;
+  listLifecycleEvents: (
+    context: OrgContext,
+    hypothesisKey: string,
+  ) => Promise<MiHypothesisLifecycleEvent[]> | MiHypothesisLifecycleEvent[];
+  insertLifecycleEvent: (
+    context: OrgContext,
+    row: InsertHypothesisLifecycleRow,
+  ) => Promise<MiHypothesisLifecycleEvent> | MiHypothesisLifecycleEvent;
+};
+
+export type MiHypothesisServiceDeps = {
+  assertMembership?: (context: OrgContext & { userId: string }) => Promise<void> | void;
+  actorType?: "user" | "admin" | "agent" | "service" | "system";
+  actorId?: string | null;
+};
+
+export type RegisterHypothesisServiceInput = RegisterHypothesisInput & {
+  actorType?: MiHypothesisServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type AppendHypothesisVersionServiceInput = AppendHypothesisVersionInput & {
+  actorType?: MiHypothesisServiceDeps["actorType"];
   actorId?: string | null;
 };

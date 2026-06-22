@@ -102,3 +102,45 @@ export class MiPatternLifecycleError extends Error {
     this.name = "MiPatternLifecycleError";
   }
 }
+
+export class MiHypothesisDuplicateError extends Error {
+  constructor(message = "MI_HYPOTHESIS_DUPLICATE") {
+    super(message);
+    this.name = "MiHypothesisDuplicateError";
+  }
+}
+
+export class MiHypothesisNotFoundError extends Error {
+  constructor(message = "MI_HYPOTHESIS_NOT_FOUND") {
+    super(message);
+    this.name = "MiHypothesisNotFoundError";
+  }
+}
+
+export class MiHypothesisFirewallError extends Error {
+  constructor(message = "MI_HYPOTHESIS_FIREWALL_VIOLATION") {
+    super(message);
+    this.name = "MiHypothesisFirewallError";
+  }
+}
+
+export class MiHypothesisInputValidationError extends Error {
+  constructor(message = "MI_HYPOTHESIS_INPUT_INVALID") {
+    super(message);
+    this.name = "MiHypothesisInputValidationError";
+  }
+}
+
+export class MiHypothesisRefError extends Error {
+  constructor(message = "MI_HYPOTHESIS_REF_INVALID") {
+    super(message);
+    this.name = "MiHypothesisRefError";
+  }
+}
+
+export class MiHypothesisSupersedesError extends Error {
+  constructor(message = "MI_HYPOTHESIS_SUPERSEDES_INVALID") {
+    super(message);
+    this.name = "MiHypothesisSupersedesError";
+  }
+}

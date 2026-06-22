@@ -610,6 +610,86 @@ export const traderMiPatternLifecycle = sqliteTable(
   ],
 );
 
+export const miHypothesisKindEnum = ["market_claim"] as const;
+export type MiHypothesisKindDb = (typeof miHypothesisKindEnum)[number];
+
+export const miHypothesisLifecycleStateEnum = ["PROPOSED"] as const;
+export type MiHypothesisLifecycleStateDb = (typeof miHypothesisLifecycleStateEnum)[number];
+
+/** AI-TRADER MI: append-only versioned hypothesis registry (DEE-285 / LD-5a.1a). */
+export const traderMiHypothesis = sqliteTable(
+  "trader_mi_hypothesis",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hypothesisKind: text("hypothesis_kind", { enum: [...miHypothesisKindEnum] }).notNull(),
+    hypothesisKey: text("hypothesis_key").notNull(),
+    name: text("name").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    definitionJson: text("definition_json").notNull(),
+    definitionDigest: text("definition_digest").notNull(),
+    supersedesJson: text("supersedes_json"),
+    versionSeq: integer("version_seq").notNull(),
+    revisionOf: text("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
+    authoredBy: text("authored_by").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_mi_hypothesis_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_hypothesis_org_key_seq_unique").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.versionSeq,
+    ),
+    index("trader_mi_hypothesis_org_kind_name_idx").on(t.organizationId, t.hypothesisKind, t.name),
+    index("trader_mi_hypothesis_org_key_seq_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.versionSeq,
+    ),
+  ],
+);
+
+/** AI-TRADER MI: append-only Hypothesis lifecycle ledger (DEE-285 / LD-5a.1a). */
+export const traderMiHypothesisLifecycle = sqliteTable(
+  "trader_mi_hypothesis_lifecycle",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hypothesisId: text("hypothesis_id").notNull(), // composite FK enforced in migration SQL
+    hypothesisKey: text("hypothesis_key").notNull(),
+    lifecycleState: text("lifecycle_state", {
+      enum: [...miHypothesisLifecycleStateEnum],
+    }).notNull(),
+    rationale: text("rationale").notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_mi_hypothesis_lifecycle_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_hypothesis_lifecycle_org_key_seq_unique").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+    index("trader_mi_hypothesis_lifecycle_org_key_seq_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+  ],
+);
+
 /** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
 export const traderStrategyPromotionRecords = sqliteTable(
   "trader_strategy_promotion_records",
