@@ -6,6 +6,12 @@ import type {
   RecordObservationInput,
 } from "@/lib/trader/mi/observation.types";
 import type {
+  AppendMeasurementVersionInput,
+  MiMeasurement,
+  MiMeasurementKind,
+  RegisterMeasurementInput,
+} from "@/lib/trader/mi/measurement.types";
+import type {
   CreateMiSourceInput,
   MiSourceIdentity,
   MiSourceStatus,
@@ -135,5 +141,58 @@ export type RecordObservationServiceInput = RecordObservationInput & {
 
 export type AppendObservationRevisionServiceInput = AppendObservationRevisionInput & {
   actorType?: MiObservationServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type InsertMeasurementRow = {
+  id: string;
+  measurementKind: MiMeasurementKind;
+  measurementKey: string;
+  name: string;
+  schemaVersion: string;
+  definitionJson: string;
+  definitionDigest: string;
+  versionSeq: number;
+  revisionOf: string | null;
+  authoredBy: string;
+  createdAt: Date;
+};
+
+export type MiMeasurementRepository = {
+  getLatestMeasurement: (
+    context: OrgContext,
+    measurementKey: string,
+  ) => Promise<MiMeasurement | null> | MiMeasurement | null;
+  listMeasurementHistory: (
+    context: OrgContext,
+    measurementKey: string,
+  ) => Promise<MiMeasurement[]> | MiMeasurement[];
+  listMeasurements: (
+    context: OrgContext,
+    measurementKind?: MiMeasurementKind,
+  ) => Promise<MiMeasurement[]> | MiMeasurement[];
+  findMeasurementByDigest: (
+    context: OrgContext,
+    definitionDigest: string,
+  ) => Promise<MiMeasurement | null> | MiMeasurement | null;
+  insertMeasurementVersion: (
+    context: OrgContext,
+    row: InsertMeasurementRow,
+  ) => Promise<MiMeasurement> | MiMeasurement;
+};
+
+export type MiMeasurementServiceDeps = {
+  assertMembership?: (context: OrgContext & { userId: string }) => Promise<void> | void;
+  actorType?: "user" | "admin" | "agent" | "service" | "system";
+  actorId?: string | null;
+};
+
+export type RegisterMeasurementServiceInput = RegisterMeasurementInput & {
+  actorType?: MiMeasurementServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type AppendMeasurementVersionServiceInput = AppendMeasurementVersionInput & {
+  actorType?: MiMeasurementServiceDeps["actorType"];
   actorId?: string | null;
 };

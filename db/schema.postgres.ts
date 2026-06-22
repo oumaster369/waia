@@ -481,6 +481,47 @@ export const traderMiObservation = pgTable(
   ],
 );
 
+export const miMeasurementKindEnumPg = pgEnum("mi_measurement_kind", ["feature_transform"]);
+
+/** AI-TRADER MI: append-only versioned transform-definition registry (DEE-282 / LD-3). */
+export const traderMiMeasurement = pgTable(
+  "trader_mi_measurement",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    measurementKind: miMeasurementKindEnumPg("measurement_kind").notNull(),
+    measurementKey: text("measurement_key").notNull(),
+    name: text("name").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    definitionJson: text("definition_json").notNull(),
+    definitionDigest: text("definition_digest").notNull(),
+    versionSeq: integer("version_seq").notNull(),
+    revisionOf: uuid("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
+    authoredBy: text("authored_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_measurement_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_measurement_org_key_seq_unique").on(
+      t.organizationId,
+      t.measurementKey,
+      t.versionSeq,
+    ),
+    index("trader_mi_measurement_org_kind_name_idx").on(
+      t.organizationId,
+      t.measurementKind,
+      t.name,
+    ),
+    index("trader_mi_measurement_org_key_seq_idx").on(
+      t.organizationId,
+      t.measurementKey,
+      t.versionSeq,
+    ),
+  ],
+);
+
 /** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
 export const traderStrategyPromotionRecords = pgTable(
   "trader_strategy_promotion_records",
