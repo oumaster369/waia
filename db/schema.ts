@@ -536,6 +536,80 @@ export const traderMiMeasurement = sqliteTable(
   ],
 );
 
+export const miPatternKindEnum = ["recurring_structure"] as const;
+export type MiPatternKindDb = (typeof miPatternKindEnum)[number];
+
+export const miPatternLifecycleStateEnum = ["ACTIVE", "ARCHIVED"] as const;
+export type MiPatternLifecycleStateDb = (typeof miPatternLifecycleStateEnum)[number];
+
+/** AI-TRADER MI: append-only versioned recurring-structure registry (DEE-283 / LD-4). */
+export const traderMiPattern = sqliteTable(
+  "trader_mi_pattern",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    patternKind: text("pattern_kind", { enum: [...miPatternKindEnum] }).notNull(),
+    patternKey: text("pattern_key").notNull(),
+    name: text("name").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    definitionJson: text("definition_json").notNull(),
+    definitionDigest: text("definition_digest").notNull(),
+    structuralSignature: text("structural_signature").notNull(),
+    trialBudgetMax: integer("trial_budget_max").notNull(),
+    versionSeq: integer("version_seq").notNull(),
+    revisionOf: text("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
+    authoredBy: text("authored_by").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_mi_pattern_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_pattern_org_key_seq_unique").on(
+      t.organizationId,
+      t.patternKey,
+      t.versionSeq,
+    ),
+    index("trader_mi_pattern_org_kind_name_idx").on(t.organizationId, t.patternKind, t.name),
+    index("trader_mi_pattern_org_key_seq_idx").on(t.organizationId, t.patternKey, t.versionSeq),
+    index("trader_mi_pattern_org_structural_sig_idx").on(t.organizationId, t.structuralSignature),
+  ],
+);
+
+/** AI-TRADER MI: append-only Pattern lifecycle (ACTIVE/ARCHIVED) ledger (DEE-283 / LD-4). */
+export const traderMiPatternLifecycle = sqliteTable(
+  "trader_mi_pattern_lifecycle",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    patternId: text("pattern_id").notNull(), // composite FK enforced in migration SQL
+    patternKey: text("pattern_key").notNull(),
+    lifecycleState: text("lifecycle_state", {
+      enum: [...miPatternLifecycleStateEnum],
+    }).notNull(),
+    rationale: text("rationale").notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_mi_pattern_lifecycle_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_pattern_lifecycle_org_key_seq_unique").on(
+      t.organizationId,
+      t.patternKey,
+      t.seq,
+    ),
+    index("trader_mi_pattern_lifecycle_org_key_seq_idx").on(t.organizationId, t.patternKey, t.seq),
+  ],
+);
+
 /** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
 export const traderStrategyPromotionRecords = sqliteTable(
   "trader_strategy_promotion_records",

@@ -12,6 +12,15 @@ import type {
   RegisterMeasurementInput,
 } from "@/lib/trader/mi/measurement.types";
 import type {
+  AppendPatternVersionInput,
+  MiPattern,
+  MiPatternKind,
+  MiPatternLifecycleEvent,
+  MiPatternLifecycleState,
+  PatternLifecycleTransitionInput,
+  RegisterPatternInput,
+} from "@/lib/trader/mi/pattern.types";
+import type {
   CreateMiSourceInput,
   MiSourceIdentity,
   MiSourceStatus,
@@ -194,5 +203,93 @@ export type RegisterMeasurementServiceInput = RegisterMeasurementInput & {
 
 export type AppendMeasurementVersionServiceInput = AppendMeasurementVersionInput & {
   actorType?: MiMeasurementServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type InsertPatternRow = {
+  id: string;
+  patternKind: MiPatternKind;
+  patternKey: string;
+  name: string;
+  schemaVersion: string;
+  definitionJson: string;
+  definitionDigest: string;
+  structuralSignature: string;
+  trialBudgetMax: number;
+  versionSeq: number;
+  revisionOf: string | null;
+  authoredBy: string;
+  createdAt: Date;
+};
+
+export type InsertPatternLifecycleRow = {
+  id: string;
+  patternId: string;
+  patternKey: string;
+  lifecycleState: MiPatternLifecycleState;
+  rationale: string;
+  recordedBy: string;
+  seq: number;
+  contentDigest: string;
+  createdAt: Date;
+};
+
+export type MiPatternRepository = {
+  getLatestPattern: (
+    context: OrgContext,
+    patternKey: string,
+  ) => Promise<MiPattern | null> | MiPattern | null;
+  listPatternHistory: (
+    context: OrgContext,
+    patternKey: string,
+  ) => Promise<MiPattern[]> | MiPattern[];
+  listPatterns: (
+    context: OrgContext,
+    patternKind?: MiPatternKind,
+  ) => Promise<MiPattern[]> | MiPattern[];
+  findPatternByDigest: (
+    context: OrgContext,
+    definitionDigest: string,
+  ) => Promise<MiPattern | null> | MiPattern | null;
+  findActivePatternByStructuralSignature: (
+    context: OrgContext,
+    structuralSignature: string,
+  ) => Promise<MiPattern | null> | MiPattern | null;
+  insertPatternVersion: (
+    context: OrgContext,
+    row: InsertPatternRow,
+  ) => Promise<MiPattern> | MiPattern;
+  getLatestLifecycleEvent: (
+    context: OrgContext,
+    patternKey: string,
+  ) => Promise<MiPatternLifecycleEvent | null> | MiPatternLifecycleEvent | null;
+  listLifecycleEvents: (
+    context: OrgContext,
+    patternKey: string,
+  ) => Promise<MiPatternLifecycleEvent[]> | MiPatternLifecycleEvent[];
+  insertLifecycleEvent: (
+    context: OrgContext,
+    row: InsertPatternLifecycleRow,
+  ) => Promise<MiPatternLifecycleEvent> | MiPatternLifecycleEvent;
+};
+
+export type MiPatternServiceDeps = {
+  assertMembership?: (context: OrgContext & { userId: string }) => Promise<void> | void;
+  actorType?: "user" | "admin" | "agent" | "service" | "system";
+  actorId?: string | null;
+};
+
+export type RegisterPatternServiceInput = RegisterPatternInput & {
+  actorType?: MiPatternServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type AppendPatternVersionServiceInput = AppendPatternVersionInput & {
+  actorType?: MiPatternServiceDeps["actorType"];
+  actorId?: string | null;
+};
+
+export type PatternLifecycleTransitionServiceInput = PatternLifecycleTransitionInput & {
+  actorType?: MiPatternServiceDeps["actorType"];
   actorId?: string | null;
 };

@@ -60,3 +60,45 @@ export class MiMeasurementInputValidationError extends Error {
     this.name = "MiMeasurementInputValidationError";
   }
 }
+
+export class MiPatternDuplicateError extends Error {
+  constructor(message = "MI_PATTERN_DUPLICATE") {
+    super(message);
+    this.name = "MiPatternDuplicateError";
+  }
+}
+
+export class MiPatternNotFoundError extends Error {
+  constructor(message = "MI_PATTERN_NOT_FOUND") {
+    super(message);
+    this.name = "MiPatternNotFoundError";
+  }
+}
+
+export class MiPatternStructuralDuplicateError extends Error {
+  constructor(message = "MI_PATTERN_STRUCTURAL_DUPLICATE") {
+    super(message);
+    this.name = "MiPatternStructuralDuplicateError";
+  }
+}
+
+export class MiPatternFirewallError extends Error {
+  constructor(message = "MI_PATTERN_FIREWALL_VIOLATION") {
+    super(message);
+    this.name = "MiPatternFirewallError";
+  }
+}
+
+export class MiPatternMeasurementRefError extends Error {
+  constructor(message = "MI_PATTERN_MEASUREMENT_REF_INVALID") {
+    super(message);
+    this.name = "MiPatternMeasurementRefError";
+  }
+}
+
+export class MiPatternLifecycleError extends Error {
+  constructor(message = "MI_PATTERN_LIFECYCLE_INVALID") {
+    super(message);
+    this.name = "MiPatternLifecycleError";
+  }
+}
