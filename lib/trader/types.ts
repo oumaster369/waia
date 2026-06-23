@@ -44,6 +44,7 @@ export const traderAuditActions = {
   miEvidenceRecorded: "trader.mi_evidence.recorded",
   miTrialRegistered: "trader.mi_trial.registered",
   miTrialIntegrityInvalidated: "trader.mi_trial_integrity.invalidated",
+  miConfidenceJudgmentRecorded: "trader.mi_confidence_judgment.recorded",
 } as const;
 
 export type TraderAuditAction = (typeof traderAuditActions)[keyof typeof traderAuditActions];
@@ -69,6 +70,7 @@ export const traderEntityTypes = {
   miEvidence: "trader.mi_evidence",
   miTrial: "trader.mi_trial",
   miTrialIntegrity: "trader.mi_trial_integrity",
+  miConfidenceJudgment: "trader.mi_confidence_judgment",
 } as const;
 
 export type TraderEntityType = (typeof traderEntityTypes)[keyof typeof traderEntityTypes];
