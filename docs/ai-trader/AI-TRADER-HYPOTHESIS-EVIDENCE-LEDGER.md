@@ -26,7 +26,7 @@ LD-5a is the layer where AI-TRADER stops cataloguing structure and starts holdin
 
 **Why Hypothesis and Evidence are introduced together.** A Hypothesis is the cognitive atom (MI Architecture §7.1): a falsifiable, regime-scoped, relationship-typed claim with an explicit prior and a mandatory null set. It is meaningless without a substrate that records what argued for and against it. The Evidence Ledger is that "append-only, immutable spine" (§8). The two are distinct entities but one layer: the claim and the immutable record of its testing.
 
-LD-5a records **facts**; it never computes **interpretations**. Confidence is recorded human judgment, not a model. Trials are registered, never scored or enforced. False-discovery awareness is a count, never a rate. Every statistical model — decay curves, FDR rates, calibration scoring, eligibility verdicts — is deferred to the layer whose outcomes give it meaning.
+LD-5a records **facts** and **derived read-models explicitly ratified in this doctrine**; it never computes **interpretations** outside that boundary. Confidence is recorded human judgment, not a model. **Eligibility** (entry/allocation interlock) is a **derived read-model within LD-5a** (§5.3.2), not a downstream decision. Trials are registered, never scored or enforced. False-discovery awareness is a count, never a rate. Statistical models — decay curves, FDR rates, calibration scoring — remain deferred to the layers whose outcomes give them meaning.
 
 ---
 
@@ -181,7 +181,7 @@ The reason-set is the **closed list**: `{ NO_JUDGMENT, WITHDRAWN, EXPIRED, CITAT
 
 **On superseded hypothesis versions.** A Confidence Judgment pins one immutable hypothesis version and remains a valid statement about *that* version. The existence of a newer hypothesis version is a **Signal** (`NEWER_HYPOTHESIS_VERSION_AVAILABLE`), **not** a gating reason, until supersession displacement policy is ratified (Open Question #5).
 
-**Lifecycle as a declared input.** The Hypothesis-Lifecycle ledger is an explicit input to the eligibility derivation (via `LIFECYCLE_BLOCKED`). Directionality is **one-way**: a non-`ACTIVE` lifecycle forces `INELIGIBLE`; an `ACTIVE` lifecycle never implies `ELIGIBLE`.
+**Lifecycle as a declared input.** The Hypothesis-Lifecycle ledger is an explicit input to the eligibility derivation (via `LIFECYCLE_BLOCKED`). Directionality is **one-way**: `RETIRED` or `QUARANTINED` forces `INELIGIBLE` via `LIFECYCLE_BLOCKED`; `PROPOSED`, `VALIDATING`, `VALIDATED`, or `DECAYING` never implies `ELIGIBLE`.
 
 **Default and withdrawal.** `INSUFFICIENT_EVIDENCE` is **hybrid**: the **derived default** when no judgment has ever been recorded, **and** a **recordable attested judgment** when a human explicitly concludes evidence is insufficient (also serving as withdrawal of prior belief). The read-model must distinguish `INSUFFICIENT (never judged)` from `INSUFFICIENT (attested by human at T, citing evidence)`.
 
