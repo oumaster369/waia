@@ -228,3 +228,31 @@ export class MiTrialIntegritySeqConflictError extends Error {
     this.name = "MiTrialIntegritySeqConflictError";
   }
 }
+
+export class MiConfidenceJudgmentInputValidationError extends Error {
+  constructor(message = "MI_CONFIDENCE_JUDGMENT_INPUT_INVALID") {
+    super(message);
+    this.name = "MiConfidenceJudgmentInputValidationError";
+  }
+}
+
+export class MiConfidenceJudgmentAuthorizationError extends Error {
+  constructor(message = "MI_CONFIDENCE_JUDGMENT_UNAUTHORIZED") {
+    super(message);
+    this.name = "MiConfidenceJudgmentAuthorizationError";
+  }
+}
+
+export class MiConfidenceJudgmentRefError extends Error {
+  constructor(message = "MI_CONFIDENCE_JUDGMENT_REF_INVALID") {
+    super(message);
+    this.name = "MiConfidenceJudgmentRefError";
+  }
+}
+
+export class MiConfidenceJudgmentSeqConflictError extends Error {
+  constructor(message = "MI_CONFIDENCE_JUDGMENT_SEQ_CONFLICT") {
+    super(message);
+    this.name = "MiConfidenceJudgmentSeqConflictError";
+  }
+}

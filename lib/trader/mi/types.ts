@@ -32,6 +32,13 @@ import type {
   MiTrialIntegrityEvent,
 } from "@/lib/trader/mi/trial-integrity.types";
 import type {
+  MiConfidenceJudgment,
+  MiConfidenceJudgmentCitation,
+  MiConfidenceJudgmentKind,
+  MiConfidenceLevelV1,
+  RecordConfidenceJudgmentInput,
+} from "@/lib/trader/mi/confidence-judgment.types";
+import type {
   AppendPatternVersionInput,
   MiPattern,
   MiPatternKind,
@@ -541,4 +548,56 @@ export type MiTrialIntegrityServiceDeps = {
 export type InvalidateTrialServiceInput = InvalidateTrialInput & {
   actorType?: MiTrialIntegrityServiceDeps["actorType"];
   actorId?: string | null;
+};
+
+export type InsertConfidenceJudgmentRow = {
+  id: string;
+  hypothesisId: string;
+  hypothesisKey: string;
+  hypothesisDefinitionDigest: string;
+  level: MiConfidenceLevelV1 | null;
+  bandLow: MiConfidenceLevelV1 | null;
+  bandHigh: MiConfidenceLevelV1 | null;
+  confidenceScaleVersion: string | null;
+  judgmentKind: MiConfidenceJudgmentKind;
+  reviewHorizonAt: Date | null;
+  forCitationsJson: string;
+  eventTime: Date;
+  ingestTime: Date;
+  recordedBy: string;
+  seq: number;
+  contentDigest: string;
+  schemaVersion: string;
+  createdAt: Date;
+};
+
+export type MiConfidenceJudgmentRepository = {
+  getLatestJudgmentByKey: (
+    context: OrgContext,
+    hypothesisKey: string,
+  ) => Promise<MiConfidenceJudgment | null> | MiConfidenceJudgment | null;
+  listJudgmentsForHypothesisId: (
+    context: OrgContext,
+    hypothesisId: string,
+  ) => Promise<MiConfidenceJudgment[]> | MiConfidenceJudgment[];
+  listJudgmentsForHypothesisKey: (
+    context: OrgContext,
+    hypothesisKey: string,
+  ) => Promise<MiConfidenceJudgment[]> | MiConfidenceJudgment[];
+  insertJudgment: (
+    context: OrgContext,
+    row: InsertConfidenceJudgmentRow,
+  ) => Promise<MiConfidenceJudgment> | MiConfidenceJudgment;
+};
+
+export type MiConfidenceJudgmentServiceDeps = {
+  assertMembership?: (context: OrgContext & { userId: string }) => Promise<void> | void;
+  actorType?: "user" | "admin" | "agent" | "service" | "system";
+  actorId?: string | null;
+};
+
+export type RecordConfidenceJudgmentServiceInput = RecordConfidenceJudgmentInput & {
+  actorType?: MiConfidenceJudgmentServiceDeps["actorType"];
+  actorId?: string | null;
+  forCitations?: readonly MiConfidenceJudgmentCitation[];
 };

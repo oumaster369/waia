@@ -795,6 +795,55 @@ export const traderMiTrial = sqliteTable(
   ],
 );
 
+/** AI-TRADER MI: append-only Confidence Judgment ledger (DEE-293 / LD-5a.3a). */
+export const traderMiConfidenceJudgment = sqliteTable(
+  "trader_mi_confidence_judgment",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hypothesisId: text("hypothesis_id").notNull(), // composite FK enforced in migration SQL
+    hypothesisKey: text("hypothesis_key").notNull(),
+    hypothesisDefinitionDigest: text("hypothesis_definition_digest").notNull(),
+    level: text("level"),
+    bandLow: text("band_low"),
+    bandHigh: text("band_high"),
+    confidenceScaleVersion: text("confidence_scale_version"),
+    judgmentKind: text("judgment_kind").notNull(),
+    reviewHorizonAt: integer("review_horizon_at", { mode: "timestamp_ms" }),
+    forCitationsJson: text("for_citations_json").notNull(),
+    eventTime: integer("event_time", { mode: "timestamp_ms" }).notNull(),
+    ingestTime: integer("ingest_time", { mode: "timestamp_ms" }).notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_mi_confidence_judgment_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_confidence_judgment_org_key_seq_unique").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+    index("trader_mi_confidence_judgment_org_hypothesis_idx").on(t.organizationId, t.hypothesisId),
+    index("trader_mi_confidence_judgment_org_key_seq_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+    index("trader_mi_confidence_judgment_org_hypothesis_ingest_idx").on(
+      t.organizationId,
+      t.hypothesisId,
+      t.ingestTime,
+    ),
+  ],
+);
+
 export const traderMiTrialIntegrityEvent = sqliteTable(
   "trader_mi_trial_integrity_event",
   {

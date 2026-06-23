@@ -772,6 +772,53 @@ export const miTrialIntegrityReasonCodeEnumPg = pgEnum("mi_trial_integrity_reaso
   "provenance_gap",
 ]);
 
+/** AI-TRADER MI: append-only Confidence Judgment ledger (DEE-293 / LD-5a.3a). */
+export const traderMiConfidenceJudgment = pgTable(
+  "trader_mi_confidence_judgment",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hypothesisId: uuid("hypothesis_id").notNull(), // composite FK enforced in migration SQL
+    hypothesisKey: text("hypothesis_key").notNull(),
+    hypothesisDefinitionDigest: text("hypothesis_definition_digest").notNull(),
+    level: text("level"),
+    bandLow: text("band_low"),
+    bandHigh: text("band_high"),
+    confidenceScaleVersion: text("confidence_scale_version"),
+    judgmentKind: text("judgment_kind").notNull(),
+    reviewHorizonAt: timestamp("review_horizon_at", { withTimezone: true, mode: "date" }),
+    forCitationsJson: text("for_citations_json").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_confidence_judgment_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_confidence_judgment_org_key_seq_unique").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+    index("trader_mi_confidence_judgment_org_hypothesis_idx").on(t.organizationId, t.hypothesisId),
+    index("trader_mi_confidence_judgment_org_key_seq_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+    index("trader_mi_confidence_judgment_org_hypothesis_ingest_idx").on(
+      t.organizationId,
+      t.hypothesisId,
+      t.ingestTime,
+    ),
+  ],
+);
+
 /** AI-TRADER MI: append-only Trial Integrity invalidation ledger (DEE-291 / LD-5a.2c). */
 export const traderMiTrialIntegrityEvent = pgTable(
   "trader_mi_trial_integrity_event",
