@@ -26,6 +26,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 | 12 | [AI-TRADER Hypothesis + Evidence Ledger](AI-TRADER-HYPOTHESIS-EVIDENCE-LEDGER.md) | **Ratified doctrine** (LD-5a) — Hypothesis Registry + Evidence Ledger; subordinate + additive to the Market Intelligence Architecture (Knowledge Objects 5–6). |
 | 13 | [AI-TRADER Knowledge-to-Action Doctrine](AI-TRADER-KNOWLEDGE-TO-ACTION-DOCTRINE.md) | **Ratified doctrine** (KTA v1.0) — canonical bridge from the Knowledge Spine (LD-5a) to Trading Intelligence (Forecast LD-6, Decision LD-7); subordinate + additive to the Market Intelligence Architecture, peer of LD-5a. |
 | 14 | [AI-TRADER Forecast Doctrine](AI-TRADER-FORECAST-DOCTRINE.md) | **Ratified doctrine** (LD-6) — Forecast as the first probabilistic, pre-registered, immutable, scored prediction layer; distribution contract, horizon doctrine, accuracy ≠ profit, economic seam resolved as a Decision sub-evaluation; subordinate + additive to the Knowledge-to-Action Doctrine and the Market Intelligence Architecture. |
+| 15 | [AI-TRADER Decision Doctrine](AI-TRADER-DECISION-DOCTRINE.md) | **Ratified doctrine** (LD-7) — Decision as the Risk-bounded, economically-justified posture layer converting an eligible Forecast into intent (incl. do-nothing); Architecture B Economic Sub-Evaluation, Worldview consume-only, Decision Confidence as a bounded ordinal posture; subordinate + additive to the Forecast Doctrine, the Knowledge-to-Action Doctrine, and the Market Intelligence Architecture. |
 
 ---
 
