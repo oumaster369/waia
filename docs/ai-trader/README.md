@@ -24,6 +24,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 | 10 | [AI-TRADER User Journey v2](AI-TRADER-USER-JOURNEY-v2.md) | End-to-end user flow for the reconciled MVP. |
 | 11 | [AI-TRADER Market Intelligence Architecture](AI-TRADER-MARKET-INTELLIGENCE-ARCHITECTURE.md) | **Accepted doctrine** (2026-06-22) — knowledge-first Market Intelligence architecture; peer of the Grandmaster Framework, subordinate + additive to the Master Spec and ADRs. |
 | 12 | [AI-TRADER Hypothesis + Evidence Ledger](AI-TRADER-HYPOTHESIS-EVIDENCE-LEDGER.md) | **Ratified doctrine** (LD-5a) — Hypothesis Registry + Evidence Ledger; subordinate + additive to the Market Intelligence Architecture (Knowledge Objects 5–6). |
+| 13 | [AI-TRADER Knowledge-to-Action Doctrine](AI-TRADER-KNOWLEDGE-TO-ACTION-DOCTRINE.md) | **Ratified doctrine** (KTA v1.0) — canonical bridge from the Knowledge Spine (LD-5a) to Trading Intelligence (Forecast LD-6, Decision LD-7); subordinate + additive to the Market Intelligence Architecture, peer of LD-5a. |
 
 ---
 
