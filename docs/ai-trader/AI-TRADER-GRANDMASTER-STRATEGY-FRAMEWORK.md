@@ -465,7 +465,7 @@ WAIA has built the **right spine in the right order**: plumbing first (M7), gove
 
 ## Appendix C — Source documents
 
-- [AI-TRADER Vision](AI-TRADER-VISION.md) · [Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) · [MVP Scope v2](AI-TRADER-MVP-SCOPE-v2.md) · [Roadmap v2](AI-TRADER-ROADMAP-v2.md) · [Implementation Program v1.1](AI-TRADER-IMPLEMENTATION-PROGRAM.md)
+- [AI-TRADER Vision](AI-TRADER-VISION.md) · [Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) · [MVP Scope v2](AI-TRADER-MVP-SCOPE-v2.md) · [Roadmap v2](AI-TRADER-ROADMAP-v2.md) · [Implementation Program v1.2](AI-TRADER-IMPLEMENTATION-PROGRAM.md)
 - [ADR-0009 Regulatory posture](../adr/0009-regulatory-posture.md) · [ADR-0010 Strategy Validation Gate](../adr/0010-strategy-validation-gate.md) · [ADR-0011 Single Operator Governance Model](../adr/0011-single-operator-governance-model.md)
 - [DEE-170 48h Paper Soak Closure](../ops/DEE-170-48H-PAPER-SOAK-CLOSURE-REPORT.md) · [DEE-170 M7 Milestone Hygiene & Governance Review](../ops/DEE-170-M7-MILESTONE-HYGIENE-GOVERNANCE-REVIEW.md)
 - Code: `lib/trader/validation-gate/*` (promotion service, record types), `lib/trader/paper/*` (paper evaluation export), Risk Engine + MSV per Master Spec §8/§13.
