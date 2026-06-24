@@ -6,6 +6,8 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { buildDashboardViewModel } from "@/lib/dashboard/build-dashboard-model";
 import { loadDashboardPageDataForUser } from "@/lib/dashboard/dashboard-readiness-source";
+import { buildModuleUrl } from "@/lib/hosts/resolve";
+import { hasTraderAccessForUser } from "@/lib/trader/access-gate";
 import type { DashboardTwinDialogueInitialTurn } from "@/lib/dashboard/types";
 import type { TwinDialogueMemoryRow } from "@/lib/twin-persistence/loader";
 
@@ -29,6 +31,9 @@ export default async function DashboardPage() {
   }
 
   const { payload, dialogueTurns, diaryEntries } = await loadDashboardPageDataForUser(userId);
+  const traderEntryHref = (await hasTraderAccessForUser(userId))
+    ? buildModuleUrl("trader", "/trader")
+    : null;
   const initialTwinDialogueTurns: DashboardTwinDialogueInitialTurn[] = dialogueTurns
     .filter(isUserOrAssistantRole)
     .map((t) => ({ id: t.id, role: t.role, text: t.content }));
@@ -49,7 +54,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="bg-background flex min-h-screen w-full flex-col md:flex-row">
-      <DashboardSidebar identityLabel={model.identityLabel} />
+      <DashboardSidebar identityLabel={model.identityLabel} traderEntryHref={traderEntryHref} />
       <DashboardShell model={model} />
     </div>
   );
