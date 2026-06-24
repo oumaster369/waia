@@ -176,6 +176,13 @@
       "when": 1779900000000,
       "tag": "0024_trader_reporting_periods",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1780000000000,
+      "tag": "0025_trader_hwm_ledger",
+      "breakpoints": true
     }
   ]
 }
