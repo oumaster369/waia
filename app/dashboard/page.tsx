@@ -41,14 +41,14 @@ export default async function DashboardPage() {
     ...buildDashboardViewModel(
       payload.readinessInput,
       payload.twinSignals,
-      payload.identityLabel,
+      payload.displayName ?? payload.identityLabel,
       initialTwinDialogueTurns,
     ),
     initialDiaryEntries,
   };
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-background md:flex-row">
+    <div className="bg-background flex min-h-screen w-full flex-col md:flex-row">
       <DashboardSidebar identityLabel={model.identityLabel} />
       <DashboardShell model={model} />
     </div>
