@@ -24,6 +24,14 @@ This is a hard control, not optional. If **any** verification item fails, issuan
 
 The manual gate is one part of the broader **billing governance** defined in the Billing & HWM document (valuation-source, unrealized-PnL, dispute-handling, overcharge-remediation, and refund/credit policies). Sensitive billing actions — invoice issuance, waiver, and cancellation — are authorized under the **Single Operator Governance Model** ([ADR-0011](0011-single-operator-governance-model.md)): immutable audit, cooling-off, explicit confirmation, with corrections made by append-only entries rather than destructive edits.
 
+## Reinterpretation (LD-10 Closed Trade Reality Doctrine)
+
+The [LD-10 Closed Trade Reality Doctrine](../ai-trader/AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md) (ratified DEE-308) adds a **second, attribution-independent ground** for the manual gate's survival:
+
+- **Realized-fill finality.** Provisional fills can reverse, re-org, or be corrected by the venue after initial reporting ([LD-9 Reality Doctrine](../ai-trader/AI-TRADER-REALITY-DOCTRINE.md) §11 — finality semantics reserved). Until a Finality / Settlement doctrine ratifies automatic promotion of provisional → final, **no realized cashflow underlying Realized Strategy Profit may reach an issued invoice without human verification** that the closed trades are final.
+
+The **Decision above is unchanged.** Deposit/withdrawal attribution unreliability remains the original ground; realized-fill finality is an additional durable ground. Automation may replace the gate only after **both** attribution reliability **and** realized-fill finality semantics are demonstrated and signed off. The reviewer checklist gains a **realized-fill finality** verification item (Billing & HWM §7).
+
 ## Consequences
 
 + No client is billed on unverified numbers; disputes are prevented at the source.
@@ -34,5 +42,7 @@ Neutral: the fee formula and invoice lifecycle are unchanged; only the issuance 
 ## Links
 
 - [AI-TRADER Billing & HWM](../ai-trader/AI-TRADER-BILLING-HWM.md)
+- [AI-TRADER Closed Trade Reality Doctrine (LD-10)](../ai-trader/AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md)
+- [AI-TRADER Reality Doctrine (LD-9)](../ai-trader/AI-TRADER-REALITY-DOCTRINE.md)
 - [AI-TRADER Master Spec v2](../ai-trader/AI-TRADER-MASTER-SPEC-v2.md)
 - [ADR-0011 Single Operator Governance Model](0011-single-operator-governance-model.md)
