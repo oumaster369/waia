@@ -57,7 +57,7 @@ Four layers, one clean ownership split. The "is / is-not" boundary prevents resp
 | **Forecast (LD-6)** | **ACCURACY** — sealed distribution, bands, tails, horizon, invalidation, Forecast Confidence, calibration, conflicting-horizon view | eligible confidence (snapshot) | encode economics; pick a winning horizon; size; decide | sealed distribution + Forecast Confidence + conflict view, **by digest** |
 | **Decision (LD-7)** | **ACTIONABILITY** — arbitration (select/prioritize/decline), Economic Sub-Evaluation, posture, proposed `size_intent`, Decision Confidence, `whyNotCash` | Forecast (by digest), eligibility + reason-set + Signals, Worldview, market digests (PIT), envelope, cost/slippage/fee model versions | predict / blend / re-weight; re-calibrate; re-judge belief; clamp / veto / kill; allocate the book; carry execution mechanics | **intent record (sealed Decision Snapshot)** → L0 |
 | **Risk (L0–L6)** | **ENFORCEMENT** — policy validation gate (L0/DEE-178), envelope precondition (L1), clamp/veto/kill + concurrent-allocation enforcement (L2–L6) | intent record, Signals, eligibility, data-quality | re-judge belief; raise conviction | **risk-approved request only** |
-| **Execution** | **ORDERS** — order type, routing, timing, slicing, venue mechanics | risk-approved request | alter the economic posture | orders to venue |
+| **Execution** | **MECHANICS** — order type, routing, timing, slicing, venue mechanics | risk-approved request | alter the economic posture | orders to venue |
 
 ---
 
@@ -171,6 +171,7 @@ Decision owns **intent**; Execution owns **mechanics** (KTA §5: only Execution 
 - **[R9] Forbidden Decision fields.** A Decision Record may **never** carry: order type, limit/market instruction, routing, venue mechanics, TWAP / slicing, execution timing, or exchange-specific order mechanics.
 - **Decision outputs:** posture, rationale, proposed `size_intent` (intent only), and the intent record.
 - **No direct path.** There is **no direct Decision → Execution path.** Risk produces a **risk-approved request**; Execution derives the actual order mechanics. Execution must not alter the economic posture.
+- **[N-econ] Reserved economic dimension (acknowledgement only).** Routing, venue selection, timing, and slicing carry an economic dimension; ownership of that economic dimension is **not assigned here and remains reserved**. This note assigns no owner, creates no doctrine, and introduces no architecture — it records the open question, nothing more.
 
 ---
 
