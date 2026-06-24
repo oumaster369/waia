@@ -2,6 +2,7 @@
 
 Status: Baseline v1.2 (governing technical specification)
 Date: 2026-06-11
+Doctrine reconciliation: 2026-06-24 — documentation-only alignment of Risk verdict vocabulary, clamp wording, the allowance lifecycle, the reconciliation split, and Related Documents to the ratified [LD-6](AI-TRADER-FORECAST-DOCTRINE.md) / [LD-7](AI-TRADER-DECISION-DOCTRINE.md) / [LD-8](AI-TRADER-RISK-DOCTRINE.md) / [LD-9](AI-TRADER-REALITY-DOCTRINE.md) doctrines. No architecture, ownership, behavior, roadmap, or governance change.
 
 This is the re-anchored technical specification for AI-TRADER, aligned to Architecture Baseline v1.2 and the real WAIA codebase. It supersedes `AI_TRADER_MASTER_SPEC_v1_EN` wherever they disagree.
 
@@ -158,7 +159,7 @@ Central brain that aggregates the layers + account risk + strategy health + data
 - Strategies are **versioned** entities with a controlled lifecycle: `DRAFT → RESEARCHING → BACKTESTING → VALIDATED → PAPER_TRADING → LIVE_LIMITED → LIVE_FULL → PAUSED → RETIRED`.
 - **MVP strategies (exactly two):** Liquidity Sweep Reversal and Mean Reversion.
 - A strategy emits a **structured signal** (side, confidence, expected edge, horizon, max risk, reason codes, MSV reference, features reference). It must never place orders.
-- The Risk Engine approves, resizes, rejects, or transforms every signal before execution.
+- The Risk Engine applies a monotone-downward verdict to every signal before execution — it may approve, clamp downward, veto, restrict to close-only, or halt, and never raises size, conviction, or permission (see [Risk Doctrine (LD-8)](AI-TRADER-RISK-DOCTRINE.md)).
 
 ---
 
@@ -189,7 +190,8 @@ Central brain that aggregates the layers + account risk + strategy health + data
 
 - Enforces, before every order: max position per account/symbol, max strategy allocation, max daily loss, max monthly drawdown, max consecutive losses, max open orders, max exposure per quote currency, emergency stop, only-close mode, account-status restrictions, billing/payment restrictions, data-quality restrictions, strategy-health restrictions.
 - Enforces **security controls** as part of risk: symbol allowlist, max notional, max order rate, price collars (see [Security](AI-TRADER-SECURITY.md)).
-- Emits a `RiskDecision` (`APPROVE / RESIZE / REJECT / CLOSE_ONLY / STOP_ACCOUNT`) with reason codes and a risk snapshot.
+- Emits a `RiskDecision` from the closed, monotone-restrictive verdict set ratified in the [Risk Doctrine (LD-8)](AI-TRADER-RISK-DOCTRINE.md) (`APPROVE / APPROVE_CLAMPED / VETO / CLOSE_ONLY / HALT`) with reason codes and a risk snapshot.
+- A permitted verdict yields a **risk-approved request (allowance)**, not an order: it is **single-use, expiring, and revocable**, with a **consumption-time posture recheck** so a posture downgrade or kill between issuance and consumption refuses the order (two independent fail-closed paths). See [Risk Doctrine (LD-8)](AI-TRADER-RISK-DOCTRINE.md).
 - **Kill switches** at global / user / account / strategy / instrument levels, plus automatic triggers; enforced inside the execution service and **fail-closed**.
 
 ---
@@ -200,6 +202,7 @@ Central brain that aggregates the layers + account risk + strategy health + data
 - **Order state machine:** `CREATED → RISK_APPROVED → SENT_TO_EXCHANGE → ACCEPTED → PARTIALLY_FILLED → FILLED`, with `CANCEL_REQUESTED, CANCELLED, REJECTED, EXPIRED, FAILED, RECONCILIATION_REQUIRED`.
 - **Idempotency:** every order carries `client_order_id`, `idempotency_key`, `strategy_signal_id`, `risk_decision_id`, and `allocation_decision_id` (if applicable). Retries never create duplicate exposure.
 - **Recovery:** on startup, rebuild state from exchange + Supabase before resuming.
+- **Reconciliation spans two doctrine-separated concerns that never merge:** reconciliation-as-construction — building canonical post-execution truth (dedup + latest-event fold + record + mark) — is owned by the [Reality Doctrine (LD-9)](AI-TRADER-REALITY-DOCTRINE.md); reconciliation-as-enforcement — Expected-vs-Actual comparison, divergence/orphan marking, and fail-closed kill — is Risk L6 in the [Risk Doctrine (LD-8)](AI-TRADER-RISK-DOCTRINE.md).
 - Execution must never depend on the UI.
 
 ---
@@ -276,4 +279,8 @@ Mirror of the platform rules; see also [Security](AI-TRADER-SECURITY.md) §12 an
 - [AI-TRADER Billing & HWM](AI-TRADER-BILLING-HWM.md)
 - [AI-TRADER Security](AI-TRADER-SECURITY.md)
 - [AI-TRADER Integration](AI-TRADER-INTEGRATION.md)
+- [AI-TRADER Forecast Doctrine (LD-6)](AI-TRADER-FORECAST-DOCTRINE.md)
+- [AI-TRADER Decision Doctrine (LD-7)](AI-TRADER-DECISION-DOCTRINE.md)
+- [AI-TRADER Risk Doctrine (LD-8)](AI-TRADER-RISK-DOCTRINE.md)
+- [AI-TRADER Reality Doctrine (LD-9)](AI-TRADER-REALITY-DOCTRINE.md)
 - ADRs: [0005](../adr/0005-saas-as-superset-strategy.md), [0006](../adr/0006-ai-trader-repository-strategy.md), [0007](../adr/0007-targeted-rls-strategy.md), [0008](../adr/0008-manual-billing-gate.md), [0009](../adr/0009-regulatory-posture.md)
