@@ -367,6 +367,9 @@ export type StrategyTargetDeploymentState = (typeof strategyTargetDeploymentStat
 export const reportingPeriodStatusEnum = ["OPEN", "CLOSED"] as const;
 export type ReportingPeriodStatusDb = (typeof reportingPeriodStatusEnum)[number];
 
+export const hwmEntryTypeEnum = ["BOOTSTRAP", "RATCHET_UP", "ROLLBACK"] as const;
+export type HwmEntryTypeDb = (typeof hwmEntryTypeEnum)[number];
+
 export const miSourceStatusEnum = ["active", "deprecated"] as const;
 export type MiSourceStatusDb = (typeof miSourceStatusEnum)[number];
 
@@ -971,6 +974,41 @@ export const traderReportingPeriods = sqliteTable(
       t.organizationId,
       t.exchangeAccountId,
       t.periodStart,
+    ),
+  ],
+);
+
+/** AI-TRADER: per-account high-water mark append-only ledger (DEE-307 / AT-E11 S3). */
+export const traderHwmLedger = sqliteTable(
+  "trader_hwm_ledger",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    entryType: text("entry_type", { enum: [...hwmEntryTypeEnum] }).notNull(),
+    highWaterMark: text("high_water_mark").notNull(),
+    previousHighWaterMark: text("previous_high_water_mark"),
+    sourcePeriodId: text("source_period_id"),
+    sourceInvoiceId: text("source_invoice_id"),
+    valuationSource: text("valuation_source").notNull(),
+    effectiveAt: integer("effective_at", { mode: "timestamp_ms" }).notNull(),
+    reason: text("reason"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_hwm_ledger_org_account_effective_idx").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.effectiveAt,
     ),
   ],
 );

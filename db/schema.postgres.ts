@@ -366,6 +366,7 @@ export const strategyTargetDeploymentStateEnumPg = pgEnum("strategy_target_deplo
 ]);
 
 export const reportingPeriodStatusEnumPg = pgEnum("reporting_period_status", ["OPEN", "CLOSED"]);
+export const hwmEntryTypeEnumPg = pgEnum("hwm_entry_type", ["BOOTSTRAP", "RATCHET_UP", "ROLLBACK"]);
 
 export const miSourceStatusEnumPg = pgEnum("mi_source_status", ["active", "deprecated"]);
 
@@ -937,6 +938,37 @@ export const traderReportingPeriods = pgTable(
       t.organizationId,
       t.exchangeAccountId,
       t.periodStart,
+    ),
+  ],
+);
+
+/** AI-TRADER: per-account high-water mark append-only ledger (DEE-307 / AT-E11 S3). */
+export const traderHwmLedger = pgTable(
+  "trader_hwm_ledger",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    entryType: hwmEntryTypeEnumPg("entry_type").notNull(),
+    highWaterMark: text("high_water_mark").notNull(),
+    previousHighWaterMark: text("previous_high_water_mark"),
+    sourcePeriodId: text("source_period_id"),
+    sourceInvoiceId: text("source_invoice_id"),
+    valuationSource: text("valuation_source").notNull(),
+    effectiveAt: timestamp("effective_at", { withTimezone: true, mode: "date" }).notNull(),
+    reason: text("reason"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_hwm_ledger_org_account_effective_idx").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.effectiveAt,
     ),
   ],
 );
