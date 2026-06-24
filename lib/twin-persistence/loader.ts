@@ -1,8 +1,15 @@
 import "server-only";
 
-import { twinDialogueTurns, twinProfiles, twinReadinessState, users } from "@/db/schema";
+import {
+  twinDialogueTurns,
+  twinProfiles,
+  twinReadinessState,
+  users,
+} from "@/db/schema";
 import type { DashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-api.types";
-import { type TwinDialogueSignals } from "@/lib/dashboard/readiness-snapshot-default";
+import {
+  type TwinDialogueSignals,
+} from "@/lib/dashboard/readiness-snapshot-default";
 import { NULL_HINTS_BY_INDICATOR } from "@/lib/dashboard/null-hints";
 import { planDemoReadinessAdvancement } from "@/lib/readiness/demo-indicator-progression";
 import type { ReadinessDemoAdvanceResult } from "@/lib/readiness/readiness-demo-advance-types";
@@ -121,18 +128,16 @@ function appendTwinDialogueTurnInsideExecutor(
   const embeddingJson = serializeEmbeddingJson(embeddingVec);
   const embeddingModel = embeddingVec ? TWIN_MEMORY_EMBEDDING_MODEL_ID : null;
 
-  ex.insert(twinDialogueTurns)
-    .values({
-      id,
-      twinProfileId: params.twinProfileId,
-      sequence: nextSeq,
-      role: params.role,
-      content: params.content,
-      idempotencyKey: params.idempotencyKey ?? null,
-      embeddingJson,
-      embeddingModel,
-    })
-    .run();
+  ex.insert(twinDialogueTurns).values({
+    id,
+    twinProfileId: params.twinProfileId,
+    sequence: nextSeq,
+    role: params.role,
+    content: params.content,
+    idempotencyKey: params.idempotencyKey ?? null,
+    embeddingJson,
+    embeddingModel,
+  }).run();
 
   const row = ex
     .select({
@@ -289,7 +294,10 @@ export async function appendTwinDialogueTurn(
   await appendTwinDialogueTurnResult(db, params);
 }
 
-export async function countUserDialogueTurns(db: WaiaDb, twinProfileId: string): Promise<number> {
+export async function countUserDialogueTurns(
+  db: WaiaDb,
+  twinProfileId: string,
+): Promise<number> {
   const rows = await db
     .select({ c: sql<number>`count(*)`.mapWith(Number) })
     .from(twinDialogueTurns)

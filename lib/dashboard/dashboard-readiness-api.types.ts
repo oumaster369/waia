@@ -1,4 +1,8 @@
-import type { IndicatorKey, ReadinessInput, ReadinessResult } from "@/lib/readiness/types";
+import type {
+  IndicatorKey,
+  ReadinessInput,
+  ReadinessResult,
+} from "@/lib/readiness/types";
 
 import type { TwinDialogueSignals } from "@/lib/dashboard/readiness-snapshot-default";
 
