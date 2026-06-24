@@ -125,9 +125,12 @@ The Sidebar contains exactly three items, in this order:
 
 ### 6.3 Negative scope (Sidebar must not contain)
 
+> Reconciliation note (erratum): the AI-TRADER bullet below was amended to align this v1 spec with the later-ratified AI-TRADER entry-point architecture — AI-TRADER Integration Baseline v1.2 (../ai-trader/AI-TRADER-INTEGRATION.md) §1.2 and WAIA Core Architecture Baseline v1.2 (../waia-core/WAIA-CORE-ARCHITECTURE.md) §5.2, both dated 2026-06-11, which postdate this document (2026-05-03). This is a documentation reconciliation only: no AI-Twin v1 scope, sidebar architecture, mode-tab architecture, readiness semantics, or state-machine semantics change.
+
 - Mode navigation. The Twin / Diary / Society navigation lives in Mode Tabs (Section 8), not in the Sidebar.
 - Settings, account management, billing, or notifications. These are not part of AI-Twin v1.
-- Links to Business, AI-Trader, or AI-Marketplace. Those are different WAIA modules and out of scope for AI-Twin v1.
+- Links to Business or AI-Marketplace. Those modules are not reachable in this milestone and remain out of scope for the AI-Twin v1 shell.
+- AI-TRADER entry is the single permitted exception, and is entitlement-gated. A cross-module AI-TRADER entry affordance MAY appear in the Sidebar only when the user's organization holds the Core `trader` entitlement (per [WAIA Core Architecture §5.2](../waia-core/WAIA-CORE-ARCHITECTURE.md) and [AI-TRADER Integration §1.2](../ai-trader/AI-TRADER-INTEGRATION.md)). When the entitlement is absent, the affordance is not rendered. This affordance is navigation only: it introduces no AI-Twin mode, indicator, setting, or state, and alters no region defined in Sections 7–11.
 - Any progress, indicator, or unlock signal. Those live in Top Block and Mode Tabs.
 
 ## 7. Region 2 — Top Block
