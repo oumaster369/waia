@@ -260,6 +260,20 @@
       "when": 1779800000002,
       "tag": "0036_trader_mi_confidence_judgment_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1779900000001,
+      "tag": "0037_trader_reporting_periods",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1779900000002,
+      "tag": "0038_trader_reporting_periods_rls",
+      "breakpoints": true
     }
   ]
 }

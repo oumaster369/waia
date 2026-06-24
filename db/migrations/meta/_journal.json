@@ -169,6 +169,13 @@
       "when": 1779800000000,
       "tag": "0023_trader_mi_confidence_judgment",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1779900000000,
+      "tag": "0024_trader_reporting_periods",
+      "breakpoints": true
     }
   ]
 }

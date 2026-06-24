@@ -365,6 +365,8 @@ export const strategyTargetDeploymentStateEnumPg = pgEnum("strategy_target_deplo
   "LIVE_LIMITED",
 ]);
 
+export const reportingPeriodStatusEnumPg = pgEnum("reporting_period_status", ["OPEN", "CLOSED"]);
+
 export const miSourceStatusEnumPg = pgEnum("mi_source_status", ["active", "deprecated"]);
 
 /** AI-TRADER MI: org-scoped market intelligence source registry (DEE-279 / LD-2a). */
@@ -896,6 +898,45 @@ export const traderStrategyPromotionRecords = pgTable(
       t.organizationId,
       t.strategyId,
       t.state,
+    ),
+  ],
+);
+
+/** AI-TRADER: billing reporting period valued-input record (DEE-305 / AT-E11 S1). */
+export const traderReportingPeriods = pgTable(
+  "trader_reporting_periods",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    periodStart: timestamp("period_start", { withTimezone: true, mode: "date" }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true, mode: "date" }),
+    startingEquity: text("starting_equity").notNull(),
+    endingEquity: text("ending_equity"),
+    openPositionsSnapshotRef: text("open_positions_snapshot_ref").notNull().default(""),
+    realizedPnl: text("realized_pnl"),
+    unrealizedPnl: text("unrealized_pnl"),
+    netDeposits: text("net_deposits").notNull().default("0"),
+    netWithdrawals: text("net_withdrawals").notNull().default("0"),
+    valuationSource: text("valuation_source").notNull(),
+    startingSnapshotAt: timestamp("starting_snapshot_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endingSnapshotAt: timestamp("ending_snapshot_at", { withTimezone: true, mode: "date" }),
+    schemaVersion: text("schema_version").notNull(),
+    status: reportingPeriodStatusEnumPg("status").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_reporting_periods_org_account_start_idx").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.periodStart,
     ),
   ],
 );
