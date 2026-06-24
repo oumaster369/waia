@@ -364,6 +364,9 @@ export type PromotionGovernanceState = (typeof promotionGovernanceStateEnum)[num
 export const strategyTargetDeploymentStateEnum = ["LIVE_LIMITED"] as const;
 export type StrategyTargetDeploymentState = (typeof strategyTargetDeploymentStateEnum)[number];
 
+export const reportingPeriodStatusEnum = ["OPEN", "CLOSED"] as const;
+export type ReportingPeriodStatusDb = (typeof reportingPeriodStatusEnum)[number];
+
 export const miSourceStatusEnum = ["active", "deprecated"] as const;
 export type MiSourceStatusDb = (typeof miSourceStatusEnum)[number];
 
@@ -928,6 +931,46 @@ export const traderStrategyPromotionRecords = sqliteTable(
       t.organizationId,
       t.strategyId,
       t.state,
+    ),
+  ],
+);
+
+/** AI-TRADER: billing reporting period valued-input record (DEE-305 / AT-E11 S1). */
+export const traderReportingPeriods = sqliteTable(
+  "trader_reporting_periods",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    periodStart: integer("period_start", { mode: "timestamp_ms" }).notNull(),
+    periodEnd: integer("period_end", { mode: "timestamp_ms" }),
+    startingEquity: text("starting_equity").notNull(),
+    endingEquity: text("ending_equity"),
+    openPositionsSnapshotRef: text("open_positions_snapshot_ref").notNull().default(""),
+    realizedPnl: text("realized_pnl"),
+    unrealizedPnl: text("unrealized_pnl"),
+    netDeposits: text("net_deposits").notNull().default("0"),
+    netWithdrawals: text("net_withdrawals").notNull().default("0"),
+    valuationSource: text("valuation_source").notNull(),
+    startingSnapshotAt: integer("starting_snapshot_at", { mode: "timestamp_ms" }).notNull(),
+    endingSnapshotAt: integer("ending_snapshot_at", { mode: "timestamp_ms" }),
+    schemaVersion: text("schema_version").notNull(),
+    status: text("status", { enum: [...reportingPeriodStatusEnum] }).notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_reporting_periods_org_account_start_idx").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.periodStart,
     ),
   ],
 );
