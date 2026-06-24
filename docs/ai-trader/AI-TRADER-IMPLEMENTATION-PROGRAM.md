@@ -35,6 +35,16 @@ Program v1.1 reconciled to the ratified Knowledge-to-Action doctrines — [LD-6 
 
 ---
 
+## Changes from v1.2 (LD-10 Doctrine Reconciliation)
+
+Program v1.2 reconciled to the ratified [LD-10 Closed Trade Reality Doctrine](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md) (DEE-308). The reconciliation is **documentation-only**; it adds a clarifying note to AT-E11 in [Section 4](#section-4--ai-trader-program-epic-detail) and changes nothing structural:
+
+1. **AT-E11 doctrine note (LD-10)** — fee computation (S4) must use Realized Strategy Profit and cumulative net realized strategy profit HWM per LD-10; unrealized PnL is audit-only; manual gate checklist extended with realized-fill finality (ADR-0008 reinterpretation).
+
+**Unchanged:** program structure, epic set, critical path, milestones, dependency graph, and every accepted decision.
+
+---
+
 ## SECTION 1 — Executive Program Assessment
 
 - **Implementation complexity — High (8/10):** two programs (Core + Trader), a long-running off-Cloudflare runtime class, financial correctness (HWM/billing), trade-capable secrets, and a 21-epic critical path. Each piece is tractable; the integration surface makes it high.
@@ -281,6 +291,7 @@ Program A runs under live-migration discipline (migration planning, rollback, AI
   - **Doctrine note (Forecast+Decision collapse):** the paper loop's "Signal" stage carries the same accepted [LD-6 Forecast](AI-TRADER-FORECAST-DOCTRINE.md) + [LD-7 Decision](AI-TRADER-DECISION-DOCTRINE.md) collapse as AT-E6; the loop consumes one collapsed signal artifact, not separate Forecast and Decision records.
 - **AT-E10 Live Execution Hardening (Org 0)** — Admin-gated live HTX spot for Org 0; hardened host + managed key. **Each strategy must pass the Strategy Validation Gate (ADR-0010) first.** Deps: AT-E9, **Strategy Validation Gate**, AT-E14, AT-E13. Complexity: L. Risk: **Very High** — real capital.
 - **AT-E11 Reporting, HWM & Billing** — Periods, HWM, deposit/withdrawal adjustment, fee, manual gate, and billing governance policies (valuation/unrealized/dispute/overcharge/refund). Deps: AT-E9 (paper PnL). Complexity: L. Risk: High — financial correctness/disputes.
+  - **Doctrine note (LD-10 Closed Trade Reality):** fee computation (S4) must use **Realized Strategy Profit** (closed-trade realized PnL net of trading costs) as the fee base and **cumulative net realized strategy profit** as the HWM ratchet — per [LD-10](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md). Unrealized PnL is captured for audit/transparency only, never fee-bearing. Manual gate checklist (ADR-0008) extended with **realized-fill finality** verification (LD-10 RC2). MVP HWM ledger (DEE-307) operates per-account; doctrine semantics are strategy-scoped (account≈strategy for Org-0).
 - **AT-E12 Crypto Payments & Suspension** — Unique-address USDT TRC-20 attribution + lifecycle. Deps: AT-E11. Complexity: M. Risk: High.
 - **AT-E13 Administration & Oversight** — Cross-module admin + kill-switch + Single Operator Governance for sensitive actions. Deps: AT-E1, AT-E5, AT-E7, WC-E5. Complexity: M. Risk: Med.
 - **AT-E14 Security & Secrets** — Managed key, residency minimization, security assurance. **Key Management is a prerequisite of AT-E2 real-credential storage.** Deps: AT-E2 (connector), but Key Management precedes any real credential. Complexity: M–L. Risk: High — highest-value assets.
