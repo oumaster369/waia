@@ -27,6 +27,7 @@ import { parseIndicatorVector } from "@/lib/readiness/readiness";
 import type { ReadinessInput } from "@/lib/readiness/types";
 import * as pgSchema from "@/db/schema.postgres";
 import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import { getProfileForUserPostgres } from "@/lib/waia-core/profiles/postgres";
 import {
   ReadinessSerializationError,
   type AppendTwinDialogueTurnResult,
@@ -716,10 +717,14 @@ async function loadDashboardReadinessPayloadFromDbPg(
     hasMeaningfulExchange: userTurnCount > 0,
   };
 
+  const profile = await getProfileForUserPostgres(db, userId);
+  const displayName = profile?.displayName ?? row.identityLabel;
+
   return {
     readinessInput,
     twinSignals,
     identityLabel: row.identityLabel,
+    displayName,
     hintsByIndicator: NULL_HINTS_BY_INDICATOR,
   };
 }

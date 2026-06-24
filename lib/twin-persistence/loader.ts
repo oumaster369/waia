@@ -1,15 +1,8 @@
 import "server-only";
 
-import {
-  twinDialogueTurns,
-  twinProfiles,
-  twinReadinessState,
-  users,
-} from "@/db/schema";
+import { twinDialogueTurns, twinProfiles, twinReadinessState, users } from "@/db/schema";
 import type { DashboardReadinessPayload } from "@/lib/dashboard/dashboard-readiness-api.types";
-import {
-  type TwinDialogueSignals,
-} from "@/lib/dashboard/readiness-snapshot-default";
+import { type TwinDialogueSignals } from "@/lib/dashboard/readiness-snapshot-default";
 import { NULL_HINTS_BY_INDICATOR } from "@/lib/dashboard/null-hints";
 import { planDemoReadinessAdvancement } from "@/lib/readiness/demo-indicator-progression";
 import type { ReadinessDemoAdvanceResult } from "@/lib/readiness/readiness-demo-advance-types";
@@ -24,6 +17,7 @@ import {
 import { and, desc, eq, sql } from "drizzle-orm";
 import { type WaiaDb } from "@/db/types";
 import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
+import { getProfileForUserSqlite } from "@/lib/waia-core/profiles/sqlite";
 import { ensureUserTwinSeed } from "./user-twin-seed";
 
 export type { WaiaDb, WaiaSqliteDb } from "@/db/types";
@@ -127,16 +121,18 @@ function appendTwinDialogueTurnInsideExecutor(
   const embeddingJson = serializeEmbeddingJson(embeddingVec);
   const embeddingModel = embeddingVec ? TWIN_MEMORY_EMBEDDING_MODEL_ID : null;
 
-  ex.insert(twinDialogueTurns).values({
-    id,
-    twinProfileId: params.twinProfileId,
-    sequence: nextSeq,
-    role: params.role,
-    content: params.content,
-    idempotencyKey: params.idempotencyKey ?? null,
-    embeddingJson,
-    embeddingModel,
-  }).run();
+  ex.insert(twinDialogueTurns)
+    .values({
+      id,
+      twinProfileId: params.twinProfileId,
+      sequence: nextSeq,
+      role: params.role,
+      content: params.content,
+      idempotencyKey: params.idempotencyKey ?? null,
+      embeddingJson,
+      embeddingModel,
+    })
+    .run();
 
   const row = ex
     .select({
@@ -293,10 +289,7 @@ export async function appendTwinDialogueTurn(
   await appendTwinDialogueTurnResult(db, params);
 }
 
-export async function countUserDialogueTurns(
-  db: WaiaDb,
-  twinProfileId: string,
-): Promise<number> {
+export async function countUserDialogueTurns(db: WaiaDb, twinProfileId: string): Promise<number> {
   const rows = await db
     .select({ c: sql<number>`count(*)`.mapWith(Number) })
     .from(twinDialogueTurns)
@@ -415,10 +408,14 @@ export async function loadDashboardReadinessPayloadFromDb(
     hasMeaningfulExchange: userTurnCount > 0,
   };
 
+  const profile = getProfileForUserSqlite(db, userId);
+  const displayName = profile?.displayName ?? row.identityLabel;
+
   return {
     readinessInput,
     twinSignals,
     identityLabel: row.identityLabel,
+    displayName,
     hintsByIndicator: NULL_HINTS_BY_INDICATOR,
   };
 }
