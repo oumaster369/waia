@@ -31,7 +31,7 @@ Module/platform architecture (the "how it's built" canon, distinct from governan
 | WAIA Core Architecture (shared platform — identity, tenancy, entitlements, payments, audit; wins on conflict) | [`docs/waia-core/WAIA-CORE-ARCHITECTURE.md`](docs/waia-core/WAIA-CORE-ARCHITECTURE.md) |
 | AI-TRADER corpus (index → vision, master spec, scope, roadmap, program, security, billing, integration, journey) | [`docs/ai-trader/README.md`](docs/ai-trader/README.md) |
 | AI-TRADER Master Spec v2 (governing technical spec) | [`docs/ai-trader/AI-TRADER-MASTER-SPEC-v2.md`](docs/ai-trader/AI-TRADER-MASTER-SPEC-v2.md) |
-| AI-TRADER Implementation Program v1.1 (execution blueprint → Linear) | [`docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md`](docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md) |
+| AI-TRADER Implementation Program v1.2 (execution blueprint → Linear) | [`docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md`](docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md) |
 | ADR corpus (AI-TRADER decisions = ADR-0005 … ADR-0011) | [`docs/adr/README.md`](docs/adr/README.md) |
 
 ---

@@ -17,7 +17,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 | 3 | [AI-TRADER Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) | **Governing technical specification** (architecture + contracts; no code). |
 | 4 | [AI-TRADER MVP Scope v2](AI-TRADER-MVP-SCOPE-v2.md) | What is IN / OUT (HTX-only, spot-only, paper-first). |
 | 5 | [AI-TRADER Roadmap v2](AI-TRADER-ROADMAP-v2.md) | Governing build sequence (Core uplift first, safety spine pulled forward). |
-| 6 | [AI-TRADER Implementation Program](AI-TRADER-IMPLEMENTATION-PROGRAM.md) | **Program v1.1** — execution blueprint (Milestones / Epics / Feature Groups) that drives Linear. |
+| 6 | [AI-TRADER Implementation Program](AI-TRADER-IMPLEMENTATION-PROGRAM.md) | **Program v1.2** — execution blueprint (Milestones / Epics / Feature Groups) that drives Linear. |
 | 7 | [AI-TRADER Security](AI-TRADER-SECURITY.md) | Binding security model (credentials, key management, kill switches, audit). |
 | 8 | [AI-TRADER Billing & HWM](AI-TRADER-BILLING-HWM.md) | Single source of truth for fees / high-water mark. |
 | 9 | [AI-TRADER Integration](AI-TRADER-INTEGRATION.md) | Relationships with Core, AI-TWIN, future modules. |
@@ -36,10 +36,10 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 
 - **Governing technical spec:** [AI-TRADER Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) (Baseline v1.2).
 - **Platform foundation (wins on conflict):** [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md).
-- **Execution blueprint:** [AI-TRADER Implementation Program v1.1](AI-TRADER-IMPLEMENTATION-PROGRAM.md).
+- **Execution blueprint:** [AI-TRADER Implementation Program v1.2](AI-TRADER-IMPLEMENTATION-PROGRAM.md).
 - **Decisions:** [ADR index](../adr/README.md) — AI-TRADER spans **[ADR-0005](../adr/0005-saas-as-superset-strategy.md) … [ADR-0011](../adr/0011-single-operator-governance-model.md)**.
 - **Subject owners:** [Security](AI-TRADER-SECURITY.md), [Billing & HWM](AI-TRADER-BILLING-HWM.md).
 
 ## Baseline
 
-All documents in this folder are anchored to **Architecture Baseline v1.2** (2026-06-11). The Implementation Program is **v1.1** (derived from Baseline v1.2). Where a v1 document is referenced (e.g. legacy specs/roadmaps), the v2 / Baseline-v1.2 document supersedes it.
+All documents in this folder are anchored to **Architecture Baseline v1.2** (2026-06-11). The Implementation Program is **v1.2** (derived from Baseline v1.2; v1.1 plus the LD-6…LD-9 doctrine reconciliation). Where a v1 document is referenced (e.g. legacy specs/roadmaps), the v2 / Baseline-v1.2 document supersedes it.
