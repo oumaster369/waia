@@ -22,11 +22,17 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import {
   auditActorTypeEnum,
   organizationKindEnum,
   organizationMemberRoleEnum,
+  paymentDirectionEnum,
+  paymentEventTypeEnum,
+  paymentFailureReasonEnum,
+  paymentStatusEnum,
+  paymentSubjectModuleEnum,
   platformRoleEnum,
   subscriptionStatusEnum,
   waiaModuleEnum,
@@ -48,6 +54,16 @@ export const platformRoleEnumPg = pgEnum("platform_role", [...platformRoleEnum])
 export const waiaModuleEnumPg = pgEnum("waia_module", [...waiaModuleEnum]);
 export const subscriptionStatusEnumPg = pgEnum("subscription_status", [...subscriptionStatusEnum]);
 export const auditActorTypeEnumPg = pgEnum("audit_actor_type", [...auditActorTypeEnum]);
+
+export const paymentEventTypeEnumPg = pgEnum("payment_event_type", [...paymentEventTypeEnum]);
+export const paymentDirectionEnumPg = pgEnum("payment_direction", [...paymentDirectionEnum]);
+export const paymentSubjectModuleEnumPg = pgEnum("payment_subject_module", [
+  ...paymentSubjectModuleEnum,
+]);
+export const paymentFailureReasonEnumPg = pgEnum("payment_failure_reason", [
+  ...paymentFailureReasonEnum,
+]);
+export const paymentStatusEnumPg = pgEnum("payment_status", [...paymentStatusEnum]);
 
 /**
  * Application user row in `public.users`.
@@ -183,6 +199,85 @@ export const auditLogs = pgTable(
   (t) => [
     index("audit_logs_org_created_idx").on(t.organizationId, t.createdAt),
     index("audit_logs_entity_idx").on(t.entityType, t.entityId),
+  ],
+);
+
+/** WAIA Core: append-only payment event ledger (AT-E12 S1 / DEE-312). */
+export const paymentEvents = pgTable(
+  "payment_events",
+  {
+    id: uuid("id").primaryKey(),
+    paymentId: uuid("payment_id").notNull(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: paymentEventTypeEnumPg("event_type").notNull(),
+    direction: paymentDirectionEnumPg("direction").notNull(),
+    subjectModule: paymentSubjectModuleEnumPg("subject_module").notNull(),
+    subjectInvoiceId: text("subject_invoice_id"),
+    idempotencyKey: text("idempotency_key"),
+    reason: paymentFailureReasonEnumPg("reason"),
+    settlementNetwork: text("settlement_network"),
+    settlementAsset: text("settlement_asset"),
+    settlementAmount: text("settlement_amount"),
+    settlementTxHash: text("settlement_tx_hash"),
+    transferIndex: integer("transfer_index"),
+    confirmationsRequired: integer("confirmations_required"),
+    confirmationsObserved: integer("confirmations_observed"),
+    blockHeight: text("block_height"),
+    observedAt: timestamp("observed_at", { withTimezone: true, mode: "date" }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true, mode: "date" }),
+    valuedAmountUsd: text("valued_amount_usd"),
+    valuationSource: text("valuation_source"),
+    valuationAt: timestamp("valuation_at", { withTimezone: true, mode: "date" }),
+    evidenceRef: text("evidence_ref"),
+    paymentAddressId: uuid("payment_address_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("payment_events_payment_id_seq_unique").on(t.paymentId, t.seq),
+    uniqueIndex("payment_events_org_idempotency_unique")
+      .on(t.organizationId, t.idempotencyKey)
+      .where(sql`"idempotency_key" IS NOT NULL`),
+    uniqueIndex("payment_events_settlement_attribution_unique")
+      .on(t.settlementNetwork, t.settlementTxHash, t.transferIndex)
+      .where(sql`"settlement_tx_hash" IS NOT NULL`),
+    index("payment_events_org_payment_idx").on(t.organizationId, t.paymentId),
+    index("payment_events_subject_idx").on(t.subjectModule, t.subjectInvoiceId),
+  ],
+);
+
+/** WAIA Core: rebuildable payment current-state projection (AT-E12 S1 / DEE-312). */
+export const payments = pgTable(
+  "payments",
+  {
+    paymentId: uuid("payment_id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    status: paymentStatusEnumPg("status").notNull(),
+    direction: paymentDirectionEnumPg("direction").notNull(),
+    subjectModule: paymentSubjectModuleEnumPg("subject_module").notNull(),
+    subjectInvoiceId: text("subject_invoice_id"),
+    settlementAmount: text("settlement_amount"),
+    settlementAsset: text("settlement_asset"),
+    settlementNetwork: text("settlement_network"),
+    settlementTxHash: text("settlement_tx_hash"),
+    transferIndex: integer("transfer_index"),
+    valuedAmountUsd: text("valued_amount_usd"),
+    valuationSource: text("valuation_source"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("payments_org_status_idx").on(t.organizationId, t.status),
+    index("payments_subject_idx").on(t.subjectModule, t.subjectInvoiceId),
   ],
 );
 
