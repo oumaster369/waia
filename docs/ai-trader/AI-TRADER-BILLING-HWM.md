@@ -22,7 +22,7 @@ The payer identity and crypto payment ledger are **WAIA Core shared infrastructu
 
 - The HWM is tracked **per exchange account** (MVP operational scope; doctrine semantics are strategy-scoped — see [LD-10 §5](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md)).
 - The HWM is **cumulative net realized strategy profit** — the running total of Realized Strategy Profit ratcheted upward only (LD-10 RC5). Unrealized marks do not move the HWM.
-- A performance fee accrues only when the period's **Realized Strategy Profit** exceeds the previous HWM **after** adjusting for client deposits and withdrawals.
+- A performance fee accrues only when **cumulative Realized Strategy Profit** exceeds the previous HWM. Under [LD-10 RC3](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md), `deposit_adjustment = 0` — deposits and withdrawals do not enter the fee base (stored for audit and manual gate only).
 - The HWM is updated only on period close, **after** invoice rules are satisfied — never intra-period and never before issuance rules are met.
 - The HWM never decreases due to losses; clients must recover prior realized drawdowns before new fees apply.
 
@@ -46,7 +46,7 @@ Deposits and withdrawals must be neutralized so the client is never charged for 
 
 ```text
 realized_strategy_profit     = sum of closed-trade realized PnL net of trading costs (LD-10 RC3)
-new_profit_above_hwm         = max(cumulative_realized_profit - previous_hwm - deposit_adjustment, 0)
+new_profit_above_hwm         = max(cumulative_realized_profit - previous_hwm, 0)   # deposit_adjustment = 0 under LD-10 RC3
 performance_fee              = new_profit_above_hwm * 0.30
 ```
 
