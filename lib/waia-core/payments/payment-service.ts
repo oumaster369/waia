@@ -10,6 +10,17 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { runWaiaPostgresTransaction } from "@/db/waia-postgres-transaction";
 import { writeAuditLogPostgres, writeAuditLogSqlite } from "@/lib/waia-core/audit/write";
 import {
+  AddressNotFoundError,
+  AddressOrgOwnershipMismatchError,
+  isAddressActiveForAttribution,
+} from "@/lib/waia-core/payment-addresses";
+import type { PaymentAddressAttributionReader } from "@/lib/waia-core/payments/payment-address-attribution.port";
+import {
+  createPostgresPaymentAddressAttributionReader,
+  createSqlitePaymentAddressAttributionReader,
+} from "@/lib/waia-core/payments/payment-address-attribution.port";
+import {
+  PaymentAddressNotAttributableError,
   PaymentAttributionRequiredError,
   PaymentNotFoundError,
   PaymentSettlementAlreadyAttributedError,
@@ -67,6 +78,7 @@ export type FailPaymentInput = {
 export type PaymentServiceDeps = {
   eventsRepository: PaymentEventsRepository;
   projectionRepository: PaymentsProjectionRepository;
+  addressAttributionReader?: PaymentAddressAttributionReader;
   writeAudit: (input: AuditLogInput) => string | Promise<string>;
   assertMembership?: (context: OrgContext & { userId: string }) => void | Promise<void>;
   runAtomic?: <T>(fn: (deps: PaymentServiceDeps) => Promise<T>) => Promise<T>;
@@ -119,6 +131,7 @@ async function appendEventAndProjection(
   context: OrgContext,
   auditAction: AuditLogInput["action"],
   payloadInput: Parameters<typeof buildPaymentEventRecordPayload>[0],
+  extraMetadata?: Record<string, unknown>,
 ): Promise<{ event: PaymentEventRecordView; projection: PaymentProjectionView }> {
   const payload = buildPaymentEventRecordPayload(payloadInput);
   const event = await deps.eventsRepository.insertEvent(context, { payload });
@@ -135,6 +148,7 @@ async function appendEventAndProjection(
       eventType: payload.eventType,
       seq: payload.seq,
       recordContentDigest: payload.recordContentDigest,
+      ...extraMetadata,
     }),
   );
   return { event, projection: savedProjection };
@@ -206,6 +220,41 @@ export function createPaymentService(deps: PaymentServiceDeps): PaymentService {
         throw new PaymentAttributionRequiredError(input.paymentId);
       }
 
+      let confirmAuditMetadata: Record<string, unknown> | undefined;
+      if (paymentAddressId) {
+        if (!deps.addressAttributionReader) {
+          throw new Error("[waia-core] payment address attribution reader not configured");
+        }
+
+        const address = await deps.addressAttributionReader.getAddressForAttribution(
+          scoped,
+          paymentAddressId,
+        );
+        if (!address) {
+          throw new AddressNotFoundError(paymentAddressId);
+        }
+        if (address.organizationId !== scoped.organizationId) {
+          throw new AddressOrgOwnershipMismatchError(
+            paymentAddressId,
+            scoped.organizationId,
+            address.organizationId,
+          );
+        }
+        if (!isAddressActiveForAttribution(address.status)) {
+          throw new PaymentAddressNotAttributableError(
+            input.paymentId,
+            paymentAddressId,
+            address.status,
+          );
+        }
+
+        confirmAuditMetadata = {
+          paymentAddressId,
+          addressStatus: address.status,
+          addressValidated: true,
+        };
+      }
+
       const existingAttribution = await deps.eventsRepository.findBySettlementAttribution(
         input.settlement.settlementNetwork,
         input.settlement.settlementTxHash,
@@ -220,20 +269,26 @@ export function createPaymentService(deps: PaymentServiceDeps): PaymentService {
       }
 
       return runAtomic(async (atomicDeps) =>
-        appendEventAndProjection(atomicDeps, scoped, paymentAuditActions.paymentConfirmed, {
-          organizationId: scoped.organizationId,
-          paymentId: input.paymentId,
-          seq: current.lastEventSeq + 1,
-          eventType: "CONFIRMED",
-          direction: current.direction,
-          subjectModule: current.subjectModule,
-          subjectInvoiceId,
-          idempotencyKey: null,
-          reason: null,
-          paymentAddressId,
-          settlement: input.settlement,
-          prevEventDigest: current.lastEventDigest,
-        }).then(({ projection }) => projection),
+        appendEventAndProjection(
+          atomicDeps,
+          scoped,
+          paymentAuditActions.paymentConfirmed,
+          {
+            organizationId: scoped.organizationId,
+            paymentId: input.paymentId,
+            seq: current.lastEventSeq + 1,
+            eventType: "CONFIRMED",
+            direction: current.direction,
+            subjectModule: current.subjectModule,
+            subjectInvoiceId,
+            idempotencyKey: null,
+            reason: null,
+            paymentAddressId,
+            settlement: input.settlement,
+            prevEventDigest: current.lastEventDigest,
+          },
+          confirmAuditMetadata,
+        ).then(({ projection }) => projection),
       );
     },
 
@@ -307,6 +362,8 @@ function buildSqlitePaymentServiceDeps(
     eventsRepository: overrides.eventsRepository ?? createSqlitePaymentEventsRepository(db),
     projectionRepository:
       overrides.projectionRepository ?? createSqlitePaymentsProjectionRepository(db),
+    addressAttributionReader:
+      overrides.addressAttributionReader ?? createSqlitePaymentAddressAttributionReader(db),
     writeAudit: overrides.writeAudit ?? ((input) => writeAuditLogSqlite(db, input)),
     assertMembership:
       overrides.assertMembership ??
@@ -335,6 +392,8 @@ export function createPostgresPaymentService(
     eventsRepository: overrides.eventsRepository ?? createPostgresPaymentEventsRepository(executor),
     projectionRepository:
       overrides.projectionRepository ?? createPostgresPaymentsProjectionRepository(executor),
+    addressAttributionReader:
+      overrides.addressAttributionReader ?? createPostgresPaymentAddressAttributionReader(executor),
     writeAudit: overrides.writeAudit ?? ((input) => writeAuditLogPostgres(executor, input)),
     assertMembership:
       overrides.assertMembership ??

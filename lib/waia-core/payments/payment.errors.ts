@@ -86,3 +86,18 @@ export class PaymentIdempotencyConflictError extends Error {
     this.name = "PaymentIdempotencyConflictError";
   }
 }
+
+export class PaymentAddressNotAttributableError extends Error {
+  readonly code = "PAYMENT_ADDRESS_NOT_ATTRIBUTABLE" as const;
+
+  constructor(
+    public readonly paymentId: string,
+    public readonly paymentAddressId: string,
+    public readonly status: string,
+  ) {
+    super(
+      `[waia-core] payment ${paymentId} cannot attribute to address ${paymentAddressId} in status ${status}`,
+    );
+    this.name = "PaymentAddressNotAttributableError";
+  }
+}
