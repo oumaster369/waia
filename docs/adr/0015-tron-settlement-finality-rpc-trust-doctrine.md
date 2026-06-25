@@ -1,6 +1,6 @@
 # ADR-0015 — Tron Settlement, Finality, and RPC Trust Doctrine
 
-Status: Proposed (pending ratification)
+Status: Accepted
 Date: 2026-06-25
 Baseline: AT-E12 S3 (inbound payment observation)
 

@@ -1,6 +1,6 @@
 # ADR-0014 — Payment Watcher: Read-Only Inbound Observer on Cloudflare Worker + Cron
 
-Status: Proposed (pending ratification)
+Status: Accepted
 Date: 2026-06-25
 Baseline: AT-E12 S3 (inbound payment observation)
 
