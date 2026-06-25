@@ -302,6 +302,20 @@
       "when": 1780000000004,
       "tag": "0042_trader_invoices_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1780000000006,
+      "tag": "0043_trader_invoice_status_issued",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1780000000007,
+      "tag": "0044_trader_invoice_issuance",
+      "breakpoints": true
     }
   ]
 }

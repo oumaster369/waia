@@ -5,7 +5,11 @@ import { and, desc, eq } from "drizzle-orm";
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { runWaiaPostgresTransaction } from "@/db/waia-postgres-transaction";
-import type { InsertInvoiceRepoInput } from "@/lib/trader/billing/invoice-repository.types";
+import type {
+  ClearIssuanceApprovalMetadataInput,
+  InsertInvoiceRepoInput,
+  SetIssuanceApprovalMetadataInput,
+} from "@/lib/trader/billing/invoice-repository.types";
 import {
   invoicePayloadToInsertValues,
   mapInvoiceRow,
@@ -19,7 +23,7 @@ import {
 } from "@/lib/waia-core/scope/org-context";
 
 type PgReadExecutor = Pick<WaiaPostgresDb, "select">;
-type PgWriteExecutor = Pick<WaiaPostgresDb, "select" | "insert">;
+type PgWriteExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
 
 function mapSelectRow(row: typeof pgSchema.traderInvoices.$inferSelect): InvoiceRecordView {
   return mapInvoiceRow(row);
@@ -108,6 +112,77 @@ export async function getInvoiceByIdPostgres(
 
   const row = rows[0];
   return row ? mapSelectRow(row) : null;
+}
+
+export async function setIssuanceApprovalMetadataPostgres(
+  ex: PgWriteExecutor,
+  context: OrgContext,
+  input: SetIssuanceApprovalMetadataInput,
+): Promise<InvoiceRecordView> {
+  const scoped = requireOrgContext(context.organizationId);
+  const now = new Date();
+
+  await ex
+    .update(pgSchema.traderInvoices)
+    .set({
+      issuanceApprovedAt: input.issuanceApprovedAt,
+      issuanceApprovedBy: input.issuanceApprovedBy,
+      coolingOffUntil: input.coolingOffUntil,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(pgSchema.traderInvoices.id, input.invoiceId),
+        orgScopedWhere(pgSchema.traderInvoices.organizationId, scoped),
+        eq(pgSchema.traderInvoices.status, "DRAFT"),
+      ),
+    );
+
+  const row = await getInvoiceByIdPostgres(ex, context, input.invoiceId);
+  if (!row) {
+    throw new Error("[trader] invoice not found after approval metadata update");
+  }
+  if (
+    row.issuanceApprovedAt?.getTime() !== input.issuanceApprovedAt.getTime() ||
+    row.issuanceApprovedBy !== input.issuanceApprovedBy ||
+    row.coolingOffUntil?.getTime() !== input.coolingOffUntil.getTime()
+  ) {
+    if (row.status === "ISSUED") {
+      throw new Error("[trader] cannot approve issuance for an already-issued invoice");
+    }
+    throw new Error("[trader] invoice approval metadata update failed");
+  }
+  return row;
+}
+
+export async function clearIssuanceApprovalMetadataPostgres(
+  ex: PgWriteExecutor,
+  context: OrgContext,
+  input: ClearIssuanceApprovalMetadataInput,
+): Promise<InvoiceRecordView> {
+  const scoped = requireOrgContext(context.organizationId);
+  const now = new Date();
+
+  await ex
+    .update(pgSchema.traderInvoices)
+    .set({
+      issuanceApprovedAt: null,
+      issuanceApprovedBy: null,
+      coolingOffUntil: null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(pgSchema.traderInvoices.id, input.invoiceId),
+        orgScopedWhere(pgSchema.traderInvoices.organizationId, scoped),
+      ),
+    );
+
+  const row = await getInvoiceByIdPostgres(ex, context, input.invoiceId);
+  if (!row) {
+    throw new Error("[trader] invoice not found after clearing approval metadata");
+  }
+  return row;
 }
 
 export function insertInvoicePostgresTx(

@@ -2,7 +2,7 @@ export const INVOICE_SCHEMA_VERSION = "waia.trader.invoice.v1" as const;
 
 export type InvoiceSchemaVersion = typeof INVOICE_SCHEMA_VERSION;
 
-export const invoiceStatuses = ["DRAFT"] as const;
+export const invoiceStatuses = ["DRAFT", "ISSUED"] as const;
 
 export type InvoiceStatus = (typeof invoiceStatuses)[number];
 
@@ -39,10 +39,25 @@ export type InvoiceRecordPayload = {
   recordContentDigest: string;
 };
 
-export type InvoiceRecordView = InvoiceRecordPayload & {
-  id: string;
-  createdAt: Date;
-  updatedAt: Date;
+/** Governance timing metadata — not invoice lifecycle states (DEE-311 S6). */
+export type InvoiceGovernanceMetadata = {
+  issuanceApprovedAt: Date | null;
+  issuanceApprovedBy: string | null;
+  coolingOffUntil: Date | null;
+  issuedAt: Date | null;
+  issuedBy: string | null;
+};
+
+export type InvoiceRecordView = InvoiceRecordPayload &
+  InvoiceGovernanceMetadata & {
+    id: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+
+export type IssuedInvoiceView = InvoiceRecordView & {
+  status: "ISSUED";
+  issuedAt: Date;
 };
 
 export type InvoiceRecordDigestInput = {

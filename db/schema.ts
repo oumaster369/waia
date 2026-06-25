@@ -370,7 +370,7 @@ export type ReportingPeriodStatusDb = (typeof reportingPeriodStatusEnum)[number]
 export const hwmEntryTypeEnum = ["BOOTSTRAP", "RATCHET_UP", "ROLLBACK"] as const;
 export type HwmEntryTypeDb = (typeof hwmEntryTypeEnum)[number];
 
-export const invoiceStatusEnum = ["DRAFT"] as const;
+export const invoiceStatusEnum = ["DRAFT", "ISSUED"] as const;
 export type InvoiceStatusDb = (typeof invoiceStatusEnum)[number];
 
 export const miSourceStatusEnum = ["active", "deprecated"] as const;
@@ -1049,6 +1049,11 @@ export const traderInvoices = sqliteTable(
     feeComputedAt: integer("fee_computed_at", { mode: "timestamp_ms" }).notNull(),
     schemaVersion: text("schema_version").notNull(),
     recordContentDigest: text("record_content_digest").notNull(),
+    issuanceApprovedAt: integer("issuance_approved_at", { mode: "timestamp_ms" }),
+    issuanceApprovedBy: text("issuance_approved_by"),
+    coolingOffUntil: integer("cooling_off_until", { mode: "timestamp_ms" }),
+    issuedAt: integer("issued_at", { mode: "timestamp_ms" }),
+    issuedBy: text("issued_by"),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
       .$defaultFn(() => new Date()),
