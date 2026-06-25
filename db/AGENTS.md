@@ -127,6 +127,9 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | SQLite `0028_payments` | `payment_events`, `payments` | Core crypto payment ledger + projection (DEE-312 / AT-E12 S1) |
 | Postgres `0045_payments` | `payment_events`, `payments` | Same |
 | Postgres `0046_payments_rls` | `payment_events`, `payments` RLS | Append-only trigger on events + ADR-0007 deny authenticated/anon |
+| SQLite `0029_payment_address_registry` | `payment_wallets`, `payment_address_events`, `payment_addresses` | Core payment address registry schema (DEE-315 / AT-E12 S2-A) |
+| Postgres `0047_payment_address_registry` | `payment_wallets`, `payment_address_events`, `payment_addresses` | Same |
+| Postgres `0048_payment_address_registry_rls` | payment address registry tables RLS | Append-only trigger on events + ADR-0007 deny authenticated/anon |
 
 **Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 

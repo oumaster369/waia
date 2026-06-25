@@ -26,3 +26,35 @@ export const paymentFailureReasonEnum = ["DROPPED", "EXPIRED", "REJECTED", "ORPH
 
 /** Projected payment aggregate status (derived from events). */
 export const paymentStatusEnum = ["DETECTED", "CONFIRMED", "FAILED"] as const;
+
+/** Payment wallet role in the control domain (AT-E12 S2 / DEE-315). */
+export const paymentWalletKindEnum = ["DEPOSIT", "DISBURSEMENT", "RESERVE"] as const;
+
+/** Custody posture metadata for payment wallets (AT-E12 S2 / DEE-315). */
+export const paymentWalletCustodyModelEnum = ["PLATFORM", "ORGANIZATION", "CUSTODIAL"] as const;
+
+/** Append-only address lifecycle event types (AT-E12 S2 / DEE-315). */
+export const paymentAddressEventTypeEnum = [
+  "GENERATED",
+  "RESERVED",
+  "RELEASED",
+  "ASSIGNED",
+  "ACTIVATED",
+  "ROTATED",
+  "RETIRED",
+  "ARCHIVED",
+  "RECOVERED",
+] as const;
+
+/** Projected payment address status (derived from address events; AT-E12 S2 / DEE-315). */
+export const paymentAddressStatusEnum = [
+  "GENERATED",
+  "RESERVED",
+  "RELEASED",
+  "ASSIGNED",
+  "ACTIVATED",
+  "ROTATED",
+  "RETIRED",
+  "ARCHIVED",
+  "RECOVERED",
+] as const;

@@ -204,6 +204,13 @@
       "when": 1780000000008,
       "tag": "0028_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1780000000010,
+      "tag": "0029_payment_address_registry",
+      "breakpoints": true
     }
   ]
 }

@@ -28,11 +28,15 @@ import {
   auditActorTypeEnum,
   organizationKindEnum,
   organizationMemberRoleEnum,
+  paymentAddressEventTypeEnum,
+  paymentAddressStatusEnum,
   paymentDirectionEnum,
   paymentEventTypeEnum,
   paymentFailureReasonEnum,
   paymentStatusEnum,
   paymentSubjectModuleEnum,
+  paymentWalletCustodyModelEnum,
+  paymentWalletKindEnum,
   platformRoleEnum,
   subscriptionStatusEnum,
   waiaModuleEnum,
@@ -64,6 +68,17 @@ export const paymentFailureReasonEnumPg = pgEnum("payment_failure_reason", [
   ...paymentFailureReasonEnum,
 ]);
 export const paymentStatusEnumPg = pgEnum("payment_status", [...paymentStatusEnum]);
+
+export const paymentWalletKindEnumPg = pgEnum("payment_wallet_kind", [...paymentWalletKindEnum]);
+export const paymentWalletCustodyModelEnumPg = pgEnum("payment_wallet_custody_model", [
+  ...paymentWalletCustodyModelEnum,
+]);
+export const paymentAddressEventTypeEnumPg = pgEnum("payment_address_event_type", [
+  ...paymentAddressEventTypeEnum,
+]);
+export const paymentAddressStatusEnumPg = pgEnum("payment_address_status", [
+  ...paymentAddressStatusEnum,
+]);
 
 /**
  * Application user row in `public.users`.
@@ -278,6 +293,84 @@ export const payments = pgTable(
   (t) => [
     index("payments_org_status_idx").on(t.organizationId, t.status),
     index("payments_subject_idx").on(t.subjectModule, t.subjectInvoiceId),
+  ],
+);
+
+/** WAIA Core: payment wallet control-domain anchor (AT-E12 S2 / DEE-315). */
+export const paymentWallets = pgTable(
+  "payment_wallets",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    walletKind: paymentWalletKindEnumPg("wallet_kind").notNull(),
+    custodyModel: paymentWalletCustodyModelEnumPg("custody_model").notNull(),
+    controlModel: text("control_model").notNull(),
+    providerRef: text("provider_ref"),
+    derivationScheme: text("derivation_scheme"),
+    status: text("status").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("payment_wallets_org_status_idx").on(t.organizationId, t.status)],
+);
+
+/** WAIA Core: append-only payment address event ledger (AT-E12 S2 / DEE-315). */
+export const paymentAddressEvents = pgTable(
+  "payment_address_events",
+  {
+    id: uuid("id").primaryKey(),
+    addressId: uuid("address_id").notNull(),
+    walletId: uuid("wallet_id"),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: paymentAddressEventTypeEnumPg("event_type").notNull(),
+    network: text("network").notNull(),
+    address: text("address"),
+    subjectModule: paymentSubjectModuleEnumPg("subject_module"),
+    subjectRef: text("subject_ref"),
+    bindingRef: text("binding_ref"),
+    reason: text("reason"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("payment_address_events_address_id_seq_unique").on(t.addressId, t.seq),
+    index("payment_address_events_org_address_idx").on(t.organizationId, t.addressId),
+  ],
+);
+
+/** WAIA Core: rebuildable payment address projection (AT-E12 S2 / DEE-315). */
+export const paymentAddresses = pgTable(
+  "payment_addresses",
+  {
+    addressId: uuid("address_id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    walletId: uuid("wallet_id").references(() => paymentWallets.id, { onDelete: "set null" }),
+    network: text("network").notNull(),
+    address: text("address").notNull(),
+    status: paymentAddressStatusEnumPg("status").notNull(),
+    subjectModule: paymentSubjectModuleEnumPg("subject_module"),
+    subjectRef: text("subject_ref"),
+    bindingRef: text("binding_ref"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("payment_addresses_network_address_unique").on(t.network, t.address),
+    uniqueIndex("payment_addresses_org_subject_active_unique")
+      .on(t.organizationId, t.subjectModule, t.subjectRef)
+      .where(sql`"status" = 'ACTIVATED'`),
+    index("payment_addresses_org_status_idx").on(t.organizationId, t.status),
   ],
 );
 
