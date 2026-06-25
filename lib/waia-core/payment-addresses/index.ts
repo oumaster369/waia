@@ -52,3 +52,60 @@ export {
 } from "@/lib/waia-core/payment-addresses/serialize-payment-address-events";
 
 export { canonicalJsonString } from "@/lib/waia-core/payment-addresses/canonical-json";
+
+export {
+  paymentAddressAuditActions,
+  paymentAddressEntityTypes,
+} from "@/lib/waia-core/payment-addresses/payment-address.audit";
+export type {
+  PaymentAddressAuditAction,
+  PaymentAddressEntityType,
+} from "@/lib/waia-core/payment-addresses/payment-address.audit";
+
+export {
+  DEFAULT_PAYMENT_ADDRESS_EVENTS_LIST_LIMIT,
+  MAX_PAYMENT_ADDRESS_EVENTS_LIST_LIMIT,
+} from "@/lib/waia-core/payment-addresses/payment-address-events-repository.types";
+export type {
+  InsertPaymentAddressEventRepoInput,
+  ListPaymentAddressEventsQuery,
+  PaymentAddressEventsRepository,
+} from "@/lib/waia-core/payment-addresses/payment-address-events-repository.types";
+
+export {
+  DEFAULT_PAYMENT_ADDRESSES_LIST_LIMIT,
+  MAX_PAYMENT_ADDRESSES_LIST_LIMIT,
+} from "@/lib/waia-core/payment-addresses/payment-address-projection-repository.types";
+export type {
+  ListPaymentAddressesQuery,
+  PaymentAddressProjectionRepository,
+} from "@/lib/waia-core/payment-addresses/payment-address-projection-repository.types";
+
+export type {
+  CreatePaymentWalletInput,
+  PaymentWalletRepository,
+} from "@/lib/waia-core/payment-addresses/payment-wallet-repository.types";
+
+export { foldPaymentAddressEventsToProjection } from "@/lib/waia-core/payment-addresses/rebuild-payment-address-projection";
+
+export {
+  createPostgresPaymentAddressEventsRepository,
+  createPostgresPaymentAddressProjectionRepository,
+  createPostgresPaymentWalletRepository,
+  createSqlitePaymentAddressEventsRepository,
+  createSqlitePaymentAddressProjectionRepository,
+  createSqlitePaymentWalletRepository,
+} from "@/lib/waia-core/payment-addresses/payment-address-repository-adapters";
+
+export {
+  createPaymentAddressService,
+  createPostgresPaymentAddressService,
+  createSqlitePaymentAddressService,
+} from "@/lib/waia-core/payment-addresses/payment-address-service";
+export type {
+  AddressTransitionInput,
+  AssignAddressInput,
+  GenerateAddressInput,
+  PaymentAddressService,
+  PaymentAddressServiceDeps,
+} from "@/lib/waia-core/payment-addresses/payment-address-service";
