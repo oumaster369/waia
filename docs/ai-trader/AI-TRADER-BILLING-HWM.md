@@ -73,6 +73,8 @@ At **period end**:
 - generate a **draft** invoice if the fee exceeds the minimum threshold;
 - update the HWM only after period close and issuance rules are satisfied.
 
+**Runtime (DEE-310 / AT-E11 S5):** draft invoice generation persists one immutable `DRAFT` row in `trader_invoices` per closed billable period, consuming the DEE-309 `FeeComputationArtifact` without recomputing fee math. Each invoice stores `fee_artifact_digest` and `record_content_digest` for tamper evidence and future fail-closed revalidation at issuance.
+
 Every period stores the exact inputs and the balance snapshots it derived from, so any invoice can be reconstructed later.
 
 ---

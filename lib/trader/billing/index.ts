@@ -139,3 +139,60 @@ export {
   type FeeComputationService,
   type FeeComputationServiceDeps,
 } from "@/lib/trader/billing/fee-computation-service";
+
+export {
+  INVOICE_CURRENCY,
+  INVOICE_SCHEMA_VERSION,
+  invoiceStatuses,
+  type GenerateDraftInvoiceInput,
+  type InvoiceRecordDigestInput,
+  type InvoiceRecordPayload,
+  type InvoiceRecordView,
+  type InvoiceSchemaVersion,
+  type InvoiceStatus,
+} from "@/lib/trader/billing/invoice.types";
+
+export {
+  DraftInvoiceContentMismatchError,
+  DraftInvoiceDigestMismatchError,
+  DraftInvoiceError,
+  DraftInvoiceNotBillableError,
+  DraftInvoiceNotDraftError,
+  DraftInvoicePeriodDisclosureMissingError,
+  DraftInvoiceValidationError,
+} from "@/lib/trader/billing/invoice.errors";
+
+export {
+  FEE_ARTIFACT_DIGEST_SCHEMA_VERSION,
+  buildInvoiceRecordDigestInput,
+  buildInvoiceRecordPayload,
+  buildInvoiceRecordPayloadFromSources,
+  computeFeeArtifactDigest,
+  computeInvoiceRecordDigest,
+  serializeFeeArtifactDigestInput,
+  serializeInvoiceDigestInput,
+  verifyDraftInvoiceCanonicalBinding,
+  verifyInvoiceRecordDigest,
+  type SerializedFeeArtifactDigestInput,
+  type SerializedInvoiceDigestInput,
+} from "@/lib/trader/billing/serialize-invoice";
+
+export {
+  createPostgresInvoiceRepository,
+  createSqliteInvoiceRepository,
+} from "@/lib/trader/billing/invoice-repository-adapters";
+
+export type {
+  InsertInvoiceRepoInput,
+  InvoiceRepository,
+} from "@/lib/trader/billing/invoice-repository.types";
+
+export {
+  createDraftInvoiceService,
+  createPostgresDraftInvoiceService,
+  createSqliteDraftInvoiceService,
+  extractPeriodDisclosure,
+  type DraftInvoiceService,
+  type DraftInvoiceServiceDeps,
+  type PeriodDisclosureSnapshot,
+} from "@/lib/trader/billing/draft-invoice-service";

@@ -367,6 +367,7 @@ export const strategyTargetDeploymentStateEnumPg = pgEnum("strategy_target_deplo
 
 export const reportingPeriodStatusEnumPg = pgEnum("reporting_period_status", ["OPEN", "CLOSED"]);
 export const hwmEntryTypeEnumPg = pgEnum("hwm_entry_type", ["BOOTSTRAP", "RATCHET_UP", "ROLLBACK"]);
+export const invoiceStatusEnumPg = pgEnum("invoice_status", ["DRAFT"]);
 
 export const miSourceStatusEnumPg = pgEnum("mi_source_status", ["active", "deprecated"]);
 
@@ -969,6 +970,56 @@ export const traderHwmLedger = pgTable(
       t.organizationId,
       t.exchangeAccountId,
       t.effectiveAt,
+    ),
+  ],
+);
+
+/** AI-TRADER: immutable draft invoice financial commitment record (DEE-310 / AT-E11 S5). */
+export const traderInvoices = pgTable(
+  "trader_invoices",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    reportingPeriodId: text("reporting_period_id").notNull(),
+    feeArtifactDigest: text("fee_artifact_digest").notNull(),
+    status: invoiceStatusEnumPg("status").notNull(),
+    currency: text("currency").notNull(),
+    periodRealizedStrategyProfit: text("period_realized_strategy_profit").notNull(),
+    cumulativeRealizedStrategyProfit: text("cumulative_realized_strategy_profit").notNull(),
+    previousHighWaterMark: text("previous_high_water_mark").notNull(),
+    newProfitAboveHwm: text("new_profit_above_hwm").notNull(),
+    feeRate: text("fee_rate").notNull(),
+    performanceFee: text("performance_fee").notNull(),
+    proposedNewHighWaterMark: text("proposed_new_high_water_mark").notNull(),
+    billable: boolean("billable").notNull(),
+    unrealizedPnl: text("unrealized_pnl"),
+    realizedFillFinality: boolean("realized_fill_finality").notNull(),
+    startingEquity: text("starting_equity").notNull(),
+    endingEquity: text("ending_equity").notNull(),
+    netDeposits: text("net_deposits").notNull(),
+    netWithdrawals: text("net_withdrawals").notNull(),
+    periodStart: timestamp("period_start", { withTimezone: true, mode: "date" }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true, mode: "date" }).notNull(),
+    valuationSource: text("valuation_source").notNull(),
+    feeComputedAt: timestamp("fee_computed_at", { withTimezone: true, mode: "date" }).notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_invoices_org_account_created_idx").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.createdAt,
+    ),
+    uniqueIndex("trader_invoices_org_account_period_unique").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.reportingPeriodId,
     ),
   ],
 );
