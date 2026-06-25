@@ -58,7 +58,7 @@ CREATE TABLE `payment_addresses` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `payment_addresses_network_address_unique` ON `payment_addresses` (`network`,`address`);
 --> statement-breakpoint
-CREATE UNIQUE INDEX `payment_addresses_org_subject_active_unique` ON `payment_addresses` (`organization_id`,`subject_module`,`subject_ref`) WHERE `status` = 'ACTIVE';
+CREATE UNIQUE INDEX `payment_addresses_org_subject_active_unique` ON `payment_addresses` (`organization_id`,`subject_module`,`subject_ref`) WHERE `status` = 'ACTIVATED';
 --> statement-breakpoint
 CREATE INDEX `payment_addresses_org_status_idx` ON `payment_addresses` (`organization_id`,`status`);
 --> statement-breakpoint

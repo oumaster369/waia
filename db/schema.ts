@@ -351,7 +351,7 @@ export const paymentAddresses = sqliteTable(
     uniqueIndex("payment_addresses_network_address_unique").on(t.network, t.address),
     uniqueIndex("payment_addresses_org_subject_active_unique")
       .on(t.organizationId, t.subjectModule, t.subjectRef)
-      .where(sql`"status" = 'ACTIVE'`),
+      .where(sql`"status" = 'ACTIVATED'`),
     index("payment_addresses_org_status_idx").on(t.organizationId, t.status),
   ],
 );
