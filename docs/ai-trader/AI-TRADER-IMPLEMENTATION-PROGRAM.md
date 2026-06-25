@@ -225,6 +225,13 @@ AI-TRADER
 │       ├── Dispute handling (enforcement freeze + evidence-based resolution)
 │       └── Overcharge remediation + refund/credit (append-only corrections, HWM rollback)
 ├── AT-E12 Crypto Payments & Suspension
+│   ├── S1 — Payment ledger (DEE-312) ✓
+│   ├── S2 — Payment Address Registry (DEE-313..317, ADR-0013) ✓
+│   ├── S3 — Inbound Payment Watcher (read-only; ADR-0014, ADR-0015)
+│   │   ├── S3-DOC — Architecture ratification (DEE-319)
+│   │   └── S3-A — Watcher build (ledger detect/confirm; gated on ADR Accepted)
+│   ├── S3-B — Settlement → invoice match → account status (follow-on; not a watcher prerequisite)
+│   ├── S7/S8+ — Custody / signing / disbursement (decoupled from S3 inbound watcher)
 │   ├── FG: Payments
 │   │   ├── Unique deposit address per account (USDT TRC-20)
 │   │   ├── Payment watcher (token/network/amount/confirmations)
@@ -292,7 +299,7 @@ Program A runs under live-migration discipline (migration planning, rollback, AI
 - **AT-E10 Live Execution Hardening (Org 0)** — Admin-gated live HTX spot for Org 0; hardened host + managed key. **Each strategy must pass the Strategy Validation Gate (ADR-0010) first.** Deps: AT-E9, **Strategy Validation Gate**, AT-E14, AT-E13. Complexity: L. Risk: **Very High** — real capital.
 - **AT-E11 Reporting, HWM & Billing** — Periods, HWM, deposit/withdrawal adjustment, fee, manual gate, and billing governance policies (valuation/unrealized/dispute/overcharge/refund). Deps: AT-E9 (paper PnL). Complexity: L. Risk: High — financial correctness/disputes.
   - **Doctrine note (LD-10 Closed Trade Reality):** fee computation (S4) must use **Realized Strategy Profit** (closed-trade realized PnL net of trading costs) as the fee base and **cumulative net realized strategy profit** as the HWM ratchet — per [LD-10](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md). Unrealized PnL is captured for audit/transparency only, never fee-bearing. Manual gate checklist (ADR-0008) extended with **realized-fill finality** verification (LD-10 RC2). MVP HWM ledger (DEE-307) operates per-account; doctrine semantics are strategy-scoped (account≈strategy for Org-0).
-- **AT-E12 Crypto Payments & Suspension** — Unique-address USDT TRC-20 attribution + lifecycle. Deps: AT-E11. Complexity: M. Risk: High. **S2-D (DEE-317):** confirm-time address validation closes the payment↔registry seam (org ownership, attribution eligibility, audit enrichment).
+- **AT-E12 Crypto Payments & Suspension** — Unique-address USDT TRC-20 attribution + lifecycle. Deps: AT-E11. Complexity: M. Risk: High. **S2-D (DEE-317):** confirm-time address validation closes the payment↔registry seam (org ownership, attribution eligibility, audit enrichment). **S3 (ADR-0014/0015):** inbound Payment Watcher is a read-only chain observer (Worker + Cron MVP), decoupled from S7/S8 custody/signing. **Sequencing:** S3-A (watcher ledger-confirm-only) precedes S3-B (invoice match + account status); see ADR-0014.
 - **AT-E13 Administration & Oversight** — Cross-module admin + kill-switch + Single Operator Governance for sensitive actions. Deps: AT-E1, AT-E5, AT-E7, WC-E5. Complexity: M. Risk: Med.
 - **AT-E14 Security & Secrets** — Managed key, residency minimization, security assurance. **Key Management is a prerequisite of AT-E2 real-credential storage.** Deps: AT-E2 (connector), but Key Management precedes any real credential. Complexity: M–L. Risk: High — highest-value assets.
 - **AT-E15 Observability & Alerting** — Telemetry + critical alerts + runbooks. **Minimum baseline required before AT-E9 paper validation.** Deps: AT-E8 (signals exist) for full telemetry; minimum baseline sequenced before paper. Complexity: M. Risk: Med — silent failure risk if absent.
