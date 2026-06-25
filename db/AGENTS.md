@@ -124,6 +124,9 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | Postgres `0042_trader_invoices_rls` | `trader_invoices` RLS | ADR-0007 deny authenticated/anon |
 | Postgres `0043_trader_invoice_status_issued` | `invoice_status` enum | Add ISSUED value (isolated migration) |
 | Postgres `0044_trader_invoice_issuance` | `trader_invoices`, `trader_hwm_ledger` | Issuance workflow columns + HWM ratchet guard (DEE-311 / AT-E11 S6) |
+| SQLite `0028_payments` | `payment_events`, `payments` | Core crypto payment ledger + projection (DEE-312 / AT-E12 S1) |
+| Postgres `0045_payments` | `payment_events`, `payments` | Same |
+| Postgres `0046_payments_rls` | `payment_events`, `payments` RLS | Append-only trigger on events + ADR-0007 deny authenticated/anon |
 
 **Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 

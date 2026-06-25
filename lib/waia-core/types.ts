@@ -45,6 +45,23 @@ export type AuditLogInput = {
   metadata?: Record<string, unknown>;
 };
 
+/** Core payment audit actions (AT-E12 S1 / DEE-312). */
+export const paymentAuditActions = {
+  paymentDetected: "payment.detected",
+  paymentConfirmed: "payment.confirmed",
+  paymentFailed: "payment.failed",
+} as const;
+
+export type PaymentAuditAction = (typeof paymentAuditActions)[keyof typeof paymentAuditActions];
+
+/** Core payment audit entity types (AT-E12 S1 / DEE-312). */
+export const paymentEntityTypes = {
+  payment: "payment",
+  paymentEvent: "payment_event",
+} as const;
+
+export type PaymentEntityType = (typeof paymentEntityTypes)[keyof typeof paymentEntityTypes];
+
 export type PermissionCheckInput = {
   userId: string;
   organizationId: string;

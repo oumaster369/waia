@@ -7,11 +7,17 @@ import {
   unique,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 import {
   auditActorTypeEnum,
   organizationKindEnum,
   organizationMemberRoleEnum,
+  paymentDirectionEnum,
+  paymentEventTypeEnum,
+  paymentFailureReasonEnum,
+  paymentStatusEnum,
+  paymentSubjectModuleEnum,
   platformRoleEnum,
   subscriptionStatusEnum,
   waiaModuleEnum,
@@ -170,6 +176,91 @@ export const auditLogs = sqliteTable(
   (t) => [
     index("audit_logs_org_created_idx").on(t.organizationId, t.createdAt),
     index("audit_logs_entity_idx").on(t.entityType, t.entityId),
+  ],
+);
+
+/** WAIA Core: append-only payment event ledger (AT-E12 S1 / DEE-312). */
+export const paymentEvents = sqliteTable(
+  "payment_events",
+  {
+    id: text("id").primaryKey(),
+    paymentId: text("payment_id").notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: text("event_type", { enum: [...paymentEventTypeEnum] }).notNull(),
+    direction: text("direction", { enum: [...paymentDirectionEnum] }).notNull(),
+    subjectModule: text("subject_module", { enum: [...paymentSubjectModuleEnum] }).notNull(),
+    subjectInvoiceId: text("subject_invoice_id"),
+    idempotencyKey: text("idempotency_key"),
+    reason: text("reason", { enum: [...paymentFailureReasonEnum] }),
+    settlementNetwork: text("settlement_network"),
+    settlementAsset: text("settlement_asset"),
+    settlementAmount: text("settlement_amount"),
+    settlementTxHash: text("settlement_tx_hash"),
+    transferIndex: integer("transfer_index"),
+    confirmationsRequired: integer("confirmations_required"),
+    confirmationsObserved: integer("confirmations_observed"),
+    blockHeight: text("block_height"),
+    observedAt: integer("observed_at", { mode: "timestamp_ms" }),
+    confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
+    valuedAmountUsd: text("valued_amount_usd"),
+    valuationSource: text("valuation_source"),
+    valuationAt: integer("valuation_at", { mode: "timestamp_ms" }),
+    evidenceRef: text("evidence_ref"),
+    paymentAddressId: text("payment_address_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("payment_events_payment_id_seq_unique").on(t.paymentId, t.seq),
+    uniqueIndex("payment_events_org_idempotency_unique")
+      .on(t.organizationId, t.idempotencyKey)
+      .where(sql`"idempotency_key" IS NOT NULL`),
+    uniqueIndex("payment_events_settlement_attribution_unique")
+      .on(t.settlementNetwork, t.settlementTxHash, t.transferIndex)
+      .where(sql`"settlement_tx_hash" IS NOT NULL`),
+    index("payment_events_org_payment_idx").on(t.organizationId, t.paymentId),
+    index("payment_events_subject_idx").on(t.subjectModule, t.subjectInvoiceId),
+  ],
+);
+
+/** WAIA Core: rebuildable payment current-state projection (AT-E12 S1 / DEE-312). */
+export const payments = sqliteTable(
+  "payments",
+  {
+    paymentId: text("payment_id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    status: text("status", { enum: [...paymentStatusEnum] }).notNull(),
+    direction: text("direction", { enum: [...paymentDirectionEnum] }).notNull(),
+    subjectModule: text("subject_module", { enum: [...paymentSubjectModuleEnum] }).notNull(),
+    subjectInvoiceId: text("subject_invoice_id"),
+    settlementAmount: text("settlement_amount"),
+    settlementAsset: text("settlement_asset"),
+    settlementNetwork: text("settlement_network"),
+    settlementTxHash: text("settlement_tx_hash"),
+    transferIndex: integer("transfer_index"),
+    valuedAmountUsd: text("valued_amount_usd"),
+    valuationSource: text("valuation_source"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("payments_org_status_idx").on(t.organizationId, t.status),
+    index("payments_subject_idx").on(t.subjectModule, t.subjectInvoiceId),
   ],
 );
 
