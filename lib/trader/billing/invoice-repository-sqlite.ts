@@ -1,0 +1,124 @@
+import "server-only";
+
+import { and, desc, eq } from "drizzle-orm";
+
+import { traderInvoices } from "@/db/schema";
+import type { WaiaDb } from "@/db/types";
+import { runSqliteTransaction } from "@/db/types";
+import type { InsertInvoiceRepoInput } from "@/lib/trader/billing/invoice-repository.types";
+import {
+  invoicePayloadToInsertValues,
+  mapInvoiceRow,
+} from "@/lib/trader/billing/invoice-row-mapper";
+import type { InvoiceRecordView } from "@/lib/trader/billing/invoice.types";
+import { isUniqueConstraintError } from "@/lib/trader/execution/order-repository.types";
+import {
+  orgScopedWhere,
+  requireOrgContext,
+  type OrgContext,
+} from "@/lib/waia-core/scope/org-context";
+
+function mapSelectRow(row: typeof traderInvoices.$inferSelect): InvoiceRecordView {
+  return mapInvoiceRow(row);
+}
+
+export function insertInvoiceSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  input: InsertInvoiceRepoInput,
+): InvoiceRecordView {
+  const scoped = requireOrgContext(context.organizationId);
+  const id = crypto.randomUUID();
+  const now = new Date();
+  const { payload } = input;
+
+  db.insert(traderInvoices)
+    .values(invoicePayloadToInsertValues(id, scoped.organizationId, payload, now, now))
+    .run();
+
+  const row = db
+    .select()
+    .from(traderInvoices)
+    .where(and(eq(traderInvoices.id, id), orgScopedWhere(traderInvoices.organizationId, scoped)))
+    .limit(1)
+    .all()[0];
+
+  if (!row) {
+    throw new Error("[trader] invoice insert failed");
+  }
+  return mapSelectRow(row);
+}
+
+export function findInvoiceByReportingPeriodSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  exchangeAccountId: string,
+  reportingPeriodId: string,
+): InvoiceRecordView | null {
+  const scoped = requireOrgContext(context.organizationId);
+
+  const row = db
+    .select()
+    .from(traderInvoices)
+    .where(
+      and(
+        orgScopedWhere(traderInvoices.organizationId, scoped),
+        eq(traderInvoices.exchangeAccountId, exchangeAccountId),
+        eq(traderInvoices.reportingPeriodId, reportingPeriodId),
+      ),
+    )
+    .limit(1)
+    .all()[0];
+
+  return row ? mapSelectRow(row) : null;
+}
+
+export function getInvoiceByIdSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  id: string,
+): InvoiceRecordView | null {
+  const scoped = requireOrgContext(context.organizationId);
+
+  const row = db
+    .select()
+    .from(traderInvoices)
+    .where(and(eq(traderInvoices.id, id), orgScopedWhere(traderInvoices.organizationId, scoped)))
+    .limit(1)
+    .all()[0];
+
+  return row ? mapSelectRow(row) : null;
+}
+
+export function insertInvoiceSqliteTx(
+  db: WaiaDb,
+  context: OrgContext,
+  input: InsertInvoiceRepoInput,
+): Promise<InvoiceRecordView> {
+  return runSqliteTransaction(db, (tx) => insertInvoiceSqlite(tx, context, input));
+}
+
+export function isInvoiceUniqueConstraintError(error: unknown): boolean {
+  return isUniqueConstraintError(error);
+}
+
+export function listInvoicesByAccountSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  exchangeAccountId: string,
+): InvoiceRecordView[] {
+  const scoped = requireOrgContext(context.organizationId);
+
+  return db
+    .select()
+    .from(traderInvoices)
+    .where(
+      and(
+        orgScopedWhere(traderInvoices.organizationId, scoped),
+        eq(traderInvoices.exchangeAccountId, exchangeAccountId),
+      ),
+    )
+    .orderBy(desc(traderInvoices.createdAt), desc(traderInvoices.id))
+    .all()
+    .map(mapSelectRow);
+}

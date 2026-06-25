@@ -288,6 +288,20 @@
       "when": 1780000000002,
       "tag": "0040_trader_hwm_ledger_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780000000003,
+      "tag": "0041_trader_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1780000000004,
+      "tag": "0042_trader_invoices_rls",
+      "breakpoints": true
     }
   ]
 }

@@ -112,6 +112,15 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | SQLite `0023_trader_mi_confidence_judgment` | `trader_mi_confidence_judgment` | MI Layer-5a Confidence Judgment ledger (DEE-293 / LD-5a.3a) |
 | Postgres `0035_trader_mi_confidence_judgment` | `trader_mi_confidence_judgment` | Same |
 | Postgres `0036_trader_mi_confidence_judgment_rls` | `trader_mi_confidence_judgment` RLS | ADR-0007 deny authenticated/anon |
+| SQLite `0024_trader_reporting_periods` | `trader_reporting_periods` | Billing reporting period valued-input record (DEE-305) |
+| Postgres `0037_trader_reporting_periods` | `trader_reporting_periods` | Same |
+| Postgres `0038_trader_reporting_periods_rls` | `trader_reporting_periods` RLS | ADR-0007 deny authenticated/anon |
+| SQLite `0025_trader_hwm_ledger` | `trader_hwm_ledger` | Per-account HWM append-only ledger (DEE-307) |
+| Postgres `0039_trader_hwm_ledger` | `trader_hwm_ledger` | Same |
+| Postgres `0040_trader_hwm_ledger_rls` | `trader_hwm_ledger` RLS | ADR-0007 deny authenticated/anon |
+| SQLite `0026_trader_invoices` | `trader_invoices` | Immutable draft invoice commitment record (DEE-310 / AT-E11 S5) |
+| Postgres `0041_trader_invoices` | `trader_invoices` | Same |
+| Postgres `0042_trader_invoices_rls` | `trader_invoices` RLS | ADR-0007 deny authenticated/anon |
 
 **Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 

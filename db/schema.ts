@@ -370,6 +370,9 @@ export type ReportingPeriodStatusDb = (typeof reportingPeriodStatusEnum)[number]
 export const hwmEntryTypeEnum = ["BOOTSTRAP", "RATCHET_UP", "ROLLBACK"] as const;
 export type HwmEntryTypeDb = (typeof hwmEntryTypeEnum)[number];
 
+export const invoiceStatusEnum = ["DRAFT"] as const;
+export type InvoiceStatusDb = (typeof invoiceStatusEnum)[number];
+
 export const miSourceStatusEnum = ["active", "deprecated"] as const;
 export type MiSourceStatusDb = (typeof miSourceStatusEnum)[number];
 
@@ -1009,6 +1012,60 @@ export const traderHwmLedger = sqliteTable(
       t.organizationId,
       t.exchangeAccountId,
       t.effectiveAt,
+    ),
+  ],
+);
+
+/** AI-TRADER: immutable draft invoice financial commitment record (DEE-310 / AT-E11 S5). */
+export const traderInvoices = sqliteTable(
+  "trader_invoices",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    reportingPeriodId: text("reporting_period_id").notNull(),
+    feeArtifactDigest: text("fee_artifact_digest").notNull(),
+    status: text("status", { enum: [...invoiceStatusEnum] }).notNull(),
+    currency: text("currency").notNull(),
+    periodRealizedStrategyProfit: text("period_realized_strategy_profit").notNull(),
+    cumulativeRealizedStrategyProfit: text("cumulative_realized_strategy_profit").notNull(),
+    previousHighWaterMark: text("previous_high_water_mark").notNull(),
+    newProfitAboveHwm: text("new_profit_above_hwm").notNull(),
+    feeRate: text("fee_rate").notNull(),
+    performanceFee: text("performance_fee").notNull(),
+    proposedNewHighWaterMark: text("proposed_new_high_water_mark").notNull(),
+    billable: integer("billable", { mode: "boolean" }).notNull(),
+    unrealizedPnl: text("unrealized_pnl"),
+    realizedFillFinality: integer("realized_fill_finality", { mode: "boolean" }).notNull(),
+    startingEquity: text("starting_equity").notNull(),
+    endingEquity: text("ending_equity").notNull(),
+    netDeposits: text("net_deposits").notNull(),
+    netWithdrawals: text("net_withdrawals").notNull(),
+    periodStart: integer("period_start", { mode: "timestamp_ms" }).notNull(),
+    periodEnd: integer("period_end", { mode: "timestamp_ms" }).notNull(),
+    valuationSource: text("valuation_source").notNull(),
+    feeComputedAt: integer("fee_computed_at", { mode: "timestamp_ms" }).notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_invoices_org_account_created_idx").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.createdAt,
+    ),
+    uniqueIndex("trader_invoices_org_account_period_unique").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.reportingPeriodId,
     ),
   ],
 );
