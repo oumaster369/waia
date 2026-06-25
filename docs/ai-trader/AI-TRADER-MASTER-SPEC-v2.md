@@ -53,11 +53,12 @@ AI-TRADER is a non-custodial, multi-tenant crypto market intelligence and tradin
 - **Frontend/runtime:** Next.js 16 App Router on Cloudflare Workers via `@opennextjs/cloudflare` (existing `wrangler.jsonc`). The trader UI is an `app/(trader)` route group; `trader.waia.life` is served via host-based rewrite.
 - **Persistence:** Supabase PostgreSQL accessed through **Drizzle ORM** with additive migrations (existing `db/schema.postgres.ts`, `db/AGENTS.md`). The v1 spec's raw-SQL/RLS-first approach is replaced by Drizzle + targeted RLS.
 - **Auth:** Supabase Auth with `public.users.id == auth.users.id` (existing `lib/auth/supabase-app-user-sync.ts`).
-- **Long-running services:** off-Cloudflare (single hardened VPS with Docker for MVP). Introduced only when a persistent execution loop / WebSocket session is required (Roadmap Phase 6+).
+- **Long-running services:** off-Cloudflare (single hardened VPS with Docker for MVP). Introduced only when a persistent execution loop / WebSocket session is required (Roadmap Phase 6+). The execution engine, persistent exchange sessions, and the fast order path belong here — not slow-state Core writers.
+- **Payment Watcher (MVP):** a read-only inbound chain observer for USDT TRC-20 deposits, running as a **Cloudflare Worker + Cron Trigger** (slow-state Core writer). See [ADR-0014](../adr/0014-payment-watcher-execution-model-read-only-observer.md). Graduation to the off-Cloudflare daemon is the documented target when the execution VPS exists or volume/latency demands it.
 - **Cold storage:** Cloudflare R2 for raw tick/order-book and report exports.
-- **External integrations:** HTX API (MVP); Fear & Greed and news sentiment feeds; crypto payment watcher (USDT TRC-20).
+- **External integrations:** HTX API (MVP); Fear & Greed and news sentiment feeds; Tron RPC / TronGrid (payment watcher).
 
-**Hard rule:** Cloudflare must not host the execution engine, persistent exchange sessions, or the fast order path. Supabase must not be used as a low-latency execution bus.
+**Hard rule:** Cloudflare must not host the execution engine, persistent exchange sessions, or the fast order path. The Payment Watcher is a slow-state Core writer and is exempt from this rule. Supabase must not be used as a low-latency execution bus.
 
 ---
 
@@ -85,6 +86,7 @@ flowchart TB
   subgraph web [Cloudflare Workers - Next.js]
     UI["app/(trader) route group + admin"]
     LAPI[light read APIs / webhook ingress]
+    PW["Payment Watcher (Cron, MVP)"]
   end
 
   subgraph svc [Long-running services off-Cloudflare]
@@ -98,13 +100,13 @@ flowchart TB
     REC[Reconciliation]
     SHM[Strategy Health Monitor - manual MVP]
     RB[Reporting + HWM + Billing]
-    PW[Payment Watcher]
     SCH[Scheduler]
   end
 
   PG[(Supabase Postgres - Drizzle)]
   R2[(R2 cold storage)]
   HTX[(HTX API / WS)]
+  TRON[(Tron RPC / TronGrid)]
 
   UI --> ID
   UI --> PG
@@ -116,7 +118,7 @@ flowchart TB
   EXE --> REC --> PG
   REC --> SHM
   REC --> RB --> PAY
-  PW --> HTX
+  PW --> TRON
   PW --> PG
   EXE -. in-memory state .- EXE
 ```
