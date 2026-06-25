@@ -24,6 +24,7 @@ export type {
 
 export {
   IllegalPaymentTransitionError,
+  PaymentAddressNotAttributableError,
   PaymentAttributionRequiredError,
   PaymentChainBrokenError,
   PaymentConcurrentConflictError,
@@ -68,5 +69,11 @@ export type {
   PaymentService,
   PaymentServiceDeps,
 } from "@/lib/waia-core/payments/payment-service";
+
+export {
+  createPostgresPaymentAddressAttributionReader,
+  createSqlitePaymentAddressAttributionReader,
+} from "@/lib/waia-core/payments/payment-address-attribution.port";
+export type { PaymentAddressAttributionReader } from "@/lib/waia-core/payments/payment-address-attribution.port";
 
 export { paymentAuditActions, paymentEntityTypes } from "@/lib/waia-core/types";
