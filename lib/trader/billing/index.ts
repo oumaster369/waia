@@ -106,3 +106,36 @@ export {
   type RecordHwmRatchetInput,
   type RecordHwmRollbackInput,
 } from "@/lib/trader/billing/hwm-ledger-service";
+
+export {
+  MIN_FEE_THRESHOLD,
+  PERFORMANCE_FEE_RATE,
+  type FeeComputationArtifact,
+  type FeeComputationInput,
+} from "@/lib/trader/billing/fee-computation.types";
+
+export {
+  FeeComputationError,
+  FeeComputationHwmNotBootstrappedError,
+  FeeComputationPeriodNotClosedError,
+  FeeComputationPeriodNotFoundError,
+  FeeComputationPriorPeriodRealizedPnlMissingError,
+  FeeComputationRealizedPnlMissingError,
+  FeeComputationValidationError,
+} from "@/lib/trader/billing/fee-computation.errors";
+
+export {
+  computeFeeComputation,
+  foldCumulativeRealizedStrategyProfit,
+  selectClosedPeriodsUpToTarget,
+  sortClosedReportingPeriodsChronologically,
+} from "@/lib/trader/billing/fee-computation";
+
+export {
+  createFeeComputationService,
+  createPostgresFeeComputationService,
+  createSqliteFeeComputationService,
+  type ComputeFeeForPeriodInput,
+  type FeeComputationService,
+  type FeeComputationServiceDeps,
+} from "@/lib/trader/billing/fee-computation-service";
