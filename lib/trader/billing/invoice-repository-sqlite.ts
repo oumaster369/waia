@@ -5,7 +5,11 @@ import { and, desc, eq } from "drizzle-orm";
 import { traderInvoices } from "@/db/schema";
 import type { WaiaDb } from "@/db/types";
 import { runSqliteTransaction } from "@/db/types";
-import type { InsertInvoiceRepoInput } from "@/lib/trader/billing/invoice-repository.types";
+import type {
+  InsertInvoiceRepoInput,
+  SetIssuanceApprovalMetadataInput,
+  ClearIssuanceApprovalMetadataInput,
+} from "@/lib/trader/billing/invoice-repository.types";
 import {
   invoicePayloadToInsertValues,
   mapInvoiceRow,
@@ -88,6 +92,79 @@ export function getInvoiceByIdSqlite(
     .all()[0];
 
   return row ? mapSelectRow(row) : null;
+}
+
+export function setIssuanceApprovalMetadataSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  input: SetIssuanceApprovalMetadataInput,
+): InvoiceRecordView {
+  const scoped = requireOrgContext(context.organizationId);
+  const now = new Date();
+
+  const updated = db
+    .update(traderInvoices)
+    .set({
+      issuanceApprovedAt: input.issuanceApprovedAt,
+      issuanceApprovedBy: input.issuanceApprovedBy,
+      coolingOffUntil: input.coolingOffUntil,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(traderInvoices.id, input.invoiceId),
+        orgScopedWhere(traderInvoices.organizationId, scoped),
+        eq(traderInvoices.status, "DRAFT"),
+      ),
+    )
+    .run();
+
+  if (updated.changes === 0) {
+    const existing = getInvoiceByIdSqlite(db, context, input.invoiceId);
+    if (!existing) {
+      throw new Error("[trader] invoice not found for approval metadata update");
+    }
+    if (existing.status === "ISSUED") {
+      throw new Error("[trader] cannot approve issuance for an already-issued invoice");
+    }
+    throw new Error("[trader] invoice approval metadata update failed");
+  }
+
+  const row = getInvoiceByIdSqlite(db, context, input.invoiceId);
+  if (!row) {
+    throw new Error("[trader] invoice not found after approval metadata update");
+  }
+  return row;
+}
+
+export function clearIssuanceApprovalMetadataSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  input: ClearIssuanceApprovalMetadataInput,
+): InvoiceRecordView {
+  const scoped = requireOrgContext(context.organizationId);
+  const now = new Date();
+
+  db.update(traderInvoices)
+    .set({
+      issuanceApprovedAt: null,
+      issuanceApprovedBy: null,
+      coolingOffUntil: null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(traderInvoices.id, input.invoiceId),
+        orgScopedWhere(traderInvoices.organizationId, scoped),
+      ),
+    )
+    .run();
+
+  const row = getInvoiceByIdSqlite(db, context, input.invoiceId);
+  if (!row) {
+    throw new Error("[trader] invoice not found after clearing approval metadata");
+  }
+  return row;
 }
 
 export function insertInvoiceSqliteTx(

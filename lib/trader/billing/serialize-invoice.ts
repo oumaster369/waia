@@ -202,8 +202,13 @@ export function buildInvoiceRecordPayloadFromSources(
 }
 
 export function verifyInvoiceRecordDigest(payload: InvoiceRecordPayload): void {
-  const { recordContentDigest, schemaVersion: _schemaVersion, ...digestInput } = payload;
-  const expected = computeInvoiceRecordDigest(digestInput);
+  const {
+    recordContentDigest,
+    schemaVersion: _schemaVersion,
+    status: _status,
+    ...digestInput
+  } = payload;
+  const expected = computeInvoiceRecordDigest({ ...digestInput, status: "DRAFT" });
   if (expected !== recordContentDigest) {
     throw new DraftInvoiceDigestMismatchError();
   }

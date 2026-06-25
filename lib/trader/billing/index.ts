@@ -196,3 +196,64 @@ export {
   type DraftInvoiceServiceDeps,
   type PeriodDisclosureSnapshot,
 } from "@/lib/trader/billing/draft-invoice-service";
+
+export {
+  DEFAULT_INVOICE_APPROVAL_VALIDITY_MS,
+  DEFAULT_INVOICE_ISSUANCE_COOLING_OFF_MS,
+  computeApprovalExpiresAt,
+  computeCoolingOffUntil,
+  effectiveInvoiceApprovalValidityMs,
+  effectiveInvoiceIssuanceCoolingOffMs,
+} from "@/lib/trader/billing/invoice-issuance.config";
+
+export {
+  INVOICE_TRANSITIONS,
+  assertAllowedInvoiceTransition,
+  isTerminalInvoiceStatus,
+} from "@/lib/trader/billing/invoice-lifecycle.transitions";
+
+export {
+  InvoiceIssuanceError,
+  InvoiceIssuanceValidationError,
+  IssuanceAlreadyIssuedError,
+  IssuanceApprovalExpiredError,
+  IssuanceApprovalRequiredError,
+  IssuanceAttestationIncompleteError,
+  IssuanceConcurrentConflictError,
+  IssuanceCoolingOffNotElapsedError,
+  IssuanceHwmInconsistentError,
+  IssuanceInvoiceNotFoundError,
+  IssuanceNotDraftError,
+  IssuanceOperatorRequiredError,
+} from "@/lib/trader/billing/invoice-issuance.errors";
+
+export {
+  ISSUANCE_ATTESTATION_KEYS,
+  isIssuanceAttestationComplete,
+  type ApproveIssuanceInput,
+  type CancelPendingIssuanceInput,
+  type InvoiceIssuanceService,
+  type InvoiceIssuanceServiceDeps,
+  type IssuanceAttestation,
+  type IssueInvoiceInput,
+} from "@/lib/trader/billing/invoice-issuance.types";
+
+export type {
+  ExecuteInvoiceIssuanceRepoInput,
+  ExecuteInvoiceIssuanceRepoResult,
+  InvoiceIssuanceRepository,
+} from "@/lib/trader/billing/invoice-issuance-repository.types";
+
+export {
+  createPostgresInvoiceIssuanceRepository,
+  createSqliteInvoiceIssuanceRepository,
+  executeInvoiceIssuanceAtomicPostgres,
+  executeInvoiceIssuanceAtomicPostgresTx,
+  executeInvoiceIssuanceAtomicSqlite,
+} from "@/lib/trader/billing/invoice-issuance-repository-adapters";
+
+export {
+  createInvoiceIssuanceService,
+  createPostgresInvoiceIssuanceService,
+  createSqliteInvoiceIssuanceService,
+} from "@/lib/trader/billing/invoice-issuance-service";

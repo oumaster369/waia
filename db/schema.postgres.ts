@@ -367,7 +367,7 @@ export const strategyTargetDeploymentStateEnumPg = pgEnum("strategy_target_deplo
 
 export const reportingPeriodStatusEnumPg = pgEnum("reporting_period_status", ["OPEN", "CLOSED"]);
 export const hwmEntryTypeEnumPg = pgEnum("hwm_entry_type", ["BOOTSTRAP", "RATCHET_UP", "ROLLBACK"]);
-export const invoiceStatusEnumPg = pgEnum("invoice_status", ["DRAFT"]);
+export const invoiceStatusEnumPg = pgEnum("invoice_status", ["DRAFT", "ISSUED"]);
 
 export const miSourceStatusEnumPg = pgEnum("mi_source_status", ["active", "deprecated"]);
 
@@ -1007,6 +1007,14 @@ export const traderInvoices = pgTable(
     feeComputedAt: timestamp("fee_computed_at", { withTimezone: true, mode: "date" }).notNull(),
     schemaVersion: text("schema_version").notNull(),
     recordContentDigest: text("record_content_digest").notNull(),
+    issuanceApprovedAt: timestamp("issuance_approved_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    issuanceApprovedBy: text("issuance_approved_by"),
+    coolingOffUntil: timestamp("cooling_off_until", { withTimezone: true, mode: "date" }),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }),
+    issuedBy: text("issued_by"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },

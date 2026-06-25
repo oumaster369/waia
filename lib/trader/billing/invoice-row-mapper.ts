@@ -29,6 +29,11 @@ type InvoiceRow = {
   feeComputedAt: Date;
   schemaVersion: string;
   recordContentDigest: string;
+  issuanceApprovedAt: Date | null;
+  issuanceApprovedBy: string | null;
+  coolingOffUntil: Date | null;
+  issuedAt: Date | null;
+  issuedBy: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -62,6 +67,11 @@ export function mapInvoiceRow(row: InvoiceRow): InvoiceRecordView {
     feeComputedAt: row.feeComputedAt,
     schemaVersion: row.schemaVersion as InvoiceRecordPayload["schemaVersion"],
     recordContentDigest: row.recordContentDigest,
+    issuanceApprovedAt: row.issuanceApprovedAt,
+    issuanceApprovedBy: row.issuanceApprovedBy,
+    coolingOffUntil: row.coolingOffUntil,
+    issuedAt: row.issuedAt,
+    issuedBy: row.issuedBy,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -104,6 +114,11 @@ export function invoicePayloadToInsertValues(
     feeComputedAt: payload.feeComputedAt,
     schemaVersion: payload.schemaVersion,
     recordContentDigest: payload.recordContentDigest,
+    issuanceApprovedAt: null,
+    issuanceApprovedBy: null,
+    coolingOffUntil: null,
+    issuedAt: null,
+    issuedBy: null,
     createdAt,
     updatedAt,
   };
