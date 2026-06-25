@@ -330,6 +330,20 @@
       "when": 1780000000009,
       "tag": "0046_payments_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1780000000010,
+      "tag": "0047_payment_address_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1780000000011,
+      "tag": "0048_payment_address_registry_rls",
+      "breakpoints": true
     }
   ]
 }

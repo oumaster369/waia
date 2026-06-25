@@ -13,11 +13,15 @@ import {
   auditActorTypeEnum,
   organizationKindEnum,
   organizationMemberRoleEnum,
+  paymentAddressEventTypeEnum,
+  paymentAddressStatusEnum,
   paymentDirectionEnum,
   paymentEventTypeEnum,
   paymentFailureReasonEnum,
   paymentStatusEnum,
   paymentSubjectModuleEnum,
+  paymentWalletCustodyModelEnum,
+  paymentWalletKindEnum,
   platformRoleEnum,
   subscriptionStatusEnum,
   waiaModuleEnum,
@@ -261,6 +265,94 @@ export const payments = sqliteTable(
   (t) => [
     index("payments_org_status_idx").on(t.organizationId, t.status),
     index("payments_subject_idx").on(t.subjectModule, t.subjectInvoiceId),
+  ],
+);
+
+/** WAIA Core: payment wallet control-domain anchor (AT-E12 S2 / DEE-315). */
+export const paymentWallets = sqliteTable(
+  "payment_wallets",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    walletKind: text("wallet_kind", { enum: [...paymentWalletKindEnum] }).notNull(),
+    custodyModel: text("custody_model", { enum: [...paymentWalletCustodyModelEnum] }).notNull(),
+    controlModel: text("control_model").notNull(),
+    providerRef: text("provider_ref"),
+    derivationScheme: text("derivation_scheme"),
+    status: text("status").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("payment_wallets_org_status_idx").on(t.organizationId, t.status)],
+);
+
+/** WAIA Core: append-only payment address event ledger (AT-E12 S2 / DEE-315). */
+export const paymentAddressEvents = sqliteTable(
+  "payment_address_events",
+  {
+    id: text("id").primaryKey(),
+    addressId: text("address_id").notNull(),
+    walletId: text("wallet_id"),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: text("event_type", { enum: [...paymentAddressEventTypeEnum] }).notNull(),
+    network: text("network").notNull(),
+    address: text("address"),
+    subjectModule: text("subject_module", { enum: [...paymentSubjectModuleEnum] }),
+    subjectRef: text("subject_ref"),
+    bindingRef: text("binding_ref"),
+    reason: text("reason"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("payment_address_events_address_id_seq_unique").on(t.addressId, t.seq),
+    index("payment_address_events_org_address_idx").on(t.organizationId, t.addressId),
+  ],
+);
+
+/** WAIA Core: rebuildable payment address projection (AT-E12 S2 / DEE-315). */
+export const paymentAddresses = sqliteTable(
+  "payment_addresses",
+  {
+    addressId: text("address_id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    walletId: text("wallet_id").references(() => paymentWallets.id, { onDelete: "set null" }),
+    network: text("network").notNull(),
+    address: text("address").notNull(),
+    status: text("status", { enum: [...paymentAddressStatusEnum] }).notNull(),
+    subjectModule: text("subject_module", { enum: [...paymentSubjectModuleEnum] }),
+    subjectRef: text("subject_ref"),
+    bindingRef: text("binding_ref"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("payment_addresses_network_address_unique").on(t.network, t.address),
+    uniqueIndex("payment_addresses_org_subject_active_unique")
+      .on(t.organizationId, t.subjectModule, t.subjectRef)
+      .where(sql`"status" = 'ACTIVE'`),
+    index("payment_addresses_org_status_idx").on(t.organizationId, t.status),
   ],
 );
 
