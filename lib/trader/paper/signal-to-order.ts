@@ -2,7 +2,11 @@ import type { SubmitOrderInput } from "@/lib/trader/execution/execution-service.
 import type { StrategySignal, TradingPermission } from "@/lib/trader/intelligence/types";
 import { compareDecimal, divideDecimal, minDecimal } from "@/lib/trader/risk/numeric";
 
-const BLOCKED_PERMISSIONS: readonly TradingPermission[] = ["STOP_TRADING", "ONLY_CLOSE_POSITIONS"];
+const BLOCKED_PERMISSIONS: readonly TradingPermission[] = [
+  "STOP_TRADING",
+  "ONLY_CLOSE_POSITIONS",
+  "PAPER_ONLY",
+];
 
 export type MapSignalToSubmitOrderInput = {
   signal: StrategySignal;

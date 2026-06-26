@@ -69,6 +69,32 @@ export default {
             }),
           );
         }
+
+        try {
+          const { buildMarketBrainDepsFromEnv, runMarketBrainCycle } =
+            await import("@/lib/trader/market-brain/build-worker-deps");
+          const { deps: marketBrainDeps, dispose: marketBrainDispose } =
+            await buildMarketBrainDepsFromEnv(env);
+          try {
+            await runMarketBrainCycle({
+              deps: marketBrainDeps,
+              organizationId: marketBrainDeps.config.organizationId,
+            });
+          } finally {
+            await marketBrainDispose();
+          }
+        } catch (marketBrainError) {
+          console.error(
+            JSON.stringify({
+              event: "waia_market_brain",
+              phase: "cycle_error",
+              error:
+                marketBrainError instanceof Error
+                  ? marketBrainError.message
+                  : String(marketBrainError),
+            }),
+          );
+        }
       })(),
     );
   },
