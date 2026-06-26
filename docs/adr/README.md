@@ -23,6 +23,6 @@ See policy: [`../waia-governance/ADR-POLICY.md`](../waia-governance/ADR-POLICY.m
 | [0013](0013-payment-address-registry-wallet-anchored-event-sourced-soft-bound.md) | Payment Address Registry: Wallet-Anchored, Event-Sourced, Soft-Bound Architecture | Accepted | AT-E12 S2; `DEE-313`, `DEE-315` |
 | [0014](0014-payment-watcher-execution-model-read-only-observer.md) | Payment Watcher: Read-Only Inbound Observer on Cloudflare Worker + Cron | Accepted | AT-E12 S3; `DEE-319` |
 | [0015](0015-tron-settlement-finality-rpc-trust-doctrine.md) | Tron Settlement, Finality, and RPC Trust Doctrine | Accepted | AT-E12 S3; `DEE-319` |
-| [0016](0016-settlement-exception-reconciliation.md) | Settlement Exception Reconciliation (immutable EXCEPTION row, separate reconciliation aggregate, derived effective outcome) | Proposed | AT-E12 S3-C; `DEE-216`, `DEE-323` |
+| [0016](0016-settlement-exception-reconciliation.md) | Settlement Exception Reconciliation (immutable EXCEPTION row, separate reconciliation aggregate, derived effective outcome) | Accepted | AT-E12 S3-C; `DEE-216`, `DEE-323` |
 
 Add rows as new decisions land.**Superseded** decisions keep file for history — index notes replacement.
