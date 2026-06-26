@@ -1,6 +1,6 @@
 # ADR-0016 — Settlement Exception Reconciliation
 
-Status: Proposed (pending ratification)
+Status: Accepted
 Date: 2026-06-26
 Baseline: AT-E12 S3-C (settlement exception reconciliation — human decision layer)
 
