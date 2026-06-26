@@ -137,6 +137,9 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | Postgres `0051_trader_invoice_status_settlement` | `invoice_status` enum | Add PAID value (isolated migration) |
 | Postgres `0052_trader_settlement` | settlement + account status tables | Same as SQLite 0031 |
 | Postgres `0053_trader_settlement_rls` | settlement tables RLS | Append-only triggers + ADR-0007 deny authenticated/anon |
+| SQLite `0032_trader_settlement_reconciliation` | reconciliation cases/events + application columns | Settlement exception reconciliation schema (DEE-325 / AT-E12 S3-C-A) |
+| Postgres `0054_trader_settlement_reconciliation` | reconciliation cases/events + application columns | Same as SQLite 0032 |
+| Postgres `0055_trader_settlement_reconciliation_rls` | reconciliation tables RLS | Append-only trigger on events + ADR-0007 deny authenticated/anon |
 
 **Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 

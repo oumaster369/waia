@@ -50,6 +50,14 @@ import { settlementExceptionReasons } from "@/lib/trader/settlement/settlement.t
 import type { SettlementValuationPolicy } from "@/lib/trader/settlement/valuation-policy";
 import { parityUsdtUsdValuation } from "@/lib/trader/settlement/valuation-policy";
 import { isUniqueConstraintError } from "@/lib/trader/execution/order-repository.types";
+import {
+  createCaseOnExceptionFromSettlement,
+  type CreateCaseDeps,
+} from "@/lib/trader/settlement/reconciliation/create-case";
+import { createPostgresReconciliationCaseRepository } from "@/lib/trader/settlement/reconciliation/reconciliation-case-repository-postgres";
+import { createSqliteReconciliationCaseRepository } from "@/lib/trader/settlement/reconciliation/reconciliation-case-repository-sqlite";
+import { createPostgresReconciliationEvidenceReader } from "@/lib/trader/settlement/reconciliation/reconciliation-evidence-postgres";
+import { createSqliteReconciliationEvidenceReader } from "@/lib/trader/settlement/reconciliation/reconciliation-evidence-sqlite";
 import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/lib/trader/types";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -62,6 +70,11 @@ export type SettlementServiceDeps = {
   allocationPolicy?: SettlementAllocationPolicy;
   valuationPolicy?: SettlementValuationPolicy;
   amountTolerance?: string;
+  createCaseOnException?: (
+    context: OrgContext,
+    settlement: SettlementRecordView,
+    input: { exceptionReason: string | null; exchangeAccountId: string },
+  ) => Promise<void>;
   runAtomic?: <T>(fn: (atomicDeps: SettlementServiceDeps) => Promise<T>) => Promise<T>;
   now?: () => Date;
 };
@@ -238,6 +251,12 @@ async function applySettlementInner(
   }
 
   if (evaluation.outcome === "EXCEPTION") {
+    if (deps.createCaseOnException) {
+      await deps.createCaseOnException(scoped, settlement, {
+        exceptionReason: evaluation.exceptionReason,
+        exchangeAccountId: evaluation.exchangeAccountId,
+      });
+    }
     await deps.writeAudit({
       actorType: "service",
       actorId: null,
@@ -307,6 +326,28 @@ async function applySettlementInner(
   return settlement;
 }
 
+function buildCreateCaseDepsFromExecutor(
+  executor: Pick<WaiaPostgresDb, "select" | "insert">,
+  writeAudit: (input: TraderAuditInput) => string | Promise<string>,
+): CreateCaseDeps {
+  return {
+    caseRepository: createPostgresReconciliationCaseRepository(executor),
+    evidenceReader: createPostgresReconciliationEvidenceReader(executor),
+    writeAudit,
+  };
+}
+
+function buildCreateCaseDepsFromSqlite(
+  db: WaiaDb,
+  writeAudit: (input: TraderAuditInput) => string | Promise<string>,
+): CreateCaseDeps {
+  return {
+    caseRepository: createSqliteReconciliationCaseRepository(db),
+    evidenceReader: createSqliteReconciliationEvidenceReader(db),
+    writeAudit,
+  };
+}
+
 export function createSettlementService(deps: SettlementServiceDeps): SettlementService {
   const runAtomic =
     deps.runAtomic ??
@@ -323,21 +364,34 @@ export function createSqliteSettlementService(
   db: WaiaDb,
   overrides: Partial<SettlementServiceDeps> = {},
 ): SettlementService {
-  const buildDeps = (): SettlementServiceDeps => ({
-    settlementsRepository: overrides.settlementsRepository ?? createSqliteSettlementsRepository(db),
-    settlementApplicationsRepository:
-      overrides.settlementApplicationsRepository ??
-      createSqliteSettlementApplicationsRepository(db),
-    accountStatusRepository:
-      overrides.accountStatusRepository ?? createSqliteAccountStatusRepository(db),
-    invoiceSettlementRepository:
-      overrides.invoiceSettlementRepository ?? createSqliteInvoiceSettlementRepository(db),
-    writeAudit: overrides.writeAudit ?? ((input) => writeTraderAuditLogSqlite(db, input)),
-    allocationPolicy: overrides.allocationPolicy,
-    valuationPolicy: overrides.valuationPolicy,
-    amountTolerance: overrides.amountTolerance,
-    now: overrides.now,
-  });
+  const buildDeps = (): SettlementServiceDeps => {
+    const writeAudit = overrides.writeAudit ?? ((input) => writeTraderAuditLogSqlite(db, input));
+    return {
+      settlementsRepository:
+        overrides.settlementsRepository ?? createSqliteSettlementsRepository(db),
+      settlementApplicationsRepository:
+        overrides.settlementApplicationsRepository ??
+        createSqliteSettlementApplicationsRepository(db),
+      accountStatusRepository:
+        overrides.accountStatusRepository ?? createSqliteAccountStatusRepository(db),
+      invoiceSettlementRepository:
+        overrides.invoiceSettlementRepository ?? createSqliteInvoiceSettlementRepository(db),
+      writeAudit,
+      allocationPolicy: overrides.allocationPolicy,
+      valuationPolicy: overrides.valuationPolicy,
+      amountTolerance: overrides.amountTolerance,
+      now: overrides.now,
+      createCaseOnException:
+        overrides.createCaseOnException ??
+        (async (context, settlement) => {
+          await createCaseOnExceptionFromSettlement(
+            buildCreateCaseDepsFromSqlite(db, writeAudit),
+            context,
+            settlement,
+          );
+        }),
+    };
+  };
 
   return createSettlementService({
     ...buildDeps(),
@@ -352,22 +406,36 @@ export function createPostgresSettlementService(
 ): SettlementService {
   const buildDeps = (
     executor: Pick<WaiaPostgresDb, "select" | "insert" | "update">,
-  ): SettlementServiceDeps => ({
-    settlementsRepository:
-      overrides.settlementsRepository ?? createPostgresSettlementsRepository(executor),
-    settlementApplicationsRepository:
-      overrides.settlementApplicationsRepository ??
-      createPostgresSettlementApplicationsRepository(executor),
-    accountStatusRepository:
-      overrides.accountStatusRepository ?? createPostgresAccountStatusRepository(executor),
-    invoiceSettlementRepository:
-      overrides.invoiceSettlementRepository ?? createPostgresInvoiceSettlementRepository(executor),
-    writeAudit: overrides.writeAudit ?? ((input) => writeTraderAuditLogPostgres(executor, input)),
-    allocationPolicy: overrides.allocationPolicy,
-    valuationPolicy: overrides.valuationPolicy,
-    amountTolerance: overrides.amountTolerance,
-    now: overrides.now,
-  });
+  ): SettlementServiceDeps => {
+    const writeAudit =
+      overrides.writeAudit ?? ((input) => writeTraderAuditLogPostgres(executor, input));
+    return {
+      settlementsRepository:
+        overrides.settlementsRepository ?? createPostgresSettlementsRepository(executor),
+      settlementApplicationsRepository:
+        overrides.settlementApplicationsRepository ??
+        createPostgresSettlementApplicationsRepository(executor),
+      accountStatusRepository:
+        overrides.accountStatusRepository ?? createPostgresAccountStatusRepository(executor),
+      invoiceSettlementRepository:
+        overrides.invoiceSettlementRepository ??
+        createPostgresInvoiceSettlementRepository(executor),
+      writeAudit,
+      allocationPolicy: overrides.allocationPolicy,
+      valuationPolicy: overrides.valuationPolicy,
+      amountTolerance: overrides.amountTolerance,
+      now: overrides.now,
+      createCaseOnException:
+        overrides.createCaseOnException ??
+        (async (context, settlement) => {
+          await createCaseOnExceptionFromSettlement(
+            buildCreateCaseDepsFromExecutor(executor, writeAudit),
+            context,
+            settlement,
+          );
+        }),
+    };
+  };
 
   return createSettlementService({
     ...buildDeps(ex),

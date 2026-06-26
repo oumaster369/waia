@@ -11,6 +11,7 @@ import {
   traderAccountStatusEvents,
   traderInvoices,
   traderSettlementApplications,
+  traderSettlementReconciliationCases,
   traderSettlements,
 } from "@/db/schema";
 import { createSqlitePaymentAddressService } from "@/lib/waia-core/payment-addresses";
@@ -236,6 +237,14 @@ describe("settlement service + cycle (sqlite)", () => {
       .where(eq(traderSettlementApplications.settlementId, settlement.id))
       .all();
     expect(applications).toHaveLength(0);
+
+    const cases = db
+      .select()
+      .from(traderSettlementReconciliationCases)
+      .where(eq(traderSettlementReconciliationCases.settlementId, settlement.id))
+      .all();
+    expect(cases).toHaveLength(1);
+    expect(cases[0]?.status).toBe("OPEN");
   });
 
   it("reactivates a suspended account on APPLIED settlement", async () => {
