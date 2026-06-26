@@ -69,4 +69,29 @@ describe("trader signal-to-order mapper (DEE-257)", () => {
 
     expect(submit).toBeNull();
   });
+
+  it("returns null when trading permission is PAPER_ONLY (fail-closed)", () => {
+    const submit = mapSignalToSubmitOrder({
+      signal: {
+        strategySignalId: "sig-paper",
+        strategyId: "mean_reversion_v0",
+        strategyVersion: "0.1.0",
+        organizationId: ORG,
+        symbol: "BTC/USDT",
+        outcome: "SIGNAL",
+        side: "buy",
+        reasonCodes: ["STRAT_MR_ZSCORE_BUY"],
+        msvId: "msv-paper",
+        featureSetId: "feat-paper",
+        evaluatedAt: "2026-01-01T00:25:00.000Z",
+      },
+      accountKey: "acct-1",
+      referencePrice: "64000.00",
+      executionMode: "mock",
+      defaultQuantity: "0.01",
+      tradingPermission: "PAPER_ONLY",
+    });
+
+    expect(submit).toBeNull();
+  });
 });

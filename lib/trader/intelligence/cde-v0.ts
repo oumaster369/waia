@@ -1,5 +1,11 @@
 import { FEATURE_ENGINE_QUALITY_THRESHOLD } from "@/lib/trader/intelligence/feature-engine-v0";
 import {
+  buildCrowdPsychologyLayer,
+  buildFutureContextLayer,
+  buildLiquidityLayer,
+  buildMarketPhysicsLayer,
+} from "@/lib/trader/intelligence/analytical-layers-v0";
+import {
   MEAN_REVERSION_V0,
   cdeReasonCodes,
   type FeatureSnapshot,
@@ -72,21 +78,10 @@ export function buildMsvEnvelope(input: BuildMsvEnvelopeInput): MsvEnvelope {
     instrumentId: features.instrumentId,
     evaluatedAt: features.evaluatedAt,
     featureSetId: features.featureSetId,
-    physics: {
-      close: features.features.close,
-      zscoreVsSma20: features.features.zscoreVsSma20,
-      realizedVol20: features.features.realizedVol20,
-    },
-    liquidity: {
-      spreadBps: features.features.spreadBps,
-    },
-    crowd: {
-      fearGreedIndex: null,
-      newsSentiment: "0",
-    },
-    futureContext: {
-      eventRiskScore: "0",
-    },
+    physics: buildMarketPhysicsLayer(features),
+    liquidity: buildLiquidityLayer(features),
+    crowd: buildCrowdPsychologyLayer(),
+    futureContext: buildFutureContextLayer(),
     derived: {
       regime,
       tradingPermission: permission.permission,

@@ -17,11 +17,7 @@ const ZSCORE_BUY_THRESHOLD = "-1.5";
 const DEFAULT_HORIZON = "1h" as const;
 const DEFAULT_MAX_RISK = "650.00";
 
-const TRADEABLE_PERMISSIONS: readonly TradingPermission[] = [
-  "ALLOW_TRADING",
-  "ALLOW_REDUCED_RISK",
-  "PAPER_ONLY",
-];
+const TRADEABLE_PERMISSIONS: readonly TradingPermission[] = ["ALLOW_TRADING", "ALLOW_REDUCED_RISK"];
 
 function isStrategyAllowed(msv: MsvEnvelope): boolean {
   return msv.derived.allowedStrategyIds.includes(MEAN_REVERSION_V0);

@@ -3,7 +3,12 @@ import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-te
 /** Canonical spot symbol for MVP intelligence slice (HTX-style slash form). */
 export const BTC_USDT = "BTC/USDT" as const;
 
-export type InstrumentId = typeof BTC_USDT | string;
+export const ETH_USDT = "ETH/USDT" as const;
+
+/** Pipeline P3 live ingestion symbols (Execution Program v2). */
+export const P3_MARKET_BRAIN_SYMBOLS = [BTC_USDT, ETH_USDT] as const;
+
+export type InstrumentId = typeof BTC_USDT | typeof ETH_USDT | string;
 
 export type BarInterval = "1m";
 
