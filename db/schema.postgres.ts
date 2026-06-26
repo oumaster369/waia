@@ -1530,6 +1530,19 @@ export const verificationFeedback = pgTable("verification_feedback", {
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
 
+/** WAIA Core: payment watcher cursor (AT-E12 S3-A / DEE-321). Network-scoped, mutable. */
+export const paymentWatcherCheckpoints = pgTable("payment_watcher_checkpoints", {
+  network: text("network").primaryKey(),
+  lastScannedBlock: text("last_scanned_block").notNull(),
+  lastScannedAt: timestamp("last_scanned_at", { withTimezone: true, mode: "date" }).notNull(),
+  leaseUntil: timestamp("lease_until", { withTimezone: true, mode: "date" }),
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true, mode: "date" }),
+  cycleCount: integer("cycle_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
+
 /**
  * Postgres transaction integration validation table (DEE-64 D6-core).
  * Used only by opt-in `tests/integration/postgres-transaction-rollback.test.ts` to verify commit/rollback semantics.

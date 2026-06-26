@@ -344,6 +344,20 @@
       "when": 1780000000011,
       "tag": "0048_payment_address_registry_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1780000000012,
+      "tag": "0049_payment_watcher_checkpoints",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1780000000013,
+      "tag": "0050_payment_watcher_checkpoints_rls",
+      "breakpoints": true
     }
   ]
 }

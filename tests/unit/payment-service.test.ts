@@ -24,7 +24,7 @@ const USER_ID = "00000000-0000-4000-8000-0000000312s";
 const INVOICE_ID = "invoice-312-service";
 
 const SETTLEMENT = {
-  settlementNetwork: "TRC20",
+  settlementNetwork: "TRC-20",
   settlementAsset: "USDT",
   settlementAmount: "150.00",
   settlementTxHash: "312abc-service-tx",

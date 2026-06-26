@@ -1607,3 +1607,20 @@ export const verificationFeedback = sqliteTable("verification_feedback", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/** WAIA Core: payment watcher cursor (AT-E12 S3-A / DEE-321). Network-scoped, mutable. */
+export const paymentWatcherCheckpoints = sqliteTable("payment_watcher_checkpoints", {
+  network: text("network").primaryKey(),
+  lastScannedBlock: text("last_scanned_block").notNull(),
+  lastScannedAt: integer("last_scanned_at", { mode: "timestamp_ms" }).notNull(),
+  leaseUntil: integer("lease_until", { mode: "timestamp_ms" }),
+  lastError: text("last_error"),
+  lastErrorAt: integer("last_error_at", { mode: "timestamp_ms" }),
+  cycleCount: integer("cycle_count").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});

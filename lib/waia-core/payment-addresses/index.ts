@@ -109,3 +109,8 @@ export type {
   PaymentAddressService,
   PaymentAddressServiceDeps,
 } from "@/lib/waia-core/payment-addresses/payment-address-service";
+
+export type { InboundAttribution } from "@/lib/waia-core/payment-addresses/payment-address-inbound-resolver.port";
+export type { PaymentAddressInboundResolver } from "@/lib/waia-core/payment-addresses/payment-address-inbound-resolver.port";
+export { createSqlitePaymentAddressInboundResolver } from "@/lib/waia-core/payment-addresses/payment-address-inbound-resolver-sqlite";
+export { createPostgresPaymentAddressInboundResolver } from "@/lib/waia-core/payment-addresses/payment-address-inbound-resolver-postgres";
