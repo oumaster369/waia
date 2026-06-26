@@ -70,7 +70,20 @@ jobs:
           DEE_ID: ${{ steps.resolve.outputs.dee_id }}
         run: |
           set -euo pipefail
-          ./scripts/linear/mark-done.sh "$DEE_ID" "$PR_URL"
+          set +e
+          output="$(./scripts/linear/mark-done.sh "$DEE_ID" "$PR_URL" 2>&1)"
+          code=$?
+          set -e
+          printf '%s\n' "$output"
+          if [[ $code -ne 0 ]]; then
+            echo "::error::Linear mark-done failed (exit ${code})"
+            exit "$code"
+          fi
+          if printf '%s' "$output" | grep -q 'already'; then
+            echo "::notice::Linear ${DEE_ID} was already Done — idempotent success."
+          else
+            echo "::notice::Linear ${DEE_ID} marked Done."
+          fi
 
       - name: Warn on skipped auto-close
         if: steps.resolve.outputs.skip == 'true'

@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -24,15 +20,9 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     },
-    "types": [
-      "node",
-      "vitest/globals",
-      "@testing-library/jest-dom"
-    ]
+    "types": ["node", "vitest/globals", "@testing-library/jest-dom"]
   },
   "include": [
     "next-env.d.ts",
@@ -47,6 +37,7 @@
     ".next",
     ".open-next",
     "playwright-report",
-    "test-results"
+    "test-results",
+    "custom-worker.ts"
   ]
 }

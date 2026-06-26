@@ -145,6 +145,8 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 
 **Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 
+**Postgres-only (MVP Execution Freeze — ADR-0017):** new AI-TRADER modules, migrations, repositories, and integration tests target Postgres only. Do not add new SQLite migrations or SQLite adapters for new trader features until Post-MVP (DEE-85).
+
 **Production apply:** targeted SQL only on `waia-prod` (no blind `pnpm db:migrate:postgres` — see WAIA Core M1 runbook).
 
 ## Validation
