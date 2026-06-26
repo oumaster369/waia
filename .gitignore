@@ -5,7 +5,9 @@ node_modules/
 
 # Build / framework output
 .next/
-.open-next/
+# OpenNext build output (committed stub keeps clean-checkout typecheck green)
+.open-next/*
+!.open-next/worker.js
 .open-next.bak/
 out/
 build/
