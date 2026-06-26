@@ -133,6 +133,10 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | SQLite `0030_payment_watcher_checkpoints` | `payment_watcher_checkpoints` | Core payment watcher cursor (DEE-321 / AT-E12 S3-A) |
 | Postgres `0049_payment_watcher_checkpoints` | `payment_watcher_checkpoints` | Same |
 | Postgres `0050_payment_watcher_checkpoints_rls` | `payment_watcher_checkpoints` RLS | ADR-0007 deny authenticated/anon |
+| SQLite `0031_trader_settlement` | `trader_settlements`, `trader_settlement_applications`, `trader_account_status`, `trader_account_status_events` | Settlement engine schema (DEE-322 / AT-E12 S3-B) |
+| Postgres `0051_trader_invoice_status_settlement` | `invoice_status` enum | Add PAID value (isolated migration) |
+| Postgres `0052_trader_settlement` | settlement + account status tables | Same as SQLite 0031 |
+| Postgres `0053_trader_settlement_rls` | settlement tables RLS | Append-only triggers + ADR-0007 deny authenticated/anon |
 
 **Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 

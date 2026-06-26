@@ -16,6 +16,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -555,7 +556,10 @@ export const strategyTargetDeploymentStateEnumPg = pgEnum("strategy_target_deplo
 
 export const reportingPeriodStatusEnumPg = pgEnum("reporting_period_status", ["OPEN", "CLOSED"]);
 export const hwmEntryTypeEnumPg = pgEnum("hwm_entry_type", ["BOOTSTRAP", "RATCHET_UP", "ROLLBACK"]);
-export const invoiceStatusEnumPg = pgEnum("invoice_status", ["DRAFT", "ISSUED"]);
+export const invoiceStatusEnumPg = pgEnum("invoice_status", ["DRAFT", "ISSUED", "PAID"]);
+export const accountStatusEnumPg = pgEnum("account_status", ["ACTIVE", "SUSPENDED"]);
+export const accountStatusEventTypeEnumPg = pgEnum("account_status_event_type", ["REACTIVATED"]);
+export const settlementOutcomeEnumPg = pgEnum("settlement_outcome", ["APPLIED", "EXCEPTION"]);
 
 export const miSourceStatusEnumPg = pgEnum("mi_source_status", ["active", "deprecated"]);
 
@@ -1203,6 +1207,8 @@ export const traderInvoices = pgTable(
     coolingOffUntil: timestamp("cooling_off_until", { withTimezone: true, mode: "date" }),
     issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }),
     issuedBy: text("issued_by"),
+    settledAmount: text("settled_amount").notNull().default("0"),
+    paidAt: timestamp("paid_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
@@ -1216,6 +1222,113 @@ export const traderInvoices = pgTable(
       t.organizationId,
       t.exchangeAccountId,
       t.reportingPeriodId,
+    ),
+  ],
+);
+
+/** AI-TRADER: settlement exactly-once anchor (one row per CONFIRMED payment; AT-E12 S3-B). */
+export const traderSettlements = pgTable(
+  "trader_settlements",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    paymentId: uuid("payment_id")
+      .notNull()
+      .references(() => payments.paymentId, { onDelete: "cascade" }),
+    settlementNetwork: text("settlement_network"),
+    settlementTxHash: text("settlement_tx_hash"),
+    transferIndex: integer("transfer_index"),
+    blockHeight: text("block_height"),
+    asset: text("asset"),
+    onChainAmount: text("on_chain_amount"),
+    valuedAmount: text("valued_amount"),
+    valuationCurrency: text("valuation_currency"),
+    valuationBasis: text("valuation_basis"),
+    outcome: settlementOutcomeEnumPg("outcome").notNull(),
+    exceptionReason: text("exception_reason"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_settlements_payment_id_unique").on(t.paymentId),
+    index("trader_settlements_org_account_idx").on(t.organizationId, t.exchangeAccountId),
+    index("trader_settlements_outcome_idx").on(t.outcome),
+  ],
+);
+
+/** AI-TRADER: settlement allocation to invoice (AT-E12 S3-B). */
+export const traderSettlementApplications = pgTable(
+  "trader_settlement_applications",
+  {
+    id: uuid("id").primaryKey(),
+    settlementId: uuid("settlement_id")
+      .notNull()
+      .references(() => traderSettlements.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => traderInvoices.id, { onDelete: "cascade" }),
+    appliedAmount: text("applied_amount").notNull(),
+    invoiceStatusAfter: invoiceStatusEnumPg("invoice_status_after").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_settlement_applications_settlement_idx").on(t.settlementId),
+    index("trader_settlement_applications_invoice_idx").on(t.invoiceId),
+  ],
+);
+
+/** AI-TRADER: exchange account status projection (AT-E12 S3-B). */
+export const traderAccountStatus = pgTable(
+  "trader_account_status",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    status: accountStatusEnumPg("status").notNull(),
+    reason: text("reason"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.exchangeAccountId] })],
+);
+
+/** AI-TRADER: append-only account status event ledger (AT-E12 S3-B). */
+export const traderAccountStatusEvents = pgTable(
+  "trader_account_status_events",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    seq: integer("seq").notNull(),
+    eventType: accountStatusEventTypeEnumPg("event_type").notNull(),
+    reason: text("reason"),
+    sourcePaymentId: uuid("source_payment_id"),
+    sourceInvoiceId: uuid("source_invoice_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_account_status_events_org_account_seq_unique").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.seq,
     ),
   ],
 );

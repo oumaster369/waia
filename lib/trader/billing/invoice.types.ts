@@ -2,7 +2,7 @@ export const INVOICE_SCHEMA_VERSION = "waia.trader.invoice.v1" as const;
 
 export type InvoiceSchemaVersion = typeof INVOICE_SCHEMA_VERSION;
 
-export const invoiceStatuses = ["DRAFT", "ISSUED"] as const;
+export const invoiceStatuses = ["DRAFT", "ISSUED", "PAID"] as const;
 
 export type InvoiceStatus = (typeof invoiceStatuses)[number];
 
@@ -48,8 +48,15 @@ export type InvoiceGovernanceMetadata = {
   issuedBy: string | null;
 };
 
+/** Settlement projection fields (AT-E12 S3-B). */
+export type InvoiceSettlementMetadata = {
+  settledAmount: string;
+  paidAt: Date | null;
+};
+
 export type InvoiceRecordView = InvoiceRecordPayload &
-  InvoiceGovernanceMetadata & {
+  InvoiceGovernanceMetadata &
+  InvoiceSettlementMetadata & {
     id: string;
     createdAt: Date;
     updatedAt: Date;

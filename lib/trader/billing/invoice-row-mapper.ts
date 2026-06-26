@@ -34,6 +34,8 @@ type InvoiceRow = {
   coolingOffUntil: Date | null;
   issuedAt: Date | null;
   issuedBy: string | null;
+  settledAmount: string;
+  paidAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -72,6 +74,8 @@ export function mapInvoiceRow(row: InvoiceRow): InvoiceRecordView {
     coolingOffUntil: row.coolingOffUntil,
     issuedAt: row.issuedAt,
     issuedBy: row.issuedBy,
+    settledAmount: row.settledAmount ?? "0",
+    paidAt: row.paidAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -119,6 +123,8 @@ export function invoicePayloadToInsertValues(
     coolingOffUntil: null,
     issuedAt: null,
     issuedBy: null,
+    settledAmount: "0",
+    paidAt: null,
     createdAt,
     updatedAt,
   };

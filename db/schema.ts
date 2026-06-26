@@ -2,6 +2,7 @@ import {
   foreignKey,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   unique,
@@ -553,8 +554,17 @@ export type ReportingPeriodStatusDb = (typeof reportingPeriodStatusEnum)[number]
 export const hwmEntryTypeEnum = ["BOOTSTRAP", "RATCHET_UP", "ROLLBACK"] as const;
 export type HwmEntryTypeDb = (typeof hwmEntryTypeEnum)[number];
 
-export const invoiceStatusEnum = ["DRAFT", "ISSUED"] as const;
+export const invoiceStatusEnum = ["DRAFT", "ISSUED", "PAID"] as const;
 export type InvoiceStatusDb = (typeof invoiceStatusEnum)[number];
+
+export const accountStatusEnum = ["ACTIVE", "SUSPENDED"] as const;
+export type AccountStatusDb = (typeof accountStatusEnum)[number];
+
+export const accountStatusEventTypeEnum = ["REACTIVATED"] as const;
+export type AccountStatusEventTypeDb = (typeof accountStatusEventTypeEnum)[number];
+
+export const settlementOutcomeEnum = ["APPLIED", "EXCEPTION"] as const;
+export type SettlementOutcomeDb = (typeof settlementOutcomeEnum)[number];
 
 export const miSourceStatusEnum = ["active", "deprecated"] as const;
 export type MiSourceStatusDb = (typeof miSourceStatusEnum)[number];
@@ -1237,6 +1247,8 @@ export const traderInvoices = sqliteTable(
     coolingOffUntil: integer("cooling_off_until", { mode: "timestamp_ms" }),
     issuedAt: integer("issued_at", { mode: "timestamp_ms" }),
     issuedBy: text("issued_by"),
+    settledAmount: text("settled_amount").notNull().default("0"),
+    paidAt: integer("paid_at", { mode: "timestamp_ms" }),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -1254,6 +1266,123 @@ export const traderInvoices = sqliteTable(
       t.organizationId,
       t.exchangeAccountId,
       t.reportingPeriodId,
+    ),
+  ],
+);
+
+/** AI-TRADER: settlement exactly-once anchor (one row per CONFIRMED payment; AT-E12 S3-B). */
+export const traderSettlements = sqliteTable(
+  "trader_settlements",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    paymentId: text("payment_id")
+      .notNull()
+      .references(() => payments.paymentId, { onDelete: "cascade" }),
+    settlementNetwork: text("settlement_network"),
+    settlementTxHash: text("settlement_tx_hash"),
+    transferIndex: integer("transfer_index"),
+    blockHeight: text("block_height"),
+    asset: text("asset"),
+    onChainAmount: text("on_chain_amount"),
+    valuedAmount: text("valued_amount"),
+    valuationCurrency: text("valuation_currency"),
+    valuationBasis: text("valuation_basis"),
+    outcome: text("outcome", { enum: [...settlementOutcomeEnum] }).notNull(),
+    exceptionReason: text("exception_reason"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("trader_settlements_payment_id_unique").on(t.paymentId),
+    index("trader_settlements_org_account_idx").on(t.organizationId, t.exchangeAccountId),
+    index("trader_settlements_outcome_idx").on(t.outcome),
+  ],
+);
+
+/** AI-TRADER: settlement allocation to invoice (AT-E12 S3-B). */
+export const traderSettlementApplications = sqliteTable(
+  "trader_settlement_applications",
+  {
+    id: text("id").primaryKey(),
+    settlementId: text("settlement_id")
+      .notNull()
+      .references(() => traderSettlements.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => traderInvoices.id, { onDelete: "cascade" }),
+    appliedAmount: text("applied_amount").notNull(),
+    invoiceStatusAfter: text("invoice_status_after", { enum: [...invoiceStatusEnum] }).notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_settlement_applications_settlement_idx").on(t.settlementId),
+    index("trader_settlement_applications_invoice_idx").on(t.invoiceId),
+  ],
+);
+
+/** AI-TRADER: exchange account status projection (AT-E12 S3-B). */
+export const traderAccountStatus = sqliteTable(
+  "trader_account_status",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    status: text("status", { enum: [...accountStatusEnum] }).notNull(),
+    reason: text("reason"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.exchangeAccountId] })],
+);
+
+/** AI-TRADER: append-only account status event ledger (AT-E12 S3-B). */
+export const traderAccountStatusEvents = sqliteTable(
+  "trader_account_status_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    seq: integer("seq").notNull(),
+    eventType: text("event_type", { enum: [...accountStatusEventTypeEnum] }).notNull(),
+    reason: text("reason"),
+    sourcePaymentId: text("source_payment_id"),
+    sourceInvoiceId: text("source_invoice_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("trader_account_status_events_org_account_seq_unique").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.seq,
     ),
   ],
 );
