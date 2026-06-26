@@ -32,5 +32,12 @@
     "vitest.setup.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", ".next", "playwright-report", "test-results"]
+  "exclude": [
+    "node_modules",
+    ".next",
+    ".open-next",
+    "playwright-report",
+    "test-results",
+    "custom-worker.ts"
+  ]
 }

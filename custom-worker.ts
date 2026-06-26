@@ -1,3 +1,5 @@
+// Wrangler entrypoint (see wrangler.jsonc). Excluded from root tsconfig — Next.js
+// typechecks during `next build` before OpenNext emits `.open-next/worker.js`.
 import { default as handler } from "./.open-next/worker.js";
 
 export default {
