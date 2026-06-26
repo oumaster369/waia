@@ -38,6 +38,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 - **Governing technical spec:** [AI-TRADER Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) (Baseline v1.2).
 - **Platform foundation (wins on conflict):** [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md).
 - **Execution blueprint:** [AI-TRADER Implementation Program v1.2](AI-TRADER-IMPLEMENTATION-PROGRAM.md).
+- **Governing MVP execution (Execution Freeze):** [AI-TRADER MVP Execution Program v2](AI-TRADER-MVP-EXECUTION-PROGRAM-v2.md).
 - **Decisions:** [ADR index](../adr/README.md) — AI-TRADER spans **[ADR-0005](../adr/0005-saas-as-superset-strategy.md) … [ADR-0011](../adr/0011-single-operator-governance-model.md)**.
 - **Subject owners:** [Security](AI-TRADER-SECURITY.md), [Billing & HWM](AI-TRADER-BILLING-HWM.md), [Closed Trade Reality Doctrine (LD-10)](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md) (realized fee base).
 
