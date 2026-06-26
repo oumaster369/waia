@@ -58,3 +58,15 @@ export const paymentAddressStatusEnum = [
   "ARCHIVED",
   "RECOVERED",
 ] as const;
+
+/** AI-TRADER invoice lifecycle (AT-E11 / AT-E12 S3-B). */
+export const invoiceStatusEnum = ["DRAFT", "ISSUED", "PAID"] as const;
+
+/** AI-TRADER exchange account status (AT-E12 S3-B minimal FSM). */
+export const accountStatusEnum = ["ACTIVE", "SUSPENDED"] as const;
+
+/** AI-TRADER account status event types (AT-E12 S3-B). */
+export const accountStatusEventTypeEnum = ["REACTIVATED"] as const;
+
+/** AI-TRADER settlement outcome (AT-E12 S3-B). */
+export const settlementOutcomeEnum = ["APPLIED", "EXCEPTION"] as const;

@@ -66,10 +66,12 @@ function samplePeriod(
 }
 
 describe("invoice issuance architecture (DEE-311 S6)", () => {
-  it("defines DRAFT -> ISSUED as the only forward invoice transition", () => {
+  it("defines issuance and settlement invoice transitions", () => {
     expect(INVOICE_TRANSITIONS.DRAFT).toEqual(["ISSUED"]);
-    expect(INVOICE_TRANSITIONS.ISSUED).toEqual([]);
-    expect(isTerminalInvoiceStatus("ISSUED")).toBe(true);
+    expect(INVOICE_TRANSITIONS.ISSUED).toEqual(["PAID"]);
+    expect(INVOICE_TRANSITIONS.PAID).toEqual([]);
+    expect(isTerminalInvoiceStatus("ISSUED")).toBe(false);
+    expect(isTerminalInvoiceStatus("PAID")).toBe(true);
     expect(() => assertAllowedInvoiceTransition("ISSUED", "DRAFT")).toThrow(
       /Invalid invoice transition/,
     );

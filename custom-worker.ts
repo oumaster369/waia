@@ -17,11 +17,56 @@ export default {
           await import("@/lib/waia-core/payment-watcher/build-worker-deps");
         const { runWatcherCycle } =
           await import("@/lib/waia-core/payment-watcher/run-watcher-cycle");
-        const { deps, dispose } = await buildWatcherDepsFromEnv(env);
+        const { buildSettlementDepsFromEnv, runSettlementCycle } =
+          await import("@/lib/trader/settlement/build-worker-deps");
+
         try {
-          await runWatcherCycle(deps);
-        } finally {
-          await dispose();
+          const { deps, dispose } = await buildWatcherDepsFromEnv(env);
+          try {
+            await runWatcherCycle(deps);
+          } catch (watcherError) {
+            console.error(
+              JSON.stringify({
+                event: "waia_payment_watcher",
+                phase: "cycle_error",
+                error: watcherError instanceof Error ? watcherError.message : String(watcherError),
+              }),
+            );
+          } finally {
+            await dispose();
+          }
+        } catch (watcherDepsError) {
+          console.error(
+            JSON.stringify({
+              event: "waia_payment_watcher",
+              phase: "deps_error",
+              error:
+                watcherDepsError instanceof Error
+                  ? watcherDepsError.message
+                  : String(watcherDepsError),
+            }),
+          );
+        }
+
+        try {
+          const { deps: settlementDeps, dispose: settlementDispose } =
+            await buildSettlementDepsFromEnv(env);
+          try {
+            await runSettlementCycle(settlementDeps);
+          } finally {
+            await settlementDispose();
+          }
+        } catch (settlementError) {
+          console.error(
+            JSON.stringify({
+              event: "waia_settlement_cycle",
+              phase: "cycle_error",
+              error:
+                settlementError instanceof Error
+                  ? settlementError.message
+                  : String(settlementError),
+            }),
+          );
         }
       })(),
     );

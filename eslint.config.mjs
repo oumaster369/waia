@@ -8,6 +8,7 @@ const eslintConfig = [
     ignores: [
       ".next/**",
       ".open-next/**",
+      ".open-next.bak/**",
       "cloudflare-env.d.ts",
       "node_modules/**",
       "playwright-report/**",

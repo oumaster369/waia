@@ -2,7 +2,8 @@ import type { InvoiceStatus } from "@/lib/trader/billing/invoice.types";
 
 export const INVOICE_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
   DRAFT: ["ISSUED"],
-  ISSUED: [],
+  ISSUED: ["PAID"],
+  PAID: [],
 };
 
 export function assertAllowedInvoiceTransition(from: InvoiceStatus, to: InvoiceStatus): void {
