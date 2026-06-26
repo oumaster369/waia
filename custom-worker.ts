@@ -1,9 +1,6 @@
 // @ts-expect-error `.open-next/worker.js` is generated at build time
 import { default as handler } from "./.open-next/worker.js";
 
-import { buildWatcherDepsFromEnv } from "@/lib/waia-core/payment-watcher/build-worker-deps";
-import { runWatcherCycle } from "@/lib/waia-core/payment-watcher/run-watcher-cycle";
-
 export default {
   fetch: handler.fetch,
 
@@ -14,6 +11,12 @@ export default {
   ): Promise<void> {
     ctx.waitUntil(
       (async () => {
+        // Lazy-load watcher deps so postgres-client (createRequire) is not
+        // evaluated at Worker upload validation — only on Cron invocation.
+        const { buildWatcherDepsFromEnv } =
+          await import("@/lib/waia-core/payment-watcher/build-worker-deps");
+        const { runWatcherCycle } =
+          await import("@/lib/waia-core/payment-watcher/run-watcher-cycle");
         const { deps, dispose } = await buildWatcherDepsFromEnv(env);
         try {
           await runWatcherCycle(deps);
