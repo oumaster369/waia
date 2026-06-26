@@ -24,6 +24,7 @@ export type WaiaRuntimeRouteKey =
   | "prediction_verifications"
   | "repeatability"
   | "health_database"
+  | "health_payment_watcher"
   | "trader_exchange_credentials_connect"
   | "trader_exchange_credentials_list"
   | "trader_exchange_credentials_sync_balances"
@@ -33,7 +34,8 @@ export type WaiaRuntimeRouteOutcome =
   | "success"
   | "client_error"
   | "config_error"
-  | "internal_error";
+  | "internal_error"
+  | "stale";
 
 /** Twin dialogue gateway provider outcome — content-free (DEE-78). */
 export type WaiaAiGatewayProviderOutcomeTelemetry =
