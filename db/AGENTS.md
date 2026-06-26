@@ -143,7 +143,7 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | Postgres `0054_trader_settlement_reconciliation` | reconciliation cases/events + application columns | Same as SQLite 0032 |
 | Postgres `0055_trader_settlement_reconciliation_rls` | reconciliation tables RLS | Append-only trigger on events + ADR-0007 deny authenticated/anon |
 
-**Runtime provisioning is deferred** — `ensureTraderOrgProfile*` lives in `lib/trader/provisioning/` for library/tests only until AT-E2+ wires a call site. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
+**Runtime provisioning:** `ensureTraderOrgProfile*` is wired at runtime via `lib/trader/runtime-provisioning.ts` (`ensureTraderRuntimeForUser`), invoked from the trader access gate when the `trader` entitlement is present. Audit writes go through `lib/trader/audit/write.ts` into Core `audit_logs`.
 
 **Postgres-only (MVP Execution Freeze — ADR-0017):** new AI-TRADER modules, migrations, repositories, and integration tests target Postgres only. Do not add new SQLite migrations or SQLite adapters for new trader features until Post-MVP (DEE-85).
 

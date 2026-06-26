@@ -1,34 +1,11 @@
 import "server-only";
 
-import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
-import {
-  hasModuleEntitlementPostgres,
-  hasModuleEntitlementSqlite,
-} from "@/lib/waia-core/entitlements/authoritative";
-import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
-
-const TRADER_ENTITLEMENT_KEY = "trader";
+import { ensureTraderRuntimeForUser } from "@/lib/trader/runtime-provisioning";
 
 /**
  * Authoritative trader-module access check for route gates.
- * Uses the personal organization and reads the entitlement row directly (not shadow-mode checkEntitlement).
+ * Provisions `trader_org_profiles` when entitlement is present (NEW-4 / DEE-331).
  */
 export async function hasTraderAccessForUser(userId: string): Promise<boolean> {
-  const organizationId = personalOrganizationIdFromUserId(userId);
-  let runtime;
-  try {
-    runtime = await getWaiaRuntimeDb();
-    if (runtime.kind === "sqlite") {
-      return hasModuleEntitlementSqlite(runtime.db, {
-        organizationId,
-        entitlementKey: TRADER_ENTITLEMENT_KEY,
-      });
-    }
-    return hasModuleEntitlementPostgres(runtime.db, {
-      organizationId,
-      entitlementKey: TRADER_ENTITLEMENT_KEY,
-    });
-  } finally {
-    await disposeWaiaRuntimeDb(runtime);
-  }
+  return ensureTraderRuntimeForUser(userId);
 }
