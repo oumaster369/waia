@@ -132,3 +132,17 @@ Neutral: future AI/policy-assisted reconciliation and the deferred actions exten
 - [AI-TRADER Security](../ai-trader/AI-TRADER-SECURITY.md)
 - [DEE-216 — AT-E12 parent](https://linear.app/deepsense/issue/DEE-216)
 - [DEE-323 — ADR-0016 ratification docs slice](https://linear.app/deepsense/issue/DEE-323)
+
+## S3-C-B addendum — Operator Reconciliation Workflow (2026-06-26)
+
+Ratifies the operator command layer built on S3-C-A:
+
+- **Single terminal state:** `RESOLVED` only. `CANCELLED` is reserved-forbidden (FSM never produces it).
+- **Holding state:** `ESCALATED` maps to derived `PENDING_RECONCILIATION` (non-terminal).
+- **At most one settlement application per settlement** (DB unique on `settlement_id`; AUTO and MANUAL alike).
+- **Proposal→execution binding:** `decisionId` + `proposalRef{seq,digest}` + optimistic concurrency token.
+- **Cooling-off gate:** server-authoritative; sweeper emits `CLAIM_EXPIRED` only (never auto-executes resolutions).
+- **Effective outcome derivation:** `FINANCIALLY_APPLIED` if application exists; `CLOSED_WITHOUT_APPLICATION` for resolved non-applying types; else `PENDING_RECONCILIATION`.
+- **Forward-compat seams:** stable `decisionId`; versioned + reference-capable evidence snapshot; reserved `RESOLUTION_RECOMMENDED` (unemitted).
+
+Event taxonomy reference: [`AI-TRADER-RECONCILIATION-EVENTS.md`](../ai-trader/AI-TRADER-RECONCILIATION-EVENTS.md).

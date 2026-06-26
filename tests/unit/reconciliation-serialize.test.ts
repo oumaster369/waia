@@ -8,31 +8,42 @@ import {
 } from "@/lib/trader/settlement/reconciliation/serialize-reconciliation";
 import { ReconciliationDigestMismatchError } from "@/lib/trader/settlement/reconciliation/reconciliation.errors";
 
-const BASE_EVIDENCE = {
-  settlement: {
-    id: "settlement-1",
-    outcome: "EXCEPTION" as const,
-    exceptionReason: "AMOUNT_MISMATCH",
-    valuedAmount: "150.000000",
-    valuationCurrency: "USD",
-    settlementNetwork: "TRC-20",
-    settlementTxHash: "tx-1",
-    onChainAmount: "150.000000",
-    asset: "USDT",
-    exchangeAccountId: "acct-1",
-    paymentId: "pay-1",
+import { buildCaseOpenedEventPayload } from "@/lib/trader/settlement/reconciliation/reconciliation.events";
+import {
+  inlineEvidenceValue,
+  RECONCILIATION_EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+} from "@/lib/trader/settlement/reconciliation/reconciliation.types";
+
+const BASE_EVIDENCE = buildCaseOpenedEventPayload({
+  evidenceSnapshot: {
+    schemaVersion: RECONCILIATION_EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+    settlement: {
+      id: "settlement-1",
+      outcome: "EXCEPTION" as const,
+      exceptionReason: "AMOUNT_MISMATCH",
+      valuedAmount: "150.000000",
+      valuationCurrency: "USD",
+      settlementNetwork: "TRC-20",
+      settlementTxHash: "tx-1",
+      onChainAmount: "150.000000",
+      asset: "USDT",
+      exchangeAccountId: "acct-1",
+      paymentId: "pay-1",
+    },
+    payment: inlineEvidenceValue({
+      paymentId: "pay-1",
+      settlementNetwork: "TRC-20",
+      settlementAsset: "USDT",
+      settlementAmount: "150.000000",
+      settlementTxHash: "tx-1",
+      transferIndex: 0,
+    }),
+    invoiceCandidates: inlineEvidenceValue([]),
+    applications: inlineEvidenceValue([]),
   },
-  payment: {
-    paymentId: "pay-1",
-    settlementNetwork: "TRC-20",
-    settlementAsset: "USDT",
-    settlementAmount: "150.000000",
-    settlementTxHash: "tx-1",
-    transferIndex: 0,
-  },
-  invoiceCandidates: [],
-  applications: [],
-};
+  exceptionReason: "AMOUNT_MISMATCH",
+  priority: 30,
+});
 
 describe("reconciliation serialize", () => {
   it("computes stable digests for CASE_OPENED payloads", () => {

@@ -4,6 +4,10 @@ import * as sqliteSchema from "@/db/schema";
 import type { WaiaDb } from "@/db/types";
 import type { ReconciliationEvidenceReader } from "@/lib/trader/settlement/reconciliation/reconciliation-evidence.types";
 import type { ReconciliationEvidenceSnapshot } from "@/lib/trader/settlement/reconciliation/reconciliation.types";
+import {
+  RECONCILIATION_EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+  inlineEvidenceValue,
+} from "@/lib/trader/settlement/reconciliation/reconciliation.types";
 import type { SettlementRecordView } from "@/lib/trader/settlement/settlement.types";
 import {
   orgScopedWhere,
@@ -82,6 +86,7 @@ async function buildEvidenceSqlite(
   const payment = paymentRows[0] ?? null;
 
   return {
+    schemaVersion: RECONCILIATION_EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
     settlement: {
       id: settlement.id,
       outcome: settlement.outcome,
@@ -96,26 +101,30 @@ async function buildEvidenceSqlite(
       paymentId: settlement.paymentId,
     },
     payment: payment
-      ? {
+      ? inlineEvidenceValue({
           paymentId: payment.paymentId,
           settlementNetwork: payment.settlementNetwork,
           settlementAsset: payment.settlementAsset,
           settlementAmount: payment.settlementAmount,
           settlementTxHash: payment.settlementTxHash,
           transferIndex: payment.transferIndex,
-        }
+        })
       : null,
-    invoiceCandidates: invoiceRows.map((row) => ({
-      id: row.id,
-      status: row.status,
-      performanceFee: row.performanceFee,
-      periodStart: row.periodStart.toISOString(),
-    })),
-    applications: applicationRows.map((row) => ({
-      id: row.id,
-      invoiceId: row.invoiceId,
-      appliedAmount: row.appliedAmount,
-      applicationSource: row.applicationSource,
-    })),
+    invoiceCandidates: inlineEvidenceValue(
+      invoiceRows.map((row) => ({
+        id: row.id,
+        status: row.status,
+        performanceFee: row.performanceFee,
+        periodStart: row.periodStart.toISOString(),
+      })),
+    ),
+    applications: inlineEvidenceValue(
+      applicationRows.map((row) => ({
+        id: row.id,
+        invoiceId: row.invoiceId,
+        appliedAmount: row.appliedAmount,
+        applicationSource: row.applicationSource,
+      })),
+    ),
   };
 }

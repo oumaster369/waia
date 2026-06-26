@@ -84,3 +84,19 @@ export const settlementReconciliationCaseStatusEnum = [
 
 /** AI-TRADER settlement application source (AT-E12 S3-C-A). */
 export const settlementApplicationSourceEnum = ["AUTO", "MANUAL"] as const;
+
+/**
+ * AI-TRADER settlement reconciliation terminal resolution types (AT-E12 S3-C-B).
+ * Escalation is a holding state action, not a resolution type.
+ */
+export const settlementReconciliationResolutionTypeEnum = [
+  "MANUAL_APPLY",
+  "WAIVE",
+  "CLOSE_NO_ACTION",
+  "CLOSE_DUPLICATE",
+] as const;
+
+/**
+ * CANCELLED in settlementReconciliationCaseStatusEnum is reserved-forbidden:
+ * the S3-C-B FSM never produces it (single terminal = RESOLVED).
+ */

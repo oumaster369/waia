@@ -5,7 +5,10 @@ if (process.env.VITEST !== "true") {
   require("server-only");
 }
 
-import { RECONCILIATION_EVENT_CASE_OPENED } from "@/lib/trader/settlement/reconciliation/reconciliation.events";
+import {
+  RECONCILIATION_EVENT_CASE_OPENED,
+  buildCaseOpenedEventPayload,
+} from "@/lib/trader/settlement/reconciliation/reconciliation.events";
 import { ReconciliationInvalidSettlementOutcomeError } from "@/lib/trader/settlement/reconciliation/reconciliation.errors";
 import type { ReconciliationCaseRepository } from "@/lib/trader/settlement/reconciliation/reconciliation-case-repository.types";
 import type { ReconciliationEvidenceReader } from "@/lib/trader/settlement/reconciliation/reconciliation-evidence.types";
@@ -77,7 +80,11 @@ export async function createCase(
     eventType: RECONCILIATION_EVENT_CASE_OPENED,
     actorType: "service",
     actorId: null,
-    payload: evidence,
+    payload: buildCaseOpenedEventPayload({
+      evidenceSnapshot: evidence,
+      exceptionReason: settlement.exceptionReason,
+      priority,
+    }),
     prevEventDigest: null,
   });
 

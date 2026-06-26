@@ -4,7 +4,7 @@ import { createPostgresReconciliationCaseRepository } from "@/lib/trader/settlem
 import { createSqliteReconciliationCaseRepository } from "@/lib/trader/settlement/reconciliation/reconciliation-case-repository-sqlite";
 
 export function createPostgresReconciliationRepositoryAdapters(
-  ex: Pick<WaiaPostgresDb, "select" | "insert">,
+  ex: Pick<WaiaPostgresDb, "select" | "insert" | "update">,
 ) {
   return {
     caseRepository: createPostgresReconciliationCaseRepository(ex),
@@ -12,7 +12,7 @@ export function createPostgresReconciliationRepositoryAdapters(
 }
 
 export function createSqliteReconciliationRepositoryAdapters(
-  ex: Pick<WaiaDb, "select" | "insert">,
+  ex: Pick<WaiaDb, "select" | "insert" | "update">,
 ) {
   return {
     caseRepository: createSqliteReconciliationCaseRepository(ex),

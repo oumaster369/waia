@@ -1289,11 +1289,13 @@ export const traderSettlementApplications = pgTable(
       .notNull()
       .default("AUTO"),
     reconciliationCaseId: uuid("reconciliation_case_id"),
+    decisionId: uuid("decision_id"),
     schemaVersion: text("schema_version").notNull(),
     recordContentDigest: text("record_content_digest").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
+    uniqueIndex("trader_settlement_applications_settlement_id_unique").on(t.settlementId),
     index("trader_settlement_applications_settlement_idx").on(t.settlementId),
     index("trader_settlement_applications_invoice_idx").on(t.invoiceId),
   ],
@@ -1364,6 +1366,7 @@ export const traderSettlementReconciliationCases = pgTable(
     status: settlementReconciliationCaseStatusEnumPg("status").notNull().default("OPEN"),
     priority: integer("priority").notNull(),
     resolutionType: text("resolution_type"),
+    currentDecisionId: uuid("current_decision_id"),
     assignedTo: uuid("assigned_to"),
     claimExpiresAt: timestamp("claim_expires_at", { withTimezone: true, mode: "date" }),
     coolingOffUntil: timestamp("cooling_off_until", { withTimezone: true, mode: "date" }),

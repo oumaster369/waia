@@ -30,7 +30,14 @@ const EXCEPTION_SETTLEMENT = {
   createdAt: new Date("2026-06-26T12:00:00.000Z"),
 };
 
-const EVIDENCE = {
+import {
+  inlineEvidenceValue,
+  RECONCILIATION_EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+} from "@/lib/trader/settlement/reconciliation/reconciliation.types";
+import { buildCaseOpenedEventPayload } from "@/lib/trader/settlement/reconciliation/reconciliation.events";
+
+const EVIDENCE_SNAPSHOT = {
+  schemaVersion: RECONCILIATION_EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
   settlement: {
     id: EXCEPTION_SETTLEMENT.id,
     outcome: EXCEPTION_SETTLEMENT.outcome,
@@ -45,9 +52,23 @@ const EVIDENCE = {
     paymentId: EXCEPTION_SETTLEMENT.paymentId,
   },
   payment: null,
-  invoiceCandidates: [],
-  applications: [],
+  invoiceCandidates: inlineEvidenceValue([]),
+  applications: inlineEvidenceValue([]),
 };
+
+function mockCaseRepository(
+  overrides: Partial<ReconciliationCaseRepository> = {},
+): ReconciliationCaseRepository {
+  return {
+    findById: vi.fn().mockResolvedValue(null),
+    findBySettlementId: vi.fn().mockResolvedValue(null),
+    openCase: vi.fn(),
+    appendEvent: vi.fn(),
+    listEventsForCase: vi.fn(),
+    listClaimExpired: vi.fn().mockResolvedValue([]),
+    ...overrides,
+  };
+}
 
 describe("createCase", () => {
   it("opens case + CASE_OPENED event and writes audit", async () => {
@@ -61,6 +82,7 @@ describe("createCase", () => {
       status: "OPEN" as const,
       priority: 30,
       resolutionType: null,
+      currentDecisionId: null,
       assignedTo: null,
       claimExpiresAt: null,
       coolingOffUntil: null,
@@ -70,7 +92,7 @@ describe("createCase", () => {
       lastEventDigest: "event-digest",
     };
 
-    const caseRepository: ReconciliationCaseRepository = {
+    const caseRepository = mockCaseRepository({
       findBySettlementId: vi.fn().mockResolvedValue(null),
       openCase: vi.fn().mockResolvedValue({
         case: openedCase,
@@ -83,16 +105,19 @@ describe("createCase", () => {
           eventType: RECONCILIATION_EVENT_CASE_OPENED,
           actorType: "service",
           actorId: null,
-          payload: EVIDENCE,
+          payload: buildCaseOpenedEventPayload({
+            evidenceSnapshot: EVIDENCE_SNAPSHOT,
+            exceptionReason: EXCEPTION_SETTLEMENT.exceptionReason,
+            priority: 30,
+          }),
           prevEventDigest: null,
           recordContentDigest: "event-digest",
           createdAt: openedCase.openedAt,
         },
       }),
-      listEventsForCase: vi.fn(),
-    };
+    });
     const evidenceReader: ReconciliationEvidenceReader = {
-      buildEvidence: vi.fn().mockResolvedValue(EVIDENCE),
+      buildEvidence: vi.fn().mockResolvedValue(EVIDENCE_SNAPSHOT),
     };
     const writeAudit = vi.fn(() => "audit-1");
 
@@ -122,6 +147,7 @@ describe("createCase", () => {
       status: "OPEN" as const,
       priority: 30,
       resolutionType: null,
+      currentDecisionId: null,
       assignedTo: null,
       claimExpiresAt: null,
       coolingOffUntil: null,
@@ -130,11 +156,9 @@ describe("createCase", () => {
       lastEventSeq: 1,
       lastEventDigest: "event-digest",
     };
-    const caseRepository: ReconciliationCaseRepository = {
+    const caseRepository = mockCaseRepository({
       findBySettlementId: vi.fn().mockResolvedValue(existing),
-      openCase: vi.fn(),
-      listEventsForCase: vi.fn(),
-    };
+    });
 
     const result = await createCase(
       {
@@ -154,11 +178,7 @@ describe("createCase", () => {
     await expect(
       createCase(
         {
-          caseRepository: {
-            findBySettlementId: vi.fn(),
-            openCase: vi.fn(),
-            listEventsForCase: vi.fn(),
-          },
+          caseRepository: mockCaseRepository(),
           evidenceReader: { buildEvidence: vi.fn() },
           writeAudit: vi.fn(),
         },

@@ -3,6 +3,7 @@ import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import * as sqliteSchema from "@/db/schema";
 import type { WaiaDb } from "@/db/types";
 import { createSqliteReconciliationEvidenceReader } from "@/lib/trader/settlement/reconciliation/reconciliation-evidence-sqlite";
+import { extractCaseOpenedEvidence } from "@/lib/trader/settlement/reconciliation/fold-reconciliation-events";
 import { ReconciliationCaseNotFoundError } from "@/lib/trader/settlement/reconciliation/reconciliation.errors";
 import { listReconciliationEventsForCaseSqlite } from "@/lib/trader/settlement/reconciliation/reconciliation-case-repository-sqlite";
 import type { ReconciliationReader } from "@/lib/trader/settlement/reconciliation/reconciliation-reader.types";
@@ -96,7 +97,8 @@ function mapCaseRow(
     exceptionReason: row.exceptionReason,
     status: row.status,
     priority: row.priority,
-    resolutionType: row.resolutionType,
+    resolutionType: row.resolutionType as ReconciliationCaseView["resolutionType"],
+    currentDecisionId: row.currentDecisionId ?? null,
     assignedTo: row.assignedTo,
     claimExpiresAt: row.claimExpiresAt,
     coolingOffUntil: row.coolingOffUntil,
@@ -121,7 +123,8 @@ function mapCaseView(
     exceptionReason: row.exceptionReason,
     status: row.status,
     priority: row.priority,
-    resolutionType: row.resolutionType,
+    resolutionType: row.resolutionType as ReconciliationCaseView["resolutionType"],
+    currentDecisionId: row.currentDecisionId ?? null,
     assignedTo: row.assignedTo,
     claimExpiresAt: row.claimExpiresAt,
     coolingOffUntil: row.coolingOffUntil,
@@ -236,7 +239,9 @@ export function createSqliteReconciliationReader(ex: SqliteExecutor): Reconcilia
       }
 
       const events = await listReconciliationEventsForCaseSqlite(ex, scoped, caseId);
-      const evidence = await evidenceReader.buildEvidence(scoped, mapSettlementRow(settlement));
+      const evidence =
+        extractCaseOpenedEvidence(events) ??
+        (await evidenceReader.buildEvidence(scoped, mapSettlementRow(settlement)));
 
       return {
         case: mapCaseView(row),

@@ -19,6 +19,25 @@ export {
   computeReconciliationEventDigest,
   verifyReconciliationEventDigest,
 } from "@/lib/trader/settlement/reconciliation/serialize-reconciliation";
+export { effectiveOutcome } from "@/lib/trader/settlement/reconciliation/effective-outcome";
+export {
+  foldReconciliationEvents,
+  rebuildCaseProjection,
+  extractCaseOpenedEvidence,
+} from "@/lib/trader/settlement/reconciliation/fold-reconciliation-events";
+export { claimCase } from "@/lib/trader/settlement/reconciliation/commands/claim-case";
+export { releaseCase } from "@/lib/trader/settlement/reconciliation/commands/release-case";
+export { startReview } from "@/lib/trader/settlement/reconciliation/commands/start-review";
+export { proposeResolution } from "@/lib/trader/settlement/reconciliation/commands/propose-resolution";
+export { cancelProposal } from "@/lib/trader/settlement/reconciliation/commands/cancel-proposal";
+export { executeResolution } from "@/lib/trader/settlement/reconciliation/commands/execute-resolution";
+export { escalateExternal } from "@/lib/trader/settlement/reconciliation/commands/escalate-external";
+export { reopenFromEscalation } from "@/lib/trader/settlement/reconciliation/commands/reopen-from-escalation";
+export { runReconciliationSweeper } from "@/lib/trader/settlement/reconciliation/run-reconciliation-sweeper";
+export {
+  createProductionReconciliationWorkflowHandlerDeps,
+  handleReconciliationWorkflowCommand,
+} from "@/lib/trader/settlement/reconciliation/reconciliation-workflow-handler";
 export type {
   ReconciliationCaseDetail,
   ReconciliationCaseListResult,
