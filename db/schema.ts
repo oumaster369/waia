@@ -1342,6 +1342,7 @@ export const traderSettlementApplications = sqliteTable(
       .notNull()
       .default("AUTO"),
     reconciliationCaseId: text("reconciliation_case_id"),
+    decisionId: text("decision_id"),
     schemaVersion: text("schema_version").notNull(),
     recordContentDigest: text("record_content_digest").notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
@@ -1349,6 +1350,7 @@ export const traderSettlementApplications = sqliteTable(
       .$defaultFn(() => new Date()),
   },
   (t) => [
+    uniqueIndex("trader_settlement_applications_settlement_id_unique").on(t.settlementId),
     index("trader_settlement_applications_settlement_idx").on(t.settlementId),
     index("trader_settlement_applications_invoice_idx").on(t.invoiceId),
   ],
@@ -1427,6 +1429,7 @@ export const traderSettlementReconciliationCases = sqliteTable(
       .default("OPEN"),
     priority: integer("priority").notNull(),
     resolutionType: text("resolution_type"),
+    currentDecisionId: text("current_decision_id"),
     assignedTo: text("assigned_to"),
     claimExpiresAt: integer("claim_expires_at", { mode: "timestamp_ms" }),
     coolingOffUntil: integer("cooling_off_until", { mode: "timestamp_ms" }),

@@ -24,9 +24,9 @@ import type {
   InvoiceSettlementRepository,
 } from "@/lib/trader/settlement/account-status-repository.types";
 import {
-  resolveStatusAfterReactivation,
-  shouldAppendReactivationEvent,
-} from "@/lib/trader/settlement/account-status.transitions";
+  applySettlementApplication,
+  type ApplySettlementApplicationDeps,
+} from "@/lib/trader/settlement/apply-settlement-application";
 import { SettlementAlreadyExistsError } from "@/lib/trader/settlement/settlement.errors";
 import { evaluateSettlement } from "@/lib/trader/settlement/settlement-matching";
 import { createPostgresSettlementApplicationsRepository } from "@/lib/trader/settlement/settlement-applications-repository-postgres";
@@ -38,7 +38,6 @@ import type {
   SettlementsRepository,
 } from "@/lib/trader/settlement/settlements-repository.types";
 import {
-  buildAccountStatusEventPayload,
   buildSettlementApplicationPayload,
   buildSettlementRecordPayload,
 } from "@/lib/trader/settlement/serialize-settlement";
@@ -103,63 +102,6 @@ function isSettlementUniqueViolation(error: unknown): boolean {
     return /UNIQUE constraint failed/i.test(String((error as { message: unknown }).message));
   }
   return false;
-}
-
-async function appendReactivationIfNeeded(
-  deps: SettlementServiceDeps,
-  context: OrgContext,
-  exchangeAccountId: string,
-  paymentId: string,
-  invoiceId: string,
-  now: Date,
-): Promise<void> {
-  const current = await deps.accountStatusRepository.getProjection(context, exchangeAccountId);
-  if (!shouldAppendReactivationEvent(current?.status ?? null)) {
-    return;
-  }
-
-  const events = await deps.accountStatusRepository.listEventsForAccount(
-    context,
-    exchangeAccountId,
-  );
-  const lastEvent = events.at(-1) ?? null;
-  const seq = (lastEvent?.seq ?? 0) + 1;
-  const eventPayload = buildAccountStatusEventPayload({
-    organizationId: context.organizationId,
-    exchangeAccountId,
-    seq,
-    eventType: "REACTIVATED",
-    reason: "confirmed_settlement",
-    sourcePaymentId: paymentId,
-    sourceInvoiceId: invoiceId,
-    prevEventDigest: lastEvent?.recordContentDigest ?? null,
-  });
-
-  const projection = {
-    organizationId: context.organizationId,
-    exchangeAccountId,
-    status: resolveStatusAfterReactivation(),
-    reason: "confirmed_settlement",
-    lastEventSeq: seq,
-    lastEventDigest: eventPayload.recordContentDigest,
-    createdAt: current?.createdAt ?? now,
-    updatedAt: now,
-  };
-
-  await deps.accountStatusRepository.appendEventAndProjection(context, eventPayload, projection);
-  await deps.writeAudit({
-    actorType: "service",
-    actorId: null,
-    action: traderAuditActions.accountReactivated,
-    entityType: traderEntityTypes.accountStatus,
-    entityId: exchangeAccountId,
-    organizationId: context.organizationId,
-    metadata: {
-      paymentId,
-      invoiceId,
-      previousStatus: current?.status ?? null,
-    },
-  });
 }
 
 async function applySettlementInner(
@@ -281,20 +223,20 @@ async function applySettlementInner(
     invoiceStatusAfter: "PAID",
   });
 
-  await deps.settlementApplicationsRepository.insertApplication(scoped, applicationPayload);
-  await deps.invoiceSettlementRepository.markInvoicePaid(scoped, {
-    invoiceId: evaluation.invoiceId!,
-    settledAmount: evaluation.appliedAmount!,
-    paidAt: now,
-  });
-  await appendReactivationIfNeeded(
-    deps,
-    scoped,
-    evaluation.exchangeAccountId,
-    payment.paymentId,
-    evaluation.invoiceId!,
+  const applyDeps: ApplySettlementApplicationDeps = {
+    settlementApplicationsRepository: deps.settlementApplicationsRepository,
+    invoiceSettlementRepository: deps.invoiceSettlementRepository,
+    accountStatusRepository: deps.accountStatusRepository,
+    writeAudit: deps.writeAudit,
+  };
+
+  await applySettlementApplication(applyDeps, scoped, {
+    applicationPayload,
+    applicationSource: "AUTO",
+    paymentId: payment.paymentId,
+    exchangeAccountId: evaluation.exchangeAccountId,
     now,
-  );
+  });
 
   await deps.writeAudit({
     actorType: "service",
@@ -327,7 +269,7 @@ async function applySettlementInner(
 }
 
 function buildCreateCaseDepsFromExecutor(
-  executor: Pick<WaiaPostgresDb, "select" | "insert">,
+  executor: Pick<WaiaPostgresDb, "select" | "insert" | "update">,
   writeAudit: (input: TraderAuditInput) => string | Promise<string>,
 ): CreateCaseDeps {
   return {

@@ -138,6 +138,8 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | Postgres `0052_trader_settlement` | settlement + account status tables | Same as SQLite 0031 |
 | Postgres `0053_trader_settlement_rls` | settlement tables RLS | Append-only triggers + ADR-0007 deny authenticated/anon |
 | SQLite `0032_trader_settlement_reconciliation` | reconciliation cases/events + application columns | Settlement exception reconciliation schema (DEE-325 / AT-E12 S3-C-A) |
+| SQLite `0033_trader_reconciliation_workflow` | case `current_decision_id`, application `decision_id`, unique settlement application | Operator workflow schema (AT-E12 S3-C-B) |
+| Postgres `0056_trader_reconciliation_workflow` | resolution type enum, same columns/constraints | Operator workflow schema (AT-E12 S3-C-B) |
 | Postgres `0054_trader_settlement_reconciliation` | reconciliation cases/events + application columns | Same as SQLite 0032 |
 | Postgres `0055_trader_settlement_reconciliation_rls` | reconciliation tables RLS | Append-only trigger on events + ADR-0007 deny authenticated/anon |
 

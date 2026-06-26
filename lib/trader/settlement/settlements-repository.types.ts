@@ -6,6 +6,14 @@ import type {
   SettlementRecordPayload,
   SettlementRecordView,
 } from "@/lib/trader/settlement/settlement.types";
+import type { SettlementApplicationSource } from "@/lib/trader/settlement/reconciliation/reconciliation.types";
+
+export type InsertSettlementApplicationInput = {
+  payload: SettlementApplicationRecordPayload;
+  applicationSource?: SettlementApplicationSource;
+  reconciliationCaseId?: string | null;
+  decisionId?: string | null;
+};
 
 export type SettlementsRepository = {
   findByPaymentId(paymentId: string): Promise<SettlementRecordView | null>;
@@ -18,7 +26,7 @@ export type SettlementsRepository = {
 export type SettlementApplicationsRepository = {
   insertApplication(
     context: OrgContext,
-    payload: SettlementApplicationRecordPayload,
+    input: InsertSettlementApplicationInput,
   ): Promise<SettlementApplicationRecordView>;
   listBySettlementId(
     context: OrgContext,

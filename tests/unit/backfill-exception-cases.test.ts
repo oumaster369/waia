@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { buildCaseOpenedEventPayload } from "@/lib/trader/settlement/reconciliation/reconciliation.events";
+import {
+  inlineEvidenceValue,
+  RECONCILIATION_EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+} from "@/lib/trader/settlement/reconciliation/reconciliation.types";
 
 import { backfillExceptionCases } from "@/lib/trader/settlement/reconciliation/backfill-exception-cases";
 import type { ReconciliationCaseRepository } from "@/lib/trader/settlement/reconciliation/reconciliation-case-repository.types";
@@ -39,6 +43,7 @@ describe("backfillExceptionCases", () => {
       status: "OPEN" as const,
       priority: 30,
       resolutionType: null,
+      currentDecisionId: null,
       assignedTo: null,
       claimExpiresAt: null,
       coolingOffUntil: null,
@@ -50,6 +55,7 @@ describe("backfillExceptionCases", () => {
 
     let hasCase = false;
     const caseRepository: ReconciliationCaseRepository = {
+      findById: vi.fn().mockResolvedValue(null),
       findBySettlementId: vi.fn(async () => (hasCase ? openedCase : null)),
       openCase: vi.fn(async () => {
         hasCase = true;
@@ -64,31 +70,38 @@ describe("backfillExceptionCases", () => {
             eventType: "CASE_OPENED",
             actorType: "service" as const,
             actorId: null,
-            payload: {
-              settlement: {
-                id: SETTLEMENT.id,
-                outcome: "EXCEPTION" as const,
-                exceptionReason: SETTLEMENT.exceptionReason,
-                valuedAmount: SETTLEMENT.valuedAmount,
-                valuationCurrency: SETTLEMENT.valuationCurrency,
-                settlementNetwork: SETTLEMENT.settlementNetwork,
-                settlementTxHash: SETTLEMENT.settlementTxHash,
-                onChainAmount: SETTLEMENT.onChainAmount,
-                asset: SETTLEMENT.asset,
-                exchangeAccountId: SETTLEMENT.exchangeAccountId,
-                paymentId: SETTLEMENT.paymentId,
+            payload: buildCaseOpenedEventPayload({
+              evidenceSnapshot: {
+                schemaVersion: RECONCILIATION_EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+                settlement: {
+                  id: SETTLEMENT.id,
+                  outcome: "EXCEPTION" as const,
+                  exceptionReason: SETTLEMENT.exceptionReason,
+                  valuedAmount: SETTLEMENT.valuedAmount,
+                  valuationCurrency: SETTLEMENT.valuationCurrency,
+                  settlementNetwork: SETTLEMENT.settlementNetwork,
+                  settlementTxHash: SETTLEMENT.settlementTxHash,
+                  onChainAmount: SETTLEMENT.onChainAmount,
+                  asset: SETTLEMENT.asset,
+                  exchangeAccountId: SETTLEMENT.exchangeAccountId,
+                  paymentId: SETTLEMENT.paymentId,
+                },
+                payment: null,
+                invoiceCandidates: inlineEvidenceValue([]),
+                applications: inlineEvidenceValue([]),
               },
-              payment: null,
-              invoiceCandidates: [],
-              applications: [],
-            },
+              exceptionReason: SETTLEMENT.exceptionReason,
+              priority: 30,
+            }),
             prevEventDigest: null,
             recordContentDigest: "event-digest",
             createdAt: openedCase.openedAt,
           },
         };
       }),
+      appendEvent: vi.fn(),
       listEventsForCase: vi.fn(),
+      listClaimExpired: vi.fn().mockResolvedValue([]),
     };
 
     const reader: Pick<ReconciliationReader, "listExceptionSettlementsWithoutCase"> = {
@@ -102,6 +115,7 @@ describe("backfillExceptionCases", () => {
       caseRepository,
       evidenceReader: {
         buildEvidence: vi.fn().mockResolvedValue({
+          schemaVersion: RECONCILIATION_EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
           settlement: {
             id: SETTLEMENT.id,
             outcome: "EXCEPTION",
@@ -116,8 +130,8 @@ describe("backfillExceptionCases", () => {
             paymentId: SETTLEMENT.paymentId,
           },
           payment: null,
-          invoiceCandidates: [],
-          applications: [],
+          invoiceCandidates: inlineEvidenceValue([]),
+          applications: inlineEvidenceValue([]),
         }),
       },
       writeAudit: vi.fn(() => "audit-1"),

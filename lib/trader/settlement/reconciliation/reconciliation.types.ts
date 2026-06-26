@@ -1,19 +1,75 @@
 import {
+  settlementReconciliationResolutionTypeEnum,
+  settlementReconciliationCaseStatusEnum,
   auditActorTypeEnum,
   settlementApplicationSourceEnum,
-  settlementReconciliationCaseStatusEnum,
 } from "@/db/core-enums";
 import type { SettlementRecordView } from "@/lib/trader/settlement/settlement.types";
+import type { ReconciliationEventPayload } from "@/lib/trader/settlement/reconciliation/reconciliation.event-payloads";
 
 export const RECONCILIATION_EVENT_SCHEMA_VERSION =
   "waia.trader.settlement-reconciliation-event.v1" as const;
 export type ReconciliationEventSchemaVersion = typeof RECONCILIATION_EVENT_SCHEMA_VERSION;
 
+export const RECONCILIATION_EVIDENCE_SNAPSHOT_SCHEMA_VERSION =
+  "waia.trader.reconciliation-evidence.v1" as const;
+export type ReconciliationEvidenceSnapshotSchemaVersion =
+  typeof RECONCILIATION_EVIDENCE_SNAPSHOT_SCHEMA_VERSION;
+
 export const reconciliationCaseStatuses = settlementReconciliationCaseStatusEnum;
 export type ReconciliationCaseStatus = (typeof reconciliationCaseStatuses)[number];
 
+export const reconciliationResolutionTypes = settlementReconciliationResolutionTypeEnum;
+export type ReconciliationResolutionType = (typeof reconciliationResolutionTypes)[number];
+
 export const settlementApplicationSources = settlementApplicationSourceEnum;
 export type SettlementApplicationSource = (typeof settlementApplicationSources)[number];
+
+/** Inline value or future content-addressed artifact reference. */
+export type EvidenceValue<T> =
+  | { kind: "inline"; value: T }
+  | { kind: "reference"; ref: string; contentHash?: string };
+
+export type ReconciliationEvidenceSnapshot = {
+  schemaVersion: ReconciliationEvidenceSnapshotSchemaVersion;
+  settlement: {
+    id: string;
+    outcome: SettlementRecordView["outcome"];
+    exceptionReason: string | null;
+    valuedAmount: string | null;
+    valuationCurrency: string | null;
+    settlementNetwork: string | null;
+    settlementTxHash: string | null;
+    onChainAmount: string | null;
+    asset: string | null;
+    exchangeAccountId: string;
+    paymentId: string;
+  };
+  payment: EvidenceValue<{
+    paymentId: string;
+    settlementNetwork: string | null;
+    settlementAsset: string | null;
+    settlementAmount: string | null;
+    settlementTxHash: string | null;
+    transferIndex: number | null;
+  }> | null;
+  invoiceCandidates: EvidenceValue<
+    Array<{
+      id: string;
+      status: string;
+      performanceFee: string;
+      periodStart: string;
+    }>
+  >;
+  applications: EvidenceValue<
+    Array<{
+      id: string;
+      invoiceId: string;
+      appliedAmount: string;
+      applicationSource: SettlementApplicationSource;
+    }>
+  >;
+};
 
 export type ReconciliationCaseView = {
   id: string;
@@ -24,7 +80,8 @@ export type ReconciliationCaseView = {
   exceptionReason: string | null;
   status: ReconciliationCaseStatus;
   priority: number;
-  resolutionType: string | null;
+  resolutionType: ReconciliationResolutionType | null;
+  currentDecisionId: string | null;
   assignedTo: string | null;
   claimExpiresAt: Date | null;
   coolingOffUntil: Date | null;
@@ -41,7 +98,7 @@ export type ReconciliationEventPayloadInput = {
   eventType: string;
   actorType: (typeof auditActorTypeEnum)[number];
   actorId: string | null;
-  payload: ReconciliationEvidenceSnapshot;
+  payload: ReconciliationEventPayload;
   prevEventDigest: string | null;
 };
 
@@ -53,42 +110,6 @@ export type ReconciliationEventRecordPayload = ReconciliationEventPayloadInput &
 export type ReconciliationEventRecordView = ReconciliationEventRecordPayload & {
   id: string;
   createdAt: Date;
-};
-
-export type ReconciliationEvidenceSnapshot = {
-  settlement: {
-    id: string;
-    outcome: SettlementRecordView["outcome"];
-    exceptionReason: string | null;
-    valuedAmount: string | null;
-    valuationCurrency: string | null;
-    settlementNetwork: string | null;
-    settlementTxHash: string | null;
-    onChainAmount: string | null;
-    asset: string | null;
-    exchangeAccountId: string;
-    paymentId: string;
-  };
-  payment: {
-    paymentId: string;
-    settlementNetwork: string | null;
-    settlementAsset: string | null;
-    settlementAmount: string | null;
-    settlementTxHash: string | null;
-    transferIndex: number | null;
-  } | null;
-  invoiceCandidates: Array<{
-    id: string;
-    status: string;
-    performanceFee: string;
-    periodStart: string;
-  }>;
-  applications: Array<{
-    id: string;
-    invoiceId: string;
-    appliedAmount: string;
-    applicationSource: SettlementApplicationSource;
-  }>;
 };
 
 export type ReconciliationCaseListItem = ReconciliationCaseView & {
@@ -120,3 +141,36 @@ export type ReconciliationHealthMetrics = {
   orphanExceptionCount: number;
   openAgeP95Seconds: number | null;
 };
+
+export type ReconciliationCommandBase = {
+  caseId: string;
+  expectedLastEventSeq: number;
+  idempotencyKey: string;
+};
+
+export type ReconciliationOperatorContext = {
+  actorType: "user" | "admin";
+  actorId: string;
+};
+
+export const settlementReconciliationEffectiveOutcomes = [
+  "FINANCIALLY_APPLIED",
+  "CLOSED_WITHOUT_APPLICATION",
+  "PENDING_RECONCILIATION",
+] as const;
+
+export type SettlementReconciliationEffectiveOutcome =
+  (typeof settlementReconciliationEffectiveOutcomes)[number];
+
+export function inlineEvidenceValue<T>(value: T): EvidenceValue<T> {
+  return { kind: "inline", value };
+}
+
+export function unwrapEvidenceValue<T>(field: EvidenceValue<T>): T {
+  if (field.kind === "inline") {
+    return field.value;
+  }
+  throw new Error(
+    `[trader/settlement/reconciliation] evidence reference not resolved: ${field.ref}`,
+  );
+}

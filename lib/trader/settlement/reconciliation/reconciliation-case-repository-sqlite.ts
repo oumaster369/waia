@@ -1,8 +1,10 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, or } from "drizzle-orm";
 
 import * as sqliteSchema from "@/db/schema";
 import type { WaiaDb } from "@/db/types";
+import { ReconciliationStaleConcurrencyTokenError } from "@/lib/trader/settlement/reconciliation/reconciliation.errors";
 import type {
+  AppendReconciliationEventInput,
   OpenReconciliationCaseInput,
   ReconciliationCaseRepository,
 } from "@/lib/trader/settlement/reconciliation/reconciliation-case-repository.types";
@@ -10,6 +12,7 @@ import { verifyReconciliationEventDigest } from "@/lib/trader/settlement/reconci
 import type {
   ReconciliationCaseView,
   ReconciliationEventRecordView,
+  ReconciliationResolutionType,
 } from "@/lib/trader/settlement/reconciliation/reconciliation.types";
 import {
   orgScopedWhere,
@@ -18,7 +21,7 @@ import {
 } from "@/lib/waia-core/scope/org-context";
 
 type SqliteReadExecutor = { select: WaiaDb["select"] };
-type SqliteExecutor = Pick<WaiaDb, "select" | "insert">;
+type SqliteExecutor = Pick<WaiaDb, "select" | "insert" | "update">;
 
 function mapCaseRow(
   row: typeof sqliteSchema.traderSettlementReconciliationCases.$inferSelect,
@@ -32,7 +35,8 @@ function mapCaseRow(
     exceptionReason: row.exceptionReason,
     status: row.status,
     priority: row.priority,
-    resolutionType: row.resolutionType,
+    resolutionType: row.resolutionType as ReconciliationResolutionType | null,
+    currentDecisionId: row.currentDecisionId ?? null,
     assignedTo: row.assignedTo,
     claimExpiresAt: row.claimExpiresAt,
     coolingOffUntil: row.coolingOffUntil,
@@ -63,6 +67,26 @@ function mapEventRow(
   };
   verifyReconciliationEventDigest(view);
   return view;
+}
+
+export async function findReconciliationCaseByIdSqlite(
+  ex: SqliteReadExecutor,
+  context: OrgContext,
+  caseId: string,
+): Promise<ReconciliationCaseView | null> {
+  const scoped = requireOrgContext(context.organizationId);
+  const rows = await ex
+    .select()
+    .from(sqliteSchema.traderSettlementReconciliationCases)
+    .where(
+      and(
+        orgScopedWhere(sqliteSchema.traderSettlementReconciliationCases.organizationId, scoped),
+        eq(sqliteSchema.traderSettlementReconciliationCases.id, caseId),
+      ),
+    )
+    .limit(1);
+  const row = rows[0];
+  return row ? mapCaseRow(row) : null;
 }
 
 export async function findReconciliationCaseBySettlementIdSqlite(
@@ -105,6 +129,7 @@ export async function openReconciliationCaseSqlite(
     status: "OPEN",
     priority: input.priority,
     resolutionType: null,
+    currentDecisionId: null,
     assignedTo: null,
     claimExpiresAt: null,
     coolingOffUntil: null,
@@ -148,6 +173,93 @@ export async function openReconciliationCaseSqlite(
   return { case: mapCaseRow(caseRow), event: mapEventRow(eventRow) };
 }
 
+export async function appendReconciliationEventSqlite(
+  ex: SqliteExecutor,
+  context: OrgContext,
+  input: AppendReconciliationEventInput,
+): Promise<{ case: ReconciliationCaseView; event: ReconciliationEventRecordView }> {
+  const scoped = requireOrgContext(context.organizationId);
+  verifyReconciliationEventDigest(input.event);
+
+  const existing = await findReconciliationCaseByIdSqlite(ex, scoped, input.caseId);
+  if (!existing) {
+    throw new Error(`[trader/settlement/reconciliation] case not found: ${input.caseId}`);
+  }
+  if (existing.lastEventSeq !== input.expectedLastEventSeq) {
+    throw new ReconciliationStaleConcurrencyTokenError(
+      input.caseId,
+      input.expectedLastEventSeq,
+      existing.lastEventSeq,
+    );
+  }
+
+  const eventId = crypto.randomUUID();
+  const now = new Date();
+
+  await ex.insert(sqliteSchema.traderSettlementReconciliationEvents).values({
+    id: eventId,
+    caseId: input.caseId,
+    organizationId: scoped.organizationId,
+    seq: input.event.seq,
+    eventType: input.event.eventType,
+    actorType: input.event.actorType,
+    actorId: input.event.actorId,
+    payload: JSON.stringify(input.event.payload),
+    schemaVersion: input.event.schemaVersion,
+    recordContentDigest: input.event.recordContentDigest,
+    prevEventDigest: input.event.prevEventDigest,
+    createdAt: now,
+  });
+
+  await ex
+    .update(sqliteSchema.traderSettlementReconciliationCases)
+    .set({
+      status: input.projection.status,
+      assignedTo: input.projection.assignedTo,
+      claimExpiresAt: input.projection.claimExpiresAt,
+      coolingOffUntil: input.projection.coolingOffUntil,
+      resolutionType: input.projection.resolutionType,
+      currentDecisionId: input.projection.currentDecisionId,
+      resolvedAt: input.projection.resolvedAt,
+      lastEventSeq: input.projection.lastEventSeq,
+      lastEventDigest: input.projection.lastEventDigest,
+    })
+    .where(
+      and(
+        eq(sqliteSchema.traderSettlementReconciliationCases.id, input.caseId),
+        eq(
+          sqliteSchema.traderSettlementReconciliationCases.lastEventSeq,
+          input.expectedLastEventSeq,
+        ),
+      ),
+    );
+
+  const caseRows = await ex
+    .select()
+    .from(sqliteSchema.traderSettlementReconciliationCases)
+    .where(eq(sqliteSchema.traderSettlementReconciliationCases.id, input.caseId))
+    .limit(1);
+  const eventRows = await ex
+    .select()
+    .from(sqliteSchema.traderSettlementReconciliationEvents)
+    .where(eq(sqliteSchema.traderSettlementReconciliationEvents.id, eventId))
+    .limit(1);
+
+  const caseRow = caseRows[0];
+  const eventRow = eventRows[0];
+  if (!caseRow || !eventRow) {
+    throw new Error("[trader/settlement/reconciliation] append event failed");
+  }
+  if (caseRow.lastEventSeq !== input.projection.lastEventSeq) {
+    throw new ReconciliationStaleConcurrencyTokenError(
+      input.caseId,
+      input.expectedLastEventSeq,
+      caseRow.lastEventSeq,
+    );
+  }
+  return { case: mapCaseRow(caseRow), event: mapEventRow(eventRow) };
+}
+
 export async function listReconciliationEventsForCaseSqlite(
   ex: SqliteReadExecutor,
   context: OrgContext,
@@ -167,14 +279,39 @@ export async function listReconciliationEventsForCaseSqlite(
   return rows.map(mapEventRow);
 }
 
+export async function listClaimExpiredReconciliationCasesSqlite(
+  ex: SqliteReadExecutor,
+  context: OrgContext,
+  now: Date,
+): Promise<ReconciliationCaseView[]> {
+  const scoped = requireOrgContext(context.organizationId);
+  const rows = await ex
+    .select()
+    .from(sqliteSchema.traderSettlementReconciliationCases)
+    .where(
+      and(
+        orgScopedWhere(sqliteSchema.traderSettlementReconciliationCases.organizationId, scoped),
+        inArray(sqliteSchema.traderSettlementReconciliationCases.status, [
+          "ASSIGNED",
+          "UNDER_REVIEW",
+        ]),
+        lt(sqliteSchema.traderSettlementReconciliationCases.claimExpiresAt, now),
+      ),
+    );
+  return rows.map(mapCaseRow);
+}
+
 export function createSqliteReconciliationCaseRepository(
   ex: SqliteExecutor,
 ): ReconciliationCaseRepository {
   return {
+    findById: (context, caseId) => findReconciliationCaseByIdSqlite(ex, context, caseId),
     findBySettlementId: (context, settlementId) =>
       findReconciliationCaseBySettlementIdSqlite(ex, context, settlementId),
     openCase: (context, input) => openReconciliationCaseSqlite(ex, context, input),
+    appendEvent: (context, input) => appendReconciliationEventSqlite(ex, context, input),
     listEventsForCase: (context, caseId) =>
       listReconciliationEventsForCaseSqlite(ex, context, caseId),
+    listClaimExpired: (context, now) => listClaimExpiredReconciliationCasesSqlite(ex, context, now),
   };
 }

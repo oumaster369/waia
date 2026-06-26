@@ -5,6 +5,7 @@ import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { createPostgresReconciliationEvidenceReader } from "@/lib/trader/settlement/reconciliation/reconciliation-evidence-postgres";
+import { extractCaseOpenedEvidence } from "@/lib/trader/settlement/reconciliation/fold-reconciliation-events";
 import { ReconciliationCaseNotFoundError } from "@/lib/trader/settlement/reconciliation/reconciliation.errors";
 import { listReconciliationEventsForCasePostgres } from "@/lib/trader/settlement/reconciliation/reconciliation-case-repository-postgres";
 import type { ReconciliationReader } from "@/lib/trader/settlement/reconciliation/reconciliation-reader.types";
@@ -99,7 +100,8 @@ function mapCaseRow(
     exceptionReason: row.exceptionReason,
     status: row.status,
     priority: row.priority,
-    resolutionType: row.resolutionType,
+    resolutionType: row.resolutionType as ReconciliationCaseView["resolutionType"],
+    currentDecisionId: row.currentDecisionId ?? null,
     assignedTo: row.assignedTo,
     claimExpiresAt: row.claimExpiresAt,
     coolingOffUntil: row.coolingOffUntil,
@@ -124,7 +126,8 @@ function mapCaseView(
     exceptionReason: row.exceptionReason,
     status: row.status,
     priority: row.priority,
-    resolutionType: row.resolutionType,
+    resolutionType: row.resolutionType as ReconciliationCaseView["resolutionType"],
+    currentDecisionId: row.currentDecisionId ?? null,
     assignedTo: row.assignedTo,
     claimExpiresAt: row.claimExpiresAt,
     coolingOffUntil: row.coolingOffUntil,
@@ -236,7 +239,9 @@ export function createPostgresReconciliationReader(ex: PgExecutor): Reconciliati
       }
 
       const events = await listReconciliationEventsForCasePostgres(ex, scoped, caseId);
-      const evidence = await evidenceReader.buildEvidence(scoped, mapSettlementRow(settlement));
+      const evidence =
+        extractCaseOpenedEvidence(events) ??
+        (await evidenceReader.buildEvidence(scoped, mapSettlementRow(settlement)));
 
       return {
         case: mapCaseView(row),

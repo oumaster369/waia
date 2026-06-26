@@ -4,7 +4,10 @@ import { and, eq } from "drizzle-orm";
 
 import type { WaiaDb } from "@/db/types";
 import * as sqliteSchema from "@/db/schema";
+import { ReconciliationApplicationAlreadyExistsError } from "@/lib/trader/settlement/reconciliation/reconciliation.errors";
+import { isUniqueConstraintError } from "@/lib/trader/execution/order-repository.types";
 import { verifySettlementApplicationDigest } from "@/lib/trader/settlement/serialize-settlement";
+import type { InsertSettlementApplicationInput } from "@/lib/trader/settlement/settlements-repository.types";
 import type { SettlementApplicationsRepository } from "@/lib/trader/settlement/settlements-repository.types";
 import type {
   SettlementApplicationRecordPayload,
@@ -17,6 +20,25 @@ import {
 } from "@/lib/waia-core/scope/org-context";
 
 type SqliteDb = Pick<WaiaDb, "select" | "insert">;
+
+function isApplicationUniqueViolation(error: unknown): boolean {
+  if (error instanceof ReconciliationApplicationAlreadyExistsError) {
+    return true;
+  }
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code: string }).code;
+    if (code === "23505" || code === "SQLITE_CONSTRAINT_UNIQUE") {
+      return true;
+    }
+  }
+  if (isUniqueConstraintError(error)) {
+    return true;
+  }
+  if (error && typeof error === "object" && "message" in error) {
+    return /UNIQUE constraint failed/i.test(String((error as { message: unknown }).message));
+  }
+  return false;
+}
 
 function mapRow(
   row: typeof sqliteSchema.traderSettlementApplications.$inferSelect,
@@ -40,26 +62,37 @@ function mapRow(
 export function insertSettlementApplicationSqlite(
   db: SqliteDb,
   context: OrgContext,
-  payload: SettlementApplicationRecordPayload,
+  input: InsertSettlementApplicationInput,
 ): SettlementApplicationRecordView {
   const scoped = requireOrgContext(context.organizationId);
+  const payload = input.payload;
   verifySettlementApplicationDigest(payload);
   const id = crypto.randomUUID();
   const now = new Date();
 
-  db.insert(sqliteSchema.traderSettlementApplications)
-    .values({
-      id,
-      settlementId: payload.settlementId,
-      organizationId: scoped.organizationId,
-      invoiceId: payload.invoiceId,
-      appliedAmount: payload.appliedAmount,
-      invoiceStatusAfter: payload.invoiceStatusAfter,
-      schemaVersion: payload.schemaVersion,
-      recordContentDigest: payload.recordContentDigest,
-      createdAt: now,
-    })
-    .run();
+  try {
+    db.insert(sqliteSchema.traderSettlementApplications)
+      .values({
+        id,
+        settlementId: payload.settlementId,
+        organizationId: scoped.organizationId,
+        invoiceId: payload.invoiceId,
+        appliedAmount: payload.appliedAmount,
+        invoiceStatusAfter: payload.invoiceStatusAfter,
+        applicationSource: input.applicationSource ?? "AUTO",
+        reconciliationCaseId: input.reconciliationCaseId ?? null,
+        decisionId: input.decisionId ?? null,
+        schemaVersion: payload.schemaVersion,
+        recordContentDigest: payload.recordContentDigest,
+        createdAt: now,
+      })
+      .run();
+  } catch (error) {
+    if (isApplicationUniqueViolation(error)) {
+      throw new ReconciliationApplicationAlreadyExistsError(payload.settlementId);
+    }
+    throw error;
+  }
 
   const row = db
     .select()
@@ -95,8 +128,8 @@ export function createSqliteSettlementApplicationsRepository(
   db: SqliteDb,
 ): SettlementApplicationsRepository {
   return {
-    insertApplication(context, payload) {
-      return Promise.resolve(insertSettlementApplicationSqlite(db, context, payload));
+    insertApplication(context, input) {
+      return Promise.resolve(insertSettlementApplicationSqlite(db, context, input));
     },
     listBySettlementId(context, settlementId) {
       return Promise.resolve(
@@ -105,3 +138,6 @@ export function createSqliteSettlementApplicationsRepository(
     },
   };
 }
+
+/** @deprecated use InsertSettlementApplicationInput */
+export type LegacySettlementApplicationInsert = SettlementApplicationRecordPayload;

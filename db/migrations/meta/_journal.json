@@ -232,6 +232,13 @@
       "when": 1780000000017,
       "tag": "0032_trader_settlement_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1780000000018,
+      "tag": "0033_trader_reconciliation_workflow",
+      "breakpoints": true
     }
   ]
 }
