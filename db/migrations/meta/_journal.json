@@ -225,6 +225,13 @@
       "when": 1780000000016,
       "tag": "0031_trader_settlement",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1780000000017,
+      "tag": "0032_trader_settlement_reconciliation",
+      "breakpoints": true
     }
   ]
 }

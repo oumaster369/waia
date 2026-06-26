@@ -560,6 +560,14 @@ export const invoiceStatusEnumPg = pgEnum("invoice_status", ["DRAFT", "ISSUED", 
 export const accountStatusEnumPg = pgEnum("account_status", ["ACTIVE", "SUSPENDED"]);
 export const accountStatusEventTypeEnumPg = pgEnum("account_status_event_type", ["REACTIVATED"]);
 export const settlementOutcomeEnumPg = pgEnum("settlement_outcome", ["APPLIED", "EXCEPTION"]);
+export const settlementReconciliationCaseStatusEnumPg = pgEnum(
+  "settlement_reconciliation_case_status",
+  ["OPEN", "ASSIGNED", "UNDER_REVIEW", "DECISION_PENDING", "RESOLVED", "CANCELLED", "ESCALATED"],
+);
+export const settlementApplicationSourceEnumPg = pgEnum("settlement_application_source", [
+  "AUTO",
+  "MANUAL",
+]);
 
 export const miSourceStatusEnumPg = pgEnum("mi_source_status", ["active", "deprecated"]);
 
@@ -1277,6 +1285,10 @@ export const traderSettlementApplications = pgTable(
       .references(() => traderInvoices.id, { onDelete: "cascade" }),
     appliedAmount: text("applied_amount").notNull(),
     invoiceStatusAfter: invoiceStatusEnumPg("invoice_status_after").notNull(),
+    applicationSource: settlementApplicationSourceEnumPg("application_source")
+      .notNull()
+      .default("AUTO"),
+    reconciliationCaseId: uuid("reconciliation_case_id"),
     schemaVersion: text("schema_version").notNull(),
     recordContentDigest: text("record_content_digest").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
@@ -1330,6 +1342,70 @@ export const traderAccountStatusEvents = pgTable(
       t.exchangeAccountId,
       t.seq,
     ),
+  ],
+);
+
+/** AI-TRADER: settlement exception reconciliation case projection (AT-E12 S3-C-A). */
+export const traderSettlementReconciliationCases = pgTable(
+  "trader_settlement_reconciliation_cases",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    settlementId: uuid("settlement_id")
+      .notNull()
+      .references(() => traderSettlements.id, { onDelete: "cascade" }),
+    paymentId: uuid("payment_id")
+      .notNull()
+      .references(() => payments.paymentId, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    exceptionReason: text("exception_reason"),
+    status: settlementReconciliationCaseStatusEnumPg("status").notNull().default("OPEN"),
+    priority: integer("priority").notNull(),
+    resolutionType: text("resolution_type"),
+    assignedTo: uuid("assigned_to"),
+    claimExpiresAt: timestamp("claim_expires_at", { withTimezone: true, mode: "date" }),
+    coolingOffUntil: timestamp("cooling_off_until", { withTimezone: true, mode: "date" }),
+    openedAt: timestamp("opened_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "date" }),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+  },
+  (t) => [
+    uniqueIndex("trader_settlement_reconciliation_cases_settlement_id_unique").on(t.settlementId),
+    index("trader_settlement_reconciliation_cases_org_status_priority_idx").on(
+      t.organizationId,
+      t.status,
+      t.priority,
+      t.openedAt,
+    ),
+  ],
+);
+
+/** AI-TRADER: append-only settlement reconciliation event ledger (AT-E12 S3-C-A). */
+export const traderSettlementReconciliationEvents = pgTable(
+  "trader_settlement_reconciliation_events",
+  {
+    id: uuid("id").primaryKey(),
+    caseId: uuid("case_id")
+      .notNull()
+      .references(() => traderSettlementReconciliationCases.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: text("event_type").notNull(),
+    actorType: auditActorTypeEnumPg("actor_type").notNull(),
+    actorId: uuid("actor_id"),
+    payload: jsonb("payload").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_settlement_reconciliation_events_case_seq_unique").on(t.caseId, t.seq),
   ],
 );
 

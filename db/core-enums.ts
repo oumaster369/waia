@@ -70,3 +70,17 @@ export const accountStatusEventTypeEnum = ["REACTIVATED"] as const;
 
 /** AI-TRADER settlement outcome (AT-E12 S3-B). */
 export const settlementOutcomeEnum = ["APPLIED", "EXCEPTION"] as const;
+
+/** AI-TRADER settlement reconciliation case status (AT-E12 S3-C-A). */
+export const settlementReconciliationCaseStatusEnum = [
+  "OPEN",
+  "ASSIGNED",
+  "UNDER_REVIEW",
+  "DECISION_PENDING",
+  "RESOLVED",
+  "CANCELLED",
+  "ESCALATED",
+] as const;
+
+/** AI-TRADER settlement application source (AT-E12 S3-C-A). */
+export const settlementApplicationSourceEnum = ["AUTO", "MANUAL"] as const;

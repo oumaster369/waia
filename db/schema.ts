@@ -566,6 +566,21 @@ export type AccountStatusEventTypeDb = (typeof accountStatusEventTypeEnum)[numbe
 export const settlementOutcomeEnum = ["APPLIED", "EXCEPTION"] as const;
 export type SettlementOutcomeDb = (typeof settlementOutcomeEnum)[number];
 
+export const settlementReconciliationCaseStatusEnum = [
+  "OPEN",
+  "ASSIGNED",
+  "UNDER_REVIEW",
+  "DECISION_PENDING",
+  "RESOLVED",
+  "CANCELLED",
+  "ESCALATED",
+] as const;
+export type SettlementReconciliationCaseStatusDb =
+  (typeof settlementReconciliationCaseStatusEnum)[number];
+
+export const settlementApplicationSourceEnum = ["AUTO", "MANUAL"] as const;
+export type SettlementApplicationSourceDb = (typeof settlementApplicationSourceEnum)[number];
+
 export const miSourceStatusEnum = ["active", "deprecated"] as const;
 export type MiSourceStatusDb = (typeof miSourceStatusEnum)[number];
 
@@ -1323,6 +1338,10 @@ export const traderSettlementApplications = sqliteTable(
       .references(() => traderInvoices.id, { onDelete: "cascade" }),
     appliedAmount: text("applied_amount").notNull(),
     invoiceStatusAfter: text("invoice_status_after", { enum: [...invoiceStatusEnum] }).notNull(),
+    applicationSource: text("application_source", { enum: [...settlementApplicationSourceEnum] })
+      .notNull()
+      .default("AUTO"),
+    reconciliationCaseId: text("reconciliation_case_id"),
     schemaVersion: text("schema_version").notNull(),
     recordContentDigest: text("record_content_digest").notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
@@ -1384,6 +1403,76 @@ export const traderAccountStatusEvents = sqliteTable(
       t.exchangeAccountId,
       t.seq,
     ),
+  ],
+);
+
+/** AI-TRADER: settlement exception reconciliation case projection (AT-E12 S3-C-A). */
+export const traderSettlementReconciliationCases = sqliteTable(
+  "trader_settlement_reconciliation_cases",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    settlementId: text("settlement_id")
+      .notNull()
+      .references(() => traderSettlements.id, { onDelete: "cascade" }),
+    paymentId: text("payment_id")
+      .notNull()
+      .references(() => payments.paymentId, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    exceptionReason: text("exception_reason"),
+    status: text("status", { enum: [...settlementReconciliationCaseStatusEnum] })
+      .notNull()
+      .default("OPEN"),
+    priority: integer("priority").notNull(),
+    resolutionType: text("resolution_type"),
+    assignedTo: text("assigned_to"),
+    claimExpiresAt: integer("claim_expires_at", { mode: "timestamp_ms" }),
+    coolingOffUntil: integer("cooling_off_until", { mode: "timestamp_ms" }),
+    openedAt: integer("opened_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+  },
+  (t) => [
+    uniqueIndex("trader_settlement_reconciliation_cases_settlement_id_unique").on(t.settlementId),
+    index("trader_settlement_reconciliation_cases_org_status_priority_idx").on(
+      t.organizationId,
+      t.status,
+      t.priority,
+      t.openedAt,
+    ),
+  ],
+);
+
+/** AI-TRADER: append-only settlement reconciliation event ledger (AT-E12 S3-C-A). */
+export const traderSettlementReconciliationEvents = sqliteTable(
+  "trader_settlement_reconciliation_events",
+  {
+    id: text("id").primaryKey(),
+    caseId: text("case_id")
+      .notNull()
+      .references(() => traderSettlementReconciliationCases.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: text("event_type").notNull(),
+    actorType: text("actor_type", { enum: [...auditActorTypeEnum] }).notNull(),
+    actorId: text("actor_id"),
+    payload: text("payload").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("trader_settlement_reconciliation_events_case_seq_unique").on(t.caseId, t.seq),
   ],
 );
 
