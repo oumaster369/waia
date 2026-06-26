@@ -13,10 +13,13 @@ Architecture is frozen. Only execution proceeds.
 | Metric | Value |
 |--------|-------|
 | Total Pipelines | 8 (P1–P8) |
-| Completed | 0 |
-| Current | P1 — Frictionless Delivery |
-| Remaining | 8 |
-| Pipeline completion | 0 / 8 (0%) |
+| P1 status | **Closed** (PR #287 → `dev` @ `49e6705`, 2026-06-26) |
+| P2 status | **Pending** (entry criteria satisfied; not started) |
+| Completed | 1 |
+| Current | **P2 — Trustworthy Foundation** (next) |
+| Remaining | 7 |
+| Pipeline completion | 1 / 8 (12.5%) |
+| Execution Freeze | **Active** |
 | MVP baseline merged to `dev` | ~60% |
 | Remaining execution | ~40% |
 | Critical Path | P1 → P2 → P3 → P4 → P5 (MVP-Paper RC) → P7 → P8 (MVP-Live Launch) |
