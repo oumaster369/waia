@@ -1,11 +1,17 @@
 import {
+  buildNoSignal,
+  isPermissionTradeable,
+  isStrategyAllowed,
+  type StrategySignalBaseInput,
+} from "@/lib/trader/intelligence/strategies/strategy-guards";
+import {
   MEAN_REVERSION_V0,
   MEAN_REVERSION_V0_VERSION,
   strategyReasonCodes,
+  type Bar,
   type FeatureSnapshot,
   type MsvEnvelope,
   type StrategySignal,
-  type TradingPermission,
 } from "@/lib/trader/intelligence/types";
 import { compareDecimal, multiplyDecimal } from "@/lib/trader/risk/numeric";
 
@@ -14,18 +20,9 @@ function absDecimal(value: string): string {
 }
 
 const ZSCORE_BUY_THRESHOLD = "-1.5";
+const ZSCORE_SELL_THRESHOLD = "0";
 const DEFAULT_HORIZON = "1h" as const;
 const DEFAULT_MAX_RISK = "650.00";
-
-const TRADEABLE_PERMISSIONS: readonly TradingPermission[] = ["ALLOW_TRADING", "ALLOW_REDUCED_RISK"];
-
-function isStrategyAllowed(msv: MsvEnvelope): boolean {
-  return msv.derived.allowedStrategyIds.includes(MEAN_REVERSION_V0);
-}
-
-function isPermissionTradeable(permission: TradingPermission): boolean {
-  return TRADEABLE_PERMISSIONS.includes(permission);
-}
 
 function confidenceFromZscore(zscore: string): string {
   const magnitude = compareDecimal(zscore, "0") <= 0 ? multiplyDecimal(zscore, "-1") : zscore;
@@ -40,18 +37,19 @@ function confidenceFromZscore(zscore: string): string {
 
 export type MeanReversionContext = {
   organizationId: string;
+  bars?: readonly Bar[];
   newId?: () => string;
 };
 
 /**
- * Mean Reversion v0 — emits structured signals only; never places orders.
+ * Mean Reversion v0 — emits structured entry (buy) and exit (sell) signals only; never places orders.
  */
 export function evaluateMeanReversionV0(
   msv: MsvEnvelope,
   features: FeatureSnapshot,
   context: MeanReversionContext,
 ): StrategySignal {
-  const base = {
+  const base: StrategySignalBaseInput = {
     strategySignalId: (context.newId ?? crypto.randomUUID.bind(crypto))(),
     strategyId: MEAN_REVERSION_V0,
     strategyVersion: MEAN_REVERSION_V0_VERSION,
@@ -60,25 +58,18 @@ export function evaluateMeanReversionV0(
     msvId: msv.msvId,
     featureSetId: features.featureSetId,
     evaluatedAt: features.evaluatedAt,
-  } satisfies Partial<StrategySignal>;
+  };
 
-  if (!isStrategyAllowed(msv)) {
-    return {
-      ...base,
-      outcome: "NO_SIGNAL",
-      reasonCodes: [strategyReasonCodes.strategyNotAllowed],
-    };
+  if (!isStrategyAllowed(msv, MEAN_REVERSION_V0)) {
+    return buildNoSignal(base, [strategyReasonCodes.strategyNotAllowed]);
   }
 
   if (!isPermissionTradeable(msv.derived.tradingPermission)) {
-    return {
-      ...base,
-      outcome: "NO_SIGNAL",
-      reasonCodes: [strategyReasonCodes.permissionBlocked],
-    };
+    return buildNoSignal(base, [strategyReasonCodes.permissionBlocked]);
   }
 
   const zscore = features.features.zscoreVsSma20;
+
   if (compareDecimal(zscore, ZSCORE_BUY_THRESHOLD) <= 0) {
     return {
       ...base,
@@ -92,11 +83,20 @@ export function evaluateMeanReversionV0(
     };
   }
 
-  return {
-    ...base,
-    outcome: "NO_SIGNAL",
-    reasonCodes: [strategyReasonCodes.zscoreNeutral],
-  };
+  if (compareDecimal(zscore, ZSCORE_SELL_THRESHOLD) >= 0) {
+    return {
+      ...base,
+      outcome: "SIGNAL",
+      side: "sell",
+      confidence: "0.55",
+      expectedEdge: multiplyDecimal(features.features.realizedVol20, "0.25"),
+      horizon: DEFAULT_HORIZON,
+      maxRisk: DEFAULT_MAX_RISK,
+      reasonCodes: [strategyReasonCodes.zscoreSell],
+    };
+  }
+
+  return buildNoSignal(base, [strategyReasonCodes.zscoreNeutral]);
 }
 
-export { ZSCORE_BUY_THRESHOLD };
+export { ZSCORE_BUY_THRESHOLD, ZSCORE_SELL_THRESHOLD };

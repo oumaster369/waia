@@ -29,7 +29,9 @@ describe("trader intelligence CDE v0 (DEE-257)", () => {
     const msv = buildMsvEnvelope({ features, newId: () => "msv-golden" });
 
     expect(msv.derived.tradingPermission).toBe("ALLOW_TRADING");
-    expect(msv.derived.allowedStrategyIds).toContain("mean_reversion_v0");
+    expect(msv.derived.allowedStrategyIds).toEqual(
+      expect.arrayContaining(["mean_reversion_v0", "liquidity_sweep_reversal_v0"]),
+    );
     expect(msv.derived.dataQualityScore).toBe(features.dataQualityScore);
   });
 

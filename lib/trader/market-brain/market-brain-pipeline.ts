@@ -2,14 +2,12 @@ import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-te
 import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
 import { emitMsvDecisionCounters } from "@/lib/trader/intelligence/decision-telemetry";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
-import { evaluateMeanReversionV0 } from "@/lib/trader/intelligence/strategies/mean-reversion-v0";
+import {
+  evaluateRegisteredStrategies,
+  selectPrimaryStrategySignal,
+} from "@/lib/trader/intelligence/strategies/registry";
 import { emitStrategySignalCounters } from "@/lib/trader/intelligence/strategy-telemetry";
-import type {
-  Bar,
-  EvaluationCycleResult,
-  InstrumentId,
-  Quote,
-} from "@/lib/trader/intelligence/types";
+import type { Bar, InstrumentId, Quote, StrategySignal } from "@/lib/trader/intelligence/types";
 import {
   DATA_QUALITY_HALT_REASON,
   evaluateDataQualityGate,
@@ -35,12 +33,13 @@ export type MarketBrainPipelineResult = {
   ingestionError?: string;
   features: ReturnType<typeof computeFeatureSnapshot> | null;
   msv: ReturnType<typeof buildMsvEnvelope> | null;
-  signal: EvaluationCycleResult["signal"] | null;
+  signals: StrategySignal[] | null;
+  signal: StrategySignal | null;
 };
 
 /**
- * Pipeline P3 orchestrator: Feature Engine → data-quality fail-closed → CDE/MSV → strategy.
- * Halts before strategy when ingestion fails or data quality is below threshold (DEE-197–202).
+ * Pipeline P3/P4 orchestrator: Feature Engine → data-quality fail-closed → CDE/MSV → strategies.
+ * Halts before strategy evaluation when ingestion fails or data quality is below threshold.
  */
 export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketBrainPipelineResult {
   const base = {
@@ -50,6 +49,7 @@ export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketB
     ingestionError: input.ingestionError,
     features: null,
     msv: null,
+    signals: null,
     signal: null,
   };
 
@@ -76,6 +76,7 @@ export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketB
       haltReasonCode: DATA_QUALITY_HALT_REASON,
       features,
       msv: null,
+      signals: null,
       signal: null,
     };
   }
@@ -83,11 +84,17 @@ export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketB
   const msv = buildMsvEnvelope({ features, newId: input.newId });
   emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
 
-  const signal = evaluateMeanReversionV0(msv, features, {
+  const signals = evaluateRegisteredStrategies(msv, features, {
     organizationId: input.organizationId,
+    bars: input.bars,
     newId: input.newId,
   });
-  emitStrategySignalCounters(signal, input.telemetrySink);
+
+  for (const strategySignal of signals) {
+    emitStrategySignalCounters(strategySignal, input.telemetrySink);
+  }
+
+  const signal = selectPrimaryStrategySignal(signals);
 
   return {
     instrumentId: input.instrumentId,
@@ -95,6 +102,7 @@ export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketB
     haltReasonCode: null,
     features,
     msv,
+    signals,
     signal,
   };
 }

@@ -48,7 +48,7 @@ describe("trader intelligence evaluation cycle decision telemetry (DEE-259)", ()
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(4);
     expect(parseCounter(lines[0]!)).toMatchObject({
       domain: "decision",
       code: cdeReasonCodes.qualityAllowTrading,
@@ -57,10 +57,9 @@ describe("trader intelligence evaluation cycle decision telemetry (DEE-259)", ()
       domain: "decision",
       code: cdeReasonCodes.regimeTrendBear,
     });
-    expect(parseCounter(lines[2]!)).toMatchObject({
-      domain: "strategy",
-      code: strategyReasonCodes.zscoreBuy,
-    });
+    const strategyLines = lines.slice(2).map(parseCounter);
+    expect(strategyLines.every((line) => line.domain === "strategy")).toBe(true);
+    expect(strategyLines.some((line) => line.code === strategyReasonCodes.zscoreBuy)).toBe(true);
   });
 
   it("omitted telemetrySink does not break evaluation cycle", () => {

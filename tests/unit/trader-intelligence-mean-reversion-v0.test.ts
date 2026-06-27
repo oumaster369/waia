@@ -21,8 +21,8 @@ function loadFixture(): FixtureFile {
   return JSON.parse(readFileSync(filePath, "utf8")) as FixtureFile;
 }
 
-describe("trader intelligence mean reversion v0 (DEE-257)", () => {
-  it("emits SIGNAL on golden fixture", () => {
+describe("trader intelligence mean reversion v0 (DEE-257 / DEE-333)", () => {
+  it("emits buy entry SIGNAL on golden entry fixture", () => {
     const fixture = loadFixture();
     const result = runEvaluationCycle({
       organizationId: ORG,
@@ -31,11 +31,33 @@ describe("trader intelligence mean reversion v0 (DEE-257)", () => {
       newId: () => "id-mr-golden",
     });
 
-    expect(result.signal.outcome).toBe("SIGNAL");
-    expect(result.signal.side).toBe("buy");
-    expect(result.signal.strategyId).toBe("mean_reversion_v0");
-    expect(result.signal.msvId).toBe(result.msv.msvId);
-    expect(result.signal.featureSetId).toBe(result.features.featureSetId);
+    const mr = result.signals.find((s) => s.strategyId === "mean_reversion_v0");
+    expect(mr?.outcome).toBe("SIGNAL");
+    expect(mr?.side).toBe("buy");
+    expect(mr?.msvId).toBe(result.msv.msvId);
+    expect(mr?.featureSetId).toBe(result.features.featureSetId);
+  });
+
+  it("emits sell exit SIGNAL on golden exit fixture", () => {
+    const filePath = path.join(
+      process.cwd(),
+      "tests/fixtures/trader/btcusdt-1m-mean-reversion-exit.json",
+    );
+    const fixture = JSON.parse(readFileSync(filePath, "utf8")) as FixtureFile;
+    const features = computeFeatureSnapshot({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt: fixture.bars.at(-1)!.barCloseTime,
+      newId: () => "feature-set-exit",
+    });
+    const msv = buildMsvEnvelope({ features, newId: () => "msv-exit" });
+    const signal = evaluateMeanReversionV0(msv, features, {
+      organizationId: ORG,
+      newId: () => "signal-exit",
+    });
+
+    expect(signal.outcome).toBe("SIGNAL");
+    expect(signal.side).toBe("sell");
   });
 
   it("emits NO_SIGNAL when trading permission is STOP_TRADING", () => {

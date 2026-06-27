@@ -35,6 +35,23 @@ const REFRESHED_STATE: AccountRiskState = {
 };
 
 function mockEvaluation(outcome: "SIGNAL" | "NO_SIGNAL" = "SIGNAL"): EvaluationCycleResult {
+  const signal = {
+    strategySignalId: "signal-266",
+    strategyId: "mean_reversion_v0" as const,
+    strategyVersion: "0.1.0",
+    organizationId: ORG,
+    symbol: "BTC/USDT" as const,
+    outcome,
+    side: "buy" as const,
+    confidence: "0.8",
+    expectedEdge: "0.01",
+    horizon: "1h" as const,
+    maxRisk: "100",
+    reasonCodes: ["STRAT_MR_ZSCORE_BUY"],
+    msvId: "msv-266",
+    featureSetId: "feature-set-266",
+    evaluatedAt: "2026-01-01T00:25:00.000Z",
+  };
   return {
     features: {
       featureSetId: "feature-set-266",
@@ -68,23 +85,8 @@ function mockEvaluation(outcome: "SIGNAL" | "NO_SIGNAL" = "SIGNAL"): EvaluationC
         reasonCodes: ["CDE_QUALITY_ALLOW_TRADING"],
       },
     },
-    signal: {
-      strategySignalId: "signal-266",
-      strategyId: "mean_reversion_v0",
-      strategyVersion: "0.1.0",
-      organizationId: ORG,
-      symbol: "BTC/USDT",
-      outcome,
-      side: "buy",
-      confidence: "0.8",
-      expectedEdge: "0.01",
-      horizon: "1h",
-      maxRisk: "100",
-      reasonCodes: ["STRAT_MR_ZSCORE_BUY"],
-      msvId: "msv-266",
-      featureSetId: "feature-set-266",
-      evaluatedAt: "2026-01-01T00:25:00.000Z",
-    },
+    signal,
+    signals: [signal],
   };
 }
 

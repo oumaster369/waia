@@ -27,13 +27,32 @@ export {
 export {
   evaluateMeanReversionV0,
   ZSCORE_BUY_THRESHOLD,
+  ZSCORE_SELL_THRESHOLD,
 } from "@/lib/trader/intelligence/strategies/mean-reversion-v0";
+export { evaluateLiquiditySweepReversalV0 } from "@/lib/trader/intelligence/strategies/liquidity-sweep-reversal-v0";
+export {
+  evaluateRegisteredStrategies,
+  getStrategyRegistryEntry,
+  isMvpStrategyId,
+  listMvpStrategyRegistry,
+  resolveMvpStrategyAssignments,
+  selectPrimaryStrategySignal,
+  strategyLifecycleStates,
+  type MvpStrategyId,
+  type StrategyEvaluator,
+  type StrategyEvaluatorContext,
+  type StrategyLifecycleState,
+  type StrategyRegistryEntry,
+} from "@/lib/trader/intelligence/strategies/registry";
 export {
   BTC_USDT,
+  LIQUIDITY_SWEEP_REVERSAL_V0,
+  LIQUIDITY_SWEEP_REVERSAL_V0_VERSION,
   MEAN_REVERSION_V0,
   MEAN_REVERSION_V0_VERSION,
   cdeReasonCodes,
   featureReasonCodes,
+  liquiditySweepReasonCodes,
   regimeEnum,
   strategyReasonCodes,
   tradingPermissionEnum,

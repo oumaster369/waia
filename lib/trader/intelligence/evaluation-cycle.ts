@@ -1,12 +1,15 @@
 import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
 import { emitMsvDecisionCounters } from "@/lib/trader/intelligence/decision-telemetry";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
-import { evaluateMeanReversionV0 } from "@/lib/trader/intelligence/strategies/mean-reversion-v0";
+import {
+  evaluateRegisteredStrategies,
+  selectPrimaryStrategySignal,
+} from "@/lib/trader/intelligence/strategies/registry";
 import { emitStrategySignalCounters } from "@/lib/trader/intelligence/strategy-telemetry";
 import type { EvaluationCycleInput, EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 
 /**
- * Runs one intelligence evaluation: Feature Engine → CDE → Mean Reversion v0.
+ * Runs one intelligence evaluation: Feature Engine → CDE → registered MVP strategies.
  */
 export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycleResult {
   const newId = input.newId ?? crypto.randomUUID.bind(crypto);
@@ -18,11 +21,18 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
   });
   const msv = buildMsvEnvelope({ features, newId });
   emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
-  const signal = evaluateMeanReversionV0(msv, features, {
+
+  const signals = evaluateRegisteredStrategies(msv, features, {
     organizationId: input.organizationId,
+    bars: input.bars,
     newId,
   });
-  emitStrategySignalCounters(signal, input.telemetrySink);
 
-  return { features, msv, signal };
+  for (const signal of signals) {
+    emitStrategySignalCounters(signal, input.telemetrySink);
+  }
+
+  const signal = selectPrimaryStrategySignal(signals);
+
+  return { features, msv, signals, signal };
 }
