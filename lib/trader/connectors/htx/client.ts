@@ -21,6 +21,13 @@ import type {
 } from "@/lib/trader/connectors/htx/types";
 import type { OrderSide, OrderType } from "@/lib/trader/connectors/types";
 import { placeOrderInputToHtxType } from "@/lib/trader/connectors/htx/mappers";
+import { HtxTransport } from "@/lib/trader/connectors/htx/transport";
+import {
+  DEFAULT_HTX_TRANSPORT_POLICY,
+  type HtxTransportPolicy,
+  computeRetryDelayMs,
+  isHtxRateLimitEnvelope,
+} from "@/lib/trader/connectors/htx/transport-policy";
 
 export type HtxFetchFn = typeof fetch;
 
@@ -39,6 +46,7 @@ export type HtxClientConfig = {
   apiSecret: string;
   restHost?: string;
   fetchImpl?: HtxFetchFn;
+  transportPolicy?: HtxTransportPolicy;
 };
 
 export class HtxRestClient {
@@ -46,14 +54,16 @@ export class HtxRestClient {
   private readonly apiSecret: string;
   private readonly restHost: string;
   private readonly host: string;
-  private readonly fetchImpl: HtxFetchFn;
+  private readonly transport: HtxTransport;
+  private readonly transportPolicy: HtxTransportPolicy;
 
   constructor(config: HtxClientConfig) {
     this.apiKey = config.apiKey;
     this.apiSecret = config.apiSecret;
     this.restHost = resolveHtxRestHost(config.restHost);
     this.host = htxHostFromUrl(this.restHost);
-    this.fetchImpl = config.fetchImpl ?? fetch;
+    this.transportPolicy = config.transportPolicy ?? DEFAULT_HTX_TRANSPORT_POLICY;
+    this.transport = new HtxTransport(config.fetchImpl ?? fetch, this.transportPolicy);
   }
 
   getRestHost(): string {
@@ -182,7 +192,7 @@ export class HtxRestClient {
 
   async getMarketDetailMerged(symbol: string): Promise<HtxMarketMergedResponse> {
     const url = `${this.restHost}${HTX_ENDPOINTS.marketDetailMerged}?symbol=${encodeURIComponent(symbol)}`;
-    const response = await this.fetchImpl(url, { method: "GET" });
+    const response = await this.transport.fetch(url, { method: "GET" });
     if (!response.ok) {
       throw new HtxApiError("http-error", `HTTP ${response.status} for market detail`);
     }
@@ -200,7 +210,7 @@ export class HtxRestClient {
       size: String(input.size ?? 25),
     });
     const url = `${this.restHost}${HTX_ENDPOINTS.marketHistoryKline}?${params.toString()}`;
-    const response = await this.fetchImpl(url, { method: "GET" });
+    const response = await this.transport.fetch(url, { method: "GET" });
     if (!response.ok) {
       throw new HtxApiError("http-error", `HTTP ${response.status} for market history kline`);
     }
@@ -226,13 +236,7 @@ export class HtxRestClient {
       params,
     });
     const url = `${this.restHost}${path}?${query}`;
-    const response = await this.fetchImpl(url, { method: "GET" });
-    if (!response.ok) {
-      throw new HtxApiError("http-error", `HTTP ${response.status} for ${path}`);
-    }
-    const body = (await response.json()) as T & HtxLegacyResponse<unknown> & HtxV2Response<unknown>;
-    this.assertOk(body, path);
-    return body;
+    return this.signedRequest<T>(url, { method: "GET" }, path);
   }
 
   private async signedPost<T>(path: string, body: Record<string, string | number>): Promise<T> {
@@ -243,19 +247,42 @@ export class HtxRestClient {
       path,
     });
     const url = `${this.restHost}${path}?${query}`;
-    const response = await this.fetchImpl(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      throw new HtxApiError("http-error", `HTTP ${response.status} for ${path}`);
+    return this.signedRequest<T>(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      path,
+    );
+  }
+
+  private async signedRequest<T>(url: string, init: RequestInit, path: string): Promise<T> {
+    for (let attempt = 0; attempt <= this.transportPolicy.maxRetries; attempt++) {
+      const response = await this.transport.fetch(url, init);
+      if (!response.ok) {
+        throw new HtxApiError("http-error", `HTTP ${response.status} for ${path}`);
+      }
+
+      const body = (await response.json()) as T &
+        HtxLegacyResponse<unknown> &
+        HtxV2Response<unknown>;
+
+      if (isHtxRateLimitEnvelope(body)) {
+        if (attempt === this.transportPolicy.maxRetries) {
+          this.assertOk(body, path);
+        }
+        const delayMs = computeRetryDelayMs(attempt, this.transportPolicy, response.headers);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+
+      this.assertOk(body, path);
+      return body;
     }
-    const parsed = (await response.json()) as T &
-      HtxLegacyResponse<unknown> &
-      HtxV2Response<unknown>;
-    this.assertOk(parsed, path);
-    return parsed;
+
+    throw new HtxApiError("rate-limit", `HTX rate limit retries exhausted for ${path}`);
   }
 
   private assertOk(body: HtxLegacyResponse<unknown> & HtxV2Response<unknown>, path: string): void {
