@@ -438,6 +438,64 @@ export const traderBalanceSnapshots = pgTable(
   ],
 );
 
+/** AI-TRADER: point-in-time position snapshots (DEE-350 / AT-E2). */
+export const traderPositionSnapshots = pgTable(
+  "trader_position_snapshots",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: uuid("credential_id")
+      .notNull()
+      .references(() => exchangeCredentials.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    positions: text("positions").notNull(),
+    positionCount: integer("position_count").notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true, mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_position_snapshots_org_cred_synced_idx").on(
+      t.organizationId,
+      t.credentialId,
+      t.syncedAt,
+    ),
+    index("trader_position_snapshots_org_synced_idx").on(t.organizationId, t.syncedAt),
+  ],
+);
+
+/** AI-TRADER: point-in-time trade-history snapshots (DEE-350 / AT-E2). */
+export const traderTradeHistorySnapshots = pgTable(
+  "trader_trade_history_snapshots",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: uuid("credential_id")
+      .notNull()
+      .references(() => exchangeCredentials.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    symbol: text("symbol").notNull(),
+    trades: text("trades").notNull(),
+    tradeCount: integer("trade_count").notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true, mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_trade_history_snapshots_org_cred_symbol_synced_idx").on(
+      t.organizationId,
+      t.credentialId,
+      t.symbol,
+      t.syncedAt,
+    ),
+    index("trader_trade_history_snapshots_org_synced_idx").on(t.organizationId, t.syncedAt),
+  ],
+);
+
 export const riskLimitsScopeTypeEnumPg = pgEnum("risk_limits_scope_type", [
   "organization",
   "venue",

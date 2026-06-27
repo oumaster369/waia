@@ -426,6 +426,68 @@ export const traderBalanceSnapshots = sqliteTable(
   ],
 );
 
+/** AI-TRADER: point-in-time position snapshots (DEE-350 / AT-E2). */
+export const traderPositionSnapshots = sqliteTable(
+  "trader_position_snapshots",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: text("credential_id")
+      .notNull()
+      .references(() => exchangeCredentials.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    positions: text("positions").notNull(),
+    positionCount: integer("position_count").notNull(),
+    syncedAt: integer("synced_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_position_snapshots_org_cred_synced_idx").on(
+      t.organizationId,
+      t.credentialId,
+      t.syncedAt,
+    ),
+    index("trader_position_snapshots_org_synced_idx").on(t.organizationId, t.syncedAt),
+  ],
+);
+
+/** AI-TRADER: point-in-time trade-history snapshots (DEE-350 / AT-E2). */
+export const traderTradeHistorySnapshots = sqliteTable(
+  "trader_trade_history_snapshots",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: text("credential_id")
+      .notNull()
+      .references(() => exchangeCredentials.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    symbol: text("symbol").notNull(),
+    trades: text("trades").notNull(),
+    tradeCount: integer("trade_count").notNull(),
+    syncedAt: integer("synced_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_trade_history_snapshots_org_cred_symbol_synced_idx").on(
+      t.organizationId,
+      t.credentialId,
+      t.symbol,
+      t.syncedAt,
+    ),
+    index("trader_trade_history_snapshots_org_synced_idx").on(t.organizationId, t.syncedAt),
+  ],
+);
+
 export const riskLimitsScopeTypeEnum = ["organization", "venue", "strategy"] as const;
 export type RiskLimitsScopeType = (typeof riskLimitsScopeTypeEnum)[number];
 
