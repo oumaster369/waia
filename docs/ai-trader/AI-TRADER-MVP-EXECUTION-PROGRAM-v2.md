@@ -102,7 +102,7 @@ Each Pipeline is atomic. Lifecycle: Architecture Review PASS → Implementation 
 | | |
 |---|---|
 | **Entry** | P4 Closed AND P2 Closed (isolation gate before `main` promotion) |
-| **Definition of Done** | Paper loop deployed; Accelerated Historical Replay Validation; observability live; RC `dev→main` + targeted Postgres apply |
+| **Definition of Done** | Paper loop deployed; Accelerated Historical Replay Validation (DEE-337 Done); observability live; RC `dev→main` + targeted Postgres apply |
 | **Exit** | MVP-Paper checklist (criteria 1–10) green on `main`; Post-Merge audit PASS |
 
 ### P6 — Money In, Accountable
@@ -111,7 +111,7 @@ Each Pipeline is atomic. Lifecycle: Architecture Review PASS → Implementation 
 
 | | |
 |---|---|
-| **Entry** | P5 Closed (serial; parallel during P5 soak only with Architect authorization) |
+| **Entry** | P5 Closed (serial; parallel during P5 replay validation only with Architect authorization) |
 | **Definition of Done** | Suspension lifecycle tested; manual-gate operator runbook complete |
 | **Exit** | unpaid→suspended→paid→reactivated proven; Post-Merge audit PASS |
 
@@ -127,7 +127,9 @@ Each Pipeline is atomic. Lifecycle: Architecture Review PASS → Implementation 
 
 ### P8 — Safe Live Execution (MVP-Live)
 
-**Issues:** DEE-221, NEW-12, DEE-212, DEE-211, DEE-218, DEE-219, DEE-223, NEW-13 · **Risk:** HIGH · **Milestone:** M9/M10
+**Issues:** DEE-221 (**Done**), NEW-12 → DEE-339, DEE-212, DEE-211 (**Done**), DEE-346 (**Done**), DEE-218, DEE-219, DEE-223, NEW-13 → DEE-340 · **Risk:** HIGH · **Milestone:** M9/M10
+
+> **P8 foundations (merged, 2026-06-27):** DEE-211 (HTX signed transport + live spot connector foundation), DEE-221 (Secrets Store + credential security foundation), DEE-346 (HTX REST transport hardening) — all **Done** on `dev`.
 
 | | |
 |---|---|
@@ -153,25 +155,25 @@ NEW-1 → DEE-154 → NEW-2
 
 ---
 
-## Issue Registry (NEW placeholders → Linear IDs on creation)
+## Issue Registry (NEW placeholders → Linear IDs)
 
-| ID | Title | Pipeline | Priority | Parent |
-|----|-------|----------|----------|--------|
-| NEW-1 | Fix clean-checkout typecheck (OpenNext suppression) | P1 | High | DEE-103 |
-| NEW-2 | Ratify Postgres-only for new trader work | P1 | Normal | DEE-64 |
-| NEW-3 | WAIA Core conformance audit & M1 closure (Org-0) | P2 | High | DEE-161 |
-| NEW-4 | Wire trader runtime provisioning | P2 | High | DEE-162 |
-| NEW-5 | Strategy 1: Liquidity Sweep Reversal | P4 | Critical | DEE-167 |
-| NEW-6 | Strategy 2: Mean Reversion (governed) | P4 | Critical | DEE-167 |
-| NEW-7 | Wire strategies → risk → exec(mock) → paper book | P5 | Critical | DEE-170 |
-| NEW-8 | Deploy paper loop as scheduled service | P5 | Critical | DEE-170 |
-| NEW-9 | Observability baseline at runtime | P5 | Critical | DEE-177 |
-| NEW-10 | Accelerated Historical Replay Validation (2 strategies) closure report | P5 | Critical | DEE-170 |
-| NEW-11 | RC promotion dev→main (Paper-Complete) | P5 | Critical | DEE-149 |
-| NEW-12 | Isolated execution host infrastructure | P8 | Critical | DEE-171 |
-| NEW-13 | Org-0 live launch gate + capped supervised live | P8 | Critical | DEE-171 |
+| ID | Title | Pipeline | Priority | Parent | Linear ID |
+|----|-------|----------|----------|--------|-----------|
+| NEW-1 | Fix clean-checkout typecheck (OpenNext suppression) | P1 | High | DEE-103 | DEE-329 |
+| NEW-2 | Ratify Postgres-only for new trader work | P1 | Normal | DEE-64 | DEE-328 |
+| NEW-3 | WAIA Core conformance audit & M1 closure (Org-0) | P2 | High | DEE-161 | DEE-330 |
+| NEW-4 | Wire trader runtime provisioning | P2 | High | DEE-162 | DEE-331 |
+| NEW-5 | Strategy 1: Liquidity Sweep Reversal | P4 | Critical | DEE-167 | DEE-332 |
+| NEW-6 | Strategy 2: Mean Reversion (governed) | P4 | Critical | DEE-167 | DEE-333 |
+| NEW-7 | Wire strategies → risk → exec(mock) → paper book | P5 | Critical | DEE-170 | DEE-334 |
+| NEW-8 | Deploy paper loop as scheduled service | P5 | Critical | DEE-170 | DEE-335 |
+| NEW-9 | Observability baseline at runtime | P5 | Critical | DEE-177 | DEE-336 |
+| NEW-10 | Accelerated Historical Replay Validation (2 strategies) closure report | P5 | Critical | DEE-170 | **DEE-337 (Done)** |
+| NEW-11 | RC promotion dev→main (Paper-Complete) | P5 | Critical | DEE-149 | **DEE-338 (Todo)** |
+| NEW-12 | Isolated execution host infrastructure | P8 | Critical | DEE-171 | **DEE-339 (Todo)** |
+| NEW-13 | Org-0 live launch gate + capped supervised live | P8 | Critical | DEE-171 | **DEE-340 (Todo)** |
 
-Existing issues: DEE-154, DEE-190, DEE-191, DEE-197–202, DEE-203, DEE-217, DEE-215, DEE-178, DEE-221, DEE-212, DEE-211, DEE-218, DEE-219, DEE-223 — see Linear for pipeline assignment.
+Existing issues: DEE-154, DEE-190, DEE-191, DEE-197–202, DEE-203, DEE-217, DEE-215, DEE-178, DEE-212, DEE-218, DEE-219, DEE-223 — see Linear for pipeline assignment. **P8 foundations Done:** DEE-211, DEE-221, DEE-346.
 
 ---
 
@@ -215,9 +217,9 @@ Full RBAC (DEE-158), key rotation (DEE-235), external pilot (DEE-179), MI doctri
 
 ## Linear Application (reference)
 
-**Close (Done):** DEE-156,180,181,157,182,183,159,186,187,160,188,189,278,172,213,214,173,216,313.
+**Close (Done):** DEE-156,180,181,157,182,183,159,186,187,160,188,189,278,172,213,214,173,216,313,**161,164,165,166,167,337,211,221,346**.
 
-**Archive (Post-MVP):** DEE-158,184,185,235,179 (+ non-trader scope).
+**Archive (Post-MVP):** DEE-158,184,185,235,179 (+ non-trader scope). **DEE-179** = Regulatory Clearance Gate (ADR-0009); governance gate, not engineering — labeled Post-MVP / Canceled.
 
 **Split:** DEE-204 → NEW-5, NEW-6.
 

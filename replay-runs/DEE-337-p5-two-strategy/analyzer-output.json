@@ -3,7 +3,7 @@
 > WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/analyze-paper-soak-log.ts -- --log=/Users/legco/Projects/waia/replay-runs/DEE-337-p5-two-strategy/paper-loop-replay.log --min-hours=48 --bar-interval-ms=60000
 
 {
-  "runbook": "docs/ops/DEE-337-P5-TWO-STRATEGY-PAPER-SOAK-RUNBOOK.md",
+  "runbook": "docs/ops/DEE-337-P5-TWO-STRATEGY-AHR-RUNBOOK.md",
   "logPath": "/Users/legco/Projects/waia/replay-runs/DEE-337-p5-two-strategy/paper-loop-replay.log",
   "totalLines": 26200,
   "parsedJsonLines": 26188,

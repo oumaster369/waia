@@ -236,7 +236,7 @@ Remedies are **separate child objects** of one or more open Knowledge Needs, sha
 
 - **Data Need Proposal** — proposes new market/macro/flow/news/sentiment/internal data. Requires a parent Knowledge Need, proof the gap is information-bounded (not method-bounded), a pre-registered falsifiable hypothesis the data would enable, **provenance feasibility**, and a false-discovery-budget acknowledgment. The bar scales by source danger (internal lowest; news/sentiment highest and default-quarantined).
 - **Hypothesis Expansion Proposal** — targets a specific empty/weak cell on the regime × relationship-type coverage map, arrives with its mandatory null and pre-registration, is deduplicated/merged against existing hypotheses, and must **displace a weak one** rather than accumulate. Conflicts produce **discriminating experiments**, not third hypotheses. This prevents strategy sprawl by construction.
-- **Research Program Proposal** — requests a dedicated investigation, validation campaign, additional paper soak, or data-quality audit. It **feeds DEE-178; it never bypasses it.** The system proposes; humans run.
+- **Research Program Proposal** — requests a dedicated investigation, validation campaign, additional Accelerated Historical Replay Validation run, or data-quality audit. It **feeds DEE-178; it never bypasses it.** The system proposes; humans run.
 - **Schema Change Proposal** — **additive-only** (new observation/entity/evidence type/attribute; never modify or remove). Highest evidence bar of all proposal kinds; default disposition **defer**; requires sustained, repeated evidence, cooling-off, and a human-authored ADR. Frequent schema proposals are an architecture-smell and are surfaced as such.
 
 ### 13.3 The three firewalls and the no-reward rule

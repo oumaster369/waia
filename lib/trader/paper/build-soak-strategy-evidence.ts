@@ -9,7 +9,7 @@ export const SOAK_STRATEGY_EVIDENCE_SCHEMA_VERSION =
   "waia.trader.paper-soak-strategy-evidence.v1" as const;
 
 export const SOAK_STRATEGY_EVIDENCE_RUNBOOK =
-  "docs/ops/DEE-337-P5-TWO-STRATEGY-PAPER-SOAK-RUNBOOK.md" as const;
+  "docs/ops/DEE-337-P5-TWO-STRATEGY-AHR-RUNBOOK.md" as const;
 
 export type SoakStrategyEvidenceInput = {
   context: OrgContext;

@@ -166,7 +166,7 @@ If the replay window produces **no closed trades** for one strategy, document ho
 
 ## Phase 4 — Closure report
 
-When Phases 1–3 pass, fill [DEE-337-P5-TWO-STRATEGY-PAPER-SOAK-CLOSURE-REPORT.md](./DEE-337-P5-TWO-STRATEGY-PAPER-SOAK-CLOSURE-REPORT.md):
+When Phases 1–3 pass, fill [DEE-337-P5-TWO-STRATEGY-AHR-CLOSURE-REPORT.md](./DEE-337-P5-TWO-STRATEGY-AHR-CLOSURE-REPORT.md):
 
 - Set **Verdict: PASS**
 - Paste analyzer JSON summary
