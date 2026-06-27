@@ -101,6 +101,12 @@ export {
   type PaperBarCloseCycleCompleteInput,
 } from "@/lib/trader/paper/paper-bar-close-loop-telemetry";
 export {
+  analyzePaperSoakLog,
+  P5_TWO_STRATEGY_SOAK_IDS,
+  type PaperSoakLogAnalysis,
+  type PaperSoakLogAnalysisInput,
+} from "@/lib/trader/paper/analyze-paper-soak-log";
+export {
   cycleOrderKeys,
   runFixturePaperCycles,
   runPaperCycleOnce,
