@@ -15,11 +15,12 @@ Architecture is frozen. Only execution proceeds.
 | Total Pipelines | 8 (P1–P8) |
 | P1 status | **Closed** (PR #287 → `dev` @ `49e6705`, 2026-06-26) |
 | P2 status | **Closed** (PR #290 → `dev` @ `bf8c326`, 2026-06-26) |
-| P3 status | **Pending** (entry criteria satisfied; not started) |
-| Completed | 2 |
-| Current | **P3 — The Market Brain** (next) |
-| Remaining | 6 |
-| Pipeline completion | 2 / 8 (25%) |
+| P3 status | **Closed** (PR #292 → `dev` @ `934b23b`, 2026-06-26) |
+| P4 status | **Pending** (entry criteria satisfied; not started) |
+| Completed | 3 |
+| Current | **P4 — Two Real Strategies** (next) |
+| Remaining | 5 |
+| Pipeline completion | 3 / 8 (37.5%) |
 | Execution Freeze | **Active** |
 | MVP baseline merged to `dev` | ~60% |
 | Remaining execution | ~40% |
