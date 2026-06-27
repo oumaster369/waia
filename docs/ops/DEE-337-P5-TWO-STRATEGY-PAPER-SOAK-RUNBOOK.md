@@ -150,10 +150,19 @@ grep '"kind":"paper_loop"' paper-loop-soak-48h.log | grep '"severity":"critical"
 
 ## Phase 3 — Closed-trade proof (DB-side, required for closure)
 
-Log analysis **does not** prove round-trip PnL. Query the soak SQLite book after T1:
+Log analysis **does not** prove round-trip PnL. Query the soak SQLite book after T1 using the closed-trade evidence CLI (window = `[t_start_utc, t_end_utc]` from `soak-run-metadata.json`):
 
-1. Export or inspect filled orders for both strategy signal IDs.
-2. Confirm **≥1 closed trade per strategy** via `derivePaperStrategyEvaluations` / `buildPaperEvaluationExportDocument` (window = `[t_start_utc, t_end_utc]`).
+```bash
+pnpm trader:paper:soak:evidence -- \
+  --db=file:/root/soak-runs/DEE-337-p5-two-strategy/.data/paper-soak.db \
+  --org-id=<soak-org-uuid> \
+  --account-key=acct-paper-loop \
+  --start-utc=<t_start_utc> \
+  --end-utc=<t_end_utc> \
+  --out=/root/soak-runs/DEE-337-p5-two-strategy/closed-trade-evidence.json
+```
+
+Exit **0** requires **≥1 closed trade per strategy** in the soak window. The JSON artifact includes per-strategy `closedTradeCount` values plus the digest-sealed `exportDocument`.
 
 Integration reference: `tests/integration/trader-paper-p5-multi-strategy.test.ts` (fixture path proving both strategies can round-trip in mock mode).
 

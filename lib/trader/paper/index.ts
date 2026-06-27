@@ -107,6 +107,14 @@ export {
   type PaperSoakLogAnalysisInput,
 } from "@/lib/trader/paper/analyze-paper-soak-log";
 export {
+  buildSoakStrategyEvidence,
+  SOAK_STRATEGY_EVIDENCE_RUNBOOK,
+  SOAK_STRATEGY_EVIDENCE_SCHEMA_VERSION,
+  type SoakStrategyClosedTradeCount,
+  type SoakStrategyEvidenceInput,
+  type SoakStrategyEvidenceResult,
+} from "@/lib/trader/paper/build-soak-strategy-evidence";
+export {
   cycleOrderKeys,
   runFixturePaperCycles,
   runPaperCycleOnce,
