@@ -138,6 +138,33 @@ function mockRiskDecision(outcome: RiskEngineDecision["decision"]["outcome"]): R
   };
 }
 
+function cycleResult(partial: PaperCycleResult): PaperCycleResult {
+  return partial;
+}
+
+function submittedCycleResult(input: {
+  evaluation: EvaluationCycleResult;
+  execution: SubmitOrderResult;
+  reconciliation: ReconciliationReport | null;
+  submitBlocked?: boolean;
+}): PaperCycleResult {
+  const signal = input.evaluation.signal;
+  return {
+    evaluation: input.evaluation,
+    strategyExecutions: [
+      {
+        signal,
+        submitBlocked: input.submitBlocked ?? false,
+        execution: input.execution,
+        reconciliation: input.reconciliation,
+      },
+    ],
+    submitBlocked: input.submitBlocked ?? false,
+    execution: input.execution,
+    reconciliation: input.reconciliation,
+  };
+}
+
 function baseInput(
   overrides: Partial<Omit<PaperBarCloseCycleCompleteInput, "result">> & {
     result: PaperCycleResult;
@@ -156,13 +183,14 @@ function baseInput(
 
 describe("paper bar-close loop telemetry (DEE-266)", () => {
   it("maps NO_SIGNAL skip to null execution_status and skip_reason no_signal", () => {
-    const result: PaperCycleResult = {
+    const result = cycleResult({
       evaluation: mockEvaluation("NO_SIGNAL"),
+      strategyExecutions: [],
       submitBlocked: true,
       skipReason: "no_signal",
       execution: null,
       reconciliation: null,
-    };
+    });
 
     const payload = buildPaperBarCloseCycleCompletePayload(
       baseInput({ result, stateRefreshed: false }),
@@ -178,13 +206,14 @@ describe("paper bar-close loop telemetry (DEE-266)", () => {
   });
 
   it("maps no_submit skip", () => {
-    const result: PaperCycleResult = {
+    const result = cycleResult({
       evaluation: mockEvaluation("SIGNAL"),
+      strategyExecutions: [],
       submitBlocked: true,
       skipReason: "no_submit",
       execution: null,
       reconciliation: null,
-    };
+    });
 
     const payload = buildPaperBarCloseCycleCompletePayload(baseInput({ result }));
 
@@ -198,12 +227,12 @@ describe("paper bar-close loop telemetry (DEE-266)", () => {
       riskDecision: mockRiskDecision("CLOSE_ONLY"),
       order: null,
     };
-    const result: PaperCycleResult = {
+    const result = submittedCycleResult({
       evaluation: mockEvaluation("SIGNAL"),
-      submitBlocked: false,
       execution,
       reconciliation: null,
-    };
+      submitBlocked: false,
+    });
 
     const payload = buildPaperBarCloseCycleCompletePayload(baseInput({ result }));
 
@@ -217,12 +246,11 @@ describe("paper bar-close loop telemetry (DEE-266)", () => {
       status: "submitted",
       order: {} as never,
     };
-    const result: PaperCycleResult = {
+    const result = submittedCycleResult({
       evaluation: mockEvaluation("SIGNAL"),
-      submitBlocked: false,
       execution,
       reconciliation: mockReconciliation("IN_SYNC"),
-    };
+    });
 
     const payload = buildPaperBarCloseCycleCompletePayload(baseInput({ result }));
 
@@ -236,12 +264,11 @@ describe("paper bar-close loop telemetry (DEE-266)", () => {
       status: "submitted",
       order: {} as never,
     };
-    const result: PaperCycleResult = {
+    const result = submittedCycleResult({
       evaluation: mockEvaluation("SIGNAL"),
-      submitBlocked: false,
       execution,
       reconciliation: mockReconciliation("UNKNOWN_POSITION"),
-    };
+    });
 
     const payload = buildPaperBarCloseCycleCompletePayload(baseInput({ result }));
 
@@ -250,13 +277,14 @@ describe("paper bar-close loop telemetry (DEE-266)", () => {
   });
 
   it("includes refresh metadata with position_symbol_count cardinality only", () => {
-    const result: PaperCycleResult = {
+    const result = cycleResult({
       evaluation: mockEvaluation("NO_SIGNAL"),
+      strategyExecutions: [],
       submitBlocked: true,
       skipReason: "no_signal",
       execution: null,
       reconciliation: null,
-    };
+    });
 
     const payload = buildPaperBarCloseCycleCompletePayload(
       baseInput({
@@ -278,12 +306,11 @@ describe("paper bar-close loop telemetry (DEE-266)", () => {
       status: "submitted",
       order: {} as never,
     };
-    const result: PaperCycleResult = {
+    const result = submittedCycleResult({
       evaluation: mockEvaluation("SIGNAL"),
-      submitBlocked: false,
       execution,
       reconciliation: mockReconciliation("IN_SYNC"),
-    };
+    });
 
     const payload = buildPaperBarCloseCycleCompletePayload(
       baseInput({ result, stateRefreshed: true, accountStateAfterCycle: REFRESHED_STATE }),

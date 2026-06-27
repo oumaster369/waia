@@ -131,6 +131,10 @@ export async function runPaperBarCloseLoop(
       executionMode: "mock",
       telemetrySink,
       newId,
+      orderRepository: config.orderRepository,
+      refreshAccountStateBetweenStrategies: Boolean(
+        config.refreshAccountState && config.orderRepository,
+      ),
     });
 
     cyclesRun += 1;

@@ -172,6 +172,10 @@ describe("paper cycle runner (DEE-260)", () => {
       clientOrderId: "client-paper-cycle-dee-260-2",
       idempotencyKey: "idem-paper-cycle-dee-260-2",
     });
+    expect(cycleOrderKeys("dee-260-2", "mean_reversion_v0")).toEqual({
+      clientOrderId: "client-paper-cycle-dee-260-2-mean_reversion_v0",
+      idempotencyKey: "idem-paper-cycle-dee-260-2-mean_reversion_v0",
+    });
   });
 
   it("passes telemetrySink to runEvaluationCycle", async () => {
@@ -230,10 +234,54 @@ describe("paper cycle runner (DEE-260)", () => {
     expect(deps.execution.submitOrder).toHaveBeenCalledWith(
       requireOrgContext(ORG),
       expect.objectContaining({
-        clientOrderId: "client-paper-cycle-dee-260-2",
-        idempotencyKey: "idem-paper-cycle-dee-260-2",
+        clientOrderId: "client-paper-cycle-dee-260-2-mean_reversion_v0",
+        idempotencyKey: "idem-paper-cycle-dee-260-2-mean_reversion_v0",
       }),
     );
+  });
+
+  it("dispatches every actionable registered strategy signal", async () => {
+    const deps = mockDeps();
+    const mrSignal = mockEvaluation().signal;
+    const lsSignal = {
+      ...mockEvaluation().signal,
+      strategySignalId: "signal-ls-260",
+      strategyId: "liquidity_sweep_reversal_v0" as const,
+      side: "buy" as const,
+      reasonCodes: ["STRAT_LS_REVERSAL_BUY"],
+    };
+    vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue(
+      mockEvaluation({
+        signals: [mrSignal, lsSignal],
+        signal: mrSignal,
+      }),
+    );
+
+    const snapshot = {
+      bars: flatBars(25),
+      quote: {
+        symbol: "BTC/USDT",
+        bid: "65000.00",
+        ask: "65000.00",
+        last: "65000.00",
+        timestamp: flatBars(25).at(-1)!.barCloseTime,
+      } satisfies Quote,
+      evaluatedAt: flatBars(25).at(-1)!.barCloseTime,
+      cycleIndex: 0,
+      cycleId: "dee-260-dual",
+    };
+
+    const result = await runPaperCycleOnce(deps, {
+      context: requireOrgContext(ORG),
+      snapshot,
+      accountKey: "acct-260",
+      defaultQuantity: "0.01",
+      accountState: EMPTY_STATE,
+    });
+
+    expect(result.strategyExecutions).toHaveLength(2);
+    expect(deps.execution.submitOrder).toHaveBeenCalledTimes(2);
+    expect(result.submitBlocked).toBe(false);
   });
 
   it("returns NO_SIGNAL without submitting", async () => {

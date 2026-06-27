@@ -173,7 +173,9 @@ describe("trader paper bar-close loop integration (AT-E9 S5)", () => {
       return;
     }
 
-    expect(submitResult.order.clientOrderId).toBe("client-paper-cycle-test-paper-loop-0");
+    expect(submitResult.order.clientOrderId).toBe(
+      "client-paper-cycle-test-paper-loop-0-mean_reversion_v0",
+    );
     expect(submitResult.order.state).toBe("FILLED");
 
     const reconcileResult = await reconcileSpy.mock.results[0]?.value;

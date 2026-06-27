@@ -3,9 +3,10 @@ import type {
   OrderExecutionService,
   SubmitOrderResult,
 } from "@/lib/trader/execution/execution-service.types";
+import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import type { ReconciliationReport } from "@/lib/trader/execution/reconciliation.types";
 import type { OrderExecutionMode } from "@/lib/trader/execution/types";
-import type { EvaluationCycleResult } from "@/lib/trader/intelligence/types";
+import type { EvaluationCycleResult, StrategySignal } from "@/lib/trader/intelligence/types";
 import type {
   BarPollSource,
   BarReplayMode,
@@ -36,14 +37,28 @@ export type PaperCycleInput = {
   accountState: AccountRiskState;
   telemetrySink?: WaiaTraderTelemetrySink;
   newId?: () => string;
+  /** When set with refreshAccountStateBetweenStrategies, refreshes risk state between strategy submits. */
+  orderRepository?: OrderRepository;
+  refreshAccountStateBetweenStrategies?: boolean;
 };
 
 export type PaperCycleSkipReason = "no_signal" | "no_submit";
 
-export type PaperCycleResult = {
-  evaluation: EvaluationCycleResult;
+export type PaperCycleStrategyExecution = {
+  signal: StrategySignal;
   submitBlocked: boolean;
   skipReason?: PaperCycleSkipReason;
+  execution: SubmitOrderResult | null;
+  reconciliation: ReconciliationReport | null;
+};
+
+export type PaperCycleResult = {
+  evaluation: EvaluationCycleResult;
+  /** Per-strategy dispatch attempts in registry order (Pipeline P5 / NEW-7). */
+  strategyExecutions: PaperCycleStrategyExecution[];
+  submitBlocked: boolean;
+  skipReason?: PaperCycleSkipReason;
+  /** Backward-compatible primary execution (first submitted, else last attempt). */
   execution: SubmitOrderResult | null;
   reconciliation: ReconciliationReport | null;
 };

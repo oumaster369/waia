@@ -166,7 +166,9 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
       return;
     }
 
-    expect(result.execution.order.clientOrderId).toBe("client-paper-cycle-test-htx-poll-0");
+    expect(result.execution.order.clientOrderId).toBe(
+      "client-paper-cycle-test-htx-poll-0-mean_reversion_v0",
+    );
     expect(result.execution.order.state).toBe("FILLED");
     expect(result.reconciliation?.outcomes[0]?.classification).toBe("IN_SYNC");
   });
@@ -209,8 +211,14 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
     }
 
     expect(idempotencyKeys.size).toBe(3);
-    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-0")).toBe(true);
-    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-1")).toBe(true);
-    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-2")).toBe(true);
+    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-0-mean_reversion_v0")).toBe(
+      true,
+    );
+    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-1-mean_reversion_v0")).toBe(
+      true,
+    );
+    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-2-mean_reversion_v0")).toBe(
+      true,
+    );
   });
 });
