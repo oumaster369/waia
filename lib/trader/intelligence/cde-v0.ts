@@ -5,8 +5,8 @@ import {
   buildLiquidityLayer,
   buildMarketPhysicsLayer,
 } from "@/lib/trader/intelligence/analytical-layers-v0";
+import { listMvpStrategyRegistry } from "@/lib/trader/intelligence/strategies/registry";
 import {
-  MEAN_REVERSION_V0,
   cdeReasonCodes,
   type FeatureSnapshot,
   type MsvEnvelope,
@@ -85,7 +85,7 @@ export function buildMsvEnvelope(input: BuildMsvEnvelopeInput): MsvEnvelope {
     derived: {
       regime,
       tradingPermission: permission.permission,
-      allowedStrategyIds: [MEAN_REVERSION_V0],
+      allowedStrategyIds: listMvpStrategyRegistry().map((entry) => entry.strategyId),
       riskMultiplier: "1.0",
       dataQualityScore: features.dataQualityScore,
       reasonCodes,

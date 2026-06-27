@@ -121,6 +121,11 @@ export type MsvEnvelope = {
 export const MEAN_REVERSION_V0 = "mean_reversion_v0" as const;
 export const MEAN_REVERSION_V0_VERSION = "0.1.0" as const;
 
+export const LIQUIDITY_SWEEP_REVERSAL_V0 = "liquidity_sweep_reversal_v0" as const;
+export const LIQUIDITY_SWEEP_REVERSAL_V0_VERSION = "0.1.0" as const;
+
+export type MvpStrategyId = typeof MEAN_REVERSION_V0 | typeof LIQUIDITY_SWEEP_REVERSAL_V0;
+
 export type SignalOutcome = "SIGNAL" | "NO_SIGNAL";
 
 export const featureReasonCodes = {
@@ -139,15 +144,24 @@ export const cdeReasonCodes = {
 
 export const strategyReasonCodes = {
   zscoreBuy: "STRAT_MR_ZSCORE_BUY",
+  zscoreSell: "STRAT_MR_ZSCORE_SELL",
   permissionBlocked: "STRAT_MR_PERMISSION_BLOCKED",
   zscoreNeutral: "STRAT_MR_ZSCORE_NEUTRAL",
   strategyNotAllowed: "STRAT_MR_STRATEGY_NOT_ALLOWED",
 } as const;
 
+export const liquiditySweepReasonCodes = {
+  sweepEntry: "STRAT_LSR_SWEEP_ENTRY",
+  recoveryExit: "STRAT_LSR_RECOVERY_EXIT",
+  permissionBlocked: "STRAT_LSR_PERMISSION_BLOCKED",
+  strategyNotAllowed: "STRAT_LSR_STRATEGY_NOT_ALLOWED",
+  noPattern: "STRAT_LSR_NO_PATTERN",
+} as const;
+
 export type StrategySignal = {
   strategySignalId: string;
-  strategyId: typeof MEAN_REVERSION_V0;
-  strategyVersion: typeof MEAN_REVERSION_V0_VERSION;
+  strategyId: MvpStrategyId;
+  strategyVersion: string;
   organizationId: string;
   symbol: InstrumentId;
   outcome: SignalOutcome;
@@ -174,5 +188,8 @@ export type EvaluationCycleInput = {
 export type EvaluationCycleResult = {
   features: FeatureSnapshot;
   msv: MsvEnvelope;
+  /** All registered strategy evaluations for this cycle. */
+  signals: StrategySignal[];
+  /** Primary signal for backward-compatible paper loop wiring. */
   signal: StrategySignal;
 };

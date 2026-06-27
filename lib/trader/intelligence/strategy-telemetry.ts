@@ -2,9 +2,16 @@ import {
   incrementTraderCounter,
   type WaiaTraderTelemetrySink,
 } from "@/lib/observability/waia-trader-telemetry";
-import { strategyReasonCodes, type StrategySignal } from "@/lib/trader/intelligence/types";
+import {
+  liquiditySweepReasonCodes,
+  strategyReasonCodes,
+  type StrategySignal,
+} from "@/lib/trader/intelligence/types";
 
-export const STRATEGY_COUNTER_CODES = new Set<string>(Object.values(strategyReasonCodes));
+export const STRATEGY_COUNTER_CODES = new Set<string>([
+  ...Object.values(strategyReasonCodes),
+  ...Object.values(liquiditySweepReasonCodes),
+]);
 
 function assertStrategyCounterCode(code: string): void {
   if (!STRATEGY_COUNTER_CODES.has(code)) {

@@ -30,7 +30,24 @@ const EMPTY_STATE: AccountRiskState = {
 };
 
 function mockEvaluation(overrides: Partial<EvaluationCycleResult> = {}): EvaluationCycleResult {
-  return {
+  const signal = {
+    strategySignalId: "signal-260",
+    strategyId: "mean_reversion_v0" as const,
+    strategyVersion: "0.1.0",
+    organizationId: ORG,
+    symbol: "BTC/USDT" as const,
+    outcome: "SIGNAL" as const,
+    side: "buy" as const,
+    confidence: "0.8",
+    expectedEdge: "0.01",
+    horizon: "1h" as const,
+    maxRisk: "100",
+    reasonCodes: ["STRAT_MR_ZSCORE_BUY"],
+    msvId: "msv-260",
+    featureSetId: "feature-set-260",
+    evaluatedAt: "2026-01-01T00:25:00.000Z",
+  };
+  const result: EvaluationCycleResult = {
     features: {
       featureSetId: "feature-set-260",
       instrumentId: "BTC/USDT",
@@ -57,31 +74,20 @@ function mockEvaluation(overrides: Partial<EvaluationCycleResult> = {}): Evaluat
       derived: {
         regime: "TREND_BEAR",
         tradingPermission: "ALLOW_TRADING",
-        allowedStrategyIds: ["mean_reversion_v0"],
+        allowedStrategyIds: ["mean_reversion_v0", "liquidity_sweep_reversal_v0"],
         riskMultiplier: "1.0",
         dataQualityScore: 0.9,
         reasonCodes: ["CDE_QUALITY_ALLOW_TRADING", "CDE_REGIME_TREND_BEAR"],
       },
     },
-    signal: {
-      strategySignalId: "signal-260",
-      strategyId: "mean_reversion_v0",
-      strategyVersion: "0.1.0",
-      organizationId: ORG,
-      symbol: "BTC/USDT",
-      outcome: "SIGNAL",
-      side: "buy",
-      confidence: "0.8",
-      expectedEdge: "0.01",
-      horizon: "1h",
-      maxRisk: "100",
-      reasonCodes: ["STRAT_MR_ZSCORE_BUY"],
-      msvId: "msv-260",
-      featureSetId: "feature-set-260",
-      evaluatedAt: "2026-01-01T00:25:00.000Z",
-    },
+    signal,
+    signals: [signal],
     ...overrides,
   };
+  if (overrides.signal && !overrides.signals) {
+    result.signals = [overrides.signal];
+  }
+  return result;
 }
 
 function flatBars(count: number, close = "65000.00"): Bar[] {

@@ -7,6 +7,7 @@ import {
   STRATEGY_COUNTER_CODES,
 } from "@/lib/trader/intelligence/strategy-telemetry";
 import {
+  liquiditySweepReasonCodes,
   MEAN_REVERSION_V0,
   MEAN_REVERSION_V0_VERSION,
   strategyReasonCodes,
@@ -43,14 +44,18 @@ function mockStrategySignal(reasonCodes: readonly string[]): StrategySignal {
 }
 
 describe("strategy-telemetry counters (DEE-258)", () => {
-  it("STRATEGY_COUNTER_CODES matches all strategyReasonCodes values", () => {
-    expect(STRATEGY_COUNTER_CODES.size).toBe(Object.values(strategyReasonCodes).length);
-    for (const code of Object.values(strategyReasonCodes)) {
+  it("STRATEGY_COUNTER_CODES matches all strategy reason code values", () => {
+    const allCodes = [
+      ...Object.values(strategyReasonCodes),
+      ...Object.values(liquiditySweepReasonCodes),
+    ];
+    expect(STRATEGY_COUNTER_CODES.size).toBe(allCodes.length);
+    for (const code of allCodes) {
       expect(STRATEGY_COUNTER_CODES.has(code)).toBe(true);
     }
   });
 
-  it.each(Object.values(strategyReasonCodes))(
+  it.each([...Object.values(strategyReasonCodes), ...Object.values(liquiditySweepReasonCodes)])(
     "emitStrategyReasonCodeCounter emits strategy domain counter for %s",
     (code) => {
       const { lines, sink } = captureSink();
