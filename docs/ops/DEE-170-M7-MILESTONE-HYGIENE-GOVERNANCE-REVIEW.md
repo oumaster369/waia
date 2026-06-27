@@ -1,16 +1,18 @@
 # DEE-170 — M7 Milestone Hygiene & Governance Review
 
+> **Reconciliation (2026-06-27, BP-0 / DEE-347):** M7 paper-trading engineering validation is now **Accelerated Historical Replay Validation** (DEE-337 / PR #304). References below to the DEE-170 48h soak are **historical context** for this audit unless explicitly marked current.
+
 **Linear project:** WAIA Development  
 **Audit type:** Read-only milestone hygiene + governance review  
 **Assessment date:** 2026-06-21  
-**Prerequisite audit:** [DEE-170-48H-PAPER-SOAK-CLOSURE-REPORT.md](./DEE-170-48H-PAPER-SOAK-CLOSURE-REPORT.md) (48h soak PASS)  
+**Prerequisite audit:** [DEE-170-48H-PAPER-SOAK-CLOSURE-REPORT.md](./DEE-170-48H-PAPER-SOAK-CLOSURE-REPORT.md) (48h soak PASS — historical)  
 **Verdict:** **APPROVE FOR OPERATOR EXECUTION** (with conditions)
 
 ---
 
 ## Executive summary
 
-Linear milestone **M7 — Paper Trading** is at **84.38%** (16 attached issues) despite M7 capability criteria being met by the DEE-170 48h soak. Three issues are mis-attached: **DEE-177** (epic spanning M7+M9), **DEE-178** (M7.5 governance gate), and **DEE-272** (M7.5 engineering). The approved hygiene plan re-milestones these issues without altering `parentId`, `blocks`, or `blockedBy`. After hygiene and DEE-170 closure, M7 becomes closable at 13 Done issues.
+Linear milestone **M7 — Paper Trading** is at **84.38%** (16 attached issues) despite M7 capability criteria being met by the DEE-170 48h soak (historical) and subsequently by DEE-337 Accelerated Historical Replay Validation. Three issues are mis-attached: **DEE-177** (epic spanning M7+M9), **DEE-178** (M7.5 governance gate), and **DEE-272** (M7.5 engineering). The approved hygiene plan re-milestones these issues without altering `parentId`, `blocks`, or `blockedBy`. After hygiene and DEE-170 closure, M7 becomes closable at 13 Done issues.
 
 **Primary conditions:** Preserve audit comments before reassignment; create **M7.5 — Strategy Validation Gate** milestone; do **not** mark M7.5 complete when only DEE-272 is Done.
 
@@ -57,7 +59,7 @@ M9 milestone description (Linear): *"Requires Strategy Validation Gate passed"* 
 
 ### ADR-0010
 
-- 48h soak = **plumbing** gate (M7 / AT-E9)
+- Accelerated Historical Replay Validation = **plumbing** gate (M7 / AT-E9)
 - Strategy Validation Gate = **sufficiency** gate for live promotion (M7.5)
 - Gate is **governance + operator judgment**, not paper-loop engineering
 
@@ -123,11 +125,11 @@ M9 — Org-0 Live Ready
 **Hygiene note:** DEE-177 re-milestoned to M9 (alerting remainder). DEE-178 + DEE-272 moved to M7.5 gate track (post-M7, pre-live). M7 scope = AT-E9 + AT-E15 minimum baseline only.
 **Canonical audit:** docs/ops/DEE-170-M7-MILESTONE-HYGIENE-GOVERNANCE-REVIEW.md
 
-**Delivered:** ≥48h stable mock paper loop (DEE-170-48h PASS), paper reporting read models, min observability baseline (DEE-222), validated measurable soak telemetry.
+**Delivered:** Accelerated Historical Replay Validation (DEE-337 PASS), paper reporting read models, min observability baseline (DEE-222), validated measurable replay telemetry. *(Historical: DEE-170-48h operator soak also PASS.)*
 
 **Not in M7:** Strategy Validation Gate passage (M7.5 / DEE-178), AT-E15 alerting (M9 / DEE-223), live trading (M9+).
 
-**Next:** M7.5 operator gate (DEE-178) using 48h soak evidence + PaperEvaluationExport.
+**Next:** M7.5 operator gate (DEE-178) using DEE-337 Accelerated Historical Replay Validation evidence + PaperEvaluationExport.
 ```
 
 ---
@@ -204,7 +206,7 @@ Milestone moves do **not** reorder this path. DEE-178 remains **between** M7 clo
 | DEE-222, DEE-253–256 completed under **M7** | **Still true** — not reassigned; these *were* M7 work |
 | DEE-223 on **M9** | **Still true** — unchanged |
 | DEE-272 PR #230 merge / `completedAt` | **Unchanged** — status history immutable |
-| 48h soak evidence tied to DEE-170 / M7 | **Unchanged** |
+| 48h soak evidence tied to DEE-170 / M7 | **Historical record** (superseded for canonical validation by DEE-337) |
 
 ### What gets corrected (not erased)
 

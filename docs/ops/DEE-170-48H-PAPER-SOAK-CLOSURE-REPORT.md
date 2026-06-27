@@ -1,5 +1,7 @@
 # DEE-170 — 48h Paper Soak Closure Report
 
+> **Status (2026-06-27, BP-0 / DEE-347):** **Historical evidence only — superseded.** This 48-hour operator soak record remains the canonical audit of the DEE-170-48h run. The **current** engineering validation model for AI-TRADER MVP is **Accelerated Historical Replay Validation** ([DEE-337 AHR closure report](./DEE-337-P5-TWO-STRATEGY-AHR-CLOSURE-REPORT.md), PR #304). Do not cite this document as the active M7 validation gate.
+
 **Linear:** [DEE-170](https://linear.app/deepsense/issue/DEE-170/at-e9-paper-trading-epic) · **Milestone:** M7 — Paper Trading  
 **Audit type:** Read-only operational closure assessment  
 **Run ID:** DEE-170-48h  

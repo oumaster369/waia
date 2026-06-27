@@ -400,13 +400,13 @@ Four epochs. Each epoch *adds* capability while *preserving* every safety invari
 | **No Strategy Health automation** | Part 5 | Med | Auto-PAUSE/DEMOTE on edge decay is manual today (Master Spec §11) |
 | **No portfolio allocation / Genome engine** | Part 6 / L9 | Low (now) | Trivial allocator by design; Genome unneeded at 2 strategies — but record genes now |
 | **`targetDeploymentState` only `LIVE_LIMITED`** | Part 4 | Low | Ladder's Canary→Scaled (`LIVE_FULL`) not yet representable in the promotion type |
-| **No deterministic replay harness** | L1 / G1 | Med | Reproducibility is designed-in but not yet provable via a replay tool |
+| **No deterministic replay harness** | L1 / G1 | ~~Med~~ **Addressed (DEE-337 / PR #304)** | Reproducibility is designed-in; pinned scenario-sequence replay is canonical for MVP plumbing validation |
 
 ### 8.3 Classification into milestones
 
 #### M7.5 — Strategy Validation Gate Passed (now; minimal, judgment-based — *do not over-build*)
 
-- Use the **existing** DEE-272 service + `PaperEvaluationExport` to assemble and operator-sign promotion records for the two MVP strategies, using 48h-soak evidence as the empirical base. *(This is exactly the DEE-178 next action.)*
+- Use the **existing** DEE-272 service + `PaperEvaluationExport` to assemble and operator-sign promotion records for the two MVP strategies, using **DEE-337 Accelerated Historical Replay Validation** evidence as the empirical base. *(This is exactly the DEE-178 next action.)*
 - **Add (light):** per-regime annotation on the paper evidence (which regimes the window actually covered) so the ">1 regime" criterion is auditable, not asserted.
 - **Add (light):** record the Genome genes (edge source, horizon, directionality, intended regime, capacity guess, failure-mode set) on each strategy version — *fields only, no engine.*
 - **Hold the line:** **no numeric thresholds**, no auto-promotion (ADR-0010). Operator judgment, recorded.
@@ -467,7 +467,7 @@ WAIA has built the **right spine in the right order**: plumbing first (M7), gove
 
 - [AI-TRADER Vision](AI-TRADER-VISION.md) · [Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) · [MVP Scope v2](AI-TRADER-MVP-SCOPE-v2.md) · [Roadmap v2](AI-TRADER-ROADMAP-v2.md) · [Implementation Program v1.2](AI-TRADER-IMPLEMENTATION-PROGRAM.md)
 - [ADR-0009 Regulatory posture](../adr/0009-regulatory-posture.md) · [ADR-0010 Strategy Validation Gate](../adr/0010-strategy-validation-gate.md) · [ADR-0011 Single Operator Governance Model](../adr/0011-single-operator-governance-model.md)
-- [DEE-170 48h Paper Soak Closure](../ops/DEE-170-48H-PAPER-SOAK-CLOSURE-REPORT.md) · [DEE-170 M7 Milestone Hygiene & Governance Review](../ops/DEE-170-M7-MILESTONE-HYGIENE-GOVERNANCE-REVIEW.md)
+- [DEE-170 48h Paper Soak Closure (historical)](../ops/DEE-170-48H-PAPER-SOAK-CLOSURE-REPORT.md) · [DEE-337 AHR Closure](../ops/DEE-337-P5-TWO-STRATEGY-AHR-CLOSURE-REPORT.md) · [DEE-170 M7 Milestone Hygiene & Governance Review](../ops/DEE-170-M7-MILESTONE-HYGIENE-GOVERNANCE-REVIEW.md)
 - Code: `lib/trader/validation-gate/*` (promotion service, record types), `lib/trader/paper/*` (paper evaluation export), Risk Engine + MSV per Master Spec §8/§13.
 
 ---

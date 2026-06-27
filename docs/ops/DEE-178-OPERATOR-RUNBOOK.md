@@ -12,7 +12,7 @@
 
 ## 0. Hard rules (read first)
 
-1. **Do NOT pass the gate on the 48h mock soak.** That soak proves plumbing only (ADR-0010). The export will print an `INSUFFICIENT_EVIDENCE` warning for mock / no-fill / zero-trade windows. Treat it as a stop sign, not a speed bump.
+1. **Do NOT pass the gate on Accelerated Historical Replay Validation plumbing evidence alone.** That validation proves plumbing only (ADR-0010). The export will print an `INSUFFICIENT_EVIDENCE` warning for mock / no-fill / zero-trade windows. Treat it as a stop sign, not a speed bump.
 2. **Absence of evidence = failure**, never neutral (ADR-0010). If you cannot honestly write the three confidence attestations, do not promote.
 3. **One accountable operator.** Cooling-off + reversibility + immutable audit are your safety net (ADR-0011). They are load-bearing — do not try to shorten them.
 4. **Org 0 only.** No external client capital (ADR-0009). This runway never submits a live order.
@@ -21,7 +21,7 @@
 
 ## 1. Prerequisites
 
-- A paper DB containing real paper evidence for the candidate strategy/strategies over a **meaningful, multi-regime window** (not the 48h plumbing soak).
+- A paper DB containing real paper evidence for the candidate strategy/strategies over a **meaningful, multi-regime window** (not Accelerated Historical Replay Validation plumbing evidence alone).
 - `DATABASE_URL` pointing at that paper DB (SQLite).
 - The exact running version + commit of the strategy code: capture with `git rev-parse HEAD`.
 
@@ -115,7 +115,7 @@ pnpm trader:gate -- cancel \
 pnpm trader:gate -- effective \
   --org-id=<orgId> --actor-id=<operatorUserId> \
   --record-id=<recordId> --expected-state-version=<stateVersion> \
-  --ack="I confirm the paper evidence exceeds the 48h plumbing soak"
+  --ack="I confirm the paper evidence exceeds Accelerated Historical Replay Validation plumbing evidence alone"
 ```
 
 `effective` is refused until cooling-off has elapsed and requires the exact `--ack` phrase (the explicit-confirmation step, ADR-0011).

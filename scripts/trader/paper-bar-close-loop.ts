@@ -2,7 +2,7 @@
  * AT-E9 / S5 — Paper loop bar-close orchestrator CLI (mock execution only).
  *
  * Waits for 1m bar-close cadence, polls HTX snapshot, runs one mock paper cycle per bar.
- * Does not complete M7, AT-E9 FG, or DEE-209 — enables timed paper-loop runs for soak validation.
+ * Does not complete M7, AT-E9 FG, or DEE-209 — enables timed paper-loop runs and Accelerated Historical Replay Validation.
  *
  * Usage:
  *   pnpm trader:paper:loop -- --org-id=<uuid> --account-key=acct-paper-loop
@@ -74,7 +74,7 @@ const EMPTY_STATE: AccountRiskState = {
   quoteExposureByCurrency: {},
 };
 
-/** Relaxed org limits for deterministic historical replay (DEE-337); not used for live/paper soak. */
+/** Relaxed org limits for deterministic historical replay (DEE-337); not used for live operator paper-loop runs. */
 const DETERMINISTIC_REPLAY_ORG_RISK_LIMITS = {
   ...DEFAULT_ORG_RISK_LIMITS,
   maxNotional: "1000000.00",

@@ -80,7 +80,7 @@ function main(): void {
   console.log(
     JSON.stringify(
       {
-        runbook: "docs/ops/DEE-337-P5-TWO-STRATEGY-PAPER-SOAK-RUNBOOK.md",
+        runbook: "docs/ops/DEE-337-P5-TWO-STRATEGY-AHR-RUNBOOK.md",
         logPath,
         ...analysis,
       },

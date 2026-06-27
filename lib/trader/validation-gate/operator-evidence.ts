@@ -106,7 +106,7 @@ export function summarizePaperEvidence(document: PaperEvaluationExportDocument):
   const insufficientReasons: string[] = [];
   if (envelope.executionMode === "mock") {
     insufficientReasons.push(
-      "execution mode is mock — plumbing evidence only, not real-market edge (ADR-0010: 48h soak is necessary but NOT sufficient)",
+      "execution mode is mock — plumbing evidence only, not real-market edge (ADR-0010: Accelerated Historical Replay Validation plumbing is necessary but NOT sufficient)",
     );
   }
   if (strategiesWithNoFills.length > 0) {
