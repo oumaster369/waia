@@ -4,6 +4,8 @@ Status: Accepted
 Date: 2026-06-11
 Baseline: v1.2
 
+> **Reconciliation (2026-06-27):** The roadmap's plumbing-stability exit (gate A) is now **Accelerated Historical Replay Validation** — the canonical engineering validation strategy for AI-TRADER MVP. This ADR's edge-gate decision is otherwise unchanged.
+
 ## Context
 
 The Red Team review correctly identified that a flawless trading platform with no strategy edge still fails, and that the Baseline contained a contradiction: the Master Spec required that no strategy go live without validation, while the roadmap deferred Research automation to post-MVP yet enabled Org-0 live trading. A 48-hour paper-stability check proves the *plumbing* works; it does not prove an *edge* exists. Promoting a strategy to live capital on plumbing-only evidence is unsafe.
