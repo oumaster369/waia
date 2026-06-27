@@ -1,0 +1,649 @@
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+if (process.env.VITEST !== "true") {
+  require("server-only");
+}
+
+import type { WaiaDb } from "@/db/types";
+import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connector";
+import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
+import type { Order, PlaceOrderInput, Trade } from "@/lib/trader/connectors/types";
+import { writeTraderAuditLogPostgres, writeTraderAuditLogSqlite } from "@/lib/trader/audit/write";
+import { mapConnectorStatusToOrderState } from "@/lib/trader/execution/connector-status-map";
+import {
+  LiveExecutionNotSupportedError,
+  UnsupportedExecutionModeError,
+} from "@/lib/trader/execution/execution-service.errors";
+import type {
+  OrderExecutionService,
+  OrderExecutionServiceDeps,
+  SubmissionAuditIds,
+  SubmitOrderInput,
+  SubmitOrderResult,
+} from "@/lib/trader/execution/execution-service.types";
+import { OrderVersionConflictError } from "@/lib/trader/execution/order-repository.errors";
+import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
+import { isTerminal } from "@/lib/trader/execution/order-state-machine";
+import type { OrderExecutionMode, OrderState } from "@/lib/trader/execution/types";
+import {
+  emitExecutionTerminalEvent,
+  emitExecutionTransitionEvent,
+} from "@/lib/trader/execution/execution-telemetry";
+import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
+import { isTerminalReject } from "@/lib/trader/risk/decision";
+import type { RiskEngineDecision } from "@/lib/trader/risk/evaluate.types";
+import {
+  createPostgresRiskEngineService,
+  createSqliteRiskEngineService,
+} from "@/lib/trader/risk/risk-engine-service";
+import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/lib/trader/types";
+import {
+  createPostgresOrderRepository,
+  createPostgresOrderRepositoryFromExecutor,
+  createSqliteOrderRepository,
+} from "@/lib/trader/execution/repository-adapters";
+import {
+  createKillSwitchResolver,
+  createPostgresKillSwitchRepository,
+  createSqliteKillSwitchRepository,
+} from "@/lib/trader/risk/kill-switch";
+
+type PgExecutionExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
+
+const KILL_SWITCH_REJECT_PAYLOAD = JSON.stringify({ reason: "kill_switch" });
+const CONNECTOR_REJECT_PAYLOAD = JSON.stringify({ reason: "connector" });
+
+/** Dispatch allowed only from RISK_APPROVED (DEE-249). */
+export function canDispatch(order: OrderRow): boolean {
+  return order.state === "RISK_APPROVED";
+}
+
+function venueForMode(executionMode: OrderExecutionMode): string {
+  return executionMode === "mock" || executionMode === "paper" ? "mock" : executionMode;
+}
+
+function placeOrderInputFromSubmit(
+  input: SubmitOrderInput,
+  clientOrderId: string,
+): PlaceOrderInput {
+  return {
+    clientOrderId,
+    symbol: input.symbol,
+    side: input.side,
+    type: input.type,
+    price: input.price,
+    quantity: input.quantity,
+  };
+}
+
+function placeOrderInputFromOrder(order: OrderRow): PlaceOrderInput {
+  return {
+    clientOrderId: order.clientOrderId,
+    symbol: order.symbol,
+    side: order.side,
+    type: order.type,
+    price: order.price ?? undefined,
+    quantity: order.quantity,
+  };
+}
+
+function isSubmittedState(state: OrderState): boolean {
+  return state === "ACCEPTED" || state === "PARTIALLY_FILLED" || state === "FILLED";
+}
+
+function resumeResultForExistingOrder(order: OrderRow): SubmitOrderResult | null {
+  if (order.state === "SENT_TO_EXCHANGE" && !order.exchangeOrderId) {
+    return { status: "connector_uncertain", order };
+  }
+
+  if (order.state === "RECONCILIATION_REQUIRED") {
+    return { status: "connector_uncertain", order };
+  }
+
+  if (isSubmittedState(order.state)) {
+    return { status: "submitted", order };
+  }
+
+  if (isTerminal(order.state)) {
+    return { status: "submitted", order };
+  }
+
+  if (order.state === "CANCEL_REQUESTED") {
+    return { status: "submitted", order };
+  }
+
+  return null;
+}
+
+async function writeOrderAudit(
+  writeAudit: OrderExecutionServiceDeps["writeAudit"],
+  context: OrgContext,
+  orderId: string,
+  action: TraderAuditInput["action"],
+  metadata?: Record<string, unknown>,
+  actor?: Pick<SubmitOrderInput, "actorType" | "actorId">,
+): Promise<string> {
+  return await writeAudit({
+    actorType: actor?.actorType ?? "service",
+    actorId: actor?.actorId ?? null,
+    action,
+    entityType: traderEntityTypes.order,
+    entityId: orderId,
+    organizationId: context.organizationId,
+    metadata,
+  });
+}
+
+function lazyValidatedMockConnector(inner: MockExchangeConnector): ExchangeConnector {
+  let validated = false;
+
+  async function ensureValidated(): Promise<void> {
+    if (!validated) {
+      await inner.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
+      validated = true;
+    }
+  }
+
+  return {
+    venueId: inner.venueId,
+    marketType: inner.marketType,
+    validateCredentials: (input) => inner.validateCredentials(input),
+    getAccountInfo: async () => {
+      await ensureValidated();
+      return inner.getAccountInfo();
+    },
+    getBalances: async () => {
+      await ensureValidated();
+      return inner.getBalances();
+    },
+    getPositions: async () => {
+      await ensureValidated();
+      return inner.getPositions();
+    },
+    getOpenOrders: async (filter) => {
+      await ensureValidated();
+      return inner.getOpenOrders(filter);
+    },
+    getOrder: async (orderId) => {
+      await ensureValidated();
+      return inner.getOrder(orderId);
+    },
+    placeOrder: async (input) => {
+      await ensureValidated();
+      return inner.placeOrder(input);
+    },
+    cancelOrder: async (orderId) => {
+      await ensureValidated();
+      return inner.cancelOrder(orderId);
+    },
+    getTradeHistory: async (filter) => {
+      await ensureValidated();
+      return inner.getTradeHistory(filter);
+    },
+    streamMarketData: (symbols) => inner.streamMarketData(symbols),
+    streamUserData: () => inner.streamUserData(),
+    getFuturesBalances: () => inner.getFuturesBalances(),
+    getFuturesPositions: () => inner.getFuturesPositions(),
+    placeFuturesOrder: (input) => inner.placeFuturesOrder(input),
+  };
+}
+
+export function createDefaultConnectorForMode(): OrderExecutionServiceDeps["connectorForMode"] {
+  const connectors = new Map<OrderExecutionMode, ExchangeConnector>();
+
+  return (executionMode) => {
+    if (executionMode !== "mock" && executionMode !== "paper") {
+      throw new UnsupportedExecutionModeError(executionMode);
+    }
+
+    const cached = connectors.get(executionMode);
+    if (cached) {
+      return cached;
+    }
+
+    const connector = lazyValidatedMockConnector(new MockExchangeConnector());
+    connectors.set(executionMode, connector);
+    return connector;
+  };
+}
+
+function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExecutionService {
+  const {
+    riskEngine,
+    orderRepository,
+    killSwitchResolver,
+    connectorForMode,
+    writeAudit,
+    nowMs,
+    executionTelemetrySink: telemetrySink,
+  } = deps;
+
+  function finishSubmitOrder(
+    orgContext: OrgContext,
+    input: SubmitOrderInput,
+    startedMs: number,
+    result: SubmitOrderResult,
+  ): SubmitOrderResult {
+    emitExecutionTerminalEvent(
+      {
+        organizationId: orgContext.organizationId,
+        executionMode: input.executionMode,
+        result,
+        durationMs: Math.max(0, nowMs() - startedMs),
+      },
+      telemetrySink,
+    );
+    return result;
+  }
+
+  async function transitionOrConflict(
+    context: OrgContext,
+    order: OrderRow,
+    toState: OrderState,
+    extras?: {
+      filledQuantity?: string;
+      avgFillPrice?: string | null;
+      exchangeOrderId?: string | null;
+      eventPayload?: string | null;
+    },
+  ): Promise<{ order: OrderRow } | { conflict: true; orderId: string }> {
+    try {
+      const updated = await orderRepository.transitionOrder(context, {
+        orderId: order.id,
+        expectedStateVersion: order.stateVersion,
+        toState,
+        filledQuantity: extras?.filledQuantity,
+        avgFillPrice: extras?.avgFillPrice,
+        exchangeOrderId: extras?.exchangeOrderId,
+        eventPayload: extras?.eventPayload,
+        occurredAt: new Date(nowMs()),
+      });
+      emitExecutionTransitionEvent(
+        {
+          organizationId: context.organizationId,
+          fromState: order.state,
+          toState,
+          executionMode: order.executionMode,
+        },
+        telemetrySink,
+      );
+      return { order: updated };
+    } catch (error) {
+      if (error instanceof OrderVersionConflictError) {
+        return { conflict: true, orderId: order.id };
+      }
+      throw error;
+    }
+  }
+
+  async function ensureRiskApproved(
+    context: OrgContext,
+    order: OrderRow,
+  ): Promise<{ order: OrderRow } | { conflict: true; orderId: string }> {
+    if (order.state === "RISK_APPROVED") {
+      return { order };
+    }
+
+    if (order.state !== "CREATED") {
+      return { order };
+    }
+
+    return transitionOrConflict(context, order, "RISK_APPROVED");
+  }
+
+  async function isKillSwitchBlocked(context: OrgContext): Promise<boolean> {
+    const effective = await killSwitchResolver.getEffectiveState(context);
+    if (effective.resolutionStatus === "fail_closed") {
+      return true;
+    }
+    return effective.blocked;
+  }
+
+  async function resolveTradeForOrder(
+    connector: ExchangeConnector,
+    order: OrderRow,
+    connectorOrder: Order,
+  ): Promise<Trade | null> {
+    const trades = await connector.getTradeHistory({ symbol: order.symbol, limit: 50 });
+    const byClient = trades.find((trade) => trade.clientOrderId === order.clientOrderId);
+    if (byClient) {
+      return byClient;
+    }
+
+    const byOrder = trades.find((trade) => trade.orderId === connectorOrder.orderId);
+    if (byOrder) {
+      return byOrder;
+    }
+
+    if (connectorOrder.status === "filled" || connectorOrder.status === "partially_filled") {
+      return {
+        tradeId: `synthetic-${connectorOrder.orderId}`,
+        orderId: connectorOrder.orderId,
+        clientOrderId: connectorOrder.clientOrderId,
+        symbol: connectorOrder.symbol,
+        side: connectorOrder.side,
+        price: connectorOrder.price ?? "0",
+        quantity: connectorOrder.filledQuantity,
+        fee: "0",
+        feeAsset: "USDT",
+        executedAt: connectorOrder.updatedAt,
+      };
+    }
+
+    return null;
+  }
+
+  async function dispatchToConnector(
+    context: OrgContext,
+    order: OrderRow,
+    input: SubmitOrderInput,
+    riskDecision?: RiskEngineDecision,
+    auditIds: SubmissionAuditIds = {},
+  ): Promise<SubmitOrderResult> {
+    if (!canDispatch(order)) {
+      const resume = resumeResultForExistingOrder(order);
+      if (resume) {
+        return resume;
+      }
+      return { status: "submitted", order };
+    }
+
+    if (await isKillSwitchBlocked(context)) {
+      const blocked = await transitionOrConflict(context, order, "REJECTED", {
+        eventPayload: KILL_SWITCH_REJECT_PAYLOAD,
+      });
+      if ("conflict" in blocked) {
+        return { status: "conflict", orderId: blocked.orderId };
+      }
+
+      auditIds.submitBlocked = await writeOrderAudit(
+        writeAudit,
+        context,
+        blocked.order.id,
+        traderAuditActions.orderSubmitBlocked,
+        { reason: "kill_switch" },
+        input,
+      );
+
+      return { status: "submit_blocked", order: blocked.order, reason: "kill_switch" };
+    }
+
+    const sent = await transitionOrConflict(context, order, "SENT_TO_EXCHANGE");
+    if ("conflict" in sent) {
+      return { status: "conflict", orderId: sent.orderId };
+    }
+
+    const connector = connectorForMode(input.executionMode);
+    const placeInput = placeOrderInputFromOrder(sent.order);
+
+    let connectorOrder: Order;
+    try {
+      connectorOrder = await connector.placeOrder(placeInput);
+    } catch {
+      const uncertain = await transitionOrConflict(context, sent.order, "RECONCILIATION_REQUIRED");
+      if ("conflict" in uncertain) {
+        return { status: "conflict", orderId: uncertain.orderId };
+      }
+
+      auditIds.connectorUncertain = await writeOrderAudit(
+        writeAudit,
+        context,
+        uncertain.order.id,
+        traderAuditActions.orderConnectorUncertain,
+        undefined,
+        input,
+      );
+
+      return { status: "connector_uncertain", order: uncertain.order };
+    }
+
+    if (connectorOrder.status === "rejected") {
+      const rejected = await transitionOrConflict(context, sent.order, "REJECTED", {
+        eventPayload: CONNECTOR_REJECT_PAYLOAD,
+      });
+      if ("conflict" in rejected) {
+        return { status: "conflict", orderId: rejected.orderId };
+      }
+
+      auditIds.connectorRejected = await writeOrderAudit(
+        writeAudit,
+        context,
+        rejected.order.id,
+        traderAuditActions.orderConnectorRejected,
+        undefined,
+        input,
+      );
+
+      return { status: "submitted", order: rejected.order, riskDecision, auditIds };
+    }
+
+    const accepted = await transitionOrConflict(context, sent.order, "ACCEPTED", {
+      exchangeOrderId: connectorOrder.orderId,
+    });
+    if ("conflict" in accepted) {
+      return { status: "conflict", orderId: accepted.orderId };
+    }
+
+    let current = accepted.order;
+
+    if (connectorOrder.status === "filled" || connectorOrder.status === "partially_filled") {
+      const trade = await resolveTradeForOrder(connector, current, connectorOrder);
+      if (trade) {
+        await orderRepository.recordFill(context, {
+          orderId: current.id,
+          exchangeTradeId: trade.tradeId,
+          price: trade.price,
+          quantity: trade.quantity,
+          fee: trade.fee,
+          feeAsset: trade.feeAsset,
+          executedAt: new Date(trade.executedAt),
+        });
+      }
+
+      const fillTarget = mapConnectorStatusToOrderState(connectorOrder.status);
+      const filled = await transitionOrConflict(context, current, fillTarget, {
+        filledQuantity: connectorOrder.filledQuantity,
+        avgFillPrice: trade?.price ?? connectorOrder.price ?? null,
+      });
+      if ("conflict" in filled) {
+        return { status: "conflict", orderId: filled.orderId };
+      }
+      current = filled.order;
+
+      auditIds.connectorFilled = await writeOrderAudit(
+        writeAudit,
+        context,
+        current.id,
+        traderAuditActions.orderConnectorFilled,
+        {
+          connectorStatus: connectorOrder.status,
+          exchangeOrderId: connectorOrder.orderId,
+        },
+        input,
+      );
+    }
+
+    return { status: "submitted", order: current, riskDecision, auditIds };
+  }
+
+  return {
+    async submitOrder(context: OrgContext, input: SubmitOrderInput): Promise<SubmitOrderResult> {
+      const orgContext = requireOrgContext(context.organizationId);
+      const startedMs = nowMs();
+
+      if (input.executionMode === "live") {
+        throw new LiveExecutionNotSupportedError("live");
+      }
+      if (input.executionMode !== "mock" && input.executionMode !== "paper") {
+        throw new UnsupportedExecutionModeError(input.executionMode);
+      }
+
+      const existingByClient = await orderRepository.findOrderByClientOrderId(
+        orgContext,
+        input.clientOrderId,
+      );
+      const existing =
+        existingByClient ??
+        (await orderRepository.findOrderByIdempotencyKey(orgContext, input.idempotencyKey));
+
+      if (existing) {
+        const resume = resumeResultForExistingOrder(existing);
+        if (resume) {
+          return finishSubmitOrder(orgContext, input, startedMs, resume);
+        }
+
+        const approved = await ensureRiskApproved(orgContext, existing);
+        if ("conflict" in approved) {
+          return finishSubmitOrder(orgContext, input, startedMs, {
+            status: "conflict",
+            orderId: approved.orderId,
+          });
+        }
+
+        return finishSubmitOrder(
+          orgContext,
+          input,
+          startedMs,
+          await dispatchToConnector(orgContext, approved.order, input),
+        );
+      }
+
+      const placeInput = placeOrderInputFromSubmit(input, input.clientOrderId);
+      const riskDecision = await riskEngine.evaluateOrderRequest({
+        context: orgContext,
+        order: placeInput,
+        referencePrice: input.referencePrice,
+        accountKey: input.accountKey,
+        accountState: input.accountState,
+      });
+
+      if (isTerminalReject(riskDecision.decision.outcome)) {
+        return finishSubmitOrder(orgContext, input, startedMs, {
+          status: "risk_rejected",
+          riskDecision,
+          order: null,
+        });
+      }
+
+      const quantity =
+        riskDecision.decision.outcome === "RESIZE" && riskDecision.decision.resize
+          ? riskDecision.decision.resize.quantity
+          : input.quantity;
+
+      const created = await orderRepository.createOrder(orgContext, {
+        venue: venueForMode(input.executionMode),
+        executionMode: input.executionMode,
+        symbol: input.symbol,
+        side: input.side,
+        type: input.type,
+        price: input.price ?? null,
+        quantity,
+        clientOrderId: input.clientOrderId,
+        idempotencyKey: input.idempotencyKey,
+        riskDecisionId: riskDecision.riskDecisionId,
+        strategySignalId: input.strategySignalId ?? null,
+        allocationDecisionId: input.allocationDecisionId ?? null,
+        credentialId: input.credentialId ?? null,
+      });
+
+      const auditIds: SubmissionAuditIds = {};
+      auditIds.submissionStarted = await writeOrderAudit(
+        writeAudit,
+        orgContext,
+        created.id,
+        traderAuditActions.orderSubmissionStarted,
+        {
+          clientOrderId: input.clientOrderId,
+          executionMode: input.executionMode,
+        },
+        input,
+      );
+
+      const approved = await transitionOrConflict(orgContext, created, "RISK_APPROVED");
+      if ("conflict" in approved) {
+        return finishSubmitOrder(orgContext, input, startedMs, {
+          status: "conflict",
+          orderId: approved.orderId,
+        });
+      }
+
+      return finishSubmitOrder(
+        orgContext,
+        input,
+        startedMs,
+        await dispatchToConnector(orgContext, approved.order, input, riskDecision, auditIds),
+      );
+    },
+  };
+}
+
+export function createOrderExecutionServiceFromDeps(
+  deps: OrderExecutionServiceDeps,
+): OrderExecutionService {
+  return createOrderExecutionService(deps);
+}
+
+export function createSqliteOrderExecutionService(
+  db: WaiaDb,
+  overrides: Partial<OrderExecutionServiceDeps> = {},
+): OrderExecutionService {
+  const nowMs = overrides.nowMs ?? (() => Date.now());
+  return createOrderExecutionService({
+    riskEngine: overrides.riskEngine ?? createSqliteRiskEngineService(db, { nowMs }),
+    orderRepository: overrides.orderRepository ?? createSqliteOrderRepository(db),
+    killSwitchResolver:
+      overrides.killSwitchResolver ??
+      createKillSwitchResolver({
+        repository: createSqliteKillSwitchRepository(db),
+        nowMs,
+      }),
+    connectorForMode: overrides.connectorForMode ?? createDefaultConnectorForMode(),
+    writeAudit:
+      overrides.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogSqlite(db, input)),
+    nowMs,
+  });
+}
+
+export function createPostgresOrderExecutionService(
+  db: WaiaPostgresDb,
+  overrides: Partial<OrderExecutionServiceDeps> = {},
+): OrderExecutionService {
+  const nowMs = overrides.nowMs ?? (() => Date.now());
+  return createOrderExecutionService({
+    riskEngine: overrides.riskEngine ?? createPostgresRiskEngineService(db, { nowMs }),
+    orderRepository: overrides.orderRepository ?? createPostgresOrderRepository(db),
+    killSwitchResolver:
+      overrides.killSwitchResolver ??
+      createKillSwitchResolver({
+        repository: createPostgresKillSwitchRepository(db),
+        nowMs,
+      }),
+    connectorForMode: overrides.connectorForMode ?? createDefaultConnectorForMode(),
+    writeAudit:
+      overrides.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogPostgres(db, input)),
+    nowMs,
+  });
+}
+
+export function createPostgresOrderExecutionServiceFromExecutor(
+  ex: PgExecutionExecutor,
+  overrides: Partial<OrderExecutionServiceDeps> = {},
+): OrderExecutionService {
+  const nowMs = overrides.nowMs ?? (() => Date.now());
+  return createOrderExecutionService({
+    riskEngine: overrides.riskEngine ?? createPostgresRiskEngineService(ex, { nowMs }),
+    orderRepository: overrides.orderRepository ?? createPostgresOrderRepositoryFromExecutor(ex),
+    killSwitchResolver:
+      overrides.killSwitchResolver ??
+      createKillSwitchResolver({
+        repository: createPostgresKillSwitchRepository(ex),
+        nowMs,
+      }),
+    connectorForMode: overrides.connectorForMode ?? createDefaultConnectorForMode(),
+    writeAudit:
+      overrides.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogPostgres(ex, input)),
+    nowMs,
+  });
+}

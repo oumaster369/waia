@@ -11,6 +11,8 @@ export type DashboardReadinessPayload = {
   readinessInput: ReadinessInput;
   twinSignals: TwinDialogueSignals;
   identityLabel: string;
+  /** WAIA Core profile display name; falls back to identityLabel when absent. */
+  displayName: string;
   /** Missing-data copy per indicator; null until DEE-17 supplies strings. */
   hintsByIndicator: Record<IndicatorKey, string | null>;
 };

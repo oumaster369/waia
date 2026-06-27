@@ -43,3 +43,19 @@ DATABASE_URL=file:./.data/waia.dev.db
 
 # Optional: session TTL in seconds (omit for default)
 # AUTH_SESSION_MAX_AGE_SECONDS=
+
+# ─── AI-TRADER master key (DEE-220 / DEE-221) — local Workers preview ONLY ───
+# SECRET — 256-bit AES key base64 (`openssl rand -base64 32`). Never production key.
+# Production: Cloudflare Secrets Store binding AI_TRADER_MASTER_KEY (credential crypto fail-closed).
+# AI_TRADER_MASTER_KEY_DEV=
+# AI_TRADER_MASTER_KEY_MODE=dev
+# WAIA_DEPLOYMENT_TIER=local
+
+# ─── Payment Watcher (AT-E12 S3-A / DEE-321) ───
+# TRONGRID_API_KEY=
+# TRON_RPC_PRIMARY_URL=
+# TRON_RPC_SECONDARY_URL=
+# TRON_RPC_SECONDARY_API_KEY=
+# WATCHER_ENABLED=
+# WATCHER_CONFIRMATIONS_REQUIRED=
+# WATCHER_RESCAN_WINDOW=

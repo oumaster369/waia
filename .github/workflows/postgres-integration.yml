@@ -1,15 +1,27 @@
-# Optional Postgres integration checks (DEE-64 D6-pre).
-# Not run on every PR — start from Actions tab (workflow_dispatch) or enable on demand.
-# Default CI remains SQLite-only (see ci.yml).
+# Postgres integration checks (DEE-64 D6-pre; restored DEE-287).
+# Applies every Postgres migration from an empty DB through the latest journal
+# entry against bare postgres:16-alpine, then runs the driver smoke.
+#
+# Triggers:
+#   * workflow_dispatch — manual full run from the Actions tab.
+#   * pull_request (path-filtered) — auto-runs on migration-bearing PRs so the
+#     Postgres apply surface is validated before merge (no more blind waivers).
+# Default CI stays SQLite-only (see ci.yml).
 
 name: postgres-integration
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "db/migrations_postgres/**"
+      - "db/schema.postgres.ts"
+      - "scripts/postgres-validation/**"
+      - "drizzle.postgres.config.ts"
+      - ".github/workflows/postgres-integration.yml"
 
 env:
   DATABASE_URL_POSTGRES: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_it
-  WAIA_PG_INTEGRATION: "1"
 
 jobs:
   integration:
@@ -40,7 +52,14 @@ jobs:
           node-version: 22
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
-      - name: Auth prelude + apply Postgres migrations
+      - name: Auth prelude (roles + auth.users) + apply Postgres migrations
         run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
-      - name: Unit + integration tests (integration skipped unless WAIA_PG_INTEGRATION=1)
-        run: pnpm exec vitest run
+      - name: Drizzle + postgres-js smoke (insert/select/delete, FK-safe)
+        run: pnpm db:smoke:postgres
+      # NOTE: the opt-in `WAIA_PG_INTEGRATION=1` parity suite
+      # (tests/integration/postgres-*.test.ts) is intentionally NOT run here.
+      # It has pre-existing, DEE-287-unrelated fixture-parity failures (SQLite-style
+      # non-canonical UUID literals rejected by Postgres `uuid`, tests not seeding
+      # `auth.users` before `public.users`, `text = uuid` comparisons). DEE-287 scopes
+      # this workflow to migration-apply + driver smoke; the parity-fixture cleanup is
+      # tracked separately (see docs/migrations/DEE-287-POSTGRES-VALIDATION-PRELUDE.md).

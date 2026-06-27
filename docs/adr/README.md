@@ -19,5 +19,11 @@ See policy: [`../waia-governance/ADR-POLICY.md`](../waia-governance/ADR-POLICY.m
 | [0009](0009-regulatory-posture.md) | Regulatory posture for managed trading + performance fees | Accepted (Posture) — gates external live trading | AI-TRADER Baseline v1.2 |
 | [0010](0010-strategy-validation-gate.md) | Strategy Validation Gate (paper → live) | Accepted | AI-TRADER Baseline v1.2 |
 | [0011](0011-single-operator-governance-model.md) | Single Operator Governance Model (replaces dual-control) | Accepted | AI-TRADER Baseline v1.2 |
+| [0012](0012-governance-integration-founders-council-and-english-canon.md) | Governance Integration: Founders Council apex authority and English canon | Accepted | Phase 0 Governance Integration; Acceptance v2.0 |
+| [0013](0013-payment-address-registry-wallet-anchored-event-sourced-soft-bound.md) | Payment Address Registry: Wallet-Anchored, Event-Sourced, Soft-Bound Architecture | Accepted | AT-E12 S2; `DEE-313`, `DEE-315` |
+| [0014](0014-payment-watcher-execution-model-read-only-observer.md) | Payment Watcher: Read-Only Inbound Observer on Cloudflare Worker + Cron | Accepted | AT-E12 S3; `DEE-319` |
+| [0015](0015-tron-settlement-finality-rpc-trust-doctrine.md) | Tron Settlement, Finality, and RPC Trust Doctrine | Accepted | AT-E12 S3; `DEE-319` |
+| [0016](0016-settlement-exception-reconciliation.md) | Settlement Exception Reconciliation (immutable EXCEPTION row, separate reconciliation aggregate, derived effective outcome) | Accepted | AT-E12 S3-C; `DEE-216`, `DEE-323` |
+| [0017](0017-postgres-only-trader-mvp.md) | Postgres-only for new AI-TRADER MVP code (Execution Freeze) | Accepted | P1 NEW-2 / `DEE-328`; ADR-0002 partial supersession |
 
 Add rows as new decisions land.**Superseded** decisions keep file for history — index notes replacement.

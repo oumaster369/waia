@@ -27,6 +27,7 @@ import { parseIndicatorVector } from "@/lib/readiness/readiness";
 import type { ReadinessInput } from "@/lib/readiness/types";
 import * as pgSchema from "@/db/schema.postgres";
 import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import { getProfileForUserPostgres } from "@/lib/waia-core/profiles/postgres";
 import {
   ReadinessSerializationError,
   type AppendTwinDialogueTurnResult,
@@ -372,21 +373,17 @@ async function ensureUserTwinSeedInsideExecutorPg(tx: PgTx, userId: string): Pro
     });
   }
 
-  try {
-    const userRows = await tx
-      .select({ identityLabel: pgSchema.users.identityLabel })
-      .from(pgSchema.users)
-      .where(eq(pgSchema.users.id, userId))
-      .limit(1);
-    const { ensureUserCoreSeedPostgres } = await import("@/lib/waia-core/provisioning/postgres");
-    await ensureUserCoreSeedPostgres(tx, {
-      userId,
-      displayName: userRows[0]?.identityLabel ?? "User",
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[waia] ensureUserCoreSeedPostgres failed (fail-open for AI-TWIN):", message);
-  }
+  const userRows = await tx
+    .select({ identityLabel: pgSchema.users.identityLabel })
+    .from(pgSchema.users)
+    .where(eq(pgSchema.users.id, userId))
+    .limit(1);
+  const { ensureUserCoreSeedPostgresFailOpenInTx } =
+    await import("@/lib/waia-core/provisioning/postgres-fail-open");
+  await ensureUserCoreSeedPostgresFailOpenInTx(tx, {
+    userId,
+    displayName: userRows[0]?.identityLabel ?? "User",
+  });
 
   return twinId;
 }
@@ -720,10 +717,14 @@ async function loadDashboardReadinessPayloadFromDbPg(
     hasMeaningfulExchange: userTurnCount > 0,
   };
 
+  const profile = await getProfileForUserPostgres(db, userId);
+  const displayName = profile?.displayName ?? row.identityLabel;
+
   return {
     readinessInput,
     twinSignals,
     identityLabel: row.identityLabel,
+    displayName,
     hintsByIndicator: NULL_HINTS_BY_INDICATOR,
   };
 }

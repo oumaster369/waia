@@ -1,11 +1,11 @@
 # AI-TRADER Implementation Program
 
-Status: Program v1.1 (from Baseline v1.2)
-Date: 2026-06-11
+Status: Program v1.2 (from Baseline v1.2)
+Date: 2026-06-11 · Doctrine reconciliation: 2026-06-24
 
 Planning structure only — no Linear issues, tasks, code, or migrations. It stops at the Feature level and respects every accepted decision (HTX-only, spot-only, Org-0-only live, manual billing gate, targeted RLS + isolation test gate, WAIA Core as prerequisite, ADR-0009 external-live prohibition). It is the implementation-ready blueprint that drives future Linear Epic / Feature Group / Task-Contract generation.
 
-This is **Program v1.1**: Program v1.0 with the six accepted Red Team remediations applied (see [Changes from v1.0](#changes-from-v10-red-team-remediation)).
+This is **Program v1.2**: Program v1.1 (Program v1.0 with the six accepted Red Team remediations — see [Changes from v1.0](#changes-from-v10-red-team-remediation)) plus a documentation-only doctrine reconciliation against the ratified Knowledge-to-Action doctrines (see [Changes from v1.1](#changes-from-v11-doctrine-reconciliation)).
 
 ---
 
@@ -19,6 +19,29 @@ This is **Program v1.1**: Program v1.0 with the six accepted Red Team remediatio
 6. **Key management sequencing**: managed key infrastructure (AT-E14 Key Management) is now a prerequisite of storing any real exchange credential in AT-E2.
 
 No epics, modules, exchanges, or product concepts were added beyond these governance/sequencing changes.
+
+---
+
+## Changes from v1.1 (Doctrine Reconciliation)
+
+Program v1.1 reconciled to the ratified Knowledge-to-Action doctrines — [LD-6 Forecast](AI-TRADER-FORECAST-DOCTRINE.md), [LD-7 Decision](AI-TRADER-DECISION-DOCTRINE.md), [LD-8 Risk](AI-TRADER-RISK-DOCTRINE.md), [LD-9 Reality](AI-TRADER-REALITY-DOCTRINE.md) — and DEE-299 Execution Canon Reconciliation. The reconciliation is **documentation-only**; it adds clarifying notes and decomposition pointers to existing epics in [Section 4](#section-4--ai-trader-program-epic-detail) and changes nothing structural:
+
+1. **AT-E5 disambiguation** — the "Chief Decision Engine" is clarified as a regime / trading-permission gate, distinct from the LD-7 Decision (ACTIONABILITY) layer; the shared word "Decision" is coincidental.
+2. **AT-E6 / AT-E9 collapse note** — the MVP "signal" is recorded as an accepted collapse of LD-6 Forecast (ACCURACY) and LD-7 Decision (ACTIONABILITY) into one artifact; future decomposition separates them.
+3. **AT-E8 separation** — the reconciliation surface is split into LD-9 reconciliation-as-construction (truth) and LD-8 Risk-L6 reconciliation-as-enforcement (safety), which never merge.
+4. **AT-E7 / AT-E8 doctrine-import checklists** — explicit decomposition pointers into LD-8 / LD-9.
+
+**Unchanged:** program structure, epic set, critical path, milestones (M0–M11), the dependency graph, and every accepted decision. No epics, modules, architecture, doctrine, governance, or roadmap sequencing were added or altered.
+
+---
+
+## Changes from v1.2 (LD-10 Doctrine Reconciliation)
+
+Program v1.2 reconciled to the ratified [LD-10 Closed Trade Reality Doctrine](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md) (DEE-308). The reconciliation is **documentation-only**; it adds a clarifying note to AT-E11 in [Section 4](#section-4--ai-trader-program-epic-detail) and changes nothing structural:
+
+1. **AT-E11 doctrine note (LD-10)** — fee computation (S4) must use Realized Strategy Profit and cumulative net realized strategy profit HWM per LD-10; unrealized PnL is audit-only; manual gate checklist extended with realized-fill finality (ADR-0008 reinterpretation).
+
+**Unchanged:** program structure, epic set, critical path, milestones, dependency graph, and every accepted decision.
 
 ---
 
@@ -202,6 +225,13 @@ AI-TRADER
 │       ├── Dispute handling (enforcement freeze + evidence-based resolution)
 │       └── Overcharge remediation + refund/credit (append-only corrections, HWM rollback)
 ├── AT-E12 Crypto Payments & Suspension
+│   ├── S1 — Payment ledger (DEE-312) ✓
+│   ├── S2 — Payment Address Registry (DEE-313..317, ADR-0013) ✓
+│   ├── S3 — Inbound Payment Watcher (read-only; ADR-0014, ADR-0015)
+│   │   ├── S3-DOC — Architecture ratification (DEE-319)
+│   │   └── S3-A — Watcher build (ledger detect/confirm; gated on ADR Accepted)
+│   ├── S3-B — Settlement → invoice match → account status (follow-on; not a watcher prerequisite)
+│   ├── S7/S8+ — Custody / signing / disbursement (decoupled from S3 inbound watcher)
 │   ├── FG: Payments
 │   │   ├── Unique deposit address per account (USDT TRC-20)
 │   │   ├── Payment watcher (token/network/amount/confirmations)
@@ -256,13 +286,20 @@ Program A runs under live-migration discipline (migration planning, rollback, AI
 - **AT-E3 Market Data Foundation** — Reliable BTC/ETH spot data + cold storage + data-quality. Deps: AT-E1. Complexity: L. Risk: Med.
 - **AT-E4 Market Intelligence Layers** — Physics/liquidity/partial-crowd features via Feature Engine. Deps: AT-E3. Complexity: L. Risk: Med.
 - **AT-E5 MSV & Chief Decision Engine** — Canonical MSV + regime/permission gate (can decline to trade). Deps: AT-E4. Complexity: L. Risk: Med.
+  - **Doctrine note (naming disambiguation):** the "Chief Decision Engine" here is a regime-classification + trading-permission gate (e.g. `PAPER_ONLY`, allowed-strategy-set). It is **not** the [LD-7 Decision](AI-TRADER-DECISION-DOCTRINE.md) layer (ACTIONABILITY — converting an eligible Forecast into capital intent). The shared word "Decision" is coincidental; the two are different layers and must not be conflated or cross-referenced.
 - **AT-E6 Strategy Framework** — Versioned strategies; two MVP strategies emit signals only. Deps: AT-E5. Complexity: M. Risk: Med.
+  - **Doctrine note (Forecast+Decision collapse):** the MVP "signal" emitted here is an **accepted collapse** of [LD-6 Forecast](AI-TRADER-FORECAST-DOCTRINE.md) (ACCURACY) and [LD-7 Decision](AI-TRADER-DECISION-DOCTRINE.md) (ACTIONABILITY) into a single artifact for MVP. No separate Forecast/Decision records or layering are built in MVP; future decomposition separates them.
 - **AT-E7 Risk Engine & Kill Switches** — Safety spine v0 against mock; fail-closed. Deps: AT-E1, AT-E2 (mock). Complexity: L. Risk: **Very High** — capital protection.
+  - **Doctrine-import checklist ([LD-8 Risk Doctrine](AI-TRADER-RISK-DOCTRINE.md)):** canonical exposure-normalization unit (§6); downward-only clamp / `size_intent` enforcement (§6, OQ1); preference-free time-priority allocation arbitration (§7, OQ4); L0–L6 composition with most-restrictive join (§8); closed verdict set `APPROVE` / `APPROVE_CLAMPED` / `VETO` / `CLOSE_ONLY` / `HALT` (§9); allowance lifecycle — single-use, expiring, revocable, consumption-time posture recheck (§10, FR2); data-quality fail-closed (§11); kill-switch hierarchy with human-gated recovery (§12, ADR-0011); anti-cascade scoping (§13); replay + Risk-assigned monotonic ingest sequence (§14); FR3 limit-relaxation re-opens DEE-178 + predictive-input default-deny (§15). Risk L0–L6 (KTA §7) is **distinct** from the Grandmaster L0–L9 stack (§8, C1) and must never be cross-referenced.
 - **AT-E8 Execution Core & Reconciliation** — Order state machine, idempotency, reconciliation vs mock. Deps: AT-E7. Complexity: L. Risk: **Very High** — duplication/mismatch.
-- **AT-E9 Paper Trading** — End-to-end loop without funds; ≥48h stable. **Minimum observability baseline (AT-E15) must be live first.** Deps: AT-E6, AT-E7, AT-E8, AT-E15 (min baseline). Complexity: M. Risk: Med.
+  - **Doctrine note (Reality vs Risk-L6 separation):** the "Reconciliation" feature group spans two doctrine-separated concerns that **never merge** ([LD-9](AI-TRADER-REALITY-DOCTRINE.md) §8): **reconciliation-as-construction** ([LD-9 Reality](AI-TRADER-REALITY-DOCTRINE.md) — dedup + fold + record + mark → canonical Actual State; Reality-owned markers `source_contradiction` / `unattributed`; fail-uncertain) and **reconciliation-as-enforcement** ([LD-8 Risk L6](AI-TRADER-RISK-DOCTRINE.md) §8 — Expected-vs-Actual comparison; markers `orphan` / `divergence` / `reconciliation-failure`; fail-closed → kill-switch). The "mismatch → risk-event / kill-switch" path is Risk-L6 enforcement (owned by the AT-E7 risk surface); fill/position reconciliation and startup state rebuild are Reality truth-construction.
+  - **Doctrine-import checklist ([LD-8](AI-TRADER-RISK-DOCTRINE.md) + [LD-9](AI-TRADER-REALITY-DOCTRINE.md)):** Execution owns MECHANICS only and acts **within** the allowance, never beyond (LD-8 §10); reconciliation-as-construction = dedup + fold + record + mark on a bitemporal, append-only truth substrate with Reality markers and fail-uncertain posture (LD-9 §4–§9, §14); Expected-vs-Actual enforcement, divergence/orphan marking, and fail-closed kill remain Risk L6 (LD-8 §8); the two reconciliation senses never merge (LD-9 §8, MC1).
+- **AT-E9 Paper Trading** — End-to-end loop without funds; validated via Accelerated Historical Replay Validation. **Minimum observability baseline (AT-E15) must be live first.** Deps: AT-E6, AT-E7, AT-E8, AT-E15 (min baseline). Complexity: M. Risk: Med.
+  - **Doctrine note (Forecast+Decision collapse):** the paper loop's "Signal" stage carries the same accepted [LD-6 Forecast](AI-TRADER-FORECAST-DOCTRINE.md) + [LD-7 Decision](AI-TRADER-DECISION-DOCTRINE.md) collapse as AT-E6; the loop consumes one collapsed signal artifact, not separate Forecast and Decision records.
 - **AT-E10 Live Execution Hardening (Org 0)** — Admin-gated live HTX spot for Org 0; hardened host + managed key. **Each strategy must pass the Strategy Validation Gate (ADR-0010) first.** Deps: AT-E9, **Strategy Validation Gate**, AT-E14, AT-E13. Complexity: L. Risk: **Very High** — real capital.
 - **AT-E11 Reporting, HWM & Billing** — Periods, HWM, deposit/withdrawal adjustment, fee, manual gate, and billing governance policies (valuation/unrealized/dispute/overcharge/refund). Deps: AT-E9 (paper PnL). Complexity: L. Risk: High — financial correctness/disputes.
-- **AT-E12 Crypto Payments & Suspension** — Unique-address USDT TRC-20 attribution + lifecycle. Deps: AT-E11. Complexity: M. Risk: High.
+  - **Doctrine note (LD-10 Closed Trade Reality):** fee computation (S4) must use **Realized Strategy Profit** (closed-trade realized PnL net of trading costs) as the fee base and **cumulative net realized strategy profit** as the HWM ratchet — per [LD-10](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md). Unrealized PnL is captured for audit/transparency only, never fee-bearing. Manual gate checklist (ADR-0008) extended with **realized-fill finality** verification (LD-10 RC2). MVP HWM ledger (DEE-307) operates per-account; doctrine semantics are strategy-scoped (account≈strategy for Org-0).
+- **AT-E12 Crypto Payments & Suspension** — Unique-address USDT TRC-20 attribution + lifecycle. Deps: AT-E11. Complexity: M. Risk: High. **S2-D (DEE-317):** confirm-time address validation closes the payment↔registry seam (org ownership, attribution eligibility, audit enrichment). **S3 (ADR-0014/0015):** inbound Payment Watcher is a read-only chain observer (Worker + Cron MVP), decoupled from S7/S8 custody/signing. **Sequencing:** S3-A (watcher ledger-confirm-only) precedes S3-B (invoice match + account status); see ADR-0014.
 - **AT-E13 Administration & Oversight** — Cross-module admin + kill-switch + Single Operator Governance for sensitive actions. Deps: AT-E1, AT-E5, AT-E7, WC-E5. Complexity: M. Risk: Med.
 - **AT-E14 Security & Secrets** — Managed key, residency minimization, security assurance. **Key Management is a prerequisite of AT-E2 real-credential storage.** Deps: AT-E2 (connector), but Key Management precedes any real credential. Complexity: M–L. Risk: High — highest-value assets.
 - **AT-E15 Observability & Alerting** — Telemetry + critical alerts + runbooks. **Minimum baseline required before AT-E9 paper validation.** Deps: AT-E8 (signals exist) for full telemetry; minimum baseline sequenced before paper. Complexity: M. Risk: Med — silent failure risk if absent.
@@ -329,7 +366,7 @@ flowchart TB
 - **M4** Safety Spine Ready — Risk Engine + kill switches + execution core + reconciliation vs mock — AT-E7, AT-E8.
 - **M5** Market Intelligence Ready — market data + MSV + Chief Decision Engine — AT-E3, AT-E4, AT-E5.
 - **M6** Strategy Signals Ready — two strategies emit governed signals — AT-E6.
-- **M7** Paper Trading Ready — end-to-end loop stable ≥48h, no funds, **minimum observability baseline live (measurable)** — AT-E9 (+ AT-E15 min baseline).
+- **M7** Paper Trading Ready — end-to-end loop validated via Accelerated Historical Replay Validation, no funds, **minimum observability baseline live (measurable)** — AT-E9 (+ AT-E15 min baseline).
 - **M7.5** Strategy Validation Gate Passed — signed promotion record per ADR-0010 for each strategy intended to go live — (governance gate).
 - **M8** Billing & Payments Ready — HWM/fee/invoice on paper PnL + manual gate + billing governance + payment attribution — AT-E11, AT-E12.
 - **M9** Org 0 Live Trading Ready — admin-gated live HTX spot (Single Operator Governance), hardened host, managed key — AT-E10, AT-E13, AT-E14, AT-E15.
@@ -341,7 +378,7 @@ flowchart TB
 ## SECTION 7 — MVP Launch Readiness Gates
 
 ### Internal Alpha (paper)
-- M1–M7 met: Core complete (migration with continuity + rollback verified), trader reachable, HTX read working, safety spine drill-tested vs mock, MSV + decision engine producing output, two strategies signaling, **minimum observability baseline live**, paper loop stable ≥48h with clean reconciliation.
+- M1–M7 met: Core complete (migration with continuity + rollback verified), trader reachable, HTX read working, safety spine drill-tested vs mock, MSV + decision engine producing output, two strategies signaling, **minimum observability baseline live**, paper loop validated via Accelerated Historical Replay Validation with clean reconciliation.
 - Tenant-isolation tests green (release-blocking); no secret reachable from client.
 
 ### Org 0 Live Trading
@@ -421,7 +458,7 @@ Multi-exchange (Binance/OKX/Bybit/Coinbase/Deribit, DEX), portfolio/fund/prop st
 - **AT-E6 Strategy Framework** — versioned strategies + two MVP strategies (signals) — deps: AT-E5 — M / Med — M6.
 - **AT-E7 Risk Engine & Kill Switches** — safety spine v0; fail-closed — deps: AT-E1, AT-E2 (mock) — L / Very High — M4.
 - **AT-E8 Execution Core & Reconciliation** — order state machine + idempotency + reconciliation — deps: AT-E7 — L / Very High — M4.
-- **AT-E9 Paper Trading** — end-to-end loop, no funds, ≥48h stable (min observability baseline live) — deps: AT-E6, AT-E7, AT-E8, AT-E15 — M / Med — M7.
+- **AT-E9 Paper Trading** — end-to-end loop, no funds, Accelerated Historical Replay Validation (min observability baseline live) — deps: AT-E6, AT-E7, AT-E8, AT-E15 — M / Med — M7.
 - **Strategy Validation Gate** — signed promotion record proving edge before live (governance, ADR-0010) — deps: AT-E9 — S (governance) / High — M7.5.
 - **AT-E11 Reporting, HWM & Billing** — periods + HWM + fee + manual gate + billing governance — deps: AT-E9 — L / High — M8.
 - **AT-E12 Crypto Payments & Suspension** — unique-address USDT TRC-20 + lifecycle — deps: AT-E11 — M / High — M8.

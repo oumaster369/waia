@@ -21,7 +21,8 @@ This does **not** waive STOP conditions, risk tiers, merge authority, or governa
 - `git push -u origin <branch>`.
 - Move Linear issue to **`In Review`** with compare URL comment.
 - Print compare URL (`dev…branch`), PR create URL, paste-ready title/body, validation summary.
-- **Stop.** Wait for human review/merge.
+- Close with the **agent completion protocol** report ([`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md)) including the exact human merge instruction for this PR class, and **recommend** (never execute) a release promotion when `dev` holds release-ready work or a `main → dev` back-sync when a release was just promoted.
+- **Stop.** Wait for human review/merge and explicit confirmation before starting the next task.
 
 ## Never allowed
 

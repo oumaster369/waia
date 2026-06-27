@@ -13,6 +13,12 @@
     "db:postgres:bootstrap": "pnpm db:postgres:up && pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres",
     "db:smoke:postgres": "WAIA_POSTGRES_CLI=1 tsx scripts/postgres-validation/drizzle-pg-smoke.ts",
     "waia:core:backfill": "WAIA_POSTGRES_CLI=1 node --import tsx --conditions=react-server scripts/waia-core/backfill.ts",
+    "trader:paper:loop": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/paper-bar-close-loop.ts",
+    "trader:replay:build-dataset": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/build-dee-337-replay-dataset.ts",
+    "trader:replay:seed-org": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/seed-paper-replay-org.ts",
+    "trader:paper:soak:analyze": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/analyze-paper-soak-log.ts",
+    "trader:paper:soak:evidence": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/export-paper-strategy-evidence.ts",
+    "trader:gate": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/strategy-gate-cli.ts",
     "db:studio": "drizzle-kit studio",
     "dev": "next dev",
     "build": "next build",
@@ -29,7 +35,8 @@
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "validate:pr-governance": "bash scripts/linear/test-validate-pr-linear-id.sh && bash scripts/linear/test-preflight-pr-governance.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

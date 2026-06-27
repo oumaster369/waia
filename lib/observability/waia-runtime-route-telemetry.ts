@@ -23,13 +23,23 @@ export type WaiaRuntimeRouteKey =
   | "prediction_verification"
   | "prediction_verifications"
   | "repeatability"
-  | "health_database";
+  | "health_database"
+  | "health_payment_watcher"
+  | "health_settlement"
+  | "health_settlement_reconciliation"
+  | "trader_settlement_reconciliation_cases_list"
+  | "trader_settlement_reconciliation_case_detail"
+  | "trader_exchange_credentials_connect"
+  | "trader_exchange_credentials_list"
+  | "trader_exchange_credentials_sync_balances"
+  | "trader_balance_snapshots_list";
 
 export type WaiaRuntimeRouteOutcome =
   | "success"
   | "client_error"
   | "config_error"
-  | "internal_error";
+  | "internal_error"
+  | "stale";
 
 /** Twin dialogue gateway provider outcome — content-free (DEE-78). */
 export type WaiaAiGatewayProviderOutcomeTelemetry =

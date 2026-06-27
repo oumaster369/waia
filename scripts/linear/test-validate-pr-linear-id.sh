@@ -79,6 +79,36 @@ run_case "dev branch to dev base still requires dee branch" 1 \
   "dev" \
   "dev" || fail=1
 
+# Option C (DEE-231): release/back-sync PRs are still validated as normal dee PRs
+# (explicit Linear + dee branch). The merge-strategy hint is stdout-only and must not
+# change exit behavior.
+run_case "release back-sync PR to dev passes" 0 \
+  "DEE-231 chore(release): back-sync main into dev" \
+  "**Linear:** \`DEE-231\`
+**Tier:** T1" \
+  "dee-231-release-back-sync-main-into-dev" \
+  "dev" || fail=1
+
+run_case "release-promote dee branch to main passes" 0 \
+  "DEE-231 chore(release): promote dev to main" \
+  "**Linear:** \`DEE-231\`
+**Tier:** T2" \
+  "dee-231-release-promote-trader" \
+  "main" || fail=1
+
+run_case "plain Linear field rejected" 1 \
+  "DEE-261 infra(governance): test" \
+  "Linear: DEE-261
+Parent: DEE-103
+Tier: T1" \
+  "dee-261-governance-pr-body-preflight" || fail=1
+
+run_case "plain Linear with bold Tier still fails Linear" 1 \
+  "DEE-261 infra(governance): test" \
+  "Linear: DEE-261
+**Tier:** T1" \
+  "dee-261-governance-pr-body-preflight" || fail=1
+
 if [[ "$fail" -ne 0 ]]; then
   echo "Some tests failed." >&2
   exit 1

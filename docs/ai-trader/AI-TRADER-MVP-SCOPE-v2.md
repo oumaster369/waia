@@ -104,7 +104,7 @@ using the smallest safe architecture, on top of WAIA Core identity and tenancy.
 3. Balances and positions synchronize correctly.
 4. The Market State Vector is produced and stored with a data-quality score.
 5. The Risk Engine blocks any signal that violates limits; kill switches work and fail closed.
-6. Paper trading runs end-to-end for ≥48 hours with clean reconciliation, with the minimum observability baseline live so the run is measurable.
+6. Paper trading runs end-to-end via Accelerated Historical Replay Validation with clean reconciliation, with the minimum observability baseline live so the run is measurable.
 7. No strategy is promoted to live without passing the Strategy Validation Gate (signed promotion record proving edge, not just plumbing — ADR-0010). Live spot trades (Org 0 only) execute only when admin-enabled under the Single Operator Governance Model (immutable audit, cooling-off, explicit confirmation — ADR-0011), within caps, under supervision.
 8. Monthly reporting + HWM + 30% fee compute correctly; invoices issue only after manual reconciliation sign-off.
 9. USDT TRC-20 payments are detected and attributed; overdue accounts suspend.

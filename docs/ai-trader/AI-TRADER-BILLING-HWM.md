@@ -11,18 +11,20 @@ The payer identity and crypto payment ledger are **WAIA Core shared infrastructu
 
 ## 1. Fee model
 
-- AI-TRADER charges a **performance fee of 30% of net new profit above the per-account High-Water Mark**, assessed monthly.
-- There is no subscription fee. Clients pay only from realized growth above their prior peak.
+- AI-TRADER charges a **performance fee of 30% of net new Realized Strategy Profit above the per-account High-Water Mark**, assessed monthly. The fee base is defined by the [Closed Trade Reality Doctrine (LD-10)](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md) — **realized, closed-trade profit only**; unrealized mark-to-market is never fee-bearing.
+- There is no subscription fee. Clients pay only from **realized** growth above their prior peak.
 - Fees are denominated in USD and invoiced in **USDT TRC-20** (MVP).
+- **Fairness disclosure (LD-10 RC4):** Realized profit may coexist with unrealized drawdown — a client may owe a fee on closed-trade gains while open positions are underwater. Such invoices show both quantities side by side and remain dispute-eligible (Section 11.3).
 
 ---
 
 ## 2. High-Water Mark (HWM)
 
-- The HWM is tracked **per exchange account**.
-- A performance fee accrues only when the period's ending equity exceeds the previous HWM **after** adjusting for client deposits and withdrawals.
+- The HWM is tracked **per exchange account** (MVP operational scope; doctrine semantics are strategy-scoped — see [LD-10 §5](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md)).
+- The HWM is **cumulative net realized strategy profit** — the running total of Realized Strategy Profit ratcheted upward only (LD-10 RC5). Unrealized marks do not move the HWM.
+- A performance fee accrues only when **cumulative Realized Strategy Profit** exceeds the previous HWM. Under [LD-10 RC3](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md), `deposit_adjustment = 0` — deposits and withdrawals do not enter the fee base (stored for audit and manual gate only).
 - The HWM is updated only on period close, **after** invoice rules are satisfied — never intra-period and never before issuance rules are met.
-- The HWM never decreases due to losses; clients must recover prior drawdowns before new fees apply.
+- The HWM never decreases due to losses; clients must recover prior realized drawdowns before new fees apply.
 
 ---
 
@@ -40,26 +42,20 @@ Deposits and withdrawals must be neutralized so the client is never charged for 
 
 ## 4. Canonical profit and fee formula
 
-This formula is canonical. The simplified `ending − starting` example in the old business document is **deprecated**.
+> **Superseded by [LD-10 Closed Trade Reality Doctrine](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md) (RC1).** The canonical fee base is **Realized Strategy Profit** measured against **cumulative net realized strategy profit HWM** — not period-close equity. The equity-based formula below is retained as historical reference only.
+
+```text
+realized_strategy_profit     = sum of closed-trade realized PnL net of trading costs (LD-10 RC3)
+new_profit_above_hwm         = max(cumulative_realized_profit - previous_hwm, 0)   # deposit_adjustment = 0 under LD-10 RC3
+performance_fee              = new_profit_above_hwm * 0.30
+```
+
+**Deprecated (equity-based — superseded):**
 
 ```text
 adjusted_profit        = ending_equity - starting_equity - net_deposits + net_withdrawals
 new_profit_above_hwm   = max(ending_equity - previous_high_water_mark - net_deposits + net_withdrawals, 0)
 performance_fee        = new_profit_above_hwm * 0.30
-```
-
-Worked example (HWM-aware):
-
-```text
-previous_high_water_mark = 10,000
-starting_equity          = 10,000
-ending_equity            = 12,000
-net_deposits             = 0
-net_withdrawals          = 0
-
-new_profit_above_hwm = max(12,000 - 10,000 - 0 + 0, 0) = 2,000
-performance_fee      = 2,000 * 0.30 = 600
-new_high_water_mark  = 12,000   (set on period close, post-issuance rules)
 ```
 
 ---
@@ -70,12 +66,14 @@ At **period start**, lock the baseline:
 - starting balance snapshot, open positions, starting equity, starting HWM.
 
 At **period end**:
-- ending balance snapshot, realized PnL, unrealized PnL policy;
+- ending balance snapshot, **realized PnL** (fee-bearing input), **unrealized PnL** (audit/transparency only — not fee-bearing per LD-10);
 - net deposits and net withdrawals for the period;
-- compute `adjusted_profit` and `new_profit_above_hwm`;
-- compute the fee on positive new profit above HWM only;
+- compute Realized Strategy Profit and `new_profit_above_hwm` per [LD-10](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md);
+- compute the fee on positive new realized profit above HWM only;
 - generate a **draft** invoice if the fee exceeds the minimum threshold;
 - update the HWM only after period close and issuance rules are satisfied.
+
+**Runtime (DEE-310 / AT-E11 S5):** draft invoice generation persists one immutable `DRAFT` row in `trader_invoices` per closed billable period, consuming the DEE-309 `FeeComputationArtifact` without recomputing fee math. Each invoice stores `fee_artifact_digest` and `record_content_digest` for tamper evidence and future fail-closed revalidation at issuance.
 
 Every period stores the exact inputs and the balance snapshots it derived from, so any invoice can be reconstructed later.
 
@@ -104,6 +102,7 @@ Until deposit/withdrawal attribution is provably reliable, **live fee issuance i
   - **deposits** correctly identified and attributed for the period;
   - **withdrawals** correctly identified and attributed for the period;
   - **balance snapshots** (period start and end) present and correct;
+  - **realized-fill finality** — closed trades underlying Realized Strategy Profit are final, not provisional (LD-10 RC2 / ADR-0008 reinterpretation);
   - **reconciliation status** clean (no unresolved order/fill/position mismatches);
   - **exchange synchronization integrity** (account data fully synced for the period, no gaps).
 - Only after every item is confirmed does the invoice move `DRAFT → ISSUED` and the HWM update. The sign-off (reviewer, timestamp, verified items) is recorded in the audit stream.
@@ -158,8 +157,11 @@ A 30% performance fee is not a complete revenue model on its own. The following 
 
 ### 11.2 Unrealized PnL policy
 
-- The fee is assessed on **period-close equity** including open positions marked at the declared valuation source. Unrealized PnL is therefore *in scope* for the HWM and the fee at the snapshot moment.
-- Because unrealized gains can reverse, the **HWM ratchet protects the client**: a later period that gives back unrealized gains cannot be charged again until equity exceeds the prior HWM. The valuation moment, marks, and open positions used are stored so any period is reconstructable.
+> **Superseded by [LD-10 Closed Trade Reality Doctrine](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md) (RC1).** Unrealized PnL is **out of fee scope**.
+
+- The fee is assessed on **Realized Strategy Profit** (closed-trade realized PnL net of trading costs) only — never on mark-to-market of open positions. Unrealized PnL is **not in scope** for the HWM or the fee.
+- Unrealized PnL is still **captured and stored** with each reporting period for audit, transparency, and the fairness disclosure (LD-10 RC4): when realized profit and unrealized drawdown coexist, both are shown side by side on the draft invoice and monthly report.
+- The **HWM ratchet on cumulative realized profit** protects the client: a later period that gives back unrealized gains cannot trigger a fee; only new realized profit above the prior HWM is charged.
 
 ### 11.3 Dispute handling policy
 
@@ -180,6 +182,8 @@ A 30% performance fee is not a complete revenue model on its own. The following 
 
 ## Related documents
 
+- [AI-TRADER Closed Trade Reality Doctrine (LD-10)](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md)
+- [AI-TRADER Reality Doctrine (LD-9)](AI-TRADER-REALITY-DOCTRINE.md)
 - [AI-TRADER Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md)
 - [AI-TRADER Security](AI-TRADER-SECURITY.md)
 - [ADR-0008 Manual Billing Gate](../adr/0008-manual-billing-gate.md)

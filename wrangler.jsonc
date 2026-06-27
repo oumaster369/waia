@@ -1,9 +1,12 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "waia-app",
-  "main": ".open-next/worker.js",
+  "main": "./custom-worker.ts",
   "compatibility_date": "2025-12-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS",
@@ -29,4 +32,14 @@
     "NEXT_PUBLIC_SUPABASE_URL": "https://wdsnuvldxyrkqcjxvuxp.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_wXZ5eaR4l6UKYXQMxr4fuw_cxz-Kk58",
   },
+  // DEE-220 / DEE-221 — secrets_store_secrets is added at ops time after Secrets Store provisioning.
+  // Do NOT commit a placeholder store_id (breaks Workers Builds). See docs/ops/DEE-220-MASTER-KEY-RUNBOOK.md §2.D.
+  // Production credential storage/decryption requires binding AI_TRADER_MASTER_KEY before persisting HTX keys.
+  // "secrets_store_secrets": [
+  //   {
+  //     "binding": "AI_TRADER_MASTER_KEY",
+  //     "store_id": "<WAIA_SECRETS_STORE_ID>",
+  //     "secret_name": "ai-trader-master-key-v1",
+  //   },
+  // ],
 }

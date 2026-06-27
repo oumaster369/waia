@@ -43,6 +43,363 @@
       "when": 1778200000001,
       "tag": "0005_trader_org_scaffolding",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778300000001,
+      "tag": "0006_exchange_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778300000002,
+      "tag": "0007_exchange_credentials_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778400000001,
+      "tag": "0008_trader_balance_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778400000002,
+      "tag": "0009_trader_balance_snapshots_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778500000001,
+      "tag": "0010_trader_risk_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778500000002,
+      "tag": "0011_trader_risk_limits_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1778600000001,
+      "tag": "0012_trader_kill_switches",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1778600000002,
+      "tag": "0013_trader_kill_switches_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1778700000001,
+      "tag": "0014_trader_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1778700000002,
+      "tag": "0015_trader_orders_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1778800000001,
+      "tag": "0016_trader_strategy_promotion_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1778800000002,
+      "tag": "0017_trader_strategy_promotion_records_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778900000001,
+      "tag": "0018_trader_mi_source_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1778900000002,
+      "tag": "0019_trader_mi_source_provenance_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779000000001,
+      "tag": "0020_trader_mi_observation",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1779000000002,
+      "tag": "0021_trader_mi_observation_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1779100000001,
+      "tag": "0022_trader_mi_measurement",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1779100000002,
+      "tag": "0023_trader_mi_measurement_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1779200000001,
+      "tag": "0024_trader_mi_pattern",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1779200000002,
+      "tag": "0025_trader_mi_pattern_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1779300000001,
+      "tag": "0026_trader_mi_hypothesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1779300000002,
+      "tag": "0027_trader_mi_hypothesis_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1779400000001,
+      "tag": "0028_trader_mi_hypothesis_lifecycle_states",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1779500000001,
+      "tag": "0029_trader_mi_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1779500000002,
+      "tag": "0030_trader_mi_evidence_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1779600000001,
+      "tag": "0031_trader_mi_trial",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1779600000002,
+      "tag": "0032_trader_mi_trial_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1779700000001,
+      "tag": "0033_trader_mi_trial_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1779700000002,
+      "tag": "0034_trader_mi_trial_integrity_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1779800000001,
+      "tag": "0035_trader_mi_confidence_judgment",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1779800000002,
+      "tag": "0036_trader_mi_confidence_judgment_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1779900000001,
+      "tag": "0037_trader_reporting_periods",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1779900000002,
+      "tag": "0038_trader_reporting_periods_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1780000000001,
+      "tag": "0039_trader_hwm_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1780000000002,
+      "tag": "0040_trader_hwm_ledger_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780000000003,
+      "tag": "0041_trader_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1780000000004,
+      "tag": "0042_trader_invoices_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1780000000006,
+      "tag": "0043_trader_invoice_status_issued",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1780000000007,
+      "tag": "0044_trader_invoice_issuance",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1780000000008,
+      "tag": "0045_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1780000000009,
+      "tag": "0046_payments_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1780000000010,
+      "tag": "0047_payment_address_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1780000000011,
+      "tag": "0048_payment_address_registry_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1780000000012,
+      "tag": "0049_payment_watcher_checkpoints",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1780000000013,
+      "tag": "0050_payment_watcher_checkpoints_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1780000000014,
+      "tag": "0051_trader_invoice_status_settlement",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1780000000015,
+      "tag": "0052_trader_settlement",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1780000000016,
+      "tag": "0053_trader_settlement_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1780000000017,
+      "tag": "0054_trader_settlement_reconciliation",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1780000000018,
+      "tag": "0055_trader_settlement_reconciliation_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1780000000019,
+      "tag": "0056_trader_reconciliation_workflow",
+      "breakpoints": true
     }
   ]
 }

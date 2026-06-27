@@ -31,15 +31,33 @@ After local validation succeeds, agents **normally** finish by pushing the `dee-
 
 **Maintainers** may turn on GitHub auto-merge **only** for **`T0`/`T1`** PRs that meet [`RISK-TIERS.md`](RISK-TIERS.md) merge-eligibility (checks green, no gate, no meaning shift, no runtime/migration/auth/infra in scope, no escalation). **Do not** use auto-merge for semantic/product governance changes, AI-Twin / readiness / autonomy / Society semantics, **`T2+`**, active Architect gates, or unresolved ambiguity—[`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md).
 
+## Merge method (by PR class)
+
+The merge **method** is not freeform — it is fixed by PR class (full table in [`BRANCHING-STRATEGY.md`](BRANCHING-STRATEGY.md)):
+
+- **Feature / fix / governance PR → `dev`:** **Squash and merge** (default).
+- **Release promotion → `main`:** **Create a merge commit** — never squash.
+- **Release back-sync → `dev`:** **Create a merge commit** — never squash.
+
+**Exact human merge instruction (agents must surface this in the PR body for the latter two classes):**
+
+> **Merge this PR with "Create a merge commit". Do NOT "Squash and merge".**
+> Squash drops the second parent and re-creates `dev`/`main` ancestry drift (see [`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md)).
+
+A normal feature/governance PR to `dev` (including this protocol's own PRs, unless a PR explicitly changes merge rules) uses squash and needs no special instruction.
+
 ## PR body essentials
 
-| Field | Notes |
-|-------|-------|
-| `Linear` | Issue URL / `DEE-NN` |
-| `Risk tier` | [`RISK-TIERS.md`](RISK-TIERS.md) `T0`–`T4` |
-| `ADR` | Link or **`n/a`** + rationale if Tier ≤ `T1` small change |
-| `Human gate` | `no`/`yes — reason` |
-| `Migration impacted` | `no`/`yes — tracker link sentence` |
+Canonical structure: [`.github/pull_request_template.md`](../../.github/pull_request_template.md). Agents must run [`preflight-pr-governance.sh`](../../scripts/linear/preflight-pr-governance.sh) before PR handoff ([`.cursor/commands/prepare-pr.md`](../../.cursor/commands/prepare-pr.md)).
+
+| Field | Required syntax |
+|-------|-----------------|
+| Linear | `**Linear:** \`DEE-NN\`` (+ optional URL) |
+| Tier | `**Tier:** T0`–`T4` per [`RISK-TIERS.md`](RISK-TIERS.md) |
+| Parent (optional) | `**Parent:** \`DEE-NN\`` — child issues only; not validated |
+| ADR | Link or **`n/a`** + rationale if Tier ≤ `T1` small change |
+| Human gate | `no`/`yes — reason` |
+| Migration impacted | `no`/`yes — tracker link sentence` |
 
 ### Semantic-impact signal **(when touched)**
 

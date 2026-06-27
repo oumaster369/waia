@@ -19,9 +19,16 @@ if [[ -z "${LINEAR_API_KEY:-}" ]]; then
 fi
 
 API="https://api.linear.app/graphql"
-TEAM_KEY="${IDENTIFIER%%-*}"
 
-lookup_query='query($id: String!) { issue(id: $id) { id identifier title team { id key } } }'
+lookup_query='query($id: String!) {
+  issue(id: $id) {
+    id
+    identifier
+    title
+    state { name type }
+    team { id key }
+  }
+}'
 
 issue_json="$(
   curl -sf "$API" \
@@ -37,55 +44,42 @@ if [[ -z "$issue_id" ]]; then
   exit 1
 fi
 
-status_query='query($teamId: String!) { workflowStates(filter: { team: { id: { eq: $teamId } } }) { nodes { id name type } } }'
-team_id="$(printf '%s' "$issue_json" | jq -r '.data.issue.team.id')"
+current_state_type="$(printf '%s' "$issue_json" | jq -r '.data.issue.state.type // empty')"
+current_state_name="$(printf '%s' "$issue_json" | jq -r '.data.issue.state.name // empty')"
 
-states_json="$(
-  curl -sf "$API" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: ${LINEAR_API_KEY}" \
-    -d "$(jq -nc --arg teamId "$team_id" --arg query "$status_query" '{query: $query, variables: {teamId: $teamId}}')"
-)"
+if [[ "$current_state_type" == "completed" ]]; then
+  echo "notice: Linear ${IDENTIFIER} already ${current_state_name} — skipping state transition"
+else
+  team_id="$(printf '%s' "$issue_json" | jq -r '.data.issue.team.id')"
 
-done_state_id="$(
-  printf '%s' "$states_json" \
-    | jq -r '.data.workflowStates.nodes[] | select(.type == "completed" and (.name == "Done" or .name == "done")) | .id' \
-    | head -1
-)"
+  status_query='query($teamId: String!) { workflowStates(filter: { team: { id: { eq: $teamId } } }) { nodes { id name type } } }'
 
-if [[ -z "$done_state_id" ]]; then
-  echo "error: could not find Done workflow state for team ${TEAM_KEY}" >&2
-  exit 1
-fi
-
-comment=""
-if [[ -n "$PR_URL" ]]; then
-  comment="Merged PR: ${PR_URL}"
-fi
-
-update_mutation='mutation($id: String!, $stateId: String!, $comment: String) {
-  issueUpdate(id: $id, input: { stateId: $stateId }) { success issue { identifier state { name } } }
-  c1: commentCreate(input: { issueId: $id, body: $comment }) { success }
-}'
-
-# commentCreate fails on empty body — skip comment mutation when no URL
-if [[ -n "$comment" ]]; then
-  result="$(
+  states_json="$(
     curl -sf "$API" \
       -H "Content-Type: application/json" \
       -H "Authorization: ${LINEAR_API_KEY}" \
-      -d "$(jq -nc \
-        --arg id "$issue_id" \
-        --arg stateId "$done_state_id" \
-        --arg comment "$comment" \
-        --arg query "$update_mutation" \
-        '{query: $query, variables: {id: $id, stateId: $stateId, comment: $comment}}')"
+      -d "$(jq -nc --arg teamId "$team_id" --arg query "$status_query" '{query: $query, variables: {teamId: $teamId}}')"
   )"
-else
+
+  done_state_id="$(
+    printf '%s' "$states_json" \
+      | jq -r '.data.workflowStates.nodes[] | select(.type == "completed" and (.name == "Done" or .name == "done")) | .id' \
+      | head -1
+  )"
+
+  if [[ -z "$done_state_id" ]]; then
+    echo "error: could not find Done workflow state for team" >&2
+    exit 1
+  fi
+
   update_mutation='mutation($id: String!, $stateId: String!) {
-    issueUpdate(id: $id, input: { stateId: $stateId }) { success issue { identifier state { name } } }
+    issueUpdate(id: $id, input: { stateId: $stateId }) {
+      success
+      issue { identifier state { name } }
+    }
   }'
-  result="$(
+
+  update_result="$(
     curl -sf "$API" \
       -H "Content-Type: application/json" \
       -H "Authorization: ${LINEAR_API_KEY}" \
@@ -95,14 +89,38 @@ else
         --arg query "$update_mutation" \
         '{query: $query, variables: {id: $id, stateId: $stateId}}')"
   )"
+
+  success="$(printf '%s' "$update_result" | jq -r '.data.issueUpdate.success // false')"
+  if [[ "$success" != "true" ]]; then
+    echo "error: Linear issueUpdate failed for ${IDENTIFIER}" >&2
+    printf '%s\n' "$update_result" | jq '.' >&2 || true
+    exit 1
+  fi
+
+  state_name="$(printf '%s' "$update_result" | jq -r '.data.issueUpdate.issue.state.name')"
+  echo "Linear ${IDENTIFIER} → ${state_name}"
 fi
 
-success="$(printf '%s' "$result" | jq -r '.data.issueUpdate.success // false')"
-if [[ "$success" != "true" ]]; then
-  echo "error: Linear issueUpdate failed for ${IDENTIFIER}" >&2
-  printf '%s\n' "$result" | jq '.' >&2 || true
-  exit 1
-fi
+if [[ -n "$PR_URL" ]]; then
+  comment="Merged PR: ${PR_URL}"
+  comment_mutation='mutation($issueId: String!, $body: String!) {
+    commentCreate(input: { issueId: $issueId, body: $body }) { success }
+  }'
 
-state_name="$(printf '%s' "$result" | jq -r '.data.issueUpdate.issue.state.name')"
-echo "Linear ${IDENTIFIER} → ${state_name}"
+  comment_result="$(
+    curl -sf "$API" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: ${LINEAR_API_KEY}" \
+      -d "$(jq -nc \
+        --arg issueId "$issue_id" \
+        --arg body "$comment" \
+        --arg query "$comment_mutation" \
+        '{query: $query, variables: {issueId: $issueId, body: $body}}')"
+  )"
+
+  comment_success="$(printf '%s' "$comment_result" | jq -r '.data.commentCreate.success // false')"
+  if [[ "$comment_success" != "true" ]]; then
+    echo "warning: merge comment failed for ${IDENTIFIER}" >&2
+    printf '%s\n' "$comment_result" | jq '.' >&2 || true
+  fi
+fi

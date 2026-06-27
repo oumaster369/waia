@@ -17,5 +17,9 @@ export type WaiaSqliteDb = WaiaDb;
  * matching the upcoming Postgres branch without faking inner async semantics.
  */
 export function runSqliteTransaction<T>(db: WaiaDb, fn: (tx: WaiaDb) => T): Promise<T> {
-  return Promise.resolve(db.transaction((tx) => fn(tx as WaiaDb)));
+  try {
+    return Promise.resolve(db.transaction((tx) => fn(tx as WaiaDb)));
+  } catch (error) {
+    return Promise.reject(error);
+  }
 }

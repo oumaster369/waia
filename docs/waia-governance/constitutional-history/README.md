@@ -26,7 +26,8 @@ For day-to-day execution, the **operational canon** in [`../README.md`](../READM
 |------|----------|--------|--------|
 | 2026-05-10 | [`2026-05-10-agent-society-roadmap.md`](2026-05-10-agent-society-roadmap.md) | **VISION** | Authored in Obsidian (`WAIA GOV/waia_dev_os_agent_society_roadmap_en.md`) |
 | 2026-05-10 | [`2026-05-10-constitutional-review.md`](2026-05-10-constitutional-review.md) | **ADVISORY** | Constitutional review of the roadmap (`WAIA GOV/waia_dev_os_constitutional_review.md`) |
-| 2026-05-10 | [`2026-05-10-constitutional-acceptance-v1.0.md`](2026-05-10-constitutional-acceptance-v1.0.md) | **DOCTRINE** (Acceptance v1.0) | Architect-level acceptance (`WAIA GOV/waia_dev_os_constitutional_acceptance.md`) |
+| 2026-05-10 | [`2026-05-10-constitutional-acceptance-v1.0.md`](2026-05-10-constitutional-acceptance-v1.0.md) | **DOCTRINE** (Acceptance v1.0 — Agent Governance Foundation) | Architect-level acceptance (`WAIA GOV/waia_dev_os_constitutional_acceptance.md`) |
+| 2026-06-21 | [`2026-06-21-constitutional-acceptance-v2.0.md`](2026-06-21-constitutional-acceptance-v2.0.md) | **DOCTRINE** (Acceptance v2.0 — Governance Integration Foundation) | Founders Council acceptance of WAIA Operations System v2.0 (Phase 0, PR1 / GI-04) |
 
 ---
 
@@ -34,7 +35,8 @@ For day-to-day execution, the **operational canon** in [`../README.md`](../READM
 
 - **Append-only.** Constitutional artifacts are not edited in place after acceptance. Supersession is recorded by adding a new dated artifact and updating [`../GOVERNANCE-VERSIONING.md`](../GOVERNANCE-VERSIONING.md).
 - **Status promotion is one-way.** A VISION artifact may inform a future DOCTRINE artifact, but the VISION file's status header is not retroactively rewritten — a new DOCTRINE artifact is added.
-- **Doctrine supersedes itself, not the operational canon.** A new DOCTRINE artifact (e.g. Acceptance v1.1) supersedes the prior DOCTRINE artifact in this folder. It does not silently override `WAIA-DEV-OS.md`, `EXECUTION-CONTRACT.md`, `AGENTS.md`, or any other operational canon — those changes still require their own deliberate PRs per [`../DOCUMENTATION-STANDARDS.md`](../DOCUMENTATION-STANDARDS.md).
+- **Supersession is scope-bound; disjoint-scope doctrines stack.** A new DOCTRINE artifact supersedes a prior one **only when they share the same scope** (e.g. Acceptance v1.1 superseding v1.0). DOCTRINE artifacts with **disjoint scopes coexist as a doctrine stack** and do **not** supersede one another — e.g. **Acceptance v1.0** (Agent Governance Foundation) and **Acceptance v2.0** (Governance Integration Foundation) are both active; v2.0 leaves every v1.0 agent constraint intact. See [`../CONSTITUTIONAL-DOCTRINE.md`](../CONSTITUTIONAL-DOCTRINE.md) §2.
+- **Doctrine never silently overrides the operational canon.** No DOCTRINE artifact silently overrides `WAIA-DEV-OS.md`, `EXECUTION-CONTRACT.md`, `AGENTS.md`, or any other operational canon — those changes still require their own deliberate PRs per [`../DOCUMENTATION-STANDARDS.md`](../DOCUMENTATION-STANDARDS.md).
 - **No agent may author or mutate files in this folder.** Constitutional drafting is human-only (Architect). Agents may *cite* artifacts here in PRs and Linear comments per the active doctrine.
 
 ---

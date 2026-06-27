@@ -11,6 +11,8 @@
 
 <!-- Example: **Linear:** `DEE-153` https://linear.app/deepsense/issue/DEE-153/... -->
 
+<!-- Optional child issues: **Parent:** `DEE-NN` (same bold/backtick syntax; not required or validated) -->
+
 **Linear groom verified:** <!-- yes (via /groom) OR n/a with Architect approval -->
 
 **Plan:** <!-- `.cursor/plans/<file>.md` or `n/a` -->
@@ -20,6 +22,12 @@
 <!-- T0 … T4 per `docs/waia-governance/RISK-TIERS.md` -->
 
 **Tier:**
+
+## Merge strategy
+
+<!-- `squash` for feature/fix/governance PRs (default). `merge-commit` REQUIRED for release-promotion (dev→main) and back-sync (main→dev) PRs — squash drops the second parent and re-creates ancestry drift. See `docs/waia-governance/BRANCHING-STRATEGY.md`. -->
+
+**Merge strategy:** squash <!-- squash | merge-commit -->
 
 ## ADR
 

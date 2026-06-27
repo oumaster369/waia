@@ -2,6 +2,7 @@
 
 Status: Baseline v1.2 (governing technical specification)
 Date: 2026-06-11
+Doctrine reconciliation: 2026-06-24 — documentation-only alignment of Risk verdict vocabulary, clamp wording, the allowance lifecycle, the reconciliation split, and Related Documents to the ratified [LD-6](AI-TRADER-FORECAST-DOCTRINE.md) / [LD-7](AI-TRADER-DECISION-DOCTRINE.md) / [LD-8](AI-TRADER-RISK-DOCTRINE.md) / [LD-9](AI-TRADER-REALITY-DOCTRINE.md) doctrines. No architecture, ownership, behavior, roadmap, or governance change.
 
 This is the re-anchored technical specification for AI-TRADER, aligned to Architecture Baseline v1.2 and the real WAIA codebase. It supersedes `AI_TRADER_MASTER_SPEC_v1_EN` wherever they disagree.
 
@@ -52,11 +53,12 @@ AI-TRADER is a non-custodial, multi-tenant crypto market intelligence and tradin
 - **Frontend/runtime:** Next.js 16 App Router on Cloudflare Workers via `@opennextjs/cloudflare` (existing `wrangler.jsonc`). The trader UI is an `app/(trader)` route group; `trader.waia.life` is served via host-based rewrite.
 - **Persistence:** Supabase PostgreSQL accessed through **Drizzle ORM** with additive migrations (existing `db/schema.postgres.ts`, `db/AGENTS.md`). The v1 spec's raw-SQL/RLS-first approach is replaced by Drizzle + targeted RLS.
 - **Auth:** Supabase Auth with `public.users.id == auth.users.id` (existing `lib/auth/supabase-app-user-sync.ts`).
-- **Long-running services:** off-Cloudflare (single hardened VPS with Docker for MVP). Introduced only when a persistent execution loop / WebSocket session is required (Roadmap Phase 6+).
+- **Long-running services:** off-Cloudflare (single hardened VPS with Docker for MVP). Introduced only when a persistent execution loop / WebSocket session is required (Roadmap Phase 6+). The execution engine, persistent exchange sessions, and the fast order path belong here — not slow-state Core writers.
+- **Payment Watcher (MVP):** a read-only inbound chain observer for USDT TRC-20 deposits, running as a **Cloudflare Worker + Cron Trigger** (slow-state Core writer). See [ADR-0014](../adr/0014-payment-watcher-execution-model-read-only-observer.md). Graduation to the off-Cloudflare daemon is the documented target when the execution VPS exists or volume/latency demands it.
 - **Cold storage:** Cloudflare R2 for raw tick/order-book and report exports.
-- **External integrations:** HTX API (MVP); Fear & Greed and news sentiment feeds; crypto payment watcher (USDT TRC-20).
+- **External integrations:** HTX API (MVP); Fear & Greed and news sentiment feeds; Tron RPC / TronGrid (payment watcher).
 
-**Hard rule:** Cloudflare must not host the execution engine, persistent exchange sessions, or the fast order path. Supabase must not be used as a low-latency execution bus.
+**Hard rule:** Cloudflare must not host the execution engine, persistent exchange sessions, or the fast order path. The Payment Watcher is a slow-state Core writer and is exempt from this rule. Supabase must not be used as a low-latency execution bus.
 
 ---
 
@@ -84,6 +86,7 @@ flowchart TB
   subgraph web [Cloudflare Workers - Next.js]
     UI["app/(trader) route group + admin"]
     LAPI[light read APIs / webhook ingress]
+    PW["Payment Watcher (Cron, MVP)"]
   end
 
   subgraph svc [Long-running services off-Cloudflare]
@@ -97,13 +100,13 @@ flowchart TB
     REC[Reconciliation]
     SHM[Strategy Health Monitor - manual MVP]
     RB[Reporting + HWM + Billing]
-    PW[Payment Watcher]
     SCH[Scheduler]
   end
 
   PG[(Supabase Postgres - Drizzle)]
   R2[(R2 cold storage)]
   HTX[(HTX API / WS)]
+  TRON[(Tron RPC / TronGrid)]
 
   UI --> ID
   UI --> PG
@@ -115,7 +118,7 @@ flowchart TB
   EXE --> REC --> PG
   REC --> SHM
   REC --> RB --> PAY
-  PW --> HTX
+  PW --> TRON
   PW --> PG
   EXE -. in-memory state .- EXE
 ```
@@ -158,7 +161,7 @@ Central brain that aggregates the layers + account risk + strategy health + data
 - Strategies are **versioned** entities with a controlled lifecycle: `DRAFT → RESEARCHING → BACKTESTING → VALIDATED → PAPER_TRADING → LIVE_LIMITED → LIVE_FULL → PAUSED → RETIRED`.
 - **MVP strategies (exactly two):** Liquidity Sweep Reversal and Mean Reversion.
 - A strategy emits a **structured signal** (side, confidence, expected edge, horizon, max risk, reason codes, MSV reference, features reference). It must never place orders.
-- The Risk Engine approves, resizes, rejects, or transforms every signal before execution.
+- The Risk Engine applies a monotone-downward verdict to every signal before execution — it may approve, clamp downward, veto, restrict to close-only, or halt, and never raises size, conviction, or permission (see [Risk Doctrine (LD-8)](AI-TRADER-RISK-DOCTRINE.md)).
 
 ---
 
@@ -189,7 +192,8 @@ Central brain that aggregates the layers + account risk + strategy health + data
 
 - Enforces, before every order: max position per account/symbol, max strategy allocation, max daily loss, max monthly drawdown, max consecutive losses, max open orders, max exposure per quote currency, emergency stop, only-close mode, account-status restrictions, billing/payment restrictions, data-quality restrictions, strategy-health restrictions.
 - Enforces **security controls** as part of risk: symbol allowlist, max notional, max order rate, price collars (see [Security](AI-TRADER-SECURITY.md)).
-- Emits a `RiskDecision` (`APPROVE / RESIZE / REJECT / CLOSE_ONLY / STOP_ACCOUNT`) with reason codes and a risk snapshot.
+- Emits a `RiskDecision` from the closed, monotone-restrictive verdict set ratified in the [Risk Doctrine (LD-8)](AI-TRADER-RISK-DOCTRINE.md) (`APPROVE / APPROVE_CLAMPED / VETO / CLOSE_ONLY / HALT`) with reason codes and a risk snapshot.
+- A permitted verdict yields a **risk-approved request (allowance)**, not an order: it is **single-use, expiring, and revocable**, with a **consumption-time posture recheck** so a posture downgrade or kill between issuance and consumption refuses the order (two independent fail-closed paths). See [Risk Doctrine (LD-8)](AI-TRADER-RISK-DOCTRINE.md).
 - **Kill switches** at global / user / account / strategy / instrument levels, plus automatic triggers; enforced inside the execution service and **fail-closed**.
 
 ---
@@ -200,13 +204,14 @@ Central brain that aggregates the layers + account risk + strategy health + data
 - **Order state machine:** `CREATED → RISK_APPROVED → SENT_TO_EXCHANGE → ACCEPTED → PARTIALLY_FILLED → FILLED`, with `CANCEL_REQUESTED, CANCELLED, REJECTED, EXPIRED, FAILED, RECONCILIATION_REQUIRED`.
 - **Idempotency:** every order carries `client_order_id`, `idempotency_key`, `strategy_signal_id`, `risk_decision_id`, and `allocation_decision_id` (if applicable). Retries never create duplicate exposure.
 - **Recovery:** on startup, rebuild state from exchange + Supabase before resuming.
+- **Reconciliation spans two doctrine-separated concerns that never merge:** reconciliation-as-construction — building canonical post-execution truth (dedup + latest-event fold + record + mark) — is owned by the [Reality Doctrine (LD-9)](AI-TRADER-REALITY-DOCTRINE.md); reconciliation-as-enforcement — Expected-vs-Actual comparison, divergence/orphan marking, and fail-closed kill — is Risk L6 in the [Risk Doctrine (LD-8)](AI-TRADER-RISK-DOCTRINE.md).
 - Execution must never depend on the UI.
 
 ---
 
 ## 15. Reporting, HWM & billing
 
-Owned in full by [Billing & HWM](AI-TRADER-BILLING-HWM.md). Summary: monthly reporting periods, per-account high-water mark, mandatory deposit/withdrawal adjustment, 30% performance fee on net new profit above HWM, invoice lifecycle, USDT TRC-20 unique-address payment attribution, suspension lifecycle, and a **mandatory manual issuance gate** in MVP. Before issuance, the reviewer must verify deposits, withdrawals, balance snapshots, reconciliation status, and exchange synchronization integrity, with the sign-off recorded in the audit stream (see [ADR-0008](../adr/0008-manual-billing-gate.md)). The Billing & HWM document also defines the **billing governance policies** — valuation source, unrealized-PnL, dispute handling, overcharge remediation, and refund/credit — that bound how fees are computed and corrected. Sensitive billing actions (waiver/cancellation) run under the Single Operator Governance Model ([ADR-0011](../adr/0011-single-operator-governance-model.md)). Payer identity and the payment ledger are WAIA Core shared infrastructure.
+Owned in full by [Billing & HWM](AI-TRADER-BILLING-HWM.md) and the [Closed Trade Reality Doctrine (LD-10)](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md). Summary: monthly reporting periods, per-account high-water mark (cumulative net realized strategy profit), mandatory deposit/withdrawal adjustment, 30% performance fee on net new **Realized Strategy Profit** above HWM (realized closed-trade profit only — unrealized PnL is audit/transparency, not fee-bearing), invoice lifecycle, USDT TRC-20 unique-address payment attribution, suspension lifecycle, and a **mandatory manual issuance gate** in MVP. Before issuance, the reviewer must verify deposits, withdrawals, balance snapshots, **realized-fill finality**, reconciliation status, and exchange synchronization integrity, with the sign-off recorded in the audit stream (see [ADR-0008](../adr/0008-manual-billing-gate.md)). The Billing & HWM document also defines the **billing governance policies** — valuation source, realized-only fee base (LD-10), dispute handling, overcharge remediation, and refund/credit — that bound how fees are computed and corrected. Sensitive billing actions (waiver/cancellation) run under the Single Operator Governance Model ([ADR-0011](../adr/0011-single-operator-governance-model.md)). Payer identity and the payment ledger are WAIA Core shared infrastructure.
 
 ---
 
@@ -276,4 +281,8 @@ Mirror of the platform rules; see also [Security](AI-TRADER-SECURITY.md) §12 an
 - [AI-TRADER Billing & HWM](AI-TRADER-BILLING-HWM.md)
 - [AI-TRADER Security](AI-TRADER-SECURITY.md)
 - [AI-TRADER Integration](AI-TRADER-INTEGRATION.md)
+- [AI-TRADER Forecast Doctrine (LD-6)](AI-TRADER-FORECAST-DOCTRINE.md)
+- [AI-TRADER Decision Doctrine (LD-7)](AI-TRADER-DECISION-DOCTRINE.md)
+- [AI-TRADER Risk Doctrine (LD-8)](AI-TRADER-RISK-DOCTRINE.md)
+- [AI-TRADER Reality Doctrine (LD-9)](AI-TRADER-REALITY-DOCTRINE.md)
 - ADRs: [0005](../adr/0005-saas-as-superset-strategy.md), [0006](../adr/0006-ai-trader-repository-strategy.md), [0007](../adr/0007-targeted-rls-strategy.md), [0008](../adr/0008-manual-billing-gate.md), [0009](../adr/0009-regulatory-posture.md)

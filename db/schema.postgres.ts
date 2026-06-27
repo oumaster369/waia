@@ -10,21 +10,34 @@
 
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import {
   auditActorTypeEnum,
   organizationKindEnum,
   organizationMemberRoleEnum,
+  paymentAddressEventTypeEnum,
+  paymentAddressStatusEnum,
+  paymentDirectionEnum,
+  paymentEventTypeEnum,
+  paymentFailureReasonEnum,
+  paymentStatusEnum,
+  paymentSubjectModuleEnum,
+  paymentWalletCustodyModelEnum,
+  paymentWalletKindEnum,
   platformRoleEnum,
   subscriptionStatusEnum,
   waiaModuleEnum,
@@ -46,6 +59,27 @@ export const platformRoleEnumPg = pgEnum("platform_role", [...platformRoleEnum])
 export const waiaModuleEnumPg = pgEnum("waia_module", [...waiaModuleEnum]);
 export const subscriptionStatusEnumPg = pgEnum("subscription_status", [...subscriptionStatusEnum]);
 export const auditActorTypeEnumPg = pgEnum("audit_actor_type", [...auditActorTypeEnum]);
+
+export const paymentEventTypeEnumPg = pgEnum("payment_event_type", [...paymentEventTypeEnum]);
+export const paymentDirectionEnumPg = pgEnum("payment_direction", [...paymentDirectionEnum]);
+export const paymentSubjectModuleEnumPg = pgEnum("payment_subject_module", [
+  ...paymentSubjectModuleEnum,
+]);
+export const paymentFailureReasonEnumPg = pgEnum("payment_failure_reason", [
+  ...paymentFailureReasonEnum,
+]);
+export const paymentStatusEnumPg = pgEnum("payment_status", [...paymentStatusEnum]);
+
+export const paymentWalletKindEnumPg = pgEnum("payment_wallet_kind", [...paymentWalletKindEnum]);
+export const paymentWalletCustodyModelEnumPg = pgEnum("payment_wallet_custody_model", [
+  ...paymentWalletCustodyModelEnum,
+]);
+export const paymentAddressEventTypeEnumPg = pgEnum("payment_address_event_type", [
+  ...paymentAddressEventTypeEnum,
+]);
+export const paymentAddressStatusEnumPg = pgEnum("payment_address_status", [
+  ...paymentAddressStatusEnum,
+]);
 
 /**
  * Application user row in `public.users`.
@@ -181,6 +215,1318 @@ export const auditLogs = pgTable(
   (t) => [
     index("audit_logs_org_created_idx").on(t.organizationId, t.createdAt),
     index("audit_logs_entity_idx").on(t.entityType, t.entityId),
+  ],
+);
+
+/** WAIA Core: append-only payment event ledger (AT-E12 S1 / DEE-312). */
+export const paymentEvents = pgTable(
+  "payment_events",
+  {
+    id: uuid("id").primaryKey(),
+    paymentId: uuid("payment_id").notNull(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: paymentEventTypeEnumPg("event_type").notNull(),
+    direction: paymentDirectionEnumPg("direction").notNull(),
+    subjectModule: paymentSubjectModuleEnumPg("subject_module").notNull(),
+    subjectInvoiceId: text("subject_invoice_id"),
+    idempotencyKey: text("idempotency_key"),
+    reason: paymentFailureReasonEnumPg("reason"),
+    settlementNetwork: text("settlement_network"),
+    settlementAsset: text("settlement_asset"),
+    settlementAmount: text("settlement_amount"),
+    settlementTxHash: text("settlement_tx_hash"),
+    transferIndex: integer("transfer_index"),
+    confirmationsRequired: integer("confirmations_required"),
+    confirmationsObserved: integer("confirmations_observed"),
+    blockHeight: text("block_height"),
+    observedAt: timestamp("observed_at", { withTimezone: true, mode: "date" }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true, mode: "date" }),
+    valuedAmountUsd: text("valued_amount_usd"),
+    valuationSource: text("valuation_source"),
+    valuationAt: timestamp("valuation_at", { withTimezone: true, mode: "date" }),
+    evidenceRef: text("evidence_ref"),
+    paymentAddressId: uuid("payment_address_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("payment_events_payment_id_seq_unique").on(t.paymentId, t.seq),
+    uniqueIndex("payment_events_org_idempotency_unique")
+      .on(t.organizationId, t.idempotencyKey)
+      .where(sql`"idempotency_key" IS NOT NULL`),
+    uniqueIndex("payment_events_settlement_attribution_unique")
+      .on(t.settlementNetwork, t.settlementTxHash, t.transferIndex)
+      .where(sql`"settlement_tx_hash" IS NOT NULL`),
+    index("payment_events_org_payment_idx").on(t.organizationId, t.paymentId),
+    index("payment_events_subject_idx").on(t.subjectModule, t.subjectInvoiceId),
+  ],
+);
+
+/** WAIA Core: rebuildable payment current-state projection (AT-E12 S1 / DEE-312). */
+export const payments = pgTable(
+  "payments",
+  {
+    paymentId: uuid("payment_id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    status: paymentStatusEnumPg("status").notNull(),
+    direction: paymentDirectionEnumPg("direction").notNull(),
+    subjectModule: paymentSubjectModuleEnumPg("subject_module").notNull(),
+    subjectInvoiceId: text("subject_invoice_id"),
+    settlementAmount: text("settlement_amount"),
+    settlementAsset: text("settlement_asset"),
+    settlementNetwork: text("settlement_network"),
+    settlementTxHash: text("settlement_tx_hash"),
+    transferIndex: integer("transfer_index"),
+    valuedAmountUsd: text("valued_amount_usd"),
+    valuationSource: text("valuation_source"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("payments_org_status_idx").on(t.organizationId, t.status),
+    index("payments_subject_idx").on(t.subjectModule, t.subjectInvoiceId),
+  ],
+);
+
+/** WAIA Core: payment wallet control-domain anchor (AT-E12 S2 / DEE-315). */
+export const paymentWallets = pgTable(
+  "payment_wallets",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    walletKind: paymentWalletKindEnumPg("wallet_kind").notNull(),
+    custodyModel: paymentWalletCustodyModelEnumPg("custody_model").notNull(),
+    controlModel: text("control_model").notNull(),
+    providerRef: text("provider_ref"),
+    derivationScheme: text("derivation_scheme"),
+    status: text("status").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("payment_wallets_org_status_idx").on(t.organizationId, t.status)],
+);
+
+/** WAIA Core: append-only payment address event ledger (AT-E12 S2 / DEE-315). */
+export const paymentAddressEvents = pgTable(
+  "payment_address_events",
+  {
+    id: uuid("id").primaryKey(),
+    addressId: uuid("address_id").notNull(),
+    walletId: uuid("wallet_id"),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: paymentAddressEventTypeEnumPg("event_type").notNull(),
+    network: text("network").notNull(),
+    address: text("address"),
+    subjectModule: paymentSubjectModuleEnumPg("subject_module"),
+    subjectRef: text("subject_ref"),
+    bindingRef: text("binding_ref"),
+    reason: text("reason"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("payment_address_events_address_id_seq_unique").on(t.addressId, t.seq),
+    index("payment_address_events_org_address_idx").on(t.organizationId, t.addressId),
+  ],
+);
+
+/** WAIA Core: rebuildable payment address projection (AT-E12 S2 / DEE-315). */
+export const paymentAddresses = pgTable(
+  "payment_addresses",
+  {
+    addressId: uuid("address_id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    walletId: uuid("wallet_id").references(() => paymentWallets.id, { onDelete: "set null" }),
+    network: text("network").notNull(),
+    address: text("address").notNull(),
+    status: paymentAddressStatusEnumPg("status").notNull(),
+    subjectModule: paymentSubjectModuleEnumPg("subject_module"),
+    subjectRef: text("subject_ref"),
+    bindingRef: text("binding_ref"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("payment_addresses_network_address_unique").on(t.network, t.address),
+    uniqueIndex("payment_addresses_org_subject_active_unique")
+      .on(t.organizationId, t.subjectModule, t.subjectRef)
+      .where(sql`"status" = 'ACTIVATED'`),
+    index("payment_addresses_org_status_idx").on(t.organizationId, t.status),
+  ],
+);
+
+export const exchangeCredentialStatusEnumPg = pgEnum("exchange_credential_status", [
+  "active",
+  "revoked",
+]);
+
+/** AI-TRADER: envelope-encrypted exchange API credentials (DEE-233 / AT-E2). */
+export const exchangeCredentials = pgTable(
+  "exchange_credentials",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    apiKeyMasked: text("api_key_masked"),
+    encryptedPayload: text("encrypted_payload"),
+    payloadKeyVersion: text("payload_key_version"),
+    wrappedDekKeyVersion: text("wrapped_dek_key_version"),
+    wrappedDekKey: text("wrapped_dek_key"),
+    permissionMetadata: text("permission_metadata"),
+    status: exchangeCredentialStatusEnumPg("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+  },
+  (t) => [
+    index("exchange_credentials_org_venue_account_idx").on(
+      t.organizationId,
+      t.venue,
+      t.exchangeAccountId,
+    ),
+  ],
+);
+
+/** AI-TRADER: point-in-time balance snapshots (DEE-237 / AT-E2). */
+export const traderBalanceSnapshots = pgTable(
+  "trader_balance_snapshots",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: uuid("credential_id")
+      .notNull()
+      .references(() => exchangeCredentials.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    balances: text("balances").notNull(),
+    assetCount: integer("asset_count").notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true, mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_balance_snapshots_org_cred_synced_idx").on(
+      t.organizationId,
+      t.credentialId,
+      t.syncedAt,
+    ),
+    index("trader_balance_snapshots_org_synced_idx").on(t.organizationId, t.syncedAt),
+  ],
+);
+
+export const riskLimitsScopeTypeEnumPg = pgEnum("risk_limits_scope_type", [
+  "organization",
+  "venue",
+  "strategy",
+]);
+
+/** AI-TRADER: org-scoped risk limit configuration (DEE-239 / AT-E7). */
+export const traderRiskLimits = pgTable(
+  "trader_risk_limits",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    scopeType: riskLimitsScopeTypeEnumPg("scope_type").notNull().default("organization"),
+    scopeRef: text("scope_ref").notNull().default(""),
+    allowedSymbolsJson: text("allowed_symbols_json").notNull(),
+    maxNotional: text("max_notional").notNull(),
+    maxOrdersPerWindow: integer("max_orders_per_window").notNull(),
+    windowMs: integer("window_ms").notNull(),
+    collarBps: integer("collar_bps").notNull(),
+    maxPositionPerSymbol: text("max_position_per_symbol").notNull(),
+    maxDailyLoss: text("max_daily_loss").notNull(),
+    maxDrawdown: text("max_drawdown").notNull(),
+    maxOpenOrders: integer("max_open_orders").notNull(),
+    maxQuoteExposure: text("max_quote_exposure").notNull(),
+    configVersion: integer("config_version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_risk_limits_org_scope_unique").on(
+      t.organizationId,
+      t.scopeType,
+      t.scopeRef,
+    ),
+    index("trader_risk_limits_org_scope_type_idx").on(t.organizationId, t.scopeType),
+  ],
+);
+
+export const killSwitchScopeTypeEnumPg = pgEnum("kill_switch_scope_type", [
+  "platform",
+  "organization",
+  "venue",
+  "strategy",
+  "account",
+  "instrument",
+]);
+
+export const killSwitchTypeEnumPg = pgEnum("kill_switch_type", [
+  "EMERGENCY_STOP",
+  "CLOSE_ONLY",
+  "PAUSE",
+  "DATA_QUALITY",
+  "CONTROL_PLANE_LOSS",
+  "STALE_STATE",
+  "RECON_MISMATCH",
+  "ABNORMAL_SLIPPAGE",
+  "UNKNOWN_POSITION",
+]);
+
+export const killSwitchEnforcementModeEnumPg = pgEnum("kill_switch_enforcement_mode", [
+  "STOP_ACCOUNT",
+  "CLOSE_ONLY",
+  "REJECT",
+]);
+
+export const killSwitchStateEnumPg = pgEnum("kill_switch_state", [
+  "ACTIVE",
+  "CLEARING",
+  "INACTIVE",
+]);
+
+export const killSwitchOriginEnumPg = pgEnum("kill_switch_origin", ["manual", "automatic"]);
+
+/** AI-TRADER: kill switch state (DEE-206A / AT-E7). Single row per scope; history in audit. */
+export const traderKillSwitches = pgTable(
+  "trader_kill_switches",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    scopeType: killSwitchScopeTypeEnumPg("scope_type").notNull(),
+    scopeRef: text("scope_ref").notNull().default(""),
+    switchType: killSwitchTypeEnumPg("switch_type").notNull(),
+    enforcementMode: killSwitchEnforcementModeEnumPg("enforcement_mode").notNull(),
+    state: killSwitchStateEnumPg("state").notNull(),
+    origin: killSwitchOriginEnumPg("origin").notNull(),
+    reason: text("reason").notNull().default(""),
+    clearingStartedAt: timestamp("clearing_started_at", { withTimezone: true, mode: "date" }),
+    coolingOffMs: integer("cooling_off_ms"),
+    trippedAt: timestamp("tripped_at", { withTimezone: true, mode: "date" }),
+    clearedAt: timestamp("cleared_at", { withTimezone: true, mode: "date" }),
+    stateVersion: integer("state_version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_kill_switches_org_scope_state_idx").on(t.organizationId, t.scopeType, t.state),
+  ],
+);
+
+export const promotionGovernanceStateEnumPg = pgEnum("strategy_promotion_governance_state", [
+  "DRAFT",
+  "PENDING_CONFIRM",
+  "COOLING_OFF",
+  "EFFECTIVE",
+  "CANCELLED",
+  "REVOKED",
+]);
+
+export const strategyTargetDeploymentStateEnumPg = pgEnum("strategy_target_deployment_state", [
+  "LIVE_LIMITED",
+]);
+
+export const reportingPeriodStatusEnumPg = pgEnum("reporting_period_status", ["OPEN", "CLOSED"]);
+export const hwmEntryTypeEnumPg = pgEnum("hwm_entry_type", ["BOOTSTRAP", "RATCHET_UP", "ROLLBACK"]);
+export const invoiceStatusEnumPg = pgEnum("invoice_status", ["DRAFT", "ISSUED", "PAID"]);
+export const accountStatusEnumPg = pgEnum("account_status", ["ACTIVE", "SUSPENDED"]);
+export const accountStatusEventTypeEnumPg = pgEnum("account_status_event_type", ["REACTIVATED"]);
+export const settlementOutcomeEnumPg = pgEnum("settlement_outcome", ["APPLIED", "EXCEPTION"]);
+export const settlementReconciliationCaseStatusEnumPg = pgEnum(
+  "settlement_reconciliation_case_status",
+  ["OPEN", "ASSIGNED", "UNDER_REVIEW", "DECISION_PENDING", "RESOLVED", "CANCELLED", "ESCALATED"],
+);
+export const settlementApplicationSourceEnumPg = pgEnum("settlement_application_source", [
+  "AUTO",
+  "MANUAL",
+]);
+
+export const miSourceStatusEnumPg = pgEnum("mi_source_status", ["active", "deprecated"]);
+
+/** AI-TRADER MI: org-scoped market intelligence source registry (DEE-279 / LD-2a). */
+export const traderMiSource = pgTable(
+  "trader_mi_source",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    feedKind: text("feed_kind").notNull(),
+    symbol: text("symbol"),
+    description: text("description"),
+    status: miSourceStatusEnumPg("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_source_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_mi_source_org_status_idx").on(t.organizationId, t.status),
+  ],
+);
+
+/** AI-TRADER MI: append-only PIT trust history (DEE-279 / LD-2a). */
+export const traderMiSourceTrust = pgTable(
+  "trader_mi_source_trust",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sourceId: uuid("source_id").notNull(),
+    trustScore: text("trust_score").notNull(),
+    rationale: text("rationale").notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    revisionOf: uuid("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
+    revisionSeq: integer("revision_seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_source_trust_id_organization_unique").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.sourceId, t.organizationId],
+      foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("trader_mi_source_trust_org_source_seq_unique").on(
+      t.organizationId,
+      t.sourceId,
+      t.revisionSeq,
+    ),
+    index("trader_mi_source_trust_org_source_seq_idx").on(
+      t.organizationId,
+      t.sourceId,
+      t.revisionSeq,
+    ),
+    index("trader_mi_source_trust_org_source_event_time_idx").on(
+      t.organizationId,
+      t.sourceId,
+      t.eventTime,
+    ),
+  ],
+);
+
+export const miObservationKindEnumPg = pgEnum("mi_observation_kind", ["msv_envelope"]);
+
+/** AI-TRADER MI: append-only PIT observations (DEE-281 / LD-2b). */
+export const traderMiObservation = pgTable(
+  "trader_mi_observation",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sourceId: uuid("source_id").notNull(),
+    observationKind: miObservationKindEnumPg("observation_kind").notNull(),
+    observationKey: text("observation_key").notNull(),
+    subjectRef: text("subject_ref").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    observedBy: text("observed_by").notNull(),
+    revisionOf: uuid("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
+    revisionSeq: integer("revision_seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_observation_id_organization_unique").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.sourceId, t.organizationId],
+      foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("trader_mi_observation_org_key_seq_unique").on(
+      t.organizationId,
+      t.observationKey,
+      t.revisionSeq,
+    ),
+    index("trader_mi_observation_org_kind_subject_idx").on(
+      t.organizationId,
+      t.observationKind,
+      t.subjectRef,
+    ),
+    index("trader_mi_observation_org_key_seq_idx").on(
+      t.organizationId,
+      t.observationKey,
+      t.revisionSeq,
+    ),
+    index("trader_mi_observation_org_event_time_idx").on(t.organizationId, t.eventTime),
+  ],
+);
+
+export const miMeasurementKindEnumPg = pgEnum("mi_measurement_kind", ["feature_transform"]);
+
+/** AI-TRADER MI: append-only versioned transform-definition registry (DEE-282 / LD-3). */
+export const traderMiMeasurement = pgTable(
+  "trader_mi_measurement",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    measurementKind: miMeasurementKindEnumPg("measurement_kind").notNull(),
+    measurementKey: text("measurement_key").notNull(),
+    name: text("name").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    definitionJson: text("definition_json").notNull(),
+    definitionDigest: text("definition_digest").notNull(),
+    versionSeq: integer("version_seq").notNull(),
+    revisionOf: uuid("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
+    authoredBy: text("authored_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_measurement_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_measurement_org_key_seq_unique").on(
+      t.organizationId,
+      t.measurementKey,
+      t.versionSeq,
+    ),
+    index("trader_mi_measurement_org_kind_name_idx").on(
+      t.organizationId,
+      t.measurementKind,
+      t.name,
+    ),
+    index("trader_mi_measurement_org_key_seq_idx").on(
+      t.organizationId,
+      t.measurementKey,
+      t.versionSeq,
+    ),
+  ],
+);
+
+export const miPatternKindEnumPg = pgEnum("mi_pattern_kind", ["recurring_structure"]);
+export const miPatternLifecycleStateEnumPg = pgEnum("mi_pattern_lifecycle_state", [
+  "ACTIVE",
+  "ARCHIVED",
+]);
+
+/** AI-TRADER MI: append-only versioned recurring-structure registry (DEE-283 / LD-4). */
+export const traderMiPattern = pgTable(
+  "trader_mi_pattern",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    patternKind: miPatternKindEnumPg("pattern_kind").notNull(),
+    patternKey: text("pattern_key").notNull(),
+    name: text("name").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    definitionJson: text("definition_json").notNull(),
+    definitionDigest: text("definition_digest").notNull(),
+    structuralSignature: text("structural_signature").notNull(),
+    trialBudgetMax: integer("trial_budget_max").notNull(),
+    versionSeq: integer("version_seq").notNull(),
+    revisionOf: uuid("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
+    authoredBy: text("authored_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_pattern_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_pattern_org_key_seq_unique").on(
+      t.organizationId,
+      t.patternKey,
+      t.versionSeq,
+    ),
+    index("trader_mi_pattern_org_kind_name_idx").on(t.organizationId, t.patternKind, t.name),
+    index("trader_mi_pattern_org_key_seq_idx").on(t.organizationId, t.patternKey, t.versionSeq),
+    index("trader_mi_pattern_org_structural_sig_idx").on(t.organizationId, t.structuralSignature),
+  ],
+);
+
+/** AI-TRADER MI: append-only Pattern lifecycle (ACTIVE/ARCHIVED) ledger (DEE-283 / LD-4). */
+export const traderMiPatternLifecycle = pgTable(
+  "trader_mi_pattern_lifecycle",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    patternId: uuid("pattern_id").notNull(), // composite FK enforced in migration SQL
+    patternKey: text("pattern_key").notNull(),
+    lifecycleState: miPatternLifecycleStateEnumPg("lifecycle_state").notNull(),
+    rationale: text("rationale").notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_pattern_lifecycle_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_pattern_lifecycle_org_key_seq_unique").on(
+      t.organizationId,
+      t.patternKey,
+      t.seq,
+    ),
+    index("trader_mi_pattern_lifecycle_org_key_seq_idx").on(t.organizationId, t.patternKey, t.seq),
+  ],
+);
+
+export const miHypothesisKindEnumPg = pgEnum("mi_hypothesis_kind", ["market_claim"]);
+export const miHypothesisLifecycleStateEnumPg = pgEnum("mi_hypothesis_lifecycle_state", [
+  "PROPOSED",
+  "VALIDATING",
+  "VALIDATED",
+  "DECAYING",
+  "RETIRED",
+  "QUARANTINED",
+]);
+
+/** AI-TRADER MI: append-only versioned hypothesis registry (DEE-285 / LD-5a.1a). */
+export const traderMiHypothesis = pgTable(
+  "trader_mi_hypothesis",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hypothesisKind: miHypothesisKindEnumPg("hypothesis_kind").notNull(),
+    hypothesisKey: text("hypothesis_key").notNull(),
+    name: text("name").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    definitionJson: text("definition_json").notNull(),
+    definitionDigest: text("definition_digest").notNull(),
+    supersedesJson: text("supersedes_json"),
+    versionSeq: integer("version_seq").notNull(),
+    revisionOf: uuid("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
+    authoredBy: text("authored_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_hypothesis_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_hypothesis_org_key_seq_unique").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.versionSeq,
+    ),
+    index("trader_mi_hypothesis_org_kind_name_idx").on(t.organizationId, t.hypothesisKind, t.name),
+    index("trader_mi_hypothesis_org_key_seq_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.versionSeq,
+    ),
+  ],
+);
+
+/** AI-TRADER MI: append-only Hypothesis lifecycle ledger (DEE-285 / LD-5a.1a). */
+export const traderMiHypothesisLifecycle = pgTable(
+  "trader_mi_hypothesis_lifecycle",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hypothesisId: uuid("hypothesis_id").notNull(), // composite FK enforced in migration SQL
+    hypothesisKey: text("hypothesis_key").notNull(),
+    lifecycleState: miHypothesisLifecycleStateEnumPg("lifecycle_state").notNull(),
+    rationale: text("rationale").notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_hypothesis_lifecycle_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_hypothesis_lifecycle_org_key_seq_unique").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+    index("trader_mi_hypothesis_lifecycle_org_key_seq_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+  ],
+);
+
+export const miEvidenceDirectionEnumPg = pgEnum("mi_evidence_direction", [
+  "FOR",
+  "AGAINST",
+  "NEUTRAL",
+]);
+export const miEvidenceKindEnumPg = pgEnum("mi_evidence_kind", ["observed"]);
+
+/** AI-TRADER MI: append-only Evidence ledger (DEE-289 / LD-5a.2a). */
+export const traderMiEvidence = pgTable(
+  "trader_mi_evidence",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    evidenceKind: miEvidenceKindEnumPg("evidence_kind").notNull(),
+    direction: miEvidenceDirectionEnumPg("direction").notNull(),
+    hypothesisId: uuid("hypothesis_id").notNull(), // composite FK enforced in migration SQL
+    hypothesisKey: text("hypothesis_key").notNull(),
+    hypothesisDefinitionDigest: text("hypothesis_definition_digest").notNull(),
+    measurementRefsJson: text("measurement_refs_json").notNull(),
+    observationRefsJson: text("observation_refs_json").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    nullComparatorRef: text("null_comparator_ref"),
+    regimeContextRef: text("regime_context_ref"),
+    // Re-typed text -> uuid in migration 0031 to carry the composite FK to trader_mi_trial.
+    trialRegistrationRef: uuid("trial_registration_ref"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_evidence_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_evidence_org_key_seq_unique").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+    index("trader_mi_evidence_org_hypothesis_idx").on(t.organizationId, t.hypothesisId),
+    index("trader_mi_evidence_org_key_seq_idx").on(t.organizationId, t.hypothesisKey, t.seq),
+    index("trader_mi_evidence_org_key_event_time_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.eventTime,
+    ),
+    index("trader_mi_evidence_org_key_direction_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.direction,
+    ),
+  ],
+);
+
+/**
+ * AI-TRADER MI: append-only Trial Registration ledger (DEE-289 / LD-5a.2b).
+ *
+ * Immutable pre-registration of an evaluation attempt against a hypothesis version.
+ * Pin-only; integrity derived (no stored column); `research_program` inert free-text.
+ * `trader_mi_evidence.trial_registration_ref` composite FK to this table enforced in migration SQL.
+ */
+export const traderMiTrial = pgTable(
+  "trader_mi_trial",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hypothesisId: uuid("hypothesis_id").notNull(), // composite FK enforced in migration SQL
+    hypothesisKey: text("hypothesis_key").notNull(),
+    hypothesisDefinitionDigest: text("hypothesis_definition_digest").notNull(),
+    researchProgram: text("research_program"),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    registeredBy: text("registered_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_trial_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_trial_org_key_seq_unique").on(t.organizationId, t.hypothesisKey, t.seq),
+    index("trader_mi_trial_org_hypothesis_idx").on(t.organizationId, t.hypothesisId),
+    index("trader_mi_trial_org_key_seq_idx").on(t.organizationId, t.hypothesisKey, t.seq),
+    index("trader_mi_trial_org_key_event_time_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.eventTime,
+    ),
+  ],
+);
+
+export const miTrialIntegrityEventTypeEnumPg = pgEnum("mi_trial_integrity_event_type", [
+  "invalidated",
+  "reinstated",
+]);
+export const miTrialIntegrityReasonCodeEnumPg = pgEnum("mi_trial_integrity_reason_code", [
+  "look_ahead_contamination",
+  "pre_registration_breach",
+  "computation_defect",
+  "provenance_gap",
+]);
+
+/** AI-TRADER MI: append-only Confidence Judgment ledger (DEE-293 / LD-5a.3a). */
+export const traderMiConfidenceJudgment = pgTable(
+  "trader_mi_confidence_judgment",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hypothesisId: uuid("hypothesis_id").notNull(), // composite FK enforced in migration SQL
+    hypothesisKey: text("hypothesis_key").notNull(),
+    hypothesisDefinitionDigest: text("hypothesis_definition_digest").notNull(),
+    level: text("level"),
+    bandLow: text("band_low"),
+    bandHigh: text("band_high"),
+    confidenceScaleVersion: text("confidence_scale_version"),
+    judgmentKind: text("judgment_kind").notNull(),
+    reviewHorizonAt: timestamp("review_horizon_at", { withTimezone: true, mode: "date" }),
+    forCitationsJson: text("for_citations_json").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_confidence_judgment_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_confidence_judgment_org_key_seq_unique").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+    index("trader_mi_confidence_judgment_org_hypothesis_idx").on(t.organizationId, t.hypothesisId),
+    index("trader_mi_confidence_judgment_org_key_seq_idx").on(
+      t.organizationId,
+      t.hypothesisKey,
+      t.seq,
+    ),
+    index("trader_mi_confidence_judgment_org_hypothesis_ingest_idx").on(
+      t.organizationId,
+      t.hypothesisId,
+      t.ingestTime,
+    ),
+  ],
+);
+
+/** AI-TRADER MI: append-only Trial Integrity invalidation ledger (DEE-291 / LD-5a.2c). */
+export const traderMiTrialIntegrityEvent = pgTable(
+  "trader_mi_trial_integrity_event",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    trialId: uuid("trial_id").notNull(), // composite FK enforced in migration SQL
+    eventType: miTrialIntegrityEventTypeEnumPg("event_type").notNull(),
+    reasonCode: miTrialIntegrityReasonCodeEnumPg("reason_code"),
+    rationale: text("rationale").notNull(),
+    causeRef: text("cause_ref"),
+    schemaVersion: text("schema_version").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    recordedBy: text("recorded_by").notNull(),
+    seq: integer("seq").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_trial_integrity_event_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_mi_trial_integrity_event_org_trial_seq_unique").on(
+      t.organizationId,
+      t.trialId,
+      t.seq,
+    ),
+    index("trader_mi_trial_integrity_event_org_trial_seq_idx").on(
+      t.organizationId,
+      t.trialId,
+      t.seq,
+    ),
+  ],
+);
+
+/** AI-TRADER: strategy validation gate promotion record (DEE-272 / DEE-178 S1). */
+export const traderStrategyPromotionRecords = pgTable(
+  "trader_strategy_promotion_records",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    gitCommitSha: text("git_commit_sha").notNull(),
+    targetDeploymentState: strategyTargetDeploymentStateEnumPg("target_deployment_state").notNull(),
+    hypothesis: text("hypothesis").notNull(),
+    intendedRegime: text("intended_regime").notNull(),
+    costModelJson: jsonb("cost_model_json").notNull(),
+    failureModesJson: jsonb("failure_modes_json").notNull(),
+    reasonCodeDistributionJson: jsonb("reason_code_distribution_json").notNull(),
+    paperTradingEvidenceJson: jsonb("paper_trading_evidence_json").notNull(),
+    evidenceContentDigest: text("evidence_content_digest").notNull(),
+    confidenceAttestationJson: jsonb("confidence_attestation_json").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    state: promotionGovernanceStateEnumPg("state").notNull(),
+    actorId: text("actor_id"),
+    requestedAt: timestamp("requested_at", { withTimezone: true, mode: "date" }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true, mode: "date" }),
+    coolingOffEndsAt: timestamp("cooling_off_ends_at", { withTimezone: true, mode: "date" }),
+    effectiveAt: timestamp("effective_at", { withTimezone: true, mode: "date" }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true, mode: "date" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    supersededByRecordId: uuid("superseded_by_record_id"),
+    stateVersion: integer("state_version").notNull().default(1),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_strategy_promotion_org_strategy_state_idx").on(
+      t.organizationId,
+      t.strategyId,
+      t.state,
+    ),
+  ],
+);
+
+/** AI-TRADER: billing reporting period valued-input record (DEE-305 / AT-E11 S1). */
+export const traderReportingPeriods = pgTable(
+  "trader_reporting_periods",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    periodStart: timestamp("period_start", { withTimezone: true, mode: "date" }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true, mode: "date" }),
+    startingEquity: text("starting_equity").notNull(),
+    endingEquity: text("ending_equity"),
+    openPositionsSnapshotRef: text("open_positions_snapshot_ref").notNull().default(""),
+    realizedPnl: text("realized_pnl"),
+    unrealizedPnl: text("unrealized_pnl"),
+    netDeposits: text("net_deposits").notNull().default("0"),
+    netWithdrawals: text("net_withdrawals").notNull().default("0"),
+    valuationSource: text("valuation_source").notNull(),
+    startingSnapshotAt: timestamp("starting_snapshot_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endingSnapshotAt: timestamp("ending_snapshot_at", { withTimezone: true, mode: "date" }),
+    schemaVersion: text("schema_version").notNull(),
+    status: reportingPeriodStatusEnumPg("status").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_reporting_periods_org_account_start_idx").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.periodStart,
+    ),
+  ],
+);
+
+/** AI-TRADER: per-account high-water mark append-only ledger (DEE-307 / AT-E11 S3). */
+export const traderHwmLedger = pgTable(
+  "trader_hwm_ledger",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    entryType: hwmEntryTypeEnumPg("entry_type").notNull(),
+    highWaterMark: text("high_water_mark").notNull(),
+    previousHighWaterMark: text("previous_high_water_mark"),
+    sourcePeriodId: text("source_period_id"),
+    sourceInvoiceId: text("source_invoice_id"),
+    valuationSource: text("valuation_source").notNull(),
+    effectiveAt: timestamp("effective_at", { withTimezone: true, mode: "date" }).notNull(),
+    reason: text("reason"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_hwm_ledger_org_account_effective_idx").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.effectiveAt,
+    ),
+  ],
+);
+
+/** AI-TRADER: immutable draft invoice financial commitment record (DEE-310 / AT-E11 S5). */
+export const traderInvoices = pgTable(
+  "trader_invoices",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    reportingPeriodId: text("reporting_period_id").notNull(),
+    feeArtifactDigest: text("fee_artifact_digest").notNull(),
+    status: invoiceStatusEnumPg("status").notNull(),
+    currency: text("currency").notNull(),
+    periodRealizedStrategyProfit: text("period_realized_strategy_profit").notNull(),
+    cumulativeRealizedStrategyProfit: text("cumulative_realized_strategy_profit").notNull(),
+    previousHighWaterMark: text("previous_high_water_mark").notNull(),
+    newProfitAboveHwm: text("new_profit_above_hwm").notNull(),
+    feeRate: text("fee_rate").notNull(),
+    performanceFee: text("performance_fee").notNull(),
+    proposedNewHighWaterMark: text("proposed_new_high_water_mark").notNull(),
+    billable: boolean("billable").notNull(),
+    unrealizedPnl: text("unrealized_pnl"),
+    realizedFillFinality: boolean("realized_fill_finality").notNull(),
+    startingEquity: text("starting_equity").notNull(),
+    endingEquity: text("ending_equity").notNull(),
+    netDeposits: text("net_deposits").notNull(),
+    netWithdrawals: text("net_withdrawals").notNull(),
+    periodStart: timestamp("period_start", { withTimezone: true, mode: "date" }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true, mode: "date" }).notNull(),
+    valuationSource: text("valuation_source").notNull(),
+    feeComputedAt: timestamp("fee_computed_at", { withTimezone: true, mode: "date" }).notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    issuanceApprovedAt: timestamp("issuance_approved_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    issuanceApprovedBy: text("issuance_approved_by"),
+    coolingOffUntil: timestamp("cooling_off_until", { withTimezone: true, mode: "date" }),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }),
+    issuedBy: text("issued_by"),
+    settledAmount: text("settled_amount").notNull().default("0"),
+    paidAt: timestamp("paid_at", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_invoices_org_account_created_idx").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.createdAt,
+    ),
+    uniqueIndex("trader_invoices_org_account_period_unique").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.reportingPeriodId,
+    ),
+  ],
+);
+
+/** AI-TRADER: settlement exactly-once anchor (one row per CONFIRMED payment; AT-E12 S3-B). */
+export const traderSettlements = pgTable(
+  "trader_settlements",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    paymentId: uuid("payment_id")
+      .notNull()
+      .references(() => payments.paymentId, { onDelete: "cascade" }),
+    settlementNetwork: text("settlement_network"),
+    settlementTxHash: text("settlement_tx_hash"),
+    transferIndex: integer("transfer_index"),
+    blockHeight: text("block_height"),
+    asset: text("asset"),
+    onChainAmount: text("on_chain_amount"),
+    valuedAmount: text("valued_amount"),
+    valuationCurrency: text("valuation_currency"),
+    valuationBasis: text("valuation_basis"),
+    outcome: settlementOutcomeEnumPg("outcome").notNull(),
+    exceptionReason: text("exception_reason"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_settlements_payment_id_unique").on(t.paymentId),
+    index("trader_settlements_org_account_idx").on(t.organizationId, t.exchangeAccountId),
+    index("trader_settlements_outcome_idx").on(t.outcome),
+  ],
+);
+
+/** AI-TRADER: settlement allocation to invoice (AT-E12 S3-B). */
+export const traderSettlementApplications = pgTable(
+  "trader_settlement_applications",
+  {
+    id: uuid("id").primaryKey(),
+    settlementId: uuid("settlement_id")
+      .notNull()
+      .references(() => traderSettlements.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => traderInvoices.id, { onDelete: "cascade" }),
+    appliedAmount: text("applied_amount").notNull(),
+    invoiceStatusAfter: invoiceStatusEnumPg("invoice_status_after").notNull(),
+    applicationSource: settlementApplicationSourceEnumPg("application_source")
+      .notNull()
+      .default("AUTO"),
+    reconciliationCaseId: uuid("reconciliation_case_id"),
+    decisionId: uuid("decision_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_settlement_applications_settlement_id_unique").on(t.settlementId),
+    index("trader_settlement_applications_settlement_idx").on(t.settlementId),
+    index("trader_settlement_applications_invoice_idx").on(t.invoiceId),
+  ],
+);
+
+/** AI-TRADER: exchange account status projection (AT-E12 S3-B). */
+export const traderAccountStatus = pgTable(
+  "trader_account_status",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    status: accountStatusEnumPg("status").notNull(),
+    reason: text("reason"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.exchangeAccountId] })],
+);
+
+/** AI-TRADER: append-only account status event ledger (AT-E12 S3-B). */
+export const traderAccountStatusEvents = pgTable(
+  "trader_account_status_events",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    seq: integer("seq").notNull(),
+    eventType: accountStatusEventTypeEnumPg("event_type").notNull(),
+    reason: text("reason"),
+    sourcePaymentId: uuid("source_payment_id"),
+    sourceInvoiceId: uuid("source_invoice_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_account_status_events_org_account_seq_unique").on(
+      t.organizationId,
+      t.exchangeAccountId,
+      t.seq,
+    ),
+  ],
+);
+
+/** AI-TRADER: settlement exception reconciliation case projection (AT-E12 S3-C-A). */
+export const traderSettlementReconciliationCases = pgTable(
+  "trader_settlement_reconciliation_cases",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    settlementId: uuid("settlement_id")
+      .notNull()
+      .references(() => traderSettlements.id, { onDelete: "cascade" }),
+    paymentId: uuid("payment_id")
+      .notNull()
+      .references(() => payments.paymentId, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    exceptionReason: text("exception_reason"),
+    status: settlementReconciliationCaseStatusEnumPg("status").notNull().default("OPEN"),
+    priority: integer("priority").notNull(),
+    resolutionType: text("resolution_type"),
+    currentDecisionId: uuid("current_decision_id"),
+    assignedTo: uuid("assigned_to"),
+    claimExpiresAt: timestamp("claim_expires_at", { withTimezone: true, mode: "date" }),
+    coolingOffUntil: timestamp("cooling_off_until", { withTimezone: true, mode: "date" }),
+    openedAt: timestamp("opened_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "date" }),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+  },
+  (t) => [
+    uniqueIndex("trader_settlement_reconciliation_cases_settlement_id_unique").on(t.settlementId),
+    index("trader_settlement_reconciliation_cases_org_status_priority_idx").on(
+      t.organizationId,
+      t.status,
+      t.priority,
+      t.openedAt,
+    ),
+  ],
+);
+
+/** AI-TRADER: append-only settlement reconciliation event ledger (AT-E12 S3-C-A). */
+export const traderSettlementReconciliationEvents = pgTable(
+  "trader_settlement_reconciliation_events",
+  {
+    id: uuid("id").primaryKey(),
+    caseId: uuid("case_id")
+      .notNull()
+      .references(() => traderSettlementReconciliationCases.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: text("event_type").notNull(),
+    actorType: auditActorTypeEnumPg("actor_type").notNull(),
+    actorId: uuid("actor_id"),
+    payload: jsonb("payload").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_settlement_reconciliation_events_case_seq_unique").on(t.caseId, t.seq),
+  ],
+);
+
+export const orderSideEnumPg = pgEnum("order_side", ["buy", "sell"]);
+export const orderTypeEnumPg = pgEnum("order_type", ["limit", "market"]);
+export const orderStateEnumPg = pgEnum("order_state", [
+  "CREATED",
+  "RISK_APPROVED",
+  "SENT_TO_EXCHANGE",
+  "ACCEPTED",
+  "PARTIALLY_FILLED",
+  "FILLED",
+  "CANCEL_REQUESTED",
+  "CANCELLED",
+  "REJECTED",
+  "EXPIRED",
+  "FAILED",
+  "RECONCILIATION_REQUIRED",
+]);
+export const orderExecutionModeEnumPg = pgEnum("order_execution_mode", ["mock", "paper", "live"]);
+
+/** AI-TRADER: durable order header (DEE-247 / AT-E8 S1). */
+export const traderOrders = pgTable(
+  "trader_orders",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: uuid("credential_id").references(() => exchangeCredentials.id, {
+      onDelete: "set null",
+    }),
+    venue: text("venue").notNull(),
+    executionMode: orderExecutionModeEnumPg("execution_mode").notNull(),
+    symbol: text("symbol").notNull(),
+    side: orderSideEnumPg("side").notNull(),
+    type: orderTypeEnumPg("type").notNull(),
+    price: text("price"),
+    quantity: text("quantity").notNull(),
+    filledQuantity: text("filled_quantity").notNull().default("0"),
+    avgFillPrice: text("avg_fill_price"),
+    state: orderStateEnumPg("state").notNull(),
+    stateVersion: integer("state_version").notNull().default(1),
+    exchangeOrderId: text("exchange_order_id"),
+    clientOrderId: text("client_order_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    riskDecisionId: text("risk_decision_id").notNull(),
+    strategySignalId: text("strategy_signal_id"),
+    allocationDecisionId: text("allocation_decision_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_orders_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_orders_org_client_order_id_unique").on(t.organizationId, t.clientOrderId),
+    uniqueIndex("trader_orders_org_idempotency_key_unique").on(t.organizationId, t.idempotencyKey),
+    index("trader_orders_org_state_idx").on(t.organizationId, t.state),
+    index("trader_orders_org_execution_mode_state_idx").on(
+      t.organizationId,
+      t.executionMode,
+      t.state,
+    ),
+    index("trader_orders_org_venue_symbol_idx").on(t.organizationId, t.venue, t.symbol),
+    index("trader_orders_exchange_order_id_idx").on(t.exchangeOrderId),
+  ],
+);
+
+/** AI-TRADER: append-only order lifecycle events (DEE-247 / AT-E8 S1). */
+export const traderOrderEvents = pgTable(
+  "trader_order_events",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id").notNull(),
+    seq: integer("seq").notNull(),
+    fromState: orderStateEnumPg("from_state"),
+    toState: orderStateEnumPg("to_state").notNull(),
+    eventType: text("event_type").notNull(),
+    payload: text("payload"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true, mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.orderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("trader_order_events_order_seq_unique").on(t.orderId, t.seq),
+    index("trader_order_events_org_order_seq_idx").on(t.organizationId, t.orderId, t.seq),
+  ],
+);
+
+/** AI-TRADER: per-fill rows for partial fills and reconciliation (DEE-247 / AT-E8 S1). */
+export const traderFills = pgTable(
+  "trader_fills",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id").notNull(),
+    exchangeTradeId: text("exchange_trade_id").notNull(),
+    price: text("price").notNull(),
+    quantity: text("quantity").notNull(),
+    fee: text("fee").notNull().default("0"),
+    feeAsset: text("fee_asset").notNull().default(""),
+    executedAt: timestamp("executed_at", { withTimezone: true, mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.orderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("trader_fills_order_exchange_trade_id_unique").on(t.orderId, t.exchangeTradeId),
+    index("trader_fills_org_order_idx").on(t.organizationId, t.orderId),
   ],
 );
 
@@ -374,6 +1720,19 @@ export const verificationFeedback = pgTable("verification_feedback", {
     .references(() => twinProfiles.id, { onDelete: "cascade" }),
   payloadJson: jsonb("payload_json").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
+
+/** WAIA Core: payment watcher cursor (AT-E12 S3-A / DEE-321). Network-scoped, mutable. */
+export const paymentWatcherCheckpoints = pgTable("payment_watcher_checkpoints", {
+  network: text("network").primaryKey(),
+  lastScannedBlock: text("last_scanned_block").notNull(),
+  lastScannedAt: timestamp("last_scanned_at", { withTimezone: true, mode: "date" }).notNull(),
+  leaseUntil: timestamp("lease_until", { withTimezone: true, mode: "date" }),
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true, mode: "date" }),
+  cycleCount: integer("cycle_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
 
 /**

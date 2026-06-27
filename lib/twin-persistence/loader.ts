@@ -24,6 +24,7 @@ import {
 import { and, desc, eq, sql } from "drizzle-orm";
 import { type WaiaDb } from "@/db/types";
 import { runWaiaSqliteLegacyTransaction } from "@/db/waia-transaction";
+import { getProfileForUserSqlite } from "@/lib/waia-core/profiles/sqlite";
 import { ensureUserTwinSeed } from "./user-twin-seed";
 
 export type { WaiaDb, WaiaSqliteDb } from "@/db/types";
@@ -415,10 +416,14 @@ export async function loadDashboardReadinessPayloadFromDb(
     hasMeaningfulExchange: userTurnCount > 0,
   };
 
+  const profile = getProfileForUserSqlite(db, userId);
+  const displayName = profile?.displayName ?? row.identityLabel;
+
   return {
     readinessInput,
     twinSignals,
     identityLabel: row.identityLabel,
+    displayName,
     hintsByIndicator: NULL_HINTS_BY_INDICATOR,
   };
 }

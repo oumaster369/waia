@@ -64,6 +64,181 @@
       "when": 1778200000000,
       "tag": "0008_trader_org_scaffolding",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1778300000000,
+      "tag": "0009_exchange_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1778400000000,
+      "tag": "0010_trader_balance_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1778500000000,
+      "tag": "0011_trader_risk_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1778600000000,
+      "tag": "0012_trader_kill_switches",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1778700000000,
+      "tag": "0013_trader_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1778800000000,
+      "tag": "0014_trader_strategy_promotion_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1778900000000,
+      "tag": "0015_trader_mi_source_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1779000000000,
+      "tag": "0016_trader_mi_observation",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1779100000000,
+      "tag": "0017_trader_mi_measurement",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1779200000000,
+      "tag": "0018_trader_mi_pattern",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1779300000000,
+      "tag": "0019_trader_mi_hypothesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1779400000000,
+      "tag": "0020_trader_mi_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1779500000000,
+      "tag": "0021_trader_mi_trial",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1779700000000,
+      "tag": "0022_trader_mi_trial_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1779800000000,
+      "tag": "0023_trader_mi_confidence_judgment",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1779900000000,
+      "tag": "0024_trader_reporting_periods",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1780000000000,
+      "tag": "0025_trader_hwm_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1780000000003,
+      "tag": "0026_trader_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1780000000006,
+      "tag": "0027_trader_invoice_issuance",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1780000000008,
+      "tag": "0028_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1780000000010,
+      "tag": "0029_payment_address_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1780000000012,
+      "tag": "0030_payment_watcher_checkpoints",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1780000000016,
+      "tag": "0031_trader_settlement",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1780000000017,
+      "tag": "0032_trader_settlement_reconciliation",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1780000000018,
+      "tag": "0033_trader_reconciliation_workflow",
+      "breakpoints": true
     }
   ]
 }

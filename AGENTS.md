@@ -31,7 +31,7 @@ Module/platform architecture (the "how it's built" canon, distinct from governan
 | WAIA Core Architecture (shared platform — identity, tenancy, entitlements, payments, audit; wins on conflict) | [`docs/waia-core/WAIA-CORE-ARCHITECTURE.md`](docs/waia-core/WAIA-CORE-ARCHITECTURE.md) |
 | AI-TRADER corpus (index → vision, master spec, scope, roadmap, program, security, billing, integration, journey) | [`docs/ai-trader/README.md`](docs/ai-trader/README.md) |
 | AI-TRADER Master Spec v2 (governing technical spec) | [`docs/ai-trader/AI-TRADER-MASTER-SPEC-v2.md`](docs/ai-trader/AI-TRADER-MASTER-SPEC-v2.md) |
-| AI-TRADER Implementation Program v1.1 (execution blueprint → Linear) | [`docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md`](docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md) |
+| AI-TRADER Implementation Program v1.2 (execution blueprint → Linear) | [`docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md`](docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md) |
 | ADR corpus (AI-TRADER decisions = ADR-0005 … ADR-0011) | [`docs/adr/README.md`](docs/adr/README.md) |
 
 ---
@@ -76,7 +76,8 @@ AI-Twin builds a structured digital personality via dialogue, diary, and behavio
 - Branch: `dee-<NN>-<slug>` · Commit: `DEE-NN type(scope): subject`
 - Reference `DEE-NN` in branch, commits, PR title/body.
 - Merge: human only; agents **never** `gh pr merge`.
-- Details: [`BRANCHING-STRATEGY.md`](docs/waia-governance/BRANCHING-STRATEGY.md), [`PR-PROTOCOL.md`](docs/waia-governance/PR-PROTOCOL.md)
+- **Merge method by class:** feature/fix/governance → `dev` = **squash**; release promotion (`dev→main`) and back-sync (`main→dev`) = **Create a merge commit** (never squash — squash drops the second parent and drifts ancestry). After every release promotion, immediately open a `dee-<NN>-release-back-sync-*` PR.
+- Details: [`BRANCHING-STRATEGY.md`](docs/waia-governance/BRANCHING-STRATEGY.md), [`PR-PROTOCOL.md`](docs/waia-governance/PR-PROTOCOL.md), [`POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md)
 
 ---
 
@@ -95,7 +96,7 @@ AI-Twin builds a structured digital personality via dialogue, diary, and behavio
 | Diagnose deploy | `/diagnose` | Agent | Sonnet |
 | Parallel fan-out | `/parallel-implement` | Agent | Sonnet |
 
-**Default completion:** green `/test-and-fix` → PR readiness per [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md) → stop. Humans review/merge.
+**Default completion:** green `/test-and-fix` → PR readiness per [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md) → close with the **agent completion protocol** report ([`POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md): Linear, branch, PR URL, CI, governance, exact human merge instruction, post-merge verification, whether promotion/back-sync is now due, next task) → stop. Humans review/merge; agents wait for explicit confirmation before the next task.
 
 **Auto-advance:** when all preconditions in [`AGENT-AUTO-ADVANCE.md`](docs/waia-governance/AGENT-AUTO-ADVANCE.md) hold, commit → push → Linear `In Review` → PR package without waiting.
 
@@ -126,3 +127,5 @@ pnpm build
 ```
 
 Plus `pnpm test:e2e` when UI/user-visible behavior changes.
+
+Before PR readiness, run PR governance preflight on the rendered body: `./scripts/linear/preflight-pr-governance.sh` (see [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md)). Regression tests: `pnpm validate:pr-governance`.
