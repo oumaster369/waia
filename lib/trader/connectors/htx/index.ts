@@ -6,6 +6,11 @@ export {
   type HtxFetchFn,
 } from "@/lib/trader/connectors/htx/client";
 export {
+  DEFAULT_HTX_TRANSPORT_POLICY,
+  type HtxTransportPolicy,
+} from "@/lib/trader/connectors/htx/transport-policy";
+export { HtxTransport } from "@/lib/trader/connectors/htx/transport";
+export {
   HtxExchangeConnector,
   type HtxExchangeConnectorConfig,
 } from "@/lib/trader/connectors/htx/htx-exchange-connector";
