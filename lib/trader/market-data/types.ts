@@ -1,7 +1,7 @@
 import type { Bar, Quote, InstrumentId } from "@/lib/trader/intelligence/types";
 import type { HtxFetchFn } from "@/lib/trader/connectors/htx/client";
 
-export type BarReplayMode = "full" | "expand";
+export type BarReplayMode = "full" | "expand" | "wrap-expand" | "scenario-sequence";
 
 export type MarketSnapshot = {
   bars: readonly Bar[];
@@ -9,6 +9,8 @@ export type MarketSnapshot = {
   evaluatedAt: string;
   cycleIndex: number;
   cycleId: string;
+  /** When set, paper cycle dispatches only these registry strategy IDs (deterministic scenario replay). */
+  activeStrategyIds?: readonly string[];
 };
 
 export type BarReplayNextResult = { done: false; snapshot: MarketSnapshot } | { done: true };

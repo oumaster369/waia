@@ -64,9 +64,12 @@ function cloneTrade(trade: Trade): Trade {
   return { ...trade };
 }
 
-function nowIso(): string {
-  return new Date().toISOString();
-}
+export type MockExchangeConnectorOptions = {
+  /** When set, trade/order timestamps use this clock (deterministic replay). */
+  nowMs?: () => number;
+  /** When true, starts with no seed positions (paper replay without venue inventory). */
+  emptyPositions?: boolean;
+};
 
 function assertPositiveQuantity(quantity: string): void {
   const parsed = Number(quantity);
@@ -87,13 +90,23 @@ export class MockExchangeConnector implements ExchangeConnector {
   readonly venueId = "mock" as const;
   readonly marketType = "spot" as const;
 
+  private readonly clock: () => number;
   private validated = false;
   private balances: Balance[] = SEED_BALANCES.map(cloneBalance);
-  private positions: Position[] = SEED_POSITIONS.map((p) => ({ ...p }));
+  private positions: Position[];
   private orders = new Map<string, Order>();
   private trades: Trade[] = [];
   private nextOrderSeq = 1;
   private nextTradeSeq = 1;
+
+  constructor(options: MockExchangeConnectorOptions = {}) {
+    this.clock = options.nowMs ?? Date.now;
+    this.positions = options.emptyPositions ? [] : SEED_POSITIONS.map((p) => ({ ...p }));
+  }
+
+  private timestampIso(): string {
+    return new Date(this.clock()).toISOString();
+  }
 
   async validateCredentials(input: ConnectorCredentialInput): Promise<CredentialValidationResult> {
     const apiKey = input.apiKey.trim();
@@ -165,7 +178,7 @@ export class MockExchangeConnector implements ExchangeConnector {
     }
 
     const orderId = `mock-order-${this.nextOrderSeq++}`;
-    const timestamp = nowIso();
+    const timestamp = this.timestampIso();
     const isMarket = input.type === "market";
     const fillPrice = isMarket ? resolveMarketPrice(input.symbol) : input.price!;
 
@@ -203,7 +216,7 @@ export class MockExchangeConnector implements ExchangeConnector {
     }
 
     order.status = "canceled";
-    order.updatedAt = nowIso();
+    order.updatedAt = this.timestampIso();
     this.orders.set(orderId, order);
     return cloneOrder(order);
   }
@@ -228,9 +241,9 @@ export class MockExchangeConnector implements ExchangeConnector {
         lastPrice: resolveMarketPrice(symbol),
         bid: resolveMarketPrice(symbol),
         ask: resolveMarketPrice(symbol),
-        timestamp: nowIso(),
+        timestamp: this.timestampIso(),
       };
-      yield { ...tick, timestamp: nowIso() };
+      yield { ...tick, timestamp: this.timestampIso() };
     }
   }
 
@@ -277,7 +290,7 @@ export class MockExchangeConnector implements ExchangeConnector {
       quantity,
       fee: "0.00",
       feeAsset: "USDT",
-      executedAt: nowIso(),
+      executedAt: this.timestampIso(),
     };
     this.trades.push(trade);
   }

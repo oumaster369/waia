@@ -105,7 +105,13 @@ export async function runPaperCycleOnce(
     telemetrySink: input.telemetrySink,
   });
 
-  const actionableSignals = evaluation.signals.filter((signal) => signal.outcome === "SIGNAL");
+  const actionableSignals = evaluation.signals.filter(
+    (signal) =>
+      signal.outcome === "SIGNAL" &&
+      (snapshot.activeStrategyIds === undefined ||
+        snapshot.activeStrategyIds.length === 0 ||
+        snapshot.activeStrategyIds.includes(signal.strategyId)),
+  );
 
   if (actionableSignals.length === 0) {
     return {

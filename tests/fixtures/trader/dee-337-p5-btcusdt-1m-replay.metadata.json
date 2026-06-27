@@ -1,0 +1,32 @@
+{
+  "run_id": "DEE-337-p5-two-strategy",
+  "linear_issue": "DEE-337",
+  "dataset_kind": "pinned_fixture_replay",
+  "source": "tests/fixtures/trader/btcusdt-1m-{mean-reversion,mean-reversion-exit,liquidity-sweep-entry,liquidity-sweep-exit}.json",
+  "symbol": "BTC/USDT",
+  "timeframe": "1m",
+  "bar_count": 100,
+  "file_path": "tests/fixtures/trader/dee-337-p5-btcusdt-1m-replay.json",
+  "sha256": "814981bc3055d8fd52d1277d60a0b443de7644416aceba8cbe99819c70242061",
+  "t_start_utc": "2026-01-01T00:00:00.000Z",
+  "t_end_utc": "2026-01-01T01:40:00.000Z",
+  "replay_mode": "scenario-sequence",
+  "scenario_order": [
+    "mean_reversion_v0 entry",
+    "mean_reversion_v0 exit",
+    "liquidity_sweep_reversal_v0 entry",
+    "liquidity_sweep_reversal_v0 exit"
+  ],
+  "scenario_fixture_paths": [
+    "tests/fixtures/trader/btcusdt-1m-mean-reversion.json",
+    "tests/fixtures/trader/btcusdt-1m-mean-reversion-exit.json",
+    "tests/fixtures/trader/btcusdt-1m-liquidity-sweep-entry.json",
+    "tests/fixtures/trader/btcusdt-1m-liquidity-sweep-exit.json"
+  ],
+  "scenario_strategy_ids": [
+    "mean_reversion_v0",
+    "mean_reversion_v0",
+    "liquidity_sweep_reversal_v0",
+    "liquidity_sweep_reversal_v0"
+  ]
+}
