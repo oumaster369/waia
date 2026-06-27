@@ -1,6 +1,7 @@
 import { loadPaperFillEvents, type PaperPnLFillEvent } from "@/lib/trader/paper/derive-paper-pnl";
 import { derivePaperPnLPeriod } from "@/lib/trader/paper/derive-paper-pnl-period";
 import { derivePaperStrategyEvaluations } from "@/lib/trader/paper/derive-paper-strategy-eval";
+import { orderMatchesStrategyEvidenceScope } from "@/lib/trader/paper/strategy-evidence-scope";
 import { PaperEvaluationExportError } from "@/lib/trader/paper/paper-evaluation-export.errors";
 import {
   PAPER_EVALUATION_EXPORT_SCHEMA_VERSION,
@@ -30,7 +31,7 @@ function strategyHasInWindowFills(
   const endMs = window.end.getTime();
 
   return fillEvents.some((event) => {
-    if (event.order.strategySignalId !== strategySignalId) {
+    if (!orderMatchesStrategyEvidenceScope(event.order, strategySignalId)) {
       return false;
     }
     const executedMs = event.fill.executedAt.getTime();

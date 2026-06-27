@@ -1,0 +1,15 @@
+{
+  "run_id": "DEE-337-p5-two-strategy",
+  "linear_issue": "DEE-337",
+  "git_sha": "77f86c0584408c24f46195c26c469b304021c085",
+  "organization_id": "e1f835cc-7313-48a3-ab88-fa2302455cd2",
+  "account_key": "acct-paper-loop",
+  "expected_strategy_ids": ["liquidity_sweep_reversal_v0", "mean_reversion_v0"],
+  "market_data_mode": "fixture-replay",
+  "replay_mode": "scenario-sequence",
+  "fixture_path": "tests/fixtures/trader/dee-337-p5-btcusdt-1m-replay.json",
+  "dataset_metadata_path": "replay-runs/DEE-337-p5-two-strategy/replay-dataset-metadata.json",
+  "t_start_utc": "2026-01-01T00:00:00.000Z",
+  "t_end_utc": "2026-01-03T00:00:00.000Z",
+  "status": "stopped"
+}

@@ -9,6 +9,7 @@ import {
   walkFillsForPnL,
   type PaperPnLFillEvent,
 } from "@/lib/trader/paper/derive-paper-pnl";
+import { orderMatchesStrategyEvidenceScope } from "@/lib/trader/paper/strategy-evidence-scope";
 import { PaperPnLScopeError, PaperPnLWindowError } from "@/lib/trader/paper/paper-pnl.errors";
 import type { PaperPnLMarkPrices } from "@/lib/trader/paper/paper-pnl.types";
 import type { PaperPnLWindow } from "@/lib/trader/paper/paper-pnl-period.types";
@@ -58,9 +59,11 @@ function assertValidWindow(window: PaperPnLWindow): void {
 
 function filterFillEventsByStrategy(
   fillEvents: readonly PaperPnLFillEvent[],
-  strategySignalId: string,
+  registryStrategyId: string,
 ): PaperPnLFillEvent[] {
-  return fillEvents.filter((event) => event.order.strategySignalId === strategySignalId);
+  return fillEvents.filter((event) =>
+    orderMatchesStrategyEvidenceScope(event.order, registryStrategyId),
+  );
 }
 
 function partitionFillEventsByWindow(

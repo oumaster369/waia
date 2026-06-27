@@ -1,0 +1,31 @@
+
+> waia-app@0.1.0 trader:paper:soak:analyze /Users/legco/Projects/waia
+> WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/analyze-paper-soak-log.ts -- --log=/Users/legco/Projects/waia/replay-runs/DEE-337-p5-two-strategy/paper-loop-replay.log --min-hours=48 --bar-interval-ms=60000
+
+{
+  "runbook": "docs/ops/DEE-337-P5-TWO-STRATEGY-PAPER-SOAK-RUNBOOK.md",
+  "logPath": "/Users/legco/Projects/waia/replay-runs/DEE-337-p5-two-strategy/paper-loop-replay.log",
+  "totalLines": 26200,
+  "parsedJsonLines": 26188,
+  "paperLoopCycleCompleteCount": 3892,
+  "paperLoopCriticalCount": 0,
+  "paperLoopCriticalCycleIds": [],
+  "paperLoopWorkerErrorCount": 0,
+  "distinctStrategyIdsObserved": [
+    "liquidity_sweep_reversal_v0",
+    "mean_reversion_v0"
+  ],
+  "strategyIdCycleHits": {
+    "liquidity_sweep_reversal_v0": 86,
+    "mean_reversion_v0": 3208
+  },
+  "rollupCount": 0,
+  "estimatedDurationHours": 64.86666666666666,
+  "minCyclesRequired": 2880,
+  "meetsCycleDurationThreshold": true,
+  "meetsBothStrategiesObserved": true,
+  "meetsCriticalZero": true,
+  "logEvidenceReadyForClosure": true,
+  "blockingReasons": []
+}
+[trader:paper:soak:analyze] PASS — log evidence gates satisfied

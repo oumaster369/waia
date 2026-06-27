@@ -64,7 +64,12 @@ export class FixtureBarReplaySource implements BarReplaySource {
     }
 
     if (this.expandExhausted) {
-      return { done: true };
+      if (this.mode === "wrap-expand") {
+        this.expandBarCount = EXPAND_MIN_BARS;
+        this.expandExhausted = false;
+      } else {
+        return { done: true };
+      }
     }
 
     const windowBars = this.fixture.bars.slice(0, this.expandBarCount);

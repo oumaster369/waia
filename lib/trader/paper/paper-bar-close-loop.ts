@@ -36,6 +36,8 @@ export type PaperBarCloseLoopConfig = {
   barIntervalMs?: number;
   maxCycles?: number;
   nowMs?: () => number;
+  /** When set, advances by `barIntervalMs` after each completed cycle (deterministic replay). */
+  syntheticNowMs?: { current: number };
   sleep?: (ms: number) => Promise<void>;
   abortSignal?: AbortSignal;
   newId?: () => string;
@@ -81,7 +83,10 @@ export async function runPaperBarCloseLoop(
   config: PaperBarCloseLoopConfig,
 ): Promise<PaperBarCloseLoopResult> {
   const barIntervalMs = config.barIntervalMs ?? DEFAULT_BAR_INTERVAL_MS;
-  const nowMs = config.nowMs ?? Date.now;
+  const nowMs =
+    config.syntheticNowMs !== undefined
+      ? () => config.syntheticNowMs!.current
+      : (config.nowMs ?? Date.now);
   const sleep = config.sleep ?? defaultSleep;
   const telemetrySink = config.telemetrySink ?? defaultTelemetrySink;
   const newId = config.newId ?? (() => crypto.randomUUID());
@@ -176,6 +181,10 @@ export async function runPaperBarCloseLoop(
     };
 
     emitPaperBarCloseCycleComplete(cycleCompletePayloadInput, telemetrySink);
+
+    if (config.syntheticNowMs !== undefined) {
+      config.syntheticNowMs.current += barIntervalMs;
+    }
 
     if (config.rollupEveryCycles !== undefined) {
       const cyclePayload = buildPaperBarCloseCycleCompletePayload(cycleCompletePayloadInput);
