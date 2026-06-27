@@ -294,7 +294,7 @@ Program A runs under live-migration discipline (migration planning, rollback, AI
 - **AT-E8 Execution Core & Reconciliation** — Order state machine, idempotency, reconciliation vs mock. Deps: AT-E7. Complexity: L. Risk: **Very High** — duplication/mismatch.
   - **Doctrine note (Reality vs Risk-L6 separation):** the "Reconciliation" feature group spans two doctrine-separated concerns that **never merge** ([LD-9](AI-TRADER-REALITY-DOCTRINE.md) §8): **reconciliation-as-construction** ([LD-9 Reality](AI-TRADER-REALITY-DOCTRINE.md) — dedup + fold + record + mark → canonical Actual State; Reality-owned markers `source_contradiction` / `unattributed`; fail-uncertain) and **reconciliation-as-enforcement** ([LD-8 Risk L6](AI-TRADER-RISK-DOCTRINE.md) §8 — Expected-vs-Actual comparison; markers `orphan` / `divergence` / `reconciliation-failure`; fail-closed → kill-switch). The "mismatch → risk-event / kill-switch" path is Risk-L6 enforcement (owned by the AT-E7 risk surface); fill/position reconciliation and startup state rebuild are Reality truth-construction.
   - **Doctrine-import checklist ([LD-8](AI-TRADER-RISK-DOCTRINE.md) + [LD-9](AI-TRADER-REALITY-DOCTRINE.md)):** Execution owns MECHANICS only and acts **within** the allowance, never beyond (LD-8 §10); reconciliation-as-construction = dedup + fold + record + mark on a bitemporal, append-only truth substrate with Reality markers and fail-uncertain posture (LD-9 §4–§9, §14); Expected-vs-Actual enforcement, divergence/orphan marking, and fail-closed kill remain Risk L6 (LD-8 §8); the two reconciliation senses never merge (LD-9 §8, MC1).
-- **AT-E9 Paper Trading** — End-to-end loop without funds; ≥48h stable. **Minimum observability baseline (AT-E15) must be live first.** Deps: AT-E6, AT-E7, AT-E8, AT-E15 (min baseline). Complexity: M. Risk: Med.
+- **AT-E9 Paper Trading** — End-to-end loop without funds; validated via Accelerated Historical Replay Validation. **Minimum observability baseline (AT-E15) must be live first.** Deps: AT-E6, AT-E7, AT-E8, AT-E15 (min baseline). Complexity: M. Risk: Med.
   - **Doctrine note (Forecast+Decision collapse):** the paper loop's "Signal" stage carries the same accepted [LD-6 Forecast](AI-TRADER-FORECAST-DOCTRINE.md) + [LD-7 Decision](AI-TRADER-DECISION-DOCTRINE.md) collapse as AT-E6; the loop consumes one collapsed signal artifact, not separate Forecast and Decision records.
 - **AT-E10 Live Execution Hardening (Org 0)** — Admin-gated live HTX spot for Org 0; hardened host + managed key. **Each strategy must pass the Strategy Validation Gate (ADR-0010) first.** Deps: AT-E9, **Strategy Validation Gate**, AT-E14, AT-E13. Complexity: L. Risk: **Very High** — real capital.
 - **AT-E11 Reporting, HWM & Billing** — Periods, HWM, deposit/withdrawal adjustment, fee, manual gate, and billing governance policies (valuation/unrealized/dispute/overcharge/refund). Deps: AT-E9 (paper PnL). Complexity: L. Risk: High — financial correctness/disputes.
@@ -366,7 +366,7 @@ flowchart TB
 - **M4** Safety Spine Ready — Risk Engine + kill switches + execution core + reconciliation vs mock — AT-E7, AT-E8.
 - **M5** Market Intelligence Ready — market data + MSV + Chief Decision Engine — AT-E3, AT-E4, AT-E5.
 - **M6** Strategy Signals Ready — two strategies emit governed signals — AT-E6.
-- **M7** Paper Trading Ready — end-to-end loop stable ≥48h, no funds, **minimum observability baseline live (measurable)** — AT-E9 (+ AT-E15 min baseline).
+- **M7** Paper Trading Ready — end-to-end loop validated via Accelerated Historical Replay Validation, no funds, **minimum observability baseline live (measurable)** — AT-E9 (+ AT-E15 min baseline).
 - **M7.5** Strategy Validation Gate Passed — signed promotion record per ADR-0010 for each strategy intended to go live — (governance gate).
 - **M8** Billing & Payments Ready — HWM/fee/invoice on paper PnL + manual gate + billing governance + payment attribution — AT-E11, AT-E12.
 - **M9** Org 0 Live Trading Ready — admin-gated live HTX spot (Single Operator Governance), hardened host, managed key — AT-E10, AT-E13, AT-E14, AT-E15.
@@ -378,7 +378,7 @@ flowchart TB
 ## SECTION 7 — MVP Launch Readiness Gates
 
 ### Internal Alpha (paper)
-- M1–M7 met: Core complete (migration with continuity + rollback verified), trader reachable, HTX read working, safety spine drill-tested vs mock, MSV + decision engine producing output, two strategies signaling, **minimum observability baseline live**, paper loop stable ≥48h with clean reconciliation.
+- M1–M7 met: Core complete (migration with continuity + rollback verified), trader reachable, HTX read working, safety spine drill-tested vs mock, MSV + decision engine producing output, two strategies signaling, **minimum observability baseline live**, paper loop validated via Accelerated Historical Replay Validation with clean reconciliation.
 - Tenant-isolation tests green (release-blocking); no secret reachable from client.
 
 ### Org 0 Live Trading
@@ -458,7 +458,7 @@ Multi-exchange (Binance/OKX/Bybit/Coinbase/Deribit, DEX), portfolio/fund/prop st
 - **AT-E6 Strategy Framework** — versioned strategies + two MVP strategies (signals) — deps: AT-E5 — M / Med — M6.
 - **AT-E7 Risk Engine & Kill Switches** — safety spine v0; fail-closed — deps: AT-E1, AT-E2 (mock) — L / Very High — M4.
 - **AT-E8 Execution Core & Reconciliation** — order state machine + idempotency + reconciliation — deps: AT-E7 — L / Very High — M4.
-- **AT-E9 Paper Trading** — end-to-end loop, no funds, ≥48h stable (min observability baseline live) — deps: AT-E6, AT-E7, AT-E8, AT-E15 — M / Med — M7.
+- **AT-E9 Paper Trading** — end-to-end loop, no funds, Accelerated Historical Replay Validation (min observability baseline live) — deps: AT-E6, AT-E7, AT-E8, AT-E15 — M / Med — M7.
 - **Strategy Validation Gate** — signed promotion record proving edge before live (governance, ADR-0010) — deps: AT-E9 — S (governance) / High — M7.5.
 - **AT-E11 Reporting, HWM & Billing** — periods + HWM + fee + manual gate + billing governance — deps: AT-E9 — L / High — M8.
 - **AT-E12 Crypto Payments & Suspension** — unique-address USDT TRC-20 + lifecycle — deps: AT-E11 — M / High — M8.

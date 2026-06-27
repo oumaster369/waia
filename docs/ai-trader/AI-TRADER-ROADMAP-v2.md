@@ -106,7 +106,7 @@ The platform must never start with live trading.
 - Signal → trivial allocation → Risk Engine → mock execution → reconciliation → paper reporting.
 - Introduce a `services/` directory + lightweight pnpm workspaces **only here**, if a persistent loop/WebSocket session requires it (see ADR-0006).
 
-**Exit:** the system operates end-to-end in paper for ≥48 hours with clean reconciliation **and the minimum observability baseline is live** (the paper run is fully measurable). This 48-hour exit proves *plumbing stability only* — it is **not** authorization to go live; live promotion requires the Strategy Validation Gate below.
+**Exit:** the system operates end-to-end in paper via **Accelerated Historical Replay Validation** over historical market data with clean reconciliation **and the minimum observability baseline is live** (the run is fully measurable). This validation proves *plumbing stability only* — it is **not** authorization to go live; live promotion requires the Strategy Validation Gate below.
 
 ---
 
@@ -126,10 +126,10 @@ The platform must never start with live trading.
 
 **Objective:** ensure a strategy has demonstrated *edge*, not just stable plumbing, before any live capital — including Org 0.
 
-> A flawless platform with no strategy edge still fails. The Phase 6 48-hour stability check proves the loop works; it does **not** prove an edge exists. **No strategy may be promoted to live (Phase 8), even for Org 0, until it passes this gate.** Governance structure only — no quantitative thresholds are fixed here. See [ADR-0010](../adr/0010-strategy-validation-gate.md).
+> A flawless platform with no strategy edge still fails. The Phase 6 plumbing validation (Accelerated Historical Replay Validation) proves the loop works; it does **not** prove an edge exists. **No strategy may be promoted to live (Phase 8), even for Org 0, until it passes this gate.** Governance structure only — no quantitative thresholds are fixed here. See [ADR-0010](../adr/0010-strategy-validation-gate.md).
 
 - **Minimum validation evidence:** a promotion record (strategy version + commit, hypothesis + intended regime, paper evidence, cost model, observed reason-code distribution, known failure modes).
-- **Paper-trading evidence:** a window meaningful for the strategy's horizon (beyond the 48-hour plumbing check), across more than one regime where observable, with clean reconciliation and acceptable data quality throughout.
+- **Paper-trading evidence:** a window meaningful for the strategy's horizon (beyond the Accelerated Historical Replay Validation plumbing gate), across more than one regime where observable, with clean reconciliation and acceptable data quality throughout.
 - **Acceptable confidence criteria:** the operator records an explicit written judgment that edge exists net of modeled costs, that live is expected to track paper, and that downside is Risk-Engine-bounded. Absence of evidence = failure.
 - **Governance approval:** promotion is a logged action under the Single Operator Governance Model ([ADR-0011](../adr/0011-single-operator-governance-model.md)) — immutable audit, cooling-off period, explicit confirmation, reversible (demotion to paper) at any time.
 
@@ -154,7 +154,7 @@ The platform must never start with live trading.
 
 All must hold:
 
-- Paper loop stable ≥48h end-to-end with reconciliation, **with the minimum observability baseline live** (the run is measurable).
+- Paper loop validated via Accelerated Historical Replay Validation end-to-end with reconciliation, **with the minimum observability baseline live** (the run is measurable).
 - Every live-enabled strategy has passed the **Strategy Validation Gate** (signed promotion record, ADR-0010).
 - All kill switches drill-tested and fail-closed.
 - Deposit/withdrawal attribution solved, **or** billing hard-gated to manual reconciliation.

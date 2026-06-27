@@ -102,7 +102,7 @@ Each Pipeline is atomic. Lifecycle: Architecture Review PASS → Implementation 
 | | |
 |---|---|
 | **Entry** | P4 Closed AND P2 Closed (isolation gate before `main` promotion) |
-| **Definition of Done** | Paper loop deployed; ≥48h soak; observability live; RC `dev→main` + targeted Postgres apply |
+| **Definition of Done** | Paper loop deployed; Accelerated Historical Replay Validation; observability live; RC `dev→main` + targeted Postgres apply |
 | **Exit** | MVP-Paper checklist (criteria 1–10) green on `main`; Post-Merge audit PASS |
 
 ### P6 — Money In, Accountable
@@ -166,7 +166,7 @@ NEW-1 → DEE-154 → NEW-2
 | NEW-7 | Wire strategies → risk → exec(mock) → paper book | P5 | Critical | DEE-170 |
 | NEW-8 | Deploy paper loop as scheduled service | P5 | Critical | DEE-170 |
 | NEW-9 | Observability baseline at runtime | P5 | Critical | DEE-177 |
-| NEW-10 | 48h paper soak (2 strategies) closure report | P5 | Critical | DEE-170 |
+| NEW-10 | Accelerated Historical Replay Validation (2 strategies) closure report | P5 | Critical | DEE-170 |
 | NEW-11 | RC promotion dev→main (Paper-Complete) | P5 | Critical | DEE-149 |
 | NEW-12 | Isolated execution host infrastructure | P8 | Critical | DEE-171 |
 | NEW-13 | Org-0 live launch gate + capped supervised live | P8 | Critical | DEE-171 |
@@ -186,7 +186,7 @@ All true on `main`:
 5. MSV + CDE operational; Future Context stub disabled.
 6. Two real strategies registered, versioned, signal-only via CDE.
 7. Risk + kill switches inside execution; idempotent orders; startup reconciliation.
-8. Paper loop deployed; ≥48h stable with both strategies; observability measurable.
+8. Paper loop deployed; validated via Accelerated Historical Replay Validation (both strategies, critical=0, ≥1 closed trade/strategy); observability measurable.
 9. Signed validation-gate promotion record per live strategy (ADR-0010/0011).
 10. Reporting + HWM + 30% fee + manual gate; USDT payments + suspension lifecycle.
 11. Org-0 live HTX spot admin-gated, capped, supervised; isolated execution host.
