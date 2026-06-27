@@ -25,6 +25,7 @@ import { HTX_TRADE_HISTORY_MAX_WINDOW_MS } from "@/lib/trader/connectors/htx/con
 import {
   HTX_PERMISSION_PROBE_WARNING,
   HTX_TRADE_PERMISSION_WARNING,
+  assertHtxSpotSymbolAllowed,
   internalSymbolToHtx,
   mapHtxBalances,
   mapHtxBalancesToPositions,
@@ -39,8 +40,9 @@ import {
 export type HtxExchangeConnectorConfig = HtxClientConfig;
 
 /**
- * Read-only HTX spot connector (DEE-195).
+ * HTX spot connector (DEE-195 read path, DEE-211 write foundation).
  * Credentials are caller-supplied and never persisted.
+ * Live execution remains blocked in execution-service until a later P8 gate slice.
  */
 export class HtxExchangeConnector implements ExchangeConnector {
   readonly venueId = "htx" as const;
@@ -159,6 +161,7 @@ export class HtxExchangeConnector implements ExchangeConnector {
     if (!filter?.symbol) {
       throw new Error("[trader] HTX getOpenOrders requires filter.symbol");
     }
+    assertHtxSpotSymbolAllowed(filter.symbol);
     const rows = await this.client.getOpenOrders({
       accountId: this.spotAccountId!,
       symbol: internalSymbolToHtx(filter.symbol),
@@ -169,17 +172,44 @@ export class HtxExchangeConnector implements ExchangeConnector {
   async getOrder(orderId: string): Promise<Order | null> {
     this.assertValidated();
     const row = await this.client.getOrder(orderId);
-    return row ? mapHtxOrder(row) : null;
+    if (!row) {
+      return null;
+    }
+    const order = mapHtxOrder(row);
+    assertHtxSpotSymbolAllowed(order.symbol);
+    return order;
   }
 
   async placeOrder(input: PlaceOrderInput): Promise<Order> {
-    void input;
-    throw new ConnectorNotSupportedError("order placement (read-only HTX connector)");
+    this.assertValidated();
+    assertHtxSpotSymbolAllowed(input.symbol);
+    if (input.type === "limit" && !input.price) {
+      throw new Error("[trader] HTX placeOrder requires price for limit orders");
+    }
+    if (!input.clientOrderId.trim()) {
+      throw new Error("[trader] HTX placeOrder requires clientOrderId");
+    }
+
+    const row = await this.client.placeOrder({
+      accountId: this.spotAccountId!,
+      symbol: internalSymbolToHtx(input.symbol),
+      side: input.side,
+      type: input.type,
+      quantity: input.quantity,
+      price: input.price,
+      clientOrderId: input.clientOrderId,
+    });
+    return mapHtxOrder(row);
   }
 
   async cancelOrder(orderId: string): Promise<Order> {
-    void orderId;
-    throw new ConnectorNotSupportedError("order cancellation (read-only HTX connector)");
+    this.assertValidated();
+    const existing = await this.getOrder(orderId);
+    if (!existing) {
+      throw new Error(`[trader] HTX cancelOrder: order not found: ${orderId}`);
+    }
+    const row = await this.client.cancelOrder(orderId);
+    return mapHtxOrder(row);
   }
 
   async getTradeHistory(filter?: GetTradeHistoryFilter): Promise<Trade[]> {
@@ -187,6 +217,7 @@ export class HtxExchangeConnector implements ExchangeConnector {
     if (!filter?.symbol) {
       throw new Error("[trader] HTX getTradeHistory requires filter.symbol");
     }
+    assertHtxSpotSymbolAllowed(filter.symbol);
 
     const endTime = Date.now();
     const startTime = endTime - HTX_TRADE_HISTORY_MAX_WINDOW_MS;
@@ -207,6 +238,7 @@ export class HtxExchangeConnector implements ExchangeConnector {
   async *streamMarketData(symbols: readonly string[]): AsyncIterable<MarketDataEvent> {
     this.assertValidated();
     for (const symbol of symbols) {
+      assertHtxSpotSymbolAllowed(symbol);
       const response = await this.client.getMarketDetailMerged(internalSymbolToHtx(symbol));
       if (response.status !== "ok" || !response.tick) {
         throw new HtxApiError("market-data-error", `HTX market snapshot failed for ${symbol}`);

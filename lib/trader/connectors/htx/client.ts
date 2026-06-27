@@ -3,7 +3,10 @@ import {
   htxHostFromUrl,
   resolveHtxRestHost,
 } from "@/lib/trader/connectors/htx/config";
-import { buildSignedQueryString } from "@/lib/trader/connectors/htx/signing";
+import {
+  buildSignedPostQueryString,
+  buildSignedQueryString,
+} from "@/lib/trader/connectors/htx/signing";
 import type {
   HtxAccountBalance,
   HtxAccountRow,
@@ -16,6 +19,8 @@ import type {
   HtxOrderRow,
   HtxV2Response,
 } from "@/lib/trader/connectors/htx/types";
+import type { OrderSide, OrderType } from "@/lib/trader/connectors/types";
+import { placeOrderInputToHtxType } from "@/lib/trader/connectors/htx/mappers";
 
 export type HtxFetchFn = typeof fetch;
 
@@ -88,6 +93,56 @@ export class HtxRestClient {
       HTX_ENDPOINTS.order(orderId),
     );
     return response.data ?? null;
+  }
+
+  async placeOrder(input: {
+    accountId: string;
+    symbol: string;
+    side: OrderSide;
+    type: OrderType;
+    quantity: string;
+    price?: string;
+    clientOrderId: string;
+  }): Promise<HtxOrderRow> {
+    const body: Record<string, string | number> = {
+      "account-id": input.accountId,
+      symbol: input.symbol,
+      type: placeOrderInputToHtxType(input),
+      amount: input.quantity,
+      source: "spot-api",
+      "client-order-id": input.clientOrderId,
+    };
+
+    if (input.type === "limit") {
+      if (!input.price) {
+        throw new HtxApiError("invalid-request", "HTX limit order requires price");
+      }
+      body.price = input.price;
+    }
+
+    const response = await this.signedPost<HtxLegacyResponse<number>>(
+      HTX_ENDPOINTS.placeOrder,
+      body,
+    );
+    const orderId = response.data;
+    if (orderId === undefined || orderId === null) {
+      throw new HtxApiError("empty-response", "HTX place order response missing order id");
+    }
+
+    const order = await this.getOrder(String(orderId));
+    if (!order) {
+      throw new HtxApiError("empty-response", `HTX order ${orderId} not found after placement`);
+    }
+    return order;
+  }
+
+  async cancelOrder(orderId: string): Promise<HtxOrderRow> {
+    await this.signedPost<HtxLegacyResponse<number>>(HTX_ENDPOINTS.cancelOrder(orderId), {});
+    const order = await this.getOrder(orderId);
+    if (!order) {
+      throw new HtxApiError("empty-response", `HTX order ${orderId} not found after cancel`);
+    }
+    return order;
   }
 
   async getMatchResults(input: {
@@ -178,6 +233,29 @@ export class HtxRestClient {
     const body = (await response.json()) as T & HtxLegacyResponse<unknown> & HtxV2Response<unknown>;
     this.assertOk(body, path);
     return body;
+  }
+
+  private async signedPost<T>(path: string, body: Record<string, string | number>): Promise<T> {
+    const query = buildSignedPostQueryString({
+      accessKeyId: this.apiKey,
+      secret: this.apiSecret,
+      host: this.host,
+      path,
+    });
+    const url = `${this.restHost}${path}?${query}`;
+    const response = await this.fetchImpl(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new HtxApiError("http-error", `HTTP ${response.status} for ${path}`);
+    }
+    const parsed = (await response.json()) as T &
+      HtxLegacyResponse<unknown> &
+      HtxV2Response<unknown>;
+    this.assertOk(parsed, path);
+    return parsed;
   }
 
   private assertOk(body: HtxLegacyResponse<unknown> & HtxV2Response<unknown>, path: string): void {

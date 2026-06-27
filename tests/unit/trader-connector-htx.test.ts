@@ -7,6 +7,7 @@ import {
   createExchangeConnectorFromId,
 } from "@/lib/trader/connectors";
 import { HTX_DEFAULT_REST_HOST } from "@/lib/trader/connectors/htx/config";
+import { HtxConnectorValidationError } from "@/lib/trader/connectors/htx/errors";
 import {
   HTX_PERMISSION_PROBE_WARNING,
   HTX_TRADE_PERMISSION_WARNING,
@@ -26,21 +27,26 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function createMockFetch(handlers: Record<string, (url: URL) => Response | Promise<Response>>) {
+function createMockFetch(
+  handlers: Record<string, (url: URL, init?: RequestInit) => Response | Promise<Response>>,
+) {
   const sortedPatterns = Object.keys(handlers).sort((a, b) => b.length - a.length);
-  return (async (input: RequestInfo | URL) => {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input.toString());
     for (const pattern of sortedPatterns) {
       if (url.pathname.includes(pattern) || url.pathname === pattern) {
-        return handlers[pattern]!(url);
+        return handlers[pattern]!(url, init);
       }
     }
-    throw new Error(`Unhandled HTX mock fetch: ${url.toString()}`);
+    throw new Error(`Unhandled HTX mock fetch: ${url.toString()} method=${init?.method ?? "GET"}`);
   }) as typeof fetch;
 }
 
-function defaultHandlers(overrides: Record<string, (url: URL) => Response> = {}) {
-  const base: Record<string, (url: URL) => Response> = {
+function defaultHandlers(
+  overrides: Record<string, (url: URL, init?: RequestInit) => Response> = {},
+) {
+  const canceledOrderIds = new Set<string>();
+  const base: Record<string, (url: URL, init?: RequestInit) => Response> = {
     "/v1/account/accounts": () =>
       jsonResponse({
         status: "ok",
@@ -93,8 +99,24 @@ function defaultHandlers(overrides: Record<string, (url: URL) => Response> = {})
           },
         ],
       }),
-    "/v1/order/orders/": (url) => {
-      const orderId = url.pathname.split("/").pop();
+    "/v1/order/orders/place": (url, init) => {
+      expect(init?.method).toBe("POST");
+      expect(url.searchParams.get("SignatureMethod")).toBe("HmacSHA256");
+      expect(url.searchParams.get("SignatureVersion")).toBe("2");
+      expect(url.searchParams.has("Signature")).toBe(true);
+      const body = JSON.parse(String(init?.body)) as Record<string, string>;
+      expect(body.source).toBe("spot-api");
+      expect(body["account-id"]).toBe(String(SPOT_ACCOUNT_ID));
+      return jsonResponse({ status: "ok", data: 357630527817872 });
+    },
+    "/v1/order/orders/": (url, init) => {
+      if (url.pathname.endsWith("/submitcancel")) {
+        expect(init?.method).toBe("POST");
+        const orderId = url.pathname.split("/").slice(-2)[0]!;
+        canceledOrderIds.add(orderId);
+        return jsonResponse({ status: "ok", data: Number(orderId) });
+      }
+      const orderId = url.pathname.split("/").pop()!;
       return jsonResponse({
         status: "ok",
         data: {
@@ -105,7 +127,7 @@ function defaultHandlers(overrides: Record<string, (url: URL) => Response> = {})
           "created-at": 1630633835224,
           type: "buy-limit",
           "filled-amount": "0",
-          state: "submitted",
+          state: canceledOrderIds.has(orderId) ? "canceled" : "submitted",
           "client-order-id": "client-1",
         },
       });
@@ -306,20 +328,62 @@ describe("HtxExchangeConnector reads (DEE-195)", () => {
   });
 });
 
-describe("HtxExchangeConnector write rejection (DEE-195)", () => {
-  it("throws ConnectorNotSupportedError for write methods", async () => {
+describe("HtxExchangeConnector write foundation (DEE-211)", () => {
+  it("places a limit order via signed POST", async () => {
+    const connector = await validatedHtx(defaultHandlers());
+    const placed = await connector.placeOrder({
+      clientOrderId: "client-new-1",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "65000",
+      quantity: "0.01",
+    });
+    expect(placed.orderId).toBe("357630527817872");
+    expect(placed.symbol).toBe("BTC/USDT");
+    expect(placed.clientOrderId).toBe("client-1");
+    expect(placed.status).toBe("open");
+  });
+
+  it("cancels an order via signed POST", async () => {
+    const connector = await validatedHtx(defaultHandlers());
+    const canceled = await connector.cancelOrder("357630527817871");
+    expect(canceled.orderId).toBe("357630527817871");
+    expect(canceled.status).toBe("canceled");
+  });
+
+  it("rejects disallowed symbols for writes", async () => {
     const connector = await validatedHtx(defaultHandlers());
     await expect(
       connector.placeOrder({
         clientOrderId: "x",
-        symbol: "BTC/USDT",
+        symbol: "SOL/USDT",
         side: "buy",
         type: "limit",
         price: "1",
         quantity: "1",
       }),
-    ).rejects.toBeInstanceOf(ConnectorNotSupportedError);
-    await expect(connector.cancelOrder("1")).rejects.toBeInstanceOf(ConnectorNotSupportedError);
+    ).rejects.toBeInstanceOf(HtxConnectorValidationError);
+  });
+
+  it("rejects disallowed symbols for reads", async () => {
+    const connector = await validatedHtx(defaultHandlers());
+    await expect(connector.getOpenOrders({ symbol: "SOL/USDT" })).rejects.toBeInstanceOf(
+      HtxConnectorValidationError,
+    );
+  });
+
+  it("requires clientOrderId for placeOrder", async () => {
+    const connector = await validatedHtx(defaultHandlers());
+    await expect(
+      connector.placeOrder({
+        clientOrderId: "  ",
+        symbol: "ETH/USDT",
+        side: "sell",
+        type: "market",
+        quantity: "0.1",
+      }),
+    ).rejects.toThrow(/requires clientOrderId/);
   });
 
   it("throws ConnectorNotSupportedError for futures stubs", async () => {

@@ -5,10 +5,13 @@ import type {
   OrderSide,
   OrderStatus,
   OrderType,
+  PlaceOrderInput,
   Position,
   Trade,
 } from "@/lib/trader/connectors/types";
 
+import { HTX_SPOT_ALLOWED_SYMBOLS } from "@/lib/trader/connectors/htx/config";
+import { HtxConnectorValidationError } from "@/lib/trader/connectors/htx/errors";
 import type {
   HtxAccountBalance,
   HtxMatchResultRow,
@@ -41,6 +44,23 @@ export function internalSymbolToHtx(symbol: string): string {
     throw new Error(`[trader] invalid internal symbol for HTX: ${symbol}`);
   }
   return `${parts[0].toLowerCase()}${parts[1].toLowerCase()}`;
+}
+
+export function isHtxSpotSymbolAllowed(symbol: string): boolean {
+  return (HTX_SPOT_ALLOWED_SYMBOLS as readonly string[]).includes(symbol);
+}
+
+export function assertHtxSpotSymbolAllowed(symbol: string): void {
+  if (!isHtxSpotSymbolAllowed(symbol)) {
+    throw new HtxConnectorValidationError(
+      "SYMBOL_NOT_ALLOWED",
+      `HTX spot connector only supports ${HTX_SPOT_ALLOWED_SYMBOLS.join(", ")}; got ${symbol}`,
+    );
+  }
+}
+
+export function placeOrderInputToHtxType(input: Pick<PlaceOrderInput, "side" | "type">): string {
+  return `${input.side}-${input.type}`;
 }
 
 export function htxSymbolToInternal(htxSymbol: string): string {

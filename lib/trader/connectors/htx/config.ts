@@ -13,12 +13,19 @@ export const HTX_ENDPOINTS = {
   accountBalance: (accountId: string) => `/v1/account/accounts/${accountId}/balance`,
   openOrders: "/v1/order/openOrders",
   order: (orderId: string) => `/v1/order/orders/${orderId}`,
+  placeOrder: "/v1/order/orders/place",
+  cancelOrder: (orderId: string) => `/v1/order/orders/${orderId}/submitcancel`,
   matchResults: "/v1/order/matchresults",
   userUid: "/v2/user/uid",
   userApiKey: "/v2/user/api-key",
   marketDetailMerged: "/market/detail/merged",
   marketHistoryKline: "/market/history/kline",
 } as const;
+
+/** MVP spot symbol allowlist (internal `BASE/QUOTE` format). */
+export const HTX_SPOT_ALLOWED_SYMBOLS = ["BTC/USDT", "ETH/USDT"] as const;
+
+export type HtxSpotAllowedSymbol = (typeof HTX_SPOT_ALLOWED_SYMBOLS)[number];
 
 /** HTX matchresults query window (ms). */
 export const HTX_TRADE_HISTORY_MAX_WINDOW_MS = 48 * 60 * 60 * 1000;
