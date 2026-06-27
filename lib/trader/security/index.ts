@@ -7,7 +7,10 @@ if (process.env.VITEST !== "true") {
 
 export { createMasterKeyProvider } from "@/lib/trader/security/create-master-key-provider";
 export type { CreateMasterKeyProviderOptions } from "@/lib/trader/security/create-master-key-provider";
-export { assertCredentialStorageAllowed } from "@/lib/trader/security/credential-storage-gate";
+export {
+  assertCredentialDecryptionAllowed,
+  assertCredentialStorageAllowed,
+} from "@/lib/trader/security/credential-storage-gate";
 export { DEK_BYTE_LENGTH, dekWrapAad } from "@/lib/trader/security/dek-wrap-crypto";
 export {
   getDeploymentTier,
@@ -27,6 +30,21 @@ export {
 } from "@/lib/trader/security/errors";
 export type { MasterKeyErrorCode } from "@/lib/trader/security/errors";
 export {
+  assertHtxPermissionMetadataSafe,
+  buildHtxPermissionMetadata,
+  HTX_CREDENTIAL_METADATA_VERSION,
+  parseHtxPermissionMetadata,
+  validateHtxConnectorCredentialInput,
+  type HtxPermissionMetadata,
+  type HtxSecureConnectorConfig,
+  type HtxStoredCredentialRecord,
+} from "@/lib/trader/security/htx-credential-types";
+export {
+  resolveHtxSecureCredential,
+  toHtxExchangeConnectorConfig,
+  type ResolveHtxSecureCredentialInput,
+} from "@/lib/trader/security/htx-secure-credential-resolver";
+export {
   generateDataKey,
   type MasterKeyProvider,
   type WrappedDataKey,
@@ -36,6 +54,11 @@ export {
   MASTER_KEY_SECRET_NAMES_BY_VERSION,
   resolveMasterKeySecretName,
 } from "@/lib/trader/security/master-key-versions";
+export {
+  containsSensitiveCredentialMaterial,
+  redactSensitiveText,
+  sanitizeClientErrorMessage,
+} from "@/lib/trader/security/redaction";
 export {
   SecretsStoreMasterKeyProvider,
   type SecretsStoreBinding,

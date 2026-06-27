@@ -28,7 +28,10 @@ import type {
   StoreCredentialsInput,
 } from "@/lib/trader/credentials/types";
 import { createMasterKeyProvider } from "@/lib/trader/security/create-master-key-provider";
-import { assertCredentialStorageAllowed } from "@/lib/trader/security/credential-storage-gate";
+import {
+  assertCredentialDecryptionAllowed,
+  assertCredentialStorageAllowed,
+} from "@/lib/trader/security/credential-storage-gate";
 import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/lib/trader/types";
 import {
   assertOrgMembershipPostgres,
@@ -183,12 +186,14 @@ export function createCredentialService(deps: CredentialServiceDeps): Credential
       const scoped = requireOrgContext(context.organizationId);
       await assertMembershipIfNeeded(scoped, deps.assertMembership);
 
+      const provider = await createProvider();
+      assertCredentialDecryptionAllowed(provider);
+
       const row = await deps.repository.getCredentialRowById(scoped, credentialId);
       if (!row || row.status !== "active") {
         throw new CredentialNotFoundError();
       }
 
-      const provider = await createProvider();
       return decryptCredentialPayload(provider, row);
     },
 
