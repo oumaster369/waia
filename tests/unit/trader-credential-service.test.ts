@@ -292,4 +292,25 @@ describe("trader credential service (DEE-234)", () => {
       ),
     ).rejects.toBeInstanceOf(MasterKeyNotReadyError);
   });
+
+  it("getDecryptedCredentials throws MasterKeyNotReadyError when provider is not production-ready", async () => {
+    const readyService = await createService();
+    const stored = await readyService.storeCredentials(
+      { organizationId },
+      {
+        venue: "mock",
+        exchangeAccountId: "decrypt-gate-acct-1",
+        credentials: { apiKey: "DECRYPT-GATE-KEY", apiSecret: "DECRYPT-GATE-SECRET" },
+      },
+    );
+
+    const db = getDb();
+    const notReadyService = createSqliteCredentialService(db, {
+      createProvider: () => DevMasterKeyProvider.create(),
+    });
+
+    await expect(
+      notReadyService.getDecryptedCredentials({ organizationId }, stored.id),
+    ).rejects.toBeInstanceOf(MasterKeyNotReadyError);
+  });
 });

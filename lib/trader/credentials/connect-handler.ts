@@ -34,7 +34,9 @@ import {
 } from "@/lib/trader/connectors/htx/htx-exchange-connector";
 import { createMasterKeyProvider } from "@/lib/trader/security/create-master-key-provider";
 import { assertCredentialStorageAllowed } from "@/lib/trader/security/credential-storage-gate";
+import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
 import { MasterKeyNotReadyError } from "@/lib/trader/security/errors";
+import { sanitizeClientErrorMessage } from "@/lib/trader/security/redaction";
 import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provider";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
@@ -208,7 +210,7 @@ export async function handleHtxConnectPost(
     return clientError(
       400,
       HTX_CONNECT_ERROR_CODES.CREDENTIAL_VALIDATION_FAILED,
-      `HTX credential validation failed (${detail}).`,
+      sanitizeClientErrorMessage(`HTX credential validation failed (${detail}).`),
     );
   }
 
@@ -224,13 +226,14 @@ export async function handleHtxConnectPost(
   const context = requireOrgContext(organizationId);
   context.userId = auth.userId;
 
-  const permissionMetadata: Record<string, unknown> = {};
-  if (validation.warnings && validation.warnings.length > 0) {
-    permissionMetadata.warnings = validation.warnings;
-  }
-  if (body.accountLabel) {
-    permissionMetadata.accountLabel = body.accountLabel;
-  }
+  const accountInfo = await connector.getAccountInfo();
+
+  const permissionMetadata = buildHtxPermissionMetadata({
+    exchangeAccountId: validation.accountId,
+    scopes: accountInfo.permissions,
+    warnings: validation.warnings,
+    accountLabel: body.accountLabel,
+  });
 
   let resolvedRuntime: WaiaRuntimeDb | undefined;
   try {
@@ -245,7 +248,7 @@ export async function handleHtxConnectPost(
         apiKey: body.apiKey,
         apiSecret: body.apiSecret,
       },
-      permissionMetadata: Object.keys(permissionMetadata).length > 0 ? permissionMetadata : null,
+      permissionMetadata,
       actorType: "user",
       actorId: auth.userId,
     });
