@@ -16,11 +16,12 @@ Architecture is frozen. Only execution proceeds.
 | P1 status | **Closed** (PR #287 → `dev` @ `49e6705`, 2026-06-26) |
 | P2 status | **Closed** (PR #290 → `dev` @ `bf8c326`, 2026-06-26) |
 | P3 status | **Closed** (PR #292 → `dev` @ `934b23b`, 2026-06-26) |
-| P4 status | **Pending** (entry criteria satisfied; not started) |
-| Completed | 3 |
-| Current | **P4 — Two Real Strategies** (next) |
-| Remaining | 5 |
-| Pipeline completion | 3 / 8 (37.5%) |
+| P4 status | **Closed** (PR #294 → `dev` @ `106d286`, 2026-06-27) |
+| P5 status | **Pending** (entry criteria satisfied; not started) |
+| Completed | 4 |
+| Current | **P5 — Provable Paper Product (MVP-Paper)** (next) |
+| Remaining | 4 |
+| Pipeline completion | 4 / 8 (50%) |
 | Execution Freeze | **Active** |
 | MVP baseline merged to `dev` | ~60% |
 | Remaining execution | ~40% |
