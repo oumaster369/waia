@@ -29,14 +29,15 @@ export function signHtxRequest(input: {
   return createHmac("sha256", input.secret).update(payload).digest("base64");
 }
 
-export function buildSignedQueryString(input: {
+export function buildSignedAuthQuery(input: {
   accessKeyId: string;
   secret: string;
   host: string;
   path: string;
+  method: "GET" | "POST";
   params?: HtxSignParams;
   timestamp?: string;
-}): string {
+}): { queryString: string; signedParams: HtxSignParams } {
   const timestamp = input.timestamp ?? formatHtxTimestamp();
   const baseParams: HtxSignParams = {
     AccessKeyId: input.accessKeyId,
@@ -47,7 +48,7 @@ export function buildSignedQueryString(input: {
   };
 
   const signature = signHtxRequest({
-    method: "GET",
+    method: input.method,
     host: input.host,
     path: input.path,
     params: baseParams,
@@ -59,5 +60,30 @@ export function buildSignedQueryString(input: {
     Signature: signature,
   };
 
-  return buildCanonicalQuery(signedParams);
+  return {
+    queryString: buildCanonicalQuery(signedParams),
+    signedParams,
+  };
+}
+
+export function buildSignedQueryString(input: {
+  accessKeyId: string;
+  secret: string;
+  host: string;
+  path: string;
+  params?: HtxSignParams;
+  timestamp?: string;
+}): string {
+  return buildSignedAuthQuery({ ...input, method: "GET" }).queryString;
+}
+
+/** Auth query string for HTX v2 signed POST (business params go in JSON body). */
+export function buildSignedPostQueryString(input: {
+  accessKeyId: string;
+  secret: string;
+  host: string;
+  path: string;
+  timestamp?: string;
+}): string {
+  return buildSignedAuthQuery({ ...input, method: "POST" }).queryString;
 }
