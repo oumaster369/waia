@@ -21,7 +21,9 @@ test.describe("/trader route gate (AT-E1 S1)", () => {
     await expect(page.getByTestId("dashboard-sidebar")).toBeVisible();
   });
 
-  test("renders trader workspace shell when trader entitlement is present", async ({ page }) => {
+  test("renders HTX connect workspace when trader entitlement is present and no exchange connected", async ({
+    page,
+  }) => {
     const email = `e2e-trader-allow-${Date.now()}@example.com`;
     await signUpAndOpenDashboard(page, email);
     grantTraderEntitlementByUserEmail(email);
@@ -30,14 +32,11 @@ test.describe("/trader route gate (AT-E1 S1)", () => {
     await expect(page).toHaveURL("/trader");
     await expect(page.getByTestId("trader-workspace")).toBeVisible();
     await expect(page.getByTestId("trader-workspace-title")).toHaveText("AI-TRADER");
-    await expect(page.getByTestId("trader-placeholder-exchange")).toContainText(
-      "No exchange connected",
-    );
-    await expect(page.getByTestId("trader-placeholder-portfolio")).toContainText(
-      "Portfolio coming soon",
-    );
-    await expect(page.getByTestId("trader-placeholder-strategies")).toContainText(
-      "Strategies coming soon",
-    );
+    await expect(page.getByTestId("trader-connect-section")).toBeVisible();
+    await expect(page.getByTestId("trader-connect-form")).toBeVisible();
+    await expect(page.getByTestId("trader-permission-explainer")).toBeVisible();
+    await expect(page.getByTestId("trader-api-key")).toBeVisible();
+    await expect(page.getByTestId("trader-api-secret")).toHaveAttribute("type", "password");
+    await expect(page.getByTestId("trader-connect-submit")).toBeEnabled();
   });
 });

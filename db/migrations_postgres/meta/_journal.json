@@ -400,6 +400,20 @@
       "when": 1780000000019,
       "tag": "0056_trader_reconciliation_workflow",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1780000000020,
+      "tag": "0057_trader_position_trade_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1780000000021,
+      "tag": "0058_trader_position_trade_snapshots_rls",
+      "breakpoints": true
     }
   ]
 }

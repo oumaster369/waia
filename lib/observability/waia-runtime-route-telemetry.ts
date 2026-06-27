@@ -32,7 +32,11 @@ export type WaiaRuntimeRouteKey =
   | "trader_exchange_credentials_connect"
   | "trader_exchange_credentials_list"
   | "trader_exchange_credentials_sync_balances"
-  | "trader_balance_snapshots_list";
+  | "trader_balance_snapshots_list"
+  | "trader_exchange_credentials_sync_positions"
+  | "trader_position_snapshots_list"
+  | "trader_exchange_credentials_sync_trades"
+  | "trader_trade_history_snapshots_list";
 
 export type WaiaRuntimeRouteOutcome =
   | "success"
