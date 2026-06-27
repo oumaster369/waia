@@ -106,6 +106,17 @@ export {
   runPaperCycleOnce,
   runPollPaperCycles,
 } from "@/lib/trader/paper/paper-cycle-runner";
+export {
+  buildPaperLoopDepsFromEnv,
+  loadPaperLoopConfig,
+  runPaperLoopCycle,
+} from "@/lib/trader/paper/build-worker-deps";
+export type {
+  PaperLoopCycleDeps,
+  PaperLoopCycleReport,
+  PaperLoopWorkerConfig,
+  RunPaperLoopCycleInput,
+} from "@/lib/trader/paper/paper-loop-worker.types";
 export { runFixturePaperCyclesHarness } from "@/lib/trader/paper/run-fixture-paper-cycles";
 export type {
   PaperCycleDeps,
@@ -113,6 +124,7 @@ export type {
   PaperCycleInput,
   PaperCycleResult,
   PaperCycleSkipReason,
+  PaperCycleStrategyExecution,
   RunFixturePaperCyclesHarnessInput,
   RunFixturePaperCyclesInput,
   RunFixturePaperCyclesResult,

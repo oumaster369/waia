@@ -95,6 +95,27 @@ export default {
             }),
           );
         }
+
+        try {
+          const { buildPaperLoopDepsFromEnv, runPaperLoopCycle } =
+            await import("@/lib/trader/paper/build-worker-deps");
+          const { deps: paperLoopDeps, dispose: paperLoopDispose } =
+            await buildPaperLoopDepsFromEnv(env);
+          try {
+            await runPaperLoopCycle({ deps: paperLoopDeps });
+          } finally {
+            await paperLoopDispose();
+          }
+        } catch (paperLoopError) {
+          console.error(
+            JSON.stringify({
+              event: "waia_paper_loop",
+              phase: "cycle_error",
+              error:
+                paperLoopError instanceof Error ? paperLoopError.message : String(paperLoopError),
+            }),
+          );
+        }
       })(),
     );
   },

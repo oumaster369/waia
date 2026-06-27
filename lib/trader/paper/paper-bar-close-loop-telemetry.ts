@@ -53,10 +53,10 @@ export function createPaperBarCloseRollupCounters(): PaperBarCloseRollupCounters
 }
 
 function mapExecutionStatus(result: PaperCycleResult): string | null {
-  if (result.submitBlocked && result.skipReason !== undefined) {
+  if (result.execution === null) {
     return null;
   }
-  if (result.execution === null) {
+  if (result.submitBlocked && result.skipReason !== undefined) {
     return null;
   }
   return result.execution.status;
@@ -72,9 +72,27 @@ function mapRiskOutcome(
   return result.execution.riskDecision.decision.outcome;
 }
 
-function mapReconciliationClassification(result: PaperCycleResult): ReconciliationClassification | null {
-  const first = result.reconciliation?.outcomes[0];
-  return first?.classification ?? null;
+function mapReconciliationClassification(
+  result: PaperCycleResult,
+): ReconciliationClassification | null {
+  const firstSubmitted = result.strategyExecutions.find(
+    (entry) => entry.execution?.status === "submitted",
+  );
+  const target = firstSubmitted ?? result.strategyExecutions.at(-1);
+  const first = target?.reconciliation?.outcomes[0];
+  return first?.classification ?? result.reconciliation?.outcomes[0]?.classification ?? null;
+}
+
+function countSubmittedStrategies(result: PaperCycleResult): number {
+  return result.strategyExecutions.filter((entry) => entry.execution?.status === "submitted")
+    .length;
+}
+
+function summarizeStrategyIds(result: PaperCycleResult): string {
+  return result.strategyExecutions
+    .map((entry) => entry.signal.strategyId)
+    .sort((a, b) => a.localeCompare(b))
+    .join(",");
 }
 
 function resolveSeverity(input: {
@@ -131,6 +149,9 @@ export function buildPaperBarCloseCycleCompletePayload(
     state_refreshed: input.stateRefreshed,
     open_order_count: input.accountStateAfterCycle.openOrderCount,
     position_symbol_count: input.accountStateAfterCycle.positions.length,
+    strategy_signal_count: input.result.strategyExecutions.length,
+    strategy_submitted_count: countSubmittedStrategies(input.result),
+    strategy_ids: summarizeStrategyIds(input.result),
   };
 
   if (input.errorClass !== undefined) {
