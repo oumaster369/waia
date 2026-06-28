@@ -616,7 +616,10 @@ export const reportingPeriodStatusEnumPg = pgEnum("reporting_period_status", ["O
 export const hwmEntryTypeEnumPg = pgEnum("hwm_entry_type", ["BOOTSTRAP", "RATCHET_UP", "ROLLBACK"]);
 export const invoiceStatusEnumPg = pgEnum("invoice_status", ["DRAFT", "ISSUED", "PAID"]);
 export const accountStatusEnumPg = pgEnum("account_status", ["ACTIVE", "SUSPENDED"]);
-export const accountStatusEventTypeEnumPg = pgEnum("account_status_event_type", ["REACTIVATED"]);
+export const accountStatusEventTypeEnumPg = pgEnum("account_status_event_type", [
+  "SUSPENDED",
+  "REACTIVATED",
+]);
 export const settlementOutcomeEnumPg = pgEnum("settlement_outcome", ["APPLIED", "EXCEPTION"]);
 export const settlementReconciliationCaseStatusEnumPg = pgEnum(
   "settlement_reconciliation_case_status",

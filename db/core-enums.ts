@@ -66,7 +66,7 @@ export const invoiceStatusEnum = ["DRAFT", "ISSUED", "PAID"] as const;
 export const accountStatusEnum = ["ACTIVE", "SUSPENDED"] as const;
 
 /** AI-TRADER account status event types (AT-E12 S3-B). */
-export const accountStatusEventTypeEnum = ["REACTIVATED"] as const;
+export const accountStatusEventTypeEnum = ["SUSPENDED", "REACTIVATED"] as const;
 
 /** AI-TRADER settlement outcome (AT-E12 S3-B). */
 export const settlementOutcomeEnum = ["APPLIED", "EXCEPTION"] as const;
