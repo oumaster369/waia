@@ -62,6 +62,19 @@ export const paymentAddressStatusEnum = [
 /** AI-TRADER invoice lifecycle (AT-E11 / AT-E12 S3-B). */
 export const invoiceStatusEnum = ["DRAFT", "ISSUED", "PAID"] as const;
 
+/** AI-TRADER invoice dispute projection status (AT-E11 / DEE-215). */
+export const invoiceDisputeStatusEnum = ["OPEN", "RESOLVED_UPHELD", "RESOLVED_CORRECTED"] as const;
+
+/** AI-TRADER append-only invoice dispute event types (AT-E11 / DEE-215). */
+export const invoiceDisputeEventTypeEnum = [
+  "OPENED",
+  "RESOLVED_UPHELD",
+  "RESOLVED_CORRECTED",
+] as const;
+
+/** AI-TRADER append-only invoice correction kinds (AT-E11 / DEE-215). */
+export const invoiceCorrectionTypeEnum = ["CREDIT", "REFUND"] as const;
+
 /** AI-TRADER exchange account status (AT-E12 S3-B minimal FSM). */
 export const accountStatusEnum = ["ACTIVE", "SUSPENDED"] as const;
 

@@ -615,6 +615,17 @@ export const strategyTargetDeploymentStateEnumPg = pgEnum("strategy_target_deplo
 export const reportingPeriodStatusEnumPg = pgEnum("reporting_period_status", ["OPEN", "CLOSED"]);
 export const hwmEntryTypeEnumPg = pgEnum("hwm_entry_type", ["BOOTSTRAP", "RATCHET_UP", "ROLLBACK"]);
 export const invoiceStatusEnumPg = pgEnum("invoice_status", ["DRAFT", "ISSUED", "PAID"]);
+export const invoiceDisputeStatusEnumPg = pgEnum("invoice_dispute_status", [
+  "OPEN",
+  "RESOLVED_UPHELD",
+  "RESOLVED_CORRECTED",
+]);
+export const invoiceDisputeEventTypeEnumPg = pgEnum("invoice_dispute_event_type", [
+  "OPENED",
+  "RESOLVED_UPHELD",
+  "RESOLVED_CORRECTED",
+]);
+export const invoiceCorrectionTypeEnumPg = pgEnum("invoice_correction_type", ["CREDIT", "REFUND"]);
 export const accountStatusEnumPg = pgEnum("account_status", ["ACTIVE", "SUSPENDED"]);
 export const accountStatusEventTypeEnumPg = pgEnum("account_status_event_type", [
   "SUSPENDED",
@@ -1292,6 +1303,95 @@ export const traderInvoices = pgTable(
       t.exchangeAccountId,
       t.reportingPeriodId,
     ),
+  ],
+);
+
+/** AI-TRADER: invoice dispute projection (AT-E11 / DEE-215). */
+export const traderInvoiceDisputes = pgTable(
+  "trader_invoice_disputes",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => traderInvoices.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    status: invoiceDisputeStatusEnumPg("status").notNull(),
+    reason: text("reason"),
+    openedBy: text("opened_by"),
+    openedAt: timestamp("opened_at", { withTimezone: true, mode: "date" }).notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "date" }),
+    resolutionReason: text("resolution_reason"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_invoice_disputes_org_invoice_idx").on(t.organizationId, t.invoiceId),
+    index("trader_invoice_disputes_org_status_idx").on(t.organizationId, t.status),
+  ],
+);
+
+/** AI-TRADER: append-only invoice dispute event ledger (AT-E11 / DEE-215). */
+export const traderInvoiceDisputeEvents = pgTable(
+  "trader_invoice_dispute_events",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    disputeId: uuid("dispute_id")
+      .notNull()
+      .references(() => traderInvoiceDisputes.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: invoiceDisputeEventTypeEnumPg("event_type").notNull(),
+    reason: text("reason"),
+    actorType: auditActorTypeEnumPg("actor_type").notNull(),
+    actorId: text("actor_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("trader_invoice_dispute_events_dispute_seq_unique").on(t.disputeId, t.seq)],
+);
+
+/** AI-TRADER: append-only invoice correction ledger (AT-E11 / DEE-215). */
+export const traderInvoiceCorrections = pgTable(
+  "trader_invoice_corrections",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => traderInvoices.id, { onDelete: "cascade" }),
+    disputeId: uuid("dispute_id").references(() => traderInvoiceDisputes.id, {
+      onDelete: "set null",
+    }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    reportingPeriodId: text("reporting_period_id").notNull(),
+    correctionType: invoiceCorrectionTypeEnumPg("correction_type").notNull(),
+    amount: text("amount").notNull(),
+    currency: text("currency").notNull(),
+    restoredHwm: text("restored_hwm").notNull(),
+    hwmLedgerEntryId: uuid("hwm_ledger_entry_id")
+      .notNull()
+      .references(() => traderHwmLedger.id, { onDelete: "restrict" }),
+    reason: text("reason").notNull(),
+    actorType: auditActorTypeEnumPg("actor_type").notNull(),
+    actorId: text("actor_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_invoice_corrections_org_invoice_idx").on(t.organizationId, t.invoiceId),
+    index("trader_invoice_corrections_dispute_idx").on(t.disputeId),
   ],
 );
 

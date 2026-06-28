@@ -257,3 +257,17 @@ export {
   createPostgresInvoiceIssuanceService,
   createSqliteInvoiceIssuanceService,
 } from "@/lib/trader/billing/invoice-issuance-service";
+
+export {
+  createBillingGovernanceService,
+  createPostgresBillingGovernanceService,
+  createSqliteBillingGovernanceService,
+  isInvoiceDisputable,
+  isInvoiceEnforcementFrozen,
+  type ApplyOverchargeCorrectionInput,
+  type ApplyOverchargeCorrectionResult,
+  type BillingGovernanceService,
+  type OpenInvoiceDisputeInput,
+  verifyInvoiceCorrectionDigest,
+  verifyInvoiceDisputeEventDigest,
+} from "@/lib/trader/billing/governance";

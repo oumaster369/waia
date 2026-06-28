@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, count, eq, isNotNull, lt } from "drizzle-orm";
+import { and, asc, count, eq, isNotNull, lt, notExists } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -34,6 +34,21 @@ export async function listOverdueIssuedInvoicesPostgres(
         eq(pgSchema.traderInvoices.status, "ISSUED"),
         isNotNull(pgSchema.traderInvoices.issuedAt),
         lt(pgSchema.traderInvoices.issuedAt, threshold),
+        notExists(
+          ex
+            .select({ id: pgSchema.traderInvoiceDisputes.id })
+            .from(pgSchema.traderInvoiceDisputes)
+            .where(
+              and(
+                eq(pgSchema.traderInvoiceDisputes.invoiceId, pgSchema.traderInvoices.id),
+                eq(
+                  pgSchema.traderInvoiceDisputes.organizationId,
+                  pgSchema.traderInvoices.organizationId,
+                ),
+                eq(pgSchema.traderInvoiceDisputes.status, "OPEN"),
+              ),
+            ),
+        ),
       ),
     )
     .orderBy(asc(pgSchema.traderInvoices.issuedAt))
@@ -61,6 +76,21 @@ export async function countOverdueIssuedInvoicesPostgres(
         eq(pgSchema.traderInvoices.status, "ISSUED"),
         isNotNull(pgSchema.traderInvoices.issuedAt),
         lt(pgSchema.traderInvoices.issuedAt, threshold),
+        notExists(
+          ex
+            .select({ id: pgSchema.traderInvoiceDisputes.id })
+            .from(pgSchema.traderInvoiceDisputes)
+            .where(
+              and(
+                eq(pgSchema.traderInvoiceDisputes.invoiceId, pgSchema.traderInvoices.id),
+                eq(
+                  pgSchema.traderInvoiceDisputes.organizationId,
+                  pgSchema.traderInvoices.organizationId,
+                ),
+                eq(pgSchema.traderInvoiceDisputes.status, "OPEN"),
+              ),
+            ),
+        ),
       ),
     );
   return Number(rows[0]?.value ?? 0);
