@@ -1775,6 +1775,74 @@ export const traderFills = sqliteTable(
   ],
 );
 
+/** AI-TRADER: org-level live-enable governance states (DEE-212 / BP-7). */
+export const traderOrgLiveEnableStateEnum = [
+  "DISABLED",
+  "REQUESTED",
+  "COOLING_OFF",
+  "ENABLED",
+  "CANCELLED",
+] as const;
+export type TraderOrgLiveEnableState = (typeof traderOrgLiveEnableStateEnum)[number];
+
+export const traderOrgLiveEnableEventTypeEnum = [
+  "REQUESTED",
+  "CONFIRMED",
+  "ENABLED",
+  "DISABLED",
+  "CANCELLED",
+] as const;
+export type TraderOrgLiveEnableEventType = (typeof traderOrgLiveEnableEventTypeEnum)[number];
+
+/** AI-TRADER: org-level live-enable projection (DEE-212 / BP-7). One row per organization. */
+export const traderOrgLiveEnable = sqliteTable("trader_org_live_enable", {
+  organizationId: text("organization_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  state: text("state", { enum: [...traderOrgLiveEnableStateEnum] })
+    .notNull()
+    .default("DISABLED"),
+  maxNotionalCap: text("max_notional_cap").notNull(),
+  requestedAt: integer("requested_at", { mode: "timestamp_ms" }),
+  coolingOffEndsAt: integer("cooling_off_ends_at", { mode: "timestamp_ms" }),
+  enabledAt: integer("enabled_at", { mode: "timestamp_ms" }),
+  disabledAt: integer("disabled_at", { mode: "timestamp_ms" }),
+  operatorAckPhraseHash: text("operator_ack_phrase_hash"),
+  stateVersion: integer("state_version").notNull().default(1),
+  lastEventSeq: integer("last_event_seq").notNull().default(0),
+  lastEventDigest: text("last_event_digest"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/** AI-TRADER: append-only org live-enable event log (DEE-212 / BP-7). */
+export const traderOrgLiveEnableEvents = sqliteTable(
+  "trader_org_live_enable_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: text("event_type", { enum: [...traderOrgLiveEnableEventTypeEnum] }).notNull(),
+    maxNotionalCap: text("max_notional_cap"),
+    reason: text("reason"),
+    actorType: text("actor_type", { enum: [...auditActorTypeEnum] }).notNull(),
+    actorId: text("actor_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("trader_org_live_enable_events_org_seq_unique").on(t.organizationId, t.seq)],
+);
+
 /** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */
 export const traderOrgProfiles = sqliteTable(
   "trader_org_profiles",
