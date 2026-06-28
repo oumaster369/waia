@@ -18,7 +18,7 @@ import type {
  */
 
 export const REQUIRED_EFFECTIVE_ACK =
-  "I confirm the paper evidence exceeds the 48h plumbing soak" as const;
+  "I confirm the paper evidence exceeds Accelerated Historical Replay Validation plumbing evidence alone" as const;
 
 export class OperatorRunwayInputError extends Error {
   readonly code: string;

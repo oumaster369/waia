@@ -143,6 +143,9 @@ describe("operator promotion inputs (DEE-277 S2)", () => {
 
   describe("assertEffectiveAck", () => {
     it("accepts the exact phrase", () => {
+      expect(REQUIRED_EFFECTIVE_ACK).toBe(
+        "I confirm the paper evidence exceeds Accelerated Historical Replay Validation plumbing evidence alone",
+      );
       expect(() => assertEffectiveAck(REQUIRED_EFFECTIVE_ACK)).not.toThrow();
     });
     it("rejects a wrong/empty phrase", () => {
