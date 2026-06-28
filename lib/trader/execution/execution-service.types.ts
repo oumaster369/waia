@@ -8,6 +8,7 @@ import type { KillSwitchResolverPort, RiskEngineDecision } from "@/lib/trader/ri
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import type { RiskEngineService } from "@/lib/trader/risk/evaluate.types";
 import type { TraderAuditInput } from "@/lib/trader/types";
+import type { LivePathAuthorizationHook } from "@/lib/trader/live/assert-live-path-authorized";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 export type SubmissionAuditIds = {
@@ -29,6 +30,8 @@ export type SubmitOrderInput = {
   quantity: string;
   credentialId?: string | null;
   strategySignalId?: string | null;
+  strategyId?: string | null;
+  strategyVersion?: string | null;
   allocationDecisionId?: string | null;
   referencePrice: string;
   accountKey: string;
@@ -57,6 +60,8 @@ export type OrderExecutionServiceDeps = {
   writeAudit: (input: TraderAuditInput) => string | Promise<string>;
   nowMs: () => number;
   executionTelemetrySink?: WaiaTraderTelemetrySink;
+  /** Injected only on bounded operator CLI path; Worker defaults omit this hook. */
+  assertLiveAuthorized?: LivePathAuthorizationHook;
 };
 
 export type OrderExecutionService = {

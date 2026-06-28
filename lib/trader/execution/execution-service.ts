@@ -61,7 +61,13 @@ export function canDispatch(order: OrderRow): boolean {
 }
 
 function venueForMode(executionMode: OrderExecutionMode): string {
-  return executionMode === "mock" || executionMode === "paper" ? "mock" : executionMode;
+  if (executionMode === "mock" || executionMode === "paper") {
+    return "mock";
+  }
+  if (executionMode === "live") {
+    return "htx";
+  }
+  return executionMode;
 }
 
 function placeOrderInputFromSubmit(
@@ -218,7 +224,22 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     writeAudit,
     nowMs,
     executionTelemetrySink: telemetrySink,
+    assertLiveAuthorized,
   } = deps;
+
+  async function authorizeLivePath(
+    orgContext: OrgContext,
+    input: SubmitOrderInput,
+    riskDecision?: RiskEngineDecision,
+  ): Promise<void> {
+    if (input.executionMode !== "live") {
+      return;
+    }
+    if (!assertLiveAuthorized) {
+      throw new LiveExecutionNotSupportedError("live");
+    }
+    await assertLiveAuthorized(orgContext, input, { riskDecision });
+  }
 
   function finishSubmitOrder(
     orgContext: OrgContext,
@@ -473,10 +494,14 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
       const orgContext = requireOrgContext(context.organizationId);
       const startedMs = nowMs();
 
-      if (input.executionMode === "live") {
+      if (input.executionMode === "live" && !assertLiveAuthorized) {
         throw new LiveExecutionNotSupportedError("live");
       }
-      if (input.executionMode !== "mock" && input.executionMode !== "paper") {
+      if (
+        input.executionMode !== "mock" &&
+        input.executionMode !== "paper" &&
+        input.executionMode !== "live"
+      ) {
         throw new UnsupportedExecutionModeError(input.executionMode);
       }
 
@@ -489,6 +514,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
         (await orderRepository.findOrderByIdempotencyKey(orgContext, input.idempotencyKey));
 
       if (existing) {
+        await authorizeLivePath(orgContext, input);
         const resume = resumeResultForExistingOrder(existing);
         if (resume) {
           return finishSubmitOrder(orgContext, input, startedMs, resume);
@@ -526,6 +552,8 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
           order: null,
         });
       }
+
+      await authorizeLivePath(orgContext, input, riskDecision);
 
       const quantity =
         riskDecision.decision.outcome === "RESIZE" && riskDecision.decision.resize

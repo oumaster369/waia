@@ -1691,6 +1691,75 @@ export const traderFills = pgTable(
   ],
 );
 
+/** AI-TRADER: org-level live-enable governance states (DEE-212 / BP-7). */
+export const traderOrgLiveEnableStateEnum = [
+  "DISABLED",
+  "REQUESTED",
+  "COOLING_OFF",
+  "ENABLED",
+  "CANCELLED",
+] as const;
+export type TraderOrgLiveEnableState = (typeof traderOrgLiveEnableStateEnum)[number];
+
+export const traderOrgLiveEnableEventTypeEnum = [
+  "REQUESTED",
+  "CONFIRMED",
+  "ENABLED",
+  "DISABLED",
+  "CANCELLED",
+] as const;
+export type TraderOrgLiveEnableEventType = (typeof traderOrgLiveEnableEventTypeEnum)[number];
+
+export const traderOrgLiveEnableStateEnumPg = pgEnum(
+  "trader_org_live_enable_state",
+  traderOrgLiveEnableStateEnum,
+);
+export const traderOrgLiveEnableEventTypeEnumPg = pgEnum(
+  "trader_org_live_enable_event_type",
+  traderOrgLiveEnableEventTypeEnum,
+);
+
+/** AI-TRADER: org-level live-enable projection (DEE-212 / BP-7). One row per organization. */
+export const traderOrgLiveEnable = pgTable("trader_org_live_enable", {
+  organizationId: uuid("organization_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  state: traderOrgLiveEnableStateEnumPg("state").notNull().default("DISABLED"),
+  maxNotionalCap: text("max_notional_cap").notNull(),
+  requestedAt: timestamp("requested_at", { withTimezone: true, mode: "date" }),
+  coolingOffEndsAt: timestamp("cooling_off_ends_at", { withTimezone: true, mode: "date" }),
+  enabledAt: timestamp("enabled_at", { withTimezone: true, mode: "date" }),
+  disabledAt: timestamp("disabled_at", { withTimezone: true, mode: "date" }),
+  operatorAckPhraseHash: text("operator_ack_phrase_hash"),
+  stateVersion: integer("state_version").notNull().default(1),
+  lastEventSeq: integer("last_event_seq").notNull().default(0),
+  lastEventDigest: text("last_event_digest"),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
+
+/** AI-TRADER: append-only org live-enable event log (DEE-212 / BP-7). */
+export const traderOrgLiveEnableEvents = pgTable(
+  "trader_org_live_enable_events",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: traderOrgLiveEnableEventTypeEnumPg("event_type").notNull(),
+    maxNotionalCap: text("max_notional_cap"),
+    reason: text("reason"),
+    actorType: auditActorTypeEnumPg("actor_type").notNull(),
+    actorId: text("actor_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("trader_org_live_enable_events_org_seq_unique").on(t.organizationId, t.seq)],
+);
+
 /** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */
 export const traderOrgProfiles = pgTable(
   "trader_org_profiles",
