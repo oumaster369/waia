@@ -59,3 +59,9 @@ DATABASE_URL=file:./.data/waia.dev.db
 # WATCHER_ENABLED=
 # WATCHER_CONFIRMATIONS_REQUIRED=
 # WATCHER_RESCAN_WINDOW=
+
+# ─── AI-TRADER alerting (DEE-223 / BP-9) — dedicated Alerts Bot only ───
+# SECRET — never reuse TELEGRAM_BOT_TOKEN (OAuth). Production: wrangler secret put.
+# TELEGRAM_ALERTS_BOT_TOKEN=
+# TELEGRAM_ALERTS_CHAT_ID=
+# TELEGRAM_ALERTS_THREAD_ID=

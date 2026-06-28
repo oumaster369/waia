@@ -166,7 +166,12 @@ Set only for providers you enable in the UI.
 
 | Variable | Secret? | Cloudflare |
 |----------|---------|------------|
-| `TELEGRAM_BOT_TOKEN` | Yes | Secret |
+| `TELEGRAM_BOT_TOKEN` | Yes | Secret — OAuth Login Widget only |
+| `TELEGRAM_ALERTS_BOT_TOKEN` | Yes | Secret — dedicated BP-9 Alerts Bot (`sendMessage`) |
+| `TELEGRAM_ALERTS_CHAT_ID` | Yes | Secret — forum supergroup for critical alerts |
+| `TELEGRAM_ALERTS_THREAD_ID` | Yes | Secret — **Alerts** forum topic thread id |
+
+See [DEE-223 BP-9 runbook](./ops/DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md) for provisioning (names only — never commit values).
 
 ---
 
