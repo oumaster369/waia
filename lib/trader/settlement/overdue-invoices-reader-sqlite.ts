@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, isNotNull, lt } from "drizzle-orm";
+import { and, asc, eq, isNotNull, lt, notExists } from "drizzle-orm";
 
 import type { WaiaDb } from "@/db/types";
 import * as sqliteSchema from "@/db/schema";
@@ -34,6 +34,21 @@ export function listOverdueIssuedInvoicesSqlite(
         eq(sqliteSchema.traderInvoices.status, "ISSUED"),
         isNotNull(sqliteSchema.traderInvoices.issuedAt),
         lt(sqliteSchema.traderInvoices.issuedAt, threshold),
+        notExists(
+          db
+            .select({ id: sqliteSchema.traderInvoiceDisputes.id })
+            .from(sqliteSchema.traderInvoiceDisputes)
+            .where(
+              and(
+                eq(sqliteSchema.traderInvoiceDisputes.invoiceId, sqliteSchema.traderInvoices.id),
+                eq(
+                  sqliteSchema.traderInvoiceDisputes.organizationId,
+                  sqliteSchema.traderInvoices.organizationId,
+                ),
+                eq(sqliteSchema.traderInvoiceDisputes.status, "OPEN"),
+              ),
+            ),
+        ),
       ),
     )
     .orderBy(asc(sqliteSchema.traderInvoices.issuedAt))
@@ -61,6 +76,21 @@ export function countOverdueIssuedInvoicesSqlite(
         eq(sqliteSchema.traderInvoices.status, "ISSUED"),
         isNotNull(sqliteSchema.traderInvoices.issuedAt),
         lt(sqliteSchema.traderInvoices.issuedAt, threshold),
+        notExists(
+          db
+            .select({ id: sqliteSchema.traderInvoiceDisputes.id })
+            .from(sqliteSchema.traderInvoiceDisputes)
+            .where(
+              and(
+                eq(sqliteSchema.traderInvoiceDisputes.invoiceId, sqliteSchema.traderInvoices.id),
+                eq(
+                  sqliteSchema.traderInvoiceDisputes.organizationId,
+                  sqliteSchema.traderInvoices.organizationId,
+                ),
+                eq(sqliteSchema.traderInvoiceDisputes.status, "OPEN"),
+              ),
+            ),
+        ),
       ),
     )
     .all();

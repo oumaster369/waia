@@ -13,6 +13,9 @@ import { sql } from "drizzle-orm";
 import {
   accountStatusEventTypeEnum,
   auditActorTypeEnum,
+  invoiceCorrectionTypeEnum,
+  invoiceDisputeEventTypeEnum,
+  invoiceDisputeStatusEnum,
   organizationKindEnum,
   organizationMemberRoleEnum,
   paymentAddressEventTypeEnum,
@@ -1345,6 +1348,103 @@ export const traderInvoices = sqliteTable(
       t.exchangeAccountId,
       t.reportingPeriodId,
     ),
+  ],
+);
+
+/** AI-TRADER: invoice dispute projection (AT-E11 / DEE-215). */
+export const traderInvoiceDisputes = sqliteTable(
+  "trader_invoice_disputes",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => traderInvoices.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    status: text("status", { enum: [...invoiceDisputeStatusEnum] }).notNull(),
+    reason: text("reason"),
+    openedBy: text("opened_by"),
+    openedAt: integer("opened_at", { mode: "timestamp_ms" }).notNull(),
+    resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+    resolutionReason: text("resolution_reason"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_invoice_disputes_org_invoice_idx").on(t.organizationId, t.invoiceId),
+    index("trader_invoice_disputes_org_status_idx").on(t.organizationId, t.status),
+  ],
+);
+
+/** AI-TRADER: append-only invoice dispute event ledger (AT-E11 / DEE-215). */
+export const traderInvoiceDisputeEvents = sqliteTable(
+  "trader_invoice_dispute_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    disputeId: text("dispute_id")
+      .notNull()
+      .references(() => traderInvoiceDisputes.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: text("event_type", { enum: [...invoiceDisputeEventTypeEnum] }).notNull(),
+    reason: text("reason"),
+    actorType: text("actor_type", { enum: [...auditActorTypeEnum] }).notNull(),
+    actorId: text("actor_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("trader_invoice_dispute_events_dispute_seq_unique").on(t.disputeId, t.seq)],
+);
+
+/** AI-TRADER: append-only invoice correction ledger (AT-E11 / DEE-215). */
+export const traderInvoiceCorrections = sqliteTable(
+  "trader_invoice_corrections",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => traderInvoices.id, { onDelete: "cascade" }),
+    disputeId: text("dispute_id").references(() => traderInvoiceDisputes.id, {
+      onDelete: "set null",
+    }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    reportingPeriodId: text("reporting_period_id").notNull(),
+    correctionType: text("correction_type", { enum: [...invoiceCorrectionTypeEnum] }).notNull(),
+    amount: text("amount").notNull(),
+    currency: text("currency").notNull(),
+    restoredHwm: text("restored_hwm").notNull(),
+    hwmLedgerEntryId: text("hwm_ledger_entry_id")
+      .notNull()
+      .references(() => traderHwmLedger.id, { onDelete: "restrict" }),
+    reason: text("reason").notNull(),
+    actorType: text("actor_type", { enum: [...auditActorTypeEnum] }).notNull(),
+    actorId: text("actor_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_invoice_corrections_org_invoice_idx").on(t.organizationId, t.invoiceId),
+    index("trader_invoice_corrections_dispute_idx").on(t.disputeId),
   ],
 );
 
