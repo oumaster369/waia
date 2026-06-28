@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createAlertRouterSink } from "@/lib/observability/alerting/alert-router";
 import type { PostgresDisposeOutcome } from "@/db/postgres-client";
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 
@@ -138,9 +139,11 @@ export type WaiaRuntimeRouteTelemetryPayload = {
 
 export type WaiaRuntimeRouteTelemetrySink = (line: string) => void;
 
-const defaultSink: WaiaRuntimeRouteTelemetrySink = (line) => {
+const stdoutSink: WaiaRuntimeRouteTelemetrySink = (line) => {
   console.info(line);
 };
+
+const defaultSink: WaiaRuntimeRouteTelemetrySink = createAlertRouterSink(stdoutSink);
 
 export function emitWaiaRuntimeRouteTelemetry(
   payload: WaiaRuntimeRouteTelemetryPayload,
