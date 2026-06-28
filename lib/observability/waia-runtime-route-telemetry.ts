@@ -36,7 +36,24 @@ export type WaiaRuntimeRouteKey =
   | "trader_exchange_credentials_sync_positions"
   | "trader_position_snapshots_list"
   | "trader_exchange_credentials_sync_trades"
-  | "trader_trade_history_snapshots_list";
+  | "trader_trade_history_snapshots_list"
+  | "trader_admin_organizations_list"
+  | "trader_admin_audit_list"
+  | "trader_admin_runtime_health"
+  | "trader_admin_overview"
+  | "trader_admin_kill_switches"
+  | "trader_admin_kill_switch_commands"
+  | "trader_admin_org_live_enable"
+  | "trader_admin_org_live_enable_commands"
+  | "trader_admin_strategy_promotions"
+  | "trader_admin_strategy_promotion_commands"
+  | "trader_admin_invoices_list"
+  | "trader_admin_invoice_detail"
+  | "trader_admin_invoice_commands"
+  | "trader_admin_billing_disputes"
+  | "trader_admin_billing_dispute_commands"
+  | "trader_admin_account_status"
+  | "trader_admin_exchange_credentials";
 
 export type WaiaRuntimeRouteOutcome =
   | "success"
