@@ -35,6 +35,7 @@ export const traderAuditActions = {
   settlementReconciliationEscalated: "trader.settlement_reconciliation.escalated",
   settlementReconciliationReopened: "trader.settlement_reconciliation.reopened",
   settlementReconciliationClaimExpired: "trader.settlement_reconciliation.claim_expired",
+  accountSuspended: "trader.account.suspended",
   accountReactivated: "trader.account.reactivated",
   riskLimitsCreated: "trader.risk_limits.created",
   riskLimitsUpdated: "trader.risk_limits.updated",

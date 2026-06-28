@@ -414,6 +414,13 @@
       "when": 1780000000021,
       "tag": "0058_trader_position_trade_snapshots_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1780000000022,
+      "tag": "0059_account_status_event_suspended",
+      "breakpoints": true
     }
   ]
 }

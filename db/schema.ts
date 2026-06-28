@@ -11,6 +11,7 @@ import {
 import { sql } from "drizzle-orm";
 
 import {
+  accountStatusEventTypeEnum,
   auditActorTypeEnum,
   organizationKindEnum,
   organizationMemberRoleEnum,
@@ -622,7 +623,7 @@ export type InvoiceStatusDb = (typeof invoiceStatusEnum)[number];
 export const accountStatusEnum = ["ACTIVE", "SUSPENDED"] as const;
 export type AccountStatusDb = (typeof accountStatusEnum)[number];
 
-export const accountStatusEventTypeEnum = ["REACTIVATED"] as const;
+export { accountStatusEventTypeEnum };
 export type AccountStatusEventTypeDb = (typeof accountStatusEventTypeEnum)[number];
 
 export const settlementOutcomeEnum = ["APPLIED", "EXCEPTION"] as const;
