@@ -13,10 +13,11 @@
 
 | Field | Value |
 |-------|-------|
-| **Package slice** | L0 — Launch Operations Package (skeleton) |
-| **Verdict** | **PENDING** — awaiting L1 onward |
-| **Canonical `dev` SHA (baseline)** | `3e31d91659c4625ecc05e596010a8b369bdcdab3` |
-| **HC-1 (Architect L0 approval)** | **PENDING** |
+| **Package slice** | L0 — Launch Operations Package — **COMPLETE** (PR #322 @ `e19295e`) |
+| **Verdict** | **PENDING** — awaiting HC-1, then L1 onward |
+| **Canonical `dev` SHA (baseline)** | `e19295e6347c12df958777b508e927662e9ac43c` |
+| **HC-1 (Architect L0 approval)** | **PENDING** — **NEXT** |
+| **L1** | **NOT STARTED** |
 
 ---
 
@@ -163,4 +164,4 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 
 ---
 
-**STOP:** L0 skeleton only. Await **HC-1 (Architect)** approval of the Launch Operations Package before L1.
+**STOP:** L0 **COMPLETE**. **HC-1 NEXT.** L1 **NOT STARTED**.

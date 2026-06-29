@@ -317,4 +317,4 @@ Open **immediately** after Launch promotion merge:
 | [ADR-0008](../adr/0008-manual-billing-gate.md) | Manual billing gate |
 | [ADR-0009](../adr/0009-regulatory-posture.md) | External live blocked |
 
-**STOP:** This runbook is the L0 Launch Operations Package procedural half. Await **HC-1 (Architect)** approval before executing L1 onward.
+**STOP:** L0 **COMPLETE** (PR #322). Await **HC-1 (Architect)** approval before L1 or any production touch.

@@ -1,7 +1,7 @@
 # DEE-352 — BP-9A Full MVP Verification Report
 
 **Linear:** [DEE-352](https://linear.app/deepsense/issue/DEE-352/bp-9a-full-mvp-verification-production-configuration-inventory) — **Done** (Step 10 complete)  
-**Blocks:** [DEE-340](https://linear.app/deepsense/issue/DEE-340) (BP-10) — **unblocked for BP-10 start**  
+**Blocks:** [DEE-340](https://linear.app/deepsense/issue/DEE-340) (BP-10) — L0 **COMPLETE**; **HC-1 NEXT** (see §15)  
 **Branch:** `dee-352-bp9a-mvp-verification` — **merged** via [PR #318](https://github.com/oumaster369/waia/pull/318)  
 **Ratification charter:** **RATIFIED** via [PR #319](https://github.com/oumaster369/waia/pull/319); Step 10 governance closure via [PR #320](https://github.com/oumaster369/waia/pull/320)  
 **Canonical `dev` SHA:** `16117d01745d2552bc6275120bf799c082d20d30` (PR #320 governance closure; PR #319 docs charter `cb48863`; implementation baseline `2071130` PR #318)  
@@ -21,7 +21,7 @@
 | **Launch Readiness Review** | **ACCEPTED** | [DEE-352-LAUNCH-READINESS-REVIEW.md](DEE-352-LAUNCH-READINESS-REVIEW.md) — **READY WITH CONDITIONS**, 2026-06-28 |
 | **Phase 2** — Operator provisioning | **COMPLETE** | Steps 1–9A **PASS** (2026-06-29); PR #318 + PR #319 + PR #320 merged; **11/11 PASS** |
 | **Phase 2** — Step 10 Architect decision | **COMPLETE** | Adamar / Architect-Operator, 2026-06-29 (§10, §12); [MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) **RATIFIED** |
-| **BP-10** | **UNBLOCKED FOR START** | DEE-352 **Done**; DEE-340 may begin — not started |
+| **BP-10** | **L0 COMPLETE — HC-1 NEXT** | DEE-352 **Done**; L0 merged PR #322; see §15 |
 
 **Checklist numbering:** Program doc lists criteria **1–14**; BP-9A adds **15** (live Telegram drill) and **16** (signed inventory) → **14+2 = 16** for DEE-340 alignment.
 
@@ -305,7 +305,7 @@ Executed on branch `dee-352-bp9a-mvp-verification` at baseline `0149267`:
 | Host | `WAIA_TRADER_EXECUTION_HOST_URL` | Live cycle gate | .env.example | Operator vault | Yes | **OPERATOR VAULT** | Step 8 — not on Worker; URL off-repo |
 | Host | Runtime secrets (separate KMS) | Host-only | DEE-339 §2.C | Host inject | Yes | **OPERATOR REQUIRED** | Operator PENDING |
 | Host | No Worker live `placeOrder` | Option B | BP-7 runbook | Code | Yes | **PASS** | Repository / CI |
-| Host | BP-7 seven-stage evidence | Pre-BP-10 | DEE-212 runbook | Off-repo | Yes | **OPERATOR REQUIRED** | Execution Host PENDING |
+| Host | BP-7 seven-stage evidence | Pre-BP-10 live order | DEE-212 runbook | Off-repo | Yes | **OPERATOR REQUIRED at L4** | Step 8 host `/health` **PASS** (2026-06-28); live order = BP-10 L4 |
 
 ### 2.8 Observability
 
@@ -1100,11 +1100,13 @@ After provisioning, record evidence in §2 **Verified by** column and §10 step 
 |------|------|------|-----------|
 | Operator / Architect | Adamar / Architect-Operator | 2026-06-29 | BP-9A Phase 2 complete — Step 10 PASS; Production Configuration Inventory signed; [MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) RATIFIED |
 
-**STOP:** BP-9A **COMPLETE**. DEE-352 **Done**. **BP-10 (DEE-340) may begin** — not started. MVP not launched on `main`.
+**STOP:** BP-9A **COMPLETE**. DEE-352 **Done**. **BP-10 L0 COMPLETE** — **HC-1 NEXT** (see §15). MVP not launched on `main`.
 
 ---
 
-## 13. Governance reconciliation (canonical — post PR #320)
+## 13. Governance reconciliation (snapshot — post PR #320)
+
+> Historical snapshot only. Post-L0 state: see [§15](#15-post-l0-governance-sync-2026-06-29).
 
 **Date:** 2026-06-29  
 **Authority:** BP-9A governance completion pass
@@ -1131,9 +1133,27 @@ After provisioning, record evidence in §2 **Verified by** column and §10 step 
 | MVP Ratification Charter | **RATIFIED** |
 | §12 sign-off | **Signed** |
 | DEE-352 | **Done** |
-| BP-10 / DEE-340 | **Unblocked for start** (not started) |
+| BP-10 / DEE-340 | **Unblocked for start** (not started) — superseded by §15 |
 
-**Exact next action:** **Begin BP-10 (DEE-340)** — Org-0 launch authorization gate.
+**Exact next action (at Step 10 close):** **Begin BP-10 (DEE-340)** — superseded by §15 after L0 merge.
+
+---
+
+## 15. Post-L0 governance sync (2026-06-29)
+
+Factual update after BP-10 L0 merge — does not alter BP-9A Phase 1/2 conclusions.
+
+| Field | Value |
+|-------|-------|
+| **BP-10 L0** | **COMPLETE** — [PR #322](https://github.com/oumaster369/waia/pull/322) @ `e19295e6347c12df958777b508e927662e9ac43c` |
+| **Launch Operations Package** | [DEE-340-BP10-LAUNCH-RUNBOOK.md](DEE-340-BP10-LAUNCH-RUNBOOK.md) · [DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md) |
+| **Canonical execution plan** | [`.cursor/plans/bp-10_launch_execution_plan_e2aa412c.plan.md`](../../.cursor/plans/bp-10_launch_execution_plan_e2aa412c.plan.md) |
+| **DEE-340 (Linear)** | **In Progress** (reopened after erroneous auto-Done on L0 merge; full BP-10 completes at L6) |
+| **Active gate** | **HC-1** — Architect review of L0 package |
+| **L1** | **NOT STARTED** |
+| **MVP on `main`** | **Not launched** |
+
+**Exact next action:** **HC-1 (Architect Review of the Launch Operations Package).**
 
 ---
 
