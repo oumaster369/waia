@@ -210,6 +210,8 @@ Phase 1 (complete) → Launch Readiness Review (this document) → Phase 2 (Step
 | Field | Value |
 |-------|-------|
 | BP-10 L0 | **COMPLETE** — PR #322 @ `e19295e` |
+| Governance sync | **COMPLETE** — PR #324 @ `1951b7d` |
+| Canonical `dev` HEAD | `1951b7d` |
 | Active gate | **HC-1** (Architect) |
 | DEE-340 (Linear) | **In Progress** |
 | L1 | **NOT STARTED** |

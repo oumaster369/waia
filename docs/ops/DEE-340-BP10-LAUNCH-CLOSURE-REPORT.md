@@ -13,9 +13,9 @@
 
 | Field | Value |
 |-------|-------|
-| **Package slice** | L0 — Launch Operations Package — **COMPLETE** (PR #322 @ `e19295e`) |
+| **Package slice** | L0 — Launch Operations Package — **COMPLETE** (PR #322 @ `e19295e`; governance sync PR #324 @ `1951b7d`) |
 | **Verdict** | **PENDING** — awaiting HC-1, then L1 onward |
-| **Canonical `dev` SHA (baseline)** | `e19295e6347c12df958777b508e927662e9ac43c` |
+| **Canonical `dev` SHA (baseline)** | `1951b7dc2503eb3c108320a47a290f273b8d6f64` |
 | **HC-1 (Architect L0 approval)** | **PENDING** — **NEXT** |
 | **L1** | **NOT STARTED** |
 

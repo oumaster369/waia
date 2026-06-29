@@ -1146,6 +1146,8 @@ Factual update after BP-10 L0 merge — does not alter BP-9A Phase 1/2 conclusio
 | Field | Value |
 |-------|-------|
 | **BP-10 L0** | **COMPLETE** — [PR #322](https://github.com/oumaster369/waia/pull/322) @ `e19295e6347c12df958777b508e927662e9ac43c` |
+| **Governance sync** | **COMPLETE** — [PR #324](https://github.com/oumaster369/waia/pull/324) @ `1951b7dc2503eb3c108320a47a290f273b8d6f64` |
+| **Canonical `dev` HEAD** | `1951b7dc2503eb3c108320a47a290f273b8d6f64` |
 | **Launch Operations Package** | [DEE-340-BP10-LAUNCH-RUNBOOK.md](DEE-340-BP10-LAUNCH-RUNBOOK.md) · [DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md) |
 | **Canonical execution plan** | [`.cursor/plans/bp-10_launch_execution_plan_e2aa412c.plan.md`](../../.cursor/plans/bp-10_launch_execution_plan_e2aa412c.plan.md) |
 | **DEE-340 (Linear)** | **In Progress** (reopened after erroneous auto-Done on L0 merge; full BP-10 completes at L6) |
