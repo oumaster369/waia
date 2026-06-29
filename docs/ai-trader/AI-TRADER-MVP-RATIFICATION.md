@@ -4,6 +4,7 @@ Status: **RATIFIED** — Step 10 complete (2026-06-29)
 Type: Closure seal (declarative; creates no new rule)  
 Implementation baseline (`dev`): `2071130bfeefb90a28f97294abca6af158fe1177` (PR #318)  
 Documentation closure (`dev`): `cb48863c8334e7b474ac3aa461ac1926076f9bb3` (PR #319)  
+Step 10 governance closure (`dev`): `16117d01745d2552bc6275120bf799c082d20d30` (PR #320)  
 Authority: Founders Council apex ([ADR-0012](../adr/0012-governance-integration-founders-council-and-english-canon.md)) · Single Operator Governance Model ([ADR-0011](../adr/0011-single-operator-governance-model.md))
 
 > **This document creates no new rule.**  
@@ -160,6 +161,7 @@ This charter is ratified when the signatures below are recorded. Upon ratificati
 |-------|-------|
 | Implementation baseline (`dev`) | `2071130bfeefb90a28f97294abca6af158fe1177` (PR #318) |
 | Documentation closure (`dev`) | `cb48863c8334e7b474ac3aa461ac1926076f9bb3` (PR #319) |
+| Step 10 governance closure (`dev`) | `16117d01745d2552bc6275120bf799c082d20d30` (PR #320) |
 | BP-9A verification | **11/11 PASS** — Steps 1–9A + Step 10 complete (2026-06-29) |
 | `WAIA_CORE_ENFORCEMENT` | **OFF** (unset on production Worker; application-layer enforcement primary per ADR-0007) |
 | Effect of signature | AI-TRADER MVP architecture **CLOSED**; scope **FROZEN**; BP-10 launch authorization **unblocked** |

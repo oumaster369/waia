@@ -3,8 +3,8 @@
 **Linear:** [DEE-352](https://linear.app/deepsense/issue/DEE-352/bp-9a-full-mvp-verification-production-configuration-inventory) — **Done** (Step 10 complete)  
 **Blocks:** [DEE-340](https://linear.app/deepsense/issue/DEE-340) (BP-10) — **unblocked for BP-10 start**  
 **Branch:** `dee-352-bp9a-mvp-verification` — **merged** via [PR #318](https://github.com/oumaster369/waia/pull/318)  
-**Ratification charter:** **RATIFIED** via [PR #319](https://github.com/oumaster369/waia/pull/319)  
-**Canonical `dev` SHA:** `cb48863c8334e7b474ac3aa461ac1926076f9bb3` (PR #319 docs closure; implementation baseline `2071130` PR #318)  
+**Ratification charter:** **RATIFIED** via [PR #319](https://github.com/oumaster369/waia/pull/319); Step 10 governance closure via [PR #320](https://github.com/oumaster369/waia/pull/320)  
+**Canonical `dev` SHA:** `16117d01745d2552bc6275120bf799c082d20d30` (PR #320 governance closure; PR #319 docs charter `cb48863`; implementation baseline `2071130` PR #318)  
 **Baseline SHA (Phase 1 start):** `0149267` (`dev` post BP-9 / PR #317)  
 **Production Worker (canonical lineage):** `86bde72b-b945-48c0-99ce-eaf0500f8aeb` — deployed from `dev` @ `2071130` (2026-06-29)  
 **Verified at:** 2026-06-28 (Phase 1); governance reconciliation 2026-06-29; **Step 10** 2026-06-29  
@@ -19,7 +19,7 @@
 | **Phase 1** — Inventory verification | **COMPLETE (Composer)** | Repo/docs audit, classification, validation chain, dry-run drill |
 | **Phase 1 gate** — Human acceptance | **COMPLETE** | Adamar / Architect-Operator, 2026-06-28 (§9) |
 | **Launch Readiness Review** | **ACCEPTED** | [DEE-352-LAUNCH-READINESS-REVIEW.md](DEE-352-LAUNCH-READINESS-REVIEW.md) — **READY WITH CONDITIONS**, 2026-06-28 |
-| **Phase 2** — Operator provisioning | **COMPLETE** | Steps 1–9A **PASS** (2026-06-29); PR #318 + PR #319 merged; **11/11 PASS** |
+| **Phase 2** — Operator provisioning | **COMPLETE** | Steps 1–9A **PASS** (2026-06-29); PR #318 + PR #319 + PR #320 merged; **11/11 PASS** |
 | **Phase 2** — Step 10 Architect decision | **COMPLETE** | Adamar / Architect-Operator, 2026-06-29 (§10, §12); [MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) **RATIFIED** |
 | **BP-10** | **UNBLOCKED FOR START** | DEE-352 **Done**; DEE-340 may begin — not started |
 
@@ -1042,7 +1042,7 @@ Provisioned via `PaymentAddressService` (`scripts/waia-core/provision-org0-payme
 
 #### Reality Preconditions
 
-Steps 1–9A **PASS**; Payment Watcher runtime recovery **PASS** (§10.1); PR #318 + PR #319 merged; production deploy lineage canonical (`86bde72b…` @ `2071130`).
+Steps 1–9A **PASS**; Payment Watcher runtime recovery **PASS** (§10.1); PR #318 + PR #319 + PR #320 merged; production deploy lineage canonical (`86bde72b…` @ `2071130`).
 
 #### Architect decisions
 
@@ -1104,17 +1104,17 @@ After provisioning, record evidence in §2 **Verified by** column and §10 step 
 
 ---
 
-## 13. Governance reconciliation (post PR #318 merge)
+## 13. Governance reconciliation (canonical — post PR #320)
 
 **Date:** 2026-06-29  
 **Authority:** BP-9A governance completion pass
 
 | Area | Result | Evidence |
 |------|--------|----------|
-| Repository | **PASS** | PR #318 + PR #319 merged; `origin/dev` @ `cb48863…` |
-| Documentation | **PASS** | Report + LRR + Ratification Charter integrated |
-| Production lineage | **PASS** | Worker **`86bde72b…`** @ 100% from `2071130` |
-| Linear | **PASS** | DEE-352 reconciled after auto-close drift |
+| Repository | **PASS** | PR #318 + PR #319 + PR #320 merged; `origin/dev` @ `16117d0…` |
+| Documentation | **PASS** | Report + LRR + Ratification Charter; Step 10 complete |
+| Production lineage | **PASS** | Worker **`86bde72b…`** @ 100% from `2071130` (unchanged by docs-only #319/#320) |
+| Linear | **PASS** | DEE-352 **Done**; DEE-340 **Todo** (BP-10 authorized, not started) |
 | Step 10 | **PASS** | See §10; §12 signed 2026-06-29 |
 
 ---
@@ -1139,7 +1139,7 @@ After provisioning, record evidence in §2 **Verified by** column and §10 step 
 
 ## References
 
-- [AI-TRADER MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) — Step 10 closure seal (pending Architect sign-off)
+- [AI-TRADER MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) — Step 10 closure seal — **RATIFIED** 2026-06-29
 - [Launch Readiness Review](DEE-352-LAUNCH-READINESS-REVIEW.md) — mandatory gate before Phase 2
 - [BP-9 alerting runbook](DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md)
 - [BP-7 live runbook](DEE-212-BP7-LIVE-EXECUTION-RUNBOOK.md)
