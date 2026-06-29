@@ -1,9 +1,11 @@
 # DEE-340 / BP-10 — L2 HC-3 Operator Checklist
 
-**Linear:** [DEE-340](https://linear.app/deepsense/issue/DEE-340) · **Checkpoint:** HC-3 · **Authority:** [ADR-0008](../adr/0008-manual-billing-gate.md) · [Billing & HWM §7](../ai-trader/AI-TRADER-BILLING-HWM.md)  
+**Linear:** [DEE-340](https://linear.app/deepsense/issue/DEE-340) · **Checkpoint:** HC-3 · **Status:** **COMPLETE** (2026-06-29)  
+**Authority:** [ADR-0008](../adr/0008-manual-billing-gate.md) · [Billing & HWM §7](../ai-trader/AI-TRADER-BILLING-HWM.md)  
 **Runbook:** [DEE-340-BP10-LAUNCH-RUNBOOK.md](DEE-340-BP10-LAUNCH-RUNBOOK.md) · **Evidence ledger:** [DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md) §3
 
-> **Operator-only.** Composer must not execute this checklist. No secret values in any artifact — use id prefixes, counts, HTTP codes, and audit action names only.
+> **Operator-only.** Ceremony **COMPLETE** 2026-06-29. Evidence recorded in closure report §3. **Next:** HC-4 readiness review — **do not proceed to L3 live-enable** until readiness review complete.  
+> **UX backlog (post-MVP):** [DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md](DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md)
 
 ---
 
@@ -144,7 +146,21 @@ Complete the evidence package in [closure report §3](DEE-340-BP10-LAUNCH-CLOSUR
 | Operator attestation | Name/role + date |
 | Criterion 10 | Operator confirms gate exercised — Composer records **PASS** in §1 |
 
-**STOP after Step 6.** Do not proceed to L3 (live-enable) until Composer records evidence and Architect/Operator agree to continue.
+**STOP after Step 6.** HC-3 **COMPLETE** (2026-06-29). Do not proceed to L3 (live-enable) until **HC-4 readiness review** complete and Architect/Operator agree to continue.
+
+---
+
+## Completion record (2026-06-29)
+
+| Step | Status | Evidence |
+|------|--------|----------|
+| 0 — Materialize drill period | **COMPLETE** | Period prefix `d926e5ff`; audit chain through `draft_generated` |
+| 1 — Locate draft invoice | **COMPLETE** | Invoice prefix `2cedeaa5`; `DRAFT`, `billable: true` |
+| 2 — Manual reconciliation review | **COMPLETE** | 6 attestations affirmed (audit metadata) |
+| 3 — Approve issuance | **COMPLETE** | `issuanceApprovedAt` `2026-06-29T17:35:34.798Z` |
+| 4 — Cooling-off elapsed | **COMPLETE** | `coolingOffUntil` `2026-06-29T17:50:34.798Z`; Issue after |
+| 5 — Issue invoice | **COMPLETE** | `ISSUED`; `issuedAt` `2026-06-29T17:57:37.216Z`; HWM ratchet prefix `6a182789` |
+| 6 — Evidence handoff | **COMPLETE** | Closure report §3 updated; criterion **10** **PASS** |
 
 ---
 
@@ -165,3 +181,4 @@ Complete the evidence package in [closure report §3](DEE-340-BP10-LAUNCH-CLOSUR
 - [ADR-0011 — Single Operator Governance Model](../adr/0011-single-operator-governance-model.md)
 - [AI-TRADER Billing & HWM §7](../ai-trader/AI-TRADER-BILLING-HWM.md)
 - Admin surface: `app/(trader)/admin/billing/page.tsx` · API: `POST /api/trader/admin/invoices/{invoiceId}/commands`
+- Post-MVP UX backlog: [DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md](DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md)

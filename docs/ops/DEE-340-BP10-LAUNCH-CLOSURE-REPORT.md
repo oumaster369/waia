@@ -14,15 +14,15 @@
 | Field | Value |
 |-------|-------|
 | **Package slice** | L0 — Launch Operations Package — **COMPLETE** (PR #322 @ `e19295e`) |
-| **Verdict** | **PENDING** — L1 **COMPLETE**; L2 implementation **COMPLETE on `dev`**; **Deployment Verification PASS**; **HC-3 Step 0 NEXT** |
+| **Verdict** | **IN PROGRESS** — L1 **COMPLETE**; L2 **COMPLETE**; **HC-3 COMPLETE**; **HC-4 NEXT** (not executed) |
 | **Canonical `dev` SHA (baseline)** | `e19295e6347c12df958777b508e927662e9ac43c` |
 | **`dev` SHA (L1 verified)** | `392bb68324bc13e3ba16661afe37cb189e3199fb` |
 | **`dev` SHA (L2 runtime merged)** | `7203e02fde631c43e0b19fef2e892bccd06d24f5` (PR #329) |
 | **HC-1 (Architect L0 approval)** | **APPROVED** (2026-06-29) |
 | **L1** | **COMPLETE** (2026-06-29) |
-| **L2** | **ACTIVE** — runtime hook + orchestrator + admin endpoint **COMPLETE on `dev`**; **production deploy VERIFIED** @ `822dfd0`; **HC-3 NOT EXECUTED** |
-| **Next action** | **HC-3 Step 0** (Operator) — `close-and-materialize` per [L2 operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) |
-| **HC-3 package** | [L2 operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) — issued; await post-deploy Operator execution |
+| **L2** | **COMPLETE** (2026-06-29) — HC-3 operator ceremony **COMPLETE**; criterion **10** **PASS** |
+| **Next action** | **HC-4 readiness review** (Operator) — governed Org-0 live-enable per runbook §5; **STOP before L3 execution until readiness review complete** |
+| **HC-3 package** | [L2 operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) — **COMPLETE**; evidence §3 below |
 
 ---
 
@@ -41,7 +41,7 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 | 7 | Risk + kill switches; reconciliation | PASS | CI tests; admin kill-switch UI | **PASS** | |
 | 8 | Paper loop + AHR validated | PASS | [DEE-337 closure report](DEE-337-P5-TWO-STRATEGY-AHR-CLOSURE-REPORT.md) | **PASS** | |
 | 9 | Signed validation-gate promotion (ADR-0010/11) | PASS | DEE-178; admin promotion UI | **PASS** | |
-| 10 | Reporting + HWM + 30% fee + manual gate | **OPERATOR REQUIRED** | Admin billing; ADR-0008 | **OPERATOR REQUIRED** | **L2 operator gate — only remaining pre-order gate** |
+| 10 | Reporting + HWM + 30% fee + manual gate | **OPERATOR REQUIRED** | Admin billing; ADR-0008 | **PASS** | HC-3 complete 2026-06-29 — §3 execution record |
 | 11 | USDT payments + suspension lifecycle | PASS | Steps 6 + 9A + §10.1 — watcher + registry | **PASS** | |
 | 12 | Org-0 live admin-gated; isolated host | PASS | Steps 4 + 8 — admin + host `/health` (2026-06-28) | **PASS** | Live order reality = **L4** |
 | 13 | Admin console complete | PASS | BP-8 PR #316; admin route tests | **PASS** | |
@@ -49,9 +49,9 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 | 15 | Live Telegram alert delivery | PASS | Step 7 — production drill (2026-06-28) | **PASS** | |
 | 16 | Production Configuration Inventory signed | PASS | Step 10 — §12 signed 2026-06-29 | **PASS** | |
 
-**Residual operator gate before live order:** Criterion **10** only (L2).
+**Residual operator gate before live order:** **HC-4** (L3 live-enable) — criterion **10** closed at L2.
 
-**L1 summary:** 15/16 criteria green on `dev`; criterion **10** deferred to L2 operator attestation.
+**L1 summary:** 15/16 criteria green on `dev` at L1; criterion **10** closed at L2 HC-3 (2026-06-29). **16/16 green on `dev`** after HC-3 evidence recorded.
 
 ---
 
@@ -91,8 +91,8 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 | Admin endpoint `POST /api/trader/admin/reporting-periods/commands` | **COMPLETE on `dev`** (PR #329) |
 | **`dev` SHA** | `7203e02fde631c43e0b19fef2e892bccd06d24f5` |
 | Production deployment | **VERIFIED** @ `822dfd06c80216896bfe5235d72a5392be8ae0d9` |
-| HC-3 execution | **NOT EXECUTED** |
-| Criterion 10 | **OPERATOR REQUIRED** (unchanged) |
+| HC-3 execution | **COMPLETE** (2026-06-29) |
+| Criterion 10 | **PASS** |
 
 **Prior blocker (resolved on `dev`):** missing implementation — S5 draft materialization was not wired to reporting period close.  
 **Prior blocker (resolved in production):** admin commands route returned **404** pre-deploy; post-deploy route is live (non-404).
@@ -126,41 +126,53 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 | **Root cause** | AT-E11 S5 draft materialization not wired to production reporting period close |
 | **Recovery plan** | `draft_invoice_runtime_integration_d4faf147` — Phase A hook + Phase B orchestrator/admin command |
 | **Recovery status** | **COMPLETE on `dev`** (PR #329 @ `7203e02`) |
-| **Remaining gate** | HC-3 Operator execution (Step 0 `close-and-materialize`) |
+| **Remaining gate** | **HC-4** (L3 live-enable) — **not executed** |
 | **Deferred** | Worker billing cron, operator CLI (post-launch) |
 
-### Execution record (Operator — pending)
+### HC-3 execution record (Operator — COMPLETE)
 
 | Field | Value |
 |-------|-------|
-| **Status** | _not started_ — HC-3 checklist issued; await Operator |
-| **Invoice id prefix** | _pending_ |
-| **Reporting period id prefix** | _pending_ |
-| **Exchange account id** | _pending_ (expected: `htx-spot-1`) |
-| **Gate attestation count** | _pending_ (expected: **6** on successful approval) |
-| **Manual sign-off timestamp** | _pending_ (`issuanceApprovedAt` ISO-8601) |
-| **Issued-at timestamp** | _pending_ (`issuedAt` ISO-8601) |
-| **Audit actions observed** | _pending_ (`trader.invoice.issuance_approved`, `trader.invoice.issued`) |
-| **Criterion 10 final status** | _pending_ — remains **OPERATOR REQUIRED** until Operator completes HC-3 |
-| **Operator attestation** | _pending_ |
-| **Date** | _pending_ |
+| **Status** | **COMPLETE** — Steps 0–6 per [operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) |
+| **Exchange account id** | `htx-spot-1` |
+| **Reporting period id prefix** | `d926e5ff` |
+| **Invoice id prefix** | `2cedeaa5` |
+| **Period** | `2026-06-01T00:00:00.000Z` → `2026-06-29T23:59:59.000Z` (attested drill) |
+| **Valuation source** | `admin.attested_close.v1` |
+| **Performance fee** | `30` (30% of RSP `100`) |
+| **Gate attestation count** | **6** (all ADR-0008 keys affirmed in `issuance_approved` audit) |
+| **Manual sign-off timestamp** | `2026-06-29T17:35:34.798Z` (`issuanceApprovedAt`) |
+| **Cooling-off until** | `2026-06-29T17:50:34.798Z` (15 minutes) |
+| **Issued-at timestamp** | `2026-06-29T17:57:37.216Z` (`issuedAt`) |
+| **Invoice final status** | `ISSUED`; `billable: true`; `paidAt: null`; `settledAmount: 0`; no open dispute |
+| **HWM bootstrap entry prefix** | `0424c555` — `BOOTSTRAP` @ `0` |
+| **HWM ratchet entry prefix** | `6a182789` — `RATCHET_UP` @ `100` (source period `d926e5ff`, source invoice `2cedeaa5`) |
+| **Audit actions observed** | `trader.hwm.bootstrapped`, `trader.reporting_period.opened`, `trader.reporting_period.closed`, `trader.invoice.draft_generated`, `trader.invoice.issuance_approved`, `trader.invoice.issued` |
+| **Criterion 10 final status** | **PASS** |
+| **Operator attestation** | _pending name/role_ — Operator ceremony complete 2026-06-29 |
+| **Verified by** | Composer (read-only production audit) + Operator (UI ceremony) |
+| **Date** | 2026-06-29 |
 
-### Evidence capture template (Composer fills after Operator attestation)
-
-When HC-3 completes, update the execution record above and §1 row 10:
+### Evidence capture (recorded)
 
 ```text
-Invoice id prefix:        <first-8-chars>
-Reporting period prefix:  <first-8-chars>
+Invoice id prefix:        2cedeaa5
+Reporting period prefix:  d926e5ff
+Exchange account id:      htx-spot-1
 Gate attestation count:   6
-Manual sign-off:          <issuanceApprovedAt ISO-8601>
-Issued-at:                <issuedAt ISO-8601>
-Audit actions:            trader.invoice.issuance_approved, trader.invoice.issued
+Manual sign-off:          2026-06-29T17:35:34.798Z
+Cooling-off until:        2026-06-29T17:50:34.798Z
+Issued-at:                2026-06-29T17:57:37.216Z
+Audit actions:            trader.hwm.bootstrapped, trader.reporting_period.opened,
+                          trader.reporting_period.closed, trader.invoice.draft_generated,
+                          trader.invoice.issuance_approved, trader.invoice.issued
+HWM bootstrap prefix:     0424c555
+HWM ratchet prefix:       6a182789
 Criterion 10:             PASS
-Operator:                 <name/role> — <date>
+Operator:                 <Operator name/role> — 2026-06-29
 ```
 
-**Do not mark criterion 10 PASS until Operator confirms Steps 1–6 of the checklist.**
+**UX observations (post-MVP backlog only):** [DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md](DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md)
 
 ---
 
@@ -254,4 +266,4 @@ Operator:                 <name/role> — <date>
 
 ---
 
-**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. L1 **COMPLETE**. L2 implementation **COMPLETE on `dev`** @ `822dfd0`. **Deployment Verification PASS** — production Worker `waia-app` @ `a23dca0a…`. **HC-3 Step 0 NEXT** (Operator). Criterion **10** remains **OPERATOR REQUIRED**. **STOP before L3.** No live-enable, no live order, no production promotion.
+**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. L1 **COMPLETE**. L2 **COMPLETE**. **HC-3 COMPLETE** (2026-06-29). Criterion **10** **PASS**. **HC-4 NEXT** — readiness review for governed Org-0 live-enable; **L3 NOT STARTED**. **STOP before L3 execution** until HC-4 readiness review complete. No live order, no production promotion.
