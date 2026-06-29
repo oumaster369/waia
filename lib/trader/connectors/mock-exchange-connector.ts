@@ -1,4 +1,6 @@
-import "server-only";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
+
+enforceServerOnly();
 
 import { ConnectorNotSupportedError } from "@/lib/trader/connectors/errors";
 import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connector";

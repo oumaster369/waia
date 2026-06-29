@@ -1,6 +1,9 @@
 import type { ChainAdapter } from "@/lib/waia-core/payment-watcher/chain-adapter.port";
 import type { ObservedTransfer } from "@/lib/waia-core/payment-watcher/watcher-cycle.types";
-import { TronRpcClient } from "@/lib/waia-core/payment-watcher/tron-rpc-client";
+import {
+  createTronRpcClient,
+  type TronRpcClient,
+} from "@/lib/waia-core/payment-watcher/tron-rpc-client";
 import type { WatcherConfig } from "@/lib/waia-core/payment-watcher/watcher-config";
 
 type TronBlockResponse = {
@@ -94,7 +97,7 @@ function mapEventToTransfer(
 export function createTronAdapter(config: WatcherConfig, rpcClient?: TronRpcClient): ChainAdapter {
   const client =
     rpcClient ??
-    new TronRpcClient({
+    createTronRpcClient({
       primaryUrl: config.tronPrimaryUrl,
       secondaryUrl: config.tronSecondaryUrl,
       apiKey: config.tronGridApiKey,

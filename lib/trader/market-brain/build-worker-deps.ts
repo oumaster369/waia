@@ -1,37 +1,16 @@
-import { createRequire } from "node:module";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
 
-const require = createRequire(import.meta.url);
-if (process.env.VITEST !== "true") {
-  require("server-only");
-}
-
-import { getCloudflareContext } from "@opennextjs/cloudflare";
+enforceServerOnly();
 
 import { createPerRequestPostgresRuntime } from "@/db/postgres-client";
 import { createPostgresMiObservationService } from "@/lib/trader/mi/observation-service";
 import { createPostgresMiSourceProvenanceRepository } from "@/lib/trader/mi/repository-adapters";
 import { P3_MARKET_BRAIN_SYMBOLS } from "@/lib/trader/intelligence/types";
+import { bridgeTraderCronEnvToProcess, mergeCronEnv } from "@/lib/trader/cron/worker-cron-env";
 import type {
   MarketBrainCycleDeps,
   MarketBrainWorkerConfig,
 } from "@/lib/trader/market-brain/types";
-
-function mergeEnv(explicitEnv?: Record<string, unknown>): Record<string, unknown> {
-  if (explicitEnv) {
-    for (const [key, value] of Object.entries(process.env)) {
-      if (explicitEnv[key] === undefined && value !== undefined) {
-        explicitEnv[key] = value;
-      }
-    }
-    return explicitEnv;
-  }
-  try {
-    const cfEnv = getCloudflareContext().env as unknown as Record<string, unknown>;
-    return { ...process.env, ...cfEnv };
-  } catch {
-    return { ...process.env };
-  }
-}
 
 function parseEnabled(raw: unknown): boolean {
   if (typeof raw !== "string") {
@@ -70,9 +49,15 @@ function createStdoutMarketBrainLogger(): MarketBrainCycleDeps["logger"] {
 export async function buildMarketBrainDepsFromEnv(
   explicitEnv?: Record<string, unknown>,
 ): Promise<{ deps: MarketBrainCycleDeps; dispose: () => Promise<void> }> {
-  const env = mergeEnv(explicitEnv);
+  const env = mergeCronEnv(explicitEnv);
+  bridgeTraderCronEnvToProcess(env);
   const config = loadMarketBrainConfig(env);
-  const runtime = await createPerRequestPostgresRuntime();
+  const postgresUrl =
+    typeof env.DATABASE_URL_POSTGRES === "string" ? env.DATABASE_URL_POSTGRES.trim() : "";
+  if (postgresUrl) {
+    process.env.DATABASE_URL_POSTGRES = postgresUrl;
+  }
+  const runtime = createPerRequestPostgresRuntime();
   const db = runtime.db;
   const sourceRepo = createPostgresMiSourceProvenanceRepository(db);
   const miBundle = createPostgresMiObservationService(db, sourceRepo);

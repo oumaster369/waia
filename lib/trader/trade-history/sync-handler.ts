@@ -21,10 +21,15 @@ import {
 } from "@/lib/trader/credentials/credential-service";
 import { CredentialDecryptError, CredentialNotFoundError } from "@/lib/trader/credentials/errors";
 import type { CredentialService } from "@/lib/trader/credentials/types";
+import { HtxConnectorValidationError } from "@/lib/trader/connectors/htx/errors";
 import {
   HtxExchangeConnector,
   type HtxExchangeConnectorConfig,
 } from "@/lib/trader/connectors/htx/htx-exchange-connector";
+import {
+  normalizeHtxSpotSymbol,
+  UNSUPPORTED_HTX_SPOT_SYMBOL_MESSAGE,
+} from "@/lib/trader/symbols/normalize-htx-spot-symbol";
 import { createMasterKeyProvider } from "@/lib/trader/security/create-master-key-provider";
 import { MasterKeyNotReadyError } from "@/lib/trader/security/errors";
 import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provider";
@@ -171,8 +176,8 @@ async function parseSyncRequestBody(
   }
 
   const body = raw as Record<string, unknown>;
-  const symbol = typeof body.symbol === "string" ? body.symbol.trim() : "";
-  if (!symbol) {
+  const rawSymbol = typeof body.symbol === "string" ? body.symbol : "";
+  if (!rawSymbol.trim()) {
     return clientError(
       400,
       HTX_TRADE_HISTORY_SYNC_ERROR_CODES.INVALID_SYMBOL,
@@ -180,8 +185,13 @@ async function parseSyncRequestBody(
     );
   }
 
+  const normalized = normalizeHtxSpotSymbol(rawSymbol);
+  if (!normalized.ok) {
+    return clientError(400, HTX_TRADE_HISTORY_SYNC_ERROR_CODES.INVALID_SYMBOL, normalized.message);
+  }
+
   if (body.limit === undefined) {
-    return { symbol };
+    return { symbol: normalized.symbol };
   }
 
   if (typeof body.limit !== "number" || !Number.isFinite(body.limit) || body.limit <= 0) {
@@ -192,7 +202,7 @@ async function parseSyncRequestBody(
     );
   }
 
-  return { symbol, limit: Math.trunc(body.limit) };
+  return { symbol: normalized.symbol, limit: Math.trunc(body.limit) };
 }
 
 function createCredentialServiceFromRuntime(
@@ -315,7 +325,14 @@ export async function handleTradeHistorySyncPost(
         symbol: syncBody.symbol,
         limit: syncBody.limit,
       });
-    } catch {
+    } catch (err) {
+      if (err instanceof HtxConnectorValidationError && err.code === "SYMBOL_NOT_ALLOWED") {
+        return clientError(
+          400,
+          HTX_TRADE_HISTORY_SYNC_ERROR_CODES.INVALID_SYMBOL,
+          UNSUPPORTED_HTX_SPOT_SYMBOL_MESSAGE,
+        );
+      }
       return {
         status: 502,
         body: errorEnvelope(

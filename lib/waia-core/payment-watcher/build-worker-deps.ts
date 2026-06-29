@@ -1,9 +1,6 @@
-import { createRequire } from "node:module";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
 
-const require = createRequire(import.meta.url);
-if (process.env.VITEST !== "true") {
-  require("server-only");
-}
+enforceServerOnly();
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
@@ -19,11 +16,7 @@ import type { WatcherDeps } from "@/lib/waia-core/payment-watcher/watcher-cycle.
 
 function mergeEnv(explicitEnv?: Record<string, unknown>): Record<string, unknown> {
   if (explicitEnv) {
-    for (const [key, value] of Object.entries(process.env)) {
-      if (explicitEnv[key] === undefined && value !== undefined) {
-        explicitEnv[key] = value;
-      }
-    }
+    // Cron passes secrets on `env`; avoid Object.entries(process.env) in workerd.
     return explicitEnv;
   }
   try {
@@ -34,13 +27,38 @@ function mergeEnv(explicitEnv?: Record<string, unknown>): Record<string, unknown
   }
 }
 
+function bridgeEnvKey(env: Record<string, unknown>, key: string): void {
+  const value = env[key];
+  if (typeof value === "string" && value.trim() !== "") {
+    process.env[key] = value;
+  }
+}
+
+/** Cron scheduled handlers receive secrets on `env`, not always on `process.env`. */
+function bridgeCronEnvToProcess(env: Record<string, unknown>): void {
+  bridgeEnvKey(env, "DATABASE_URL_POSTGRES");
+  bridgeEnvKey(env, "DATABASE_URL");
+  bridgeEnvKey(env, "TRONGRID_API_KEY");
+  bridgeEnvKey(env, "TRON_RPC_PRIMARY_URL");
+  bridgeEnvKey(env, "TRON_RPC_SECONDARY_URL");
+  bridgeEnvKey(env, "TRON_RPC_SECONDARY_API_KEY");
+  bridgeEnvKey(env, "WATCHER_ENABLED");
+  bridgeEnvKey(env, "WAIA_DB_BACKEND");
+}
+
 /** Build watcher dependencies for Cron / scheduled handlers (R13 env bridging). */
 export async function buildWatcherDepsFromEnv(
   explicitEnv?: Record<string, unknown>,
 ): Promise<{ deps: WatcherDeps; dispose: () => Promise<void> }> {
   const env = mergeEnv(explicitEnv);
+  bridgeCronEnvToProcess(env);
   const config = loadWatcherConfig(env);
-  const runtime = await createPerRequestPostgresRuntime();
+  const postgresUrl =
+    typeof env.DATABASE_URL_POSTGRES === "string" ? env.DATABASE_URL_POSTGRES.trim() : "";
+  if (postgresUrl) {
+    process.env.DATABASE_URL_POSTGRES = postgresUrl;
+  }
+  const runtime = createPerRequestPostgresRuntime();
   const db = runtime.db;
 
   const deps: WatcherDeps = {

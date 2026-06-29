@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createTronAdapter } from "@/lib/waia-core/payment-watcher/tron-adapter";
-import { TronRpcClient } from "@/lib/waia-core/payment-watcher/tron-rpc-client";
+import { createTronRpcClient } from "@/lib/waia-core/payment-watcher/tron-rpc-client";
 import { loadWatcherConfig } from "@/lib/waia-core/payment-watcher/watcher-config";
 
 describe("TronAdapter", () => {
@@ -42,7 +42,7 @@ describe("TronAdapter", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
-    const client = new TronRpcClient({
+    const client = createTronRpcClient({
       primaryUrl: config.tronPrimaryUrl,
       secondaryUrl: config.tronSecondaryUrl,
       apiKey: "",
