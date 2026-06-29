@@ -70,7 +70,7 @@ Re-confirm immediately before any governed live act. All must pass; **do not pro
 
 ## 4. L2 — Criterion 10 manual billing gate (Operator, HC-3)
 
-**Prerequisite — Deployment Verification:** L2 runtime (PR #329) is merged on `dev` @ `7203e02` but **production deploy is NOT verified**. Operator must complete [closure report §3 deployment verification](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md) before HC-3. Confirm `POST /api/trader/admin/reporting-periods/commands` returns **401/403** (not **404**) on `trader.waia.life`.
+**Prerequisite — Deployment Verification:** **COMPLETE** (PR #331 evidence on `dev` @ `b5a6e35`; production Worker `waia-app` @ `a23dca0a` deployed from git `822dfd0`). See [closure report §3 deployment verification](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md). **HC-3 Step 0** may proceed. Optional re-check: `POST /api/trader/admin/reporting-periods/commands` returns non-**404** on `trader.waia.life` (observed **400** / auth-gated responses are acceptable).
 
 **Purpose:** Close the one OPERATOR-REQUIRED MVP checklist item before live capital.
 
@@ -326,4 +326,4 @@ Open **immediately** after Launch promotion merge:
 | [ADR-0008](../adr/0008-manual-billing-gate.md) | Manual billing gate |
 | [ADR-0009](../adr/0009-regulatory-posture.md) | External live blocked |
 
-**STOP:** L0 **COMPLETE** (PR #322). HC-1 **APPROVED** (2026-06-29). L1 **COMPLETE**. L2 **NEXT** — HC-3 [operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) issued; await Operator gate exercise. **STOP before L3.**
+**STOP:** L0 **COMPLETE** (PR #322). HC-1 **APPROVED** (2026-06-29). L1 **COMPLETE**. **Deployment Verification COMPLETE** (PR #331). L2 **ACTIVE** — **HC-3 Step 0 NEXT** (`close-and-materialize`) per [operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md). HC-3 **NOT EXECUTED**. Criterion **10** **OPERATOR REQUIRED**. **STOP before L3.**
