@@ -1,8 +1,8 @@
 # DEE-352 — Launch Readiness Review
 
 **Linear:** [DEE-352](https://linear.app/deepsense/issue/DEE-352/bp-9a-full-mvp-verification-production-configuration-inventory) — **Done** (Step 10 complete)  
-**Branch:** merged via [PR #318](https://github.com/oumaster369/waia/pull/318) + [PR #319](https://github.com/oumaster369/waia/pull/319)  
-**Canonical `dev` SHA:** `cb48863c8334e7b474ac3aa461ac1926076f9bb3` (2026-06-29)  
+**Branch:** merged via [PR #318](https://github.com/oumaster369/waia/pull/318) + [PR #319](https://github.com/oumaster369/waia/pull/319) + [PR #320](https://github.com/oumaster369/waia/pull/320)  
+**Canonical `dev` SHA:** `16117d01745d2552bc6275120bf799c082d20d30` (2026-06-29)  
 **Baseline (Phase 1 start):** `dev` @ `0149267` (BP-9 merged, PR #317)  
 **Review date:** 2026-06-28 · **Step 10:** 2026-06-29  
 **Authority:** Architect review gate immediately before production provisioning
@@ -33,14 +33,14 @@ After BP-9, the AI-TRADER MVP architecture is frozen as follows:
 | **Execution Host = Execution Plane** | Isolated off-Cloudflare host for bounded live CLI cycle (Option B); separate secret injection path |
 | **Option B preserved** | Live spot execution bounded to execution host + Org-0 CLI; Worker does not call exchange `placeOrder` for live |
 | **Fail-closed** | Missing config, bad data, kill switches, tenant isolation, org allowlist, and master-key readiness deny unsafe paths |
-| **Single source of truth** | Master Execution Plan + MVP Execution Program v2 + Master Spec v2; Linear DEE-352 blocks DEE-340 until BP-9A Step 10 + §12 complete |
+| **Single source of truth** | Master Execution Plan + MVP Execution Program v2 + Master Spec v2; BP-9A Step 10 + §12 **satisfied** 2026-06-29 — DEE-340 (BP-10) **authorized**, not started |
 | **No duplicated runtime** | No second scheduler, daemon, websocket loop, or parallel execution FSM beyond approved cron + host |
 | **No unauthorized execution path** | ADR-0009 external live blocked; Org-0 only; admin-gated live-enable; validation-gate promotion required |
 | **Governed promotion** | ADR-0010/0011 — strategy validation gate, cooling-off, CLI-only promotion request |
 | **Governed billing** | ADR-0008 manual invoice attestation; HWM + 30% fee; payment watcher attribution |
 | **Governed alerting** | BP-9 inline Alert Router on existing telemetry only; dedicated `TELEGRAM_ALERTS_*` secrets; non-blocking delivery |
 
-Alerting, admin console, HTX connect/sync UI, paper/AHR evidence, and tenant-isolation CI are **implemented** — production **configuration and runtime proof** remain Phase 2 work (see §4).
+Alerting, admin console, HTX connect/sync UI, paper/AHR evidence, and tenant-isolation CI are **implemented** — production **configuration and runtime proof** **complete** (Phase 2 — **11/11 PASS**, Step 10 complete 2026-06-29; see §4).
 
 ---
 
@@ -189,7 +189,7 @@ Phase 1 (complete) → Launch Readiness Review (this document) → Phase 2 (Step
 |----------|------|
 | [DEE-352-BP9A-MVP-VERIFICATION-REPORT.md](DEE-352-BP9A-MVP-VERIFICATION-REPORT.md) | Phase 1 inventory, Phase 2 playbook, MVP checklist |
 | [AI-TRADER MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) | Step 10 closure seal — **RATIFIED** 2026-06-29 |
-| [AI-TRADER Master Execution Plan](https://linear.app/deepsense/issue/DEE-352) / `.cursor/plans/ai-trader_master_execution_plan_f03b2775.plan.md` | Package sequencing BP-0→BP-10 |
+| [DEE-340 (BP-10)](https://linear.app/deepsense/issue/DEE-340) / `.cursor/plans/bp-9a_verification_readiness_903a27e2.plan.md` (closed) | BP-9A **COMPLETE**; next executable package **BP-10** |
 | [DEE-212-BP7-LIVE-EXECUTION-RUNBOOK.md](DEE-212-BP7-LIVE-EXECUTION-RUNBOOK.md) | Org-0 live CLI path |
 | [DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md](DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md) | Alerting provisioning |
 | [DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md](DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md) | Execution host |
