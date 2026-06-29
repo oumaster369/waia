@@ -65,7 +65,9 @@ describe("tryAcquireWatcherLeaseWithStaleRecovery", () => {
 
     await repo.bootstrap(CANONICAL_NETWORK, "1000");
 
-    const leaseUntil = new Date(now.getTime() + 600_000);
+    // tryAcquireLease compares leaseUntil to wall-clock Date(); keep the lease
+    // active vs real time while lastScannedAt stays stale vs frozen deps.now.
+    const leaseUntil = new Date(Date.now() + 600_000);
     db.update(paymentWatcherCheckpoints)
       .set({ lastScannedAt: staleScannedAt, leaseUntil })
       .where(eq(paymentWatcherCheckpoints.network, CANONICAL_NETWORK))
@@ -94,7 +96,7 @@ describe("tryAcquireWatcherLeaseWithStaleRecovery", () => {
 
     await repo.bootstrap(CANONICAL_NETWORK, "2000");
 
-    const leaseUntil = new Date(now.getTime() + 600_000);
+    const leaseUntil = new Date(Date.now() + 600_000);
     db.update(paymentWatcherCheckpoints)
       .set({ lastScannedAt: now, leaseUntil })
       .where(eq(paymentWatcherCheckpoints.network, CANONICAL_NETWORK))
@@ -112,7 +114,7 @@ describe("tryAcquireWatcherLeaseWithStaleRecovery", () => {
 
     await repo.bootstrap(CANONICAL_NETWORK, "3000");
 
-    const leaseUntil = new Date(now.getTime() + 600_000);
+    const leaseUntil = new Date(Date.now() + 600_000);
     db.update(paymentWatcherCheckpoints)
       .set({ lastScannedAt: now, leaseUntil })
       .where(eq(paymentWatcherCheckpoints.network, CANONICAL_NETWORK))
