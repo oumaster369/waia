@@ -19,7 +19,8 @@
 | **`dev` SHA (L1 verified)** | `392bb68324bc13e3ba16661afe37cb189e3199fb` |
 | **HC-1 (Architect L0 approval)** | **APPROVED** (2026-06-29) |
 | **L1** | **COMPLETE** (2026-06-29) |
-| **L2** | **NOT STARTED** — **NEXT** |
+| **L2** | **NOT STARTED** — **NEXT** (HC-3 operator checklist issued; await Operator execution) |
+| **HC-3 package** | **PREPARED** — [L2 operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) |
 
 ---
 
@@ -67,15 +68,50 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 
 ## 3. L2 — Criterion 10 manual billing gate (HC-3)
 
+**Operator checklist:** [DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md)
+
+### L2 readiness (Composer — pre-HC-3)
+
+| Check | Result |
+|-------|--------|
+| L1 complete on canonical `dev` | **PASS** (PR #327 @ `deaa53d`) |
+| Criterion 10 sole pre-live operator gate | **PASS** — §1 row 10 only **OPERATOR REQUIRED** |
+| No production live-enable recorded | **PASS** — §4 _not started_ |
+| No live order recorded | **PASS** — §5 _not started_ |
+| HC-3 prerequisites documented | **PASS** — ADR-0008 attestation keys + admin billing surface |
+
+### Execution record (Operator — pending)
+
 | Field | Value |
 |-------|-------|
-| **Status** | _not started_ |
+| **Status** | _not started_ — HC-3 checklist issued; await Operator |
 | **Invoice id prefix** | _pending_ |
-| **Gate attestation count** | _pending_ |
-| **Manual sign-off timestamp** | _pending_ |
-| **Criterion 10 final status** | _pending_ |
+| **Reporting period id prefix** | _pending_ |
+| **Exchange account id** | _pending_ (expected: `htx-spot-1`) |
+| **Gate attestation count** | _pending_ (expected: **6** on successful approval) |
+| **Manual sign-off timestamp** | _pending_ (`issuanceApprovedAt` ISO-8601) |
+| **Issued-at timestamp** | _pending_ (`issuedAt` ISO-8601) |
+| **Audit actions observed** | _pending_ (`trader.invoice.issuance_approved`, `trader.invoice.issued`) |
+| **Criterion 10 final status** | _pending_ — remains **OPERATOR REQUIRED** until Operator completes HC-3 |
 | **Operator attestation** | _pending_ |
 | **Date** | _pending_ |
+
+### Evidence capture template (Composer fills after Operator attestation)
+
+When HC-3 completes, update the execution record above and §1 row 10:
+
+```text
+Invoice id prefix:        <first-8-chars>
+Reporting period prefix:  <first-8-chars>
+Gate attestation count:   6
+Manual sign-off:          <issuanceApprovedAt ISO-8601>
+Issued-at:                <issuedAt ISO-8601>
+Audit actions:            trader.invoice.issuance_approved, trader.invoice.issued
+Criterion 10:             PASS
+Operator:                 <name/role> — <date>
+```
+
+**Do not mark criterion 10 PASS until Operator confirms Steps 1–6 of the checklist.**
 
 ---
 
@@ -169,4 +205,4 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 
 ---
 
-**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. L1 **COMPLETE**. **L2 NEXT** — await Operator criterion 10 manual billing gate (HC-3). No live-enable, no live order, no production promotion.
+**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. L1 **COMPLETE**. L2 **NEXT** — HC-3 [operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) issued; await Operator manual billing gate. **STOP before L3.** No live-enable, no live order, no production promotion.
