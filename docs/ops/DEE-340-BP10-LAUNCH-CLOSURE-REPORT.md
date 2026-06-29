@@ -14,15 +14,16 @@
 | Field | Value |
 |-------|-------|
 | **Package slice** | L0 — Launch Operations Package — **COMPLETE** (PR #322 @ `e19295e`) |
-| **Verdict** | **IN PROGRESS** — L1 **COMPLETE**; L2 **COMPLETE**; **HC-3 COMPLETE**; **HC-4 NEXT** (not executed) |
+| **Verdict** | **IN PROGRESS** — L1 **COMPLETE**; L2 **COMPLETE**; **HC-3 COMPLETE**; **HC-4 operator package READY**; **HC-4 NOT EXECUTED** |
 | **Canonical `dev` SHA (baseline)** | `e19295e6347c12df958777b508e927662e9ac43c` |
 | **`dev` SHA (L1 verified)** | `392bb68324bc13e3ba16661afe37cb189e3199fb` |
 | **`dev` SHA (L2 runtime merged)** | `7203e02fde631c43e0b19fef2e892bccd06d24f5` (PR #329) |
 | **HC-1 (Architect L0 approval)** | **APPROVED** (2026-06-29) |
 | **L1** | **COMPLETE** (2026-06-29) |
 | **L2** | **COMPLETE** (2026-06-29) — HC-3 operator ceremony **COMPLETE**; criterion **10** **PASS** |
-| **Next action** | **HC-4 readiness review** (Operator) — governed Org-0 live-enable per runbook §5; **STOP before L3 execution until readiness review complete** |
+| **Next action** | **HC-4 execution** (Operator) — governed Org-0 live-enable per [L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md); **NOT STARTED** — requires Architect authorization (P-5) |
 | **HC-3 package** | [L2 operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) — **COMPLETE**; evidence §3 below |
+| **HC-4 package** | [L3 HC-4 operator checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md) — **READY — NOT EXECUTED**; evidence slot §4 below |
 
 ---
 
@@ -178,6 +179,8 @@ Operator:                 <Operator name/role> — 2026-06-29
 
 ## 4. L3 — Governed Org-0 live-enable (HC-4)
 
+**Operator checklist:** [DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md) — **READY — NOT EXECUTED**
+
 | Field | Value |
 |-------|-------|
 | **Status** | _not started_ |
@@ -266,4 +269,4 @@ Operator:                 <Operator name/role> — 2026-06-29
 
 ---
 
-**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. L1 **COMPLETE**. L2 **COMPLETE**. **HC-3 COMPLETE** (2026-06-29). Criterion **10** **PASS**. **HC-4 NEXT** — readiness review for governed Org-0 live-enable; **L3 NOT STARTED**. **STOP before L3 execution** until HC-4 readiness review complete. No live order, no production promotion.
+**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. L1 **COMPLETE**. L2 **COMPLETE**. **HC-3 COMPLETE** (2026-06-29). Criterion **10** **PASS**. **HC-4 operator package READY** ([L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md)). **HC-4 NOT EXECUTED**. **STOP before L3 execution** until Architect authorizes HC-4 (P-5). No live order, no production promotion.

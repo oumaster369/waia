@@ -48,9 +48,9 @@ Execute in strict order. **Stop on any failed verification.** Record evidence in
 
 ---
 
-## 3. Pre-flight checks (before L2)
+## 3. Pre-flight checks (before L3 / HC-4)
 
-Re-confirm immediately before any governed live act. All must pass; **do not proceed** if any fail.
+Re-confirm immediately before HC-4 live-enable (and again before L4 if on a later day). All must pass; **do not proceed** if any fail. Full operator table: [L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md) Step 0.
 
 | # | Check | How | Expected evidence shape |
 |---|-------|-----|-------------------------|
@@ -58,7 +58,7 @@ Re-confirm immediately before any governed live act. All must pass; **do not pro
 | PF-2 | HTX Step-5 sync re-confirm | Trader Workspace `/trader` — balance, position, trade-history sync for Org-0 credential | HTTP **200** on sync; credential count **1**; `withdrawForbidden=true`; `transferForbidden=true` |
 | PF-3 | Master-key decrypt probe | Host/CLI path can resolve production Secrets Store / `AI_TRADER_MASTER_KEY` (no secret values logged) | Decrypt succeeds or explicit fail-closed denial with actionable error |
 | PF-4 | Kill-switch posture | Admin console — global/org kill switches | All clear (not armed) before enable |
-| PF-5 | Criterion 10 gate awareness | Confirm L2 billing gate exercise is scheduled before live order | Closure report L2 slot empty until Operator attests |
+| PF-5 | Criterion 10 gate sealed | Closure report §3 — L2 / HC-3 **COMPLETE**; criterion **10** **PASS** | **Do not re-run billing gate** |
 | PF-6 | BP-5 promotion | Strategy `mean_reversion_v0` @ `0.1.0` (or Architect-selected drill strategy) | **EFFECTIVE** promotion record exists |
 | PF-7 | Org-0 allowlist | `WAIA_TRADER_ORG0_ORGANIZATION_ID` set on host/CLI env | Live path rejects non-Org-0 fail-closed |
 | PF-8 | Telegram alerting | Production drill endpoint or recent alert telemetry | Router configured; non-blocking delivery path live |
@@ -96,11 +96,13 @@ Re-confirm immediately before any governed live act. All must pass; **do not pro
 
 **UX backlog (post-MVP, no implementation):** [DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md](DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md)
 
-**STOP:** L2 **COMPLETE**. **HC-4 NEXT** (readiness review). **L3 NOT STARTED**. Do not live-enable until HC-4 readiness review complete.
+**STOP:** L2 **COMPLETE**. **HC-4 operator package READY** ([L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md)). **HC-4 NOT EXECUTED**. Do not live-enable until Architect authorizes HC-4 (checklist P-5).
 
 ---
 
 ## 5. L3 — Governed Org-0 live-enable (Operator, ADR-0011, HC-4)
+
+**Status:** **NOT EXECUTED** — operator package **READY** ([L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md)).
 
 **Purpose:** Arm the live path under the Single Operator Governance Model.
 
@@ -319,6 +321,7 @@ Open **immediately** after Launch promotion merge:
 | [BP-10 Canonical Execution Plan](../../.cursor/plans/bp-10_launch_execution_plan_e2aa412c.plan.md) | Authoritative ceremony sequence |
 | [DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md) | Evidence ledger |
 | [DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) | HC-3 operator steps (**COMPLETE**) |
+| [DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md) | HC-4 operator steps (**READY — NOT EXECUTED**) |
 | [DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md](DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md) | Post-MVP Operator Console UX backlog (HC-3 observations) |
 | [DEE-352-BP9A-MVP-VERIFICATION-REPORT.md](DEE-352-BP9A-MVP-VERIFICATION-REPORT.md) | Baseline 16-criterion inventory |
 | [DEE-352-LAUNCH-READINESS-REVIEW.md](DEE-352-LAUNCH-READINESS-REVIEW.md) | Launch readiness gate |
@@ -327,4 +330,4 @@ Open **immediately** after Launch promotion merge:
 | [ADR-0008](../adr/0008-manual-billing-gate.md) | Manual billing gate |
 | [ADR-0009](../adr/0009-regulatory-posture.md) | External live blocked |
 
-**STOP:** L0 **COMPLETE** (PR #322). HC-1 **APPROVED** (2026-06-29). L1 **COMPLETE**. L2 **COMPLETE**. **HC-3 COMPLETE** (2026-06-29). Criterion **10** **PASS**. **HC-4 NEXT** — readiness review for governed Org-0 live-enable. **L3 NOT STARTED**. **STOP before L3 execution** until HC-4 readiness review complete.
+**STOP:** L0 **COMPLETE** (PR #322). HC-1 **APPROVED** (2026-06-29). L1 **COMPLETE**. L2 **COMPLETE**. **HC-3 COMPLETE** (2026-06-29). Criterion **10** **PASS**. **HC-4 operator package READY** ([L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md)). **HC-4 NOT EXECUTED**. **STOP before L3 execution** until Architect authorizes HC-4 (P-5).
