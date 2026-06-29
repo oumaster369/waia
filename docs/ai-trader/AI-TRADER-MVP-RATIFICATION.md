@@ -1,8 +1,9 @@
 # AI-TRADER MVP — Architecture Ratification & Scope-Freeze Charter
 
-Status: **PROPOSED** — awaiting Architect ratification (Step 10)  
+Status: **RATIFIED** — Step 10 complete (2026-06-29)  
 Type: Closure seal (declarative; creates no new rule)  
-Canonical `dev` SHA at ratification: `2071130bfeefb90a28f97294abca6af158fe1177`  
+Implementation baseline (`dev`): `2071130bfeefb90a28f97294abca6af158fe1177` (PR #318)  
+Documentation closure (`dev`): `cb48863c8334e7b474ac3aa461ac1926076f9bb3` (PR #319)  
 Authority: Founders Council apex ([ADR-0012](../adr/0012-governance-integration-founders-council-and-english-canon.md)) · Single Operator Governance Model ([ADR-0011](../adr/0011-single-operator-governance-model.md))
 
 > **This document creates no new rule.**  
@@ -150,16 +151,17 @@ This charter is ratified when the signatures below are recorded. Upon ratificati
 
 | Role | Authority | Name | Date | Signature |
 |------|-----------|------|------|-----------|
-| Chief Architect | Founders Council apex (ADR-0012) | _PENDING_ | _PENDING_ | _PENDING_ |
-| Single Operator | ADR-0011 governed authority | _PENDING_ | _PENDING_ | _PENDING_ |
+| Chief Architect | Founders Council apex (ADR-0012) | Adamar / Architect-Operator | 2026-06-29 | Step 10 ratification — BP-9A closure |
+| Single Operator | ADR-0011 governed authority | Adamar / Architect-Operator | 2026-06-29 | Step 10 ratification — BP-9A closure |
 
 **Ratification record**
 
 | Field | Value |
 |-------|-------|
-| Canonical `dev` SHA | `2071130bfeefb90a28f97294abca6af158fe1177` |
-| BP-9A verification | Steps 1–9A PASS; Payment Watcher recovery PASS (10/11) |
-| Outstanding before BP-10 | `WAIA_CORE_ENFORCEMENT` posture decision; UNKNOWN inventory-row waivers; §12 sign-off in the BP-9A Verification Report |
-| Effect of signature | AI-TRADER MVP architecture **CLOSED**; scope **FROZEN**; BP-10 launch authorization unblocked |
+| Implementation baseline (`dev`) | `2071130bfeefb90a28f97294abca6af158fe1177` (PR #318) |
+| Documentation closure (`dev`) | `cb48863c8334e7b474ac3aa461ac1926076f9bb3` (PR #319) |
+| BP-9A verification | **11/11 PASS** — Steps 1–9A + Step 10 complete (2026-06-29) |
+| `WAIA_CORE_ENFORCEMENT` | **OFF** (unset on production Worker; application-layer enforcement primary per ADR-0007) |
+| Effect of signature | AI-TRADER MVP architecture **CLOSED**; scope **FROZEN**; BP-10 launch authorization **unblocked** |
 
 **Canonical references:** [Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) · [MVP Scope v2](AI-TRADER-MVP-SCOPE-v2.md) · [Implementation Program v1.2](AI-TRADER-IMPLEMENTATION-PROGRAM.md) · [Vision](AI-TRADER-VISION.md) · [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md) · [ADRs](../adr/README.md) · [BP-9A Verification Report](../ops/DEE-352-BP9A-MVP-VERIFICATION-REPORT.md) · [Launch Readiness Review](../ops/DEE-352-LAUNCH-READINESS-REVIEW.md)

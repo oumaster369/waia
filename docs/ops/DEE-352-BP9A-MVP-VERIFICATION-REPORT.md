@@ -1,12 +1,13 @@
 # DEE-352 — BP-9A Full MVP Verification Report
 
-**Linear:** [DEE-352](https://linear.app/deepsense/issue/DEE-352/bp-9a-full-mvp-verification-production-configuration-inventory) — **In Review** (Step 10 pending)  
-**Blocks:** [DEE-340](https://linear.app/deepsense/issue/DEE-340) (BP-10)  
+**Linear:** [DEE-352](https://linear.app/deepsense/issue/DEE-352/bp-9a-full-mvp-verification-production-configuration-inventory) — **Done** (Step 10 complete)  
+**Blocks:** [DEE-340](https://linear.app/deepsense/issue/DEE-340) (BP-10) — **unblocked for BP-10 start**  
 **Branch:** `dee-352-bp9a-mvp-verification` — **merged** via [PR #318](https://github.com/oumaster369/waia/pull/318)  
-**Canonical `dev` SHA:** `2071130bfeefb90a28f97294abca6af158fe1177` (squash merge 2026-06-29)  
+**Ratification charter:** **RATIFIED** via [PR #319](https://github.com/oumaster369/waia/pull/319)  
+**Canonical `dev` SHA:** `cb48863c8334e7b474ac3aa461ac1926076f9bb3` (PR #319 docs closure; implementation baseline `2071130` PR #318)  
 **Baseline SHA (Phase 1 start):** `0149267` (`dev` post BP-9 / PR #317)  
 **Production Worker (canonical lineage):** `86bde72b-b945-48c0-99ce-eaf0500f8aeb` — deployed from `dev` @ `2071130` (2026-06-29)  
-**Verified at:** 2026-06-28 (Phase 1); governance reconciliation 2026-06-29  
+**Verified at:** 2026-06-28 (Phase 1); governance reconciliation 2026-06-29; **Step 10** 2026-06-29  
 **Mode:** Verification only — no secret values in this document
 
 ---
@@ -18,9 +19,9 @@
 | **Phase 1** — Inventory verification | **COMPLETE (Composer)** | Repo/docs audit, classification, validation chain, dry-run drill |
 | **Phase 1 gate** — Human acceptance | **COMPLETE** | Adamar / Architect-Operator, 2026-06-28 (§9) |
 | **Launch Readiness Review** | **ACCEPTED** | [DEE-352-LAUNCH-READINESS-REVIEW.md](DEE-352-LAUNCH-READINESS-REVIEW.md) — **READY WITH CONDITIONS**, 2026-06-28 |
-| **Phase 2** — Operator provisioning | **OPEN — Step 10 next** | Steps 1–9A **PASS** (2026-06-29); watcher recovery **PASS** (2026-06-29); PR #318 **merged** to `dev` @ `2071130`; **10/11 PASS** |
-| **Phase 2** — Evidence recording | **GOVERNANCE RECONCILIATION COMPLETE** | Merge + production lineage reconciled 2026-06-29; Step 10 **NOT STARTED** |
-| **BP-10** | **BLOCKED** | DEE-340 blocked by DEE-352 until Step 10 + §12 sign-off; not started |
+| **Phase 2** — Operator provisioning | **COMPLETE** | Steps 1–9A **PASS** (2026-06-29); PR #318 + PR #319 merged; **11/11 PASS** |
+| **Phase 2** — Step 10 Architect decision | **COMPLETE** | Adamar / Architect-Operator, 2026-06-29 (§10, §12); [MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) **RATIFIED** |
+| **BP-10** | **UNBLOCKED FOR START** | DEE-352 **Done**; DEE-340 may begin — not started |
 
 **Checklist numbering:** Program doc lists criteria **1–14**; BP-9A adds **15** (live Telegram drill) and **16** (signed inventory) → **14+2 = 16** for DEE-340 alignment.
 
@@ -51,7 +52,7 @@ After BP-9, **no new MVP functionality** may be added before BP-10.
 
 ## Release Decision
 
-**Current state:** **NOT READY FOR BP-10**
+**Current state:** **BP-9A COMPLETE — READY FOR BP-10 LAUNCH GATE (DEE-340)**
 
 **Launch Readiness Review:** **ACCEPTED** — [DEE-352-LAUNCH-READINESS-REVIEW.md](DEE-352-LAUNCH-READINESS-REVIEW.md) (READY WITH CONDITIONS; Adamar / Architect-Operator, 2026-06-28).
 
@@ -68,12 +69,10 @@ After BP-9, **no new MVP functionality** may be added before BP-10.
 - Phase 2 Step 9 (Cron workers) **PASS** — runtime compatibility gate; MB + paper `cycle_complete`; deploy **`07408a7a…`** — **9/11 PASS**
 - Phase 2 Step 9A (Payment address registry) **PASS** — first Org-0 inbound wallet **`788f0fdc…`**; address **`TSBJRwVc…`** ACTIVATED; resolver ready — **10/11 PASS**
 - Payment Watcher runtime recovery **PASS** — stale-lease handling + Worker-safe imports — see §10.1 (pre-merge deploy **`c47176f9…`**; post-merge canonical deploy **`86bde72b…`** @ `2071130`)
+- Step 10 Architect decision **PASS** — `WAIA_CORE_ENFORCEMENT` **OFF**; UNKNOWN inventory resolved; [MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) **RATIFIED**; §12 signed — **11/11 PASS**
 - OpenAI for AI-TRADER — **N/A for BP-9A** (Twin-only `WAIA_AI_*`)
-- final human sign-off pending (§12)
 
-**Future target state (after Phase 2 complete):** **READY FOR BP-10** — only if all §10 steps verified and operator sign-off recorded in §12.
-
-**Phase 2 verdict (current):** Steps 1–9A **PASS**; Payment Watcher runtime recovery **PASS** (§10.1); Step 10 **NOT STARTED** (**10/11 PASS**).
+**Phase 2 verdict (final):** Steps 1–9A + Step 10 **PASS**; Payment Watcher runtime recovery **PASS** (§10.1); BP-9A **COMPLETE** (**11/11 PASS**).
 
 ---
 
@@ -226,9 +225,9 @@ Executed on branch `dee-352-bp9a-mvp-verification` at baseline `0149267`:
 | Plain env | `OAUTH_PUBLIC_BASE_URL` | OAuth callbacks | wrangler.jsonc | Cloudflare plain | Yes | If OAuth | **PRESENT — awaiting runtime verification** | Version env `8be7d73b` |
 | Plain env | `WAIA_DB_BACKEND=postgres` | Worker DB path | wrangler.jsonc | Cloudflare plain | Yes | Yes | **PRESENT — awaiting runtime verification** | Version env + health `200` |
 | Plain env | `WAIA_DEPLOYMENT_TIER=production` | Master key readiness | DEE-220 | Cloudflare plain | .env.example | Yes | **PASS** | Deployed plain env `production` (2026-06-28) |
-| Plain env | `WAIA_CORE_ENFORCEMENT` | Permission fail-closed | M1 runbook | Cloudflare plain | .env.example | Recommended | **UNKNOWN** | Not on active version; Step 10 |
+| Plain env | `WAIA_CORE_ENFORCEMENT` | Permission fail-closed | M1 runbook | Cloudflare plain | .env.example | Recommended | **ACCEPTED (Step 10)** | **OFF** — unset on production Worker; app-layer enforcement primary (ADR-0007); enable post-MVP via ADR |
 | Plain env | `WAIA_CORE_SHADOW` | Shadow audit | lib/waia-core/config.ts | Cloudflare plain | .env.example | No | **NOT APPLICABLE** | — |
-| Plain env | `WAIA_POSTGRES_PER_REQUEST_CLIENT` | PG lifecycle | cloudflare-env-vars.md | Cloudflare plain | .dev.vars.example | Yes | **UNKNOWN** | Not set; code default on |
+| Plain env | `WAIA_POSTGRES_PER_REQUEST_CLIENT` | PG lifecycle | cloudflare-env-vars.md | Cloudflare plain | .dev.vars.example | Yes | **WAIVED (Step 10)** | Not set; code default acceptable for MVP Worker Postgres |
 | Secret | `DATABASE_URL_POSTGRES` | All trader/core Postgres | DEE-74/75 | Wrangler secret | .dev.vars.example | Yes | **PRESENT — awaiting runtime verification** | `wrangler secret list`; health `200` |
 | Secret | `SUPABASE_SERVICE_ROLE_KEY` | Supabase admin | cloudflare-env-vars.md | Wrangler secret | .dev.vars.example | If Supabase | **PRESENT — awaiting runtime verification** | `wrangler secret list` |
 | Public | `NEXT_PUBLIC_SUPABASE_URL` / `ANON_KEY` | Supabase client | wrangler.jsonc | Cloudflare plain | wrangler + .dev.vars.example | If Supabase auth | **PRESENT — awaiting runtime verification** | Version env `8be7d73b` |
@@ -236,8 +235,8 @@ Executed on branch `dee-352-bp9a-mvp-verification` at baseline `0149267`:
 | Secret | `WAIA_AI_OPENAI_API_KEY` | Twin AI | cloudflare-env-vars.md | Wrangler secret | .env.example | If AI enabled | **PRESENT — awaiting runtime verification** | `wrangler secret list` |
 | Worker cron | `MARKET_BRAIN_ENABLED` + org id | MSV/CDE ingestion | .env.example | Cloudflare | Placeholder | Yes for live data | **PASS** | Step 9 Build B — deploy **`07408a7a…`** |
 | Worker cron | `PAPER_LOOP_*` vars | Paper loop cron | .env.example | Cloudflare | Placeholder | Yes for paper | **PASS** | Step 9 Build B — `org0-paper-primary` account key |
-| CI | `LINEAR_API_KEY` | Auto Done on merge | .env.example | GitHub Actions secret | Documented | No | **UNKNOWN** | Not BP-10 critical |
-| CI | `CLOUDFLARE_API_TOKEN` / `ACCOUNT_ID` | Preview deploy | docs | GitHub secrets | N/A | No | **UNKNOWN** | Not BP-10 critical |
+| CI | `LINEAR_API_KEY` | Auto Done on merge | .env.example | GitHub Actions secret | Documented | No | **WAIVED (Step 10)** | CI operational; not BP-10 inventory; hardening deferred post-MVP |
+| CI | `CLOUDFLARE_API_TOKEN` / `ACCOUNT_ID` | Preview deploy | docs | GitHub secrets | N/A | No | **WAIVED (Step 10)** | Preview CI green on PR #318/#319; not BP-10 critical |
 
 ### 2.2 AI-TRADER exchange / HTX
 
@@ -290,7 +289,7 @@ Executed on branch `dee-352-bp9a-mvp-verification` at baseline `0149267`:
 
 | Category | Name / Binding | Required for | Source | Storage location | Before BP-10? | Status | Verified by |
 |----------|----------------|--------------|--------|------------------|---------------|--------|-------------------|
-| Auth | Supabase Auth OR legacy session | Login | sign-in route | Supabase / SQLite | Yes | **UNKNOWN** | Operator PENDING prod path |
+| Auth | Supabase Auth (production path) | Login | sign-in route | Supabase | Yes | **ACCEPTED (Step 10)** | Steps 3–5 — Supabase redirect + Org-0 + HTX connect via authenticated Trader Workspace |
 | Auth | `trader.waia.life` DNS | Trader module | AT-E1 checklist | Cloudflare DNS | Yes | **PASS** | Step 3 — `curl` **200/307**; custom domain on **`waia-app`** (2026-06-28) |
 | Auth | Supabase redirect **`https://trader.waia.life/**`** | Trader auth callbacks | DEE-59 checklist | Supabase dashboard | Yes | **PASS** | Step 3 — operator dashboard attestation; Site URL **`https://waia.life`** (2026-06-28) |
 | Admin | Platform role `admin` | Admin console | permissions/resolve | user_platform_roles | Yes | **PASS** | Step 4 — **`1`** admin row (operator); **`19`** user (2026-06-28) |
@@ -327,7 +326,7 @@ Reference: [AI-TRADER-USER-JOURNEY-v2.md](../ai-trader/AI-TRADER-USER-JOURNEY-v2
 
 | Step | Requirement | Current evidence | Status | Verified by | BP-10 impact |
 |------|-------------|------------------|--------|-------------|--------------|
-| 1–2 | Register + trader entitlement | Auth routes; [trader.spec.ts](../../tests/e2e/trader.spec.ts) | **UNKNOWN** | Repository / CI | Blocks if prod auth broken |
+| 1–2 | Register + trader entitlement | Auth routes; Step 4 `trader` entitlement; [trader.spec.ts](../../tests/e2e/trader.spec.ts) | **ACCEPTED (Step 10)** | Steps 4–5 + CI | Production auth path confirmed |
 | 3 | HTX connect UI | [TraderWorkspace](../../components/trader/trader-workspace.tsx); e2e connect form | **VERIFIED IN CODE** | Repository / CI | Phase 2 HTX connect proof |
 | 4 | Sync balances/positions/history | BP-2C UI + DEE-237/DEE-350 APIs | **VERIFIED IN CODE** | Repository | Phase 2 HTX sync proof |
 | 5 | Strategy selection | No trader UI picker; registry/admin/cron | **INFORMATIONAL GAP** | Repository | AHR + cron acceptable for Org-0 MVP |
@@ -358,7 +357,7 @@ Reference: [AI-TRADER-USER-JOURNEY-v2.md](../ai-trader/AI-TRADER-USER-JOURNEY-v2
 | 13 | Admin console complete | 1 | **PASS** | BP-8 PR #316; admin route tests |
 | 14 | External live blocked (ADR-0009) | 1 | **PASS** | org allowlist tests; live path fail-closed |
 | 15 | Live Telegram alert delivery | 2 | **PASS** | Step 7 — production drill `outcome:success` (2026-06-28) |
-| 16 | Production Configuration Inventory signed | 2 | **PENDING (Step 10)** | §12 operator / Architect sign-off |
+| 16 | Production Configuration Inventory signed | 2 | **PASS** | Step 10 — §12 signed 2026-06-29 |
 
 **ADR cross-checks (Phase 1 code review):**
 
@@ -403,11 +402,11 @@ Reference: [AI-TRADER-USER-JOURNEY-v2.md](../ai-trader/AI-TRADER-USER-JOURNEY-v2
 
 | Gap | Classification | Blocks BP-10? |
 |-----|----------------|---------------|
-| Phase 2 Steps 1–9A + watcher recovery | **PASS** — closed 2026-06-28–2026-06-29 | **No** |
-| Phase 2 runtime merged to `dev` | **RESOLVED** — PR #318 squash merge `2071130` (2026-06-29); production redeployed from canonical SHA → **`86bde72b…`** | **No** |
-| `WAIA_CORE_ENFORCEMENT` posture | Architect decision (Step 10) | **Yes** — Step 10 |
-| MVP checklist criterion 16 (signed inventory) | §12 unsigned | **Yes** — Step 10 |
-| Remaining **UNKNOWN** inventory rows (§2) | Architect waive or resolve (Step 10) | **Yes** — Step 10 |
+| Phase 2 Steps 1–9A + watcher recovery + Step 10 | **PASS** — closed 2026-06-28–2026-06-29 | **No** |
+| Phase 2 runtime merged to `dev` | **RESOLVED** — PR #318 + PR #319 merged | **No** |
+| `WAIA_CORE_ENFORCEMENT` posture | **RESOLVED (Step 10)** — **OFF** (unset on production) | **No** |
+| MVP checklist criterion 16 (signed inventory) | **RESOLVED (Step 10)** — §12 signed | **No** |
+| Remaining **UNKNOWN** inventory rows (§2) | **RESOLVED (Step 10)** — accepted/waived per §10 | **No** |
 | Steps 5–6 no trader UI | **INFORMATIONAL GAP** | **No** — AHR satisfies criterion 8 |
 
 ---
@@ -446,13 +445,13 @@ Reference: [AI-TRADER-USER-JOURNEY-v2.md](../ai-trader/AI-TRADER-USER-JOURNEY-v2
 
 **Prerequisite:** [Launch Readiness Review](DEE-352-LAUNCH-READINESS-REVIEW.md) **accepted** (Adamar / Architect-Operator, 2026-06-28). **Reality Preconditions Audit** integrated 2026-06-28 (see §10.0).
 
-**Active step:** **Step 10 — Architect decision** (**NOT STARTED** — Step 9A **PASS**)
+**Active step:** **BP-10 (DEE-340)** — BP-9A **COMPLETE** (Step 10 **PASS** 2026-06-29)
 
 **Protocol:** Execute steps **1 → 2 → … → 7 → 8 → 9 → 9A → 10** in order. **Never reorder.** Step 9A is **not** between Steps 7 and 8. After each step: complete **Reality Preconditions** (§10.0) → verify → collect non-secret evidence → update this section and §2 inventory → **STOP** if verification fails.
 
 **Composer role:** Guide operator, record evidence, sync docs/Linear. **Composer must not** run `wrangler secret put`, provision secrets, or execute `--send` autonomously.
 
-**Progress:** **10 / 11** steps **PASS** · last updated **2026-06-29** (post-merge governance reconciliation)
+**Progress:** **11 / 11** steps **PASS** · Step 10 complete **2026-06-29**
 
 ### 10.0 Reality Preconditions (mandatory from Step 8 onward)
 
@@ -500,7 +499,7 @@ Recommend **WAIA DEV OS** rule: **Reality Preconditions Check** — before every
 | 8 | Execution host | **PASS** | Execution Host + Operator + Composer | 2026-06-28 |
 | 9 | Cron workers *(runtime gate → enable vars)* | **PASS** | Cloudflare tail + Composer | 2026-06-29 |
 | 9A | Payment address registry verification | **PASS** | Operator + Postgres CLI + Composer | 2026-06-29 |
-| 10 | Architect decision | **NOT STARTED** | — | — |
+| 10 | Architect decision | **PASS** | Adamar / Architect-Operator | 2026-06-29 |
 
 ---
 
@@ -1037,29 +1036,36 @@ Provisioned via `PaymentAddressService` (`scripts/waia-core/provision-org0-payme
 
 ---
 
-### Step 10 — Architect decision *(NOT STARTED)*
+### Step 10 — Architect decision *(PASS — 2026-06-29)*
 
-**Closure artifact:** [AI-TRADER MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) — **PROPOSED**; pending Architect sign-off in §8. Creates no new rule; ratifies approved architecture; freezes MVP scope.
+**Closure artifact:** [AI-TRADER MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) — **RATIFIED** §8; creates no new rule; freezes MVP scope.
 
 #### Reality Preconditions
 
-Steps 1–9A **PASS**; Payment Watcher runtime recovery **PASS** (§10.1); inventory rows resolved or waived.
+Steps 1–9A **PASS**; Payment Watcher runtime recovery **PASS** (§10.1); PR #318 + PR #319 merged; production deploy lineage canonical (`86bde72b…` @ `2071130`).
 
-**Remaining Step 10 blockers (implementation + merge/deploy lineage cleared):**
+#### Architect decisions
 
-1. `WAIA_CORE_ENFORCEMENT` posture decision (on/off documented).
-2. Waive or resolve remaining **UNKNOWN** inventory rows (§2).
-3. Operator / Architect attestation + §12 sign-off.
-4. Linear DEE-352 → **Done** only after Step 10 complete (currently **In Review** — reopened after premature auto-close on PR #318 merge).
+| Item | Decision | Rationale |
+|------|----------|-----------|
+| **`WAIA_CORE_ENFORCEMENT`** | **OFF** (unset on production Worker) | [M1 deployment runbook](../waia-core/WAIA-CORE-M1-DEPLOYMENT-RUNBOOK.md): leave OFF for MVP; ADR-0007 application-layer enforcement is primary; enabling enforcement is a post-MVP ADR-gated change |
+| **`WAIA_POSTGRES_PER_REQUEST_CLIENT`** | **Waived** | Not set on Worker; code default on is acceptable for MVP Postgres lifecycle |
+| **`LINEAR_API_KEY` / Cloudflare CI secrets** | **Waived** | CI operational (PR #318/#319 green); not BP-10 inventory; `linear-done.yml` hardening deferred post-MVP |
+| **Production auth path** | **Accepted — Supabase Auth** | Steps 3–5 prove Supabase redirect + Org-0 + authenticated HTX connect |
+| **User journey Steps 1–2** | **Accepted** | Step 4 `trader` entitlement PASS; Step 5 authenticated workspace PASS; e2e in CI |
+| **Ratification Charter §8** | **Approved and signed** | Declarative closure seal; subordinate to Master Spec / MVP Scope / ADRs; no new rules |
+| **§12 sign-off** | **Signed** | See §12 below |
 
 | Field | Value |
 |-------|-------|
-| **Status** | **NOT STARTED** |
-| **Evidence** | _pending — Architect attestation line_ |
-| **Verified by** | _pending — Operator / Architect_ |
-| **Date** | _pending_ |
+| **Status** | **PASS** |
+| **Evidence** | Architect attestation; charter **RATIFIED**; inventory UNKNOWN rows resolved; `WAIA_CORE_ENFORCEMENT` **OFF** documented |
+| **Verified by** | Adamar / Architect-Operator |
+| **Date** | 2026-06-29 |
 
-**On FAIL:** STOP.
+**Step 10 verdict:** **PASS** — BP-9A **COMPLETE** (11/11).
+
+**Next allowed step:** **BP-10 (DEE-340)** — launch authorization gate. **Do not** conflate BP-10 with MVP implementation.
 
 ---
 
@@ -1088,31 +1094,46 @@ After provisioning, record evidence in §2 **Verified by** column and §10 step 
 |------|------|------|-----------|
 | Verification agent | Composer (DEE-352 Build) | 2026-06-28 | Phase 1 inventory complete |
 
-### Phase 2 + final (human — PENDING)
+### Phase 2 + final (human — COMPLETE)
 
 | Role | Name | Date | Signature |
 |------|------|------|-----------|
-| Operator / Architect | _PENDING_ | _PENDING_ | _PENDING_ |
+| Operator / Architect | Adamar / Architect-Operator | 2026-06-29 | BP-9A Phase 2 complete — Step 10 PASS; Production Configuration Inventory signed; [MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) RATIFIED |
 
-**STOP:** BP-10 / DEE-340 not started. DEE-340 remains blocked by DEE-352 until Step 10 complete and §12 signed. DEE-352 is **In Review** (not Done) until Step 10 Architect decision.
+**STOP:** BP-9A **COMPLETE**. DEE-352 **Done**. **BP-10 (DEE-340) may begin** — not started. MVP not launched on `main`.
 
 ---
 
 ## 13. Governance reconciliation (post PR #318 merge)
 
 **Date:** 2026-06-29  
-**Authority:** BP-9A governance completion pass (no implementation, no Step 10 sign-off)
+**Authority:** BP-9A governance completion pass
 
 | Area | Result | Evidence |
 |------|--------|----------|
-| Repository | **PASS** | `origin/dev` @ `2071130bfeefb90a28f97294abca6af158fe1177`; PR #318 MERGED; no missing commits vs canonical SHA |
-| Documentation | **PASS** | This report + LRR reconciled to merged state; historical pre-merge sections retained with banners |
-| Production lineage | **PASS** | Redeploy from `dev` @ `2071130` → Worker **`86bde72b…`** @ 100%; watcher health `ok:true` post-redeploy |
-| Linear | **PASS** | DEE-352 reopened **In Review** (premature Done on merge reversed); DEE-340 **Todo**, blocked by DEE-352 |
-| Master plan sync | **PASS** | BP-9A plan updated — governance completion phase; BP-10 remains blocked until Step 10 |
-| Step 10 | **NOT STARTED** | Architect decision + §12 sign-off pending |
+| Repository | **PASS** | PR #318 + PR #319 merged; `origin/dev` @ `cb48863…` |
+| Documentation | **PASS** | Report + LRR + Ratification Charter integrated |
+| Production lineage | **PASS** | Worker **`86bde72b…`** @ 100% from `2071130` |
+| Linear | **PASS** | DEE-352 reconciled after auto-close drift |
+| Step 10 | **PASS** | See §10; §12 signed 2026-06-29 |
 
-**Exact next action:** **Step 10 — Architect Decision** (see §10) — ratify [AI-TRADER MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md).
+---
+
+## 14. Step 10 completion record
+
+**Date:** 2026-06-29  
+**Authority:** Adamar / Architect-Operator (Step 10 — Architect Decision)
+
+| Decision | Outcome |
+|----------|---------|
+| `WAIA_CORE_ENFORCEMENT` | **OFF** |
+| UNKNOWN inventory rows | **Resolved** (§10 table) |
+| MVP Ratification Charter | **RATIFIED** |
+| §12 sign-off | **Signed** |
+| DEE-352 | **Done** |
+| BP-10 / DEE-340 | **Unblocked for start** (not started) |
+
+**Exact next action:** **Begin BP-10 (DEE-340)** — Org-0 launch authorization gate.
 
 ---
 
