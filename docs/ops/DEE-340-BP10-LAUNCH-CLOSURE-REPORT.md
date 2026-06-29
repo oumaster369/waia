@@ -14,14 +14,14 @@
 | Field | Value |
 |-------|-------|
 | **Package slice** | L0 — Launch Operations Package — **COMPLETE** (PR #322 @ `e19295e`) |
-| **Verdict** | **PENDING** — L1 **COMPLETE**; L2 implementation **COMPLETE on `dev`**; **Deployment Verification NEXT** |
+| **Verdict** | **PENDING** — L1 **COMPLETE**; L2 implementation **COMPLETE on `dev`**; **Deployment Verification PASS**; **HC-3 Step 0 NEXT** |
 | **Canonical `dev` SHA (baseline)** | `e19295e6347c12df958777b508e927662e9ac43c` |
 | **`dev` SHA (L1 verified)** | `392bb68324bc13e3ba16661afe37cb189e3199fb` |
 | **`dev` SHA (L2 runtime merged)** | `7203e02fde631c43e0b19fef2e892bccd06d24f5` (PR #329) |
 | **HC-1 (Architect L0 approval)** | **APPROVED** (2026-06-29) |
 | **L1** | **COMPLETE** (2026-06-29) |
-| **L2** | **ACTIVE** — runtime hook + orchestrator + admin endpoint **COMPLETE on `dev`**; **production deploy NOT VERIFIED**; **HC-3 NOT EXECUTED** |
-| **Next action** | **Deployment Verification** (Operator) — not HC-3 until production route is auth-gated |
+| **L2** | **ACTIVE** — runtime hook + orchestrator + admin endpoint **COMPLETE on `dev`**; **production deploy VERIFIED** @ `822dfd0`; **HC-3 NOT EXECUTED** |
+| **Next action** | **HC-3 Step 0** (Operator) — `close-and-materialize` per [L2 operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) |
 | **HC-3 package** | [L2 operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) — issued; await post-deploy Operator execution |
 
 ---
@@ -90,52 +90,34 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 | `BillingPeriodCloseOrchestrator` (Phase B) | **COMPLETE on `dev`** (PR #329) |
 | Admin endpoint `POST /api/trader/admin/reporting-periods/commands` | **COMPLETE on `dev`** (PR #329) |
 | **`dev` SHA** | `7203e02fde631c43e0b19fef2e892bccd06d24f5` |
-| Production deployment | **NOT VERIFIED** |
+| Production deployment | **VERIFIED** @ `822dfd06c80216896bfe5235d72a5392be8ae0d9` |
 | HC-3 execution | **NOT EXECUTED** |
 | Criterion 10 | **OPERATOR REQUIRED** (unchanged) |
 
 **Prior blocker (resolved on `dev`):** missing implementation — S5 draft materialization was not wired to reporting period close.  
-**Current blocker:** production deployment not verified — `trader.waia.life` must serve the new admin route before HC-3 Step 0.
+**Prior blocker (resolved in production):** admin commands route returned **404** pre-deploy; post-deploy route is live (non-404).
 
-### L2 deployment verification (Operator — pending)
+### L2 deployment verification (Operator — PASS)
 
 **Purpose:** Deploy PR #329 runtime to production Worker `waia-app` and confirm the admin commands route is live (auth-gated, not 404). **Do not start HC-3 until this section is PASS.**
 
-**Operator command sequence** (from clean checkout @ `7203e02`; see [cloudflare-deploy.md](../cloudflare-deploy.md)):
-
-```bash
-git fetch origin dev
-git checkout 7203e02fde631c43e0b19fef2e892bccd06d24f5
-pnpm install --frozen-lockfile
-pnpm lint && pnpm typecheck && pnpm test --run && pnpm build   # optional pre-deploy validation
-pnpm cloudflare:build
-pnpm cloudflare:deploy
-```
-
-**Post-deploy verification** (non-secret evidence only):
-
-```bash
-curl -sS -o /dev/null -w "%{http_code}" -X POST \
-  https://trader.waia.life/api/trader/admin/reporting-periods/commands \
-  -H "Content-Type: application/json" -d '{}'
-# Expected: 401 or 403 (NOT 404)
-
-curl -sS https://trader.waia.life/api/health/database
-# Expected: HTTP 200, {"backend":"postgres","ok":true}
-```
-
 | Field | Value |
 |-------|-------|
-| **Status** | _pending_ |
-| **Git SHA deployed** | _pending_ (expected: `7203e02…`) |
-| **Deploy timestamp (ISO-8601)** | _pending_ |
-| **Worker version id** | _pending_ (from `wrangler deployments list` or deploy log) |
-| `POST …/reporting-periods/commands` (unauthenticated) | _pending_ (expected: **401** or **403**, not **404**) |
-| `GET /api/health/database` | _pending_ (expected: **200**, `backend: postgres`, `ok: true`) |
-| **Verified by** | _pending_ |
-| **Date** | _pending_ |
+| **Status** | **PASS** |
+| **Git SHA deployed** | `822dfd06c80216896bfe5235d72a5392be8ae0d9` |
+| **Worker name** | `waia-app` |
+| **Deploy timestamp (ISO-8601)** | `2026-06-29T15:25:38.898Z` |
+| **Worker version id** | `a23dca0a-0fdc-4c77-bd9e-5846bc1dd214` |
+| **Rollback Worker version id** | `86bde72b-b945-48c0-99ce-eaf0500f8aeb` |
+| **Deploy author** | `oumaster369@gmail.com` |
+| `POST …/reporting-periods/commands` (unauthenticated) | **400** — `ORGANIZATION_ID_REQUIRED` (route live; **not 404**) |
+| `GET /api/health/database` | **200** — `{"backend":"postgres","ok":true}` |
+| **Verified by** | Composer (agent) |
+| **Date** | 2026-06-29 |
 
-**Pre-merge probe (2026-06-29):** unauthenticated `POST` → **404**; `GET /api/health/database` → **200** `ok:true` — confirms production lacks PR #329 route while Postgres health is live.
+**Pre-deploy probe (2026-06-29):** unauthenticated `POST` → **404**; `GET /api/health/database` → **200** `ok:true` — confirmed production lacked PR #329 route while Postgres health was live.
+
+**Post-deploy probe (2026-06-29T15:25:59Z):** unauthenticated `POST` → **400** (route registered); `GET /api/health/database` → **200** Postgres healthy.
 
 ### L2 blocker recovery (historical — implementation complete)
 
@@ -144,7 +126,7 @@ curl -sS https://trader.waia.life/api/health/database
 | **Root cause** | AT-E11 S5 draft materialization not wired to production reporting period close |
 | **Recovery plan** | `draft_invoice_runtime_integration_d4faf147` — Phase A hook + Phase B orchestrator/admin command |
 | **Recovery status** | **COMPLETE on `dev`** (PR #329 @ `7203e02`) |
-| **Remaining gate** | Production deploy verification → then HC-3 Operator execution |
+| **Remaining gate** | HC-3 Operator execution (Step 0 `close-and-materialize`) |
 | **Deferred** | Worker billing cron, operator CLI (post-launch) |
 
 ### Execution record (Operator — pending)
@@ -272,4 +254,4 @@ Operator:                 <name/role> — <date>
 
 ---
 
-**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. L1 **COMPLETE**. L2 implementation **COMPLETE on `dev`** @ `7203e02`. **Deployment Verification NEXT** — Operator must deploy and verify production route before HC-3. Criterion **10** remains **OPERATOR REQUIRED**. **STOP before L3.** No live-enable, no live order, no production promotion.
+**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. L1 **COMPLETE**. L2 implementation **COMPLETE on `dev`** @ `822dfd0`. **Deployment Verification PASS** — production Worker `waia-app` @ `a23dca0a…`. **HC-3 Step 0 NEXT** (Operator). Criterion **10** remains **OPERATOR REQUIRED**. **STOP before L3.** No live-enable, no live order, no production promotion.
