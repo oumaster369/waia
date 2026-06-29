@@ -1,10 +1,12 @@
 # DEE-352 — BP-9A Full MVP Verification Report
 
-**Linear:** [DEE-352](https://linear.app/deepsense/issue/DEE-352/bp-9a-full-mvp-verification-production-configuration-inventory)  
+**Linear:** [DEE-352](https://linear.app/deepsense/issue/DEE-352/bp-9a-full-mvp-verification-production-configuration-inventory) — **In Review** (Step 10 pending)  
 **Blocks:** [DEE-340](https://linear.app/deepsense/issue/DEE-340) (BP-10)  
-**Branch:** `dee-352-bp9a-mvp-verification`  
-**Baseline SHA:** `0149267` (`dev` post BP-9 / PR #317)  
-**Verified at:** 2026-06-28  
+**Branch:** `dee-352-bp9a-mvp-verification` — **merged** via [PR #318](https://github.com/oumaster369/waia/pull/318)  
+**Canonical `dev` SHA:** `2071130bfeefb90a28f97294abca6af158fe1177` (squash merge 2026-06-29)  
+**Baseline SHA (Phase 1 start):** `0149267` (`dev` post BP-9 / PR #317)  
+**Production Worker (canonical lineage):** `86bde72b-b945-48c0-99ce-eaf0500f8aeb` — deployed from `dev` @ `2071130` (2026-06-29)  
+**Verified at:** 2026-06-28 (Phase 1); governance reconciliation 2026-06-29  
 **Mode:** Verification only — no secret values in this document
 
 ---
@@ -16,9 +18,9 @@
 | **Phase 1** — Inventory verification | **COMPLETE (Composer)** | Repo/docs audit, classification, validation chain, dry-run drill |
 | **Phase 1 gate** — Human acceptance | **COMPLETE** | Adamar / Architect-Operator, 2026-06-28 (§9) |
 | **Launch Readiness Review** | **ACCEPTED** | [DEE-352-LAUNCH-READINESS-REVIEW.md](DEE-352-LAUNCH-READINESS-REVIEW.md) — **READY WITH CONDITIONS**, 2026-06-28 |
-| **Phase 2** — Operator provisioning | **OPEN — Step 10 next** | Steps 1–9A **PASS** (2026-06-29); watcher recovery **PASS** (2026-06-29); **10/11 PASS** |
-| **Phase 2** — Evidence recording | **IN PROGRESS** | Step 9A **PASS** 2026-06-29; watcher runtime recovery **PASS** 2026-06-29; Step 10 not started |
-| **BP-10** | **BLOCKED** | DEE-340 blocked by DEE-352; not started |
+| **Phase 2** — Operator provisioning | **OPEN — Step 10 next** | Steps 1–9A **PASS** (2026-06-29); watcher recovery **PASS** (2026-06-29); PR #318 **merged** to `dev` @ `2071130`; **10/11 PASS** |
+| **Phase 2** — Evidence recording | **GOVERNANCE RECONCILIATION COMPLETE** | Merge + production lineage reconciled 2026-06-29; Step 10 **NOT STARTED** |
+| **BP-10** | **BLOCKED** | DEE-340 blocked by DEE-352 until Step 10 + §12 sign-off; not started |
 
 **Checklist numbering:** Program doc lists criteria **1–14**; BP-9A adds **15** (live Telegram drill) and **16** (signed inventory) → **14+2 = 16** for DEE-340 alignment.
 
@@ -65,7 +67,7 @@ After BP-9, **no new MVP functionality** may be added before BP-10.
 - Phase 2 Step 8 (Execution host) **PASS** — isolated host `waia-org0-execution`; `GET /health → 200`; health JSON `status:ok` — **8/11 PASS**
 - Phase 2 Step 9 (Cron workers) **PASS** — runtime compatibility gate; MB + paper `cycle_complete`; deploy **`07408a7a…`** — **9/11 PASS**
 - Phase 2 Step 9A (Payment address registry) **PASS** — first Org-0 inbound wallet **`788f0fdc…`**; address **`TSBJRwVc…`** ACTIVATED; resolver ready — **10/11 PASS**
-- Payment Watcher runtime recovery **PASS** — stale-lease handling + Worker-safe imports; deploy **`c47176f9…`**; health `ok:true` (2026-06-29) — see §10.1
+- Payment Watcher runtime recovery **PASS** — stale-lease handling + Worker-safe imports — see §10.1 (pre-merge deploy **`c47176f9…`**; post-merge canonical deploy **`86bde72b…`** @ `2071130`)
 - OpenAI for AI-TRADER — **N/A for BP-9A** (Twin-only `WAIA_AI_*`)
 - final human sign-off pending (§12)
 
@@ -402,7 +404,7 @@ Reference: [AI-TRADER-USER-JOURNEY-v2.md](../ai-trader/AI-TRADER-USER-JOURNEY-v2
 | Gap | Classification | Blocks BP-10? |
 |-----|----------------|---------------|
 | Phase 2 Steps 1–9A + watcher recovery | **PASS** — closed 2026-06-28–2026-06-29 | **No** |
-| Phase 2 runtime not merged to `dev` | **GOVERNANCE REQUIRED** — ~129 files uncommitted; production on deploy **`c47176f9…`** ahead of canonical SHA | **Yes** — Step 10 + BP-10 |
+| Phase 2 runtime merged to `dev` | **RESOLVED** — PR #318 squash merge `2071130` (2026-06-29); production redeployed from canonical SHA → **`86bde72b…`** | **No** |
 | `WAIA_CORE_ENFORCEMENT` posture | Architect decision (Step 10) | **Yes** — Step 10 |
 | MVP checklist criterion 16 (signed inventory) | §12 unsigned | **Yes** — Step 10 |
 | Remaining **UNKNOWN** inventory rows (§2) | Architect waive or resolve (Step 10) | **Yes** — Step 10 |
@@ -450,7 +452,7 @@ Reference: [AI-TRADER-USER-JOURNEY-v2.md](../ai-trader/AI-TRADER-USER-JOURNEY-v2
 
 **Composer role:** Guide operator, record evidence, sync docs/Linear. **Composer must not** run `wrangler secret put`, provision secrets, or execute `--send` autonomously.
 
-**Progress:** **10 / 11** steps **PASS** · last updated **2026-06-29**
+**Progress:** **10 / 11** steps **PASS** · last updated **2026-06-29** (post-merge governance reconciliation)
 
 ### 10.0 Reality Preconditions (mandatory from Step 8 onward)
 
@@ -722,7 +724,7 @@ Recommend **WAIA DEV OS** rule: **Reality Preconditions Check** — before every
 
 **Operator provisioning (2026-06-28):** Operator set `TRONGRID_API_KEY` and `TRON_RPC_PRIMARY_URL` via Wrangler (values not recorded). Composer added `WATCHER_ENABLED=1` to `wrangler.jsonc` and deployed production Worker.
 
-**Runtime fixes (branch, deployed, not merged):** Worker cron could not load payment-watcher modules — `server-only` side-effect imports throw in workerd; `createRequire(import.meta.url)` fails when `import.meta.url` is absent; cron env bridging used non-iterable `process.env`/`CRON_ENV_KEYS`; `TronRpcClient` class and alert-router sink had constructor interop failures. Fixed via `lib/enforce-server-only.ts`, cron-safe env bridge, `createTronRpcClient` factory, cron-safe watcher logger, and related adapter imports.
+> **Historical (pre-merge):** Runtime fixes were first deployed from branch before PR #318 merge. **Current state:** merged to `dev` @ `2071130` and redeployed to production **`86bde72b…`** (2026-06-29). Original defect: Worker cron could not load payment-watcher modules — `server-only` side-effect imports throw in workerd; `createRequire(import.meta.url)` fails when `import.meta.url` is absent; cron env bridging used non-iterable `process.env`/`CRON_ENV_KEYS`; `TronRpcClient` class and alert-router sink had constructor interop failures. Fixed via `lib/enforce-server-only.ts`, cron-safe env bridge, `createTronRpcClient` factory, cron-safe watcher logger, and related adapter imports.
 
 **Verification (evidence shapes only — no secrets):**
 
@@ -985,14 +987,24 @@ Provisioned via `PaymentAddressService` (`scripts/waia-core/provision-org0-payme
 | `lease_until` | `2026-06-29T07:00:56.799Z` (orphaned) |
 | `last_error` | null |
 
-**Production deploy (recovery):**
+**Production deploy (recovery — pre-merge branch):**
 
 | Field | Value |
 |-------|-------|
 | Worker version | `c47176f9-c73d-4272-8975-0e7e80509039` |
 | Deploy date | 2026-06-29 |
+| Git lineage | Branch `dee-352-bp9a-mvp-verification` (pre-PR #318 merge) |
 
-**Post-recovery evidence:**
+**Production deploy (canonical — post-merge `dev` @ `2071130`):**
+
+| Field | Value |
+|-------|-------|
+| Worker version | `86bde72b-b945-48c0-99ce-eaf0500f8aeb` |
+| Deploy date | 2026-06-29 |
+| Git lineage | `dev` @ `2071130bfeefb90a28f97294abca6af158fe1177` (PR #318 squash merge) |
+| Deploy command | `pnpm cloudflare:deploy` from clean `dev` checkout @ `2071130` |
+
+**Post-recovery evidence (pre-merge deploy `c47176f9…`):**
 
 | Check | Result | Evidence |
 |-------|--------|----------|
@@ -1012,24 +1024,33 @@ Provisioned via `PaymentAddressService` (`scripts/waia-core/provision-org0-payme
 | **Verified by** | Composer recovery pass + production HTTP + `wrangler tail` |
 | **Date** | 2026-06-29 |
 
-**Step 10 remains blocked** until Phase 2 runtime fixes are committed, reviewed, merged to `dev`, and redeployed from a canonical SHA with documented lineage (see Step 10 below). **Do not** sign Step 10 in this pass.
+**Post-merge canonical lineage evidence (`86bde72b…` @ `2071130`):**
+
+| Check | Result | Evidence |
+|-------|--------|----------|
+| Active deployment | **PASS** | `wrangler deployments list` → **100%** `86bde72b-b945-48c0-99ce-eaf0500f8aeb` (2026-06-29T08:32:30Z) |
+| Watcher health (post-redeploy) | **PASS** | `GET /api/health/payment-watcher` → `ok:true`, `last_scanned_at` **`2026-06-29T08:37:27.356Z`**, `scan_lag_seconds` **36** |
+| Settlement regression | **PASS** | `GET /api/health/settlement` → `ok:true`, `backlog:0` |
+| Database regression | **PASS** | `GET /api/health/database` → `ok:true`, `backend:postgres` |
+
+**Step 10 governance merge/deploy lineage:** **RESOLVED** (2026-06-29). Step 10 itself remains **NOT STARTED** — Architect decision + §12 sign-off only. **Do not** sign Step 10 in this pass.
 
 ---
 
 ### Step 10 — Architect decision *(NOT STARTED)*
 
+**Closure artifact:** [AI-TRADER MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) — **PROPOSED**; pending Architect sign-off in §8. Creates no new rule; ratifies approved architecture; freezes MVP scope.
+
 #### Reality Preconditions
 
 Steps 1–9A **PASS**; Payment Watcher runtime recovery **PASS** (§10.1); inventory rows resolved or waived.
 
-**Remaining Step 10 blockers (Payment Watcher runtime cleared — governance/deploy lineage not):**
+**Remaining Step 10 blockers (implementation + merge/deploy lineage cleared):**
 
-1. **~129+ uncommitted Phase 2 runtime files** on branch — no PR merged to `dev`; production deploy lineage non-reproducible from canonical SHA.
-2. Reconcile pre-Phase-2 audit snapshot (Production environment audit, 2026-06-28) vs §10 evidence — historical section now bannered; no content rewrite.
-3. `WAIA_CORE_ENFORCEMENT` posture decision (on/off documented).
-4. Waive or resolve remaining **UNKNOWN** inventory rows.
-5. Operator / Architect attestation + §12 sign-off.
-6. Linear DEE-352 status sync on merge.
+1. `WAIA_CORE_ENFORCEMENT` posture decision (on/off documented).
+2. Waive or resolve remaining **UNKNOWN** inventory rows (§2).
+3. Operator / Architect attestation + §12 sign-off.
+4. Linear DEE-352 → **Done** only after Step 10 complete (currently **In Review** — reopened after premature auto-close on PR #318 merge).
 
 | Field | Value |
 |-------|-------|
@@ -1073,12 +1094,31 @@ After provisioning, record evidence in §2 **Verified by** column and §10 step 
 |------|------|------|-----------|
 | Operator / Architect | _PENDING_ | _PENDING_ | _PENDING_ |
 
-**STOP:** BP-10 / DEE-340 not started. DEE-340 remains blocked by DEE-352 until this issue is Done with full Phase 2 evidence.
+**STOP:** BP-10 / DEE-340 not started. DEE-340 remains blocked by DEE-352 until Step 10 complete and §12 signed. DEE-352 is **In Review** (not Done) until Step 10 Architect decision.
+
+---
+
+## 13. Governance reconciliation (post PR #318 merge)
+
+**Date:** 2026-06-29  
+**Authority:** BP-9A governance completion pass (no implementation, no Step 10 sign-off)
+
+| Area | Result | Evidence |
+|------|--------|----------|
+| Repository | **PASS** | `origin/dev` @ `2071130bfeefb90a28f97294abca6af158fe1177`; PR #318 MERGED; no missing commits vs canonical SHA |
+| Documentation | **PASS** | This report + LRR reconciled to merged state; historical pre-merge sections retained with banners |
+| Production lineage | **PASS** | Redeploy from `dev` @ `2071130` → Worker **`86bde72b…`** @ 100%; watcher health `ok:true` post-redeploy |
+| Linear | **PASS** | DEE-352 reopened **In Review** (premature Done on merge reversed); DEE-340 **Todo**, blocked by DEE-352 |
+| Master plan sync | **PASS** | BP-9A plan updated — governance completion phase; BP-10 remains blocked until Step 10 |
+| Step 10 | **NOT STARTED** | Architect decision + §12 sign-off pending |
+
+**Exact next action:** **Step 10 — Architect Decision** (see §10) — ratify [AI-TRADER MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md).
 
 ---
 
 ## References
 
+- [AI-TRADER MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) — Step 10 closure seal (pending Architect sign-off)
 - [Launch Readiness Review](DEE-352-LAUNCH-READINESS-REVIEW.md) — mandatory gate before Phase 2
 - [BP-9 alerting runbook](DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md)
 - [BP-7 live runbook](DEE-212-BP7-LIVE-EXECUTION-RUNBOOK.md)

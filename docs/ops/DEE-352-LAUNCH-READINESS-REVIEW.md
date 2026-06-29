@@ -1,9 +1,10 @@
 # DEE-352 — Launch Readiness Review
 
-**Linear:** [DEE-352](https://linear.app/deepsense/issue/DEE-352/bp-9a-full-mvp-verification-production-configuration-inventory)  
-**Branch:** `dee-352-bp9a-mvp-verification`  
-**Baseline:** `dev` @ `0149267` (BP-9 merged, PR #317)  
-**Review date:** 2026-06-28  
+**Linear:** [DEE-352](https://linear.app/deepsense/issue/DEE-352/bp-9a-full-mvp-verification-production-configuration-inventory) — **In Review** (Step 10 pending)  
+**Branch:** `dee-352-bp9a-mvp-verification` — **merged** via [PR #318](https://github.com/oumaster369/waia/pull/318)  
+**Canonical `dev` SHA:** `2071130bfeefb90a28f97294abca6af158fe1177` (2026-06-29)  
+**Baseline (Phase 1 start):** `dev` @ `0149267` (BP-9 merged, PR #317)  
+**Review date:** 2026-06-28 · **Governance reconciliation:** 2026-06-29  
 **Authority:** Architect review gate immediately before production provisioning
 
 ---
@@ -32,7 +33,7 @@ After BP-9, the AI-TRADER MVP architecture is frozen as follows:
 | **Execution Host = Execution Plane** | Isolated off-Cloudflare host for bounded live CLI cycle (Option B); separate secret injection path |
 | **Option B preserved** | Live spot execution bounded to execution host + Org-0 CLI; Worker does not call exchange `placeOrder` for live |
 | **Fail-closed** | Missing config, bad data, kill switches, tenant isolation, org allowlist, and master-key readiness deny unsafe paths |
-| **Single source of truth** | Master Execution Plan + MVP Execution Program v2 + Master Spec v2; Linear DEE-352 blocks DEE-340 until BP-9A Done |
+| **Single source of truth** | Master Execution Plan + MVP Execution Program v2 + Master Spec v2; Linear DEE-352 blocks DEE-340 until BP-9A Step 10 + §12 complete |
 | **No duplicated runtime** | No second scheduler, daemon, websocket loop, or parallel execution FSM beyond approved cron + host |
 | **No unauthorized execution path** | ADR-0009 external live blocked; Org-0 only; admin-gated live-enable; validation-gate promotion required |
 | **Governed promotion** | ADR-0010/0011 — strategy validation gate, cooling-off, CLI-only promotion request |
@@ -92,10 +93,10 @@ Full step order and evidence slots live in the BP-9A report §10. This section l
 | Risk | Notes |
 |------|-------|
 | Production secrets unprovisioned | **Resolved** — Steps 2, 6, 7, 9, 9A **PASS**; Step 10 governance waivers remain |
-| No production runtime evidence | **Resolved** — registry, watcher (recovery **PASS**), Telegram, cron MB/paper **PASS**; Step 10 pending (merge lineage + sign-off) |
+| No production runtime evidence | **Resolved** — registry, watcher (recovery **PASS**), Telegram, cron MB/paper **PASS**; canonical deploy **`86bde72b…`** from `dev` @ `2071130` |
 | Execution host not deployed | **Resolved** — Step 8 **PASS** (2026-06-28); BP-6 `/health` only; not BP-7 live orders |
 | Org-0 HTX not connected in production | **Resolved** — Step 5 **PASS** (2026-06-28) |
-| Phase 2 evidence incomplete | **10/11 PASS** — Step 10 only remains; runtime blockers **cleared**; governance blockers open |
+| Phase 2 evidence incomplete | **10/11 PASS** — Step 10 only remains; merge + deploy lineage **resolved** 2026-06-29 |
 
 ### Accepted (documented; do not alone block BP-10)
 
@@ -143,7 +144,7 @@ Full step order and evidence slots live in the BP-9A report §10. This section l
 9. Every failed verification **stops** the sequence
 10. **BP-10 remains blocked** until DEE-352 is complete and signed (§12)
 
-**BP-10 remains blocked** by DEE-352 until Phase 2 complete and DEE-352 closed. No live order, no Launch promotion.
+**BP-10 remains blocked** by DEE-352 until Step 10 Architect decision + §12 sign-off. No live order, no Launch promotion.
 
 ### Architect sign-off
 
@@ -169,7 +170,7 @@ Full step order and evidence slots live in the BP-9A report §10. This section l
 | Production provisioning is **not** part of BP-9A Phase 1 verification | Phase 1 = repo/docs inventory only |
 | Production provisioning begins **only after** this Launch Readiness Review is **accepted** | Gate between Phase 1 and Phase 2 |
 | Phase 2 is **operator-led**; Composer records evidence, does not autonomously provision secrets | BP-9A report §10 protocol |
-| BP-10 (DEE-340) starts **only after** DEE-352 Done with full Phase 2 evidence | Linear `blocks` relation |
+| BP-10 (DEE-340) starts **only after** DEE-352 Step 10 complete + §12 signed | Linear `blocks` relation; DEE-352 **In Review** until then |
 | MVP Scope Freeze active | No new MVP features before BP-10 — see BP-9A report |
 
 **Execution order:**
@@ -187,6 +188,7 @@ Phase 1 (complete) → Launch Readiness Review (this document) → Phase 2 (Step
 | Document | Role |
 |----------|------|
 | [DEE-352-BP9A-MVP-VERIFICATION-REPORT.md](DEE-352-BP9A-MVP-VERIFICATION-REPORT.md) | Phase 1 inventory, Phase 2 playbook, MVP checklist |
+| [AI-TRADER MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) | Step 10 closure seal — scope-freeze charter (pending Architect sign-off) |
 | [AI-TRADER Master Execution Plan](https://linear.app/deepsense/issue/DEE-352) / `.cursor/plans/ai-trader_master_execution_plan_f03b2775.plan.md` | Package sequencing BP-0→BP-10 |
 | [DEE-212-BP7-LIVE-EXECUTION-RUNBOOK.md](DEE-212-BP7-LIVE-EXECUTION-RUNBOOK.md) | Org-0 live CLI path |
 | [DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md](DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md) | Alerting provisioning |
