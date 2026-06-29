@@ -68,11 +68,37 @@ describe("BP-6 architecture boundaries (DEE-339 ratification)", () => {
     expect(files.some((name) => name.endsWith(".yaml") || name.endsWith(".yml"))).toBe(false);
   });
 
-  it("does not activate secrets_store or master key in wrangler until operator store_id", () => {
+  it("allows only approved Secrets Store binding on Worker (BP-9A Step 2)", () => {
     const wrangler = readFileSync(WRANGLER_PATH, "utf8");
 
+    // Dev-only master key material must never ship in wrangler.jsonc.
     expect(wrangler).not.toMatch(/AI_TRADER_MASTER_KEY_DEV/);
-    expect(wrangler).not.toMatch(/^\s*"secrets_store_secrets":\s*\[/m);
-    expect(wrangler).toMatch(/\/\/\s*"secrets_store_secrets"/);
+
+    // Option B: execution plane URL and host-only secrets stay off the Worker config.
+    expect(wrangler).not.toMatch(/WAIA_TRADER_EXECUTION_HOST_URL/);
+    expect(wrangler).not.toMatch(/EXECUTION_HOST.*KMS|HOST_KMS|host-only secret/i);
+
+    // BP-9A Step 2: canonical Secrets Store binding for HTX credential crypto readiness.
+    expect(wrangler).toMatch(/^\s*"secrets_store_secrets":\s*\[/m);
+
+    const secretsStoreMatch = wrangler.match(/"secrets_store_secrets":\s*\[([\s\S]*?)\n\s*\]/);
+    expect(secretsStoreMatch).not.toBeNull();
+    const secretsStoreBlock = secretsStoreMatch![1]!;
+
+    const bindings = [...secretsStoreBlock.matchAll(/"binding":\s*"([^"]+)"/g)].map(
+      (match) => match[1],
+    );
+    expect(bindings).toEqual(["AI_TRADER_MASTER_KEY"]);
+
+    // Metadata only — no secret values, tokens, or raw credentials in the store block.
+    expect(secretsStoreBlock).toMatch(/"store_id":\s*"/);
+    expect(secretsStoreBlock).toMatch(/"secret_name":\s*"ai-trader-master-key-v1"/);
+    expect(secretsStoreBlock).not.toMatch(
+      /TELEGRAM|TRONGRID|TRON_RPC|api[_-]?secret|private[_-]?key|seed phrase|Bearer /i,
+    );
+
+    // Worker plain env must not embed operator Wrangler secrets (names in docs only).
+    expect(wrangler).not.toMatch(/TELEGRAM_ALERTS_BOT_TOKEN\s*:/);
+    expect(wrangler).not.toMatch(/TRONGRID_API_KEY\s*:/);
   });
 });
