@@ -68,35 +68,35 @@ Re-confirm immediately before any governed live act. All must pass; **do not pro
 
 ---
 
-## 4. L2 — Criterion 10 manual billing gate (Operator, HC-3)
+## 4. L2 — Criterion 10 manual billing gate (Operator, HC-3) — **COMPLETE**
 
-**Prerequisite — Deployment Verification:** **COMPLETE** (PR #331 evidence on `dev` @ `b5a6e35`; production Worker `waia-app` @ `a23dca0a` deployed from git `822dfd0`). See [closure report §3 deployment verification](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md). **HC-3 Step 0** may proceed. Optional re-check: `POST /api/trader/admin/reporting-periods/commands` returns non-**404** on `trader.waia.life` (observed **400** / auth-gated responses are acceptable).
+**Prerequisite — Deployment Verification:** **COMPLETE** (PR #331 evidence on `dev`; production Worker `waia-app` @ `a23dca0a` deployed from git `822dfd0`). See [closure report §3 deployment verification](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md).
 
-**Purpose:** Close the one OPERATOR-REQUIRED MVP checklist item before live capital.
+**Status:** **HC-3 COMPLETE** (2026-06-29). Criterion **10** **PASS**. Production evidence recorded in closure report §3.
 
-**Operator checklist (executable):** [DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md)
+**Purpose:** Close the one OPERATOR-REQUIRED MVP checklist item before live capital — **achieved**.
 
-**Scope:** Exercise the manual invoice/HWM gate per [ADR-0008](../adr/0008-manual-billing-gate.md) on Org-0:
+**Operator checklist (executed):** [DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md)
 
-1. Verify preconditions (L1 complete; no live-enable; billable **DRAFT** invoice for **`htx-spot-1`**).
-2. Complete manual reconciliation review — all **6** ADR-0008 attestation items (incl. realized-fill finality per LD-10).
-3. **Approve issuance** → audit `trader.invoice.issuance_approved`; observe **15-minute** cooling-off.
-4. **Issue** after cooling-off → audit `trader.invoice.issued`; confirm **`DRAFT → ISSUED`** and HWM update.
-5. Hand non-secret evidence to Composer for closure report §3 and §1 row 10.
-
-**Evidence shapes (record in closure report §3):**
+**Recorded evidence (closure report §3):**
 
 | Field | Value |
 |-------|-------|
-| Invoice id prefix | `<first-8-chars>` |
-| Reporting period id prefix | `<first-8-chars>` |
-| Gate attestation count | **6** (all ADR-0008 items) |
-| Manual sign-off timestamp | `<issuanceApprovedAt ISO-8601>` |
-| Issued-at timestamp | `<issuedAt ISO-8601>` |
-| Audit actions | `trader.invoice.issuance_approved`, `trader.invoice.issued` |
-| Criterion 10 status | **PASS** (after Operator attestation only) |
+| Invoice id prefix | `2cedeaa5` |
+| Reporting period id prefix | `d926e5ff` |
+| Exchange account id | `htx-spot-1` |
+| Gate attestation count | **6** |
+| Manual sign-off timestamp | `2026-06-29T17:35:34.798Z` |
+| Cooling-off until | `2026-06-29T17:50:34.798Z` |
+| Issued-at timestamp | `2026-06-29T17:57:37.216Z` |
+| HWM bootstrap prefix | `0424c555` @ `0` |
+| HWM ratchet prefix | `6a182789` @ `100` |
+| Audit actions | `trader.hwm.bootstrapped`, `trader.reporting_period.opened`, `trader.reporting_period.closed`, `trader.invoice.draft_generated`, `trader.invoice.issuance_approved`, `trader.invoice.issued` |
+| Criterion 10 status | **PASS** |
 
-**STOP:** Composer records evidence after Operator completes HC-3; **STOP before L3**. Do not live-enable.
+**UX backlog (post-MVP, no implementation):** [DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md](DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md)
+
+**STOP:** L2 **COMPLETE**. **HC-4 NEXT** (readiness review). **L3 NOT STARTED**. Do not live-enable until HC-4 readiness review complete.
 
 ---
 
@@ -318,7 +318,8 @@ Open **immediately** after Launch promotion merge:
 |----------|------|
 | [BP-10 Canonical Execution Plan](../../.cursor/plans/bp-10_launch_execution_plan_e2aa412c.plan.md) | Authoritative ceremony sequence |
 | [DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md) | Evidence ledger |
-| [DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) | HC-3 executable operator steps |
+| [DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) | HC-3 operator steps (**COMPLETE**) |
+| [DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md](DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md) | Post-MVP Operator Console UX backlog (HC-3 observations) |
 | [DEE-352-BP9A-MVP-VERIFICATION-REPORT.md](DEE-352-BP9A-MVP-VERIFICATION-REPORT.md) | Baseline 16-criterion inventory |
 | [DEE-352-LAUNCH-READINESS-REVIEW.md](DEE-352-LAUNCH-READINESS-REVIEW.md) | Launch readiness gate |
 | [AI-TRADER-MVP-RATIFICATION.md](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) | Scope freeze + BP-10 definition |
@@ -326,4 +327,4 @@ Open **immediately** after Launch promotion merge:
 | [ADR-0008](../adr/0008-manual-billing-gate.md) | Manual billing gate |
 | [ADR-0009](../adr/0009-regulatory-posture.md) | External live blocked |
 
-**STOP:** L0 **COMPLETE** (PR #322). HC-1 **APPROVED** (2026-06-29). L1 **COMPLETE**. **Deployment Verification COMPLETE** (PR #331). L2 **ACTIVE** — **HC-3 Step 0 NEXT** (`close-and-materialize`) per [operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md). HC-3 **NOT EXECUTED**. Criterion **10** **OPERATOR REQUIRED**. **STOP before L3.**
+**STOP:** L0 **COMPLETE** (PR #322). HC-1 **APPROVED** (2026-06-29). L1 **COMPLETE**. L2 **COMPLETE**. **HC-3 COMPLETE** (2026-06-29). Criterion **10** **PASS**. **HC-4 NEXT** — readiness review for governed Org-0 live-enable. **L3 NOT STARTED**. **STOP before L3 execution** until HC-4 readiness review complete.
