@@ -17,6 +17,7 @@ Exercise the ADR-0008 manual billing / HWM gate on Org-0 so criterion **10** can
 
 | # | Check | Expected |
 |---|-------|----------|
+| P-0 | Production deployment verified | Closure report §3 deployment verification **PASS**; admin commands route live on `trader.waia.life` (not **404**) |
 | P-1 | BP-10 L1 complete | Closure report §2 **COMPLETE** |
 | P-2 | Criterion 10 is the sole pre-live operator gate | Closure report §1 — only row **10** is **OPERATOR REQUIRED** |
 | P-3 | No live-enable armed | Admin `/admin/live-enable` — Org-0 state **DISABLED** (or equivalent not-enabled) |
