@@ -14,37 +14,41 @@
 | Field | Value |
 |-------|-------|
 | **Package slice** | L0 — Launch Operations Package — **COMPLETE** (PR #322 @ `e19295e`) |
-| **Verdict** | **PENDING** — HC-1 **APPROVED**; awaiting L1 |
+| **Verdict** | **PENDING** — L1 **COMPLETE**; awaiting L2 (operator gate) |
 | **Canonical `dev` SHA (baseline)** | `e19295e6347c12df958777b508e927662e9ac43c` |
+| **`dev` SHA (L1 verified)** | `392bb68324bc13e3ba16661afe37cb189e3199fb` |
 | **HC-1 (Architect L0 approval)** | **APPROVED** (2026-06-29) |
-| **L1** | **NOT STARTED** — **NEXT** |
+| **L1** | **COMPLETE** (2026-06-29) |
+| **L2** | **NOT STARTED** — **NEXT** |
 
 ---
 
 ## 1. Pre-launch verification table (16 criteria)
 
-Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.md). L1 will re-confirm on canonical `dev` SHA. Final green state required on `main` at L5/L6.
+Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.md). L1 re-confirmed on canonical `dev` @ `392bb68`. Final green state required on `main` at L5/L6.
 
 | # | Criterion | BP-9A baseline status | Evidence pointer | BP-10 final status | Notes |
 |---|-----------|----------------------|------------------|-------------------|-------|
-| 1 | WAIA Core auth + org + trader entitlement + audit | VERIFIED IN CODE | runtime-provisioning; admin audit UI | _pending_ | |
-| 2 | Tenant-isolation gate (ADR-0007) | PASS | CI; 31 tenant-isolation test files | _pending_ | |
-| 3 | HTX spot read + encrypted creds + sync | PASS | Step 5 — Trader Workspace connect + sync (2026-06-28) | _pending_ | Re-confirm PF-2 pre-L4 |
-| 4 | Market data ingestion + fail-closed | PASS | Step 9 — MB cron `cycle_complete` (2026-06-29) | _pending_ | |
-| 5 | MSV + CDE operational | PASS | Step 9 — MB telemetry + CDE counters (2026-06-29) | _pending_ | |
-| 6 | Two strategies registered; CDE signal-only | PASS | DEE-337; registry tests | _pending_ | |
-| 7 | Risk + kill switches; reconciliation | PASS | CI tests; admin kill-switch UI | _pending_ | |
-| 8 | Paper loop + AHR validated | PASS | [DEE-337 closure report](DEE-337-P5-TWO-STRATEGY-AHR-CLOSURE-REPORT.md) | _pending_ | |
-| 9 | Signed validation-gate promotion (ADR-0010/11) | PASS | DEE-178; admin promotion UI | _pending_ | |
-| 10 | Reporting + HWM + 30% fee + manual gate | **OPERATOR REQUIRED** | Admin billing; ADR-0008 | _pending_ | **L2 operator gate** |
-| 11 | USDT payments + suspension lifecycle | PASS | Steps 6 + 9A + §10.1 — watcher + registry | _pending_ | |
-| 12 | Org-0 live admin-gated; isolated host | PASS | Steps 4 + 8 — admin + host `/health` (2026-06-28) | _pending_ | Live order reality = **L4** |
-| 13 | Admin console complete | PASS | BP-8 PR #316; admin route tests | _pending_ | |
-| 14 | External live blocked (ADR-0009) | PASS | org allowlist tests; live path fail-closed | _pending_ | Must remain Posture |
-| 15 | Live Telegram alert delivery | PASS | Step 7 — production drill (2026-06-28) | _pending_ | |
-| 16 | Production Configuration Inventory signed | PASS | Step 10 — §12 signed 2026-06-29 | _pending_ | |
+| 1 | WAIA Core auth + org + trader entitlement + audit | VERIFIED IN CODE | runtime-provisioning; admin audit UI | **VERIFIED IN CODE** | L1 CI green on `dev` @ `392bb68` |
+| 2 | Tenant-isolation gate (ADR-0007) | PASS | CI; 31 tenant-isolation test files | **PASS** | L1 test suite green |
+| 3 | HTX spot read + encrypted creds + sync | PASS | Step 5 — Trader Workspace connect + sync (2026-06-28) | **PASS** | Re-confirm PF-2 pre-L4 |
+| 4 | Market data ingestion + fail-closed | PASS | Step 9 — MB cron `cycle_complete` (2026-06-29) | **PASS** | |
+| 5 | MSV + CDE operational | PASS | Step 9 — MB telemetry + CDE counters (2026-06-29) | **PASS** | |
+| 6 | Two strategies registered; CDE signal-only | PASS | DEE-337; registry tests | **PASS** | |
+| 7 | Risk + kill switches; reconciliation | PASS | CI tests; admin kill-switch UI | **PASS** | |
+| 8 | Paper loop + AHR validated | PASS | [DEE-337 closure report](DEE-337-P5-TWO-STRATEGY-AHR-CLOSURE-REPORT.md) | **PASS** | |
+| 9 | Signed validation-gate promotion (ADR-0010/11) | PASS | DEE-178; admin promotion UI | **PASS** | |
+| 10 | Reporting + HWM + 30% fee + manual gate | **OPERATOR REQUIRED** | Admin billing; ADR-0008 | **OPERATOR REQUIRED** | **L2 operator gate — only remaining pre-order gate** |
+| 11 | USDT payments + suspension lifecycle | PASS | Steps 6 + 9A + §10.1 — watcher + registry | **PASS** | |
+| 12 | Org-0 live admin-gated; isolated host | PASS | Steps 4 + 8 — admin + host `/health` (2026-06-28) | **PASS** | Live order reality = **L4** |
+| 13 | Admin console complete | PASS | BP-8 PR #316; admin route tests | **PASS** | |
+| 14 | External live blocked (ADR-0009) | PASS | org allowlist tests; live path fail-closed | **PASS** | Must remain Posture |
+| 15 | Live Telegram alert delivery | PASS | Step 7 — production drill (2026-06-28) | **PASS** | |
+| 16 | Production Configuration Inventory signed | PASS | Step 10 — §12 signed 2026-06-29 | **PASS** | |
 
 **Residual operator gate before live order:** Criterion **10** only (L2).
+
+**L1 summary:** 15/16 criteria green on `dev`; criterion **10** deferred to L2 operator attestation.
 
 ---
 
@@ -52,12 +56,12 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 
 | Field | Value |
 |-------|-------|
-| **Status** | _not started_ |
-| **Validation chain** | _pending_ |
-| **`dev` SHA verified** | _pending_ |
-| **16/16 table updated** | _pending_ |
-| **Verified by** | _pending_ |
-| **Date** | _pending_ |
+| **Status** | **COMPLETE** |
+| **Validation chain** | `pnpm lint` — **PASS** (0 errors, 49 warnings); `pnpm typecheck` — **PASS**; `pnpm test --run` — **PASS** (274 files, 1875 tests passed, 77 skipped); `pnpm build` — **PASS** |
+| **`dev` SHA verified** | `392bb68324bc13e3ba16661afe37cb189e3199fb` (`origin/dev` post-HC-1 PR #326) |
+| **16/16 table updated** | **YES** — §1 populated; criterion 10 flagged as sole operator gate |
+| **Verified by** | Composer (agent) |
+| **Date** | 2026-06-29 |
 
 ---
 
@@ -165,4 +169,4 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 
 ---
 
-**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. **L1 NEXT** — not started.
+**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. L1 **COMPLETE**. **L2 NEXT** — await Operator criterion 10 manual billing gate (HC-3). No live-enable, no live order, no production promotion.
