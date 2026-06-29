@@ -8,7 +8,10 @@ import { getDb } from "@/db/client";
 import { auditLogs, traderReportingPeriods } from "@/db/schema";
 import {
   computeReportingPeriodRecordDigest,
+  createReportingPeriodLifecycleService,
+  createSqliteHwmLedgerService,
   createSqliteReportingPeriodLifecycleService,
+  createSqliteReportingPeriodRepository,
   ReportingPeriodAlreadyOpenError,
   ReportingPeriodDigestMismatchError,
   ReportingPeriodInvalidTransitionError,
@@ -16,6 +19,7 @@ import {
   verifyReportingPeriodRecordDigest,
 } from "@/lib/trader/billing";
 import { assertAllowedReportingPeriodTransition } from "@/lib/trader/billing/reporting-period-lifecycle.transitions";
+import { writeTraderAuditLogSqlite } from "@/lib/trader/audit/write";
 import { traderAuditActions, traderEntityTypes } from "@/lib/trader/types";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
@@ -109,8 +113,19 @@ describe("reporting period lifecycle service (DEE-306 S2)", () => {
 
   it("closes the OPEN period, recomputes digest, and writes audit", async () => {
     const db = getDb();
-    const service = createSqliteReportingPeriodLifecycleService(db);
+    const service = createReportingPeriodLifecycleService({
+      repository: createSqliteReportingPeriodRepository(db),
+      writeAudit: (input) => writeTraderAuditLogSqlite(db, input),
+    });
     const context = requireOrgContext(organizationId);
+
+    const hwmService = createSqliteHwmLedgerService(db);
+    await hwmService.bootstrapHwm(context, {
+      exchangeAccountId: EXCHANGE_ACCOUNT_ID,
+      initialHwm: "0",
+      valuationSource: "paper_pnl_read_model.v1",
+      effectiveAt: PERIOD_START,
+    });
 
     const open = await service.findOpenPeriod(context, EXCHANGE_ACCOUNT_ID);
     expect(open).not.toBeNull();

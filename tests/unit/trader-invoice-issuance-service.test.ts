@@ -106,9 +106,18 @@ describe("invoice issuance service (DEE-311 S6)", () => {
     await bootstrapZeroHwm(exchangeAccountId);
     const closed = await openAndClosePeriod(exchangeAccountId, { month, realizedPnl });
     const draftService = createSqliteDraftInvoiceService(getDb());
-    return draftService.generateDraftInvoice(requireOrgContext(organizationId), {
+    const context = requireOrgContext(organizationId);
+    const existing = await draftService.getDraftInvoiceByPeriod(
+      context,
+      exchangeAccountId,
+      closed.id,
+    );
+    if (existing) {
+      return existing;
+    }
+    return draftService.generateDraftInvoice(context, {
       periodId: closed.id,
-      computedAt: FIXED_AT,
+      computedAt: closed.periodEnd!,
       realizedFillFinality: false,
     });
   }

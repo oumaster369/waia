@@ -19,6 +19,12 @@ import type {
   OpenReportingPeriodInput,
   ReportingPeriodRepository,
 } from "@/lib/trader/billing/reporting-period-repository.types";
+import type { DraftInvoiceService } from "@/lib/trader/billing/draft-invoice-service";
+import {
+  createPostgresDraftInvoiceService,
+  createSqliteDraftInvoiceService,
+} from "@/lib/trader/billing/draft-invoice-service";
+import { DraftInvoiceNotBillableError } from "@/lib/trader/billing/invoice.errors";
 import {
   createPostgresReportingPeriodRepository,
   createSqliteReportingPeriodRepository,
@@ -38,6 +44,7 @@ type PgReportingPeriodExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "upd
 export type ReportingPeriodLifecycleServiceDeps = {
   repository: ReportingPeriodRepository;
   writeAudit: (input: TraderAuditInput) => string | Promise<string>;
+  draftInvoiceService?: DraftInvoiceService;
   assertMembership?: (context: OrgContext & { userId: string }) => void | Promise<void>;
 };
 
@@ -90,6 +97,30 @@ function buildAuditInput(
     organizationId: context.organizationId,
     metadata,
   };
+}
+
+async function materializeDraftInvoiceAfterPeriodClose(
+  deps: ReportingPeriodLifecycleServiceDeps,
+  context: OrgContext,
+  period: ReportingPeriodRecordView,
+  periodEnd: Date,
+): Promise<void> {
+  if (!deps.draftInvoiceService) {
+    return;
+  }
+
+  try {
+    await deps.draftInvoiceService.generateDraftInvoice(context, {
+      periodId: period.id,
+      computedAt: periodEnd,
+      realizedFillFinality: false,
+    });
+  } catch (error) {
+    if (error instanceof DraftInvoiceNotBillableError) {
+      return;
+    }
+    throw error;
+  }
 }
 
 export function createReportingPeriodLifecycleService(
@@ -188,6 +219,8 @@ export function createReportingPeriodLifecycleService(
         }),
       );
 
+      await materializeDraftInvoiceAfterPeriodClose(deps, scoped, row, input.periodEnd);
+
       return row;
     },
 
@@ -218,6 +251,7 @@ export function createSqliteReportingPeriodLifecycleService(
   return createReportingPeriodLifecycleService({
     repository: deps.repository ?? createSqliteReportingPeriodRepository(db),
     writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogSqlite(db, input)),
+    draftInvoiceService: deps.draftInvoiceService ?? createSqliteDraftInvoiceService(db),
     assertMembership:
       deps.assertMembership ??
       ((context) => {
@@ -234,6 +268,7 @@ export function createPostgresReportingPeriodLifecycleService(
   return createReportingPeriodLifecycleService({
     repository: deps.repository ?? createPostgresReportingPeriodRepository(ex, db),
     writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogPostgres(ex, input)),
+    draftInvoiceService: deps.draftInvoiceService ?? createPostgresDraftInvoiceService(ex, {}, db),
     assertMembership:
       deps.assertMembership ??
       (async (context) => {

@@ -8,10 +8,12 @@ import { getDb } from "@/db/client";
 import { auditLogs, traderHwmLedger, traderInvoices, traderReportingPeriods } from "@/db/schema";
 import {
   DraftInvoiceNotBillableError,
+  createReportingPeriodLifecycleService,
   createSqliteDraftInvoiceService,
   createSqliteHwmLedgerService,
-  createSqliteReportingPeriodLifecycleService,
+  createSqliteReportingPeriodRepository,
 } from "@/lib/trader/billing";
+import { writeTraderAuditLogSqlite } from "@/lib/trader/audit/write";
 import { listInvoicesByAccountSqlite } from "@/lib/trader/billing/invoice-repository-adapters";
 import { traderAuditActions } from "@/lib/trader/types";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
@@ -71,7 +73,10 @@ describe("draft invoice service (DEE-310 S5)", () => {
     },
   ) {
     const db = getDb();
-    const lifecycle = createSqliteReportingPeriodLifecycleService(db);
+    const lifecycle = createReportingPeriodLifecycleService({
+      repository: createSqliteReportingPeriodRepository(db),
+      writeAudit: (input) => writeTraderAuditLogSqlite(db, input),
+    });
     const context = requireOrgContext(organizationId);
 
     const month = String(options.month).padStart(2, "0");

@@ -80,6 +80,15 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 | No live order recorded | **PASS** — §5 _not started_ |
 | HC-3 prerequisites documented | **PASS** — ADR-0008 attestation keys + admin billing surface |
 
+### L2 blocker recovery (implementation)
+
+| Field | Value |
+|-------|-------|
+| **Root cause** | AT-E11 S5 draft materialization not wired to production reporting period close |
+| **Recovery plan** | `draft_invoice_runtime_integration_d4faf147` — Phase A hook + Phase B orchestrator/admin command |
+| **HC-3 status** | **BLOCKED** until recovery is deployed and Operator materializes billable DRAFT on production |
+| **Deferred** | Worker billing cron, operator CLI (post-launch) |
+
 ### Execution record (Operator — pending)
 
 | Field | Value |
