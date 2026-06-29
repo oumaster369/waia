@@ -171,7 +171,7 @@ NEW-1 → DEE-154 → NEW-2
 | NEW-10 | Accelerated Historical Replay Validation (2 strategies) closure report | P5 | Critical | DEE-170 | **DEE-337 (Done)** |
 | NEW-11 | RC promotion dev→main (Paper-Complete) | P5 | Critical | DEE-149 | **DEE-338 (Todo)** |
 | NEW-12 | Isolated execution host infrastructure | P8 | Critical | DEE-171 | **DEE-339 (Todo)** |
-| NEW-13 | Org-0 live launch gate + capped supervised live | P8 | Critical | DEE-171 | **DEE-340 (Todo)** |
+| NEW-13 | Org-0 live launch gate + capped supervised live | P8 | Critical | DEE-171 | **DEE-340 (In Progress — L0 complete; HC-1 NEXT)** |
 
 Existing issues: DEE-154, DEE-190, DEE-191, DEE-197–202, DEE-203, DEE-217, DEE-215, DEE-178, DEE-212, DEE-218, DEE-219, DEE-223 — see Linear for pipeline assignment. **P8 foundations Done:** DEE-211, DEE-221, DEE-346.
 
