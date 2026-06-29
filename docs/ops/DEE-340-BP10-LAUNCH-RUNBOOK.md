@@ -70,6 +70,8 @@ Re-confirm immediately before any governed live act. All must pass; **do not pro
 
 ## 4. L2 — Criterion 10 manual billing gate (Operator, HC-3)
 
+**Prerequisite — Deployment Verification:** L2 runtime (PR #329) is merged on `dev` @ `7203e02` but **production deploy is NOT verified**. Operator must complete [closure report §3 deployment verification](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md) before HC-3. Confirm `POST /api/trader/admin/reporting-periods/commands` returns **401/403** (not **404**) on `trader.waia.life`.
+
 **Purpose:** Close the one OPERATOR-REQUIRED MVP checklist item before live capital.
 
 **Operator checklist (executable):** [DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md)
