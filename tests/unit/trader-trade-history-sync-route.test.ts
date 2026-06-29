@@ -297,6 +297,31 @@ describe("HTX trade history sync API (DEE-350)", () => {
     );
   });
 
+  it("returns 400 when symbol is unsupported", async () => {
+    const result = await handleTradeHistorySyncPost(
+      credentialId,
+      syncTradesPostRequest({ symbol: "solusdt" }),
+      createDeps(),
+    );
+    expect(result.status).toBe(400);
+    expect(result.body).toEqual({
+      error: {
+        code: HTX_TRADE_HISTORY_SYNC_ERROR_CODES.INVALID_SYMBOL,
+        message: "Unsupported HTX spot pair. Use BTC/USDT or ETH/USDT.",
+      },
+    });
+  });
+
+  it("normalizes btcusdt wire symbol before HTX fetch", async () => {
+    const result = await handleTradeHistorySyncPost(
+      credentialId,
+      syncTradesPostRequest({ symbol: "btcusdt" }),
+      createDeps(),
+    );
+    expect(result.status).toBe(200);
+    expect((result.body as { symbol: string }).symbol).toBe("BTC/USDT");
+  });
+
   it("returns 404 for unknown credential", async () => {
     const result = await handleTradeHistorySyncPost(
       "00000000-0000-4000-8000-000000009999",

@@ -21,8 +21,12 @@ import {
   syncTradeHistoryClient,
 } from "@/lib/trader/trader-workspace-client";
 import { parseHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
+import {
+  normalizeHtxSpotSymbol,
+  TRADER_WORKSPACE_SUPPORTED_HTX_SPOT_PAIR_MESSAGE,
+} from "@/lib/trader/symbols/normalize-htx-spot-symbol";
 
-const DEFAULT_TRADE_SYMBOL = "btcusdt";
+const DEFAULT_TRADE_SYMBOL = "ETH/USDT";
 
 const dateFormatter =
   typeof Intl !== "undefined"
@@ -236,9 +240,12 @@ function TradeHistoryPanel({
             data-testid="trader-trade-symbol"
             className="mt-1 max-w-xs"
             value={symbol}
-            onChange={(e) => onSymbolChange(e.target.value.trim().toLowerCase())}
-            placeholder="btcusdt"
+            onChange={(e) => onSymbolChange(e.target.value)}
+            placeholder="ETH/USDT"
           />
+          <p className="text-muted-foreground mt-1 text-xs">
+            Use an HTX spot pair with trade history, e.g. ETH/USDT.
+          </p>
         </div>
         <Button
           type="button"
@@ -297,10 +304,12 @@ export function TraderWorkspace() {
   const activeCredential = credentials.find((c) => c.status === "active") ?? credentials[0];
 
   const refreshSnapshots = React.useCallback(async (credentialId: string, symbol: string) => {
+    const normalized = normalizeHtxSpotSymbol(symbol);
+    const listSymbol = normalized.ok ? normalized.symbol : symbol.trim();
     const [balances, positions, trades] = await Promise.all([
       listBalanceSnapshotsClient(credentialId),
       listPositionSnapshotsClient(credentialId),
-      listTradeHistorySnapshotsClient(credentialId, symbol),
+      listTradeHistorySnapshotsClient(credentialId, listSymbol),
     ]);
     if (balances.kind === "ok") {
       setBalanceSnapshots(balances.data);
@@ -343,12 +352,19 @@ export function TraderWorkspace() {
 
   const handleTradeSymbolChange = (value: string) => {
     setTradeSymbol(value);
-    if (activeCredential && value) {
-      void listTradeHistorySnapshotsClient(activeCredential.id, value).then((result) => {
-        if (result.kind === "ok") {
-          setTradeSnapshots(result.data);
-        }
-      });
+    if (activeCredential && value.trim()) {
+      const normalized = normalizeHtxSpotSymbol(value);
+      if (!normalized.ok) {
+        setTradeSnapshots([]);
+        return;
+      }
+      void listTradeHistorySnapshotsClient(activeCredential.id, normalized.symbol).then(
+        (result) => {
+          if (result.kind === "ok") {
+            setTradeSnapshots(result.data);
+          }
+        },
+      );
     }
   };
 
@@ -415,19 +431,25 @@ export function TraderWorkspace() {
   };
 
   const handleSyncTrades = () => {
-    if (!activeCredential || !tradeSymbol) {
+    if (!activeCredential || !tradeSymbol.trim()) {
+      return;
+    }
+    const normalized = normalizeHtxSpotSymbol(tradeSymbol);
+    if (!normalized.ok) {
+      setErrorMessage(TRADER_WORKSPACE_SUPPORTED_HTX_SPOT_PAIR_MESSAGE);
       return;
     }
     setSyncingTrades(true);
     setErrorMessage(null);
     void (async () => {
-      const result = await syncTradeHistoryClient(activeCredential.id, tradeSymbol);
+      const result = await syncTradeHistoryClient(activeCredential.id, normalized.symbol);
       setSyncingTrades(false);
       if (result.kind === "err") {
         setErrorMessage(result.displayMessage);
         return;
       }
-      await refreshSnapshots(activeCredential.id, tradeSymbol);
+      setTradeSymbol(normalized.symbol);
+      await refreshSnapshots(activeCredential.id, normalized.symbol);
     })();
   };
 
@@ -489,7 +511,8 @@ export function TraderWorkspace() {
           <WaiaSurface variant="elevated" className="p-6" data-testid="trader-connect-section">
             <h2 className="text-lg font-medium">Connect HTX</h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              Link your HTX spot account with read-only or trade-enabled API keys.
+              Create an HTX API key with Read + Trade permissions. Do not enable Withdraw. Paste the
+              Access Key and Secret Key from HTX below.
             </p>
             <form
               className="mt-6 space-y-4"
@@ -498,7 +521,7 @@ export function TraderWorkspace() {
             >
               <div>
                 <label className="text-sm font-medium" htmlFor="trader-api-key">
-                  API key
+                  HTX Access Key
                 </label>
                 <Input
                   id="trader-api-key"
@@ -512,7 +535,7 @@ export function TraderWorkspace() {
               </div>
               <div>
                 <label className="text-sm font-medium" htmlFor="trader-api-secret">
-                  API secret
+                  HTX Secret Key
                 </label>
                 <Input
                   id="trader-api-secret"

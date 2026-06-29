@@ -1,12 +1,6 @@
-import { createRequire } from "node:module";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
 
-const require = createRequire(import.meta.url);
-const skipServerOnlyGuard =
-  process.env.WAIA_POSTGRES_CLI === "1" || process.env.VITEST === "true";
-
-if (!skipServerOnlyGuard) {
-  require("server-only");
-}
+enforceServerOnly();
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { drizzle } from "drizzle-orm/postgres-js";

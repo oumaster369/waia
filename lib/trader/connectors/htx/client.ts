@@ -63,7 +63,8 @@ export class HtxRestClient {
     this.restHost = resolveHtxRestHost(config.restHost);
     this.host = htxHostFromUrl(this.restHost);
     this.transportPolicy = config.transportPolicy ?? DEFAULT_HTX_TRANSPORT_POLICY;
-    this.transport = new HtxTransport(config.fetchImpl ?? fetch, this.transportPolicy);
+    const fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.transport = new HtxTransport(fetchImpl, this.transportPolicy);
   }
 
   getRestHost(): string {
