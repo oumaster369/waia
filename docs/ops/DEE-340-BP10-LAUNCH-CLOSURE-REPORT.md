@@ -14,10 +14,10 @@
 | Field | Value |
 |-------|-------|
 | **Package slice** | L0 — Launch Operations Package — **COMPLETE** (PR #322 @ `e19295e`) |
-| **Verdict** | **PENDING** — awaiting HC-1, then L1 onward |
+| **Verdict** | **PENDING** — HC-1 **APPROVED**; awaiting L1 |
 | **Canonical `dev` SHA (baseline)** | `e19295e6347c12df958777b508e927662e9ac43c` |
-| **HC-1 (Architect L0 approval)** | **PENDING** — **NEXT** |
-| **L1** | **NOT STARTED** |
+| **HC-1 (Architect L0 approval)** | **APPROVED** (2026-06-29) |
+| **L1** | **NOT STARTED** — **NEXT** |
 
 ---
 
@@ -143,9 +143,10 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 
 | Field | Value |
 |-------|-------|
-| **Decision** | _pending_ |
-| **Signed by** | _pending_ |
-| **Date** | _pending_ |
+| **Decision** | **APPROVED** — proceed to L1 |
+| **Signed by** | Architect / Adamar |
+| **Date** | 2026-06-29 |
+| **Notes** | Launch Operations Package reviewed (runbook + closure report + canonical plan). No production action performed. L1 not started at sign-off. |
 
 ### HC-7 — Architect (BP-10 COMPLETE)
 
@@ -164,4 +165,4 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 
 ---
 
-**STOP:** L0 **COMPLETE**. **HC-1 NEXT.** L1 **NOT STARTED**.
+**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. **L1 NEXT** — not started.
