@@ -1157,6 +1157,22 @@ Factual update after BP-10 L0 merge — does not alter BP-9A Phase 1/2 conclusio
 
 ---
 
+## 16. Post-HC-1 addendum (2026-06-29)
+
+Factual update after HC-1 approval — does not alter BP-9A Phase 1/2 conclusions or §15 historical record.
+
+| Field | Value |
+|-------|-------|
+| **HC-1** | **APPROVED** — Architect / Adamar, 2026-06-29 ([PR #326](https://github.com/oumaster369/waia/pull/326) @ `392bb68324bc13e3ba16661afe37cb189e3199fb`) |
+| **BP-10 L1** | **COMPLETE** — read-only validation chain green on canonical `dev` @ `392bb68`; 16-criterion table populated in [closure report](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md) |
+| **DEE-340 (Linear)** | **In Progress** (full BP-10 completes at L6) |
+| **Active gate** | **L2** — Operator criterion 10 manual billing gate (HC-3; ADR-0008) |
+| **MVP on `main`** | **Not launched** |
+
+**Exact next action:** **L2 (Operator — ADR-0008 manual billing / HWM gate on Org-0).**
+
+---
+
 ## References
 
 - [AI-TRADER MVP Ratification](../ai-trader/AI-TRADER-MVP-RATIFICATION.md) — Step 10 closure seal — **RATIFIED** 2026-06-29

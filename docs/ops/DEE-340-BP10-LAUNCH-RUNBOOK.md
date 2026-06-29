@@ -317,4 +317,4 @@ Open **immediately** after Launch promotion merge:
 | [ADR-0008](../adr/0008-manual-billing-gate.md) | Manual billing gate |
 | [ADR-0009](../adr/0009-regulatory-posture.md) | External live blocked |
 
-**STOP:** L0 **COMPLETE** (PR #322). Await **HC-1 (Architect)** approval before L1 or any production touch.
+**STOP:** L0 **COMPLETE** (PR #322). HC-1 **APPROVED** (2026-06-29). L1 **COMPLETE**. **L2 NEXT** — await Operator criterion 10 manual billing gate (HC-3). No production touch beyond L1 read-only validation.
