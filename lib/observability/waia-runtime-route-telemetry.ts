@@ -51,6 +51,7 @@ export type WaiaRuntimeRouteKey =
   | "trader_admin_invoices_list"
   | "trader_admin_invoice_detail"
   | "trader_admin_invoice_commands"
+  | "trader_admin_reporting_period_commands"
   | "trader_admin_billing_disputes"
   | "trader_admin_billing_dispute_commands"
   | "trader_admin_account_status"

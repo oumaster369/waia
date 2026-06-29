@@ -21,6 +21,10 @@ import {
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
 import {
+  createPostgresBillingPeriodCloseOrchestrator,
+  createSqliteBillingPeriodCloseOrchestrator,
+} from "@/lib/trader/billing/billing-period-close-orchestrator";
+import {
   createPostgresBillingGovernanceService,
   createSqliteBillingGovernanceService,
 } from "@/lib/trader/billing/governance/billing-governance-service";
@@ -86,6 +90,34 @@ function createDisputeRepository(
     return createSqliteInvoiceDisputeRepository(runtime.db);
   }
   return createPostgresInvoiceDisputeRepository(runtime.db);
+}
+
+function createBillingPeriodCloseOrchestrator(
+  runtime: Awaited<ReturnType<AdminRouteHandlerDeps["getRuntimeDb"]>>,
+) {
+  if (runtime.kind === "sqlite") {
+    return createSqliteBillingPeriodCloseOrchestrator(runtime.db);
+  }
+  return createPostgresBillingPeriodCloseOrchestrator(runtime.db);
+}
+
+function parseRequiredString(value: unknown, field: string): string | AdminRouteHandlerResult {
+  if (typeof value !== "string" || !value.trim()) {
+    return adminClientError(400, "INVALID_BODY", `${field} is required.`);
+  }
+  return value.trim();
+}
+
+function parseRequiredDate(value: unknown, field: string): Date | AdminRouteHandlerResult {
+  const raw = parseRequiredString(value, field);
+  if (typeof raw !== "string") {
+    return raw;
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return adminClientError(400, "INVALID_BODY", `${field} must be a valid ISO-8601 timestamp.`);
+  }
+  return parsed;
 }
 
 export async function handleAdminInvoicesListGet(
@@ -430,6 +462,193 @@ export async function handleAdminBillingDisputeCommandPost(
         },
         runtime.kind,
       );
+    }
+
+    return adminClientError(400, "UNKNOWN_COMMAND", `Unknown command: ${command}`);
+  } catch (err) {
+    return mapServiceError(err);
+  } finally {
+    await deps.disposeRuntimeDb(runtime);
+  }
+}
+
+type ReportingPeriodCommandBody = {
+  command?: string;
+  organization_id?: string;
+  exchange_account_id?: string;
+  period_id?: string;
+  period_start?: string;
+  period_end?: string;
+  starting_equity?: string;
+  ending_equity?: string;
+  starting_snapshot_at?: string;
+  ending_snapshot_at?: string;
+  open_positions_snapshot_ref?: string;
+  valuation_source?: string;
+  realized_pnl?: string;
+  unrealized_pnl?: string;
+  net_deposits?: string;
+  net_withdrawals?: string;
+  computed_at?: string;
+};
+
+function parseReportingPeriodCommandBody(
+  raw: unknown,
+): ReportingPeriodCommandBody | AdminRouteHandlerResult {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+    return adminClientError(400, "INVALID_BODY", "Request body must be a JSON object.");
+  }
+  return raw as ReportingPeriodCommandBody;
+}
+
+export async function handleAdminReportingPeriodCommandPost(
+  request: Request,
+  deps: AdminRouteHandlerDeps,
+): Promise<AdminRouteHandlerResult> {
+  let parsed: unknown;
+  try {
+    parsed = await request.json();
+  } catch {
+    return adminClientError(400, "INVALID_BODY", "Expected JSON body.");
+  }
+
+  const bodyOrError = parseReportingPeriodCommandBody(parsed);
+  if ("status" in bodyOrError) {
+    return bodyOrError;
+  }
+  const body = bodyOrError;
+
+  const organizationId = body.organization_id?.trim();
+  if (!organizationId) {
+    return adminClientError(400, "ORGANIZATION_ID_REQUIRED", "organization_id is required.");
+  }
+  try {
+    requireOrgContext(organizationId);
+  } catch {
+    return adminClientError(400, "ORGANIZATION_ID_INVALID", "organization_id is invalid.");
+  }
+
+  const command = body.command?.trim();
+  if (!command) {
+    return adminClientError(400, "COMMAND_REQUIRED", "command is required.");
+  }
+
+  let runtime;
+  try {
+    const auth = await authorizeAdminRoute(deps, organizationId, "admin.audit.read");
+    if (!auth.ok) {
+      return auth.result;
+    }
+    runtime = auth.runtime;
+
+    const context = { ...requireOrgContext(organizationId), userId: auth.userId };
+    const orchestrator = createBillingPeriodCloseOrchestrator(runtime);
+
+    if (command === "close-and-materialize") {
+      const exchangeAccountId = parseRequiredString(
+        body.exchange_account_id,
+        "exchange_account_id",
+      );
+      if (typeof exchangeAccountId !== "string") {
+        return exchangeAccountId;
+      }
+
+      const periodStart = parseRequiredDate(body.period_start, "period_start");
+      if (!(periodStart instanceof Date)) {
+        return periodStart;
+      }
+      const periodEnd = parseRequiredDate(body.period_end, "period_end");
+      if (!(periodEnd instanceof Date)) {
+        return periodEnd;
+      }
+      const startingSnapshotAt = parseRequiredDate(
+        body.starting_snapshot_at,
+        "starting_snapshot_at",
+      );
+      if (!(startingSnapshotAt instanceof Date)) {
+        return startingSnapshotAt;
+      }
+      const endingSnapshotAt = parseRequiredDate(body.ending_snapshot_at, "ending_snapshot_at");
+      if (!(endingSnapshotAt instanceof Date)) {
+        return endingSnapshotAt;
+      }
+
+      const startingEquity = parseRequiredString(body.starting_equity, "starting_equity");
+      if (typeof startingEquity !== "string") {
+        return startingEquity;
+      }
+      const endingEquity = parseRequiredString(body.ending_equity, "ending_equity");
+      if (typeof endingEquity !== "string") {
+        return endingEquity;
+      }
+      const openPositionsSnapshotRef = parseRequiredString(
+        body.open_positions_snapshot_ref,
+        "open_positions_snapshot_ref",
+      );
+      if (typeof openPositionsSnapshotRef !== "string") {
+        return openPositionsSnapshotRef;
+      }
+      const valuationSource = parseRequiredString(body.valuation_source, "valuation_source");
+      if (typeof valuationSource !== "string") {
+        return valuationSource;
+      }
+      const realizedPnl = parseRequiredString(body.realized_pnl, "realized_pnl");
+      if (typeof realizedPnl !== "string") {
+        return realizedPnl;
+      }
+      const unrealizedPnl = parseRequiredString(body.unrealized_pnl, "unrealized_pnl");
+      if (typeof unrealizedPnl !== "string") {
+        return unrealizedPnl;
+      }
+
+      const result = await orchestrator.closeAndMaterialize(context, {
+        exchangeAccountId,
+        periodStart,
+        periodEnd,
+        startingEquity,
+        endingEquity,
+        startingSnapshotAt,
+        endingSnapshotAt,
+        openPositionsSnapshotRef,
+        valuationSource,
+        realizedPnl,
+        unrealizedPnl,
+        netDeposits: body.net_deposits?.trim(),
+        netWithdrawals: body.net_withdrawals?.trim(),
+      });
+
+      return adminSuccess({ result }, runtime.kind);
+    }
+
+    if (command === "materialize-draft") {
+      const exchangeAccountId = parseRequiredString(
+        body.exchange_account_id,
+        "exchange_account_id",
+      );
+      if (typeof exchangeAccountId !== "string") {
+        return exchangeAccountId;
+      }
+      const periodId = parseRequiredString(body.period_id, "period_id");
+      if (typeof periodId !== "string") {
+        return periodId;
+      }
+
+      let computedAt: Date | undefined;
+      if (body.computed_at?.trim()) {
+        const parsedAt = parseRequiredDate(body.computed_at, "computed_at");
+        if (!(parsedAt instanceof Date)) {
+          return parsedAt;
+        }
+        computedAt = parsedAt;
+      }
+
+      const result = await orchestrator.materializeDraft(context, {
+        exchangeAccountId,
+        periodId,
+        computedAt,
+      });
+
+      return adminSuccess({ result }, runtime.kind);
     }
 
     return adminClientError(400, "UNKNOWN_COMMAND", `Unknown command: ${command}`);

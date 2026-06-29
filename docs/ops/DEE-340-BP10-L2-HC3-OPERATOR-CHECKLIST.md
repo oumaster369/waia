@@ -27,6 +27,25 @@ Exercise the ADR-0008 manual billing / HWM gate on Org-0 so criterion **10** can
 
 If **P-7** fails: stop. A closed billable reporting period and draft invoice must exist per [Billing & HWM §5–6](../ai-trader/AI-TRADER-BILLING-HWM.md) before the gate can be exercised. Do not proceed to L3.
 
+If **P-7** fails because no DRAFT exists yet (post-recovery deploy): use governed admin **`POST /api/trader/admin/reporting-periods/commands`** with **`close-and-materialize`** and operator-attested period inputs for **`htx-spot-1`** (realized PnL must yield billable fee ≥ minimum threshold). Confirm **`billable": true`** and audit actions include **`trader.invoice.draft_generated`**, then restart from Step 1.
+
+---
+
+## Step 0 — Materialize drill period (only if P-7 fails with empty invoices)
+
+**Surface:** Authenticated admin API **`POST /api/trader/admin/reporting-periods/commands`**
+
+**Body (non-secret shapes only):**
+
+- `command`: `"close-and-materialize"`
+- `organization_id`: Org-0 UUID
+- `exchange_account_id`: `"htx-spot-1"`
+- Operator-attested period fields: `period_start`, `period_end`, `starting_equity`, `ending_equity`, `starting_snapshot_at`, `ending_snapshot_at`, `open_positions_snapshot_ref`, `valuation_source`, `realized_pnl`, `unrealized_pnl`
+
+**Confirm response includes:** `reportingPeriodIdPrefix`, `invoiceIdPrefix` (when billable), `invoiceStatus: "DRAFT"`, `billable: true`, audit action names including **`trader.reporting_period.closed`** and **`trader.invoice.draft_generated`**.
+
+Then proceed to Step 1.
+
 ---
 
 ## Step 1 — Locate the Org-0 draft invoice

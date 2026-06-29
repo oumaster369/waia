@@ -10,10 +10,13 @@ import {
   FeeComputationHwmNotBootstrappedError,
   FeeComputationPeriodNotClosedError,
   FeeComputationRealizedPnlMissingError,
+  createReportingPeriodLifecycleService,
   createSqliteFeeComputationService,
   createSqliteHwmLedgerService,
   createSqliteReportingPeriodLifecycleService,
+  createSqliteReportingPeriodRepository,
 } from "@/lib/trader/billing";
+import { writeTraderAuditLogSqlite } from "@/lib/trader/audit/write";
 import { insertOpenReportingPeriodSqlite } from "@/lib/trader/billing/repository-adapters";
 import { buildReportingPeriodRecordPayload } from "@/lib/trader/billing/serialize-reporting-period";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
@@ -194,7 +197,10 @@ describe("fee computation service (DEE-309 S4)", () => {
 
   it("fails closed when HWM bootstrap is missing", async () => {
     const db = getDb();
-    const lifecycle = createSqliteReportingPeriodLifecycleService(db);
+    const lifecycle = createReportingPeriodLifecycleService({
+      repository: createSqliteReportingPeriodRepository(db),
+      writeAudit: (input) => writeTraderAuditLogSqlite(db, input),
+    });
     const service = createSqliteFeeComputationService(db);
     const context = requireOrgContext(organizationId);
 

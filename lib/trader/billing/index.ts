@@ -271,3 +271,14 @@ export {
   verifyInvoiceCorrectionDigest,
   verifyInvoiceDisputeEventDigest,
 } from "@/lib/trader/billing/governance";
+
+export {
+  createBillingPeriodCloseOrchestrator,
+  createPostgresBillingPeriodCloseOrchestrator,
+  createSqliteBillingPeriodCloseOrchestrator,
+  type BillingPeriodCloseOrchestrator,
+  type BillingPeriodCloseOrchestratorDeps,
+  type BillingPeriodCloseResult,
+  type CloseAndMaterializeInput,
+  type MaterializeDraftInput,
+} from "@/lib/trader/billing/billing-period-close-orchestrator";
