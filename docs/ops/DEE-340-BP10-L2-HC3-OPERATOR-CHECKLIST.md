@@ -181,3 +181,4 @@ Complete the evidence package in [closure report §3](DEE-340-BP10-LAUNCH-CLOSUR
 - [ADR-0011 — Single Operator Governance Model](../adr/0011-single-operator-governance-model.md)
 - [AI-TRADER Billing & HWM §7](../ai-trader/AI-TRADER-BILLING-HWM.md)
 - Admin surface: `app/(trader)/admin/billing/page.tsx` · API: `POST /api/trader/admin/invoices/{invoiceId}/commands`
+- Post-MVP UX backlog: [DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md](DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md)
