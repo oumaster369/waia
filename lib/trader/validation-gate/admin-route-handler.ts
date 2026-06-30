@@ -16,7 +16,12 @@ import {
   type AdminRouteHandlerDeps,
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
-import { assertEffectiveAck } from "@/lib/trader/validation-gate/operator-promotion-inputs";
+import { OperatorEvidenceError } from "@/lib/trader/validation-gate/operator-evidence";
+import {
+  assertEffectiveAck,
+  OperatorRunwayInputError,
+  parseAdminPromotionRequestAssembly,
+} from "@/lib/trader/validation-gate/operator-promotion-inputs";
 import {
   createPostgresStrategyPromotionRepository,
   createPostgresStrategyPromotionService,
@@ -109,7 +114,17 @@ type StrategyPromotionCommandBody = {
   cooling_off_ms?: number;
   reason?: string;
   ack?: string;
+  idempotency_key?: string;
+  evidence?: unknown;
+  inputs?: unknown;
 };
+
+function mapPromotionRequestInputError(err: unknown): AdminRouteHandlerResult | null {
+  if (err instanceof OperatorRunwayInputError || err instanceof OperatorEvidenceError) {
+    return adminClientError(400, err.code, err.message);
+  }
+  return null;
+}
 
 function parseCommandBody(raw: unknown): StrategyPromotionCommandBody | AdminRouteHandlerResult {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
@@ -150,14 +165,6 @@ export async function handleAdminStrategyPromotionCommandPost(
     return adminClientError(400, "COMMAND_REQUIRED", "command is required.");
   }
 
-  if (body.expected_state_version === undefined || !Number.isInteger(body.expected_state_version)) {
-    return adminClientError(
-      400,
-      "EXPECTED_STATE_VERSION_REQUIRED",
-      "expected_state_version is required.",
-    );
-  }
-
   let runtime;
   try {
     const auth = await authorizeAdminRoute(deps, organizationId, "admin.audit.read");
@@ -169,6 +176,48 @@ export async function handleAdminStrategyPromotionCommandPost(
     const context = requireOrgContext(organizationId);
     const actor = adminActor(auth.userId);
     const service = createPromotionService(runtime);
+
+    if (command === "request") {
+      const strategyId = body.strategy_id?.trim();
+      if (!strategyId) {
+        return adminClientError(400, "STRATEGY_ID_REQUIRED", "strategy_id is required.");
+      }
+
+      let assembly;
+      try {
+        assembly = parseAdminPromotionRequestAssembly({
+          organizationId,
+          strategyId,
+          evidence: body.evidence,
+          inputs: body.inputs,
+        });
+      } catch (err) {
+        const mapped = mapPromotionRequestInputError(err);
+        if (mapped) {
+          return mapped;
+        }
+        throw err;
+      }
+
+      const idempotencyKey = body.idempotency_key?.trim();
+      const record = await service.requestPromotion(actor, context, {
+        idempotencyKey: idempotencyKey && idempotencyKey.length > 0 ? idempotencyKey : undefined,
+        assembly,
+      });
+      return adminSuccess({ record: serializePromotionRecord(record) }, runtime.kind);
+    }
+
+    if (
+      body.expected_state_version === undefined ||
+      !Number.isInteger(body.expected_state_version)
+    ) {
+      return adminClientError(
+        400,
+        "EXPECTED_STATE_VERSION_REQUIRED",
+        "expected_state_version is required.",
+      );
+    }
+
     const transitionInput = {
       expectedStateVersion: body.expected_state_version,
       coolingOffMs: body.cooling_off_ms,
