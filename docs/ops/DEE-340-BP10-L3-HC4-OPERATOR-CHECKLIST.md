@@ -4,7 +4,7 @@
 **Authority:** [ADR-0011](../adr/0011-single-operator-governance-model.md) · [ADR-0009](../adr/0009-regulatory-posture.md) · [ADR-0010](../adr/0010-strategy-validation-gate.md)  
 **Runbook:** [DEE-340-BP10-LAUNCH-RUNBOOK.md](DEE-340-BP10-LAUNCH-RUNBOOK.md) §3, §5 · **Evidence ledger:** [DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md) §4
 
-> **Operator-only.** Governed Org-0 live-enable ceremony — **NOT STARTED**. Execute only after Architect authorization (precondition P-5). **STOP after Step 7** — do **not** proceed to L4 without **HC-2** (sequencing) and **HC-5** (supervision).  
+> **Operator-only.** Governed Org-0 live-enable ceremony — **NOT STARTED**. Execute only after **HC-3.5 COMPLETE** (closure §3.5 sealed) and Architect authorization (precondition P-5). **STOP after Step 7** — do **not** proceed to L4 without **HC-2** (sequencing) and **HC-5** (supervision).  
 > **UX backlog (post-MVP):** [DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md](DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md)
 
 ---
@@ -21,7 +21,7 @@ This checklist arms the live path only. It does **not** place a live order.
 
 | In scope | Out of scope (see Non-goals) |
 |----------|------------------------------|
-| Pre-flight re-confirmation PF-1–PF-9 on execution day | First capped live spot order (L4) |
+| Pre-flight re-confirmation PF-1–PF-10 on execution day | First capped live spot order (L4) |
 | Org-0 live-enable FSM: `DISABLED → REQUESTED → COOLING_OFF → ENABLED` | Strategy promotion or validation-gate bypass |
 | Cooling-off wait and explicit ack confirmation | L2 / HC-3 billing re-exercise |
 | Post-enable status + optional fail-closed probes (no order) | `dev→main` promotion (L5) |
@@ -30,10 +30,12 @@ This checklist arms the live path only. It does **not** place a live order.
 
 **FSM (canonical):** `DISABLED → REQUESTED → COOLING_OFF → ENABLED → DISABLED` (disable is L4 post-order or abort only — **not** part of HC-4 success path).
 
-**Governed surfaces (pick one; both write the same audit trail):**
+**Governed surfaces (pick one; both write the same audit trail on Postgres):**
 
-- **CLI (runbook-canonical):** `pnpm trader:live:request`, `confirm`, `enable`, `status` — requires `WAIA_TRADER_CLI=1` and production `DATABASE_URL`
+- **CLI (runbook-canonical):** `pnpm trader:live:request`, `confirm`, `enable`, `status` — requires `WAIA_TRADER_CLI=1`, `WAIA_DB_BACKEND=postgres`, and non-empty `DATABASE_URL_POSTGRES` on the execution host
 - **Admin UI (alternate):** `/admin/live-enable` on production trader host — Request / Confirm / Mark enabled
+
+**U1 policy:** Production launch uses **Postgres** only. SQLite `DATABASE_URL` without `WAIA_DB_BACKEND=postgres` is for **local BP-7 drills** — not HC-4 on production.
 
 ---
 
@@ -53,19 +55,20 @@ This checklist arms the live path only. It does **not** place a live order.
 | # | Check | Expected |
 |---|-------|----------|
 | P-0 | L0–L2 sealed | Closure report §2 **COMPLETE**; §3 **COMPLETE**; criterion **10** **PASS** |
+| P-0b | HC-3.5 complete | Closure report §3.5 **COMPLETE**; production Postgres **EFFECTIVE** promotion for `mean_reversion_v0` @ `0.1.0` |
 | P-1 | L3 not started | Closure report §4 `_not started_`; §5 `_not started_` |
 | P-2 | Org-0 live-enable DISABLED | Admin `/admin/live-enable` or `pnpm trader:live:status` → state **DISABLED** (or equivalent not-enabled) |
 | P-3 | Org-0 identity | Organization UUID matches operator vault Org-0 (org prefix **`3c50b4e9…`** per BP-9A Step 4) |
 | P-4 | Platform admin session | If using admin UI: signed-in operator with platform **`admin`** role on production trader host |
 | P-5 | Architect authorization | Explicit written or recorded go-ahead to begin HC-4 execution (date only in evidence — no secrets) |
 | P-6 | HC-4 package published | This checklist + runbook §5 + closure §4 slot cross-linked on canonical `dev` |
-| P-7 | Canonical `dev` SHA (PF-9) | `ffad2fecf3468d492ab7413431dabceecf35e0df` (PR #333) — re-run validation chain if `dev` has advanced |
+| P-7 | Canonical `dev` SHA (PF-9) | `9e0deaaf0c85dd7efc6a2988780e64356c87432b` (IMP-U1 S8 / sign-off) — re-run validation chain if `dev` has advanced |
 
 If **any** precondition fails: **STOP**. Do not run `pnpm trader:live:request` or equivalent admin Request command.
 
 ---
 
-## Step 0 — Pre-flight checks (PF-1–PF-9)
+## Step 0 — Pre-flight checks (PF-1–PF-10)
 
 Re-confirm immediately before HC-4 execution. All must **PASS**; record evidence in the table below.
 
@@ -76,12 +79,13 @@ Re-confirm immediately before HC-4 execution. All must **PASS**; record evidence
 | PF-3 | Master-key decrypt probe | Host/CLI path resolves production Secrets Store / `AI_TRADER_MASTER_KEY` (no secret values logged) | Decrypt succeeds or explicit fail-closed denial with actionable error | | |
 | PF-4 | Kill-switch posture | Admin console — global/org kill switches | All clear (not armed) before enable | | |
 | PF-5 | Criterion 10 gate sealed | Closure report §3 — L2 / HC-3 **COMPLETE**; criterion **10** **PASS** | **Do not re-run billing gate** | | |
-| PF-6 | BP-5 promotion | Strategy `mean_reversion_v0` @ `0.1.0` (or Architect-selected drill strategy) | **EFFECTIVE** promotion record exists — no new promotion during HC-4 | | |
+| PF-6 | Production promotion (Postgres) | Admin `/admin/strategy-promotions` or read-only query on `trader_strategy_promotion_records` for Org-0 | **EFFECTIVE** row for `mean_reversion_v0` @ `0.1.0` — sealed in closure §3.5; **not** DEE-178 SQLite replay alone | | |
 | PF-7 | Org-0 allowlist | `WAIA_TRADER_ORG0_ORGANIZATION_ID` set on host/CLI env | Live path rejects non-Org-0 fail-closed | | |
 | PF-8 | Telegram alerting | Production drill endpoint or recent alert telemetry | Router configured; non-blocking delivery path live | | |
 | PF-9 | Validation chain (repo) | `pnpm lint && pnpm typecheck && pnpm test --run && pnpm build` on canonical `dev` SHA | All green | | |
+| PF-10 | Postgres launch env | Execution host / CLI env for `trader:live:*` | `WAIA_DB_BACKEND=postgres` + `DATABASE_URL_POSTGRES`; fail-closed without both | | |
 
-**PF pass count required:** **9/9**. If any row fails, **STOP** — do not proceed to Step 1.
+**PF pass count required:** **10/10**. If any row fails, **STOP** — do not proceed to Step 1.
 
 ---
 
@@ -266,7 +270,7 @@ Event row count:          <N>
 Audit actions:            trader.org_live_enable.requested,
                           trader.org_live_enable.confirmed,
                           trader.org_live_enable.enabled
-PF pass count:            9/9
+PF pass count:            10/10
 Fail-closed probes:       <PASS/FAIL summary>
 Operator:                 <Operator name/role> — <date>
 Live order placed:        NO
@@ -297,7 +301,7 @@ L4 uses runbook §6 — a **separate** operator ceremony. HC-4 success does **no
 
 | Situation | Action |
 |-----------|--------|
-| Any PF-1–PF-9 check fails | **STOP** — do not request enable |
+| Any PF-1–PF-10 check fails | **STOP** — do not request enable |
 | Wrong org selected | Do not confirm; if **REQUESTED**, disable/cancel per [runbook §9](DEE-340-BP10-LAUNCH-RUNBOOK.md) |
 | Wrong ack phrase | Abort confirm; remain **REQUESTED** or disable back to **DISABLED** |
 | Cooling-off bypass attempted | Wait; do not bypass |
@@ -334,7 +338,7 @@ Same discipline as closure report header:
 | Final live-enable state | **ENABLED** |
 | `trader_org_live_enable_events` row count | |
 | Audit actions (list) | `requested`, `confirmed`, `enabled` (minimum) |
-| PF pass count | **9/9** |
+| PF pass count | **10/10** |
 | Fail-closed probes summary | PASS / FAIL |
 | Live order placed | **NO** (required) |
 | HC-4 verdict | **COMPLETE** / **ABORTED** |

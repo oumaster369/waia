@@ -27,7 +27,14 @@
 - Org-0 only; READ + TRADE credentials; WITHDRAW/TRANSFER forbidden
 - Single bounded order per cycle; fail-closed everywhere
 
-**Related runbooks:** [DEE-212 BP-7 Live Execution](DEE-212-BP7-LIVE-EXECUTION-RUNBOOK.md) · [DEE-339 BP-6 Execution Host](DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md) · [DEE-220 Master Key](DEE-220-MASTER-KEY-RUNBOOK.md) · [DEE-223 Alerting](DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md) · [BP-9A Verification Report](DEE-352-BP9A-MVP-VERIFICATION-REPORT.md)
+**U1 persistence policy (IMP-U1 — fixed):**
+
+- **Production launch** (HC-3.5, HC-4, L4): governed state on **Postgres** — Worker `WAIA_DB_BACKEND=postgres`; execution host CLI `WAIA_DB_BACKEND=postgres` + `DATABASE_URL_POSTGRES`
+- **Admin UI** is the sole production **promotion Request** surface (HC-3.5)
+- **SQLite** (`DATABASE_URL` file) and `pnpm trader:gate` remain **replay/BP-5 process proof only** — not production launch attestation
+- Architect IMP-U1 sign-off **PASS** (2026-06-30 @ `9e0deaaf0c85dd7efc6a2988780e64356c87432b`)
+
+**Related runbooks:** [DEE-212 BP-7 Live Execution](DEE-212-BP7-LIVE-EXECUTION-RUNBOOK.md) · [DEE-339 BP-6 Execution Host](DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md) · [DEE-220 Master Key](DEE-220-MASTER-KEY-RUNBOOK.md) · [DEE-223 Alerting](DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md) · [BP-9A Verification Report](DEE-352-BP9A-MVP-VERIFICATION-REPORT.md) · [L2.5 HC-3.5 Checklist](DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md)
 
 ---
 
@@ -39,6 +46,7 @@ Execute in strict order. **Stop on any failed verification.** Record evidence in
 |-------|-------|---------|------------------|
 | **L1** | Composer records; Operator/Architect attest | Pre-launch verification on canonical `dev` SHA | After L1 — await Operator L2 |
 | **L2** | Operator | Criterion 10 manual billing/HWM gate (ADR-0008) | HC-3 |
+| **L2.5** | Operator (ADR-0010) | Production Postgres strategy promotion attestation | HC-3.5 |
 | **L3** | Operator (ADR-0011) | Governed Org-0 live-enable FSM | HC-4 |
 | **L4** | Operator + Architect | First capped supervised live spot order | HC-2 (sequencing) + HC-5 (supervision) |
 | **L5** | Human merge; Composer packages | Launch promotion + back-sync | HC-6 |
@@ -50,7 +58,7 @@ Execute in strict order. **Stop on any failed verification.** Record evidence in
 
 ## 3. Pre-flight checks (before L3 / HC-4)
 
-Re-confirm immediately before HC-4 live-enable (and again before L4 if on a later day). All must pass; **do not proceed** if any fail. Full operator table: [L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md) Step 0.
+Re-confirm immediately before HC-4 live-enable (and again before L4 if on a later day). All must pass; **do not proceed** if any fail. **Prerequisite:** HC-3.5 **COMPLETE** — closure report §3.5 sealed; production Postgres EFFECTIVE promotion for drill strategy exists. Full operator table: [L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md) Step 0.
 
 | # | Check | How | Expected evidence shape |
 |---|-------|-----|-------------------------|
@@ -59,10 +67,11 @@ Re-confirm immediately before HC-4 live-enable (and again before L4 if on a late
 | PF-3 | Master-key decrypt probe | Host/CLI path can resolve production Secrets Store / `AI_TRADER_MASTER_KEY` (no secret values logged) | Decrypt succeeds or explicit fail-closed denial with actionable error |
 | PF-4 | Kill-switch posture | Admin console — global/org kill switches | All clear (not armed) before enable |
 | PF-5 | Criterion 10 gate sealed | Closure report §3 — L2 / HC-3 **COMPLETE**; criterion **10** **PASS** | **Do not re-run billing gate** |
-| PF-6 | BP-5 promotion | Strategy `mean_reversion_v0` @ `0.1.0` (or Architect-selected drill strategy) | **EFFECTIVE** promotion record exists |
+| PF-6 | Production promotion (Postgres) | Admin `/admin/strategy-promotions` or read-only Postgres query on `trader_strategy_promotion_records` | **EFFECTIVE** row for `mean_reversion_v0` @ `0.1.0` on Org-0 — attested in closure §3.5 (**not** DEE-178 SQLite replay alone) |
 | PF-7 | Org-0 allowlist | `WAIA_TRADER_ORG0_ORGANIZATION_ID` set on host/CLI env | Live path rejects non-Org-0 fail-closed |
 | PF-8 | Telegram alerting | Production drill endpoint or recent alert telemetry | Router configured; non-blocking delivery path live |
 | PF-9 | Validation chain (repo) | `pnpm lint && pnpm typecheck && pnpm test --run && pnpm build` on canonical `dev` SHA | All green |
+| PF-10 | Postgres launch env (execution host) | Host/CLI env for live commands | `WAIA_DB_BACKEND=postgres` + non-empty `DATABASE_URL_POSTGRES`; **not** SQLite `DATABASE_URL` alone for production launch |
 
 **Secret discipline:** No API keys, tokens, ciphertext, or `.env*` values in any artifact. Use counts, HTTP codes, id prefixes, and audit action names only.
 
@@ -96,7 +105,37 @@ Re-confirm immediately before HC-4 live-enable (and again before L4 if on a late
 
 **UX backlog (post-MVP, no implementation):** [DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md](DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md)
 
-**STOP:** L2 **COMPLETE**. **HC-4 operator package READY** ([L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md)). **HC-4 NOT EXECUTED**. Do not live-enable until Architect authorizes HC-4 (checklist P-5).
+**STOP:** L2 **COMPLETE**. **HC-3.5 package READY** ([L2.5 HC-3.5 checklist](DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md)). **HC-3.5 NOT EXECUTED**. **HC-4 NOT EXECUTED**. Do not live-enable until HC-3.5 complete and Architect authorizes HC-4 (checklist P-5).
+
+---
+
+## 4.5. L2.5 — Production strategy promotion (Operator, HC-3.5)
+
+**Status:** **NOT EXECUTED** — operator package **READY** ([L2.5 HC-3.5 checklist](DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md)).
+
+**Purpose:** Create the production-attested **EFFECTIVE** promotion record on **Postgres** for the BP-10 drill strategy before any live-enable (L3).
+
+**Prerequisites:** IMP-U1d / PROC merged on `dev`; Architect IMP-U1 sign-off PASS; HC-3.5 unlock conditions 1–5 satisfied.
+
+**Drill strategy (fixed):** `mean_reversion_v0` @ `0.1.0` only.
+
+**Governed surface:** Admin UI **`/admin/strategy-promotions`** — sole production **Request** surface. Do **not** use `pnpm trader:gate` for production launch attestation.
+
+**FSM:** Request → confirm → cooling-off → effective (existing validation-gate service).
+
+**Evidence shapes (record in closure report §3.5):**
+
+| Field | Value |
+|-------|-------|
+| Promotion record id prefix | `<first-8-chars>` |
+| Final state | **EFFECTIVE** |
+| Strategy / version | `mean_reversion_v0` / `0.1.0` |
+| Postgres attestation | Exactly one EFFECTIVE row on Org-0 |
+| Criterion 9 production attestation | **PASS** |
+
+**HC-3.5 unlock (all required):** S1–S8 on `dev`; validation green; postgres-integration CI green; Architect sign-off recorded; **PROC PR merged**.
+
+**STOP:** Composer records audit counts only; **do not proceed to L3 / HC-4** until §3.5 sealed.
 
 ---
 
@@ -153,6 +192,8 @@ pnpm trader:live:status -- --org-id=<ORG0>
 ### Bounded live cycle (single order, terminates)
 
 Run on the **isolated execution host** (Option B). Replace placeholders; **do not log secrets**.
+
+**Production launch env (required):** `WAIA_DB_BACKEND=postgres` and `DATABASE_URL_POSTGRES` pointing at production Supabase pooler. SQLite `DATABASE_URL` alone is for **local BP-7 drills only** — not production launch.
 
 ```bash
 pnpm trader:live:cycle -- \
@@ -305,6 +346,7 @@ Open **immediately** after Launch promotion merge:
 | HC-1 | Architect | Approve L0 Launch Operations Package before production touch |
 | HC-2 | Architect | Approve order-vs-promote sequencing before L4/L5 |
 | HC-3 | Operator | Criterion 10 manual billing gate (L2) |
+| HC-3.5 | Operator | Production Postgres strategy promotion (L2.5) |
 | HC-4 | Operator | Governed live-enable (L3) |
 | HC-5 | Operator + Architect | Supervise first capped live order (L4) |
 | HC-6 | Human merge | Launch promotion + back-sync (L5) |
@@ -321,6 +363,7 @@ Open **immediately** after Launch promotion merge:
 | [BP-10 Canonical Execution Plan](../../.cursor/plans/bp-10_launch_execution_plan_e2aa412c.plan.md) | Authoritative ceremony sequence |
 | [DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md](DEE-340-BP10-LAUNCH-CLOSURE-REPORT.md) | Evidence ledger |
 | [DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) | HC-3 operator steps (**COMPLETE**) |
+| [DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md](DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md) | HC-3.5 operator steps (**READY — NOT EXECUTED**) |
 | [DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md) | HC-4 operator steps (**READY — NOT EXECUTED**) |
 | [DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md](DEE-340-OPERATOR-CONSOLE-UX-BACKLOG.md) | Post-MVP Operator Console UX backlog (HC-3 observations) |
 | [DEE-352-BP9A-MVP-VERIFICATION-REPORT.md](DEE-352-BP9A-MVP-VERIFICATION-REPORT.md) | Baseline 16-criterion inventory |
@@ -330,4 +373,4 @@ Open **immediately** after Launch promotion merge:
 | [ADR-0008](../adr/0008-manual-billing-gate.md) | Manual billing gate |
 | [ADR-0009](../adr/0009-regulatory-posture.md) | External live blocked |
 
-**STOP:** L0 **COMPLETE** (PR #322). HC-1 **APPROVED** (2026-06-29). L1 **COMPLETE**. L2 **COMPLETE**. **HC-3 COMPLETE** (2026-06-29). Criterion **10** **PASS**. **HC-4 operator package READY** ([L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md)). **HC-4 NOT EXECUTED**. **STOP before L3 execution** until Architect authorizes HC-4 (P-5).
+**STOP:** L0 **COMPLETE** (PR #322). HC-1 **APPROVED** (2026-06-29). L1 **COMPLETE**. L2 **COMPLETE**. **HC-3 COMPLETE** (2026-06-29). Criterion **10** **PASS**. **IMP-U1 Engineering COMPLETE**. **Architect IMP-U1 Sign-off PASS** (2026-06-30). **HC-3.5 package READY** ([L2.5 HC-3.5 checklist](DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md)). **HC-3.5 NOT EXECUTED**. **HC-4 NOT EXECUTED**. **STOP before L3 execution** until HC-3.5 complete and Architect authorizes HC-4 (P-5).

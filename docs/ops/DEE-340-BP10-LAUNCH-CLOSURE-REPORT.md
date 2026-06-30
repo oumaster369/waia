@@ -14,15 +14,20 @@
 | Field | Value |
 |-------|-------|
 | **Package slice** | L0 — Launch Operations Package — **COMPLETE** (PR #322 @ `e19295e`) |
-| **Verdict** | **IN PROGRESS** — L1 **COMPLETE**; L2 **COMPLETE**; **HC-3 COMPLETE**; **HC-4 operator package READY**; **HC-4 NOT EXECUTED** |
+| **Verdict** | **IN PROGRESS** — L1 **COMPLETE**; L2 **COMPLETE**; **HC-3 COMPLETE**; **IMP-U1 Engineering COMPLETE**; **Architect IMP-U1 Sign-off PASS**; **IMP-U1d / PROC NEXT**; **HC-3.5 STOPPED**; **HC-4 NOT EXECUTED** |
 | **Canonical `dev` SHA (baseline)** | `e19295e6347c12df958777b508e927662e9ac43c` |
 | **`dev` SHA (L1 verified)** | `392bb68324bc13e3ba16661afe37cb189e3199fb` |
 | **`dev` SHA (L2 runtime merged)** | `7203e02fde631c43e0b19fef2e892bccd06d24f5` (PR #329) |
+| **`dev` SHA (IMP-U1 S8 / sign-off)** | `9e0deaaf0c85dd7efc6a2988780e64356c87432b` (PR #343) |
 | **HC-1 (Architect L0 approval)** | **APPROVED** (2026-06-29) |
 | **L1** | **COMPLETE** (2026-06-29) |
 | **L2** | **COMPLETE** (2026-06-29) — HC-3 operator ceremony **COMPLETE**; criterion **10** **PASS** |
-| **Next action** | **HC-4 execution** (Operator) — governed Org-0 live-enable per [L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md); **NOT STARTED** — requires Architect authorization (P-5) |
+| **IMP-U1 Engineering** | **COMPLETE** (S1–S8, 2026-06-30) |
+| **Architect IMP-U1 Sign-off** | **PASS** (2026-06-30) |
+| **IMP-U1 Engineering Closure** | **COMPLETE** |
+| **Next action** | **IMP-U1d / PROC** (Composer ops docs) — **IN PR**; **HC-3.5 STOPPED** until PROC merged; **HC-4 / L4 STOPPED** |
 | **HC-3 package** | [L2 operator checklist](DEE-340-BP10-L2-HC3-OPERATOR-CHECKLIST.md) — **COMPLETE**; evidence §3 below |
+| **HC-3.5 package** | [L2.5 operator checklist](DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md) — **READY — NOT EXECUTED**; evidence slot §3.5 below |
 | **HC-4 package** | [L3 HC-4 operator checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md) — **READY — NOT EXECUTED**; evidence slot §4 below |
 
 ---
@@ -41,7 +46,7 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 | 6 | Two strategies registered; CDE signal-only | PASS | DEE-337; registry tests | **PASS** | |
 | 7 | Risk + kill switches; reconciliation | PASS | CI tests; admin kill-switch UI | **PASS** | |
 | 8 | Paper loop + AHR validated | PASS | [DEE-337 closure report](DEE-337-P5-TWO-STRATEGY-AHR-CLOSURE-REPORT.md) | **PASS** | |
-| 9 | Signed validation-gate promotion (ADR-0010/11) | PASS | DEE-178; admin promotion UI | **PASS** | |
+| 9 | Signed validation-gate promotion (ADR-0010/11) | PASS | DEE-178 (SQLite process proof); admin promotion UI | **PASS** (process) / **OPERATOR REQUIRED** (production attestation) | DEE-178 = replay/BP-5 only; production EFFECTIVE attestation = **HC-3.5** on Postgres (closure §3.5) before HC-4 PF-6 |
 | 10 | Reporting + HWM + 30% fee + manual gate | **OPERATOR REQUIRED** | Admin billing; ADR-0008 | **PASS** | HC-3 complete 2026-06-29 — §3 execution record |
 | 11 | USDT payments + suspension lifecycle | PASS | Steps 6 + 9A + §10.1 — watcher + registry | **PASS** | |
 | 12 | Org-0 live admin-gated; isolated host | PASS | Steps 4 + 8 — admin + host `/health` (2026-06-28) | **PASS** | Live order reality = **L4** |
@@ -50,7 +55,9 @@ Baseline populated from [BP-9A report §4](DEE-352-BP9A-MVP-VERIFICATION-REPORT.
 | 15 | Live Telegram alert delivery | PASS | Step 7 — production drill (2026-06-28) | **PASS** | |
 | 16 | Production Configuration Inventory signed | PASS | Step 10 — §12 signed 2026-06-29 | **PASS** | |
 
-**Residual operator gate before live order:** **HC-4** (L3 live-enable) — criterion **10** closed at L2.
+**Residual operator gates before live order:** **HC-3.5** (production promotion attestation) then **HC-4** (L3 live-enable). Criterion **10** closed at L2.
+
+**HC-3.5 unlock (all required before operator begins HC-3.5):** S1–S8 on `dev`; validation green; postgres-integration CI green; Architect IMP-U1 sign-off PASS; **IMP-U1d / PROC merged**.
 
 **L1 summary:** 15/16 criteria green on `dev` at L1; criterion **10** closed at L2 HC-3 (2026-06-29). **16/16 green on `dev`** after HC-3 evidence recorded.
 
@@ -177,6 +184,29 @@ Operator:                 <Operator name/role> — 2026-06-29
 
 ---
 
+## 3.5. L2.5 — Production strategy promotion (HC-3.5)
+
+**Operator checklist:** [DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md](DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md) — **READY — NOT EXECUTED**
+
+| Field | Value |
+|-------|-------|
+| **Status** | _not started_ |
+| **Drill strategy** | `mean_reversion_v0` @ `0.1.0` (fixed for BP-10) |
+| **Attestation surface** | Admin UI `/admin/strategy-promotions` (sole production Request surface) |
+| **Persistence** | Production **Postgres** (`trader_strategy_promotion_records`) |
+| **Promotion record id prefix** | _pending_ |
+| **Final promotion state** | _pending_ (expect **EFFECTIVE**) |
+| **`state_version`** | _pending_ |
+| **Audit actions emitted** | _pending_ (`requested`, `confirmed`, `effective`) |
+| **Postgres attestation query result** | _pending_ (exactly one EFFECTIVE row) |
+| **Criterion 9 production attestation** | _pending_ |
+| **Operator attestation** | _pending_ |
+| **Date** | _pending_ |
+
+**STOP:** HC-3.5 **NOT EXECUTED**. Do not proceed to HC-4 until §3.5 sealed.
+
+---
+
 ## 4. L3 — Governed Org-0 live-enable (HC-4)
 
 **Operator checklist:** [DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md) — **READY — NOT EXECUTED**
@@ -252,6 +282,23 @@ Operator:                 <Operator name/role> — 2026-06-29
 | **Date** | 2026-06-29 |
 | **Notes** | Launch Operations Package reviewed (runbook + closure report + canonical plan). No production action performed. L1 not started at sign-off. |
 
+### IMP-U1 — Architect (U1 Unified Postgres Engineering Closure)
+
+| Field | Value |
+|-------|-------|
+| **Decision** | **PASS** |
+| **Signed by** | Architect / Adamar |
+| **Date** | 2026-06-30 |
+| **Canonical dev HEAD** | `9e0deaaf0c85dd7efc6a2988780e64356c87432b` (PR #343 / DEE-360) |
+
+**Statement:**
+
+> IMP-U1 engineering correctly implements the ratified U1 Unified Postgres architecture.
+>
+> No additional engineering slices are required before IMP-U1d / PROC.
+
+**Additional notes:** S7 env matrix confirmed; S8 verification-only (tests only, zero production changes); CI green on sign-off SHA. No operational evidence recorded at sign-off (no HC-3.5, HC-4, or L4 execution).
+
 ### HC-7 — Architect (BP-10 COMPLETE)
 
 | Field | Value |
@@ -269,4 +316,4 @@ Operator:                 <Operator name/role> — 2026-06-29
 
 ---
 
-**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. L1 **COMPLETE**. L2 **COMPLETE**. **HC-3 COMPLETE** (2026-06-29). Criterion **10** **PASS**. **HC-4 operator package READY** ([L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md)). **HC-4 NOT EXECUTED**. **STOP before L3 execution** until Architect authorizes HC-4 (P-5). No live order, no production promotion.
+**STOP:** L0 **COMPLETE**. HC-1 **APPROVED**. L1 **COMPLETE**. L2 **COMPLETE**. **HC-3 COMPLETE** (2026-06-29). Criterion **10** **PASS**. **IMP-U1 Engineering COMPLETE** (S1–S8, 2026-06-30). **Architect IMP-U1 Sign-off PASS** (2026-06-30). **IMP-U1 Engineering Closure COMPLETE**. **HC-3.5 package READY** ([L2.5 HC-3.5 checklist](DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md)). **HC-3.5 STOPPED** until IMP-U1d / PROC merged. **HC-4 NOT EXECUTED** ([L3 HC-4 checklist](DEE-340-BP10-L3-HC4-OPERATOR-CHECKLIST.md)). **L4 STOPPED**. No live order, no production promotion ceremony, no HC-4 execution.

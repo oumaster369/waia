@@ -1,5 +1,7 @@
 # DEE-178 — Strategy Validation Gate Operator Runbook
 
+> **Production launch boundary (IMP-U1 / U1):** This runbook and `pnpm trader:gate` are for **replay and BP-5 process proof on SQLite only**. They do **not** satisfy production promotion attestation for BP-10 launch. Production EFFECTIVE promotion on **Postgres** is performed via **HC-3.5** using the Admin UI (`/admin/strategy-promotions`) per [L2.5 HC-3.5 checklist](DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md). Architect IMP-U1 sign-off PASS (2026-06-30).
+
 **Audience:** the single accountable operator (ADR-0011) executing the Strategy Validation Gate.
 **Tooling:** `pnpm trader:gate` (DEE-277 operator runway, CLI) over the DEE-272 service layer.
 **Governing canon:** [ADR-0010](../adr/0010-strategy-validation-gate.md) (gate, no thresholds), [ADR-0011](../adr/0011-single-operator-governance-model.md) (immutable audit, cooling-off, explicit confirm, reversible), [ADR-0009](../adr/0009-regulatory-posture.md) (Org-0 only).

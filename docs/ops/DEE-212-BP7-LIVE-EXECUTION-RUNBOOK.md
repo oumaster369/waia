@@ -4,13 +4,27 @@ Bounded, operator-triggered live execution on the **isolated host machine** (Opt
 
 ## Preconditions
 
+- BP-5 **EFFECTIVE** promotion for drill strategy (`mean_reversion_v0` @ `0.1.0`) on **production Postgres** — attested via HC-3.5 (closure §3.5); DEE-178 SQLite replay alone is insufficient
 - Org-0 UUID configured: `WAIA_TRADER_ORG0_ORGANIZATION_ID`
-- BP-5 **EFFECTIVE** promotion for drill strategy (`mean_reversion_v0` @ `0.1.0`)
 - HTX Org-0 credentials connected (trade only; withdraw/transfer forbidden)
 - Execution host running; `WAIA_TRADER_EXECUTION_HOST_URL` returns `GET /health` → 200
 - Kill switches clear
 - Production `AI_TRADER_MASTER_KEY` / Secrets Store live (credential decrypt on Worker/CLI path)
 - Org live-enable cap set to minimal (e.g. **10 USDT** notional)
+
+## Production Postgres env (U1 launch)
+
+For **production launch** drills (HC-4, L4), the execution host CLI must use unified Postgres — not SQLite:
+
+| Variable | Production launch | Local BP-7 drill only |
+|----------|-------------------|------------------------|
+| `WAIA_DB_BACKEND` | `postgres` | unset or `sqlite` |
+| `DATABASE_URL_POSTGRES` | Supabase pooler URL (operator vault) | — |
+| `DATABASE_URL` | — (do not use SQLite file for production launch) | SQLite file path |
+
+Fail-closed: if `WAIA_DB_BACKEND=postgres` but runtime resolves non-Postgres, live-cli exits with actionable error (IMP-U1 S7).
+
+See [DEE-339 BP-6 execution host runbook](DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md) §6 for pooler egress and env injection.
 
 ## Seven-stage drill
 
