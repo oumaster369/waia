@@ -19,6 +19,7 @@
     "trader:paper:soak:analyze": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/analyze-paper-soak-log.ts",
     "trader:paper:soak:evidence": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/export-paper-strategy-evidence.ts",
     "trader:gate": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/strategy-gate-cli.ts",
+    "trader:paper:export": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/export-paper-evaluation.ts",
     "trader:live:request": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/live-cli.ts request",
     "trader:live:confirm": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/live-cli.ts confirm",
     "trader:live:enable": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/live-cli.ts mark-enabled",
