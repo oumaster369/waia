@@ -9,13 +9,18 @@
  *   status        Preview org live-enable state
  *   cycle         Run one bounded live cycle (Strategy → Risk → Execution → Reconciliation → Reporting)
  *
- * Requires DATABASE_URL, WAIA_TRADER_CLI=1, WAIA_TRADER_ORG0_ORGANIZATION_ID for live paths.
+ * Requires WAIA_TRADER_CLI=1.
+ * SQLite path (default / local drill): DATABASE_URL.
+ * Postgres path (unified launch): WAIA_DB_BACKEND=postgres and DATABASE_URL_POSTGRES.
+ * WAIA_TRADER_ORG0_ORGANIZATION_ID required for live cycle authorization.
  */
 
 import path from "node:path";
 
 import { getDb } from "@/db/client";
+import { getResolvedWaiaDbRuntimeConfig } from "@/db/runtime-backend";
 import type { WaiaDb } from "@/db/types";
+import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import { createSqliteCredentialService } from "@/lib/trader/credentials";
 import {
   createSqliteFeeComputationService,
@@ -42,17 +47,62 @@ import {
   runLiveCycleOnce,
   type LiveCycleDeps,
 } from "@/lib/trader/live";
+import { buildLiveCliPostgresDeps } from "@/lib/trader/live/build-live-cli-deps";
+import {
+  createPostgresOrgLiveEnableService,
+  type OrgLiveEnableService,
+} from "@/lib/trader/live/org-live-enable-service";
 import { FixtureBarReplaySource } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import { createSqliteStrategyPromotionService } from "@/lib/trader/validation-gate";
 import { writeTraderAuditLogSqlite } from "@/lib/trader/audit/write";
 import type { TraderAuditInput } from "@/lib/trader/types";
-import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 
 type Flags = Map<string, string>;
 
 const SUBCOMMANDS = ["request", "confirm", "mark-enabled", "disable", "status", "cycle"] as const;
 
 type Subcommand = (typeof SUBCOMMANDS)[number];
+
+function usesPostgresBackend(): boolean {
+  return getResolvedWaiaDbRuntimeConfig().backend === "postgres";
+}
+
+function assertLiveCliDatabaseEnv(): void {
+  getResolvedWaiaDbRuntimeConfig();
+  if (usesPostgresBackend()) {
+    return;
+  }
+  if (!process.env.DATABASE_URL?.trim()) {
+    throw new Error(
+      "[trader:live] DATABASE_URL is required when WAIA_DB_BACKEND is sqlite (default)",
+    );
+  }
+}
+
+async function withOrgLiveEnableService<T>(
+  orgId: string,
+  fn: (service: OrgLiveEnableService, context: OrgContext) => Promise<T>,
+): Promise<T> {
+  const context = requireOrgContext(orgId);
+  if (!usesPostgresBackend()) {
+    const service = createSqliteOrgLiveEnableService(getDb());
+    return fn(service, context);
+  }
+
+  const runtime = await getWaiaRuntimeDb();
+  try {
+    if (runtime.kind !== "postgres") {
+      throw new Error(
+        "[trader:live] Postgres backend requires WAIA_DB_BACKEND=postgres and DATABASE_URL_POSTGRES.",
+      );
+    }
+    const service = createPostgresOrgLiveEnableService(runtime.db);
+    return await fn(service, context);
+  } finally {
+    await disposeWaiaRuntimeDb(runtime);
+  }
+}
 
 function printUsage(): void {
   console.log(`Org-0 live execution operator CLI (DEE-212 / BP-7)
@@ -69,8 +119,10 @@ Subcommands (trader:live:enable maps to request/confirm/mark-enabled):
   cycle         --org-id --account-key --exchange-account-id --strategy --version --credential-id --fixture-path [--quantity] [--notional-cap]
 
 Environment:
-  DATABASE_URL                         SQLite database path (required)
   WAIA_TRADER_CLI=1                    Required safety gate
+  WAIA_DB_BACKEND                       sqlite (default) or postgres for unified launch
+  DATABASE_URL                         SQLite path (required when backend is sqlite)
+  DATABASE_URL_POSTGRES                  Postgres path (required when WAIA_DB_BACKEND=postgres)
   WAIA_TRADER_ORG0_ORGANIZATION_ID     Org-0 allowlist (required for live cycle)
   WAIA_TRADER_EXECUTION_HOST_URL       Execution host /health URL (required for live cycle)`);
 }
@@ -119,12 +171,11 @@ function requireStateVersion(flags: Flags): number {
 async function runRequest(flags: Flags): Promise<void> {
   const orgId = requireFlag(flags, "org-id");
   const cap = requireFlag(flags, "cap");
-  const db = getDb();
-  const context = requireOrgContext(orgId);
-  const service = createSqliteOrgLiveEnableService(db);
-  const updated = await service.requestEnable(operatorActor(flags), context, {
-    maxNotionalCap: cap,
-  });
+  const updated = await withOrgLiveEnableService(orgId, async (service, context) =>
+    service.requestEnable(operatorActor(flags), context, {
+      maxNotionalCap: cap,
+    }),
+  );
   console.log(
     `[trader:live] requested orgId=${orgId} state=${updated.state} stateVersion=${updated.stateVersion} cap=${updated.maxNotionalCap}`,
   );
@@ -133,13 +184,12 @@ async function runRequest(flags: Flags): Promise<void> {
 async function runConfirm(flags: Flags): Promise<void> {
   const orgId = requireFlag(flags, "org-id");
   const ack = requireFlag(flags, "ack");
-  const db = getDb();
-  const context = requireOrgContext(orgId);
-  const service = createSqliteOrgLiveEnableService(db);
-  const updated = await service.confirmEnable(operatorActor(flags), context, {
-    expectedStateVersion: requireStateVersion(flags),
-    ackPhrase: ack,
-  });
+  const updated = await withOrgLiveEnableService(orgId, async (service, context) =>
+    service.confirmEnable(operatorActor(flags), context, {
+      expectedStateVersion: requireStateVersion(flags),
+      ackPhrase: ack,
+    }),
+  );
   console.log(
     `[trader:live] confirmed orgId=${orgId} state=${updated.state} coolingOffEndsAt=${updated.coolingOffEndsAt?.toISOString() ?? "n/a"}`,
   );
@@ -147,12 +197,11 @@ async function runConfirm(flags: Flags): Promise<void> {
 
 async function runMarkEnabled(flags: Flags): Promise<void> {
   const orgId = requireFlag(flags, "org-id");
-  const db = getDb();
-  const context = requireOrgContext(orgId);
-  const service = createSqliteOrgLiveEnableService(db);
-  const updated = await service.markEnabled(operatorActor(flags), context, {
-    expectedStateVersion: requireStateVersion(flags),
-  });
+  const updated = await withOrgLiveEnableService(orgId, async (service, context) =>
+    service.markEnabled(operatorActor(flags), context, {
+      expectedStateVersion: requireStateVersion(flags),
+    }),
+  );
   console.log(
     `[trader:live] enabled orgId=${orgId} state=${updated.state} enabledAt=${updated.enabledAt?.toISOString() ?? "n/a"}`,
   );
@@ -160,22 +209,20 @@ async function runMarkEnabled(flags: Flags): Promise<void> {
 
 async function runDisable(flags: Flags): Promise<void> {
   const orgId = requireFlag(flags, "org-id");
-  const db = getDb();
-  const context = requireOrgContext(orgId);
-  const service = createSqliteOrgLiveEnableService(db);
-  const updated = await service.disable(operatorActor(flags), context, {
-    expectedStateVersion: requireStateVersion(flags),
-    reason: flags.get("reason") ?? null,
-  });
+  const updated = await withOrgLiveEnableService(orgId, async (service, context) =>
+    service.disable(operatorActor(flags), context, {
+      expectedStateVersion: requireStateVersion(flags),
+      reason: flags.get("reason") ?? null,
+    }),
+  );
   console.log(`[trader:live] disabled orgId=${orgId} state=${updated.state}`);
 }
 
 async function runStatus(flags: Flags): Promise<void> {
   const orgId = requireFlag(flags, "org-id");
-  const db = getDb();
-  const context = requireOrgContext(orgId);
-  const service = createSqliteOrgLiveEnableService(db);
-  const preview = await service.preview(context);
+  const preview = await withOrgLiveEnableService(orgId, async (service, context) =>
+    service.preview(context),
+  );
   console.log(
     `[trader:live] status orgId=${orgId} state=${preview.state?.state ?? "DISABLED"} confirmable=${preview.confirmable} enableEligible=${preview.enableEligible} remainingMs=${preview.remainingMs}`,
   );
@@ -264,9 +311,7 @@ async function runCycle(flags: Flags): Promise<void> {
     ? fixturePathRaw
     : path.join(process.cwd(), fixturePathRaw);
 
-  const db = getDb();
   const context = requireOrgContext(orgId);
-  const deps = await buildLiveCycleDeps(db, credentialId, orgId);
   const replay = new FixtureBarReplaySource({
     fixturePath,
     mode: "full",
@@ -278,8 +323,7 @@ async function runCycle(flags: Flags): Promise<void> {
   }
   const snapshot = next.snapshot;
 
-  const orgLive = await createSqliteOrgLiveEnableService(db).getState(context);
-  const result = await runLiveCycleOnce(deps, {
+  const cycleInput = {
     context,
     snapshot,
     accountKey,
@@ -288,8 +332,34 @@ async function runCycle(flags: Flags): Promise<void> {
     strategyVersion,
     credentialId,
     defaultQuantity: flags.get("quantity") ?? "0.001",
-    notionalCap: flags.get("notional-cap") ?? orgLive?.maxNotionalCap,
-  });
+  };
+
+  let result: Awaited<ReturnType<typeof runLiveCycleOnce>>;
+
+  if (usesPostgresBackend()) {
+    const built = await buildLiveCliPostgresDeps({
+      organizationId: orgId,
+      credentialId,
+      env: process.env,
+    });
+    try {
+      const orgLive = await built.orgLiveEnableService.getState(context);
+      result = await runLiveCycleOnce(built.deps, {
+        ...cycleInput,
+        notionalCap: flags.get("notional-cap") ?? orgLive?.maxNotionalCap,
+      });
+    } finally {
+      await built.dispose();
+    }
+  } else {
+    const db = getDb();
+    const deps = await buildLiveCycleDeps(db, credentialId, orgId);
+    const orgLive = await createSqliteOrgLiveEnableService(db).getState(context);
+    result = await runLiveCycleOnce(deps, {
+      ...cycleInput,
+      notionalCap: flags.get("notional-cap") ?? orgLive?.maxNotionalCap,
+    });
+  }
 
   const evidence = {
     organizationId: orgId,
@@ -372,9 +442,7 @@ async function main(): Promise<void> {
   if (process.env.WAIA_TRADER_CLI !== "1") {
     throw new Error("[trader:live] Refusing to run without WAIA_TRADER_CLI=1");
   }
-  if (!process.env.DATABASE_URL?.trim()) {
-    throw new Error("[trader:live] DATABASE_URL is required");
-  }
+  assertLiveCliDatabaseEnv();
 
   const argv = process.argv.slice(2);
   if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
