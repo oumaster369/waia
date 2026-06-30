@@ -13,6 +13,7 @@ import { effectivePromotionCoolingOffMs } from "@/lib/trader/validation-gate/con
 import {
   findPromotionByIdempotencyKeyPostgres,
   getEffectivePromotionPostgres,
+  getLatestPendingPromotionPostgres,
   getPromotionRecordByIdPostgres,
   insertPromotionRecordPostgres,
   updatePromotionGovernancePostgres,
@@ -20,6 +21,7 @@ import {
 import {
   findPromotionByIdempotencyKeySqlite,
   getEffectivePromotionSqlite,
+  getLatestPendingPromotionSqlite,
   getPromotionRecordByIdSqlite,
   insertPromotionRecordSqlite,
   updatePromotionGovernanceSqlite,
@@ -55,6 +57,10 @@ export type StrategyPromotionRepository = {
     idempotencyKey: string,
   ): Promise<StrategyPromotionRecordView | null>;
   getEffective(
+    context: OrgContext,
+    strategyId: string,
+  ): Promise<StrategyPromotionRecordView | null>;
+  getLatestPending(
     context: OrgContext,
     strategyId: string,
   ): Promise<StrategyPromotionRecordView | null>;
@@ -378,6 +384,8 @@ export function createSqliteStrategyPromotionRepository(db: WaiaDb): StrategyPro
       findPromotionByIdempotencyKeySqlite(db, context, key),
     getEffective: async (context, strategyId) =>
       getEffectivePromotionSqlite(db, context, strategyId),
+    getLatestPending: async (context, strategyId) =>
+      getLatestPendingPromotionSqlite(db, context, strategyId),
     updateGovernance: async (context, recordId, expectedStateVersion, patch) =>
       updatePromotionGovernanceSqlite(db, context, recordId, expectedStateVersion, patch),
   };
@@ -391,6 +399,8 @@ export function createPostgresStrategyPromotionRepository(
     getById: (context, recordId) => getPromotionRecordByIdPostgres(ex, context, recordId),
     findByIdempotencyKey: (context, key) => findPromotionByIdempotencyKeyPostgres(ex, context, key),
     getEffective: (context, strategyId) => getEffectivePromotionPostgres(ex, context, strategyId),
+    getLatestPending: (context, strategyId) =>
+      getLatestPendingPromotionPostgres(ex, context, strategyId),
     updateGovernance: (context, recordId, expectedStateVersion, patch) =>
       updatePromotionGovernancePostgres(ex, context, recordId, expectedStateVersion, patch),
   };
