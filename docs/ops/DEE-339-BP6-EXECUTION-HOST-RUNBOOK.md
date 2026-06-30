@@ -108,6 +108,23 @@ BP-6 **does not**:
 
 ---
 
+## 6. Execution host — Postgres egress for live CLI (IMP-U1 / U1)
+
+When the operator runs `pnpm trader:live:*` or `trader:live:cycle` on the execution host for **production launch** (HC-4, L4):
+
+1. **Egress:** Allow outbound TLS to the Supabase Postgres pooler host/port (operator vault — not committed to repo).
+2. **Env injection** at host runtime (not in image/git):
+   - `WAIA_DB_BACKEND=postgres`
+   - `DATABASE_URL_POSTGRES=<pooler-url>` (from operator vault)
+   - `WAIA_TRADER_ORG0_ORGANIZATION_ID=<ORG0>`
+   - `WAIA_TRADER_CLI=1` (set automatically by pnpm scripts)
+3. **Do not** point production launch at a local SQLite `DATABASE_URL` file — SQLite remains for local BP-7 drills only.
+4. **Pre-flight:** From host, confirm `GET /api/health/database` on Worker returns `backend: postgres` before live-enable.
+
+Architect IMP-U1 sign-off PASS (2026-06-30) — Option B unchanged; live dispatch remains host CLI only.
+
+---
+
 ## Related
 
 - [DEE-220 Master Key Runbook](./DEE-220-MASTER-KEY-RUNBOOK.md)

@@ -350,7 +350,7 @@ Reference: [AI-TRADER-USER-JOURNEY-v2.md](../ai-trader/AI-TRADER-USER-JOURNEY-v2
 | 6 | Two strategies registered; CDE signal-only | 1 | **PASS** | DEE-337; registry tests |
 | 7 | Risk + kill switches; reconciliation | 1 | **PASS** | CI tests; admin kill-switch UI |
 | 8 | Paper loop + AHR validated | 1 | **PASS** | [DEE-337 closure report](DEE-337-P5-TWO-STRATEGY-AHR-CLOSURE-REPORT.md) |
-| 9 | Signed validation-gate promotion (ADR-0010/11) | 1 | **PASS** | DEE-178; admin promotion UI |
+| 9 | Signed validation-gate promotion (ADR-0010/11) | 1 | **PASS** | DEE-178 (SQLite process proof); admin promotion UI; production attestation = **HC-3.5** on Postgres (BP-10 closure §3.5) |
 | 10 | Reporting + HWM + 30% fee + manual gate | 2 | **OPERATOR REQUIRED** | Admin billing; ADR-0008 |
 | 11 | USDT payments + suspension lifecycle | 2 | **PASS** | Steps 6 + 9A + §10.1 — watcher scan + address registry; health `ok:true` (no deposit required) |
 | 12 | Org-0 live admin-gated; isolated host | 2 | **PASS** | Steps 4 + 8 — admin entitlement + execution host `/health` (2026-06-28) |

@@ -173,7 +173,15 @@ Full step order and evidence slots live in the BP-9A report §10. This section l
 | BP-10 (DEE-340) starts after DEE-352 Step 10 + §12 | **Satisfied** 2026-06-29 — DEE-352 **Done** |
 | MVP Scope Freeze active | No new MVP features before BP-10 — see BP-9A report |
 
-**Execution order:**
+**Execution order (BP-10 launch ceremony):**
+
+```
+L0 → L1 → L2 (HC-3) → L2.5 (HC-3.5 production promotion on Postgres) → L3 (HC-4 live-enable) → L4 → L5 → L6
+```
+
+**HC-3.5 gate:** Production EFFECTIVE promotion attestation on Postgres (Admin UI Request) — required before HC-4 PF-6 passes. DEE-178 replay alone does not satisfy production attestation. See [L2.5 HC-3.5 checklist](DEE-340-BP10-L2.5-HC3.5-OPERATOR-CHECKLIST.md).
+
+**Legacy Phase 2 order (BP-9A provisioning — complete):**
 
 ```
 Phase 1 (complete) → Launch Readiness Review (this document) → Phase 2 (Steps 1→7→8→9→9A→10) → BP-10
