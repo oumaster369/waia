@@ -57,3 +57,8 @@ export {
   type LiveReportingBridgeResult,
 } from "@/lib/trader/live/reporting-bridge";
 export { hashOperatorAckPhrase } from "@/lib/trader/live/serialize-org-live-enable";
+export {
+  buildLiveCliPostgresDeps,
+  type BuildLiveCliPostgresDepsInput,
+  type BuildLiveCliPostgresDepsResult,
+} from "@/lib/trader/live/build-live-cli-deps";
