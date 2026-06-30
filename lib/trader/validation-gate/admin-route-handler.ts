@@ -94,8 +94,12 @@ export async function handleAdminStrategyPromotionsGet(
     }
 
     const effective = await service.getEffectivePromotion(context, strategyId);
+    const pending = await repository.getLatestPending(context, strategyId);
     return adminSuccess(
-      { effective: effective ? serializePromotionRecord(effective) : null },
+      {
+        effective: effective ? serializePromotionRecord(effective) : null,
+        pending: pending ? serializePromotionRecord(pending) : null,
+      },
       runtime.kind,
     );
   } catch (err) {
