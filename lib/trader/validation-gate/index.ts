@@ -71,6 +71,7 @@ export {
   REQUIRED_EFFECTIVE_ACK,
   OperatorRunwayInputError,
   parseOperatorPromotionInputs,
+  parseAdminPromotionRequestAssembly,
   assertEffectiveAck,
   buildAssembleInput,
   type OperatorPromotionInputs,

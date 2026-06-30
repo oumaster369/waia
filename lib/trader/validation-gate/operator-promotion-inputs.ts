@@ -1,4 +1,8 @@
 import type { PaperEvaluationExportDocument } from "@/lib/trader/paper/paper-evaluation-export.types";
+import {
+  OperatorEvidenceError,
+  parsePaperEvaluationExportDocument,
+} from "@/lib/trader/validation-gate/operator-evidence";
 import type {
   AssembleStrategyPromotionRecordInput,
   PromotionCostModel,
@@ -330,4 +334,46 @@ export function buildAssembleInput(params: {
     paperTradingEvidenceDocument: document,
     confidenceAttestation: inputs.confidenceAttestation,
   };
+}
+
+/**
+ * Parse admin Request body fields into assembler input (IMP-U1 S1).
+ * Reuses CLI validation paths; evidence and inputs are JSON objects from the HTTP body.
+ */
+export function parseAdminPromotionRequestAssembly(params: {
+  organizationId: string;
+  strategyId: string;
+  evidence: unknown;
+  inputs: unknown;
+}): AssembleStrategyPromotionRecordInput {
+  if (params.evidence === undefined || params.evidence === null) {
+    throw new OperatorEvidenceError("OPERATOR_EVIDENCE_REQUIRED", "evidence is required");
+  }
+  if (params.inputs === undefined || params.inputs === null) {
+    throw new OperatorRunwayInputError("OPERATOR_INPUTS_REQUIRED", "inputs is required");
+  }
+
+  const strategyId = params.strategyId.trim();
+  if (strategyId.length === 0) {
+    throw new OperatorRunwayInputError(
+      "OPERATOR_INPUTS_STRATEGY_ID_REQUIRED",
+      "strategy_id is required",
+    );
+  }
+
+  const document = parsePaperEvaluationExportDocument(JSON.stringify(params.evidence));
+  const operatorInputs = parseOperatorPromotionInputs(JSON.stringify(params.inputs));
+
+  if (operatorInputs.strategyId !== strategyId) {
+    throw new OperatorRunwayInputError(
+      "OPERATOR_INPUTS_STRATEGY_MISMATCH",
+      "inputs.strategyId must match strategy_id",
+    );
+  }
+
+  return buildAssembleInput({
+    organizationId: params.organizationId,
+    inputs: operatorInputs,
+    document,
+  });
 }
