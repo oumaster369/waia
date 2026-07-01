@@ -199,6 +199,10 @@ Operator:                 <Operator name/role> — 2026-06-29
 | **`state_version`** | _pending_ |
 | **Audit actions emitted** | _pending_ (`requested`, `confirmed`, `effective`) |
 | **Postgres attestation query result** | _pending_ (exactly one EFFECTIVE row) |
+| **Research evidence digest (Track A)** | _pending_ |
+| **`knowledgeId` (Track A PKA)** | _pending_ |
+| **PKA reproducibility digest** | _pending_ |
+| **MKB linkage (`marketEventId`, `knowledgeEdgeId`)** | _pending_ |
 | **Criterion 9 production attestation** | _pending_ |
 | **Operator attestation** | _pending_ |
 | **Date** | _pending_ |

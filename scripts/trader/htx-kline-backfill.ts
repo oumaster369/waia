@@ -1,18 +1,20 @@
 /**
- * RI-P1 — HTX kline backfill CLI skeleton (maps HTX klines → trader_market_bars).
+ * RI-P7 — HTX kline backfill with paginated fetch (maps HTX klines → trader_market_bars).
  *
  * Usage:
  *   WAIA_DB_BACKEND=postgres DATABASE_URL_POSTGRES=... pnpm trader:htx:backfill -- \
  *     --org-id=<uuid> \
  *     --symbol=BTC/USDT \
  *     --period=1min \
- *     --size=2000
+ *     [--size=2000] \
+ *     [--target-bars=43200]
  *
  * Requires WAIA_TRADER_CLI=1 (set by package.json script when wired).
  */
 
 import { internalSymbolToHtx } from "@/lib/trader/connectors/htx/mappers";
 import { HtxRestClient, type HtxFetchFn } from "@/lib/trader/connectors/htx/client";
+import { fetchPaginatedHtxKlines } from "@/lib/trader/connectors/htx/kline-pagination";
 import { BTC_USDT, type Bar, type InstrumentId } from "@/lib/trader/intelligence/types";
 import { mapHtxKlinesToBars } from "@/lib/trader/market-data/htx-kline-mapper";
 
@@ -28,21 +30,27 @@ export type HtxKlineBackfillConfig = {
   organizationId: string;
   internalSymbol: InstrumentId;
   period: string;
+  /** Single-shot fetch size (legacy); ignored when targetBarCount > size. */
   size: number;
+  /** Paginated backfill target (RI-P7). Default 43_200 (~30 days of 1m bars). */
+  targetBarCount: number;
   restHost?: string;
 };
+
+export const DEFAULT_HTX_BACKFILL_TARGET_BARS = 43_200;
 
 const LOG_PREFIX = "[trader:htx:backfill]";
 
 export function printHtxKlineBackfillUsage(): void {
-  console.log(`HTX kline backfill (RI-P1 skeleton)
+  console.log(`HTX kline backfill (RI-P7 paginated)
 
 Usage:
   pnpm trader:htx:backfill -- \\
     --org-id=<uuid> \\
     [--symbol=BTC/USDT] \\
     [--period=1min] \\
-    [--size=2000]
+    [--size=2000] \\
+    [--target-bars=43200]
 
 Environment:
   WAIA_DB_BACKEND=postgres
@@ -81,11 +89,18 @@ export function resolveHtxKlineBackfillConfig(
     throw new Error(`${LOG_PREFIX} --size must be a positive integer`);
   }
 
+  const targetRaw = flags.get("target-bars") ?? String(DEFAULT_HTX_BACKFILL_TARGET_BARS);
+  const targetBarCount = Number.parseInt(targetRaw, 10);
+  if (!Number.isFinite(targetBarCount) || targetBarCount <= 0) {
+    throw new Error(`${LOG_PREFIX} --target-bars must be a positive integer`);
+  }
+
   return {
     organizationId,
     internalSymbol: (flags.get("symbol")?.trim() || BTC_USDT) as InstrumentId,
     period: flags.get("period")?.trim() || "1min",
     size,
+    targetBarCount,
     restHost: flags.get("rest-host")?.trim(),
   };
 }
@@ -102,13 +117,31 @@ export async function fetchHtxKlineBars(
   });
 
   const htxSymbol = internalSymbolToHtx(config.internalSymbol);
-  const klines = await client.getMarketHistoryKline({
+
+  if (config.targetBarCount <= config.size) {
+    const klines = await client.getMarketHistoryKline({
+      symbol: htxSymbol,
+      period: config.period,
+      size: config.targetBarCount,
+    });
+    return mapHtxKlinesToBars(config.internalSymbol, klines);
+  }
+
+  const paginated = await fetchPaginatedHtxKlines({
     symbol: htxSymbol,
     period: config.period,
-    size: config.size,
+    targetBarCount: config.targetBarCount,
+    batchSize: config.size,
+    fetchPage: (input) =>
+      client.getMarketHistoryKline({
+        symbol: input.symbol,
+        period: input.period,
+        size: input.size,
+        from: input.from,
+      }),
   });
 
-  return mapHtxKlinesToBars(config.internalSymbol, klines);
+  return mapHtxKlinesToBars(config.internalSymbol, paginated.rows);
 }
 
 export async function runHtxKlineBackfill(
@@ -128,7 +161,7 @@ export async function runHtxKlineBackfill(
   }
 
   log(
-    `${LOG_PREFIX} mapped ${bars.length} bars for org=${config.organizationId} symbol=${config.internalSymbol} period=${config.period}`,
+    `${LOG_PREFIX} mapped ${bars.length} bars for org=${config.organizationId} symbol=${config.internalSymbol} period=${config.period} target=${config.targetBarCount}`,
   );
 
   return { barCount: bars.length };

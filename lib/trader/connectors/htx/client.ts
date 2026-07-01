@@ -204,12 +204,17 @@ export class HtxRestClient {
     symbol: string;
     period: string;
     size?: number;
+    /** Unix timestamp in seconds — HTX returns klines from this time forward. */
+    from?: number;
   }): Promise<HtxKlineRow[]> {
     const params = new URLSearchParams({
       symbol: input.symbol,
       period: input.period,
       size: String(input.size ?? 25),
     });
+    if (input.from !== undefined) {
+      params.set("from", String(input.from));
+    }
     const url = `${this.restHost}${HTX_ENDPOINTS.marketHistoryKline}?${params.toString()}`;
     const response = await this.transport.fetch(url, { method: "GET" });
     if (!response.ok) {
