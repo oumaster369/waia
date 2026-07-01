@@ -41,11 +41,8 @@ function assertReasonCodeDistribution(distribution: Record<string, number>): voi
 
 function assertResearchEvidenceDocument(
   input: AssembleStrategyPromotionRecordInput,
-): ReturnType<typeof buildResearchEvidenceSlot> | undefined {
+): ReturnType<typeof buildResearchEvidenceSlot> {
   const document = input.researchEvidenceDocument;
-  if (!document) {
-    return undefined;
-  }
 
   if (document.schemaVersion !== RESEARCH_EVIDENCE_EXPORT_SCHEMA_VERSION) {
     throw new StrategyPromotionValidationError(
@@ -111,6 +108,10 @@ export function assembleStrategyPromotionRecord(
 
   const document = input.paperTradingEvidenceDocument;
 
+  if (!input.researchEvidenceDocument) {
+    throw new StrategyPromotionValidationError("STRATEGY_PROMOTION_RESEARCH_EVIDENCE_REQUIRED");
+  }
+
   if (document.schemaVersion !== PAPER_EVALUATION_EXPORT_SCHEMA_VERSION) {
     throw new StrategyPromotionValidationError("STRATEGY_PROMOTION_EVIDENCE_SCHEMA_MISMATCH");
   }
@@ -124,7 +125,7 @@ export function assembleStrategyPromotionRecord(
     throw new StrategyPromotionValidationError("STRATEGY_PROMOTION_EVIDENCE_MODE_INVALID");
   }
 
-  if (executionMode === "mock" && !input.researchEvidenceDocument) {
+  if (executionMode === "mock") {
     throw new StrategyPromotionValidationError("STRATEGY_PROMOTION_MOCK_EVIDENCE_INSUFFICIENT");
   }
 
@@ -156,7 +157,7 @@ export function assembleStrategyPromotionRecord(
     failureModes: input.failureModes,
     reasonCodeDistribution: input.reasonCodeDistribution,
     paperTradingEvidence,
-    ...(researchEvidence ? { researchEvidence } : {}),
+    researchEvidence,
     confidenceAttestation: input.confidenceAttestation,
   });
 }

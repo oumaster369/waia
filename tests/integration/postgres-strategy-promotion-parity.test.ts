@@ -27,6 +27,7 @@ import {
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -130,6 +131,7 @@ async function buildAssembly(orgId: string, strategyId: string, strategyVersion 
     failureModes: ["liquidity vacuum"],
     reasonCodeDistribution: { STRAT_MR_ZSCORE_BUY: 3 },
     paperTradingEvidenceDocument: document,
+    researchEvidenceDocument: buildValidResearchEvidenceDocument(orgId, { strategyId }),
     confidenceAttestation: {
       edgeNetOfCosts: "Net edge after costs.",
       liveTracksPaper: "Live should track paper.",
@@ -205,7 +207,10 @@ describe.skipIf(!integrationEnabled || !url)(
     it("runs request -> confirm -> effective with cooling-off and audit trail", async () => {
       const db = getPostgresDrizzle();
       let now = Date.now();
-      const service = createPostgresStrategyPromotionService(db, { nowMs: () => now });
+      const service = createPostgresStrategyPromotionService(db, {
+        nowMs: () => now,
+        validateResearchProvenance: false,
+      });
       const context = requireOrgContext(orgA);
       const strategyId = "mean_reversion_v0_pg_fsm";
 
@@ -242,7 +247,9 @@ describe.skipIf(!integrationEnabled || !url)(
 
     it("replays requestPromotion with the same idempotency key", async () => {
       const db = getPostgresDrizzle();
-      const service = createPostgresStrategyPromotionService(db);
+      const service = createPostgresStrategyPromotionService(db, {
+        validateResearchProvenance: false,
+      });
       const context = requireOrgContext(orgA);
       const idempotencyKey = randomUUID();
       const assembly = await buildAssembly(orgA, "mean_reversion_v0_pg_idem");
@@ -263,7 +270,10 @@ describe.skipIf(!integrationEnabled || !url)(
     it("getEffectivePromotion returns version-bound EFFECTIVE record", async () => {
       const db = getPostgresDrizzle();
       let now = Date.now();
-      const service = createPostgresStrategyPromotionService(db, { nowMs: () => now });
+      const service = createPostgresStrategyPromotionService(db, {
+        nowMs: () => now,
+        validateResearchProvenance: false,
+      });
       const context = requireOrgContext(orgA);
       const strategyId = "mean_reversion_v0_pg_effective";
 
@@ -289,7 +299,10 @@ describe.skipIf(!integrationEnabled || !url)(
     it("isLiveAuthorized fails closed on version drift", async () => {
       const db = getPostgresDrizzle();
       let now = Date.now();
-      const service = createPostgresStrategyPromotionService(db, { nowMs: () => now });
+      const service = createPostgresStrategyPromotionService(db, {
+        nowMs: () => now,
+        validateResearchProvenance: false,
+      });
       const context = requireOrgContext(orgA);
       const strategyId = "mean_reversion_v0_pg_drift";
 
@@ -324,7 +337,10 @@ describe.skipIf(!integrationEnabled || !url)(
     it("assertStrategyLiveAuthorized throws on version mismatch", async () => {
       const db = getPostgresDrizzle();
       let now = Date.now();
-      const service = createPostgresStrategyPromotionService(db, { nowMs: () => now });
+      const service = createPostgresStrategyPromotionService(db, {
+        nowMs: () => now,
+        validateResearchProvenance: false,
+      });
       const context = requireOrgContext(orgA);
       const strategyId = "mean_reversion_v0_pg_assert";
 

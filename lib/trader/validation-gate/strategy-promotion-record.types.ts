@@ -55,7 +55,7 @@ export type StrategyPromotionRecordPayload = {
   failureModes: string[];
   reasonCodeDistribution: Record<string, number>;
   paperTradingEvidence: PaperEvaluationEvidenceSlot;
-  researchEvidence?: ResearchEvidenceSlot;
+  researchEvidence: ResearchEvidenceSlot;
   confidenceAttestation: ConfidenceAttestation;
   recordContentDigest: string;
 };
@@ -109,7 +109,7 @@ export type AssembleStrategyPromotionRecordInput = {
   failureModes: string[];
   reasonCodeDistribution: Record<string, number>;
   paperTradingEvidenceDocument: PaperEvaluationExportDocument;
-  researchEvidenceDocument?: ResearchEvidenceDocument;
+  researchEvidenceDocument: ResearchEvidenceDocument;
   confidenceAttestation: ConfidenceAttestation;
 };
 

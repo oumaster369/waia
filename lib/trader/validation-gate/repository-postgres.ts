@@ -35,6 +35,12 @@ function mapRow(
     reasonCodeDistribution: row.reasonCodeDistributionJson as Record<string, number>,
     paperTradingEvidence:
       row.paperTradingEvidenceJson as StrategyPromotionRecordView["paperTradingEvidence"],
+    researchEvidence: (() => {
+      if (!row.researchEvidenceJson) {
+        throw new Error("STRATEGY_PROMOTION_RESEARCH_EVIDENCE_NOT_PERSISTED");
+      }
+      return row.researchEvidenceJson as StrategyPromotionRecordView["researchEvidence"];
+    })(),
     evidenceContentDigest: row.evidenceContentDigest,
     confidenceAttestation:
       row.confidenceAttestationJson as StrategyPromotionRecordView["confidenceAttestation"],
@@ -70,6 +76,7 @@ function payloadToRowValues(input: InsertPromotionRecordInput) {
     failureModesJson: input.failureModes,
     reasonCodeDistributionJson: input.reasonCodeDistribution,
     paperTradingEvidenceJson: input.paperTradingEvidence,
+    researchEvidenceJson: input.researchEvidence,
     evidenceContentDigest: input.paperTradingEvidence.contentDigest,
     confidenceAttestationJson: input.confidenceAttestation,
     recordContentDigest: input.recordContentDigest,

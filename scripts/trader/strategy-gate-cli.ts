@@ -39,6 +39,7 @@ import {
   createSqliteStrategyPromotionService,
   parseOperatorPromotionInputs,
   parsePaperEvaluationExportDocument,
+  parseResearchEvidenceExportDocument,
   summarizePaperEvidence,
 } from "@/lib/trader/validation-gate";
 import type { PromotionActor } from "@/lib/trader/validation-gate";
@@ -69,7 +70,7 @@ Usage:
 
 Subcommands:
   export    --org-id --window-start --window-end --strategy-signal-ids --execution-mode [--out]
-  request   --org-id --actor-id --evidence --inputs [--idempotency-key]
+  request   --org-id --actor-id --evidence --research-evidence --inputs [--idempotency-key]
   status    --org-id --record-id
   confirm   --org-id --actor-id --record-id --expected-state-version
   effective --org-id --actor-id --record-id --expected-state-version --ack
@@ -208,8 +209,16 @@ async function runRequest(flags: Flags): Promise<void> {
   const orgId = requireFlag(flags, "org-id");
   const actor = operatorActor(flags);
   const document = parsePaperEvaluationExportDocument(readFile(requireFlag(flags, "evidence")));
+  const researchEvidenceDocument = parseResearchEvidenceExportDocument(
+    readFile(requireFlag(flags, "research-evidence")),
+  );
   const inputs = parseOperatorPromotionInputs(readFile(requireFlag(flags, "inputs")));
-  const assembly = buildAssembleInput({ organizationId: orgId, inputs, document });
+  const assembly = buildAssembleInput({
+    organizationId: orgId,
+    inputs,
+    document,
+    researchEvidenceDocument,
+  });
 
   const db = getDb();
   const context = requireOrgContext(orgId);

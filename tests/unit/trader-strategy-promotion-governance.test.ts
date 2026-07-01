@@ -23,6 +23,7 @@ import {
 import { traderAuditActions } from "@/lib/trader/types";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
@@ -123,6 +124,7 @@ async function buildAssembly(orgId: string, strategyId = STRATEGY_ID, strategyVe
     failureModes: ["liquidity vacuum"],
     reasonCodeDistribution: { STRAT_MR_ZSCORE_BUY: 3 },
     paperTradingEvidenceDocument: document,
+    researchEvidenceDocument: buildValidResearchEvidenceDocument(orgId, { strategyId }),
     confidenceAttestation: {
       edgeNetOfCosts: "Net edge after costs.",
       liveTracksPaper: "Live should track paper.",

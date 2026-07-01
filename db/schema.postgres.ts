@@ -1149,6 +1149,7 @@ export const traderStrategyPromotionRecords = pgTable(
     failureModesJson: jsonb("failure_modes_json").notNull(),
     reasonCodeDistributionJson: jsonb("reason_code_distribution_json").notNull(),
     paperTradingEvidenceJson: jsonb("paper_trading_evidence_json").notNull(),
+    researchEvidenceJson: jsonb("research_evidence_json"),
     evidenceContentDigest: text("evidence_content_digest").notNull(),
     confidenceAttestationJson: jsonb("confidence_attestation_json").notNull(),
     recordContentDigest: text("record_content_digest").notNull(),

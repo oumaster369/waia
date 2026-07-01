@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { hasSufficientCanonicalRegimeCoverage } from "@/lib/trader/research/regime-taxonomy";
 import {
   RESEARCH_EVIDENCE_EXPORT_SCHEMA_VERSION,
   type ResearchEvidenceDocument,
@@ -45,7 +46,7 @@ export function buildResearchEvidenceSlot(
 }
 
 export function hasSufficientResearchRegimeCoverage(coverage: ResearchRegimeCoverage): boolean {
-  return coverage.nonTrendingCount >= 1 && coverage.downRegimeCount >= 1;
+  return hasSufficientCanonicalRegimeCoverage(coverage);
 }
 
 export function assertResearchEvidenceSchemaVersion(

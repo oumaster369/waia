@@ -1,21 +1,22 @@
+import type { Regime } from "@/lib/trader/intelligence/types";
+
 export const RESEARCH_EVIDENCE_EXPORT_SCHEMA_VERSION =
-  "waia.trader.research-evidence-export.v1" as const;
+  "waia.trader.research-evidence-export.v2" as const;
 
 export type ResearchEvidenceExportSchemaVersion = typeof RESEARCH_EVIDENCE_EXPORT_SCHEMA_VERSION;
 
-export const RESEARCH_REGIME_CLASSES = ["trend_up", "trend_down", "range", "high_vol"] as const;
-
-export type ResearchRegimeClass = (typeof RESEARCH_REGIME_CLASSES)[number];
-
+/** CDE regime labels — see {@link ./regime-taxonomy.ts}. */
 export type ResearchRegimeCoverage = {
-  regimes: ResearchRegimeClass[];
+  regimes: Regime[];
   nonTrendingCount: number;
   downRegimeCount: number;
+  satisfiesRequirement: boolean;
 };
 
 export type ResearchEvidenceExportBody = {
+  datasetId: string;
   backtestRunId: string;
-  walkForwardRunId: string;
+  strategyCandidateId: string;
   blindValidationResultId: string;
   costModelVersion: string;
   executionMode: "backtest";

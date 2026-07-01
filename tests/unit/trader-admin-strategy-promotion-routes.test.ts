@@ -24,6 +24,7 @@ import { REQUIRED_EFFECTIVE_ACK } from "@/lib/trader/validation-gate/operator-pr
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
+import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
 const ADMIN_ID = "00000000-0000-4000-8000-00000000d804";
@@ -223,6 +224,7 @@ describe("trader admin strategy promotion routes (IMP-U1 S4)", () => {
       strategy_id: strategyId,
       idempotency_key: randomUUID(),
       evidence,
+      research_evidence: buildValidResearchEvidenceDocument(orgId, { strategyId }),
       inputs,
     });
     expect(requestResult.status).toBe(200);
@@ -290,6 +292,7 @@ describe("trader admin strategy promotion routes (IMP-U1 S4)", () => {
       strategy_id: strategyId,
       idempotency_key: randomUUID(),
       evidence,
+      research_evidence: buildValidResearchEvidenceDocument(orgId, { strategyId }),
       inputs: buildInputsObject(strategyId),
     });
     expect(requestResult.status).toBe(200);

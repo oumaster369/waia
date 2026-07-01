@@ -2,7 +2,6 @@ import {
   RESEARCH_EVIDENCE_EXPORT_SCHEMA_VERSION,
   type ResearchEvidenceDocument,
   type ResearchEvidenceExportBody,
-  type ResearchRegimeClass,
 } from "@/lib/trader/research/research-evidence-export.types";
 import { computeResearchEvidenceExportDigest } from "@/lib/trader/research/serialize-research-evidence-export";
 
@@ -18,15 +17,17 @@ export function buildValidResearchEvidenceDocument(
   } = {},
 ): ResearchEvidenceDocument {
   const evidenceBody: ResearchEvidenceExportBody = {
+    datasetId: "00000000-0000-4000-8000-0000000ds1",
     backtestRunId: "00000000-0000-4000-8000-0000000b01",
-    walkForwardRunId: "00000000-0000-4000-8000-0000000wf1",
+    strategyCandidateId: "00000000-0000-4000-8000-0000000ca1",
     blindValidationResultId: "00000000-0000-4000-8000-0000000bl1",
-    costModelVersion: "ri-cost-v1",
+    costModelVersion: "waia.trader.cost-model.v1",
     executionMode: "backtest",
     regimeCoverage: {
-      regimes: ["range", "trend_down"] satisfies ResearchRegimeClass[],
+      regimes: ["RANGE", "TREND_BEAR"],
       nonTrendingCount: 1,
       downRegimeCount: 1,
+      satisfiesRequirement: true,
     },
     ...overrides.evidenceBody,
   };

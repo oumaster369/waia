@@ -30,7 +30,7 @@ export type StrategyPromotionRecordDigestInput = {
   failureModes: string[];
   reasonCodeDistribution: Record<string, number>;
   paperTradingEvidence: PaperEvaluationEvidenceSlot;
-  researchEvidence?: ResearchEvidenceSlot;
+  researchEvidence: ResearchEvidenceSlot;
   confidenceAttestation: ConfidenceAttestation;
 };
 
@@ -63,15 +63,11 @@ export function canonicalizeStrategyPromotionDigestInput(
       contentDigest: input.paperTradingEvidence.contentDigest,
       document: sortKeysDeep(input.paperTradingEvidence.document),
     },
-    ...(input.researchEvidence
-      ? {
-          researchEvidence: {
-            artifactSchemaVersion: input.researchEvidence.artifactSchemaVersion,
-            contentDigest: input.researchEvidence.contentDigest,
-            document: sortKeysDeep(input.researchEvidence.document),
-          },
-        }
-      : {}),
+    researchEvidence: {
+      artifactSchemaVersion: input.researchEvidence.artifactSchemaVersion,
+      contentDigest: input.researchEvidence.contentDigest,
+      document: sortKeysDeep(input.researchEvidence.document),
+    },
   }) as StrategyPromotionRecordDigestInput;
 }
 
@@ -118,7 +114,7 @@ export function buildStrategyPromotionRecordPayload(
     failureModes: input.failureModes,
     reasonCodeDistribution: input.reasonCodeDistribution,
     paperTradingEvidence: input.paperTradingEvidence,
-    ...(input.researchEvidence ? { researchEvidence: input.researchEvidence } : {}),
+    researchEvidence: input.researchEvidence,
     confidenceAttestation: input.confidenceAttestation,
     recordContentDigest,
   };

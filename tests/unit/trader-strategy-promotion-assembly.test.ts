@@ -6,6 +6,7 @@ import type {
   OrderRow,
 } from "@/lib/trader/execution/order-repository.types";
 import { buildPaperEvaluationExportDocument } from "@/lib/trader/paper/build-paper-evaluation-export";
+import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
 import {
   assembleStrategyPromotionRecord,
   StrategyPromotionValidationError,
@@ -113,6 +114,7 @@ function baseAssemblyInput(document: Awaited<ReturnType<typeof buildValidEvidenc
     failureModes: ["liquidity vacuum"],
     reasonCodeDistribution: { STRAT_MR_ZSCORE_BUY: 3 },
     paperTradingEvidenceDocument: document,
+    researchEvidenceDocument: buildValidResearchEvidenceDocument(ORG_A),
     confidenceAttestation: {
       edgeNetOfCosts: "Net edge after costs.",
       liveTracksPaper: "Live should track paper.",

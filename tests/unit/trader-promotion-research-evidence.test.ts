@@ -10,9 +10,9 @@ import {
   RESEARCH_EVIDENCE_EXPORT_SCHEMA_VERSION,
   type ResearchEvidenceDocument,
   type ResearchEvidenceExportBody,
-  type ResearchRegimeClass,
 } from "@/lib/trader/research/research-evidence-export.types";
 import { computeResearchEvidenceExportDigest } from "@/lib/trader/research/serialize-research-evidence-export";
+import { buildValidResearchEvidenceDocument as buildResearchEvidenceFixture } from "@/tests/helpers/build-research-evidence-fixture";
 import {
   assembleStrategyPromotionRecord,
   StrategyPromotionValidationError,
@@ -108,41 +108,28 @@ async function buildMockEvidenceDocument() {
   });
 }
 
+async function buildPaperEvidenceDocument() {
+  const buy = mockOrder({ id: "272-buy-paper", avgFillPrice: "100" });
+  const sell = mockOrder({ id: "272-sell-paper", side: "sell", avgFillPrice: "110" });
+  return buildPaperEvaluationExportDocument({
+    context: requireOrgContext(ORG_A),
+    orderRepository: mockRepository([buy, sell]),
+    window: { start: new Date(100), end: new Date(200) },
+    strategySignalIds: [STRATEGY_SIGNAL],
+    executionMode: "paper",
+    exportedAt: EXPORTED_AT,
+  });
+}
+
 function buildValidResearchEvidenceDocument(
   overrides: Partial<ResearchEvidenceDocument["evidenceBody"]> = {},
 ): ResearchEvidenceDocument {
-  const evidenceBody: ResearchEvidenceExportBody = {
-    backtestRunId: "00000000-0000-4000-8000-0000000b01",
-    walkForwardRunId: "00000000-0000-4000-8000-0000000wf1",
-    blindValidationResultId: "00000000-0000-4000-8000-0000000bl1",
-    costModelVersion: "ri-cost-v1",
-    executionMode: "backtest",
-    regimeCoverage: {
-      regimes: ["range", "trend_down"] satisfies ResearchRegimeClass[],
-      nonTrendingCount: 1,
-      downRegimeCount: 1,
-    },
-    ...overrides,
-  };
-
-  const contentDigest = computeResearchEvidenceExportDigest(evidenceBody);
-
-  return {
-    schemaVersion: RESEARCH_EVIDENCE_EXPORT_SCHEMA_VERSION,
-    envelope: {
-      organizationId: ORG_A,
-      strategyId: "mean_reversion_v0",
-      strategyVersion: "0.1.0",
-      exportedAt: EXPORTED_AT.toISOString(),
-      contentDigest,
-    },
-    evidenceBody,
-  };
+  return buildResearchEvidenceFixture(ORG_A, { evidenceBody: overrides });
 }
 
 function baseAssemblyInput(
   document: Awaited<ReturnType<typeof buildMockEvidenceDocument>>,
-  researchEvidenceDocument?: ResearchEvidenceDocument,
+  researchEvidenceDocument: ResearchEvidenceDocument = buildValidResearchEvidenceDocument(),
 ) {
   return {
     organizationId: ORG_A,
@@ -155,7 +142,7 @@ function baseAssemblyInput(
     failureModes: ["liquidity vacuum"],
     reasonCodeDistribution: { STRAT_MR_ZSCORE_BUY: 3 },
     paperTradingEvidenceDocument: document,
-    ...(researchEvidenceDocument ? { researchEvidenceDocument } : {}),
+    researchEvidenceDocument,
     confidenceAttestation: {
       edgeNetOfCosts: "Net edge after costs.",
       liveTracksPaper: "Live should track paper.",
@@ -165,7 +152,7 @@ function baseAssemblyInput(
 }
 
 describe("assembleStrategyPromotionRecord research evidence (RI-P6)", () => {
-  it("rejects mock-only paper evidence without research bundle", async () => {
+  it("rejects mock-only paper evidence even with research bundle", async () => {
     const document = await buildMockEvidenceDocument();
 
     expect(() => assembleStrategyPromotionRecord(baseAssemblyInput(document))).toThrow(
@@ -179,22 +166,33 @@ describe("assembleStrategyPromotionRecord research evidence (RI-P6)", () => {
     }
   });
 
-  it("accepts mock paper evidence when research bundle has sufficient regime coverage", async () => {
-    const document = await buildMockEvidenceDocument();
+  it("rejects paper-only evidence without research bundle", async () => {
+    const document = await buildPaperEvidenceDocument();
+    const input = {
+      ...baseAssemblyInput(document),
+      researchEvidenceDocument: undefined as unknown as ResearchEvidenceDocument,
+    };
+
+    expect(() => assembleStrategyPromotionRecord(input)).toThrow(StrategyPromotionValidationError);
+  });
+
+  it("accepts paper evidence when research bundle has sufficient regime coverage", async () => {
+    const document = await buildPaperEvidenceDocument();
     const research = buildValidResearchEvidenceDocument();
     const payload = assembleStrategyPromotionRecord(baseAssemblyInput(document, research));
 
-    expect(payload.researchEvidence?.contentDigest).toBe(research.envelope.contentDigest);
+    expect(payload.researchEvidence.contentDigest).toBe(research.envelope.contentDigest);
     expect(payload.paperTradingEvidence.contentDigest).toBe(document.envelope.contentDigest);
   });
 
   it("rejects research bundle with insufficient regime coverage", async () => {
-    const document = await buildMockEvidenceDocument();
+    const document = await buildPaperEvidenceDocument();
     const research = buildValidResearchEvidenceDocument({
       regimeCoverage: {
-        regimes: ["trend_up"],
+        regimes: ["TREND_BULL"],
         nonTrendingCount: 0,
         downRegimeCount: 0,
+        satisfiesRequirement: false,
       },
     });
 
@@ -212,9 +210,20 @@ describe("assembleStrategyPromotionRecord research evidence (RI-P6)", () => {
   });
 
   it("rejects tampered research evidence digest", async () => {
-    const document = await buildMockEvidenceDocument();
+    const document = await buildPaperEvidenceDocument();
     const research = buildValidResearchEvidenceDocument();
     research.envelope.contentDigest = "deadbeef".repeat(8);
+
+    expect(() => assembleStrategyPromotionRecord(baseAssemblyInput(document, research))).toThrow(
+      StrategyPromotionValidationError,
+    );
+  });
+
+  it("requires research evidence schema v2", async () => {
+    const document = await buildPaperEvidenceDocument();
+    const research = buildValidResearchEvidenceDocument();
+    research.schemaVersion =
+      "waia.trader.research-evidence-export.v1" as typeof RESEARCH_EVIDENCE_EXPORT_SCHEMA_VERSION;
 
     expect(() => assembleStrategyPromotionRecord(baseAssemblyInput(document, research))).toThrow(
       StrategyPromotionValidationError,

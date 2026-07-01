@@ -120,6 +120,7 @@ type StrategyPromotionCommandBody = {
   ack?: string;
   idempotency_key?: string;
   evidence?: unknown;
+  research_evidence?: unknown;
   inputs?: unknown;
 };
 
@@ -193,6 +194,7 @@ export async function handleAdminStrategyPromotionCommandPost(
           organizationId,
           strategyId,
           evidence: body.evidence,
+          researchEvidence: body.research_evidence,
           inputs: body.inputs,
         });
       } catch (err) {

@@ -53,3 +53,23 @@ export class MultiRegimeCoverageError extends Error {
     this.name = "MultiRegimeCoverageError";
   }
 }
+
+export class ResearchEvidenceProvenanceError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message?: string) {
+    super(message ?? code);
+    this.name = "ResearchEvidenceProvenanceError";
+    this.code = code;
+  }
+}
+
+export class ResearchOrchestratorError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message?: string) {
+    super(message ?? code);
+    this.name = "ResearchOrchestratorError";
+    this.code = code;
+  }
+}

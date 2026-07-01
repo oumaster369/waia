@@ -11,6 +11,7 @@ import {
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
+type PgBacktestReadExecutor = Pick<WaiaPostgresDb, "select">;
 type PgBacktestExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
 
 export type BacktestRunStatus = "pending" | "running" | "completed" | "failed";
@@ -126,7 +127,7 @@ export async function createBacktestRunPostgres(
 }
 
 export async function getBacktestRunByIdPostgres(
-  ex: PgBacktestExecutor,
+  ex: PgBacktestReadExecutor,
   context: OrgContext,
   runId: string,
 ): Promise<BacktestRunView | null> {

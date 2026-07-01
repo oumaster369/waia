@@ -1184,6 +1184,7 @@ export const traderStrategyPromotionRecords = sqliteTable(
     failureModesJson: text("failure_modes_json").notNull(),
     reasonCodeDistributionJson: text("reason_code_distribution_json").notNull(),
     paperTradingEvidenceJson: text("paper_trading_evidence_json").notNull(),
+    researchEvidenceJson: text("research_evidence_json"),
     evidenceContentDigest: text("evidence_content_digest").notNull(),
     confidenceAttestationJson: text("confidence_attestation_json").notNull(),
     recordContentDigest: text("record_content_digest").notNull(),

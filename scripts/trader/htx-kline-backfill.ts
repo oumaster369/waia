@@ -142,7 +142,22 @@ async function main(): Promise<void> {
   }
 
   const config = resolveHtxKlineBackfillConfig(flags);
-  await runHtxKlineBackfill(config);
+  const { getPostgresDrizzle } = await import("@/db/postgres-client");
+  const { insertMarketBarsPostgres } =
+    await import("@/lib/trader/market-data/market-bars-repository-postgres");
+  const { requireOrgContext } = await import("@/lib/waia-core/scope/org-context");
+
+  const db = getPostgresDrizzle();
+  await runHtxKlineBackfill(config, {
+    insertBars: async (organizationId, bars) => {
+      const context = requireOrgContext(organizationId);
+      await insertMarketBarsPostgres(
+        db,
+        context,
+        bars.map((bar) => ({ bar })),
+      );
+    },
+  });
 }
 
 if (process.env.WAIA_TRADER_CLI === "1") {

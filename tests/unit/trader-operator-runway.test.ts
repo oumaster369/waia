@@ -28,6 +28,7 @@ import { listAuditLogsForEntitySqlite } from "@/lib/waia-core/audit/read";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
+import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 import { HANDLERS, parseFlags } from "@/scripts/trader/strategy-gate-cli";
 
@@ -137,7 +138,15 @@ function inputsJson(strategyId: string, strategyVersion = "0.1.0"): string {
 async function assemblyFor(orgId: string, strategyId: string, strategyVersion = "0.1.0") {
   const document = parsePaperEvaluationExportDocument(await evidenceDocumentJson(orgId));
   const inputs = parseOperatorPromotionInputs(inputsJson(strategyId, strategyVersion));
-  return buildAssembleInput({ organizationId: orgId, inputs, document });
+  return buildAssembleInput({
+    organizationId: orgId,
+    inputs,
+    document,
+    researchEvidenceDocument: buildValidResearchEvidenceDocument(orgId, {
+      strategyId,
+      strategyVersion,
+    }),
+  });
 }
 
 describe("strategy gate operator runway (DEE-277 S2–S4)", () => {
@@ -231,7 +240,14 @@ describe("strategy gate operator runway (DEE-277 S2–S4)", () => {
     mutated.evidenceBody.orgPeriodRollup.periodRealizedPnl = "999999";
     const document = parsePaperEvaluationExportDocument(JSON.stringify(mutated));
     const inputs = parseOperatorPromotionInputs(inputsJson("rw_tamper"));
-    const assembly = buildAssembleInput({ organizationId: org, inputs, document });
+    const assembly = buildAssembleInput({
+      organizationId: org,
+      inputs,
+      document,
+      researchEvidenceDocument: buildValidResearchEvidenceDocument(org, {
+        strategyId: "rw_tamper",
+      }),
+    });
 
     await expect(
       service.requestPromotion(ACTOR, context, { idempotencyKey: randomUUID(), assembly }),
