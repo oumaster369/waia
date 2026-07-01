@@ -19,6 +19,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 | 4 | [AI-TRADER MVP Scope v2](AI-TRADER-MVP-SCOPE-v2.md) | What is IN / OUT (HTX-only, spot-only, paper-first). |
 | 5 | [AI-TRADER Roadmap v2](AI-TRADER-ROADMAP-v2.md) | Governing build sequence (Core uplift first, safety spine pulled forward). |
 | 6 | [AI-TRADER Implementation Program](AI-TRADER-IMPLEMENTATION-PROGRAM.md) | **Program v1.2** — execution blueprint (Milestones / Epics / Feature Groups) that drives Linear. |
+| 6b | [AI-TRADER Research Intelligence Program](AI-TRADER-RESEARCH-INTELLIGENCE-PROGRAM.md) | **RI Program** — M11 research spine, MKB, operator; Batch H (RI-P7) evidence + Production Knowledge Asset. |
 | 7 | [AI-TRADER Security](AI-TRADER-SECURITY.md) | Binding security model (credentials, key management, kill switches, audit). |
 | 8 | [AI-TRADER Billing & HWM](AI-TRADER-BILLING-HWM.md) | Single source of truth for fees / high-water mark. |
 | 9 | [AI-TRADER Integration](AI-TRADER-INTEGRATION.md) | Relationships with Core, AI-TWIN, future modules. |
@@ -42,7 +43,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 - **Platform foundation (wins on conflict):** [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md).
 - **Execution blueprint:** [AI-TRADER Implementation Program v1.2](AI-TRADER-IMPLEMENTATION-PROGRAM.md).
 - **Governing MVP execution (Execution Freeze):** [AI-TRADER MVP Execution Program v2](AI-TRADER-MVP-EXECUTION-PROGRAM-v2.md).
-- **Decisions:** [ADR index](../adr/README.md) — AI-TRADER spans **[ADR-0005](../adr/0005-saas-as-superset-strategy.md) … [ADR-0017](../adr/0017-postgres-only-trader-mvp.md)**.
+- **Decisions:** [ADR index](../adr/README.md) — AI-TRADER spans **[ADR-0005](../adr/0005-saas-as-superset-strategy.md) … [ADR-0019](../adr/0019-ai-operator-intelligence-authority.md)**.
 - **MVP closure (Step 10):** [AI-TRADER MVP Ratification](AI-TRADER-MVP-RATIFICATION.md) — scope-freeze charter; **RATIFIED** 2026-06-29; supersedes nothing.
 - **Subject owners:** [Security](AI-TRADER-SECURITY.md), [Billing & HWM](AI-TRADER-BILLING-HWM.md), [Closed Trade Reality Doctrine (LD-10)](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md) (realized fee base).
 

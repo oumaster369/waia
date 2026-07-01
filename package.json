@@ -21,6 +21,7 @@
     "trader:gate": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/strategy-gate-cli.ts",
     "trader:htx:backfill": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/htx-kline-backfill.ts",
     "trader:research:pipeline": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/research-pipeline-cli.ts",
+    "trader:ri:campaign": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/ri-evidence-campaign.ts",
     "trader:paper:export": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/export-paper-evaluation.ts",
     "trader:live:request": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/live-cli.ts request",
     "trader:live:confirm": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/live-cli.ts confirm",
