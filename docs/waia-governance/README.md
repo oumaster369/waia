@@ -48,3 +48,5 @@ WAIA DEV OS operational layer:
 Architectural WHY: [`../adr/`](../adr/README.md).
 
 Product onboarding hub: [`../product/WAIA-V1-MVP-SPEC.md`](../product/WAIA-V1-MVP-SPEC.md).
+
+Module product canon (non-governance): [AI-TRADER Product Constitution](../AI-TRADER-PRODUCT-CONSTITUTION.md) — product-level definition of the finished AI-TRADER module; indexed from [`../ai-trader/README.md`](../ai-trader/README.md).

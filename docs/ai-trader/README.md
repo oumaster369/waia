@@ -4,7 +4,7 @@ Status: Baseline v1.2 (governing) · Date: 2026-06-11
 
 AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reachable at `trader.waia.life`. It attaches to **WAIA Core** for identity, tenancy, entitlements, payments, and audit. This README is the navigation index for the AI-TRADER corpus — it routes, it does not redefine.
 
-> **Authority order:** [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md) wins over any module document. Within AI-TRADER, the [Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) is the governing technical specification; subject-owner docs (Security, Billing & HWM) are authoritative for their subject. Decisions are recorded as [ADRs](../adr/README.md) (AI-TRADER decisions = **ADR-0005 … ADR-0011**).
+> **Authority order:** [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md) wins over any module document. Within AI-TRADER, the [Product Constitution](../AI-TRADER-PRODUCT-CONSTITUTION.md) defines the *finished product* (what AI-TRADER must be); the [Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) is the governing technical specification; subject-owner docs (Security, Billing & HWM) are authoritative for their subject. Decisions are recorded as [ADRs](../adr/README.md) (AI-TRADER decisions = **ADR-0005 … ADR-0019**).
 
 ---
 
@@ -12,6 +12,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 
 | # | Document | Role |
 |---|----------|------|
+| 0 | [AI-TRADER Product Constitution](../AI-TRADER-PRODUCT-CONSTITUTION.md) | **Product canon** — what the finished AI-TRADER product is (knowledge-first RI + Market Knowledge + recommend-only operator); not a roadmap or spec. |
 | 1 | [AI-TRADER Vision](AI-TRADER-VISION.md) | Purpose, philosophy, long-term direction (no timelines/budgets). |
 | 2 | [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md) | Shared platform AI-TRADER depends on (read before the spec). |
 | 3 | [AI-TRADER Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) | **Governing technical specification** (architecture + contracts; no code). |
@@ -36,6 +37,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 
 ## Authoritative sources
 
+- **Product canon (what the finished module is):** [AI-TRADER Product Constitution](../AI-TRADER-PRODUCT-CONSTITUTION.md).
 - **Governing technical spec:** [AI-TRADER Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) (Baseline v1.2).
 - **Platform foundation (wins on conflict):** [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md).
 - **Execution blueprint:** [AI-TRADER Implementation Program v1.2](AI-TRADER-IMPLEMENTATION-PROGRAM.md).
