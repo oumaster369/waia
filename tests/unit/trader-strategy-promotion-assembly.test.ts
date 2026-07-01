@@ -96,7 +96,7 @@ async function buildValidEvidenceDocument() {
     orderRepository: mockRepository([buy, sell]),
     window: { start: new Date(100), end: new Date(200) },
     strategySignalIds: [STRATEGY_SIGNAL],
-    executionMode: "mock",
+    executionMode: "paper",
     exportedAt: EXPORTED_AT,
   });
 }

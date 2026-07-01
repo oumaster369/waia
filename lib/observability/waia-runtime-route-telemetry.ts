@@ -34,6 +34,7 @@ export type WaiaRuntimeRouteKey =
   | "trader_exchange_credentials_list"
   | "trader_exchange_credentials_sync_balances"
   | "trader_balance_snapshots_list"
+  | "trader_research_runs_list"
   | "trader_exchange_credentials_sync_positions"
   | "trader_position_snapshots_list"
   | "trader_exchange_credentials_sync_trades"

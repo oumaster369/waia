@@ -36,7 +36,7 @@ function parseCounter(line: string): Record<string, unknown> {
 }
 
 describe("trader intelligence evaluation cycle decision telemetry (DEE-259)", () => {
-  it("golden fixture emits 2 decision counters before 1 strategy counter", () => {
+  it("golden fixture emits 2 decision counters before strategy counters", () => {
     const fixture = loadFixture();
     const { lines, sink } = captureSink();
 
@@ -48,7 +48,7 @@ describe("trader intelligence evaluation cycle decision telemetry (DEE-259)", ()
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
     expect(parseCounter(lines[0]!)).toMatchObject({
       domain: "decision",
       code: cdeReasonCodes.qualityAllowTrading,

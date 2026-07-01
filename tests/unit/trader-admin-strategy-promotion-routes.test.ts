@@ -113,7 +113,7 @@ async function buildEvidenceObject(orgId: string) {
     ]),
     window: { start: new Date(100), end: new Date(200) },
     strategySignalIds: [SIGNAL],
-    executionMode: "mock",
+    executionMode: "paper",
     exportedAt: new Date("2026-06-18T12:00:00.000Z"),
   });
 }

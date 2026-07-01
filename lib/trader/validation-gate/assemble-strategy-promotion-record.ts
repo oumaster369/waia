@@ -1,5 +1,11 @@
 import { PAPER_EVALUATION_EXPORT_SCHEMA_VERSION } from "@/lib/trader/paper/paper-evaluation-export.types";
 import { computePaperEvaluationExportDigest } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import { RESEARCH_EVIDENCE_EXPORT_SCHEMA_VERSION } from "@/lib/trader/research/research-evidence-export.types";
+import {
+  buildResearchEvidenceSlot,
+  computeResearchEvidenceExportDigest,
+  hasSufficientResearchRegimeCoverage,
+} from "@/lib/trader/research/serialize-research-evidence-export";
 import { StrategyPromotionValidationError } from "@/lib/trader/validation-gate/strategy-promotion-record.errors";
 import {
   buildPaperTradingEvidenceSlot,
@@ -33,6 +39,63 @@ function assertReasonCodeDistribution(distribution: Record<string, number>): voi
   }
 }
 
+function assertResearchEvidenceDocument(
+  input: AssembleStrategyPromotionRecordInput,
+): ReturnType<typeof buildResearchEvidenceSlot> | undefined {
+  const document = input.researchEvidenceDocument;
+  if (!document) {
+    return undefined;
+  }
+
+  if (document.schemaVersion !== RESEARCH_EVIDENCE_EXPORT_SCHEMA_VERSION) {
+    throw new StrategyPromotionValidationError(
+      "STRATEGY_PROMOTION_RESEARCH_EVIDENCE_SCHEMA_MISMATCH",
+    );
+  }
+
+  if (document.envelope.organizationId !== input.organizationId) {
+    throw new StrategyPromotionValidationError("STRATEGY_PROMOTION_RESEARCH_EVIDENCE_ORG_MISMATCH");
+  }
+
+  if (document.envelope.strategyId !== input.strategyId) {
+    throw new StrategyPromotionValidationError(
+      "STRATEGY_PROMOTION_RESEARCH_EVIDENCE_STRATEGY_MISMATCH",
+    );
+  }
+
+  if (document.envelope.strategyVersion !== input.strategyVersion) {
+    throw new StrategyPromotionValidationError(
+      "STRATEGY_PROMOTION_RESEARCH_EVIDENCE_VERSION_MISMATCH",
+    );
+  }
+
+  if (document.evidenceBody.executionMode !== "backtest") {
+    throw new StrategyPromotionValidationError("STRATEGY_PROMOTION_RESEARCH_EVIDENCE_MODE_INVALID");
+  }
+
+  const recomputedDigest = computeResearchEvidenceExportDigest(document.evidenceBody);
+  if (recomputedDigest !== document.envelope.contentDigest) {
+    throw new StrategyPromotionValidationError(
+      "STRATEGY_PROMOTION_RESEARCH_EVIDENCE_DIGEST_MISMATCH",
+    );
+  }
+
+  if (!hasSufficientResearchRegimeCoverage(document.evidenceBody.regimeCoverage)) {
+    throw new StrategyPromotionValidationError(
+      "STRATEGY_PROMOTION_RESEARCH_REGIME_COVERAGE_INSUFFICIENT",
+    );
+  }
+
+  const researchEvidence = buildResearchEvidenceSlot(document);
+  if (researchEvidence.contentDigest !== document.envelope.contentDigest) {
+    throw new StrategyPromotionValidationError(
+      "STRATEGY_PROMOTION_RESEARCH_EVIDENCE_SLOT_DIGEST_MISMATCH",
+    );
+  }
+
+  return researchEvidence;
+}
+
 export function assembleStrategyPromotionRecord(
   input: AssembleStrategyPromotionRecordInput,
 ): StrategyPromotionRecordPayload {
@@ -61,6 +124,10 @@ export function assembleStrategyPromotionRecord(
     throw new StrategyPromotionValidationError("STRATEGY_PROMOTION_EVIDENCE_MODE_INVALID");
   }
 
+  if (executionMode === "mock" && !input.researchEvidenceDocument) {
+    throw new StrategyPromotionValidationError("STRATEGY_PROMOTION_MOCK_EVIDENCE_INSUFFICIENT");
+  }
+
   if (document.evidenceBody.dataQuality.reconciliationStatus !== "clean") {
     throw new StrategyPromotionValidationError("STRATEGY_PROMOTION_EVIDENCE_RECONCILIATION_DIRTY");
   }
@@ -75,6 +142,8 @@ export function assembleStrategyPromotionRecord(
     throw new StrategyPromotionValidationError("STRATEGY_PROMOTION_EVIDENCE_SLOT_DIGEST_MISMATCH");
   }
 
+  const researchEvidence = assertResearchEvidenceDocument(input);
+
   return buildStrategyPromotionRecordPayload({
     organizationId: input.organizationId,
     strategyId: input.strategyId,
@@ -87,6 +156,7 @@ export function assembleStrategyPromotionRecord(
     failureModes: input.failureModes,
     reasonCodeDistribution: input.reasonCodeDistribution,
     paperTradingEvidence,
+    ...(researchEvidence ? { researchEvidence } : {}),
     confidenceAttestation: input.confidenceAttestation,
   });
 }

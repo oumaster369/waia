@@ -118,7 +118,7 @@ describe("trader paper cycle runner integration (DEE-260)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-paper-cycle-260");
   });
 
-  it("runs 3 fixture cycles with unique idempotency keys and 12 intelligence telemetry lines", async () => {
+  it("runs 3 fixture cycles with unique idempotency keys and 15 intelligence telemetry lines", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);
@@ -160,14 +160,15 @@ describe("trader paper cycle runner integration (DEE-260)", () => {
     expect(idempotencyKeys.has("client-paper-cycle-dee-260-2-mean_reversion_v0")).toBe(true);
 
     const intelligenceLines = lines.filter(isIntelligenceCounter);
-    expect(intelligenceLines).toHaveLength(12);
+    expect(intelligenceLines).toHaveLength(15);
 
     for (let cycle = 0; cycle < 3; cycle += 1) {
-      const offset = cycle * 4;
+      const offset = cycle * 5;
       expect(parseCounter(intelligenceLines[offset]!).domain).toBe("decision");
       expect(parseCounter(intelligenceLines[offset + 1]!).domain).toBe("decision");
       expect(parseCounter(intelligenceLines[offset + 2]!).domain).toBe("strategy");
       expect(parseCounter(intelligenceLines[offset + 3]!).domain).toBe("strategy");
+      expect(parseCounter(intelligenceLines[offset + 4]!).domain).toBe("strategy");
     }
   });
 });

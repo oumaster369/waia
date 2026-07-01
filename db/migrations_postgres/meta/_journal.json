@@ -449,6 +449,20 @@
       "when": 1780000000026,
       "tag": "0063_trader_org_live_enable_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1780000000027,
+      "tag": "0064_research_intelligence_substrate",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1780000000028,
+      "tag": "0065_research_intelligence_substrate_rls",
+      "breakpoints": true
     }
   ]
 }

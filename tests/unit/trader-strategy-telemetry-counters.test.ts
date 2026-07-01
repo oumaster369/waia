@@ -11,6 +11,7 @@ import {
   MEAN_REVERSION_V0,
   MEAN_REVERSION_V0_VERSION,
   strategyReasonCodes,
+  trendMomentumReasonCodes,
   type StrategySignal,
 } from "@/lib/trader/intelligence/types";
 
@@ -48,6 +49,7 @@ describe("strategy-telemetry counters (DEE-258)", () => {
     const allCodes = [
       ...Object.values(strategyReasonCodes),
       ...Object.values(liquiditySweepReasonCodes),
+      ...Object.values(trendMomentumReasonCodes),
     ];
     expect(STRATEGY_COUNTER_CODES.size).toBe(allCodes.length);
     for (const code of allCodes) {
@@ -55,24 +57,25 @@ describe("strategy-telemetry counters (DEE-258)", () => {
     }
   });
 
-  it.each([...Object.values(strategyReasonCodes), ...Object.values(liquiditySweepReasonCodes)])(
-    "emitStrategyReasonCodeCounter emits strategy domain counter for %s",
-    (code) => {
-      const { lines, sink } = captureSink();
-      emitStrategyReasonCodeCounter({ organizationId: ORG_ID, code }, sink);
+  it.each([
+    ...Object.values(strategyReasonCodes),
+    ...Object.values(liquiditySweepReasonCodes),
+    ...Object.values(trendMomentumReasonCodes),
+  ])("emitStrategyReasonCodeCounter emits strategy domain counter for %s", (code) => {
+    const { lines, sink } = captureSink();
+    emitStrategyReasonCodeCounter({ organizationId: ORG_ID, code }, sink);
 
-      expect(parseCounter(lines)).toMatchObject({
-        event: "waia_trader_event",
-        kind: "counter",
-        organization_id: ORG_ID,
-        outcome: "increment",
-        domain: "strategy",
-        code,
-        delta: 1,
-        severity: "info",
-      });
-    },
-  );
+    expect(parseCounter(lines)).toMatchObject({
+      event: "waia_trader_event",
+      kind: "counter",
+      organization_id: ORG_ID,
+      outcome: "increment",
+      domain: "strategy",
+      code,
+      delta: 1,
+      severity: "info",
+    });
+  });
 
   it("rejects invalid strategy counter codes", () => {
     expect(() =>

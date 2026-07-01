@@ -16,6 +16,7 @@ import {
 import {
   LIQUIDITY_SWEEP_REVERSAL_V0,
   MEAN_REVERSION_V0,
+  TREND_MOMENTUM_V0,
   type Bar,
   type Quote,
 } from "@/lib/trader/intelligence/types";
@@ -23,23 +24,22 @@ import {
 const ORG = "00000000-0000-4000-8000-0000000203";
 
 describe("strategy registry (DEE-203)", () => {
-  it("registers both MVP strategies with version and lifecycle metadata", () => {
+  it("registers all MVP strategies with version and lifecycle metadata", () => {
     const registry = listMvpStrategyRegistry();
-    expect(registry).toHaveLength(2);
-    expect(registry.map((entry) => entry.strategyId).sort()).toEqual([
-      LIQUIDITY_SWEEP_REVERSAL_V0,
-      MEAN_REVERSION_V0,
-    ]);
+    expect(registry).toHaveLength(3);
+    expect(registry.map((entry) => entry.strategyId).sort()).toEqual(
+      [LIQUIDITY_SWEEP_REVERSAL_V0, MEAN_REVERSION_V0, TREND_MOMENTUM_V0].sort(),
+    );
     for (const entry of registry) {
       expect(entry.version).toMatch(/^\d+\.\d+\.\d+$/);
-      expect(entry.lifecycleState).toBe("PAPER");
+      expect(["PAPER", "RESEARCHING"]).toContain(entry.lifecycleState);
       expect(getStrategyRegistryEntry(entry.strategyId)).toEqual(entry);
     }
   });
 
-  it("assigns both strategies to every org in MVP model", () => {
+  it("assigns all MVP strategies to every org in MVP model", () => {
     const assignments = resolveMvpStrategyAssignments(ORG);
-    expect(assignments).toHaveLength(2);
+    expect(assignments).toHaveLength(3);
     for (const strategyId of assignments) {
       expect(isMvpStrategyId(strategyId)).toBe(true);
     }
@@ -103,9 +103,10 @@ describe("strategy fixture replay (P4 exit criterion)", () => {
       bars: fixture.bars,
       newId: () => "sig-dispatch",
     });
-    expect(signals).toHaveLength(2);
+    expect(signals).toHaveLength(3);
     expect(msv.derived.allowedStrategyIds).toEqual(
       expect.arrayContaining([MEAN_REVERSION_V0, LIQUIDITY_SWEEP_REVERSAL_V0]),
     );
+    expect(msv.derived.allowedStrategyIds).not.toContain(TREND_MOMENTUM_V0);
   });
 });

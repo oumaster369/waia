@@ -1965,6 +1965,318 @@ export const paymentWatcherCheckpoints = pgTable("payment_watcher_checkpoints", 
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
 
+/** RI-P1: canonical append-only OHLCV history (ADR-0018). */
+export const traderMarketBars = pgTable(
+  "trader_market_bars",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    interval: text("interval").notNull(),
+    barOpenTime: timestamp("bar_open_time", { withTimezone: true, mode: "date" }).notNull(),
+    barCloseTime: timestamp("bar_close_time", { withTimezone: true, mode: "date" }).notNull(),
+    open: text("open").notNull(),
+    high: text("high").notNull(),
+    low: text("low").notNull(),
+    close: text("close").notNull(),
+    volume: text("volume").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    ingestedAt: timestamp("ingested_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_market_bars_org_symbol_interval_open_unique").on(
+      t.organizationId,
+      t.symbol,
+      t.interval,
+      t.barOpenTime,
+    ),
+    index("trader_market_bars_org_symbol_time_idx").on(t.organizationId, t.symbol, t.barOpenTime),
+  ],
+);
+
+/** RI-P1: extensible Layer-1 market facts. */
+export const traderMarketFacts = pgTable(
+  "trader_market_facts",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    factKind: text("fact_kind").notNull(),
+    subjectRef: text("subject_ref").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_market_facts_org_digest_unique").on(t.organizationId, t.contentDigest),
+    index("trader_market_facts_org_kind_subject_idx").on(
+      t.organizationId,
+      t.factKind,
+      t.subjectRef,
+    ),
+  ],
+);
+
+export const researchDatasetSplitEnumPg = pgEnum("research_dataset_split", [
+  "train",
+  "validation",
+  "blind",
+]);
+
+/** RI-P1: sealed research datasets with train/validation/blind splits. */
+export const researchDataset = pgTable(
+  "research_dataset",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    symbol: text("symbol").notNull(),
+    interval: text("interval").notNull(),
+    trainBarCount: integer("train_bar_count").notNull(),
+    validationBarCount: integer("validation_bar_count").notNull(),
+    blindBarCount: integer("blind_bar_count").notNull(),
+    trainDigest: text("train_digest").notNull(),
+    validationDigest: text("validation_digest").notNull(),
+    blindDigest: text("blind_digest").notNull(),
+    sealedAt: timestamp("sealed_at", { withTimezone: true, mode: "date" }).notNull(),
+    metadataJson: text("metadata_json").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("research_dataset_org_name_unique").on(t.organizationId, t.name)],
+);
+
+export const backtestRunStatusEnumPg = pgEnum("backtest_run_status", [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+]);
+
+/** RI-P2: backtest run registry. */
+export const traderBacktestRuns = pgTable(
+  "trader_backtest_runs",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    datasetId: uuid("dataset_id")
+      .notNull()
+      .references(() => researchDataset.id, { onDelete: "restrict" }),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    costModelVersion: text("cost_model_version").notNull(),
+    split: researchDatasetSplitEnumPg("split").notNull(),
+    status: backtestRunStatusEnumPg("status").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "date" }),
+    completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }),
+    evidenceDigest: text("evidence_digest"),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_backtest_runs_org_strategy_idx").on(t.organizationId, t.strategyId, t.createdAt),
+  ],
+);
+
+/** RI-P2: per-regime backtest result slices. */
+export const traderBacktestResults = pgTable(
+  "trader_backtest_results",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => traderBacktestRuns.id, { onDelete: "cascade" }),
+    regimeLabel: text("regime_label").notNull(),
+    metricsJson: text("metrics_json").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("trader_backtest_results_run_regime_idx").on(t.runId, t.regimeLabel)],
+);
+
+export const strategyCandidateStatusEnumPg = pgEnum("strategy_candidate_status", [
+  "draft",
+  "registered",
+  "backtested",
+  "walk_forward_validated",
+  "blind_validated",
+  "rejected",
+]);
+
+/** RI-P3: strategy candidate experiment registry. */
+export const traderStrategyCandidates = pgTable(
+  "trader_strategy_candidates",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    hypothesisId: uuid("hypothesis_id"),
+    trialId: uuid("trial_id"),
+    status: strategyCandidateStatusEnumPg("status").notNull(),
+    paramsJson: text("params_json").notNull(),
+    blindUsed: boolean("blind_used").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_strategy_candidates_org_strategy_version_unique").on(
+      t.organizationId,
+      t.strategyId,
+      t.strategyVersion,
+    ),
+  ],
+);
+
+/** RI-P3: walk-forward window results. */
+export const traderWalkForwardWindows = pgTable(
+  "trader_walk_forward_windows",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => traderStrategyCandidates.id, { onDelete: "cascade" }),
+    windowIndex: integer("window_index").notNull(),
+    inSampleDigest: text("in_sample_digest").notNull(),
+    outOfSampleDigest: text("out_of_sample_digest").notNull(),
+    metricsJson: text("metrics_json").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_walk_forward_windows_candidate_idx_unique").on(
+      t.candidateId,
+      t.windowIndex,
+    ),
+  ],
+);
+
+/** RI-P3: immutable blind validation result (single-shot). */
+export const traderBlindValidationResults = pgTable(
+  "trader_blind_validation_results",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => traderStrategyCandidates.id, { onDelete: "restrict" }),
+    datasetId: uuid("dataset_id")
+      .notNull()
+      .references(() => researchDataset.id, { onDelete: "restrict" }),
+    metricsJson: text("metrics_json").notNull(),
+    evidenceDigest: text("evidence_digest").notNull(),
+    validatedAt: timestamp("validated_at", { withTimezone: true, mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("trader_blind_validation_results_candidate_unique").on(t.candidateId)],
+);
+
+/** RI-P4: Layer-2 market events. */
+export const traderMarketEvents = pgTable(
+  "trader_market_events",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    eventKind: text("event_kind").notNull(),
+    subjectRef: text("subject_ref").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    confidence: text("confidence").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_market_events_org_digest_unique").on(t.organizationId, t.contentDigest),
+  ],
+);
+
+/** RI-P4: Layer-3 knowledge edges (correlational hypotheses). */
+export const traderKnowledgeEdges = pgTable(
+  "trader_knowledge_edges",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    fromRef: text("from_ref").notNull(),
+    toRef: text("to_ref").notNull(),
+    relationKind: text("relation_kind").notNull(),
+    confidence: text("confidence").notNull(),
+    strength: text("strength").notNull(),
+    regimeScope: text("regime_scope").notNull(),
+    failureCasesJson: text("failure_cases_json").notNull(),
+    hypothesisId: uuid("hypothesis_id"),
+    verified: boolean("verified").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("trader_knowledge_edges_org_from_to_idx").on(t.organizationId, t.fromRef, t.toRef)],
+);
+
+/** RI-P4: market predictions for verify->learn loop. */
+export const traderMarketPredictions = pgTable(
+  "trader_market_predictions",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    subjectRef: text("subject_ref").notNull(),
+    predictionJson: text("prediction_json").notNull(),
+    predictedAt: timestamp("predicted_at", { withTimezone: true, mode: "date" }).notNull(),
+    outcomeJson: text("outcome_json"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true, mode: "date" }),
+    verificationResult: text("verification_result"),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_market_predictions_org_subject_idx").on(
+      t.organizationId,
+      t.subjectRef,
+      t.predictedAt,
+    ),
+  ],
+);
+
+/** RI-P5: AI operator action audit log (append-only). */
+export const traderOperatorAudit = pgTable(
+  "trader_operator_audit",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    actionKind: text("action_kind").notNull(),
+    actionPayloadJson: text("action_payload_json").notNull(),
+    recommendationJson: text("recommendation_json"),
+    actorKind: text("actor_kind").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("trader_operator_audit_org_created_idx").on(t.organizationId, t.createdAt)],
+);
+
 /**
  * Postgres transaction integration validation table (DEE-64 D6-core).
  * Used only by opt-in `tests/integration/postgres-transaction-rollback.test.ts` to verify commit/rollback semantics.
