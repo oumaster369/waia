@@ -106,9 +106,12 @@ function mockRepository(orders: OrderRow[]): OrderRepository {
 }
 
 async function buildAssembly(orgId: string, strategyId: string, strategyVersion = "0.1.0") {
-  const buy = mockOrder({ id: `gov-buy-${strategyId}`, avgFillPrice: "100" }, orgId);
+  const buy = mockOrder(
+    { id: `gov-buy-${strategyId}`, avgFillPrice: "100", executionMode: "paper" },
+    orgId,
+  );
   const sell = mockOrder(
-    { id: `gov-sell-${strategyId}`, side: "sell", avgFillPrice: "110" },
+    { id: `gov-sell-${strategyId}`, side: "sell", avgFillPrice: "110", executionMode: "paper" },
     orgId,
   );
   const document = await buildPaperEvaluationExportDocument({
@@ -116,7 +119,7 @@ async function buildAssembly(orgId: string, strategyId: string, strategyVersion 
     orderRepository: mockRepository([buy, sell]),
     window: { start: new Date(100), end: new Date(200) },
     strategySignalIds: [STRATEGY_SIGNAL],
-    executionMode: "mock",
+    executionMode: "paper",
     exportedAt: new Date("2026-06-18T12:00:00.000Z"),
   });
 
@@ -161,7 +164,7 @@ describe.skipIf(!integrationEnabled || !url)(
         await sql.unsafe(`ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_block_delete`);
         await sql.unsafe(
           `DELETE FROM audit_logs WHERE organization_id = $1 OR entity_id IN (
-          SELECT id FROM trader_strategy_promotion_records WHERE organization_id = $1
+          SELECT id::text FROM trader_strategy_promotion_records WHERE organization_id = $1
         )`,
           [orgId],
         );
@@ -193,6 +196,13 @@ describe.skipIf(!integrationEnabled || !url)(
       }
 
       const db = getPostgresDrizzle();
+      await db.insert(pgSchema.users).values({
+        id: USER_A,
+        identityLabel: "Strategy Promotion Postgres Parity",
+        email: "promotion-pg-parity-357@waia.invalid",
+        passwordHash: null,
+      });
+
       orgA = await ensureUserCoreSeedPostgres(db, {
         userId: USER_A,
         displayName: "Strategy Promotion Postgres Parity",

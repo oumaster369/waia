@@ -225,6 +225,13 @@ describe.skipIf(!integrationEnabled || !url)(
       }
 
       db = getPostgresDrizzle();
+      await db.insert(pgSchema.users).values({
+        id: USER_A,
+        identityLabel: "Research Intelligence Integration",
+        email: "research-intelligence-400@waia.invalid",
+        passwordHash: null,
+      });
+
       orgA = await ensureUserCoreSeedPostgres(db, {
         userId: USER_A,
         displayName: "Research Intelligence Integration",
