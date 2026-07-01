@@ -4,8 +4,7 @@
  * Enable with: WAIA_PG_INTEGRATION=1 + DATABASE_URL_POSTGRES (see docs/postgres-development.md).
  */
 
-import { readFileSync } from "node:fs";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import postgres from "postgres";
 
@@ -27,7 +26,6 @@ import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import { buildPaperEvaluationExportDocument } from "@/lib/trader/paper/build-paper-evaluation-export";
 import { insertMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
 import { getResearchDatasetByIdPostgres } from "@/lib/trader/market-data/research-dataset-repository-postgres";
-import type { TraderFixtureFile } from "@/lib/trader/market-data/types";
 import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
 import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/research/validate-research-evidence-provenance";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
@@ -40,14 +38,16 @@ import {
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
 import {
-  assembleStrategyPromotionRecord,
   createPostgresStrategyPromotionService,
   StrategyPromotionValidationError,
 } from "@/lib/trader/validation-gate";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
-import { DEE337_REPLAY_FIXTURE_PATH } from "@/scripts/trader/build-dee-337-replay-dataset";
+import {
+  buildResearchIntegrationBars,
+  RESEARCH_INTEGRATION_BAR_COUNT,
+} from "@/tests/helpers/build-research-integration-bars";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -56,9 +56,23 @@ const USER_A = "00000000-0000-4000-8000-0000000400a1";
 const STRATEGY_SIGNAL = "signal-400-ri";
 const SERVICE_ACTOR = { actorType: "service" as const, actorId: null };
 
-function loadReplayBars() {
-  const fixture = JSON.parse(readFileSync(DEE337_REPLAY_FIXTURE_PATH, "utf8")) as TraderFixtureFile;
-  return fixture.bars;
+/** Validation split is 46 bars at 230 total; OOS windows must satisfy the 20-bar backtest minimum. */
+const RESEARCH_PIPELINE_OOS_BAR_COUNT = 20;
+
+const RESEARCH_PIPELINE_BASE = {
+  symbol: "BTC/USDT" as const,
+  interval: "1m" as const,
+  strategyId: MEAN_REVERSION_V0,
+  strategyVersion: "0.1.0",
+  oosBarCount: RESEARCH_PIPELINE_OOS_BAR_COUNT,
+};
+
+function createResearchPipelineIdFactory(): () => string {
+  let counter = 0;
+  return () => {
+    counter += 1;
+    return `00000000-0000-4000-8000-${counter.toString(16).padStart(12, "0")}`;
+  };
 }
 
 function mockOrder(overrides: Partial<OrderRow> & Pick<OrderRow, "id">, orgId: string): OrderRow {
@@ -140,7 +154,10 @@ async function buildPostgresResearchDeps(
   await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
 
   const limits = createPostgresRiskLimitsService(db);
-  await limits.upsertLimitsForOrg(context, { ...DEFAULT_ORG_RISK_LIMITS });
+  await limits.upsertLimitsForOrg(context, {
+    ...DEFAULT_ORG_RISK_LIMITS,
+    maxOrdersPerWindow: 500,
+  });
 
   const killSwitchResolver = createKillSwitchResolver({
     repository: createPostgresKillSwitchRepository(db),
@@ -179,10 +196,21 @@ describe.skipIf(!integrationEnabled || !url)(
     let orgA: string;
     let db: ReturnType<typeof getPostgresDrizzle>;
 
-    async function cleanup(): Promise<void> {
-      const orgId = personalOrganizationIdFromUserId(USER_A);
+    async function deleteAuditLogsForOrg(sql: postgres.Sql, orgId: string): Promise<void> {
+      await sql.unsafe(`ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_block_delete`);
+      await sql.unsafe(
+        `DELETE FROM audit_logs WHERE organization_id = $1 OR entity_id IN (
+          SELECT id::text FROM trader_strategy_promotion_records WHERE organization_id = $1
+        )`,
+        [orgId],
+      );
+      await sql.unsafe(`ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_block_delete`);
+    }
+
+    async function cleanupResearchArtifacts(orgId: string): Promise<void> {
       const sql = postgres(url!, { max: 1 });
       try {
+        await deleteAuditLogsForOrg(sql, orgId);
         await sql.unsafe(`DELETE FROM trader_knowledge_edges WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM trader_market_events WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM trader_blind_validation_results WHERE organization_id = $1`, [
@@ -197,11 +225,24 @@ describe.skipIf(!integrationEnabled || !url)(
         await sql.unsafe(`DELETE FROM trader_backtest_results WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM trader_backtest_runs WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM research_dataset WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM trader_market_bars WHERE organization_id = $1`, [orgId]);
+        await sql.unsafe(`DELETE FROM trader_fills WHERE organization_id = $1`, [orgId]);
+        await sql.unsafe(`DELETE FROM trader_order_events WHERE organization_id = $1`, [orgId]);
+        await sql.unsafe(`DELETE FROM trader_orders WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(
           `DELETE FROM trader_strategy_promotion_records WHERE organization_id = $1`,
           [orgId],
         );
+      } finally {
+        await sql.end({ timeout: 5 });
+      }
+    }
+
+    async function cleanup(): Promise<void> {
+      const orgId = personalOrganizationIdFromUserId(USER_A);
+      const sql = postgres(url!, { max: 1 });
+      try {
+        await cleanupResearchArtifacts(orgId);
+        await sql.unsafe(`DELETE FROM trader_market_bars WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM organizations WHERE id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM user_platform_roles WHERE user_id = $1`, [USER_A]);
@@ -236,6 +277,18 @@ describe.skipIf(!integrationEnabled || !url)(
         userId: USER_A,
         displayName: "Research Intelligence Integration",
       });
+
+      const context = requireOrgContext(orgA);
+      const bars = buildResearchIntegrationBars(RESEARCH_INTEGRATION_BAR_COUNT);
+      await insertMarketBarsPostgres(
+        db,
+        context,
+        bars.map((bar) => ({ bar })),
+      );
+    });
+
+    beforeEach(async () => {
+      await cleanupResearchArtifacts(orgA);
     });
 
     afterAll(async () => {
@@ -245,36 +298,26 @@ describe.skipIf(!integrationEnabled || !url)(
 
     it("runs bars → dataset → backtest → walk-forward → blind → evidence → knowledge", async () => {
       const context = requireOrgContext(orgA);
-      const bars = loadReplayBars();
-      expect(bars.length).toBeGreaterThanOrEqual(60);
-
-      await insertMarketBarsPostgres(
-        db,
-        context,
-        bars.map((bar) => ({ bar })),
-      );
-
       const deps = await buildPostgresResearchDeps(db, orgA);
-      const first = await runResearchPipelinePostgres(db, {
+      const pipelineInput = {
         context,
-        datasetName: "ri-integration-run-1",
-        symbol: "BTC/USDT",
-        interval: "1m",
-        strategyId: MEAN_REVERSION_V0,
-        strategyVersion: "0.1.0",
         deps,
         createOrderRepository: () => createPostgresOrderRepository(db),
+        newId: createResearchPipelineIdFactory(),
+        ...RESEARCH_PIPELINE_BASE,
+      };
+
+      const first = await runResearchPipelinePostgres(db, {
+        ...pipelineInput,
+        datasetName: "ri-integration-run-1",
       });
 
+      await cleanupResearchArtifacts(orgA);
+
       const second = await runResearchPipelinePostgres(db, {
-        context,
+        ...pipelineInput,
+        newId: createResearchPipelineIdFactory(),
         datasetName: "ri-integration-run-2",
-        symbol: "BTC/USDT",
-        interval: "1m",
-        strategyId: MEAN_REVERSION_V0,
-        strategyVersion: "0.1.0",
-        deps,
-        createOrderRepository: () => createPostgresOrderRepository(db),
       });
 
       expect(first.evidenceDocument.envelope.contentDigest).toBe(
@@ -311,12 +354,9 @@ describe.skipIf(!integrationEnabled || !url)(
       const pipeline = await runResearchPipelinePostgres(db, {
         context,
         datasetName: "ri-promotion-gate-run",
-        symbol: "BTC/USDT",
-        interval: "1m",
-        strategyId: MEAN_REVERSION_V0,
-        strategyVersion: "0.1.0",
         deps,
         createOrderRepository: () => createPostgresOrderRepository(db),
+        ...RESEARCH_PIPELINE_BASE,
       });
 
       const paperDocument = await buildPaperEvaluationExportDocument({
@@ -352,7 +392,6 @@ describe.skipIf(!integrationEnabled || !url)(
           downsideRiskBounded: "Risk engine caps downside.",
         },
       };
-      assembleStrategyPromotionRecord(assemblyInput);
 
       const service = createPostgresStrategyPromotionService(db);
       await expect(
@@ -369,12 +408,9 @@ describe.skipIf(!integrationEnabled || !url)(
       const pipeline = await runResearchPipelinePostgres(db, {
         context,
         datasetName: "ri-promotion-accept-run",
-        symbol: "BTC/USDT",
-        interval: "1m",
-        strategyId: MEAN_REVERSION_V0,
-        strategyVersion: "0.1.0",
         deps,
         createOrderRepository: () => createPostgresOrderRepository(db),
+        ...RESEARCH_PIPELINE_BASE,
       });
 
       const paperDocument = await buildPaperEvaluationExportDocument({
