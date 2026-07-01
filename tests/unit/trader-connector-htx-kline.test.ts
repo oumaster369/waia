@@ -56,6 +56,32 @@ describe("HtxRestClient.getMarketHistoryKline (AT-E3 S4)", () => {
     expect(rows).toHaveLength(25);
   });
 
+  it("passes from epoch when provided", async () => {
+    const fixture = loadFixture();
+    let requestedUrl = "";
+
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      requestedUrl = url.toString();
+      return jsonResponse(fixture.kline);
+    }) as typeof fetch;
+
+    const client = new HtxRestClient({
+      apiKey: "public",
+      apiSecret: "public",
+      fetchImpl,
+    });
+
+    await client.getMarketHistoryKline({
+      symbol: "btcusdt",
+      period: "1min",
+      size: 100,
+      from: 1_700_000_000,
+    });
+
+    expect(requestedUrl).toContain("from=1700000000");
+  });
+
   it("throws HtxApiError on HTX error envelope", async () => {
     const fetchImpl = (async () =>
       jsonResponse({

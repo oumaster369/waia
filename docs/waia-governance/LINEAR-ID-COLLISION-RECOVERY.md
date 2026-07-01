@@ -73,3 +73,15 @@ The Linear GitHub integration linked PR #165 to DEE-150 and transitioned it **Do
 3. Head branch must be **`dee-363-research-intelligence`** for governance pass. GitHub closes PR #346 if the head branch is renamed via API; reopen requires recreating the head ref or opening a replacement PR from `dee-363-research-intelligence`.
 
 **Canonical tracking:** **DEE-363** (not DEE-400). Branch `dee-400-*` is a pre-groom artifact — do not reuse for new work.
+
+## DEE-401 / DEE-364 groom gap (PR #348 — 2026-07-01)
+
+**What happened:** PR #348 opened on branch `dee-401-ri-p7-evidence-knowledge-campaign` with **Linear:** `DEE-401` before `/groom` created the issue. Linear API returned no issue for `DEE-401` (latest team issue was **DEE-363**; **DEE-401 never existed**). `LINEAR_API_KEY` was configured in CI — not a secret failure.
+
+**Remediation:**
+
+1. Groomed **DEE-364** — *RI-P7 — HTX multi-regime evidence campaign and Production Knowledge Asset tooling* (`In Review`, parent DEE-363).
+2. Closed PR #348 (`dee-401-*`); opened **PR #349** with **Linear:** / title / commit prefix **DEE-364**; doc references corrected.
+3. Head branch **`dee-364-ri-p7-evidence-knowledge-campaign`** for governance pass.
+
+**Canonical tracking:** **DEE-364** (not DEE-401). Branch `dee-401-*` is a pre-groom artifact — do not reuse for new work.
