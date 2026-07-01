@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { PaperEvaluationExportDocument } from "@/lib/trader/paper/paper-evaluation-export.types";
+import type { ResearchEvidenceDocument } from "@/lib/trader/research/research-evidence-export.types";
+import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
 import {
   REQUIRED_EFFECTIVE_ACK,
   assertEffectiveAck,
@@ -159,10 +161,18 @@ describe("operator promotion inputs (DEE-277 S2)", () => {
       schemaVersion: "waia.trader.paper-evaluation-export.v1",
       envelope: { organizationId: ORG },
     } as unknown as PaperEvaluationExportDocument;
+    const researchEvidenceDocument = buildValidResearchEvidenceDocument(
+      ORG,
+    ) as ResearchEvidenceDocument;
 
     it("builds an assembly input when orgs match", () => {
       const inputs = parse(validInputObject());
-      const assembly = buildAssembleInput({ organizationId: ORG, inputs, document });
+      const assembly = buildAssembleInput({
+        organizationId: ORG,
+        inputs,
+        document,
+        researchEvidenceDocument,
+      });
       expect(assembly.organizationId).toBe(ORG);
       expect(assembly.paperTradingEvidenceDocument).toBe(document);
     });
@@ -170,15 +180,29 @@ describe("operator promotion inputs (DEE-277 S2)", () => {
     it("rejects evidence org mismatch", () => {
       const inputs = parse(validInputObject());
       expect(
-        thrownCode(() => buildAssembleInput({ organizationId: "other-org", inputs, document })),
+        thrownCode(() =>
+          buildAssembleInput({
+            organizationId: "other-org",
+            inputs,
+            document,
+            researchEvidenceDocument,
+          }),
+        ),
       ).toBe("OPERATOR_EVIDENCE_ORG_MISMATCH");
     });
 
     it("rejects inputs org mismatch", () => {
       const inputs = parse({ ...validInputObject(), organizationId: "different-org" });
-      expect(thrownCode(() => buildAssembleInput({ organizationId: ORG, inputs, document }))).toBe(
-        "OPERATOR_INPUTS_ORG_MISMATCH",
-      );
+      expect(
+        thrownCode(() =>
+          buildAssembleInput({
+            organizationId: ORG,
+            inputs,
+            document,
+            researchEvidenceDocument,
+          }),
+        ),
+      ).toBe("OPERATOR_INPUTS_ORG_MISMATCH");
     });
   });
 });

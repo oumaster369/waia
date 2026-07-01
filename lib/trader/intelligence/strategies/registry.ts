@@ -1,10 +1,13 @@
 import { evaluateLiquiditySweepReversalV0 } from "@/lib/trader/intelligence/strategies/liquidity-sweep-reversal-v0";
 import { evaluateMeanReversionV0 } from "@/lib/trader/intelligence/strategies/mean-reversion-v0";
+import { evaluateTrendMomentumV0 } from "@/lib/trader/intelligence/strategies/trend-momentum-v0";
 import {
   LIQUIDITY_SWEEP_REVERSAL_V0,
   LIQUIDITY_SWEEP_REVERSAL_V0_VERSION,
   MEAN_REVERSION_V0,
   MEAN_REVERSION_V0_VERSION,
+  TREND_MOMENTUM_V0,
+  TREND_MOMENTUM_V0_VERSION,
   type Bar,
   type FeatureSnapshot,
   type MsvEnvelope,
@@ -22,7 +25,10 @@ export const strategyLifecycleStates = [
 
 export type StrategyLifecycleState = (typeof strategyLifecycleStates)[number];
 
-export type MvpStrategyId = typeof LIQUIDITY_SWEEP_REVERSAL_V0 | typeof MEAN_REVERSION_V0;
+export type MvpStrategyId =
+  | typeof LIQUIDITY_SWEEP_REVERSAL_V0
+  | typeof MEAN_REVERSION_V0
+  | typeof TREND_MOMENTUM_V0;
 
 export type StrategyRegistryEntry = {
   strategyId: MvpStrategyId;
@@ -51,6 +57,12 @@ const MVP_STRATEGY_REGISTRY: readonly StrategyRegistryEntry[] = [
     displayName: "Liquidity Sweep Reversal",
   },
   {
+    strategyId: TREND_MOMENTUM_V0,
+    version: TREND_MOMENTUM_V0_VERSION,
+    lifecycleState: "RESEARCHING",
+    displayName: "Trend Momentum",
+  },
+  {
     strategyId: MEAN_REVERSION_V0,
     version: MEAN_REVERSION_V0_VERSION,
     lifecycleState: "PAPER",
@@ -61,6 +73,7 @@ const MVP_STRATEGY_REGISTRY: readonly StrategyRegistryEntry[] = [
 const EVALUATORS: Record<MvpStrategyId, StrategyEvaluator> = {
   [LIQUIDITY_SWEEP_REVERSAL_V0]: evaluateLiquiditySweepReversalV0,
   [MEAN_REVERSION_V0]: evaluateMeanReversionV0,
+  [TREND_MOMENTUM_V0]: evaluateTrendMomentumV0,
 };
 
 /** MVP assignment model: both strategies active for every org. */

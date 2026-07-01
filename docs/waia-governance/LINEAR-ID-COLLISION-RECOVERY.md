@@ -61,3 +61,15 @@ The Linear GitHub integration linked PR #165 to DEE-150 and transitioned it **Do
 
 - `/groom` before `/implement` — verify branch `dee-NN` matches issue scope via Linear MCP
 - Never pick `dee-NN` branch numbers without `get_issue` confirmation
+
+## DEE-400 / DEE-363 groom gap (PR #346 — 2026-07-01)
+
+**What happened:** PR #346 opened on branch `dee-400-research-intelligence` with **Linear:** `DEE-400` before `/groom` created the issue. Linear API returned no issue for `DEE-400` (latest team issue was **DEE-362**; **DEE-400 never existed**). `LINEAR_API_KEY` was configured in CI — not a secret failure.
+
+**Remediation:**
+
+1. Groomed **DEE-363** — *RI-INTEGRATION-1 — Research Intelligence operational spine and product constitution* (`In Review`, parent DEE-278).
+2. PR #346 **Linear:** / title updated to **DEE-363**; test plan corrected (Postgres validation no longer blocked).
+3. Head branch must be **`dee-363-research-intelligence`** for governance pass. GitHub closes PR #346 if the head branch is renamed via API; reopen requires recreating the head ref or opening a replacement PR from `dee-363-research-intelligence`.
+
+**Canonical tracking:** **DEE-363** (not DEE-400). Branch `dee-400-*` is a pre-groom artifact — do not reuse for new work.

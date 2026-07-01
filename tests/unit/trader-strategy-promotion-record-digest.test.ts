@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
+import { buildResearchEvidenceSlot } from "@/lib/trader/research/serialize-research-evidence-export";
 import {
   computeStrategyPromotionRecordDigest,
   STRATEGY_PROMOTION_RECORD_SCHEMA_VERSION,
@@ -7,6 +9,9 @@ import {
 } from "@/lib/trader/validation-gate";
 
 const EVIDENCE_DIGEST = "a".repeat(64);
+const RESEARCH_EVIDENCE = buildResearchEvidenceSlot(
+  buildValidResearchEvidenceDocument("00000000-0000-4000-8000-0000000272"),
+);
 
 const baseDigestInput = {
   organizationId: "00000000-0000-4000-8000-0000000272",
@@ -76,6 +81,7 @@ const baseDigestInput = {
       },
     },
   },
+  researchEvidence: RESEARCH_EVIDENCE,
   confidenceAttestation: {
     edgeNetOfCosts: "Edge observed net of modeled costs.",
     liveTracksPaper: "Live expected to track paper within risk bounds.",

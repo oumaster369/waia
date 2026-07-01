@@ -32,6 +32,7 @@ describe("trader intelligence CDE v0 (DEE-257)", () => {
     expect(msv.derived.allowedStrategyIds).toEqual(
       expect.arrayContaining(["mean_reversion_v0", "liquidity_sweep_reversal_v0"]),
     );
+    expect(msv.derived.allowedStrategyIds).not.toContain("trend_momentum_v0");
     expect(msv.derived.dataQualityScore).toBe(features.dataQualityScore);
   });
 

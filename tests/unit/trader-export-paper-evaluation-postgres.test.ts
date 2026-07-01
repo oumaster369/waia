@@ -17,6 +17,7 @@ import {
 } from "@/lib/trader/validation-gate";
 import { createSqliteOrderRepository } from "@/lib/trader/execution";
 import { getDb } from "@/db/client";
+import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import {
   assertPostgresExportDatabaseEnv,
@@ -158,11 +159,15 @@ describe("trader:paper:export (HC-3.5 Phase 1)", () => {
     });
 
     const inputs = parseOperatorPromotionInputs(JSON.stringify(validInputsJson()));
+    const researchEvidenceDocument = buildValidResearchEvidenceDocument(ORG_A, {
+      strategyId: STRATEGY,
+    });
     expect(() =>
       buildAssembleInput({
         organizationId: ORG_B,
         inputs,
         document,
+        researchEvidenceDocument,
       }),
     ).toThrow(OperatorRunwayInputError);
 
@@ -172,6 +177,7 @@ describe("trader:paper:export (HC-3.5 Phase 1)", () => {
           organizationId: ORG_A,
           inputs,
           document,
+          researchEvidenceDocument,
         }),
       ),
     ).not.toThrow();
@@ -185,6 +191,7 @@ describe("trader:paper:export (HC-3.5 Phase 1)", () => {
         organizationId: ORG_A,
         inputs,
         document: mismatchedDocument,
+        researchEvidenceDocument,
       }),
     ).toThrow(OperatorRunwayInputError);
   });

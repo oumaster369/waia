@@ -1,4 +1,9 @@
 import type { PaperEvaluationExportDocument } from "@/lib/trader/paper/paper-evaluation-export.types";
+import type { ResearchEvidenceDocument } from "@/lib/trader/research/research-evidence-export.types";
+import {
+  assertResearchEvidenceSchemaVersion,
+  computeResearchEvidenceExportDigest,
+} from "@/lib/trader/research/serialize-research-evidence-export";
 import {
   OperatorEvidenceError,
   parsePaperEvaluationExportDocument,
@@ -296,6 +301,35 @@ export function assertEffectiveAck(ack: string | undefined): void {
   }
 }
 
+export function parseResearchEvidenceExportDocument(json: string): ResearchEvidenceDocument {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json) as unknown;
+  } catch {
+    throw new OperatorEvidenceError("OPERATOR_RESEARCH_EVIDENCE_INVALID_JSON", "invalid JSON");
+  }
+
+  if (parsed === null || typeof parsed !== "object") {
+    throw new OperatorEvidenceError(
+      "OPERATOR_RESEARCH_EVIDENCE_INVALID",
+      "research evidence must be an object",
+    );
+  }
+
+  const document = parsed as ResearchEvidenceDocument;
+  assertResearchEvidenceSchemaVersion(document.schemaVersion);
+
+  const recomputed = computeResearchEvidenceExportDigest(document.evidenceBody);
+  if (recomputed !== document.envelope.contentDigest) {
+    throw new OperatorEvidenceError(
+      "OPERATOR_RESEARCH_EVIDENCE_DIGEST_MISMATCH",
+      "research evidence digest mismatch",
+    );
+  }
+
+  return document;
+}
+
 /**
  * Merge operator inputs + the parsed evidence document into the assembler input,
  * enforcing org consistency. Does not mutate either source.
@@ -304,8 +338,9 @@ export function buildAssembleInput(params: {
   organizationId: string;
   inputs: OperatorPromotionInputs;
   document: PaperEvaluationExportDocument;
+  researchEvidenceDocument: ResearchEvidenceDocument;
 }): AssembleStrategyPromotionRecordInput {
-  const { organizationId, inputs, document } = params;
+  const { organizationId, inputs, document, researchEvidenceDocument } = params;
 
   if (inputs.organizationId !== undefined && inputs.organizationId !== organizationId) {
     throw new OperatorRunwayInputError(
@@ -321,6 +356,20 @@ export function buildAssembleInput(params: {
     );
   }
 
+  if (researchEvidenceDocument.envelope.organizationId !== organizationId) {
+    throw new OperatorRunwayInputError(
+      "OPERATOR_RESEARCH_EVIDENCE_ORG_MISMATCH",
+      "research evidence organizationId does not match --org-id",
+    );
+  }
+
+  if (researchEvidenceDocument.envelope.strategyId !== inputs.strategyId) {
+    throw new OperatorRunwayInputError(
+      "OPERATOR_RESEARCH_EVIDENCE_STRATEGY_MISMATCH",
+      "research evidence strategyId does not match inputs.strategyId",
+    );
+  }
+
   return {
     organizationId,
     strategyId: inputs.strategyId,
@@ -332,6 +381,7 @@ export function buildAssembleInput(params: {
     failureModes: inputs.failureModes,
     reasonCodeDistribution: inputs.reasonCodeDistribution,
     paperTradingEvidenceDocument: document,
+    researchEvidenceDocument,
     confidenceAttestation: inputs.confidenceAttestation,
   };
 }
@@ -344,10 +394,17 @@ export function parseAdminPromotionRequestAssembly(params: {
   organizationId: string;
   strategyId: string;
   evidence: unknown;
+  researchEvidence: unknown;
   inputs: unknown;
 }): AssembleStrategyPromotionRecordInput {
   if (params.evidence === undefined || params.evidence === null) {
     throw new OperatorEvidenceError("OPERATOR_EVIDENCE_REQUIRED", "evidence is required");
+  }
+  if (params.researchEvidence === undefined || params.researchEvidence === null) {
+    throw new OperatorEvidenceError(
+      "OPERATOR_RESEARCH_EVIDENCE_REQUIRED",
+      "research_evidence is required",
+    );
   }
   if (params.inputs === undefined || params.inputs === null) {
     throw new OperatorRunwayInputError("OPERATOR_INPUTS_REQUIRED", "inputs is required");
@@ -362,6 +419,9 @@ export function parseAdminPromotionRequestAssembly(params: {
   }
 
   const document = parsePaperEvaluationExportDocument(JSON.stringify(params.evidence));
+  const researchEvidenceDocument = parseResearchEvidenceExportDocument(
+    JSON.stringify(params.researchEvidence),
+  );
   const operatorInputs = parseOperatorPromotionInputs(JSON.stringify(params.inputs));
 
   if (operatorInputs.strategyId !== strategyId) {
@@ -375,5 +435,6 @@ export function parseAdminPromotionRequestAssembly(params: {
     organizationId: params.organizationId,
     inputs: operatorInputs,
     document,
+    researchEvidenceDocument,
   });
 }

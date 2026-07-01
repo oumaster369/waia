@@ -7,6 +7,7 @@ import * as cdeModule from "@/lib/trader/intelligence/cde-v0";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import {
   liquiditySweepReasonCodes,
+  trendMomentumReasonCodes,
   cdeReasonCodes,
   strategyReasonCodes,
   type Bar,
@@ -76,7 +77,7 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
     expect(parseCounter(lines[0]!).domain).toBe("decision");
     expect(parseCounter(lines[1]!).domain).toBe("decision");
     const strategyLines = lines.slice(2).map(parseCounter);
@@ -110,13 +111,16 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
     const strategyLines = lines.slice(2).map(parseCounter);
     expect(strategyLines.some((line) => line.code === strategyReasonCodes.permissionBlocked)).toBe(
       true,
     );
     expect(
       strategyLines.some((line) => line.code === liquiditySweepReasonCodes.permissionBlocked),
+    ).toBe(true);
+    expect(
+      strategyLines.some((line) => line.code === trendMomentumReasonCodes.strategyNotAllowed),
     ).toBe(true);
   });
 
@@ -144,13 +148,16 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
     const strategyLines = lines.slice(2).map(parseCounter);
     expect(strategyLines.some((line) => line.code === strategyReasonCodes.strategyNotAllowed)).toBe(
       true,
     );
     expect(
       strategyLines.some((line) => line.code === liquiditySweepReasonCodes.strategyNotAllowed),
+    ).toBe(true);
+    expect(
+      strategyLines.some((line) => line.code === trendMomentumReasonCodes.strategyNotAllowed),
     ).toBe(true);
   });
 
@@ -172,7 +179,7 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
     const strategyLines = lines.slice(2).map(parseCounter);
     expect(strategyLines.some((line) => line.code === strategyReasonCodes.zscoreSell)).toBe(true);
   });

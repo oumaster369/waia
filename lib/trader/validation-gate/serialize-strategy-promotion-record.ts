@@ -5,6 +5,11 @@ import {
   canonicalJsonString,
   computePaperEvaluationExportDigest,
 } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import type { ResearchEvidenceSlot } from "@/lib/trader/research/research-evidence-export.types";
+import {
+  buildResearchEvidenceSlot,
+  computeResearchEvidenceExportDigest,
+} from "@/lib/trader/research/serialize-research-evidence-export";
 import {
   STRATEGY_PROMOTION_RECORD_SCHEMA_VERSION,
   type ConfidenceAttestation,
@@ -25,6 +30,7 @@ export type StrategyPromotionRecordDigestInput = {
   failureModes: string[];
   reasonCodeDistribution: Record<string, number>;
   paperTradingEvidence: PaperEvaluationEvidenceSlot;
+  researchEvidence: ResearchEvidenceSlot;
   confidenceAttestation: ConfidenceAttestation;
 };
 
@@ -57,6 +63,11 @@ export function canonicalizeStrategyPromotionDigestInput(
       contentDigest: input.paperTradingEvidence.contentDigest,
       document: sortKeysDeep(input.paperTradingEvidence.document),
     },
+    researchEvidence: {
+      artifactSchemaVersion: input.researchEvidence.artifactSchemaVersion,
+      contentDigest: input.researchEvidence.contentDigest,
+      document: sortKeysDeep(input.researchEvidence.document),
+    },
   }) as StrategyPromotionRecordDigestInput;
 }
 
@@ -66,6 +77,14 @@ export function computeStrategyPromotionRecordDigest(
   const canonical = canonicalizeStrategyPromotionDigestInput(input);
   return createHash("sha256").update(canonicalJsonString(canonical), "utf8").digest("hex");
 }
+
+export function buildResearchEvidenceSlotFromDocument(
+  document: import("@/lib/trader/research/research-evidence-export.types").ResearchEvidenceDocument,
+): ResearchEvidenceSlot {
+  return buildResearchEvidenceSlot(document);
+}
+
+export { computeResearchEvidenceExportDigest };
 
 export function buildPaperTradingEvidenceSlot(
   document: PaperEvaluationExportDocument,
@@ -95,6 +114,7 @@ export function buildStrategyPromotionRecordPayload(
     failureModes: input.failureModes,
     reasonCodeDistribution: input.reasonCodeDistribution,
     paperTradingEvidence: input.paperTradingEvidence,
+    researchEvidence: input.researchEvidence,
     confidenceAttestation: input.confidenceAttestation,
     recordContentDigest,
   };

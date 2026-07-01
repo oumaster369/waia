@@ -36,6 +36,12 @@ function mapRow(
     failureModes: parseJson<string[]>(row.failureModesJson),
     reasonCodeDistribution: parseJson<Record<string, number>>(row.reasonCodeDistributionJson),
     paperTradingEvidence: parseJson(row.paperTradingEvidenceJson),
+    researchEvidence: (() => {
+      if (!row.researchEvidenceJson) {
+        throw new Error("STRATEGY_PROMOTION_RESEARCH_EVIDENCE_NOT_PERSISTED");
+      }
+      return parseJson(row.researchEvidenceJson);
+    })(),
     evidenceContentDigest: row.evidenceContentDigest,
     confidenceAttestation: parseJson(row.confidenceAttestationJson),
     recordContentDigest: row.recordContentDigest,
@@ -69,6 +75,7 @@ function payloadToRowValues(input: InsertPromotionRecordInput) {
     failureModesJson: JSON.stringify(input.failureModes),
     reasonCodeDistributionJson: JSON.stringify(input.reasonCodeDistribution),
     paperTradingEvidenceJson: JSON.stringify(input.paperTradingEvidence),
+    researchEvidenceJson: JSON.stringify(input.researchEvidence),
     evidenceContentDigest: input.paperTradingEvidence.contentDigest,
     confidenceAttestationJson: JSON.stringify(input.confidenceAttestation),
     recordContentDigest: input.recordContentDigest,

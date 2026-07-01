@@ -23,6 +23,20 @@ A **Strategy Validation Gate** sits between Paper Trading (Roadmap Phase 7) and 
 
 **Accelerated Historical Replay Validation** in the roadmap remains a *plumbing* gate; it is necessary but **not sufficient** for live promotion. This Validation Gate is the sufficiency condition.
 
+### Amendment (2026-07-01) — Historical research evidence class
+
+Per ADR-0018 and the RI program, a promotion record for `LIVE_LIMITED` must include, in addition to forward paper evidence where applicable, a **historical research evidence bundle**:
+
+1. **Real backtest** on stored historical OHLCV (not fixture/synthetic), net of a versioned cost/slippage model (`cost_model_version` recorded).
+2. **Walk-forward validation** over sealed train/validation splits with parameter-freeze and forward-lock discipline.
+3. **Single-shot blind holdout** on a sealed blind split — immutable result; re-runs rejected.
+4. **Multi-regime coverage:** evidence must span ≥1 non-trending and ≥1 down regime (per regime classifier used in production).
+5. **Provenance:** evidence documents must not be `executionMode: "mock"` with zero fees as the sole basis; synthetic fixture-only evidence is structurally insufficient.
+
+Quantitative thresholds (minimum expectancy, drawdown caps, etc.) remain **operator-set** and recorded in the attestation — this amendment defines the **evidence class**, not numeric gates.
+
+Mock-only or single-regime evidence must be rejected by `assembleStrategyPromotionRecord` once RI-P6 gate integration is merged.
+
 ## Consequences
 
 + Resolves the live-before-validation contradiction; the Master Spec validation rule and the roadmap now agree.

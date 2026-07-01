@@ -25,5 +25,7 @@ See policy: [`../waia-governance/ADR-POLICY.md`](../waia-governance/ADR-POLICY.m
 | [0015](0015-tron-settlement-finality-rpc-trust-doctrine.md) | Tron Settlement, Finality, and RPC Trust Doctrine | Accepted | AT-E12 S3; `DEE-319` |
 | [0016](0016-settlement-exception-reconciliation.md) | Settlement Exception Reconciliation (immutable EXCEPTION row, separate reconciliation aggregate, derived effective outcome) | Accepted | AT-E12 S3-C; `DEE-216`, `DEE-323` |
 | [0017](0017-postgres-only-trader-mvp.md) | Postgres-only for new AI-TRADER MVP code (Execution Freeze) | Accepted | P1 NEW-2 / `DEE-328`; ADR-0002 partial supersession |
+| [0018](0018-research-intelligence-market-knowledge-base.md) | Research Intelligence Layer & Market Knowledge Base | Accepted | RI program M11; ADR-0010 amendment |
+| [0019](0019-ai-operator-intelligence-authority.md) | AI Operator Intelligence authority boundaries (recommend-only) | Accepted | RI-P5; ADR-0011 |
 
 Add rows as new decisions land.**Superseded** decisions keep file for history — index notes replacement.

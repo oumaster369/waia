@@ -2,8 +2,13 @@ import type {
   PaperEvaluationEvidenceSlot,
   PaperEvaluationExportDocument,
 } from "@/lib/trader/paper/paper-evaluation-export.types";
+import type {
+  ResearchEvidenceDocument,
+  ResearchEvidenceSlot,
+} from "@/lib/trader/research/research-evidence-export.types";
 
 export type { PaperEvaluationEvidenceSlot };
+export type { ResearchEvidenceDocument, ResearchEvidenceSlot };
 
 export const STRATEGY_PROMOTION_RECORD_SCHEMA_VERSION =
   "waia.trader.strategy-promotion-record.v1" as const;
@@ -50,6 +55,7 @@ export type StrategyPromotionRecordPayload = {
   failureModes: string[];
   reasonCodeDistribution: Record<string, number>;
   paperTradingEvidence: PaperEvaluationEvidenceSlot;
+  researchEvidence: ResearchEvidenceSlot;
   confidenceAttestation: ConfidenceAttestation;
   recordContentDigest: string;
 };
@@ -103,6 +109,7 @@ export type AssembleStrategyPromotionRecordInput = {
   failureModes: string[];
   reasonCodeDistribution: Record<string, number>;
   paperTradingEvidenceDocument: PaperEvaluationExportDocument;
+  researchEvidenceDocument: ResearchEvidenceDocument;
   confidenceAttestation: ConfidenceAttestation;
 };
 

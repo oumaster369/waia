@@ -5,12 +5,14 @@ import {
 import {
   liquiditySweepReasonCodes,
   strategyReasonCodes,
+  trendMomentumReasonCodes,
   type StrategySignal,
 } from "@/lib/trader/intelligence/types";
 
 export const STRATEGY_COUNTER_CODES = new Set<string>([
   ...Object.values(strategyReasonCodes),
   ...Object.values(liquiditySweepReasonCodes),
+  ...Object.values(trendMomentumReasonCodes),
 ]);
 
 function assertStrategyCounterCode(code: string): void {

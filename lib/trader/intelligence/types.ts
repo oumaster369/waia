@@ -124,7 +124,13 @@ export const MEAN_REVERSION_V0_VERSION = "0.1.0" as const;
 export const LIQUIDITY_SWEEP_REVERSAL_V0 = "liquidity_sweep_reversal_v0" as const;
 export const LIQUIDITY_SWEEP_REVERSAL_V0_VERSION = "0.1.0" as const;
 
-export type MvpStrategyId = typeof MEAN_REVERSION_V0 | typeof LIQUIDITY_SWEEP_REVERSAL_V0;
+export const TREND_MOMENTUM_V0 = "trend_momentum_v0" as const;
+export const TREND_MOMENTUM_V0_VERSION = "0.1.0" as const;
+
+export type MvpStrategyId =
+  | typeof MEAN_REVERSION_V0
+  | typeof LIQUIDITY_SWEEP_REVERSAL_V0
+  | typeof TREND_MOMENTUM_V0;
 
 export type SignalOutcome = "SIGNAL" | "NO_SIGNAL";
 
@@ -148,6 +154,15 @@ export const strategyReasonCodes = {
   permissionBlocked: "STRAT_MR_PERMISSION_BLOCKED",
   zscoreNeutral: "STRAT_MR_ZSCORE_NEUTRAL",
   strategyNotAllowed: "STRAT_MR_STRATEGY_NOT_ALLOWED",
+} as const;
+
+export const trendMomentumReasonCodes = {
+  momentumEntry: "STRAT_TM_MOMENTUM_ENTRY",
+  momentumExit: "STRAT_TM_MOMENTUM_EXIT",
+  permissionBlocked: "STRAT_TM_PERMISSION_BLOCKED",
+  strategyNotAllowed: "STRAT_TM_STRATEGY_NOT_ALLOWED",
+  regimeFlat: "STRAT_TM_REGIME_FLAT",
+  zscoreNeutral: "STRAT_TM_ZSCORE_NEUTRAL",
 } as const;
 
 export const liquiditySweepReasonCodes = {

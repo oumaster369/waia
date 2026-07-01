@@ -8,7 +8,10 @@ if (process.env.VITEST !== "true") {
 import type { WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { writeAuditLogPostgres, writeAuditLogSqlite } from "@/lib/waia-core/audit/write";
+import { ResearchEvidenceProvenanceError } from "@/lib/trader/research/errors";
+import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/research/validate-research-evidence-provenance";
 import { assembleStrategyPromotionRecord } from "@/lib/trader/validation-gate/assemble-strategy-promotion-record";
+import type { AssembleStrategyPromotionRecordInput } from "@/lib/trader/validation-gate/strategy-promotion-record.types";
 import { effectivePromotionCoolingOffMs } from "@/lib/trader/validation-gate/config";
 import {
   findPromotionByIdempotencyKeyPostgres,
@@ -82,6 +85,11 @@ export type StrategyPromotionServiceDeps = {
     record: StrategyPromotionRecordView,
     metadata?: Record<string, unknown>,
   ) => Promise<string> | string;
+  /** Postgres-only: cross-check research evidence artifact IDs before assembly. */
+  validateAssembly?: (
+    context: OrgContext,
+    assembly: AssembleStrategyPromotionRecordInput,
+  ) => Promise<void>;
 };
 
 function validateCoolingOffMsOverride(value: number | undefined): number {
@@ -136,8 +144,15 @@ export function buildPromotionPreview(
   };
 }
 
+function mapResearchProvenanceError(error: unknown): never {
+  if (error instanceof ResearchEvidenceProvenanceError) {
+    throw new StrategyPromotionValidationError(error.code);
+  }
+  throw error;
+}
+
 export function createStrategyPromotionService(deps: StrategyPromotionServiceDeps) {
-  const { repository, nowMs, writeAudit } = deps;
+  const { repository, nowMs, writeAudit, validateAssembly } = deps;
 
   async function getRecord(
     context: OrgContext,
@@ -170,6 +185,15 @@ export function createStrategyPromotionService(deps: StrategyPromotionServiceDep
       input: RequestPromotionInput,
     ): Promise<StrategyPromotionRecordView> {
       const scoped = requireOrgContext(context.organizationId);
+
+      if (validateAssembly) {
+        try {
+          await validateAssembly(scoped, input.assembly);
+        } catch (error) {
+          mapResearchProvenanceError(error);
+        }
+      }
+
       const payload = assembleStrategyPromotionRecord(input.assembly);
 
       if (payload.organizationId !== scoped.organizationId) {
@@ -434,12 +458,22 @@ export function createSqliteStrategyPromotionService(
 
 export function createPostgresStrategyPromotionService(
   ex: PgPromotionExecutor,
-  deps: { nowMs?: () => number } = {},
+  deps: { nowMs?: () => number; validateResearchProvenance?: boolean } = {},
 ): StrategyPromotionService {
   const nowMs = deps.nowMs ?? (() => Date.now());
+  const validateResearchProvenance = deps.validateResearchProvenance ?? true;
   return createStrategyPromotionService({
     repository: createPostgresStrategyPromotionRepository(ex),
     nowMs,
+    validateAssembly: validateResearchProvenance
+      ? async (context, assembly) => {
+          await validateResearchEvidenceProvenancePostgres(
+            ex,
+            context,
+            assembly.researchEvidenceDocument,
+          );
+        }
+      : undefined,
     writeAudit: async (actor, organizationId, action, record, metadata) =>
       writeAuditLogPostgres(ex, {
         actorType: actor.actorType,

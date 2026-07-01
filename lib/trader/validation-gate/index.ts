@@ -72,6 +72,7 @@ export {
   OperatorRunwayInputError,
   parseOperatorPromotionInputs,
   parseAdminPromotionRequestAssembly,
+  parseResearchEvidenceExportDocument,
   assertEffectiveAck,
   buildAssembleInput,
   type OperatorPromotionInputs,
