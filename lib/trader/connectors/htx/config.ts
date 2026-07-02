@@ -20,7 +20,12 @@ export const HTX_ENDPOINTS = {
   userApiKey: "/v2/user/api-key",
   marketDetailMerged: "/market/detail/merged",
   marketHistoryKline: "/market/history/kline",
+  /** CCXT spot historical OHLCV path; supports `from`/`to` (seconds) for forward paging. */
+  marketHistoryCandles: "/market/history/candles",
 } as const;
+
+/** HTX `/market/history/candles` max `size` per request (values above 1000 return empty). */
+export const HTX_MARKET_HISTORY_CANDLES_MAX_SIZE = 1000;
 
 /** MVP spot symbol allowlist (internal `BASE/QUOTE` format). */
 export const HTX_SPOT_ALLOWED_SYMBOLS = ["BTC/USDT", "ETH/USDT"] as const;

@@ -20,9 +20,10 @@
 
 ## Step 1 — Paginated HTX backfill
 
+Deep history uses HTX **`GET /market/history/candles`** with forward `from` paging (max 1000 bars/request). The legacy **`/market/history/kline`** endpoint returns only the latest N candles and ignores `from`.
+
 ```bash
-WAIA_DB_BACKEND=postgres \
-DATABASE_URL_POSTGRES='<vault-url>' \
+set -a && source .env.local && set +a
 pnpm trader:htx:backfill -- \
   --org-id='<ORG0_UUID>' \
   --symbol=BTC/USDT \
