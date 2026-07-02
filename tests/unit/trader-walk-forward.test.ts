@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { Bar } from "@/lib/trader/intelligence/types";
-import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
+import {
+  computeBarSetDigest,
+  computeBarSetDigestFromParts,
+} from "@/lib/trader/market-data/research-dataset";
 import { MultiRegimeCoverageError } from "@/lib/trader/research/errors";
 import {
+  buildWalkForwardWindowPlanAtIndex,
   buildWalkForwardWindowPlans,
   computeWalkForwardEvidenceDigest,
   runWalkForwardValidation,
@@ -140,4 +144,38 @@ describe("trader walk-forward (RI-P3)", () => {
 
     expect(repository.updateStrategyCandidateStatus).not.toHaveBeenCalled();
   });
+});
+
+/** Org-0 RI-P7 campaign split sizes (129,602 bars, 60/20/20 three-way split). */
+const ORG0_TRAIN_BAR_COUNT = 77_761;
+const ORG0_VALIDATION_BAR_COUNT = 25_920;
+const ORG0_OOS_BAR_COUNT = 20;
+const ORG0_WALK_FORWARD_WINDOW_COUNT = Math.floor(ORG0_VALIDATION_BAR_COUNT / ORG0_OOS_BAR_COUNT);
+
+describe("trader walk-forward Org-0 scale (DEE-367)", () => {
+  it("schedules 1296 walk-forward windows for Org-0 validation split", () => {
+    expect(ORG0_WALK_FORWARD_WINDOW_COUNT).toBe(1_296);
+  });
+
+  it.each([0, 648, 1_295])(
+    "computeBarSetDigestFromParts matches concatenated digest at window %i",
+    (windowIndex) => {
+      const trainBars = buildBars(ORG0_TRAIN_BAR_COUNT, "90");
+      const validationBars = buildBars(ORG0_VALIDATION_BAR_COUNT, "110");
+      const oosStart = windowIndex * ORG0_OOS_BAR_COUNT;
+
+      const fromParts = computeBarSetDigestFromParts(trainBars, validationBars.slice(0, oosStart));
+      const fromConcat = computeBarSetDigest([...trainBars, ...validationBars.slice(0, oosStart)]);
+
+      expect(fromParts).toBe(fromConcat);
+
+      const plan = buildWalkForwardWindowPlanAtIndex(
+        trainBars,
+        validationBars,
+        windowIndex,
+        ORG0_OOS_BAR_COUNT,
+      );
+      expect(plan.inSampleDigest).toBe(fromParts);
+    },
+  );
 });

@@ -1,4 +1,7 @@
-import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
+import {
+  computeBarSetDigest,
+  computeBarSetDigestFromParts,
+} from "@/lib/trader/market-data/research-dataset";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { WalkForwardValidationError } from "@/lib/trader/research/errors";
 import {
@@ -52,6 +55,13 @@ export type WalkForwardValidationResult = {
   regimeLabels: string[];
 };
 
+export type WalkForwardWindowPlanCore = {
+  windowIndex: number;
+  outOfSampleBars: readonly Bar[];
+  inSampleDigest: string;
+  outOfSampleDigest: string;
+};
+
 const ALLOWED_WALK_FORWARD_STATUSES = new Set<StrategyCandidateStatus>([
   "registered",
   "backtested",
@@ -63,12 +73,11 @@ function assertPositiveInteger(value: number, label: string): void {
   }
 }
 
-/** Rolling anchored expanding windows over sealed train/validation splits (blind excluded). */
-export function buildWalkForwardWindowPlans(
+function assertWalkForwardSplits(
   trainBars: readonly Bar[],
   validationBars: readonly Bar[],
   oosBarCount: number,
-): WalkForwardWindowPlan[] {
+): number {
   assertPositiveInteger(oosBarCount, "oosBarCount");
 
   if (trainBars.length < 1) {
@@ -80,21 +89,62 @@ export function buildWalkForwardWindowPlans(
     );
   }
 
-  const windowCount = Math.floor(validationBars.length / oosBarCount);
+  return Math.floor(validationBars.length / oosBarCount);
+}
+
+/** Single walk-forward window plan — digests without materializing full in-sample bar arrays. */
+export function buildWalkForwardWindowPlanAtIndex(
+  trainBars: readonly Bar[],
+  validationBars: readonly Bar[],
+  windowIndex: number,
+  oosBarCount: number,
+): WalkForwardWindowPlanCore {
+  assertPositiveInteger(oosBarCount, "oosBarCount");
+  if (!Number.isInteger(windowIndex) || windowIndex < 0) {
+    throw new WalkForwardValidationError("windowIndex must be a non-negative integer");
+  }
+
+  const windowCount = assertWalkForwardSplits(trainBars, validationBars, oosBarCount);
+  if (windowIndex >= windowCount) {
+    throw new WalkForwardValidationError(
+      `windowIndex ${windowIndex} out of range (windowCount=${windowCount})`,
+    );
+  }
+
+  const oosStart = windowIndex * oosBarCount;
+  const oosEnd = oosStart + oosBarCount;
+  const outOfSampleBars = validationBars.slice(oosStart, oosEnd);
+
+  return {
+    windowIndex,
+    outOfSampleBars,
+    inSampleDigest: computeBarSetDigestFromParts(trainBars, validationBars.slice(0, oosStart)),
+    outOfSampleDigest: computeBarSetDigest(outOfSampleBars),
+  };
+}
+
+/** Rolling anchored expanding windows over sealed train/validation splits (blind excluded). */
+export function buildWalkForwardWindowPlans(
+  trainBars: readonly Bar[],
+  validationBars: readonly Bar[],
+  oosBarCount: number,
+): WalkForwardWindowPlan[] {
+  const windowCount = assertWalkForwardSplits(trainBars, validationBars, oosBarCount);
   const plans: WalkForwardWindowPlan[] = [];
 
   for (let windowIndex = 0; windowIndex < windowCount; windowIndex += 1) {
+    const core = buildWalkForwardWindowPlanAtIndex(
+      trainBars,
+      validationBars,
+      windowIndex,
+      oosBarCount,
+    );
     const oosStart = windowIndex * oosBarCount;
-    const oosEnd = oosStart + oosBarCount;
-    const outOfSampleBars = validationBars.slice(oosStart, oosEnd);
     const inSampleBars = [...trainBars, ...validationBars.slice(0, oosStart)];
 
     plans.push({
-      windowIndex,
+      ...core,
       inSampleBars,
-      outOfSampleBars,
-      inSampleDigest: computeBarSetDigest(inSampleBars),
-      outOfSampleDigest: computeBarSetDigest(outOfSampleBars),
     });
   }
 
@@ -114,20 +164,27 @@ export async function runWalkForwardValidation(
     );
   }
 
-  const plans = buildWalkForwardWindowPlans(
+  const windowCount = assertWalkForwardSplits(
     input.trainBars,
     input.validationBars,
     input.oosBarCount,
   );
 
-  if (plans.length === 0) {
+  if (windowCount === 0) {
     throw new WalkForwardValidationError("walk-forward schedule produced zero windows");
   }
 
   const newId = input.newId ?? crypto.randomUUID.bind(crypto);
   const windows: WalkForwardWindowResult[] = [];
 
-  for (const plan of plans) {
+  for (let windowIndex = 0; windowIndex < windowCount; windowIndex += 1) {
+    const plan = buildWalkForwardWindowPlanAtIndex(
+      input.trainBars,
+      input.validationBars,
+      windowIndex,
+      input.oosBarCount,
+    );
+
     const metrics = await input.runBacktest({
       bars: plan.outOfSampleBars,
       strategyId: input.candidate.strategyId,
