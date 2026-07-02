@@ -24,6 +24,7 @@ export type WalkForwardBacktestRunner = (input: {
   strategyId: string;
   strategyVersion: string;
   paramsJson: string;
+  windowIndex: number;
 }) => Promise<ResearchValidationMetrics>;
 
 export type WalkForwardRepository = {
@@ -190,6 +191,7 @@ export async function runWalkForwardValidation(
       strategyId: input.candidate.strategyId,
       strategyVersion: input.candidate.strategyVersion,
       paramsJson: input.candidate.paramsJson,
+      windowIndex: plan.windowIndex,
     });
 
     await input.repository.insertWalkForwardWindow(input.context, {

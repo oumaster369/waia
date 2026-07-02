@@ -31,7 +31,12 @@ import { runBlindHoldoutValidation } from "@/lib/trader/research/blind-holdout-e
 import { buildResearchEvidenceDocument } from "@/lib/trader/research/build-research-evidence-export";
 import { ResearchOrchestratorError } from "@/lib/trader/research/errors";
 import { recordResearchPipelineKnowledgePostgres } from "@/lib/trader/research/record-research-knowledge";
-import { runResearchValidationBacktest } from "@/lib/trader/research/research-backtest-runner";
+import { runIsolatedResearchBacktest } from "@/lib/trader/research/research-backtest-isolation";
+import {
+  buildResearchBlindCycleIdPrefix,
+  buildResearchValidationCycleIdPrefix,
+  buildResearchWalkForwardCycleIdPrefix,
+} from "@/lib/trader/research/research-backtest-cycle-id";
 import type { ResearchEvidenceDocument } from "@/lib/trader/research/research-evidence-export.types";
 import {
   getBlindValidationResultForCandidatePostgres,
@@ -45,7 +50,7 @@ import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/researc
 import { runWalkForwardValidation } from "@/lib/trader/research/walk-forward-engine";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
-type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
+type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete">;
 
 export type RunResearchPipelineInput = {
   context: OrgContext;
@@ -165,7 +170,7 @@ export async function runResearchPipelinePostgres(
   });
 
   const validationRepo = await resolveOrderRepository(input.createOrderRepository);
-  const validationMetrics = await runResearchValidationBacktest({
+  const validationMetrics = await runIsolatedResearchBacktest(ex, {
     context: input.context,
     bars: splits.validation,
     strategyId: input.strategyId,
@@ -179,6 +184,7 @@ export async function runResearchPipelinePostgres(
     accountKey,
     defaultQuantity,
     newId,
+    cycleIdPrefix: buildResearchValidationCycleIdPrefix(backtestRunId),
   });
 
   await insertBacktestResultPostgres(ex, input.context, {
@@ -217,9 +223,9 @@ export async function runResearchPipelinePostgres(
     validationBars: splits.validation,
     oosBarCount,
     requireMultiRegimeCoverage,
-    runBacktest: async ({ bars, strategyId, strategyVersion }) => {
+    runBacktest: async ({ bars, strategyId, strategyVersion, windowIndex }) => {
       const repo = await resolveOrderRepository(input.createOrderRepository);
-      return runResearchValidationBacktest({
+      return runIsolatedResearchBacktest(ex, {
         context: input.context,
         bars,
         strategyId,
@@ -233,6 +239,7 @@ export async function runResearchPipelinePostgres(
         accountKey,
         defaultQuantity,
         newId,
+        cycleIdPrefix: buildResearchWalkForwardCycleIdPrefix(backtestRunId, windowIndex),
       });
     },
     repository: {
@@ -252,7 +259,7 @@ export async function runResearchPipelinePostgres(
     requireMultiRegimeCoverage,
     runBacktest: async ({ bars, strategyId, strategyVersion }) => {
       const repo = await resolveOrderRepository(input.createOrderRepository);
-      return runResearchValidationBacktest({
+      return runIsolatedResearchBacktest(ex, {
         context: input.context,
         bars,
         strategyId,
@@ -266,6 +273,7 @@ export async function runResearchPipelinePostgres(
         accountKey,
         defaultQuantity,
         newId,
+        cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
       });
     },
     repository: {

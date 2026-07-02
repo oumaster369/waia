@@ -51,6 +51,7 @@ export {
   createPostgresOrderRepositoryFromExecutor,
   createSqliteOrderRepository,
 } from "@/lib/trader/execution/repository-adapters";
+export { deleteMockExecutionArtifactsForOrgPostgres } from "@/lib/trader/execution/repository-postgres";
 export {
   createOrderExecutionServiceFromDeps,
   createPostgresOrderExecutionService,

@@ -36,6 +36,7 @@ import {
 
 type PgReadExecutor = Pick<WaiaPostgresDb, "select">;
 type PgWriteExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
+type PgDeleteExecutor = Pick<WaiaPostgresDb, "delete">;
 
 function mapOrderRow(row: typeof pgSchema.traderOrders.$inferSelect): OrderRow {
   return {
@@ -494,4 +495,26 @@ function isPgUniqueViolation(error: unknown): boolean {
     return (error as { code: string }).code === "23505";
   }
   return isUniqueConstraintError(error);
+}
+
+/**
+ * Removes org-scoped mock execution orders for research backtest isolation.
+ *
+ * `trader_fills` and `trader_order_events` cascade via FK on `trader_orders`.
+ * Live and paper orders are never deleted.
+ */
+export async function deleteMockExecutionArtifactsForOrgPostgres(
+  ex: PgDeleteExecutor,
+  context: OrgContext,
+): Promise<void> {
+  const scoped = requireOrgContext(context.organizationId);
+
+  await ex
+    .delete(pgSchema.traderOrders)
+    .where(
+      and(
+        eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
+        eq(pgSchema.traderOrders.executionMode, "mock"),
+      ),
+    );
 }

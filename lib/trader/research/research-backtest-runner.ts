@@ -27,6 +27,8 @@ export type RunResearchValidationBacktestInput = {
   accountState?: AccountRiskState;
   exportedAt?: Date;
   newId?: () => string;
+  /** Isolates paper-cycle order keys per research phase/window (see research-backtest-cycle-id). */
+  cycleIdPrefix?: string;
 };
 
 const EMPTY_ACCOUNT_STATE: AccountRiskState = {
@@ -60,7 +62,10 @@ export async function runResearchValidationBacktest(
     throw new Error("[research] validation backtest requires at least 20 bars");
   }
 
-  const barSource = new HistoricalBarReplaySource({ bars: input.bars });
+  const barSource = new HistoricalBarReplaySource({
+    bars: input.bars,
+    cycleIdPrefix: input.cycleIdPrefix,
+  });
   const window = parseWindowFromBars(input.bars);
   const exportedAt = input.exportedAt ?? new Date(window.end);
 
