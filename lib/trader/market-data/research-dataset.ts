@@ -90,12 +90,22 @@ export function splitBarsThreeWay(
   };
 }
 
-export function computeBarSetDigest(bars: readonly Bar[]): string {
-  const barDigests = bars.map((bar) => computeBarContentDigest(bar));
+/** Digest over concatenated bar parts without materializing a combined Bar array. */
+export function computeBarSetDigestFromParts(...parts: readonly (readonly Bar[])[]): string {
+  const barDigests: string[] = [];
+  for (const part of parts) {
+    for (const bar of part) {
+      barDigests.push(computeBarContentDigest(bar));
+    }
+  }
   return computeStableJsonDigest({
     schemaVersion: RESEARCH_DATASET_SCHEMA_VERSION,
     barDigests,
   });
+}
+
+export function computeBarSetDigest(bars: readonly Bar[]): string {
+  return computeBarSetDigestFromParts(bars);
 }
 
 export function sealResearchDataset(
