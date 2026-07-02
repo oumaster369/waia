@@ -5,7 +5,7 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import postgres from "postgres";
 
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
@@ -346,6 +346,20 @@ describe.skipIf(!integrationEnabled || !url)(
       expect(edgeRows.some((row) => row.relationKind === "validated_by_research_pipeline")).toBe(
         true,
       );
+
+      const mockOrders = await db
+        .select()
+        .from(pgSchema.traderOrders)
+        .where(
+          and(
+            eq(pgSchema.traderOrders.organizationId, orgA),
+            eq(pgSchema.traderOrders.executionMode, "mock"),
+          ),
+        );
+
+      for (const order of mockOrders) {
+        expect(order.clientOrderId).toContain("ri-blind-");
+      }
     });
 
     it("rejects promotion when research evidence references fabricated artifact IDs", async () => {

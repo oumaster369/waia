@@ -113,6 +113,8 @@ describe("trader walk-forward (RI-P3)", () => {
     });
 
     expect(runBacktest).toHaveBeenCalledTimes(2);
+    expect(runBacktest.mock.calls[0]?.[0]).toMatchObject({ windowIndex: 0 });
+    expect(runBacktest.mock.calls[1]?.[0]).toMatchObject({ windowIndex: 1 });
     expect(insertWalkForwardWindow).toHaveBeenCalledTimes(2);
     expect(updateStrategyCandidateStatus).toHaveBeenCalledWith(
       { organizationId: ORG_ID },
