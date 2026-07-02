@@ -33,6 +33,8 @@ pnpm trader:htx:backfill -- \
 
 **Target:** ≥43,200 bars (~30 days). Recommended: `--target-bars=129600` (~90 days).
 
+Persistence batches Postgres inserts in chunks of 1,000 bars (idempotent `ON CONFLICT DO NOTHING` per chunk).
+
 ---
 
 ## Step 2 — Track A evidence + PKA (HC-3.5 drill)

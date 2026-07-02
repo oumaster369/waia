@@ -17,6 +17,16 @@ import {
 type PgReadExecutor = Pick<WaiaPostgresDb, "select">;
 type PgWriteExecutor = Pick<WaiaPostgresDb, "insert">;
 
+/** Aligns with HTX candles page size; keeps Drizzle `.values()` batches stack-safe. */
+export const MARKET_BAR_INSERT_CHUNK_SIZE = 1000;
+
+const MARKET_BAR_CONFLICT_TARGET = [
+  pgSchema.traderMarketBars.organizationId,
+  pgSchema.traderMarketBars.symbol,
+  pgSchema.traderMarketBars.interval,
+  pgSchema.traderMarketBars.barOpenTime,
+] as const;
+
 export type MarketBarRecord = Bar & {
   id: string;
   organizationId: string;
@@ -88,19 +98,18 @@ export async function insertMarketBarsPostgres(
   }
 
   const scoped = requireOrgContext(context.organizationId);
-  const rows = inputs.map((input) => toInsertRow(scoped.organizationId, input));
 
-  await ex
-    .insert(pgSchema.traderMarketBars)
-    .values(rows)
-    .onConflictDoNothing({
-      target: [
-        pgSchema.traderMarketBars.organizationId,
-        pgSchema.traderMarketBars.symbol,
-        pgSchema.traderMarketBars.interval,
-        pgSchema.traderMarketBars.barOpenTime,
-      ],
-    });
+  for (let offset = 0; offset < inputs.length; offset += MARKET_BAR_INSERT_CHUNK_SIZE) {
+    const chunk = inputs.slice(offset, offset + MARKET_BAR_INSERT_CHUNK_SIZE);
+    const rows = chunk.map((input) => toInsertRow(scoped.organizationId, input));
+
+    await ex
+      .insert(pgSchema.traderMarketBars)
+      .values(rows)
+      .onConflictDoNothing({
+        target: [...MARKET_BAR_CONFLICT_TARGET],
+      });
+  }
 }
 
 export async function listMarketBarsPostgres(
