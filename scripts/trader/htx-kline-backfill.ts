@@ -14,7 +14,11 @@
 
 import { internalSymbolToHtx } from "@/lib/trader/connectors/htx/mappers";
 import { HtxRestClient, type HtxFetchFn } from "@/lib/trader/connectors/htx/client";
-import { fetchPaginatedHtxKlines } from "@/lib/trader/connectors/htx/kline-pagination";
+import {
+  computeHtxCandlesStartFromSeconds,
+  fetchPaginatedHtxKlines,
+} from "@/lib/trader/connectors/htx/kline-pagination";
+import { HTX_MARKET_HISTORY_CANDLES_MAX_SIZE } from "@/lib/trader/connectors/htx/config";
 import { BTC_USDT, type Bar, type InstrumentId } from "@/lib/trader/intelligence/types";
 import { mapHtxKlinesToBars } from "@/lib/trader/market-data/htx-kline-mapper";
 
@@ -109,6 +113,7 @@ export async function fetchHtxKlineBars(
   config: HtxKlineBackfillConfig,
   deps: HtxKlineBackfillDeps = {},
 ): Promise<Bar[]> {
+  const log = deps.log ?? ((message: string) => console.info(message));
   const client = new HtxRestClient({
     apiKey: "public",
     apiSecret: "public",
@@ -118,7 +123,10 @@ export async function fetchHtxKlineBars(
 
   const htxSymbol = internalSymbolToHtx(config.internalSymbol);
 
-  if (config.targetBarCount <= config.size) {
+  if (
+    config.targetBarCount <= config.size &&
+    config.targetBarCount <= HTX_MARKET_HISTORY_CANDLES_MAX_SIZE
+  ) {
     const klines = await client.getMarketHistoryKline({
       symbol: htxSymbol,
       period: config.period,
@@ -127,13 +135,20 @@ export async function fetchHtxKlineBars(
     return mapHtxKlinesToBars(config.internalSymbol, klines);
   }
 
+  const startFromSeconds = computeHtxCandlesStartFromSeconds({
+    targetBarCount: config.targetBarCount,
+    period: config.period,
+  });
+
   const paginated = await fetchPaginatedHtxKlines({
     symbol: htxSymbol,
     period: config.period,
     targetBarCount: config.targetBarCount,
-    batchSize: config.size,
+    batchSize: Math.min(config.size, HTX_MARKET_HISTORY_CANDLES_MAX_SIZE),
+    startFromSeconds,
+    log,
     fetchPage: (input) =>
-      client.getMarketHistoryKline({
+      client.getMarketHistoryCandles({
         symbol: input.symbol,
         period: input.period,
         size: input.size,
@@ -175,21 +190,22 @@ async function main(): Promise<void> {
   }
 
   const config = resolveHtxKlineBackfillConfig(flags);
-  const { getPostgresDrizzle } = await import("@/db/postgres-client");
+  const { withWaiaPostgresClient } = await import("@/db/postgres-client");
   const { insertMarketBarsPostgres } =
     await import("@/lib/trader/market-data/market-bars-repository-postgres");
   const { requireOrgContext } = await import("@/lib/waia-core/scope/org-context");
 
-  const db = getPostgresDrizzle();
-  await runHtxKlineBackfill(config, {
-    insertBars: async (organizationId, bars) => {
-      const context = requireOrgContext(organizationId);
-      await insertMarketBarsPostgres(
-        db,
-        context,
-        bars.map((bar) => ({ bar })),
-      );
-    },
+  await withWaiaPostgresClient(async (_sql, db) => {
+    await runHtxKlineBackfill(config, {
+      insertBars: async (organizationId, bars) => {
+        const context = requireOrgContext(organizationId);
+        await insertMarketBarsPostgres(
+          db,
+          context,
+          bars.map((bar) => ({ bar })),
+        );
+      },
+    });
   });
 }
 

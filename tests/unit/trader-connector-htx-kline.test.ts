@@ -82,6 +82,40 @@ describe("HtxRestClient.getMarketHistoryKline (AT-E3 S4)", () => {
     expect(requestedUrl).toContain("from=1700000000");
   });
 
+  it("getMarketHistoryCandles requests candles endpoint with from/to and caps size at 1000", async () => {
+    const fixture = loadFixture();
+    let requestedUrl = "";
+
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      requestedUrl = url.toString();
+      if (url.pathname.endsWith(HTX_ENDPOINTS.marketHistoryCandles)) {
+        return jsonResponse(fixture.kline);
+      }
+      throw new Error(`Unexpected fetch: ${url.toString()}`);
+    }) as typeof fetch;
+
+    const client = new HtxRestClient({
+      apiKey: "public",
+      apiSecret: "public",
+      fetchImpl,
+    });
+
+    const rows = await client.getMarketHistoryCandles({
+      symbol: "btcusdt",
+      period: "1min",
+      size: 2000,
+      from: 1_700_000_000,
+      to: 1_700_086_400,
+    });
+
+    expect(requestedUrl).toContain(`${HTX_ENDPOINTS.marketHistoryCandles}?`);
+    expect(requestedUrl).toContain("from=1700000000");
+    expect(requestedUrl).toContain("to=1700086400");
+    expect(requestedUrl).toContain("size=1000");
+    expect(rows).toHaveLength(25);
+  });
+
   it("throws HtxApiError on HTX error envelope", async () => {
     const fetchImpl = (async () =>
       jsonResponse({
