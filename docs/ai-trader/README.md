@@ -20,6 +20,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 | 5 | [AI-TRADER Roadmap v2](AI-TRADER-ROADMAP-v2.md) | Governing build sequence (Core uplift first, safety spine pulled forward). |
 | 6 | [AI-TRADER Implementation Program](AI-TRADER-IMPLEMENTATION-PROGRAM.md) | **Program v1.2** — execution blueprint (Milestones / Epics / Feature Groups) that drives Linear. |
 | 6b | [AI-TRADER Research Intelligence Program](AI-TRADER-RESEARCH-INTELLIGENCE-PROGRAM.md) | **RI Program** — M11 research spine, MKB, operator; Batch H (RI-P7) evidence + Production Knowledge Asset. |
+| 6c | [AI-TRADER Strategy Evolution Loop](AI-TRADER-STRATEGY-EVOLUTION-LOOP.md) | **Architectural research canon** — how AI-TRADER evolves strategies from accumulated market knowledge (Research Questions, Programs, Theories, human-broken loop); subordinate to Product Constitution and ADR-0018/0019. |
 | 7 | [AI-TRADER Security](AI-TRADER-SECURITY.md) | Binding security model (credentials, key management, kill switches, audit). |
 | 8 | [AI-TRADER Billing & HWM](AI-TRADER-BILLING-HWM.md) | Single source of truth for fees / high-water mark. |
 | 9 | [AI-TRADER Integration](AI-TRADER-INTEGRATION.md) | Relationships with Core, AI-TWIN, future modules. |
