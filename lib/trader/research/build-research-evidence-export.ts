@@ -14,6 +14,7 @@ export type BuildResearchEvidenceDocumentInput = {
   strategyCandidateId: string;
   blindValidationResultId: string;
   costModelVersion: string;
+  validationMetrics: ResearchValidationMetrics;
   walkForwardMetrics: readonly ResearchValidationMetrics[];
   blindMetrics: ResearchValidationMetrics;
   exportedAt?: Date;
@@ -27,16 +28,15 @@ export function buildResearchEvidenceDocument(
   input: BuildResearchEvidenceDocumentInput,
 ): ResearchEvidenceDocument {
   const regimeLabels = new Set<string>();
-  for (const metrics of input.walkForwardMetrics) {
+  for (const metrics of [
+    input.validationMetrics,
+    ...input.walkForwardMetrics,
+    input.blindMetrics,
+  ]) {
     for (const slice of metrics.byRegime) {
       if (slice.tradeCount > 0) {
         regimeLabels.add(slice.regimeLabel);
       }
-    }
-  }
-  for (const slice of input.blindMetrics.byRegime) {
-    if (slice.tradeCount > 0) {
-      regimeLabels.add(slice.regimeLabel);
     }
   }
 

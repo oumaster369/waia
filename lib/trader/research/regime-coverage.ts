@@ -79,3 +79,10 @@ export function assertMultiRegimeCoverage(regimeLabels: readonly string[]): void
     `missing ${missing.join(" and ")} regime coverage (observed: ${report.regimeLabels.join(", ") || "none"})`,
   );
 }
+
+/** ADR-0010 bundle-level gate: validation + walk-forward + blind trade-attributed regimes. */
+export function assertResearchPipelineRegimeCoverage(
+  metrics: readonly ResearchValidationMetrics[],
+): void {
+  assertMultiRegimeCoverage(collectRegimeLabelsFromMetrics(metrics));
+}

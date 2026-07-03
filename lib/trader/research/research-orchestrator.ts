@@ -47,6 +47,7 @@ import {
   updateStrategyCandidateStatusPostgres,
 } from "@/lib/trader/research/strategy-candidate-repository-postgres";
 import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/research/validate-research-evidence-provenance";
+import { assertResearchPipelineRegimeCoverage } from "@/lib/trader/research/regime-coverage";
 import { runWalkForwardValidation } from "@/lib/trader/research/walk-forward-engine";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -222,7 +223,6 @@ export async function runResearchPipelinePostgres(
     trainBars: splits.train,
     validationBars: splits.validation,
     oosBarCount,
-    requireMultiRegimeCoverage,
     runBacktest: async ({ bars, strategyId, strategyVersion, windowIndex }) => {
       const repo = await resolveOrderRepository(input.createOrderRepository);
       return runIsolatedResearchBacktest(ex, {
@@ -256,7 +256,6 @@ export async function runResearchPipelinePostgres(
     datasetId: dataset.id,
     blindBars: splits.blind,
     expectedBlindDigest: dataset.blindDigest,
-    requireMultiRegimeCoverage,
     runBacktest: async ({ bars, strategyId, strategyVersion }) => {
       const repo = await resolveOrderRepository(input.createOrderRepository);
       return runIsolatedResearchBacktest(ex, {
@@ -289,6 +288,14 @@ export async function runResearchPipelinePostgres(
     newId,
   });
 
+  if (requireMultiRegimeCoverage) {
+    assertResearchPipelineRegimeCoverage([
+      validationMetrics,
+      ...walkForward.windows.map((window) => window.metrics),
+      blind.metrics,
+    ]);
+  }
+
   const evidenceDocument = buildResearchEvidenceDocument({
     organizationId: input.context.organizationId,
     strategyId: input.strategyId,
@@ -298,6 +305,7 @@ export async function runResearchPipelinePostgres(
     strategyCandidateId: candidate.id,
     blindValidationResultId: blind.result.id,
     costModelVersion: costModel.version,
+    validationMetrics,
     walkForwardMetrics: walkForward.windows.map((window) => window.metrics),
     blindMetrics: blind.metrics,
   });
