@@ -5,6 +5,8 @@ enforceServerOnly();
 import type { ProviderMessage } from "@/lib/ai-gateway/completion-types";
 import type { ReasoningContext } from "@/lib/trader/research/reasoning-context.types";
 
+export const MARKET_REASONING_PROMPT_VERSION = "market-reasoning-assist-prompt-v1" as const;
+
 const SYSTEM_PROMPT = `You are the WAIA AI-TRADER market reasoning assist agent (recommend-only).
 
 Your role is to analyze research rejection evidence and propose improved market hypotheses.

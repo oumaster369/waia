@@ -1,5 +1,5 @@
 /**
- * SEE-R1 — Market Intelligence reasoning assist for Strategy Evolution.
+ * SEE-R2 — Market Intelligence reasoning assist for Strategy Evolution.
  *
  * Usage:
  *   pnpm trader:see:reason -- \
@@ -16,18 +16,22 @@ import { runMarketReasoningAssist } from "@/lib/trader/research/run-market-reaso
 const LOG_PREFIX = "[trader:see:reason]";
 
 export function printMarketReasoningAssistUsage(): void {
-  console.log(`SEE-R1 — market reasoning assist
+  console.log(`SEE-R2 — market reasoning assist
 
 Usage:
   pnpm trader:see:reason -- \\
     --vault-dir=./replay-runs/RI-P7/dee-371-artifact-check
 
-Environment (R1 defaults to fake provider — no secrets required):
+Environment (default: fake provider — no secrets required):
   WAIA_TRADER_CLI=1
-  WAIA_TRADER_SEE_AI_REASONING=1          (required for R2 live egress)
-  WAIA_AI_TRADER_GATEWAY_FOUNDATION=1     (R2)
-  WAIA_AI_TRADER_PROVIDER=openai-compatible (R2)
-  WAIA_AI_TRADER_OPENAI_API_KEY           (R2 — separate from Twin key)`);
+  WAIA_TRADER_SEE_AI_REASONING=1
+  WAIA_AI_TRADER_GATEWAY_FOUNDATION=1
+  WAIA_AI_TRADER_PROVIDER=openai-compatible
+  WAIA_AI_TRADER_PROVIDER_LIFECYCLE=sandbox|production
+  WAIA_AI_TRADER_OPENAI_API_KEY           (separate from Twin WAIA_AI_OPENAI_API_KEY)
+  WAIA_AI_TRADER_OPENAI_MODEL=gpt-4o-mini
+  WAIA_AI_TRADER_OPENAI_MAX_OUTPUT_TOKENS=2048
+  WAIA_AI_TRADER_OPENAI_MAX_RETRIES=2`);
 }
 
 function parseFlags(argv: string[]): Map<string, string | boolean> {
@@ -61,9 +65,9 @@ async function main(): Promise<void> {
   const result = await runMarketReasoningAssist({ vaultDir });
 
   console.error(
-    `${LOG_PREFIX} providerId=${result.providerId} ` +
-      `context=${result.reasoningContextPath} proposal=${result.proposalPath} ` +
-      `digest=${result.proposal.envelope.contentDigest}`,
+    `${LOG_PREFIX} sessionId=${result.reasoningSessionId} providerId=${result.providerId} ` +
+      `context=${result.reasoningContextPath} audit=${result.reasoningSessionAuditPath} ` +
+      `proposal=${result.proposalPath} digest=${result.proposal.envelope.contentDigest}`,
   );
 }
 

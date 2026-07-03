@@ -14,14 +14,14 @@ import {
   computeMarketReasoningProposalDigest,
   computeMarketReasoningPromptDigest,
 } from "@/lib/trader/research/serialize-market-reasoning-proposal";
-import type { TraderAiFoundationBinding } from "@/lib/ai-gateway/trader-foundation-profile";
+import type { TraderAIFoundationProfile } from "@/lib/ai-gateway/trader-ai-foundation.types";
 
 export type BuildMarketReasoningProposalInput = {
   context: ReasoningContext;
   draft: MarketReasoningProposalDraft;
   promptMessages: readonly { role: string; content: string }[];
   rawProviderJson: unknown;
-  foundation: TraderAiFoundationBinding;
+  foundation: TraderAIFoundationProfile;
   providerRequestId?: string;
   completedAt?: string;
 };
@@ -69,6 +69,7 @@ export function buildMarketReasoningProposal(
       strategyId: rejection.strategyId,
       strategyVersion: rejection.strategyVersion,
       candidateId: rejection.candidateId,
+      reasoningSessionId: context.envelope.reasoningSessionId,
       contentDigest,
     },
     proposalBody,

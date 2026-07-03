@@ -60,6 +60,7 @@ export type ReasoningContextEnvelope = {
   strategyId: string;
   strategyVersion: string;
   candidateId: string;
+  reasoningSessionId: string;
   assembledAt: string;
   contentDigest: string;
   sourceArtifactDigests: ReasoningContextSourceArtifactDigests;
@@ -75,4 +76,5 @@ export type AssembleReasoningContextInput = {
   rejectionRecord: ResearchRejectionRecord;
   evolutionCycle: EvolutionCycleMvp;
   assembledAt?: string;
+  reasoningSessionId: string;
 };
