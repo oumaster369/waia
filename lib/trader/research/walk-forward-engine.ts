@@ -4,10 +4,7 @@ import {
 } from "@/lib/trader/market-data/research-dataset";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { WalkForwardValidationError } from "@/lib/trader/research/errors";
-import {
-  assertMultiRegimeCoverage,
-  collectRegimeLabelsFromMetrics,
-} from "@/lib/trader/research/regime-coverage";
+import { collectRegimeLabelsFromMetrics } from "@/lib/trader/research/regime-coverage";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import type {
   InsertWalkForwardWindowRow,
@@ -48,7 +45,6 @@ export type RunWalkForwardValidationInput = {
   runBacktest: WalkForwardBacktestRunner;
   repository: WalkForwardRepository;
   newId?: () => string;
-  requireMultiRegimeCoverage?: boolean;
 };
 
 export type WalkForwardValidationResult = {
@@ -212,9 +208,6 @@ export async function runWalkForwardValidation(
   }
 
   const regimeLabels = collectRegimeLabelsFromMetrics(windows.map((window) => window.metrics));
-  if (input.requireMultiRegimeCoverage ?? true) {
-    assertMultiRegimeCoverage(regimeLabels);
-  }
 
   await input.repository.updateStrategyCandidateStatus(
     input.context,

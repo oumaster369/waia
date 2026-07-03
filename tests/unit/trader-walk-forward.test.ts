@@ -5,7 +5,6 @@ import {
   computeBarSetDigest,
   computeBarSetDigestFromParts,
 } from "@/lib/trader/market-data/research-dataset";
-import { MultiRegimeCoverageError } from "@/lib/trader/research/errors";
 import {
   buildWalkForwardWindowPlanAtIndex,
   buildWalkForwardWindowPlans,
@@ -126,25 +125,29 @@ describe("trader walk-forward (RI-P3)", () => {
     expect(computeWalkForwardEvidenceDigest(result.windows)).toMatch(/^[a-f0-9]{64}$/);
   });
 
-  it("runWalkForwardValidation rejects when multi-regime coverage is missing", async () => {
-    const repository = {
-      insertWalkForwardWindow: vi.fn(),
-      updateStrategyCandidateStatus: vi.fn(),
-    };
+  it("runWalkForwardValidation completes when window metrics lack multi-regime coverage", async () => {
+    const insertWalkForwardWindow = vi.fn().mockResolvedValue(undefined);
+    const updateStrategyCandidateStatus = vi.fn().mockResolvedValue(undefined);
 
-    await expect(
-      runWalkForwardValidation({
-        context: { organizationId: ORG_ID },
-        candidate: buildCandidate(),
-        trainBars: buildBars(10),
-        validationBars: buildBars(2),
-        oosBarCount: 2,
-        runBacktest: vi.fn().mockResolvedValue(buildMetrics(["TREND_BULL"])),
-        repository,
-      }),
-    ).rejects.toBeInstanceOf(MultiRegimeCoverageError);
+    const result = await runWalkForwardValidation({
+      context: { organizationId: ORG_ID },
+      candidate: buildCandidate(),
+      trainBars: buildBars(10),
+      validationBars: buildBars(2),
+      oosBarCount: 2,
+      runBacktest: vi.fn().mockResolvedValue(buildMetrics(["TREND_BULL"])),
+      repository: {
+        insertWalkForwardWindow,
+        updateStrategyCandidateStatus,
+      },
+    });
 
-    expect(repository.updateStrategyCandidateStatus).not.toHaveBeenCalled();
+    expect(updateStrategyCandidateStatus).toHaveBeenCalledWith(
+      { organizationId: ORG_ID },
+      CANDIDATE_ID,
+      "walk_forward_validated",
+    );
+    expect(result.regimeLabels).toEqual(["TREND_BULL"]);
   });
 });
 

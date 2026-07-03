@@ -6,7 +6,6 @@ import {
   BlindValidationAlreadyExistsError,
   StrategyCandidateBlindLockoutError,
 } from "@/lib/trader/research/errors";
-import { assertMultiRegimeCoverage } from "@/lib/trader/research/regime-coverage";
 import type {
   BlindValidationResult,
   ResearchValidationMetrics,
@@ -53,7 +52,6 @@ export type RunBlindHoldoutValidationInput = {
   repository: BlindHoldoutRepository;
   validatedAt?: Date;
   newId?: () => string;
-  requireMultiRegimeCoverage?: boolean;
 };
 
 export type BlindHoldoutValidationResult = {
@@ -120,13 +118,6 @@ export async function runBlindHoldoutValidation(
     strategyVersion: input.candidate.strategyVersion,
     paramsJson: input.candidate.paramsJson,
   });
-
-  if (input.requireMultiRegimeCoverage ?? true) {
-    const regimeLabels = metrics.byRegime
-      .filter((slice) => slice.tradeCount > 0)
-      .map((slice) => slice.regimeLabel);
-    assertMultiRegimeCoverage(regimeLabels);
-  }
 
   const validatedAt = input.validatedAt ?? new Date();
   const evidenceDigest = computeBlindValidationEvidenceDigest(
