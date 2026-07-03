@@ -137,7 +137,11 @@ export type ResearchFailureReconstructionErrorCode =
   | "SEALED_DATASET_NOT_FOUND"
   | "SEALED_DATASET_DIGEST_MISMATCH"
   | "REGIME_COVERAGE_NOT_FAILED"
-  | "INSUFFICIENT_MARKET_BARS";
+  | "INSUFFICIENT_MARKET_BARS"
+  | "ARTIFACT_DIGEST_MISMATCH"
+  | "EVOLUTION_REJECTION_DIGEST_MISMATCH"
+  | "VAULT_PARSE_ERROR"
+  | "VAULT_ARTIFACT_MISSING";
 
 export class ResearchFailureReconstructionError extends Error {
   readonly code: ResearchFailureReconstructionErrorCode;
@@ -145,6 +149,26 @@ export class ResearchFailureReconstructionError extends Error {
   constructor(code: ResearchFailureReconstructionErrorCode, message?: string) {
     super(message ?? `[research] failure reconstruction: ${code}`);
     this.name = "ResearchFailureReconstructionError";
+    this.code = code;
+  }
+}
+
+export class MarketReasoningGuardrailError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message?: string) {
+    super(message ?? `[research] market reasoning guardrail: ${code}`);
+    this.name = "MarketReasoningGuardrailError";
+    this.code = code;
+  }
+}
+
+export class MarketReasoningAssistError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message?: string) {
+    super(message ?? `[research] market reasoning assist: ${code}`);
+    this.name = "MarketReasoningAssistError";
     this.code = code;
   }
 }
