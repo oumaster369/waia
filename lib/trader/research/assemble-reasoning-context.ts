@@ -84,6 +84,7 @@ export function assembleReasoningContext(input: AssembleReasoningContextInput): 
       strategyId: rejectionBody.strategyId,
       strategyVersion: rejectionBody.strategyVersion,
       candidateId: rejectionBody.candidateId,
+      reasoningSessionId: input.reasoningSessionId,
       assembledAt,
       contentDigest,
       sourceArtifactDigests: {

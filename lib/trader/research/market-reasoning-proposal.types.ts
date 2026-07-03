@@ -64,6 +64,7 @@ export type MarketReasoningProposalEnvelope = {
   strategyId: string;
   strategyVersion: string;
   candidateId: string;
+  reasoningSessionId: string;
   contentDigest: string;
 };
 

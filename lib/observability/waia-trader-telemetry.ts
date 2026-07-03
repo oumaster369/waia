@@ -10,7 +10,12 @@ import { createAlertRouterSink } from "@/lib/observability/alerting/alert-router
  * @see docs/migrations/DEE-222-TRADER-TELEMETRY-SCHEMA.md — field meanings and grep examples.
  * @see docs/migrations/DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md — where stdout logs appear.
  */
-export type WaiaTraderEventKind = "execution" | "reconciliation" | "counter" | "paper_loop";
+export type WaiaTraderEventKind =
+  | "execution"
+  | "reconciliation"
+  | "counter"
+  | "paper_loop"
+  | "reasoning";
 
 export type WaiaTraderTelemetrySeverity = "info" | "critical";
 

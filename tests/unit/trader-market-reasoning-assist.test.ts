@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { resolveWaiaAiTraderFoundationBinding } from "@/lib/ai-gateway/trader-foundation-profile";
+import { resolveTraderAIFoundation } from "@/lib/ai-gateway/trader-foundation-profile";
 import { assembleReasoningContext } from "@/lib/trader/research/assemble-reasoning-context";
 import { buildEvolutionCycleMvp } from "@/lib/trader/research/build-evolution-cycle-mvp";
 import { buildResearchRejectionRecord } from "@/lib/trader/research/build-research-rejection-record";
@@ -89,13 +89,16 @@ function writeVaultDir(
   );
 }
 
-describe("market reasoning assist (SEE-R1)", () => {
+const TEST_SESSION_ID = "00000000-0000-4000-8000-000000000001";
+
+describe("market reasoning assist (SEE-R2)", () => {
   it("assembles reasoning context with R1 subset and empty future slots", () => {
     const { rejectionRecord, evolutionCycle } = buildOrg0VaultArtifacts();
     const context = assembleReasoningContext({
       rejectionRecord,
       evolutionCycle,
       assembledAt: "2026-07-03T00:00:00.000Z",
+      reasoningSessionId: TEST_SESSION_ID,
     });
 
     expect(context.schemaVersion).toBe("waia.trader.reasoning-context.v1");
@@ -118,11 +121,13 @@ describe("market reasoning assist (SEE-R1)", () => {
       rejectionRecord,
       evolutionCycle,
       assembledAt: "2026-07-03T00:00:00.000Z",
+      reasoningSessionId: TEST_SESSION_ID,
     });
     const b = assembleReasoningContext({
       rejectionRecord,
       evolutionCycle,
       assembledAt: "2026-07-03T00:00:00.000Z",
+      reasoningSessionId: TEST_SESSION_ID,
     });
     expect(a.envelope.contentDigest).toBe(b.envelope.contentDigest);
   });
@@ -136,16 +141,23 @@ describe("market reasoning assist (SEE-R1)", () => {
       const result = await runMarketReasoningAssist({
         vaultDir,
         assembledAt: "2026-07-03T00:00:00.000Z",
+        reasoningSessionId: TEST_SESSION_ID,
+        traceId: "00000000-0000-4000-8000-000000000002",
       });
 
       expect(result.providerId).toBe("fake");
+      expect(result.reasoningSessionId).toBe(TEST_SESSION_ID);
       expect(result.proposal.schemaVersion).toBe("waia.trader.market-reasoning-proposal.v1");
+      expect(result.proposal.envelope.reasoningSessionId).toBe(TEST_SESSION_ID);
       expect(result.proposal.proposalBody.humanReview.disposition).toBe("pending");
       expect(result.proposal.proposalBody.inputArtifactDigests.reasoningContext).toBe(
         result.reasoningContext.envelope.contentDigest,
       );
       expect(readFileSync(result.reasoningContextPath, "utf8")).toContain("reasoning-context.v1");
       expect(readFileSync(result.proposalPath, "utf8")).toContain("market-reasoning-proposal.v1");
+      expect(readFileSync(result.reasoningSessionAuditPath, "utf8")).toContain(
+        "reasoning-session-audit.v1",
+      );
     } finally {
       rmSync(vaultDir, { recursive: true, force: true });
     }
@@ -162,6 +174,7 @@ describe("market reasoning assist (SEE-R1)", () => {
     const context = assembleReasoningContext({
       rejectionRecord: loaded.rejectionRecord,
       evolutionCycle: loaded.evolutionCycle,
+      reasoningSessionId: TEST_SESSION_ID,
     });
     expect(context.contextBody.rejectionRecord.recordBody.failureCode).toBe(
       "MULTI_REGIME_COVERAGE_INSUFFICIENT",
@@ -174,7 +187,11 @@ describe("market reasoning assist (SEE-R1)", () => {
 
   it("guardrails reject promotion language", () => {
     const { rejectionRecord, evolutionCycle } = buildOrg0VaultArtifacts();
-    const context = assembleReasoningContext({ rejectionRecord, evolutionCycle });
+    const context = assembleReasoningContext({
+      rejectionRecord,
+      evolutionCycle,
+      reasoningSessionId: TEST_SESSION_ID,
+    });
     const draft = buildFakeMarketReasoningProposalDraft(context);
     const bad = {
       ...draft,
@@ -194,7 +211,11 @@ describe("market reasoning assist (SEE-R1)", () => {
 
   it("guardrails reject trading instructions", () => {
     const { rejectionRecord, evolutionCycle } = buildOrg0VaultArtifacts();
-    const context = assembleReasoningContext({ rejectionRecord, evolutionCycle });
+    const context = assembleReasoningContext({
+      rejectionRecord,
+      evolutionCycle,
+      reasoningSessionId: TEST_SESSION_ID,
+    });
     const draft = buildFakeMarketReasoningProposalDraft(context);
     const bad = {
       ...draft,
@@ -214,7 +235,11 @@ describe("market reasoning assist (SEE-R1)", () => {
 
   it("guardrails reject executable commands", () => {
     const { rejectionRecord, evolutionCycle } = buildOrg0VaultArtifacts();
-    const context = assembleReasoningContext({ rejectionRecord, evolutionCycle });
+    const context = assembleReasoningContext({
+      rejectionRecord,
+      evolutionCycle,
+      reasoningSessionId: TEST_SESSION_ID,
+    });
     const draft = buildFakeMarketReasoningProposalDraft(context);
     const bad = {
       ...draft,
@@ -234,7 +259,11 @@ describe("market reasoning assist (SEE-R1)", () => {
 
   it("guardrails reject missing falsification conditions", () => {
     const { rejectionRecord, evolutionCycle } = buildOrg0VaultArtifacts();
-    const context = assembleReasoningContext({ rejectionRecord, evolutionCycle });
+    const context = assembleReasoningContext({
+      rejectionRecord,
+      evolutionCycle,
+      reasoningSessionId: TEST_SESSION_ID,
+    });
     const draft = buildFakeMarketReasoningProposalDraft(context);
     const bad = {
       ...draft,
@@ -267,8 +296,9 @@ describe("market reasoning assist (SEE-R1)", () => {
       process.env.WAIA_AI_TRADER_GATEWAY_FOUNDATION = "1";
       process.env.WAIA_TRADER_SEE_AI_REASONING = "1";
       process.env.WAIA_AI_TRADER_PROVIDER = "openai-compatible";
-      const binding = resolveWaiaAiTraderFoundationBinding();
-      expect(binding.providerId).toBe("fake");
+      const profile = resolveTraderAIFoundation();
+      expect(profile.providerId).toBe("openai-compatible");
+      expect(profile.lifecycle).not.toBe("fake");
     } finally {
       if (prevTwinKey === undefined) {
         delete process.env.WAIA_AI_OPENAI_API_KEY;
