@@ -1,0 +1,40 @@
+{
+  "organizationId": "00000000-0000-4000-8000-00000000e001",
+  "strategyId": "mean_reversion_v0",
+  "strategyVersion": "0.1.0",
+  "candidateId": "00000000-0000-4000-8000-00000000e020",
+  "datasetId": "00000000-0000-4000-8000-00000000e021",
+  "backtestRunId": "00000000-0000-4000-8000-00000000e022",
+  "blindValidationResultId": "00000000-0000-4000-8000-00000000e023",
+  "failureMessage": "missing down (TREND_BEAR|STRESS) regime coverage (observed: CHOP, RANGE)",
+  "blindConsumed": true,
+  "walkForwardWindowCount": 1296,
+  "validationMetrics": {
+    "schemaVersion": "1.0.0",
+    "tradeCount": 2,
+    "periodRealizedPnl": "1.0",
+    "periodTotalFees": "0.1",
+    "byRegime": [
+      {
+        "regimeLabel": "CHOP",
+        "tradeCount": 1,
+        "periodRealizedPnl": "0.5",
+        "periodTotalFees": "0.05"
+      },
+      {
+        "regimeLabel": "RANGE",
+        "tradeCount": 1,
+        "periodRealizedPnl": "0.5",
+        "periodTotalFees": "0.05"
+      }
+    ]
+  },
+  "walkForwardMetrics": [],
+  "blindMetrics": {
+    "schemaVersion": "1.0.0",
+    "tradeCount": 0,
+    "periodRealizedPnl": "0",
+    "periodTotalFees": "0",
+    "byRegime": []
+  }
+}
