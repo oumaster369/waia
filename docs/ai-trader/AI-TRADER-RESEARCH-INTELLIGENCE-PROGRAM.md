@@ -74,6 +74,10 @@ Relational + optional pgvector. **No graph DB.**
 
 Recommend-only orchestration per ADR-0019. Uses `lib/ai-gateway` + DEE-80 prompt envelopes. Full action audit.
 
+## Strategy Evolution Loop
+
+How validated and rejected research feeds forward into the next generation of questions, theories, and hypotheses is defined in **[AI-TRADER Strategy Evolution Loop](AI-TRADER-STRATEGY-EVOLUTION-LOOP.md)** (architectural research canon v1.0). That document does not alter the RI pipeline or ADR-0010/0011 gates.
+
 ## North Star (non-executable)
 
 Parts 18–22 of the master plan (World State Engine, Knowledge Evolution, long-term vision) guide future architecture only — not MVP RI scope.
