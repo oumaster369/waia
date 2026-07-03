@@ -1,0 +1,78 @@
+{
+  "organizationId": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+  "candidate": {
+    "id": "747518d7-e2ff-4ea5-abf9-58f37567aeba",
+    "organizationId": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+    "strategyId": "mean_reversion_v0",
+    "strategyVersion": "0.1.0",
+    "hypothesisId": null,
+    "trialId": null,
+    "status": "blind_validated",
+    "paramsJson": "{}",
+    "blindUsed": true,
+    "createdAt": "2026-07-03T06:49:51.418Z",
+    "updatedAt": "2026-07-03T06:49:51.418Z"
+  },
+  "blindResult": {
+    "id": "146ba852-15c3-46cc-a2dd-23cbfb5ea8c8",
+    "organizationId": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+    "candidateId": "747518d7-e2ff-4ea5-abf9-58f37567aeba",
+    "datasetId": "ba4b5397-7706-46ed-80d9-b8a3aeb8a832",
+    "metricsJson": "{\"schemaVersion\":\"1.0.0\",\"tradeCount\":0,\"periodRealizedPnl\":\"0\",\"periodTotalFees\":\"0\",\"byRegime\":[]}",
+    "evidenceDigest": "org0-blind-digest",
+    "validatedAt": "2026-07-03T06:49:51.500Z",
+    "createdAt": "2026-07-03T06:49:51.500Z"
+  },
+  "walkForwardWindowCount": 1296,
+  "validationBacktestRun": {
+    "id": "da00cc4e-d0b1-42cd-ab8f-2e56ac158a3a",
+    "organizationId": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+    "datasetId": "ba4b5397-7706-46ed-80d9-b8a3aeb8a832",
+    "strategyId": "mean_reversion_v0",
+    "strategyVersion": "0.1.0",
+    "costModelVersion": "waia.trader.cost-model.v1",
+    "split": "validation",
+    "status": "completed",
+    "startedAt": "2026-07-03T06:49:51.460Z",
+    "completedAt": "2026-07-03T06:49:51.460Z",
+    "evidenceDigest": "org0-validation-digest",
+    "errorMessage": null,
+    "createdAt": "2026-07-03T06:49:51.460Z"
+  },
+  "dataset": {
+    "id": "ba4b5397-7706-46ed-80d9-b8a3aeb8a832",
+    "organizationId": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+    "name": "ri-p7-track-a-mean-reversion-archived-dee371",
+    "symbol": "BTC/USDT",
+    "interval": "1m",
+    "trainBarCount": 77761,
+    "validationBarCount": 25920,
+    "blindBarCount": 25921,
+    "trainDigest": "placeholder-not-used-in-unit-test",
+    "validationDigest": "placeholder-not-used-in-unit-test",
+    "blindDigest": "placeholder-not-used-in-unit-test",
+    "sealedAt": "2026-07-03T06:49:51.367Z",
+    "metadataJson": "{}",
+    "createdAt": "2026-07-03T06:49:51.367Z"
+  },
+  "validationMetrics": {
+    "schemaVersion": "1.0.0",
+    "tradeCount": 2,
+    "periodRealizedPnl": "1.0",
+    "periodTotalFees": "0.1",
+    "byRegime": [
+      {
+        "regimeLabel": "CHOP",
+        "tradeCount": 1,
+        "periodRealizedPnl": "0.5",
+        "periodTotalFees": "0.05"
+      },
+      {
+        "regimeLabel": "RANGE",
+        "tradeCount": 1,
+        "periodRealizedPnl": "0.5",
+        "periodTotalFees": "0.05"
+      }
+    ]
+  }
+}

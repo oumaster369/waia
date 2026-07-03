@@ -127,3 +127,24 @@ export class ResearchOrchestratorError extends Error {
     this.code = code;
   }
 }
+
+export type ResearchFailureReconstructionErrorCode =
+  | "CANDIDATE_NOT_FOUND"
+  | "CANDIDATE_NOT_ELIGIBLE"
+  | "BLIND_RESULT_NOT_FOUND"
+  | "VALIDATION_BACKTEST_RUN_NOT_FOUND"
+  | "WALK_FORWARD_WINDOWS_EMPTY"
+  | "SEALED_DATASET_NOT_FOUND"
+  | "SEALED_DATASET_DIGEST_MISMATCH"
+  | "REGIME_COVERAGE_NOT_FAILED"
+  | "INSUFFICIENT_MARKET_BARS";
+
+export class ResearchFailureReconstructionError extends Error {
+  readonly code: ResearchFailureReconstructionErrorCode;
+
+  constructor(code: ResearchFailureReconstructionErrorCode, message?: string) {
+    super(message ?? `[research] failure reconstruction: ${code}`);
+    this.name = "ResearchFailureReconstructionError";
+    this.code = code;
+  }
+}
