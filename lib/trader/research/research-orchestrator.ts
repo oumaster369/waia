@@ -29,7 +29,11 @@ import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import type { ResearchValidationMetrics } from "@/lib/trader/research/strategy-candidate.types";
 import { runBlindHoldoutValidation } from "@/lib/trader/research/blind-holdout-engine";
 import { buildResearchEvidenceDocument } from "@/lib/trader/research/build-research-evidence-export";
-import { ResearchOrchestratorError } from "@/lib/trader/research/errors";
+import {
+  MultiRegimeCoverageError,
+  ResearchOrchestratorError,
+  ResearchPipelineRegimeFailureError,
+} from "@/lib/trader/research/errors";
 import { recordResearchPipelineKnowledgePostgres } from "@/lib/trader/research/record-research-knowledge";
 import { runIsolatedResearchBacktest } from "@/lib/trader/research/research-backtest-isolation";
 import {
@@ -289,11 +293,35 @@ export async function runResearchPipelinePostgres(
   });
 
   if (requireMultiRegimeCoverage) {
-    assertResearchPipelineRegimeCoverage([
+    const pipelineMetrics = [
       validationMetrics,
       ...walkForward.windows.map((window) => window.metrics),
       blind.metrics,
-    ]);
+    ];
+    try {
+      assertResearchPipelineRegimeCoverage(pipelineMetrics);
+    } catch (error) {
+      if (error instanceof MultiRegimeCoverageError) {
+        throw new ResearchPipelineRegimeFailureError(
+          {
+            organizationId: input.context.organizationId,
+            strategyId: input.strategyId,
+            strategyVersion: input.strategyVersion,
+            candidateId: candidate.id,
+            datasetId: dataset.id,
+            backtestRunId,
+            blindValidationResultId: blind.result.id,
+            blindConsumed: true,
+            walkForwardWindowCount: walkForward.windows.length,
+            validationMetrics,
+            walkForwardMetrics: walkForward.windows.map((window) => window.metrics),
+            blindMetrics: blind.metrics,
+          },
+          error,
+        );
+      }
+      throw error;
+    }
   }
 
   const evidenceDocument = buildResearchEvidenceDocument({

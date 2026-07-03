@@ -2,7 +2,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -88,6 +88,29 @@ export async function getStrategyCandidateByIdPostgres(
         orgScopedWhere(pgSchema.traderStrategyCandidates.organizationId, scoped),
       ),
     )
+    .limit(1);
+
+  return rows[0] ? mapCandidate(rows[0]) : null;
+}
+
+export async function getLatestCandidateForStrategyPostgres(
+  ex: PgReadExecutor,
+  context: OrgContext,
+  strategyId: string,
+  strategyVersion: string,
+): Promise<StrategyCandidate | null> {
+  const scoped = requireOrgContext(context.organizationId);
+  const rows = await ex
+    .select()
+    .from(pgSchema.traderStrategyCandidates)
+    .where(
+      and(
+        eq(pgSchema.traderStrategyCandidates.strategyId, strategyId),
+        eq(pgSchema.traderStrategyCandidates.strategyVersion, strategyVersion),
+        orgScopedWhere(pgSchema.traderStrategyCandidates.organizationId, scoped),
+      ),
+    )
+    .orderBy(desc(pgSchema.traderStrategyCandidates.updatedAt))
     .limit(1);
 
   return rows[0] ? mapCandidate(rows[0]) : null;

@@ -32,7 +32,9 @@ import {
 } from "@/lib/trader/intelligence/types";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
 import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
-import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
+import { buildEvolutionCycleMvp } from "@/lib/trader/research/build-evolution-cycle-mvp";
+import { finalizeResearchCampaignFailurePostgres } from "@/lib/trader/research/finalize-research-campaign-failure";
+import { ResearchPipelineRegimeFailureError } from "@/lib/trader/research/errors";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import {
   createKillSwitchResolver,
@@ -42,6 +44,8 @@ import {
 } from "@/lib/trader/risk";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
+import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
+import { writeCampaignFailureVaultArtifacts } from "@/lib/trader/research/write-campaign-failure-vault";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const LOG_PREFIX = "[trader:ri:campaign]";
@@ -222,71 +226,100 @@ async function main(): Promise<void> {
   let trackARegimeFailed = false;
 
   for (const track of tracks) {
-    const result = await runResearchPipelinePostgres(db, {
-      context,
-      datasetName: track.datasetName,
-      symbol,
-      interval,
-      strategyId: track.strategyId,
-      strategyVersion: track.strategyVersion,
-      oosBarCount,
-      deps: { execution, reconciliation },
-      createOrderRepository: () => createPostgresOrderRepository(db),
-    });
+    const builderGitSha = process.env.GITHUB_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null;
 
-    const edgeVerified = result.evidenceDocument.evidenceBody.regimeCoverage.satisfiesRequirement;
-    const pka = buildProductionKnowledgeAsset({
-      evidenceDocument: result.evidenceDocument,
-      dataset: result.dataset,
-      barSetDigest,
-      barCount: barRecords.length,
-      symbol,
-      interval,
-      walkForwardWindowCount: result.walkForwardWindowCount,
-      blindMetrics: result.blindMetrics,
-      mkbLinkage: result.knowledge,
-      edgeConfidence: edgeVerified ? "0.7500" : "0.2500",
-      edgeStrength: "0.5000",
-      edgeVerified,
-      builderGitSha: process.env.GITHUB_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null,
-    });
+    try {
+      const result = await runResearchPipelinePostgres(db, {
+        context,
+        datasetName: track.datasetName,
+        symbol,
+        interval,
+        strategyId: track.strategyId,
+        strategyVersion: track.strategyVersion,
+        oosBarCount,
+        deps: { execution, reconciliation },
+        createOrderRepository: () => createPostgresOrderRepository(db),
+      });
 
-    const evidencePath = resolve(
-      vaultDir,
-      `track-${track.trackId.toLowerCase()}-research-evidence.json`,
-    );
-    const pkaPath = resolve(
-      vaultDir,
-      `track-${track.trackId.toLowerCase()}-production-knowledge-asset.json`,
-    );
+      const edgeVerified = result.evidenceDocument.evidenceBody.regimeCoverage.satisfiesRequirement;
+      const pka = buildProductionKnowledgeAsset({
+        evidenceDocument: result.evidenceDocument,
+        dataset: result.dataset,
+        barSetDigest,
+        barCount: barRecords.length,
+        symbol,
+        interval,
+        walkForwardWindowCount: result.walkForwardWindowCount,
+        blindMetrics: result.blindMetrics,
+        mkbLinkage: result.knowledge,
+        edgeConfidence: edgeVerified ? "0.7500" : "0.2500",
+        edgeStrength: "0.5000",
+        edgeVerified,
+        builderGitSha,
+      });
 
-    writeFileSync(evidencePath, `${JSON.stringify(result.evidenceDocument, null, 2)}\n`, "utf8");
-    writeFileSync(pkaPath, serializeProductionKnowledgeAsset(pka), "utf8");
+      const evidencePath = resolve(
+        vaultDir,
+        `track-${track.trackId.toLowerCase()}-research-evidence.json`,
+      );
+      const pkaPath = resolve(
+        vaultDir,
+        `track-${track.trackId.toLowerCase()}-production-knowledge-asset.json`,
+      );
 
-    manifestTracks.push({
-      trackId: track.trackId,
-      strategyId: track.strategyId,
-      strategyVersion: track.strategyVersion,
-      evidencePath,
-      pkaPath,
-      knowledgeId: pka.knowledgeId,
-      evidenceDigest: result.evidenceDocument.envelope.contentDigest,
-      pkaDigest: pka.reproducibilityDigest,
-      marketEventId: result.knowledge.marketEventId,
-      knowledgeEdgeId: result.knowledge.knowledgeEdgeId,
-      regimeSatisfiesRequirement: edgeVerified,
-      regimeCoverage: result.evidenceDocument.evidenceBody.regimeCoverage,
-      costModelVersion: result.evidenceDocument.evidenceBody.costModelVersion,
-    });
+      writeFileSync(evidencePath, `${JSON.stringify(result.evidenceDocument, null, 2)}\n`, "utf8");
+      writeFileSync(pkaPath, serializeProductionKnowledgeAsset(pka), "utf8");
 
-    if (track.trackId === "A" && !edgeVerified) {
-      trackARegimeFailed = true;
+      manifestTracks.push({
+        trackId: track.trackId,
+        strategyId: track.strategyId,
+        strategyVersion: track.strategyVersion,
+        evidencePath,
+        pkaPath,
+        knowledgeId: pka.knowledgeId,
+        evidenceDigest: result.evidenceDocument.envelope.contentDigest,
+        pkaDigest: pka.reproducibilityDigest,
+        marketEventId: result.knowledge.marketEventId,
+        knowledgeEdgeId: result.knowledge.knowledgeEdgeId,
+        regimeSatisfiesRequirement: edgeVerified,
+        regimeCoverage: result.evidenceDocument.evidenceBody.regimeCoverage,
+        costModelVersion: result.evidenceDocument.evidenceBody.costModelVersion,
+      });
+
+      if (track.trackId === "A" && !edgeVerified) {
+        trackARegimeFailed = true;
+      }
+
+      console.error(
+        `${LOG_PREFIX} track ${track.trackId} strategy=${track.strategyId} knowledgeId=${pka.knowledgeId} ` +
+          `regimeOk=${edgeVerified}`,
+      );
+    } catch (error) {
+      if (error instanceof ResearchPipelineRegimeFailureError) {
+        const rejectionRecord = await finalizeResearchCampaignFailurePostgres(db, context, {
+          failure: error,
+          builderGitSha,
+        });
+        const evolutionCycle = buildEvolutionCycleMvp({ rejectionRecord });
+        const artifactPaths = writeCampaignFailureVaultArtifacts({
+          vaultDir,
+          trackId: track.trackId,
+          rejectionRecord,
+          evolutionCycle,
+        });
+
+        if (track.trackId === "A") {
+          trackARegimeFailed = true;
+        }
+
+        console.error(
+          `${LOG_PREFIX} track ${track.trackId} strategy=${track.strategyId} STRATEGY_FAILED ` +
+            `rejection=${artifactPaths.rejectionRecordPath} evolution=${artifactPaths.evolutionCyclePath}`,
+        );
+        continue;
+      }
+      throw error;
     }
-
-    console.error(
-      `${LOG_PREFIX} track ${track.trackId} strategy=${track.strategyId} knowledgeId=${pka.knowledgeId} ` +
-        `regimeOk=${edgeVerified}`,
-    );
   }
 
   const manifest: RiEvidenceCampaignManifest = {
@@ -309,7 +342,7 @@ async function main(): Promise<void> {
 
   if (trackARegimeFailed) {
     console.error(
-      `${LOG_PREFIX} Track A regime coverage failed — HC-3.5 promotion blocked (exit 1)`,
+      `${LOG_PREFIX} Track A regime coverage failed — HC-3.5 promotion blocked; evolution artifacts written (exit 1)`,
     );
     process.exitCode = 1;
   }
