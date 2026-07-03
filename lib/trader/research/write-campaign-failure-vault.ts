@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type { EvolutionCycleMvp } from "@/lib/trader/research/evolution-cycle-mvp.types";
@@ -6,9 +6,12 @@ import type { ResearchRejectionRecord } from "@/lib/trader/research/research-rej
 import { serializeEvolutionCycleMvp } from "@/lib/trader/research/serialize-evolution-cycle-mvp";
 import { serializeResearchRejectionRecord } from "@/lib/trader/research/serialize-research-rejection-record";
 
+export type VaultArtifactNaming = "track" | "flat";
+
 export type WriteCampaignFailureVaultArtifactsInput = {
   vaultDir: string;
-  trackId: "A" | "B";
+  trackId?: "A" | "B";
+  naming?: VaultArtifactNaming;
   rejectionRecord: ResearchRejectionRecord;
   evolutionCycle: EvolutionCycleMvp;
 };
@@ -21,15 +24,23 @@ export type WriteCampaignFailureVaultArtifactsResult = {
 export function writeCampaignFailureVaultArtifacts(
   input: WriteCampaignFailureVaultArtifactsInput,
 ): WriteCampaignFailureVaultArtifactsResult {
-  const trackSuffix = input.trackId.toLowerCase();
-  const rejectionRecordPath = resolve(
-    input.vaultDir,
-    `track-${trackSuffix}-research-rejection-record.json`,
-  );
-  const evolutionCyclePath = resolve(
-    input.vaultDir,
-    `track-${trackSuffix}-evolution-cycle-mvp.json`,
-  );
+  const naming = input.naming ?? "track";
+  const rejectionRecordPath =
+    naming === "flat"
+      ? resolve(input.vaultDir, "research-rejection-record.json")
+      : resolve(
+          input.vaultDir,
+          `track-${(input.trackId ?? "A").toLowerCase()}-research-rejection-record.json`,
+        );
+  const evolutionCyclePath =
+    naming === "flat"
+      ? resolve(input.vaultDir, "evolution-cycle-mvp.json")
+      : resolve(
+          input.vaultDir,
+          `track-${(input.trackId ?? "A").toLowerCase()}-evolution-cycle-mvp.json`,
+        );
+
+  mkdirSync(input.vaultDir, { recursive: true });
 
   writeFileSync(
     rejectionRecordPath,

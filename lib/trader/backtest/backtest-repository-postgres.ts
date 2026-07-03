@@ -126,6 +126,28 @@ export async function createBacktestRunPostgres(
   return run;
 }
 
+export async function getValidationBacktestRunForDatasetPostgres(
+  ex: PgBacktestReadExecutor,
+  context: OrgContext,
+  datasetId: string,
+): Promise<BacktestRunView | null> {
+  const scoped = requireOrgContext(context.organizationId);
+  const rows = await ex
+    .select()
+    .from(pgSchema.traderBacktestRuns)
+    .where(
+      and(
+        eq(pgSchema.traderBacktestRuns.datasetId, datasetId),
+        eq(pgSchema.traderBacktestRuns.split, "validation"),
+        orgScopedWhere(pgSchema.traderBacktestRuns.organizationId, scoped),
+      ),
+    )
+    .limit(1);
+
+  const row = rows[0];
+  return row ? mapRunRow(row) : null;
+}
+
 export async function getBacktestRunByIdPostgres(
   ex: PgBacktestReadExecutor,
   context: OrgContext,

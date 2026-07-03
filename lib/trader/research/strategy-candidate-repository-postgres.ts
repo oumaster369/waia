@@ -24,6 +24,7 @@ import {
 
 type PgReadExecutor = Pick<WaiaPostgresDb, "select">;
 type PgWriteExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
+type PgUpdateExecutor = Pick<WaiaPostgresDb, "select" | "update">;
 
 function mapCandidate(
   row: typeof pgSchema.traderStrategyCandidates.$inferSelect,
@@ -146,7 +147,7 @@ export async function registerStrategyCandidatePostgres(
 }
 
 export async function updateStrategyCandidateStatusPostgres(
-  ex: PgWriteExecutor,
+  ex: PgUpdateExecutor,
   context: OrgContext,
   candidateId: string,
   status: StrategyCandidateStatus,

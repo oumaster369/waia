@@ -13,8 +13,10 @@ import {
   getLatestCandidateForStrategyPostgres,
   updateStrategyCandidateStatusPostgres,
 } from "@/lib/trader/research/strategy-candidate-repository-postgres";
-import type { ResearchValidationMetrics } from "@/lib/trader/research/strategy-candidate.types";
+import { parseResearchValidationMetricsJson } from "@/lib/trader/research/parse-research-validation-metrics";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+
+export { parseResearchValidationMetricsJson };
 
 type PgWriteExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
 type PgReadExecutor = Pick<WaiaPostgresDb, "select">;
@@ -52,14 +54,6 @@ export async function finalizeResearchCampaignFailurePostgres(
   await updateStrategyCandidateStatusPostgres(ex, context, failure.candidateId, "rejected");
 
   return rejectionRecord;
-}
-
-export function parseResearchValidationMetricsJson(json: string): ResearchValidationMetrics {
-  const parsed = JSON.parse(json) as ResearchValidationMetrics;
-  if (parsed.schemaVersion !== "1.0.0") {
-    throw new Error("[research] unsupported ResearchValidationMetrics schemaVersion");
-  }
-  return parsed;
 }
 
 export async function ingestCampaignOutcomeFromPostgres(
