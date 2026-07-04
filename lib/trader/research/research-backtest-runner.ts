@@ -9,6 +9,10 @@ import {
   TRADE_LIFECYCLE_SEMANTICS_VERSION,
 } from "@/lib/trader/paper/trade-lifecycle-semantics";
 import { derivePaperStrategyEvaluations } from "@/lib/trader/paper/derive-paper-strategy-eval";
+import {
+  assertLifecycleFillWalkTaxonomyParity,
+  deriveTradesFromFills,
+} from "@/lib/trader/lifecycle";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import {
   buildQuoteCurrencyBySymbol,
@@ -440,6 +444,34 @@ async function runResearchValidationBacktestV2(
     orderRepository: input.orderRepository,
     executionMode: "mock",
   });
+
+  const lifecycleRecorder = input.deps.lifecycleRecorder;
+  if (lifecycleRecorder) {
+    for (const markToClose of evaluation.markToCloseTrades) {
+      await lifecycleRecorder.recordForcedFlatLifecycle({
+        context: input.context,
+        accountKey: input.accountKey,
+        strategySignalId: input.strategyId,
+        markToClose,
+      });
+    }
+
+    const strategyFillEvents = fillEvents.filter((event) =>
+      orderMatchesStrategyEvidenceScope(event.order, input.strategyId),
+    );
+    const lifecycleSnapshot = deriveTradesFromFills({
+      fillEvents: strategyFillEvents,
+      organizationId: input.context.organizationId,
+      strategySignalId: input.strategyId,
+      accountKey: input.accountKey,
+      forcedFlatTrades: evaluation.markToCloseTrades,
+    });
+    assertLifecycleFillWalkTaxonomyParity({
+      fillWalk: evaluation,
+      lifecycleSnapshot,
+    });
+  }
+
   const symbols = [...new Set(fillEvents.map((event) => event.order.symbol))];
   const quoteCurrencyBySymbol = buildQuoteCurrencyBySymbol(symbols);
   const feesByRegime = attributePeriodFeesByRegime(

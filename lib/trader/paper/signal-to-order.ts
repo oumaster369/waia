@@ -61,7 +61,12 @@ export function mapSignalToSubmitOrder(
     type: "market",
     quantity: allocateQuantity(signal, input.referencePrice, input.defaultQuantity),
     strategySignalId: signal.strategySignalId,
+    strategyId: signal.strategyId,
+    strategyVersion: signal.strategyVersion,
     allocationDecisionId: null,
+    openingMsvId: signal.msvId,
+    openingFeatureSetId: signal.featureSetId,
+    signalConfidence: signal.confidence ?? null,
     referencePrice: input.referencePrice,
     accountKey: input.accountKey,
   };

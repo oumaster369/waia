@@ -1692,6 +1692,176 @@ export const traderFills = pgTable(
   ],
 );
 
+export const positionSideEnumPg = pgEnum("trader_position_side", ["LONG", "SHORT"]);
+export const instrumentKindEnumPg = pgEnum("trader_instrument_kind", ["SPOT", "PERP", "FUTURE"]);
+export const positionLotStateEnumPg = pgEnum("trader_position_lot_state", ["OPEN", "CLOSED"]);
+export const tradeStateEnumPg = pgEnum("trader_trade_state", ["OPEN", "CLOSED", "FORCED_FLAT"]);
+export const tradeLegKindEnumPg = pgEnum("trader_trade_leg_kind", [
+  "OPEN_FILL",
+  "CLOSE_FILL",
+  "FORCED_FLAT",
+]);
+export const lifecycleEventPhaseEnumPg = pgEnum("trader_lifecycle_event_phase", [
+  "SIGNAL_ACCEPTED",
+  "ORDER_SUBMITTED",
+  "ORDER_FILLED",
+  "TRADE_OPENED",
+  "TRADE_CLOSED",
+  "FORCED_FLAT",
+  "GUARDIAN_EVALUATED",
+  "GUARDIAN_EXIT_INTENT",
+]);
+export const lifecycleEntityTypeEnumPg = pgEnum("trader_lifecycle_entity_type", [
+  "TRADE",
+  "POSITION_LOT",
+  "ORDER",
+  "FILL",
+  "STRATEGY_SIGNAL",
+]);
+
+/** AI-TRADER: round-trip knowledge records (M1 / DEE-376). */
+export const traderTrades = pgTable(
+  "trader_trades",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    venue: text("venue").notNull(),
+    accountKey: text("account_key").notNull(),
+    positionSide: positionSideEnumPg("position_side").notNull(),
+    instrumentKind: instrumentKindEnumPg("instrument_kind").notNull(),
+    strategySignalId: text("strategy_signal_id").notNull(),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    state: tradeStateEnumPg("state").notNull(),
+    semanticsVersion: text("semantics_version").notNull(),
+    openedAt: timestamp("opened_at", { withTimezone: true, mode: "date" }).notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true, mode: "date" }),
+    realizedPnl: text("realized_pnl").notNull().default("0"),
+    markedPnl: text("marked_pnl").notNull().default("0"),
+    hypothesisId: uuid("hypothesis_id"),
+    patternId: uuid("pattern_id"),
+    riskDecisionId: text("risk_decision_id").notNull(),
+    allocationDecisionId: text("allocation_decision_id"),
+    reasoningSessionId: text("reasoning_session_id"),
+    signalConfidence: text("signal_confidence"),
+    openingRegime: text("opening_regime"),
+    openingMsvId: text("opening_msv_id"),
+    openingFeatureSetId: text("opening_feature_set_id"),
+    closingMsvId: text("closing_msv_id"),
+    closingFeatureSetId: text("closing_feature_set_id"),
+    closingRegime: text("closing_regime"),
+    frozenAt: timestamp("frozen_at", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_trades_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_trades_org_strategy_signal_idx").on(t.organizationId, t.strategySignalId),
+    index("trader_trades_org_state_idx").on(t.organizationId, t.state),
+  ],
+);
+
+/** AI-TRADER: live position lots (M1 / DEE-376). */
+export const traderPositionLots = pgTable(
+  "trader_position_lots",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    venue: text("venue").notNull(),
+    accountKey: text("account_key").notNull(),
+    positionSide: positionSideEnumPg("position_side").notNull(),
+    instrumentKind: instrumentKindEnumPg("instrument_kind").notNull(),
+    strategySignalId: text("strategy_signal_id").notNull(),
+    state: positionLotStateEnumPg("state").notNull(),
+    openQty: text("open_qty").notNull(),
+    remainingQty: text("remaining_qty").notNull(),
+    avgCost: text("avg_cost").notNull(),
+    openedAt: timestamp("opened_at", { withTimezone: true, mode: "date" }).notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true, mode: "date" }),
+    tradeId: uuid("trade_id").notNull(),
+    hedgeGroupId: uuid("hedge_group_id"),
+    targetLotId: uuid("target_lot_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_position_lots_id_organization_unique").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.tradeId, t.organizationId],
+      foreignColumns: [traderTrades.id, traderTrades.organizationId],
+    }).onDelete("cascade"),
+    index("trader_position_lots_org_state_idx").on(t.organizationId, t.state),
+    index("trader_position_lots_org_symbol_strategy_idx").on(
+      t.organizationId,
+      t.symbol,
+      t.strategySignalId,
+    ),
+  ],
+);
+
+/** AI-TRADER: append-only trade legs (M1 / DEE-376). */
+export const traderTradeLegs = pgTable(
+  "trader_trade_legs",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    tradeId: uuid("trade_id").notNull(),
+    positionLotId: uuid("position_lot_id").notNull(),
+    kind: tradeLegKindEnumPg("kind").notNull(),
+    orderId: uuid("order_id").notNull(),
+    fillId: uuid("fill_id"),
+    syntheticId: text("synthetic_id"),
+    quantity: text("quantity").notNull(),
+    price: text("price").notNull(),
+    fee: text("fee").notNull().default("0"),
+    executedAt: timestamp("executed_at", { withTimezone: true, mode: "date" }).notNull(),
+    legPnl: text("leg_pnl").notNull().default("0"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_trade_legs_id_organization_unique").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.tradeId, t.organizationId],
+      foreignColumns: [traderTrades.id, traderTrades.organizationId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.positionLotId, t.organizationId],
+      foreignColumns: [traderPositionLots.id, traderPositionLots.organizationId],
+    }).onDelete("cascade"),
+    index("trader_trade_legs_org_trade_idx").on(t.organizationId, t.tradeId),
+  ],
+);
+
+/** AI-TRADER: append-only lifecycle trace (M1 / DEE-376). */
+export const traderLifecycleEvents = pgTable(
+  "trader_lifecycle_events",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    entityType: lifecycleEntityTypeEnumPg("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    phase: lifecycleEventPhaseEnumPg("phase").notNull(),
+    payload: text("payload"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true, mode: "date" }).notNull(),
+    researchRunId: uuid("research_run_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_lifecycle_events_org_entity_idx").on(t.organizationId, t.entityType, t.entityId),
+    index("trader_lifecycle_events_org_phase_idx").on(t.organizationId, t.phase),
+  ],
+);
+
 /** AI-TRADER: org-level live-enable governance states (DEE-212 / BP-7). */
 export const traderOrgLiveEnableStateEnum = [
   "DISABLED",

@@ -267,6 +267,13 @@
       "when": 1780000000030,
       "tag": "0037_strategy_promotion_research_evidence",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1780000000038,
+      "tag": "0038_trader_lifecycle",
+      "breakpoints": true
     }
   ]
 }

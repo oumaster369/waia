@@ -151,6 +151,20 @@ export async function runPaperCycleOnce(
       continue;
     }
 
+    submit.openingRegime = evaluation.msv.derived.regime;
+
+    if (deps.lifecycleRecorder) {
+      await deps.lifecycleRecorder.recordSignalAcceptedLifecycleEvent({
+        context,
+        strategySignalId: signal.strategySignalId,
+        payload: {
+          strategyId: signal.strategyId,
+          regime: evaluation.msv.derived.regime,
+        },
+        occurredAt: new Date(snapshot.evaluatedAt),
+      });
+    }
+
     const execution = await deps.execution.submitOrder(context, {
       ...submit,
       accountState,

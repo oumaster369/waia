@@ -14,6 +14,7 @@ import type {
   MarketSnapshot,
 } from "@/lib/trader/market-data/types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
+import type { LifecycleRecorder } from "@/lib/trader/lifecycle/lifecycle-recorder";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 export type PaperCycleExecutionMode = Extract<OrderExecutionMode, "mock" | "paper">;
@@ -26,6 +27,7 @@ export type PaperCycleDeps = {
       target: { kind: "order"; orderId: string },
     ): Promise<ReconciliationReport>;
   };
+  lifecycleRecorder?: LifecycleRecorder;
 };
 
 export type PaperCycleInput = {
