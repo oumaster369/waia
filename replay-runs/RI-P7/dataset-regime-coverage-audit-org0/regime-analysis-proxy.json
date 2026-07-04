@@ -1,0 +1,109 @@
+{
+  "capturedAt": "2026-07-04T08:29:01.227Z",
+  "symbol": "BTC/USDT",
+  "interval": "1m",
+  "totalBars": 129600,
+  "classifiableWindows": 129581,
+  "barTimeSpan": {
+    "firstOpen": "2026-04-05T08:27:00.000Z",
+    "lastClose": "2026-07-04T08:27:00.000Z",
+    "spanDays": 90
+  },
+  "regimeCounts": {
+    "TREND_BULL": 7319,
+    "TREND_BEAR": 7953,
+    "RANGE": 85367,
+    "CHOP": 28942,
+    "STRESS": 0,
+    "PANIC": 0,
+    "LIQUIDITY_VACUUM": 0,
+    "EVENT_RISK": 0,
+    "LOW_EDGE": 0,
+    "UNKNOWN": 0
+  },
+  "regimePercent": {
+    "TREND_BULL": 5.65,
+    "TREND_BEAR": 6.14,
+    "RANGE": 65.88,
+    "CHOP": 22.34
+  },
+  "canonicalRegimeCounts": {
+    "TREND_BULL": 7319,
+    "TREND_BEAR": 7953,
+    "RANGE": 85367,
+    "CHOP": 28942,
+    "STRESS": 0
+  },
+  "stressEmitted": false,
+  "unreachableCanonicalRegimes": [
+    "STRESS"
+  ],
+  "gateBarCoverage": {
+    "hasNonTrendingBars": true,
+    "hasDownBars": true,
+    "satisfiesBarLevelRequirement": true,
+    "nonTrendingBarCount": 114309,
+    "downBarCount": 7953
+  },
+  "volatility": {
+    "realizedVol20": {
+      "min": "1.78325622",
+      "p25": "28.49233027",
+      "median": "43.39479022",
+      "p75": "68.16335497",
+      "max": "721.90636015"
+    },
+    "highVolBarShare": 27.16,
+    "lowVolBarShare": 13.09
+  },
+  "trend": {
+    "maxConsecutiveBars": {
+      "CHOP": 15,
+      "RANGE": 42,
+      "TREND_BULL": 9,
+      "TREND_BEAR": 12
+    },
+    "regimeTransitionCount": 40741
+  },
+  "reversal": {
+    "zscoreZeroCrossCount": 15427,
+    "zscoreSignFlipCount": 15426
+  },
+  "sideways": {
+    "rangePlusChopShare": 88.21,
+    "chopShare": 22.34,
+    "rangeShare": 65.88
+  },
+  "crisisRecovery": {
+    "stressBarCount": 0,
+    "panicBarCount": 0,
+    "bearToNonBearTransitionCount": 3923,
+    "bearRecoverySegments": 3923
+  },
+  "breakout": {
+    "bullBreakoutCrossCount": 3728,
+    "bearBreakoutCrossCount": 3923,
+    "falseBullBreakoutCount": 810,
+    "falseBearBreakoutCount": 813
+  },
+  "eventDiversity": {
+    "measurable": false,
+    "reason": "Sealed research datasets store OHLCV bars only; trader_market_events ingestion is not bound to dataset windows (M7)."
+  },
+  "gateEvaluationFromObservedBarRegimes": {
+    "regimeLabels": [
+      "TREND_BULL",
+      "TREND_BEAR",
+      "RANGE",
+      "CHOP"
+    ],
+    "hasNonTrending": true,
+    "hasDown": true,
+    "satisfiesRequirement": true
+  },
+  "notes": [
+    "Proxy analysis uses current HTX public kline fetch, not Org-0 sealed digest verification.",
+    "Trade-attributed gate requires countAttributedRoundTrips > 0 per regime bucket (v2), not bar presence alone.",
+    "CDE v0 classifyRegime never emits STRESS; down bucket attribution depends on TREND_BEAR only."
+  ]
+}

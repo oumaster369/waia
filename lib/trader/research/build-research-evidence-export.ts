@@ -4,6 +4,7 @@ import { computeResearchEvidenceExportDigest } from "@/lib/trader/research/seria
 import { RESEARCH_EVIDENCE_EXPORT_SCHEMA_VERSION } from "@/lib/trader/research/research-evidence-export.types";
 import type { ResearchValidationMetrics } from "@/lib/trader/research/strategy-candidate.types";
 import type { WalkForwardWindowResult } from "@/lib/trader/research/strategy-candidate.types";
+import { regimeSliceHasAttributedRoundTrips } from "@/lib/trader/research/regime-coverage";
 
 export type BuildResearchEvidenceDocumentInput = {
   organizationId: string;
@@ -34,7 +35,7 @@ export function buildResearchEvidenceDocument(
     input.blindMetrics,
   ]) {
     for (const slice of metrics.byRegime) {
-      if (slice.tradeCount > 0) {
+      if (regimeSliceHasAttributedRoundTrips(slice)) {
         regimeLabels.add(slice.regimeLabel);
       }
     }

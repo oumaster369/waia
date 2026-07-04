@@ -37,22 +37,55 @@ export type InsertStrategyCandidateRow = {
   updatedAt?: Date;
 };
 
-export const RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION = "1.0.0" as const;
+export const RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1 = "1.0.0" as const;
 
-export type ResearchRegimeMetricSlice = {
+export const RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION = "2.0.0" as const;
+
+export type ResearchRegimeMetricSliceV1 = {
   regimeLabel: string;
   tradeCount: number;
   periodRealizedPnl: string;
   periodTotalFees: string;
 };
 
-export type ResearchValidationMetrics = {
-  schemaVersion: typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION;
+/** @deprecated legacy v1 slice — use ResearchRegimeMetricSliceV2 for new metrics. */
+export type ResearchRegimeMetricSlice = ResearchRegimeMetricSliceV1;
+
+export type ResearchValidationMetricsV1 = {
+  schemaVersion: typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1;
   tradeCount: number;
   periodRealizedPnl: string;
   periodTotalFees: string;
-  byRegime: ResearchRegimeMetricSlice[];
+  byRegime: ResearchRegimeMetricSliceV1[];
 };
+
+export type ResearchTradeMetricTaxonomy = {
+  submittedOrders: number;
+  acceptedOrders: number;
+  filledOrders: number;
+  openPositions: number;
+  closedTrades: number;
+  markToCloseTrades: number;
+  realizedPnl: string;
+  markedPnl: string;
+  periodTotalFees: string;
+  rejectedSignals: number;
+  skippedSignals: number;
+};
+
+export type ResearchRegimeMetricSliceV2 = ResearchTradeMetricTaxonomy & {
+  regimeLabel: string;
+};
+
+export type ResearchValidationMetricsV2 = ResearchTradeMetricTaxonomy & {
+  schemaVersion: typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION;
+  closedTradeSemanticsVersion: string;
+  tradeLifecycleSemanticsVersion: string;
+  costModelVersion: string;
+  byRegime: ResearchRegimeMetricSliceV2[];
+};
+
+export type ResearchValidationMetrics = ResearchValidationMetricsV1 | ResearchValidationMetricsV2;
 
 export type WalkForwardWindowResult = {
   windowIndex: number;

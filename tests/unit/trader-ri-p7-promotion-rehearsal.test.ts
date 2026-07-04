@@ -7,7 +7,7 @@ import type {
   OrderRepository,
   OrderRow,
 } from "@/lib/trader/execution/order-repository.types";
-import { RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION } from "@/lib/trader/research/strategy-candidate.types";
+import { RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1 } from "@/lib/trader/research/strategy-candidate.types";
 import { assembleStrategyPromotionRecord } from "@/lib/trader/validation-gate";
 import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
@@ -138,7 +138,7 @@ describe("RI-P7 promotion rehearsal", () => {
       interval: "1m",
       walkForwardWindowCount: 3,
       blindMetrics: {
-        schemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
+        schemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
         tradeCount: 2,
         periodRealizedPnl: "1",
         periodTotalFees: "0",

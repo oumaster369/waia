@@ -1,14 +1,39 @@
 import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
+import { COST_MODEL_VERSION_V1 } from "@/lib/trader/execution/cost-model";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import type { Bar, Regime } from "@/lib/trader/intelligence/types";
+import {
+  CLOSED_TRADE_SEMANTICS_VERSION,
+  TRADE_LIFECYCLE_SEMANTICS_VERSION,
+} from "@/lib/trader/paper/trade-lifecycle-semantics";
 import { derivePaperStrategyEvaluations } from "@/lib/trader/paper/derive-paper-strategy-eval";
+import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
+import {
+  buildQuoteCurrencyBySymbol,
+  loadPaperFillEvents,
+  type PaperPnLFillEvent,
+} from "@/lib/trader/paper/derive-paper-pnl";
+import { orderMatchesStrategyEvidenceScope } from "@/lib/trader/paper/strategy-evidence-scope";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
-import { addDecimal, divideDecimal } from "@/lib/trader/risk/numeric";
+import { addDecimal, divideDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import { buildResearchRegimeCoverage } from "@/lib/trader/research/regime-taxonomy";
-import type { ResearchValidationMetrics } from "@/lib/trader/research/strategy-candidate.types";
+import {
+  assertResearchValidationMetricsV2Coherence,
+  createEmptyResearchRegimeMetricSlice,
+} from "@/lib/trader/research/research-validation-metrics-taxonomy";
+import type {
+  ResearchRegimeMetricSliceV2,
+  ResearchValidationMetrics,
+  ResearchValidationMetricsV1,
+  ResearchValidationMetricsV2,
+} from "@/lib/trader/research/strategy-candidate.types";
+import {
+  RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
+  RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
+} from "@/lib/trader/research/strategy-candidate.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 export type RunResearchValidationBacktestInput = {
@@ -29,6 +54,13 @@ export type RunResearchValidationBacktestInput = {
   newId?: () => string;
   /** Isolates paper-cycle order keys per research phase/window (see research-backtest-cycle-id). */
   cycleIdPrefix?: string;
+  /**
+   * Metrics schema version. Default `"1.0.0"` preserves legacy v1 semantics for sealed artifacts
+   * and the Phase 1 forensic regression. Pass `"2.0.0"` for M0 repaired taxonomy + forced-flat.
+   */
+  metricsSchemaVersion?:
+    | typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1
+    | typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION;
 };
 
 const EMPTY_ACCOUNT_STATE: AccountRiskState = {
@@ -39,10 +71,15 @@ const EMPTY_ACCOUNT_STATE: AccountRiskState = {
   quoteExposureByCurrency: {},
 };
 
-type RegimeAccumulator = {
+type RegimeAccumulatorV1 = {
   tradeCount: number;
   periodRealizedPnl: string;
   periodTotalFees: string;
+};
+
+type CycleRegimeTimelineEntry = {
+  evaluatedAtMs: number;
+  regime: Regime;
 };
 
 function parseWindowFromBars(bars: readonly Bar[]): { start: Date; end: Date } {
@@ -51,23 +88,200 @@ function parseWindowFromBars(bars: readonly Bar[]): { start: Date; end: Date } {
   return { start, end };
 }
 
-/**
- * Runs a cost-aware backtest over a bar window and derives {@link ResearchValidationMetrics}
- * with per-CDE-regime slices from cycle MSV envelopes.
- */
-export async function runResearchValidationBacktest(
-  input: RunResearchValidationBacktestInput,
-): Promise<ResearchValidationMetrics> {
-  if (input.bars.length < 20) {
-    throw new Error("[research] validation backtest requires at least 20 bars");
+function buildCycleRegimeTimeline(
+  cycleResults: readonly PaperCycleResult[],
+): CycleRegimeTimelineEntry[] {
+  return cycleResults.map((cycle) => ({
+    evaluatedAtMs: new Date(cycle.evaluation.msv.evaluatedAt).getTime(),
+    regime: cycle.evaluation.msv.derived.regime,
+  }));
+}
+
+function resolveRegimeAtTimestamp(
+  timestamp: Date,
+  timeline: readonly CycleRegimeTimelineEntry[],
+): Regime {
+  const targetMs = timestamp.getTime();
+  let regime: Regime = timeline[0]?.regime ?? "RANGE";
+  for (const entry of timeline) {
+    if (entry.evaluatedAtMs <= targetMs) {
+      regime = entry.regime;
+    } else {
+      break;
+    }
+  }
+  return regime;
+}
+
+function getOrCreateRegimeSliceV2(
+  accumulators: Map<Regime, ResearchRegimeMetricSliceV2>,
+  regime: Regime,
+): ResearchRegimeMetricSliceV2 {
+  const existing = accumulators.get(regime);
+  if (existing) {
+    return existing;
+  }
+  const created = createEmptyResearchRegimeMetricSlice(regime);
+  accumulators.set(regime, created);
+  return created;
+}
+
+function accumulateCycleSignalOrderMetrics(
+  cycleResults: readonly PaperCycleResult[],
+  accumulators: Map<Regime, ResearchRegimeMetricSliceV2>,
+): void {
+  for (const cycle of cycleResults) {
+    const regime = cycle.evaluation.msv.derived.regime;
+    const slice = getOrCreateRegimeSliceV2(accumulators, regime);
+
+    if (cycle.strategyExecutions.length === 0) {
+      if (cycle.skipReason === "no_signal") {
+        slice.skippedSignals += 1;
+      }
+      continue;
+    }
+
+    for (const entry of cycle.strategyExecutions) {
+      if (entry.skipReason === "no_submit") {
+        slice.skippedSignals += 1;
+        continue;
+      }
+
+      if (entry.execution?.status === "risk_rejected") {
+        slice.rejectedSignals += 1;
+        continue;
+      }
+
+      if (entry.execution?.status === "submitted") {
+        slice.submittedOrders += 1;
+        slice.acceptedOrders += 1;
+        if (entry.execution.order.state === "FILLED") {
+          slice.filledOrders += 1;
+        }
+        continue;
+      }
+
+      if (entry.submitBlocked) {
+        slice.rejectedSignals += 1;
+      }
+    }
+  }
+}
+
+function partitionInWindowFillEvents(
+  fillEvents: readonly PaperPnLFillEvent[],
+  strategySignalId: string,
+  window: { start: Date; end: Date },
+): PaperPnLFillEvent[] {
+  const startMs = window.start.getTime();
+  const endMs = window.end.getTime();
+  return fillEvents.filter((event) => {
+    if (!orderMatchesStrategyEvidenceScope(event.order, strategySignalId)) {
+      return false;
+    }
+    const executedMs = event.fill.executedAt.getTime();
+    return executedMs >= startMs && executedMs < endMs;
+  });
+}
+
+function attributePeriodFeesByRegime(
+  fillEvents: readonly PaperPnLFillEvent[],
+  strategySignalId: string,
+  window: { start: Date; end: Date },
+  timeline: readonly CycleRegimeTimelineEntry[],
+  quoteCurrencyBySymbol: Readonly<Record<string, string>>,
+): Map<Regime, string> {
+  const feesByRegime = new Map<Regime, string>();
+  for (const event of partitionInWindowFillEvents(fillEvents, strategySignalId, window)) {
+    const quoteCurrency = quoteCurrencyBySymbol[event.order.symbol];
+    if (!quoteCurrency) {
+      continue;
+    }
+    const quoteFee = event.fill.feeAsset === quoteCurrency ? event.fill.fee : "0";
+    if (quoteFee === "0") {
+      continue;
+    }
+    const regime = resolveRegimeAtTimestamp(event.fill.executedAt, timeline);
+    feesByRegime.set(regime, addDecimal(feesByRegime.get(regime) ?? "0", quoteFee));
+  }
+  return feesByRegime;
+}
+
+function resolveLastInWindowBuyRegime(
+  fillEvents: readonly PaperPnLFillEvent[],
+  strategySignalId: string,
+  window: { start: Date; end: Date },
+  timeline: readonly CycleRegimeTimelineEntry[],
+): Regime | null {
+  const inWindow = partitionInWindowFillEvents(fillEvents, strategySignalId, window)
+    .filter((event) => event.order.side === "buy")
+    .sort(
+      (a, b) =>
+        a.fill.executedAt.getTime() - b.fill.executedAt.getTime() ||
+        a.fill.id.localeCompare(b.fill.id),
+    );
+  const lastBuy = inWindow.at(-1);
+  if (!lastBuy) {
+    return null;
+  }
+  return resolveRegimeAtTimestamp(lastBuy.fill.executedAt, timeline);
+}
+
+function buildAggregateFromByRegime(
+  byRegime: ResearchRegimeMetricSliceV2[],
+  costModel: CostModelV1,
+): ResearchValidationMetricsV2 {
+  const aggregate = createEmptyResearchRegimeMetricSlice("AGGREGATE");
+  for (const slice of byRegime) {
+    for (const field of [
+      "submittedOrders",
+      "acceptedOrders",
+      "filledOrders",
+      "openPositions",
+      "closedTrades",
+      "markToCloseTrades",
+      "rejectedSignals",
+      "skippedSignals",
+    ] as const) {
+      aggregate[field] += slice[field];
+    }
+    aggregate.realizedPnl = addDecimal(aggregate.realizedPnl, slice.realizedPnl);
+    aggregate.markedPnl = addDecimal(aggregate.markedPnl, slice.markedPnl);
+    aggregate.periodTotalFees = addDecimal(aggregate.periodTotalFees, slice.periodTotalFees);
   }
 
+  const metrics: ResearchValidationMetricsV2 = {
+    schemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
+    closedTradeSemanticsVersion: CLOSED_TRADE_SEMANTICS_VERSION,
+    tradeLifecycleSemanticsVersion: TRADE_LIFECYCLE_SEMANTICS_VERSION,
+    costModelVersion: costModel.version ?? COST_MODEL_VERSION_V1,
+    submittedOrders: aggregate.submittedOrders,
+    acceptedOrders: aggregate.acceptedOrders,
+    filledOrders: aggregate.filledOrders,
+    openPositions: aggregate.openPositions,
+    closedTrades: aggregate.closedTrades,
+    markToCloseTrades: aggregate.markToCloseTrades,
+    realizedPnl: aggregate.realizedPnl,
+    markedPnl: aggregate.markedPnl,
+    periodTotalFees: aggregate.periodTotalFees,
+    rejectedSignals: aggregate.rejectedSignals,
+    skippedSignals: aggregate.skippedSignals,
+    byRegime: byRegime.filter((slice) => slice.regimeLabel !== "AGGREGATE"),
+  };
+
+  assertResearchValidationMetricsV2Coherence(metrics);
+  return metrics;
+}
+
+async function runResearchValidationBacktestV1(
+  input: RunResearchValidationBacktestInput,
+  window: { start: Date; end: Date },
+  exportedAt: Date,
+): Promise<ResearchValidationMetricsV1> {
   const barSource = new HistoricalBarReplaySource({
     bars: input.bars,
     cycleIdPrefix: input.cycleIdPrefix,
   });
-  const window = parseWindowFromBars(input.bars);
-  const exportedAt = input.exportedAt ?? new Date(window.end);
 
   const backtest = await runBacktest({
     context: input.context,
@@ -92,7 +306,7 @@ export async function runResearchValidationBacktest(
     newId: input.newId,
   });
 
-  const regimeAccumulators = new Map<Regime, RegimeAccumulator>();
+  const regimeAccumulators = new Map<Regime, RegimeAccumulatorV1>();
 
   for (const cycle of backtest.cycleResults) {
     const regime = cycle.evaluation.msv.derived.regime;
@@ -156,12 +370,173 @@ export async function runResearchValidationBacktest(
     .sort((a, b) => a.regimeLabel.localeCompare(b.regimeLabel));
 
   return {
-    schemaVersion: "1.0.0",
+    schemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
     tradeCount: closedTradeCount,
     periodRealizedPnl,
     periodTotalFees,
     byRegime,
   };
+}
+
+async function runResearchValidationBacktestV2(
+  input: RunResearchValidationBacktestInput,
+  window: { start: Date; end: Date },
+  exportedAt: Date,
+): Promise<ResearchValidationMetricsV2> {
+  const lastBar = input.bars.at(-1)!;
+  const barSource = new HistoricalBarReplaySource({
+    bars: input.bars,
+    cycleIdPrefix: input.cycleIdPrefix,
+  });
+
+  const backtest = await runBacktest({
+    context: input.context,
+    barSource,
+    deps: input.deps,
+    orderRepository: input.orderRepository,
+    accountKey: input.accountKey,
+    defaultQuantity: input.defaultQuantity,
+    costModel: input.costModel,
+    strategySignalIds: [input.strategyId],
+    strategyId: input.strategyId,
+    strategyVersion: input.strategyVersion,
+    regimeLabel: "AGGREGATE",
+    datasetId: input.datasetId,
+    runId: input.runId,
+    split: input.split,
+    window,
+    accountState: input.accountState ?? EMPTY_ACCOUNT_STATE,
+    exportedAt,
+    activeStrategyIds: [input.strategyId],
+    refreshAccountStateBetweenStrategies: true,
+    newId: input.newId,
+  });
+
+  const timeline = buildCycleRegimeTimeline(backtest.cycleResults);
+  const regimeAccumulators = new Map<Regime, ResearchRegimeMetricSliceV2>();
+  accumulateCycleSignalOrderMetrics(backtest.cycleResults, regimeAccumulators);
+
+  const evaluations = await derivePaperStrategyEvaluations({
+    context: input.context,
+    orderRepository: input.orderRepository,
+    strategySignalIds: [input.strategyId],
+    window,
+    executionMode: "mock",
+    derivedAt: exportedAt,
+    forcedFlat: {
+      boundaryClosePrice: lastBar.close,
+      boundaryTimestamp: window.end,
+      costModel: input.costModel,
+    },
+  });
+
+  const evaluation = evaluations[0];
+  if (!evaluation) {
+    return buildAggregateFromByRegime([], input.costModel);
+  }
+
+  const { fillEvents } = await loadPaperFillEvents({
+    context: input.context,
+    orderRepository: input.orderRepository,
+    executionMode: "mock",
+  });
+  const symbols = [...new Set(fillEvents.map((event) => event.order.symbol))];
+  const quoteCurrencyBySymbol = buildQuoteCurrencyBySymbol(symbols);
+  const feesByRegime = attributePeriodFeesByRegime(
+    fillEvents,
+    input.strategyId,
+    window,
+    timeline,
+    quoteCurrencyBySymbol,
+  );
+
+  for (const [regime, fees] of feesByRegime) {
+    const slice = getOrCreateRegimeSliceV2(regimeAccumulators, regime);
+    slice.periodTotalFees = addDecimal(slice.periodTotalFees, fees);
+  }
+
+  for (const trade of evaluation.closedTrades) {
+    const regime = resolveRegimeAtTimestamp(trade.executedAt, timeline);
+    const slice = getOrCreateRegimeSliceV2(regimeAccumulators, regime);
+    slice.closedTrades += 1;
+    slice.realizedPnl = addDecimal(slice.realizedPnl, trade.tradePnl);
+    slice.markedPnl = addDecimal(slice.markedPnl, trade.tradePnl);
+  }
+
+  const boundaryRegime =
+    timeline.at(-1)?.regime ??
+    backtest.cycleResults.at(-1)?.evaluation.msv.derived.regime ??
+    "RANGE";
+
+  for (const trade of evaluation.markToCloseTrades) {
+    const slice = getOrCreateRegimeSliceV2(regimeAccumulators, boundaryRegime);
+    slice.markToCloseTrades += 1;
+    slice.markedPnl = addDecimal(slice.markedPnl, trade.tradePnl);
+  }
+
+  if (evaluation.openPositionCount > 0) {
+    const openRegime =
+      resolveLastInWindowBuyRegime(fillEvents, input.strategyId, window, timeline) ??
+      boundaryRegime;
+    const slice = getOrCreateRegimeSliceV2(regimeAccumulators, openRegime);
+    slice.openPositions += evaluation.openPositionCount;
+  }
+
+  const byRegime = [...regimeAccumulators.values()]
+    .filter(
+      (slice) =>
+        slice.submittedOrders > 0 ||
+        slice.closedTrades > 0 ||
+        slice.markToCloseTrades > 0 ||
+        slice.openPositions > 0 ||
+        slice.rejectedSignals > 0 ||
+        slice.skippedSignals > 0,
+    )
+    .sort((a, b) => a.regimeLabel.localeCompare(b.regimeLabel));
+
+  const metrics = buildAggregateFromByRegime(byRegime, input.costModel);
+
+  if (metrics.periodTotalFees !== evaluation.periodTotalFees && byRegime.length > 0) {
+    const delta = subtractDecimal(evaluation.periodTotalFees, metrics.periodTotalFees);
+    if (delta !== "0") {
+      byRegime[0]!.periodTotalFees = addDecimal(byRegime[0]!.periodTotalFees, delta);
+      return buildAggregateFromByRegime(byRegime, input.costModel);
+    }
+  }
+
+  return metrics;
+}
+
+/**
+ * Runs a cost-aware backtest over a bar window and derives {@link ResearchValidationMetrics}
+ * with per-CDE-regime slices from cycle MSV envelopes.
+ */
+export async function runResearchValidationBacktest(
+  input: RunResearchValidationBacktestInput & {
+    metricsSchemaVersion?: typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1;
+  },
+): Promise<ResearchValidationMetricsV1>;
+export async function runResearchValidationBacktest(
+  input: RunResearchValidationBacktestInput & {
+    metricsSchemaVersion: typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION;
+  },
+): Promise<ResearchValidationMetricsV2>;
+export async function runResearchValidationBacktest(
+  input: RunResearchValidationBacktestInput,
+): Promise<ResearchValidationMetrics> {
+  if (input.bars.length < 20) {
+    throw new Error("[research] validation backtest requires at least 20 bars");
+  }
+
+  const window = parseWindowFromBars(input.bars);
+  const exportedAt = input.exportedAt ?? new Date(window.end);
+  const schemaVersion = input.metricsSchemaVersion ?? RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1;
+
+  if (schemaVersion === RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1) {
+    return runResearchValidationBacktestV1(input, window, exportedAt);
+  }
+
+  return runResearchValidationBacktestV2(input, window, exportedAt);
 }
 
 function divideEvenly(total: string, parts: number): string[] {
@@ -178,7 +553,9 @@ export function collectRegimeCoverageFromValidationMetrics(
   const labels = new Set<string>();
   for (const entry of metrics) {
     for (const slice of entry.byRegime) {
-      if (slice.tradeCount > 0) {
+      if ("tradeCount" in slice && slice.tradeCount > 0) {
+        labels.add(slice.regimeLabel);
+      } else if ("closedTrades" in slice && slice.closedTrades + slice.markToCloseTrades > 0) {
         labels.add(slice.regimeLabel);
       }
     }

@@ -27,6 +27,10 @@ import {
 import type { Bar, BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import type { ResearchValidationMetrics } from "@/lib/trader/research/strategy-candidate.types";
+import {
+  readLegacyTradeCount,
+  readPeriodRealizedPnl,
+} from "@/lib/trader/research/research-validation-metrics-taxonomy";
 import { runBlindHoldoutValidation } from "@/lib/trader/research/blind-holdout-engine";
 import { buildResearchEvidenceDocument } from "@/lib/trader/research/build-research-evidence-export";
 import {
@@ -200,9 +204,9 @@ export async function runResearchPipelinePostgres(
       {
         regimeLabel: "AGGREGATE",
         strategySignalId: input.strategyId,
-        periodRealizedPnl: validationMetrics.periodRealizedPnl,
+        periodRealizedPnl: readPeriodRealizedPnl(validationMetrics),
         periodTotalFees: validationMetrics.periodTotalFees,
-        closedTradeCount: validationMetrics.tradeCount,
+        closedTradeCount: readLegacyTradeCount(validationMetrics),
         winRate: null,
         profitFactor: null,
         expectancy: null,

@@ -17,6 +17,7 @@ import {
   runMarketReasoningAssist,
   loadVaultArtifacts,
 } from "@/lib/trader/research/run-market-reasoning-assist";
+import { readLegacyTradeCount } from "@/lib/trader/research/research-validation-metrics-taxonomy";
 import type { ResearchValidationMetrics } from "@/lib/trader/research/strategy-candidate.types";
 import { validateMarketReasoningGuardrails } from "@/lib/trader/research/validate-market-reasoning-guardrails";
 import { buildFakeMarketReasoningProposalDraft } from "@/lib/trader/research/build-market-reasoning-proposal";
@@ -109,8 +110,8 @@ describe("market reasoning assist (SEE-R2)", () => {
     expect(context.contextBody.marketStatistics).toBeNull();
     expect(context.contextBody.chartSnapshots).toEqual([]);
     expect(context.contextBody.walkForwardSummary.windowCount).toBe(1296);
-    expect(context.contextBody.validationMetrics.tradeCount).toBe(
-      rejectionRecord.recordBody.validationMetrics.tradeCount,
+    expect(readLegacyTradeCount(context.contextBody.validationMetrics)).toBe(
+      readLegacyTradeCount(rejectionRecord.recordBody.validationMetrics),
     );
     expect(context.envelope.contentDigest).toMatch(/^[a-f0-9]{64}$/);
   });

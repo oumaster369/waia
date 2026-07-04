@@ -1,7 +1,12 @@
 import { classifyRegime } from "@/lib/trader/intelligence/cde-v0";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
 import type { Bar, Regime } from "@/lib/trader/intelligence/types";
-import type { ResearchValidationMetrics } from "@/lib/trader/research/strategy-candidate.types";
+import type {
+  ResearchRegimeMetricSliceV1,
+  ResearchRegimeMetricSliceV2,
+  ResearchValidationMetrics,
+} from "@/lib/trader/research/strategy-candidate.types";
+import { countAttributedRoundTrips } from "@/lib/trader/research/research-validation-metrics-taxonomy";
 import { MultiRegimeCoverageError } from "@/lib/trader/research/errors";
 
 /** Non-trending regimes per ADR-0010 / RI program (RANGE/CHOP). */
@@ -28,13 +33,29 @@ export function classifyBarWindowRegime(bars: readonly Bar[]): Regime {
   return classifyRegime(features);
 }
 
+export function isResearchRegimeMetricSliceV2(
+  slice: ResearchRegimeMetricSliceV1 | ResearchRegimeMetricSliceV2,
+): slice is ResearchRegimeMetricSliceV2 {
+  return "closedTrades" in slice;
+}
+
+/** Whether a regime slice has attributed round-trip activity for coverage gates. */
+export function regimeSliceHasAttributedRoundTrips(
+  slice: ResearchRegimeMetricSliceV1 | ResearchRegimeMetricSliceV2,
+): boolean {
+  if (isResearchRegimeMetricSliceV2(slice)) {
+    return countAttributedRoundTrips(slice) > 0;
+  }
+  return slice.tradeCount > 0;
+}
+
 export function collectRegimeLabelsFromMetrics(
   metrics: readonly ResearchValidationMetrics[],
 ): string[] {
   const labels = new Set<string>();
   for (const entry of metrics) {
     for (const slice of entry.byRegime) {
-      if (slice.tradeCount > 0) {
+      if (regimeSliceHasAttributedRoundTrips(slice)) {
         labels.add(slice.regimeLabel);
       }
     }

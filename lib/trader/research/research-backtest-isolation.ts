@@ -9,6 +9,10 @@ import {
   type RunResearchValidationBacktestInput,
 } from "@/lib/trader/research/research-backtest-runner";
 import type { ResearchValidationMetrics } from "@/lib/trader/research/strategy-candidate.types";
+import {
+  RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
+  RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
+} from "@/lib/trader/research/strategy-candidate.types";
 
 type PgDeleteExecutor = Pick<WaiaPostgresDb, "delete">;
 
@@ -23,5 +27,15 @@ export async function runIsolatedResearchBacktest(
   input: RunResearchValidationBacktestInput,
 ): Promise<ResearchValidationMetrics> {
   await deleteMockExecutionArtifactsForOrgPostgres(ex, input.context);
-  return runResearchValidationBacktest(input);
+  if (input.metricsSchemaVersion === RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION) {
+    return runResearchValidationBacktest({
+      ...input,
+      metricsSchemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
+    });
+  }
+  return runResearchValidationBacktest({
+    ...input,
+    metricsSchemaVersion:
+      input.metricsSchemaVersion ?? RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
+  });
 }
