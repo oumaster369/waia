@@ -91,19 +91,19 @@ CREATE TABLE "trader_lifecycle_events" (
 );
 --> statement-breakpoint
 ALTER TABLE "trader_trades" ADD CONSTRAINT "trader_trades_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trader_position_lots" ADD CONSTRAINT "trader_position_lots_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trader_position_lots" ADD CONSTRAINT "trader_position_lots_trade_id_organization_id_trader_trades_id_organization_id_fk" FOREIGN KEY ("trade_id","organization_id") REFERENCES "public"."trader_trades"("id","organization_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trader_trade_legs" ADD CONSTRAINT "trader_trade_legs_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trader_trade_legs" ADD CONSTRAINT "trader_trade_legs_trade_id_organization_id_trader_trades_id_organization_id_fk" FOREIGN KEY ("trade_id","organization_id") REFERENCES "public"."trader_trades"("id","organization_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trader_trade_legs" ADD CONSTRAINT "trader_trade_legs_position_lot_id_organization_id_trader_position_lots_id_organization_id_fk" FOREIGN KEY ("position_lot_id","organization_id") REFERENCES "public"."trader_position_lots"("id","organization_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trader_lifecycle_events" ADD CONSTRAINT "trader_lifecycle_events_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "trader_trades_id_organization_unique" ON "trader_trades" USING btree ("id","organization_id");--> statement-breakpoint
 CREATE INDEX "trader_trades_org_strategy_signal_idx" ON "trader_trades" USING btree ("organization_id","strategy_signal_id");--> statement-breakpoint
 CREATE INDEX "trader_trades_org_state_idx" ON "trader_trades" USING btree ("organization_id","state");--> statement-breakpoint
+ALTER TABLE "trader_position_lots" ADD CONSTRAINT "trader_position_lots_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "trader_position_lots_id_organization_unique" ON "trader_position_lots" USING btree ("id","organization_id");--> statement-breakpoint
+ALTER TABLE "trader_position_lots" ADD CONSTRAINT "trader_position_lots_trade_id_organization_id_trader_trades_id_organization_id_fk" FOREIGN KEY ("trade_id","organization_id") REFERENCES "public"."trader_trades"("id","organization_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "trader_position_lots_org_state_idx" ON "trader_position_lots" USING btree ("organization_id","state");--> statement-breakpoint
 CREATE INDEX "trader_position_lots_org_symbol_strategy_idx" ON "trader_position_lots" USING btree ("organization_id","symbol","strategy_signal_id");--> statement-breakpoint
+ALTER TABLE "trader_trade_legs" ADD CONSTRAINT "trader_trade_legs_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "trader_trade_legs_id_organization_unique" ON "trader_trade_legs" USING btree ("id","organization_id");--> statement-breakpoint
+ALTER TABLE "trader_trade_legs" ADD CONSTRAINT "trader_trade_legs_trade_id_organization_id_trader_trades_id_organization_id_fk" FOREIGN KEY ("trade_id","organization_id") REFERENCES "public"."trader_trades"("id","organization_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "trader_trade_legs" ADD CONSTRAINT "trader_trade_legs_position_lot_id_organization_id_trader_position_lots_id_organization_id_fk" FOREIGN KEY ("position_lot_id","organization_id") REFERENCES "public"."trader_position_lots"("id","organization_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "trader_trade_legs_org_trade_idx" ON "trader_trade_legs" USING btree ("organization_id","trade_id");--> statement-breakpoint
+ALTER TABLE "trader_lifecycle_events" ADD CONSTRAINT "trader_lifecycle_events_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "trader_lifecycle_events_org_entity_idx" ON "trader_lifecycle_events" USING btree ("organization_id","entity_type","entity_id");--> statement-breakpoint
 CREATE INDEX "trader_lifecycle_events_org_phase_idx" ON "trader_lifecycle_events" USING btree ("organization_id","phase");
