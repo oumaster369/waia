@@ -46,6 +46,14 @@ import {
   RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
 } from "@/lib/trader/research/strategy-candidate.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import type { PatternCatalogRunConfig } from "@/lib/trader/mi/pattern-catalog.types";
+import type { PaperClosedTrade } from "@/lib/trader/paper/paper-strategy-eval.types";
+
+export type PatternCatalogBacktestCompleteHook = (input: {
+  context: OrgContext;
+  cycleResults: readonly PaperCycleResult[];
+  closedTrades: readonly PaperClosedTrade[];
+}) => Promise<void>;
 
 export type RunResearchValidationBacktestInput = {
   context: OrgContext;
@@ -72,6 +80,10 @@ export type RunResearchValidationBacktestInput = {
   metricsSchemaVersion?:
     | typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1
     | typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION;
+  /** Post-hoc M6 analytics export — default disabled; must not alter metrics. */
+  patternCatalog?: PatternCatalogRunConfig & {
+    onBacktestComplete?: PatternCatalogBacktestCompleteHook;
+  };
 };
 
 const EMPTY_ACCOUNT_STATE: AccountRiskState = {
@@ -572,8 +584,24 @@ async function runResearchValidationBacktestV2(
     const delta = subtractDecimal(evaluation.periodTotalFees, metrics.periodTotalFees);
     if (delta !== "0") {
       byRegime[0]!.periodTotalFees = addDecimal(byRegime[0]!.periodTotalFees, delta);
-      return buildAggregateFromByRegime(byRegime, input.costModel);
+      const adjustedMetrics = buildAggregateFromByRegime(byRegime, input.costModel);
+      if (input.patternCatalog?.enabled === true && input.patternCatalog.onBacktestComplete) {
+        await input.patternCatalog.onBacktestComplete({
+          context: input.context,
+          cycleResults: backtest.cycleResults,
+          closedTrades: evaluation.closedTrades,
+        });
+      }
+      return adjustedMetrics;
     }
+  }
+
+  if (input.patternCatalog?.enabled === true && input.patternCatalog.onBacktestComplete) {
+    await input.patternCatalog.onBacktestComplete({
+      context: input.context,
+      cycleResults: backtest.cycleResults,
+      closedTrades: evaluation.closedTrades,
+    });
   }
 
   return metrics;

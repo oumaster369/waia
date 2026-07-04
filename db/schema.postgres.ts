@@ -869,6 +869,60 @@ export const traderMiPatternLifecycle = pgTable(
   ],
 );
 
+/** AI-TRADER M6: append-only pattern catalog score events (DEE-381). */
+export const traderMiPatternScore = pgTable(
+  "trader_mi_pattern_score",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    patternKey: text("pattern_key").notNull(),
+    definitionDigest: text("definition_digest").notNull(),
+    subjectRef: text("subject_ref").notNull(),
+    matchScore: text("match_score").notNull(),
+    relevanceScore: text("relevance_score").notNull(),
+    confidenceMean: text("confidence_mean").notNull(),
+    confidenceBandLow: text("confidence_band_low").notNull(),
+    confidenceBandHigh: text("confidence_band_high").notNull(),
+    priorHits: integer("prior_hits").notNull(),
+    priorMisses: integer("prior_misses").notNull(),
+    regime: text("regime").notNull(),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true, mode: "date" }).notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_mi_pattern_score_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_mi_pattern_score_org_pattern_subject_idx").on(
+      t.organizationId,
+      t.patternKey,
+      t.subjectRef,
+    ),
+  ],
+);
+
+/** AI-TRADER M6: append-only price-move explanation records (DEE-381). */
+export const traderPriceMoveExplanation = pgTable(
+  "trader_price_move_explanation",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    subjectRef: text("subject_ref").notNull(),
+    priceMoveJson: text("price_move_json").notNull(),
+    patternRefsJson: text("pattern_refs_json").notNull(),
+    scoreBreakdownJson: text("score_breakdown_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_price_move_explanation_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_price_move_explanation_org_subject_idx").on(t.organizationId, t.subjectRef),
+  ],
+);
+
 export const miHypothesisKindEnumPg = pgEnum("mi_hypothesis_kind", ["market_claim"]);
 export const miHypothesisLifecycleStateEnumPg = pgEnum("mi_hypothesis_lifecycle_state", [
   "PROPOSED",
