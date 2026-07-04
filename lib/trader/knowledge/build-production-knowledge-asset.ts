@@ -4,6 +4,7 @@ import type { ResearchDatasetRecord } from "@/lib/trader/market-data/research-da
 import type { BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 import type { ResearchEvidenceDocument } from "@/lib/trader/research/research-evidence-export.types";
 import type { ResearchValidationMetrics } from "@/lib/trader/research/strategy-candidate.types";
+import { regimeSliceHasAttributedRoundTrips } from "@/lib/trader/research/regime-coverage";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
 import {
@@ -21,6 +22,7 @@ import {
   type StrategyRef,
   type ValidationHistorySummary,
 } from "@/lib/trader/knowledge/production-knowledge-asset.types";
+import { readLegacyTradeCount } from "@/lib/trader/research/research-validation-metrics-taxonomy";
 import { computeProductionKnowledgeAssetDigest } from "@/lib/trader/knowledge/serialize-production-knowledge-asset";
 
 export type BuildProductionKnowledgeAssetInput = {
@@ -143,9 +145,9 @@ export function buildProductionKnowledgeAsset(
 
   const validationHistory: ValidationHistorySummary = {
     walkForwardWindowCount: input.walkForwardWindowCount,
-    blindHoldoutTradeCount: input.blindMetrics.tradeCount,
+    blindHoldoutTradeCount: readLegacyTradeCount(input.blindMetrics),
     blindHoldoutRegimeLabels: input.blindMetrics.byRegime
-      .filter((slice) => slice.tradeCount > 0)
+      .filter((slice) => regimeSliceHasAttributedRoundTrips(slice))
       .map((slice) => slice.regimeLabel),
   };
 

@@ -1,3 +1,5 @@
+import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
+import { applyCostToFill } from "@/lib/trader/execution/cost-model";
 import type {
   FillRow,
   OrderRepository,
@@ -219,6 +221,19 @@ export type PaperFillClosedTrade = {
   tradePnl: string;
 };
 
+/** Synthetic window-boundary mark-to-close (H2 — not a real exchange SELL fill). */
+export type PaperMarkToCloseTrade = {
+  syntheticId: string;
+  symbol: string;
+  executedAt: Date;
+  quantity: string;
+  boundaryClosePrice: string;
+  adjustedSellPrice: string;
+  sellFee: string;
+  tradePnl: string;
+  syntheticClose: true;
+};
+
 /**
  * Walk opening + in-window fills and record per-sell trade PnL for in-window sells only.
  * Uses the same avg-cost economics as `walkFillsForPnL`.
@@ -281,6 +296,68 @@ export function extractInWindowClosedTrades(
   }
 
   return closedTrades;
+}
+
+function defaultSyntheticFlatId(symbol: string): string {
+  return `synthetic-flat:${symbol}`;
+}
+
+/**
+ * Applies forced-flat mark-to-close at the evaluation window boundary (H2).
+ * Uses boundary-bar close price, sell-side applyCostToFill, and marked PnL economics.
+ */
+export function extractForcedFlatMarkToCloseTrades(input: {
+  openingEvents: readonly PaperPnLFillEvent[];
+  inWindowEvents: readonly PaperPnLFillEvent[];
+  quoteCurrencyBySymbol: Readonly<Record<string, string>>;
+  boundaryClosePrice: string;
+  boundaryTimestamp: Date;
+  costModel: Pick<CostModelV1, "feesBps" | "slippageBps">;
+  newSyntheticId?: (symbol: string) => string;
+}): PaperMarkToCloseTrade[] {
+  const openingWalk = walkFillsForPnL(input.openingEvents, input.quoteCurrencyBySymbol);
+  const endWalk = walkFillsForPnL(
+    input.inWindowEvents,
+    input.quoteCurrencyBySymbol,
+    openingWalk.ledgerBySymbol,
+  );
+  const newSyntheticId = input.newSyntheticId ?? defaultSyntheticFlatId;
+  const markToCloseTrades: PaperMarkToCloseTrade[] = [];
+
+  for (const [symbol, ledger] of endWalk.ledgerBySymbol.entries()) {
+    if (compareDecimal(ledger.openQty, "0") <= 0) {
+      continue;
+    }
+
+    const { adjustedPrice, fee } = applyCostToFill(
+      input.boundaryClosePrice,
+      ledger.openQty,
+      "sell",
+      input.costModel,
+    );
+    const proceeds = multiplyDecimal(adjustedPrice, ledger.openQty);
+    const cost = multiplyDecimal(ledger.openQty, ledger.avgCost);
+    const tradePnl = subtractDecimal(subtractDecimal(proceeds, cost), fee);
+
+    markToCloseTrades.push({
+      syntheticId: newSyntheticId(symbol),
+      symbol,
+      executedAt: input.boundaryTimestamp,
+      quantity: ledger.openQty,
+      boundaryClosePrice: input.boundaryClosePrice,
+      adjustedSellPrice: adjustedPrice,
+      sellFee: fee,
+      tradePnl,
+      syntheticClose: true,
+    });
+  }
+
+  return markToCloseTrades.sort((a, b) => a.symbol.localeCompare(b.symbol));
+}
+
+export function countOpenPositionsFromLedger(ledgerBySymbol: Map<string, SymbolLedger>): number {
+  return [...ledgerBySymbol.values()].filter((ledger) => compareDecimal(ledger.openQty, "0") > 0)
+    .length;
 }
 
 function resolveQuoteCurrency(

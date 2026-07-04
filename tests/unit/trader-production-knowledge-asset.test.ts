@@ -10,7 +10,7 @@ import {
   serializeProductionKnowledgeAsset,
 } from "@/lib/trader/knowledge/serialize-production-knowledge-asset";
 import type { ProductionKnowledgeAsset } from "@/lib/trader/knowledge/production-knowledge-asset.types";
-import { RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION } from "@/lib/trader/research/strategy-candidate.types";
+import { RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1 } from "@/lib/trader/research/strategy-candidate.types";
 import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
 
 const ORG = "00000000-0000-4000-8000-0000000272";
@@ -36,7 +36,7 @@ function sampleDataset() {
 
 function sampleBlindMetrics() {
   return {
-    schemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
+    schemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
     tradeCount: 3,
     periodRealizedPnl: "10",
     periodTotalFees: "1",

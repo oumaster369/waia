@@ -6,14 +6,18 @@ import * as repoPostgres from "@/lib/trader/execution/repository-postgres";
 import * as backtestRunner from "@/lib/trader/research/research-backtest-runner";
 import { runIsolatedResearchBacktest } from "@/lib/trader/research/research-backtest-isolation";
 import type { RunResearchValidationBacktestInput } from "@/lib/trader/research/research-backtest-runner";
+import type {
+  ResearchValidationMetrics,
+  ResearchValidationMetricsV1,
+} from "@/lib/trader/research/strategy-candidate.types";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const ORG_A = "00000000-0000-4000-8000-0000000290";
 const STRATEGY_A = "mean_reversion_v0";
 const TEST_COST_MODEL = createCostModelV1("10", "5");
 
-const EMPTY_METRICS = {
-  schemaVersion: "1.0.0" as const,
+const EMPTY_METRICS: ResearchValidationMetricsV1 = {
+  schemaVersion: "1.0.0",
   tradeCount: 0,
   periodRealizedPnl: "0",
   periodTotalFees: "0",
@@ -62,7 +66,8 @@ describe("research orchestrator backtest isolation (DEE-368)", () => {
       .mockResolvedValue(undefined);
     const backtestSpy = vi
       .spyOn(backtestRunner, "runResearchValidationBacktest")
-      .mockResolvedValue(EMPTY_METRICS);
+      // @ts-expect-error isolation tests stub legacy v1 metrics only
+      .mockImplementation(async () => EMPTY_METRICS);
 
     const ex = { delete: vi.fn() };
 

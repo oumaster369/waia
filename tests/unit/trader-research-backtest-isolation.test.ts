@@ -12,6 +12,10 @@ import { PaperPnLReconciliationError } from "@/lib/trader/paper/paper-pnl.errors
 import * as repoPostgres from "@/lib/trader/execution/repository-postgres";
 import * as backtestRunner from "@/lib/trader/research/research-backtest-runner";
 import { runIsolatedResearchBacktest } from "@/lib/trader/research/research-backtest-isolation";
+import type {
+  ResearchValidationMetrics,
+  ResearchValidationMetricsV1,
+} from "@/lib/trader/research/strategy-candidate.types";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const ORG_A = "00000000-0000-4000-8000-0000000280";
@@ -197,13 +201,14 @@ describe("research backtest isolation (DEE-368)", () => {
       .mockResolvedValue(undefined);
     const backtestSpy = vi
       .spyOn(backtestRunner, "runResearchValidationBacktest")
-      .mockResolvedValue({
+      // @ts-expect-error isolation tests stub legacy v1 metrics only
+      .mockImplementation(async () => ({
         schemaVersion: "1.0.0",
         tradeCount: 0,
         periodRealizedPnl: "0",
         periodTotalFees: "0",
         byRegime: [],
-      });
+      }));
 
     const ex = { delete: vi.fn() };
     const input = {
