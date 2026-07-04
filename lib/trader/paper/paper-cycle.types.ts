@@ -17,6 +17,7 @@ import type {
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import type { GuardianCycleResult } from "@/lib/trader/guardian";
 import type { GuardianRunConfig } from "@/lib/trader/guardian/guardian-run-config.types";
+import type { ExitRunConfig, TrailingState } from "@/lib/trader/exits/exit-types";
 import type { LifecycleRecorder } from "@/lib/trader/lifecycle/lifecycle-recorder";
 import type { LifecycleRepository } from "@/lib/trader/lifecycle/lifecycle-repository.types";
 import type {
@@ -37,9 +38,17 @@ export type PortfolioCycleContext = {
 
 export type PaperCycleExecutionMode = Extract<OrderExecutionMode, "mock" | "paper">;
 
+/** M4 session-scoped trailing cache (not replay truth). */
+export type ExitEngineCycleContext = {
+  runConfig: ExitRunConfig;
+  trailingStateByLotId: Map<string, TrailingState>;
+};
+
 /** M3 guardian supervisory context (optional — legacy cycles omit this). */
 export type GuardianCycleContext = {
   runConfig: GuardianRunConfig;
+  /** M4 dynamic SL/TP — opt-in; requires guardian enabled. */
+  exitEngine?: ExitEngineCycleContext;
 };
 
 export type PaperCycleDeps = {

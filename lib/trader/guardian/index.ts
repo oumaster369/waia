@@ -39,6 +39,7 @@ export {
   computeBarsHeld,
   computeUnrealizedPnlUsdt,
   evaluatePositionGuardian,
+  type EvaluatePositionGuardianExitEngineInput,
   type EvaluatePositionGuardianInput,
 } from "@/lib/trader/guardian/evaluate-position-guardian";
 

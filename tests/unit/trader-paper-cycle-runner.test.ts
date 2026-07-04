@@ -5,6 +5,9 @@ import path from "node:path";
 
 import { getDb, resetWaiaSqliteSingleton } from "@/db/client";
 import { GUARDIAN_REASON_RECORD_SCHEMA_VERSION, guardianReasonCodes } from "@/lib/trader/guardian";
+import { buildExitPlan } from "@/lib/trader/exits/exit-plan-builder";
+import { exitReasonCodes } from "@/lib/trader/exits/exit-reason-codes";
+import { DEFAULT_EXIT_RUN_CONFIG } from "@/lib/trader/exits/exit-types";
 import {
   createLifecycleRecorder,
   createSqliteLifecycleRepository,
@@ -1042,5 +1045,311 @@ describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
 
     const trade = await harness.lifecycleRepository.getTradeById(context, tradeId);
     expect(trade?.state).toBe("CLOSED");
+  });
+});
+
+function m4VolatileBars(count: number, baseClose = "64000.00"): Bar[] {
+  const bars: Bar[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const openTime = new Date(
+      Date.parse("2026-01-01T00:00:00.000Z") + index * 60_000,
+    ).toISOString();
+    const closeTime = new Date(Date.parse(openTime) + 60_000).toISOString();
+    const closeNum = Number(baseClose) + (index % 2 === 0 ? 2 : -1);
+    const close = closeNum.toFixed(2);
+    const high = (closeNum + 3).toFixed(2);
+    const low = (closeNum - 3).toFixed(2);
+    bars.push({
+      symbol: "BTC/USDT",
+      interval: "1m",
+      open: close,
+      high,
+      low,
+      close,
+      volume: "10.00",
+      barOpenTime: openTime,
+      barCloseTime: closeTime,
+    });
+  }
+  return bars;
+}
+
+describe("paper cycle runner — M4 dynamic SL/TP (DEE-379)", () => {
+  let harness: M3PaperCycleHarness;
+
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    harness = await createM3PaperCycleHarness();
+  });
+
+  afterEach(() => {
+    harness.cleanup();
+  });
+
+  it("submits stop-loss exit when mark crosses SL and populates slTpLevels", async () => {
+    const lotId = "lot-m4-sl";
+    const tradeId = "trade-m4-sl";
+    const openedAt = new Date("2026-01-01T00:00:00.000Z");
+    const bars = m4VolatileBars(25);
+
+    await harness.lifecycleRepository.insertTrade(requireOrgContext(harness.orgM3), {
+      trade: {
+        id: tradeId,
+        organizationId: harness.orgM3,
+        symbol: "BTC/USDT",
+        venue: "mock",
+        accountKey: "paper",
+        positionSide: "LONG",
+        instrumentKind: "SPOT",
+        strategySignalId: "signal-m4-sl",
+        strategyId: "mean_reversion_v0",
+        strategyVersion: "0.1.0",
+        state: "OPEN",
+        semanticsVersion: TRADE_LIFECYCLE_SEMANTICS_VERSION_V2,
+        openedAt,
+        closedAt: null,
+        realizedPnl: "0",
+        markedPnl: "0",
+        hypothesisId: null,
+        patternId: null,
+        riskDecisionId: "risk-m4",
+        allocationDecisionId: null,
+        reasoningSessionId: null,
+        signalConfidence: null,
+        openingRegime: "RANGE",
+        openingMsvId: "msv-m4",
+        openingFeatureSetId: "fs-m4",
+        closingMsvId: null,
+        closingFeatureSetId: null,
+        closingRegime: null,
+        frozenAt: null,
+      },
+    });
+    await harness.lifecycleRepository.insertPositionLot(requireOrgContext(harness.orgM3), {
+      lot: {
+        id: lotId,
+        organizationId: harness.orgM3,
+        symbol: "BTC/USDT",
+        venue: "mock",
+        accountKey: "paper",
+        positionSide: "LONG",
+        instrumentKind: "SPOT",
+        strategySignalId: "signal-m4-sl",
+        state: "OPEN",
+        openQty: "0.01",
+        remainingQty: "0.01",
+        avgCost: "64000.00",
+        openedAt,
+        closedAt: null,
+        tradeId,
+        hedgeGroupId: null,
+        targetLotId: null,
+      },
+    });
+
+    const evaluatedAt = bars.at(-1)!.barCloseTime;
+    const plan = buildExitPlan({
+      lot: {
+        id: lotId,
+        organizationId: harness.orgM3,
+        symbol: "BTC/USDT",
+        venue: "mock",
+        accountKey: "paper",
+        positionSide: "LONG",
+        instrumentKind: "SPOT",
+        strategySignalId: "signal-m4-sl",
+        state: "OPEN",
+        openQty: "0.01",
+        remainingQty: "0.01",
+        avgCost: "64000.00",
+        openedAt,
+        closedAt: null,
+        tradeId,
+        hedgeGroupId: null,
+        targetLotId: null,
+        createdAt: openedAt,
+        updatedAt: openedAt,
+      },
+      bars,
+      runConfig: DEFAULT_EXIT_RUN_CONFIG,
+      evaluatedAt,
+    });
+    expect(plan).not.toBeNull();
+
+    vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue({
+      ...mockEvaluation(),
+      signals: [],
+      signal: {
+        ...mockEvaluation().signal,
+        outcome: "NO_SIGNAL",
+        side: undefined,
+      },
+      features: {
+        ...mockEvaluation().features,
+        features: {
+          ...mockEvaluation().features.features,
+          close: plan!.stopLoss.price,
+        },
+      },
+    });
+
+    const submitSpy = vi.spyOn(harness.deps.execution, "submitOrder");
+
+    const result = await runPaperCycleOnce(harness.deps, {
+      context: requireOrgContext(harness.orgM3),
+      snapshot: {
+        bars,
+        quote: {
+          symbol: "BTC/USDT",
+          bid: plan!.stopLoss.price,
+          ask: plan!.stopLoss.price,
+          last: plan!.stopLoss.price,
+          timestamp: evaluatedAt,
+        },
+        evaluatedAt,
+        cycleIndex: 0,
+        cycleId: "cycle-m4-sl",
+      },
+      accountKey: "paper",
+      defaultQuantity: "0.01",
+      accountState: EMPTY_STATE,
+      orderRepository: harness.orderRepository,
+      guardian: {
+        runConfig: { enabled: true, maxHoldBars: 0 },
+        exitEngine: {
+          runConfig: DEFAULT_EXIT_RUN_CONFIG,
+          trailingStateByLotId: new Map(),
+        },
+      },
+    });
+
+    expect(result.guardian?.exitIntents).toHaveLength(1);
+    expect(result.guardian?.evaluations[0]?.reason.reasonCode).toBe(exitReasonCodes.stopLossHit);
+    expect(result.guardian?.evaluations[0]?.reason.slTpLevels).not.toBeNull();
+    expect(submitSpy).toHaveBeenCalledTimes(1);
+
+    const trade = await harness.lifecycleRepository.getTradeById(
+      requireOrgContext(harness.orgM3),
+      tradeId,
+    );
+    expect(trade?.state).toBe("CLOSED");
+  });
+
+  it("holds without ExitIntent when ATR bars are insufficient", async () => {
+    const lotId = "lot-m4-insufficient-atr";
+    const openedAt = new Date("2026-01-01T00:20:00.000Z");
+    const bars = m4VolatileBars(25);
+
+    await harness.lifecycleRepository.insertTrade(requireOrgContext(harness.orgM3), {
+      trade: {
+        id: "trade-m4-insufficient",
+        organizationId: harness.orgM3,
+        symbol: "BTC/USDT",
+        venue: "mock",
+        accountKey: "paper",
+        positionSide: "LONG",
+        instrumentKind: "SPOT",
+        strategySignalId: "signal-m4-insufficient",
+        strategyId: "mean_reversion_v0",
+        strategyVersion: "0.1.0",
+        state: "OPEN",
+        semanticsVersion: TRADE_LIFECYCLE_SEMANTICS_VERSION_V2,
+        openedAt,
+        closedAt: null,
+        realizedPnl: "0",
+        markedPnl: "0",
+        hypothesisId: null,
+        patternId: null,
+        riskDecisionId: "risk-m4",
+        allocationDecisionId: null,
+        reasoningSessionId: null,
+        signalConfidence: null,
+        openingRegime: "RANGE",
+        openingMsvId: "msv-m4",
+        openingFeatureSetId: "fs-m4",
+        closingMsvId: null,
+        closingFeatureSetId: null,
+        closingRegime: null,
+        frozenAt: null,
+      },
+    });
+    await harness.lifecycleRepository.insertPositionLot(requireOrgContext(harness.orgM3), {
+      lot: {
+        id: lotId,
+        organizationId: harness.orgM3,
+        symbol: "BTC/USDT",
+        venue: "mock",
+        accountKey: "paper",
+        positionSide: "LONG",
+        instrumentKind: "SPOT",
+        strategySignalId: "signal-m4-insufficient",
+        state: "OPEN",
+        openQty: "0.01",
+        remainingQty: "0.01",
+        avgCost: "64000.00",
+        openedAt,
+        closedAt: null,
+        tradeId: "trade-m4-insufficient",
+        hedgeGroupId: null,
+        targetLotId: null,
+      },
+    });
+
+    const evaluatedAt = bars.at(-1)!.barCloseTime;
+
+    vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue({
+      ...mockEvaluation(),
+      signals: [],
+      signal: {
+        ...mockEvaluation().signal,
+        outcome: "NO_SIGNAL",
+        side: undefined,
+      },
+    });
+
+    const submitSpy = vi.spyOn(harness.deps.execution, "submitOrder");
+
+    const result = await runPaperCycleOnce(harness.deps, {
+      context: requireOrgContext(harness.orgM3),
+      snapshot: {
+        bars,
+        quote: {
+          symbol: "BTC/USDT",
+          bid: "64000.00",
+          ask: "64000.00",
+          last: "64000.00",
+          timestamp: evaluatedAt,
+        },
+        evaluatedAt,
+        cycleIndex: 0,
+        cycleId: "cycle-m4-insufficient-atr",
+      },
+      accountKey: "paper",
+      defaultQuantity: "0.01",
+      accountState: EMPTY_STATE,
+      orderRepository: harness.orderRepository,
+      guardian: {
+        runConfig: { enabled: true, maxHoldBars: 0 },
+        exitEngine: {
+          runConfig: DEFAULT_EXIT_RUN_CONFIG,
+          trailingStateByLotId: new Map(),
+        },
+      },
+    });
+
+    expect(result.guardian?.evaluations).toHaveLength(1);
+    expect(result.guardian?.evaluations[0]?.decision).toBe("HOLD");
+    expect(result.guardian?.evaluations[0]?.reason.slTpLevels).toBeNull();
+    expect(result.guardian?.exitIntents).toHaveLength(0);
+    expect(submitSpy).not.toHaveBeenCalled();
+
+    const lotEvents = await harness.lifecycleRepository.listLifecycleEvents(
+      requireOrgContext(harness.orgM3),
+      {
+        entityType: "POSITION_LOT",
+        entityId: lotId,
+      },
+    );
+    expect(lotEvents.map((event) => event.phase)).toEqual(["GUARDIAN_EVALUATED"]);
   });
 });
