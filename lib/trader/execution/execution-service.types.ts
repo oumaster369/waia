@@ -9,6 +9,7 @@ import type { OrderRepository } from "@/lib/trader/execution/order-repository.ty
 import type { RiskEngineService } from "@/lib/trader/risk/evaluate.types";
 import type { TraderAuditInput } from "@/lib/trader/types";
 import type { LivePathAuthorizationHook } from "@/lib/trader/live/assert-live-path-authorized";
+import type { LifecycleRecorder } from "@/lib/trader/lifecycle/lifecycle-recorder";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 export type SubmissionAuditIds = {
@@ -33,6 +34,10 @@ export type SubmitOrderInput = {
   strategyId?: string | null;
   strategyVersion?: string | null;
   allocationDecisionId?: string | null;
+  openingMsvId?: string | null;
+  openingFeatureSetId?: string | null;
+  openingRegime?: import("@/lib/trader/intelligence/types").Regime | null;
+  signalConfidence?: string | null;
   referencePrice: string;
   accountKey: string;
   accountState?: AccountRiskState;
@@ -62,6 +67,7 @@ export type OrderExecutionServiceDeps = {
   executionTelemetrySink?: WaiaTraderTelemetrySink;
   /** Injected only on bounded operator CLI path; Worker defaults omit this hook. */
   assertLiveAuthorized?: LivePathAuthorizationHook;
+  lifecycleRecorder?: LifecycleRecorder;
 };
 
 export type OrderExecutionService = {

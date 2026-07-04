@@ -1776,6 +1776,197 @@ export const traderFills = sqliteTable(
   ],
 );
 
+export const positionSideEnum = ["LONG", "SHORT"] as const;
+export type PositionSideDb = (typeof positionSideEnum)[number];
+
+export const instrumentKindEnum = ["SPOT", "PERP", "FUTURE"] as const;
+export type InstrumentKindDb = (typeof instrumentKindEnum)[number];
+
+export const positionLotStateEnum = ["OPEN", "CLOSED"] as const;
+export type PositionLotStateDb = (typeof positionLotStateEnum)[number];
+
+export const tradeStateEnum = ["OPEN", "CLOSED", "FORCED_FLAT"] as const;
+export type TradeStateDb = (typeof tradeStateEnum)[number];
+
+export const tradeLegKindEnum = ["OPEN_FILL", "CLOSE_FILL", "FORCED_FLAT"] as const;
+export type TradeLegKindDb = (typeof tradeLegKindEnum)[number];
+
+export const lifecycleEventPhaseEnum = [
+  "SIGNAL_ACCEPTED",
+  "ORDER_SUBMITTED",
+  "ORDER_FILLED",
+  "TRADE_OPENED",
+  "TRADE_CLOSED",
+  "FORCED_FLAT",
+  "GUARDIAN_EVALUATED",
+  "GUARDIAN_EXIT_INTENT",
+] as const;
+export type LifecycleEventPhaseDb = (typeof lifecycleEventPhaseEnum)[number];
+
+export const lifecycleEntityTypeEnum = [
+  "TRADE",
+  "POSITION_LOT",
+  "ORDER",
+  "FILL",
+  "STRATEGY_SIGNAL",
+] as const;
+export type LifecycleEntityTypeDb = (typeof lifecycleEntityTypeEnum)[number];
+
+/** AI-TRADER: round-trip knowledge records (M1 / DEE-376). */
+export const traderTrades = sqliteTable(
+  "trader_trades",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    venue: text("venue").notNull(),
+    accountKey: text("account_key").notNull(),
+    positionSide: text("position_side", { enum: [...positionSideEnum] }).notNull(),
+    instrumentKind: text("instrument_kind", { enum: [...instrumentKindEnum] }).notNull(),
+    strategySignalId: text("strategy_signal_id").notNull(),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    state: text("state", { enum: [...tradeStateEnum] }).notNull(),
+    semanticsVersion: text("semantics_version").notNull(),
+    openedAt: integer("opened_at", { mode: "timestamp_ms" }).notNull(),
+    closedAt: integer("closed_at", { mode: "timestamp_ms" }),
+    realizedPnl: text("realized_pnl").notNull().default("0"),
+    markedPnl: text("marked_pnl").notNull().default("0"),
+    hypothesisId: text("hypothesis_id"),
+    patternId: text("pattern_id"),
+    riskDecisionId: text("risk_decision_id").notNull(),
+    allocationDecisionId: text("allocation_decision_id"),
+    reasoningSessionId: text("reasoning_session_id"),
+    signalConfidence: text("signal_confidence"),
+    openingRegime: text("opening_regime"),
+    openingMsvId: text("opening_msv_id"),
+    openingFeatureSetId: text("opening_feature_set_id"),
+    closingMsvId: text("closing_msv_id"),
+    closingFeatureSetId: text("closing_feature_set_id"),
+    closingRegime: text("closing_regime"),
+    frozenAt: integer("frozen_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_trades_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_trades_org_strategy_signal_idx").on(t.organizationId, t.strategySignalId),
+    index("trader_trades_org_state_idx").on(t.organizationId, t.state),
+  ],
+);
+
+/** AI-TRADER: live position lots (M1 / DEE-376). */
+export const traderPositionLots = sqliteTable(
+  "trader_position_lots",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    venue: text("venue").notNull(),
+    accountKey: text("account_key").notNull(),
+    positionSide: text("position_side", { enum: [...positionSideEnum] }).notNull(),
+    instrumentKind: text("instrument_kind", { enum: [...instrumentKindEnum] }).notNull(),
+    strategySignalId: text("strategy_signal_id").notNull(),
+    state: text("state", { enum: [...positionLotStateEnum] }).notNull(),
+    openQty: text("open_qty").notNull(),
+    remainingQty: text("remaining_qty").notNull(),
+    avgCost: text("avg_cost").notNull(),
+    openedAt: integer("opened_at", { mode: "timestamp_ms" }).notNull(),
+    closedAt: integer("closed_at", { mode: "timestamp_ms" }),
+    tradeId: text("trade_id").notNull(),
+    hedgeGroupId: text("hedge_group_id"),
+    targetLotId: text("target_lot_id"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_position_lots_id_organization_unique").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.tradeId, t.organizationId],
+      foreignColumns: [traderTrades.id, traderTrades.organizationId],
+    }).onDelete("cascade"),
+    index("trader_position_lots_org_state_idx").on(t.organizationId, t.state),
+    index("trader_position_lots_org_symbol_strategy_idx").on(
+      t.organizationId,
+      t.symbol,
+      t.strategySignalId,
+    ),
+  ],
+);
+
+/** AI-TRADER: append-only trade legs (M1 / DEE-376). */
+export const traderTradeLegs = sqliteTable(
+  "trader_trade_legs",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    tradeId: text("trade_id").notNull(),
+    positionLotId: text("position_lot_id").notNull(),
+    kind: text("kind", { enum: [...tradeLegKindEnum] }).notNull(),
+    orderId: text("order_id").notNull(),
+    fillId: text("fill_id"),
+    syntheticId: text("synthetic_id"),
+    quantity: text("quantity").notNull(),
+    price: text("price").notNull(),
+    fee: text("fee").notNull().default("0"),
+    executedAt: integer("executed_at", { mode: "timestamp_ms" }).notNull(),
+    legPnl: text("leg_pnl").notNull().default("0"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_trade_legs_id_organization_unique").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.tradeId, t.organizationId],
+      foreignColumns: [traderTrades.id, traderTrades.organizationId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.positionLotId, t.organizationId],
+      foreignColumns: [traderPositionLots.id, traderPositionLots.organizationId],
+    }).onDelete("cascade"),
+    index("trader_trade_legs_org_trade_idx").on(t.organizationId, t.tradeId),
+  ],
+);
+
+/** AI-TRADER: append-only lifecycle trace (M1 / DEE-376). */
+export const traderLifecycleEvents = sqliteTable(
+  "trader_lifecycle_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    entityType: text("entity_type", { enum: [...lifecycleEntityTypeEnum] }).notNull(),
+    entityId: text("entity_id").notNull(),
+    phase: text("phase", { enum: [...lifecycleEventPhaseEnum] }).notNull(),
+    payload: text("payload"),
+    occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+    researchRunId: text("research_run_id"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_lifecycle_events_org_entity_idx").on(t.organizationId, t.entityType, t.entityId),
+    index("trader_lifecycle_events_org_phase_idx").on(t.organizationId, t.phase),
+  ],
+);
+
 /** AI-TRADER: org-level live-enable governance states (DEE-212 / BP-7). */
 export const traderOrgLiveEnableStateEnum = [
   "DISABLED",

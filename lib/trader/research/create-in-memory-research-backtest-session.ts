@@ -12,6 +12,7 @@ import {
   createSqliteReconciliationService,
 } from "@/lib/trader/execution";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
+import { createLifecycleRecorder, createSqliteLifecycleRepository } from "@/lib/trader/lifecycle";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import {
@@ -49,6 +50,8 @@ export function createInMemoryResearchBacktestSession(): InMemoryResearchBacktes
   const connector = new MockExchangeConnector();
 
   const orderRepository = createSqliteOrderRepository(db);
+  const lifecycleRepository = createSqliteLifecycleRepository(db);
+  const lifecycleRecorder = createLifecycleRecorder({ repository: lifecycleRepository });
   const killSwitchResolver = createKillSwitchResolver({
     repository: createSqliteKillSwitchRepository(db),
     nowMs,
@@ -69,6 +72,7 @@ export function createInMemoryResearchBacktestSession(): InMemoryResearchBacktes
     connectorForMode: () => connector,
     writeAudit,
     nowMs,
+    lifecycleRecorder,
   });
   const reconciliation = createSqliteReconciliationService(db, {
     connectorForMode: () => connector,
@@ -77,7 +81,7 @@ export function createInMemoryResearchBacktestSession(): InMemoryResearchBacktes
   });
 
   return {
-    deps: { execution, reconciliation },
+    deps: { execution, reconciliation, lifecycleRecorder },
     orderRepository,
     cleanup: () => {
       try {

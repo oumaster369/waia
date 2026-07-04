@@ -41,6 +41,7 @@ import {
   createPostgresOrderRepositoryFromExecutor,
   createSqliteOrderRepository,
 } from "@/lib/trader/execution/repository-adapters";
+import type { TradeLineageAtOpen } from "@/lib/trader/lifecycle/trade-lifecycle.types";
 import {
   createKillSwitchResolver,
   createPostgresKillSwitchRepository,
@@ -222,7 +223,50 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     nowMs,
     executionTelemetrySink: telemetrySink,
     assertLiveAuthorized,
+    lifecycleRecorder,
   } = deps;
+
+  function buildTradeLineageFromSubmit(
+    order: OrderRow,
+    input: SubmitOrderInput,
+  ): TradeLineageAtOpen {
+    return {
+      strategySignalId: order.strategySignalId ?? input.strategySignalId ?? "",
+      strategyId: input.strategyId ?? "unknown",
+      strategyVersion: input.strategyVersion ?? "0.0.0",
+      riskDecisionId: order.riskDecisionId,
+      allocationDecisionId: order.allocationDecisionId ?? input.allocationDecisionId ?? null,
+      signalConfidence: input.signalConfidence ?? null,
+      openingRegime: input.openingRegime ?? null,
+      openingMsvId: input.openingMsvId ?? null,
+      openingFeatureSetId: input.openingFeatureSetId ?? null,
+    };
+  }
+
+  async function recordLifecycleForFill(
+    context: OrgContext,
+    order: OrderRow,
+    input: SubmitOrderInput,
+    fillId: string,
+  ): Promise<void> {
+    if (!lifecycleRecorder) {
+      return;
+    }
+
+    const fills = await orderRepository.listFills(context, order.id);
+    const fill = fills.find((entry) => entry.id === fillId);
+    if (!fill) {
+      return;
+    }
+
+    await lifecycleRecorder.recordFillLifecycle({
+      context,
+      order,
+      fill,
+      accountKey: input.accountKey,
+      lineage: buildTradeLineageFromSubmit(order, input),
+    });
+  }
 
   async function authorizeLivePath(
     orgContext: OrgContext,
@@ -449,7 +493,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     if (connectorOrder.status === "filled" || connectorOrder.status === "partially_filled") {
       const trade = await resolveTradeForOrder(connector, current, connectorOrder);
       if (trade) {
-        await orderRepository.recordFill(context, {
+        const fillRow = await orderRepository.recordFill(context, {
           orderId: current.id,
           exchangeTradeId: trade.tradeId,
           price: trade.price,
@@ -458,6 +502,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
           feeAsset: trade.feeAsset,
           executedAt: new Date(trade.executedAt),
         });
+        await recordLifecycleForFill(context, current, input, fillRow.id);
       }
 
       const fillTarget = mapConnectorStatusToOrderState(connectorOrder.status);

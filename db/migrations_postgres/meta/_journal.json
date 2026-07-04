@@ -470,6 +470,20 @@
       "when": 1780000000029,
       "tag": "0066_strategy_promotion_research_evidence",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1780000000030,
+      "tag": "0067_trader_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1780000000031,
+      "tag": "0068_trader_lifecycle_rls",
+      "breakpoints": true
     }
   ]
 }
