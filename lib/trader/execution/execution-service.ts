@@ -585,6 +585,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
         referencePrice: input.referencePrice,
         accountKey: input.accountKey,
         accountState: input.accountState,
+        stopDistanceUsdt: input.stopDistanceUsdt,
       });
 
       if (isTerminalReject(riskDecision.decision.outcome)) {

@@ -15,6 +15,8 @@ export type MapSignalToSubmitOrderInput = {
   executionMode: "mock" | "paper";
   defaultQuantity: string;
   /** When set, caps notional via min(maxRisk/price, defaultQuantity). */
+  /** When set, overrides allocateQuantity result (M2 portfolio sizer output). */
+  quantity?: string;
   tradingPermission?: TradingPermission;
   clientOrderId?: string;
   idempotencyKey?: string;
@@ -59,7 +61,8 @@ export function mapSignalToSubmitOrder(
     symbol: signal.symbol,
     side: signal.side,
     type: "market",
-    quantity: allocateQuantity(signal, input.referencePrice, input.defaultQuantity),
+    quantity:
+      input.quantity ?? allocateQuantity(signal, input.referencePrice, input.defaultQuantity),
     strategySignalId: signal.strategySignalId,
     strategyId: signal.strategyId,
     strategyVersion: signal.strategyVersion,

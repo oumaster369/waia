@@ -1,3 +1,4 @@
+import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import type {
   OrderExecutionService,
@@ -15,7 +16,21 @@ import type {
 } from "@/lib/trader/market-data/types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import type { LifecycleRecorder } from "@/lib/trader/lifecycle/lifecycle-recorder";
+import type {
+  PortfolioRunConfig,
+  PortfolioSizingLimits,
+  StopDistanceProvider,
+} from "@/lib/trader/portfolio";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+
+/** M2 deposit-aware sizing context (optional — legacy cycles omit this). */
+export type PortfolioCycleContext = {
+  runConfig: PortfolioRunConfig;
+  limits: PortfolioSizingLimits;
+  stopDistanceProvider: StopDistanceProvider;
+  costModel: CostModelV1;
+  markPrices?: import("@/lib/trader/paper/paper-pnl.types").PaperPnLMarkPrices;
+};
 
 export type PaperCycleExecutionMode = Extract<OrderExecutionMode, "mock" | "paper">;
 
@@ -42,6 +57,8 @@ export type PaperCycleInput = {
   /** When set with refreshAccountStateBetweenStrategies, refreshes risk state between strategy submits. */
   orderRepository?: OrderRepository;
   refreshAccountStateBetweenStrategies?: boolean;
+  /** When set, enables M2 stop-based sizing + portfolio ledger refresh. */
+  portfolio?: PortfolioCycleContext;
 };
 
 export type PaperCycleSkipReason = "no_signal" | "no_submit";

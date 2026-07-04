@@ -13,6 +13,9 @@ const PERMISSIVE_CONFIG: CapitalLimitsConfig = {
   maxDrawdown: "1000",
   maxOpenOrders: 10,
   maxQuoteExposure: "10000",
+  maxRiskPerTradePct: "0.01",
+  maxPortfolioRiskPct: "0.05",
+  maxConcurrentPositions: 3,
 };
 
 const BASELINE_STATE: AccountRiskState = {
@@ -259,5 +262,116 @@ describe("trader capital limits evaluator (DEE-240)", () => {
         createDeps(),
       ),
     ).toThrow(/referencePrice/);
+  });
+
+  it("rejects when open position count is at concurrent cap", () => {
+    const decision = evaluateCapitalLimits(
+      {
+        order: {
+          clientOrderId: "cap-concurrent",
+          symbol: "ETH/USDT",
+          side: "buy",
+          type: "limit",
+          price: "3000.00",
+          quantity: "0.01",
+        },
+        referencePrice: "3000.00",
+        accountState: {
+          ...BASELINE_STATE,
+          openPositionCount: 3,
+          positions: [{ symbol: "BTC/USDT", quantity: "0.01" }],
+        },
+        stopDistanceUsdt: "60",
+      },
+      PERMISSIVE_CONFIG,
+      createDeps(),
+    );
+
+    expect(decision.outcome).toBe("REJECT");
+    expect(decision.reasonCodes).toEqual([capitalReasonCodes.maxConcurrentPositionsExceeded]);
+  });
+
+  it("rejects when projected portfolio risk exceeds cap", () => {
+    const decision = evaluateCapitalLimits(
+      {
+        order: {
+          clientOrderId: "cap-portfolio-risk",
+          symbol: "BTC/USDT",
+          side: "buy",
+          type: "limit",
+          price: "65000.00",
+          quantity: "0.50",
+        },
+        referencePrice: "65000.00",
+        accountState: {
+          positions: [],
+          openOrderCount: 0,
+          dailyPnl: "0",
+          drawdown: "0",
+          quoteExposureByCurrency: {},
+          equityUsdt: "10000",
+          openRiskUsdt: "400",
+          openPositionCount: 1,
+        },
+        stopDistanceUsdt: "1300",
+      },
+      { ...PERMISSIVE_CONFIG, maxPositionPerSymbol: "2", maxQuoteExposure: "50000" },
+      createDeps(),
+    );
+
+    expect(decision.outcome).toBe("REJECT");
+    expect(decision.reasonCodes).toEqual([capitalReasonCodes.maxPortfolioRiskExceeded]);
+  });
+
+  it("rejects buy when available balance is insufficient", () => {
+    const decision = evaluateCapitalLimits(
+      {
+        order: {
+          clientOrderId: "cap-available-balance",
+          symbol: "BTC/USDT",
+          side: "buy",
+          type: "limit",
+          price: "65000.00",
+          quantity: "0.10",
+        },
+        referencePrice: "65000.00",
+        accountState: {
+          positions: [],
+          openOrderCount: 0,
+          dailyPnl: "0",
+          drawdown: "0",
+          quoteExposureByCurrency: {},
+          availableBalanceUsdt: "1000",
+        },
+      },
+      { ...PERMISSIVE_CONFIG, maxQuoteExposure: "20000" },
+      createDeps(),
+    );
+
+    expect(decision.outcome).toBe("REJECT");
+    expect(decision.reasonCodes).toEqual([capitalReasonCodes.insufficientAvailableBalance]);
+  });
+
+  it("rejects when stop distance is zero or negative", () => {
+    const decision = evaluateCapitalLimits(
+      {
+        order: {
+          clientOrderId: "cap-invalid-stop",
+          symbol: "BTC/USDT",
+          side: "buy",
+          type: "limit",
+          price: "65000.00",
+          quantity: "0.01",
+        },
+        referencePrice: "65000.00",
+        accountState: BASELINE_STATE,
+        stopDistanceUsdt: "0",
+      },
+      PERMISSIVE_CONFIG,
+      createDeps(),
+    );
+
+    expect(decision.outcome).toBe("REJECT");
+    expect(decision.reasonCodes).toEqual([capitalReasonCodes.invalidStopDistance]);
   });
 });

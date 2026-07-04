@@ -15,6 +15,7 @@ import type {
   PaperLoopCycleDeps,
   PaperLoopWorkerConfig,
 } from "@/lib/trader/paper/paper-loop-worker.types";
+import { DEFAULT_PORTFOLIO_RUN_CONFIG } from "@/lib/trader/portfolio/portfolio-run-config.types";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import { createPostgresRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
@@ -45,6 +46,16 @@ export function loadPaperLoopConfig(env: Record<string, unknown>): PaperLoopWork
     env.PAPER_LOOP_CYCLE_ID_PREFIX.trim() !== ""
       ? env.PAPER_LOOP_CYCLE_ID_PREFIX.trim()
       : "paper-loop-worker";
+  const startingBalanceUsdt =
+    typeof env.PAPER_LOOP_STARTING_BALANCE_USDT === "string" &&
+    env.PAPER_LOOP_STARTING_BALANCE_USDT.trim() !== ""
+      ? env.PAPER_LOOP_STARTING_BALANCE_USDT.trim()
+      : DEFAULT_PORTFOLIO_RUN_CONFIG.startingBalanceUsdt;
+  const defaultStopDistancePct =
+    typeof env.PAPER_LOOP_DEFAULT_STOP_DISTANCE_PCT === "string" &&
+    env.PAPER_LOOP_DEFAULT_STOP_DISTANCE_PCT.trim() !== ""
+      ? env.PAPER_LOOP_DEFAULT_STOP_DISTANCE_PCT.trim()
+      : DEFAULT_PORTFOLIO_RUN_CONFIG.defaultStopDistancePct;
 
   return {
     enabled:
@@ -52,6 +63,8 @@ export function loadPaperLoopConfig(env: Record<string, unknown>): PaperLoopWork
     organizationId,
     accountKey,
     defaultQuantity,
+    startingBalanceUsdt,
+    defaultStopDistancePct,
     cycleIdPrefix,
     htxRestHost:
       typeof env.HTX_REST_HOST === "string" && env.HTX_REST_HOST.trim() !== ""

@@ -22,10 +22,18 @@ function parseQuoteCurrency(symbol: string): string {
 /**
  * Rebuilds {@link AccountRiskState} from persisted mock orders (full re-derive, idempotent).
  *
+ * **Legacy path (pre-M2):** Used when {@link PortfolioCycleContext} is absent — fixture replay,
+ * research v1 forensic parity, and scripts that have not adopted the portfolio adapter.
+ *
  * `positions[]` come from {@link derivePaperBook}. Exposure fields are risk-projection
  * snapshots, not PnL or paper-book balances. `quoteExposureByCurrency` accumulates buy
- * notionals only; sells do not unwind quote exposure in this slice. `dailyPnl` and
- * `drawdown` remain `"0"`.
+ * notionals only; sells do not unwind quote exposure in this slice (known limitation).
+ *
+ * **M2 deposit-aware paths** must use {@link derivePortfolioAccountState} +
+ * {@link toAccountRiskState} instead (see `paper-cycle-runner`, `run-paper-loop-cycle`,
+ * research v2 / optional backtest `portfolio` input).
+ *
+ * `dailyPnl` and `drawdown` remain `"0"` on this legacy path.
  */
 export async function deriveAccountRiskStateFromMockOrders(
   input: DeriveAccountRiskStateInput,

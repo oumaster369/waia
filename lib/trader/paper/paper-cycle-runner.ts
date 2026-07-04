@@ -1,7 +1,11 @@
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { mapSignalToSubmitOrder } from "@/lib/trader/paper/signal-to-order";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
-
+import {
+  computeStopBasedQuantity,
+  derivePortfolioAccountState,
+  toAccountRiskState,
+} from "@/lib/trader/portfolio";
 import type {
   PaperCycleDeps,
   PaperCycleInput,
@@ -82,6 +86,22 @@ async function refreshAccountStateIfConfigured(
     return input.accountState;
   }
 
+  if (input.portfolio) {
+    const portfolio = await derivePortfolioAccountState({
+      context: input.context,
+      orderRepository: input.orderRepository,
+      runConfig: input.portfolio.runConfig,
+      limits: input.portfolio.limits,
+      stopDistanceProvider: input.portfolio.stopDistanceProvider,
+      executionMode: "mock",
+      markPrices: input.portfolio.markPrices,
+    });
+    const openOrders = await input.orderRepository.listOpenOrders(input.context, {
+      executionMode: "mock",
+    });
+    return toAccountRiskState({ portfolio, openOrderCount: openOrders.length });
+  }
+
   return deriveAccountRiskStateFromMockOrders({
     context: input.context,
     orderRepository: input.orderRepository,
@@ -129,15 +149,66 @@ export async function runPaperCycleOnce(
 
   for (const signal of actionableSignals) {
     const orderKeys = cycleOrderKeys(snapshot.cycleId, signal.strategyId);
+    const referencePrice = evaluation.features.features.close;
+
+    let sizedQuantity: string | undefined;
+    let stopDistanceUsdt: string | undefined;
+
+    if (input.portfolio && signal.side) {
+      const portfolioState = await derivePortfolioAccountState({
+        context: input.context,
+        orderRepository: input.orderRepository!,
+        runConfig: input.portfolio.runConfig,
+        limits: input.portfolio.limits,
+        stopDistanceProvider: input.portfolio.stopDistanceProvider,
+        executionMode: "mock",
+        markPrices: input.portfolio.markPrices,
+      });
+      const sizing = computeStopBasedQuantity({
+        side: signal.side,
+        signal,
+        entryPrice: referencePrice,
+        defaultQuantity: input.defaultQuantity,
+        account: portfolioState,
+        limits: {
+          ...input.portfolio.limits,
+          maxNotional: input.portfolio.limits.maxNotional,
+        },
+        stopDistanceProvider: input.portfolio.stopDistanceProvider,
+        runConfig: input.portfolio.runConfig,
+        costModel: input.portfolio.costModel,
+      });
+      if (!sizing.ok) {
+        strategyExecutions.push({
+          signal,
+          submitBlocked: true,
+          skipReason: "no_submit",
+          execution: null,
+          reconciliation: null,
+        });
+        continue;
+      }
+      sizedQuantity = sizing.quantity;
+      stopDistanceUsdt = sizing.stopDistanceUsdt;
+      const openOrders = await input.orderRepository!.listOpenOrders(input.context, {
+        executionMode: "mock",
+      });
+      accountState = toAccountRiskState({
+        portfolio: portfolioState,
+        openOrderCount: openOrders.length,
+      });
+    }
+
     const submit = mapSignalToSubmitOrder({
       signal,
       accountKey: input.accountKey,
-      referencePrice: evaluation.features.features.close,
+      referencePrice,
       executionMode,
       defaultQuantity: input.defaultQuantity,
       tradingPermission: evaluation.msv.derived.tradingPermission,
       clientOrderId: orderKeys.clientOrderId,
       idempotencyKey: orderKeys.idempotencyKey,
+      quantity: sizedQuantity,
     });
 
     if (submit == null) {
@@ -168,6 +239,7 @@ export async function runPaperCycleOnce(
     const execution = await deps.execution.submitOrder(context, {
       ...submit,
       accountState,
+      stopDistanceUsdt,
     });
 
     if (execution.status !== "submitted") {

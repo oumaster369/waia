@@ -93,7 +93,7 @@ describe("deriveAccountRiskStateFromMockOrders (AT-E9 S6)", () => {
     expect(state.drawdown).toBe("0");
   });
 
-  it("reduces net position on sells without reducing quote exposure", async () => {
+  it("legacy path keeps buy-only quote exposure after sells (M2 portfolio adapter supersedes)", async () => {
     const buy = mockOrder({
       id: "order-buy-partial",
       filledQuantity: "0.02",

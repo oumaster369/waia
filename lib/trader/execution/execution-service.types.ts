@@ -41,6 +41,7 @@ export type SubmitOrderInput = {
   referencePrice: string;
   accountKey: string;
   accountState?: AccountRiskState;
+  stopDistanceUsdt?: string;
   actorType?: TraderAuditInput["actorType"];
   actorId?: string | null;
 };

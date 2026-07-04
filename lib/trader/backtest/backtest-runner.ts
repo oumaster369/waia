@@ -16,7 +16,9 @@ import type {
 import type { BarReplaySource } from "@/lib/trader/market-data/types";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import type { PaperCycleDeps, PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
+import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
+import { derivePortfolioAccountState, toAccountRiskState } from "@/lib/trader/portfolio";
 import type { PaperPnLMarkPrices } from "@/lib/trader/paper/paper-pnl.types";
 import type { PaperPnLWindow } from "@/lib/trader/paper/paper-pnl-period.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
@@ -43,6 +45,7 @@ export type RunBacktestInput = {
   activeStrategyIds?: readonly string[];
   markPrices?: PaperPnLMarkPrices;
   refreshAccountStateBetweenStrategies?: boolean;
+  portfolio?: PortfolioCycleContext;
   telemetrySink?: WaiaTraderTelemetrySink;
   newId?: () => string;
   maxCycles?: number;
@@ -135,16 +138,36 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       refreshAccountStateBetweenStrategies: input.refreshAccountStateBetweenStrategies,
       telemetrySink: input.telemetrySink,
       newId: input.newId,
+      portfolio: input.portfolio,
     });
 
     cycleResults.push(result);
 
     if (input.refreshAccountStateBetweenStrategies) {
-      accountState = await deriveAccountRiskStateFromMockOrders({
-        context: input.context,
-        orderRepository: costAwareRepository,
-        executionMode: "mock",
-      });
+      if (input.portfolio) {
+        const portfolio = await derivePortfolioAccountState({
+          context: input.context,
+          orderRepository: costAwareRepository,
+          runConfig: input.portfolio.runConfig,
+          limits: input.portfolio.limits,
+          stopDistanceProvider: input.portfolio.stopDistanceProvider,
+          executionMode: "mock",
+          markPrices: input.markPrices,
+        });
+        const openOrders = await costAwareRepository.listOpenOrders(input.context, {
+          executionMode: "mock",
+        });
+        accountState = toAccountRiskState({
+          portfolio,
+          openOrderCount: openOrders.length,
+        });
+      } else {
+        accountState = await deriveAccountRiskStateFromMockOrders({
+          context: input.context,
+          orderRepository: costAwareRepository,
+          executionMode: "mock",
+        });
+      }
     }
   }
 

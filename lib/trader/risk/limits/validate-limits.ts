@@ -51,6 +51,17 @@ function assertPositiveDecimalField(name: string, value: string): string {
   return canonicalizeDecimal(value);
 }
 
+function assertPctDecimalField(name: string, value: string): string {
+  if (!isPositiveDecimal(value)) {
+    throw new RiskLimitsValidationError(`${name} must be a positive decimal string`);
+  }
+  const canonical = canonicalizeDecimal(value);
+  if (compareDecimal(canonical, "1") > 0) {
+    throw new RiskLimitsValidationError(`${name} must be <= 1`);
+  }
+  return canonical;
+}
+
 export function normalizeAndValidateRiskLimitsInput(input: {
   allowedSymbols: readonly string[];
   maxNotional: string;
@@ -62,6 +73,9 @@ export function normalizeAndValidateRiskLimitsInput(input: {
   maxDrawdown: string;
   maxOpenOrders: number;
   maxQuoteExposure: string;
+  maxRiskPerTradePct: string;
+  maxPortfolioRiskPct: string;
+  maxConcurrentPositions: number;
 }): NormalizedRiskLimitsConfig {
   const allowedSymbols = normalizeAllowedSymbols(input.allowedSymbols);
 
@@ -85,6 +99,13 @@ export function normalizeAndValidateRiskLimitsInput(input: {
     maxDrawdown: assertPositiveDecimalField("maxDrawdown", input.maxDrawdown),
     maxOpenOrders: assertIntegerField("maxOpenOrders", input.maxOpenOrders, 1),
     maxQuoteExposure: assertPositiveDecimalField("maxQuoteExposure", input.maxQuoteExposure),
+    maxRiskPerTradePct: assertPctDecimalField("maxRiskPerTradePct", input.maxRiskPerTradePct),
+    maxPortfolioRiskPct: assertPctDecimalField("maxPortfolioRiskPct", input.maxPortfolioRiskPct),
+    maxConcurrentPositions: assertIntegerField(
+      "maxConcurrentPositions",
+      input.maxConcurrentPositions,
+      1,
+    ),
   };
 }
 
@@ -99,6 +120,9 @@ const CONFIG_FIELD_NAMES = [
   "maxDrawdown",
   "maxOpenOrders",
   "maxQuoteExposure",
+  "maxRiskPerTradePct",
+  "maxPortfolioRiskPct",
+  "maxConcurrentPositions",
 ] as const satisfies ReadonlyArray<keyof NormalizedRiskLimitsConfig>;
 
 function allowedSymbolsEqual(left: readonly string[], right: readonly string[]): boolean {
@@ -122,6 +146,8 @@ export function riskLimitsConfigEquals(
     "maxDailyLoss",
     "maxDrawdown",
     "maxQuoteExposure",
+    "maxRiskPerTradePct",
+    "maxPortfolioRiskPct",
   ] as const;
 
   for (const field of decimalFields) {
@@ -130,7 +156,13 @@ export function riskLimitsConfigEquals(
     }
   }
 
-  const integerFields = ["maxOrdersPerWindow", "windowMs", "collarBps", "maxOpenOrders"] as const;
+  const integerFields = [
+    "maxOrdersPerWindow",
+    "windowMs",
+    "collarBps",
+    "maxOpenOrders",
+    "maxConcurrentPositions",
+  ] as const;
 
   for (const field of integerFields) {
     if (left[field] !== right[field]) {
@@ -161,6 +193,8 @@ export function diffRiskLimitsConfig(
       "maxDailyLoss",
       "maxDrawdown",
       "maxQuoteExposure",
+      "maxRiskPerTradePct",
+      "maxPortfolioRiskPct",
     ]);
 
     if (decimalFields.has(field)) {
