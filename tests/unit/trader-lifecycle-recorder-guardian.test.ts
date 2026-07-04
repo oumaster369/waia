@@ -66,6 +66,7 @@ describe("lifecycle recorder guardian phases (M3 / DEE-378)", () => {
       invalidation: null,
       patternRefs: [],
       signalRefs: [],
+      exitIntelligenceContext: null,
     };
 
     await recorder.recordGuardianEvaluated({

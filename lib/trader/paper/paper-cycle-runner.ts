@@ -164,6 +164,7 @@ async function runGuardianPhase(
 
   const markPrice = evaluation.features.features.close;
   const exitEngine = input.guardian.exitEngine;
+  const exitIntelligence = input.guardian.exitIntelligence;
   const guardianResult = evaluatePositionGuardian({
     context,
     snapshot,
@@ -180,6 +181,10 @@ async function runGuardianPhase(
             bars: snapshot.bars,
             trailingStateByLotId: exitEngine.trailingStateByLotId,
           }
+        : undefined,
+    exitIntelligence:
+      exitIntelligence?.runConfig.enabled === true
+        ? { runConfig: exitIntelligence.runConfig }
         : undefined,
   });
 

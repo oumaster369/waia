@@ -40,6 +40,7 @@ export {
   computeUnrealizedPnlUsdt,
   evaluatePositionGuardian,
   type EvaluatePositionGuardianExitEngineInput,
+  type EvaluatePositionGuardianExitIntelligenceInput,
   type EvaluatePositionGuardianInput,
 } from "@/lib/trader/guardian/evaluate-position-guardian";
 

@@ -13,6 +13,14 @@ export {
 } from "@/lib/trader/intelligence/cde-v0";
 export { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 export {
+  DEFAULT_EXIT_INTELLIGENCE_RUN_CONFIG,
+  EXIT_INTELLIGENCE_CONTEXT_SCHEMA_VERSION,
+  buildExitIntelligenceContext,
+  type BuildExitIntelligenceContextInput,
+  type ExitIntelligenceContext,
+  type ExitIntelligenceRunConfig,
+} from "@/lib/trader/intelligence/m5";
+export {
   emitDecisionReasonCodeCounter,
   emitMsvDecisionCounters,
   DECISION_COUNTER_CODES,
