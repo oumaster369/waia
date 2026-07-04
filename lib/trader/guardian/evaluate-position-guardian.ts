@@ -10,6 +10,8 @@ import {
   updateTrailingSessionState,
 } from "@/lib/trader/exits/exit-plan-builder";
 import type { ExitPlan, ExitRunConfig, TrailingState } from "@/lib/trader/exits/exit-types";
+import { buildExitIntelligenceContext } from "@/lib/trader/intelligence/m5/exit-intelligence-context";
+import type { ExitIntelligenceRunConfig } from "@/lib/trader/intelligence/m5/exit-intelligence-types";
 import type { EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 import type { PositionLotRow, TradeRow } from "@/lib/trader/lifecycle/trade-lifecycle.types";
 import type { MarketSnapshot } from "@/lib/trader/market-data/types";
@@ -21,11 +23,16 @@ import type {
   GuardianCycleResult,
   GuardianPositionEvaluation,
 } from "@/lib/trader/guardian/guardian.types";
+import type { GuardianReasonRecord } from "@/lib/trader/guardian/guardian-reason-record.types";
 
 export type EvaluatePositionGuardianExitEngineInput = {
   runConfig: ExitRunConfig;
   bars: MarketSnapshot["bars"];
   trailingStateByLotId: Map<string, TrailingState>;
+};
+
+export type EvaluatePositionGuardianExitIntelligenceInput = {
+  runConfig: ExitIntelligenceRunConfig;
 };
 
 export type EvaluatePositionGuardianInput = {
@@ -40,6 +47,8 @@ export type EvaluatePositionGuardianInput = {
   ruleProviders?: readonly GuardianRuleProvider[];
   /** M4 dynamic SL/TP — opt-in; omitted preserves M3 behavior. */
   exitEngine?: EvaluatePositionGuardianExitEngineInput;
+  /** M5 exit intelligence overlay — opt-in; omitted preserves M3/M4 behavior. */
+  exitIntelligence?: EvaluatePositionGuardianExitIntelligenceInput;
 };
 
 export function computeBarsHeld(
@@ -193,7 +202,7 @@ export function evaluatePositionGuardian(
       exitPlan && trailingState ? toSlTpLevelsSnapshot(exitPlan, trailingState) : null;
 
     const evaluationId = `${input.snapshot.cycleId}:${lot.id}`;
-    const reason = {
+    const baseReason = {
       schemaVersion: GUARDIAN_REASON_RECORD_SCHEMA_VERSION,
       decision: action.decision,
       reasonCode: action.reasonCode,
@@ -217,7 +226,25 @@ export function evaluatePositionGuardian(
       invalidation: null,
       patternRefs: [],
       signalRefs: [],
-    } as const;
+      exitIntelligenceContext: null,
+    } satisfies Omit<GuardianReasonRecord, "exitIntelligenceContext"> & {
+      exitIntelligenceContext: null;
+    };
+
+    const exitIntelligenceContext =
+      input.exitIntelligence?.runConfig.enabled === true
+        ? buildExitIntelligenceContext({
+            reason: baseReason,
+            trade,
+            msv: input.evaluation.msv,
+            signals: input.evaluation.signals,
+          })
+        : null;
+
+    const reason: GuardianReasonRecord = {
+      ...baseReason,
+      exitIntelligenceContext,
+    };
 
     evaluations.push({
       evaluationId,

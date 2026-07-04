@@ -47,6 +47,7 @@ describe("mapExitIntentToSubmitOrder (M3)", () => {
       invalidation: null,
       patternRefs: [],
       signalRefs: [],
+      exitIntelligenceContext: null,
     },
   };
 

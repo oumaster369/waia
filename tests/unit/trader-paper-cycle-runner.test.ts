@@ -8,6 +8,7 @@ import { GUARDIAN_REASON_RECORD_SCHEMA_VERSION, guardianReasonCodes } from "@/li
 import { buildExitPlan } from "@/lib/trader/exits/exit-plan-builder";
 import { exitReasonCodes } from "@/lib/trader/exits/exit-reason-codes";
 import { DEFAULT_EXIT_RUN_CONFIG } from "@/lib/trader/exits/exit-types";
+import { DEFAULT_EXIT_INTELLIGENCE_RUN_CONFIG } from "@/lib/trader/intelligence/m5/exit-intelligence-types";
 import {
   createLifecycleRecorder,
   createSqliteLifecycleRepository,
@@ -1045,6 +1046,48 @@ describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
 
     const trade = await harness.lifecycleRepository.getTradeById(context, tradeId);
     expect(trade?.state).toBe("CLOSED");
+  });
+
+  it("attaches exitIntelligenceContext on HOLD without adding exit intents (M5)", async () => {
+    const lotId = "lot-m5-hold";
+    await seedOpenLot({
+      tradeId: "trade-m5-hold",
+      lotId,
+      strategySignalId: "signal-m5-hold",
+    });
+
+    vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue({
+      ...mockEvaluation(),
+      signals: [],
+      signal: {
+        ...mockEvaluation().signal,
+        outcome: "NO_SIGNAL",
+        side: undefined,
+      },
+    });
+
+    const submitSpy = vi.spyOn(harness.deps.execution, "submitOrder");
+
+    const result = await runPaperCycleOnce(harness.deps, {
+      context: requireOrgContext(harness.orgM3),
+      snapshot: portfolioSnapshot("cycle-m5-hold"),
+      accountKey: "paper",
+      defaultQuantity: "0.01",
+      accountState: EMPTY_STATE,
+      orderRepository: harness.orderRepository,
+      guardian: {
+        runConfig: { enabled: true, maxHoldBars: 0 },
+        exitIntelligence: {
+          runConfig: { ...DEFAULT_EXIT_INTELLIGENCE_RUN_CONFIG, enabled: true },
+        },
+      },
+    });
+
+    expect(result.guardian?.evaluations).toHaveLength(1);
+    expect(result.guardian?.evaluations[0]?.decision).toBe("HOLD");
+    expect(result.guardian?.evaluations[0]?.reason.exitIntelligenceContext).not.toBeNull();
+    expect(result.guardian?.exitIntents).toHaveLength(0);
+    expect(submitSpy).not.toHaveBeenCalled();
   });
 });
 
