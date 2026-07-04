@@ -3,6 +3,13 @@ import { guardianOrderKeys } from "@/lib/trader/guardian/guardian-order-keys";
 import { GUARDIAN_REASON_RECORD_SCHEMA_VERSION } from "@/lib/trader/guardian/guardian-reason-record.types";
 import type { GuardianRunConfig } from "@/lib/trader/guardian/guardian-run-config.types";
 import type { GuardianRuleProvider } from "@/lib/trader/guardian/guardian-rule-provider.types";
+import {
+  buildExitPlan,
+  createSlTpGuardianRuleProvider,
+  toSlTpLevelsSnapshot,
+  updateTrailingSessionState,
+} from "@/lib/trader/exits/exit-plan-builder";
+import type { ExitPlan, ExitRunConfig, TrailingState } from "@/lib/trader/exits/exit-types";
 import type { EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 import type { PositionLotRow, TradeRow } from "@/lib/trader/lifecycle/trade-lifecycle.types";
 import type { MarketSnapshot } from "@/lib/trader/market-data/types";
@@ -15,6 +22,12 @@ import type {
   GuardianPositionEvaluation,
 } from "@/lib/trader/guardian/guardian.types";
 
+export type EvaluatePositionGuardianExitEngineInput = {
+  runConfig: ExitRunConfig;
+  bars: MarketSnapshot["bars"];
+  trailingStateByLotId: Map<string, TrailingState>;
+};
+
 export type EvaluatePositionGuardianInput = {
   context: OrgContext;
   snapshot: MarketSnapshot;
@@ -25,6 +38,8 @@ export type EvaluatePositionGuardianInput = {
   accountKey: string;
   markPrice: string;
   ruleProviders?: readonly GuardianRuleProvider[];
+  /** M4 dynamic SL/TP — opt-in; omitted preserves M3 behavior. */
+  exitEngine?: EvaluatePositionGuardianExitEngineInput;
 };
 
 export function computeBarsHeld(
@@ -66,6 +81,63 @@ function sortOpenLots(lots: PositionLotRow[]): PositionLotRow[] {
   });
 }
 
+function prepareExitEngineState(input: EvaluatePositionGuardianInput): {
+  exitPlanByLotId: Map<string, ExitPlan>;
+  ruleProviders: readonly GuardianRuleProvider[];
+} {
+  if (!input.exitEngine?.runConfig.enabled) {
+    return {
+      exitPlanByLotId: new Map(),
+      ruleProviders: input.ruleProviders ?? [],
+    };
+  }
+
+  const exitPlanByLotId = new Map<string, ExitPlan>();
+  const sortedLots = sortOpenLots(input.openLots);
+
+  // Prune trailing state for lots that are no longer open so the session map
+  // cannot grow unbounded or resurrect stale state for a reopened lot id.
+  const openLotIds = new Set(sortedLots.map((lot) => lot.id));
+  for (const lotId of [...input.exitEngine.trailingStateByLotId.keys()]) {
+    if (!openLotIds.has(lotId)) {
+      input.exitEngine.trailingStateByLotId.delete(lotId);
+    }
+  }
+
+  for (const lot of sortedLots) {
+    const plan = buildExitPlan({
+      lot,
+      bars: input.exitEngine.bars,
+      runConfig: input.exitEngine.runConfig,
+      evaluatedAt: input.snapshot.evaluatedAt,
+    });
+    if (!plan) {
+      continue;
+    }
+
+    const trailingState = updateTrailingSessionState({
+      plan,
+      priorTrailing: input.exitEngine.trailingStateByLotId.get(lot.id),
+      bars: input.exitEngine.bars,
+      lot,
+      markPrice: input.markPrice,
+      evaluatedAt: input.snapshot.evaluatedAt,
+    });
+    input.exitEngine.trailingStateByLotId.set(lot.id, trailingState);
+    exitPlanByLotId.set(lot.id, plan);
+  }
+
+  const slTpProvider = createSlTpGuardianRuleProvider({
+    getExitPlan: (lotId) => exitPlanByLotId.get(lotId),
+    getTrailingState: (lotId) => input.exitEngine!.trailingStateByLotId.get(lotId),
+  });
+
+  return {
+    exitPlanByLotId,
+    ruleProviders: [slTpProvider, ...(input.ruleProviders ?? [])],
+  };
+}
+
 export function evaluatePositionGuardian(
   input: EvaluatePositionGuardianInput,
 ): GuardianCycleResult {
@@ -77,6 +149,7 @@ export function evaluatePositionGuardian(
   const { msv } = input.evaluation;
   const evaluations: GuardianPositionEvaluation[] = [];
   const exitIntents: ExitIntent[] = [];
+  const { exitPlanByLotId, ruleProviders } = prepareExitEngineState(input);
 
   for (const lot of sortOpenLots(input.openLots)) {
     const trade = input.tradesById.get(lot.tradeId);
@@ -90,6 +163,9 @@ export function evaluatePositionGuardian(
       lot.avgCost,
       lot.remainingQty,
     );
+
+    const exitPlan = exitPlanByLotId.get(lot.id);
+    const trailingState = input.exitEngine?.trailingStateByLotId.get(lot.id);
 
     const ruleInput = {
       lot,
@@ -109,9 +185,12 @@ export function evaluatePositionGuardian(
       tradeStrategyId: trade.strategyId,
       barsHeld,
       maxHoldBars: input.runConfig.maxHoldBars,
-      ruleProviders: input.ruleProviders,
+      ruleProviders,
       ruleInput,
     });
+
+    const slTpLevels =
+      exitPlan && trailingState ? toSlTpLevelsSnapshot(exitPlan, trailingState) : null;
 
     const evaluationId = `${input.snapshot.cycleId}:${lot.id}`;
     const reason = {
@@ -133,7 +212,7 @@ export function evaluatePositionGuardian(
       markPrice: input.markPrice,
       unrealizedPnlUsdt,
       barsHeld,
-      slTpLevels: null,
+      slTpLevels,
       rMultiple: null,
       invalidation: null,
       patternRefs: [],

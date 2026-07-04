@@ -163,6 +163,7 @@ async function runGuardianPhase(
   );
 
   const markPrice = evaluation.features.features.close;
+  const exitEngine = input.guardian.exitEngine;
   const guardianResult = evaluatePositionGuardian({
     context,
     snapshot,
@@ -172,6 +173,14 @@ async function runGuardianPhase(
     runConfig: input.guardian.runConfig,
     accountKey: input.accountKey,
     markPrice,
+    exitEngine:
+      exitEngine?.runConfig.enabled === true
+        ? {
+            runConfig: exitEngine.runConfig,
+            bars: snapshot.bars,
+            trailingStateByLotId: exitEngine.trailingStateByLotId,
+          }
+        : undefined,
   });
 
   let nextAccountState = accountState;
