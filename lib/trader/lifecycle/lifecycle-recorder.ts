@@ -1,4 +1,6 @@
 import type { FillRow, OrderRow } from "@/lib/trader/execution/order-repository.types";
+import type { GuardianReasonRecord } from "@/lib/trader/guardian/guardian-reason-record.types";
+import type { ExitIntent } from "@/lib/trader/guardian/guardian.types";
 import type { LifecycleRepository } from "@/lib/trader/lifecycle/lifecycle-repository.types";
 import { TRADE_LIFECYCLE_SEMANTICS_VERSION_V2 } from "@/lib/trader/lifecycle/trade-lifecycle-semantics";
 import type { TradeLineageAtOpen } from "@/lib/trader/lifecycle/trade-lifecycle.types";
@@ -38,6 +40,21 @@ export type RecordForcedFlatLifecycleInput = {
   accountKey: string;
   strategySignalId: string;
   markToClose: PaperMarkToCloseTrade;
+};
+
+export type RecordGuardianEvaluatedInput = {
+  context: OrgContext;
+  positionLotId: string;
+  reason: GuardianReasonRecord;
+  occurredAt?: Date;
+  researchRunId?: string | null;
+};
+
+export type RecordGuardianExitIntentInput = {
+  context: OrgContext;
+  intent: ExitIntent;
+  occurredAt?: Date;
+  researchRunId?: string | null;
 };
 
 export async function recordSignalAcceptedLifecycleEvent(
@@ -81,6 +98,49 @@ async function recordLifecyclePhase(
       payload: input.payload ? JSON.stringify(input.payload) : null,
       occurredAt: input.occurredAt,
       researchRunId: null,
+    },
+  });
+}
+
+export async function recordGuardianEvaluated(
+  deps: LifecycleRecorderDeps,
+  input: RecordGuardianEvaluatedInput,
+): Promise<void> {
+  const newId = deps.newId ?? (() => crypto.randomUUID());
+  await deps.repository.insertLifecycleEvent(input.context, {
+    event: {
+      id: newId(),
+      organizationId: input.context.organizationId,
+      entityType: "POSITION_LOT",
+      entityId: input.positionLotId,
+      phase: "GUARDIAN_EVALUATED",
+      payload: JSON.stringify(input.reason),
+      occurredAt: input.occurredAt ?? new Date(input.reason.evaluatedAt),
+      researchRunId: input.researchRunId ?? null,
+    },
+  });
+}
+
+export async function recordGuardianExitIntent(
+  deps: LifecycleRecorderDeps,
+  input: RecordGuardianExitIntentInput,
+): Promise<void> {
+  const newId = deps.newId ?? (() => crypto.randomUUID());
+  const { intent } = input;
+  await deps.repository.insertLifecycleEvent(input.context, {
+    event: {
+      id: newId(),
+      organizationId: input.context.organizationId,
+      entityType: "POSITION_LOT",
+      entityId: intent.positionLotId,
+      phase: "GUARDIAN_EXIT_INTENT",
+      payload: JSON.stringify({
+        ...intent.reason,
+        intentId: intent.intentId,
+        quantity: intent.quantity,
+      }),
+      occurredAt: input.occurredAt ?? new Date(intent.reason.evaluatedAt),
+      researchRunId: input.researchRunId ?? null,
     },
   });
 }
@@ -402,6 +462,10 @@ export function createLifecycleRecorder(deps: LifecycleRecorderDeps) {
       recordSignalAcceptedLifecycleEvent(deps, input),
     recordForcedFlatLifecycle: (input: RecordForcedFlatLifecycleInput) =>
       recordForcedFlatLifecycle(deps, input),
+    recordGuardianEvaluated: (input: RecordGuardianEvaluatedInput) =>
+      recordGuardianEvaluated(deps, input),
+    recordGuardianExitIntent: (input: RecordGuardianExitIntentInput) =>
+      recordGuardianExitIntent(deps, input),
   };
 }
 

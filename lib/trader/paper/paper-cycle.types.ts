@@ -15,7 +15,10 @@ import type {
   MarketSnapshot,
 } from "@/lib/trader/market-data/types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
+import type { GuardianCycleResult } from "@/lib/trader/guardian";
+import type { GuardianRunConfig } from "@/lib/trader/guardian/guardian-run-config.types";
 import type { LifecycleRecorder } from "@/lib/trader/lifecycle/lifecycle-recorder";
+import type { LifecycleRepository } from "@/lib/trader/lifecycle/lifecycle-repository.types";
 import type {
   PortfolioRunConfig,
   PortfolioSizingLimits,
@@ -34,6 +37,11 @@ export type PortfolioCycleContext = {
 
 export type PaperCycleExecutionMode = Extract<OrderExecutionMode, "mock" | "paper">;
 
+/** M3 guardian supervisory context (optional — legacy cycles omit this). */
+export type GuardianCycleContext = {
+  runConfig: GuardianRunConfig;
+};
+
 export type PaperCycleDeps = {
   execution: OrderExecutionService;
   reconciliation: {
@@ -43,6 +51,8 @@ export type PaperCycleDeps = {
     ): Promise<ReconciliationReport>;
   };
   lifecycleRecorder?: LifecycleRecorder;
+  /** Required when guardian enabled on input. */
+  lifecycleRepository?: LifecycleRepository;
 };
 
 export type PaperCycleInput = {
@@ -59,6 +69,8 @@ export type PaperCycleInput = {
   refreshAccountStateBetweenStrategies?: boolean;
   /** When set, enables M2 stop-based sizing + portfolio ledger refresh. */
   portfolio?: PortfolioCycleContext;
+  /** When set with lifecycleRepository, enables M3 position guardian per bar. */
+  guardian?: GuardianCycleContext;
 };
 
 export type PaperCycleSkipReason = "no_signal" | "no_submit";
@@ -67,6 +79,13 @@ export type PaperCycleStrategyExecution = {
   signal: StrategySignal;
   submitBlocked: boolean;
   skipReason?: PaperCycleSkipReason;
+  execution: SubmitOrderResult | null;
+  reconciliation: ReconciliationReport | null;
+};
+
+export type PaperCycleGuardianExecution = {
+  intentId: string;
+  submitBlocked: boolean;
   execution: SubmitOrderResult | null;
   reconciliation: ReconciliationReport | null;
 };
@@ -80,6 +99,9 @@ export type PaperCycleResult = {
   /** Backward-compatible primary execution (first submitted, else last attempt). */
   execution: SubmitOrderResult | null;
   reconciliation: ReconciliationReport | null;
+  /** M3 guardian evaluations + exit intents when guardian enabled. */
+  guardian?: GuardianCycleResult;
+  guardianExecutions?: PaperCycleGuardianExecution[];
 };
 
 /** Shared N-cycle runner context (fixture replay + poll sources). */

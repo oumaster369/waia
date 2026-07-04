@@ -1,4 +1,5 @@
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
+import { evaluatePositionGuardian, mapExitIntentToSubmitOrder } from "@/lib/trader/guardian";
 import { mapSignalToSubmitOrder } from "@/lib/trader/paper/signal-to-order";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import {
@@ -8,6 +9,7 @@ import {
 } from "@/lib/trader/portfolio";
 import type {
   PaperCycleDeps,
+  PaperCycleGuardianExecution,
   PaperCycleInput,
   PaperCycleResult,
   PaperCycleStrategyExecution,
@@ -22,6 +24,9 @@ import type {
  *
  * Pipeline P5 (NEW-7): dispatches every actionable registered strategy signal through
  * CDE-gated risk → mock execution → reconciliation (not only the primary signal).
+ *
+ * M3: optional Position Guardian runs after evaluation and before strategy entries when
+ * `input.guardian` + `deps.lifecycleRepository` are configured.
  *
  * Off-Cloudflare intent: a long-running paper loop orchestrator (Docker VPS per ADR-0006 /
  * Master Spec §4) will call this function on a bar-close cadence. This module does not deploy
@@ -43,7 +48,19 @@ export function cycleOrderKeys(
 
 function pickLegacyExecution(
   strategyExecutions: readonly PaperCycleStrategyExecution[],
+  guardianExecutions: readonly PaperCycleGuardianExecution[],
 ): Pick<PaperCycleResult, "execution" | "reconciliation" | "submitBlocked" | "skipReason"> {
+  const firstGuardianSubmitted = guardianExecutions.find(
+    (entry) => entry.execution?.status === "submitted",
+  );
+  if (firstGuardianSubmitted) {
+    return {
+      submitBlocked: false,
+      execution: firstGuardianSubmitted.execution,
+      reconciliation: firstGuardianSubmitted.reconciliation,
+    };
+  }
+
   if (strategyExecutions.length === 0) {
     return {
       submitBlocked: true,
@@ -109,6 +126,114 @@ async function refreshAccountStateIfConfigured(
   });
 }
 
+async function runGuardianPhase(
+  deps: PaperCycleDeps,
+  input: PaperCycleInput,
+  evaluation: ReturnType<typeof runEvaluationCycle>,
+  accountState: PaperCycleInput["accountState"],
+  executionMode: NonNullable<PaperCycleInput["executionMode"]>,
+): Promise<{
+  guardianResult?: PaperCycleResult["guardian"];
+  guardianExecutions: PaperCycleGuardianExecution[];
+  accountState: PaperCycleInput["accountState"];
+}> {
+  const guardianExecutions: PaperCycleGuardianExecution[] = [];
+
+  if (!input.guardian?.runConfig.enabled || !deps.lifecycleRepository) {
+    return { guardianExecutions, accountState };
+  }
+
+  const { snapshot, context } = input;
+  const openLots = await deps.lifecycleRepository.listOpenPositionLots(context, {});
+  if (openLots.length === 0) {
+    return {
+      guardianResult: { evaluations: [], exitIntents: [] },
+      guardianExecutions,
+      accountState,
+    };
+  }
+
+  const trades = await Promise.all(
+    openLots.map((lot) => deps.lifecycleRepository!.getTradeById(context, lot.tradeId)),
+  );
+  const tradesById = new Map(
+    trades
+      .filter((trade): trade is NonNullable<typeof trade> => trade != null)
+      .map((trade) => [trade.id, trade]),
+  );
+
+  const markPrice = evaluation.features.features.close;
+  const guardianResult = evaluatePositionGuardian({
+    context,
+    snapshot,
+    evaluation,
+    openLots,
+    tradesById,
+    runConfig: input.guardian.runConfig,
+    accountKey: input.accountKey,
+    markPrice,
+  });
+
+  let nextAccountState = accountState;
+
+  for (const evaluationEntry of guardianResult.evaluations) {
+    if (deps.lifecycleRecorder) {
+      await deps.lifecycleRecorder.recordGuardianEvaluated({
+        context,
+        positionLotId: evaluationEntry.positionLotId,
+        reason: evaluationEntry.reason,
+        occurredAt: new Date(snapshot.evaluatedAt),
+      });
+    }
+  }
+
+  for (const intent of guardianResult.exitIntents) {
+    if (deps.lifecycleRecorder) {
+      await deps.lifecycleRecorder.recordGuardianExitIntent({
+        context,
+        intent,
+        occurredAt: new Date(snapshot.evaluatedAt),
+      });
+    }
+
+    const submit = mapExitIntentToSubmitOrder(intent, executionMode);
+    const execution = await deps.execution.submitOrder(context, {
+      ...submit,
+      accountState: nextAccountState,
+    });
+
+    if (execution.status !== "submitted") {
+      guardianExecutions.push({
+        intentId: intent.intentId,
+        submitBlocked: true,
+        execution,
+        reconciliation: null,
+      });
+      continue;
+    }
+
+    const reconciliation = await deps.reconciliation.reconcile(context, {
+      kind: "order",
+      orderId: execution.order.id,
+    });
+
+    guardianExecutions.push({
+      intentId: intent.intentId,
+      submitBlocked: false,
+      execution,
+      reconciliation,
+    });
+
+    nextAccountState = await refreshAccountStateIfConfigured(input, executionMode);
+  }
+
+  return {
+    guardianResult,
+    guardianExecutions,
+    accountState: nextAccountState,
+  };
+}
+
 export async function runPaperCycleOnce(
   deps: PaperCycleDeps,
   input: PaperCycleInput,
@@ -133,7 +258,21 @@ export async function runPaperCycleOnce(
         snapshot.activeStrategyIds.includes(signal.strategyId)),
   );
 
-  if (actionableSignals.length === 0) {
+  let accountState = input.accountState;
+  const guardianPhase = await runGuardianPhase(
+    deps,
+    input,
+    evaluation,
+    accountState,
+    executionMode,
+  );
+  accountState = guardianPhase.accountState;
+
+  const hasGuardianActivity =
+    (guardianPhase.guardianResult?.evaluations.length ?? 0) > 0 ||
+    (guardianPhase.guardianExecutions.length ?? 0) > 0;
+
+  if (actionableSignals.length === 0 && !hasGuardianActivity) {
     return {
       evaluation,
       strategyExecutions: [],
@@ -141,10 +280,11 @@ export async function runPaperCycleOnce(
       skipReason: "no_signal",
       execution: null,
       reconciliation: null,
+      guardian: guardianPhase.guardianResult,
+      guardianExecutions: guardianPhase.guardianExecutions,
     };
   }
 
-  let accountState = input.accountState;
   const strategyExecutions: PaperCycleStrategyExecution[] = [];
 
   for (const signal of actionableSignals) {
@@ -267,12 +407,14 @@ export async function runPaperCycleOnce(
     accountState = await refreshAccountStateIfConfigured(input, executionMode);
   }
 
-  const legacy = pickLegacyExecution(strategyExecutions);
+  const legacy = pickLegacyExecution(strategyExecutions, guardianPhase.guardianExecutions);
 
   return {
     evaluation,
     strategyExecutions,
     ...legacy,
+    guardian: guardianPhase.guardianResult,
+    guardianExecutions: guardianPhase.guardianExecutions,
   };
 }
 

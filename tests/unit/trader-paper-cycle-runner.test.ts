@@ -1,4 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { getDb, resetWaiaSqliteSingleton } from "@/db/client";
+import { GUARDIAN_REASON_RECORD_SCHEMA_VERSION, guardianReasonCodes } from "@/lib/trader/guardian";
+import {
+  createLifecycleRecorder,
+  createSqliteLifecycleRepository,
+  TRADE_LIFECYCLE_SEMANTICS_VERSION_V2,
+} from "@/lib/trader/lifecycle";
+import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
+import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
+import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 
 import type {
   OrderExecutionService,
@@ -11,6 +25,12 @@ import type {
   OrderRow,
 } from "@/lib/trader/execution/order-repository.types";
 import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  createOrderExecutionServiceFromDeps,
+  createSqliteOrderRepository,
+  createSqliteReconciliationService,
+} from "@/lib/trader/execution";
+import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import * as evaluationCycleModule from "@/lib/trader/intelligence/evaluation-cycle";
 import type { Bar, EvaluationCycleResult, Quote } from "@/lib/trader/intelligence/types";
 import { FixtureBarReplaySource } from "@/lib/trader/market-data/fixture-bar-replay-source";
@@ -26,8 +46,14 @@ import {
 import type { PaperCycleDeps, PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
+import {
+  createKillSwitchResolver,
+  createRiskEngineService,
+  createSqliteKillSwitchRepository,
+  createSqliteRiskLimitsService,
+  DEFAULT_ORG_RISK_LIMITS,
+} from "@/lib/trader/risk";
 import { capitalReasonCodes } from "@/lib/trader/risk/reason-codes";
-import { createRiskEngineService } from "@/lib/trader/risk/risk-engine-service";
 import type { SubmitOrderInput } from "@/lib/trader/execution/execution-service.types";
 import type { KillSwitchResolverPort } from "@/lib/trader/risk/evaluate.types";
 import type { EffectiveKillSwitchState } from "@/lib/trader/risk/kill-switch/types";
@@ -670,5 +696,351 @@ describe("paper cycle runner — M2 portfolio sizing (DEE-377)", () => {
         capitalReasonCodes.maxConcurrentPositionsExceeded,
       );
     }
+  });
+});
+
+type M3PaperCycleHarness = {
+  orgM3: string;
+  deps: PaperCycleDeps;
+  lifecycleRepository: ReturnType<typeof createSqliteLifecycleRepository>;
+  orderRepository: OrderRepository;
+  cleanup: () => void;
+};
+
+async function createM3PaperCycleHarness(): Promise<M3PaperCycleHarness> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "waia-m3-paper-cycle-"));
+  const dbPath = path.join(tmpDir, "m3-paper-cycle.sqlite");
+  process.env.DATABASE_URL = `file:${dbPath}`;
+  migrateDatabaseFromEnv();
+  const db = getDb();
+
+  const userId = crypto.randomUUID();
+  insertEmailPasswordUser(db, {
+    id: userId,
+    email: `m3-paper-cycle-${userId}@waia.invalid`,
+    password: "password123",
+    identityLabel: "M3 Paper Cycle Org",
+  });
+  const orgM3 = ensureUserCoreSeedSqlite(db, { userId, displayName: "M3 Paper Cycle Org" });
+
+  const orderRepository = createSqliteOrderRepository(db);
+  const lifecycleRepository = createSqliteLifecycleRepository(db);
+  const lifecycleRecorder = createLifecycleRecorder({ repository: lifecycleRepository });
+  const connector = new MockExchangeConnector();
+  await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
+  const writeAudit = () => "m3-audit";
+  const nowMs = () => Date.now();
+  const killSwitchResolver = createKillSwitchResolver({
+    repository: createSqliteKillSwitchRepository(db),
+    nowMs,
+  });
+  const limitsService = createSqliteRiskLimitsService(db);
+  await limitsService.upsertLimitsForOrg(requireOrgContext(orgM3), {
+    ...DEFAULT_ORG_RISK_LIMITS,
+  });
+  const riskEngine = createRiskEngineService({
+    limitsService,
+    killSwitchResolver,
+    rateStore: createInMemoryOrderRateStore(),
+    writeAudit,
+    nowMs,
+    newDecisionId: () => crypto.randomUUID(),
+  });
+  const execution = createOrderExecutionServiceFromDeps({
+    riskEngine,
+    orderRepository,
+    killSwitchResolver,
+    connectorForMode: () => connector,
+    writeAudit,
+    nowMs,
+    lifecycleRecorder,
+  });
+  const reconciliation = createSqliteReconciliationService(db, {
+    connectorForMode: () => connector,
+    nowMs,
+    writeAudit,
+  });
+
+  return {
+    orgM3,
+    deps: {
+      execution,
+      reconciliation,
+      lifecycleRecorder,
+      lifecycleRepository,
+    },
+    lifecycleRepository,
+    orderRepository,
+    cleanup: () => {
+      resetWaiaSqliteSingleton();
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // best-effort
+      }
+    },
+  };
+}
+
+describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
+  let harness: M3PaperCycleHarness;
+
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    harness = await createM3PaperCycleHarness();
+  });
+
+  afterEach(() => {
+    harness.cleanup();
+  });
+
+  async function seedOpenLot(input: {
+    tradeId: string;
+    lotId: string;
+    strategySignalId: string;
+    openedAt?: Date;
+  }): Promise<void> {
+    const context = requireOrgContext(harness.orgM3);
+    const openedAt = input.openedAt ?? new Date("2026-01-01T00:00:00.000Z");
+    await harness.lifecycleRepository.insertTrade(context, {
+      trade: {
+        id: input.tradeId,
+        organizationId: harness.orgM3,
+        symbol: "BTC/USDT",
+        venue: "mock",
+        accountKey: "paper",
+        positionSide: "LONG",
+        instrumentKind: "SPOT",
+        strategySignalId: input.strategySignalId,
+        strategyId: "mean_reversion_v0",
+        strategyVersion: "0.1.0",
+        state: "OPEN",
+        semanticsVersion: TRADE_LIFECYCLE_SEMANTICS_VERSION_V2,
+        openedAt,
+        closedAt: null,
+        realizedPnl: "0",
+        markedPnl: "0",
+        hypothesisId: null,
+        patternId: null,
+        riskDecisionId: "risk-m3",
+        allocationDecisionId: null,
+        reasoningSessionId: null,
+        signalConfidence: null,
+        openingRegime: "RANGE",
+        openingMsvId: "msv-m3",
+        openingFeatureSetId: "fs-m3",
+        closingMsvId: null,
+        closingFeatureSetId: null,
+        closingRegime: null,
+        frozenAt: null,
+      },
+    });
+    await harness.lifecycleRepository.insertPositionLot(context, {
+      lot: {
+        id: input.lotId,
+        organizationId: harness.orgM3,
+        symbol: "BTC/USDT",
+        venue: "mock",
+        accountKey: "paper",
+        positionSide: "LONG",
+        instrumentKind: "SPOT",
+        strategySignalId: input.strategySignalId,
+        state: "OPEN",
+        openQty: "0.01",
+        remainingQty: "0.01",
+        avgCost: "64000",
+        openedAt,
+        closedAt: null,
+        tradeId: input.tradeId,
+        hedgeGroupId: null,
+        targetLotId: null,
+      },
+    });
+  }
+
+  it("runs guardian on no-signal bar when open lots exist and submits close-only exit", async () => {
+    const lotId = "lot-m3";
+    const tradeId = "trade-m3";
+
+    await seedOpenLot({
+      tradeId,
+      lotId,
+      strategySignalId: "signal-m3-open",
+    });
+
+    vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue({
+      ...mockEvaluation(),
+      signals: [],
+      signal: {
+        ...mockEvaluation().signal,
+        outcome: "NO_SIGNAL",
+        side: undefined,
+      },
+      msv: {
+        ...mockEvaluation().msv,
+        derived: {
+          ...mockEvaluation().msv.derived,
+          tradingPermission: "ONLY_CLOSE_POSITIONS",
+        },
+      },
+    });
+
+    const exitIntentSpy = vi.spyOn(harness.deps.lifecycleRecorder!, "recordGuardianExitIntent");
+    const submitSpy = vi.spyOn(harness.deps.execution, "submitOrder");
+
+    const result = await runPaperCycleOnce(harness.deps, {
+      context: requireOrgContext(harness.orgM3),
+      snapshot: portfolioSnapshot("cycle-m3-close-only"),
+      accountKey: "paper",
+      defaultQuantity: "0.01",
+      accountState: EMPTY_STATE,
+      orderRepository: harness.orderRepository,
+      guardian: { runConfig: { enabled: true, maxHoldBars: 0 } },
+    });
+
+    expect(result.guardian?.exitIntents).toHaveLength(1);
+    expect(result.guardian?.evaluations).toHaveLength(1);
+    expect(submitSpy).toHaveBeenCalledTimes(1);
+    const submitArg = submitSpy.mock.calls[0]?.[1];
+    expect(submitArg?.side).toBe("sell");
+    expect(submitArg?.strategySignalId).toBe("signal-m3-open");
+    expect(result.guardianExecutions?.[0]?.submitBlocked).toBe(false);
+
+    expect(exitIntentSpy).toHaveBeenCalledTimes(1);
+    expect(exitIntentSpy.mock.invocationCallOrder[0]!).toBeLessThan(
+      submitSpy.mock.invocationCallOrder[0]!,
+    );
+
+    const context = requireOrgContext(harness.orgM3);
+    const lotEvents = await harness.lifecycleRepository.listLifecycleEvents(context, {
+      entityType: "POSITION_LOT",
+      entityId: lotId,
+    });
+    expect(lotEvents.map((event) => event.phase)).toEqual([
+      "GUARDIAN_EVALUATED",
+      "GUARDIAN_EXIT_INTENT",
+    ]);
+    expect(JSON.parse(lotEvents[0]!.payload!)).toMatchObject({
+      schemaVersion: GUARDIAN_REASON_RECORD_SCHEMA_VERSION,
+      reasonCode: guardianReasonCodes.closeOnlyPermission,
+      positionLotId: lotId,
+    });
+    expect(JSON.parse(lotEvents[1]!.payload!)).toMatchObject({
+      intentId: result.guardian?.exitIntents[0]?.intentId,
+      quantity: "0.01",
+    });
+
+    const tradeEvents = await harness.lifecycleRepository.listLifecycleEvents(context, {
+      entityType: "TRADE",
+      entityId: tradeId,
+    });
+    expect(tradeEvents.some((event) => event.phase === "TRADE_CLOSED")).toBe(true);
+
+    const trade = await harness.lifecycleRepository.getTradeById(context, tradeId);
+    expect(trade?.state).toBe("CLOSED");
+
+    const openLots = await harness.lifecycleRepository.listOpenPositionLots(context, {});
+    expect(openLots).toHaveLength(0);
+  });
+
+  it("emits HOLD guardian evaluation without submit when permission allows trading", async () => {
+    const lotId = "lot-m3-hold";
+
+    await seedOpenLot({
+      tradeId: "trade-m3-hold",
+      lotId,
+      strategySignalId: "signal-m3-hold",
+    });
+
+    vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue({
+      ...mockEvaluation(),
+      signals: [],
+      signal: {
+        ...mockEvaluation().signal,
+        outcome: "NO_SIGNAL",
+        side: undefined,
+      },
+    });
+
+    const submitSpy = vi.spyOn(harness.deps.execution, "submitOrder");
+
+    const result = await runPaperCycleOnce(harness.deps, {
+      context: requireOrgContext(harness.orgM3),
+      snapshot: portfolioSnapshot("cycle-m3-hold"),
+      accountKey: "paper",
+      defaultQuantity: "0.01",
+      accountState: EMPTY_STATE,
+      orderRepository: harness.orderRepository,
+      guardian: { runConfig: { enabled: true, maxHoldBars: 0 } },
+    });
+
+    expect(result.guardian?.evaluations).toHaveLength(1);
+    expect(result.guardian?.evaluations[0]?.decision).toBe("HOLD");
+    expect(result.guardian?.exitIntents).toHaveLength(0);
+    expect(submitSpy).not.toHaveBeenCalled();
+
+    const lotEvents = await harness.lifecycleRepository.listLifecycleEvents(
+      requireOrgContext(harness.orgM3),
+      {
+        entityType: "POSITION_LOT",
+        entityId: lotId,
+      },
+    );
+    expect(lotEvents.map((event) => event.phase)).toEqual(["GUARDIAN_EVALUATED"]);
+    expect(JSON.parse(lotEvents[0]!.payload!)).toMatchObject({
+      reasonCode: guardianReasonCodes.hold,
+      decision: "HOLD",
+    });
+  });
+
+  it("closes open lot when maxHoldBars is exceeded on an allow-trading bar", async () => {
+    const lotId = "lot-m3-max-hold";
+    const tradeId = "trade-m3-max-hold";
+
+    await seedOpenLot({
+      tradeId,
+      lotId,
+      strategySignalId: "signal-m3-max-hold",
+    });
+
+    vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue({
+      ...mockEvaluation(),
+      signals: [],
+      signal: {
+        ...mockEvaluation().signal,
+        outcome: "NO_SIGNAL",
+        side: undefined,
+      },
+    });
+
+    const result = await runPaperCycleOnce(harness.deps, {
+      context: requireOrgContext(harness.orgM3),
+      snapshot: portfolioSnapshot("cycle-m3-max-hold"),
+      accountKey: "paper",
+      defaultQuantity: "0.01",
+      accountState: EMPTY_STATE,
+      orderRepository: harness.orderRepository,
+      guardian: { runConfig: { enabled: true, maxHoldBars: 5, barIntervalMs: 60_000 } },
+    });
+
+    expect(result.guardian?.evaluations).toHaveLength(1);
+    expect(result.guardian?.evaluations[0]?.reason.reasonCode).toBe(
+      guardianReasonCodes.maxHoldBars,
+    );
+    expect(result.guardian?.exitIntents).toHaveLength(1);
+    expect(result.guardianExecutions?.[0]?.submitBlocked).toBe(false);
+
+    const context = requireOrgContext(harness.orgM3);
+    const lotEvents = await harness.lifecycleRepository.listLifecycleEvents(context, {
+      entityType: "POSITION_LOT",
+      entityId: lotId,
+    });
+    expect(lotEvents.map((event) => event.phase)).toEqual([
+      "GUARDIAN_EVALUATED",
+      "GUARDIAN_EXIT_INTENT",
+    ]);
+
+    const trade = await harness.lifecycleRepository.getTradeById(context, tradeId);
+    expect(trade?.state).toBe("CLOSED");
   });
 });
