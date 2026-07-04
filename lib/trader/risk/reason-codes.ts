@@ -13,6 +13,10 @@ export const capitalReasonCodes = {
   maxDrawdownExceeded: "RISK_MAX_DRAWDOWN",
   maxOpenOrdersExceeded: "RISK_MAX_OPEN_ORDERS",
   maxQuoteExposureExceeded: "RISK_MAX_QUOTE_EXPOSURE",
+  maxConcurrentPositionsExceeded: "RISK_MAX_CONCURRENT_POSITIONS",
+  maxPortfolioRiskExceeded: "RISK_MAX_PORTFOLIO_RISK",
+  insufficientAvailableBalance: "RISK_INSUFFICIENT_AVAILABLE_BALANCE",
+  invalidStopDistance: "RISK_INVALID_STOP_DISTANCE",
 } as const;
 
 /**

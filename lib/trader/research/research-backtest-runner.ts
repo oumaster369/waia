@@ -22,6 +22,13 @@ import {
 import { orderMatchesStrategyEvidenceScope } from "@/lib/trader/paper/strategy-evidence-scope";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
+import {
+  createInitialPortfolioAccountState,
+  defaultStopDistanceProvider,
+  DEFAULT_PORTFOLIO_RUN_CONFIG,
+  toAccountRiskState,
+} from "@/lib/trader/portfolio";
+import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
 import { addDecimal, divideDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import { buildResearchRegimeCoverage } from "@/lib/trader/research/regime-taxonomy";
 import {
@@ -74,6 +81,32 @@ const EMPTY_ACCOUNT_STATE: AccountRiskState = {
   drawdown: "0",
   quoteExposureByCurrency: {},
 };
+
+const RESEARCH_V2_PORTFOLIO: PortfolioCycleContext = {
+  runConfig: {
+    ...DEFAULT_PORTFOLIO_RUN_CONFIG,
+    startingBalanceUsdt: "1000000.00",
+  },
+  limits: {
+    maxRiskPerTradePct: "0.10",
+    maxPortfolioRiskPct: "0.50",
+    maxConcurrentPositions: 10,
+    maxNotional: "100000.00",
+  },
+  stopDistanceProvider: defaultStopDistanceProvider,
+  costModel: { version: COST_MODEL_VERSION_V1, feesBps: "10", slippageBps: "5" },
+};
+
+function researchV2InitialAccountState(): AccountRiskState {
+  return toAccountRiskState({
+    portfolio: createInitialPortfolioAccountState({
+      runConfig: RESEARCH_V2_PORTFOLIO.runConfig,
+      limits: RESEARCH_V2_PORTFOLIO.limits,
+      stopDistanceProvider: RESEARCH_V2_PORTFOLIO.stopDistanceProvider,
+    }),
+    openOrderCount: 0,
+  });
+}
 
 type RegimeAccumulatorV1 = {
   tradeCount: number;
@@ -393,6 +426,11 @@ async function runResearchValidationBacktestV2(
     cycleIdPrefix: input.cycleIdPrefix,
   });
 
+  const portfolioContext: PortfolioCycleContext = {
+    ...RESEARCH_V2_PORTFOLIO,
+    costModel: input.costModel,
+  };
+
   const backtest = await runBacktest({
     context: input.context,
     barSource,
@@ -409,11 +447,13 @@ async function runResearchValidationBacktestV2(
     runId: input.runId,
     split: input.split,
     window,
-    accountState: input.accountState ?? EMPTY_ACCOUNT_STATE,
+    accountState: input.accountState ?? researchV2InitialAccountState(),
     exportedAt,
     activeStrategyIds: [input.strategyId],
     refreshAccountStateBetweenStrategies: true,
     newId: input.newId,
+    portfolio: portfolioContext,
+    markPrices: { marks: { [lastBar.symbol]: lastBar.close } },
   });
 
   const timeline = buildCycleRegimeTimeline(backtest.cycleResults);

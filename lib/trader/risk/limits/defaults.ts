@@ -12,4 +12,7 @@ export const DEFAULT_ORG_RISK_LIMITS: UpsertOrgRiskLimitsInput = {
   maxDrawdown: "1000",
   maxOpenOrders: 10,
   maxQuoteExposure: "10000",
+  maxRiskPerTradePct: "0.01",
+  maxPortfolioRiskPct: "0.05",
+  maxConcurrentPositions: 3,
 };

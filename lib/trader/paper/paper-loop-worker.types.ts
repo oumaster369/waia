@@ -9,6 +9,10 @@ export type PaperLoopWorkerConfig = {
   organizationId: string;
   accountKey: string;
   defaultQuantity: string;
+  /** M2 deposit seed for portfolio ledger (env: PAPER_LOOP_STARTING_BALANCE_USDT). */
+  startingBalanceUsdt: string;
+  /** M2 provisional stop distance pct for sizing (env: PAPER_LOOP_DEFAULT_STOP_DISTANCE_PCT). */
+  defaultStopDistancePct: string;
   cycleIdPrefix: string;
   htxRestHost?: string;
 };

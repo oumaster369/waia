@@ -19,6 +19,9 @@ export type NormalizedRiskLimitsConfig = {
   maxDrawdown: string;
   maxOpenOrders: number;
   maxQuoteExposure: string;
+  maxRiskPerTradePct: string;
+  maxPortfolioRiskPct: string;
+  maxConcurrentPositions: number;
 };
 
 export type RiskLimitsRow = {
@@ -36,6 +39,9 @@ export type RiskLimitsRow = {
   maxDrawdown: string;
   maxOpenOrders: number;
   maxQuoteExposure: string;
+  maxRiskPerTradePct: string;
+  maxPortfolioRiskPct: string;
+  maxConcurrentPositions: number;
   configVersion: number;
   createdAt: Date;
   updatedAt: Date;
@@ -56,6 +62,9 @@ export type UpsertOrgRiskLimitsInput = {
   maxDrawdown: string;
   maxOpenOrders: number;
   maxQuoteExposure: string;
+  maxRiskPerTradePct: string;
+  maxPortfolioRiskPct: string;
+  maxConcurrentPositions: number;
   actorType?: TraderAuditInput["actorType"];
   actorId?: string | null;
   reason?: string;
@@ -142,6 +151,9 @@ export function rowToNormalizedConfig(row: RiskLimitsRow): NormalizedRiskLimitsC
     maxDrawdown: row.maxDrawdown,
     maxOpenOrders: row.maxOpenOrders,
     maxQuoteExposure: row.maxQuoteExposure,
+    maxRiskPerTradePct: row.maxRiskPerTradePct,
+    maxPortfolioRiskPct: row.maxPortfolioRiskPct,
+    maxConcurrentPositions: row.maxConcurrentPositions,
   };
 }
 
@@ -179,6 +191,9 @@ export function toCapitalLimitsConfig(
     maxDrawdown: metadata.maxDrawdown,
     maxOpenOrders: metadata.maxOpenOrders,
     maxQuoteExposure: metadata.maxQuoteExposure,
+    maxRiskPerTradePct: metadata.maxRiskPerTradePct,
+    maxPortfolioRiskPct: metadata.maxPortfolioRiskPct,
+    maxConcurrentPositions: metadata.maxConcurrentPositions,
   };
 }
 

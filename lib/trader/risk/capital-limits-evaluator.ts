@@ -166,5 +166,60 @@ export function evaluateCapitalLimits(
     }
   }
 
+  if (input.stopDistanceUsdt !== undefined) {
+    checksApplied.push("stopDistance");
+    if (compareDecimal(input.stopDistanceUsdt, "0") <= 0) {
+      return rejectDecision([capitalReasonCodes.invalidStopDistance], baseSnapshot(), evaluatedAt);
+    }
+  }
+
+  if (input.accountState.availableBalanceUsdt !== undefined && input.order.side === "buy") {
+    checksApplied.push("availableBalance");
+    if (compareDecimal(computedNotional, input.accountState.availableBalanceUsdt) > 0) {
+      return rejectDecision(
+        [capitalReasonCodes.insufficientAvailableBalance],
+        baseSnapshot(),
+        evaluatedAt,
+      );
+    }
+  }
+
+  if (
+    input.accountState.openPositionCount !== undefined &&
+    isPositionIncreasing(input.order.side)
+  ) {
+    checksApplied.push("concurrentPositions");
+    const hasExisting = compareDecimal(currentPosition, "0") > 0;
+    if (!hasExisting && input.accountState.openPositionCount >= config.maxConcurrentPositions) {
+      return rejectDecision(
+        [capitalReasonCodes.maxConcurrentPositionsExceeded],
+        baseSnapshot(),
+        evaluatedAt,
+      );
+    }
+  }
+
+  if (
+    input.accountState.equityUsdt !== undefined &&
+    input.accountState.openRiskUsdt !== undefined &&
+    input.stopDistanceUsdt !== undefined &&
+    isPositionIncreasing(input.order.side)
+  ) {
+    checksApplied.push("portfolioRisk");
+    const projectedOrderRisk = multiplyDecimal(input.order.quantity, input.stopDistanceUsdt);
+    const projectedOpenRisk = addDecimal(input.accountState.openRiskUsdt, projectedOrderRisk);
+    const portfolioRiskCap = multiplyDecimal(
+      input.accountState.equityUsdt,
+      config.maxPortfolioRiskPct,
+    );
+    if (compareDecimal(projectedOpenRisk, portfolioRiskCap) > 0) {
+      return rejectDecision(
+        [capitalReasonCodes.maxPortfolioRiskExceeded],
+        baseSnapshot(),
+        evaluatedAt,
+      );
+    }
+  }
+
   return approveDecision(baseSnapshot(), evaluatedAt);
 }

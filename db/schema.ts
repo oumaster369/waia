@@ -517,6 +517,9 @@ export const traderRiskLimits = sqliteTable(
     maxDrawdown: text("max_drawdown").notNull(),
     maxOpenOrders: integer("max_open_orders").notNull(),
     maxQuoteExposure: text("max_quote_exposure").notNull(),
+    maxRiskPerTradePct: text("max_risk_per_trade_pct").notNull().default("0.01"),
+    maxPortfolioRiskPct: text("max_portfolio_risk_pct").notNull().default("0.05"),
+    maxConcurrentPositions: integer("max_concurrent_positions").notNull().default(3),
     configVersion: integer("config_version").notNull().default(1),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()

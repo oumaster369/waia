@@ -214,6 +214,7 @@ export function createRiskEngineService(deps: RiskEngineServiceDeps): RiskEngine
                     order: evaluatedOrder,
                     referencePrice: input.referencePrice,
                     accountState: input.accountState,
+                    stopDistanceUsdt: input.stopDistanceUsdt,
                   },
                   toCapitalLimitsConfig(metadata),
                   { nowMs: deps.nowMs },

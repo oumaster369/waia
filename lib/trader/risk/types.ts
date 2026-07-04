@@ -14,7 +14,11 @@ export type RiskCheckName =
   | "dailyLoss"
   | "drawdown"
   | "openOrders"
-  | "quoteExposure";
+  | "quoteExposure"
+  | "concurrentPositions"
+  | "portfolioRisk"
+  | "availableBalance"
+  | "stopDistance";
 
 export type RiskSnapshot = {
   symbol: string;

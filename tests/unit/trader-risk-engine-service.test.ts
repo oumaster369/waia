@@ -47,6 +47,9 @@ function metadata(
     maxDrawdown: overrides.maxDrawdown ?? "1000",
     maxOpenOrders: overrides.maxOpenOrders ?? 10,
     maxQuoteExposure: overrides.maxQuoteExposure ?? "1000000",
+    maxRiskPerTradePct: overrides.maxRiskPerTradePct ?? "0.10",
+    maxPortfolioRiskPct: overrides.maxPortfolioRiskPct ?? "0.50",
+    maxConcurrentPositions: overrides.maxConcurrentPositions ?? 10,
   };
 }
 
@@ -468,5 +471,67 @@ describe("risk engine kill switch pre-gate (DEE-244)", () => {
     expect(killSwitch.contributors).toEqual([
       expect.objectContaining({ killSwitchId: "ks-org-1", stateVersion: 3 }),
     ]);
+  });
+
+  it("capital invalid stop distance surfaces RISK_INVALID_STOP_DISTANCE", async () => {
+    const { service } = makeEngine(metadata());
+
+    const result = await service.evaluateOrderRequest(
+      request({ stopDistanceUsdt: "0", order: order({ quantity: "0.01" }) }),
+    );
+
+    expect(result.decision.outcome).toBe("REJECT");
+    expect(result.decision.reasonCodes).toContain(capitalReasonCodes.invalidStopDistance);
+  });
+
+  it("capital concurrent position cap surfaces RISK_MAX_CONCURRENT_POSITIONS", async () => {
+    const { service } = makeEngine(
+      metadata({ maxConcurrentPositions: 1, maxQuoteExposure: "1000000" }),
+    );
+
+    const result = await service.evaluateOrderRequest(
+      request({
+        order: order({ symbol: "ETH/USDT", price: "3000", quantity: "0.01" }),
+        referencePrice: "3000",
+        stopDistanceUsdt: "60",
+        accountState: {
+          ...EMPTY_STATE,
+          openPositionCount: 1,
+          positions: [{ symbol: "BTC/USDT", quantity: "0.01" }],
+        },
+      }),
+    );
+
+    expect(result.decision.outcome).toBe("REJECT");
+    expect(result.decision.reasonCodes).toContain(
+      capitalReasonCodes.maxConcurrentPositionsExceeded,
+    );
+  });
+
+  it("capital portfolio risk cap surfaces RISK_MAX_PORTFOLIO_RISK", async () => {
+    const { service } = makeEngine(
+      metadata({
+        maxPortfolioRiskPct: "0.05",
+        maxQuoteExposure: "1000000",
+        maxPositionPerSymbol: "10",
+      }),
+    );
+
+    const result = await service.evaluateOrderRequest(
+      request({
+        order: order({ price: "65000", quantity: "0.50" }),
+        referencePrice: "65000",
+        stopDistanceUsdt: "1300",
+        accountState: {
+          ...EMPTY_STATE,
+          equityUsdt: "10000",
+          openRiskUsdt: "400",
+          openPositionCount: 1,
+        },
+      }),
+    );
+
+    expect(result.decision.outcome).toBe("REJECT");
+    expect(result.decision.reasonCodes).toContain(capitalReasonCodes.maxPortfolioRiskExceeded);
   });
 });

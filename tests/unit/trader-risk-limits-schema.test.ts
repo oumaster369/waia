@@ -60,6 +60,9 @@ describe("trader_risk_limits schema + repository (DEE-239)", () => {
     expect(row.scopeType).toBe("organization");
     expect(row.scopeRef).toBe("");
     expect(row.configVersion).toBe(1);
+    expect(row.maxRiskPerTradePct).toBe("0.01");
+    expect(row.maxPortfolioRiskPct).toBe("0.05");
+    expect(row.maxConcurrentPositions).toBe(3);
   });
 
   it("returns null for cross-org scoped read", () => {

@@ -9,6 +9,9 @@ export type CapitalLimitsConfig = {
   maxDrawdown: string;
   maxOpenOrders: number;
   maxQuoteExposure: string;
+  maxRiskPerTradePct: string;
+  maxPortfolioRiskPct: string;
+  maxConcurrentPositions: number;
 };
 
 export type PositionSnapshot = {
@@ -23,12 +26,21 @@ export type AccountRiskState = {
   dailyPnl: string;
   drawdown: string;
   quoteExposureByCurrency: Readonly<Record<string, string>>;
+  /** M2 portfolio extensions (populated when portfolio adapter is wired). */
+  availableBalanceUsdt?: string;
+  equityUsdt?: string;
+  openRiskUsdt?: string;
+  openPositionCount?: number;
+  /** Projected risk-at-stop for the order under evaluation. */
+  projectedOrderRiskUsdt?: string;
 };
 
 export type CapitalLimitsEvaluationInput = {
   order: PlaceOrderInput;
   referencePrice: string;
   accountState: AccountRiskState;
+  /** M2: stop distance for projected order risk (from StopDistanceProvider). */
+  stopDistanceUsdt?: string;
 };
 
 export type CapitalLimitsEvaluatorDeps = {

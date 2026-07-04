@@ -195,6 +195,9 @@ describe("trader risk limits service (DEE-239)", () => {
       maxDrawdown: metadata.maxDrawdown,
       maxOpenOrders: metadata.maxOpenOrders,
       maxQuoteExposure: metadata.maxQuoteExposure,
+      maxRiskPerTradePct: metadata.maxRiskPerTradePct,
+      maxPortfolioRiskPct: metadata.maxPortfolioRiskPct,
+      maxConcurrentPositions: metadata.maxConcurrentPositions,
     });
   });
 });

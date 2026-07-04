@@ -21,6 +21,19 @@ describe("paper loop worker config (P5 NEW-8)", () => {
       }).enabled,
     ).toBe(false);
   });
+
+  it("loads M2 portfolio env defaults", () => {
+    const config = loadPaperLoopConfig({
+      PAPER_LOOP_ENABLED: "1",
+      PAPER_LOOP_ORGANIZATION_ID: "00000000-0000-4000-8000-0000000334",
+      PAPER_LOOP_ACCOUNT_KEY: "acct-paper-loop",
+      PAPER_LOOP_STARTING_BALANCE_USDT: "50000.00",
+      PAPER_LOOP_DEFAULT_STOP_DISTANCE_PCT: "0.03",
+    });
+
+    expect(config.startingBalanceUsdt).toBe("50000.00");
+    expect(config.defaultStopDistancePct).toBe("0.03");
+  });
 });
 
 describe("runPaperLoopCycle", () => {
@@ -31,6 +44,8 @@ describe("runPaperLoopCycle", () => {
         organizationId: "",
         accountKey: "",
         defaultQuantity: "0.01",
+        startingBalanceUsdt: "100000.00",
+        defaultStopDistancePct: "0.02",
         cycleIdPrefix: "test",
       },
       paperCycleDeps: {} as PaperLoopCycleDeps["paperCycleDeps"],
