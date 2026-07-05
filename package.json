@@ -22,6 +22,7 @@
     "trader:htx:backfill": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/htx-kline-backfill.ts",
     "trader:research:pipeline": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/research-pipeline-cli.ts",
     "trader:ri:campaign": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/ri-evidence-campaign.ts",
+    "trader:m9:campaign": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/m9-v2-research-campaign.ts",
     "trader:see:reconstruct-failure": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/reconstruct-research-failure.ts",
     "trader:see:reason": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/market-reasoning-assist.ts",
     "trader:discovery:run": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/discovery-run.ts",

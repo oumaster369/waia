@@ -12,6 +12,8 @@ export type WriteCampaignFailureVaultArtifactsInput = {
   vaultDir: string;
   trackId?: "A" | "B";
   naming?: VaultArtifactNaming;
+  rejectionBasename?: string;
+  evolutionBasename?: string;
   rejectionRecord: ResearchRejectionRecord;
   evolutionCycle: EvolutionCycleMvp;
 };
@@ -27,14 +29,14 @@ export function writeCampaignFailureVaultArtifacts(
   const naming = input.naming ?? "track";
   const rejectionRecordPath =
     naming === "flat"
-      ? resolve(input.vaultDir, "research-rejection-record.json")
+      ? resolve(input.vaultDir, input.rejectionBasename ?? "research-rejection-record.json")
       : resolve(
           input.vaultDir,
           `track-${(input.trackId ?? "A").toLowerCase()}-research-rejection-record.json`,
         );
   const evolutionCyclePath =
     naming === "flat"
-      ? resolve(input.vaultDir, "evolution-cycle-mvp.json")
+      ? resolve(input.vaultDir, input.evolutionBasename ?? "evolution-cycle-mvp.json")
       : resolve(
           input.vaultDir,
           `track-${(input.trackId ?? "A").toLowerCase()}-evolution-cycle-mvp.json`,
