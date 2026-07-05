@@ -85,3 +85,15 @@ The Linear GitHub integration linked PR #165 to DEE-150 and transitioned it **Do
 3. Head branch **`dee-364-ri-p7-evidence-knowledge-campaign`** for governance pass.
 
 **Canonical tracking:** **DEE-364** (not DEE-401). Branch `dee-401-*` is a pre-groom artifact — do not reuse for new work.
+
+## DEE-382 groom gap (PR #369 — 2026-07-05)
+
+**What happened:** PR #369 opened on branch `dee-382-m7-event-attribution` with **Linear:** `DEE-382` before `/groom` created the issue. Linear API returned no issue for `DEE-382` (latest team issue was **DEE-381**; **DEE-382 never existed**). `LINEAR_API_KEY` was configured in CI — not a secret failure.
+
+**Remediation:**
+
+1. Groomed **DEE-382** — *M7 — News/event attribution memory* (`In Review`, related to DEE-381).
+2. PR #369 **Linear:** / title / branch already declare **DEE-382** — no branch rename or replacement PR required.
+3. Re-run `pr-governance` check after Linear issue exists.
+
+**Canonical tracking:** **DEE-382**. Branch `dee-382-m7-event-attribution` is correct.

@@ -10,8 +10,9 @@ M7 introduces no changes to Guardian decision logic, exit math, order placement,
 
 ## Linked issue / plan
 
-**Linear:** `DEE-382`  
-**Plan:** `.cursor/plans/m7_event_attribution_memory_bfedcc24.plan.md`
+**Linear:** `DEE-382` https://linear.app/deepsense/issue/DEE-382/m7-newsevent-attribution-memory  
+**Plan:** `.cursor/plans/m7_event_attribution_memory_bfedcc24.plan.md`  
+**Linear groom verified:** yes (DEE-382 groomed 2026-07-05; see `LINEAR-ID-COLLISION-RECOVERY.md`)
 
 ## Risk tier
 
