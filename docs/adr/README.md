@@ -27,5 +27,6 @@ See policy: [`../waia-governance/ADR-POLICY.md`](../waia-governance/ADR-POLICY.m
 | [0017](0017-postgres-only-trader-mvp.md) | Postgres-only for new AI-TRADER MVP code (Execution Freeze) | Accepted | P1 NEW-2 / `DEE-328`; ADR-0002 partial supersession |
 | [0018](0018-research-intelligence-market-knowledge-base.md) | Research Intelligence Layer & Market Knowledge Base | Accepted | RI program M11; ADR-0010 amendment |
 | [0019](0019-ai-operator-intelligence-authority.md) | AI Operator Intelligence authority boundaries (recommend-only) | Accepted | RI-P5; ADR-0011 |
+| [0020](0020-m8-discovery-architecture-no-reinforcement.md) | M8 Discovery Architecture & No-Reinforcement Boundaries | Accepted | DEE-383; M8 program |
 
 Add rows as new decisions land.**Superseded** decisions keep file for history — index notes replacement.
