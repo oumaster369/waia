@@ -13,22 +13,18 @@ import {
   assertLifecycleFillWalkTaxonomyParity,
   deriveTradesFromFills,
 } from "@/lib/trader/lifecycle";
-import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
-import {
-  buildQuoteCurrencyBySymbol,
-  loadPaperFillEvents,
-  type PaperPnLFillEvent,
-} from "@/lib/trader/paper/derive-paper-pnl";
-import { orderMatchesStrategyEvidenceScope } from "@/lib/trader/paper/strategy-evidence-scope";
-import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
+import type {
+  PaperCycleDeps,
+  PaperCycleResult,
+  PortfolioCycleContext,
+  GuardianCycleContext,
+} from "@/lib/trader/paper/paper-cycle.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
+import { createInitialPortfolioAccountState, toAccountRiskState } from "@/lib/trader/portfolio";
 import {
-  createInitialPortfolioAccountState,
-  defaultStopDistanceProvider,
-  DEFAULT_PORTFOLIO_RUN_CONFIG,
-  toAccountRiskState,
-} from "@/lib/trader/portfolio";
-import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
+  buildResearchV2PortfolioContext,
+  type ResearchPortfolioConfig,
+} from "@/lib/trader/research/research-portfolio-config";
 import { addDecimal, divideDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import { buildResearchRegimeCoverage } from "@/lib/trader/research/regime-taxonomy";
 import {
@@ -48,7 +44,20 @@ import {
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import type { PatternCatalogRunConfig } from "@/lib/trader/mi/pattern-catalog.types";
 import type { EventAttributionRunConfig } from "@/lib/trader/events/event-attribution.types";
+import { orderMatchesStrategyEvidenceScope } from "@/lib/trader/paper/strategy-evidence-scope";
+import {
+  buildQuoteCurrencyBySymbol,
+  loadPaperFillEvents,
+  type PaperPnLFillEvent,
+} from "@/lib/trader/paper/derive-paper-pnl";
 import type { PaperClosedTrade } from "@/lib/trader/paper/paper-strategy-eval.types";
+
+export type ResearchValidationBacktestArtifactSink = {
+  cycleResults?: PaperCycleResult[];
+  portfolioContext?: PortfolioCycleContext;
+};
+
+export { buildResearchV2PortfolioContext, type ResearchPortfolioConfig };
 
 export type PatternCatalogBacktestCompleteHook = (input: {
   context: OrgContext;
@@ -95,6 +104,14 @@ export type RunResearchValidationBacktestInput = {
   eventAttribution?: EventAttributionRunConfig & {
     onBacktestComplete?: EventAttributionBacktestCompleteHook;
   };
+  /** M2 portfolio overrides for v2 metrics path. Ignored when `portfolio` is set. */
+  portfolioConfig?: ResearchPortfolioConfig;
+  /** Explicit portfolio context override (advanced). */
+  portfolio?: PortfolioCycleContext;
+  /** M3/M4 guardian + exit engine — opt-in; requires lifecycleRepository on deps when enabled. */
+  guardian?: GuardianCycleContext;
+  /** Optional sink for M9 evidence exports (validation window cycle results). */
+  artifactSink?: ResearchValidationBacktestArtifactSink;
 };
 
 const EMPTY_ACCOUNT_STATE: AccountRiskState = {
@@ -105,30 +122,24 @@ const EMPTY_ACCOUNT_STATE: AccountRiskState = {
   quoteExposureByCurrency: {},
 };
 
-const RESEARCH_V2_PORTFOLIO: PortfolioCycleContext = {
-  runConfig: {
-    ...DEFAULT_PORTFOLIO_RUN_CONFIG,
-    startingBalanceUsdt: "1000000.00",
-  },
-  limits: {
-    maxRiskPerTradePct: "0.10",
-    maxPortfolioRiskPct: "0.50",
-    maxConcurrentPositions: 10,
-    maxNotional: "100000.00",
-  },
-  stopDistanceProvider: defaultStopDistanceProvider,
-  costModel: { version: COST_MODEL_VERSION_V1, feesBps: "10", slippageBps: "5" },
-};
-
-function researchV2InitialAccountState(): AccountRiskState {
+function researchV2InitialAccountState(portfolio: PortfolioCycleContext): AccountRiskState {
   return toAccountRiskState({
     portfolio: createInitialPortfolioAccountState({
-      runConfig: RESEARCH_V2_PORTFOLIO.runConfig,
-      limits: RESEARCH_V2_PORTFOLIO.limits,
-      stopDistanceProvider: RESEARCH_V2_PORTFOLIO.stopDistanceProvider,
+      runConfig: portfolio.runConfig,
+      limits: portfolio.limits,
+      stopDistanceProvider: portfolio.stopDistanceProvider,
     }),
     openOrderCount: 0,
   });
+}
+
+function resolveResearchV2PortfolioContext(
+  input: RunResearchValidationBacktestInput,
+): PortfolioCycleContext {
+  if (input.portfolio) {
+    return input.portfolio;
+  }
+  return buildResearchV2PortfolioContext(input.costModel, input.portfolioConfig);
 }
 
 type RegimeAccumulatorV1 = {
@@ -449,10 +460,7 @@ async function runResearchValidationBacktestV2(
     cycleIdPrefix: input.cycleIdPrefix,
   });
 
-  const portfolioContext: PortfolioCycleContext = {
-    ...RESEARCH_V2_PORTFOLIO,
-    costModel: input.costModel,
-  };
+  const portfolioContext = resolveResearchV2PortfolioContext(input);
 
   const backtest = await runBacktest({
     context: input.context,
@@ -470,14 +478,20 @@ async function runResearchValidationBacktestV2(
     runId: input.runId,
     split: input.split,
     window,
-    accountState: input.accountState ?? researchV2InitialAccountState(),
+    accountState: input.accountState ?? researchV2InitialAccountState(portfolioContext),
     exportedAt,
     activeStrategyIds: [input.strategyId],
     refreshAccountStateBetweenStrategies: true,
     newId: input.newId,
     portfolio: portfolioContext,
+    guardian: input.guardian,
     markPrices: { marks: { [lastBar.symbol]: lastBar.close } },
   });
+
+  if (input.artifactSink) {
+    input.artifactSink.cycleResults = [...backtest.cycleResults];
+    input.artifactSink.portfolioContext = portfolioContext;
+  }
 
   const timeline = buildCycleRegimeTimeline(backtest.cycleResults);
   const regimeAccumulators = new Map<Regime, ResearchRegimeMetricSliceV2>();

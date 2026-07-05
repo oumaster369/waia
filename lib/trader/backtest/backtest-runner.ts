@@ -15,8 +15,12 @@ import type {
 } from "@/lib/trader/backtest/backtest-evaluation-export.types";
 import type { BarReplaySource } from "@/lib/trader/market-data/types";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
-import type { PaperCycleDeps, PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
-import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
+import type {
+  GuardianCycleContext,
+  PaperCycleDeps,
+  PaperCycleResult,
+  PortfolioCycleContext,
+} from "@/lib/trader/paper/paper-cycle.types";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
 import { derivePortfolioAccountState, toAccountRiskState } from "@/lib/trader/portfolio";
 import type { PaperPnLMarkPrices } from "@/lib/trader/paper/paper-pnl.types";
@@ -46,6 +50,8 @@ export type RunBacktestInput = {
   markPrices?: PaperPnLMarkPrices;
   refreshAccountStateBetweenStrategies?: boolean;
   portfolio?: PortfolioCycleContext;
+  /** M3/M4 guardian + exit engine — opt-in per research campaign flag. */
+  guardian?: GuardianCycleContext;
   telemetrySink?: WaiaTraderTelemetrySink;
   newId?: () => string;
   maxCycles?: number;
@@ -139,6 +145,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       telemetrySink: input.telemetrySink,
       newId: input.newId,
       portfolio: input.portfolio,
+      guardian: input.guardian,
     });
 
     cycleResults.push(result);

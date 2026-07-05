@@ -25,8 +25,16 @@ import {
   splitBarsThreeWay,
 } from "@/lib/trader/market-data/research-dataset";
 import type { Bar, BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
-import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
-import type { ResearchValidationMetrics } from "@/lib/trader/research/strategy-candidate.types";
+import type { PaperCycleDeps, PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
+import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
+import { assertM9BlindAuthorization } from "@/lib/trader/research/m9-operator-authorization";
+import { buildResearchGuardianContext } from "@/lib/trader/research/research-guardian-config";
+import type { ResearchPipelineBacktestOptions } from "@/lib/trader/research/research-pipeline-config.types";
+import type { ResearchValidationBacktestArtifactSink } from "@/lib/trader/research/research-backtest-runner";
+import {
+  RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
+  type ResearchValidationMetrics,
+} from "@/lib/trader/research/strategy-candidate.types";
 import {
   readLegacyTradeCount,
   readPeriodRealizedPnl,
@@ -80,6 +88,8 @@ export type RunResearchPipelineInput = {
   slippageBps?: string;
   newId?: () => string;
   requireMultiRegimeCoverage?: boolean;
+  /** M9 v2 wiring — metrics schema, portfolio, guardian, blind authorization. */
+  pipelineBacktest?: ResearchPipelineBacktestOptions;
 };
 
 export type RunResearchPipelineResult = {
@@ -90,7 +100,10 @@ export type RunResearchPipelineResult = {
   evidenceDocument: ResearchEvidenceDocument;
   knowledge: { marketEventId: string; knowledgeEdgeId: string };
   walkForwardWindowCount: number;
+  validationMetrics: ResearchValidationMetrics;
   blindMetrics: ResearchValidationMetrics;
+  validationCycleResults?: readonly PaperCycleResult[];
+  validationPortfolioContext?: PortfolioCycleContext;
 };
 
 function barsFromRecords(records: Awaited<ReturnType<typeof listMarketBarsPostgres>>): Bar[] {
@@ -111,6 +124,48 @@ async function resolveOrderRepository(
   factory: RunResearchPipelineInput["createOrderRepository"],
 ): Promise<OrderRepository> {
   return await factory();
+}
+
+function buildIsolatedBacktestInput(
+  input: RunResearchPipelineInput,
+  params: {
+    bars: readonly Bar[];
+    datasetId: string;
+    runId: string;
+    split: "train" | "validation" | "blind";
+    costModel: CostModelV1;
+    orderRepository: OrderRepository;
+    accountKey: string;
+    defaultQuantity: string;
+    newId: () => string;
+    cycleIdPrefix: string;
+    artifactSink?: ResearchValidationBacktestArtifactSink;
+  },
+) {
+  const pipelineBacktest = input.pipelineBacktest;
+  const metricsSchemaVersion =
+    pipelineBacktest?.metricsSchemaVersion ?? RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1;
+
+  return {
+    context: input.context,
+    bars: params.bars,
+    strategyId: input.strategyId,
+    strategyVersion: input.strategyVersion,
+    datasetId: params.datasetId,
+    runId: params.runId,
+    split: params.split,
+    costModel: params.costModel,
+    deps: input.deps,
+    orderRepository: params.orderRepository,
+    accountKey: params.accountKey,
+    defaultQuantity: params.defaultQuantity,
+    newId: params.newId,
+    cycleIdPrefix: params.cycleIdPrefix,
+    metricsSchemaVersion,
+    portfolioConfig: pipelineBacktest?.portfolioConfig,
+    guardian: buildResearchGuardianContext(pipelineBacktest?.guardian),
+    artifactSink: params.artifactSink,
+  };
 }
 
 /**
@@ -179,22 +234,23 @@ export async function runResearchPipelinePostgres(
   });
 
   const validationRepo = await resolveOrderRepository(input.createOrderRepository);
-  const validationMetrics = await runIsolatedResearchBacktest(ex, {
-    context: input.context,
-    bars: splits.validation,
-    strategyId: input.strategyId,
-    strategyVersion: input.strategyVersion,
-    datasetId: dataset.id,
-    runId: backtestRunId,
-    split: "validation",
-    costModel,
-    deps: input.deps,
-    orderRepository: validationRepo,
-    accountKey,
-    defaultQuantity,
-    newId,
-    cycleIdPrefix: buildResearchValidationCycleIdPrefix(backtestRunId),
-  });
+  const validationArtifactSink = input.pipelineBacktest?.validationArtifactSink;
+  const validationMetrics = await runIsolatedResearchBacktest(
+    ex,
+    buildIsolatedBacktestInput(input, {
+      bars: splits.validation,
+      datasetId: dataset.id,
+      runId: backtestRunId,
+      split: "validation",
+      costModel,
+      orderRepository: validationRepo,
+      accountKey,
+      defaultQuantity,
+      newId,
+      cycleIdPrefix: buildResearchValidationCycleIdPrefix(backtestRunId),
+      artifactSink: validationArtifactSink,
+    }),
+  );
 
   await insertBacktestResultPostgres(ex, input.context, {
     id: newId(),
@@ -233,22 +289,21 @@ export async function runResearchPipelinePostgres(
     oosBarCount,
     runBacktest: async ({ bars, strategyId, strategyVersion, windowIndex }) => {
       const repo = await resolveOrderRepository(input.createOrderRepository);
-      return runIsolatedResearchBacktest(ex, {
-        context: input.context,
-        bars,
-        strategyId,
-        strategyVersion,
-        datasetId: dataset.id,
-        runId: backtestRunId,
-        split: "validation",
-        costModel,
-        deps: input.deps,
-        orderRepository: repo,
-        accountKey,
-        defaultQuantity,
-        newId,
-        cycleIdPrefix: buildResearchWalkForwardCycleIdPrefix(backtestRunId, windowIndex),
-      });
+      return runIsolatedResearchBacktest(
+        ex,
+        buildIsolatedBacktestInput(input, {
+          bars,
+          datasetId: dataset.id,
+          runId: backtestRunId,
+          split: "validation",
+          costModel,
+          orderRepository: repo,
+          accountKey,
+          defaultQuantity,
+          newId,
+          cycleIdPrefix: buildResearchWalkForwardCycleIdPrefix(backtestRunId, windowIndex),
+        }),
+      );
     },
     repository: {
       insertWalkForwardWindow: (context, row) => insertWalkForwardWindowPostgres(ex, context, row),
@@ -258,6 +313,23 @@ export async function runResearchPipelinePostgres(
     newId,
   });
 
+  const pipelineBacktest = input.pipelineBacktest;
+  if (pipelineBacktest?.operatorBlindAuthorization) {
+    const blindScope = pipelineBacktest.blindAuthorizationScope;
+    if (!blindScope) {
+      throw new ResearchOrchestratorError(
+        "M9_BLIND_AUTHORIZATION_SCOPE_MISSING",
+        "blind authorization scope must be provided with operator blind digest",
+      );
+    }
+    assertM9BlindAuthorization(pipelineBacktest.operatorBlindAuthorization, blindScope);
+  } else if (pipelineBacktest?.blindAuthorizationScope) {
+    throw new ResearchOrchestratorError(
+      "M9_BLIND_AUTHORIZATION_REQUIRED",
+      "operator blind authorization digest required before blind holdout stage",
+    );
+  }
+
   const blind = await runBlindHoldoutValidation({
     context: input.context,
     candidate: { ...candidate, status: "walk_forward_validated", blindUsed: false },
@@ -266,22 +338,21 @@ export async function runResearchPipelinePostgres(
     expectedBlindDigest: dataset.blindDigest,
     runBacktest: async ({ bars, strategyId, strategyVersion }) => {
       const repo = await resolveOrderRepository(input.createOrderRepository);
-      return runIsolatedResearchBacktest(ex, {
-        context: input.context,
-        bars,
-        strategyId,
-        strategyVersion,
-        datasetId: dataset.id,
-        runId: backtestRunId,
-        split: "blind",
-        costModel,
-        deps: input.deps,
-        orderRepository: repo,
-        accountKey,
-        defaultQuantity,
-        newId,
-        cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
-      });
+      return runIsolatedResearchBacktest(
+        ex,
+        buildIsolatedBacktestInput(input, {
+          bars,
+          datasetId: dataset.id,
+          runId: backtestRunId,
+          split: "blind",
+          costModel,
+          orderRepository: repo,
+          accountKey,
+          defaultQuantity,
+          newId,
+          cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
+        }),
+      );
     },
     repository: {
       getBlindValidationResultForCandidate: (context, candidateId) =>
@@ -357,7 +428,10 @@ export async function runResearchPipelinePostgres(
     evidenceDocument,
     knowledge,
     walkForwardWindowCount: walkForward.windows.length,
+    validationMetrics,
     blindMetrics: blind.metrics,
+    validationCycleResults: validationArtifactSink?.cycleResults,
+    validationPortfolioContext: validationArtifactSink?.portfolioContext,
   };
 }
 
