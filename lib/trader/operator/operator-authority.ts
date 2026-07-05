@@ -10,6 +10,11 @@ export const OPERATOR_ALLOWED_ACTIONS = [
   "persist_operator_memory",
   "recommend_strategy_review",
   "append_audit_log",
+  "authorize_discovery_run",
+  "accept_research_question",
+  "accept_hypothesis_proposal",
+  "accept_strategy_synthesis",
+  "trigger_knowledge_consolidation",
 ] as const;
 
 export type OperatorAllowedAction = (typeof OPERATOR_ALLOWED_ACTIONS)[number];

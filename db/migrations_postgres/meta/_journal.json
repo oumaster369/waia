@@ -519,6 +519,20 @@
       "when": 1780000000043,
       "tag": "0073_trader_event_attribution_memory_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1780000000044,
+      "tag": "0074_trader_discovery_substrate",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1780000000045,
+      "tag": "0075_trader_discovery_substrate_rls",
+      "breakpoints": true
     }
   ]
 }

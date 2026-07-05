@@ -1039,6 +1039,314 @@ export const traderEventExplanation = pgTable(
   ],
 );
 
+/** AI-TRADER M8: long-lived research campaign container (DEE-383). */
+export const traderDiscoveryResearchCampaign = pgTable(
+  "trader_discovery_research_campaign",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignKey: text("campaign_key").notNull(),
+    name: text("name").notNull(),
+    researchProgram: text("research_program").notNull(),
+    description: text("description").notNull(),
+    symbolScope: text("symbol_scope").notNull(),
+    datasetDigest: text("dataset_digest"),
+    currentState: text("current_state").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_research_campaign_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_discovery_research_campaign_org_key_unique").on(
+      t.organizationId,
+      t.campaignKey,
+    ),
+    uniqueIndex("trader_discovery_research_campaign_org_digest_unique").on(
+      t.organizationId,
+      t.contentDigest,
+    ),
+  ],
+);
+
+export const traderDiscoveryCampaignStateRecord = pgTable(
+  "trader_discovery_campaign_state_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchCampaign.id, { onDelete: "cascade" }),
+    priorState: text("prior_state"),
+    newState: text("new_state").notNull(),
+    rationale: text("rationale").notNull(),
+    operatorAttestationDigest: text("operator_attestation_digest").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_campaign_state_record_id_organization_unique").on(
+      t.id,
+      t.organizationId,
+    ),
+    index("trader_discovery_campaign_state_record_org_campaign_idx").on(
+      t.organizationId,
+      t.campaignId,
+    ),
+  ],
+);
+
+export const traderDiscoveryResearchQuestion = pgTable(
+  "trader_discovery_research_question",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchCampaign.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    questionText: text("question_text").notNull(),
+    researchProgram: text("research_program").notNull(),
+    observationRefsJson: text("observation_refs_json").notNull(),
+    structureClusterId: uuid("structure_cluster_id"),
+    status: text("status").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_research_question_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_discovery_research_question_org_campaign_idx").on(t.organizationId, t.campaignId),
+  ],
+);
+
+export const traderDiscoveryObservation = pgTable(
+  "trader_discovery_observation",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchCampaign.id, { onDelete: "cascade" }),
+    payloadJson: text("payload_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_observation_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_discovery_observation_org_campaign_idx").on(t.organizationId, t.campaignId),
+  ],
+);
+
+export const traderDiscoveryStructureCluster = pgTable(
+  "trader_discovery_structure_cluster",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchCampaign.id, { onDelete: "cascade" }),
+    signatureKey: text("signature_key").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_structure_cluster_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_discovery_structure_cluster_org_campaign_idx").on(t.organizationId, t.campaignId),
+  ],
+);
+
+export const traderDiscoveryHypothesisProposal = pgTable(
+  "trader_discovery_hypothesis_proposal",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchCampaign.id, { onDelete: "cascade" }),
+    researchQuestionId: uuid("research_question_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchQuestion.id, { onDelete: "cascade" }),
+    payloadJson: text("payload_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_hypothesis_proposal_id_organization_unique").on(
+      t.id,
+      t.organizationId,
+    ),
+    index("trader_discovery_hypothesis_proposal_org_campaign_idx").on(
+      t.organizationId,
+      t.campaignId,
+    ),
+  ],
+);
+
+export const traderDiscoveryConsolidationRecord = pgTable(
+  "trader_discovery_consolidation_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchCampaign.id, { onDelete: "cascade" }),
+    action: text("action").notNull(),
+    sourceRefsJson: text("source_refs_json").notNull(),
+    canonicalRef: text("canonical_ref"),
+    rationale: text("rationale").notNull(),
+    operatorAttestationDigest: text("operator_attestation_digest").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_consolidation_record_id_organization_unique").on(
+      t.id,
+      t.organizationId,
+    ),
+  ],
+);
+
+export const traderDiscoveryStrategySynthesis = pgTable(
+  "trader_discovery_strategy_synthesis",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchCampaign.id, { onDelete: "cascade" }),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    templateId: text("template_id").notNull(),
+    paramsJson: text("params_json").notNull(),
+    parentStrategyVersion: text("parent_strategy_version"),
+    hypothesisProposalId: uuid("hypothesis_proposal_id"),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_strategy_synthesis_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_discovery_strategy_synthesis_org_strategy_version_unique").on(
+      t.organizationId,
+      t.strategyId,
+      t.strategyVersion,
+    ),
+  ],
+);
+
+export const traderDiscoveryEvidenceRecord = pgTable(
+  "trader_discovery_evidence_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchCampaign.id, { onDelete: "cascade" }),
+    hypothesisRef: text("hypothesis_ref"),
+    candidateRef: text("candidate_ref"),
+    dimension: text("dimension").notNull(),
+    direction: text("direction").notNull(),
+    strength: text("strength").notNull(),
+    uncertaintyBandLow: text("uncertainty_band_low").notNull(),
+    uncertaintyBandHigh: text("uncertainty_band_high").notNull(),
+    contradictionRefsJson: text("contradiction_refs_json").notNull(),
+    sourceRunDigest: text("source_run_digest").notNull(),
+    relevanceScore: text("relevance_score").notNull(),
+    rationaleJson: text("rationale_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_evidence_record_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_discovery_evidence_record_org_candidate_idx").on(
+      t.organizationId,
+      t.candidateRef,
+    ),
+  ],
+);
+
+export const traderDiscoveryComparisonScore = pgTable(
+  "trader_discovery_comparison_score",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchCampaign.id, { onDelete: "cascade" }),
+    candidateRef: text("candidate_ref").notNull(),
+    dimensionScoresJson: text("dimension_scores_json").notNull(),
+    aggregateRankScore: text("aggregate_rank_score").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_comparison_score_id_organization_unique").on(t.id, t.organizationId),
+  ],
+);
+
+export const traderDiscoveryPromotionProposal = pgTable(
+  "trader_discovery_promotion_proposal",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchCampaign.id, { onDelete: "cascade" }),
+    candidateId: text("candidate_id").notNull(),
+    comparisonDigest: text("comparison_digest").notNull(),
+    recommends: text("recommends").notNull(),
+    rationale: text("rationale").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_promotion_proposal_id_organization_unique").on(t.id, t.organizationId),
+  ],
+);
+
+export const traderDiscoveryRetirementRecord = pgTable(
+  "trader_discovery_retirement_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => traderDiscoveryResearchCampaign.id, { onDelete: "cascade" }),
+    subjectRef: text("subject_ref").notNull(),
+    subjectKind: text("subject_kind").notNull(),
+    rationale: text("rationale").notNull(),
+    operatorAttestationDigest: text("operator_attestation_digest").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_discovery_retirement_record_id_organization_unique").on(t.id, t.organizationId),
+  ],
+);
+
 export const miHypothesisKindEnumPg = pgEnum("mi_hypothesis_kind", ["market_claim"]);
 export const miHypothesisLifecycleStateEnumPg = pgEnum("mi_hypothesis_lifecycle_state", [
   "PROPOSED",
