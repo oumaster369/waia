@@ -505,6 +505,20 @@
       "when": 1780000000041,
       "tag": "0071_trader_mi_pattern_catalog_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1780000000042,
+      "tag": "0072_trader_event_attribution_memory",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1780000000043,
+      "tag": "0073_trader_event_attribution_memory_rls",
+      "breakpoints": true
     }
   ]
 }

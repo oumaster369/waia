@@ -47,9 +47,16 @@ import {
 } from "@/lib/trader/research/strategy-candidate.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import type { PatternCatalogRunConfig } from "@/lib/trader/mi/pattern-catalog.types";
+import type { EventAttributionRunConfig } from "@/lib/trader/events/event-attribution.types";
 import type { PaperClosedTrade } from "@/lib/trader/paper/paper-strategy-eval.types";
 
 export type PatternCatalogBacktestCompleteHook = (input: {
+  context: OrgContext;
+  cycleResults: readonly PaperCycleResult[];
+  closedTrades: readonly PaperClosedTrade[];
+}) => Promise<void>;
+
+export type EventAttributionBacktestCompleteHook = (input: {
   context: OrgContext;
   cycleResults: readonly PaperCycleResult[];
   closedTrades: readonly PaperClosedTrade[];
@@ -83,6 +90,10 @@ export type RunResearchValidationBacktestInput = {
   /** Post-hoc M6 analytics export — default disabled; must not alter metrics. */
   patternCatalog?: PatternCatalogRunConfig & {
     onBacktestComplete?: PatternCatalogBacktestCompleteHook;
+  };
+  /** Post-hoc M7 analytics export — default disabled; must not alter metrics. */
+  eventAttribution?: EventAttributionRunConfig & {
+    onBacktestComplete?: EventAttributionBacktestCompleteHook;
   };
 };
 
@@ -592,12 +603,27 @@ async function runResearchValidationBacktestV2(
           closedTrades: evaluation.closedTrades,
         });
       }
+      if (input.eventAttribution?.enabled === true && input.eventAttribution.onBacktestComplete) {
+        await input.eventAttribution.onBacktestComplete({
+          context: input.context,
+          cycleResults: backtest.cycleResults,
+          closedTrades: evaluation.closedTrades,
+        });
+      }
       return adjustedMetrics;
     }
   }
 
   if (input.patternCatalog?.enabled === true && input.patternCatalog.onBacktestComplete) {
     await input.patternCatalog.onBacktestComplete({
+      context: input.context,
+      cycleResults: backtest.cycleResults,
+      closedTrades: evaluation.closedTrades,
+    });
+  }
+
+  if (input.eventAttribution?.enabled === true && input.eventAttribution.onBacktestComplete) {
+    await input.eventAttribution.onBacktestComplete({
       context: input.context,
       cycleResults: backtest.cycleResults,
       closedTrades: evaluation.closedTrades,
