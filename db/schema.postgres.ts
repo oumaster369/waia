@@ -923,6 +923,122 @@ export const traderPriceMoveExplanation = pgTable(
   ],
 );
 
+/** AI-TRADER M7: append-only external event records (DEE-382). */
+export const traderEventRecord = pgTable(
+  "trader_event_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    eventKey: text("event_key").notNull(),
+    sourceRef: text("source_ref").notNull(),
+    symbolScope: text("symbol_scope").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_event_record_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_event_record_org_digest_unique").on(t.organizationId, t.contentDigest),
+    index("trader_event_record_org_key_idx").on(t.organizationId, t.eventKey),
+  ],
+);
+
+export const traderEventClassification = pgTable(
+  "trader_event_classification",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    eventRecordId: uuid("event_record_id")
+      .notNull()
+      .references(() => traderEventRecord.id, { onDelete: "cascade" }),
+    classificationKind: text("classification_kind").notNull(),
+    ruleId: text("rule_id").notNull(),
+    confidence: text("confidence").notNull(),
+    rationaleJson: text("rationale_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_event_classification_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_event_classification_org_event_idx").on(t.organizationId, t.eventRecordId),
+  ],
+);
+
+export const traderEventAttribution = pgTable(
+  "trader_event_attribution",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    eventRecordId: uuid("event_record_id")
+      .notNull()
+      .references(() => traderEventRecord.id, { onDelete: "cascade" }),
+    subjectRef: text("subject_ref").notNull(),
+    subjectKind: text("subject_kind").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true, mode: "date" }).notNull(),
+    windowEnd: timestamp("window_end", { withTimezone: true, mode: "date" }).notNull(),
+    attributionStrength: text("attribution_strength").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_event_attribution_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_event_attribution_org_subject_idx").on(t.organizationId, t.subjectRef),
+  ],
+);
+
+export const traderEventAttributionConfidence = pgTable(
+  "trader_event_attribution_confidence",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    eventRecordId: uuid("event_record_id")
+      .notNull()
+      .references(() => traderEventRecord.id, { onDelete: "cascade" }),
+    subjectRef: text("subject_ref").notNull(),
+    confidenceMean: text("confidence_mean").notNull(),
+    confidenceBandLow: text("confidence_band_low").notNull(),
+    confidenceBandHigh: text("confidence_band_high").notNull(),
+    priorSupporting: integer("prior_supporting").notNull(),
+    priorContradicting: integer("prior_contradicting").notNull(),
+    rationaleJson: text("rationale_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_event_attribution_confidence_id_organization_unique").on(t.id, t.organizationId),
+  ],
+);
+
+export const traderEventExplanation = pgTable(
+  "trader_event_explanation",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    subjectRef: text("subject_ref").notNull(),
+    priceMoveJson: text("price_move_json").notNull(),
+    eventRefsJson: text("event_refs_json").notNull(),
+    patternRefsJson: text("pattern_refs_json").notNull(),
+    scoreBreakdownJson: text("score_breakdown_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_event_explanation_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_event_explanation_org_subject_idx").on(t.organizationId, t.subjectRef),
+  ],
+);
+
 export const miHypothesisKindEnumPg = pgEnum("mi_hypothesis_kind", ["market_claim"]);
 export const miHypothesisLifecycleStateEnumPg = pgEnum("mi_hypothesis_lifecycle_state", [
   "PROPOSED",
