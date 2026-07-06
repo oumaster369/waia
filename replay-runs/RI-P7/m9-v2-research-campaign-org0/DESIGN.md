@@ -63,3 +63,19 @@ Default **off** to preserve RI-P7 baseline comparability.
 | Operator campaign | Filled vault artifacts + VALIDATION.md (post-merge, human-authorized) |
 
 Build merge alone does **not** complete M9.
+
+---
+
+## Outcome (operator phase — 2026-07-06)
+
+| Phase | Status |
+|-------|--------|
+| Build (DEE-384) | Merged PR #371 @ `87e5fb8` |
+| Operator package (DEE-385) | Merged PR #372 @ `a9c416a` |
+| Operator campaign | **Blocked** — `M9_BLOCKED_BY_ACCOUNTING_DEFECT` |
+
+Final campaign error: `PaperPnLReconciliationError` — sell quantity exceeds PnL ledger open quantity (SPOT inventory accounting). Not a strategy, RI, CDE, guardian, or pattern-discovery failure.
+
+**Closure docs:** `M9-ENGINEERING-CLOSURE.md`, `VALIDATION.md`, `M9-FORENSIC-REPORT.md`.
+
+**Next (approved roadmap):** PR1 Canonical Position Ledger → PR2 Spot Lifecycle Hardening → repeat M9.

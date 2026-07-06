@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "m9_operator_authorization_v1",
+  "generatedAt": "2026-07-05T19:23:20.651Z",
+  "organizationId": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+  "campaignAuthorizationDigest": "6bcd5792cb78b01d2b90374c595a626b1b36a1c8f1470e79b9d7ce8ac2c60aeb",
+  "blindAuthorizationDigest": "d0c6cfccab559d63832bc7005f6e99197343181e58df8110d49f14284f12aeb4",
+  "campaignScope": {
+    "organizationId": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+    "strategyId": "mean_reversion_v0",
+    "strategyVersion": "0.1.6",
+    "symbol": "BTC/USDT",
+    "interval": "1m",
+    "vaultDir": "/Users/legco/Projects/waia/replay-runs/RI-P7/m9-v2-research-campaign-org0",
+    "metricsSchemaVersion": "2.0.0"
+  },
+  "blindScope": {
+    "organizationId": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+    "strategyId": "mean_reversion_v0",
+    "strategyVersion": "0.1.6",
+    "symbol": "BTC/USDT",
+    "interval": "1m",
+    "vaultDir": "/Users/legco/Projects/waia/replay-runs/RI-P7/m9-v2-research-campaign-org0",
+    "metricsSchemaVersion": "2.0.0",
+    "datasetName": "m9-v2-research-campaign-org0-0.1.6"
+  },
+  "operatorId": null,
+  "notes": "Operator authorization record — campaign and blind digests verified at CLI preflight."
+}

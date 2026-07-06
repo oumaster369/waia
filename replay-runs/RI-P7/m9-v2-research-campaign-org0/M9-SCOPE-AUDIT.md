@@ -28,7 +28,7 @@
 | New Postgres migrations | Not required — reuses 0064–0066 RI substrate |
 | HTX backfill | Operator responsibility post-merge |
 | Campaign execution during Build | Execution Server access policy |
-| Completion plan `m9` checkbox | Pending until operator VALIDATION.md accepted |
+| Completion plan `m9` checkbox | Closure recorded in vault; snapshot file not rewritten |
 
 ## Risk tier
 
@@ -44,9 +44,18 @@
 
 ## Acceptance (Build PR)
 
-- [ ] v2 wired through full orchestrator path
-- [ ] Portfolio configurable; PAPER_LOOP divergence documented
-- [ ] Lifecycle + guardian export paths
-- [ ] Operator authorization gates enforced
-- [ ] Candidate duplicate preflight
-- [ ] CI green; no campaign run in Build
+- [x] v2 wired through full orchestrator path
+- [x] Portfolio configurable; PAPER_LOOP divergence documented
+- [x] Lifecycle + guardian export paths
+- [x] Operator authorization gates enforced
+- [x] Candidate duplicate preflight
+- [x] CI green; no campaign run in Build
+
+## Operator campaign outcome (2026-07-06)
+
+- [x] Operator campaign executed (DEE-385)
+- [ ] Success evidence bundle — **not produced** (blocked by accounting defect)
+- [x] `VALIDATION.md` finalized with honest blocked outcome
+- [x] Forensic + closure artifacts in vault
+
+**Blocker:** `M9_BLOCKED_BY_ACCOUNTING_DEFECT` — see `M9-FORENSIC-REPORT.md`.

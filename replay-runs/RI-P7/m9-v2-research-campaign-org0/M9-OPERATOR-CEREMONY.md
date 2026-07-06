@@ -88,3 +88,19 @@ Post-run: `pgrep -fl 'm9-v2-research-campaign'` must be empty.
 Campaign from Cursor agents without chat authorization · HTX backfill during ceremony · background `&` · promotion/live · M10 work · mutating sealed dee-371 / prior vault JSON
 
 **Full detail:** `M9-OPERATOR-RUNBOOK.md` · **Acceptance:** `VALIDATION.md`
+
+---
+
+## F. Post-campaign outcome (2026-07-06)
+
+| Result | Status |
+|--------|--------|
+| Campaign CLI | **Failed** (exit `1`) |
+| Blocker | **`M9_BLOCKED_BY_ACCOUNTING_DEFECT`** |
+| Final strategy version | `0.1.6` |
+| Success bundle | **Not produced** |
+| Blind consumed | **No** |
+
+**Closure:** `M9-ENGINEERING-CLOSURE.md` · **Forensics:** `M9-FORENSIC-REPORT.md` · **Retries:** `M9-CAMPAIGN-EXECUTION-RECORD.md`
+
+**Next:** PR1 Canonical Position Ledger → PR2 Spot Lifecycle Hardening → repeat M9.

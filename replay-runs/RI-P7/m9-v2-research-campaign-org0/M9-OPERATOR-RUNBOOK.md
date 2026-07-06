@@ -254,5 +254,29 @@ Research campaign uses **mock ledger** for window isolation. Evidence `execution
 ## Quick reference
 
 - **Ceremony checklist:** `M9-OPERATOR-CEREMONY.md`
+
+---
+
+## Post-campaign closure (2026-07-06)
+
+The operator campaign **did not succeed**. Official blocker: **`M9_BLOCKED_BY_ACCOUNTING_DEFECT`**.
+
+| Failure class | M9 outcome |
+|---------------|------------|
+| Early regime / post-run regime | **No** — not the blocker |
+| Accounting / PnL reconciliation | **Yes** — `PaperPnLReconciliationError` |
+| Success evidence bundle | **Not produced** |
+
+Final error (attempt `0.1.6`):
+
+```
+[trader/paper/pnl] sell quantity 0.00866055 exceeds open quantity 0.00731991
+```
+
+**Do not** patch ad hoc in the vault or mutate Postgres candidate rows to simulate success.
+
+**Closure docs:** `M9-ENGINEERING-CLOSURE.md`, `VALIDATION.md`, `M9-FORENSIC-REPORT.md`, `M9-CAMPAIGN-EXECUTION-RECORD.md`.
+
+**Next engineering step (approved roadmap only):** PR1 Canonical Position Ledger → PR2 Spot Lifecycle Hardening → repeat M9 with fresh operator authorization and new candidate version.
 - **Post-campaign acceptance:** `VALIDATION.md`
 - **Linear:** DEE-385
