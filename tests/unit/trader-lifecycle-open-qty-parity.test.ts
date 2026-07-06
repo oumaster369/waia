@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { computeExitQuantity } from "@/lib/trader/guardian/compute-exit-quantity";
 import { guardianReasonCodes } from "@/lib/trader/guardian/guardian-reason-codes";
+import { compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import {
   assertLifecycleFillWalkOpenQtyParity,
   LifecycleFillWalkParityError,
@@ -122,14 +123,15 @@ describe("assertLifecycleFillWalkOpenQtyParity (PR2)", () => {
     const fixture = loadFixture<{
       lots: { remainingQty: string }[];
       sellFillQty: string;
+      expectedFirstLotRemaining: string;
       expectedSecondLotRemaining: string;
     }>("multi-lot-partial-exit-fifo.json");
 
     const firstLotQty = fixture.lots[0]!.remainingQty;
     const closeQty =
-      Number(fixture.sellFillQty) <= Number(firstLotQty) ? fixture.sellFillQty : firstLotQty;
-    const firstRemaining = (Number(firstLotQty) - Number(closeQty)).toFixed(3);
-    expect(firstRemaining).toBe("0");
+      compareDecimal(fixture.sellFillQty, firstLotQty) <= 0 ? fixture.sellFillQty : firstLotQty;
+    const firstRemaining = subtractDecimal(firstLotQty, closeQty);
+    expect(firstRemaining).toBe(fixture.expectedFirstLotRemaining);
     expect(fixture.expectedSecondLotRemaining).toBe("0.002");
   });
 });
