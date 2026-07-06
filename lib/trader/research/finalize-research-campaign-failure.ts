@@ -3,16 +3,13 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 enforceServerOnly();
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
-import { buildResearchRejectionRecord } from "@/lib/trader/research/build-research-rejection-record";
 import type { ResearchPipelineRegimeFailureError } from "@/lib/trader/research/errors";
+import { finalizeResearchCampaignOutcomePostgres } from "@/lib/trader/research/finalize-research-campaign-outcome";
 import type {
   CampaignOutcomeSnapshot,
   ResearchRejectionRecord,
 } from "@/lib/trader/research/research-rejection-record.types";
-import {
-  getLatestCandidateForStrategyPostgres,
-  updateStrategyCandidateStatusPostgres,
-} from "@/lib/trader/research/strategy-candidate-repository-postgres";
+import { getLatestCandidateForStrategyPostgres } from "@/lib/trader/research/strategy-candidate-repository-postgres";
 import { parseResearchValidationMetricsJson } from "@/lib/trader/research/parse-research-validation-metrics";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -32,28 +29,28 @@ export async function finalizeResearchCampaignFailurePostgres(
   input: FinalizeResearchCampaignFailureInput,
 ): Promise<ResearchRejectionRecord> {
   const { failure } = input;
-
-  const rejectionRecord = buildResearchRejectionRecord({
-    organizationId: failure.organizationId,
-    strategyId: failure.strategyId,
-    strategyVersion: failure.strategyVersion,
-    candidateId: failure.candidateId,
-    datasetId: failure.datasetId,
-    backtestRunId: failure.backtestRunId,
-    blindValidationResultId: failure.blindValidationResultId,
-    failureCode: "MULTI_REGIME_COVERAGE_INSUFFICIENT",
-    failureMessage: failure.message,
-    blindConsumed: failure.blindConsumed,
-    walkForwardWindowCount: failure.walkForwardWindowCount,
-    validationMetrics: failure.validationMetrics,
-    walkForwardMetrics: failure.walkForwardMetrics,
-    blindMetrics: failure.blindMetrics,
+  const outcome = await finalizeResearchCampaignOutcomePostgres(ex, context, {
+    kind: "governed_reject",
+    scope: {
+      organizationId: failure.organizationId,
+      strategyId: failure.strategyId,
+      strategyVersion: failure.strategyVersion,
+      candidateId: failure.candidateId,
+      datasetId: failure.datasetId,
+      backtestRunId: failure.backtestRunId,
+      blindValidationResultId: failure.blindValidationResultId,
+      blindConsumed: failure.blindConsumed,
+      walkForwardWindowCount: failure.walkForwardWindowCount,
+    },
+    governedReject: failure,
     builderGitSha: input.builderGitSha ?? null,
   });
 
-  await updateStrategyCandidateStatusPostgres(ex, context, failure.candidateId, "rejected");
+  if (!outcome.rejectionRecord) {
+    throw new Error("[research] governed reject outcome missing rejection record");
+  }
 
-  return rejectionRecord;
+  return outcome.rejectionRecord;
 }
 
 export async function ingestCampaignOutcomeFromPostgres(

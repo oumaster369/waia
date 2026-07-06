@@ -93,4 +93,49 @@ describe("M9 guardian reason sample export", () => {
     expect(exportDoc.cyclesWithSlTpLevels).toBe(2);
     expect(exportDoc.reasonRecords[0]?.slTpLevels?.stopLossPrice).toBe("64000");
   });
+
+  it("preserves M5 partial exit quantity fields in exported reason records (PR2)", () => {
+    const partialReason = {
+      ...sampleReason("cycle-partial"),
+      decision: "EXIT_PARTIAL" as const,
+      reasonCode: "GUARDIAN_INVENTORY_CAPPED_PARTIAL",
+      requestedExitQty: "0.005",
+      approvedExitQty: "0.00231991",
+      inventoryAvailableQty: "0.00231991",
+      partialExitFraction: null,
+      inventoryCapApplied: true,
+    };
+    const cycle: PaperCycleResult = {
+      ...cycleWithGuardian("cycle-partial"),
+      guardian: {
+        evaluations: [
+          {
+            evaluationId: "eval-partial",
+            positionLotId: "lot-1",
+            tradeId: "trade-1",
+            symbol: "BTC/USDT",
+            strategyId: "mean_reversion_v0",
+            strategyVersion: "0.1.0",
+            openingStrategySignalId: "mean_reversion_v0",
+            decision: "EXIT_PARTIAL",
+            reason: partialReason,
+            occurredAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        exitIntents: [],
+      },
+    };
+
+    const exportDoc = buildM9GuardianReasonSampleExport({
+      organizationId: "org-1",
+      strategyId: "mean_reversion_v0",
+      strategyVersion: "0.1.0",
+      cycleResults: [cycle],
+      maxSamples: 5,
+    });
+
+    expect(exportDoc.reasonRecords[0]?.requestedExitQty).toBe("0.005");
+    expect(exportDoc.reasonRecords[0]?.approvedExitQty).toBe("0.00231991");
+    expect(exportDoc.reasonRecords[0]?.inventoryCapApplied).toBe(true);
+  });
 });

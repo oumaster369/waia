@@ -12,8 +12,11 @@ export type CampaignOperatorDiagnosticsBody = {
   organizationId: string;
   strategyId: string;
   strategyVersion: string;
-  errorName: string;
-  errorMessage: string;
+  outcomeKind: "success" | "governed_reject" | "crash";
+  parityStatus: "ok" | "not_checked" | "failed";
+  parityMessage?: string | null;
+  errorName: string | null;
+  errorMessage: string | null;
   errorStack: string | null;
   inventorySemanticsVersion: typeof INVENTORY_SEMANTICS_VERSION;
   inventorySnapshot: CampaignOperatorDiagnosticsInventorySnapshot | null;

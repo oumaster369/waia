@@ -286,6 +286,9 @@ export function createSqliteLifecycleRepository(db: WaiaDb): LifecycleRepository
       if (filter?.strategySignalId) {
         conditions.push(eq(traderPositionLots.strategySignalId, filter.strategySignalId));
       }
+      if (filter?.accountKey) {
+        conditions.push(eq(traderPositionLots.accountKey, filter.accountKey));
+      }
       const rows = await db
         .select()
         .from(traderPositionLots)

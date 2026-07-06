@@ -1,0 +1,12 @@
+{
+  "description": "M9 v0.1.6 class — two open lots totaling 0.01 BTC but canonical inventory is 0.00731991",
+  "symbol": "BTC/USDT",
+  "canonicalOpenQty": "0.00731991",
+  "lots": [
+    { "id": "lot-1", "remainingQty": "0.005", "openedAt": "2026-01-01T00:00:00.000Z" },
+    { "id": "lot-2", "remainingQty": "0.005", "openedAt": "2026-01-01T00:01:00.000Z" }
+  ],
+  "expectedTotalExitQty": "0.00731991",
+  "expectedPartialLotId": "lot-2",
+  "expectedPartialQty": "0.00231991"
+}

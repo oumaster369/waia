@@ -6,3 +6,6 @@ export const TRADE_LIFECYCLE_SEMANTICS_VERSION_V2 = "waia.trader.trade-lifecycle
 
 /** Default for new lifecycle rows. */
 export const TRADE_LIFECYCLE_SEMANTICS_VERSION = TRADE_LIFECYCLE_SEMANTICS_VERSION_V2;
+
+/** Synthetic forced-flat when lot remainder is below minOrderQty after partial close. */
+export const LIFECYCLE_DUST_REMAINDER_REASON = "LIFECYCLE_DUST_REMAINDER" as const;

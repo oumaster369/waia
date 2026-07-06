@@ -1,9 +1,9 @@
 import type { GuardianReasonRecord } from "@/lib/trader/guardian/guardian-reason-record.types";
 
-export const guardianDecisionValues = ["HOLD", "EXIT_FULL"] as const;
+export const guardianDecisionValues = ["HOLD", "EXIT_PARTIAL", "EXIT_FULL"] as const;
 export type GuardianDecision = (typeof guardianDecisionValues)[number];
 
-export const exitIntentKindValues = ["CLOSE_LONG"] as const;
+export const exitIntentKindValues = ["REDUCE_LONG", "CLOSE_LONG"] as const;
 export type ExitIntentKind = (typeof exitIntentKindValues)[number];
 
 /** One auditable guardian outcome per open lot per bar. */
@@ -20,7 +20,7 @@ export type GuardianPositionEvaluation = {
   occurredAt: string;
 };
 
-/** Emitted only when decision === EXIT_FULL. */
+/** Emitted when decision === EXIT_PARTIAL or EXIT_FULL. */
 export type ExitIntent = {
   intentId: string;
   evaluationId: string;

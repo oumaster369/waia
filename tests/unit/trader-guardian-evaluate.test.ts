@@ -249,4 +249,56 @@ describe("evaluatePositionGuardian (M3)", () => {
     const second = runGuardian("ONLY_CLOSE_POSITIONS");
     expect(JSON.stringify(first.exitIntents)).toBe(JSON.stringify(second.exitIntents));
   });
+
+  it("emits EXIT_PARTIAL with inventory cap fields when canonical inventory is constrained (PR2)", () => {
+    const lot1 = mockLot({
+      id: "lot-1",
+      tradeId: "trade-1",
+      remainingQty: "0.005",
+      openQty: "0.005",
+    });
+    const lot2 = mockLot({
+      id: "lot-2",
+      tradeId: "trade-2",
+      remainingQty: "0.005",
+      openQty: "0.005",
+      openedAt: new Date("2026-01-01T00:01:00.000Z"),
+    });
+    const trade1 = mockTrade({ id: "trade-1" });
+    const trade2 = mockTrade({ id: "trade-2" });
+
+    const result = evaluatePositionGuardian({
+      context: requireOrgContext(ORG),
+      snapshot: {
+        cycleId: "cycle-partial",
+        cycleIndex: 0,
+        evaluatedAt: "2026-01-01T00:05:00.000Z",
+        bars: [],
+        quote: {
+          symbol: "BTC/USDT",
+          bid: "64999",
+          ask: "65001",
+          last: "65000",
+          timestamp: "2026-01-01T00:05:00.000Z",
+        },
+      },
+      evaluation: mockEvaluation("ONLY_CLOSE_POSITIONS"),
+      openLots: [lot1, lot2],
+      tradesById: new Map([
+        [trade1.id, trade1],
+        [trade2.id, trade2],
+      ]),
+      runConfig: { enabled: true, maxHoldBars: 1, barIntervalMs: 60_000 },
+      accountKey: "paper",
+      markPrice: "65000",
+      canonicalInventory: { openQtyBySymbol: new Map([["BTC/USDT", "0.00731991"]]) },
+    });
+
+    const partialEval = result.evaluations.find((entry) => entry.decision === "EXIT_PARTIAL");
+    expect(partialEval).toBeDefined();
+    expect(partialEval?.reason.inventoryCapApplied).toBe(true);
+    expect(partialEval?.reason.requestedExitQty).toBe("0.005");
+    expect(partialEval?.reason.approvedExitQty).toBe("0.00231991");
+    expect(result.exitIntents.some((intent) => intent.kind === "REDUCE_LONG")).toBe(true);
+  });
 });

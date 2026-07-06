@@ -4,6 +4,7 @@ export const guardianReasonCodes = {
   strategyDisallowed: "GUARDIAN_STRATEGY_DISALLOWED",
   maxHoldBars: "GUARDIAN_MAX_HOLD_BARS",
   hold: "GUARDIAN_HOLD",
+  inventoryCappedPartial: "GUARDIAN_INVENTORY_CAPPED_PARTIAL",
 } as const;
 
 export const guardianRuleIds = {

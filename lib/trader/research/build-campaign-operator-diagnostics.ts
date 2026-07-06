@@ -6,14 +6,18 @@ import {
   CAMPAIGN_OPERATOR_DIAGNOSTICS_SCHEMA_VERSION,
   type CampaignOperatorDiagnostics,
   type CampaignOperatorDiagnosticsBody,
+  type CampaignOperatorDiagnosticsInventorySnapshot,
 } from "@/lib/trader/research/campaign-operator-diagnostics.types";
 
 export type BuildCampaignOperatorDiagnosticsInput = {
   organizationId: string;
   strategyId: string;
   strategyVersion: string;
-  error: unknown;
+  outcomeKind: CampaignOperatorDiagnosticsBody["outcomeKind"];
+  error?: unknown;
   inventory?: Pick<CanonicalInventoryWalkResult, "openQtyBySymbol"> | null;
+  parityStatus?: CampaignOperatorDiagnosticsBody["parityStatus"];
+  parityMessage?: string | null;
   builderGitSha?: string | null;
   crashedAt?: string;
 };
@@ -35,7 +39,7 @@ export function computeCampaignOperatorDiagnosticsDigest(
 
 function resolveInventorySnapshot(
   inventory: Pick<CanonicalInventoryWalkResult, "openQtyBySymbol"> | null | undefined,
-): CampaignOperatorDiagnostics["recordBody"]["inventorySnapshot"] {
+): CampaignOperatorDiagnosticsInventorySnapshot | null {
   if (!inventory) {
     return null;
   }
@@ -47,21 +51,36 @@ function resolveInventorySnapshot(
   };
 }
 
+function resolveErrorFields(error: unknown | undefined): {
+  errorName: string | null;
+  errorMessage: string | null;
+  errorStack: string | null;
+} {
+  if (error === undefined || error === null) {
+    return { errorName: null, errorMessage: null, errorStack: null };
+  }
+  return {
+    errorName: error instanceof Error ? error.name : "Error",
+    errorMessage: error instanceof Error ? error.message : String(error),
+    errorStack: error instanceof Error ? (error.stack ?? null) : null,
+  };
+}
+
 export function buildCampaignOperatorDiagnostics(
   input: BuildCampaignOperatorDiagnosticsInput,
 ): CampaignOperatorDiagnostics {
-  const err = input.error;
-  const errorName = err instanceof Error ? err.name : "Error";
-  const errorMessage = err instanceof Error ? err.message : String(err);
-  const errorStack = err instanceof Error ? (err.stack ?? null) : null;
+  const errorFields = resolveErrorFields(input.error);
 
   const recordBody: CampaignOperatorDiagnosticsBody = {
     organizationId: input.organizationId,
     strategyId: input.strategyId,
     strategyVersion: input.strategyVersion,
-    errorName,
-    errorMessage,
-    errorStack,
+    outcomeKind: input.outcomeKind,
+    parityStatus: input.parityStatus ?? (input.outcomeKind === "crash" ? "not_checked" : "ok"),
+    parityMessage: input.parityMessage ?? null,
+    errorName: errorFields.errorName,
+    errorMessage: errorFields.errorMessage,
+    errorStack: errorFields.errorStack,
     inventorySemanticsVersion: INVENTORY_SEMANTICS_VERSION,
     inventorySnapshot: resolveInventorySnapshot(input.inventory),
     builderGitSha: input.builderGitSha ?? null,

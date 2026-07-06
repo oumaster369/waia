@@ -30,4 +30,9 @@ export type GuardianReasonRecord = {
   patternRefs: readonly string[];
   signalRefs: readonly string[];
   exitIntelligenceContext: ExitIntelligenceContext | null;
+  requestedExitQty?: string;
+  approvedExitQty?: string;
+  inventoryAvailableQty?: string;
+  partialExitFraction?: string | null;
+  inventoryCapApplied?: boolean;
 };

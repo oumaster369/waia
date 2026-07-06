@@ -31,7 +31,6 @@ import { serializeProductionKnowledgeAsset } from "@/lib/trader/knowledge/serial
 import { createLifecycleRecorder, createPostgresLifecycleRepository } from "@/lib/trader/lifecycle";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
 import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
-import { buildEvolutionCycleMvp } from "@/lib/trader/research/build-evolution-cycle-mvp";
 import {
   applyCampaignSuffixToStrategyVersion,
   assertStrategyCandidateSlotAvailablePostgres,
@@ -59,16 +58,15 @@ import {
   type M9CampaignAuthorizationScope,
 } from "@/lib/trader/research/m9-operator-authorization";
 import { buildM9V2MetricsExport } from "@/lib/trader/research/m9-v2-metrics-export";
-import { finalizeResearchCampaignFailurePostgres } from "@/lib/trader/research/finalize-research-campaign-failure";
 import {
-  finalizeResearchCampaignCrashPostgres,
-  sealResearchCampaignCrashArtifacts,
-} from "@/lib/trader/research/finalize-research-campaign-crash";
+  finalizeResearchCampaignOutcomePostgres,
+  sealResearchCampaignOutcomeArtifacts,
+} from "@/lib/trader/research/finalize-research-campaign-outcome";
+import { tryLoadCanonicalInventorySnapshot } from "@/lib/trader/research/load-campaign-inventory-snapshot";
 import { ResearchPipelineRegimeFailureError } from "@/lib/trader/research/errors";
 import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
 import type { ResearchValidationBacktestArtifactSink } from "@/lib/trader/research/research-backtest-runner";
 import { RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION } from "@/lib/trader/research/strategy-candidate.types";
-import { writeCampaignFailureVaultArtifacts } from "@/lib/trader/research/write-campaign-failure-vault";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import {
   createKillSwitchResolver,
@@ -271,7 +269,7 @@ async function main(): Promise<void> {
       strategyVersion,
       oosBarCount,
       deps: { execution, reconciliation, lifecycleRecorder, lifecycleRepository },
-      createOrderRepository: () => createPostgresOrderRepository(db),
+      createOrderRepository: () => orderRepository,
       pipelineBacktest: {
         metricsSchemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
         portfolioConfig,
@@ -374,12 +372,31 @@ async function main(): Promise<void> {
       note: "M9 v2 research campaign — promotion forbidden; mock ledger research isolation only.",
     };
 
-    const manifestPath = resolve(vaultDir, "m9-campaign-manifest.json");
-    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    const inventory = await tryLoadCanonicalInventorySnapshot(db, context, { orderRepository });
+    const successOutcome = await finalizeResearchCampaignOutcomePostgres(db, context, {
+      kind: "success",
+      scope: {
+        organizationId,
+        strategyId: baseStrategy.strategyId,
+        strategyVersion,
+      },
+      inventory,
+      builderGitSha,
+    });
+
+    const sealedPaths = sealResearchCampaignOutcomeArtifacts({
+      vaultDir,
+      naming: "flat",
+      diagnosticsBasename: "m9-campaign-operator-diagnostics.json",
+      outcome: successOutcome,
+      manifest,
+      manifestBasename: "m9-campaign-manifest.json",
+    });
 
     console.error(
       `${LOG_PREFIX} complete strategy=${baseStrategy.strategyId}@${strategyVersion} ` +
-        `knowledgeId=${pka.knowledgeId} regimeOk=${edgeVerified} manifest=${manifestPath}`,
+        `knowledgeId=${pka.knowledgeId} regimeOk=${edgeVerified} manifest=${sealedPaths.manifestPath} ` +
+        `diagnostics=${sealedPaths.operatorDiagnosticsPath}`,
     );
 
     if (!edgeVerified) {
@@ -388,29 +405,37 @@ async function main(): Promise<void> {
     }
   } catch (error) {
     if (error instanceof ResearchPipelineRegimeFailureError) {
-      const rejectionRecord = await finalizeResearchCampaignFailurePostgres(db, context, {
-        failure: error,
+      const rejectOutcome = await finalizeResearchCampaignOutcomePostgres(db, context, {
+        kind: "governed_reject",
+        scope: {
+          organizationId,
+          strategyId: baseStrategy.strategyId,
+          strategyVersion,
+        },
+        governedReject: error,
+        orderRepository,
         builderGitSha,
       });
-      const evolutionCycle = buildEvolutionCycleMvp({ rejectionRecord });
-      const artifactPaths = writeCampaignFailureVaultArtifacts({
+      const artifactPaths = sealResearchCampaignOutcomeArtifacts({
         vaultDir,
         naming: "flat",
         rejectionBasename: "m9-research-rejection-record.json",
         evolutionBasename: "m9-evolution-cycle-mvp.json",
-        rejectionRecord,
-        evolutionCycle,
+        diagnosticsBasename: "m9-campaign-operator-diagnostics.json",
+        outcome: rejectOutcome,
       });
 
       console.error(
         `${LOG_PREFIX} STRATEGY_FAILED rejection=${artifactPaths.rejectionRecordPath} ` +
-          `evolution=${artifactPaths.evolutionCyclePath}`,
+          `evolution=${artifactPaths.evolutionCyclePath} ` +
+          `diagnostics=${artifactPaths.operatorDiagnosticsPath}`,
       );
       process.exitCode = 1;
       return;
     }
 
-    const crashResult = await finalizeResearchCampaignCrashPostgres(db, context, {
+    const crashOutcome = await finalizeResearchCampaignOutcomePostgres(db, context, {
+      kind: "crash",
       scope: {
         organizationId,
         strategyId: baseStrategy.strategyId,
@@ -418,16 +443,16 @@ async function main(): Promise<void> {
         datasetId: datasetName,
       },
       error,
+      orderRepository,
       builderGitSha,
     });
-    const artifactPaths = sealResearchCampaignCrashArtifacts({
+    const artifactPaths = sealResearchCampaignOutcomeArtifacts({
       vaultDir,
       naming: "flat",
       rejectionBasename: "m9-research-rejection-record.json",
       evolutionBasename: "m9-evolution-cycle-mvp.json",
       diagnosticsBasename: "m9-campaign-operator-diagnostics.json",
-      rejectionRecord: crashResult.rejectionRecord,
-      operatorDiagnostics: crashResult.operatorDiagnostics,
+      outcome: crashOutcome,
     });
 
     console.error(

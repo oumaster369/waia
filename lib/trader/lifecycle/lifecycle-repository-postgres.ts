@@ -295,6 +295,9 @@ function createPostgresLifecycleRepositoryImpl(
       if (filter?.strategySignalId) {
         conditions.push(eq(pgSchema.traderPositionLots.strategySignalId, filter.strategySignalId));
       }
+      if (filter?.accountKey) {
+        conditions.push(eq(pgSchema.traderPositionLots.accountKey, filter.accountKey));
+      }
       const rows = await db
         .select()
         .from(pgSchema.traderPositionLots)
