@@ -10,6 +10,7 @@ import {
   derivePaperBook,
   netPositionsFromFilledOrders,
 } from "@/lib/trader/paper/derive-paper-book";
+import { PaperPnLReconciliationError } from "@/lib/trader/paper/paper-pnl.errors";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const ORG_A = "00000000-0000-4000-8000-0000000267";
@@ -70,6 +71,22 @@ function mockRepository(
   } = {},
 ): OrderRepository {
   const fillsByOrderId = options.fillsByOrderId ?? {};
+
+  for (const order of orders) {
+    if (
+      order.state === "FILLED" &&
+      Number(order.filledQuantity) > 0 &&
+      fillsByOrderId[order.id] === undefined
+    ) {
+      fillsByOrderId[order.id] = [
+        mockFill(order.id, {
+          organizationId: order.organizationId,
+          quantity: order.filledQuantity,
+          price: order.avgFillPrice ?? "64000",
+        }),
+      ];
+    }
+  }
 
   return {
     createOrder: vi.fn(),
@@ -203,7 +220,7 @@ describe("derivePaperBook (AT-E9 S8)", () => {
     ]);
   });
 
-  it("AC6: floors quantity at zero when sells exceed holdings", async () => {
+  it("AC6: rejects oversell during canonical fill-walk", async () => {
     const repo = mockRepository([
       mockOrder({ id: "buy-4", filledQuantity: "0.01" }),
       mockOrder({
@@ -213,12 +230,12 @@ describe("derivePaperBook (AT-E9 S8)", () => {
       }),
     ]);
 
-    const book = await derivePaperBook({
-      context: requireOrgContext(ORG_A),
-      orderRepository: repo,
-    });
-
-    expect(book.positions).toEqual([]);
+    await expect(
+      derivePaperBook({
+        context: requireOrgContext(ORG_A),
+        orderRepository: repo,
+      }),
+    ).rejects.toThrow(PaperPnLReconciliationError);
   });
 
   it("AC7: is idempotent across repeated derivation", async () => {

@@ -1,10 +1,12 @@
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import type { StrategySignal } from "@/lib/trader/intelligence/types";
-import { derivePaperBook } from "@/lib/trader/paper/derive-paper-book";
+import {
+  deriveCanonicalInventory,
+  openPositionsFromCanonicalInventory,
+} from "@/lib/trader/paper/derive-canonical-inventory";
 import {
   buildQuoteCurrencyBySymbol,
   loadPaperFillEvents,
-  walkFillsForPnL,
 } from "@/lib/trader/paper/derive-paper-pnl";
 import type { PaperPnLMarkPrices } from "@/lib/trader/paper/paper-pnl.types";
 import type { PaperBookExecutionMode } from "@/lib/trader/paper/paper-book.types";
@@ -89,23 +91,17 @@ export async function derivePortfolioAccountState(
   input: DerivePortfolioAccountStateInput,
 ): Promise<PortfolioAccountState> {
   const executionMode = input.executionMode ?? "mock";
-  const [book, loaded] = await Promise.all([
-    derivePaperBook({
-      context: input.context,
-      orderRepository: input.orderRepository,
-      executionMode,
-    }),
-    loadPaperFillEvents({
-      context: input.context,
-      orderRepository: input.orderRepository,
-      executionMode,
-    }),
-  ]);
+  const loaded = await loadPaperFillEvents({
+    context: input.context,
+    orderRepository: input.orderRepository,
+    executionMode,
+  });
 
   const events = loaded.fillEvents;
   const symbols = [...new Set(events.map((event) => event.order.symbol))];
   const quoteCurrencyBySymbol = buildQuoteCurrencyBySymbol(symbols);
-  const walk = walkFillsForPnL(events, quoteCurrencyBySymbol);
+  const inventory = deriveCanonicalInventory(events, quoteCurrencyBySymbol);
+  const openPositions = openPositionsFromCanonicalInventory(inventory);
   const { availableBalanceUsdt, feesPaidUsdt } = computeAvailableBalanceFromFills(
     input.runConfig.startingBalanceUsdt,
     events,
@@ -117,12 +113,12 @@ export async function derivePortfolioAccountState(
   let openRiskUsdt = "0";
   let inventoryMarkValue = "0";
 
-  for (const position of book.positions) {
+  for (const position of openPositions) {
     if (compareDecimal(position.quantity, "0") <= 0) {
       continue;
     }
 
-    const ledger = walk.ledgerBySymbol.get(position.symbol);
+    const ledger = inventory.ledgerBySymbol.get(position.symbol);
     const avgCost = ledger?.avgCost ?? "0";
     const markPrice =
       input.markPrices?.marks[position.symbol] ??
@@ -168,7 +164,7 @@ export async function derivePortfolioAccountState(
     startingBalanceUsdt: input.runConfig.startingBalanceUsdt,
     availableBalanceUsdt,
     reservedMarginUsdt: "0",
-    realizedPnlUsdt: walk.realizedPnl,
+    realizedPnlUsdt: inventory.realizedPnl,
     markedPnlUsdt,
     feesPaidUsdt,
     equityUsdt,
