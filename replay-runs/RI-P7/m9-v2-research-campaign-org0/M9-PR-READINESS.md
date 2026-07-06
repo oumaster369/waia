@@ -56,7 +56,7 @@ no
 
 ## Next engineering step
 
-PR1 Canonical Position Ledger → PR2 Spot Lifecycle Hardening → repeat M9.
+PR1 → PR2 → Repeat M9 v0.1.7 → Gate A → PR3/PR4 (blocked). See `../AI-TRADER-ENGINEERING-STATUS.md`.
 
 ## Human merge instruction
 

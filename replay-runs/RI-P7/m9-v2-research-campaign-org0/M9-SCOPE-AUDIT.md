@@ -59,3 +59,5 @@
 - [x] Forensic + closure artifacts in vault
 
 **Blocker:** `M9_BLOCKED_BY_ACCOUNTING_DEFECT` — see `M9-FORENSIC-REPORT.md`.
+
+**Post-M9 sequence:** `../AI-TRADER-ENGINEERING-STATUS.md`

@@ -1,5 +1,7 @@
 # M9 Engineering Closure
 
+> **Not the engineering recovery entry point.** For current phase, resume point, and canonical sequence, read **`../AI-TRADER-ENGINEERING-STATUS.md`** (the single canonical recovery document).
+
 **Milestone:** M9 — Full Execution Server v2 Research Campaign  
 **Status:** **ENGINEERING CLOSURE COMPLETE**  
 **Verdict:** `M9_BLOCKED_BY_ACCOUNTING_DEFECT`  
@@ -33,7 +35,7 @@ See **`VALIDATION.md`** for the full matrix.
 | **Proven** | Build wiring, operator gates, RI orchestrator, v2 metrics path, guardian on research path, CDE/strategy/execution telemetry, mock fill + reconciliation loop |
 | **Not proven** | PnL reconciliation, walk-forward, blind holdout, v2 evidence bundle, PKA, regime gate completion, M10 readiness |
 | **Root cause** | SPOT position accounting desync between fills and PnL ledger (`M9-FORENSIC-REPORT.md`) |
-| **Next step** | PR1 → PR2 → repeat M9 (approved roadmap; not modified) |
+| **Next step** | See `../AI-TRADER-ENGINEERING-STATUS.md` — PR1 → PR2 → Repeat M9 v0.1.7 → Gate A → PR3/PR4 (blocked) |
 
 ---
 
@@ -46,7 +48,7 @@ See **`VALIDATION.md`** for the full matrix.
 | Added closure docs | `VALIDATION.md` (finalized), `M9-FORENSIC-REPORT.md`, `M9-CAMPAIGN-EXECUTION-RECORD.md`, this file |
 | Tracked authorization | `operator-authorization-record.json` added to vault |
 | Untracked non-M9 artifact | `m6-pattern-catalog-org0/M6-M7-BOUNDARY.md` — valid M6 governance doc; left untracked (out of M9 scope; commit on separate issue if desired) |
-| Branch state | On `dev`, synced with `origin/dev` @ `a9c416a` |
+| Branch state | On `dev`, synced with `origin/dev` @ `39d17ad` (PR #373) |
 | No PR1 implementation | Confirmed — no Canonical Position Ledger code merged |
 
 ---
@@ -63,8 +65,8 @@ See **`VALIDATION.md`** for the full matrix.
 | Operator runbook / ceremony / checklist | Post-campaign pointers added | Updated |
 | Completion plan snapshot | Historical pre-M0 snapshot — **not modified** (preserve history) | No change |
 | Approved evolution roadmap | Not modified | No change |
-| Linear DEE-384 / DEE-385 | PRs #371 / #372 merged to `dev` | Human: confirm Linear status `Done` if automation lagging |
-| GitHub | `dev` @ `a9c416a` includes M9 build + operator package | Synced |
+| Linear DEE-384 / DEE-385 / DEE-386 | PRs #371 / #372 / #373 merged to `dev` | Done |
+| GitHub | `dev` @ `39d17ad` includes M9 build + operator + closure | Synced |
 
 ---
 
@@ -99,9 +101,9 @@ See **`VALIDATION.md`** for the full matrix.
 ## 6. Repository status
 
 - **Branch:** `dev`
-- **HEAD:** `a9c416a` (DEE-385 operator package)
+- **HEAD:** `39d17ad` (DEE-386 engineering closure, PR #373)
 - **Remote:** up to date with `origin/dev`
-- **Working tree:** clean after closure doc writes (pending commit by human)
+- **Working tree:** clean (post-merge sync pending hygiene commit)
 
 ---
 
@@ -124,7 +126,7 @@ Expected after applying closure updates:
 | `dev` | Integration | Active; M9 merged |
 | `dee-384-m9-v2-research-campaign` | Build | Merged (PR #371) |
 | `dee-385-m9-operator-launch-package` | Operator | Merged (PR #372) |
-| `main` | Production | Behind `dev`; no M9 promotion required for closure |
+| `dee-386-m9-engineering-closure` | Closure docs | Merged (PR #373) |
 
 ---
 
@@ -133,9 +135,10 @@ Expected after applying closure updates:
 | Issue | Expected | Notes |
 |-------|----------|-------|
 | DEE-384 | Done | Build merged PR #371 |
-| DEE-385 | Done | Operator package PR #372; campaign executed with documented blocker |
+| DEE-385 | Done | Operator package PR #372 |
+| DEE-386 | Done | Engineering closure PR #373 |
 
-Linear MCP unavailable during closure automation. **Human verification:** confirm both issues show `Done` with closure comment referencing `M9-ENGINEERING-CLOSURE.md`.
+Linear synchronized 2026-07-06.
 
 ---
 
@@ -148,15 +151,16 @@ Linear MCP unavailable during closure automation. **Human verification:** confir
 1. M9 build and operator phases are complete and honestly documented.  
 2. Root cause is isolated and forensically recorded — no ambiguity requiring further M9 investigation.  
 3. Repository working tree is free of ad hoc accounting fixes (reverted).  
-4. Approved next step is PR1 — Canonical Position Ledger; roadmap not modified.  
+4. Approved next step is PR1 — Canonical Position Ledger (see `../AI-TRADER-ENGINEERING-STATUS.md`).  
 5. No sealed M9 success artifacts exist to conflict with PR1 semantics.  
-6. `dev` is synced with `origin/dev` and ready for a new `dee-*` branch.
+6. `dev` is synced with `origin/dev` @ `39d17ad` and ready for PR1 branch.
+
+**Canonical sequence after PR1:** PR2 → **Repeat M9 v0.1.7** → Gate A → PR3/PR4 (blocked until Gate A).
 
 **Human actions before PR1 branch:**
 
-1. Commit and push M9 closure vault documents (this closure set).  
-2. Confirm Linear DEE-384 / DEE-385 → `Done`.  
-3. Open PR1 branch per approved evolution roadmap — do not reuse M9 candidate versions `0.1.1`–`0.1.6` for repeat M9 without fresh operator authorization.
+1. Confirm this post-merge sync is committed on `dev`.  
+2. Open PR1 branch per approved evolution roadmap — do not reuse M9 candidate versions `0.1.1`–`0.1.6`; Repeat M9 uses **`0.1.7`** with fresh operator authorization.
 
 ---
 
@@ -165,5 +169,5 @@ Linear MCP unavailable during closure automation. **Human verification:** confir
 - Validation: `VALIDATION.md`
 - Forensics: `M9-FORENSIC-REPORT.md`
 - Execution record: `M9-CAMPAIGN-EXECUTION-RECORD.md`
-- Design: `DESIGN.md`
-- Scope audit: `M9-SCOPE-AUDIT.md`
+- Engineering recovery entry point: `../AI-TRADER-ENGINEERING-STATUS.md`
+- Historical plans: `../HISTORICAL-PLANS-INDEX.md`

@@ -82,11 +82,17 @@ This is **not** a strategy failure, Research Pipeline failure, Feature Engine fa
 
 ## Next engineering step (only acceptable recommendation)
 
-1. **PR1 — Canonical Position Ledger**  
-2. **PR2 — Spot Lifecycle Hardening**  
-3. **Repeat M9** (operator-authorized campaign after PR1 + PR2)
+See **`../AI-TRADER-ENGINEERING-STATUS.md`** for the full canonical sequence.
 
-Do **not** start PR1 in this closure task. Approved evolution roadmap must not be modified.
+1. **PR1 — Canonical Position Ledger** (NEXT)  
+2. **PR2 — Spot Lifecycle Hardening**  
+3. **Repeat M9 v0.1.7** (fresh operator authorization — mandatory stop after PR2)  
+4. **Gate A** verification  
+5. **PR3 — Market Context + MSV Depth** — **BLOCKED until Gate A**  
+6. **PR4 — Market Memory + Knowledge Loop** — **BLOCKED until Gate A**  
+7. **M10 Paper Soak** — **BLOCKED until PR1–PR4 + Gate A + Gate B**
+
+Approved roadmap: `.cursor/plans/ai-trader_intelligence_evolution_48358215.plan.md`
 
 ---
 
@@ -155,13 +161,16 @@ Failure class: **accounting / PnL reconciliation crash** — not early regime, n
 | Knowledge ID | **none** | No PKA |
 | Architect acceptance | **deferred** | After PR1 + PR2 + repeat M9 |
 | DEE-384 (build) | **Done** | Merged PR #371 |
-| DEE-385 (operator) | **Done (blocked outcome documented)** | Merged PR #372; campaign executed; validation closed |
+| DEE-385 (operator) | **Done** | Merged PR #372 |
+| DEE-386 (closure) | **Done** | Merged PR #373 |
+| Closure merge SHA | **`39d17ad`** | On `dev` |
 
 ---
 
 ## Cross-links
 
 - Engineering closure: `M9-ENGINEERING-CLOSURE.md`
+- Engineering status: `../AI-TRADER-ENGINEERING-STATUS.md`
 - Forensic report: `M9-FORENSIC-REPORT.md`
 - Execution record: `M9-CAMPAIGN-EXECUTION-RECORD.md`
 - Operator ceremony: `M9-OPERATOR-CEREMONY.md`

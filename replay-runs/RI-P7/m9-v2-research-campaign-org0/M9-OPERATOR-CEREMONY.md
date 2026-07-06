@@ -103,4 +103,4 @@ Campaign from Cursor agents without chat authorization · HTX backfill during ce
 
 **Closure:** `M9-ENGINEERING-CLOSURE.md` · **Forensics:** `M9-FORENSIC-REPORT.md` · **Retries:** `M9-CAMPAIGN-EXECUTION-RECORD.md`
 
-**Next:** PR1 Canonical Position Ledger → PR2 Spot Lifecycle Hardening → repeat M9.
+**Next:** See `../AI-TRADER-ENGINEERING-STATUS.md` — PR1 → PR2 → Repeat M9 v0.1.7 → Gate A.

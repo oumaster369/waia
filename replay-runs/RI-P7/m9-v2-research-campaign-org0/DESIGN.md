@@ -78,4 +78,4 @@ Final campaign error: `PaperPnLReconciliationError` — sell quantity exceeds Pn
 
 **Closure docs:** `M9-ENGINEERING-CLOSURE.md`, `VALIDATION.md`, `M9-FORENSIC-REPORT.md`.
 
-**Next (approved roadmap):** PR1 Canonical Position Ledger → PR2 Spot Lifecycle Hardening → repeat M9.
+**Next (approved roadmap):** See `../AI-TRADER-ENGINEERING-STATUS.md` — PR1 → PR2 → Repeat M9 v0.1.7 → Gate A → PR3/PR4 (blocked).
