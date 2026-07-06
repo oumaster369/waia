@@ -1,4 +1,5 @@
 import { decideGuardianAction } from "@/lib/trader/guardian/guardian-decision-model";
+import { computeExitQuantity } from "@/lib/trader/guardian/compute-exit-quantity";
 import { guardianOrderKeys } from "@/lib/trader/guardian/guardian-order-keys";
 import { GUARDIAN_REASON_RECORD_SCHEMA_VERSION } from "@/lib/trader/guardian/guardian-reason-record.types";
 import type { GuardianRunConfig } from "@/lib/trader/guardian/guardian-run-config.types";
@@ -16,7 +17,6 @@ import type { EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 import type { PositionLotRow, TradeRow } from "@/lib/trader/lifecycle/trade-lifecycle.types";
 import type { MarketSnapshot } from "@/lib/trader/market-data/types";
 import type { CanonicalInventoryWalkResult } from "@/lib/trader/paper/derive-canonical-inventory";
-import { capSellQuantityToInventory } from "@/lib/trader/paper/derive-canonical-inventory";
 import {
   addDecimal,
   compareDecimal,
@@ -58,6 +58,7 @@ export type EvaluatePositionGuardianInput = {
   exitIntelligence?: EvaluatePositionGuardianExitIntelligenceInput;
   /** PR1 canonical symbol inventory — caps batch EXIT_FULL quantities. */
   canonicalInventory?: Pick<CanonicalInventoryWalkResult, "openQtyBySymbol">;
+  minOrderQty?: string;
 };
 
 export function computeBarsHeld(
@@ -170,6 +171,7 @@ export function evaluatePositionGuardian(
   const { exitPlanByLotId, ruleProviders } = prepareExitEngineState(input);
   const batchAllocatedBySymbol = new Map<string, string>();
   const openQtyBySymbol = input.canonicalInventory?.openQtyBySymbol;
+  const minOrderQty = input.minOrderQty ?? "0.00001";
 
   for (const lot of sortOpenLots(input.openLots)) {
     const trade = input.tradesById.get(lot.tradeId);
@@ -213,10 +215,38 @@ export function evaluatePositionGuardian(
       exitPlan && trailingState ? toSlTpLevelsSnapshot(exitPlan, trailingState) : null;
 
     const evaluationId = `${input.snapshot.cycleId}:${lot.id}`;
+
+    const isExitDecision = action.decision === "EXIT_FULL" || action.decision === "EXIT_PARTIAL";
+
+    let exitQtyResult: ReturnType<typeof computeExitQuantity> | null = null;
+    if (isExitDecision) {
+      exitQtyResult = computeExitQuantity({
+        decision: action.decision,
+        ruleReasonCode: action.reasonCode,
+        remainingQty: lot.remainingQty,
+        partialExitFraction: action.partialExitFraction,
+        symbol: lot.symbol,
+        minOrderQty,
+        openQtyBySymbol,
+        batchAllocatedBySymbol,
+      });
+
+      if (openQtyBySymbol && compareDecimal(exitQtyResult.approvedQty, "0") > 0) {
+        const priorAllocated = batchAllocatedBySymbol.get(lot.symbol) ?? "0";
+        batchAllocatedBySymbol.set(
+          lot.symbol,
+          addDecimal(priorAllocated, exitQtyResult.approvedQty),
+        );
+      }
+    }
+
+    const effectiveDecision = exitQtyResult?.effectiveDecision ?? action.decision;
+    const effectiveReasonCode = exitQtyResult?.effectiveReasonCode ?? action.reasonCode;
+
     const baseReason = {
       schemaVersion: GUARDIAN_REASON_RECORD_SCHEMA_VERSION,
-      decision: action.decision,
-      reasonCode: action.reasonCode,
+      decision: effectiveDecision,
+      reasonCode: effectiveReasonCode,
       ruleId: action.ruleId,
       cycleId: input.snapshot.cycleId,
       evaluatedAt: input.snapshot.evaluatedAt,
@@ -238,6 +268,11 @@ export function evaluatePositionGuardian(
       patternRefs: [],
       signalRefs: [],
       exitIntelligenceContext: null,
+      requestedExitQty: exitQtyResult?.requestedQty,
+      approvedExitQty: exitQtyResult?.approvedQty,
+      inventoryAvailableQty: exitQtyResult?.inventoryAvailableQty,
+      partialExitFraction: exitQtyResult?.partialExitFraction ?? null,
+      inventoryCapApplied: exitQtyResult?.inventoryCapApplied ?? false,
     } satisfies Omit<GuardianReasonRecord, "exitIntelligenceContext"> & {
       exitIntelligenceContext: null;
     };
@@ -265,47 +300,40 @@ export function evaluatePositionGuardian(
       strategyId: trade.strategyId,
       strategyVersion: trade.strategyVersion,
       openingStrategySignalId: lot.strategySignalId,
-      decision: action.decision,
+      decision: effectiveDecision,
       reason,
       occurredAt: input.snapshot.evaluatedAt,
     });
 
-    if (action.decision === "EXIT_FULL") {
-      let exitQuantity = lot.remainingQty;
-      if (openQtyBySymbol) {
-        exitQuantity = capSellQuantityToInventory({
-          symbol: lot.symbol,
-          requestedQty: lot.remainingQty,
-          openQtyBySymbol,
-          batchAllocatedBySymbol,
-        });
-        if (compareDecimal(exitQuantity, "0") <= 0) {
-          continue;
-        }
-        const priorAllocated = batchAllocatedBySymbol.get(lot.symbol) ?? "0";
-        batchAllocatedBySymbol.set(lot.symbol, addDecimal(priorAllocated, exitQuantity));
-      }
-
-      const orderKeys = guardianOrderKeys(input.snapshot.cycleId, lot.id);
-      exitIntents.push({
-        intentId: `${evaluationId}:exit`,
-        evaluationId,
-        kind: "CLOSE_LONG",
-        positionLotId: lot.id,
-        tradeId: lot.tradeId,
-        symbol: lot.symbol,
-        side: "sell",
-        quantity: exitQuantity,
-        openingStrategySignalId: lot.strategySignalId,
-        strategyId: trade.strategyId,
-        strategyVersion: trade.strategyVersion,
-        referencePrice: input.markPrice,
-        accountKey: input.accountKey,
-        reason,
-        clientOrderId: orderKeys.clientOrderId,
-        idempotencyKey: orderKeys.idempotencyKey,
-      });
+    if (!isExitDecision || !exitQtyResult) {
+      continue;
     }
+
+    if (compareDecimal(exitQtyResult.approvedQty, "0") <= 0 || exitQtyResult.belowMinQty) {
+      continue;
+    }
+
+    const exitKind = effectiveDecision === "EXIT_PARTIAL" ? "REDUCE_LONG" : "CLOSE_LONG";
+
+    const orderKeys = guardianOrderKeys(input.snapshot.cycleId, lot.id);
+    exitIntents.push({
+      intentId: `${evaluationId}:exit`,
+      evaluationId,
+      kind: exitKind,
+      positionLotId: lot.id,
+      tradeId: lot.tradeId,
+      symbol: lot.symbol,
+      side: "sell",
+      quantity: exitQtyResult.approvedQty,
+      openingStrategySignalId: lot.strategySignalId,
+      strategyId: trade.strategyId,
+      strategyVersion: trade.strategyVersion,
+      referencePrice: input.markPrice,
+      accountKey: input.accountKey,
+      reason,
+      clientOrderId: orderKeys.clientOrderId,
+      idempotencyKey: orderKeys.idempotencyKey,
+    });
   }
 
   return { evaluations, exitIntents };

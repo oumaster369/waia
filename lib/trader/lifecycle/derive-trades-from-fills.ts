@@ -9,6 +9,7 @@ import {
   type PairingSnapshot,
 } from "@/lib/trader/lifecycle/trade-pairing";
 import type { TradeLineageAtOpen } from "@/lib/trader/lifecycle/trade-lifecycle.types";
+import { buildPairingKey } from "@/lib/trader/lifecycle/trade-lifecycle.types";
 
 export type DeriveTradesFromFillsInput = {
   fillEvents: readonly { fill: FillRow; order: OrderRow }[];
@@ -68,7 +69,13 @@ export function deriveTradesFromFills(input: DeriveTradesFromFillsInput): Pairin
     if (lot.state !== "OPEN") {
       continue;
     }
-    const key = `${lot.organizationId}:${lot.symbol}:${lot.strategySignalId}:${lot.positionSide}:${lot.accountKey}`;
+    const key = buildPairingKey({
+      organizationId: lot.organizationId,
+      symbol: lot.symbol,
+      strategySignalId: lot.strategySignalId,
+      positionSide: lot.positionSide,
+      accountKey: lot.accountKey,
+    });
     const bucket = buckets.get(key) ?? { openLots: [] };
     bucket.openLots.push(lot);
     buckets.set(key, bucket);

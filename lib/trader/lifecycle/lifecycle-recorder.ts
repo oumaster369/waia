@@ -2,6 +2,8 @@ import type { FillRow, OrderRow } from "@/lib/trader/execution/order-repository.
 import type { GuardianReasonRecord } from "@/lib/trader/guardian/guardian-reason-record.types";
 import type { ExitIntent } from "@/lib/trader/guardian/guardian.types";
 import type { LifecycleRepository } from "@/lib/trader/lifecycle/lifecycle-repository.types";
+import { recordDustRemainderFlat } from "@/lib/trader/lifecycle/dust-lot-closure";
+import { openLotsFilterFromScope, resolvePairingScope } from "@/lib/trader/lifecycle/pairing-scope";
 import { TRADE_LIFECYCLE_SEMANTICS_VERSION_V2 } from "@/lib/trader/lifecycle/trade-lifecycle-semantics";
 import type { TradeLineageAtOpen } from "@/lib/trader/lifecycle/trade-lifecycle.types";
 import type { PaperMarkToCloseTrade } from "@/lib/trader/paper/derive-paper-pnl";
@@ -25,6 +27,8 @@ export type RecordFillLifecycleInput = {
   fill: FillRow;
   accountKey: string;
   lineage: TradeLineageAtOpen;
+  minOrderQty?: string;
+  markPrice?: string;
 };
 
 export type RecordSignalAcceptedInput = {
@@ -253,18 +257,24 @@ async function recordSellFill(
   input: RecordFillLifecycleInput,
 ): Promise<void> {
   const newId = deps.newId ?? (() => crypto.randomUUID());
-  const { context, order, fill, lineage } = input;
-
-  const openLots = await deps.repository.listOpenPositionLots(context, {
-    symbol: order.symbol,
-    strategySignalId: lineage.strategySignalId,
+  const { context, order, fill, accountKey, lineage } = input;
+  const scope = resolvePairingScope({
+    organizationId: context.organizationId,
+    order,
+    accountKey,
+    lineage,
   });
+  const lotFilter = openLotsFilterFromScope(scope);
+  const minOrderQty = input.minOrderQty ?? "0.00001";
+  const markPrice = input.markPrice ?? fill.price;
+
+  const openLots = await deps.repository.listOpenPositionLots(context, lotFilter);
 
   if (openLots.length === 0) {
     throw new Error(`[trader/lifecycle/recorder] no open lot for sell fill ${fill.id}`);
   }
 
-  const lot = openLots[0]!;
+  let lot = openLots[0]!;
   let remainingSellQty = fill.quantity;
   const quoteFeePerUnit =
     compareDecimal(fill.quantity, "0") > 0 ? divideDecimal(fill.fee, fill.quantity) : "0";
@@ -336,7 +346,28 @@ async function recordSellFill(
         tradeId: trade.id,
         realizedPnl: nextRealized,
       });
-      lot.remainingQty = nextRemaining;
+      lot = { ...lot, remainingQty: nextRemaining };
+
+      if (
+        compareDecimal(nextRemaining, "0") > 0 &&
+        compareDecimal(nextRemaining, minOrderQty) < 0
+      ) {
+        await recordDustRemainderFlat(
+          {
+            repository: deps.repository,
+            newId: deps.newId,
+            recordLifecyclePhase: (phaseInput) => recordLifecyclePhase(deps, phaseInput),
+          },
+          {
+            context,
+            lot,
+            markPrice,
+            minOrderQty,
+            accountKey,
+            lineage,
+          },
+        );
+      }
     }
 
     await recordLifecyclePhase(deps, {
@@ -350,16 +381,13 @@ async function recordSellFill(
 
     remainingSellQty = subtractDecimal(remainingSellQty, closeQty);
     if (compareDecimal(remainingSellQty, "0") > 0) {
-      const nextLots = await deps.repository.listOpenPositionLots(context, {
-        symbol: order.symbol,
-        strategySignalId: lineage.strategySignalId,
-      });
+      const nextLots = await deps.repository.listOpenPositionLots(context, lotFilter);
       if (nextLots.length === 0) {
         throw new Error(
           `[trader/lifecycle/recorder] insufficient open qty for partial sell ${fill.id}`,
         );
       }
-      Object.assign(lot, nextLots[0]!);
+      lot = nextLots[0]!;
     }
   }
 }
@@ -383,10 +411,11 @@ export async function recordForcedFlatLifecycle(
   input: RecordForcedFlatLifecycleInput,
 ): Promise<void> {
   const newId = deps.newId ?? (() => crypto.randomUUID());
-  const { context, strategySignalId, markToClose } = input;
+  const { context, accountKey, strategySignalId, markToClose } = input;
   const openLots = await deps.repository.listOpenPositionLots(context, {
     symbol: markToClose.symbol,
     strategySignalId,
+    accountKey,
   });
 
   for (const lot of openLots) {

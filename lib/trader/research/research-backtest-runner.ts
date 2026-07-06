@@ -10,9 +10,11 @@ import {
 } from "@/lib/trader/paper/trade-lifecycle-semantics";
 import { derivePaperStrategyEvaluations } from "@/lib/trader/paper/derive-paper-strategy-eval";
 import {
+  assertLifecycleFillWalkOpenQtyParity,
   assertLifecycleFillWalkTaxonomyParity,
   deriveTradesFromFills,
 } from "@/lib/trader/lifecycle";
+import { deriveCanonicalInventory } from "@/lib/trader/paper/derive-canonical-inventory";
 import type {
   PaperCycleDeps,
   PaperCycleResult,
@@ -523,14 +525,22 @@ async function runResearchValidationBacktestV2(
   });
 
   const lifecycleRecorder = input.deps.lifecycleRecorder;
-  if (lifecycleRecorder) {
+  const lifecycleRepository = input.deps.lifecycleRepository;
+  if (lifecycleRecorder && lifecycleRepository) {
     for (const markToClose of evaluation.markToCloseTrades) {
-      await lifecycleRecorder.recordForcedFlatLifecycle({
-        context: input.context,
+      const symbolOpenLots = await lifecycleRepository.listOpenPositionLots(input.context, {
+        symbol: markToClose.symbol,
         accountKey: input.accountKey,
-        strategySignalId: input.strategyId,
-        markToClose,
       });
+      const strategySignalIds = [...new Set(symbolOpenLots.map((lot) => lot.strategySignalId))];
+      for (const strategySignalId of strategySignalIds) {
+        await lifecycleRecorder.recordForcedFlatLifecycle({
+          context: input.context,
+          accountKey: input.accountKey,
+          strategySignalId,
+          markToClose,
+        });
+      }
     }
 
     const strategyFillEvents = fillEvents.filter((event) =>
@@ -547,6 +557,14 @@ async function runResearchValidationBacktestV2(
       fillWalk: evaluation,
       lifecycleSnapshot,
     });
+
+    const symbols = [...new Set(strategyFillEvents.map((event) => event.order.symbol))];
+    const quoteCurrencyBySymbol = buildQuoteCurrencyBySymbol(symbols);
+    const inventory = deriveCanonicalInventory(strategyFillEvents, quoteCurrencyBySymbol);
+    const openLots = await lifecycleRepository.listOpenPositionLots(input.context, {
+      accountKey: input.accountKey,
+    });
+    assertLifecycleFillWalkOpenQtyParity({ inventory, openLots });
   }
 
   const symbols = [...new Set(fillEvents.map((event) => event.order.symbol))];

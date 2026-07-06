@@ -21,6 +21,7 @@ export type DecideGuardianActionResult = {
   decision: GuardianDecision;
   reasonCode: string;
   ruleId: string;
+  partialExitFraction?: string;
 };
 
 export function decideGuardianAction(input: DecideGuardianActionInput): DecideGuardianActionResult {
@@ -63,7 +64,12 @@ export function decideGuardianAction(input: DecideGuardianActionInput): DecideGu
     for (const provider of providers) {
       const outcome = provider.evaluate(input.ruleInput);
       if (outcome) {
-        return outcome;
+        return {
+          decision: outcome.decision,
+          reasonCode: outcome.reasonCode,
+          ruleId: outcome.ruleId,
+          partialExitFraction: outcome.partialExitFraction,
+        };
       }
     }
   }
@@ -76,5 +82,7 @@ export function decideGuardianAction(input: DecideGuardianActionInput): DecideGu
 }
 
 export function isGuardianRuleOutcome(value: GuardianRuleOutcome): value is GuardianRuleOutcome {
-  return value.decision === "HOLD" || value.decision === "EXIT_FULL";
+  return (
+    value.decision === "HOLD" || value.decision === "EXIT_PARTIAL" || value.decision === "EXIT_FULL"
+  );
 }

@@ -58,4 +58,24 @@ describe("mapExitIntentToSubmitOrder (M3)", () => {
     expect(submit.quantity).toBe("0.01");
     expect(submit.executionMode).toBe("mock");
   });
+
+  it("maps REDUCE_LONG partial exit the same as CLOSE_LONG sell submit (PR2)", () => {
+    const partialIntent: ExitIntent = {
+      ...intent,
+      kind: "REDUCE_LONG",
+      quantity: "0.00231991",
+      reason: {
+        ...intent.reason,
+        decision: "EXIT_PARTIAL",
+        reasonCode: "GUARDIAN_INVENTORY_CAPPED_PARTIAL",
+        requestedExitQty: "0.005",
+        approvedExitQty: "0.00231991",
+        inventoryCapApplied: true,
+      },
+    };
+    const submit = mapExitIntentToSubmitOrder(partialIntent, "mock");
+    expect(submit.side).toBe("sell");
+    expect(submit.quantity).toBe("0.00231991");
+    expect(submit.strategySignalId).toBe("signal-open-1");
+  });
 });

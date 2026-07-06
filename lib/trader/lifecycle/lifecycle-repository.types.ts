@@ -67,7 +67,7 @@ export interface LifecycleRepository {
   updatePositionLot(context: OrgContext, input: UpdatePositionLotInput): Promise<PositionLotRow>;
   listOpenPositionLots(
     context: OrgContext,
-    filter?: { symbol?: string; strategySignalId?: string },
+    filter?: { symbol?: string; strategySignalId?: string; accountKey?: string },
   ): Promise<PositionLotRow[]>;
 
   insertTradeLeg(context: OrgContext, input: InsertTradeLegInput): Promise<TradeLegRow>;

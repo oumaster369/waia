@@ -1,5 +1,6 @@
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { evaluatePositionGuardian, mapExitIntentToSubmitOrder } from "@/lib/trader/guardian";
+import { assertLifecycleFillWalkOpenQtyParity } from "@/lib/trader/lifecycle";
 import {
   buildQuoteCurrencyBySymbol,
   loadPaperFillEvents,
@@ -204,6 +205,7 @@ async function runGuardianPhase(
         ? { runConfig: exitIntelligence.runConfig }
         : undefined,
     canonicalInventory,
+    minOrderQty: input.portfolio?.runConfig.minOrderQty,
   });
 
   let nextAccountState = accountState;
@@ -257,6 +259,24 @@ async function runGuardianPhase(
     });
 
     nextAccountState = await refreshAccountStateIfConfigured(input, executionMode);
+  }
+
+  const hadGuardianFillRecording = guardianExecutions.some(
+    (execution) => !execution.submitBlocked && execution.reconciliation != null,
+  );
+
+  if (deps.lifecycleRecorder && input.orderRepository && hadGuardianFillRecording) {
+    const { fillEvents } = await loadPaperFillEvents({
+      context,
+      orderRepository: input.orderRepository,
+      executionMode,
+    });
+    const symbols = [...new Set(fillEvents.map((event) => event.order.symbol))];
+    const inventory = deriveCanonicalInventory(fillEvents, buildQuoteCurrencyBySymbol(symbols));
+    const remainingOpenLots = await deps.lifecycleRepository.listOpenPositionLots(context, {
+      accountKey: input.accountKey,
+    });
+    assertLifecycleFillWalkOpenQtyParity({ inventory, openLots: remainingOpenLots });
   }
 
   return {

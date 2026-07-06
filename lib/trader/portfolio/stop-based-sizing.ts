@@ -57,7 +57,7 @@ function resolveMinOrderQty(runConfig: PortfolioRunConfig): string {
   return runConfig.minOrderQty ?? "0.00001";
 }
 
-function floorToMinQty(qty: string, minOrderQty: string): string {
+export function floorToMinQty(qty: string, minOrderQty: string): string {
   if (compareDecimal(qty, minOrderQty) < 0) {
     return "0";
   }

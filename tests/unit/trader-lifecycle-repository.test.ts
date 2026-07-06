@@ -428,4 +428,172 @@ describe("trader lifecycle execution wire (M1 / DEE-376)", () => {
       lifecycleSnapshot,
     });
   });
+
+  it("scopes sell fills to pairing key strategySignalId and accountKey (PR2)", async () => {
+    const context = requireOrgContext(orgA);
+    const recorder = createLifecycleRecorder({ repository: lifecycleRepo });
+
+    async function openLot(strategySignalId: string, clientSuffix: string) {
+      const order = await orderRepo.createOrder(context, {
+        venue: "mock",
+        executionMode: "mock",
+        symbol: "BTC/USDT",
+        side: "buy",
+        type: "market",
+        quantity: "0.01",
+        clientOrderId: `client-pair-${clientSuffix}`,
+        idempotencyKey: `idem-pair-${clientSuffix}`,
+        riskDecisionId: `risk-pair-${clientSuffix}`,
+        strategySignalId,
+      });
+      const fill = await orderRepo.recordFill(context, {
+        orderId: order.id,
+        exchangeTradeId: `ex-pair-${clientSuffix}`,
+        price: "100",
+        quantity: "0.01",
+        executedAt: new Date("2026-01-02T00:00:00.000Z"),
+      });
+      await recorder.recordFillLifecycle({
+        context,
+        order,
+        fill,
+        accountKey: "paper",
+        lineage: {
+          strategySignalId,
+          strategyId: "mean_reversion_v0",
+          strategyVersion: "0.1.0",
+          riskDecisionId: order.riskDecisionId,
+        },
+      });
+    }
+
+    await openLot("signal-scope-a", "a");
+    await openLot("signal-scope-b", "b");
+
+    const sellOrder = await orderRepo.createOrder(context, {
+      venue: "mock",
+      executionMode: "mock",
+      symbol: "BTC/USDT",
+      side: "sell",
+      type: "market",
+      quantity: "0.01",
+      clientOrderId: "client-pair-sell-a",
+      idempotencyKey: "idem-pair-sell-a",
+      riskDecisionId: "risk-pair-sell-a",
+      strategySignalId: "signal-scope-a",
+    });
+    const sellFill = await orderRepo.recordFill(context, {
+      orderId: sellOrder.id,
+      exchangeTradeId: "ex-pair-sell-a",
+      price: "101",
+      quantity: "0.01",
+      executedAt: new Date("2026-01-03T00:00:00.000Z"),
+    });
+    await recorder.recordFillLifecycle({
+      context,
+      order: sellOrder,
+      fill: sellFill,
+      accountKey: "paper",
+      lineage: {
+        strategySignalId: "signal-scope-a",
+        strategyId: "mean_reversion_v0",
+        strategyVersion: "0.1.0",
+        riskDecisionId: sellOrder.riskDecisionId,
+      },
+    });
+
+    const lotA = await lifecycleRepo.listOpenPositionLots(context, {
+      strategySignalId: "signal-scope-a",
+      accountKey: "paper",
+    });
+    const lotB = await lifecycleRepo.listOpenPositionLots(context, {
+      strategySignalId: "signal-scope-b",
+      accountKey: "paper",
+    });
+    expect(lotA).toHaveLength(0);
+    expect(lotB).toHaveLength(1);
+    expect(lotB[0]?.remainingQty).toBe("0.01");
+  });
+
+  it("closes dust remainder via synthetic FORCED_FLAT leg (PR2)", async () => {
+    const context = requireOrgContext(orgA);
+    const recorder = createLifecycleRecorder({ repository: lifecycleRepo });
+
+    const buyOrder = await orderRepo.createOrder(context, {
+      venue: "mock",
+      executionMode: "mock",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "market",
+      quantity: "0.003",
+      clientOrderId: "client-dust-buy",
+      idempotencyKey: "idem-dust-buy",
+      riskDecisionId: "risk-dust-buy",
+      strategySignalId: "signal-dust",
+    });
+    const buyFill = await orderRepo.recordFill(context, {
+      orderId: buyOrder.id,
+      exchangeTradeId: "ex-dust-buy",
+      price: "100",
+      quantity: "0.003",
+      executedAt: new Date("2026-01-02T00:00:00.000Z"),
+    });
+    await recorder.recordFillLifecycle({
+      context,
+      order: buyOrder,
+      fill: buyFill,
+      accountKey: "paper",
+      lineage: {
+        strategySignalId: "signal-dust",
+        strategyId: "mean_reversion_v0",
+        strategyVersion: "0.1.0",
+        riskDecisionId: buyOrder.riskDecisionId,
+      },
+    });
+
+    const sellOrder = await orderRepo.createOrder(context, {
+      venue: "mock",
+      executionMode: "mock",
+      symbol: "BTC/USDT",
+      side: "sell",
+      type: "market",
+      quantity: "0.0025",
+      clientOrderId: "client-dust-sell",
+      idempotencyKey: "idem-dust-sell",
+      riskDecisionId: "risk-dust-sell",
+      strategySignalId: "signal-dust",
+    });
+    const sellFill = await orderRepo.recordFill(context, {
+      orderId: sellOrder.id,
+      exchangeTradeId: "ex-dust-sell",
+      price: "101",
+      quantity: "0.0025",
+      executedAt: new Date("2026-01-03T00:00:00.000Z"),
+    });
+    await recorder.recordFillLifecycle({
+      context,
+      order: sellOrder,
+      fill: sellFill,
+      accountKey: "paper",
+      minOrderQty: "0.001",
+      markPrice: "101",
+      lineage: {
+        strategySignalId: "signal-dust",
+        strategyId: "mean_reversion_v0",
+        strategyVersion: "0.1.0",
+        riskDecisionId: sellOrder.riskDecisionId,
+      },
+    });
+
+    const openLots = await lifecycleRepo.listOpenPositionLots(context, {
+      strategySignalId: "signal-dust",
+      accountKey: "paper",
+    });
+    expect(openLots).toHaveLength(0);
+
+    const trades = await lifecycleRepo.listTrades(context, { strategySignalId: "signal-dust" });
+    const legs = await lifecycleRepo.listTradeLegs(context, trades[0]!.id);
+    const dustLeg = legs.find((leg) => leg.kind === "FORCED_FLAT");
+    expect(dustLeg?.syntheticId).toMatch(/^dust-remainder:/);
+  });
 });

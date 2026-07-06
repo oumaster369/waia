@@ -241,6 +241,22 @@ Research campaign uses **mock ledger** for window isolation. Evidence `execution
 
 ---
 
+## Campaign vault sealing (PR2+)
+
+Every campaign exit — **success**, **governed reject**, or **crash** — must leave **`m9-campaign-operator-diagnostics.json`** in the vault.
+
+| `outcomeKind` | Required vault artifacts |
+|---------------|--------------------------|
+| `success` | `m9-campaign-manifest.json` + operator diagnostics (inventory snapshot, `parityStatus: ok`) |
+| `governed_reject` | rejection record + evolution cycle + operator diagnostics |
+| `crash` | rejection record + evolution cycle + operator diagnostics (best-effort inventory snapshot) |
+
+Operator diagnostics fields (v1 additive): `outcomeKind`, `parityStatus`, `inventorySnapshot`, error fields (crash/reject only).
+
+A campaign is **not complete** until the vault contains the success manifest **or** sealed failure bundle **plus** operator diagnostics.
+
+---
+
 ## Forbidden
 
 - Promotion FSM / live enable

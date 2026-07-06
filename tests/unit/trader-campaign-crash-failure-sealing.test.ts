@@ -44,6 +44,7 @@ describe("research campaign crash failure sealing (PR1)", () => {
         organizationId: "org-1",
         strategyId: "mean_reversion_v0",
         strategyVersion: "0.1.6",
+        outcomeKind: "crash",
         error: new PaperPnLReconciliationError(
           "sell quantity 0.00866055 exceeds open quantity 0.00731991",
         ),
@@ -68,12 +69,14 @@ describe("research campaign crash failure sealing (PR1)", () => {
       };
       const diagnostics = JSON.parse(readFileSync(paths.operatorDiagnosticsPath!, "utf8")) as {
         recordBody: {
+          outcomeKind: string;
           errorName: string;
           inventorySnapshot: { openQtyBySymbol: Record<string, string> } | null;
         };
       };
 
       expect(rejection.recordBody.failureCode).toBe("INVENTORY_RECONCILIATION");
+      expect(diagnostics.recordBody.outcomeKind).toBe("crash");
       expect(diagnostics.recordBody.errorName).toBe("PaperPnLReconciliationError");
       expect(diagnostics.recordBody.inventorySnapshot?.openQtyBySymbol["BTC/USDT"]).toBe(
         "0.00731991",

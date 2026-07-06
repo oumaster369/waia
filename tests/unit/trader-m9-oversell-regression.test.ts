@@ -187,6 +187,13 @@ describe("M9 v0.1.6 oversell regression (PR1)", () => {
     );
     expect(totalExitQty).toBeCloseTo(0.00731991, 8);
     expect(result.exitIntents.length).toBe(2);
+
+    const partialIntent = result.exitIntents.find((intent) => intent.positionLotId === "lot-2");
+    expect(partialIntent?.kind).toBe("REDUCE_LONG");
+    expect(partialIntent?.reason.decision).toBe("EXIT_PARTIAL");
+    expect(partialIntent?.reason.reasonCode).toBe("GUARDIAN_INVENTORY_CAPPED_PARTIAL");
+    expect(partialIntent?.reason.inventoryCapApplied).toBe(true);
+    expect(Number(partialIntent?.quantity)).toBeCloseTo(0.00231991, 8);
   });
 
   it("rejects sell quantity exceeding held position in risk engine", () => {

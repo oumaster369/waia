@@ -19,6 +19,7 @@ export type GuardianRuleOutcome = {
   decision: GuardianDecision;
   reasonCode: string;
   ruleId: string;
+  partialExitFraction?: string;
 };
 
 export type GuardianRuleProvider = {
