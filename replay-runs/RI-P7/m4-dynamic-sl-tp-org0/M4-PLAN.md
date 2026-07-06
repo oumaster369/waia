@@ -18,3 +18,11 @@
 - Worker / paper-loop wiring
 - DB trailing persistence
 - Live / billing / execution-service changes
+
+---
+
+## Historical execution annotation (2026-07-06)
+
+**Status:** Complete · **Linear:** DEE-379 · **Merged:** PR #366  
+**Superseded by:** `.cursor/plans/ai-trader_intelligence_evolution_48358215.plan.md` for post-M9 work  
+**Canonical recovery entry point:** `../AI-TRADER-ENGINEERING-STATUS.md`

@@ -328,3 +328,21 @@ WAIA's "governed autonomous researcher" shape (append-only knowledge + determini
 - Forced-flat mark-to-close is synthetic; over-reliance could flatter results — mitigated by separating `markedPnl` from `realizedPnl` and by M4 producing real exits.
 - M0 repair alone may not satisfy regime coverage (M0.5 audit) — decoupled by design.
 - Autonomous discovery (M8) risks overfitting — mitigated by mandatory single-use blind discipline and human promotion gate.
+
+---
+
+## Historical execution annotation (2026-07-06 — do not edit body above)
+
+**Document class:** Frozen snapshot copied before M0 Phase 1. Todo statuses above reflect copy-time state only.
+
+| Milestone | Actual outcome | Concluding reference |
+|-----------|----------------|----------------------|
+| M0–M0.5 | Complete | DEE-372 forensics |
+| M1–M8 | Complete | DEE-376–383 / PRs #365–370 |
+| **M9** | **Closed — `M9_BLOCKED_BY_ACCOUNTING_DEFECT`** | DEE-384–386 / PRs #371–373 |
+| M10+ | Not started | Blocked per canonical roadmap |
+
+**Active roadmap (post-M9):** `.cursor/plans/ai-trader_intelligence_evolution_48358215.plan.md`  
+**Canonical recovery entry point:** `AI-TRADER-ENGINEERING-STATUS.md`
+
+Implementation continues only through the approved Intelligence Evolution roadmap. Next: **PR1 — Canonical Position Ledger**.

@@ -78,3 +78,11 @@ pnpm test --run tests/unit/trader-paper-cycle-runner.test.ts -t "M3"
 3. End of Phase 4 — before human opens PR ⏳
 
 **Agents do not open PRs.** Human authorization required as separate step.
+
+---
+
+## Historical execution annotation (2026-07-06)
+
+**Status:** Complete · **Linear:** DEE-378 · **Merged:** PR #365  
+**Superseded by:** `.cursor/plans/ai-trader_intelligence_evolution_48358215.plan.md` for post-M9 work  
+**Canonical recovery entry point:** `../AI-TRADER-ENGINEERING-STATUS.md`

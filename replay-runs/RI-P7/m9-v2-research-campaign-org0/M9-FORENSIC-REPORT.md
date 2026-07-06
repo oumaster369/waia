@@ -89,9 +89,11 @@ No sealed success-bundle JSON was produced (`m9-campaign-manifest.json`, PKA, me
 
 Per approved evolution roadmap (not started in this closure):
 
-1. **PR1 — Canonical Position Ledger** — single source of truth for SPOT open quantity / cost basis consumed by PnL, lifecycle, and research backtest paths.  
-2. **PR2 — Spot Lifecycle Hardening** — align fill → lot → close semantics; eliminate orphan sells and partial desync.  
-3. **Repeat M9** — operator-authorized campaign after PR1 + PR2 merge.
+1. **PR1 — Canonical Position Ledger** (NEXT)  
+2. **PR2 — Spot Lifecycle Hardening**  
+3. **Repeat M9 v0.1.7** (fresh operator authorization — mandatory stop after PR2)  
+4. **Gate A** verification  
+5. **PR3 / PR4** — **BLOCKED until Gate A** (see `../AI-TRADER-ENGINEERING-STATUS.md`)
 
 ---
 

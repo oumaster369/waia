@@ -277,6 +277,6 @@ Final error (attempt `0.1.6`):
 
 **Closure docs:** `M9-ENGINEERING-CLOSURE.md`, `VALIDATION.md`, `M9-FORENSIC-REPORT.md`, `M9-CAMPAIGN-EXECUTION-RECORD.md`.
 
-**Next engineering step (approved roadmap only):** PR1 Canonical Position Ledger → PR2 Spot Lifecycle Hardening → repeat M9 with fresh operator authorization and new candidate version.
+**Next engineering step (approved roadmap only):** See `../AI-TRADER-ENGINEERING-STATUS.md`. Repeat **M9 v0.1.7** is mandatory after PR2 and before PR3.
 - **Post-campaign acceptance:** `VALIDATION.md`
 - **Linear:** DEE-385

@@ -631,3 +631,11 @@ No blockers. M1 merged; local `dev` aligned with `origin/dev`. Plan includes `St
 5. Proceed Phase 1 → Phase 4 per §10
 
 **Note:** Local commit `9b5df12` (DEE-375 governance docs) remains in hygiene backup only — separate optional governance PR, not part of M2.
+
+---
+
+## Historical execution annotation (2026-07-06)
+
+**Status:** Complete · **Linear:** DEE-377 · **Merged:** PR to `dev` (M2 milestone)  
+**Superseded by:** `.cursor/plans/ai-trader_intelligence_evolution_48358215.plan.md` for post-M9 work  
+**Canonical recovery entry point:** `../AI-TRADER-ENGINEERING-STATUS.md`
