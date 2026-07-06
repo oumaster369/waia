@@ -12,10 +12,21 @@ export {
   type DerivePaperBookInput,
 } from "@/lib/trader/paper/derive-paper-book";
 export {
+  deriveCanonicalInventory,
+  capSellQuantityToInventory,
+  openPositionsFromCanonicalInventory,
+  type CanonicalInventoryWalkResult,
+  type SymbolLedger,
+} from "@/lib/trader/paper/derive-canonical-inventory";
+export { INVENTORY_SEMANTICS_VERSION } from "@/lib/trader/paper/inventory-semantics";
+export {
+  loadPaperFillEvents,
+  type LoadPaperFillEventsInput,
+} from "@/lib/trader/paper/load-paper-fill-events";
+export {
   derivePaperPnL,
   walkFillsForPnL,
   buildPaperPnLFromLedger,
-  loadPaperFillEvents,
   resolvePaperPnLQuoteCurrency,
   buildQuoteCurrencyBySymbol,
   computeUnrealizedFromLedgerForMarks,
@@ -24,7 +35,6 @@ export {
   type PaperPnLFillEvent,
   type PaperPnLWalkResult,
   type BuildPaperPnLFromLedgerInput,
-  type LoadPaperFillEventsInput,
   type PaperFillClosedTrade,
 } from "@/lib/trader/paper/derive-paper-pnl";
 export {

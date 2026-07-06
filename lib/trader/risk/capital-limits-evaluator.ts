@@ -148,6 +148,14 @@ export function evaluateCapitalLimits(
     );
   }
 
+  if (input.order.side === "sell" && compareDecimal(input.order.quantity, currentPosition) > 0) {
+    return rejectDecision(
+      [capitalReasonCodes.sellExceedsOpenQuantity],
+      baseSnapshot(),
+      evaluatedAt,
+    );
+  }
+
   checksApplied.push("quoteExposure");
   if (input.order.side === "buy") {
     const quoteCurrency = parseQuoteCurrency(input.order.symbol);

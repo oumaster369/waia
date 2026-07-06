@@ -15,7 +15,14 @@ import type { ExitIntelligenceRunConfig } from "@/lib/trader/intelligence/m5/exi
 import type { EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 import type { PositionLotRow, TradeRow } from "@/lib/trader/lifecycle/trade-lifecycle.types";
 import type { MarketSnapshot } from "@/lib/trader/market-data/types";
-import { multiplyDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
+import type { CanonicalInventoryWalkResult } from "@/lib/trader/paper/derive-canonical-inventory";
+import { capSellQuantityToInventory } from "@/lib/trader/paper/derive-canonical-inventory";
+import {
+  addDecimal,
+  compareDecimal,
+  multiplyDecimal,
+  subtractDecimal,
+} from "@/lib/trader/risk/numeric";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 import type {
@@ -49,6 +56,8 @@ export type EvaluatePositionGuardianInput = {
   exitEngine?: EvaluatePositionGuardianExitEngineInput;
   /** M5 exit intelligence overlay — opt-in; omitted preserves M3/M4 behavior. */
   exitIntelligence?: EvaluatePositionGuardianExitIntelligenceInput;
+  /** PR1 canonical symbol inventory — caps batch EXIT_FULL quantities. */
+  canonicalInventory?: Pick<CanonicalInventoryWalkResult, "openQtyBySymbol">;
 };
 
 export function computeBarsHeld(
@@ -159,6 +168,8 @@ export function evaluatePositionGuardian(
   const evaluations: GuardianPositionEvaluation[] = [];
   const exitIntents: ExitIntent[] = [];
   const { exitPlanByLotId, ruleProviders } = prepareExitEngineState(input);
+  const batchAllocatedBySymbol = new Map<string, string>();
+  const openQtyBySymbol = input.canonicalInventory?.openQtyBySymbol;
 
   for (const lot of sortOpenLots(input.openLots)) {
     const trade = input.tradesById.get(lot.tradeId);
@@ -260,6 +271,21 @@ export function evaluatePositionGuardian(
     });
 
     if (action.decision === "EXIT_FULL") {
+      let exitQuantity = lot.remainingQty;
+      if (openQtyBySymbol) {
+        exitQuantity = capSellQuantityToInventory({
+          symbol: lot.symbol,
+          requestedQty: lot.remainingQty,
+          openQtyBySymbol,
+          batchAllocatedBySymbol,
+        });
+        if (compareDecimal(exitQuantity, "0") <= 0) {
+          continue;
+        }
+        const priorAllocated = batchAllocatedBySymbol.get(lot.symbol) ?? "0";
+        batchAllocatedBySymbol.set(lot.symbol, addDecimal(priorAllocated, exitQuantity));
+      }
+
       const orderKeys = guardianOrderKeys(input.snapshot.cycleId, lot.id);
       exitIntents.push({
         intentId: `${evaluationId}:exit`,
@@ -269,7 +295,7 @@ export function evaluatePositionGuardian(
         tradeId: lot.tradeId,
         symbol: lot.symbol,
         side: "sell",
-        quantity: lot.remainingQty,
+        quantity: exitQuantity,
         openingStrategySignalId: lot.strategySignalId,
         strategyId: trade.strategyId,
         strategyVersion: trade.strategyVersion,

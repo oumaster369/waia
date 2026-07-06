@@ -60,6 +60,10 @@ import {
 } from "@/lib/trader/research/m9-operator-authorization";
 import { buildM9V2MetricsExport } from "@/lib/trader/research/m9-v2-metrics-export";
 import { finalizeResearchCampaignFailurePostgres } from "@/lib/trader/research/finalize-research-campaign-failure";
+import {
+  finalizeResearchCampaignCrashPostgres,
+  sealResearchCampaignCrashArtifacts,
+} from "@/lib/trader/research/finalize-research-campaign-crash";
 import { ResearchPipelineRegimeFailureError } from "@/lib/trader/research/errors";
 import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
 import type { ResearchValidationBacktestArtifactSink } from "@/lib/trader/research/research-backtest-runner";
@@ -405,7 +409,34 @@ async function main(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    throw error;
+
+    const crashResult = await finalizeResearchCampaignCrashPostgres(db, context, {
+      scope: {
+        organizationId,
+        strategyId: baseStrategy.strategyId,
+        strategyVersion,
+        datasetId: datasetName,
+      },
+      error,
+      builderGitSha,
+    });
+    const artifactPaths = sealResearchCampaignCrashArtifacts({
+      vaultDir,
+      naming: "flat",
+      rejectionBasename: "m9-research-rejection-record.json",
+      evolutionBasename: "m9-evolution-cycle-mvp.json",
+      diagnosticsBasename: "m9-campaign-operator-diagnostics.json",
+      rejectionRecord: crashResult.rejectionRecord,
+      operatorDiagnostics: crashResult.operatorDiagnostics,
+    });
+
+    console.error(
+      `${LOG_PREFIX} CAMPAIGN_CRASH rejection=${artifactPaths.rejectionRecordPath} ` +
+        `evolution=${artifactPaths.evolutionCyclePath} ` +
+        `diagnostics=${artifactPaths.operatorDiagnosticsPath}`,
+    );
+    process.exitCode = 1;
+    return;
   }
 }
 

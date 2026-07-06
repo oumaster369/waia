@@ -1,5 +1,6 @@
-import type { PaperStrategyEvaluation } from "@/lib/trader/paper/paper-strategy-eval.types";
+import type { CanonicalInventoryWalkResult } from "@/lib/trader/paper/derive-canonical-inventory";
 import { addDecimal } from "@/lib/trader/risk/numeric";
+import { compareDecimal } from "@/lib/trader/risk/numeric";
 
 import type { PairingSnapshot } from "@/lib/trader/lifecycle/trade-pairing";
 
@@ -15,10 +16,12 @@ export class LifecycleFillWalkParityError extends Error {
  * Fill-walk remains the operational metrics source; lifecycle runs in parallel with enforced parity.
  */
 export function assertLifecycleFillWalkTaxonomyParity(input: {
-  fillWalk: Pick<
-    PaperStrategyEvaluation,
-    "closedTrades" | "markToCloseTrades" | "closedTradeCount" | "markToCloseTradeCount"
-  >;
+  fillWalk: {
+    closedTrades: readonly { tradePnl: string }[];
+    markToCloseTrades: readonly { tradePnl: string }[];
+    closedTradeCount: number;
+    markToCloseTradeCount: number;
+  };
   lifecycleSnapshot: PairingSnapshot;
 }): void {
   const lifecycleClosed = input.lifecycleSnapshot.trades.filter(
@@ -66,5 +69,29 @@ export function assertLifecycleFillWalkTaxonomyParity(input: {
     throw new LifecycleFillWalkParityError(
       `mark-to-close PnL mismatch: lifecycle=${lifecycleMarkedPnl} fillWalk=${fillWalkMarkedPnl}`,
     );
+  }
+}
+
+/** PR1: symbol-level open qty must match sum of open lot remainingQty. */
+export function assertLifecycleFillWalkOpenQtyParity(input: {
+  inventory: Pick<CanonicalInventoryWalkResult, "openQtyBySymbol">;
+  openLots: readonly { symbol: string; remainingQty: string }[];
+}): void {
+  const lifecycleBySymbol = new Map<string, string>();
+  for (const lot of input.openLots) {
+    const current = lifecycleBySymbol.get(lot.symbol) ?? "0";
+    lifecycleBySymbol.set(lot.symbol, addDecimal(current, lot.remainingQty));
+  }
+
+  const symbols = new Set([...input.inventory.openQtyBySymbol.keys(), ...lifecycleBySymbol.keys()]);
+
+  for (const symbol of symbols) {
+    const walkQty = input.inventory.openQtyBySymbol.get(symbol) ?? "0";
+    const lifecycleQty = lifecycleBySymbol.get(symbol) ?? "0";
+    if (compareDecimal(walkQty, lifecycleQty) !== 0) {
+      throw new LifecycleFillWalkParityError(
+        `openQty mismatch for ${symbol}: lifecycle=${lifecycleQty} fillWalk=${walkQty}`,
+      );
+    }
   }
 }

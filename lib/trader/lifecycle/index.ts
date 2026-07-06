@@ -68,6 +68,7 @@ export {
 } from "@/lib/trader/lifecycle/lifecycle-repository-postgres";
 
 export {
+  assertLifecycleFillWalkOpenQtyParity,
   assertLifecycleFillWalkTaxonomyParity,
   LifecycleFillWalkParityError,
 } from "@/lib/trader/lifecycle/lifecycle-fill-walk-parity";

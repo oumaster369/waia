@@ -786,6 +786,60 @@ async function createM3PaperCycleHarness(): Promise<M3PaperCycleHarness> {
   };
 }
 
+async function seedFilledBuyOrderForHarness(
+  harness: M3PaperCycleHarness,
+  input: {
+    orderKey: string;
+    strategySignalId: string;
+    quantity?: string;
+    avgFillPrice?: string;
+    executedAt?: Date;
+  },
+): Promise<void> {
+  const context = requireOrgContext(harness.orgM3);
+  const quantity = input.quantity ?? "0.01";
+  const price = input.avgFillPrice ?? "64000";
+  const executedAt = input.executedAt ?? new Date("2026-01-01T00:00:00.000Z");
+
+  let order = await harness.orderRepository.createOrder(context, {
+    venue: "mock",
+    executionMode: "mock",
+    symbol: "BTC/USDT",
+    side: "buy",
+    type: "market",
+    quantity,
+    clientOrderId: `client-${input.orderKey}`,
+    idempotencyKey: `idem-${input.orderKey}`,
+    riskDecisionId: "risk-m3-inv",
+    strategySignalId: input.strategySignalId,
+  });
+
+  const transition = async (
+    toState: "RISK_APPROVED" | "SENT_TO_EXCHANGE" | "ACCEPTED" | "FILLED",
+  ) => {
+    order = await harness.orderRepository.transitionOrder(context, {
+      orderId: order.id,
+      expectedStateVersion: order.stateVersion,
+      toState,
+      ...(toState === "FILLED" ? { filledQuantity: quantity, avgFillPrice: price } : {}),
+    });
+  };
+
+  await transition("RISK_APPROVED");
+  await transition("SENT_TO_EXCHANGE");
+  await transition("ACCEPTED");
+  await harness.orderRepository.recordFill(context, {
+    orderId: order.id,
+    exchangeTradeId: `trade-${input.orderKey}`,
+    price,
+    quantity,
+    fee: "0",
+    feeAsset: "USDT",
+    executedAt,
+  });
+  await transition("FILLED");
+}
+
 describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
   let harness: M3PaperCycleHarness;
 
@@ -860,6 +914,11 @@ describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
         targetLotId: null,
       },
     });
+    await seedFilledBuyOrderForHarness(harness, {
+      orderKey: input.lotId,
+      strategySignalId: input.strategySignalId,
+      executedAt: openedAt,
+    });
   }
 
   it("runs guardian on no-signal bar when open lots exist and submits close-only exit", async () => {
@@ -898,7 +957,9 @@ describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
       accountKey: "paper",
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
+      executionMode: "mock",
       orderRepository: harness.orderRepository,
+      refreshAccountStateBetweenStrategies: true,
       guardian: { runConfig: { enabled: true, maxHoldBars: 0 } },
     });
 
@@ -1023,7 +1084,9 @@ describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
       accountKey: "paper",
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
+      executionMode: "mock",
       orderRepository: harness.orderRepository,
+      refreshAccountStateBetweenStrategies: true,
       guardian: { runConfig: { enabled: true, maxHoldBars: 5, barIntervalMs: 60_000 } },
     });
 
@@ -1190,6 +1253,13 @@ describe("paper cycle runner — M4 dynamic SL/TP (DEE-379)", () => {
       },
     });
 
+    await seedFilledBuyOrderForHarness(harness, {
+      orderKey: lotId,
+      strategySignalId: "signal-m4-sl",
+      avgFillPrice: "64000.00",
+      executedAt: openedAt,
+    });
+
     const evaluatedAt = bars.at(-1)!.barCloseTime;
     const plan = buildExitPlan({
       lot: {
@@ -1256,7 +1326,9 @@ describe("paper cycle runner — M4 dynamic SL/TP (DEE-379)", () => {
       accountKey: "paper",
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
+      executionMode: "mock",
       orderRepository: harness.orderRepository,
+      refreshAccountStateBetweenStrategies: true,
       guardian: {
         runConfig: { enabled: true, maxHoldBars: 0 },
         exitEngine: {

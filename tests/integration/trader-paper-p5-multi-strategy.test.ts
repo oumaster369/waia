@@ -125,6 +125,7 @@ describe("P5 multi-strategy paper pipeline integration (DEE-334)", () => {
       {
         fixture: path.join(process.cwd(), "tests/fixtures/trader/btcusdt-1m-mean-reversion.json"),
         cycleId: "p5-mr-entry",
+        strategyId: MEAN_REVERSION_V0,
       },
       {
         fixture: path.join(
@@ -132,6 +133,7 @@ describe("P5 multi-strategy paper pipeline integration (DEE-334)", () => {
           "tests/fixtures/trader/btcusdt-1m-mean-reversion-exit.json",
         ),
         cycleId: "p5-mr-exit",
+        strategyId: MEAN_REVERSION_V0,
       },
       {
         fixture: path.join(
@@ -139,6 +141,7 @@ describe("P5 multi-strategy paper pipeline integration (DEE-334)", () => {
           "tests/fixtures/trader/btcusdt-1m-liquidity-sweep-entry.json",
         ),
         cycleId: "p5-ls-entry",
+        strategyId: LIQUIDITY_SWEEP_REVERSAL_V0,
       },
       {
         fixture: path.join(
@@ -146,6 +149,7 @@ describe("P5 multi-strategy paper pipeline integration (DEE-334)", () => {
           "tests/fixtures/trader/btcusdt-1m-liquidity-sweep-exit.json",
         ),
         cycleId: "p5-ls-exit",
+        strategyId: LIQUIDITY_SWEEP_REVERSAL_V0,
       },
     ] as const;
 
@@ -155,7 +159,7 @@ describe("P5 multi-strategy paper pipeline integration (DEE-334)", () => {
       const snapshot = fixtureSnapshot(run.fixture, run.cycleId);
       const result = await runPaperCycleOnce(deps, {
         context,
-        snapshot,
+        snapshot: { ...snapshot, activeStrategyIds: [run.strategyId] },
         accountKey: "acct-p5-334",
         defaultQuantity: "0.01",
         accountState: EMPTY_STATE,

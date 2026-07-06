@@ -6,6 +6,8 @@ export const RESEARCH_REJECTION_RECORD_SCHEMA_VERSION =
 
 export type ResearchRejectionFailureCode =
   | "MULTI_REGIME_COVERAGE_INSUFFICIENT"
+  | "INVENTORY_RECONCILIATION"
+  | "CAMPAIGN_CRASH"
   | "OTHER_PIPELINE_FAILURE";
 
 export type RejectionMissingBucket = "non_trending" | "down_regime";

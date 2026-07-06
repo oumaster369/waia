@@ -8,6 +8,7 @@ export const tradeAbuseReasonCodes = {
 
 /** Stable capital-limits reason codes (Master Spec §13). */
 export const capitalReasonCodes = {
+  sellExceedsOpenQuantity: "RISK_SELL_EXCEEDS_OPEN_QUANTITY",
   maxPositionPerSymbolExceeded: "RISK_MAX_POSITION_PER_SYMBOL",
   maxDailyLossExceeded: "RISK_MAX_DAILY_LOSS",
   maxDrawdownExceeded: "RISK_MAX_DRAWDOWN",

@@ -1,5 +1,10 @@
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { evaluatePositionGuardian, mapExitIntentToSubmitOrder } from "@/lib/trader/guardian";
+import {
+  buildQuoteCurrencyBySymbol,
+  loadPaperFillEvents,
+} from "@/lib/trader/paper/derive-paper-pnl";
+import { deriveCanonicalInventory } from "@/lib/trader/paper/derive-canonical-inventory";
 import { mapSignalToSubmitOrder } from "@/lib/trader/paper/signal-to-order";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import {
@@ -163,6 +168,18 @@ async function runGuardianPhase(
   );
 
   const markPrice = evaluation.features.features.close;
+
+  let canonicalInventory: ReturnType<typeof deriveCanonicalInventory> | undefined;
+  if (input.orderRepository) {
+    const { fillEvents } = await loadPaperFillEvents({
+      context,
+      orderRepository: input.orderRepository,
+      executionMode,
+    });
+    const symbols = [...new Set(fillEvents.map((event) => event.order.symbol))];
+    canonicalInventory = deriveCanonicalInventory(fillEvents, buildQuoteCurrencyBySymbol(symbols));
+  }
+
   const exitEngine = input.guardian.exitEngine;
   const exitIntelligence = input.guardian.exitIntelligence;
   const guardianResult = evaluatePositionGuardian({
@@ -186,6 +203,7 @@ async function runGuardianPhase(
       exitIntelligence?.runConfig.enabled === true
         ? { runConfig: exitIntelligence.runConfig }
         : undefined,
+    canonicalInventory,
   });
 
   let nextAccountState = accountState;
@@ -273,6 +291,13 @@ export async function runPaperCycleOnce(
   );
 
   let accountState = input.accountState;
+  if (
+    input.refreshAccountStateBetweenStrategies &&
+    input.orderRepository &&
+    executionMode === "mock"
+  ) {
+    accountState = await refreshAccountStateIfConfigured(input, executionMode);
+  }
   const guardianPhase = await runGuardianPhase(
     deps,
     input,
