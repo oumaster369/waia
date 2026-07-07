@@ -113,7 +113,8 @@ pnpm lint && pnpm typecheck && pnpm test --run && pnpm build
 
 - [ ] All items above checked
 - [ ] **Full Market Data Source Integration — PASS**
-- [ ] **Repeat M9 v0.1.7 may be operator-authorized** (requires fresh campaign authorization)
+- [ ] Pre-M9 Provider Fusion Remediation engineering merged (DEE-394 / #382)
+- [ ] **Repeat M9 v0.1.7 may be operator-authorized** only after DEE-394 Architect re-audit PASS + fresh campaign authorization
 - [ ] Gate A still open until Repeat M9 succeeds
 
 **Sign-off**
@@ -122,6 +123,12 @@ pnpm lint && pnpm typecheck && pnpm test --run && pnpm build
 |------|------|------|-----------|
 | Operator | | | |
 | Architect | | | |
+
+---
+
+## Appendix — DEE-394 engineering record (merged)
+
+Pre-M9 Provider Fusion Remediation (#382 @ `7d1401d`) merged 2026-07-07. Engineering deliverables: Sidecar v2, replay lane normalizers, fusion/coverage/decision-trace artifacts, digest pinning, research isolation. **Repeat M9 NOT RUN.** Operator sign-off items in provisioning sequence remain pending until Architect re-audit. Gate record: [`M9-PROVIDER-FUSION-REMEDIATION-GATE.md`](M9-PROVIDER-FUSION-REMEDIATION-GATE.md).
 
 ---
 
