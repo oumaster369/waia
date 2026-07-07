@@ -87,6 +87,19 @@ pnpm test --run tests/integration/trader-htx-bar-poll-cycle.test.ts
 10. **Sign validation checklist** — [`AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md`](../ai-trader/AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md) DEE-393 section.
 11. **Only after operator sign-off** may Repeat M9 v0.1.7 be authorized.
 
+### Pre-M9 provider fusion remediation (DEE-394)
+
+Before Repeat M9, capture and pin a v2 provider sidecar:
+
+```bash
+pnpm trader:m9:capture-sidecar -- \
+  --output=replay-runs/RI-P7/m9-v2-research-campaign-org0/m9-provider-sidecar.json
+```
+
+Recompute blind authorization digest with `sidecarContentDigest` in scope (`pnpm trader:m9:digest`). Run M9 campaign with `--require-provider-fusion=1` to enforce fusion artifacts and truthfulness guards.
+
+Expected vault artifacts: `m9-provider-sidecar.json`, `m9-provider-fusion.json`, `m9-provider-coverage-matrix.md`, `m9-decision-trace.json` — all with non-null manifest digests.
+
 ---
 
 ## Provider coverage matrix (20/20)

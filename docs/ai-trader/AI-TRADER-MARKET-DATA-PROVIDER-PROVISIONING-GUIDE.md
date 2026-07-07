@@ -418,6 +418,9 @@ Required **before Repeat M9 v0.1.7** (in addition to above):
 - [ ] End-to-end provider validation through gateway path (20/20 registry)
 - [ ] `order_book_snapshot` implemented via HTX depth adapter
 - [ ] Fused context v2 verified (`waia.trader.fused_context.v2`)
+- [ ] Provider sidecar v2 captured: `pnpm trader:m9:capture-sidecar -- --output=<vault>/m9-provider-sidecar.json`
+- [ ] Blind authorization digest recomputed with `sidecarContentDigest` in scope
+- [ ] M9 campaign run with `--require-provider-fusion=1` produces fusion + decision trace artifacts
 - [ ] Fresh operator authorization for M9 v0.1.7 campaign
 - [ ] Gate A accounting prerequisites (PR1+PR2) unchanged and verified
 

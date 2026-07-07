@@ -101,6 +101,11 @@ pnpm lint && pnpm typecheck && pnpm test --run && pnpm build
 - [ ] HTX credentials connected via Trader UI and encrypted
 - [ ] Market Brain / Paper Loop connectivity verified
 - [ ] Gateway poll produces fused context v2
+- [ ] `pnpm trader:m9:capture-sidecar` produces v2 sidecar with `captureOutcomes` for 20 providers
+- [ ] Replay fused context fuses all lanes (populated or honest `UNAVAILABLE`) — no hardcoded `[]` evidence
+- [ ] `newsSentiment` is `null` with `NEWS_SENTIMENT_DEFERRED_PR3` reason code (not fabricated `"0"`)
+- [ ] M9 campaign emits `m9-provider-fusion.json`, `m9-provider-coverage-matrix.md`, `m9-decision-trace.json` with manifest digests
+- [ ] Sidecar `contentDigest` pinned in blind authorization scope
 
 ---
 

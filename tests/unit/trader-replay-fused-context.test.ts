@@ -8,6 +8,7 @@ import {
   buildReplayFusedContextFromSnapshot,
   type ReplayProviderSidecar,
 } from "@/lib/trader/market-data/replay-fused-context-builder";
+import type { ReplayProviderSidecarV1 } from "@/lib/trader/market-data/replay/provider-sidecar-types";
 import { buildMarketSnapshot } from "@/lib/trader/market-data/market-snapshot";
 
 function loadFixtureBars() {
@@ -49,7 +50,7 @@ describe("PR2.6 replay fused context builder", () => {
 
   it("merges provider sidecar entries by evaluatedAt", () => {
     const fixture = loadFixtureBars();
-    const sidecar = loadSidecar();
+    const sidecar = loadSidecar() as ReplayProviderSidecarV1;
     const evaluatedAt = sidecar.entries[0]!.evaluatedAt;
 
     const fused = buildReplayFusedContext({

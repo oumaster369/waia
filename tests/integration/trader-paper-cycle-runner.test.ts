@@ -160,16 +160,17 @@ describe("trader paper cycle runner integration (DEE-260)", () => {
     expect(idempotencyKeys.has("client-paper-cycle-dee-260-2-mean_reversion_v0")).toBe(true);
 
     const intelligenceLines = lines.filter(isIntelligenceCounter);
-    expect(intelligenceLines).toHaveLength(18);
+    expect(intelligenceLines).toHaveLength(21);
 
     for (let cycle = 0; cycle < 3; cycle += 1) {
-      const offset = cycle * 6;
+      const offset = cycle * 7;
       expect(parseCounter(intelligenceLines[offset]!).domain).toBe("decision");
       expect(parseCounter(intelligenceLines[offset + 1]!).domain).toBe("decision");
       expect(parseCounter(intelligenceLines[offset + 2]!).domain).toBe("decision");
-      expect(parseCounter(intelligenceLines[offset + 3]!).domain).toBe("strategy");
+      expect(parseCounter(intelligenceLines[offset + 3]!).code).toBe("NEWS_SENTIMENT_DEFERRED_PR3");
       expect(parseCounter(intelligenceLines[offset + 4]!).domain).toBe("strategy");
       expect(parseCounter(intelligenceLines[offset + 5]!).domain).toBe("strategy");
+      expect(parseCounter(intelligenceLines[offset + 6]!).domain).toBe("strategy");
     }
   });
 });

@@ -199,7 +199,11 @@ export function buildMsvEnvelope(input: BuildMsvEnvelopeInput): MsvEnvelope {
     fusedContext,
     understanding,
   });
+  const crowd = buildCrowdPsychologyLayer(fusedContext);
   const reasonCodes = [...permission.reasonCodes, regimeReasonCode(regime)];
+  if (crowd.newsSentiment === null) {
+    reasonCodes.push(cdeReasonCodes.newsSentimentDeferredPr3);
+  }
 
   const fusedQuality =
     fusedContext !== undefined
@@ -216,7 +220,7 @@ export function buildMsvEnvelope(input: BuildMsvEnvelopeInput): MsvEnvelope {
     featureSetId: features.featureSetId,
     physics: buildMarketPhysicsLayer(features),
     liquidity: buildLiquidityLayer(features),
-    crowd: buildCrowdPsychologyLayer(fusedContext),
+    crowd,
     futureContext: buildFutureContextLayer(fusedContext, understanding),
     understanding: understanding ? buildMsvUnderstandingBlock(understanding) : undefined,
     derived: {

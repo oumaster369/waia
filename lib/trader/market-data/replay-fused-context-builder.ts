@@ -2,51 +2,40 @@ import type { Bar, Quote } from "@/lib/trader/intelligence/types";
 import { fuseContextV1 } from "@/lib/trader/market-data/fusion/context-fusion-v1";
 import { buildCrossVenueTriangulation } from "@/lib/trader/market-data/fusion/cross-venue-triangulation";
 import {
-  buildProvenanceRef,
-  normalizeCrossExchangeConfirmation,
-  normalizeFearGreedObservation,
-  normalizeGlobalMarketObservation,
   normalizeOhlcvBarsObservation,
   normalizeQuoteObservation,
 } from "@/lib/trader/market-data/normalization/normalize-observation";
 import { resampleReplayMtfBars } from "@/lib/trader/market-data/mtf/replay-mtf-resampler";
 import type {
   FusedMarketContext,
-  NormalizedObservation,
   SourceProvenanceRef,
 } from "@/lib/trader/market-data/observation-types";
 import { MTF_BAR_INTERVALS } from "@/lib/trader/market-data/observation-types";
+import {
+  buildObservationsFromSidecarV1,
+  buildObservationsFromSidecarV2,
+} from "@/lib/trader/market-data/replay/replay-lane-normalizer";
+import {
+  isReplayProviderSidecarV1,
+  isReplayProviderSidecarV2,
+  type ReplayProviderSidecar,
+  type ReplayProviderSidecarEntryV1,
+  type ReplayProviderSidecarV1,
+  type ReplayProviderSidecarV2,
+} from "@/lib/trader/market-data/replay/provider-sidecar-types";
+import { assertResearchRuntime } from "@/lib/trader/research/assert-research-runtime";
 import type { MarketSnapshot } from "@/lib/trader/market-data/types";
+import { buildProvenanceRef } from "@/lib/trader/market-data/normalization/normalize-observation";
 
-export type ReplayProviderSidecarEntry = {
-  evaluatedAt: string;
-  fearGreed?: {
-    value: number;
-    classification: string;
-  };
-  globalMarket?: {
-    btcDominance: number;
-    marketCapUsd: number;
-  };
-  binanceConfirmLast?: string;
-  bybitConfirmLast?: string;
-};
+export type {
+  ReplayProviderSidecar,
+  ReplayProviderSidecarEntryV1,
+  ReplayProviderSidecarV1,
+  ReplayProviderSidecarV2,
+} from "@/lib/trader/market-data/replay/provider-sidecar-types";
 
-export type ReplayProviderSidecar = {
-  schemaVersion: "waia.trader.m9_provider_sidecar.v1";
-  instrumentId: string;
-  entries: ReplayProviderSidecarEntry[];
-};
-
-function findSidecarEntry(
-  sidecar: ReplayProviderSidecar | undefined,
-  evaluatedAt: string,
-): ReplayProviderSidecarEntry | undefined {
-  if (!sidecar) {
-    return undefined;
-  }
-  return sidecar.entries.find((entry) => entry.evaluatedAt === evaluatedAt);
-}
+/** @deprecated use ReplayProviderSidecarEntryV1 */
+export type ReplayProviderSidecarEntry = ReplayProviderSidecarEntryV1;
 
 function replayProvenance(input: {
   providerId: SourceProvenanceRef["providerId"];
@@ -55,11 +44,23 @@ function replayProvenance(input: {
   symbol: string;
   eventTimeUtc: string;
   evaluatedAt: string;
+  captureAsOfUtc?: string;
 }): SourceProvenanceRef {
   return buildProvenanceRef({
-    ...input,
-    ingestTimeUtc: input.evaluatedAt,
+    providerId: input.providerId,
+    venue: input.venue,
+    feedKind: input.feedKind,
+    symbol: input.symbol,
+    eventTimeUtc: input.eventTimeUtc,
+    ingestTimeUtc: input.captureAsOfUtc ?? input.evaluatedAt,
   });
+}
+
+function findSidecarEntryV1(
+  sidecar: ReplayProviderSidecarV1,
+  evaluatedAt: string,
+): ReplayProviderSidecarEntryV1 | undefined {
+  return sidecar.entries.find((entry) => entry.evaluatedAt === evaluatedAt);
 }
 
 export function buildReplayFusedContext(input: {
@@ -69,10 +70,14 @@ export function buildReplayFusedContext(input: {
   instrumentId: string;
   providerSidecar?: ReplayProviderSidecar;
 }): FusedMarketContext {
+  assertResearchRuntime("buildReplayFusedContext");
+
   const degradationReasons: string[] = [];
   const mtfBarsByInterval = resampleReplayMtfBars({ bars1m: input.bars });
 
-  const mtfObservations: Partial<Record<string, NormalizedObservation[]>> = {};
+  const mtfObservations: Partial<
+    Record<string, import("@/lib/trader/market-data/observation-types").NormalizedObservation[]>
+  > = {};
   for (const interval of MTF_BAR_INTERVALS) {
     const bars = mtfBarsByInterval[interval];
     if (!bars || bars.length === 0) {
@@ -109,48 +114,67 @@ export function buildReplayFusedContext(input: {
     evaluatedAt: input.evaluatedAt,
   });
 
-  const sidecarEntry = findSidecarEntry(input.providerSidecar, input.evaluatedAt);
   const primaryLast = input.quote.last;
+  let orderBookSnapshot: FusedMarketContext["orderBookSnapshot"];
+  let marketTradesSnapshot: FusedMarketContext["marketTradesSnapshot"];
+  let crossExchangeConfirmation: FusedMarketContext["crossExchangeConfirmation"];
+  let fearGreedObservation: FusedMarketContext["fearGreed"];
+  let globalMarketObservation: FusedMarketContext["globalMarket"];
+  let macroEvidence: FusedMarketContext["macroEvidence"] = [];
+  let newsEvidence: FusedMarketContext["newsEvidence"] = [];
+  let blockchainEvidence: FusedMarketContext["blockchainEvidence"] = [];
+  let regulatoryEvidence: FusedMarketContext["regulatoryEvidence"] = [];
+  let protocolEvidence: FusedMarketContext["protocolEvidence"] = [];
+  let binanceObs: ReturnType<typeof buildObservationsFromSidecarV2>["binanceObs"];
+  let bybitObs: ReturnType<typeof buildObservationsFromSidecarV2>["bybitObs"];
 
-  let binanceObs: NormalizedObservation | undefined;
-  let bybitObs: NormalizedObservation | undefined;
-
-  if (sidecarEntry?.binanceConfirmLast) {
-    binanceObs = normalizeCrossExchangeConfirmation({
-      symbol: input.instrumentId,
+  if (input.providerSidecar && isReplayProviderSidecarV2(input.providerSidecar)) {
+    const laneObs = buildObservationsFromSidecarV2({
+      lanes: input.providerSidecar.lanes,
+      instrumentId: input.instrumentId,
       primaryLast,
-      confirmLast: sidecarEntry.binanceConfirmLast,
-      confirmVenue: "binance",
-      provenance: replayProvenance({
-        providerId: "binance_public",
-        venue: "binance",
-        feedKind: "cross_exchange_confirmation",
-        symbol: input.instrumentId,
-        eventTimeUtc: input.evaluatedAt,
-        evaluatedAt: input.evaluatedAt,
-      }),
-      latencyMs: 0,
       evaluatedAt: input.evaluatedAt,
+      captureAsOfUtc: input.providerSidecar.captureAsOfUtc,
+      degradationReasons,
     });
-  }
-
-  if (sidecarEntry?.bybitConfirmLast) {
-    bybitObs = normalizeCrossExchangeConfirmation({
-      symbol: input.instrumentId,
+    orderBookSnapshot = laneObs.orderBookSnapshot;
+    marketTradesSnapshot = laneObs.marketTradesSnapshot;
+    crossExchangeConfirmation = laneObs.crossExchangeConfirmation;
+    fearGreedObservation = laneObs.fearGreed;
+    globalMarketObservation = laneObs.globalMarket;
+    macroEvidence = laneObs.macroEvidence;
+    newsEvidence = laneObs.newsEvidence;
+    blockchainEvidence = laneObs.blockchainEvidence;
+    regulatoryEvidence = laneObs.regulatoryEvidence;
+    protocolEvidence = laneObs.protocolEvidence;
+    binanceObs = laneObs.binanceObs;
+    bybitObs = laneObs.bybitObs;
+  } else if (input.providerSidecar && isReplayProviderSidecarV1(input.providerSidecar)) {
+    const sidecarEntry = findSidecarEntryV1(input.providerSidecar, input.evaluatedAt);
+    const laneObs = buildObservationsFromSidecarV1({
+      sidecar: input.providerSidecar,
+      sidecarEntry,
+      instrumentId: input.instrumentId,
       primaryLast,
-      confirmLast: sidecarEntry.bybitConfirmLast,
-      confirmVenue: "bybit",
-      provenance: replayProvenance({
-        providerId: "bybit_public",
-        venue: "bybit",
-        feedKind: "cross_exchange_confirmation",
-        symbol: input.instrumentId,
-        eventTimeUtc: input.evaluatedAt,
-        evaluatedAt: input.evaluatedAt,
-      }),
-      latencyMs: 0,
       evaluatedAt: input.evaluatedAt,
+      degradationReasons,
     });
+    crossExchangeConfirmation = laneObs.crossExchangeConfirmation;
+    fearGreedObservation = laneObs.fearGreed;
+    globalMarketObservation = laneObs.globalMarket;
+    binanceObs = laneObs.binanceObs;
+    bybitObs = laneObs.bybitObs;
+    macroEvidence = [];
+    newsEvidence = [];
+    blockchainEvidence = [];
+    regulatoryEvidence = [];
+    protocolEvidence = [];
+  } else {
+    macroEvidence = [];
+    newsEvidence = [];
+    blockchainEvidence = [];
+    regulatoryEvidence = [];
+    protocolEvidence = [];
   }
 
   const crossVenueTriangulation = buildCrossVenueTriangulation({
@@ -158,65 +182,22 @@ export function buildReplayFusedContext(input: {
     bybit: bybitObs,
   });
 
-  const crossExchangeConfirmation =
-    binanceObs && bybitObs
-      ? binanceObs.confidence >= bybitObs.confidence
-        ? binanceObs
-        : bybitObs
-      : (binanceObs ?? bybitObs);
-
-  let fearGreedObservation: NormalizedObservation | undefined;
-  if (sidecarEntry?.fearGreed) {
-    fearGreedObservation = normalizeFearGreedObservation({
-      value: sidecarEntry.fearGreed.value,
-      classification: sidecarEntry.fearGreed.classification,
-      provenance: replayProvenance({
-        providerId: "alternative_me",
-        venue: "alternative_me",
-        feedKind: "fear_greed_index",
-        symbol: "GLOBAL",
-        eventTimeUtc: input.evaluatedAt,
-        evaluatedAt: input.evaluatedAt,
-      }),
-      latencyMs: 0,
-      evaluatedAt: input.evaluatedAt,
-      eventTimeUtc: input.evaluatedAt,
-    });
-  }
-
-  let globalMarketObservation: NormalizedObservation | undefined;
-  if (sidecarEntry?.globalMarket) {
-    globalMarketObservation = normalizeGlobalMarketObservation({
-      btcDominance: sidecarEntry.globalMarket.btcDominance,
-      marketCapUsd: sidecarEntry.globalMarket.marketCapUsd,
-      provenance: replayProvenance({
-        providerId: "coingecko_global",
-        venue: "coingecko",
-        feedKind: "global_market_stats",
-        symbol: "GLOBAL",
-        eventTimeUtc: input.evaluatedAt,
-        evaluatedAt: input.evaluatedAt,
-      }),
-      latencyMs: 0,
-      evaluatedAt: input.evaluatedAt,
-      eventTimeUtc: input.evaluatedAt,
-    });
-  }
-
   return fuseContextV1({
     instrumentId: input.instrumentId,
     fusedAtUtc: input.evaluatedAt,
     mtfBars: mtfObservations,
     primaryQuote,
+    orderBookSnapshot,
+    marketTradesSnapshot,
     crossExchangeConfirmation,
     crossVenueTriangulation,
     fearGreed: fearGreedObservation,
     globalMarket: globalMarketObservation,
-    macroEvidence: [],
-    newsEvidence: [],
-    blockchainEvidence: [],
-    regulatoryEvidence: [],
-    protocolEvidence: [],
+    macroEvidence,
+    newsEvidence,
+    blockchainEvidence,
+    regulatoryEvidence,
+    protocolEvidence,
     degradationReasons,
   });
 }
@@ -225,6 +206,7 @@ export function buildReplayFusedContextFromSnapshot(
   snapshot: MarketSnapshot,
   providerSidecar?: ReplayProviderSidecar,
 ): FusedMarketContext {
+  assertResearchRuntime("buildReplayFusedContextFromSnapshot");
   const evaluatedAt =
     snapshot.evaluatedAt ?? snapshot.bars.at(-1)?.barCloseTime ?? snapshot.quote.timestamp;
   return buildReplayFusedContext({
