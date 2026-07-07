@@ -1,4 +1,5 @@
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
+import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
 
 /** Canonical spot symbol for MVP intelligence slice (HTX-style slash form). */
 export const BTC_USDT = "BTC/USDT" as const;
@@ -10,7 +11,7 @@ export const P3_MARKET_BRAIN_SYMBOLS = [BTC_USDT, ETH_USDT] as const;
 
 export type InstrumentId = typeof BTC_USDT | typeof ETH_USDT | string;
 
-export type BarInterval = "1m";
+export type BarInterval = "1m" | "15m" | "1h" | "4h" | "1d";
 
 export type Bar = {
   symbol: InstrumentId;
@@ -89,12 +90,14 @@ export type MsvLiquidityBlock = {
 };
 
 export type MsvCrowdBlock = {
-  fearGreedIndex: null;
+  fearGreedIndex: number | null;
   newsSentiment: string;
 };
 
 export type MsvFutureContextBlock = {
   eventRiskScore: string;
+  sessionPhase?: string;
+  asianRangeCorridorPresent?: boolean;
 };
 
 export type MsvDerivedBlock = {
@@ -146,6 +149,8 @@ export const cdeReasonCodes = {
   regimeRange: "CDE_REGIME_RANGE",
   regimeTrendBear: "CDE_REGIME_TREND_BEAR",
   regimeUnknown: "CDE_REGIME_UNKNOWN",
+  providerDegraded: "CDE_PROVIDER_DEGRADED",
+  fusedContextReduced: "CDE_FUSED_CONTEXT_REDUCED",
 } as const;
 
 export const strategyReasonCodes = {
@@ -198,6 +203,7 @@ export type EvaluationCycleInput = {
   evaluatedAt?: string;
   newId?: () => string;
   telemetrySink?: WaiaTraderTelemetrySink;
+  fusedContext?: FusedMarketContext;
 };
 
 export type EvaluationCycleResult = {
@@ -207,4 +213,5 @@ export type EvaluationCycleResult = {
   signals: StrategySignal[];
   /** Primary signal for backward-compatible paper loop wiring. */
   signal: StrategySignal;
+  fusedContext?: FusedMarketContext;
 };

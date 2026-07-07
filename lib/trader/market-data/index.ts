@@ -42,3 +42,32 @@ export type {
   MarketSnapshot,
   TraderFixtureFile,
 } from "@/lib/trader/market-data/types";
+export {
+  FUSED_CONTEXT_SCHEMA_VERSION,
+  HTX_PERIOD_BY_INTERVAL,
+  INTERVAL_BY_HTX_PERIOD,
+  MARKET_DATA_PROVIDER_IDS,
+  MTF_BAR_INTERVALS,
+  OBSERVATION_SCHEMA_VERSION,
+  type AsianRangeCorridorMetadata,
+  type FusedMarketContext,
+  type MarketDataProviderId,
+  type NormalizedObservation,
+  type NormalizedObservationKind,
+  type ProviderHealth,
+  type SessionPhase,
+  type SourceProvenanceRef,
+} from "@/lib/trader/market-data/observation-types";
+export {
+  getMarketDataProvider,
+  isRegisteredMarketDataProvider,
+  listMarketDataProviders,
+} from "@/lib/trader/market-data/provider-registry";
+export {
+  MarketDataGateway,
+  type GatewayPollResult,
+  type MarketDataGatewayConfig,
+} from "@/lib/trader/market-data/market-data-gateway";
+export { fuseContextV0 } from "@/lib/trader/market-data/fusion/context-fusion-v0";
+export { classifySessionPhaseUtc } from "@/lib/trader/market-data/session/session-phase-classifier";
+export { computeAsianRangeCorridorMetadata } from "@/lib/trader/market-data/session/asian-range-corridor";

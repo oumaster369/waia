@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 
 import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
 import type {
@@ -236,5 +238,25 @@ describe("research backtest isolation (DEE-368)", () => {
 
     deleteSpy.mockRestore();
     backtestSpy.mockRestore();
+  });
+
+  it("P6: research modules do not import external provider clients directly", () => {
+    const researchDir = path.join(process.cwd(), "lib/trader/research");
+    const forbidden = [
+      "connectors/binance",
+      "connectors/bybit",
+      "connectors/alternative-me",
+      "connectors/coingecko",
+      "connectors/htx/client",
+      "market-data-gateway",
+    ];
+
+    const files = readdirSync(researchDir).filter((name) => name.endsWith(".ts"));
+    for (const file of files) {
+      const content = readFileSync(path.join(researchDir, file), "utf8");
+      for (const pattern of forbidden) {
+        expect(content, `${file} must not import ${pattern}`).not.toContain(pattern);
+      }
+    }
   });
 });

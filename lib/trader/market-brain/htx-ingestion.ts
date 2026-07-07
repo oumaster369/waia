@@ -1,10 +1,12 @@
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
+import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
 import type { MarketSnapshot } from "@/lib/trader/market-data/types";
 import { P3_MARKET_BRAIN_SYMBOLS, type InstrumentId } from "@/lib/trader/intelligence/types";
 
 export type HtxIngestionSymbolResult = {
   instrumentId: InstrumentId;
   snapshot: MarketSnapshot | null;
+  fusedContext: FusedMarketContext | null;
   ingestionError: string | null;
 };
 
@@ -36,11 +38,16 @@ export async function runHtxIngestionCycle(
         restHost: options.restHost,
         cycleIdPrefix: `p3-${instrumentId.replace("/", "-").toLowerCase()}`,
       });
-      const snapshot = await poll.fetchSnapshot();
-      results.push({ instrumentId, snapshot, ingestionError: null });
+      const bundle = await poll.fetchEvaluationBundle();
+      results.push({
+        instrumentId,
+        snapshot: bundle.snapshot,
+        fusedContext: bundle.fusedContext,
+        ingestionError: null,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      results.push({ instrumentId, snapshot: null, ingestionError: message });
+      results.push({ instrumentId, snapshot: null, fusedContext: null, ingestionError: message });
     }
   }
 

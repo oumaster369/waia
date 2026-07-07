@@ -7,7 +7,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { getDb } from "@/db/client";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
-import { HTX_ENDPOINTS } from "@/lib/trader/connectors/htx/config";
 import type { HtxKlineResponse, HtxMarketMergedResponse } from "@/lib/trader/connectors/htx/types";
 import {
   createOrderExecutionServiceFromDeps,
@@ -29,6 +28,7 @@ import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store
 import type { TraderAuditInput } from "@/lib/trader/types";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
+import { htxPollSourceOptions } from "@/tests/helpers/htx-gateway-mock-fetch";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
@@ -51,26 +51,6 @@ type HtxKlineFixture = {
 function loadHtxFixture(): HtxKlineFixture {
   const filePath = path.join(process.cwd(), "tests/fixtures/trader/htx-kline-btcusdt-1m.json");
   return JSON.parse(readFileSync(filePath, "utf8")) as HtxKlineFixture;
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function createMockFetch(fixture: HtxKlineFixture) {
-  return (async (input: RequestInfo | URL) => {
-    const url = new URL(typeof input === "string" ? input : input.toString());
-    if (url.pathname.endsWith(HTX_ENDPOINTS.marketHistoryKline)) {
-      return jsonResponse(fixture.kline);
-    }
-    if (url.pathname.endsWith(HTX_ENDPOINTS.marketDetailMerged)) {
-      return jsonResponse(fixture.merged);
-    }
-    throw new Error(`Unexpected fetch: ${url.toString()}`);
-  }) as typeof fetch;
 }
 
 function buildPaperCycleDeps(
@@ -145,10 +125,9 @@ describe("trader paper bar-close loop integration (AT-E9 S5)", () => {
     const submitSpy = vi.spyOn(deps.execution, "submitOrder");
     const reconcileSpy = vi.spyOn(deps.reconciliation, "reconcile");
     const fixture = loadHtxFixture();
-    const poll = new HtxBarPollSource({
-      fetchImpl: createMockFetch(fixture),
-      cycleIdPrefix: "test-paper-loop",
-    });
+    const poll = new HtxBarPollSource(
+      htxPollSourceOptions(fixture, { cycleIdPrefix: "test-paper-loop" }),
+    );
 
     const result = await runPaperBarCloseLoop({
       deps,
