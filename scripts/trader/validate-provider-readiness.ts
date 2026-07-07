@@ -261,20 +261,22 @@ export function auditStatusDocs(root: string): ReadinessFinding {
     status.includes("Data Provider Readiness") &&
     status.includes("Full Market Data Source Integration") &&
     status.includes("DEE-393") &&
-    status.includes("complete pending merge") &&
+    status.includes("DEE-394") &&
+    status.includes("Merged") &&
     status.includes("Repeat M9") &&
-    status.includes("BLOCKED") &&
+    (status.includes("BLOCKED") || status.includes("NOT STARTED")) &&
     gateA.includes("Data Provider Readiness") &&
     gateA.includes("Full Market Data Source Integration") &&
     gateA.includes("DEE-393") &&
+    gateA.includes("DEE-394") &&
     gateA.includes("Repeat M9") &&
-    gateA.includes("BLOCKED");
+    (gateA.includes("BLOCKED") || gateA.includes("NOT STARTED"));
   return {
     id: "status-docs",
     pass,
     detail: pass
-      ? "Engineering status and Gate A docs reflect DEE-393 integration phase (Repeat M9 still blocked)."
-      : "Update AI-TRADER-ENGINEERING-STATUS.md and GATE-A-VALIDATION.md for DEE-393.",
+      ? "Engineering status and Gate A docs reflect DEE-393/DEE-394 merged state (Repeat M9 still blocked)."
+      : "Update AI-TRADER-ENGINEERING-STATUS.md and GATE-A-VALIDATION.md for DEE-393/DEE-394 post-merge state.",
   };
 }
 
