@@ -79,7 +79,19 @@ Direct provider client imports from strategy, research, or CDE are **forbidden**
 | `PAPER_LOOP_*` | Paper cron config | When paper enabled | Paper loop ops | `.env.local` / `.dev.vars` | Cloudflare **Variables** |
 | `AI_TRADER_MASTER_KEY_DEV` | Local credential crypto | **Required locally** for HTX UI creds | Before HTX connect (local) | `.env.local` | **Never in production** |
 | `AI_TRADER_MASTER_KEY` | Production credential crypto | **Required prod** | Before HTX connect (prod) | Never | Secrets Store **binding** |
+| `AI_TRADER_SEC_EDGAR_USER_AGENT` | SEC EDGAR User-Agent | Optional | Fail-soft without | `.env.local` | Secret |
+| `AI_TRADER_CME_FEDWATCH_ENABLED` | CME FedWatch adapter toggle | Optional | Fail-soft when off | `.env.local` | Plain var |
 | `WAIA_HTX_LIVE_SMOKE` | Live HTX integration smoke | Test-only | Never required for Repeat M9 | `.env.local` opt-in | Do not set in prod |
+
+### Full Market Data Integration secrets (DEE-393 — optional MI providers)
+
+| Variable | Purpose | Required? | Repeat M9 | Local | Cloudflare |
+|----------|---------|-----------|-----------|-------|------------|
+| `FRED_API_KEY` | FRED macro series | No | Not required | `.env.local` | Secret |
+| `AI_TRADER_INFURA_PROJECT_ID` | Infura project id | No | Not required | `.env.local` | Secret |
+| `AI_TRADER_INFURA_API_SECRET` | Infura API secret | No | Not required | `.env.local` | Secret |
+| `AI_TRADER_TRONGRID_API_KEY` | TronGrid MI intelligence | No | Not required | `.env.local` | Secret |
+| `AI_TRADER_GITHUB_TOKEN` | GitHub protocol releases | No | Not required | `.env.local` | Secret |
 
 ### Credential and platform variables (not MI gateway feeds)
 
@@ -90,7 +102,7 @@ Direct provider client imports from strategy, research, or CDE are **forbidden**
 | `TRONGRID_API_KEY` | Payment watcher RPC auth | Cloudflare **Secret** (settlement) |
 | `TRON_RPC_*`, `WATCHER_*` | Watcher tuning | Variables / optional secrets |
 
-**Not invented in repository:** `FRED_API_KEY`, `INFURA_*` — deferred until Full Market Data Source Integration grooming.
+**Forbidden bare Infura names:** `INFURA_API_KEY`, `INFURA_PROJECT_ID` — use `AI_TRADER_INFURA_*` only.
 
 ---
 
@@ -156,60 +168,85 @@ Same as Binance — public v5 market tickers, no credentials, nowhere to store.
 | **Auth** | None — `https://api.alternative.me/fng/` |
 | **Local / Cloudflare / UI / DB** | **Nowhere** |
 
-### Tier 3 — FRED (Deferred)
+### Tier 3 — FRED (Implemented — Repeat M9 deferred)
 
 | Field | Detail |
 |-------|--------|
 | **Purpose** | Macro rates, monetary aggregates |
-| **Why** | Future macro context engine (post-Gate-A) |
-| **Repeat M9** | **Not required** |
+| **Why** | Macro evidence in fused context v2 |
+| **Repeat M9** | **Not required** (fail-soft) |
 | **Free tier** | FRED API free with registration |
 | **Registration** | https://fredaccount.stlouisfed.org |
-| **Env var** | **Not invented** — future phase will define name |
-| **Nowhere yet** | No adapter, no env, no secret |
+| **Env var** | `FRED_API_KEY` |
+| **Local** | `.env.local` |
+| **Cloudflare** | `wrangler secret put FRED_API_KEY` |
+| **Adapter** | `fred-adapter.ts` |
 
-### Tier 3 — Federal Reserve / CME FedWatch (Deferred)
-
-Public reference sources for macro event proximity — no credentials, no storage, PR3+/post-Gate-A.
-
-### Tier 4 — GDELT, CoinDesk RSS, Cointelegraph RSS, Decrypt RSS (Deferred)
-
-News Intelligence Engine inputs (PR4) — public feeds, no auth today, **nowhere yet**.
-
-### Tier 5 — Exchange announcements (Binance, HTX, Bybit) (Deferred)
-
-Event proximity for listings/maintenance — adapter strategy TBD, **nowhere yet**.
-
-### Tier 6 — GitHub Public API (Deferred)
-
-Protocol release intelligence — optional token if rate-limited; **nowhere yet**.
-
-### Tier 7 — Infura / MetaMask RPC (Deferred)
+### Tier 3 — Federal Reserve (Implemented — Repeat M9 deferred)
 
 | Field | Detail |
 |-------|--------|
-| **Purpose** | EVM + Solana RPC for future Blockchain Event Engine |
+| **Purpose** | Macro calendar event proximity |
 | **Repeat M9** | Not required |
-| **Registration** | https://app.infura.io |
-| **Env var** | **Not invented** (`INFURA_*` deferred) |
-| **Nowhere yet** | Separate from payment watcher |
+| **Auth** | No auth — public calendar |
+| **Adapter** | `federal-reserve-adapter.ts` |
 
-### Tier 7 — TronGrid AI-TRADER intelligence (Deferred)
+### Tier 3 — CME FedWatch (Implemented — Repeat M9 deferred)
 
 | Field | Detail |
 |-------|--------|
-| **Purpose** | TRON on-chain event intelligence (future) |
+| **Purpose** | Rate probability backdrop |
+| **Repeat M9** | Not required |
+| **Env var** | `AI_TRADER_CME_FEDWATCH_ENABLED` (opt-in) |
+| **Adapter** | `cme-fedwatch-adapter.ts` |
+
+### Tier 4 — GDELT, CoinDesk RSS, Cointelegraph RSS, Decrypt RSS (Implemented — Repeat M9 deferred)
+
+News evidence adapters — public feeds, no auth. Adapters in `lib/trader/market-data/adapters/*-rss-adapter.ts` and `gdelt-adapter.ts`.
+
+### Tier 5 — Exchange announcements (Binance, HTX, Bybit) (Implemented — Repeat M9 deferred)
+
+Event proximity for listings/maintenance — `*-announcements-adapter.ts` modules.
+
+### Tier 6 — GitHub Public API (Implemented — Repeat M9 deferred)
+
+| Field | Detail |
+|-------|--------|
+| **Purpose** | Protocol release intelligence |
+| **Env var** | Optional `AI_TRADER_GITHUB_TOKEN` |
+| **Adapter** | `github-releases-adapter.ts` |
+
+### Tier 7 — Infura / MetaMask RPC (Implemented — Repeat M9 deferred)
+
+| Field | Detail |
+|-------|--------|
+| **Purpose** | EVM network stats for blockchain evidence |
+| **Registration** | https://app.infura.io |
+| **Env vars** | `AI_TRADER_INFURA_PROJECT_ID`, `AI_TRADER_INFURA_API_SECRET` |
+| **Adapter** | `infura-rpc-adapter.ts` |
+| **Separate from** | Payment watcher — not bare `INFURA_*` names |
+
+### Tier 7 — TronGrid AI-TRADER intelligence (Implemented — Repeat M9 deferred)
+
+| Field | Detail |
+|-------|--------|
+| **Purpose** | TRON on-chain network stats |
 | **Registration** | https://www.trongrid.io/dashboard/ |
+| **Env var** | `AI_TRADER_TRONGRID_API_KEY` |
 | **Critical** | **Separate key** from `TRONGRID_API_KEY` payment watcher |
-| **Nowhere yet** | No env var in codebase |
+| **Adapter** | `trongrid-intelligence-adapter.ts` |
 
-### Tier 7 — mempool.space (Deferred)
+### Tier 7 — mempool.space (Implemented — Repeat M9 deferred)
 
-Bitcoin mempool REST — no auth, **nowhere yet**.
+Bitcoin mempool REST — no auth. Adapter: `mempool-space-adapter.ts`.
 
-### Tier 8 — SEC EDGAR (Deferred)
+### Tier 8 — SEC EDGAR (Implemented — Repeat M9 deferred)
 
-Regulatory filings — public access with policy constraints, **nowhere yet**.
+| Field | Detail |
+|-------|--------|
+| **Purpose** | Regulatory filing evidence |
+| **Env var** | `AI_TRADER_SEC_EDGAR_USER_AGENT` (policy-bound) |
+| **Adapter** | `sec-edgar-adapter.ts` |
 
 ### Settlement — TronGrid Payment Watcher (not MI gateway)
 
@@ -294,6 +331,7 @@ See [`DEE-220-MASTER-KEY-RUNBOOK.md`](../ops/DEE-220-MASTER-KEY-RUNBOOK.md).
 ```bash
 set -a && source .env.local && set +a
 pnpm validate:provider-readiness
+pnpm validate:market-data-integration
 pnpm lint && pnpm typecheck && pnpm test --run
 ```
 
@@ -311,7 +349,9 @@ Fix any FAIL before continuing.
 1. Provision Secrets Store + `AI_TRADER_MASTER_KEY` per DEE-220.
 2. Set plain vars: `MARKET_BRAIN_ENABLED`, `MARKET_BRAIN_ORGANIZATION_ID`, optional `HTX_REST_HOST`.
 3. `wrangler secret put COINGECKO_API_KEY` (optional).
-4. `wrangler secret put TRONGRID_API_KEY` (payment watcher — if settlement enabled).
+4. Optional Tier 3–8 secrets: `FRED_API_KEY`, `AI_TRADER_INFURA_*`, `AI_TRADER_TRONGRID_API_KEY`, `AI_TRADER_GITHUB_TOKEN`, `AI_TRADER_SEC_EDGAR_USER_AGENT`.
+5. Set `AI_TRADER_CME_FEDWATCH_ENABLED=1` if enabling CME FedWatch adapter.
+6. `wrangler secret put TRONGRID_API_KEY` (payment watcher — if settlement enabled).
 5. Deploy Worker from `dev` lineage.
 
 See [`docs/cloudflare-env-vars.md`](../cloudflare-env-vars.md).
@@ -333,6 +373,7 @@ See [`docs/cloudflare-env-vars.md`](../cloudflare-env-vars.md).
 | Provider adapters | `pnpm test --run tests/unit/trader-provider-adapters.test.ts` |
 | Gateway integration | `pnpm test --run tests/integration/trader-htx-bar-poll-cycle.test.ts` |
 | Readiness audit | `pnpm validate:provider-readiness` |
+| Integration audit | `pnpm validate:market-data-integration` |
 
 Optional live smoke: `WAIA_HTX_LIVE_SMOKE=1 pnpm test --run tests/integration/trader-htx-candles-live-smoke.test.ts`
 
@@ -343,7 +384,16 @@ Optional live smoke: `WAIA_HTX_LIVE_SMOKE=1 pnpm test --run tests/integration/tr
 3. Confirm fused context shows provider observations or documented degradation reasons.
 4. Sign [`AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md`](AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md).
 
-**Stop here for Data Provider Readiness.** Do not start Repeat M9 until Full Market Data Source Integration passes.
+**Stop here for Data Provider Readiness.** Proceed to Full Market Data Source Integration (DEE-393) before Repeat M9.
+
+### Phase 9 — Full Market Data Integration validation (DEE-393)
+
+1. Add optional Tier 3–8 keys from `.env.example` comments.
+2. Run `pnpm validate:market-data-integration` — all audits PASS.
+3. Run gateway/integration tests listed in [`DEE-393-FULL-MARKET-DATA-INTEGRATION-RUNBOOK.md`](../ops/DEE-393-FULL-MARKET-DATA-INTEGRATION-RUNBOOK.md).
+4. Sign validation checklist DEE-393 section.
+
+**Stop here for Full Market Data Source Integration.** Do not start Repeat M9 until operator sign-off.
 
 ---
 
@@ -363,11 +413,24 @@ Required **before Full Market Data Source Integration** grooming:
 
 Required **before Repeat M9 v0.1.7** (in addition to above):
 
-- [ ] **Full Market Data Source Integration** phase complete
-- [ ] End-to-end provider validation through gateway path
-- [ ] `order_book_snapshot` gap resolved or explicitly accepted per integration artifacts
+- [ ] **Full Market Data Source Integration** phase complete (DEE-393 merged)
+- [ ] `pnpm validate:market-data-integration` passes on operator workstation
+- [ ] End-to-end provider validation through gateway path (20/20 registry)
+- [ ] `order_book_snapshot` implemented via HTX depth adapter
+- [ ] Fused context v2 verified (`waia.trader.fused_context.v2`)
 - [ ] Fresh operator authorization for M9 v0.1.7 campaign
 - [ ] Gate A accounting prerequisites (PR1+PR2) unchanged and verified
+
+---
+
+## Phase exit — Full Market Data Source Integration (DEE-393)
+
+- [ ] All Tier 3–8 adapters registered and fail-soft
+- [ ] Seven integration env vars documented and cron-bridged
+- [ ] `pnpm validate:market-data-integration` exits 0
+- [ ] Architect sign-off on validation checklist DEE-393 section
+- [ ] **Full Market Data Source Integration — PASS**
+- [ ] **Repeat M9 v0.1.7 may be operator-authorized**
 
 ---
 
@@ -375,9 +438,7 @@ Required **before Repeat M9 v0.1.7** (in addition to above):
 
 | Item | Deferred to |
 |------|-------------|
-| Live provider adapter implementation for Tier 3–8 | Full Market Data Source Integration / PR3–PR4 |
-| `order_book_snapshot` gateway fetch | Full Market Data Source Integration |
-| `FRED_API_KEY`, `INFURA_*` env names | Full Market Data Source Integration grooming |
-| Repeat M9 v0.1.7 campaign | After both provider phases pass |
+| Tier 3–8 deep CDE feature consumption | PR3–PR4 (evidence delivered today) |
+| Repeat M9 v0.1.7 campaign | After DEE-393 merge + operator validation |
 | PR3 Market Context depth | After Gate A |
 | PR4 Market Memory / news engines | After Gate A |

@@ -1,14 +1,29 @@
 import type { BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 
 export const OBSERVATION_SCHEMA_VERSION = "waia.trader.observation.v1" as const;
-export const FUSED_CONTEXT_SCHEMA_VERSION = "waia.trader.fused_context.v1" as const;
+export const FUSED_CONTEXT_SCHEMA_VERSION = "waia.trader.fused_context.v2" as const;
 
 export const MARKET_DATA_PROVIDER_IDS = [
   "htx_spot",
+  "coingecko_global",
   "binance_public",
   "bybit_public",
   "alternative_me",
-  "coingecko_global",
+  "fred",
+  "federal_reserve",
+  "cme_fedwatch",
+  "gdelt",
+  "coindesk_rss",
+  "cointelegraph_rss",
+  "decrypt_rss",
+  "binance_announcements",
+  "htx_announcements",
+  "bybit_announcements",
+  "github_releases",
+  "infura_rpc",
+  "trongrid_intelligence",
+  "mempool_space",
+  "sec_edgar",
 ] as const;
 
 export type MarketDataProviderId = (typeof MARKET_DATA_PROVIDER_IDS)[number];
@@ -21,9 +36,20 @@ export type NormalizedObservationKind =
   | "ohlcv_bar"
   | "quote_l1"
   | "order_book_snapshot"
+  | "market_trades_snapshot"
   | "fear_greed_index"
   | "global_market_stats"
-  | "cross_exchange_confirmation";
+  | "cross_exchange_confirmation"
+  | "macro_series"
+  | "macro_calendar_event"
+  | "macro_probability"
+  | "news_headline"
+  | "news_event_cluster"
+  | "exchange_announcement"
+  | "protocol_release"
+  | "blockchain_network_stats"
+  | "regulatory_filing"
+  | "mempool_stats";
 
 export type SourceProvenanceRef = {
   providerId: MarketDataProviderId;
@@ -66,10 +92,17 @@ export type FusedMarketContext = {
   sessionPhase: SessionPhase;
   mtfBars: Partial<Record<BarInterval, NormalizedObservation[]>>;
   primaryQuote?: NormalizedObservation;
+  orderBookSnapshot?: NormalizedObservation;
+  marketTradesSnapshot?: NormalizedObservation;
   crossExchangeConfirmation?: NormalizedObservation;
   crossVenueTriangulation?: CrossVenueTriangulation;
   fearGreed?: NormalizedObservation;
   globalMarket?: NormalizedObservation;
+  macroEvidence?: NormalizedObservation[];
+  newsEvidence?: NormalizedObservation[];
+  blockchainEvidence?: NormalizedObservation[];
+  regulatoryEvidence?: NormalizedObservation[];
+  protocolEvidence?: NormalizedObservation[];
   asianRangeCorridor?: AsianRangeCorridorMetadata;
   aggregateHealth: ProviderHealth;
   aggregateConfidence: number;

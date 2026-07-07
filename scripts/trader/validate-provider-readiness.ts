@@ -55,7 +55,7 @@ const REQUIRED_DEV_VARS = [
   "PAPER_LOOP_ENABLED",
 ] as const;
 
-const FORBIDDEN_INVENTED_ENV = ["FRED_API_KEY", "INFURA_API_KEY", "INFURA_PROJECT_ID"] as const;
+const FORBIDDEN_INVENTED_ENV = ["INFURA_API_KEY", "INFURA_PROJECT_ID"] as const;
 
 const BINDING_SPEC_SECTIONS = [
   "Canonical 20-source tier table",
@@ -63,14 +63,15 @@ const BINDING_SPEC_SECTIONS = [
   "Environment and secrets",
   "Provider health observability",
   "Gateway bypass inventory",
-  "Known implementation gaps",
-  "order_book_snapshot",
+  "20/20 registry readiness matrix",
+  "waia.trader.fused_context.v2",
 ] as const;
 
 const REQUIRED_DOCS = [
   "docs/ai-trader/AI-TRADER-DATA-PROVIDERS.md",
   "docs/ai-trader/AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md",
   "docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md",
+  "docs/ops/DEE-393-FULL-MARKET-DATA-INTEGRATION-RUNBOOK.md",
 ] as const;
 
 const RESEARCH_FORBIDDEN_IMPORTS = [
@@ -135,18 +136,45 @@ export function auditDevVarsExample(root: string): ReadinessFinding {
   };
 }
 
+function containsForbiddenBareEnv(content: string, bareName: string): boolean {
+  if (bareName === "INFURA_PROJECT_ID") {
+    return content.replaceAll("AI_TRADER_INFURA_PROJECT_ID", "").includes("INFURA_PROJECT_ID");
+  }
+  if (bareName === "INFURA_API_KEY") {
+    return content.replaceAll("AI_TRADER_INFURA_API_SECRET", "").includes("INFURA_API_KEY");
+  }
+  return content.includes(bareName);
+}
+
 export function auditNoInventedEnvVars(root: string): ReadinessFinding {
   const envExample = readRepoFile(root, ".env.example");
   const devVars = readRepoFile(root, ".dev.vars.example");
   const combined = `${envExample}\n${devVars}`;
-  const found = FORBIDDEN_INVENTED_ENV.filter((name) => combined.includes(name));
+  const found = FORBIDDEN_INVENTED_ENV.filter((name) => containsForbiddenBareEnv(combined, name));
   return {
     id: "no-invented-env",
     pass: found.length === 0,
     detail:
       found.length === 0
-        ? "No deferred FRED/Infura env vars invented in templates."
+        ? "No bare INFURA_* env vars invented in templates."
         : `Remove invented env vars from templates: ${found.join(", ")}`,
+  };
+}
+
+export function auditFredApiKeyDocumented(root: string): ReadinessFinding {
+  const envExample = readRepoFile(root, ".env.example");
+  const devVars = readRepoFile(root, ".dev.vars.example");
+  const cloudflareDoc = readRepoFile(root, "docs/cloudflare-env-vars.md");
+  const pass =
+    envExample.includes("FRED_API_KEY") &&
+    devVars.includes("FRED_API_KEY") &&
+    cloudflareDoc.includes("FRED_API_KEY");
+  return {
+    id: "fred-api-key-documented",
+    pass,
+    detail: pass
+      ? "FRED_API_KEY documented in .env.example, .dev.vars.example, and cloudflare-env-vars.md."
+      : "FRED_API_KEY must be documented in env templates after Full Market Data Source Integration.",
   };
 }
 
@@ -204,6 +232,13 @@ export function auditCloudflareEnvInventory(root: string): ReadinessFinding {
     "COINGECKO_API_KEY",
     "MARKET_BRAIN_ENABLED",
     "TRONGRID_API_KEY",
+    "FRED_API_KEY",
+    "AI_TRADER_INFURA_PROJECT_ID",
+    "AI_TRADER_INFURA_API_SECRET",
+    "AI_TRADER_TRONGRID_API_KEY",
+    "AI_TRADER_GITHUB_TOKEN",
+    "AI_TRADER_SEC_EDGAR_USER_AGENT",
+    "AI_TRADER_CME_FEDWATCH_ENABLED",
   ];
   const missing = required.filter((name) => !doc.includes(name));
   return {
@@ -225,17 +260,21 @@ export function auditStatusDocs(root: string): ReadinessFinding {
   const pass =
     status.includes("Data Provider Readiness") &&
     status.includes("Full Market Data Source Integration") &&
+    status.includes("DEE-393") &&
+    status.includes("complete pending merge") &&
     status.includes("Repeat M9") &&
+    status.includes("BLOCKED") &&
     gateA.includes("Data Provider Readiness") &&
     gateA.includes("Full Market Data Source Integration") &&
+    gateA.includes("DEE-393") &&
     gateA.includes("Repeat M9") &&
     gateA.includes("BLOCKED");
   return {
     id: "status-docs",
     pass,
     detail: pass
-      ? "Engineering status and Gate A docs reflect provider-readiness sequence."
-      : "Update AI-TRADER-ENGINEERING-STATUS.md and GATE-A-VALIDATION.md.",
+      ? "Engineering status and Gate A docs reflect DEE-393 integration phase (Repeat M9 still blocked)."
+      : "Update AI-TRADER-ENGINEERING-STATUS.md and GATE-A-VALIDATION.md for DEE-393.",
   };
 }
 
@@ -273,6 +312,7 @@ export function runProviderReadinessAudit(root = process.cwd()): ReadinessReport
     auditEnvExample(root),
     auditDevVarsExample(root),
     auditNoInventedEnvVars(root),
+    auditFredApiKeyDocumented(root),
     auditBindingSpecSections(root),
     auditRequiredDocs(root),
     auditResearchBypassGuard(root),

@@ -6,6 +6,7 @@ import {
   auditCronEnvBridge,
   auditDevVarsExample,
   auditEnvExample,
+  auditFredApiKeyDocumented,
   auditNoInventedEnvVars,
   auditPackageScript,
   auditProviderRegistry,
@@ -43,8 +44,12 @@ describe("DEE-392 provider readiness audit", () => {
     expect(auditDevVarsExample(REPO_ROOT).pass).toBe(true);
   });
 
-  it("auditNoInventedEnvVars rejects FRED/Infura template names", () => {
+  it("auditNoInventedEnvVars rejects bare INFURA template names", () => {
     expect(auditNoInventedEnvVars(REPO_ROOT).pass).toBe(true);
+  });
+
+  it("auditFredApiKeyDocumented requires FRED_API_KEY in env templates", () => {
+    expect(auditFredApiKeyDocumented(REPO_ROOT).pass).toBe(true);
   });
 
   it("auditBindingSpecSections covers readiness documentation", () => {

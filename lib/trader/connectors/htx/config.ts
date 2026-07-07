@@ -22,6 +22,8 @@ export const HTX_ENDPOINTS = {
   marketHistoryKline: "/market/history/kline",
   /** CCXT spot historical OHLCV path; supports `from`/`to` (seconds) for forward paging. */
   marketHistoryCandles: "/market/history/candles",
+  marketDepth: "/market/depth",
+  marketHistoryTrade: "/market/history/trade",
 } as const;
 
 /** HTX `/market/history/candles` max `size` per request (values above 1000 return empty). */

@@ -71,6 +71,6 @@ describe("PR2.6 replay fused context builder", () => {
     const snapshot = buildMarketSnapshot(fixture.bars, fixture.latestQuote, 0, "replay-test");
     const fused = buildReplayFusedContextFromSnapshot(snapshot);
     expect(fused.instrumentId).toBe("BTC/USDT");
-    expect(fused.schemaVersion).toBe("waia.trader.fused_context.v1");
+    expect(fused.schemaVersion).toBe("waia.trader.fused_context.v2");
   });
 });

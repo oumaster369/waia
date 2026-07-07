@@ -16,6 +16,13 @@ export function bridgeTraderCronEnvToProcess(env: Record<string, unknown>): void
   bridgeEnvKey(env, "MARKET_BRAIN_ORGANIZATION_ID");
   bridgeEnvKey(env, "HTX_REST_HOST");
   bridgeEnvKey(env, "COINGECKO_API_KEY");
+  bridgeEnvKey(env, "FRED_API_KEY");
+  bridgeEnvKey(env, "AI_TRADER_INFURA_PROJECT_ID");
+  bridgeEnvKey(env, "AI_TRADER_INFURA_API_SECRET");
+  bridgeEnvKey(env, "AI_TRADER_TRONGRID_API_KEY");
+  bridgeEnvKey(env, "AI_TRADER_GITHUB_TOKEN");
+  bridgeEnvKey(env, "AI_TRADER_SEC_EDGAR_USER_AGENT");
+  bridgeEnvKey(env, "AI_TRADER_CME_FEDWATCH_ENABLED");
   bridgeEnvKey(env, "PAPER_LOOP_ENABLED");
   bridgeEnvKey(env, "PAPER_LOOP_ORGANIZATION_ID");
   bridgeEnvKey(env, "PAPER_LOOP_ACCOUNT_KEY");

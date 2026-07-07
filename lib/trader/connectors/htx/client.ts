@@ -15,7 +15,10 @@ import type {
   HtxKlineResponse,
   HtxKlineRow,
   HtxLegacyResponse,
+  HtxMarketDepthResponse,
+  HtxMarketHistoryTradeResponse,
   HtxMarketMergedResponse,
+  HtxMarketTradeRow,
   HtxMatchResultRow,
   HtxOrderRow,
   HtxV2Response,
@@ -199,6 +202,55 @@ export class HtxRestClient {
       throw new HtxApiError("http-error", `HTTP ${response.status} for market detail`);
     }
     return (await response.json()) as HtxMarketMergedResponse;
+  }
+
+  async getMarketDepth(input: {
+    symbol: string;
+    type?: "step0" | "step1" | "step2" | "step3" | "step4" | "step5";
+  }): Promise<HtxMarketDepthResponse> {
+    const params = new URLSearchParams({
+      symbol: input.symbol,
+      type: input.type ?? "step0",
+    });
+    const url = `${this.restHost}${HTX_ENDPOINTS.marketDepth}?${params.toString()}`;
+    const response = await this.transport.fetch(url, { method: "GET" });
+    if (!response.ok) {
+      throw new HtxApiError("http-error", `HTTP ${response.status} for market depth`);
+    }
+    const body = (await response.json()) as HtxMarketDepthResponse;
+    if (body.status === "error") {
+      throw new HtxApiError(
+        body["err-code"] ?? "unknown",
+        body["err-msg"] ?? "HTX market depth error",
+      );
+    }
+    return body;
+  }
+
+  async getMarketHistoryTrade(input: {
+    symbol: string;
+    size?: number;
+  }): Promise<HtxMarketTradeRow[]> {
+    const params = new URLSearchParams({
+      symbol: input.symbol,
+      size: String(input.size ?? 50),
+    });
+    const url = `${this.restHost}${HTX_ENDPOINTS.marketHistoryTrade}?${params.toString()}`;
+    const response = await this.transport.fetch(url, { method: "GET" });
+    if (!response.ok) {
+      throw new HtxApiError("http-error", `HTTP ${response.status} for market history trade`);
+    }
+    const body = (await response.json()) as HtxMarketHistoryTradeResponse;
+    if (body.status === "error") {
+      throw new HtxApiError(
+        body["err-code"] ?? "unknown",
+        body["err-msg"] ?? "HTX market history trade error",
+      );
+    }
+    if (body.status !== "ok") {
+      throw new HtxApiError("invalid-response", "Unexpected HTX market history trade response");
+    }
+    return body.data ?? [];
   }
 
   async getMarketHistoryKline(input: {

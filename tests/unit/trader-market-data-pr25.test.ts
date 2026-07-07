@@ -159,7 +159,7 @@ describe("PR2.5 context fusion v0", () => {
       mtfBars,
     });
 
-    expect(fused.schemaVersion).toBe("waia.trader.fused_context.v1");
+    expect(fused.schemaVersion).toBe("waia.trader.fused_context.v2");
     expect(Object.keys(fused.mtfBars)).toHaveLength(MTF_BAR_INTERVALS.length);
     expect(fused.sessionPhase).toBe("ASIA");
     expect(fused.asianRangeCorridor?.isResearchSeedOnly).toBe(true);

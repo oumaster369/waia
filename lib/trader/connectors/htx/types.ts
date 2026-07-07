@@ -98,3 +98,38 @@ export type HtxKlineResponse = {
   ts?: number;
   data?: HtxKlineRow[];
 };
+
+export type HtxMarketDepthLevel = [number, number];
+
+export type HtxMarketDepthTick = {
+  bids: HtxMarketDepthLevel[];
+  asks: HtxMarketDepthLevel[];
+  ts?: number;
+  version?: number;
+};
+
+export type HtxMarketDepthResponse = {
+  status: "ok" | "error";
+  "err-code"?: string;
+  "err-msg"?: string;
+  ch?: string;
+  ts?: number;
+  tick?: HtxMarketDepthTick;
+};
+
+export type HtxMarketTradeRow = {
+  id: number;
+  price: number;
+  amount: number;
+  direction: "buy" | "sell";
+  ts: number;
+};
+
+export type HtxMarketHistoryTradeResponse = {
+  status: "ok" | "error";
+  "err-code"?: string;
+  "err-msg"?: string;
+  ch?: string;
+  ts?: number;
+  data?: HtxMarketTradeRow[];
+};

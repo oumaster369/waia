@@ -34,6 +34,107 @@ import { compareDecimal } from "@/lib/trader/risk/numeric";
 
 const PARTIAL_CONFIDENCE_THRESHOLD = 0.55;
 const SPREAD_THIN_BPS = 50;
+const PROVIDER_COVERAGE_TRUST_THRESHOLD = 0.3;
+
+function hasAvailableEvidence(observations?: readonly NormalizedObservation[]): boolean {
+  return (observations ?? []).some((observation) => observation.health !== "UNAVAILABLE");
+}
+
+function countAvailableEvidence(observations?: readonly NormalizedObservation[]): number {
+  return (observations ?? []).filter((observation) => observation.health !== "UNAVAILABLE").length;
+}
+
+function isAvailableObservation(observation?: NormalizedObservation): boolean {
+  return Boolean(observation && observation.health !== "UNAVAILABLE");
+}
+
+function isFullIntegrationCycle(fusedContext: FusedMarketContext): boolean {
+  if (
+    fusedContext.crossExchangeConfirmation !== undefined ||
+    fusedContext.fearGreed !== undefined ||
+    fusedContext.globalMarket !== undefined
+  ) {
+    return true;
+  }
+
+  const evidenceArrays = [
+    fusedContext.macroEvidence,
+    fusedContext.newsEvidence,
+    fusedContext.blockchainEvidence,
+    fusedContext.regulatoryEvidence,
+    fusedContext.protocolEvidence,
+  ];
+  if (evidenceArrays.some((observations) => (observations?.length ?? 0) > 0)) {
+    return true;
+  }
+
+  return fusedContext.degradationReasons.some((reason) => {
+    const providerPrefix = reason.split(":")[0] ?? "";
+    return (
+      providerPrefix.endsWith("_unavailable") &&
+      !providerPrefix.startsWith("order_book") &&
+      !providerPrefix.startsWith("market_trades")
+    );
+  });
+}
+
+export function computeProviderCoverageScore(fusedContext: FusedMarketContext): number {
+  if (!isFullIntegrationCycle(fusedContext)) {
+    const coreChecks = [
+      Object.values(fusedContext.mtfBars).some((bars) =>
+        (bars ?? []).some((observation) => observation.health !== "UNAVAILABLE"),
+      ),
+      isAvailableObservation(fusedContext.primaryQuote),
+    ];
+    const available = coreChecks.filter(Boolean).length;
+    return available / coreChecks.length;
+  }
+
+  const categories = [
+    hasAvailableEvidence(fusedContext.macroEvidence),
+    hasAvailableEvidence(fusedContext.newsEvidence),
+    hasAvailableEvidence(fusedContext.blockchainEvidence),
+    hasAvailableEvidence(fusedContext.regulatoryEvidence),
+    hasAvailableEvidence(fusedContext.protocolEvidence),
+    isAvailableObservation(fusedContext.orderBookSnapshot),
+    isAvailableObservation(fusedContext.marketTradesSnapshot),
+    isAvailableObservation(fusedContext.crossExchangeConfirmation),
+    isAvailableObservation(fusedContext.fearGreed),
+    isAvailableObservation(fusedContext.globalMarket),
+  ];
+  const available = categories.filter(Boolean).length;
+  return available / categories.length;
+}
+
+function buildMissingEvidenceGapDescriptions(fusedContext: FusedMarketContext): string[] {
+  if (!isFullIntegrationCycle(fusedContext)) {
+    return [];
+  }
+
+  const gaps: string[] = [];
+  if (!hasAvailableEvidence(fusedContext.macroEvidence)) {
+    gaps.push("missing_macro_evidence");
+  }
+  if (!hasAvailableEvidence(fusedContext.newsEvidence)) {
+    gaps.push("missing_news_evidence");
+  }
+  if (!hasAvailableEvidence(fusedContext.blockchainEvidence)) {
+    gaps.push("missing_blockchain_evidence");
+  }
+  if (!hasAvailableEvidence(fusedContext.regulatoryEvidence)) {
+    gaps.push("missing_regulatory_evidence");
+  }
+  if (!hasAvailableEvidence(fusedContext.protocolEvidence)) {
+    gaps.push("missing_protocol_evidence");
+  }
+  if (!isAvailableObservation(fusedContext.orderBookSnapshot)) {
+    gaps.push("missing_order_book_snapshot");
+  }
+  if (!isAvailableObservation(fusedContext.marketTradesSnapshot)) {
+    gaps.push("missing_market_trades_snapshot");
+  }
+  return gaps;
+}
 
 export type BuildMarketUnderstandingBridgeInput = {
   fusedContext: FusedMarketContext;
@@ -98,6 +199,20 @@ function classifyLiquidity(
   if (compareDecimal(spreadBps, String(SPREAD_THIN_BPS)) > 0) {
     return "THIN";
   }
+
+  const orderBook = fusedContext.orderBookSnapshot;
+  if (orderBook && orderBook.health !== "UNAVAILABLE") {
+    const bestBid = orderBook.payload.bestBid;
+    const bestAsk = orderBook.payload.bestAsk;
+    if (typeof bestBid === "number" && typeof bestAsk === "number" && bestBid > 0) {
+      const bookSpreadBps = ((bestAsk - bestBid) / bestBid) * 10_000;
+      if (bookSpreadBps > SPREAD_THIN_BPS) {
+        return "THIN";
+      }
+      return "SUFFICIENT";
+    }
+  }
+
   if (fusedContext.primaryQuote && fusedContext.primaryQuote.health !== "UNAVAILABLE") {
     return "SUFFICIENT";
   }
@@ -334,8 +449,11 @@ export function evaluateCanonicalMarketQuestions(input: {
   dataQualitySufficient: boolean;
   dataQualityReasonCodes: readonly string[];
   knowledgeGapDescriptions: readonly string[];
+  providerCoverageScore?: number;
 }): MarketQuestionEvaluation[] {
   const provenanceIds = input.fusedContext.provenance.map((ref) => provenanceId(ref));
+  const providerCoverageScore =
+    input.providerCoverageScore ?? computeProviderCoverageScore(input.fusedContext);
 
   const questionBuilders: Record<MarketQuestionId, () => MarketQuestionEvaluation> = {
     Q_WHAT_HAPPENING: () => ({
@@ -347,15 +465,26 @@ export function evaluateCanonicalMarketQuestions(input: {
       influencesPermission: false,
       influencesPosture: true,
     }),
-    Q_WHY_HAPPENING: () => ({
-      questionId: "Q_WHY_HAPPENING",
-      status: input.mtfAlignment === "UNCLEAR" ? "PARTIAL" : "ANSWERED",
-      answerSummary: `mtf_${input.mtfAlignment.toLowerCase()}`,
-      confidence: 0.55,
-      evidenceProvenanceIds: provenanceIds,
-      influencesPermission: false,
-      influencesPosture: true,
-    }),
+    Q_WHY_HAPPENING: () => {
+      const macroCount = countAvailableEvidence(input.fusedContext.macroEvidence);
+      const newsCount = countAvailableEvidence(input.fusedContext.newsEvidence);
+      let answerSummary = `mtf_${input.mtfAlignment.toLowerCase()}`;
+      if (macroCount > 0) {
+        answerSummary += `|macro_${macroCount}`;
+      }
+      if (newsCount > 0) {
+        answerSummary += `|news_${newsCount}`;
+      }
+      return {
+        questionId: "Q_WHY_HAPPENING",
+        status: input.mtfAlignment === "UNCLEAR" ? "PARTIAL" : "ANSWERED",
+        answerSummary,
+        confidence: 0.55,
+        evidenceProvenanceIds: provenanceIds,
+        influencesPermission: false,
+        influencesPosture: true,
+      };
+    },
     Q_HTF_ALIGNED: () => ({
       questionId: "Q_HTF_ALIGNED",
       status:
@@ -416,20 +545,27 @@ export function evaluateCanonicalMarketQuestions(input: {
       answerSummary: input.liquidity,
       confidence: input.liquidity === "SUFFICIENT" ? 0.75 : 0.5,
       evidenceProvenanceIds: provenanceIds.filter(
-        (id) => id.includes("quote_l1") || id.includes("ohlcv_bar"),
+        (id) =>
+          id.includes("quote_l1") || id.includes("ohlcv_bar") || id.includes("order_book_snapshot"),
       ),
       influencesPermission: input.liquidity === "THIN",
       influencesPosture: true,
     }),
-    Q_DATA_TRUST: () => ({
-      questionId: "Q_DATA_TRUST",
-      status: input.dataQualitySufficient ? "ANSWERED" : "PARTIAL",
-      answerSummary: input.dataQualitySufficient ? "TRUSTED" : "DEGRADED",
-      confidence: input.dataQualitySufficient ? 0.85 : 0.35,
-      evidenceProvenanceIds: provenanceIds,
-      influencesPermission: !input.dataQualitySufficient,
-      influencesPosture: true,
-    }),
+    Q_DATA_TRUST: () => {
+      const trusted =
+        input.dataQualitySufficient && providerCoverageScore >= PROVIDER_COVERAGE_TRUST_THRESHOLD;
+      return {
+        questionId: "Q_DATA_TRUST",
+        status: trusted ? "ANSWERED" : "PARTIAL",
+        answerSummary: trusted ? "TRUSTED" : "DEGRADED",
+        confidence: trusted
+          ? Math.min(0.85, 0.5 + providerCoverageScore * 0.5)
+          : Math.min(0.35, providerCoverageScore * 0.35),
+        evidenceProvenanceIds: provenanceIds,
+        influencesPermission: !trusted,
+        influencesPosture: true,
+      };
+    },
     Q_UNKNOWN: () => ({
       questionId: "Q_UNKNOWN",
       status: input.knowledgeGapDescriptions.length > 0 ? "ANSWERED" : "ANSWERED",
@@ -437,7 +573,7 @@ export function evaluateCanonicalMarketQuestions(input: {
         input.knowledgeGapDescriptions.length > 0
           ? `${input.knowledgeGapDescriptions.length}_gaps`
           : "none",
-      confidence: 0.9,
+      confidence: input.knowledgeGapDescriptions.length > 0 ? 0.75 : 0.9,
       evidenceProvenanceIds: provenanceIds,
       influencesPermission: false,
       influencesPosture: false,
@@ -474,6 +610,7 @@ export function buildMarketUnderstandingBridge(
   const crowd = classifyCrowdPsychology(fusedContext.fearGreed);
   const globalContext = classifyGlobalContext(fusedContext.globalMarket);
   const liquidity = classifyLiquidity(fusedContext, features);
+  const providerCoverageScore = computeProviderCoverageScore(fusedContext);
   const crossVenue = resolveCrossVenue(fusedContext);
   const regimeHint = classifyRegimeHint({
     mtfAlignment,
@@ -505,9 +642,11 @@ export function buildMarketUnderstandingBridge(
     dataQualitySufficient,
     dataQualityReasonCodes,
     knowledgeGapDescriptions: [],
+    providerCoverageScore,
   });
 
   const knowledgeGaps = buildKnowledgeGaps(preliminaryEvaluations);
+  const missingEvidenceGaps = buildMissingEvidenceGapDescriptions(fusedContext);
 
   const questionEvaluations = evaluateCanonicalMarketQuestions({
     fusedContext,
@@ -522,7 +661,11 @@ export function buildMarketUnderstandingBridge(
     globalContext,
     dataQualitySufficient,
     dataQualityReasonCodes,
-    knowledgeGapDescriptions: knowledgeGaps.map((gap) => gap.description),
+    knowledgeGapDescriptions: [
+      ...knowledgeGaps.map((gap) => gap.description),
+      ...missingEvidenceGaps,
+    ],
+    providerCoverageScore,
   });
 
   const priorConfidence = fusedContext.aggregateConfidence;

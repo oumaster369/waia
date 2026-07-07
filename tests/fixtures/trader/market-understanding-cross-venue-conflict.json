@@ -107,7 +107,7 @@
       "questionId": "Q_DATA_TRUST",
       "status": "PARTIAL",
       "answerSummary": "DEGRADED",
-      "confidence": 0.35,
+      "confidence": 0.105,
       "evidenceProvenanceIds": [
         "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
         "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
@@ -124,8 +124,8 @@
     {
       "questionId": "Q_UNKNOWN",
       "status": "ANSWERED",
-      "answerSummary": "5_gaps",
-      "confidence": 0.9,
+      "answerSummary": "12_gaps",
+      "confidence": 0.75,
       "evidenceProvenanceIds": [
         "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
         "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",

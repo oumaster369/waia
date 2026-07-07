@@ -1,6 +1,6 @@
-# AI-TRADER Data Providers (PR2.5 + PR2.6 + Data Provider Readiness binding spec)
+# AI-TRADER Data Providers (PR2.5 + PR2.6 + DEE-392 + DEE-393 binding spec)
 
-Status: **Data Provider Readiness complete (DEE-392 / #379)** · PR2.5 + PR2.6 + operator/env gate · Date: 2026-07-07
+Status: **Full Market Data Source Integration complete pending merge (DEE-393)** · 20/20 registry · fused context v2 · Date: 2026-07-07
 
 This document is the binding companion for Market Intelligence provider integration. **Operator provisioning from zero:** use **[AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md](AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md)** (canonical — only source of truth for provisioning steps).
 
@@ -18,7 +18,7 @@ Provider Registry
   → Normalization (`normalize-observation.ts`)
   → Validation (`validate-observation.ts`)
   → Freshness / Reliability (`provider-health.ts`)
-  → Context Fusion (`context-fusion-v0.ts`)
+  → Context Fusion (`context-fusion-v1.ts` → `waia.trader.fused_context.v2`)
   → Market Understanding Bridge (`market-understanding-bridge-v0.ts`) — PR2.6
   → MSV hook (`buildMsvEnvelope`)
   → Chief Decision Engine hook (`cde-v0.ts`)
@@ -36,11 +36,28 @@ Distinct from execution connector registry (`lib/trader/connectors/registry.ts`)
 
 | ID | Provider | Required | Observation kinds | Role |
 |----|----------|----------|-------------------|------|
-| `htx_spot` | HTX Spot | **Yes** | `ohlcv_bar`, `quote_l1`, `order_book_snapshot` | Primary execution venue + market truth |
+| `htx_spot` | HTX Spot | **Yes** | `ohlcv_bar`, `quote_l1`, `order_book_snapshot`, `market_trades_snapshot` | Primary execution venue + market truth |
 | `binance_public` | Binance Public | No | `cross_exchange_confirmation`, `quote_l1` | Secondary price confirmation |
 | `bybit_public` | Bybit Public | No | `cross_exchange_confirmation`, `quote_l1` | Tertiary price confirmation |
 | `alternative_me` | Alternative.me | No | `fear_greed_index` | Crowd psychology evidence |
 | `coingecko_global` | CoinGecko | No | `global_market_stats` | Global crypto backdrop |
+| `fred` | FRED | No | `macro_series` | Macro rates and aggregates |
+| `federal_reserve` | Federal Reserve | No | `macro_calendar_event` | Macro calendar proximity |
+| `cme_fedwatch` | CME FedWatch | No | `macro_probability` | Rate probability backdrop |
+| `gdelt` | GDELT | No | `news_event_cluster` | News event clusters |
+| `coindesk_rss` | CoinDesk RSS | No | `news_headline` | Crypto news headlines |
+| `cointelegraph_rss` | Cointelegraph RSS | No | `news_headline` | Crypto news headlines |
+| `decrypt_rss` | Decrypt RSS | No | `news_headline` | Crypto news headlines |
+| `binance_announcements` | Binance Announcements | No | `exchange_announcement` | Exchange event proximity |
+| `htx_announcements` | HTX Announcements | No | `exchange_announcement` | Exchange event proximity |
+| `bybit_announcements` | Bybit Announcements | No | `exchange_announcement` | Exchange event proximity |
+| `github_releases` | GitHub Releases | No | `protocol_release` | Protocol release intelligence |
+| `infura_rpc` | Infura EVM RPC | No | `blockchain_network_stats` | EVM network stats |
+| `trongrid_intelligence` | TronGrid Intelligence | No | `blockchain_network_stats` | TRON network stats |
+| `mempool_space` | mempool.space | No | `mempool_stats` | Bitcoin mempool stats |
+| `sec_edgar` | SEC EDGAR | No | `regulatory_filing` | Regulatory filing evidence |
+
+**Count:** 20 distinct `MarketDataProviderId` values in `MARKET_DATA_PROVIDER_IDS`.
 
 ---
 
@@ -60,6 +77,7 @@ Distinct from execution connector registry (`lib/trader/connectors/registry.ts`)
 - `disableOptionalProviders: true` — HTX-only mode for deterministic tests
 - `fetchImpl` — injectable fetch for fixtures/mocks
 - `coingeckoApiKey` — optional; degrades gracefully when absent
+- `fredApiKey`, `infuraProjectId`, `infuraApiSecret`, `tronGridApiKey`, `githubToken`, `secEdgarUserAgent`, `cmeFedWatchEnabled` — optional Tier 3–8 adapter credentials (fail-soft)
 
 ---
 
@@ -84,7 +102,9 @@ Schema: `waia.trader.observation.v1` (`lib/trader/market-data/observation-types.
 Every observation exposes:
 - `kind`, `sessionPhase`, `provenance`, `health`, `freshnessMs`, `latencyMs`, `confidence`, `payload`
 
-Fused output schema: `waia.trader.fused_context.v1` (`FusedMarketContext`)
+Fused output schema: `waia.trader.fused_context.v2` (`FusedMarketContext`)
+
+Evidence slots on fused context: `macroEvidence`, `newsEvidence`, `blockchainEvidence`, `regulatoryEvidence`, `protocolEvidence`, `orderBookSnapshot`.
 
 ---
 
@@ -153,14 +173,21 @@ External data must **never** generate buy/sell signals directly.
 | `AI_TRADER_MASTER_KEY_DEV` | Local/test | Master key for HTX credential encryption | `dev-master-key-provider.ts` |
 | `AI_TRADER_MASTER_KEY` | Production | Secrets Store binding for credential decrypt | `secrets-store-master-key-provider.ts` |
 | `WAIA_HTX_LIVE_SMOKE` | Test-only | Opt-in live HTX integration smoke | `trader-htx-candles-live-smoke.test.ts` |
+| `FRED_API_KEY` | No | FRED macro series adapter | `fred-adapter.ts`, gateway, `worker-cron-env.ts` |
+| `AI_TRADER_INFURA_PROJECT_ID` | No | Infura project id (not bare `INFURA_PROJECT_ID`) | `infura-rpc-adapter.ts`, gateway |
+| `AI_TRADER_INFURA_API_SECRET` | No | Infura API secret (not bare `INFURA_API_KEY`) | Same |
+| `AI_TRADER_TRONGRID_API_KEY` | No | TronGrid MI intelligence (separate from payment watcher) | `trongrid-intelligence-adapter.ts` |
+| `AI_TRADER_GITHUB_TOKEN` | No | GitHub protocol release rate limits | `github-releases-adapter.ts` |
+| `AI_TRADER_SEC_EDGAR_USER_AGENT` | No | SEC EDGAR policy-bound User-Agent | `sec-edgar-adapter.ts` |
+| `AI_TRADER_CME_FEDWATCH_ENABLED` | No | Opt-in CME FedWatch adapter | `cme-fedwatch-adapter.ts` |
 
 HTX public market REST, Binance, Bybit, and Alternative.me require **no authentication** in PR2.5.
 
 **HTX trade credentials (API key, secret, passphrase) are NEVER environment variables.** They are entered only through the Trader Workspace UI and encrypted at rest via the existing credential architecture. See **[AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md](AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md)** Section D.
 
-Payment watcher TronGrid vars (`TRONGRID_API_KEY`, `TRON_RPC_*`, `WATCHER_*`) are settlement infrastructure — not MI gateway providers. See [`docs/cloudflare-env-vars.md`](../cloudflare-env-vars.md).
+Payment watcher TronGrid vars (`TRONGRID_API_KEY`, `TRON_RPC_*`, `WATCHER_*`) are settlement infrastructure — not MI gateway providers. MI blockchain intelligence uses **`AI_TRADER_TRONGRID_API_KEY`** only. See [`docs/cloudflare-env-vars.md`](../cloudflare-env-vars.md).
 
-**Deferred env vars:** No `FRED_API_KEY` or `INFURA_*` names exist in this repository until Full Market Data Source Integration grooming approves them.
+**Forbidden bare Infura names:** `INFURA_API_KEY`, `INFURA_PROJECT_ID` — use `AI_TRADER_INFURA_*` prefix.
 
 ---
 
@@ -175,23 +202,23 @@ Parent roadmap Part V — deduplicated canonical sources. **Repeat M9 required v
 | 1 | 3 | **Binance Public** | Required (fail-soft) | No auth | `binance_public` |
 | 1 | 4 | **Bybit Public** | Required (fail-soft) | No auth | `bybit_public` |
 | 2 | 5 | **Alternative.me** | Required (fail-soft) | No auth | `alternative_me` |
-| 3 | 6 | **FRED** | **Deferred** | Future API key TBD | Not implemented |
-| 3 | 7 | **Federal Reserve** | **Deferred** | No auth (public site) | Not implemented |
-| 3 | 8 | **CME FedWatch** | **Deferred** | Reference / terms-bound | Not implemented |
-| 4 | 9 | **GDELT** | **Deferred** | No auth | Not implemented (PR4 news engine) |
-| 4 | 10 | **CoinDesk RSS** | **Deferred** | No auth | Not implemented |
-| 4 | 11 | **Cointelegraph RSS** | **Deferred** | No auth | Not implemented |
-| 4 | 12 | **Decrypt RSS** | **Deferred** | No auth | Not implemented |
-| 5 | 13 | **Binance Announcements** | **Deferred** | No auth | Not implemented |
-| 5 | 14 | **HTX Announcements** | **Deferred** | No auth | Not implemented |
-| 5 | 15 | **Bybit Announcements** | **Deferred** | No auth | Not implemented |
-| 6 | 16 | **GitHub Public API** | **Deferred** | No token (rate limits) | Not implemented |
-| 7 | 17 | **Infura / MetaMask RPC** | **Deferred** | Future API key TBD | Not implemented |
-| 7 | 18 | **TronGrid (AI-TRADER intelligence)** | **Deferred** | Separate key from payment watcher | Not implemented |
-| 7 | 19 | **mempool.space** | **Deferred** | No auth | Not implemented |
-| 8 | 20 | **SEC EDGAR** | **Deferred** | No auth (policy-bound) | Not implemented |
+| 3 | 6 | **FRED** | **Deferred** (Repeat M9) | `FRED_API_KEY` | `fred` — `fred-adapter.ts` |
+| 3 | 7 | **Federal Reserve** | **Deferred** (Repeat M9) | No auth (public site) | `federal_reserve` — `federal-reserve-adapter.ts` |
+| 3 | 8 | **CME FedWatch** | **Deferred** (Repeat M9) | Opt-in `AI_TRADER_CME_FEDWATCH_ENABLED` | `cme_fedwatch` — `cme-fedwatch-adapter.ts` |
+| 4 | 9 | **GDELT** | **Deferred** (Repeat M9) | No auth | `gdelt` — `gdelt-adapter.ts` |
+| 4 | 10 | **CoinDesk RSS** | **Deferred** (Repeat M9) | No auth | `coindesk_rss` — `coindesk-rss-adapter.ts` |
+| 4 | 11 | **Cointelegraph RSS** | **Deferred** (Repeat M9) | No auth | `cointelegraph_rss` — `cointelegraph-rss-adapter.ts` |
+| 4 | 12 | **Decrypt RSS** | **Deferred** (Repeat M9) | No auth | `decrypt_rss` — `decrypt-rss-adapter.ts` |
+| 5 | 13 | **Binance Announcements** | **Deferred** (Repeat M9) | No auth | `binance_announcements` — `binance-announcements-adapter.ts` |
+| 5 | 14 | **HTX Announcements** | **Deferred** (Repeat M9) | No auth | `htx_announcements` — `htx-announcements-adapter.ts` |
+| 5 | 15 | **Bybit Announcements** | **Deferred** (Repeat M9) | No auth | `bybit_announcements` — `bybit-announcements-adapter.ts` |
+| 6 | 16 | **GitHub Public API** | **Deferred** (Repeat M9) | Optional `AI_TRADER_GITHUB_TOKEN` | `github_releases` — `github-releases-adapter.ts` |
+| 7 | 17 | **Infura / MetaMask RPC** | **Deferred** (Repeat M9) | `AI_TRADER_INFURA_*` | `infura_rpc` — `infura-rpc-adapter.ts` |
+| 7 | 18 | **TronGrid (AI-TRADER intelligence)** | **Deferred** (Repeat M9) | `AI_TRADER_TRONGRID_API_KEY` | `trongrid_intelligence` — `trongrid-intelligence-adapter.ts` |
+| 7 | 19 | **mempool.space** | **Deferred** (Repeat M9) | No auth | `mempool_space` — `mempool-space-adapter.ts` |
+| 8 | 20 | **SEC EDGAR** | **Deferred** (Repeat M9) | `AI_TRADER_SEC_EDGAR_USER_AGENT` | `sec_edgar` — `sec-edgar-adapter.ts` |
 
-**Repeat M9 required vs deferred summary:** Five registry providers are **required for Repeat M9** (HTX primary + four optional fail-soft confirmations). All Tier 3–8 sources are **deferred** to post-Gate-A / Full Market Data Source Integration / PR3–PR4 — none block Repeat M9 once the five-registry stack is validated end-to-end.
+**Repeat M9 required vs deferred summary:** Five registry providers are **required for Repeat M9** (HTX primary + four optional fail-soft confirmations). Tier 3–8 sources are **implemented** (adapters + gateway fusion) but **deferred for Repeat M9 gate** — they enrich fused context v2 when keys are present and fail-soft otherwise.
 
 ---
 
@@ -205,13 +232,18 @@ Parent roadmap Part V — deduplicated canonical sources. **Repeat M9 required v
 | Binance / Bybit / Alt.me | — | — | Public endpoints | — | N/A |
 | Master key | `AI_TRADER_MASTER_KEY` (prod) / `AI_TRADER_MASTER_KEY_DEV` (local) | — | — | Secrets Store / `.env.local` | [`DEE-220-MASTER-KEY-RUNBOOK.md`](../ops/DEE-220-MASTER-KEY-RUNBOOK.md) |
 | TronGrid watcher | `TRONGRID_API_KEY` | `TRON_RPC_SECONDARY_API_KEY` | Default RPC URL | Worker secret | BP-9A Step 6 |
-| FRED / Infura | — (deferred) | Future TBD | — | Not in repo | Future phase |
+| TronGrid MI | `AI_TRADER_TRONGRID_API_KEY` | — | — | `.env.local` / Secret | Separate from watcher |
+| FRED | — | `FRED_API_KEY` | — | `.env.local` / Secret | Replace secret |
+| Infura MI | `AI_TRADER_INFURA_PROJECT_ID` + `AI_TRADER_INFURA_API_SECRET` | — | — | Secret | Replace secrets |
+| GitHub releases | — | `AI_TRADER_GITHUB_TOKEN` | Public API | Secret | Replace token |
+| SEC EDGAR | `AI_TRADER_SEC_EDGAR_USER_AGENT` | — | Public filings | Secret / var | Update User-Agent |
+| CME FedWatch | — | `AI_TRADER_CME_FEDWATCH_ENABLED` | Reference data | Plain var | Toggle adapter |
 
 **Security rules (binding):**
 
 - Never commit `.env`, `.env.local`, `.dev.vars`, or API keys.
 - `.env.example` and `.dev.vars.example` contain **placeholders only**.
-- TronGrid payment watcher key must remain **separate** from future TronGrid AI-TRADER intelligence key.
+- TronGrid payment watcher key must remain **separate** from `AI_TRADER_TRONGRID_API_KEY`.
 - No HTX key with withdraw permissions.
 
 ---
@@ -223,7 +255,7 @@ Health is computed inline — there is no standalone provider probe service in D
 | Signal | Source module | Operator observability |
 |--------|---------------|------------------------|
 | **Health** | `provider-health.ts` → `NormalizedObservation.health` | `FusedMarketContext.aggregateHealth` |
-| **Freshness** | `freshnessMs` vs 60s degraded / 120s stale | `degradationReasons[]` on fused context |
+| **Freshness** | `freshness-policy.ts` + `freshnessMs` | Per-kind cadence (e.g. daily for `fear_greed_index`) |
 | **Latency** | Gateway `timed()` wrapper | `NormalizedObservation.latencyMs` |
 | **Degradation** | Gateway catch blocks | e.g. `coingecko_unavailable:…`, `binance_unavailable:…` |
 | **Fallback** | Optional fail-soft; HTX bars fail-closed | Market brain cycle may halt on HTX primary failure |
@@ -236,8 +268,10 @@ Health is computed inline — there is no standalone provider probe service in D
 
 ```bash
 pnpm test --run tests/unit/trader-market-data-pr25.test.ts
+pnpm test --run tests/unit/trader-market-data-integration.test.ts
 pnpm test --run tests/unit/trader-provider-adapters.test.ts
 pnpm test --run tests/integration/trader-htx-bar-poll-cycle.test.ts
+pnpm validate:market-data-integration
 ```
 
 Optional live smoke (operator opt-in): `WAIA_HTX_LIVE_SMOKE=1 pnpm test --run tests/integration/trader-htx-candles-live-smoke.test.ts`
@@ -259,23 +293,52 @@ Optional live smoke (operator opt-in): `WAIA_HTX_LIVE_SMOKE=1 pnpm test --run te
 
 ---
 
-## Known implementation gaps
+## Remaining implementation notes
 
-| Gap | Registry / docs | Implementation | Next phase |
-|-----|-----------------|----------------|------------|
-| **`order_book_snapshot`** | Declared on `htx_spot` kinds | **Not fetched** — no gateway path, no normalizer | Full Market Data Source Integration |
-| Provider health probe service | Documented observability contract | Inline scoring only | Optional in integration phase |
-| Tier 3–8 sources | Listed in tier table | No adapters | PR3/PR4 / post-Gate-A engines |
-
-**`order_book_snapshot`:** The registry and `NormalizedObservationKind` include this kind for forward compatibility. PR2.5 delivers HTX MTF `ohlcv_bar` + L1 `quote_l1` only. Full Market Data Source Integration must either implement depth fetch + normalization or remove the kind from the registry — do not leave silent mismatch.
+| Item | Status | Notes |
+|------|--------|-------|
+| **`order_book_snapshot`** | ✅ Implemented | HTX depth via `HtxDepthAdapter` + `normalizeOrderBookSnapshotObservation` |
+| Provider health probe service | Inline scoring | Optional standalone probe service post-Gate-A |
+| Tier 3–8 consumption in CDE | Evidence only | PR3/PR4 deepen feature use — adapters deliver observations today |
 
 ---
 
-## Registry readiness matrix (Repeat M9)
+## 20/20 registry readiness matrix
+
+All 20 canonical sources are registered and wired (gateway clients or optional adapters). Repeat M9 still requires only the Tier 0–2 five-provider stack validated end-to-end.
+
+| Registry ID | Declared kinds | Implemented via gateway/adapters | Repeat M9 |
+|-------------|----------------|----------------------------------|-----------|
+| `htx_spot` | `ohlcv_bar`, `quote_l1`, `order_book_snapshot`, `market_trades_snapshot` | Gateway + depth adapter | **Required** |
+| `binance_public` | `cross_exchange_confirmation`, `quote_l1` | Gateway | Required (fail-soft) |
+| `bybit_public` | `cross_exchange_confirmation`, `quote_l1` | Gateway | Required (fail-soft) |
+| `alternative_me` | `fear_greed_index` | Gateway | Required (fail-soft) |
+| `coingecko_global` | `global_market_stats` | Gateway | Required (fail-soft) |
+| `fred` | `macro_series` | Adapter | Deferred (fail-soft) |
+| `federal_reserve` | `macro_calendar_event` | Adapter | Deferred (fail-soft) |
+| `cme_fedwatch` | `macro_probability` | Adapter | Deferred (fail-soft) |
+| `gdelt` | `news_event_cluster` | Adapter | Deferred (fail-soft) |
+| `coindesk_rss` | `news_headline` | Adapter | Deferred (fail-soft) |
+| `cointelegraph_rss` | `news_headline` | Adapter | Deferred (fail-soft) |
+| `decrypt_rss` | `news_headline` | Adapter | Deferred (fail-soft) |
+| `binance_announcements` | `exchange_announcement` | Adapter | Deferred (fail-soft) |
+| `htx_announcements` | `exchange_announcement` | Adapter | Deferred (fail-soft) |
+| `bybit_announcements` | `exchange_announcement` | Adapter | Deferred (fail-soft) |
+| `github_releases` | `protocol_release` | Adapter | Deferred (fail-soft) |
+| `infura_rpc` | `blockchain_network_stats` | Adapter | Deferred (fail-soft) |
+| `trongrid_intelligence` | `blockchain_network_stats` | Adapter | Deferred (fail-soft) |
+| `mempool_space` | `mempool_stats` | Adapter | Deferred (fail-soft) |
+| `sec_edgar` | `regulatory_filing` | Adapter | Deferred (fail-soft) |
+
+Fused context schema: **`waia.trader.fused_context.v2`**.
+
+---
+
+## Registry readiness matrix (Repeat M9 — Tier 0–2 subset)
 
 | Registry ID | Declared kinds | Implemented via gateway | Repeat M9 |
 |-------------|----------------|-------------------------|-----------|
-| `htx_spot` | `ohlcv_bar`, `quote_l1`, `order_book_snapshot` | `ohlcv_bar`, `quote_l1` only | **Required** |
+| `htx_spot` | `ohlcv_bar`, `quote_l1`, `order_book_snapshot` | Yes (incl. depth) | **Required** |
 | `binance_public` | `cross_exchange_confirmation`, `quote_l1` | Yes | Required (fail-soft) |
 | `bybit_public` | `cross_exchange_confirmation`, `quote_l1` | Yes | Required (fail-soft) |
 | `alternative_me` | `fear_greed_index` | Yes | Required (fail-soft) |
@@ -289,6 +352,7 @@ Optional live smoke (operator opt-in): `WAIA_HTX_LIVE_SMOKE=1 pnpm test --run te
 |----------|------|
 | **[AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md](AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md)** | **Canonical** provisioning from empty workstation (Sections A–F) |
 | [`DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](../ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md) | DEE-392 phase gate record |
+| [`DEE-393-FULL-MARKET-DATA-INTEGRATION-RUNBOOK.md`](../ops/DEE-393-FULL-MARKET-DATA-INTEGRATION-RUNBOOK.md) | DEE-393 phase gate record |
 | [`AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md`](AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md) | Architect/operator sign-off |
 | [`../cloudflare-env-vars.md`](../cloudflare-env-vars.md) | Cloudflare inventory |
 
@@ -296,6 +360,7 @@ Validation:
 
 ```bash
 pnpm validate:provider-readiness
+pnpm validate:market-data-integration
 ```
 
 ---
