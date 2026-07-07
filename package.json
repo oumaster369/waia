@@ -52,7 +52,8 @@
     "test:watch": "vitest --watch",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "validate:pr-governance": "bash scripts/linear/test-validate-pr-linear-id.sh && bash scripts/linear/test-preflight-pr-governance.sh"
+    "validate:pr-governance": "bash scripts/linear/test-validate-pr-linear-id.sh && bash scripts/linear/test-preflight-pr-governance.sh",
+    "validate:provider-readiness": "node --import tsx scripts/trader/validate-provider-readiness.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

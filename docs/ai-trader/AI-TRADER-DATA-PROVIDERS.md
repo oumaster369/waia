@@ -1,6 +1,6 @@
-# AI-TRADER Data Providers (PR2.5 + PR2.6 binding spec)
+# AI-TRADER Data Providers (PR2.5 + PR2.6 + Data Provider Readiness binding spec)
 
-Status: **PR2.5 + PR2.6 implementation binding** · Date: 2026-07-07
+Status: **PR2.5 + PR2.6 + Data Provider Readiness (DEE-392)** · Date: 2026-07-07
 
 This document is the binding companion for Market Intelligence provider integration delivered in **PR2.5 — Market Intelligence Integration**. It defines registry entries, gateway routing, degradation policy, and architectural boundaries. Implementation lives under `lib/trader/market-data/` and `lib/trader/connectors/`.
 
@@ -143,11 +143,159 @@ External data must **never** generate buy/sell signals directly.
 
 ## Environment variables
 
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `COINGECKO_API_KEY` | No | Optional CoinGecko rate-limit relief; degrades without key |
+| Variable | Required | Purpose | Consumed in |
+|----------|----------|---------|-------------|
+| `HTX_REST_HOST` | No | HTX REST host override (default `https://api.huobi.pro`) | `market-brain/build-worker-deps.ts`, `paper/build-worker-deps.ts`, `htx-bar-poll-source.ts`, gateway |
+| `COINGECKO_API_KEY` | No | Optional CoinGecko rate-limit relief; degrades without key | `market-data-gateway.ts`, bridged in `worker-cron-env.ts` |
+| `MARKET_BRAIN_ENABLED` | When cron ingest | Enables MSV/CDE ingestion cycle | `market-brain/build-worker-deps.ts` |
+| `MARKET_BRAIN_ORGANIZATION_ID` | When enabled | Target org UUID | Same |
+| `PAPER_LOOP_*` | When paper cron | Paper loop worker (uses gateway via `HtxBarPollSource`) | `paper/build-worker-deps.ts` |
+| `AI_TRADER_MASTER_KEY_DEV` | Local/test | Master key for HTX credential encryption | `dev-master-key-provider.ts` |
+| `AI_TRADER_MASTER_KEY` | Production | Secrets Store binding for credential decrypt | `secrets-store-master-key-provider.ts` |
+| `WAIA_HTX_LIVE_SMOKE` | Test-only | Opt-in live HTX integration smoke | `trader-htx-candles-live-smoke.test.ts` |
 
-HTX, Binance, Bybit, and Alternative.me public endpoints require no authentication in PR2.5.
+HTX public market REST, Binance, Bybit, and Alternative.me require **no authentication** in PR2.5.
+
+**HTX trade credentials (API key, secret, passphrase) are NEVER environment variables.** They are entered only through the Trader Workspace UI and encrypted at rest via the existing credential architecture. See [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](../ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md).
+
+Payment watcher TronGrid vars (`TRONGRID_API_KEY`, `TRON_RPC_*`, `WATCHER_*`) are settlement infrastructure — not MI gateway providers. See [`docs/cloudflare-env-vars.md`](../cloudflare-env-vars.md).
+
+**Deferred env vars:** No `FRED_API_KEY` or `INFURA_*` names exist in this repository until Full Market Data Source Integration grooming approves them.
+
+---
+
+## Canonical 20-source tier table
+
+Parent roadmap Part V — deduplicated canonical sources. **Repeat M9 required vs deferred** column governs Gate A provider gates only.
+
+| Tier | # | Source | Repeat M9 required vs deferred | Auth | Registry / adapter today |
+|------|---|--------|-------------------------------|------|--------------------------|
+| 0 | 1 | **HTX** | **Required** | Public REST; trade via UI | `htx_spot` — gateway + execution connector |
+| 1 | 2 | **CoinGecko** | Required (fail-soft) | Optional `COINGECKO_API_KEY` | `coingecko_global` |
+| 1 | 3 | **Binance Public** | Required (fail-soft) | No auth | `binance_public` |
+| 1 | 4 | **Bybit Public** | Required (fail-soft) | No auth | `bybit_public` |
+| 2 | 5 | **Alternative.me** | Required (fail-soft) | No auth | `alternative_me` |
+| 3 | 6 | **FRED** | **Deferred** | Future API key TBD | Not implemented |
+| 3 | 7 | **Federal Reserve** | **Deferred** | No auth (public site) | Not implemented |
+| 3 | 8 | **CME FedWatch** | **Deferred** | Reference / terms-bound | Not implemented |
+| 4 | 9 | **GDELT** | **Deferred** | No auth | Not implemented (PR4 news engine) |
+| 4 | 10 | **CoinDesk RSS** | **Deferred** | No auth | Not implemented |
+| 4 | 11 | **Cointelegraph RSS** | **Deferred** | No auth | Not implemented |
+| 4 | 12 | **Decrypt RSS** | **Deferred** | No auth | Not implemented |
+| 5 | 13 | **Binance Announcements** | **Deferred** | No auth | Not implemented |
+| 5 | 14 | **HTX Announcements** | **Deferred** | No auth | Not implemented |
+| 5 | 15 | **Bybit Announcements** | **Deferred** | No auth | Not implemented |
+| 6 | 16 | **GitHub Public API** | **Deferred** | No token (rate limits) | Not implemented |
+| 7 | 17 | **Infura / MetaMask RPC** | **Deferred** | Future API key TBD | Not implemented |
+| 7 | 18 | **TronGrid (AI-TRADER intelligence)** | **Deferred** | Separate key from payment watcher | Not implemented |
+| 7 | 19 | **mempool.space** | **Deferred** | No auth | Not implemented |
+| 8 | 20 | **SEC EDGAR** | **Deferred** | No auth (policy-bound) | Not implemented |
+
+**Repeat M9 required vs deferred summary:** Five registry providers are **required for Repeat M9** (HTX primary + four optional fail-soft confirmations). All Tier 3–8 sources are **deferred** to post-Gate-A / Full Market Data Source Integration / PR3–PR4 — none block Repeat M9 once the five-registry stack is validated end-to-end.
+
+---
+
+## Environment and secrets
+
+| Provider | Required secret | Optional secret | Public / no-auth | Storage | Rotation |
+|----------|----------------|-----------------|------------------|---------|----------|
+| HTX trade | UI Read+Trade key+secret (+ passphrase if applicable) | — | Public klines/ticker | Trader UI → encrypted DB | Reconnect in Trader Workspace |
+| HTX REST host | — | `HTX_REST_HOST` | Default host works | `.env.local` / Cloudflare var | Update env |
+| CoinGecko | — | `COINGECKO_API_KEY` | Unauthenticated global endpoint | `.env.local` / `wrangler secret put` | Replace secret |
+| Binance / Bybit / Alt.me | — | — | Public endpoints | — | N/A |
+| Master key | `AI_TRADER_MASTER_KEY` (prod) / `AI_TRADER_MASTER_KEY_DEV` (local) | — | — | Secrets Store / `.env.local` | [`DEE-220-MASTER-KEY-RUNBOOK.md`](../ops/DEE-220-MASTER-KEY-RUNBOOK.md) |
+| TronGrid watcher | `TRONGRID_API_KEY` | `TRON_RPC_SECONDARY_API_KEY` | Default RPC URL | Worker secret | BP-9A Step 6 |
+| FRED / Infura | — (deferred) | Future TBD | — | Not in repo | Future phase |
+
+**Security rules (binding):**
+
+- Never commit `.env`, `.env.local`, `.dev.vars`, or API keys.
+- `.env.example` and `.dev.vars.example` contain **placeholders only**.
+- TronGrid payment watcher key must remain **separate** from future TronGrid AI-TRADER intelligence key.
+- No HTX key with withdraw permissions.
+
+---
+
+## Provider health observability
+
+Health is computed inline — there is no standalone provider probe service in Data Provider Readiness.
+
+| Signal | Source module | Operator observability |
+|--------|---------------|------------------------|
+| **Health** | `provider-health.ts` → `NormalizedObservation.health` | `FusedMarketContext.aggregateHealth` |
+| **Freshness** | `freshnessMs` vs 60s degraded / 120s stale | `degradationReasons[]` on fused context |
+| **Latency** | Gateway `timed()` wrapper | `NormalizedObservation.latencyMs` |
+| **Degradation** | Gateway catch blocks | e.g. `coingecko_unavailable:…`, `binance_unavailable:…` |
+| **Fallback** | Optional fail-soft; HTX bars fail-closed | Market brain cycle may halt on HTX primary failure |
+| **Confidence degradation** | `aggregateConfidence` | CDE risk multiplier in `cde-v0.ts` |
+| **Permission degradation** | Health → CDE permission | `HEALTHY` → `ALLOW_TRADING`; `STALE`/`UNAVAILABLE` → `PAPER_ONLY` |
+
+**Telemetry:** Market brain cycle emits counters such as `MARKET_BRAIN_CYCLE_OK`, `MARKET_BRAIN_INGESTION_HALT`, `MARKET_BRAIN_QUALITY_HALT` via `run-market-brain-cycle.ts`.
+
+**Verification without Repeat M9:**
+
+```bash
+pnpm test --run tests/unit/trader-market-data-pr25.test.ts
+pnpm test --run tests/unit/trader-provider-adapters.test.ts
+pnpm test --run tests/integration/trader-htx-bar-poll-cycle.test.ts
+```
+
+Optional live smoke (operator opt-in): `WAIA_HTX_LIVE_SMOKE=1 pnpm test --run tests/integration/trader-htx-candles-live-smoke.test.ts`
+
+---
+
+## Gateway bypass inventory
+
+**Governed intelligence path:** all optional market-data clients import only from `market-data-gateway.ts` (enforced by `trader-research-backtest-isolation.test.ts`).
+
+**Intentional bypasses (documented — do not route through MI gateway):**
+
+| Call site | Purpose | Allowed |
+|-----------|---------|---------|
+| `HtxExchangeConnector.streamMarketData()` | Execution connector surface | Yes — not intelligence |
+| `scripts/trader/htx-kline-backfill.ts` | Ops DB backfill | Yes — ops tool |
+| `replay-fused-context-builder.ts` | M9/research replay | Yes — no live HTTP |
+| `fetchPrimaryBarsOnly()` in gateway | Unused export | Document only — remove in integration phase |
+
+---
+
+## Known implementation gaps
+
+| Gap | Registry / docs | Implementation | Next phase |
+|-----|-----------------|----------------|------------|
+| **`order_book_snapshot`** | Declared on `htx_spot` kinds | **Not fetched** — no gateway path, no normalizer | Full Market Data Source Integration |
+| Provider health probe service | Documented observability contract | Inline scoring only | Optional in integration phase |
+| Tier 3–8 sources | Listed in tier table | No adapters | PR3/PR4 / post-Gate-A engines |
+
+**`order_book_snapshot`:** The registry and `NormalizedObservationKind` include this kind for forward compatibility. PR2.5 delivers HTX MTF `ohlcv_bar` + L1 `quote_l1` only. Full Market Data Source Integration must either implement depth fetch + normalization or remove the kind from the registry — do not leave silent mismatch.
+
+---
+
+## Registry readiness matrix (Repeat M9)
+
+| Registry ID | Declared kinds | Implemented via gateway | Repeat M9 |
+|-------------|----------------|-------------------------|-----------|
+| `htx_spot` | `ohlcv_bar`, `quote_l1`, `order_book_snapshot` | `ohlcv_bar`, `quote_l1` only | **Required** |
+| `binance_public` | `cross_exchange_confirmation`, `quote_l1` | Yes | Required (fail-soft) |
+| `bybit_public` | `cross_exchange_confirmation`, `quote_l1` | Yes | Required (fail-soft) |
+| `alternative_me` | `fear_greed_index` | Yes | Required (fail-soft) |
+| `coingecko_global` | `global_market_stats` | Yes | Required (fail-soft) |
+
+---
+
+## Operator documentation
+
+| Document | Role |
+|----------|------|
+| [`DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](../ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md) | Operator provisioning and verification |
+| [`AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md`](AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md) | Architect/operator sign-off |
+| [`../cloudflare-env-vars.md`](../cloudflare-env-vars.md) | Cloudflare inventory |
+
+Validation:
+
+```bash
+pnpm validate:provider-readiness
+```
 
 ---
 
@@ -254,6 +402,7 @@ pnpm lint
 pnpm typecheck
 pnpm test --run
 pnpm build
+pnpm validate:provider-readiness
 ```
 
 Grep guard: research modules must not import `connectors/binance`, `connectors/bybit`, `connectors/alternative-me`, `connectors/coingecko`, or `market-data-gateway` directly (`tests/unit/trader-research-backtest-isolation.test.ts`).

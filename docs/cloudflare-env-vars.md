@@ -175,6 +175,48 @@ See [DEE-223 BP-9 runbook](./ops/DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md) for p
 
 ---
 
+## AI-TRADER — Market Intelligence (MI gateway)
+
+Binding spec: [`docs/ai-trader/AI-TRADER-DATA-PROVIDERS.md`](./ai-trader/AI-TRADER-DATA-PROVIDERS.md)  
+Operator runbook: [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](./ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md)
+
+**HTX trade credentials are never Worker env vars** — connect via Trader UI; encrypted with master key.
+
+| Variable | Secret? | Cloudflare | Notes |
+|----------|---------|------------|-------|
+| `MARKET_BRAIN_ENABLED` | No | Plain `wrangler.jsonc` var | Cron ingest toggle |
+| `MARKET_BRAIN_ORGANIZATION_ID` | No | Plain var | Target org UUID |
+| `HTX_REST_HOST` | No | Plain var or secret | Optional REST host override |
+| `COINGECKO_API_KEY` | Yes | `wrangler secret put COINGECKO_API_KEY` | Optional; fail-soft without |
+| `PAPER_LOOP_ENABLED` | No | Plain var | Paper cron toggle |
+| `PAPER_LOOP_ORGANIZATION_ID` | No | Plain var | Paper org |
+| `PAPER_LOOP_ACCOUNT_KEY` | No | Plain var | Paper account key |
+| `PAPER_LOOP_DEFAULT_QUANTITY` | No | Plain var | Optional |
+| `PAPER_LOOP_CYCLE_ID_PREFIX` | No | Plain var | Optional |
+| `AI_TRADER_MASTER_KEY_DEV` | Yes | **Never in production** | Local `.env.local` only |
+| `AI_TRADER_MASTER_KEY` | Yes | Secrets Store binding | See [DEE-220 runbook](./ops/DEE-220-MASTER-KEY-RUNBOOK.md) |
+
+Local dev: copy placeholders from `.env.example` → `.env.local`. Workers preview: `.dev.vars.example` → `.dev.vars`.
+
+Validation: `pnpm validate:provider-readiness`
+
+---
+
+## AI-TRADER — Payment watcher (settlement; not MI gateway)
+
+| Variable | Secret? | Cloudflare |
+|----------|---------|------------|
+| `TRONGRID_API_KEY` | Yes | `wrangler secret put TRONGRID_API_KEY` |
+| `TRON_RPC_PRIMARY_URL` | No | Plain var (default TronGrid) |
+| `TRON_RPC_SECONDARY_URL` | No | Plain var |
+| `TRON_RPC_SECONDARY_API_KEY` | Yes | Secret |
+| `WATCHER_ENABLED` | No | Plain var |
+| `WATCHER_*` | No | Plain vars (see `.env.example`) |
+
+**Do not reuse** `TRONGRID_API_KEY` for future AI-TRADER blockchain intelligence — separate key per parent roadmap.
+
+---
+
 ## Files and git
 
 | File | Committed? |

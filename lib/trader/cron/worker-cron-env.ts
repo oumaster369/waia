@@ -15,6 +15,7 @@ export function bridgeTraderCronEnvToProcess(env: Record<string, unknown>): void
   bridgeEnvKey(env, "MARKET_BRAIN_ENABLED");
   bridgeEnvKey(env, "MARKET_BRAIN_ORGANIZATION_ID");
   bridgeEnvKey(env, "HTX_REST_HOST");
+  bridgeEnvKey(env, "COINGECKO_API_KEY");
   bridgeEnvKey(env, "PAPER_LOOP_ENABLED");
   bridgeEnvKey(env, "PAPER_LOOP_ORGANIZATION_ID");
   bridgeEnvKey(env, "PAPER_LOOP_ACCOUNT_KEY");
