@@ -1,7 +1,7 @@
 # Gate A — PR2 Lifecycle Readiness Input
 
-> **Status:** PR1–PR2.6 merged on `dev`. Gate A does **not** close at PR2.6 merge.  
-> **Gate A closes only after:** Data Provider Readiness → Full Market Data Source Integration → successful **Repeat M9 v0.1.7** under the complete production MI stack.
+> **Status:** PR1–PR2.6 + Data Provider Readiness merged on `dev`. Gate A does **not** close at provider-readiness merge.  
+> **Gate A closes only after:** Full Market Data Source Integration → successful **Repeat M9 v0.1.7** under the complete production MI stack.
 
 ---
 
@@ -29,15 +29,16 @@
 |------|-----|--------|
 | Provider Registry + Gateway + fusion | PR2.5 | ✅ merged (#377) |
 | Market Understanding Bridge + M9 export | PR2.6 | ✅ merged (#378) |
-| `AI-TRADER-DATA-PROVIDERS.md` binding spec | PR2.5/2.6 | ✅ exists — extended by DEE-392 |
+| `AI-TRADER-DATA-PROVIDERS.md` binding spec | PR2.5/2.6 | ✅ extended by DEE-392 |
+| Canonical provisioning guide | DEE-392 | ✅ [`AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`](../../../docs/ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md) |
 
 ---
 
 ## Provider-readiness prerequisites (before Repeat M9)
 
-**Repeat M9 v0.1.7 is BLOCKED** until **both** phases pass:
+**Repeat M9 v0.1.7 is BLOCKED** until **Full Market Data Source Integration** passes:
 
-1. **Data Provider Readiness** (DEE-392) — operator/env, secrets conventions, gateway config, validation script, runbook
+1. ✅ **Data Provider Readiness** (DEE-392 / #379) — operator/env, secrets conventions, gateway config, validation script, runbook, canonical provisioning guide
 2. **Full Market Data Source Integration** — end-to-end provider validation through gateway path
 
 | Phase | Repeat M9 blocked? |
@@ -46,15 +47,16 @@
 | Full Market Data Source Integration incomplete | **BLOCKED** |
 | Both pass | Repeat M9 may be operator-authorized |
 
-See [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](../../../docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md).
+**Operator provisioning (canonical):** [`docs/ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`](../../../docs/ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md)  
+**Phase record:** [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](../../../docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md)
 
 ---
 
 ## Remaining Gate A prerequisites
 
 1. ✅ **PR1–PR2.6** merged to `dev`.
-2. **Data Provider Readiness** — current phase (DEE-392).
-3. **Full Market Data Source Integration** — next engineering phase.
+2. ✅ **Data Provider Readiness** — complete (DEE-392 / #379 @ `9c1df25`).
+3. **Full Market Data Source Integration** — **current engineering phase**.
 4. **Repeat M9 v0.1.7** with fresh operator authorization, guardian exits ON, under validated provider stack.
 5. **Gate A verification** after successful Repeat M9.
 
@@ -74,8 +76,8 @@ See [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](../../../docs/ops/DE
 
 ## Engineering resume point
 
-**Current:** Data Provider Readiness (DEE-392)  
-**Next:** Full Market Data Source Integration  
+**Current:** Full Market Data Source Integration  
+**Completed:** Data Provider Readiness (DEE-392 / #379)  
 **Not yet:** Repeat M9
 
 See `replay-runs/RI-P7/AI-TRADER-ENGINEERING-STATUS.md` for canonical sequence.

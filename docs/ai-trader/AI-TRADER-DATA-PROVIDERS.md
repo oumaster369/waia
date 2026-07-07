@@ -1,8 +1,8 @@
 # AI-TRADER Data Providers (PR2.5 + PR2.6 + Data Provider Readiness binding spec)
 
-Status: **PR2.5 + PR2.6 + Data Provider Readiness (DEE-392)** · Date: 2026-07-07
+Status: **Data Provider Readiness complete (DEE-392 / #379)** · PR2.5 + PR2.6 + operator/env gate · Date: 2026-07-07
 
-This document is the binding companion for Market Intelligence provider integration delivered in **PR2.5 — Market Intelligence Integration**. It defines registry entries, gateway routing, degradation policy, and architectural boundaries. Implementation lives under `lib/trader/market-data/` and `lib/trader/connectors/`.
+This document is the binding companion for Market Intelligence provider integration. **Operator provisioning from zero:** use **[AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md](AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md)** (canonical — only source of truth for provisioning steps).
 
 > **Authority:** Parent intelligence evolution roadmap (`.cursor/plans/ai-trader_intelligence_evolution_48358215.plan.md`) wins on ambiguity. Providers produce **evidence only** — never trading decisions.
 
@@ -156,7 +156,7 @@ External data must **never** generate buy/sell signals directly.
 
 HTX public market REST, Binance, Bybit, and Alternative.me require **no authentication** in PR2.5.
 
-**HTX trade credentials (API key, secret, passphrase) are NEVER environment variables.** They are entered only through the Trader Workspace UI and encrypted at rest via the existing credential architecture. See [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](../ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md).
+**HTX trade credentials (API key, secret, passphrase) are NEVER environment variables.** They are entered only through the Trader Workspace UI and encrypted at rest via the existing credential architecture. See **[AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md](AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md)** Section D.
 
 Payment watcher TronGrid vars (`TRONGRID_API_KEY`, `TRON_RPC_*`, `WATCHER_*`) are settlement infrastructure — not MI gateway providers. See [`docs/cloudflare-env-vars.md`](../cloudflare-env-vars.md).
 
@@ -287,7 +287,8 @@ Optional live smoke (operator opt-in): `WAIA_HTX_LIVE_SMOKE=1 pnpm test --run te
 
 | Document | Role |
 |----------|------|
-| [`DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](../ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md) | Operator provisioning and verification |
+| **[AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md](AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md)** | **Canonical** provisioning from empty workstation (Sections A–F) |
+| [`DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](../ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md) | DEE-392 phase gate record |
 | [`AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md`](AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md) | Architect/operator sign-off |
 | [`../cloudflare-env-vars.md`](../cloudflare-env-vars.md) | Cloudflare inventory |
 

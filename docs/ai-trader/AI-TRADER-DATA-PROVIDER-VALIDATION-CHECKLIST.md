@@ -1,8 +1,10 @@
 # AI-TRADER Data Provider Validation Checklist
 
-**Phase:** Data Provider Readiness (DEE-392)  
+**Phase:** Data Provider Readiness (DEE-392) — **engineering complete** (#379 merged)  
 **Next phase:** Full Market Data Source Integration  
-**Repeat M9:** **BLOCKED** until both provider phases pass
+**Repeat M9:** **BLOCKED** until Full Market Data Source Integration passes
+
+**Canonical provisioning:** [`AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`](AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md) (Sections A–F)
 
 Use this checklist for Architect/operator sign-off. No secret values — verify names and locations only.
 
@@ -28,9 +30,10 @@ pnpm lint && pnpm typecheck && pnpm test --run && pnpm build
 - [ ] Provider health observability documented
 - [ ] Gateway bypass inventory documented
 - [ ] `order_book_snapshot` known gap documented
+- [ ] [`AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`](AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md) exists as canonical provisioning source
 - [ ] [`DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](../ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md) exists with Post-merge Operator Provisioning Sequence
-- [ ] [`AI-TRADER-ENGINEERING-STATUS.md`](../../replay-runs/RI-P7/AI-TRADER-ENGINEERING-STATUS.md) shows Data Provider Readiness as current phase
-- [ ] [`GATE-A-VALIDATION.md`](../../replay-runs/RI-P7/m9-v2-research-campaign-org0/GATE-A-VALIDATION.md) lists both provider phases before Repeat M9
+- [ ] [`AI-TRADER-ENGINEERING-STATUS.md`](../../replay-runs/RI-P7/AI-TRADER-ENGINEERING-STATUS.md) shows Full Market Data Source Integration as next phase
+- [ ] [`GATE-A-VALIDATION.md`](../../replay-runs/RI-P7/m9-v2-research-campaign-org0/GATE-A-VALIDATION.md) lists Data Provider Readiness complete; Full Market Data Source Integration before Repeat M9
 
 ---
 
