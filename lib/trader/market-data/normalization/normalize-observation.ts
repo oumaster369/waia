@@ -32,9 +32,19 @@ export function normalizeOhlcvBarsObservation(input: {
   evaluatedAt: string;
 }): NormalizedObservation {
   const latest = input.bars[input.bars.length - 1];
+  const first = input.bars[0];
   const eventTime = latest?.barCloseTime ?? input.evaluatedAt;
   const freshnessMs = Math.max(0, Date.parse(input.evaluatedAt) - Date.parse(eventTime));
   const reliability = scoreObservationReliability({ freshnessMs });
+
+  let openCloseDeltaPct: number | undefined;
+  if (first && latest) {
+    const open = Number(first.open);
+    const close = Number(latest.close);
+    if (Number.isFinite(open) && Number.isFinite(close) && open > 0) {
+      openCloseDeltaPct = ((close - open) / open) * 100;
+    }
+  }
 
   return {
     schemaVersion: OBSERVATION_SCHEMA_VERSION,
@@ -50,6 +60,7 @@ export function normalizeOhlcvBarsObservation(input: {
       barCount: input.bars.length,
       latestClose: latest?.close,
       latestBarCloseTime: latest?.barCloseTime,
+      openCloseDeltaPct,
     },
   };
 }

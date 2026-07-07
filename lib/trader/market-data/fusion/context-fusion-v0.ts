@@ -7,6 +7,7 @@ import { aggregateProviderHealth } from "@/lib/trader/market-data/reliability/pr
 import { computeAsianRangeCorridorMetadata } from "@/lib/trader/market-data/session/asian-range-corridor";
 import { classifySessionPhaseUtc } from "@/lib/trader/market-data/session/session-phase-classifier";
 import { filterValidObservations } from "@/lib/trader/market-data/validation/validate-observation";
+import type { CrossVenueTriangulation } from "@/lib/trader/intelligence/market-understanding.types";
 import type { BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 
 export type FuseContextV0Input = {
@@ -15,6 +16,7 @@ export type FuseContextV0Input = {
   mtfBars: Partial<Record<BarInterval, NormalizedObservation[]>>;
   primaryQuote?: NormalizedObservation;
   crossExchangeConfirmation?: NormalizedObservation;
+  crossVenueTriangulation?: CrossVenueTriangulation;
   fearGreed?: NormalizedObservation;
   globalMarket?: NormalizedObservation;
   degradationReasons?: readonly string[];
@@ -65,6 +67,7 @@ export function fuseContextV0(input: FuseContextV0Input): FusedMarketContext {
     mtfBars,
     primaryQuote: input.primaryQuote,
     crossExchangeConfirmation: input.crossExchangeConfirmation,
+    crossVenueTriangulation: input.crossVenueTriangulation,
     fearGreed: input.fearGreed,
     globalMarket: input.globalMarket,
     asianRangeCorridor,

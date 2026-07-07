@@ -13,6 +13,7 @@ import {
   createSqliteOrderRepository,
   createSqliteReconciliationService,
 } from "@/lib/trader/execution";
+import { CANONICAL_MARKET_QUESTION_IDS } from "@/lib/trader/intelligence/market-understanding.types";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
 import { runPaperCycleOnce, runPollPaperCycles } from "@/lib/trader/paper/paper-cycle-runner";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
@@ -127,16 +128,23 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
       htxPollSourceOptions(fixture, { cycleIdPrefix: "test-htx-poll" }),
     );
 
-    const snapshot = await poll.fetchSnapshot();
+    const bundle = await poll.fetchEvaluationBundle();
     const result = await runPaperCycleOnce(deps, {
       context,
-      snapshot,
+      snapshot: bundle.snapshot,
+      fusedContext: bundle.fusedContext,
       accountKey: "acct-htx-poll",
       defaultQuantity: "0.01",
       executionMode: "mock",
       accountState: EMPTY_STATE,
       newId: () => crypto.randomUUID(),
     });
+
+    expect(result.evaluation.understanding).toBeDefined();
+    expect(result.evaluation.understanding!.questionEvaluations).toHaveLength(11);
+    expect(
+      result.evaluation.understanding!.questionEvaluations.map((q) => q.questionId).sort(),
+    ).toEqual([...CANONICAL_MARKET_QUESTION_IDS].sort());
 
     expect(result.evaluation.signal.outcome).toBe("SIGNAL");
     expect(result.submitBlocked).toBe(false);
@@ -177,6 +185,12 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
 
     const idempotencyKeys = new Set<string>();
     for (const result of results) {
+      expect(result.evaluation.understanding).toBeDefined();
+      expect(result.evaluation.understanding!.questionEvaluations).toHaveLength(11);
+      expect(
+        result.evaluation.understanding!.questionEvaluations.map((q) => q.questionId).sort(),
+      ).toEqual([...CANONICAL_MARKET_QUESTION_IDS].sort());
+
       expect(result.evaluation.signal.outcome).toBe("SIGNAL");
       expect(result.submitBlocked).toBe(false);
       expect(result.execution?.status).toBe("submitted");

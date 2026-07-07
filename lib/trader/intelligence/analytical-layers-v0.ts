@@ -4,7 +4,9 @@ import type {
   MsvFutureContextBlock,
   MsvLiquidityBlock,
   MsvPhysicsBlock,
+  MsvUnderstandingBlock,
 } from "@/lib/trader/intelligence/types";
+import type { MarketUnderstandingSnapshot } from "@/lib/trader/intelligence/market-understanding.types";
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
 
 /**
@@ -35,13 +37,38 @@ export function buildCrowdPsychologyLayer(fusedContext?: FusedMarketContext): Ms
   };
 }
 
-export function buildFutureContextLayer(fusedContext?: FusedMarketContext): MsvFutureContextBlock {
+export function buildFutureContextLayer(
+  fusedContext?: FusedMarketContext,
+  understanding?: MarketUnderstandingSnapshot,
+): MsvFutureContextBlock {
   const sessionPhase = fusedContext?.sessionPhase ?? "UNKNOWN";
   const corridor = fusedContext?.asianRangeCorridor;
-  const eventRiskScore = corridor ? "0.1" : "0";
+  const eventRiskScore =
+    understanding?.regimeHint === "STRESSED"
+      ? "0.35"
+      : understanding?.mtfAlignment === "CONFLICTING"
+        ? "0.2"
+        : corridor
+          ? "0.1"
+          : "0";
   return {
     eventRiskScore,
     sessionPhase,
     asianRangeCorridorPresent: corridor !== undefined,
+  };
+}
+
+export function buildMsvUnderstandingBlock(
+  understanding: MarketUnderstandingSnapshot,
+): MsvUnderstandingBlock {
+  return {
+    regimeHint: understanding.regimeHint,
+    mtfAlignment: understanding.mtfAlignment,
+    spotPosture: understanding.spotPosture,
+    crossVenueAgreement: understanding.crossVenue.agreement,
+    understandingConfidence: understanding.understandingConfidence,
+    postureRationale: understanding.postureRationale,
+    knowledgeGapCount: understanding.knowledgeGaps.length,
+    dataQualitySufficient: understanding.dataQualitySufficient,
   };
 }

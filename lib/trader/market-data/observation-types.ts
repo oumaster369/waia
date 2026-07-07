@@ -57,6 +57,8 @@ export type AsianRangeCorridorMetadata = {
   isResearchSeedOnly: true;
 };
 
+import type { CrossVenueTriangulation } from "@/lib/trader/intelligence/market-understanding.types";
+
 export type FusedMarketContext = {
   schemaVersion: typeof FUSED_CONTEXT_SCHEMA_VERSION;
   fusedAtUtc: string;
@@ -65,6 +67,7 @@ export type FusedMarketContext = {
   mtfBars: Partial<Record<BarInterval, NormalizedObservation[]>>;
   primaryQuote?: NormalizedObservation;
   crossExchangeConfirmation?: NormalizedObservation;
+  crossVenueTriangulation?: CrossVenueTriangulation;
   fearGreed?: NormalizedObservation;
   globalMarket?: NormalizedObservation;
   asianRangeCorridor?: AsianRangeCorridorMetadata;

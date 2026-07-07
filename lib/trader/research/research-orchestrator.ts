@@ -165,6 +165,7 @@ function buildIsolatedBacktestInput(
     portfolioConfig: pipelineBacktest?.portfolioConfig,
     guardian: buildResearchGuardianContext(pipelineBacktest?.guardian),
     artifactSink: params.artifactSink,
+    providerSidecar: pipelineBacktest?.providerSidecar,
   };
 }
 

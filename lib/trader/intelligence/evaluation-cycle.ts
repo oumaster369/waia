@@ -1,6 +1,7 @@
 import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
 import { emitMsvDecisionCounters } from "@/lib/trader/intelligence/decision-telemetry";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
+import { buildMarketUnderstandingBridge } from "@/lib/trader/intelligence/market-understanding-bridge-v0";
 import {
   evaluateRegisteredStrategies,
   selectPrimaryStrategySignal,
@@ -9,7 +10,7 @@ import { emitStrategySignalCounters } from "@/lib/trader/intelligence/strategy-t
 import type { EvaluationCycleInput, EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 
 /**
- * Runs one intelligence evaluation: Feature Engine → Context Fusion hook → CDE → strategies.
+ * Runs one intelligence evaluation: Feature Engine → Context Fusion hook → Understanding Bridge → CDE → strategies.
  */
 export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycleResult {
   const newId = input.newId ?? crypto.randomUUID.bind(crypto);
@@ -19,9 +20,18 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     evaluatedAt: input.evaluatedAt,
     newId,
   });
+
+  const understanding = input.fusedContext
+    ? buildMarketUnderstandingBridge({
+        fusedContext: input.fusedContext,
+        features,
+      })
+    : undefined;
+
   const msv = buildMsvEnvelope({
     features,
     fusedContext: input.fusedContext,
+    understanding,
     newId,
   });
   emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
@@ -38,5 +48,5 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
 
   const signal = selectPrimaryStrategySignal(signals);
 
-  return { features, msv, signals, signal, fusedContext: input.fusedContext };
+  return { features, msv, signals, signal, fusedContext: input.fusedContext, understanding };
 }

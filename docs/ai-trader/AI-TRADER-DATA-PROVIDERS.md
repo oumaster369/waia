@@ -1,6 +1,6 @@
-# AI-TRADER Data Providers (PR2.5 binding spec)
+# AI-TRADER Data Providers (PR2.5 + PR2.6 binding spec)
 
-Status: **PR2.5 implementation binding** · Date: 2026-07-07
+Status: **PR2.5 + PR2.6 implementation binding** · Date: 2026-07-07
 
 This document is the binding companion for Market Intelligence provider integration delivered in **PR2.5 — Market Intelligence Integration**. It defines registry entries, gateway routing, degradation policy, and architectural boundaries. Implementation lives under `lib/trader/market-data/` and `lib/trader/connectors/`.
 
@@ -19,6 +19,7 @@ Provider Registry
   → Validation (`validate-observation.ts`)
   → Freshness / Reliability (`provider-health.ts`)
   → Context Fusion (`context-fusion-v0.ts`)
+  → Market Understanding Bridge (`market-understanding-bridge-v0.ts`) — PR2.6
   → MSV hook (`buildMsvEnvelope`)
   → Chief Decision Engine hook (`cde-v0.ts`)
   → Risk Engine / Strategy evaluation
@@ -52,6 +53,7 @@ Distinct from execution connector registry (`lib/trader/connectors/registry.ts`)
 **Consumers:**
 - `HtxBarPollSource` — paper cycles and integration tests
 - `market-brain/htx-ingestion.ts` — scheduled ingest
+- `market-brain/market-brain-pipeline.ts` — routes through `runEvaluationCycle()` (understanding bridge + CDE)
 - Evaluation cycle via optional `fusedContext` on `EvaluationCycleInput`
 
 **Configuration:**
@@ -126,14 +128,16 @@ External data must **never** generate buy/sell signals directly.
 
 ## PR mapping
 
-| Capability | PR2.5 | PR3 | PR4 |
-|------------|-------|-----|-----|
-| Registry + Gateway + adapters | Implement | Consume | Consume |
-| MTF bars + fusion hooks | Implement | Deepen features | Consume |
-| Feature Engine v1 (ATR/VWAP) | Contracts only | Implement | — |
-| Market Context layer | — | Implement | — |
-| CDE regime upgrades | Hook only | Implement | — |
-| Market Memory / Research Questions | Hooks only | — | Implement |
+| Capability | PR2.5 | PR2.6 | PR3 | PR4 |
+|------------|-------|-------|-----|-----|
+| Registry + Gateway + adapters | Implement | Harden | Consume | Consume |
+| MTF bars + fusion hooks | Implement | Backdrop classifier + replay resampler | Deepen features | Consume |
+| Cross-venue triangulation | Winner-take-all | Both venues merged | — | — |
+| Market Understanding Bridge | — | Implement | Consume | Consume |
+| Feature Engine v1 (ATR/VWAP) | Contracts only | — | Implement | — |
+| Market Context layer | — | — | Implement | — |
+| CDE regime upgrades | Hook only | Understanding-informed permission | Implement | — |
+| Market Memory / Research Questions | Hooks only | ResearchSignals export | — | Implement |
 
 ---
 
@@ -159,6 +163,87 @@ Deterministic fixtures under `tests/fixtures/trader/`:
 Unit tests: `tests/unit/trader-market-data-pr25.test.ts`, `tests/unit/trader-provider-adapters.test.ts`
 
 Integration tests use `tests/helpers/htx-gateway-mock-fetch.ts` with `disableOptionalProviders: true`.
+
+---
+
+## PR2.6 — Pre-M9 Market Understanding Bridge
+
+PR2.6 transforms `FusedMarketContext` into deterministic `MarketUnderstandingSnapshot` before CDE permission. Providers still produce evidence only.
+
+### Observation lifecycle (doctrine)
+
+```text
+Observed   → Provider answer ingested (PR2.5 gateway)
+Validated  → Schema + quality gates pass (PR2.5)
+Accepted   → Health/freshness above rejection threshold (PR2.5)
+Fused      → Merged into FusedMarketContext (PR2.5)
+Interpreted → MarketUnderstandingSnapshot produced (PR2.6)
+Remembered → Archived in MKB / Market Memory (PR4 — not PR2.6)
+```
+
+### Architectural invariants (binding)
+
+1. Provider ≠ Intelligence — providers produce evidence only.
+2. Observation ≠ Knowledge — normalized observations are not MKB edges until PR4.
+3. Knowledge ≠ Decision — understanding informs permission; never commands trades.
+4. Decision ≠ Execution — CDE posture ≠ order submission.
+5. Missing evidence must never become bullish evidence.
+6. Cash/no-trade is a successful outcome when edge is insufficient.
+7. Understanding remains deterministic — identical inputs → identical snapshot.
+8. Replay remains byte-reproducible — no live optional-provider fetch in research backtest.
+9. No provider bypass on governed paths.
+10. All provider influence is advisory (confidence, permission, risk multiplier only).
+
+### Core modules
+
+| Module | Purpose |
+|--------|---------|
+| `market-understanding-bridge-v0.ts` | 11 canonical questions → snapshot |
+| `cross-venue-triangulation.ts` | Binance + Bybit agreement (not winner-take-all) |
+| `mtf-backdrop-classifier.ts` | Per-interval direction + alignment |
+| `replay-mtf-resampler.ts` | Deterministic MTF from 1m replay |
+| `replay-fused-context-builder.ts` | Replay `FusedMarketContext` for M9/research |
+| `m9-market-understanding-export.ts` | `m9-market-understanding-sample.json` |
+
+### Replay path (M9)
+
+Research backtests MUST NOT call live Binance/Bybit. Use:
+
+1. **Tier 1:** Resample MTF from historical 1m bars (`replay-fused-context-builder.ts`)
+2. **Tier 2:** Optional fixture sidecar (`tests/fixtures/trader/m9-provider-sidecar.json`)
+
+**M9 tier-2 operator workflow:**
+
+```bash
+# Default: vaultDir/m9-provider-sidecar.json when present
+pnpm tsx scripts/trader/m9-v2-research-campaign.ts \
+  --vault-dir=<vault> \
+  [--provider-sidecar-path=<path>] \
+  ...
+```
+
+The campaign loads the sidecar via `loadM9ProviderSidecar()` and passes `pipelineBacktest.providerSidecar` through the research orchestrator → `buildIsolatedBacktestInput` → `runResearchValidationBacktest`. Cross-venue, crowd, and global context from the sidecar appear in replay fused context and in `m9-market-understanding-sample.json` export artifacts.
+
+### Future provider contract (doc template — PR3/PR4 runtime)
+
+Every future provider MUST declare:
+
+| Field | Meaning |
+|-------|---------|
+| Market questions answered | Canonical question IDs from intelligence roadmap |
+| Freshness expectation | Max acceptable staleness before degradation |
+| Reliability tier | Primary / secondary / fallback |
+| Failure semantics | degrade / unavailable / retry — never crash |
+| Confidence contribution | Bounded, monotonic influence on upstream confidence |
+
+### PR2.6 test fixtures
+
+- `m9-provider-sidecar.json` — timestamp-keyed optional observations for replay
+- `market-understanding-aligned-trend.json` — golden aligned-trend understanding snapshot
+- `market-understanding-cross-venue-conflict.json` — golden cross-venue conflict snapshot
+- `market-understanding-gaps-conflict.json` — golden knowledge-gap conflict snapshot
+- Unit tests: `trader-market-understanding-bridge.test.ts`, `trader-market-understanding-golden.test.ts`, `trader-cross-venue-triangulation.test.ts`, `trader-replay-fused-context.test.ts`, `trader-market-question-evaluation.test.ts`, `trader-m9-market-understanding-export.test.ts`
+- Integration: `tests/integration/trader-htx-bar-poll-cycle.test.ts` asserts `evaluation.understanding` and all 11 canonical questions on live poll cycles
 
 ---
 

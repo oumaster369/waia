@@ -1,3 +1,4 @@
+import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
 import type { M9BlindAuthorizationScope } from "@/lib/trader/research/m9-operator-authorization";
@@ -20,6 +21,8 @@ export type ResearchPipelineBacktestOptions = {
   operatorBlindAuthorization?: string;
   blindAuthorizationScope?: M9BlindAuthorizationScope;
   validationArtifactSink?: ResearchValidationBacktestArtifactSink;
+  /** Optional replay provider sidecar for tier-2 cross-venue/crowd/global in M9 artifacts. */
+  providerSidecar?: ReplayProviderSidecar;
 };
 
 export type RunResearchPipelineResultArtifacts = {

@@ -1,5 +1,6 @@
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
+import { buildReplayFusedContextFromSnapshot } from "@/lib/trader/market-data/replay-fused-context-builder";
 import { evaluatePositionGuardian, mapExitIntentToSubmitOrder } from "@/lib/trader/guardian";
 import { assertLifecycleFillWalkOpenQtyParity } from "@/lib/trader/lifecycle";
 import {
@@ -495,6 +496,10 @@ export async function runFixturePaperCycles(
     const result = await runPaperCycleOnce(input.deps, {
       context: input.context,
       snapshot: next.snapshot,
+      fusedContext:
+        input.enableReplayFusedContext === false
+          ? undefined
+          : buildReplayFusedContextFromSnapshot(next.snapshot, input.providerSidecar),
       accountKey: input.accountKey,
       defaultQuantity: input.defaultQuantity,
       executionMode: input.executionMode,

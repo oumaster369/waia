@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import type { BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 import { MEAN_REVERSION_V0, MEAN_REVERSION_V0_VERSION } from "@/lib/trader/intelligence/types";
 import type { ResearchPortfolioConfig } from "@/lib/trader/research/research-portfolio-config";
@@ -95,4 +98,28 @@ export function resolveM9SymbolInterval(flags: Map<string, string>): {
 
 export function parseEnableGuardianExits(flags: Map<string, string>): boolean {
   return flags.get("enable-guardian-exits") === "1";
+}
+
+export function resolveM9ProviderSidecarPath(
+  flags: Map<string, string>,
+  vaultDir: string,
+): string | undefined {
+  const explicit = flags.get("provider-sidecar-path")?.trim();
+  if (explicit) {
+    return resolve(explicit);
+  }
+  const defaultPath = resolve(vaultDir, "m9-provider-sidecar.json");
+  if (existsSync(defaultPath)) {
+    return defaultPath;
+  }
+  return undefined;
+}
+
+export function loadM9ProviderSidecar(path: string | undefined) {
+  if (!path) {
+    return undefined;
+  }
+  return JSON.parse(
+    readFileSync(path, "utf8"),
+  ) as import("@/lib/trader/market-data/replay-fused-context-builder").ReplayProviderSidecar;
 }

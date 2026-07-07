@@ -73,6 +73,7 @@ export type PaperCycleDeps = {
 };
 
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
+import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
 
 export type PaperCycleInput = {
   context: OrgContext;
@@ -139,6 +140,10 @@ export type RunMultiPaperCyclesSharedInput = {
 
 export type RunFixturePaperCyclesInput = RunMultiPaperCyclesSharedInput & {
   replay: BarReplaySource;
+  /** Optional timestamped provider sidecar for replay fused context (M9 path). */
+  providerSidecar?: ReplayProviderSidecar;
+  /** When false, skips replay fused context builder (legacy behavior). */
+  enableReplayFusedContext?: boolean;
 };
 
 export type RunPollPaperCyclesInput = RunMultiPaperCyclesSharedInput & {

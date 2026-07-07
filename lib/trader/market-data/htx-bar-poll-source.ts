@@ -23,6 +23,7 @@ export class HtxBarPollSource implements BarPollSource {
       htxRestHost: options.restHost,
       fetchImpl: options.fetchImpl,
       disableOptionalProviders: options.disableOptionalProviders ?? false,
+      coingeckoApiKey: process.env.COINGECKO_API_KEY,
     });
     this.cycleIdPrefix = options.cycleIdPrefix ?? DEFAULT_HTX_POLL_CYCLE_ID_PREFIX;
   }
