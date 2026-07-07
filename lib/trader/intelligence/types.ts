@@ -1,4 +1,11 @@
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
+import type {
+  CrossVenueAgreement,
+  MarketUnderstandingSnapshot,
+  MtfAlignment,
+  RegimeHint,
+  SpotPosture,
+} from "@/lib/trader/intelligence/market-understanding.types";
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
 
 /** Canonical spot symbol for MVP intelligence slice (HTX-style slash form). */
@@ -109,6 +116,17 @@ export type MsvDerivedBlock = {
   reasonCodes: readonly string[];
 };
 
+export type MsvUnderstandingBlock = {
+  regimeHint: RegimeHint;
+  mtfAlignment: MtfAlignment;
+  spotPosture: SpotPosture;
+  crossVenueAgreement: CrossVenueAgreement;
+  understandingConfidence: number;
+  postureRationale: readonly string[];
+  knowledgeGapCount: number;
+  dataQualitySufficient: boolean;
+};
+
 export type MsvEnvelope = {
   msvId: string;
   instrumentId: InstrumentId;
@@ -118,6 +136,7 @@ export type MsvEnvelope = {
   liquidity: MsvLiquidityBlock;
   crowd: MsvCrowdBlock;
   futureContext: MsvFutureContextBlock;
+  understanding?: MsvUnderstandingBlock;
   derived: MsvDerivedBlock;
 };
 
@@ -151,6 +170,14 @@ export const cdeReasonCodes = {
   regimeUnknown: "CDE_REGIME_UNKNOWN",
   providerDegraded: "CDE_PROVIDER_DEGRADED",
   fusedContextReduced: "CDE_FUSED_CONTEXT_REDUCED",
+  understandingNoTrade: "CDE_UNDERSTANDING_NO_TRADE",
+  understandingWait: "CDE_UNDERSTANDING_WAIT",
+  understandingReducedRisk: "CDE_UNDERSTANDING_REDUCED_RISK",
+  understandingPreserveCapital: "CDE_UNDERSTANDING_PRESERVE_CAPITAL",
+  understandingCrossVenueConflict: "CDE_UNDERSTANDING_CROSS_VENUE_CONFLICT",
+  understandingKnowledgeGap: "CDE_UNDERSTANDING_KNOWLEDGE_GAP",
+  understandingDataInsufficient: "CDE_UNDERSTANDING_DATA_INSUFFICIENT",
+  understandingStressed: "CDE_UNDERSTANDING_STRESSED",
 } as const;
 
 export const strategyReasonCodes = {
@@ -214,4 +241,5 @@ export type EvaluationCycleResult = {
   /** Primary signal for backward-compatible paper loop wiring. */
   signal: StrategySignal;
   fusedContext?: FusedMarketContext;
+  understanding?: MarketUnderstandingSnapshot;
 };

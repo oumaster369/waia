@@ -1,0 +1,217 @@
+{
+  "schemaVersion": "waia.trader.market_understanding.v0",
+  "instrumentId": "BTC/USDT",
+  "evaluatedAt": "2026-01-01T00:25:00.000Z",
+  "questionEvaluations": [
+    {
+      "questionId": "Q_WHAT_HAPPENING",
+      "status": "PARTIAL",
+      "answerSummary": "UNCLEAR",
+      "confidence": 0.4,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_WHY_HAPPENING",
+      "status": "PARTIAL",
+      "answerSummary": "mtf_unclear",
+      "confidence": 0.55,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_HTF_ALIGNED",
+      "status": "ANSWERED",
+      "answerSummary": "UNCLEAR/UNCLEAR",
+      "confidence": 0.45,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_LTF_ALIGNED",
+      "status": "ANSWERED",
+      "answerSummary": "UNCLEAR/UNCLEAR",
+      "confidence": 0.45,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_CROSS_VENUE",
+      "status": "UNAVAILABLE",
+      "answerSummary": "UNAVAILABLE",
+      "confidence": 0,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_CROWD",
+      "status": "UNAVAILABLE",
+      "answerSummary": "UNAVAILABLE",
+      "confidence": 0,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_LIQUIDITY",
+      "status": "PARTIAL",
+      "answerSummary": "UNKNOWN",
+      "confidence": 0.5,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_DATA_TRUST",
+      "status": "PARTIAL",
+      "answerSummary": "DEGRADED",
+      "confidence": 0.35,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": true,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_UNKNOWN",
+      "status": "ANSWERED",
+      "answerSummary": "8_gaps",
+      "confidence": 0.9,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": false
+    },
+    {
+      "questionId": "Q_DEPLOY_CAPITAL",
+      "status": "PARTIAL",
+      "answerSummary": "NO_TRADE",
+      "confidence": 0,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_PRESERVE_CAPITAL",
+      "status": "ANSWERED",
+      "answerSummary": "NO_TRADE",
+      "confidence": 0,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": true
+    }
+  ],
+  "knowledgeGaps": [
+    {
+      "kind": "NEED_MORE_EVIDENCE",
+      "questionId": "Q_WHAT_HAPPENING",
+      "description": "Q_WHAT_HAPPENING:PARTIAL",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_WHAT_HAPPENING_PARTIAL"
+    },
+    {
+      "kind": "NEED_MORE_EVIDENCE",
+      "questionId": "Q_WHY_HAPPENING",
+      "description": "Q_WHY_HAPPENING:PARTIAL",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_WHY_HAPPENING_PARTIAL"
+    },
+    {
+      "kind": "UNAVAILABLE",
+      "questionId": "Q_CROSS_VENUE",
+      "description": "Q_CROSS_VENUE:UNAVAILABLE",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_CROSS_VENUE_UNAVAILABLE"
+    },
+    {
+      "kind": "UNAVAILABLE",
+      "questionId": "Q_CROWD",
+      "description": "Q_CROWD:UNAVAILABLE",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_CROWD_UNAVAILABLE"
+    },
+    {
+      "kind": "NEED_MORE_EVIDENCE",
+      "questionId": "Q_LIQUIDITY",
+      "description": "Q_LIQUIDITY:PARTIAL",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_LIQUIDITY_PARTIAL"
+    },
+    {
+      "kind": "NEED_MORE_EVIDENCE",
+      "questionId": "Q_DATA_TRUST",
+      "description": "Q_DATA_TRUST:PARTIAL",
+      "blocksPermission": true,
+      "reasonCode": "GAP_Q_DATA_TRUST_PARTIAL"
+    },
+    {
+      "kind": "NEED_MORE_EVIDENCE",
+      "questionId": "Q_DEPLOY_CAPITAL",
+      "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
+    },
+    {
+      "kind": "NEED_MORE_EVIDENCE",
+      "questionId": "Q_PRESERVE_CAPITAL",
+      "description": "Q_PRESERVE_CAPITAL:PARTIAL",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+    }
+  ],
+  "confidenceAttribution": {
+    "priorConfidence": 0,
+    "finalConfidence": 0,
+    "confidenceDelta": 0,
+    "contributors": [
+      {
+        "source": "fused_context_aggregate",
+        "direction": "INCREASE",
+        "magnitude": 0,
+        "reasonCode": "PRIOR_FUSED_CONFIDENCE"
+      },
+      {
+        "source": "feature_engine",
+        "direction": "DECREASE",
+        "magnitude": 0.15,
+        "reasonCode": "DATA_QUALITY_INSUFFICIENT"
+      }
+    ]
+  },
+  "reasoningInputs": {
+    "evidenceUsed": [],
+    "evidenceIgnored": [],
+    "conflicts": [],
+    "unknowns": [
+      "GAP_Q_CROSS_VENUE_UNAVAILABLE",
+      "GAP_Q_CROWD_UNAVAILABLE"
+    ]
+  },
+  "mtfBackdrop": {},
+  "mtfAlignment": "UNCLEAR",
+  "regimeHint": "UNCLEAR",
+  "crossVenue": {
+    "agreement": "UNAVAILABLE",
+    "binanceDeltaBps": null,
+    "bybitDeltaBps": null,
+    "triangulationConfidence": 0,
+    "reasonCodes": [
+      "CROSS_VENUE_UNAVAILABLE"
+    ]
+  },
+  "globalContext": "UNAVAILABLE",
+  "crowdPsychology": "UNAVAILABLE",
+  "liquiditySufficiency": "UNKNOWN",
+  "dataQualitySufficient": false,
+  "dataQualityReasonCodes": [
+    "DATA_QUALITY_BELOW_THRESHOLD"
+  ],
+  "asianCorridorPresent": false,
+  "spotPosture": "NO_TRADE",
+  "postureRationale": [
+    "POSTURE_DATA_QUALITY_INSUFFICIENT"
+  ],
+  "understandingConfidence": 0
+}

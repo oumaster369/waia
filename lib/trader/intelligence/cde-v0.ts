@@ -4,7 +4,9 @@ import {
   buildFutureContextLayer,
   buildLiquidityLayer,
   buildMarketPhysicsLayer,
+  buildMsvUnderstandingBlock,
 } from "@/lib/trader/intelligence/analytical-layers-v0";
+import type { MarketUnderstandingSnapshot } from "@/lib/trader/intelligence/market-understanding.types";
 import { listMvpStrategyRegistry } from "@/lib/trader/intelligence/strategies/registry";
 import {
   cdeReasonCodes,
@@ -21,6 +23,14 @@ import { compareDecimal } from "@/lib/trader/risk/numeric";
 const QUALITY_PAPER_ONLY_THRESHOLD = FEATURE_ENGINE_QUALITY_THRESHOLD;
 const FUSED_DEGRADED_CONFIDENCE_THRESHOLD = 0.5;
 
+const PERMISSION_RESTRICTIVENESS: Record<TradingPermission, number> = {
+  STOP_TRADING: 0,
+  ONLY_CLOSE_POSITIONS: 1,
+  PAPER_ONLY: 2,
+  ALLOW_REDUCED_RISK: 3,
+  ALLOW_TRADING: 4,
+};
+
 export function classifyRegime(features: FeatureSnapshot): Regime {
   const zscore = features.features.zscoreVsSma20;
   if (compareDecimal(zscore, "-2") <= 0) {
@@ -35,9 +45,19 @@ export function classifyRegime(features: FeatureSnapshot): Regime {
   return "RANGE";
 }
 
+function moreRestrictivePermission(
+  current: TradingPermission,
+  candidate: TradingPermission,
+): TradingPermission {
+  return PERMISSION_RESTRICTIVENESS[candidate] < PERMISSION_RESTRICTIVENESS[current]
+    ? candidate
+    : current;
+}
+
 function resolveTradingPermission(input: {
   dataQualityScore: number;
   fusedContext?: FusedMarketContext;
+  understanding?: MarketUnderstandingSnapshot;
 }): {
   permission: TradingPermission;
   reasonCodes: string[];
@@ -56,12 +76,11 @@ function resolveTradingPermission(input: {
 
   reasonCodes.push(cdeReasonCodes.qualityAllowTrading);
 
+  let permission: TradingPermission = "ALLOW_TRADING";
+  let riskMultiplier = "1.0";
+
   if (!input.fusedContext) {
-    return {
-      permission: "ALLOW_TRADING",
-      reasonCodes,
-      riskMultiplier: "1.0",
-    };
+    return { permission, reasonCodes, riskMultiplier };
   }
 
   if (
@@ -69,30 +88,69 @@ function resolveTradingPermission(input: {
     input.fusedContext.aggregateHealth === "STALE"
   ) {
     reasonCodes.push(cdeReasonCodes.providerDegraded);
-    return {
-      permission: "PAPER_ONLY",
-      reasonCodes,
-      riskMultiplier: "0.75",
-    };
-  }
-
-  if (
+    permission = "PAPER_ONLY";
+    riskMultiplier = "0.75";
+  } else if (
     input.fusedContext.aggregateHealth === "DEGRADED" ||
     input.fusedContext.aggregateConfidence < FUSED_DEGRADED_CONFIDENCE_THRESHOLD
   ) {
     reasonCodes.push(cdeReasonCodes.fusedContextReduced);
-    return {
-      permission: "ALLOW_REDUCED_RISK",
-      reasonCodes,
-      riskMultiplier: "0.5",
-    };
+    permission = moreRestrictivePermission(permission, "ALLOW_REDUCED_RISK");
+    riskMultiplier = "0.5";
   }
 
-  return {
-    permission: "ALLOW_TRADING",
-    reasonCodes,
-    riskMultiplier: "1.0",
-  };
+  if (input.understanding) {
+    if (!input.understanding.dataQualitySufficient) {
+      reasonCodes.push(cdeReasonCodes.understandingDataInsufficient);
+      permission = moreRestrictivePermission(permission, "PAPER_ONLY");
+      riskMultiplier = "0.5";
+    }
+
+    if (input.understanding.crossVenue.agreement === "DISAGREE") {
+      reasonCodes.push(cdeReasonCodes.understandingCrossVenueConflict);
+      permission = moreRestrictivePermission(permission, "PAPER_ONLY");
+      riskMultiplier = "0.5";
+    }
+
+    if (input.understanding.knowledgeGaps.some((gap) => gap.blocksPermission)) {
+      reasonCodes.push(cdeReasonCodes.understandingKnowledgeGap);
+      permission = moreRestrictivePermission(permission, "PAPER_ONLY");
+      riskMultiplier = "0.5";
+    }
+
+    if (input.understanding.regimeHint === "STRESSED") {
+      reasonCodes.push(cdeReasonCodes.understandingStressed);
+      permission = moreRestrictivePermission(permission, "ALLOW_REDUCED_RISK");
+      riskMultiplier = "0.5";
+    }
+
+    switch (input.understanding.spotPosture) {
+      case "NO_TRADE":
+        reasonCodes.push(cdeReasonCodes.understandingNoTrade);
+        permission = moreRestrictivePermission(permission, "PAPER_ONLY");
+        riskMultiplier = "0.25";
+        break;
+      case "WAIT":
+        reasonCodes.push(cdeReasonCodes.understandingWait);
+        permission = moreRestrictivePermission(permission, "PAPER_ONLY");
+        riskMultiplier = "0.5";
+        break;
+      case "PRESERVE_CAPITAL":
+        reasonCodes.push(cdeReasonCodes.understandingPreserveCapital);
+        permission = moreRestrictivePermission(permission, "ONLY_CLOSE_POSITIONS");
+        riskMultiplier = "0.25";
+        break;
+      case "REDUCE_RISK":
+        reasonCodes.push(cdeReasonCodes.understandingReducedRisk);
+        permission = moreRestrictivePermission(permission, "ALLOW_REDUCED_RISK");
+        riskMultiplier = "0.5";
+        break;
+      case "TRADE":
+        break;
+    }
+  }
+
+  return { permission, reasonCodes, riskMultiplier };
 }
 
 function regimeReasonCode(regime: Regime): string {
@@ -109,6 +167,7 @@ function regimeReasonCode(regime: Regime): string {
 export type BuildMsvEnvelopeInput = {
   features: FeatureSnapshot;
   fusedContext?: FusedMarketContext;
+  understanding?: MarketUnderstandingSnapshot;
   newId?: () => string;
 };
 
@@ -116,6 +175,7 @@ export type BuildMsvEnvelopeInput = {
  * Chief Decision Engine v0 — aggregates features into an MSV envelope.
  * Does not recompute {@link FeatureSnapshot.dataQualityScore}.
  * PR2.5: fused context may adjust permission/confidence only — never trade signals.
+ * PR2.6: understanding augments permission/posture rationale — never trade signals.
  */
 function resolveAllowedStrategyIds(regime: Regime): readonly string[] {
   const all = listMvpStrategyRegistry().map((entry) => entry.strategyId);
@@ -132,17 +192,21 @@ function resolveAllowedStrategyIds(regime: Regime): readonly string[] {
 }
 
 export function buildMsvEnvelope(input: BuildMsvEnvelopeInput): MsvEnvelope {
-  const { features, fusedContext } = input;
+  const { features, fusedContext, understanding } = input;
   const regime = classifyRegime(features);
   const permission = resolveTradingPermission({
     dataQualityScore: features.dataQualityScore,
     fusedContext,
+    understanding,
   });
   const reasonCodes = [...permission.reasonCodes, regimeReasonCode(regime)];
 
   const fusedQuality =
     fusedContext !== undefined
-      ? Math.min(features.dataQualityScore, fusedContext.aggregateConfidence)
+      ? Math.min(
+          features.dataQualityScore,
+          understanding?.understandingConfidence ?? fusedContext.aggregateConfidence,
+        )
       : features.dataQualityScore;
 
   return {
@@ -153,7 +217,8 @@ export function buildMsvEnvelope(input: BuildMsvEnvelopeInput): MsvEnvelope {
     physics: buildMarketPhysicsLayer(features),
     liquidity: buildLiquidityLayer(features),
     crowd: buildCrowdPsychologyLayer(fusedContext),
-    futureContext: buildFutureContextLayer(fusedContext),
+    futureContext: buildFutureContextLayer(fusedContext, understanding),
+    understanding: understanding ? buildMsvUnderstandingBlock(understanding) : undefined,
     derived: {
       regime,
       tradingPermission: permission.permission,

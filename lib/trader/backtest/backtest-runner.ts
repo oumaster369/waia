@@ -14,6 +14,10 @@ import type {
   BacktestRegimeMetrics,
 } from "@/lib/trader/backtest/backtest-evaluation-export.types";
 import type { BarReplaySource } from "@/lib/trader/market-data/types";
+import {
+  buildReplayFusedContextFromSnapshot,
+  type ReplayProviderSidecar,
+} from "@/lib/trader/market-data/replay-fused-context-builder";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import type {
   GuardianCycleContext,
@@ -55,6 +59,9 @@ export type RunBacktestInput = {
   telemetrySink?: WaiaTraderTelemetrySink;
   newId?: () => string;
   maxCycles?: number;
+  /** When true (default), builds deterministic replay fused context per cycle. */
+  enableReplayFusedContext?: boolean;
+  providerSidecar?: ReplayProviderSidecar;
 };
 
 export type RunBacktestResult = {
@@ -133,9 +140,15 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         ? next.snapshot
         : { ...next.snapshot, activeStrategyIds: input.activeStrategyIds };
 
+    const fusedContext =
+      input.enableReplayFusedContext === false
+        ? undefined
+        : buildReplayFusedContextFromSnapshot(snapshot, input.providerSidecar);
+
     const result = await runPaperCycleOnce(input.deps, {
       context: input.context,
       snapshot,
+      fusedContext,
       accountKey: input.accountKey,
       defaultQuantity: input.defaultQuantity,
       executionMode: "mock",

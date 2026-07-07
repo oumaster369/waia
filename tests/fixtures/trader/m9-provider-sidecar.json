@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "waia.trader.m9_provider_sidecar.v1",
+  "instrumentId": "BTC/USDT",
+  "entries": [
+    {
+      "evaluatedAt": "2026-01-01T00:25:00.000Z",
+      "fearGreed": {
+        "value": 75,
+        "classification": "Greed"
+      },
+      "globalMarket": {
+        "btcDominance": 56.5,
+        "marketCapUsd": 2500000000000
+      },
+      "binanceConfirmLast": "64005.12",
+      "bybitConfirmLast": "64006.00"
+    }
+  ]
+}

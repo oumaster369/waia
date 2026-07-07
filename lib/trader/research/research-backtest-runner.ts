@@ -46,6 +46,7 @@ import {
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import type { PatternCatalogRunConfig } from "@/lib/trader/mi/pattern-catalog.types";
 import type { EventAttributionRunConfig } from "@/lib/trader/events/event-attribution.types";
+import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
 import { orderMatchesStrategyEvidenceScope } from "@/lib/trader/paper/strategy-evidence-scope";
 import {
   buildQuoteCurrencyBySymbol,
@@ -114,6 +115,10 @@ export type RunResearchValidationBacktestInput = {
   guardian?: GuardianCycleContext;
   /** Optional sink for M9 evidence exports (validation window cycle results). */
   artifactSink?: ResearchValidationBacktestArtifactSink;
+  /** Optional replay provider sidecar for deterministic fused context in M9 path. */
+  providerSidecar?: ReplayProviderSidecar;
+  /** When false, skips replay fused context builder (legacy behavior). */
+  enableReplayFusedContext?: boolean;
 };
 
 const EMPTY_ACCOUNT_STATE: AccountRiskState = {
@@ -377,6 +382,8 @@ async function runResearchValidationBacktestV1(
     activeStrategyIds: [input.strategyId],
     refreshAccountStateBetweenStrategies: true,
     newId: input.newId,
+    providerSidecar: input.providerSidecar,
+    enableReplayFusedContext: input.enableReplayFusedContext,
   });
 
   const regimeAccumulators = new Map<Regime, RegimeAccumulatorV1>();
@@ -488,6 +495,8 @@ async function runResearchValidationBacktestV2(
     portfolio: portfolioContext,
     guardian: input.guardian,
     markPrices: { marks: { [lastBar.symbol]: lastBar.close } },
+    providerSidecar: input.providerSidecar,
+    enableReplayFusedContext: input.enableReplayFusedContext,
   });
 
   if (input.artifactSink) {

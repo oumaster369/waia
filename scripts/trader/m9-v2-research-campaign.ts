@@ -43,11 +43,14 @@ import {
   parseM9MetricsSchemaVersion,
   parseM9OosBarCount,
   parseM9PortfolioConfig,
+  resolveM9ProviderSidecarPath,
+  loadM9ProviderSidecar,
   resolveM9CampaignStrategy,
   resolveM9SymbolInterval,
 } from "@/lib/trader/research/m9-campaign-flags";
 import { buildM9GuardianReasonSampleExport } from "@/lib/trader/research/m9-guardian-sample-export";
 import { buildM9LifecycleTraceExport } from "@/lib/trader/research/m9-lifecycle-trace-export";
+import { buildM9MarketUnderstandingSampleExport } from "@/lib/trader/research/m9-market-understanding-export";
 import {
   assertM9BlindAuthorization,
   assertM9CampaignAuthorization,
@@ -101,6 +104,7 @@ export type M9ResearchCampaignManifest = {
     metricsExport: string;
     lifecycleTrace: string;
     guardianSample: string | null;
+    marketUnderstandingSample: string | null;
     operatorAuthorization: string;
   };
   digests: {
@@ -109,6 +113,7 @@ export type M9ResearchCampaignManifest = {
     metricsExport: string | null;
     lifecycleTrace: string | null;
     guardianSample: string | null;
+    marketUnderstandingSample: string | null;
     campaignAuthorization: string;
     blindAuthorization: string;
   };
@@ -129,6 +134,7 @@ Usage:
     --operator-campaign-authorization=<digest> \\
     --operator-blind-authorization=<digest> \\
     [--vault-dir=${M9_DEFAULT_VAULT_DIR}] \\
+    [--provider-sidecar-path=<path>] \\
     [--campaign-suffix=<suffix>] \\
     [--starting-balance-usdt=1000000.00] \\
     [--enable-guardian-exits=1]
@@ -258,6 +264,8 @@ async function main(): Promise<void> {
   const barSetDigest = computeBarSetDigest(barRecords);
   const builderGitSha = process.env.GITHUB_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null;
   const validationArtifactSink: ResearchValidationBacktestArtifactSink = {};
+  const providerSidecarPath = resolveM9ProviderSidecarPath(flags, vaultDir);
+  const providerSidecar = loadM9ProviderSidecar(providerSidecarPath);
 
   try {
     const result = await runResearchPipelinePostgres(db, {
@@ -280,6 +288,7 @@ async function main(): Promise<void> {
         operatorBlindAuthorization,
         blindAuthorizationScope: blindScope,
         validationArtifactSink,
+        providerSidecar,
       },
     });
 
@@ -335,6 +344,22 @@ async function main(): Promise<void> {
       writeFileSync(guardianSamplePath, `${JSON.stringify(guardianSample, null, 2)}\n`, "utf8");
     }
 
+    let marketUnderstandingSamplePath: string | null = null;
+    if (validationArtifactSink.cycleResults && validationArtifactSink.cycleResults.length > 0) {
+      marketUnderstandingSamplePath = resolve(vaultDir, "m9-market-understanding-sample.json");
+      const understandingSample = buildM9MarketUnderstandingSampleExport({
+        organizationId,
+        strategyId: baseStrategy.strategyId,
+        strategyVersion,
+        cycleResults: validationArtifactSink.cycleResults,
+      });
+      writeFileSync(
+        marketUnderstandingSamplePath,
+        `${JSON.stringify(understandingSample, null, 2)}\n`,
+        "utf8",
+      );
+    }
+
     const manifest: M9ResearchCampaignManifest = {
       schemaVersion: "m9_v2_research_campaign_v1",
       campaignId: `m9-v2-${Date.now()}`,
@@ -356,6 +381,7 @@ async function main(): Promise<void> {
         metricsExport: metricsExportPath,
         lifecycleTrace: lifecycleTracePath,
         guardianSample: guardianSamplePath,
+        marketUnderstandingSample: marketUnderstandingSamplePath,
         operatorAuthorization: authorizationPath,
       },
       digests: {
@@ -364,6 +390,7 @@ async function main(): Promise<void> {
         metricsExport: null,
         lifecycleTrace: null,
         guardianSample: null,
+        marketUnderstandingSample: null,
         campaignAuthorization: operatorCampaignAuthorization,
         blindAuthorization: operatorBlindAuthorization,
       },

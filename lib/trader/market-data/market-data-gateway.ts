@@ -6,6 +6,7 @@ import { internalSymbolToHtx } from "@/lib/trader/connectors/htx/mappers";
 import { HtxRestClient, type HtxFetchFn } from "@/lib/trader/connectors/htx/client";
 import type { Bar, BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 import { fuseContextV0 } from "@/lib/trader/market-data/fusion/context-fusion-v0";
+import { buildCrossVenueTriangulation } from "@/lib/trader/market-data/fusion/cross-venue-triangulation";
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import { mapHtxKlinesToBars, mapHtxMergedToQuote } from "@/lib/trader/market-data/htx-kline-mapper";
 import { fetchMtfBarsFromHtx } from "@/lib/trader/market-data/mtf/mtf-bar-aggregator";
@@ -72,7 +73,7 @@ export class MarketDataGateway {
     this.fearGreed = new AlternativeMeFearGreedClient({ fetchImpl });
     this.coinGecko = new CoinGeckoGlobalMarketClient({
       fetchImpl,
-      apiKey: config.coingeckoApiKey,
+      apiKey: config.coingeckoApiKey ?? process.env.COINGECKO_API_KEY,
     });
     this.disableOptionalProviders = config.disableOptionalProviders ?? false;
     this.cycleIdPrefix = "mi-gateway";
@@ -154,15 +155,18 @@ export class MarketDataGateway {
     });
 
     let crossExchangeConfirmation: NormalizedObservation | undefined;
+    let crossVenueTriangulation;
     let fearGreedObservation: NormalizedObservation | undefined;
     let globalMarketObservation: NormalizedObservation | undefined;
 
     if (!this.disableOptionalProviders) {
-      crossExchangeConfirmation = await this.fetchCrossExchangeConfirmation({
+      const crossExchange = await this.fetchCrossExchangeConfirmation({
         primaryLast: quote.last,
         evaluatedAt,
         degradationReasons,
       });
+      crossExchangeConfirmation = crossExchange.crossExchangeConfirmation;
+      crossVenueTriangulation = crossExchange.crossVenueTriangulation;
       fearGreedObservation = await this.fetchFearGreed({ evaluatedAt, degradationReasons });
       globalMarketObservation = await this.fetchGlobalMarket({ evaluatedAt, degradationReasons });
     }
@@ -173,6 +177,7 @@ export class MarketDataGateway {
       mtfBars: mtfObservations,
       primaryQuote,
       crossExchangeConfirmation,
+      crossVenueTriangulation,
       fearGreed: fearGreedObservation,
       globalMarket: globalMarketObservation,
       degradationReasons,
@@ -189,10 +194,16 @@ export class MarketDataGateway {
     primaryLast: string;
     evaluatedAt: string;
     degradationReasons: string[];
-  }): Promise<NormalizedObservation | undefined> {
+  }): Promise<{
+    crossExchangeConfirmation?: NormalizedObservation;
+    crossVenueTriangulation: ReturnType<typeof buildCrossVenueTriangulation>;
+  }> {
+    let binanceObs: NormalizedObservation | undefined;
+    let bybitObs: NormalizedObservation | undefined;
+
     try {
       const binanceTimed = await timed(() => this.binance.getTickerPrice(this.internalSymbol));
-      const binanceObs = normalizeCrossExchangeConfirmation({
+      binanceObs = normalizeCrossExchangeConfirmation({
         symbol: this.internalSymbol,
         primaryLast: input.primaryLast,
         confirmLast: binanceTimed.value.price,
@@ -207,49 +218,66 @@ export class MarketDataGateway {
         latencyMs: binanceTimed.latencyMs,
         evaluatedAt: input.evaluatedAt,
       });
-
-      try {
-        const bybitTimed = await timed(() => this.bybit.getSpotTicker(this.internalSymbol));
-        const bybitObs = normalizeCrossExchangeConfirmation({
-          symbol: this.internalSymbol,
-          primaryLast: input.primaryLast,
-          confirmLast: bybitTimed.value.lastPrice,
-          confirmVenue: "bybit",
-          provenance: buildProvenanceRef({
-            providerId: "bybit_public",
-            venue: "bybit",
-            feedKind: "cross_exchange_confirmation",
-            symbol: this.internalSymbol,
-            eventTimeUtc: input.evaluatedAt,
-          }),
-          latencyMs: bybitTimed.latencyMs,
-          evaluatedAt: input.evaluatedAt,
-        });
-
-        return binanceObs.confidence >= bybitObs.confidence ? binanceObs : bybitObs;
-      } catch (bybitError) {
-        input.degradationReasons.push(
-          `bybit_unavailable:${bybitError instanceof Error ? bybitError.message : String(bybitError)}`,
-        );
-        return binanceObs;
-      }
     } catch (error) {
       input.degradationReasons.push(
-        `cross_exchange_unavailable:${error instanceof Error ? error.message : String(error)}`,
+        `binance_unavailable:${error instanceof Error ? error.message : String(error)}`,
       );
-      return normalizeUnavailableObservation({
-        kind: "cross_exchange_confirmation",
+    }
+
+    try {
+      const bybitTimed = await timed(() => this.bybit.getSpotTicker(this.internalSymbol));
+      bybitObs = normalizeCrossExchangeConfirmation({
+        symbol: this.internalSymbol,
+        primaryLast: input.primaryLast,
+        confirmLast: bybitTimed.value.lastPrice,
+        confirmVenue: "bybit",
         provenance: buildProvenanceRef({
-          providerId: "binance_public",
-          venue: "binance",
+          providerId: "bybit_public",
+          venue: "bybit",
           feedKind: "cross_exchange_confirmation",
           symbol: this.internalSymbol,
           eventTimeUtc: input.evaluatedAt,
         }),
+        latencyMs: bybitTimed.latencyMs,
         evaluatedAt: input.evaluatedAt,
-        reason: error instanceof Error ? error.message : String(error),
       });
+    } catch (error) {
+      input.degradationReasons.push(
+        `bybit_unavailable:${error instanceof Error ? error.message : String(error)}`,
+      );
     }
+
+    const crossVenueTriangulation = buildCrossVenueTriangulation({
+      binance: binanceObs,
+      bybit: bybitObs,
+    });
+
+    if (!binanceObs && !bybitObs) {
+      return {
+        crossExchangeConfirmation: normalizeUnavailableObservation({
+          kind: "cross_exchange_confirmation",
+          provenance: buildProvenanceRef({
+            providerId: "binance_public",
+            venue: "binance",
+            feedKind: "cross_exchange_confirmation",
+            symbol: this.internalSymbol,
+            eventTimeUtc: input.evaluatedAt,
+          }),
+          evaluatedAt: input.evaluatedAt,
+          reason: "cross_exchange_unavailable",
+        }),
+        crossVenueTriangulation,
+      };
+    }
+
+    const crossExchangeConfirmation =
+      binanceObs && bybitObs
+        ? binanceObs.confidence >= bybitObs.confidence
+          ? binanceObs
+          : bybitObs
+        : (binanceObs ?? bybitObs);
+
+    return { crossExchangeConfirmation, crossVenueTriangulation };
   }
 
   private async fetchFearGreed(input: {
@@ -317,7 +345,18 @@ export class MarketDataGateway {
       input.degradationReasons.push(
         `coingecko_unavailable:${error instanceof Error ? error.message : String(error)}`,
       );
-      return undefined;
+      return normalizeUnavailableObservation({
+        kind: "global_market_stats",
+        provenance: buildProvenanceRef({
+          providerId: "coingecko_global",
+          venue: "coingecko",
+          feedKind: "global_market_stats",
+          symbol: "GLOBAL",
+          eventTimeUtc: input.evaluatedAt,
+        }),
+        evaluatedAt: input.evaluatedAt,
+        reason: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

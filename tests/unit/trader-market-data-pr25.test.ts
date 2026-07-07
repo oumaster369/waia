@@ -5,11 +5,14 @@ import { describe, expect, it } from "vitest";
 
 import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
+import { buildMarketUnderstandingBridge } from "@/lib/trader/intelligence/market-understanding-bridge-v0";
 import { cdeReasonCodes } from "@/lib/trader/intelligence/types";
+import { buildCrossVenueTriangulation } from "@/lib/trader/market-data/fusion/cross-venue-triangulation";
 import { fuseContextV0 } from "@/lib/trader/market-data/fusion/context-fusion-v0";
 import { MarketDataGateway } from "@/lib/trader/market-data/market-data-gateway";
 import {
   buildProvenanceRef,
+  normalizeCrossExchangeConfirmation,
   normalizeFearGreedObservation,
   normalizeOhlcvBarsObservation,
   normalizeUnavailableObservation,
@@ -190,6 +193,61 @@ describe("PR2.5 CDE fused context hooks", () => {
     expect(msv.derived.reasonCodes).toContain(cdeReasonCodes.fusedContextReduced);
     expect(msv.derived.riskMultiplier).toBe("0.5");
   });
+
+  it("PR2.6 downgrades permission when understanding reports cross-venue conflict", () => {
+    const fixture = loadFixtureBars();
+    const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
+    const features = computeFeatureSnapshot({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+    });
+
+    const binance = normalizeCrossExchangeConfirmation({
+      symbol: "BTC/USDT",
+      primaryLast: fixture.latestQuote.last,
+      confirmLast: "70000",
+      confirmVenue: "binance",
+      provenance: buildProvenanceRef({
+        providerId: "binance_public",
+        venue: "binance",
+        feedKind: "cross_exchange_confirmation",
+        symbol: "BTC/USDT",
+        eventTimeUtc: evaluatedAt,
+      }),
+      latencyMs: 1,
+      evaluatedAt,
+    });
+    const bybit = normalizeCrossExchangeConfirmation({
+      symbol: "BTC/USDT",
+      primaryLast: fixture.latestQuote.last,
+      confirmLast: "60000",
+      confirmVenue: "bybit",
+      provenance: buildProvenanceRef({
+        providerId: "bybit_public",
+        venue: "bybit",
+        feedKind: "cross_exchange_confirmation",
+        symbol: "BTC/USDT",
+        eventTimeUtc: evaluatedAt,
+      }),
+      latencyMs: 1,
+      evaluatedAt,
+    });
+
+    const fusedContext = fuseContextV0({
+      instrumentId: "BTC/USDT",
+      fusedAtUtc: evaluatedAt,
+      mtfBars: {},
+      crossExchangeConfirmation: binance,
+      crossVenueTriangulation: buildCrossVenueTriangulation({ binance, bybit }),
+    });
+    const understanding = buildMarketUnderstandingBridge({ fusedContext, features });
+    const msv = buildMsvEnvelope({ features, fusedContext, understanding });
+
+    expect(msv.understanding).toBeDefined();
+    expect(msv.derived.tradingPermission).not.toBe("ALLOW_TRADING");
+    expect(msv.derived.reasonCodes).toContain(cdeReasonCodes.understandingCrossVenueConflict);
+  });
 });
 
 describe("PR2.5 market data gateway", () => {
@@ -219,6 +277,19 @@ describe("PR2.5 market data gateway", () => {
 
     expect(bundle.fusedContext.degradationReasons.length).toBeGreaterThan(0);
     expect(bundle.snapshot.bars.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it("PR2.6 stores cross-venue triangulation on fused context", async () => {
+    const fixture = loadHtxFixture();
+    const gateway = new MarketDataGateway({
+      fetchImpl: createHtxGatewayMockFetch(fixture),
+      disableOptionalProviders: false,
+    });
+
+    const bundle = await gateway.pollEvaluationBundle({ cycleIdPrefix: "pr26-triangulation" });
+
+    expect(bundle.fusedContext.crossVenueTriangulation).toBeDefined();
+    expect(bundle.fusedContext.crossVenueTriangulation?.agreement).toBeDefined();
   });
 });
 
