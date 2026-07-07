@@ -9,7 +9,7 @@ import { emitStrategySignalCounters } from "@/lib/trader/intelligence/strategy-t
 import type { EvaluationCycleInput, EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 
 /**
- * Runs one intelligence evaluation: Feature Engine → CDE → registered MVP strategies.
+ * Runs one intelligence evaluation: Feature Engine → Context Fusion hook → CDE → strategies.
  */
 export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycleResult {
   const newId = input.newId ?? crypto.randomUUID.bind(crypto);
@@ -19,7 +19,11 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     evaluatedAt: input.evaluatedAt,
     newId,
   });
-  const msv = buildMsvEnvelope({ features, newId });
+  const msv = buildMsvEnvelope({
+    features,
+    fusedContext: input.fusedContext,
+    newId,
+  });
   emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
 
   const signals = evaluateRegisteredStrategies(msv, features, {
@@ -34,5 +38,5 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
 
   const signal = selectPrimaryStrategySignal(signals);
 
-  return { features, msv, signals, signal };
+  return { features, msv, signals, signal, fusedContext: input.fusedContext };
 }

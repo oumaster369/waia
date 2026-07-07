@@ -38,6 +38,8 @@ export type HtxBarPollOptions = {
   cycleIdPrefix?: string;
   restHost?: string;
   fetchImpl?: HtxFetchFn;
+  /** When true, only HTX primary data is fetched (optional cross-exchange/sentiment omitted). */
+  disableOptionalProviders?: boolean;
 };
 
 export type TraderFixtureFile = {

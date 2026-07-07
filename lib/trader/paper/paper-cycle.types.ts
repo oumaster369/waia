@@ -72,9 +72,12 @@ export type PaperCycleDeps = {
   lifecycleRepository?: LifecycleRepository;
 };
 
+import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
+
 export type PaperCycleInput = {
   context: OrgContext;
   snapshot: MarketSnapshot;
+  fusedContext?: FusedMarketContext;
   accountKey: string;
   defaultQuantity: string;
   executionMode?: PaperCycleExecutionMode;

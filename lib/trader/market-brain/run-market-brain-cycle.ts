@@ -108,6 +108,7 @@ export async function runMarketBrainCycle(
       bars: entry.snapshot.bars,
       quote: entry.snapshot.quote,
       evaluatedAt: entry.snapshot.evaluatedAt,
+      fusedContext: entry.fusedContext ?? undefined,
       newId: input.newId,
       telemetrySink,
     });

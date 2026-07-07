@@ -1,4 +1,5 @@
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
+import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
 import { evaluatePositionGuardian, mapExitIntentToSubmitOrder } from "@/lib/trader/guardian";
 import { assertLifecycleFillWalkOpenQtyParity } from "@/lib/trader/lifecycle";
 import {
@@ -298,6 +299,7 @@ export async function runPaperCycleOnce(
     bars: snapshot.bars,
     quote: snapshot.quote,
     evaluatedAt: snapshot.evaluatedAt,
+    fusedContext: input.fusedContext,
     newId: input.newId,
     telemetrySink: input.telemetrySink,
   });
@@ -513,11 +515,21 @@ export async function runPollPaperCycles(
   const results: PaperCycleResult[] = [];
 
   for (let index = 0; index < input.n; index += 1) {
-    const snapshot = await input.poll.fetchSnapshot();
+    let snapshot;
+    let fusedContext;
+
+    if (input.poll instanceof HtxBarPollSource) {
+      const bundle = await input.poll.fetchEvaluationBundle();
+      snapshot = bundle.snapshot;
+      fusedContext = bundle.fusedContext;
+    } else {
+      snapshot = await input.poll.fetchSnapshot();
+    }
 
     const result = await runPaperCycleOnce(input.deps, {
       context: input.context,
       snapshot,
+      fusedContext,
       accountKey: input.accountKey,
       defaultQuantity: input.defaultQuantity,
       executionMode: input.executionMode,

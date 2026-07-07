@@ -15,6 +15,8 @@ import {
   INGESTION_HALT_REASON,
 } from "@/lib/trader/market-data/data-quality-gate";
 
+import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
+
 export type MarketBrainPipelineInput = {
   organizationId: string;
   instrumentId: InstrumentId;
@@ -22,6 +24,7 @@ export type MarketBrainPipelineInput = {
   quote?: Quote;
   evaluatedAt?: string;
   ingestionError?: string;
+  fusedContext?: FusedMarketContext;
   newId?: () => string;
   telemetrySink?: WaiaTraderTelemetrySink;
 };
@@ -81,7 +84,11 @@ export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketB
     };
   }
 
-  const msv = buildMsvEnvelope({ features, newId: input.newId });
+  const msv = buildMsvEnvelope({
+    features,
+    fusedContext: input.fusedContext,
+    newId: input.newId,
+  });
   emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
 
   const signals = evaluateRegisteredStrategies(msv, features, {

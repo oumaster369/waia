@@ -1,0 +1,12 @@
+{
+  "retCode": 0,
+  "retMsg": "OK",
+  "result": {
+    "list": [
+      {
+        "symbol": "BTCUSDT",
+        "lastPrice": "63998.50"
+      }
+    ]
+  }
+}

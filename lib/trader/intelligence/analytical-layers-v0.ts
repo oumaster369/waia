@@ -5,10 +5,11 @@ import type {
   MsvLiquidityBlock,
   MsvPhysicsBlock,
 } from "@/lib/trader/intelligence/types";
+import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
 
 /**
  * Analytical layers v0 (DEE-200) — explicit layer builders for MSV blocks.
- * Crowd Psychology and Future Context remain MVP stubs per Execution Program.
+ * PR2.5 wires crowd/future metadata from fused context; depth remains PR3.
  */
 
 export function buildMarketPhysicsLayer(features: FeatureSnapshot): MsvPhysicsBlock {
@@ -25,15 +26,22 @@ export function buildLiquidityLayer(features: FeatureSnapshot): MsvLiquidityBloc
   };
 }
 
-export function buildCrowdPsychologyLayer(): MsvCrowdBlock {
+export function buildCrowdPsychologyLayer(fusedContext?: FusedMarketContext): MsvCrowdBlock {
+  const fearGreedValue = fusedContext?.fearGreed?.payload.value;
   return {
-    fearGreedIndex: null,
+    fearGreedIndex:
+      typeof fearGreedValue === "number" && Number.isFinite(fearGreedValue) ? fearGreedValue : null,
     newsSentiment: "0",
   };
 }
 
-export function buildFutureContextLayer(): MsvFutureContextBlock {
+export function buildFutureContextLayer(fusedContext?: FusedMarketContext): MsvFutureContextBlock {
+  const sessionPhase = fusedContext?.sessionPhase ?? "UNKNOWN";
+  const corridor = fusedContext?.asianRangeCorridor;
+  const eventRiskScore = corridor ? "0.1" : "0";
   return {
-    eventRiskScore: "0",
+    eventRiskScore,
+    sessionPhase,
+    asianRangeCorridorPresent: corridor !== undefined,
   };
 }
