@@ -121,7 +121,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data && pnpm db:migrate
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install chromium
       - run: pnpm test:e2e
       - if: failure()
         uses: actions/upload-artifact@v4
