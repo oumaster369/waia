@@ -1,9 +1,11 @@
 # DEE-392 — Data Provider Readiness Operator Runbook
 
-**Linear:** [DEE-392](https://linear.app/deepsense/issue/DEE-392/data-provider-readiness-operatorenv-gateway-config-validation)  
+**Status:** ✅ **Phase complete** — merged to `dev` as PR #379 @ `9c1df25` · Date: 2026-07-07  
+**Linear:** [DEE-392](https://linear.app/deepsense/issue/DEE-392/data-provider-readiness-operatorenv-gateway-config-validation) — **Done**  
 **Phase:** Data Provider Readiness (post PR2.6, pre Full Market Data Source Integration)  
-**Baseline:** `origin/dev` @ `a046fc4` · PR2.6 merged (#378 / DEE-391)  
+**Merge baseline:** `origin/dev` @ `9c1df25`  
 **Binding spec:** [`docs/ai-trader/AI-TRADER-DATA-PROVIDERS.md`](../ai-trader/AI-TRADER-DATA-PROVIDERS.md)  
+**Canonical provisioning (from zero):** [`docs/ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`](../ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md) — **use this for all operator provisioning steps**  
 **Validation checklist:** [`docs/ai-trader/AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md`](../ai-trader/AI-TRADER-DATA-PROVIDER-VALIDATION-CHECKLIST.md)
 
 > **No secret values in this document.** Placeholders only.

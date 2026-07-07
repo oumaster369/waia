@@ -178,7 +178,8 @@ See [DEE-223 BP-9 runbook](./ops/DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md) for p
 ## AI-TRADER — Market Intelligence (MI gateway)
 
 Binding spec: [`docs/ai-trader/AI-TRADER-DATA-PROVIDERS.md`](./ai-trader/AI-TRADER-DATA-PROVIDERS.md)  
-Operator runbook: [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](./ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md)
+**Canonical provisioning:** [`docs/ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`](./ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md)  
+Phase record: [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](./ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md)
 
 **HTX trade credentials are never Worker env vars** — connect via Trader UI; encrypted with master key.
 

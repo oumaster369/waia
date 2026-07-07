@@ -47,7 +47,9 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 - **Decisions:** [ADR index](../adr/README.md) — AI-TRADER spans **[ADR-0005](../adr/0005-saas-as-superset-strategy.md) … [ADR-0019](../adr/0019-ai-operator-intelligence-authority.md)**.
 - **MVP closure (Step 10):** [AI-TRADER MVP Ratification](AI-TRADER-MVP-RATIFICATION.md) — scope-freeze charter; **RATIFIED** 2026-06-29; supersedes nothing.
 - **Subject owners:** [Security](AI-TRADER-SECURITY.md), [Billing & HWM](AI-TRADER-BILLING-HWM.md), [Closed Trade Reality Doctrine (LD-10)](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md) (realized fee base).
-- **Engineering recovery (active RI-P7 work):** [`replay-runs/RI-P7/AI-TRADER-ENGINEERING-STATUS.md`](../replay-runs/RI-P7/AI-TRADER-ENGINEERING-STATUS.md) — **single canonical entry point** for current phase, resume point (PR1), and post-M9 sequence. Do not duplicate elsewhere.
+- **Engineering recovery (active RI-P7 work):** [`replay-runs/RI-P7/AI-TRADER-ENGINEERING-STATUS.md`](../replay-runs/RI-P7/AI-TRADER-ENGINEERING-STATUS.md) — **single canonical entry point** for current phase, resume point, and post-M9 sequence. Do not duplicate elsewhere.
+- **Market data operator provisioning (canonical):** [`AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`](AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md) — **only** source of truth for provisioning every market-data provider from an empty workstation.
+- **Market data binding spec:** [`AI-TRADER-DATA-PROVIDERS.md`](AI-TRADER-DATA-PROVIDERS.md) — registry, gateway, degradation policy.
 
 ## Baseline
 
