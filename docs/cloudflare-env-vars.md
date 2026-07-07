@@ -179,7 +179,7 @@ See [DEE-223 BP-9 runbook](./ops/DEE-223-BP9-TELEGRAM-ALERTING-RUNBOOK.md) for p
 
 Binding spec: [`docs/ai-trader/AI-TRADER-DATA-PROVIDERS.md`](./ai-trader/AI-TRADER-DATA-PROVIDERS.md)  
 **Canonical provisioning:** [`docs/ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`](./ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md)  
-Phase record: [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](./ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md)
+Phase records: [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](./ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md) · [`docs/ops/DEE-393-FULL-MARKET-DATA-INTEGRATION-RUNBOOK.md`](./ops/DEE-393-FULL-MARKET-DATA-INTEGRATION-RUNBOOK.md)
 
 **HTX trade credentials are never Worker env vars** — connect via Trader UI; encrypted with master key.
 
@@ -189,6 +189,13 @@ Phase record: [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](./ops/DEE-
 | `MARKET_BRAIN_ORGANIZATION_ID` | No | Plain var | Target org UUID |
 | `HTX_REST_HOST` | No | Plain var or secret | Optional REST host override |
 | `COINGECKO_API_KEY` | Yes | `wrangler secret put COINGECKO_API_KEY` | Optional; fail-soft without |
+| `FRED_API_KEY` | Yes | `wrangler secret put FRED_API_KEY` | Optional macro series; fail-soft without |
+| `AI_TRADER_INFURA_PROJECT_ID` | Yes | `wrangler secret put AI_TRADER_INFURA_PROJECT_ID` | Infura project id (not bare `INFURA_PROJECT_ID`) |
+| `AI_TRADER_INFURA_API_SECRET` | Yes | `wrangler secret put AI_TRADER_INFURA_API_SECRET` | Infura API secret (not bare `INFURA_API_KEY`) |
+| `AI_TRADER_TRONGRID_API_KEY` | Yes | `wrangler secret put AI_TRADER_TRONGRID_API_KEY` | MI blockchain intelligence — **not** payment watcher |
+| `AI_TRADER_GITHUB_TOKEN` | Yes | `wrangler secret put AI_TRADER_GITHUB_TOKEN` | Optional protocol release rate limits |
+| `AI_TRADER_SEC_EDGAR_USER_AGENT` | Yes | `wrangler secret put AI_TRADER_SEC_EDGAR_USER_AGENT` | SEC EDGAR policy-bound User-Agent |
+| `AI_TRADER_CME_FEDWATCH_ENABLED` | No | Plain var (`1` / `true` to enable) | Opt-in CME FedWatch adapter |
 | `PAPER_LOOP_ENABLED` | No | Plain var | Paper cron toggle |
 | `PAPER_LOOP_ORGANIZATION_ID` | No | Plain var | Paper org |
 | `PAPER_LOOP_ACCOUNT_KEY` | No | Plain var | Paper account key |
@@ -199,7 +206,7 @@ Phase record: [`docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`](./ops/DEE-
 
 Local dev: copy placeholders from `.env.example` → `.env.local`. Workers preview: `.dev.vars.example` → `.dev.vars`.
 
-Validation: `pnpm validate:provider-readiness`
+Validation: `pnpm validate:provider-readiness` · `pnpm validate:market-data-integration`
 
 ---
 
@@ -214,7 +221,7 @@ Validation: `pnpm validate:provider-readiness`
 | `WATCHER_ENABLED` | No | Plain var |
 | `WATCHER_*` | No | Plain vars (see `.env.example`) |
 
-**Do not reuse** `TRONGRID_API_KEY` for future AI-TRADER blockchain intelligence — separate key per parent roadmap.
+**Do not reuse** `TRONGRID_API_KEY` for AI-TRADER blockchain intelligence — use `AI_TRADER_TRONGRID_API_KEY` instead.
 
 ---
 

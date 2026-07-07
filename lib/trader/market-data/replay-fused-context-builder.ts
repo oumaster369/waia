@@ -1,5 +1,5 @@
 import type { Bar, Quote } from "@/lib/trader/intelligence/types";
-import { fuseContextV0 } from "@/lib/trader/market-data/fusion/context-fusion-v0";
+import { fuseContextV1 } from "@/lib/trader/market-data/fusion/context-fusion-v1";
 import { buildCrossVenueTriangulation } from "@/lib/trader/market-data/fusion/cross-venue-triangulation";
 import {
   buildProvenanceRef,
@@ -203,7 +203,7 @@ export function buildReplayFusedContext(input: {
     });
   }
 
-  return fuseContextV0({
+  return fuseContextV1({
     instrumentId: input.instrumentId,
     fusedAtUtc: input.evaluatedAt,
     mtfBars: mtfObservations,
@@ -212,6 +212,11 @@ export function buildReplayFusedContext(input: {
     crossVenueTriangulation,
     fearGreed: fearGreedObservation,
     globalMarket: globalMarketObservation,
+    macroEvidence: [],
+    newsEvidence: [],
+    blockchainEvidence: [],
+    regulatoryEvidence: [],
+    protocolEvidence: [],
     degradationReasons,
   });
 }

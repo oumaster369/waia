@@ -70,7 +70,7 @@
       "questionId": "Q_DATA_TRUST",
       "status": "PARTIAL",
       "answerSummary": "DEGRADED",
-      "confidence": 0.35,
+      "confidence": 0,
       "evidenceProvenanceIds": [],
       "influencesPermission": true,
       "influencesPosture": true
@@ -78,8 +78,8 @@
     {
       "questionId": "Q_UNKNOWN",
       "status": "ANSWERED",
-      "answerSummary": "8_gaps",
-      "confidence": 0.9,
+      "answerSummary": "15_gaps",
+      "confidence": 0.75,
       "evidenceProvenanceIds": [],
       "influencesPermission": false,
       "influencesPosture": false

@@ -66,6 +66,15 @@ DATABASE_URL=file:./.data/waia.dev.db
 # HTX_REST_HOST=
 # COINGECKO_API_KEY=
 
+# ─── Full Market Data Source Integration (DEE-393) — optional MI providers ───
+# FRED_API_KEY=
+# AI_TRADER_INFURA_PROJECT_ID=
+# AI_TRADER_INFURA_API_SECRET=
+# AI_TRADER_TRONGRID_API_KEY=
+# AI_TRADER_GITHUB_TOKEN=
+# AI_TRADER_SEC_EDGAR_USER_AGENT=YourOrgName contact@example.com
+# AI_TRADER_CME_FEDWATCH_ENABLED=
+
 # ─── Paper loop worker (Pipeline P5) — uses HtxBarPollSource / gateway ───
 # PAPER_LOOP_ENABLED=
 # PAPER_LOOP_ORGANIZATION_ID=

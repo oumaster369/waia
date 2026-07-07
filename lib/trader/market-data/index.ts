@@ -69,5 +69,9 @@ export {
   type MarketDataGatewayConfig,
 } from "@/lib/trader/market-data/market-data-gateway";
 export { fuseContextV0 } from "@/lib/trader/market-data/fusion/context-fusion-v0";
+export {
+  fuseContextV1,
+  type FuseContextV1Input,
+} from "@/lib/trader/market-data/fusion/context-fusion-v1";
 export { classifySessionPhaseUtc } from "@/lib/trader/market-data/session/session-phase-classifier";
 export { computeAsianRangeCorridorMetadata } from "@/lib/trader/market-data/session/asian-range-corridor";

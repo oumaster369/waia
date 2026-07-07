@@ -5,7 +5,12 @@ import { CoinGeckoGlobalMarketClient } from "@/lib/trader/connectors/coingecko/g
 import { internalSymbolToHtx } from "@/lib/trader/connectors/htx/mappers";
 import { HtxRestClient, type HtxFetchFn } from "@/lib/trader/connectors/htx/client";
 import type { Bar, BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
-import { fuseContextV0 } from "@/lib/trader/market-data/fusion/context-fusion-v0";
+import {
+  buildOptionalMarketDataAdapters,
+  categorizeOptionalObservations,
+} from "@/lib/trader/market-data/adapters/adapter-registry";
+import { HtxDepthAdapter } from "@/lib/trader/market-data/adapters/htx-depth-adapter";
+import { fuseContextV1 } from "@/lib/trader/market-data/fusion/context-fusion-v1";
 import { buildCrossVenueTriangulation } from "@/lib/trader/market-data/fusion/cross-venue-triangulation";
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import { mapHtxKlinesToBars, mapHtxMergedToQuote } from "@/lib/trader/market-data/htx-kline-mapper";
@@ -34,6 +39,13 @@ export type MarketDataGatewayConfig = {
   fetchImpl?: HtxFetchFn;
   coingeckoApiKey?: string;
   disableOptionalProviders?: boolean;
+  fredApiKey?: string;
+  infuraProjectId?: string;
+  infuraApiSecret?: string;
+  tronGridApiKey?: string;
+  githubToken?: string;
+  secEdgarUserAgent?: string;
+  cmeFedWatchEnabled?: boolean;
 };
 
 export type GatewayPollResult = {
@@ -48,14 +60,40 @@ async function timed<T>(fn: () => Promise<T>): Promise<{ value: T; latencyMs: nu
   return { value, latencyMs: Date.now() - started };
 }
 
+function resolveEnvBoolean(value: string | undefined): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return value === "1" || value.toLowerCase() === "true";
+}
+
+function pickObservationByKind(
+  observations: readonly NormalizedObservation[],
+  kind: NormalizedObservation["kind"],
+): NormalizedObservation | undefined {
+  return observations.find((observation) => observation.kind === kind);
+}
+
 export class MarketDataGateway {
   private readonly internalSymbol: InstrumentId;
   private readonly htxClient: HtxRestClient;
+  private readonly htxDepthAdapter: HtxDepthAdapter;
   private readonly binance: BinancePublicMarketClient;
   private readonly bybit: BybitPublicMarketClient;
   private readonly fearGreed: AlternativeMeFearGreedClient;
   private readonly coinGecko: CoinGeckoGlobalMarketClient;
   private readonly disableOptionalProviders: boolean;
+  private readonly optionalAdaptersConfig: {
+    fetchImpl?: HtxFetchFn;
+    internalSymbol: InstrumentId;
+    fredApiKey?: string;
+    infuraProjectId?: string;
+    infuraApiSecret?: string;
+    tronGridApiKey?: string;
+    githubToken?: string;
+    secEdgarUserAgent?: string;
+    cmeFedWatchEnabled?: boolean;
+  };
   private cycleIndex = 0;
   private readonly cycleIdPrefix: string;
 
@@ -68,6 +106,10 @@ export class MarketDataGateway {
       restHost: config.htxRestHost,
       fetchImpl,
     });
+    this.htxDepthAdapter = new HtxDepthAdapter({
+      htxClient: this.htxClient,
+      internalSymbol: this.internalSymbol,
+    });
     this.binance = new BinancePublicMarketClient({ fetchImpl });
     this.bybit = new BybitPublicMarketClient({ fetchImpl });
     this.fearGreed = new AlternativeMeFearGreedClient({ fetchImpl });
@@ -76,6 +118,18 @@ export class MarketDataGateway {
       apiKey: config.coingeckoApiKey ?? process.env.COINGECKO_API_KEY,
     });
     this.disableOptionalProviders = config.disableOptionalProviders ?? false;
+    this.optionalAdaptersConfig = {
+      fetchImpl,
+      internalSymbol: this.internalSymbol,
+      fredApiKey: config.fredApiKey ?? process.env.FRED_API_KEY,
+      infuraProjectId: config.infuraProjectId ?? process.env.AI_TRADER_INFURA_PROJECT_ID,
+      infuraApiSecret: config.infuraApiSecret ?? process.env.AI_TRADER_INFURA_API_SECRET,
+      tronGridApiKey: config.tronGridApiKey ?? process.env.AI_TRADER_TRONGRID_API_KEY,
+      githubToken: config.githubToken ?? process.env.AI_TRADER_GITHUB_TOKEN,
+      secEdgarUserAgent: config.secEdgarUserAgent ?? process.env.AI_TRADER_SEC_EDGAR_USER_AGENT,
+      cmeFedWatchEnabled:
+        config.cmeFedWatchEnabled ?? resolveEnvBoolean(process.env.AI_TRADER_CME_FEDWATCH_ENABLED),
+    };
     this.cycleIdPrefix = "mi-gateway";
   }
 
@@ -154,10 +208,31 @@ export class MarketDataGateway {
       evaluatedAt,
     });
 
+    const depthObservations = await this.htxDepthAdapter.fetchObservations({
+      instrumentId: this.internalSymbol,
+      symbol: this.internalSymbol,
+      evaluatedAt,
+      fetchImpl: this.optionalAdaptersConfig.fetchImpl,
+    });
+    const orderBookSnapshot = pickObservationByKind(depthObservations, "order_book_snapshot");
+    const marketTradesSnapshot = pickObservationByKind(depthObservations, "market_trades_snapshot");
+    for (const observation of depthObservations) {
+      if (observation.health === "UNAVAILABLE") {
+        degradationReasons.push(
+          `${observation.provenance.feedKind}_unavailable:${observation.payload.reason ?? "unknown"}`,
+        );
+      }
+    }
+
     let crossExchangeConfirmation: NormalizedObservation | undefined;
     let crossVenueTriangulation;
     let fearGreedObservation: NormalizedObservation | undefined;
     let globalMarketObservation: NormalizedObservation | undefined;
+    let macroEvidence: NormalizedObservation[] = [];
+    let newsEvidence: NormalizedObservation[] = [];
+    let blockchainEvidence: NormalizedObservation[] = [];
+    let regulatoryEvidence: NormalizedObservation[] = [];
+    let protocolEvidence: NormalizedObservation[] = [];
 
     if (!this.disableOptionalProviders) {
       const crossExchange = await this.fetchCrossExchangeConfirmation({
@@ -169,17 +244,66 @@ export class MarketDataGateway {
       crossVenueTriangulation = crossExchange.crossVenueTriangulation;
       fearGreedObservation = await this.fetchFearGreed({ evaluatedAt, degradationReasons });
       globalMarketObservation = await this.fetchGlobalMarket({ evaluatedAt, degradationReasons });
+
+      const optionalAdapters = buildOptionalMarketDataAdapters(this.optionalAdaptersConfig);
+      const adapterResults = await Promise.allSettled(
+        optionalAdapters.map((adapter) =>
+          adapter.fetchObservations({
+            instrumentId: this.internalSymbol,
+            symbol: this.internalSymbol,
+            evaluatedAt,
+            fetchImpl: this.optionalAdaptersConfig.fetchImpl,
+          }),
+        ),
+      );
+
+      const optionalObservations: NormalizedObservation[] = [];
+      for (let index = 0; index < adapterResults.length; index++) {
+        const result = adapterResults[index];
+        const adapter = optionalAdapters[index];
+        if (!result || !adapter) {
+          continue;
+        }
+        if (result.status === "rejected") {
+          degradationReasons.push(
+            `${adapter.providerId}_unavailable:${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+          );
+          continue;
+        }
+        for (const observation of result.value) {
+          if (observation.health === "UNAVAILABLE") {
+            degradationReasons.push(
+              `${adapter.providerId}_unavailable:${observation.payload.reason ?? "unknown"}`,
+            );
+          }
+        }
+        optionalObservations.push(...result.value);
+      }
+
+      const categorized = categorizeOptionalObservations(optionalObservations);
+      macroEvidence = categorized.macroEvidence;
+      newsEvidence = categorized.newsEvidence;
+      blockchainEvidence = categorized.blockchainEvidence;
+      regulatoryEvidence = categorized.regulatoryEvidence;
+      protocolEvidence = categorized.protocolEvidence;
     }
 
-    const fusedContext = fuseContextV0({
+    const fusedContext = fuseContextV1({
       instrumentId: this.internalSymbol,
       fusedAtUtc: evaluatedAt,
       mtfBars: mtfObservations,
       primaryQuote,
+      orderBookSnapshot,
+      marketTradesSnapshot,
       crossExchangeConfirmation,
       crossVenueTriangulation,
       fearGreed: fearGreedObservation,
       globalMarket: globalMarketObservation,
+      macroEvidence,
+      newsEvidence,
+      blockchainEvidence,
+      regulatoryEvidence,
+      protocolEvidence,
       degradationReasons,
     });
 
