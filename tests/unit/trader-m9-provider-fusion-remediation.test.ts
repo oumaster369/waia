@@ -15,6 +15,7 @@ import {
 import {
   isReplayProviderSidecarV1,
   type ReplayProviderSidecarV1,
+  type ReplayProviderSidecarV2,
 } from "@/lib/trader/market-data/replay/provider-sidecar-types";
 import { guardNoLookahead } from "@/lib/trader/market-data/replay/replay-lane-normalizer";
 import { computeSidecarContentDigest } from "@/lib/trader/market-data/replay/sidecar-content-digest";
@@ -52,9 +53,9 @@ function loadSidecarV1(): ReplayProviderSidecar {
   return JSON.parse(readFileSync(filePath, "utf8")) as ReplayProviderSidecar;
 }
 
-function loadSidecarV2(): ReplayProviderSidecar {
+function loadSidecarV2(): ReplayProviderSidecarV2 {
   const filePath = path.join(process.cwd(), "tests/fixtures/trader/m9-provider-sidecar-v2.json");
-  return JSON.parse(readFileSync(filePath, "utf8")) as ReplayProviderSidecar;
+  return JSON.parse(readFileSync(filePath, "utf8")) as ReplayProviderSidecarV2;
 }
 
 describe("M9 provider fusion remediation", () => {
