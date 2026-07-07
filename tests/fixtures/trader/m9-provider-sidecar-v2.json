@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "waia.trader.m9_provider_sidecar.v2",
+  "instrumentId": "BTC/USDT",
+  "captureAsOfUtc": "2026-01-01T00:25:00.000Z",
+  "generatedBy": "tests/fixtures",
+  "builderGitSha": null,
+  "captureOutcomes": {
+    "htx_spot": "CAPTURED_HEALTHY",
+    "binance_public": "CAPTURED_HEALTHY",
+    "bybit_public": "CAPTURED_HEALTHY",
+    "alternative_me": "CAPTURED_HEALTHY",
+    "coingecko_global": "CAPTURED_HEALTHY",
+    "fred": "CAPTURED_HEALTHY",
+    "gdelt": "CAPTURED_HEALTHY",
+    "infura_rpc": "CAPTURED_HEALTHY",
+    "sec_edgar": "CAPTURED_HEALTHY",
+    "github_releases": "CAPTURED_HEALTHY"
+  },
+  "lanes": {
+    "fear_greed_index": {
+      "value": 75,
+      "classification": "Greed",
+      "eventTimeUtc": "2026-01-01T00:20:00.000Z"
+    },
+    "global_market_stats": {
+      "btcDominance": 56.5,
+      "marketCapUsd": 2500000000000,
+      "eventTimeUtc": "2026-01-01T00:20:00.000Z"
+    },
+    "cross_exchange_confirmation": [
+      {
+        "confirmVenue": "binance",
+        "confirmLast": "64005.12",
+        "eventTimeUtc": "2026-01-01T00:24:00.000Z"
+      },
+      {
+        "confirmVenue": "bybit",
+        "confirmLast": "64006.00",
+        "eventTimeUtc": "2026-01-01T00:24:00.000Z"
+      }
+    ],
+    "order_book_snapshot": {
+      "bestBid": 64000,
+      "bestAsk": 64001,
+      "bidLevels": 5,
+      "askLevels": 5,
+      "eventTimeUtc": "2026-01-01T00:24:30.000Z"
+    },
+    "market_trades_snapshot": {
+      "tradeCount": 12,
+      "latestPrice": 64000.5,
+      "eventTimeUtc": "2026-01-01T00:24:45.000Z"
+    },
+    "macro_series": [
+      {
+        "seriesId": "DFF",
+        "value": 5.25,
+        "observationDate": "2025-12-31",
+        "eventTimeUtc": "2025-12-31T00:00:00.000Z"
+      }
+    ],
+    "news_headline": [
+      {
+        "headline": "Bitcoin holds steady",
+        "url": "https://example.com/btc",
+        "source": "coindesk",
+        "publishedAt": "2026-01-01T00:10:00.000Z",
+        "eventTimeUtc": "2026-01-01T00:10:00.000Z",
+        "providerId": "coindesk_rss"
+      }
+    ],
+    "news_event_cluster": {
+      "clusterId": "cluster-1",
+      "query": "bitcoin",
+      "articleCount": 3,
+      "topHeadline": "Bitcoin holds steady",
+      "eventTimeUtc": "2026-01-01T00:15:00.000Z"
+    },
+    "blockchain_network_stats": [
+      {
+        "network": "ethereum",
+        "blockNumber": "12345678",
+        "gasPriceWei": "20000000000",
+        "eventTimeUtc": "2026-01-01T00:22:00.000Z",
+        "providerId": "infura_rpc"
+      }
+    ],
+    "regulatory_filing": [
+      {
+        "cik": "0000320193",
+        "accessionNumber": "0000320193-26-000001",
+        "form": "8-K",
+        "filingDate": "2025-12-30",
+        "eventTimeUtc": "2025-12-30T00:00:00.000Z"
+      }
+    ],
+    "protocol_release": [
+      {
+        "owner": "bitcoin",
+        "repo": "bitcoin",
+        "tagName": "v26.0",
+        "releaseName": "Bitcoin Core 26.0",
+        "publishedAt": "2025-12-15T00:00:00.000Z",
+        "eventTimeUtc": "2025-12-15T00:00:00.000Z"
+      }
+    ],
+    "mempool_stats": {
+      "count": 1000,
+      "vsize": 2500000,
+      "totalFee": 0.5,
+      "fastestFee": 15,
+      "eventTimeUtc": "2026-01-01T00:23:00.000Z"
+    }
+  }
+}

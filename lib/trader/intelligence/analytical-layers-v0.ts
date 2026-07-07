@@ -33,7 +33,7 @@ export function buildCrowdPsychologyLayer(fusedContext?: FusedMarketContext): Ms
   return {
     fearGreedIndex:
       typeof fearGreedValue === "number" && Number.isFinite(fearGreedValue) ? fearGreedValue : null,
-    newsSentiment: "0",
+    newsSentiment: null,
   };
 }
 

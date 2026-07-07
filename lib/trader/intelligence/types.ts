@@ -98,7 +98,7 @@ export type MsvLiquidityBlock = {
 
 export type MsvCrowdBlock = {
   fearGreedIndex: number | null;
-  newsSentiment: string;
+  newsSentiment: string | null;
 };
 
 export type MsvFutureContextBlock = {
@@ -178,6 +178,7 @@ export const cdeReasonCodes = {
   understandingKnowledgeGap: "CDE_UNDERSTANDING_KNOWLEDGE_GAP",
   understandingDataInsufficient: "CDE_UNDERSTANDING_DATA_INSUFFICIENT",
   understandingStressed: "CDE_UNDERSTANDING_STRESSED",
+  newsSentimentDeferredPr3: "NEWS_SENTIMENT_DEFERRED_PR3",
 } as const;
 
 export const strategyReasonCodes = {

@@ -77,14 +77,16 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(5);
+    expect(lines).toHaveLength(6);
     expect(parseCounter(lines[0]!).domain).toBe("decision");
     expect(parseCounter(lines[1]!).domain).toBe("decision");
-    const strategyLines = lines.slice(2).map(parseCounter);
+    expect(parseCounter(lines[2]!).domain).toBe("decision");
+    const strategyLines = lines.slice(3).map(parseCounter);
     expect(strategyLines.every((line) => line.domain === "strategy")).toBe(true);
     expect(strategyLines.some((line) => line.code === strategyReasonCodes.zscoreBuy)).toBe(true);
     expect(parseCounter(lines[0]!).code).toBe(cdeReasonCodes.qualityAllowTrading);
     expect(parseCounter(lines[1]!).code).toBe(cdeReasonCodes.regimeTrendBear);
+    expect(parseCounter(lines[2]!).code).toBe(cdeReasonCodes.newsSentimentDeferredPr3);
   });
 
   it("STOP_TRADING MSV emits STRAT_MR_PERMISSION_BLOCKED", () => {
@@ -111,8 +113,8 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(5);
-    const strategyLines = lines.slice(2).map(parseCounter);
+    expect(lines).toHaveLength(6);
+    const strategyLines = lines.slice(3).map(parseCounter);
     expect(strategyLines.some((line) => line.code === strategyReasonCodes.permissionBlocked)).toBe(
       true,
     );
@@ -148,8 +150,8 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(5);
-    const strategyLines = lines.slice(2).map(parseCounter);
+    expect(lines).toHaveLength(6);
+    const strategyLines = lines.slice(3).map(parseCounter);
     expect(strategyLines.some((line) => line.code === strategyReasonCodes.strategyNotAllowed)).toBe(
       true,
     );
@@ -179,8 +181,8 @@ describe("trader intelligence evaluation cycle telemetry (DEE-258)", () => {
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(5);
-    const strategyLines = lines.slice(2).map(parseCounter);
+    expect(lines).toHaveLength(6);
+    const strategyLines = lines.slice(3).map(parseCounter);
     expect(strategyLines.some((line) => line.code === strategyReasonCodes.zscoreSell)).toBe(true);
   });
 

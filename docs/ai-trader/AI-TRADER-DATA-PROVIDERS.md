@@ -424,19 +424,33 @@ Remembered → Archived in MKB / Market Memory (PR4 — not PR2.6)
 Research backtests MUST NOT call live Binance/Bybit. Use:
 
 1. **Tier 1:** Resample MTF from historical 1m bars (`replay-fused-context-builder.ts`)
-2. **Tier 2:** Optional fixture sidecar (`tests/fixtures/trader/m9-provider-sidecar.json`)
+2. **Tier 2:** Provider sidecar v2 (`waia.trader.m9_provider_sidecar.v2`) — single live capture snapshot with all 20 lanes
+
+**Capture sidecar (operator, before Repeat M9):**
+
+```bash
+pnpm trader:m9:capture-sidecar -- \
+  --output=replay-runs/RI-P7/m9-v2-research-campaign-org0/m9-provider-sidecar.json
+```
 
 **M9 tier-2 operator workflow:**
 
 ```bash
 # Default: vaultDir/m9-provider-sidecar.json when present
-pnpm tsx scripts/trader/m9-v2-research-campaign.ts \
+pnpm trader:m9:campaign -- \
   --vault-dir=<vault> \
   [--provider-sidecar-path=<path>] \
+  [--require-provider-fusion=1] \
   ...
 ```
 
-The campaign loads the sidecar via `loadM9ProviderSidecar()` and passes `pipelineBacktest.providerSidecar` through the research orchestrator → `buildIsolatedBacktestInput` → `runResearchValidationBacktest`. Cross-venue, crowd, and global context from the sidecar appear in replay fused context and in `m9-market-understanding-sample.json` export artifacts.
+The campaign loads the sidecar via `loadM9ProviderSidecar()`, pins `sidecarContentDigest` in blind authorization scope, and emits:
+
+- `m9-provider-fusion.json` — 20-provider coverage matrix + influence trace
+- `m9-provider-coverage-matrix.md` — human-readable matrix
+- `m9-decision-trace.json` — understanding → MSV → strategy selection trace
+
+Cross-venue, crowd, global, macro, news, blockchain, regulatory, and protocol lanes from the v2 sidecar appear in replay fused context. Context lanes remain **DEFERRED_PR3** (coverage only — no trading permission changes).
 
 ### Future provider contract (doc template — PR3/PR4 runtime)
 

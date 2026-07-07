@@ -302,6 +302,146 @@ export function auditIntegrationPackageScript(root: string): IntegrationFinding 
   };
 }
 
+export function auditReplayFusedContextLanes(root: string): IntegrationFinding {
+  const builder = readRepoFile(root, "lib/trader/market-data/replay-fused-context-builder.ts");
+  const pass =
+    (!builder.includes("macroEvidence: []") &&
+      !builder.includes("newsEvidence: []") &&
+      builder.includes("buildObservationsFromSidecarV2")) ||
+    builder.includes("replay-lane-normalizer");
+  builder.includes("assertResearchRuntime");
+  return {
+    id: "replay-fused-context-lanes",
+    pass,
+    detail: pass
+      ? "Replay fused context builder routes all lanes via sidecar normalizers with research guard."
+      : "Replay builder must not hardcode empty evidence arrays; use lane normalizers + assertResearchRuntime.",
+  };
+}
+
+export function auditNewsSentimentNotFabricated(root: string): IntegrationFinding {
+  const layers = readRepoFile(root, "lib/trader/intelligence/analytical-layers-v0.ts");
+  const pass =
+    !layers.includes('newsSentiment: "0"') &&
+    layers.includes("newsSentiment: null") &&
+    readRepoFile(root, "lib/trader/intelligence/types.ts").includes("newsSentiment: string | null");
+  return {
+    id: "news-sentiment-not-fabricated",
+    pass,
+    detail: pass
+      ? "Crowd psychology layer uses null newsSentiment (NEWS_SENTIMENT_DEFERRED_PR3)."
+      : 'Remove fabricated newsSentiment: "0" from analytical-layers-v0.ts.',
+  };
+}
+
+const REPLAY_ISOLATION_FORBIDDEN_IMPORTS = [
+  "replay-fused-context-builder",
+  "capture/capture-provider-snapshot",
+  "replay/provider-sidecar-types",
+] as const;
+
+const REPLAY_ISOLATION_ENTRYPOINTS = [
+  "lib/trader/market-brain",
+  "lib/trader/cron",
+  "app",
+  "lib/trader/market-data/htx-bar-poll-source.ts",
+] as const;
+
+function scanDirectoryForForbiddenImports(
+  root: string,
+  relativeDir: string,
+  forbidden: readonly string[],
+): string[] {
+  const absoluteDir = join(root, relativeDir);
+  if (!existsSync(absoluteDir)) {
+    return [];
+  }
+  const violations: string[] = [];
+  const walk = (dir: string, prefix: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const rel = `${prefix}/${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(join(dir, entry.name), rel);
+        continue;
+      }
+      if (!entry.name.endsWith(".ts") && !entry.name.endsWith(".tsx")) {
+        continue;
+      }
+      const content = readFileSync(join(dir, entry.name), "utf8");
+      for (const marker of forbidden) {
+        if (content.includes(marker)) {
+          violations.push(`${rel} imports ${marker}`);
+        }
+      }
+    }
+  };
+  walk(absoluteDir, relativeDir);
+  return violations;
+}
+
+export function auditReplayIsolationImportBoundary(root: string): IntegrationFinding {
+  const violations: string[] = [];
+  for (const entrypoint of REPLAY_ISOLATION_ENTRYPOINTS) {
+    const fullPath = join(root, entrypoint);
+    if (existsSync(fullPath)) {
+      if (entrypoint.endsWith(".ts")) {
+        const content = readFileSync(fullPath, "utf8");
+        for (const marker of REPLAY_ISOLATION_FORBIDDEN_IMPORTS) {
+          if (content.includes(marker)) {
+            violations.push(`${entrypoint} imports ${marker}`);
+          }
+        }
+      } else {
+        violations.push(
+          ...scanDirectoryForForbiddenImports(root, entrypoint, REPLAY_ISOLATION_FORBIDDEN_IMPORTS),
+        );
+      }
+    }
+  }
+  return {
+    id: "replay-isolation-import-boundary",
+    pass: violations.length === 0,
+    detail:
+      violations.length === 0
+        ? "Production entrypoints do not import replay sidecar/capture modules."
+        : violations.join("; "),
+  };
+}
+
+export function auditM9ManifestDigestFields(root: string): IntegrationFinding {
+  const campaign = readRepoFile(root, "scripts/trader/m9-v2-research-campaign.ts");
+  const required = [
+    "providerSidecar",
+    "providerFusion",
+    "providerCoverageMatrix",
+    "decisionTrace",
+    "sidecarContentDigest",
+    "require-provider-fusion",
+  ];
+  const missing = required.filter((token) => !campaign.includes(token));
+  return {
+    id: "m9-manifest-digest-fields",
+    pass: missing.length === 0,
+    detail:
+      missing.length === 0
+        ? "M9 campaign manifest includes sidecar/fusion/coverage/decision-trace digest fields."
+        : `Missing in m9-v2-research-campaign.ts: ${missing.join(", ")}`,
+  };
+}
+
+export function auditSidecarCaptureScript(root: string): IntegrationFinding {
+  const pkg = readRepoFile(root, "package.json");
+  const scriptExists = existsSync(join(root, "scripts/trader/m9-capture-provider-sidecar.ts"));
+  const pass = scriptExists && pkg.includes('"trader:m9:capture-sidecar"');
+  return {
+    id: "sidecar-capture-script",
+    pass,
+    detail: pass
+      ? "m9-capture-provider-sidecar.ts exists and package.json exposes trader:m9:capture-sidecar."
+      : "Add sidecar capture CLI and package script.",
+  };
+}
+
 export function runMarketDataIntegrationAudit(root = process.cwd()): IntegrationReport {
   const findings: IntegrationFinding[] = [
     auditProviderRegistryParity(root),
@@ -312,6 +452,11 @@ export function runMarketDataIntegrationAudit(root = process.cwd()): Integration
     auditTronGridIntelligenceEnvBoundary(root),
     auditOrderBookSnapshotNormalizer(root),
     auditFusedContextSchemaV2(),
+    auditReplayFusedContextLanes(root),
+    auditNewsSentimentNotFabricated(root),
+    auditReplayIsolationImportBoundary(root),
+    auditM9ManifestDigestFields(root),
+    auditSidecarCaptureScript(root),
     auditProviderReadinessCompatibility(root),
     auditIntegrationRunbook(root),
     auditIntegrationPackageScript(root),

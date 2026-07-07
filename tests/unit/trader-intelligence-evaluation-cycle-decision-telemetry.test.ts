@@ -48,7 +48,7 @@ describe("trader intelligence evaluation cycle decision telemetry (DEE-259)", ()
       telemetrySink: sink,
     });
 
-    expect(lines).toHaveLength(5);
+    expect(lines).toHaveLength(6);
     expect(parseCounter(lines[0]!)).toMatchObject({
       domain: "decision",
       code: cdeReasonCodes.qualityAllowTrading,
@@ -57,7 +57,11 @@ describe("trader intelligence evaluation cycle decision telemetry (DEE-259)", ()
       domain: "decision",
       code: cdeReasonCodes.regimeTrendBear,
     });
-    const strategyLines = lines.slice(2).map(parseCounter);
+    expect(parseCounter(lines[2]!)).toMatchObject({
+      domain: "decision",
+      code: cdeReasonCodes.newsSentimentDeferredPr3,
+    });
+    const strategyLines = lines.slice(3).map(parseCounter);
     expect(strategyLines.every((line) => line.domain === "strategy")).toBe(true);
     expect(strategyLines.some((line) => line.code === strategyReasonCodes.zscoreBuy)).toBe(true);
   });
@@ -72,7 +76,8 @@ describe("trader intelligence evaluation cycle decision telemetry (DEE-259)", ()
       newId: () => "id-eval-259-no-sink",
     });
 
-    expect(result.msv.derived.reasonCodes).toHaveLength(2);
+    expect(result.msv.derived.reasonCodes).toHaveLength(3);
+    expect(result.msv.derived.reasonCodes).toContain(cdeReasonCodes.newsSentimentDeferredPr3);
     expect(result.signal.outcome).toBe("SIGNAL");
   });
 });

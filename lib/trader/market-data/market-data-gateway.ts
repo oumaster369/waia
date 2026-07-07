@@ -52,6 +52,10 @@ export type GatewayPollResult = {
   snapshot: MarketSnapshot;
   fusedContext: FusedMarketContext;
   mtfBarsByInterval: Partial<Record<BarInterval, Bar[]>>;
+  crossExchangeObservations?: {
+    binance?: NormalizedObservation;
+    bybit?: NormalizedObservation;
+  };
 };
 
 async function timed<T>(fn: () => Promise<T>): Promise<{ value: T; latencyMs: number }> {
@@ -226,6 +230,8 @@ export class MarketDataGateway {
 
     let crossExchangeConfirmation: NormalizedObservation | undefined;
     let crossVenueTriangulation;
+    let crossExchangeBinance: NormalizedObservation | undefined;
+    let crossExchangeBybit: NormalizedObservation | undefined;
     let fearGreedObservation: NormalizedObservation | undefined;
     let globalMarketObservation: NormalizedObservation | undefined;
     let macroEvidence: NormalizedObservation[] = [];
@@ -242,6 +248,8 @@ export class MarketDataGateway {
       });
       crossExchangeConfirmation = crossExchange.crossExchangeConfirmation;
       crossVenueTriangulation = crossExchange.crossVenueTriangulation;
+      crossExchangeBinance = crossExchange.binance;
+      crossExchangeBybit = crossExchange.bybit;
       fearGreedObservation = await this.fetchFearGreed({ evaluatedAt, degradationReasons });
       globalMarketObservation = await this.fetchGlobalMarket({ evaluatedAt, degradationReasons });
 
@@ -311,6 +319,10 @@ export class MarketDataGateway {
       snapshot: { ...snapshot, evaluatedAt: snapshot.evaluatedAt ?? evaluatedAt },
       fusedContext,
       mtfBarsByInterval,
+      crossExchangeObservations: {
+        binance: crossExchangeBinance,
+        bybit: crossExchangeBybit,
+      },
     };
   }
 
@@ -321,6 +333,8 @@ export class MarketDataGateway {
   }): Promise<{
     crossExchangeConfirmation?: NormalizedObservation;
     crossVenueTriangulation: ReturnType<typeof buildCrossVenueTriangulation>;
+    binance?: NormalizedObservation;
+    bybit?: NormalizedObservation;
   }> {
     let binanceObs: NormalizedObservation | undefined;
     let bybitObs: NormalizedObservation | undefined;
@@ -391,6 +405,8 @@ export class MarketDataGateway {
           reason: "cross_exchange_unavailable",
         }),
         crossVenueTriangulation,
+        binance: undefined,
+        bybit: undefined,
       };
     }
 
@@ -401,7 +417,12 @@ export class MarketDataGateway {
           : bybitObs
         : (binanceObs ?? bybitObs);
 
-    return { crossExchangeConfirmation, crossVenueTriangulation };
+    return {
+      crossExchangeConfirmation,
+      crossVenueTriangulation,
+      binance: binanceObs,
+      bybit: bybitObs,
+    };
   }
 
   private async fetchFearGreed(input: {

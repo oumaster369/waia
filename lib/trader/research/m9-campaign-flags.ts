@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type { BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
+import { parseReplayProviderSidecar } from "@/lib/trader/market-data/replay/provider-sidecar-types";
+import { assertResearchRuntime } from "@/lib/trader/research/assert-research-runtime";
 import { MEAN_REVERSION_V0, MEAN_REVERSION_V0_VERSION } from "@/lib/trader/intelligence/types";
 import type { ResearchPortfolioConfig } from "@/lib/trader/research/research-portfolio-config";
 import { RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION } from "@/lib/trader/research/strategy-candidate.types";
@@ -115,11 +117,14 @@ export function resolveM9ProviderSidecarPath(
   return undefined;
 }
 
+export function parseRequireProviderFusion(flags: Map<string, string>): boolean {
+  return flags.get("require-provider-fusion") === "1";
+}
+
 export function loadM9ProviderSidecar(path: string | undefined) {
+  assertResearchRuntime("loadM9ProviderSidecar");
   if (!path) {
     return undefined;
   }
-  return JSON.parse(
-    readFileSync(path, "utf8"),
-  ) as import("@/lib/trader/market-data/replay-fused-context-builder").ReplayProviderSidecar;
+  return parseReplayProviderSidecar(JSON.parse(readFileSync(path, "utf8")));
 }

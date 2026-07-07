@@ -16,7 +16,7 @@
  *     [--enable-guardian-exits=1]
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { getPostgresDrizzle } from "@/db/postgres-client";
@@ -43,12 +43,22 @@ import {
   parseM9MetricsSchemaVersion,
   parseM9OosBarCount,
   parseM9PortfolioConfig,
+  parseRequireProviderFusion,
   resolveM9ProviderSidecarPath,
   loadM9ProviderSidecar,
   resolveM9CampaignStrategy,
   resolveM9SymbolInterval,
 } from "@/lib/trader/research/m9-campaign-flags";
+import { buildM9DecisionTraceExport } from "@/lib/trader/research/m9-decision-trace-export";
 import { buildM9GuardianReasonSampleExport } from "@/lib/trader/research/m9-guardian-sample-export";
+import {
+  assertProviderFusionRequirements,
+  buildM9ProviderCoverageMatrixMarkdown,
+  buildM9ProviderFusionExport,
+  computeArtifactFileDigest,
+} from "@/lib/trader/research/m9-provider-fusion-export";
+import { computeSidecarContentDigest } from "@/lib/trader/market-data/replay/sidecar-content-digest";
+import { isReplayProviderSidecarV2 } from "@/lib/trader/market-data/replay/provider-sidecar-types";
 import { buildM9LifecycleTraceExport } from "@/lib/trader/research/m9-lifecycle-trace-export";
 import { buildM9MarketUnderstandingSampleExport } from "@/lib/trader/research/m9-market-understanding-export";
 import {
@@ -105,6 +115,10 @@ export type M9ResearchCampaignManifest = {
     lifecycleTrace: string;
     guardianSample: string | null;
     marketUnderstandingSample: string | null;
+    providerSidecar: string | null;
+    providerFusion: string | null;
+    providerCoverageMatrix: string | null;
+    decisionTrace: string | null;
     operatorAuthorization: string;
   };
   digests: {
@@ -114,6 +128,10 @@ export type M9ResearchCampaignManifest = {
     lifecycleTrace: string | null;
     guardianSample: string | null;
     marketUnderstandingSample: string | null;
+    providerSidecar: string | null;
+    providerFusion: string | null;
+    providerCoverageMatrix: string | null;
+    decisionTrace: string | null;
     campaignAuthorization: string;
     blindAuthorization: string;
   };
@@ -135,6 +153,7 @@ Usage:
     --operator-blind-authorization=<digest> \\
     [--vault-dir=${M9_DEFAULT_VAULT_DIR}] \\
     [--provider-sidecar-path=<path>] \\
+    [--require-provider-fusion=1] \\
     [--campaign-suffix=<suffix>] \\
     [--starting-balance-usdt=1000000.00] \\
     [--enable-guardian-exits=1]
@@ -171,9 +190,24 @@ async function main(): Promise<void> {
   const oosBarCount = parseM9OosBarCount(flags);
   const portfolioConfig = parseM9PortfolioConfig(flags);
   const enableGuardianExits = parseEnableGuardianExits(flags);
+  const requireProviderFusion = parseRequireProviderFusion(flags);
   const campaignSuffix = flags.get("campaign-suffix")?.trim();
   const datasetName = flags.get("dataset-name")?.trim() || M9_DEFAULT_DATASET_NAME;
   const operatorId = flags.get("operator-id")?.trim() ?? null;
+
+  const providerSidecarPath = resolveM9ProviderSidecarPath(flags, vaultDir);
+  const providerSidecar = loadM9ProviderSidecar(providerSidecarPath);
+  const sidecarContentDigest = providerSidecar
+    ? computeSidecarContentDigest(providerSidecar)
+    : null;
+
+  if (requireProviderFusion) {
+    if (!providerSidecar || !isReplayProviderSidecarV2(providerSidecar)) {
+      throw new Error(
+        `${LOG_PREFIX} --require-provider-fusion=1 requires a v2 sidecar at ${providerSidecarPath ?? "default path"}`,
+      );
+    }
+  }
 
   const baseStrategy = resolveM9CampaignStrategy(flags);
   const strategyVersion = applyCampaignSuffixToStrategyVersion(
@@ -196,6 +230,7 @@ async function main(): Promise<void> {
   const blindScope: M9BlindAuthorizationScope = {
     ...campaignScope,
     datasetName,
+    sidecarContentDigest,
   };
   assertM9BlindAuthorization(operatorBlindAuthorization, blindScope);
 
@@ -264,8 +299,6 @@ async function main(): Promise<void> {
   const barSetDigest = computeBarSetDigest(barRecords);
   const builderGitSha = process.env.GITHUB_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null;
   const validationArtifactSink: ResearchValidationBacktestArtifactSink = {};
-  const providerSidecarPath = resolveM9ProviderSidecarPath(flags, vaultDir);
-  const providerSidecar = loadM9ProviderSidecar(providerSidecarPath);
 
   try {
     const result = await runResearchPipelinePostgres(db, {
@@ -360,6 +393,56 @@ async function main(): Promise<void> {
       );
     }
 
+    const providerSidecarArtifactPath = providerSidecarPath ?? null;
+    let providerFusionPath: string | null = null;
+    let providerCoverageMatrixPath: string | null = null;
+    let decisionTracePath: string | null = null;
+    let providerFusionDigest: string | null = null;
+    let providerCoverageMatrixDigest: string | null = null;
+    let decisionTraceDigest: string | null = null;
+
+    if (validationArtifactSink.cycleResults && validationArtifactSink.cycleResults.length > 0) {
+      const fusedSamples = validationArtifactSink.cycleResults
+        .map((cycle) => cycle.evaluation.fusedContext)
+        .filter((fused): fused is NonNullable<typeof fused> => fused !== undefined);
+
+      providerFusionPath = resolve(vaultDir, "m9-provider-fusion.json");
+      const providerFusion = buildM9ProviderFusionExport({
+        organizationId,
+        strategyId: baseStrategy.strategyId,
+        strategyVersion,
+        instrumentId: symbol,
+        fusedSamples,
+        providerSidecar,
+      });
+      if (requireProviderFusion) {
+        assertProviderFusionRequirements(providerFusion);
+      }
+      const providerFusionJson = `${JSON.stringify(providerFusion, null, 2)}\n`;
+      writeFileSync(providerFusionPath, providerFusionJson, "utf8");
+      providerFusionDigest = providerFusion.contentDigest;
+
+      providerCoverageMatrixPath = resolve(vaultDir, "m9-provider-coverage-matrix.md");
+      const coverageMarkdown = buildM9ProviderCoverageMatrixMarkdown(providerFusion);
+      writeFileSync(providerCoverageMatrixPath, coverageMarkdown, "utf8");
+      providerCoverageMatrixDigest = computeArtifactFileDigest(coverageMarkdown);
+
+      decisionTracePath = resolve(vaultDir, "m9-decision-trace.json");
+      const decisionTrace = buildM9DecisionTraceExport({
+        organizationId,
+        strategyId: baseStrategy.strategyId,
+        strategyVersion,
+        cycleResults: validationArtifactSink.cycleResults,
+      });
+      const decisionTraceJson = `${JSON.stringify(decisionTrace, null, 2)}\n`;
+      writeFileSync(decisionTracePath, decisionTraceJson, "utf8");
+      decisionTraceDigest = decisionTrace.contentDigest;
+    } else if (requireProviderFusion) {
+      throw new Error(
+        `${LOG_PREFIX} --require-provider-fusion=1 requires validation cycle results with fused context`,
+      );
+    }
+
     const manifest: M9ResearchCampaignManifest = {
       schemaVersion: "m9_v2_research_campaign_v1",
       campaignId: `m9-v2-${Date.now()}`,
@@ -382,15 +465,27 @@ async function main(): Promise<void> {
         lifecycleTrace: lifecycleTracePath,
         guardianSample: guardianSamplePath,
         marketUnderstandingSample: marketUnderstandingSamplePath,
+        providerSidecar: providerSidecarArtifactPath,
+        providerFusion: providerFusionPath,
+        providerCoverageMatrix: providerCoverageMatrixPath,
+        decisionTrace: decisionTracePath,
         operatorAuthorization: authorizationPath,
       },
       digests: {
         evidence: result.evidenceDocument.envelope.contentDigest,
         pka: pka.reproducibilityDigest,
-        metricsExport: null,
-        lifecycleTrace: null,
-        guardianSample: null,
-        marketUnderstandingSample: null,
+        metricsExport: computeArtifactFileDigest(readFileSync(metricsExportPath, "utf8")),
+        lifecycleTrace: computeArtifactFileDigest(readFileSync(lifecycleTracePath, "utf8")),
+        guardianSample: guardianSamplePath
+          ? computeArtifactFileDigest(readFileSync(guardianSamplePath, "utf8"))
+          : null,
+        marketUnderstandingSample: marketUnderstandingSamplePath
+          ? computeArtifactFileDigest(readFileSync(marketUnderstandingSamplePath, "utf8"))
+          : null,
+        providerSidecar: sidecarContentDigest,
+        providerFusion: providerFusionDigest,
+        providerCoverageMatrix: providerCoverageMatrixDigest,
+        decisionTrace: decisionTraceDigest,
         campaignAuthorization: operatorCampaignAuthorization,
         blindAuthorization: operatorBlindAuthorization,
       },

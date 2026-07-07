@@ -17,6 +17,7 @@ export type M9CampaignAuthorizationScope = {
 
 export type M9BlindAuthorizationScope = M9CampaignAuthorizationScope & {
   datasetName: string;
+  sidecarContentDigest?: string | null;
 };
 
 export type M9OperatorAuthorizationRecord = {
