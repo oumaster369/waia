@@ -60,6 +60,19 @@ DATABASE_URL=file:./.data/waia.dev.db
 # WATCHER_CONFIRMATIONS_REQUIRED=
 # WATCHER_RESCAN_WINDOW=
 
+# ─── Market Brain worker (Pipeline P3) — MI gateway cron ───
+# MARKET_BRAIN_ENABLED=
+# MARKET_BRAIN_ORGANIZATION_ID=
+# HTX_REST_HOST=
+# COINGECKO_API_KEY=
+
+# ─── Paper loop worker (Pipeline P5) — uses HtxBarPollSource / gateway ───
+# PAPER_LOOP_ENABLED=
+# PAPER_LOOP_ORGANIZATION_ID=
+# PAPER_LOOP_ACCOUNT_KEY=
+# PAPER_LOOP_DEFAULT_QUANTITY=
+# PAPER_LOOP_CYCLE_ID_PREFIX=
+
 # ─── AI-TRADER alerting (DEE-223 / BP-9) — dedicated Alerts Bot only ───
 # SECRET — never reuse TELEGRAM_BOT_TOKEN (OAuth). Production: wrangler secret put.
 # TELEGRAM_ALERTS_BOT_TOKEN=
