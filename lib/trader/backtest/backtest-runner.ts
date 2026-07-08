@@ -145,6 +145,8 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         ? undefined
         : buildReplayFusedContextFromSnapshot(snapshot, input.providerSidecar);
 
+    input.deps.researchReplayDeterminism?.clock.setNowMs(new Date(snapshot.evaluatedAt).getTime());
+
     const result = await runPaperCycleOnce(input.deps, {
       context: input.context,
       snapshot,

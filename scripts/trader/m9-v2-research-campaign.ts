@@ -70,6 +70,7 @@ import {
   type M9BlindAuthorizationScope,
   type M9CampaignAuthorizationScope,
 } from "@/lib/trader/research/m9-operator-authorization";
+import { createManualReplayClock } from "@/lib/trader/research/deterministic-replay-clock";
 import { buildM9V2MetricsExport } from "@/lib/trader/research/m9-v2-metrics-export";
 import {
   finalizeResearchCampaignOutcomePostgres,
@@ -92,6 +93,16 @@ import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const LOG_PREFIX = "[trader:m9:campaign]";
+
+/**
+ * Fixed governance-gate placeholder scale (NOT an evidence-derived score). PKA confidence
+ * scoring from actual blind/walk-forward metrics is deferred to a future PR — see ADR-0021
+ * scope note. Explicitly de-labeled per DEE-397 audit finding so this is not mistaken for a
+ * measured edge-confidence metric.
+ */
+const PKA_GOVERNANCE_GATE_EDGE_CONFIDENCE_VERIFIED = "0.7500";
+const PKA_GOVERNANCE_GATE_EDGE_CONFIDENCE_UNVERIFIED = "0.2500";
+const PKA_GOVERNANCE_GATE_EDGE_STRENGTH_PLACEHOLDER = "0.5000";
 
 export type M9ResearchCampaignManifest = {
   schemaVersion: "m9_v2_research_campaign_v1";
@@ -257,8 +268,14 @@ async function main(): Promise<void> {
 
   const writeAudit = (input: Parameters<typeof writeTraderAuditLogPostgres>[1]) =>
     writeTraderAuditLogPostgres(db, input);
-  const nowMs = () => Date.now();
-  const connector = new MockExchangeConnector();
+  // Deterministic replay clock (DEE-397 / ADR-0021): the backtest runner advances this to
+  // each cycle's evaluated bar time before invoking execution/risk deps, so `nowMs()` never
+  // observes the wall clock while replaying. The seed value below is only ever read before
+  // the first backtest cycle sets it and never reaches a risk decision, order, or digest.
+  const replayClock = createManualReplayClock(Date.now());
+  const nowMs = () => replayClock.nowMs();
+  const rateStore = createInMemoryOrderRateStore();
+  const connector = new MockExchangeConnector({ nowMs });
   await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
 
   const limits = createPostgresRiskLimitsService(db);
@@ -275,7 +292,7 @@ async function main(): Promise<void> {
   const riskEngine = createPostgresRiskEngineService(db, {
     limitsService: limits,
     killSwitchResolver,
-    rateStore: createInMemoryOrderRateStore(),
+    rateStore,
     writeAudit,
     nowMs,
     newDecisionId: () => crypto.randomUUID(),
@@ -309,7 +326,16 @@ async function main(): Promise<void> {
       strategyId: baseStrategy.strategyId,
       strategyVersion,
       oosBarCount,
-      deps: { execution, reconciliation, lifecycleRecorder, lifecycleRepository },
+      deps: {
+        execution,
+        reconciliation,
+        lifecycleRecorder,
+        lifecycleRepository,
+        researchReplayDeterminism: {
+          clock: replayClock,
+          resetWindowState: () => rateStore.clear(),
+        },
+      },
       createOrderRepository: () => orderRepository,
       pipelineBacktest: {
         metricsSchemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
@@ -336,8 +362,10 @@ async function main(): Promise<void> {
       walkForwardWindowCount: result.walkForwardWindowCount,
       blindMetrics: result.blindMetrics,
       mkbLinkage: result.knowledge,
-      edgeConfidence: edgeVerified ? "0.7500" : "0.2500",
-      edgeStrength: "0.5000",
+      edgeConfidence: edgeVerified
+        ? PKA_GOVERNANCE_GATE_EDGE_CONFIDENCE_VERIFIED
+        : PKA_GOVERNANCE_GATE_EDGE_CONFIDENCE_UNVERIFIED,
+      edgeStrength: PKA_GOVERNANCE_GATE_EDGE_STRENGTH_PLACEHOLDER,
       edgeVerified,
       builderGitSha,
     });

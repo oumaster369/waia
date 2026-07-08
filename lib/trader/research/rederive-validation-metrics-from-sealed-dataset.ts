@@ -34,7 +34,7 @@ function resolveCostModel(costModelVersion: string) {
 export async function rederiveValidationMetricsFromSealedDataset(
   input: RederiveValidationMetricsInput,
 ): Promise<ResearchValidationMetrics> {
-  const session = createInMemoryResearchBacktestSession();
+  const session = await createInMemoryResearchBacktestSession();
   try {
     const costModel = resolveCostModel(input.costModelVersion);
     return await runResearchValidationBacktest({

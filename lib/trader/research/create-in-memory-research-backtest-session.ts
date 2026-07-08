@@ -14,6 +14,7 @@ import {
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import { createLifecycleRecorder, createSqliteLifecycleRepository } from "@/lib/trader/lifecycle";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
+import { createManualReplayClock } from "@/lib/trader/research/deterministic-replay-clock";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import {
   createKillSwitchResolver,
@@ -37,7 +38,7 @@ export type InMemoryResearchBacktestSession = {
 };
 
 /** Isolated SQLite session for validation replay — no Postgres mock order mutation. */
-export function createInMemoryResearchBacktestSession(): InMemoryResearchBacktestSession {
+export async function createInMemoryResearchBacktestSession(): Promise<InMemoryResearchBacktestSession> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "waia-see-a15-"));
   const dbPath = path.join(tempDir, "research-replay.sqlite");
   process.env.DATABASE_URL = dbPath;
@@ -46,8 +47,13 @@ export function createInMemoryResearchBacktestSession(): InMemoryResearchBacktes
 
   const db = getDb();
   const writeAudit = (_input: TraderAuditInput) => "see-a15-audit";
-  const nowMs = () => Date.now();
-  const connector = new MockExchangeConnector();
+  // Deterministic replay clock (DEE-397 / ADR-0021): advanced to each cycle's evaluated bar
+  // time by the backtest runner, so re-derivation from a sealed dataset is reproducible.
+  const replayClock = createManualReplayClock(Date.now());
+  const nowMs = () => replayClock.nowMs();
+  const rateStore = createInMemoryOrderRateStore();
+  const connector = new MockExchangeConnector({ nowMs });
+  await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
 
   const orderRepository = createSqliteOrderRepository(db);
   const lifecycleRepository = createSqliteLifecycleRepository(db);
@@ -60,7 +66,7 @@ export function createInMemoryResearchBacktestSession(): InMemoryResearchBacktes
   const riskEngine = createRiskEngineService({
     limitsService,
     killSwitchResolver,
-    rateStore: createInMemoryOrderRateStore(),
+    rateStore,
     writeAudit,
     nowMs,
     newDecisionId: () => crypto.randomUUID(),
@@ -81,7 +87,15 @@ export function createInMemoryResearchBacktestSession(): InMemoryResearchBacktes
   });
 
   return {
-    deps: { execution, reconciliation, lifecycleRecorder },
+    deps: {
+      execution,
+      reconciliation,
+      lifecycleRecorder,
+      researchReplayDeterminism: {
+        clock: replayClock,
+        resetWindowState: () => rateStore.clear(),
+      },
+    },
     orderRepository,
     cleanup: () => {
       try {

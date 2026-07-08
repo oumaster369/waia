@@ -20,13 +20,16 @@ type PgDeleteExecutor = Pick<WaiaPostgresDb, "delete">;
  * Clears org mock execution artifacts then runs a research validation backtest window.
  *
  * Ensures each validation / walk-forward / blind window sees an isolated mock ledger
- * when backed by Postgres (RI-P7 / DEE-368).
+ * when backed by Postgres (RI-P7 / DEE-368), and — when the deterministic replay hook
+ * is set (M9+ / DEE-397 / ADR-0021) — an isolated in-memory order-rate limiter, so
+ * rate-limiting decisions cannot leak between windows.
  */
 export async function runIsolatedResearchBacktest(
   ex: PgDeleteExecutor,
   input: RunResearchValidationBacktestInput,
 ): Promise<ResearchValidationMetrics> {
   await deleteMockExecutionArtifactsForOrgPostgres(ex, input.context);
+  input.deps.researchReplayDeterminism?.resetWindowState();
   if (input.metricsSchemaVersion === RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION) {
     return runResearchValidationBacktest({
       ...input,
