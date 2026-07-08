@@ -5,6 +5,7 @@ enforceServerOnly();
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { isTransientConnectionError, withCampaignDbRetry } from "@/db/postgres-client";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import type { CanonicalInventoryWalkResult } from "@/lib/trader/paper/derive-canonical-inventory";
@@ -69,11 +70,23 @@ export type FinalizeResearchCampaignOutcomeResult = {
   evolutionCycle?: EvolutionCycleMvp;
 };
 
+/**
+ * Classifies a campaign termination error honestly (DEE-399). `PaperPnLReconciliationError`
+ * remains a real accounting defect. A transient Postgres/network connection failure — the
+ * class observed in Repeat M9 v0.1.7's `write CONNECTION_CLOSED …pooler.supabase.com:6543`
+ * crash — is sealed as its own `CAMPAIGN_INFRA_DISCONNECT` code so an infrastructure blip is
+ * never conflated with a generic/unknown pipeline crash. Everything else remains
+ * `CAMPAIGN_CRASH`. This function only ever narrows the label; it never converts a failure
+ * into success and never suppresses the underlying error.
+ */
 export function resolveResearchCampaignCrashFailureCode(
   error: unknown,
 ): ResearchRejectionFailureCode {
   if (error instanceof PaperPnLReconciliationError) {
     return "INVENTORY_RECONCILIATION";
+  }
+  if (isTransientConnectionError(error)) {
+    return "CAMPAIGN_INFRA_DISCONNECT";
   }
   return "CAMPAIGN_CRASH";
 }
@@ -109,7 +122,13 @@ async function buildGovernedRejectRejectionRecord(
     builderGitSha: builderGitSha ?? null,
   });
 
-  await updateStrategyCandidateStatusPostgres(ex, context, failure.candidateId, "rejected");
+  // Resilient (DEE-399): a transient connection blip must not prevent sealing the honest
+  // rejection artifact below. Best-effort only — if the candidate status write still fails
+  // after bounded retry, the candidate row remains non-terminal for operator SQL cleanup
+  // (see PR-1 plan §5); it never blocks or falsifies the local rejection/evolution artifact.
+  await withCampaignDbRetry(() =>
+    updateStrategyCandidateStatusPostgres(ex, context, failure.candidateId, "rejected"),
+  ).catch(() => undefined);
 
   return rejectionRecord;
 }
@@ -129,17 +148,21 @@ async function buildCrashRejectionRecord(
   let blindConsumed = scope.blindConsumed ?? false;
   const walkForwardWindowCount = scope.walkForwardWindowCount ?? 0;
 
-  const candidate = await getLatestCandidateForStrategyPostgres(
-    ex,
-    context,
-    scope.strategyId,
-    scope.strategyVersion,
+  // Resilient (DEE-399): retry the read/write themselves, but never let an ultimately-failed
+  // DB write escape and block sealing the honest local rejection/evolution/diagnostics
+  // artifact — that is the primary failure mode PR-1 closes (a dead connection previously
+  // prevented even the crash artifact from being written). A candidate left non-terminal
+  // after exhausted retries is documented operator SQL cleanup (PR-1 plan §5), never silent.
+  const candidate = await withCampaignDbRetry(() =>
+    getLatestCandidateForStrategyPostgres(ex, context, scope.strategyId, scope.strategyVersion),
   ).catch(() => null);
 
   if (candidate) {
     candidateId = candidate.id;
     blindConsumed = candidate.blindUsed;
-    await updateStrategyCandidateStatusPostgres(ex, context, candidate.id, "rejected");
+    await withCampaignDbRetry(() =>
+      updateStrategyCandidateStatusPostgres(ex, context, candidate.id, "rejected"),
+    ).catch(() => undefined);
   }
 
   return buildResearchRejectionRecord({
@@ -206,9 +229,14 @@ export async function finalizeResearchCampaignOutcomePostgres(
 
   let inventory = input.inventory;
   if (!inventory && input.orderRepository) {
-    inventory = await tryLoadCanonicalInventorySnapshot(ex, context, {
-      orderRepository: input.orderRepository,
-    });
+    // Best-effort (DEE-399): an inventory snapshot failure must never block sealing the
+    // rejection/evolution/diagnostics artifact — `parityStatus` already models "not_checked"
+    // for exactly this case.
+    inventory = await withCampaignDbRetry(() =>
+      tryLoadCanonicalInventorySnapshot(ex, context, {
+        orderRepository: input.orderRepository!,
+      }),
+    ).catch(() => null);
   }
 
   const error = input.error ?? new Error("Campaign crash");

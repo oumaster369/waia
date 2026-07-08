@@ -8,6 +8,7 @@ export type ResearchRejectionFailureCode =
   | "MULTI_REGIME_COVERAGE_INSUFFICIENT"
   | "INVENTORY_RECONCILIATION"
   | "CAMPAIGN_CRASH"
+  | "CAMPAIGN_INFRA_DISCONNECT"
   | "OTHER_PIPELINE_FAILURE";
 
 export type RejectionMissingBucket = "non_trending" | "down_regime";
