@@ -22,3 +22,12 @@ Campaign blocked by **`M9_BLOCKED_BY_ACCOUNTING_DEFECT`**. Authorization record:
 Use `computeM9CampaignAuthorizationDigest` / `computeM9BlindAuthorizationDigest` from
 `lib/trader/research/m9-operator-authorization.ts` with the exact campaign scope fields
 (org, strategy, version, symbol, interval, vault dir, dataset name for blind).
+
+## v0.1.7 content-bound authorization checklist (DEE-398 / ADR-0022)
+
+- [ ] `pnpm trader:m9:digest -- --verify-scope` run on the same host/repo root/stored bars/sidecar path that will run the campaign
+- [ ] `blindScope.blindDigest` is a real 64-char hex digest (computed from stored bars, not a placeholder)
+- [ ] `blindScope.sidecarContentDigest` is a real digest, or `"none"` if genuinely no sidecar is used — never `null`
+- [ ] `--require-provider-fusion=1`, `--enable-guardian-exits=1`, and `--provider-sidecar-path=<v2 sidecar>` all set on the campaign command (the campaign now refuses to start otherwise)
+- [ ] If a prior dataset row exists under the same `--dataset-name`, confirmed it is a genuine REUSE (identical stored bars) — not a `M9_DATASET_CONTENT_CONFLICT`
+- [ ] Digests generated immediately before the campaign command, with no bar/sidecar changes in between

@@ -29,12 +29,18 @@
 
 **Host rule:** Generate digests on the same Execution Server host and from the same repo root/path that will run the campaign. **Never generate digests on a laptop for a remote execution.**
 
-1. Confirm campaign scope matches runbook exactly (org, strategy, **`0.1.1`**, symbol, interval, vault path, metrics `2.0.0`, dataset `m9-v2-research-campaign-org0`).
-2. Confirm campaign command includes **`--enable-guardian-exits=1`** and **no** `--starting-balance-usdt` / portfolio overrides unless architect-approved.
-3. Run **digest scope verification** on **this host**: `pnpm trader:m9:digest -- --verify-scope` — confirm absolute `vaultDir` matches this machine’s repo path.
+**v0.1.7 (DEE-398 / ADR-0022): blind authorization is content-bound, not label-bound.** The
+blind scope carries `blindDigest` (sealed blind-split bar-content digest) and a normalized
+`sidecarContentDigest` — `pnpm trader:m9:digest` reads the stored bars (read-only) to compute
+them via the same canonical builder the campaign uses. Generate digests only when the stored
+bars and sidecar are in their final, campaign-ready state.
+
+1. Confirm campaign scope matches runbook exactly (org, strategy, **`0.1.7`** (bump per retry), symbol, interval, vault path, metrics `2.0.0`, dataset `m9-v2-research-campaign-org0`).
+2. Confirm campaign command includes **`--enable-guardian-exits=1`**, **`--require-provider-fusion=1`**, a v2 `--provider-sidecar-path`, and **no** `--starting-balance-usdt` / portfolio overrides unless architect-approved. The campaign now refuses to start if any of the first three is missing.
+3. Run **digest scope verification** on **this host**: `pnpm trader:m9:digest -- --verify-scope` — confirm absolute `vaultDir` matches this machine's repo path, and `blindScope.blindDigest` / `sidecarContentDigest` look correct (real values, not placeholders).
 4. Post **explicit go/no-go in chat** (include operator name + date).
 5. Run **digest generation** on **this host**: `pnpm trader:m9:digest -- --generate-digests`. Copy both 64-char hex digests.
-6. Paste digests into the final campaign command. **Do not reuse digests if any scope field changes.**
+6. Paste digests into the final campaign command. **Do not reuse digests if any scope field, the stored bars, or the sidecar changes** — the campaign fails closed with `M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH` on any content drift.
 
 ---
 
@@ -47,16 +53,19 @@ cd <WAIA_REPO_ROOT>
 set -a && source .env.local && set +a   # or export vars on Execution Server
 export WAIA_TRADER_ORG0_ORGANIZATION_ID=3c50b4e9-1138-43a5-a29f-e65088124cfc
 
-# First attempt (clean log):
+# v0.1.7 attempt (clean log) — --enable-guardian-exits=1, --require-provider-fusion=1, and a
+# v2 --provider-sidecar-path are all required; the campaign refuses to start if any is missing:
 pnpm trader:m9:campaign -- \
   --org-id=3c50b4e9-1138-43a5-a29f-e65088124cfc \
   --strategy-id=mean_reversion_v0 \
-  --strategy-version=0.1.1 \
+  --strategy-version=0.1.7 \
   --metrics-schema-version=2.0.0 \
   --operator-campaign-authorization=<CAMPAIGN_DIGEST> \
   --operator-blind-authorization=<BLIND_DIGEST> \
   --vault-dir=./replay-runs/RI-P7/m9-v2-research-campaign-org0 \
   --enable-guardian-exits=1 \
+  --require-provider-fusion=1 \
+  --provider-sidecar-path=./replay-runs/RI-P7/m9-v2-research-campaign-org0/m9-provider-sidecar.json \
   2>&1 | tee replay-runs/RI-P7/m9-v2-research-campaign-org0/m9-campaign-run.log
 
 # Retry after failure (preserve prior log):
@@ -103,4 +112,4 @@ Campaign from Cursor agents without chat authorization · HTX backfill during ce
 
 **Closure:** `M9-ENGINEERING-CLOSURE.md` · **Forensics:** `M9-FORENSIC-REPORT.md` · **Retries:** `M9-CAMPAIGN-EXECUTION-RECORD.md`
 
-**Next:** See `../AI-TRADER-ENGINEERING-STATUS.md` — PR1 → PR2 → Repeat M9 v0.1.7 → Gate A.
+**Next:** See `../AI-TRADER-ENGINEERING-STATUS.md` — PR1 → PR2 (complete, DEE-398 / ADR-0022) → Repeat M9 v0.1.7 (BLOCKED pending final re-audit) → Gate A.

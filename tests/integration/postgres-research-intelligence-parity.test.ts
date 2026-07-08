@@ -25,8 +25,18 @@ import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import { buildPaperEvaluationExportDocument } from "@/lib/trader/paper/build-paper-evaluation-export";
 import { insertMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
-import { getResearchDatasetByIdPostgres } from "@/lib/trader/market-data/research-dataset-repository-postgres";
+import {
+  getResearchDatasetByIdPostgres,
+  getResearchDatasetByNamePostgres,
+} from "@/lib/trader/market-data/research-dataset-repository-postgres";
+import {
+  buildM9BlindAuthorizationScope,
+  computeM9BlindAuthorizationDigest,
+  type M9CampaignAuthorizationScope,
+} from "@/lib/trader/research/m9-operator-authorization";
+import { computeM9DatasetSealPreviewPostgres } from "@/lib/trader/research/m9-dataset-seal-preview";
 import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
+import { RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION } from "@/lib/trader/research/strategy-candidate.types";
 import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/research/validate-research-evidence-provenance";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import {
@@ -360,6 +370,139 @@ describe.skipIf(!integrationEnabled || !url)(
       for (const order of mockOrders) {
         expect(order.clientOrderId).toContain("ri-blind-");
       }
+    });
+
+    it("DEE-398: repeat-run idempotency — second run reuses the existing dataset row", async () => {
+      const context = requireOrgContext(orgA);
+      const deps = await buildPostgresResearchDeps(db, orgA);
+      const datasetName = "ri-repeat-idempotency";
+      const pipelineInput = {
+        context,
+        deps,
+        createOrderRepository: () => createPostgresOrderRepository(db),
+        ...RESEARCH_PIPELINE_BASE,
+      };
+
+      const first = await runResearchPipelinePostgres(db, {
+        ...pipelineInput,
+        newId: createResearchPipelineIdFactory(),
+        datasetName,
+        strategyVersion: "0.1.210",
+      });
+
+      // No cleanup between runs — proves the second run does not hit the
+      // research_dataset_org_name_unique constraint and does not duplicate the row.
+      const second = await runResearchPipelinePostgres(db, {
+        ...pipelineInput,
+        newId: createResearchPipelineIdFactory(),
+        datasetName,
+        strategyVersion: "0.1.211",
+      });
+
+      expect(second.dataset.id).toBe(first.dataset.id);
+      expect(second.dataset.blindDigest).toBe(first.dataset.blindDigest);
+
+      const rows = await db
+        .select()
+        .from(pgSchema.researchDataset)
+        .where(
+          and(
+            eq(pgSchema.researchDataset.organizationId, orgA),
+            eq(pgSchema.researchDataset.name, datasetName),
+          ),
+        );
+      expect(rows).toHaveLength(1);
+    });
+
+    it("DEE-398: happy path — valid content-bound blind authorization proceeds through blind holdout", async () => {
+      const context = requireOrgContext(orgA);
+      const deps = await buildPostgresResearchDeps(db, orgA);
+      const datasetName = "ri-auth-happy-path";
+      const strategyVersion = "0.1.220";
+
+      const sealPreview = await computeM9DatasetSealPreviewPostgres(db, context, {
+        symbol: RESEARCH_PIPELINE_BASE.symbol,
+        interval: RESEARCH_PIPELINE_BASE.interval,
+      });
+
+      const campaignScope: M9CampaignAuthorizationScope = {
+        organizationId: orgA,
+        strategyId: RESEARCH_PIPELINE_BASE.strategyId,
+        strategyVersion,
+        symbol: RESEARCH_PIPELINE_BASE.symbol,
+        interval: RESEARCH_PIPELINE_BASE.interval,
+        vaultDir: "tests/fixtures/m9-auth-happy-path",
+        metricsSchemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
+      };
+      const blindScope = buildM9BlindAuthorizationScope({
+        campaignScope,
+        datasetName,
+        blindDigest: sealPreview.sealed.blindDigest,
+        sidecarContentDigest: null,
+      });
+      const operatorBlindAuthorization = computeM9BlindAuthorizationDigest(blindScope);
+
+      const result = await runResearchPipelinePostgres(db, {
+        context,
+        datasetName,
+        deps,
+        createOrderRepository: () => createPostgresOrderRepository(db),
+        newId: createResearchPipelineIdFactory(),
+        ...RESEARCH_PIPELINE_BASE,
+        strategyVersion,
+        pipelineBacktest: {
+          operatorBlindAuthorization,
+          blindAuthorizationScope: blindScope,
+        },
+      });
+
+      expect(result.blindValidationResultId).toBeTruthy();
+      expect(result.dataset.blindDigest).toBe(sealPreview.sealed.blindDigest);
+    });
+
+    it("DEE-398: runtime content mismatch fails closed before any dataset or blind side effect", async () => {
+      const context = requireOrgContext(orgA);
+      const deps = await buildPostgresResearchDeps(db, orgA);
+      const datasetName = "ri-auth-content-mismatch";
+      const strategyVersion = "0.1.221";
+
+      const campaignScope: M9CampaignAuthorizationScope = {
+        organizationId: orgA,
+        strategyId: RESEARCH_PIPELINE_BASE.strategyId,
+        strategyVersion,
+        symbol: RESEARCH_PIPELINE_BASE.symbol,
+        interval: RESEARCH_PIPELINE_BASE.interval,
+        vaultDir: "tests/fixtures/m9-auth-content-mismatch",
+        metricsSchemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
+      };
+      // Authorized over content A ("0".repeat(64)) — the campaign always seals content B
+      // (the real stored bars) at runtime, so this must never match.
+      const blindScope = buildM9BlindAuthorizationScope({
+        campaignScope,
+        datasetName,
+        blindDigest: "0".repeat(64),
+        sidecarContentDigest: null,
+      });
+      const operatorBlindAuthorization = computeM9BlindAuthorizationDigest(blindScope);
+
+      await expect(
+        runResearchPipelinePostgres(db, {
+          context,
+          datasetName,
+          deps,
+          createOrderRepository: () => createPostgresOrderRepository(db),
+          newId: createResearchPipelineIdFactory(),
+          ...RESEARCH_PIPELINE_BASE,
+          strategyVersion,
+          pipelineBacktest: {
+            operatorBlindAuthorization,
+            blindAuthorizationScope: blindScope,
+          },
+        }),
+      ).rejects.toMatchObject({ code: "M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH" });
+
+      const dataset = await getResearchDatasetByNamePostgres(db, context, datasetName);
+      expect(dataset).toBeNull();
     });
 
     it("rejects promotion when research evidence references fabricated artifact IDs", async () => {

@@ -15,19 +15,22 @@ import {
 } from "@/lib/trader/execution/cost-model";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
-import {
-  insertResearchDatasetPostgres,
-  type ResearchDatasetRecord,
-} from "@/lib/trader/market-data/research-dataset-repository-postgres";
+import type { ResearchDatasetRecord } from "@/lib/trader/market-data/research-dataset-repository-postgres";
 import {
   computeBarSetDigest,
   sealResearchDataset,
   splitBarsThreeWay,
 } from "@/lib/trader/market-data/research-dataset";
+import { computeSidecarContentDigest } from "@/lib/trader/market-data/replay/sidecar-content-digest";
 import type { Bar, BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 import type { PaperCycleDeps, PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
-import { assertM9BlindAuthorization } from "@/lib/trader/research/m9-operator-authorization";
+import {
+  assertM9BlindAuthorizationV2,
+  M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE,
+} from "@/lib/trader/research/m9-operator-authorization";
+import { barsFromMarketBarRecords } from "@/lib/trader/research/m9-dataset-seal-preview";
+import { resolveM9ResearchDatasetPostgres } from "@/lib/trader/research/m9-dataset-preflight";
 import { buildResearchGuardianContext } from "@/lib/trader/research/research-guardian-config";
 import type { ResearchPipelineBacktestOptions } from "@/lib/trader/research/research-pipeline-config.types";
 import type { ResearchValidationBacktestArtifactSink } from "@/lib/trader/research/research-backtest-runner";
@@ -105,20 +108,6 @@ export type RunResearchPipelineResult = {
   validationCycleResults?: readonly PaperCycleResult[];
   validationPortfolioContext?: PortfolioCycleContext;
 };
-
-function barsFromRecords(records: Awaited<ReturnType<typeof listMarketBarsPostgres>>): Bar[] {
-  return records.map((record) => ({
-    symbol: record.symbol,
-    interval: record.interval,
-    open: record.open,
-    high: record.high,
-    low: record.low,
-    close: record.close,
-    volume: record.volume,
-    barOpenTime: record.barOpenTime,
-    barCloseTime: record.barCloseTime,
-  }));
-}
 
 async function resolveOrderRepository(
   factory: RunResearchPipelineInput["createOrderRepository"],
@@ -198,11 +187,56 @@ export async function runResearchPipelinePostgres(
     );
   }
 
-  const bars = barsFromRecords(barRecords);
+  const bars = barsFromMarketBarRecords(barRecords);
   const splits = splitBarsThreeWay(bars);
   const sealed = sealResearchDataset(bars, splits);
 
-  const dataset = await insertResearchDatasetPostgres(ex, input.context, {
+  // 2. Content-bound operator blind authorization verification (DEE-398 / ADR-0022).
+  // Runs immediately after sealing and before dataset persistence/backtest work: fails
+  // closed on any mismatch between the operator-authorized scope and what was just sealed,
+  // so no replay content can silently change after authorization and no compute is wasted
+  // on an unauthorized run.
+  const pipelineBacktest = input.pipelineBacktest;
+  if (pipelineBacktest?.operatorBlindAuthorization) {
+    const blindScope = pipelineBacktest.blindAuthorizationScope;
+    if (!blindScope) {
+      throw new ResearchOrchestratorError(
+        "M9_BLIND_AUTHORIZATION_SCOPE_MISSING",
+        "blind authorization scope must be provided with operator blind digest",
+      );
+    }
+    assertM9BlindAuthorizationV2(pipelineBacktest.operatorBlindAuthorization, blindScope);
+
+    if (blindScope.blindDigest !== sealed.blindDigest) {
+      throw new ResearchOrchestratorError(
+        "M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH",
+        `authorized blindDigest (${blindScope.blindDigest.slice(0, 12)}…) does not match the ` +
+          `freshly sealed dataset blindDigest (${sealed.blindDigest.slice(0, 12)}…) — replay ` +
+          "content changed after operator authorization",
+      );
+    }
+
+    const runtimeSidecarDigest = pipelineBacktest.providerSidecar
+      ? computeSidecarContentDigest(pipelineBacktest.providerSidecar)
+      : M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE;
+    if (runtimeSidecarDigest !== blindScope.sidecarContentDigest) {
+      throw new ResearchOrchestratorError(
+        "M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH",
+        "authorized sidecarContentDigest does not match the runtime provider sidecar content " +
+          "— replay content changed after operator authorization",
+      );
+    }
+  } else if (pipelineBacktest?.blindAuthorizationScope) {
+    throw new ResearchOrchestratorError(
+      "M9_BLIND_AUTHORIZATION_REQUIRED",
+      "operator blind authorization digest required before blind holdout stage",
+    );
+  }
+
+  // 3. Dataset reuse/create — idempotent, content-addressed (DEE-398 / ADR-0022). Identical
+  // repeat runs under the same (organizationId, datasetName) reuse the existing row; content
+  // that diverges under the same name fails closed via M9DatasetContentConflictError.
+  const { dataset } = await resolveM9ResearchDatasetPostgres(ex, input.context, {
     id: newId(),
     name: input.datasetName,
     symbol: input.symbol,
@@ -314,23 +348,9 @@ export async function runResearchPipelinePostgres(
     newId,
   });
 
-  const pipelineBacktest = input.pipelineBacktest;
-  if (pipelineBacktest?.operatorBlindAuthorization) {
-    const blindScope = pipelineBacktest.blindAuthorizationScope;
-    if (!blindScope) {
-      throw new ResearchOrchestratorError(
-        "M9_BLIND_AUTHORIZATION_SCOPE_MISSING",
-        "blind authorization scope must be provided with operator blind digest",
-      );
-    }
-    assertM9BlindAuthorization(pipelineBacktest.operatorBlindAuthorization, blindScope);
-  } else if (pipelineBacktest?.blindAuthorizationScope) {
-    throw new ResearchOrchestratorError(
-      "M9_BLIND_AUTHORIZATION_REQUIRED",
-      "operator blind authorization digest required before blind holdout stage",
-    );
-  }
-
+  // Blind gate: single-use blind-holdout lockout (`markStrategyCandidateBlindUsedPostgres` /
+  // `StrategyCandidateBlindLockoutError`), independent of and downstream from the
+  // content-bound operator authorization verification already enforced in step 2 above.
   const blind = await runBlindHoldoutValidation({
     context: input.context,
     candidate: { ...candidate, status: "walk_forward_validated", blindUsed: false },

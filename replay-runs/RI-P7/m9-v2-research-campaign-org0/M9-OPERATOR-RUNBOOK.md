@@ -73,63 +73,95 @@ Alternative: keep `0.1.0` and pass `--campaign-suffix=<unique>` (version becomes
 
 ---
 
-## Authorization digests
+## Authorization digests (v0.1.7 — content-bound, DEE-398 / ADR-0022)
 
 Digests are SHA-256 of canonical JSON scope (`lib/trader/research/m9-operator-authorization.ts`).
 
-**Critical — host and path:** Generate digests on the **same Execution Server host** and from the **same repo root/path** that will run the campaign. **Never generate digests on a laptop for a remote execution.** `vaultDir` in scope is the absolute `path.resolve()` of `--vault-dir`; a path mismatch causes digest rejection at CLI start.
+**Blind authorization is now content-bound, not label-bound.** The blind scope carries the
+sealed blind-split bar-content digest (`blindDigest`) and a normalized `sidecarContentDigest`
+(always a real digest or the `"none"` sentinel — never `null`/absent). `datasetName` is still
+present for provenance/audit only; it is **not** the integrity anchor. Both
+`pnpm trader:m9:digest` and the campaign build this scope through the **same canonical
+builder** (`buildM9BlindAuthorizationScope`), so the digest you review is provably the one the
+campaign will authorize — as long as the stored bars have not changed between the two commands.
+The orchestrator independently re-seals and re-verifies this content at runtime; any drift
+fails closed with `M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH` before any dataset write or backtest
+work.
 
-**Critical — command lock (not in digest scope):** The authorized first campaign must use **`--enable-guardian-exits=1`** and **no** portfolio overrides (`--starting-balance-usdt`, `--max-risk-per-trade-pct`, etc.) unless explicitly architect-approved. Document any approved overrides in `VALIDATION.md`.
+**Repeat M9 v0.1.7 run profile is now enforced, not optional.** The campaign refuses to start
+(before any file/DB write) unless **all three** are present: `--require-provider-fusion=1`,
+`--enable-guardian-exits=1`, and a v2 provider sidecar (`--provider-sidecar-path=<path>` or the
+default vault path). This replaces the earlier "recommended" posture — an authorized run can no
+longer silently omit any of these three gates.
 
-| Field | M9 first campaign value |
+**Critical — host and path:** Generate digests on the **same Execution Server host** and from the **same repo root/path** that will run the campaign, **after the same stored bars are in place** — `pnpm trader:m9:digest` now performs a read-only Postgres bar lookup to compute `blindDigest`, so it must see the same bars the campaign will see. **Never generate digests on a laptop for a remote execution.** `vaultDir` in scope is the absolute `path.resolve()` of `--vault-dir`; a path mismatch causes digest rejection at CLI start.
+
+**Critical — command lock (not in digest scope):** The authorized campaign must use **`--enable-guardian-exits=1`**, **`--require-provider-fusion=1`**, and a v2 sidecar, and **no** portfolio overrides (`--starting-balance-usdt`, `--max-risk-per-trade-pct`, etc.) unless explicitly architect-approved. Document any approved overrides in `VALIDATION.md`.
+
+| Field | M9 v0.1.7 campaign value |
 |-------|-------------------------|
 | `organizationId` | `3c50b4e9-1138-43a5-a29f-e65088124cfc` |
 | `strategyId` | `mean_reversion_v0` |
-| `strategyVersion` | `0.1.1` |
+| `strategyVersion` | `0.1.7` (bump further per retry) |
 | `symbol` | `BTC/USDT` |
 | `interval` | `1m` |
 | `vaultDir` | `<absolute path>/replay-runs/RI-P7/m9-v2-research-campaign-org0` |
 | `metricsSchemaVersion` | `2.0.0` |
 | `campaignSuffix` | omit (no `--campaign-suffix` flag) |
-| `datasetName` (blind only) | `m9-v2-research-campaign-org0` |
+| `datasetName` (blind only, provenance) | `m9-v2-research-campaign-org0` |
+| `blindDigest` (blind only, integrity anchor) | computed from stored bars — see Step 1/2 below |
+| `sidecarContentDigest` (blind only) | real digest of the v2 sidecar, or `"none"` if no sidecar |
 
 ### Step 1 — Verify scope (no digest output yet)
 
-Run on the **Execution Server** from the **same repo root** as the campaign:
+Run on the **Execution Server** from the **same repo root** as the campaign, with the same bars already stored and the same `--provider-sidecar-path` (or default vault path) the campaign will use:
 
 ```bash
 cd <WAIA_REPO_ROOT>
 pnpm trader:m9:digest -- --verify-scope
 ```
 
-Review JSON output. Confirm `vaultDir` is the **absolute** path on this host. If any field is wrong, **stop** — fix flags before generating digests.
+Review JSON output. Confirm `vaultDir` is the **absolute** path on this host, and that `blindScope.blindDigest` / `blindScope.sidecarContentDigest` look correct (non-empty 64-char hex, or `"none"` for no sidecar). If any field is wrong, **stop** — fix flags/bars/sidecar before generating digests.
 
 Optional overrides (must match campaign command exactly):
 
 ```bash
 pnpm trader:m9:digest -- --verify-scope \
-  --strategy-version=0.1.1 \
+  --strategy-version=0.1.7 \
   --vault-dir=./replay-runs/RI-P7/m9-v2-research-campaign-org0
 ```
 
 ### Step 2 — Generate digests (only after explicit operator go/no-go in chat)
 
-Run on the **same host and repo root** as Step 1:
+Run on the **same host, repo root, stored bars, and sidecar path** as Step 1:
 
 ```bash
 pnpm trader:m9:digest -- --generate-digests
 ```
 
-Copy `CAMPAIGN_DIGEST=` and `BLIND_DIGEST=` lines to secure scratch pad. **Do not run this step during preparation** — only at authorization time.
+Copy `CAMPAIGN_DIGEST=` and `BLIND_DIGEST=` lines to secure scratch pad. **Do not run this step during preparation** — only at authorization time. **If the stored bars or sidecar change after this step, the digest is stale — regenerate before running the campaign.**
 
 Required CLI flags:
 
 - `--operator-campaign-authorization=<CAMPAIGN_DIGEST>`
-- `--operator-blind-authorization=<BLIND_DIGEST>` (**single-use blind holdout**)
+- `--operator-blind-authorization=<BLIND_DIGEST>` (**single-use blind holdout**; content-bound to `blindDigest` — the campaign fails closed with `M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH` if the sealed content at run time differs from what was authorized)
 
-On start, CLI writes `operator-authorization-record.json` to vault (before pipeline).
+On start, the CLI runs all fail-fast preflights (run profile, campaign authorization, content-bound blind authorization, candidate slot availability) **before** writing anything — `operator-authorization-record.json` is only written to the vault once every preflight has passed.
 
 ---
+
+## Dataset reuse / conflict (v0.1.7 — DEE-398 / ADR-0022)
+
+`--dataset-name` is no longer an unconditional insert. On each run the pipeline seals the
+stored bars and resolves the dataset by `(organizationId, datasetName)`:
+
+| Outcome | Meaning | Operator action |
+|---------|---------|------------------|
+| **CREATE** | No dataset row exists yet for this name | Normal first run — proceeds |
+| **REUSE** | An existing row has identical train/validation/blind digests and bar counts | Normal retry with a bumped `--strategy-version` — proceeds, no duplicate row |
+| **CONFLICT** | An existing row has the same name but *different* sealed content | Pipeline throws `M9DatasetContentConflictError` (`M9_DATASET_CONTENT_CONFLICT`) before any backtest work — **use a new `--dataset-name`**, or confirm the stored bars actually match the prior run's before retrying |
+
+This replaces the previous raw Postgres unique-violation failure mode on same-name retries.
 
 ## Campaign command
 
@@ -142,16 +174,19 @@ cd <WAIA_REPO_ROOT>
 set -a && source .env.local && set +a
 export WAIA_TRADER_ORG0_ORGANIZATION_ID=3c50b4e9-1138-43a5-a29f-e65088124cfc
 
-# First attempt:
+# v0.1.7 attempt — all three run-profile flags below are now REQUIRED; the campaign
+# refuses to start (before any write) if any is missing:
 pnpm trader:m9:campaign -- \
   --org-id=3c50b4e9-1138-43a5-a29f-e65088124cfc \
   --strategy-id=mean_reversion_v0 \
-  --strategy-version=0.1.1 \
+  --strategy-version=0.1.7 \
   --metrics-schema-version=2.0.0 \
   --operator-campaign-authorization=<CAMPAIGN_DIGEST> \
   --operator-blind-authorization=<BLIND_DIGEST> \
   --vault-dir=./replay-runs/RI-P7/m9-v2-research-campaign-org0 \
   --enable-guardian-exits=1 \
+  --require-provider-fusion=1 \
+  --provider-sidecar-path=./replay-runs/RI-P7/m9-v2-research-campaign-org0/m9-provider-sidecar.json \
   2>&1 | tee replay-runs/RI-P7/m9-v2-research-campaign-org0/m9-campaign-run.log
 
 # Retry (append — do not overwrite):
@@ -162,7 +197,7 @@ pnpm trader:m9:campaign -- \
 # ... | tee "$LOG"
 ```
 
-**Required:** `--enable-guardian-exits=1`. **Forbidden unless architect-approved:** portfolio override flags (see below).
+**Required (v0.1.7 run profile, enforced by `assertM9V017RunProfile` — refuses to start otherwise):** `--enable-guardian-exits=1`, `--require-provider-fusion=1`, a v2 provider sidecar. **Forbidden unless architect-approved:** portfolio override flags (see below).
 
 Optional portfolio overrides (research path — **not** `PAPER_LOOP_*`; **architect approval required for first institutional campaign**):
 
@@ -293,6 +328,6 @@ Final error (attempt `0.1.6`):
 
 **Closure docs:** `M9-ENGINEERING-CLOSURE.md`, `VALIDATION.md`, `M9-FORENSIC-REPORT.md`, `M9-CAMPAIGN-EXECUTION-RECORD.md`.
 
-**Next engineering step (approved roadmap only):** See `../AI-TRADER-ENGINEERING-STATUS.md`. Repeat **M9 v0.1.7** is mandatory after PR2 and before PR3.
+**Next engineering step (approved roadmap only):** See `../AI-TRADER-ENGINEERING-STATUS.md`. PR2 (DEE-398 — content-bound authorization + dataset idempotency, ADR-0022) is complete; Repeat **M9 v0.1.7** remains **BLOCKED** pending the final architectural re-audit, and is mandatory before PR3.
 - **Post-campaign acceptance:** `VALIDATION.md`
 - **Linear:** DEE-385

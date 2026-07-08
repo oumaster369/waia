@@ -3,17 +3,24 @@
 > **Document role:** The **single** canonical entry point for engineering recovery after M9 closure.  
 > Do not create parallel status, checkpoint, or recovery documents — update **this file** only.
 
-**Last synchronized:** 2026-07-07 (DEE-394 Pre-M9 Provider Fusion Remediation — merged)  
-**Integration branch:** `dev` @ `7d1401d`  
+**Last synchronized:** 2026-07-08 (DEE-398 Canonical Pre-Repeat-M9 Remediation PR2 — Task B + Task C, content-bound authorization + dataset idempotency; in progress)  
+**Integration branch:** `dev` @ `108a632`  
 **Approved active roadmap:** `.cursor/plans/ai-trader_intelligence_evolution_48358215.plan.md` (Cursor plan — local; not committed per `.gitignore`)
 
 ---
 
 ## Current engineering phase
 
-**Phase I — Post-M9 Recovery (Pre-M9 Provider Fusion Remediation — DEE-394 merged)**
+**Phase I — Post-M9 Recovery (Canonical Pre-Repeat-M9 Remediation Strategy — PR2 in progress)**
 
-PR1 through **Pre-M9 Provider Fusion Remediation** are merged. Gate A remains **open** until Architect re-audit PASS and Repeat M9 v0.1.7 completes under the validated 20/20 provider stack with truthful replay fusion.
+The Final Pre-M9 Architectural Readiness Audit (run after Pre-M9 Provider Fusion Remediation
+merged) found three Critical findings gating Repeat M9 v0.1.7: Task A (deterministic replay
+substrate), Task B (operator blind authorization was label-bound, not content-bound), Task C
+(dataset creation was an unconditional insert with no idempotency/preflight). **PR1 (DEE-397,
+Task A, ADR-0021) is merged.** **PR2 (DEE-398, Task B + Task C, ADR-0022) is in progress** —
+this is the final remediation PR before the final architectural re-audit. Gate A remains
+**open** until Architect re-audit PASS and Repeat M9 v0.1.7 completes under the validated
+20/20 provider stack with truthful replay fusion.
 
 ---
 
@@ -21,9 +28,9 @@ PR1 through **Pre-M9 Provider Fusion Remediation** are merged. Gate A remains **
 
 | Field | Value |
 |-------|--------|
-| **Resume at** | **Architect re-audit** → then **Repeat M9 v0.1.7** (operator authorization) |
-| **Linear** | DEE-392 **Done** · DEE-393 **Done** · DEE-394 **Done** |
-| **Branch** | `dev` @ `7d1401d` |
+| **Resume at** | **PR2 (DEE-398) review/merge** → **final Architect re-audit** → then **Repeat M9 v0.1.7** (operator authorization) |
+| **Linear** | DEE-392 **Done** · DEE-393 **Done** · DEE-394 **Done** · DEE-397 **Done** · DEE-398 **In Review** |
+| **Branch** | `dev` @ `108a632`; PR2 on `dee-398-m9-authorization-dataset-idempotency` |
 | **Do not start** | Repeat M9 (until re-audit PASS), PR3, PR4, M10, or live trading until Gate A passes |
 
 **Immediate next action for implementers:** None — await Architect re-audit. Operators may run sidecar capture and validation per runbook when authorized.
@@ -46,7 +53,10 @@ PR1 through **Pre-M9 Provider Fusion Remediation** are merged. Gate A remains **
 | Data Provider Readiness | Merged — operator/env gate (#379 / DEE-392) |
 | Full Market Data Source Integration | Merged (#381 / DEE-393) |
 | Pre-M9 Provider Fusion Remediation | Merged (#382 / DEE-394) |
-| Gate A | **Open** — closes after Repeat M9 v0.1.7 success |
+| Final Pre-M9 Architectural Readiness Audit | 3 Critical findings (Task A/B/C) — remediation PR1 + PR2 |
+| Remediation PR1 (Task A — deterministic replay) | Merged (DEE-397, ADR-0021) |
+| Remediation PR2 (Task B + C — content-bound auth + dataset idempotency) | In progress (DEE-398, ADR-0022) |
+| Gate A | **Open** — closes after final re-audit PASS + Repeat M9 v0.1.7 success |
 
 M9 milestone evidence: `m9-v2-research-campaign-org0/` — **not** the recovery entry point.  
 Gate A input: `m9-v2-research-campaign-org0/GATE-A-VALIDATION.md`.
@@ -65,11 +75,17 @@ Data Provider Readiness (merged #379)
   ↓
 Full Market Data Source Integration (merged #381)
   ↓
-Pre-M9 Provider Fusion Remediation (merged #382)  ← CURRENT
+Pre-M9 Provider Fusion Remediation (merged #382)
   ↓
-Architect re-audit
+Final Pre-M9 Architectural Readiness Audit (3 Critical findings: Task A/B/C)
   ↓
-Repeat M9 v0.1.7  (NOT STARTED)
+Remediation PR1 — Task A: deterministic replay (merged, DEE-397, ADR-0021)
+  ↓
+Remediation PR2 — Task B + C: content-bound auth + dataset idempotency (DEE-398, ADR-0022)  ← CURRENT
+  ↓
+Final architectural re-audit
+  ↓
+Repeat M9 v0.1.7  (NOT STARTED — BLOCKED)
   ↓
 Gate A
   ↓
@@ -85,13 +101,16 @@ PR3 → PR4 → M10
 | **5** | **Data Provider Readiness** | ✅ Merged (#379 / DEE-392) |
 | **6** | **Full Market Data Source Integration** | ✅ Merged (#381 / DEE-393) |
 | **7** | **Pre-M9 Provider Fusion Remediation** | ✅ Merged (#382 / DEE-394) |
-| **8** | **Architect re-audit** | **PENDING** |
-| **9** | **Repeat M9 v0.1.7** | **NOT STARTED** — blocked until re-audit PASS + operator authorization |
-| **10** | **Gate A** verification | After Repeat M9 success |
-| **11** | **PR3 — Market Context + MSV Depth** | **BLOCKED** until Gate A |
-| **12** | **PR4 — Market Memory + Knowledge Loop** | **BLOCKED** until Gate A |
-| **13** | **M10 Paper Soak** | **BLOCKED** until PR1–PR4 + Gate A + Gate B |
-| **14** | **First HTX Live Account** | After all human governance gates |
+| **8** | **Final Pre-M9 Architectural Readiness Audit** | ✅ Complete — 3 Critical findings (Task A/B/C) |
+| **9** | **Remediation PR1 — Task A (deterministic replay)** | ✅ Merged (DEE-397, ADR-0021) |
+| **10** | **Remediation PR2 — Task B + C (content-bound auth + dataset idempotency)** | **In progress** (DEE-398, ADR-0022) |
+| **11** | **Final architectural re-audit** | **PENDING** — after PR2 merges |
+| **12** | **Repeat M9 v0.1.7** | **NOT STARTED — BLOCKED** until re-audit PASS + operator authorization |
+| **13** | **Gate A** verification | After Repeat M9 success |
+| **14** | **PR3 — Market Context + MSV Depth** | **BLOCKED** until Gate A |
+| **15** | **PR4 — Market Memory + Knowledge Loop** | **BLOCKED** until Gate A |
+| **16** | **M10 Paper Soak** | **BLOCKED** until PR1–PR4 + Gate A + Gate B |
+| **17** | **First HTX Live Account** | After all human governance gates |
 
 ---
 
@@ -109,6 +128,8 @@ PR3 → PR4 → M10
 | Data Provider Readiness | DEE-392 | #379 | Operator/env + validation |
 | Full Market Data Source Integration | DEE-393 | #381 | 20/20 providers + fused context v2 |
 | Pre-M9 Provider Fusion Remediation | DEE-394 | #382 | Sidecar v2 + truthful replay fusion + artifacts |
+| Remediation PR1 (Task A) | DEE-397 | — | Deterministic research replay clock & state isolation (ADR-0021) |
+| Remediation PR2 (Task B + C) | DEE-398 | — | Content-bound operator authorization + idempotent dataset lifecycle (ADR-0022) |
 
 ---
 
