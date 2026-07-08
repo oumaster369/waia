@@ -37,6 +37,13 @@ DATABASE_URL=file:./.data/waia.dev.db
 # DATABASE_URL_POSTGRES=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
 #
 # Optional later hardening: Cloudflare **Hyperdrive** in front of Postgres — not required for DEE-74; same env contract (connection string) once wired.
+#
+# SECRET — long-running CLI campaigns only (DEE-399, e.g. `pnpm trader:m9:campaign`), NOT used by
+# Workers runtime. A multi-hour single-connection process must not hold the transaction pooler
+# (it recycles held connections — observed as a mid-write CAMPAIGN_CRASH). Prefer Supabase's
+# **session-mode** pooler (same host, port 5432) or a **direct** connection
+# (db.[ref].supabase.co:5432). Falls back to DATABASE_URL_POSTGRES with a console warning if unset.
+# DATABASE_URL_POSTGRES_SESSION=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres
 
 # SECRET — direct OpenAI API. MUST NOT ship to browser/client bundles.
 # OPENAI_API_KEY=

@@ -237,6 +237,87 @@ Default `--oos-bar-count=20` (not part of authorization scope).
 
 ---
 
+## Campaign DB stability (v0.1.8+ — DEE-399)
+
+Repeat M9 v0.1.7 crashed after ~6h47m with `CAMPAIGN_CRASH` caused by a Postgres **transaction
+pooler** socket close (`write CONNECTION_CLOSED …pooler.supabase.com:6543`) mid-write — an
+infrastructure failure, not a strategy/accounting failure. DEE-399 adds a resilient long-running
+connection mode and bounded retry for the campaign CLI. This does **not** change the pipeline's
+semantics, retry the pipeline run itself, or implement mid-pipeline resume (single-use blind
+holdout forbids it) — it only makes the CLI's own preflight reads and finalization writes
+survive a transient disconnect, and classifies an unrecovered one honestly.
+
+### Set the session/direct connection before a multi-hour run
+
+Add to `.env.local` (or the host's secret store) **before** starting the campaign:
+
+```bash
+# Supabase session-mode pooler (:5432) — same host/credentials as the transaction pooler,
+# port 5432 instead of 6543 — OR a direct connection: db.<project-ref>.supabase.co:5432
+DATABASE_URL_POSTGRES_SESSION=postgresql://postgres.<ref>:<password>@<pooler-host>:5432/postgres
+```
+
+If unset, the CLI falls back to `DATABASE_URL_POSTGRES` (transaction pooler) with a loud
+`console.warn` — multi-hour single-connection runs against the transaction pooler remain
+crash-prone. Do not start a multi-hour campaign on the fallback path without acknowledging the
+warning in the operator log.
+
+### New terminal failure code
+
+| Code | Meaning | Operator action |
+|------|---------|------------------|
+| `CAMPAIGN_INFRA_DISCONNECT` | A transient Postgres/network connection failure was never recovered (bounded retries exhausted, or it hit an unwrapped step) | **Not** a strategy or accounting defect — safe to retry with the **same** strategy version once connectivity is confirmed, or bump `--campaign-suffix` if the candidate slot was left non-terminal (see below) |
+| `CAMPAIGN_CRASH` | Unchanged — unknown/logic error, treat as before | Investigate before retry |
+| `INVENTORY_RECONCILIATION` | Unchanged — real accounting defect | Do not retry blindly; investigate |
+
+### Guarded orphan candidate cleanup (operator SQL only — never code)
+
+A `CAMPAIGN_INFRA_DISCONNECT` (or any crash) can leave a candidate row non-terminal if the
+status-update write itself could not be confirmed even after bounded retry — the local
+rejection/evolution/diagnostics artifacts are still sealed truthfully in this case, but the DB
+row may need manual closure before reusing the same `--strategy-version`. **Read-only check
+first, always:**
+
+```sql
+-- Read-only: find non-terminal candidates for this org/strategy after a crash.
+SELECT id, strategy_id, strategy_version, status, blind_used, created_at, updated_at
+FROM trader_strategy_candidates
+WHERE organization_id = '<ORG0_UUID>'::uuid
+  AND strategy_id = '<strategy_id>'
+  AND strategy_version = '<strategy_version>'
+  AND status <> 'rejected'
+ORDER BY updated_at DESC;
+```
+
+Only after confirming (from the vault's `m9-research-rejection-record.json` /
+`m9-campaign-operator-diagnostics.json`) that the run truly crashed and this candidate is the
+orphan in question, close it explicitly:
+
+```sql
+-- Guarded write: only closes the exact orphaned row, never a blind-consumed or already-terminal one.
+UPDATE trader_strategy_candidates
+SET status = 'rejected', updated_at = now()
+WHERE id = '<candidate_id>'::uuid
+  AND organization_id = '<ORG0_UUID>'::uuid
+  AND status <> 'rejected';
+```
+
+Never delete candidate rows. Never mutate `blind_used` — a consumed blind holdout stays
+consumed regardless of the infra outcome (never re-run blind without a new
+`--operator-blind-authorization`).
+
+### Retrying after `CAMPAIGN_INFRA_DISCONNECT`
+
+- If connectivity is confirmed (session URL set, network healthy) and the candidate slot is
+  still free (per the read-only check above), retry with the **same** `--strategy-version`.
+- If the slot is occupied by the orphaned candidate and you cannot or should not close it yet,
+  retry with `--campaign-suffix=<unique>` (version becomes `<version>+<suffix>`) instead of
+  bumping the semantic strategy version — this preserves the intended version lineage while
+  avoiding the occupied slot. Requires a fresh authorization digest pair (Step 1/2 above) since
+  `campaignSuffix` is part of the authorization scope.
+
+---
+
 ## Failure recovery
 
 Three outcomes — operator must distinguish via log + vault contents:
