@@ -121,6 +121,42 @@ export function parseRequireProviderFusion(flags: Map<string, string>): boolean 
   return flags.get("require-provider-fusion") === "1";
 }
 
+/**
+ * Repeat M9 v0.1.7 run profile requires all three gates explicitly enabled — an authorized
+ * run must never silently omit any of them (DEE-398 / ADR-0022).
+ */
+export class M9RunProfileViolationError extends Error {
+  readonly code = "M9_RUN_PROFILE_VIOLATION" as const;
+
+  constructor(missing: readonly string[]) {
+    super(
+      `[m9] Repeat M9 v0.1.7 run profile requires: ${missing.join(", ")} — refusing to run a ` +
+        "degraded profile silently",
+    );
+    this.name = "M9RunProfileViolationError";
+  }
+}
+
+export function assertM9V017RunProfile(input: {
+  requireProviderFusion: boolean;
+  enableGuardianExits: boolean;
+  sidecarIsV2: boolean;
+}): void {
+  const missing: string[] = [];
+  if (!input.requireProviderFusion) {
+    missing.push("--require-provider-fusion=1");
+  }
+  if (!input.enableGuardianExits) {
+    missing.push("--enable-guardian-exits=1");
+  }
+  if (!input.sidecarIsV2) {
+    missing.push("a v2 provider sidecar (--provider-sidecar-path=<path> or default vault path)");
+  }
+  if (missing.length > 0) {
+    throw new M9RunProfileViolationError(missing);
+  }
+}
+
 export function loadM9ProviderSidecar(path: string | undefined) {
   assertResearchRuntime("loadM9ProviderSidecar");
   if (!path) {

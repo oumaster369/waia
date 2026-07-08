@@ -29,5 +29,6 @@ See policy: [`../waia-governance/ADR-POLICY.md`](../waia-governance/ADR-POLICY.m
 | [0019](0019-ai-operator-intelligence-authority.md) | AI Operator Intelligence authority boundaries (recommend-only) | Accepted | RI-P5; ADR-0011 |
 | [0020](0020-m8-discovery-architecture-no-reinforcement.md) | M8 Discovery Architecture & No-Reinforcement Boundaries | Accepted | DEE-383; M8 program |
 | [0021](0021-deterministic-research-replay-clock-and-state-isolation.md) | Deterministic Research Replay Clock & State Isolation | Accepted | DEE-397; Pre-Repeat-M9 Remediation PR1 |
+| [0022](0022-content-bound-operator-authorization-and-idempotent-dataset-lifecycle.md) | Content-Bound Operator Authorization & Idempotent Research Dataset Lifecycle | Accepted | DEE-398; Pre-Repeat-M9 Remediation PR2 |
 
 Add rows as new decisions land.**Superseded** decisions keep file for history — index notes replacement.

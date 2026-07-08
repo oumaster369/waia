@@ -36,6 +36,7 @@ import {
   assertStrategyCandidateSlotAvailablePostgres,
 } from "@/lib/trader/research/m9-candidate-preflight";
 import {
+  assertM9V017RunProfile,
   M9_DEFAULT_DATASET_NAME,
   M9_DEFAULT_VAULT_DIR,
   parseEnableGuardianExits,
@@ -49,6 +50,7 @@ import {
   resolveM9CampaignStrategy,
   resolveM9SymbolInterval,
 } from "@/lib/trader/research/m9-campaign-flags";
+import { computeM9DatasetSealPreviewPostgres } from "@/lib/trader/research/m9-dataset-seal-preview";
 import { buildM9DecisionTraceExport } from "@/lib/trader/research/m9-decision-trace-export";
 import { buildM9GuardianReasonSampleExport } from "@/lib/trader/research/m9-guardian-sample-export";
 import {
@@ -62,12 +64,12 @@ import { isReplayProviderSidecarV2 } from "@/lib/trader/market-data/replay/provi
 import { buildM9LifecycleTraceExport } from "@/lib/trader/research/m9-lifecycle-trace-export";
 import { buildM9MarketUnderstandingSampleExport } from "@/lib/trader/research/m9-market-understanding-export";
 import {
-  assertM9BlindAuthorization,
+  assertM9BlindAuthorizationV2,
   assertM9CampaignAuthorization,
+  buildM9BlindAuthorizationScope,
   buildM9OperatorAuthorizationRecord,
   computeM9BlindAuthorizationDigest,
   computeM9CampaignAuthorizationDigest,
-  type M9BlindAuthorizationScope,
   type M9CampaignAuthorizationScope,
 } from "@/lib/trader/research/m9-operator-authorization";
 import { createManualReplayClock } from "@/lib/trader/research/deterministic-replay-clock";
@@ -212,13 +214,14 @@ async function main(): Promise<void> {
     ? computeSidecarContentDigest(providerSidecar)
     : null;
 
-  if (requireProviderFusion) {
-    if (!providerSidecar || !isReplayProviderSidecarV2(providerSidecar)) {
-      throw new Error(
-        `${LOG_PREFIX} --require-provider-fusion=1 requires a v2 sidecar at ${providerSidecarPath ?? "default path"}`,
-      );
-    }
-  }
+  // Repeat M9 v0.1.7 run profile (DEE-398 / ADR-0022): sidecar v2, provider fusion, and
+  // guardian exits must all be explicitly enabled — an authorized run must never silently
+  // omit any of these gates. Checked before any file/DB write.
+  assertM9V017RunProfile({
+    requireProviderFusion,
+    enableGuardianExits,
+    sidecarIsV2: Boolean(providerSidecar && isReplayProviderSidecarV2(providerSidecar)),
+  });
 
   const baseStrategy = resolveM9CampaignStrategy(flags);
   const strategyVersion = applyCampaignSuffixToStrategyVersion(
@@ -238,12 +241,33 @@ async function main(): Promise<void> {
   };
   assertM9CampaignAuthorization(operatorCampaignAuthorization, campaignScope);
 
-  const blindScope: M9BlindAuthorizationScope = {
-    ...campaignScope,
+  const db = getPostgresDrizzle();
+  const context = requireOrgContext(organizationId);
+
+  // Preflight seal (DEE-398 / ADR-0022): binds the blind authorization to the actual sealed
+  // replay content — not just the dataset name/label — before any authorization record or
+  // side effect is written. The orchestrator re-seals and re-verifies this same content at
+  // runtime (fail-closed on mismatch).
+  const sealPreview = await computeM9DatasetSealPreviewPostgres(db, context, {
+    symbol,
+    interval,
+  });
+  const blindScope = buildM9BlindAuthorizationScope({
+    campaignScope,
     datasetName,
+    blindDigest: sealPreview.sealed.blindDigest,
     sidecarContentDigest,
-  };
-  assertM9BlindAuthorization(operatorBlindAuthorization, blindScope);
+  });
+  assertM9BlindAuthorizationV2(operatorBlindAuthorization, blindScope);
+
+  // Remaining fail-fast preflight — must also pass before any authorization record or side
+  // effect is written (no partial/misleading vault state on a rejected run).
+  await assertStrategyCandidateSlotAvailablePostgres(
+    db,
+    context,
+    baseStrategy.strategyId,
+    strategyVersion,
+  );
 
   mkdirSync(vaultDir, { recursive: true });
 
@@ -256,15 +280,6 @@ async function main(): Promise<void> {
   });
   const authorizationPath = resolve(vaultDir, "operator-authorization-record.json");
   writeFileSync(authorizationPath, `${JSON.stringify(authorizationRecord, null, 2)}\n`, "utf8");
-
-  const db = getPostgresDrizzle();
-  const context = requireOrgContext(organizationId);
-  await assertStrategyCandidateSlotAvailablePostgres(
-    db,
-    context,
-    baseStrategy.strategyId,
-    strategyVersion,
-  );
 
   const writeAudit = (input: Parameters<typeof writeTraderAuditLogPostgres>[1]) =>
     writeTraderAuditLogPostgres(db, input);

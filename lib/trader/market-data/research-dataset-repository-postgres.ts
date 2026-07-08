@@ -117,3 +117,28 @@ export async function getResearchDatasetByIdPostgres(
 
   return rows[0] ? mapRow(rows[0]) : null;
 }
+
+/**
+ * Looks up a research dataset by its `(organization_id, name)` unique key — the lookup half
+ * of the DEE-398 / ADR-0022 dataset preflight (CREATE / REUSE / CONFLICT decision lives in
+ * `lib/trader/research/m9-dataset-preflight.ts`).
+ */
+export async function getResearchDatasetByNamePostgres(
+  ex: PgReadExecutor,
+  context: OrgContext,
+  name: string,
+): Promise<ResearchDatasetRecord | null> {
+  const scoped = requireOrgContext(context.organizationId);
+  const rows = await ex
+    .select()
+    .from(pgSchema.researchDataset)
+    .where(
+      and(
+        eq(pgSchema.researchDataset.name, name),
+        orgScopedWhere(pgSchema.researchDataset.organizationId, scoped),
+      ),
+    )
+    .limit(1);
+
+  return rows[0] ? mapRow(rows[0]) : null;
+}
