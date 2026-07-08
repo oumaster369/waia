@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
 import {
   MARKET_DATA_PROVIDER_IDS,
@@ -268,10 +268,14 @@ export function buildProviderCoverageMatrix(input: {
   });
 }
 
+/**
+ * Content digest excluding `generatedAt` (identity/provenance, not content — DEE-397 /
+ * ADR-0021), so two replays over identical inputs produce an identical digest.
+ */
 export function computeProviderFusionContentDigest(
   exportDoc: Omit<M9ProviderFusionExport, "contentDigest">,
 ): string {
-  return createHash("sha256").update(canonicalJsonString(exportDoc), "utf8").digest("hex");
+  return computeReplayReproContentDigest(exportDoc);
 }
 
 export function buildM9ProviderFusionExport(input: {

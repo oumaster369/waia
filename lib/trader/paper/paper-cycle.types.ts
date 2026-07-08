@@ -26,7 +26,22 @@ import type {
   PortfolioSizingLimits,
   StopDistanceProvider,
 } from "@/lib/trader/portfolio";
+import type { DeterministicReplayClock } from "@/lib/trader/research/deterministic-replay-clock";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+
+/**
+ * Research replay determinism hook (M9+ / DEE-397 / ADR-0021).
+ *
+ * When set, {@link runBacktest} advances `clock` to each cycle's evaluated bar
+ * time before invoking `deps.execution`/risk deps, and callers isolating a
+ * validation/walk-forward/blind window invoke `resetWindowState` beforehand
+ * so mutable replay-only state (e.g. an in-memory order-rate limiter) cannot
+ * leak across windows. Live/paper trading paths never set this field.
+ */
+export type ResearchReplayDeterminismDeps = {
+  clock: DeterministicReplayClock;
+  resetWindowState(): void;
+};
 
 /** M2 deposit-aware sizing context (optional — legacy cycles omit this). */
 export type PortfolioCycleContext = {
@@ -70,6 +85,8 @@ export type PaperCycleDeps = {
   lifecycleRecorder?: LifecycleRecorder;
   /** Required when guardian enabled on input. */
   lifecycleRepository?: LifecycleRepository;
+  /** Research replay determinism only (M9+ / DEE-397). Omitted on live/paper paths. */
+  researchReplayDeterminism?: ResearchReplayDeterminismDeps;
 };
 
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";

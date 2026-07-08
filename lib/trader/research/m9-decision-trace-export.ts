@@ -1,6 +1,4 @@
-import { createHash } from "node:crypto";
-
-import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 
 export const M9_DECISION_TRACE_SCHEMA_VERSION = "m9_decision_trace_v1" as const;
@@ -73,10 +71,14 @@ function provenanceProviderIds(fused: NonNullable<PaperCycleResult["evaluation"]
   return [...ids].sort();
 }
 
+/**
+ * Content digest excluding `generatedAt` (identity/provenance, not content — DEE-397 /
+ * ADR-0021), so two replays over identical inputs produce an identical digest.
+ */
 export function computeDecisionTraceContentDigest(
   exportDoc: Omit<M9DecisionTraceExport, "contentDigest">,
 ): string {
-  return createHash("sha256").update(canonicalJsonString(exportDoc), "utf8").digest("hex");
+  return computeReplayReproContentDigest(exportDoc);
 }
 
 export function buildM9DecisionTraceExport(input: {
