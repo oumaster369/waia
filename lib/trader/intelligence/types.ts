@@ -7,6 +7,13 @@ import type {
   SpotPosture,
 } from "@/lib/trader/intelligence/market-understanding.types";
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
+import type {
+  DecisionChain,
+  HypothesisSessionState,
+  MarketStateSnapshot,
+} from "@/lib/trader/intelligence/mi-core.types";
+import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
+import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 
 /** Canonical spot symbol for MVP intelligence slice (HTX-style slash form). */
 export const BTC_USDT = "BTC/USDT" as const;
@@ -114,6 +121,14 @@ export type MsvDerivedBlock = {
   riskMultiplier: string;
   dataQualityScore: number;
   reasonCodes: readonly string[];
+  /** PR-2 MI Core: active hypothesis conviction (0..1). */
+  conviction?: number;
+  /** PR-2 MI Core: opportunity authorized this cycle. */
+  opportunityAuthorized?: boolean;
+  /** PR-2 MI Core: active hypothesis type. */
+  activeHypothesisType?: string | null;
+  /** PR-2 MI Core: eligible strategy families from hypothesis engine. */
+  eligibleStrategyFamilies?: readonly string[];
 };
 
 export type MsvUnderstandingBlock = {
@@ -179,6 +194,11 @@ export const cdeReasonCodes = {
   understandingDataInsufficient: "CDE_UNDERSTANDING_DATA_INSUFFICIENT",
   understandingStressed: "CDE_UNDERSTANDING_STRESSED",
   newsSentimentDeferredPr3: "NEWS_SENTIMENT_DEFERRED_PR3",
+  /** PR-2 MI Core conviction path */
+  convictionAllowTrading: "MI_CDE_CONVICTION_ALLOW_TRADING",
+  convictionAllowReducedRisk: "MI_CDE_CONVICTION_ALLOW_REDUCED_RISK",
+  truthfulHealthDegradedOk: "MI_CDE_TRUTHFUL_HEALTH_DEGRADED_OK",
+  truthfulHealthSufficient: "MI_CDE_TRUTHFUL_HEALTH_SUFFICIENT",
 } as const;
 
 export const strategyReasonCodes = {
@@ -232,6 +252,10 @@ export type EvaluationCycleInput = {
   newId?: () => string;
   telemetrySink?: WaiaTraderTelemetrySink;
   fusedContext?: FusedMarketContext;
+  /** PR-2 MI Core: explicit flag override (defaults to WAIA_MI_CORE_ENABLED env). */
+  miCoreEnabled?: boolean;
+  /** PR-2 MI Core: within-session conviction state (caller-owned). */
+  hypothesisSessionState?: HypothesisSessionState;
 };
 
 export type EvaluationCycleResult = {
@@ -243,4 +267,10 @@ export type EvaluationCycleResult = {
   signal: StrategySignal;
   fusedContext?: FusedMarketContext;
   understanding?: MarketUnderstandingSnapshot;
+  /** PR-2 MI Core outputs (present only when miCoreEnabled). */
+  reconstruction?: ReconstructionSnapshot;
+  hypothesisSet?: HypothesisSet;
+  marketStateSnapshot?: MarketStateSnapshot;
+  decisionChain?: DecisionChain;
+  hypothesisSessionState?: HypothesisSessionState;
 };

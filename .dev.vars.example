@@ -73,6 +73,10 @@ DATABASE_URL=file:./.data/waia.dev.db
 # HTX_REST_HOST=
 # COINGECKO_API_KEY=
 
+# ─── PR-2 Market Intelligence Core (evaluation cycle) ───
+# Default OFF; when disabled the pipeline is byte-identical to understanding → CDE.
+# WAIA_MI_CORE_ENABLED=1
+
 # ─── Full Market Data Source Integration (DEE-393) — optional MI providers ───
 # FRED_API_KEY=
 # AI_TRADER_INFURA_PROJECT_ID=

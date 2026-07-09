@@ -8,6 +8,7 @@ import type { OrderRepository } from "@/lib/trader/execution/order-repository.ty
 import type { ReconciliationReport } from "@/lib/trader/execution/reconciliation.types";
 import type { OrderExecutionMode } from "@/lib/trader/execution/types";
 import type { EvaluationCycleResult, StrategySignal } from "@/lib/trader/intelligence/types";
+import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import type {
   BarPollSource,
   BarReplayMode,
@@ -109,6 +110,10 @@ export type PaperCycleInput = {
   portfolio?: PortfolioCycleContext;
   /** When set with lifecycleRepository, enables M3 position guardian per bar. */
   guardian?: GuardianCycleContext;
+  /** PR-2 MI Core: within-session conviction state (caller-owned). */
+  hypothesisSessionState?: HypothesisSessionState;
+  /** PR-2 MI Core: explicit flag override (defaults to WAIA_MI_CORE_ENABLED env). */
+  miCoreEnabled?: boolean;
 };
 
 export type PaperCycleSkipReason = "no_signal" | "no_submit";
@@ -140,6 +145,8 @@ export type PaperCycleResult = {
   /** M3 guardian evaluations + exit intents when guardian enabled. */
   guardian?: GuardianCycleResult;
   guardianExecutions?: PaperCycleGuardianExecution[];
+  /** PR-2 MI Core: updated session state for next cycle. */
+  hypothesisSessionState?: HypothesisSessionState;
 };
 
 /** Shared N-cycle runner context (fixture replay + poll sources). */
@@ -153,6 +160,10 @@ export type RunMultiPaperCyclesSharedInput = {
   accountState: AccountRiskState;
   telemetrySink?: WaiaTraderTelemetrySink;
   newId?: () => string;
+  /** PR-2 MI Core: within-session conviction state seed. */
+  hypothesisSessionState?: HypothesisSessionState;
+  /** PR-2 MI Core: explicit flag override. */
+  miCoreEnabled?: boolean;
 };
 
 export type RunFixturePaperCyclesInput = RunMultiPaperCyclesSharedInput & {

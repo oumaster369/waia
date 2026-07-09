@@ -30,12 +30,30 @@ export type M9DecisionTraceCycle = {
     reasonCodes: readonly string[];
     allowedStrategyIds: readonly string[];
     newsSentiment: string | null;
+    conviction?: number;
+    opportunityAuthorized?: boolean;
+    activeHypothesisType?: string | null;
+    eligibleStrategyFamilies?: readonly string[];
   };
   selected: {
     strategyId: string;
     outcome: string;
     side: string | null;
   };
+  /** PR-2 MI Core: decision-chain completeness fields. */
+  decisionChain?: {
+    terminalReasonCode: string;
+    opportunityAuthorized: boolean;
+    activeHypothesisType: string | null;
+    reconstructionSummary: string;
+    observation: {
+      expectedPath: string;
+      observedOutcome: string;
+      deviation: string;
+      invalidationStatus: string;
+      terminalReasonCode: string;
+    };
+  } | null;
 };
 
 export type M9DecisionTraceExport = {
@@ -45,6 +63,10 @@ export type M9DecisionTraceExport = {
   strategyId: string;
   strategyVersion: string;
   cycleCount: number;
+  /** Total cycles in input (100% completeness denominator). */
+  totalInputCycles: number;
+  /** Completeness record covers all input cycles (no sampling cap). */
+  completenessCoverage: "full" | "sampled";
   cycles: M9DecisionTraceCycle[];
   contentDigest: string;
 };
@@ -90,18 +112,17 @@ export function buildM9DecisionTraceExport(input: {
   generatedAt?: string;
 }): M9DecisionTraceExport {
   const maxSamples = input.maxSamples ?? 25;
-  const cycles: M9DecisionTraceCycle[] = [];
+  const completenessCycles: M9DecisionTraceCycle[] = [];
+  const sampleCycles: M9DecisionTraceCycle[] = [];
 
   for (const cycle of input.cycleResults) {
-    if (cycles.length >= maxSamples) {
-      break;
-    }
     const evaluation = cycle.evaluation;
     const fused = evaluation.fusedContext;
     const understanding = evaluation.understanding;
     const primarySignal = evaluation.signal;
+    const decisionChain = evaluation.decisionChain;
 
-    cycles.push({
+    const traceCycle: M9DecisionTraceCycle = {
       evaluatedAt: evaluation.features.evaluatedAt,
       fused: fused
         ? {
@@ -134,14 +155,41 @@ export function buildM9DecisionTraceExport(input: {
         reasonCodes: evaluation.msv.derived.reasonCodes,
         allowedStrategyIds: evaluation.msv.derived.allowedStrategyIds,
         newsSentiment: evaluation.msv.crowd.newsSentiment,
+        conviction: evaluation.msv.derived.conviction,
+        opportunityAuthorized: evaluation.msv.derived.opportunityAuthorized,
+        activeHypothesisType: evaluation.msv.derived.activeHypothesisType,
+        eligibleStrategyFamilies: evaluation.msv.derived.eligibleStrategyFamilies,
       },
       selected: {
         strategyId: primarySignal.strategyId,
         outcome: primarySignal.outcome,
         side: primarySignal.side ?? null,
       },
-    });
+      decisionChain: decisionChain
+        ? {
+            terminalReasonCode: decisionChain.terminalReasonCode,
+            opportunityAuthorized: decisionChain.opportunityAuthorized,
+            activeHypothesisType: decisionChain.activeHypothesisType,
+            reconstructionSummary: decisionChain.reconstructionSummary,
+            observation: {
+              expectedPath: decisionChain.observation.expectedPath,
+              observedOutcome: decisionChain.observation.observedOutcome,
+              deviation: decisionChain.observation.deviation,
+              invalidationStatus: decisionChain.observation.invalidationStatus,
+              terminalReasonCode: decisionChain.observation.terminalReasonCode,
+            },
+          }
+        : null,
+    };
+
+    completenessCycles.push(traceCycle);
+    if (sampleCycles.length < maxSamples) {
+      sampleCycles.push(traceCycle);
+    }
   }
+
+  const hasDecisionChains = completenessCycles.some((c) => c.decisionChain !== null);
+  const cycles = hasDecisionChains ? completenessCycles : sampleCycles;
 
   const withoutDigest: Omit<M9DecisionTraceExport, "contentDigest"> = {
     schemaVersion: M9_DECISION_TRACE_SCHEMA_VERSION,
@@ -150,6 +198,8 @@ export function buildM9DecisionTraceExport(input: {
     strategyId: input.strategyId,
     strategyVersion: input.strategyVersion,
     cycleCount: cycles.length,
+    totalInputCycles: input.cycleResults.length,
+    completenessCoverage: hasDecisionChains ? "full" : "sampled",
     cycles,
   };
 

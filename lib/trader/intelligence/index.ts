@@ -12,6 +12,23 @@ export {
   type BuildMsvEnvelopeInput,
 } from "@/lib/trader/intelligence/cde-v0";
 export { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
+export { isMiCoreEnabled } from "@/lib/trader/intelligence/mi-core-flag";
+export {
+  createEmptyHypothesisSessionState,
+  MARKET_STATE_SNAPSHOT_SCHEMA_VERSION,
+  type CycleObservationRecord,
+  type DecisionChain,
+  type HypothesisSessionState,
+  type MarketStateSnapshot,
+} from "@/lib/trader/intelligence/mi-core.types";
+export { buildReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction";
+export type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction";
+export { buildHypothesisSet, hypothesisTypeEnum } from "@/lib/trader/intelligence/hypothesis";
+export type {
+  HypothesisSet,
+  MarketHypothesis,
+  MarketOpportunity,
+} from "@/lib/trader/intelligence/hypothesis";
 export {
   DEFAULT_EXIT_INTELLIGENCE_RUN_CONFIG,
   EXIT_INTELLIGENCE_CONTEXT_SCHEMA_VERSION,
