@@ -1,4 +1,5 @@
 import type { FeatureSnapshot } from "@/lib/trader/intelligence/types";
+import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
 import {
   CANONICAL_MARKET_QUESTION_IDS,
   provenanceId,
@@ -139,6 +140,8 @@ function buildMissingEvidenceGapDescriptions(fusedContext: FusedMarketContext): 
 export type BuildMarketUnderstandingBridgeInput = {
   fusedContext: FusedMarketContext;
   features: FeatureSnapshot;
+  /** PR-2 MI Core: optional reconstruction descriptors (additive). */
+  reconstruction?: ReconstructionSnapshot;
 };
 
 function resolveCrossVenue(fusedContext: FusedMarketContext) {
@@ -224,7 +227,22 @@ function classifyRegimeHint(input: {
   mtfBackdrop: Partial<Record<string, MtfDirection>>;
   crowd: CrowdPsychologyPosture;
   features: FeatureSnapshot;
+  reconstruction?: ReconstructionSnapshot;
 }): RegimeHint {
+  if (input.reconstruction) {
+    const regimeBias = input.reconstruction.trendStructure.regimeBias;
+    if (regimeBias === "TREND") {
+      return input.reconstruction.trendStructure.mtfAlignment === "CONFLICTING"
+        ? "CHOPPING"
+        : "TRENDING";
+    }
+    if (regimeBias === "RANGE") {
+      return "RANGING";
+    }
+    if (regimeBias === "CHOP") {
+      return "CHOPPING";
+    }
+  }
   if (input.crowd === "EXTREME") {
     return "STRESSED";
   }
@@ -604,7 +622,7 @@ export function evaluateCanonicalMarketQuestions(input: {
 export function buildMarketUnderstandingBridge(
   input: BuildMarketUnderstandingBridgeInput,
 ): MarketUnderstandingSnapshot {
-  const { fusedContext, features } = input;
+  const { fusedContext, features, reconstruction } = input;
   const mtfBackdrop = classifyMtfBackdropFromObservations(fusedContext.mtfBars);
   const mtfAlignment = classifyMtfAlignment(mtfBackdrop);
   const crowd = classifyCrowdPsychology(fusedContext.fearGreed);
@@ -617,6 +635,7 @@ export function buildMarketUnderstandingBridge(
     mtfBackdrop,
     crowd,
     features,
+    reconstruction,
   });
 
   const dataQualityReasonCodes: string[] = [];

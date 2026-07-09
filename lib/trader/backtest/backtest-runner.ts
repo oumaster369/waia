@@ -25,6 +25,7 @@ import type {
   PaperCycleResult,
   PortfolioCycleContext,
 } from "@/lib/trader/paper/paper-cycle.types";
+import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
 import { derivePortfolioAccountState, toAccountRiskState } from "@/lib/trader/portfolio";
 import type { PaperPnLMarkPrices } from "@/lib/trader/paper/paper-pnl.types";
@@ -62,6 +63,10 @@ export type RunBacktestInput = {
   /** When true (default), builds deterministic replay fused context per cycle. */
   enableReplayFusedContext?: boolean;
   providerSidecar?: ReplayProviderSidecar;
+  /** PR-2 MI Core: within-session conviction state seed. */
+  hypothesisSessionState?: HypothesisSessionState;
+  /** PR-2 MI Core: explicit flag override. */
+  miCoreEnabled?: boolean;
 };
 
 export type RunBacktestResult = {
@@ -127,6 +132,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
 
   const cycleResults: PaperCycleResult[] = [];
   let accountState = input.accountState;
+  let hypothesisSessionState = input.hypothesisSessionState;
   const maxCycles = input.maxCycles ?? Number.POSITIVE_INFINITY;
 
   while (cycleResults.length < maxCycles) {
@@ -161,8 +167,11 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       newId: input.newId,
       portfolio: input.portfolio,
       guardian: input.guardian,
+      hypothesisSessionState,
+      miCoreEnabled: input.miCoreEnabled,
     });
 
+    hypothesisSessionState = result.hypothesisSessionState;
     cycleResults.push(result);
 
     if (input.refreshAccountStateBetweenStrategies) {

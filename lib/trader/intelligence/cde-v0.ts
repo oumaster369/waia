@@ -6,6 +6,7 @@ import {
   buildMarketPhysicsLayer,
   buildMsvUnderstandingBlock,
 } from "@/lib/trader/intelligence/analytical-layers-v0";
+import type { MarketOpportunity } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 import type { MarketUnderstandingSnapshot } from "@/lib/trader/intelligence/market-understanding.types";
 import { listMvpStrategyRegistry } from "@/lib/trader/intelligence/strategies/registry";
 import {
@@ -54,10 +55,116 @@ function moreRestrictivePermission(
     : current;
 }
 
+function lessRestrictivePermission(
+  current: TradingPermission,
+  candidate: TradingPermission,
+): TradingPermission {
+  return PERMISSION_RESTRICTIVENESS[candidate] > PERMISSION_RESTRICTIVENESS[current]
+    ? candidate
+    : current;
+}
+
+function hasHardVeto(input: {
+  dataQualityScore: number;
+  fusedContext?: FusedMarketContext;
+  understanding?: MarketUnderstandingSnapshot;
+}): boolean {
+  if (input.dataQualityScore < QUALITY_PAPER_ONLY_THRESHOLD) {
+    return true;
+  }
+  if (
+    input.fusedContext?.aggregateHealth === "UNAVAILABLE" ||
+    input.fusedContext?.aggregateHealth === "STALE"
+  ) {
+    return true;
+  }
+  if (!input.understanding) {
+    return false;
+  }
+  if (!input.understanding.dataQualitySufficient) {
+    return true;
+  }
+  if (input.understanding.crossVenue.agreement === "DISAGREE") {
+    return true;
+  }
+  if (input.understanding.knowledgeGaps.some((gap) => gap.blocksPermission)) {
+    return true;
+  }
+  if (
+    input.understanding.spotPosture === "NO_TRADE" ||
+    input.understanding.spotPosture === "PRESERVE_CAPITAL"
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isTruthfulHealthSufficientForTrading(input: {
+  dataQualityScore: number;
+  fusedContext?: FusedMarketContext;
+}): { sufficient: boolean; degradedOk: boolean } {
+  if (input.dataQualityScore < QUALITY_PAPER_ONLY_THRESHOLD) {
+    return { sufficient: false, degradedOk: false };
+  }
+  if (!input.fusedContext) {
+    return { sufficient: true, degradedOk: false };
+  }
+  if (
+    input.fusedContext.aggregateHealth === "UNAVAILABLE" ||
+    input.fusedContext.aggregateHealth === "STALE"
+  ) {
+    return { sufficient: false, degradedOk: false };
+  }
+  if (input.fusedContext.aggregateHealth === "DEGRADED") {
+    return { sufficient: true, degradedOk: true };
+  }
+  return { sufficient: true, degradedOk: false };
+}
+
+function resolveConvictionPermission(input: {
+  opportunity?: MarketOpportunity;
+  dataQualityScore: number;
+  fusedContext?: FusedMarketContext;
+  understanding?: MarketUnderstandingSnapshot;
+}): {
+  permission: TradingPermission;
+  reasonCodes: string[];
+  riskMultiplier: string;
+} | null {
+  if (!input.opportunity?.authorized) {
+    return null;
+  }
+
+  const health = isTruthfulHealthSufficientForTrading({
+    dataQualityScore: input.dataQualityScore,
+    fusedContext: input.fusedContext,
+  });
+  if (!health.sufficient) {
+    return null;
+  }
+
+  const reasonCodes: string[] = [];
+  if (health.degradedOk) {
+    reasonCodes.push(cdeReasonCodes.truthfulHealthDegradedOk);
+  } else {
+    reasonCodes.push(cdeReasonCodes.truthfulHealthSufficient);
+  }
+
+  if (input.understanding?.spotPosture === "REDUCE_RISK" || health.degradedOk) {
+    reasonCodes.push(cdeReasonCodes.convictionAllowReducedRisk);
+    return { permission: "ALLOW_REDUCED_RISK", reasonCodes, riskMultiplier: "0.5" };
+  }
+
+  reasonCodes.push(cdeReasonCodes.convictionAllowTrading);
+  return { permission: "ALLOW_TRADING", reasonCodes, riskMultiplier: "1.0" };
+}
+
 function resolveTradingPermission(input: {
   dataQualityScore: number;
   fusedContext?: FusedMarketContext;
   understanding?: MarketUnderstandingSnapshot;
+  opportunity?: MarketOpportunity;
+  miCoreEnabled?: boolean;
 }): {
   permission: TradingPermission;
   reasonCodes: string[];
@@ -95,8 +202,12 @@ function resolveTradingPermission(input: {
     input.fusedContext.aggregateConfidence < FUSED_DEGRADED_CONFIDENCE_THRESHOLD
   ) {
     reasonCodes.push(cdeReasonCodes.fusedContextReduced);
-    permission = moreRestrictivePermission(permission, "ALLOW_REDUCED_RISK");
-    riskMultiplier = "0.5";
+    if (!input.miCoreEnabled) {
+      permission = moreRestrictivePermission(permission, "ALLOW_REDUCED_RISK");
+      riskMultiplier = "0.5";
+    } else {
+      reasonCodes.push(cdeReasonCodes.truthfulHealthDegradedOk);
+    }
   }
 
   if (input.understanding) {
@@ -150,6 +261,24 @@ function resolveTradingPermission(input: {
     }
   }
 
+  if (input.miCoreEnabled) {
+    const convictionPath = resolveConvictionPermission({
+      opportunity: input.opportunity,
+      dataQualityScore: input.dataQualityScore,
+      fusedContext: input.fusedContext,
+      understanding: input.understanding,
+    });
+    if (convictionPath && !hasHardVeto(input)) {
+      for (const code of convictionPath.reasonCodes) {
+        reasonCodes.push(code);
+      }
+      permission = lessRestrictivePermission(permission, convictionPath.permission);
+      if (convictionPath.riskMultiplier !== "1.0") {
+        riskMultiplier = convictionPath.riskMultiplier;
+      }
+    }
+  }
+
   return { permission, reasonCodes, riskMultiplier };
 }
 
@@ -168,6 +297,8 @@ export type BuildMsvEnvelopeInput = {
   features: FeatureSnapshot;
   fusedContext?: FusedMarketContext;
   understanding?: MarketUnderstandingSnapshot;
+  opportunity?: MarketOpportunity;
+  miCoreEnabled?: boolean;
   newId?: () => string;
 };
 
@@ -192,12 +323,14 @@ function resolveAllowedStrategyIds(regime: Regime): readonly string[] {
 }
 
 export function buildMsvEnvelope(input: BuildMsvEnvelopeInput): MsvEnvelope {
-  const { features, fusedContext, understanding } = input;
+  const { features, fusedContext, understanding, opportunity, miCoreEnabled } = input;
   const regime = classifyRegime(features);
   const permission = resolveTradingPermission({
     dataQualityScore: features.dataQualityScore,
     fusedContext,
     understanding,
+    opportunity,
+    miCoreEnabled,
   });
   const crowd = buildCrowdPsychologyLayer(fusedContext);
   const reasonCodes = [...permission.reasonCodes, regimeReasonCode(regime)];
@@ -230,6 +363,14 @@ export function buildMsvEnvelope(input: BuildMsvEnvelopeInput): MsvEnvelope {
       riskMultiplier: permission.riskMultiplier,
       dataQualityScore: fusedQuality,
       reasonCodes,
+      ...(miCoreEnabled && opportunity
+        ? {
+            conviction: opportunity.conviction,
+            opportunityAuthorized: opportunity.authorized,
+            activeHypothesisType: opportunity.hypothesisType,
+            eligibleStrategyFamilies: opportunity.eligibleStrategyFamilies,
+          }
+        : {}),
     },
   };
 }

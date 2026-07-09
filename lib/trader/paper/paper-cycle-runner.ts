@@ -303,6 +303,8 @@ export async function runPaperCycleOnce(
     fusedContext: input.fusedContext,
     newId: input.newId,
     telemetrySink: input.telemetrySink,
+    hypothesisSessionState: input.hypothesisSessionState,
+    miCoreEnabled: input.miCoreEnabled,
   });
 
   const actionableSignals = evaluation.signals.filter(
@@ -344,6 +346,7 @@ export async function runPaperCycleOnce(
       reconciliation: null,
       guardian: guardianPhase.guardianResult,
       guardianExecutions: guardianPhase.guardianExecutions,
+      hypothesisSessionState: evaluation.hypothesisSessionState,
     };
   }
 
@@ -477,6 +480,7 @@ export async function runPaperCycleOnce(
     ...legacy,
     guardian: guardianPhase.guardianResult,
     guardianExecutions: guardianPhase.guardianExecutions,
+    hypothesisSessionState: evaluation.hypothesisSessionState,
   };
 }
 
@@ -484,6 +488,7 @@ export async function runFixturePaperCycles(
   input: RunFixturePaperCyclesInput,
 ): Promise<RunMultiPaperCyclesResult> {
   const results: PaperCycleResult[] = [];
+  let hypothesisSessionState = input.hypothesisSessionState;
 
   for (let index = 0; index < input.n; index += 1) {
     const next = input.replay.next();
@@ -506,8 +511,11 @@ export async function runFixturePaperCycles(
       accountState: input.accountState,
       telemetrySink: input.telemetrySink,
       newId: input.newId,
+      hypothesisSessionState,
+      miCoreEnabled: input.miCoreEnabled,
     });
 
+    hypothesisSessionState = result.hypothesisSessionState;
     results.push(result);
   }
 
