@@ -57,7 +57,7 @@ Optionally include `?expand=1` on the compare URL if you want the rich compare v
 
 ### 6. PR title and body (ready to paste)
 
-1. **Read** [`.github/pull_request_template.md`](../../.github/pull_request_template.md) — the **only** canonical PR body source. Do **not** invent a compact YAML-style metadata header.
+1. **Read** [`.github/pull_request_template.md`](../../.github/pull_request_template.md) and derive content from the **canonical plan** in `docs/plans/<branch>.md` when it exists.
 2. **Copy** the template structure verbatim; fill placeholders (Summary, Linked issue, Risk tier, Test plan, etc.).
 3. **Required field syntax** (validator-enforced — plain text fails CI):
 

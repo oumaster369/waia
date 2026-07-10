@@ -40,4 +40,4 @@ For Linear MCP tool calls in this Cursor runtime, use server id **`plugin-linear
 - **Git commands / deploy snippets:** **`docs/DEVELOPMENT_WORKFLOW.md`** (adjunct — does not override **AGENTS.md**)
 - **MVP onboarding index:** **`docs/product/WAIA-V1-MVP-SPEC.md`**
 - **Architectural decisions (why):** **`docs/adr/README.md`**
-- **Plan files agents produce:** `.cursor/plans/` (gitignored)
+- **Plan files agents produce:** draft in `.cursor/plans/` (gitignored); promoted canonical plans in `docs/plans/` ([`docs/plans/README.md`](../../docs/plans/README.md))

@@ -33,6 +33,10 @@ Deprecation: prepend `**(Superseded by …)**` rather than deleting historical b
 
 **Natural compression:** When guidance moves, prefer a **short stub + supersession pointer** over two full narratives side by side—not a mandated cleanup ritual; favors semantic continuity without archive sprawl.
 
+## Canonical plan promotion
+
+Integration plans promote from draft (`.cursor/plans/`, gitignored) to committed canonical plans (`docs/plans/dee-<NN>-<slug>.md`) per [`docs/plans/README.md`](../plans/README.md). PR bodies reference the canonical plan path in `**Plan:**`. See [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) for integration-ready and post-merge reconciliation rules.
+
 ## When to author ADR
 
 Non-obvious durable policy shifts, infra topology change, branching/merge rituals adjustments, rollout doctrine reinterpretations — see **[`ADR-POLICY.md`](ADR-POLICY.md)** (including **semantic / product pivots** that outlive a single PR).

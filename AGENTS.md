@@ -19,6 +19,7 @@ Repository-specific execution contract for AI coding agents. **Router only** —
 | Auto-advance preconditions | [`docs/waia-governance/AGENT-AUTO-ADVANCE.md`](docs/waia-governance/AGENT-AUTO-ADVANCE.md) |
 | Agent automation topology | [`docs/AGENT_AUTOMATION.md`](docs/AGENT_AUTOMATION.md) |
 | Governance index | [`docs/waia-governance/README.md`](docs/waia-governance/README.md) |
+| Canonical integration plans | [`docs/plans/README.md`](docs/plans/README.md) |
 | ADRs | [`docs/adr/README.md`](docs/adr/README.md) |
 
 ---
