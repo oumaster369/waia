@@ -57,7 +57,7 @@ End-to-end flow (may be compressed in small tasks, but **approval** and **audit*
 7. **Post-merge closeout** — Sync `dev`, prune branches, rerun or trust CI, tracker updates if semantics changed ([`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md)).  
 8. **Linear update** — Issue **Done**, comment with PR link, merge commit hash, validation summary ([`DOCUMENTATION-STANDARDS.md`](DOCUMENTATION-STANDARDS.md), [`LINEAR-GOVERNANCE.md`](LINEAR-GOVERNANCE.md)).
 
-Extended loop reference: [`AUTONOMOUS-EXECUTION-LOOP.md`](AUTONOMOUS-EXECUTION-LOOP.md).
+Extended loop reference: [`AUTONOMOUS-EXECUTION-LOOP.md`](AUTONOMOUS-EXECUTION-LOOP.md). **Canonical lifecycle:** [`LIFECYCLE.md`](LIFECYCLE.md) · **Integration boundaries:** [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md).
 
 ---
 

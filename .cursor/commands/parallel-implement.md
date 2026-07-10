@@ -39,6 +39,8 @@ If two agents touch the same file → stop both, merge sequentially instead.
 - Never parallelize T3/T4 or schema + UI on coupled paths without explicit Architect approval.
 - Each worktree uses its own `dee-*` branch; never share one branch across agents.
 
+- Each worktree = one integration batch = one PR ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)).
+
 ## Cleanup
 
 After merge:

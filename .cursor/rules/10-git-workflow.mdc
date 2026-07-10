@@ -31,4 +31,4 @@ Use `DEE-NN type(scope): subject` — e.g. `DEE-402 feat(home): add hero section
 - Never run `git push --force`, `git reset --hard origin/...`, or rewrite history on shared branches.
 - Never commit `.env*` files, secrets, or anything matching `*.key`/`*.pem`.
 - Never check in `node_modules/`, `.next/`, `playwright-report/`, `test-results/`.
-- One feature = one branch = one PR. Don't pile unrelated work into the same PR.
+- One feature = one integration batch = one branch = one PR. Multiple work packages may land in one PR when the integration-ready contract holds ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)). Don't pile unrelated integration batches into the same PR.

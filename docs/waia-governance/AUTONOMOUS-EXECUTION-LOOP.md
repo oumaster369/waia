@@ -2,6 +2,8 @@
 
 Maps Cursor phases to WAIA artifacts. Humans remain merge authority unless [`HUMAN-OVERRIDE.md`](HUMAN-OVERRIDE.md).
 
+> **Canonical lifecycle:** [`LIFECYCLE.md`](LIFECYCLE.md) · **Integration boundaries / action matrix:** [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md). This 12-step table is the detailed map; do not treat it as a competing lifecycle.
+
 **Orchestrator (pattern):** optional continuity mindset described in [`AGENT-ROLES.md`](AGENT-ROLES.md)—**not** a separate runtime. **Typically the same Architect/humans/implementers** sequence the loop steps (model/hints, sanity checks)—no external merge authority implied.
 
 | Step | Action | Governor docs |

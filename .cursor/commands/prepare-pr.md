@@ -106,6 +106,12 @@ gh pr create --base dev --title "DEE-NN type(scope): subject" --body-file .curso
 
 Do **not** use `--fill` alone when a pre-rendered body file exists — it bypasses the filled template you validated. Still **never** `gh pr merge`.
 
+## Integration boundary ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md))
+
+- Refuse a second PR for an integration id with an existing open/merged PR.
+- Include `**Includes:**` and `**Deferred:**` in the rendered body when applicable.
+- Synchronize with `origin/dev` via merge before opening PR if the branch was already pushed.
+
 ## Hard rules
 
 - Never `gh pr merge` from the agent — merging is the human’s call.

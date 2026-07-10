@@ -4,7 +4,7 @@ Investigate **production or preview deploy** issues using Cloudflare MCP plugins
 
 ## When to use
 
-- Cloudflare Worker/Pages deploy failed or regressed after merge.
+- Cloudflare Worker deploy failed or regressed after merge.
 - Runtime errors in production or PR preview Worker.
 - Need build logs, observability keys, or worker configuration without leaving Cursor.
 
@@ -36,3 +36,4 @@ Investigate **production or preview deploy** issues using Cloudflare MCP plugins
 - **No production deploys** from this command unless the user explicitly requests and risk tier allows.
 - SQLite/file-DB limitations on Workers are known — see [`docs/cloudflare-preview-deploys.md`](../../docs/cloudflare-preview-deploys.md).
 - T3/T4 infra changes → escalate per [`RISK-TIERS.md`](../../docs/waia-governance/RISK-TIERS.md).
+- Read-only diagnostics only — HUMAN-ONLY for production deploy ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)).

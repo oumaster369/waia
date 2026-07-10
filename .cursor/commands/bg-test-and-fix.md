@@ -32,6 +32,10 @@ gh pr create --base dev --title "DEE-NN type(scope): subject" --body-file .curso
 
 Never `gh pr merge`.
 
+## Integration boundary
+
+Follow [`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md): one PR per integration issue; stop before merge; no scope broadening.
+
 ## Hard rules
 
 - Bounded by [`.cursor/hooks/guard-shell.sh`](../hooks/guard-shell.sh) and GitHub rulesets on `dev`/`main`.

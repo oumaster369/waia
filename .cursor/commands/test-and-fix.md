@@ -58,3 +58,10 @@ After the loop is green twice, **safe auto-advance** per [`AGENTS.md`](../../AGE
 No separate "now run /prepare-pr" prompt is required for normal task completion. If any auto-advance precondition fails (validation, scope, branch, Linear id, risk tier, open STOP, constitutional Architect hold), do **not** auto-advance — surface the blocker.
 
 Use `/prepare-pr` only when you need a standalone retry (e.g. push failed earlier) without re-running the full test loop; its §1 STOP remains the safety net if the tree is unexpectedly dirty.
+
+## Integration boundary ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md))
+
+- Loop gates locally many times; **one PR** only when integration-ready.
+- Render `**Includes:**` / `**Deferred:**` when child work is in scope.
+- Do not open a second PR for the same integration issue — spawn a new batch instead.
+- Sync branch with `origin/dev` via merge (not rebase) before PR when branch was already pushed.
