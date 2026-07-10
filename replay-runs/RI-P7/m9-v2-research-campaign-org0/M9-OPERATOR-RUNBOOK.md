@@ -209,6 +209,24 @@ Default `--oos-bar-count=20` (not part of authorization scope).
 
 ---
 
+## Evidence policy (DEE-407)
+
+Canonical taxonomy: [`docs/waia-governance/EVIDENCE-POLICY.md`](../../../docs/waia-governance/EVIDENCE-POLICY.md).
+
+| Class | M9 vault handling |
+|-------|-------------------|
+| **accepted experimental** | Commit success bundle (`m9-research-evidence.json`, PKA, manifest, traces) |
+| **rejected** | Commit `m9-research-rejection-record.json` + evolution MVP on governed reject/crash |
+| **diagnostic** | Commit `m9-campaign-operator-diagnostics.json` on every exit |
+| **forensic** | `M9-FORENSIC-REPORT.md` + execution records — commit when investigation closes |
+| **archived** | Move superseded JSON under `archive/<reason>/` with README — do not delete |
+| **operator forensics stash** | `_operator-forensics-stash/` is **gitignored** — promote into vault before PR |
+| **temp** | `m9-campaign-run.log` — local operator tee; optional commit per ceremony |
+
+On the Execution Server set `WAIA_EXECUTION_SURFACE=execution-server` (and prefer `DATABASE_URL_POSTGRES_SESSION`) so `m9-campaign-manifest.json` `frontmatter` seals `executionOrigin` and `dbConnectionMode`. Frontmatter is **additive** — it does not change blind authorization or holdout semantics.
+
+---
+
 ## Success artifacts
 
 | File | Purpose |
@@ -219,7 +237,7 @@ Default `--oos-bar-count=20` (not part of authorization scope).
 | `m9-v2-metrics-export.json` | v2 aggregate + byRegime |
 | `m9-lifecycle-trace.json` | Lifecycle parity export |
 | `m9-guardian-reason-sample.json` | Guardian sample (when `--enable-guardian-exits=1`) |
-| `m9-campaign-manifest.json` | Cross-links digests, paths, `promotionAttempted: false` |
+| `m9-campaign-manifest.json` | Cross-links digests, paths, `promotionAttempted: false`, additive `frontmatter` (`runId`, `executionOrigin`, `gitSha`, `environment`, `dbConnectionMode`) |
 | `m9-campaign-run.log` | Operator tee log |
 
 ---
@@ -367,7 +385,7 @@ Every campaign exit — **success**, **governed reject**, or **crash** — must 
 | `governed_reject` | rejection record + evolution cycle + operator diagnostics |
 | `crash` | rejection record + evolution cycle + operator diagnostics (best-effort inventory snapshot) |
 
-Operator diagnostics fields (v1 additive): `outcomeKind`, `parityStatus`, `inventorySnapshot`, error fields (crash/reject only).
+Operator diagnostics fields (v1 additive): `outcomeKind`, `parityStatus`, `inventorySnapshot`, error fields (crash/reject only). Manifest `frontmatter` (DEE-407) is separate from diagnostics and does not alter pipeline semantics.
 
 A campaign is **not complete** until the vault contains the success manifest **or** sealed failure bundle **plus** operator diagnostics.
 
