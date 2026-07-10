@@ -1,9 +1,9 @@
 # AI-TRADER Execution Server — operator runbook
 
-**Owner:** Architect · **Status:** Canonical (documentation only in Slice D1) · **Linear:** DEE-406  
+**Owner:** Architect · **Status:** Canonical · **Linear:** DEE-406 (D1), DEE-409 (D2 tooling)  
 **Scope:** AI-TRADER execution plane only — see [ADR-0023](../adr/0023-execution-server-ai-trader-only-execution-plane.md)
 
-> **Slice D1 boundary.** This runbook documents procedures only. Guarded mutation scripts (`execution-server-sync.sh`, `build`, `deploy`, `rollback`) ship in **Slice D2** and require `--confirm`. **Composer and agents must never execute host mutation.**
+> **HUMAN-ONLY mutation.** Guarded scripts require `--confirm` on the execution host. Without `--confirm` they print planned actions and exit 0. **Agents must never pass `--confirm`.**
 
 **Related:**
 
@@ -11,6 +11,10 @@
 - [DEE-339 BP-6 runbook](./DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md) — health scaffold + secret boundaries
 - [DEE-212 BP-7 live execution](./DEE-212-BP7-LIVE-EXECUTION-RUNBOOK.md) — Org-0 live path
 - [`scripts/ops/execution-server-preflight.sh`](../../scripts/ops/execution-server-preflight.sh) — read-only stale-code guard
+- [`scripts/ops/execution-server-sync.sh`](../../scripts/ops/execution-server-sync.sh) — guarded checkout pin (D2)
+- [`scripts/ops/execution-server-build.sh`](../../scripts/ops/execution-server-build.sh) — guarded image build (D2)
+- [`scripts/ops/execution-server-deploy.sh`](../../scripts/ops/execution-server-deploy.sh) — guarded container deploy (D2)
+- [`scripts/ops/execution-server-rollback.sh`](../../scripts/ops/execution-server-rollback.sh) — guarded rollback (D2)
 
 ---
 
@@ -54,7 +58,7 @@ After every successful deploy or rollback, the operator records deployment truth
 | `previousGitSha` | Rollback only | Prior known-good SHA |
 | `notes` | No | Incident/context only — no credentials |
 
-Slice D2 scripts will create/update this file; until then, operators maintain it manually.
+Guarded deploy/rollback write the full record on `--confirm`; sync/build merge `gitSha` / `imageTag` on `--confirm`.
 
 ---
 
@@ -225,16 +229,16 @@ Encoded in [`INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOU
 
 ---
 
-## 10. Slice D2 tooling (not yet available)
+## 10. Slice D2 guarded tooling
 
-Slice D2 will add guarded scripts that implement §3–§7 with mandatory `--confirm`:
+| Script | `--confirm` effect |
+|--------|-------------------|
+| [`execution-server-sync.sh`](../../scripts/ops/execution-server-sync.sh) | `git fetch` + `git checkout` + preflight; merge `gitSha` |
+| [`execution-server-build.sh`](../../scripts/ops/execution-server-build.sh) | `docker build`, `pnpm install`; merge `imageTag` |
+| [`execution-server-deploy.sh`](../../scripts/ops/execution-server-deploy.sh) | `docker run`, `/health`; write full `deployed-revision.json` |
+| [`execution-server-rollback.sh`](../../scripts/ops/execution-server-rollback.sh) | sync + redeploy + `/health`; rewrite `deployed-revision.json` |
 
-- `scripts/ops/execution-server-sync.sh`
-- `scripts/ops/execution-server-build.sh`
-- `scripts/ops/execution-server-deploy.sh`
-- `scripts/ops/execution-server-rollback.sh`
-
-Each is a no-op without `--confirm`. Composer authors and dry-run-tests them in D2 but never executes against the live host.
+All scripts support `--dry-run` and `--help`. Without `--confirm`: no-op (exit 0).
 
 ---
 
@@ -253,4 +257,4 @@ Each is a no-op without `--confirm`. Composer authors and dry-run-tests them in 
 
 ---
 
-*Last updated: 2026-07-10 — vNext Slice D1 (documentation only).*
+*Last updated: 2026-07-10 — vNext Slice D2.*

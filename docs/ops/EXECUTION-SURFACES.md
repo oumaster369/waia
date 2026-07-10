@@ -1,6 +1,6 @@
 # WAIA execution surfaces
 
-**Owner:** Architect · **Status:** Canonical · **Linear:** DEE-406 (vNext Slice D1)
+**Owner:** Architect · **Status:** Canonical · **Linear:** DEE-406 (D1), DEE-409 (D2 tooling)
 
 Defines every environment where WAIA work may execute, who may act there, what evidence is produced, and which actions are **HUMAN-ONLY**. Canonical plan frontmatter uses the same surface ids in `executionSurfaces: [...]`.
 
@@ -142,7 +142,7 @@ Host filesystem state is **operational**, not canonical engineering memory — G
 
 **Operator runbook:** [`EXECUTION-SERVER-RUNBOOK.md`](EXECUTION-SERVER-RUNBOOK.md)  
 **Stale-code guard:** [`scripts/ops/execution-server-preflight.sh`](../../scripts/ops/execution-server-preflight.sh) (read-only)  
-**Mutation tooling:** Slice D2 (`execution-server-{sync,build,deploy,rollback}.sh`) — not in D1.
+**Mutation tooling (HUMAN-ONLY, `--confirm` required):** [`execution-server-sync.sh`](../../scripts/ops/execution-server-sync.sh), [`execution-server-build.sh`](../../scripts/ops/execution-server-build.sh), [`execution-server-deploy.sh`](../../scripts/ops/execution-server-deploy.sh), [`execution-server-rollback.sh`](../../scripts/ops/execution-server-rollback.sh) — no-op without `--confirm`.
 
 ---
 
@@ -170,4 +170,4 @@ When grooming or planning an integration batch:
 
 ---
 
-*Last updated: 2026-07-10 — vNext Slice D1.*
+*Last updated: 2026-07-10 — vNext Slice D2.*

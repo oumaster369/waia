@@ -61,6 +61,7 @@ replay-runs/**/_operator-forensics-stash/
 
 # Local SQLite (WAIA persistence)
 .data/
+.ops/
 
 # Wrangler typegen output (large; run `pnpm cf-typegen`)
 cloudflare-env.d.ts
