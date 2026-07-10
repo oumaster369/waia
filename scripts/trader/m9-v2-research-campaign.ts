@@ -96,6 +96,10 @@ import {
 } from "@/lib/trader/risk";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
+import {
+  buildCampaignRunFrontmatter,
+  type CampaignRunFrontmatter,
+} from "@/lib/trader/research/campaign-run-frontmatter";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const LOG_PREFIX = "[trader:m9:campaign]";
@@ -114,6 +118,8 @@ export type M9ResearchCampaignManifest = {
   schemaVersion: "m9_v2_research_campaign_v1";
   campaignId: string;
   generatedAt: string;
+  /** Additive provenance block (DEE-407) — does not alter pipeline/blind-holdout semantics. */
+  frontmatter: CampaignRunFrontmatter;
   builderGitSha: string | null;
   organizationId: string;
   symbol: string;
@@ -512,6 +518,11 @@ async function main(): Promise<void> {
         schemaVersion: "m9_v2_research_campaign_v1",
         campaignId: `m9-v2-${Date.now()}`,
         generatedAt: new Date().toISOString(),
+        frontmatter: buildCampaignRunFrontmatter({
+          runId: result.backtestRunId,
+          gitSha: builderGitSha,
+          dbConnectionMode: urlSource,
+        }),
         builderGitSha,
         organizationId,
         symbol,
