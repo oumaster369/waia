@@ -1,0 +1,256 @@
+# AI-TRADER Execution Server — operator runbook
+
+**Owner:** Architect · **Status:** Canonical (documentation only in Slice D1) · **Linear:** DEE-406  
+**Scope:** AI-TRADER execution plane only — see [ADR-0023](../adr/0023-execution-server-ai-trader-only-execution-plane.md)
+
+> **Slice D1 boundary.** This runbook documents procedures only. Guarded mutation scripts (`execution-server-sync.sh`, `build`, `deploy`, `rollback`) ship in **Slice D2** and require `--confirm`. **Composer and agents must never execute host mutation.**
+
+**Related:**
+
+- [`EXECUTION-SURFACES.md`](EXECUTION-SURFACES.md) — `execution-server` surface definition
+- [DEE-339 BP-6 runbook](./DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md) — health scaffold + secret boundaries
+- [DEE-212 BP-7 live execution](./DEE-212-BP7-LIVE-EXECUTION-RUNBOOK.md) — Org-0 live path
+- [`scripts/ops/execution-server-preflight.sh`](../../scripts/ops/execution-server-preflight.sh) — read-only stale-code guard
+
+---
+
+## 1. Architectural boundaries
+
+| Boundary | Rule |
+|----------|------|
+| **Plane** | Execution Server = AI-TRADER live execution only; WAIA Worker = control plane |
+| **Secrets** | Runtime injection at deploy; never Cloudflare Secrets Store; never in git/image |
+| **Master key** | Worker uses `AI_TRADER_MASTER_KEY` via Secrets Store — Execution Server does **not** |
+| **State** | Canonical app state in Supabase Postgres; host checkout is operational |
+| **Code pin** | Every campaign/deploy must target an explicit full git SHA |
+
+Reference host id (operator vault): `waia-org0-exec` / `waia-org0-execution`.
+
+---
+
+## 2. Deployed revision record
+
+After every successful deploy or rollback, the operator records deployment truth in **`deployed-revision.json`** on the host (path configurable via `EXECUTION_SERVER_DEPLOYED_REVISION_PATH`).
+
+### Schema (canonical)
+
+```json
+{
+  "gitSha": "40-char-full-sha",
+  "imageTag": "waia-execution-host:20260710-abc1234",
+  "deployedAt": "2026-07-10T12:00:00Z",
+  "operator": "human-id-or-handle",
+  "previousGitSha": "optional-40-char-sha-for-rollback-chain",
+  "notes": "optional free text — no secrets"
+}
+```
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `gitSha` | Yes | Must match `EXECUTION_SERVER_TARGET_SHA` / checkout `HEAD` at deploy time |
+| `imageTag` | Yes | Docker image tag or digest reference |
+| `deployedAt` | Yes | ISO-8601 UTC |
+| `operator` | Yes | Who performed the deploy |
+| `previousGitSha` | Rollback only | Prior known-good SHA |
+| `notes` | No | Incident/context only — no credentials |
+
+Slice D2 scripts will create/update this file; until then, operators maintain it manually.
+
+---
+
+## 3. Sync — pin checkout to declared SHA
+
+**Classification:** HUMAN-ONLY
+
+**Goal:** Ensure the host monorepo `HEAD` equals the approved integration merge SHA before build, deploy, or live campaigns.
+
+### Procedure (manual until D2 `execution-server-sync.sh`)
+
+1. SSH to execution host as the operator service user.
+2. `cd` to the WAIA monorepo checkout (operator vault path).
+3. Record intended SHA from the approved PR merge commit on `dev` (or explicit release tag).
+4. `git fetch origin && git checkout <full-sha>` (detached HEAD or branch tracking that SHA).
+5. Run read-only preflight:
+
+```bash
+EXECUTION_SERVER_TARGET_SHA=<full-sha> ./scripts/ops/execution-server-preflight.sh
+```
+
+6. Abort if preflight reports stale or unknown code.
+
+**Do not:** `git pull` without a pinned SHA; run campaigns on dirty or ahead/behind trees.
+
+---
+
+## 4. Build — container + trader CLI deps
+
+**Classification:** HUMAN-ONLY
+
+**Goal:** Produce a runnable execution-host image and ensure trader CLI dependencies are available for `pnpm trader:live:*`.
+
+### Execution host image
+
+```bash
+docker build -t waia-execution-host:<tag> services/ai-trader-execution-host/
+docker history waia-execution-host:<tag>   # verify no secret ENV layers
+```
+
+### Trader CLI (same pinned SHA)
+
+```bash
+pnpm install --frozen-lockfile
+# Trader live CLIs require WAIA_TRADER_CLI=1 — set by pnpm trader:* scripts
+```
+
+Tag convention: `waia-execution-host:YYYYMMDD-<short-sha>`.
+
+See [DEE-339 §2B](./DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md) for BP-6 health scaffold acceptance.
+
+---
+
+## 5. Deploy — runtime with operator secrets
+
+**Classification:** HUMAN-ONLY
+
+**Goal:** Run the execution-host container and inject runtime secrets from operator vault — never from repo or Cloudflare.
+
+### Container run (reference)
+
+```bash
+docker run -d \
+  --name ai-trader-execution-host \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -e EXECUTION_HOST_PORT=8080 \
+  # ... operator-vault secrets via -e or --env-file (not committed) \
+  waia-execution-host:<tag>
+```
+
+| Rule | Detail |
+|------|--------|
+| Restart policy | `unless-stopped` |
+| Port | `EXECUTION_HOST_PORT` (default 8080) |
+| Secrets | File mount or sealed env from host KMS — document location in ops vault |
+| Forbidden | `ENV` secrets in Dockerfile; Cloudflare Secrets Store on host |
+
+After deploy: write/update `deployed-revision.json` (§2).
+
+---
+
+## 6. Health — liveness and readiness
+
+**Classification:** Read-only checks (AUTO for agents when plan explicitly requires verification)
+
+### Liveness (BP-6 minimum)
+
+```bash
+curl -sf http://127.0.0.1:8080/health
+# Expect: {"status":"ok","service":"ai-trader-execution-host"}
+```
+
+### Readiness (operator checklist before live path)
+
+| Check | Pass criterion |
+|-------|----------------|
+| SHA match | `./scripts/ops/execution-server-preflight.sh` exit 0 |
+| `deployed-revision.json` | `gitSha` equals target SHA |
+| Postgres egress | Worker `GET /api/health/database` returns `backend: postgres` before live-enable ([DEE-339 §6](./DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md)) |
+| Env on host | `WAIA_DB_BACKEND=postgres`, `DATABASE_URL_POSTGRES`, `WAIA_TRADER_ORG0_ORGANIZATION_ID` from vault |
+| Graceful shutdown | `docker stop` → SIGTERM → exit 0 |
+
+Agents may run **read-only** preflight and `curl /health` only when the integration plan lists `execution-server` validation.
+
+---
+
+## 7. Rollback — redeploy prior known-good revision
+
+**Classification:** HUMAN-ONLY
+
+**Goal:** Restore the last known-good image + SHA without improvising from unmerged branches.
+
+### Procedure
+
+1. Read `deployed-revision.json` → identify `previousGitSha` and prior `imageTag` (or operator vault backup).
+2. Stop current container: `docker stop ai-trader-execution-host`.
+3. Sync checkout to `previousGitSha` (§3).
+4. If image missing locally, rebuild from that SHA (§4) or pull from operator registry.
+5. Deploy prior image (§5).
+6. Write new `deployed-revision.json` with rolled-back `gitSha`, updated `deployedAt`/`operator`, and `notes` describing incident.
+7. Re-run health checks (§6).
+
+**Do not:** roll forward with unreviewed code during an incident without Architect approval.
+
+---
+
+## 8. SSH and host recovery
+
+**Classification:** HUMAN-ONLY
+
+### SSH access
+
+| Item | Guidance |
+|------|----------|
+| Host | `waia-org0-exec` (operator DNS/IP in vault) |
+| Keys | Backup operator SSH private keys off-repo; restore before account migration |
+| Access | Single-tenant Org-0 path; restrict to operator group |
+
+### Reboot recovery
+
+1. Verify Docker daemon: `systemctl status docker`
+2. Confirm container auto-starts (`unless-stopped`): `docker ps`
+3. If container absent, redeploy from `deployed-revision.json` image tag — do not auto-pull `latest`.
+4. Run §6 health checks before resuming live campaigns.
+
+### Long-running jobs
+
+Use `tmux` or `nohup` for multi-hour `pnpm trader:live:*` / campaign CLIs so SSH disconnect does not kill the process. Record session name and PID in operator log (not git).
+
+---
+
+## 9. Human-only boundaries (summary)
+
+| Action | Who | Agent |
+|--------|-----|-------|
+| Sync checkout to SHA | Human operator | **Never** |
+| Docker build on host | Human operator | **Never** |
+| Deploy / restart container | Human operator | **Never** |
+| Rollback | Human operator | **Never** |
+| SSH / reboot recovery | Human operator | **Never** |
+| Inject runtime secrets | Human operator | **Never** |
+| Live trading / `trader:live:*` on host | Human operator | **Never** |
+| Read-only preflight | Human or agent (plan-listed) | **Allowed** |
+| `curl /health` | Human or agent (plan-listed) | **Allowed** |
+
+Encoded in [`INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOUNDARY-POLICY.md) §HUMAN-ONLY.
+
+---
+
+## 10. Slice D2 tooling (not yet available)
+
+Slice D2 will add guarded scripts that implement §3–§7 with mandatory `--confirm`:
+
+- `scripts/ops/execution-server-sync.sh`
+- `scripts/ops/execution-server-build.sh`
+- `scripts/ops/execution-server-deploy.sh`
+- `scripts/ops/execution-server-rollback.sh`
+
+Each is a no-op without `--confirm`. Composer authors and dry-run-tests them in D2 but never executes against the live host.
+
+---
+
+## 11. Operator sign-off block (deploy / rollback)
+
+| Field | Value |
+|-------|-------|
+| Action | deploy / rollback |
+| Target git SHA | |
+| Image tag | |
+| Operator | |
+| Preflight exit code | |
+| `/health` status | |
+| `deployed-revision.json` updated | yes / no |
+| Date (UTC) | |
+
+---
+
+*Last updated: 2026-07-10 — vNext Slice D1 (documentation only).*

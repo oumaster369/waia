@@ -20,6 +20,7 @@ Repository-specific execution contract for AI coding agents. **Router only** —
 | Agent automation topology | [`docs/AGENT_AUTOMATION.md`](docs/AGENT_AUTOMATION.md) |
 | Governance index | [`docs/waia-governance/README.md`](docs/waia-governance/README.md) |
 | Canonical integration plans | [`docs/plans/README.md`](docs/plans/README.md) |
+| Execution surfaces | [`docs/ops/EXECUTION-SURFACES.md`](docs/ops/EXECUTION-SURFACES.md) |
 | ADRs | [`docs/adr/README.md`](docs/adr/README.md) |
 
 ---
