@@ -66,6 +66,19 @@ After Slice C: each integration batch uses `docs/plans/dee-<NN>-<slug>.md` with 
 
 ---
 
+## Intake (product-spec → gap → roadmap → plan)
+
+Before opening a new integration batch, trace intent through the layered canon:
+
+1. **Completion spec** — measurable *done* for the module ([`PRODUCT-COMPLETION-SPEC-STANDARD.md`](PRODUCT-COMPLETION-SPEC-STANDARD.md)).
+2. **Gap registry** — record what is missing vs the spec ([`../gaps/GAP-REGISTRY-STANDARD.md`](../gaps/GAP-REGISTRY-STANDARD.md)).
+3. **Roadmap** — sequence integration batches with `batchId` → `DEE-NNN` ([`../roadmaps/ROADMAP-STANDARD.md`](../roadmaps/ROADMAP-STANDARD.md)).
+4. **Canonical plan** — mutable execution state for the approved batch ([`../plans/README.md`](../plans/README.md)).
+
+Bootstrap batches may skip layers 1–3 when explicitly Architect-approved; document `n/a` in the PR **Plan:** field with rationale.
+
+---
+
 ## Pointers (non-duplicative)
 
 | Topic | Canonical doc |
@@ -75,4 +88,6 @@ After Slice C: each integration batch uses `docs/plans/dee-<NN>-<slug>.md` with 
 | Post-merge hygiene | [`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md) |
 | 12-step detail map | [`AUTONOMOUS-EXECUTION-LOOP.md`](AUTONOMOUS-EXECUTION-LOOP.md) |
 | Action classification | [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) |
-| Product-spec / gap layer *(future)* | Linked from Slice G standards |
+| Product completion specs | [`PRODUCT-COMPLETION-SPEC-STANDARD.md`](PRODUCT-COMPLETION-SPEC-STANDARD.md), [`../product-specs/`](../product-specs/) |
+| Gap registries | [`../gaps/GAP-REGISTRY-STANDARD.md`](../gaps/GAP-REGISTRY-STANDARD.md) |
+| Roadmaps (integration batches) | [`../roadmaps/ROADMAP-STANDARD.md`](../roadmaps/ROADMAP-STANDARD.md) |

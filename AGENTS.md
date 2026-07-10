@@ -20,6 +20,9 @@ Repository-specific execution contract for AI coding agents. **Router only** —
 | Agent automation topology | [`docs/AGENT_AUTOMATION.md`](docs/AGENT_AUTOMATION.md) |
 | Governance index | [`docs/waia-governance/README.md`](docs/waia-governance/README.md) |
 | Canonical integration plans | [`docs/plans/README.md`](docs/plans/README.md) |
+| Product completion specs | [`docs/waia-governance/PRODUCT-COMPLETION-SPEC-STANDARD.md`](docs/waia-governance/PRODUCT-COMPLETION-SPEC-STANDARD.md), [`docs/product-specs/`](docs/product-specs/) |
+| Gap registries | [`docs/gaps/GAP-REGISTRY-STANDARD.md`](docs/gaps/GAP-REGISTRY-STANDARD.md) |
+| Roadmaps (integration batches) | [`docs/roadmaps/ROADMAP-STANDARD.md`](docs/roadmaps/ROADMAP-STANDARD.md) |
 | ADRs | [`docs/adr/README.md`](docs/adr/README.md) |
 
 ---
