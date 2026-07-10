@@ -88,7 +88,7 @@ Checkbox rule: only check template items **actually verified**.
 
 ### 7. Report validation results
 
-Echo the commands that were run for this task and their outcome (see [`AGENTS.md`](../../AGENTS.md) validation section — minimally **`pnpm lint`** and **`pnpm typecheck`**; full gate list applies before calling work PR-ready unless the issuing task narrows scope).
+Echo the commands that were run for this task and their outcome (see [`AGENTS.md`](../../AGENTS.md) validation section — full gate before PR-readiness: **`pnpm lint && pnpm typecheck && pnpm test --run && pnpm build`** plus **`pnpm validate:pr-governance`**; add **`pnpm test:e2e`** when UI/user-visible behavior changed; unless the issuing task narrows scope).
 
 ### 8. Stop and wait
 
