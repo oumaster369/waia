@@ -4,9 +4,9 @@
 
 ## Model selection (guidance — not automated)
 
-See [`AGENT-ROLES.md`](AGENT-ROLES.md) **Model selection policy**.
+See [`MODEL-COST-POLICY.md`](MODEL-COST-POLICY.md) and [`AGENT-ROLES.md`](AGENT-ROLES.md).
 
-**Rule of thumb:** Composer 2 for cheapest safe path; Sonnet for substantive implementation; Opus for architecture, migration ambiguity, and high‑stakes planning/review. Tie selection to [`RISK-TIERS.md`](RISK-TIERS.md) hints.
+**Rule of thumb:** **`fast`** for cheapest safe path; **`mid`** for substantive implementation; **`reasoning`** for architecture, migration ambiguity, and high‑stakes planning/review. Tie selection to [`RISK-TIERS.md`](RISK-TIERS.md) class hints.
 
 No requirement to log model name in every PR — only when helpful for audit (e.g., high tier).
 

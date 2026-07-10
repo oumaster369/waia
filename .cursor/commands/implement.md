@@ -1,6 +1,6 @@
 # /implement
 
-Switch to **Agent Mode** with Claude Sonnet 4.5 (default) and execute the canonical plan from `docs/plans/dee-<NN>-<slug>.md` (or bootstrap sources before Slice C).
+Switch to **Agent Mode** with the **`mid`** model class ([`MODEL-COST-POLICY.md`](../../docs/waia-governance/MODEL-COST-POLICY.md) — default implementation tier, e.g. Sonnet) and execute the canonical plan from `docs/plans/dee-<NN>-<slug>.md` (or bootstrap sources before Slice C).
 
 ## What you must do
 
