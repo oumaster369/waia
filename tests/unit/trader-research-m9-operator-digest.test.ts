@@ -2,14 +2,28 @@ import { resolve } from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { parseM9Flags } from "@/lib/trader/research/m9-campaign-flags";
+import { computeSidecarContentDigest } from "@/lib/trader/market-data/replay/sidecar-content-digest";
+import {
+  loadM9ProviderSidecar,
+  parseM9Flags,
+  resolveM9ProviderSidecarPath,
+} from "@/lib/trader/research/m9-campaign-flags";
 import {
   buildM9BlindAuthorizationScope,
   computeM9BlindAuthorizationDigest,
   computeM9CampaignAuthorizationDigest,
+  M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE,
 } from "@/lib/trader/research/m9-operator-authorization";
 
 const FIXED_BLIND_DIGEST = "a".repeat(64);
+
+function resolveSidecarContentDigestForVault(
+  flags: Map<string, string>,
+  vaultDir: string,
+): string | null {
+  const providerSidecar = loadM9ProviderSidecar(resolveM9ProviderSidecarPath(flags, vaultDir));
+  return providerSidecar ? computeSidecarContentDigest(providerSidecar) : null;
+}
 
 vi.mock("@/db/postgres-client", () => ({
   getPostgresDrizzle: () => ({}),
@@ -52,7 +66,10 @@ describe("M9 operator digest scope builder (DEE-398 canonical builder)", () => {
     );
     expect(blindScope.datasetName).toBe("m9-v2-research-campaign-org0");
     expect(blindScope.blindDigest).toBe(FIXED_BLIND_DIGEST);
-    expect(blindScope.sidecarContentDigest).toBe("none");
+    expect(blindScope.sidecarContentDigest).toBe(
+      resolveSidecarContentDigestForVault(flags, campaignScope.vaultDir) ??
+        M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE,
+    );
   });
 
   it("produces stable digests for fixed scope", async () => {
@@ -89,7 +106,7 @@ describe("M9 operator digest scope builder (DEE-398 canonical builder)", () => {
       campaignScope,
       datasetName: "m9-v2-research-campaign-org0",
       blindDigest: FIXED_BLIND_DIGEST,
-      sidecarContentDigest: null,
+      sidecarContentDigest: resolveSidecarContentDigestForVault(flags, campaignScope.vaultDir),
     });
 
     expect(blindScope).toEqual(campaignSideScope);
