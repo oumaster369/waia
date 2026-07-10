@@ -15,7 +15,7 @@ Multiple or zero execution labels → STOP per [`AGENTS.md`](../../AGENTS.md).
 
 ## Status semantics
 
-Ideally Backlog → Todo → In Progress → Done. Boards lacking `Todo` should document actual flow in issue comment pinned by Architect — reconcile with [`AGENTS.md`](../../AGENTS.md) via future doc PR if mismatched prolonged.
+Ideally Backlog → Todo → In Progress → In Review → Done. Boards lacking `Todo` should document actual flow in issue comment pinned by Architect — reconcile with [`AGENTS.md`](../../AGENTS.md) via future doc PR if mismatched prolonged.
 
 Terminal: `Canceled`, `Duplicate`.
 

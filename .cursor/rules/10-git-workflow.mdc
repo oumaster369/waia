@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## Branches
 
-- `main` — production, deployed to Cloudflare Pages by the user. **Never push directly.**
+- `main` — production, deployed to Cloudflare Workers (OpenNext) by the user. **Never push directly.**
 - `dev` — integration, protected. **Never push directly.**
 - **`dee-<NN>-<slug>`** — canonical branch for WAIA work tied to Linear **`DEE-NN`** (see [`AGENTS.md`](../../AGENTS.md) and [`docs/waia-governance/BRANCHING-STRATEGY.md`](../../docs/waia-governance/BRANCHING-STRATEGY.md)).
 - **`feature/<scope>-<slug>`** — **legacy** naming; avoid for new work unless Architect-approved and noted in the PR.
@@ -16,14 +16,14 @@ alwaysApply: true
 
 1. `git checkout dev && git pull origin dev`
 2. `git checkout -b dee-<NN>-<slug>`
-3. Implement, run `pnpm lint && pnpm typecheck && pnpm test --run` (full chain incl. `pnpm build` before PR per [`AGENTS.md`](../../AGENTS.md) + `/test-and-fix`)
-4. `git add -A && git commit -m "<conventional-commits-message>"`
+3. Implement, run `pnpm lint && pnpm typecheck && pnpm test --run && pnpm build` (full chain before PR per [`AGENTS.md`](../../AGENTS.md) + `/test-and-fix`)
+4. `git add -A && git commit -m "DEE-NN type(scope): subject"`
 5. `git push -u origin dee-<NN>-<slug>`
-6. `gh pr create --base dev --fill` using the PR template
+6. Open PR via `/prepare-pr` (render body from [`.github/pull_request_template.md`](../../.github/pull_request_template.md), run `preflight-pr-governance.sh`, then `gh pr create --base dev --title "..." --body-file .cursor/pr-body-DEE-NN.md` — do **not** use `--fill` alone when a validated body exists)
 
 ## Conventional Commits
 
-Use `type(scope): subject` — e.g. `feat(home): add hero section`, `fix(lint): drop unused import`, `chore(ci): bump node to 22`.
+Use `DEE-NN type(scope): subject` — e.g. `DEE-402 feat(home): add hero section`, `DEE-402 fix(lint): drop unused import`, `DEE-402 chore(ci): bump node to 22`.
 
 ## Hard rules
 

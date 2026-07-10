@@ -12,6 +12,7 @@ Operational aids that enforce WAIA DEV OS at CI/GitHub/Cursor boundaries. **Advi
 | PR Linear ID P0 validation | [`.github/workflows/pr-governance.yml`](../../.github/workflows/pr-governance.yml) + [`validate-pr-linear-id.sh`](../../scripts/linear/validate-pr-linear-id.sh) | **Blocking** (ruleset) |
 | PR body preflight (local) | [`preflight-pr-governance.sh`](../../scripts/linear/preflight-pr-governance.sh) + [`.cursor/commands/prepare-pr.md`](../../.cursor/commands/prepare-pr.md) | **Mandatory** (agent handoff) |
 | Linear Done on merge (explicit **Linear:** field) | [`.github/workflows/linear-done.yml`](../../.github/workflows/linear-done.yml) | Automated; skips + warns on ambiguity |
+| Tenant isolation gate (transitive via `build`) | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — `build` job `needs: [lint, typecheck, tenant-isolation]` | **Blocking** (ruleset) |
 | CI failure → `/fix-ci` hint | [`.github/workflows/ci-failure-triage.yml`](../../.github/workflows/ci-failure-triage.yml) | Advisory |
 
 ## Backlog candidates

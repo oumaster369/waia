@@ -17,7 +17,7 @@ User / Linear
  ├─ /parallel-implement (Agent + worktrees)  → N independent issues in parallel
  └─ /prepare-pr      (retry)                 → PR package without full test loop
                                                     │
-                                                    ├─ CI + pr-governance (advisory)
+                                                    ├─ CI + pr-governance (blocking required check)
                                                     ├─ ci-failure-triage → /fix-ci hint
                                                     ├─ linear-done on merge (if LINEAR_API_KEY set)
                                                     ├─ Cursor Bugbot review

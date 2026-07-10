@@ -1,4 +1,4 @@
-# Copy to `.dev.vars` in the `waia-app/` root for `pnpm cloudflare:preview` / Wrangler local Workers dev.
+# Copy to `.dev.vars` at the repository root for `pnpm cloudflare:preview` / Wrangler local Workers dev.
 # `.dev.vars` is gitignored — never commit production secrets here.
 #
 # Legend: PUBLIC = safe for NEXT_PUBLIC_* in Workers; SECRET = server-only (Wrangler secrets in production).
