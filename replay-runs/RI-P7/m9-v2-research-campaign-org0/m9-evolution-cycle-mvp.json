@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "waia.trader.evolution-cycle-mvp.v1",
+  "envelope": {
+    "organizationId": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+    "strategyId": "mean_reversion_v0",
+    "strategyVersion": "0.1.7+mi-repeat-20260709",
+    "sourceOutcomeKind": "rejected",
+    "sourceRejectionDigest": "9b36a13ab4d091d46294385cf7ca77478719164e6aff4cd4ecf80f6bec27e6a4",
+    "contentDigest": "eefca415803d25619d9f42247d79fa2f21d0481ec4b85fd5a4082bd4239ffe74"
+  },
+  "cycleBody": {
+    "observation": {
+      "observedRegimes": [],
+      "missingBuckets": [
+        "non_trending",
+        "down_regime"
+      ],
+      "blindConsumed": false,
+      "failureCode": "CAMPAIGN_INFRA_DISCONNECT",
+      "candidateId": "c00a6864-d8f0-49cc-9d74-055cf4a8b9fb"
+    },
+    "researchQuestion": {
+      "questionText": "Under what market conditions does mean_reversion_v0@0.1.7+mi-repeat-20260709 generate trade-attributed activity in TREND_BEAR or STRESS, and when does signal generation fail to produce closed trades?",
+      "researchProgram": "mean_reversion_research_program",
+      "status": "open"
+    },
+    "knowledgeNeed": {
+      "needType": "missing_regime_context",
+      "severity": "high",
+      "statement": "Bundle regime coverage for mean_reversion_v0@0.1.7+mi-repeat-20260709 lacks down-regime (TREND_BEAR/STRESS) trade attribution despite observed regimes: none.",
+      "evidenceRefs": [
+        "9b36a13ab4d091d46294385cf7ca77478719164e6aff4cd4ecf80f6bec27e6a4"
+      ]
+    },
+    "hypothesisProposal": {
+      "claimText": "mean_reversion_v0 entries in TREND_BEAR/STRESS produce positive net attribution when regime gate requires explicit down-regime confirmation and minimum hold bars are satisfied.",
+      "falsificationConditions": [
+        "No trade-attributed activity in TREND_BEAR or STRESS over the sealed evaluation window after explicit down-regime gate activation.",
+        "Net attribution in down regimes is non-positive after modeled costs."
+      ],
+      "intendedRegimeScope": [
+        "TREND_BEAR",
+        "STRESS"
+      ],
+      "lineage": {
+        "priorCandidateId": "c00a6864-d8f0-49cc-9d74-055cf4a8b9fb",
+        "priorStrategyId": "mean_reversion_v0",
+        "priorStrategyVersion": "0.1.7+mi-repeat-20260709"
+      },
+      "mapsToMiRegisterHypothesis": {
+        "hypothesisKind": "market_claim",
+        "name": "mean_reversion_v0 down-regime attribution v-next",
+        "definition": {
+          "claimShape": {
+            "relationshipType": "predictive",
+            "isDirectional": true,
+            "isTrendEdge": false,
+            "isTimingEdge": true
+          },
+          "prior": {
+            "ordinal": "speculative",
+            "band": "low"
+          },
+          "falsificationConditions": [
+            "No trade-attributed activity in TREND_BEAR or STRESS over the sealed evaluation window after explicit down-regime gate activation.",
+            "Net attribution in down regimes is non-positive after modeled costs."
+          ],
+          "requiredNulls": [
+            "always-flat-cash"
+          ],
+          "patternRefs": [],
+          "measurementRefs": [],
+          "regimeScope": {
+            "description": "TREND_BEAR and STRESS regimes on BTC/USDT 1m sealed research dataset",
+            "notes": "Derived from campaign rejection for mean_reversion_v0@0.1.7+mi-repeat-20260709"
+          }
+        },
+        "supersedes": [],
+        "authoredBy": "strategy-evolution-engine-mvp"
+      }
+    },
+    "humanReview": {
+      "disposition": "pending",
+      "reviewChecklist": [
+        "Verify research question addresses the observed rejection evidence.",
+        "Confirm knowledge need cites the rejection record digest.",
+        "Review falsification conditions before MI hypothesis registration.",
+        "Decide Accept / Defer / Reject — no automatic campaign execution."
+      ],
+      "nextSteps": [
+        "Review hypothesis proposal fields in evolution-cycle-mvp.json.",
+        "If accepted: register hypothesis via existing MI tooling.",
+        "Register a new strategy candidate version manually.",
+        "Schedule the next RI campaign manually (pnpm trader:ri:campaign)."
+      ]
+    }
+  }
+}

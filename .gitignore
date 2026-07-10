@@ -49,6 +49,10 @@ yarn-error.log*
 .cursor/agent-log.jsonl
 .cursor/agent-log.*.jsonl
 .cursor/plans/
+# Ad-hoc PR body drafts — use .github/pull_request_template.md instead
+.cursor/pr-*.md
+# Operator forensics scratch copies — archive into vault before commit
+replay-runs/**/_operator-forensics-stash/
 # Ad-hoc telemetry tail exports — local scratch only (do not commit)
 .cursor-agent-tail-sample.txt
 

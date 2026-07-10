@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "waia.trader.campaign-operator-diagnostics.v1",
+  "envelope": {
+    "contentDigest": "619614675da24b3e3e1e5b5a55dc2015c554d2a64de25997baa8c5ca87050a10"
+  },
+  "recordBody": {
+    "organizationId": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+    "strategyId": "mean_reversion_v0",
+    "strategyVersion": "0.1.7",
+    "outcomeKind": "crash",
+    "parityStatus": "not_checked",
+    "parityMessage": null,
+    "errorName": "Error",
+    "errorMessage": "write CONNECTION_CLOSED aws-1-eu-central-1.pooler.supabase.com:6543",
+    "errorStack": "Error: write CONNECTION_CLOSED aws-1-eu-central-1.pooler.supabase.com:6543\n    at Socket.closed (/Users/legco/Projects/waia/node_modules/postgres/cjs/src/connection.js:453:57)\n    at Socket.emit (node:events:519:28)\n    at TCP.<anonymous> (node:net:346:12)",
+    "inventorySemanticsVersion": "waia.trader.inventory.v1",
+    "inventorySnapshot": null,
+    "builderGitSha": null,
+    "crashedAt": "2026-07-08T10:24:56.408Z"
+  }
+}

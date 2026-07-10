@@ -1,0 +1,282 @@
+{
+  "schemaVersion": "waia.trader.m9_provider_sidecar.v2",
+  "instrumentId": "BTC/USDT",
+  "captureAsOfUtc": "2026-07-08T03:36:14.953Z",
+  "generatedBy": "scripts/trader/m9-capture-provider-sidecar.ts",
+  "builderGitSha": null,
+  "captureOutcomes": {
+    "htx_spot": "CAPTURED_HEALTHY",
+    "binance_public": "CAPTURED_HEALTHY",
+    "bybit_public": "CAPTURED_HEALTHY",
+    "alternative_me": "CAPTURED_HEALTHY",
+    "coingecko_global": "CAPTURED_HEALTHY",
+    "fred": "CAPTURED_HEALTHY",
+    "cme_fedwatch": "UNAVAILABLE",
+    "gdelt": "UNAVAILABLE",
+    "coindesk_rss": "CAPTURED_HEALTHY",
+    "cointelegraph_rss": "CAPTURED_HEALTHY",
+    "decrypt_rss": "CAPTURED_HEALTHY",
+    "binance_announcements": "UNAVAILABLE",
+    "htx_announcements": "UNAVAILABLE",
+    "bybit_announcements": "CAPTURED_HEALTHY",
+    "infura_rpc": "CAPTURED_HEALTHY",
+    "trongrid_intelligence": "CAPTURED_HEALTHY",
+    "mempool_space": "CAPTURED_HEALTHY",
+    "sec_edgar": "UNAVAILABLE",
+    "github_releases": "CAPTURED_HEALTHY",
+    "federal_reserve": "UNAVAILABLE"
+  },
+  "lanes": {
+    "fear_greed_index": {
+      "value": 20,
+      "classification": "Extreme Fear",
+      "eventTimeUtc": "2026-07-08T00:00:00.000Z"
+    },
+    "global_market_stats": {
+      "btcDominance": 56.04474243737763,
+      "marketCapUsd": 2252578507460.1304,
+      "eventTimeUtc": "2026-07-08T03:33:51.000Z"
+    },
+    "order_book_snapshot": {
+      "bestBid": 62953.95,
+      "bestAsk": 62953.96,
+      "bidLevels": 150,
+      "askLevels": 150,
+      "eventTimeUtc": "2026-07-08T03:35:58.005Z"
+    },
+    "market_trades_snapshot": {
+      "tradeCount": 50,
+      "eventTimeUtc": "2026-07-08T03:35:34.648Z"
+    },
+    "cross_exchange_confirmation": [
+      {
+        "confirmVenue": "binance",
+        "confirmLast": "62962.00000000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z"
+      },
+      {
+        "confirmVenue": "bybit",
+        "confirmLast": "62965.3",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z"
+      }
+    ],
+    "macro_series": [
+      {
+        "seriesId": "DFF",
+        "value": 3.63,
+        "observationDate": "2026-07-06",
+        "eventTimeUtc": "2026-07-06T00:00:00.000Z"
+      },
+      {
+        "seriesId": "T10Y2Y",
+        "value": 0.36,
+        "observationDate": "2026-07-07",
+        "eventTimeUtc": "2026-07-07T00:00:00.000Z"
+      }
+    ],
+    "news_headline": [
+      {
+        "headline": "<![CDATA[BlackRock-backed Securitize slides 40% after SPAC debut despite tokenization boom]]>",
+        "url": "https://www.coindesk.com/markets/2026/07/07/blackrock-backed-securitize-slides-40-after-spac-debut-despite-tokenization-boom",
+        "source": "coindesk",
+        "publishedAt": "Tue, 07 Jul 2026 19:35:14 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "coindesk_rss"
+      },
+      {
+        "headline": "<![CDATA[Crypto exchange Kraken is trying to become a bank in Europe]]>",
+        "url": "https://www.coindesk.com/business/2026/07/07/crypto-exchange-kraken-is-trying-to-become-a-bank-in-europe",
+        "source": "coindesk",
+        "publishedAt": "Tue, 07 Jul 2026 18:38:10 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "coindesk_rss"
+      },
+      {
+        "headline": "<![CDATA[SpaceX IPO powers record $3.86 billion in tokenized equities trading in June]]>",
+        "url": "https://www.coindesk.com/markets/2026/07/07/spacex-ipo-powers-record-usd3-86-billion-in-tokenized-equities-trading-in-june",
+        "source": "coindesk",
+        "publishedAt": "Tue, 07 Jul 2026 16:18:18 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "coindesk_rss"
+      },
+      {
+        "headline": "<![CDATA[U.S. SEC to propose crypto rule as soon as this month to ease startups, fundraising]]>",
+        "url": "https://www.coindesk.com/policy/2026/07/07/u-s-sec-to-propose-crypto-rule-as-soon-as-this-month-to-ease-startups-fundraising",
+        "source": "coindesk",
+        "publishedAt": "Tue, 07 Jul 2026 16:08:19 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "coindesk_rss"
+      },
+      {
+        "headline": "<![CDATA[Analysts see more upside for SpaceX as post-IPO research begins]]>",
+        "url": "https://www.coindesk.com/markets/2026/07/07/analysts-see-more-upside-for-spacex-as-post-ipo-research-begins",
+        "source": "coindesk",
+        "publishedAt": "Tue, 07 Jul 2026 14:39:24 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "coindesk_rss"
+      },
+      {
+        "headline": "CFTC charges commodity, crypto pool operator with $14M fraud",
+        "url": "<![CDATA[https://cointelegraph.com/news/cftc-charges-commodity-crypto-pool-operator-with-14m-fraud?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]>",
+        "source": "cointelegraph",
+        "publishedAt": "Wed, 08 Jul 2026 03:25:30 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "cointelegraph_rss"
+      },
+      {
+        "headline": "Strike launches ‘volatility-proof’ Bitcoin loans amid bear market, but at a cost",
+        "url": "<![CDATA[https://cointelegraph.com/news/strike-launches-volatility-proof-bitcoin-loans-amid-bear-market-but-at-what-cost?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]>",
+        "source": "cointelegraph",
+        "publishedAt": "Wed, 08 Jul 2026 02:40:13 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "cointelegraph_rss"
+      },
+      {
+        "headline": "SEC crypto rule changes are high on its 2026 agenda",
+        "url": "<![CDATA[https://cointelegraph.com/news/sec-crypto-rule-changes-2026-agenda?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]>",
+        "source": "cointelegraph",
+        "publishedAt": "Tue, 07 Jul 2026 21:39:48 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "cointelegraph_rss"
+      },
+      {
+        "headline": "Ether climbs toward $2K as Bitmine buys ETH, Robinhood L2 boost",
+        "url": "<![CDATA[https://cointelegraph.com/markets/ether-climbs-toward-2k-as-bitmine-buys-eth-robinhood-l2-boost?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]>",
+        "source": "cointelegraph",
+        "publishedAt": "Tue, 07 Jul 2026 21:14:37 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "cointelegraph_rss"
+      },
+      {
+        "headline": "Vanguard seeks digital assets chief after years of crypto skepticism",
+        "url": "<![CDATA[https://cointelegraph.com/news/vanguard-seeks-digital-assets-chief-after-years-of-crypto-skepticism?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]>",
+        "source": "cointelegraph",
+        "publishedAt": "Tue, 07 Jul 2026 20:57:02 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "cointelegraph_rss"
+      },
+      {
+        "headline": "Anthropic Removes Hidden Claude Code Tracker After Researchers Raise Privacy Concerns",
+        "url": "https://decrypt.co/372977/anthropic-removes-hidden-claude-code-tracker-privacy",
+        "source": "decrypt",
+        "publishedAt": "Tue, 07 Jul 2026 22:31:03 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "decrypt_rss"
+      },
+      {
+        "headline": "SEC's Long-Promised Crypto Safe Harbor to Be Introduced as Soon as This Month",
+        "url": "https://decrypt.co/372980/sec-crypto-safe-harbor-introduced-soon-this-month",
+        "source": "decrypt",
+        "publishedAt": "Tue, 07 Jul 2026 22:01:32 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "decrypt_rss"
+      },
+      {
+        "headline": "Tether Invests $20 Million in Mercado Bitcoin to Fuel Expansion Across Latin America",
+        "url": "https://decrypt.co/372946/tether-invests-20-million-mercado-bitcoin-fuel-expansion-latin-america",
+        "source": "decrypt",
+        "publishedAt": "Tue, 07 Jul 2026 21:31:09 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "decrypt_rss"
+      },
+      {
+        "headline": "AI Is Changing the Workplace and Universities Aren’t Keeping Up, Study Warns",
+        "url": "https://decrypt.co/372957/ai-changing-workplace-universities-not-keeping-up-study",
+        "source": "decrypt",
+        "publishedAt": "Tue, 07 Jul 2026 20:46:51 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "decrypt_rss"
+      },
+      {
+        "headline": "BIG3 NFT Buyers Sue Ice Cube's Basketball League Over Alleged Unfulfilled Promises",
+        "url": "https://decrypt.co/372959/big3-nft-buyers-sue-ice-cube-basketball-league-unfulfilled-benefits",
+        "source": "decrypt",
+        "publishedAt": "Tue, 07 Jul 2026 20:37:40 +0000",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "decrypt_rss"
+      }
+    ],
+    "exchange_announcement": [
+      {
+        "announcementId": "https://announcements.bybit.com/en-US/article/let-ai-trade-for-you-blt296ca14455f8efdd/",
+        "title": "Let AI trade for you",
+        "venue": "bybit",
+        "publishedAt": "2026-06-17T00:00:00.000Z",
+        "eventTimeUtc": "2026-06-17T00:00:00.000Z",
+        "providerId": "bybit_announcements"
+      },
+      {
+        "announcementId": "https://announcements.bybit.com/en-US/article/bybit-launches-rwa-earn-featuring-a-limited-time-5-apr-boost-event-blt7f2ea19b82f3b2dc/",
+        "title": "Bybit launches RWA Earn, featuring a limited-time +5% APR boost event",
+        "venue": "bybit",
+        "publishedAt": "2026-06-15T00:00:00.000Z",
+        "eventTimeUtc": "2026-06-15T00:00:00.000Z",
+        "providerId": "bybit_announcements"
+      },
+      {
+        "announcementId": "https://announcements.bybit.com/en-US/article/bybit-football-season-2026-trade-predict-win-from-1-000-000-in-rewards--bltf8a798fbfccc3a6d/",
+        "title": "Bybit Football Season 2026: Trade, predict & win from $1,000,000 in rewards!",
+        "venue": "bybit",
+        "publishedAt": "2026-06-09T00:00:00.000Z",
+        "eventTimeUtc": "2026-06-09T00:00:00.000Z",
+        "providerId": "bybit_announcements"
+      },
+      {
+        "announcementId": "https://announcements.bybit.com/en-US/article/vip-tradfi-gold-rush-deposit-to-claim-guaranteed-rewards-real-gold--bltea44bf43ace96b91/",
+        "title": "VIP TradFi Gold Rush: Deposit to claim guaranteed rewards + real gold!",
+        "venue": "bybit",
+        "publishedAt": "2026-05-20T00:00:00.000Z",
+        "eventTimeUtc": "2026-05-20T00:00:00.000Z",
+        "providerId": "bybit_announcements"
+      },
+      {
+        "announcementId": "https://announcements.bybit.com/en-US/article/trademasters-grand-prix-s1-bybit-stockholm-open-2026-edition-bltf77af3cf08e45632/",
+        "title": "TradeMasters Grand Prix S1: Bybit Stockholm Open 2026 Edition",
+        "venue": "bybit",
+        "publishedAt": "2026-05-12T00:00:00.000Z",
+        "eventTimeUtc": "2026-05-12T00:00:00.000Z",
+        "providerId": "bybit_announcements"
+      }
+    ],
+    "mempool_stats": {
+      "count": 88882,
+      "vsize": 45685092,
+      "totalFee": 10000886,
+      "fastestFee": 2,
+      "eventTimeUtc": "2026-07-08T03:36:00.000Z"
+    },
+    "blockchain_network_stats": [
+      {
+        "network": "ethereum-mainnet",
+        "blockNumber": "0x184df8d",
+        "gasPriceWei": "0x428f647",
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "infura_rpc"
+      },
+      {
+        "network": "tron-mainnet",
+        "chainParameterCount": 0,
+        "eventTimeUtc": "2026-07-08T03:36:00.000Z",
+        "providerId": "trongrid_intelligence"
+      }
+    ],
+    "protocol_release": [
+      {
+        "owner": "bitcoin",
+        "repo": "bitcoin",
+        "tagName": "v31.0",
+        "releaseName": "Bitcoin Core 31.0",
+        "publishedAt": "2026-04-20T13:21:17Z",
+        "eventTimeUtc": "2026-04-20T13:21:17Z"
+      },
+      {
+        "owner": "ethereum",
+        "repo": "go-ethereum",
+        "tagName": "v1.17.4",
+        "releaseName": "Flexible Polymer Casing (v1.17.4)",
+        "publishedAt": "2026-06-22T07:47:09Z",
+        "eventTimeUtc": "2026-06-22T07:47:09Z"
+      }
+    ]
+  }
+}
