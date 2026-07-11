@@ -50,6 +50,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 - **Engineering recovery (active RI-P7 work):** [`replay-runs/RI-P7/AI-TRADER-ENGINEERING-STATUS.md`](../replay-runs/RI-P7/AI-TRADER-ENGINEERING-STATUS.md) — **single canonical entry point** for current phase, resume point, and post-M9 sequence. Do not duplicate elsewhere.
 - **Market data operator provisioning (canonical):** [`AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`](AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md) — **only** source of truth for provisioning every market-data provider from an empty workstation.
 - **Market data binding spec:** [`AI-TRADER-DATA-PROVIDERS.md`](AI-TRADER-DATA-PROVIDERS.md) — registry, gateway, degradation policy.
+- **Execution Server (off-Cloudflare live plane):** [`EXECUTION-SURFACES.md`](../ops/EXECUTION-SURFACES.md) (`execution-server` surface) · [`EXECUTION-SERVER-RUNBOOK.md`](../ops/EXECUTION-SERVER-RUNBOOK.md) · [ADR-0023](../adr/0023-execution-server-ai-trader-only-execution-plane.md) — AI-TRADER-only; host mutation human-only.
 
 ## Baseline
 
