@@ -1,6 +1,6 @@
 # /plan-feature
 
-Switch to **Plan Mode** and use the strongest reasoning model available (e.g. Claude Opus 4.x) to design the implementation **before any code changes**.
+Switch to **Plan Mode** and use the **`reasoning`** model class ([`MODEL-COST-POLICY.md`](../../docs/waia-governance/MODEL-COST-POLICY.md) — strongest tier available in Cursor, e.g. Opus) to design the implementation **before any code changes**.
 
 ## What you must do
 

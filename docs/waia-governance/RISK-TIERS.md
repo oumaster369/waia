@@ -48,19 +48,19 @@ Vendor integrations, Postgres broad enablement, CI deploy topology changes — *
 
 **Line in the sand:** **Autonomous execution** (implement, validate, open PR) ≠ **autonomous governance** or **autonomous architectural authority**. Low-risk merge acceleration ≠ waiving semantics, rollout, or Architect gates.
 
-## Default model hint (Cursor — optional)
+## Default model class hint (optional)
 
-Not prescriptive; escalate model **up** when complexity or tier demands it.
+Not prescriptive; escalate class **up** when complexity or tier demands it. Full policy: [`MODEL-COST-POLICY.md`](MODEL-COST-POLICY.md).
 
-| Tier | Hint |
-|------|------|
-| **T0** | Composer 2 typical for pure doc/ADR edits |
-| **T1** | Composer 2 quick paths; Sonnet if logic non-trivial |
-| **T2** | Sonnet implementation; Opus if route/migration ambiguity |
-| **T3** | Sonnet + Architect touch; Opus for planning / pre-merge review as needed |
-| **T4** | Opus/Maintainer-led; never autonomous merge |
+| Tier | Class hint |
+|------|------------|
+| **T0** | **`fast`** typical for pure doc/ADR edits |
+| **T1** | **`fast`** quick paths; **`mid`** if logic non-trivial |
+| **T2** | **`mid`** implementation; **`reasoning`** if route/migration ambiguity |
+| **T3** | **`mid`** + Architect touch; **`reasoning`** for planning / pre-merge review as needed |
+| **T4** | **`reasoning`** / maintainer-led; never autonomous merge |
 
-Full policy: [`AGENT-ROLES.md`](AGENT-ROLES.md).
+Role defaults: [`AGENT-ROLES.md`](AGENT-ROLES.md).
 
 ## Interaction map
 
