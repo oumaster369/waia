@@ -27,7 +27,7 @@ Switch to **Agent Mode** with the **`mid`** model class ([`MODEL-COST-POLICY.md`
    pnpm lint && pnpm typecheck && pnpm test --run
    ```
 
-7. When the implementation is complete, hand off to `/test-and-fix`.
+7. When the implementation is complete, hand off to `/test-and-fix`. That phase runs local gates (including `pnpm build` for PR-readiness) then, by default, **PR readiness** (push branch + compare/PR URLs + title/body; [`/prepare-pr`](prepare-pr.md)) — humans still open/review/merge; agents **never** merge.
 
 ## Integration boundary ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md))
 
