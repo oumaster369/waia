@@ -5,6 +5,7 @@ WAIA DEV OS operational layer:
 | Doc | Topic |
 |-----|-------|
 | [**`WAIA-DEV-OS.md`**](WAIA-DEV-OS.md) | **Constitution — roles, lifecycle, gates, MCP, validation canon** |
+| [`WAIA-DEV-OS-ARCHITECTURE-SPECIFICATION.md`](WAIA-DEV-OS-ARCHITECTURE-SPECIFICATION.md) | **Primary DEV OS architecture specification (T0)** — how WAIA development is organized: document hierarchy, execution-surface boundaries, AUTO/CONFIRM/HUMAN-ONLY classification; subordinate to product specs and governance topic owners; does not own product meaning or module runtime architecture |
 | [`WAIA-NORTH-STAR.md`](WAIA-NORTH-STAR.md) | **Ecosystem orientation — purpose field (interpretive; non-binding)** |
 | [`WAIA-OPERATING-MEMORY.md`](WAIA-OPERATING-MEMORY.md) | **Layer 2 — current operational truth snapshot (sync hub)** |
 | [`CORE-PRINCIPLES.md`](CORE-PRINCIPLES.md) | Ethos |

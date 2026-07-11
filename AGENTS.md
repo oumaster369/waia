@@ -9,6 +9,7 @@ Repository-specific execution contract for AI coding agents. **Router only** —
 | Resource | Location |
 |---------|----------|
 | WAIA DEV OS constitution | [`docs/waia-governance/WAIA-DEV-OS.md`](docs/waia-governance/WAIA-DEV-OS.md) |
+| WAIA DEV OS architecture specification (primary DEV OS organization canon; T0 documentation; does not own product meaning or module runtime architecture) | [`docs/waia-governance/WAIA-DEV-OS-ARCHITECTURE-SPECIFICATION.md`](docs/waia-governance/WAIA-DEV-OS-ARCHITECTURE-SPECIFICATION.md) |
 | North Star | [`docs/waia-governance/WAIA-NORTH-STAR.md`](docs/waia-governance/WAIA-NORTH-STAR.md) |
 | Operating memory | [`docs/waia-governance/WAIA-OPERATING-MEMORY.md`](docs/waia-governance/WAIA-OPERATING-MEMORY.md) |
 | MVP index | [`docs/product/WAIA-V1-MVP-SPEC.md`](docs/product/WAIA-V1-MVP-SPEC.md) |
@@ -39,8 +40,9 @@ Module/platform architecture (the "how it's built" canon, distinct from governan
 | AI-TRADER corpus (index → vision, master spec, scope, roadmap, program, security, billing, integration, journey) | [`docs/ai-trader/README.md`](docs/ai-trader/README.md) |
 | AI-TRADER Product Constitution (product-level canon — what the finished module is) | [`docs/AI-TRADER-PRODUCT-CONSTITUTION.md`](docs/AI-TRADER-PRODUCT-CONSTITUTION.md) |
 | AI-TRADER Master Spec v2 (governing technical spec) | [`docs/ai-trader/AI-TRADER-MASTER-SPEC-v2.md`](docs/ai-trader/AI-TRADER-MASTER-SPEC-v2.md) |
+| AI-TRADER Target Runtime Architecture (completed-system runtime topology and end-to-end algorithm; subordinate to Product Constitution and Master Spec; documentation target only, not implementation scope) | [`docs/ai-trader/AI-TRADER-TARGET-ARCHITECTURE.md`](docs/ai-trader/AI-TRADER-TARGET-ARCHITECTURE.md) |
 | AI-TRADER Implementation Program v1.2 (execution blueprint → Linear) | [`docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md`](docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md) |
-| ADR corpus (AI-TRADER decisions = ADR-0005 … ADR-0019) | [`docs/adr/README.md`](docs/adr/README.md) |
+| ADR corpus (AI-TRADER decisions = ADR-0005 … ADR-0023) | [`docs/adr/README.md`](docs/adr/README.md) |
 
 ---
 
