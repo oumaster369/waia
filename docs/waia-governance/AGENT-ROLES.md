@@ -12,15 +12,17 @@ Human operators may overlap roles; below keeps **mental separation** aligned wit
 
 ## Model selection policy (Cursor)
 
-**Principle:** Use the **cheapest/smallest model that can safely complete** the slice. Product names below match Cursor naming; remap if the IDE renames tiers.
+**Canonical classes:** [`MODEL-COST-POLICY.md`](MODEL-COST-POLICY.md) — version-agnostic `fast` / `mid` / `reasoning` (not pinned product versions).
 
-| Model | Typical use | Examples |
-|-------|--------------|----------|
-| **Composer 2** | Default for fast, low‑blast‑radius work | T0/T1-ish docs (`docs/**`), governance touch-ups, lightweight refactors with clear specs, Linear hygiene text, uncomplicated UI copy. |
-| **Sonnet** | Medium/high complexity implementation & reasoning | Most feature/backend work (`/implement`, `/test-and-fix`), non-trivial debugging when context is pinned, PR preparation with full local gates. |
-| **Opus** | Architecture-heavy or ambiguous reasoning | `/plan-feature`‑class planning, migration/runtime tradeoffs touching [`MIGRATION-GOVERNANCE.md`](MIGRATION-GOVERNANCE.md), high‑risk ambiguity ([`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md) escalation ladder), peer review **before merge** when Architect wants strongest model pass |
+**Principle:** Use the **cheapest class that can safely complete** the slice. Cursor product names below are **runtime equivalents**; remap when the IDE renames tiers.
 
-Escalate model tier **upward** when: requirements unclear, trackers contradict code, rollback is costly. Do **not** build automated model routing scripts — judgment only.
+| Class | Cursor equivalent | Typical use | Examples |
+|-------|-------------------|-------------|----------|
+| **`fast`** | Composer 2 | Low‑blast‑radius work | T0/T1-ish docs (`docs/**`), governance touch-ups, lightweight refactors with clear specs, Linear hygiene text, uncomplicated UI copy. |
+| **`mid`** | Sonnet | Implementation & debugging | Most feature/backend work (`/implement`, `/test-and-fix`), non-trivial debugging when context is pinned, PR preparation with full local gates. |
+| **`reasoning`** | Opus | Architecture-heavy or ambiguous reasoning | `/plan-feature`‑class planning, migration/runtime tradeoffs touching [`MIGRATION-GOVERNANCE.md`](MIGRATION-GOVERNANCE.md), high‑risk ambiguity ([`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md) escalation ladder), peer review **before merge** when Architect wants strongest model pass |
+
+Escalate class **upward** when: requirements unclear, trackers contradict code, rollback is costly. Do **not** build automated model routing scripts — judgment only.
 
 ### WAIA Orchestrator Agent
 
@@ -32,7 +34,7 @@ A **conceptual coordinating role**—**workflow glue, not management**: no comma
 
 - Pick next safe task aligned with Linear + `[AGENTS.md](../../AGENTS.md)` selection rules (`TASK-LIFECYCLE.md`).
 - Sanity-check **risk tier** against diff reality; flag mislabels before PR (`RISK-TIERS.md`, `PR-PROTOCOL.md`).
-- Recommend **model** per table above for the next delegate or sub-step.
+- Recommend **model class** per [`MODEL-COST-POLICY.md`](MODEL-COST-POLICY.md) for the next delegate or sub-step.
 - Keep **workflow continuity**: plan artifact → branch → validation → PR body fields → merge handoff cues.
 - **Linear continuity**: ensure issue ↔ PR linkage and closeout template intent after merge instructions (`LINEAR-GOVERNANCE.md`).
 - **Escalation routing**: package STOP payloads (question, contradictions, tier, suggested ADR) toward Architect (`EXECUTION-CONTRACT.md`).
@@ -55,7 +57,7 @@ Orchestrator is **not** an extra Legal label — it overlays **workflow discipli
 
 | | |
 |--|--|
-| **Mode** | Plan Mode (`/plan-feature`; **Opus** per model policy unless task is trivial) |
+| **Mode** | Plan Mode (`/plan-feature`; **`reasoning`** class per [`MODEL-COST-POLICY.md`](MODEL-COST-POLICY.md) unless task is trivial) |
 | **Owns** | Goals, citations, risks, file list proposals, explicit open questions |
 | **Does not own** | Commits on `dev`, merges, rewriting product specs without Architect approval |
 
@@ -63,7 +65,7 @@ Orchestrator is **not** an extra Legal label — it overlays **workflow discipli
 
 | | |
 |--|--|
-| **Mode** | Agent Mode (`/implement`, `/test-and-fix`, `/prepare-pr`; **Sonnet** default for substantive code) |
+| **Mode** | Agent Mode (`/implement`, `/test-and-fix`, `/prepare-pr`; **`mid`** class default for substantive code) |
 | **Owns** | Code/doc edits on `dee-<NN>-<slug>`, commits, pushes, CI green locally |
 | **Does not own** | Merge to protected branches, backlog reorder, closing parent migrations |
 
@@ -94,5 +96,6 @@ Produces `docs/**/*` artifacts per issue scope; aligns with [`DOCUMENTATION-STAN
 
 ## Related
 
+- [`MODEL-COST-POLICY.md`](MODEL-COST-POLICY.md)
 - [`AUTONOMOUS-EXECUTION-LOOP.md`](AUTONOMOUS-EXECUTION-LOOP.md)
 - [`HUMAN-OVERRIDE.md`](HUMAN-OVERRIDE.md)
