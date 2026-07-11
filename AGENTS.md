@@ -13,7 +13,8 @@ Repository-specific execution contract for AI coding agents. **Router only** —
 | Operating memory | [`docs/waia-governance/WAIA-OPERATING-MEMORY.md`](docs/waia-governance/WAIA-OPERATING-MEMORY.md) |
 | MVP index | [`docs/product/WAIA-V1-MVP-SPEC.md`](docs/product/WAIA-V1-MVP-SPEC.md) |
 | Execution contract + risk | [`docs/waia-governance/EXECUTION-CONTRACT.md`](docs/waia-governance/EXECUTION-CONTRACT.md), [`RISK-TIERS.md`](docs/waia-governance/RISK-TIERS.md) |
-| Linear + task lifecycle | [`docs/waia-governance/LINEAR-GOVERNANCE.md`](docs/waia-governance/LINEAR-GOVERNANCE.md), [`TASK-LIFECYCLE.md`](docs/waia-governance/TASK-LIFECYCLE.md) |
+| Linear + task lifecycle | [`docs/waia-governance/LINEAR-GOVERNANCE.md`](docs/waia-governance/LINEAR-GOVERNANCE.md), [`TASK-LIFECYCLE.md`](docs/waia-governance/TASK-LIFECYCLE.md), [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) |
+| Integration boundaries | [`docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md`](docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md) |
 | Execution label ownership | [`docs/waia-governance/AGENT-EXECUTION-LABELS.md`](docs/waia-governance/AGENT-EXECUTION-LABELS.md) |
 | Auto-advance preconditions | [`docs/waia-governance/AGENT-AUTO-ADVANCE.md`](docs/waia-governance/AGENT-AUTO-ADVANCE.md) |
 | Agent automation topology | [`docs/AGENT_AUTOMATION.md`](docs/AGENT_AUTOMATION.md) |
@@ -54,7 +55,7 @@ Recovery order — then escalate per [`EXECUTION-CONTRACT.md`](docs/waia-governa
 1. Never push directly to `main` or `dev`.
 2. Work on **`dee-<NN>-<slug>`** linked to Linear; open PR to `dev`.
 3. Never commit secrets.
-4. Follow the 4-phase workflow without skipping steps.
+4. Follow the lifecycle in [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) without skipping steps; **PR = integration boundary** ([`INTEGRATION-BOUNDARY-POLICY.md`](docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)).
 5. Linear project **WAIA** is the source of executable work.
 6. Only atomic issues with exactly one execution label.
 7. Missing detail blocks execution → STOP and ask.
@@ -83,6 +84,8 @@ AI-Twin builds a structured digital personality via dialogue, diary, and behavio
 ---
 
 ## Required workflow
+
+Canonical lifecycle: [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) · Integration boundaries: [`INTEGRATION-BOUNDARY-POLICY.md`](docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md).
 
 | Phase | Command | Mode | Model |
 |-------|---------|------|-------|

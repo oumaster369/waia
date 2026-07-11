@@ -34,6 +34,8 @@ Triage and fix **failing PR checks** on the current `dee-*` branch. Prefer **Bac
 - If failure contradicts the plan → STOP and re-plan; do not silently change acceptance criteria.
 - Scope stays within the active Linear issue; new failures outside scope → new issue.
 
+Follow [`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md) — fixes stay on the same integration branch; no second PR; HUMAN-ONLY merge.
+
 ## Completion
 
 Report: which checks failed, root cause, fix summary, new CI status. Stop for human merge.
