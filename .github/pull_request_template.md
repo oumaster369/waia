@@ -19,7 +19,7 @@
 
 **Deferred:** <!-- optional: child work not delivered in this batch — Linear children stay open -->
 
-**Plan:** <!-- `docs/plans/dee-NN-slug.md` or `n/a` (bootstrap before Slice C) -->
+**Plan:** <!-- `docs/plans/dee-NN-slug.md` or `n/a` (Architect-approved bootstrap only) -->
 
 ## Risk tier
 

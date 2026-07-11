@@ -4,7 +4,7 @@ Status: Baseline v1.2 (governing) · Date: 2026-06-11
 
 AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reachable at `trader.waia.life`. It attaches to **WAIA Core** for identity, tenancy, entitlements, payments, and audit. This README is the navigation index for the AI-TRADER corpus — it routes, it does not redefine.
 
-> **Authority order:** [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md) wins over any module document. Within AI-TRADER, the [Product Constitution](../AI-TRADER-PRODUCT-CONSTITUTION.md) defines the *finished product* (what AI-TRADER must be); the [Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) is the governing technical specification; subject-owner docs (Security, Billing & HWM) are authoritative for their subject. Decisions are recorded as [ADRs](../adr/README.md) (AI-TRADER decisions = **ADR-0005 … ADR-0019**).
+> **Authority order:** [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md) wins over any module document. Within AI-TRADER, the [Product Constitution](../AI-TRADER-PRODUCT-CONSTITUTION.md) defines the *finished product* (what AI-TRADER must be); the [Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) is the governing technical specification; subject-owner docs (Security, Billing & HWM) are authoritative for their subject. Decisions are recorded as [ADRs](../adr/README.md) (AI-TRADER decisions span **ADR-0005 … ADR-0023**).
 
 ---
 
@@ -16,6 +16,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 | 1 | [AI-TRADER Vision](AI-TRADER-VISION.md) | Purpose, philosophy, long-term direction (no timelines/budgets). |
 | 2 | [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md) | Shared platform AI-TRADER depends on (read before the spec). |
 | 3 | [AI-TRADER Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) | **Governing technical specification** (architecture + contracts; no code). |
+| 3b | [AI-TRADER Target Runtime Architecture](AI-TRADER-TARGET-ARCHITECTURE.md) | Target runtime architecture for the completed / mature AI-TRADER: Cloudflare control plane, Execution Server execution plane, Market Canvas, MTF algorithm, Forecast → Decision → Risk → Execution → Reality chain, portfolio/guardian/reconciliation, AI boundary, and completion acceptance signs. Subordinate to Product Constitution and Master Spec; not a roadmap or implementation plan. |
 | 4 | [AI-TRADER MVP Scope v2](AI-TRADER-MVP-SCOPE-v2.md) | What is IN / OUT (HTX-only, spot-only, paper-first). |
 | 5 | [AI-TRADER Roadmap v2](AI-TRADER-ROADMAP-v2.md) | Governing build sequence (Core uplift first, safety spine pulled forward). |
 | 6 | [AI-TRADER Implementation Program](AI-TRADER-IMPLEMENTATION-PROGRAM.md) | **Program v1.2** — execution blueprint (Milestones / Epics / Feature Groups) that drives Linear. |
@@ -41,10 +42,11 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 
 - **Product canon (what the finished module is):** [AI-TRADER Product Constitution](../AI-TRADER-PRODUCT-CONSTITUTION.md).
 - **Governing technical spec:** [AI-TRADER Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) (Baseline v1.2).
+- **Target runtime architecture:** [AI-TRADER Target Runtime Architecture](AI-TRADER-TARGET-ARCHITECTURE.md) — completed-system runtime topology and end-to-end algorithm; subordinate to Product Constitution and Master Spec; additive to ratified doctrines and ADRs.
 - **Platform foundation (wins on conflict):** [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md).
 - **Execution blueprint:** [AI-TRADER Implementation Program v1.2](AI-TRADER-IMPLEMENTATION-PROGRAM.md).
 - **Governing MVP execution (Execution Freeze):** [AI-TRADER MVP Execution Program v2](AI-TRADER-MVP-EXECUTION-PROGRAM-v2.md).
-- **Decisions:** [ADR index](../adr/README.md) — AI-TRADER spans **[ADR-0005](../adr/0005-saas-as-superset-strategy.md) … [ADR-0019](../adr/0019-ai-operator-intelligence-authority.md)**.
+- **Decisions:** [ADR index](../adr/README.md) — AI-TRADER spans **[ADR-0005](../adr/0005-saas-as-superset-strategy.md) … [ADR-0023](../adr/0023-execution-server-ai-trader-only-execution-plane.md)**.
 - **MVP closure (Step 10):** [AI-TRADER MVP Ratification](AI-TRADER-MVP-RATIFICATION.md) — scope-freeze charter; **RATIFIED** 2026-06-29; supersedes nothing.
 - **Subject owners:** [Security](AI-TRADER-SECURITY.md), [Billing & HWM](AI-TRADER-BILLING-HWM.md), [Closed Trade Reality Doctrine (LD-10)](AI-TRADER-CLOSED-TRADE-REALITY-DOCTRINE.md) (realized fee base).
 - **Engineering recovery (active RI-P7 work):** [`replay-runs/RI-P7/AI-TRADER-ENGINEERING-STATUS.md`](../replay-runs/RI-P7/AI-TRADER-ENGINEERING-STATUS.md) — **single canonical entry point** for current phase, resume point, and post-M9 sequence. Do not duplicate elsewhere.

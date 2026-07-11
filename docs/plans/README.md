@@ -10,8 +10,8 @@ Draft scratch plans remain in `.cursor/plans/` (gitignored).
 
 | Phase | Plan source |
 |-------|-------------|
-| Before Slice C merged | Master Build program + Linear issue + branch + commits + PR ([`LIFECYCLE.md`](../waia-governance/LIFECYCLE.md) bootstrap) |
-| After Slice C merged | `docs/plans/dee-<NN>-<slug>.md` per integration issue |
+| Historical (pre–Slice C) | Master Build program + Linear issue + branch + commits + PR |
+| Current (post–Slice C) | `docs/plans/dee-<NN>-<slug>.md` per integration issue ([`LIFECYCLE.md`](../waia-governance/LIFECYCLE.md)) |
 
 The vNext master Build program remains **program architecture**; these files hold **mutable per-task operational state**.
 
@@ -80,20 +80,9 @@ Secrets never enter plans. Review before commit.
 
 ---
 
-## Future slice plan creation (vNext backlog)
+## New integration batches
 
-After the Linear integration issue exists for each remaining vNext slice, promote one plan file:
-
-| Slice | Suggested path |
-|-------|----------------|
-| G | `docs/plans/dee-<NN>-devos-spec-gap-foundation.md` |
-| D1 | `docs/plans/dee-<NN>-devos-exec-surfaces.md` |
-| D2 | `docs/plans/dee-<NN>-devos-exec-server-tooling.md` |
-| E | `docs/plans/dee-<NN>-devos-evidence-m9.md` |
-| F | `docs/plans/dee-<NN>-devos-model-operator.md` |
-| H | `docs/plans/dee-<NN>-devos-autopilot-prep.md` |
-
-Do not pre-create all plans in Slice C — define the path only; create each plan when its issue is approved.
+vNext DEV OS integration (Slices A–H) completed 2026-07. For new work, create `docs/plans/dee-<NN>-<slug>.md` when the Linear integration issue is approved — one file per integration batch, following the schema above.
 
 ---
 

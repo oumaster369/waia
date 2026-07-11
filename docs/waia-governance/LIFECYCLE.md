@@ -58,11 +58,11 @@ See [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) for when 
 
 ---
 
-## Bootstrap (before canonical plans exist)
+## Bootstrap (historical)
 
-Until `docs/plans/` is established (vNext Slice C), Slices A and B use the master Build program + Linear issue + branch + commits + PR as resumption sources — not a per-slice canonical plan file.
+Historical batches before canonical plans (pre–Slice C, 2026-07) used the master Build program + Linear issue as resumption sources. **Current work:** each integration batch uses `docs/plans/dee-<NN>-<slug>.md` with `state.status` as the resumption primitive ([`../plans/README.md`](../plans/README.md)).
 
-After Slice C: each integration batch uses `docs/plans/dee-<NN>-<slug>.md` with `state.status` as the resumption primitive.
+Architect-approved bootstrap batches may still use master Build program + issue only; document `n/a` in the PR **Plan:** field with rationale.
 
 ---
 

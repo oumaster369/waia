@@ -13,7 +13,7 @@ Answer these before starting or resuming a batch:
 | # | Question | Where to look |
 |---|----------|---------------|
 | **Q1** | Which **integration Linear issue** owns this batch (one issue = one PR)? | Issue title; branch `dee-<NN>-<slug>`; PR `**Linear:**` field |
-| **Q2** | What is the **canonical plan** and `state.status`? | `docs/plans/dee-<NN>-<slug>.md` (or bootstrap: master plan + issue before Slice C) |
+| **Q2** | What is the **canonical plan** and `state.status`? | `docs/plans/dee-<NN>-<slug>.md` (Architect-approved bootstrap: master plan + issue) |
 | **Q3** | What **risk tier** and **execution surfaces** apply? | Plan frontmatter; [`RISK-TIERS.md`](../waia-governance/RISK-TIERS.md); [`EXECUTION-SURFACES.md`](EXECUTION-SURFACES.md) |
 | **Q4** | Which **model class** (`fast` / `mid` / `reasoning`) for the current phase? | [`MODEL-COST-POLICY.md`](../waia-governance/MODEL-COST-POLICY.md) |
 | **Q5** | Is this action **AUTO**, **CONFIRM**, or **HUMAN-ONLY**? | Action matrix below; [`INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOUNDARY-POLICY.md) §AUTO/CONFIRM/HUMAN-ONLY |

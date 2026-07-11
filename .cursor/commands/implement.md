@@ -1,10 +1,10 @@
 # /implement
 
-Switch to **Agent Mode** with the **`mid`** model class ([`MODEL-COST-POLICY.md`](../../docs/waia-governance/MODEL-COST-POLICY.md) — default implementation tier, e.g. Sonnet) and execute the canonical plan from `docs/plans/dee-<NN>-<slug>.md` (or bootstrap sources before Slice C).
+Switch to **Agent Mode** with the **`mid`** model class ([`MODEL-COST-POLICY.md`](../../docs/waia-governance/MODEL-COST-POLICY.md) — default implementation tier, e.g. Sonnet) and execute the canonical plan from `docs/plans/dee-<NN>-<slug>.md`.
 
 ## What you must do
 
-1. Resolve the canonical plan: prefer **`docs/plans/dee-<NN>-<slug>.md`** matching the current branch's `integrationIssue`; if missing (bootstrap before Slice C), use the master Build program + Linear issue; fallback to newest draft in `.cursor/plans/`.
+1. Resolve the canonical plan: prefer **`docs/plans/dee-<NN>-<slug>.md`** matching the current branch's `integrationIssue`; if missing (Architect-approved bootstrap only), use the master Build program + Linear issue; fallback to newest draft in `.cursor/plans/`.
 2. Verify you are on `dev` and it is up to date:
 
    ```bash
