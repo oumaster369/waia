@@ -8,7 +8,9 @@
 
 - [`AGENTS.md`](../../AGENTS.md) — execution contract router
 - [`docs/AGENT_AUTOMATION.md`](../AGENT_AUTOMATION.md) — automation topology
-- [`docs/waia-governance/AGENT-ROLES.md`](../waia-governance/AGENT-ROLES.md) — model selection policy
+- [`docs/waia-governance/AGENT-ROLES.md`](../waia-governance/AGENT-ROLES.md) — role defaults
+- [`docs/waia-governance/MODEL-COST-POLICY.md`](../waia-governance/MODEL-COST-POLICY.md) — version-agnostic model classes
+- [`docs/ops/OPERATOR-QUICKREF.md`](OPERATOR-QUICKREF.md) — action matrix and checkpoints
 - [`.cursor/`](../../.cursor/) — committed project rules, commands, hooks, MCP
 
 ---
@@ -93,7 +95,7 @@ File: [`.cursor/mcp.json`](../../.cursor/mcp.json)
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest"]
+      "args": ["-y", "@playwright/mcp@0.0.78"]
     }
   }
 }
@@ -122,25 +124,47 @@ After installing plugins, authenticate each MCP when prompted:
 
 **Restore:** Settings → MCP → authenticate each server. If auth fails, run the plugin OAuth flow again.
 
+### 4.3 MCP OAuth recovery
+
+When plugin MCP servers show **needsAuth**, **error**, or tools fail with authentication errors:
+
+1. **Cursor Settings → MCP** — identify the failing server id (use ids from §4.2 and §19).
+2. **Re-run OAuth** — click **Authenticate** / **Connect** on that server; complete the provider login in the browser.
+3. **Linear** (`plugin-linear-linear`): ensure the Linear account has access to workspace **DeepSense**, team **DEE**, project **WAIA**.
+4. **Supabase** (`plugin-supabase-supabase`): ensure the account can list org projects used by WAIA Postgres.
+5. **Cloudflare** plugins: re-authenticate each Cloudflare MCP entry (docs, bindings, builds, observability are separate).
+6. **Verify** — in Agent chat, run a trivial MCP call (e.g. Linear `list_issues` limited to team DEE).
+7. **Do not** commit OAuth tokens — they live in the Cursor account only.
+
+If OAuth loops fail: sign out of the provider in the browser, revoke stale Cursor MCP connections, restart Cursor, re-authenticate. Escalate to Architect if org-level SSO blocks plugin access.
+
 ---
 
 ## 5. Model configuration
 
-Models are configured in **Cursor Settings → Models** (account-scoped). Policy is documented in repo:
+Models are configured in **Cursor Settings → Models** (account-scoped). Policy uses **version-agnostic classes** — not pinned product versions:
 
-| Phase / command | Mode | Model (default) | Source |
-|-----------------|------|-----------------|--------|
-| `/groom`, `/decompose` | Plan / Ask | **Opus** | [`AGENTS.md`](../../AGENTS.md) |
-| `/plan-feature` | Plan | **Opus** | [`AGENTS.md`](../../AGENTS.md) |
-| `/implement`, `/test-and-fix`, `/prepare-pr` | Agent | **Sonnet** | [`AGENTS.md`](../../AGENTS.md) |
-| `/bg-test-and-fix`, `/fix-ci` | Background Agent | **Sonnet** | [`docs/AGENT_AUTOMATION.md`](../AGENT_AUTOMATION.md) |
-| Fast docs / low-risk edits | Agent | **Composer 2** | [`docs/waia-governance/AGENT-ROLES.md`](../waia-governance/AGENT-ROLES.md) |
+| Class | Cursor equivalent | Typical phase |
+|-------|-------------------|---------------|
+| **`fast`** | Composer 2 | Low-risk docs, hygiene |
+| **`mid`** | Sonnet | `/implement`, `/test-and-fix`, `/prepare-pr` |
+| **`reasoning`** | Opus | `/plan-feature`, `/groom`, architecture |
+
+Canonical mapping: [`MODEL-COST-POLICY.md`](../waia-governance/MODEL-COST-POLICY.md). Phase table also in [`AGENTS.md`](../../AGENTS.md).
+
+| Phase / command | Mode | Class |
+|-----------------|------|-------|
+| `/groom`, `/decompose` | Plan / Ask | **`reasoning`** |
+| `/plan-feature` | Plan | **`reasoning`** |
+| `/implement`, `/test-and-fix`, `/prepare-pr` | Agent | **`mid`** |
+| `/bg-test-and-fix`, `/fix-ci` | Background Agent | **`mid`** |
+| Fast docs / low-risk edits | Agent | **`fast`** |
 
 **Restore checklist:**
 
-1. Enable **Claude Sonnet**, **Claude Opus**, and **Composer 2** (or current equivalents).
+1. Enable **`mid`**, **`reasoning`**, and **`fast`** equivalents (Sonnet, Opus, Composer 2 or current names).
 2. **Disable unused models** so agents cannot silently switch tiers.
-3. Set Agent mode default to Sonnet for implementation work.
+3. Set Agent mode default to **`mid`** for implementation work.
 
 ---
 
@@ -397,6 +421,38 @@ Required scopes: repo access to `oumaster369/waia`.
 
 Credential helper is typically `gh auth git-credential` (macOS keychain).
 
+### GitHub token recovery
+
+If `gh auth status` fails or `gh pr create` returns **401** / **403**:
+
+```bash
+gh auth status          # diagnose current host and token state
+gh auth login           # interactive re-login (HTTPS recommended)
+gh auth refresh -h github.com -s repo,read:org
+gh auth status          # must succeed before agent PR workflow
+```
+
+| Symptom | Recovery |
+|---------|----------|
+| Token expired | `gh auth login` or `gh auth refresh` |
+| Wrong GitHub account | `gh auth logout` then `gh auth login` with correct account |
+| Missing `repo` scope | Re-login and grant repository access to `oumaster369/waia` |
+| SSO authorization required | Complete org SSO authorization in browser (GitHub → Settings → Applications) |
+
+Agents depend on `gh` for PR creation — fix auth before `/prepare-pr`. Never paste tokens into chat, commits, or `.env*` files.
+
+### SSH key recovery (Remote SSH)
+
+For **Remote - SSH** (`anysphere.remote-ssh`) development on a remote host:
+
+1. **Generate or locate key** (if missing): `ssh-keygen -t ed25519 -C "waia-dev" -f ~/.ssh/id_ed25519_waia`
+2. **Load agent**: `ssh-add --apple-use-keychain ~/.ssh/id_ed25519_waia` (macOS)
+3. **Install public key** on the remote host `~/.ssh/authorized_keys` (operator vault — never commit private keys).
+4. **Test**: `ssh -i ~/.ssh/id_ed25519_waia user@host 'echo ok'`
+5. **Cursor**: Settings → Remote SSH → configure `Host` entry in `~/.ssh/config`; reconnect via **Remote-SSH: Connect to Host**.
+
+If connection fails after account migration: verify `IdentitiesOnly yes` and correct `IdentityFile` in `~/.ssh/config`; remove stale `known_hosts` entries only when host keys legitimately changed.
+
 ### Repository protection (already in repo)
 
 - Branch rulesets: [`.github/rulesets/dev-main-protection.json`](../../.github/rulesets/dev-main-protection.json)
@@ -433,9 +489,10 @@ Execute in this sequence on a **brand-new macOS + Cursor account**:
 11. Apply **editor settings** (Section 11)
 12. Configure **models** (Section 5)
 13. Install **plugins**: Linear, Supabase, Cloudflare (Section 3)
-14. **Authenticate MCP** servers (Section 4.2)
-15. Verify **hooks** loaded (Section 10)
-16. Wait for **codebase indexing** to complete
+14. **Authenticate MCP** servers (Section 4.2); if stale, Section 4.3 OAuth recovery
+15. Run **`./scripts/ops/cursor-env-preflight.sh`** (Section 15)
+16. Verify **hooks** loaded (Section 10)
+17. Wait for **codebase indexing** to complete
 
 ### Phase 4 — Validate
 
@@ -465,6 +522,10 @@ pnpm build
 # PR governance regression
 pnpm validate:pr-governance
 
+# Cursor environment preflight (Slice F)
+./scripts/ops/cursor-env-preflight.sh
+./scripts/ops/cursor-env-preflight.sh --dry-run
+
 # Optional — UI changes
 pnpm test:e2e
 ```
@@ -479,7 +540,8 @@ pnpm test:e2e
 - [ ] MCP: `plugin-supabase-supabase` authenticated
 - [ ] MCP: Cloudflare plugin servers authenticated
 - [ ] User Rules pasted (Section 7)
-- [ ] Models: Sonnet + Opus enabled; unused models disabled
+- [ ] Models: **`mid`** + **`reasoning`** + **`fast`** equivalents enabled; unused models disabled
+- [ ] `./scripts/ops/cursor-env-preflight.sh` passes (or gaps documented)
 
 ---
 
@@ -534,8 +596,8 @@ Items still partially dependent on Cursor account or local machine — proposed 
 | User Rules only in account | **Done** — Section 7 of this doc | — |
 | Plans gitignored but referenced in docs | Archive approved plans under `docs/plans/` | Medium |
 | `replay-runs/` campaign JSON artifacts untracked | Add runbook: commit evidence vs gitignore `_operator-forensics-stash/` | Medium |
-| Playwright MCP uses `@latest` | Pin version in `.cursor/mcp.json` | Low |
-| No preflight script | Add `scripts/ops/cursor-env-preflight.sh` | Low |
+| Playwright MCP uses `@latest` | **Done** — pinned `@playwright/mcp@0.0.78` in `.cursor/mcp.json` | — |
+| No preflight script | **Done** — `scripts/ops/cursor-env-preflight.sh` | — |
 | `.vscode/extensions.json` missing | Recommend `anysphere.remote-ssh` for team | Low |
 
 ---
@@ -550,4 +612,4 @@ Items still partially dependent on Cursor account or local machine — proposed 
 
 ---
 
-*Last updated: 2026-07-10 — canonical for WAIA Cursor account migration.*
+*Last updated: 2026-07-10 — vNext Slice F (model classes, operator quickref, preflight, recovery).*
