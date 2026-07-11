@@ -33,3 +33,5 @@ See policy: [`../waia-governance/ADR-POLICY.md`](../waia-governance/ADR-POLICY.m
 | [0023](0023-execution-server-ai-trader-only-execution-plane.md) | Execution Server as AI-TRADER-only execution plane | Accepted | DEE-406; vNext Slice D1 |
 
 Add rows as new decisions land.**Superseded** decisions keep file for history — index notes replacement.
+
+**Proposed (not yet authored):** **ADR-0024** — Roadmap autopilot activation (read-only selector + reconciliation proposer; human merge gate retained). Preparation contract: [`../waia-governance/ROADMAP-AUTOPILOT.md`](../waia-governance/ROADMAP-AUTOPILOT.md) (DEE-410; vNext Slice H). Author ADR only when an activation slice is Architect-approved — not in Slice H.
