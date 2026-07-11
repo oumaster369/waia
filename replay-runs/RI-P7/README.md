@@ -27,6 +27,17 @@
 
 ## Document classes
 
+Evidence taxonomy: [`docs/waia-governance/EVIDENCE-POLICY.md`](../../docs/waia-governance/EVIDENCE-POLICY.md).
+
+| Class | RI-P7 examples |
+|-------|----------------|
+| **accepted experimental** | `m9-research-evidence.json`, `m9-production-knowledge-asset.json`, milestone `VALIDATION.md` |
+| **rejected** | `m9-research-rejection-record.json`, governed-evolution MVP on reject |
+| **diagnostic** | `m9-campaign-operator-diagnostics.json` |
+| **forensic** | `M9-FORENSIC-REPORT.md`, `closed-trade-attribution-forensics-org0/` |
+| **archived** | `m9-v2-research-campaign-org0/archive/**` |
+| **operator forensics stash** | `_operator-forensics-stash/` (gitignored — promote before commit) |
+
 - **Recovery entry point:** `AI-TRADER-ENGINEERING-STATUS.md` · Active milestone evidence: `VALIDATION.md`, closure reports
 - **Historical:** `AI-TRADER-COMPLETION-PLAN-SNAPSHOT-BEFORE-M0.md`, `M*-PLAN.md`, `WORKING_TREE_INVENTORY_BEFORE_M0.md`
 - **Archived (local):** `*.log` files — gitignored; chronology in markdown execution records

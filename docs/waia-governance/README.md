@@ -28,6 +28,7 @@ WAIA DEV OS operational layer:
 | [`AGENT-AUTO-ADVANCE.md`](AGENT-AUTO-ADVANCE.md) | Safe auto-advance preconditions |
 | [`LINEAR-ID-COLLISION-RECOVERY.md`](LINEAR-ID-COLLISION-RECOVERY.md) | ID collision incident playbook |
 | [`GOVERNANCE-VERSIONING.md`](GOVERNANCE-VERSIONING.md) | Evolution log |
+| [`EVIDENCE-POLICY.md`](EVIDENCE-POLICY.md) | Evidence taxonomy and storage |
 | [`AGENT-ROLES.md`](AGENT-ROLES.md) | Planner/executor/etc. |
 | [`FAILURE-PATTERNS.md`](FAILURE-PATTERNS.md) | Incident knowledge |
 | [`HUMAN-OVERRIDE.md`](HUMAN-OVERRIDE.md) | Emergency path |
