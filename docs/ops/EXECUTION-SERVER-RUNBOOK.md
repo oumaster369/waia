@@ -3,7 +3,7 @@
 **Owner:** Architect · **Status:** Canonical · **Linear:** DEE-406 (D1), DEE-409 (D2 tooling)  
 **Scope:** AI-TRADER execution plane only — see [ADR-0023](../adr/0023-execution-server-ai-trader-only-execution-plane.md)
 
-> **HUMAN-ONLY mutation.** Guarded scripts require `--confirm` on the execution host. Without `--confirm` they print planned actions and exit 0. **Agents must never pass `--confirm`.**
+> **HUMAN-ONLY mutation.** Guarded scripts (`execution-server-{sync,build,deploy,rollback}.sh`) require `--confirm` on the execution host. Without `--confirm` they print the planned actions and exit 0. **Composer and agents must never pass `--confirm` or execute host mutation.**
 
 **Related:**
 
@@ -58,7 +58,7 @@ After every successful deploy or rollback, the operator records deployment truth
 | `previousGitSha` | Rollback only | Prior known-good SHA |
 | `notes` | No | Incident/context only — no credentials |
 
-Guarded deploy/rollback write the full record on `--confirm`; sync/build merge `gitSha` / `imageTag` on `--confirm`.
+Guarded deploy and rollback scripts write the full record on `--confirm`; sync and build merge `gitSha` / `imageTag` fields on `--confirm`.
 
 ---
 
@@ -68,7 +68,17 @@ Guarded deploy/rollback write the full record on `--confirm`; sync/build merge `
 
 **Goal:** Ensure the host monorepo `HEAD` equals the approved integration merge SHA before build, deploy, or live campaigns.
 
-### Procedure (manual until D2 `execution-server-sync.sh`)
+### Guarded script
+
+On the execution host:
+
+```bash
+./scripts/ops/execution-server-sync.sh --target-sha <full-sha> --confirm
+```
+
+Without `--confirm` the script prints the planned `git fetch` / `git checkout` / preflight steps and performs no mutation.
+
+### Manual equivalent
 
 1. SSH to execution host as the operator service user.
 2. `cd` to the WAIA monorepo checkout (operator vault path).
@@ -92,16 +102,19 @@ EXECUTION_SERVER_TARGET_SHA=<full-sha> ./scripts/ops/execution-server-preflight.
 
 **Goal:** Produce a runnable execution-host image and ensure trader CLI dependencies are available for `pnpm trader:live:*`.
 
-### Execution host image
+### Guarded script
+
+```bash
+./scripts/ops/execution-server-build.sh --target-sha <full-sha> [--image-tag waia-execution-host:YYYYMMDD-<short>] --confirm
+```
+
+Runs preflight, `docker build`, `docker history`, and `pnpm install --frozen-lockfile` on `--confirm`. Updates `deployed-revision.json` `imageTag` on success.
+
+### Manual equivalent
 
 ```bash
 docker build -t waia-execution-host:<tag> services/ai-trader-execution-host/
 docker history waia-execution-host:<tag>   # verify no secret ENV layers
-```
-
-### Trader CLI (same pinned SHA)
-
-```bash
 pnpm install --frozen-lockfile
 # Trader live CLIs require WAIA_TRADER_CLI=1 — set by pnpm trader:* scripts
 ```
@@ -118,7 +131,20 @@ See [DEE-339 §2B](./DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md) for BP-6 health scaf
 
 **Goal:** Run the execution-host container and inject runtime secrets from operator vault — never from repo or Cloudflare.
 
-### Container run (reference)
+### Guarded script
+
+```bash
+./scripts/ops/execution-server-deploy.sh \
+  --target-sha <full-sha> \
+  --image-tag waia-execution-host:<tag> \
+  --operator <human-id> \
+  [--secrets-env-file /path/to/operator-vault.env] \
+  --confirm
+```
+
+On `--confirm`: replaces the container, checks `/health`, and writes `deployed-revision.json`.
+
+### Manual equivalent
 
 ```bash
 docker run -d \
@@ -172,7 +198,19 @@ Agents may run **read-only** preflight and `curl /health` only when the integrat
 
 **Goal:** Restore the last known-good image + SHA without improvising from unmerged branches.
 
-### Procedure
+### Guarded script
+
+```bash
+./scripts/ops/execution-server-rollback.sh \
+  --operator <human-id> \
+  [--notes "incident context"] \
+  [--secrets-env-file /path/to/operator-vault.env] \
+  --confirm
+```
+
+Reads `previousGitSha` and `imageTag` from `deployed-revision.json` when overrides are omitted. On `--confirm`: syncs checkout, redeploys prior image, checks `/health`, and rewrites `deployed-revision.json`.
+
+### Manual equivalent
 
 1. Read `deployed-revision.json` → identify `previousGitSha` and prior `imageTag` (or operator vault backup).
 2. Stop current container: `docker stop ai-trader-execution-host`.
@@ -231,14 +269,14 @@ Encoded in [`INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOU
 
 ## 10. Slice D2 guarded tooling
 
-| Script | `--confirm` effect |
-|--------|-------------------|
-| [`execution-server-sync.sh`](../../scripts/ops/execution-server-sync.sh) | `git fetch` + `git checkout` + preflight; merge `gitSha` |
-| [`execution-server-build.sh`](../../scripts/ops/execution-server-build.sh) | `docker build`, `pnpm install`; merge `imageTag` |
-| [`execution-server-deploy.sh`](../../scripts/ops/execution-server-deploy.sh) | `docker run`, `/health`; write full `deployed-revision.json` |
-| [`execution-server-rollback.sh`](../../scripts/ops/execution-server-rollback.sh) | sync + redeploy + `/health`; rewrite `deployed-revision.json` |
+| Script | Purpose | `--confirm` effect |
+|--------|---------|-------------------|
+| [`execution-server-sync.sh`](../../scripts/ops/execution-server-sync.sh) | Pin checkout to SHA | `git fetch` + `git checkout` + preflight; merge `gitSha` in `deployed-revision.json` |
+| [`execution-server-build.sh`](../../scripts/ops/execution-server-build.sh) | Build image + CLI deps | `docker build`, `pnpm install`; merge `imageTag` in `deployed-revision.json` |
+| [`execution-server-deploy.sh`](../../scripts/ops/execution-server-deploy.sh) | Run container | `docker run`, `/health` check; write full `deployed-revision.json` |
+| [`execution-server-rollback.sh`](../../scripts/ops/execution-server-rollback.sh) | Restore prior revision | sync + redeploy + `/health`; rewrite `deployed-revision.json` |
 
-All scripts support `--dry-run` and `--help`. Without `--confirm`: no-op (exit 0).
+All scripts support `--dry-run` and `--help`. **Without `--confirm`:** print planned actions and exit 0 — no mutation. Composer authors dry-run-test locally; **never** pass `--confirm` against the live host.
 
 ---
 
@@ -257,4 +295,4 @@ All scripts support `--dry-run` and `--help`. Without `--confirm`: no-op (exit 0
 
 ---
 
-*Last updated: 2026-07-10 — vNext Slice D2.*
+*Last updated: 2026-07-10 — vNext Slice D2 (guarded tooling).*

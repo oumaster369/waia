@@ -52,8 +52,10 @@ yarn-error.log*
 # Ad-hoc PR body drafts — use .github/pull_request_template.md instead
 .cursor/pr-*.md
 # Operator forensics scratch copies — archive into vault before commit
+# Class: operator forensics stash — see docs/waia-governance/EVIDENCE-POLICY.md
 replay-runs/**/_operator-forensics-stash/
 # Ad-hoc telemetry tail exports — local scratch only (do not commit)
+# Class: temp — see docs/waia-governance/EVIDENCE-POLICY.md
 .cursor-agent-tail-sample.txt
 
 # Cloudflare Pages local

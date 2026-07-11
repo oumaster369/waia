@@ -17,10 +17,33 @@ import {
   DISCOVERY_SCHEMA_VERSION,
 } from "@/lib/trader/discovery/discovery.types";
 import { runDiscoveryEvolutionPass } from "@/lib/trader/discovery/evolution-orchestrator";
+import type { DiscoveryEvolutionPassResult } from "@/lib/trader/discovery/evolution-orchestrator";
 import { assertOperatorActionAllowed } from "@/lib/trader/operator/operator-authority";
+import {
+  buildCampaignRunFrontmatter,
+  type CampaignRunFrontmatter,
+} from "@/lib/trader/research/campaign-run-frontmatter";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const LOG_PREFIX = "[trader:discovery:run]";
+
+export type DiscoveryRunRecord = {
+  /** Additive provenance block (DEE-407) — does not alter discovery pipeline semantics. */
+  frontmatter: CampaignRunFrontmatter;
+  result: DiscoveryEvolutionPassResult;
+};
+
+export function buildDiscoveryRunRecord(
+  result: DiscoveryEvolutionPassResult,
+  input?: { runId?: string },
+): DiscoveryRunRecord {
+  return {
+    frontmatter: buildCampaignRunFrontmatter({
+      runId: input?.runId,
+    }),
+    result,
+  };
+}
 
 export function printDiscoveryRunUsage(): void {
   console.log(`M8 discovery evolution orchestrator (operator-invoked, default disabled)
@@ -121,10 +144,13 @@ async function main(): Promise<void> {
     closedTrades: [],
   });
 
-  console.log(`${LOG_PREFIX} result`, JSON.stringify(result, null, 2));
+  const record = buildDiscoveryRunRecord(result, { runId: campaignId });
+  console.log(`${LOG_PREFIX} record`, JSON.stringify(record, null, 2));
 }
 
-main().catch((error: unknown) => {
-  console.error(`${LOG_PREFIX} failed`, error);
-  process.exit(1);
-});
+if (process.env.WAIA_TRADER_CLI === "1") {
+  main().catch((error: unknown) => {
+    console.error(`${LOG_PREFIX} failed`, error);
+    process.exit(1);
+  });
+}

@@ -142,7 +142,16 @@ Host filesystem state is **operational**, not canonical engineering memory — G
 
 **Operator runbook:** [`EXECUTION-SERVER-RUNBOOK.md`](EXECUTION-SERVER-RUNBOOK.md)  
 **Stale-code guard:** [`scripts/ops/execution-server-preflight.sh`](../../scripts/ops/execution-server-preflight.sh) (read-only)  
-**Mutation tooling (HUMAN-ONLY, `--confirm` required):** [`execution-server-sync.sh`](../../scripts/ops/execution-server-sync.sh), [`execution-server-build.sh`](../../scripts/ops/execution-server-build.sh), [`execution-server-deploy.sh`](../../scripts/ops/execution-server-deploy.sh), [`execution-server-rollback.sh`](../../scripts/ops/execution-server-rollback.sh) — no-op without `--confirm`.
+**Mutation tooling (HUMAN-ONLY, `--confirm` required):**
+
+| Script | Purpose |
+|--------|---------|
+| [`execution-server-sync.sh`](../../scripts/ops/execution-server-sync.sh) | Pin checkout to approved SHA |
+| [`execution-server-build.sh`](../../scripts/ops/execution-server-build.sh) | Build execution-host image + CLI deps |
+| [`execution-server-deploy.sh`](../../scripts/ops/execution-server-deploy.sh) | Deploy container + write `deployed-revision.json` |
+| [`execution-server-rollback.sh`](../../scripts/ops/execution-server-rollback.sh) | Roll back to prior known-good revision |
+
+Without `--confirm`, each script is a no-op (prints planned actions, exit 0).
 
 ---
 

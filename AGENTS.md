@@ -23,6 +23,7 @@ Repository-specific execution contract for AI coding agents. **Router only** —
 | Product completion specs | [`docs/waia-governance/PRODUCT-COMPLETION-SPEC-STANDARD.md`](docs/waia-governance/PRODUCT-COMPLETION-SPEC-STANDARD.md), [`docs/product-specs/`](docs/product-specs/) |
 | Gap registries | [`docs/gaps/GAP-REGISTRY-STANDARD.md`](docs/gaps/GAP-REGISTRY-STANDARD.md) |
 | Roadmaps (integration batches) | [`docs/roadmaps/ROADMAP-STANDARD.md`](docs/roadmaps/ROADMAP-STANDARD.md) |
+| Roadmap autopilot (prep) | [`docs/waia-governance/ROADMAP-AUTOPILOT.md`](docs/waia-governance/ROADMAP-AUTOPILOT.md) |
 | Execution surfaces | [`docs/ops/EXECUTION-SURFACES.md`](docs/ops/EXECUTION-SURFACES.md) |
 | ADRs | [`docs/adr/README.md`](docs/adr/README.md) |
 
