@@ -6,6 +6,8 @@
 |-------------|--|
 | **Semantics & autonomy** | [`../waia-governance/GLOSSARY.md`](../waia-governance/GLOSSARY.md), [`SYSTEM-MAP.md`](../waia-governance/SYSTEM-MAP.md), [`NON-GOALS.md`](../waia-governance/NON-GOALS.md) |
 | **Execution** | Repo [`AGENTS.md`](../../AGENTS.md), [`../waia-governance/EXECUTION-CONTRACT.md`](../waia-governance/EXECUTION-CONTRACT.md), [`AUTONOMOUS-EXECUTION-LOOP.md`](../waia-governance/AUTONOMOUS-EXECUTION-LOOP.md) |
+| **Completion specs** | [`../product-specs/`](../product-specs/) — module *done* layer ([`PRODUCT-COMPLETION-SPEC-STANDARD`](../waia-governance/PRODUCT-COMPLETION-SPEC-STANDARD.md)) |
+| **Gaps & roadmaps** | [`../gaps/`](../gaps/), [`../roadmaps/`](../roadmaps/) — intake → batch sequencing |
 | **Architectural WHY** | [`../adr/`](../adr/README.md) |
 
 ---
