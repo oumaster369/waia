@@ -595,7 +595,7 @@ Items still partially dependent on Cursor account or local machine — proposed 
 |-----|----------|------------|
 | User Rules only in account | **Done** — Section 7 of this doc | — |
 | Plans gitignored but referenced in docs | Archive approved plans under `docs/plans/` | Medium |
-| `replay-runs/` campaign JSON artifacts untracked | Add runbook: commit evidence vs gitignore `_operator-forensics-stash/` | Medium |
+| `replay-runs/` campaign JSON artifacts untracked | **Done** — [`EVIDENCE-POLICY.md`](../waia-governance/EVIDENCE-POLICY.md) + RI-P7 README + M9 runbook | — |
 | Playwright MCP uses `@latest` | **Done** — pinned `@playwright/mcp@0.0.78` in `.cursor/mcp.json` | — |
 | No preflight script | **Done** — `scripts/ops/cursor-env-preflight.sh` | — |
 | `.vscode/extensions.json` missing | Recommend `anysphere.remote-ssh` for team | Low |
