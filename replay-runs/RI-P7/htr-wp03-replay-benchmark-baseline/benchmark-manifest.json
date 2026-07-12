@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "htr-wp03-benchmark/v1",
+  "fixturePath": "/Users/legco/Projects/waia/tests/fixtures/trader/dee-337-p5-btcusdt-1m-replay.json",
+  "fixtureSha256": "814981bc3055d8fd52d1277d60a0b443de7644416aceba8cbe99819c70242061",
+  "codeSha": "d1275992f8c6fc89e714cff38d08189ed771ca05",
+  "dirtyTree": true,
+  "command": "pnpm trader:replay:benchmark",
+  "cycleCount": 81,
+  "perCycleStages": [
+    "bar-source-next",
+    "fused-context-build",
+    "clock-advance",
+    "paper-cycle",
+    "account-state-refresh"
+  ],
+  "perRunStages": [
+    "evidence-export"
+  ],
+  "coldRuns": 1,
+  "warmRuns": 5,
+  "semanticReproDigest": "b1cf1d8145f3d7906a7a6fb42153b7b1367830b7143abbe2efe7c75d3c86df3a",
+  "evidenceDigest": "9652e2b45a0acf8fe8232c30efa8f41444f34d67e583ddee249189b9ad2991d4",
+  "terminalState": "BENCHMARK_OK"
+}

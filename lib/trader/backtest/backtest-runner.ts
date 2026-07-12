@@ -13,6 +13,10 @@ import type {
   BacktestEvaluationExportDocument,
   BacktestRegimeMetrics,
 } from "@/lib/trader/backtest/backtest-evaluation-export.types";
+import {
+  NOOP_REPLAY_BENCHMARK_OBSERVER,
+  type ReplayBenchmarkObserver,
+} from "@/lib/trader/backtest/replay-benchmark-instrumentation";
 import type { BarReplaySource } from "@/lib/trader/market-data/types";
 import {
   buildReplayFusedContextFromSnapshot,
@@ -67,6 +71,7 @@ export type RunBacktestInput = {
   hypothesisSessionState?: HypothesisSessionState;
   /** PR-2 MI Core: explicit flag override. */
   miCoreEnabled?: boolean;
+  benchmarkObserver?: ReplayBenchmarkObserver;
 };
 
 export type RunBacktestResult = {
@@ -129,6 +134,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     input.orderRepository,
     input.costModel,
   );
+  const benchmarkObserver = input.benchmarkObserver ?? NOOP_REPLAY_BENCHMARK_OBSERVER;
 
   const cycleResults: PaperCycleResult[] = [];
   let accountState = input.accountState;
@@ -136,23 +142,35 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   const maxCycles = input.maxCycles ?? Number.POSITIVE_INFINITY;
 
   while (cycleResults.length < maxCycles) {
+    const cycleIndex = cycleResults.length;
+
+    const barSourceTimer = benchmarkObserver.beginStage("bar-source-next", cycleIndex);
     const next = input.barSource.next();
+    barSourceTimer.end({ discard: next.done });
     if (next.done) {
       break;
     }
+    benchmarkObserver.sampleMemory("bar-source-next", cycleIndex);
 
     const snapshot =
       input.activeStrategyIds === undefined
         ? next.snapshot
         : { ...next.snapshot, activeStrategyIds: input.activeStrategyIds };
 
+    const fusedContextTimer = benchmarkObserver.beginStage("fused-context-build", cycleIndex);
     const fusedContext =
       input.enableReplayFusedContext === false
         ? undefined
         : buildReplayFusedContextFromSnapshot(snapshot, input.providerSidecar);
+    fusedContextTimer.end();
+    benchmarkObserver.sampleMemory("fused-context-build", cycleIndex);
 
+    const clockAdvanceTimer = benchmarkObserver.beginStage("clock-advance", cycleIndex);
     input.deps.researchReplayDeterminism?.clock.setNowMs(new Date(snapshot.evaluatedAt).getTime());
+    clockAdvanceTimer.end();
+    benchmarkObserver.sampleMemory("clock-advance", cycleIndex);
 
+    const paperCycleTimer = benchmarkObserver.beginStage("paper-cycle", cycleIndex);
     const result = await runPaperCycleOnce(input.deps, {
       context: input.context,
       snapshot,
@@ -170,10 +188,13 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       hypothesisSessionState,
       miCoreEnabled: input.miCoreEnabled,
     });
+    paperCycleTimer.end();
+    benchmarkObserver.sampleMemory("paper-cycle", cycleIndex);
 
     hypothesisSessionState = result.hypothesisSessionState;
     cycleResults.push(result);
 
+    const accountRefreshTimer = benchmarkObserver.beginStage("account-state-refresh", cycleIndex);
     if (input.refreshAccountStateBetweenStrategies) {
       if (input.portfolio) {
         const portfolio = await derivePortfolioAccountState({
@@ -200,6 +221,8 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         });
       }
     }
+    accountRefreshTimer.end();
+    benchmarkObserver.sampleMemory("account-state-refresh", cycleIndex);
   }
 
   const exportInput = {
@@ -220,10 +243,13 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     exportedAt: input.exportedAt,
   };
 
+  const evidenceExportTimer = benchmarkObserver.beginStage("evidence-export", null);
   const [exportBundle, exportDocument] = await Promise.all([
     buildBacktestEvaluationExport(exportInput),
     buildBacktestEvaluationExportDocument(exportInput),
   ]);
+  evidenceExportTimer.end();
+  benchmarkObserver.sampleMemory("evidence-export", null);
 
   return {
     cycleCount: cycleResults.length,
