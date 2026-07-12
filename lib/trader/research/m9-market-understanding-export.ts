@@ -3,6 +3,11 @@ import type {
   ResearchSignals,
 } from "@/lib/trader/intelligence/market-understanding.types";
 import { buildResearchSignals } from "@/lib/trader/intelligence/market-understanding-bridge-v0";
+import type { StreamingEvidenceReader } from "@/lib/trader/backtest/streaming-evidence";
+import {
+  assertM9ProjectionSource,
+  iterateM9Cycles,
+} from "@/lib/trader/research/m9-projection-source";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 
 export const M9_MARKET_UNDERSTANDING_SAMPLE_SCHEMA_VERSION =
@@ -27,16 +32,18 @@ export function buildM9MarketUnderstandingSampleExport(input: {
   organizationId: string;
   strategyId: string;
   strategyVersion: string;
-  cycleResults: readonly PaperCycleResult[];
+  cycleResults?: readonly PaperCycleResult[];
+  projectionReader?: StreamingEvidenceReader;
   maxSamples?: number;
   generatedAt?: string;
 }): M9MarketUnderstandingSampleExport {
+  assertM9ProjectionSource(input);
   const maxSamples = input.maxSamples ?? DEFAULT_MAX_SAMPLES;
   const understandingSnapshots: MarketUnderstandingSnapshot[] = [];
   const researchSignals: ResearchSignals[] = [];
   let cyclesWithUnderstanding = 0;
 
-  for (const cycle of input.cycleResults) {
+  for (const cycle of iterateM9Cycles(input)) {
     const understanding = cycle.evaluation.understanding;
     if (!understanding) {
       continue;

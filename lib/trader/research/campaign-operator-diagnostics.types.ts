@@ -8,6 +8,14 @@ export type CampaignOperatorDiagnosticsInventorySnapshot = {
   openQtyBySymbol: Record<string, string>;
 };
 
+export type CampaignOperatorDiagnosticsStreamingEvidence = {
+  terminalState: string;
+  chainDigest: string;
+  expectedCycleCount: number;
+  sealedThroughCycleIndex: number;
+  runDir: string;
+};
+
 export type CampaignOperatorDiagnosticsBody = {
   organizationId: string;
   strategyId: string;
@@ -22,6 +30,7 @@ export type CampaignOperatorDiagnosticsBody = {
   inventorySnapshot: CampaignOperatorDiagnosticsInventorySnapshot | null;
   builderGitSha: string | null;
   crashedAt: string;
+  streamingEvidence?: CampaignOperatorDiagnosticsStreamingEvidence | null;
 };
 
 export type CampaignOperatorDiagnostics = {

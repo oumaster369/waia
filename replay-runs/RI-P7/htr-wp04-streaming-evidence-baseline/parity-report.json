@@ -1,0 +1,6 @@
+{
+  "evidenceDigestMatch": true,
+  "semanticReproDigestMatch": true,
+  "metricsMatch": true,
+  "cycleCountMatch": true
+}

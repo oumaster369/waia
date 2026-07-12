@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "htr-wp04-regime-timeline/v1",
+  "seq": 1,
+  "entries": [
+    {
+      "evaluatedAtMs": 1767230640000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230700000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230760000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230820000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230880000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230940000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767231000000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767231060000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767231120000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767231180000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767231240000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767231300000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767231360000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767231420000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767231480000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767231540000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767231600000,
+      "regime": "CHOP"
+    }
+  ],
+  "payloadDigest": "83b27bed7d1b42add3313ef0ca70c3aa61e315d724d31e6e55a6de4542c05967",
+  "chunkDigest": "81cb25a14d3282de8506a16ef33072b77d02a81d3bc17015bb3c7b9e9019f220"
+}

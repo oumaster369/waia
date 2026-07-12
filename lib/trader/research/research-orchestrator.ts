@@ -33,6 +33,10 @@ import { barsFromMarketBarRecords } from "@/lib/trader/research/m9-dataset-seal-
 import { resolveM9ResearchDatasetPostgres } from "@/lib/trader/research/m9-dataset-preflight";
 import { buildResearchGuardianContext } from "@/lib/trader/research/research-guardian-config";
 import type { ResearchPipelineBacktestOptions } from "@/lib/trader/research/research-pipeline-config.types";
+import type { StreamingEvidenceManifestRef } from "@/lib/trader/backtest/streaming-evidence";
+import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import type { ResearchValidationBacktestArtifactSink } from "@/lib/trader/research/research-backtest-runner";
 import {
   RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
@@ -107,6 +111,7 @@ export type RunResearchPipelineResult = {
   blindMetrics: ResearchValidationMetrics;
   validationCycleResults?: readonly PaperCycleResult[];
   validationPortfolioContext?: PortfolioCycleContext;
+  validationStreamingManifestRef?: StreamingEvidenceManifestRef;
 };
 
 async function resolveOrderRepository(
@@ -155,7 +160,25 @@ function buildIsolatedBacktestInput(
     guardian: buildResearchGuardianContext(pipelineBacktest?.guardian),
     artifactSink: params.artifactSink,
     providerSidecar: pipelineBacktest?.providerSidecar,
+    retentionMode: pipelineBacktest?.retentionMode,
+    evidenceSink:
+      pipelineBacktest?.evidenceSink ??
+      (pipelineBacktest?.retentionMode === "STREAM_ONLY" && pipelineBacktest.evidenceRunDir
+        ? createStreamingEvidenceSink({
+            runDir: ensureEvidenceRunDir(pipelineBacktest.evidenceRunDir, params.runId),
+            runId: params.runId,
+            gitSha: pipelineBacktest.evidenceGitSha ?? null,
+            environment: pipelineBacktest.evidenceEnvironment ?? "research-pipeline",
+            dbConnectionMode: pipelineBacktest.evidenceDbConnectionMode ?? null,
+          })
+        : undefined),
   };
+}
+
+function ensureEvidenceRunDir(baseDir: string, runId: string): string {
+  const runDir = join(baseDir, runId);
+  mkdirSync(runDir, { recursive: true });
+  return runDir;
 }
 
 /**
@@ -453,6 +476,7 @@ export async function runResearchPipelinePostgres(
     blindMetrics: blind.metrics,
     validationCycleResults: validationArtifactSink?.cycleResults,
     validationPortfolioContext: validationArtifactSink?.portfolioContext,
+    validationStreamingManifestRef: validationArtifactSink?.streamingManifestRef,
   };
 }
 

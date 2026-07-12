@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "htr-wp04-evidence-manifest/v1",
+  "runId": "sigterm-run",
+  "terminalState": "STREAMING_EVIDENCE_OK",
+  "chainDigest": "94c6c7561cad6d88a5c88c87b8d3fc0440df014969f177f639e6764af21c17ad",
+  "expectedCycleCount": 21,
+  "chunkCount": 1,
+  "sealedThroughCycleIndex": 20,
+  "timelineChunkCount": 1,
+  "provenance": {
+    "gitSha": null,
+    "environment": "sigterm-simulation",
+    "dbConnectionMode": null,
+    "sealedAt": "2026-07-12T14:31:54.667Z",
+    "sealReason": null
+  }
+}

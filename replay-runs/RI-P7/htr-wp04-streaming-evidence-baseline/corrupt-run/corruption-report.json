@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "htr-wp04-corruption/v1",
+  "firstBadSeq": 2,
+  "reason": "checksum_or_chain_break",
+  "quarantinedSeqs": [
+    2
+  ]
+}

@@ -7,6 +7,7 @@ import {
   type CampaignOperatorDiagnostics,
   type CampaignOperatorDiagnosticsBody,
   type CampaignOperatorDiagnosticsInventorySnapshot,
+  type CampaignOperatorDiagnosticsStreamingEvidence,
 } from "@/lib/trader/research/campaign-operator-diagnostics.types";
 
 export type BuildCampaignOperatorDiagnosticsInput = {
@@ -20,6 +21,7 @@ export type BuildCampaignOperatorDiagnosticsInput = {
   parityMessage?: string | null;
   builderGitSha?: string | null;
   crashedAt?: string;
+  streamingEvidence?: CampaignOperatorDiagnosticsStreamingEvidence | null;
 };
 
 function canonicalJsonString(value: unknown): string {
@@ -85,6 +87,7 @@ export function buildCampaignOperatorDiagnostics(
     inventorySnapshot: resolveInventorySnapshot(input.inventory),
     builderGitSha: input.builderGitSha ?? null,
     crashedAt: input.crashedAt ?? new Date().toISOString(),
+    streamingEvidence: input.streamingEvidence ?? null,
   };
 
   return {

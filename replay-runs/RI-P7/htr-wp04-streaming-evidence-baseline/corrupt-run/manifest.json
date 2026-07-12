@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "htr-wp04-evidence-manifest/v1",
+  "runId": "htr-wp04-parity",
+  "terminalState": "STREAMING_EVIDENCE_OK",
+  "chainDigest": "d346ce471e46dcb2891ae06e312ca4cc7b560853e53aabaa9c29a85bf3604e76",
+  "expectedCycleCount": 81,
+  "chunkCount": 3,
+  "sealedThroughCycleIndex": 80,
+  "timelineChunkCount": 2,
+  "provenance": {
+    "gitSha": "htr-wp04-test",
+    "environment": "streaming-evidence-fixture-harness",
+    "dbConnectionMode": null,
+    "sealedAt": "2026-07-12T14:31:54.257Z",
+    "sealReason": null
+  }
+}

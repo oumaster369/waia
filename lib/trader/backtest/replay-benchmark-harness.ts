@@ -317,7 +317,7 @@ function aggregateWarmRuns(
   };
 }
 
-async function seedBenchmarkSession() {
+export async function seedBenchmarkSession() {
   const session = await createDeterministicBenchmarkSession();
   const db = getDb();
   const email = "htr-wp03-benchmark@waia.invalid";

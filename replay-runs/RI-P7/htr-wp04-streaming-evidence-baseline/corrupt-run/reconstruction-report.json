@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "htr-wp04-reconstruction/v1",
+  "outcome": "QUARANTINED",
+  "terminalState": "STREAMING_EVIDENCE_FAILED",
+  "validChunkCount": 2,
+  "sealedThroughCycleIndex": 63,
+  "chainDigest": "e391f82c5429b87a49afb86529870e0f2433b2154dd7e703470a070063a1e378",
+  "orphanTempDeleted": 0,
+  "quarantinedSeqs": [
+    2
+  ]
+}

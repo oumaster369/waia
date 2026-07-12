@@ -1,0 +1,264 @@
+{
+  "schemaVersion": "htr-wp04-regime-timeline/v1",
+  "seq": 0,
+  "entries": [
+    {
+      "evaluatedAtMs": 1767226800000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767226860000,
+      "regime": "TREND_BEAR"
+    },
+    {
+      "evaluatedAtMs": 1767226920000,
+      "regime": "TREND_BEAR"
+    },
+    {
+      "evaluatedAtMs": 1767226980000,
+      "regime": "TREND_BEAR"
+    },
+    {
+      "evaluatedAtMs": 1767227040000,
+      "regime": "TREND_BEAR"
+    },
+    {
+      "evaluatedAtMs": 1767227100000,
+      "regime": "TREND_BEAR"
+    },
+    {
+      "evaluatedAtMs": 1767227160000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227220000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227280000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227340000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227400000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227460000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227520000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227580000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227640000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227700000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227760000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227820000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227880000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227940000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767228000000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767228060000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228120000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228180000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228240000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228300000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228360000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228420000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228480000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228540000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228600000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228660000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228720000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228780000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228840000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228900000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228960000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229020000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229080000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229140000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229200000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229260000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229320000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229380000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229440000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229500000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229560000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229620000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229680000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229740000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229800000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229860000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229920000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229980000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230040000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230100000,
+      "regime": "TREND_BULL"
+    },
+    {
+      "evaluatedAtMs": 1767230160000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230220000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230280000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230340000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230400000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230460000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230520000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767230580000,
+      "regime": "CHOP"
+    }
+  ],
+  "payloadDigest": "bf2b5d61eb20c3d4ac8cbac38b9e5f45336a42d3d2fff8dd0a5e3c0546271845",
+  "chunkDigest": "8f55bf0aff0a4d4705f2fb6b1980204ebf185d1ea613c644784ccb20f364bf11"
+}

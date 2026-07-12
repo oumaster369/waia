@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "htr-wp04-regime-timeline/v1",
+  "seq": 0,
+  "entries": [
+    {
+      "evaluatedAtMs": 1767226800000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767226860000,
+      "regime": "TREND_BEAR"
+    },
+    {
+      "evaluatedAtMs": 1767226920000,
+      "regime": "TREND_BEAR"
+    },
+    {
+      "evaluatedAtMs": 1767226980000,
+      "regime": "TREND_BEAR"
+    },
+    {
+      "evaluatedAtMs": 1767227040000,
+      "regime": "TREND_BEAR"
+    },
+    {
+      "evaluatedAtMs": 1767227100000,
+      "regime": "TREND_BEAR"
+    },
+    {
+      "evaluatedAtMs": 1767227160000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227220000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227280000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227340000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227400000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227460000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227520000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227580000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227640000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227700000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227760000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227820000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227880000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767227940000,
+      "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767228000000,
+      "regime": "RANGE"
+    }
+  ],
+  "payloadDigest": "6813a1f0e3839df2e47eae19b5f0ce4083f76ee61eb371b785b9a976796b6e56",
+  "chunkDigest": "4036a4cabc3a9cf0ed93599032733c745cf9b9f52231b5e94239a3bddb87cd8e"
+}

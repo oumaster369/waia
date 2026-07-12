@@ -1,4 +1,10 @@
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
+import type { StreamingEvidenceReader } from "@/lib/trader/backtest/streaming-evidence";
+import {
+  assertM9ProjectionSource,
+  countM9InputCycles,
+  iterateM9Cycles,
+} from "@/lib/trader/research/m9-projection-source";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 
 export const M9_DECISION_TRACE_SCHEMA_VERSION = "m9_decision_trace_v1" as const;
@@ -107,15 +113,17 @@ export function buildM9DecisionTraceExport(input: {
   organizationId: string;
   strategyId: string;
   strategyVersion: string;
-  cycleResults: readonly PaperCycleResult[];
+  cycleResults?: readonly PaperCycleResult[];
+  projectionReader?: StreamingEvidenceReader;
   maxSamples?: number;
   generatedAt?: string;
 }): M9DecisionTraceExport {
+  assertM9ProjectionSource(input);
   const maxSamples = input.maxSamples ?? 25;
   const completenessCycles: M9DecisionTraceCycle[] = [];
   const sampleCycles: M9DecisionTraceCycle[] = [];
 
-  for (const cycle of input.cycleResults) {
+  for (const cycle of iterateM9Cycles(input)) {
     const evaluation = cycle.evaluation;
     const fused = evaluation.fusedContext;
     const understanding = evaluation.understanding;
@@ -198,7 +206,7 @@ export function buildM9DecisionTraceExport(input: {
     strategyId: input.strategyId,
     strategyVersion: input.strategyVersion,
     cycleCount: cycles.length,
-    totalInputCycles: input.cycleResults.length,
+    totalInputCycles: countM9InputCycles(input),
     completenessCoverage: hasDecisionChains ? "full" : "sampled",
     cycles,
   };

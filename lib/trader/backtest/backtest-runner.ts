@@ -17,6 +17,12 @@ import {
   NOOP_REPLAY_BENCHMARK_OBSERVER,
   type ReplayBenchmarkObserver,
 } from "@/lib/trader/backtest/replay-benchmark-instrumentation";
+import {
+  NOOP_REPLAY_EVIDENCE_SINK,
+  type ReplayEvidenceSink,
+  type ReplayRetentionMode,
+  type StreamingEvidenceManifestRef,
+} from "@/lib/trader/backtest/streaming-evidence";
 import type { BarReplaySource } from "@/lib/trader/market-data/types";
 import {
   buildReplayFusedContextFromSnapshot,
@@ -72,6 +78,8 @@ export type RunBacktestInput = {
   /** PR-2 MI Core: explicit flag override. */
   miCoreEnabled?: boolean;
   benchmarkObserver?: ReplayBenchmarkObserver;
+  retentionMode?: ReplayRetentionMode;
+  evidenceSink?: ReplayEvidenceSink;
 };
 
 export type RunBacktestResult = {
@@ -81,6 +89,7 @@ export type RunBacktestResult = {
   exportDocument: BacktestEvaluationExportDocument;
   evidenceDigest: string;
   regimeMetrics: BacktestRegimeMetrics[];
+  streamingManifestRef?: StreamingEvidenceManifestRef;
 };
 
 function wrapOrderRepositoryWithCostModel(
@@ -135,14 +144,17 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     input.costModel,
   );
   const benchmarkObserver = input.benchmarkObserver ?? NOOP_REPLAY_BENCHMARK_OBSERVER;
+  const retentionMode = input.retentionMode ?? "FULL";
+  const evidenceSink = input.evidenceSink ?? NOOP_REPLAY_EVIDENCE_SINK;
 
   const cycleResults: PaperCycleResult[] = [];
+  let cycleCount = 0;
   let accountState = input.accountState;
   let hypothesisSessionState = input.hypothesisSessionState;
   const maxCycles = input.maxCycles ?? Number.POSITIVE_INFINITY;
 
-  while (cycleResults.length < maxCycles) {
-    const cycleIndex = cycleResults.length;
+  while (cycleCount < maxCycles) {
+    const cycleIndex = cycleCount;
 
     const barSourceTimer = benchmarkObserver.beginStage("bar-source-next", cycleIndex);
     const next = input.barSource.next();
@@ -192,7 +204,11 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     benchmarkObserver.sampleMemory("paper-cycle", cycleIndex);
 
     hypothesisSessionState = result.hypothesisSessionState;
-    cycleResults.push(result);
+    if (retentionMode === "FULL") {
+      cycleResults.push(result);
+    }
+    await evidenceSink.onCycle(cycleIndex, result);
+    cycleCount += 1;
 
     const accountRefreshTimer = benchmarkObserver.beginStage("account-state-refresh", cycleIndex);
     if (input.refreshAccountStateBetweenStrategies) {
@@ -237,7 +253,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     datasetId: input.datasetId,
     runId: input.runId,
     split: input.split,
-    cycleCount: cycleResults.length,
+    cycleCount,
     executionMode: "mock" as const,
     markPrices: input.markPrices,
     exportedAt: input.exportedAt,
@@ -251,12 +267,15 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   evidenceExportTimer.end();
   benchmarkObserver.sampleMemory("evidence-export", null);
 
+  const streamingManifestRef = await evidenceSink.sealComplete(cycleCount);
+
   return {
-    cycleCount: cycleResults.length,
-    cycleResults,
+    cycleCount,
+    cycleResults: retentionMode === "STREAM_ONLY" ? [] : cycleResults,
     exportBundle,
     exportDocument,
     evidenceDigest: exportDocument.envelope.contentDigest,
     regimeMetrics: buildRegimeMetrics(exportBundle, exportDocument),
+    streamingManifestRef: retentionMode === "STREAM_ONLY" ? streamingManifestRef : undefined,
   };
 }

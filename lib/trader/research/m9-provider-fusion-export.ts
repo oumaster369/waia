@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
+import type { StreamingEvidenceReader } from "@/lib/trader/backtest/streaming-evidence";
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
+import { countM9InputCycles, iterateM9Cycles } from "@/lib/trader/research/m9-projection-source";
+import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import {
   MARKET_DATA_PROVIDER_IDS,
   type MarketDataProviderId,
@@ -283,16 +286,24 @@ export function buildM9ProviderFusionExport(input: {
   strategyId: string;
   strategyVersion: string;
   instrumentId: string;
-  fusedSamples: readonly FusedMarketContext[];
+  fusedSamples?: readonly FusedMarketContext[];
+  cycleResults?: readonly PaperCycleResult[];
+  projectionReader?: StreamingEvidenceReader;
   providerSidecar?: ReplayProviderSidecar;
   generatedAt?: string;
 }): M9ProviderFusionExport {
+  const fusedSamples =
+    input.fusedSamples ??
+    [...iterateM9Cycles(input)]
+      .map((cycle) => cycle.evaluation.fusedContext)
+      .filter((fused): fused is FusedMarketContext => fused !== undefined);
+
   const coverageMatrix = buildProviderCoverageMatrix({
-    fusedSamples: input.fusedSamples,
+    fusedSamples,
     providerSidecar: input.providerSidecar,
   });
 
-  const sample = input.fusedSamples[0];
+  const sample = fusedSamples[0];
   const laneSummary = {
     macroEvidenceCount: sample?.macroEvidence?.length ?? 0,
     newsEvidenceCount: sample?.newsEvidence?.length ?? 0,
@@ -311,7 +322,7 @@ export function buildM9ProviderFusionExport(input: {
       (row) =>
         row.captured && !row.fusedCycleCount && row.influenceClass === "DECISION_INFLUENTIAL",
     ).length,
-    htxSupremacyMaintained: input.fusedSamples.every(
+    htxSupremacyMaintained: fusedSamples.every(
       (fused) => fused.primaryQuote?.provenance.providerId === "htx_spot",
     ),
     pr3BoundaryLocked: coverageMatrix
@@ -332,7 +343,7 @@ export function buildM9ProviderFusionExport(input: {
       input.providerSidecar && isReplayProviderSidecarV2(input.providerSidecar)
         ? input.providerSidecar.captureAsOfUtc
         : null,
-    sampleCycleCount: input.fusedSamples.length,
+    sampleCycleCount: input.fusedSamples?.length ?? countM9InputCycles(input),
     coverageMatrix,
     laneSummary,
     truthfulnessGuards,
