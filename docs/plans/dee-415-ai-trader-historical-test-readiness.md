@@ -26,18 +26,25 @@ linearStatusFlow:
   onFinalPrOpened: In Review
   onMerge: Done
 state:
-  status: approved
+  status: in-progress
   humanApproval: CONFIRM-DEE-415-HTR-WP01-CHILD-PLAN
-  childPlanStatus: approved
+  childPlanStatus: draft
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  buildPhaseAStatus: awaiting-opus-post-review
-  currentWorkPackage: HTR-WP01
-  activeChildPlan: .cursor/plans/dee-415-htr-wp01-readiness-canon.plan.md
-  completedWorkPackages: []
-  remainingWorkPackages:
+  currentWorkPackage: HTR-WP02
+  activeChildPlan: .cursor/plans/dee-415-htr-wp02-post-m9-forensic.plan.md
+  workCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
+  wp01PostReview: PASS
+  wp01Validation:
+    validateCanon: PASS
+    lint: PASS
+    typecheck: PASS
+    tests: PASS
+    build: PASS
+  completedWorkPackages:
     - HTR-WP01
+  remainingWorkPackages:
     - HTR-WP02
     - HTR-WP03
     - HTR-WP04
@@ -66,7 +73,7 @@ state:
   lastValidationAt: null
   finalAuditStatus: not-started
   blockedReason: null
-  nextAction: "HTR-WP01 Phase A complete — WORK COMMIT created; awaiting Human-authorized Opus 4.8 post-implementation conformance review (Phase B closeout). No PR."
+  nextAction: "Human reviews and approves the HTR-WP02 child Cursor plan."
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -100,11 +107,11 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | Risk tier (whole program) | T2 |
 | Execution label | product |
 | Program label | program:ai-trader |
-| Branch | `dee-415-ai-trader-historical-test-readiness` (created only after Human approves the WP01 child plan) |
+| Branch | `dee-415-ai-trader-historical-test-readiness` (created from `origin/dev` @ `f23c51e`; HTR-WP01 WORK COMMIT `6600708`) |
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
-| Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1`; `dev == origin/dev`; clean |
-| Plan state | `state.status: approved` (Human approved the HTR-WP01 child plan via `CONFIRM-DEE-415-HTR-WP01-CHILD-PLAN`; branch created; Build authorized, not started) |
+| Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
+| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`, Opus post-review PASS, validation PASS; active work package HTR-WP02, child plan DRAFT awaiting Human approval) |
 
 ## Approved decisions (recorded)
 
@@ -120,7 +127,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 
 | WP | Title | dependsOn | label | status | local commit |
 |----|-------|-----------|-------|--------|--------------|
-| HTR-WP01 | Canon & readiness-contract + activation/target-subset ratification | — | product | pending (child DRAFT) | — |
+| HTR-WP01 | Canon & readiness-contract + activation/target-subset ratification | — | product | COMPLETE (Opus post-review PASS) | `6600708` (WORK) |
 | HTR-WP02 | Post-M9 forensic + status truth-up + program supersession | WP01 | product | pending | — |
 | HTR-WP03 | Replay benchmark + stage timing + memory instrumentation | WP01 | backend | pending | — |
 | HTR-WP04 | Streaming evidence + partial sealing + crash-recovery reconstruction | WP03 | backend | pending | — |
@@ -146,9 +153,9 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 
 Mandatory tail: **HTR-WP21 → HTR-WP22 → HTR-WP23**; also **HTR-WP16 → HTR-WP22**. Full dependency graph: parent master §40.
 
-## WP01 summary (former HTR-B01 technical content — full contract in the child plan)
+## WP01 summary (COMPLETE — former HTR-B01 technical content)
 
-Creates the three canonical artifacts and records decisions/supersession (no runtime code):
+HTR-WP01 is **COMPLETE** (WORK COMMIT `6600708`, Opus post-review PASS, validation PASS). It created the three canonical artifacts and recorded decisions/supersession (no runtime code):
 - `docs/product-specs/ai-trader-historical-test-readiness-completion.md` — Completion Spec; `READY_FOR_FULL_HISTORICAL_TEST` = code-ready Execution Server package; gate groups CG-A..CG-H; explicit exclusions; decision record.
 - `docs/gaps/ai-trader-historical-test-readiness-gap-registry.md` — HTR-GAP-001..042 with PRIMARY/CONTRIBUTING/CLOSURE (HTR-GAP-005 = WP04/WP22/WP22; no `B21'`).
 - `docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md` — 23 work packages `IB-HTR-01..23` with dependency graph incl. WP21→WP22→WP23 and WP16→WP22.
@@ -163,9 +170,9 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## WP-01 (current work package)
+## WP-02 (current work package)
 
-The active work package is HTR-WP01. Its exact implementation contract (source files, frontmatter, 42-gap matrix, 23-WP roadmap, decision tokens, supersession, registration, acceptance, validation, evidence, rollback, STOP) is the child Cursor plan `.cursor/plans/dee-415-htr-wp01-readiness-canon.plan.md`. This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
+The active work package is **HTR-WP02** (Post-M9 forensic + status truth-up + program supersession). Its exact implementation contract is the child Cursor plan `.cursor/plans/dee-415-htr-wp02-post-m9-forensic.plan.md` (DRAFT, awaiting Human approval). HTR-WP01 is COMPLETE (WORK COMMIT `6600708`). This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
 
 ## Acceptance (whole program)
 

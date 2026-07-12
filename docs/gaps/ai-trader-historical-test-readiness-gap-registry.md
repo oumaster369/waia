@@ -62,7 +62,7 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 | HTR-GAP-029 | Pipeline-body DB-disconnect resilience | major | open | HTR-WP05 | — | HTR-WP22 | IB-HTR-05 |
 | HTR-GAP-030 | Status/vault drift | major | open | HTR-WP02 | — | HTR-WP02 | IB-HTR-02 |
 | HTR-GAP-031 | No-lookahead/determinism property-suite gaps | blocker | open | HTR-WP10 | HTR-WP07, HTR-WP11 | HTR-WP10 | IB-HTR-10 |
-| HTR-GAP-032 | Canonical artifacts not created | major | open | HTR-WP01 | — | HTR-WP01 | IB-HTR-01 |
+| HTR-GAP-032 | Canonical artifacts not created | major | closed (2026-07-12; WORK COMMIT 6600708) | HTR-WP01 | — | HTR-WP01 | IB-HTR-01 |
 | HTR-GAP-033 | Master-plan frontmatter unsafe | major | closed | — | — | — | — |
 | HTR-GAP-034 | Gate-A naming collision + duplicate authority | major | open | HTR-WP01 | HTR-WP02 | HTR-WP02 | IB-HTR-01 |
 | HTR-GAP-035 | Postgres parity CI-only (skipped locally) | major | open | HTR-WP17 | HTR-WP18, HTR-WP19 | HTR-WP19 | IB-HTR-17 |
@@ -71,7 +71,7 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 | HTR-GAP-038 | Knowledge-confidence update/decay unwired | major | open | HTR-WP21 | HTR-WP15 | HTR-WP21 | IB-HTR-21 |
 | HTR-GAP-039 | No-trade/abstention outcome scoring absent | major | open | HTR-WP21 | HTR-WP14 | HTR-WP21 | IB-HTR-21 |
 | HTR-GAP-040 | Hypothesis outcome resolution not evidence-driven in replay | major | open | HTR-WP21 | HTR-WP13 | HTR-WP21 | IB-HTR-21 |
-| HTR-GAP-041 | Activation authority + Core-uplift status not recorded | blocker | open | HTR-WP01 | — | HTR-WP01 | IB-HTR-01 |
+| HTR-GAP-041 | Activation authority + Core-uplift status not recorded | blocker | closed (2026-07-12; recorded in Completion Spec decision record, D-14/D-15) | HTR-WP01 | — | HTR-WP01 | IB-HTR-01 |
 | HTR-GAP-042 | Execution Server code-ready package/manifest contracts absent | major | open | HTR-WP23 | HTR-WP12 | HTR-WP23 | IB-HTR-23 |
 
 ## Intake rules
