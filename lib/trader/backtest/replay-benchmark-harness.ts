@@ -46,7 +46,6 @@ import type { TraderFixtureFile } from "@/lib/trader/market-data/types";
 import { MEAN_REVERSION_V0, type Bar } from "@/lib/trader/intelligence/types";
 import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
 import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
-import type { TraderAuditInput } from "@/lib/trader/types";
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
 import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
@@ -125,7 +124,7 @@ async function createDeterministicBenchmarkSession(): Promise<BenchmarkSession> 
   migrateBenchmarkDb();
 
   const db = getDb();
-  const writeAudit = (_input: TraderAuditInput) => "htr-wp03-benchmark-audit";
+  const writeAudit = () => "htr-wp03-benchmark-audit";
   const replayClock = createManualReplayClock(BENCHMARK_REPLAY_CLOCK_START_MS);
   const nowMs = () => replayClock.nowMs();
   const rateStore = createInMemoryOrderRateStore();
