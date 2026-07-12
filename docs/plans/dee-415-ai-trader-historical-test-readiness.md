@@ -106,7 +106,7 @@ state:
   lastValidationAt: 2026-07-12
   finalAuditStatus: not-started
   blockedReason: null
-  nextAction: "Refresh the HTR-WP05 packet in place inside the active rolling controller against the actual WP04 CLOSEOUT HEAD. HTR-WP05 is not approved and Build is not authorized."
+  nextAction: "Rolling tranche uses the rev-5 macro-execution topology (macros A/B/C/D; see Authority-and-topology section). HTR-MACRO-A (HTR-WP05) is Human-approved with an exact packet and MIGRATION_DECISION: NONE (proven from current code); Build is authorized. Next: Composer 2.5 executes HTR-MACRO-A / HTR-WP05 Phase A from the rolling controller and stops at AWAITING_OPUS_MACRO_POST_REVIEW. No intermediate PR; the single final PR remains gated on all 23 work packages."
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -123,9 +123,10 @@ provenance:
 ## Authority and topology
 
 - **Core invariant:** DEE-415 = one integration issue = one canonical integration plan (this file) = one primary branch (`dee-415-ai-trader-historical-test-readiness`) = one final PR = one Human merge event. The 23 implementation stages are **internal work packages**, not PR boundaries (`INTEGRATION-BOUNDARY-POLICY.md`: "Never split merely because a plan has several steps — those are work-packages inside one PR").
-- **Parent controller (guidance/ledger):** `.cursor/plans/ai-trader_historical-test-readiness_master_20260711.plan.md` (rev 4, gitignored).
+- **Parent controller (guidance/ledger):** `.cursor/plans/ai-trader_historical-test-readiness_master_20260711.plan.md` (rev 5, gitignored).
 - **After first commit:** this canonical integration plan `state` + Linear DEE-415 + `git log` are authoritative; the scratch parent is a synchronized mirror.
-- Only **one child plan** may be active at a time; only **one work package** may be implemented per Build session; all work packages use the **same branch**; each completed work package produces a **local commit**; **no child plan may open a PR**; only the final integration closeout (after HTR-WP23 + final Opus audit) prepares the **single final PR**.
+- Only **one child plan** may be active at a time; all work packages use the **same branch**; each work package produces its own **local commits** (one WORK + one CLOSEOUT); **no child plan may open a PR**; only the final integration closeout (after HTR-WP23 + final Opus audit) prepares the **single final PR**.
+- **Execution topology for the WP05–WP12 rolling tranche (rev 5, execution-only — no technical/scope/gap/decision change):** work packages are executed in Human-pre-approved **macros** (`HTR-MACRO-A [WP05]`, `HTR-MACRO-B [WP06–08]`, `HTR-MACRO-C [WP09–10]`, `HTR-MACRO-D [WP11–12]`). One Composer Build session executes the WPs of **one** approved macro sequentially (internal advance only; one WORK commit + targeted validation per WP; full validation at macro end), and one Human-authorized Opus Phase-B session audits the macro with a **per-WP** PASS/FAIL verdict and **one CLOSEOUT commit per WP**. This replaces "one work package per Build session" for WP05–WP12 only; **WP01–WP04 used one WP per Build**. The WP layer is fully preserved (per-WP packet, WORK+CLOSEOUT commits, Opus verdict, gap/decision ownership); no macro merges, adds, removes, renumbers, or reorders any work package; every Human/D-11B/migration gate is held; the integration boundary is unchanged (one branch, zero intermediate PRs, one final PR, one merge).
 - **Final PR prohibited** until all 23 work packages are COMPLETE, parent/canonical states synchronized, the full validation matrix is green, the readiness package exists, and Opus completes the final whole-program audit.
 
 ## Program goal
