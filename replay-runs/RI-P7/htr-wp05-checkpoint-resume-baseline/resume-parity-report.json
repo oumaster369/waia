@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "htr-wp05-resume-parity/v1",
+  "uninterrupted": {
+    "evidenceDigest": "8a323f92129260ee9e54f26af9298be3b8e85b7ce1f1a709118d9ac43ecd9e1e",
+    "semanticReproDigest": "34494d5aa2c279f094bd1778421199c9c07c0a24168712d08aa889ba163b0d54",
+    "cycleCount": 81
+  },
+  "resumed": {
+    "evidenceDigest": "8a323f92129260ee9e54f26af9298be3b8e85b7ce1f1a709118d9ac43ecd9e1e",
+    "semanticReproDigest": "34494d5aa2c279f094bd1778421199c9c07c0a24168712d08aa889ba163b0d54",
+    "semanticParityDigest": "30e9b40ab4f2aa460bf7388053ce1ef5ed16b88da7720e548449ee7564418d03",
+    "cycleCount": 81
+  },
+  "parity": {
+    "evidenceDigestMatch": true,
+    "semanticReproDigestMatch": true,
+    "semanticParityDigestMatch": false,
+    "cycleCountMatch": true
+  }
+}

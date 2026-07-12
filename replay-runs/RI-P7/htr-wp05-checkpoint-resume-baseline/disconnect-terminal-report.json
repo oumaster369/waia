@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "htr-wp05-disconnect-terminal/v1",
+  "transientClassified": true,
+  "infraFailureCode": "CAMPAIGN_INFRA_DISCONNECT",
+  "passed": true
+}

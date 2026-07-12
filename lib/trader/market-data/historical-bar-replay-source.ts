@@ -50,6 +50,17 @@ export class HistoricalBarReplaySource implements BarReplaySource {
     this.expandExhausted = false;
   }
 
+  /** Advance internal cursor without executing cycles — used for resume warm-up discard. */
+  advanceToCycleIndex(targetCycleIndex: number): void {
+    while (this.cycleIndex < targetCycleIndex && !this.expandExhausted) {
+      this.next();
+    }
+  }
+
+  get currentCycleIndex(): number {
+    return this.cycleIndex;
+  }
+
   next(): BarReplayNextResult {
     if (this.expandExhausted) {
       return { done: true };

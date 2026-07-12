@@ -9,6 +9,7 @@ import { isTransientConnectionError, withCampaignDbRetry } from "@/db/postgres-c
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import type { StreamingEvidenceManifestRef } from "@/lib/trader/backtest/streaming-evidence";
+import type { ReplayRunTerminalState } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import type { CanonicalInventoryWalkResult } from "@/lib/trader/paper/derive-canonical-inventory";
 import { PaperPnLReconciliationError } from "@/lib/trader/paper/paper-pnl.errors";
 import {
@@ -63,6 +64,7 @@ export type FinalizeResearchCampaignOutcomeInput = {
   builderGitSha?: string | null;
   orderRepository?: OrderRepository;
   streamingManifestRef?: StreamingEvidenceManifestRef | null;
+  replayTerminalState?: ReplayRunTerminalState | null;
 };
 
 export type FinalizeResearchCampaignOutcomeResult = {
@@ -103,6 +105,7 @@ function resolveFailureMessage(error: unknown): string {
 function resolveStreamingEvidenceDiagnostics(
   manifestRef: StreamingEvidenceManifestRef | null | undefined,
   outcomeKind: CampaignTerminationKind,
+  replayTerminalState?: ReplayRunTerminalState | null,
 ): CampaignOperatorDiagnostics["recordBody"]["streamingEvidence"] {
   if (!manifestRef) {
     return null;
@@ -122,6 +125,7 @@ function resolveStreamingEvidenceDiagnostics(
     expectedCycleCount: manifest.expectedCycleCount,
     sealedThroughCycleIndex: manifest.sealedThroughCycleIndex,
     runDir,
+    replayTerminalState: replayTerminalState ?? null,
   };
 }
 
@@ -217,7 +221,19 @@ export async function finalizeResearchCampaignOutcomePostgres(
   input: FinalizeResearchCampaignOutcomeInput,
 ): Promise<FinalizeResearchCampaignOutcomeResult> {
   const { scope, kind } = input;
-  const streamingEvidence = resolveStreamingEvidenceDiagnostics(input.streamingManifestRef, kind);
+  const streamingEvidence = resolveStreamingEvidenceDiagnostics(
+    input.streamingManifestRef,
+    kind,
+    input.replayTerminalState,
+  );
+
+  if (
+    kind === "success" &&
+    input.replayTerminalState &&
+    input.replayTerminalState !== "REPLAY_RUN_OK"
+  ) {
+    throw new Error("WP05_FALSE_SUCCESS: replay terminal state blocks success finalization");
+  }
 
   if (kind === "success") {
     const operatorDiagnostics = buildCampaignOperatorDiagnostics({

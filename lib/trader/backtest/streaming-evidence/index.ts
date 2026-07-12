@@ -45,6 +45,36 @@ export {
   type ReconstructionResult,
 } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-reconstructor";
 export {
+  REPLAY_CHECKPOINT_SCHEMA_VERSION,
+  REPLAY_RUN_CHAIN_MANIFEST_SCHEMA_VERSION,
+  ReplayCheckpointError,
+  type ReplayCheckpointRecord,
+  type ReplayRunTerminalState,
+  type ReplayRunChainManifest,
+  type ReplayRunChainSegment,
+  type ResearchReplayPhase,
+  type DbPhaseFrontier,
+  type ResumeBoundary,
+  type ReplayResumeIdentity,
+  writeReplayCheckpoint,
+  readReplayCheckpoint,
+  resolveResumeBoundary,
+  resolveEvidenceFrontier,
+  writeReplayRunChainManifest,
+  readReplayRunChainManifest,
+  buildReplayRunChainManifest,
+  compareReplayResumeIdentity,
+  serializeResumableState,
+  restoreResumableState,
+  emptyDbPhaseFrontier,
+  dbPhaseFrontierFromCommittedPhases,
+} from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+export {
+  ReplayRunChainReader,
+  readReplayRunChainProjections,
+  type ReplayRunChainReadResult,
+} from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
+export {
   createStreamingEvidenceSink,
   createShutdownCoordinator,
   NOOP_REPLAY_EVIDENCE_SINK,

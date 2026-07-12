@@ -34,6 +34,11 @@ import { resolveM9ResearchDatasetPostgres } from "@/lib/trader/research/m9-datas
 import { buildResearchGuardianContext } from "@/lib/trader/research/research-guardian-config";
 import type { ResearchPipelineBacktestOptions } from "@/lib/trader/research/research-pipeline-config.types";
 import type { StreamingEvidenceManifestRef } from "@/lib/trader/backtest/streaming-evidence";
+import {
+  compareReplayResumeIdentity,
+  readReplayCheckpoint,
+  type ReplayRunTerminalState,
+} from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -97,6 +102,11 @@ export type RunResearchPipelineInput = {
   requireMultiRegimeCoverage?: boolean;
   /** M9 v2 wiring — metrics schema, portfolio, guardian, blind authorization. */
   pipelineBacktest?: ResearchPipelineBacktestOptions;
+  /** Optional filesystem checkpoint resume root (HTR-WP05). */
+  replayResume?: {
+    runRootDir: string;
+    codeSha: string;
+  };
 };
 
 export type RunResearchPipelineResult = {
@@ -112,6 +122,7 @@ export type RunResearchPipelineResult = {
   validationCycleResults?: readonly PaperCycleResult[];
   validationPortfolioContext?: PortfolioCycleContext;
   validationStreamingManifestRef?: StreamingEvidenceManifestRef;
+  replayTerminalState?: ReplayRunTerminalState | null;
 };
 
 async function resolveOrderRepository(
@@ -281,7 +292,31 @@ export async function runResearchPipelinePostgres(
     status: "registered",
   });
 
-  const backtestRunId = newId();
+  const backtestRunId = (() => {
+    if (input.replayResume) {
+      const checkpoint = readReplayCheckpoint(input.replayResume.runRootDir);
+      if (!checkpoint) {
+        throw new ResearchOrchestratorError(
+          "REPLAY_CHECKPOINT_MISSING",
+          "replay resume requested but checkpoint missing",
+        );
+      }
+      compareReplayResumeIdentity(
+        {
+          backtestRunId: checkpoint.backtestRunId,
+          datasetContentDigest: checkpoint.datasetContentDigest,
+          codeSha: checkpoint.codeSha,
+        },
+        {
+          backtestRunId: checkpoint.backtestRunId,
+          datasetContentDigest: computeBarSetDigest(bars),
+          codeSha: input.replayResume.codeSha,
+        },
+      );
+      return checkpoint.backtestRunId;
+    }
+    return newId();
+  })();
   await createBacktestRunPostgres(ex, input.context, {
     id: backtestRunId,
     datasetId: dataset.id,

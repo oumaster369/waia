@@ -131,6 +131,12 @@ export type RunResearchValidationBacktestInput = {
   enableReplayFusedContext?: boolean;
   retentionMode?: ReplayRetentionMode;
   evidenceSink?: ReplayEvidenceSink;
+  /** Bounded cycle cap for interrupt/resume harness scenarios. */
+  maxCycles?: number;
+  /** STREAM_ONLY resume cursor — discard bar-source cycles below this index. */
+  resumeCycleStartIndex?: number;
+  evidenceSealMode?: "complete" | "partial" | "none";
+  evidenceSealReason?: string;
 };
 
 const EMPTY_ACCOUNT_STATE: AccountRiskState = {
@@ -465,6 +471,10 @@ async function runResearchValidationBacktestV1(
     enableReplayFusedContext: input.enableReplayFusedContext,
     retentionMode,
     evidenceSink,
+    maxCycles: input.maxCycles,
+    resumeCycleStartIndex: input.resumeCycleStartIndex,
+    evidenceSealMode: input.evidenceSealMode,
+    evidenceSealReason: input.evidenceSealReason,
   });
 
   if (retentionMode === "FULL") {
@@ -594,6 +604,10 @@ async function runResearchValidationBacktestV2(
     enableReplayFusedContext: input.enableReplayFusedContext,
     retentionMode,
     evidenceSink,
+    maxCycles: input.maxCycles,
+    resumeCycleStartIndex: input.resumeCycleStartIndex,
+    evidenceSealMode: input.evidenceSealMode,
+    evidenceSealReason: input.evidenceSealReason,
   });
 
   if (input.artifactSink) {

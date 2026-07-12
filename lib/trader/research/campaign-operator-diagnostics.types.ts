@@ -14,6 +14,7 @@ export type CampaignOperatorDiagnosticsStreamingEvidence = {
   expectedCycleCount: number;
   sealedThroughCycleIndex: number;
   runDir: string;
+  replayTerminalState?: string | null;
 };
 
 export type CampaignOperatorDiagnosticsBody = {

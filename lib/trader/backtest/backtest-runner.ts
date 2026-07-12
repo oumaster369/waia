@@ -24,6 +24,7 @@ import {
   type StreamingEvidenceManifestRef,
 } from "@/lib/trader/backtest/streaming-evidence";
 import type { BarReplaySource } from "@/lib/trader/market-data/types";
+import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import {
   buildReplayFusedContextFromSnapshot,
   type ReplayProviderSidecar,
@@ -80,6 +81,11 @@ export type RunBacktestInput = {
   benchmarkObserver?: ReplayBenchmarkObserver;
   retentionMode?: ReplayRetentionMode;
   evidenceSink?: ReplayEvidenceSink;
+  /** STREAM_ONLY: discard bar-source cycles below this index before executing paper cycles. */
+  resumeCycleStartIndex?: number;
+  /** STREAM_ONLY evidence seal behavior at run end (default: complete). */
+  evidenceSealMode?: "complete" | "partial" | "none";
+  evidenceSealReason?: string;
 };
 
 export type RunBacktestResult = {
@@ -152,6 +158,12 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   let accountState = input.accountState;
   let hypothesisSessionState = input.hypothesisSessionState;
   const maxCycles = input.maxCycles ?? Number.POSITIVE_INFINITY;
+  const resumeCycleStartIndex = Math.max(0, input.resumeCycleStartIndex ?? 0);
+
+  if (resumeCycleStartIndex > 0 && "advanceToCycleIndex" in input.barSource) {
+    (input.barSource as HistoricalBarReplaySource).advanceToCycleIndex(resumeCycleStartIndex);
+    cycleCount = resumeCycleStartIndex;
+  }
 
   while (cycleCount < maxCycles) {
     const cycleIndex = cycleCount;
@@ -267,7 +279,18 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   evidenceExportTimer.end();
   benchmarkObserver.sampleMemory("evidence-export", null);
 
-  const streamingManifestRef = await evidenceSink.sealComplete(cycleCount);
+  let streamingManifestRef: StreamingEvidenceManifestRef | undefined;
+  const sealMode = input.evidenceSealMode ?? "complete";
+  if (sealMode === "none") {
+    streamingManifestRef = undefined;
+  } else if (sealMode === "partial") {
+    streamingManifestRef = await evidenceSink.sealPartial(
+      cycleCount,
+      input.evidenceSealReason ?? "PARTIAL",
+    );
+  } else {
+    streamingManifestRef = await evidenceSink.sealComplete(cycleCount);
+  }
 
   return {
     cycleCount,
