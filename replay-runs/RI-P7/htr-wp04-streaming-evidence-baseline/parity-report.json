@@ -2,5 +2,13 @@
   "evidenceDigestMatch": true,
   "semanticReproDigestMatch": true,
   "metricsMatch": true,
-  "cycleCountMatch": true
+  "cycleCountMatch": true,
+  "digests": {
+    "fullEvidenceDigest": "2538f5d0e77976ffbe5278ca584dec2ebd5e1bf45ff4a4b9feca855c0cd67e19",
+    "streamEvidenceDigest": "2538f5d0e77976ffbe5278ca584dec2ebd5e1bf45ff4a4b9feca855c0cd67e19",
+    "fullSemanticReproDigest": "2195601dd55265d2da943b16a19b8f63b2b00096269b6ad09379eaf83ea57db1",
+    "streamSemanticReproDigest": "2195601dd55265d2da943b16a19b8f63b2b00096269b6ad09379eaf83ea57db1",
+    "streamChainDigest": "d346ce471e46dcb2891ae06e312ca4cc7b560853e53aabaa9c29a85bf3604e76",
+    "fixtureSha256": "814981bc3055d8fd52d1277d60a0b443de7644416aceba8cbe99819c70242061"
+  }
 }

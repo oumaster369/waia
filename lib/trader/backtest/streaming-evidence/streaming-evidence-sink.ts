@@ -10,7 +10,11 @@ export type ReplayEvidenceSink = {
   onCycle(cycleIndex: number, result: PaperCycleResult): void | Promise<void>;
   sealComplete(expectedCycleCount: number): Promise<StreamingEvidenceManifestRef>;
   sealPartial(expectedCycleCount: number, reason: string): Promise<StreamingEvidenceManifestRef>;
-  peakRetainedCycles(): number;
+  /**
+   * High-water mark of buffered evidence projections (bounded by MAX_BATCH_CYCLES), not retained
+   * PaperCycleResult objects. STREAM_ONLY retains zero PaperCycleResult objects.
+   */
+  peakBufferedProjections(): number;
 };
 
 export const NOOP_REPLAY_EVIDENCE_SINK: ReplayEvidenceSink = {
@@ -48,7 +52,7 @@ export const NOOP_REPLAY_EVIDENCE_SINK: ReplayEvidenceSink = {
       },
     };
   },
-  peakRetainedCycles() {
+  peakBufferedProjections() {
     return 0;
   },
 };
@@ -67,8 +71,8 @@ export function createStreamingEvidenceSink(
     async sealPartial(expectedCycleCount, reason) {
       return writer.sealPartial(expectedCycleCount, reason);
     },
-    peakRetainedCycles() {
-      return writer.peakRetainedCycles();
+    peakBufferedProjections() {
+      return writer.peakBufferedProjections();
     },
   };
 }
@@ -82,8 +86,11 @@ export type ShutdownCoordinator = {
 export function createShutdownCoordinator(options?: {
   timeoutMs?: number;
   onTimeout?: () => void;
+  /** Injectable process exit (defaults to process.exit) — overridable for tests. */
+  exit?: (code: number) => void;
 }): ShutdownCoordinator {
   const timeoutMs = options?.timeoutMs ?? 5000;
+  const exit = options?.exit ?? ((code: number) => process.exit(code));
   let shuttingDown = false;
   let sealed = false;
   let callback: (() => void | Promise<void>) | null = null;
@@ -96,15 +103,19 @@ export function createShutdownCoordinator(options?: {
     isShuttingDown() {
       return shuttingDown;
     },
-    requestShutdown(_signal) {
+    requestShutdown(signal) {
       if (shuttingDown) {
-        process.exit(130);
+        // Second signal escalates immediately (SIGINT semantics) without a duplicate seal.
+        exit(130);
         return;
       }
       shuttingDown = true;
+      // Exit code follows the received signal (SIGTERM=143, SIGINT=130) and is applied only
+      // AFTER the partial seal completes (or the timeout fires), never before required cleanup.
+      const exitCode = signal === "SIGTERM" ? 143 : 130;
       timeoutHandle = setTimeout(() => {
         options?.onTimeout?.();
-        process.exit(1);
+        exit(1);
       }, timeoutMs);
       void (async () => {
         try {
@@ -116,6 +127,7 @@ export function createShutdownCoordinator(options?: {
           if (timeoutHandle) {
             clearTimeout(timeoutHandle);
           }
+          exit(exitCode);
         }
       })();
     },

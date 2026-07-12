@@ -35,7 +35,12 @@ export type CreateStreamingEvidenceWriterInput = {
 
 export type StreamingEvidenceWriter = {
   onCycle(cycleIndex: number, result: PaperCycleResult): void;
-  peakRetainedCycles(): number;
+  /**
+   * High-water mark of the in-flight projection batch (buffered ReplayCycleEvidenceProjection
+   * objects), NOT retained PaperCycleResult objects. Bounded by MAX_BATCH_CYCLES regardless of
+   * total cycle count. STREAM_ONLY retains zero PaperCycleResult objects (see backtest-runner).
+   */
+  peakBufferedProjections(): number;
   sealComplete(expectedCycleCount: number): StreamingEvidenceManifestRef;
   sealPartial(expectedCycleCount: number, reason: string): StreamingEvidenceManifestRef;
 };
@@ -64,7 +69,10 @@ export function createStreamingEvidenceWriter(
   let lastChunkDigest: string | null = null;
   const chunkDigests: string[] = [];
   let sealedThroughCycleIndex = -1;
-  let peakRetained = 0;
+  let peakBuffered = 0;
+  // First seal wins: a complete seal must never overwrite a prior partial seal, and a complete
+  // seal must occur at most once (§7 invariant). Subsequent seals return the sealed ref idempotently.
+  let sealedRef: StreamingEvidenceManifestRef | null = null;
 
   const flushBatch = (): void => {
     if (batch.length === 0) {
@@ -109,7 +117,6 @@ export function createStreamingEvidenceWriter(
     sealedThroughCycleIndex = batch.at(-1)!.cycleIndex;
     nextSeq += 1;
     batch = [];
-    peakRetained = Math.max(peakRetained, 0);
   };
 
   const seal = (
@@ -117,6 +124,9 @@ export function createStreamingEvidenceWriter(
     expectedCycleCount: number,
     reason: string | null,
   ): StreamingEvidenceManifestRef => {
+    if (sealedRef) {
+      return sealedRef;
+    }
     flushBatch();
     timelineWriter.flush();
 
@@ -141,7 +151,8 @@ export function createStreamingEvidenceWriter(
         : "manifest.json";
     writeFileAtomic(join(input.runDir, manifestName), JSON.stringify(manifest, null, 2));
 
-    return { runDir: input.runDir, manifest };
+    sealedRef = { runDir: input.runDir, manifest };
+    return sealedRef;
   };
 
   return {
@@ -150,14 +161,13 @@ export function createStreamingEvidenceWriter(
       const projection = buildReplayCycleEvidenceProjection(cycleIndex, result);
       batch.push(projection);
       timelineWriter.append(cycleIndex, result);
-      peakRetained = Math.max(peakRetained, batch.length);
+      peakBuffered = Math.max(peakBuffered, batch.length);
       if (batch.length >= MAX_BATCH_CYCLES) {
         flushBatch();
-        peakRetained = Math.max(peakRetained, batch.length);
       }
     },
-    peakRetainedCycles(): number {
-      return Math.max(peakRetained, batch.length);
+    peakBufferedProjections(): number {
+      return Math.max(peakBuffered, batch.length);
     },
     sealComplete(expectedCycleCount: number): StreamingEvidenceManifestRef {
       return seal("STREAMING_EVIDENCE_OK", expectedCycleCount, null);

@@ -28,13 +28,13 @@ linearStatusFlow:
 state:
   status: in-progress
   humanApproval: CONFIRM-DEE-415-HTR-WP01-CHILD-PLAN
-  childPlanStatus: not-planned
+  childPlanStatus: REFRESH_REQUIRED
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  currentWorkPackage: HTR-WP04
-  activeChildPlan: null
-  workCommitSha: 35283edc03efff975da3cdd489378463be07ddde
+  currentWorkPackage: HTR-WP05
+  activeChildPlan: .cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md
+  workCommitSha: b3abe7b9483be9b54752d5dfb38b29155c7a891d
   wp01WorkCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
   wp01PostReview: PASS
   wp01Validation:
@@ -64,12 +64,23 @@ state:
     build: PASS
   wp03BenchmarkEvidence: replay-runs/RI-P7/htr-wp03-replay-benchmark-baseline/
   wp03GapStatus: "HTR-GAP-024 remains OPEN; baseline evidence recorded; closure HTR-WP22"
+  wp04WorkCommitSha: b3abe7b9483be9b54752d5dfb38b29155c7a891d
+  wp04PostReview: PASS
+  wp04Validation:
+    validateCanon: PASS
+    lint: PASS
+    typecheck: PASS
+    tests: PASS
+    build: PASS
+  wp04StreamingEvidence: replay-runs/RI-P7/htr-wp04-streaming-evidence-baseline/
+  wp04MigrationDecision: NONE
+  wp04GapStatus: "HTR-GAP-005 and HTR-GAP-026 remain OPEN; WP04 evidence recorded; closure HTR-WP22"
   completedWorkPackages:
     - HTR-WP01
     - HTR-WP02
     - HTR-WP03
-  remainingWorkPackages:
     - HTR-WP04
+  remainingWorkPackages:
     - HTR-WP05
     - HTR-WP06
     - HTR-WP07
@@ -91,11 +102,11 @@ state:
     - HTR-WP23
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 35283edc03efff975da3cdd489378463be07ddde
+  lastValidatedGitSha: b3abe7b9483be9b54752d5dfb38b29155c7a891d
   lastValidationAt: 2026-07-12
   finalAuditStatus: not-started
   blockedReason: null
-  nextAction: "Human authorizes the next planning operation for HTR-WP04 and subsequent approved work-package tranche. No Build is authorized."
+  nextAction: "Refresh the HTR-WP05 packet in place inside the active rolling controller against the actual WP04 CLOSEOUT HEAD. HTR-WP05 is not approved and Build is not authorized."
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -133,7 +144,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed; HTR-WP03 COMPLETE — WORK COMMIT `35283ed`, Opus post-review PASS, validation PASS, HTR-GAP-024 baseline evidence recorded (remains OPEN, closure HTR-WP22); active work package HTR-WP04, no child plan created, Build not authorized) |
+| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed; HTR-WP03 COMPLETE — WORK COMMIT `35283ed`, HTR-GAP-024 baseline recorded (OPEN, closure HTR-WP22); HTR-WP04 COMPLETE — WORK COMMIT `b3abe7b`, Opus post-review PASS, validation PASS, streaming-evidence baseline recorded, HTR-GAP-005/026 remain OPEN, closure HTR-WP22; active work package HTR-WP05 in the rolling controller with childPlanStatus REFRESH_REQUIRED, Build not authorized) |
 
 ## Approved decisions (recorded)
 
@@ -152,8 +163,8 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP01 | Canon & readiness-contract + activation/target-subset ratification | — | product | COMPLETE (Opus post-review PASS) | `6600708` (WORK) |
 | HTR-WP02 | Post-M9 forensic + status truth-up + program supersession | WP01 | product | COMPLETE (Opus post-review PASS; HTR-GAP-030/034 closed) | `7ec02dd` (WORK) |
 | HTR-WP03 | Replay benchmark + stage timing + memory instrumentation | WP01 | backend | COMPLETE (Opus post-review PASS; HTR-GAP-024 baseline evidence recorded, remains OPEN, closure HTR-WP22) | `35283ed` (WORK) |
-| HTR-WP04 | Streaming evidence + partial sealing + crash-recovery reconstruction | WP03 | backend | pending | — |
-| HTR-WP05 | Checkpoint/resume + pipeline DB-disconnect + terminal states | WP04 | backend | pending | — |
+| HTR-WP04 | Streaming evidence + partial sealing + crash-recovery reconstruction | WP03 | backend | COMPLETE (Opus post-review PASS; full validation PASS; streaming-evidence baseline recorded; HTR-GAP-005/026 remain OPEN, closure HTR-WP22) | `b3abe7b` (WORK) |
+| HTR-WP05 | Checkpoint/resume + pipeline DB-disconnect + terminal states | WP04 | backend | REFRESH_REQUIRED (rolling controller; Build not authorized) | — |
 | HTR-WP06 | Market Canvas state contract + cursor replay foundation | WP01,WP03 | backend | pending | — |
 | HTR-WP07 | Incremental closed-bar MTF aggregation | WP06 | backend | pending | — |
 | HTR-WP08 | Incremental reconstruction + oracle parity | WP07 | backend | pending | — |
@@ -192,9 +203,9 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## WP-04 (current work package)
+## WP-05 (current work package)
 
-The active work package is **HTR-WP04** (Streaming evidence + partial sealing + crash-recovery reconstruction). **No HTR-WP04 child plan exists yet and Build is not authorized** — a separate Human-authorized planning operation is required before implementation. HTR-WP01 is COMPLETE (WORK COMMIT `6600708`); HTR-WP02 is COMPLETE (WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed); HTR-WP03 is COMPLETE (WORK COMMIT `35283ed`, Opus post-review PASS, full validation PASS, benchmark baseline evidence at `replay-runs/RI-P7/htr-wp03-replay-benchmark-baseline/`; HTR-GAP-024 remains OPEN with baseline evidence recorded, closure HTR-WP22). This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
+The active work package is **HTR-WP05** (Checkpoint/resume + pipeline DB-disconnect + terminal states), tracked in the rolling controller `.cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md` with **childPlanStatus REFRESH_REQUIRED**. **No HTR-WP05 packet is approved and Build is not authorized** — Opus must perform an in-place packet refresh against the actual WP04 CLOSEOUT HEAD before any Human approval. HTR-WP01 COMPLETE (`6600708`); HTR-WP02 COMPLETE (`7ec02dd`, HTR-GAP-030/034 closed); HTR-WP03 COMPLETE (`35283ed`, HTR-GAP-024 baseline recorded, OPEN, closure HTR-WP22); **HTR-WP04 COMPLETE** (WORK COMMIT `b3abe7b`, Opus post-review PASS, full validation PASS, streaming-evidence baseline at `replay-runs/RI-P7/htr-wp04-streaming-evidence-baseline/`; HTR-GAP-005 and HTR-GAP-026 remain OPEN with WP04 evidence recorded, closure HTR-WP22). This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
 
 ## Acceptance (whole program)
 

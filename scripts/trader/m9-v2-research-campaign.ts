@@ -382,9 +382,10 @@ async function main(): Promise<void> {
           validationArtifactSink.streamingManifestRef?.manifest.expectedCycleCount ?? 0;
         await sink.sealPartial(cycleCount, "graceful-shutdown");
       });
+      // Delegate exit to the coordinator: it performs the partial seal and then exits with the
+      // signal-appropriate code (143/130). Exiting synchronously here would abort the async seal.
       const onSignal = (signal: "SIGTERM" | "SIGINT"): void => {
         shutdownCoordinator.requestShutdown(signal);
-        process.exit(signal === "SIGTERM" ? 143 : 130);
       };
       process.on("SIGTERM", () => onSignal("SIGTERM"));
       process.on("SIGINT", () => onSignal("SIGINT"));

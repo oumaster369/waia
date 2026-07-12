@@ -25,7 +25,9 @@ describe("research streaming integration (HTR-WP04)", () => {
     expect(artifactSink.cycleResults).toBeUndefined();
     expect(artifactSink.streamingManifestRef?.manifest.terminalState).toBe("STREAMING_EVIDENCE_OK");
     expect(artifactSink.evidenceSink).toBeDefined();
-    expect(artifactSink.evidenceSink!.peakRetainedCycles()).toBeLessThanOrEqual(MAX_BATCH_CYCLES);
+    expect(artifactSink.evidenceSink!.peakBufferedProjections()).toBeLessThanOrEqual(
+      MAX_BATCH_CYCLES,
+    );
 
     const runDir = artifactSink.streamingManifestRef!.runDir;
     expect(countStreamingProjections(runDir)).toBe(HTR_WP03_BENCHMARK_EXPECTED_CYCLES);

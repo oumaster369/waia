@@ -22,7 +22,8 @@ describe("streaming evidence writer (HTR-WP04)", () => {
     });
 
     expect(result.streamingManifestRef?.manifest.terminalState).toBe("STREAMING_EVIDENCE_OK");
-    expect(result.peakRetainedCycles).toBeLessThanOrEqual(MAX_BATCH_CYCLES);
+    expect(result.peakBufferedProjections).toBeLessThanOrEqual(MAX_BATCH_CYCLES);
+    expect(result.cycleResultsLength).toBe(0);
     expect(result.cycleCount).toBe(HTR_WP03_BENCHMARK_EXPECTED_CYCLES);
 
     const runDir = result.streamingManifestRef!.runDir;
@@ -31,6 +32,20 @@ describe("streaming evidence writer (HTR-WP04)", () => {
       HTR_WP03_BENCHMARK_EXPECTED_CYCLES,
     );
   }, 120_000);
+
+  it("does not overwrite a partial seal with a later complete seal", () => {
+    const runDir = fs.mkdtempSync(path.join(os.tmpdir(), "waia-wp04-seal-once-"));
+    const writer = createStreamingEvidenceWriter({ runDir, runId: "seal-once" });
+
+    const partial = writer.sealPartial(1, "SIGTERM");
+    expect(partial.manifest.terminalState).toBe("STREAMING_EVIDENCE_SEALED_PARTIAL");
+
+    // A subsequent complete seal must be idempotent — the first (partial) seal wins.
+    const afterComplete = writer.sealComplete(1);
+    expect(afterComplete.manifest.terminalState).toBe("STREAMING_EVIDENCE_SEALED_PARTIAL");
+    expect(fs.existsSync(path.join(runDir, "manifest.partial.json"))).toBe(true);
+    expect(fs.existsSync(path.join(runDir, "manifest.json"))).toBe(false);
+  });
 
   it("throws on atomic write failure", () => {
     const runDir = fs.mkdtempSync(path.join(os.tmpdir(), "waia-wp04-writer-fail-"));

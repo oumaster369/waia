@@ -8,10 +8,10 @@
   "sealedThroughCycleIndex": 80,
   "timelineChunkCount": 2,
   "provenance": {
-    "gitSha": "htr-wp04-test",
+    "gitSha": "b3abe7b9483be9b54752d5dfb38b29155c7a891d",
     "environment": "streaming-evidence-fixture-harness",
     "dbConnectionMode": null,
-    "sealedAt": "2026-07-12T14:31:54.257Z",
+    "sealedAt": "2026-07-12T15:30:38.013Z",
     "sealReason": null
   }
 }

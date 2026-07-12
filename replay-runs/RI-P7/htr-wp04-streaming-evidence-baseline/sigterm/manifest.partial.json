@@ -2,16 +2,16 @@
   "schemaVersion": "htr-wp04-evidence-manifest/v1",
   "runId": "sigterm-run",
   "terminalState": "STREAMING_EVIDENCE_SEALED_PARTIAL",
-  "chainDigest": "94c6c7561cad6d88a5c88c87b8d3fc0440df014969f177f639e6764af21c17ad",
-  "expectedCycleCount": 40,
-  "chunkCount": 1,
-  "sealedThroughCycleIndex": 20,
+  "chainDigest": "edfb8ae534927b700f9c91445a31f05d7dc5aa100c75af31824d648aed70260c",
+  "expectedCycleCount": 81,
+  "chunkCount": 2,
+  "sealedThroughCycleIndex": 39,
   "timelineChunkCount": 1,
   "provenance": {
-    "gitSha": null,
+    "gitSha": "b3abe7b9483be9b54752d5dfb38b29155c7a891d",
     "environment": "sigterm-simulation",
     "dbConnectionMode": null,
-    "sealedAt": "2026-07-12T14:31:54.675Z",
+    "sealedAt": "2026-07-12T15:30:38.459Z",
     "sealReason": "SIGTERM"
   }
 }

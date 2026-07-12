@@ -203,8 +203,8 @@ function wrapEvidenceSinkWithOnlineAccumulators(
     sealPartial(expectedCycleCount, reason) {
       return baseSink.sealPartial(expectedCycleCount, reason);
     },
-    peakRetainedCycles() {
-      return baseSink.peakRetainedCycles();
+    peakBufferedProjections() {
+      return baseSink.peakBufferedProjections();
     },
   };
 }

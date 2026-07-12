@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   console.log("[htr-wp04-evidence] terminal state:", harness.terminalState);
   console.log("[htr-wp04-evidence] baseline:", paths.baselineDir);
   console.log(
-    `[htr-wp04-evidence] cycles=${harness.streamOnlyRun.cycleCount} peakRetained=${harness.memoryBoundedness.peakRetainedCycles}`,
+    `[htr-wp04-evidence] cycles=${harness.streamOnlyRun.cycleCount} retainedPaperCycleResults=${harness.memoryBoundedness.retainedPaperCycleResults} peakBufferedProjections=${harness.memoryBoundedness.peakBufferedProjections}`,
   );
 
   if (harness.terminalState !== "STREAMING_EVIDENCE_OK") {

@@ -85,8 +85,84 @@
     {
       "evaluatedAtMs": 1767228000000,
       "regime": "RANGE"
+    },
+    {
+      "evaluatedAtMs": 1767228060000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228120000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228180000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228240000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228300000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228360000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228420000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228480000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228540000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228600000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228660000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228720000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228780000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228840000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228900000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767228960000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229020000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229080000,
+      "regime": "CHOP"
+    },
+    {
+      "evaluatedAtMs": 1767229140000,
+      "regime": "CHOP"
     }
   ],
-  "payloadDigest": "6813a1f0e3839df2e47eae19b5f0ce4083f76ee61eb371b785b9a976796b6e56",
-  "chunkDigest": "4036a4cabc3a9cf0ed93599032733c745cf9b9f52231b5e94239a3bddb87cd8e"
+  "payloadDigest": "643b7656fcdd77a2c950620580bb71d8e90059a794b999687b89961ae2c2ce3b",
+  "chunkDigest": "b89fc6c471ab3643c00077b7614ea49d895f6d231c37145dd3e009def68cbab2"
 }

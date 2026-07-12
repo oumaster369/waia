@@ -35,7 +35,7 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 | HTR-GAP-002 | Reconstruction full recompute | blocker | open | HTR-WP08 | — | HTR-WP09 | IB-HTR-08 |
 | HTR-GAP-003 | MTF full resample | blocker | open | HTR-WP07 | — | HTR-WP09 | IB-HTR-07 |
 | HTR-GAP-004 | Partial-bar HTF leakage | blocker | open | HTR-WP07 | HTR-WP10 | HTR-WP10 | IB-HTR-07 |
-| HTR-GAP-005 | Unbounded in-memory trace | blocker | open | HTR-WP04 | HTR-WP22 | HTR-WP22 | IB-HTR-04 |
+| HTR-GAP-005 | Unbounded in-memory trace | blocker | open (2026-07-12; WP04 WORK COMMIT b3abe7b + CLOSEOUT supplied bounded STREAM_ONLY retention — 0 retained PaperCycleResults, ≤32 buffered evidence projections, fixed O(1) buffer high-water at N=40 and N=81 (both 32), no O(N) final rebuild, M9 exporters stream the iterator; semantic-parity PASS; baseline at replay-runs/RI-P7/htr-wp04-streaming-evidence-baseline/; CLOSURE remains HTR-WP22 full complete-runtime memory soak) | HTR-WP04 | HTR-WP22 | HTR-WP22 | IB-HTR-04 |
 | HTR-GAP-006 | MI-core chain default OFF | blocker | open | HTR-WP13 | — | HTR-WP13 | IB-HTR-13 |
 | HTR-GAP-007 | CDE/Decision naming conflation | major | open | HTR-WP14 | — | HTR-WP14 | IB-HTR-14 |
 | HTR-GAP-008 | whyNotCash + no-trade decision absent | blocker | open | HTR-WP14 | HTR-WP13 | HTR-WP14 | IB-HTR-14 |
@@ -56,7 +56,7 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 | HTR-GAP-023 | Cost model not on default fills; net vs gross | blocker | open | HTR-WP17 | HTR-WP18 | HTR-WP18 | IB-HTR-17 |
 | HTR-GAP-024 | No per-stage timing / perf telemetry | major | open (2026-07-12; WP03 WORK COMMIT 35283ed supplied benchmark instrumentation, per-stage timing baseline, memory high-water, semantic-parity evidence, baseline evidence at replay-runs/RI-P7/htr-wp03-replay-benchmark-baseline/; CLOSURE remains HTR-WP22 full-runtime perf qualification) | HTR-WP03 | — | HTR-WP22 | IB-HTR-03 |
 | HTR-GAP-025 | Determinism residuals | blocker | open | HTR-WP10 | — | HTR-WP10 | IB-HTR-10 |
-| HTR-GAP-026 | All-or-nothing evidence sealing; no crash-recovery | blocker | open | HTR-WP04 | — | HTR-WP22 | IB-HTR-04 |
+| HTR-GAP-026 | All-or-nothing evidence sealing; no crash-recovery | blocker | open (2026-07-12; WP04 WORK COMMIT b3abe7b + CLOSEOUT supplied streaming per-cycle evidence, atomic checksummed chain-linked chunks, complete/partial manifest truth, graceful SIGTERM partial sealing, hard-kill durable-prefix reconstruction, orphan-temp handling, corrupt-chain quarantine, integrated research-path evidence; baseline at replay-runs/RI-P7/htr-wp04-streaming-evidence-baseline/; CLOSURE remains HTR-WP22) | HTR-WP04 | — | HTR-WP22 | IB-HTR-04 |
 | HTR-GAP-027 | No checkpoint/resume | major | open | HTR-WP05 | — | HTR-WP22 | IB-HTR-05 |
 | HTR-GAP-028 | Readiness preflight absent | major | open | HTR-WP23 | — | HTR-WP23 | IB-HTR-23 |
 | HTR-GAP-029 | Pipeline-body DB-disconnect resilience | major | open | HTR-WP05 | — | HTR-WP22 | IB-HTR-05 |

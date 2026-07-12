@@ -189,7 +189,7 @@ function buildInfluenceTrace(input: {
 }
 
 export function buildProviderCoverageMatrix(input: {
-  fusedSamples: readonly FusedMarketContext[];
+  fusedSamples: Iterable<FusedMarketContext>;
   providerSidecar?: ReplayProviderSidecar;
 }): ProviderCoverageMatrixRow[] {
   const perProvider = new Map<
@@ -281,6 +281,28 @@ export function computeProviderFusionContentDigest(
   return computeReplayReproContentDigest(exportDoc);
 }
 
+/**
+ * Yields one FusedMarketContext per cycle lazily. In STREAM_ONLY mode this re-reads projections
+ * from disk on demand (O(1) memory) instead of materializing every cycle into an array, preserving
+ * the WP04 bound that no M9 exporter converts the streaming iterator to an unbounded array.
+ */
+function* iterateFusedSamples(input: {
+  fusedSamples?: readonly FusedMarketContext[];
+  cycleResults?: readonly PaperCycleResult[];
+  projectionReader?: StreamingEvidenceReader;
+}): Generator<FusedMarketContext> {
+  if (input.fusedSamples) {
+    yield* input.fusedSamples;
+    return;
+  }
+  for (const cycle of iterateM9Cycles(input)) {
+    const fused = cycle.evaluation.fusedContext;
+    if (fused !== undefined) {
+      yield fused;
+    }
+  }
+}
+
 export function buildM9ProviderFusionExport(input: {
   organizationId: string;
   strategyId: string;
@@ -292,18 +314,28 @@ export function buildM9ProviderFusionExport(input: {
   providerSidecar?: ReplayProviderSidecar;
   generatedAt?: string;
 }): M9ProviderFusionExport {
-  const fusedSamples =
-    input.fusedSamples ??
-    [...iterateM9Cycles(input)]
-      .map((cycle) => cycle.evaluation.fusedContext)
-      .filter((fused): fused is FusedMarketContext => fused !== undefined);
+  // Fresh iterable per pass; a generator can only be consumed once, so each consumer re-derives it.
+  const fusedSource = (): Iterable<FusedMarketContext> =>
+    input.fusedSamples ?? iterateFusedSamples(input);
 
   const coverageMatrix = buildProviderCoverageMatrix({
-    fusedSamples,
+    fusedSamples: fusedSource(),
     providerSidecar: input.providerSidecar,
   });
 
-  const sample = fusedSamples[0];
+  // Single bounded pass: capture the first sample (laneSummary) and fold HTX supremacy without
+  // holding all fused contexts in memory. `.every` over an empty set is true; the fold matches.
+  let sample: FusedMarketContext | undefined;
+  let htxSupremacyMaintained = true;
+  for (const fused of fusedSource()) {
+    if (sample === undefined) {
+      sample = fused;
+    }
+    if (fused.primaryQuote?.provenance.providerId !== "htx_spot") {
+      htxSupremacyMaintained = false;
+    }
+  }
+
   const laneSummary = {
     macroEvidenceCount: sample?.macroEvidence?.length ?? 0,
     newsEvidenceCount: sample?.newsEvidence?.length ?? 0,
@@ -322,9 +354,7 @@ export function buildM9ProviderFusionExport(input: {
       (row) =>
         row.captured && !row.fusedCycleCount && row.influenceClass === "DECISION_INFLUENTIAL",
     ).length,
-    htxSupremacyMaintained: fusedSamples.every(
-      (fused) => fused.primaryQuote?.provenance.providerId === "htx_spot",
-    ),
+    htxSupremacyMaintained,
     pr3BoundaryLocked: coverageMatrix
       .filter((row) => row.influenceClass === "DEFERRED_PR3")
       .every((row) => row.influence.stopReason === "PR3_BOUNDARY_CONTEXT_LANE"),

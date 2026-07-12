@@ -18,6 +18,8 @@ import {
   HTR_WP03_BENCHMARK_FIXTURE_PATH,
   HTR_WP03_BENCHMARK_FIXTURE_SHA256,
   loadApprovedBenchmarkFixture,
+  readGitCodeSha,
+  readGitDirtyTree,
   seedBenchmarkSession,
   sha256File,
 } from "@/lib/trader/backtest/replay-benchmark-harness";
@@ -46,7 +48,8 @@ export type StreamingFixtureBacktestResult = {
   evidenceDigest: string;
   semanticReproDigest: string;
   cycleResultsLength: number;
-  peakRetainedCycles: number;
+  /** Buffered evidence-projection high-water (bounded by MAX_BATCH_CYCLES), not retained cycles. */
+  peakBufferedProjections: number;
   streamingManifestRef?: StreamingEvidenceManifestRef;
 };
 
@@ -67,9 +70,18 @@ export type StreamingEvidenceRecoveryHarnessResult = {
   sigtermPartialManifest: string | null;
   reconstructionOutcome: string;
   memoryBoundedness: {
-    peakRetainedCycles: number;
+    /**
+     * Retained PaperCycleResult objects in STREAM_ONLY mode. Invariant: 0 (the runner never pushes
+     * to cycleResults and RunBacktestResult.cycleResults is empty).
+     */
+    retainedPaperCycleResults: number;
+    /** Buffered evidence-projection high-water; bounded by maxBatchCycles regardless of cycleCount. */
+    peakBufferedProjections: number;
     maxBatchCycles: number;
     cycleCount: number;
+    /** Bound observed at multiple cycle counts, proving the high-water does not grow with N. */
+    boundedness: Array<{ cycleCount: number; peakBufferedProjections: number }>;
+    provenance: { gitSha: string; dirtyTree: boolean };
   };
   evidenceDirs: {
     completeRunDir: string;
@@ -114,7 +126,7 @@ export async function runFixtureBacktestWithRetention(input: {
     const runId = input.runId ?? "htr-wp04-parity";
     const cycleIdPrefix = input.cycleIdPrefix ?? "htr-wp04-parity";
     let evidenceSink: ReplayEvidenceSink | undefined;
-    let peakRetainedCycles = 0;
+    let peakBufferedProjections = 0;
 
     if (input.retentionMode === "STREAM_ONLY") {
       const baseDir =
@@ -124,7 +136,7 @@ export async function runFixtureBacktestWithRetention(input: {
       evidenceSink = createStreamingEvidenceSink({
         runDir,
         runId,
-        gitSha: "htr-wp04-test",
+        gitSha: readGitCodeSha(),
         environment: "streaming-evidence-fixture-harness",
       });
       if (input.peakSink) {
@@ -175,7 +187,10 @@ export async function runFixtureBacktestWithRetention(input: {
       });
 
       if (evidenceSink) {
-        peakRetainedCycles = Math.max(peakRetainedCycles, evidenceSink.peakRetainedCycles());
+        peakBufferedProjections = Math.max(
+          peakBufferedProjections,
+          evidenceSink.peakBufferedProjections(),
+        );
       }
 
       return {
@@ -183,7 +198,7 @@ export async function runFixtureBacktestWithRetention(input: {
         evidenceDigest: backtest.evidenceDigest,
         semanticReproDigest: computeReplayReproContentDigest(backtest.exportDocument),
         cycleResultsLength: backtest.cycleResults.length,
-        peakRetainedCycles,
+        peakBufferedProjections,
         streamingManifestRef: backtest.streamingManifestRef,
       };
     } finally {
@@ -207,7 +222,7 @@ export async function runFixtureResearchValidationStreamOnly(input: {
     const evidenceSink = createStreamingEvidenceSink({
       runDir,
       runId: input.runId,
-      gitSha: "htr-wp04-test",
+      gitSha: readGitCodeSha(),
       environment: "streaming-evidence-research-integration",
     });
     const artifactSink: ResearchValidationBacktestArtifactSink = {};
@@ -249,6 +264,7 @@ export async function runStreamingEvidenceRecoveryHarness(): Promise<StreamingEv
   }
 
   const evidenceBaseDir = fs.mkdtempSync(path.join(os.tmpdir(), "waia-wp04-recovery-harness-"));
+  const fixture = loadApprovedBenchmarkFixture();
   const completeRun = await runFixtureBacktestWithRetention({
     retentionMode: "FULL",
     runId: "htr-wp04-parity",
@@ -269,30 +285,35 @@ export async function runStreamingEvidenceRecoveryHarness(): Promise<StreamingEv
     runId: "validation-v2",
   });
 
+  // SIGTERM simulation: seal a genuine PARTIAL bundle. We feed a truncated prefix of the completed
+  // stream-only run's durable cycles into a fresh sink and call sealPartial WITHOUT any prior
+  // sealComplete, so only manifest.partial.json is written (a faithful graceful-shutdown seal).
   const sigtermDir = path.join(evidenceBaseDir, "sigterm-run");
   mkdirSync(sigtermDir, { recursive: true });
   const sigtermSink = createStreamingEvidenceSink({
     runDir: sigtermDir,
     runId: "sigterm-run",
+    gitSha: readGitCodeSha(),
     environment: "sigterm-simulation",
   });
-  const fixture = loadApprovedBenchmarkFixture();
-  const { session, context } = await seedBenchmarkSession();
+  const SIGTERM_PREFIX_CYCLES = 40;
+  let sigtermCycleCount = 0;
+  const sigtermSource = await seedBenchmarkSession();
   try {
     const window = {
       start: new Date(fixture.bars[0]!.barOpenTime),
       end: new Date(fixture.bars.at(-1)!.barCloseTime),
     };
-    const barSource = new HistoricalBarReplaySource({
-      bars: fixture.bars.slice(0, 40),
-      quote: fixture.latestQuote,
-      cycleIdPrefix: "htr-wp04-sigterm",
-    });
-    await runBacktest({
-      context,
-      barSource,
-      deps: session.deps,
-      orderRepository: session.orderRepository,
+    // FULL mode retains raw PaperCycleResults so we can feed a truncated prefix into the sink.
+    const rawRun = await runBacktest({
+      context: sigtermSource.context,
+      barSource: new HistoricalBarReplaySource({
+        bars: fixture.bars,
+        quote: fixture.latestQuote,
+        cycleIdPrefix: "htr-wp04-sigterm",
+      }),
+      deps: sigtermSource.session.deps,
+      orderRepository: sigtermSource.session.orderRepository,
       accountKey: "htr-wp04-sigterm",
       defaultQuantity: "0.01",
       costModel: createCostModelV1("10", "5"),
@@ -301,7 +322,7 @@ export async function runStreamingEvidenceRecoveryHarness(): Promise<StreamingEv
       strategyVersion: BENCHMARK_STRATEGY_VERSION,
       regimeLabel: "AGGREGATE",
       datasetId: "htr-wp04-sigterm",
-      runId: "sigterm-run",
+      runId: "sigterm-source",
       split: "validation",
       window,
       accountState: {
@@ -314,13 +335,22 @@ export async function runStreamingEvidenceRecoveryHarness(): Promise<StreamingEv
       exportedAt: new Date(window.end),
       activeStrategyIds: [MEAN_REVERSION_V0],
       newId: createBenchmarkNewIdFactory(),
-      retentionMode: "STREAM_ONLY",
-      evidenceSink: sigtermSink,
+      retentionMode: "FULL",
     });
+    for (const cycle of rawRun.cycleResults) {
+      if (sigtermCycleCount >= SIGTERM_PREFIX_CYCLES) {
+        break;
+      }
+      sigtermSink.onCycle(sigtermCycleCount, cycle);
+      sigtermCycleCount += 1;
+    }
   } finally {
-    session.cleanup();
+    sigtermSource.session.cleanup();
   }
-  await sigtermSink.sealPartial(40, "SIGTERM");
+  const sigtermPeakBufferedProjections = sigtermSink.peakBufferedProjections();
+  // expectedCycleCount is the full run target; the partial seal is durable only through the
+  // interrupted prefix, so sealedThroughCycleIndex < expectedCycleCount - 1 (a faithful partial).
+  await sigtermSink.sealPartial(streamOnlyRun.cycleCount, "SIGTERM");
   const sigtermPartialManifest = path.join(sigtermDir, "manifest.partial.json");
 
   const hardKillDir = streamOnlyRun.streamingManifestRef?.runDir;
@@ -382,7 +412,7 @@ export async function runStreamingEvidenceRecoveryHarness(): Promise<StreamingEv
     parity.metricsMatch &&
     parity.cycleCountMatch &&
     streamOnlyRun.cycleResultsLength === 0 &&
-    streamOnlyRun.peakRetainedCycles <= MAX_BATCH_CYCLES &&
+    streamOnlyRun.peakBufferedProjections <= MAX_BATCH_CYCLES &&
     reconstruction.outcome !== "QUARANTINED" &&
     corruptReconstruction.outcome === "QUARANTINED"
       ? "STREAMING_EVIDENCE_OK"
@@ -400,10 +430,23 @@ export async function runStreamingEvidenceRecoveryHarness(): Promise<StreamingEv
     sigtermPartialManifest: fs.existsSync(sigtermPartialManifest) ? sigtermPartialManifest : null,
     reconstructionOutcome: reconstruction.outcome,
     memoryBoundedness: {
-      peakRetainedCycles:
-        peakTracker.sink?.peakRetainedCycles() ?? streamOnlyRun.peakRetainedCycles,
+      retainedPaperCycleResults: streamOnlyRun.cycleResultsLength,
+      peakBufferedProjections:
+        peakTracker.sink?.peakBufferedProjections() ?? streamOnlyRun.peakBufferedProjections,
       maxBatchCycles: MAX_BATCH_CYCLES,
       cycleCount: streamOnlyRun.cycleCount,
+      boundedness: [
+        {
+          cycleCount: streamOnlyRun.cycleCount,
+          peakBufferedProjections:
+            peakTracker.sink?.peakBufferedProjections() ?? streamOnlyRun.peakBufferedProjections,
+        },
+        {
+          cycleCount: sigtermCycleCount,
+          peakBufferedProjections: sigtermPeakBufferedProjections,
+        },
+      ],
+      provenance: { gitSha: readGitCodeSha(), dirtyTree: readGitDirtyTree() },
     },
     evidenceDirs: {
       completeRunDir: streamOnlyRun.streamingManifestRef?.runDir ?? "",
@@ -437,7 +480,22 @@ export function writeStreamingEvidenceBaseline(
 
   writeFileSync(
     path.join(baselineDir, "parity-report.json"),
-    `${JSON.stringify(harness.parity, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        ...harness.parity,
+        digests: {
+          fullEvidenceDigest: harness.completeRun.evidenceDigest,
+          streamEvidenceDigest: harness.streamOnlyRun.evidenceDigest,
+          fullSemanticReproDigest: harness.completeRun.semanticReproDigest,
+          streamSemanticReproDigest: harness.streamOnlyRun.semanticReproDigest,
+          streamChainDigest:
+            harness.streamOnlyRun.streamingManifestRef?.manifest.chainDigest ?? null,
+          fixtureSha256: harness.fixtureSha256,
+        },
+      },
+      null,
+      2,
+    )}\n`,
   );
   writeFileSync(
     path.join(baselineDir, "memory-boundedness.json"),
@@ -487,7 +545,12 @@ Terminal state: \`${harness.terminalState}\`
 - Command: \`${HTR_WP04_STREAMING_EVIDENCE_COMMAND}\`
 - Fixture digest verified before run
 - FULL vs STREAM_ONLY parity: evidenceDigest=${harness.parity.evidenceDigestMatch}, metrics=${harness.parity.metricsMatch}
-- Peak retained cycles: ${harness.memoryBoundedness.peakRetainedCycles} (max batch ${harness.memoryBoundedness.maxBatchCycles})
+- Retained PaperCycleResult objects (STREAM_ONLY): ${harness.memoryBoundedness.retainedPaperCycleResults}
+- Peak buffered projections: ${harness.memoryBoundedness.peakBufferedProjections} (max batch ${harness.memoryBoundedness.maxBatchCycles})
+- Boundedness at multiple cycle counts: ${harness.memoryBoundedness.boundedness
+      .map((entry) => `${entry.cycleCount}→${entry.peakBufferedProjections}`)
+      .join(", ")}
+- Evidence provenance: gitSha=${harness.memoryBoundedness.provenance.gitSha}, dirtyTree=${harness.memoryBoundedness.provenance.dirtyTree}
 `,
   );
 
