@@ -30,7 +30,11 @@ import {
   type ReplayCheckpointRecord,
   type ReplayRunTerminalState,
 } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
-import { readReplayRunChainProjections } from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
+import {
+  computeSemanticParityDigest,
+  readReplayRunChainProjections,
+  readSegmentProjections,
+} from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
 import { REPLAY_CHECKPOINT_SCHEMA_VERSION } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
@@ -75,6 +79,14 @@ export type CheckpointResumeHarnessResult = {
     semanticParityDigestMatch: boolean;
     cycleCountMatch: boolean;
   };
+  authoritativeStream: {
+    cycleCount: number;
+    duplicateCount: number;
+    gapCount: number;
+    supersededSegmentCount: number;
+  };
+  uninterruptedSemanticParityDigest: string;
+  resumedSemanticParityDigest: string;
   frontierSeparation: {
     evidenceAheadCycleIndex: number;
     safeResumeThroughCycleIndex: number;
@@ -261,13 +273,25 @@ export async function runCheckpointResumeHarness(): Promise<CheckpointResumeHarn
   });
 
   const continuationReconstruction = reconstructStreamingEvidence(continuationDir);
+  // Audit lineage vs authoritative stream (HTR-WP05 §continuation): the interrupted partial segment
+  // is retained as an immutable SUPERSEDED audit attempt; the re-executed phase (from its phase start,
+  // safeResume = -1) is the sole AUTHORITATIVE segment. Overlap between the two is audit-only and never
+  // enters the authoritative composed stream.
   const chainManifest = buildReplayRunChainManifest({
     backtestRunId,
     activePhase: "validation",
     segments: [
       {
+        runDir: partialDir,
+        chainDigest: partialReconstruction.chainDigest ?? "",
+        role: "superseded",
+        terminalState: "STREAMING_EVIDENCE_SEALED_PARTIAL",
+        sealedThroughCycleIndex: partialReconstruction.sealedThroughCycleIndex,
+      },
+      {
         runDir: continuationDir,
         chainDigest: continuationReconstruction.chainDigest ?? "",
+        role: "authoritative",
         continuesFromRunDir: partialDir,
         continuesFromChainDigest: partialReconstruction.chainDigest ?? undefined,
         terminalState: "STREAMING_EVIDENCE_OK",
@@ -278,9 +302,17 @@ export async function runCheckpointResumeHarness(): Promise<CheckpointResumeHarn
   writeReplayRunChainManifest(runRootDir, chainManifest);
 
   const chainRead = readReplayRunChainProjections(runRootDir);
+  // Like-for-like parity: BOTH digests are computed by computeSemanticParityDigest over the same
+  // normalized ascending-cycle projection stream (uninterrupted single segment vs resumed authoritative
+  // composition). This is the corrected comparison (Phase-B): the prior harness compared the export-doc
+  // repro digest against the projection-stream digest, which are incommensurable.
+  const uninterruptedSemanticParityDigest = computeSemanticParityDigest(
+    readSegmentProjections(uninterruptedDir),
+  );
+  const resumedSemanticParityDigest = chainRead.semanticParityDigest;
   const resumedWithParity: CheckpointFixtureRunResult = {
     ...resumed,
-    semanticParityDigest: chainRead.semanticParityDigest,
+    semanticParityDigest: resumedSemanticParityDigest,
   };
 
   const evidenceAheadCycleIndex = partialReconstruction.sealedThroughCycleIndex;
@@ -303,8 +335,15 @@ export async function runCheckpointResumeHarness(): Promise<CheckpointResumeHarn
   const parity = {
     evidenceDigestMatch: uninterrupted.evidenceDigest === resumed.evidenceDigest,
     semanticReproDigestMatch: uninterrupted.semanticReproDigest === resumed.semanticReproDigest,
-    semanticParityDigestMatch: uninterrupted.semanticReproDigest === chainRead.semanticParityDigest,
+    semanticParityDigestMatch: uninterruptedSemanticParityDigest === resumedSemanticParityDigest,
     cycleCountMatch: uninterrupted.cycleCount === resumed.cycleCount,
+  };
+
+  const authoritativeStream = {
+    cycleCount: chainRead.authoritativeCycleCount,
+    duplicateCount: chainRead.authoritativeDuplicateCount,
+    gapCount: chainRead.authoritativeGapCount,
+    supersededSegmentCount: chainRead.supersededSegmentRunDirs.length,
   };
 
   const frontierSeparation = {
@@ -315,9 +354,10 @@ export async function runCheckpointResumeHarness(): Promise<CheckpointResumeHarn
       frontierBoundary.safeResumeThroughCycleIndex < evidenceAheadCycleIndex,
   };
 
-  const terminalState: ReplayRunTerminalState = parity.evidenceDigestMatch
-    ? "REPLAY_RUN_OK"
-    : "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE";
+  const terminalState: ReplayRunTerminalState =
+    parity.evidenceDigestMatch && parity.semanticParityDigestMatch
+      ? "REPLAY_RUN_OK"
+      : "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE";
 
   return {
     schemaVersion: "htr-wp05-checkpoint-resume/v1",
@@ -326,10 +366,13 @@ export async function runCheckpointResumeHarness(): Promise<CheckpointResumeHarn
     fixtureSha256: sha256File(HTR_WP03_BENCHMARK_FIXTURE_PATH),
     datasetContentDigest,
     expectedCycles: HTR_WP03_BENCHMARK_EXPECTED_CYCLES,
-    uninterrupted,
+    uninterrupted: { ...uninterrupted, semanticParityDigest: uninterruptedSemanticParityDigest },
     interruptedPartial,
     resumed: resumedWithParity,
     parity,
+    authoritativeStream,
+    uninterruptedSemanticParityDigest,
+    resumedSemanticParityDigest,
     frontierSeparation,
     disconnectTerminal,
     checkpointRecord,
@@ -370,10 +413,11 @@ export function writeCheckpointResumeBaseline(
     path.join(targetDir, "resume-parity-report.json"),
     JSON.stringify(
       {
-        schemaVersion: "htr-wp05-resume-parity/v1",
+        schemaVersion: "htr-wp05-resume-parity/v2",
         uninterrupted: {
           evidenceDigest: harness.uninterrupted.evidenceDigest,
           semanticReproDigest: harness.uninterrupted.semanticReproDigest,
+          semanticParityDigest: harness.uninterrupted.semanticParityDigest,
           cycleCount: harness.uninterrupted.cycleCount,
         },
         resumed: {
@@ -382,6 +426,9 @@ export function writeCheckpointResumeBaseline(
           semanticParityDigest: harness.resumed.semanticParityDigest,
           cycleCount: harness.resumed.cycleCount,
         },
+        uninterruptedSemanticParityDigest: harness.uninterruptedSemanticParityDigest,
+        resumedSemanticParityDigest: harness.resumedSemanticParityDigest,
+        authoritativeStream: harness.authoritativeStream,
         parity: harness.parity,
       },
       null,
@@ -451,6 +498,15 @@ export function assertCheckpointResumeHarness(harness: CheckpointResumeHarnessRe
   }
   if (!harness.parity.semanticReproDigestMatch) {
     throw new Error("WP05_RESUME_DIVERGENCE: semanticReproDigest mismatch");
+  }
+  if (!harness.parity.semanticParityDigestMatch) {
+    throw new Error("WP05_RESUME_DIVERGENCE: semanticParityDigest mismatch");
+  }
+  if (harness.authoritativeStream.duplicateCount !== 0) {
+    throw new Error("WP05_DUPLICATE_OUTPUT: authoritative stream has duplicate cycle indexes");
+  }
+  if (harness.authoritativeStream.gapCount !== 0) {
+    throw new Error("WP05_RESUME_DIVERGENCE: authoritative stream has cycle gaps");
   }
   if (!harness.frontierSeparation.passed) {
     throw new Error("WP05_RESUME_DIVERGENCE: frontier separation failed");

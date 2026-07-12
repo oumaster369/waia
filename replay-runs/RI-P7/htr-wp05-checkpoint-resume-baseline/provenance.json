@@ -1,6 +1,6 @@
 {
   "schemaVersion": "htr-wp05-provenance/v1",
-  "gitSha": "3af9afdd54fbbef0c0cb8b669f0ff140700c5fc7",
+  "gitSha": "f90faa9f02e12b3a4a724311cd4b7805f9c12f7c",
   "dirtyTree": true,
   "fixturePath": "/Users/legco/Projects/waia/tests/fixtures/trader/dee-337-p5-btcusdt-1m-replay.json",
   "fixtureSha256": "814981bc3055d8fd52d1277d60a0b443de7644416aceba8cbe99819c70242061",

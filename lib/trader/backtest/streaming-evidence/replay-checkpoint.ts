@@ -56,14 +56,29 @@ export type ReplayCheckpointRecord = {
   checkpointDigest: string;
 };
 
+/**
+ * Segment role in the authoritative semantic projection stream (HTR-WP05 §continuation).
+ * - `authoritative`: contributes to the composed semantic parity stream, metrics, and reproducibility.
+ * - `superseded`: an immutable audit attempt (e.g. an interrupted partial segment) that is preserved
+ *   and verifiable but explicitly EXCLUDED from authoritative composition. Overlap may exist between a
+ *   superseded attempt and its authoritative replacement, but never inside the authoritative stream.
+ */
+export type ReplayRunChainSegmentRole = "authoritative" | "superseded";
+
 export type ReplayRunChainSegment = {
   runDir: string;
   chainDigest: string;
+  /** Authoritative vs preserved-but-superseded audit attempt (defaults to authoritative when absent). */
+  role?: ReplayRunChainSegmentRole;
   continuesFromRunDir?: string;
   continuesFromChainDigest?: string;
   terminalState: StreamingEvidenceTerminalState;
   sealedThroughCycleIndex: number;
 };
+
+export function segmentRole(segment: ReplayRunChainSegment): ReplayRunChainSegmentRole {
+  return segment.role ?? "authoritative";
+}
 
 export type ReplayRunChainManifest = {
   schemaVersion: typeof REPLAY_RUN_CHAIN_MANIFEST_SCHEMA_VERSION;

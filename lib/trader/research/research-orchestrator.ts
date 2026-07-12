@@ -512,6 +512,9 @@ export async function runResearchPipelinePostgres(
     validationCycleResults: validationArtifactSink?.cycleResults,
     validationPortfolioContext: validationArtifactSink?.portfolioContext,
     validationStreamingManifestRef: validationArtifactSink?.streamingManifestRef,
+    // A full pipeline that reaches this return is completed; downstream finalization uses this to
+    // block false success (a run that ended INFRA_DISCONNECT/SEALED_PARTIAL never reaches here).
+    replayTerminalState: "REPLAY_RUN_OK",
   };
 }
 

@@ -52,6 +52,8 @@ export {
   type ReplayRunTerminalState,
   type ReplayRunChainManifest,
   type ReplayRunChainSegment,
+  type ReplayRunChainSegmentRole,
+  segmentRole,
   type ResearchReplayPhase,
   type DbPhaseFrontier,
   type ResumeBoundary,
@@ -72,6 +74,8 @@ export {
 export {
   ReplayRunChainReader,
   readReplayRunChainProjections,
+  readSegmentProjections,
+  computeSemanticParityDigest,
   type ReplayRunChainReadResult,
 } from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
 export {

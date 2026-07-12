@@ -32,9 +32,9 @@ state:
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  currentWorkPackage: HTR-WP05
+  currentWorkPackage: HTR-WP06
   activeChildPlan: .cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md
-  workCommitSha: b3abe7b9483be9b54752d5dfb38b29155c7a891d
+  workCommitSha: f90faa9f02e12b3a4a724311cd4b7805f9c12f7c
   wp01WorkCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
   wp01PostReview: PASS
   wp01Validation:
@@ -75,13 +75,29 @@ state:
   wp04StreamingEvidence: replay-runs/RI-P7/htr-wp04-streaming-evidence-baseline/
   wp04MigrationDecision: NONE
   wp04GapStatus: "HTR-GAP-005 and HTR-GAP-026 remain OPEN; WP04 evidence recorded; closure HTR-WP22"
+  wp05WorkCommitSha: f90faa9f02e12b3a4a724311cd4b7805f9c12f7c
+  wp05PostReview: PASS
+  wp05Validation:
+    validateCanon: PASS
+    lint: PASS
+    typecheck: PASS
+    tests: PASS
+    build: PASS
+  wp05StreamingEvidence: replay-runs/RI-P7/htr-wp05-checkpoint-resume-baseline/
+  wp05MigrationDecision: NONE
+  wp05ParityDigests:
+    evidenceDigest: 8a323f92129260ee9e54f26af9298be3b8e85b7ce1f1a709118d9ac43ecd9e1e
+    semanticReproDigest: 34494d5aa2c279f094bd1778421199c9c07c0a24168712d08aa889ba163b0d54
+    semanticParityDigest: 30e9b40ab4f2aa460bf7388053ce1ef5ed16b88da7720e548449ee7564418d03
+  wp05GapStatus: "HTR-GAP-027 (resume) and HTR-GAP-029 (DB-disconnect) remain OPEN; WP05 contributes; final qualification HTR-WP22"
+  macroAStatus: COMPLETE
   completedWorkPackages:
     - HTR-WP01
     - HTR-WP02
     - HTR-WP03
     - HTR-WP04
-  remainingWorkPackages:
     - HTR-WP05
+  remainingWorkPackages:
     - HTR-WP06
     - HTR-WP07
     - HTR-WP08
@@ -102,11 +118,11 @@ state:
     - HTR-WP23
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: b3abe7b9483be9b54752d5dfb38b29155c7a891d
+  lastValidatedGitSha: f90faa9f02e12b3a4a724311cd4b7805f9c12f7c
   lastValidationAt: 2026-07-12
   finalAuditStatus: not-started
   blockedReason: null
-  nextAction: "Rolling tranche uses the rev-5 macro-execution topology (macros A/B/C/D; see Authority-and-topology section). HTR-MACRO-A (HTR-WP05) is Human-approved with an exact packet and MIGRATION_DECISION: NONE (proven from current code); Build is authorized. Next: Composer 2.5 executes HTR-MACRO-A / HTR-WP05 Phase A from the rolling controller and stops at AWAITING_OPUS_MACRO_POST_REVIEW. No intermediate PR; the single final PR remains gated on all 23 work packages."
+  nextAction: "HTR-MACRO-A (HTR-WP05) is COMPLETE — Opus Phase-B post-review PASS (WORK COMMIT f90faa9; CLOSEOUT recorded only in the gitignored controllers). Semantic parity digest equality proven (30e9b40…) over the authoritative composed stream; full validation green. HTR-MACRO-B (HTR-WP06+WP07+WP08) is the next macro and has been refreshed in place to an implementation-ready packet, but remains Build-unauthorized (ACTIVE_MACRO_STATUS DRAFT; BUILD_AUTHORIZED: NO) pending Human review (APPROVE-HTR-MACRO-B, then APPROVE-HTR-MACRO-B-BUILD). No intermediate PR; the single final PR remains gated on all 23 work packages."
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -145,7 +161,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed; HTR-WP03 COMPLETE — WORK COMMIT `35283ed`, HTR-GAP-024 baseline recorded (OPEN, closure HTR-WP22); HTR-WP04 COMPLETE — WORK COMMIT `b3abe7b`, Opus post-review PASS, validation PASS, streaming-evidence baseline recorded, HTR-GAP-005/026 remain OPEN, closure HTR-WP22; active work package HTR-WP05 in the rolling controller with childPlanStatus REFRESH_REQUIRED, Build not authorized) |
+| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed; HTR-WP03 COMPLETE — WORK COMMIT `35283ed`, HTR-GAP-024 baseline recorded (OPEN, closure HTR-WP22); HTR-WP04 COMPLETE — WORK COMMIT `b3abe7b`, Opus post-review PASS, validation PASS, streaming-evidence baseline recorded, HTR-GAP-005/026 remain OPEN, closure HTR-WP22; **HTR-WP05 COMPLETE** — WORK COMMIT `f90faa9`, Opus Phase-B post-review PASS, full validation PASS, checkpoint-resume baseline recorded, semantic parity digest equality proven (`30e9b40…`), HTR-GAP-027/029 remain OPEN, closure HTR-WP22, MIGRATION_DECISION NONE; **HTR-MACRO-A COMPLETE**; next macro HTR-MACRO-B (WP06–08) refreshed in place to DRAFT, Build not authorized) |
 
 ## Approved decisions (recorded)
 
@@ -165,8 +181,8 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP02 | Post-M9 forensic + status truth-up + program supersession | WP01 | product | COMPLETE (Opus post-review PASS; HTR-GAP-030/034 closed) | `7ec02dd` (WORK) |
 | HTR-WP03 | Replay benchmark + stage timing + memory instrumentation | WP01 | backend | COMPLETE (Opus post-review PASS; HTR-GAP-024 baseline evidence recorded, remains OPEN, closure HTR-WP22) | `35283ed` (WORK) |
 | HTR-WP04 | Streaming evidence + partial sealing + crash-recovery reconstruction | WP03 | backend | COMPLETE (Opus post-review PASS; full validation PASS; streaming-evidence baseline recorded; HTR-GAP-005/026 remain OPEN, closure HTR-WP22) | `b3abe7b` (WORK) |
-| HTR-WP05 | Checkpoint/resume + pipeline DB-disconnect + terminal states | WP04 | backend | REFRESH_REQUIRED (rolling controller; Build not authorized) | — |
-| HTR-WP06 | Market Canvas state contract + cursor replay foundation | WP01,WP03 | backend | pending | — |
+| HTR-WP05 | Checkpoint/resume + pipeline DB-disconnect + terminal states | WP04 | backend | COMPLETE (Opus post-review PASS; semantic parity digest equality proven; full validation PASS; HTR-GAP-027/029 remain OPEN, closure HTR-WP22) | `f90faa9` (WORK) |
+| HTR-WP06 | Market Canvas state contract + cursor replay foundation | WP01,WP03 | backend | pending (HTR-MACRO-B refreshed to DRAFT; Build not authorized) | — |
 | HTR-WP07 | Incremental closed-bar MTF aggregation | WP06 | backend | pending | — |
 | HTR-WP08 | Incremental reconstruction + oracle parity | WP07 | backend | pending | — |
 | HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | WP08,WP03 | backend | pending | — |
@@ -204,9 +220,11 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## WP-05 (current work package)
+## WP-06 (current work package)
 
-The active work package is **HTR-WP05** (Checkpoint/resume + pipeline DB-disconnect + terminal states), tracked in the rolling controller `.cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md` with **childPlanStatus REFRESH_REQUIRED**. **No HTR-WP05 packet is approved and Build is not authorized** — Opus must perform an in-place packet refresh against the actual WP04 CLOSEOUT HEAD before any Human approval. HTR-WP01 COMPLETE (`6600708`); HTR-WP02 COMPLETE (`7ec02dd`, HTR-GAP-030/034 closed); HTR-WP03 COMPLETE (`35283ed`, HTR-GAP-024 baseline recorded, OPEN, closure HTR-WP22); **HTR-WP04 COMPLETE** (WORK COMMIT `b3abe7b`, Opus post-review PASS, full validation PASS, streaming-evidence baseline at `replay-runs/RI-P7/htr-wp04-streaming-evidence-baseline/`; HTR-GAP-005 and HTR-GAP-026 remain OPEN with WP04 evidence recorded, closure HTR-WP22). This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
+**HTR-WP05 is COMPLETE** (Checkpoint/resume + pipeline DB-disconnect + terminal states; WORK COMMIT `f90faa9`, Opus Phase-B post-review PASS, full validation PASS, checkpoint-resume baseline at `replay-runs/RI-P7/htr-wp05-checkpoint-resume-baseline/`; semantic parity digest equality proven — uninterrupted == resumed authoritative composed stream `30e9b40ab4f2aa460bf7388053ce1ef5ed16b88da7720e548449ee7564418d03`; evidence digest `8a323f9…`; replay repro digest `34494d5…`; MIGRATION_DECISION NONE; HTR-GAP-027 (resume) and HTR-GAP-029 (DB-disconnect) remain OPEN with WP05 contribution, final qualification HTR-WP22). **HTR-MACRO-A is COMPLETE.**
+
+The next work package is **HTR-WP06** (Market Canvas state contract + cursor replay foundation), the first WP of **HTR-MACRO-B (WP06+WP07+WP08)**, tracked in the rolling controller `.cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md`. Macro B has been refreshed in place to an implementation-ready packet but remains **DRAFT / Build not authorized** pending Human review (`APPROVE-HTR-MACRO-B`, then `APPROVE-HTR-MACRO-B-BUILD`). HTR-WP01 COMPLETE (`6600708`); HTR-WP02 COMPLETE (`7ec02dd`); HTR-WP03 COMPLETE (`35283ed`); HTR-WP04 COMPLETE (`b3abe7b`); HTR-WP05 COMPLETE (`f90faa9`). This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
 
 ## Acceptance (whole program)
 
