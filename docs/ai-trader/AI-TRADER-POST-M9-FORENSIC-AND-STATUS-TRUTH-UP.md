@@ -117,9 +117,17 @@ Historical M9 merge lineage, PR tables, and M9 evidence pointers are **preserved
 - `docs/ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`
 - `docs/ops/DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md`
 
-**Untouched:** governance Gate A→D corpus; HTR canon already describing the rename; `GATE-A-VALIDATION.md` filename; ADR-0010 dated reconciliation line.
+**Untouched (correctly):** governance Gate A→D corpus (`docs/waia-governance/**`, `constitutional-history/**`) — a distinct, unrelated concept; HTR canon already describing the rename (`docs/product-specs/…-completion.md`, `docs/plans/dee-415-…`); `GATE-A-VALIDATION.md` filename; ADR-0010 dated 2026-06-27 reconciliation line (labelled historical).
 
-HTR readiness gates remain **CG-A..CG-H** (distinct from M9 Accounting Gate).
+**Residual AI-TRADER-sense references (classified; intentionally not renamed in WP02):**
+
+| Location | Classification | Disposition |
+|----------|----------------|-------------|
+| `replay-runs/RI-P7/m9-v2-research-campaign-org0/**` (e.g. `M9-ENGINEERING-CLOSURE.md`, `M9-FORENSIC-REPORT.md`, `VALIDATION.md`, `DESIGN.md`, `M9-PR-READINESS.md`, `M9-OPERATOR-CEREMONY.md`, `GATE-A-VALIDATION.md`) | Frozen dated M9 milestone evidence (the forensic source itself) | **Preserved** — rewriting evidence would corrupt the forensic basis |
+| `replay-runs/RI-P7/HISTORICAL-PLANS-INDEX.md`, `AI-TRADER-COMPLETION-PLAN-SNAPSHOT-BEFORE-M0.md` | Dated historical index/snapshot | **Preserved** — historical record |
+| `scripts/trader/validate-provider-readiness.ts` (readiness-check message referencing "Gate A docs" / `GATE-A-VALIDATION.md`) | Runtime/script reference bound to the preserved `GATE-A-VALIDATION.md` filename | **Deferred** — out of WP02 docs/forensic scope; rename (if any) belongs to a future runtime work package; does **not** reintroduce documentation-authority ambiguity |
+
+No renamed occurrence and no residual occurrence collides with governance Gate A: the AI-TRADER references are confined to M9-accounting/provider-readiness context. HTR readiness gates remain **CG-A..CG-H** (distinct from M9 Accounting Gate).
 
 ## DEE-412 assessment
 
@@ -154,6 +162,8 @@ Evidence packages prepared here; **not applied** to the Gap Registry in Composer
 | Criterion | Evidence |
 |-----------|----------|
 | Gate-A rename in active AI-TRADER prose | Enumerated files updated — see §Gate-A naming reconciliation |
+| Residual occurrences classified | Historical M9 evidence + index preserved; one runtime-script reference deferred to a future runtime WP (out of WP02 scope) — see §Gate-A naming reconciliation residual table |
+| Governance Gate A untouched | `docs/waia-governance/**` + `constitutional-history/**` unmodified |
 | Duplicate program authority | D-13 supersession recorded; intelligence_evolution retained as historical only |
 | HTR gates distinct | CG-A..CG-H unchanged; M9 Accounting Gate disambiguated from governance Gate A |
 

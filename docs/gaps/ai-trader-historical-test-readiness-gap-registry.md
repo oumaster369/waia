@@ -60,11 +60,11 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 | HTR-GAP-027 | No checkpoint/resume | major | open | HTR-WP05 | — | HTR-WP22 | IB-HTR-05 |
 | HTR-GAP-028 | Readiness preflight absent | major | open | HTR-WP23 | — | HTR-WP23 | IB-HTR-23 |
 | HTR-GAP-029 | Pipeline-body DB-disconnect resilience | major | open | HTR-WP05 | — | HTR-WP22 | IB-HTR-05 |
-| HTR-GAP-030 | Status/vault drift | major | open | HTR-WP02 | — | HTR-WP02 | IB-HTR-02 |
+| HTR-GAP-030 | Status/vault drift | major | closed (2026-07-12; WP02 WORK COMMIT 7ec02dd; engineering-status trued-up, HTR authority explicit, forensic canon registered) | HTR-WP02 | — | HTR-WP02 | IB-HTR-02 |
 | HTR-GAP-031 | No-lookahead/determinism property-suite gaps | blocker | open | HTR-WP10 | HTR-WP07, HTR-WP11 | HTR-WP10 | IB-HTR-10 |
 | HTR-GAP-032 | Canonical artifacts not created | major | closed (2026-07-12; WORK COMMIT 6600708) | HTR-WP01 | — | HTR-WP01 | IB-HTR-01 |
 | HTR-GAP-033 | Master-plan frontmatter unsafe | major | closed | — | — | — | — |
-| HTR-GAP-034 | Gate-A naming collision + duplicate authority | major | open | HTR-WP01 | HTR-WP02 | HTR-WP02 | IB-HTR-01 |
+| HTR-GAP-034 | Gate-A naming collision + duplicate authority | major | closed (2026-07-12; WP01 canon + WP02 WORK COMMIT 7ec02dd; active AI-TRADER Gate-A renamed to M9 Accounting Gate, residuals classified, governance Gate A untouched, D-13 supersession recorded) | HTR-WP01 | HTR-WP02 | HTR-WP02 | IB-HTR-01 |
 | HTR-GAP-035 | Postgres parity CI-only (skipped locally) | major | open | HTR-WP17 | HTR-WP18, HTR-WP19 | HTR-WP19 | IB-HTR-17 |
 | HTR-GAP-036 | Forecast pre-registration + horizon resolution absent | blocker | open | HTR-WP14 | HTR-WP21 | HTR-WP21 | IB-HTR-14 |
 | HTR-GAP-037 | Calibration scoring (Brier/log-loss, sample-gated, survivorship-aware) MISSING | blocker | open | HTR-WP21 | — | HTR-WP21 | IB-HTR-21 |

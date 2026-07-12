@@ -32,9 +32,10 @@ state:
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  currentWorkPackage: HTR-WP02
-  activeChildPlan: .cursor/plans/dee-415-htr-wp02-post-m9-forensic.plan.md
-  workCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
+  currentWorkPackage: HTR-WP03
+  activeChildPlan: .cursor/plans/dee-415-htr-wp03-replay-benchmark-instrumentation.plan.md
+  workCommitSha: 7ec02dd89fb74b2eaa7b81f384ae1c12ea6819f3
+  wp01WorkCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
   wp01PostReview: PASS
   wp01Validation:
     validateCanon: PASS
@@ -42,10 +43,21 @@ state:
     typecheck: PASS
     tests: PASS
     build: PASS
+  wp02WorkCommitSha: 7ec02dd89fb74b2eaa7b81f384ae1c12ea6819f3
+  wp02PostReview: PASS
+  wp02Validation:
+    validateCanon: PASS
+    lint: PASS
+    typecheck: PASS
+    tests: PASS
+    build: PASS
+  wp02GapsClosed:
+    - HTR-GAP-030
+    - HTR-GAP-034
   completedWorkPackages:
     - HTR-WP01
-  remainingWorkPackages:
     - HTR-WP02
+  remainingWorkPackages:
     - HTR-WP03
     - HTR-WP04
     - HTR-WP05
@@ -69,11 +81,11 @@ state:
     - HTR-WP23
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 7ec02dd89fb74b2eaa7b81f384ae1c12ea6819f3
+  lastValidationAt: 2026-07-12
   finalAuditStatus: not-started
   blockedReason: null
-  nextAction: "Human reviews and approves the HTR-WP02 child Cursor plan."
+  nextAction: "Human reviews the HTR-WP03 child plan and resolves D-11A before Build activation."
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -111,7 +123,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`, Opus post-review PASS, validation PASS; active work package HTR-WP02, child plan DRAFT awaiting Human approval) |
+| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, Opus post-review PASS, validation PASS, HTR-GAP-030/034 closed; active work package HTR-WP03, child plan DRAFT awaiting Human approval + D-11A) |
 
 ## Approved decisions (recorded)
 
@@ -128,7 +140,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | WP | Title | dependsOn | label | status | local commit |
 |----|-------|-----------|-------|--------|--------------|
 | HTR-WP01 | Canon & readiness-contract + activation/target-subset ratification | — | product | COMPLETE (Opus post-review PASS) | `6600708` (WORK) |
-| HTR-WP02 | Post-M9 forensic + status truth-up + program supersession | WP01 | product | pending | — |
+| HTR-WP02 | Post-M9 forensic + status truth-up + program supersession | WP01 | product | COMPLETE (Opus post-review PASS; HTR-GAP-030/034 closed) | `7ec02dd` (WORK) |
 | HTR-WP03 | Replay benchmark + stage timing + memory instrumentation | WP01 | backend | pending | — |
 | HTR-WP04 | Streaming evidence + partial sealing + crash-recovery reconstruction | WP03 | backend | pending | — |
 | HTR-WP05 | Checkpoint/resume + pipeline DB-disconnect + terminal states | WP04 | backend | pending | — |
@@ -170,9 +182,9 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## WP-02 (current work package)
+## WP-03 (current work package)
 
-The active work package is **HTR-WP02** (Post-M9 forensic + status truth-up + program supersession). Its exact implementation contract is the child Cursor plan `.cursor/plans/dee-415-htr-wp02-post-m9-forensic.plan.md` (DRAFT, awaiting Human approval). HTR-WP01 is COMPLETE (WORK COMMIT `6600708`). This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
+The active work package is **HTR-WP03** (Replay benchmark + stage timing + memory instrumentation). Its exact implementation contract is the child Cursor plan `.cursor/plans/dee-415-htr-wp03-replay-benchmark-instrumentation.plan.md` (DRAFT; Build not authorized until Human approval + D-11A benchmark-methodology approval). HTR-WP01 is COMPLETE (WORK COMMIT `6600708`); HTR-WP02 is COMPLETE (WORK COMMIT `7ec02dd`, Opus post-review PASS, HTR-GAP-030/034 closed). This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
 
 ## Acceptance (whole program)
 

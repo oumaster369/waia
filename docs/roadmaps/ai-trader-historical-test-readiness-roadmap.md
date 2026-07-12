@@ -22,7 +22,7 @@ Sequence gap closure and implementation work for the Historical-Test Readiness p
 | batchId | workPackage | title | dependsOn | riskTier | status | planPath | gapRefs | acceptanceSummary |
 |---------|-------------|-------|-----------|----------|--------|----------|---------|-------------------|
 | IB-HTR-01 | HTR-WP01 | Canon & readiness-contract + activation/target-subset ratification | — | T1 | complete | docs/plans/dee-415-ai-trader-historical-test-readiness.md | HTR-GAP-032,034,041 | Three canonical docs; activation recorded; all gaps have ownership (HTR-GAP-032/041 closed; HTR-GAP-034 closes at HTR-WP02) |
-| IB-HTR-02 | HTR-WP02 | Post-M9 forensic + status truth-up + program supersession | IB-HTR-01 | T1 | planned | null | HTR-GAP-030,034 | Engineering status reconciled; Gate-A rename applied |
+| IB-HTR-02 | HTR-WP02 | Post-M9 forensic + status truth-up + program supersession | IB-HTR-01 | T1 | complete | docs/plans/dee-415-ai-trader-historical-test-readiness.md | HTR-GAP-030,034 | Engineering status reconciled; Gate-A rename applied; forensic canon registered; HTR-GAP-030/034 closed (WP02 WORK COMMIT 7ec02dd) |
 | IB-HTR-03 | HTR-WP03 | Replay benchmark + stage timing + memory instrumentation | IB-HTR-01 | T1 | planned | null | HTR-GAP-024 | Benchmark methodology + fixtures; stage timing baseline |
 | IB-HTR-04 | HTR-WP04 | Streaming evidence + partial sealing + crash-recovery reconstruction | IB-HTR-03 | T2 | planned | null | HTR-GAP-005,026 | Streaming evidence; crash-recovery path |
 | IB-HTR-05 | HTR-WP05 | Checkpoint/resume + pipeline DB-disconnect + terminal states | IB-HTR-04 | T2 | planned | null | HTR-GAP-027,029 | Checkpoint/resume; DB-disconnect resilience |
