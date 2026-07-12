@@ -53,6 +53,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 - **Market data operator provisioning (canonical):** [`AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`](AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md) — **only** source of truth for provisioning every market-data provider from an empty workstation.
 - **Market data binding spec:** [`AI-TRADER-DATA-PROVIDERS.md`](AI-TRADER-DATA-PROVIDERS.md) — registry, gateway, degradation policy.
 - **Execution Server (off-Cloudflare live plane):** [`EXECUTION-SURFACES.md`](../ops/EXECUTION-SURFACES.md) (`execution-server` surface) · [`EXECUTION-SERVER-RUNBOOK.md`](../ops/EXECUTION-SERVER-RUNBOOK.md) · [ADR-0023](../adr/0023-execution-server-ai-trader-only-execution-plane.md) — AI-TRADER-only; host mutation human-only.
+- **Historical-Test Readiness program (DEE-415):** [`Completion Specification`](../product-specs/ai-trader-historical-test-readiness-completion.md) · [`Gap Registry`](../gaps/ai-trader-historical-test-readiness-gap-registry.md) · [`Roadmap`](../roadmaps/ai-trader-historical-test-readiness-roadmap.md) · [`Canonical integration plan`](../plans/dee-415-ai-trader-historical-test-readiness.md) — Org-0 research-only lane; 23 sequential work packages; one final PR; defines `READY_FOR_FULL_HISTORICAL_TEST` (code-ready Execution Server package, not edge verdict).
 
 ## Baseline
 
