@@ -193,7 +193,7 @@ Payment watcher TronGrid vars (`TRONGRID_API_KEY`, `TRON_RPC_*`, `WATCHER_*`) ar
 
 ## Canonical 20-source tier table
 
-Parent roadmap Part V — deduplicated canonical sources. **Repeat M9 required vs deferred** column governs Gate A provider gates only.
+Parent roadmap Part V — deduplicated canonical sources. **Repeat M9 required vs deferred** column governs M9 Accounting Gate (formerly "Gate A") provider gates only.
 
 | Tier | # | Source | Repeat M9 required vs deferred | Auth | Registry / adapter today |
 |------|---|--------|-------------------------------|------|--------------------------|

@@ -115,7 +115,7 @@ For each provider: purpose, tier, Repeat M9 status, credentials, and **where the
 | Field | Detail |
 |-------|--------|
 | **Purpose** | Primary execution venue; MTF OHLCV (1m/15m/1h/4h/1d); L1 quote; account/fill truth |
-| **Why AI-TRADER needs it** | Gate A MI stack requires HTX as primary market truth and execution venue |
+| **Why AI-TRADER needs it** | M9 Accounting Gate (formerly "Gate A") MI stack requires HTX as primary market truth and execution venue |
 | **Repeat M9** | **Required** (fail-closed on primary bars) |
 | **Public market REST** | No API key — default `https://api.huobi.pro` |
 | **Free tier** | Public endpoints sufficient for MI gateway |
@@ -422,7 +422,7 @@ Required **before Repeat M9 v0.1.7** (in addition to above):
 - [ ] Blind authorization digest recomputed with `sidecarContentDigest` in scope
 - [ ] M9 campaign run with `--require-provider-fusion=1` produces fusion + decision trace artifacts
 - [ ] Fresh operator authorization for M9 v0.1.7 campaign
-- [ ] Gate A accounting prerequisites (PR1+PR2) unchanged and verified
+- [ ] M9 Accounting Gate (formerly "Gate A") accounting prerequisites (PR1+PR2) unchanged and verified
 
 ---
 
@@ -443,5 +443,5 @@ Required **before Repeat M9 v0.1.7** (in addition to above):
 |------|-------------|
 | Tier 3–8 deep CDE feature consumption | PR3–PR4 (evidence delivered today) |
 | Repeat M9 v0.1.7 campaign | After DEE-393 merge + operator validation |
-| PR3 Market Context depth | After Gate A |
-| PR4 Market Memory / news engines | After Gate A |
+| PR3 Market Context depth | After M9 Accounting Gate (formerly "Gate A") |
+| PR4 Market Memory / news engines | After M9 Accounting Gate (formerly "Gate A") |
