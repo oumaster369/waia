@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { execSync, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
@@ -12,13 +13,17 @@ import {
   aggregateNumberP95NearestRank,
 } from "@/lib/trader/backtest/replay-benchmark-instrumentation";
 import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
+import { verifyCanonicalHostFingerprint } from "@/lib/trader/backtest/d11b-host-fingerprint";
 import {
+  QUALIFICATION_NOOP_TELEMETRY_SINK,
   readBenchmarkEnvironment,
   readGitCodeSha,
   readGitDirtyTree,
   runReplayBenchmarkOnce,
   sha256File,
 } from "@/lib/trader/backtest/replay-benchmark-harness";
+
+export const HTR_WP09_MEASUREMENT_MARKER = "HTR_WP09_MEASUREMENT_JSON:";
 
 export const HTR_WP09_QUALIFICATION_EVIDENCE_SCHEMA = "htr-wp09-canvas-runtime-qualification/v1";
 
@@ -128,26 +133,9 @@ export function loadQualificationBars(size: QualificationDatasetSize, datasetPat
   return parsed.bars;
 }
 
-export function computeHostFingerprintSha256(
-  env: ReturnType<typeof readBenchmarkEnvironment>,
-): string {
-  const referencePath = path.join(
-    process.cwd(),
-    ".cursor/plans/dee-415-d11b/reference-host-environment.json",
-  );
-  try {
-    return sha256File(referencePath);
-  } catch {
-    const payload = JSON.stringify({
-      nodeVersion: env.nodeVersion,
-      platform: env.platform,
-      arch: env.arch,
-      cpuModel: env.cpuModel,
-      cpuCount: env.cpuCount,
-      totalMemBytes: env.totalMemBytes,
-    });
-    return createHash("sha256").update(payload).digest("hex");
-  }
+export function computeHostFingerprintSha256(): string {
+  const { canonicalSha256 } = verifyCanonicalHostFingerprint(D11B_APPROVED_HOST_FINGERPRINT_SHA256);
+  return canonicalSha256;
 }
 
 function extractPaperCycleStats(
@@ -180,7 +168,11 @@ export async function runQualificationMeasurement(input: {
   void input.isCold;
   const bars = loadQualificationBars(input.size, input.datasetPath);
   const started = performance.now();
-  const result = await runReplayBenchmarkOnce({ bars, includeInstrumentation: true });
+  const result = await runReplayBenchmarkOnce({
+    bars,
+    includeInstrumentation: true,
+    telemetrySink: QUALIFICATION_NOOP_TELEMETRY_SINK,
+  });
   const runWallTimeMs = performance.now() - started;
 
   if (!result.benchmark || result.benchmark.terminalState !== "BENCHMARK_OK") {
@@ -312,7 +304,7 @@ export async function runWp09QualificationAttempt(input?: {
   stagingDir?: string;
 }): Promise<QualificationAttemptResult> {
   const hostPreflight = readBenchmarkEnvironment();
-  const hostFingerprintSha256 = computeHostFingerprintSha256(hostPreflight);
+  const hostFingerprintSha256 = computeHostFingerprintSha256();
 
   if (readGitDirtyTree()) {
     return {
@@ -376,33 +368,33 @@ export function spawnFreshQualificationMeasurement(input: {
   isCold: boolean;
 }): QualificationRunObservation {
   const script = path.join(process.cwd(), "scripts/trader/replay-qualify-measure.ts");
-  const args = [script, input.size, input.runLabel, input.isCold ? "cold" : "warm"];
-  const proc = spawnSync(
-    process.execPath,
-    ["--import", "tsx", "--conditions=react-server", ...args],
-    {
-      encoding: "utf8",
-      env: { ...process.env, WAIA_TRADER_CLI: "1" },
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  );
-  if (proc.status !== 0) {
-    throw new Error(
-      `[htr-wp09-qualify] fresh process failed (${input.runLabel}): ${proc.stderr || proc.stdout}`,
+  const tmpDir = mkdtempSync(path.join(tmpdir(), "htr-wp09-measure-"));
+  const outPath = path.join(tmpDir, "observation.json");
+  const args = [script, input.size, input.runLabel, input.isCold ? "cold" : "warm", outPath];
+  try {
+    const proc = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "--conditions=react-server", ...args],
+      {
+        encoding: "utf8",
+        env: { ...process.env, WAIA_TRADER_CLI: "1" },
+        maxBuffer: 1024 * 1024,
+      },
     );
+    if (proc.status !== 0) {
+      const detail = proc.stderr?.trim() || proc.stdout?.trim() || proc.error?.message;
+      throw new Error(
+        `[htr-wp09-qualify] fresh process failed (${input.runLabel}): ${detail ?? "unknown"}`,
+      );
+    }
+    return JSON.parse(readFileSync(outPath, "utf8")) as QualificationRunObservation;
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
   }
-  const line = proc.stdout.trim().split("\n").at(-1);
-  return JSON.parse(line!) as QualificationRunObservation;
 }
 
 export function verifyReferenceHostFingerprint(expectedSha256: string): void {
-  const env = readBenchmarkEnvironment();
-  const actual = computeHostFingerprintSha256(env);
-  if (actual !== expectedSha256) {
-    throw new Error(
-      `[htr-wp09-qualify] host fingerprint mismatch: expected ${expectedSha256}, got ${actual}`,
-    );
-  }
+  verifyCanonicalHostFingerprint(expectedSha256);
 }
 
 export function readQualificationHarnessSha256(): string {

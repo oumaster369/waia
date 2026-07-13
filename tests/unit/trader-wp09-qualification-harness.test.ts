@@ -5,29 +5,28 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
-  D11B_APPROVED_DATASET_SHA256,
-  D11B_APPROVED_HOST_FINGERPRINT_SHA256,
-  D11B_N1_NORMALIZED_SHA256,
-  D11B_THRESHOLDS,
   computeHostFingerprintSha256,
   loadQualificationBars,
   readQualificationHarnessSha256,
   verifyReferenceHostFingerprint,
+  D11B_APPROVED_HOST_FINGERPRINT_SHA256,
+  D11B_APPROVED_DATASET_SHA256,
+  D11B_N1_NORMALIZED_SHA256,
+  D11B_THRESHOLDS,
 } from "@/lib/trader/backtest/replay-qualification-harness";
-import { readBenchmarkEnvironment } from "@/lib/trader/backtest/replay-benchmark-harness";
+import { verifyCanonicalHostFingerprint } from "@/lib/trader/backtest/d11b-host-fingerprint";
 import { sha256File } from "@/lib/trader/backtest/replay-benchmark-harness";
 
 describe("WP09 qualification harness (HTR-WP09)", () => {
-  it("computes host fingerprint from reference file or environment fallback", () => {
-    const env = readBenchmarkEnvironment();
-    const actual = computeHostFingerprintSha256(env);
-    expect(actual).toMatch(/^[a-f0-9]{64}$/);
+  it("computes canonical host fingerprint from live/reference match", () => {
+    expect(computeHostFingerprintSha256()).toBe(D11B_APPROVED_HOST_FINGERPRINT_SHA256);
+    expect(
+      verifyCanonicalHostFingerprint(D11B_APPROVED_HOST_FINGERPRINT_SHA256).canonicalSha256,
+    ).toBe(D11B_APPROVED_HOST_FINGERPRINT_SHA256);
   });
 
   it("verifyReferenceHostFingerprint fails closed on mismatch", () => {
-    expect(() => verifyReferenceHostFingerprint("0".repeat(64))).toThrow(
-      /host fingerprint mismatch/,
-    );
+    expect(() => verifyReferenceHostFingerprint("0".repeat(64))).toThrow(/fingerprint mismatch/);
   });
 
   it("pins approved host fingerprint constant for Stage-C preflight", () => {

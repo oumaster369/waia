@@ -52,8 +52,12 @@ import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-re
 import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { ensureUserTwinSeed } from "@/lib/twin-persistence/loader";
+
+/** Suppresses stdout trader telemetry during D-11B fresh-process measurements. */
+export const QUALIFICATION_NOOP_TELEMETRY_SINK: WaiaTraderTelemetrySink = () => {};
 
 export const HTR_WP03_BENCHMARK_FIXTURE_PATH = path.join(
   process.cwd(),
@@ -346,6 +350,8 @@ export async function runReplayBenchmarkOnce(input: {
   bars: readonly Bar[];
   includeInstrumentation: boolean;
   substrateMode?: ReplaySubstrateMode;
+  /** When set, overrides default stdout telemetry (qualification uses noop). */
+  telemetrySink?: WaiaTraderTelemetrySink;
 }): Promise<{
   benchmark: ReplayBenchmarkRunResult | null;
   backtest: Awaited<ReturnType<typeof runBacktest>>;
@@ -397,6 +403,7 @@ export async function runReplayBenchmarkOnce(input: {
         refreshAccountStateBetweenStrategies: true,
         newId: createBenchmarkNewIdFactory(),
         benchmarkObserver: instrumentation?.observer ?? NOOP_REPLAY_BENCHMARK_OBSERVER,
+        telemetrySink: input.telemetrySink,
         substrateMode,
       });
 

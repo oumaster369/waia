@@ -23,6 +23,8 @@ import {
   buildSubstrateReconstruction,
   createInitialCanvasState,
 } from "@/lib/trader/backtest/canvas-replay-integration";
+import { writeCanvasStateSidecar } from "@/lib/trader/market-data/canvas/market-canvas-serialization";
+import type { MarketCanvasState } from "@/lib/trader/market-data/canvas/market-canvas.types";
 import {
   DEFAULT_REPLAY_SUBSTRATE_MODE,
   type ReplaySubstrateMode,
@@ -97,6 +99,12 @@ export type RunBacktestInput = {
   evidenceSealReason?: string;
   /** HTR-WP09: replay substrate mode (default incremental canvas cutover). */
   substrateMode?: ReplaySubstrateMode;
+  /** HTR-WP09: restored canvas state for checkpoint resume. */
+  initialCanvasState?: MarketCanvasState;
+  /** HTR-WP09: 1m bars already applied to restored canvas (prefix through resume frontier). */
+  initialBars1mPrefix?: readonly Bar[];
+  /** HTR-WP09: write canvas sidecar to this run root at end of execution. */
+  checkpointRunRoot?: string;
 };
 
 export type RunBacktestResult = {
@@ -107,6 +115,8 @@ export type RunBacktestResult = {
   evidenceDigest: string;
   regimeMetrics: BacktestRegimeMetrics[];
   streamingManifestRef?: StreamingEvidenceManifestRef;
+  canvasState: MarketCanvasState;
+  canvasStateRef?: string;
 };
 
 function wrapOrderRepositoryWithCostModel(
@@ -174,9 +184,9 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   const maxCycles = input.maxCycles ?? Number.POSITIVE_INFINITY;
   const resumeCycleStartIndex = Math.max(0, input.resumeCycleStartIndex ?? 0);
 
-  let canvasState = createInitialCanvasState();
-  let canvasAppliedBarCount = 0;
-  const bars1mPrefix: Bar[] = [];
+  let canvasState = input.initialCanvasState ?? createInitialCanvasState();
+  let canvasAppliedBarCount = input.initialCanvasState?.closedBarCount ?? 0;
+  const bars1mPrefix: Bar[] = input.initialBars1mPrefix ? [...input.initialBars1mPrefix] : [];
 
   if (resumeCycleStartIndex > 0 && "advanceToCycleIndex" in input.barSource) {
     (input.barSource as HistoricalBarReplaySource).advanceToCycleIndex(resumeCycleStartIndex);
@@ -338,6 +348,14 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     streamingManifestRef = await evidenceSink.sealComplete(cycleCount);
   }
 
+  let canvasStateRef: string | undefined;
+  if (input.checkpointRunRoot) {
+    const serializeTimer = benchmarkObserver.beginStage("canvas-serialize", null);
+    canvasStateRef = writeCanvasStateSidecar(input.checkpointRunRoot, canvasState);
+    serializeTimer.end();
+    benchmarkObserver.sampleMemory("canvas-serialize", null);
+  }
+
   return {
     cycleCount,
     cycleResults: retentionMode === "STREAM_ONLY" ? [] : cycleResults,
@@ -346,5 +364,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     evidenceDigest: exportDocument.envelope.contentDigest,
     regimeMetrics: buildRegimeMetrics(exportBundle, exportDocument),
     streamingManifestRef: retentionMode === "STREAM_ONLY" ? streamingManifestRef : undefined,
+    canvasState,
+    canvasStateRef,
   };
 }

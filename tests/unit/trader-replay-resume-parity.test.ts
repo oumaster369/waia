@@ -4,6 +4,23 @@ import {
   assertCheckpointResumeHarness,
   runCheckpointResumeHarness,
 } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint-resume-harness";
+import {
+  assertCanvasIncrementalCheckpointResumeHarness,
+  runCanvasIncrementalCheckpointResumeHarness,
+} from "@/lib/trader/backtest/canvas-checkpoint-resume-harness";
+import { CanvasStateError } from "@/lib/trader/market-data/canvas/market-canvas.types";
+import {
+  writeCanvasStateSidecar,
+  readCanvasStateSidecar,
+} from "@/lib/trader/market-data/canvas/market-canvas-serialization";
+import {
+  createInitialCanvasState,
+  applyNewBarsToCanvas,
+} from "@/lib/trader/backtest/canvas-replay-integration";
+import { makeCanvasBar1m } from "@/tests/unit/helpers/canvas-bar-fixture";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 describe("trader replay resume parity (HTR-WP05)", () => {
   it("resumed composed outputs match uninterrupted execution", async () => {
@@ -28,4 +45,20 @@ describe("trader replay resume parity (HTR-WP05)", () => {
     expect(harness.authoritativeStream.supersededSegmentCount).toBe(1);
     expect(harness.terminalState).toBe("REPLAY_RUN_OK");
   }, 240_000);
+
+  it("incremental canvas checkpoint/resume preserves exact semantic parity", async () => {
+    const harness = await runCanvasIncrementalCheckpointResumeHarness(40);
+    assertCanvasIncrementalCheckpointResumeHarness(harness);
+    expect(harness.parity.fullHistoryRescansZero).toBe(true);
+  }, 240_000);
+
+  it("fails closed on corrupt canvas sidecar digest", () => {
+    const runRoot = fs.mkdtempSync(path.join(os.tmpdir(), "waia-wp09-canvas-sidecar-"));
+    const bars = [makeCanvasBar1m({ barOpenTime: "2024-01-01T00:00:00.000Z" })];
+    const state = applyNewBarsToCanvas(createInitialCanvasState(), bars, 0).state;
+    const ref = writeCanvasStateSidecar(runRoot, state);
+    const filePath = path.join(runRoot, ref);
+    fs.writeFileSync(filePath, `${fs.readFileSync(filePath, "utf8")}corrupt`, "utf8");
+    expect(() => readCanvasStateSidecar(runRoot, ref)).toThrow(CanvasStateError);
+  });
 });
