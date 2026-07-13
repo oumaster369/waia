@@ -1,5 +1,7 @@
 export type ReplayBenchmarkStageId =
   | "bar-source-next"
+  | "canvas-advance"
+  | "canvas-serialize"
   | "fused-context-build"
   | "clock-advance"
   | "paper-cycle"
@@ -8,6 +10,7 @@ export type ReplayBenchmarkStageId =
 
 export const REPLAY_BENCHMARK_PER_CYCLE_STAGES: readonly ReplayBenchmarkStageId[] = [
   "bar-source-next",
+  "canvas-advance",
   "fused-context-build",
   "clock-advance",
   "paper-cycle",

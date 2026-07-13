@@ -18,6 +18,17 @@ import {
   type ReplayBenchmarkObserver,
 } from "@/lib/trader/backtest/replay-benchmark-instrumentation";
 import {
+  applyNewBarsToCanvas,
+  buildSubstrateFusedContext,
+  buildSubstrateReconstruction,
+  createInitialCanvasState,
+} from "@/lib/trader/backtest/canvas-replay-integration";
+import {
+  DEFAULT_REPLAY_SUBSTRATE_MODE,
+  type ReplaySubstrateMode,
+} from "@/lib/trader/backtest/replay-substrate-mode";
+import { resetFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
+import {
   NOOP_REPLAY_EVIDENCE_SINK,
   type ReplayEvidenceSink,
   type ReplayRetentionMode,
@@ -25,10 +36,7 @@ import {
 } from "@/lib/trader/backtest/streaming-evidence";
 import type { BarReplaySource } from "@/lib/trader/market-data/types";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
-import {
-  buildReplayFusedContextFromSnapshot,
-  type ReplayProviderSidecar,
-} from "@/lib/trader/market-data/replay-fused-context-builder";
+import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import type {
   GuardianCycleContext,
@@ -36,6 +44,7 @@ import type {
   PaperCycleResult,
   PortfolioCycleContext,
 } from "@/lib/trader/paper/paper-cycle.types";
+import type { Bar } from "@/lib/trader/intelligence/types";
 import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
 import { derivePortfolioAccountState, toAccountRiskState } from "@/lib/trader/portfolio";
@@ -86,6 +95,8 @@ export type RunBacktestInput = {
   /** STREAM_ONLY evidence seal behavior at run end (default: complete). */
   evidenceSealMode?: "complete" | "partial" | "none";
   evidenceSealReason?: string;
+  /** HTR-WP09: replay substrate mode (default incremental canvas cutover). */
+  substrateMode?: ReplaySubstrateMode;
 };
 
 export type RunBacktestResult = {
@@ -145,6 +156,9 @@ function buildRegimeMetrics(
  * versioned cost model on fills, and derives strategy metrics for export.
  */
 export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestResult> {
+  const substrateMode = input.substrateMode ?? DEFAULT_REPLAY_SUBSTRATE_MODE;
+  resetFullHistoryRescanCount();
+
   const costAwareRepository = wrapOrderRepositoryWithCostModel(
     input.orderRepository,
     input.costModel,
@@ -159,6 +173,10 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   let hypothesisSessionState = input.hypothesisSessionState;
   const maxCycles = input.maxCycles ?? Number.POSITIVE_INFINITY;
   const resumeCycleStartIndex = Math.max(0, input.resumeCycleStartIndex ?? 0);
+
+  let canvasState = createInitialCanvasState();
+  let canvasAppliedBarCount = 0;
+  const bars1mPrefix: Bar[] = [];
 
   if (resumeCycleStartIndex > 0 && "advanceToCycleIndex" in input.barSource) {
     (input.barSource as HistoricalBarReplaySource).advanceToCycleIndex(resumeCycleStartIndex);
@@ -181,11 +199,38 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         ? next.snapshot
         : { ...next.snapshot, activeStrategyIds: input.activeStrategyIds };
 
+    for (const bar of snapshot.bars) {
+      bars1mPrefix.push(bar);
+    }
+
     const fusedContextTimer = benchmarkObserver.beginStage("fused-context-build", cycleIndex);
-    const fusedContext =
-      input.enableReplayFusedContext === false
-        ? undefined
-        : buildReplayFusedContextFromSnapshot(snapshot, input.providerSidecar);
+    let fusedContext = undefined;
+    let reconstruction = undefined;
+
+    if (input.enableReplayFusedContext !== false) {
+      const canvasAdvanceTimer = benchmarkObserver.beginStage("canvas-advance", cycleIndex);
+      const advanceResult = applyNewBarsToCanvas(canvasState, snapshot.bars, canvasAppliedBarCount);
+      canvasState = advanceResult.state;
+      canvasAppliedBarCount += advanceResult.appliedBars;
+      canvasAdvanceTimer.end();
+      benchmarkObserver.sampleMemory("canvas-advance", cycleIndex);
+
+      const evaluatedAt =
+        snapshot.evaluatedAt ?? snapshot.bars.at(-1)?.barCloseTime ?? snapshot.quote.timestamp;
+      const instrumentId = snapshot.bars[0]?.symbol ?? snapshot.quote.symbol;
+
+      fusedContext = buildSubstrateFusedContext({
+        substrateMode,
+        bars: bars1mPrefix,
+        quote: snapshot.quote,
+        evaluatedAt,
+        instrumentId,
+        providerSidecar: input.providerSidecar,
+        canvasState,
+      });
+      reconstruction = buildSubstrateReconstruction({ substrateMode, canvasState });
+    }
+
     fusedContextTimer.end();
     benchmarkObserver.sampleMemory("fused-context-build", cycleIndex);
 
@@ -211,6 +256,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       guardian: input.guardian,
       hypothesisSessionState,
       miCoreEnabled: input.miCoreEnabled,
+      reconstruction,
     });
     paperCycleTimer.end();
     benchmarkObserver.sampleMemory("paper-cycle", cycleIndex);

@@ -45,6 +45,8 @@ import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-b
 import type { TraderFixtureFile } from "@/lib/trader/market-data/types";
 import { MEAN_REVERSION_V0, type Bar } from "@/lib/trader/intelligence/types";
 import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
+import { DEFAULT_REPLAY_SUBSTRATE_MODE } from "@/lib/trader/backtest/replay-substrate-mode";
+import type { ReplaySubstrateMode } from "@/lib/trader/backtest/replay-substrate-mode";
 import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
 import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
@@ -343,6 +345,7 @@ export async function seedBenchmarkSession() {
 export async function runReplayBenchmarkOnce(input: {
   bars: readonly Bar[];
   includeInstrumentation: boolean;
+  substrateMode?: ReplaySubstrateMode;
 }): Promise<{
   benchmark: ReplayBenchmarkRunResult | null;
   backtest: Awaited<ReturnType<typeof runBacktest>>;
@@ -356,10 +359,12 @@ export async function runReplayBenchmarkOnce(input: {
         end: new Date(input.bars.at(-1)!.barCloseTime),
       };
       const costModel = createCostModelV1("10", "5");
+      const substrateMode = input.substrateMode ?? DEFAULT_REPLAY_SUBSTRATE_MODE;
       const barSource = new HistoricalBarReplaySource({
         bars: input.bars,
         quote: fixture.latestQuote,
         cycleIdPrefix: "htr-wp03-benchmark",
+        windowMode: substrateMode === "legacy-oracle" ? "expanding" : "cursor",
       });
 
       const instrumentation = input.includeInstrumentation ? createReplayBenchmarkObserver() : null;
@@ -392,6 +397,7 @@ export async function runReplayBenchmarkOnce(input: {
         refreshAccountStateBetweenStrategies: true,
         newId: createBenchmarkNewIdFactory(),
         benchmarkObserver: instrumentation?.observer ?? NOOP_REPLAY_BENCHMARK_OBSERVER,
+        substrateMode,
       });
 
       const benchmark = instrumentation ? instrumentation.collect() : null;

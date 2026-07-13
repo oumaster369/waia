@@ -256,6 +256,8 @@ export type EvaluationCycleInput = {
   miCoreEnabled?: boolean;
   /** PR-2 MI Core: within-session conviction state (caller-owned). */
   hypothesisSessionState?: HypothesisSessionState;
+  /** HTR-WP09: prebuilt incremental reconstruction from canvas view (skips full recompute). */
+  reconstruction?: ReconstructionSnapshot;
 };
 
 export type EvaluationCycleResult = {

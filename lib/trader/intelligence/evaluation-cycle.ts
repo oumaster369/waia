@@ -11,11 +11,13 @@ import {
 } from "@/lib/trader/intelligence/market-state-finalization";
 import { buildMarketUnderstandingBridge } from "@/lib/trader/intelligence/market-understanding-bridge-v0";
 import { buildReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/build-reconstruction-snapshot";
+import { recordFullHistoryRescan } from "@/lib/trader/backtest/replay-runtime-metrics";
 import {
   evaluateRegisteredStrategies,
   selectPrimaryStrategySignal,
 } from "@/lib/trader/intelligence/strategies/registry";
 import { emitStrategySignalCounters } from "@/lib/trader/intelligence/strategy-telemetry";
+import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
 import type { EvaluationCycleInput, EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 
 /**
@@ -66,11 +68,16 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     return { features, msv, signals, signal, fusedContext: input.fusedContext, understanding };
   }
 
-  const reconstruction = buildReconstructionSnapshot({
-    bars1m: input.bars,
-    evaluatedAt,
-    fusedContext: input.fusedContext,
-  });
+  const reconstruction: ReconstructionSnapshot =
+    input.reconstruction ??
+    (() => {
+      recordFullHistoryRescan("buildReconstructionSnapshot");
+      return buildReconstructionSnapshot({
+        bars1m: input.bars,
+        evaluatedAt,
+        fusedContext: input.fusedContext,
+      });
+    })();
 
   const understanding = input.fusedContext
     ? buildMarketUnderstandingBridge({

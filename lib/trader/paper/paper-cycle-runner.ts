@@ -305,6 +305,7 @@ export async function runPaperCycleOnce(
     telemetrySink: input.telemetrySink,
     hypothesisSessionState: input.hypothesisSessionState,
     miCoreEnabled: input.miCoreEnabled,
+    reconstruction: input.reconstruction,
   });
 
   const actionableSignals = evaluation.signals.filter(

@@ -18,6 +18,11 @@ const CLOSED_TAIL_CAPACITY: Record<HtfInterval, number> = {
   "1d": 5,
 };
 
+export type MtfClosedStats = Readonly<{
+  count: number;
+  first: Bar | null;
+}>;
+
 export type MtfDomainState = Readonly<{
   forming: Partial<Record<HtfInterval, BucketAccumulator>>;
   closedTail: Readonly<{
@@ -26,6 +31,12 @@ export type MtfDomainState = Readonly<{
     _4h: readonly Bar[];
     _1d: readonly Bar[];
   }>;
+  closedStats: Readonly<{
+    _15m: MtfClosedStats;
+    _1h: MtfClosedStats;
+    _4h: MtfClosedStats;
+    _1d: MtfClosedStats;
+  }>;
   gapCount: number;
   lastGapBarOpenTimeMs: number | null;
 }>;
@@ -33,6 +44,7 @@ export type MtfDomainState = Readonly<{
 export type MtfView = Readonly<{
   formingBucketKeys: Readonly<Partial<Record<HtfInterval, number>>>;
   closedTail: MtfDomainState["closedTail"];
+  closedStats: MtfDomainState["closedStats"];
   gapCount: number;
   lastGapBarOpenTimeMs: number | null;
 }>;
@@ -43,9 +55,16 @@ export type MtfAdvanceResult = Readonly<{
 }>;
 
 export function createMtfDomainState(): MtfDomainState {
+  const emptyStats = (): MtfClosedStats => ({ count: 0, first: null });
   return {
     forming: {},
     closedTail: { _15m: [], _1h: [], _4h: [], _1d: [] },
+    closedStats: {
+      _15m: emptyStats(),
+      _1h: emptyStats(),
+      _4h: emptyStats(),
+      _1d: emptyStats(),
+    },
     gapCount: 0,
     lastGapBarOpenTimeMs: null,
   };
@@ -99,11 +118,17 @@ function processInterval(
       closedBar,
       CLOSED_TAIL_CAPACITY[interval],
     );
+    const priorStats = state.closedStats[key];
+    const nextStats: MtfClosedStats = {
+      count: priorStats.count + 1,
+      first: priorStats.first ?? closedBar,
+    };
     return {
       state: {
         ...state,
         forming: { ...state.forming, [interval]: createBucketAccumulator(acceptedBar1m, interval) },
         closedTail: { ...state.closedTail, [key]: nextTail },
+        closedStats: { ...state.closedStats, [key]: nextStats },
       },
       emitted: closedBar,
     };
@@ -155,6 +180,7 @@ export function selectMtfView(state: MtfDomainState): MtfView {
   return {
     formingBucketKeys,
     closedTail: state.closedTail,
+    closedStats: state.closedStats,
     gapCount: state.gapCount,
     lastGapBarOpenTimeMs: state.lastGapBarOpenTimeMs,
   };

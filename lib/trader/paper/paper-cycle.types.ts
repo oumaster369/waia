@@ -114,6 +114,8 @@ export type PaperCycleInput = {
   hypothesisSessionState?: HypothesisSessionState;
   /** PR-2 MI Core: explicit flag override (defaults to WAIA_MI_CORE_ENABLED env). */
   miCoreEnabled?: boolean;
+  /** HTR-WP09: prebuilt incremental reconstruction from canvas view. */
+  reconstruction?: import("@/lib/trader/intelligence/reconstruction/reconstruction.types").ReconstructionSnapshot;
 };
 
 export type PaperCycleSkipReason = "no_signal" | "no_submit";

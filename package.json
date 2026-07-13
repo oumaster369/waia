@@ -16,6 +16,7 @@
     "trader:paper:loop": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/paper-bar-close-loop.ts",
     "trader:replay:build-dataset": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/build-dee-337-replay-dataset.ts",
     "trader:replay:benchmark": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-benchmark.ts",
+    "trader:replay:qualify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-qualify.ts",
     "trader:replay:evidence-recovery": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-evidence-recovery-check.ts",
     "trader:replay:checkpoint-resume": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-checkpoint-resume-check.ts",
     "trader:canvas:state-check": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/canvas-state-check.ts",
