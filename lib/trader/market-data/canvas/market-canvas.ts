@@ -1,6 +1,11 @@
 import { compareDecimal } from "@/lib/trader/risk/numeric";
 
 import {
+  advanceMtf,
+  createMtfDomainState,
+  selectMtfView,
+} from "@/lib/trader/market-data/canvas/incremental-mtf";
+import {
   CANVAS_1M_RING_CAPACITY,
   MARKET_CANVAS_SCHEMA_VERSION,
   type CanvasAdvanceError,
@@ -137,12 +142,17 @@ export function advanceMarketCanvasClosedBar(
     state.lastAppliedBarOpenTimeMs !== null &&
     detectGap(state.lastAppliedBarOpenTimeMs, barOpenTimeMs);
 
+  const mtfResult = advanceMtf(state.mtf ?? createMtfDomainState(), bar1m, {
+    gapObserved,
+  });
+
   const nextState: MarketCanvasState = {
     schemaVersion: MARKET_CANVAS_SCHEMA_VERSION,
     instrumentId: state.instrumentId ?? bar1m.symbol,
     closedBarCount: state.closedBarCount + 1,
     lastAppliedBarOpenTimeMs: barOpenTimeMs,
     oneMinuteRing: appendToRing(state.oneMinuteRing, bar1m),
+    mtf: mtfResult.state,
   };
 
   return { ok: true, state: nextState, gapObserved };
@@ -153,5 +163,6 @@ export function selectMarketCanvasView(state: MarketCanvasState): MarketCanvasVi
     instrumentId: state.instrumentId,
     closedBarCount: state.closedBarCount,
     recent1m: state.oneMinuteRing,
+    ...(state.mtf ? { mtf: selectMtfView(state.mtf) } : {}),
   };
 }

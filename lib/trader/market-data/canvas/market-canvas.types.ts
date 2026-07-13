@@ -1,6 +1,8 @@
 import type { Bar } from "@/lib/trader/intelligence/types";
 
-/** WP06-OWNED ONLY — no WP07/WP08 types at this commit. */
+import type { MtfDomainState, MtfView } from "@/lib/trader/market-data/canvas/incremental-mtf";
+
+/** WP06-OWNED ONLY — WP07 widens with optional `mtf`; WP08 adds optional `reconstruction`. */
 export const MARKET_CANVAS_SCHEMA_VERSION = "waia.trader.canvas.v1" as const;
 
 export const CANVAS_1M_RING_CAPACITY = 32;
@@ -15,12 +17,14 @@ export type MarketCanvasState = Readonly<{
   closedBarCount: number;
   lastAppliedBarOpenTimeMs: number | null;
   oneMinuteRing: readonly CanvasClosedBar[];
+  mtf?: MtfDomainState;
 }>;
 
 export type MarketCanvasView = Readonly<{
   instrumentId: string | null;
   closedBarCount: number;
   recent1m: readonly CanvasClosedBar[];
+  mtf?: MtfView;
 }>;
 
 export type SerializedMarketCanvasState = MarketCanvasState;

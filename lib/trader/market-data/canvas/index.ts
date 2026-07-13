@@ -12,6 +12,17 @@ export {
 } from "@/lib/trader/market-data/canvas/market-canvas.types";
 
 export {
+  advanceMtf,
+  collectIncrementalClosedBars,
+  createMtfDomainState,
+  selectMtfView,
+  type HtfInterval,
+  type MtfAdvanceResult,
+  type MtfDomainState,
+  type MtfView,
+} from "@/lib/trader/market-data/canvas/incremental-mtf";
+
+export {
   advanceMarketCanvasClosedBar,
   createMarketCanvasState,
   selectMarketCanvasView,
