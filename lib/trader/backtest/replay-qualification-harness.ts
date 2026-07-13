@@ -12,6 +12,7 @@ import {
   aggregateNumberMedian,
   aggregateNumberP95NearestRank,
 } from "@/lib/trader/backtest/replay-benchmark-instrumentation";
+import { estimateSerializedCanvasBytes } from "@/lib/trader/market-data/canvas/market-canvas-serialization";
 import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
 import { verifyCanonicalHostFingerprint } from "@/lib/trader/backtest/d11b-host-fingerprint";
 import {
@@ -65,15 +66,50 @@ export type QualificationRunObservation = {
   isCold: boolean;
   runWallTimeMs: number;
   meanPaperCycleMs: number;
+  /** Real nearest-rank p95 of per-cycle paper-cycle durations (bounded histogram). */
   p95PaperCycleMs: number;
+  /** Maximum single paper-cycle duration (diagnostic only; previously mislabelled as p95). */
+  maxPaperCycleMs: number;
+  /** peakRss − baselineRss (true delta; previously absolute high-water). */
   rssDeltaBytes: number;
+  /** peakHeapUsed − baselineHeapUsed (true delta; previously absolute high-water). */
   heapUsedDeltaBytes: number;
+  /** STREAM_ONLY invariant: retained PaperCycleResult objects (must be 0). */
+  retainedCycleResults: number;
+  /** Serialized Market Canvas byte size at run end (maxSerializedCanvasBytes gate). */
+  serializedCanvasBytes: number;
   cycleCount: number;
   barCount: number;
   fullHistoryRescans: number;
   semanticReproDigest: string;
   evidenceDigest: string;
 };
+
+/**
+ * HTR-WP09 post-fail self-consistency guard: the reported mean/p95/max must be able
+ * to originate from the same non-negative per-cycle observation population, i.e.
+ * 0 ≤ mean ≤ p95 ≤ max with a positive sample count. Fails closed otherwise.
+ */
+export function assertCycleStatsSelfConsistent(input: {
+  runLabel: string;
+  cycleCount: number;
+  meanPaperCycleMs: number;
+  p95PaperCycleMs: number;
+  maxPaperCycleMs: number;
+}): void {
+  const { runLabel, cycleCount, meanPaperCycleMs, p95PaperCycleMs, maxPaperCycleMs } = input;
+  if (
+    cycleCount <= 0 ||
+    meanPaperCycleMs < 0 ||
+    !(meanPaperCycleMs <= p95PaperCycleMs) ||
+    !(p95PaperCycleMs <= maxPaperCycleMs)
+  ) {
+    throw new Error(
+      `[htr-wp09-qualify] cycle-stats self-consistency violated (${runLabel}): ` +
+        `count=${cycleCount} mean=${meanPaperCycleMs} p95=${p95PaperCycleMs} max=${maxPaperCycleMs}`,
+    );
+  }
+}
 
 export type QualificationDatasetResult = {
   size: QualificationDatasetSize;
@@ -89,10 +125,14 @@ export type QualificationDatasetResult = {
     runtimeRangePct: number;
     meanPaperCycleMs: number;
     p95PaperCycleMs: number;
+    maxPaperCycleMs: number;
     medianRssDeltaBytes: number;
     p95RssDeltaBytes: number;
     medianHeapDeltaBytes: number;
     p95HeapDeltaBytes: number;
+    maxSerializedCanvasBytes: number;
+    maxRetainedCycleResults: number;
+    maxFullHistoryRescans: number;
   };
   n1ToN2WallTimeRatio?: number;
 };
@@ -138,24 +178,30 @@ export function computeHostFingerprintSha256(): string {
   return canonicalSha256;
 }
 
-function extractPaperCycleStats(
+export function extractPaperCycleStats(
   benchmark: NonNullable<Awaited<ReturnType<typeof runReplayBenchmarkOnce>>["benchmark"]>,
 ): {
   meanPaperCycleMs: number;
   p95PaperCycleMs: number;
+  maxPaperCycleMs: number;
   rssDeltaBytes: number;
   heapUsedDeltaBytes: number;
 } {
   const stage = benchmark.telemetry.perStage["paper-cycle"];
   const sampleCount = stage?.sampleCount ?? 0;
   const totalNs = BigInt(stage?.totalNs ?? "0");
-  const meanNs = sampleCount > 0 ? Number(totalNs / BigInt(sampleCount)) / 1_000_000 : 0;
-  const p95Ns = Number(stage?.maxNs ?? "0") / 1_000_000;
+  // Sub-ns precision preserved by dividing after the float conversion.
+  const meanNs = sampleCount > 0 ? Number(totalNs) / sampleCount / 1_000_000 : 0;
+  const p95Ns = Number(BigInt(stage?.p95Ns ?? "0")) / 1_000_000;
+  const maxNs = Number(BigInt(stage?.maxNs ?? "0")) / 1_000_000;
+  const highWater = benchmark.telemetry.memoryHighWater;
+  const baseline = benchmark.telemetry.memoryBaseline;
   return {
     meanPaperCycleMs: meanNs,
     p95PaperCycleMs: p95Ns,
-    rssDeltaBytes: benchmark.telemetry.memoryHighWater.rssBytes,
-    heapUsedDeltaBytes: benchmark.telemetry.memoryHighWater.heapUsedBytes,
+    maxPaperCycleMs: maxNs,
+    rssDeltaBytes: Math.max(0, highWater.rssBytes - baseline.rssBytes),
+    heapUsedDeltaBytes: Math.max(0, highWater.heapUsedBytes - baseline.heapUsedBytes),
   };
 }
 
@@ -172,6 +218,9 @@ export async function runQualificationMeasurement(input: {
     bars,
     includeInstrumentation: true,
     telemetrySink: QUALIFICATION_NOOP_TELEMETRY_SINK,
+    // Measure the approved bounded active research-validation path (0 retained
+    // cycle results), not the legacy FULL retention default.
+    retentionMode: "STREAM_ONLY",
   });
   const runWallTimeMs = performance.now() - started;
 
@@ -180,11 +229,20 @@ export async function runQualificationMeasurement(input: {
   }
 
   const stats = extractPaperCycleStats(result.benchmark);
+  assertCycleStatsSelfConsistent({
+    runLabel: input.runLabel,
+    cycleCount: result.backtest.cycleCount,
+    meanPaperCycleMs: stats.meanPaperCycleMs,
+    p95PaperCycleMs: stats.p95PaperCycleMs,
+    maxPaperCycleMs: stats.maxPaperCycleMs,
+  });
   return {
     runLabel: input.runLabel,
     isCold: input.isCold,
     runWallTimeMs,
     ...stats,
+    retainedCycleResults: result.backtest.cycleResults.length,
+    serializedCanvasBytes: estimateSerializedCanvasBytes(result.backtest.canvasState),
     cycleCount: result.backtest.cycleCount,
     barCount: bars.length,
     fullHistoryRescans: getFullHistoryRescanCount(),
@@ -205,10 +263,14 @@ function aggregateWarmObservations(runs: QualificationRunObservation[]) {
     runtimeRangePct,
     meanPaperCycleMs: aggregateNumberMedian(runs.map((r) => r.meanPaperCycleMs)),
     p95PaperCycleMs: aggregateNumberP95NearestRank(runs.map((r) => r.p95PaperCycleMs)),
+    maxPaperCycleMs: aggregateNumberMax(runs.map((r) => r.maxPaperCycleMs)),
     medianRssDeltaBytes: aggregateNumberMedian(runs.map((r) => r.rssDeltaBytes)),
     p95RssDeltaBytes: aggregateNumberP95NearestRank(runs.map((r) => r.rssDeltaBytes)),
     medianHeapDeltaBytes: aggregateNumberMedian(runs.map((r) => r.heapUsedDeltaBytes)),
     p95HeapDeltaBytes: aggregateNumberP95NearestRank(runs.map((r) => r.heapUsedDeltaBytes)),
+    maxSerializedCanvasBytes: aggregateNumberMax(runs.map((r) => r.serializedCanvasBytes)),
+    maxRetainedCycleResults: aggregateNumberMax(runs.map((r) => r.retainedCycleResults)),
+    maxFullHistoryRescans: aggregateNumberMax(runs.map((r) => r.fullHistoryRescans)),
   };
 }
 
@@ -291,6 +353,51 @@ function evaluateThresholds(
   const rssGrowth = n2.aggregate.p95RssDeltaBytes - n1.aggregate.p95RssDeltaBytes;
   if (rssGrowth > t.max2xMemoryGrowthBytes) {
     failures.push(`rssGrowth ${rssGrowth} > ${t.max2xMemoryGrowthBytes}`);
+  }
+
+  if (n2.canvasAdvanceCount !== t.canvasAdvanceCountN2) {
+    failures.push(`canvasAdvanceCount ${n2.canvasAdvanceCount} != ${t.canvasAdvanceCountN2}`);
+  }
+
+  // Serialized-canvas bound (previously declared but never measured/gated).
+  if (n2.aggregate.maxSerializedCanvasBytes > t.maxSerializedCanvasBytes) {
+    failures.push(
+      `serializedCanvasBytes ${n2.aggregate.maxSerializedCanvasBytes} > ${t.maxSerializedCanvasBytes}`,
+    );
+  }
+  if (n1.aggregate.maxSerializedCanvasBytes > t.maxSerializedCanvasBytes) {
+    failures.push(
+      `serializedCanvasBytes(N1) ${n1.aggregate.maxSerializedCanvasBytes} > ${t.maxSerializedCanvasBytes}`,
+    );
+  }
+
+  // Bounded active-path invariants (STREAM_ONLY: 0 retained; no full-history rescans).
+  for (const [label, ds] of [
+    ["N1", n1],
+    ["N2", n2],
+  ] as const) {
+    if (ds.aggregate.maxRetainedCycleResults !== 0) {
+      failures.push(`retainedCycleResults(${label}) ${ds.aggregate.maxRetainedCycleResults} != 0`);
+    }
+    if (ds.aggregate.maxFullHistoryRescans !== 0) {
+      failures.push(`fullHistoryRescans(${label}) ${ds.aggregate.maxFullHistoryRescans} != 0`);
+    }
+  }
+
+  // Cross-run semantic + evidence digest parity (identical across cold + all warm runs per N).
+  for (const [label, ds] of [
+    ["N1", n1],
+    ["N2", n2],
+  ] as const) {
+    const runs = [ds.coldRun, ...ds.warmRuns];
+    const semantic = new Set(runs.map((r) => r.semanticReproDigest));
+    const evidence = new Set(runs.map((r) => r.evidenceDigest));
+    if (semantic.size !== 1) {
+      failures.push(`semanticReproDigest(${label}) not identical across runs`);
+    }
+    if (evidence.size !== 1) {
+      failures.push(`evidenceDigest(${label}) not identical across runs`);
+    }
   }
 
   if (n2.barSetDigest !== D11B_N2_BAR_SET_DIGEST && n2.barCount === t.qualificationBarCountN2) {

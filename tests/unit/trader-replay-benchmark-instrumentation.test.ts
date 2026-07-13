@@ -20,13 +20,14 @@ describe("replay benchmark instrumentation (HTR-WP03)", () => {
   it("defines complete per-cycle and per-run stage lists", () => {
     expect(REPLAY_BENCHMARK_PER_CYCLE_STAGES).toEqual([
       "bar-source-next",
+      "canvas-advance",
       "fused-context-build",
       "clock-advance",
       "paper-cycle",
       "account-state-refresh",
     ]);
     expect(REPLAY_BENCHMARK_PER_RUN_STAGES).toEqual(["evidence-export"]);
-    expect(REPLAY_BENCHMARK_ALL_STAGES).toHaveLength(6);
+    expect(REPLAY_BENCHMARK_ALL_STAGES).toHaveLength(7);
   });
 
   it("records positive stage durations and memory high-water with O(1) aggregates", () => {

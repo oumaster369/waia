@@ -76,13 +76,59 @@ export type ReplayBenchmarkStageAggregate = {
   sampleCount: number;
   totalNs: string;
   maxNs: string;
+  /**
+   * HTR-WP09 post-fail correction: real nearest-rank p95 of per-sample durations,
+   * derived from a bounded fixed-resolution histogram (O(1) memory, independent of
+   * cycle count). Prior instrumentation exposed only `maxNs`; the qualification
+   * harness mislabelled `maxNs` as p95 (see ATTEMPT_INVALIDATED_BY_INSTRUMENTATION_FAILURE).
+   */
+  p95Ns: string;
 };
 
 export type ReplayBenchmarkStageTelemetry = {
   schemaVersion: typeof REPLAY_BENCHMARK_EVIDENCE_SCHEMA_VERSION;
   perStage: Record<ReplayBenchmarkStageId, ReplayBenchmarkStageAggregate>;
   memoryHighWater: MemoryHighWater;
+  /**
+   * HTR-WP09 post-fail correction: RSS/heap captured before the measured run begins,
+   * so a true delta (peak − baseline) can be computed. Prior instrumentation exposed
+   * only the absolute high-water, which the harness mislabelled as a delta.
+   */
+  memoryBaseline: MemoryHighWater;
 };
+
+/**
+ * Bounded latency histogram — fixed bucket count independent of sample count.
+ * 10µs resolution across [0, 200ms); a real nearest-rank p95 for sub-200ms
+ * per-cycle latencies (the D-11B paper-cycle domain) with O(1) memory.
+ */
+export const REPLAY_LATENCY_HISTOGRAM_BUCKET_WIDTH_NS = 10_000n;
+export const REPLAY_LATENCY_HISTOGRAM_BUCKET_COUNT = 20_000;
+
+export function computeP95NsFromHistogram(
+  buckets: Int32Array,
+  overflowCount: number,
+  bucketWidthNs: bigint,
+): bigint {
+  let total = overflowCount;
+  for (let i = 0; i < buckets.length; i += 1) {
+    total += buckets[i]!;
+  }
+  if (total === 0) {
+    return 0n;
+  }
+  const targetRank = Math.ceil(0.95 * total);
+  let cumulative = 0;
+  for (let i = 0; i < buckets.length; i += 1) {
+    cumulative += buckets[i]!;
+    if (cumulative >= targetRank) {
+      // Upper edge of the containing bucket (conservative / fail-closed).
+      return BigInt(i + 1) * bucketWidthNs;
+    }
+  }
+  // p95 rank lands in the overflow region (>= cap): report the cap (fail-closed).
+  return BigInt(buckets.length) * bucketWidthNs;
+}
 
 export type ReplayBenchmarkRunResult = {
   schemaVersion: typeof REPLAY_BENCHMARK_EVIDENCE_SCHEMA_VERSION;
@@ -94,16 +140,23 @@ type StageAccumulator = {
   sampleCount: number;
   totalNs: bigint;
   maxNs: bigint;
+  histogram: Int32Array;
+  histogramOverflow: number;
 };
 
 function createEmptyStageAccumulators(): Record<ReplayBenchmarkStageId, StageAccumulator> {
   return Object.fromEntries(
-    REPLAY_BENCHMARK_ALL_STAGES.map((stage) => [stage, { sampleCount: 0, totalNs: 0n, maxNs: 0n }]),
+    REPLAY_BENCHMARK_ALL_STAGES.map((stage) => [
+      stage,
+      {
+        sampleCount: 0,
+        totalNs: 0n,
+        maxNs: 0n,
+        histogram: new Int32Array(REPLAY_LATENCY_HISTOGRAM_BUCKET_COUNT),
+        histogramOverflow: 0,
+      },
+    ]),
   ) as Record<ReplayBenchmarkStageId, StageAccumulator>;
-}
-
-function emptyMemoryHighWater(): MemoryHighWater {
-  return { rssBytes: 0, heapUsedBytes: 0 };
 }
 
 function readMemoryUsage(): MemoryHighWater {
@@ -124,6 +177,7 @@ function updateMemoryHighWater(current: MemoryHighWater, sample: MemoryHighWater
 function toStageTelemetry(
   accumulators: Record<ReplayBenchmarkStageId, StageAccumulator>,
   memoryHighWater: MemoryHighWater,
+  memoryBaseline: MemoryHighWater,
 ): ReplayBenchmarkStageTelemetry {
   const perStage = Object.fromEntries(
     REPLAY_BENCHMARK_ALL_STAGES.map((stage) => {
@@ -134,6 +188,11 @@ function toStageTelemetry(
           sampleCount: aggregate.sampleCount,
           totalNs: aggregate.totalNs.toString(),
           maxNs: aggregate.maxNs.toString(),
+          p95Ns: computeP95NsFromHistogram(
+            aggregate.histogram,
+            aggregate.histogramOverflow,
+            REPLAY_LATENCY_HISTOGRAM_BUCKET_WIDTH_NS,
+          ).toString(),
         },
       ];
     }),
@@ -143,6 +202,7 @@ function toStageTelemetry(
     schemaVersion: REPLAY_BENCHMARK_EVIDENCE_SCHEMA_VERSION,
     perStage,
     memoryHighWater,
+    memoryBaseline,
   };
 }
 
@@ -151,7 +211,8 @@ export function createReplayBenchmarkObserver(): {
   collect(): ReplayBenchmarkRunResult;
 } {
   const accumulators = createEmptyStageAccumulators();
-  let memoryHighWater = emptyMemoryHighWater();
+  const memoryBaseline = readMemoryUsage();
+  let memoryHighWater = memoryBaseline;
   let failed = false;
 
   const observer: ReplayBenchmarkObserver = {
@@ -183,6 +244,12 @@ export function createReplayBenchmarkObserver(): {
             if (durationNs > aggregate.maxNs) {
               aggregate.maxNs = durationNs;
             }
+            const bucketIndex = Number(durationNs / REPLAY_LATENCY_HISTOGRAM_BUCKET_WIDTH_NS);
+            if (bucketIndex >= 0 && bucketIndex < aggregate.histogram.length) {
+              aggregate.histogram[bucketIndex] += 1;
+            } else {
+              aggregate.histogramOverflow += 1;
+            }
           } catch {
             failed = true;
           }
@@ -208,7 +275,7 @@ export function createReplayBenchmarkObserver(): {
     collect() {
       return {
         schemaVersion: REPLAY_BENCHMARK_EVIDENCE_SCHEMA_VERSION,
-        telemetry: toStageTelemetry(accumulators, memoryHighWater),
+        telemetry: toStageTelemetry(accumulators, memoryHighWater, memoryBaseline),
         terminalState: failed ? "BENCHMARK_FAILED" : "BENCHMARK_OK",
       };
     },

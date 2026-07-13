@@ -47,6 +47,7 @@ import { MEAN_REVERSION_V0, type Bar } from "@/lib/trader/intelligence/types";
 import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
 import { DEFAULT_REPLAY_SUBSTRATE_MODE } from "@/lib/trader/backtest/replay-substrate-mode";
 import type { ReplaySubstrateMode } from "@/lib/trader/backtest/replay-substrate-mode";
+import type { ReplayRetentionMode } from "@/lib/trader/backtest/streaming-evidence";
 import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
 import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
@@ -352,6 +353,12 @@ export async function runReplayBenchmarkOnce(input: {
   substrateMode?: ReplaySubstrateMode;
   /** When set, overrides default stdout telemetry (qualification uses noop). */
   telemetrySink?: WaiaTraderTelemetrySink;
+  /**
+   * HTR-WP09 post-fail correction: retention mode for the measured run. The D-11B
+   * qualification measures the approved bounded active path (`STREAM_ONLY`, 0 retained
+   * cycle results); WP03 defaults to `FULL` (legacy compatibility, unchanged).
+   */
+  retentionMode?: ReplayRetentionMode;
 }): Promise<{
   benchmark: ReplayBenchmarkRunResult | null;
   backtest: Awaited<ReturnType<typeof runBacktest>>;
@@ -404,6 +411,7 @@ export async function runReplayBenchmarkOnce(input: {
         newId: createBenchmarkNewIdFactory(),
         benchmarkObserver: instrumentation?.observer ?? NOOP_REPLAY_BENCHMARK_OBSERVER,
         telemetrySink: input.telemetrySink,
+        retentionMode: input.retentionMode,
         substrateMode,
       });
 
