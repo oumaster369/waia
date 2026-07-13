@@ -32,7 +32,7 @@ state:
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  currentWorkPackage: HTR-WP07
+  currentWorkPackage: HTR-WP08
   activeChildPlan: .cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md
   workCommitSha: f90faa9f02e12b3a4a724311cd4b7805f9c12f7c
   wp01WorkCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
@@ -103,6 +103,18 @@ state:
   wp06EvidenceTerminal: CANVAS_STATE_OK
   wp06MigrationDecision: NONE
   wp06GapStatus: "HTR-GAP-001 WP06 Canvas state contract + cursor foundation contribution delivered; remains OPEN; closure owner HTR-WP09"
+  wp07WorkCommitSha: 10f2500d80db65e010fd9408745b96f34369dff8
+  wp07PostReview: PASS
+  wp07Validation:
+    validateCanon: PASS
+    lint: PASS
+    typecheck: PASS
+    tests: PASS
+    build: PASS
+  wp07Evidence: replay-runs/RI-P7/htr-wp07-incremental-mtf-baseline/
+  wp07EvidenceTerminal: CANVAS_MTF_PARITY_OK
+  wp07MigrationDecision: NONE
+  wp07GapStatus: "HTR-GAP-003 WP07 incremental closed-bar MTF aggregation delivered, remains OPEN, closure owner HTR-WP09; HTR-GAP-004 WP07 partial-bar HTF-leakage closed-bar correction delivered, remains OPEN until HTR-WP10 qualification"
   macroBStatus: IN_PROGRESS
   completedWorkPackages:
     - HTR-WP01
@@ -111,8 +123,8 @@ state:
     - HTR-WP04
     - HTR-WP05
     - HTR-WP06
-  remainingWorkPackages:
     - HTR-WP07
+  remainingWorkPackages:
     - HTR-WP08
     - HTR-WP09
     - HTR-WP10
@@ -196,7 +208,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP04 | Streaming evidence + partial sealing + crash-recovery reconstruction | WP03 | backend | COMPLETE (Opus post-review PASS; full validation PASS; streaming-evidence baseline recorded; HTR-GAP-005/026 remain OPEN, closure HTR-WP22) | `b3abe7b` (WORK) |
 | HTR-WP05 | Checkpoint/resume + pipeline DB-disconnect + terminal states | WP04 | backend | COMPLETE (Opus post-review PASS; semantic parity digest equality proven; full validation PASS; HTR-GAP-027/029 remain OPEN, closure HTR-WP22) | `f90faa9` (WORK) |
 | HTR-WP06 | Market Canvas state contract + cursor replay foundation | WP01,WP03 | backend | COMPLETE (Opus Phase-B PASS; WORK `24eb7f9`; CANVAS_STATE_OK; HTR-GAP-001 contribution, remains OPEN, closure HTR-WP09) | `24eb7f9` (WORK) |
-| HTR-WP07 | Incremental closed-bar MTF aggregation | WP06 | backend | pending | — |
+| HTR-WP07 | Incremental closed-bar MTF aggregation | WP06 | backend | COMPLETE (Opus Phase-B PASS; WORK `10f2500`; CANVAS_MTF_PARITY_OK; HTR-GAP-003 contribution remains OPEN closure HTR-WP09; HTR-GAP-004 closed-bar correction remains OPEN closure HTR-WP10) | `10f2500` (WORK) |
 | HTR-WP08 | Incremental reconstruction + oracle parity | WP07 | backend | pending | — |
 | HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | WP08,WP03 | backend | pending | — |
 | HTR-WP10 | No-lookahead + determinism property suites | WP09 | backend | pending | — |
