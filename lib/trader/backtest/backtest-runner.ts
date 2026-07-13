@@ -117,6 +117,10 @@ export type RunBacktestResult = {
   streamingManifestRef?: StreamingEvidenceManifestRef;
   canvasState: MarketCanvasState;
   canvasStateRef?: string;
+  /** Qualification diagnostic only — length of the retained bars1mPrefix reference array. */
+  bars1mPrefixLength?: number;
+  /** Qualification diagnostic only — estimated reference-slot bytes (8 × length on 64-bit). */
+  bars1mPrefixEstimatedReferenceBytes?: number;
 };
 
 function wrapOrderRepositoryWithCostModel(
@@ -366,5 +370,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     streamingManifestRef: retentionMode === "STREAM_ONLY" ? streamingManifestRef : undefined,
     canvasState,
     canvasStateRef,
+    bars1mPrefixLength: bars1mPrefix.length,
+    bars1mPrefixEstimatedReferenceBytes: bars1mPrefix.length * 8,
   };
 }

@@ -293,6 +293,63 @@ APPROVE-HTR-D11B: qual-bar-count=129600 qual-canvas-advance-count=129600 qual-re
 - **WP09→WP10 qualification boundary** (`APPROVE-HTR-WP09-WP10-QUALIFICATION-BOUNDARY`, 2026-07-13 — clarifies, does not change, the approved Macro C scope; supersedes the overbroad "no production/test/harness/tracked-document change after Stage C begins" rule). **Stage-C freeze:** from the start of the WP09 Stage-C attempt until its raw evidence + manifest + digest are completely sealed, no tracked file may change. **Evidence binding:** WP09 qualification evidence is permanently bound to the exact WP09 WORK commit SHA, the committed WP09 qualification harness SHA, the approved host fingerprint, the approved N1/N2 dataset digests, and the approved D-11B thresholds — never to the WP10 or Macro-C final SHA. After a valid WP09 PASS and complete seal, Composer may internally advance to the already Human-approved WP10 packet and create the separate WP10 WORK commit; WP10 does not retroactively relabel WP09 evidence. **WP10 permitted boundary:** WP10 may modify only its approved determinism / no-lookahead scope; it must not modify the WP09 harness/CLI, D-11B thresholds, dataset/digests, host fingerprint, Canvas state contract, Canvas advance semantics, incremental MTF/reconstruction numeric semantics, WP09 cutover mode, the qualification result/staged evidence, or the WP09 WORK commit. For shared files (especially `evaluation-cycle.ts`) WP10 changes only the approved deterministic-clock/ID/no-lookahead seams. **Invalidation rule:** a WP10 change invalidates WP09 qualification only if it changes a WP09 measurement-critical surface (harness/CLI, Canvas advance/cutover semantics, thresholds, dataset, host binding, cycle-count contract, measured-stage boundaries, semantic/digest parity, or staged evidence); ordinary pre-approved WP10 deterministic changes do not. A required measurement-critical WP10 change forces STOP `WP10_CHANGE_INVALIDATES_WP09_QUALIFICATION` (no automatic D-11B rerun; no second D-11B attempt is authorized in Macro C). **Macro-end claims** may state only that WP09 passed D-11B on the exact WP09 WORK commit, WP10 passed its deterministic/no-lookahead contract, WP10 did not mutate a WP09 measurement-critical surface, and full repository validation passed — never that the WP09 attempt qualified the WP10 SHA or the final HTR runtime. Final completed-runtime D-11B re-proof is owned by **HTR-WP22**.
 - **WP09 prequalification correction** (`APPROVE-HTR-WP09-PREQUALIFICATION-CORRECTION` + `CLARIFY-HTR-D11B-HOST-FINGERPRINT`, 2026-07-13): Stage-C host preflight blocked on a false mismatch because the verifier hashed raw reference-file bytes (including a trailing LF) instead of the canonical sorted-key compact JSON semantic object (`1cd9f953…`). A separate prequalification correction commit completes the omitted WP09 checkpoint/resume Canvas wiring and canonical host verification; the original WP09 WORK commit `46820ac` remains immutable; `qualificationGitSha` binds to the correction commit HEAD (explicit Human exception).
 - **HTR-MACRO-C** is `REFRESHED_EXACT` (rolling-controller §9-C) and **Human-APPROVED** (2026-07-13: `APPROVE-HTR-MACRO-C: wp09-canvas-cutover-wp10-determinism` + `ACK-HTR-MACRO-C-MIGRATION: none` + `APPROVE-HTR-MACRO-C-BUILD` consumed). `MACRO_C_MIGRATION_DECISION: NONE`; `MACRO_C_CODE_BASELINE_HEAD: a8a709ff…`. **`BUILD_AUTHORIZED: YES` for HTR-MACRO-C only** (Composer 2.5 executes WP09 then WP10; no auto-advance to Macro D; the single final PR remains gated on all 23 WPs). WP09 and WP10 are **not** implemented/complete; HTR-GAP-001/002/003/004/025/031 remain **OPEN**; `READY_FOR_FULL_HISTORICAL_TEST` is **not** set.
+- **WP09 replacement D-11B attempt (2026-07-13):** valid **THRESHOLDS_NOT_MET** under the original D-11B contract (`rssGrowthFor2xN = 5,308,416 B > 1,048,576 B`). Opus memory-gate forensic verdict: **`VALID_THRESHOLD_FAIL_GATE_DEFINITION_MISALIGNED`**. Sealed evidence: `.cursor/plans/dee-415-d11b/qualification-staging/htr-wp09-replacement-1/` (manifest `bff973996…`). Forensic annotation (tracked, non-regenerating): `replay-runs/RI-P7/htr-wp09-d11b-replacement-1-forensic-annotation/`. This result is **permanently classified VALID FAIL under the original contract** and must never be retroactively relabelled PASS.
+- **D-11B Memory Gate Amendment v1 (Human-approved 2026-07-13):** `AUTHORIZE-HTR-D11B-MEMORY-GATE-AMENDMENT-V1` + one amended attempt authorization `AUTHORIZE-HTR-WP09-D11B-AMENDED-MEMORY-ATTEMPT`. Governs **prospective** qualification attempts only; does not rewrite prior sealed evidence.
+
+```yaml
+D11B_MEMORY_GATE_AMENDMENT_V1:
+  STATUS: HUMAN_APPROVED
+  APPROVAL_DATE: 2026-07-13
+  FORENSIC_BASIS: VALID_THRESHOLD_FAIL_GATE_DEFINITION_MISALIGNED
+
+  RETIRED_ACCEPTANCE_GATE:
+    field: max2xMemoryGrowthBytes
+    value: 1048576
+    measuredQuantity: pre-GC process peak delta growth
+    disposition: DIAGNOSTIC_ONLY
+    reason: "same-N fresh-process RSS variance exceeds the complete gate; metric measures V8/GC/allocator high-water rather than retained runtime state"
+
+  PRESERVED_ABSOLUTE_PROCESS_SAFETY_GATES:
+    maxRssDeltaBytes: 536870912
+    maxHeapUsedDeltaBytes: 268435456
+
+  NEW_RETAINED_STATE_GATE:
+    field: maxN2P95PostGcLiveHeapDeltaBytes
+    value: 4194304
+    aggregation: nearest-rank p95 over all five valid N2 warm runs
+    measurement: "postGcHeapUsedBytes - preRunPostGcHeapUsedBytes"
+    negativeDeltaPolicy: clamp_to_zero
+    purpose: "detect reachable retained state after runtime completion, not transient allocation churn"
+
+  PRESERVED_BOUNDEDNESS_GATES:
+    retainedCycleResults: 0
+    maxBufferedProjections: 32
+    maxSerializedCanvasBytes: 262144
+    fullHistoryRescans: 0
+
+  DIAGNOSTIC_ONLY:
+    - rssGrowthFor2xN
+    - heapGrowthFor2xN
+    - bars1mPrefixLength
+    - bars1mPrefixEstimatedReferenceBytes
+
+  UNCHANGED_GATES:
+    - bar counts
+    - Canvas advance counts
+    - replay cycle counts
+    - wall time
+    - mean cycle time
+    - p95 cycle time
+    - runtime range
+    - wall-time 2x scaling
+    - semantic parity
+    - digest parity
+    - dataset identity
+    - host identity
+```
+
+The historical Human token `APPROVE-HTR-D11B` (including `max-2x-mem-growth-bytes=1048576`) remains in audit
+text; after Amendment v1 it is **not** the active acceptance gate.
 
 ## Full Historical Validation Run Contract v0 (Human-approved future-run contract)
 

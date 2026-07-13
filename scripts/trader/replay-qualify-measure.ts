@@ -16,7 +16,15 @@ async function main(): Promise<void> {
   const runLabel = process.argv[3] ?? "unlabeled";
   const isCold = process.argv[4] === "cold";
   const outPath = process.argv[5];
-  const observation = await runQualificationMeasurement({ size, runLabel, isCold });
+  const contractEnv = process.env.WAIA_QUALIFICATION_CONTRACT;
+  const contract =
+    contractEnv === "ORIGINAL_D11B" ? "ORIGINAL_D11B" : "D11B_MEMORY_GATE_AMENDMENT_V1";
+  const observation = await runQualificationMeasurement({
+    size,
+    runLabel,
+    isCold,
+    contract,
+  });
   const payload = JSON.stringify(observation);
   if (outPath) {
     writeFileSync(outPath, payload, "utf8");

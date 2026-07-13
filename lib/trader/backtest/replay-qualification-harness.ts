@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { execSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -11,6 +11,7 @@ import {
   aggregateNumberMax,
   aggregateNumberMedian,
   aggregateNumberP95NearestRank,
+  assertGlobalGcAvailable,
 } from "@/lib/trader/backtest/replay-benchmark-instrumentation";
 import { estimateSerializedCanvasBytes } from "@/lib/trader/market-data/canvas/market-canvas-serialization";
 import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
@@ -53,11 +54,25 @@ export const D11B_THRESHOLDS = {
   max2xTimeGrowth: 2.2,
   maxRssDeltaBytes: 536_870_912,
   maxHeapDeltaBytes: 268_435_456,
+  /** Retired as acceptance gate under D11B_MEMORY_GATE_AMENDMENT_V1 — diagnostic only. */
   max2xMemoryGrowthBytes: 1_048_576,
   maxSerializedCanvasBytes: 262_144,
   measuredWarmRunsPerN: 5,
   maxFullDatasetRuntimeRangePct: 20.0,
 } as const;
+
+/** Human-approved D-11B Memory Gate Amendment v1 (2026-07-13). */
+export const D11B_MEMORY_GATE_AMENDMENT_V1_THRESHOLDS = {
+  ...D11B_THRESHOLDS,
+  maxN2P95PostGcLiveHeapDeltaBytes: 4_194_304,
+  maxBufferedProjections: 32,
+  activeQualificationContract: "D11B_MEMORY_GATE_AMENDMENT_V1" as const,
+} as const;
+
+export const HTR_WP09_AMENDED_STAGING_DIR = path.join(
+  process.cwd(),
+  ".cursor/plans/dee-415-d11b/qualification-staging/htr-wp09-memory-amendment-v1-attempt-1",
+);
 
 export type QualificationDatasetSize = "N1" | "N2";
 
@@ -74,6 +89,19 @@ export type QualificationRunObservation = {
   rssDeltaBytes: number;
   /** peakHeapUsed − baselineHeapUsed (true delta; previously absolute high-water). */
   heapUsedDeltaBytes: number;
+  baselineRssBytes?: number;
+  peakRssBytes?: number;
+  baselineHeapUsedBytes?: number;
+  peakHeapUsedBytes?: number;
+  /** Amendment v1: post-GC live heap delta (outside wall/stage timing). */
+  preRunPostGcHeapUsedBytes?: number;
+  postRunPostGcHeapUsedBytes?: number;
+  postGcLiveHeapDeltaBytes?: number;
+  /** Amendment v1: streaming projection buffer high-water. */
+  peakBufferedProjections?: number;
+  /** Diagnostic only under Amendment v1. */
+  bars1mPrefixLength?: number;
+  bars1mPrefixEstimatedReferenceBytes?: number;
   /** STREAM_ONLY invariant: retained PaperCycleResult objects (must be 0). */
   retainedCycleResults: number;
   /** Serialized Market Canvas byte size at run end (maxSerializedCanvasBytes gate). */
@@ -133,8 +161,17 @@ export type QualificationDatasetResult = {
     maxSerializedCanvasBytes: number;
     maxRetainedCycleResults: number;
     maxFullHistoryRescans: number;
+    p95PostGcLiveHeapDeltaBytes?: number;
+    maxPeakBufferedProjections?: number;
   };
   n1ToN2WallTimeRatio?: number;
+};
+
+export type QualificationDiagnosticGrowth = {
+  rssGrowthFor2xN: number;
+  heapGrowthFor2xN: number;
+  rssGrowthGateResult: "DIAGNOSTIC_ONLY";
+  heapGrowthGateResult: "DIAGNOSTIC_ONLY";
 };
 
 export type QualificationAttemptResult = {
@@ -142,7 +179,11 @@ export type QualificationAttemptResult = {
   terminalState:
     | "HTR_WP09_D11B_QUALIFICATION_PASS"
     | "HTR_WP09_D11B_THRESHOLDS_NOT_MET"
-    | "HTR_WP09_D11B_ATTEMPT_INVALIDATED";
+    | "HTR_WP09_D11B_ATTEMPT_INVALIDATED"
+    | "HTR_WP09_D11B_MEMORY_AMENDMENT_V1_PASS"
+    | "HTR_WP09_D11B_MEMORY_AMENDMENT_V1_THRESHOLDS_NOT_MET"
+    | "HTR_WP09_D11B_MEMORY_AMENDMENT_V1_ATTEMPT_INVALIDATED";
+  activeQualificationContract?: "ORIGINAL_D11B" | "D11B_MEMORY_GATE_AMENDMENT_V1";
   gitSha: string;
   dirtyTree: boolean;
   hostFingerprintSha256: string;
@@ -152,6 +193,7 @@ export type QualificationAttemptResult = {
   hostPreflight: ReturnType<typeof readBenchmarkEnvironment>;
   invalidationReason?: string;
   thresholdFailures?: string[];
+  diagnosticGrowth?: QualificationDiagnosticGrowth;
 };
 
 function defaultDatasetPath(size: QualificationDatasetSize): string {
@@ -210,19 +252,24 @@ export async function runQualificationMeasurement(input: {
   runLabel: string;
   isCold: boolean;
   datasetPath?: string;
+  contract?: "ORIGINAL_D11B" | "D11B_MEMORY_GATE_AMENDMENT_V1";
 }): Promise<QualificationRunObservation> {
   void input.isCold;
+  const contract = input.contract ?? "D11B_MEMORY_GATE_AMENDMENT_V1";
+  if (contract === "D11B_MEMORY_GATE_AMENDMENT_V1") {
+    assertGlobalGcAvailable(`runQualificationMeasurement(${input.runLabel})`);
+  }
+
   const bars = loadQualificationBars(input.size, input.datasetPath);
-  const started = performance.now();
   const result = await runReplayBenchmarkOnce({
     bars,
     includeInstrumentation: true,
     telemetrySink: QUALIFICATION_NOOP_TELEMETRY_SINK,
-    // Measure the approved bounded active research-validation path (0 retained
-    // cycle results), not the legacy FULL retention default.
     retentionMode: "STREAM_ONLY",
+    qualificationMeasurementV1: contract === "D11B_MEMORY_GATE_AMENDMENT_V1",
   });
-  const runWallTimeMs = performance.now() - started;
+
+  const runWallTimeMs = result.runWallTimeMs ?? 0;
 
   if (!result.benchmark || result.benchmark.terminalState !== "BENCHMARK_OK") {
     throw new Error(`[htr-wp09-qualify] measurement failed: ${input.runLabel}`);
@@ -236,11 +283,23 @@ export async function runQualificationMeasurement(input: {
     p95PaperCycleMs: stats.p95PaperCycleMs,
     maxPaperCycleMs: stats.maxPaperCycleMs,
   });
+
+  const baseline = result.benchmark.telemetry.memoryBaseline;
+  const peak = result.benchmark.telemetry.memoryHighWater;
+
   return {
     runLabel: input.runLabel,
     isCold: input.isCold,
     runWallTimeMs,
     ...stats,
+    baselineRssBytes: baseline.rssBytes,
+    peakRssBytes: peak.rssBytes,
+    baselineHeapUsedBytes: baseline.heapUsedBytes,
+    peakHeapUsedBytes: peak.heapUsedBytes,
+    preRunPostGcHeapUsedBytes: result.preRunPostGcHeapUsedBytes,
+    postRunPostGcHeapUsedBytes: result.postRunPostGcHeapUsedBytes,
+    postGcLiveHeapDeltaBytes: result.postGcLiveHeapDeltaBytes,
+    peakBufferedProjections: result.peakBufferedProjections ?? 0,
     retainedCycleResults: result.backtest.cycleResults.length,
     serializedCanvasBytes: estimateSerializedCanvasBytes(result.backtest.canvasState),
     cycleCount: result.backtest.cycleCount,
@@ -248,6 +307,8 @@ export async function runQualificationMeasurement(input: {
     fullHistoryRescans: getFullHistoryRescanCount(),
     semanticReproDigest: result.backtest.exportDocument.envelope.contentDigest,
     evidenceDigest: result.backtest.evidenceDigest,
+    bars1mPrefixLength: result.backtest.bars1mPrefixLength,
+    bars1mPrefixEstimatedReferenceBytes: result.backtest.bars1mPrefixEstimatedReferenceBytes,
   };
 }
 
@@ -271,11 +332,28 @@ function aggregateWarmObservations(runs: QualificationRunObservation[]) {
     maxSerializedCanvasBytes: aggregateNumberMax(runs.map((r) => r.serializedCanvasBytes)),
     maxRetainedCycleResults: aggregateNumberMax(runs.map((r) => r.retainedCycleResults)),
     maxFullHistoryRescans: aggregateNumberMax(runs.map((r) => r.fullHistoryRescans)),
+    p95PostGcLiveHeapDeltaBytes: aggregateNumberP95NearestRank(
+      runs.map((r) => r.postGcLiveHeapDeltaBytes ?? 0),
+    ),
+    maxPeakBufferedProjections: aggregateNumberMax(runs.map((r) => r.peakBufferedProjections ?? 0)),
+  };
+}
+
+export function computeDiagnosticGrowthMetrics(
+  n1: QualificationDatasetResult,
+  n2: QualificationDatasetResult,
+): QualificationDiagnosticGrowth {
+  return {
+    rssGrowthFor2xN: n2.aggregate.p95RssDeltaBytes - n1.aggregate.p95RssDeltaBytes,
+    heapGrowthFor2xN: n2.aggregate.p95HeapDeltaBytes - n1.aggregate.p95HeapDeltaBytes,
+    rssGrowthGateResult: "DIAGNOSTIC_ONLY",
+    heapGrowthGateResult: "DIAGNOSTIC_ONLY",
   };
 }
 
 async function runDatasetQualification(
   size: QualificationDatasetSize,
+  contract: "ORIGINAL_D11B" | "D11B_MEMORY_GATE_AMENDMENT_V1" = "ORIGINAL_D11B",
 ): Promise<QualificationDatasetResult> {
   const bars = loadQualificationBars(size);
   const barSetDigest = computeBarSetDigest(bars);
@@ -283,6 +361,7 @@ async function runDatasetQualification(
     size,
     runLabel: `${size}-cold`,
     isCold: true,
+    contract,
   });
 
   const warmRuns: QualificationRunObservation[] = [];
@@ -292,6 +371,7 @@ async function runDatasetQualification(
         size,
         runLabel: `${size}-warm-${i + 1}`,
         isCold: false,
+        contract,
       }),
     );
   }
@@ -309,6 +389,14 @@ async function runDatasetQualification(
 }
 
 function evaluateThresholds(
+  n1: QualificationDatasetResult,
+  n2: QualificationDatasetResult,
+): string[] {
+  return evaluateLegacyThresholds(n1, n2);
+}
+
+/** Original D-11B contract (pre-Amendment v1) — retained for historical evidence interpretation. */
+export function evaluateLegacyThresholds(
   n1: QualificationDatasetResult,
   n2: QualificationDatasetResult,
 ): string[] {
@@ -407,6 +495,105 @@ function evaluateThresholds(
   return failures;
 }
 
+/** D-11B Memory Gate Amendment v1 acceptance gates (2026-07-13). */
+export function evaluateAmendedThresholds(
+  n1: QualificationDatasetResult,
+  n2: QualificationDatasetResult,
+): string[] {
+  const failures: string[] = [];
+  const t = D11B_MEMORY_GATE_AMENDMENT_V1_THRESHOLDS;
+
+  if (n2.barCount !== t.qualificationBarCountN2) {
+    failures.push(`barCount ${n2.barCount} != ${t.qualificationBarCountN2}`);
+  }
+  if (n2.integratedReplayCycleCount !== t.integratedReplayCycleCountN2) {
+    failures.push(
+      `integratedReplayCycleCount ${n2.integratedReplayCycleCount} != ${t.integratedReplayCycleCountN2}`,
+    );
+  }
+  if (n2.aggregate.maxWallMs > t.maxTotalWallMs) {
+    failures.push(`maxWallMs ${n2.aggregate.maxWallMs} > ${t.maxTotalWallMs}`);
+  }
+  if (n2.aggregate.meanPaperCycleMs > t.maxMeanReplayCycleMs) {
+    failures.push(`meanPaperCycleMs ${n2.aggregate.meanPaperCycleMs} > ${t.maxMeanReplayCycleMs}`);
+  }
+  if (n2.aggregate.p95PaperCycleMs > t.maxP95ReplayCycleMs) {
+    failures.push(`p95PaperCycleMs ${n2.aggregate.p95PaperCycleMs} > ${t.maxP95ReplayCycleMs}`);
+  }
+  if (n2.aggregate.runtimeRangePct > t.maxFullDatasetRuntimeRangePct) {
+    failures.push(
+      `runtimeRangePct ${n2.aggregate.runtimeRangePct} > ${t.maxFullDatasetRuntimeRangePct}`,
+    );
+  }
+  if (n2.aggregate.p95RssDeltaBytes > t.maxRssDeltaBytes) {
+    failures.push(`rssDelta ${n2.aggregate.p95RssDeltaBytes} > ${t.maxRssDeltaBytes}`);
+  }
+  if (n2.aggregate.p95HeapDeltaBytes > t.maxHeapDeltaBytes) {
+    failures.push(`heapDelta ${n2.aggregate.p95HeapDeltaBytes} > ${t.maxHeapDeltaBytes}`);
+  }
+
+  const wallRatio =
+    n1.aggregate.medianWallMs > 0 ? n2.aggregate.medianWallMs / n1.aggregate.medianWallMs : 0;
+  if (wallRatio > t.max2xTimeGrowth) {
+    failures.push(`wallTimeRatio ${wallRatio} > ${t.max2xTimeGrowth}`);
+  }
+
+  const p95PostGc = n2.aggregate.p95PostGcLiveHeapDeltaBytes ?? 0;
+  if (p95PostGc > t.maxN2P95PostGcLiveHeapDeltaBytes) {
+    failures.push(`postGcLiveHeapDelta ${p95PostGc} > ${t.maxN2P95PostGcLiveHeapDeltaBytes}`);
+  }
+
+  if (n2.canvasAdvanceCount !== t.canvasAdvanceCountN2) {
+    failures.push(`canvasAdvanceCount ${n2.canvasAdvanceCount} != ${t.canvasAdvanceCountN2}`);
+  }
+
+  if (n2.aggregate.maxSerializedCanvasBytes > t.maxSerializedCanvasBytes) {
+    failures.push(
+      `serializedCanvasBytes ${n2.aggregate.maxSerializedCanvasBytes} > ${t.maxSerializedCanvasBytes}`,
+    );
+  }
+  if (n1.aggregate.maxSerializedCanvasBytes > t.maxSerializedCanvasBytes) {
+    failures.push(
+      `serializedCanvasBytes(N1) ${n1.aggregate.maxSerializedCanvasBytes} > ${t.maxSerializedCanvasBytes}`,
+    );
+  }
+
+  for (const [label, ds] of [
+    ["N1", n1],
+    ["N2", n2],
+  ] as const) {
+    if (ds.aggregate.maxRetainedCycleResults !== 0) {
+      failures.push(`retainedCycleResults(${label}) ${ds.aggregate.maxRetainedCycleResults} != 0`);
+    }
+    if (ds.aggregate.maxFullHistoryRescans !== 0) {
+      failures.push(`fullHistoryRescans(${label}) ${ds.aggregate.maxFullHistoryRescans} != 0`);
+    }
+    const peakBuffered = ds.aggregate.maxPeakBufferedProjections ?? 0;
+    if (peakBuffered > t.maxBufferedProjections) {
+      failures.push(
+        `peakBufferedProjections(${label}) ${peakBuffered} > ${t.maxBufferedProjections}`,
+      );
+    }
+  }
+
+  for (const [label, ds] of [
+    ["N1", n1],
+    ["N2", n2],
+  ] as const) {
+    const runs = [ds.coldRun, ...ds.warmRuns];
+    const semantic = new Set(runs.map((r) => r.semanticReproDigest));
+    const evidence = new Set(runs.map((r) => r.evidenceDigest));
+    if (semantic.size !== 1) {
+      failures.push(`semanticReproDigest(${label}) not identical across runs`);
+    }
+    if (evidence.size !== 1) {
+      failures.push(`evidenceDigest(${label}) not identical across runs`);
+    }
+  }
+
+  return failures;
+}
+
 export async function runWp09QualificationAttempt(input?: {
   stagingDir?: string;
 }): Promise<QualificationAttemptResult> {
@@ -468,26 +655,100 @@ export async function runWp09QualificationAttempt(input?: {
   return result;
 }
 
+/** D-11B Memory Gate Amendment v1 — single permitted amended qualification attempt. */
+export async function runWp09AmendedQualificationAttempt(input?: {
+  stagingDir?: string;
+}): Promise<QualificationAttemptResult> {
+  const hostPreflight = readBenchmarkEnvironment();
+  const hostFingerprintSha256 = computeHostFingerprintSha256();
+
+  if (readGitDirtyTree()) {
+    return {
+      schemaVersion: HTR_WP09_QUALIFICATION_EVIDENCE_SCHEMA,
+      terminalState: "HTR_WP09_D11B_MEMORY_AMENDMENT_V1_ATTEMPT_INVALIDATED",
+      activeQualificationContract: "D11B_MEMORY_GATE_AMENDMENT_V1",
+      gitSha: readGitCodeSha(),
+      dirtyTree: true,
+      hostFingerprintSha256,
+      datasetSha256: D11B_APPROVED_DATASET_SHA256,
+      n1: {} as QualificationDatasetResult,
+      n2: {} as QualificationDatasetResult,
+      hostPreflight,
+      invalidationReason: "qualificationDirtyTree=true",
+    };
+  }
+
+  const contract = "D11B_MEMORY_GATE_AMENDMENT_V1" as const;
+  const n1 = await runDatasetQualification("N1", contract);
+  const n2 = await runDatasetQualification("N2", contract);
+  n2.n1ToN2WallTimeRatio =
+    n1.aggregate.medianWallMs > 0 ? n2.aggregate.medianWallMs / n1.aggregate.medianWallMs : 0;
+
+  const diagnosticGrowth = computeDiagnosticGrowthMetrics(n1, n2);
+  const thresholdFailures = evaluateAmendedThresholds(n1, n2);
+  const terminalState =
+    thresholdFailures.length === 0
+      ? "HTR_WP09_D11B_MEMORY_AMENDMENT_V1_PASS"
+      : "HTR_WP09_D11B_MEMORY_AMENDMENT_V1_THRESHOLDS_NOT_MET";
+
+  const result: QualificationAttemptResult = {
+    schemaVersion: HTR_WP09_QUALIFICATION_EVIDENCE_SCHEMA,
+    terminalState,
+    activeQualificationContract: contract,
+    gitSha: readGitCodeSha(),
+    dirtyTree: false,
+    hostFingerprintSha256,
+    datasetSha256: D11B_APPROVED_DATASET_SHA256,
+    n1,
+    n2,
+    hostPreflight,
+    diagnosticGrowth,
+    thresholdFailures: thresholdFailures.length > 0 ? thresholdFailures : undefined,
+  };
+
+  const stagingDir = input?.stagingDir ?? HTR_WP09_AMENDED_STAGING_DIR;
+  mkdirSync(stagingDir, { recursive: true });
+  const payloadPath = path.join(stagingDir, "qualification-attempt.json");
+  writeFileSync(payloadPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  const manifestDigest = createHash("sha256").update(readFileSync(payloadPath)).digest("hex");
+  writeFileSync(
+    path.join(stagingDir, "manifest.json"),
+    `${JSON.stringify({ payloadPath, manifestDigest, gitSha: result.gitSha }, null, 2)}\n`,
+    "utf8",
+  );
+
+  return result;
+}
+
 /** Spawn a fresh Node process for one qualification measurement (D-11A protocol). */
 export function spawnFreshQualificationMeasurement(input: {
   size: QualificationDatasetSize;
   runLabel: string;
   isCold: boolean;
+  contract?: "ORIGINAL_D11B" | "D11B_MEMORY_GATE_AMENDMENT_V1";
 }): QualificationRunObservation {
+  const contract = input.contract ?? "D11B_MEMORY_GATE_AMENDMENT_V1";
   const script = path.join(process.cwd(), "scripts/trader/replay-qualify-measure.ts");
   const tmpDir = mkdtempSync(path.join(tmpdir(), "htr-wp09-measure-"));
   const outPath = path.join(tmpDir, "observation.json");
   const args = [script, input.size, input.runLabel, input.isCold ? "cold" : "warm", outPath];
+  const nodeArgs =
+    contract === "D11B_MEMORY_GATE_AMENDMENT_V1"
+      ? ["--expose-gc", "--import", "tsx", "--conditions=react-server", ...args]
+      : ["--import", "tsx", "--conditions=react-server", ...args];
   try {
-    const proc = spawnSync(
-      process.execPath,
-      ["--import", "tsx", "--conditions=react-server", ...args],
-      {
-        encoding: "utf8",
-        env: { ...process.env, WAIA_TRADER_CLI: "1" },
-        maxBuffer: 1024 * 1024,
+    const proc = spawnSync(process.execPath, nodeArgs, {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        WAIA_TRADER_CLI: "1",
+        WAIA_QUALIFICATION_CONTRACT: contract,
+        // `--expose-gc` is passed via argv; clear NODE_OPTIONS so host fingerprint
+        // (nodeOptions="") matches the approved reference binding in child processes.
+        NODE_OPTIONS: "",
       },
-    );
+      maxBuffer: 1024 * 1024,
+    });
     if (proc.status !== 0) {
       const detail = proc.stderr?.trim() || proc.stdout?.trim() || proc.error?.message;
       throw new Error(

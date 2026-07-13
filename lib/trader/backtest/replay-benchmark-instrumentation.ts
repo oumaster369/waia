@@ -337,3 +337,30 @@ export function aggregateNumberMax(values: readonly number[]): number {
   }
   return Math.max(...values);
 }
+
+/** Fail closed when `--expose-gc` was not provided to the qualification child process. */
+export function assertGlobalGcAvailable(context = "qualification"): void {
+  if (typeof (globalThis as { gc?: () => void }).gc !== "function") {
+    throw new Error(
+      `[htr-wp09-qualify] global.gc unavailable (${context}) — child process must use --expose-gc`,
+    );
+  }
+}
+
+/** Invoke V8 full GC twice (requires `--expose-gc`). Used outside wall/stage timing. */
+export function invokeFullGcTwice(): void {
+  assertGlobalGcAvailable();
+  (globalThis as { gc: () => void }).gc();
+  (globalThis as { gc: () => void }).gc();
+}
+
+export function readHeapUsedBytes(): number {
+  return process.memoryUsage().heapUsed;
+}
+
+export function computePostGcLiveHeapDeltaBytes(
+  preRunPostGcHeapUsedBytes: number,
+  postRunPostGcHeapUsedBytes: number,
+): number {
+  return Math.max(0, postRunPostGcHeapUsedBytes - preRunPostGcHeapUsedBytes);
+}

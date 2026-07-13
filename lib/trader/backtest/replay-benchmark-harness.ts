@@ -32,8 +32,12 @@ import {
   aggregateNumberMax,
   aggregateNumberMedian,
   aggregateNumberP95NearestRank,
+  assertGlobalGcAvailable,
+  computePostGcLiveHeapDeltaBytes,
   createReplayBenchmarkObserver,
+  invokeFullGcTwice,
   NOOP_REPLAY_BENCHMARK_OBSERVER,
+  readHeapUsedBytes,
   REPLAY_BENCHMARK_ALL_STAGES,
   REPLAY_BENCHMARK_EVIDENCE_SCHEMA_VERSION,
   REPLAY_BENCHMARK_PER_CYCLE_STAGES,
@@ -41,6 +45,7 @@ import {
   type ReplayBenchmarkRunResult,
   type ReplayBenchmarkStageId,
 } from "@/lib/trader/backtest/replay-benchmark-instrumentation";
+import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-sink";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import type { TraderFixtureFile } from "@/lib/trader/market-data/types";
 import { MEAN_REVERSION_V0, type Bar } from "@/lib/trader/intelligence/types";
@@ -359,12 +364,30 @@ export async function runReplayBenchmarkOnce(input: {
    * cycle results); WP03 defaults to `FULL` (legacy compatibility, unchanged).
    */
   retentionMode?: ReplayRetentionMode;
+  /**
+   * D-11B Memory Gate Amendment v1: enforce post-GC live-heap measurement semantics,
+   * wall timing excluding GC, and peakBufferedProjections tracking via a temp streaming sink.
+   */
+  qualificationMeasurementV1?: boolean;
 }): Promise<{
   benchmark: ReplayBenchmarkRunResult | null;
   backtest: Awaited<ReturnType<typeof runBacktest>>;
+  /** Present when qualificationMeasurementV1 — wall time excludes pre/post GC and setup. */
+  runWallTimeMs?: number;
+  preRunPostGcHeapUsedBytes?: number;
+  postRunPostGcHeapUsedBytes?: number;
+  postGcLiveHeapDeltaBytes?: number;
+  peakBufferedProjections?: number;
 }> {
   return withDeterministicRandomUuid(async () => {
+    if (input.qualificationMeasurementV1) {
+      assertGlobalGcAvailable("runReplayBenchmarkOnce");
+    }
+
     const { session, context } = await seedBenchmarkSession();
+    const evidenceTempDir = input.qualificationMeasurementV1
+      ? fs.mkdtempSync(path.join(os.tmpdir(), "waia-htr-wp09-evidence-"))
+      : null;
     try {
       const fixture = loadApprovedBenchmarkFixture();
       const window = {
@@ -380,8 +403,23 @@ export async function runReplayBenchmarkOnce(input: {
         windowMode: substrateMode === "legacy-oracle" ? "expanding" : "cursor",
       });
 
-      const instrumentation = input.includeInstrumentation ? createReplayBenchmarkObserver() : null;
+      let preRunPostGcHeapUsedBytes: number | undefined;
+      if (input.qualificationMeasurementV1) {
+        invokeFullGcTwice();
+        preRunPostGcHeapUsedBytes = readHeapUsedBytes();
+      }
 
+      const instrumentation = input.includeInstrumentation ? createReplayBenchmarkObserver() : null;
+      const evidenceSink =
+        input.qualificationMeasurementV1 && evidenceTempDir
+          ? createStreamingEvidenceSink({
+              runDir: evidenceTempDir,
+              runId: "htr-wp09-qualify",
+              environment: "qualification-v1",
+            })
+          : undefined;
+
+      const measureStarted = input.qualificationMeasurementV1 ? performance.now() : null;
       const backtest = await runBacktest({
         context,
         barSource,
@@ -412,13 +450,43 @@ export async function runReplayBenchmarkOnce(input: {
         benchmarkObserver: instrumentation?.observer ?? NOOP_REPLAY_BENCHMARK_OBSERVER,
         telemetrySink: input.telemetrySink,
         retentionMode: input.retentionMode,
+        evidenceSink,
         substrateMode,
       });
+      const runWallTimeMs =
+        measureStarted !== null ? performance.now() - measureStarted : undefined;
 
       const benchmark = instrumentation ? instrumentation.collect() : null;
-      return { benchmark, backtest };
+
+      let postRunPostGcHeapUsedBytes: number | undefined;
+      let postGcLiveHeapDeltaBytes: number | undefined;
+      if (input.qualificationMeasurementV1 && preRunPostGcHeapUsedBytes !== undefined) {
+        invokeFullGcTwice();
+        postRunPostGcHeapUsedBytes = readHeapUsedBytes();
+        postGcLiveHeapDeltaBytes = computePostGcLiveHeapDeltaBytes(
+          preRunPostGcHeapUsedBytes,
+          postRunPostGcHeapUsedBytes,
+        );
+      }
+
+      return {
+        benchmark,
+        backtest,
+        runWallTimeMs,
+        preRunPostGcHeapUsedBytes,
+        postRunPostGcHeapUsedBytes,
+        postGcLiveHeapDeltaBytes,
+        peakBufferedProjections: evidenceSink?.peakBufferedProjections(),
+      };
     } finally {
       session.cleanup();
+      if (evidenceTempDir) {
+        try {
+          fs.rmSync(evidenceTempDir, { recursive: true, force: true });
+        } catch {
+          // best-effort temp cleanup
+        }
+      }
     }
   });
 }
