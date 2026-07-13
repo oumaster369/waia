@@ -28,7 +28,13 @@ linearStatusFlow:
 state:
   status: in-progress
   humanApproval: CONFIRM-DEE-415-HTR-WP01-CHILD-PLAN
-  childPlanStatus: REFRESHED_EXACT   # 2026-07-13: HTR-MACRO-C (WP09+WP10) refreshed EXACT in the rolling controller after D-11B resolution
+  childPlanStatus: APPROVED_EXACT   # 2026-07-13: HTR-MACRO-C (WP09+WP10) refreshed EXACT + Human-approved (APPROVE-HTR-MACRO-C / -BUILD consumed) after D-11B resolution
+  programStatus: WP_ACTIVE
+  activeWorkPackage: HTR-WP09
+  macroCMigrationDecision: NONE
+  macroCStartingHead: THIS_SESSION_PROCESS_COMMIT   # exact SHA recorded in git log + gitignored controllers; canonical authority is git log (process commit changes planning/governance only)
+  macroCCodeBaselineHead: a8a709ff53f74649b5c5f39e0ba8e00af1e113de   # HTR-WP08 CLOSEOUT — latest validated production baseline; process commit changes NO production code
+  composerTerminalState: null
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
@@ -140,8 +146,11 @@ state:
     - HTR-MACRO-A
     - HTR-MACRO-B
   activeMacroPackage: HTR-MACRO-C
-  activeMacroStatus: DRAFT_AWAITING_HUMAN_APPROVAL   # 2026-07-13: D-11B RESOLVED (Human-approved); Macro C refreshed EXACT; Build unauthorized pending separate Human approval
-  buildAuthorized: NO
+  activeMacroWorkPackages:
+    - HTR-WP09
+    - HTR-WP10
+  activeMacroStatus: APPROVED   # 2026-07-13: D-11B RESOLVED; Macro C refreshed EXACT + Human-approved (APPROVE-HTR-MACRO-C: wp09-canvas-cutover-wp10-determinism; ACK-HTR-MACRO-C-MIGRATION: none; APPROVE-HTR-MACRO-C-BUILD)
+  buildAuthorized: YES   # 2026-07-13: Composer 2.5 may execute the approved HTR-MACRO-C packet only (WP09 then WP10); no auto-advance to Macro D
   d11bStatus: RESOLVED
   d11bDecisionStatus: HUMAN_APPROVED
   d11bApprovalDate: 2026-07-13
@@ -150,6 +159,38 @@ state:
   d11bQuiescencePolicy: PREFLIGHT_CHECKS_ONLY_NO_NUMERIC_LOAD_AVERAGE_GATE
   wp09CleanCommitQualificationSequence: APPROVE-HTR-WP09-CLEAN-COMMIT-QUALIFICATION-SEQUENCE   # bounded WP09-only lifecycle exception; unchanged macro membership / integration boundary / WORK-commit count / Human gates
   readyForFullHistoricalTest: false
+  fullHistoricalValidationRunContract:   # v0 — Human-approved future-run contract (APPROVE-FHV-RUN-CONTRACT-V0); does NOT authorize the run during DEE-415
+    version: v0
+    approvalToken: APPROVE-FHV-RUN-CONTRACT-V0
+    executionPhase: AFTER_DEE_415_AND_CERTIFY_HTR_READY
+    instruments: [BTCUSDT, ETHUSDT]
+    venueClass: spot
+    primaryInterval: 1m
+    derivedIntervals: [15m, 1h, 4h, 1d]
+    derivedIntervalRule: CLOSED_BARS_ONLY
+    fullPeriod: { startUtc: 2020-01-01T00:00:00Z, endUtc: 2025-12-31T23:59:00Z }
+    developmentCalibration: { startUtc: 2020-01-01T00:00:00Z, endUtc: 2022-12-31T23:59:00Z }
+    walkForward: { startUtc: 2023-01-01T00:00:00Z, endUtc: 2024-12-31T23:59:00Z }
+    blindHoldout: { startUtc: 2025-01-01T00:00:00Z, endUtc: 2025-12-31T23:59:00Z, status: SEALED_NOT_ACCESSED }
+    initialPortfolio:
+      quoteCurrency: USDT
+      cashUsdt: 100000
+      btcQuantity: 0
+      ethQuantity: 0
+      leverage: 0
+      borrowing: PROHIBITED
+      shortSelling: PROHIBITED
+      externalDepositsDuringRun: 0
+      externalWithdrawalsDuringRun: 0
+      portfolioMode: SHARED_MULTI_INSTRUMENT
+  blindHoldout2025Status: RESERVED_SEALED_NOT_ACCESSED   # contamination audit 2026-07-13: no material strategy/parameter/threshold/feature/model-selection/promotion use of 2025 spot-1m found; no 2025 price content inspected
+  d11bDatasetRole: INFRASTRUCTURE_QUALIFICATION_ONLY   # 2023-04-01..2023-06-29 90-day dataset qualifies runtime/memory thresholds only; NOT the full historical program
+  drawdownLimitDecision:
+    id: D-20
+    status: HUMAN_DECISION_REQUIRED_BEFORE_HTR_WP16
+    proposedTokenNotConsumed: "APPROVE-HTR-D20-DRAWDOWN-LIMITS: max-account-drawdown-pct=<v> max-monthly-drawdown-pct=<v> max-strategy-drawdown-pct=<v> breach-action=<CLOSE_ONLY_THEN_STOP_ACCOUNT|IMMEDIATE_STOP_ACCOUNT>"
+    blocks: [HTR-WP16_ACTIVATION, HTR-WP22_FINAL_QUALIFICATION, CERTIFY_HTR_READY]
+    doesNotBlock: [HTR-MACRO-C, HTR-MACRO-D]
   completedWorkPackages:
     - HTR-WP01
     - HTR-WP02
@@ -181,7 +222,7 @@ state:
   lastValidationAt: 2026-07-12
   finalAuditStatus: not-started
   blockedReason: null
-  nextAction: "HTR-MACRO-B (HTR-WP06+WP07+WP08) is COMPLETE — Opus Phase-B post-implementation audit PASS for all three WPs; three WORK commits (24eb7f9, 10f2500, 0c4b8c3) + three CLOSEOUT commits; full repository validation green in the supported local environment (lint 0 errors, typecheck PASS, 2469 unit tests passed / 92 skipped, build PASS, validate:canon PASS); evidence CANVAS_STATE_OK + CANVAS_MTF_PARITY_OK + RECONSTRUCTION_ORACLE_PARITY_OK (22/22 exact closed-boundary digest parity, 0 divergences, FULL_HISTORY_RESCANS 0, state within declared bounds, work growth linear); HTR-GAP-001/002/003 remain OPEN with closure owner HTR-WP09, HTR-GAP-004 remains OPEN with closure owner HTR-WP10; no runtime cutover (belongs to HTR-WP09); MIGRATION_DECISION NONE. The next macro HTR-MACRO-C (HTR-WP09+WP10) is BLOCKED_BY_D11B_AND_REFRESH and Build-unauthorized; the next Human step is a separate D-11B decision package and Macro-C refresh/approval. No intermediate PR; READY_FOR_FULL_HISTORICAL_TEST not set; the single final PR remains gated on all 23 work packages."
+  nextAction: "Composer 2.5 executes the approved HTR-MACRO-C packet only (HTR-WP09 canvas runtime integration + integrated D-11B qualification + default cutover, then HTR-WP10 determinism/no-lookahead qualification), from the rolling controller. D-11B is RESOLVED (Human-approved 2026-07-13; thresholds only — WP09 still owns the qualification proof; does not close WP09/WP22). HTR-MACRO-C is REFRESHED_EXACT and Human-APPROVED (APPROVE-HTR-MACRO-C + ACK-HTR-MACRO-C-MIGRATION: none + APPROVE-HTR-MACRO-C-BUILD consumed); MACRO_C_MIGRATION_DECISION NONE; MACRO_C_CODE_BASELINE_HEAD a8a709ff. BUILD_AUTHORIZED YES for Macro C only; no auto-advance to Macro D. HTR-GAP-001/002/003 close on WP09 integrated qualification PASS, HTR-GAP-004/025/031 on WP10. Full Historical Validation Run Contract v0 pinned (BTCUSDT+ETHUSDT spot 1m; 2020-01-01..2025-12-31; initial equity 100,000 USDT; 2025 blind holdout SEALED_NOT_ACCESSED); the actual multi-year run executes only AFTER DEE-415 CERTIFY-HTR-READY. Exact account/monthly drawdown percentage remains a Human gate (D-20) before HTR-WP16; it does not block Macro C/D. No intermediate PR; READY_FOR_FULL_HISTORICAL_TEST not set; the single final PR remains gated on all 23 work packages."
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -220,11 +261,11 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed; HTR-WP03 COMPLETE — WORK COMMIT `35283ed`, HTR-GAP-024 baseline recorded (OPEN, closure HTR-WP22); HTR-WP04 COMPLETE — WORK COMMIT `b3abe7b`, Opus post-review PASS, validation PASS, streaming-evidence baseline recorded, HTR-GAP-005/026 remain OPEN, closure HTR-WP22; **HTR-WP05 COMPLETE** — WORK COMMIT `f90faa9`, Opus Phase-B post-review PASS, semantic parity digest equality proven (`30e9b40…`), HTR-GAP-027/029 remain OPEN, closure HTR-WP22, MIGRATION_DECISION NONE; **HTR-MACRO-A COMPLETE**; **HTR-MACRO-B COMPLETE** — HTR-WP06 (`24eb7f9`), HTR-WP07 (`10f2500`), HTR-WP08 (`0c4b8c3`), Opus Phase-B per-WP PASS, full validation green, evidence CANVAS_STATE_OK/CANVAS_MTF_PARITY_OK/RECONSTRUCTION_ORACLE_PARITY_OK (22/22 exact, 0 divergence, FULL_HISTORY_RESCANS 0, linear work), HTR-GAP-001/002/003 OPEN closure HTR-WP09, HTR-GAP-004 OPEN closure HTR-WP10, no runtime cutover, MIGRATION_DECISION NONE; next macro HTR-MACRO-C (WP09–10) BLOCKED_BY_D11B_AND_REFRESH, Build not authorized) |
+| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed; HTR-WP03 COMPLETE — WORK COMMIT `35283ed`, HTR-GAP-024 baseline recorded (OPEN, closure HTR-WP22); HTR-WP04 COMPLETE — WORK COMMIT `b3abe7b`, Opus post-review PASS, validation PASS, streaming-evidence baseline recorded, HTR-GAP-005/026 remain OPEN, closure HTR-WP22; **HTR-WP05 COMPLETE** — WORK COMMIT `f90faa9`, Opus Phase-B post-review PASS, semantic parity digest equality proven (`30e9b40…`), HTR-GAP-027/029 remain OPEN, closure HTR-WP22, MIGRATION_DECISION NONE; **HTR-MACRO-A COMPLETE**; **HTR-MACRO-B COMPLETE** — HTR-WP06 (`24eb7f9`), HTR-WP07 (`10f2500`), HTR-WP08 (`0c4b8c3`), Opus Phase-B per-WP PASS, full validation green, evidence CANVAS_STATE_OK/CANVAS_MTF_PARITY_OK/RECONSTRUCTION_ORACLE_PARITY_OK (22/22 exact, 0 divergence, FULL_HISTORY_RESCANS 0, linear work), HTR-GAP-001/002/003 OPEN closure HTR-WP09, HTR-GAP-004 OPEN closure HTR-WP10, no runtime cutover, MIGRATION_DECISION NONE; **D-11B RESOLVED (Human-approved 2026-07-13, thresholds only); HTR-MACRO-C (WP09–10) REFRESHED_EXACT + Human-APPROVED, MACRO_C_MIGRATION_DECISION NONE, BUILD_AUTHORIZED YES for Macro C only; Composer executes the approved Macro C packet next**) |
 
 ## Approved decisions (recorded)
 
-`APPROVE-HTR-PROGRAM`; `APPROVE-HTR-ACTIVATION: research-only-org0` (D-14); `ACK-HTR-CORE: m1-closed` (D-15); `APPROVE-HTR-D13: htr-supersedes` (D-13); `APPROVE-HTR-RUNTIME-SUBSTRATE: deterministic-historical-readiness-substrate` (D-16); `APPROVE-HTR-TARGET-SUBSET: scoped-htr-ratification` (D-17); `APPROVE-HTR-D1: record-level-chain` (D-1); `APPROVE-HTR-EPISTEMIC-CLOSURE: record-level` (D-18); `APPROVE-HTR-EXECSERVER: option-a-code-ready` (D-19); `APPROVE-HTR-D10: divergence-register-v1` (D-10); `APPROVE-HTR-EXECUTION-TOPOLOGY: one-integration-issue-one-branch-one-final-pr-23-sequential-child-build-plans`; **`APPROVE-HTR-D11B`** (D-11B — 2026-07-13, exact token in §"D-11B decision" below); **`APPROVE-HTR-WP09-CLEAN-COMMIT-QUALIFICATION-SEQUENCE`** (2026-07-13). Activation boundary: Org-0 non-custodial research/historical only; no live, capital, holdout, external activation, agent authorization, gate opening, or Execution Server mutation. WP-local decisions D-11A/D-2/D-4/D-5/D-12 stop at their owning work package's Human gate on the same branch; **D-11B is RESOLVED (Human-approved)**.
+`APPROVE-HTR-PROGRAM`; `APPROVE-HTR-ACTIVATION: research-only-org0` (D-14); `ACK-HTR-CORE: m1-closed` (D-15); `APPROVE-HTR-D13: htr-supersedes` (D-13); `APPROVE-HTR-RUNTIME-SUBSTRATE: deterministic-historical-readiness-substrate` (D-16); `APPROVE-HTR-TARGET-SUBSET: scoped-htr-ratification` (D-17); `APPROVE-HTR-D1: record-level-chain` (D-1); `APPROVE-HTR-EPISTEMIC-CLOSURE: record-level` (D-18); `APPROVE-HTR-EXECSERVER: option-a-code-ready` (D-19); `APPROVE-HTR-D10: divergence-register-v1` (D-10); `APPROVE-HTR-EXECUTION-TOPOLOGY: one-integration-issue-one-branch-one-final-pr-23-sequential-child-build-plans`; **`APPROVE-HTR-D11B`** (D-11B — 2026-07-13, exact token in §"D-11B decision" below); **`APPROVE-HTR-WP09-CLEAN-COMMIT-QUALIFICATION-SEQUENCE`** (2026-07-13); **`APPROVE-HTR-MACRO-C: wp09-canvas-cutover-wp10-determinism`** + **`ACK-HTR-MACRO-C-MIGRATION: none`** + **`APPROVE-HTR-MACRO-C-BUILD`** (2026-07-13 — Macro C APPROVED / `BUILD_AUTHORIZED: YES` for Macro C only); **`APPROVE-FHV-RUN-CONTRACT-V0`** (2026-07-13 — Full Historical Validation Run Contract v0, a future-run contract that does NOT authorize the run during DEE-415). Activation boundary: Org-0 non-custodial research/historical only; no live, capital, holdout, external activation, agent authorization, gate opening, or Execution Server mutation. WP-local decisions D-11A/D-2/D-4/D-5/D-12 stop at their owning work package's Human gate on the same branch; **D-11B is RESOLVED (Human-approved)**.
 
 ## D-11B decision (Human-approved) + HTR-MACRO-C governance state
 
@@ -242,7 +283,128 @@ APPROVE-HTR-D11B: qual-bar-count=129600 qual-canvas-advance-count=129600 qual-re
 - **WP22 role: final re-proof.** HTR-WP22 re-proves the approved thresholds against the completed HTR runtime; no auto-tighten/loosen — any change requires a separate Human-approved D-11B amendment.
 - **Approved quiescence policy: `PREFLIGHT_CHECKS_ONLY_NO_NUMERIC_LOAD_AVERAGE_GATE`.** No numeric load-average or thermal ceiling is introduced. Load averages and thermal/power state are recorded (before N1, after N1, before N2, after N2) as diagnostics only; high load alone never invalidates an attempt, excludes a slow run, or permits a repeat-until-PASS rerun. An explicit OS thermal/throttling warning invalidates the complete attempt; absence of a thermal command is recorded but non-invalidating. Objective invalidation reasons: AC power lost, low-power mode enabled, machine sleep, process interruption, instrumentation failure, dataset/digest mismatch, code/harness mutation during the attempt, competing WAIA trader benchmark/replay/qualification process, explicit OS thermal/power warning.
 - **WP09 clean-commit qualification sequence** (`APPROVE-HTR-WP09-CLEAN-COMMIT-QUALIFICATION-SEQUENCE`, bounded WP09-only lifecycle exception; unchanged macro membership, integration boundary, WORK-commit count and Human gates): Stage A runs implementation-readiness checks (unit/integration on bounded deterministic fixtures, parity smoke, harness self-tests, dataset-digest verify, host-fingerprint self-test, qualification-preflight self-test, scope-boundary, lint/typecheck) with the full N1/N2 attempt forbidden; Stage B creates exactly one WP09 WORK commit (`DEE-415 feat(trader): integrate canvas runtime + default incremental cutover`, no amend) containing the implementation, tests, integrated qualification harness/CLI, deterministic fixture readiness checks and required package script; Stage C, on a clean HEAD, binds `qualificationGitSha` = the WP09 WORK commit and `qualificationDirtyTree: false`, verifies the approved host fingerprint and N1/N2 dataset digests, runs the single permitted attempt, writes raw output only to a gitignored immutable staging location, computes an evidence manifest/digest and records the staging path + digest in the gitignored controllers. Accepted evidence is independently verified and promoted during Opus Phase B into `replay-runs/RI-P7/htr-wp09-canvas-runtime-qualification/`.
-- **HTR-MACRO-C** requires the exact in-place refresh (this session) **and a separate Human approval** (`APPROVE-HTR-MACRO-C`) plus a separate Build authorization (`APPROVE-HTR-MACRO-C-BUILD`) before any Build. **`BUILD_AUTHORIZED: NO`.** WP09 and WP10 are **not** complete; HTR-GAP-001/002/003/004/025/031 remain **OPEN**; `READY_FOR_FULL_HISTORICAL_TEST` is **not** set.
+- **HTR-MACRO-C** is `REFRESHED_EXACT` (rolling-controller §9-C) and **Human-APPROVED** (2026-07-13: `APPROVE-HTR-MACRO-C: wp09-canvas-cutover-wp10-determinism` + `ACK-HTR-MACRO-C-MIGRATION: none` + `APPROVE-HTR-MACRO-C-BUILD` consumed). `MACRO_C_MIGRATION_DECISION: NONE`; `MACRO_C_CODE_BASELINE_HEAD: a8a709ff…`. **`BUILD_AUTHORIZED: YES` for HTR-MACRO-C only** (Composer 2.5 executes WP09 then WP10; no auto-advance to Macro D; the single final PR remains gated on all 23 WPs). WP09 and WP10 are **not** implemented/complete; HTR-GAP-001/002/003/004/025/031 remain **OPEN**; `READY_FOR_FULL_HISTORICAL_TEST` is **not** set.
+
+## Full Historical Validation Run Contract v0 (Human-approved future-run contract)
+
+Recorded per Human decision `APPROVE-FHV-RUN-CONTRACT-V0` (2026-07-13). **This is a future-run contract; it does NOT authorize a full historical run during DEE-415.** The actual multi-year execution runs only **AFTER DEE-415 is complete and `CERTIFY-HTR-READY` (D-12) is issued**. The D-11B `2023-04-01…2023-06-29` 90-day dataset is **infrastructure qualification only** (runtime/memory thresholds) and must not be conflated with this program.
+
+```yaml
+FULL_HISTORICAL_VALIDATION_RUN_CONTRACT_V0:
+  executionPhase: AFTER_DEE_415_AND_CERTIFY_HTR_READY
+  instruments: [BTCUSDT, ETHUSDT]
+  venueClass: spot
+  primaryInterval: 1m
+  derivedIntervals: [15m, 1h, 4h, 1d]
+  derivedIntervalRule: CLOSED_BARS_ONLY
+  fullPeriod:            { startUtc: 2020-01-01T00:00:00Z, endUtc: 2025-12-31T23:59:00Z }
+  developmentCalibration:{ startUtc: 2020-01-01T00:00:00Z, endUtc: 2022-12-31T23:59:00Z }
+  walkForward:           { startUtc: 2023-01-01T00:00:00Z, endUtc: 2024-12-31T23:59:00Z }
+  blindHoldout:          { startUtc: 2025-01-01T00:00:00Z, endUtc: 2025-12-31T23:59:00Z, status: SEALED_NOT_ACCESSED }
+  initialPortfolio:
+    quoteCurrency: USDT
+    cashUsdt: 100000
+    btcQuantity: 0
+    ethQuantity: 0
+    leverage: 0
+    borrowing: PROHIBITED
+    shortSelling: PROHIBITED
+    externalDepositsDuringRun: 0
+    externalWithdrawalsDuringRun: 0
+    portfolioMode: SHARED_MULTI_INSTRUMENT
+```
+
+**Exact initial portfolio state:** starting cash **100,000 USDT**, **0 BTC**, **0 ETH**, a single **shared** BTC/ETH portfolio, **no leverage / no borrowing / no short-selling**, and **zero external deposits or withdrawals** during the run. **Exact date intervals:** full `2020-01-01T00:00:00Z … 2025-12-31T23:59:00Z`; development/calibration `2020-01-01 … 2022-12-31`; walk-forward `2023-01-01 … 2024-12-31`; blind holdout `2025-01-01 … 2025-12-31`.
+
+**Blind-holdout protection.** Repository/evidence contamination audit (2026-07-13, no 2025 price content inspected): no manifest, fixture, test, replay-run, script, or plan uses 2025 BTCUSDT/ETHUSDT spot-1m content for strategy development, parameter tuning, threshold setting, feature selection, model selection, or promotion. The only 2025 calendar references are the D-11B clean-window **search-universe upper bound** (`…2025-12-31`, selected window `2023-04-01…2023-06-29`) and synthetic macro-provider timestamps in `tests/fixtures/trader/m9-provider-sidecar-v2.json` (not price data). **`BLIND_HOLDOUT_2025_STATUS: RESERVED_SEALED_NOT_ACCESSED`.** The actual integrity/dataset-manifest implementation and sealed-holdout access procedure remain owned by HTR-WP12 and the later Full Historical Validation Program.
+
+## Drawdown contract (canonical equity series, maximum drawdown, risk response)
+
+The completed HTR runtime must support a canonical **point-in-time equity series**. For each accepted portfolio event and each closed 1m bar:
+
+```text
+equity_t = available_cash_t + marked_value_of_open_positions_t - already_accrued_not_yet_deducted_costs_t
+runningEquityHighWater_t = max(equity_0 … equity_t)
+drawdownAbs_t = runningEquityHighWater_t - equity_t
+drawdownPct_t = drawdownAbs_t / runningEquityHighWater_t * 100
+maximumDrawdownPct = max(drawdownPct_t)
+```
+
+All financial values use the trader's **exact numeric type** (`ScaledDecimal`, `lib/trader/risk/numeric.ts`, 8-dp bigint) — **no binary floating point for financial truth** (Master Spec §16).
+
+**Required outputs:** maximum drawdown absolute + percent; drawdown start / trough / recovery timestamps (or `NOT_RECOVERED`); drawdown duration; recovery duration; current drawdown; account/portfolio drawdown; strategy-attributed drawdown; symbol-attributed drawdown; regime-attributed drawdown; monthly drawdown; consecutive-loss state. **Adverse-intrabar diagnostic:** a conservative drawdown using valid bar extremes (long inventory marked against the bar low), with **no future bar influencing a prior decision** — this metric is reporting/risk evidence and is **separately labelled** from closed-bar drawdown.
+
+**Risk response.** At the approved drawdown limit, Risk must **fail closed** through existing authority (`RiskDecisionOutcome`, `lib/trader/risk/types.ts`): `APPROVE | RESIZE | REJECT | CLOSE_ONLY | STOP_ACCOUNT`, with a deterministic, reason-coded action hierarchy. The system must **not**: let a strategy override the drawdown gate; let AI change the limit; increase risk after a breach; reset HWM or drawdown on restart; hide drawdown via deposits/withdrawals; or conflate the realized-only **billing HWM** (`lib/trader/billing/**`, `foldCumulativeRealizedStrategyProfit`) with the **portfolio mark-to-market risk/equity drawdown HWM**. Billing HWM and risk/equity drawdown HWM are **distinct concepts with distinct owners, names and tests**.
+
+## Drawdown-limit decision (D-20 — Human gate before HTR-WP16)
+
+**Canon/code audit (2026-07-13).** No exact Human-approved account or monthly drawdown **percentage** exists in canon or code:
+- Risk Doctrine (LD-8) / Master Spec §13 / Implementation Program (AT-E7) require "position/loss/drawdown/exposure limits" and "max monthly drawdown" **structurally, with no numeric value**.
+- **ADR-0010** explicitly defers quantitative drawdown caps to **operator-set attestation** ("this amendment defines the evidence class, not numeric gates").
+- Code (`lib/trader/risk/capital-limits-evaluator.ts`) enforces an **absolute USDT** `maxDrawdown` (→ `STOP_ACCOUNT`, reason `RISK_MAX_DRAWDOWN`) and `maxDailyLoss` (→ `REJECT`, `RISK_MAX_DAILY_LOSS`); the only configured values are **test/paper defaults** in `lib/trader/risk/limits/defaults.ts` (`maxDrawdown: "1000"`, `maxDailyLoss: "500"`) — **not** ratified policy. The risk `drawdown` field (`lib/trader/portfolio/to-account-risk-state.ts`) is underwater-vs-run-start, **not** peak-equity or monthly; `max consecutive losses` is not yet implemented; legacy mock paths hardcode drawdown to `"0"`.
+- Billing HWM (30% performance fee, cumulative realized profit) is a **separate, already-approved** concept and does not supply a risk drawdown percentage.
+
+**No approved exact value exists → Human decision package (D-20, next unused Decision-Register id):**
+
+1. Recommended `MAX_ACCOUNT_DRAWDOWN_PCT`: **25%** (peak-equity mark-to-market, fail-closed).
+2. Recommended `MAX_MONTHLY_DRAWDOWN_PCT`: **15%** (calendar-month peak-equity).
+3. Recommended strategy-level limit: **20%** per strategy-attributed equity slice.
+4. Breach action: **`CLOSE_ONLY` first, then `STOP_ACCOUNT`** if the account limit is breached or drawdown deepens after `CLOSE_ONLY` (immediate `STOP_ACCOUNT` reserved for the account hard cap).
+5. Rationale: 25% account / 15% monthly is a conventional research-grade capital-preservation envelope for a shared spot BTC/ETH portfolio without leverage; a per-strategy 20% cap isolates a single strategy's decay before it endangers the account; `CLOSE_ONLY`-then-`STOP_ACCOUNT` de-risks before a hard stop, matching the existing deterministic verb hierarchy.
+6. Sensitivity: tighter (15%/10%/12%) reduces terminal-equity variance but raises false-halt/whipsaw risk over 2020–2025 volatility regimes; looser (35%/20%/30%) lowers halt frequency but weakens the capital-preservation guarantee the historical result must demonstrate.
+7. **Exact proposed token (NOT consumed):**
+
+```text
+APPROVE-HTR-D20-DRAWDOWN-LIMITS: max-account-drawdown-pct=25 max-monthly-drawdown-pct=15 max-strategy-drawdown-pct=20 breach-action=CLOSE_ONLY_THEN_STOP_ACCOUNT hwm-basis=PEAK_EQUITY_MARK_TO_MARKET billing-hwm-distinct=true applies-to-research-replay=true
+```
+
+```yaml
+DRAWDOWN_LIMIT_DECISION:
+  id: D-20
+  status: HUMAN_DECISION_REQUIRED_BEFORE_HTR_WP16
+  blocks:
+    - HTR-WP16_ACTIVATION
+    - HTR-WP22_FINAL_QUALIFICATION
+    - CERTIFY_HTR_READY
+  doesNotBlock:
+    - HTR-MACRO-C
+    - HTR-MACRO-D
+```
+
+The proposed token is **not** consumed. D-20 does **not** block HTR-MACRO-C (WP09/WP10) or HTR-MACRO-D (WP11/WP12).
+
+## Mandatory quality PnL report contract (versioned)
+
+A versioned PnL report contract implemented by the owning later WPs (WP18 canonical owner; WP19 reconciliation; WP23 pins it in the readiness package) and invoked by the Full Historical Validation Program. Minimum fields:
+
+```yaml
+capital:      { initialEquityUsdt:, finalEquityUsdt:, minimumEquityUsdt:, maximumEquityUsdt: }
+returns:      { grossPnlUsdt:, netPnlUsdt:, totalReturnPct:, annualizedReturnPct:, realizedPnlUsdt:, unrealizedPnlUsdt: }
+costs:        { feesUsdt:, spreadCostUsdt:, slippageUsdt:, impactCostUsdt:, totalCostUsdt:, feeDragPct: }
+drawdown:     { maxClosedBarDrawdownUsdt:, maxClosedBarDrawdownPct:, maxAdverseIntrabarDrawdownUsdt:, maxAdverseIntrabarDrawdownPct:,
+                drawdownStartUtc:, drawdownTroughUtc:, drawdownRecoveryUtc:, maxDrawdownDuration:, recoveryDuration:, recovered: }
+trades:       { tradeCount:, winningTrades:, losingTrades:, winRate:, averageWinUsdt:, averageLossUsdt:, payoffRatio:, profitFactor:, expectancyPerTradeUsdt:, consecutiveLossMax: }
+riskAdjusted: { sharpeRatio:, sortinoRatio:, returnSamplingMethod:, riskFreeRateAssumption: }
+activity:     { turnoverUsdt:, averageExposurePct:, maximumExposurePct:, timeInMarketPct: }
+breakdowns:   { bySymbol:, byStrategyVersion:, byRegime:, byMonth:, byYear: }
+benchmarks:   { cashBaseline:, btcBuyAndHoldReference:, ethBuyAndHoldReference: }
+provenance:   { codeSha:, dirtyTree:, datasetManifestDigest:, runConfigDigest:, strategyVersions:, costModelVersion:, riskPolicyVersion:, initialPortfolioDigest: }
+```
+
+Rules: every financial number uses exact numeric truth; the derivation is reproducible; the report digest is deterministic; **gross vs net** and **realized vs unrealized** are never conflated; **billing HWM never replaces risk drawdown**; and the report must **reconcile to final portfolio equity**.
+
+## Work-package ownership amendments (cross-cutting historical-run requirements)
+
+These amendments **bind missing cross-cutting acceptance requirements to existing work packages**. They do **not** add, split, merge, remove, renumber or reorder any work package — the frozen 23-WP decomposition is unchanged.
+
+- **HTR-WP12** (ingress bar-integrity + versioned dataset manifest): add a future **Full Historical Validation dataset-manifest** capability — exact full-period + partition boundaries, symbol/venue/interval identity, source-object checksums, normalized data digests, PIT/provider provenance, gap/duplicate/out-of-order results, and blind-holdout **sealed metadata without semantic access**. WP12 must **not** execute the full historical run.
+- **HTR-WP16** (strategy pinning + gating + trial accounting): add the pinned account/strategy/monthly **drawdown policy** (from D-20), deterministic drawdown-gate reason codes, downward-only risk handling, trial halt/`CLOSE_ONLY` semantics, and **no reset across restart**. An unresolved exact D-20 limit **blocks WP16 activation**.
+- **HTR-WP17** (historical execution-simulation realism): add the **initial-portfolio input contract** — starting cash `100000 USDT`, zero starting positions, no leverage/borrowing/shorting, no external cash flows, a single cost-application point, costs included in net equity and drawdown, and **identical initial-portfolio semantics across replay, walk-forward and holdout**.
+- **HTR-WP18** (inventory & accounting parity): **canonical owner** of the cash ledger, position valuation, exact equity/NAV series, realized/unrealized PnL, gross/net PnL, equity high-water, closed-bar maximum drawdown, adverse-intrabar drawdown diagnostic, drawdown duration/recovery, restart parity, and the **shared BTC/ETH portfolio** accounting.
+- **HTR-WP19** (reality reconciliation): add reconciliation proving `cash + marked positions = equity`, `orders/fills/lots = positions`, `realized + unrealized - costs = net economic result`, and `equity-curve terminal value = reconciled final account value`. Any difference **fails closed**.
+- **HTR-WP20** (Guardian/exits + closed-trade reality): add Guardian/Risk interaction — a drawdown breach **cannot widen risk**; appropriate `CLOSE_ONLY`/exit/`STOP_ACCOUNT` action; no new position after a hard breach; explicit exit + terminal reason codes; closed-trade truth and portfolio-level truth remain distinct.
+- **HTR-WP22** (resilience + performance qualification): add qualification of equity/drawdown determinism, checkpoint/resume parity (no HWM reset, no drawdown reset, identical equity/drawdown digest before and after recovery), the drawdown-breach action, bounded memory of equity reporting, the exact 100,000-USDT fixture, a multi-position BTC/ETH fixture, and correct cost/partial-fill effects on drawdown.
+- **HTR-WP23** (runbook + readiness preflight + Execution Server package): the runbook/readiness package must **pin** the exact FHV Run Contract v0, initial capital, symbols, date intervals, partition boundaries, dataset digests, cost model, risk/drawdown limits, report schema, checkpoint/evidence paths, holdout access procedure, and operator confirmation tokens. The preflight must **reject a run** when any required parameter is missing or differs.
 
 ## Supersession
 
@@ -262,8 +424,8 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP06 | Market Canvas state contract + cursor replay foundation | WP01,WP03 | backend | COMPLETE (Opus Phase-B PASS; WORK `24eb7f9`; CANVAS_STATE_OK; HTR-GAP-001 contribution, remains OPEN, closure HTR-WP09) | `24eb7f9` (WORK) |
 | HTR-WP07 | Incremental closed-bar MTF aggregation | WP06 | backend | COMPLETE (Opus Phase-B PASS; WORK `10f2500`; CANVAS_MTF_PARITY_OK; HTR-GAP-003 contribution remains OPEN closure HTR-WP09; HTR-GAP-004 closed-bar correction remains OPEN closure HTR-WP10) | `10f2500` (WORK) |
 | HTR-WP08 | Incremental reconstruction + oracle parity | WP07 | backend | COMPLETE (Opus Phase-B PASS; WORK `0c4b8c3`; RECONSTRUCTION_ORACLE_PARITY_OK — 22/22 exact, 0 divergence, FULL_HISTORY_RESCANS 0, bounds true, work growth linear; HTR-GAP-002 contribution remains OPEN closure HTR-WP09) | `0c4b8c3` (WORK) |
-| HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | WP08,WP03 | backend | pending | — |
-| HTR-WP10 | No-lookahead + determinism property suites | WP09 | backend | pending | — |
+| HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | WP08,WP03 | backend | APPROVED — Macro C REFRESHED_EXACT + Build-authorized 2026-07-13; not yet implemented (owns integrated D-11B qualification proof; closes HTR-GAP-001/002/003 on PASS) | — |
+| HTR-WP10 | No-lookahead + determinism property suites | WP09 | backend | APPROVED — Macro C REFRESHED_EXACT + Build-authorized 2026-07-13; not yet implemented (closes HTR-GAP-004/025/031) | — |
 | HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | WP01,WP09 | backend | pending | — |
 | HTR-WP12 | Ingress bar-integrity gate + versioned dataset manifest | WP01 | backend | pending | — |
 | HTR-WP13 | Intelligence-chain activation (historical run profile) | WP09,WP10,WP11,WP12 | ai | pending | — |
@@ -301,7 +463,7 @@ A single PR is opened only after HTR-WP23, final full validation, and the final 
 
 **HTR-MACRO-B is COMPLETE** (HTR-WP06 Market Canvas state contract + cursor foundation, WORK `24eb7f9`; HTR-WP07 incremental closed-bar MTF aggregation, WORK `10f2500`; HTR-WP08 incremental reconstruction + oracle parity, WORK `0c4b8c3`). Opus Phase-B post-implementation audit issued PASS for all three WPs with bounded review fixes (verification-script temp-workspace cleanup, real deterministic incremental-work counters, dead-import cleanup, evidence regeneration) landed in the three CLOSEOUT commits. Full repository validation is green in the supported local environment; evidence terminals `CANVAS_STATE_OK`, `CANVAS_MTF_PARITY_OK`, `RECONSTRUCTION_ORACLE_PARITY_OK` (22/22 exact closed-boundary `contentDigest` parity, 0 divergences, `FULL_HISTORY_RESCANS: 0`, state within declared bounds, linear work growth). HTR-GAP-001/002/003 remain OPEN with closure owner HTR-WP09; HTR-GAP-004 remains OPEN with closure owner HTR-WP10; no runtime cutover (owned by HTR-WP09); MIGRATION_DECISION NONE.
 
-The next work package is **HTR-WP09** (Canvas runtime integration + benchmark qual + default cutover), the first WP of **HTR-MACRO-C (WP09+WP10)**, tracked in the rolling controller `.cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md`. Macro C is **BLOCKED_BY_D11B_AND_REFRESH / Build not authorized**; the next Human step is a separate D-11B decision package and Macro-C refresh/approval. HTR-WP01 COMPLETE (`6600708`); HTR-WP02 (`7ec02dd`); HTR-WP03 (`35283ed`); HTR-WP04 (`b3abe7b`); HTR-WP05 (`f90faa9`); HTR-WP06 (`24eb7f9`); HTR-WP07 (`10f2500`); HTR-WP08 (`0c4b8c3`). This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
+The next work package is **HTR-WP09** (Canvas runtime integration + benchmark qual + default cutover), the first WP of **HTR-MACRO-C (WP09+WP10)**, tracked in the rolling controller `.cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md`. **D-11B is RESOLVED** (Human-approved 2026-07-13; thresholds only — WP09 still owns the integrated qualification proof). **HTR-MACRO-C is REFRESHED_EXACT and Human-APPROVED** (`APPROVE-HTR-MACRO-C` + `ACK-HTR-MACRO-C-MIGRATION: none` + `APPROVE-HTR-MACRO-C-BUILD` consumed; `MACRO_C_MIGRATION_DECISION: NONE`; `MACRO_C_CODE_BASELINE_HEAD: a8a709ff`); **`BUILD_AUTHORIZED: YES` for Macro C only** (no auto-advance to Macro D). Composer 2.5 executes the approved Macro C packet next. HTR-WP01 COMPLETE (`6600708`); HTR-WP02 (`7ec02dd`); HTR-WP03 (`35283ed`); HTR-WP04 (`b3abe7b`); HTR-WP05 (`f90faa9`); HTR-WP06 (`24eb7f9`); HTR-WP07 (`10f2500`); HTR-WP08 (`0c4b8c3`). This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
 
 ## Acceptance (whole program)
 
