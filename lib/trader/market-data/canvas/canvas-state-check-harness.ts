@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import {
@@ -7,7 +8,6 @@ import {
   canvasStateContentDigest,
   createMarketCanvasState,
   readCanvasStateSidecar,
-  serializeMarketCanvasState,
   writeCanvasStateSidecar,
 } from "@/lib/trader/market-data/canvas";
 import type { Bar } from "@/lib/trader/intelligence/types";
@@ -65,15 +65,19 @@ export function runCanvasStateCheckHarness(): CanvasStateCheckHarness {
   }
 
   const digest = canvasStateContentDigest(state);
-  const serialized = serializeMarketCanvasState(state);
-  const runRoot = path.join(process.cwd(), ".tmp-wp06-canvas-check");
-  fs.mkdirSync(runRoot, { recursive: true });
-  const ref = writeCanvasStateSidecar(runRoot, state);
-  const restored = readCanvasStateSidecar(runRoot, ref);
-  const sidecarRoundTripOk =
-    canvasStateContentDigest(restored) === digest &&
-    restored.closedBarCount === state.closedBarCount &&
-    restored.oneMinuteRing.length === state.oneMinuteRing.length;
+  // Disposable system-temp workspace; never leave verification debris in repo root.
+  const runRoot = fs.mkdtempSync(path.join(os.tmpdir(), "wp06-canvas-check-"));
+  let sidecarRoundTripOk = false;
+  try {
+    const ref = writeCanvasStateSidecar(runRoot, state);
+    const restored = readCanvasStateSidecar(runRoot, ref);
+    sidecarRoundTripOk =
+      canvasStateContentDigest(restored) === digest &&
+      restored.closedBarCount === state.closedBarCount &&
+      restored.oneMinuteRing.length === state.oneMinuteRing.length;
+  } finally {
+    fs.rmSync(runRoot, { recursive: true, force: true });
+  }
 
   return {
     terminalState: "CANVAS_STATE_OK",

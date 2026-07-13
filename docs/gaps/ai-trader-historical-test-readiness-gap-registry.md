@@ -5,7 +5,7 @@ scope: ai-trader
 owner: Architect
 linkedSpec: docs/product-specs/ai-trader-historical-test-readiness-completion.md
 linkedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
-lastReviewed: 2026-07-12
+lastReviewed: 2026-07-13
 version: 0.1.0
 ---
 
@@ -31,7 +31,7 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 
 | gapId | summary | severity | status | PRIMARY_OWNER | CONTRIBUTING | CLOSURE | batchRef |
 |-------|---------|----------|--------|---------------|--------------|---------|----------|
-| HTR-GAP-001 | No incremental replay / O(N²) / no Canvas | blocker | open | HTR-WP06 | HTR-WP07, HTR-WP08 | HTR-WP09 | IB-HTR-06 |
+| HTR-GAP-001 | No incremental replay / O(N²) / no Canvas | blocker | open (2026-07-13; WP06 WORK COMMIT 24eb7f9 delivered immutable Market Canvas state contract, pure deterministic reducer, single 1m sequence-validation owner, bounded 32-bar ring, deterministic serialization + digest-addressed sidecar, cursor foundation; CANVAS_STATE_OK; no runtime cutover; closure remains HTR-WP09) | HTR-WP06 | HTR-WP07, HTR-WP08 | HTR-WP09 | IB-HTR-06 |
 | HTR-GAP-002 | Reconstruction full recompute | blocker | open | HTR-WP08 | — | HTR-WP09 | IB-HTR-08 |
 | HTR-GAP-003 | MTF full resample | blocker | open | HTR-WP07 | — | HTR-WP09 | IB-HTR-07 |
 | HTR-GAP-004 | Partial-bar HTF leakage | blocker | open | HTR-WP07 | HTR-WP10 | HTR-WP10 | IB-HTR-07 |
