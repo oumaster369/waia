@@ -6,6 +6,10 @@ import {
   selectMtfView,
 } from "@/lib/trader/market-data/canvas/incremental-mtf";
 import {
+  advanceReconstruction,
+  createReconstructionDomainState,
+} from "@/lib/trader/market-data/canvas/incremental-reconstruction";
+import {
   CANVAS_1M_RING_CAPACITY,
   MARKET_CANVAS_SCHEMA_VERSION,
   type CanvasAdvanceError,
@@ -146,13 +150,23 @@ export function advanceMarketCanvasClosedBar(
     gapObserved,
   });
 
+  const oneMinuteRing = appendToRing(state.oneMinuteRing, bar1m);
+
+  const reconResult = advanceReconstruction(
+    state.reconstruction ?? createReconstructionDomainState(),
+    mtfResult.emittedClosed,
+    oneMinuteRing,
+    bar1m.barCloseTime,
+  );
+
   const nextState: MarketCanvasState = {
     schemaVersion: MARKET_CANVAS_SCHEMA_VERSION,
     instrumentId: state.instrumentId ?? bar1m.symbol,
     closedBarCount: state.closedBarCount + 1,
     lastAppliedBarOpenTimeMs: barOpenTimeMs,
-    oneMinuteRing: appendToRing(state.oneMinuteRing, bar1m),
+    oneMinuteRing,
     mtf: mtfResult.state,
+    reconstruction: reconResult.state,
   };
 
   return { ok: true, state: nextState, gapObserved };
@@ -164,5 +178,6 @@ export function selectMarketCanvasView(state: MarketCanvasState): MarketCanvasVi
     closedBarCount: state.closedBarCount,
     recent1m: state.oneMinuteRing,
     ...(state.mtf ? { mtf: selectMtfView(state.mtf) } : {}),
+    ...(state.reconstruction ? { reconstruction: state.reconstruction.snapshot } : {}),
   };
 }

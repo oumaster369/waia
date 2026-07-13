@@ -1,0 +1,16 @@
+{
+  "terminalState": "RECONSTRUCTION_ORACLE_PARITY_OK",
+  "boundaryCount": 22,
+  "exactMatches": 22,
+  "intentionalDefectCorrections": 0,
+  "divergences": 0,
+  "FULL_HISTORY_RESCANS": 0,
+  "RECONSTRUCTION_STATE_WITHIN_DECLARED_BOUNDS": true,
+  "workCounters": {
+    "fullHistoryRescans": 0,
+    "barVisitsPerClose": 0,
+    "swingConfirmOps": 0,
+    "sweepMapUpdates": 0,
+    "clusterOps": 0
+  }
+}

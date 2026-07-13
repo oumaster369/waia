@@ -1,0 +1,11 @@
+{
+  "FULL_HISTORY_RESCANS": 0,
+  "BAR_VISITS_GROWTH": "LINEAR_OR_N_LOG_N",
+  "workCounters": {
+    "fullHistoryRescans": 0,
+    "barVisitsPerClose": 0,
+    "swingConfirmOps": 0,
+    "sweepMapUpdates": 0,
+    "clusterOps": 0
+  }
+}

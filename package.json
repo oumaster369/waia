@@ -20,6 +20,7 @@
     "trader:replay:checkpoint-resume": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-checkpoint-resume-check.ts",
     "trader:canvas:state-check": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/canvas-state-check.ts",
     "trader:canvas:mtf-parity": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/canvas-mtf-parity-check.ts",
+    "trader:canvas:reconstruction-parity": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/reconstruction-oracle-parity-check.ts",
     "trader:replay:seed-org": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/seed-paper-replay-org.ts",
     "trader:paper:soak:analyze": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/analyze-paper-soak-log.ts",
     "trader:paper:soak:evidence": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/export-paper-strategy-evidence.ts",

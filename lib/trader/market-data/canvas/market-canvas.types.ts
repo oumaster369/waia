@@ -1,6 +1,8 @@
 import type { Bar } from "@/lib/trader/intelligence/types";
 
 import type { MtfDomainState, MtfView } from "@/lib/trader/market-data/canvas/incremental-mtf";
+import type { ReconstructionDomainState } from "@/lib/trader/market-data/canvas/incremental-reconstruction";
+import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
 
 /** WP06-OWNED ONLY — WP07 widens with optional `mtf`; WP08 adds optional `reconstruction`. */
 export const MARKET_CANVAS_SCHEMA_VERSION = "waia.trader.canvas.v1" as const;
@@ -18,6 +20,7 @@ export type MarketCanvasState = Readonly<{
   lastAppliedBarOpenTimeMs: number | null;
   oneMinuteRing: readonly CanvasClosedBar[];
   mtf?: MtfDomainState;
+  reconstruction?: ReconstructionDomainState;
 }>;
 
 export type MarketCanvasView = Readonly<{
@@ -25,6 +28,7 @@ export type MarketCanvasView = Readonly<{
   closedBarCount: number;
   recent1m: readonly CanvasClosedBar[];
   mtf?: MtfView;
+  reconstruction?: ReconstructionSnapshot | null;
 }>;
 
 export type SerializedMarketCanvasState = MarketCanvasState;

@@ -23,6 +23,20 @@ export {
 } from "@/lib/trader/market-data/canvas/incremental-mtf";
 
 export {
+  advanceReconstruction,
+  createReconstructionDomainState,
+  measureReconstructionStateBounds,
+  type AtrStreamState,
+  type LiquiditySide,
+  type ReconstructionAdvanceResult,
+  type ReconstructionDomainState,
+  type ReconstructionWorkCounters,
+  type StructureTimeframe,
+  type SweepKey,
+  type TfReconstructionState,
+} from "@/lib/trader/market-data/canvas/incremental-reconstruction";
+
+export {
   advanceMarketCanvasClosedBar,
   createMarketCanvasState,
   selectMarketCanvasView,

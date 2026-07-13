@@ -40,6 +40,7 @@ export function restoreMarketCanvasState(
     lastAppliedBarOpenTimeMs: serialized.lastAppliedBarOpenTimeMs,
     oneMinuteRing: [...serialized.oneMinuteRing],
     ...(serialized.mtf ? { mtf: serialized.mtf } : {}),
+    ...(serialized.reconstruction ? { reconstruction: serialized.reconstruction } : {}),
   };
 }
 
