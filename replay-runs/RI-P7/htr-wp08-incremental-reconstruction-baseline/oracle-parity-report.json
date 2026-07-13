@@ -8,9 +8,34 @@
   "RECONSTRUCTION_STATE_WITHIN_DECLARED_BOUNDS": true,
   "workCounters": {
     "fullHistoryRescans": 0,
-    "barVisitsPerClose": 0,
-    "swingConfirmOps": 0,
+    "barVisitsPerClose": 18,
+    "swingConfirmOps": 11,
     "sweepMapUpdates": 0,
     "clusterOps": 0
+  },
+  "barVisitsGrowth": {
+    "small": {
+      "barCount": 120,
+      "counters": {
+        "fullHistoryRescans": 0,
+        "barVisitsPerClose": 8,
+        "swingConfirmOps": 3,
+        "sweepMapUpdates": 0,
+        "clusterOps": 0
+      }
+    },
+    "large": {
+      "barCount": 240,
+      "counters": {
+        "fullHistoryRescans": 0,
+        "barVisitsPerClose": 18,
+        "swingConfirmOps": 11,
+        "sweepMapUpdates": 0,
+        "clusterOps": 0
+      }
+    },
+    "inputRatio": 2,
+    "barVisitsGrowthRatio": 2.25,
+    "linearOrNLogN": true
   }
 }

@@ -78,6 +78,31 @@ export type ReconstructionWorkCounters = Readonly<{
   clusterOps: number;
 }>;
 
+/**
+ * Mutable accumulator variant. When passed to {@link advanceReconstruction} the
+ * function accumulates real operation counts into the caller's object in place,
+ * so verification harnesses can prove per-close work is bounded (never a
+ * full-history rescan). The production Canvas reducer passes no counters, so
+ * this has no effect on the runtime state/digest path.
+ */
+export type MutableReconstructionWorkCounters = {
+  fullHistoryRescans: number;
+  barVisitsPerClose: number;
+  swingConfirmOps: number;
+  sweepMapUpdates: number;
+  clusterOps: number;
+};
+
+export function createWorkCounters(): MutableReconstructionWorkCounters {
+  return {
+    fullHistoryRescans: 0,
+    barVisitsPerClose: 0,
+    swingConfirmOps: 0,
+    sweepMapUpdates: 0,
+    clusterOps: 0,
+  };
+}
+
 function emptyTfState(): TfReconstructionState {
   return {
     firstClose: null,
@@ -355,27 +380,15 @@ export function advanceReconstruction(
   oneMinuteRing: readonly CanvasClosedBar[],
   evaluatedAt: string,
   fusedContext?: FusedMarketContext,
-  counters?: ReconstructionWorkCounters,
+  counters?: MutableReconstructionWorkCounters,
 ): ReconstructionAdvanceResult {
   if (closedHtfBars.length === 0) {
     return { state, snapshot: state.snapshot, recomputed: false };
   }
 
-  const work: {
-    fullHistoryRescans: number;
-    barVisitsPerClose: number;
-    swingConfirmOps: number;
-    sweepMapUpdates: number;
-    clusterOps: number;
-  } = counters
-    ? { ...counters }
-    : {
-        fullHistoryRescans: 0,
-        barVisitsPerClose: 0,
-        swingConfirmOps: 0,
-        sweepMapUpdates: 0,
-        clusterOps: 0,
-      };
+  // When a caller supplies `counters` we accumulate into that exact object so
+  // measured operation counts persist across bars; otherwise a throwaway is used.
+  const work: MutableReconstructionWorkCounters = counters ?? createWorkCounters();
 
   let next = state;
   for (const { interval, bar } of closedHtfBars) {

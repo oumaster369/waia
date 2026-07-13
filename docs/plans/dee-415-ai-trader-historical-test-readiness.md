@@ -32,7 +32,7 @@ state:
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  currentWorkPackage: HTR-WP08
+  currentWorkPackage: HTR-WP09
   activeChildPlan: .cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md
   workCommitSha: f90faa9f02e12b3a4a724311cd4b7805f9c12f7c
   wp01WorkCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
@@ -115,7 +115,32 @@ state:
   wp07EvidenceTerminal: CANVAS_MTF_PARITY_OK
   wp07MigrationDecision: NONE
   wp07GapStatus: "HTR-GAP-003 WP07 incremental closed-bar MTF aggregation delivered, remains OPEN, closure owner HTR-WP09; HTR-GAP-004 WP07 partial-bar HTF-leakage closed-bar correction delivered, remains OPEN until HTR-WP10 qualification"
-  macroBStatus: IN_PROGRESS
+  wp08WorkCommitSha: 0c4b8c38e7e2a0f74d9b9318b66d750ed7c82ec9
+  wp08PostReview: PASS
+  wp08Validation:
+    validateCanon: PASS
+    lint: PASS
+    typecheck: PASS
+    tests: PASS
+    build: PASS
+  wp08Evidence: replay-runs/RI-P7/htr-wp08-incremental-reconstruction-baseline/
+  wp08EvidenceTerminal: RECONSTRUCTION_ORACLE_PARITY_OK
+  wp08MigrationDecision: NONE
+  wp08OracleParity:
+    boundaryCount: 22
+    exactMatches: 22
+    intentionalDefectCorrections: 0
+    divergences: 0
+    fullHistoryRescans: 0
+    stateWithinDeclaredBounds: true
+    barVisitsGrowth: LINEAR_OR_N_LOG_N
+  wp08GapStatus: "HTR-GAP-002 WP08 incremental reconstruction + exact closed-boundary oracle parity delivered; remains OPEN; closure owner HTR-WP09"
+  macroBStatus: COMPLETE
+  completedMacros:
+    - HTR-MACRO-A
+    - HTR-MACRO-B
+  activeMacroPackage: HTR-MACRO-C
+  activeMacroStatus: BLOCKED_BY_D11B_AND_REFRESH
   completedWorkPackages:
     - HTR-WP01
     - HTR-WP02
@@ -124,8 +149,8 @@ state:
     - HTR-WP05
     - HTR-WP06
     - HTR-WP07
-  remainingWorkPackages:
     - HTR-WP08
+  remainingWorkPackages:
     - HTR-WP09
     - HTR-WP10
     - HTR-WP11
@@ -147,7 +172,7 @@ state:
   lastValidationAt: 2026-07-12
   finalAuditStatus: not-started
   blockedReason: null
-  nextAction: "HTR-MACRO-A (HTR-WP05) is COMPLETE — Opus Phase-B post-review PASS (WORK COMMIT f90faa9; CLOSEOUT recorded only in the gitignored controllers). Semantic parity digest equality proven (30e9b40…) over the authoritative composed stream; full validation green. HTR-MACRO-B (HTR-WP06+WP07+WP08) is the next macro and has been refreshed in place to an implementation-ready packet, but remains Build-unauthorized (ACTIVE_MACRO_STATUS DRAFT; BUILD_AUTHORIZED: NO) pending Human review (APPROVE-HTR-MACRO-B, then APPROVE-HTR-MACRO-B-BUILD). No intermediate PR; the single final PR remains gated on all 23 work packages."
+  nextAction: "HTR-MACRO-B (HTR-WP06+WP07+WP08) is COMPLETE — Opus Phase-B post-implementation audit PASS for all three WPs; three WORK commits (24eb7f9, 10f2500, 0c4b8c3) + three CLOSEOUT commits; full repository validation green in the supported local environment (lint 0 errors, typecheck PASS, 2469 unit tests passed / 92 skipped, build PASS, validate:canon PASS); evidence CANVAS_STATE_OK + CANVAS_MTF_PARITY_OK + RECONSTRUCTION_ORACLE_PARITY_OK (22/22 exact closed-boundary digest parity, 0 divergences, FULL_HISTORY_RESCANS 0, state within declared bounds, work growth linear); HTR-GAP-001/002/003 remain OPEN with closure owner HTR-WP09, HTR-GAP-004 remains OPEN with closure owner HTR-WP10; no runtime cutover (belongs to HTR-WP09); MIGRATION_DECISION NONE. The next macro HTR-MACRO-C (HTR-WP09+WP10) is BLOCKED_BY_D11B_AND_REFRESH and Build-unauthorized; the next Human step is a separate D-11B decision package and Macro-C refresh/approval. No intermediate PR; READY_FOR_FULL_HISTORICAL_TEST not set; the single final PR remains gated on all 23 work packages."
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -186,7 +211,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed; HTR-WP03 COMPLETE — WORK COMMIT `35283ed`, HTR-GAP-024 baseline recorded (OPEN, closure HTR-WP22); HTR-WP04 COMPLETE — WORK COMMIT `b3abe7b`, Opus post-review PASS, validation PASS, streaming-evidence baseline recorded, HTR-GAP-005/026 remain OPEN, closure HTR-WP22; **HTR-WP05 COMPLETE** — WORK COMMIT `f90faa9`, Opus Phase-B post-review PASS, full validation PASS, checkpoint-resume baseline recorded, semantic parity digest equality proven (`30e9b40…`), HTR-GAP-027/029 remain OPEN, closure HTR-WP22, MIGRATION_DECISION NONE; **HTR-MACRO-A COMPLETE**; next macro HTR-MACRO-B (WP06–08) refreshed in place to DRAFT, Build not authorized) |
+| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed; HTR-WP03 COMPLETE — WORK COMMIT `35283ed`, HTR-GAP-024 baseline recorded (OPEN, closure HTR-WP22); HTR-WP04 COMPLETE — WORK COMMIT `b3abe7b`, Opus post-review PASS, validation PASS, streaming-evidence baseline recorded, HTR-GAP-005/026 remain OPEN, closure HTR-WP22; **HTR-WP05 COMPLETE** — WORK COMMIT `f90faa9`, Opus Phase-B post-review PASS, semantic parity digest equality proven (`30e9b40…`), HTR-GAP-027/029 remain OPEN, closure HTR-WP22, MIGRATION_DECISION NONE; **HTR-MACRO-A COMPLETE**; **HTR-MACRO-B COMPLETE** — HTR-WP06 (`24eb7f9`), HTR-WP07 (`10f2500`), HTR-WP08 (`0c4b8c3`), Opus Phase-B per-WP PASS, full validation green, evidence CANVAS_STATE_OK/CANVAS_MTF_PARITY_OK/RECONSTRUCTION_ORACLE_PARITY_OK (22/22 exact, 0 divergence, FULL_HISTORY_RESCANS 0, linear work), HTR-GAP-001/002/003 OPEN closure HTR-WP09, HTR-GAP-004 OPEN closure HTR-WP10, no runtime cutover, MIGRATION_DECISION NONE; next macro HTR-MACRO-C (WP09–10) BLOCKED_BY_D11B_AND_REFRESH, Build not authorized) |
 
 ## Approved decisions (recorded)
 
@@ -209,7 +234,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP05 | Checkpoint/resume + pipeline DB-disconnect + terminal states | WP04 | backend | COMPLETE (Opus post-review PASS; semantic parity digest equality proven; full validation PASS; HTR-GAP-027/029 remain OPEN, closure HTR-WP22) | `f90faa9` (WORK) |
 | HTR-WP06 | Market Canvas state contract + cursor replay foundation | WP01,WP03 | backend | COMPLETE (Opus Phase-B PASS; WORK `24eb7f9`; CANVAS_STATE_OK; HTR-GAP-001 contribution, remains OPEN, closure HTR-WP09) | `24eb7f9` (WORK) |
 | HTR-WP07 | Incremental closed-bar MTF aggregation | WP06 | backend | COMPLETE (Opus Phase-B PASS; WORK `10f2500`; CANVAS_MTF_PARITY_OK; HTR-GAP-003 contribution remains OPEN closure HTR-WP09; HTR-GAP-004 closed-bar correction remains OPEN closure HTR-WP10) | `10f2500` (WORK) |
-| HTR-WP08 | Incremental reconstruction + oracle parity | WP07 | backend | pending | — |
+| HTR-WP08 | Incremental reconstruction + oracle parity | WP07 | backend | COMPLETE (Opus Phase-B PASS; WORK `0c4b8c3`; RECONSTRUCTION_ORACLE_PARITY_OK — 22/22 exact, 0 divergence, FULL_HISTORY_RESCANS 0, bounds true, work growth linear; HTR-GAP-002 contribution remains OPEN closure HTR-WP09) | `0c4b8c3` (WORK) |
 | HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | WP08,WP03 | backend | pending | — |
 | HTR-WP10 | No-lookahead + determinism property suites | WP09 | backend | pending | — |
 | HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | WP01,WP09 | backend | pending | — |
@@ -245,11 +270,11 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## WP-06 (current work package)
+## WP-09 (current work package)
 
-**HTR-WP05 is COMPLETE** (Checkpoint/resume + pipeline DB-disconnect + terminal states; WORK COMMIT `f90faa9`, Opus Phase-B post-review PASS, full validation PASS, checkpoint-resume baseline at `replay-runs/RI-P7/htr-wp05-checkpoint-resume-baseline/`; semantic parity digest equality proven — uninterrupted == resumed authoritative composed stream `30e9b40ab4f2aa460bf7388053ce1ef5ed16b88da7720e548449ee7564418d03`; evidence digest `8a323f9…`; replay repro digest `34494d5…`; MIGRATION_DECISION NONE; HTR-GAP-027 (resume) and HTR-GAP-029 (DB-disconnect) remain OPEN with WP05 contribution, final qualification HTR-WP22). **HTR-MACRO-A is COMPLETE.**
+**HTR-MACRO-B is COMPLETE** (HTR-WP06 Market Canvas state contract + cursor foundation, WORK `24eb7f9`; HTR-WP07 incremental closed-bar MTF aggregation, WORK `10f2500`; HTR-WP08 incremental reconstruction + oracle parity, WORK `0c4b8c3`). Opus Phase-B post-implementation audit issued PASS for all three WPs with bounded review fixes (verification-script temp-workspace cleanup, real deterministic incremental-work counters, dead-import cleanup, evidence regeneration) landed in the three CLOSEOUT commits. Full repository validation is green in the supported local environment; evidence terminals `CANVAS_STATE_OK`, `CANVAS_MTF_PARITY_OK`, `RECONSTRUCTION_ORACLE_PARITY_OK` (22/22 exact closed-boundary `contentDigest` parity, 0 divergences, `FULL_HISTORY_RESCANS: 0`, state within declared bounds, linear work growth). HTR-GAP-001/002/003 remain OPEN with closure owner HTR-WP09; HTR-GAP-004 remains OPEN with closure owner HTR-WP10; no runtime cutover (owned by HTR-WP09); MIGRATION_DECISION NONE.
 
-The next work package is **HTR-WP06** (Market Canvas state contract + cursor replay foundation), the first WP of **HTR-MACRO-B (WP06+WP07+WP08)**, tracked in the rolling controller `.cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md`. Macro B has been refreshed in place to an implementation-ready packet but remains **DRAFT / Build not authorized** pending Human review (`APPROVE-HTR-MACRO-B`, then `APPROVE-HTR-MACRO-B-BUILD`). HTR-WP01 COMPLETE (`6600708`); HTR-WP02 COMPLETE (`7ec02dd`); HTR-WP03 COMPLETE (`35283ed`); HTR-WP04 COMPLETE (`b3abe7b`); HTR-WP05 COMPLETE (`f90faa9`). This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
+The next work package is **HTR-WP09** (Canvas runtime integration + benchmark qual + default cutover), the first WP of **HTR-MACRO-C (WP09+WP10)**, tracked in the rolling controller `.cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md`. Macro C is **BLOCKED_BY_D11B_AND_REFRESH / Build not authorized**; the next Human step is a separate D-11B decision package and Macro-C refresh/approval. HTR-WP01 COMPLETE (`6600708`); HTR-WP02 (`7ec02dd`); HTR-WP03 (`35283ed`); HTR-WP04 (`b3abe7b`); HTR-WP05 (`f90faa9`); HTR-WP06 (`24eb7f9`); HTR-WP07 (`10f2500`); HTR-WP08 (`0c4b8c3`). This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
 
 ## Acceptance (whole program)
 

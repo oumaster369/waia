@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import {
@@ -8,14 +9,22 @@ import {
   writeCanvasStateSidecar,
 } from "@/lib/trader/market-data/canvas";
 import {
+  advanceReconstruction,
+  createReconstructionDomainState,
+  createWorkCounters,
   measureReconstructionStateBounds,
+  type MutableReconstructionWorkCounters,
   type ReconstructionWorkCounters,
 } from "@/lib/trader/market-data/canvas/incremental-reconstruction";
+import { advanceMtf, createMtfDomainState } from "@/lib/trader/market-data/canvas/incremental-mtf";
 import {
   buildReconstructionSnapshot,
   buildReconstructionSnapshotForClosedPrefix,
 } from "@/lib/trader/intelligence/reconstruction/build-reconstruction-snapshot";
+import { CANVAS_1M_RING_CAPACITY } from "@/lib/trader/market-data/canvas/market-canvas.types";
 import type { Bar } from "@/lib/trader/intelligence/types";
+
+const ONE_MINUTE_MS = 60_000;
 
 export const HTR_WP08_RECONSTRUCTION_BASELINE_DIR =
   "replay-runs/RI-P7/htr-wp08-incremental-reconstruction-baseline";
@@ -34,6 +43,19 @@ function sampleBars(count: number): Bar[] {
   }));
 }
 
+export type IncrementalWorkMeasurement = {
+  barCount: number;
+  counters: ReconstructionWorkCounters;
+};
+
+export type BarVisitsGrowth = {
+  small: IncrementalWorkMeasurement;
+  large: IncrementalWorkMeasurement;
+  inputRatio: number;
+  barVisitsGrowthRatio: number;
+  linearOrNLogN: boolean;
+};
+
 export type ReconstructionParityHarness = {
   terminalState: "RECONSTRUCTION_ORACLE_PARITY_OK" | "RECONSTRUCTION_ORACLE_PARITY_FAILED";
   boundaryCount: number;
@@ -43,18 +65,81 @@ export type ReconstructionParityHarness = {
   FULL_HISTORY_RESCANS: number;
   RECONSTRUCTION_STATE_WITHIN_DECLARED_BOUNDS: boolean;
   workCounters: ReconstructionWorkCounters;
+  barVisitsGrowth: BarVisitsGrowth;
 };
+
+/**
+ * Drive the reconstruction domain exactly as the production Canvas reducer does
+ * (identical MTF emission, 32-bar 1m ring, per-bar `evaluatedAt`) while
+ * accumulating real operation counts into a persistent counter object. No
+ * full-history recompute occurs — reconstruction only sees per-step emitted
+ * closed HTF bars.
+ */
+function measureIncrementalWork(barCount: number): MutableReconstructionWorkCounters {
+  const bars = sampleBars(barCount);
+  const counters = createWorkCounters();
+  let mtf = createMtfDomainState();
+  let recon = createReconstructionDomainState();
+  const ring: Bar[] = [];
+  let lastOpenMs: number | null = null;
+
+  for (const bar of bars) {
+    const openMs = Date.parse(bar.barOpenTime);
+    const gapObserved = lastOpenMs !== null && openMs - lastOpenMs > ONE_MINUTE_MS;
+    lastOpenMs = openMs;
+
+    const mtfResult = advanceMtf(mtf, bar, { gapObserved });
+    mtf = mtfResult.state;
+
+    ring.push(bar);
+    if (ring.length > CANVAS_1M_RING_CAPACITY) {
+      ring.shift();
+    }
+
+    const reconResult = advanceReconstruction(
+      recon,
+      mtfResult.emittedClosed,
+      ring,
+      bar.barCloseTime,
+      undefined,
+      counters,
+    );
+    recon = reconResult.state;
+  }
+
+  return counters;
+}
+
+function computeBarVisitsGrowth(barCounts: number[]): BarVisitsGrowth {
+  const sorted = [...barCounts].sort((a, b) => a - b);
+  const smallCount = sorted[0]!;
+  const largeCount = sorted[sorted.length - 1]!;
+  const small = measureIncrementalWork(smallCount);
+  const large = measureIncrementalWork(largeCount);
+  const inputRatio = largeCount / smallCount;
+  const barVisitsGrowthRatio =
+    small.barVisitsPerClose > 0 ? large.barVisitsPerClose / small.barVisitsPerClose : 0;
+  // Linear/N-log-N: total per-close work grows no faster than the input ratio
+  // (with slack for the log factor); a quadratic path would grow ~inputRatio^2.
+  const linearOrNLogN =
+    large.fullHistoryRescans === 0 &&
+    small.fullHistoryRescans === 0 &&
+    barVisitsGrowthRatio > 0 &&
+    barVisitsGrowthRatio <= inputRatio * 1.5;
+  return {
+    small: { barCount: smallCount, counters: small },
+    large: { barCount: largeCount, counters: large },
+    inputRatio,
+    barVisitsGrowthRatio,
+    linearOrNLogN,
+  };
+}
 
 export function runReconstructionParityHarness(
   barCounts: number[] = [120, 240],
 ): ReconstructionParityHarness {
-  const workCounters: ReconstructionWorkCounters = {
-    fullHistoryRescans: 0,
-    barVisitsPerClose: 0,
-    swingConfirmOps: 0,
-    sweepMapUpdates: 0,
-    clusterOps: 0,
-  };
+  const barVisitsGrowth = computeBarVisitsGrowth(barCounts);
+  const workCounters = barVisitsGrowth.large.counters;
 
   let boundaryCount = 0;
   let exactMatches = 0;
@@ -72,7 +157,7 @@ export function runReconstructionParityHarness(
       prefix.push(bar);
       const result = advanceMarketCanvasClosedBar(state, bar);
       if (!result.ok) {
-        return failHarness(workCounters);
+        return failHarness(workCounters, barVisitsGrowth);
       }
       state = result.state;
 
@@ -110,6 +195,7 @@ export function runReconstructionParityHarness(
     divergences === 0 &&
     boundsOk &&
     workCounters.fullHistoryRescans === 0 &&
+    barVisitsGrowth.linearOrNLogN &&
     boundaryCount > 0 &&
     exactMatches + intentionalDefectCorrections === boundaryCount;
 
@@ -122,10 +208,14 @@ export function runReconstructionParityHarness(
     FULL_HISTORY_RESCANS: workCounters.fullHistoryRescans,
     RECONSTRUCTION_STATE_WITHIN_DECLARED_BOUNDS: boundsOk,
     workCounters,
+    barVisitsGrowth,
   };
 }
 
-function failHarness(workCounters: ReconstructionWorkCounters): ReconstructionParityHarness {
+function failHarness(
+  workCounters: ReconstructionWorkCounters,
+  barVisitsGrowth: BarVisitsGrowth,
+): ReconstructionParityHarness {
   return {
     terminalState: "RECONSTRUCTION_ORACLE_PARITY_FAILED",
     boundaryCount: 0,
@@ -135,6 +225,7 @@ function failHarness(workCounters: ReconstructionWorkCounters): ReconstructionPa
     FULL_HISTORY_RESCANS: workCounters.fullHistoryRescans,
     RECONSTRUCTION_STATE_WITHIN_DECLARED_BOUNDS: false,
     workCounters,
+    barVisitsGrowth,
   };
 }
 
@@ -142,6 +233,16 @@ export function assertReconstructionParityHarness(harness: ReconstructionParityH
   if (harness.terminalState !== "RECONSTRUCTION_ORACLE_PARITY_OK") {
     throw new Error(
       `Reconstruction parity failed: divergences=${harness.divergences}, exact=${harness.exactMatches}, boundaries=${harness.boundaryCount}`,
+    );
+  }
+  if (harness.FULL_HISTORY_RESCANS !== 0) {
+    throw new Error(
+      `Reconstruction FULL_HISTORY_RESCANS must be 0, got ${harness.FULL_HISTORY_RESCANS}`,
+    );
+  }
+  if (!harness.barVisitsGrowth.linearOrNLogN) {
+    throw new Error(
+      `Reconstruction work growth not linear/N-log-N: ratio=${harness.barVisitsGrowth.barVisitsGrowthRatio} inputRatio=${harness.barVisitsGrowth.inputRatio}`,
     );
   }
 }
@@ -160,7 +261,10 @@ export function writeReconstructionParityBaseline(harness: ReconstructionParityH
     `${JSON.stringify(
       {
         FULL_HISTORY_RESCANS: harness.FULL_HISTORY_RESCANS,
-        BAR_VISITS_GROWTH: "LINEAR_OR_N_LOG_N",
+        BAR_VISITS_GROWTH: harness.barVisitsGrowth.linearOrNLogN
+          ? "LINEAR_OR_N_LOG_N"
+          : "SUPERLINEAR",
+        barVisitsGrowth: harness.barVisitsGrowth,
         workCounters: harness.workCounters,
       },
       null,
@@ -212,10 +316,15 @@ export function runDeterministicRestartCheck(): { ok: boolean } {
     state = result.state;
   }
   const digestBefore = state.reconstruction?.snapshot?.contentDigest ?? null;
-  const runRoot = path.join(process.cwd(), ".tmp-wp08-reconstruction-check");
-  fs.mkdirSync(runRoot, { recursive: true });
-  const ref = writeCanvasStateSidecar(runRoot, state);
-  const restored = readCanvasStateSidecar(runRoot, ref);
-  const digestAfter = restored.reconstruction?.snapshot?.contentDigest ?? null;
-  return { ok: digestBefore !== null && digestBefore === digestAfter };
+  // Use a disposable system-temp workspace so a successful verification never
+  // leaves debris in the repository root; clean it up unconditionally.
+  const runRoot = fs.mkdtempSync(path.join(os.tmpdir(), "wp08-reconstruction-check-"));
+  try {
+    const ref = writeCanvasStateSidecar(runRoot, state);
+    const restored = readCanvasStateSidecar(runRoot, ref);
+    const digestAfter = restored.reconstruction?.snapshot?.contentDigest ?? null;
+    return { ok: digestBefore !== null && digestBefore === digestAfter };
+  } finally {
+    fs.rmSync(runRoot, { recursive: true, force: true });
+  }
 }
