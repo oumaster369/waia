@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
+import { assertIngestBarsIntegrityOrThrow } from "@/lib/trader/market-data/ingress/bar-integrity-gate";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import {
@@ -212,6 +213,15 @@ export function loadQualificationBars(size: QualificationDatasetSize, datasetPat
   if (size === "N1" && digest !== D11B_N1_NORMALIZED_SHA256) {
     throw new Error(`[htr-wp09-qualify] N1 sha256 mismatch: got ${digest}`);
   }
+  const firstBar = parsed.bars[0];
+  if (!firstBar) {
+    throw new Error(`[htr-wp09-qualify] dataset contains no bars for ${size}`);
+  }
+  assertIngestBarsIntegrityOrThrow({
+    bars: parsed.bars,
+    expectedSymbol: firstBar.symbol,
+    expectedInterval: firstBar.interval,
+  });
   return parsed.bars;
 }
 

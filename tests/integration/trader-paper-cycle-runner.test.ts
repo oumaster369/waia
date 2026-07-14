@@ -28,6 +28,7 @@ import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
+import { loadSidecarV1Fixture } from "@/tests/unit/helpers/wp11-wp12-fixture";
 
 const USER_A = "00000000-0000-4000-8000-0000000260";
 const NOW = 1_735_689_600_000;
@@ -131,6 +132,7 @@ describe("trader paper cycle runner integration (DEE-260)", () => {
       context,
       n: 3,
       replay,
+      providerSidecar: loadSidecarV1Fixture(),
       accountKey: "acct-paper-cycle-260",
       defaultQuantity: "0.01",
       executionMode: "mock",

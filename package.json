@@ -24,6 +24,7 @@
     "trader:canvas:reconstruction-parity": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/reconstruction-oracle-parity-check.ts",
     "trader:replay:seed-org": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/seed-paper-replay-org.ts",
     "trader:replay:pit-context": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-pit-context.ts",
+    "trader:dataset:manifest": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/dataset-manifest.ts",
     "trader:paper:soak:analyze": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/analyze-paper-soak-log.ts",
     "trader:paper:soak:evidence": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/export-paper-strategy-evidence.ts",
     "trader:gate": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/strategy-gate-cli.ts",

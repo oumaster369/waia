@@ -17,6 +17,10 @@ import {
   usesLegacyOracleSubstrate,
 } from "@/lib/trader/backtest/replay-substrate-mode";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
+import {
+  FUTURE_EVIDENCE_EXCLUDED,
+  SIDECAR_LANE_ABSENT,
+} from "@/lib/trader/market-data/replay/replay-lane-normalizer";
 
 export const HTR_WP11_LIVE_PROVIDER_CALL_FORBIDDEN =
   "HTR_WP11_LIVE_PROVIDER_CALL_FORBIDDEN" as const;
@@ -72,12 +76,17 @@ function assertNoFutureEvidence(context: FusedMarketContext, evaluatedAt: string
     if (!observation) {
       return;
     }
+    const payload = observation.payload as { reason?: string; unavailable?: boolean };
+    if (
+      observation.health === "UNAVAILABLE" ||
+      payload.reason === FUTURE_EVIDENCE_EXCLUDED ||
+      payload.reason === SIDECAR_LANE_ABSENT
+    ) {
+      return;
+    }
     const eventMs = Date.parse(observation.provenance.eventTimeUtc);
     if (Number.isFinite(eventMs) && eventMs > evaluatedMs) {
       throw new Error(HTR_WP11_FUTURE_EVIDENCE_REACHABLE);
-    }
-    if (observation.payload.reason === "FUTURE_EVIDENCE_EXCLUDED") {
-      return;
     }
   };
 

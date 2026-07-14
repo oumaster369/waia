@@ -77,7 +77,14 @@ describe("M9 provider fusion remediation", () => {
 
     expect(fused.fearGreed).toBeDefined();
     expect(fused.globalMarket).toBeDefined();
-    expect(fused.macroEvidence).toEqual([]);
+    expect((fused.macroEvidence ?? []).length).toBeGreaterThan(0);
+    expect(
+      (fused.macroEvidence ?? []).every(
+        (observation) =>
+          observation.health === "UNAVAILABLE" &&
+          (observation.payload as { reason?: string }).reason === "SIDECAR_LANE_ABSENT",
+      ),
+    ).toBe(true);
   });
 
   it("fuses all v2 sidecar lanes with honest unavailable for missing depth lanes", () => {

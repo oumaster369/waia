@@ -32,6 +32,37 @@ export {
   sealResearchDataset,
   splitBarsThreeWay,
 } from "@/lib/trader/market-data/research-dataset";
+export {
+  FHV_DATASET_MANIFEST_SCHEMA_VERSION,
+  FHV_DATASET_PARTITIONS_V1,
+  buildFhvDatasetManifest,
+  buildFhvDatasetManifestFromBars,
+  computeFhvDatasetManifestDigest,
+  type BuildFhvDatasetManifestInput,
+  type FhvBlindHoldoutPartition,
+  type FhvDatasetManifestV1,
+  type FhvDatasetPartitionsV1,
+  type FhvUtcHalfOpenInterval,
+} from "@/lib/trader/market-data/dataset/fhv-dataset-manifest";
+export {
+  FHV_GAP_POLICY_V1,
+  evaluateGapPolicy,
+  type FhvGapPolicyV1,
+  type GapPolicyResult,
+} from "@/lib/trader/market-data/dataset/fhv-gap-policy";
+export {
+  assertIngestBarsIntegrity,
+  assertIngestBarsIntegrityOrThrow,
+  INGRESS_INTEGRITY_REASON_CODES,
+  type AssertIngestBarsIntegrityInput,
+  type GapRecord,
+  type IngressIntegrityFailure,
+  type IngressIntegrityReasonCode,
+  type IngressIntegrityResult,
+  type IngressIntegrityResults,
+  type IngressIntegritySuccess,
+  type IngressSourceProvenance,
+} from "@/lib/trader/market-data/ingress/bar-integrity-gate";
 export type {
   BarPollSource,
   BarReplayMode,

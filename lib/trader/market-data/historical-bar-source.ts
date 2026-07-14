@@ -1,4 +1,5 @@
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
+import { assertIngestBarsIntegrityOrThrow } from "@/lib/trader/market-data/ingress/bar-integrity-gate";
 import { buildMarketSnapshot } from "@/lib/trader/market-data/market-snapshot";
 import type { BarPollSource, MarketSnapshot } from "@/lib/trader/market-data/types";
 import type { Bar, Quote } from "@/lib/trader/intelligence/types";
@@ -21,6 +22,19 @@ function quoteFromBar(bar: Bar): Quote {
     bid: bar.close,
     ask: bar.close,
     last: bar.close,
+    timestamp: bar.barCloseTime,
+  };
+}
+
+/** Preserve static fixture quote levels while binding timestamp to the active closed bar. */
+function quoteForReplayCycle(bar: Bar, quoteOverride?: Quote): Quote {
+  if (!quoteOverride) {
+    return quoteFromBar(bar);
+  }
+
+  return {
+    ...quoteOverride,
+    symbol: bar.symbol,
     timestamp: bar.barCloseTime,
   };
 }
@@ -59,6 +73,15 @@ export class HistoricalBarSource implements BarPollSource {
         `[market-data] historical bar source requires at least ${EXPAND_MIN_BARS} bars`,
       );
     }
+
+    if (this.initialBars) {
+      const firstBar = this.initialBars[0]!;
+      assertIngestBarsIntegrityOrThrow({
+        bars: this.initialBars,
+        expectedSymbol: firstBar.symbol,
+        expectedInterval: firstBar.interval,
+      });
+    }
   }
 
   reset(): void {
@@ -88,6 +111,13 @@ export class HistoricalBarSource implements BarPollSource {
       );
     }
 
+    const firstBar = loaded[0]!;
+    assertIngestBarsIntegrityOrThrow({
+      bars: loaded,
+      expectedSymbol: firstBar.symbol,
+      expectedInterval: firstBar.interval,
+    });
+
     this.bars = loaded;
     return loaded;
   }
@@ -101,7 +131,7 @@ export class HistoricalBarSource implements BarPollSource {
 
     const windowBars = bars.slice(0, this.expandBarCount);
     const lastBar = windowBars.at(-1)!;
-    const quote = this.quoteOverride ?? quoteFromBar(lastBar);
+    const quote = quoteForReplayCycle(lastBar, this.quoteOverride);
     const snapshot = buildMarketSnapshot(windowBars, quote, this.cycleIndex, this.cycleIdPrefix);
 
     this.cycleIndex += 1;

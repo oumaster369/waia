@@ -1,4 +1,5 @@
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
+import { assertIngestBarsIntegrityOrThrow } from "@/lib/trader/market-data/ingress/bar-integrity-gate";
 import { buildMarketSnapshot } from "@/lib/trader/market-data/market-snapshot";
 import type { BarReplayNextResult, BarReplaySource } from "@/lib/trader/market-data/types";
 import type { Bar, Quote } from "@/lib/trader/intelligence/types";
@@ -23,6 +24,19 @@ function quoteFromBar(bar: Bar): Quote {
   };
 }
 
+/** Preserve static fixture quote levels while binding timestamp to the active closed bar. */
+function quoteForReplayCycle(bar: Bar, quoteOverride?: Quote): Quote {
+  if (!quoteOverride) {
+    return quoteFromBar(bar);
+  }
+
+  return {
+    ...quoteOverride,
+    symbol: bar.symbol,
+    timestamp: bar.barCloseTime,
+  };
+}
+
 /**
  * {@link BarReplaySource} over stored OHLCV with expanding windows (min {@link EXPAND_MIN_BARS}).
  * Used by the backtest engine via {@link runBacktest}.
@@ -43,6 +57,12 @@ export class HistoricalBarReplaySource implements BarReplaySource {
         `[market-data] historical bar replay requires at least ${EXPAND_MIN_BARS} bars`,
       );
     }
+    const firstBar = options.bars[0]!;
+    assertIngestBarsIntegrityOrThrow({
+      bars: options.bars,
+      expectedSymbol: firstBar.symbol,
+      expectedInterval: firstBar.interval,
+    });
     this.bars = options.bars;
     this.quoteOverride = options.quote;
     this.cycleIdPrefix = options.cycleIdPrefix ?? DEFAULT_HISTORICAL_BAR_REPLAY_CYCLE_ID_PREFIX;
@@ -82,7 +102,7 @@ export class HistoricalBarReplaySource implements BarReplaySource {
   private nextExpanding(): BarReplayNextResult {
     const windowBars = this.bars.slice(0, this.expandBarCount);
     const lastBar = windowBars.at(-1)!;
-    const quote = this.quoteOverride ?? quoteFromBar(lastBar);
+    const quote = quoteForReplayCycle(lastBar, this.quoteOverride);
     const snapshot = buildMarketSnapshot(windowBars, quote, this.cycleIndex, this.cycleIdPrefix);
 
     this.cycleIndex += 1;
@@ -100,7 +120,7 @@ export class HistoricalBarReplaySource implements BarReplaySource {
     if (this.cycleIndex === 0) {
       const windowBars = this.bars.slice(0, EXPAND_MIN_BARS);
       const lastBar = windowBars.at(-1)!;
-      const quote = this.quoteOverride ?? quoteFromBar(lastBar);
+      const quote = quoteForReplayCycle(lastBar, this.quoteOverride);
       const snapshot = buildMarketSnapshot(windowBars, quote, this.cycleIndex, this.cycleIdPrefix);
       this.cycleIndex += 1;
       this.cursorBarIndex = EXPAND_MIN_BARS;
@@ -117,7 +137,7 @@ export class HistoricalBarReplaySource implements BarReplaySource {
 
     const bar = this.bars[this.cursorBarIndex]!;
     this.cursorBarIndex += 1;
-    const quote = this.quoteOverride ?? quoteFromBar(bar);
+    const quote = quoteForReplayCycle(bar, this.quoteOverride);
     const snapshot = buildMarketSnapshot([bar], quote, this.cycleIndex, this.cycleIdPrefix);
     this.cycleIndex += 1;
 
