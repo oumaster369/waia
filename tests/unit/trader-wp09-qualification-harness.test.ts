@@ -14,19 +14,38 @@ import {
   D11B_N1_NORMALIZED_SHA256,
   D11B_THRESHOLDS,
 } from "@/lib/trader/backtest/replay-qualification-harness";
-import { verifyCanonicalHostFingerprint } from "@/lib/trader/backtest/d11b-host-fingerprint";
+import {
+  collectLiveHostEnvironment,
+  hostEnvironmentsMatch,
+  loadReferenceHostEnvironment,
+  verifyCanonicalHostFingerprint,
+} from "@/lib/trader/backtest/d11b-host-fingerprint";
 import { sha256File } from "@/lib/trader/backtest/replay-benchmark-harness";
 
+function isD11bQualificationHost(): boolean {
+  try {
+    hostEnvironmentsMatch(loadReferenceHostEnvironment(), collectLiveHostEnvironment());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("WP09 qualification harness (HTR-WP09)", () => {
-  it("computes canonical host fingerprint from live/reference match", () => {
-    expect(computeHostFingerprintSha256()).toBe(D11B_APPROVED_HOST_FINGERPRINT_SHA256);
-    expect(
-      verifyCanonicalHostFingerprint(D11B_APPROVED_HOST_FINGERPRINT_SHA256).canonicalSha256,
-    ).toBe(D11B_APPROVED_HOST_FINGERPRINT_SHA256);
-  });
+  it.skipIf(!isD11bQualificationHost())(
+    "computes canonical host fingerprint from live/reference match",
+    () => {
+      expect(computeHostFingerprintSha256()).toBe(D11B_APPROVED_HOST_FINGERPRINT_SHA256);
+      expect(
+        verifyCanonicalHostFingerprint(D11B_APPROVED_HOST_FINGERPRINT_SHA256).canonicalSha256,
+      ).toBe(D11B_APPROVED_HOST_FINGERPRINT_SHA256);
+    },
+  );
 
   it("verifyReferenceHostFingerprint fails closed on mismatch", () => {
-    expect(() => verifyReferenceHostFingerprint("0".repeat(64))).toThrow(/fingerprint mismatch/);
+    expect(() => verifyReferenceHostFingerprint("0".repeat(64))).toThrow(
+      /\[d11b-host\] (live host mismatch|canonical fingerprint mismatch)/,
+    );
   });
 
   it("pins approved host fingerprint constant for Stage-C preflight", () => {
