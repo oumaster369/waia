@@ -11,6 +11,7 @@ import {
   buildWp10DeterminismManifest,
   buildWp10DeterminismProvenance,
   HTR_WP10_DETERMINISM_COMMAND,
+  parseWp10EvidenceOutputDir,
   sha256File,
   writeWp10DeterminismEvidence,
 } from "@/lib/trader/research/wp10-determinism-evidence-harness";
@@ -18,13 +19,8 @@ import { computeWp10DeterminismEvidence } from "@/tests/unit/helpers/wp10-replay
 
 const HARNESS_SOURCE_PATH = "lib/trader/research/wp10-determinism-evidence-harness.ts";
 
-function parseOutputDir(argv: string[]): string | undefined {
-  const outIndex = argv.indexOf("--output-dir");
-  return outIndex >= 0 ? argv[outIndex + 1] : undefined;
-}
-
 async function main(): Promise<void> {
-  const outputDir = parseOutputDir(process.argv.slice(2));
+  const outputDir = parseWp10EvidenceOutputDir(process.argv.slice(2));
   if (!outputDir) {
     throw new Error(`${HTR_WP10_DETERMINISM_COMMAND} requires --output-dir <explicit-output-dir>`);
   }
