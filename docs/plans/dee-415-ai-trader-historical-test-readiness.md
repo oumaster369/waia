@@ -29,8 +29,8 @@ state:
   status: in-progress
   humanApproval: CONFIRM-DEE-415-HTR-WP01-CHILD-PLAN
   childPlanStatus: APPROVED_EXACT   # 2026-07-13: HTR-MACRO-C (WP09+WP10) refreshed EXACT + Human-approved (APPROVE-HTR-MACRO-C / -BUILD consumed) after D-11B resolution
-  programStatus: WP_ACTIVE
-  activeWorkPackage: HTR-WP10   # WP09 CLOSEOUT complete (Opus Macro-C Phase B 2026-07-14); advanced WP09 → WP10
+  programStatus: APPROVED_IDLE   # 2026-07-14: HTR-MACRO-C COMPLETE (WP09+WP10 Opus Phase-B PASS); Macro D refreshed, awaiting Human approval
+  activeWorkPackage: HTR-WP11   # WP09+WP10 CLOSEOUT complete (Opus Macro-C Phase B 2026-07-14); advanced to WP11
   macroCMigrationDecision: NONE
   macroCStartingHead: THIS_SESSION_PROCESS_COMMIT   # exact SHA recorded in git log + gitignored controllers; canonical authority is git log (process commit changes planning/governance only)
   macroCCodeBaselineHead: a8a709ff53f74649b5c5f39e0ba8e00af1e113de   # HTR-WP08 CLOSEOUT — latest validated production baseline; process commit changes NO production code
@@ -38,7 +38,7 @@ state:
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  currentWorkPackage: HTR-WP10   # WP09 CLOSEOUT complete; advanced WP09 → WP10
+  currentWorkPackage: HTR-WP11   # WP09+WP10 CLOSEOUT complete; Macro C COMPLETE; advanced to WP11
   activeChildPlan: .cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md
   workCommitSha: f90faa9f02e12b3a4a724311cd4b7805f9c12f7c
   wp01WorkCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
@@ -174,15 +174,39 @@ state:
     typecheck: PASS
     tests: PASS
     build: PASS
+  # --- HTR-WP10 CLOSEOUT (Opus Macro-C Phase B, 2026-07-14) ---
+  wp10WorkCommitSha: befa6c15ef2501f975c3f55a0b464924ed52695b
+  wp10ValidationCorrectionCommitSha: 2987f37ddaca8b36760e4b9062e48bb83c6f3d13
+  wp10EvidencePath: replay-runs/RI-P7/htr-wp10-determinism-nolookahead/
+  wp10EvidenceArtifactDigest: fa5def3786dd85fe790c5623c09d76f31b9b67c866409e8fa8ae1ad91274926b   # independently reproduced byte-identically by the WP10 suite
+  wp10ValidationCorrectionClassification:
+    m9FillAssertion: STALE_TEST_CONTRACT   # `fillExecutedAtIso.length > 0` rendered stale by the Human-approved WP09 incremental-Canvas cutover (introduced at 46820ac): PASS at a8a709f/cad4541 (legacy substrate produced a fill) -> deterministic canonical NO_TRADE under incremental Canvas; removal keeps all determinism assertions + byte-identical empty-fill comparison; fill/timestamp determinism independently proven by WP10 order-id + lifecycle fixtures
+    hostLiveMatchSkips: ENVIRONMENT_ONLY   # two live-host reference-match tests skip off the AC qualification host via it.skipIf(!isD11bQualificationHost()); all host-independent canonicalization/mismatch/fail-closed contract tests always run
+    failClosedRegex: STALE_TEST_CONTRACT   # regex widened to the D11bHostFingerprintError message prefix (live host mismatch|canonical fingerprint mismatch); remains fail-closed, cannot accept an unrelated exception
+  wp10NoWp09MeasurementCriticalChange: true   # verified: no change after 7c532f5 to harness/CLI, D-11B evaluator, Canvas advance/state contract, cutover mode, MTF/reconstruction numeric semantics, measured-stage boundaries, cycle-count contract, dataset/host binding, or sealed evidence; shared-file WP10 edits are behavior-preserving deterministic clock/ID/no-lookahead seams
+  wp10OpusPostReview: PASS
+  wp10TerminalState: WORK_PACKAGE_COMPLETE
+  wp10GapsClosed:
+    - HTR-GAP-004
+    - HTR-GAP-025
+    - HTR-GAP-031
+  wp10Validation:
+    validateCanon: PASS
+    lint: PASS
+    typecheck: PASS
+    tests: PASS
+    build: PASS
+  macroCStatus: COMPLETE
   completedMacros:
     - HTR-MACRO-A
     - HTR-MACRO-B
-  activeMacroPackage: HTR-MACRO-C
+    - HTR-MACRO-C
+  activeMacroPackage: HTR-MACRO-D
   activeMacroWorkPackages:
-    - HTR-WP09
-    - HTR-WP10
-  activeMacroStatus: APPROVED   # 2026-07-13: D-11B RESOLVED; Macro C refreshed EXACT + Human-approved (APPROVE-HTR-MACRO-C: wp09-canvas-cutover-wp10-determinism; ACK-HTR-MACRO-C-MIGRATION: none; APPROVE-HTR-MACRO-C-BUILD)
-  buildAuthorized: YES   # 2026-07-13: Composer 2.5 may execute the approved HTR-MACRO-C packet only (WP09 then WP10); no auto-advance to Macro D
+    - HTR-WP11
+    - HTR-WP12
+  activeMacroStatus: DRAFT   # 2026-07-14: Macro C COMPLETE (WP09+WP10 Opus Phase-B PASS); Macro D refreshed in-place in the rolling controller; MACRO_D_MIGRATION_DECISION NONE; awaiting Human REVIEW_AND_APPROVE_HTR_MACRO_D
+  buildAuthorized: NO   # 2026-07-14: Macro C closed; Macro D not Build-authorized
   d11bStatus: RESOLVED
   d11bDecisionStatus: HUMAN_APPROVED
   d11bApprovalDate: 2026-07-13
@@ -240,8 +264,8 @@ state:
     - HTR-WP07
     - HTR-WP08
     - HTR-WP09
-  remainingWorkPackages:
     - HTR-WP10
+  remainingWorkPackages:
     - HTR-WP11
     - HTR-WP12
     - HTR-WP13
@@ -261,7 +285,7 @@ state:
   lastValidationAt: 2026-07-12
   finalAuditStatus: not-started
   blockedReason: null
-  nextAction: "Composer 2.5 executes the approved HTR-MACRO-C packet only (HTR-WP09 canvas runtime integration + integrated D-11B qualification + default cutover, then HTR-WP10 determinism/no-lookahead qualification), from the rolling controller. D-11B is RESOLVED (Human-approved 2026-07-13; thresholds only — WP09 still owns the qualification proof; does not close WP09/WP22). HTR-MACRO-C is REFRESHED_EXACT and Human-APPROVED (APPROVE-HTR-MACRO-C + ACK-HTR-MACRO-C-MIGRATION: none + APPROVE-HTR-MACRO-C-BUILD consumed); MACRO_C_MIGRATION_DECISION NONE; MACRO_C_CODE_BASELINE_HEAD a8a709ff. BUILD_AUTHORIZED YES for Macro C only; no auto-advance to Macro D. HTR-GAP-001/002/003 close on WP09 integrated qualification PASS, HTR-GAP-004/025/031 on WP10. Full Historical Validation Run Contract v0 pinned (BTCUSDT+ETHUSDT spot 1m; 2020-01-01..2025-12-31; initial equity 100,000 USDT; 2025 blind holdout SEALED_NOT_ACCESSED); the actual multi-year run executes only AFTER DEE-415 CERTIFY-HTR-READY. Exact account/monthly drawdown percentage remains a Human gate (D-20) before HTR-WP16; it does not block Macro C/D. No intermediate PR; READY_FOR_FULL_HISTORICAL_TEST not set; the single final PR remains gated on all 23 work packages."
+  nextAction: "HTR-MACRO-C is COMPLETE (2026-07-14): HTR-WP09 Opus Phase-B PASS (D-11B PASS under Memory Gate Amendment v1, bound to 7c532f5, accepted evidence promoted to replay-runs/RI-P7/htr-wp09-canvas-runtime-qualification/ digest 78560485; CLOSEOUT 3a0962f) and HTR-WP10 Opus Phase-B PASS (WORK befa6c1, validation correction 2987f37 test-only, evidence digest fa5def37, no WP09 measurement-critical surface changed; CLOSEOUT recorded). HTR-GAP-001/002/003 closed at WP09; HTR-GAP-004/025/031 closed at WP10. Macro D (HTR-WP11 PIT provider context + gateway enforcement + absent-lane; HTR-WP12 ingress bar-integrity gate + immutable versioned dataset manifest) refreshed in-place in the rolling controller with MACRO_D_MIGRATION_DECISION NONE; BUILD_AUTHORIZED NO. Next Human gate: REVIEW_AND_APPROVE_HTR_MACRO_D.  Prior context:  Composer 2.5 executes the approved HTR-MACRO-C packet only (HTR-WP09 canvas runtime integration + integrated D-11B qualification + default cutover, then HTR-WP10 determinism/no-lookahead qualification), from the rolling controller. D-11B is RESOLVED (Human-approved 2026-07-13; thresholds only — WP09 still owns the qualification proof; does not close WP09/WP22). HTR-MACRO-C is REFRESHED_EXACT and Human-APPROVED (APPROVE-HTR-MACRO-C + ACK-HTR-MACRO-C-MIGRATION: none + APPROVE-HTR-MACRO-C-BUILD consumed); MACRO_C_MIGRATION_DECISION NONE; MACRO_C_CODE_BASELINE_HEAD a8a709ff. BUILD_AUTHORIZED YES for Macro C only; no auto-advance to Macro D. HTR-GAP-001/002/003 close on WP09 integrated qualification PASS, HTR-GAP-004/025/031 on WP10. Full Historical Validation Run Contract v0 pinned (BTCUSDT+ETHUSDT spot 1m; 2020-01-01..2025-12-31; initial equity 100,000 USDT; 2025 blind holdout SEALED_NOT_ACCESSED); the actual multi-year run executes only AFTER DEE-415 CERTIFY-HTR-READY. Exact account/monthly drawdown percentage remains a Human gate (D-20) before HTR-WP16; it does not block Macro C/D. No intermediate PR; READY_FOR_FULL_HISTORICAL_TEST not set; the single final PR remains gated on all 23 work packages."
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -529,7 +553,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP07 | Incremental closed-bar MTF aggregation | WP06 | backend | COMPLETE (Opus Phase-B PASS; WORK `10f2500`; CANVAS_MTF_PARITY_OK; HTR-GAP-003 contribution remains OPEN closure HTR-WP09; HTR-GAP-004 closed-bar correction remains OPEN closure HTR-WP10) | `10f2500` (WORK) |
 | HTR-WP08 | Incremental reconstruction + oracle parity | WP07 | backend | COMPLETE (Opus Phase-B PASS; WORK `0c4b8c3`; RECONSTRUCTION_ORACLE_PARITY_OK — 22/22 exact, 0 divergence, FULL_HISTORY_RESCANS 0, bounds true, work growth linear; HTR-GAP-002 contribution remains OPEN closure HTR-WP09) | `0c4b8c3` (WORK) |
 | HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | WP08,WP03 | backend | COMPLETE (Opus Macro-C Phase B PASS 2026-07-14; WORK `46820ac`; prequalification correction `c57a7a0`; instrumentation correction `bc9cb46`; memory-gate alignment `7c532f5`; D-11B PASS under Memory Gate Amendment v1, accepted evidence `replay-runs/RI-P7/htr-wp09-canvas-runtime-qualification/` digest `78560485…`; qualification bound to `7c532f5` per Human Amendment-v1 exception; HTR-GAP-001/002/003 CLOSED) | `46820ac` (WORK) |
-| HTR-WP10 | No-lookahead + determinism property suites | WP09 | backend | APPROVED — Macro C REFRESHED_EXACT + Build-authorized 2026-07-13; not yet implemented (closes HTR-GAP-004/025/031) | — |
+| HTR-WP10 | No-lookahead + determinism property suites | WP09 | backend | COMPLETE (Opus Macro-C Phase B PASS 2026-07-14; WORK `befa6c1`; validation correction `2987f37` — test-only; evidence `replay-runs/RI-P7/htr-wp10-determinism-nolookahead/` digest `fa5def37…`; no WP09 measurement-critical surface changed; full validation green; HTR-GAP-004/025/031 CLOSED; Macro C COMPLETE) | `befa6c1` (WORK) |
 | HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | WP01,WP09 | backend | pending | — |
 | HTR-WP12 | Ingress bar-integrity gate + versioned dataset manifest | WP01 | backend | pending | — |
 | HTR-WP13 | Intelligence-chain activation (historical run profile) | WP09,WP10,WP11,WP12 | ai | pending | — |
