@@ -33,7 +33,7 @@ async function main(): Promise<void> {
     harnessSourceSha256,
   });
 
-  const paths = writeWp10DeterminismEvidence({
+  const paths = await writeWp10DeterminismEvidence({
     outputDir,
     manifest: buildWp10DeterminismManifest(replay),
     provenance,

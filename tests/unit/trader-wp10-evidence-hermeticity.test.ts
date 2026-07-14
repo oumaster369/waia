@@ -1,8 +1,19 @@
 /**
- * HTR-WP10 — evidence hermeticity + hardened operator-gated writer safeguards.
+ * HTR-WP10 — evidence hermeticity + cwd-bound writer safeguards (frozen guard matrix).
  */
 import { createHash } from "node:crypto";
-import { lstatSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -14,11 +25,14 @@ import {
   buildWp10DeterminismProvenance,
   buildWp10StagingManifestDigestEntries,
   computeWp10StagingManifestDigest,
+  HTR_WP10_CANDIDATE_COMPLETION_SCHEMA_VERSION,
+  HTR_WP10_CANDIDATE_REQUIRED_FILES,
   HTR_WP10_DETERMINISM_COMMAND,
   HTR_WP10_HISTORICAL_ACCEPTED_ARTIFACT_DIGEST,
   HTR_WP10_HISTORICAL_EVIDENCE_RELATIVE_PATH,
   HTR_WP10_STAGING_MANIFEST_DIGEST_SCHEMA_VERSION,
   HTR_WP10_TRACKED_EVIDENCE_VAULT_PREFIX,
+  isWp10CandidateComplete,
   parseWp10EvidenceOutputDir,
   readHistoricalWp10Manifest,
   resolveHistoricalWp10EvidenceDir,
@@ -111,6 +125,7 @@ describe("HTR-WP10 evidence hermeticity", () => {
     expect(() => assertWp10WriterOutputDirAllowed("   ")).toThrow(
       "WP10_WRITER_OUTPUT_DIR_REQUIRED",
     );
+    assertHistoricalSealUnchanged();
   });
 
   it("rejects the historical accepted path and relative aliases", () => {
@@ -156,7 +171,7 @@ describe("HTR-WP10 evidence hermeticity", () => {
     assertHistoricalSealUnchanged();
   });
 
-  it("rejects symlink destinations resolving into the accepted path or RI-P7 child", () => {
+  it("rejects external symlink destinations resolving into the accepted path or RI-P7 child", () => {
     const historical = resolveHistoricalWp10EvidenceDir();
     const vaultChild = path.join(resolveTrackedEvidenceVaultDir(), "htr-wp11-pit-provider-context");
     const acceptedSymlink = makeTempSymlink(historical, "wp10-guard-accepted-");
@@ -167,6 +182,34 @@ describe("HTR-WP10 evidence hermeticity", () => {
         /WP10_WRITER_(CANNOT_TARGET_HISTORICAL_ACCEPTED_PATH|CANNOT_TARGET_TRACKED_ACCEPTED_EVIDENCE_VAULT|OUTPUT_DIR_LEAF_IS_SYMLINK)/,
       );
     }
+    assertHistoricalSealUnchanged();
+  });
+
+  it("rejects parent-directory symlink to protected path", () => {
+    const historical = resolveHistoricalWp10EvidenceDir();
+    const linkBase = makeTempSymlink(path.dirname(historical), "wp10-parentlink-");
+    const dest = path.join(linkBase, path.basename(historical));
+    expect(() => assertWp10WriterOutputDirAllowed(dest)).toThrow(
+      /WP10_WRITER_CANNOT_TARGET_(HISTORICAL_ACCEPTED_PATH|TRACKED_ACCEPTED_EVIDENCE_VAULT)/,
+    );
+    assertHistoricalSealUnchanged();
+  });
+
+  it("rejects multi-hop symlink to protected path", () => {
+    const historical = resolveHistoricalWp10EvidenceDir();
+    const hop1 = makeTempSymlink(historical, "wp10-hop1-");
+    const hop2 = makeTempSymlink(hop1, "wp10-hop2-");
+    expect(() => assertWp10WriterOutputDirAllowed(hop2)).toThrow(
+      /WP10_WRITER_(CANNOT_TARGET_HISTORICAL_ACCEPTED_PATH|OUTPUT_DIR_LEAF_IS_SYMLINK)/,
+    );
+    assertHistoricalSealUnchanged();
+  });
+
+  it("allows sibling prefix RI-P70-safe when otherwise safe", () => {
+    const sibling = path.join(process.cwd(), "replay-runs", "RI-P70-safe");
+    mkdirSync(sibling, { recursive: true });
+    tempDirs.push(sibling);
+    expect(() => assertWp10WriterOutputDirAllowed(sibling)).not.toThrow();
     assertHistoricalSealUnchanged();
   });
 
@@ -185,23 +228,23 @@ describe("HTR-WP10 evidence hermeticity", () => {
     const missingDir = path.join(os.tmpdir(), `wp10-missing-${Date.now()}`);
     const { manifest } = await computeWp10DeterminismEvidence();
     const provenance = await buildProvenance(manifest);
-    expect(() =>
+    await expect(
       writeWp10DeterminismEvidence({
         outputDir: missingDir,
         manifest,
         provenance,
       }),
-    ).toThrow("WP10_WRITER_OUTPUT_DIR_MISSING");
+    ).rejects.toThrow("WP10_WRITER_OUTPUT_DIR_MISSING");
 
     const nonEmptyDir = makeTempDir("wp10-nonempty-");
     writeFileSync(path.join(nonEmptyDir, "seed.txt"), "seed", "utf8");
-    expect(() =>
+    await expect(
       writeWp10DeterminismEvidence({
         outputDir: nonEmptyDir,
         manifest,
         provenance,
       }),
-    ).toThrow("WP10_WRITER_OUTPUT_DIR_NON_EMPTY");
+    ).rejects.toThrow("WP10_WRITER_OUTPUT_DIR_NON_EMPTY");
     assertHistoricalSealUnchanged();
   });
 
@@ -212,13 +255,13 @@ describe("HTR-WP10 evidence hermeticity", () => {
       ...(await buildProvenance(manifest)),
       dirtyTree: true,
     };
-    expect(() =>
+    await expect(
       writeWp10DeterminismEvidence({
         outputDir,
         manifest,
         provenance,
       }),
-    ).toThrow("WP10_WRITER_REFUSES_DIRTY_TREE_CANDIDATE_SEAL");
+    ).rejects.toThrow("WP10_WRITER_REFUSES_DIRTY_TREE_CANDIDATE_SEAL");
 
     const symlinkOutputDir = makeTempDir("wp10-manifest-symlink-");
     symlinkSync(
@@ -227,22 +270,22 @@ describe("HTR-WP10 evidence hermeticity", () => {
     );
     tempLinks.push(path.join(symlinkOutputDir, "manifest.json"));
     const cleanProvenance = await buildProvenance(manifest);
-    expect(() =>
+    await expect(
       writeWp10DeterminismEvidence({
         outputDir: symlinkOutputDir,
         manifest,
         provenance: cleanProvenance,
       }),
-    ).toThrow("WP10_WRITER_OUTPUT_FILE_SYMLINK");
+    ).rejects.toThrow("WP10_WRITER_OUTPUT_FILE_SYMLINK");
     assertHistoricalSealUnchanged();
   });
 
-  it("writes deterministic candidate output to a temporary directory", async () => {
+  it("writes a complete cwd-bound candidate to a temporary directory", async () => {
     const outputDir = makeTempDir("wp10-writer-");
     const first = await computeWp10DeterminismEvidence();
     const provenance = await buildProvenance(first.manifest);
 
-    const paths = writeWp10DeterminismEvidence({
+    const paths = await writeWp10DeterminismEvidence({
       outputDir,
       manifest: first.manifest,
       provenance,
@@ -263,6 +306,12 @@ describe("HTR-WP10 evidence hermeticity", () => {
     expect(writtenProvenance.harnessSourceSha256).toBe(provenance.harnessSourceSha256);
     expect(writtenProvenance.gitSha).toMatch(/^[a-f0-9]{40}$/);
     expect(writtenProvenance.dirtyTree).toBe(false);
+
+    const completion = JSON.parse(readFileSync(paths.completionPath, "utf8"));
+    expect(completion.schemaVersion).toBe(HTR_WP10_CANDIDATE_COMPLETION_SCHEMA_VERSION);
+    expect(completion.status).toBe("COMPLETE_NOT_ACCEPTED");
+    expect(completion.requiredFiles).toEqual([...HTR_WP10_CANDIDATE_REQUIRED_FILES]);
+    expect(isWp10CandidateComplete(outputDir)).toBe(true);
     assertHistoricalSealUnchanged();
   });
 
@@ -271,14 +320,14 @@ describe("HTR-WP10 evidence hermeticity", () => {
     const { manifest } = await computeWp10DeterminismEvidence();
     const provenance = await buildProvenance(manifest);
 
-    writeWp10DeterminismEvidence({ outputDir, manifest, provenance });
-    expect(() => writeWp10DeterminismEvidence({ outputDir, manifest, provenance })).toThrow(
+    await writeWp10DeterminismEvidence({ outputDir, manifest, provenance });
+    await expect(writeWp10DeterminismEvidence({ outputDir, manifest, provenance })).rejects.toThrow(
       "WP10_WRITER_OUTPUT_DIR_NON_EMPTY",
     );
     assertHistoricalSealUnchanged();
   });
 
-  it("produces byte-identical manifests across two writer generations", async () => {
+  it("produces byte-identical complete candidates across two writer generations", async () => {
     const dirA = makeTempDir("wp10-writer-a-");
     const dirB = makeTempDir("wp10-writer-b-");
 
@@ -291,12 +340,85 @@ describe("HTR-WP10 evidence hermeticity", () => {
     const pathsA = await runOnce(dirA);
     const pathsB = await runOnce(dirB);
 
-    expect(readFileSync(pathsA.manifestPath, "utf8")).toBe(
-      readFileSync(pathsB.manifestPath, "utf8"),
+    for (const fileName of HTR_WP10_CANDIDATE_REQUIRED_FILES) {
+      expect(readFileSync(path.join(dirA, fileName), "utf8")).toBe(
+        readFileSync(path.join(dirB, fileName), "utf8"),
+      );
+    }
+    expect(pathsA.manifestPath).toBeTruthy();
+    assertHistoricalSealUnchanged();
+  });
+
+  it("fails closed before provenance without completion marker", async () => {
+    const outputDir = makeTempDir("wp10-partial-provenance-");
+    const { manifest } = await computeWp10DeterminismEvidence();
+    const provenance = await buildProvenance(manifest);
+
+    await expect(
+      writeWp10DeterminismEvidence({
+        outputDir,
+        manifest,
+        provenance,
+        testInjectFailAfter: "provenance.json",
+      }),
+    ).rejects.toThrow(/WP10_WRITER_CHILD_EXIT_/);
+
+    expect(existsSync(path.join(outputDir, "completion.json"))).toBe(false);
+    expect(isWp10CandidateComplete(outputDir)).toBe(false);
+    await expect(writeWp10DeterminismEvidence({ outputDir, manifest, provenance })).rejects.toThrow(
+      "WP10_WRITER_OUTPUT_DIR_NON_EMPTY",
     );
-    expect(readFileSync(pathsA.provenancePath, "utf8")).toBe(
-      readFileSync(pathsB.provenancePath, "utf8"),
-    );
+    assertHistoricalSealUnchanged();
+  });
+
+  it("fails closed before completion marker without completion.json", async () => {
+    const outputDir = makeTempDir("wp10-partial-completion-");
+    const { manifest } = await computeWp10DeterminismEvidence();
+    const provenance = await buildProvenance(manifest);
+
+    await expect(
+      writeWp10DeterminismEvidence({
+        outputDir,
+        manifest,
+        provenance,
+        testInjectFailAfter: "staging-manifest.json",
+      }),
+    ).rejects.toThrow(/WP10_WRITER_CHILD_EXIT_/);
+
+    expect(existsSync(path.join(outputDir, "completion.json"))).toBe(false);
+    expect(isWp10CandidateComplete(outputDir)).toBe(false);
+    assertHistoricalSealUnchanged();
+  });
+
+  it("prevents directory substitution after cwd binding", async () => {
+    const boundDir = makeTempDir("wp10-toctou-bound-");
+    const escapeTarget = makeTempDir("wp10-toctou-escape-");
+    let renamedBoundPath = "";
+
+    const { manifest } = await computeWp10DeterminismEvidence();
+    const provenance = await buildProvenance(manifest);
+
+    await writeWp10DeterminismEvidence({
+      outputDir: boundDir,
+      manifest,
+      provenance,
+      testBarrier: {
+        onChildReady: async () => {
+          renamedBoundPath = `${boundDir}-renamed-${Date.now()}`;
+          renameSync(boundDir, renamedBoundPath);
+          tempDirs.push(renamedBoundPath);
+          symlinkSync(escapeTarget, boundDir);
+          tempLinks.push(boundDir);
+        },
+      },
+    });
+
+    expect(readdirSync(escapeTarget)).toHaveLength(0);
+    expect(isWp10CandidateComplete(renamedBoundPath)).toBe(true);
+    for (const fileName of HTR_WP10_CANDIDATE_REQUIRED_FILES) {
+      expect(existsSync(path.join(renamedBoundPath, fileName))).toBe(true);
+      expect(existsSync(path.join(escapeTarget, fileName))).toBe(false);
+    }
     assertHistoricalSealUnchanged();
   });
 
@@ -314,11 +436,11 @@ describe("HTR-WP10 evidence hermeticity", () => {
     expect(manifestA).toEqual(manifestB);
   });
 
-  it("computes canonical staging manifest digest independent of insertion order", async () => {
+  it("computes canonical staging manifest digest with code-point sort independent of insertion order", async () => {
     const outputDir = makeTempDir("wp10-staging-digest-");
     const { manifest } = await computeWp10DeterminismEvidence();
     const provenance = await buildProvenance(manifest);
-    const paths = writeWp10DeterminismEvidence({ outputDir, manifest, provenance });
+    const paths = await writeWp10DeterminismEvidence({ outputDir, manifest, provenance });
 
     const orderedA = computeWp10StagingManifestDigest([
       paths.manifestPath,
@@ -340,9 +462,9 @@ describe("HTR-WP10 evidence hermeticity", () => {
       paths.readmePath,
     ]);
     expect(entries.map((entry) => entry.path)).toEqual([
+      "README.md",
       "manifest.json",
       "provenance.json",
-      "README.md",
     ]);
 
     const tamperedReadme = `${readFileSync(paths.readmePath, "utf8")}tamper`;
@@ -381,5 +503,6 @@ describe("HTR-WP10 evidence hermeticity", () => {
     expect(() => assertWp10WriterOutputDirAllowed(caseAlias)).toThrow(
       "WP10_WRITER_CANNOT_TARGET_HISTORICAL_ACCEPTED_PATH",
     );
+    assertHistoricalSealUnchanged();
   });
 });
