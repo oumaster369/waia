@@ -30,7 +30,7 @@ state:
   humanApproval: CONFIRM-DEE-415-HTR-WP01-CHILD-PLAN
   childPlanStatus: APPROVED_EXACT   # 2026-07-13: HTR-MACRO-C (WP09+WP10) refreshed EXACT + Human-approved (APPROVE-HTR-MACRO-C / -BUILD consumed) after D-11B resolution
   programStatus: WP_ACTIVE
-  activeWorkPackage: HTR-WP09
+  activeWorkPackage: HTR-WP10   # WP09 CLOSEOUT complete (Opus Macro-C Phase B 2026-07-14); advanced WP09 → WP10
   macroCMigrationDecision: NONE
   macroCStartingHead: THIS_SESSION_PROCESS_COMMIT   # exact SHA recorded in git log + gitignored controllers; canonical authority is git log (process commit changes planning/governance only)
   macroCCodeBaselineHead: a8a709ff53f74649b5c5f39e0ba8e00af1e113de   # HTR-WP08 CLOSEOUT — latest validated production baseline; process commit changes NO production code
@@ -38,7 +38,7 @@ state:
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  currentWorkPackage: HTR-WP09
+  currentWorkPackage: HTR-WP10   # WP09 CLOSEOUT complete; advanced WP09 → WP10
   activeChildPlan: .cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md
   workCommitSha: f90faa9f02e12b3a4a724311cd4b7805f9c12f7c
   wp01WorkCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
@@ -108,7 +108,7 @@ state:
   wp06Evidence: replay-runs/RI-P7/htr-wp06-canvas-contract-baseline/
   wp06EvidenceTerminal: CANVAS_STATE_OK
   wp06MigrationDecision: NONE
-  wp06GapStatus: "HTR-GAP-001 WP06 Canvas state contract + cursor foundation contribution delivered; remains OPEN; closure owner HTR-WP09"
+  wp06GapStatus: "HTR-GAP-001 WP06 Canvas state contract + cursor foundation contribution delivered; CLOSED at HTR-WP09 runtime cutover"
   wp07WorkCommitSha: 10f2500d80db65e010fd9408745b96f34369dff8
   wp07PostReview: PASS
   wp07Validation:
@@ -120,7 +120,7 @@ state:
   wp07Evidence: replay-runs/RI-P7/htr-wp07-incremental-mtf-baseline/
   wp07EvidenceTerminal: CANVAS_MTF_PARITY_OK
   wp07MigrationDecision: NONE
-  wp07GapStatus: "HTR-GAP-003 WP07 incremental closed-bar MTF aggregation delivered, remains OPEN, closure owner HTR-WP09; HTR-GAP-004 WP07 partial-bar HTF-leakage closed-bar correction delivered, remains OPEN until HTR-WP10 qualification"
+  wp07GapStatus: "HTR-GAP-003 WP07 incremental closed-bar MTF aggregation delivered, CLOSED at HTR-WP09 runtime cutover; HTR-GAP-004 WP07 partial-bar HTF-leakage closed-bar correction delivered, closure owner HTR-WP10"
   wp08WorkCommitSha: 0c4b8c38e7e2a0f74d9b9318b66d750ed7c82ec9
   wp08PostReview: PASS
   wp08Validation:
@@ -140,8 +140,40 @@ state:
     fullHistoryRescans: 0
     stateWithinDeclaredBounds: true
     barVisitsGrowth: LINEAR_OR_N_LOG_N
-  wp08GapStatus: "HTR-GAP-002 WP08 incremental reconstruction + exact closed-boundary oracle parity delivered; remains OPEN; closure owner HTR-WP09"
+  wp08GapStatus: "HTR-GAP-002 WP08 incremental reconstruction + exact closed-boundary oracle parity delivered; CLOSED at HTR-WP09 runtime cutover"
   macroBStatus: COMPLETE
+  # --- HTR-WP09 CLOSEOUT (Opus Macro-C Phase B, 2026-07-14) ---
+  wp09WorkCommitSha: 46820ace551cdf0ee03c16886b313514a1afdbd3
+  wp09PrequalificationCorrectionCommitSha: c57a7a09e87582f818008a413862732ce7574b9b
+  wp09InstrumentationCorrectionCommitSha: bc9cb468988294652a7d82c38b17942abfa01b94
+  wp09MemoryGateAlignmentCommitSha: 7c532f5ef2d936cff1a28a8f53e8f45d3377d0aa
+  wp09AcceptedQualificationGitSha: 7c532f5ef2d936cff1a28a8f53e8f45d3377d0aa   # NOT the WP09 WORK SHA — Human-approved Amendment-v1 exception (see wp09QualificationBindingNote)
+  wp09AcceptedQualificationHarnessSha256: 5bd9a61a5f2ed3d022f7c853f05d8e657192f4e53f08de893062ace1436c248c   # sha256 of committed replay-qualification-harness.ts at 7c532f5; prior report's d7f93b75 was a REPORT_ONLY_TYPO, never in any sealed artifact
+  wp09ActiveQualificationContract: D11B_MEMORY_GATE_AMENDMENT_V1
+  wp09D11bResult: PASS_UNDER_MEMORY_GATE_AMENDMENT_V1
+  wp09AcceptedEvidencePath: replay-runs/RI-P7/htr-wp09-canvas-runtime-qualification/
+  wp09AcceptedEvidenceSourceStaging: .cursor/plans/dee-415-d11b/qualification-staging/htr-wp09-memory-amendment-v1-attempt-1/
+  wp09AcceptedEvidenceManifestDigest: 78560485f2690ed0b7c59d6e8cfe9a5183df1f65d331f6b2b13bbbf4eea0a60c
+  wp09HostFingerprintSha256: 1cd9f9535e86b3f5ad13cd907f08059d5ca3650cfbf74d9120449c7355b7a774
+  wp09DatasetSha256N2: e3415ffb324961ce19ce014a08d6cc3bc12bcaaba6ae380824dc7049f33a570f
+  wp09HistoricalAttempts:
+    firstInvalidated: { staging: .cursor/plans/dee-415-d11b/qualification-staging/htr-wp09/, manifestDigest: 10edfeaf1c99302fcf9fc8136482c1e9cfad97f8841b0e09bbd8c39cff1d7e98, status: INVALIDATED_BY_INSTRUMENTATION_FAILURE }
+    replacementValidFail: { staging: .cursor/plans/dee-415-d11b/qualification-staging/htr-wp09-replacement-1/, manifestDigest: bff973996e69c14e923e4b84421a36f61921345f673367e76cb332da9c73c6cd, status: VALID_THRESHOLD_FAIL_ORIGINAL_CONTRACT }   # never relabelled PASS
+    acceptedAmendmentV1: { staging: .cursor/plans/dee-415-d11b/qualification-staging/htr-wp09-memory-amendment-v1-attempt-1/, manifestDigest: 78560485f2690ed0b7c59d6e8cfe9a5183df1f65d331f6b2b13bbbf4eea0a60c, status: HTR_WP09_D11B_MEMORY_AMENDMENT_V1_PASS }
+  wp09ForensicAnnotation: replay-runs/RI-P7/htr-wp09-d11b-replacement-1-forensic-annotation/
+  wp09QualificationBindingNote: "Original clean-commit contract required qualificationGitSha == WP09 WORK commit (46820ac). The Human-approved D-11B Memory Gate Amendment v1 (2026-07-13) authorized a new exact qualification baseline at the memory-gate alignment HEAD 7c532f5; qualification is bound to 7c532f5, not 46820ac. The original contract is preserved as historical context; this is the recorded prospective Amendment-v1 exception."
+  wp09OpusPostReview: PASS
+  wp09TerminalState: WORK_PACKAGE_COMPLETE
+  wp09GapsClosed:
+    - HTR-GAP-001
+    - HTR-GAP-002
+    - HTR-GAP-003
+  wp09Validation:
+    validateCanon: PASS
+    lint: PASS
+    typecheck: PASS
+    tests: PASS
+    build: PASS
   completedMacros:
     - HTR-MACRO-A
     - HTR-MACRO-B
@@ -207,8 +239,8 @@ state:
     - HTR-WP06
     - HTR-WP07
     - HTR-WP08
-  remainingWorkPackages:
     - HTR-WP09
+  remainingWorkPackages:
     - HTR-WP10
     - HTR-WP11
     - HTR-WP12
@@ -496,7 +528,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP06 | Market Canvas state contract + cursor replay foundation | WP01,WP03 | backend | COMPLETE (Opus Phase-B PASS; WORK `24eb7f9`; CANVAS_STATE_OK; HTR-GAP-001 contribution, remains OPEN, closure HTR-WP09) | `24eb7f9` (WORK) |
 | HTR-WP07 | Incremental closed-bar MTF aggregation | WP06 | backend | COMPLETE (Opus Phase-B PASS; WORK `10f2500`; CANVAS_MTF_PARITY_OK; HTR-GAP-003 contribution remains OPEN closure HTR-WP09; HTR-GAP-004 closed-bar correction remains OPEN closure HTR-WP10) | `10f2500` (WORK) |
 | HTR-WP08 | Incremental reconstruction + oracle parity | WP07 | backend | COMPLETE (Opus Phase-B PASS; WORK `0c4b8c3`; RECONSTRUCTION_ORACLE_PARITY_OK — 22/22 exact, 0 divergence, FULL_HISTORY_RESCANS 0, bounds true, work growth linear; HTR-GAP-002 contribution remains OPEN closure HTR-WP09) | `0c4b8c3` (WORK) |
-| HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | WP08,WP03 | backend | APPROVED — Macro C REFRESHED_EXACT + Build-authorized 2026-07-13; not yet implemented (owns integrated D-11B qualification proof; closes HTR-GAP-001/002/003 on PASS) | — |
+| HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | WP08,WP03 | backend | COMPLETE (Opus Macro-C Phase B PASS 2026-07-14; WORK `46820ac`; prequalification correction `c57a7a0`; instrumentation correction `bc9cb46`; memory-gate alignment `7c532f5`; D-11B PASS under Memory Gate Amendment v1, accepted evidence `replay-runs/RI-P7/htr-wp09-canvas-runtime-qualification/` digest `78560485…`; qualification bound to `7c532f5` per Human Amendment-v1 exception; HTR-GAP-001/002/003 CLOSED) | `46820ac` (WORK) |
 | HTR-WP10 | No-lookahead + determinism property suites | WP09 | backend | APPROVED — Macro C REFRESHED_EXACT + Build-authorized 2026-07-13; not yet implemented (closes HTR-GAP-004/025/031) | — |
 | HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | WP01,WP09 | backend | pending | — |
 | HTR-WP12 | Ingress bar-integrity gate + versioned dataset manifest | WP01 | backend | pending | — |

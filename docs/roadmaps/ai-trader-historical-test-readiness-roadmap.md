@@ -5,7 +5,7 @@ horizon: v1
 owner: Architect
 linkedSpec: docs/product-specs/ai-trader-historical-test-readiness-completion.md
 linkedGapRegistry: docs/gaps/ai-trader-historical-test-readiness-gap-registry.md
-lastReviewed: 2026-07-12
+lastReviewed: 2026-07-14
 version: 0.1.0
 ---
 
@@ -29,7 +29,7 @@ Sequence gap closure and implementation work for the Historical-Test Readiness p
 | IB-HTR-06 | HTR-WP06 | Market Canvas state contract + cursor replay foundation | IB-HTR-01, IB-HTR-03 | T2 | planned | null | HTR-GAP-001 | Canvas state contract; cursor replay foundation |
 | IB-HTR-07 | HTR-WP07 | Incremental closed-bar MTF aggregation | IB-HTR-06 | T2 | planned | null | HTR-GAP-003,004 | Incremental MTF; no partial-bar leakage |
 | IB-HTR-08 | HTR-WP08 | Incremental reconstruction + oracle parity | IB-HTR-07 | T2 | planned | null | HTR-GAP-002 | Incremental reconstruction; divergence register applied |
-| IB-HTR-09 | HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | IB-HTR-08, IB-HTR-03 | T2 | planned | null | HTR-GAP-001,002,003 | Incremental default; benchmark qualification |
+| IB-HTR-09 | HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | IB-HTR-08, IB-HTR-03 | T2 | complete | docs/plans/dee-415-ai-trader-historical-test-readiness.md | HTR-GAP-001,002,003 | Incremental default cutover shipped; D-11B PASS under Memory Gate Amendment v1 (accepted evidence replay-runs/RI-P7/htr-wp09-canvas-runtime-qualification/ digest 78560485…, bound to 7c532f5 per Human Amendment-v1 exception); Opus Macro-C Phase B PASS; WORK 46820ac; HTR-GAP-001/002/003 closed |
 | IB-HTR-10 | HTR-WP10 | No-lookahead + determinism property suites | IB-HTR-09 | T1 | planned | null | HTR-GAP-025,031 | Property suites green; determinism residuals closed |
 | IB-HTR-11 | HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | IB-HTR-01, IB-HTR-09 | T2 | planned | null | HTR-GAP-012,013 | PIT context; gateway enforcement |
 | IB-HTR-12 | HTR-WP12 | Ingress bar-integrity gate + versioned dataset manifest | IB-HTR-01 | T2 | planned | null | HTR-GAP-014,015 | Bar-integrity gate; dataset manifest |

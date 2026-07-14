@@ -1,0 +1,63 @@
+{
+  "schema": "htr-wp09-accepted-qualification-provenance/v1",
+  "workPackage": "HTR-WP09",
+  "macroPackage": "HTR-MACRO-C",
+  "acceptedResult": "HTR_WP09_D11B_MEMORY_AMENDMENT_V1_PASS",
+  "activeQualificationContract": "D11B_MEMORY_GATE_AMENDMENT_V1",
+  "promotedBy": "Opus 4.8 Macro-C Phase B independent post-implementation audit (AUTHORIZE_OPUS_MACRO_C_PHASE_B)",
+  "promotionRules": "byte-for-byte copy of the accepted sealed Amendment-v1 staging bundle; no raw run regenerated; original staging directories preserved immutable",
+  "source": {
+    "stagingPath": ".cursor/plans/dee-415-d11b/qualification-staging/htr-wp09-memory-amendment-v1-attempt-1",
+    "manifestDigest": "78560485f2690ed0b7c59d6e8cfe9a5183df1f65d331f6b2b13bbbf4eea0a60c",
+    "note": "manifestDigest == sha256(qualification-attempt.json) — reproducible from the co-located byte-identical copy"
+  },
+  "promotedBundle": {
+    "path": "replay-runs/RI-P7/htr-wp09-canvas-runtime-qualification/accepted-amendment-v1-attempt-1",
+    "qualificationAttemptSha256": "78560485f2690ed0b7c59d6e8cfe9a5183df1f65d331f6b2b13bbbf4eea0a60c",
+    "manifestFileSha256": "bfa9a55da3cf76680e427839a5befae0f136e10aaaec0db0a8e8ece4668ccbfa"
+  },
+  "binding": {
+    "qualificationGitSha": "7c532f5ef2d936cff1a28a8f53e8f45d3377d0aa",
+    "qualificationHarnessSha256": "5bd9a61a5f2ed3d022f7c853f05d8e657192f4e53f08de893062ace1436c248c",
+    "hostFingerprintSha256": "1cd9f9535e86b3f5ad13cd907f08059d5ca3650cfbf74d9120449c7355b7a774",
+    "datasetSha256N2Normalized": "e3415ffb324961ce19ce014a08d6cc3bc12bcaaba6ae380824dc7049f33a570f",
+    "n1BarSetDigest": "454418e4669180acb56bec34149e0a183317a08b91d594742c51ac10212790f6",
+    "n2BarSetDigest": "c2f379935492e64786c54ba79c01be2e7e291383f9ec352cedad48ec9321e7ae",
+    "n1SemanticEvidenceDigest": "29f023fa01937d6097c4a9128c313ed4e93cd2f9700037068c4e0413adf787f9",
+    "n2SemanticEvidenceDigest": "7a85d570eadde0f5da4443ebf906040972a84ceba075ccfc1211b2d0bf3bf702"
+  },
+  "harnessProvenanceNote": "The sealed qualification-attempt/manifest bind via gitSha (7c532f5), which uniquely determines the harness file bytes (sha256 5bd9a61a...). A prior Composer report cited harness SHA d7f93b75... — that value never appeared in any sealed artifact and is a REPORT_ONLY_TYPO; the operational controller was corrected to 5bd9a61a.",
+  "attemptStructure": {
+    "N1": {
+      "coldExcluded": 1,
+      "warmIncluded": 5,
+      "freshNodeProcessPerRun": true,
+      "exposeGc": true
+    },
+    "N2": { "coldExcluded": 1, "warmIncluded": 5, "freshNodeProcessPerRun": true, "exposeGc": true }
+  },
+  "passGateTable": {
+    "n2BarCount": { "value": 129600, "gate": "== 129600", "result": "PASS" },
+    "n2CanvasAdvanceCount": { "value": 129600, "gate": "== 129600", "result": "PASS" },
+    "n2IntegratedReplayCycleCount": { "value": 129581, "gate": "== 129581", "result": "PASS" },
+    "n2MaxWallMs": { "value": 150850.509458, "gate": "<= 1800000", "result": "PASS" },
+    "n2MeanCycleMs": { "value": 0.2648648515754624, "gate": "<= 13.891", "result": "PASS" },
+    "n2P95CycleMs": { "value": 0.47, "gate": "<= 55.564", "result": "PASS" },
+    "n2RuntimeRangePct": { "value": 4.654683388558934, "gate": "<= 20", "result": "PASS" },
+    "n1ToN2MedianWallRatio": { "value": 1.9579402627795353, "gate": "<= 2.20", "result": "PASS" },
+    "n2P95RssDeltaBytes": { "value": 200785920, "gate": "<= 536870912", "result": "PASS" },
+    "n2P95HeapDeltaBytes": { "value": 249136248, "gate": "<= 268435456", "result": "PASS" },
+    "n2P95PostGcLiveHeapDeltaBytes": { "value": 17072, "gate": "<= 4194304", "result": "PASS" },
+    "retainedCycleResults": { "value": 0, "gate": "== 0", "result": "PASS" },
+    "peakBufferedProjections": { "value": 32, "gate": "<= 32", "result": "PASS" },
+    "maxSerializedCanvasBytes": { "value": 8687, "gate": "<= 262144", "result": "PASS" },
+    "fullHistoryRescans": { "value": 0, "gate": "== 0", "result": "PASS" },
+    "semanticParity": { "value": "EXACT", "gate": "EXACT", "result": "PASS" },
+    "digestParity": { "value": "EXACT", "gate": "EXACT", "result": "PASS" }
+  },
+  "diagnosticOnly": {
+    "rssGrowthFor2xN": 35291136,
+    "heapGrowthFor2xN": 71044336,
+    "note": "retired as acceptance gates under Amendment v1; recorded diagnostic-only"
+  }
+}
