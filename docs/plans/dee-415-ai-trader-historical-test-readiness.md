@@ -28,8 +28,8 @@ linearStatusFlow:
 state:
   status: in-progress
   humanApproval: AUTHORIZE_OPUS_MACRO_D_PHASE_B   # 2026-07-14 CONSUMED: Opus Macro-D Phase B independent post-review + two-WP closeout (WP11 f6cefb0, WP12 993fdab) + WP04–WP12 rolling tranche COMPLETE + transition to WP13 planning gate (no WP13 build, no PR). Prior APPROVE-HTR-MACRO-D (+ACK-none +BUILD) consumed at Phase A.
-  childPlanStatus: NOT_PLANNED   # 2026-07-14: Macro D COMPLETE; no active child plan; WP13 child plan not yet created (blocked on Human WP13 planning authorization + D-1/D-2/D-3)
-  programStatus: APPROVED_IDLE   # 2026-07-14: HTR-MACRO-D COMPLETE (Opus Phase B per-WP PASS); WP04–WP12 rolling tranche COMPLETE; awaiting Human WP13 planning gate
+  childPlanStatus: DRAFT_OR_CONFIRM_REQUIRED   # 2026-07-14: WP13–WP16 intelligence tranche PLANNED; active child controller = .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md (HTR-MACRO-E DRAFT / WP13 MIGRATION CONFIRM_REQUIRED); Build NOT authorized
+  programStatus: APPROVED_IDLE   # 2026-07-14: HTR-MACRO-D COMPLETE (Opus Phase B per-WP PASS); WP04–WP12 rolling tranche COMPLETE; WP13–WP16 intelligence tranche PLANNED; awaiting Human REVIEW_D2_D3_APPLICATION_MATRIX_AND_MACRO_E_PACKET gate
   activeWorkPackage: HTR-WP13   # next work package; planning-gate only (not authorized for build in this session)
   macroCMigrationDecision: NONE
   macroDMigrationDecision: NONE   # 2026-07-14: proven from code (rolling controller §9-D MIGRATION_DECISION_EVIDENCE); WP11 in-memory/file-sidecar runtime state + WP12 immutable file manifest, consistent with WP04–WP10; no durable trader schema added (ADR-0017 Postgres-only posture preserved)
@@ -41,7 +41,25 @@ state:
   branchCreated: true
   buildStarted: true
   currentWorkPackage: HTR-WP13   # WP11+WP12 CLOSEOUT complete; Macro D COMPLETE; rolling tranche COMPLETE; WP13 is planning-gate only
-  activeChildPlan: null   # rolling runtime-substrate controller retired at tranche completion; no active child plan
+  activeChildPlan: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md   # 2026-07-14: WP13–WP16 intelligence rolling controller (DRAFT); WP04–WP12 runtime-substrate controller retired at tranche completion
+  intelligenceTranche:
+    controller: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
+    status: DRAFT
+    macroPackages: { HTR-MACRO-E: [HTR-WP13], HTR-MACRO-F: [HTR-WP14, HTR-WP15], HTR-MACRO-G: [HTR-WP16] }
+    preferredOrderAfterWp13: [HTR-MACRO-F, HTR-MACRO-G]
+    d1: RESOLVED_RECORD_LEVEL_CHAIN
+    d2: HUMAN_DECISION_REQUIRED
+    d3: CANON_RESOLVED_EXACT_APPLICATION_PENDING_HUMAN_REVIEW
+    d4: HUMAN_DECISION_REQUIRED_BEFORE_HTR_WP14
+    d20: HUMAN_DECISION_REQUIRED_BEFORE_HTR_WP16
+    htrHistoricalIntelligenceProfileV1: PROPOSED_NOT_HUMAN_APPROVED
+    profileDigestCanonical: fac1a44f06642748c7f42bfe10790cd2e0a341fa730af1a7a83ffeec43adbec2
+    profileDigestInsertionOrder: 167e1e34378641cded150cec1640f6104d27af91638dc99e3fcf961ed9d95f13
+    timeframeEvidenceLaneAuthorityMatrixV1: PROPOSED_NOT_HUMAN_APPROVED
+    matrixDigestCanonical: 46d1d9cb4f6f146e4ffbc2ef60a3a98629ab28eb821772afd8d62745835fb5b9
+    matrixDigestInsertionOrder: bcb8b606443d54c7ad1ba279edd1e1d70b1aafb99155f3dd8ee935aab9d8898f
+    wp13MigrationDecision: CONFIRM_REQUIRED
+    buildAuthorized: NO
   workCommitSha: null   # per-WP WORK SHAs recorded in wpNNWorkCommitSha fields (Macro D: WP11 f6cefb0, WP12 993fdab); no separate macro-level WORK commit
   wp01WorkCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
   wp01PostReview: PASS
@@ -205,9 +223,9 @@ state:
     - HTR-MACRO-C
     - HTR-MACRO-D
   macroDStatus: COMPLETE   # 2026-07-14 Opus Macro-D Phase B: WP11 CLOSEOUT + WP12 CLOSEOUT; WP04–WP12 rolling runtime/data-truth tranche COMPLETE
-  activeMacroPackage: null   # HTR-MACRO-D COMPLETE 2026-07-14; no active macro
-  activeMacroWorkPackages: []
-  activeMacroStatus: null   # HTR-MACRO-D COMPLETE (Opus Phase B per-WP PASS: WP11 f6cefb0, WP12 993fdab)
+  activeMacroPackage: HTR-MACRO-E   # 2026-07-14: WP13–WP16 intelligence tranche planned; HTR-MACRO-D COMPLETE
+  activeMacroWorkPackages: [HTR-WP13]
+  activeMacroStatus: DRAFT_OR_CONFIRM_REQUIRED   # HTR-MACRO-E [HTR-WP13] planned (DRAFT); WP13 MIGRATION CONFIRM_REQUIRED; Build NOT authorized
   buildAuthorized: NO   # Macro-D Build authorization CONSUMED at Phase A and now COMPLETE; no new Build authorized; WP13 Build separately gated on Human authorization + D-1/D-2/D-3 + Timeframe×Evidence-Lane matrix + exact WP13 child plan
   # --- HTR-WP11 CLOSEOUT (Opus Macro-D Phase B, 2026-07-14) ---
   wp11WorkCommitSha: f6cefb064c562ae29f506cac5e319c826da3912b
@@ -332,15 +350,25 @@ state:
     - HTR-WP23
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 993fdaba0ffd5f66837bea1c7272507183efa973   # Macro-D Phase-A code baseline validated green (validate:canon+lint+typecheck+2568 tests+build); WP11/WP12 CLOSEOUT commits are docs-only on top of this validated code
+  lastValidatedGitSha: 993fdaba0ffd5f66837bea1c7272507183efa973   # Macro-D Phase-A code baseline validated green (validate:canon+lint+typecheck+tests+build); WP11/WP12 CLOSEOUT commits are docs-only on top of this validated code
+  baselineTestCountAtHead:   # 2026-07-14: full `pnpm test --run` at HEAD fd2f9ca (WP12 CLOSEOUT; docs-only atop 993fdab) to reconcile the reported-count divergence
+    gitSha: fd2f9cad76e409cca8a372319b0e8c572e0b9222
+    command: "pnpm test --run"
+    testFilesPassed: 432
+    testFilesSkipped: 26
+    testCasesPassed: 2570
+    testCasesSkipped: 92
+    testCasesFailed: 0
+    exitCode: 0
+    reconciliation: "Composer Macro-D report '2570 passed' is EXACT; the earlier canonical prose '2568 tests' was a documentation undercount (report typo), not a test removal/skip/weakening. Macro-C prose '2520 tests' is that macro's historical baseline. No test removed, skipped or weakened to reconcile."
   lastValidationAt: 2026-07-14
   latestValidatedBaseline: HTR-MACRO-D_PHASE_B_CLOSEOUT
   finalAuditStatus: not-started
   blockedReason: null
-  timeframeEvidenceLaneAuthorityMatrixV1: REQUIRED_BEFORE_HTR_WP13_BUILD   # RATIFY-TIMEFRAME-EVIDENCE-LANE-AUTHORITY-MATRIX-V1 (2026-07-14, §"Timeframe × Evidence Lane authority matrix v1"); exact machine-readable matrix + cadence/freshness numbers Human-reviewed during WP13 planning; adds/splits/merges/removes/reorders no WP
+  timeframeEvidenceLaneAuthorityMatrixV1: PROPOSED_NOT_HUMAN_APPROVED   # RATIFY-TIMEFRAME-EVIDENCE-LANE-AUTHORITY-MATRIX-V1 (2026-07-14); exact machine-readable matrix now PROPOSED (16 lanes = 1 primary HTX spot 1m price + 15 optional sidecar; canonical digest 46d1d9cb…) in §"WP13–WP16 intelligence tranche"; REQUIRED_BEFORE_HTR_WP13_BUILD; APPROVE-TIMEFRAME-EVIDENCE-LANE-AUTHORITY-MATRIX-V1 not yet consumed; adds/splits/merges/removes/reorders no WP
   positionPurposeAndExitContractV1: REQUIRED_BEFORE_HTR_WP14_BUILD   # RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1 (2026-07-14, §"Position purpose + exit contract v1"); no order intent without hypothesis/exit plan; adds/splits/merges/removes/reorders no WP
-  nextHumanGate: AUTHORIZE_HTR_WP13_PLANNING_AND_RESOLVE_D1_D2_D3
-  nextAction: "OPUS_CREATE_EXACT_HTR_WP13_CHILD_PLAN_AFTER_HUMAN_AUTHORIZATION. HTR-MACRO-D COMPLETE (Opus Phase B per-WP PASS: WP11 f6cefb0 CLOSEOUT, WP12 993fdab CLOSEOUT); WP04–WP12 rolling runtime/data-truth tranche COMPLETE. Program is APPROVED_IDLE at the WP13 planning gate. WP13 remains blocked from Build until D-1/D-2 resolved, exact D-3 historical-profile behavior pinned, the exact Timeframe × Evidence Lane × Cadence × Freshness × Authority matrix approved, the exact WP13 child plan Human-approved, and Build separately authorized. No WP13 build, no child plan, and no PR in this session; single final PR still gated on all 23 WPs."
+  nextHumanGate: REVIEW_D2_D3_APPLICATION_MATRIX_AND_MACRO_E_PACKET   # AUTHORIZE_HTR_WP13_PLANNING_AND_RESOLVE_D1_D2_D3 CONSUMED 2026-07-14
+  nextAction: "HUMAN_REVIEW_HTR_MACRO_E. WP13–WP16 intelligence tranche PLANNED 2026-07-14 (controller .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md; HTR-MACRO-E [WP13] / HTR-MACRO-F [WP14,15] / HTR-MACRO-G [WP16]). D-1 ALREADY_RESOLVED (record-level chain, no mature autonomous engines); D-3 CANON_RESOLVED with exact application proposed (HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1, digest fac1a44f…, pending Human review); D-2 remains a Human decision (FHV-compatible package prepared); TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1 PROPOSED (digest 46d1d9cb…, not Human-approved). WP13 MIGRATION_DECISION CONFIRM_REQUIRED. Program APPROVED_IDLE. WP13 remains blocked from Build until D-2 resolved, D-3 profile + matrix Human-approved, WP13 migration confirmed, the exact HTR-MACRO-E/WP13 packet Human-approved, and Build separately authorized (APPROVE-HTR-INTELLIGENCE-MACRO-E-BUILD). No WP13 build, no code, and no PR in this session; single final PR still gated on all 23 WPs."
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -677,6 +705,58 @@ HTR-WP22: deterministic matrix-conformance qualification
 HTR-WP23: runbook and report schema
 ```
 
+## WP13–WP16 intelligence tranche (planning, 2026-07-14 — topology, D-1/D-2/D-3, matrix v1, historical profile v1)
+
+Recorded per the Human-authorized bounded planning session `AUTHORIZE-HTR-WP13-WP16-INTELLIGENCE-TRANCHE-PLANNING` (2026-07-14). **Planning + governance reconciliation only** — this session authorized **no** production code, **no** WP13/WP14/WP15/WP16 implementation, **no** Build, **no** migration, **no** PR, **no** FHV/M9/holdout/paper/live access. The exact per-WP packets, matrix JSON and profile JSON live in the gitignored controller [`.cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md`](../../.cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md) and its staging directory; this section is the tracked governance summary.
+
+### Safe execution topology (execution-only macro grouping)
+
+```yaml
+HTR-MACRO-E: { workPackages: [HTR-WP13] }
+HTR-MACRO-F: { workPackages: [HTR-WP14, HTR-WP15] }
+HTR-MACRO-G: { workPackages: [HTR-WP16] }
+```
+
+Changes **execution topology only** — adds/removes no WP, merges no technical ownership, changes no dependency/gap ownership/per-WP WORK+CLOSEOUT requirement, permits no auto-advance between macros, authorizes no Build. **Macro E is WP13 alone** because WP13 is a foundational T2 High intelligence-chain activation that owns historical-profile activation, matrix enforcement, and the runtime shape consumed by WP14, and must independently earn WORK + Opus PASS + CLOSEOUT before Macro F Build (WP14/WP15 packets refresh from the WP13 CLOSEOUT HEAD). **Macro F groups WP14+WP15** as one sequential epistemic-consumer chain (Forecast + Decision + whyNotCash → MKB read-model), executable only after WP13 COMPLETE + D-4 + `POSITION_PURPOSE_AND_EXIT_CONTRACT_V1` + both packets refreshed + both Human-approved, with a separate WORK+Opus verdict+CLOSEOUT per WP. **Macro G keeps WP16 separate** because strategy eligibility/lifecycle gating, trial accounting and `riskMultiplier` have a different semantic owner, are gated by D-2 **and** D-20, and feed WP22 rather than the WP14→WP15→WP21 critical chain. Preferred order after WP13 closeout: **Macro F, then Macro G**. Neither future macro is authorized now.
+
+### Decision reconciliation
+
+- **D-1 — ALREADY_RESOLVED.** `APPROVE-HTR-D1: record-level-chain` (recorded above). WP13 activates only the **record-level** chain and creates **no mature autonomous engines**. The Human is **not** asked to resolve D-1 again.
+- **D-3 — CANON_RESOLVED, exact application pending.** The parent Decision Register records D-3 (historical run profile) as CANON_RESOLVED. No new architectural D-3 is invented; the remaining work is `PIN_EXACT_D3_HISTORICAL_PROFILE_APPLICATION`, proposed as `HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1` (below), i.e. **apply the canon-resolved D-3 through an exact Human-reviewed historical-profile contract**.
+- **D-2 — real Human decision.** The old recommendation (LSR + MR; BTCUSDT 1m; TM research-only) must **not** be reused blindly: the Human-approved FHV Run Contract v0 pins HTX_ONLY SPOT, **BTCUSDT and ETHUSDT**, 1m base + closed 15m/1h/4h/1d. Code audit at HEAD `fd2f9ca` (`lib/trader/intelligence/strategies/registry.ts`): `liquidity_sweep_reversal_v0` (LSR, PAPER), `mean_reversion_v0` (MR, PAPER), `trend_momentum_v0` (TM, RESEARCHING) — all three evaluated every cycle; lifecycle state is metadata only and not enforced. **Conflicts:** old rec is BTCUSDT-only (FHV needs BTCUSDT+ETHUSDT); implied Binance/1m (FHV is HTX_ONLY SPOT; Binance D-11B dataset is infra-qualification only); TM is evaluated in code but canon requires `STRAT_TM_STRATEGY_NOT_ALLOWED` (enforced at WP16, not WP13). WP13 owns the enablement set + matrix + terminal-reason + records; **strategy-version pinning and lifecycle gating remain owned by WP16**.
+
+Exact recommended D-2 token (**NOT consumed**):
+
+```text
+APPROVE-HTR-D2: venue=HTX market=SPOT symbols=BTCUSDT,ETHUSDT base=1m derived=15m,1h,4h,1d enabled=liquidity_sweep_reversal_v0,mean_reversion_v0 research-only=trend_momentum_v0 version-rule=PIN_EXACT_REGISTERED_VERSION_AT_WP16 portfolio=SHARED_MULTI_INSTRUMENT wp13-owns=enablement+matrix+terminal-reason+records wp16-owns=version-pin+lifecycle-gating+trial+riskMultiplier
+```
+
+### `HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1` (exact D-3 application — PROPOSED, not Human-approved)
+
+Explicit, versioned historical run profile that activates the record-level MI-core chain **only** through an explicit seam (`runBacktest historicalProfile → runEvaluationCycle`), **never** as a global default. Pins venueScope `HTX_ONLY`, marketType `SPOT`, symbols `[BTCUSDT, ETHUSDT]`, baseInterval `1m`, derivedIntervals `[15m,1h,4h,1d]` (`CLOSED_BARS_ONLY`); enabled intelligence stages (ingress→fusion→canvas→MTF→reconstruction→understanding→hypothesis→conviction→CDE/MSV→strategies→decision-chain terminal reason); strategy-consumer policy `DEFERRED_TO_D2`; TM research-only (STRAT_TM_STRATEGY_NOT_ALLOWED at WP16); PIT/closed-bar/terminal-reason/hypothesis-link/conviction/no-trade/deterministic-clock policies; global-default, live, paper and holdout prohibitions. Hard requirements: no live provider call; no direct provider import by timeframe/strategy/CDE; no partial HTF bar leakage; no lookahead; missing lane explicit UNAVAILABLE; 1m cannot create HTF; slow context cannot alone create BUY/SELL; every terminal path emits a reason; no strategy self-promotion; no capital authority. Canonical digest `fac1a44f06642748c7f42bfe10790cd2e0a341fa730af1a7a83ffeec43adbec2` (insertion-order `167e1e34…`).
+
+### `TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1` (PROPOSED, not Human-approved)
+
+Exact machine-readable matrix over **16 lanes** = 1 primary HTX spot 1m price lane (+ closed-bar 15m/1h/4h/1d derivation) and the **15 WP11 optional sidecar lanes** (`fear_greed_index`, `global_market_stats`, `cross_exchange_confirmation`, `order_book_snapshot`, `market_trades_snapshot`, `macro_series`, `macro_calendar_event`, `macro_probability`, `news_headline`, `news_event_cluster`, `exchange_announcement`, `protocol_release`, `blockchain_network_stats`, `regulatory_filing`, `mempool_stats`). Per lane: laneId, providerClass, marketQuestion, historicalReplaySource, refresh cadence (+grounding), max age/freshness (+grounding), PIT availability rule, timeframes allowed to read, fields it may influence, decisions forbidden, absence/degradation reason codes, fallback policy. Timeframe authority is grounded in `AI-TRADER-TARGET-ARCHITECTURE.md §10` (1D global/structural, 4H major structure/regime, 1H operational, 15m tactical setup, 1m execution-safety only). **Grounding discipline:** only the primary price lane carries grounded numbers (`DATASET_INTERVAL_DERIVATION`: 60s closed-bar); **all 15 optional sidecar lanes are `UNAVAILABLE` / `UNAVAILABLE_NO_NUMBER` for the historical profile** because no real HTX 2020–2025 PIT sidecar dataset has been acquired/qualified (WP12 gap-closure semantics; WP23 owns final dataset pinning) — no cadence/freshness value is synthesized. Hard invariants: no timeframe directly calls a provider; every lane enters through `buildHistoricalIngressContext`; HTF state changes only on closed-bar boundaries; missing lane remains explicit UNAVAILABLE; no partial HTF leakage; no lookahead. Canonical digest `46d1d9cb4f6f146e4ffbc2ef60a3a98629ab28eb821772afd8d62745835fb5b9` (insertion-order `bcb8b606…`).
+
+### HTR-WP13 migration decision
+
+```yaml
+MIGRATION_DECISION: CONFIRM_REQUIRED
+ACTIVE_MACRO_STATUS: CONFIRM_REQUIRED
+BUILD_AUTHORIZED: NO
+```
+
+WP13 introduces hypothesis records, conviction records and (potentially) an authoritative hypothesis-link persistence surface consumed by WP14; at HEAD there is no conviction table and no LD-7/forecast table, and the existing `trader_mi_hypothesis`/`trader_mi_confidence_judgment` tables are **not wired** into the evaluation cycle. Whether WP13 persists new records (new table/column/index/RLS) or remains in-memory/evidence-only is a real open question resolved from exact persistence requirements at build-plan time. An exact schema package must be prepared and Human-confirmed (`CONFIRM-HTR-MACRO-E-MIGRATION`) **before** WP13 Build if persistence is required. **No SQL was created in this planning session.**
+
+### Architecture-only WP14 / WP15 / WP16
+
+`ARCHITECTURE_ONLY`, `REFRESH_REQUIRED_AFTER_WP13_CLOSEOUT`, `BUILD_AUTHORIZED NO`. **WP14** (Macro F): Forecast + Decision + whyNotCash + CDE/LD-7 disambiguation + net economics + entry-purpose ownership (gaps 007/008/011/036; gates WP13 COMPLETE, D-4, `POSITION_PURPOSE_AND_EXIT_CONTRACT_V1`, migration). **WP15** (Macro F): MKB read-model integration, global spine tenant-read-only, tenant-scoped outcomes, eligibility via sanctioned contract (gap 010; gate WP14 COMPLETE; grouped with WP14 only after both refreshed from WP13 CLOSEOUT HEAD). **WP16** (Macro G): strategy-version pinning, lifecycle eligibility (`STRAT_TM_STRATEGY_NOT_ALLOWED`), trial accounting, `riskMultiplier`, position-purpose gating, pinned D-20 drawdown policy (gaps 020/021; gates WP13 COMPLETE, D-2, D-20, migration).
+
+### Next Human tokens (recommended; NOT consumed)
+
+`APPROVE-HTR-D2: …` · `CLARIFY-HTR-D3-HISTORICAL-PROFILE: profile-id=HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 profile-digest=fac1a44f… global-default=PROHIBITED historical-only=YES` · `APPROVE-TIMEFRAME-EVIDENCE-LANE-AUTHORITY-MATRIX-V1: matrix-digest=46d1d9cb…` · `APPROVE-HTR-INTELLIGENCE-MACRO-E: wp13-historical-intelligence-chain` · `CONFIRM-HTR-MACRO-E-MIGRATION: <exact schema package>`. Build approval remains a separate later token `APPROVE-HTR-INTELLIGENCE-MACRO-E-BUILD`.
+
 ## Position purpose + exit contract v1 (`RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1`, 2026-07-14)
 
 ```text
@@ -792,7 +872,7 @@ A single PR is opened only after HTR-WP23, final full validation, and the final 
 
 **HTR-MACRO-D is COMPLETE** (2026-07-14, Opus Macro-D Phase-B independent post-review, per-WP PASS). HTR-WP11 (PIT provider context + gateway enforcement + absent-lane): WORK `f6cefb0` + CLOSEOUT `c63453d`; single sanctioned `buildHistoricalIngressContext`, sidecar-v3 PIT selection, all 15 optional lanes explicit incl. UNAVAILABLE/`SIDECAR_LANE_ABSENT`, no live provider/network call, replay/live parity; accepted evidence `replay-runs/RI-P7/htr-wp11-pit-provider-context/` (manifest digest `b8f043ac…`, reproduced); post-WORK changes classified WP11_POST_WORK_NON_SEMANTIC_CORRECTION (no fabricated availability, no future evidence reachable). HTR-WP12 (ingress bar-integrity gate + immutable versioned FHV dataset manifest): WORK `993fdab` + CLOSEOUT (this commit); nine fail-closed integrity classes gate every historical loader before first Canvas advance; `fhv-dataset-manifest/v1` (HTX_ONLY SPOT BTCUSDT+ETHUSDT, 1m base + closed-bar 15m/1h/4h/1d, UTC half-open partitions, `FHV_GAP_POLICY_V1` zero-tolerance) semantic digest `fd7d4895…`; blind holdout `RESERVED_SEALED_NOT_ACCESSED`. HTR-GAP-012/013 CLOSED at WP11; HTR-GAP-014/015 CLOSED at WP12. Gap-closure semantics: the fail-closed gate + versioned manifest contract now exist; the real HTX 2020–2025 dataset has **not** been acquired or qualified; the full FHV remains unauthorized; HTR-WP23 owns final runbook/manifest pinning + real-run preflight.
 
-The **WP04–WP12 rolling runtime/data-truth tranche is COMPLETE** and the program is `APPROVED_IDLE` at the **HTR-WP13 planning gate**. WP13 (intelligence-chain activation, historical run profile) remains **blocked from Build** until D-1/D-2 are resolved, exact D-3 historical-profile behavior is pinned, the exact Timeframe × Evidence Lane × Cadence × Freshness × Authority matrix (`TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1`) is approved, the exact WP13 child plan is Human-approved, and Build is separately authorized. No WP13 code, no WP13 child plan and no PR were created in this Phase-B session; the single final PR remains gated on all 23 WPs. Completed WORK commits: HTR-WP01 `6600708`; WP02 `7ec02dd`; WP03 `35283ed`; WP04 `b3abe7b`; WP05 `f90faa9`; WP06 `24eb7f9`; WP07 `10f2500`; WP08 `0c4b8c3`; WP09 `46820ac`; WP10 `befa6c1`; WP11 `f6cefb0`; WP12 `993fdab`. This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
+The **WP04–WP12 rolling runtime/data-truth tranche is COMPLETE** and the **WP13–WP16 intelligence tranche is PLANNED** (2026-07-14, `AUTHORIZE-HTR-WP13-WP16-INTELLIGENCE-TRANCHE-PLANNING` consumed; see §"WP13–WP16 intelligence tranche"). The program is `APPROVED_IDLE` at the **`REVIEW_D2_D3_APPLICATION_MATRIX_AND_MACRO_E_PACKET`** Human gate. Topology: **HTR-MACRO-E [WP13]** (exact packet, DRAFT) / **HTR-MACRO-F [WP14,WP15]** (architecture-only) / **HTR-MACRO-G [WP16]** (architecture-only), in `.cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md`. D-1 is **ALREADY_RESOLVED** (record-level chain, no mature autonomous engines); D-3 is **CANON_RESOLVED** with an exact application proposed (`HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1`, digest `fac1a44f…`, pending Human review); D-2 remains a Human decision (FHV-compatible package prepared); `TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1` is **PROPOSED** (16 lanes, digest `46d1d9cb…`, not Human-approved). WP13 (intelligence-chain activation, historical run profile) remains **blocked from Build** until D-2 is resolved, the D-3 profile + matrix are Human-approved, the WP13 `MIGRATION_DECISION: CONFIRM_REQUIRED` is resolved, the exact HTR-MACRO-E/WP13 packet is Human-approved, and Build is separately authorized (`APPROVE-HTR-INTELLIGENCE-MACRO-E-BUILD`). No WP13 code and no PR were created in this planning session; the single final PR remains gated on all 23 WPs. Completed WORK commits: HTR-WP01 `6600708`; WP02 `7ec02dd`; WP03 `35283ed`; WP04 `b3abe7b`; WP05 `f90faa9`; WP06 `24eb7f9`; WP07 `10f2500`; WP08 `0c4b8c3`; WP09 `46820ac`; WP10 `befa6c1`; WP11 `f6cefb0`; WP12 `993fdab`. This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
 
 ## Acceptance (whole program)
 
