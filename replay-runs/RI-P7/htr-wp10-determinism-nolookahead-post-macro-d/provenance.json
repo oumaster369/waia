@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "htr_wp10_determinism_provenance_v1",
+  "gitSha": "521ddd11a47a735769f04aa52d0139cf2075d4dc",
+  "dirtyTree": false,
+  "harnessSourcePath": "lib/trader/research/wp10-determinism-evidence-harness.ts",
+  "harnessSourceSha256": "077e7f2a0ceb58f19b56232c187361f526b65de58425e87e38e7e20e1a2c4409",
+  "historicalSealPath": "replay-runs/RI-P7/htr-wp10-determinism-nolookahead",
+  "historicalAcceptedArtifactDigest": "fa5def3786dd85fe790c5623c09d76f31b9b67c866409e8fa8ae1ad91274926b",
+  "historicalBinding": "WP10_ERA_ACCEPTED_SEAL",
+  "candidateBinding": "POST_MACRO_D_CODE_AT_EXACT_WORK_SHA",
+  "candidateStatus": "POST_MACRO_D_WP10_COMPATIBILITY_CANDIDATE_NOT_ACCEPTED",
+  "candidateSemanticDigests": {
+    "decisionTraceDigest": "e6ca8aceaaacf6aad501f319d19bfe497db1103725f84ce9080c4854890c17eb",
+    "reproDigest": "e6c7fc0459378dda18b8a213e2801db6c960ce349c97ce86fcf4c3617f8baa48",
+    "artifactDigest": "3d3f7cf348228f56e294a55dce027e426957250036b4aa0f2f993d5a926b7e89"
+  },
+  "reproductionCommand": "pnpm trader:replay:wp10-evidence"
+}
