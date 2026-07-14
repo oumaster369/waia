@@ -27,22 +27,22 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: APPROVE-HTR-MACRO-D   # 2026-07-14 CONSUMED: APPROVE-HTR-MACRO-D: wp11-pit-provider-gateway-wp12-ingress-manifest + ACK-HTR-MACRO-D-MIGRATION: none + APPROVE-HTR-MACRO-D-BUILD; Macro D APPROVED + Build-authorized
-  childPlanStatus: APPROVED_EXACT   # 2026-07-14: HTR-MACRO-D (WP11+WP12) exact packets (rolling controller §9-D) Human-approved
-  programStatus: WP_ACTIVE   # 2026-07-14: HTR-MACRO-D APPROVED + BUILD_AUTHORIZED YES; Composer executes Macro D Phase A
-  activeWorkPackage: HTR-WP11   # first WP of the approved active macro HTR-MACRO-D
+  humanApproval: AUTHORIZE_OPUS_MACRO_D_PHASE_B   # 2026-07-14 CONSUMED: Opus Macro-D Phase B independent post-review + two-WP closeout (WP11 f6cefb0, WP12 993fdab) + WP04–WP12 rolling tranche COMPLETE + transition to WP13 planning gate (no WP13 build, no PR). Prior APPROVE-HTR-MACRO-D (+ACK-none +BUILD) consumed at Phase A.
+  childPlanStatus: NOT_PLANNED   # 2026-07-14: Macro D COMPLETE; no active child plan; WP13 child plan not yet created (blocked on Human WP13 planning authorization + D-1/D-2/D-3)
+  programStatus: APPROVED_IDLE   # 2026-07-14: HTR-MACRO-D COMPLETE (Opus Phase B per-WP PASS); WP04–WP12 rolling tranche COMPLETE; awaiting Human WP13 planning gate
+  activeWorkPackage: HTR-WP13   # next work package; planning-gate only (not authorized for build in this session)
   macroCMigrationDecision: NONE
   macroDMigrationDecision: NONE   # 2026-07-14: proven from code (rolling controller §9-D MIGRATION_DECISION_EVIDENCE); WP11 in-memory/file-sidecar runtime state + WP12 immutable file manifest, consistent with WP04–WP10; no durable trader schema added (ADR-0017 Postgres-only posture preserved)
   macroCCodeBaselineHead: a8a709ff53f74649b5c5f39e0ba8e00af1e113de   # HTR-WP08 CLOSEOUT — latest validated production baseline
   macroDCodeBaselineHead: 1ac0e6a8a7318be5b068dcb833f1a00ed32440a9   # HTR-WP10 CLOSEOUT — latest fully validated production-code baseline (Macro D refresh baseline)
   macroDPreapprovalHead: 6d102f05d76fba2efd99b363799dde18a0668a71   # Macro-D pre-approval reconciliation governance commit
-  composerTerminalState: READY_FOR_COMPOSER_MACRO_D_BUILD
+  composerTerminalState: MACRO_D_PHASE_B_CLOSEOUT_COMPLETE   # 2026-07-14: Composer Phase A delivered WP11 f6cefb0 + WP12 993fdab; Opus Phase B post-review PASS + two closeout commits; awaiting Human WP13 planning authorization
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  currentWorkPackage: HTR-WP11   # WP09+WP10 CLOSEOUT complete; Macro C COMPLETE; advanced to WP11
-  activeChildPlan: .cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md
-  workCommitSha: null   # no active-macro WORK commit yet — HTR-MACRO-D is APPROVED + Build-authorized but Composer Phase A not started (not implemented); per-WP WORK SHAs are recorded in wpNNWorkCommitSha fields (e.g. WP05 f90faa9, WP09 46820ac, WP10 befa6c1)
+  currentWorkPackage: HTR-WP13   # WP11+WP12 CLOSEOUT complete; Macro D COMPLETE; rolling tranche COMPLETE; WP13 is planning-gate only
+  activeChildPlan: null   # rolling runtime-substrate controller retired at tranche completion; no active child plan
+  workCommitSha: null   # per-WP WORK SHAs recorded in wpNNWorkCommitSha fields (Macro D: WP11 f6cefb0, WP12 993fdab); no separate macro-level WORK commit
   wp01WorkCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
   wp01PostReview: PASS
   wp01Validation:
@@ -203,12 +203,12 @@ state:
     - HTR-MACRO-A
     - HTR-MACRO-B
     - HTR-MACRO-C
-  activeMacroPackage: HTR-MACRO-D
-  activeMacroWorkPackages:
-    - HTR-WP11
-    - HTR-WP12
-  activeMacroStatus: APPROVED   # 2026-07-14: HTR-MACRO-D Human-approved (APPROVE-HTR-MACRO-D consumed); MACRO_D_MIGRATION_DECISION NONE
-  buildAuthorized: YES   # 2026-07-14: HTR-MACRO-D only (APPROVE-HTR-MACRO-D-BUILD consumed); Composer executes WP11 then WP12; no auto-advance to Macro E/WP13; single final PR still gated on all 23 WPs
+    - HTR-MACRO-D
+  macroDStatus: COMPLETE   # 2026-07-14 Opus Macro-D Phase B: WP11 CLOSEOUT + WP12 CLOSEOUT; WP04–WP12 rolling runtime/data-truth tranche COMPLETE
+  activeMacroPackage: null   # HTR-MACRO-D COMPLETE 2026-07-14; no active macro
+  activeMacroWorkPackages: []
+  activeMacroStatus: null   # HTR-MACRO-D COMPLETE (Opus Phase B per-WP PASS: WP11 f6cefb0, WP12 993fdab)
+  buildAuthorized: NO   # Macro-D Build authorization CONSUMED at Phase A and now COMPLETE; no new Build authorized; WP13 Build separately gated on Human authorization + D-1/D-2/D-3 + Timeframe×Evidence-Lane matrix + exact WP13 child plan
   # --- HTR-WP11 CLOSEOUT (Opus Macro-D Phase B, 2026-07-14) ---
   wp11WorkCommitSha: f6cefb064c562ae29f506cac5e319c826da3912b
   wp11OpusPostReview: PASS
@@ -227,6 +227,32 @@ state:
     - HTR-GAP-012
     - HTR-GAP-013
   wp11Validation:
+    validateCanon: PASS
+    lint: PASS
+    typecheck: PASS
+    tests: PASS
+    build: PASS
+  # --- HTR-WP12 CLOSEOUT (Opus Macro-D Phase B, 2026-07-14) ---
+  wp12WorkCommitSha: 993fdaba0ffd5f66837bea1c7272507183efa973
+  wp12OpusPostReview: PASS
+  wp12AcceptedEvidencePath: replay-runs/RI-P7/htr-wp12-ingress-manifest/
+  wp12AcceptedEvidenceGitSha: f6cefb064c562ae29f506cac5e319c826da3912b   # gitSha recorded in accepted WP12 evidence (dirtyTree: true) — generated atop f6cefb0 with uncommitted WP12 changes, then committed as WP12 WORK 993fdab; semantic digests reproduce byte-identically at 993fdab (verified via pnpm trader:dataset:manifest)
+  wp12EvidenceBundleManifestDigest: fd7d489595f8fc20e4311c74e5d82b2957e7cca5b80319b8cb8d5f0893544663
+  fhvDatasetManifestSemanticDigest: fd7d489595f8fc20e4311c74e5d82b2957e7cca5b80319b8cb8d5f0893544663   # SAME artifact — the WP12 evidence-bundle "Manifest digest" IS fhv-dataset-manifest.json manifestSemanticDigest (self-digest exclusion); intentional, not accidental conflation
+  fhvGapPolicyV1Digest:
+    reportedInsertionOrder: 25342542e90b183112f6b5918a75cd55e1f12b98860f4d8f8a79ebe685cfb330   # = sha256(JSON.stringify(FHV_GAP_POLICY_V1)); Composer-reported label, NOT stored in any committed evidence file
+    canonicalStableDigest: 3699f03b15f0a943592ce33c49486c1bf504e7a18de3b548ad44b37dd87b9f23   # = computeStableJsonDigest(FHV_GAP_POLICY_V1) (sorted-key canonical); both fingerprint the identical exact gap-policy object recorded in the WP12 evidence
+  fhvGapPolicyV1Values: { policyId: FHV_GAP_POLICY_V1, maxTotalMissingBars: 0, maxSingleGapBars: 0, interpolationAllowed: false, syntheticBarInsertionAllowed: false, silentGapDropAllowed: false, crossVenueSubstitutionAllowed: false, onAnyGap: HTR_WP12_DATASET_GAP_POLICY_DECISION_REQUIRED }
+  wp12LoaderCoverage: [HistoricalBarReplaySource, HistoricalBarSource, loadQualificationBars]   # each invokes assertIngestBarsIntegrityOrThrow before first Canvas advance; FixtureBarReplaySource is purely synthetic (not a historical loader)
+  wp12BarIntegrityGateClasses: [identity, non-monotonic, duplicate, interval-misalignment, non-finite-OHLCV, negative-volume, invalid-OHLC-relation, malformed-provenance, digest-mismatch]   # nine fail-closed classes; no warning-only continuation
+  wp12HoldoutNoRead: RESERVED_SEALED_NOT_ACCESSED   # blindHoldout 2025-01-01..2026-01-01 SEALED_NOT_ACCESSED; only opaque sourceChecksumSha256/holdoutSeal metadata; synthetic test objects
+  wp12Wp09NonInvalidation: true   # integrity gate acts at load time before benchmark execution; no D-11B rerun, no WP09 evidence/threshold/host/dataset/cycle-count change
+  wp12GapClosureSemantics: "fail-closed gate + versioned manifest contract now EXIST; real HTX 2020–2025 dataset NOT yet acquired/qualified; full FHV remains unauthorized; WP23 owns final runbook/manifest pinning + real-run preflight"
+  wp12TerminalState: WORK_PACKAGE_COMPLETE
+  wp12GapsClosed:
+    - HTR-GAP-014
+    - HTR-GAP-015
+  wp12Validation:
     validateCanon: PASS
     lint: PASS
     typecheck: PASS
@@ -291,8 +317,8 @@ state:
     - HTR-WP09
     - HTR-WP10
     - HTR-WP11
-  remainingWorkPackages:
     - HTR-WP12
+  remainingWorkPackages:
     - HTR-WP13
     - HTR-WP14
     - HTR-WP15
@@ -306,11 +332,15 @@ state:
     - HTR-WP23
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 1ac0e6a8a7318be5b068dcb833f1a00ed32440a9
+  lastValidatedGitSha: 993fdaba0ffd5f66837bea1c7272507183efa973   # Macro-D Phase-A code baseline validated green (validate:canon+lint+typecheck+2568 tests+build); WP11/WP12 CLOSEOUT commits are docs-only on top of this validated code
   lastValidationAt: 2026-07-14
+  latestValidatedBaseline: HTR-MACRO-D_PHASE_B_CLOSEOUT
   finalAuditStatus: not-started
   blockedReason: null
-  nextAction: "COMPOSER_EXECUTE_HTR_MACRO_D_PHASE_A. HTR-MACRO-D APPROVED + BUILD_AUTHORIZED YES (APPROVE-HTR-MACRO-D + ACK-HTR-MACRO-D-MIGRATION: none + APPROVE-HTR-MACRO-D-BUILD consumed 2026-07-14; MACRO_D_MIGRATION_DECISION NONE). Composer executes the exact §9-D packet (WP11 PIT provider context + gateway enforcement + absent-lane, then WP12 ingress bar-integrity gate + immutable versioned FHV dataset manifest), one WORK commit per WP, full validation at macro end, STOP at AWAITING_OPUS_MACRO_POST_REVIEW. No CLOSEOUT in Phase A; no auto-advance to WP13; no PR. FHV inside-out + multi-account/multi-position readiness contracts (v1) ratified onto WP13–WP23; LIVE_MINIMUM_CAPITAL_DECISION deferred (does not block Macro D)."
+  timeframeEvidenceLaneAuthorityMatrixV1: REQUIRED_BEFORE_HTR_WP13_BUILD   # RATIFY-TIMEFRAME-EVIDENCE-LANE-AUTHORITY-MATRIX-V1 (2026-07-14, §"Timeframe × Evidence Lane authority matrix v1"); exact machine-readable matrix + cadence/freshness numbers Human-reviewed during WP13 planning; adds/splits/merges/removes/reorders no WP
+  positionPurposeAndExitContractV1: REQUIRED_BEFORE_HTR_WP14_BUILD   # RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1 (2026-07-14, §"Position purpose + exit contract v1"); no order intent without hypothesis/exit plan; adds/splits/merges/removes/reorders no WP
+  nextHumanGate: AUTHORIZE_HTR_WP13_PLANNING_AND_RESOLVE_D1_D2_D3
+  nextAction: "OPUS_CREATE_EXACT_HTR_WP13_CHILD_PLAN_AFTER_HUMAN_AUTHORIZATION. HTR-MACRO-D COMPLETE (Opus Phase B per-WP PASS: WP11 f6cefb0 CLOSEOUT, WP12 993fdab CLOSEOUT); WP04–WP12 rolling runtime/data-truth tranche COMPLETE. Program is APPROVED_IDLE at the WP13 planning gate. WP13 remains blocked from Build until D-1/D-2 resolved, exact D-3 historical-profile behavior pinned, the exact Timeframe × Evidence Lane × Cadence × Freshness × Authority matrix approved, the exact WP13 child plan Human-approved, and Build separately authorized. No WP13 build, no child plan, and no PR in this session; single final PR still gated on all 23 WPs."
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -349,11 +379,11 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed; HTR-WP03 COMPLETE — WORK COMMIT `35283ed`, HTR-GAP-024 baseline recorded (OPEN, closure HTR-WP22); HTR-WP04 COMPLETE — WORK COMMIT `b3abe7b`, Opus post-review PASS, validation PASS, streaming-evidence baseline recorded, HTR-GAP-005/026 remain OPEN, closure HTR-WP22; **HTR-WP05 COMPLETE** — WORK COMMIT `f90faa9`, Opus Phase-B post-review PASS, semantic parity digest equality proven (`30e9b40…`), HTR-GAP-027/029 remain OPEN, closure HTR-WP22, MIGRATION_DECISION NONE; **HTR-MACRO-A COMPLETE**; **HTR-MACRO-B COMPLETE** — HTR-WP06 (`24eb7f9`), HTR-WP07 (`10f2500`), HTR-WP08 (`0c4b8c3`), Opus Phase-B per-WP PASS, full validation green, evidence CANVAS_STATE_OK/CANVAS_MTF_PARITY_OK/RECONSTRUCTION_ORACLE_PARITY_OK (22/22 exact, 0 divergence, FULL_HISTORY_RESCANS 0, linear work), HTR-GAP-001/002/003 OPEN closure HTR-WP09, HTR-GAP-004 OPEN closure HTR-WP10, no runtime cutover, MIGRATION_DECISION NONE; **HTR-MACRO-C COMPLETE (2026-07-14, Opus Phase-B per-WP PASS): HTR-WP09 WORK `46820ac` + CLOSEOUT `3a0962f` (D-11B PASS under Memory Gate Amendment v1, bound to `7c532f5`; accepted evidence promoted), HTR-WP10 WORK `befa6c1` + validation correction `2987f37` + CLOSEOUT `1ac0e6a`; HTR-GAP-001/002/003/004/025/031 CLOSED; **HTR-MACRO-D (WP11–12) APPROVED + BUILD_AUTHORIZED YES** (2026-07-14; `APPROVE-HTR-MACRO-D` + `ACK-HTR-MACRO-D-MIGRATION: none` + `APPROVE-HTR-MACRO-D-BUILD` consumed; `MACRO_D_MIGRATION_DECISION NONE`; Composer executes the exact §9-D packet next)**) |
+| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed; HTR-WP03 COMPLETE — WORK COMMIT `35283ed`, HTR-GAP-024 baseline recorded (OPEN, closure HTR-WP22); HTR-WP04 COMPLETE — WORK COMMIT `b3abe7b`, Opus post-review PASS, validation PASS, streaming-evidence baseline recorded, HTR-GAP-005/026 remain OPEN, closure HTR-WP22; **HTR-WP05 COMPLETE** — WORK COMMIT `f90faa9`, Opus Phase-B post-review PASS, semantic parity digest equality proven (`30e9b40…`), HTR-GAP-027/029 remain OPEN, closure HTR-WP22, MIGRATION_DECISION NONE; **HTR-MACRO-A COMPLETE**; **HTR-MACRO-B COMPLETE** — HTR-WP06 (`24eb7f9`), HTR-WP07 (`10f2500`), HTR-WP08 (`0c4b8c3`), Opus Phase-B per-WP PASS, full validation green, evidence CANVAS_STATE_OK/CANVAS_MTF_PARITY_OK/RECONSTRUCTION_ORACLE_PARITY_OK (22/22 exact, 0 divergence, FULL_HISTORY_RESCANS 0, linear work), HTR-GAP-001/002/003 OPEN closure HTR-WP09, HTR-GAP-004 OPEN closure HTR-WP10, no runtime cutover, MIGRATION_DECISION NONE; **HTR-MACRO-C COMPLETE (2026-07-14, Opus Phase-B per-WP PASS): HTR-WP09 WORK `46820ac` + CLOSEOUT `3a0962f` (D-11B PASS under Memory Gate Amendment v1, bound to `7c532f5`; accepted evidence promoted), HTR-WP10 WORK `befa6c1` + validation correction `2987f37` + CLOSEOUT `1ac0e6a`; HTR-GAP-001/002/003/004/025/031 CLOSED; **HTR-MACRO-D (WP11–12) COMPLETE (2026-07-14, Opus Macro-D Phase-B per-WP PASS): HTR-WP11 WORK `f6cefb0` + CLOSEOUT `c63453d`, HTR-WP12 WORK `993fdab` + CLOSEOUT (this commit); HTR-GAP-012/013/014/015 CLOSED; `MACRO_D_MIGRATION_DECISION NONE`; WP04–WP12 rolling runtime/data-truth tranche COMPLETE; program `APPROVED_IDLE` at the WP13 planning gate — no WP13 build/child-plan/PR; real HTX 2020–2025 dataset not acquired/qualified (WP23 owns final pinning)**) |
 
 ## Approved decisions (recorded)
 
-`APPROVE-HTR-PROGRAM`; `APPROVE-HTR-ACTIVATION: research-only-org0` (D-14); `ACK-HTR-CORE: m1-closed` (D-15); `APPROVE-HTR-D13: htr-supersedes` (D-13); `APPROVE-HTR-RUNTIME-SUBSTRATE: deterministic-historical-readiness-substrate` (D-16); `APPROVE-HTR-TARGET-SUBSET: scoped-htr-ratification` (D-17); `APPROVE-HTR-D1: record-level-chain` (D-1); `APPROVE-HTR-EPISTEMIC-CLOSURE: record-level` (D-18); `APPROVE-HTR-EXECSERVER: option-a-code-ready` (D-19); `APPROVE-HTR-D10: divergence-register-v1` (D-10); `APPROVE-HTR-EXECUTION-TOPOLOGY: one-integration-issue-one-branch-one-final-pr-23-sequential-child-build-plans`; **`APPROVE-HTR-D11B`** (D-11B — 2026-07-13, exact token in §"D-11B decision" below); **`APPROVE-HTR-WP09-CLEAN-COMMIT-QUALIFICATION-SEQUENCE`** (2026-07-13); **`APPROVE-HTR-MACRO-C: wp09-canvas-cutover-wp10-determinism`** + **`ACK-HTR-MACRO-C-MIGRATION: none`** + **`APPROVE-HTR-MACRO-C-BUILD`** (2026-07-13 — CONSUMED; Macro C Build authorized then, now COMPLETE 2026-07-14 with `BUILD_AUTHORIZED: NO`); **`APPROVE-FHV-RUN-CONTRACT-V0`** (2026-07-13 — Full Historical Validation Run Contract v0, a future-run contract that does NOT authorize the run during DEE-415); **`APPROVE-HTR-WP09-WP10-QUALIFICATION-BOUNDARY`** (2026-07-13 — WP09 evidence bound to the WP09 WORK commit; pre-approved WP10 determinism/no-lookahead changes may follow; no WP09 harness/Canvas/threshold/dataset/host mutation; no second D-11B attempt; final runtime re-proof owned by WP22); **`CLARIFY-FHV-RUN-CONTRACT-V0`** (2026-07-13 — venue HTX_ONLY, spot, BTCUSDT+ETHUSDT; the Binance D-11B dataset is infrastructure qualification only); **`APPROVE-HTR-MACRO-D: wp11-pit-provider-gateway-wp12-ingress-manifest`** + **`ACK-HTR-MACRO-D-MIGRATION: none`** + **`APPROVE-HTR-MACRO-D-BUILD`** (2026-07-14 — CONSUMED; HTR-MACRO-D APPROVED / `MACRO_D_MIGRATION_DECISION: NONE` / `BUILD_AUTHORIZED: YES` for Macro D only; Composer executes the exact §9-D packet, no auto-advance to WP13, single final PR still gated on all 23 WPs); **`RATIFY-FHV-INSIDE-OUT-VALIDATION-CONTRACT-V1`** (2026-07-14 — cross-cutting future-FHV contract, §"FHV inside-out validation contract v1"; maps onto WP13–WP23; adds no WP and no current implementation scope); **`RATIFY-MULTI-ACCOUNT-MULTI-POSITION-READINESS-CONTRACT-V1`** (2026-07-14 — cross-cutting offline readiness contract, §"Multi-account / multi-position readiness contract v1"; maps onto WP17–WP23; offline architecture/readiness qualification only — no live multi-account operation, no customer capital). Activation boundary: Org-0 non-custodial research/historical only; no live, capital, holdout, external activation, agent authorization, gate opening, or Execution Server mutation. WP-local decisions D-11A/D-2/D-4/D-5/D-12 stop at their owning work package's Human gate on the same branch; **D-11B is RESOLVED (Human-approved)**.
+`APPROVE-HTR-PROGRAM`; `APPROVE-HTR-ACTIVATION: research-only-org0` (D-14); `ACK-HTR-CORE: m1-closed` (D-15); `APPROVE-HTR-D13: htr-supersedes` (D-13); `APPROVE-HTR-RUNTIME-SUBSTRATE: deterministic-historical-readiness-substrate` (D-16); `APPROVE-HTR-TARGET-SUBSET: scoped-htr-ratification` (D-17); `APPROVE-HTR-D1: record-level-chain` (D-1); `APPROVE-HTR-EPISTEMIC-CLOSURE: record-level` (D-18); `APPROVE-HTR-EXECSERVER: option-a-code-ready` (D-19); `APPROVE-HTR-D10: divergence-register-v1` (D-10); `APPROVE-HTR-EXECUTION-TOPOLOGY: one-integration-issue-one-branch-one-final-pr-23-sequential-child-build-plans`; **`APPROVE-HTR-D11B`** (D-11B — 2026-07-13, exact token in §"D-11B decision" below); **`APPROVE-HTR-WP09-CLEAN-COMMIT-QUALIFICATION-SEQUENCE`** (2026-07-13); **`APPROVE-HTR-MACRO-C: wp09-canvas-cutover-wp10-determinism`** + **`ACK-HTR-MACRO-C-MIGRATION: none`** + **`APPROVE-HTR-MACRO-C-BUILD`** (2026-07-13 — CONSUMED; Macro C Build authorized then, now COMPLETE 2026-07-14 with `BUILD_AUTHORIZED: NO`); **`APPROVE-FHV-RUN-CONTRACT-V0`** (2026-07-13 — Full Historical Validation Run Contract v0, a future-run contract that does NOT authorize the run during DEE-415); **`APPROVE-HTR-WP09-WP10-QUALIFICATION-BOUNDARY`** (2026-07-13 — WP09 evidence bound to the WP09 WORK commit; pre-approved WP10 determinism/no-lookahead changes may follow; no WP09 harness/Canvas/threshold/dataset/host mutation; no second D-11B attempt; final runtime re-proof owned by WP22); **`CLARIFY-FHV-RUN-CONTRACT-V0`** (2026-07-13 — venue HTX_ONLY, spot, BTCUSDT+ETHUSDT; the Binance D-11B dataset is infrastructure qualification only); **`APPROVE-HTR-MACRO-D: wp11-pit-provider-gateway-wp12-ingress-manifest`** + **`ACK-HTR-MACRO-D-MIGRATION: none`** + **`APPROVE-HTR-MACRO-D-BUILD`** (2026-07-14 — CONSUMED; HTR-MACRO-D APPROVED / `MACRO_D_MIGRATION_DECISION: NONE` / `BUILD_AUTHORIZED: YES` for Macro D only; Composer executes the exact §9-D packet, no auto-advance to WP13, single final PR still gated on all 23 WPs); **`RATIFY-FHV-INSIDE-OUT-VALIDATION-CONTRACT-V1`** (2026-07-14 — cross-cutting future-FHV contract, §"FHV inside-out validation contract v1"; maps onto WP13–WP23; adds no WP and no current implementation scope); **`RATIFY-MULTI-ACCOUNT-MULTI-POSITION-READINESS-CONTRACT-V1`** (2026-07-14 — cross-cutting offline readiness contract, §"Multi-account / multi-position readiness contract v1"; maps onto WP17–WP23; offline architecture/readiness qualification only — no live multi-account operation, no customer capital); **`RATIFY-TIMEFRAME-EVIDENCE-LANE-AUTHORITY-MATRIX-V1`** (2026-07-14 — cross-cutting future acceptance requirement, §"Timeframe × Evidence Lane authority matrix v1 (`RATIFY-TIMEFRAME-EVIDENCE-LANE-AUTHORITY-MATRIX-V1`)"; `REQUIRED_BEFORE_HTR_WP13_BUILD`; maps onto WP13/WP14/WP21/WP22/WP23; adds/splits/merges/removes/reorders no WP; exact cadence/freshness numbers grounded + Human-reviewed during WP13 planning, not this session); **`RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1`** (2026-07-14 — cross-cutting future acceptance requirement, §"Position purpose + exit contract v1 (`RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1`)"; `REQUIRED_BEFORE_HTR_WP14_BUILD`; maps onto WP14/WP16/WP17/WP18/WP20/WP21/WP22/WP23; adds/splits/merges/removes/reorders no WP). Activation boundary: Org-0 non-custodial research/historical only; no live, capital, holdout, external activation, agent authorization, gate opening, or Execution Server mutation. WP-local decisions D-11A/D-2/D-4/D-5/D-12 stop at their owning work package's Human gate on the same branch; **D-11B is RESOLVED (Human-approved)**.
 
 ## D-11B decision (Human-approved) + HTR-MACRO-C governance state
 
@@ -614,6 +644,78 @@ HTR-WP22: deterministic multi-account/multi-position stress fixture; checkpoint/
 HTR-WP23: capacity envelope; per-account checkpoint paths; per-account reports; aggregate operator report; restart + kill-switch procedures
 ```
 
+## Timeframe × Evidence Lane authority matrix v1 (`RATIFY-TIMEFRAME-EVIDENCE-LANE-AUTHORITY-MATRIX-V1`, 2026-07-14)
+
+```text
+TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1:
+REQUIRED_BEFORE_HTR_WP13_BUILD
+```
+
+`TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1` is a Human-ratified future planning + acceptance requirement. It **adds, splits, merges, removes and reorders no work package** (the frozen 23-WP decomposition is unchanged) and authorizes **no** implementation of WP13–WP23 in this session. The exact machine-readable matrix must be grounded and Human-reviewed during WP13 planning — **do not invent arbitrary cadence/freshness numbers here.**
+
+**Per-lane definition.** For every evidence lane the future matrix must define: `laneId`; source/provider class; market question answered; refresh cadence or event trigger; maximum age/freshness; PIT availability rule; timeframes allowed to read it; fields/state it may influence; decisions it is forbidden to make; absence/degradation reason code; historical replay source.
+
+**Hard invariants.**
+
+```text
+no timeframe directly calls a provider
+1D/4H/1H/15m own structure/scenario context
+1m owns execution-safety precision only
+1m cannot create higher-timeframe understanding
+HTF state changes only on closed-bar boundaries
+slow context cannot independently create BUY/SELL
+missing lane is explicit UNAVAILABLE
+```
+
+**Ownership mapping (existing WPs only; no new WP):**
+
+```yaml
+HTR-WP13: exact matrix definition and historical-profile enforcement
+HTR-WP14: Decision/Forecast records show which lanes influenced the decision
+HTR-WP21: outcome/calibration attribution by evidence lane
+HTR-WP22: deterministic matrix-conformance qualification
+HTR-WP23: runbook and report schema
+```
+
+## Position purpose + exit contract v1 (`RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1`, 2026-07-14)
+
+```text
+POSITION_PURPOSE_AND_EXIT_CONTRACT_V1:
+REQUIRED_BEFORE_HTR_WP14_BUILD
+```
+
+`POSITION_PURPOSE_AND_EXIT_CONTRACT_V1` is a Human-ratified future planning + acceptance requirement. It **adds, splits, merges, removes and reorders no work package** and authorizes **no** implementation of the later-WP requirements now.
+
+**No order intent may eventually exist without:** `hypothesisId`, `originalThesis`, `expectedPath`, `forecastHorizon`, `entryReason`, `entryCondition`, `invalidationCondition`, `initialStopModel`, `targetModel`, `optionalPartialTargets`, `maximumHoldingTime`, `whyNotCash`, `riskAmount`, `expectedRewardAfterCosts`, `decisionId`, `forecastId`, `evidenceDigest`.
+
+**Position management must preserve:** original thesis; current thesis state; expected path versus actual path; remaining reward/risk; time expiry; invalidation; target fulfilment; partial exits; breakeven/trailing rules; account and portfolio risk state.
+
+**Hard invariants.**
+
+```text
+no purposeless position
+no order without an exit plan
+stop may not widen risk
+profitable position may close when thesis fails
+losing position may remain only while thesis and risk remain valid
+time expiry is part of the hypothesis
+closed trade must reconcile to fills, costs, PnL and hypothesis outcome
+AI recommends; Human controls strategy promotion and capital authority
+```
+
+**Ownership mapping (existing WPs only; no new WP):**
+
+```yaml
+HTR-WP14: hypothesis/forecast/Decision/whyNotCash and entry-purpose records
+HTR-WP16: strategy eligibility and position-purpose gating
+HTR-WP17: executable stop/target/partial-fill/partial-exit simulation
+HTR-WP18: lot-level inventory and PnL attribution
+HTR-WP20: Guardian action vocabulary, invalidation and exit-reason taxonomy
+HTR-WP21: thesis/outcome resolution and learning
+HTR-WP22: end-to-end deterministic qualification
+HTR-WP23: final trace and report schema
+```
+
 ## Capital semantics + LIVE_MINIMUM_CAPITAL_DECISION (future, non-blocking)
 
 The FHV initial portfolio **`100000 USDT`** is the **initial portfolio of the approved FHV Run Contract v0 only**. It is **NOT** a minimum customer deposit, a minimum future live balance, an onboarding threshold, or a universal per-strategy capital minimum.
@@ -652,7 +754,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | WP08,WP03 | backend | COMPLETE (Opus Macro-C Phase B PASS 2026-07-14; WORK `46820ac`; prequalification correction `c57a7a0`; instrumentation correction `bc9cb46`; memory-gate alignment `7c532f5`; D-11B PASS under Memory Gate Amendment v1, accepted evidence `replay-runs/RI-P7/htr-wp09-canvas-runtime-qualification/` digest `78560485…`; qualification bound to `7c532f5` per Human Amendment-v1 exception; HTR-GAP-001/002/003 CLOSED) | `46820ac` (WORK) |
 | HTR-WP10 | No-lookahead + determinism property suites | WP09 | backend | COMPLETE (Opus Macro-C Phase B PASS 2026-07-14; WORK `befa6c1`; validation correction `2987f37` — test-only; evidence `replay-runs/RI-P7/htr-wp10-determinism-nolookahead/` digest `fa5def37…`; no WP09 measurement-critical surface changed; full validation green; HTR-GAP-004/025/031 CLOSED; Macro C COMPLETE) | `befa6c1` (WORK) |
 | HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | WP01,WP09 | backend | COMPLETE (Opus Macro-D Phase B PASS 2026-07-14; WORK `f6cefb0`; single sanctioned `buildHistoricalIngressContext` + sidecar-v3 PIT selection, all 15 optional lanes explicit incl. UNAVAILABLE/SIDECAR_LANE_ABSENT, no live provider/network call, replay/live parity; accepted evidence `replay-runs/RI-P7/htr-wp11-pit-provider-context/` manifest digest `b8f043ac…`; post-WORK non-semantic corrections (assertNoFutureEvidence reorder, quoteForReplayCycle fixture-timestamp binding, evidence gitSha restamp) classified, no fabricated availability, no future evidence reachable; HTR-GAP-012/013 CLOSED) | `f6cefb0` (WORK) |
-| HTR-WP12 | Ingress bar-integrity gate + versioned dataset manifest | WP01 | backend | pending | — |
+| HTR-WP12 | Ingress bar-integrity gate + versioned dataset manifest | WP01 | backend | COMPLETE (Opus Macro-D Phase B PASS 2026-07-14; WORK `993fdab`; nine fail-closed integrity classes gate HistoricalBarReplaySource/HistoricalBarSource/loadQualificationBars before first Canvas advance; immutable `fhv-dataset-manifest/v1` HTX_ONLY SPOT BTCUSDT+ETHUSDT 1m→closed-bar 15m/1h/4h/1d, UTC half-open partitions, source checksums, normalized+bar-set digests, `FHV_GAP_POLICY_V1` zero-tolerance, self-digest exclusion; semantic digest `fd7d4895…` (= evidence-bundle manifest digest); blind holdout RESERVED_SEALED_NOT_ACCESSED; no WP09 invalidation; real HTX 2020–2025 dataset NOT acquired/qualified — final pinning HTR-WP23; HTR-GAP-014/015 CLOSED) | `993fdab` (WORK) |
 | HTR-WP13 | Intelligence-chain activation (historical run profile) | WP09,WP10,WP11,WP12 | ai | pending | — |
 | HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | pending | — |
 | HTR-WP15 | MKB read-model integration for replay | WP14 | ai | pending | — |
@@ -684,11 +786,13 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## WP-11 (current work package)
+## WP-13 (next work package — planning gate)
 
 **HTR-MACRO-C is COMPLETE** (2026-07-14, Opus Macro-C Phase-B per-WP PASS). HTR-WP09 (Canvas runtime integration + default incremental cutover): WORK `46820ac` + CLOSEOUT `3a0962f`; D-11B PASS under Memory Gate Amendment v1, qualification bound to `7c532f5` (Human Amendment-v1 exception), accepted evidence promoted to `replay-runs/RI-P7/htr-wp09-canvas-runtime-qualification/` (digest `78560485…`). HTR-WP10 (no-lookahead + determinism property suites): WORK `befa6c1` + validation correction `2987f37` (test-only) + CLOSEOUT `1ac0e6a`; evidence `replay-runs/RI-P7/htr-wp10-determinism-nolookahead/` (digest `fa5def37…`); no WP09 measurement-critical surface changed. HTR-GAP-001/002/003 CLOSED at WP09; HTR-GAP-004/025/031 CLOSED at WP10. Full repository validation green (`validate:canon` + lint + typecheck + 2520 tests + build).
 
-The current work package is **HTR-WP11** (PIT provider context + gateway enforcement + absent-lane), the first WP of **HTR-MACRO-D (WP11+WP12)**, tracked in the rolling controller `.cursor/plans/dee-415-htr-wp04-wp12-runtime-substrate-rolling.plan.md` §9-D. **HTR-MACRO-D is APPROVED + `BUILD_AUTHORIZED: YES`** (2026-07-14; `APPROVE-HTR-MACRO-D: wp11-pit-provider-gateway-wp12-ingress-manifest` + `ACK-HTR-MACRO-D-MIGRATION: none` + `APPROVE-HTR-MACRO-D-BUILD` consumed; `MACRO_D_MIGRATION_DECISION: NONE` proven from code; `MACRO_D_CODE_BASELINE_HEAD: 1ac0e6a`; `MACRO_D_PREAPPROVAL_HEAD: 6d102f0`). Composer executes the exact §9-D packet (WP11 then WP12), one WORK commit per WP, full validation at macro end, then STOP at `AWAITING_OPUS_MACRO_POST_REVIEW` — no auto-advance to WP13, no PR. Completed WORK commits: HTR-WP01 `6600708`; WP02 `7ec02dd`; WP03 `35283ed`; WP04 `b3abe7b`; WP05 `f90faa9`; WP06 `24eb7f9`; WP07 `10f2500`; WP08 `0c4b8c3`; WP09 `46820ac`; WP10 `befa6c1`. This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
+**HTR-MACRO-D is COMPLETE** (2026-07-14, Opus Macro-D Phase-B independent post-review, per-WP PASS). HTR-WP11 (PIT provider context + gateway enforcement + absent-lane): WORK `f6cefb0` + CLOSEOUT `c63453d`; single sanctioned `buildHistoricalIngressContext`, sidecar-v3 PIT selection, all 15 optional lanes explicit incl. UNAVAILABLE/`SIDECAR_LANE_ABSENT`, no live provider/network call, replay/live parity; accepted evidence `replay-runs/RI-P7/htr-wp11-pit-provider-context/` (manifest digest `b8f043ac…`, reproduced); post-WORK changes classified WP11_POST_WORK_NON_SEMANTIC_CORRECTION (no fabricated availability, no future evidence reachable). HTR-WP12 (ingress bar-integrity gate + immutable versioned FHV dataset manifest): WORK `993fdab` + CLOSEOUT (this commit); nine fail-closed integrity classes gate every historical loader before first Canvas advance; `fhv-dataset-manifest/v1` (HTX_ONLY SPOT BTCUSDT+ETHUSDT, 1m base + closed-bar 15m/1h/4h/1d, UTC half-open partitions, `FHV_GAP_POLICY_V1` zero-tolerance) semantic digest `fd7d4895…`; blind holdout `RESERVED_SEALED_NOT_ACCESSED`. HTR-GAP-012/013 CLOSED at WP11; HTR-GAP-014/015 CLOSED at WP12. Gap-closure semantics: the fail-closed gate + versioned manifest contract now exist; the real HTX 2020–2025 dataset has **not** been acquired or qualified; the full FHV remains unauthorized; HTR-WP23 owns final runbook/manifest pinning + real-run preflight.
+
+The **WP04–WP12 rolling runtime/data-truth tranche is COMPLETE** and the program is `APPROVED_IDLE` at the **HTR-WP13 planning gate**. WP13 (intelligence-chain activation, historical run profile) remains **blocked from Build** until D-1/D-2 are resolved, exact D-3 historical-profile behavior is pinned, the exact Timeframe × Evidence Lane × Cadence × Freshness × Authority matrix (`TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1`) is approved, the exact WP13 child plan is Human-approved, and Build is separately authorized. No WP13 code, no WP13 child plan and no PR were created in this Phase-B session; the single final PR remains gated on all 23 WPs. Completed WORK commits: HTR-WP01 `6600708`; WP02 `7ec02dd`; WP03 `35283ed`; WP04 `b3abe7b`; WP05 `f90faa9`; WP06 `24eb7f9`; WP07 `10f2500`; WP08 `0c4b8c3`; WP09 `46820ac`; WP10 `befa6c1`; WP11 `f6cefb0`; WP12 `993fdab`. This heading also satisfies the canonical-plan validator's `## WP-*` requirement.
 
 ## Acceptance (whole program)
 
