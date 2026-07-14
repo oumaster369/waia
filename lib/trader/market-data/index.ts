@@ -75,3 +75,25 @@ export {
 } from "@/lib/trader/market-data/fusion/context-fusion-v1";
 export { classifySessionPhaseUtc } from "@/lib/trader/market-data/session/session-phase-classifier";
 export { computeAsianRangeCorridorMetadata } from "@/lib/trader/market-data/session/asian-range-corridor";
+export {
+  detectGap,
+  validateOhlcv,
+  validateTimestamps,
+} from "@/lib/trader/market-data/canvas/market-canvas";
+export {
+  REPLAY_PROVIDER_SIDECAR_V3,
+  type ReplayProviderSidecarLaneKey,
+  type ReplayProviderSidecarTimelineEntryV3,
+  type ReplayProviderSidecarV3,
+} from "@/lib/trader/market-data/replay/provider-sidecar-types";
+export {
+  assertNoNetworkImport,
+  buildHistoricalIngressContext,
+  HTR_WP11_FABRICATED_AVAILABILITY,
+  HTR_WP11_FUTURE_EVIDENCE_REACHABLE,
+  HTR_WP11_INGRESS_BYPASS,
+  HTR_WP11_LIVE_PROVIDER_CALL_FORBIDDEN,
+  HTR_WP11_STRATEGY_DIRECT_PROVIDER_IMPORT,
+  type HistoricalIngressInput,
+  type HistoricalIngressResult,
+} from "@/lib/trader/market-data/replay/historical-ingress-gateway";

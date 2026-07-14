@@ -56,7 +56,8 @@ function failClosed(state: MarketCanvasState, error: CanvasAdvanceError): Canvas
   return { ok: false, error, state };
 }
 
-function validateTimestamps(bar: CanvasClosedBar): CanvasAdvanceError | null {
+/** Exported for HTR-WP12 ingress gate — do not weaken numeric behavior. */
+export function validateTimestamps(bar: CanvasClosedBar): CanvasAdvanceError | null {
   const barOpenTimeMs = Date.parse(bar.barOpenTime);
   const barCloseTimeMs = Date.parse(bar.barCloseTime);
   if (!Number.isFinite(barOpenTimeMs) || !Number.isFinite(barCloseTimeMs)) {
@@ -68,7 +69,8 @@ function validateTimestamps(bar: CanvasClosedBar): CanvasAdvanceError | null {
   return null;
 }
 
-function validateOhlcv(bar: CanvasClosedBar): CanvasAdvanceError | null {
+/** Exported for HTR-WP12 ingress gate — do not weaken numeric behavior. */
+export function validateOhlcv(bar: CanvasClosedBar): CanvasAdvanceError | null {
   const fields = [bar.open, bar.high, bar.low, bar.close, bar.volume];
   for (const field of fields) {
     if (field === undefined || field === null || field === "") {
@@ -95,7 +97,8 @@ function validateOhlcv(bar: CanvasClosedBar): CanvasAdvanceError | null {
   return null;
 }
 
-function detectGap(lastAppliedBarOpenTimeMs: number, barOpenTimeMs: number): boolean {
+/** Exported for HTR-WP12 ingress gate — gap when open-time delta exceeds one minute. */
+export function detectGap(lastAppliedBarOpenTimeMs: number, barOpenTimeMs: number): boolean {
   return barOpenTimeMs - lastAppliedBarOpenTimeMs > ONE_MINUTE_MS;
 }
 

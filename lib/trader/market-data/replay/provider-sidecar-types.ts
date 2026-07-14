@@ -2,6 +2,27 @@ import type { MarketDataProviderId } from "@/lib/trader/market-data/observation-
 
 export const REPLAY_PROVIDER_SIDECAR_V1 = "waia.trader.m9_provider_sidecar.v1" as const;
 export const REPLAY_PROVIDER_SIDECAR_V2 = "waia.trader.m9_provider_sidecar.v2" as const;
+export const REPLAY_PROVIDER_SIDECAR_V3 = "waia.trader.m9_provider_sidecar.v3" as const;
+
+export const REPLAY_PROVIDER_SIDECAR_LANE_KEYS = [
+  "fear_greed_index",
+  "global_market_stats",
+  "cross_exchange_confirmation",
+  "order_book_snapshot",
+  "market_trades_snapshot",
+  "macro_series",
+  "macro_calendar_event",
+  "macro_probability",
+  "news_headline",
+  "news_event_cluster",
+  "exchange_announcement",
+  "protocol_release",
+  "blockchain_network_stats",
+  "regulatory_filing",
+  "mempool_stats",
+] as const;
+
+export type ReplayProviderSidecarLaneKey = (typeof REPLAY_PROVIDER_SIDECAR_LANE_KEYS)[number];
 
 export type ProviderCaptureOutcome = "CAPTURED_HEALTHY" | "CAPTURE_FAILED" | "UNAVAILABLE";
 
@@ -167,12 +188,39 @@ export type ReplayProviderSidecarV2 = {
   lanes: ReplayProviderSidecarLanesV2;
 };
 
-export type ReplayProviderSidecar = ReplayProviderSidecarV1 | ReplayProviderSidecarV2;
+export type ReplayProviderSidecarTimelineEntryV3 = {
+  eventTimeUtc: string;
+  availableAtUtc: string;
+  ingestTimeUtc: string;
+  providerId: MarketDataProviderId;
+  feedKind: string;
+  sourceDigest: string;
+  payload: unknown;
+};
+
+export type ReplayProviderSidecarV3 = {
+  schemaVersion: typeof REPLAY_PROVIDER_SIDECAR_V3;
+  instrumentId: string;
+  generatedBy: string;
+  builderGitSha?: string | null;
+  lanes: Partial<Record<ReplayProviderSidecarLaneKey, ReplayProviderSidecarTimelineEntryV3[]>>;
+};
+
+export type ReplayProviderSidecar =
+  | ReplayProviderSidecarV1
+  | ReplayProviderSidecarV2
+  | ReplayProviderSidecarV3;
 
 export function isReplayProviderSidecarV2(
   sidecar: ReplayProviderSidecar,
 ): sidecar is ReplayProviderSidecarV2 {
   return sidecar.schemaVersion === REPLAY_PROVIDER_SIDECAR_V2;
+}
+
+export function isReplayProviderSidecarV3(
+  sidecar: ReplayProviderSidecar,
+): sidecar is ReplayProviderSidecarV3 {
+  return sidecar.schemaVersion === REPLAY_PROVIDER_SIDECAR_V3;
 }
 
 export function isReplayProviderSidecarV1(
@@ -186,6 +234,9 @@ export function parseReplayProviderSidecar(raw: unknown): ReplayProviderSidecar 
     throw new Error("[sidecar] invalid sidecar payload");
   }
   const schemaVersion = (raw as { schemaVersion?: string }).schemaVersion;
+  if (schemaVersion === REPLAY_PROVIDER_SIDECAR_V3) {
+    return raw as ReplayProviderSidecarV3;
+  }
   if (schemaVersion === REPLAY_PROVIDER_SIDECAR_V2) {
     return raw as ReplayProviderSidecarV2;
   }
@@ -193,6 +244,6 @@ export function parseReplayProviderSidecar(raw: unknown): ReplayProviderSidecar 
     return raw as ReplayProviderSidecarV1;
   }
   throw new Error(
-    `[sidecar] unsupported schemaVersion ${String(schemaVersion)}; expected v1 or v2`,
+    `[sidecar] unsupported schemaVersion ${String(schemaVersion)}; expected v1, v2, or v3`,
   );
 }

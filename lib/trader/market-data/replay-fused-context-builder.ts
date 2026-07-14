@@ -16,16 +16,17 @@ import type {
 } from "@/lib/trader/market-data/observation-types";
 import { MTF_BAR_INTERVALS } from "@/lib/trader/market-data/observation-types";
 import {
-  buildObservationsFromSidecarV1,
-  buildObservationsFromSidecarV2,
+  buildObservationsFromSidecarAtPit,
+  markAbsentEvidenceLanes,
+  type SidecarObservationBundle,
 } from "@/lib/trader/market-data/replay/replay-lane-normalizer";
 import {
   isReplayProviderSidecarV1,
-  isReplayProviderSidecarV2,
   type ReplayProviderSidecar,
   type ReplayProviderSidecarEntryV1,
   type ReplayProviderSidecarV1,
   type ReplayProviderSidecarV2,
+  type ReplayProviderSidecarV3,
 } from "@/lib/trader/market-data/replay/provider-sidecar-types";
 import { assertResearchRuntime } from "@/lib/trader/research/assert-research-runtime";
 import { recordFullHistoryRescan } from "@/lib/trader/backtest/replay-runtime-metrics";
@@ -37,6 +38,7 @@ export type {
   ReplayProviderSidecarEntryV1,
   ReplayProviderSidecarV1,
   ReplayProviderSidecarV2,
+  ReplayProviderSidecarV3,
 } from "@/lib/trader/market-data/replay/provider-sidecar-types";
 
 /** @deprecated use ReplayProviderSidecarEntryV1 */
@@ -145,75 +147,63 @@ function buildSidecarLanes(input: {
   blockchainEvidence: FusedMarketContext["blockchainEvidence"];
   regulatoryEvidence: FusedMarketContext["regulatoryEvidence"];
   protocolEvidence: FusedMarketContext["protocolEvidence"];
-  binanceObs: ReturnType<typeof buildObservationsFromSidecarV2>["binanceObs"];
-  bybitObs: ReturnType<typeof buildObservationsFromSidecarV2>["bybitObs"];
+  binanceObs: SidecarObservationBundle["binanceObs"];
+  bybitObs: SidecarObservationBundle["bybitObs"];
 } {
   const degradationReasons: string[] = [];
-  let orderBookSnapshot: FusedMarketContext["orderBookSnapshot"];
-  let marketTradesSnapshot: FusedMarketContext["marketTradesSnapshot"];
-  let crossExchangeConfirmation: FusedMarketContext["crossExchangeConfirmation"];
-  let fearGreedObservation: FusedMarketContext["fearGreed"];
-  let globalMarketObservation: FusedMarketContext["globalMarket"];
-  let macroEvidence: FusedMarketContext["macroEvidence"] = [];
-  let newsEvidence: FusedMarketContext["newsEvidence"] = [];
-  let blockchainEvidence: FusedMarketContext["blockchainEvidence"] = [];
-  let regulatoryEvidence: FusedMarketContext["regulatoryEvidence"] = [];
-  let protocolEvidence: FusedMarketContext["protocolEvidence"] = [];
-  let binanceObs: ReturnType<typeof buildObservationsFromSidecarV2>["binanceObs"];
-  let bybitObs: ReturnType<typeof buildObservationsFromSidecarV2>["bybitObs"];
 
-  if (input.providerSidecar && isReplayProviderSidecarV2(input.providerSidecar)) {
-    const laneObs = buildObservationsFromSidecarV2({
-      lanes: input.providerSidecar.lanes,
-      instrumentId: input.instrumentId,
-      primaryLast: input.primaryLast,
+  if (!input.providerSidecar) {
+    const absent = markAbsentEvidenceLanes({
       evaluatedAt: input.evaluatedAt,
-      captureAsOfUtc: input.providerSidecar.captureAsOfUtc,
-      degradationReasons,
-    });
-    orderBookSnapshot = laneObs.orderBookSnapshot;
-    marketTradesSnapshot = laneObs.marketTradesSnapshot;
-    crossExchangeConfirmation = laneObs.crossExchangeConfirmation;
-    fearGreedObservation = laneObs.fearGreed;
-    globalMarketObservation = laneObs.globalMarket;
-    macroEvidence = laneObs.macroEvidence;
-    newsEvidence = laneObs.newsEvidence;
-    blockchainEvidence = laneObs.blockchainEvidence;
-    regulatoryEvidence = laneObs.regulatoryEvidence;
-    protocolEvidence = laneObs.protocolEvidence;
-    binanceObs = laneObs.binanceObs;
-    bybitObs = laneObs.bybitObs;
-  } else if (input.providerSidecar && isReplayProviderSidecarV1(input.providerSidecar)) {
-    const sidecarEntry = findSidecarEntryV1(input.providerSidecar, input.evaluatedAt);
-    const laneObs = buildObservationsFromSidecarV1({
-      sidecar: input.providerSidecar,
-      sidecarEntry,
       instrumentId: input.instrumentId,
-      primaryLast: input.primaryLast,
-      evaluatedAt: input.evaluatedAt,
       degradationReasons,
-    });
-    crossExchangeConfirmation = laneObs.crossExchangeConfirmation;
-    fearGreedObservation = laneObs.fearGreed;
-    globalMarketObservation = laneObs.globalMarket;
-    binanceObs = laneObs.binanceObs;
-    bybitObs = laneObs.bybitObs;
+      hasSidecar: false,
+    }) as SidecarObservationBundle;
+
+    return {
+      degradationReasons,
+      orderBookSnapshot: absent.orderBookSnapshot,
+      marketTradesSnapshot: absent.marketTradesSnapshot,
+      crossExchangeConfirmation: absent.crossExchangeConfirmation,
+      fearGreedObservation: absent.fearGreed,
+      globalMarketObservation: absent.globalMarket,
+      macroEvidence: absent.macroEvidence,
+      newsEvidence: absent.newsEvidence,
+      blockchainEvidence: absent.blockchainEvidence,
+      regulatoryEvidence: absent.regulatoryEvidence,
+      protocolEvidence: absent.protocolEvidence,
+      binanceObs: absent.binanceObs,
+      bybitObs: absent.bybitObs,
+    };
   }
+
+  const sidecarEntry = isReplayProviderSidecarV1(input.providerSidecar)
+    ? findSidecarEntryV1(input.providerSidecar, input.evaluatedAt)
+    : undefined;
+
+  const laneObs = buildObservationsFromSidecarAtPit({
+    sidecar: input.providerSidecar,
+    sidecarEntryV1: sidecarEntry,
+    instrumentId: input.instrumentId,
+    primaryLast: input.primaryLast,
+    evaluatedAt: input.evaluatedAt,
+    degradationReasons,
+  });
 
   return {
     degradationReasons,
-    orderBookSnapshot,
-    marketTradesSnapshot,
-    crossExchangeConfirmation,
-    fearGreedObservation,
-    globalMarketObservation,
-    macroEvidence,
-    newsEvidence,
-    blockchainEvidence,
-    regulatoryEvidence,
-    protocolEvidence,
-    binanceObs,
-    bybitObs,
+    orderBookSnapshot: laneObs.orderBookSnapshot,
+    marketTradesSnapshot: laneObs.marketTradesSnapshot,
+    crossExchangeConfirmation: laneObs.crossExchangeConfirmation,
+    fearGreedObservation: laneObs.fearGreed,
+    globalMarketObservation: laneObs.globalMarket,
+    macroEvidence: laneObs.macroEvidence,
+    newsEvidence: laneObs.newsEvidence,
+    blockchainEvidence: laneObs.blockchainEvidence,
+    regulatoryEvidence: laneObs.regulatoryEvidence,
+    protocolEvidence: laneObs.protocolEvidence,
+    binanceObs: laneObs.binanceObs,
+    bybitObs: laneObs.bybitObs,
   };
 }
 

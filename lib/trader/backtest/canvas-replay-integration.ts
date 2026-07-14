@@ -7,19 +7,13 @@ import {
   selectMarketCanvasView,
 } from "@/lib/trader/market-data/canvas/market-canvas";
 import type { MarketCanvasState } from "@/lib/trader/market-data/canvas/market-canvas.types";
-import {
-  buildReplayFusedContext,
-  buildReplayFusedContextClosedOnlyLegacy,
-  buildReplayFusedContextFromCanvasView,
-  type ReplayProviderSidecar,
-} from "@/lib/trader/market-data/replay-fused-context-builder";
+import { buildHistoricalIngressContext } from "@/lib/trader/market-data/replay/historical-ingress-gateway";
+import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
 import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
-import { canonicalJsonString } from "@/lib/trader/research/digest";
 import {
   DEFAULT_REPLAY_SUBSTRATE_MODE,
   type ReplaySubstrateMode,
   usesIncrementalCanvasSubstrate,
-  usesLegacyOracleSubstrate,
 } from "@/lib/trader/backtest/replay-substrate-mode";
 
 export type CanvasReplayAdvanceResult = {
@@ -65,38 +59,16 @@ export function buildSubstrateFusedContext(input: {
   providerSidecar?: ReplayProviderSidecar;
   canvasState: MarketCanvasState;
 }): FusedMarketContext {
-  const mode = input.substrateMode ?? DEFAULT_REPLAY_SUBSTRATE_MODE;
-  const canvasView = selectMarketCanvasView(input.canvasState);
-
-  const incremental = usesIncrementalCanvasSubstrate(mode)
-    ? buildReplayFusedContextFromCanvasView({
-        canvasView,
-        quote: input.quote,
-        evaluatedAt: input.evaluatedAt,
-        instrumentId: input.instrumentId,
-        providerSidecar: input.providerSidecar,
-        bars1mPrefix: input.bars,
-      })
-    : null;
-
-  const legacy = usesLegacyOracleSubstrate(mode)
-    ? buildReplayFusedContextClosedOnlyLegacy({
-        bars: input.bars,
-        quote: input.quote,
-        evaluatedAt: input.evaluatedAt,
-        instrumentId: input.instrumentId,
-        providerSidecar: input.providerSidecar,
-      })
-    : null;
-
-  if (mode === "parity-both") {
-    if (canonicalJsonString(incremental!) !== canonicalJsonString(legacy!)) {
-      throw new Error("CANVAS_PARITY_DIVERGENCE: fused context mismatch");
-    }
-    return incremental!;
-  }
-
-  return (incremental ?? legacy)!;
+  const { context } = buildHistoricalIngressContext({
+    substrateMode: input.substrateMode ?? DEFAULT_REPLAY_SUBSTRATE_MODE,
+    bars: input.bars,
+    quote: input.quote,
+    evaluatedAt: input.evaluatedAt,
+    instrumentId: input.instrumentId,
+    providerSidecar: input.providerSidecar,
+    canvasState: input.canvasState,
+  });
+  return context;
 }
 
 export function buildSubstrateReconstruction(input: {

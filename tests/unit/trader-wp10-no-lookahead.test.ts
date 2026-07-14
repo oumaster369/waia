@@ -66,7 +66,7 @@ describe("HTR-WP10 no-lookahead properties", () => {
       instrumentId: "BTC/USDT",
       degradationReasons,
       hasSidecar: false,
-    });
+    }) as import("@/lib/trader/market-data/replay/replay-lane-normalizer").SidecarObservationBundle;
 
     expect(lanes.macroEvidence.length).toBeGreaterThan(0);
     expect(lanes.macroEvidence[0]?.health).toBe("UNAVAILABLE");

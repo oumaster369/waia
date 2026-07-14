@@ -23,14 +23,164 @@ import type {
   SourceProvenanceRef,
 } from "@/lib/trader/market-data/observation-types";
 import type {
+  ReplayProviderSidecar,
   ReplayProviderSidecarEntryV1,
+  ReplayProviderSidecarLaneKey,
   ReplayProviderSidecarLanesV2,
   ReplayProviderSidecarV1,
   ReplayProviderSidecarV2,
+  ReplayProviderSidecarV3,
 } from "@/lib/trader/market-data/replay/provider-sidecar-types";
+import {
+  isReplayProviderSidecarV1,
+  isReplayProviderSidecarV2,
+  isReplayProviderSidecarV3,
+} from "@/lib/trader/market-data/replay/provider-sidecar-types";
+import {
+  pitResolvedEntriesToLanes,
+  resolveSidecarTimelinesAtPit,
+  sidecarV1EntryToTimeline,
+  sidecarV2LanesToTimelines,
+  sidecarV3Lanes,
+  type PitTimelineEntry,
+} from "@/lib/trader/market-data/replay/replay-pit-selector";
 
 export const FUTURE_EVIDENCE_EXCLUDED = "FUTURE_EVIDENCE_EXCLUDED" as const;
 export const SIDECAR_LANE_ABSENT = "SIDECAR_LANE_ABSENT" as const;
+
+export type SidecarObservationBundle = {
+  orderBookSnapshot: NormalizedObservation;
+  marketTradesSnapshot: NormalizedObservation;
+  crossExchangeConfirmation: NormalizedObservation;
+  binanceObs?: NormalizedObservation;
+  bybitObs?: NormalizedObservation;
+  fearGreed: NormalizedObservation;
+  globalMarket: NormalizedObservation;
+  macroEvidence: NormalizedObservation[];
+  newsEvidence: NormalizedObservation[];
+  blockchainEvidence: NormalizedObservation[];
+  regulatoryEvidence: NormalizedObservation[];
+  protocolEvidence: NormalizedObservation[];
+};
+
+type LaneAbsentSpec = {
+  kind: NormalizedObservationKind;
+  providerId: SourceProvenanceRef["providerId"];
+  venue: string;
+  feedKind: string;
+  symbol: "GLOBAL" | "instrument";
+};
+
+const SINGULAR_ABSENT_LANE_SPECS: LaneAbsentSpec[] = [
+  {
+    kind: "fear_greed_index",
+    providerId: "alternative_me",
+    venue: "alternative_me",
+    feedKind: "fear_greed_index",
+    symbol: "GLOBAL",
+  },
+  {
+    kind: "global_market_stats",
+    providerId: "coingecko_global",
+    venue: "coingecko",
+    feedKind: "global_market_stats",
+    symbol: "GLOBAL",
+  },
+  {
+    kind: "cross_exchange_confirmation",
+    providerId: "binance_public",
+    venue: "binance",
+    feedKind: "cross_exchange_confirmation",
+    symbol: "instrument",
+  },
+  {
+    kind: "order_book_snapshot",
+    providerId: "htx_spot",
+    venue: "htx",
+    feedKind: "order_book_snapshot",
+    symbol: "instrument",
+  },
+  {
+    kind: "market_trades_snapshot",
+    providerId: "htx_spot",
+    venue: "htx",
+    feedKind: "market_trades_snapshot",
+    symbol: "instrument",
+  },
+];
+
+const ARRAY_ABSENT_LANE_SPECS: LaneAbsentSpec[] = [
+  {
+    kind: "macro_series",
+    providerId: "fred",
+    venue: "fred",
+    feedKind: "macro_series",
+    symbol: "GLOBAL",
+  },
+  {
+    kind: "macro_calendar_event",
+    providerId: "federal_reserve",
+    venue: "federal_reserve",
+    feedKind: "macro_calendar_event",
+    symbol: "GLOBAL",
+  },
+  {
+    kind: "macro_probability",
+    providerId: "cme_fedwatch",
+    venue: "cme",
+    feedKind: "macro_probability",
+    symbol: "GLOBAL",
+  },
+  {
+    kind: "news_headline",
+    providerId: "gdelt",
+    venue: "gdelt",
+    feedKind: "news_headline",
+    symbol: "GLOBAL",
+  },
+  {
+    kind: "news_event_cluster",
+    providerId: "gdelt",
+    venue: "gdelt",
+    feedKind: "news_event_cluster",
+    symbol: "GLOBAL",
+  },
+  {
+    kind: "exchange_announcement",
+    providerId: "binance_announcements",
+    venue: "binance",
+    feedKind: "exchange_announcement",
+    symbol: "GLOBAL",
+  },
+  {
+    kind: "protocol_release",
+    providerId: "github_releases",
+    venue: "github",
+    feedKind: "protocol_release",
+    symbol: "GLOBAL",
+  },
+  {
+    kind: "blockchain_network_stats",
+    providerId: "infura_rpc",
+    venue: "infura",
+    feedKind: "blockchain_network_stats",
+    symbol: "GLOBAL",
+  },
+  {
+    kind: "regulatory_filing",
+    providerId: "sec_edgar",
+    venue: "sec_edgar",
+    feedKind: "regulatory_filing",
+    symbol: "GLOBAL",
+  },
+  {
+    kind: "mempool_stats",
+    providerId: "mempool_space",
+    venue: "mempool_space",
+    feedKind: "mempool_stats",
+    symbol: "GLOBAL",
+  },
+];
 
 function replayProvenance(input: {
   providerId: SourceProvenanceRef["providerId"];
@@ -104,6 +254,132 @@ function finalizeObservation(
   return guardNoLookahead({ observation, evaluatedAt, degradationReasons });
 }
 
+function absentLaneObservation(
+  spec: LaneAbsentSpec,
+  instrumentId: string,
+  evaluatedAt: string,
+): NormalizedObservation {
+  return unavailableLane({
+    kind: spec.kind,
+    providerId: spec.providerId,
+    venue: spec.venue,
+    feedKind: spec.feedKind,
+    symbol: spec.symbol === "GLOBAL" ? "GLOBAL" : instrumentId,
+    evaluatedAt,
+    reason: SIDECAR_LANE_ABSENT,
+  });
+}
+
+function hasObservationKind(
+  observations: NormalizedObservation[],
+  kind: NormalizedObservationKind,
+): boolean {
+  return observations.some((observation) => observation.kind === kind);
+}
+
+export function ensureExplicitAbsentLanes(input: {
+  bundle: Partial<SidecarObservationBundle>;
+  instrumentId: string;
+  evaluatedAt: string;
+  degradationReasons: string[];
+}): SidecarObservationBundle {
+  const macroEvidence = [...(input.bundle.macroEvidence ?? [])];
+  const newsEvidence = [...(input.bundle.newsEvidence ?? [])];
+  const blockchainEvidence = [...(input.bundle.blockchainEvidence ?? [])];
+  const regulatoryEvidence = [...(input.bundle.regulatoryEvidence ?? [])];
+  const protocolEvidence = [...(input.bundle.protocolEvidence ?? [])];
+
+  let fearGreed = input.bundle.fearGreed;
+  let globalMarket = input.bundle.globalMarket;
+  let orderBookSnapshot = input.bundle.orderBookSnapshot;
+  let marketTradesSnapshot = input.bundle.marketTradesSnapshot;
+  let crossExchangeConfirmation = input.bundle.crossExchangeConfirmation;
+
+  for (const spec of SINGULAR_ABSENT_LANE_SPECS) {
+    const pushReason = () => {
+      input.degradationReasons.push(`${spec.feedKind}_unavailable:${SIDECAR_LANE_ABSENT}`);
+    };
+
+    if (spec.kind === "fear_greed_index" && !fearGreed) {
+      fearGreed = absentLaneObservation(spec, input.instrumentId, input.evaluatedAt);
+      pushReason();
+    }
+    if (spec.kind === "global_market_stats" && !globalMarket) {
+      globalMarket = absentLaneObservation(spec, input.instrumentId, input.evaluatedAt);
+      pushReason();
+    }
+    if (spec.kind === "order_book_snapshot" && !orderBookSnapshot) {
+      orderBookSnapshot = absentLaneObservation(spec, input.instrumentId, input.evaluatedAt);
+      pushReason();
+    }
+    if (spec.kind === "market_trades_snapshot" && !marketTradesSnapshot) {
+      marketTradesSnapshot = absentLaneObservation(spec, input.instrumentId, input.evaluatedAt);
+      pushReason();
+    }
+    if (
+      spec.kind === "cross_exchange_confirmation" &&
+      !crossExchangeConfirmation &&
+      !input.bundle.binanceObs &&
+      !input.bundle.bybitObs
+    ) {
+      crossExchangeConfirmation = absentLaneObservation(
+        spec,
+        input.instrumentId,
+        input.evaluatedAt,
+      );
+      pushReason();
+    }
+  }
+
+  for (const spec of ARRAY_ABSENT_LANE_SPECS) {
+    const target =
+      spec.kind === "macro_series" ||
+      spec.kind === "macro_calendar_event" ||
+      spec.kind === "macro_probability"
+        ? macroEvidence
+        : spec.kind === "news_headline" ||
+            spec.kind === "news_event_cluster" ||
+            spec.kind === "exchange_announcement"
+          ? newsEvidence
+          : spec.kind === "blockchain_network_stats" || spec.kind === "mempool_stats"
+            ? blockchainEvidence
+            : spec.kind === "regulatory_filing"
+              ? regulatoryEvidence
+              : protocolEvidence;
+
+    if (!hasObservationKind(target, spec.kind)) {
+      target.push(absentLaneObservation(spec, input.instrumentId, input.evaluatedAt));
+      input.degradationReasons.push(`${spec.feedKind}_unavailable:${SIDECAR_LANE_ABSENT}`);
+    }
+  }
+
+  if (!crossExchangeConfirmation && (input.bundle.binanceObs || input.bundle.bybitObs)) {
+    const binanceObs = input.bundle.binanceObs;
+    const bybitObs = input.bundle.bybitObs;
+    crossExchangeConfirmation =
+      binanceObs && bybitObs
+        ? binanceObs.confidence >= bybitObs.confidence
+          ? binanceObs
+          : bybitObs
+        : (binanceObs ?? bybitObs)!;
+  }
+
+  return {
+    orderBookSnapshot: orderBookSnapshot!,
+    marketTradesSnapshot: marketTradesSnapshot!,
+    crossExchangeConfirmation: crossExchangeConfirmation!,
+    binanceObs: input.bundle.binanceObs,
+    bybitObs: input.bundle.bybitObs,
+    fearGreed: fearGreed!,
+    globalMarket: globalMarket!,
+    macroEvidence,
+    newsEvidence,
+    blockchainEvidence,
+    regulatoryEvidence,
+    protocolEvidence,
+  };
+}
+
 export function buildObservationsFromSidecarV2(input: {
   lanes: ReplayProviderSidecarLanesV2;
   instrumentId: string;
@@ -111,20 +387,7 @@ export function buildObservationsFromSidecarV2(input: {
   evaluatedAt: string;
   captureAsOfUtc: string;
   degradationReasons: string[];
-}): {
-  orderBookSnapshot?: NormalizedObservation;
-  marketTradesSnapshot?: NormalizedObservation;
-  crossExchangeConfirmation?: NormalizedObservation;
-  binanceObs?: NormalizedObservation;
-  bybitObs?: NormalizedObservation;
-  fearGreed?: NormalizedObservation;
-  globalMarket?: NormalizedObservation;
-  macroEvidence: NormalizedObservation[];
-  newsEvidence: NormalizedObservation[];
-  blockchainEvidence: NormalizedObservation[];
-  regulatoryEvidence: NormalizedObservation[];
-  protocolEvidence: NormalizedObservation[];
-} {
+}): SidecarObservationBundle {
   const { lanes, instrumentId, primaryLast, evaluatedAt, captureAsOfUtc, degradationReasons } =
     input;
 
@@ -135,6 +398,12 @@ export function buildObservationsFromSidecarV2(input: {
   const protocolEvidence: NormalizedObservation[] = [];
 
   let orderBookSnapshot: NormalizedObservation | undefined;
+  let marketTradesSnapshot: NormalizedObservation | undefined;
+  let fearGreed: NormalizedObservation | undefined;
+  let globalMarket: NormalizedObservation | undefined;
+  let binanceObs: NormalizedObservation | undefined;
+  let bybitObs: NormalizedObservation | undefined;
+
   if (lanes.order_book_snapshot) {
     const lane = lanes.order_book_snapshot;
     orderBookSnapshot = finalizeObservation(
@@ -158,20 +427,8 @@ export function buildObservationsFromSidecarV2(input: {
       evaluatedAt,
       degradationReasons,
     );
-  } else {
-    orderBookSnapshot = unavailableLane({
-      kind: "order_book_snapshot",
-      providerId: "htx_spot",
-      venue: "htx",
-      feedKind: "order_book_snapshot",
-      symbol: instrumentId,
-      evaluatedAt,
-      reason: SIDECAR_LANE_ABSENT,
-    });
-    degradationReasons.push("order_book_snapshot_unavailable:SIDECAR_LANE_ABSENT");
   }
 
-  let marketTradesSnapshot: NormalizedObservation | undefined;
   if (lanes.market_trades_snapshot) {
     const lane = lanes.market_trades_snapshot;
     marketTradesSnapshot = finalizeObservation(
@@ -196,21 +453,8 @@ export function buildObservationsFromSidecarV2(input: {
       evaluatedAt,
       degradationReasons,
     );
-  } else {
-    marketTradesSnapshot = unavailableLane({
-      kind: "market_trades_snapshot",
-      providerId: "htx_spot",
-      venue: "htx",
-      feedKind: "market_trades_snapshot",
-      symbol: instrumentId,
-      evaluatedAt,
-      reason: SIDECAR_LANE_ABSENT,
-    });
-    degradationReasons.push("market_trades_snapshot_unavailable:SIDECAR_LANE_ABSENT");
   }
 
-  let binanceObs: NormalizedObservation | undefined;
-  let bybitObs: NormalizedObservation | undefined;
   for (const cross of lanes.cross_exchange_confirmation ?? []) {
     const obs = finalizeObservation(
       normalizeCrossExchangeConfirmation({
@@ -240,7 +484,6 @@ export function buildObservationsFromSidecarV2(input: {
     }
   }
 
-  let fearGreed: NormalizedObservation | undefined;
   if (lanes.fear_greed_index) {
     const lane = lanes.fear_greed_index;
     fearGreed = finalizeObservation(
@@ -265,7 +508,6 @@ export function buildObservationsFromSidecarV2(input: {
     );
   }
 
-  let globalMarket: NormalizedObservation | undefined;
   if (lanes.global_market_stats) {
     const lane = lanes.global_market_stats;
     globalMarket = finalizeObservation(
@@ -561,27 +803,24 @@ export function buildObservationsFromSidecarV2(input: {
     );
   }
 
-  const crossExchangeConfirmation =
-    binanceObs && bybitObs
-      ? binanceObs.confidence >= bybitObs.confidence
-        ? binanceObs
-        : bybitObs
-      : (binanceObs ?? bybitObs);
-
-  return {
-    orderBookSnapshot,
-    marketTradesSnapshot,
-    crossExchangeConfirmation,
-    binanceObs,
-    bybitObs,
-    fearGreed,
-    globalMarket,
-    macroEvidence,
-    newsEvidence,
-    blockchainEvidence,
-    regulatoryEvidence,
-    protocolEvidence,
-  };
+  return ensureExplicitAbsentLanes({
+    bundle: {
+      orderBookSnapshot,
+      marketTradesSnapshot,
+      binanceObs,
+      bybitObs,
+      fearGreed,
+      globalMarket,
+      macroEvidence,
+      newsEvidence,
+      blockchainEvidence,
+      regulatoryEvidence,
+      protocolEvidence,
+    },
+    instrumentId,
+    evaluatedAt,
+    degradationReasons,
+  });
 }
 
 export function buildObservationsFromSidecarV1(input: {
@@ -708,61 +947,78 @@ export function buildObservationsFromSidecarV1(input: {
   return { crossExchangeConfirmation, binanceObs, bybitObs, fearGreed, globalMarket };
 }
 
+export function buildObservationsFromSidecarAtPit(input: {
+  sidecar: ReplayProviderSidecar;
+  sidecarEntryV1?: ReplayProviderSidecarEntryV1;
+  instrumentId: string;
+  primaryLast: string;
+  evaluatedAt: string;
+  degradationReasons: string[];
+}): SidecarObservationBundle {
+  let timelines: Partial<Record<ReplayProviderSidecarLaneKey, PitTimelineEntry[]>> = {};
+  let captureAsOfUtc = input.evaluatedAt;
+
+  if (isReplayProviderSidecarV3(input.sidecar)) {
+    timelines = sidecarV3Lanes(input.sidecar.lanes);
+  } else if (isReplayProviderSidecarV2(input.sidecar)) {
+    timelines = sidecarV2LanesToTimelines(input.sidecar.lanes, input.sidecar.captureAsOfUtc);
+    captureAsOfUtc = input.sidecar.captureAsOfUtc;
+  } else if (isReplayProviderSidecarV1(input.sidecar)) {
+    const entry =
+      input.sidecarEntryV1 ??
+      input.sidecar.entries.find((candidate) => candidate.evaluatedAt === input.evaluatedAt);
+    if (entry) {
+      timelines = sidecarV1EntryToTimeline(entry, input.evaluatedAt);
+    }
+  }
+
+  const resolved = resolveSidecarTimelinesAtPit({
+    timelines,
+    evaluatedAtUtc: input.evaluatedAt,
+  });
+  const lanes = pitResolvedEntriesToLanes(resolved);
+
+  return buildObservationsFromSidecarV2({
+    lanes,
+    instrumentId: input.instrumentId,
+    primaryLast: input.primaryLast,
+    evaluatedAt: input.evaluatedAt,
+    captureAsOfUtc,
+    degradationReasons: input.degradationReasons,
+  });
+}
+
+export function buildObservationsFromSidecarV3(input: {
+  sidecar: ReplayProviderSidecarV3;
+  instrumentId: string;
+  primaryLast: string;
+  evaluatedAt: string;
+  degradationReasons: string[];
+}): SidecarObservationBundle {
+  return buildObservationsFromSidecarAtPit({
+    sidecar: input.sidecar,
+    instrumentId: input.instrumentId,
+    primaryLast: input.primaryLast,
+    evaluatedAt: input.evaluatedAt,
+    degradationReasons: input.degradationReasons,
+  });
+}
+
 export function markAbsentEvidenceLanes(input: {
   evaluatedAt: string;
   instrumentId: string;
   degradationReasons: string[];
   hasSidecar: boolean;
-}): {
-  macroEvidence: NormalizedObservation[];
-  newsEvidence: NormalizedObservation[];
-  blockchainEvidence: NormalizedObservation[];
-  regulatoryEvidence: NormalizedObservation[];
-  protocolEvidence: NormalizedObservation[];
-} {
+}): SidecarObservationBundle | Partial<SidecarObservationBundle> {
   if (input.hasSidecar) {
-    return {
-      macroEvidence: [],
-      newsEvidence: [],
-      blockchainEvidence: [],
-      regulatoryEvidence: [],
-      protocolEvidence: [],
-    };
+    return {};
   }
-  const reason = SIDECAR_LANE_ABSENT;
-  const pushUnavailable = (
-    kind: NormalizedObservationKind,
-    providerId: SourceProvenanceRef["providerId"],
-    venue: string,
-    feedKind: string,
-  ) =>
-    unavailableLane({
-      kind,
-      providerId,
-      venue,
-      feedKind,
-      symbol: input.instrumentId,
-      evaluatedAt: input.evaluatedAt,
-      reason,
-    });
 
   input.degradationReasons.push("sidecar_absent:advanced_lanes_unavailable");
-  return {
-    macroEvidence: [pushUnavailable("macro_series", "fred", "fred", "macro_series")],
-    newsEvidence: [pushUnavailable("news_headline", "gdelt", "gdelt", "news_headline")],
-    blockchainEvidence: [
-      pushUnavailable(
-        "blockchain_network_stats",
-        "infura_rpc",
-        "infura",
-        "blockchain_network_stats",
-      ),
-    ],
-    regulatoryEvidence: [
-      pushUnavailable("regulatory_filing", "sec_edgar", "sec_edgar", "regulatory_filing"),
-    ],
-    protocolEvidence: [
-      pushUnavailable("protocol_release", "github_releases", "github", "protocol_release"),
-    ],
-  };
+  return ensureExplicitAbsentLanes({
+    bundle: {},
+    instrumentId: input.instrumentId,
+    evaluatedAt: input.evaluatedAt,
+    degradationReasons: input.degradationReasons,
+  });
 }
