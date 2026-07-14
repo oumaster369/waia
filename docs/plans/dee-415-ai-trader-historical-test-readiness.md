@@ -209,6 +209,29 @@ state:
     - HTR-WP12
   activeMacroStatus: APPROVED   # 2026-07-14: HTR-MACRO-D Human-approved (APPROVE-HTR-MACRO-D consumed); MACRO_D_MIGRATION_DECISION NONE
   buildAuthorized: YES   # 2026-07-14: HTR-MACRO-D only (APPROVE-HTR-MACRO-D-BUILD consumed); Composer executes WP11 then WP12; no auto-advance to Macro E/WP13; single final PR still gated on all 23 WPs
+  # --- HTR-WP11 CLOSEOUT (Opus Macro-D Phase B, 2026-07-14) ---
+  wp11WorkCommitSha: f6cefb064c562ae29f506cac5e319c826da3912b
+  wp11OpusPostReview: PASS
+  wp11AcceptedEvidencePath: replay-runs/RI-P7/htr-wp11-pit-provider-context/
+  wp11AcceptedEvidenceGitSha: f6cefb064c562ae29f506cac5e319c826da3912b   # gitSha recorded in the accepted WP11 evidence report (dirtyTree: true), bound to the WP11 WORK commit
+  wp11EvidenceManifestDigest: b8f043acff23c4b3d8ae5f5db13d1d40db08283928b76996d1ee5dfebcc8b20c   # independently reproduced = sha256(canonical fusedContextDigest string) from pit-provider-context-report.json
+  wp11EvidenceBinding: WP11_EVIDENCE_VALID_AT_F6CEFB0   # fusedContextDigest byte-identical across a4a67ce->f6cefb0->993fdab; WP12 changed only the evidence gitSha provenance field, semantic digest unchanged
+  wp11PostWorkChangeClassification:
+    assertNoFutureEvidenceReorder: WP11_POST_WORK_NON_SEMANTIC_CORRECTION   # skip UNAVAILABLE/FUTURE_EVIDENCE_EXCLUDED/SIDECAR_LANE_ABSENT before the future-timestamp throw; payloads stripped by normalizeUnavailableObservation ({unavailable:true,reason}); future obs neutralized pre-fusion by guardNoLookahead; auditable degradationReasons; a genuine HEALTHY future observation still throws HTR_WP11_FUTURE_EVIDENCE_REACHABLE
+    quoteForReplayCycle: WP11_POST_WORK_NON_SEMANTIC_CORRECTION   # real historical path unchanged (quoteFromBar no-op when no override); override branch only re-stamps a caller-supplied static fixture quote symbol/timestamp to the closed bar barCloseTime (past, PIT-valid); no fabricated observation/provenance/price-timeline; sidecar-v3 PIT untouched
+    wp11EvidenceGitShaRestamp: WP11_POST_WORK_NON_SEMANTIC_CORRECTION   # WP12 commit updated WP11 evidence gitSha a4a67ce->f6cefb0 only; fusedContextDigest byte-identical -> not evidence-invalidating
+  wp11FabricatedAvailability: false
+  wp11FutureEvidenceReachable: false   # no reachable future payload downstream (strategy/CDE/Canvas/Market Understanding)
+  wp11TerminalState: WORK_PACKAGE_COMPLETE
+  wp11GapsClosed:
+    - HTR-GAP-012
+    - HTR-GAP-013
+  wp11Validation:
+    validateCanon: PASS
+    lint: PASS
+    typecheck: PASS
+    tests: PASS
+    build: PASS
   d11bStatus: RESOLVED
   d11bDecisionStatus: HUMAN_APPROVED
   d11bApprovalDate: 2026-07-13
@@ -267,8 +290,8 @@ state:
     - HTR-WP08
     - HTR-WP09
     - HTR-WP10
-  remainingWorkPackages:
     - HTR-WP11
+  remainingWorkPackages:
     - HTR-WP12
     - HTR-WP13
     - HTR-WP14
@@ -628,7 +651,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP08 | Incremental reconstruction + oracle parity | WP07 | backend | COMPLETE (Opus Phase-B PASS; WORK `0c4b8c3`; RECONSTRUCTION_ORACLE_PARITY_OK — 22/22 exact, 0 divergence, FULL_HISTORY_RESCANS 0, bounds true, work growth linear; HTR-GAP-002 contribution remains OPEN closure HTR-WP09) | `0c4b8c3` (WORK) |
 | HTR-WP09 | Canvas runtime integration + benchmark qual + default cutover | WP08,WP03 | backend | COMPLETE (Opus Macro-C Phase B PASS 2026-07-14; WORK `46820ac`; prequalification correction `c57a7a0`; instrumentation correction `bc9cb46`; memory-gate alignment `7c532f5`; D-11B PASS under Memory Gate Amendment v1, accepted evidence `replay-runs/RI-P7/htr-wp09-canvas-runtime-qualification/` digest `78560485…`; qualification bound to `7c532f5` per Human Amendment-v1 exception; HTR-GAP-001/002/003 CLOSED) | `46820ac` (WORK) |
 | HTR-WP10 | No-lookahead + determinism property suites | WP09 | backend | COMPLETE (Opus Macro-C Phase B PASS 2026-07-14; WORK `befa6c1`; validation correction `2987f37` — test-only; evidence `replay-runs/RI-P7/htr-wp10-determinism-nolookahead/` digest `fa5def37…`; no WP09 measurement-critical surface changed; full validation green; HTR-GAP-004/025/031 CLOSED; Macro C COMPLETE) | `befa6c1` (WORK) |
-| HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | WP01,WP09 | backend | pending | — |
+| HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | WP01,WP09 | backend | COMPLETE (Opus Macro-D Phase B PASS 2026-07-14; WORK `f6cefb0`; single sanctioned `buildHistoricalIngressContext` + sidecar-v3 PIT selection, all 15 optional lanes explicit incl. UNAVAILABLE/SIDECAR_LANE_ABSENT, no live provider/network call, replay/live parity; accepted evidence `replay-runs/RI-P7/htr-wp11-pit-provider-context/` manifest digest `b8f043ac…`; post-WORK non-semantic corrections (assertNoFutureEvidence reorder, quoteForReplayCycle fixture-timestamp binding, evidence gitSha restamp) classified, no fabricated availability, no future evidence reachable; HTR-GAP-012/013 CLOSED) | `f6cefb0` (WORK) |
 | HTR-WP12 | Ingress bar-integrity gate + versioned dataset manifest | WP01 | backend | pending | — |
 | HTR-WP13 | Intelligence-chain activation (historical run profile) | WP09,WP10,WP11,WP12 | ai | pending | — |
 | HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | pending | — |

@@ -42,8 +42,8 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 | HTR-GAP-009 | Terminal reason not universal | major | open | HTR-WP13 | — | HTR-WP13 | IB-HTR-13 |
 | HTR-GAP-010 | MKB read-model unwired | major | open | HTR-WP15 | HTR-WP21 | HTR-WP21 | IB-HTR-15 |
 | HTR-GAP-011 | Forecast/Decision records absent | blocker | open | HTR-WP14 | — | HTR-WP14 | IB-HTR-14 |
-| HTR-GAP-012 | PIT provider context missing | blocker | open | HTR-WP11 | — | HTR-WP11 | IB-HTR-11 |
-| HTR-GAP-013 | Gateway bypass on historical paths | major | open | HTR-WP11 | — | HTR-WP11 | IB-HTR-11 |
+| HTR-GAP-012 | PIT provider context missing | blocker | closed (2026-07-14; WP11 WORK f6cefb0 added the single sanctioned buildHistoricalIngressContext producer + sidecar-v3 PIT selection — event/ingest/availableAt eligibility, deterministic four-key tie-break, bounded freshness, all 15 optional lanes explicit incl. UNAVAILABLE/SIDECAR_LANE_ABSENT, V1/V2 byte compatibility; accepted evidence replay-runs/RI-P7/htr-wp11-pit-provider-context/ manifest digest b8f043ac…; Opus Macro-D Phase B PASS) | HTR-WP11 | — | HTR-WP11 | IB-HTR-11 |
+| HTR-GAP-013 | Gateway bypass on historical paths | major | closed (2026-07-14; WP11 WORK f6cefb0 gateway enforcement — assertNoNetworkImport + assertNoFutureEvidence, no live provider/network call, replay/live normalization+degradation parity, HistoricalBarReplaySource/HistoricalBarSource/FixtureBarReplaySource routed through the sanctioned historical ingress; Opus Macro-D Phase B PASS) | HTR-WP11 | — | HTR-WP11 | IB-HTR-11 |
 | HTR-GAP-014 | No ingress bar-integrity gate | blocker | open | HTR-WP12 | — | HTR-WP12 | IB-HTR-12 |
 | HTR-GAP-015 | No versioned dataset manifest | blocker | open | HTR-WP12 | HTR-WP23 | HTR-WP12 | IB-HTR-12 |
 | HTR-GAP-016 | Cancel/expire/partial-fill sim missing | major | open | HTR-WP17 | — | HTR-WP17 | IB-HTR-17 |
