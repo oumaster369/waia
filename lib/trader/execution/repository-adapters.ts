@@ -28,6 +28,7 @@ import {
   listOrdersSqlite,
   recordFillSqlite,
   transitionOrderSqlite,
+  type SqliteOrderRepositoryClockDeps,
 } from "@/lib/trader/execution/repository-sqlite";
 
 type PgOrderExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
@@ -40,10 +41,13 @@ function toPromise<T>(fn: () => T): Promise<T> {
   }
 }
 
-export function createSqliteOrderRepository(db: WaiaDb): OrderRepository {
+export function createSqliteOrderRepository(
+  db: WaiaDb,
+  clockDeps: SqliteOrderRepositoryClockDeps = {},
+): OrderRepository {
   return {
     createOrder: (context, input) =>
-      runSqliteTransaction(db, (tx) => createOrderSqlite(tx, context, input)),
+      runSqliteTransaction(db, (tx) => createOrderSqlite(tx, context, input, clockDeps)),
     getOrderById: (context, id) => toPromise(() => getOrderByIdSqlite(db, context, id)),
     findOrderByClientOrderId: (context, clientOrderId) =>
       toPromise(() => findOrderByClientOrderIdSqlite(db, context, clientOrderId)),
@@ -52,8 +56,9 @@ export function createSqliteOrderRepository(db: WaiaDb): OrderRepository {
     listOpenOrders: (context, filter) => toPromise(() => listOpenOrdersSqlite(db, context, filter)),
     listOrders: (context, filter) => toPromise(() => listOrdersSqlite(db, context, filter)),
     transitionOrder: (context, input) =>
-      runSqliteTransaction(db, (tx) => transitionOrderSqlite(tx, context, input)),
-    recordFill: (context, input) => toPromise(() => recordFillSqlite(db, context, input)),
+      runSqliteTransaction(db, (tx) => transitionOrderSqlite(tx, context, input, clockDeps)),
+    recordFill: (context, input) =>
+      toPromise(() => recordFillSqlite(db, context, input, clockDeps)),
     listEvents: (context, orderId) => toPromise(() => listEventsSqlite(db, context, orderId)),
     listFills: (context, orderId) => toPromise(() => listFillsSqlite(db, context, orderId)),
   };

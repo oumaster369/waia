@@ -15,6 +15,11 @@ import type { OrderRepository } from "@/lib/trader/execution/order-repository.ty
 import { createLifecycleRecorder, createSqliteLifecycleRepository } from "@/lib/trader/lifecycle";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import { createManualReplayClock } from "@/lib/trader/research/deterministic-replay-clock";
+import {
+  createDeterministicReplayIdFactory,
+  RESEARCH_REPLAY_CLOCK_START_MS,
+  RESEARCH_REPLAY_ID_NAMESPACE,
+} from "@/lib/trader/research/deterministic-replay-id-factory";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import {
   createKillSwitchResolver,
@@ -47,17 +52,25 @@ export async function createInMemoryResearchBacktestSession(): Promise<InMemoryR
 
   const db = getDb();
   const writeAudit = (_input: TraderAuditInput) => "see-a15-audit";
-  // Deterministic replay clock (DEE-397 / ADR-0021): advanced to each cycle's evaluated bar
-  // time by the backtest runner, so re-derivation from a sealed dataset is reproducible.
-  const replayClock = createManualReplayClock(Date.now());
+  // Deterministic replay clock (DEE-397 / ADR-0021 / HTR-WP10): seeded from the first
+  // golden-fixture bar close; advanced to each cycle's evaluated bar time by the runner.
+  const replayClock = createManualReplayClock(RESEARCH_REPLAY_CLOCK_START_MS);
   const nowMs = () => replayClock.nowMs();
+  const now = () => new Date(nowMs());
+  const sessionNewId = createDeterministicReplayIdFactory(RESEARCH_REPLAY_ID_NAMESPACE.session);
+  const orderNewId = createDeterministicReplayIdFactory(RESEARCH_REPLAY_ID_NAMESPACE.order);
+  const newDecisionId = createDeterministicReplayIdFactory(RESEARCH_REPLAY_ID_NAMESPACE.decision);
   const rateStore = createInMemoryOrderRateStore();
   const connector = new MockExchangeConnector({ nowMs });
   await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
 
-  const orderRepository = createSqliteOrderRepository(db);
+  const orderRepository = createSqliteOrderRepository(db, { newId: orderNewId, now });
   const lifecycleRepository = createSqliteLifecycleRepository(db);
-  const lifecycleRecorder = createLifecycleRecorder({ repository: lifecycleRepository });
+  const lifecycleRecorder = createLifecycleRecorder({
+    repository: lifecycleRepository,
+    newId: sessionNewId,
+    nowMs,
+  });
   const killSwitchResolver = createKillSwitchResolver({
     repository: createSqliteKillSwitchRepository(db),
     nowMs,
@@ -69,7 +82,7 @@ export async function createInMemoryResearchBacktestSession(): Promise<InMemoryR
     rateStore,
     writeAudit,
     nowMs,
-    newDecisionId: () => crypto.randomUUID(),
+    newDecisionId,
   });
   const execution = createOrderExecutionServiceFromDeps({
     riskEngine,
@@ -94,6 +107,7 @@ export async function createInMemoryResearchBacktestSession(): Promise<InMemoryR
       researchReplayDeterminism: {
         clock: replayClock,
         resetWindowState: () => rateStore.clear(),
+        newId: sessionNewId,
       },
     },
     orderRepository,

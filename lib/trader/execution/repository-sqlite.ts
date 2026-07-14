@@ -34,6 +34,19 @@ import {
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
+export type SqliteOrderRepositoryClockDeps = {
+  newId?: () => string;
+  now?: () => Date;
+};
+
+function resolveOrderNewId(deps?: SqliteOrderRepositoryClockDeps): () => string {
+  return deps?.newId ?? (() => crypto.randomUUID());
+}
+
+function resolveOrderNow(deps?: SqliteOrderRepositoryClockDeps): Date {
+  return deps?.now?.() ?? new Date();
+}
+
 function mapOrderRow(row: typeof traderOrders.$inferSelect): OrderRow {
   return {
     id: row.id,
@@ -241,8 +254,10 @@ export function createOrderSqlite(
   db: WaiaDb,
   context: OrgContext,
   input: CreateOrderInput,
+  deps: SqliteOrderRepositoryClockDeps = {},
 ): OrderRow {
   const scoped = requireOrgContext(context.organizationId);
+  const newId = resolveOrderNewId(deps);
 
   const byClientOrderId = findOrderByClientOrderIdSqlite(db, context, input.clientOrderId);
   if (byClientOrderId) {
@@ -254,8 +269,8 @@ export function createOrderSqlite(
     return resolveExistingOrderForCreate(byIdempotencyKey, input);
   }
 
-  const id = crypto.randomUUID();
-  const now = new Date();
+  const id = newId();
+  const now = resolveOrderNow(deps);
 
   try {
     db.insert(traderOrders)
@@ -284,7 +299,7 @@ export function createOrderSqlite(
 
     db.insert(traderOrderEvents)
       .values({
-        id: crypto.randomUUID(),
+        id: newId(),
         organizationId: scoped.organizationId,
         orderId: id,
         seq: 0,
@@ -321,7 +336,9 @@ export function transitionOrderSqlite(
   db: WaiaDb,
   context: OrgContext,
   input: TransitionOrderInput,
+  deps: SqliteOrderRepositoryClockDeps = {},
 ): OrderRow {
+  const newId = resolveOrderNewId(deps);
   const existing = getOrderByIdSqlite(db, context, input.orderId);
   if (!existing) {
     throw new OrderNotFoundError(input.orderId);
@@ -329,7 +346,7 @@ export function transitionOrderSqlite(
 
   assertTransition(existing.state, input.toState);
 
-  const now = new Date();
+  const now = resolveOrderNow(deps);
   const result = db
     .update(traderOrders)
     .set({
@@ -371,7 +388,7 @@ export function transitionOrderSqlite(
 
   db.insert(traderOrderEvents)
     .values({
-      id: crypto.randomUUID(),
+      id: newId(),
       organizationId: scoped.organizationId,
       orderId: input.orderId,
       seq: nextSeq,
@@ -390,7 +407,13 @@ export function transitionOrderSqlite(
   return updated;
 }
 
-export function recordFillSqlite(db: WaiaDb, context: OrgContext, input: RecordFillInput): FillRow {
+export function recordFillSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  input: RecordFillInput,
+  deps: SqliteOrderRepositoryClockDeps = {},
+): FillRow {
+  const newId = resolveOrderNewId(deps);
   const scoped = requireOrgContext(context.organizationId);
   const existingFill = db
     .select()
@@ -418,8 +441,8 @@ export function recordFillSqlite(db: WaiaDb, context: OrgContext, input: RecordF
     throw new OrderNotFoundError(input.orderId);
   }
 
-  const id = crypto.randomUUID();
-  const now = new Date();
+  const id = newId();
+  const now = resolveOrderNow(deps);
   const fee = input.fee ?? "0";
   const feeAsset = input.feeAsset ?? "";
 

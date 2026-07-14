@@ -294,6 +294,7 @@ export async function runPaperCycleOnce(
 ): Promise<PaperCycleResult> {
   const { snapshot, context } = input;
   const executionMode = input.executionMode ?? "mock";
+  const cycleNewId = input.newId ?? deps.researchReplayDeterminism?.newId;
 
   const evaluation = runEvaluationCycle({
     organizationId: context.organizationId,
@@ -301,7 +302,7 @@ export async function runPaperCycleOnce(
     quote: snapshot.quote,
     evaluatedAt: snapshot.evaluatedAt,
     fusedContext: input.fusedContext,
-    newId: input.newId,
+    newId: cycleNewId,
     telemetrySink: input.telemetrySink,
     hypothesisSessionState: input.hypothesisSessionState,
     miCoreEnabled: input.miCoreEnabled,

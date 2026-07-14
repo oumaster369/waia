@@ -27,8 +27,12 @@ import type { EvaluationCycleInput, EvaluationCycleResult } from "@/lib/trader/i
 export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycleResult {
   const newId = input.newId ?? crypto.randomUUID.bind(crypto);
   const miCore = input.miCoreEnabled ?? isMiCoreEnabled();
-  const evaluatedAt =
-    input.evaluatedAt ?? input.bars.at(-1)?.barCloseTime ?? new Date().toISOString();
+  const evaluatedAt = input.evaluatedAt ?? input.bars.at(-1)?.barCloseTime;
+  if (!evaluatedAt) {
+    throw new Error(
+      "[trader/intelligence] runEvaluationCycle requires evaluatedAt or at least one bar with barCloseTime",
+    );
+  }
 
   const features = computeFeatureSnapshot({
     bars: input.bars,

@@ -42,6 +42,8 @@ import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 export type ResearchReplayDeterminismDeps = {
   clock: DeterministicReplayClock;
   resetWindowState(): void;
+  /** Default id factory when callers omit `PaperCycleInput.newId` (HTR-WP10). */
+  newId?: () => string;
 };
 
 /** M2 deposit-aware sizing context (optional — legacy cycles omit this). */

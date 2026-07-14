@@ -19,7 +19,12 @@ import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 export type LifecycleRecorderDeps = {
   repository: LifecycleRepository;
   newId?: () => string;
+  nowMs?: () => number;
 };
+
+function resolveLifecycleNow(deps: LifecycleRecorderDeps): Date {
+  return deps.nowMs ? new Date(deps.nowMs()) : new Date();
+}
 
 export type RecordFillLifecycleInput = {
   context: OrgContext;
@@ -74,7 +79,7 @@ export async function recordSignalAcceptedLifecycleEvent(
       entityId: input.strategySignalId,
       phase: "SIGNAL_ACCEPTED",
       payload: input.payload ? JSON.stringify(input.payload) : null,
-      occurredAt: input.occurredAt ?? new Date(),
+      occurredAt: input.occurredAt ?? resolveLifecycleNow(deps),
       researchRunId: input.researchRunId ?? null,
     },
   });
@@ -158,7 +163,6 @@ async function recordBuyFill(
   const tradeId = newId();
   const lotId = newId();
   const legId = newId();
-  const now = new Date();
 
   await deps.repository.insertTrade(context, {
     trade: {
@@ -327,7 +331,7 @@ async function recordSellFill(
         state: "CLOSED",
         closedAt: fill.executedAt,
         realizedPnl: nextRealized,
-        frozenAt: new Date(),
+        frozenAt: resolveLifecycleNow(deps),
       });
 
       await recordLifecyclePhase(deps, {
@@ -356,6 +360,7 @@ async function recordSellFill(
           {
             repository: deps.repository,
             newId: deps.newId,
+            nowMs: deps.nowMs,
             recordLifecyclePhase: (phaseInput) => recordLifecyclePhase(deps, phaseInput),
           },
           {
@@ -433,7 +438,7 @@ export async function recordForcedFlatLifecycle(
     const proceeds = multiplyDecimal(markToClose.adjustedSellPrice, lot.remainingQty);
     const cost = multiplyDecimal(lot.remainingQty, lot.avgCost);
     const legPnl = subtractDecimal(subtractDecimal(proceeds, cost), legFee);
-    const frozenAt = new Date();
+    const frozenAt = resolveLifecycleNow(deps);
 
     await deps.repository.insertTradeLeg(context, {
       leg: {
