@@ -12,6 +12,10 @@ import {
   runResearchValidationBacktest,
   type ResearchValidationBacktestArtifactSink,
 } from "@/lib/trader/research/research-backtest-runner";
+import {
+  buildWp10DeterminismManifest,
+  type Wp10DefaultReplayResult,
+} from "@/lib/trader/research/wp10-determinism-evidence-harness";
 import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import { RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION } from "@/lib/trader/research/strategy-candidate.types";
@@ -29,18 +33,7 @@ export function loadWp10FixtureBars(): { bars: Bar[]; latestQuote: Quote } {
   return JSON.parse(readFileSync(filePath, "utf8")) as { bars: Bar[]; latestQuote: Quote };
 }
 
-export type Wp10DefaultReplayResult = {
-  metrics: unknown;
-  decisionTraceDigest: string;
-  reproDigest: string;
-  cycleCount: number;
-  closedTradeCount: number;
-  orderIds: string[];
-  fillIds: string[];
-  fillExecutedAtIso: string[];
-  featureSetIds: string[];
-  strategySignalIds: string[];
-};
+export type { Wp10DefaultReplayResult } from "@/lib/trader/research/wp10-determinism-evidence-harness";
 
 export async function runWp10DefaultSessionReplay(
   generatedAt: string,
@@ -143,4 +136,17 @@ export async function runWp10DefaultSessionReplay(
   } finally {
     session.cleanup();
   }
+}
+
+export async function computeWp10DeterminismEvidence(
+  generatedAt = "2026-01-01T00:00:00.000Z",
+): Promise<{
+  replay: Wp10DefaultReplayResult;
+  manifest: ReturnType<typeof buildWp10DeterminismManifest>;
+}> {
+  const replay = await runWp10DefaultSessionReplay(generatedAt);
+  return {
+    replay,
+    manifest: buildWp10DeterminismManifest(replay),
+  };
 }
