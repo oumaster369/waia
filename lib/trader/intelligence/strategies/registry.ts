@@ -130,10 +130,15 @@ export function evaluateRegisteredStrategies(
     if (isResearchOnlyStrategyForProfile(strategyId, context.historicalProfile)) {
       return {
         ...signal,
+        researchEvaluationOutcome: signal.outcome,
+        tradeEligible: false,
         outcome: "NO_SIGNAL",
       };
     }
-    return signal;
+    return {
+      ...signal,
+      tradeEligible: true,
+    };
   });
 }
 

@@ -2,145 +2,147 @@
  * DEE-415 / HTR-WP13 — intelligence bundle idempotency (opt-in).
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import postgres from "postgres";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
-import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
-import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { persistIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
-import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
-import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
-import { createDeterministicReplayIdFactory } from "@/lib/trader/research/deterministic-replay-id-factory";
 import { IntelligenceRecordsIdempotencyConflictError } from "@/lib/trader/intelligence/records/errors";
-import type { Bar } from "@/lib/trader/intelligence/types";
+import {
+  buildWp13Bundle,
+  cleanupWp13IntelligenceRows,
+  cleanupWp13Org,
+  countWp13RowsForRun,
+  seedWp13User,
+  WP13_PG_USER_A,
+} from "./wp13-intelligence-test-helpers";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
-const USER_A = "00000000-0000-4000-8000-0000000415p2";
-
-function bars(): Bar[] {
-  return Array.from({ length: 80 }, (_, i) => ({
-    symbol: "BTC/USDT",
-    interval: "1m" as const,
-    open: "100",
-    high: "101",
-    low: "99",
-    close: "100",
-    volume: "1",
-    barOpenTime: new Date(Date.UTC(2024, 0, 1, 0, i)).toISOString(),
-    barCloseTime: new Date(Date.UTC(2024, 0, 1, 0, i + 1)).toISOString(),
-  }));
-}
 
 describe.skipIf(!integrationEnabled || !url)(
   "postgres trader intelligence bundle idempotency (DEE-415 / HTR-WP13)",
   () => {
     let orgA: string;
 
-    async function cleanup(): Promise<void> {
-      const sql = postgres(url!, { max: 1 });
-      try {
-        const orgId = personalOrganizationIdFromUserId(USER_A);
-        await sql.unsafe(
-          `DELETE FROM trader_intelligence_conviction_record WHERE organization_id = $1`,
-          [orgId],
-        );
-        await sql.unsafe(
-          `DELETE FROM trader_intelligence_hypothesis_record WHERE organization_id = $1`,
-          [orgId],
-        );
-        await sql.unsafe(
-          `DELETE FROM trader_intelligence_cycle_envelope WHERE organization_id = $1`,
-          [orgId],
-        );
-        await sql.unsafe(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM organizations WHERE id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM user_platform_roles WHERE user_id = $1`, [USER_A]);
-        await sql.unsafe(`DELETE FROM profiles WHERE user_id = $1`, [USER_A]);
-        await sql.unsafe(`DELETE FROM users WHERE id = $1`, [USER_A]);
-        await sql.unsafe(`DELETE FROM auth.users WHERE id = $1`, [USER_A]);
-      } finally {
-        await sql.end({ timeout: 5 });
-      }
-    }
-
     beforeAll(async () => {
-      await cleanup();
-      const sql = postgres(url!, { max: 1 });
-      try {
-        await sql.unsafe(`INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [
-          USER_A,
-        ]);
-      } finally {
-        await sql.end({ timeout: 5 });
-      }
-      const db = getPostgresDrizzle();
-      orgA = await ensureUserCoreSeedPostgres(db, {
-        userId: USER_A,
-        displayName: "WP13 Intelligence Bundle Idempotency",
-      });
+      await cleanupWp13Org(url!, WP13_PG_USER_A);
+      orgA = await seedWp13User(url!, WP13_PG_USER_A, "WP13 Intelligence Bundle Idempotency");
+    });
+
+    beforeEach(async () => {
+      await cleanupWp13IntelligenceRows(url!, orgA);
     });
 
     afterAll(async () => {
-      await cleanup();
+      await cleanupWp13Org(url!, WP13_PG_USER_A);
       resetPostgresSingletonForTests();
     });
 
     it("accepts identical replay twice idempotently", async () => {
       const db = getPostgresDrizzle();
-      const cycle = runEvaluationCycle({
-        organizationId: orgA,
-        bars: bars(),
-        historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
-        runId: "wp13-idem-run",
-        cycleId: "0",
-        newId: createDeterministicReplayIdFactory(415_130),
-      });
-      const bundle = buildIntelligenceCycleBundle({
-        organizationId: orgA,
-        runId: "wp13-idem-run",
-        cycleId: "0",
-        symbol: "BTC/USDT",
-        marketStateSnapshot: cycle.marketStateSnapshot!,
-        decisionChain: cycle.decisionChain!,
-      });
+      const bundle = buildWp13Bundle(orgA, "wp13-idem-run", "0");
       await persistIntelligenceCycleBundle({ organizationId: orgA }, bundle, db);
       await persistIntelligenceCycleBundle({ organizationId: orgA }, bundle, db);
+      const counts = await countWp13RowsForRun(url!, orgA, "wp13-idem-run");
+      expect(counts.envelopes).toBe(1);
+      expect(counts.convictions).toBe(1);
     });
 
     it("fails closed on same key with changed terminal reason digest", async () => {
       const db = getPostgresDrizzle();
-      const cycle = runEvaluationCycle({
-        organizationId: orgA,
-        bars: bars(),
-        historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
-        runId: "wp13-conflict-run",
-        cycleId: "1",
-        newId: createDeterministicReplayIdFactory(415_130),
-      });
-      const bundle = buildIntelligenceCycleBundle({
-        organizationId: orgA,
-        runId: "wp13-conflict-run",
-        cycleId: "1",
-        symbol: "BTC/USDT",
-        marketStateSnapshot: cycle.marketStateSnapshot!,
-        decisionChain: cycle.decisionChain!,
-      });
+      const bundle = buildWp13Bundle(orgA, "wp13-conflict-terminal", "1");
       await persistIntelligenceCycleBundle({ organizationId: orgA }, bundle, db);
 
       const divergent = {
         ...bundle,
         envelope: {
           ...bundle.envelope,
-          terminalReasonCode: "ALLOW_TRADING",
+          terminalReasonCode: "ALLOW_TRADING" as const,
           contentDigest: "0".repeat(64),
         },
       };
       await expect(
         persistIntelligenceCycleBundle({ organizationId: orgA }, divergent, db),
       ).rejects.toBeInstanceOf(IntelligenceRecordsIdempotencyConflictError);
+    });
+
+    it("fails closed on same key with changed hypothesis evidence digest", async () => {
+      const db = getPostgresDrizzle();
+      const bundle = buildWp13Bundle(orgA, "wp13-conflict-hypothesis", "2");
+      await persistIntelligenceCycleBundle({ organizationId: orgA }, bundle, db);
+      if (bundle.hypotheses.length === 0) {
+        return;
+      }
+      const divergent = {
+        ...bundle,
+        hypotheses: bundle.hypotheses.map((row, index) =>
+          index === 0
+            ? { ...row, evidenceDigest: "f".repeat(64), contentDigest: "1".repeat(64) }
+            : row,
+        ),
+      };
+      await expect(
+        persistIntelligenceCycleBundle({ organizationId: orgA }, divergent, db),
+      ).rejects.toBeInstanceOf(IntelligenceRecordsIdempotencyConflictError);
+    });
+
+    it("fails closed on same key with changed conviction value", async () => {
+      const db = getPostgresDrizzle();
+      const bundle = buildWp13Bundle(orgA, "wp13-conflict-conviction", "3");
+      await persistIntelligenceCycleBundle({ organizationId: orgA }, bundle, db);
+      const divergent = {
+        ...bundle,
+        conviction: {
+          ...bundle.conviction,
+          convictionValue: "9.999",
+          contentDigest: "2".repeat(64),
+        },
+      };
+      await expect(
+        persistIntelligenceCycleBundle({ organizationId: orgA }, divergent, db),
+      ).rejects.toBeInstanceOf(IntelligenceRecordsIdempotencyConflictError);
+    });
+
+    it("concurrent identical insertions leave one semantic bundle and both succeed", async () => {
+      const db = getPostgresDrizzle();
+      const bundle = buildWp13Bundle(orgA, "wp13-concurrent-identical", "0");
+      const context = { organizationId: orgA };
+      const results = await Promise.allSettled([
+        persistIntelligenceCycleBundle(context, bundle, db),
+        persistIntelligenceCycleBundle(context, bundle, db),
+      ]);
+      expect(results.every((result) => result.status === "fulfilled")).toBe(true);
+      const counts = await countWp13RowsForRun(url!, orgA, "wp13-concurrent-identical");
+      expect(counts.envelopes).toBe(1);
+      expect(counts.convictions).toBe(1);
+    });
+
+    it("concurrent divergent insertions yield one success and one conflict", async () => {
+      const db = getPostgresDrizzle();
+      const bundle = buildWp13Bundle(orgA, "wp13-concurrent-divergent", "1");
+      const divergent = {
+        ...bundle,
+        envelope: {
+          ...bundle.envelope,
+          terminalReasonCode: "ALLOW_TRADING" as const,
+          contentDigest: "3".repeat(64),
+        },
+      };
+      const context = { organizationId: orgA };
+      const results = await Promise.allSettled([
+        persistIntelligenceCycleBundle(context, bundle, db),
+        persistIntelligenceCycleBundle(context, divergent, db),
+      ]);
+      const fulfilled = results.filter((result) => result.status === "fulfilled");
+      const rejected = results.filter((result) => result.status === "rejected");
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]?.status === "rejected" && rejected[0].reason).toBeInstanceOf(
+        IntelligenceRecordsIdempotencyConflictError,
+      );
+      const counts = await countWp13RowsForRun(url!, orgA, "wp13-concurrent-divergent");
+      expect(counts.envelopes).toBe(1);
+      expect(counts.convictions).toBe(1);
     });
   },
 );

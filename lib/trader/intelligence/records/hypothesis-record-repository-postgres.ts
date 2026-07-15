@@ -2,17 +2,17 @@ import { and, eq } from "drizzle-orm";
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import * as pgSchema from "@/db/schema.postgres";
-import { isUniqueConstraintError } from "@/lib/trader/execution/order-repository.types";
 import { IntelligenceRecordsIdempotencyConflictError } from "@/lib/trader/intelligence/records/errors";
 import type { TraderIntelligenceHypothesisRecord } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { HypothesisRecordRepository } from "@/lib/trader/intelligence/records/repository-adapters";
+import { runIdempotentInsertWithSavepoint } from "@/lib/trader/intelligence/records/postgres-idempotent-insert";
 import {
   orgScopedWhere,
   requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
-type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert">;
+type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
 
 function mapRow(
   row: typeof pgSchema.traderIntelligenceHypothesisRecord.$inferSelect,
@@ -92,29 +92,32 @@ export function createHypothesisRecordRepositoryPostgres(
         return;
       }
 
-      try {
-        await ex.insert(pgSchema.traderIntelligenceHypothesisRecord).values({
-          id: record.id,
-          organizationId: scoped.organizationId,
-          cycleEnvelopeId: record.cycleEnvelopeId,
-          runId: record.runId,
-          cycleId: record.cycleId,
-          symbol: record.symbol,
-          evaluatedAt: new Date(record.evaluatedAt),
-          hypothesisType: record.hypothesisType,
-          hypothesisStatus: record.hypothesisStatus,
-          confidenceValue: record.confidenceValue,
-          thesisDigest: record.thesisDigest,
-          evidenceDigest: record.evidenceDigest,
-          miHypothesisId: record.miHypothesisId,
-          authoritativeLinkDigest: record.authoritativeLinkDigest,
-          contentDigest: record.contentDigest,
-          schemaVersion: record.schemaVersion,
-        });
-      } catch (error) {
-        if (!isUniqueConstraintError(error)) {
-          throw error;
-        }
+      const insertResult = await runIdempotentInsertWithSavepoint(
+        ex,
+        "hypothesis_record",
+        async () => {
+          await ex.insert(pgSchema.traderIntelligenceHypothesisRecord).values({
+            id: record.id,
+            organizationId: scoped.organizationId,
+            cycleEnvelopeId: record.cycleEnvelopeId,
+            runId: record.runId,
+            cycleId: record.cycleId,
+            symbol: record.symbol,
+            evaluatedAt: new Date(record.evaluatedAt),
+            hypothesisType: record.hypothesisType,
+            hypothesisStatus: record.hypothesisStatus,
+            confidenceValue: record.confidenceValue,
+            thesisDigest: record.thesisDigest,
+            evidenceDigest: record.evidenceDigest,
+            miHypothesisId: record.miHypothesisId,
+            authoritativeLinkDigest: record.authoritativeLinkDigest,
+            contentDigest: record.contentDigest,
+            schemaVersion: record.schemaVersion,
+          });
+        },
+      );
+
+      if (insertResult === "unique_violation") {
         const raced = await this.findByBusinessKey(context, {
           runId: record.runId,
           cycleId: record.cycleId,

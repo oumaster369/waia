@@ -2,13 +2,13 @@ import { and, eq } from "drizzle-orm";
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import * as pgSchema from "@/db/schema.postgres";
-import { isUniqueConstraintError } from "@/lib/trader/execution/order-repository.types";
 import { IntelligenceRecordsIdempotencyConflictError } from "@/lib/trader/intelligence/records/errors";
 import type { TraderIntelligenceConvictionRecord } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { ConvictionRecordRepository } from "@/lib/trader/intelligence/records/repository-adapters";
+import { runIdempotentInsertWithSavepoint } from "@/lib/trader/intelligence/records/postgres-idempotent-insert";
 import { orgScopedWhere, requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
-type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert">;
+type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
 
 function mapRow(
   row: typeof pgSchema.traderIntelligenceConvictionRecord.$inferSelect,
@@ -84,28 +84,31 @@ export function createConvictionRecordRepositoryPostgres(
         return;
       }
 
-      try {
-        await ex.insert(pgSchema.traderIntelligenceConvictionRecord).values({
-          id: record.id,
-          organizationId: scoped.organizationId,
-          cycleEnvelopeId: record.cycleEnvelopeId,
-          activeHypothesisRecordId: record.activeHypothesisRecordId,
-          convictionScope: record.convictionScope,
-          runId: record.runId,
-          cycleId: record.cycleId,
-          symbol: record.symbol,
-          evaluatedAt: new Date(record.evaluatedAt),
-          convictionValue: record.convictionValue,
-          convictionClass: record.convictionClass,
-          reasonCodesJson: JSON.stringify([...record.reasonCodes]),
-          sustainedCycles: record.sustainedCycles,
-          contentDigest: record.contentDigest,
-          schemaVersion: record.schemaVersion,
-        });
-      } catch (error) {
-        if (!isUniqueConstraintError(error)) {
-          throw error;
-        }
+      const insertResult = await runIdempotentInsertWithSavepoint(
+        ex,
+        "conviction_record",
+        async () => {
+          await ex.insert(pgSchema.traderIntelligenceConvictionRecord).values({
+            id: record.id,
+            organizationId: scoped.organizationId,
+            cycleEnvelopeId: record.cycleEnvelopeId,
+            activeHypothesisRecordId: record.activeHypothesisRecordId,
+            convictionScope: record.convictionScope,
+            runId: record.runId,
+            cycleId: record.cycleId,
+            symbol: record.symbol,
+            evaluatedAt: new Date(record.evaluatedAt),
+            convictionValue: record.convictionValue,
+            convictionClass: record.convictionClass,
+            reasonCodesJson: JSON.stringify([...record.reasonCodes]),
+            sustainedCycles: record.sustainedCycles,
+            contentDigest: record.contentDigest,
+            schemaVersion: record.schemaVersion,
+          });
+        },
+      );
+
+      if (insertResult === "unique_violation") {
         const raced = await this.findByBusinessKey(context, {
           runId: record.runId,
           cycleId: record.cycleId,

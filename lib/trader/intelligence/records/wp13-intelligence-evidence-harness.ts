@@ -81,7 +81,15 @@ export function runWp13IntelligenceEvidenceHarness() {
   );
   const trendMomentumTradeEligible = generationOne.some((cycle) =>
     cycle.signals.some(
-      (signal) => signal.strategyId === TREND_MOMENTUM_V0 && signal.outcome === "SIGNAL",
+      (signal) =>
+        signal.strategyId === TREND_MOMENTUM_V0 &&
+        (signal.tradeEligible === true || signal.outcome === "SIGNAL"),
+    ),
+  );
+  const trendMomentumResearchPreserved = generationOne.some((cycle) =>
+    cycle.signals.some(
+      (signal) =>
+        signal.strategyId === TREND_MOMENTUM_V0 && signal.researchEvaluationOutcome !== undefined,
     ),
   );
 
@@ -135,6 +143,7 @@ export function runWp13IntelligenceEvidenceHarness() {
     ),
     trendMomentumEvidenceVisible: trendMomentumVisible,
     trendMomentumTradeEligible: trendMomentumTradeEligible,
+    trendMomentumResearchPreserved: trendMomentumResearchPreserved,
     deterministicHypothesisLinks: true,
     deterministicRecordIds: true,
     deterministicContentDigests: true,

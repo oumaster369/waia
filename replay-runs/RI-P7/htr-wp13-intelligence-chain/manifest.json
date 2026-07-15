@@ -17,6 +17,7 @@
   "noTradeObservationPreserved": true,
   "trendMomentumEvidenceVisible": true,
   "trendMomentumTradeEligible": false,
+  "trendMomentumResearchPreserved": true,
   "deterministicHypothesisLinks": true,
   "deterministicRecordIds": true,
   "deterministicContentDigests": true,
@@ -25,7 +26,7 @@
   "partialCyclePublication": false,
   "semanticDigest": "b6b3badd0d385ca3f56b87426d32b389285273d1026be68ff421526992f6b0d5",
   "provenance": {
-    "baseGitSha": "8c97ad047bc9263fd8c42ea15d3d1bd733facca4",
+    "baseGitSha": "d07bb654eacb8940b194669094c995efdf2f5342",
     "trackedWorktreeDirty": true,
     "profileDigest": "9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe",
     "matrixDigest": "6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6"

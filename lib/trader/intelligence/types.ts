@@ -235,6 +235,10 @@ export type StrategySignal = {
   organizationId: string;
   symbol: InstrumentId;
   outcome: SignalOutcome;
+  /** Raw evaluator outcome before trade-eligibility projection (D-2 research-only consumers). */
+  researchEvaluationOutcome?: SignalOutcome;
+  /** Whether this signal may participate in trade-eligible primary selection. */
+  tradeEligible?: boolean;
   side?: "buy" | "sell";
   confidence?: string;
   expectedEdge?: string;

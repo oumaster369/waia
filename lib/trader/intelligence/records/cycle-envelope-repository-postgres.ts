@@ -2,17 +2,17 @@ import { and, eq } from "drizzle-orm";
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import * as pgSchema from "@/db/schema.postgres";
-import { isUniqueConstraintError } from "@/lib/trader/execution/order-repository.types";
 import { IntelligenceRecordsIdempotencyConflictError } from "@/lib/trader/intelligence/records/errors";
 import type { TraderIntelligenceCycleEnvelopeRecord } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { CycleEnvelopeRepository } from "@/lib/trader/intelligence/records/repository-adapters";
+import { runIdempotentInsertWithSavepoint } from "@/lib/trader/intelligence/records/postgres-idempotent-insert";
 import {
   orgScopedWhere,
   requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
-type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert">;
+type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
 
 function mapRow(
   row: typeof pgSchema.traderIntelligenceCycleEnvelope.$inferSelect,
@@ -85,27 +85,30 @@ export function createCycleEnvelopeRepositoryPostgres(ex: PgExecutor): CycleEnve
         return;
       }
 
-      try {
-        await ex.insert(pgSchema.traderIntelligenceCycleEnvelope).values({
-          id: record.id,
-          organizationId: scoped.organizationId,
-          runId: record.runId,
-          cycleId: record.cycleId,
-          symbol: record.symbol,
-          evaluatedAt: new Date(record.evaluatedAt),
-          historicalProfileId: record.historicalProfileId,
-          historicalProfileDigest: record.historicalProfileDigest,
-          matrixDigest: record.matrixDigest,
-          terminalReasonCode: record.terminalReasonCode,
-          inputSemanticDigest: record.inputSemanticDigest,
-          outputSemanticDigest: record.outputSemanticDigest,
-          contentDigest: record.contentDigest,
-          schemaVersion: record.schemaVersion,
-        });
-      } catch (error) {
-        if (!isUniqueConstraintError(error)) {
-          throw error;
-        }
+      const insertResult = await runIdempotentInsertWithSavepoint(
+        ex,
+        "cycle_envelope",
+        async () => {
+          await ex.insert(pgSchema.traderIntelligenceCycleEnvelope).values({
+            id: record.id,
+            organizationId: scoped.organizationId,
+            runId: record.runId,
+            cycleId: record.cycleId,
+            symbol: record.symbol,
+            evaluatedAt: new Date(record.evaluatedAt),
+            historicalProfileId: record.historicalProfileId,
+            historicalProfileDigest: record.historicalProfileDigest,
+            matrixDigest: record.matrixDigest,
+            terminalReasonCode: record.terminalReasonCode,
+            inputSemanticDigest: record.inputSemanticDigest,
+            outputSemanticDigest: record.outputSemanticDigest,
+            contentDigest: record.contentDigest,
+            schemaVersion: record.schemaVersion,
+          });
+        },
+      );
+
+      if (insertResult === "unique_violation") {
         const raced = await this.findByBusinessKey(context, {
           runId: record.runId,
           cycleId: record.cycleId,
