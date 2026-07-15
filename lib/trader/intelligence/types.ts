@@ -16,6 +16,8 @@ import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstru
 import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
 import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
+import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
+import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
 
 /** Canonical spot symbol for MVP intelligence slice (HTX-style slash form). */
 export const BTC_USDT = "BTC/USDT" as const;
@@ -272,6 +274,8 @@ export type EvaluationCycleInput = {
   cycleId?: string;
   /** HTR-WP13: symbol for intelligence records (defaults to bar symbol). */
   symbol?: string;
+  /** HTR-WP14: cost model for net-economics fail-closed decision records. */
+  costModel?: CostModelV1;
 };
 
 export type EvaluationCycleResult = {
@@ -291,4 +295,6 @@ export type EvaluationCycleResult = {
   hypothesisSessionState?: HypothesisSessionState;
   /** HTR-WP13: intelligence cycle bundle when historical profile active. */
   intelligenceCycleBundle?: IntelligenceCycleBundle;
+  /** HTR-WP14: forecast-decision bundle when historical profile active. */
+  forecastDecisionBundle?: ForecastDecisionBundle;
 };

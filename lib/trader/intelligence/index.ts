@@ -125,3 +125,4 @@ export {
   type UniversalTerminalReasonCode,
 } from "@/lib/trader/intelligence/terminal-reason/universal-terminal-reason";
 export * from "@/lib/trader/intelligence/records";
+export * from "@/lib/trader/intelligence/forecast-decision";

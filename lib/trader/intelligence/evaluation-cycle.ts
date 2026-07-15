@@ -6,6 +6,7 @@ import { buildHypothesisSet } from "@/lib/trader/intelligence/hypothesis/build-h
 import { isMiCoreEnabled } from "@/lib/trader/intelligence/mi-core-flag";
 import { isHistoricalProfileActive } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
+import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
 import { createEmptyHypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import {
   finalizeMarketStateSnapshot,
@@ -171,6 +172,18 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
         })
       : undefined;
 
+  const forecastDecisionBundle =
+    profileActive && intelligenceCycleBundle && hypothesisSet && decisionChain
+      ? buildForecastDecisionBundle({
+          intelligenceCycleBundle,
+          hypothesisSet,
+          decisionChain,
+          msv,
+          signal,
+          costModel: input.costModel,
+        })
+      : undefined;
+
   return {
     features,
     msv,
@@ -184,5 +197,6 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     decisionChain,
     hypothesisSessionState: nextSessionState,
     intelligenceCycleBundle,
+    forecastDecisionBundle,
   };
 }

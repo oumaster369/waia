@@ -3051,6 +3051,200 @@ export const traderIntelligenceConvictionRecord = pgTable(
   ],
 );
 
+export const traderIntelligenceForecastRecord = pgTable(
+  "trader_intelligence_forecast_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    cycleEnvelopeId: uuid("cycle_envelope_id").notNull(),
+    hypothesisRecordId: uuid("hypothesis_record_id").notNull(),
+    convictionRecordId: uuid("conviction_record_id").notNull(),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    forecastKeyDigest: text("forecast_key_digest").notNull(),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true, mode: "date" }).notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    evidenceCutoffAt: timestamp("evidence_cutoff_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    targetWindowStartAt: timestamp("target_window_start_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    targetWindowEndAt: timestamp("target_window_end_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    marketQuestion: text("market_question").notNull(),
+    invalidationConditionsJson: text("invalidation_conditions_json").notNull(),
+    scenarioSetJson: text("scenario_set_json").notNull(),
+    forecastConfidenceJson: text("forecast_confidence_json").notNull(),
+    historicalProfileId: text("historical_profile_id").notNull(),
+    historicalProfileDigest: text("historical_profile_digest").notNull(),
+    matrixDigest: text("matrix_digest").notNull(),
+    evidenceDigest: text("evidence_digest").notNull(),
+    authoritativeLinkDigest: text("authoritative_link_digest").notNull(),
+    forecastModelVersion: text("forecast_model_version").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_intelligence_forecast_record_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_intelligence_forecast_record_org_run_cycle_symbol_key_unique").on(
+      t.organizationId,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+      t.forecastKeyDigest,
+    ),
+    index("trader_intelligence_forecast_record_org_cycle_envelope_idx").on(
+      t.organizationId,
+      t.cycleEnvelopeId,
+    ),
+  ],
+);
+
+export const traderIntelligenceDecisionRecord = pgTable(
+  "trader_intelligence_decision_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    cycleEnvelopeId: uuid("cycle_envelope_id").notNull(),
+    convictionRecordId: uuid("conviction_record_id").notNull(),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true, mode: "date" }).notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    decisionClass: text("decision_class").notNull(),
+    universalTerminalReasonCode: text("universal_terminal_reason_code").notNull(),
+    whyNotCashJson: text("why_not_cash_json"),
+    whyCashOrAbstainJson: text("why_cash_or_abstain_json"),
+    grossExpectedReward: text("gross_expected_reward"),
+    expectedFees: text("expected_fees"),
+    expectedSlippage: text("expected_slippage"),
+    expectedOtherCosts: text("expected_other_costs"),
+    expectedRewardAfterCosts: text("expected_reward_after_costs"),
+    costModelId: text("cost_model_id"),
+    costModelVersion: text("cost_model_version"),
+    costEvidenceState: text("cost_evidence_state").notNull(),
+    cdeMsvPermissionSnapshotJson: text("cde_msv_permission_snapshot_json").notNull(),
+    reasonCodesJson: text("reason_codes_json").notNull(),
+    strategyId: text("strategy_id"),
+    strategyVersion: text("strategy_version"),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_intelligence_decision_record_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_intelligence_decision_record_org_run_cycle_symbol_unique").on(
+      t.organizationId,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+    ),
+    index("trader_intelligence_decision_record_org_cycle_envelope_idx").on(
+      t.organizationId,
+      t.cycleEnvelopeId,
+    ),
+  ],
+);
+
+export const traderIntelligenceDecisionForecastLink = pgTable(
+  "trader_intelligence_decision_forecast_link",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    decisionRecordId: uuid("decision_record_id").notNull(),
+    forecastRecordId: uuid("forecast_record_id").notNull(),
+    linkRole: text("link_role").notNull(),
+    ordinal: integer("ordinal").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_intelligence_decision_forecast_link_id_organization_unique").on(
+      t.id,
+      t.organizationId,
+    ),
+    uniqueIndex("trader_intelligence_decision_forecast_link_org_decision_forecast_unique").on(
+      t.organizationId,
+      t.decisionRecordId,
+      t.forecastRecordId,
+    ),
+    uniqueIndex("trader_intelligence_decision_forecast_link_org_decision_ordinal_unique").on(
+      t.organizationId,
+      t.decisionRecordId,
+      t.ordinal,
+    ),
+  ],
+);
+
+export const traderIntelligenceEntryPurposeRecord = pgTable(
+  "trader_intelligence_entry_purpose_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    decisionRecordId: uuid("decision_record_id").notNull(),
+    primaryForecastRecordId: uuid("primary_forecast_record_id").notNull(),
+    hypothesisRecordId: uuid("hypothesis_record_id").notNull(),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    originalThesisJson: text("original_thesis_json").notNull(),
+    expectedPath: text("expected_path").notNull(),
+    forecastHorizon: text("forecast_horizon").notNull(),
+    entryReason: text("entry_reason").notNull(),
+    entryConditionJson: text("entry_condition_json").notNull(),
+    invalidationConditionJson: text("invalidation_condition_json").notNull(),
+    initialStopModelJson: text("initial_stop_model_json").notNull(),
+    targetModelJson: text("target_model_json").notNull(),
+    optionalPartialTargetsJson: text("optional_partial_targets_json"),
+    maximumHoldingUntil: timestamp("maximum_holding_until", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    whyNotCashJson: text("why_not_cash_json").notNull(),
+    riskAmountJson: text("risk_amount_json").notNull(),
+    expectedRewardAfterCosts: text("expected_reward_after_costs").notNull(),
+    evidenceDigest: text("evidence_digest").notNull(),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_intelligence_entry_purpose_record_id_organization_unique").on(
+      t.id,
+      t.organizationId,
+    ),
+    uniqueIndex("trader_intelligence_entry_purpose_record_org_decision_unique").on(
+      t.organizationId,
+      t.decisionRecordId,
+    ),
+    uniqueIndex("trader_intelligence_entry_purpose_record_org_run_cycle_symbol_unique").on(
+      t.organizationId,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+    ),
+  ],
+);
+
 /**
  * Postgres transaction integration validation table (DEE-64 D6-core).
  * Used only by opt-in `tests/integration/postgres-transaction-rollback.test.ts` to verify commit/rollback semantics.

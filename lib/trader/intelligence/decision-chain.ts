@@ -3,6 +3,7 @@ import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothe
 import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
 import {
   DECISION_CHAIN_SCHEMA_VERSION,
+  LD7_DECISION_CHAIN_BOUNDARY,
   miCoreReasonCodes,
   type CycleObservationRecord,
   type DecisionChain,
@@ -72,3 +73,5 @@ export function assembleDecisionChain(input: AssembleDecisionChainInput): Decisi
     tradingPermission: input.tradingPermission,
   };
 }
+
+export { LD7_DECISION_CHAIN_BOUNDARY };

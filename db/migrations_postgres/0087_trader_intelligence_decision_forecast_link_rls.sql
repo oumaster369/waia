@@ -1,0 +1,11 @@
+-- DEE-415 / HTR-WP14: intelligence decision-forecast link RLS (ADR-0007 deny authenticated/anon)
+
+ALTER TABLE public.trader_intelligence_decision_forecast_link ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS trader_intelligence_decision_forecast_link_deny_authenticated_select ON public.trader_intelligence_decision_forecast_link;
+CREATE POLICY trader_intelligence_decision_forecast_link_deny_authenticated_select ON public.trader_intelligence_decision_forecast_link FOR SELECT TO authenticated, anon USING (false);
+DROP POLICY IF EXISTS trader_intelligence_decision_forecast_link_deny_authenticated_insert ON public.trader_intelligence_decision_forecast_link;
+CREATE POLICY trader_intelligence_decision_forecast_link_deny_authenticated_insert ON public.trader_intelligence_decision_forecast_link FOR INSERT TO authenticated, anon WITH CHECK (false);
+DROP POLICY IF EXISTS trader_intelligence_decision_forecast_link_deny_authenticated_update ON public.trader_intelligence_decision_forecast_link;
+CREATE POLICY trader_intelligence_decision_forecast_link_deny_authenticated_update ON public.trader_intelligence_decision_forecast_link FOR UPDATE TO authenticated, anon USING (false);
+DROP POLICY IF EXISTS trader_intelligence_decision_forecast_link_deny_authenticated_delete ON public.trader_intelligence_decision_forecast_link;
+CREATE POLICY trader_intelligence_decision_forecast_link_deny_authenticated_delete ON public.trader_intelligence_decision_forecast_link FOR DELETE TO authenticated, anon USING (false);

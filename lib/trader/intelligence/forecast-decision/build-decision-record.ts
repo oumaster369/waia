@@ -1,0 +1,264 @@
+import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
+import { COST_MODEL_VERSION_V1 } from "@/lib/trader/execution/cost-model";
+import { multiplyDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
+import type { DecisionChain } from "@/lib/trader/intelligence/mi-core.types";
+import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { deriveDecisionRecordId } from "@/lib/trader/intelligence/forecast-decision/derive-forecast-decision-ids";
+import {
+  canonicalizeReasonCodesJson,
+  computeDecisionRecordContentDigest,
+} from "@/lib/trader/intelligence/forecast-decision/serialize-forecast-decision";
+import {
+  DECISION_RECORD_SCHEMA_VERSION,
+  type CostEvidenceState,
+  type DecisionClass,
+  type TraderIntelligenceDecisionRecord,
+} from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
+import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
+import type { MsvEnvelope, StrategySignal } from "@/lib/trader/intelligence/types";
+
+export const wp14DecisionReasonCodes = {
+  costEvidenceUnavailable: "WP14_COST_EVIDENCE_UNAVAILABLE",
+  noTradeableSignal: "WP14_NO_TRADEABLE_SIGNAL",
+  cdePermissionSnapshotOnly: "WP14_CDE_MSV_PERMISSION_SNAPSHOT_ONLY",
+} as const;
+
+export type BuildDecisionRecordInput = Readonly<{
+  intelligenceCycleBundle: IntelligenceCycleBundle;
+  decisionChain: DecisionChain;
+  msv: MsvEnvelope;
+  signal: StrategySignal;
+  costModel?: CostModelV1;
+}>;
+
+type CostEvidenceResolution = Readonly<{
+  state: CostEvidenceState;
+  grossExpectedReward: string | null;
+  expectedFees: string | null;
+  expectedSlippage: string | null;
+  expectedOtherCosts: string | null;
+  expectedRewardAfterCosts: string | null;
+  costModelId: string | null;
+  costModelVersion: string | null;
+}>;
+
+function buildCdeMsvPermissionSnapshot(msv: MsvEnvelope): string {
+  return canonicalizeSemanticJsonString({
+    regime: msv.derived.regime,
+    trading_permission: msv.derived.tradingPermission,
+    allowed_strategy_ids: msv.derived.allowedStrategyIds,
+    risk_multiplier: msv.derived.riskMultiplier,
+    data_quality_score: msv.derived.dataQualityScore,
+    reason_codes: msv.derived.reasonCodes,
+    conviction: msv.derived.conviction ?? null,
+    opportunity_authorized: msv.derived.opportunityAuthorized ?? false,
+    active_hypothesis_type: msv.derived.activeHypothesisType ?? null,
+    snapshot_role: "CDE_MSV_PERMISSION_ONLY_NOT_LD7_DECISION",
+  });
+}
+
+function resolveCostEvidence(
+  signal: StrategySignal,
+  costModel?: CostModelV1,
+): CostEvidenceResolution {
+  if (!costModel) {
+    return {
+      state: "UNAVAILABLE",
+      grossExpectedReward: null,
+      expectedFees: null,
+      expectedSlippage: null,
+      expectedOtherCosts: null,
+      expectedRewardAfterCosts: null,
+      costModelId: null,
+      costModelVersion: null,
+    };
+  }
+
+  if (!signal.expectedEdge || signal.outcome !== "SIGNAL") {
+    return {
+      state: "NOT_APPLICABLE",
+      grossExpectedReward: null,
+      expectedFees: null,
+      expectedSlippage: null,
+      expectedOtherCosts: null,
+      expectedRewardAfterCosts: null,
+      costModelId: costModel.version,
+      costModelVersion: costModel.version,
+    };
+  }
+
+  const grossExpectedReward = signal.expectedEdge;
+  const notional = signal.maxRisk ?? "1";
+  const expectedFees = multiplyDecimal(notional, multiplyDecimal(costModel.feesBps, "0.0001"));
+  const expectedSlippage = multiplyDecimal(
+    notional,
+    multiplyDecimal(costModel.slippageBps, "0.0001"),
+  );
+  const expectedOtherCosts = "0";
+  const expectedRewardAfterCosts = subtractDecimal(
+    subtractDecimal(subtractDecimal(grossExpectedReward, expectedFees), expectedSlippage),
+    expectedOtherCosts,
+  );
+
+  return {
+    state: "AVAILABLE",
+    grossExpectedReward,
+    expectedFees,
+    expectedSlippage,
+    expectedOtherCosts,
+    expectedRewardAfterCosts,
+    costModelId: COST_MODEL_VERSION_V1,
+    costModelVersion: costModel.version,
+  };
+}
+
+function resolveDecisionClass(input: {
+  decisionChain: DecisionChain;
+  signal: StrategySignal;
+  costEvidence: CostEvidenceResolution;
+}): DecisionClass {
+  if (input.costEvidence.state === "UNAVAILABLE") {
+    return "NO_TRADE";
+  }
+
+  const tradeEligible =
+    input.signal.tradeEligible === true ||
+    (input.signal.outcome === "SIGNAL" && input.signal.tradeEligible !== false);
+
+  if (
+    input.decisionChain.opportunityAuthorized &&
+    input.decisionChain.tradingPermission === "ALLOW_TRADING" &&
+    tradeEligible &&
+    input.signal.outcome === "SIGNAL" &&
+    input.costEvidence.state === "AVAILABLE"
+  ) {
+    return "TRADE";
+  }
+
+  if (
+    input.decisionChain.opportunityAuthorized &&
+    input.decisionChain.tradingPermission === "ALLOW_REDUCED_RISK" &&
+    tradeEligible &&
+    input.signal.outcome === "SIGNAL" &&
+    input.costEvidence.state === "AVAILABLE"
+  ) {
+    return "REDUCED_RISK";
+  }
+
+  return "NO_TRADE";
+}
+
+function buildWhyNotCashJson(
+  input: BuildDecisionRecordInput,
+  decisionClass: DecisionClass,
+): string | null {
+  if (decisionClass === "NO_TRADE") {
+    return null;
+  }
+
+  return canonicalizeSemanticJsonString({
+    active_hypothesis_type: input.decisionChain.activeHypothesisType,
+    conviction_value: input.intelligenceCycleBundle.conviction.convictionValue,
+    opportunity_authorized: input.decisionChain.opportunityAuthorized,
+    trading_permission: input.decisionChain.tradingPermission,
+    strategy_id: input.signal.strategyId,
+    strategy_version: input.signal.strategyVersion,
+    lane_influence_codes: input.msv.derived.reasonCodes,
+    risk_beats_cash_rationale:
+      "Active hypothesis conviction and trade-eligible strategy signal justify risk over cash preservation.",
+  });
+}
+
+function buildWhyCashOrAbstainJson(
+  input: BuildDecisionRecordInput,
+  decisionClass: DecisionClass,
+  costEvidence: CostEvidenceResolution,
+): string | null {
+  if (decisionClass !== "NO_TRADE") {
+    return null;
+  }
+
+  const abstainCodes = [...input.decisionChain.reasonCodes];
+  if (costEvidence.state === "UNAVAILABLE") {
+    abstainCodes.push(wp14DecisionReasonCodes.costEvidenceUnavailable);
+  }
+  if (input.signal.outcome !== "SIGNAL" || input.signal.tradeEligible === false) {
+    abstainCodes.push(wp14DecisionReasonCodes.noTradeableSignal);
+  }
+
+  return canonicalizeSemanticJsonString({
+    terminal_reason_code: input.decisionChain.terminalReasonCode,
+    abstain_rationale_codes: abstainCodes,
+    trading_permission: input.decisionChain.tradingPermission,
+    opportunity_authorized: input.decisionChain.opportunityAuthorized,
+    cde_msv_snapshot_role: "PERMISSION_CONTEXT_ONLY",
+  });
+}
+
+export function buildDecisionRecord(
+  input: BuildDecisionRecordInput,
+): TraderIntelligenceDecisionRecord {
+  const envelope = input.intelligenceCycleBundle.envelope;
+  const conviction = input.intelligenceCycleBundle.conviction;
+  const costEvidence = resolveCostEvidence(input.signal, input.costModel);
+  const decisionClass = resolveDecisionClass({
+    decisionChain: input.decisionChain,
+    signal: input.signal,
+    costEvidence,
+  });
+
+  const reasonCodes = [
+    ...input.decisionChain.reasonCodes,
+    wp14DecisionReasonCodes.cdePermissionSnapshotOnly,
+  ];
+  if (costEvidence.state === "UNAVAILABLE") {
+    reasonCodes.push(wp14DecisionReasonCodes.costEvidenceUnavailable);
+  }
+
+  const strategyId = decisionClass === "NO_TRADE" ? null : input.signal.strategyId;
+  const strategyVersion = decisionClass === "NO_TRADE" ? null : input.signal.strategyVersion;
+
+  const base: TraderIntelligenceDecisionRecord = {
+    id: deriveDecisionRecordId({
+      organizationId: envelope.organizationId,
+      runId: envelope.runId,
+      cycleId: envelope.cycleId,
+      symbol: envelope.symbol,
+    }),
+    organizationId: envelope.organizationId,
+    cycleEnvelopeId: envelope.id,
+    convictionRecordId: conviction.id,
+    runId: envelope.runId,
+    cycleId: envelope.cycleId,
+    symbol: envelope.symbol,
+    evaluatedAt: envelope.evaluatedAt,
+    issuedAt: envelope.evaluatedAt,
+    decisionClass,
+    universalTerminalReasonCode: input.decisionChain.terminalReasonCode,
+    whyNotCashJson: buildWhyNotCashJson(input, decisionClass),
+    whyCashOrAbstainJson: buildWhyCashOrAbstainJson(input, decisionClass, costEvidence),
+    grossExpectedReward: decisionClass === "NO_TRADE" ? null : costEvidence.grossExpectedReward,
+    expectedFees: decisionClass === "NO_TRADE" ? null : costEvidence.expectedFees,
+    expectedSlippage: decisionClass === "NO_TRADE" ? null : costEvidence.expectedSlippage,
+    expectedOtherCosts: decisionClass === "NO_TRADE" ? null : costEvidence.expectedOtherCosts,
+    expectedRewardAfterCosts:
+      decisionClass === "NO_TRADE" ? null : costEvidence.expectedRewardAfterCosts,
+    costModelId: decisionClass === "NO_TRADE" ? null : costEvidence.costModelId,
+    costModelVersion: decisionClass === "NO_TRADE" ? null : costEvidence.costModelVersion,
+    costEvidenceState:
+      decisionClass === "NO_TRADE" && costEvidence.state === "UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : costEvidence.state,
+    cdeMsvPermissionSnapshotJson: buildCdeMsvPermissionSnapshot(input.msv),
+    reasonCodesJson: canonicalizeReasonCodesJson(reasonCodes),
+    strategyId,
+    strategyVersion,
+    contentDigest: "",
+    schemaVersion: DECISION_RECORD_SCHEMA_VERSION,
+  };
+
+  return {
+    ...base,
+    contentDigest: computeDecisionRecordContentDigest(base),
+  };
+}

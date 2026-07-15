@@ -60,10 +60,12 @@ import {
   HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import type { IntelligenceCycleBundleRepository } from "@/lib/trader/intelligence/records/repository-adapters";
+import type { ForecastDecisionBundleRepository } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
 import {
   buildIntelligenceCycleBundle,
   persistEvaluationCycleRecords,
 } from "@/lib/trader/intelligence/records/intelligence-records-service";
+import { persistForecastDecisionBundleForCycle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
 
 export type RunBacktestInput = {
   context: OrgContext;
@@ -119,6 +121,8 @@ export type RunBacktestInput = {
   historicalProfile?: HistoricalIntelligenceProfile;
   /** HTR-WP13: optional intelligence records persistence sink. */
   intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
+  /** HTR-WP14: optional forecast-decision persistence sink. */
+  forecastDecisionSink?: ForecastDecisionBundleRepository;
 };
 
 export type RunBacktestResult = {
@@ -304,8 +308,11 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         profile: input.historicalProfile,
       });
       result.evaluation.intelligenceCycleBundle = bundle;
+
+      let wp13Persisted = false;
       if (input.intelligenceRecordsSink) {
         await input.intelligenceRecordsSink.persist(input.context, bundle);
+        wp13Persisted = true;
       } else if (input.deps.researchReplayDeterminism) {
         await persistEvaluationCycleRecords(
           input.context,
@@ -320,6 +327,27 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           },
           {},
         );
+        wp13Persisted = true;
+      }
+
+      if (result.evaluation.hypothesisSet && result.evaluation.forecastDecisionBundle) {
+        const forecastDecisionInput = {
+          intelligenceCycleBundle: bundle,
+          hypothesisSet: result.evaluation.hypothesisSet,
+          decisionChain: result.evaluation.decisionChain,
+          msv: result.evaluation.msv,
+          signal: result.evaluation.signal,
+          costModel: input.costModel,
+          wp13Persisted,
+        };
+
+        if (input.forecastDecisionSink) {
+          await persistForecastDecisionBundleForCycle(input.context, forecastDecisionInput, {
+            bundleRepository: input.forecastDecisionSink,
+          });
+        } else if (input.deps.researchReplayDeterminism) {
+          await persistForecastDecisionBundleForCycle(input.context, forecastDecisionInput, {});
+        }
       }
     }
 
