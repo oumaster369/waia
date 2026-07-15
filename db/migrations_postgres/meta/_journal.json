@@ -631,6 +631,62 @@
       "when": 1780000000059,
       "tag": "0089_trader_intelligence_entry_purpose_record_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1780000000060,
+      "tag": "0090_trader_strategy_lifecycle_event",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1780000000061,
+      "tag": "0091_trader_strategy_lifecycle_event_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1780000000062,
+      "tag": "0092_trader_strategy_trial",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1780000000063,
+      "tag": "0093_trader_strategy_trial_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1780000000064,
+      "tag": "0094_trader_account_drawdown_checkpoint",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1780000000065,
+      "tag": "0095_trader_account_drawdown_checkpoint_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1780000000066,
+      "tag": "0096_trader_strategy_drawdown_checkpoint",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1780000000067,
+      "tag": "0097_trader_strategy_drawdown_checkpoint_rls",
+      "breakpoints": true
     }
   ]
 }

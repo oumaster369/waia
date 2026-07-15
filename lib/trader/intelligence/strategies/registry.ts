@@ -71,7 +71,7 @@ export type StrategyEvaluator = (
   context: StrategyEvaluatorContext,
 ) => StrategySignal;
 
-const MVP_STRATEGY_REGISTRY: readonly StrategyRegistryEntry[] = [
+export const MVP_STRATEGY_REGISTRY: readonly StrategyRegistryEntry[] = [
   {
     strategyId: LIQUIDITY_SWEEP_REVERSAL_V0,
     version: LIQUIDITY_SWEEP_REVERSAL_V0_VERSION,

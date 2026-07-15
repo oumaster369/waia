@@ -3245,6 +3245,177 @@ export const traderIntelligenceEntryPurposeRecord = pgTable(
   ],
 );
 
+export const traderStrategyLifecycleEvent = pgTable(
+  "trader_strategy_lifecycle_event",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    fromState: text("from_state"),
+    toState: text("to_state").notNull(),
+    actor: text("actor").notNull(),
+    approvalRef: text("approval_ref"),
+    reasonCode: text("reason_code"),
+    seq: integer("seq").notNull(),
+    effectiveAt: timestamp("effective_at", { withTimezone: true, mode: "date" }).notNull(),
+    runId: text("run_id"),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_strategy_lifecycle_event_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_strategy_lifecycle_event_org_strategy_version_seq_unique").on(
+      t.organizationId,
+      t.strategyId,
+      t.strategyVersion,
+      t.seq,
+    ),
+    index("trader_strategy_lifecycle_event_org_strategy_version_effective_idx").on(
+      t.organizationId,
+      t.strategyId,
+      t.strategyVersion,
+      t.effectiveAt,
+    ),
+  ],
+);
+
+export const traderStrategyTrial = pgTable(
+  "trader_strategy_trial",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    accountKey: text("account_key").notNull(),
+    portfolioId: text("portfolio_id").notNull(),
+    seq: integer("seq").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    registeredBy: text("registered_by").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_strategy_trial_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_strategy_trial_org_strategy_run_cycle_symbol_unique").on(
+      t.organizationId,
+      t.strategyId,
+      t.strategyVersion,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+    ),
+    uniqueIndex("trader_strategy_trial_org_strategy_run_seq_unique").on(
+      t.organizationId,
+      t.strategyId,
+      t.strategyVersion,
+      t.runId,
+      t.seq,
+    ),
+    index("trader_strategy_trial_org_strategy_run_event_time_idx").on(
+      t.organizationId,
+      t.strategyId,
+      t.strategyVersion,
+      t.runId,
+      t.eventTime,
+    ),
+  ],
+);
+
+export const traderAccountDrawdownCheckpoint = pgTable(
+  "trader_account_drawdown_checkpoint",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountKey: text("account_key").notNull(),
+    portfolioId: text("portfolio_id").notNull(),
+    runId: text("run_id").notNull(),
+    seq: integer("seq").notNull(),
+    asOf: timestamp("as_of", { withTimezone: true, mode: "date" }).notNull(),
+    monthKey: text("month_key").notNull(),
+    equityUsdt: text("equity_usdt").notNull(),
+    accountPeakHwm: text("account_peak_hwm").notNull(),
+    monthlyPeakHwm: text("monthly_peak_hwm").notNull(),
+    accountDrawdownBps: integer("account_drawdown_bps").notNull(),
+    monthlyDrawdownBps: integer("monthly_drawdown_bps").notNull(),
+    breachState: text("breach_state").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_account_drawdown_checkpoint_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("tadd_chkpt_org_acct_run_seq_uq").on(
+      t.organizationId,
+      t.accountKey,
+      t.portfolioId,
+      t.runId,
+      t.seq,
+    ),
+    index("tadd_chkpt_org_acct_run_asof_ix").on(
+      t.organizationId,
+      t.accountKey,
+      t.portfolioId,
+      t.runId,
+      t.asOf,
+    ),
+  ],
+);
+
+export const traderStrategyDrawdownCheckpoint = pgTable(
+  "trader_strategy_drawdown_checkpoint",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountKey: text("account_key").notNull(),
+    portfolioId: text("portfolio_id").notNull(),
+    runId: text("run_id").notNull(),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    seq: integer("seq").notNull(),
+    asOf: timestamp("as_of", { withTimezone: true, mode: "date" }).notNull(),
+    strategyAllocationUsdt: text("strategy_allocation_usdt").notNull(),
+    strategyEquityUsdt: text("strategy_equity_usdt").notNull(),
+    strategyPeakHwm: text("strategy_peak_hwm").notNull(),
+    strategyDrawdownBps: integer("strategy_drawdown_bps").notNull(),
+    breachState: text("breach_state").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_strategy_drawdown_checkpoint_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("tsdd_chkpt_org_acct_run_strat_ver_seq_uq").on(
+      t.organizationId,
+      t.accountKey,
+      t.portfolioId,
+      t.runId,
+      t.strategyId,
+      t.strategyVersion,
+      t.seq,
+    ),
+    index("tsdd_chkpt_org_acct_run_strat_ver_asof_ix").on(
+      t.organizationId,
+      t.accountKey,
+      t.portfolioId,
+      t.runId,
+      t.strategyId,
+      t.strategyVersion,
+      t.asOf,
+    ),
+  ],
+);
+
 /**
  * Postgres transaction integration validation table (DEE-64 D6-core).
  * Used only by opt-in `tests/integration/postgres-transaction-rollback.test.ts` to verify commit/rollback semantics.

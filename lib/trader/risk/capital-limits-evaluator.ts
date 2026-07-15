@@ -13,6 +13,7 @@ import type {
   CapitalLimitsEvaluationInput,
   CapitalLimitsEvaluatorDeps,
 } from "@/lib/trader/risk/capital-limits.types";
+import type { DrawdownPolicyEvaluationResult } from "@/lib/trader/risk/drawdown-policy.types";
 import {
   addDecimal,
   compareDecimal,
@@ -20,8 +21,23 @@ import {
   multiplyDecimal,
   subtractDecimal,
 } from "@/lib/trader/risk/numeric";
-import { capitalReasonCodes } from "@/lib/trader/risk/reason-codes";
+import {
+  evaluateDrawdownPolicy,
+  evaluateDrawdownPolicyDecision,
+} from "@/lib/trader/risk/drawdown-policy-evaluator";
+import { capitalReasonCodes, drawdownReasonCodes } from "@/lib/trader/risk/reason-codes";
 import type { RiskCheckName, RiskDecision } from "@/lib/trader/risk/types";
+import type { RiskReasonCode } from "@/lib/trader/risk/reason-codes";
+
+type Wp16AccountRiskState = AccountRiskState & {
+  accountPeakHwm?: string;
+  monthlyPeakHwm?: string;
+};
+
+type Wp16CapitalLimitsEvaluationInput = CapitalLimitsEvaluationInput & {
+  drawdownEvaluation?: DrawdownPolicyEvaluationResult;
+  accountState: Wp16AccountRiskState;
+};
 
 function resolveEffectivePrice(order: PlaceOrderInput, referencePrice: string): string {
   if (order.type === "limit") {
@@ -93,7 +109,7 @@ function negateThreshold(threshold: string): string {
 }
 
 export function evaluateCapitalLimits(
-  input: CapitalLimitsEvaluationInput,
+  input: Wp16CapitalLimitsEvaluationInput,
   config: CapitalLimitsConfig,
   deps: CapitalLimitsEvaluatorDeps,
 ): RiskDecision {
@@ -109,6 +125,33 @@ export function evaluateCapitalLimits(
       computedNotional,
       checksApplied: [...checksApplied],
     });
+
+  if (input.drawdownEvaluation) {
+    return evaluateDrawdownPolicyDecision({
+      order: input.order,
+      evaluation: input.drawdownEvaluation,
+      evaluatedAt,
+    });
+  }
+
+  if (
+    input.accountState.equityUsdt &&
+    input.accountState.accountPeakHwm &&
+    input.accountState.monthlyPeakHwm
+  ) {
+    const d20 = evaluateDrawdownPolicy({
+      equityUsdt: input.accountState.equityUsdt,
+      accountPeakHwm: input.accountState.accountPeakHwm,
+      monthlyPeakHwm: input.accountState.monthlyPeakHwm,
+    });
+    if (d20.breachState === "STOP_ACCOUNT") {
+      const reasonCodes: RiskReasonCode[] = [];
+      if (d20.accountBreached) reasonCodes.push(drawdownReasonCodes.accountDrawdown);
+      if (d20.monthlyBreached) reasonCodes.push(drawdownReasonCodes.monthlyDrawdown);
+      if (d20.strategyBreached) reasonCodes.push(drawdownReasonCodes.strategyDrawdown);
+      return stopAccountDecision(reasonCodes, baseSnapshot(), evaluatedAt);
+    }
+  }
 
   checksApplied.push("drawdown");
   if (compareDecimal(input.accountState.drawdown, config.maxDrawdown) >= 0) {

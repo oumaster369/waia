@@ -94,6 +94,29 @@ export type PaperCycleDeps = {
 
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
 import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
+import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
+import type { StrategyLifecycleState } from "@/lib/trader/intelligence/strategies/strategy-lifecycle.types";
+import type { StrategyLifecycleService } from "@/lib/trader/intelligence/strategies/strategy-lifecycle-service";
+import type { StrategyTrialService } from "@/lib/trader/intelligence/strategies/strategy-trial-service";
+import type { DrawdownPolicyEvaluationResult } from "@/lib/trader/risk/drawdown-policy.types";
+
+/** HTR-WP16 strategy gating + drawdown context (optional — legacy cycles omit). */
+export type Wp16GatingContext = {
+  runId: string;
+  portfolioId: string;
+  historicalProfile?: HistoricalIntelligenceProfile;
+  lifecycleService?: StrategyLifecycleService;
+  trialService?: StrategyTrialService;
+  lifecycleStateResolver?: (
+    strategyId: string,
+    strategyVersion: string,
+    asOf: string,
+  ) => Promise<StrategyLifecycleState | null> | StrategyLifecycleState | null;
+  drawdownEvaluation?: DrawdownPolicyEvaluationResult;
+  accountPeakHwm?: string;
+  monthlyPeakHwm?: string;
+  entryPurposeStrategyVersion?: string | null;
+};
 
 export type PaperCycleInput = {
   context: OrgContext;
@@ -118,6 +141,8 @@ export type PaperCycleInput = {
   miCoreEnabled?: boolean;
   /** HTR-WP09: prebuilt incremental reconstruction from canvas view. */
   reconstruction?: import("@/lib/trader/intelligence/reconstruction/reconstruction.types").ReconstructionSnapshot;
+  /** HTR-WP16: strategy eligibility, trial, and drawdown gating context. */
+  wp16?: Wp16GatingContext;
 };
 
 export type PaperCycleSkipReason = "no_signal" | "no_submit";

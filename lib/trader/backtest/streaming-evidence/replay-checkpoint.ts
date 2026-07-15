@@ -7,7 +7,7 @@ import { reconstructStreamingEvidence } from "@/lib/trader/backtest/streaming-ev
 import type { StreamingEvidenceTerminalState } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
 
-export const REPLAY_CHECKPOINT_SCHEMA_VERSION = "htr-wp05-replay-checkpoint/v1" as const;
+export const REPLAY_CHECKPOINT_SCHEMA_VERSION = "htr-wp16-replay-checkpoint/v2" as const;
 export const REPLAY_RUN_CHAIN_MANIFEST_SCHEMA_VERSION = "htr-wp05-run-chain/v1" as const;
 
 export type ResearchReplayPhase = "validation" | `walk-forward:${number}` | "blind" | "none";
@@ -36,6 +36,14 @@ export class ReplayCheckpointError extends Error {
   }
 }
 
+export type ReplayDrawdownHwmState = {
+  accountPeakHwm: string;
+  monthlyPeakHwm: string;
+  monthKey: string;
+  breachState: "NONE" | "CLOSE_ONLY" | "STOP_ACCOUNT";
+  strategyPeaks?: Readonly<Record<string, string>>;
+};
+
 export type ReplayCheckpointRecord = {
   schemaVersion: typeof REPLAY_CHECKPOINT_SCHEMA_VERSION;
   backtestRunId: string;
@@ -53,6 +61,8 @@ export type ReplayCheckpointRecord = {
   replayTerminalState: ReplayRunTerminalState;
   fixtureSha256?: string;
   canvasStateRef?: string;
+  /** HTR-WP16: restart-safe drawdown HWM checkpoint slice. */
+  drawdownHwmState?: ReplayDrawdownHwmState;
   checkpointDigest: string;
 };
 
@@ -124,6 +134,7 @@ export type ReplayResumeIdentity = {
 export type ResumableStateSnapshot = {
   schemaVersion: "htr-wp05-resumable-state/v1";
   canvasStateRef?: string;
+  drawdownHwmState?: ReplayDrawdownHwmState;
 };
 
 const CHECKPOINT_FILENAME = "replay-checkpoint.json";
@@ -220,6 +231,17 @@ export function resolveResumeBoundary(input: ResolveResumeBoundaryInput): Resume
     evidenceChainDigest,
     evidenceTerminalState,
   };
+}
+
+export function serializeCheckpoint(
+  record: Omit<ReplayCheckpointRecord, "checkpointDigest">,
+): ReplayCheckpointRecord {
+  const digest = digestCheckpointPayload(record);
+  return { ...record, checkpointDigest: digest };
+}
+
+export function deserializeCheckpoint(raw: unknown): ReplayCheckpointRecord {
+  return parseCheckpoint(raw);
 }
 
 export function writeReplayCheckpoint(runRootDir: string, record: ReplayCheckpointRecord): void {

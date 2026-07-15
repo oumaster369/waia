@@ -233,6 +233,7 @@ export const liquiditySweepReasonCodes = {
 export type StrategySignal = {
   strategySignalId: string;
   strategyId: MvpStrategyId;
+  /** Exact registered semver; no alias/latest substitution (HTR-WP16 version pin). */
   strategyVersion: string;
   organizationId: string;
   symbol: InstrumentId;

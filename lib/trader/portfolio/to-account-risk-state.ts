@@ -3,17 +3,26 @@ import { addDecimal, compareDecimal, subtractDecimal } from "@/lib/trader/risk/n
 
 import type { PortfolioAccountState } from "@/lib/trader/portfolio/portfolio-account.types";
 
+export type Wp16AccountRiskState = AccountRiskState & {
+  accountPeakHwm?: string;
+  monthlyPeakHwm?: string;
+};
+
 export type ToAccountRiskStateInput = {
   portfolio: PortfolioAccountState;
   openOrderCount: number;
   quoteExposureUsdt?: string;
+  /** HTR-WP16: running account peak-equity HWM (defaults to current equity). */
+  accountPeakHwm?: string;
+  /** HTR-WP16: calendar-month peak-equity HWM (defaults to account peak). */
+  monthlyPeakHwm?: string;
 };
 
 /**
  * Maps M2 portfolio ledger into legacy {@link AccountRiskState} for the risk engine.
  * Populates M2 portfolio extension fields when present.
  */
-export function toAccountRiskState(input: ToAccountRiskStateInput): AccountRiskState {
+export function toAccountRiskState(input: ToAccountRiskStateInput): Wp16AccountRiskState {
   const { portfolio } = input;
   const dailyPnl = subtractDecimal(portfolio.equityUsdt, portfolio.startingBalanceUsdt);
   const drawdown =
@@ -41,6 +50,8 @@ export function toAccountRiskState(input: ToAccountRiskStateInput): AccountRiskS
     openRiskUsdt: portfolio.openRiskUsdt,
     openPositionCount: portfolio.openPositionCount,
     projectedOrderRiskUsdt: "0",
+    accountPeakHwm: input.accountPeakHwm ?? portfolio.equityUsdt,
+    monthlyPeakHwm: input.monthlyPeakHwm ?? input.accountPeakHwm ?? portfolio.equityUsdt,
   };
 }
 

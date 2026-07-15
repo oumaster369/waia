@@ -9,6 +9,13 @@ import {
 } from "@/lib/trader/paper/derive-paper-pnl";
 import { deriveCanonicalInventory } from "@/lib/trader/paper/derive-canonical-inventory";
 import { mapSignalToSubmitOrder } from "@/lib/trader/paper/signal-to-order";
+import { applyRiskMultiplierToQuantity } from "@/lib/trader/paper/apply-risk-multiplier";
+import {
+  evaluateStrategyEligibilityGate,
+  projectIneligibleSignal,
+} from "@/lib/trader/intelligence/strategies/strategy-eligibility-gate";
+import { createDeterministicReplayIdFactory } from "@/lib/trader/research/deterministic-replay-id-factory";
+import { getStrategyRegistryEntry } from "@/lib/trader/intelligence/strategies/registry";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import {
   computeStopBasedQuantity,
@@ -338,7 +345,55 @@ export async function runPaperCycleOnce(
     (guardianPhase.guardianResult?.evaluations.length ?? 0) > 0 ||
     (guardianPhase.guardianExecutions.length ?? 0) > 0;
 
-  if (actionableSignals.length === 0 && !hasGuardianActivity) {
+  const strategyExecutions: PaperCycleStrategyExecution[] = [];
+
+  const gatedSignals = await Promise.all(
+    actionableSignals.map(async (signal) => {
+      if (!input.wp16) {
+        return signal;
+      }
+      const asOf = snapshot.evaluatedAt;
+      const lifecycleState =
+        (input.wp16.lifecycleStateResolver
+          ? await input.wp16.lifecycleStateResolver(signal.strategyId, signal.strategyVersion, asOf)
+          : null) ??
+        getStrategyRegistryEntry(signal.strategyId)?.lifecycleState ??
+        "DRAFT";
+      if (!lifecycleState) {
+        return projectIneligibleSignal(signal, ["STRAT_LIFECYCLE_NOT_ELIGIBLE"]);
+      }
+      const gate = evaluateStrategyEligibilityGate({
+        signal,
+        lifecycleState,
+        historicalProfile: input.wp16.historicalProfile,
+        entryPurposeStrategyVersion: input.wp16.entryPurposeStrategyVersion,
+      });
+      if (!gate.eligible) {
+        return projectIneligibleSignal(signal, gate.reasonCodes);
+      }
+      if (input.wp16.trialService) {
+        const trialIdFactory = cycleNewId ?? createDeterministicReplayIdFactory(415_160);
+        await input.wp16.trialService.registerStrategyTrial(input.context, {
+          strategyId: signal.strategyId,
+          strategyVersion: signal.strategyVersion,
+          runId: input.wp16.runId,
+          cycleId: snapshot.cycleId,
+          symbol: signal.symbol,
+          accountKey: input.accountKey,
+          portfolioId: input.wp16.portfolioId,
+          eventTime: asOf,
+          ingestTime: asOf,
+          registeredBy: "wp16-paper-cycle",
+          deterministicId: trialIdFactory(),
+        });
+      }
+      return signal;
+    }),
+  );
+
+  const eligibleActionableSignals = gatedSignals.filter((signal) => signal.outcome === "SIGNAL");
+
+  if (eligibleActionableSignals.length === 0 && !hasGuardianActivity) {
     return {
       evaluation,
       strategyExecutions: [],
@@ -352,9 +407,7 @@ export async function runPaperCycleOnce(
     };
   }
 
-  const strategyExecutions: PaperCycleStrategyExecution[] = [];
-
-  for (const signal of actionableSignals) {
+  for (const signal of eligibleActionableSignals) {
     const orderKeys = cycleOrderKeys(snapshot.cycleId, signal.strategyId);
     const referencePrice = evaluation.features.features.close;
 
@@ -397,12 +450,16 @@ export async function runPaperCycleOnce(
       }
       sizedQuantity = sizing.quantity;
       stopDistanceUsdt = sizing.stopDistanceUsdt;
+      const riskMultiplier = Number(evaluation.msv.derived.riskMultiplier ?? "1");
+      sizedQuantity = applyRiskMultiplierToQuantity(sizedQuantity, riskMultiplier);
       const openOrders = await input.orderRepository!.listOpenOrders(input.context, {
         executionMode: "mock",
       });
       accountState = toAccountRiskState({
         portfolio: portfolioState,
         openOrderCount: openOrders.length,
+        accountPeakHwm: input.wp16?.accountPeakHwm,
+        monthlyPeakHwm: input.wp16?.monthlyPeakHwm,
       });
     }
 

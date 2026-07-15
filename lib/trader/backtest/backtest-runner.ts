@@ -123,6 +123,8 @@ export type RunBacktestInput = {
   intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
   /** HTR-WP14: optional forecast-decision persistence sink. */
   forecastDecisionSink?: ForecastDecisionBundleRepository;
+  /** HTR-WP16: optional strategy gating + drawdown context. */
+  wp16?: import("@/lib/trader/paper/paper-cycle.types").Wp16GatingContext;
 };
 
 export type RunBacktestResult = {
@@ -293,6 +295,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       hypothesisSessionState,
       miCoreEnabled: profileActive ? true : input.miCoreEnabled,
       reconstruction,
+      wp16: input.wp16,
     });
     paperCycleTimer.end();
     benchmarkObserver.sampleMemory("paper-cycle", cycleIndex);
