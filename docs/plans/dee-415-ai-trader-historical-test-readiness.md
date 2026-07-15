@@ -512,7 +512,6 @@ state:
   d11bQuiescencePolicy: PREFLIGHT_CHECKS_ONLY_NO_NUMERIC_LOAD_AVERAGE_GATE
   wp09CleanCommitQualificationSequence: APPROVE-HTR-WP09-CLEAN-COMMIT-QUALIFICATION-SEQUENCE   # bounded WP09-only lifecycle exception; unchanged macro membership / integration boundary / WORK-commit count / Human gates
   wp09PrequalificationCorrection: APPROVE-HTR-WP09-PREQUALIFICATION-CORRECTION   # 2026-07-13: canonical host-fingerprint verifier (semantic JSON, not raw file bytes) + checkpoint/resume Canvas wiring + resume parity tests; original WP09 WORK commit 46820ac preserved; separate prequalification correction commit is the Stage-C qualification baseline (Human exception to qualificationGitSha==WP09 WORK SHA)
-  readyForFullHistoricalTest: false
   fullHistoricalValidationRunContract:   # v0 — Human-approved future-run contract (APPROVE-FHV-RUN-CONTRACT-V0); does NOT authorize the run during DEE-415
     version: v0
     approvalToken: APPROVE-FHV-RUN-CONTRACT-V0
@@ -1847,7 +1846,7 @@ strategyDrawdownSeparateTable: YES  # relational, not an opaque JSON map — che
 finalMigrationStatus: HUMAN_CONFIRMED  # CONFIRM-HTR-WP16-MIGRATION consumed 2026-07-15; SQL authorized for Phase-A Build only
 ```
 
-### Exact file/symbol manifest (§11) — supersedes rolling-controller §9-G draft where they differ
+### Exact file/symbol manifest (§11) — canonical source of truth; mirrored exactly in rolling-controller §9-G. Any future divergence is a STOP condition `WP16_PACKET_NOT_EXACT`
 
 `CREATE_FILES`
 
