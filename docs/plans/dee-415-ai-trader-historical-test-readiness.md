@@ -27,9 +27,9 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: MACRO_F_INDEPENDENT_PHASE_B_COMPLETE
+  humanApproval: D20_CONSUMED_MACRO_G_PACKET_UNDER_HUMAN_REVIEW
   programStatus: APPROVED_IDLE
-  childPlanStatus: REFRESHED_EXACT_AWAITING_HUMAN_APPROVAL
+  childPlanStatus: HARDENED_EXACT_AWAITING_HUMAN_DECISIONS
   buildAuthorized: NO
   buildAuthorizedScope: null
   composerTerminalState: HTR_MACRO_G_EXACT_PACKET_READY_FOR_HUMAN_REVIEW
@@ -43,16 +43,26 @@ state:
   wp15CloseoutCommitSha: c6e94d9fd75608e280c2ec9054bf19799bd84147
   planningTerminalState: HTR_MACRO_G_EXACT_PACKET_READY_FOR_HUMAN_REVIEW
   governanceStateAuthority: GIT_HEAD
-  governanceReconciledFromHead: 8fe7aeefa64412ae158396fda4cb80b10b0054a2   # Macro F activation commit; reconciliation SHA in gitignored controllers only
+  governanceReconciledFromHead: a0928d5d9bb4ef886e4403a7d08157d5261e272f   # post-Macro-F reconciliation baseline (D-20 refresh commit); reconciliation SHA tracked from GIT_HEAD, never self-referential to the commit being created
   macroFActivationCommitSha: 8fe7aeefa64412ae158396fda4cb80b10b0054a2
   macroFPhaseAStartingHead: 250994f92bed9dd5604bcc5fcb663de0d190506b
   macroFPhaseAStartingHeadClassification: NON_SEMANTIC_GOVERNANCE_DESCENDANT_OF_HUMAN_AUTHORIZED_ACTIVATION
   buildAuthorizationReopened: NO
-  newHumanTokenRequired: NO
+  newHumanTokenRequired: YES
+  requiredHumanTokens:
+    - CONFIRM_HTR_WP16_LIFECYCLE_AND_TRIAL_CONTRACT
+    - CONFIRM_HTR_WP16_DRAWDOWN_ATTRIBUTION
+    - CONFIRM_HTR_WP16_MIGRATION
+    - APPROVE_HTR_MACRO_G
+    - APPROVE_HTR_MACRO_G_BUILD
   wp14ImplementationStatus: WORK_PACKAGE_COMPLETE
   wp15ImplementationStatus: WORK_PACKAGE_COMPLETE
+  wp16ImplementationStatus: NOT_STARTED
   macroFStatus: COMPLETE
-  macroGStatus: REFRESHED_EXACT_AWAITING_HUMAN_APPROVAL
+  macroGStatus: HARDENED_EXACT_AWAITING_HUMAN_DECISIONS
+  macroGMigrationDecision: CONFIRM_REQUIRED
+  nextHumanGate: CONFIRM_HTR_WP16_POLICY_ATTRIBUTION_AND_MIGRATION
+  nextAction: HUMAN_REVIEW_WP16_DECISION_TOKENS
   macroCMigrationDecision: NONE
   macroDMigrationDecision: NONE
   macroCCodeBaselineHead: a8a709ff53f74649b5c5f39e0ba8e00af1e113de
@@ -64,10 +74,10 @@ state:
   activeChildPlan: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
   intelligenceTranche:
     controller: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
-    status: MACRO_G_EXACT_PACKET_AWAITING_HUMAN_APPROVAL
+    status: MACRO_G_HARDENED_EXACT_AWAITING_HUMAN_DECISIONS
     macroPackages: { HTR-MACRO-E: [HTR-WP13], HTR-MACRO-F: [HTR-WP14, HTR-WP15], HTR-MACRO-G: [HTR-WP16] }
     preferredOrderAfterWp13: [HTR-MACRO-F, HTR-MACRO-G]
-    activeMacroStatus: REFRESHED_EXACT_AWAITING_HUMAN_APPROVAL
+    activeMacroStatus: HARDENED_EXACT_AWAITING_HUMAN_DECISIONS
     d4:
       status: HUMAN_APPROVED_CONSUMED
       consumedAt: 2026-07-15
@@ -345,7 +355,7 @@ state:
   macroEStatus: COMPLETE   # 2026-07-15 Composer Phase-B: HTR-WP13 CLOSEOUT
   activeMacroPackage: HTR-MACRO-G
   activeMacroWorkPackages: [HTR-WP16]
-  activeMacroStatus: REFRESHED_EXACT_AWAITING_HUMAN_APPROVAL
+  activeMacroStatus: HARDENED_EXACT_AWAITING_HUMAN_DECISIONS
   phaseBReviewerPolicy:
     defaultReviewer: COMPOSER_2_5_INDEPENDENT_SESSION
     phaseBMustBe:
@@ -640,11 +650,8 @@ state:
   macroFFullValidation: PASS
   wp14TargetedValidation: PASS
   wp15TargetedValidation: PASS
-  nextHumanGate: REVIEW_AND_APPROVE_HTR_MACRO_G_PACKET_AND_MIGRATION_DECISION
-  nextAction: HUMAN_REVIEW_HTR_MACRO_G_EXACT_PACKET
-  macroGMigrationDecision: CONFIRM_REQUIRED
-  wp16Status: EXACT_PACKET_AWAITING_HUMAN_APPROVAL
-  wp16ImplementationStatus: NOT_STARTED
+  wp16Status: HARDENED_EXACT_AWAITING_HUMAN_DECISIONS
+  # nextHumanGate / nextAction / macroGMigrationDecision / wp16ImplementationStatus are the single canonical keys under state: (see above); stale Macro-F-era duplicates removed 2026-07-15 pre-Build audit
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -683,7 +690,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: APPROVED_IDLE` — **HTR-WP01..HTR-WP15 COMPLETE**; **HTR-MACRO-F COMPLETE** (WP14 WORK `b8eeadb`, CLOSEOUT `e4a3a38`; WP15 WORK `645f4be`, CLOSEOUT `c6e94d9`); **HTR-MACRO-G** exact packet refreshed, **Build unauthorized** (`BUILD_AUTHORIZED: NO`; current work package **HTR-WP16**); **D-20 HUMAN_APPROVED_CONSUMED** (2026-07-15); `composerTerminalState: HTR_MACRO_G_EXACT_PACKET_READY_FOR_HUMAN_REVIEW`. **HISTORICAL (CONSUMED/SUPERSEDED):** Macro F Build authorization, Phase-A states, v1 WP14 0082..0087 three-table proposal. |
+| Plan state | `state.status: in-progress` · `programStatus: APPROVED_IDLE` — **HTR-WP01..HTR-WP15 COMPLETE**; **HTR-MACRO-F COMPLETE** (WP14 WORK `b8eeadb`, CLOSEOUT `e4a3a38`; WP15 WORK `645f4be`, CLOSEOUT `c6e94d9`); **HTR-MACRO-G `HARDENED_EXACT_AWAITING_HUMAN_DECISIONS`**, **Build unauthorized** (`BUILD_AUTHORIZED: NO`; current work package **HTR-WP16**); **D-20 HUMAN_APPROVED_CONSUMED** (2026-07-15); three Human decision tokens required (`CONFIRM_HTR_WP16_LIFECYCLE_AND_TRIAL_CONTRACT`, `CONFIRM_HTR_WP16_DRAWDOWN_ATTRIBUTION`, `CONFIRM_HTR_WP16_MIGRATION`) before `APPROVE_HTR_MACRO_G` + `APPROVE_HTR_MACRO_G_BUILD`; `newHumanTokenRequired: YES`; `composerTerminalState: HTR_MACRO_G_EXACT_PACKET_READY_FOR_HUMAN_REVIEW`. **HISTORICAL (CONSUMED/SUPERSEDED):** Macro F Build authorization, Phase-A states, v1 WP14 0082..0087 three-table proposal. |
 
 ## Approved decisions (recorded)
 
@@ -990,7 +997,7 @@ HTR-WP23: runbook and report schema
 
 Recorded per two Human-authorized bounded sessions (both **CONSUMED**, both planning/governance only — **no** production code, WP implementation, Build, migration execution, PR, FHV/M9/holdout/paper/live): `AUTHORIZE-HTR-WP13-WP16-INTELLIGENCE-TRANCHE-PLANNING` (2026-07-14, topology + drafts) and `AUTHORIZE-HTR-MACRO-E-FINAL-PREAPPROVAL-RECONCILIATION` (2026-07-14, finalization). The exact per-WP packets, matrix JSON and profile JSON live in the gitignored controller [`.cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md`](../../.cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md) and its staging directory; this section is the tracked governance summary.
 
-> **HISTORICAL (CONSUMED / SUPERSEDED 2026-07-15):** Macro-E Phase-A Build was `BUILD_AUTHORIZED: YES` under `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` (CONSUMED). HTR-MACRO-E is **COMPLETE**; HTR-WP13 **WORK_PACKAGE_COMPLETE** (CLOSEOUT `2d63eca`). Final code-point profile canonical digest `92219746…` and matrix canonical digest `6296c54e…` remain `HUMAN_BOUND_FINAL_CODEPOINT_DIGEST`. **HISTORICAL (CONSUMED 2026-07-15):** Macro-F Phase-A Build authorization (`APPROVE-HTR-MACRO-F-BUILD`, `COMPOSER_EXECUTE_HTR_MACRO_F_PHASE_A`) — CONSUMED. **CURRENT (2026-07-15):** HTR-MACRO-F **COMPLETE** (WP14+WP15 Phase-B PASS); HTR-MACRO-G **REFRESHED_EXACT_AWAITING_HUMAN_APPROVAL**; current work package **HTR-WP16**; **D-20 HUMAN_APPROVED_CONSUMED**; `BUILD_AUTHORIZED: NO`; no PR.
+> **HISTORICAL (CONSUMED / SUPERSEDED 2026-07-15):** Macro-E Phase-A Build was `BUILD_AUTHORIZED: YES` under `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` (CONSUMED). HTR-MACRO-E is **COMPLETE**; HTR-WP13 **WORK_PACKAGE_COMPLETE** (CLOSEOUT `2d63eca`). Final code-point profile canonical digest `92219746…` and matrix canonical digest `6296c54e…` remain `HUMAN_BOUND_FINAL_CODEPOINT_DIGEST`. **HISTORICAL (CONSUMED 2026-07-15):** Macro-F Phase-A Build authorization (`APPROVE-HTR-MACRO-F-BUILD`, `COMPOSER_EXECUTE_HTR_MACRO_F_PHASE_A`) — CONSUMED. **CURRENT (2026-07-15):** HTR-MACRO-F **COMPLETE** (WP14+WP15 Phase-B PASS); HTR-MACRO-G **HARDENED_EXACT_AWAITING_HUMAN_DECISIONS**; current work package **HTR-WP16**; **D-20 HUMAN_APPROVED_CONSUMED**; `newHumanTokenRequired: YES` (CONFIRM_HTR_WP16_LIFECYCLE_AND_TRIAL_CONTRACT + CONFIRM_HTR_WP16_DRAWDOWN_ATTRIBUTION + CONFIRM_HTR_WP16_MIGRATION → APPROVE_HTR_MACRO_G → APPROVE_HTR_MACRO_G_BUILD); `BUILD_AUTHORIZED: NO`; no PR.
 
 ### Safe execution topology (execution-only macro grouping)
 
@@ -1002,18 +1009,20 @@ HTR-MACRO-F:
   status: COMPLETE
   workPackages: [HTR-WP14, HTR-WP15]
 HTR-MACRO-G:
-  status: REFRESHED_EXACT_AWAITING_HUMAN_APPROVAL
+  status: HARDENED_EXACT_AWAITING_HUMAN_DECISIONS
   workPackages: [HTR-WP16]
   buildAuthorized: NO
   d20: HUMAN_APPROVED_CONSUMED
   migrationDecision: CONFIRM_REQUIRED
+  newHumanTokenRequired: YES
+  requiredHumanTokens: [CONFIRM_HTR_WP16_LIFECYCLE_AND_TRIAL_CONTRACT, CONFIRM_HTR_WP16_DRAWDOWN_ATTRIBUTION, CONFIRM_HTR_WP16_MIGRATION, APPROVE_HTR_MACRO_G, APPROVE_HTR_MACRO_G_BUILD]
 ```
 
 Changes **execution topology only** — adds/removes no WP, merges no technical ownership, changes no dependency/gap ownership/per-WP WORK+CLOSEOUT requirement, permits no auto-advance between macros. **The topology grouping does not authorize Build by itself.**
 
 **HISTORICAL (CONSUMED):** `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` authorized HTR-MACRO-E / HTR-WP13 Phase A only; Macro E is now COMPLETE.
 
-**CURRENT:** `APPROVE-HTR-MACRO-F-BUILD` consumed 2026-07-15 — HTR-MACRO-F / HTR-WP14+HTR-WP15 COMPLETE. Macro G / WP16 exact packet refreshed; **Build unauthorized** pending Human review.
+**CURRENT:** `APPROVE-HTR-MACRO-F-BUILD` consumed 2026-07-15 — HTR-MACRO-F / HTR-WP14+HTR-WP15 COMPLETE. Macro G / WP16 exact packet **HARDENED_EXACT_AWAITING_HUMAN_DECISIONS**; **Build unauthorized** pending three Human decision tokens (`CONFIRM_HTR_WP16_LIFECYCLE_AND_TRIAL_CONTRACT`, `CONFIRM_HTR_WP16_DRAWDOWN_ATTRIBUTION`, `CONFIRM_HTR_WP16_MIGRATION`) then `APPROVE_HTR_MACRO_G` + `APPROVE_HTR_MACRO_G_BUILD`.
 
 **Macro E is WP13 alone** (foundational T2 intelligence-chain activation). **Macro F groups WP14+WP15** as one sequential epistemic-consumer chain (Forecast + Decision + whyNotCash → MKB read-model). **Macro G keeps WP16 separate** (strategy eligibility/lifecycle, D-2, D-20, feeds WP22). Preferred order after WP13: Macro F first, Macro G second when separately authorized.
 
@@ -1608,9 +1617,9 @@ live=false
 capital=false
 ```
 
-## HTR-MACRO-G exact implementation packet (2026-07-15, repository-grounded refresh)
+## HTR-MACRO-G exact implementation packet (2026-07-15 refresh → 2026-07-15 pre-Build hardening)
 
-Refreshed from production baseline `645f4be149e65b5e401c3e9bc76cca3f415b23a2` (HTR-WP15 WORK). Status: **`REFRESHED_EXACT_AWAITING_HUMAN_APPROVAL`** · **`BUILD_AUTHORIZED: NO`**. **D-20 HUMAN_APPROVED_CONSUMED** (2026-07-15). Authoritative executable copy: gitignored rolling controller §9-G.
+Repository-grounded at governance HEAD `a0928d5d9bb4ef886e4403a7d08157d5261e272f`; production baseline `645f4be149e65b5e401c3e9bc76cca3f415b23a2` (HTR-WP15 WORK) / audit closeout `c6e94d9fd75608e280c2ec9054bf19799bd84147`. Status: **`HARDENED_EXACT_AWAITING_HUMAN_DECISIONS`** · **`BUILD_AUTHORIZED: NO`** · `newHumanTokenRequired: YES`. **D-20 HUMAN_APPROVED_CONSUMED** (2026-07-15). Authoritative executable mirror: gitignored rolling controller §9-G. This section is the tracked exact packet; the three Human decision tokens are in §"HTR-WP16 Human decision tokens".
 
 ### WP16 objective and gaps
 
@@ -1620,57 +1629,291 @@ Refreshed from production baseline `645f4be149e65b5e401c3e9bc76cca3f415b23a2` (H
 
 **Gaps:** HTR-GAP-020 (strategy pinning/lifecycle/trial) · HTR-GAP-021 (`riskMultiplier` unused downstream).
 
-### Policy hierarchy (binding)
+### Strategy-version contract (resolved from code — one canonical source of truth)
 
-1. account hard-stop and global safety
-2. D-20 account drawdown (25% peak-equity MTM HWM)
-3. D-20 monthly drawdown (15% calendar-month peak-equity HWM)
-4. strategy-attributed drawdown (20% strategy slice HWM)
+Canonical source of truth: `lib/trader/intelligence/types.ts` string/version constant pairs, projected once into `MVP_STRATEGY_REGISTRY` (`lib/trader/intelligence/strategies/registry.ts`). Proven distinctions:
+
+| Concept | Value at HEAD | Meaning |
+|---------|---------------|---------|
+| `strategyId` | `"liquidity_sweep_reversal_v0"`, `"mean_reversion_v0"`, `"trend_momentum_v0"` | The **stable identifier string**. The `_v0` suffix is **part of the identifier**, not the version. |
+| `strategyVersion` | `"0.1.0"` for all three (`*_V0_VERSION`) | The **semantic version** of the implementation. |
+| registry key | `strategyId` | `MVP_STRATEGY_REGISTRY` rows + `EVALUATORS` record are keyed by `strategyId`. |
+| implementation version | `strategyVersion` semver | Bumped only by a code change to the evaluator. |
+| entry-purpose strategy reference | `trader_intelligence_entry_purpose_record.strategy_id` + `.strategy_version` (append-only, migration 0088) | Immutable originating (`strategyId`,`strategyVersion`) of a position; may never be mutated. |
+
+**Exact registered versions to pin at Build:** `liquidity_sweep_reversal_v0@0.1.0`, `mean_reversion_v0@0.1.0`, `trend_momentum_v0@0.1.0`. Proof that `_v0` is the ID not the version: `LIQUIDITY_SWEEP_REVERSAL_V0 = "liquidity_sweep_reversal_v0"` **and** `LIQUIDITY_SWEEP_REVERSAL_V0_VERSION = "0.1.0"` are two distinct constants; `StrategySignal.strategyId` and `StrategySignal.strategyVersion` are distinct fields.
+
+**Invariants (all fail-closed):** no alias fallback; no latest-version lookup; no unregistered version; no version substitution; no entry-purpose/version mismatch; no mutation of a position's originating strategy version; no machine self-promotion. Version pin is asserted against the frozen registry pair at signal→order time and re-asserted against the immutable entry-purpose record.
+
+### Strategy lifecycle contract (reuse existing vocabulary — no second vocabulary)
+
+Canonical vocabulary already exists: `strategyLifecycleStates = [DRAFT, RESEARCHING, PAPER, LIVE, RETIRED]` (`registry.ts`, "Master Spec §9 lifecycle states"). WP16 must **reuse** this enum and must **not** introduce a second, incompatible vocabulary. NOTE — naming collision guard: the existing `trader_lifecycle_events` table + `trader_lifecycle_event_phase` enum (migration 0067) are **trade** lifecycle (`SIGNAL_ACCEPTED`,`ORDER_FILLED`,…), a different domain; the new strategy-lifecycle table is named `trader_strategy_lifecycle_event` to avoid conflation and is in DO_NOT_TOUCH-adjacent isolation from 0067.
+
+- **States:** `DRAFT`, `RESEARCHING`, `PAPER`, `LIVE`, `RETIRED`.
+- **Initial-state rule:** a machine-proposed candidate may be created **only** in `DRAFT` or `RESEARCHING`. No other initial state is permitted for a machine origin.
+- **Transition matrix (proposed; Human-confirmable):** `DRAFT→RESEARCHING`, `RESEARCHING→PAPER`, `PAPER→LIVE`, `{DRAFT,RESEARCHING,PAPER,LIVE}→RETIRED`. `→PAPER` and `→LIVE` are **human-actor-only** and require the ADR-0010 Strategy Validation Gate; **no automatic PAPER/LIVE promotion**; **no SVG bypass**. `RETIRED` is terminal (no exit).
+- **Actor/approval:** `actor ∈ {HUMAN, MACHINE, SERVICE}`; only `HUMAN` may effect `→PAPER`/`→LIVE`; `MACHINE` may only create `DRAFT`/`RESEARCHING`. Every transition records `approvalRef` (null for machine DRAFT/RESEARCHING; SVG promotion record id for PAPER/LIVE).
+- **Deterministic effective time:** `effective_at` = the deterministic replay clock timestamp (injected, no `Date.now()`); events ordered by `(organization_id, strategy_id, seq)` monotone integer; as-of query returns the state whose `effective_at ≤ asOf` with the greatest `seq`.
+- **Idempotency:** `(organization_id, strategy_id, seq)` unique; replay of the same transition with the same deterministic id is a no-op-equal (load-and-compare content_digest; mismatch → fail-closed `HTR_WP16_LIFECYCLE_IDEMPOTENCY_CONFLICT`).
+- **Rejection reason codes:** `STRAT_LIFECYCLE_NOT_ELIGIBLE`, `STRAT_LIFECYCLE_INVALID_TRANSITION`, `STRAT_LIFECYCLE_ACTOR_NOT_PERMITTED`.
+- **Existing LSR/MR/TM treatment:** seeded from the frozen registry as lifecycle history at exact versions — `liquidity_sweep_reversal_v0@0.1.0 = PAPER`, `mean_reversion_v0@0.1.0 = PAPER`, `trend_momentum_v0@0.1.0 = RESEARCHING` (`RESEARCHING` ⇒ `EVIDENCE_ONLY_NOT_TRADE_ELIGIBLE`). Historical trade-eligibility for LSR/MR comes **only** from the consumed D-2 decision + exact registered versions; **no lifecycle event may grant capital authority**.
+- **Trade-eligibility rule:** a strategy version is trade-eligible in the historical replay lane iff `lifecycleState ∈ {PAPER, LIVE}` **and** it is a D-2 enabled historical consumer at the exact registered version. `RESEARCHING`/`DRAFT`/`RETIRED` ⇒ evidence-only.
+
+### Trial accounting contract (append-only — mutable-counter conflict resolved)
+
+**Conflict resolved:** the draft simultaneously proposed `appendOnly: true` and `incrementStrategyTrialCounter` (a silent mutable counter). **Chosen model = Form A (append-only trial events; counts resolved at read time).** Proven from repository convention `trader_mi_trial` (migration 0031: append-only via `waia_mi_trial_block_mutation` UPDATE/DELETE triggers; per-key monotone `seq`; counts derived, never stored/mutated — `MiTrialCounts` is a read projection). `incrementStrategyTrialCounter` is **removed** from the manifest; the service exposes `registerStrategyTrial` (append) + `getStrategyTrialCounts` (read projection) only. Silent mutable counters are prohibited (`WP16_TRIAL_APPEND_ONLY_COUNTER_CONFLICT`).
+
+- **What constitutes one trial:** one pre-registered evaluation attempt of an exact (`strategyId`,`strategyVersion`) against a specific `(runId, cycleId, symbol)` under a specific account/portfolio — recorded as one immutable event.
+- **Trial identity:** `(organization_id, strategy_id, strategy_version, run_id, cycle_id, symbol)` unique; monotone `seq` per `(organization_id, strategy_id, strategy_version, run_id)`.
+- **Trial state:** derived, not stored — `REGISTERED` (event exists), counts = `count(events)`; no success/failure/score/budget stored (mirrors `trader_mi_trial` "records only that an attempt occurred").
+- **Registration / completion / invalidation / failure:** registration = append event; completion/invalidation/failure outcomes are **out of WP16 scope** (owned by WP21 outcome resolution) — WP16 records the attempt only.
+- **Restart behaviour / as-of / idempotency / ordering / no-lookahead:** on restart, resume reads the max `seq` per key and continues; as-of returns events with `event_time ≤ asOf`; idempotent replay of the same deterministic trial id is no-op-equal (content_digest compare); deterministic order by `seq`; `ingest_time ≥ event_time` check constraint prevents lookahead.
+- **Trial eligibility rule (was undefined — now defined; no invented thresholds):** a signal is **trial-eligible** iff (a) the exact (`strategyId`,`strategyVersion`) passes the version pin, (b) `lifecycleState ∈ {PAPER, LIVE}`, and (c) it is a D-2 enabled historical consumer. There is **no profitability/SVG/edge threshold** in the trial-eligibility rule (ADR-0010: those are operator-set at the separate Validation Gate, not here). Failing eligibility ⇒ evidence-only projection (`tradeEligible=false`, `outcome="NO_SIGNAL"`), reason `STRAT_TRIAL_NOT_ELIGIBLE`. This rule is included in decision token 1 for Human confirmation.
+
+### D-20 drawdown contract (exact arithmetic)
+
+Fixed percentages (unchangeable): account **25%**, monthly **15%**, strategy **20%**, represented as basis points `accountBps=2500`, `monthlyBps=1500`, `strategyBps=2000`.
+
+- **Money & thresholds:** all money is the repository exact-decimal string form (`lib/trader/risk/numeric.ts`, BigInt scale-8) — **never** binary float. Thresholds are deterministic basis points (integers). No `divideDecimal` in the breach test (avoids rounding).
+- **Equity source:** account equity = canonical point-in-time mark-to-market equity `PortfolioAccountState.equityUsdt` (`derivePortfolioAccountState`), the same source feeding the risk engine. HWM basis = `PEAK_EQUITY_MARK_TO_MARKET` (D-20).
+- **Boundary comparison (confirmed against repository convention):** breach when `(hwm − equity) × 10000 ≥ hwm × limitBps`, evaluated with exact decimal (`multiplyDecimal`/`subtractDecimal`/`compareDecimal`). **Equality at the limit = BREACH** — matching the existing convention in `capital-limits-evaluator.ts` (`compareDecimal(state.drawdown, config.maxDrawdown) >= 0` → `stopAccountDecision`). Reason codes `RISK_D20_ACCOUNT_DRAWDOWN`, `RISK_D20_MONTHLY_DRAWDOWN`, `RISK_D20_STRATEGY_DRAWDOWN`.
+- **HWM update / no-reset:** `account_peak_hwm`, `monthly_peak_hwm`, and per-strategy `strategy_peak_hwm` are **non-decreasing** within their scope (running max of point-in-time equity). **No reset** after restart, after checkpoint, or after month transition — except the **exact monthly initialization rule**: at the first cycle whose UTC calendar month differs from the prior checkpoint's month, `monthly_peak_hwm` initializes to the current point-in-time equity for the new month (account/strategy HWM untouched). Deposits/withdrawals are excluded from equity delta so they cannot hide drawdown (LD-10 RC3 `deposit_adjustment=0`).
+- **Billing HWM isolation:** the D-20 risk HWM (peak mark-to-market equity) is **completely distinct** from the billing HWM (`trader_hwm_ledger`, cumulative net **realized** profit, ratcheted only at period close — `AI-TRADER-BILLING-HWM.md` §2). WP16 must not read or write `trader_hwm_ledger`. Conflation ⇒ `WP16_BILLING_HWM_CONFLATION`.
+- **As-of / no-lookahead:** all HWM math uses the injected deterministic clock; no future bar/equity is referenced.
+
+#### Month boundary (§8.1)
+
+`calendarMonthTimezone = UTC` (recommended; Human token 2). Month key = `YYYY-MM` in UTC of the deterministic `effective_at`.
+
+#### Strategy attribution (§8.2)
+
+Preferred deterministic research-only model (Human token 2 to confirm or replace):
+
+- Attribution key = `organization_id + account_key + portfolio_id + run_id + strategy_id + strategy_version`.
+- Immutable virtual capital allocation set at run start; only **trade-eligible exact strategy versions** (D-2 enabled, `PAPER`/`LIVE`) receive allocation.
+- FHV v0: the 100,000 USDT portfolio is divided **equally** among D-2 trade-eligible exact versions present at run start ⇒ `liquidity_sweep_reversal_v0@0.1.0` and `mean_reversion_v0@0.1.0` receive **50,000 USDT each**; `trend_momentum_v0@0.1.0` receives **0** (not trade-eligible / `RESEARCHING`).
+- Allocation is immutable for the run; no dynamic reallocation; no cross-strategy PnL transfer.
+- `strategy_equity = initial_virtual_allocation + cumulative_realized_net_pnl + point_in_time_unrealized_net_pnl − attributable_fees_slippage_costs`. Every lot is attributed via the immutable entry-purpose record (exact strategy version). The physical BTC/ETH portfolio stays shared; the virtual ledger exists only for deterministic risk attribution.
+
+#### Breach action (§8.3)
+
+D-20 consumed token = `CLOSE_ONLY_THEN_STOP_ACCOUNT` (not weakened). Account and monthly breaches ⇒ `CLOSE_ONLY` → flatten/reconcile all open positions → `STOP_ACCOUNT`. **Open question requiring Human clarification (token 1 + token 2):** whether a **strategy-level** (20%) breach is strategy-local (`CLOSE_ONLY` for that strategy's lots, account continues) or escalates to the same account `CLOSE_ONLY_THEN_STOP_ACCOUNT`. The consumed D-20 token is account-scoped and is **not weakened**; strategy-scope requires explicit Human resolution → `WP16_DRAWDOWN_SCOPE_UNRESOLVED` until confirmed.
+
+### Multi-account and identity propagation (§9)
+
+Every new schema row and runtime gate propagates `organization_id`, `account_key` (+ `venue_account_id` when applicable), `portfolio_id`, `run_id`, `strategy_id`, `strategy_version`. No account drawdown, trial, or lifecycle state may leak across organizations, accounts, portfolios, runs, or strategy versions. FHV v0 is Org-0 + one shared portfolio, but **no global singleton state** is permitted (would block later multi-account readiness). Mandatory cross-account and cross-tenant isolation tests are required (see test matrix).
+
+### Gate order and authority (§12)
+
+Precedence (highest authority first); a lower layer may never raise authority; merge via the existing `mostRestrictive`/`OUTCOME_ORDINAL` in `risk-engine-service.ts`:
+
+1. existing account hard-stop / global safety (kill-switch, existing capital limits)
+2. D-20 account drawdown (25%)
+3. D-20 monthly drawdown (15%)
+4. D-20 strategy drawdown (20%)
 5. lifecycle eligibility
 6. trial eligibility
-7. historical-profile consumer eligibility (D-2)
-8. position-purpose/version compatibility
-9. `riskMultiplier` downward-only adjustment
-10. strategy evaluation (CDE regime gating)
+7. D-2 historical-profile consumer eligibility
+8. entry-purpose exact-version compatibility
+9. `riskMultiplier` downward-only adjustment (clamp `msv.derived.riskMultiplier` to `(0,1]`; `>1` fail-closed clamp to `1`; `0` ⇒ no size)
+10. CDE/regime strategy evaluation (lowest authority — proposes only)
 
-Risk may only preserve or reduce: `APPROVE` → `RESIZE` → `REJECT` → `CLOSE_ONLY` → `STOP_ACCOUNT` — never upward.
+Authority lattice `APPROVE → RESIZE → REJECT → CLOSE_ONLY → STOP_ACCOUNT` (never upward). No strategy may bypass a prior rejection by producing a positive signal later in the cycle. The drawdown gates (2–4) are implemented as evaluators merged into the risk engine decision; the eligibility gates (5–8) run in a new `strategy-eligibility-gate` between actionable-signal selection and `mapSignalToSubmitOrder` in `runPaperCycleOnce`; `riskMultiplier` (9) is applied to the sized quantity before order submission.
 
-### Repository audit summary (HEAD `c6e94d9`)
+### Call graph (actual, HEAD `a0928d5`) and gate insertion points
 
-| Area | At HEAD | WP16 action |
-|------|---------|-------------|
-| `MVP_STRATEGY_REGISTRY` | EXISTS (in-memory) | Pin + lifecycle gate |
-| CDE `allowedStrategyIds` / regime gating | EXISTS | Preserve; add lifecycle layer |
-| `STRAT_*_STRATEGY_NOT_ALLOWED` | EXISTS (regime-only) | Extend for lifecycle/version |
-| Strategy lifecycle persistence | MISSING | New Postgres tables + service |
-| Strategy trial accounting | MISSING (MI trials separate) | New strategy trial service |
-| `riskMultiplier` | Computed, not consumed | Wire to sizing/risk |
-| Drawdown | Absolute USDT / run-start | D-20 peak-equity policy |
-| `historicalProfile` in paper cycle | NOT passed | Passthrough required |
-| Entry-purpose version fields | EXISTS (WP14) | Enforcement gate |
+```text
+HistoricalBarReplaySource.next
+→ runBacktest (backtest-runner.ts; strategyId+strategyVersion+runId+split+portfolio present)
+→ runPaperCycleOnce (paper-cycle-runner.ts)
+  → runEvaluationCycle → evaluateRegisteredStrategies (LSR/MR/TM; D-2 research-only projection) [gate 10 proposes]
+  → actionableSignals filter
+  → [INSERT strategy-eligibility-gate: gates 5–8 + version pin]
+  → computeStopBasedQuantity (portfolio sizing) → [INSERT applyRiskMultiplier: gate 9]
+  → mapSignalToSubmitOrder → deps.execution.submitOrder
+      → risk engine evaluateOrderRequest → evaluateTradeAbuse + evaluateCapitalLimits
+        → [INSERT evaluateDrawdownPolicy: gates 2–4] → mergeDecisions(mostRestrictive)
+```
 
-### Migration decision
+No architectural decision is delegated to the Build executor; every insertion point is named above.
 
-**`MACRO_G_MIGRATION_DECISION: CONFIRM_REQUIRED`** — migrations 0082–0089 are WP14-only; no strategy lifecycle/trial/drawdown-state tables exist. Proposed package (no SQL this session):
+### Exact persistence & migration package (§10) — `MACRO_G_MIGRATION_DECISION: CONFIRM_REQUIRED`
+
+Latest Postgres migration at HEAD is **0089** (`_journal.json` idx 89; `0089_trader_intelligence_entry_purpose_record_rls`); next available is **0090**. Migrations 0082–0089 are WP14/WP15-only. Four new tables (Postgres-only per ADR-0017 / `db/AGENTS.md`; `SQLITE_ADAPTER: NOT_REQUIRED`), each with a paired RLS migration (ADR-0007 service-role deny `authenticated`/`anon`). Append-only tables carry the `waia_*_block_mutation` UPDATE/DELETE trigger (per 0031/0088 convention). Money = `text` exact-decimal. Digests = `CHECK (~ '^[0-9a-f]{64}$')`. Composite FKs use `(id, organization_id)` unique + reference, per repository tenant-isolation convention.
 
 ```yaml
-migrationFiles:
+migrationFiles:            # SQL NOT created this session (CONFIRM_REQUIRED)
   - db/migrations_postgres/0090_trader_strategy_lifecycle_event.sql
   - db/migrations_postgres/0091_trader_strategy_lifecycle_event_rls.sql
   - db/migrations_postgres/0092_trader_strategy_trial.sql
   - db/migrations_postgres/0093_trader_strategy_trial_rls.sql
-  - db/migrations_postgres/0094_trader_account_drawdown_state.sql
-  - db/migrations_postgres/0095_trader_account_drawdown_state_rls.sql
+  - db/migrations_postgres/0094_trader_account_drawdown_checkpoint.sql
+  - db/migrations_postgres/0095_trader_account_drawdown_checkpoint_rls.sql
+  - db/migrations_postgres/0096_trader_strategy_drawdown_checkpoint.sql
+  - db/migrations_postgres/0097_trader_strategy_drawdown_checkpoint_rls.sql
+journalEntries: idx 90..97 appended to db/migrations_postgres/meta/_journal.json (monotone when)
+schemaFile: db/schema.postgres.ts (append four table defs; drizzle pg-core; text money; no generate)
+
 tables:
-  trader_strategy_lifecycle_event: { appendOnly: true, orgScoped: true, serviceRoleRls: true }
-  trader_strategy_trial: { appendOnly: true, orgScoped: true, serviceRoleRls: true }
-  trader_account_drawdown_state: { upsertCheckpoint: true, orgScoped: true, billingHwmIsolated: true }
-humanConfirmationGate: CONFIRM-HTR-WP16-MIGRATION before Build
+  trader_strategy_lifecycle_event:      # append-only event ledger; strategy lifecycle state machine
+    policy: APPEND_ONLY (block_mutation UPDATE/DELETE trigger)
+    columns:
+      id: uuid PK NOT NULL
+      organization_id: uuid NOT NULL  (FK organizations.id ON DELETE cascade)
+      strategy_id: text NOT NULL
+      strategy_version: text NOT NULL
+      from_state: text NULL            (null iff initial event)
+      to_state: text NOT NULL          (CHECK IN DRAFT,RESEARCHING,PAPER,LIVE,RETIRED)
+      actor: text NOT NULL             (CHECK IN HUMAN,MACHINE,SERVICE)
+      approval_ref: text NULL          (SVG promotion record id for PAPER/LIVE; null for machine DRAFT/RESEARCHING)
+      reason_code: text NULL
+      seq: integer NOT NULL
+      effective_at: timestamptz NOT NULL
+      run_id: text NULL
+      content_digest: text NOT NULL    (CHECK ~ 64-hex)
+      created_at: timestamptz DEFAULT now() NOT NULL
+    constraints:
+      CHECK: (actor='MACHINE' => to_state IN (DRAFT,RESEARCHING)); (to_state IN (PAPER,LIVE) => actor='HUMAN' AND approval_ref IS NOT NULL)
+    uniques: (id,organization_id); (organization_id,strategy_id,strategy_version,seq)
+    indexes: (organization_id,strategy_id,strategy_version,effective_at)
+  trader_strategy_trial:                # append-only trial-registration events (Form A)
+    policy: APPEND_ONLY (block_mutation UPDATE/DELETE trigger)
+    columns:
+      id: uuid PK NOT NULL
+      organization_id: uuid NOT NULL  (FK organizations.id ON DELETE cascade)
+      strategy_id: text NOT NULL
+      strategy_version: text NOT NULL
+      run_id: text NOT NULL
+      cycle_id: text NOT NULL
+      symbol: text NOT NULL
+      account_key: text NOT NULL
+      portfolio_id: text NOT NULL
+      seq: integer NOT NULL
+      event_time: timestamptz NOT NULL
+      ingest_time: timestamptz NOT NULL   (CHECK ingest_time >= event_time)
+      registered_by: text NOT NULL
+      content_digest: text NOT NULL       (CHECK ~ 64-hex)
+      created_at: timestamptz DEFAULT now() NOT NULL
+    uniques: (id,organization_id); (organization_id,strategy_id,strategy_version,run_id,cycle_id,symbol); (organization_id,strategy_id,strategy_version,run_id,seq)
+    indexes: (organization_id,strategy_id,strategy_version,run_id,event_time)
+  trader_account_drawdown_checkpoint:   # append-only checkpoint rows; running-max HWM (no reset)
+    policy: APPEND_ONLY_CHECKPOINT (block_mutation UPDATE/DELETE; current state = max seq)
+    columns:
+      id: uuid PK NOT NULL
+      organization_id: uuid NOT NULL  (FK organizations.id ON DELETE cascade)
+      account_key: text NOT NULL
+      portfolio_id: text NOT NULL
+      run_id: text NOT NULL
+      seq: integer NOT NULL
+      as_of: timestamptz NOT NULL
+      month_key: text NOT NULL          (YYYY-MM UTC)
+      equity_usdt: text NOT NULL        (exact decimal)
+      account_peak_hwm: text NOT NULL   (non-decreasing)
+      monthly_peak_hwm: text NOT NULL   (reset only on month init rule)
+      account_drawdown_bps: integer NOT NULL
+      monthly_drawdown_bps: integer NOT NULL
+      breach_state: text NOT NULL       (CHECK IN NONE,CLOSE_ONLY,STOP_ACCOUNT)
+      content_digest: text NOT NULL     (CHECK ~ 64-hex)
+      created_at: timestamptz DEFAULT now() NOT NULL
+    uniques: (id,organization_id); (organization_id,account_key,portfolio_id,run_id,seq)
+    indexes: (organization_id,account_key,portfolio_id,run_id,as_of)
+  trader_strategy_drawdown_checkpoint:  # separate relational table (decision: YES — normalized per-strategy slice)
+    policy: APPEND_ONLY_CHECKPOINT (block_mutation UPDATE/DELETE; current state = max seq)
+    columns:
+      id: uuid PK NOT NULL
+      organization_id: uuid NOT NULL  (FK organizations.id ON DELETE cascade)
+      account_key: text NOT NULL
+      portfolio_id: text NOT NULL
+      run_id: text NOT NULL
+      strategy_id: text NOT NULL
+      strategy_version: text NOT NULL
+      seq: integer NOT NULL
+      as_of: timestamptz NOT NULL
+      strategy_allocation_usdt: text NOT NULL   (immutable per run)
+      strategy_equity_usdt: text NOT NULL
+      strategy_peak_hwm: text NOT NULL          (non-decreasing)
+      strategy_drawdown_bps: integer NOT NULL
+      breach_state: text NOT NULL               (CHECK IN NONE,CLOSE_ONLY,STOP_ACCOUNT)
+      content_digest: text NOT NULL             (CHECK ~ 64-hex)
+      created_at: timestamptz DEFAULT now() NOT NULL
+    uniques: (id,organization_id); (organization_id,account_key,portfolio_id,run_id,strategy_id,strategy_version,seq)
+    indexes: (organization_id,account_key,portfolio_id,run_id,strategy_id,strategy_version,as_of)
+
+rlsPolicy: each *_rls migration ENABLEs RLS + service-role-only (deny authenticated/anon), matching ADR-0007 pattern used by 0068/0090-style pairs; append-only tables additionally keep block_mutation triggers.
+strategyDrawdownSeparateTable: YES  # relational, not an opaque JSON map — check constraints + FKs + per-strategy cardinality are only enforceable relationally
+finalMigrationStatus: CONFIRM_REQUIRED  # until CONFIRM-HTR-WP16-MIGRATION consumed
 ```
 
-### Executable manifest (exact paths — no wildcards)
+### Exact file/symbol manifest (§11) — supersedes rolling-controller §9-G draft where they differ
 
-See rolling controller §9-G for full `CREATE_FILES` / `MODIFY_FILES` / `DO_NOT_TOUCH_FILES_OR_SURFACES` with symbol-level detail, test matrix, evidence contract (`pnpm trader:wp16:evidence` → `replay-runs/RI-P7/htr-wp16-strategy-gating/`), and STOP conditions.
+`CREATE_FILES`
+
+```yaml
+- lib/trader/intelligence/strategies/strategy-version-pin.ts: [assertPinnedStrategyVersion, resolvePinnedStrategyVersion, StrategyVersionPinError, PINNED_STRATEGY_VERSIONS]
+- lib/trader/intelligence/strategies/strategy-lifecycle.types.ts: [StrategyLifecycleState, StrategyLifecycleEvent, StrategyLifecycleTransition, STRATEGY_LIFECYCLE_SCHEMA_VERSION]
+- lib/trader/intelligence/strategies/strategy-lifecycle-transition-validator.ts: [validateStrategyLifecycleTransition, STRATEGY_LIFECYCLE_TRANSITIONS, strategyLifecycleReasonCodes]
+- lib/trader/intelligence/strategies/strategy-lifecycle-repository-postgres.ts: [createStrategyLifecycleRepositoryPostgres]
+- lib/trader/intelligence/strategies/strategy-lifecycle-service.ts: [createStrategyLifecycleService, StrategyLifecycleService, appendLifecycleEvent, getLifecycleStateAsOf]
+- lib/trader/intelligence/strategies/strategy-lifecycle-eligibility.ts: [isStrategyLifecycleTradeEligible]
+- lib/trader/intelligence/strategies/strategy-trial.types.ts: [StrategyTrialEvent, StrategyTrialRegistrationInput, StrategyTrialCounts, STRATEGY_TRIAL_SCHEMA_VERSION]
+- lib/trader/intelligence/strategies/strategy-trial-repository-postgres.ts: [createStrategyTrialRepositoryPostgres]
+- lib/trader/intelligence/strategies/strategy-trial-service.ts: [createStrategyTrialService, StrategyTrialService, registerStrategyTrial, getStrategyTrialCounts]   # NO incrementStrategyTrialCounter
+- lib/trader/intelligence/strategies/strategy-trial-eligibility.ts: [evaluateStrategyTrialEligibility]
+- lib/trader/intelligence/strategies/strategy-eligibility-gate.ts: [evaluateStrategyEligibilityGate, StrategyEligibilityResult]
+- lib/trader/risk/drawdown-policy.types.ts: [DrawdownPolicyConfig, AccountDrawdownState, StrategyDrawdownState, MonthlyDrawdownState, D20_DRAWDOWN_POLICY_VERSION]
+- lib/trader/risk/drawdown-policy-evaluator.ts: [evaluateDrawdownPolicy, computePeakEquityDrawdownBps, updateDrawdownHighWaterMarks, isDrawdownBreach, drawdownReasonCodes]
+- lib/trader/risk/account-drawdown-repository-postgres.ts: [createAccountDrawdownRepositoryPostgres, loadAccountDrawdownCheckpoint, appendAccountDrawdownCheckpoint]
+- lib/trader/risk/strategy-drawdown-repository-postgres.ts: [createStrategyDrawdownRepositoryPostgres, loadStrategyDrawdownCheckpoint, appendStrategyDrawdownCheckpoint]
+- lib/trader/risk/strategy-attribution.ts: [computeVirtualStrategyAllocations, computeStrategyEquity, StrategyAttributionKey]
+- lib/trader/paper/apply-risk-multiplier.ts: [applyRiskMultiplierToQuantity, clampRiskMultiplierDownwardOnly]
+- scripts/trader/replay-wp16-strategy-gating-evidence.ts: [main, buildWp16EvidenceManifest]
+- tests/unit/trader-wp16-strategy-version-pin.test.ts
+- tests/unit/trader-wp16-lifecycle-transitions.test.ts
+- tests/unit/trader-wp16-lifecycle-as-of.test.ts
+- tests/unit/trader-wp16-trial-registration.test.ts
+- tests/unit/trader-wp16-trial-eligibility.test.ts
+- tests/unit/trader-wp16-drawdown-arithmetic.test.ts
+- tests/unit/trader-wp16-strategy-attribution.test.ts
+- tests/unit/trader-wp16-risk-multiplier.test.ts
+- tests/unit/trader-wp16-eligibility-order.test.ts
+- tests/unit/trader-wp16-entry-purpose-version.test.ts
+- tests/unit/trader-wp16-cross-tenant-isolation.test.ts
+- tests/integration/postgres-trader-strategy-lifecycle-parity.test.ts
+- tests/integration/postgres-trader-strategy-trial-parity.test.ts
+- tests/integration/postgres-trader-account-drawdown-parity.test.ts
+- tests/integration/postgres-trader-strategy-drawdown-parity.test.ts
+```
+
+`MODIFY_FILES`
+
+```yaml
+- lib/trader/intelligence/strategies/registry.ts: [MVP_STRATEGY_REGISTRY, evaluateRegisteredStrategies, getStrategyRegistryEntry]   # seed lifecycle at exact versions; keep vocabulary
+- lib/trader/intelligence/types.ts: [StrategySignal, EvaluationCycleInput]   # additive only; historicalProfile passthrough
+- lib/trader/paper/paper-cycle.types.ts: [PaperCycleInput]                    # add drawdown/lifecycle/trial deps + historicalProfile
+- lib/trader/paper/paper-cycle-runner.ts: [runPaperCycleOnce]                 # insert eligibility gate + riskMultiplier
+- lib/trader/paper/signal-to-order.ts: [mapSignalToSubmitOrder]               # consume sized (riskMultiplier-applied) quantity
+- lib/trader/backtest/backtest-runner.ts: [runBacktest, RunBacktestInput]     # thread lifecycle/trial/drawdown sinks + historicalProfile
+- lib/trader/portfolio/to-account-risk-state.ts: [toAccountRiskState]         # expose point-in-time equity for peak HWM (no semantic change to existing fields)
+- lib/trader/risk/capital-limits-evaluator.ts: [evaluateCapitalLimits]        # additive: invoke drawdown-policy evaluator (existing absolute checks unchanged)
+- lib/trader/risk/risk-engine-service.ts: [createRiskEngineService, mergeDecisions]   # merge drawdown decision via mostRestrictive
+- lib/trader/risk/reason-codes.ts: [capitalReasonCodes + drawdownReasonCodes + lifecycle/trial codes]
+- lib/trader/backtest/streaming-evidence/replay-checkpoint.ts: [REPLAY_CHECKPOINT_SCHEMA_VERSION, serializeCheckpoint, deserializeCheckpoint]   # include drawdown HWM state (restart parity)
+- db/schema.postgres.ts: [traderStrategyLifecycleEvent, traderStrategyTrial, traderAccountDrawdownCheckpoint, traderStrategyDrawdownCheckpoint]
+- db/migrations_postgres/meta/_journal.json: [idx 90..97]
+- package.json: [scripts."trader:wp16:evidence"]
+```
+
+`DELETE_FILES`: `[]`
+
+`DO_NOT_TOUCH_FILES_OR_SURFACES`: WP14 frozen intelligence record builders + migrations 0082–0089; WP15 MKB read-model; billing HWM (`lib/trader/billing/**`, `trader_hwm_ledger`, migration 0039); MI trial domain (`lib/trader/mi/trial-*`, `trader_mi_trial`); trade lifecycle 0067 (`trader_lifecycle_events`); blind-holdout paths; FHV runners; live/paper real order placement. Decimal helpers already exist (`lib/trader/risk/numeric.ts`) — **do not** re-create them.
+
+### Tests (§13) and evidence (§14)
+
+Mandatory unit coverage: exact version pin success/failure; no alias/latest fallback; lifecycle transitions incl. invalid transition fail-closed; lifecycle as-of/no-lookahead; trial registration + idempotency + eligibility; account drawdown below/equal/above 25%; monthly below/equal/above 15%; strategy below/equal/above 20%; month transition; UTC boundary (if approved); immutable strategy allocation; fees/slippage attribution; checkpoint/resume HWM parity; breach-state resume parity; deposit/withdrawal non-reset; billing-HWM isolation; `riskMultiplier` 0/fraction/1/>1 clamp; exact gate ordering; strategy version mismatch; TM evidence-only never trade-eligible; LSR/MR exact registered versions; cross-account isolation; cross-tenant isolation; deterministic replay digest. Mandatory Postgres tests (zero skip) cover **all four** new tables (lifecycle, trial, account drawdown, strategy drawdown) — not only trial + account. Before/after **HTR-GAP-035** comparison: `POSTGRES_BASELINE_EXACTLY_UNCHANGED` (no new failing Postgres file/test). Evidence: `pnpm trader:wp16:evidence` → `replay-runs/RI-P7/htr-wp16-strategy-gating/` with manifest fields {command, schemaVersion, sourceGitSha, dirtyTreeRule=REJECT_IF_DIRTY, profileDigest, matrixDigest, d20PolicyDigest, strategyAllocationDigest, lifecyclePolicyDigest, migrationSchemaVersion, trialSummary, drawdownBoundaryCases, checkpointResumeParity, tenantIsolationResult, postgresBaselineComparison, semanticDigest}. Evidence is **not** generated this session.
+
+### STOP conditions (§15)
+
+`WP16_CONTROLLER_CURRENT_STATE_CONTRADICTION`, `WP16_PACKET_NOT_EXACT`, `WP16_LIFECYCLE_TRANSITIONS_UNRESOLVED`, `WP16_TRIAL_ELIGIBILITY_UNRESOLVED`, `WP16_TRIAL_APPEND_ONLY_COUNTER_CONFLICT`, `WP16_STRATEGY_ATTRIBUTION_UNRESOLVED`, `WP16_DRAWDOWN_SCOPE_UNRESOLVED`, `WP16_ACCOUNT_IDENTITY_MISSING`, `WP16_FINANCIAL_FLOAT_TRUTH`, `WP16_BILLING_HWM_CONFLATION`, `WP16_DRAWDOWN_RESET_ON_CHECKPOINT`, `WP16_DRAWDOWN_RESET_ON_RESTART`, `WP16_RISK_MULTIPLIER_UPWARD`, `WP16_MIGRATION_WITHOUT_HUMAN_CONFIRM`, `WP16_BUILD_WITHOUT_HUMAN_APPROVAL`, `WP16_TOUCHES_WP14_FROZEN_SURFACE`, `WP16_TOUCHES_WP15_FROZEN_SURFACE`, `WP16_SCOPE_LEAKAGE_TO_WP17_PLUS`, `WP16_HOLDOUT_ACCESS`, `WP16_PAPER_LIVE_CAPITAL_ACTION`.
 
 **WORK commit message (not authorized until Human Build approval):**
 
@@ -1678,12 +1921,62 @@ See rolling controller §9-G for full `CREATE_FILES` / `MODIFY_FILES` / `DO_NOT_
 DEE-415 feat(trader): add strategy gating and drawdown policy (HTR-WP16)
 ```
 
-**Bounded Human confirmations (not silently invented):**
+## HTR-WP16 Human decision tokens (produced, NOT consumed)
 
-- Exact `trader_strategy_lifecycle_event` column set and transition rules for `DRAFT`/`RESEARCHING` admission seam
-- Strategy-attributed equity slice allocation formula for multi-strategy shared portfolio
-- Calendar-month boundary timezone (recommend UTC; confirm at Build gate)
+Three decision groups must be internally complete and Human-confirmed before `APPROVE_HTR_MACRO_G` and `APPROVE_HTR_MACRO_G_BUILD`. Ready-to-copy forms:
 
+**Token 1 — lifecycle + trial contract**
+
+```text
+CONFIRM-HTR-WP16-LIFECYCLE-AND-TRIAL-CONTRACT:
+lifecycle-states=DRAFT,RESEARCHING,PAPER,LIVE,RETIRED
+transition-matrix=DRAFT->RESEARCHING;RESEARCHING->PAPER;PAPER->LIVE;{DRAFT,RESEARCHING,PAPER,LIVE}->RETIRED
+initial-state-rule=MACHINE_ORIGIN_ONLY_DRAFT_OR_RESEARCHING
+promotion=PAPER_AND_LIVE_HUMAN_ONLY_VIA_ADR0010_SVG;NO_AUTOMATIC_PROMOTION;NO_SVG_BYPASS
+existing-treatment=liquidity_sweep_reversal_v0@0.1.0=PAPER;mean_reversion_v0@0.1.0=PAPER;trend_momentum_v0@0.1.0=RESEARCHING(EVIDENCE_ONLY_NOT_TRADE_ELIGIBLE)
+trial-model=APPEND_ONLY_EVENTS_COUNTS_READ_TIME;NO_MUTABLE_COUNTER
+trial-eligibility=VERSION_PIN_OK AND lifecycle IN {PAPER,LIVE} AND D2_ENABLED_CONSUMER;NO_PROFITABILITY_OR_SVG_THRESHOLD
+strategy-breach-scope=<STRATEGY_LOCAL_CLOSE_ONLY | ESCALATE_TO_ACCOUNT_CLOSE_ONLY_THEN_STOP_ACCOUNT>   # HUMAN CHOICE
+as-of=DETERMINISTIC_CLOCK_NO_LOOKAHEAD idempotency=CONTENT_DIGEST_COMPARE_FAIL_CLOSED
+no-lifecycle-event-grants-capital-authority=TRUE
+```
+
+**Token 2 — drawdown attribution**
+
+```text
+CONFIRM-HTR-WP16-DRAWDOWN-ATTRIBUTION:
+account-bps=2500 monthly-bps=1500 strategy-bps=2000 (FIXED)
+month-timezone=UTC
+equality-at-limit=BREACH   # (hwm-equity)*10000 >= hwm*limitBps ; exact decimal ; matches capital-limits >= convention
+hwm-basis=PEAK_EQUITY_MARK_TO_MARKET (non-decreasing; billing HWM isolated)
+attribution-key=organization_id+account_key+portfolio_id+run_id+strategy_id+strategy_version
+allocation=IMMUTABLE_VIRTUAL_AT_RUN_START;TRADE_ELIGIBLE_EXACT_VERSIONS_ONLY;FHV_V0_EQUAL_SPLIT_100000=>LSR_50000+MR_50000+TM_0
+strategy-equity=alloc+cum_realized_net+pit_unrealized_net-attributable_costs;NO_CROSS_STRATEGY_TRANSFER;NO_DYNAMIC_REALLOCATION
+fee-slippage=INCLUDED_VIA_IMMUTABLE_ENTRY_PURPOSE_ATTRIBUTION
+month-reset=ONLY_MONTHLY_HWM_ON_UTC_MONTH_INIT;NO_RESET_ON_RESTART_OR_CHECKPOINT
+breach-scope=CLOSE_ONLY_THEN_STOP_ACCOUNT (account+monthly; strategy-scope per Token 1 choice)
+checkpoint-restart=HWM_STATE_SERIALIZED_IN_REPLAY_CHECKPOINT;RESUME_PARITY_REQUIRED
+```
+
+**Token 3 — migration**
+
+```text
+CONFIRM-HTR-WP16-MIGRATION:
+files=0090_trader_strategy_lifecycle_event(.sql+_rls);0092_trader_strategy_trial(.sql+_rls);0094_trader_account_drawdown_checkpoint(.sql+_rls);0096_trader_strategy_drawdown_checkpoint(.sql+_rls)
+tables=trader_strategy_lifecycle_event(APPEND_ONLY);trader_strategy_trial(APPEND_ONLY);trader_account_drawdown_checkpoint(APPEND_ONLY_CHECKPOINT);trader_strategy_drawdown_checkpoint(APPEND_ONLY_CHECKPOINT)
+schema-version=next after 0089 (0090..0097); journal idx 90..97
+numeric-types=MONEY_AS_TEXT_EXACT_DECIMAL;BPS_AS_INTEGER;DIGEST_CHECK_64_HEX
+keys=PK uuid;UNIQUE(id,organization_id);business-uniques+seq per table (see packet)
+constraints=lifecycle_actor+state_checks;trial ingest>=event;drawdown breach_state IN NONE,CLOSE_ONLY,STOP_ACCOUNT
+indexes=per-table (org+scope+as_of/effective/event_time)
+rls=SERVICE_ROLE_ONLY_DENY_AUTHENTICATED_ANON (ADR-0007) + append-only block_mutation triggers
+idempotency=DETERMINISTIC_ID+CONTENT_DIGEST_COMPARE;ON_CONFLICT_DO_NOTHING_PROHIBITED
+scope=organization_id+account_key+portfolio_id+run_id+strategy_id+strategy_version;NO_GLOBAL_SINGLETON
+sqlite-adapter=NOT_REQUIRED (ADR-0017 Postgres-only)
+status=CONFIRM_REQUIRED (no SQL created until consumed)
+```
+
+Do not produce Build-approval tokens until all three decision groups are internally complete and Human-confirmed.
 ## Position purpose + exit contract v1 (`RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1`, 2026-07-14)
 
 ```text
@@ -1765,7 +2058,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP13 | Intelligence-chain activation (historical run profile) | WP09,WP10,WP11,WP12 | ai | COMPLETE (Composer Phase-B PASS_WITH_BOUNDED_FIXES) | `d07bb654` (WORK) + `2d63eca` (CLOSEOUT) |
 | HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW (WORK `b8eeadb`; migration HUMAN_CONFIRMED_V2) | — |
 | HTR-WP15 | MKB read-model integration for replay | WP14 | ai | PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW (Macro F; migration NONE_READ_MODEL_ONLY) | — |
-| HTR-WP16 | Strategy pinning + gating + trial accounting + D-20 drawdown | WP13 | ai | EXACT_PACKET_AWAITING_HUMAN_APPROVAL (Macro G; buildAuthorized NO) | — |
+| HTR-WP16 | Strategy pinning + gating + trial accounting + D-20 drawdown | WP13 | ai | HARDENED_EXACT_AWAITING_HUMAN_DECISIONS (Macro G; buildAuthorized NO; 3 decision tokens required) | — |
 | HTR-WP17 | Historical execution-simulation realism | WP09 | backend | pending | — |
 | HTR-WP18 | Inventory & accounting parity | WP17 | backend | pending | — |
 | HTR-WP19 | Reality reconciliation + M9-class regression closure | WP18 | backend | pending | — |
@@ -1793,15 +2086,15 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## Current work package (HTR-WP16 — Macro G exact packet refreshed, awaiting Human Build approval)
+## Current work package (HTR-WP16 — Macro G hardened exact packet, awaiting Human policy/migration decisions)
 
-**CURRENT (2026-07-15):** HTR-WP01..HTR-WP15 **COMPLETE**; HTR-MACRO-F **COMPLETE** (WP14 CLOSEOUT `e4a3a38`, WP15 CLOSEOUT `c6e94d9`); **D-20 HUMAN_APPROVED_CONSUMED**; HTR-MACRO-G exact packet **REFRESHED** from production baseline `645f4be` (WP15 WORK); `BUILD_AUTHORIZED: NO`; `WP16_IMPLEMENTATION_STATUS: NOT_STARTED`; no PR; no FHV/holdout/paper/live/capital.
+**CURRENT (2026-07-15):** HTR-WP01..HTR-WP15 **COMPLETE**; HTR-MACRO-F **COMPLETE** (WP14 CLOSEOUT `e4a3a38`, WP15 CLOSEOUT `c6e94d9`); **D-20 HUMAN_APPROVED_CONSUMED**; HTR-MACRO-G exact packet **`HARDENED_EXACT_AWAITING_HUMAN_DECISIONS`** (repository-grounded at HEAD `a0928d5`; production baseline `645f4be`/`c6e94d9`); `BUILD_AUTHORIZED: NO`; `WP16_IMPLEMENTATION_STATUS: NOT_STARTED`; `newHumanTokenRequired: YES`; no PR; no FHV/holdout/paper/live/capital. Three Human decision tokens are required before any Build approval — see §"HTR-WP16 Human decision tokens".
 
 **HTR-MACRO-C is COMPLETE** (2026-07-14, Opus Macro-C Phase-B per-WP PASS). **HTR-MACRO-D is COMPLETE** (2026-07-14, Opus Macro-D Phase-B independent post-review, per-WP PASS). **HTR-MACRO-E is COMPLETE** (2026-07-15). HTR-WP13 WORK `d07bb654` preserved; CLOSEOUT `2d63eca`.
 
 **HTR-MACRO-F is COMPLETE** (2026-07-15, Composer independent Phase-B). HTR-WP14 WORK `b8eeadb` + CLOSEOUT `e4a3a38` (PASS); HTR-WP15 WORK `645f4be` + CLOSEOUT `c6e94d9` (PASS_WITH_BOUNDED_PROCESS_DEVIATION). Postgres baseline **POSTGRES_BASELINE_EXACTLY_UNCHANGED** (18 files / 34 tests). HTR-GAP-007/008/011 CLOSED; HTR-GAP-010/036 contribution delivered (open, closureOwner HTR-WP21).
 
-**Next Human gate:** `REVIEW_AND_APPROVE_HTR_MACRO_G_PACKET_AND_MIGRATION_DECISION`. See §"HTR-MACRO-G exact implementation packet" and gitignored rolling controller §9-G.
+**Next Human gate:** `CONFIRM_HTR_WP16_POLICY_ATTRIBUTION_AND_MIGRATION`. **Next action:** `HUMAN_REVIEW_WP16_DECISION_TOKENS`. See §"HTR-MACRO-G exact implementation packet", §"HTR-WP16 Human decision tokens", and gitignored rolling controller §9-G.
 
 **HISTORICAL (NON_OPERATIONAL):** Sections below describing Macro-C/D/E/F Phase-A authorization states are audit history only — marked `HISTORICAL_CONSUMED` or `SUPERSEDED_EXPLICIT` where applicable.
 
