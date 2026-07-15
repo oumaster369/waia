@@ -1,0 +1,14 @@
+{
+  "everyEntryHasExplicitAsOf": true,
+  "noCapitalAuthorityFields": true,
+  "unresolvedWithoutOutcomePort": true,
+  "verifiedKnowledgeExcludesUnresolved": true,
+  "deterministicSemanticDigest": "EXACT",
+  "semanticDigest": "258217e27841f1f3fe52812601e1c27f7ecf4839c013c4f5986b68f8019a0ef7",
+  "entryCount": 2,
+  "verifiedKnowledgeCount": 0,
+  "provenance": {
+    "baseGitSha": "250994f92bed9dd5604bcc5fcb663de0d190506b",
+    "trackedWorktreeDirty": true
+  }
+}

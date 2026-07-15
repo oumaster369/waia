@@ -27,25 +27,28 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: MACRO_F_BUILD_AUTHORIZED   # CONFIRM-HTR-WP14-MIGRATION-V2 + CONFIRM-HTR-WP15-MIGRATION + APPROVE-HTR-MACRO-F + APPROVE-HTR-MACRO-F-BUILD consumed 2026-07-15
-  programStatus: WP_ACTIVE
-  childPlanStatus: APPROVED
-  buildAuthorized: YES
-  buildAuthorizedScope: HTR-MACRO-F / HTR-WP14 + HTR-WP15 ONLY
-  composerTerminalState: READY_FOR_COMPOSER_HTR_MACRO_F_PHASE_A
+  humanApproval: MACRO_F_PHASE_A_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW
+  programStatus: WP_VALIDATED
+  childPlanStatus: VALIDATED
+  buildAuthorized: NO
+  buildAuthorizedScope: null
+  composerTerminalState: AWAITING_INDEPENDENT_MACRO_POST_REVIEW
   activeWorkPackage: HTR-WP14
   currentWorkPackage: HTR-WP14
   latestValidatedProductionCodeSha: 2d63eca2231bbd06ad40680a4485f74a8244bef0   # HTR-WP13 CLOSEOUT (latest validated production baseline)
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
-  planningTerminalState: HTR_MACRO_F_EXECUTABLE_MIRROR_RECONCILIATION_COMPLETE
+  wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b
+  wp15WorkCommitSha: 92c7c08733a74f1f0c1ae99860ea5c345cc60afd
+  planningTerminalState: HTR_MACRO_F_PHASE_A_COMPLETE
   governanceStateAuthority: GIT_HEAD
   governanceReconciledFromHead: 8fe7aeefa64412ae158396fda4cb80b10b0054a2   # Macro F activation commit; reconciliation SHA in gitignored controllers only
   macroFActivationCommitSha: 8fe7aeefa64412ae158396fda4cb80b10b0054a2
+  macroFPhaseAStartingHead: 250994f92bed9dd5604bcc5fcb663de0d190506b
   macroFPhaseAStartingHeadClassification: NON_SEMANTIC_GOVERNANCE_DESCENDANT_OF_HUMAN_AUTHORIZED_ACTIVATION
   buildAuthorizationReopened: NO
   newHumanTokenRequired: NO
-  wp14ImplementationStatus: PHASE_A_NOT_STARTED
-  wp15ImplementationStatus: PHASE_A_NOT_STARTED
+  wp14ImplementationStatus: PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW
+  wp15ImplementationStatus: PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW
   macroGStatus: ARCHITECTURE_ONLY_NOT_AUTHORIZED
   macroCMigrationDecision: NONE
   macroDMigrationDecision: NONE
@@ -58,10 +61,10 @@ state:
   activeChildPlan: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
   intelligenceTranche:
     controller: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
-    status: MACRO_F_BUILD_AUTHORIZED
+    status: MACRO_F_PHASE_A_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW
     macroPackages: { HTR-MACRO-E: [HTR-WP13], HTR-MACRO-F: [HTR-WP14, HTR-WP15], HTR-MACRO-G: [HTR-WP16] }
     preferredOrderAfterWp13: [HTR-MACRO-F, HTR-MACRO-G]
-    activeMacroStatus: APPROVED   # HTR-MACRO-F Build authorized 2026-07-15 consistency patch
+    activeMacroStatus: VALIDATED_PENDING_INDEPENDENT_POST_REVIEW
     d4:
       status: HUMAN_APPROVED_CONSUMED
       consumedAt: 2026-07-15
@@ -558,9 +561,18 @@ state:
   wp14MigrationDecision: HUMAN_CONFIRMED_V2   # CONFIRM-HTR-WP14-MIGRATION-V2 consumed 2026-07-15; supersedes v1 0082..0087 three-table proposal
   wp14MigrationSupersededV1: SUPERSEDED_BEFORE_BUILD_BY_FORECAST_CARDINALITY_AND_RELATIONAL_LINK_CORRECTION
   wp15MigrationDecision: HUMAN_CONFIRMED_NONE_READ_MODEL_ONLY   # CONFIRM-HTR-WP15-MIGRATION consumed 2026-07-15
-  macroFReadiness: READY_FOR_PHASE_A
-  nextHumanGate: NONE_UNTIL_HTR_MACRO_F_PHASE_A_REPORT
-  nextAction: COMPOSER_EXECUTE_HTR_MACRO_F_PHASE_A
+  macroFReadiness: PHASE_A_COMPLETE_AWAITING_INDEPENDENT_POST_REVIEW
+  macroFFullValidation: PASS
+  wp14TargetedValidation: PASS
+  wp15TargetedValidation: PASS
+  wp14PostgresIntegration: PASS_ZERO_SKIP
+  wp15PostgresIntegration: PASS_ZERO_SKIP
+  wp14EvidenceStatus: SEALED_PENDING_INDEPENDENT_ACCEPTANCE
+  wp15EvidenceStatus: SEALED_PENDING_INDEPENDENT_ACCEPTANCE
+  wp14EvidenceSemanticDigest: 6fd8d3d7d7acac0b69cf3d897b22797ca30cc52f788674cc61e829bbd263e882
+  wp15EvidenceSemanticDigest: 258217e27841f1f3fe52812601e1c27f7ecf4839c013c4f5986b68f8019a0ef7
+  nextHumanGate: AUTHORIZE_HTR_MACRO_F_INDEPENDENT_PHASE_B
+  nextAction: COMPOSER_2_5_INDEPENDENT_MACRO_F_PHASE_B
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -599,7 +611,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: WP_ACTIVE` — **HTR-WP13 COMPLETE** (WORK `d07bb654`, CLOSEOUT `2d63eca`); **HTR-MACRO-E COMPLETE**; **HTR-MACRO-F APPROVED** (`BUILD_AUTHORIZED: YES`, scope WP14+WP15 only); `composerTerminalState: READY_FOR_COMPOSER_HTR_MACRO_F_PHASE_A`; WP14 migration V2 confirmed (4 tables, 0082..0089); WP15 read-model-only confirmed; D-4 and Position-Purpose tokens preserved verbatim. **HISTORICAL (CONSUMED/SUPERSEDED):** Macro E Build authorization, `COMPOSER_EXECUTE_HTR_MACRO_E_PHASE_A`, v1 WP14 0082..0087 three-table proposal. |
+| Plan state | `state.status: in-progress` · `programStatus: WP_VALIDATED` — **HTR-WP13 COMPLETE** (WORK `d07bb654`, CLOSEOUT `2d63eca`); **HTR-MACRO-E COMPLETE**; **HTR-MACRO-F Phase A VALIDATED** (`BUILD_AUTHORIZED: NO`; WP14 WORK `b8eeadb`, WP15 WORK `92c7c08`); `composerTerminalState: AWAITING_INDEPENDENT_MACRO_POST_REVIEW`; WP14 migration V2 (4 tables, 0082..0089); WP15 read-model-only; D-4 and Position-Purpose tokens preserved verbatim. **HISTORICAL (CONSUMED/SUPERSEDED):** Macro E Build authorization, `COMPOSER_EXECUTE_HTR_MACRO_E_PHASE_A`, v1 WP14 0082..0087 three-table proposal. |
 
 ## Approved decisions (recorded)
 
@@ -1595,8 +1607,8 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | WP01,WP09 | backend | COMPLETE (Opus Macro-D Phase B PASS 2026-07-14; WORK `f6cefb0`; single sanctioned `buildHistoricalIngressContext` + sidecar-v3 PIT selection, all 15 optional lanes explicit incl. UNAVAILABLE/SIDECAR_LANE_ABSENT, no live provider/network call, replay/live parity; accepted evidence `replay-runs/RI-P7/htr-wp11-pit-provider-context/` manifest digest `b8f043ac…`; post-WORK non-semantic corrections (assertNoFutureEvidence reorder, quoteForReplayCycle fixture-timestamp binding, evidence gitSha restamp) classified, no fabricated availability, no future evidence reachable; HTR-GAP-012/013 CLOSED) | `f6cefb0` (WORK) |
 | HTR-WP12 | Ingress bar-integrity gate + versioned dataset manifest | WP01 | backend | COMPLETE (Opus Macro-D Phase B PASS 2026-07-14; WORK `993fdab`; nine fail-closed integrity classes gate HistoricalBarReplaySource/HistoricalBarSource/loadQualificationBars before first Canvas advance; immutable `fhv-dataset-manifest/v1` HTX_ONLY SPOT BTCUSDT+ETHUSDT 1m→closed-bar 15m/1h/4h/1d, UTC half-open partitions, source checksums, normalized+bar-set digests, `FHV_GAP_POLICY_V1` zero-tolerance, self-digest exclusion; semantic digest `fd7d4895…` (= evidence-bundle manifest digest); blind holdout RESERVED_SEALED_NOT_ACCESSED; no WP09 invalidation; real HTX 2020–2025 dataset NOT acquired/qualified — final pinning HTR-WP23; HTR-GAP-014/015 CLOSED) | `993fdab` (WORK) |
 | HTR-WP13 | Intelligence-chain activation (historical run profile) | WP09,WP10,WP11,WP12 | ai | COMPLETE (Composer Phase-B PASS_WITH_BOUNDED_FIXES) | `d07bb654` (WORK) + `2d63eca` (CLOSEOUT) |
-| HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | APPROVED_BUILD_AUTHORIZED (Macro F; Phase A NOT_STARTED; migration HUMAN_CONFIRMED_V2) | — |
-| HTR-WP15 | MKB read-model integration for replay | WP14 | ai | APPROVED_BUILD_AUTHORIZED_AFTER_WP14_PHASE_A_GATE (Macro F; Phase A NOT_STARTED; migration NONE_READ_MODEL_ONLY) | — |
+| HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW (WORK `b8eeadb`; migration HUMAN_CONFIRMED_V2) | — |
+| HTR-WP15 | MKB read-model integration for replay | WP14 | ai | PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW (Macro F; migration NONE_READ_MODEL_ONLY) | — |
 | HTR-WP16 | Strategy pinning + gating + trial accounting | WP13 | ai | ARCHITECTURE_ONLY (Macro G; buildAuthorized NO) | — |
 | HTR-WP17 | Historical execution-simulation realism | WP09 | backend | pending | — |
 | HTR-WP18 | Inventory & accounting parity | WP17 | backend | pending | — |
@@ -1625,7 +1637,7 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## Current work package (HTR-WP14 — Macro F Phase A)
+## Current work package (HTR-WP14 — Macro F Phase A validated, pending independent Phase B)
 
 **HISTORICAL (NON_OPERATIONAL):** The sections below through Macro-D describe completed tranches only; they are not current execution instructions.
 
@@ -1633,7 +1645,9 @@ A single PR is opened only after HTR-WP23, final full validation, and the final 
 
 **HTR-MACRO-D is COMPLETE** (2026-07-14, Opus Macro-D Phase-B independent post-review, per-WP PASS). HTR-WP11 (PIT provider context + gateway enforcement + absent-lane): WORK `f6cefb0` + CLOSEOUT `c63453d`; single sanctioned `buildHistoricalIngressContext`, sidecar-v3 PIT selection, all 15 optional lanes explicit incl. UNAVAILABLE/`SIDECAR_LANE_ABSENT`, no live provider/network call, replay/live parity; accepted evidence `replay-runs/RI-P7/htr-wp11-pit-provider-context/` (manifest digest `b8f043ac…`, reproduced); post-WORK changes classified WP11_POST_WORK_NON_SEMANTIC_CORRECTION (no fabricated availability, no future evidence reachable). HTR-WP12 (ingress bar-integrity gate + immutable versioned FHV dataset manifest): WORK `993fdab` + CLOSEOUT (this commit); nine fail-closed integrity classes gate every historical loader before first Canvas advance; `fhv-dataset-manifest/v1` (HTX_ONLY SPOT BTCUSDT+ETHUSDT, 1m base + closed-bar 15m/1h/4h/1d, UTC half-open partitions, `FHV_GAP_POLICY_V1` zero-tolerance) semantic digest `fd7d4895…`; blind holdout `RESERVED_SEALED_NOT_ACCESSED`. HTR-GAP-012/013 CLOSED at WP11; HTR-GAP-014/015 CLOSED at WP12. Gap-closure semantics: the fail-closed gate + versioned manifest contract now exist; the real HTX 2020–2025 dataset has **not** been acquired or qualified; the full FHV remains unauthorized; HTR-WP23 owns final runbook/manifest pinning + real-run preflight.
 
-The **WP04–WP12 rolling runtime/data-truth tranche is COMPLETE**. **HTR-MACRO-E is COMPLETE** (2026-07-15). HTR-WP13 WORK `d07bb654` preserved; CLOSEOUT `2d63eca`. **HTR-MACRO-F BUILD AUTHORIZED** (`BUILD_AUTHORIZED: YES`, scope WP14+WP15 only); `composerTerminalState: READY_FOR_COMPOSER_HTR_MACRO_F_PHASE_A`; WP14 migration V2 (4 tables, 0082..0089); WP15 read-model-only. Next action: `COMPOSER_EXECUTE_HTR_MACRO_F_PHASE_A`. **HISTORICAL (CONSUMED/SUPERSEDED):** v1 WP14 0082..0087 proposal, Macro E Build authorization, `APPROVE_HTR_MACRO_F_MIGRATIONS_AND_BUILD` gate.
+The **WP04–WP12 rolling runtime/data-truth tranche is COMPLETE**. **HTR-MACRO-E is COMPLETE** (2026-07-15). HTR-WP13 WORK `d07bb654` preserved; CLOSEOUT `2d63eca`.
+
+**HTR-MACRO-F Phase A is VALIDATED** (2026-07-15). HTR-WP14 WORK `b8eeadb` — forecast/decision/link/entry-purpose persistence (0082..0089), atomic bundle, idempotency, chain completeness; evidence `replay-runs/RI-P7/htr-wp14-forecast-decision/` (semantic digest `6fd8d3d7…`). HTR-WP15 WORK (this commit) — deterministic MKB read model (read-model-only, no migration); evidence `replay-runs/RI-P7/htr-wp15-mkb-read-model/` (semantic digest `258217e2…`). `PROGRAM_STATUS: WP_VALIDATED`; `BUILD_AUTHORIZED: NO`; `COMPOSER_TERMINAL_STATE: AWAITING_INDEPENDENT_MACRO_POST_REVIEW`; next gate `AUTHORIZE_HTR_MACRO_F_INDEPENDENT_PHASE_B`. WP14/WP15/Macro F are **not** COMPLETE until independent Phase-B PASS + CLOSEOUT commits. **Do not** advance to WP16. **HISTORICAL (CONSUMED/SUPERSEDED):** v1 WP14 0082..0087 proposal, Macro E Build authorization, `APPROVE_HTR_MACRO_F_MIGRATIONS_AND_BUILD` gate.
 
 ## Acceptance (whole program)
 
