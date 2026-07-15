@@ -33,8 +33,8 @@ state:
   buildAuthorized: NO
   buildAuthorizedScope: null
   composerTerminalState: AWAITING_INDEPENDENT_MACRO_POST_REVIEW
-  activeWorkPackage: HTR-WP14
-  currentWorkPackage: HTR-WP14
+  activeWorkPackage: HTR-WP15
+  currentWorkPackage: HTR-WP15
   latestValidatedProductionCodeSha: 2d63eca2231bbd06ad40680a4485f74a8244bef0   # HTR-WP13 CLOSEOUT (latest validated production baseline)
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
   wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b
@@ -47,7 +47,7 @@ state:
   macroFPhaseAStartingHeadClassification: NON_SEMANTIC_GOVERNANCE_DESCENDANT_OF_HUMAN_AUTHORIZED_ACTIVATION
   buildAuthorizationReopened: NO
   newHumanTokenRequired: NO
-  wp14ImplementationStatus: PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW
+  wp14ImplementationStatus: WORK_PACKAGE_COMPLETE
   wp15ImplementationStatus: PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW
   macroGStatus: ARCHITECTURE_ONLY_NOT_AUTHORIZED
   macroCMigrationDecision: NONE
@@ -379,6 +379,30 @@ state:
     postgresIntegration: PASS
     mandatoryPostgresCasesSkipped: 0
   wp13OpusPostReview: null   # historical Opus records preserved unchanged; WP13 Phase-B reviewed by Composer independent session
+  # --- HTR-WP14 CLOSEOUT (Composer independent Phase-B, 2026-07-15) ---
+  wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b
+  wp14PhaseBReviewer: COMPOSER_2_5_INDEPENDENT_SESSION
+  wp14PhaseBVerdict: HTR_WP14_INDEPENDENT_PHASE_B_PASS
+  wp14ImplementationStatus: WORK_PACKAGE_COMPLETE
+  wp14PostgresIntegration: PASS_ZERO_SKIP
+  wp14EvidenceStatus: ACCEPTED
+  wp14EvidencePath: replay-runs/RI-P7/htr-wp14-forecast-decision/
+  wp14EvidenceSemanticDigest: 6fd8d3d7d7acac0b69cf3d897b22797ca30cc52f788674cc61e829bbd263e882
+  wp14ProfileDigest: 9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe
+  wp14MatrixDigest: 6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6
+  wp14BoundedFixes: []
+  wp14TerminalState: WORK_PACKAGE_COMPLETE
+  wp14GapsClosed:
+    - HTR-GAP-007
+    - HTR-GAP-008
+    - HTR-GAP-011
+  wp14GapContributions:
+    HTR-GAP-036: { status: OPEN_CONTRIBUTION_DELIVERED, closureOwner: HTR-WP21 }
+  wp14Validation:
+    unitTests: { files: 14, passed: 16, failed: 0, skipped: 0 }
+    postgresMandatory: { files: 3, passed: 9, failed: 0, skipped: 0 }
+    evidence: PASS
+  wp14OpusPostReview: null
   # --- HTR-WP11 CLOSEOUT (Opus Macro-D Phase B, 2026-07-14) ---
   wp11WorkCommitSha: f6cefb064c562ae29f506cac5e319c826da3912b
   wp11OpusPostReview: PASS
@@ -561,13 +585,13 @@ state:
   wp14MigrationDecision: HUMAN_CONFIRMED_V2   # CONFIRM-HTR-WP14-MIGRATION-V2 consumed 2026-07-15; supersedes v1 0082..0087 three-table proposal
   wp14MigrationSupersededV1: SUPERSEDED_BEFORE_BUILD_BY_FORECAST_CARDINALITY_AND_RELATIONAL_LINK_CORRECTION
   wp15MigrationDecision: HUMAN_CONFIRMED_NONE_READ_MODEL_ONLY   # CONFIRM-HTR-WP15-MIGRATION consumed 2026-07-15
-  macroFReadiness: PHASE_A_COMPLETE_AWAITING_INDEPENDENT_POST_REVIEW
+  macroFReadiness: WP14_COMPLETE_WP15_PENDING_INDEPENDENT_CLOSEOUT
   macroFFullValidation: PASS
   wp14TargetedValidation: PASS
   wp15TargetedValidation: PASS
   wp14PostgresIntegration: PASS_ZERO_SKIP
   wp15PostgresIntegration: PASS_ZERO_SKIP
-  wp14EvidenceStatus: SEALED_PENDING_INDEPENDENT_ACCEPTANCE
+  wp14EvidenceStatus: ACCEPTED
   wp15EvidenceStatus: SEALED_PENDING_INDEPENDENT_ACCEPTANCE
   wp14EvidenceSemanticDigest: 6fd8d3d7d7acac0b69cf3d897b22797ca30cc52f788674cc61e829bbd263e882
   wp15EvidenceSemanticDigest: 258217e27841f1f3fe52812601e1c27f7ecf4839c013c4f5986b68f8019a0ef7
@@ -913,7 +937,7 @@ HTR-WP23: runbook and report schema
 
 Recorded per two Human-authorized bounded sessions (both **CONSUMED**, both planning/governance only — **no** production code, WP implementation, Build, migration execution, PR, FHV/M9/holdout/paper/live): `AUTHORIZE-HTR-WP13-WP16-INTELLIGENCE-TRANCHE-PLANNING` (2026-07-14, topology + drafts) and `AUTHORIZE-HTR-MACRO-E-FINAL-PREAPPROVAL-RECONCILIATION` (2026-07-14, finalization). The exact per-WP packets, matrix JSON and profile JSON live in the gitignored controller [`.cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md`](../../.cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md) and its staging directory; this section is the tracked governance summary.
 
-> **HISTORICAL (CONSUMED / SUPERSEDED 2026-07-15):** Macro-E Phase-A Build was `BUILD_AUTHORIZED: YES` under `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` (CONSUMED). HTR-MACRO-E is **COMPLETE**; HTR-WP13 **WORK_PACKAGE_COMPLETE** (CLOSEOUT `2d63eca`). Final code-point profile canonical digest `92219746…` and matrix canonical digest `6296c54e…` remain `HUMAN_BOUND_FINAL_CODEPOINT_DIGEST`. **CURRENT (2026-07-15):** HTR-MACRO-F **APPROVED** / **BUILD_AUTHORIZED** (scope WP14+WP15 only); `composerTerminalState: READY_FOR_COMPOSER_HTR_MACRO_F_PHASE_A`; next action `COMPOSER_EXECUTE_HTR_MACRO_F_PHASE_A`.
+> **HISTORICAL (CONSUMED / SUPERSEDED 2026-07-15):** Macro-E Phase-A Build was `BUILD_AUTHORIZED: YES` under `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` (CONSUMED). HTR-MACRO-E is **COMPLETE**; HTR-WP13 **WORK_PACKAGE_COMPLETE** (CLOSEOUT `2d63eca`). Final code-point profile canonical digest `92219746…` and matrix canonical digest `6296c54e…` remain `HUMAN_BOUND_FINAL_CODEPOINT_DIGEST`. **HISTORICAL (CONSUMED 2026-07-15):** Macro-F Phase-A Build authorization (`APPROVE-HTR-MACRO-F-BUILD`, `COMPOSER_EXECUTE_HTR_MACRO_F_PHASE_A`, `READY_FOR_COMPOSER_HTR_MACRO_F_PHASE_A`) — CONSUMED. **CURRENT (2026-07-15):** HTR-WP14 **WORK_PACKAGE_COMPLETE** (Phase-B PASS); HTR-WP15 Phase-A validated pending independent closeout; HTR-MACRO-F **INCOMPLETE** (WP15 pending); `BUILD_AUTHORIZED: NO`.
 
 ### Safe execution topology (execution-only macro grouping)
 
@@ -922,7 +946,7 @@ HTR-MACRO-E:
   status: COMPLETE
   workPackages: [HTR-WP13]
 HTR-MACRO-F:
-  status: ACTIVE_APPROVED_BUILD_AUTHORIZED
+  status: WP14_COMPLETE_WP15_PENDING_INDEPENDENT_CLOSEOUT
   workPackages: [HTR-WP14, HTR-WP15]
 HTR-MACRO-G:
   status: ARCHITECTURE_ONLY_NOT_AUTHORIZED
