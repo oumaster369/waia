@@ -27,38 +27,38 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: MACRO_E_PACKET_HUMAN_APPROVED_PENDING_FINAL_DIGEST_BINDING   # substantive Macro-E decisions consumed 2026-07-15; final code-point profile/matrix digests prepared; Human binding pending before Build
-  childPlanStatus: CONFIRM_REQUIRED   # substantive Macro-E architecture approved; final code-point digests NOT yet Human-bound; Build NOT authorized
-  programStatus: APPROVED_IDLE   # WP04–WP12 COMPLETE; final code-point digest binding required before Build; next gate APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD
+  humanApproval: MACRO_E_FINAL_DIGESTS_HUMAN_BOUND_BUILD_AUTHORIZED   # APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD consumed 2026-07-15; final code-point profile/matrix digests Human-bound; Macro E / WP13 Build authorized
+  childPlanStatus: APPROVED   # Macro-E architecture Human-approved; final code-point digests Human-bound; WP13 Build authorized
+  programStatus: WP_ACTIVE   # WP04–WP12 COMPLETE; Macro E / WP13 Build authorized; Composer may execute HTR-MACRO-E Phase A
   governanceStateAuthority: GIT_HEAD
-  governanceReconciledFromHead: a935ecb1394c679e99b9ef387804d134a606a10e   # prior reconciliation at a935ecb; this code-point digest authority commit advances HEAD by one (44 ahead)
+  governanceReconciledFromHead: 0f363ef714daeca94690937a0ec1e6633d4a3241   # prior HEAD 0f363ef; this Macro-E activation commit advances HEAD by one (45 ahead)
   latestValidatedProductionCodeSha: 993fdaba0ffd5f66837bea1c7272507183efa973
-  planningTerminalState: FINAL_CODEPOINT_DIGEST_RECONCILIATION_COMPLETE
+  planningTerminalState: MACRO_E_FINAL_DIGESTS_BOUND_BUILD_AUTHORIZED
   activeWorkPackage: HTR-WP13
   macroCMigrationDecision: NONE
   macroDMigrationDecision: NONE
   macroCCodeBaselineHead: a8a709ff53f74649b5c5f39e0ba8e00af1e113de
   macroDCodeBaselineHead: 1ac0e6a8a7318be5b068dcb833f1a00ed32440a9
   macroDPreapprovalHead: 6d102f05d76fba2efd99b363799dde18a0668a71
-  composerTerminalState: FINAL_CODEPOINT_DIGEST_RECONCILIATION_COMPLETE
+  composerTerminalState: READY_TO_EXECUTE_HTR_MACRO_E_PHASE_A
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
   currentWorkPackage: HTR-WP13
-  activeChildPlan: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md   # WP13–WP16 intelligence rolling controller (ACTIVE_MACRO_E_APPROVED_PENDING_FINAL_DIGEST_BINDING); WP04–WP12 runtime-substrate controller retired
+  activeChildPlan: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md   # WP13–WP16 intelligence rolling controller (ACTIVE_MACRO_E_APPROVED_BUILD_AUTHORIZED); WP04–WP12 runtime-substrate controller retired
   intelligenceTranche:
     controller: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
-    status: APPROVED_PENDING_FINAL_DIGEST_BINDING
+    status: MACRO_E_ACTIVE
     macroPackages: { HTR-MACRO-E: [HTR-WP13], HTR-MACRO-F: [HTR-WP14, HTR-WP15], HTR-MACRO-G: [HTR-WP16] }
     preferredOrderAfterWp13: [HTR-MACRO-F, HTR-MACRO-G]
-    activeMacroStatus: CONFIRM_REQUIRED   # substantive architecture approved 2026-07-15; final code-point digest binding pending Human approval before Build
+    activeMacroStatus: APPROVED   # APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD consumed 2026-07-15; final code-point digests Human-bound; WP13 Build authorized
     d1: RESOLVED_RECORD_LEVEL_CHAIN
     d2: HUMAN_APPROVED   # APPROVE-HTR-D2 consumed 2026-07-15 (HTX_ONLY SPOT BTCUSDT+ETHUSDT; base 1m + derived 15m/1h/4h/1d; LSR+MR enabled; trend_momentum_v0 EVIDENCE_ONLY_NOT_TRADE_ELIGIBLE); enablement is NOT SVG approval / NOT an edge verdict; version-pin+lifecycle owned by WP16
-    d3: SUBSTANTIVE_CONTRACT_HUMAN_APPROVED_FINAL_DIGEST_BINDING_REQUIRED   # CLARIFY-HTR-D3 consumed 2026-07-15; final code-point canonical digest 92219746… awaits Human binding
+    d3: HUMAN_APPROVED_FINAL_CODEPOINT_DIGEST_BOUND   # CLARIFY-HTR-D3 consumed 2026-07-15; final code-point canonical digest 92219746… Human-bound 2026-07-15 (APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD)
     d4: HUMAN_DECISION_REQUIRED_BEFORE_HTR_WP14
     d20: HUMAN_DECISION_REQUIRED_BEFORE_HTR_WP16
-    htrHistoricalIntelligenceProfileV1: SUBSTANTIVE_CONTRACT_HUMAN_APPROVED_FINAL_DIGEST_BINDING_REQUIRED
-    profileDigestCanonical: 9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe   # HTR_SEMANTIC_CANONICAL_JSON_V1 code-point digest; matrix bound; NOT yet Human-bound
+    htrHistoricalIntelligenceProfileV1: HUMAN_APPROVED_FINAL_CODEPOINT_DIGEST_BOUND
+    profileDigestCanonical: 9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe   # HTR_SEMANTIC_CANONICAL_JSON_V1 code-point digest; matrix bound; HUMAN_BOUND_FINAL_CODEPOINT_DIGEST 2026-07-15
     profileDigestInsertionOrder: 0d156d38a9e615f0488e7c11d5de730b54a7f6270d3d0921ceea074f738b839f
     profileDigestRawFileSha256: 72ed9b17d773e1be2bc55f659c1d0ec39e9e0c8a3e5dc0f7c02795103db2cc8a
     profileDigestSupersededLocaleCompare: a9666258e046e934b2156e0dc3ad5da02eb9b7e69d994e3505a3af5b62cd8bf0   # REJECTED_CANONICALIZATION (localeCompare)
@@ -67,8 +67,8 @@ state:
     profileGovernanceFieldsRemoved: [status, strategyConsumerPolicy.status, decisionBasis, strategyConsumerPolicy.ownedBy]
     profileSubstantiveRuntimeSemanticsChanged: false
     historicalEvidenceCapability: PRICE_ONLY_GROUNDED_EVIDENCE_PROFILE
-    timeframeEvidenceLaneAuthorityMatrixV1: SUBSTANTIVE_CONTRACT_HUMAN_APPROVED_FINAL_DIGEST_BINDING_REQUIRED
-    matrixDigestCanonical: 6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6   # HTR_SEMANTIC_CANONICAL_JSON_V1 code-point digest; NOT yet Human-bound
+    timeframeEvidenceLaneAuthorityMatrixV1: HUMAN_APPROVED_FINAL_CODEPOINT_DIGEST_BOUND
+    matrixDigestCanonical: 6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6   # HTR_SEMANTIC_CANONICAL_JSON_V1 code-point digest; HUMAN_BOUND_FINAL_CODEPOINT_DIGEST 2026-07-15
     matrixDigestInsertionOrder: 2e558f18a863fca6acc180929776a4ef3e710195317f091dd321c52ed7060c55
     matrixDigestRawFileSha256: 4aed27c0bfeaa853641330378962dce019a63eea22548ac4616bf03b396bfa97
     matrixDigestSupersededLocaleCompare: 231712e2916370e07def8546f70ed8434e7794e498842390c301e9a7a16baffb   # REJECTED_CANONICALIZATION (localeCompare)
@@ -94,7 +94,7 @@ state:
     strategyDiscoveryToOperatorProposalContractV1: HUMAN_RATIFIED   # RATIFY-STRATEGY-DISCOVERY-TO-OPERATOR-PROPOSAL-CONTRACT-V1 consumed 2026-07-15; foundation only (implemented-in-dee415=false; mature-autonomous-engine=false; machine self-promotion + capital authority PROHIBITED)
     wp13MigrationDecision: CONFIRMED_WITH_ATOMIC_FAIL_CLOSED_IDEMPOTENCY   # CONFIRM-HTR-MACRO-E-MIGRATION consumed 2026-07-15. 3 append-only Postgres tables (trader_intelligence_cycle_envelope/hypothesis_record/conviction_record); service-role RLS; SQLITE_ADAPTER NOT_REQUIRED (db/AGENTS.md:148 Postgres-only MVP freeze + ADR-0017). Atomic cycle bundle HTR_WP13_ATOMIC_INTELLIGENCE_CYCLE_BUNDLE_V1 = single Postgres transaction (envelope → hypotheses code-point sorted → conviction), partial commit PROHIBITED, rollback complete bundle on any failure. Fail-closed idempotency: on conflict load-and-compare deterministic id + org + business key + schema_version + content_digest; any mismatch throws HTR_WP13_IDEMPOTENCY_CONFLICT + rollback (ON CONFLICT DO NOTHING PROHIBITED). conviction cardinality = Model B; conviction_scope ∈ {ACTIVE_HYPOTHESIS, NONE} (AGGREGATE DEFERRED_NOT_IN_SCHEMA_V1); active_hypothesis_record_id NULLABLE with scope constraint; conviction UNIQUE(org,run,cycle,symbol); hypothesis UNIQUE(org,run,cycle,symbol,hypothesis_type); DUP-14 link; migrations 0076–0081; Forecast/Decision/whyNotCash DEFERRED to WP14; no SQL created this session
     wp10EvidenceHermeticity: FINAL_PHASE_B_PASS   # 2026-07-14 Opus final Phase-B rereview PASS. Correction chain 017fcbe (FAIL symlink/case-alias) → f2413b2 (FAIL output-directory-substitution TOCTOU) → 521ddd1 (PASS cwd/inode-bound child publication + completion contract). Original WP10 seal (replay-runs/RI-P7/htr-wp10-determinism-nolookahead/, artifact fa5def37…) preserved byte-identical across befa6c1/1ac0e6a/017fcbe/f2413b2/521ddd1; accepted post-Macro-D compatibility evidence promoted separately — NOT a replacement of the original seal.
-    macroEReadiness: READY_FOR_HUMAN_FINAL_DIGEST_BINDING_AND_BUILD_AUTHORIZATION   # substantive Macro-E decisions consumed; final code-point digests prepared; Human binding + Build authorization remain separate gates; BUILD_AUTHORIZED NO
+    macroEReadiness: BUILD_AUTHORIZED   # APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD consumed 2026-07-15; final code-point digests Human-bound; BUILD_AUTHORIZED YES for HTR-MACRO-E / HTR-WP13 only
     wp10EvidenceHermeticityCorrection:
       status: FINAL_PHASE_B_PASS
       initialWorkCommitSha: 017fcbe4dad60bc36dcb93e538b7c52ff7be7585
@@ -114,8 +114,8 @@ state:
       candidateStagingManifestDigest: 13c2d68f821c150d3154741380aafa47c7c9c86557083ce330e191f0866dceb3
       harnessSourceSha256: 077e7f2a0ceb58f19b56232c187361f526b65de58425e87e38e7e20e1a2c4409
       acceptedBundleDigest: 1a80d67a650fc1a999293f2bcd32c08650c5fb56a823248acc14bc4ef5279492
-      fullValidation: PASS
-    buildAuthorized: NO
+    fullValidation: PASS
+  buildAuthorized: YES   # HTR-MACRO-E / HTR-WP13 only (APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD consumed 2026-07-15); NOT WP14/WP15/WP16; no FHV/holdout/paper/live/capital
   workCommitSha: null   # per-WP WORK SHAs recorded in wpNNWorkCommitSha fields (Macro D: WP11 f6cefb0, WP12 993fdab); no separate macro-level WORK commit
   wp01WorkCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
   wp01PostReview: PASS
@@ -281,8 +281,8 @@ state:
   macroDStatus: COMPLETE   # 2026-07-14 Opus Macro-D Phase B: WP11 CLOSEOUT + WP12 CLOSEOUT; WP04–WP12 rolling runtime/data-truth tranche COMPLETE
   activeMacroPackage: HTR-MACRO-E   # 2026-07-14: WP13–WP16 intelligence tranche planned; HTR-MACRO-D COMPLETE
   activeMacroWorkPackages: [HTR-WP13]
-  activeMacroStatus: CONFIRM_REQUIRED   # substantive architecture approved; profile/matrix digest rebind pending Human binding before Build
-  buildAuthorized: NO   # Macro-D Build authorization CONSUMED at Phase A and now COMPLETE; no new Build authorized; WP13 Build separately gated on Human authorization + D-1/D-2/D-3 + Timeframe×Evidence-Lane matrix + exact WP13 child plan
+  activeMacroStatus: APPROVED   # APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD consumed 2026-07-15; final code-point digests Human-bound; WP13 Build authorized
+  # (single operational buildAuthorized is state.buildAuthorized above — duplicate ledger key removed 2026-07-15; BUILD_AUTHORIZED YES for HTR-MACRO-E / HTR-WP13 only)
   # --- HTR-WP11 CLOSEOUT (Opus Macro-D Phase B, 2026-07-14) ---
   wp11WorkCommitSha: f6cefb064c562ae29f506cac5e319c826da3912b
   wp11OpusPostReview: PASS
@@ -421,10 +421,10 @@ state:
   latestValidatedBaseline: HTR-MACRO-D_PHASE_B_CLOSEOUT
   finalAuditStatus: not-started
   blockedReason: null
-  timeframeEvidenceLaneAuthorityMatrixV1: SUBSTANTIVE_CONTRACT_HUMAN_APPROVED_FINAL_DIGEST_BINDING_REQUIRED   # final code-point digest 6296c54e… awaits Human binding
+  timeframeEvidenceLaneAuthorityMatrixV1: HUMAN_APPROVED_FINAL_CODEPOINT_DIGEST_BOUND   # final code-point digest 6296c54e… Human-bound 2026-07-15
   positionPurposeAndExitContractV1: REQUIRED_BEFORE_HTR_WP14_BUILD   # RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1 (2026-07-14, §"Position purpose + exit contract v1"); no order intent without hypothesis/exit plan; adds/splits/merges/removes/reorders no WP
-  nextHumanGate: APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD
-  nextAction: "HUMAN_BIND_FINAL_CODEPOINT_DIGESTS_AND_AUTHORIZE_MACRO_E_BUILD (Human gate APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD). Substantive Macro-E decisions consumed 2026-07-15. Final code-point profile digest 9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe (raw 72ed9b17…); final matrix digest 6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6 (raw 4aed27c0…). Canonicalizer HTR_SEMANTIC_CANONICAL_JSON_V1 (code-point comparator; localeCompare PROHIBITED). Prior localeCompare digests a9666258…/231712e… REJECTED_CANONICALIZATION. Six substantive decisions remain consumed; final digests NOT yet Human-bound. Build NOT authorized. No WP13 code/SQL/PR."
+  nextHumanGate: NONE_UNTIL_HTR_MACRO_E_PHASE_A_REPORT
+  nextAction: "COMPOSER_EXECUTE_HTR_MACRO_E_PHASE_A. APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD consumed 2026-07-15: final code-point profile digest 9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe (raw 72ed9b17…) and matrix digest 6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6 (raw 4aed27c0…) HUMAN_BOUND_FINAL_CODEPOINT_DIGEST; canonicalizer HTR_SEMANTIC_CANONICAL_JSON_V1 (code-point comparator; localeCompare PROHIBITED); prior localeCompare digests a9666258…/231712e… REJECTED_CANONICALIZATION; earlier a9… integrity-defect digests SUPERSEDED. BUILD_AUTHORIZED YES for HTR-MACRO-E / HTR-WP13 only (NOT WP14/WP15/WP16; no FHV/blind-holdout/paper/live/capital). Composer executes WP13 Phase A only; next Human gate is the Macro E Phase A report."
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -765,7 +765,7 @@ HTR-WP23: runbook and report schema
 
 Recorded per two Human-authorized bounded sessions (both **CONSUMED**, both planning/governance only — **no** production code, WP implementation, Build, migration execution, PR, FHV/M9/holdout/paper/live): `AUTHORIZE-HTR-WP13-WP16-INTELLIGENCE-TRANCHE-PLANNING` (2026-07-14, topology + drafts) and `AUTHORIZE-HTR-MACRO-E-FINAL-PREAPPROVAL-RECONCILIATION` (2026-07-14, finalization). The exact per-WP packets, matrix JSON and profile JSON live in the gitignored controller [`.cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md`](../../.cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md) and its staging directory; this section is the tracked governance summary.
 
-> **Macro-E readiness is `READY_FOR_HUMAN_FINAL_DIGEST_BINDING_AND_BUILD_AUTHORIZATION`** — substantive Macro-E architecture was Human-approved 2026-07-15. Final code-point profile canonical digest `92219746…` and matrix canonical digest `6296c54e…` (canonicalizer `HTR_SEMANTIC_CANONICAL_JSON_V1`; `localeCompare` PROHIBITED) await Human binding (`APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD`). Build NOT authorized.
+> **Macro-E readiness is `BUILD_AUTHORIZED`** — substantive Macro-E architecture was Human-approved 2026-07-15 and the final code-point digests were **Human-bound 2026-07-15** (`APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` CONSUMED). Final code-point profile canonical digest `92219746…` and matrix canonical digest `6296c54e…` (canonicalizer `HTR_SEMANTIC_CANONICAL_JSON_V1`; `localeCompare` PROHIBITED) are `HUMAN_BOUND_FINAL_CODEPOINT_DIGEST`. `BUILD_AUTHORIZED: YES` for **HTR-MACRO-E / HTR-WP13 only** (not WP14/WP15/WP16; no FHV, blind holdout, paper, live or capital).
 
 ### Safe execution topology (execution-only macro grouping)
 
@@ -780,18 +780,18 @@ Changes **execution topology only** — adds/removes no WP, merges no technical 
 ### Decision reconciliation
 
 - **D-1 — ALREADY_RESOLVED.** `APPROVE-HTR-D1: record-level-chain` (recorded above). WP13 activates only the **record-level** chain and creates **no mature autonomous engines**.
-- **D-3 — SUBSTANTIVE_CONTRACT_HUMAN_APPROVED; FINAL_DIGEST_BINDING_REQUIRED.** `CLARIFY-HTR-D3-HISTORICAL-PROFILE` consumed 2026-07-15. Runtime semantic contract approved; governance-only fields removed from staging JSON. Final code-point canonical digest `9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe` awaits Human binding (`APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD`). Prior localeCompare digest `a9666258…` is **REJECTED_CANONICALIZATION**.
+- **D-3 — HUMAN_APPROVED_FINAL_CODEPOINT_DIGEST_BOUND.** `CLARIFY-HTR-D3-HISTORICAL-PROFILE` consumed 2026-07-15. Runtime semantic contract approved; governance-only fields removed from staging JSON. Final code-point canonical digest `9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe` is **HUMAN_BOUND_FINAL_CODEPOINT_DIGEST** (`APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` consumed 2026-07-15). Prior localeCompare digest `a9666258…` is **REJECTED_CANONICALIZATION_LOCALECOMPARE**; original `9a1ed67e…` is **SUPERSEDED_DIGEST_INTEGRITY_DEFECT**.
 - **D-2 — HUMAN_APPROVED (consumed 2026-07-15).** HTX_ONLY SPOT; BTCUSDT+ETHUSDT; base 1m + derived 15m/1h/4h/1d; enabled historical consumers `liquidity_sweep_reversal_v0`+`mean_reversion_v0`; research-only `trend_momentum_v0` = `EVIDENCE_ONLY_NOT_TRADE_ELIGIBLE`; enablement is **not** SVG approval and **not** an edge verdict; version-pin+lifecycle owned by WP16. WP13 owns enablement set + matrix + terminal-reason + records.
 
 ```text
 APPROVE-HTR-D2: venue=HTX market=SPOT symbols=BTCUSDT,ETHUSDT base=1m derived=15m,1h,4h,1d enabled-historical-consumers=liquidity_sweep_reversal_v0,mean_reversion_v0 research-only=trend_momentum_v0 research-only-semantics=EVIDENCE_ONLY_NOT_TRADE_ELIGIBLE strategy-promotion=PROHIBITED edge-verdict=NOT_CLAIMED version-rule=PIN_EXACT_REGISTERED_VERSION_AT_WP16 portfolio=SHARED_MULTI_INSTRUMENT wp13-owns=consumer-set+matrix+terminal-reason+records wp16-owns=version-pin+lifecycle-gating+trial+riskMultiplier
 ```
 
-### `HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1` (SUBSTANTIVE_CONTRACT_HUMAN_APPROVED · FINAL_DIGEST_BINDING_REQUIRED)
+### `HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1` (HUMAN_APPROVED · FINAL_CODEPOINT_DIGEST_HUMAN_BOUND)
 
 Explicit, versioned historical run profile (staging: `.cursor/plans/dee-415-htr-wp13-wp16-staging/htr-historical-intelligence-profile-v1.json`) that activates the record-level MI-core chain **only** through an explicit seam (`runBacktest historicalProfile → runEvaluationCycle`), **never** as a global default. Contains **no governance/planning status fields**. Pins venueScope `HTX_ONLY`, marketType `SPOT`, symbols `[BTCUSDT, ETHUSDT]`, baseInterval `1m`, derivedIntervals `[15m,1h,4h,1d]` (`CLOSED_BARS_ONLY`); enabled intelligence stages; `strategyConsumerPolicy` with enabled LSR+MR and research-only TM (`EVIDENCE_ONLY_NOT_TRADE_ELIGIBLE`); `historicalEvidenceCapability: PRICE_ONLY_GROUNDED_EVIDENCE_PROFILE`; matrix digest pin in `providerEvidenceLanePolicy.matrixDigestCanonical`. **Final code-point canonical digest:** `9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe` (insertion-order `0d156d38…`; raw-file `72ed9b17…`). Canonicalizer: `HTR_SEMANTIC_CANONICAL_JSON_V1` (`localeCompare` PROHIBITED). **Substantive runtime semantics unchanged.**
 
-### `TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1` (SUBSTANTIVE_CONTRACT_HUMAN_APPROVED · FINAL_DIGEST_BINDING_REQUIRED)
+### `TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1` (HUMAN_APPROVED · FINAL_CODEPOINT_DIGEST_HUMAN_BOUND)
 
 Exact machine-readable matrix (staging: `.cursor/plans/dee-415-htr-wp13-wp16-staging/timeframe-evidence-lane-authority-matrix-v1.json`) over **16 lanes** (1 HTX spot 1m price + 15 UNAVAILABLE sidecar lanes). Contains **no governance status fields**. **Final code-point canonical digest:** `6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6` (insertion-order `2e558f18…`; raw-file `4aed27c0…`). Canonicalizer: `HTR_SEMANTIC_CANONICAL_JSON_V1`. FHV scope: `PRICE_ONLY_GROUNDED_EVIDENCE`; `MULTI_SOURCE_HISTORICAL_VALIDATION: NOT_PERFORMED`.
 
@@ -799,8 +799,8 @@ Exact machine-readable matrix (staging: `.cursor/plans/dee-415-htr-wp13-wp16-sta
 
 ```yaml
 MIGRATION_DECISION: CONFIRMED_WITH_ATOMIC_FAIL_CLOSED_IDEMPOTENCY   # CONFIRM-HTR-MACRO-E-MIGRATION consumed 2026-07-15
-ACTIVE_MACRO_STATUS: CONFIRM_REQUIRED   # substantive architecture approved; profile/matrix digest rebind pending
-BUILD_AUTHORIZED: NO
+ACTIVE_MACRO_STATUS: APPROVED   # APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD consumed 2026-07-15; final code-point digests Human-bound
+BUILD_AUTHORIZED: YES   # HTR-MACRO-E / HTR-WP13 only; NOT WP14/WP15/WP16; no FHV/holdout/paper/live/capital
 ```
 
 **Amendment consumed 2026-07-15 (`CONFIRM-HTR-MACRO-E-MIGRATION`):** the earlier package's
@@ -829,13 +829,47 @@ after applying the mandatory persistence amendment (atomic cycle bundle + fail-c
 removed from schema v1). Build authorization remains a **separate later** gate and is **NOT** consumed:
 
 1. `APPROVE-HTR-D2: venue=HTX market=SPOT symbols=BTCUSDT,ETHUSDT base=1m derived=15m,1h,4h,1d enabled-historical-consumers=liquidity_sweep_reversal_v0,mean_reversion_v0 research-only=trend_momentum_v0 research-only-semantics=EVIDENCE_ONLY_NOT_TRADE_ELIGIBLE strategy-promotion=PROHIBITED edge-verdict=NOT_CLAIMED version-rule=PIN_EXACT_REGISTERED_VERSION_AT_WP16 portfolio=SHARED_MULTI_INSTRUMENT wp13-owns=consumer-set+matrix+terminal-reason+records wp16-owns=version-pin+lifecycle-gating+trial+riskMultiplier`
-2. `CLARIFY-HTR-D3-HISTORICAL-PROFILE: profile-id=HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 profile-digest=9a1ed67e… (SUPERSEDED — corrected digest a9666258… awaits rebind) supersedes-draft-digest=fac1a44f… historical-evidence-capability=PRICE_ONLY_GROUNDED_EVIDENCE_PROFILE global-default=PROHIBITED historical-only=YES`
-3. `APPROVE-TIMEFRAME-EVIDENCE-LANE-AUTHORITY-MATRIX-V1: matrix-digest=c9186814… (SUPERSEDED — corrected digest 231712e… awaits rebind) fhv-scope-limitation=PRICE_ONLY_GROUNDED_EVIDENCE multi-source-historical-validation=NOT_PERFORMED`
+2. `CLARIFY-HTR-D3-HISTORICAL-PROFILE: profile-id=HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 profile-digest=9a1ed67e… (as-consumed; SUPERSEDED_DIGEST_INTEGRITY_DEFECT) supersedes-draft-digest=fac1a44f… historical-evidence-capability=PRICE_ONLY_GROUNDED_EVIDENCE_PROFILE global-default=PROHIBITED historical-only=YES` — final code-point digest binding recorded below.
+3. `APPROVE-TIMEFRAME-EVIDENCE-LANE-AUTHORITY-MATRIX-V1: matrix-digest=c9186814… (as-consumed; SUPERSEDED_DIGEST_INTEGRITY_DEFECT) fhv-scope-limitation=PRICE_ONLY_GROUNDED_EVIDENCE multi-source-historical-validation=NOT_PERFORMED` — final code-point digest binding recorded below.
 4. `CONFIRM-HTR-MACRO-E-MIGRATION: tables=trader_intelligence_cycle_envelope,trader_intelligence_hypothesis_record,trader_intelligence_conviction_record posture=POSTGRES_ONLY+APPEND_ONLY+SERVICE_ROLE_RLS+ORG_SCOPED sqlite-adapter=NOT_REQUIRED bundle-write=SINGLE_ATOMIC_POSTGRES_TRANSACTION partial-cycle-bundle=PROHIBITED conflict-policy=VERIFY_DETERMINISTIC_ID_AND_CONTENT_DIGEST same-key-same-content=IDEMPOTENT_REPLAY_ACCEPTED same-key-different-content=HTR_WP13_IDEMPOTENCY_CONFLICT silent-on-conflict-do-nothing=PROHIBITED hypothesis-idempotency=UNIQUE(org,run,cycle,symbol,hypothesis_type) conviction-cardinality=MODEL_B_ONE_CYCLE_LEVEL_ACTIVE_CONVICTION conviction-idempotency=UNIQUE(org,run,cycle,symbol) conviction-scope=ACTIVE_HYPOTHESIS|NONE aggregate-scope=DEFERRED_NOT_IN_SCHEMA_V1 active-hypothesis-link=NULLABLE_COMPOSITE_FK_WITH_SCOPE_CONSTRAINT cycle-envelope-idempotency=UNIQUE(org,run,cycle,symbol) numeric=CANONICAL_DECIMAL_STRING backfill=NONE rollback=DROP_REVERSE_ORDER migration-files=0076..0081 deferred-to-wp14=forecast,decision,whyNotCash`
 5. `RATIFY-STRATEGY-DISCOVERY-TO-OPERATOR-PROPOSAL-CONTRACT-V1: implemented-in-dee415=false mature-autonomous-engine-authorized=false foundation-preservation-required=true machine-self-promotion=PROHIBITED machine-capital-authority=PROHIBITED future-program-required=true` (additive foundation obligation; adds no WP and no current Build scope)
 6. `APPROVE-HTR-INTELLIGENCE-MACRO-E: wp13-historical-intelligence-chain`
 
-(full forms in controller §10). **All six substantive tokens were consumed 2026-07-15.** Corrected profile/matrix digests prepared 2026-07-15 but **NOT yet Human-bound** — narrow rebind gate `APPROVE_CORRECTED_HTR_PROFILE_DIGEST_AND_MACRO_E_BUILD`. Build approval remains a **separate later** token — explicitly **not** issued here.
+(full forms in controller §10). **All six substantive tokens were consumed 2026-07-15.**
+
+**Final code-point digest binding (CONSUMED 2026-07-15 — `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD`).** This Human decision binds the final code-point profile and matrix digests, supersedes all draft/originally-approved/governance-cleanup/`localeCompare` digests, and authorizes Composer Phase A for **HTR-MACRO-E / HTR-WP13 only** (not WP14/WP15/WP16; no FHV, blind holdout, paper, live or capital deployment). The complete digest history, classified:
+
+```yaml
+ORIGINAL_CONSUMED_PROFILE_DIGEST:
+  value: 9a1ed67e39c2a5e23bb83459f4f1fb52b10c88a49ebbf773b5285c90b82f706c
+  status: SUPERSEDED_DIGEST_INTEGRITY_DEFECT
+
+INTERMEDIATE_GOVERNANCE_CLEAN_PROFILE_DIGEST:
+  value: a9666258e046e934b2156e0dc3ad5da02eb9b7e69d994e3505a3af5b62cd8bf0
+  status: REJECTED_CANONICALIZATION_LOCALECOMPARE
+
+FINAL_PROFILE_DIGEST:
+  value: 9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe
+  status: HUMAN_BOUND_FINAL_CODEPOINT_DIGEST
+
+ORIGINAL_CONSUMED_MATRIX_DIGEST:
+  value: c91868142e8b5ed0b5db533e1811fe4a733290a204efab52f02ed592c1c01b08
+  status: SUPERSEDED_DIGEST_INTEGRITY_DEFECT
+
+INTERMEDIATE_GOVERNANCE_CLEAN_MATRIX_DIGEST:
+  value: 231712e2916370e07def8546f70ed8434e7794e498842390c301e9a7a16baffb
+  status: REJECTED_CANONICALIZATION_LOCALECOMPARE
+
+FINAL_MATRIX_DIGEST:
+  value: 6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6
+  status: HUMAN_BOUND_FINAL_CODEPOINT_DIGEST
+```
+
+Exact consumed decision (recorded verbatim; the six substantive tokens above remain preserved as history and are **not** rewritten or reopened):
+
+```text
+APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD: profile-id=HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 profile-canonical-digest=9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe profile-raw-file-sha256=72ed9b17d773e1be2bc55f659c1d0ec39e9e0c8a3e5dc0f7c02795103db2cc8a matrix-id=TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1 matrix-canonical-digest=6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6 matrix-raw-file-sha256=4aed27c0bfeaa853641330378962dce019a63eea22548ac4616bf03b396bfa97 canonicalizer=HTR_SEMANTIC_CANONICAL_JSON_V1 object-key-order=UNICODE_CODE_POINT_ASCENDING locale-compare=PROHIBITED active-macro=HTR-MACRO-E active-work-packages=HTR-WP13 macro-build-authorized=YES scope=RESEARCH_ONLY_HISTORICAL paper=PROHIBITED live=PROHIBITED capital-authority=PROHIBITED holdout-access=PROHIBITED
+```
 
 ### HTR-WP13 conviction cardinality resolution (Model B — evidence-backed, 2026-07-14)
 
@@ -1038,7 +1072,7 @@ A single PR is opened only after HTR-WP23, final full validation, and the final 
 
 **HTR-MACRO-D is COMPLETE** (2026-07-14, Opus Macro-D Phase-B independent post-review, per-WP PASS). HTR-WP11 (PIT provider context + gateway enforcement + absent-lane): WORK `f6cefb0` + CLOSEOUT `c63453d`; single sanctioned `buildHistoricalIngressContext`, sidecar-v3 PIT selection, all 15 optional lanes explicit incl. UNAVAILABLE/`SIDECAR_LANE_ABSENT`, no live provider/network call, replay/live parity; accepted evidence `replay-runs/RI-P7/htr-wp11-pit-provider-context/` (manifest digest `b8f043ac…`, reproduced); post-WORK changes classified WP11_POST_WORK_NON_SEMANTIC_CORRECTION (no fabricated availability, no future evidence reachable). HTR-WP12 (ingress bar-integrity gate + immutable versioned FHV dataset manifest): WORK `993fdab` + CLOSEOUT (this commit); nine fail-closed integrity classes gate every historical loader before first Canvas advance; `fhv-dataset-manifest/v1` (HTX_ONLY SPOT BTCUSDT+ETHUSDT, 1m base + closed-bar 15m/1h/4h/1d, UTC half-open partitions, `FHV_GAP_POLICY_V1` zero-tolerance) semantic digest `fd7d4895…`; blind holdout `RESERVED_SEALED_NOT_ACCESSED`. HTR-GAP-012/013 CLOSED at WP11; HTR-GAP-014/015 CLOSED at WP12. Gap-closure semantics: the fail-closed gate + versioned manifest contract now exist; the real HTX 2020–2025 dataset has **not** been acquired or qualified; the full FHV remains unauthorized; HTR-WP23 owns final runbook/manifest pinning + real-run preflight.
 
-The **WP04–WP12 rolling runtime/data-truth tranche is COMPLETE** and the **WP13–WP16 intelligence tranche is `APPROVED_PENDING_FINAL_DIGEST_BINDING`** (substantive Macro-E packet Human-approved 2026-07-15; final code-point digests prepared — see §"WP13–WP16 intelligence tranche"). The program is `APPROVED_IDLE` at the **`APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD`** Human gate. Topology: **HTR-MACRO-E [WP13]** (exact packet, substantive contract approved; final digest binding required) / **HTR-MACRO-F [WP14,WP15]** (architecture-only) / **HTR-MACRO-G [WP16]** (architecture-only). D-3 profile digest `92219746…`; matrix digest `6296c54e…`; canonicalizer `HTR_SEMANTIC_CANONICAL_JSON_V1` (`localeCompare` PROHIBITED). WP13 `MIGRATION_DECISION` **`CONFIRMED_WITH_ATOMIC_FAIL_CLOSED_IDEMPOTENCY`**; conviction cardinality Model B `MODEL_B_ONE_CYCLE_LEVEL_ACTIVE_CONVICTION`; `conviction_scope` ∈ {`ACTIVE_HYPOTHESIS`,`NONE`}; `AGGREGATE` = `DEFERRED_NOT_IN_SCHEMA_V1`. **`MACRO_E_READINESS: READY_FOR_HUMAN_FINAL_DIGEST_BINDING_AND_BUILD_AUTHORIZATION`** — final digests prepared but NOT yet Human-bound; Build NOT authorized. No WP13 code, no SQL and no PR.
+The **WP04–WP12 rolling runtime/data-truth tranche is COMPLETE** and the **WP13–WP16 intelligence tranche is `MACRO_E_ACTIVE`** (substantive Macro-E packet Human-approved 2026-07-15; final code-point digests Human-bound 2026-07-15 — see §"WP13–WP16 intelligence tranche"). The program is `WP_ACTIVE`; the **`APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD`** Human gate is CONSUMED. Topology: **HTR-MACRO-E [WP13]** (exact packet, substantive contract approved; final code-point digests Human-bound; Build authorized) / **HTR-MACRO-F [WP14,WP15]** (architecture-only) / **HTR-MACRO-G [WP16]** (architecture-only). D-3 profile digest `92219746…`; matrix digest `6296c54e…`; canonicalizer `HTR_SEMANTIC_CANONICAL_JSON_V1` (`localeCompare` PROHIBITED); both `HUMAN_BOUND_FINAL_CODEPOINT_DIGEST`. WP13 `MIGRATION_DECISION` **`CONFIRMED_WITH_ATOMIC_FAIL_CLOSED_IDEMPOTENCY`**; conviction cardinality Model B `MODEL_B_ONE_CYCLE_LEVEL_ACTIVE_CONVICTION`; `conviction_scope` ∈ {`ACTIVE_HYPOTHESIS`,`NONE`}; `AGGREGATE` = `DEFERRED_NOT_IN_SCHEMA_V1`. **`MACRO_E_READINESS: BUILD_AUTHORIZED`** — `BUILD_AUTHORIZED: YES` for **HTR-MACRO-E / HTR-WP13 only** (not WP14/WP15/WP16; no FHV, blind holdout, paper, live or capital). Next action is `COMPOSER_EXECUTE_HTR_MACRO_E_PHASE_A`; next Human gate is the Macro E Phase A report. No WP13 code, no SQL and no PR were produced in this activation session.
 
 ## Acceptance (whole program)
 
