@@ -1,0 +1,7 @@
+{
+  "accountAtLimit": true,
+  "monthlyAtLimit": true,
+  "strategyAtLimit": true,
+  "accountBelow": false,
+  "accountAbove": true
+}

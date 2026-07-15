@@ -1,0 +1,17 @@
+{
+  "phaseBReviewer": "COMPOSER_2_5_INDEPENDENT_SESSION",
+  "verificationResult": "PASS",
+  "promotionTimestamp": "2026-07-15T19:35:00.000Z",
+  "sourceWorkSha": "93d6908f47edd5a6484fbced64d35c79534e4136",
+  "originalStagingPath": ".cursor/plans/dee-415-wp16/evidence-staging/93d6908f47edd5a6484fbced64d35c79534e4136/",
+  "originalStagingManifestDigest": "3d8af1055fb35e243097a2023d9362fb5c2567598c40d5a252bfce8f2415c5c1",
+  "semanticDigest": "97865938fbe3888bbdb416a238dccb6d8b341f313939ab37376d78617e9e3c81",
+  "acceptedArtifactDigest": "e7ff494d6d1ac32af186e5c0971a662134aa26f966e18dbc4ee9b17b72ab3fd9",
+  "payloadFileDigests": {
+    "README.md": "912315a442b0bf37899f08ee2ebc826badaae58872a200abe15100c0ee20bc08",
+    "acceptance.json": "0d48fe02bc1fa9bd1aebf712d1ded0bb2b4645f21be9e88ae4a75a372076efdb",
+    "drawdown-boundary-cases.json": "084b1298f639fa3ca83d4d624cd086d19b3dc3b44a4b935c720a09aa84682cc4",
+    "manifest.json": "3d8af1055fb35e243097a2023d9362fb5c2567598c40d5a252bfce8f2415c5c1"
+  },
+  "noRegenerationClaim": true
+}

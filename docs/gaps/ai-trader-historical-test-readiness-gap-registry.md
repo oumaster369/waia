@@ -50,8 +50,8 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 | HTR-GAP-017 | Spread/impact/latency not modeled | major | open | HTR-WP17 | — | HTR-WP17 | IB-HTR-17 |
 | HTR-GAP-018 | Position/balance vs ledger reconcile missing | major | open | HTR-WP19 | — | HTR-WP19 | IB-HTR-19 |
 | HTR-GAP-019 | Dual inventory; parity; M9 accounting unproven | blocker | open | HTR-WP18 | HTR-WP19, HTR-WP20 | HTR-WP19 | IB-HTR-18 |
-| HTR-GAP-020 | Strategy pinning/gating/lifecycle/trial | major | open | HTR-WP16 | — | HTR-WP16 | IB-HTR-16 |
-| HTR-GAP-021 | riskMultiplier unused | minor | open | HTR-WP16 | — | HTR-WP16 | IB-HTR-16 |
+| HTR-GAP-020 | Strategy pinning/gating/lifecycle/trial | major | closed (2026-07-15; HTR-WP16 WORK 93d6908; independent Phase-B PASS; exact version pin, lifecycle, trial, eligibility gates; Postgres 0090–0093; accepted evidence replay-runs/RI-P7/htr-wp16-strategy-gating/) | HTR-WP16 | — | HTR-WP16 | IB-HTR-16 |
+| HTR-GAP-021 | riskMultiplier unused | minor | closed (2026-07-15; HTR-WP16 applyRiskMultiplierToQuantity integrated in paper-cycle-runner; downward-only clamp; unit tests PASS) | HTR-WP16 | — | HTR-WP16 | IB-HTR-16 |
 | HTR-GAP-022 | Guardian vocabulary incomplete; exit-reason | major | open | HTR-WP20 | — | HTR-WP20 | IB-HTR-20 |
 | HTR-GAP-023 | Cost model not on default fills; net vs gross | blocker | open | HTR-WP17 | HTR-WP18 | HTR-WP18 | IB-HTR-17 |
 | HTR-GAP-024 | No per-stage timing / perf telemetry | major | open (2026-07-12; WP03 WORK COMMIT 35283ed supplied benchmark instrumentation, per-stage timing baseline, memory high-water, semantic-parity evidence, baseline evidence at replay-runs/RI-P7/htr-wp03-replay-benchmark-baseline/; CLOSURE remains HTR-WP22 full-runtime perf qualification) | HTR-WP03 | — | HTR-WP22 | IB-HTR-03 |

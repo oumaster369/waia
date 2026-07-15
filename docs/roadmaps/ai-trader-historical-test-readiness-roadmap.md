@@ -36,7 +36,7 @@ Sequence gap closure and implementation work for the Historical-Test Readiness p
 | IB-HTR-13 | HTR-WP13 | Intelligence-chain activation (historical run profile) | IB-HTR-09, IB-HTR-10, IB-HTR-11, IB-HTR-12 | T2 | planned | null | HTR-GAP-006,009 | MI chain ON for historical profile |
 | IB-HTR-14 | HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | IB-HTR-13 | T2 | planned | null | HTR-GAP-007,008,011,036 | Record-level Forecast/Decision; whyNotCash |
 | IB-HTR-15 | HTR-WP15 | MKB read-model integration for replay | IB-HTR-14 | T2 | planned | null | HTR-GAP-010 | MKB read-model wired |
-| IB-HTR-16 | HTR-WP16 | Strategy pinning + gating + trial accounting | IB-HTR-13 | T2 | planned | null | HTR-GAP-020,021 | Strategy lifecycle + trial accounting |
+| IB-HTR-16 | HTR-WP16 | Strategy pinning + gating + trial accounting | IB-HTR-13 | T2 | complete | 93d6908 | HTR-GAP-020,021 CLOSED | Strategy lifecycle + trial accounting + D-20 drawdown |
 | IB-HTR-17 | HTR-WP17 | Historical execution-simulation realism | IB-HTR-09 | T2 | planned | null | HTR-GAP-016,017,023,035 | Realistic sim; cost model on fills |
 | IB-HTR-18 | HTR-WP18 | Inventory & accounting parity | IB-HTR-17 | T2 | planned | null | HTR-GAP-019,023 | Unified inventory; net vs gross |
 | IB-HTR-19 | HTR-WP19 | Reality reconciliation + M9-class regression closure | IB-HTR-18 | T2 | planned | null | HTR-GAP-018,019,035 | Reconciliation; M9 regression; Postgres parity |

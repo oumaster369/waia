@@ -27,21 +27,31 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: HTR_MACRO_G_POLICY_MIGRATION_AND_BUILD_APPROVED
-  programStatus: WP_ACTIVE
-  childPlanStatus: APPROVED
-  buildAuthorized: YES
-  buildAuthorizedScope: HTR-MACRO-G/HTR-WP16_PHASE_A_ONLY
-  composerTerminalState: READY_FOR_COMPOSER_HTR_MACRO_G_PHASE_A
-  activeWorkPackage: HTR-WP16
-  currentWorkPackage: HTR-WP16
-  latestValidatedProductionCodeSha: 645f4be149e65b5e401c3e9bc76cca3f415b23a2   # HTR-WP15 WORK (Phase-B validated production code; CLOSEOUT commits are docs-only)
+  humanApproval: HTR_MACRO_G_INDEPENDENT_PHASE_B_COMPLETE
+  programStatus: APPROVED_IDLE
+  childPlanStatus: NOT_PLANNED
+  buildAuthorized: NO
+  buildAuthorizedScope: null
+  composerTerminalState: HTR_MACRO_G_COMPLETE
+  activeWorkPackage: HTR-WP17
+  currentWorkPackage: HTR-WP17
+  latestValidatedProductionCodeSha: 93d6908f47edd5a6484fbced64d35c79534e4136
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
   wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b
   wp15WorkCommitSha: 645f4be149e65b5e401c3e9bc76cca3f415b23a2
   wp14CloseoutCommitSha: e4a3a3876121751d1641092bd2a783db0edccd6b
   wp15CloseoutCommitSha: c6e94d9fd75608e280c2ec9054bf19799bd84147
-  planningTerminalState: HTR_MACRO_G_APPROVED_BUILD_AUTHORIZED
+  wp16WorkCommitSha: 93d6908f47edd5a6484fbced64d35c79534e4136
+  wp16PhaseBReviewer: COMPOSER_2_5_INDEPENDENT_SESSION
+  wp16PhaseBVerdict: PASS
+  wp16EvidenceStatus: ACCEPTED
+  wp16EvidenceSourceGitSha: 93d6908f47edd5a6484fbced64d35c79534e4136
+  wp16EvidenceSourceDirtyTree: false
+  wp16EvidenceStagingManifestDigest: 3d8af1055fb35e243097a2023d9362fb5c2567598c40d5a252bfce8f2415c5c1
+  wp16EvidenceSemanticDigest: 97865938fbe3888bbdb416a238dccb6d8b341f313939ab37376d78617e9e3c81
+  wp16AcceptedEvidencePath: replay-runs/RI-P7/htr-wp16-strategy-gating/
+  wp16AcceptedArtifactDigest: e7ff494d6d1ac32af186e5c0971a662134aa26f966e18dbc4ee9b17b72ab3fd9
+  planningTerminalState: HTR_MACRO_G_INDEPENDENT_PHASE_B_CLOSEOUT
   governanceStateAuthority: GIT_HEAD
   activationBaselineSha: 1dd2b19f08ac9af3edc1c44a020a6246789f16f7   # pre-activation harden commit; not self-referential to the activation commit being created
   governanceReconciledFromHead: a0928d5d9bb4ef886e4403a7d08157d5261e272f   # post-Macro-F reconciliation baseline (D-20 refresh commit)
@@ -53,18 +63,18 @@ state:
   requiredHumanTokens: []
   wp14ImplementationStatus: WORK_PACKAGE_COMPLETE
   wp15ImplementationStatus: WORK_PACKAGE_COMPLETE
-  wp16ImplementationStatus: NOT_STARTED
+  wp16ImplementationStatus: WORK_PACKAGE_COMPLETE
   macroFStatus: COMPLETE
-  macroGStatus: APPROVED_BUILD_AUTHORIZED
+  macroGStatus: COMPLETE
   macroGMigrationDecision: HUMAN_CONFIRMED_0090_THROUGH_0097
-  wp16Status: APPROVED_BUILD_AUTHORIZED
+  wp16Status: WORK_PACKAGE_COMPLETE
   wp16LifecycleTrialDecision: HUMAN_APPROVED_CONSUMED
   wp16DrawdownAttributionDecision: HUMAN_APPROVED_CONSUMED
   wp16MigrationDecision: HUMAN_APPROVED_CONSUMED
   wp16EvidenceLifecycle: HTR_WP16_CLEAN_WORK_COMMIT_EVIDENCE_STAGING_V1
   d20: HUMAN_APPROVED_CONSUMED
-  nextHumanGate: AFTER_PHASE_A_INDEPENDENT_MACRO_G_POST_REVIEW
-  nextAction: COMPOSER_EXECUTE_HTR_MACRO_G_PHASE_A
+  nextHumanGate: REVIEW_AND_APPROVE_HTR_WP17_CHILD_PACKET
+  nextAction: PLAN_HTR_WP17_CHILD_PACKET
   finalPrAuthorized: NO
   readyForFullHistoricalTest: false
   macroCMigrationDecision: NONE
@@ -75,13 +85,13 @@ state:
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  activeChildPlan: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
+  activeChildPlan: null
   intelligenceTranche:
     controller: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
-    status: MACRO_G_APPROVED_BUILD_AUTHORIZED
+    status: COMPLETE
     macroPackages: { HTR-MACRO-E: [HTR-WP13], HTR-MACRO-F: [HTR-WP14, HTR-WP15], HTR-MACRO-G: [HTR-WP16] }
     preferredOrderAfterWp13: [HTR-MACRO-F, HTR-MACRO-G]
-    activeMacroStatus: APPROVED
+    activeMacroStatus: null
     d4:
       status: HUMAN_APPROVED_CONSUMED
       consumedAt: 2026-07-15
@@ -575,8 +585,8 @@ state:
     - HTR-WP13
     - HTR-WP14
     - HTR-WP15
-  remainingWorkPackages:
     - HTR-WP16
+  remainingWorkPackages:
     - HTR-WP17
     - HTR-WP18
     - HTR-WP19
@@ -2115,7 +2125,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP13 | Intelligence-chain activation (historical run profile) | WP09,WP10,WP11,WP12 | ai | COMPLETE (Composer Phase-B PASS_WITH_BOUNDED_FIXES) | `d07bb654` (WORK) + `2d63eca` (CLOSEOUT) |
 | HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW (WORK `b8eeadb`; migration HUMAN_CONFIRMED_V2) | — |
 | HTR-WP15 | MKB read-model integration for replay | WP14 | ai | PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW (Macro F; migration NONE_READ_MODEL_ONLY) | — |
-| HTR-WP16 | Strategy pinning + gating + trial accounting + D-20 drawdown | WP13 | ai | APPROVED_BUILD_AUTHORIZED (Macro G; Phase A authorized; implementation NOT_STARTED) | — |
+| HTR-WP16 | Strategy pinning + gating + trial accounting + D-20 drawdown | WP13 | ai | COMPLETE (Composer independent Phase-B PASS 2026-07-15; WORK `93d6908`; migrations 0090–0097; accepted evidence `replay-runs/RI-P7/htr-wp16-strategy-gating/` semantic digest `97865938…`; HTR-GAP-020/021 CLOSED) | `93d6908` (WORK) |
 | HTR-WP17 | Historical execution-simulation realism | WP09 | backend | pending | — |
 | HTR-WP18 | Inventory & accounting parity | WP17 | backend | pending | — |
 | HTR-WP19 | Reality reconciliation + M9-class regression closure | WP18 | backend | pending | — |
@@ -2143,11 +2153,11 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## Current work package (HTR-WP16 — Macro G approved, Build authorized for Phase A)
+## Current work package (HTR-WP17 — not planned; Build not authorized)
 
-**CURRENT (2026-07-15):** HTR-WP01..HTR-WP15 **COMPLETE**; HTR-MACRO-F **COMPLETE**; **D-20 HUMAN_APPROVED_CONSUMED**; HTR-MACRO-G **`APPROVED_BUILD_AUTHORIZED`** (activation baseline `1dd2b19`; production baseline `645f4be`/`c6e94d9`); `BUILD_AUTHORIZED: YES` (scope `HTR-MACRO-G/HTR-WP16_PHASE_A_ONLY`); `WP16_IMPLEMENTATION_STATUS: NOT_STARTED`; evidence lifecycle `HTR_WP16_CLEAN_WORK_COMMIT_EVIDENCE_STAGING_V1`; no PR; no FHV/holdout/paper/live/capital.
+**CURRENT (2026-07-15):** HTR-WP01..HTR-WP16 **COMPLETE**; HTR-MACRO-G **COMPLETE** (WP16 WORK `93d6908`; independent Composer 2.5 Phase-B PASS); current work package **HTR-WP17**; `BUILD_AUTHORIZED: NO`; `activeChildPlan: null`; `childPlanStatus: NOT_PLANNED`; **D-20 HUMAN_APPROVED_CONSUMED**; accepted WP16 evidence `replay-runs/RI-P7/htr-wp16-strategy-gating/`; no PR; no FHV/holdout/paper/live/capital.
 
-**Next Human gate:** `AFTER_PHASE_A_INDEPENDENT_MACRO_G_POST_REVIEW`. **Next action:** `COMPOSER_EXECUTE_HTR_MACRO_G_PHASE_A`. See §"HTR-MACRO-G exact implementation packet" and gitignored rolling controller §9-G.
+**Next Human gate:** `REVIEW_AND_APPROVE_HTR_WP17_CHILD_PACKET`. **Next action:** `PLAN_HTR_WP17_CHILD_PACKET`.
 
 **HISTORICAL (NON_OPERATIONAL):** Sections below describing Macro-C/D/E/F Phase-A authorization states are audit history only — marked `HISTORICAL_CONSUMED` or `SUPERSEDED_EXPLICIT` where applicable.
 
