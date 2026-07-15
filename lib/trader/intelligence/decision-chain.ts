@@ -9,6 +9,7 @@ import {
   type MarketStateSnapshot,
 } from "@/lib/trader/intelligence/mi-core.types";
 import type { TradingPermission } from "@/lib/trader/intelligence/types";
+import { resolveUniversalTerminalReason } from "@/lib/trader/intelligence/terminal-reason/universal-terminal-reason";
 
 export type AssembleDecisionChainInput = {
   evaluatedAt: string;
@@ -47,14 +48,24 @@ function buildObservationRecord(input: AssembleDecisionChainInput): CycleObserva
 export function assembleDecisionChain(input: AssembleDecisionChainInput): DecisionChain {
   const opportunity = input.hypothesisSet.opportunity;
   const observation = buildObservationRecord(input);
+  const universalTerminalReason = resolveUniversalTerminalReason({
+    sourceTerminalReasonCode: input.marketStateSnapshot.terminalReasonCode,
+    sourceReasonCodes: input.reasonCodes,
+    opportunityAuthorized: opportunity?.authorized ?? false,
+    tradingPermission: input.tradingPermission,
+    activeHypothesisType: input.hypothesisSet.activeHypothesis?.hypothesisType ?? null,
+  });
 
   return {
     schemaVersion: DECISION_CHAIN_SCHEMA_VERSION,
     evaluatedAt: input.evaluatedAt,
     steps: ["RECONSTRUCTION", "UNDERSTANDING", "HYPOTHESES", "OPPORTUNITY", "CDE", "FINALIZATION"],
-    terminalReasonCode: input.marketStateSnapshot.terminalReasonCode,
+    terminalReasonCode: universalTerminalReason,
     reasonCodes: [...input.reasonCodes, miCoreReasonCodes.decisionChainComplete],
-    observation,
+    observation: {
+      ...observation,
+      terminalReasonCode: universalTerminalReason,
+    },
     reconstructionSummary: `${input.reconstruction.marketStructure.structureBias}|${input.reconstruction.trendStructure.regimeBias}|${input.reconstruction.volatilityStructure.volatilityRegime}`,
     activeHypothesisType: input.hypothesisSet.activeHypothesis?.hypothesisType ?? null,
     opportunityAuthorized: opportunity?.authorized ?? false,

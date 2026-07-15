@@ -54,6 +54,16 @@ import type { PaperPnLMarkPrices } from "@/lib/trader/paper/paper-pnl.types";
 import type { PaperPnLWindow } from "@/lib/trader/paper/paper-pnl-period.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
+import {
+  isHistoricalProfileActive,
+  HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
+} from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import type { IntelligenceCycleBundleRepository } from "@/lib/trader/intelligence/records/repository-adapters";
+import {
+  buildIntelligenceCycleBundle,
+  persistEvaluationCycleRecords,
+} from "@/lib/trader/intelligence/records/intelligence-records-service";
 
 export type RunBacktestInput = {
   context: OrgContext;
@@ -105,6 +115,10 @@ export type RunBacktestInput = {
   initialBars1mPrefix?: readonly Bar[];
   /** HTR-WP09: write canvas sidecar to this run root at end of execution. */
   checkpointRunRoot?: string;
+  /** HTR-WP13: explicit historical intelligence profile (never global default). */
+  historicalProfile?: HistoricalIntelligenceProfile;
+  /** HTR-WP13: optional intelligence records persistence sink. */
+  intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
 };
 
 export type RunBacktestResult = {
@@ -172,6 +186,10 @@ function buildRegimeMetrics(
 export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestResult> {
   const substrateMode = input.substrateMode ?? DEFAULT_REPLAY_SUBSTRATE_MODE;
   resetFullHistoryRescanCount();
+
+  const profileActive =
+    input.historicalProfile !== undefined &&
+    isHistoricalProfileActive(input.historicalProfile ?? HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1);
 
   const costAwareRepository = wrapOrderRepositoryWithCostModel(
     input.orderRepository,
@@ -269,11 +287,41 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       portfolio: input.portfolio,
       guardian: input.guardian,
       hypothesisSessionState,
-      miCoreEnabled: input.miCoreEnabled,
+      miCoreEnabled: profileActive ? true : input.miCoreEnabled,
       reconstruction,
     });
     paperCycleTimer.end();
     benchmarkObserver.sampleMemory("paper-cycle", cycleIndex);
+
+    if (profileActive && result.evaluation.marketStateSnapshot && result.evaluation.decisionChain) {
+      const bundle = buildIntelligenceCycleBundle({
+        organizationId: input.context.organizationId,
+        runId: input.runId,
+        cycleId: String(cycleIndex),
+        symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
+        marketStateSnapshot: result.evaluation.marketStateSnapshot,
+        decisionChain: result.evaluation.decisionChain,
+        profile: input.historicalProfile,
+      });
+      result.evaluation.intelligenceCycleBundle = bundle;
+      if (input.intelligenceRecordsSink) {
+        await input.intelligenceRecordsSink.persist(input.context, bundle);
+      } else if (input.deps.researchReplayDeterminism) {
+        await persistEvaluationCycleRecords(
+          input.context,
+          {
+            organizationId: input.context.organizationId,
+            runId: input.runId,
+            cycleId: String(cycleIndex),
+            symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
+            marketStateSnapshot: result.evaluation.marketStateSnapshot,
+            decisionChain: result.evaluation.decisionChain,
+            profile: input.historicalProfile,
+          },
+          {},
+        );
+      }
+    }
 
     hypothesisSessionState = result.hypothesisSessionState;
     if (retentionMode === "FULL") {

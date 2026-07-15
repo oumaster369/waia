@@ -533,6 +533,48 @@
       "when": 1780000000045,
       "tag": "0075_trader_discovery_substrate_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1780000000046,
+      "tag": "0076_trader_intelligence_cycle_envelope",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1780000000047,
+      "tag": "0077_trader_intelligence_cycle_envelope_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1780000000048,
+      "tag": "0078_trader_intelligence_hypothesis_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1780000000049,
+      "tag": "0079_trader_intelligence_hypothesis_record_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1780000000050,
+      "tag": "0080_trader_intelligence_conviction_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1780000000051,
+      "tag": "0081_trader_intelligence_conviction_record_rls",
+      "breakpoints": true
     }
   ]
 }

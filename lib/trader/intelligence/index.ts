@@ -100,3 +100,28 @@ export {
   type StrategySignal,
   type TradingPermission,
 } from "@/lib/trader/intelligence/types";
+export {
+  HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
+  HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1_DIGEST,
+  isHistoricalProfileActive,
+  assertHistoricalProfileNotGlobalDefault,
+  canonicalizeHistoricalProfile,
+  computeHistoricalProfileDigest,
+  type HistoricalIntelligenceProfile,
+  type HistoricalProfileId,
+} from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+export {
+  TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1,
+  TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1_DIGEST,
+  assertTimeframeLaneAuthority,
+  assertNoProviderAccessFromTimeframe,
+  canonicalizeMatrix,
+  computeMatrixDigest,
+  countMatrixLanes,
+} from "@/lib/trader/intelligence/matrix/timeframe-evidence-lane-authority-matrix-v1";
+export {
+  universalTerminalReasonCodes,
+  resolveUniversalTerminalReason,
+  type UniversalTerminalReasonCode,
+} from "@/lib/trader/intelligence/terminal-reason/universal-terminal-reason";
+export * from "@/lib/trader/intelligence/records";

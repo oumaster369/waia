@@ -4,6 +4,8 @@ import { emitMsvDecisionCounters } from "@/lib/trader/intelligence/decision-tele
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
 import { buildHypothesisSet } from "@/lib/trader/intelligence/hypothesis/build-hypothesis-set";
 import { isMiCoreEnabled } from "@/lib/trader/intelligence/mi-core-flag";
+import { isHistoricalProfileActive } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { createEmptyHypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import {
   finalizeMarketStateSnapshot,
@@ -26,7 +28,12 @@ import type { EvaluationCycleInput, EvaluationCycleResult } from "@/lib/trader/i
  */
 export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycleResult {
   const newId = input.newId ?? crypto.randomUUID.bind(crypto);
-  const miCore = input.miCoreEnabled ?? isMiCoreEnabled();
+  const profileActive = input.historicalProfile
+    ? isHistoricalProfileActive(input.historicalProfile)
+    : false;
+  const miCore = profileActive
+    ? true
+    : (input.miCoreEnabled ?? isMiCoreEnabled(undefined, input.historicalProfile));
   const evaluatedAt = input.evaluatedAt ?? input.bars.at(-1)?.barCloseTime;
   if (!evaluatedAt) {
     throw new Error(
@@ -113,6 +120,9 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     opportunityAuthorized: hypothesisSet.opportunity?.authorized ?? false,
     tradingPermission: msv.derived.tradingPermission,
     conviction: hypothesisSet.opportunity?.conviction ?? 0,
+    activeHypothesisType: hypothesisSet.activeHypothesis?.hypothesisType ?? null,
+    sourceReasonCodes: msv.derived.reasonCodes,
+    insufficientBars: features.inputs.barCount < 20,
   });
 
   const marketStateSnapshot = finalizeMarketStateSnapshot({
@@ -137,13 +147,29 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     organizationId: input.organizationId,
     bars: input.bars,
     newId,
+    historicalProfile: profileActive ? input.historicalProfile : undefined,
   });
 
   for (const signal of signals) {
     emitStrategySignalCounters(signal, input.telemetrySink);
   }
 
-  const signal = selectPrimaryStrategySignal(signals);
+  const signal = selectPrimaryStrategySignal(signals, {
+    historicalProfile: profileActive ? input.historicalProfile : undefined,
+  });
+
+  const intelligenceCycleBundle =
+    profileActive && input.runId && input.cycleId
+      ? buildIntelligenceCycleBundle({
+          organizationId: input.organizationId,
+          runId: input.runId,
+          cycleId: input.cycleId,
+          symbol: input.symbol ?? input.bars[0]?.symbol ?? "BTC/USDT",
+          marketStateSnapshot,
+          decisionChain,
+          profile: input.historicalProfile,
+        })
+      : undefined;
 
   return {
     features,
@@ -157,5 +183,6 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     marketStateSnapshot,
     decisionChain,
     hypothesisSessionState: nextSessionState,
+    intelligenceCycleBundle,
   };
 }

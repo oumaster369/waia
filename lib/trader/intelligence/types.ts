@@ -14,6 +14,8 @@ import type {
 } from "@/lib/trader/intelligence/mi-core.types";
 import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
 import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
+import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
+import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
 
 /** Canonical spot symbol for MVP intelligence slice (HTX-style slash form). */
 export const BTC_USDT = "BTC/USDT" as const;
@@ -258,6 +260,14 @@ export type EvaluationCycleInput = {
   hypothesisSessionState?: HypothesisSessionState;
   /** HTR-WP09: prebuilt incremental reconstruction from canvas view (skips full recompute). */
   reconstruction?: ReconstructionSnapshot;
+  /** HTR-WP13: explicit historical intelligence profile (never global default). */
+  historicalProfile?: HistoricalIntelligenceProfile;
+  /** HTR-WP13: run identifier for intelligence records. */
+  runId?: string;
+  /** HTR-WP13: cycle identifier for intelligence records. */
+  cycleId?: string;
+  /** HTR-WP13: symbol for intelligence records (defaults to bar symbol). */
+  symbol?: string;
 };
 
 export type EvaluationCycleResult = {
@@ -275,4 +285,6 @@ export type EvaluationCycleResult = {
   marketStateSnapshot?: MarketStateSnapshot;
   decisionChain?: DecisionChain;
   hypothesisSessionState?: HypothesisSessionState;
+  /** HTR-WP13: intelligence cycle bundle when historical profile active. */
+  intelligenceCycleBundle?: IntelligenceCycleBundle;
 };

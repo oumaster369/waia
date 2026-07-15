@@ -53,6 +53,19 @@ export function buildReplayCycleEvidenceProjection(
   cycleIndex: number,
   cycle: PaperCycleResult,
 ): ReplayCycleEvidenceProjection {
+  const intelligenceTrace = cycle.evaluation.intelligenceCycleBundle
+    ? {
+        envelopeDigest: cycle.evaluation.intelligenceCycleBundle.envelope.contentDigest,
+        terminalReasonCode: cycle.evaluation.intelligenceCycleBundle.envelope.terminalReasonCode,
+        hypothesisCount: cycle.evaluation.intelligenceCycleBundle.hypotheses.length,
+        convictionDigest: cycle.evaluation.intelligenceCycleBundle.conviction.contentDigest,
+        convictionScope: cycle.evaluation.intelligenceCycleBundle.conviction.convictionScope,
+        profileId: cycle.evaluation.intelligenceCycleBundle.envelope.historicalProfileId,
+        profileDigest: cycle.evaluation.intelligenceCycleBundle.envelope.historicalProfileDigest,
+        matrixDigest: cycle.evaluation.intelligenceCycleBundle.envelope.matrixDigest,
+      }
+    : null;
+
   return {
     schemaVersion: CYCLE_PROJECTION_SCHEMA_VERSION,
     cycleIndex,
@@ -62,6 +75,9 @@ export function buildReplayCycleEvidenceProjection(
     strategyExecutions: serializeStrategyExecutions(cycle),
     guardian: serializeGuardian(cycle),
     msv: buildMsvPayloadCanonical(cycle.evaluation.msv),
-    m9Trace: serializeM9Trace(cycle),
+    m9Trace: {
+      ...serializeM9Trace(cycle),
+      intelligenceTrace,
+    },
   };
 }

@@ -13,6 +13,8 @@ import {
   type MsvEnvelope,
   type StrategySignal,
 } from "@/lib/trader/intelligence/types";
+import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
+import { isHistoricalProfileActive } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 
 /** Master Spec §9 lifecycle states (MVP registry subset). */
 export const strategyLifecycleStates = [
@@ -41,7 +43,27 @@ export type StrategyEvaluatorContext = {
   organizationId: string;
   bars: readonly Bar[];
   newId?: () => string;
+  historicalProfile?: HistoricalIntelligenceProfile;
 };
+
+export function isResearchOnlyStrategyForProfile(
+  strategyId: string,
+  profile?: HistoricalIntelligenceProfile,
+): boolean {
+  if (!profile || !isHistoricalProfileActive(profile)) {
+    return false;
+  }
+  return (profile.strategyConsumerPolicy.researchOnly as readonly string[]).includes(strategyId);
+}
+
+export function resolveHistoricalProfileStrategyIds(
+  profile: HistoricalIntelligenceProfile,
+): readonly MvpStrategyId[] {
+  const enabled = profile.strategyConsumerPolicy
+    .enabledHistoricalConsumers as readonly MvpStrategyId[];
+  const researchOnly = profile.strategyConsumerPolicy.researchOnly as readonly MvpStrategyId[];
+  return [...enabled, ...researchOnly];
+}
 
 export type StrategyEvaluator = (
   msv: MsvEnvelope,
@@ -97,16 +119,34 @@ export function evaluateRegisteredStrategies(
   msv: MsvEnvelope,
   features: FeatureSnapshot,
   context: StrategyEvaluatorContext,
-  strategyIds: readonly MvpStrategyId[] = resolveMvpStrategyAssignments(context.organizationId),
+  strategyIds: readonly MvpStrategyId[] = context.historicalProfile &&
+  isHistoricalProfileActive(context.historicalProfile)
+    ? resolveHistoricalProfileStrategyIds(context.historicalProfile)
+    : resolveMvpStrategyAssignments(context.organizationId),
 ): StrategySignal[] {
   return strategyIds.map((strategyId) => {
     const evaluator = EVALUATORS[strategyId];
-    return evaluator(msv, features, context);
+    const signal = evaluator(msv, features, context);
+    if (isResearchOnlyStrategyForProfile(strategyId, context.historicalProfile)) {
+      return {
+        ...signal,
+        outcome: "NO_SIGNAL",
+      };
+    }
+    return signal;
   });
 }
 
 /** Primary signal for backward-compatible paper loop wiring (first actionable signal). */
-export function selectPrimaryStrategySignal(signals: readonly StrategySignal[]): StrategySignal {
-  const actionable = signals.find((signal) => signal.outcome === "SIGNAL");
-  return actionable ?? signals[0]!;
+export function selectPrimaryStrategySignal(
+  signals: readonly StrategySignal[],
+  options?: { historicalProfile?: HistoricalIntelligenceProfile },
+): StrategySignal {
+  const tradeEligible = options?.historicalProfile
+    ? signals.filter(
+        (signal) => !isResearchOnlyStrategyForProfile(signal.strategyId, options.historicalProfile),
+      )
+    : signals;
+  const actionable = tradeEligible.find((signal) => signal.outcome === "SIGNAL");
+  return actionable ?? tradeEligible[0] ?? signals[0]!;
 }

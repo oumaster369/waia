@@ -2929,6 +2929,128 @@ export const traderOperatorAudit = pgTable(
   (t) => [index("trader_operator_audit_org_created_idx").on(t.organizationId, t.createdAt)],
 );
 
+/** DEE-415 / HTR-WP13: per-cycle intelligence envelope (append-only). */
+export const traderIntelligenceCycleEnvelope = pgTable(
+  "trader_intelligence_cycle_envelope",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true, mode: "date" }).notNull(),
+    historicalProfileId: text("historical_profile_id").notNull(),
+    historicalProfileDigest: text("historical_profile_digest").notNull(),
+    matrixDigest: text("matrix_digest").notNull(),
+    terminalReasonCode: text("terminal_reason_code").notNull(),
+    inputSemanticDigest: text("input_semantic_digest").notNull(),
+    outputSemanticDigest: text("output_semantic_digest").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_intelligence_cycle_envelope_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_intelligence_cycle_envelope_org_run_cycle_symbol_unique").on(
+      t.organizationId,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+    ),
+    index("trader_intelligence_cycle_envelope_org_run_evaluated_idx").on(
+      t.organizationId,
+      t.runId,
+      t.evaluatedAt,
+    ),
+  ],
+);
+
+/** DEE-415 / HTR-WP13: per-cycle hypothesis records (append-only). */
+export const traderIntelligenceHypothesisRecord = pgTable(
+  "trader_intelligence_hypothesis_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    cycleEnvelopeId: uuid("cycle_envelope_id").notNull(),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true, mode: "date" }).notNull(),
+    hypothesisType: text("hypothesis_type").notNull(),
+    hypothesisStatus: text("hypothesis_status").notNull(),
+    confidenceValue: text("confidence_value").notNull(),
+    thesisDigest: text("thesis_digest").notNull(),
+    evidenceDigest: text("evidence_digest").notNull(),
+    miHypothesisId: uuid("mi_hypothesis_id"),
+    authoritativeLinkDigest: text("authoritative_link_digest").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_intelligence_hypothesis_record_id_organization_unique").on(
+      t.id,
+      t.organizationId,
+    ),
+    uniqueIndex("trader_intelligence_hypothesis_record_org_run_cycle_symbol_type_unique").on(
+      t.organizationId,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+      t.hypothesisType,
+    ),
+    index("trader_intelligence_hypothesis_record_org_cycle_envelope_idx").on(
+      t.organizationId,
+      t.cycleEnvelopeId,
+    ),
+  ],
+);
+
+/** DEE-415 / HTR-WP13: per-cycle conviction record (Model B, append-only). */
+export const traderIntelligenceConvictionRecord = pgTable(
+  "trader_intelligence_conviction_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    cycleEnvelopeId: uuid("cycle_envelope_id").notNull(),
+    activeHypothesisRecordId: uuid("active_hypothesis_record_id"),
+    convictionScope: text("conviction_scope").notNull(),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true, mode: "date" }).notNull(),
+    convictionValue: text("conviction_value").notNull(),
+    convictionClass: text("conviction_class").notNull(),
+    reasonCodesJson: text("reason_codes_json").notNull(),
+    sustainedCycles: integer("sustained_cycles").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_intelligence_conviction_record_id_organization_unique").on(
+      t.id,
+      t.organizationId,
+    ),
+    uniqueIndex("trader_intelligence_conviction_record_org_run_cycle_symbol_unique").on(
+      t.organizationId,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+    ),
+    index("trader_intelligence_conviction_record_org_cycle_envelope_idx").on(
+      t.organizationId,
+      t.cycleEnvelopeId,
+    ),
+  ],
+);
+
 /**
  * Postgres transaction integration validation table (DEE-64 D6-core).
  * Used only by opt-in `tests/integration/postgres-transaction-rollback.test.ts` to verify commit/rollback semantics.
