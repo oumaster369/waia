@@ -42,6 +42,7 @@ state:
   wp14CloseoutCommitSha: e4a3a3876121751d1641092bd2a783db0edccd6b
   wp15CloseoutCommitSha: c6e94d9fd75608e280c2ec9054bf19799bd84147
   wp16WorkCommitSha: 93d6908f47edd5a6484fbced64d35c79534e4136
+  wp16CloseoutCommitSha: 2e8835e998dce3148660582113cd27f13502ff75
   wp16PhaseBReviewer: COMPOSER_2_5_INDEPENDENT_SESSION
   wp16PhaseBVerdict: PASS
   wp16EvidenceStatus: ACCEPTED
@@ -621,7 +622,15 @@ state:
     preExistingFailingTests: 34
     wp13MandatoryTests: 15_PASS
     verifiedAtWp13CloseoutHead: 2d63eca2231bbd06ad40680a4485f74a8244bef0
-    failingFileDigest: dd2dd141d5cf8b88cb632407b7cbb09ade09ad8c3396532a88d678694cbf5dad
+    failingFileDigest: 430f2de686d0a2f4ecf4f06c7971228f08c57a3fb8ad874cacfa7fa44593967c
+    failingTestNameSetDigest: e362173b132e6a65001bf4863f71aecd8dfdb992564e68c2174a0b6c5abd55e1
+    verifiedAtWp16CloseoutHead: 2e8835e998dce3148660582113cd27f13502ff75
+    baselineComparison:
+      parentHead: c9bb6341e3720786ede6424a83611b4785faa2cd
+      closeoutHead: 2e8835e998dce3148660582113cd27f13502ff75
+      classification: IDENTICAL_UNDER_SAME_ENVIRONMENT
+      wp16Regression: NOT_OBSERVED
+      staleMetadataCorrected: 2026-07-15
     failingFiles:
       - tests/integration/postgres-hwm-ledger-parity.test.ts
       - tests/integration/postgres-invoice-issuance-parity.test.ts
@@ -702,7 +711,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: WP_ACTIVE` — **HTR-WP01..HTR-WP15 COMPLETE**; **HTR-MACRO-F COMPLETE**; **HTR-MACRO-G `APPROVED_BUILD_AUTHORIZED`**; **Build authorized** (`BUILD_AUTHORIZED: YES`; scope **HTR-MACRO-G/HTR-WP16_PHASE_A_ONLY**; current work package **HTR-WP16**; `WP16_IMPLEMENTATION_STATUS: NOT_STARTED`); **D-20 HUMAN_APPROVED_CONSUMED**; WP16 lifecycle/trial, drawdown attribution and migration decisions **HUMAN_APPROVED_CONSUMED** (2026-07-15); evidence lifecycle **`HTR_WP16_CLEAN_WORK_COMMIT_EVIDENCE_STAGING_V1`**; `composerTerminalState: READY_FOR_COMPOSER_HTR_MACRO_G_PHASE_A`; `nextAction: COMPOSER_EXECUTE_HTR_MACRO_G_PHASE_A`. **HISTORICAL (CONSUMED/SUPERSEDED):** pre-activation HARDENED_EXACT_AWAITING_HUMAN_DECISIONS state; Macro F Build authorization; v1 WP14 0082..0087 three-table proposal. |
+| Plan state | `state.status: in-progress` · `programStatus: APPROVED_IDLE` — **HTR-WP01..HTR-WP16 COMPLETE**; **HTR-MACRO-G COMPLETE** (WP16 WORK `93d6908` + CLOSEOUT `2e8835e`; Composer 2.5 independent Phase-B PASS); current work package **HTR-WP17**; `childPlanStatus: NOT_PLANNED`; **Build not authorized** (`BUILD_AUTHORIZED: NO`); **D-20 HUMAN_APPROVED_CONSUMED**; accepted WP16 evidence `replay-runs/RI-P7/htr-wp16-strategy-gating/`; HTR-GAP-035 **OPEN** (18 files / 34 tests unchanged parent→closeout); `nextAction: PLAN_HTR_WP17_CHILD_PACKET`. **HISTORICAL (CONSUMED/SUPERSEDED):** pre-WP16-closeout Macro-G Phase-A authorization; pre-activation HARDENED_EXACT_AWAITING_HUMAN_DECISIONS state; Macro F Build authorization; v1 WP14 0082..0087 three-table proposal. |
 
 ## Approved decisions (recorded)
 
@@ -1021,20 +1030,21 @@ HTR-MACRO-F:
   status: COMPLETE
   workPackages: [HTR-WP14, HTR-WP15]
 HTR-MACRO-G:
-  status: APPROVED
+  status: COMPLETE
   workPackages: [HTR-WP16]
-  buildAuthorized: YES
-  buildAuthorizedScope: HTR-MACRO-G/HTR-WP16_PHASE_A_ONLY
+  wp16WorkCommitSha: 93d6908f47edd5a6484fbced64d35c79534e4136
+  wp16CloseoutCommitSha: 2e8835e998dce3148660582113cd27f13502ff75
   d20: HUMAN_APPROVED_CONSUMED
   migrationDecision: HUMAN_CONFIRMED_0090_THROUGH_0097
   evidenceLifecycle: HTR_WP16_CLEAN_WORK_COMMIT_EVIDENCE_STAGING_V1
+  # HISTORICAL_EXPLICIT (APPROVED_PACKET_BASELINE): buildAuthorized YES / buildAuthorizedScope HTR-MACRO-G/HTR-WP16_PHASE_A_ONLY applied only during consumed Phase-A Build
 ```
 
 Changes **execution topology only** — adds/removes no WP, merges no technical ownership, changes no dependency/gap ownership/per-WP WORK+CLOSEOUT requirement, permits no auto-advance between macros. **The topology grouping does not authorize Build by itself.**
 
-**HISTORICAL (CONSUMED):** `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` authorized HTR-MACRO-E / HTR-WP13 Phase A only; Macro E is now COMPLETE.
+**HISTORICAL (CONSUMED):** `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` authorized HTR-MACRO-E / HTR-WP13 Phase A only; Macro E is now COMPLETE. `APPROVE-HTR-MACRO-F-BUILD` consumed 2026-07-15 — HTR-MACRO-F COMPLETE. Macro G Build tokens consumed 2026-07-15; Phase-A Build complete; independent Phase-B PASS 2026-07-15.
 
-**CURRENT:** `APPROVE-HTR-MACRO-F-BUILD` consumed 2026-07-15 — HTR-MACRO-F / HTR-WP14+HTR-WP15 COMPLETE. Macro G / WP16 **APPROVED_BUILD_AUTHORIZED** (2026-07-15): three WP16 decision tokens + `APPROVE-HTR-MACRO-G` + `APPROVE-HTR-MACRO-G-BUILD` consumed; Build authorized for Phase A only; implementation not started.
+**CURRENT:** HTR-MACRO-G **COMPLETE**; HTR-WP16 **WORK_PACKAGE_COMPLETE** (WORK `93d6908` + CLOSEOUT `2e8835e`); intelligence tranche **COMPLETE**; `BUILD_AUTHORIZED: NO`; next action `PLAN_HTR_WP17_CHILD_PACKET`.
 
 **Macro E is WP13 alone** (foundational T2 intelligence-chain activation). **Macro F groups WP14+WP15** as one sequential epistemic-consumer chain (Forecast + Decision + whyNotCash → MKB read-model). **Macro G keeps WP16 separate** (strategy eligibility/lifecycle, D-2, D-20, feeds WP22). Preferred order after WP13: Macro F first, Macro G second when separately authorized.
 
