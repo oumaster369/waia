@@ -37,9 +37,16 @@ state:
   currentWorkPackage: HTR-WP14
   latestValidatedProductionCodeSha: 2d63eca2231bbd06ad40680a4485f74a8244bef0   # HTR-WP13 CLOSEOUT (latest validated production baseline)
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
-  planningTerminalState: HTR_MACRO_F_FINAL_CONSISTENCY_PATCH_COMPLETE
+  planningTerminalState: HTR_MACRO_F_EXECUTABLE_MIRROR_RECONCILIATION_COMPLETE
   governanceStateAuthority: GIT_HEAD
-  governanceReconciledFromHead: c250726328d3d2241d21d8939db74d069abec6cb   # activation parent; activation SHA recorded in gitignored controllers only
+  governanceReconciledFromHead: 8fe7aeefa64412ae158396fda4cb80b10b0054a2   # Macro F activation commit; reconciliation SHA in gitignored controllers only
+  macroFActivationCommitSha: 8fe7aeefa64412ae158396fda4cb80b10b0054a2
+  macroFPhaseAStartingHeadClassification: NON_SEMANTIC_GOVERNANCE_DESCENDANT_OF_HUMAN_AUTHORIZED_ACTIVATION
+  buildAuthorizationReopened: NO
+  newHumanTokenRequired: NO
+  wp14ImplementationStatus: PHASE_A_NOT_STARTED
+  wp15ImplementationStatus: PHASE_A_NOT_STARTED
+  macroGStatus: ARCHITECTURE_ONLY_NOT_AUTHORIZED
   macroCMigrationDecision: NONE
   macroDMigrationDecision: NONE
   macroCCodeBaselineHead: a8a709ff53f74649b5c5f39e0ba8e00af1e113de
@@ -551,7 +558,7 @@ state:
   wp14MigrationDecision: HUMAN_CONFIRMED_V2   # CONFIRM-HTR-WP14-MIGRATION-V2 consumed 2026-07-15; supersedes v1 0082..0087 three-table proposal
   wp14MigrationSupersededV1: SUPERSEDED_BEFORE_BUILD_BY_FORECAST_CARDINALITY_AND_RELATIONAL_LINK_CORRECTION
   wp15MigrationDecision: HUMAN_CONFIRMED_NONE_READ_MODEL_ONLY   # CONFIRM-HTR-WP15-MIGRATION consumed 2026-07-15
-  macroFReadiness: BUILD_AUTHORIZED
+  macroFReadiness: READY_FOR_PHASE_A
   nextHumanGate: NONE_UNTIL_HTR_MACRO_F_PHASE_A_REPORT
   nextAction: COMPOSER_EXECUTE_HTR_MACRO_F_PHASE_A
 provenance:
@@ -894,17 +901,29 @@ HTR-WP23: runbook and report schema
 
 Recorded per two Human-authorized bounded sessions (both **CONSUMED**, both planning/governance only — **no** production code, WP implementation, Build, migration execution, PR, FHV/M9/holdout/paper/live): `AUTHORIZE-HTR-WP13-WP16-INTELLIGENCE-TRANCHE-PLANNING` (2026-07-14, topology + drafts) and `AUTHORIZE-HTR-MACRO-E-FINAL-PREAPPROVAL-RECONCILIATION` (2026-07-14, finalization). The exact per-WP packets, matrix JSON and profile JSON live in the gitignored controller [`.cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md`](../../.cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md) and its staging directory; this section is the tracked governance summary.
 
-> **HISTORICAL (CONSUMED / SUPERSEDED 2026-07-15 Phase-A):** Macro-E Phase-A Build was `BUILD_AUTHORIZED: YES` under `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` (CONSUMED). **Current-facing (post Phase-B CLOSEOUT):** HTR-MACRO-E **COMPLETE**; HTR-WP13 **WORK_PACKAGE_COMPLETE**; `BUILD_AUTHORIZED: NO`. Final code-point profile canonical digest `92219746…` and matrix canonical digest `6296c54e…` (canonicalizer `HTR_SEMANTIC_CANONICAL_JSON_V1`; `localeCompare` PROHIBITED) remain `HUMAN_BOUND_FINAL_CODEPOINT_DIGEST`. Macro F `REFRESHED_CONFIRM_REQUIRED` (not WP14/WP15/WP16 Build; no FHV, blind holdout, paper, live or capital).
+> **HISTORICAL (CONSUMED / SUPERSEDED 2026-07-15):** Macro-E Phase-A Build was `BUILD_AUTHORIZED: YES` under `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` (CONSUMED). HTR-MACRO-E is **COMPLETE**; HTR-WP13 **WORK_PACKAGE_COMPLETE** (CLOSEOUT `2d63eca`). Final code-point profile canonical digest `92219746…` and matrix canonical digest `6296c54e…` remain `HUMAN_BOUND_FINAL_CODEPOINT_DIGEST`. **CURRENT (2026-07-15):** HTR-MACRO-F **APPROVED** / **BUILD_AUTHORIZED** (scope WP14+WP15 only); `composerTerminalState: READY_FOR_COMPOSER_HTR_MACRO_F_PHASE_A`; next action `COMPOSER_EXECUTE_HTR_MACRO_F_PHASE_A`.
 
 ### Safe execution topology (execution-only macro grouping)
 
 ```yaml
-HTR-MACRO-E: { workPackages: [HTR-WP13] }
-HTR-MACRO-F: { workPackages: [HTR-WP14, HTR-WP15] }
-HTR-MACRO-G: { workPackages: [HTR-WP16] }
+HTR-MACRO-E:
+  status: COMPLETE
+  workPackages: [HTR-WP13]
+HTR-MACRO-F:
+  status: ACTIVE_APPROVED_BUILD_AUTHORIZED
+  workPackages: [HTR-WP14, HTR-WP15]
+HTR-MACRO-G:
+  status: ARCHITECTURE_ONLY_NOT_AUTHORIZED
+  workPackages: [HTR-WP16]
 ```
 
-Changes **execution topology only** — adds/removes no WP, merges no technical ownership, changes no dependency/gap ownership/per-WP WORK+CLOSEOUT requirement, permits no auto-advance between macros. **The topology decision alone authorizes no Build.** The separately consumed `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` does authorize HTR-MACRO-E / HTR-WP13 Phase A. **Macro E is WP13 alone** because WP13 is a foundational T2 High intelligence-chain activation that owns historical-profile activation, matrix enforcement, and the runtime shape consumed by WP14, and must independently earn WORK + Opus PASS + CLOSEOUT before Macro F Build (WP14/WP15 packets refresh from the WP13 CLOSEOUT HEAD). **Macro F groups WP14+WP15** as one sequential epistemic-consumer chain (Forecast + Decision + whyNotCash → MKB read-model), executable only after WP13 COMPLETE + D-4 + `POSITION_PURPOSE_AND_EXIT_CONTRACT_V1` + both packets refreshed + both Human-approved, with a separate WORK+Opus verdict+CLOSEOUT per WP. **Macro G keeps WP16 separate** because strategy eligibility/lifecycle gating, trial accounting and `riskMultiplier` have a different semantic owner, are gated by D-2 **and** D-20, and feed WP22 rather than the WP14→WP15→WP21 critical chain. Preferred order after WP13 closeout: **Macro F, then Macro G**. Neither future macro is authorized now.
+Changes **execution topology only** — adds/removes no WP, merges no technical ownership, changes no dependency/gap ownership/per-WP WORK+CLOSEOUT requirement, permits no auto-advance between macros. **The topology grouping does not authorize Build by itself.**
+
+**HISTORICAL (CONSUMED):** `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD` authorized HTR-MACRO-E / HTR-WP13 Phase A only; Macro E is now COMPLETE.
+
+**CURRENT:** `APPROVE-HTR-MACRO-F-BUILD` consumed 2026-07-15 — HTR-MACRO-F / HTR-WP14+HTR-WP15 authorized. Macro G / WP16 is **not** authorized.
+
+**Macro E is WP13 alone** (foundational T2 intelligence-chain activation). **Macro F groups WP14+WP15** as one sequential epistemic-consumer chain (Forecast + Decision + whyNotCash → MKB read-model). **Macro G keeps WP16 separate** (strategy eligibility/lifecycle, D-2, D-20, feeds WP22). Preferred order after WP13: Macro F first, Macro G second when separately authorized.
 
 ### Decision reconciliation
 
@@ -924,12 +943,13 @@ Explicit, versioned historical run profile (staging: `.cursor/plans/dee-415-htr-
 
 Exact machine-readable matrix (staging: `.cursor/plans/dee-415-htr-wp13-wp16-staging/timeframe-evidence-lane-authority-matrix-v1.json`) over **16 lanes** (1 HTX spot 1m price + 15 UNAVAILABLE sidecar lanes). Contains **no governance status fields**. **Final code-point canonical digest:** `6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6` (insertion-order `2e558f18…`; raw-file `4aed27c0…`). Canonicalizer: `HTR_SEMANTIC_CANONICAL_JSON_V1`. FHV scope: `PRICE_ONLY_GROUNDED_EVIDENCE`; `MULTI_SOURCE_HISTORICAL_VALIDATION: NOT_PERFORMED`.
 
-### HTR-WP13 migration decision
+### HTR-WP13 migration decision (HISTORICAL — Macro E consumed; WP13 COMPLETE)
 
 ```yaml
 MIGRATION_DECISION: CONFIRMED_WITH_ATOMIC_FAIL_CLOSED_IDEMPOTENCY   # CONFIRM-HTR-MACRO-E-MIGRATION consumed 2026-07-15
-ACTIVE_MACRO_STATUS: APPROVED   # APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD consumed 2026-07-15; final code-point digests Human-bound
-BUILD_AUTHORIZED: NO   # HISTORICAL Phase-A authorization CONSUMED; Macro E COMPLETE; Macro F unauthorized
+ACTIVE_MACRO_STATUS_AT_CONSUMPTION: APPROVED   # HISTORICAL — Macro E only
+BUILD_AUTHORIZED_AT_CONSUMPTION: YES   # HISTORICAL — Macro E Phase A only; CONSUMED; Macro E COMPLETE
+CURRENT_NOTE: WP13 COMPLETE at CLOSEOUT 2d63eca; Macro F authorized separately via APPROVE-HTR-MACRO-F-BUILD
 ```
 
 **Amendment consumed 2026-07-15 (`CONFIRM-HTR-MACRO-E-MIGRATION`):** the earlier package's
@@ -948,16 +968,18 @@ controller §7.6/§7.7; exact file/symbol packet in §7.4.
 
 ### Architecture-only WP14 / WP15 / WP16 (SUPERSEDED — see §"HTR-MACRO-F exact implementation packets")
 
-**HISTORICAL / SUPERSEDED 2026-07-15.** The architecture-only placeholders below are replaced by exact packets in §"HTR-MACRO-F exact implementation packets (2026-07-15)".
+**HISTORICAL / SUPERSEDED 2026-07-15 (NON_OPERATIONAL).** The architecture-only placeholders below are replaced by exact packets in §"HTR-MACRO-F exact implementation packets (2026-07-15)". Do not read this block as current-facing authorization.
 
-`ARCHITECTURE_ONLY`, `REFRESH_REQUIRED_AFTER_WP13_CLOSEOUT`, `BUILD_AUTHORIZED NO`. **WP14** (Macro F): Forecast + Decision + whyNotCash + CDE/LD-7 disambiguation + net economics + entry-purpose ownership (gaps 007/008/011/036; gates WP13 COMPLETE, D-4, `POSITION_PURPOSE_AND_EXIT_CONTRACT_V1`, migration). **WP15** (Macro F): MKB read-model integration, global spine tenant-read-only, tenant-scoped outcomes, eligibility via sanctioned contract (gap 010; gate WP14 COMPLETE; grouped with WP14 only after both refreshed from WP13 CLOSEOUT HEAD). **WP16** (Macro G): strategy-version pinning, lifecycle eligibility (`STRAT_TM_STRATEGY_NOT_ALLOWED`), trial accounting, `riskMultiplier`, position-purpose gating, pinned D-20 drawdown policy (gaps 020/021; gates WP13 COMPLETE, D-2, D-20, migration).
+`ARCHITECTURE_ONLY`, `REFRESH_REQUIRED_AFTER_WP13_CLOSEOUT`, `BUILD_AUTHORIZED NO` — **all SUPERSEDED**. **WP14** (Macro F): Forecast + Decision + whyNotCash + CDE/LD-7 disambiguation + net economics + entry-purpose ownership (gaps 007/008/011/036; gates WP13 COMPLETE, D-4, `POSITION_PURPOSE_AND_EXIT_CONTRACT_V1`, migration). **WP15** (Macro F): MKB read-model integration, global spine tenant-read-only, tenant-scoped outcomes, eligibility via sanctioned contract (gap 010; **HISTORICAL gate WP14 COMPLETE** — superseded by Phase-A internal-advance gate). **WP16** (Macro G): strategy-version pinning, lifecycle eligibility (`STRAT_TM_STRATEGY_NOT_ALLOWED`), trial accounting, `riskMultiplier`, position-purpose gating, pinned D-20 drawdown policy (gaps 020/021; gates WP13 COMPLETE, D-2, D-20, migration).
 
 ### Human Macro-E decisions (CONSUMED 2026-07-15)
 
 WP10 evidence-hermeticity is **RESOLVED_FINAL_PHASE_B_PASS** (closeout `b132166`). The six exact Macro-E
 tokens below were **CONSUMED 2026-07-15** (`APPROVE_FINAL_D2_D3_MATRIX_MIGRATION_STRATEGY_FOUNDATION_AND_MACRO_E_PACKET`),
 after applying the mandatory persistence amendment (atomic cycle bundle + fail-closed idempotency; `AGGREGATE`
-removed from schema v1). Build authorization remains a **separate later** gate and is **NOT** consumed:
+removed from schema v1).
+
+> **HISTORICAL (SUPERSEDED 2026-07-15 pre-Macro-F-activation):** The sentence "Build authorization remains a separate later gate and is NOT consumed" applied only before `APPROVE-HTR-MACRO-F-BUILD` was consumed. Macro-E substantive tokens remain consumed; Macro F Build is now authorized separately.
 
 1. `APPROVE-HTR-D2: venue=HTX market=SPOT symbols=BTCUSDT,ETHUSDT base=1m derived=15m,1h,4h,1d enabled-historical-consumers=liquidity_sweep_reversal_v0,mean_reversion_v0 research-only=trend_momentum_v0 research-only-semantics=EVIDENCE_ONLY_NOT_TRADE_ELIGIBLE strategy-promotion=PROHIBITED edge-verdict=NOT_CLAIMED version-rule=PIN_EXACT_REGISTERED_VERSION_AT_WP16 portfolio=SHARED_MULTI_INSTRUMENT wp13-owns=consumer-set+matrix+terminal-reason+records wp16-owns=version-pin+lifecycle-gating+trial+riskMultiplier`
 2. `CLARIFY-HTR-D3-HISTORICAL-PROFILE: profile-id=HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 profile-digest=9a1ed67e… (as-consumed; SUPERSEDED_DIGEST_INTEGRITY_DEFECT) supersedes-draft-digest=fac1a44f… historical-evidence-capability=PRICE_ONLY_GROUNDED_EVIDENCE_PROFILE global-default=PROHIBITED historical-only=YES` — final code-point digest binding recorded below.
@@ -968,7 +990,7 @@ removed from schema v1). Build authorization remains a **separate later** gate a
 
 (full forms in controller §10). **All six substantive tokens were consumed 2026-07-15.**
 
-**Final code-point digest binding (CONSUMED 2026-07-15 — `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD`).** This Human decision binds the final code-point profile and matrix digests, supersedes all draft/originally-approved/governance-cleanup/`localeCompare` digests, and authorizes Composer Phase A for **HTR-MACRO-E / HTR-WP13 only** (not WP14/WP15/WP16; no FHV, blind holdout, paper, live or capital deployment). The complete digest history, classified:
+**Final code-point digest binding (CONSUMED 2026-07-15 — `APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD`).** HISTORICAL — authorized Composer Phase A for **HTR-MACRO-E / HTR-WP13 only** (not WP14/WP15/WP16). Macro E is COMPLETE; Macro F authorized via separate `APPROVE-HTR-MACRO-F-BUILD` (consumed 2026-07-15). Digest history:
 
 ```yaml
 ORIGINAL_CONSUMED_PROFILE_DIGEST:
@@ -1573,9 +1595,9 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | WP01,WP09 | backend | COMPLETE (Opus Macro-D Phase B PASS 2026-07-14; WORK `f6cefb0`; single sanctioned `buildHistoricalIngressContext` + sidecar-v3 PIT selection, all 15 optional lanes explicit incl. UNAVAILABLE/SIDECAR_LANE_ABSENT, no live provider/network call, replay/live parity; accepted evidence `replay-runs/RI-P7/htr-wp11-pit-provider-context/` manifest digest `b8f043ac…`; post-WORK non-semantic corrections (assertNoFutureEvidence reorder, quoteForReplayCycle fixture-timestamp binding, evidence gitSha restamp) classified, no fabricated availability, no future evidence reachable; HTR-GAP-012/013 CLOSED) | `f6cefb0` (WORK) |
 | HTR-WP12 | Ingress bar-integrity gate + versioned dataset manifest | WP01 | backend | COMPLETE (Opus Macro-D Phase B PASS 2026-07-14; WORK `993fdab`; nine fail-closed integrity classes gate HistoricalBarReplaySource/HistoricalBarSource/loadQualificationBars before first Canvas advance; immutable `fhv-dataset-manifest/v1` HTX_ONLY SPOT BTCUSDT+ETHUSDT 1m→closed-bar 15m/1h/4h/1d, UTC half-open partitions, source checksums, normalized+bar-set digests, `FHV_GAP_POLICY_V1` zero-tolerance, self-digest exclusion; semantic digest `fd7d4895…` (= evidence-bundle manifest digest); blind holdout RESERVED_SEALED_NOT_ACCESSED; no WP09 invalidation; real HTX 2020–2025 dataset NOT acquired/qualified — final pinning HTR-WP23; HTR-GAP-014/015 CLOSED) | `993fdab` (WORK) |
 | HTR-WP13 | Intelligence-chain activation (historical run profile) | WP09,WP10,WP11,WP12 | ai | COMPLETE (Composer Phase-B PASS_WITH_BOUNDED_FIXES) | `d07bb654` (WORK) + `2d63eca` (CLOSEOUT) |
-| HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | pending | — |
-| HTR-WP15 | MKB read-model integration for replay | WP14 | ai | pending | — |
-| HTR-WP16 | Strategy pinning + gating + trial accounting | WP13 | ai | pending | — |
+| HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | APPROVED_BUILD_AUTHORIZED (Macro F; Phase A NOT_STARTED; migration HUMAN_CONFIRMED_V2) | — |
+| HTR-WP15 | MKB read-model integration for replay | WP14 | ai | APPROVED_BUILD_AUTHORIZED_AFTER_WP14_PHASE_A_GATE (Macro F; Phase A NOT_STARTED; migration NONE_READ_MODEL_ONLY) | — |
+| HTR-WP16 | Strategy pinning + gating + trial accounting | WP13 | ai | ARCHITECTURE_ONLY (Macro G; buildAuthorized NO) | — |
 | HTR-WP17 | Historical execution-simulation realism | WP09 | backend | pending | — |
 | HTR-WP18 | Inventory & accounting parity | WP17 | backend | pending | — |
 | HTR-WP19 | Reality reconciliation + M9-class regression closure | WP18 | backend | pending | — |
@@ -1603,7 +1625,9 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## WP-13 (next work package — planning gate)
+## Current work package (HTR-WP14 — Macro F Phase A)
+
+**HISTORICAL (NON_OPERATIONAL):** The sections below through Macro-D describe completed tranches only; they are not current execution instructions.
 
 **HTR-MACRO-C is COMPLETE** (2026-07-14, Opus Macro-C Phase-B per-WP PASS). HTR-WP09 (Canvas runtime integration + default incremental cutover): WORK `46820ac` + CLOSEOUT `3a0962f`; D-11B PASS under Memory Gate Amendment v1, qualification bound to `7c532f5` (Human Amendment-v1 exception), accepted evidence promoted to `replay-runs/RI-P7/htr-wp09-canvas-runtime-qualification/` (digest `78560485…`). HTR-WP10 (no-lookahead + determinism property suites): WORK `befa6c1` + validation correction `2987f37` (test-only) + CLOSEOUT `1ac0e6a`; evidence `replay-runs/RI-P7/htr-wp10-determinism-nolookahead/` (digest `fa5def37…`); no WP09 measurement-critical surface changed. HTR-GAP-001/002/003 CLOSED at WP09; HTR-GAP-004/025/031 CLOSED at WP10. Full repository validation green (`validate:canon` + lint + typecheck + 2520 tests + build).
 
