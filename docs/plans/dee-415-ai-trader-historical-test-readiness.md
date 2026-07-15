@@ -27,36 +27,37 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: MACRO_E_FINAL_DIGESTS_HUMAN_BOUND_BUILD_AUTHORIZED   # APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD consumed 2026-07-15; final code-point profile/matrix digests Human-bound; Macro E / WP13 Build authorized
-  programStatus: APPROVED_IDLE   # HTR-WP13 COMPLETE (Composer Phase-B 2026-07-15); Macro E COMPLETE; Macro F REFRESHED_CONFIRM_REQUIRED
-  childPlanStatus: CONFIRM_REQUIRED   # Macro F refreshed from WP13 CLOSEOUT HEAD; Human confirm required before Build
-  buildAuthorized: NO   # HTR-MACRO-F / WP14/WP15 unauthorized; Macro G unauthorized
-  composerTerminalState: READY_FOR_HUMAN_MACRO_F_PACKET_REVIEW
+  humanApproval: MACRO_F_D4_AND_POSITION_APPLICATION_BOUND_MIGRATION_AND_BUILD_PENDING   # D-4 + BIND-POSITION-PURPOSE consumed 2026-07-15 Macro F hardening; migration/build tokens prepared not consumed
+  programStatus: APPROVED_IDLE
+  childPlanStatus: CONFIRM_REQUIRED
+  buildAuthorized: NO
+  composerTerminalState: READY_FOR_HUMAN_MACRO_F_MIGRATION_AND_BUILD_DECISION
   activeWorkPackage: HTR-WP14
   currentWorkPackage: HTR-WP14
-  latestValidatedProductionCodeSha: d07bb654eacb8940b194669094c995efdf2f5342   # HTR-WP13 WORK commit (preserved)
-  planningTerminalState: HTR_WP13_COMPLETE_MACRO_F_REFRESHED
+  latestValidatedProductionCodeSha: 2d63eca2231bbd06ad40680a4485f74a8244bef0   # HTR-WP13 CLOSEOUT (latest validated production baseline)
+  wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
+  planningTerminalState: HTR_MACRO_F_FINAL_PACKET_HARDENING_COMPLETE
+  governanceStateAuthority: GIT_HEAD
+  governanceReconciledFromHead: 2d63eca2231bbd06ad40680a4485f74a8244bef0
   macroCMigrationDecision: NONE
   macroDMigrationDecision: NONE
   macroCCodeBaselineHead: a8a709ff53f74649b5c5f39e0ba8e00af1e113de
   macroDCodeBaselineHead: 1ac0e6a8a7318be5b068dcb833f1a00ed32440a9
   macroDPreapprovalHead: 6d102f05d76fba2efd99b363799dde18a0668a71
-  composerTerminalState: READY_FOR_HUMAN_MACRO_F_PACKET_REVIEW   # HISTORICAL alias: AWAITING_OPUS_MACRO_POST_REVIEW superseded by AWAITING_INDEPENDENT_MACRO_POST_REVIEW policy
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  currentWorkPackage: HTR-WP14
-  activeChildPlan: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md   # WP13 COMPLETE; Macro F REFRESHED_CONFIRM_REQUIRED
+  activeChildPlan: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
   intelligenceTranche:
     controller: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
-    status: MACRO_F_REFRESHED_CONFIRM_REQUIRED
+    status: MACRO_F_FINAL_PACKET_HARDENING_COMPLETE
     macroPackages: { HTR-MACRO-E: [HTR-WP13], HTR-MACRO-F: [HTR-WP14, HTR-WP15], HTR-MACRO-G: [HTR-WP16] }
     preferredOrderAfterWp13: [HTR-MACRO-F, HTR-MACRO-G]
-    activeMacroStatus: REFRESHED_CONFIRM_REQUIRED   # HTR-MACRO-E COMPLETE; HTR-MACRO-F refreshed from WP13 CLOSEOUT HEAD 2026-07-15
+    activeMacroStatus: CONFIRM_REQUIRED   # HTR-MACRO-E COMPLETE; HTR-MACRO-F exact packet hardened 2026-07-15
     d1: RESOLVED_RECORD_LEVEL_CHAIN
     d2: HUMAN_APPROVED   # APPROVE-HTR-D2 consumed 2026-07-15 (HTX_ONLY SPOT BTCUSDT+ETHUSDT; base 1m + derived 15m/1h/4h/1d; LSR+MR enabled; trend_momentum_v0 EVIDENCE_ONLY_NOT_TRADE_ELIGIBLE); enablement is NOT SVG approval / NOT an edge verdict; version-pin+lifecycle owned by WP16
     d3: HUMAN_APPROVED_FINAL_CODEPOINT_DIGEST_BOUND   # CLARIFY-HTR-D3 consumed 2026-07-15; final code-point canonical digest 92219746… Human-bound 2026-07-15 (APPROVE_FINAL_CODEPOINT_PROFILE_MATRIX_DIGESTS_AND_MACRO_E_BUILD)
-    d4: HUMAN_DECISION_REQUIRED_BEFORE_HTR_WP14
+    d4: HUMAN_APPROVED_CONSUMED   # APPROVE-HTR-D4 consumed 2026-07-15 Macro F hardening session
     d20: HUMAN_DECISION_REQUIRED_BEFORE_HTR_WP16
     htrHistoricalIntelligenceProfileV1: HUMAN_APPROVED_FINAL_CODEPOINT_DIGEST_BOUND
     profileDigestCanonical: 9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe   # HTR_SEMANTIC_CANONICAL_JSON_V1 code-point digest; matrix bound; HUMAN_BOUND_FINAL_CODEPOINT_DIGEST 2026-07-15
@@ -116,8 +117,7 @@ state:
       harnessSourceSha256: 077e7f2a0ceb58f19b56232c187361f526b65de58425e87e38e7e20e1a2c4409
       acceptedBundleDigest: 1a80d67a650fc1a999293f2bcd32c08650c5fb56a823248acc14bc4ef5279492
     fullValidation: PASS
-  buildAuthorized: NO   # HTR-MACRO-F / WP14/WP15 unauthorized; NOT WP16; no FHV/holdout/paper/live/capital
-  workCommitSha: null   # per-WP WORK SHAs recorded in wpNNWorkCommitSha fields (Macro D: WP11 f6cefb0, WP12 993fdab); no separate macro-level WORK commit
+  workCommitSha: null
   wp01WorkCommitSha: 6600708adaf0ad7b9d07eacf275bbb31653b25a5
   wp01PostReview: PASS
   wp01Validation:
@@ -283,7 +283,7 @@ state:
   macroEStatus: COMPLETE   # 2026-07-15 Composer Phase-B: HTR-WP13 CLOSEOUT
   activeMacroPackage: HTR-MACRO-F   # refreshed from WP13 CLOSEOUT HEAD 2026-07-15
   activeMacroWorkPackages: [HTR-WP14, HTR-WP15]
-  activeMacroStatus: REFRESHED_CONFIRM_REQUIRED
+  activeMacroStatus: CONFIRM_REQUIRED
   phaseBReviewerPolicy:
     defaultReviewer: COMPOSER_2_5_INDEPENDENT_SESSION
     opusEscalation:
@@ -447,25 +447,67 @@ state:
     - HTR-WP23
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 993fdaba0ffd5f66837bea1c7272507183efa973   # Macro-D Phase-A code baseline validated green (validate:canon+lint+typecheck+tests+build); WP11/WP12 CLOSEOUT commits are docs-only on top of this validated code
-  baselineTestCountAtHead:   # 2026-07-14: full `pnpm test --run` at HEAD fd2f9ca (WP12 CLOSEOUT; docs-only atop 993fdab) to reconcile the reported-count divergence
-    gitSha: fd2f9cad76e409cca8a372319b0e8c572e0b9222
+  lastValidatedGitSha: 2d63eca2231bbd06ad40680a4485f74a8244bef0
+  baselineTestCountAtHead:
+    gitSha: 2d63eca2231bbd06ad40680a4485f74a8244bef0
     command: "pnpm test --run"
-    testFilesPassed: 432
+    testFilesPassed: 446
     testFilesSkipped: 26
-    testCasesPassed: 2570
-    testCasesSkipped: 92
+    testCasesPassed: 2607
+    testCasesSkipped: 107
     testCasesFailed: 0
     exitCode: 0
-    reconciliation: "Composer Macro-D report '2570 passed' is EXACT; the earlier canonical prose '2568 tests' was a documentation undercount (report typo), not a test removal/skip/weakening. Macro-C prose '2520 tests' is that macro's historical baseline. No test removed, skipped or weakened to reconcile."
-  lastValidationAt: 2026-07-14
-  latestValidatedBaseline: HTR-MACRO-D_PHASE_B_CLOSEOUT
+    note: default-suite baseline at WP13 CLOSEOUT; Postgres-gated baseline debt recorded separately under htrGap035
+  wp13PostgresMandatorySuites:
+    testsPassed: 15
+    testsSkipped: 0
+    verdict: PASS
+  htrGap035:
+    status: OPEN
+    classification: POSTGRES_GATED_REPOSITORY_BASELINE_DEBT
+    primaryOwner: HTR-WP17
+    contributingOwners: [HTR-WP18, HTR-WP19]
+    closureOwner: HTR-WP19
+    preExistingFailingFiles: 18
+    preExistingFailingTests: 34
+    wp13MandatoryTests: 15_PASS
+    verifiedAtWp13CloseoutHead: 2d63eca2231bbd06ad40680a4485f74a8244bef0
+    failingFileDigest: dd2dd141d5cf8b88cb632407b7cbb09ade09ad8c3396532a88d678694cbf5dad
+    failingFiles:
+      - tests/integration/postgres-hwm-ledger-parity.test.ts
+      - tests/integration/postgres-invoice-issuance-parity.test.ts
+      - tests/integration/postgres-kill-switch-parity.test.ts
+      - tests/integration/postgres-order-execution-parity.test.ts
+      - tests/integration/postgres-order-reconciliation-parity.test.ts
+      - tests/integration/postgres-order-repository-parity.test.ts
+      - tests/integration/postgres-payment-ledger-parity.test.ts
+      - tests/integration/postgres-reconciliation-workflow-parity.test.ts
+      - tests/integration/postgres-reporting-period-parity.test.ts
+      - tests/integration/postgres-research-intelligence-parity.test.ts
+      - tests/integration/postgres-runtime-coherence.test.ts
+      - tests/integration/postgres-settlement-parity.test.ts
+      - tests/integration/postgres-settlement-reconciliation-parity.test.ts
+      - tests/integration/postgres-trader-orders-parity.test.ts
+      - tests/integration/postgres-twin-engine.test.ts
+      - tests/integration/postgres-twin-persistence.test.ts
+      - tests/integration/postgres-twin-reasoning-prediction.test.ts
+      - tests/integration/reconciliation-rls.test.ts
+    macroFPolicy:
+      - WP14 and WP15 mandatory Postgres suites must execute with zero skip
+      - Macro F may introduce no additional failing Postgres file or test
+      - exact before/after failing-set comparison required
+      - pre-existing failures may not be silently reclassified as Macro F PASS
+  lastValidationAt: 2026-07-15
+  latestValidatedBaseline: HTR-MACRO-E_PHASE_B_CLOSEOUT
   finalAuditStatus: not-started
   blockedReason: null
   timeframeEvidenceLaneAuthorityMatrixV1: HUMAN_APPROVED_FINAL_CODEPOINT_DIGEST_BOUND   # final code-point digest 6296c54e… Human-bound 2026-07-15
-  positionPurposeAndExitContractV1: REQUIRED_BEFORE_HTR_WP14_BUILD   # RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1 (2026-07-14, §"Position purpose + exit contract v1"); no order intent without hypothesis/exit plan; adds/splits/merges/removes/reorders no WP
-  nextHumanGate: REVIEW_D4_POSITION_PURPOSE_EXIT_MIGRATIONS_AND_MACRO_F_PACKET
-  nextAction: "HUMAN_REVIEW_HTR_MACRO_F_PACKET. HTR-WP13 COMPLETE (Composer Phase-B PASS_WITH_BOUNDED_FIXES 2026-07-15). Macro E COMPLETE. Macro F refreshed from WP13 CLOSEOUT HEAD with exact WP14/WP15 packets; BUILD_AUTHORIZED NO. Required Human decisions: D-4, POSITION_PURPOSE_AND_EXIT_CONTRACT_V1, WP14_MIGRATION_DECISION, WP15_MIGRATION_DECISION."
+  positionPurposeAndExitContractV1: HUMAN_RATIFIED_WP14_APPLICATION_BOUND   # RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1 historical; BIND-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1-TO-HTR-WP14 consumed 2026-07-15
+  wp14MigrationDecision: EXACT_PACKET_PREPARED_NOT_CONSUMED
+  wp15MigrationDecision: EXACT_PACKET_PREPARED_NOT_CONSUMED
+  macroFReadiness: READY_FOR_HUMAN_MIGRATION_AND_BUILD_DECISION
+  nextHumanGate: APPROVE_HTR_MACRO_F_MIGRATIONS_AND_BUILD
+  nextAction: HUMAN_REVIEW_AND_AUTHORIZE_HTR_MACRO_F_BUILD
 provenance:
   createdFrom: roadmap-batch
   supersedes: docs/plans/dee-415-htr-b01-readiness-canon.md
@@ -504,7 +546,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` (HTR-WP01 COMPLETE — WORK COMMIT `6600708`; HTR-WP02 COMPLETE — WORK COMMIT `7ec02dd`, HTR-GAP-030/034 closed; HTR-WP03 COMPLETE — WORK COMMIT `35283ed`, HTR-GAP-024 baseline recorded (OPEN, closure HTR-WP22); HTR-WP04 COMPLETE — WORK COMMIT `b3abe7b`, Opus post-review PASS, validation PASS, streaming-evidence baseline recorded, HTR-GAP-005/026 remain OPEN, closure HTR-WP22; **HTR-WP05 COMPLETE** — WORK COMMIT `f90faa9`, Opus Phase-B post-review PASS, semantic parity digest equality proven (`30e9b40…`), HTR-GAP-027/029 remain OPEN, closure HTR-WP22, MIGRATION_DECISION NONE; **HTR-MACRO-A COMPLETE**; **HTR-MACRO-B COMPLETE** — HTR-WP06 (`24eb7f9`), HTR-WP07 (`10f2500`), HTR-WP08 (`0c4b8c3`), Opus Phase-B per-WP PASS, full validation green, evidence CANVAS_STATE_OK/CANVAS_MTF_PARITY_OK/RECONSTRUCTION_ORACLE_PARITY_OK (22/22 exact, 0 divergence, FULL_HISTORY_RESCANS 0, linear work), HTR-GAP-001/002/003 OPEN closure HTR-WP09, HTR-GAP-004 OPEN closure HTR-WP10, no runtime cutover, MIGRATION_DECISION NONE; **HTR-MACRO-C COMPLETE (2026-07-14, Opus Phase-B per-WP PASS): HTR-WP09 WORK `46820ac` + CLOSEOUT `3a0962f` (D-11B PASS under Memory Gate Amendment v1, bound to `7c532f5`; accepted evidence promoted), HTR-WP10 WORK `befa6c1` + validation correction `2987f37` + CLOSEOUT `1ac0e6a`; HTR-GAP-001/002/003/004/025/031 CLOSED; **HTR-MACRO-D (WP11–12) COMPLETE (2026-07-14, Opus Macro-D Phase-B per-WP PASS): HTR-WP11 WORK `f6cefb0` + CLOSEOUT `c63453d`, HTR-WP12 WORK `993fdab` + CLOSEOUT `fd2f9ca`; HTR-GAP-012/013/014/015 CLOSED; `MACRO_D_MIGRATION_DECISION NONE`; WP04–WP12 rolling runtime/data-truth tranche COMPLETE; HTR-MACRO-D and WP04–WP12 tranche COMPLETE; HTR-MACRO-E / HTR-WP13 ACTIVE; PROGRAM_STATUS WP_ACTIVE; ACTIVE_MACRO_STATUS APPROVED; CHILD_PLAN_STATUS APPROVED; final profile and matrix code-point digests Human-bound; BUILD_AUTHORIZED YES for HTR-MACRO-E / HTR-WP13 only; WP13 implementation has not yet started; no WP13 WORK commit yet; WP14/WP15/WP16, FHV, blind holdout, paper, live and capital remain unauthorized; next action COMPOSER_EXECUTE_HTR_MACRO_E_PHASE_A; real HTX 2020–2025 dataset not acquired/qualified (WP23 owns final pinning)**) |
+| Plan state | `state.status: in-progress` — **HTR-WP13 COMPLETE** (WORK `d07bb654`, CLOSEOUT `2d63eca`, Composer Phase-B `HTR_WP13_COMPOSER_PHASE_B_PASS_WITH_BOUNDED_FIXES`); **HTR-MACRO-E COMPLETE**; **HTR-MACRO-F exact packet hardened** (`CONFIRM_REQUIRED`, `BUILD_AUTHORIZED: NO`); `currentWorkPackage: HTR-WP14`; D-4 consumed; Position-Purpose WP14 application bound; WP14/WP15 migration packets exact and prepared-not-consumed; next gate `APPROVE_HTR_MACRO_F_MIGRATIONS_AND_BUILD`. **HISTORICAL (CONSUMED/SUPERSEDED):** Macro E Build authorization, `COMPOSER_EXECUTE_HTR_MACRO_E_PHASE_A`, stale Macro-D-active prose. |
 
 ## Approved decisions (recorded)
 
@@ -858,7 +900,9 @@ controller §7.6/§7.7; exact file/symbol packet in §7.4.
 
 **Resolved to Outcome B (migration required) via a read-only schema/repository audit at HEAD `fd2f9ca`.** The existing `trader_mi_*` tables implement the LD-5a declarative-claim doctrine (registry/evidence/confidence-judgment; DDL `db/migrations_postgres/0026–0036`), are **orphaned** from `runEvaluationCycle`/`runBacktest`, and are semantically/granularly wrong for WP13 per-cycle records; there is **no** conviction, LD-7 decision, or forecast table. WP13 identities (`runId`, `cycleId`, `symbol`, profile/matrix digests, in-cycle `hypothesisType`, conviction value/class/reason-codes, DUP-14 authoritative link, persisted terminal reason) are **not representable** without new schema (no column overloading / JSON abuse; existing `UNIQUE(org,hypothesis_key,seq)` cannot enforce `(org,run,cycle,symbol)` replay parity). **Exact package (Postgres-only, append-only, service-role RLS; no SQL created):** three new tables — `trader_intelligence_cycle_envelope` (one row per org/run/cycle/symbol + universal `terminal_reason_code` + input/output semantic digests; `UNIQUE(organization_id,run_id,cycle_id,symbol)`), `trader_intelligence_hypothesis_record` (the **8 competing per-cycle hypotheses** — one row per `hypothesis_type` — with `authoritative_link_digest` DUP-14 + optional `mi_hypothesis_id` FK; `UNIQUE(organization_id,run_id,cycle_id,symbol,hypothesis_type)`), `trader_intelligence_conviction_record` (**exactly one cycle-level active conviction row per cycle** — Model B `MODEL_B_ONE_CYCLE_LEVEL_ACTIVE_CONVICTION`, proven from `lib/trader/intelligence/hypothesis/build-hypothesis-set.ts` + `mi-core.types.ts` `MarketStateSnapshot.activeOpportunity: MarketOpportunity | null`; `UNIQUE(organization_id,run_id,cycle_id,symbol)`; **`active_hypothesis_record_id` NULLABLE** composite-FK → `trader_intelligence_hypothesis_record(id, organization_id)`; **`conviction_scope` `ACTIVE_HYPOTHESIS`|`NONE`** (schema v1; `AGGREGATE` = `DEFERRED_NOT_IN_SCHEMA_V1`) with the exact constraint `(scope='ACTIVE_HYPOTHESIS' AND active_hypothesis_record_id IS NOT NULL) OR (scope='NONE' AND active_hypothesis_record_id IS NULL)`, so the no-active-hypothesis / no-hypothesis cycle persists deterministically as `conviction_scope=NONE` + null link (still persisting conviction value/class/reason-codes/sustained state) — the earlier proposed `hypothesis_record_id NOT NULL` was too strict for the nullable `activeHypothesis`/`activeOpportunity` runtime + `MI_HYP_NO_ACTIVE` reason code); numeric fields as canonical decimal STRING for byte-identical replay; migration files `0076–0081` (DDL+RLS pairs); **`SQLITE_ADAPTER: NOT_REQUIRED`** (`db/AGENTS.md:148` Postgres-only MVP Execution Freeze + ADR-0017: no new SQLite migrations/adapters for new trader features until Post-MVP DEE-85); backfill NONE; rollback = DROP reverse order; **Forecast/Decision/whyNotCash explicitly DEFERRED to WP14**. Human confirmation token `CONFIRM-HTR-MACRO-E-MIGRATION` was **consumed 2026-07-15** (full form in controller §10). **No SQL was created in this planning session.**
 
-### Architecture-only WP14 / WP15 / WP16
+### Architecture-only WP14 / WP15 / WP16 (SUPERSEDED — see §"HTR-MACRO-F exact implementation packets")
+
+**HISTORICAL / SUPERSEDED 2026-07-15.** The architecture-only placeholders below are replaced by exact packets in §"HTR-MACRO-F exact implementation packets (2026-07-15)".
 
 `ARCHITECTURE_ONLY`, `REFRESH_REQUIRED_AFTER_WP13_CLOSEOUT`, `BUILD_AUTHORIZED NO`. **WP14** (Macro F): Forecast + Decision + whyNotCash + CDE/LD-7 disambiguation + net economics + entry-purpose ownership (gaps 007/008/011/036; gates WP13 COMPLETE, D-4, `POSITION_PURPOSE_AND_EXIT_CONTRACT_V1`, migration). **WP15** (Macro F): MKB read-model integration, global spine tenant-read-only, tenant-scoped outcomes, eligibility via sanctioned contract (gap 010; gate WP14 COMPLETE; grouped with WP14 only after both refreshed from WP13 CLOSEOUT HEAD). **WP16** (Macro G): strategy-version pinning, lifecycle eligibility (`STRAT_TM_STRATEGY_NOT_ALLOWED`), trial accounting, `riskMultiplier`, position-purpose gating, pinned D-20 drawdown policy (gaps 020/021; gates WP13 COMPLETE, D-2, D-20, migration).
 
@@ -998,11 +1042,319 @@ WP16 does **not** implement machine generation — it only preserves lifecycle c
 
 **Operator proposal package (future machine proposal must contain):** pattern discovered; economic/market rationale; source knowledge + hypothesis lineage; strategy candidate version; entry/no-trade/exit/risk rules; applicable + failure regimes; falsification conditions; data periods + separation; net PnL after costs; max drawdown + recovery; trade count + statistical sufficiency; parameter sensitivity; regime/symbol/period breakdown; walk-forward result; untouched validation result; blind-holdout status; known failure modes; remaining uncertainty; recommended next gate. **Allowed machine recommendations:** `REJECT`, `NEEDS_MORE_EVIDENCE`, `READY_FOR_BLIND_HOLDOUT`, `READY_FOR_PAPER_SOAK`, `READY_FOR_HUMAN_REVIEW`. **The machine may never promote itself.**
 
+## HTR-MACRO-F exact implementation packets (2026-07-15)
+
+Refreshed from production baseline `2d63eca2231bbd06ad40680a4485f74a8244bef0` (HTR-WP13 CLOSEOUT). Status: `CONFIRM_REQUIRED` · `BUILD_AUTHORIZED: NO`. D-4 consumed; Position-Purpose WP14 application bound; migration tokens prepared-not-consumed.
+
+### D-4 consumed (2026-07-15)
+
+```text
+APPROVE-HTR-D4 (CONSUMED):
+cde-msv-role=MARKET_STATE_CONTEXT_AND_PERMISSION_NOT_LD7_DECISION
+forecast-authority=LD6_PREREGISTERED_APPEND_ONLY
+forecast-seal=BEFORE_OUTCOME_AVAILABILITY
+forecast-horizon=OWNED_BY_FORECAST_IMMUTABLE
+forecast-invalidation=DECLARED_AT_ISSUANCE_IMMUTABLE
+decision-authority=LD7_ONE_AUTHORITATIVE_DECISION_PER_ORG_RUN_CYCLE_SYMBOL
+decision-classes=TRADE,REDUCED_RISK,NO_TRADE
+no-trade=FIRST_CLASS
+why-not-cash=REQUIRED_FOR_TRADE_OR_REDUCED_RISK
+why-cash-or-abstain=REQUIRED_FOR_NO_TRADE
+net-economics=DECISION_OWNS_COST_MODEL_REFERENCE_AND_EXPECTED_NET_VALUE
+missing-net-economics=FAIL_CLOSED_TO_NO_TRADE
+causal-lineage=WP13_CYCLE_ENVELOPE+HYPOTHESIS+CONVICTION+FORECAST
+outcome-resolution=SEPARATE_APPEND_ONLY_RECORD_OWNED_BY_WP21
+forecast-calibration=OWNED_BY_WP21
+no-lookahead=MANDATORY
+strategy-promotion=PROHIBITED
+capital-authority=HUMAN_ONLY
+```
+
+CDE/MSV (`buildMsvEnvelope` / `TradingPermission`) constrains permission only; it is never persisted as the LD-7 Decision. Research strategy evaluations remain separate evidence (`StrategySignal.researchEvaluationOutcome` / `tradeEligible`).
+
+### Position-Purpose WP14 application bound (2026-07-15)
+
+```text
+BIND-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1-TO-HTR-WP14 (CONSUMED):
+entry-purpose-owner=HTR-WP14
+entry-purpose-immutable=true
+retroactive-purpose-rewrite=PROHIBITED
+strategy-version-reference=REQUIRED
+strategy-version-enforcement=DEFERRED_TO_HTR-WP16
+executable-stop-target-semantics=DEFERRED_TO_HTR-WP17
+inventory-pnl-attribution=DEFERRED_TO_HTR-WP18
+guardian-exit-taxonomy=DEFERRED_TO_HTR-WP20
+outcome-learning=DEFERRED_TO_HTR-WP21
+operator-report=DEFERRED_TO_HTR-WP23
+```
+
+Historical ratification `RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1` (2026-07-14) preserved; not re-ratified.
+
+### WP14 migration audit verdict
+
+**`WP14_MIGRATION_NEW_POSTGRES_TABLES_REQUIRED`** (mixed: no existing table reuse for Forecast or Decision or Entry Purpose).
+
+| Table | Verdict | Reason |
+|-------|---------|--------|
+| `trader_market_predictions` | REJECT reuse | RI-P4 legacy; mutable `outcome_json`; no run/cycle/symbol lineage; no horizon/invalidation/profile binding; violates LD-6 immutability |
+| `trader_mi_hypothesis` | REJECT reuse | LD-5a versioned registry; `UNIQUE(org,hypothesis_key,version_seq)`; not per-cycle |
+| `trader_mi_evidence` | REJECT reuse | LD-5a evidence ledger; wrong granularity |
+| `trader_mi_confidence_judgment` | REJECT reuse | Human ordinal confidence; not LD-7 Decision |
+| `trader_intelligence_cycle_envelope` | CONSUME FK only | WP13 owner; terminal reason is not Forecast/Decision |
+| `trader_intelligence_hypothesis_record` | CONSUME FK only | WP13 owner; thesis digest insufficient for LD-6/LD-7 |
+| `trader_intelligence_conviction_record` | CONSUME FK only | WP13 owner |
+
+**Exact migrations (Postgres-only; append-only; service-role RLS; no SQL created this session):**
+
+```yaml
+migrationFiles:
+  - db/migrations_postgres/0082_trader_intelligence_forecast_record.sql
+  - db/migrations_postgres/0083_trader_intelligence_forecast_record_rls.sql
+  - db/migrations_postgres/0084_trader_intelligence_decision_record.sql
+  - db/migrations_postgres/0085_trader_intelligence_decision_record_rls.sql
+  - db/migrations_postgres/0086_trader_intelligence_entry_purpose_record.sql
+  - db/migrations_postgres/0087_trader_intelligence_entry_purpose_record_rls.sql
+tables:
+  trader_intelligence_forecast_record:
+    columns: [id uuid PK, organization_id uuid NOT NULL, cycle_envelope_id uuid NOT NULL, hypothesis_record_id uuid NOT NULL, conviction_record_id uuid NOT NULL, run_id text NOT NULL, cycle_id text NOT NULL, symbol text NOT NULL, evaluated_at timestamptz NOT NULL, issued_at timestamptz NOT NULL, evidence_cutoff_at timestamptz NOT NULL, forecast_horizon text NOT NULL, market_question text NOT NULL, invalidation_conditions_json text NOT NULL, scenario_set_json text NOT NULL, forecast_confidence_json text NOT NULL, historical_profile_id text NOT NULL, historical_profile_digest text NOT NULL, matrix_digest text NOT NULL, evidence_digest text NOT NULL, authoritative_link_digest text NOT NULL, forecast_model_version text NOT NULL, content_digest text NOT NULL, schema_version text NOT NULL, created_at timestamptz NOT NULL DEFAULT now()]
+    unique: [(id, organization_id), (organization_id, run_id, cycle_id, symbol)]
+    fk: [organization_id -> organizations, (cycle_envelope_id, organization_id) -> trader_intelligence_cycle_envelope, (hypothesis_record_id, organization_id) -> trader_intelligence_hypothesis_record, (conviction_record_id, organization_id) -> trader_intelligence_conviction_record]
+    appendOnly: true
+  trader_intelligence_decision_record:
+    columns: [id uuid PK, organization_id uuid NOT NULL, cycle_envelope_id uuid NOT NULL, conviction_record_id uuid NOT NULL, forecast_record_ids_json text NOT NULL, run_id text NOT NULL, cycle_id text NOT NULL, symbol text NOT NULL, evaluated_at timestamptz NOT NULL, issued_at timestamptz NOT NULL, decision_class text NOT NULL CHECK IN (TRADE,REDUCED_RISK,NO_TRADE), universal_terminal_reason_code text NOT NULL, why_not_cash_json text, why_cash_or_abstain_json text, gross_expected_reward text, expected_fees text, expected_slippage text, expected_other_costs text, expected_reward_after_costs text, cost_model_id text, cost_model_version text, cost_evidence_state text NOT NULL CHECK IN (AVAILABLE,UNAVAILABLE), cde_msv_permission_snapshot_json text NOT NULL, reason_codes_json text NOT NULL, strategy_id text, strategy_version text, content_digest text NOT NULL, schema_version text NOT NULL, created_at timestamptz NOT NULL DEFAULT now()]
+    unique: [(id, organization_id), (organization_id, run_id, cycle_id, symbol)]
+    check: [(decision_class IN ('TRADE','REDUCED_RISK') AND why_not_cash_json IS NOT NULL) OR (decision_class='NO_TRADE' AND why_cash_or_abstain_json IS NOT NULL)]
+    checkCostFailClosed: "(cost_evidence_state='UNAVAILABLE' AND decision_class='NO_TRADE') OR cost_evidence_state='AVAILABLE'"
+    appendOnly: true
+  trader_intelligence_entry_purpose_record:
+    columns: [id uuid PK, organization_id uuid NOT NULL, decision_record_id uuid NOT NULL, forecast_record_id uuid NOT NULL, hypothesis_record_id uuid NOT NULL, run_id text NOT NULL, cycle_id text NOT NULL, symbol text NOT NULL, original_thesis_json text NOT NULL, expected_path text NOT NULL, forecast_horizon text NOT NULL, entry_reason text NOT NULL, entry_condition_json text NOT NULL, invalidation_condition_json text NOT NULL, initial_stop_model_json text NOT NULL, target_model_json text NOT NULL, optional_partial_targets_json text, maximum_holding_time text NOT NULL, why_not_cash_json text NOT NULL, risk_amount text, expected_reward_after_costs text, evidence_digest text NOT NULL, strategy_id text NOT NULL, strategy_version text NOT NULL, content_digest text NOT NULL, schema_version text NOT NULL, created_at timestamptz NOT NULL DEFAULT now()]
+    unique: [(id, organization_id), (organization_id, run_id, cycle_id, symbol)]
+    note: row exists only when decision_class IN (TRADE,REDUCED_RISK); NO_TRADE cycles have no entry-purpose row
+atomicBundle: HTR_WP14_ATOMIC_FORECAST_DECISION_ENTRY_PURPOSE_BUNDLE_V1
+idempotency: fail-closed load-and-compare on deterministic id + org + business key + schema_version + content_digest
+```
+
+### WP15 migration audit verdict
+
+**`WP15_MIGRATION_NONE_READ_MODEL_ONLY`**
+
+WP15 is a deterministic read model over WP13 intelligence records, WP14 Forecast/Decision/Entry-Purpose records, `trader_knowledge_edges`, `trader_market_predictions` (legacy RI-P4 observations only), `trader_market_events`, and future WP21 outcome records. No new persistence required.
+
+### HTR-WP14 exact implementation packet
+
+```yaml
+objective: Persist LD-6 Forecast + LD-7 Decision + entry-purpose records with causal WP13 lineage, CDE/MSV disambiguation, net-economics fail-closed, and byte-identical replay idempotency
+runtimeCallGraph: |
+  runBacktest(historicalProfile) -> runEvaluationCycle -> buildIntelligenceCycleBundle -> persistIntelligenceCycleBundle
+  -> buildForecastRecord -> buildDecisionRecord -> buildEntryPurposeRecord (TRADE/REDUCED_RISK only)
+  -> persistForecastDecisionBundle (single Postgres transaction: forecast -> decision -> entry-purpose)
+ownedGaps: [HTR-GAP-007, HTR-GAP-008, HTR-GAP-011, HTR-GAP-036]
+dependencies: [HTR-WP13 COMPLETE, D-4 CONSUMED, POSITION_PURPOSE_WP14_BOUND]
+CREATE_FILES:
+  - lib/trader/intelligence/forecast-decision/forecast-decision.types.ts
+  - lib/trader/intelligence/forecast-decision/serialize-forecast-decision.ts
+  - lib/trader/intelligence/forecast-decision/derive-forecast-decision-ids.ts
+  - lib/trader/intelligence/forecast-decision/build-forecast-record.ts
+  - lib/trader/intelligence/forecast-decision/build-decision-record.ts
+  - lib/trader/intelligence/forecast-decision/build-entry-purpose-record.ts
+  - lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters.ts
+  - lib/trader/intelligence/forecast-decision/forecast-record-repository-postgres.ts
+  - lib/trader/intelligence/forecast-decision/decision-record-repository-postgres.ts
+  - lib/trader/intelligence/forecast-decision/entry-purpose-record-repository-postgres.ts
+  - lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres.ts
+  - lib/trader/intelligence/forecast-decision/forecast-decision-service.ts
+  - lib/trader/intelligence/forecast-decision/errors.ts
+  - lib/trader/intelligence/forecast-decision/wp14-forecast-decision-evidence-harness.ts
+  - scripts/trader/replay-wp14-forecast-decision-evidence.ts
+  - db/migrations_postgres/0082_trader_intelligence_forecast_record.sql
+  - db/migrations_postgres/0083_trader_intelligence_forecast_record_rls.sql
+  - db/migrations_postgres/0084_trader_intelligence_decision_record.sql
+  - db/migrations_postgres/0085_trader_intelligence_decision_record_rls.sql
+  - db/migrations_postgres/0086_trader_intelligence_entry_purpose_record.sql
+  - db/migrations_postgres/0087_trader_intelligence_entry_purpose_record_rls.sql
+MODIFY_FILES:
+  - lib/trader/intelligence/evaluation-cycle.ts
+  - lib/trader/intelligence/decision-chain.ts
+  - lib/trader/intelligence/types.ts
+  - lib/trader/backtest/backtest-runner.ts
+  - lib/trader/intelligence/index.ts
+  - db/schema.postgres.ts
+  - db/migrations_postgres/meta/_journal.json
+  - package.json
+DO_NOT_TOUCH_FILES:
+  - lib/trader/intelligence/records/postgres-idempotent-insert.ts
+  - lib/trader/intelligence/records/wp13-intelligence-evidence-harness.ts
+  - lib/trader/intelligence/records/hypothesis-record-repository-postgres.ts
+  - lib/trader/intelligence/records/cycle-envelope-repository-postgres.ts
+  - lib/trader/intelligence/records/conviction-record-repository-postgres.ts
+  - lib/trader/intelligence/records/index.ts
+  - lib/trader/intelligence/records/intelligence-records-service.ts
+  - lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres.ts
+  - lib/trader/intelligence/records/repository-adapters.ts
+  - lib/trader/intelligence/records/serialize-intelligence-records.ts
+  - lib/trader/intelligence/records/intelligence-records.types.ts
+  - lib/trader/intelligence/records/errors.ts
+  - lib/trader/research/wp10-determinism-evidence-harness.ts
+  - lib/trader/market-data/canvas/market-canvas.ts
+  - lib/trader/market-data/canvas/incremental-mtf.ts
+  - lib/trader/market-data/canvas/canvas-state-check-harness.ts
+  - lib/trader/market-data/canvas/canvas-reconstruction-parity-harness.ts
+  - lib/trader/market-data/canvas/incremental-reconstruction.ts
+  - lib/trader/market-data/canvas/market-canvas-serialization.ts
+  - lib/trader/market-data/canvas/index.ts
+  - lib/trader/market-data/canvas/market-canvas.types.ts
+  - lib/trader/market-data/canvas/canvas-mtf-parity-harness.ts
+  - lib/trader/market-data/replay/replay-pit-selector.ts
+  - lib/trader/market-data/replay/sidecar-content-digest.ts
+  - lib/trader/market-data/replay/provider-sidecar-types.ts
+  - lib/trader/market-data/replay/pit-context-evidence-harness.ts
+  - lib/trader/market-data/replay/historical-ingress-gateway.ts
+  - lib/trader/market-data/replay/replay-lane-normalizer.ts
+  - db/migrations_postgres/0026_trader_mi_hypothesis.sql through db/migrations_postgres/0081_trader_intelligence_conviction_record_rls.sql
+symbols:
+  FORECAST_RECORD_SCHEMA_VERSION: waia.trader.intelligence_forecast_record.v1
+  DECISION_RECORD_SCHEMA_VERSION: waia.trader.intelligence_decision_record.v1
+  ENTRY_PURPOSE_RECORD_SCHEMA_VERSION: waia.trader.intelligence_entry_purpose_record.v1
+  DecisionClass: TRADE | REDUCED_RISK | NO_TRADE
+  CostEvidenceState: AVAILABLE | UNAVAILABLE
+  buildForecastRecord: fn
+  buildDecisionRecord: fn
+  buildEntryPurposeRecord: fn
+  persistForecastDecisionBundle: fn
+  deriveForecastRecordId: fn
+  deriveDecisionRecordId: fn
+  deriveEntryPurposeRecordId: fn
+  ForecastDecisionIdempotencyConflictError: class code HTR_WP14_IDEMPOTENCY_CONFLICT
+tests:
+  unit:
+    - tests/unit/trader-wp14-forecast-seal.test.ts
+    - tests/unit/trader-wp14-decision-record.test.ts
+    - tests/unit/trader-wp14-no-trade.test.ts
+    - tests/unit/trader-wp14-why-not-cash.test.ts
+    - tests/unit/trader-wp14-cost-evidence-fail-closed.test.ts
+    - tests/unit/trader-wp14-cde-msv-disambiguation.test.ts
+    - tests/unit/trader-wp14-entry-purpose.test.ts
+    - tests/unit/trader-wp14-forecast-decision-digest.test.ts
+    - tests/unit/trader-wp14-idempotency-fail-closed.test.ts
+    - tests/unit/trader-wp14-atomic-bundle.test.ts
+    - tests/unit/trader-wp14-lineage.test.ts
+  postgresMandatory:
+    - tests/integration/postgres-trader-forecast-decision-parity.test.ts
+    - tests/integration/postgres-trader-forecast-decision-idempotency.test.ts
+evidenceCommand: pnpm trader:wp14:evidence
+evidencePath: replay-runs/RI-P7/htr-wp14-forecast-decision/
+workCommitMessage: "DEE-415 feat(trader): add forecast and decision records (HTR-WP14)"
+phaseATerminalState: AWAITING_INDEPENDENT_MACRO_POST_REVIEW
+stopConditions: [WP14_TOUCHES_FROZEN_SUBSTRATE, WP14_WP13_SCOPE_REGRESSION, HTR_WP14_IDEMPOTENCY_CONFLICT, WP14_COST_FABRICATION, WP14_CDE_PERSISTED_AS_DECISION, WP14_LOOKAHEAD, WP14_POSTGRES_BASELINE_REGRESSION]
+```
+
+### HTR-WP15 exact implementation packet
+
+```yaml
+objective: Deterministic MKB read model with tenant-scoped resolved-outcome view, knowledge eligibility/aging, and pattern-discovery query seam — no capital authority
+runtimeCallGraph: |
+  queryMkbReadModel(context, query) -> deterministic SQL/read adapters over WP13+WP14 tables + trader_knowledge_edges + trader_market_events + trader_market_predictions (read-only legacy)
+ownedGaps: [HTR-GAP-010]
+dependencies: [HTR-WP14 COMPLETE]
+CREATE_FILES:
+  - lib/trader/knowledge/mkb-read-model.types.ts
+  - lib/trader/knowledge/mkb-knowledge-state.ts
+  - lib/trader/knowledge/mkb-read-model-queries.ts
+  - lib/trader/knowledge/mkb-read-model.ts
+  - lib/trader/knowledge/mkb-read-model-evidence-harness.ts
+  - scripts/trader/replay-wp15-mkb-read-model-evidence.ts
+MODIFY_FILES:
+  - lib/trader/knowledge/market-memory.ts
+  - lib/trader/knowledge/index.ts
+  - package.json
+DO_NOT_TOUCH_FILES:
+  - lib/trader/intelligence/records/postgres-idempotent-insert.ts
+  - lib/trader/intelligence/records/wp13-intelligence-evidence-harness.ts
+  - lib/trader/intelligence/records/hypothesis-record-repository-postgres.ts
+  - lib/trader/intelligence/records/cycle-envelope-repository-postgres.ts
+  - lib/trader/intelligence/records/conviction-record-repository-postgres.ts
+  - lib/trader/intelligence/records/index.ts
+  - lib/trader/intelligence/records/intelligence-records-service.ts
+  - lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres.ts
+  - lib/trader/intelligence/records/repository-adapters.ts
+  - lib/trader/intelligence/records/serialize-intelligence-records.ts
+  - lib/trader/intelligence/records/intelligence-records.types.ts
+  - lib/trader/intelligence/records/errors.ts
+  - lib/trader/intelligence/forecast-decision/forecast-record.ts
+  - lib/trader/intelligence/forecast-decision/decision-record.ts
+  - lib/trader/intelligence/forecast-decision/entry-purpose-record.ts
+  - lib/trader/intelligence/forecast-decision/forecast-decision-bundle.ts
+  - lib/trader/intelligence/forecast-decision/forecast-decision-repository-postgres.ts
+  - lib/trader/intelligence/forecast-decision/serialize-forecast-decision.ts
+  - lib/trader/intelligence/forecast-decision/forecast-decision.types.ts
+  - lib/trader/intelligence/forecast-decision/index.ts
+  - db/migrations_postgres/0082_trader_intelligence_forecast_record.sql
+  - db/migrations_postgres/0083_trader_intelligence_forecast_record_rls.sql
+  - db/migrations_postgres/0084_trader_intelligence_decision_record.sql
+  - db/migrations_postgres/0085_trader_intelligence_decision_record_rls.sql
+  - db/migrations_postgres/0086_trader_intelligence_entry_purpose_record.sql
+  - db/migrations_postgres/0087_trader_intelligence_entry_purpose_record_rls.sql
+symbols:
+  MKB_KNOWLEDGE_STATES: [OBSERVATION_ONLY, UNRESOLVED, RESOLVED_CORRECT, RESOLVED_INCORRECT, INSUFFICIENT_EVIDENCE, STALE, INELIGIBLE]
+  queryMkbReadModel: fn
+  queryForecastDecisionLineage: fn
+  queryPatternDiscoveryCandidates: fn
+  queryNoTradeObservations: fn
+  queryHypothesisFamiliesByRegime: fn
+  assertNoCapitalAuthority: fn
+tests:
+  unit:
+    - tests/unit/trader-wp15-mkb-read-model.test.ts
+    - tests/unit/trader-wp15-knowledge-state.test.ts
+    - tests/unit/trader-wp15-lineage-queries.test.ts
+    - tests/unit/trader-wp15-tenant-boundary.test.ts
+    - tests/unit/trader-wp15-no-unresolved-as-knowledge.test.ts
+  postgresMandatory:
+    - tests/integration/postgres-trader-mkb-read-model-parity.test.ts
+evidenceCommand: pnpm trader:wp15:evidence
+evidencePath: replay-runs/RI-P7/htr-wp15-mkb-read-model/
+workCommitMessage: "DEE-415 feat(trader): add deterministic market-knowledge read model (HTR-WP15)"
+phaseATerminalState: AWAITING_INDEPENDENT_MACRO_POST_REVIEW
+stopConditions: [WP15_MUTATES_SOURCE_OF_TRUTH, WP15_CAPITAL_AUTHORITY, WP15_STRATEGY_PROMOTION, WP15_BLIND_HOLDOUT_ACCESS, WP15_HARDCODED_STRATEGY_UNIVERSE, WP15_POSTGRES_BASELINE_REGRESSION]
+migrationDecision: NONE_READ_MODEL_ONLY
+```
+
+### Macro F internal advance contract
+
+Macro F may advance WP14 → WP15 inside one Build session only when WP14 WORK commit exists, WP14 targeted tests pass, WP14 mandatory Postgres suites execute with zero skip, WP14 evidence passes, tracked tree clean, and no STOP fired. WP15 receives a separate WORK commit. No advance to WP16.
+
+### Prepared Human tokens (NOT consumed)
+
+```text
+CONFIRM-HTR-WP14-MIGRATION:
+WP14_MIGRATION_NEW_POSTGRES_TABLES_REQUIRED
+tables=trader_intelligence_forecast_record,trader_intelligence_decision_record,trader_intelligence_entry_purpose_record
+migration-files=0082..0087
+atomic-bundle=HTR_WP14_ATOMIC_FORECAST_DECISION_ENTRY_PURPOSE_BUNDLE_V1
+fail-closed-idempotency=VERIFY_DETERMINISTIC_ID_AND_CONTENT_DIGEST
+
+CONFIRM-HTR-WP15-MIGRATION:
+WP15_MIGRATION_NONE_READ_MODEL_ONLY
+
+APPROVE-HTR-MACRO-F:
+wp14-forecast-decision-entry-purpose
++
+wp15-deterministic-mkb-read-model
+
+APPROVE-HTR-MACRO-F-BUILD:
+work-packages=HTR-WP14,HTR-WP15
+starting-head=GIT_HEAD_AFTER_GOVERNANCE_COMMIT
+internal-advance=WP14_TO_WP15_ONLY
+work-commit-each-wp=true
+closeout-commit-each-wp=true
+build-wp16=false
+```
+
 ## Position purpose + exit contract v1 (`RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1`, 2026-07-14)
 
 ```text
 POSITION_PURPOSE_AND_EXIT_CONTRACT_V1:
-REQUIRED_BEFORE_HTR_WP14_BUILD
+HUMAN_RATIFIED_WP14_APPLICATION_BOUND   # HISTORICAL ratification RATIFY-POSITION-PURPOSE-AND-EXIT-CONTRACT-V1 (2026-07-14); BIND consumed 2026-07-15
 ```
 
 `POSITION_PURPOSE_AND_EXIT_CONTRACT_V1` is a Human-ratified future planning + acceptance requirement. It **adds, splits, merges, removes and reorders no work package** and authorizes **no** implementation of the later-WP requirements now.
@@ -1076,7 +1428,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP10 | No-lookahead + determinism property suites | WP09 | backend | COMPLETE (Opus Macro-C Phase B PASS 2026-07-14; WORK `befa6c1`; validation correction `2987f37` — test-only; evidence `replay-runs/RI-P7/htr-wp10-determinism-nolookahead/` digest `fa5def37…`; no WP09 measurement-critical surface changed; full validation green; HTR-GAP-004/025/031 CLOSED; Macro C COMPLETE) | `befa6c1` (WORK) |
 | HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | WP01,WP09 | backend | COMPLETE (Opus Macro-D Phase B PASS 2026-07-14; WORK `f6cefb0`; single sanctioned `buildHistoricalIngressContext` + sidecar-v3 PIT selection, all 15 optional lanes explicit incl. UNAVAILABLE/SIDECAR_LANE_ABSENT, no live provider/network call, replay/live parity; accepted evidence `replay-runs/RI-P7/htr-wp11-pit-provider-context/` manifest digest `b8f043ac…`; post-WORK non-semantic corrections (assertNoFutureEvidence reorder, quoteForReplayCycle fixture-timestamp binding, evidence gitSha restamp) classified, no fabricated availability, no future evidence reachable; HTR-GAP-012/013 CLOSED) | `f6cefb0` (WORK) |
 | HTR-WP12 | Ingress bar-integrity gate + versioned dataset manifest | WP01 | backend | COMPLETE (Opus Macro-D Phase B PASS 2026-07-14; WORK `993fdab`; nine fail-closed integrity classes gate HistoricalBarReplaySource/HistoricalBarSource/loadQualificationBars before first Canvas advance; immutable `fhv-dataset-manifest/v1` HTX_ONLY SPOT BTCUSDT+ETHUSDT 1m→closed-bar 15m/1h/4h/1d, UTC half-open partitions, source checksums, normalized+bar-set digests, `FHV_GAP_POLICY_V1` zero-tolerance, self-digest exclusion; semantic digest `fd7d4895…` (= evidence-bundle manifest digest); blind holdout RESERVED_SEALED_NOT_ACCESSED; no WP09 invalidation; real HTX 2020–2025 dataset NOT acquired/qualified — final pinning HTR-WP23; HTR-GAP-014/015 CLOSED) | `993fdab` (WORK) |
-| HTR-WP13 | Intelligence-chain activation (historical run profile) | WP09,WP10,WP11,WP12 | ai | pending | — |
+| HTR-WP13 | Intelligence-chain activation (historical run profile) | WP09,WP10,WP11,WP12 | ai | COMPLETE (Composer Phase-B PASS_WITH_BOUNDED_FIXES) | `d07bb654` (WORK) + `2d63eca` (CLOSEOUT) |
 | HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | pending | — |
 | HTR-WP15 | MKB read-model integration for replay | WP14 | ai | pending | — |
 | HTR-WP16 | Strategy pinning + gating + trial accounting | WP13 | ai | pending | — |
@@ -1113,7 +1465,7 @@ A single PR is opened only after HTR-WP23, final full validation, and the final 
 
 **HTR-MACRO-D is COMPLETE** (2026-07-14, Opus Macro-D Phase-B independent post-review, per-WP PASS). HTR-WP11 (PIT provider context + gateway enforcement + absent-lane): WORK `f6cefb0` + CLOSEOUT `c63453d`; single sanctioned `buildHistoricalIngressContext`, sidecar-v3 PIT selection, all 15 optional lanes explicit incl. UNAVAILABLE/`SIDECAR_LANE_ABSENT`, no live provider/network call, replay/live parity; accepted evidence `replay-runs/RI-P7/htr-wp11-pit-provider-context/` (manifest digest `b8f043ac…`, reproduced); post-WORK changes classified WP11_POST_WORK_NON_SEMANTIC_CORRECTION (no fabricated availability, no future evidence reachable). HTR-WP12 (ingress bar-integrity gate + immutable versioned FHV dataset manifest): WORK `993fdab` + CLOSEOUT (this commit); nine fail-closed integrity classes gate every historical loader before first Canvas advance; `fhv-dataset-manifest/v1` (HTX_ONLY SPOT BTCUSDT+ETHUSDT, 1m base + closed-bar 15m/1h/4h/1d, UTC half-open partitions, `FHV_GAP_POLICY_V1` zero-tolerance) semantic digest `fd7d4895…`; blind holdout `RESERVED_SEALED_NOT_ACCESSED`. HTR-GAP-012/013 CLOSED at WP11; HTR-GAP-014/015 CLOSED at WP12. Gap-closure semantics: the fail-closed gate + versioned manifest contract now exist; the real HTX 2020–2025 dataset has **not** been acquired or qualified; the full FHV remains unauthorized; HTR-WP23 owns final runbook/manifest pinning + real-run preflight.
 
-The **WP04–WP12 rolling runtime/data-truth tranche is COMPLETE**. **HTR-MACRO-E is COMPLETE** (2026-07-15, Composer Phase-B independent post-review `HTR_WP13_COMPOSER_PHASE_B_PASS_WITH_BOUNDED_FIXES`). HTR-WP13 WORK `d07bb654` preserved; Phase-B bounded fixes (SAVEPOINT idempotency, D-2 research/trade separation, expanded Postgres integration). Evidence `replay-runs/RI-P7/htr-wp13-intelligence-chain/` semantic digest `b6b3badd…` (unchanged). HTR-GAP-006/009 CLOSED. Program `APPROVED_IDLE`; `currentWorkPackage: HTR-WP14`. **HTR-MACRO-F** refreshed `REFRESHED_CONFIRM_REQUIRED` (`BUILD_AUTHORIZED: NO`). D-3 profile digest `92219746…`; matrix digest `6296c54e…`; canonicalizer `HTR_SEMANTIC_CANONICAL_JSON_V1`. Next Human gate: `REVIEW_D4_POSITION_PURPOSE_EXIT_MIGRATIONS_AND_MACRO_F_PACKET`. **HISTORICAL (PRE_PHASE_A / CONSUMED):** `MACRO_E_ACTIVE`, `BUILD_AUTHORIZED: YES`, `COMPOSER_EXECUTE_HTR_MACRO_E_PHASE_A` — superseded by WP13 CLOSEOUT.
+The **WP04–WP12 rolling runtime/data-truth tranche is COMPLETE**. **HTR-MACRO-E is COMPLETE** (2026-07-15, Composer Phase-B independent post-review `HTR_WP13_COMPOSER_PHASE_B_PASS_WITH_BOUNDED_FIXES`). HTR-WP13 WORK `d07bb654` preserved; CLOSEOUT `2d63eca`; Phase-B bounded fixes (SAVEPOINT idempotency, D-2 research/trade separation, expanded Postgres integration). Evidence `replay-runs/RI-P7/htr-wp13-intelligence-chain/` semantic digest `b6b3badd…` (unchanged). HTR-GAP-006/009 CLOSED. Program `APPROVED_IDLE`; `currentWorkPackage: HTR-WP14`. **HTR-MACRO-F** exact packet hardened (`CONFIRM_REQUIRED`, `BUILD_AUTHORIZED: NO`). D-4 consumed; Position-Purpose WP14 application bound. Next Human gate: `APPROVE_HTR_MACRO_F_MIGRATIONS_AND_BUILD`. **HISTORICAL (PRE_PHASE_A / CONSUMED):** `MACRO_E_ACTIVE`, `BUILD_AUTHORIZED: YES`, `COMPOSER_EXECUTE_HTR_MACRO_E_PHASE_A` — superseded by WP13 CLOSEOUT.
 
 ## Acceptance (whole program)
 
