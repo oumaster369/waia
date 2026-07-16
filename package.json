@@ -29,6 +29,7 @@
     "trader:wp14:evidence": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-wp14-forecast-decision-evidence.ts",
     "trader:wp15:evidence": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-wp15-mkb-read-model-evidence.ts",
     "trader:wp16:evidence": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-wp16-strategy-gating-evidence.ts",
+    "trader:wp17:evidence": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-wp17-execution-simulation-evidence.ts",
     "trader:dataset:manifest": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/dataset-manifest.ts",
     "trader:paper:soak:analyze": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/analyze-paper-soak-log.ts",
     "trader:paper:soak:evidence": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/export-paper-strategy-evidence.ts",

@@ -15,6 +15,7 @@ import {
   listOpenOrdersPostgres,
   listOrdersPostgres,
   recordFillPostgres,
+  recordFillProgressPostgres,
   transitionOrderPostgres,
 } from "@/lib/trader/execution/repository-postgres";
 import {
@@ -27,6 +28,7 @@ import {
   listOpenOrdersSqlite,
   listOrdersSqlite,
   recordFillSqlite,
+  recordFillProgressSqlite,
   transitionOrderSqlite,
   type SqliteOrderRepositoryClockDeps,
 } from "@/lib/trader/execution/repository-sqlite";
@@ -59,6 +61,8 @@ export function createSqliteOrderRepository(
       runSqliteTransaction(db, (tx) => transitionOrderSqlite(tx, context, input, clockDeps)),
     recordFill: (context, input) =>
       toPromise(() => recordFillSqlite(db, context, input, clockDeps)),
+    recordFillProgress: (context, input) =>
+      runSqliteTransaction(db, (tx) => recordFillProgressSqlite(tx, context, input, clockDeps)),
     listEvents: (context, orderId) => toPromise(() => listEventsSqlite(db, context, orderId)),
     listFills: (context, orderId) => toPromise(() => listFillsSqlite(db, context, orderId)),
   };
@@ -78,6 +82,8 @@ export function createPostgresOrderRepository(db: WaiaPostgresDb): OrderReposito
     transitionOrder: (context, input) =>
       runWaiaPostgresTransaction(db, (tx) => transitionOrderPostgres(tx, context, input)),
     recordFill: (context, input) => recordFillPostgres(db, context, input),
+    recordFillProgress: (context, input) =>
+      runWaiaPostgresTransaction(db, (tx) => recordFillProgressPostgres(tx, context, input)),
     listEvents: (context, orderId) => listEventsPostgres(db, context, orderId),
     listFills: (context, orderId) => listFillsPostgres(db, context, orderId),
   };
@@ -95,6 +101,7 @@ export function createPostgresOrderRepositoryFromExecutor(ex: PgOrderExecutor): 
     listOrders: (context, filter) => listOrdersPostgres(ex, context, filter),
     transitionOrder: (context, input) => transitionOrderPostgres(ex, context, input),
     recordFill: (context, input) => recordFillPostgres(ex, context, input),
+    recordFillProgress: (context, input) => recordFillProgressPostgres(ex, context, input),
     listEvents: (context, orderId) => listEventsPostgres(ex, context, orderId),
     listFills: (context, orderId) => listFillsPostgres(ex, context, orderId),
   };

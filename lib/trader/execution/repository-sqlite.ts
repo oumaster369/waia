@@ -22,8 +22,11 @@ import {
   type OrderRow,
   type OpenOrdersFilter,
   type RecordFillInput,
+  type RecordFillProgressInput,
   type TransitionOrderInput,
 } from "@/lib/trader/execution/order-repository.types";
+import { EXECUTION_FACT_KIND_HISTORICAL_SIMULATED } from "@/lib/trader/execution/historical-execution-model.types";
+import { assertCompleteHistoricalFillEconomics } from "@/lib/trader/execution/fill-economics";
 import {
   assertTransition,
   TERMINAL_ORDER_STATES,
@@ -441,7 +444,11 @@ export function recordFillSqlite(
     throw new OrderNotFoundError(input.orderId);
   }
 
-  const id = newId();
+  if (input.executionFactKind === EXECUTION_FACT_KIND_HISTORICAL_SIMULATED) {
+    assertCompleteHistoricalFillEconomics(input);
+  }
+
+  const id = input.fillId ?? newId();
   const now = resolveOrderNow(deps);
   const fee = input.fee ?? "0";
   const feeAsset = input.feeAsset ?? "";
@@ -496,4 +503,81 @@ export function recordFillSqlite(
     throw new Error("[trader] fill insert failed");
   }
   return mapFillRow(inserted);
+}
+
+export function recordFillProgressSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  input: RecordFillProgressInput,
+  deps: SqliteOrderRepositoryClockDeps = {},
+): FillRow {
+  assertCompleteHistoricalFillEconomics(input);
+  const newId = resolveOrderNewId(deps);
+  const scoped = requireOrgContext(context.organizationId);
+  const existing = getOrderByIdSqlite(db, context, input.orderId);
+  if (!existing) {
+    throw new OrderNotFoundError(input.orderId);
+  }
+
+  const fillRow = recordFillSqlite(
+    db,
+    context,
+    {
+      orderId: input.orderId,
+      exchangeTradeId: input.exchangeTradeId,
+      price: input.price,
+      quantity: input.quantity,
+      fee: input.fee,
+      feeAsset: input.feeAsset,
+      executedAt: input.executedAt,
+      executionFactKind: input.executionFactKind,
+      economics: input.economics,
+      fillId: input.fillId,
+      economicsRow: input.economicsRow,
+    },
+    deps,
+  );
+
+  const now = resolveOrderNow(deps);
+  const result = db
+    .update(traderOrders)
+    .set({
+      filledQuantity: input.filledQuantity,
+      avgFillPrice: input.avgFillPrice,
+      updatedAt: now,
+    })
+    .where(and(eq(traderOrders.id, input.orderId), orgOrderConditions(context)))
+    .run();
+
+  if (result.changes === 0) {
+    throw new OrderNotFoundError(input.orderId);
+  }
+
+  const maxSeqRow = db
+    .select({ maxSeq: max(traderOrderEvents.seq) })
+    .from(traderOrderEvents)
+    .where(
+      and(
+        eq(traderOrderEvents.orderId, input.orderId),
+        orgScopedWhere(traderOrderEvents.organizationId, scoped),
+      ),
+    )
+    .all()[0];
+  const nextSeq = (maxSeqRow?.maxSeq ?? 0) + 1;
+
+  db.insert(traderOrderEvents)
+    .values({
+      id: newId(),
+      organizationId: scoped.organizationId,
+      orderId: input.orderId,
+      seq: nextSeq,
+      fromState: existing.state,
+      toState: existing.state,
+      eventType: "fill_recorded",
+      payload: null,
+      occurredAt: input.executedAt,
+    })
+    .run();
+
+  return fillRow;
 }

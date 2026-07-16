@@ -1,4 +1,9 @@
 import type {
+  CostedFillEconomics,
+  ExecutionFactKind,
+  FillExecutionEconomicsRow,
+} from "@/lib/trader/execution/historical-execution-model.types";
+import type {
   OrderExecutionMode,
   OrderEventType,
   OrderSide,
@@ -94,6 +99,26 @@ export interface RecordFillInput {
   fee?: string;
   feeAsset?: string;
   executedAt: Date;
+  executionFactKind?: ExecutionFactKind;
+  economics?: CostedFillEconomics;
+  fillId?: string;
+  economicsRow?: FillExecutionEconomicsRow;
+}
+
+export interface RecordFillProgressInput {
+  orderId: string;
+  exchangeTradeId: string;
+  price: string;
+  quantity: string;
+  fee?: string;
+  feeAsset?: string;
+  executedAt: Date;
+  executionFactKind: ExecutionFactKind;
+  economics: CostedFillEconomics;
+  fillId: string;
+  economicsRow: FillExecutionEconomicsRow;
+  filledQuantity: string;
+  avgFillPrice: string;
 }
 
 export interface OpenOrdersFilter {
@@ -110,6 +135,7 @@ export interface OrderRepository {
   listOrders(context: OrgContext, filter?: OpenOrdersFilter): Promise<OrderRow[]>;
   transitionOrder(context: OrgContext, input: TransitionOrderInput): Promise<OrderRow>;
   recordFill(context: OrgContext, input: RecordFillInput): Promise<FillRow>;
+  recordFillProgress?(context: OrgContext, input: RecordFillProgressInput): Promise<FillRow>;
   listEvents(context: OrgContext, orderId: string): Promise<OrderEventRow[]>;
   listFills(context: OrgContext, orderId: string): Promise<FillRow[]>;
 }
@@ -146,6 +172,8 @@ export function fillPayloadMatches(existing: FillRow, input: RecordFillInput): b
     existing.executedAt.getTime() === input.executedAt.getTime()
   );
 }
+
+export type { ExecutionFactKind, CostedFillEconomics, FillExecutionEconomicsRow };
 
 export function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Error && /UNIQUE constraint failed/i.test(error.message);

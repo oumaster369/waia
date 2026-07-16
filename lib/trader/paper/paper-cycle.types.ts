@@ -44,6 +44,8 @@ export type ResearchReplayDeterminismDeps = {
   resetWindowState(): void;
   /** Default id factory when callers omit `PaperCycleInput.newId` (HTR-WP10). */
   newId?: () => string;
+  /** HTR-WP17: current closed-bar index for historical order registration. */
+  setDecisionBarIndex?: (index: number) => void;
 };
 
 /** M2 deposit-aware sizing context (optional — legacy cycles omit this). */

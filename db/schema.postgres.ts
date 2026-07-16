@@ -2169,7 +2169,74 @@ export const traderFills = pgTable(
       foreignColumns: [traderOrders.id, traderOrders.organizationId],
     }).onDelete("cascade"),
     uniqueIndex("trader_fills_order_exchange_trade_id_unique").on(t.orderId, t.exchangeTradeId),
+    uniqueIndex("trader_fills_id_organization_unique").on(t.id, t.organizationId),
     index("trader_fills_org_order_idx").on(t.organizationId, t.orderId),
+  ],
+);
+
+/** HTR-WP17: append-only historical fill economics decomposition. */
+export const traderFillExecutionEconomics = pgTable(
+  "trader_fill_execution_economics",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    fillId: uuid("fill_id").notNull(),
+    orderId: uuid("order_id").notNull(),
+    exchangeTradeId: text("exchange_trade_id").notNull(),
+    fillSequence: integer("fill_sequence").notNull(),
+    symbol: text("symbol").notNull(),
+    side: text("side").notNull(),
+    quantity: text("quantity").notNull(),
+    grossFillPrice: text("gross_fill_price").notNull(),
+    grossNotional: text("gross_notional").notNull(),
+    feeAmount: text("fee_amount").notNull(),
+    feeAsset: text("fee_asset").notNull(),
+    spreadCost: text("spread_cost").notNull(),
+    impactSlippageCost: text("impact_slippage_cost").notNull(),
+    totalExecutionCost: text("total_execution_cost").notNull(),
+    netFillPrice: text("net_fill_price").notNull(),
+    netCashEffect: text("net_cash_effect").notNull(),
+    remainingQuantityAfter: text("remaining_quantity_after").notNull(),
+    executionModelId: text("execution_model_id").notNull(),
+    executionModelSchemaVersion: text("execution_model_schema_version").notNull(),
+    simulatorId: text("simulator_id").notNull(),
+    simulatorVersion: text("simulator_version").notNull(),
+    sourceBarTimestamp: timestamp("source_bar_timestamp", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    sourceBarIndex: integer("source_bar_index").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true, mode: "date" }).notNull(),
+    fillTimestamp: timestamp("fill_timestamp", { withTimezone: true, mode: "date" }).notNull(),
+    submitLatencyMs: integer("submit_latency_ms").notNull(),
+    cancelLatencyMs: integer("cancel_latency_ms"),
+    executionFactKind: text("execution_fact_kind").notNull(),
+    economicsContentDigest: text("economics_content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.fillId, t.organizationId],
+      foreignColumns: [traderFills.id, traderFills.organizationId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.orderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("trader_fill_execution_economics_org_fill_unique").on(t.organizationId, t.fillId),
+    uniqueIndex("trader_fill_execution_economics_org_order_seq_unique").on(
+      t.organizationId,
+      t.orderId,
+      t.fillSequence,
+    ),
+    index("trader_fill_execution_economics_org_digest_idx").on(
+      t.organizationId,
+      t.economicsContentDigest,
+    ),
+    index("trader_fill_execution_economics_org_order_idx").on(t.organizationId, t.orderId),
   ],
 );
 

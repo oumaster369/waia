@@ -5,6 +5,12 @@ import type {
   RecordFillInput,
 } from "@/lib/trader/execution/order-repository.types";
 import {
+  advanceHistoricalExecutionOnClosedBar,
+  type HistoricalExecutionPersistencePort,
+} from "@/lib/trader/execution/historical-simulated-exchange";
+import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
+import { HTR_HISTORICAL_EXECUTION_PROFILE_V1 } from "@/lib/trader/backtest/historical-execution-profile";
+import {
   buildBacktestEvaluationExport,
   buildBacktestEvaluationExportDocument,
 } from "@/lib/trader/backtest/build-backtest-evaluation-export";
@@ -125,6 +131,8 @@ export type RunBacktestInput = {
   forecastDecisionSink?: ForecastDecisionBundleRepository;
   /** HTR-WP16: optional strategy gating + drawdown context. */
   wp16?: import("@/lib/trader/paper/paper-cycle.types").Wp16GatingContext;
+  /** HTR-WP17: historical execution simulation profile. */
+  historicalExecutionProfile?: HistoricalExecutionProfileV1;
 };
 
 export type RunBacktestResult = {
@@ -197,10 +205,13 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     input.historicalProfile !== undefined &&
     isHistoricalProfileActive(input.historicalProfile ?? HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1);
 
-  const costAwareRepository = wrapOrderRepositoryWithCostModel(
-    input.orderRepository,
-    input.costModel,
-  );
+  const wp17Active =
+    input.historicalExecutionProfile?.profileId === HTR_HISTORICAL_EXECUTION_PROFILE_V1;
+
+  const activeRepository = wp17Active
+    ? input.orderRepository
+    : wrapOrderRepositoryWithCostModel(input.orderRepository, input.costModel);
+  const costAwareRepository = activeRepository;
   const benchmarkObserver = input.benchmarkObserver ?? NOOP_REPLAY_BENCHMARK_OBSERVER;
   const retentionMode = input.retentionMode ?? "FULL";
   const evidenceSink = input.evidenceSink ?? NOOP_REPLAY_EVIDENCE_SINK;
@@ -277,7 +288,64 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     clockAdvanceTimer.end();
     benchmarkObserver.sampleMemory("clock-advance", cycleIndex);
 
+    if (wp17Active && input.historicalExecutionProfile) {
+      const closedBar = snapshot.bars.at(-1);
+      if (closedBar) {
+        const persistence: HistoricalExecutionPersistencePort = {
+          recordSimulatedFill: (context, order, event, isFirstSlice) =>
+            input.deps.execution.recordSimulatedFill!(context, order, event, isFirstSlice).then(
+              () => undefined,
+            ),
+          transitionOrderExpired: (context, order) =>
+            input.deps.execution.transitionOrderExpired!(context, order),
+          transitionOrderCancelled: (context, order) =>
+            input.deps.execution.transitionOrderCancelled!(context, order),
+        };
+        const advance = await advanceHistoricalExecutionOnClosedBar(
+          input.historicalExecutionProfile.exchange,
+          {
+            context: input.context,
+            closedBar,
+            barIndex: cycleIndex,
+            model: input.historicalExecutionProfile.model,
+            persistence,
+            replayNowMs: new Date(snapshot.evaluatedAt).getTime(),
+            refreshAccountState: async () => {
+              if (input.portfolio) {
+                const portfolio = await derivePortfolioAccountState({
+                  context: input.context,
+                  orderRepository: costAwareRepository,
+                  runConfig: input.portfolio.runConfig,
+                  limits: input.portfolio.limits,
+                  stopDistanceProvider: input.portfolio.stopDistanceProvider,
+                  executionMode: "mock",
+                  markPrices: input.markPrices,
+                });
+                const openOrders = await costAwareRepository.listOpenOrders(input.context, {
+                  executionMode: "mock",
+                });
+                return toAccountRiskState({ portfolio, openOrderCount: openOrders.length });
+              }
+              return deriveAccountRiskStateFromMockOrders({
+                context: input.context,
+                orderRepository: costAwareRepository,
+                executionMode: "mock",
+              });
+            },
+            reconcileOrder: async (orderId) => {
+              await input.deps.reconciliation.reconcile(input.context, {
+                kind: "order",
+                orderId,
+              });
+            },
+          },
+        );
+        accountState = advance.accountState;
+      }
+    }
+
     const paperCycleTimer = benchmarkObserver.beginStage("paper-cycle", cycleIndex);
+    input.deps.researchReplayDeterminism?.setDecisionBarIndex?.(cycleIndex);
     const result = await runPaperCycleOnce(input.deps, {
       context: input.context,
       snapshot,

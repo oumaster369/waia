@@ -20,8 +20,23 @@ import type {
   SubmitOrderInput,
   SubmitOrderResult,
 } from "@/lib/trader/execution/execution-service.types";
-import { OrderVersionConflictError } from "@/lib/trader/execution/order-repository.errors";
-import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
+import {
+  OrderVersionConflictError,
+  OrderNotFoundError,
+} from "@/lib/trader/execution/order-repository.errors";
+import type {
+  OrderRow,
+  RecordFillProgressInput,
+} from "@/lib/trader/execution/order-repository.types";
+import { applyHistoricalExecutionEconomics } from "@/lib/trader/execution/fill-economics";
+import { buildRecordFillPayload } from "@/lib/trader/execution/historical-simulated-exchange";
+import type { SimulatedFillEvent } from "@/lib/trader/execution/historical-execution-model.types";
+import {
+  addDecimal,
+  compareDecimal,
+  divideDecimal,
+  multiplyDecimal,
+} from "@/lib/trader/risk/numeric";
 import { isTerminal } from "@/lib/trader/execution/order-state-machine";
 import type { OrderExecutionMode, OrderState } from "@/lib/trader/execution/types";
 import {
@@ -224,6 +239,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     executionTelemetrySink: telemetrySink,
     assertLiveAuthorized,
     lifecycleRecorder,
+    historicalExecution,
   } = deps;
 
   function buildTradeLineageFromSubmit(
@@ -490,6 +506,15 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
 
     let current = accepted.order;
 
+    if (historicalExecution?.enabled && input.executionMode === "mock" && input.type === "market") {
+      historicalExecution.exchange.registerOrder(
+        current,
+        historicalExecution.getDecisionBarIndex(),
+        historicalExecution.getReplayNowMs(),
+      );
+      return { status: "submitted", order: current, riskDecision, auditIds };
+    }
+
     if (connectorOrder.status === "filled" || connectorOrder.status === "partially_filled") {
       const trade = await resolveTradeForOrder(connector, current, connectorOrder);
       if (trade) {
@@ -531,7 +556,92 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     return { status: "submitted", order: current, riskDecision, auditIds };
   }
 
+  async function recordSimulatedFill(
+    context: OrgContext,
+    order: OrderRow,
+    event: SimulatedFillEvent,
+    isFirstSlice: boolean,
+  ): Promise<OrderRow> {
+    const economics = applyHistoricalExecutionEconomics(event, historicalExecution!.model);
+    const newFilledQty = addDecimal(order.filledQuantity, event.sliceQuantity);
+    const avgFillPrice =
+      compareDecimal(order.filledQuantity, "0") === 0
+        ? economics.netFillPrice
+        : divideDecimal(
+            addDecimal(
+              multiplyDecimal(order.avgFillPrice ?? "0", order.filledQuantity),
+              multiplyDecimal(economics.netFillPrice, event.sliceQuantity),
+            ),
+            newFilledQty,
+          );
+
+    const payload = buildRecordFillPayload(
+      event,
+      economics,
+      context.organizationId,
+      order.id,
+      order.side,
+      avgFillPrice,
+      newFilledQty,
+      !isFirstSlice,
+    );
+
+    if (isFirstSlice) {
+      const fillTarget =
+        compareDecimal(event.remainingQuantityAfter, "0") === 0 ? "FILLED" : "PARTIALLY_FILLED";
+      const transitioned = await transitionOrConflict(context, order, fillTarget, {
+        filledQuantity: newFilledQty,
+        avgFillPrice,
+      });
+      if ("conflict" in transitioned) {
+        throw new OrderVersionConflictError(transitioned.orderId, order.stateVersion);
+      }
+      await orderRepository.recordFill(context, payload);
+      return transitioned.order;
+    }
+
+    await orderRepository.recordFillProgress!(context, payload as RecordFillProgressInput);
+    const updated = await orderRepository.getOrderById(context, order.id);
+    if (!updated) {
+      throw new OrderNotFoundError(order.id);
+    }
+    if (compareDecimal(event.remainingQuantityAfter, "0") === 0) {
+      const filled = await transitionOrConflict(context, updated, "FILLED", {
+        filledQuantity: newFilledQty,
+        avgFillPrice,
+      });
+      if ("conflict" in filled) {
+        throw new OrderVersionConflictError(filled.orderId, updated.stateVersion);
+      }
+      return filled.order;
+    }
+    return updated;
+  }
+
+  async function transitionOrderExpired(context: OrgContext, order: OrderRow): Promise<OrderRow> {
+    const result = await transitionOrConflict(context, order, "EXPIRED");
+    if ("conflict" in result) {
+      throw new OrderVersionConflictError(result.orderId, order.stateVersion);
+    }
+    return result.order;
+  }
+
+  async function transitionOrderCancelled(context: OrgContext, order: OrderRow): Promise<OrderRow> {
+    const cancelRequested = await transitionOrConflict(context, order, "CANCEL_REQUESTED");
+    if ("conflict" in cancelRequested) {
+      throw new OrderVersionConflictError(cancelRequested.orderId, order.stateVersion);
+    }
+    const cancelled = await transitionOrConflict(context, cancelRequested.order, "CANCELLED");
+    if ("conflict" in cancelled) {
+      throw new OrderVersionConflictError(cancelled.orderId, cancelRequested.order.stateVersion);
+    }
+    return cancelled.order;
+  }
+
   return {
+    recordSimulatedFill,
+    transitionOrderExpired,
+    transitionOrderCancelled,
     async submitOrder(context: OrgContext, input: SubmitOrderInput): Promise<SubmitOrderResult> {
       const orgContext = requireOrgContext(context.organizationId);
       const startedMs = nowMs();

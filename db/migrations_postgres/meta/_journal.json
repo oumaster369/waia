@@ -687,6 +687,20 @@
       "when": 1780000000067,
       "tag": "0097_trader_strategy_drawdown_checkpoint_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1780000000068,
+      "tag": "0098_trader_fill_execution_economics",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1780000000069,
+      "tag": "0099_trader_fill_execution_economics_rls",
+      "breakpoints": true
     }
   ]
 }

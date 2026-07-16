@@ -7,7 +7,7 @@ import { reconstructStreamingEvidence } from "@/lib/trader/backtest/streaming-ev
 import type { StreamingEvidenceTerminalState } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
 
-export const REPLAY_CHECKPOINT_SCHEMA_VERSION = "htr-wp16-replay-checkpoint/v2" as const;
+export const REPLAY_CHECKPOINT_SCHEMA_VERSION = "htr-wp17-replay-checkpoint/v3" as const;
 export const REPLAY_RUN_CHAIN_MANIFEST_SCHEMA_VERSION = "htr-wp05-run-chain/v1" as const;
 
 export type ResearchReplayPhase = "validation" | `walk-forward:${number}` | "blind" | "none";
@@ -36,6 +36,8 @@ export class ReplayCheckpointError extends Error {
   }
 }
 
+import type { HistoricalExecutionCheckpointSlice } from "@/lib/trader/execution/historical-execution-model.types";
+
 export type ReplayDrawdownHwmState = {
   accountPeakHwm: string;
   monthlyPeakHwm: string;
@@ -63,6 +65,8 @@ export type ReplayCheckpointRecord = {
   canvasStateRef?: string;
   /** HTR-WP16: restart-safe drawdown HWM checkpoint slice. */
   drawdownHwmState?: ReplayDrawdownHwmState;
+  /** HTR-WP17: in-flight historical execution open-order metadata. */
+  executionState?: HistoricalExecutionCheckpointSlice;
   checkpointDigest: string;
 };
 

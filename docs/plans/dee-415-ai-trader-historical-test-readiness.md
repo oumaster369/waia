@@ -28,11 +28,11 @@ linearStatusFlow:
 state:
   status: in-progress
   humanApproval: HTR_WP17_HUMAN_ACTIVATION_COMPLETE
-  programStatus: WP_ACTIVE
-  childPlanStatus: APPROVED
-  buildAuthorized: true
-  buildAuthorizedScope: HTR-WP17_PHASE_A_ONLY
-  composerTerminalState: READY_FOR_COMPOSER_HTR_WP17_PHASE_A
+  programStatus: WP_VALIDATED
+  childPlanStatus: VALIDATED
+  buildAuthorized: false
+  buildAuthorizedScope: null
+  composerTerminalState: AWAITING_INDEPENDENT_POST_REVIEW
   activeWorkPackage: HTR-WP17
   currentWorkPackage: HTR-WP17
   activeChildPlan: .cursor/plans/dee-415-htr-wp17-execution-simulation-realism.plan.md
@@ -42,9 +42,6 @@ state:
   approvedChildPacketLines: 835
   approvedChildPacketImmutable: true
   approvedChildPacketSnapshotPath: .cursor/plans/dee-415-wp17/approved-packets/ba8daf2608dcea83aeae918150a73fd3c0713f951750a9ff45edfe1e2653baaa/dee-415-htr-wp17-execution-simulation-realism.plan.md
-  activeControllerSha256: 9ebc156652f2be116aa34383f5e17bc53c9436f704c560c776cf24b2270c4ed6
-  activeControllerBytes: 65407
-  activeControllerLines: 860
   d5Status: HUMAN_APPROVED_CONSUMED
   d5ApprovalDate: 2026-07-16
   d5ModelId: htr-historical-execution-v1
@@ -54,12 +51,12 @@ state:
   wp17PostgresMigrations: [0098, 0099]
   wp17SqliteMigrationRequired: false
   wp17SqliteAdapterModificationRequired: true
-  wp17ImplementationStatus: NOT_STARTED
-  planningTerminalState: READY_FOR_COMPOSER_HTR_WP17_PHASE_A
+  wp17ImplementationStatus: VALIDATED_PENDING_INDEPENDENT_POST_REVIEW
+  planningTerminalState: AWAITING_INDEPENDENT_POST_REVIEW
   newHumanTokenRequired: false
   requiredHumanTokens: []
-  nextHumanGate: NONE_UNTIL_HTR_WP17_PHASE_A_REPORT
-  nextAction: COMPOSER_EXECUTE_HTR_WP17_PHASE_A
+  nextHumanGate: INDEPENDENT_HTR_WP17_PHASE_B_REVIEW
+  nextAction: INDEPENDENT_COMPOSER_HTR_WP17_PHASE_B
   latestValidatedProductionCodeSha: 93d6908f47edd5a6484fbced64d35c79534e4136
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
   wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b
@@ -120,7 +117,7 @@ state:
       - CONFIRM-HTR-WP17-MIGRATION
       - APPROVE-HTR-WP17-BUILD
     buildAuthorizedScope: HTR-WP17_PHASE_A_ONLY
-    implementationStatus: NOT_STARTED
+    implementationStatus: VALIDATED_PENDING_INDEPENDENT_POST_REVIEW
   intelligenceTranche:
     controller: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
     status: COMPLETE

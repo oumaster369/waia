@@ -14,6 +14,8 @@ import {
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import { createLifecycleRecorder, createSqliteLifecycleRepository } from "@/lib/trader/lifecycle";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
+import { bindHistoricalExecutionModelToSession } from "@/lib/trader/backtest/historical-execution-profile";
+import type { HistoricalExecutionRuntime } from "@/lib/trader/execution/execution-service.types";
 import { createManualReplayClock } from "@/lib/trader/research/deterministic-replay-clock";
 import {
   createDeterministicReplayIdFactory,
@@ -39,6 +41,7 @@ function migrateInMemoryResearchDb(): void {
 export type InMemoryResearchBacktestSession = {
   deps: PaperCycleDeps;
   orderRepository: OrderRepository;
+  historicalExecutionProfile: ReturnType<typeof bindHistoricalExecutionModelToSession>;
   cleanup: () => void;
 };
 
@@ -84,6 +87,16 @@ export async function createInMemoryResearchBacktestSession(): Promise<InMemoryR
     nowMs,
     newDecisionId,
   });
+  const historicalExecutionProfile = bindHistoricalExecutionModelToSession();
+  const decisionBarIndex = { value: 0 };
+  const historicalExecution: HistoricalExecutionRuntime = {
+    enabled: true,
+    model: historicalExecutionProfile.model,
+    exchange: historicalExecutionProfile.exchange,
+    getDecisionBarIndex: () => decisionBarIndex.value,
+    getReplayNowMs: () => replayClock.nowMs(),
+  };
+
   const execution = createOrderExecutionServiceFromDeps({
     riskEngine,
     orderRepository,
@@ -92,6 +105,7 @@ export async function createInMemoryResearchBacktestSession(): Promise<InMemoryR
     writeAudit,
     nowMs,
     lifecycleRecorder,
+    historicalExecution,
   });
   const reconciliation = createSqliteReconciliationService(db, {
     connectorForMode: () => connector,
@@ -108,9 +122,13 @@ export async function createInMemoryResearchBacktestSession(): Promise<InMemoryR
         clock: replayClock,
         resetWindowState: () => rateStore.clear(),
         newId: sessionNewId,
+        setDecisionBarIndex: (index: number) => {
+          decisionBarIndex.value = index;
+        },
       },
     },
     orderRepository,
+    historicalExecutionProfile,
     cleanup: () => {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });
