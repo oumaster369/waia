@@ -701,6 +701,20 @@
       "when": 1780000000069,
       "tag": "0099_trader_fill_execution_economics_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1780000000070,
+      "tag": "0100_trader_accounting_frontier",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1780000000071,
+      "tag": "0101_trader_accounting_frontier_rls",
+      "breakpoints": true
     }
   ]
 }

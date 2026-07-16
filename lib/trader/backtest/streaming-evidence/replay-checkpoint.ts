@@ -46,6 +46,17 @@ export type ReplayDrawdownHwmState = {
   strategyPeaks?: Readonly<Record<string, string>>;
 };
 
+export type ReplayAccountingFrontierState = {
+  accountingSequence: number;
+  frontierAsOf: string;
+  cash: string;
+  equity: string;
+  equityHwm: string;
+  accountDrawdownBps: number;
+  marksJson: Record<string, { price: string; barCloseTime: string }>;
+  semanticContentDigest: string;
+};
+
 export type ReplayCheckpointRecord = {
   schemaVersion: typeof REPLAY_CHECKPOINT_SCHEMA_VERSION;
   backtestRunId: string;
@@ -67,6 +78,8 @@ export type ReplayCheckpointRecord = {
   drawdownHwmState?: ReplayDrawdownHwmState;
   /** HTR-WP17: in-flight historical execution open-order metadata. */
   executionState?: HistoricalExecutionCheckpointSlice;
+  /** HTR-WP18: accounting frontier restart slice. */
+  accountingFrontierState?: ReplayAccountingFrontierState;
   checkpointDigest: string;
 };
 

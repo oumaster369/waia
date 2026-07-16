@@ -1,4 +1,5 @@
 import { PaperPnLReconciliationError } from "@/lib/trader/paper/paper-pnl.errors";
+import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 import {
   INVENTORY_SEMANTICS_VERSION,
   type InventorySemanticsVersion,
@@ -82,6 +83,38 @@ export function cloneLedgerMap(source: Map<string, SymbolLedger>): Map<string, S
     clone.set(symbol, { ...ledger });
   }
   return clone;
+}
+
+/** Maps dual-basis accounting frontier positions into canonical inventory semantics. */
+export function deriveCanonicalInventoryFromAccountingState(
+  state: AccountingStateV1,
+): CanonicalInventoryWalkResult {
+  const ledgerBySymbol = new Map<string, SymbolLedger>();
+  for (const [symbol, position] of Object.entries(state.positions)) {
+    if (compareDecimal(position.quantity, "0") <= 0) {
+      continue;
+    }
+    ledgerBySymbol.set(symbol, {
+      openQty: position.quantity,
+      avgCost:
+        compareDecimal(position.quantity, "0") > 0
+          ? divideDecimal(position.netPositionBasis, position.quantity)
+          : "0",
+      realizedPnl: "0",
+      sellFees: "0",
+    });
+  }
+  const { openQtyBySymbol, avgCostBySymbol } = buildOpenQtyMaps(ledgerBySymbol);
+  return {
+    semanticsVersion: INVENTORY_SEMANTICS_VERSION,
+    ledgerBySymbol,
+    openQtyBySymbol,
+    avgCostBySymbol,
+    feesByAsset: {},
+    valuationGaps: [],
+    realizedPnl: state.netRealizedPnl,
+    totalFees: "0",
+  };
 }
 
 export function applyBuyFill(

@@ -1,4 +1,5 @@
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
+import { computePeakEquityDrawdownBps } from "@/lib/trader/risk/drawdown-policy-evaluator";
 import { addDecimal, compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 
 import type { PortfolioAccountState } from "@/lib/trader/portfolio/portfolio-account.types";
@@ -25,10 +26,14 @@ export type ToAccountRiskStateInput = {
 export function toAccountRiskState(input: ToAccountRiskStateInput): Wp16AccountRiskState {
   const { portfolio } = input;
   const dailyPnl = subtractDecimal(portfolio.equityUsdt, portfolio.startingBalanceUsdt);
+  const accountPeak = input.accountPeakHwm ?? portfolio.equityUsdt;
+  const drawdownBps = computePeakEquityDrawdownBps(portfolio.equityUsdt, accountPeak);
   const drawdown =
-    compareDecimal(portfolio.equityUsdt, portfolio.startingBalanceUsdt) < 0
-      ? subtractDecimal(portfolio.startingBalanceUsdt, portfolio.equityUsdt)
-      : "0";
+    drawdownBps > 0
+      ? subtractDecimal(accountPeak, portfolio.equityUsdt)
+      : compareDecimal(portfolio.equityUsdt, portfolio.startingBalanceUsdt) < 0
+        ? subtractDecimal(portfolio.startingBalanceUsdt, portfolio.equityUsdt)
+        : "0";
 
   const quoteExposure =
     input.quoteExposureUsdt ??

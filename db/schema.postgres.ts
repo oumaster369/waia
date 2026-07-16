@@ -9,6 +9,7 @@
  */
 
 import {
+  bigint,
   boolean,
   foreignKey,
   index,
@@ -3480,6 +3481,47 @@ export const traderStrategyDrawdownCheckpoint = pgTable(
       t.strategyVersion,
       t.asOf,
     ),
+  ],
+);
+
+export const traderAccountingFrontier = pgTable(
+  "trader_accounting_frontier",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountKey: text("account_key").notNull(),
+    runId: text("run_id").notNull(),
+    accountingSequence: bigint("accounting_sequence", { mode: "bigint" }).notNull(),
+    frontierAsOf: timestamp("frontier_as_of", { withTimezone: true, mode: "date" }).notNull(),
+    cash: text("cash").notNull(),
+    positionQuantityJson: jsonb("position_quantity_json").notNull(),
+    grossPositionBasisJson: jsonb("gross_position_basis_json").notNull(),
+    netPositionBasisJson: jsonb("net_position_basis_json").notNull(),
+    grossRealizedPnl: text("gross_realized_pnl").notNull(),
+    netRealizedPnl: text("net_realized_pnl").notNull(),
+    marksJson: jsonb("marks_json").notNull(),
+    equity: text("equity").notNull(),
+    equityHwm: text("equity_hwm").notNull(),
+    accountDrawdownBps: integer("account_drawdown_bps").notNull(),
+    sourceFillId: uuid("source_fill_id"),
+    sourceEconomicsDigest: text("source_economics_digest").notNull(),
+    semanticContentDigest: text("semantic_content_digest").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_accounting_frontier_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("taf_org_acct_run_seq_uq").on(
+      t.organizationId,
+      t.accountKey,
+      t.runId,
+      t.accountingSequence,
+    ),
+    uniqueIndex("taf_org_idempotency_key_uq").on(t.organizationId, t.idempotencyKey),
+    index("taf_org_acct_run_asof_ix").on(t.organizationId, t.accountKey, t.runId, t.frontierAsOf),
   ],
 );
 

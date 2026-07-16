@@ -1,3 +1,5 @@
+import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
+import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
 import type { HistoricalExecutionModelV1 } from "@/lib/trader/execution/historical-execution-model.types";
 import type { SerializedHistoricalFillEconomicsExport } from "@/lib/trader/execution/fill-economics";
@@ -48,6 +50,9 @@ export type BacktestEvaluationExportInput = {
   exportedAt: Date;
   /** When WP17 historical execution is active, enables cost-decomposition provenance. */
   historicalExecutionModel?: HistoricalExecutionModelV1;
+  /** HTR-WP18: optional accounting state for HTR_PNL_REPORT_V1 embed. */
+  accountingState?: AccountingStateV1;
+  htrPnlReportSemanticDigest?: string;
 };
 
 export type BacktestEvaluationDataQuality = {
@@ -101,6 +106,7 @@ export type BacktestEvaluationExportBundle = {
   dataQuality: BacktestEvaluationDataQuality;
   provenance: BacktestEvaluationProvenance;
   historicalExecutionCost?: HistoricalExecutionCostProvenance;
+  htrPnlReportV1?: HtrPnlReportV1;
   exportedAt: Date;
 };
 

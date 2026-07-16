@@ -1,3 +1,5 @@
+import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
+import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 import type { PaperBookExecutionMode } from "@/lib/trader/paper/paper-book.types";
 import type { PaperPnLMarkPrices } from "@/lib/trader/paper/paper-pnl.types";
 import type { PaperPnLWindow } from "@/lib/trader/paper/paper-pnl-period.types";
@@ -26,6 +28,9 @@ export type PaperEvaluationExportInput = {
   markPrices?: PaperPnLMarkPrices;
   /** Caller-supplied audit timestamp; excluded from content digest. */
   exportedAt: Date;
+  /** HTR-WP18: optional accounting state for HTR_PNL_REPORT_V1 embed. */
+  accountingState?: AccountingStateV1;
+  htrPnlReportSemanticDigest?: string;
 };
 
 export type PaperEvaluationDataQuality = {
@@ -41,7 +46,9 @@ export type PaperEvaluationProvenance = {
   fillEventCount: number;
   filledOrderCount: number;
   strategySignalIds: string[];
-  readModelSlices: ["paper-pnl.v1", "paper-pnl-period.v1", "paper-strategy-eval.v1"];
+  readModelSlices: ReadonlyArray<
+    "paper-pnl.v1" | "paper-pnl-period.v1" | "paper-strategy-eval.v1" | "htr-pnl-report.v1"
+  >;
 };
 
 export type PaperEvaluationExportBundle = {
@@ -54,6 +61,8 @@ export type PaperEvaluationExportBundle = {
   dataQuality: PaperEvaluationDataQuality;
   provenance: PaperEvaluationProvenance;
   exportedAt: Date;
+  /** HTR-WP18: embedded when accountingState supplied. */
+  htrPnlReportV1?: HtrPnlReportV1;
 };
 
 export type SerializedPaperPnLWindow = {
@@ -66,6 +75,7 @@ export type PaperEvaluationExportEvidenceBody = {
   strategyEvaluations: SerializedPaperStrategyEvaluation[];
   dataQuality: PaperEvaluationDataQuality;
   provenance: PaperEvaluationProvenance;
+  htrPnlReportV1?: HtrPnlReportV1;
 };
 
 export type PaperEvaluationExportDocument = {
