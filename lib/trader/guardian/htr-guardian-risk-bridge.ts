@@ -72,7 +72,11 @@ export function evaluateHtrGuardianCycle(input: HtrGuardianCycleInput): HtrGuard
   });
 
   const breachState =
-    drawdown.breachState === "STOP_ACCOUNT" ? "STOP_ACCOUNT" : resolved.breachState;
+    resolved.breachState !== "NONE"
+      ? resolved.breachState
+      : drawdown.breachState === "STOP_ACCOUNT"
+        ? "STOP_ACCOUNT"
+        : "NONE";
   const reason = resolved.reason;
 
   return {

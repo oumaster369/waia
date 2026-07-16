@@ -147,6 +147,8 @@ export type PaperCycleInput = {
   reconstruction?: import("@/lib/trader/intelligence/reconstruction/reconstruction.types").ReconstructionSnapshot;
   /** HTR-WP16: strategy eligibility, trial, and drawdown gating context. */
   wp16?: Wp16GatingContext;
+  /** HTR-WP18/WP19/WP20: accounting + reconciliation + guardian authority on research path. */
+  htrAccounting?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrAccountingCycleContext;
 };
 
 export type PaperCycleSkipReason = "no_signal" | "no_submit";
@@ -178,6 +180,10 @@ export type PaperCycleResult = {
   /** M3 guardian evaluations + exit intents when guardian enabled. */
   guardian?: GuardianCycleResult;
   guardianExecutions?: PaperCycleGuardianExecution[];
+  /** HTR-WP20: authoritative guardian cycle on default historical research path. */
+  htrGuardian?: import("@/lib/trader/guardian/htr-guardian-risk-bridge").HtrGuardianCycleResult;
+  /** HTR-WP18..WP20: observable production runtime call order proof. */
+  htrRuntimeCallOrder?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrRuntimeCallEvent[];
   /** PR-2 MI Core: updated session state for next cycle. */
   hypothesisSessionState?: HypothesisSessionState;
 };

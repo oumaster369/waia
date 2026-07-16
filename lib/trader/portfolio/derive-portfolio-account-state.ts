@@ -24,6 +24,8 @@ import {
   multiplyDecimal,
   subtractDecimal,
 } from "@/lib/trader/risk/numeric";
+import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
+import { derivePortfolioFromAccountingState as derivePortfolioFromAccountingStateBridge } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 export type DerivePortfolioAccountStateInput = {
@@ -225,4 +227,11 @@ export function computeQuoteExposureUsdt(
     return "0";
   }
   return exposure;
+}
+
+/** Derives portfolio ledger from HTR-WP18 accounting frontier authority. */
+export function derivePortfolioFromAccountingState(
+  input: Parameters<typeof derivePortfolioFromAccountingStateBridge>[0],
+): PortfolioAccountState {
+  return derivePortfolioFromAccountingStateBridge(input);
 }

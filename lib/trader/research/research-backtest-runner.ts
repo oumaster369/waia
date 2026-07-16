@@ -484,6 +484,10 @@ async function runResearchValidationBacktestV1(
     historicalExecutionProfile: input.historicalExecutionProfile,
   });
 
+  if (input.artifactSink && retentionMode !== "STREAM_ONLY") {
+    input.artifactSink.cycleResults = [...backtest.cycleResults];
+  }
+
   if (retentionMode === "FULL") {
     for (const cycle of backtest.cycleResults) {
       const regime = cycle.evaluation.msv.derived.regime;

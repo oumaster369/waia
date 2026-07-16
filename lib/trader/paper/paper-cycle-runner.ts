@@ -2,6 +2,15 @@ import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
 import { buildReplayFusedContextFromSnapshot } from "@/lib/trader/market-data/replay-fused-context-builder";
 import { evaluatePositionGuardian, mapExitIntentToSubmitOrder } from "@/lib/trader/guardian";
+import { applyBreachSubmissionRestrictions } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
+import { HTR_GUARDIAN_EXIT_REASON_V1 } from "@/lib/trader/guardian/htr-guardian-exit-taxonomy";
+import {
+  deriveAccountRiskStateFromBridge,
+  derivePortfolioFromAccountingState,
+  evaluateHtrGuardianForBridge,
+  runAutomaticAccountingReconciliation,
+} from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
+import { compareDecimal } from "@/lib/trader/risk/numeric";
 import { assertLifecycleFillWalkOpenQtyParity } from "@/lib/trader/lifecycle";
 import {
   buildQuoteCurrencyBySymbol,
@@ -22,6 +31,8 @@ import {
   derivePortfolioAccountState,
   toAccountRiskState,
 } from "@/lib/trader/portfolio";
+import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
+import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
 import type {
   PaperCycleDeps,
   PaperCycleGuardianExecution,
@@ -118,6 +129,29 @@ async function refreshAccountStateIfConfigured(
     return input.accountState;
   }
 
+  if (input.htrAccounting) {
+    const openOrders = await input.orderRepository.listOpenOrders(input.context, {
+      executionMode: "mock",
+    });
+    if (input.portfolio) {
+      const portfolio = derivePortfolioFromAccountingState({
+        state: input.htrAccounting.bridge.state,
+        runConfig: input.portfolio.runConfig,
+        limits: input.portfolio.limits,
+        stopDistanceProvider: input.portfolio.stopDistanceProvider,
+      });
+      return toAccountRiskState({
+        portfolio,
+        openOrderCount: openOrders.length,
+        accountPeakHwm: input.htrAccounting.bridge.state.equityHwm,
+        monthlyPeakHwm: input.htrAccounting.bridge.state.equityHwm,
+      });
+    }
+    return deriveAccountRiskStateFromBridge(input.htrAccounting.bridge, {
+      openOrderCount: openOrders.length,
+    });
+  }
+
   if (input.portfolio) {
     const portfolio = await derivePortfolioAccountState({
       context: input.context,
@@ -141,6 +175,69 @@ async function refreshAccountStateIfConfigured(
   });
 }
 
+async function runHtrGuardianPhase(
+  input: PaperCycleInput,
+  evaluation: ReturnType<typeof runEvaluationCycle>,
+  accountState: PaperCycleInput["accountState"],
+  cycleIndex?: number,
+): Promise<{
+  htrGuardian?: PaperCycleResult["htrGuardian"];
+  accountState: PaperCycleInput["accountState"];
+}> {
+  if (!input.htrAccounting) {
+    return { accountState };
+  }
+
+  const inventoryOpenQtyBySymbol = await input.htrAccounting.resolveInventoryOpenQtyBySymbol();
+  runAutomaticAccountingReconciliation(input.htrAccounting.bridge, {
+    inventoryOpenQtyBySymbol,
+    cycleIndex,
+    phase: "before_guardian",
+  });
+
+  const missingMark = Object.entries(input.htrAccounting.bridge.state.positions).some(
+    ([symbol, position]) =>
+      compareDecimal(position.quantity, "0") > 0 &&
+      !input.htrAccounting!.bridge.state.marks[symbol],
+  );
+
+  const htrGuardian = evaluateHtrGuardianForBridge(input.htrAccounting.bridge, {
+    equityUsdt: input.htrAccounting.bridge.state.equity,
+    missingMark,
+    cycleIndex: cycleIndex ?? 0,
+    inventoryOpenQtyBySymbol,
+  });
+
+  if (htrGuardian.breachState !== "NONE" && input.htrAccounting.bridge.guardianReason) {
+    input.htrAccounting.bridge.guardianReason = htrGuardian.reason;
+  }
+
+  return { htrGuardian, accountState };
+}
+
+function assertHtrOrderSubmissionPermitted(
+  input: PaperCycleInput,
+  order: PlaceOrderInput,
+): { permitted: boolean; reason: string | null } {
+  if (!input.htrAccounting?.bridge.lastGuardianCycle) {
+    return { permitted: true, reason: null };
+  }
+  const symbol = normalizeSymbolForHistoricalExecution(order.symbol);
+  const openQty =
+    input.htrAccounting.bridge.state.positions[symbol]?.quantity ??
+    input.htrAccounting.bridge.state.positions[order.symbol]?.quantity ??
+    "0";
+  const restriction = applyBreachSubmissionRestrictions({
+    cycle: input.htrAccounting.bridge.lastGuardianCycle,
+    order,
+    openQty,
+  });
+  return {
+    permitted: restriction.permitted,
+    reason: restriction.reason,
+  };
+}
+
 async function runGuardianPhase(
   deps: PaperCycleDeps,
   input: PaperCycleInput,
@@ -153,6 +250,13 @@ async function runGuardianPhase(
   accountState: PaperCycleInput["accountState"];
 }> {
   const guardianExecutions: PaperCycleGuardianExecution[] = [];
+
+  if (input.htrAccounting) {
+    return {
+      guardianExecutions,
+      accountState,
+    };
+  }
 
   if (!input.guardian?.runConfig.enabled || !deps.lifecycleRepository) {
     return { guardianExecutions, accountState };
@@ -341,6 +445,14 @@ export async function runPaperCycleOnce(
   );
   accountState = guardianPhase.accountState;
 
+  const htrGuardianPhase = await runHtrGuardianPhase(
+    input,
+    evaluation,
+    accountState,
+    Number.parseInt(snapshot.cycleId, 10),
+  );
+  accountState = htrGuardianPhase.accountState;
+
   const hasGuardianActivity =
     (guardianPhase.guardianResult?.evaluations.length ?? 0) > 0 ||
     (guardianPhase.guardianExecutions.length ?? 0) > 0;
@@ -403,6 +515,8 @@ export async function runPaperCycleOnce(
       reconciliation: null,
       guardian: guardianPhase.guardianResult,
       guardianExecutions: guardianPhase.guardianExecutions,
+      htrGuardian: htrGuardianPhase.htrGuardian,
+      htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
       hypothesisSessionState: evaluation.hypothesisSessionState,
     };
   }
@@ -486,6 +600,18 @@ export async function runPaperCycleOnce(
       continue;
     }
 
+    const htrRestriction = assertHtrOrderSubmissionPermitted(input, submit);
+    if (!htrRestriction.permitted) {
+      strategyExecutions.push({
+        signal,
+        submitBlocked: true,
+        skipReason: "no_submit",
+        execution: null,
+        reconciliation: null,
+      });
+      continue;
+    }
+
     submit.openingRegime = evaluation.msv.derived.regime;
 
     if (deps.lifecycleRecorder) {
@@ -539,6 +665,8 @@ export async function runPaperCycleOnce(
     ...legacy,
     guardian: guardianPhase.guardianResult,
     guardianExecutions: guardianPhase.guardianExecutions,
+    htrGuardian: htrGuardianPhase.htrGuardian,
+    htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
     hypothesisSessionState: evaluation.hypothesisSessionState,
   };
 }

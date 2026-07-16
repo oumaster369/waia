@@ -54,8 +54,37 @@ export type ReplayAccountingFrontierState = {
   equityHwm: string;
   accountDrawdownBps: number;
   marksJson: Record<string, { price: string; barCloseTime: string }>;
+  positionsJson: Record<
+    string,
+    { quantity: string; grossPositionBasis: string; netPositionBasis: string }
+  >;
+  consumedFillIds: string[];
+  cashEventsJson: Array<{ fillId: string; netCashEffect: string }>;
+  grossRealizedPnl: string;
+  netRealizedPnl: string;
   semanticContentDigest: string;
 };
+
+export function buildReplayAccountingFrontierState(input: {
+  accountingSequence: number;
+  frontierAsOf: string;
+  cash: string;
+  equity: string;
+  equityHwm: string;
+  accountDrawdownBps: number;
+  marksJson: Record<string, { price: string; barCloseTime: string }>;
+  positionsJson: Record<
+    string,
+    { quantity: string; grossPositionBasis: string; netPositionBasis: string }
+  >;
+  consumedFillIds: string[];
+  cashEventsJson: Array<{ fillId: string; netCashEffect: string }>;
+  grossRealizedPnl: string;
+  netRealizedPnl: string;
+  semanticContentDigest: string;
+}): ReplayAccountingFrontierState {
+  return { ...input };
+}
 
 export type ReplayCheckpointRecord = {
   schemaVersion: typeof REPLAY_CHECKPOINT_SCHEMA_VERSION;

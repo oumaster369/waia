@@ -39,6 +39,7 @@ export {
   computeQuoteExposureUsdt,
   createInitialPortfolioAccountState,
   derivePortfolioAccountState,
+  derivePortfolioFromAccountingState,
   type DerivePortfolioAccountStateInput,
   type DerivePortfolioAccountStateSyncDeps,
 } from "@/lib/trader/portfolio/derive-portfolio-account-state";

@@ -1,5 +1,7 @@
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import { applyCostToFill, type CostModelV1 } from "@/lib/trader/execution/cost-model";
+import { applyHistoricalExecutionEconomics } from "@/lib/trader/execution/fill-economics";
+import { historicalFillId } from "@/lib/trader/execution/deterministic-execution-id";
 import type {
   OrderRepository,
   RecordFillInput,
@@ -56,7 +58,33 @@ import type {
 import type { Bar } from "@/lib/trader/intelligence/types";
 import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
-import { derivePortfolioAccountState, toAccountRiskState } from "@/lib/trader/portfolio";
+import {
+  buildQuoteCurrencyBySymbol,
+  loadPaperFillEvents,
+} from "@/lib/trader/paper/derive-paper-pnl";
+import { deriveCanonicalInventory } from "@/lib/trader/paper/derive-canonical-inventory";
+import {
+  derivePortfolioAccountState,
+  derivePortfolioFromAccountingState,
+  toAccountRiskState,
+} from "@/lib/trader/portfolio";
+import {
+  attachClosed1mMarkToAccountingBridge,
+  consumeWp17FillIntoAccountingBridge,
+  createHtrAccountingCycleBridge,
+  deriveAccountRiskStateFromBridge,
+  HtrAccountingReconciliationTerminationError,
+  restoreAccountingBridgeFromCheckpoint,
+  runAutomaticAccountingReconciliation,
+  toAccountingCheckpointSlice,
+  type HtrAccountingCycleBridge,
+  type HtrAccountingCycleContext,
+} from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
+import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
+import type { ReplayAccountingFrontierState } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
+import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
+import { computeAccountingSemanticDigest } from "@/lib/trader/accounting";
 import type { PaperPnLMarkPrices } from "@/lib/trader/paper/paper-pnl.types";
 import type { PaperPnLWindow } from "@/lib/trader/paper/paper-pnl-period.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
@@ -134,6 +162,8 @@ export type RunBacktestInput = {
   wp16?: import("@/lib/trader/paper/paper-cycle.types").Wp16GatingContext;
   /** HTR-WP17: historical execution simulation profile. */
   historicalExecutionProfile?: HistoricalExecutionProfileV1;
+  /** HTR-WP18: restored accounting frontier for checkpoint resume. */
+  initialAccountingFrontierState?: ReplayAccountingFrontierState;
 };
 
 export type RunBacktestResult = {
@@ -150,6 +180,11 @@ export type RunBacktestResult = {
   bars1mPrefixLength?: number;
   /** Qualification diagnostic only — estimated reference-slot bytes (8 × length on 64-bit). */
   bars1mPrefixEstimatedReferenceBytes?: number;
+  /** HTR-WP18: terminal accounting authority on default historical research path. */
+  accountingState?: AccountingStateV1;
+  htrPnlReportV1?: HtrPnlReportV1;
+  accountingFrontierState?: ReplayAccountingFrontierState;
+  htrRuntimeCallOrder?: HtrAccountingCycleBridge["callOrder"];
 };
 
 function wrapOrderRepositoryWithCostModel(
@@ -194,6 +229,62 @@ function buildRegimeMetrics(
   }));
 }
 
+async function resolveHtrInventoryOpenQtyBySymbol(input: {
+  context: OrgContext;
+  orderRepository: OrderRepository;
+}): Promise<Record<string, string>> {
+  const { fillEvents } = await loadPaperFillEvents({
+    context: input.context,
+    orderRepository: input.orderRepository,
+    executionMode: "mock",
+  });
+  const symbols = [...new Set(fillEvents.map((event) => event.order.symbol))];
+  const inventory = deriveCanonicalInventory(fillEvents, buildQuoteCurrencyBySymbol(symbols));
+  const openQtyBySymbol: Record<string, string> = {};
+  for (const [symbol, qty] of inventory.openQtyBySymbol.entries()) {
+    openQtyBySymbol[normalizeSymbolForHistoricalExecution(symbol)] = qty;
+  }
+  return openQtyBySymbol;
+}
+
+async function reconcileHtrAccountingBridge(input: {
+  bridge: HtrAccountingCycleBridge;
+  context: OrgContext;
+  orderRepository: OrderRepository;
+  cycleIndex?: number;
+  phase:
+    | "frontier_mutation"
+    | "checkpoint_restore"
+    | "before_guardian"
+    | "before_cycle_complete"
+    | "before_terminal_export";
+}): Promise<void> {
+  const inventoryOpenQtyBySymbol = await resolveHtrInventoryOpenQtyBySymbol({
+    context: input.context,
+    orderRepository: input.orderRepository,
+  });
+  runAutomaticAccountingReconciliation(input.bridge, {
+    inventoryOpenQtyBySymbol,
+    cycleIndex: input.cycleIndex,
+    phase: input.phase,
+  });
+}
+
+function buildHtrAccountingContext(input: {
+  bridge: HtrAccountingCycleBridge;
+  context: OrgContext;
+  orderRepository: OrderRepository;
+}): HtrAccountingCycleContext {
+  return {
+    bridge: input.bridge,
+    resolveInventoryOpenQtyBySymbol: () =>
+      resolveHtrInventoryOpenQtyBySymbol({
+        context: input.context,
+        orderRepository: input.orderRepository,
+      }),
+  };
+}
+
 /**
  * Replays historical bars through `runPaperCycleOnce` (mock mode), applies the
  * versioned cost model on fills, and derives strategy metrics for export.
@@ -213,6 +304,36 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
 
   const wp17Active =
     input.historicalExecutionProfile?.profileId === HTR_HISTORICAL_EXECUTION_PROFILE_V1;
+
+  const htrAccountingBridge = wp17Active
+    ? createHtrAccountingCycleBridge({
+        organizationId: input.context.organizationId,
+        accountKey: input.accountKey,
+        runId: input.runId,
+        frontierAsOf: input.window.start.toISOString(),
+      })
+    : null;
+
+  if (htrAccountingBridge && input.initialAccountingFrontierState) {
+    restoreAccountingBridgeFromCheckpoint(
+      htrAccountingBridge,
+      input.initialAccountingFrontierState,
+    );
+    await reconcileHtrAccountingBridge({
+      bridge: htrAccountingBridge,
+      context: input.context,
+      orderRepository: input.orderRepository,
+      phase: "checkpoint_restore",
+    });
+  }
+
+  const htrAccounting =
+    htrAccountingBridge &&
+    buildHtrAccountingContext({
+      bridge: htrAccountingBridge,
+      context: input.context,
+      orderRepository: input.orderRepository,
+    });
 
   const activeRepository = wp17Active
     ? input.orderRepository
@@ -294,7 +415,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     clockAdvanceTimer.end();
     benchmarkObserver.sampleMemory("clock-advance", cycleIndex);
 
-    if (wp17Active && input.historicalExecutionProfile) {
+    if (wp17Active && input.historicalExecutionProfile && htrAccountingBridge) {
       const closedBar = snapshot.bars.at(-1);
       if (closedBar) {
         const persistence: HistoricalExecutionPersistencePort = {
@@ -317,62 +438,129 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
             persistence,
             replayNowMs: new Date(snapshot.evaluatedAt).getTime(),
             refreshAccountState: async () => {
+              const openOrders = await costAwareRepository.listOpenOrders(input.context, {
+                executionMode: "mock",
+              });
               if (input.portfolio) {
-                const portfolio = await derivePortfolioAccountState({
-                  context: input.context,
-                  orderRepository: costAwareRepository,
+                const portfolio = derivePortfolioFromAccountingState({
+                  state: htrAccountingBridge.state,
                   runConfig: input.portfolio.runConfig,
                   limits: input.portfolio.limits,
                   stopDistanceProvider: input.portfolio.stopDistanceProvider,
-                  executionMode: "mock",
-                  markPrices: input.markPrices,
                 });
-                const openOrders = await costAwareRepository.listOpenOrders(input.context, {
-                  executionMode: "mock",
+                return toAccountRiskState({
+                  portfolio,
+                  openOrderCount: openOrders.length,
+                  accountPeakHwm: htrAccountingBridge.state.equityHwm,
+                  monthlyPeakHwm: htrAccountingBridge.state.equityHwm,
                 });
-                return toAccountRiskState({ portfolio, openOrderCount: openOrders.length });
               }
-              return deriveAccountRiskStateFromMockOrders({
-                context: input.context,
-                orderRepository: costAwareRepository,
-                executionMode: "mock",
+              return deriveAccountRiskStateFromBridge(htrAccountingBridge, {
+                openOrderCount: openOrders.length,
               });
             },
-            reconcileOrder: wp17Active
-              ? async () => undefined
-              : async (orderId) => {
-                  await input.deps.reconciliation.reconcile(input.context, {
-                    kind: "order",
-                    orderId,
-                  });
-                },
+            reconcileOrder: async () => undefined,
           },
         );
-        accountState = advance.accountState;
+        for (const event of advance.fillEvents) {
+          const order = await costAwareRepository.getOrderById(input.context, event.orderId);
+          if (!order) {
+            continue;
+          }
+          const economics = applyHistoricalExecutionEconomics(
+            event,
+            input.historicalExecutionProfile.model,
+          );
+          const fillId = historicalFillId({
+            organizationId: input.context.organizationId,
+            orderId: order.id,
+            fillSequence: event.fillSequence,
+            sourceBarIndex: event.sourceBarIndex,
+          });
+          consumeWp17FillIntoAccountingBridge(htrAccountingBridge, {
+            fill: {
+              fillId,
+              economics: {
+                symbol: economics.symbol,
+                side: economics.side,
+                quantity: economics.quantity,
+                grossFillPrice: economics.grossFillPrice,
+                grossNotional: economics.grossNotional,
+                netFillPrice: economics.netFillPrice,
+                feeAmount: economics.feeAmount,
+                netCashEffect: economics.netCashEffect,
+                spreadCost: economics.spreadCost,
+                impactSlippageCost: economics.impactSlippageCost,
+                totalExecutionCost: economics.totalExecutionCost,
+                economicsContentDigest: economics.economicsContentDigest,
+              },
+              executedAt: event.fillTimestamp.toISOString(),
+            },
+            cycleIndex,
+          });
+        }
+        attachClosed1mMarkToAccountingBridge(htrAccountingBridge, closedBar, cycleIndex);
+        await reconcileHtrAccountingBridge({
+          bridge: htrAccountingBridge,
+          context: input.context,
+          orderRepository: costAwareRepository,
+          cycleIndex,
+          phase: "frontier_mutation",
+        });
+        const openOrders = await costAwareRepository.listOpenOrders(input.context, {
+          executionMode: "mock",
+        });
+        if (input.portfolio) {
+          const portfolio = derivePortfolioFromAccountingState({
+            state: htrAccountingBridge.state,
+            runConfig: input.portfolio.runConfig,
+            limits: input.portfolio.limits,
+            stopDistanceProvider: input.portfolio.stopDistanceProvider,
+          });
+          accountState = toAccountRiskState({
+            portfolio,
+            openOrderCount: openOrders.length,
+            accountPeakHwm: htrAccountingBridge.state.equityHwm,
+            monthlyPeakHwm: htrAccountingBridge.state.equityHwm,
+          });
+        } else {
+          accountState = deriveAccountRiskStateFromBridge(htrAccountingBridge, {
+            openOrderCount: openOrders.length,
+          });
+        }
       }
     }
 
     const paperCycleTimer = benchmarkObserver.beginStage("paper-cycle", cycleIndex);
     input.deps.researchReplayDeterminism?.setDecisionBarIndex?.(cycleIndex);
-    const result = await runPaperCycleOnce(input.deps, {
-      context: input.context,
-      snapshot,
-      fusedContext,
-      accountKey: input.accountKey,
-      defaultQuantity: input.defaultQuantity,
-      executionMode: "mock",
-      accountState,
-      orderRepository: costAwareRepository,
-      refreshAccountStateBetweenStrategies: input.refreshAccountStateBetweenStrategies,
-      telemetrySink: input.telemetrySink,
-      newId: input.newId,
-      portfolio: input.portfolio,
-      guardian: input.guardian,
-      hypothesisSessionState,
-      miCoreEnabled: profileActive ? true : input.miCoreEnabled,
-      reconstruction,
-      wp16: input.wp16,
-    });
+    let result: PaperCycleResult;
+    try {
+      result = await runPaperCycleOnce(input.deps, {
+        context: input.context,
+        snapshot,
+        fusedContext,
+        accountKey: input.accountKey,
+        defaultQuantity: input.defaultQuantity,
+        executionMode: "mock",
+        accountState,
+        orderRepository: costAwareRepository,
+        refreshAccountStateBetweenStrategies: input.refreshAccountStateBetweenStrategies,
+        telemetrySink: input.telemetrySink,
+        newId: input.newId,
+        portfolio: input.portfolio,
+        guardian: input.guardian,
+        hypothesisSessionState,
+        miCoreEnabled: profileActive ? true : input.miCoreEnabled,
+        reconstruction,
+        wp16: input.wp16,
+        htrAccounting: htrAccounting ?? undefined,
+      });
+    } catch (error) {
+      if (error instanceof HtrAccountingReconciliationTerminationError) {
+        break;
+      }
+      throw error;
+    }
     paperCycleTimer.end();
     benchmarkObserver.sampleMemory("paper-cycle", cycleIndex);
 
@@ -439,7 +627,27 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
 
     const accountRefreshTimer = benchmarkObserver.beginStage("account-state-refresh", cycleIndex);
     if (input.refreshAccountStateBetweenStrategies) {
-      if (input.portfolio) {
+      const openOrders = await costAwareRepository.listOpenOrders(input.context, {
+        executionMode: "mock",
+      });
+      if (htrAccountingBridge && input.portfolio) {
+        const portfolio = derivePortfolioFromAccountingState({
+          state: htrAccountingBridge.state,
+          runConfig: input.portfolio.runConfig,
+          limits: input.portfolio.limits,
+          stopDistanceProvider: input.portfolio.stopDistanceProvider,
+        });
+        accountState = toAccountRiskState({
+          portfolio,
+          openOrderCount: openOrders.length,
+          accountPeakHwm: htrAccountingBridge.state.equityHwm,
+          monthlyPeakHwm: htrAccountingBridge.state.equityHwm,
+        });
+      } else if (htrAccountingBridge) {
+        accountState = deriveAccountRiskStateFromBridge(htrAccountingBridge, {
+          openOrderCount: openOrders.length,
+        });
+      } else if (input.portfolio) {
         const portfolio = await derivePortfolioAccountState({
           context: input.context,
           orderRepository: costAwareRepository,
@@ -448,9 +656,6 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           stopDistanceProvider: input.portfolio.stopDistanceProvider,
           executionMode: "mock",
           markPrices: input.markPrices,
-        });
-        const openOrders = await costAwareRepository.listOpenOrders(input.context, {
-          executionMode: "mock",
         });
         accountState = toAccountRiskState({
           portfolio,
@@ -464,8 +669,29 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         });
       }
     }
+    if (htrAccountingBridge && !htrAccountingBridge.runTerminated) {
+      await reconcileHtrAccountingBridge({
+        bridge: htrAccountingBridge,
+        context: input.context,
+        orderRepository: costAwareRepository,
+        cycleIndex,
+        phase: "before_cycle_complete",
+      });
+    }
+    if (htrAccountingBridge?.runTerminated) {
+      break;
+    }
     accountRefreshTimer.end();
     benchmarkObserver.sampleMemory("account-state-refresh", cycleIndex);
+  }
+
+  if (htrAccountingBridge && !htrAccountingBridge.runTerminated) {
+    await reconcileHtrAccountingBridge({
+      bridge: htrAccountingBridge,
+      context: input.context,
+      orderRepository: costAwareRepository,
+      phase: "before_terminal_export",
+    });
   }
 
   const exportInput = {
@@ -485,6 +711,10 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     markPrices: input.markPrices,
     exportedAt: input.exportedAt,
     historicalExecutionModel: wp17Active ? input.historicalExecutionProfile?.model : undefined,
+    accountingState: htrAccountingBridge?.state,
+    htrPnlReportSemanticDigest: htrAccountingBridge
+      ? computeAccountingSemanticDigest(htrAccountingBridge.state)
+      : undefined,
   };
 
   const evidenceExportTimer = benchmarkObserver.beginStage("evidence-export", null);
@@ -528,5 +758,11 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     canvasStateRef,
     bars1mPrefixLength: bars1mPrefix.length,
     bars1mPrefixEstimatedReferenceBytes: bars1mPrefix.length * 8,
+    accountingState: htrAccountingBridge?.state,
+    htrPnlReportV1: exportBundle.htrPnlReportV1,
+    accountingFrontierState: htrAccountingBridge
+      ? toAccountingCheckpointSlice(htrAccountingBridge)
+      : undefined,
+    htrRuntimeCallOrder: htrAccountingBridge?.callOrder,
   };
 }
