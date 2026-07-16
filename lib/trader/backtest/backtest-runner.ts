@@ -476,6 +476,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     executionMode: "mock" as const,
     markPrices: input.markPrices,
     exportedAt: input.exportedAt,
+    historicalExecutionModel: wp17Active ? input.historicalExecutionProfile?.model : undefined,
   };
 
   const evidenceExportTimer = benchmarkObserver.beginStage("evidence-export", null);

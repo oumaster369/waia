@@ -26,7 +26,10 @@ import {
   type TransitionOrderInput,
 } from "@/lib/trader/execution/order-repository.types";
 import { EXECUTION_FACT_KIND_HISTORICAL_SIMULATED } from "@/lib/trader/execution/historical-execution-model.types";
-import { assertCompleteHistoricalFillEconomics } from "@/lib/trader/execution/fill-economics";
+import {
+  assertCompleteHistoricalFillEconomics,
+  serializeHistoricalFillEconomicsForExport,
+} from "@/lib/trader/execution/fill-economics";
 import {
   assertTransition,
   TERMINAL_ORDER_STATES,
@@ -75,6 +78,45 @@ function mapOrderRow(row: typeof traderOrders.$inferSelect): OrderRow {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function appendHistoricalFillRecordedEvent(
+  db: WaiaDb,
+  context: OrgContext,
+  input: {
+    orderId: string;
+    occurredAt: Date;
+    economics: NonNullable<RecordFillInput["economics"]>;
+    fromState: OrderRow["state"];
+  },
+  deps: SqliteOrderRepositoryClockDeps = {},
+): void {
+  const newId = resolveOrderNewId(deps);
+  const scoped = requireOrgContext(context.organizationId);
+  const maxSeqRow = db
+    .select({ maxSeq: max(traderOrderEvents.seq) })
+    .from(traderOrderEvents)
+    .where(
+      and(
+        eq(traderOrderEvents.orderId, input.orderId),
+        orgScopedWhere(traderOrderEvents.organizationId, scoped),
+      ),
+    )
+    .all()[0];
+  const nextSeq = (maxSeqRow?.maxSeq ?? 0) + 1;
+  db.insert(traderOrderEvents)
+    .values({
+      id: newId(),
+      organizationId: scoped.organizationId,
+      orderId: input.orderId,
+      seq: nextSeq,
+      fromState: input.fromState,
+      toState: input.fromState,
+      eventType: "fill_recorded",
+      payload: serializeHistoricalFillEconomicsForExport(input.economics),
+      occurredAt: input.occurredAt,
+    })
+    .run();
 }
 
 function mapEventRow(row: typeof traderOrderEvents.$inferSelect): OrderEventRow {
@@ -415,6 +457,7 @@ export function recordFillSqlite(
   context: OrgContext,
   input: RecordFillInput,
   deps: SqliteOrderRepositoryClockDeps = {},
+  options?: { skipFillRecordedEvent?: boolean },
 ): FillRow {
   const newId = resolveOrderNewId(deps);
   const scoped = requireOrgContext(context.organizationId);
@@ -502,6 +545,25 @@ export function recordFillSqlite(
   if (!inserted) {
     throw new Error("[trader] fill insert failed");
   }
+
+  if (
+    !options?.skipFillRecordedEvent &&
+    input.executionFactKind === EXECUTION_FACT_KIND_HISTORICAL_SIMULATED &&
+    input.economics
+  ) {
+    appendHistoricalFillRecordedEvent(
+      db,
+      context,
+      {
+        orderId: input.orderId,
+        occurredAt: input.executedAt,
+        economics: input.economics,
+        fromState: parent.state,
+      },
+      deps,
+    );
+  }
+
   return mapFillRow(inserted);
 }
 
@@ -536,6 +598,7 @@ export function recordFillProgressSqlite(
       economicsRow: input.economicsRow,
     },
     deps,
+    { skipFillRecordedEvent: true },
   );
 
   const now = resolveOrderNow(deps);
@@ -574,7 +637,7 @@ export function recordFillProgressSqlite(
       fromState: existing.state,
       toState: existing.state,
       eventType: "fill_recorded",
-      payload: null,
+      payload: serializeHistoricalFillEconomicsForExport(input.economics),
       occurredAt: input.executedAt,
     })
     .run();

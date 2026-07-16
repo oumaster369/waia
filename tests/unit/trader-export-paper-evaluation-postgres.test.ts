@@ -97,6 +97,9 @@ function mockRepository(orders: OrderRow[]): OrderRepository {
     recordFill: async () => {
       throw new Error("read-only export");
     },
+    recordFillProgress: async () => {
+      throw new Error("read-only export");
+    },
     listEvents: async () => [],
     listFills: async (_context, orderId) => fillsByOrderId[orderId] ?? [],
   };

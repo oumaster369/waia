@@ -252,7 +252,7 @@ describe.skipIf(!integrationEnabled || !url)(
           });
           await repo.recordFill(context, payload);
         } else {
-          await repo.recordFillProgress!(context, payload as RecordFillProgressInput);
+          await repo.recordFillProgress(context, payload as RecordFillProgressInput);
         }
       }
 

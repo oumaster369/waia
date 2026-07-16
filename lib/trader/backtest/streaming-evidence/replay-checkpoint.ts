@@ -264,6 +264,30 @@ export function readReplayCheckpoint(runRootDir: string): ReplayCheckpointRecord
   return parseCheckpoint(JSON.parse(readFileSync(path, "utf8")) as unknown);
 }
 
+export function assertCheckpointExecutionState(
+  record: ReplayCheckpointRecord,
+  hasOpenHistoricalOrdersAtFrontier: boolean,
+): void {
+  if (!hasOpenHistoricalOrdersAtFrontier) {
+    return;
+  }
+  if (!record.executionState) {
+    throw new ReplayCheckpointError(
+      "REPLAY_CHECKPOINT_CORRUPT",
+      "checkpoint missing required executionState for open historical orders",
+    );
+  }
+  if (
+    record.executionState.executionModelSchemaVersion !==
+    "waia.trader.historical-execution-model.v1"
+  ) {
+    throw new ReplayCheckpointError(
+      "REPLAY_CHECKPOINT_CORRUPT",
+      "unsupported execution model schema in checkpoint executionState",
+    );
+  }
+}
+
 export function writeReplayRunChainManifest(
   runRootDir: string,
   manifest: ReplayRunChainManifest,

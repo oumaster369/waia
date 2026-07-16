@@ -200,3 +200,65 @@ export function assertCompleteHistoricalFillEconomics(
     throw new FillEconomicsInvariantError("[trader] economics_content_digest mismatch");
   }
 }
+
+export const HISTORICAL_FILL_ECONOMICS_EXPORT_SCHEMA_VERSION =
+  "waia.trader.historical-fill-economics-export.v1" as const;
+
+export type SerializedHistoricalFillEconomicsExport = {
+  schemaVersion: typeof HISTORICAL_FILL_ECONOMICS_EXPORT_SCHEMA_VERSION;
+  executionFactKind: typeof EXECUTION_FACT_KIND_HISTORICAL_SIMULATED;
+  executionModelId: typeof HISTORICAL_EXECUTION_MODEL_ID;
+  executionModelSchemaVersion: typeof HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION;
+  grossFillPrice: string;
+  grossNotional: string;
+  feeAmount: string;
+  spreadCost: string;
+  impactSlippageCost: string;
+  totalExecutionCost: string;
+  netFillPrice: string;
+  netCashEffect: string;
+  economicsContentDigest: string;
+  fillSequence: number;
+};
+
+export function serializeHistoricalFillEconomicsForExport(economics: CostedFillEconomics): string {
+  const body: SerializedHistoricalFillEconomicsExport = {
+    schemaVersion: HISTORICAL_FILL_ECONOMICS_EXPORT_SCHEMA_VERSION,
+    executionFactKind: EXECUTION_FACT_KIND_HISTORICAL_SIMULATED,
+    executionModelId: economics.executionModelId,
+    executionModelSchemaVersion: economics.executionModelSchemaVersion,
+    grossFillPrice: economics.grossFillPrice,
+    grossNotional: economics.grossNotional,
+    feeAmount: economics.feeAmount,
+    spreadCost: economics.spreadCost,
+    impactSlippageCost: economics.impactSlippageCost,
+    totalExecutionCost: economics.totalExecutionCost,
+    netFillPrice: economics.netFillPrice,
+    netCashEffect: economics.netCashEffect,
+    economicsContentDigest: economics.economicsContentDigest,
+    fillSequence: economics.fillSequence,
+  };
+  return JSON.stringify(body);
+}
+
+export function parseHistoricalFillEconomicsExportPayload(
+  payload: string | null,
+): SerializedHistoricalFillEconomicsExport | null {
+  if (!payload) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(payload) as SerializedHistoricalFillEconomicsExport;
+    if (parsed.schemaVersion !== HISTORICAL_FILL_ECONOMICS_EXPORT_SCHEMA_VERSION) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function computeHistoricalExecutionAggregateDigest(digests: readonly string[]): string {
+  const sorted = [...digests].sort((a, b) => a.localeCompare(b));
+  return sha256Hex(canonicalJsonString(sorted));
+}

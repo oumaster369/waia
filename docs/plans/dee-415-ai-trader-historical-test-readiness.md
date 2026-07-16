@@ -51,12 +51,15 @@ state:
   wp17PostgresMigrations: [0098, 0099]
   wp17SqliteMigrationRequired: false
   wp17SqliteAdapterModificationRequired: true
-  wp17ImplementationStatus: VALIDATED_PENDING_INDEPENDENT_POST_REVIEW
-  planningTerminalState: AWAITING_INDEPENDENT_POST_REVIEW
+  wp17ImplementationStatus: VALIDATED_PENDING_FRESH_INDEPENDENT_POST_REVIEW
+  wp17PhaseBVerdict: FAIL_MATERIAL_NONCONFORMANCE_REMEDIATED
+  wp17OriginalWorkCommitSha: 7b4304d0e0779b5d39f7899385f12aa8f185060d
+  wp17EvidenceStatus: RESTAGED_PENDING_FRESH_INDEPENDENT_REVIEW
+  planningTerminalState: AWAITING_FRESH_INDEPENDENT_POST_REVIEW
   newHumanTokenRequired: false
   requiredHumanTokens: []
-  nextHumanGate: INDEPENDENT_HTR_WP17_PHASE_B_REVIEW
-  nextAction: INDEPENDENT_COMPOSER_HTR_WP17_PHASE_B
+  nextHumanGate: FRESH_INDEPENDENT_HTR_WP17_PHASE_B_REVIEW
+  nextAction: FRESH_INDEPENDENT_COMPOSER_HTR_WP17_PHASE_B
   latestValidatedProductionCodeSha: 93d6908f47edd5a6484fbced64d35c79534e4136
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
   wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b

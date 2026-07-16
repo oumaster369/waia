@@ -600,7 +600,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
       return transitioned.order;
     }
 
-    await orderRepository.recordFillProgress!(context, payload as RecordFillProgressInput);
+    await orderRepository.recordFillProgress(context, payload as RecordFillProgressInput);
     const updated = await orderRepository.getOrderById(context, order.id);
     if (!updated) {
       throw new OrderNotFoundError(order.id);

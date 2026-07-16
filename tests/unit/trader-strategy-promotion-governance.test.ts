@@ -96,6 +96,9 @@ function mockRepository(orders: OrderRow[]): OrderRepository {
     recordFill: async () => {
       throw new Error("not implemented");
     },
+    recordFillProgress: async () => {
+      throw new Error("not implemented");
+    },
     listEvents: async () => [],
     listFills: async (_context, orderId) => fillsByOrderId[orderId] ?? [],
   };

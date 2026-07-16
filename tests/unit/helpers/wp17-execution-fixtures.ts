@@ -212,7 +212,7 @@ export function createWp17PersistencePort(
         return;
       }
 
-      await repo.recordFillProgress!(context, payload as RecordFillProgressInput);
+      await repo.recordFillProgress(context, payload as RecordFillProgressInput);
       if (compareDecimal(event.remainingQuantityAfter, "0") === 0) {
         const updated = await latestOrder(context, current.id);
         await repo.transitionOrder(context, {

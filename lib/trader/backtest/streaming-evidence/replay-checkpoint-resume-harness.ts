@@ -39,6 +39,12 @@ import { REPLAY_CHECKPOINT_SCHEMA_VERSION } from "@/lib/trader/backtest/streamin
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
 import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import { type HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
+import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
+import type { HistoricalExecutionCheckpointSlice } from "@/lib/trader/execution/historical-execution-model.types";
+import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
+import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import { ReplayCheckpointError } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
 import { buildResearchValidationCycleIdPrefix } from "@/lib/trader/research/research-backtest-cycle-id";
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
@@ -109,6 +115,37 @@ function createBenchmarkNewIdFactory(): () => string {
   };
 }
 
+export async function restoreWp17ExecutionFromCheckpoint(input: {
+  profile: HistoricalExecutionProfileV1;
+  slice: HistoricalExecutionCheckpointSlice;
+  orderRepository: OrderRepository;
+  context: OrgContext;
+}): Promise<void> {
+  if (input.slice.executionModelSchemaVersion !== input.profile.model.schemaVersion) {
+    throw new ReplayCheckpointError(
+      "REPLAY_CHECKPOINT_CORRUPT",
+      "executionState schema version mismatch",
+    );
+  }
+  const ordersById = new Map(
+    (
+      await Promise.all(
+        input.slice.openOrders.map(async (entry) => {
+          const order = await input.orderRepository.getOrderById(input.context, entry.orderId);
+          return order ? ([entry.orderId, order] as const) : null;
+        }),
+      )
+    ).filter((entry): entry is readonly [string, NonNullable<typeof entry>[1]] => entry !== null),
+  );
+  if (ordersById.size !== input.slice.openOrders.length) {
+    throw new ReplayCheckpointError(
+      "REPLAY_CHECKPOINT_CORRUPT",
+      "checkpoint open-order book missing durable order facts",
+    );
+  }
+  input.profile.exchange.restoreFromCheckpointSlice(input.slice, ordersById);
+}
+
 async function withDeterministicRandomUuid<T>(run: () => Promise<T>): Promise<T> {
   let sequence = 0;
   const originalRandomUuid = crypto.randomUUID.bind(crypto);
@@ -129,10 +166,31 @@ async function runFixtureStreamOnly(input: {
   maxCycles?: number;
   evidenceSealMode?: "complete" | "partial" | "none";
   evidenceSealReason?: string;
+  historicalExecutionProfile?: HistoricalExecutionProfileV1;
+  resumeExecutionState?: HistoricalExecutionCheckpointSlice;
+  orderRepository?: OrderRepository;
+  resumeContext?: OrgContext;
 }): Promise<CheckpointFixtureRunResult> {
   return withDeterministicRandomUuid(async () => {
     const fixture = loadApprovedBenchmarkFixture();
     const { session, context } = await seedBenchmarkSession();
+    const researchSession = input.historicalExecutionProfile
+      ? await createInMemoryResearchBacktestSession()
+      : null;
+    const activeContext = input.resumeContext ?? context;
+    const activeOrderRepository =
+      input.orderRepository ?? researchSession?.orderRepository ?? session.orderRepository;
+    const activeDeps = researchSession?.deps ?? session.deps;
+
+    if (input.resumeExecutionState && input.historicalExecutionProfile && input.resumeContext) {
+      await restoreWp17ExecutionFromCheckpoint({
+        profile: input.historicalExecutionProfile,
+        slice: input.resumeExecutionState,
+        orderRepository: activeOrderRepository,
+        context: input.resumeContext,
+      });
+    }
+
     mkdirSync(input.runDir, { recursive: true });
     const evidenceSink = createStreamingEvidenceSink({
       runDir: input.runDir,
@@ -153,13 +211,15 @@ async function runFixtureStreamOnly(input: {
 
     try {
       const backtest = await runBacktest({
-        context,
+        context: activeContext,
         barSource,
-        deps: session.deps,
-        orderRepository: session.orderRepository,
+        deps: activeDeps,
+        orderRepository: activeOrderRepository,
         accountKey: "htr-wp05-checkpoint",
         defaultQuantity: "0.01",
-        costModel: createCostModelV1("10", "5"),
+        costModel: input.historicalExecutionProfile
+          ? createCostModelV1("20", "10")
+          : createCostModelV1("10", "5"),
         strategySignalIds: [MEAN_REVERSION_V0],
         strategyId: MEAN_REVERSION_V0,
         strategyVersion: BENCHMARK_STRATEGY_VERSION,
@@ -183,6 +243,7 @@ async function runFixtureStreamOnly(input: {
         maxCycles: input.maxCycles,
         evidenceSealMode: input.evidenceSealMode,
         evidenceSealReason: input.evidenceSealReason,
+        historicalExecutionProfile: input.historicalExecutionProfile,
       });
 
       return {
@@ -193,6 +254,7 @@ async function runFixtureStreamOnly(input: {
       };
     } finally {
       session.cleanup();
+      researchSession?.cleanup();
     }
   });
 }
@@ -203,6 +265,7 @@ function buildCheckpointRecord(input: {
   datasetContentDigest: string;
   evidenceRunDir: string;
   replayTerminalState: ReplayRunTerminalState;
+  executionState?: HistoricalExecutionCheckpointSlice;
 }): ReplayCheckpointRecord {
   const evidence = resolveEvidenceFrontier(input.evidenceRunDir);
   const boundary = resolveResumeBoundary({
@@ -227,6 +290,7 @@ function buildCheckpointRecord(input: {
     dbConnectionMode: "harness",
     replayTerminalState: input.replayTerminalState,
     fixtureSha256: HTR_WP03_BENCHMARK_FIXTURE_SHA256,
+    executionState: input.executionState,
   };
   return {
     ...withoutDigest,

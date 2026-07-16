@@ -135,7 +135,7 @@ export interface OrderRepository {
   listOrders(context: OrgContext, filter?: OpenOrdersFilter): Promise<OrderRow[]>;
   transitionOrder(context: OrgContext, input: TransitionOrderInput): Promise<OrderRow>;
   recordFill(context: OrgContext, input: RecordFillInput): Promise<FillRow>;
-  recordFillProgress?(context: OrgContext, input: RecordFillProgressInput): Promise<FillRow>;
+  recordFillProgress(context: OrgContext, input: RecordFillProgressInput): Promise<FillRow>;
   listEvents(context: OrgContext, orderId: string): Promise<OrderEventRow[]>;
   listFills(context: OrgContext, orderId: string): Promise<FillRow[]>;
 }

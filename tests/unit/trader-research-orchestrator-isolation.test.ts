@@ -35,6 +35,7 @@ function stubOrderRepository(): OrderRepository {
     listFills: vi.fn(async () => []),
     transitionOrder: vi.fn(),
     recordFill: vi.fn(),
+    recordFillProgress: vi.fn(),
     listEvents: vi.fn(async () => []),
   };
 }
