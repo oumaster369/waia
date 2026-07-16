@@ -6,7 +6,7 @@ owner: Architect
 linkedSpec: docs/product-specs/ai-trader-historical-test-readiness-completion.md
 linkedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
 lastReviewed: 2026-07-16
-version: 0.1.1
+version: 0.1.2
 ---
 
 # AI-TRADER Historical-Test Readiness — Gap Registry
@@ -65,7 +65,7 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 | HTR-GAP-032 | Canonical artifacts not created | major | closed (2026-07-12; WORK COMMIT 6600708) | HTR-WP01 | — | HTR-WP01 | IB-HTR-01 |
 | HTR-GAP-033 | Master-plan frontmatter unsafe | major | closed | — | — | — | — |
 | HTR-GAP-034 | Gate-A naming collision + duplicate authority | major | closed (2026-07-12; WP01 canon + WP02 WORK COMMIT 7ec02dd; active AI-TRADER Gate-A renamed to M9 Accounting Gate, residuals classified, governance Gate A untouched, D-13 supersession recorded) | HTR-WP01 | HTR-WP02 | HTR-WP02 | IB-HTR-01 |
-| HTR-GAP-035 | Postgres parity CI-only (skipped locally) | major | open | HTR-WP17 | HTR-WP18, HTR-WP19 | HTR-WP19 | IB-HTR-17 |
+| HTR-GAP-035 | WP18/WP19 accounting-frontier + reconciliation Postgres local parity (Model B reclassification 2026-07-16; original CI-only/skipped-locally framing refuted; 0 env-gated skips; retained scope = accounting-class suites WP18/WP19 create) | major | open | HTR-WP18 | HTR-WP19 | HTR-WP19 | IB-HTR-18 |
 | HTR-GAP-036 | Forecast pre-registration + horizon resolution absent | blocker | open | HTR-WP14 | HTR-WP21 | HTR-WP21 | IB-HTR-14 |
 | HTR-GAP-037 | Calibration scoring (Brier/log-loss, sample-gated, survivorship-aware) MISSING | blocker | open | HTR-WP21 | — | HTR-WP21 | IB-HTR-21 |
 | HTR-GAP-038 | Knowledge-confidence update/decay unwired | major | open | HTR-WP21 | HTR-WP15 | HTR-WP21 | IB-HTR-21 |
@@ -73,6 +73,9 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 | HTR-GAP-040 | Hypothesis outcome resolution not evidence-driven in replay | major | open | HTR-WP21 | HTR-WP13 | HTR-WP21 | IB-HTR-21 |
 | HTR-GAP-041 | Activation authority + Core-uplift status not recorded | blocker | closed (2026-07-12; recorded in Completion Spec decision record, D-14/D-15) | HTR-WP01 | — | HTR-WP01 | IB-HTR-01 |
 | HTR-GAP-042 | Execution Server code-ready package/manifest contracts absent | major | open | HTR-WP23 | HTR-WP12 | HTR-WP23 | IB-HTR-23 |
+| HTR-GAP-043 | Local Postgres parity setup-hook failure (auth.users seeding + invalid UUID fixtures; 13 suites/29 tests not executed) | major | open | HTR-WP23 | — | HTR-WP23 | IB-HTR-23 |
+| HTR-GAP-044 | Research-intelligence Postgres parity multi-regime coverage assertion (5 tests) | major | open | HTR-WP13 | HTR-WP22 | HTR-WP22 | IB-HTR-13 |
+| HTR-GAP-045 | Twin/runtime Postgres suites auth.users FK (28+1 tests; outside AI-TRADER Macro-H; external Twin backlog — no false closure by WP15) | minor | open | — | — | external-Twin-backlog | IB-HTR-15 |
 
 ## Intake rules
 

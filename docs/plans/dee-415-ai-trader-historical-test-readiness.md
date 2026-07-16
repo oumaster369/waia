@@ -27,18 +27,18 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: HTR_WP17_ECONOMICS_CORRECTIVE_PHASE_B_PASS
-  programStatus: APPROVED_IDLE
-  childPlanStatus: DRAFT
-  buildAuthorized: false
-  buildAuthorizedScope: null
-  composerTerminalState: HTR_WP17_ECONOMICS_CORRECTIVE_PHASE_B_PASS
+  humanApproval: HTR_MACRO_H_ACTIVATED_BUILD_AUTHORIZED
+  programStatus: WP_ACTIVE
+  childPlanStatus: APPROVED_EXACT
+  buildAuthorized: true
+  buildAuthorizedScope: HTR-MACRO-H_PHASE_A_ONLY
+  composerTerminalState: HTR_MACRO_H_ACTIVATED_BUILD_AUTHORIZED
   activeWorkPackage: HTR-WP18
   currentWorkPackage: HTR-WP18
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-H
-  activeMacroStatus: PACKET_REFRESH_PENDING_HUMAN_APPROVAL
+  activeMacroStatus: APPROVED
   childPlanPacketAudit: PASS
   approvedChildPacketSha256: ba8daf2608dcea83aeae918150a73fd3c0713f951750a9ff45edfe1e2653baaa
   approvedChildPacketBytes: 64153
@@ -83,11 +83,36 @@ state:
   wp17EconomicsCorrectiveEvidencePath: replay-runs/RI-P7/htr-wp17-economics-corrective-conformance/
   wp17EconomicsCorrectiveManifestDigest: d5089c51860e446be3adab9ed7ef31723c67bdd4eb9e54016a8238a369fee279
   wp17EconomicsCorrectiveSemanticDigest: f00d69fe6a1445eb99453e4388eaab69f1192fbbcf7790fedc266d25dc2f50eb
-  planningTerminalState: HUMAN_REVIEW_MACRO_H_PACKET_AND_GAP035_DECISION
-  newHumanTokenRequired: true
-  requiredHumanTokens: [APPROVE-HTR-MACRO-H-PACKET, APPROVE-HTR-GAP-035-BASELINE-RECLASSIFICATION, CONFIRM-HTR-WP18-MIGRATION]
-  nextHumanGate: APPROVE-HTR-MACRO-H-PACKET
-  nextAction: HUMAN_REVIEW_MACRO_H_PACKET_AND_GAP035_DECISION
+  planningTerminalState: COMPOSER_EXECUTE_HTR_MACRO_H_PHASE_A
+  newHumanTokenRequired: false
+  requiredHumanTokens: []
+  nextHumanGate: null
+  nextAction: COMPOSER_EXECUTE_HTR_MACRO_H_PHASE_A
+  macroHStatus: APPROVED
+  macroHPacketSha256: 2263861b26e4a12409459e483a443c01eeb6431fefc3dca18ccc9d5a9631fc1a
+  macroHPacketBytes: 19927
+  macroHPacketLines: 440
+  macroHPacketStartingHead: bb212b6c79bcfb6a0fc485a64a15ca25f9cb644c
+  macroHPacketSnapshotPath: .cursor/plans/dee-415-macro-h/approval-candidates/2263861b26e4a12409459e483a443c01eeb6431fefc3dca18ccc9d5a9631fc1a/dee-415-htr-macro-h-exact-packet.plan.md
+  macroHAccountingBasis: DUAL_GROSS_NET_WEIGHTED_AVERAGE_BASIS_V1
+  macroHDirectWp17NetCashConsumption: true
+  macroHWorkPackages: [HTR-WP18, HTR-WP19, HTR-WP20]
+  wp18MigrationDecision: HUMAN_CONFIRMED
+  wp18PostgresMigrations: [0100, 0101]
+  wp19MigrationDecision: NONE
+  wp20MigrationDecision: NONE
+  macroHHumanActivation:
+    status: HUMAN_APPROVED_CONSUMED
+    activationDate: 2026-07-16
+    approvedPacketSha256: 2263861b26e4a12409459e483a443c01eeb6431fefc3dca18ccc9d5a9631fc1a
+    tokensConsumed:
+      - APPROVE-HTR-MACRO-H-PACKET
+      - APPROVE-HTR-GAP-035-BASELINE-RECLASSIFICATION
+      - CONFIRM-HTR-WP18-MIGRATION
+      - ACK-HTR-WP19-MIGRATION: none
+      - ACK-HTR-WP20-MIGRATION: none
+      - APPROVE-HTR-MACRO-H-BUILD
+    buildAuthorizedScope: HTR-MACRO-H_PHASE_A_ONLY
   readyForFullHistoricalTest: false
   finalPrAuthorized: false
   latestValidatedProductionCodeSha: f3368b2aa56bedf011ecd5c3fe8d10a94bf9621f
@@ -140,8 +165,17 @@ state:
   htrGap017: CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH
   htrGap023: OPEN
   htrGap035: OPEN
+  htrGap043: OPEN
+  htrGap044: OPEN
+  htrGap045: OPEN
   htrGap023ClosureOwner: HTR-WP18
   htrGap035ClosureOwner: HTR-WP19
+  htrGap035PrimaryOwner: HTR-WP18
+  htrGap043PrimaryOwner: HTR-WP23
+  htrGap043ClosureOwner: HTR-WP23
+  htrGap044PrimaryOwner: HTR-WP13
+  htrGap044ClosureOwner: HTR-WP22
+  htrGap045Disposition: external-Twin-backlog
   wp17HumanActivation:
     status: HUMAN_APPROVED_CONSUMED
     activationDate: 2026-07-16
@@ -437,7 +471,7 @@ state:
   macroEStatus: COMPLETE   # 2026-07-15 Composer Phase-B: HTR-WP13 CLOSEOUT
   activeMacroPackage: HTR-MACRO-H
   activeMacroWorkPackages: [HTR-WP18, HTR-WP19, HTR-WP20]
-  activeMacroStatus: DRAFT_EXACT_PENDING_HUMAN_REVIEW
+  activeMacroStatus: APPROVED
   phaseBReviewerPolicy:
     defaultReviewer: COMPOSER_2_5_INDEPENDENT_SESSION
     phaseBMustBe:
@@ -681,10 +715,15 @@ state:
     verdict: PASS
   htrGap035:
     status: OPEN
-    classification: POSTGRES_GATED_REPOSITORY_BASELINE_DEBT
-    primaryOwner: HTR-WP17
-    contributingOwners: [HTR-WP18, HTR-WP19]
+    classification: MODEL_B_ACCOUNTING_FRONTIER_RECONCILIATION_LOCAL_PARITY
+    baselineIdentifier: POSTGRES_ZERO_ENV_GATE_WITH_HOOK_CASCADE_BASELINE_V1
+    primaryOwner: HTR-WP18
+    contributingOwners: [HTR-WP19]
     closureOwner: HTR-WP19
+    blockingReadyForFullHistoricalTest: true
+    retainedFileSetSha256: 5d7e0fcdd1de00235b9d5f1b04cf4b4a8afa3c93e02347753ecd301cb81c8ef0
+    reclassifiedAt: 2026-07-16
+    supersededFraming: Postgres parity CI-only (skipped locally)
     preExistingFailingFiles: 18
     preExistingFailingTests: 34
     wp13MandatoryTests: 15_PASS
@@ -778,7 +817,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: APPROVED_IDLE` — **HTR-WP01..HTR-WP17 COMPLETE** (economics corrective Phase-B **PASS**); **HTR-WP17** economics corrective WORK `f3368b2` (parent `0e1b904`); independent Composer Phase-B economics review **PASS**; accepted economics-corrective evidence `replay-runs/RI-P7/htr-wp17-economics-corrective-conformance/` (manifest `d5089c51…`, semantic `f00d69fe…`); historical chain `7b4304d` → `6c6e693` → `47b2ece` + default-path correction `bc39900`; default-path evidence `replay-runs/RI-P7/htr-wp17-default-path-conformance/`; component evidence `replay-runs/RI-P7/htr-wp17-execution-simulation/`; current work package **HTR-WP18**; `childPlanStatus: DRAFT`; **Build not authorized** (`BUILD_AUTHORIZED: NO`); HTR-MACRO-H `PACKET_REFRESH_PENDING_HUMAN_APPROVAL`; HTR-GAP-016/017 **CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH**; economics defects A+B **CLOSED_CORRECTED**; HTR-GAP-023 **OPEN** (owner WP18); HTR-GAP-035 **OPEN** (owner WP18, Model B reclassification pending Human); `nextAction: HUMAN_REVIEW_MACRO_H_PACKET_AND_GAP035_DECISION`. |
+| Plan state | `state.status: in-progress` · `programStatus: WP_ACTIVE` — **HTR-WP01..HTR-WP17 COMPLETE**; **HTR-MACRO-H APPROVED** (packet `2263861b…`, starting HEAD `bb212b6`); **`BUILD_AUTHORIZED: YES`** scope `HTR-MACRO-H_PHASE_A_ONLY`; current work package **HTR-WP18**; `childPlanStatus: APPROVED_EXACT`; accounting basis `DUAL_GROSS_NET_WEIGHTED_AVERAGE_BASIS_V1`; WP18 migrations **0100/0101** confirmed; WP19/WP20 migration **NONE**; HTR-GAP-035 **OPEN** (Model B, primary WP18, closure WP19, blocking); HTR-GAP-043 **OPEN** (WP23, blocking); HTR-GAP-044 **OPEN** (historical WP13, closure WP22, non-blocking); HTR-GAP-045 **OPEN** (external Twin backlog, non-blocking); `nextAction: COMPOSER_EXECUTE_HTR_MACRO_H_PHASE_A`. |
 
 ## Approved decisions (recorded)
 
@@ -2204,9 +2243,9 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP15 | MKB read-model integration for replay | WP14 | ai | PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW (Macro F; migration NONE_READ_MODEL_ONLY) | — |
 | HTR-WP16 | Strategy pinning + gating + trial accounting + D-20 drawdown | WP13 | ai | COMPLETE (Composer independent Phase-B PASS 2026-07-15; WORK `93d6908`; migrations 0090–0097; accepted evidence `replay-runs/RI-P7/htr-wp16-strategy-gating/` semantic digest `97865938…`; HTR-GAP-020/021 CLOSED) | `93d6908` (WORK) |
 | HTR-WP17 | Historical execution-simulation realism | WP09 | backend | **complete** | WORK `7b4304d` + correction `6c6e693`; Composer 2.5 fresh independent Phase-B PASS |
-| HTR-WP18 | Inventory & accounting parity | WP17 | backend | pending | — |
-| HTR-WP19 | Reality reconciliation + M9-class regression closure | WP18 | backend | pending | — |
-| HTR-WP20 | Guardian/exits completion + closed-trade reality invariants | WP18,WP19 | backend | pending | — |
+| HTR-WP18 | Inventory & accounting parity | WP17 | backend | APPROVED | — |
+| HTR-WP19 | Reality reconciliation + M9-class regression closure | WP18 | backend | APPROVED | — |
+| HTR-WP20 | Guardian/exits completion + closed-trade reality invariants | WP18,WP19 | backend | APPROVED | — |
 | HTR-WP21 | Outcome Resolution, Forecast Calibration & Knowledge Confidence Update | WP14,WP15,WP19,WP20 | ai | pending | — |
 | HTR-WP22 | Resilience + performance qualification | WP04,WP05,WP09,WP16,WP19,WP21 | backend | pending | — |
 | HTR-WP23 | Operator runbook + readiness preflight + Execution Server package + Certification prep | WP20,WP22 | infra | pending | — |
@@ -2230,11 +2269,11 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## Current work package (HTR-WP18 — Macro H draft pending Human review)
+## Current work package (HTR-WP18 — Macro H activated)
 
-**CURRENT (2026-07-16):** HTR-WP01..HTR-WP17 **COMPLETE** (economics corrective Phase-B **PASS**); economics corrective WORK `f3368b2aa56bedf011ecd5c3fe8d10a94bf9621f` (parent `0e1b904`); independent Composer Phase-B economics review **PASS**; effective validated production code `f3368b2`; accepted economics-corrective evidence `replay-runs/RI-P7/htr-wp17-economics-corrective-conformance/` (manifest `d5089c51860e446be3adab9ed7ef31723c67bdd4eb9e54016a8238a369fee279`, semantic `f00d69fe6a1445eb99453e4388eaab69f1192fbbcf7790fedc266d25dc2f50eb`); historical chain `7b4304d` → `6c6e693` → `47b2ece`; default-path correction WORK `bc39900`; default-path evidence `replay-runs/RI-P7/htr-wp17-default-path-conformance/`; component evidence `replay-runs/RI-P7/htr-wp17-execution-simulation/`; economics defects A+B **CLOSED_CORRECTED**; migration **NONE**; backfill **NO**; current work package **HTR-WP18**; `BUILD_AUTHORIZED: NO`; HTR-MACRO-H `PACKET_REFRESH_PENDING_HUMAN_APPROVAL`; `activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md`; `childPlanStatus: DRAFT`; HTR-GAP-016/017 **CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH**; HTR-GAP-023 **OPEN** (owner WP18); HTR-GAP-035 **OPEN** (owner WP18, Model B reclassification pending Human); `nextAction: HUMAN_REVIEW_MACRO_H_PACKET_AND_GAP035_DECISION`; no PR; no FHV/holdout/paper/live/capital.
+**CURRENT (2026-07-16):** HTR-MACRO-H **ACTIVATED** (`HTR_MACRO_H_ACTIVATED_BUILD_AUTHORIZED`); approved packet `2263861b26e4a12409459e483a443c01eeb6431fefc3dca18ccc9d5a9631fc1a` (bytes 19927, lines 440); packet starting HEAD `bb212b6c79bcfb6a0fc485a64a15ca25f9cb644c`; `BUILD_AUTHORIZED: YES` scope `HTR-MACRO-H_PHASE_A_ONLY`; accounting basis `DUAL_GROSS_NET_WEIGHTED_AVERAGE_BASIS_V1`; direct WP17 `netCashEffect` consumption; WP18 migrations **0100/0101**; WP19/WP20 migration **NONE**; current work package **HTR-WP18**; `childPlanStatus: APPROVED_EXACT`; `programStatus: WP_ACTIVE`; `LATEST_VALIDATED_PRODUCTION_CODE_SHA: f3368b2`; GAP-035 Model B applied (HTR-GAP-043/044/045 added); `nextAction: COMPOSER_EXECUTE_HTR_MACRO_H_PHASE_A`; no PR; no FHV/holdout/paper/live/capital.
 
-**Next Human gate:** `REVIEW_AND_APPROVE_HTR_WP17_CHILD_PACKET`. **Next action:** `PLAN_HTR_WP17_CHILD_PACKET`.
+**Next action:** `COMPOSER_EXECUTE_HTR_MACRO_H_PHASE_A` (WP18 → WP19 → WP20 sequential Build).
 
 **HISTORICAL (NON_OPERATIONAL):** Sections below describing Macro-C/D/E/F Phase-A authorization states are audit history only — marked `HISTORICAL_CONSUMED` or `SUPERSEDED_EXPLICIT` where applicable.
 
