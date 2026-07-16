@@ -27,15 +27,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: HTR_WP17_HUMAN_ACTIVATION_COMPLETE
-  programStatus: WP_VALIDATED
-  childPlanStatus: VALIDATED
+  humanApproval: HTR_WP17_CLOSEOUT_COMPLETE
+  programStatus: APPROVED_IDLE
+  childPlanStatus: DRAFT
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: AWAITING_INDEPENDENT_POST_REVIEW
-  activeWorkPackage: HTR-WP17
-  currentWorkPackage: HTR-WP17
-  activeChildPlan: .cursor/plans/dee-415-htr-wp17-execution-simulation-realism.plan.md
+  composerTerminalState: WORK_PACKAGE_COMPLETE
+  activeWorkPackage: HTR-WP18
+  currentWorkPackage: HTR-WP18
+  activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   childPlanPacketAudit: PASS
   approvedChildPacketSha256: ba8daf2608dcea83aeae918150a73fd3c0713f951750a9ff45edfe1e2653baaa
   approvedChildPacketBytes: 64153
@@ -51,16 +51,23 @@ state:
   wp17PostgresMigrations: [0098, 0099]
   wp17SqliteMigrationRequired: false
   wp17SqliteAdapterModificationRequired: true
-  wp17ImplementationStatus: VALIDATED_PENDING_FRESH_INDEPENDENT_POST_REVIEW
-  wp17PhaseBVerdict: FAIL_MATERIAL_NONCONFORMANCE_REMEDIATED
+  wp17ImplementationStatus: WORK_PACKAGE_COMPLETE
+  wp17FreshIndependentPhaseBVerdict: PASS
+  wp17PhaseBVerdict: PASS
   wp17OriginalWorkCommitSha: 7b4304d0e0779b5d39f7899385f12aa8f185060d
-  wp17EvidenceStatus: RESTAGED_PENDING_FRESH_INDEPENDENT_REVIEW
-  planningTerminalState: AWAITING_FRESH_INDEPENDENT_POST_REVIEW
-  newHumanTokenRequired: false
-  requiredHumanTokens: []
-  nextHumanGate: FRESH_INDEPENDENT_HTR_WP17_PHASE_B_REVIEW
-  nextAction: FRESH_INDEPENDENT_COMPOSER_HTR_WP17_PHASE_B
-  latestValidatedProductionCodeSha: 93d6908f47edd5a6484fbced64d35c79534e4136
+  wp17CorrectionWorkCommitSha: 6c6e69371719c5be41d54dcb613a9eb32a86073d
+  wp17EffectiveValidatedWorkHead: 6c6e69371719c5be41d54dcb613a9eb32a86073d
+  wp17EvidenceStatus: ACCEPTED
+  wp17AcceptedEvidenceSourceGitSha: 6c6e69371719c5be41d54dcb613a9eb32a86073d
+  wp17AcceptedEvidenceManifestDigest: a8402a9c2a6d448714af75a2d48e227790a61b850cb900f2047c7466b4ffd938
+  wp17AcceptedEvidenceSemanticDigest: 73b1720722fa434a28b0f8b4d33302f4edcbb175923e0d8e68be958434e2f68b
+  wp17AcceptedEvidencePath: replay-runs/RI-P7/htr-wp17-execution-simulation/
+  planningTerminalState: AWAITING_HUMAN_HTR_MACRO_H_REVIEW
+  newHumanTokenRequired: true
+  requiredHumanTokens: [REVIEW_AND_APPROVE_HTR_MACRO_H]
+  nextHumanGate: HUMAN_REVIEW_HTR_MACRO_H_PACKET_AND_MIGRATIONS
+  nextAction: REVIEW_AND_APPROVE_HTR_MACRO_H
+  latestValidatedProductionCodeSha: 6c6e69371719c5be41d54dcb613a9eb32a86073d
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
   wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b
   wp15WorkCommitSha: 645f4be149e65b5e401c3e9bc76cca3f415b23a2
@@ -106,10 +113,12 @@ state:
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  htrGap016: OPEN
-  htrGap017: OPEN
+  htrGap016: CLOSED
+  htrGap017: CLOSED
   htrGap023: OPEN
   htrGap035: OPEN
+  htrGap023ClosureOwner: HTR-WP18
+  htrGap035ClosureOwner: HTR-WP19
   wp17HumanActivation:
     status: HUMAN_APPROVED_CONSUMED
     activationDate: 2026-07-16
@@ -621,8 +630,8 @@ state:
     - HTR-WP14
     - HTR-WP15
     - HTR-WP16
-  remainingWorkPackages:
     - HTR-WP17
+  remainingWorkPackages:
     - HTR-WP18
     - HTR-WP19
     - HTR-WP20
@@ -745,7 +754,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: APPROVED_IDLE` — **HTR-WP01..HTR-WP16 COMPLETE**; **HTR-MACRO-G COMPLETE** (WP16 WORK `93d6908` + CLOSEOUT `2e8835e`; Composer 2.5 independent Phase-B PASS); current work package **HTR-WP17**; `childPlanStatus: NOT_PLANNED`; **Build not authorized** (`BUILD_AUTHORIZED: NO`); **D-20 HUMAN_APPROVED_CONSUMED**; accepted WP16 evidence `replay-runs/RI-P7/htr-wp16-strategy-gating/`; HTR-GAP-035 **OPEN** (18 files / 34 tests unchanged parent→closeout); `nextAction: PLAN_HTR_WP17_CHILD_PACKET`. **HISTORICAL (CONSUMED/SUPERSEDED):** pre-WP16-closeout Macro-G Phase-A authorization; pre-activation HARDENED_EXACT_AWAITING_HUMAN_DECISIONS state; Macro F Build authorization; v1 WP14 0082..0087 three-table proposal. |
+| Plan state | `state.status: in-progress` · `programStatus: APPROVED_IDLE` — **HTR-WP01..HTR-WP17 COMPLETE**; **HTR-WP17** WORK `7b4304d` + correction `6c6e693` + fresh independent Composer Phase-B PASS; current work package **HTR-WP18**; `childPlanStatus: DRAFT`; **Build not authorized** (`BUILD_AUTHORIZED: NO`); accepted WP17 evidence `replay-runs/RI-P7/htr-wp17-execution-simulation/`; HTR-GAP-016/017 **CLOSED**; HTR-GAP-023 **OPEN** (owner WP18); HTR-GAP-035 **OPEN** (owner WP19); `nextAction: REVIEW_AND_APPROVE_HTR_MACRO_H`. **HISTORICAL (CONSUMED/SUPERSEDED):** pre-WP17-closeout activation/Phase-A state; WP17 original evidence `7b4304d` superseded by correction `6c6e693`. |
 
 ## Approved decisions (recorded)
 
@@ -2170,7 +2179,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW (WORK `b8eeadb`; migration HUMAN_CONFIRMED_V2) | — |
 | HTR-WP15 | MKB read-model integration for replay | WP14 | ai | PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW (Macro F; migration NONE_READ_MODEL_ONLY) | — |
 | HTR-WP16 | Strategy pinning + gating + trial accounting + D-20 drawdown | WP13 | ai | COMPLETE (Composer independent Phase-B PASS 2026-07-15; WORK `93d6908`; migrations 0090–0097; accepted evidence `replay-runs/RI-P7/htr-wp16-strategy-gating/` semantic digest `97865938…`; HTR-GAP-020/021 CLOSED) | `93d6908` (WORK) |
-| HTR-WP17 | Historical execution-simulation realism | WP09 | backend | pending | — |
+| HTR-WP17 | Historical execution-simulation realism | WP09 | backend | **complete** | WORK `7b4304d` + correction `6c6e693`; Composer 2.5 fresh independent Phase-B PASS |
 | HTR-WP18 | Inventory & accounting parity | WP17 | backend | pending | — |
 | HTR-WP19 | Reality reconciliation + M9-class regression closure | WP18 | backend | pending | — |
 | HTR-WP20 | Guardian/exits completion + closed-trade reality invariants | WP18,WP19 | backend | pending | — |
@@ -2197,9 +2206,9 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## Current work package (HTR-WP17 — not planned; Build not authorized)
+## Current work package (HTR-WP18 — Macro H draft pending Human review)
 
-**CURRENT (2026-07-15):** HTR-WP01..HTR-WP16 **COMPLETE**; HTR-MACRO-G **COMPLETE** (WP16 WORK `93d6908`; independent Composer 2.5 Phase-B PASS); current work package **HTR-WP17**; `BUILD_AUTHORIZED: NO`; `activeChildPlan: null`; `childPlanStatus: NOT_PLANNED`; **D-20 HUMAN_APPROVED_CONSUMED**; accepted WP16 evidence `replay-runs/RI-P7/htr-wp16-strategy-gating/`; no PR; no FHV/holdout/paper/live/capital.
+**CURRENT (2026-07-16):** HTR-WP01..HTR-WP17 **COMPLETE**; HTR-WP17 WORK `7b4304d0e0779b5d39f7899385f12aa8f185060d` + forward correction `6c6e69371719c5be41d54dcb613a9eb32a86073d`; fresh independent Composer Phase-B **PASS**; effective validated production head `6c6e693`; accepted WP17 evidence `replay-runs/RI-P7/htr-wp17-execution-simulation/`; current work package **HTR-WP18**; `BUILD_AUTHORIZED: NO`; `activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md`; `childPlanStatus: DRAFT`; HTR-GAP-016/017 **CLOSED**; HTR-GAP-023 **OPEN** (owner WP18); HTR-GAP-035 **OPEN** (owner WP19); `nextAction: REVIEW_AND_APPROVE_HTR_MACRO_H`; no PR; no FHV/holdout/paper/live/capital.
 
 **Next Human gate:** `REVIEW_AND_APPROVE_HTR_WP17_CHILD_PACKET`. **Next action:** `PLAN_HTR_WP17_CHILD_PACKET`.
 
