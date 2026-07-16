@@ -35,12 +35,18 @@ function roundHalfUpScaled(scaled: bigint): bigint {
   return negative ? -result : result;
 }
 
+/**
+ * monetaryAmount = notional × bps / 10000 at scale-8 with HALF_UP.
+ * Both operands are scale-8 scaled integers; their product is scale-16.
+ * One reduction divides by 10000 × DECIMAL_SCALE_FACTOR.
+ */
 function multiplyBpsRoundHalfUp(notional: string, bps: string): string {
   const scaledNotional = parseDecimal(notional);
   const scaledBps = parseDecimal(bps);
   const product = scaledNotional * scaledBps;
-  const rounded = roundHalfUpScaled(product);
-  const quotient = rounded / 10000n;
+  const divisor = 10000n * DECIMAL_SCALE_FACTOR;
+  const half = divisor / 2n;
+  const quotient = (product + half) / divisor;
   return formatDecimal(quotient);
 }
 
@@ -101,7 +107,6 @@ export function applyHistoricalExecutionEconomics(
     parseDecimal(feeAmount) + parseDecimal(spreadCost) + parseDecimal(impactSlippageCost),
   );
 
-  const sideMultiplier = event.side === "buy" ? 1n : -1n;
   const spreadHalf = divideRoundHalfUp(
     multiplyDecimal(event.grossFillPrice, model.halfSpreadBpsPerSide),
     "10000",
@@ -121,9 +126,10 @@ export function applyHistoricalExecutionEconomics(
       : grossScaled - spreadScaled - impactScaled;
   const netFillPrice = formatDecimal(netPriceScaled);
 
+  const principalScaled = parseDecimal(multiplyDecimal(netFillPrice, event.sliceQuantity));
+  const feeScaled = parseDecimal(feeAmount);
   const netCashScaled =
-    sideMultiplier * parseDecimal(multiplyDecimal(netFillPrice, event.sliceQuantity)) +
-    (event.side === "buy" ? -parseDecimal(feeAmount) : -parseDecimal(feeAmount));
+    event.side === "buy" ? -(principalScaled + feeScaled) : principalScaled - feeScaled;
   const netCashEffect = formatDecimal(netCashScaled);
 
   const base: Omit<CostedFillEconomics, "economicsContentDigest"> = {
