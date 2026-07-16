@@ -27,14 +27,39 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: HTR_MACRO_G_INDEPENDENT_PHASE_B_COMPLETE
-  programStatus: APPROVED_IDLE
-  childPlanStatus: NOT_PLANNED
-  buildAuthorized: NO
-  buildAuthorizedScope: null
-  composerTerminalState: HTR_MACRO_G_COMPLETE
+  humanApproval: HTR_WP17_HUMAN_ACTIVATION_COMPLETE
+  programStatus: WP_ACTIVE
+  childPlanStatus: APPROVED
+  buildAuthorized: true
+  buildAuthorizedScope: HTR-WP17_PHASE_A_ONLY
+  composerTerminalState: READY_FOR_COMPOSER_HTR_WP17_PHASE_A
   activeWorkPackage: HTR-WP17
   currentWorkPackage: HTR-WP17
+  activeChildPlan: .cursor/plans/dee-415-htr-wp17-execution-simulation-realism.plan.md
+  childPlanPacketAudit: PASS
+  approvedChildPacketSha256: ba8daf2608dcea83aeae918150a73fd3c0713f951750a9ff45edfe1e2653baaa
+  approvedChildPacketBytes: 64153
+  approvedChildPacketLines: 835
+  approvedChildPacketImmutable: true
+  approvedChildPacketSnapshotPath: .cursor/plans/dee-415-wp17/approved-packets/ba8daf2608dcea83aeae918150a73fd3c0713f951750a9ff45edfe1e2653baaa/dee-415-htr-wp17-execution-simulation-realism.plan.md
+  activeControllerSha256: 9ebc156652f2be116aa34383f5e17bc53c9436f704c560c776cf24b2270c4ed6
+  activeControllerBytes: 65407
+  activeControllerLines: 860
+  d5Status: HUMAN_APPROVED_CONSUMED
+  d5ApprovalDate: 2026-07-16
+  d5ModelId: htr-historical-execution-v1
+  d5SchemaVersion: waia.trader.historical-execution-model.v1
+  wp17MigrationDecision: HUMAN_CONFIRMED
+  wp17MigrationApprovalDate: 2026-07-16
+  wp17PostgresMigrations: [0098, 0099]
+  wp17SqliteMigrationRequired: false
+  wp17SqliteAdapterModificationRequired: true
+  wp17ImplementationStatus: NOT_STARTED
+  planningTerminalState: READY_FOR_COMPOSER_HTR_WP17_PHASE_A
+  newHumanTokenRequired: false
+  requiredHumanTokens: []
+  nextHumanGate: NONE_UNTIL_HTR_WP17_PHASE_A_REPORT
+  nextAction: COMPOSER_EXECUTE_HTR_WP17_PHASE_A
   latestValidatedProductionCodeSha: 93d6908f47edd5a6484fbced64d35c79534e4136
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
   wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b
@@ -52,7 +77,6 @@ state:
   wp16EvidenceSemanticDigest: 97865938fbe3888bbdb416a238dccb6d8b341f313939ab37376d78617e9e3c81
   wp16AcceptedEvidencePath: replay-runs/RI-P7/htr-wp16-strategy-gating/
   wp16AcceptedArtifactDigest: e7ff494d6d1ac32af186e5c0971a662134aa26f966e18dbc4ee9b17b72ab3fd9
-  planningTerminalState: HTR_MACRO_G_INDEPENDENT_PHASE_B_CLOSEOUT
   governanceStateAuthority: GIT_HEAD
   activationBaselineSha: 1dd2b19f08ac9af3edc1c44a020a6246789f16f7   # pre-activation harden commit; not self-referential to the activation commit being created
   governanceReconciledFromHead: a0928d5d9bb4ef886e4403a7d08157d5261e272f   # post-Macro-F reconciliation baseline (D-20 refresh commit)
@@ -60,8 +84,6 @@ state:
   macroFPhaseAStartingHead: 250994f92bed9dd5604bcc5fcb663de0d190506b
   macroFPhaseAStartingHeadClassification: NON_SEMANTIC_GOVERNANCE_DESCENDANT_OF_HUMAN_AUTHORIZED_ACTIVATION
   buildAuthorizationReopened: YES
-  newHumanTokenRequired: NO
-  requiredHumanTokens: []
   wp14ImplementationStatus: WORK_PACKAGE_COMPLETE
   wp15ImplementationStatus: WORK_PACKAGE_COMPLETE
   wp16ImplementationStatus: WORK_PACKAGE_COMPLETE
@@ -74,8 +96,6 @@ state:
   wp16MigrationDecision: HUMAN_APPROVED_CONSUMED
   wp16EvidenceLifecycle: HTR_WP16_CLEAN_WORK_COMMIT_EVIDENCE_STAGING_V1
   d20: HUMAN_APPROVED_CONSUMED
-  nextHumanGate: REVIEW_AND_APPROVE_HTR_WP17_CHILD_PACKET
-  nextAction: PLAN_HTR_WP17_CHILD_PACKET
   finalPrAuthorized: NO
   readyForFullHistoricalTest: false
   macroCMigrationDecision: NONE
@@ -86,7 +106,21 @@ state:
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  activeChildPlan: null
+  htrGap016: OPEN
+  htrGap017: OPEN
+  htrGap023: OPEN
+  htrGap035: OPEN
+  wp17HumanActivation:
+    status: HUMAN_APPROVED_CONSUMED
+    activationDate: 2026-07-16
+    approvedPacketSha256: ba8daf2608dcea83aeae918150a73fd3c0713f951750a9ff45edfe1e2653baaa
+    tokensConsumed:
+      - APPROVE-HTR-WP17-CHILD-PACKET
+      - APPROVE-HTR-D5
+      - CONFIRM-HTR-WP17-MIGRATION
+      - APPROVE-HTR-WP17-BUILD
+    buildAuthorizedScope: HTR-WP17_PHASE_A_ONLY
+    implementationStatus: NOT_STARTED
   intelligenceTranche:
     controller: .cursor/plans/dee-415-htr-wp13-wp16-intelligence-rolling.plan.md
     status: COMPLETE
