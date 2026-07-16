@@ -27,20 +27,18 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: HTR_WP17_DEFAULT_PATH_CONFORMANCE_CORRECTION_PENDING_REVIEW
-  programStatus: WP_VALIDATED
+  humanApproval: HTR_WP17_DEFAULT_PATH_CONFORMANCE_PHASE_B_PASS
+  programStatus: APPROVED_IDLE
   childPlanStatus: DRAFT
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: AWAITING_FRESH_INDEPENDENT_WP17_DEFAULT_PATH_CONFORMANCE_REVIEW
-  activeWorkPackage: HTR-WP17
-  currentWorkPackage: HTR-WP17
-  activeCorrection:
-    id: HTR-WP17-DEFAULT-PATH-CONFORMANCE
-    status: VALIDATED_PENDING_FRESH_INDEPENDENT_REVIEW
+  composerTerminalState: WORK_PACKAGE_COMPLETE_REVALIDATED_DEFAULT_PATH
+  activeWorkPackage: HTR-WP18
+  currentWorkPackage: HTR-WP18
+  activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-H
-  activeMacroStatus: BLOCKED_BY_WP17_DEFAULT_PATH_REVALIDATION
+  activeMacroStatus: REFRESH_REQUIRED_AFTER_WP17_REVALIDATION
   childPlanPacketAudit: PASS
   approvedChildPacketSha256: ba8daf2608dcea83aeae918150a73fd3c0713f951750a9ff45edfe1e2653baaa
   approvedChildPacketBytes: 64153
@@ -56,31 +54,33 @@ state:
   wp17PostgresMigrations: [0098, 0099]
   wp17SqliteMigrationRequired: false
   wp17SqliteAdapterModificationRequired: true
-  wp17ImplementationStatus: VALIDATED_PENDING_FRESH_INDEPENDENT_DEFAULT_PATH_REVIEW
-  wp17FreshIndependentPhaseBVerdict: PENDING_DEFAULT_PATH_REVALIDATION
+  wp17ImplementationStatus: WORK_PACKAGE_COMPLETE_REVALIDATED_DEFAULT_PATH
+  wp17FreshIndependentPhaseBVerdict: PASS
+  wp17DefaultPathPhaseBVerdict: PASS
   wp17PhaseBVerdict: PASS
   wp17OriginalWorkCommitSha: 7b4304d0e0779b5d39f7899385f12aa8f185060d
-  wp17CorrectionWorkCommitSha: c231f4a43fa43aaf6ad63688fa9c472a038e7544
-  wp17DefaultPathCorrectionWorkSha: c231f4a43fa43aaf6ad63688fa9c472a038e7544
-  wp17EffectiveValidatedWorkHead: 6c6e69371719c5be41d54dcb613a9eb32a86073d
-  wp17HistoricalCloseoutStatus: SUPERSEDED_PENDING_DEFAULT_PATH_CONFORMANCE
+  wp17CorrectionWorkCommitSha: 6c6e69371719c5be41d54dcb613a9eb32a86073d
+  wp17DefaultPathCorrectionWorkSha: bc39900bf3245adb95766d7b72eb85c045ff257a
+  wp17EffectiveValidatedWorkHead: bc39900bf3245adb95766d7b72eb85c045ff257a
+  wp17HistoricalCloseoutStatus: HISTORICAL_CLOSEOUT_SUPERSEDED_BY_DEFAULT_PATH_REVALIDATION
   wp17HistoricalCloseoutCommitSha: 47b2ece5c85b02290c7968c1ccb24dc4dea7685b
   wp17HistoricalEffectiveValidatedHead: 6c6e69371719c5be41d54dcb613a9eb32a86073d
-  wp17CloseoutCommitSha: 47b2ece5c85b02290c7968c1ccb24dc4dea7685b
-  wp17EvidenceStatus: CORRECTION_STAGED_NOT_ACCEPTED
-  wp17AcceptedEvidenceSourceGitSha: 6c6e69371719c5be41d54dcb613a9eb32a86073d
-  wp17AcceptedEvidenceClassification: HISTORICAL_ACCEPTED_COMPONENT_EVIDENCE_PATH_B_NOT_SUFFICIENT_ALONE_FOR_DEFAULT_PATH_CONFORMANCE
-  wp17AcceptedEvidenceManifestDigest: a8402a9c2a6d448714af75a2d48e227790a61b850cb900f2047c7466b4ffd938
-  wp17AcceptedEvidenceSemanticDigest: 73b1720722fa434a28b0f8b4d33302f4edcbb175923e0d8e68be958434e2f68b
-  wp17AcceptedEvidencePath: replay-runs/RI-P7/htr-wp17-execution-simulation/
-  planningTerminalState: AWAITING_FRESH_INDEPENDENT_WP17_DEFAULT_PATH_CONFORMANCE_REVIEW
+  wp17HistoricalEvidencePath: replay-runs/RI-P7/htr-wp17-execution-simulation/
+  wp17HistoricalEvidenceClassification: HISTORICAL_ACCEPTED_COMPONENT_EVIDENCE_PATH_B_NOT_SUFFICIENT_ALONE_FOR_DEFAULT_PATH_CONFORMANCE
+  wp17EvidenceStatus: ACCEPTED
+  wp17AcceptedEvidenceSourceGitSha: bc39900bf3245adb95766d7b72eb85c045ff257a
+  wp17AcceptedEvidenceClassification: HTR_WP17_DEFAULT_PATH_CONFORMANCE_EVIDENCE_ACCEPTED
+  wp17AcceptedEvidenceManifestDigest: 2b9152cb919bf3b1b8f7a9b79b52920a3251f42c4cd6688f7ca64188d75947fe
+  wp17AcceptedEvidenceSemanticDigest: fbb8f354f901de21b71efcd013d1f922490df015e22db377d503ae7b8198bc5a
+  wp17AcceptedEvidencePath: replay-runs/RI-P7/htr-wp17-default-path-conformance/
+  planningTerminalState: AUTHORIZE_HTR_MACRO_H_FINAL_BUILD_READINESS_HARDENING
   newHumanTokenRequired: true
-  requiredHumanTokens: [FRESH_INDEPENDENT_WP17_DEFAULT_PATH_CONFORMANCE_REVIEW]
-  nextHumanGate: HUMAN_AUTHORIZE_FRESH_INDEPENDENT_WP17_DEFAULT_PATH_REVIEW
-  nextAction: FRESH_INDEPENDENT_WP17_DEFAULT_PATH_CONFORMANCE_REVIEW
+  requiredHumanTokens: [AUTHORIZE_HTR_MACRO_H_FINAL_BUILD_READINESS_HARDENING]
+  nextHumanGate: AUTHORIZE_HTR_MACRO_H_FINAL_BUILD_READINESS_HARDENING
+  nextAction: AUTHORIZE_HTR_MACRO_H_FINAL_BUILD_READINESS_HARDENING
   readyForFullHistoricalTest: false
   finalPrAuthorized: false
-  latestValidatedProductionCodeSha: 6c6e69371719c5be41d54dcb613a9eb32a86073d
+  latestValidatedProductionCodeSha: bc39900bf3245adb95766d7b72eb85c045ff257a
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
   wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b
   wp15WorkCommitSha: 645f4be149e65b5e401c3e9bc76cca3f415b23a2
@@ -126,8 +126,8 @@ state:
   branch: dee-415-ai-trader-historical-test-readiness
   branchCreated: true
   buildStarted: true
-  htrGap016: CLOSED
-  htrGap017: CLOSED
+  htrGap016: CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH
+  htrGap017: CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH
   htrGap023: OPEN
   htrGap035: OPEN
   htrGap023ClosureOwner: HTR-WP18
@@ -768,7 +768,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: APPROVED_IDLE` — **HTR-WP01..HTR-WP17 COMPLETE**; **HTR-WP17** WORK `7b4304d` + correction `6c6e693` + fresh independent Composer Phase-B PASS; current work package **HTR-WP18**; `childPlanStatus: DRAFT`; **Build not authorized** (`BUILD_AUTHORIZED: NO`); accepted WP17 evidence `replay-runs/RI-P7/htr-wp17-execution-simulation/`; HTR-GAP-016/017 **CLOSED**; HTR-GAP-023 **OPEN** (owner WP18); HTR-GAP-035 **OPEN** (owner WP19); `nextAction: REVIEW_AND_APPROVE_HTR_MACRO_H`. **HISTORICAL (CONSUMED/SUPERSEDED):** pre-WP17-closeout activation/Phase-A state; WP17 original evidence `7b4304d` superseded by correction `6c6e693`. |
+| Plan state | `state.status: in-progress` · `programStatus: APPROVED_IDLE` — **HTR-WP01..HTR-WP17 COMPLETE** (default-path revalidated); **HTR-WP17** historical chain `7b4304d` → `6c6e693` → `47b2ece` + default-path correction `bc39900` + fresh independent Composer Phase-B **PASS**; current work package **HTR-WP18**; `childPlanStatus: DRAFT`; **Build not authorized** (`BUILD_AUTHORIZED: NO`); accepted WP17 default-path evidence `replay-runs/RI-P7/htr-wp17-default-path-conformance/`; historical component evidence `replay-runs/RI-P7/htr-wp17-execution-simulation/`; HTR-GAP-016/017 **CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH**; HTR-GAP-023 **OPEN** (owner WP18); HTR-GAP-035 **OPEN** (owner WP19); `nextAction: AUTHORIZE_HTR_MACRO_H_FINAL_BUILD_READINESS_HARDENING`. **HISTORICAL (CONSUMED/SUPERSEDED):** pre-default-path WP17 closeout state; component evidence alone insufficient for default-path conformance. |
 
 ## Approved decisions (recorded)
 
@@ -2222,7 +2222,7 @@ A single PR is opened only after HTR-WP23, final full validation, and the final 
 
 ## Current work package (HTR-WP18 — Macro H draft pending Human review)
 
-**CURRENT (2026-07-16):** HTR-WP01..HTR-WP17 **COMPLETE**; HTR-WP17 WORK `7b4304d0e0779b5d39f7899385f12aa8f185060d` + forward correction `6c6e69371719c5be41d54dcb613a9eb32a86073d`; fresh independent Composer Phase-B **PASS**; effective validated production head `6c6e693`; accepted WP17 evidence `replay-runs/RI-P7/htr-wp17-execution-simulation/`; current work package **HTR-WP18**; `BUILD_AUTHORIZED: NO`; `activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md`; `childPlanStatus: DRAFT`; HTR-GAP-016/017 **CLOSED**; HTR-GAP-023 **OPEN** (owner WP18); HTR-GAP-035 **OPEN** (owner WP19); `nextAction: REVIEW_AND_APPROVE_HTR_MACRO_H`; no PR; no FHV/holdout/paper/live/capital.
+**CURRENT (2026-07-16):** HTR-WP01..HTR-WP17 **COMPLETE** (default-path revalidated); historical WP17 chain `7b4304d` → `6c6e693` → `47b2ece`; default-path correction WORK `bc39900bf3245adb95766d7b72eb85c045ff257a`; fresh independent Composer Phase-B default-path review **PASS**; effective validated production head `bc39900`; accepted default-path evidence `replay-runs/RI-P7/htr-wp17-default-path-conformance/`; historical component evidence `replay-runs/RI-P7/htr-wp17-execution-simulation/`; current work package **HTR-WP18**; `BUILD_AUTHORIZED: NO`; `activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md`; `childPlanStatus: DRAFT`; HTR-GAP-016/017 **CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH**; HTR-GAP-023 **OPEN** (owner WP18); HTR-GAP-035 **OPEN** (owner WP19); `nextAction: AUTHORIZE_HTR_MACRO_H_FINAL_BUILD_READINESS_HARDENING`; no PR; no FHV/holdout/paper/live/capital.
 
 **Next Human gate:** `REVIEW_AND_APPROVE_HTR_WP17_CHILD_PACKET`. **Next action:** `PLAN_HTR_WP17_CHILD_PACKET`.
 
