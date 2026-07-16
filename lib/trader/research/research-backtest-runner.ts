@@ -2,6 +2,7 @@ import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
 import { COST_MODEL_VERSION_V1 } from "@/lib/trader/execution/cost-model";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
+import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
 import {
   StreamingEvidenceError,
   StreamingRegimeTimelineReader,
@@ -34,6 +35,8 @@ import {
   buildResearchV2PortfolioContext,
   type ResearchPortfolioConfig,
 } from "@/lib/trader/research/research-portfolio-config";
+import { assertHtrHistoricalExecutionSessionConfiguration } from "@/lib/trader/research/htr-historical-execution-configuration";
+import { createHtrInitialAccountRiskState } from "@/lib/trader/research/htr-initial-portfolio-contract";
 import { addDecimal, divideDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import { buildResearchRegimeCoverage } from "@/lib/trader/research/regime-taxonomy";
 import {
@@ -137,15 +140,18 @@ export type RunResearchValidationBacktestInput = {
   resumeCycleStartIndex?: number;
   evidenceSealMode?: "complete" | "partial" | "none";
   evidenceSealReason?: string;
+  /** HTR-WP17: versioned historical execution profile for default research replay. */
+  historicalExecutionProfile?: HistoricalExecutionProfileV1;
 };
 
-const EMPTY_ACCOUNT_STATE: AccountRiskState = {
-  positions: [],
-  openOrderCount: 0,
-  dailyPnl: "0",
-  drawdown: "0",
-  quoteExposureByCurrency: {},
-};
+function resolveResearchV1InitialAccountState(
+  input: RunResearchValidationBacktestInput,
+): AccountRiskState {
+  if (input.accountState) {
+    return input.accountState;
+  }
+  return createHtrInitialAccountRiskState();
+}
 
 function researchV2InitialAccountState(portfolio: PortfolioCycleContext): AccountRiskState {
   return toAccountRiskState({
@@ -462,7 +468,7 @@ async function runResearchValidationBacktestV1(
     runId: input.runId,
     split: input.split,
     window,
-    accountState: input.accountState ?? EMPTY_ACCOUNT_STATE,
+    accountState: resolveResearchV1InitialAccountState(input),
     exportedAt,
     activeStrategyIds: [input.strategyId],
     refreshAccountStateBetweenStrategies: true,
@@ -475,6 +481,7 @@ async function runResearchValidationBacktestV1(
     resumeCycleStartIndex: input.resumeCycleStartIndex,
     evidenceSealMode: input.evidenceSealMode,
     evidenceSealReason: input.evidenceSealReason,
+    historicalExecutionProfile: input.historicalExecutionProfile,
   });
 
   if (retentionMode === "FULL") {
@@ -608,6 +615,7 @@ async function runResearchValidationBacktestV2(
     resumeCycleStartIndex: input.resumeCycleStartIndex,
     evidenceSealMode: input.evidenceSealMode,
     evidenceSealReason: input.evidenceSealReason,
+    historicalExecutionProfile: input.historicalExecutionProfile,
   });
 
   if (input.artifactSink) {
@@ -821,6 +829,11 @@ export async function runResearchValidationBacktest(
   if (input.bars.length < 20) {
     throw new Error("[research] validation backtest requires at least 20 bars");
   }
+
+  assertHtrHistoricalExecutionSessionConfiguration({
+    deps: input.deps,
+    historicalExecutionProfile: input.historicalExecutionProfile,
+  });
 
   const window = parseWindowFromBars(input.bars);
   const exportedAt = input.exportedAt ?? new Date(window.end);

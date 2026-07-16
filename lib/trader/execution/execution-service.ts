@@ -20,6 +20,7 @@ import type {
   SubmitOrderInput,
   SubmitOrderResult,
 } from "@/lib/trader/execution/execution-service.types";
+import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
 import {
   OrderVersionConflictError,
   OrderNotFoundError,
@@ -508,7 +509,10 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
 
     if (historicalExecution?.enabled && input.executionMode === "mock" && input.type === "market") {
       historicalExecution.exchange.registerOrder(
-        current,
+        {
+          ...current,
+          symbol: normalizeSymbolForHistoricalExecution(current.symbol),
+        },
         historicalExecution.getDecisionBarIndex(),
         historicalExecution.getReplayNowMs(),
       );

@@ -21,3 +21,14 @@ export function bindHistoricalExecutionModelToSession(): HistoricalExecutionProf
     exchange: bindHistoricalSimulatedExchange(model),
   };
 }
+
+const HISTORICAL_EXECUTION_SYMBOLS = new Set(["BTCUSDT", "ETHUSDT"]);
+
+/** Maps canonical research instrument ids to WP17 execution symbols. */
+export function normalizeSymbolForHistoricalExecution(symbol: string): "BTCUSDT" | "ETHUSDT" {
+  const normalized = symbol.includes("/") ? symbol.replace("/", "") : symbol;
+  if (HISTORICAL_EXECUTION_SYMBOLS.has(normalized)) {
+    return normalized as "BTCUSDT" | "ETHUSDT";
+  }
+  throw new Error(`[htr/wp17] unsupported historical execution symbol: ${symbol}`);
+}

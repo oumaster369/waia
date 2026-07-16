@@ -46,6 +46,8 @@ export type ResearchReplayDeterminismDeps = {
   newId?: () => string;
   /** HTR-WP17: current closed-bar index for historical order registration. */
   setDecisionBarIndex?: (index: number) => void;
+  /** HTR-WP17: marks deps wired with enabled historical execution simulation. */
+  historicalExecutionSession?: boolean;
 };
 
 /** M2 deposit-aware sizing context (optional — legacy cycles omit this). */

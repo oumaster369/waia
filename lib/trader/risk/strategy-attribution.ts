@@ -7,6 +7,7 @@ import {
   TREND_MOMENTUM_V0_VERSION,
 } from "@/lib/trader/intelligence/types";
 import { addDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
+import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-contract";
 
 export type StrategyAttributionKey = {
   organizationId: string;
@@ -17,7 +18,7 @@ export type StrategyAttributionKey = {
   strategyVersion: string;
 };
 
-export const FHV_V0_TOTAL_VIRTUAL_EQUITY_USDT = "100000";
+export const FHV_V0_TOTAL_VIRTUAL_EQUITY_USDT = HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT;
 export const FHV_V0_LSR_ALLOCATION_USDT = "50000";
 export const FHV_V0_MR_ALLOCATION_USDT = "50000";
 export const FHV_V0_TM_ALLOCATION_USDT = "0";

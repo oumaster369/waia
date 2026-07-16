@@ -51,6 +51,7 @@ export async function rederiveValidationMetricsFromSealedDataset(
       accountKey: "see-a15-reconstruct",
       defaultQuantity: "0.01",
       cycleIdPrefix: `${buildResearchValidationCycleIdPrefix(input.backtestRunId)}-reconstruct`,
+      historicalExecutionProfile: session.historicalExecutionProfile,
     });
   } finally {
     session.cleanup();

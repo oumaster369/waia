@@ -77,6 +77,7 @@ import {
 import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/research/validate-research-evidence-provenance";
 import { assertResearchPipelineRegimeCoverage } from "@/lib/trader/research/regime-coverage";
 import { runWalkForwardValidation } from "@/lib/trader/research/walk-forward-engine";
+import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete">;
@@ -107,6 +108,8 @@ export type RunResearchPipelineInput = {
     runRootDir: string;
     codeSha: string;
   };
+  /** HTR-WP17: optional historical execution profile for HTR default research replay. */
+  historicalExecutionProfile?: HistoricalExecutionProfileV1;
 };
 
 export type RunResearchPipelineResult = {
@@ -183,6 +186,7 @@ function buildIsolatedBacktestInput(
             dbConnectionMode: pipelineBacktest.evidenceDbConnectionMode ?? null,
           })
         : undefined),
+    historicalExecutionProfile: input.historicalExecutionProfile,
   };
 }
 

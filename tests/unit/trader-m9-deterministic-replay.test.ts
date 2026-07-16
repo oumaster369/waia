@@ -99,6 +99,7 @@ async function runFullReplay(generatedAt: string): Promise<ReplayRunResult> {
       cycleIdPrefix: buildResearchValidationCycleIdPrefix("run-dee-397"),
       metricsSchemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
       artifactSink,
+      historicalExecutionProfile: session.historicalExecutionProfile,
     });
 
     const cycleResults = artifactSink.cycleResults ?? [];

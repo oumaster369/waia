@@ -10,6 +10,7 @@ import {
 } from "@/lib/trader/execution/historical-simulated-exchange";
 import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
 import { HTR_HISTORICAL_EXECUTION_PROFILE_V1 } from "@/lib/trader/backtest/historical-execution-profile";
+import { assertHtrHistoricalExecutionSessionConfiguration } from "@/lib/trader/research/htr-historical-execution-configuration";
 import {
   buildBacktestEvaluationExport,
   buildBacktestEvaluationExportDocument,
@@ -201,6 +202,11 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   const substrateMode = input.substrateMode ?? DEFAULT_REPLAY_SUBSTRATE_MODE;
   resetFullHistoryRescanCount();
 
+  assertHtrHistoricalExecutionSessionConfiguration({
+    deps: input.deps,
+    historicalExecutionProfile: input.historicalExecutionProfile,
+  });
+
   const profileActive =
     input.historicalProfile !== undefined &&
     isHistoricalProfileActive(input.historicalProfile ?? HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1);
@@ -332,12 +338,14 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
                 executionMode: "mock",
               });
             },
-            reconcileOrder: async (orderId) => {
-              await input.deps.reconciliation.reconcile(input.context, {
-                kind: "order",
-                orderId,
-              });
-            },
+            reconcileOrder: wp17Active
+              ? async () => undefined
+              : async (orderId) => {
+                  await input.deps.reconciliation.reconcile(input.context, {
+                    kind: "order",
+                    orderId,
+                  });
+                },
           },
         );
         accountState = advance.accountState;

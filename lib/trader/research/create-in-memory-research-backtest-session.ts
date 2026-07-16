@@ -125,6 +125,7 @@ export async function createInMemoryResearchBacktestSession(): Promise<InMemoryR
         setDecisionBarIndex: (index: number) => {
           decisionBarIndex.value = index;
         },
+        historicalExecutionSession: true,
       },
     },
     orderRepository,

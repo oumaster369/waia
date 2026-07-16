@@ -1,14 +1,16 @@
 import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
 import { COST_MODEL_VERSION_V1 } from "@/lib/trader/execution/cost-model";
-import {
-  DEFAULT_PORTFOLIO_RUN_CONFIG,
-  defaultStopDistanceProvider,
-  type PortfolioSizingLimits,
-} from "@/lib/trader/portfolio";
+import { defaultStopDistanceProvider, type PortfolioSizingLimits } from "@/lib/trader/portfolio";
 import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
+import {
+  HTR_DEFAULT_PORTFOLIO_RUN_CONFIG,
+  HTR_DEFAULT_PORTFOLIO_SIZING_LIMITS,
+  HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
+} from "@/lib/trader/research/htr-initial-portfolio-contract";
 
-/** Default M9 research portfolio — 1M USDT starting balance (Org-0 operator vault policy). */
-export const DEFAULT_RESEARCH_V2_STARTING_BALANCE_USDT = "1000000.00";
+/** Default HTR research portfolio — canonical 100k USDT shared spot portfolio. */
+export const DEFAULT_RESEARCH_V2_STARTING_BALANCE_USDT =
+  HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT;
 
 export type ResearchPortfolioConfig = {
   startingBalanceUsdt?: string;
@@ -48,6 +50,7 @@ export function buildResearchV2PortfolioContext(
 ): PortfolioCycleContext {
   const resolved = resolveResearchPortfolioConfig(config);
   const limits: PortfolioSizingLimits = {
+    ...HTR_DEFAULT_PORTFOLIO_SIZING_LIMITS,
     maxRiskPerTradePct: resolved.maxRiskPerTradePct,
     maxPortfolioRiskPct: resolved.maxPortfolioRiskPct,
     maxConcurrentPositions: resolved.maxConcurrentPositions,
@@ -56,7 +59,7 @@ export function buildResearchV2PortfolioContext(
 
   return {
     runConfig: {
-      ...DEFAULT_PORTFOLIO_RUN_CONFIG,
+      ...HTR_DEFAULT_PORTFOLIO_RUN_CONFIG,
       startingBalanceUsdt: resolved.startingBalanceUsdt,
       ...(resolved.defaultStopDistancePct
         ? { defaultStopDistancePct: resolved.defaultStopDistancePct }

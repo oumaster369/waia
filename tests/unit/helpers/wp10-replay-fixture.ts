@@ -76,6 +76,7 @@ export async function runWp10DefaultSessionReplay(
       cycleIdPrefix: buildResearchValidationCycleIdPrefix(WP10_RUN_ID),
       metricsSchemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
       artifactSink,
+      historicalExecutionProfile: session.historicalExecutionProfile,
     });
 
     const cycleResults = artifactSink.cycleResults ?? [];

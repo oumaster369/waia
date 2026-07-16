@@ -27,15 +27,20 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: HTR_WP17_CLOSEOUT_COMPLETE
-  programStatus: APPROVED_IDLE
+  humanApproval: HTR_WP17_DEFAULT_PATH_CONFORMANCE_CORRECTION_PENDING_REVIEW
+  programStatus: WP_VALIDATED
   childPlanStatus: DRAFT
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: WORK_PACKAGE_COMPLETE
-  activeWorkPackage: HTR-WP18
-  currentWorkPackage: HTR-WP18
+  composerTerminalState: AWAITING_FRESH_INDEPENDENT_WP17_DEFAULT_PATH_CONFORMANCE_REVIEW
+  activeWorkPackage: HTR-WP17
+  currentWorkPackage: HTR-WP17
+  activeCorrection:
+    id: HTR-WP17-DEFAULT-PATH-CONFORMANCE
+    status: VALIDATED_PENDING_FRESH_INDEPENDENT_REVIEW
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
+  activeMacroPackage: HTR-MACRO-H
+  activeMacroStatus: BLOCKED_BY_WP17_DEFAULT_PATH_REVALIDATION
   childPlanPacketAudit: PASS
   approvedChildPacketSha256: ba8daf2608dcea83aeae918150a73fd3c0713f951750a9ff45edfe1e2653baaa
   approvedChildPacketBytes: 64153
@@ -51,23 +56,30 @@ state:
   wp17PostgresMigrations: [0098, 0099]
   wp17SqliteMigrationRequired: false
   wp17SqliteAdapterModificationRequired: true
-  wp17ImplementationStatus: WORK_PACKAGE_COMPLETE
-  wp17FreshIndependentPhaseBVerdict: PASS
+  wp17ImplementationStatus: VALIDATED_PENDING_FRESH_INDEPENDENT_DEFAULT_PATH_REVIEW
+  wp17FreshIndependentPhaseBVerdict: PENDING_DEFAULT_PATH_REVALIDATION
   wp17PhaseBVerdict: PASS
   wp17OriginalWorkCommitSha: 7b4304d0e0779b5d39f7899385f12aa8f185060d
-  wp17CorrectionWorkCommitSha: 6c6e69371719c5be41d54dcb613a9eb32a86073d
+  wp17CorrectionWorkCommitSha: c231f4a43fa43aaf6ad63688fa9c472a038e7544
+  wp17DefaultPathCorrectionWorkSha: c231f4a43fa43aaf6ad63688fa9c472a038e7544
   wp17EffectiveValidatedWorkHead: 6c6e69371719c5be41d54dcb613a9eb32a86073d
-  wp17CloseoutCommitSha: 47b2ece5c85b02290c7968c1ccb24dc4dea7685b   # 2026-07-16 forward reconciliation; parent 6c6e693; recorded post-hoc (closeout commit could not self-reference); supersedes dangling closeout attempt d9130ef
-  wp17EvidenceStatus: ACCEPTED
+  wp17HistoricalCloseoutStatus: SUPERSEDED_PENDING_DEFAULT_PATH_CONFORMANCE
+  wp17HistoricalCloseoutCommitSha: 47b2ece5c85b02290c7968c1ccb24dc4dea7685b
+  wp17HistoricalEffectiveValidatedHead: 6c6e69371719c5be41d54dcb613a9eb32a86073d
+  wp17CloseoutCommitSha: 47b2ece5c85b02290c7968c1ccb24dc4dea7685b
+  wp17EvidenceStatus: CORRECTION_STAGED_NOT_ACCEPTED
   wp17AcceptedEvidenceSourceGitSha: 6c6e69371719c5be41d54dcb613a9eb32a86073d
+  wp17AcceptedEvidenceClassification: HISTORICAL_ACCEPTED_COMPONENT_EVIDENCE_PATH_B_NOT_SUFFICIENT_ALONE_FOR_DEFAULT_PATH_CONFORMANCE
   wp17AcceptedEvidenceManifestDigest: a8402a9c2a6d448714af75a2d48e227790a61b850cb900f2047c7466b4ffd938
   wp17AcceptedEvidenceSemanticDigest: 73b1720722fa434a28b0f8b4d33302f4edcbb175923e0d8e68be958434e2f68b
   wp17AcceptedEvidencePath: replay-runs/RI-P7/htr-wp17-execution-simulation/
-  planningTerminalState: AWAITING_HUMAN_HTR_MACRO_H_REVIEW
+  planningTerminalState: AWAITING_FRESH_INDEPENDENT_WP17_DEFAULT_PATH_CONFORMANCE_REVIEW
   newHumanTokenRequired: true
-  requiredHumanTokens: [REVIEW_AND_APPROVE_HTR_MACRO_H]
-  nextHumanGate: HUMAN_REVIEW_HTR_MACRO_H_PACKET_AND_MIGRATIONS
-  nextAction: REVIEW_AND_APPROVE_HTR_MACRO_H
+  requiredHumanTokens: [FRESH_INDEPENDENT_WP17_DEFAULT_PATH_CONFORMANCE_REVIEW]
+  nextHumanGate: HUMAN_AUTHORIZE_FRESH_INDEPENDENT_WP17_DEFAULT_PATH_REVIEW
+  nextAction: FRESH_INDEPENDENT_WP17_DEFAULT_PATH_CONFORMANCE_REVIEW
+  readyForFullHistoricalTest: false
+  finalPrAuthorized: false
   latestValidatedProductionCodeSha: 6c6e69371719c5be41d54dcb613a9eb32a86073d
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
   wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b
