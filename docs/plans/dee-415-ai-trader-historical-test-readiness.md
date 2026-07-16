@@ -57,6 +57,7 @@ state:
   wp17OriginalWorkCommitSha: 7b4304d0e0779b5d39f7899385f12aa8f185060d
   wp17CorrectionWorkCommitSha: 6c6e69371719c5be41d54dcb613a9eb32a86073d
   wp17EffectiveValidatedWorkHead: 6c6e69371719c5be41d54dcb613a9eb32a86073d
+  wp17CloseoutCommitSha: 47b2ece5c85b02290c7968c1ccb24dc4dea7685b   # 2026-07-16 forward reconciliation; parent 6c6e693; recorded post-hoc (closeout commit could not self-reference); supersedes dangling closeout attempt d9130ef
   wp17EvidenceStatus: ACCEPTED
   wp17AcceptedEvidenceSourceGitSha: 6c6e69371719c5be41d54dcb613a9eb32a86073d
   wp17AcceptedEvidenceManifestDigest: a8402a9c2a6d448714af75a2d48e227790a61b850cb900f2047c7466b4ffd938
@@ -409,11 +410,12 @@ state:
     - HTR-MACRO-D
     - HTR-MACRO-E
     - HTR-MACRO-F
+    - HTR-MACRO-G
   macroDStatus: COMPLETE   # 2026-07-14 Opus Macro-D Phase B: WP11 CLOSEOUT + WP12 CLOSEOUT; WP04–WP12 rolling runtime/data-truth tranche COMPLETE
   macroEStatus: COMPLETE   # 2026-07-15 Composer Phase-B: HTR-WP13 CLOSEOUT
-  activeMacroPackage: HTR-MACRO-G
-  activeMacroWorkPackages: [HTR-WP16]
-  activeMacroStatus: APPROVED
+  activeMacroPackage: HTR-MACRO-H
+  activeMacroWorkPackages: [HTR-WP18, HTR-WP19, HTR-WP20]
+  activeMacroStatus: DRAFT_EXACT_PENDING_HUMAN_REVIEW
   phaseBReviewerPolicy:
     defaultReviewer: COMPOSER_2_5_INDEPENDENT_SESSION
     phaseBMustBe:
