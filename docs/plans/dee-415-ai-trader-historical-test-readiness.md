@@ -27,14 +27,14 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: HTR_WP18_CLOSEOUT_COMPLETE
+  humanApproval: HTR_WP19_CLOSEOUT_COMPLETE
   programStatus: WP_VALIDATED
   childPlanStatus: APPROVED_EXACT
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: HTR_WP18_CLOSEOUT_COMPLETE
-  activeWorkPackage: HTR-WP19
-  currentWorkPackage: HTR-WP19
+  composerTerminalState: HTR_WP19_CLOSEOUT_COMPLETE
+  activeWorkPackage: HTR-WP20
+  currentWorkPackage: HTR-WP20
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-H
@@ -112,7 +112,20 @@ state:
   wp18AcceptedEvidencePath: replay-runs/RI-P7/htr-wp18-accounting-parity/
   wp18AcceptedEvidenceManifestDigest: d495ad5baed16dc93e3f4677ed63a3415d6c5ddfe69ab4d2540b71f60a1e27b4
   wp18AcceptedEvidenceSemanticDigest: fd22742d0650525969b348cd3bd3fa4bcffe6edb0c528e9ab3e9c08d2526a0e8
+  wp18CloseoutCommitSha: 0444e9485732e6db4c846ec7a63cdc219743b2c1
   wp18Status: WORK_PACKAGE_COMPLETE
+  wp19WorkCommitSha: 5558860428a4001b14cb6aa70b310d98f77b00dd
+  wp19ImplementationStatus: WORK_PACKAGE_COMPLETE
+  wp19PhaseBVerdict: PASS
+  wp19EvidenceStatus: ACCEPTED
+  wp19AcceptedEvidenceSourceGitSha: 077ea4379c191b4d0cd475b393d83326f4a3c0f2
+  wp19AcceptedEvidencePath: replay-runs/RI-P7/htr-wp19-reality-reconciliation/
+  wp19AcceptedEvidenceManifestDigest: 4f248a424cdcac532ee7a3ffa33b52cd5cb15997f81e600c87cfce645f79cb0f
+  wp19AcceptedEvidenceSemanticDigest: 393d6ccc9216ef9133131c3e56b1229ddecd37e75c5e8951db5b5b52cfec69ef
+  wp19Status: WORK_PACKAGE_COMPLETE
+  htrGap018: CLOSED
+  htrGap019: CLOSED
+  htrGap035: CLOSED
   macroHHumanActivation:
     status: HUMAN_APPROVED_CONSUMED
     activationDate: 2026-07-16
@@ -176,7 +189,7 @@ state:
   htrGap016: CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH
   htrGap017: CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH
   htrGap023: CLOSED
-  htrGap035: OPEN
+  htrGap035: CLOSED
   htrGap043: OPEN
   htrGap044: OPEN
   htrGap045: OPEN
