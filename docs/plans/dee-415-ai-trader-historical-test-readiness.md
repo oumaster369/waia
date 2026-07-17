@@ -27,20 +27,20 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: HTR_MACRO_J_POLICY_DECISIONS_CONSUMED_PACKET_APPROVAL_PENDING
+  humanApproval: HTR_MACRO_J_V3_PACKET_AND_BUILD_APPROVED_CONSUMED
   historicalMacroIHumanApproval: HTR_MACRO_I_HUMAN_APPROVED_CONSUMED
-  programStatus: APPROVED_IDLE
-  childPlanStatus: V3_EXACT
-  buildAuthorized: false
-  buildAuthorizedScope: null
-  composerTerminalState: HTR_MACRO_J_V3_EXACT_PACKET_READY_FOR_HUMAN_APPROVAL
+  programStatus: MACRO_ACTIVE
+  childPlanStatus: APPROVED
+  buildAuthorized: true
+  buildAuthorizedScope: HTR-MACRO-J_PHASE_A_ONLY
+  composerTerminalState: EXECUTE_HTR_MACRO_J_PHASE_A
   activeWorkPackage: HTR-WP22
   currentWorkPackage: HTR-WP22
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-J
   activeMacroWorkPackages: [HTR-WP22, HTR-WP23]
-  activeMacroStatus: V3_EXACT_PENDING_HUMAN_REVIEW
+  activeMacroStatus: PHASE_A_ACTIVE
   macroJPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25
   macroJPacketPath: .cursor/plans/dee-415-macro-j/approval-candidates/5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25/dee-415-htr-macro-j-exact-packet.plan.md
   macroJSupersededPacketSha256: 91be9b0f462e5f9f36ba08d3007eafd9bd00ee4ee5dea48749bc83c5e954fe58
@@ -150,13 +150,25 @@ state:
     executionServerPackageMode:
       mode: option-a-code-ready
       actualServerMutation: PROHIBITED
-  planningTerminalState: HTR_MACRO_J_V3_EXACT_PACKET_READY_FOR_HUMAN_APPROVAL
-  newHumanTokenRequired: true
-  requiredHumanTokens:
-    - APPROVE-HTR-MACRO-J-PACKET
-    - APPROVE-HTR-MACRO-J-BUILD
-  nextHumanGate: APPROVE-HTR-MACRO-J-PACKET
-  nextAction: HUMAN_REVIEW_HTR_MACRO_J_V3_EXACT_PACKET
+  planningTerminalState: EXECUTE_HTR_MACRO_J_PHASE_A
+  newHumanTokenRequired: false
+  requiredHumanTokens: []
+  nextHumanGate: null
+  nextAction: EXECUTE_HTR_MACRO_J_PHASE_A
+  macroJHumanActivation:
+    status: HUMAN_APPROVED_CONSUMED
+    approvedPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25
+    packetAuthoringHead: 11f44cb31bc639e0947638dc88c2ba18abab0050
+    preActivationHead: 1da41f767139d990c4cb6ac38a46803d818081c2
+    workPackages: [HTR-WP22, HTR-WP23]
+    scope: HTR-MACRO-J_PHASE_A_ONLY
+    internalAdvance:
+      from: HTR-WP22
+      to: HTR-WP23
+      requires: WP22_PHASE_A_GATE_PASS
+    tokensConsumed:
+      - APPROVE-HTR-MACRO-J-PACKET
+      - APPROVE-HTR-MACRO-J-BUILD
   readyForFullHistoricalTest: false
   finalPrAuthorized: false
   childPlanPacketAudit: PASS
