@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.912Z",
+  "nodeVersion": "v22.22.3",
+  "targetedPhaseB": [
+    "HTR-GAP-010",
+    "HTR-GAP-036",
+    "HTR-GAP-037",
+    "HTR-GAP-038",
+    "HTR-GAP-039",
+    "HTR-GAP-040"
+  ],
+  "remainOpen": [
+    "HTR-GAP-005",
+    "HTR-GAP-024",
+    "HTR-GAP-026",
+    "HTR-GAP-027",
+    "HTR-GAP-029",
+    "HTR-GAP-043",
+    "HTR-GAP-044",
+    "HTR-GAP-045"
+  ],
+  "phaseAClosed": [],
+  "gapsClosed": "NONE",
+  "evidencePromoted": false,
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "45828dad292fb5db492a748a3b624c03453e75939c8fa61957e40ef24801f65a"
+}

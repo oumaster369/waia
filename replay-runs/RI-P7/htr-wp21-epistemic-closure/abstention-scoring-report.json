@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.909Z",
+  "nodeVersion": "v22.22.3",
+  "command": "pnpm exec vitest run tests/unit/trader-wp21-abstention-scoring.test.ts",
+  "exitCode": 0,
+  "status": "PASS",
+  "noTradeFirstClass": true,
+  "guardianAbstentionNotPenalized": true,
+  "invalidatedNonScoring": true,
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "441fd72a61877c17e5e3c0de66edb8391afcf73f9d44bf247e635043ef1e5de2"
+}

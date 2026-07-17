@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.912Z",
+  "nodeVersion": "v22.22.3",
+  "command": "pnpm exec vitest run tests/unit/trader-wp21-determinism-nolookahead.test.ts",
+  "exitCode": 0,
+  "status": "PASS",
+  "digestStable": true,
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "a111442787702ba9c6ad9b46d18c45e2076ee70341b19893c0d7f08845083db3"
+}

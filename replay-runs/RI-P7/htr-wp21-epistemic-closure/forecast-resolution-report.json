@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.909Z",
+  "nodeVersion": "v22.22.3",
+  "command": "pnpm exec vitest run tests/unit/trader-wp21-forecast-outcome-resolution.test.ts",
+  "exitCode": 0,
+  "status": "PASS",
+  "terminalClasses": [
+    "RESOLVED",
+    "EXPIRED",
+    "INVALIDATED",
+    "UNRESOLVED_DUE_TO_DATA_INTEGRITY"
+  ],
+  "pitSafe": true,
+  "noEarlyResolution": true,
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "575224e830c36c2dd62e4aafc59cfe30766bbc74c99a0d8e826c6d59d2c890f7"
+}

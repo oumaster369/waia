@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.912Z",
+  "nodeVersion": "v22.22.3",
+  "command": "env -i PATH HOME NODE_ENV=test pnpm test --run",
+  "startedAt": "2026-07-17T13:40:00.000Z",
+  "exitCode": 0,
+  "passedFiles": 522,
+  "skippedFiles": 42,
+  "passedTests": 2856,
+  "skippedTests": 175,
+  "failedFiles": 0,
+  "failedTests": 0,
+  "durationSeconds": 812.64,
+  "repositoryDotenvLocalLoaded": false,
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "594990cbbfa5fff4d08acde5373d4598d2dc034ca5481b8eae79623db3c2ad41"
+}

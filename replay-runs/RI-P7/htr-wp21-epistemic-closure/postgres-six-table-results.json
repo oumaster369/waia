@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.910Z",
+  "nodeVersion": "v22.22.3",
+  "command": "pnpm exec vitest run tests/integration/postgres-trader-wp21-six-table-matrix.test.ts",
+  "exitCode": 0,
+  "fail": 0,
+  "skip": 0,
+  "timeout": 0,
+  "openHandles": 0,
+  "tests": 28,
+  "tables": 6,
+  "status": "PASS",
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "e6938dd8f8db086c28cee6237e445d2a2e208139ae64ae93501478f113867b76"
+}

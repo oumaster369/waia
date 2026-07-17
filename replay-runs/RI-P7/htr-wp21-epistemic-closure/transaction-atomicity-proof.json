@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.910Z",
+  "nodeVersion": "v22.22.3",
+  "command": "pnpm exec vitest run tests/integration/postgres-transaction-rollback.test.ts",
+  "exitCode": 0,
+  "status": "PASS",
+  "savepointNeverOutsideTransaction": true,
+  "atomicWp21BundleCommit": true,
+  "rollbackLeavesNoPartialBundle": true,
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "6fcea71a44f12e30c417a1f51cbf710a8c1799a4487813d44b4b33d5601beb58"
+}

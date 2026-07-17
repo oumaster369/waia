@@ -32,29 +32,40 @@ state:
   childPlanStatus: VALIDATED
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: HTR_WP21_EVIDENCE_INTEGRITY_AND_GOVERNANCE_RECONCILED_READY_FOR_FRESH_INDEPENDENT_PHASE_B
-  activeWorkPackage: HTR-WP21
-  currentWorkPackage: HTR-WP21
+  composerTerminalState: HTR_MACRO_I_FINAL_INDEPENDENT_PHASE_B_PASS_WP21_COMPLETE
+  activeWorkPackage: HTR-WP22
+  currentWorkPackage: HTR-WP22
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
-  activeMacroPackage: HTR-MACRO-I
-  activeMacroStatus: CORRECTIVE_PROOF_CLOSURE_VALIDATED_PENDING_INDEPENDENT_PHASE_B
+  activeMacroPackage: HTR-MACRO-J
+  activeMacroStatus: REFRESH_REQUIRED
   governanceStateAuthority: GIT_HEAD
   wp21OriginalWorkSha: f72eed46779b2c5c3c49803c30d382109e4710b8
   wp21FirstCorrectiveWorkSha: 0c80b2d5ef7b5398780dbb1dc0cfe0a96d1f5eb8
   wp21RuntimeProofWorkSha: f642d5d5005fd52f5d5660a14f6c9ed61e1a4a1d
   wp21EffectivePhaseACandidateSha: b71a381327d042640f5c3bd9912fe1fd5d3cd4c4
+  wp21EffectiveValidatedProductionSha: b71a381327d042640f5c3bd9912fe1fd5d3cd4c4
   wp21CorrectiveScope: HTR-WP21_VALIDATION_ENVIRONMENT_REMEDIATION_AND_PROOF_CLOSURE
   wp21CandidateProductionSha: b71a381327d042640f5c3bd9912fe1fd5d3cd4c4
-  wp21PhaseAStatus: PHASE_A_PROOF_COMPLETE_PENDING_INDEPENDENT_PHASE_B
-  wp21CloseoutCommit: NONE
-  wp21EvidencePromoted: false
+  wp21PhaseAStatus: PHASE_A_PROOF_COMPLETE
+  wp21PhaseBVerdict: PASS
+  wp21ImplementationStatus: WORK_PACKAGE_COMPLETE
+  wp21Status: WORK_PACKAGE_COMPLETE
+  wp21CloseoutCommitAuthority: GIT_HEAD
+  wp21EvidencePromoted: true
+  wp21EvidenceStatus: ACCEPTED
+  wp21AcceptedEvidencePath: replay-runs/RI-P7/htr-wp21-epistemic-closure/
+  wp21AcceptedEvidenceSourceGitSha: b71a381327d042640f5c3bd9912fe1fd5d3cd4c4
+  wp21AcceptedEvidenceManifestDigest: 82b6d0fc12546e8b058fdd132c73e5625278fade3749e87d52120d8ab35b4db5
+  wp21AcceptedEvidenceSemanticDigest: c9c52c49ef0b6c88329d5d6ed94310344bc205a0ba7ae0e895aefd725b3c35a8
   wp21EvidenceStagingPath: .cursor/plans/dee-415-wp21/evidence-staging/b71a381327d042640f5c3bd9912fe1fd5d3cd4c4/canon-conformance-validation-corrective/
   wp21EvidenceManifestDigest: 82b6d0fc12546e8b058fdd132c73e5625278fade3749e87d52120d8ab35b4db5
   wp21EvidenceSemanticDigest: c9c52c49ef0b6c88329d5d6ed94310344bc205a0ba7ae0e895aefd725b3c35a8
   wp21EvidenceDigestContractVersion: waia.htr.wp21.evidence-integrity.v2
-  wp21EvidenceIntegrityStatus: REPAIRED_FILE_BYTE_BINDING_V2
+  wp21EvidenceIntegrityStatus: ACCEPTED_FILE_BYTE_BINDING_V2
   macroIWorkPackages: [HTR-WP21]
+  macroIStatus: COMPLETE
+  macroIFinalIndependentPhaseBVerdict: PASS
   macroIPacketSha256: 378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777
   macroIPacketPath: .cursor/plans/dee-415-macro-i/approval-candidates/378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777/dee-415-htr-macro-i-exact-packet.plan.md
   macroIPacketBytes: 53219
@@ -99,19 +110,25 @@ state:
   completedWorkPackages:
     [HTR-WP01, HTR-WP02, HTR-WP03, HTR-WP04, HTR-WP05, HTR-WP06, HTR-WP07, HTR-WP08,
      HTR-WP09, HTR-WP10, HTR-WP11, HTR-WP12, HTR-WP13, HTR-WP14, HTR-WP15, HTR-WP16,
-     HTR-WP17, HTR-WP18, HTR-WP19, HTR-WP20]
-  remainingWorkPackages: [HTR-WP21, HTR-WP22, HTR-WP23]
+     HTR-WP17, HTR-WP18, HTR-WP19, HTR-WP20, HTR-WP21]
+  remainingWorkPackages: [HTR-WP22, HTR-WP23]
+  htrGap010: CLOSED
+  htrGap036: CLOSED
+  htrGap037: CLOSED
+  htrGap038: CLOSED
+  htrGap039: CLOSED
+  htrGap040: CLOSED
   htrGap035: CLOSED
   htrGap043: OPEN
   htrGap044: OPEN
   htrGap045: OPEN
-  latestValidatedProductionCodeSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
+  latestValidatedProductionCodeSha: b71a381327d042640f5c3bd9912fe1fd5d3cd4c4
   latestIndependentlyValidatedPreWp21ProductionSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
-  planningTerminalState: HTR_WP21_EVIDENCE_INTEGRITY_AND_GOVERNANCE_RECONCILED_READY_FOR_FRESH_INDEPENDENT_PHASE_B
+  planningTerminalState: HTR_MACRO_I_COMPLETE
   newHumanTokenRequired: true
-  requiredHumanTokens: [AUTHORIZE_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B]
-  nextHumanGate: AUTHORIZE_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B
-  nextAction: FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B
+  requiredHumanTokens: [HTR_MACRO_J_PACKET_REVIEW]
+  nextHumanGate: HTR_MACRO_J_PACKET_REVIEW
+  nextAction: REFRESH_HTR_MACRO_J_EXACT_PACKET
   readyForFullHistoricalTest: false
   finalPrAuthorized: false
   childPlanPacketAudit: PASS
@@ -918,7 +935,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: WP_VALIDATED` — **HTR-WP01..HTR-WP20 COMPLETE**; **HTR-MACRO-H COMPLETE**; **HTR-WP21 Phase-A proof complete, pending independent Phase B**; `WP21_EFFECTIVE_PHASE_A_CANDIDATE_SHA: b71a381…`; `LATEST_INDEPENDENTLY_VALIDATED_PRE_WP21_PRODUCTION_SHA: 96144e0…`; active macro **HTR-MACRO-I** (`CORRECTIVE_PROOF_CLOSURE_VALIDATED_PENDING_INDEPENDENT_PHASE_B`); Macro-I packet consumed (`378e853b…`); `BUILD_AUTHORIZED: NO`; HTR-GAP-010/036/037/038/039/040 **OPEN** (closure owner HTR-WP21, not closed in Phase A); `nextAction: FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B`; `nextHumanGate: AUTHORIZE_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B`. |
+| Plan state | `state.status: in-progress` · `programStatus: WP_VALIDATED` — **HTR-WP01..HTR-WP21 COMPLETE**; **HTR-MACRO-I COMPLETE** (independent Phase-B PASS 2026-07-17); `WP21_EFFECTIVE_VALIDATED_PRODUCTION_SHA: b71a381…`; accepted evidence `replay-runs/RI-P7/htr-wp21-epistemic-closure/` (manifest `82b6d0fc…`, semantic `c9c52c49…`); active macro **HTR-MACRO-J** (`REFRESH_REQUIRED`); current work package **HTR-WP22**; `BUILD_AUTHORIZED: NO`; HTR-GAP-010/036/037/038/039/040 **CLOSED**; HTR-GAP-005/024/026/027/029 (WP22), 043 (WP23), 044 (WP22), 045 (external) **OPEN — preserved**; `nextAction: REFRESH_HTR_MACRO_J_EXACT_PACKET`; `nextHumanGate: HTR_MACRO_J_PACKET_REVIEW`. |
 
 ## Approved decisions (recorded)
 
@@ -2370,13 +2387,13 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## Current work package (HTR-WP21 — Phase A proof complete, pending independent Phase B)
+## Current work package (HTR-WP22 — Macro I complete)
 
-**CURRENT (2026-07-17):** HTR-MACRO-H **COMPLETE**; HTR-WP18/WP19/WP20 **COMPLETE**; `PROGRAM_STATUS: WP_VALIDATED`; `BUILD_AUTHORIZED: NO`. Active macro **HTR-MACRO-I = [HTR-WP21]** with Macro-I packet **HUMAN_APPROVED_CONSUMED** (immutable sha256 `378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777`). WP21 epistemic-closure capability is **implemented and Phase-A-proven** at `WP21_EFFECTIVE_PHASE_A_CANDIDATE_SHA: b71a381327d042640f5c3bd9912fe1fd5d3cd4c4` with evidence digest contract `waia.htr.wp21.evidence-integrity.v2` (staging-only, not promoted). `LATEST_INDEPENDENTLY_VALIDATED_PRE_WP21_PRODUCTION_SHA: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d`. HTR-GAP-010/036/037/038/039/040 remain **OPEN** (closure owner HTR-WP21 — gap closure deferred to independent Phase B). HTR-GAP-005/024/026/027/029 (WP22), 043 (WP23), 044 (WP22), 045 (external) **OPEN — preserved**; `nextAction: FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B`; `nextHumanGate: AUTHORIZE_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B`; no PR; no gap closure; no evidence promotion; no FHV/holdout/paper/live/capital.
+**CURRENT (2026-07-17):** HTR-MACRO-I **COMPLETE** (`HTR_MACRO_I_FINAL_INDEPENDENT_PHASE_B_PASS_WP21_COMPLETE`); HTR-WP21 **WORK_PACKAGE_COMPLETE**; validated production code `b71a381327d042640f5c3bd9912fe1fd5d3cd4c4`; accepted evidence `replay-runs/RI-P7/htr-wp21-epistemic-closure/` (manifest digest `82b6d0fc12546e8b058fdd132c73e5625278fade3749e87d52120d8ab35b4db5`, semantic digest `c9c52c49ef0b6c88329d5d6ed94310344bc205a0ba7ae0e895aefd725b3c35a8`, contract `waia.htr.wp21.evidence-integrity.v2`); `PROGRAM_STATUS: WP_VALIDATED`; `BUILD_AUTHORIZED: NO`; HTR-GAP-010/036/037/038/039/040 **CLOSED**; HTR-GAP-005/024/026/027/029 (WP22), 043 (WP23), 044 (WP22), 045 (external) **OPEN — preserved**; active macro **HTR-MACRO-J** (`REFRESH_REQUIRED`); current work package **HTR-WP22**; `nextAction: REFRESH_HTR_MACRO_J_EXACT_PACKET`; no PR; no FHV/holdout/paper/live/capital.
 
-**Next action:** `AUTHORIZE_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B` → fresh independent HTR-MACRO-I Phase B session (no Phase-A implementation context).
+**Next action:** `REFRESH_HTR_MACRO_J_EXACT_PACKET` → human gate `HTR_MACRO_J_PACKET_REVIEW`.
 
-**HISTORICAL (NON_OPERATIONAL):** Sections below describing Macro-H activation/Build authorization are audit history only.
+**HISTORICAL (NON_OPERATIONAL):** Sections below describing Macro-I Phase-A activation/Build authorization are audit history only.
 
 ## Acceptance (whole program)
 
