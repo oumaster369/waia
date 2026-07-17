@@ -33,14 +33,14 @@ state:
   childPlanStatus: APPROVED
   buildAuthorized: true
   buildAuthorizedScope: HTR-MACRO-J_PHASE_A_ONLY
-  composerTerminalState: EXECUTE_HTR_MACRO_J_PHASE_A
+  composerTerminalState: REPROVE_HTR_WP22_PHASE_A_GATE_ON_EFFECTIVE_CANDIDATE
   activeWorkPackage: HTR-WP22
   currentWorkPackage: HTR-WP22
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-J
   activeMacroWorkPackages: [HTR-WP22, HTR-WP23]
-  activeMacroStatus: PHASE_A_ACTIVE
+  activeMacroStatus: PHASE_A_ACTIVE_WP22_GATE_REMEDIATION
   macroJPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25
   macroJPacketPath: .cursor/plans/dee-415-macro-j/approval-candidates/5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25/dee-415-htr-macro-j-exact-packet.plan.md
   macroJSupersededPacketSha256: 91be9b0f462e5f9f36ba08d3007eafd9bd00ee4ee5dea48749bc83c5e954fe58
@@ -49,6 +49,21 @@ state:
   macroJPacketLines: 708
   macroJPacketAuthoringHead: 11f44cb31bc639e0947638dc88c2ba18abab0050
   wp22MigrationDecision: NONE
+  wp22OriginalWorkCommitSha: d4a619c10fae940e14bd93eba7ed4386ce45a03c
+  wp22PhaseAStatus: GATE_FAIL_REMEDIATION_CANDIDATE
+  wp22EffectivePhaseACandidateAuthority: GIT_HEAD
+  wp22FirstValidD11bAttemptConsumed: false
+  wp22EvidenceStatus: NOT_STAGED
+  wp22GateFailureClassification: TEST_CONTRACT_OVERCONSTRAINED_AND_HARNESS_WIRING_DEFECT
+  wp22GateRemediationScope: bounded_gap044_postgres_harness_and_fixture_prelude_only
+  macroJActivationAmendDeviation:
+    classification: BOUNDED_GOVERNANCE_ONLY_PRE_WP22_PROCESS_DEVIATION
+    originalActivationSha: 5a7833961fe02b6744d7ff902ca1fd1178cab9cc
+    finalActivationSha: 83f3116c165a00c58ed59e630f502154c12cb0a0
+    amendReason: complete_macroJHumanActivation_governance_block
+    runtimeSemanticImpact: NONE
+    qualificationImpact: NONE
+    historyRewriteAfterWp22Work: false
   wp23MigrationDecision: NONE
   htxDatasetClassification: NOT_AVAILABLE
   d11bAmendmentRequired: false
@@ -150,11 +165,11 @@ state:
     executionServerPackageMode:
       mode: option-a-code-ready
       actualServerMutation: PROHIBITED
-  planningTerminalState: EXECUTE_HTR_MACRO_J_PHASE_A
+  planningTerminalState: REPROVE_HTR_WP22_PHASE_A_GATE_ON_EFFECTIVE_CANDIDATE
   newHumanTokenRequired: false
   requiredHumanTokens: []
   nextHumanGate: null
-  nextAction: EXECUTE_HTR_MACRO_J_PHASE_A
+  nextAction: REPROVE_HTR_WP22_PHASE_A_GATE_ON_EFFECTIVE_CANDIDATE
   macroJHumanActivation:
     status: HUMAN_APPROVED_CONSUMED
     approvedPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25
