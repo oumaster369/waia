@@ -534,7 +534,9 @@ export async function runResearchPipelinePostgres(
     blindMetrics: blind.metrics,
   });
 
-  await validateResearchEvidenceProvenancePostgres(ex, input.context, evidenceDocument);
+  await validateResearchEvidenceProvenancePostgres(ex, input.context, evidenceDocument, {
+    requireRegimeCoverage: requireMultiRegimeCoverage,
+  });
 
   const knowledge = await recordResearchPipelineKnowledgePostgres(ex, input.context, {
     evidenceDocument,

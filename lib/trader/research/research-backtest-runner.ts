@@ -512,6 +512,7 @@ async function runResearchValidationBacktestV1(
     outcomeResolutionReadPort: input.outcomeResolutionReadPort,
     wp21PostgresExecutor: input.wp21PostgresExecutor,
     wp21Provenance: input.wp21Provenance,
+    cycleIdPrefix: input.cycleIdPrefix,
   });
 
   if (input.artifactSink && retentionMode !== "STREAM_ONLY") {
@@ -660,6 +661,7 @@ async function runResearchValidationBacktestV2(
     outcomeResolutionReadPort: input.outcomeResolutionReadPort,
     wp21PostgresExecutor: input.wp21PostgresExecutor,
     wp21Provenance: input.wp21Provenance,
+    cycleIdPrefix: input.cycleIdPrefix,
   });
 
   if (input.artifactSink) {

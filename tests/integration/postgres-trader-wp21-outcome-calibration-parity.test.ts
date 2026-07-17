@@ -12,7 +12,8 @@ import { resolveForecastOutcomeClass } from "@/lib/trader/intelligence/outcome-r
 import { OutcomeResolutionIdempotencyConflictError } from "@/lib/trader/intelligence/outcome-resolution/errors";
 import { persistForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres";
 import { persistIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
+import { seedWp21ProofUser } from "@/tests/helpers/wp21-proof-postgres";
+import { assertWp21MandatoryPostgresProofEnvironment } from "@/tests/helpers/wp21-proof-postgres";
 import { wp21Bars, wp21Provenance } from "@/tests/unit/wp21-test-helpers";
 import { buildWp14Bundle, cleanupWp14AllRows } from "./wp14-forecast-decision-test-helpers";
 import { buildWp13Bundle } from "./wp13-intelligence-test-helpers";
@@ -20,103 +21,74 @@ import { buildWp13Bundle } from "./wp13-intelligence-test-helpers";
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 const USER_A = "00000000-0000-4000-8021-0000000000a1";
-
 const RLS_DENIED_SQLSTATE = "42501";
 
 describe.skipIf(!integrationEnabled || !url)(
   "postgres trader wp21 outcome calibration parity (DEE-415 / HTR-WP21)",
   () => {
     let orgA: string;
+    let sql: postgres.Sql;
 
     async function cleanupRows(): Promise<void> {
-      const sql = postgres(url!, { max: 1 });
-      try {
-        const tables = [
-          "trader_calibration_observation_record",
-          "trader_calibration_snapshot_record",
-          "trader_abstention_outcome_record",
-          "trader_knowledge_confidence_update_record",
-          "trader_hypothesis_outcome_record",
-          "trader_forecast_outcome_record",
-        ] as const;
-        for (const table of tables) {
-          await sql.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER USER`);
-          await sql.unsafe(`DELETE FROM ${table} WHERE organization_id = $1`, [orgA]);
-          await sql.unsafe(`ALTER TABLE ${table} ENABLE TRIGGER USER`);
-        }
-      } finally {
-        await sql.end({ timeout: 5 });
+      const tables = [
+        "trader_calibration_observation_record",
+        "trader_calibration_snapshot_record",
+        "trader_abstention_outcome_record",
+        "trader_knowledge_confidence_update_record",
+        "trader_hypothesis_outcome_record",
+        "trader_forecast_outcome_record",
+      ] as const;
+      for (const table of tables) {
+        await sql.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER ${table}_block_delete`);
+        await sql.unsafe(`DELETE FROM ${table} WHERE organization_id = $1`, [orgA]);
+        await sql.unsafe(`ALTER TABLE ${table} ENABLE TRIGGER ${table}_block_delete`);
       }
       await cleanupWp14AllRows(url!, orgA);
     }
 
     beforeAll(async () => {
-      const sql = postgres(url!, { max: 1 });
-      try {
-        await sql.unsafe(`INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [
-          USER_A,
-        ]);
-        await sql.unsafe(
-          `INSERT INTO users (id, identity_label, email) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`,
-          [USER_A, "wp21-parity", "wp21-parity@example.com"],
-        );
-      } finally {
-        await sql.end({ timeout: 5 });
-      }
-
-      const db = getPostgresDrizzle();
-      orgA = await ensureUserCoreSeedPostgres(db, {
-        userId: USER_A,
-        displayName: "WP21 Outcome Parity",
-      });
-    });
+      await assertWp21MandatoryPostgresProofEnvironment();
+      sql = postgres(url!, { max: 1 });
+      orgA = await seedWp21ProofUser(url!, USER_A, "WP21 Outcome Parity");
+    }, 60_000);
 
     beforeEach(async () => {
-      await cleanupRows();
+      // Unique run ids per test; avoid table-owner-only cleanup in local Postgres profiles.
     });
 
     afterAll(async () => {
+      await sql.end({ timeout: 5 });
       resetPostgresSingletonForTests();
     });
 
     it("creates trader_forecast_outcome_record table", async () => {
-      const sql = postgres(url!, { max: 1 });
-      try {
-        const tables = await sql.unsafe<{ table_name: string }[]>(
-          `SELECT table_name FROM information_schema.tables
-           WHERE table_schema = 'public' AND table_name = 'trader_forecast_outcome_record'`,
-        );
-        expect(tables).toHaveLength(1);
-      } finally {
-        await sql.end({ timeout: 5 });
-      }
+      const tables = await sql.unsafe<{ table_name: string }[]>(
+        `SELECT table_name FROM information_schema.tables
+         WHERE table_schema = 'public' AND table_name = 'trader_forecast_outcome_record'`,
+      );
+      expect(tables).toHaveLength(1);
     });
 
     it("denies authenticated role direct table access (42501)", async () => {
-      const sql = postgres(url!, { max: 1 });
+      const baseline = await sql.unsafe<{ role: string }[]>(`SELECT current_user AS role`);
+      await sql.unsafe(`SET ROLE authenticated`);
       try {
-        const baseline = await sql.unsafe<{ role: string }[]>(`SELECT current_user AS role`);
-        await sql.unsafe(`SET ROLE authenticated`);
-        try {
-          await sql.unsafe(`SELECT 1 FROM trader_forecast_outcome_record LIMIT 1`);
-          throw new Error("expected permission denied");
-        } catch (error) {
-          const probe = error as Error & { code?: string };
-          expect(probe.code).toBe(RLS_DENIED_SQLSTATE);
-        } finally {
-          await sql.unsafe(`RESET ROLE`);
-          expect(
-            (await sql.unsafe<{ role: string }[]>(`SELECT current_user AS role`))[0]?.role,
-          ).toBe(baseline[0]?.role);
-        }
+        await sql.unsafe(`SELECT 1 FROM trader_forecast_outcome_record LIMIT 1`);
+        throw new Error("expected permission denied");
+      } catch (error) {
+        const probe = error as Error & { code?: string };
+        expect(probe.code).toBe(RLS_DENIED_SQLSTATE);
       } finally {
-        await sql.end({ timeout: 5 });
+        await sql.unsafe(`RESET ROLE`);
+        expect((await sql.unsafe<{ role: string }[]>(`SELECT current_user AS role`))[0]?.role).toBe(
+          baseline[0]?.role,
+        );
       }
     });
 
     it("idempotent insert accepts identical digest and rejects digest conflict", async () => {
       const db = getPostgresDrizzle();
-      const runId = "wp21-idem-run";
+      const runId = `wp21-idem-${Date.now()}`;
       const cycleId = "0";
       await persistIntelligenceCycleBundle(
         { organizationId: orgA },
@@ -164,6 +136,6 @@ describe.skipIf(!integrationEnabled || !url)(
       await expect(insert(conflict)).rejects.toBeInstanceOf(
         OutcomeResolutionIdempotencyConflictError,
       );
-    });
+    }, 60_000);
   },
 );

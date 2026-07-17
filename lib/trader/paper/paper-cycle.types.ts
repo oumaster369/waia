@@ -147,6 +147,12 @@ export type PaperCycleInput = {
   reconstruction?: import("@/lib/trader/intelligence/reconstruction/reconstruction.types").ReconstructionSnapshot;
   /** HTR-WP16: strategy eligibility, trial, and drawdown gating context. */
   wp16?: Wp16GatingContext;
+  /** HTR-WP13/WP14: explicit historical intelligence profile for evaluation-cycle records. */
+  historicalProfile?: HistoricalIntelligenceProfile;
+  /** HTR-WP13/WP14: research run identifier for intelligence record lineage. */
+  runId?: string;
+  /** HTR-WP14: cost model for net-economics fail-closed decision records. */
+  costModel?: CostModelV1;
   /** HTR-WP18/WP19/WP20: accounting + reconciliation + guardian authority on research path. */
   htrAccounting?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrAccountingCycleContext;
 };

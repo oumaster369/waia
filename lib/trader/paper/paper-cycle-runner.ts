@@ -418,6 +418,11 @@ export async function runPaperCycleOnce(
     hypothesisSessionState: input.hypothesisSessionState,
     miCoreEnabled: input.miCoreEnabled,
     reconstruction: input.reconstruction,
+    historicalProfile: input.historicalProfile ?? input.wp16?.historicalProfile,
+    runId: input.runId,
+    cycleId: snapshot.cycleId,
+    symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
+    costModel: input.costModel,
   });
 
   const actionableSignals = evaluation.signals.filter(

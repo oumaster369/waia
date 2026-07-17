@@ -1,10 +1,4 @@
-import {
-  compareDecimal,
-  formatDecimal,
-  multiplyDecimal,
-  parseDecimal,
-} from "@/lib/trader/risk/numeric";
-import { EPISTEMIC_LOG_LOSS_EPSILON } from "@/lib/trader/intelligence/epistemic/epistemic-scoring-contract";
+import { formatDecimal, multiplyDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import {
   formatEpistemicScore,
   validateProbabilityDomain,
@@ -12,13 +6,19 @@ import {
 import { addDecimal, divideDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 
 function clipProbability(probability: string): string {
-  const epsilon = Number(EPISTEMIC_LOG_LOSS_EPSILON);
   const p = Number(probability);
+  const epsilon = 1e-12;
   if (!Number.isFinite(p)) {
-    throw new Error("INVALID_PROBABILITY");
+    return probability;
   }
-  const clipped = Math.min(1 - epsilon, Math.max(epsilon, p));
-  return clipped.toFixed(8).replace(/\.?0+$/, "") || "0";
+  if (p < epsilon) {
+    return String(epsilon);
+  }
+  const ceiling = 1 - epsilon;
+  if (p > ceiling) {
+    return String(ceiling);
+  }
+  return probability;
 }
 
 function naturalLogApprox(value: string): string {

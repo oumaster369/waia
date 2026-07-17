@@ -112,6 +112,7 @@ import type { OutcomeResolutionSink } from "@/lib/trader/intelligence/outcome-re
 import type { ConfidenceUpdateSink } from "@/lib/trader/knowledge/knowledge-confidence-update-repository-postgres";
 import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
 import type { Wp21CheckpointState } from "@/lib/trader/intelligence/outcome-resolution/wp21-checkpoint-state";
+import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 
 export type RunBacktestInput = {
   context: OrgContext;
@@ -192,6 +193,8 @@ export type RunBacktestInput = {
   wp16?: import("@/lib/trader/paper/paper-cycle.types").Wp16GatingContext;
   /** HTR-WP17: historical execution simulation profile. */
   historicalExecutionProfile?: HistoricalExecutionProfileV1;
+  /** Research pipeline phase prefix for intelligence/WP21 cycle business keys. */
+  cycleIdPrefix?: string;
   /** HTR-WP18: restored accounting frontier for checkpoint resume. */
   initialAccountingFrontierState?: ReplayAccountingFrontierState;
 };
@@ -218,6 +221,19 @@ export type RunBacktestResult = {
   /** HTR-WP21: terminal checkpoint state after epistemic closure. */
   wp21CheckpointState?: Wp21CheckpointState;
 };
+
+function resolveWp21PostgresDb(
+  executor: RunBacktestInput["wp21PostgresExecutor"],
+): WaiaPostgresDb | undefined {
+  if (executor && "transaction" in executor && typeof executor.transaction === "function") {
+    return executor as WaiaPostgresDb;
+  }
+  return undefined;
+}
+
+function resolveIntelligenceCycleId(cycleIdPrefix: string | undefined, cycleIndex: number): string {
+  return cycleIdPrefix ? `${cycleIdPrefix}-${cycleIndex}` : String(cycleIndex);
+}
 
 function wrapOrderRepositoryWithCostModel(
   inner: OrderRepository,
@@ -598,6 +614,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         checkpoint: wp21CheckpointState,
         codeSha: provenance.codeSha,
         datasetContentDigest: provenance.datasetContentDigest,
+        pgDb: resolveWp21PostgresDb(input.wp21PostgresExecutor),
       });
       wp21CheckpointState = cycleSeam.checkpoint;
     }
@@ -624,6 +641,9 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         miCoreEnabled: profileActive ? true : input.miCoreEnabled,
         reconstruction,
         wp16: input.wp16,
+        historicalProfile: input.historicalProfile,
+        runId: input.runId,
+        costModel: input.costModel,
         htrAccounting: htrAccounting ?? undefined,
       });
     } catch (error) {
@@ -636,10 +656,11 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     benchmarkObserver.sampleMemory("paper-cycle", cycleIndex);
 
     if (profileActive && result.evaluation.marketStateSnapshot && result.evaluation.decisionChain) {
+      const intelligenceCycleId = resolveIntelligenceCycleId(input.cycleIdPrefix, cycleIndex);
       const bundle = buildIntelligenceCycleBundle({
         organizationId: input.context.organizationId,
         runId: input.runId,
-        cycleId: String(cycleIndex),
+        cycleId: intelligenceCycleId,
         symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
         marketStateSnapshot: result.evaluation.marketStateSnapshot,
         decisionChain: result.evaluation.decisionChain,
@@ -657,7 +678,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           {
             organizationId: input.context.organizationId,
             runId: input.runId,
-            cycleId: String(cycleIndex),
+            cycleId: intelligenceCycleId,
             symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
             marketStateSnapshot: result.evaluation.marketStateSnapshot,
             decisionChain: result.evaluation.decisionChain,
@@ -668,7 +689,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         wp13Persisted = true;
       }
 
-      if (result.evaluation.hypothesisSet && result.evaluation.forecastDecisionBundle) {
+      if (result.evaluation.hypothesisSet) {
         const forecastDecisionInput = {
           intelligenceCycleBundle: bundle,
           hypothesisSet: result.evaluation.hypothesisSet,
@@ -793,6 +814,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       provenance,
       ex: input.wp21PostgresExecutor,
       checkpoint: wp21CheckpointState,
+      pgDb: resolveWp21PostgresDb(input.wp21PostgresExecutor),
     });
     wp21CheckpointState = terminalSeam.checkpoint;
   }

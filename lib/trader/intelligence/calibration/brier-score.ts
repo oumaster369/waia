@@ -12,9 +12,17 @@ import { EPISTEMIC_NUMERIC_PRECISION_DP } from "@/lib/trader/intelligence/episte
 function roundHalfEven(value: string, dp: number): string {
   const factor = 10 ** dp;
   const num = Number(value);
-  const scaled = Math.round(num * factor);
-  const evenCheck = scaled / factor;
-  return evenCheck.toFixed(dp);
+  const scaled = num * factor;
+  const floor = Math.floor(scaled);
+  const fraction = scaled - floor;
+  if (fraction > 0.5) {
+    return ((floor + 1) / factor).toFixed(dp);
+  }
+  if (fraction < 0.5) {
+    return (floor / factor).toFixed(dp);
+  }
+  const rounded = floor % 2 === 0 ? floor : floor + 1;
+  return (rounded / factor).toFixed(dp);
 }
 
 export function formatEpistemicScore(value: string): string {
