@@ -32,16 +32,26 @@ state:
   childPlanStatus: VALIDATED
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: HTR_WP21_CANON_CONFORMANCE_CORRECTIVE_VALIDATED_PENDING_INDEPENDENT_PHASE_B
+  composerTerminalState: HTR_WP21_CORRECTIVE_PROOF_CLOSURE_VALIDATED_PENDING_INDEPENDENT_PHASE_B
   activeWorkPackage: HTR-WP21
   currentWorkPackage: HTR-WP21
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-I
-  activeMacroStatus: CORRECTIVE_VALIDATED_PENDING_INDEPENDENT_PHASE_B
+  activeMacroStatus: CORRECTIVE_PROOF_CLOSURE_VALIDATED_PENDING_INDEPENDENT_PHASE_B
+  governanceStateAuthority: GIT_HEAD
   wp21OriginalWorkSha: f72eed46779b2c5c3c49803c30d382109e4710b8
-  wp21CorrectiveScope: HTR-WP21_CANON_CONFORMANCE_AND_VALIDATION_PROOF
-  wp21CandidateProductionSha: f72eed46779b2c5c3c49803c30d382109e4710b8
+  wp21FirstCorrectiveWorkSha: 0c80b2d5ef7b5398780dbb1dc0cfe0a96d1f5eb8
+  wp21RuntimeProofWorkSha: f642d5d5005fd52f5d5660a14f6c9ed61e1a4a1d
+  wp21EffectivePhaseACandidateSha: b71a381327d042640f5c3bd9912fe1fd5d3cd4c4
+  wp21CorrectiveScope: HTR-WP21_VALIDATION_ENVIRONMENT_REMEDIATION_AND_PROOF_CLOSURE
+  wp21CandidateProductionSha: b71a381327d042640f5c3bd9912fe1fd5d3cd4c4
+  wp21PhaseAStatus: PHASE_A_PROOF_COMPLETE_PENDING_INDEPENDENT_PHASE_B
+  wp21CloseoutCommit: NONE
+  wp21EvidencePromoted: false
+  wp21EvidenceStagingPath: .cursor/plans/dee-415-wp21/evidence-staging/b71a381327d042640f5c3bd9912fe1fd5d3cd4c4/canon-conformance-validation-corrective/
+  wp21EvidenceManifestDigest: e064a72ab70a10eddca7f8def9249506dba6b4bb9c4eb63fa024b5286474f2f4
+  wp21EvidenceSemanticDigest: bd40f2a9da8bd8af203af5ab90766d37ff31ff84219dbc7b2727a1bf119c350c
   macroIWorkPackages: [HTR-WP21]
   macroIPacketSha256: 378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777
   macroIPacketPath: .cursor/plans/dee-415-macro-i/approval-candidates/378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777/dee-415-htr-macro-i-exact-packet.plan.md
@@ -93,12 +103,13 @@ state:
   htrGap043: OPEN
   htrGap044: OPEN
   htrGap045: OPEN
-  latestValidatedProductionCodeSha: 3eb65728dce3feab94b885f61fbaa90e06383bd8
-  planningTerminalState: HTR_WP21_CANON_CONFORMANCE_CORRECTIVE_VALIDATED_PENDING_INDEPENDENT_PHASE_B
+  latestValidatedProductionCodeSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
+  latestIndependentlyValidatedPreWp21ProductionSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
+  planningTerminalState: HTR_WP21_CORRECTIVE_PROOF_CLOSURE_VALIDATED_PENDING_INDEPENDENT_PHASE_B
   newHumanTokenRequired: true
   requiredHumanTokens: [AUTHORIZE_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B]
-  nextHumanGate: INDEPENDENT_HTR_MACRO_I_PHASE_B_AFTER_CORRECTIVE
-  nextAction: FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B_AFTER_CORRECTIVE
+  nextHumanGate: AUTHORIZE_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B
+  nextAction: FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B
   readyForFullHistoricalTest: false
   finalPrAuthorized: false
   childPlanPacketAudit: PASS
