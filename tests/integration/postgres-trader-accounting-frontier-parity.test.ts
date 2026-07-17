@@ -31,6 +31,57 @@ const USER_A = "00000000-0000-4000-8000-0000000418d1";
 const ACCOUNT_KEY = "htr-frontier-parity";
 const RUN_ID = "htr-frontier-run-1";
 
+const RLS_DENIED_SQLSTATE = "42501";
+const RLS_PROBE_ORG_ID = "00000000-0000-4000-8018-000000000001";
+const RLS_PROBE_ROW_ID = "00000000-0000-4000-8018-000000000002";
+
+type PostgresRoleProbeError = Error & { code?: string };
+
+/** Canonical validate profile uses table-owner `waia_validate`, not PostgreSQL `service_role`. */
+function createDedicatedRoleProbeClient() {
+  return postgres(url!, { max: 1 });
+}
+
+async function readSessionRole(sql: ReturnType<typeof postgres>): Promise<string> {
+  const rows = await sql.unsafe<{ role: string }[]>(`SELECT current_user AS role`);
+  return rows[0]?.role ?? "";
+}
+
+async function assertRoleReset(
+  sql: ReturnType<typeof postgres>,
+  expectedRole: string,
+): Promise<void> {
+  expect(await readSessionRole(sql)).toBe(expectedRole);
+}
+
+async function expectInsufficientPrivilege(
+  operation: () => Promise<unknown>,
+): Promise<PostgresRoleProbeError> {
+  try {
+    await operation();
+    throw new Error("RLS_PROBE_EXPECTED_INSUFFICIENT_PRIVILEGE");
+  } catch (error) {
+    const probeError = error as PostgresRoleProbeError;
+    expect(probeError.code).toBe(RLS_DENIED_SQLSTATE);
+    expect(probeError.message).toMatch(/permission denied for table trader_accounting_frontier/i);
+    return probeError;
+  }
+}
+
+function rlsProbeInsertSql(): string {
+  return `INSERT INTO trader_accounting_frontier (
+    id, organization_id, account_key, run_id, accounting_sequence, frontier_as_of,
+    cash, position_quantity_json, gross_position_basis_json, net_position_basis_json,
+    gross_realized_pnl, net_realized_pnl, marks_json, equity, equity_hwm,
+    account_drawdown_bps, source_economics_digest, semantic_content_digest,
+    idempotency_key, schema_version
+  ) VALUES (
+    '${RLS_PROBE_ROW_ID}', '${RLS_PROBE_ORG_ID}', 'htr-rls-probe', 'htr-rls-probe-run', 1,
+    TIMESTAMPTZ '2026-01-01T00:00:00.000Z', '0', '{}', '{}', '{}', '0', '0', '{}', '0', '0',
+    0, repeat('a', 64), repeat('b', 64), 'htr-rls-probe-idempotency', 'htr-accounting-frontier/v1'
+  )`;
+}
+
 /** Postgres FK on source_fill_id requires persisted trader_fills; parity tests use marks-only linkage. */
 function forPostgresAppend(frontier: AccountingFrontierV1): AccountingFrontierV1 {
   return { ...frontier, sourceFillId: null };
@@ -131,7 +182,7 @@ describe.skipIf(!integrationEnabled || !url)(
       }
     });
 
-    it("persists accounting frontier with content-addressed semantic digest", async () => {
+    it("persists accounting frontier with content-addressed semantic digest (privileged validate-profile table-owner append permitted)", async () => {
       const context = requireOrgContext(orgA);
       const fill = makeAccountingEconomicsFill("buy");
       const frontier = advanceAccountingFrontier({
@@ -157,7 +208,7 @@ describe.skipIf(!integrationEnabled || !url)(
       expect(rows[0]?.schemaVersion).toBe("htr-accounting-frontier/v1");
     });
 
-    it("loadLatest returns highest accounting_sequence frontier", async () => {
+    it("loadLatest returns highest accounting_sequence frontier (privileged validate-profile table-owner readback permitted)", async () => {
       const context = requireOrgContext(orgA);
       const buy = makeAccountingEconomicsFill("buy");
       let state = createInitialAccountingState({
@@ -260,6 +311,66 @@ describe.skipIf(!integrationEnabled || !url)(
           sql.unsafe(`UPDATE trader_accounting_frontier SET cash = '9' WHERE id = $1`, [stored.id]),
         ).rejects.toThrow(/append-only/i);
       } finally {
+        await sql.end({ timeout: 5 });
+      }
+    });
+
+    it("denies authenticated role SELECT on trader_accounting_frontier (42501 insufficient privilege)", async () => {
+      const sql = createDedicatedRoleProbeClient();
+      const baselineRole = await readSessionRole(sql);
+      try {
+        await sql.unsafe(`SET ROLE authenticated`);
+        expect(await readSessionRole(sql)).toBe("authenticated");
+        await expectInsufficientPrivilege(() =>
+          sql.unsafe(`SELECT id FROM trader_accounting_frontier LIMIT 1`),
+        );
+      } finally {
+        await sql.unsafe(`RESET ROLE`);
+        await assertRoleReset(sql, baselineRole);
+        await sql.end({ timeout: 5 });
+      }
+    });
+
+    it("denies authenticated role INSERT on trader_accounting_frontier (42501 insufficient privilege)", async () => {
+      const sql = createDedicatedRoleProbeClient();
+      const baselineRole = await readSessionRole(sql);
+      try {
+        await sql.unsafe(`SET ROLE authenticated`);
+        expect(await readSessionRole(sql)).toBe("authenticated");
+        await expectInsufficientPrivilege(() => sql.unsafe(rlsProbeInsertSql()));
+      } finally {
+        await sql.unsafe(`RESET ROLE`);
+        await assertRoleReset(sql, baselineRole);
+        await sql.end({ timeout: 5 });
+      }
+    });
+
+    it("denies anon role SELECT on trader_accounting_frontier (42501 insufficient privilege)", async () => {
+      const sql = createDedicatedRoleProbeClient();
+      const baselineRole = await readSessionRole(sql);
+      try {
+        await sql.unsafe(`SET ROLE anon`);
+        expect(await readSessionRole(sql)).toBe("anon");
+        await expectInsufficientPrivilege(() =>
+          sql.unsafe(`SELECT id FROM trader_accounting_frontier LIMIT 1`),
+        );
+      } finally {
+        await sql.unsafe(`RESET ROLE`);
+        await assertRoleReset(sql, baselineRole);
+        await sql.end({ timeout: 5 });
+      }
+    });
+
+    it("denies anon role INSERT on trader_accounting_frontier (42501 insufficient privilege)", async () => {
+      const sql = createDedicatedRoleProbeClient();
+      const baselineRole = await readSessionRole(sql);
+      try {
+        await sql.unsafe(`SET ROLE anon`);
+        expect(await readSessionRole(sql)).toBe("anon");
+        await expectInsufficientPrivilege(() => sql.unsafe(rlsProbeInsertSql()));
+      } finally {
+        await sql.unsafe(`RESET ROLE`);
+        await assertRoleReset(sql, baselineRole);
         await sql.end({ timeout: 5 });
       }
     });
