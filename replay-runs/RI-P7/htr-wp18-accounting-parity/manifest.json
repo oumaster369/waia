@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "htr-macro-h-wp18-rls-proof-final-corrective-evidence/v1",
+  "sourceGitSha": "24c0eb9041048a8c381a218e1922ed433b44e594",
+  "sourceDirtyTree": false,
+  "files": [
+    "accounting-state-digest.json",
+    "checkpoint-resume-result.json",
+    "default-path-runtime-proof.json",
+    "parity-manifest.json",
+    "pnl-report-v1.json",
+    "postgres-parity-results.json",
+    "rls-runtime-proof.json",
+    "terminal-export-result.json"
+  ],
+  "fileDigests": {
+    "accounting-state-digest.json": "17b8ba2733641eab5d292283e23593a86dd8c22ff49f8c8b330c8381dd0feb8a",
+    "checkpoint-resume-result.json": "438d2549bb6924328b643f46f8d6cb044535a8c91fe1ab77269bd4f5d23eb140",
+    "default-path-runtime-proof.json": "8dd7d59eef60ab60efc20708d090c54729b4a1f629f92a52ebdcf6964d30f5f4",
+    "parity-manifest.json": "8cc900a30165fa7857940ed99e9c2bb1cddd060bb2b48807c698a5809ed1e148",
+    "pnl-report-v1.json": "4473d8b4e0e2ed702b81904cf41a19672b1fabe3000dce04a127084fff5c2a30",
+    "postgres-parity-results.json": "c89f4d4434e8ff661397c92464c364abbf564b46449d3c7f36510b2b416325b0",
+    "rls-runtime-proof.json": "de4ac91d91cf18e2968606ba46b949c524d11dd04bb6a854f92eac56d3740b97",
+    "terminal-export-result.json": "49a22dd4dc35316eb5b1a3354c7374b1f7f9cde2d76458dc6a36701a017bb9f2"
+  },
+  "semanticDigest": "fd22742d0650525969b348cd3bd3fa4bcffe6edb0c528e9ab3e9c08d2526a0e8",
+  "manifestDigest": "d495ad5baed16dc93e3f4677ed63a3415d6c5ddfe69ab4d2540b71f60a1e27b4"
+}

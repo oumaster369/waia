@@ -27,14 +27,14 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: HTR_MACRO_H_ACTIVATED_BUILD_AUTHORIZED
-  programStatus: WP_ACTIVE
+  humanApproval: HTR_WP18_CLOSEOUT_COMPLETE
+  programStatus: WP_VALIDATED
   childPlanStatus: APPROVED_EXACT
-  buildAuthorized: true
-  buildAuthorizedScope: HTR-MACRO-H_PHASE_A_ONLY
-  composerTerminalState: HTR_MACRO_H_ACTIVATED_BUILD_AUTHORIZED
-  activeWorkPackage: HTR-WP18
-  currentWorkPackage: HTR-WP18
+  buildAuthorized: false
+  buildAuthorizedScope: null
+  composerTerminalState: HTR_WP18_CLOSEOUT_COMPLETE
+  activeWorkPackage: HTR-WP19
+  currentWorkPackage: HTR-WP19
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-H
@@ -101,6 +101,18 @@ state:
   wp18PostgresMigrations: [0100, 0101]
   wp19MigrationDecision: NONE
   wp20MigrationDecision: NONE
+  wp18WorkCommitSha: 09573c594b5ea01add3d2b2a543253c241ce463f
+  wp18DefaultPathCorrectiveSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
+  wp18FixturePostgresCorrectiveSha: 077ea4379c191b4d0cd475b393d83326f4a3c0f2
+  wp18RlsProofCorrectiveSha: 24c0eb9041048a8c381a218e1922ed433b44e594
+  wp18ImplementationStatus: WORK_PACKAGE_COMPLETE
+  wp18PhaseBVerdict: PASS
+  wp18EvidenceStatus: ACCEPTED
+  wp18AcceptedEvidenceSourceGitSha: 24c0eb9041048a8c381a218e1922ed433b44e594
+  wp18AcceptedEvidencePath: replay-runs/RI-P7/htr-wp18-accounting-parity/
+  wp18AcceptedEvidenceManifestDigest: d495ad5baed16dc93e3f4677ed63a3415d6c5ddfe69ab4d2540b71f60a1e27b4
+  wp18AcceptedEvidenceSemanticDigest: fd22742d0650525969b348cd3bd3fa4bcffe6edb0c528e9ab3e9c08d2526a0e8
+  wp18Status: WORK_PACKAGE_COMPLETE
   macroHHumanActivation:
     status: HUMAN_APPROVED_CONSUMED
     activationDate: 2026-07-16
@@ -115,7 +127,7 @@ state:
     buildAuthorizedScope: HTR-MACRO-H_PHASE_A_ONLY
   readyForFullHistoricalTest: false
   finalPrAuthorized: false
-  latestValidatedProductionCodeSha: f3368b2aa56bedf011ecd5c3fe8d10a94bf9621f
+  latestValidatedProductionCodeSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
   wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b
   wp15WorkCommitSha: 645f4be149e65b5e401c3e9bc76cca3f415b23a2
@@ -163,7 +175,7 @@ state:
   buildStarted: true
   htrGap016: CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH
   htrGap017: CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH
-  htrGap023: OPEN
+  htrGap023: CLOSED
   htrGap035: OPEN
   htrGap043: OPEN
   htrGap044: OPEN

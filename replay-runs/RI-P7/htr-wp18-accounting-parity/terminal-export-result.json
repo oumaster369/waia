@@ -1,0 +1,198 @@
+{
+  "schemaVersion": "waia.trader.backtest-evaluation-export.v1",
+  "organizationId": "c218df5a-3df0-4c61-aa36-191a921bf90f",
+  "executionMode": "mock",
+  "costModel": {
+    "version": "waia.trader.cost-model.v1",
+    "feesBps": "10",
+    "slippageBps": "5"
+  },
+  "window": {
+    "start": "2026-01-01T00:00:00.000Z",
+    "end": "2026-01-01T00:25:00.000Z"
+  },
+  "strategyId": "mean_reversion_v0",
+  "strategyVersion": "0.1.0",
+  "regimeLabel": "AGGREGATE",
+  "datasetId": "dataset-macro-h-evidence",
+  "runId": "run-macro-h-evidence",
+  "split": "validation",
+  "cycleCount": 4,
+  "orgPeriodRollup": {
+    "organizationId": "c218df5a-3df0-4c61-aa36-191a921bf90f",
+    "executionMode": "mock",
+    "quoteCurrency": "USDT",
+    "window": {
+      "start": "2026-01-01T00:00:00.000Z",
+      "end": "2026-01-01T00:25:00.000Z"
+    },
+    "periodRealizedPnl": "0",
+    "periodTotalFees": "0",
+    "periodFeesByAsset": {},
+    "periodValuationGaps": [],
+    "periodUnrealizedChange": null,
+    "periodTotalPnlChange": null,
+    "endSnapshot": {
+      "organizationId": "c218df5a-3df0-4c61-aa36-191a921bf90f",
+      "executionMode": "mock",
+      "quoteCurrency": "USDT",
+      "realizedPnl": "0",
+      "unrealizedPnl": null,
+      "totalFees": "0",
+      "totalPnl": null,
+      "positions": [
+        {
+          "symbol": "BTC/USDT",
+          "quantity": "0.01",
+          "avgCost": "65227.5",
+          "costBasis": "652.275",
+          "markPrice": null,
+          "marketValue": null,
+          "realizedPnl": "0",
+          "unrealizedPnl": null,
+          "fees": "0"
+        }
+      ],
+      "feesByAsset": {},
+      "valuationGaps": [],
+      "derivedAt": "2026-01-01T00:25:00.000Z"
+    },
+    "derivedAt": "2026-01-01T00:25:00.000Z"
+  },
+  "strategyEvaluations": [
+    {
+      "organizationId": "c218df5a-3df0-4c61-aa36-191a921bf90f",
+      "executionMode": "mock",
+      "strategySignalId": "mean_reversion_v0",
+      "quoteCurrency": "USDT",
+      "window": {
+        "start": "2026-01-01T00:00:00.000Z",
+        "end": "2026-01-01T00:25:00.000Z"
+      },
+      "periodRealizedPnl": "0",
+      "periodTotalFees": "0",
+      "periodFeesByAsset": {},
+      "periodValuationGaps": [],
+      "periodUnrealizedChange": null,
+      "periodTotalPnlChange": null,
+      "endSnapshot": {
+        "organizationId": "c218df5a-3df0-4c61-aa36-191a921bf90f",
+        "executionMode": "mock",
+        "quoteCurrency": "USDT",
+        "realizedPnl": "0",
+        "unrealizedPnl": null,
+        "totalFees": "0",
+        "totalPnl": null,
+        "positions": [],
+        "feesByAsset": {},
+        "valuationGaps": [],
+        "derivedAt": "2026-01-01T00:25:00.000Z"
+      },
+      "derivedAt": "2026-01-01T00:25:00.000Z",
+      "markToCloseTrades": [],
+      "markToCloseTradeCount": 0,
+      "openPositionCount": 0,
+      "periodMarkedPnl": "0",
+      "closedTrades": [],
+      "closedTradeCount": 0,
+      "winCount": 0,
+      "lossCount": 0,
+      "breakevenCount": 0,
+      "winRate": null,
+      "lossRate": null,
+      "averageWin": null,
+      "averageLoss": null,
+      "grossProfit": "0",
+      "grossLoss": "0",
+      "profitFactor": null,
+      "expectancy": null,
+      "maxRealizedDrawdown": "0",
+      "recoveryFactor": null
+    }
+  ],
+  "dataQuality": {
+    "reconciliationStatus": "clean",
+    "valuationGapCount": 0,
+    "valuationGaps": [],
+    "unrealizedAvailable": false,
+    "strategiesWithNoFills": [
+      "mean_reversion_v0"
+    ]
+  },
+  "provenance": {
+    "source": "backtest_run",
+    "runId": "run-macro-h-evidence",
+    "datasetId": "dataset-macro-h-evidence",
+    "split": "validation",
+    "strategyId": "mean_reversion_v0",
+    "strategyVersion": "0.1.0",
+    "regimeLabel": "AGGREGATE",
+    "costModelVersion": "waia.trader.cost-model.v1",
+    "cycleCount": 4,
+    "fillEventCount": 1,
+    "filledOrderCount": 1,
+    "strategySignalIds": [
+      "mean_reversion_v0"
+    ],
+    "readModelSlices": [
+      "paper-pnl.v1",
+      "paper-pnl-period.v1",
+      "paper-strategy-eval.v1",
+      "backtest-cost-model.v1",
+      "historical-execution-cost.v1",
+      "htr-pnl-report.v1"
+    ]
+  },
+  "historicalExecutionCost": {
+    "executionModelId": "htr-historical-execution-v1",
+    "executionModelSchemaVersion": "waia.trader.historical-execution-model.v1",
+    "executionFactKind": "HISTORICAL_SIMULATED_FILL_V1",
+    "fillCount": 1,
+    "aggregateEconomicsDigest": "cb1a4222a8723ff1067bcd5e2dc6e71004725d28a8ff03e4e30e1f311ff47e4c",
+    "fills": [
+      {
+        "schemaVersion": "waia.trader.historical-fill-economics-export.v1",
+        "executionFactKind": "HISTORICAL_SIMULATED_FILL_V1",
+        "executionModelId": "htr-historical-execution-v1",
+        "executionModelSchemaVersion": "waia.trader.historical-execution-model.v1",
+        "grossFillPrice": "65000.00",
+        "grossNotional": "650",
+        "feeAmount": "1.3",
+        "spreadCost": "0.325",
+        "impactSlippageCost": "0.65",
+        "totalExecutionCost": "2.275",
+        "netFillPrice": "65097.5",
+        "netCashEffect": "-652.275",
+        "economicsContentDigest": "1bc969ecf893707cc64e0e4649d00210bc255e5c2771006d5362af645abb854a",
+        "fillSequence": 1
+      }
+    ]
+  },
+  "htrPnlReportV1": {
+    "schemaVersion": "htr-pnl-report/v1",
+    "organizationId": "c218df5a-3df0-4c61-aa36-191a921bf90f",
+    "accountKey": "macro-h-evidence",
+    "runId": "run-macro-h-evidence",
+    "startingEquityUsdt": "100000.00",
+    "terminalEquityUsdt": "99997.725",
+    "terminalCashUsdt": "99347.725",
+    "grossRealizedPnlUsdt": "0",
+    "netRealizedPnlUsdt": "0",
+    "grossUnrealizedPnlUsdt": "0",
+    "netUnrealizedPnlUsdt": "-2.275",
+    "totalExecutionCostUsdt": "2.275",
+    "accountDrawdownBps": 0,
+    "equityHwmUsdt": "100000.00",
+    "terminalOpenPositions": [
+      {
+        "symbol": "BTCUSDT",
+        "quantity": "0.01",
+        "grossAvgCost": "65000",
+        "netAvgCost": "65227.5"
+      }
+    ],
+    "accountingSequence": 6,
+    "semanticDigest": "176a4b7f62aaf65eb162c3f7be2fd0db39927dd1f510c3c66982202d21693474"
+  },
+  "exportedAt": "2026-01-01T00:25:00.000Z"
+}

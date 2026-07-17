@@ -5,7 +5,7 @@ scope: ai-trader
 owner: Architect
 linkedSpec: docs/product-specs/ai-trader-historical-test-readiness-completion.md
 linkedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
-lastReviewed: 2026-07-16
+lastReviewed: 2026-07-17
 version: 0.1.2
 ---
 
@@ -53,7 +53,7 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 | HTR-GAP-020 | Strategy pinning/gating/lifecycle/trial | major | closed (2026-07-15; HTR-WP16 WORK 93d6908; independent Phase-B PASS; exact version pin, lifecycle, trial, eligibility gates; Postgres 0090–0093; accepted evidence replay-runs/RI-P7/htr-wp16-strategy-gating/) | HTR-WP16 | — | HTR-WP16 | IB-HTR-16 |
 | HTR-GAP-021 | riskMultiplier unused | minor | closed (2026-07-15; HTR-WP16 applyRiskMultiplierToQuantity integrated in paper-cycle-runner; downward-only clamp; unit tests PASS) | HTR-WP16 | — | HTR-WP16 | IB-HTR-16 |
 | HTR-GAP-022 | Guardian vocabulary incomplete; exit-reason | major | open | HTR-WP20 | — | HTR-WP20 | IB-HTR-20 |
-| HTR-GAP-023 | Cost model not on default fills; net vs gross | blocker | open | HTR-WP17 | HTR-WP18 | HTR-WP18 | IB-HTR-17 |
+| HTR-GAP-023 | Cost model not on default fills; net vs gross | blocker | closed (2026-07-17; HTR-WP18 WORK 09573c5 + default-path corrective 96144e0 + RLS proof corrective 24c0eb9; independent Phase-B PASS; dual-basis accounting on default path; Postgres 0100/0101 with table-privilege denial before RLS; accepted evidence replay-runs/RI-P7/htr-wp18-accounting-parity/ semantic digest fd22742d…) | HTR-WP17 | HTR-WP18 | HTR-WP18 | IB-HTR-17 |
 | HTR-GAP-024 | No per-stage timing / perf telemetry | major | open (2026-07-12; WP03 WORK COMMIT 35283ed supplied benchmark instrumentation, per-stage timing baseline, memory high-water, semantic-parity evidence, baseline evidence at replay-runs/RI-P7/htr-wp03-replay-benchmark-baseline/; CLOSURE remains HTR-WP22 full-runtime perf qualification) | HTR-WP03 | — | HTR-WP22 | IB-HTR-03 |
 | HTR-GAP-025 | Determinism residuals | blocker | closed (2026-07-14; WP10 WORK befa6c1 injected deterministic clock/ID seams (deterministic-replay-id-factory, session/repository/lifecycle clock injection), removed Date.now() lookahead in evaluatedAt; fresh-process + checkpoint/resume byte-identical decisions/evidence/digests proven; Opus Macro-C Phase B PASS) | HTR-WP10 | — | HTR-WP10 | IB-HTR-10 |
 | HTR-GAP-026 | All-or-nothing evidence sealing; no crash-recovery | blocker | open (2026-07-12; WP04 WORK COMMIT b3abe7b + CLOSEOUT supplied streaming per-cycle evidence, atomic checksummed chain-linked chunks, complete/partial manifest truth, graceful SIGTERM partial sealing, hard-kill durable-prefix reconstruction, orphan-temp handling, corrupt-chain quarantine, integrated research-path evidence; baseline at replay-runs/RI-P7/htr-wp04-streaming-evidence-baseline/; CLOSURE remains HTR-WP22) | HTR-WP04 | — | HTR-WP22 | IB-HTR-04 |

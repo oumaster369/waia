@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "htr-pnl-report/v1",
+  "organizationId": "c218df5a-3df0-4c61-aa36-191a921bf90f",
+  "accountKey": "macro-h-evidence",
+  "runId": "run-macro-h-evidence",
+  "startingEquityUsdt": "100000.00",
+  "terminalEquityUsdt": "99997.725",
+  "terminalCashUsdt": "99347.725",
+  "grossRealizedPnlUsdt": "0",
+  "netRealizedPnlUsdt": "0",
+  "grossUnrealizedPnlUsdt": "0",
+  "netUnrealizedPnlUsdt": "-2.275",
+  "totalExecutionCostUsdt": "2.275",
+  "accountDrawdownBps": 0,
+  "equityHwmUsdt": "100000.00",
+  "terminalOpenPositions": [
+    {
+      "symbol": "BTCUSDT",
+      "quantity": "0.01",
+      "grossAvgCost": "65000",
+      "netAvgCost": "65227.5"
+    }
+  ],
+  "accountingSequence": 6,
+  "semanticDigest": "176a4b7f62aaf65eb162c3f7be2fd0db39927dd1f510c3c66982202d21693474"
+}

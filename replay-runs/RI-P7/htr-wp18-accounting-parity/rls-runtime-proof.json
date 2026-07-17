@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "htr-wp18-accounting-frontier-rls-runtime-proof/v1",
+  "sourceGitSha": "24c0eb9041048a8c381a218e1922ed433b44e594",
+  "sourceDirtyTree": false,
+  "databaseClass": "isolated-local-test",
+  "testFile": "tests/integration/postgres-trader-accounting-frontier-parity.test.ts",
+  "testNames": [
+    "denies authenticated role SELECT on trader_accounting_frontier (42501 insufficient privilege)",
+    "denies authenticated role INSERT on trader_accounting_frontier (42501 insufficient privilege)",
+    "denies anon role SELECT on trader_accounting_frontier (42501 insufficient privilege)",
+    "denies anon role INSERT on trader_accounting_frontier (42501 insufficient privilege)"
+  ],
+  "migrationIds": [
+    "0100_trader_accounting_frontier",
+    "0101_trader_accounting_frontier_rls"
+  ],
+  "denialMechanism": "sql_table_privilege_denied_before_rls",
+  "privilegedBackendCase": {
+    "connectionIdentityClass": "validate-profile-table-owner",
+    "roleName": "waia_validate",
+    "appendTestName": "persists accounting frontier with content-addressed semantic digest (privileged validate-profile table-owner append permitted)",
+    "readbackTestName": "loadLatest returns highest accounting_sequence frontier (privileged validate-profile table-owner readback permitted)",
+    "outcome": "permitted"
+  },
+  "roleResetVerified": true,
+  "unauthorizedRowsCreated": false,
+  "roleCases": [
+    {
+      "role": "authenticated",
+      "operation": "SELECT",
+      "table": "trader_accounting_frontier",
+      "expectedOutcome": "insufficient_privilege",
+      "actualOutcome": "insufficient_privilege",
+      "sqlState": "42501",
+      "roleReset": true,
+      "testName": "denies authenticated role SELECT on trader_accounting_frontier (42501 insufficient privilege)"
+    },
+    {
+      "role": "authenticated",
+      "operation": "INSERT",
+      "table": "trader_accounting_frontier",
+      "expectedOutcome": "insufficient_privilege",
+      "actualOutcome": "insufficient_privilege",
+      "sqlState": "42501",
+      "roleReset": true,
+      "testName": "denies authenticated role INSERT on trader_accounting_frontier (42501 insufficient privilege)"
+    },
+    {
+      "role": "anon",
+      "operation": "SELECT",
+      "table": "trader_accounting_frontier",
+      "expectedOutcome": "insufficient_privilege",
+      "actualOutcome": "insufficient_privilege",
+      "sqlState": "42501",
+      "roleReset": true,
+      "testName": "denies anon role SELECT on trader_accounting_frontier (42501 insufficient privilege)"
+    },
+    {
+      "role": "anon",
+      "operation": "INSERT",
+      "table": "trader_accounting_frontier",
+      "expectedOutcome": "insufficient_privilege",
+      "actualOutcome": "insufficient_privilege",
+      "sqlState": "42501",
+      "roleReset": true,
+      "testName": "denies anon role INSERT on trader_accounting_frontier (42501 insufficient privilege)"
+    }
+  ]
+}
