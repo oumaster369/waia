@@ -78,6 +78,14 @@ import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/researc
 import { assertResearchPipelineRegimeCoverage } from "@/lib/trader/research/regime-coverage";
 import { runWalkForwardValidation } from "@/lib/trader/research/walk-forward-engine";
 import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
+import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
+import type { IntelligenceCycleBundleRepository } from "@/lib/trader/intelligence/records/repository-adapters";
+import type { ForecastDecisionBundleRepository } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
+import type { CalibrationSink } from "@/lib/trader/intelligence/calibration/calibration.types";
+import type { OutcomeResolutionSink } from "@/lib/trader/intelligence/outcome-resolution/outcome-resolution.types";
+import type { Wp21RuntimeDeps } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
+import type { ConfidenceUpdateSink } from "@/lib/trader/knowledge/knowledge-confidence-update-repository-postgres";
+import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete">;
@@ -110,6 +118,26 @@ export type RunResearchPipelineInput = {
   };
   /** HTR-WP17: optional historical execution profile for HTR default research replay. */
   historicalExecutionProfile?: HistoricalExecutionProfileV1;
+  /** HTR-WP21: opt-in historical intelligence profile for epistemic closure. */
+  historicalProfile?: HistoricalIntelligenceProfile;
+  /** HTR-WP13: intelligence records Postgres sink. */
+  intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
+  /** HTR-WP14: forecast-decision Postgres sink. */
+  forecastDecisionSink?: ForecastDecisionBundleRepository;
+  /** HTR-WP21: outcome resolution sink. */
+  outcomeResolutionSink?: OutcomeResolutionSink;
+  /** HTR-WP21: calibration sink. */
+  calibrationSink?: CalibrationSink;
+  /** HTR-WP21: confidence update sink. */
+  confidenceUpdateSink?: ConfidenceUpdateSink;
+  /** HTR-WP21: bundled runtime deps. */
+  wp21RuntimeDeps?: Wp21RuntimeDeps;
+  /** HTR-WP21: MKB outcome read port. */
+  outcomeResolutionReadPort?: OutcomeResolutionReadPort;
+  /** HTR-WP21: Postgres executor for terminal MKB query. */
+  wp21PostgresExecutor?: Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
+  /** HTR-WP21: provenance for epistemic records. */
+  wp21Provenance?: { codeSha: string; datasetContentDigest: string };
 };
 
 export type RunResearchPipelineResult = {
@@ -187,6 +215,16 @@ function buildIsolatedBacktestInput(
           })
         : undefined),
     historicalExecutionProfile: input.historicalExecutionProfile,
+    historicalProfile: input.historicalProfile,
+    intelligenceRecordsSink: input.intelligenceRecordsSink,
+    forecastDecisionSink: input.forecastDecisionSink,
+    outcomeResolutionSink: input.outcomeResolutionSink,
+    calibrationSink: input.calibrationSink,
+    confidenceUpdateSink: input.confidenceUpdateSink,
+    wp21RuntimeDeps: input.wp21RuntimeDeps,
+    outcomeResolutionReadPort: input.outcomeResolutionReadPort,
+    wp21PostgresExecutor: input.wp21PostgresExecutor,
+    wp21Provenance: input.wp21Provenance,
   };
 }
 

@@ -3525,6 +3525,304 @@ export const traderAccountingFrontier = pgTable(
   ],
 );
 
+/** DEE-415 / HTR-WP21: forecast outcome record (append-only). */
+export const traderForecastOutcomeRecord = pgTable(
+  "trader_forecast_outcome_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    forecastRecordId: uuid("forecast_record_id").notNull(),
+    decisionRecordId: uuid("decision_record_id"),
+    hypothesisRecordId: uuid("hypothesis_record_id"),
+    modelVersion: text("model_version").notNull(),
+    strategyVersion: text("strategy_version"),
+    regime: text("regime").notNull(),
+    horizon: text("horizon").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    eligibleResolutionAt: timestamp("eligible_resolution_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "date" }),
+    pitEvidenceBoundary: timestamp("pit_evidence_boundary", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    outcomeClass: text("outcome_class").notNull(),
+    outcomeVerdict: text("outcome_verdict"),
+    score: text("score"),
+    sourceRecordIdsJson: text("source_record_ids_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    provenanceJson: text("provenance_json").notNull(),
+    terminalReason: text("terminal_reason").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_forecast_outcome_record_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("tfor_org_run_cycle_symbol_forecast_uq").on(
+      t.organizationId,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+      t.forecastRecordId,
+    ),
+    uniqueIndex("tfor_org_idempotency_key_uq").on(t.organizationId, t.idempotencyKey),
+  ],
+);
+
+export const traderHypothesisOutcomeRecord = pgTable(
+  "trader_hypothesis_outcome_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    hypothesisRecordId: uuid("hypothesis_record_id").notNull(),
+    decisionRecordId: uuid("decision_record_id"),
+    forecastOutcomeIdsJson: text("forecast_outcome_ids_json").notNull(),
+    modelVersion: text("model_version").notNull(),
+    strategyVersion: text("strategy_version"),
+    regime: text("regime").notNull(),
+    horizon: text("horizon").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    eligibleResolutionAt: timestamp("eligible_resolution_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "date" }),
+    pitEvidenceBoundary: timestamp("pit_evidence_boundary", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    outcomeClass: text("outcome_class").notNull(),
+    score: text("score"),
+    sourceRecordIdsJson: text("source_record_ids_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    provenanceJson: text("provenance_json").notNull(),
+    terminalReason: text("terminal_reason").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_hypothesis_outcome_record_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("thor_org_run_cycle_symbol_hypothesis_uq").on(
+      t.organizationId,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+      t.hypothesisRecordId,
+    ),
+    uniqueIndex("thor_org_idempotency_key_uq").on(t.organizationId, t.idempotencyKey),
+  ],
+);
+
+export const traderCalibrationObservationRecord = pgTable(
+  "trader_calibration_observation_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    forecastRecordId: uuid("forecast_record_id").notNull(),
+    forecastOutcomeId: uuid("forecast_outcome_id").notNull(),
+    modelVersion: text("model_version").notNull(),
+    strategyVersion: text("strategy_version"),
+    regime: text("regime").notNull(),
+    horizon: text("horizon").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    eligibleResolutionAt: timestamp("eligible_resolution_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "date" }).notNull(),
+    pitEvidenceBoundary: timestamp("pit_evidence_boundary", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    probability: text("probability"),
+    outcomeEncoding: text("outcome_encoding"),
+    brierScore: text("brier_score"),
+    logLossScore: text("log_loss_score"),
+    scoringEligible: boolean("scoring_eligible").notNull(),
+    nonScoringReason: text("non_scoring_reason"),
+    contentDigest: text("content_digest").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    provenanceJson: text("provenance_json").notNull(),
+    terminalReason: text("terminal_reason").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_calibration_observation_record_id_organization_unique").on(
+      t.id,
+      t.organizationId,
+    ),
+    uniqueIndex("tcor_org_idempotency_key_uq").on(t.organizationId, t.idempotencyKey),
+  ],
+);
+
+export const traderCalibrationSnapshotRecord = pgTable(
+  "trader_calibration_snapshot_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    forecastModelVersion: text("forecast_model_version").notNull(),
+    regime: text("regime").notNull(),
+    horizon: text("horizon").notNull(),
+    sampleCount: integer("sample_count").notNull(),
+    scoringSampleCount: integer("scoring_sample_count").notNull(),
+    brierMean: text("brier_mean"),
+    logLossMean: text("log_loss_mean"),
+    calibrationStatus: text("calibration_status").notNull(),
+    calibrationWindow: text("calibration_window").notNull(),
+    survivorshipCountsJson: text("survivorship_counts_json").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    eligibleResolutionAt: timestamp("eligible_resolution_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "date" }).notNull(),
+    pitEvidenceBoundary: timestamp("pit_evidence_boundary", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    score: text("score"),
+    contentDigest: text("content_digest").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    provenanceJson: text("provenance_json").notNull(),
+    terminalReason: text("terminal_reason").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_calibration_snapshot_record_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("tcsr_org_run_partition_uq").on(
+      t.organizationId,
+      t.runId,
+      t.forecastModelVersion,
+      t.regime,
+      t.horizon,
+    ),
+    uniqueIndex("tcsr_org_idempotency_key_uq").on(t.organizationId, t.idempotencyKey),
+  ],
+);
+
+export const traderAbstentionOutcomeRecord = pgTable(
+  "trader_abstention_outcome_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    decisionRecordId: uuid("decision_record_id").notNull(),
+    forecastRecordId: uuid("forecast_record_id"),
+    forecastOutcomeId: uuid("forecast_outcome_id"),
+    modelVersion: text("model_version"),
+    strategyVersion: text("strategy_version"),
+    regime: text("regime").notNull(),
+    horizon: text("horizon").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    eligibleResolutionAt: timestamp("eligible_resolution_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "date" }).notNull(),
+    pitEvidenceBoundary: timestamp("pit_evidence_boundary", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    outcomeClass: text("outcome_class").notNull(),
+    score: text("score"),
+    observedOutcomeJson: text("observed_outcome_json").notNull(),
+    counterfactualTradeSimJson: text("counterfactual_trade_sim_json"),
+    sourceRecordIdsJson: text("source_record_ids_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    provenanceJson: text("provenance_json").notNull(),
+    terminalReason: text("terminal_reason").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_abstention_outcome_record_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("taor_org_run_cycle_symbol_decision_uq").on(
+      t.organizationId,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+      t.decisionRecordId,
+    ),
+    uniqueIndex("taor_org_idempotency_key_uq").on(t.organizationId, t.idempotencyKey),
+  ],
+);
+
+export const traderKnowledgeConfidenceUpdateRecord = pgTable(
+  "trader_knowledge_confidence_update_record",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    knowledgeEdgeId: uuid("knowledge_edge_id").notNull(),
+    updateKind: text("update_kind").notNull(),
+    updateModelVersion: text("update_model_version").notNull(),
+    priorConfidence: text("prior_confidence").notNull(),
+    posteriorConfidence: text("posterior_confidence").notNull(),
+    delta: text("delta").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    eligibleResolutionAt: timestamp("eligible_resolution_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "date" }).notNull(),
+    pitEvidenceBoundary: timestamp("pit_evidence_boundary", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    outcomeClass: text("outcome_class").notNull(),
+    score: text("score"),
+    sourceRecordIdsJson: text("source_record_ids_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    provenanceJson: text("provenance_json").notNull(),
+    terminalReason: text("terminal_reason").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_knowledge_confidence_update_record_id_organization_unique").on(
+      t.id,
+      t.organizationId,
+    ),
+    uniqueIndex("tkcur_org_idempotency_key_uq").on(t.organizationId, t.idempotencyKey),
+  ],
+);
+
 /**
  * Postgres transaction integration validation table (DEE-64 D6-core).
  * Used only by opt-in `tests/integration/postgres-transaction-rollback.test.ts` to verify commit/rollback semantics.

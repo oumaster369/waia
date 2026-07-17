@@ -101,6 +101,17 @@ import {
   persistEvaluationCycleRecords,
 } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { persistForecastDecisionBundleForCycle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
+import type { CalibrationSink } from "@/lib/trader/intelligence/calibration/calibration.types";
+import {
+  buildDefaultWp21Provenance,
+  runWp21CycleSeam,
+  runWp21TerminalSeam,
+  type Wp21RuntimeDeps,
+} from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
+import type { OutcomeResolutionSink } from "@/lib/trader/intelligence/outcome-resolution/outcome-resolution.types";
+import type { ConfidenceUpdateSink } from "@/lib/trader/knowledge/knowledge-confidence-update-repository-postgres";
+import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
+import type { Wp21CheckpointState } from "@/lib/trader/intelligence/outcome-resolution/wp21-checkpoint-state";
 
 export type RunBacktestInput = {
   context: OrgContext;
@@ -158,6 +169,25 @@ export type RunBacktestInput = {
   intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
   /** HTR-WP14: optional forecast-decision persistence sink. */
   forecastDecisionSink?: ForecastDecisionBundleRepository;
+  /** HTR-WP21: optional outcome resolution sink (cycle-boundary resolution). */
+  outcomeResolutionSink?: OutcomeResolutionSink;
+  /** HTR-WP21: optional calibration sink (terminal seam). */
+  calibrationSink?: CalibrationSink;
+  /** HTR-WP21: optional confidence update sink (terminal seam). */
+  confidenceUpdateSink?: ConfidenceUpdateSink;
+  /** HTR-WP21: runtime deps bundle (source + ports). */
+  wp21RuntimeDeps?: Wp21RuntimeDeps;
+  /** HTR-WP21: MKB outcome read port (terminal seam). */
+  outcomeResolutionReadPort?: OutcomeResolutionReadPort;
+  /** HTR-WP21: checkpoint state for resume. */
+  wp21CheckpointState?: Wp21CheckpointState;
+  /** HTR-WP21: provenance inputs for epistemic records. */
+  wp21Provenance?: { codeSha: string; datasetContentDigest: string };
+  /** HTR-WP21: Postgres executor for terminal MKB query. */
+  wp21PostgresExecutor?: Pick<
+    import("@/db/waia-postgres-transaction").WaiaPostgresDb,
+    "select" | "insert" | "execute"
+  >;
   /** HTR-WP16: optional strategy gating + drawdown context. */
   wp16?: import("@/lib/trader/paper/paper-cycle.types").Wp16GatingContext;
   /** HTR-WP17: historical execution simulation profile. */
@@ -185,6 +215,8 @@ export type RunBacktestResult = {
   htrPnlReportV1?: HtrPnlReportV1;
   accountingFrontierState?: ReplayAccountingFrontierState;
   htrRuntimeCallOrder?: HtrAccountingCycleBridge["callOrder"];
+  /** HTR-WP21: terminal checkpoint state after epistemic closure. */
+  wp21CheckpointState?: Wp21CheckpointState;
 };
 
 function wrapOrderRepositoryWithCostModel(
@@ -353,6 +385,13 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   let canvasState = input.initialCanvasState ?? createInitialCanvasState();
   let canvasAppliedBarCount = input.initialCanvasState?.closedBarCount ?? 0;
   const bars1mPrefix: Bar[] = input.initialBars1mPrefix ? [...input.initialBars1mPrefix] : [];
+  let wp21CheckpointState = input.wp21CheckpointState;
+
+  const wp21Active =
+    profileActive &&
+    input.wp21RuntimeDeps !== undefined &&
+    input.outcomeResolutionSink !== undefined &&
+    input.calibrationSink !== undefined;
 
   if (resumeCycleStartIndex > 0 && "advanceToCycleIndex" in input.barSource) {
     (input.barSource as HistoricalBarReplaySource).advanceToCycleIndex(resumeCycleStartIndex);
@@ -531,6 +570,38 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       }
     }
 
+    if (wp21Active && input.wp21RuntimeDeps && input.outcomeResolutionSink) {
+      const evaluatedAt =
+        snapshot.evaluatedAt ?? snapshot.bars.at(-1)?.barCloseTime ?? snapshot.quote.timestamp;
+      const provenance =
+        input.wp21Provenance !== undefined
+          ? buildDefaultWp21Provenance(input.wp21Provenance)
+          : buildDefaultWp21Provenance({
+              codeSha: "unknown",
+              datasetContentDigest: input.datasetId,
+            });
+      const cycleSeam = await runWp21CycleSeam({
+        context: input.context,
+        runId: input.runId,
+        asOf: evaluatedAt,
+        bars: bars1mPrefix,
+        deps: {
+          ...input.wp21RuntimeDeps,
+          outcomeResolutionSink: input.outcomeResolutionSink,
+          calibrationSink: input.calibrationSink!,
+          confidenceUpdateSink:
+            input.confidenceUpdateSink ?? input.wp21RuntimeDeps.confidenceUpdateSink,
+          outcomeResolutionReadPort:
+            input.outcomeResolutionReadPort ?? input.wp21RuntimeDeps.outcomeResolutionReadPort,
+        },
+        provenance,
+        checkpoint: wp21CheckpointState,
+        codeSha: provenance.codeSha,
+        datasetContentDigest: provenance.datasetContentDigest,
+      });
+      wp21CheckpointState = cycleSeam.checkpoint;
+    }
+
     const paperCycleTimer = benchmarkObserver.beginStage("paper-cycle", cycleIndex);
     input.deps.researchReplayDeterminism?.setDecisionBarIndex?.(cycleIndex);
     let result: PaperCycleResult;
@@ -694,6 +765,38 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     });
   }
 
+  if (
+    wp21Active &&
+    input.wp21RuntimeDeps &&
+    input.outcomeResolutionSink &&
+    input.calibrationSink &&
+    input.wp21PostgresExecutor
+  ) {
+    const terminalAsOf = bars1mPrefix.at(-1)?.barCloseTime ?? input.window.end.toISOString();
+    const provenance =
+      input.wp21Provenance !== undefined
+        ? buildDefaultWp21Provenance(input.wp21Provenance)
+        : buildDefaultWp21Provenance({ codeSha: "unknown", datasetContentDigest: input.datasetId });
+    const terminalSeam = await runWp21TerminalSeam({
+      context: input.context,
+      runId: input.runId,
+      asOf: terminalAsOf,
+      deps: {
+        ...input.wp21RuntimeDeps,
+        outcomeResolutionSink: input.outcomeResolutionSink,
+        calibrationSink: input.calibrationSink,
+        confidenceUpdateSink:
+          input.confidenceUpdateSink ?? input.wp21RuntimeDeps.confidenceUpdateSink,
+        outcomeResolutionReadPort:
+          input.outcomeResolutionReadPort ?? input.wp21RuntimeDeps.outcomeResolutionReadPort,
+      },
+      provenance,
+      ex: input.wp21PostgresExecutor,
+      checkpoint: wp21CheckpointState,
+    });
+    wp21CheckpointState = terminalSeam.checkpoint;
+  }
+
   const exportInput = {
     context: input.context,
     orderRepository: costAwareRepository,
@@ -764,5 +867,6 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       ? toAccountingCheckpointSlice(htrAccountingBridge)
       : undefined,
     htrRuntimeCallOrder: htrAccountingBridge?.callOrder,
+    wp21CheckpointState,
   };
 }

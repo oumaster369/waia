@@ -31,6 +31,10 @@ import type { BarInterval, InstrumentId } from "@/lib/trader/intelligence/types"
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
 import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
 import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
+import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { createIntelligenceCycleBundleRepositoryPostgres } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
+import { createForecastDecisionBundleRepositoryPostgres } from "@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres";
+import { createWp21RuntimeDepsPostgres } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import {
   createKillSwitchResolver,
@@ -59,7 +63,8 @@ Usage:
     [--oos-bar-count=20] \\
     [--out=evidence.json] \\
     [--build-pka] \\
-    [--pka-out=production-knowledge-asset.json]
+    [--pka-out=production-knowledge-asset.json] \\
+    [--htr-epistemic-closure]
 
 Environment:
   WAIA_DB_BACKEND=postgres
@@ -112,6 +117,7 @@ async function main(): Promise<void> {
   const datasetName = flags.get("dataset-name")?.trim() || `ri-pipeline-${Date.now()}`;
   const oosBarCount = parseOosBarCount(flags);
   const buildPka = flags.has("build-pka");
+  const htrEpistemicClosure = flags.has("htr-epistemic-closure");
 
   const db = getPostgresDrizzle();
   const context = requireOrgContext(organizationId);
@@ -154,6 +160,8 @@ async function main(): Promise<void> {
   const barRecords = await listMarketBarsPostgres(db, context, { symbol, interval });
   const barSetDigest = computeBarSetDigest(barRecords);
 
+  const wp21Deps = htrEpistemicClosure ? createWp21RuntimeDepsPostgres(db) : undefined;
+
   const result = await runResearchPipelinePostgres(db, {
     context,
     datasetName,
@@ -164,6 +172,23 @@ async function main(): Promise<void> {
     oosBarCount,
     deps: { execution, reconciliation },
     createOrderRepository: () => createPostgresOrderRepository(db),
+    ...(htrEpistemicClosure
+      ? {
+          historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
+          intelligenceRecordsSink: createIntelligenceCycleBundleRepositoryPostgres(db),
+          forecastDecisionSink: createForecastDecisionBundleRepositoryPostgres(db),
+          outcomeResolutionSink: wp21Deps!.outcomeResolutionSink,
+          calibrationSink: wp21Deps!.calibrationSink,
+          confidenceUpdateSink: wp21Deps!.confidenceUpdateSink,
+          wp21RuntimeDeps: wp21Deps,
+          outcomeResolutionReadPort: wp21Deps!.outcomeResolutionReadPort,
+          wp21PostgresExecutor: db,
+          wp21Provenance: {
+            codeSha: process.env.GITHUB_SHA ?? "local-dev",
+            datasetContentDigest: barSetDigest,
+          },
+        }
+      : {}),
   });
 
   const serialized = `${JSON.stringify(result.evidenceDocument, null, 2)}\n`;

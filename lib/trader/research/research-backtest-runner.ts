@@ -57,6 +57,15 @@ import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import type { PatternCatalogRunConfig } from "@/lib/trader/mi/pattern-catalog.types";
 import type { EventAttributionRunConfig } from "@/lib/trader/events/event-attribution.types";
 import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
+import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
+import type { IntelligenceCycleBundleRepository } from "@/lib/trader/intelligence/records/repository-adapters";
+import type { ForecastDecisionBundleRepository } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
+import type { CalibrationSink } from "@/lib/trader/intelligence/calibration/calibration.types";
+import type { OutcomeResolutionSink } from "@/lib/trader/intelligence/outcome-resolution/outcome-resolution.types";
+import type { Wp21RuntimeDeps } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
+import type { ConfidenceUpdateSink } from "@/lib/trader/knowledge/knowledge-confidence-update-repository-postgres";
+import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
+import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { orderMatchesStrategyEvidenceScope } from "@/lib/trader/paper/strategy-evidence-scope";
 import {
   buildQuoteCurrencyBySymbol,
@@ -142,6 +151,17 @@ export type RunResearchValidationBacktestInput = {
   evidenceSealReason?: string;
   /** HTR-WP17: versioned historical execution profile for default research replay. */
   historicalExecutionProfile?: HistoricalExecutionProfileV1;
+  /** HTR-WP21: opt-in epistemic closure fields. */
+  historicalProfile?: HistoricalIntelligenceProfile;
+  intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
+  forecastDecisionSink?: ForecastDecisionBundleRepository;
+  outcomeResolutionSink?: OutcomeResolutionSink;
+  calibrationSink?: CalibrationSink;
+  confidenceUpdateSink?: ConfidenceUpdateSink;
+  wp21RuntimeDeps?: Wp21RuntimeDeps;
+  outcomeResolutionReadPort?: OutcomeResolutionReadPort;
+  wp21PostgresExecutor?: Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
+  wp21Provenance?: { codeSha: string; datasetContentDigest: string };
 };
 
 function resolveResearchV1InitialAccountState(
@@ -482,6 +502,16 @@ async function runResearchValidationBacktestV1(
     evidenceSealMode: input.evidenceSealMode,
     evidenceSealReason: input.evidenceSealReason,
     historicalExecutionProfile: input.historicalExecutionProfile,
+    historicalProfile: input.historicalProfile,
+    intelligenceRecordsSink: input.intelligenceRecordsSink,
+    forecastDecisionSink: input.forecastDecisionSink,
+    outcomeResolutionSink: input.outcomeResolutionSink,
+    calibrationSink: input.calibrationSink,
+    confidenceUpdateSink: input.confidenceUpdateSink,
+    wp21RuntimeDeps: input.wp21RuntimeDeps,
+    outcomeResolutionReadPort: input.outcomeResolutionReadPort,
+    wp21PostgresExecutor: input.wp21PostgresExecutor,
+    wp21Provenance: input.wp21Provenance,
   });
 
   if (input.artifactSink && retentionMode !== "STREAM_ONLY") {
@@ -620,6 +650,16 @@ async function runResearchValidationBacktestV2(
     evidenceSealMode: input.evidenceSealMode,
     evidenceSealReason: input.evidenceSealReason,
     historicalExecutionProfile: input.historicalExecutionProfile,
+    historicalProfile: input.historicalProfile,
+    intelligenceRecordsSink: input.intelligenceRecordsSink,
+    forecastDecisionSink: input.forecastDecisionSink,
+    outcomeResolutionSink: input.outcomeResolutionSink,
+    calibrationSink: input.calibrationSink,
+    confidenceUpdateSink: input.confidenceUpdateSink,
+    wp21RuntimeDeps: input.wp21RuntimeDeps,
+    outcomeResolutionReadPort: input.outcomeResolutionReadPort,
+    wp21PostgresExecutor: input.wp21PostgresExecutor,
+    wp21Provenance: input.wp21Provenance,
   });
 
   if (input.artifactSink) {

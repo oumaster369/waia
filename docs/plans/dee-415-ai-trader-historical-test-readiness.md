@@ -28,17 +28,17 @@ linearStatusFlow:
 state:
   status: in-progress
   humanApproval: HTR_MACRO_I_HUMAN_APPROVED_CONSUMED
-  programStatus: WP_ACTIVE
-  childPlanStatus: APPROVED_EXACT
-  buildAuthorized: true
-  buildAuthorizedScope: HTR-MACRO-I_PHASE_A_ONLY
-  composerTerminalState: COMPOSER_EXECUTE_HTR_MACRO_I_PHASE_A
+  programStatus: WP_VALIDATED
+  childPlanStatus: VALIDATED
+  buildAuthorized: false
+  buildAuthorizedScope: null
+  composerTerminalState: AWAITING_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B
   activeWorkPackage: HTR-WP21
   currentWorkPackage: HTR-WP21
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-I
-  activeMacroStatus: APPROVED
+  activeMacroStatus: VALIDATED_PENDING_INDEPENDENT_PHASE_B
   macroIWorkPackages: [HTR-WP21]
   macroIPacketSha256: 378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777
   macroIPacketPath: .cursor/plans/dee-415-macro-i/approval-candidates/378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777/dee-415-htr-macro-i-exact-packet.plan.md
@@ -91,11 +91,11 @@ state:
   htrGap044: OPEN
   htrGap045: OPEN
   latestValidatedProductionCodeSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
-  planningTerminalState: COMPOSER_EXECUTE_HTR_MACRO_I_PHASE_A
-  newHumanTokenRequired: false
-  requiredHumanTokens: []
-  nextHumanGate: null
-  nextAction: COMPOSER_EXECUTE_HTR_MACRO_I_PHASE_A
+  planningTerminalState: AWAITING_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B
+  newHumanTokenRequired: true
+  requiredHumanTokens: [AUTHORIZE_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B]
+  nextHumanGate: INDEPENDENT_HTR_MACRO_I_PHASE_B
+  nextAction: FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B
   readyForFullHistoricalTest: false
   finalPrAuthorized: false
   childPlanPacketAudit: PASS
