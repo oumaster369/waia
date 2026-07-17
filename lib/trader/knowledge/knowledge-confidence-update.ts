@@ -1,6 +1,16 @@
 import { createHash } from "node:crypto";
 
 import {
+  KNOWLEDGE_CONFIDENCE_VALUE_CLASS,
+  WP21_EPISTEMIC_AUTHORITY_DEFAULTS,
+} from "@/lib/trader/intelligence/epistemic/epistemic-authority.types";
+import type {
+  EpistemicAuthorityClass,
+  EpistemicDownstreamAuthority,
+  EpistemicOperatorDisposition,
+  KnowledgeConfidenceValueClass,
+} from "@/lib/trader/intelligence/epistemic/epistemic-authority.types";
+import {
   EPISTEMIC_CONFIDENCE_BOUNDS,
   EPISTEMIC_CONFIDENCE_DECAY_HALF_LIFE_BARS,
   EPISTEMIC_CONFIDENCE_UPDATE_CAP,
@@ -37,9 +47,18 @@ export type KnowledgeConfidenceUpdateRecord = Readonly<{
   knowledgeEdgeId: string;
   updateKind: KnowledgeConfidenceUpdateKind;
   updateModelVersion: string;
-  priorConfidence: string;
-  posteriorConfidence: string;
-  delta: string;
+  /** Machine-recommended prior confidence — not operator attestation. */
+  priorMachineRecommendedConfidence: string;
+  /** Machine-recommended posterior confidence — not operator attestation. */
+  machineRecommendedConfidence: string;
+  machineRecommendedDelta: string;
+  confidenceValueClass: KnowledgeConfidenceValueClass;
+  authorityClass: EpistemicAuthorityClass;
+  operatorDisposition: EpistemicOperatorDisposition;
+  capitalAuthority: EpistemicDownstreamAuthority;
+  strategyAuthority: EpistemicDownstreamAuthority;
+  tradeEligibilityAuthority: EpistemicDownstreamAuthority;
+  guardianAuthority: EpistemicDownstreamAuthority;
   issuedAt: string;
   eligibleResolutionAt: string;
   resolvedAt: string;
@@ -67,6 +86,30 @@ function clampConfidence(value: string): string {
 function deriveDeterministicUuidV4(seed: string): string {
   const hash = createHash("sha256").update(seed, "utf8").digest("hex");
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+
+function buildAuthorityFields(
+  confidenceValueClass: KnowledgeConfidenceValueClass,
+): Pick<
+  KnowledgeConfidenceUpdateRecord,
+  | "confidenceValueClass"
+  | "authorityClass"
+  | "operatorDisposition"
+  | "capitalAuthority"
+  | "strategyAuthority"
+  | "tradeEligibilityAuthority"
+  | "guardianAuthority"
+> {
+  return {
+    confidenceValueClass,
+    authorityClass: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.authorityClass,
+    operatorDisposition: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.operatorDisposition,
+    capitalAuthority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.capitalAuthority,
+    strategyAuthority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.strategyAuthority,
+    tradeEligibilityAuthority:
+      WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.tradeEligibilityAuthority,
+    guardianAuthority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.guardianAuthority,
+  };
 }
 
 export function computeKnowledgeConfidenceUpdate(input: {
@@ -127,9 +170,10 @@ export function computeKnowledgeConfidenceUpdate(input: {
     knowledgeEdgeId: input.knowledgeEdgeId,
     updateKind: "UPDATE",
     updateModelVersion: KNOWLEDGE_CONFIDENCE_UPDATE_MODEL_VERSION,
-    priorConfidence: formatEpistemicScore(input.priorConfidence),
-    posteriorConfidence,
-    delta: formatEpistemicScore(delta),
+    priorMachineRecommendedConfidence: formatEpistemicScore(input.priorConfidence),
+    machineRecommendedConfidence: posteriorConfidence,
+    machineRecommendedDelta: formatEpistemicScore(delta),
+    ...buildAuthorityFields(KNOWLEDGE_CONFIDENCE_VALUE_CLASS.machineRecommendedBoundedDelta),
     issuedAt: input.forecastOutcome.issuedAt,
     eligibleResolutionAt: input.forecastOutcome.eligibleResolutionAt,
     resolvedAt: input.asOf,
@@ -139,6 +183,14 @@ export function computeKnowledgeConfidenceUpdate(input: {
     sourceRecordIdsJson: JSON.stringify({
       forecast_outcome_id: input.forecastOutcome.id,
       calibration_snapshot_id: input.calibrationSnapshot?.id ?? null,
+      confidence_value_class: KNOWLEDGE_CONFIDENCE_VALUE_CLASS.machineRecommendedBoundedDelta,
+      authority_class: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.authorityClass,
+      operator_disposition: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.operatorDisposition,
+      capital_authority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.capitalAuthority,
+      strategy_authority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.strategyAuthority,
+      trade_eligibility_authority:
+        WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.tradeEligibilityAuthority,
+      guardian_authority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.guardianAuthority,
     }),
     idempotencyKey,
     provenance: input.provenance,
@@ -194,16 +246,27 @@ export function computeKnowledgeConfidenceDecay(input: {
     knowledgeEdgeId: input.knowledgeEdgeId,
     updateKind: "DECAY",
     updateModelVersion: KNOWLEDGE_CONFIDENCE_UPDATE_MODEL_VERSION,
-    priorConfidence: formatEpistemicScore(input.priorConfidence),
-    posteriorConfidence,
-    delta: formatEpistemicScore(delta),
+    priorMachineRecommendedConfidence: formatEpistemicScore(input.priorConfidence),
+    machineRecommendedConfidence: posteriorConfidence,
+    machineRecommendedDelta: formatEpistemicScore(delta),
+    ...buildAuthorityFields(KNOWLEDGE_CONFIDENCE_VALUE_CLASS.derivedStalenessEvidence),
     issuedAt: input.asOf,
     eligibleResolutionAt: input.asOf,
     resolvedAt: input.asOf,
     pitEvidenceBoundary: input.asOf,
     outcomeClass: "DECAY",
     score: decayFactor,
-    sourceRecordIdsJson: JSON.stringify({ age_bars: input.ageBars }),
+    sourceRecordIdsJson: JSON.stringify({
+      age_bars: input.ageBars,
+      confidence_value_class: KNOWLEDGE_CONFIDENCE_VALUE_CLASS.derivedStalenessEvidence,
+      authority_class: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.authorityClass,
+      operator_disposition: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.operatorDisposition,
+      capital_authority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.capitalAuthority,
+      strategy_authority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.strategyAuthority,
+      trade_eligibility_authority:
+        WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.tradeEligibilityAuthority,
+      guardian_authority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.guardianAuthority,
+    }),
     idempotencyKey,
     provenance: input.provenance,
     terminalReason: "CONFIDENCE_DECAY",
@@ -229,9 +292,16 @@ export function canonicalizeKnowledgeConfidenceUpdateRecord(
     knowledge_edge_id: record.knowledgeEdgeId,
     update_kind: record.updateKind,
     update_model_version: record.updateModelVersion,
-    prior_confidence: record.priorConfidence,
-    posterior_confidence: record.posteriorConfidence,
-    delta: record.delta,
+    prior_machine_recommended_confidence: record.priorMachineRecommendedConfidence,
+    machine_recommended_confidence: record.machineRecommendedConfidence,
+    machine_recommended_delta: record.machineRecommendedDelta,
+    confidence_value_class: record.confidenceValueClass,
+    authority_class: record.authorityClass,
+    operator_disposition: record.operatorDisposition,
+    capital_authority: record.capitalAuthority,
+    strategy_authority: record.strategyAuthority,
+    trade_eligibility_authority: record.tradeEligibilityAuthority,
+    guardian_authority: record.guardianAuthority,
     issued_at: record.issuedAt,
     eligible_resolution_at: record.eligibleResolutionAt,
     resolved_at: record.resolvedAt,

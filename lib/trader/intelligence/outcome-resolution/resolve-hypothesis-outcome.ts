@@ -1,4 +1,5 @@
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { WP21_EPISTEMIC_AUTHORITY_DEFAULTS } from "@/lib/trader/intelligence/epistemic/epistemic-authority.types";
 import {
   deriveHypothesisOutcomeId,
   deriveHypothesisOutcomeIdempotencyKey,
@@ -27,15 +28,16 @@ export function deriveHypothesisOutcomeClass(input: {
     return "INCONCLUSIVE";
   }
 
+  if (input.linkedOutcomes.some((row) => row.outcomeClass === "UNRESOLVED_DUE_TO_DATA_INTEGRITY")) {
+    return "DATA_INTEGRITY_BLOCKED";
+  }
+
   const resolved = input.linkedOutcomes.filter((row) => row.outcomeClass === "RESOLVED");
   if (resolved.some((row) => row.outcomeVerdict === "CORRECT")) {
-    return "CONFIRMED";
+    return "SUPPORTING_OBSERVATION";
   }
-  if (
-    resolved.some((row) => row.outcomeVerdict === "INCORRECT") ||
-    input.linkedOutcomes.some((row) => row.outcomeClass === "INVALIDATED")
-  ) {
-    return "REFUTED";
+  if (resolved.some((row) => row.outcomeVerdict === "INCORRECT")) {
+    return "CONTRADICTING_OBSERVATION";
   }
 
   const allTerminal = input.linkedOutcomes.every((row) => row.outcomeClass !== "ACTIVE");
@@ -81,9 +83,25 @@ function buildHypothesisOutcomeRecord(input: {
     pitEvidenceBoundary: input.asOf,
     outcomeClass,
     score: null,
+    authorityClass: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.authorityClass,
+    operatorDisposition: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.operatorDisposition,
+    hypothesisLifecycleAuthority:
+      WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.hypothesisLifecycleAuthority,
+    strategyPromotionAuthority:
+      WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.strategyPromotionAuthority,
+    validatedKnowledgeAuthority:
+      WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.validatedKnowledgeAuthority,
     sourceRecordIdsJson: canonicalizeSemanticJsonString({
       hypothesis_record_id: input.hypothesis.id,
       forecast_outcome_ids: input.linkedOutcomes.map((row) => row.id),
+      authority_class: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.authorityClass,
+      operator_disposition: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.operatorDisposition,
+      hypothesis_lifecycle_authority:
+        WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.hypothesisLifecycleAuthority,
+      strategy_promotion_authority:
+        WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.strategyPromotionAuthority,
+      validated_knowledge_authority:
+        WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.validatedKnowledgeAuthority,
     }),
     provenance: input.provenance,
     terminalReason: outcomeClass,

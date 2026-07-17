@@ -81,6 +81,11 @@ export function canonicalizeHypothesisOutcomeRecord(
     hypothesis_record_id: record.hypothesisRecordId,
     decision_record_id: record.decisionRecordId,
     forecast_outcome_ids_json: record.forecastOutcomeIdsJson,
+    authority_class: record.authorityClass,
+    operator_disposition: record.operatorDisposition,
+    hypothesis_lifecycle_authority: record.hypothesisLifecycleAuthority,
+    strategy_promotion_authority: record.strategyPromotionAuthority,
+    validated_knowledge_authority: record.validatedKnowledgeAuthority,
   };
 }
 

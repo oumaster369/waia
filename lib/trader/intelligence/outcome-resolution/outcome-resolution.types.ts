@@ -3,6 +3,12 @@ import type { TraderIntelligenceDecisionRecord } from "@/lib/trader/intelligence
 import type { TraderIntelligenceForecastRecord } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import type { TraderIntelligenceHypothesisRecord } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { OutcomeResolutionVerdict } from "@/lib/trader/knowledge/mkb-read-model.types";
+import type {
+  EpistemicAuthorityClass,
+  EpistemicDownstreamAuthority,
+  EpistemicOperatorDisposition,
+  KnowledgeConfidenceValueClass,
+} from "@/lib/trader/intelligence/epistemic/epistemic-authority.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 export const FORECAST_OUTCOME_SCHEMA_VERSION = "waia.trader.forecast_outcome_record.v1" as const;
@@ -22,9 +28,10 @@ export const forecastOutcomeClassEnum = [
 export type ForecastOutcomeClass = (typeof forecastOutcomeClassEnum)[number];
 
 export const hypothesisOutcomeClassEnum = [
-  "CONFIRMED",
-  "REFUTED",
+  "SUPPORTING_OBSERVATION",
+  "CONTRADICTING_OBSERVATION",
   "INCONCLUSIVE",
+  "DATA_INTEGRITY_BLOCKED",
   "UNRESOLVED",
 ] as const;
 
@@ -106,6 +113,11 @@ export type HypothesisOutcomeRecord = Readonly<{
   pitEvidenceBoundary: string | null;
   outcomeClass: HypothesisOutcomeClass;
   score: string | null;
+  authorityClass: EpistemicAuthorityClass;
+  operatorDisposition: EpistemicOperatorDisposition;
+  hypothesisLifecycleAuthority: EpistemicDownstreamAuthority;
+  strategyPromotionAuthority: EpistemicDownstreamAuthority;
+  validatedKnowledgeAuthority: EpistemicDownstreamAuthority;
   sourceRecordIdsJson: string;
   contentDigest: string;
   idempotencyKey: string;

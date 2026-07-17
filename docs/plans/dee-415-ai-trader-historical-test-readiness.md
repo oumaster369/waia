@@ -32,13 +32,16 @@ state:
   childPlanStatus: VALIDATED
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: AWAITING_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B
+  composerTerminalState: HTR_WP21_CANON_CONFORMANCE_CORRECTIVE_VALIDATED_PENDING_INDEPENDENT_PHASE_B
   activeWorkPackage: HTR-WP21
   currentWorkPackage: HTR-WP21
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-I
-  activeMacroStatus: VALIDATED_PENDING_INDEPENDENT_PHASE_B
+  activeMacroStatus: CORRECTIVE_VALIDATED_PENDING_INDEPENDENT_PHASE_B
+  wp21OriginalWorkSha: f72eed46779b2c5c3c49803c30d382109e4710b8
+  wp21CorrectiveScope: HTR-WP21_CANON_CONFORMANCE_AND_VALIDATION_PROOF
+  wp21CandidateProductionSha: f72eed46779b2c5c3c49803c30d382109e4710b8
   macroIWorkPackages: [HTR-WP21]
   macroIPacketSha256: 378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777
   macroIPacketPath: .cursor/plans/dee-415-macro-i/approval-candidates/378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777/dee-415-htr-macro-i-exact-packet.plan.md
@@ -90,12 +93,12 @@ state:
   htrGap043: OPEN
   htrGap044: OPEN
   htrGap045: OPEN
-  latestValidatedProductionCodeSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
-  planningTerminalState: AWAITING_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B
+  latestValidatedProductionCodeSha: 3eb65728dce3feab94b885f61fbaa90e06383bd8
+  planningTerminalState: HTR_WP21_CANON_CONFORMANCE_CORRECTIVE_VALIDATED_PENDING_INDEPENDENT_PHASE_B
   newHumanTokenRequired: true
   requiredHumanTokens: [AUTHORIZE_FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B]
-  nextHumanGate: INDEPENDENT_HTR_MACRO_I_PHASE_B
-  nextAction: FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B
+  nextHumanGate: INDEPENDENT_HTR_MACRO_I_PHASE_B_AFTER_CORRECTIVE
+  nextAction: FRESH_INDEPENDENT_HTR_MACRO_I_PHASE_B_AFTER_CORRECTIVE
   readyForFullHistoricalTest: false
   finalPrAuthorized: false
   childPlanPacketAudit: PASS

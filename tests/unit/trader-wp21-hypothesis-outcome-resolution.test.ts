@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { deriveHypothesisOutcomeClass } from "@/lib/trader/intelligence/outcome-resolution/resolve-hypothesis-outcome";
 import type { ForecastOutcomeRecord } from "@/lib/trader/intelligence/outcome-resolution/outcome-resolution.types";
 import { FORECAST_OUTCOME_SCHEMA_VERSION } from "@/lib/trader/intelligence/outcome-resolution/outcome-resolution.types";
+import { WP21_EPISTEMIC_AUTHORITY_DEFAULTS } from "@/lib/trader/intelligence/epistemic/epistemic-authority.types";
 
 function outcome(partial: Partial<ForecastOutcomeRecord>): ForecastOutcomeRecord {
   return {
@@ -41,28 +42,50 @@ function outcome(partial: Partial<ForecastOutcomeRecord>): ForecastOutcomeRecord
 }
 
 describe("trader wp21 hypothesis outcome resolution", () => {
-  it("confirms when linked forecast outcome is CORRECT", () => {
+  it("records supporting observation when linked forecast outcome is CORRECT", () => {
     expect(
       deriveHypothesisOutcomeClass({
         linkedOutcomes: [outcome({ outcomeVerdict: "CORRECT" })],
       }),
-    ).toBe("CONFIRMED");
+    ).toBe("SUPPORTING_OBSERVATION");
   });
 
-  it("refutes on INCORRECT or INVALIDATED forecast outcomes", () => {
+  it("records contradicting observation on INCORRECT but not on INVALIDATED forecast", () => {
     expect(
       deriveHypothesisOutcomeClass({
         linkedOutcomes: [outcome({ outcomeVerdict: "INCORRECT" })],
       }),
-    ).toBe("REFUTED");
+    ).toBe("CONTRADICTING_OBSERVATION");
     expect(
       deriveHypothesisOutcomeClass({
         linkedOutcomes: [outcome({ outcomeClass: "INVALIDATED", outcomeVerdict: null })],
       }),
-    ).toBe("REFUTED");
+    ).toBe("INCONCLUSIVE");
+  });
+
+  it("returns DATA_INTEGRITY_BLOCKED when linked forecast has data integrity failure", () => {
+    expect(
+      deriveHypothesisOutcomeClass({
+        linkedOutcomes: [
+          outcome({ outcomeClass: "UNRESOLVED_DUE_TO_DATA_INTEGRITY", outcomeVerdict: null }),
+        ],
+      }),
+    ).toBe("DATA_INTEGRITY_BLOCKED");
   });
 
   it("returns INCONCLUSIVE without linked outcomes", () => {
     expect(deriveHypothesisOutcomeClass({ linkedOutcomes: [] })).toBe("INCONCLUSIVE");
+  });
+
+  it("does not imply validated hypothesis or strategy promotion authority", () => {
+    expect(WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.validatedKnowledgeAuthority).toBe(
+      "NONE",
+    );
+    expect(WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.strategyPromotionAuthority).toBe(
+      "NONE",
+    );
+    expect(WP21_EPISTEMIC_AUTHORITY_DEFAULTS.hypothesisOutcome.hypothesisLifecycleAuthority).toBe(
+      "NONE",
+    );
   });
 });

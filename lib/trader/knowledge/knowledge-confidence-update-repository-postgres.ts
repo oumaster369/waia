@@ -15,6 +15,13 @@ type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
 function mapRow(
   row: typeof pgSchema.traderKnowledgeConfidenceUpdateRecord.$inferSelect,
 ): KnowledgeConfidenceUpdateRecord {
+  let authorityPayload: Record<string, unknown> = {};
+  try {
+    authorityPayload = JSON.parse(row.sourceRecordIdsJson) as Record<string, unknown>;
+  } catch {
+    authorityPayload = {};
+  }
+
   return {
     id: row.id,
     organizationId: row.organizationId,
@@ -24,9 +31,32 @@ function mapRow(
     knowledgeEdgeId: row.knowledgeEdgeId,
     updateKind: row.updateKind as KnowledgeConfidenceUpdateRecord["updateKind"],
     updateModelVersion: row.updateModelVersion,
-    priorConfidence: row.priorConfidence,
-    posteriorConfidence: row.posteriorConfidence,
-    delta: row.delta,
+    priorMachineRecommendedConfidence: row.priorConfidence,
+    machineRecommendedConfidence: row.posteriorConfidence,
+    machineRecommendedDelta: row.delta,
+    confidenceValueClass:
+      (authorityPayload.confidence_value_class as KnowledgeConfidenceUpdateRecord["confidenceValueClass"]) ??
+      (row.updateKind === "DECAY"
+        ? "DERIVED_STALENESS_EVIDENCE"
+        : "MACHINE_RECOMMENDED_BOUNDED_DELTA"),
+    authorityClass:
+      (authorityPayload.authority_class as KnowledgeConfidenceUpdateRecord["authorityClass"]) ??
+      "EVIDENCE_ONLY",
+    operatorDisposition:
+      (authorityPayload.operator_disposition as KnowledgeConfidenceUpdateRecord["operatorDisposition"]) ??
+      "PENDING",
+    capitalAuthority:
+      (authorityPayload.capital_authority as KnowledgeConfidenceUpdateRecord["capitalAuthority"]) ??
+      "NONE",
+    strategyAuthority:
+      (authorityPayload.strategy_authority as KnowledgeConfidenceUpdateRecord["strategyAuthority"]) ??
+      "NONE",
+    tradeEligibilityAuthority:
+      (authorityPayload.trade_eligibility_authority as KnowledgeConfidenceUpdateRecord["tradeEligibilityAuthority"]) ??
+      "NONE",
+    guardianAuthority:
+      (authorityPayload.guardian_authority as KnowledgeConfidenceUpdateRecord["guardianAuthority"]) ??
+      "NONE",
     issuedAt: row.issuedAt.toISOString(),
     eligibleResolutionAt: row.eligibleResolutionAt.toISOString(),
     resolvedAt: row.resolvedAt.toISOString(),
@@ -86,9 +116,9 @@ export function createKnowledgeConfidenceUpdateRepositoryPostgres(ex: PgExecutor
           knowledgeEdgeId: record.knowledgeEdgeId,
           updateKind: record.updateKind,
           updateModelVersion: record.updateModelVersion,
-          priorConfidence: record.priorConfidence,
-          posteriorConfidence: record.posteriorConfidence,
-          delta: record.delta,
+          priorConfidence: record.priorMachineRecommendedConfidence,
+          posteriorConfidence: record.machineRecommendedConfidence,
+          delta: record.machineRecommendedDelta,
           issuedAt: new Date(record.issuedAt),
           eligibleResolutionAt: new Date(record.eligibleResolutionAt),
           resolvedAt: new Date(record.resolvedAt),
