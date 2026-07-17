@@ -1,0 +1,7 @@
+{
+  "suite": "tests/unit/trader-lifecycle-open-qty-parity.test.ts",
+  "fixture": "m9-v0.1.6-partial-inventory-mismatch.json",
+  "pass": 4,
+  "fail": 0,
+  "skip": 0
+}
