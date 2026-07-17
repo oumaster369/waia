@@ -33,14 +33,14 @@ state:
   childPlanStatus: APPROVED
   buildAuthorized: true
   buildAuthorizedScope: HTR-MACRO-J_PHASE_A_ONLY
-  composerTerminalState: REPROVE_HTR_WP22_PHASE_A_GATE_ON_EFFECTIVE_CANDIDATE
+  composerTerminalState: REPROVE_WP22_ON_SERIALIZATION_CORRECTED_CANDIDATE
   activeWorkPackage: HTR-WP22
   currentWorkPackage: HTR-WP22
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-J
   activeMacroWorkPackages: [HTR-WP22, HTR-WP23]
-  activeMacroStatus: PHASE_A_ACTIVE_WP22_GATE_REMEDIATION
+  activeMacroStatus: PHASE_A_ACTIVE_WP22_INSTRUMENTATION_RECOVERY
   macroJPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25
   macroJPacketPath: .cursor/plans/dee-415-macro-j/approval-candidates/5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25/dee-415-htr-macro-j-exact-packet.plan.md
   macroJSupersededPacketSha256: 91be9b0f462e5f9f36ba08d3007eafd9bd00ee4ee5dea48749bc83c5e954fe58
@@ -50,12 +50,25 @@ state:
   macroJPacketAuthoringHead: 11f44cb31bc639e0947638dc88c2ba18abab0050
   wp22MigrationDecision: NONE
   wp22OriginalWorkCommitSha: d4a619c10fae940e14bd93eba7ed4386ce45a03c
-  wp22PhaseAStatus: GATE_FAIL_REMEDIATION_CANDIDATE
+  wp22GapRemediationSha: 420b31e1a743b27654a43c663cc7d94a0efc90e2
+  wp22PhaseAStatus: INSTRUMENTATION_RECOVERY_PENDING_SERIALIZATION_COMMIT
   wp22EffectivePhaseACandidateAuthority: GIT_HEAD
   wp22FirstValidD11bAttemptConsumed: false
   wp22EvidenceStatus: NOT_STAGED
-  wp22GateFailureClassification: TEST_CONTRACT_OVERCONSTRAINED_AND_HARNESS_WIRING_DEFECT
-  wp22GateRemediationScope: bounded_gap044_postgres_harness_and_fixture_prelude_only
+  wp22D11bInvalidatedAttempt:
+    sourceGitSha: 420b31e1a743b27654a43c663cc7d94a0efc90e2
+    classification: INVALIDATED_BY_INSTRUMENTATION_FAILURE
+    thresholdVerdict: NOT_REACHED
+    evidenceSealed: false
+    firstValidAttemptConsumed: false
+    terminalError: "HTR_SEMANTIC_CANONICAL_JSON_V1: unsupported value type"
+    rootCause: WP22_QUALIFICATION_SEMANTIC_PROJECTION_DEFECT
+    unsupportedPath: qualificationAttempt nested optional fields with runtime undefined
+  wp23WorkCommitSha: null
+  wp23PrematureDraftStatus: QUARANTINED_NOT_ACCEPTED
+  wp23QuarantineStashOid: a6ead010bf0d35f67f4beffc93f15cde901a6948
+  wp23QuarantineFileCount: 29
+  nextAction: REPROVE_WP22_ON_SERIALIZATION_CORRECTED_CANDIDATE
   macroJActivationAmendDeviation:
     classification: BOUNDED_GOVERNANCE_ONLY_PRE_WP22_PROCESS_DEVIATION
     originalActivationSha: 5a7833961fe02b6744d7ff902ca1fd1178cab9cc
@@ -165,11 +178,11 @@ state:
     executionServerPackageMode:
       mode: option-a-code-ready
       actualServerMutation: PROHIBITED
-  planningTerminalState: REPROVE_HTR_WP22_PHASE_A_GATE_ON_EFFECTIVE_CANDIDATE
+  planningTerminalState: REPROVE_WP22_ON_SERIALIZATION_CORRECTED_CANDIDATE
   newHumanTokenRequired: false
   requiredHumanTokens: []
   nextHumanGate: null
-  nextAction: REPROVE_HTR_WP22_PHASE_A_GATE_ON_EFFECTIVE_CANDIDATE
+  nextAction: REPROVE_WP22_ON_SERIALIZATION_CORRECTED_CANDIDATE
   macroJHumanActivation:
     status: HUMAN_APPROVED_CONSUMED
     approvedPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25

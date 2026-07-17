@@ -15,6 +15,7 @@ import type {
 import {
   HTR_WP22_COMPLETED_RUNTIME_D11B_PHASE,
   HTR_WP22_COMPLETED_RUNTIME_QUALIFICATION_SCHEMA,
+  toHtrWp22CompletedRuntimeQualificationSemanticPayloadV1,
 } from "@/lib/trader/backtest/htr-completed-runtime-qualification.types";
 import { HTR_WP22_EVIDENCE_STAGING_ROOT } from "@/lib/trader/backtest/htr-wp22-evidence-harness";
 
@@ -112,20 +113,25 @@ export async function runHtrWp22CompletedRuntimeD11bQualification(input: {
   });
 
   const terminalState = mapQualificationTerminalState(qualificationAttempt.terminalState);
-  const semanticBody = {
+  const semanticPayload = toHtrWp22CompletedRuntimeQualificationSemanticPayloadV1({
+    terminalState,
+    sourceGitSha: input.sourceGitSha,
+    sourceDirtyTree: false,
+    hostFingerprintSha256,
+    qualificationHarnessSha256: readQualificationHarnessSha256(),
+    qualificationAttempt,
+  });
+
+  return {
     schemaVersion: HTR_WP22_COMPLETED_RUNTIME_QUALIFICATION_SCHEMA,
     phase: HTR_WP22_COMPLETED_RUNTIME_D11B_PHASE,
     terminalState,
     sourceGitSha: input.sourceGitSha,
     sourceDirtyTree: false,
     hostFingerprintSha256,
-    d11bThresholdsBinding: "D11B_THRESHOLDS_UNCHANGED" as const,
+    d11bThresholdsBinding: "D11B_THRESHOLDS_UNCHANGED",
     qualificationHarnessSha256: readQualificationHarnessSha256(),
     qualificationAttempt,
-  };
-
-  return {
-    ...semanticBody,
-    payloadSha256: computeSemanticSha256Hex(semanticBody),
+    payloadSha256: computeSemanticSha256Hex(semanticPayload),
   };
 }

@@ -6,12 +6,26 @@ import {
   loadReferenceHostEnvironment,
 } from "@/lib/trader/backtest/d11b-host-fingerprint";
 import {
+  buildHtrWp22D11bThresholdSnapshotV1,
   HTR_WP22_COMPLETED_RUNTIME_D11B_PHASE,
   HTR_WP22_COMPLETED_RUNTIME_QUALIFICATION_SCHEMA,
+  HTR_WP22_COMPLETED_RUNTIME_QUALIFICATION_SEMANTIC_SCHEMA_V1,
+  toHtrWp22CompletedRuntimeQualificationSemanticPayloadV1,
+  toQualificationAttemptSemanticV1,
+  toQualificationRunObservationSemanticV1,
 } from "@/lib/trader/backtest/htr-completed-runtime-qualification.types";
 import {
+  computeSemanticSha256Hex,
+  canonicalizeSemanticJsonString,
+} from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { readGitDirtyTree } from "@/lib/trader/backtest/replay-benchmark-harness";
+import {
   D11B_APPROVED_DATASET_SHA256,
+  D11B_MEMORY_GATE_AMENDMENT_V1_THRESHOLDS,
   D11B_THRESHOLDS,
+  HTR_WP09_QUALIFICATION_EVIDENCE_SCHEMA,
+  type QualificationAttemptResult,
+  type QualificationRunObservation,
 } from "@/lib/trader/backtest/replay-qualification-harness";
 
 function isD11bQualificationHost(): boolean {
@@ -21,6 +35,97 @@ function isD11bQualificationHost(): boolean {
   } catch {
     return false;
   }
+}
+
+function sampleObservation(
+  overrides: Partial<QualificationRunObservation> = {},
+): QualificationRunObservation {
+  return {
+    runLabel: "N2-warm-1",
+    isCold: false,
+    runWallTimeMs: 120_000,
+    meanPaperCycleMs: 1.2,
+    p95PaperCycleMs: 2.4,
+    maxPaperCycleMs: 3.1,
+    rssDeltaBytes: 1_024,
+    heapUsedDeltaBytes: 512,
+    retainedCycleResults: 0,
+    serializedCanvasBytes: 4_096,
+    cycleCount: 129_581,
+    barCount: 129_600,
+    fullHistoryRescans: 0,
+    semanticReproDigest: "a".repeat(64),
+    evidenceDigest: "b".repeat(64),
+    baselineRssBytes: undefined,
+    ...overrides,
+  };
+}
+
+function sampleAttempt(
+  overrides: Partial<QualificationAttemptResult> = {},
+): QualificationAttemptResult {
+  const warmRun = sampleObservation();
+  const coldRun = sampleObservation({ runLabel: "N2-cold", isCold: true });
+  const dataset = {
+    size: "N2" as const,
+    barCount: 129_600,
+    canvasAdvanceCount: 129_600,
+    integratedReplayCycleCount: 129_581,
+    barSetDigest: "c".repeat(64),
+    warmRuns: [warmRun],
+    coldRun,
+    aggregate: {
+      medianWallMs: 120_000,
+      maxWallMs: 130_000,
+      runtimeRangePct: 5,
+      meanPaperCycleMs: 1.2,
+      p95PaperCycleMs: 2.4,
+      maxPaperCycleMs: 3.1,
+      medianRssDeltaBytes: 1_024,
+      p95RssDeltaBytes: 2_048,
+      medianHeapDeltaBytes: 512,
+      p95HeapDeltaBytes: 768,
+      maxSerializedCanvasBytes: 4_096,
+      maxRetainedCycleResults: 0,
+      maxFullHistoryRescans: 0,
+      p95PostGcLiveHeapDeltaBytes: undefined,
+      maxPeakBufferedProjections: undefined,
+    },
+  };
+
+  return {
+    schemaVersion: HTR_WP09_QUALIFICATION_EVIDENCE_SCHEMA,
+    terminalState: "HTR_WP09_D11B_MEMORY_AMENDMENT_V1_PASS",
+    activeQualificationContract: "D11B_MEMORY_GATE_AMENDMENT_V1",
+    gitSha: "420b31e1a743b27654a43c663cc7d94a0efc90e2",
+    dirtyTree: false,
+    hostFingerprintSha256: "d".repeat(64),
+    datasetSha256: D11B_APPROVED_DATASET_SHA256,
+    n1: {
+      ...dataset,
+      size: "N1",
+      barCount: 64_800,
+      canvasAdvanceCount: 64_800,
+      integratedReplayCycleCount: 64_781,
+    },
+    n2: dataset,
+    hostPreflight: {
+      nodeVersion: "v22.0.0",
+      platform: "darwin",
+      arch: "arm64",
+      cpuModel: "Apple M1",
+      cpuCount: 8,
+      totalMemBytes: 16_000_000_000,
+    },
+    diagnosticGrowth: {
+      rssGrowthFor2xN: 1024,
+      heapGrowthFor2xN: 512,
+      rssGrowthGateResult: "DIAGNOSTIC_ONLY",
+      heapGrowthGateResult: "DIAGNOSTIC_ONLY",
+    },
+    thresholdFailures: undefined,
+    ...overrides,
+  };
 }
 
 describe("HTR-WP22 completed-runtime D-11B qualification", () => {
@@ -42,9 +147,193 @@ describe("HTR-WP22 completed-runtime D-11B qualification", () => {
     expect(HTR_WP22_COMPLETED_RUNTIME_QUALIFICATION_SCHEMA).toBe(
       "htr-wp22-completed-runtime-qualification/v1",
     );
+    expect(HTR_WP22_COMPLETED_RUNTIME_QUALIFICATION_SEMANTIC_SCHEMA_V1).toBe(
+      "htr-wp22-completed-runtime-qualification-semantic/v1",
+    );
   });
 
-  it.skipIf(!isD11bQualificationHost())(
+  it("omits undefined optional run-observation fields from semantic projection", () => {
+    const semantic = toQualificationRunObservationSemanticV1(sampleObservation());
+    expect(Object.hasOwn(semantic, "baselineRssBytes")).toBe(false);
+    expect(() => computeSemanticSha256Hex(semantic)).not.toThrow();
+  });
+
+  it("preserves defined optional run-observation fields in semantic projection", () => {
+    const semantic = toQualificationRunObservationSemanticV1(
+      sampleObservation({ baselineRssBytes: 4096, peakBufferedProjections: 4 }),
+    );
+    expect(semantic.baselineRssBytes).toBe(4096);
+    expect(semantic.peakBufferedProjections).toBe(4);
+  });
+
+  it("hashes the full semantic payload successfully for a pass attempt", () => {
+    const payload = toHtrWp22CompletedRuntimeQualificationSemanticPayloadV1({
+      terminalState: "HTR_WP22_COMPLETED_RUNTIME_D11B_PASS",
+      sourceGitSha: "420b31e1a743b27654a43c663cc7d94a0efc90e2",
+      sourceDirtyTree: false,
+      hostFingerprintSha256: "d".repeat(64),
+      qualificationHarnessSha256: "e".repeat(64),
+      qualificationAttempt: sampleAttempt(),
+    });
+    expect(() => computeSemanticSha256Hex(payload)).not.toThrow();
+    expect(payload.d11bThresholdSnapshot.measuredWarmRunsPerN).toBe(5);
+    expect(payload.qualificationAttempt.n2.barCount).toBe(129_600);
+  });
+
+  it("produces identical digest for identical semantic payloads", () => {
+    const input = {
+      terminalState: "HTR_WP22_COMPLETED_RUNTIME_D11B_PASS" as const,
+      sourceGitSha: "420b31e1a743b27654a43c663cc7d94a0efc90e2",
+      sourceDirtyTree: false,
+      hostFingerprintSha256: "d".repeat(64),
+      qualificationHarnessSha256: "e".repeat(64),
+      qualificationAttempt: sampleAttempt(),
+    };
+    const first = computeSemanticSha256Hex(
+      toHtrWp22CompletedRuntimeQualificationSemanticPayloadV1(input),
+    );
+    const second = computeSemanticSha256Hex(
+      toHtrWp22CompletedRuntimeQualificationSemanticPayloadV1(input),
+    );
+    expect(second).toBe(first);
+  });
+
+  it("changes digest when a semantic acceptance measurement changes", () => {
+    const base = toHtrWp22CompletedRuntimeQualificationSemanticPayloadV1({
+      terminalState: "HTR_WP22_COMPLETED_RUNTIME_D11B_PASS",
+      sourceGitSha: "420b31e1a743b27654a43c663cc7d94a0efc90e2",
+      sourceDirtyTree: false,
+      hostFingerprintSha256: "d".repeat(64),
+      qualificationHarnessSha256: "e".repeat(64),
+      qualificationAttempt: sampleAttempt(),
+    });
+    const mutated = structuredClone(base);
+    mutated.qualificationAttempt.n2.integratedReplayCycleCount = 1;
+    expect(computeSemanticSha256Hex(mutated)).not.toBe(computeSemanticSha256Hex(base));
+  });
+
+  it("is insensitive to JavaScript key insertion order", () => {
+    const payload = toHtrWp22CompletedRuntimeQualificationSemanticPayloadV1({
+      terminalState: "HTR_WP22_COMPLETED_RUNTIME_D11B_PASS",
+      sourceGitSha: "420b31e1a743b27654a43c663cc7d94a0efc90e2",
+      sourceDirtyTree: false,
+      hostFingerprintSha256: "d".repeat(64),
+      qualificationHarnessSha256: "e".repeat(64),
+      qualificationAttempt: sampleAttempt(),
+    });
+    const reordered = {
+      qualificationAttempt: payload.qualificationAttempt,
+      semanticSchemaVersion: payload.semanticSchemaVersion,
+      schemaVersion: payload.schemaVersion,
+      phase: payload.phase,
+      terminalState: payload.terminalState,
+      sourceGitSha: payload.sourceGitSha,
+      sourceDirtyTree: payload.sourceDirtyTree,
+      hostFingerprintSha256: payload.hostFingerprintSha256,
+      d11bThresholdsBinding: payload.d11bThresholdsBinding,
+      d11bThresholdSnapshot: payload.d11bThresholdSnapshot,
+      qualificationHarnessSha256: payload.qualificationHarnessSha256,
+    };
+    expect(computeSemanticSha256Hex(reordered)).toBe(computeSemanticSha256Hex(payload));
+  });
+
+  it("preserves array order significance in warmRuns", () => {
+    const attempt = sampleAttempt();
+    const secondWarm = sampleObservation({
+      runLabel: "N2-warm-2",
+      semanticReproDigest: "f".repeat(64),
+    });
+    attempt.n2.warmRuns = [attempt.n2.warmRuns[0]!, secondWarm];
+    const reversed = structuredClone(attempt);
+    reversed.n2.warmRuns = [...attempt.n2.warmRuns].reverse();
+    const forward = computeSemanticSha256Hex(toQualificationAttemptSemanticV1(attempt));
+    const backward = computeSemanticSha256Hex(toQualificationAttemptSemanticV1(reversed));
+    expect(backward).not.toBe(forward);
+  });
+
+  it("embeds frozen D-11B threshold snapshot values", () => {
+    const snapshot = buildHtrWp22D11bThresholdSnapshotV1();
+    expect(snapshot.contract).toBe(
+      D11B_MEMORY_GATE_AMENDMENT_V1_THRESHOLDS.activeQualificationContract,
+    );
+    expect(snapshot.qualificationBarCountN2).toBe(D11B_THRESHOLDS.qualificationBarCountN2);
+    expect(snapshot.maxBufferedProjections).toBe(
+      D11B_MEMORY_GATE_AMENDMENT_V1_THRESHOLDS.maxBufferedProjections,
+    );
+  });
+
+  it("fails closed on unsupported semantic value types", () => {
+    expect(() =>
+      computeSemanticSha256Hex({
+        ok: true,
+        bad: undefined,
+      }),
+    ).toThrow(/unsupported value type/);
+    expect(() =>
+      computeSemanticSha256Hex({
+        ok: true,
+        bad: Number.NaN,
+      }),
+    ).toThrow(/non-finite number prohibited/);
+    expect(() =>
+      computeSemanticSha256Hex({
+        ok: true,
+        bad: Number.POSITIVE_INFINITY,
+      }),
+    ).toThrow(/non-finite number prohibited/);
+    expect(() =>
+      computeSemanticSha256Hex({
+        ok: true,
+        bad: () => "secret-value",
+      }),
+    ).toThrow(/unsupported value type/);
+    expect(() =>
+      computeSemanticSha256Hex({
+        ok: true,
+        bad: Symbol("secret"),
+      }),
+    ).toThrow(/unsupported value type/);
+  });
+
+  it("does not embed secret-like strings in the canonical semantic JSON", () => {
+    const payload = toHtrWp22CompletedRuntimeQualificationSemanticPayloadV1({
+      terminalState: "HTR_WP22_COMPLETED_RUNTIME_D11B_PASS",
+      sourceGitSha: "420b31e1a743b27654a43c663cc7d94a0efc90e2",
+      sourceDirtyTree: false,
+      hostFingerprintSha256: "d".repeat(64),
+      qualificationHarnessSha256: "e".repeat(64),
+      qualificationAttempt: sampleAttempt(),
+    });
+    const canonical = canonicalizeSemanticJsonString(payload);
+    expect(canonical).not.toMatch(/password|api[_-]?key|secret|token/i);
+  });
+
+  it("keeps invalidated attempts out of accepted pass digests", () => {
+    const invalidated = toHtrWp22CompletedRuntimeQualificationSemanticPayloadV1({
+      terminalState: "HTR_WP22_COMPLETED_RUNTIME_D11B_ATTEMPT_INVALIDATED",
+      sourceGitSha: "420b31e1a743b27654a43c663cc7d94a0efc90e2",
+      sourceDirtyTree: false,
+      hostFingerprintSha256: "d".repeat(64),
+      qualificationHarnessSha256: "e".repeat(64),
+      qualificationAttempt: sampleAttempt({
+        terminalState: "HTR_WP09_D11B_MEMORY_AMENDMENT_V1_ATTEMPT_INVALIDATED",
+        invalidationReason: "sourceGitShaMismatch",
+      }),
+      invalidationReason: "sourceGitShaMismatch:expected=abc:actual=def",
+    });
+    const accepted = toHtrWp22CompletedRuntimeQualificationSemanticPayloadV1({
+      terminalState: "HTR_WP22_COMPLETED_RUNTIME_D11B_PASS",
+      sourceGitSha: "420b31e1a743b27654a43c663cc7d94a0efc90e2",
+      sourceDirtyTree: false,
+      hostFingerprintSha256: "d".repeat(64),
+      qualificationHarnessSha256: "e".repeat(64),
+      qualificationAttempt: sampleAttempt(),
+    });
+    expect(invalidated.terminalState).not.toBe("HTR_WP22_COMPLETED_RUNTIME_D11B_PASS");
+    expect(computeSemanticSha256Hex(invalidated)).not.toBe(computeSemanticSha256Hex(accepted));
+  });
+
+  it.skipIf(!isD11bQualificationHost() || readGitDirtyTree())(
     "invalidates when source git sha mismatches current HEAD",
     async () => {
       const { runHtrWp22CompletedRuntimeD11bQualification } =
@@ -55,6 +344,7 @@ describe("HTR-WP22 completed-runtime D-11B qualification", () => {
       expect(result.terminalState).toBe("HTR_WP22_COMPLETED_RUNTIME_D11B_ATTEMPT_INVALIDATED");
       expect(result.invalidationReason).toContain("sourceGitShaMismatch");
       expect(result.d11bThresholdsBinding).toBe("D11B_THRESHOLDS_UNCHANGED");
+      expect(result.payloadSha256).toBeUndefined();
     },
   );
 });
