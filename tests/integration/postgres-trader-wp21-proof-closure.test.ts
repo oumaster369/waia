@@ -16,27 +16,33 @@ import {
   WP21_PROOF_TABLES,
 } from "@/tests/helpers/wp21-proof-postgres";
 
-const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
-const url = process.env.DATABASE_URL_POSTGRES?.trim();
+function wp21PostgresProofEnabled(): boolean {
+  return (
+    process.env.WAIA_PG_INTEGRATION === "1" && Boolean(process.env.DATABASE_URL_POSTGRES?.trim())
+  );
+}
 
-describe.skipIf(!integrationEnabled || !url)(
+describe.skipIf(!wp21PostgresProofEnabled())(
   "postgres trader wp21 proof closure (DEE-415 / HTR-WP21)",
   () => {
-    const db = getPostgresDrizzle();
-    let sql: postgres.Sql;
+    let db!: ReturnType<typeof getPostgresDrizzle>;
+    let sql!: postgres.Sql;
+    let url!: string;
+
+    beforeAll(async () => {
+      url = process.env.DATABASE_URL_POSTGRES!.trim();
+      await assertWp21MandatoryPostgresProofEnvironment();
+      db = getPostgresDrizzle();
+      sql = postgres(url, { max: 1 });
+    });
 
     afterAll(async () => {
       await sql?.end({ timeout: 5 });
       resetPostgresSingletonForTests();
     });
 
-    beforeAll(async () => {
-      await assertWp21MandatoryPostgresProofEnvironment();
-    });
-
     it("runs dynamic V1 production entrypoint with WP21 ON and persists linked records", async () => {
-      sql = postgres(url!, { max: 1 });
-      const orgId = await seedWp21ProofPostgresOrg({ db, databaseUrl: url! });
+      const orgId = await seedWp21ProofPostgresOrg({ db, databaseUrl: url });
       const newId = createWp21ProofPipelineIdFactory();
       const datasetName = `wp21-proof-v1-on-${crypto.randomUUID()}`;
       const { result } = await runWp21ProofProductionPipeline({
@@ -50,12 +56,6 @@ describe.skipIf(!integrationEnabled || !url)(
 
       expect(result.validationMetrics).toBeDefined();
       expect(result.knowledge.marketEventId).toBeTruthy();
-
-      const counts = Object.fromEntries(
-        await Promise.all(
-          WP21_PROOF_TABLES.map(async (table) => [table, await countOrgRows(sql, table, orgId)]),
-        ),
-      );
 
       expect(await countOrgRows(sql, "trader_intelligence_forecast_record", orgId)).toBeGreaterThan(
         0,
@@ -78,8 +78,7 @@ describe.skipIf(!integrationEnabled || !url)(
     }, 180_000);
 
     it("runs dynamic V2 portfolio-context production entrypoint with WP21 ON", async () => {
-      sql = postgres(url!, { max: 1 });
-      const orgId = await seedWp21ProofPostgresOrg({ db, databaseUrl: url! });
+      const orgId = await seedWp21ProofPostgresOrg({ db, databaseUrl: url });
       const newId = createWp21ProofPipelineIdFactory();
       const datasetName = `wp21-proof-v2-on-${crypto.randomUUID()}`;
       const { result } = await runWp21ProofProductionPipeline({

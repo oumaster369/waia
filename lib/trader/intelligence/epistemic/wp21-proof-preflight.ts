@@ -18,6 +18,10 @@ export function assertWp21ProofPostgresEnvironment(): Wp21ProofPostgresEnvironme
     throw new Error("HTR_WP21_PROOF_PG_PREFLIGHT:WAIA_PG_INTEGRATION_REQUIRED");
   }
 
+  if (process.env.WAIA_DB_BACKEND !== "postgres") {
+    throw new Error("HTR_WP21_PROOF_PG_PREFLIGHT:WAIA_DB_BACKEND_POSTGRES_REQUIRED");
+  }
+
   const url = process.env.DATABASE_URL_POSTGRES?.trim();
   if (!url) {
     throw new Error("HTR_WP21_PROOF_PG_PREFLIGHT:DATABASE_URL_POSTGRES_MISSING");
