@@ -27,30 +27,77 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: HTR_MACRO_H_COMPLETE
-  programStatus: APPROVED_IDLE
-  childPlanStatus: DRAFT_EXACT
-  buildAuthorized: false
-  buildAuthorizedScope: null
-  composerTerminalState: HTR_MACRO_I_EXACT_PACKET_READY_FOR_HUMAN_REVIEW
+  humanApproval: HTR_MACRO_I_HUMAN_APPROVED_CONSUMED
+  programStatus: WP_ACTIVE
+  childPlanStatus: APPROVED_EXACT
+  buildAuthorized: true
+  buildAuthorizedScope: HTR-MACRO-I_PHASE_A_ONLY
+  composerTerminalState: COMPOSER_EXECUTE_HTR_MACRO_I_PHASE_A
   activeWorkPackage: HTR-WP21
   currentWorkPackage: HTR-WP21
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-I
-  activeMacroStatus: DRAFT_EXACT_PENDING_HUMAN_REVIEW
+  activeMacroStatus: APPROVED
   macroIWorkPackages: [HTR-WP21]
   macroIPacketSha256: 378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777
   macroIPacketPath: .cursor/plans/dee-415-macro-i/approval-candidates/378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777/dee-415-htr-macro-i-exact-packet.plan.md
   macroIPacketBytes: 53219
   macroIPacketLines: 846
   macroIPacketStartingHead: e9cca6796ab0c96aae1af19cf420f580a4fc75cf
-  wp21MigrationDecision: POSTGRES_REQUIRED
+  wp21MigrationDecision: HUMAN_CONFIRMED_POSTGRES_REQUIRED
   wp21MigrationIds: [0102, 0103, 0104, 0105, 0106, 0107, 0108, 0109]
   wp21GapsToClose: [HTR-GAP-010, HTR-GAP-036, HTR-GAP-037, HTR-GAP-038, HTR-GAP-039, HTR-GAP-040]
   d18: HUMAN_APPROVED_CONSUMED
   d18Model: RECORD_LEVEL_EPISTEMIC_CLOSURE
   d18ReapprovalRequired: false
+  macroIHumanActivation:
+    status: HUMAN_APPROVED_CONSUMED
+    approvalDate: 2026-07-17
+    packetSha256: 378e853ba411ea98c2c0ab2abe44c44f79eaaa8865ed1177c1601edaf8d8c777
+    migrationIds: [0102, 0103, 0104, 0105, 0106, 0107, 0108, 0109]
+    scoringContract:
+      minCalibrationSamples: 30
+      logLossEpsilon: 1e-12
+      calibrationWindow: FULL_RUN_CUMULATIVE
+      confidenceUpdateCap: 0.0500
+      confidenceDecayHalfLifeBars: 120
+      confidenceDecayBarUnit: CLOSED_BASE_1M_BARS
+      confidenceBounds: [0.0000, 1.0000]
+      calibrationPartition: [forecast_model_version, regime, horizon]
+      probabilitySource: forecast_confidence_json.confidence_value
+      numericPrecision: 4dp-round-half-even
+      knowledgeUpdateAuthority: EVIDENCE_AND_MKB_READ_MODEL_ONLY
+      sameRunDecisionAuthority: PROHIBITED
+      strategyLifecycleAuthority: PROHIBITED
+      tradeEligibilityAuthority: PROHIBITED
+      riskMultiplierAuthority: PROHIBITED
+      guardianAuthority: PROHIBITED
+      capitalAuthority: PROHIBITED
+      automaticStrategyPromotion: PROHIBITED
+    buildScope: HTR-MACRO-I_PHASE_A_ONLY
+    tokensConsumed:
+      - APPROVE-HTR-MACRO-I-PACKET
+      - CONFIRM-HTR-WP21-MIGRATION
+      - APPROVE-HTR-WP21-EPISTEMIC-SCORING-CONTRACT
+      - APPROVE-HTR-MACRO-I-BUILD
+  completedWorkPackages:
+    [HTR-WP01, HTR-WP02, HTR-WP03, HTR-WP04, HTR-WP05, HTR-WP06, HTR-WP07, HTR-WP08,
+     HTR-WP09, HTR-WP10, HTR-WP11, HTR-WP12, HTR-WP13, HTR-WP14, HTR-WP15, HTR-WP16,
+     HTR-WP17, HTR-WP18, HTR-WP19, HTR-WP20]
+  remainingWorkPackages: [HTR-WP21, HTR-WP22, HTR-WP23]
+  htrGap035: CLOSED
+  htrGap043: OPEN
+  htrGap044: OPEN
+  htrGap045: OPEN
+  latestValidatedProductionCodeSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
+  planningTerminalState: COMPOSER_EXECUTE_HTR_MACRO_I_PHASE_A
+  newHumanTokenRequired: false
+  requiredHumanTokens: []
+  nextHumanGate: null
+  nextAction: COMPOSER_EXECUTE_HTR_MACRO_I_PHASE_A
+  readyForFullHistoricalTest: false
+  finalPrAuthorized: false
   childPlanPacketAudit: PASS
   approvedChildPacketSha256: ba8daf2608dcea83aeae918150a73fd3c0713f951750a9ff45edfe1e2653baaa
   approvedChildPacketBytes: 64153
@@ -95,11 +142,7 @@ state:
   wp17EconomicsCorrectiveEvidencePath: replay-runs/RI-P7/htr-wp17-economics-corrective-conformance/
   wp17EconomicsCorrectiveManifestDigest: d5089c51860e446be3adab9ed7ef31723c67bdd4eb9e54016a8238a369fee279
   wp17EconomicsCorrectiveSemanticDigest: f00d69fe6a1445eb99453e4388eaab69f1192fbbcf7790fedc266d25dc2f50eb
-  planningTerminalState: HTR_MACRO_H_COMPLETE
-  newHumanTokenRequired: true
-  requiredHumanTokens: [APPROVE-HTR-MACRO-I-PACKET, CONFIRM-HTR-WP21-MIGRATION, APPROVE-HTR-WP21-EPISTEMIC-SCORING-CONTRACT, APPROVE-HTR-MACRO-I-BUILD]
-  nextHumanGate: HTR_MACRO_I_PACKET_REVIEW
-  nextAction: HUMAN_REVIEW_HTR_MACRO_I_EXACT_PACKET
+  macroHPlanningTerminalStateHistorical: HTR_MACRO_H_COMPLETE
   macroHStatus: COMPLETE
   macroHFinalIndependentPhaseBVerdict: PASS
   macroHFinalTestAndEvidenceSha: 24c0eb9041048a8c381a218e1922ed433b44e594
@@ -151,8 +194,6 @@ state:
   wp20AcceptedEvidenceSemanticDigest: e5fa84d6e1f913d2a43cd084a95a07fa3e7a40b356a141d4768b2c95e9ce1873
   wp20Status: WORK_PACKAGE_COMPLETE
   htrGap022: CLOSED
-  completedWorkPackages: [HTR-WP18, HTR-WP19, HTR-WP20]
-  remainingWorkPackages: [HTR-WP21, HTR-WP22, HTR-WP23]
   macroHHumanActivation:
     status: HUMAN_APPROVED_CONSUMED
     activationDate: 2026-07-16
@@ -165,9 +206,6 @@ state:
       - ACK-HTR-WP20-MIGRATION: none
       - APPROVE-HTR-MACRO-H-BUILD
     buildAuthorizedScope: HTR-MACRO-H_PHASE_A_ONLY
-  readyForFullHistoricalTest: false
-  finalPrAuthorized: false
-  latestValidatedProductionCodeSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
   wp13WorkCommitShaPreserved: d07bb654eacb8940b194669094c995efdf2f5342
   wp14WorkCommitSha: b8eeadb6366229a3c868f38cc5ef691054c4e76b
   wp15WorkCommitSha: 645f4be149e65b5e401c3e9bc76cca3f415b23a2
@@ -203,8 +241,6 @@ state:
   wp16MigrationDecision: HUMAN_APPROVED_CONSUMED
   wp16EvidenceLifecycle: HTR_WP16_CLEAN_WORK_COMMIT_EVIDENCE_STAGING_V1
   d20: HUMAN_APPROVED_CONSUMED
-  finalPrAuthorized: NO
-  readyForFullHistoricalTest: false
   macroCMigrationDecision: NONE
   macroDMigrationDecision: NONE
   macroCCodeBaselineHead: a8a709ff53f74649b5c5f39e0ba8e00af1e113de
@@ -216,10 +252,6 @@ state:
   htrGap016: CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH
   htrGap017: CLOSED_REVALIDATED_ON_DEFAULT_RESEARCH_PATH
   htrGap023: CLOSED
-  htrGap035: CLOSED
-  htrGap043: OPEN
-  htrGap044: OPEN
-  htrGap045: OPEN
   htrGap023ClosureOwner: HTR-WP18
   htrGap035ClosureOwner: HTR-WP19
   htrGap035PrimaryOwner: HTR-WP18
@@ -724,7 +756,7 @@ state:
     blocks: []   # D-20 consumed — no longer blocks WP16 packet review
     previouslyBlocked: [HTR-WP16_ACTIVATION, HTR-WP22_FINAL_QUALIFICATION, CERTIFY_HTR_READY]
     doesNotBlock: [HTR-MACRO-C, HTR-MACRO-D]
-  completedWorkPackages:
+  completedWorkPackagesHistoricalPreMacroH:
     - HTR-WP01
     - HTR-WP02
     - HTR-WP03
@@ -742,7 +774,7 @@ state:
     - HTR-WP15
     - HTR-WP16
     - HTR-WP17
-  remainingWorkPackages:
+  remainingWorkPackagesHistoricalPreMacroH:
     - HTR-WP18
     - HTR-WP19
     - HTR-WP20
@@ -766,7 +798,7 @@ state:
     testsPassed: 15
     testsSkipped: 0
     verdict: PASS
-  htrGap035:
+  htrGap035HistoricalLedger:
     status: OPEN
     classification: MODEL_B_ACCOUNTING_FRONTIER_RECONCILIATION_LOCAL_PARITY
     baselineIdentifier: POSTGRES_ZERO_ENV_GATE_WITH_HOOK_CASCADE_BASELINE_V1
