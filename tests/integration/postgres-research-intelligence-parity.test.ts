@@ -36,8 +36,12 @@ import {
 } from "@/lib/trader/research/m9-operator-authorization";
 import { computeM9DatasetSealPreviewPostgres } from "@/lib/trader/research/m9-dataset-seal-preview";
 import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
+import { parseResearchValidationMetricsJson } from "@/lib/trader/research/parse-research-validation-metrics";
+import { listWalkForwardWindowsForCandidatePostgres } from "@/lib/trader/research/strategy-candidate-repository-postgres";
 import { RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION } from "@/lib/trader/research/strategy-candidate.types";
 import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/research/validate-research-evidence-provenance";
+import { hasSufficientCanonicalRegimeCoverage } from "@/lib/trader/research/regime-taxonomy";
+import { buildHtrWp22MultiRegimePostgresEvidence } from "@/lib/trader/backtest/htr-wp22-multi-regime-postgres-evidence";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import {
   createKillSwitchResolver,
@@ -58,6 +62,7 @@ import {
   buildResearchIntegrationBars,
   RESEARCH_INTEGRATION_BAR_COUNT,
 } from "@/tests/helpers/build-research-integration-bars";
+import { ensureAuthUsersSeed } from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -269,14 +274,7 @@ describe.skipIf(!integrationEnabled || !url)(
 
     beforeAll(async () => {
       await cleanup();
-      const sql = postgres(url!, { max: 1 });
-      try {
-        await sql.unsafe(`INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [
-          USER_A,
-        ]);
-      } finally {
-        await sql.end({ timeout: 5 });
-      }
+      await ensureAuthUsersSeed(url!, [USER_A]);
 
       db = getPostgresDrizzle();
       await db.insert(pgSchema.users).values({
@@ -373,6 +371,21 @@ describe.skipIf(!integrationEnabled || !url)(
       for (const order of mockOrders) {
         expect(order.clientOrderId).toContain("ri-blind-");
       }
+
+      const regimeEvidence = buildHtrWp22MultiRegimePostgresEvidence({
+        validationMetrics: first.validationMetrics,
+        walkForwardMetrics: (
+          await listWalkForwardWindowsForCandidatePostgres(db, context, first.strategyCandidateId)
+        ).map((window) => parseResearchValidationMetricsJson(window.metricsJson)),
+        blindMetrics: first.blindMetrics,
+      });
+      expect(first.evidenceDocument.evidenceBody.regimeCoverage.satisfiesRequirement).toBe(true);
+      expect(hasSufficientCanonicalRegimeCoverage(regimeEvidence.regimeCoverage)).toBe(true);
+      expect(regimeEvidence.regimeCoverage.regimes.sort()).toEqual(
+        first.evidenceDocument.evidenceBody.regimeCoverage.regimes.sort(),
+      );
+      expect(regimeEvidence.regimeCoverage.nonTrendingCount).toBeGreaterThan(0);
+      expect(regimeEvidence.regimeCoverage.downRegimeCount).toBeGreaterThan(0);
     });
 
     it("DEE-398: repeat-run idempotency — second run reuses the existing dataset row", async () => {
