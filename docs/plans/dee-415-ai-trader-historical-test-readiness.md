@@ -27,24 +27,27 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  humanApproval: HTR_MACRO_I_HUMAN_APPROVED_CONSUMED
+  humanApproval: HTR_MACRO_J_POLICY_DECISIONS_CONSUMED_PACKET_APPROVAL_PENDING
+  historicalMacroIHumanApproval: HTR_MACRO_I_HUMAN_APPROVED_CONSUMED
   programStatus: APPROVED_IDLE
-  childPlanStatus: DRAFT_EXACT
+  childPlanStatus: CORRECTED_DRAFT_EXACT
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: HTR_MACRO_J_EXACT_PACKET_READY_FOR_HUMAN_REVIEW
+  composerTerminalState: HTR_MACRO_J_HARDENED_EXACT_PACKET_READY_FOR_HUMAN_APPROVAL
   activeWorkPackage: HTR-WP22
   currentWorkPackage: HTR-WP22
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-J
   activeMacroWorkPackages: [HTR-WP22, HTR-WP23]
-  activeMacroStatus: DRAFT_EXACT_PENDING_HUMAN_REVIEW
-  macroJPacketSha256: 7d2ea611ee6667843bdcdbf24ff3e43d4b96a512f59e7d3b581041e3d1353dde
-  macroJPacketPath: .cursor/plans/dee-415-macro-j/approval-candidates/7d2ea611ee6667843bdcdbf24ff3e43d4b96a512f59e7d3b581041e3d1353dde/dee-415-htr-macro-j-exact-packet.plan.md
-  macroJPacketBytes: 26210
-  macroJPacketLines: 495
-  macroJPacketStartingHead: 0dff99cad848e542a78863b91ff24557a8180d7f
+  activeMacroStatus: CORRECTED_DRAFT_EXACT_PENDING_HUMAN_REVIEW
+  macroJPacketSha256: 91be9b0f462e5f9f36ba08d3007eafd9bd00ee4ee5dea48749bc83c5e954fe58
+  macroJPacketPath: .cursor/plans/dee-415-macro-j/approval-candidates/91be9b0f462e5f9f36ba08d3007eafd9bd00ee4ee5dea48749bc83c5e954fe58/dee-415-htr-macro-j-exact-packet.plan.md
+  macroJSupersededPacketSha256: 7d2ea611ee6667843bdcdbf24ff3e43d4b96a512f59e7d3b581041e3d1353dde
+  macroJSupersededPacketClassification: SUPERSEDED_NOT_APPROVABLE_PRE_BUILD_CONTRACT_CONTRADICTIONS
+  macroJPacketBytes: 25703
+  macroJPacketLines: 637
+  macroJPacketAuthoringHead: f076c34a8a1ef574ce78c4139fd6260b813ed224
   wp22MigrationDecision: NONE
   wp23MigrationDecision: NONE
   htxDatasetClassification: NOT_AVAILABLE
@@ -134,18 +137,26 @@ state:
   htrGap045: OPEN
   latestValidatedProductionCodeSha: b71a381327d042640f5c3bd9912fe1fd5d3cd4c4
   latestIndependentlyValidatedPreWp21ProductionSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
-  planningTerminalState: HTR_MACRO_J_EXACT_PACKET_READY_FOR_HUMAN_REVIEW
+  macroJPolicyDecisionsConsumed:
+    wp22Migration: none
+    wp23Migration: none
+    d11b: existing-thresholds-remain-authoritative
+    fhvDatasetSource:
+      classification: NOT_AVAILABLE
+      silentSubstitution: PROHIBITED
+      codeReadyReadinessPackage: AUTHORIZED_WITHOUT_DATASET_ACQUISITION
+      datasetAcquisitionDecision: REQUIRED_BEFORE_ACTUAL_FHV
+      blindHoldout: SEALED_NOT_ACCESSED
+    executionServerPackageMode:
+      mode: option-a-code-ready
+      actualServerMutation: PROHIBITED
+  planningTerminalState: HTR_MACRO_J_HARDENED_EXACT_PACKET_READY_FOR_HUMAN_APPROVAL
   newHumanTokenRequired: true
   requiredHumanTokens:
     - APPROVE-HTR-MACRO-J-PACKET
-    - ACK-HTR-WP22-MIGRATION
-    - ACK-HTR-WP23-MIGRATION
-    - ACK-HTR-D11B
-    - ACK-HTR-FHV-DATASET-SOURCE
-    - APPROVE-HTR-EXECSERVER-PACKAGE-MODE
     - APPROVE-HTR-MACRO-J-BUILD
-  nextHumanGate: HTR_MACRO_J_PACKET_REVIEW
-  nextAction: HUMAN_REVIEW_HTR_MACRO_J_EXACT_PACKET
+  nextHumanGate: APPROVE-HTR-MACRO-J-PACKET
+  nextAction: HUMAN_REVIEW_CORRECTED_HTR_MACRO_J_EXACT_PACKET
   readyForFullHistoricalTest: false
   finalPrAuthorized: false
   childPlanPacketAudit: PASS
@@ -952,7 +963,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: APPROVED_IDLE` — **HTR-WP01..HTR-WP21 COMPLETE**; **HTR-MACRO-I COMPLETE**; active macro **HTR-MACRO-J** (`DRAFT_EXACT_PENDING_HUMAN_REVIEW`); `MACRO_J_PACKET_SHA256: 7d2ea611…`; current work package **HTR-WP22**; `BUILD_AUTHORIZED: NO`; HTR-GAP-005/024/026/027/029/044 (WP22), 028/042/043 (WP23), 045 (external) **OPEN — preserved**; `nextAction: HUMAN_REVIEW_HTR_MACRO_J_EXACT_PACKET`; `nextHumanGate: HTR_MACRO_J_PACKET_REVIEW`. |
+| Plan state | `state.status: in-progress` · `programStatus: APPROVED_IDLE` — **HTR-WP01..HTR-WP21 COMPLETE**; **HTR-MACRO-I COMPLETE**; active macro **HTR-MACRO-J** (`CORRECTED_DRAFT_EXACT_PENDING_HUMAN_REVIEW`); `MACRO_J_PACKET_SHA256: 91be9b0f…` (supersedes `7d2ea611…`); policy decisions consumed; packet approval pending; current work package **HTR-WP22**; `BUILD_AUTHORIZED: NO`; `nextAction: HUMAN_REVIEW_CORRECTED_HTR_MACRO_J_EXACT_PACKET`; `nextHumanGate: APPROVE-HTR-MACRO-J-PACKET`. |
 
 ## Approved decisions (recorded)
 
@@ -2404,11 +2415,11 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## Current work package (HTR-WP22 — Macro-J exact packet bound)
+## Current work package (HTR-WP22 — corrected Macro-J packet bound)
 
-**CURRENT (2026-07-17):** HTR-MACRO-J exact packet **DRAFT_EXACT_PENDING_HUMAN_REVIEW** (`MACRO_J_PACKET_SHA256: 7d2ea611ee6667843bdcdbf24ff3e43d4b96a512f59e7d3b581041e3d1353dde`); HTR-MACRO-I **COMPLETE**; HTR-WP21 **WORK_PACKAGE_COMPLETE** (closeout `0dff99c`, validated production `b71a381…`, accepted evidence `replay-runs/RI-P7/htr-wp21-epistemic-closure/`); `PROGRAM_STATUS: APPROVED_IDLE`; `BUILD_AUTHORIZED: NO`; WP22/WP23 migration decisions **NONE**; HTX dataset **NOT_AVAILABLE**; D-11B **existing thresholds authoritative**; HTR-GAP-005/024/026/027/029/044 (WP22), 028/042/043 (WP23), 045 (external) **OPEN — preserved**; active work package **HTR-WP22**; `nextAction: HUMAN_REVIEW_HTR_MACRO_J_EXACT_PACKET`; no PR; no FHV/holdout/paper/live/capital.
+**CURRENT (2026-07-17):** HTR-MACRO-J corrected exact packet **CORRECTED_DRAFT_EXACT_PENDING_HUMAN_REVIEW** (`MACRO_J_PACKET_SHA256: 91be9b0f462e5f9f36ba08d3007eafd9bd00ee4ee5dea48749bc83c5e954fe58`; supersedes `7d2ea611…` as `SUPERSEDED_NOT_APPROVABLE_PRE_BUILD_CONTRACT_CONTRADICTIONS`); Macro-J policy decisions consumed; packet approval pending; HTR-MACRO-I **COMPLETE**; HTR-WP21 closeout `0dff99c`; `BUILD_AUTHORIZED: NO`; migrations **NONE**; HTX **NOT_AVAILABLE**; D-11B thresholds unchanged; `nextAction: HUMAN_REVIEW_CORRECTED_HTR_MACRO_J_EXACT_PACKET`.
 
-**Next action:** `HUMAN_REVIEW_HTR_MACRO_J_EXACT_PACKET` → human gate `HTR_MACRO_J_PACKET_REVIEW`.
+**Next action:** `HUMAN_REVIEW_CORRECTED_HTR_MACRO_J_EXACT_PACKET` → human gate `APPROVE-HTR-MACRO-J-PACKET`.
 
 **HISTORICAL (NON_OPERATIONAL):** Sections below describing Macro-I Phase-A activation/Build authorization are audit history only.
 
