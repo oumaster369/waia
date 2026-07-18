@@ -6,7 +6,7 @@ owner: Architect
 linkedSpec: docs/product-specs/ai-trader-historical-test-readiness-completion.md
 linkedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
 lastReviewed: 2026-07-18
-version: 0.1.3
+version: 0.1.4
 ---
 
 # AI-TRADER Historical-Test Readiness — Gap Registry
@@ -15,9 +15,18 @@ Tracks known gaps between `READY_FOR_FULL_HISTORICAL_TEST` intent and current im
 
 ## Purpose
 
-Make missing or partial work explicit for the Historical-Test Readiness program. Each gap has exactly one **PRIMARY_OWNER** work package, zero or more **CONTRIBUTING** work packages, and a **CLOSURE** work package (where sufficient evidence exists to close). A gap is **not** closed merely because primary code landed if qualification evidence remains outstanding.
+Make missing or partial work explicit for the Historical-Test Readiness program. Each gap has exactly one **PRIMARY_OWNER**, zero or more **CONTRIBUTING** surfaces, and a **CLOSURE** unit that produces sufficient integrated evidence to close the gap. A gap is **not** closed merely because primary code landed if qualification evidence remains outstanding.
 
-Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
+**Terminology:**
+
+- **PRIMARY_OWNER** — original work package whose accepted output owns the deficient contract.
+- **CONTRIBUTING** — other original work packages (`HTR-WPxx` only) whose surfaces participate in the correction.
+- **CLOSURE** — original work package **or** Human-approved final-audit corrective closure unit that produces sufficient integrated evidence to close the gap.
+
+**Identifier rules:**
+
+- **PRIMARY_OWNER** and **CONTRIBUTING** use **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
+- For gaps discovered after completion of **HTR-WP01..HTR-WP23**, **CLOSURE** may identify a Human-approved corrective closure unit with identifier **`HTR-FINAL-AUDIT-CORRECTIVE-<ID>`**. Such an identifier is **not** a new work package and does **not** alter the frozen 23-WP decomposition. Its **`batchRef`** must point to the corresponding entry in the **Final-audit corrective batches** roadmap section (`IB-HTR-CORR-<ID>`).
 
 **Load-bearing invariants:**
 
@@ -76,10 +85,10 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 | HTR-GAP-043 | Local Postgres parity setup-hook failure (auth.users seeding + invalid UUID fixtures; 13 suites/29 tests not executed) | major | closed (2026-07-18; HTR-WP23 independent Phase-B PASS; corrective 6647b903; GAP-043 13 files / 29 executed / 0 failed / 0 skipped; accepted evidence replay-runs/RI-P7/htr-wp23-readiness-package/) | HTR-WP23 | — | HTR-WP23 | IB-HTR-23 |
 | HTR-GAP-044 | Research-intelligence Postgres parity multi-regime coverage assertion (5 tests) | major | closed (2026-07-18; HTR-WP22 independent Phase-B PASS; GAP-044 2 files / 12 executed / 0 failed / 0 skipped with real regime lineage; accepted evidence replay-runs/RI-P7/htr-wp22-runtime-qualification/) | HTR-WP13 | HTR-WP22 | HTR-WP22 | IB-HTR-13 |
 | HTR-GAP-045 | Twin/runtime Postgres suites auth.users FK (28+1 tests; outside AI-TRADER Macro-H; external Twin backlog — no false closure by WP15) | minor | open (NON_BLOCKING_EXTERNAL_BACKLOG; closureOwner=external-Twin-backlog; blocking READY_FOR_FULL_HISTORICAL_TEST=false) | — | — | external-Twin-backlog | IB-HTR-15 |
-| HTR-GAP-046 | D-20 monthly/strategy drawdown semantics not tracked in hot path (FA-001) | blocker | open (2026-07-18; final audit adjudication; monthlyPeakHwm aliased to account equityHwm; strategy drawdown unreachable) | HTR-WP16 | HTR-WP18, HTR-WP20, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A (C-A5) | HTR-FINAL-AUDIT-CORRECTIVE-A |
-| HTR-GAP-047 | D-5 vs FHV cost-model contradiction; no single authoritative cost object (FA-002) | blocker | open (2026-07-18; D-5 20/5/10 bps vs FHV pin 10/5 bps on default path) | HTR-WP17 | HTR-WP18, HTR-WP19, HTR-WP22, HTR-WP23 | HTR-FINAL-AUDIT-CORRECTIVE-A (C-A5) | HTR-FINAL-AUDIT-CORRECTIVE-A |
-| HTR-GAP-048 | cancelPartialEntry emitted on breach but unconsumed; partial entry remainder not cancelled (FA-003) | blocker | open (2026-07-18; safety contract defect; WP20 partial-entry cancellation incomplete) | HTR-WP20 | HTR-WP17, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A (C-A5) | HTR-FINAL-AUDIT-CORRECTIVE-A |
-| HTR-GAP-049 | FHV semantic trace + operator/six-report emitters missing; schema-only (FA-004) | blocker | open (2026-07-18; blocks code-ready FHV capability; not post-DEE-415 deferral) | HTR-WP23 | HTR-WP04, HTR-WP13, HTR-WP14, HTR-WP18, HTR-WP19, HTR-WP20, HTR-WP21, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A (C-A5) | HTR-FINAL-AUDIT-CORRECTIVE-A |
+| HTR-GAP-046 | D-20 monthly/strategy drawdown semantics not tracked in hot path (FA-001) | blocker | open (2026-07-18; final audit adjudication; monthlyPeakHwm aliased to account equityHwm; strategy drawdown unreachable) | HTR-WP16 | HTR-WP18, HTR-WP20, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-CORR-A |
+| HTR-GAP-047 | D-5 vs FHV cost-model contradiction; no single authoritative cost object (FA-002) | blocker | open (2026-07-18; D-5 20/5/10 bps vs FHV pin 10/5 bps on default path) | HTR-WP17 | HTR-WP18, HTR-WP19, HTR-WP22, HTR-WP23 | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-CORR-A |
+| HTR-GAP-048 | cancelPartialEntry emitted on breach but unconsumed; partial entry remainder not cancelled (FA-003) | blocker | open (2026-07-18; safety contract defect; WP20 partial-entry cancellation incomplete) | HTR-WP20 | HTR-WP17, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-CORR-A |
+| HTR-GAP-049 | FHV semantic trace + operator/six-report emitters missing; schema-only (FA-004) | blocker | open (2026-07-18; blocks code-ready FHV capability; not post-DEE-415 deferral) | HTR-WP23 | HTR-WP04, HTR-WP13, HTR-WP14, HTR-WP18, HTR-WP19, HTR-WP20, HTR-WP21, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-CORR-A |
 
 ## Intake rules
 
@@ -91,9 +100,9 @@ Gap ownership uses **`HTR-WPxx`** identifiers only (never `HTR-Bxx` or `B21'`).
 ## Resolution workflow
 
 1. Triage gap → assign `severity`, `PRIMARY_OWNER`, `CONTRIBUTING`, `CLOSURE`.
-2. Map to roadmap integration batch (`IB-HTR-NN`) and work package (`HTR-WPNN`).
-3. Execute via Build-enabled child Cursor plan on branch `dee-415-ai-trader-historical-test-readiness`.
-4. Close gap when CLOSURE work package evidence is recorded; set `status: closed`, `closedAt`, and `batchRef`.
+2. Map to roadmap batch: ordinary gaps → integration batch `IB-HTR-NN` + work package `HTR-WPNN`; post-final-audit gaps → corrective batch `IB-HTR-CORR-<ID>` + corrective unit `HTR-FINAL-AUDIT-CORRECTIVE-<ID>`.
+3. Execute via Build-enabled child Cursor plan on branch `dee-415-ai-trader-historical-test-readiness` (ordinary WP closure **or** Human-approved final-audit corrective closure unit).
+4. Close gap when CLOSURE unit evidence is recorded; set `status: closed`, `closedAt`, and `batchRef` (`IB-HTR-NN` or `IB-HTR-CORR-<ID>` as applicable).
 5. Whole-program gap closeout included in the DEE-415 branch before the single final PR.
 
 ## Traceability

@@ -12,7 +12,7 @@ sourceOfTruth:
 relatedGaps: docs/gaps/ai-trader-historical-test-readiness-gap-registry.md
 relatedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
 lastReviewed: 2026-07-18
-version: 0.1.1
+version: 0.1.2
 ---
 
 # AI-TRADER — Historical-Test Readiness Completion Specification
@@ -71,74 +71,77 @@ Final Opus whole-program audit **technical coverage preserved**; Human **rejecte
 
 ### Governance / activation (CG-Gov)
 
-- [ ] Activation authority recorded: research-only Org-0 lane (`APPROVE-HTR-ACTIVATION: research-only-org0`, D-14).
-- [ ] WAIA Core uplift status recorded: M1 closed (`ACK-HTR-CORE: m1-closed`, D-15).
-- [ ] Scoped Target Architecture subset ratified (`APPROVE-HTR-TARGET-SUBSET: scoped-htr-ratification`, D-17).
-- [ ] Runtime-substrate interpretation recorded (`APPROVE-HTR-RUNTIME-SUBSTRATE: deterministic-historical-readiness-substrate`, D-16).
-- [ ] Repository-first program state synchronized (canonical integration plan + Linear + parent ledger after each work package).
-- [ ] All 23 work packages COMPLETE with WORK + CLOSEOUT commits on the shared branch.
-- [ ] Final whole-program Opus audit PASS; full validation matrix green; readiness package exists.
-- [ ] Human certification (`CERTIFY-HTR-READY`, D-12) after HTR-WP23.
+- [x] Activation authority recorded: research-only Org-0 lane (`APPROVE-HTR-ACTIVATION: research-only-org0`, D-14; HTR-WP01 WORK 6600708 + CLOSEOUT 60310d5).
+- [x] WAIA Core uplift status recorded: M1 closed (`ACK-HTR-CORE: m1-closed`, D-15; HTR-WP01).
+- [x] Scoped Target Architecture subset ratified (`APPROVE-HTR-TARGET-SUBSET: scoped-htr-ratification`, D-17; HTR-WP01).
+- [x] Runtime-substrate interpretation recorded (`APPROVE-HTR-RUNTIME-SUBSTRATE: deterministic-historical-readiness-substrate`, D-16; HTR-WP01).
+- [x] Repository-first program state synchronized (canonical integration plan + Linear + parent ledger after each work package; all 23 WPs closed).
+- [x] All 23 work packages COMPLETE with WORK + CLOSEOUT commits on the shared branch (`HTR-WP01..HTR-WP23`; independent Phase-B PASS per WP).
+- [ ] Final whole-program Opus audit PASS; full validation matrix green; readiness package exists (Human rejected prior PASS; corrective closure pending).
+- [ ] Human certification (`CERTIFY-HTR-READY`, D-12) after corrective closure + re-audit PASS.
 
 ### CG-A — Data & dataset
 
-- [ ] Point-in-time (PIT) provider context enforced on historical paths (HTR-WP11).
-- [ ] Gateway bypass eliminated on historical paths (HTR-WP11).
-- [ ] Ingress bar-integrity gate operational (HTR-WP12).
-- [ ] Versioned dataset manifest with reproducible fixture binding (HTR-WP12; manifest closure HTR-WP12, package contribution HTR-WP23).
+- [x] Point-in-time (PIT) provider context enforced on historical paths (HTR-WP11 WORK f6cefb0 + CLOSEOUT c63453d; HTR-GAP-012 CLOSED).
+- [x] Gateway bypass eliminated on historical paths (HTR-WP11; HTR-GAP-013 CLOSED).
+- [x] Ingress bar-integrity gate operational (HTR-WP12 WORK 993fdab + CLOSEOUT fd2f9ca; HTR-GAP-014 CLOSED).
+- [x] Versioned dataset manifest with reproducible fixture binding (HTR-WP12; manifest closure HTR-WP12; package contribution HTR-WP23; HTR-GAP-015 CLOSED).
 
 ### CG-B — Replay runtime
 
-- [ ] Replay benchmark methodology approved (D-11A) with golden fixtures (HTR-WP03).
-- [x] Per-stage timing and memory instrumentation (HTR-WP03; qualification HTR-WP22).
-- [x] Checkpoint/resume and pipeline DB-disconnect resilience (HTR-WP05; qualification HTR-WP22).
-- [ ] No-lookahead and determinism property suites green (HTR-WP10).
+- [x] Replay benchmark methodology approved (D-11A) with golden fixtures (HTR-WP03 WORK 35283ed + CLOSEOUT b682bbc).
+- [x] Per-stage timing and memory instrumentation (HTR-WP03; qualification HTR-WP22; HTR-GAP-024 CLOSED).
+- [x] Checkpoint/resume and pipeline DB-disconnect resilience (HTR-WP05 WORK f90faa9 + CLOSEOUT c2ae049; qualification HTR-WP22; HTR-GAP-027/029 CLOSED).
+- [x] No-lookahead and determinism property suites green (HTR-WP10 WORK befa6c1 + CLOSEOUT 1ac0e6a; HTR-GAP-004/025/031 CLOSED).
 
 ### CG-C — Market Canvas & MTF
 
-- [ ] Market Canvas state contract and cursor replay foundation (HTR-WP06).
-- [ ] Incremental closed-bar MTF aggregation without partial-bar HTF leakage (HTR-WP07, HTR-WP10).
-- [ ] Incremental reconstruction with oracle parity (HTR-WP08, HTR-WP09).
-- [ ] Canvas runtime integration, benchmark qualification, default cutover to incremental path (HTR-WP09).
+- [x] Market Canvas state contract and cursor replay foundation (HTR-WP06 WORK 24eb7f9 + CLOSEOUT c8407a3; CANVAS_STATE_OK).
+- [x] Incremental closed-bar MTF aggregation without partial-bar HTF leakage (HTR-WP07 WORK 10f2500 + CLOSEOUT 3a3d82a; HTR-WP10 closed-bar proof; HTR-GAP-003/004 CLOSED).
+- [x] Incremental reconstruction with oracle parity (HTR-WP08 WORK 0c4b8c3 + CLOSEOUT a8a709f; HTR-WP09 cutover; HTR-GAP-002 CLOSED).
+- [x] Canvas runtime integration, benchmark qualification, default cutover to incremental path (HTR-WP09 WORK 46820ac + CLOSEOUT 3a0962f; D-11B PASS; HTR-GAP-001 CLOSED).
 
 ### CG-D — Decision chain (record-level)
 
-- [ ] Intelligence-chain activation for historical run profile (HTR-WP13).
-- [ ] Forecast records (LD-6) and Decision records (LD-7) with whyNotCash and no-trade first-class (HTR-WP14).
-- [ ] CDE/LD-7 naming disambiguation (D-4; HTR-WP14).
-- [ ] Terminal reason universal across chain (HTR-WP13).
-- [ ] MKB read-model wired for replay (HTR-WP15).
-- [ ] Strategy pinning, gating, and trial accounting (HTR-WP16).
+- [x] Intelligence-chain activation for historical run profile (HTR-WP13 WORK d07bb65 + CLOSEOUT 2d63eca; HTR-GAP-006 CLOSED).
+- [x] Forecast records (LD-6) and Decision records (LD-7) with whyNotCash and no-trade first-class (HTR-WP14 WORK b8eeadb + CLOSEOUT e4a3a38; HTR-GAP-007/008/011 CLOSED).
+- [x] CDE/LD-7 naming disambiguation (D-4; HTR-WP14; HTR-GAP-007 CLOSED).
+- [x] Terminal reason universal across chain (HTR-WP13; HTR-GAP-009 CLOSED).
+- [x] MKB read-model wired for replay (HTR-WP15 WORK 645f4be + CLOSEOUT c6e94d9; HTR-GAP-010 CLOSED at HTR-WP21).
+- [x] Strategy pinning, gating, and trial accounting (HTR-WP16 WORK 93d6908 + CLOSEOUT 2e8835e; HTR-GAP-020/021 CLOSED).
 
 ### CG-E — Trading simulation & reality
 
-- [ ] Historical execution-simulation realism: cancel/expire/partial-fill, spread/impact/latency (HTR-WP17).
-- [ ] Cost model on default fills; net vs gross accounting (HTR-WP17, HTR-WP18).
-- [ ] Unified inventory and accounting parity; dual-inventory eliminated (HTR-WP18).
-- [ ] Reality reconciliation and M9-class regression closure (HTR-WP19).
-- [ ] Postgres parity validated beyond CI-only skip (HTR-WP19).
+- [x] Historical execution-simulation realism: cancel/expire/partial-fill, spread/impact/latency (HTR-WP17 WORK 7b4304d + default-path CLOSEOUT 0e1b904; HTR-GAP-016/017 CLOSED_REVALIDATED).
+- [ ] Single authoritative cost model on default fills; net vs gross accounting without D-5/FHV contradiction (HTR-WP17, HTR-WP18; **HTR-GAP-047**).
+- [x] Unified inventory and accounting parity; dual-inventory eliminated (HTR-WP18 WORK 09573c5 + CLOSEOUT 0444e94; HTR-GAP-023 CLOSED).
+- [x] Reality reconciliation and M9-class regression closure (HTR-WP19 WORK 5558860 + CLOSEOUT d1a47ac; HTR-GAP-018/019 CLOSED).
+- [x] Postgres parity validated beyond CI-only skip (HTR-WP19; HTR-GAP-035 CLOSED).
+- [ ] D-20 monthly/strategy drawdown contract enforced in hot path (peak-equity HWM, monthly/strategy attribution, fail-closed response; **HTR-GAP-046**).
 
 ### CG-F — Guardian & exits
 
-- [ ] Guardian vocabulary complete; exit-reason invariants (HTR-WP20).
-- [ ] Closed-trade reality invariants aligned with LD-10 (HTR-WP20).
+- [x] Guardian vocabulary complete; exit-reason invariants (HTR-WP20 WORK b820a06 + CLOSEOUT e9cca67; HTR-GAP-022 CLOSED).
+- [x] Closed-trade reality invariants aligned with LD-10 (HTR-WP20).
+- [ ] Partial-entry cancellation consumed end-to-end on Guardian breach (`cancelPartialEntry` not merely emitted; **HTR-GAP-048**).
 
 ### CG-G — Evidence / quality / ops (+ Execution Server package)
 
-- [x] Streaming evidence with partial sealing and crash-recovery reconstruction (HTR-WP04; qualification HTR-WP22).
+- [x] Streaming evidence with partial sealing and crash-recovery reconstruction (HTR-WP04 WORK b3abe7b; qualification HTR-WP22; HTR-GAP-005/026 CLOSED).
 - [x] Bounded in-memory trace; complete-runtime memory soak (HTR-WP04 primary, HTR-WP22 closure for HTR-GAP-005).
-- [x] Campaign manifest and readiness preflight CLI (HTR-WP23).
-- [ ] Full test matrix green (`pnpm lint`, `typecheck`, `test --run`, `build`, `validate:canon`; Postgres integration when in scope).
-- [x] **Code-ready Execution Server package** (Option A): manifests, contracts, resource assumptions, commands, checkpoint/evidence semantics, operator instructions — ready for Human-operated deployment; **not** "server already deployed" (HTR-WP23, §32B).
+- [x] Campaign manifest and readiness preflight CLI (HTR-WP23 WORK 6647b903 + CLOSEOUT 4e1345e; HTR-GAP-028 CLOSED).
+- [x] Full test matrix green (`pnpm lint`, `typecheck`, `test --run`, `build`, `validate:canon`; Postgres integration when in scope; validated at HTR-WP23 closeout).
+- [ ] FHV semantic trace JSONL emitter + six operator report builders (not schema-only; **HTR-GAP-049**).
+- [ ] **Code-ready Execution Server package** (Option A): manifests, contracts, resource assumptions, commands, checkpoint/evidence semantics, operator instructions — ready for Human-operated deployment; **not** "server already deployed" (HTR-WP23 schema present; emitter/trace gap blocks acceptance until **HTR-GAP-049** closure; §32B).
 
 ### CG-H — Outcome resolution, calibration & knowledge confidence
 
-- [ ] Forecast pre-registration and horizon resolution against PIT-realized data (HTR-WP14, HTR-WP21).
-- [ ] Resolution states per LD-6; hypothesis terminal resolution evidence-driven in replay (HTR-WP21).
-- [ ] Calibration scoring: Brier/log-loss, sample-gated, survivorship-aware (HTR-WP21).
-- [ ] Knowledge-confidence update/decay: deterministic, never autonomous; human-gated global promotion (HTR-WP21).
-- [ ] No-trade/abstention outcome scoring (HTR-WP21).
-- [ ] Deterministic replay of resolution and calibration (ADR-0021; HTR-WP21).
+- [x] Forecast pre-registration and horizon resolution against PIT-realized data (HTR-WP14 + HTR-WP21 WORK f72eed4..b71a381 + CLOSEOUT 0dff99c; HTR-GAP-036 CLOSED).
+- [x] Resolution states per LD-6; hypothesis terminal resolution evidence-driven in replay (HTR-WP21; HTR-GAP-040 CLOSED).
+- [x] Calibration scoring: Brier/log-loss, sample-gated, survivorship-aware (HTR-WP21; HTR-GAP-037 CLOSED).
+- [x] Knowledge-confidence update/decay: deterministic, never autonomous; human-gated global promotion (HTR-WP21; HTR-GAP-038 CLOSED).
+- [x] No-trade/abstention outcome scoring (HTR-WP21; HTR-GAP-039 CLOSED).
+- [x] Deterministic replay of resolution and calibration (ADR-0021; HTR-WP21; accepted evidence replay-runs/RI-P7/htr-wp21-epistemic-closure/).
 
 ## Dependencies
 
