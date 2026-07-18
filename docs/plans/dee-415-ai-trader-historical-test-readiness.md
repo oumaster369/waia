@@ -33,7 +33,7 @@ state:
   childPlanStatus: APPROVED
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: DEE_415_POST_MACRO_J_PHASE_B_TRUTH_RECONCILED_READY_FOR_FINAL_WHOLE_PROGRAM_OPUS_AUDIT
+  composerTerminalState: DEE_415_FINAL_AUDIT_CONTROLLERS_STRICTLY_UNIQUE_READY_FOR_FRESH_OPUS_WHOLE_PROGRAM_AUDIT
   activeWorkPackage: null
   currentWorkPackage: null
   activeCorrection: null
@@ -179,7 +179,7 @@ state:
   wp23PrematureDraftStatus: REAPPLIED_REAUDITED_AND_COMMITTED_AS_ACCEPTED_PHASE_A_WORK
   wp23QuarantineStashPreserved: true
   wp23QuarantineReapplicationStatus: REAPPLIED_REAUDITED_AND_COMMITTED
-  planningTerminalState: DEE_415_POST_MACRO_J_PHASE_B_TRUTH_RECONCILED_READY_FOR_FINAL_WHOLE_PROGRAM_OPUS_AUDIT
+  planningTerminalState: DEE_415_FINAL_AUDIT_CONTROLLERS_STRICTLY_UNIQUE_READY_FOR_FRESH_OPUS_WHOLE_PROGRAM_AUDIT
   nextAction: FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_AUDIT
   newHumanTokenRequired: true
   requiredHumanTokens:
@@ -303,7 +303,6 @@ state:
     blockingReadyForFullHistoricalTest: false
   readyForFullHistoricalTest: false
   finalPrAuthorized: false
-  wp22EffectiveValidatedProductionSha: c982660b61c68e8c1319dae20fd4ebdc698821be
   wp23EffectiveValidatedProductionSha: 6647b9035c19bd4ea55d3c610d1f637ddf3eb668
   latestValidatedProductionCodeSha: 6647b9035c19bd4ea55d3c610d1f637ddf3eb668
   latestIndependentlyValidatedPreWp21ProductionSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
@@ -363,8 +362,6 @@ state:
     tokensConsumed:
       - APPROVE-HTR-MACRO-J-PACKET
       - APPROVE-HTR-MACRO-J-BUILD
-  readyForFullHistoricalTest: false
-  finalPrAuthorized: false
   childPlanPacketAudit: PASS
   approvedChildPacketSha256: ba8daf2608dcea83aeae918150a73fd3c0713f951750a9ff45edfe1e2653baaa
   approvedChildPacketBytes: 64153
@@ -525,7 +522,6 @@ state:
   htrGap043ClosureOwner: HTR-WP23
   htrGap044PrimaryOwner: HTR-WP13
   htrGap044ClosureOwner: HTR-WP22
-  htrGap045Disposition: external-Twin-backlog
   wp17HumanActivation:
     status: HUMAN_APPROVED_CONSUMED
     activationDate: 2026-07-16
