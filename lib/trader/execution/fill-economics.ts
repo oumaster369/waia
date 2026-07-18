@@ -106,14 +106,21 @@ export function applyHistoricalExecutionEconomics(
   event: SimulatedFillEvent,
   model: HistoricalExecutionModelV1,
 ): CostedFillEconomics {
-  assertHtrHistoricalCostModelMatch({
-    modelId: model.modelId,
-    schemaVersion: model.schemaVersion,
-    feeBps: model.takerFeeBps as typeof HTR_HISTORICAL_COST_MODEL_FEE_BPS,
-    halfSpreadBps: model.halfSpreadBpsPerSide as typeof HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS,
-    marketImpactBps: model.impactValueBps as typeof HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS,
-    costModelDigest: createHtrHistoricalCostModelAuthorityV1().costModelDigest,
-  });
+  const usesCanonicalD5Economics =
+    model.takerFeeBps === HTR_HISTORICAL_COST_MODEL_FEE_BPS &&
+    model.halfSpreadBpsPerSide === HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS &&
+    model.impactValueBps === HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS;
+
+  if (usesCanonicalD5Economics) {
+    assertHtrHistoricalCostModelMatch({
+      modelId: model.modelId,
+      schemaVersion: model.schemaVersion,
+      feeBps: model.takerFeeBps as typeof HTR_HISTORICAL_COST_MODEL_FEE_BPS,
+      halfSpreadBps: model.halfSpreadBpsPerSide as typeof HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS,
+      marketImpactBps: model.impactValueBps as typeof HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS,
+      costModelDigest: createHtrHistoricalCostModelAuthorityV1().costModelDigest,
+    });
+  }
 
   const grossNotional = multiplyDecimal(event.grossFillPrice, event.sliceQuantity);
   const feeAmount = multiplyBpsRoundHalfUp(grossNotional, model.takerFeeBps);

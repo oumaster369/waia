@@ -10,10 +10,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { getDb } from "@/db/client";
-import {
-  costModelV1FromAuthority,
-  createHtrHistoricalCostModelAuthorityV1,
-} from "@/lib/trader/execution/cost-model";
+import { COST_MODEL_VERSION_V1, type CostModelV1 } from "@/lib/trader/execution/cost-model";
 import { MEAN_REVERSION_V0, type Bar } from "@/lib/trader/intelligence/types";
 import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
@@ -35,6 +32,13 @@ import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
 const FIXTURE_PATH = "tests/fixtures/trader/btcusdt-1m-mean-reversion.json";
 const USER_ID = "00000000-0000-4000-8021-0000000000r1";
+
+/** Macro-I parent worktrees lack C-A2 authority modules; keep 10/5 for cross-SHA byte parity. */
+const WP21_MEASURED_FLAG_OFF_COST_MODEL: CostModelV1 = {
+  version: COST_MODEL_VERSION_V1,
+  feesBps: "10",
+  slippageBps: "5",
+};
 
 function sha256Utf8(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -83,7 +87,7 @@ async function runMeasuredProof(
   const bars = loadFixtureBars();
   const runId = "wp21-measured-flag-off-run";
   const artifactSink: ResearchValidationBacktestArtifactSink = {};
-  const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
+  const costModel = WP21_MEASURED_FLAG_OFF_COST_MODEL;
   const portfolio = buildResearchV2PortfolioContext(costModel);
 
   try {

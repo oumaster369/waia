@@ -1,4 +1,7 @@
-import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
@@ -77,7 +80,7 @@ export function buildWp15Snapshot(
     runId,
     cycleId,
     newId: createDeterministicReplayIdFactory(415_150),
-    costModel: createCostModelV1("10", "5"),
+    costModel: WP15_COST_MODEL,
   });
 
   const intelligenceCycleBundle = buildIntelligenceCycleBundle({
@@ -95,7 +98,7 @@ export function buildWp15Snapshot(
     decisionChain: cycle.decisionChain!,
     msv: cycle.msv,
     signal: cycle.signal,
-    costModel: createCostModelV1("10", "5"),
+    costModel: WP15_COST_MODEL,
   });
 
   const knowledgeSeed = buildWp15KnowledgeSeedArtifacts(organizationId);
@@ -118,3 +121,5 @@ export const WP15_ORG_A = "00000000-0000-4000-8000-000000041501";
 export const WP15_ORG_B = "00000000-0000-4000-8000-000000041502";
 
 export const WP15_AS_OF = new Date(Date.UTC(2024, 0, 2, 0, 0, 0));
+
+const WP15_COST_MODEL = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());

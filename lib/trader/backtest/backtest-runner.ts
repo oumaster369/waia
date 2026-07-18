@@ -428,7 +428,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   const costAwareRepository = activeRepository;
   const benchmarkObserver = input.benchmarkObserver ?? NOOP_REPLAY_BENCHMARK_OBSERVER;
   const retentionMode = input.retentionMode ?? "FULL";
-  let finalizeAccountingState: AccountingStateV1 | undefined;
+  const finalizeAccountingRef: { state?: AccountingStateV1 } = {};
   const evidenceSink =
     input.evidenceSink ??
     (input.fhvObservability
@@ -453,9 +453,9 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
             initialPortfolioDigest: HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
           },
           getFinalizeContext: () =>
-            finalizeAccountingState
+            finalizeAccountingRef.state
               ? {
-                  accountingState: finalizeAccountingState,
+                  accountingState: finalizeAccountingRef.state,
                 }
               : undefined,
         })
@@ -933,7 +933,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   evidenceExportTimer.end();
   benchmarkObserver.sampleMemory("evidence-export", null);
 
-  finalizeAccountingState = htrAccountingBridge?.state;
+  finalizeAccountingRef.state = htrAccountingBridge?.state;
 
   let streamingManifestRef: StreamingEvidenceManifestRef | undefined;
   const sealMode = input.evidenceSealMode ?? "complete";
