@@ -19,11 +19,13 @@ import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgre
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
+import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
+import { ensureAuthUsersSeed } from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 
-const USER_A = "00000000-0000-4000-8000-0000000321ca";
+const USER_A = "00000000-0000-4000-8022-000000032101";
 const EXCHANGE_ACCOUNT_ID = "htx-reconciliation-s3ca-pg";
 const PERFORMANCE_FEE = "200.000000";
 
@@ -64,15 +66,9 @@ describe.skipIf(!integrationEnabled || !url)(
     }
 
     beforeAll(async () => {
+      await verifyHtrPostgresConnectionIdentity();
       await cleanup();
-      const sql = postgres(url!, { max: 1 });
-      try {
-        await sql.unsafe(`INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [
-          USER_A,
-        ]);
-      } finally {
-        await sql.end({ timeout: 5 });
-      }
+      await ensureAuthUsersSeed(url!, [USER_A]);
 
       const db = getPostgresDrizzle();
       orgA = await ensureUserCoreSeedPostgres(db, {

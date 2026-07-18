@@ -29,11 +29,13 @@ import { createPostgresSettlementApplicationsRepository } from "@/lib/trader/set
 import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
+import { ensureAuthUsersSeed } from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 
-const USER_A = "00000000-0000-4000-8000-0000000s3cbpg";
+const USER_A = "00000000-0000-4000-8022-00000003cb001";
 const EXCHANGE = "htx-recon-s3cb-pg";
 const VALUED = "150.000000";
 
@@ -118,15 +120,9 @@ describe.skipIf(!integrationEnabled || !url)(
     }
 
     beforeAll(async () => {
+      await verifyHtrPostgresConnectionIdentity();
       await cleanup();
-      const sql = postgres(url!, { max: 1 });
-      try {
-        await sql.unsafe(`INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [
-          USER_A,
-        ]);
-      } finally {
-        await sql.end({ timeout: 5 });
-      }
+      await ensureAuthUsersSeed(url!, [USER_A]);
 
       const db = getPostgresDrizzle();
       orgA = await ensureUserCoreSeedPostgres(db, {
