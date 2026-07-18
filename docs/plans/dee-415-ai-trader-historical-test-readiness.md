@@ -31,16 +31,16 @@ state:
   historicalMacroIHumanApproval: HTR_MACRO_I_HUMAN_APPROVED_CONSUMED
   programStatus: MACRO_ACTIVE
   childPlanStatus: APPROVED
-  buildAuthorized: false
-  buildAuthorizedScope: null
-  composerTerminalState: HTR_MACRO_J_PHASE_A_COMPLETE_OFFICIAL_WP23_EVIDENCE_READY_FOR_FRESH_INDEPENDENT_PHASE_B
+  buildAuthorized: true
+  buildAuthorizedScope: HTR_WP23_GAP043_FIXTURE_SEEDING_CORRECTION_ONLY
+  composerTerminalState: HTR_MACRO_J_PHASE_A_GAP043_REGRESSION_FAIL
   activeWorkPackage: HTR-WP23
   currentWorkPackage: HTR-WP23
-  activeCorrection: null
+  activeCorrection: WP23_GAP043_FIXTURE_SEEDING_CORRECTION
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-J
   activeMacroWorkPackages: [HTR-WP22, HTR-WP23]
-  activeMacroStatus: PHASE_A_COMPLETE_PENDING_INDEPENDENT_PHASE_B
+  activeMacroStatus: PHASE_A_CORRECTION_ACTIVE
   macroJPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25
   macroJPacketPath: .cursor/plans/dee-415-macro-j/approval-candidates/5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25/dee-415-htr-macro-j-exact-packet.plan.md
   macroJSupersededPacketSha256: 91be9b0f462e5f9f36ba08d3007eafd9bd00ee4ee5dea48749bc83c5e954fe58
@@ -105,8 +105,8 @@ state:
   wp23EvidenceCliCorrectionSha: 3234b1f4766602749f79129ef4c22ecb6f73c1ac
   wp23EffectivePhaseACandidateSha: 3234b1f4766602749f79129ef4c22ecb6f73c1ac
   wp23EvidenceSourceGitSha: 3234b1f4766602749f79129ef4c22ecb6f73c1ac
-  wp23PhaseAStatus: WP23_PHASE_A_COMPLETE_PENDING_INDEPENDENT_PHASE_B
-  wp23EvidenceStatus: STAGED_PENDING_INDEPENDENT_REVIEW
+  wp23PhaseAStatus: GAP043_CORRECTION_ACTIVE
+  wp23EvidenceStatus: PREVIOUS_OFFICIAL_STAGING_NOT_PHASE_B_PROMOTABLE
   wp23EvidenceManifestDigest: 07ff3fa24f85291f9f309200aed205c66de147efa5f3b706fe2ea56dbd1584e9
   wp23EvidenceSemanticDigest: a973717243db6e847847fd3968c67e6c8b57e0b7fa16ea242cef95cbbd840187
   wp23EvidenceSealMethod: OFFICIAL_CLI
@@ -118,15 +118,32 @@ state:
     classification: DIAGNOSTIC_NOT_PHASE_B_PROMOTABLE_SUPERSEDED_BY_OFFICIAL_CLI_RESEAL
     manifestDigest: d3418a376dc1f78d4bac24855163978eb996de6f44770c8c419cb35771883551
     semanticDigest: a8086947eb9ef0c25dd7074a9bf5f2c201a8c6e9a90e10a0d5a9df4fa63faebb
+  wp23PreviousOfficialCliStaging:
+    sourceGitSha: 3234b1f4766602749f79129ef4c22ecb6f73c1ac
+    classification: SUPERSEDED_NOT_PHASE_B_PROMOTABLE_BY_WP23_GAP043_CORRECTION
+    manifestDigest: 07ff3fa24f85291f9f309200aed205c66de147efa5f3b706fe2ea56dbd1584e9
+    semanticDigest: a973717243db6e847847fd3968c67e6c8b57e0b7fa16ea242cef95cbbd840187
+  wp23Gap043InvalidatedAuditRecord:
+    classification: SUPERSEDED_INVALIDATED_BY_MANDATORY_LIVE_REGRESSION
+    priorClaim: GAP-043 13/29 PASS per-file validate profile
+    verificationTerminal: HTR_MACRO_J_PHASE_A_GAP043_REGRESSION_FAIL
+    observedResult:
+      filesAttempted: 13
+      testsDeclared: 29
+      testsExecuted: 0
+      suitesFailed: 13
+      testsSkipped: 29
+      rootCause: profiles_user_id_users_id_fk — public.users missing before ensureUserCoreSeedPostgres
+  wp23Gap043CorrectionToken: AUTHORIZE-HTR-WP23-GAP043-FIXTURE-SEEDING-CORRECTION-AND-PHASE-A-REPROOF
+  wp23Gap043CorrectionTokenStatus: CONSUMED
   wp23PrematureDraftStatus: REAPPLIED_REAUDITED_AND_COMMITTED_AS_ACCEPTED_PHASE_A_WORK
   wp23QuarantineStashPreserved: true
   wp23QuarantineReapplicationStatus: REAPPLIED_REAUDITED_AND_COMMITTED
-  planningTerminalState: HTR_MACRO_J_PHASE_A_COMPLETE_OFFICIAL_WP23_EVIDENCE_READY_FOR_FRESH_INDEPENDENT_PHASE_B
-  nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B
-  newHumanTokenRequired: true
-  requiredHumanTokens:
-    - AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B
-  nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B
+  planningTerminalState: HTR_MACRO_J_PHASE_A_GAP043_REGRESSION_FAIL
+  nextAction: IMPLEMENT_AND_REPROVE_WP23_GAP043
+  newHumanTokenRequired: false
+  requiredHumanTokens: []
+  nextHumanGate: null
   macroJPhaseAHandoffToken: AUTHORIZE-HTR-WP23-QUARANTINE-REAPPLICATION-AND-PHASE-A-RESUME
   macroJPhaseAHandoffTokenStatus: CONSUMED
   macroJActivationAmendDeviation:
@@ -2518,9 +2535,9 @@ A single PR is opened only after HTR-WP23, final full validation, and the final 
 
 ## Current work package (HTR-WP23 — historical readiness package)
 
-**CURRENT (2026-07-18):** HTR-MACRO-J Phase A **COMPLETE pending independent Phase B**; WP22 Phase A gate **PASS pending independent Phase B** (`c982660` proof, binding `3b02ad3`); WP23 Phase A **COMPLETE pending independent Phase B** (WORK `69cb6d7`, official evidence CLI correction `3234b1f`); WP23 evidence sealed via **official CLI only** (manifest `07ff3fa…`); superseded internal-API bundle `69cb6d7` retained as diagnostic-only; hermetic full-suite **PASS**; GAP-044 **12/12**; GAP-043 **13/29 PASS** (per-file validate profile); evidence staged (not promoted); `BUILD_AUTHORIZED: NO`; `nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B`.
+**CURRENT (2026-07-18):** HTR-MACRO-J **Phase A correction active** (`GAP043_CORRECTION_ACTIVE`); prior verification terminal `HTR_MACRO_J_PHASE_A_GAP043_REGRESSION_FAIL`; invalidated prior claim **GAP-043 13/29 PASS** (mandatory live regression: 13 suites failed in `beforeAll`, 0/29 test bodies executed — `profiles_user_id_users_id_fk`); WP22 Phase A gate **PASS pending independent Phase B** unchanged (`c982660`); previous official WP23 evidence `3234b1f` classified **SUPERSEDED_NOT_PHASE_B_PROMOTABLE_BY_WP23_GAP043_CORRECTION**; GAP-044 **12/12 PASS** preserved from verification session; `BUILD_AUTHORIZED: YES` scope `HTR_WP23_GAP043_FIXTURE_SEEDING_CORRECTION_ONLY`; `nextAction: IMPLEMENT_AND_REPROVE_WP23_GAP043`.
 
-**Next action:** `FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B` → human gate `AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B`.
+**HISTORICAL (SUPERSEDED / INVALIDATED):** Prior current-facing statement claiming GAP-043 **13/29 PASS** at `3234b1f` — invalidated by mandatory live regression 2026-07-18; retained only in `wp23Gap043InvalidatedAuditRecord`.
 
 **HISTORICAL (NON_OPERATIONAL):** Sections below describing Macro-I Phase-A activation/Build authorization are audit history only.
 
