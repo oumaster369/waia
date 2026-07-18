@@ -44,6 +44,20 @@ import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 export const HTR_PG_USER_A = "00000000-0000-4000-8022-0000000000a1";
 export const HTR_PG_USER_B = "00000000-0000-4000-8022-0000000000b2";
 
+/** RFC 4122 UUID v4 identities for deterministic HTR Postgres parity fixtures. */
+const HTR_POSTGRES_FIXTURE_USER_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function assertHtrPostgresFixtureUserId(userId: string): void {
+  if (!HTR_POSTGRES_FIXTURE_USER_ID.test(userId)) {
+    throw new Error(`HTR_POSTGRES_FIXTURE:INVALID_RFC4122_USER_ID:${userId}`);
+  }
+}
+
+export function htrPostgresFixtureEmail(userId: string): string {
+  return `${userId}@waia.invalid`;
+}
+
 export function buildHtrGap044PipelineBacktestOptions(): Pick<
   ResearchPipelineBacktestOptions,
   "metricsSchemaVersion" | "portfolioConfig" | "validationArtifactSink"
@@ -75,6 +89,80 @@ export async function deleteHtrPostgresAuditLogsForOrg(url: string, orgId: strin
   } finally {
     await sql.end({ timeout: 5 });
   }
+}
+
+/** Removes payment projection rows (disables append-only payment_events trigger). */
+export async function deleteHtrPostgresPaymentLedgerForOrg(
+  url: string,
+  orgId: string,
+): Promise<void> {
+  const sql = postgres(url, { max: 1 });
+  try {
+    await sql.unsafe(`ALTER TABLE payment_events DISABLE TRIGGER ALL`);
+    await sql.unsafe(`DELETE FROM payment_events WHERE organization_id = $1`, [orgId]);
+    await sql.unsafe(`ALTER TABLE payment_events ENABLE TRIGGER ALL`);
+    await sql.unsafe(`DELETE FROM payments WHERE organization_id = $1`, [orgId]);
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
+/** Removes trader billing artifacts used by GAP-043 parity suites. */
+export async function deleteHtrPostgresBillingArtifactsForOrg(
+  url: string,
+  orgId: string,
+): Promise<void> {
+  const sql = postgres(url, { max: 1 });
+  try {
+    await sql.unsafe(`DELETE FROM trader_hwm_ledger WHERE organization_id = $1`, [orgId]);
+    await sql.unsafe(`DELETE FROM trader_invoices WHERE organization_id = $1`, [orgId]);
+    await sql.unsafe(`DELETE FROM trader_reporting_periods WHERE organization_id = $1`, [orgId]);
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+  await deleteHtrPostgresAuditLogsForOrg(url, orgId);
+}
+
+/**
+ * Removes settlement + payment parity fixture rows (disables append-only triggers).
+ * Order respects FK topology: reconciliation → applications → settlements → payments.
+ */
+export async function deleteHtrPostgresSettlementDomainForOrg(
+  url: string,
+  orgId: string,
+): Promise<void> {
+  const sql = postgres(url, { max: 1 });
+  try {
+    await sql.unsafe(`ALTER TABLE trader_settlement_reconciliation_events DISABLE TRIGGER ALL`);
+    await sql.unsafe(
+      `DELETE FROM trader_settlement_reconciliation_events WHERE organization_id = $1`,
+      [orgId],
+    );
+    await sql.unsafe(`ALTER TABLE trader_settlement_reconciliation_events ENABLE TRIGGER ALL`);
+    await sql.unsafe(`ALTER TABLE trader_settlement_applications DISABLE TRIGGER ALL`);
+    await sql.unsafe(`DELETE FROM trader_settlement_applications WHERE organization_id = $1`, [
+      orgId,
+    ]);
+    await sql.unsafe(`ALTER TABLE trader_settlement_applications ENABLE TRIGGER ALL`);
+    await sql.unsafe(
+      `DELETE FROM trader_settlement_reconciliation_cases WHERE organization_id = $1`,
+      [orgId],
+    );
+    await sql.unsafe(`ALTER TABLE trader_account_status_events DISABLE TRIGGER ALL`);
+    await sql.unsafe(`DELETE FROM trader_account_status_events WHERE organization_id = $1`, [
+      orgId,
+    ]);
+    await sql.unsafe(`ALTER TABLE trader_account_status_events ENABLE TRIGGER ALL`);
+    await sql.unsafe(`DELETE FROM trader_account_status WHERE organization_id = $1`, [orgId]);
+    await sql.unsafe(`ALTER TABLE trader_settlements DISABLE TRIGGER ALL`);
+    await sql.unsafe(`DELETE FROM trader_settlements WHERE organization_id = $1`, [orgId]);
+    await sql.unsafe(`ALTER TABLE trader_settlements ENABLE TRIGGER ALL`);
+    await sql.unsafe(`DELETE FROM trader_invoices WHERE organization_id = $1`, [orgId]);
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+  await deleteHtrPostgresPaymentLedgerForOrg(url, orgId);
+  await deleteHtrPostgresAuditLogsForOrg(url, orgId);
 }
 
 export type HtrPostgresResearchSession = {
@@ -171,7 +259,14 @@ export function createHtrPostgresUuidFactory(seed: number): () => string {
   };
 }
 
+/**
+ * Inserts auth.users stub rows only.
+ * Does not create public.users — profiles FK requires public.users first.
+ */
 export async function ensureAuthUsersSeed(url: string, userIds: readonly string[]): Promise<void> {
+  for (const userId of userIds) {
+    assertHtrPostgresFixtureUserId(userId);
+  }
   const sql = postgres(url, { max: 1 });
   try {
     for (const userId of userIds) {
@@ -184,13 +279,14 @@ export async function ensureAuthUsersSeed(url: string, userIds: readonly string[
   }
 }
 
-export async function seedHtrPostgresUser(
-  url: string,
+/**
+ * Idempotent public.users row for HTR Postgres parity fixtures (after auth.users).
+ */
+export async function ensureHtrPostgresPublicUserSeed(
   userId: string,
   displayName: string,
-): Promise<string> {
-  await ensureAuthUsersSeed(url, [userId]);
-
+): Promise<void> {
+  assertHtrPostgresFixtureUserId(userId);
   const db = getPostgresDrizzle();
   const existing = await db
     .select({ id: pgSchema.users.id })
@@ -201,12 +297,27 @@ export async function seedHtrPostgresUser(
   if (!existing[0]) {
     await db.insert(pgSchema.users).values({
       id: userId,
-      identityLabel: displayName,
-      email: `${userId}@waia.invalid`,
+      identityLabel: displayName.trim().slice(0, 200),
+      email: htrPostgresFixtureEmail(userId),
       passwordHash: null,
     });
   }
+}
 
+/**
+ * Canonical HTR Postgres parity org seed:
+ * auth.users → public.users → core provisioning (profiles/org/membership/entitlements).
+ */
+export async function seedHtrPostgresUser(
+  url: string,
+  userId: string,
+  displayName: string,
+): Promise<string> {
+  assertHtrPostgresFixtureUserId(userId);
+  await ensureAuthUsersSeed(url, [userId]);
+  await ensureHtrPostgresPublicUserSeed(userId, displayName);
+
+  const db = getPostgresDrizzle();
   return ensureUserCoreSeedPostgres(db, { userId, displayName });
 }
 

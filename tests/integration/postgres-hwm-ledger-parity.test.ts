@@ -14,11 +14,13 @@ import {
   HwmLedgerRatchetNotAllowedError,
   verifyHwmLedgerRecordDigest,
 } from "@/lib/trader/billing";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
-import { ensureAuthUsersSeed } from "@/tests/integration/htr-postgres-fixture-prelude";
+import {
+  deleteHtrPostgresBillingArtifactsForOrg,
+  seedHtrPostgresUser,
+} from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -35,11 +37,10 @@ describe.skipIf(!integrationEnabled || !url)("postgres HWM ledger parity (DEE-30
   let service: ReturnType<typeof createPostgresHwmLedgerService>;
 
   async function cleanup(): Promise<void> {
+    const orgId = personalOrganizationIdFromUserId(USER_A);
+    await deleteHtrPostgresBillingArtifactsForOrg(url!, orgId);
     const sql = postgres(url!, { max: 1 });
     try {
-      const orgId = personalOrganizationIdFromUserId(USER_A);
-      await sql.unsafe(`DELETE FROM trader_hwm_ledger WHERE organization_id = $1`, [orgId]);
-      await sql.unsafe(`DELETE FROM audit_logs WHERE organization_id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM organizations WHERE id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM user_platform_roles WHERE user_id = $1`, [USER_A]);
@@ -54,13 +55,9 @@ describe.skipIf(!integrationEnabled || !url)("postgres HWM ledger parity (DEE-30
   beforeAll(async () => {
     await verifyHtrPostgresConnectionIdentity();
     await cleanup();
-    await ensureAuthUsersSeed(url!, [USER_A]);
+    orgA = await seedHtrPostgresUser(url!, USER_A, "HWM Ledger Postgres Parity");
 
     const db = getPostgresDrizzle();
-    orgA = await ensureUserCoreSeedPostgres(db, {
-      userId: USER_A,
-      displayName: "HWM Ledger Postgres Parity",
-    });
     service = createPostgresHwmLedgerService(db, {}, db);
   });
 

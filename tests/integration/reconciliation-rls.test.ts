@@ -6,15 +6,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
-import { ensureAuthUsersSeed } from "@/tests/integration/htr-postgres-fixture-prelude";
+import {
+  deleteHtrPostgresSettlementDomainForOrg,
+  seedHtrPostgresUser,
+} from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 
-const USER_A = "00000000-0000-4000-8022-00000003cb002";
+const USER_A = "00000000-0000-4000-8022-0000003cb002";
 
 describe.skipIf(!integrationEnabled || !url)("reconciliation RLS (AT-E12 S3-C-B)", () => {
   let orgA: string;
@@ -23,20 +25,9 @@ describe.skipIf(!integrationEnabled || !url)("reconciliation RLS (AT-E12 S3-C-B)
 
   async function cleanup(): Promise<void> {
     const orgId = personalOrganizationIdFromUserId(USER_A);
+    await deleteHtrPostgresSettlementDomainForOrg(url!, orgId);
     const sql = postgres(url!, { max: 1 });
     try {
-      await sql.unsafe(
-        `DELETE FROM trader_settlement_reconciliation_events WHERE organization_id = $1`,
-        [orgId],
-      );
-      await sql.unsafe(
-        `DELETE FROM trader_settlement_reconciliation_cases WHERE organization_id = $1`,
-        [orgId],
-      );
-      await sql.unsafe(`DELETE FROM trader_settlement_applications WHERE organization_id = $1`, [
-        orgId,
-      ]);
-      await sql.unsafe(`DELETE FROM trader_settlements WHERE organization_id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM organizations WHERE id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM user_platform_roles WHERE user_id = $1`, [USER_A]);
@@ -51,18 +42,25 @@ describe.skipIf(!integrationEnabled || !url)("reconciliation RLS (AT-E12 S3-C-B)
   beforeAll(async () => {
     await verifyHtrPostgresConnectionIdentity();
     await cleanup();
-    await ensureAuthUsersSeed(url!, [USER_A]);
+    orgA = await seedHtrPostgresUser(url!, USER_A, "Recon RLS User");
 
     const db = getPostgresDrizzle();
-    orgA = await ensureUserCoreSeedPostgres(db, {
-      userId: USER_A,
-      displayName: "Recon RLS User",
-    });
 
     settlementId = crypto.randomUUID();
     caseId = crypto.randomUUID();
+    const paymentId = crypto.randomUUID();
     const owner = postgres(url!, { max: 1 });
     try {
+      await owner.unsafe(
+        `INSERT INTO payments (
+          payment_id, organization_id, status, direction, subject_module,
+          last_event_seq, last_event_digest, created_at, updated_at
+        ) VALUES (
+          $1, $2, 'DETECTED', 'INBOUND', 'trader',
+          0, 'rls-fixture-digest', NOW(), NOW()
+        )`,
+        [paymentId, orgA],
+      );
       await owner.unsafe(
         `INSERT INTO trader_settlements (
           id, organization_id, exchange_account_id, payment_id,
@@ -75,7 +73,7 @@ describe.skipIf(!integrationEnabled || !url)("reconciliation RLS (AT-E12 S3-C-B)
           'USDT', '1', '1', 'USD', 'stablecoin_par',
           'EXCEPTION', 'AMOUNT_MISMATCH', 'waia.trader.settlement.v1', 'digest', NOW()
         )`,
-        [settlementId, orgA, crypto.randomUUID()],
+        [settlementId, orgA, paymentId],
       );
       await owner.unsafe(
         `INSERT INTO trader_settlement_reconciliation_cases (
@@ -87,7 +85,7 @@ describe.skipIf(!integrationEnabled || !url)("reconciliation RLS (AT-E12 S3-C-B)
           'AMOUNT_MISMATCH', 'OPEN', 10, $5,
           1, 'digest', NOW()
         )`,
-        [caseId, orgA, settlementId, crypto.randomUUID(), crypto.randomUUID()],
+        [caseId, orgA, settlementId, paymentId, crypto.randomUUID()],
       );
     } finally {
       await owner.end({ timeout: 5 });
@@ -103,11 +101,12 @@ describe.skipIf(!integrationEnabled || !url)("reconciliation RLS (AT-E12 S3-C-B)
     const sql = postgres(url!, { max: 1 });
     try {
       await sql.unsafe(`SET ROLE authenticated`);
-      const rows = await sql.unsafe(
-        `SELECT id, current_decision_id FROM trader_settlement_reconciliation_cases WHERE id = $1`,
-        [caseId],
-      );
-      expect(rows).toHaveLength(0);
+      await expect(
+        sql.unsafe(
+          `SELECT id, current_decision_id FROM trader_settlement_reconciliation_cases WHERE id = $1`,
+          [caseId],
+        ),
+      ).rejects.toThrow();
     } finally {
       await sql.unsafe(`RESET ROLE`);
       await sql.end({ timeout: 5 });
@@ -140,11 +139,12 @@ describe.skipIf(!integrationEnabled || !url)("reconciliation RLS (AT-E12 S3-C-B)
     const sql = postgres(url!, { max: 1 });
     try {
       await sql.unsafe(`SET ROLE authenticated`);
-      const rows = await sql.unsafe(
-        `SELECT id, decision_id FROM trader_settlement_applications WHERE settlement_id = $1`,
-        [settlementId],
-      );
-      expect(rows).toHaveLength(0);
+      await expect(
+        sql.unsafe(
+          `SELECT id, decision_id FROM trader_settlement_applications WHERE settlement_id = $1`,
+          [settlementId],
+        ),
+      ).rejects.toThrow();
     } finally {
       await sql.unsafe(`RESET ROLE`);
       await sql.end({ timeout: 5 });

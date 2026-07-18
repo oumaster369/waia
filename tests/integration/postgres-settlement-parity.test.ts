@@ -13,11 +13,13 @@ import * as pgSchema from "@/db/schema.postgres";
 import { createPostgresPaymentService } from "@/lib/waia-core/payments";
 import { buildSettlementEvidence } from "@/lib/waia-core/payment-watcher/build-settlement-evidence";
 import { createPostgresSettlementService } from "@/lib/trader/settlement/settlement-service";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
-import { ensureAuthUsersSeed } from "@/tests/integration/htr-postgres-fixture-prelude";
+import {
+  deleteHtrPostgresSettlementDomainForOrg,
+  seedHtrPostgresUser,
+} from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -31,16 +33,9 @@ describe.skipIf(!integrationEnabled || !url)("postgres settlement parity (AT-E12
 
   async function cleanup(): Promise<void> {
     const orgId = personalOrganizationIdFromUserId(USER_A);
+    await deleteHtrPostgresSettlementDomainForOrg(url!, orgId);
     const sql = postgres(url!, { max: 1 });
     try {
-      await sql.unsafe(`DELETE FROM trader_settlement_applications WHERE organization_id = $1`, [
-        orgId,
-      ]);
-      await sql.unsafe(`DELETE FROM trader_settlements WHERE organization_id = $1`, [orgId]);
-      await sql.unsafe(`DELETE FROM trader_invoices WHERE organization_id = $1`, [orgId]);
-      await sql.unsafe(`DELETE FROM payment_events WHERE organization_id = $1`, [orgId]);
-      await sql.unsafe(`DELETE FROM payments WHERE organization_id = $1`, [orgId]);
-      await sql.unsafe(`DELETE FROM audit_logs WHERE organization_id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM organizations WHERE id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM user_platform_roles WHERE user_id = $1`, [USER_A]);
@@ -55,13 +50,9 @@ describe.skipIf(!integrationEnabled || !url)("postgres settlement parity (AT-E12
   beforeAll(async () => {
     await verifyHtrPostgresConnectionIdentity();
     await cleanup();
-    await ensureAuthUsersSeed(url!, [USER_A]);
+    orgA = await seedHtrPostgresUser(url!, USER_A, "Settlement Postgres Parity");
 
     const db = getPostgresDrizzle();
-    orgA = await ensureUserCoreSeedPostgres(db, {
-      userId: USER_A,
-      displayName: "Settlement Postgres Parity",
-    });
   });
 
   afterAll(async () => {
@@ -78,6 +69,7 @@ describe.skipIf(!integrationEnabled || !url)("postgres settlement parity (AT-E12
     const detected = await paymentService.detectPayment(context, {
       idempotencyKey: "pg-settlement-append-only",
       subjectModule: "trader",
+      subjectInvoiceId: "invoice-settlement-append-only-pg",
     });
     const transfer = {
       txHash: "pg-settlement-append-only-tx",

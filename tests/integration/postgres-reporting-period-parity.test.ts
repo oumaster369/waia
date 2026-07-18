@@ -9,16 +9,19 @@ import postgres from "postgres";
 
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
 import {
+  createPostgresHwmLedgerService,
   createPostgresReportingPeriodLifecycleService,
   ReportingPeriodAlreadyOpenError,
   ReportingPeriodNotOpenError,
   verifyReportingPeriodRecordDigest,
 } from "@/lib/trader/billing";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
-import { ensureAuthUsersSeed } from "@/tests/integration/htr-postgres-fixture-prelude";
+import {
+  deleteHtrPostgresBillingArtifactsForOrg,
+  seedHtrPostgresUser,
+} from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -36,15 +39,13 @@ describe.skipIf(!integrationEnabled || !url)(
   () => {
     let orgA: string;
     let service: ReturnType<typeof createPostgresReportingPeriodLifecycleService>;
+    let hwmService: ReturnType<typeof createPostgresHwmLedgerService>;
 
     async function cleanup(): Promise<void> {
       const sql = postgres(url!, { max: 1 });
       try {
         const orgId = personalOrganizationIdFromUserId(USER_A);
-        await sql.unsafe(`DELETE FROM trader_reporting_periods WHERE organization_id = $1`, [
-          orgId,
-        ]);
-        await sql.unsafe(`DELETE FROM audit_logs WHERE organization_id = $1`, [orgId]);
+        await deleteHtrPostgresBillingArtifactsForOrg(url!, orgId);
         await sql.unsafe(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM organizations WHERE id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM user_platform_roles WHERE user_id = $1`, [USER_A]);
@@ -59,14 +60,11 @@ describe.skipIf(!integrationEnabled || !url)(
     beforeAll(async () => {
       await verifyHtrPostgresConnectionIdentity();
       await cleanup();
-      await ensureAuthUsersSeed(url!, [USER_A]);
+      orgA = await seedHtrPostgresUser(url!, USER_A, "Reporting Period Postgres Parity");
 
       const db = getPostgresDrizzle();
-      orgA = await ensureUserCoreSeedPostgres(db, {
-        userId: USER_A,
-        displayName: "Reporting Period Postgres Parity",
-      });
       service = createPostgresReportingPeriodLifecycleService(db, {}, db);
+      hwmService = createPostgresHwmLedgerService(db, {}, db);
     });
 
     afterAll(async () => {
@@ -76,6 +74,13 @@ describe.skipIf(!integrationEnabled || !url)(
 
     it("opens and closes a reporting period with digest verification", async () => {
       const context = requireOrgContext(orgA);
+
+      await hwmService.bootstrapHwm(context, {
+        exchangeAccountId: EXCHANGE_ACCOUNT_ID,
+        initialHwm: "0",
+        valuationSource: "paper_pnl_read_model.v1",
+        effectiveAt: PERIOD_START,
+      });
 
       const open = await service.openReportingPeriod(context, {
         exchangeAccountId: EXCHANGE_ACCOUNT_ID,

@@ -10,11 +10,10 @@ import postgres from "postgres";
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
 import { createPostgresReconciliationService } from "@/lib/trader/execution";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
-import { ensureAuthUsersSeed } from "@/tests/integration/htr-postgres-fixture-prelude";
+import { seedHtrPostgresUser } from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -49,13 +48,9 @@ describe.skipIf(!integrationEnabled || !url)(
     beforeAll(async () => {
       await verifyHtrPostgresConnectionIdentity();
       await cleanup();
-      await ensureAuthUsersSeed(url!, [USER_A]);
+      orgA = await seedHtrPostgresUser(url!, USER_A, "Order Recon Postgres Parity");
 
-      const db = getPostgresDrizzle();
-      orgA = await ensureUserCoreSeedPostgres(db, {
-        userId: USER_A,
-        displayName: "Order Recon Postgres Parity",
-      });
+    const db = getPostgresDrizzle();
 
       connector = new MockExchangeConnector();
       await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });

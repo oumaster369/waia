@@ -12,11 +12,13 @@ import { createPostgresOrderExecutionService } from "@/lib/trader/execution";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import { createPostgresRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
-import { ensureAuthUsersSeed } from "@/tests/integration/htr-postgres-fixture-prelude";
+import {
+  deleteHtrPostgresAuditLogsForOrg,
+  seedHtrPostgresUser,
+} from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -36,9 +38,10 @@ describe.skipIf(!integrationEnabled || !url)("postgres order execution parity (D
   let service: ReturnType<typeof createPostgresOrderExecutionService>;
 
   async function cleanup(): Promise<void> {
+    const orgId = personalOrganizationIdFromUserId(USER_A);
+    await deleteHtrPostgresAuditLogsForOrg(url!, orgId);
     const sql = postgres(url!, { max: 1 });
     try {
-      const orgId = personalOrganizationIdFromUserId(USER_A);
       await sql.unsafe(`DELETE FROM trader_fills WHERE organization_id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM trader_order_events WHERE organization_id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM trader_orders WHERE organization_id = $1`, [orgId]);
@@ -57,13 +60,9 @@ describe.skipIf(!integrationEnabled || !url)("postgres order execution parity (D
   beforeAll(async () => {
     await verifyHtrPostgresConnectionIdentity();
     await cleanup();
-    await ensureAuthUsersSeed(url!, [USER_A]);
+    orgA = await seedHtrPostgresUser(url!, USER_A, "Order Exec Postgres Parity");
 
     const db = getPostgresDrizzle();
-    orgA = await ensureUserCoreSeedPostgres(db, {
-      userId: USER_A,
-      displayName: "Order Exec Postgres Parity",
-    });
 
     const limits = createPostgresRiskLimitsService(db);
     await limits.upsertLimitsForOrg(requireOrgContext(orgA), { ...DEFAULT_ORG_RISK_LIMITS });
