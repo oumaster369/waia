@@ -111,9 +111,9 @@ Link: [`docs/waia-governance/NON-GOALS.md`](../waia-governance/NON-GOALS.md).
 
 - [x] Streaming evidence with partial sealing and crash-recovery reconstruction (HTR-WP04; qualification HTR-WP22).
 - [x] Bounded in-memory trace; complete-runtime memory soak (HTR-WP04 primary, HTR-WP22 closure for HTR-GAP-005).
-- [ ] Campaign manifest and readiness preflight CLI (HTR-WP23).
+- [x] Campaign manifest and readiness preflight CLI (HTR-WP23).
 - [ ] Full test matrix green (`pnpm lint`, `typecheck`, `test --run`, `build`, `validate:canon`; Postgres integration when in scope).
-- [ ] **Code-ready Execution Server package** (Option A): manifests, contracts, resource assumptions, commands, checkpoint/evidence semantics, operator instructions — ready for Human-operated deployment; **not** "server already deployed" (HTR-WP23, §32B).
+- [x] **Code-ready Execution Server package** (Option A): manifests, contracts, resource assumptions, commands, checkpoint/evidence semantics, operator instructions — ready for Human-operated deployment; **not** "server already deployed" (HTR-WP23, §32B).
 
 ### CG-H — Outcome resolution, calibration & knowledge confidence
 
