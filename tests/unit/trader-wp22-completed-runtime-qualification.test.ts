@@ -18,7 +18,7 @@ import {
   computeSemanticSha256Hex,
   canonicalizeSemanticJsonString,
 } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
-import { readGitDirtyTree } from "@/lib/trader/backtest/replay-benchmark-harness";
+import { readGitCodeSha, readGitDirtyTree } from "@/lib/trader/backtest/replay-benchmark-harness";
 import {
   D11B_APPROVED_DATASET_SHA256,
   D11B_MEMORY_GATE_AMENDMENT_V1_THRESHOLDS,
@@ -347,4 +347,124 @@ describe("HTR-WP22 completed-runtime D-11B qualification", () => {
       expect(result.payloadSha256).toBeUndefined();
     },
   );
+});
+
+describe("HTR-WP22 evidence seal harness", () => {
+  const qualificationSourceGitSha = "afd9a3107f58ea2d6782a4881a76dcfeeca9227d";
+  const expectedD11bPayloadSha256 =
+    "6821c8f7ee47d6f2ea04ce4577ac2df795940fd676e1a98e20d46353d0944624";
+
+  it("declares sequential resilience task order without Promise.all orchestration", async () => {
+    const { HTR_WP22_EVIDENCE_SEAL_RESILIENCE_TASK_ORDER } =
+      await import("@/lib/trader/backtest/htr-wp22-evidence-harness");
+    expect(HTR_WP22_EVIDENCE_SEAL_RESILIENCE_TASK_ORDER).toEqual([
+      "crash-recovery-matrix",
+      "checkpoint-resume-parity",
+      "bounded-memory-soak",
+    ]);
+  });
+
+  it("loads bound D-11B qualification artifact without mutating payloadSha256", async () => {
+    const { loadHtrWp22CompletedRuntimeFromQualificationStaging } =
+      await import("@/lib/trader/backtest/htr-wp22-evidence-harness");
+    const loaded = loadHtrWp22CompletedRuntimeFromQualificationStaging({
+      qualificationSourceGitSha,
+    });
+    expect(loaded.terminalState).toBe("HTR_WP22_COMPLETED_RUNTIME_D11B_PASS");
+    expect(loaded.sourceGitSha).toBe(qualificationSourceGitSha);
+    expect(loaded.payloadSha256).toBe(expectedD11bPayloadSha256);
+    expect(loaded.qualificationAttempt.gitSha).toBe(qualificationSourceGitSha);
+  });
+
+  it("rejects forged qualification source git sha on loaded artifact", async () => {
+    const { loadHtrWp22CompletedRuntimeFromQualificationStaging } =
+      await import("@/lib/trader/backtest/htr-wp22-evidence-harness");
+    expect(() =>
+      loadHtrWp22CompletedRuntimeFromQualificationStaging({
+        qualificationSourceGitSha: "0".repeat(40),
+      }),
+    ).toThrow(/QUALIFICATION_ARTIFACT_MISSING|QUALIFICATION_SHA_MISMATCH/);
+  });
+
+  it("records per-artifact provenance with distinct qualification and assembly SHAs", async () => {
+    const {
+      buildHtrWp22EvidenceManifest,
+      computeHtrWp22EvidenceGeneratorSha256,
+      loadHtrWp22CompletedRuntimeFromQualificationStaging,
+    } = await import("@/lib/trader/backtest/htr-wp22-evidence-harness");
+    const { buildHtrWp22FixtureManifest } =
+      await import("@/lib/trader/backtest/htr-wp22-fixture-manifest");
+    const completedRuntime = loadHtrWp22CompletedRuntimeFromQualificationStaging({
+      qualificationSourceGitSha,
+    });
+    const assemblyGitSha = readGitCodeSha();
+    const manifest = buildHtrWp22EvidenceManifest("/tmp/unused", {
+      sourceGitSha: assemblyGitSha,
+      qualificationSourceGitSha,
+      sourceDirtyTree: false,
+      completedRuntime,
+      fixtureManifest: buildHtrWp22FixtureManifest(),
+    });
+    const d11b = manifest.artifactIndex.find(
+      (entry) => entry.path === "completed-runtime-d11b.json",
+    );
+    const fixture = manifest.artifactIndex.find(
+      (entry) => entry.path === "multi-position-fixture-manifest.json",
+    );
+    expect(d11b?.artifactSourceGitSha).toBe(qualificationSourceGitSha);
+    expect(fixture?.artifactSourceGitSha).toBe(assemblyGitSha);
+    expect(d11b?.generatorGitSha).toBe(assemblyGitSha);
+    expect(d11b?.generatorSha256).toBe(
+      computeHtrWp22EvidenceGeneratorSha256(
+        "lib/trader/backtest/htr-wp22-evidence-harness.ts",
+        assemblyGitSha,
+      ),
+    );
+    const serialized = JSON.stringify(manifest);
+    expect(serialized).not.toMatch(/password|api[_-]?key|secret|token/i);
+  });
+
+  it("rejects already-sealed staging targets and partial bundles", async () => {
+    const { assertHtrWp22EvidenceStagingTargetWritable, resolveHtrWp22EvidenceStagingDir } =
+      await import("@/lib/trader/backtest/htr-wp22-evidence-harness");
+    const sealedDir = resolveHtrWp22EvidenceStagingDir(qualificationSourceGitSha);
+    expect(() => assertHtrWp22EvidenceStagingTargetWritable(sealedDir)).toThrow(
+      /ALREADY_SEALED|PARTIAL_NOT_ACCEPTED/,
+    );
+  });
+
+  it("fails verification on one-byte artifact mutation", async () => {
+    const {
+      loadHtrWp22CompletedRuntimeFromQualificationStaging,
+      sealHtrWp22EvidenceStaging,
+      verifyHtrWp22EvidenceStaging,
+    } = await import("@/lib/trader/backtest/htr-wp22-evidence-harness");
+    const { buildHtrWp22FixtureManifest } =
+      await import("@/lib/trader/backtest/htr-wp22-fixture-manifest");
+    const { mkdtempSync, readFileSync, writeFileSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+
+    const completedRuntime = loadHtrWp22CompletedRuntimeFromQualificationStaging({
+      qualificationSourceGitSha,
+    });
+    const tmpRoot = mkdtempSync(join(tmpdir(), "htr-wp22-evidence-mutation-"));
+    const sealed = sealHtrWp22EvidenceStaging({
+      sourceGitSha: readGitCodeSha(),
+      cwd: tmpRoot,
+      bundle: {
+        sourceGitSha: readGitCodeSha(),
+        qualificationSourceGitSha,
+        sourceDirtyTree: false,
+        completedRuntime,
+        fixtureManifest: buildHtrWp22FixtureManifest(),
+      },
+    });
+    expect(verifyHtrWp22EvidenceStaging(sealed.stagingDir)).toBe(true);
+    const artifactPath = join(sealed.stagingDir, "multi-position-fixture-manifest.json");
+    const original = readFileSync(artifactPath, "utf8");
+    writeFileSync(artifactPath, original.replace("BTCUSDT", "BTCUSDTX"), "utf8");
+    expect(verifyHtrWp22EvidenceStaging(sealed.stagingDir)).toBe(false);
+    rmSync(tmpRoot, { recursive: true, force: true });
+  });
 });

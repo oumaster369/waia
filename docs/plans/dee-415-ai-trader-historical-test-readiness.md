@@ -33,14 +33,14 @@ state:
   childPlanStatus: APPROVED
   buildAuthorized: true
   buildAuthorizedScope: HTR-MACRO-J_PHASE_A_ONLY
-  composerTerminalState: REPROVE_WP22_ON_SERIALIZATION_CORRECTED_CANDIDATE
+  composerTerminalState: PROVISIONAL_GATE_NOT_ACCEPTED_PENDING_CLI_AND_PROOF_CORRECTION
   activeWorkPackage: HTR-WP22
   currentWorkPackage: HTR-WP22
-  activeCorrection: null
+  activeCorrection: NON_MEASUREMENT_CRITICAL_EVIDENCE_ORCHESTRATION_CORRECTION
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-J
   activeMacroWorkPackages: [HTR-WP22, HTR-WP23]
-  activeMacroStatus: PHASE_A_ACTIVE_WP22_INSTRUMENTATION_RECOVERY
+  activeMacroStatus: PHASE_A_ACTIVE
   macroJPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25
   macroJPacketPath: .cursor/plans/dee-415-macro-j/approval-candidates/5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25/dee-415-htr-macro-j-exact-packet.plan.md
   macroJSupersededPacketSha256: 91be9b0f462e5f9f36ba08d3007eafd9bd00ee4ee5dea48749bc83c5e954fe58
@@ -51,10 +51,18 @@ state:
   wp22MigrationDecision: NONE
   wp22OriginalWorkCommitSha: d4a619c10fae940e14bd93eba7ed4386ce45a03c
   wp22GapRemediationSha: 420b31e1a743b27654a43c663cc7d94a0efc90e2
-  wp22PhaseAStatus: INSTRUMENTATION_RECOVERY_PENDING_SERIALIZATION_COMMIT
+  wp22SerializationRemediationSha: afd9a3107f58ea2d6782a4881a76dcfeeca9227d
+  wp22EvidenceCliCorrectionClassification: NON_MEASUREMENT_CRITICAL_EVIDENCE_ORCHESTRATION_CORRECTION
+  wp22PhaseAStatus: PROVISIONAL_GATE_NOT_ACCEPTED_PENDING_CLI_AND_PROOF_CORRECTION
   wp22EffectivePhaseACandidateAuthority: GIT_HEAD
-  wp22FirstValidD11bAttemptConsumed: false
-  wp22EvidenceStatus: NOT_STAGED
+  wp22FirstValidD11bAttemptConsumed: true
+  d11bQualificationSourceGitSha: afd9a3107f58ea2d6782a4881a76dcfeeca9227d
+  d11bHarnessSha256: 518c7338fe5b030ad2a6662e2ca1fe127f176ca2fcf573a05ae921cebb96cab3
+  d11bPayloadSha256: 6821c8f7ee47d6f2ea04ce4577ac2df795940fd676e1a98e20d46353d0944624
+  d11bReplacementAttempt: PASS
+  wp22EvidenceStatus: STAGED_PENDING_INDEPENDENT_REVIEW
+  wp22KnownCliDefect: OPEN_EVIDENCE_SEAL_PARALLEL_ORCHESTRATION
+  wp22MultiPositionCorrectnessProof: NOT_YET_EXPLICITLY_VERIFIED
   wp22D11bInvalidatedAttempt:
     sourceGitSha: 420b31e1a743b27654a43c663cc7d94a0efc90e2
     classification: INVALIDATED_BY_INSTRUMENTATION_FAILURE
@@ -68,7 +76,10 @@ state:
   wp23PrematureDraftStatus: QUARANTINED_NOT_ACCEPTED
   wp23QuarantineStashOid: a6ead010bf0d35f67f4beffc93f15cde901a6948
   wp23QuarantineFileCount: 29
-  nextAction: REPROVE_WP22_ON_SERIALIZATION_CORRECTED_CANDIDATE
+  nextAction: HUMAN_REVIEW_BEFORE_WP23_DRAFT_REAPPLICATION
+  newHumanTokenRequired: true
+  requiredHumanTokens:
+    - AUTHORIZE-HTR-WP23-QUARANTINE-REAPPLICATION-AND-PHASE-A-RESUME
   macroJActivationAmendDeviation:
     classification: BOUNDED_GOVERNANCE_ONLY_PRE_WP22_PROCESS_DEVIATION
     originalActivationSha: 5a7833961fe02b6744d7ff902ca1fd1178cab9cc

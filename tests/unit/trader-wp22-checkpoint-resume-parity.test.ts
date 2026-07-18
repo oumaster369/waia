@@ -26,4 +26,13 @@ describe("HTR-WP22 checkpoint/resume parity", () => {
       result.terminalState === "HTR_WP22_CHECKPOINT_RESUME_PASS",
     );
   }, 240_000);
+
+  it("does not collide on users.email when run sequentially before crash recovery", async () => {
+    const { runHtrWp22CrashRecoveryMatrix } =
+      await import("@/lib/trader/backtest/htr-wp22-crash-recovery-matrix");
+    const checkpoint = await runHtrWp22CheckpointResumeParity();
+    const crash = await runHtrWp22CrashRecoveryMatrix();
+    expect(checkpoint.terminalState).toBe("HTR_WP22_CHECKPOINT_RESUME_PASS");
+    expect(crash.terminalState).toBe("HTR_WP22_CRASH_RECOVERY_PASS");
+  }, 480_000);
 });

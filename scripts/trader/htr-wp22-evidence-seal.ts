@@ -2,26 +2,31 @@
  * HTR-WP22 — staging evidence seal CLI (v2 sidecar model).
  *
  * Usage:
- *   pnpm trader:htr:wp22:evidence-seal -- --staging-only --source-git-sha <SHA>
+ *   pnpm trader:htr:wp22:evidence-seal -- \
+ *     --staging-only \
+ *     --source-git-sha <EVIDENCE_ASSEMBLY_SHA> \
+ *     --qualification-source-git-sha <D11B_QUALIFICATION_SHA>
  */
 
 import { execSync } from "node:child_process";
 
-import { buildHtrWp22FixtureManifest } from "@/lib/trader/backtest/htr-wp22-fixture-manifest";
-import { runHtrWp22BoundedMemorySoak } from "@/lib/trader/backtest/htr-wp22-bounded-memory-soak";
-import { runHtrWp22CheckpointResumeParity } from "@/lib/trader/backtest/htr-wp22-checkpoint-resume-parity";
-import { runHtrWp22CrashRecoveryMatrix } from "@/lib/trader/backtest/htr-wp22-crash-recovery-matrix";
 import {
+  assembleHtrWp22EvidenceBundleSequential,
   sealHtrWp22EvidenceStaging,
   verifyHtrWp22EvidenceStaging,
 } from "@/lib/trader/backtest/htr-wp22-evidence-harness";
-import { runHtrWp22CompletedRuntimeD11bQualification } from "@/lib/trader/backtest/htr-completed-runtime-qualification-harness";
 
-function parseArgs(argv: string[]): { stagingOnly?: boolean; sourceGitSha?: string } {
+function parseArgs(argv: string[]): {
+  stagingOnly?: boolean;
+  sourceGitSha?: string;
+  qualificationSourceGitSha?: string;
+} {
   const shaIndex = argv.indexOf("--source-git-sha");
+  const qualificationIndex = argv.indexOf("--qualification-source-git-sha");
   return {
     stagingOnly: argv.includes("--staging-only"),
     sourceGitSha: shaIndex >= 0 ? argv[shaIndex + 1] : undefined,
+    qualificationSourceGitSha: qualificationIndex >= 0 ? argv[qualificationIndex + 1] : undefined,
   };
 }
 
@@ -37,36 +42,31 @@ async function main(): Promise<void> {
     throw new Error("WAIA_TRADER_CLI=1 required");
   }
 
-  const { stagingOnly, sourceGitSha } = parseArgs(process.argv.slice(2));
+  const { stagingOnly, sourceGitSha, qualificationSourceGitSha } = parseArgs(process.argv.slice(2));
   if (!stagingOnly) {
     throw new Error("HTR_WP22_EVIDENCE_SEAL:STAGING_ONLY_REQUIRED");
   }
   if (!sourceGitSha) {
     throw new Error("HTR_WP22_EVIDENCE_SEAL:SOURCE_GIT_SHA_REQUIRED");
   }
+  if (!qualificationSourceGitSha) {
+    throw new Error("HTR_WP22_EVIDENCE_SEAL:QUALIFICATION_SOURCE_GIT_SHA_REQUIRED");
+  }
 
   assertGitTreeClean();
 
-  const [completedRuntime, crashRecoveryMatrix, checkpointResumeParity, boundedMemorySoak] =
-    await Promise.all([
-      runHtrWp22CompletedRuntimeD11bQualification({ sourceGitSha }),
-      runHtrWp22CrashRecoveryMatrix(),
-      runHtrWp22CheckpointResumeParity(),
-      runHtrWp22BoundedMemorySoak(),
-    ]);
-
-  const fixtureManifest = buildHtrWp22FixtureManifest();
+  const bundle = await assembleHtrWp22EvidenceBundleSequential({
+    sourceGitSha,
+    qualificationSourceGitSha,
+  });
 
   const sealed = sealHtrWp22EvidenceStaging({
     sourceGitSha,
     bundle: {
+      ...bundle,
       sourceGitSha,
+      qualificationSourceGitSha,
       sourceDirtyTree: false,
-      completedRuntime,
-      crashRecoveryMatrix,
-      checkpointResumeParity,
-      boundedMemorySoak,
-      fixtureManifest,
     },
   });
 
@@ -81,6 +81,8 @@ async function main(): Promise<void> {
         manifestDigest: sealed.manifestDigest,
         semanticDigest: sealed.semanticDigest,
         artifactCount: sealed.manifest.artifactIndex.length,
+        evidenceAssemblyGitSha: sourceGitSha,
+        qualificationSourceGitSha,
       },
       null,
       2,
