@@ -10,7 +10,8 @@ import {
 } from "@/lib/trader/backtest/backtest-repository-postgres";
 import {
   COST_MODEL_VERSION_V1,
-  createCostModelV1,
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
   type CostModelV1,
 } from "@/lib/trader/execution/cost-model";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
@@ -245,7 +246,7 @@ export async function runResearchPipelinePostgres(
 ): Promise<RunResearchPipelineResult> {
   const newId = input.newId ?? crypto.randomUUID.bind(crypto);
   const costModel =
-    input.costModel ?? createCostModelV1(input.feesBps ?? "10", input.slippageBps ?? "5");
+    input.costModel ?? costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
   const accountKey = input.accountKey ?? "research-default";
   const defaultQuantity = input.defaultQuantity ?? "0.01";
   const oosBarCount = input.oosBarCount ?? 20;

@@ -22,6 +22,11 @@ export type CostAdjustedFill = {
 
 export type CostModelFillSide = "buy" | "sell";
 
+/**
+ * @deprecated Non-production historical fixture constructor only.
+ * Production executable paths MUST use
+ * `costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1())`.
+ */
 export function createCostModelV1(feesBps: string, slippageBps: string): CostModelV1 {
   return {
     version: COST_MODEL_VERSION_V1,
@@ -29,6 +34,21 @@ export function createCostModelV1(feesBps: string, slippageBps: string): CostMod
     slippageBps,
   };
 }
+
+export {
+  assertHtrHistoricalCostModelMatch,
+  computeHtrHistoricalCostModelDigest,
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+  HTR_HISTORICAL_COST_MODEL_DIGEST,
+  HTR_HISTORICAL_COST_MODEL_FEE_BPS,
+  HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS,
+  HTR_HISTORICAL_COST_MODEL_ID,
+  HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS,
+  HTR_HISTORICAL_COST_MODEL_SCHEMA_VERSION,
+  HTR_HISTORICAL_COST_MODEL_SLIPPAGE_MODEL,
+  type HtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/htr-historical-cost-model-authority";
 
 /**
  * Applies versioned slippage (worse fill price) and fee drag (bps of notional).

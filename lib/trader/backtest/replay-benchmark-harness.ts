@@ -53,7 +53,10 @@ import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
 import { DEFAULT_REPLAY_SUBSTRATE_MODE } from "@/lib/trader/backtest/replay-substrate-mode";
 import type { ReplaySubstrateMode } from "@/lib/trader/backtest/replay-substrate-mode";
 import type { ReplayRetentionMode } from "@/lib/trader/backtest/streaming-evidence";
-import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
 import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
@@ -394,7 +397,7 @@ export async function runReplayBenchmarkOnce(input: {
         start: new Date(input.bars[0]!.barOpenTime),
         end: new Date(input.bars.at(-1)!.barCloseTime),
       };
-      const costModel = createCostModelV1("10", "5");
+      const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
       const substrateMode = input.substrateMode ?? DEFAULT_REPLAY_SUBSTRATE_MODE;
       const barSource = new HistoricalBarReplaySource({
         bars: input.bars,

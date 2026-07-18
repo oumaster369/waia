@@ -4,6 +4,10 @@ import {
   EXECUTION_FACT_KIND_HISTORICAL_SIMULATED,
   type HistoricalExecutionModelV1,
 } from "@/lib/trader/execution/historical-execution-model.types";
+import {
+  assertHtrHistoricalCostModelMatch,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/htr-historical-cost-model-authority";
 
 export class InvalidHistoricalExecutionModelError extends Error {
   constructor(message: string) {
@@ -12,8 +16,9 @@ export class InvalidHistoricalExecutionModelError extends Error {
   }
 }
 
-/** Human-approved D-5 model (HTR-WP17). */
+/** Human-approved D-5 model (HTR-WP17). Canonical economics are also exposed via cost-model authority. */
 export function createHistoricalExecutionModelV1(): HistoricalExecutionModelV1 {
+  assertHtrHistoricalCostModelMatch(createHtrHistoricalCostModelAuthorityV1());
   return {
     modelId: HISTORICAL_EXECUTION_MODEL_ID,
     schemaVersion: HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION,

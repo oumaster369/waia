@@ -1,6 +1,9 @@
 import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
-import { COST_MODEL_VERSION_V1 } from "@/lib/trader/execution/cost-model";
-import { multiplyDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
+import { addDecimal, multiplyDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import type { DecisionChain } from "@/lib/trader/intelligence/mi-core.types";
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { deriveDecisionRecordId } from "@/lib/trader/intelligence/forecast-decision/derive-forecast-decision-ids";
@@ -74,6 +77,24 @@ function resolveCostEvidence(
     };
   }
 
+  const authority = createHtrHistoricalCostModelAuthorityV1();
+  const canonicalCostModel = costModelV1FromAuthority(authority);
+  if (
+    costModel.feesBps !== canonicalCostModel.feesBps ||
+    costModel.slippageBps !== canonicalCostModel.slippageBps
+  ) {
+    return {
+      state: "UNAVAILABLE",
+      grossExpectedReward: null,
+      expectedFees: null,
+      expectedSlippage: null,
+      expectedOtherCosts: null,
+      expectedRewardAfterCosts: null,
+      costModelId: null,
+      costModelVersion: null,
+    };
+  }
+
   if (!signal.expectedEdge || signal.outcome !== "SIGNAL") {
     return {
       state: "NOT_APPLICABLE",
@@ -89,11 +110,16 @@ function resolveCostEvidence(
 
   const grossExpectedReward = signal.expectedEdge;
   const notional = signal.maxRisk ?? "1";
-  const expectedFees = multiplyDecimal(notional, multiplyDecimal(costModel.feesBps, "0.0001"));
-  const expectedSlippage = multiplyDecimal(
+  const expectedFees = multiplyDecimal(notional, multiplyDecimal(authority.feeBps, "0.0001"));
+  const expectedSpread = multiplyDecimal(
     notional,
-    multiplyDecimal(costModel.slippageBps, "0.0001"),
+    multiplyDecimal(authority.halfSpreadBps, "0.0001"),
   );
+  const expectedImpact = multiplyDecimal(
+    notional,
+    multiplyDecimal(authority.marketImpactBps, "0.0001"),
+  );
+  const expectedSlippage = addDecimal(expectedSpread, expectedImpact);
   const expectedOtherCosts = "0";
   const expectedRewardAfterCosts = subtractDecimal(
     subtractDecimal(subtractDecimal(grossExpectedReward, expectedFees), expectedSlippage),
@@ -107,8 +133,8 @@ function resolveCostEvidence(
     expectedSlippage,
     expectedOtherCosts,
     expectedRewardAfterCosts,
-    costModelId: COST_MODEL_VERSION_V1,
-    costModelVersion: costModel.version,
+    costModelId: authority.modelId,
+    costModelVersion: authority.schemaVersion,
   };
 }
 

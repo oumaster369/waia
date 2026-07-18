@@ -2,7 +2,10 @@ import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
@@ -48,7 +51,7 @@ function buildSnapshotFromCycle(
     runId,
     cycleId,
     newId: createDeterministicReplayIdFactory(415_150),
-    costModel: createCostModelV1("10", "5"),
+    costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
   });
 
   const intelligenceCycleBundle = buildIntelligenceCycleBundle({
@@ -66,7 +69,7 @@ function buildSnapshotFromCycle(
     decisionChain: cycle.decisionChain!,
     msv: cycle.msv,
     signal: cycle.signal,
-    costModel: createCostModelV1("10", "5"),
+    costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
   });
 
   return {

@@ -15,7 +15,10 @@ import {
   readReplayCheckpoint,
   REPLAY_CHECKPOINT_SCHEMA_VERSION,
 } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
-import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
 import { MEAN_REVERSION_V0, type Bar } from "@/lib/trader/intelligence/types";
 import type { MarketCanvasState } from "@/lib/trader/market-data/canvas/market-canvas.types";
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
@@ -89,7 +92,7 @@ async function runIncrementalFixture(input: {
         orderRepository: session.orderRepository,
         accountKey: "htr-wp09-canvas-resume",
         defaultQuantity: "0.01",
-        costModel: createCostModelV1("10", "5"),
+        costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
         strategySignalIds: [MEAN_REVERSION_V0],
         strategyId: MEAN_REVERSION_V0,
         strategyVersion: BENCHMARK_STRATEGY_VERSION,

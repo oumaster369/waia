@@ -42,6 +42,7 @@ import { readGitCodeSha, readGitDirtyTree } from "@/lib/trader/backtest/replay-b
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
 import { restoreWp17ExecutionFromCheckpoint } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint-resume-harness";
 import { createHistoricalExecutionModelV1 } from "@/lib/trader/execution/historical-execution-model";
+import { createHtrHistoricalCostModelAuthorityV1 } from "@/lib/trader/execution/htr-historical-cost-model-authority";
 import type { HistoricalExecutionModelV1 } from "@/lib/trader/execution/historical-execution-model.types";
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import { buildMarketSnapshot } from "@/lib/trader/market-data/market-snapshot";
@@ -334,6 +335,7 @@ export type HtrWp22MultiPositionCorrectnessResult = {
     end: typeof HTR_WP22_FIXTURE_TIME_RANGE_END;
   };
   executionBoundaryClassification: typeof HTR_WP22_MULTI_POSITION_EXECUTION_BOUNDARY;
+  executionCostModelDigest: string;
   intentSeamClassification: typeof HTR_WP22_MULTI_POSITION_INTENT_SEAM;
   orders: { total: number; bySymbol: { BTCUSDT: number; ETHUSDT: number } };
   fills: {
@@ -926,6 +928,7 @@ export async function runHtrWp22MultiPositionCorrectness(
       end: HTR_WP22_FIXTURE_TIME_RANGE_END,
     },
     executionBoundaryClassification: HTR_WP22_MULTI_POSITION_EXECUTION_BOUNDARY,
+    executionCostModelDigest: createHtrHistoricalCostModelAuthorityV1().costModelDigest,
     intentSeamClassification: HTR_WP22_MULTI_POSITION_INTENT_SEAM,
     orders: {
       total: uninterruptedOrders.length,

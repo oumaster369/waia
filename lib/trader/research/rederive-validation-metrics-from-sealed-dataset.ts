@@ -3,7 +3,11 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 enforceServerOnly();
 
 import type { Bar } from "@/lib/trader/intelligence/types";
-import { COST_MODEL_VERSION_V1, createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  COST_MODEL_VERSION_V1,
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
 import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
 import { runResearchValidationBacktest } from "@/lib/trader/research/research-backtest-runner";
 import { buildResearchValidationCycleIdPrefix } from "@/lib/trader/research/research-backtest-cycle-id";
@@ -24,7 +28,7 @@ function resolveCostModel(costModelVersion: string) {
   if (costModelVersion !== COST_MODEL_VERSION_V1) {
     throw new Error(`[research] unsupported cost model version for re-derive: ${costModelVersion}`);
   }
-  return createCostModelV1("10", "5");
+  return costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
 }
 
 /**

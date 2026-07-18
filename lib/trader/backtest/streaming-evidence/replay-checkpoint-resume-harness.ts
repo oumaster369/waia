@@ -38,7 +38,10 @@ import {
 import { REPLAY_CHECKPOINT_SCHEMA_VERSION } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
-import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
 import { type HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
 import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
 import type { HistoricalExecutionCheckpointSlice } from "@/lib/trader/execution/historical-execution-model.types";
@@ -217,9 +220,7 @@ async function runFixtureStreamOnly(input: {
         orderRepository: activeOrderRepository,
         accountKey: "htr-wp05-checkpoint",
         defaultQuantity: "0.01",
-        costModel: input.historicalExecutionProfile
-          ? createCostModelV1("20", "10")
-          : createCostModelV1("10", "5"),
+        costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
         strategySignalIds: [MEAN_REVERSION_V0],
         strategyId: MEAN_REVERSION_V0,
         strategyVersion: BENCHMARK_STRATEGY_VERSION,

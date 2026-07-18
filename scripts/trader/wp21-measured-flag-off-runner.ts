@@ -10,7 +10,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { getDb } from "@/db/client";
-import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
 import { MEAN_REVERSION_V0, type Bar } from "@/lib/trader/intelligence/types";
 import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
@@ -80,7 +83,7 @@ async function runMeasuredProof(
   const bars = loadFixtureBars();
   const runId = "wp21-measured-flag-off-run";
   const artifactSink: ResearchValidationBacktestArtifactSink = {};
-  const costModel = createCostModelV1("10", "5");
+  const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
   const portfolio = buildResearchV2PortfolioContext(costModel);
 
   try {

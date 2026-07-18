@@ -3,7 +3,10 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import {
   HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
@@ -40,7 +43,7 @@ export function runWp14ForecastDecisionEvidenceHarness() {
   const bars = makeBars(120);
   const runId = "htr-wp14-evidence-run";
   const organizationId = "00000000-0000-4000-8000-0000000415wp";
-  const costModel = createCostModelV1("10", "5");
+  const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
 
   const generationOne = [];
   const generationTwo = [];

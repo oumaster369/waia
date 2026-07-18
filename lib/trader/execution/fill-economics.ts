@@ -6,6 +6,13 @@ import {
   type HistoricalExecutionModelV1,
   type SimulatedFillEvent,
 } from "@/lib/trader/execution/historical-execution-model.types";
+import {
+  assertHtrHistoricalCostModelMatch,
+  createHtrHistoricalCostModelAuthorityV1,
+  HTR_HISTORICAL_COST_MODEL_FEE_BPS,
+  HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS,
+  HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS,
+} from "@/lib/trader/execution/htr-historical-cost-model-authority";
 import type { RecordFillInput } from "@/lib/trader/execution/order-repository.types";
 import {
   DECIMAL_SCALE_FACTOR,
@@ -99,6 +106,15 @@ export function applyHistoricalExecutionEconomics(
   event: SimulatedFillEvent,
   model: HistoricalExecutionModelV1,
 ): CostedFillEconomics {
+  assertHtrHistoricalCostModelMatch({
+    modelId: model.modelId,
+    schemaVersion: model.schemaVersion,
+    feeBps: model.takerFeeBps as typeof HTR_HISTORICAL_COST_MODEL_FEE_BPS,
+    halfSpreadBps: model.halfSpreadBpsPerSide as typeof HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS,
+    marketImpactBps: model.impactValueBps as typeof HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS,
+    costModelDigest: createHtrHistoricalCostModelAuthorityV1().costModelDigest,
+  });
+
   const grossNotional = multiplyDecimal(event.grossFillPrice, event.sliceQuantity);
   const feeAmount = multiplyBpsRoundHalfUp(grossNotional, model.takerFeeBps);
   const spreadCost = multiplyBpsRoundHalfUp(grossNotional, model.halfSpreadBpsPerSide);

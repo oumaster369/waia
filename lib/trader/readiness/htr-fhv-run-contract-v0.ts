@@ -1,5 +1,14 @@
 import { FHV_DATASET_PARTITIONS_V1 } from "@/lib/trader/market-data/dataset/fhv-dataset-manifest";
-import { COST_MODEL_VERSION_V1 } from "@/lib/trader/execution/cost-model";
+import {
+  assertHtrHistoricalCostModelMatch,
+  HTR_HISTORICAL_COST_MODEL_DIGEST,
+  HTR_HISTORICAL_COST_MODEL_FEE_BPS,
+  HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS,
+  HTR_HISTORICAL_COST_MODEL_ID,
+  HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS,
+  HTR_HISTORICAL_COST_MODEL_SCHEMA_VERSION,
+  HTR_HISTORICAL_COST_MODEL_SLIPPAGE_MODEL,
+} from "@/lib/trader/execution/htr-historical-cost-model-authority";
 import { D20_DRAWDOWN_POLICY_VERSION } from "@/lib/trader/risk/drawdown-policy.types";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
@@ -55,9 +64,13 @@ export type HtrFhvRunContractV0 = Readonly<{
   };
   partitions: typeof FHV_DATASET_PARTITIONS_V1;
   initialPortfolio: HtrFhvRunContractInitialPortfolioV0;
-  costModelVersion: typeof COST_MODEL_VERSION_V1;
-  costModelFeesBps: "10";
-  costModelSlippageBps: "5";
+  costModelId: typeof HTR_HISTORICAL_COST_MODEL_ID;
+  costModelSchemaVersion: typeof HTR_HISTORICAL_COST_MODEL_SCHEMA_VERSION;
+  feeBps: typeof HTR_HISTORICAL_COST_MODEL_FEE_BPS;
+  halfSpreadBps: typeof HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS;
+  marketImpactBps: typeof HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS;
+  slippageModel: typeof HTR_HISTORICAL_COST_MODEL_SLIPPAGE_MODEL;
+  costModelDigest: typeof HTR_HISTORICAL_COST_MODEL_DIGEST;
   drawdownPolicyVersion: typeof D20_DRAWDOWN_POLICY_VERSION;
   maxAccountDrawdownPct: 25;
   maxMonthlyDrawdownPct: 15;
@@ -116,9 +129,13 @@ export const HTR_FHV_RUN_CONTRACT_V0: HtrFhvRunContractV0 = {
     externalWithdrawalsDuringRun: 0,
     portfolioMode: "SHARED_MULTI_INSTRUMENT",
   },
-  costModelVersion: COST_MODEL_VERSION_V1,
-  costModelFeesBps: "10",
-  costModelSlippageBps: "5",
+  costModelId: HTR_HISTORICAL_COST_MODEL_ID,
+  costModelSchemaVersion: HTR_HISTORICAL_COST_MODEL_SCHEMA_VERSION,
+  feeBps: HTR_HISTORICAL_COST_MODEL_FEE_BPS,
+  halfSpreadBps: HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS,
+  marketImpactBps: HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS,
+  slippageModel: HTR_HISTORICAL_COST_MODEL_SLIPPAGE_MODEL,
+  costModelDigest: HTR_HISTORICAL_COST_MODEL_DIGEST,
   drawdownPolicyVersion: D20_DRAWDOWN_POLICY_VERSION,
   maxAccountDrawdownPct: 25,
   maxMonthlyDrawdownPct: 15,
@@ -153,9 +170,13 @@ export type HtrFhvRunCandidateInput = Partial<{
   borrowing: string;
   shortSelling: string;
   portfolioMode: string;
-  costModelVersion: string;
-  costModelFeesBps: string;
-  costModelSlippageBps: string;
+  costModelId?: string;
+  costModelSchemaVersion?: string;
+  feeBps?: string;
+  halfSpreadBps?: string;
+  marketImpactBps?: string;
+  slippageModel?: string;
+  costModelDigest?: string;
   drawdownPolicyVersion: string;
   maxAccountDrawdownPct: number;
   maxMonthlyDrawdownPct: number;
@@ -229,24 +250,41 @@ export function assertHtrFhvRunContractMatch(input: HtrFhvRunCandidateInput): vo
   ) {
     throw new Error("HTR_WP23_FHV_CONTRACT:PORTFOLIO_MODE_MISMATCH");
   }
-  if (
-    input.costModelVersion !== undefined &&
-    input.costModelVersion !== contract.costModelVersion
-  ) {
-    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_VERSION_MISMATCH");
+  if (input.costModelId !== undefined && input.costModelId !== contract.costModelId) {
+    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_ID_MISMATCH");
   }
   if (
-    input.costModelFeesBps !== undefined &&
-    input.costModelFeesBps !== contract.costModelFeesBps
+    input.costModelSchemaVersion !== undefined &&
+    input.costModelSchemaVersion !== contract.costModelSchemaVersion
   ) {
-    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_FEES_MISMATCH");
+    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_SCHEMA_VERSION_MISMATCH");
   }
-  if (
-    input.costModelSlippageBps !== undefined &&
-    input.costModelSlippageBps !== contract.costModelSlippageBps
-  ) {
-    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_SLIPPAGE_MISMATCH");
+  if (input.feeBps !== undefined && input.feeBps !== contract.feeBps) {
+    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_FEE_BPS_MISMATCH");
   }
+  if (input.halfSpreadBps !== undefined && input.halfSpreadBps !== contract.halfSpreadBps) {
+    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_HALF_SPREAD_BPS_MISMATCH");
+  }
+  if (input.marketImpactBps !== undefined && input.marketImpactBps !== contract.marketImpactBps) {
+    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_MARKET_IMPACT_BPS_MISMATCH");
+  }
+  if (input.slippageModel !== undefined && input.slippageModel !== contract.slippageModel) {
+    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_SLIPPAGE_MODEL_MISMATCH");
+  }
+  if (input.costModelDigest !== undefined && input.costModelDigest !== contract.costModelDigest) {
+    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_DIGEST_MISMATCH");
+  }
+
+  assertHtrHistoricalCostModelMatch({
+    modelId: contract.costModelId,
+    schemaVersion: contract.costModelSchemaVersion,
+    feeBps: contract.feeBps,
+    halfSpreadBps: contract.halfSpreadBps,
+    marketImpactBps: contract.marketImpactBps,
+    slippageModel: contract.slippageModel,
+    costModelDigest: contract.costModelDigest,
+  });
+
   if (
     input.drawdownPolicyVersion !== undefined &&
     input.drawdownPolicyVersion !== contract.drawdownPolicyVersion

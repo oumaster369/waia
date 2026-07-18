@@ -24,7 +24,10 @@ import {
   sha256File,
 } from "@/lib/trader/backtest/replay-benchmark-harness";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
-import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
 import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
 import { buildResearchValidationCycleIdPrefix } from "@/lib/trader/research/research-backtest-cycle-id";
 import {
@@ -149,7 +152,7 @@ export async function runFixtureBacktestWithRetention(input: {
         start: new Date(fixture.bars[0]!.barOpenTime),
         end: new Date(fixture.bars.at(-1)!.barCloseTime),
       };
-      const costModel = createCostModelV1("10", "5");
+      const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
       const barSource = new HistoricalBarReplaySource({
         bars: fixture.bars,
         quote: fixture.latestQuote,
@@ -236,7 +239,7 @@ export async function runFixtureResearchValidationStreamOnly(input: {
         datasetId: "htr-wp04-streaming",
         runId: input.runId,
         split: "validation",
-        costModel: createCostModelV1("10", "5"),
+        costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
         deps: session.deps,
         orderRepository: session.orderRepository,
         accountKey: "htr-wp04-research",
@@ -316,7 +319,7 @@ export async function runStreamingEvidenceRecoveryHarness(): Promise<StreamingEv
       orderRepository: sigtermSource.session.orderRepository,
       accountKey: "htr-wp04-sigterm",
       defaultQuantity: "0.01",
-      costModel: createCostModelV1("10", "5"),
+      costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
       strategySignalIds: [MEAN_REVERSION_V0],
       strategyId: MEAN_REVERSION_V0,
       strategyVersion: BENCHMARK_STRATEGY_VERSION,
@@ -385,7 +388,7 @@ export async function runStreamingEvidenceRecoveryHarness(): Promise<StreamingEv
         datasetId: "htr-wp04-streaming",
         runId: "full-metrics",
         split: "validation",
-        costModel: createCostModelV1("10", "5"),
+        costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
         deps: session.deps,
         orderRepository: session.orderRepository,
         accountKey: "htr-wp04-research-full",

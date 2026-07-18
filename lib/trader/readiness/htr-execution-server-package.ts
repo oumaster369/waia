@@ -1,4 +1,5 @@
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { createHtrHistoricalCostModelAuthorityV1 } from "@/lib/trader/execution/htr-historical-cost-model-authority";
 import {
   HTR_FHV_RUN_CONTRACT_V0,
   computeHtrFhvRunContractDigest,
@@ -38,6 +39,7 @@ export type HtrExecutionServerPackageManifestV1 = Readonly<{
   packageMode: typeof HTR_EXECUTION_SERVER_PACKAGE_MODE;
   packageId: "HTR-WP23-EXECUTION-SERVER-CODE-READY";
   fhvRunContractDigest: string;
+  costModelDigest: string;
   operatorReportSchemaVersion: typeof HTR_OPERATOR_REPORT_SCHEMA_VERSION;
   attestation: HtrExecutionServerPackageAttestation;
   resourceAssumptions: readonly HtrExecutionServerResourceAssumption[];
@@ -120,6 +122,7 @@ export function buildHtrExecutionServerPackageManifest(): HtrExecutionServerPack
     packageMode: HTR_EXECUTION_SERVER_PACKAGE_MODE,
     packageId: "HTR-WP23-EXECUTION-SERVER-CODE-READY",
     fhvRunContractDigest: computeHtrFhvRunContractDigest(HTR_FHV_RUN_CONTRACT_V0),
+    costModelDigest: createHtrHistoricalCostModelAuthorityV1().costModelDigest,
     operatorReportSchemaVersion: HTR_OPERATOR_REPORT_SCHEMA_VERSION,
     attestation: HTR_EXECUTION_SERVER_PACKAGE_ATTESTATION,
     resourceAssumptions: HTR_EXECUTION_SERVER_RESOURCE_ASSUMPTIONS,

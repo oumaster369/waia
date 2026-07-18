@@ -17,6 +17,7 @@ import {
   computeHistoricalExecutionAggregateDigest,
   parseHistoricalFillEconomicsExportPayload,
 } from "@/lib/trader/execution/fill-economics";
+import { createHtrHistoricalCostModelAuthorityV1 } from "@/lib/trader/execution/htr-historical-cost-model-authority";
 import {
   EXECUTION_FACT_KIND_HISTORICAL_SIMULATED,
   HISTORICAL_EXECUTION_MODEL_ID,
@@ -91,6 +92,7 @@ async function buildHistoricalExecutionCostProvenance(
     executionModelId: HISTORICAL_EXECUTION_MODEL_ID,
     executionModelSchemaVersion: HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION,
     executionFactKind: EXECUTION_FACT_KIND_HISTORICAL_SIMULATED,
+    costModelDigest: createHtrHistoricalCostModelAuthorityV1().costModelDigest,
     fillCount: fills.length,
     aggregateEconomicsDigest: computeHistoricalExecutionAggregateDigest(
       fills.map((fill) => fill.economicsContentDigest),
