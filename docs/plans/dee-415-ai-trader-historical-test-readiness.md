@@ -277,12 +277,35 @@ state:
     executionServerPackageMode:
       mode: option-a-code-ready
       actualServerMutation: PROHIBITED
-  planningTerminalState: HTR_MACRO_J_PHASE_A_COMPLETE_OFFICIAL_WP23_EVIDENCE_READY_FOR_FRESH_INDEPENDENT_PHASE_B
-  newHumanTokenRequired: true
-  requiredHumanTokens:
-    - AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B
-  nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B
-  nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B
+  macroJPhaseATerminalStateHistoricalPre3234b1fOfficialReseal:
+    planningTerminalState: HTR_MACRO_J_PHASE_A_COMPLETE_OFFICIAL_WP23_EVIDENCE_READY_FOR_FRESH_INDEPENDENT_PHASE_B
+    newHumanTokenRequired: true
+    requiredHumanTokens:
+      - AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B
+    nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B
+    nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B
+  wp23Gap043PerFileVerificationClosure:
+    verificationToken: AUTHORIZE-HTR-MACRO-J-PHASE-A-CONTROLLER-TRUTH-AND-PER-FILE-VERIFICATION-CLOSURE
+    verifiedAt: 2026-07-18
+    gap043:
+      files: 13
+      tests: 29
+      executed: 29
+      passed: 29
+      failed: 0
+      skipped: 0
+      setupFailures: 0
+      verdict: PASS
+    gap044:
+      files: 2
+      tests: 12
+      executed: 12
+      passed: 12
+      failed: 0
+      skipped: 0
+      verdict: PASS
+    evidenceBundleVerified: true
+    mutationProofVerified: true
   macroJHumanActivation:
     status: HUMAN_APPROVED_CONSUMED
     approvedPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25
@@ -423,7 +446,6 @@ state:
   wp16EvidenceSemanticDigest: 97865938fbe3888bbdb416a238dccb6d8b341f313939ab37376d78617e9e3c81
   wp16AcceptedEvidencePath: replay-runs/RI-P7/htr-wp16-strategy-gating/
   wp16AcceptedArtifactDigest: e7ff494d6d1ac32af186e5c0971a662134aa26f966e18dbc4ee9b17b72ab3fd9
-  governanceStateAuthority: GIT_HEAD
   activationBaselineSha: 1dd2b19f08ac9af3edc1c44a020a6246789f16f7   # pre-activation harden commit; not self-referential to the activation commit being created
   governanceReconciledFromHead: a0928d5d9bb4ef886e4403a7d08157d5261e272f   # post-Macro-F reconciliation baseline (D-20 refresh commit)
   macroFActivationCommitSha: 8fe7aeefa64412ae158396fda4cb80b10b0054a2
@@ -2557,7 +2579,7 @@ A single PR is opened only after HTR-WP23, final full validation, and the final 
 
 ## Current work package (HTR-WP23 — historical readiness package)
 
-**CURRENT (2026-07-18):** HTR-MACRO-J **Phase A COMPLETE pending independent Phase B** after GAP-043 fixture correction and mandatory reproof; corrective SHA `6647b90`; official WP23 evidence resealed (`8093c418…` / `1665f093…`); prior verification terminal `HTR_MACRO_J_PHASE_A_GAP043_REGRESSION_FAIL` resolved; invalidated prior claim **GAP-043 13/29 PASS** at `3234b1f` retained in audit record only; WP22 Phase A gate **PASS pending independent Phase B** unchanged (`c982660`); GAP-043 **13/29 executed PASS**; GAP-044 **12/12 PASS**; `3234b1f` bundle **SUPERSEDED_NOT_PHASE_B_PROMOTABLE_BY_WP23_GAP043_CORRECTION**; `BUILD_AUTHORIZED: NO`; `nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B`; `nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B`.
+**CURRENT (2026-07-18):** HTR-MACRO-J **Phase A COMPLETE pending independent Phase B**; independent per-file GAP-043/GAP-044 verification and controller-truth reconciliation completed; corrective source **`6647b9035c19bd4ea55d3c610d1f637ddf3eb668`**; official WP23 evidence verified at **`8093c418…` / `1665f093…`**; GAP-043 **13 files / 29 executed / 0 failed / 0 skipped**; GAP-044 **2 files / 12 executed / 0 failed / 0 skipped**; `3234b1f` bundle **SUPERSEDED_NOT_PHASE_B_PROMOTABLE_BY_WP23_GAP043_CORRECTION** (historical only); WP22 effective candidate unchanged **`c982660`**; `BUILD_AUTHORIZED: NO`; `nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B`; `nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B`.
 
 **HISTORICAL (SUPERSEDED / INVALIDATED):** Prior current-facing statement claiming GAP-043 **13/29 PASS** at `3234b1f` — invalidated by mandatory live regression 2026-07-18; retained only in `wp23Gap043InvalidatedAuditRecord`.
 
