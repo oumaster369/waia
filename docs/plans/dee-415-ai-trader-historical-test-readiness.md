@@ -33,10 +33,10 @@ state:
   childPlanStatus: APPROVED
   buildAuthorized: true
   buildAuthorizedScope: HTR-MACRO-J_PHASE_A_ONLY
-  composerTerminalState: PROVISIONAL_GATE_NOT_ACCEPTED_PENDING_CLI_AND_PROOF_CORRECTION
+  composerTerminalState: HTR_WP22_PHASE_A_GATE_PASS_MULTI_POSITION_PROVEN_WP23_DRAFT_QUARANTINED
   activeWorkPackage: HTR-WP22
   currentWorkPackage: HTR-WP22
-  activeCorrection: NON_MEASUREMENT_CRITICAL_EVIDENCE_ORCHESTRATION_CORRECTION
+  activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-J
   activeMacroWorkPackages: [HTR-WP22, HTR-WP23]
@@ -52,17 +52,31 @@ state:
   wp22OriginalWorkCommitSha: d4a619c10fae940e14bd93eba7ed4386ce45a03c
   wp22GapRemediationSha: 420b31e1a743b27654a43c663cc7d94a0efc90e2
   wp22SerializationRemediationSha: afd9a3107f58ea2d6782a4881a76dcfeeca9227d
-  wp22EvidenceCliCorrectionClassification: NON_MEASUREMENT_CRITICAL_EVIDENCE_ORCHESTRATION_CORRECTION
-  wp22PhaseAStatus: PROVISIONAL_GATE_NOT_ACCEPTED_PENDING_CLI_AND_PROOF_CORRECTION
-  wp22EffectivePhaseACandidateAuthority: GIT_HEAD
+  wp22EvidenceCliCorrectionSha: cd9ff5b4e176236d388e873627cded7b869cb216
+  wp22MultiPositionProofSha: PENDING_COMMIT
+  wp22PhaseAStatus: WP22_PHASE_A_GATE_PASS_PENDING_INDEPENDENT_PHASE_B
+  wp22EffectivePhaseACandidateSha: PENDING_COMMIT
   wp22FirstValidD11bAttemptConsumed: true
   d11bQualificationSourceGitSha: afd9a3107f58ea2d6782a4881a76dcfeeca9227d
   d11bHarnessSha256: 518c7338fe5b030ad2a6662e2ca1fe127f176ca2fcf573a05ae921cebb96cab3
   d11bPayloadSha256: 6821c8f7ee47d6f2ea04ce4577ac2df795940fd676e1a98e20d46353d0944624
   d11bReplacementAttempt: PASS
   wp22EvidenceStatus: STAGED_PENDING_INDEPENDENT_REVIEW
-  wp22KnownCliDefect: OPEN_EVIDENCE_SEAL_PARALLEL_ORCHESTRATION
-  wp22MultiPositionCorrectnessProof: NOT_YET_EXPLICITLY_VERIFIED
+  wp22KnownCliDefect: CLOSED
+  wp22MultiPositionCorrectnessProof: PASS
+  wp22MultiPositionProofScopeAmendment:
+    classification: VERIFIED_PACKET_MANIFEST_OMISSION_FOR_EXISTING_MANDATORY_WP22_GATE
+    scopeAmendmentToken: AUTHORIZE-HTR-WP22-MULTI-POSITION-CORRECTNESS-PROOF
+    packetRequirement: WP22_MULTI_POSITION_BTC_ETH_CORRECTNESS_MATRIX_PASS
+    packetProvidedInputs:
+      - tests/fixtures/trader/htr-wp22-btcusdt-1m-correctness.v1.json
+      - tests/fixtures/trader/htr-wp22-ethusdt-1m-correctness.v1.json
+      - tests/fixtures/trader/htr-wp22-multi-position-btc-eth.manifest.v1.json
+      - lib/trader/backtest/htr-wp22-fixture-manifest.ts
+    packetMissingDeliverables:
+      - executable multi-position correctness harness
+      - complete deterministic reconciliation test
+      - multi-position-correctness-result.json evidence artifact
   wp22D11bInvalidatedAttempt:
     sourceGitSha: 420b31e1a743b27654a43c663cc7d94a0efc90e2
     classification: INVALIDATED_BY_INSTRUMENTATION_FAILURE
@@ -189,11 +203,12 @@ state:
     executionServerPackageMode:
       mode: option-a-code-ready
       actualServerMutation: PROHIBITED
-  planningTerminalState: REPROVE_WP22_ON_SERIALIZATION_CORRECTED_CANDIDATE
-  newHumanTokenRequired: false
-  requiredHumanTokens: []
-  nextHumanGate: null
-  nextAction: REPROVE_WP22_ON_SERIALIZATION_CORRECTED_CANDIDATE
+  planningTerminalState: HTR_WP22_PHASE_A_GATE_PASS_MULTI_POSITION_PROVEN_WP23_DRAFT_QUARANTINED
+  newHumanTokenRequired: true
+  requiredHumanTokens:
+    - AUTHORIZE-HTR-WP23-QUARANTINE-REAPPLICATION-AND-PHASE-A-RESUME
+  nextHumanGate: AUTHORIZE-HTR-WP23-QUARANTINE-REAPPLICATION-AND-PHASE-A-RESUME
+  nextAction: HUMAN_REVIEW_BEFORE_WP23_DRAFT_REAPPLICATION
   macroJHumanActivation:
     status: HUMAN_APPROVED_CONSUMED
     approvedPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25

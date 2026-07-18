@@ -105,6 +105,9 @@ export function verifyHtrWp22FixtureManifest(
   return (
     manifest.sourceAuthority === rebuilt.sourceAuthority &&
     manifest.initialCashUsdt === rebuilt.initialCashUsdt &&
+    manifest.symbols.length === rebuilt.symbols.length &&
+    manifest.symbols.every((symbol, index) => symbol === rebuilt.symbols[index]) &&
+    manifest.legs.length === rebuilt.legs.length &&
     manifest.legs[0].fileSha256 === rebuilt.legs[0].fileSha256 &&
     manifest.legs[1].fileSha256 === rebuilt.legs[1].fileSha256 &&
     manifest.legs[0].barCount === rebuilt.legs[0].barCount &&

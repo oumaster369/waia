@@ -12,7 +12,9 @@ import type { HtrWp22CompletedRuntimeQualificationResult } from "@/lib/trader/ba
 import type { HtrWp22BoundedMemorySoakResult } from "@/lib/trader/backtest/htr-wp22-bounded-memory-soak";
 import type { HtrWp22CheckpointResumeParityResult } from "@/lib/trader/backtest/htr-wp22-checkpoint-resume-parity";
 import type { HtrWp22CrashRecoveryMatrixResult } from "@/lib/trader/backtest/htr-wp22-crash-recovery-matrix";
+import { runHtrWp22MultiPositionCorrectness } from "@/lib/trader/backtest/htr-wp22-multi-position-correctness";
 import type { HtrWp22MultiRegimePostgresEvidenceResult } from "@/lib/trader/backtest/htr-wp22-multi-regime-postgres-evidence";
+import type { HtrWp22MultiPositionCorrectnessResult } from "@/lib/trader/backtest/htr-wp22-multi-position-correctness";
 import type { HtrWp22FixtureManifest } from "@/lib/trader/backtest/htr-wp22-fixture-manifest";
 
 export const HTR_WP22_EVIDENCE_INTEGRITY_CONTRACT_ID = "waia.htr.evidence-integrity.v2" as const;
@@ -63,6 +65,7 @@ export type HtrWp22EvidenceBundleInput = {
   boundedMemorySoak?: HtrWp22BoundedMemorySoakResult;
   multiRegimePostgres?: HtrWp22MultiRegimePostgresEvidenceResult;
   fixtureManifest?: HtrWp22FixtureManifest;
+  multiPositionCorrectness?: HtrWp22MultiPositionCorrectnessResult;
 };
 
 export function sha256FileBytes(filePath: string): string {
@@ -151,6 +154,7 @@ export async function assembleHtrWp22EvidenceBundleSequential(input: {
       | "checkpointResumeParity"
       | "boundedMemorySoak"
       | "fixtureManifest"
+      | "multiPositionCorrectness"
     >
   > &
     HtrWp22EvidenceBundleInput
@@ -173,6 +177,7 @@ export async function assembleHtrWp22EvidenceBundleSequential(input: {
   const checkpointResumeParity = await runHtrWp22CheckpointResumeParity();
   const boundedMemorySoak = await runHtrWp22BoundedMemorySoak();
   const fixtureManifest = buildHtrWp22FixtureManifest();
+  const multiPositionCorrectness = await runHtrWp22MultiPositionCorrectness();
 
   return {
     sourceGitSha: input.sourceGitSha,
@@ -183,6 +188,7 @@ export async function assembleHtrWp22EvidenceBundleSequential(input: {
     checkpointResumeParity,
     boundedMemorySoak,
     fixtureManifest,
+    multiPositionCorrectness,
   };
 }
 
@@ -325,6 +331,21 @@ export function buildHtrWp22EvidenceManifest(
           ...assemblyCommon,
           artifactSourceGitSha: bundle.sourceGitSha,
           schemaVersion: bundle.fixtureManifest.schemaVersion,
+        },
+      ),
+    );
+  }
+
+  if (bundle.multiPositionCorrectness) {
+    artifactIndex.push(
+      writeReportArtifact(
+        stagingDir,
+        "multi-position-correctness-result.json",
+        bundle.multiPositionCorrectness as unknown as Record<string, unknown>,
+        {
+          ...assemblyCommon,
+          artifactSourceGitSha: bundle.sourceGitSha,
+          schemaVersion: bundle.multiPositionCorrectness.schemaVersion,
         },
       ),
     );
