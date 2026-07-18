@@ -98,6 +98,16 @@ export function computeEconomicsContentDigest(
   return sha256Hex(canonicalJsonString(payload));
 }
 
+function isCanonicalD5HistoricalExecutionModel(model: HistoricalExecutionModelV1): boolean {
+  return (
+    model.modelId === HISTORICAL_EXECUTION_MODEL_ID &&
+    model.schemaVersion === HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION &&
+    model.takerFeeBps === HTR_HISTORICAL_COST_MODEL_FEE_BPS &&
+    model.halfSpreadBpsPerSide === HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS &&
+    model.impactValueBps === HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS
+  );
+}
+
 /**
  * Authoritative single application point for historical execution economics (D-5).
  * Component order: grossNotional → fee → spread → impact → total → netPrice → netCash → digest.
@@ -106,12 +116,7 @@ export function applyHistoricalExecutionEconomics(
   event: SimulatedFillEvent,
   model: HistoricalExecutionModelV1,
 ): CostedFillEconomics {
-  const usesCanonicalD5Economics =
-    model.takerFeeBps === HTR_HISTORICAL_COST_MODEL_FEE_BPS &&
-    model.halfSpreadBpsPerSide === HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS &&
-    model.impactValueBps === HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS;
-
-  if (usesCanonicalD5Economics) {
+  if (isCanonicalD5HistoricalExecutionModel(model)) {
     assertHtrHistoricalCostModelMatch({
       modelId: model.modelId,
       schemaVersion: model.schemaVersion,

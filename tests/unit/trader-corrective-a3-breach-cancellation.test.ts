@@ -17,6 +17,7 @@ import {
 } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
 import { createInitialAccountingState } from "@/lib/trader/accounting";
+import { normalizeAccountingStateDrawdownFields } from "@/lib/trader/accounting/accounting-frontier.types";
 
 function makeOrder(
   overrides: Partial<OrderRow> & Pick<OrderRow, "id" | "symbol" | "side">,
@@ -59,14 +60,15 @@ describe("trader corrective A3 breach cancellation", () => {
     });
     state.equity = "50000";
     state.accountDrawdownBps = DEFAULT_D20_DRAWDOWN_POLICY.accountBps + 1;
+    const drawdownState = normalizeAccountingStateDrawdownFields(state);
     const guardianCycle = evaluateHtrGuardianCycle({
       reconciliation: {
         state,
         startingEquityUsdt: "100000",
         startingCashUsdt: "100000",
       },
-      accountPeakHwm: state.equityHwm,
-      monthlyPeakHwm: state.monthlyPeakHwm,
+      accountPeakHwm: drawdownState.equityHwm,
+      monthlyPeakHwm: drawdownState.monthlyPeakHwm,
       equityUsdt: state.equity,
     });
 
@@ -91,14 +93,15 @@ describe("trader corrective A3 breach cancellation", () => {
       accountKey: "acct",
       runId: "run",
     });
+    const drawdownState = normalizeAccountingStateDrawdownFields(state);
     const guardianCycle = evaluateHtrGuardianCycle({
       reconciliation: {
         state,
         startingEquityUsdt: "100000",
         startingCashUsdt: "100000",
       },
-      accountPeakHwm: state.equityHwm,
-      monthlyPeakHwm: state.monthlyPeakHwm,
+      accountPeakHwm: drawdownState.equityHwm,
+      monthlyPeakHwm: drawdownState.monthlyPeakHwm,
       equityUsdt: state.equity,
     });
 

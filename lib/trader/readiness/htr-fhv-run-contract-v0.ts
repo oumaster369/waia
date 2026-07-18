@@ -10,7 +10,17 @@ import {
   HTR_HISTORICAL_COST_MODEL_SLIPPAGE_MODEL,
 } from "@/lib/trader/execution/htr-historical-cost-model-authority";
 import { D20_DRAWDOWN_POLICY_VERSION } from "@/lib/trader/risk/drawdown-policy.types";
+import { addDecimal } from "@/lib/trader/risk/numeric";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+
+export const HTR_FHV_RUN_CONTRACT_LEGACY_COST_MODEL_VERSION =
+  HTR_HISTORICAL_COST_MODEL_SCHEMA_VERSION;
+
+/** WP23 readiness compat pin: combined half-spread + impact for legacy candidate fields. */
+export const HTR_FHV_RUN_CONTRACT_LEGACY_COST_MODEL_SLIPPAGE_BPS = addDecimal(
+  HTR_HISTORICAL_COST_MODEL_HALF_SPREAD_BPS,
+  HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS,
+);
 
 export const HTR_FHV_RUN_CONTRACT_SCHEMA_VERSION = "htr-fhv-run-contract/v0" as const;
 
@@ -71,6 +81,12 @@ export type HtrFhvRunContractV0 = Readonly<{
   marketImpactBps: typeof HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS;
   slippageModel: typeof HTR_HISTORICAL_COST_MODEL_SLIPPAGE_MODEL;
   costModelDigest: typeof HTR_HISTORICAL_COST_MODEL_DIGEST;
+  /** WP23 readiness compat — excluded from contract semantic digest. */
+  costModelVersion: typeof HTR_FHV_RUN_CONTRACT_LEGACY_COST_MODEL_VERSION;
+  /** WP23 readiness compat — excluded from contract semantic digest. */
+  costModelFeesBps: typeof HTR_HISTORICAL_COST_MODEL_FEE_BPS;
+  /** WP23 readiness compat — excluded from contract semantic digest. */
+  costModelSlippageBps: typeof HTR_FHV_RUN_CONTRACT_LEGACY_COST_MODEL_SLIPPAGE_BPS;
   drawdownPolicyVersion: typeof D20_DRAWDOWN_POLICY_VERSION;
   maxAccountDrawdownPct: 25;
   maxMonthlyDrawdownPct: 15;
@@ -136,6 +152,9 @@ export const HTR_FHV_RUN_CONTRACT_V0: HtrFhvRunContractV0 = {
   marketImpactBps: HTR_HISTORICAL_COST_MODEL_MARKET_IMPACT_BPS,
   slippageModel: HTR_HISTORICAL_COST_MODEL_SLIPPAGE_MODEL,
   costModelDigest: HTR_HISTORICAL_COST_MODEL_DIGEST,
+  costModelVersion: HTR_FHV_RUN_CONTRACT_LEGACY_COST_MODEL_VERSION,
+  costModelFeesBps: HTR_HISTORICAL_COST_MODEL_FEE_BPS,
+  costModelSlippageBps: HTR_FHV_RUN_CONTRACT_LEGACY_COST_MODEL_SLIPPAGE_BPS,
   drawdownPolicyVersion: D20_DRAWDOWN_POLICY_VERSION,
   maxAccountDrawdownPct: 25,
   maxMonthlyDrawdownPct: 15,
@@ -152,7 +171,13 @@ export const HTR_FHV_RUN_CONTRACT_V0: HtrFhvRunContractV0 = {
 export function computeHtrFhvRunContractDigest(
   contract: HtrFhvRunContractV0 = HTR_FHV_RUN_CONTRACT_V0,
 ): string {
-  return computeSemanticSha256Hex(contract as unknown as Record<string, unknown>);
+  const {
+    costModelVersion: _costModelVersion,
+    costModelFeesBps: _costModelFeesBps,
+    costModelSlippageBps: _costModelSlippageBps,
+    ...digestPayload
+  } = contract;
+  return computeSemanticSha256Hex(digestPayload as unknown as Record<string, unknown>);
 }
 
 export type HtrFhvRunCandidateInput = Partial<{
@@ -177,6 +202,10 @@ export type HtrFhvRunCandidateInput = Partial<{
   marketImpactBps?: string;
   slippageModel?: string;
   costModelDigest?: string;
+  /** WP23 readiness compat candidate fields. */
+  costModelVersion?: string;
+  costModelFeesBps?: string;
+  costModelSlippageBps?: string;
   drawdownPolicyVersion: string;
   maxAccountDrawdownPct: number;
   maxMonthlyDrawdownPct: number;
@@ -273,6 +302,24 @@ export function assertHtrFhvRunContractMatch(input: HtrFhvRunCandidateInput): vo
   }
   if (input.costModelDigest !== undefined && input.costModelDigest !== contract.costModelDigest) {
     throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_DIGEST_MISMATCH");
+  }
+  if (
+    input.costModelVersion !== undefined &&
+    input.costModelVersion !== contract.costModelVersion
+  ) {
+    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_VERSION_MISMATCH");
+  }
+  if (
+    input.costModelFeesBps !== undefined &&
+    input.costModelFeesBps !== contract.costModelFeesBps
+  ) {
+    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_FEE_BPS_MISMATCH");
+  }
+  if (
+    input.costModelSlippageBps !== undefined &&
+    input.costModelSlippageBps !== contract.costModelSlippageBps
+  ) {
+    throw new Error("HTR_WP23_FHV_CONTRACT:COST_MODEL_SLIPPAGE_BPS_MISMATCH");
   }
 
   assertHtrHistoricalCostModelMatch({

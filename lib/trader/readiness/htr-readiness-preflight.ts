@@ -6,6 +6,10 @@ import {
   computeHtrExecutionServerPackageDigest,
 } from "@/lib/trader/readiness/htr-execution-server-package";
 import {
+  assertHtrHistoricalCostModelMatch,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/htr-historical-cost-model-authority";
+import {
   HTR_FHV_DATASET_SOURCE_CLASSIFICATION,
   HTR_FHV_RUN_CONTRACT_V0,
   assertHtrFhvRunContractMatch,
@@ -61,6 +65,23 @@ function collectFailure(run: () => void, codes: string[]): void {
   }
 }
 
+export function assertHtrReadinessCostModelAuthority(): void {
+  const authority = createHtrHistoricalCostModelAuthorityV1();
+  assertHtrHistoricalCostModelMatch(authority);
+  assertHtrFhvRunContractMatch({
+    costModelId: HTR_FHV_RUN_CONTRACT_V0.costModelId,
+    costModelSchemaVersion: HTR_FHV_RUN_CONTRACT_V0.costModelSchemaVersion,
+    feeBps: HTR_FHV_RUN_CONTRACT_V0.feeBps,
+    halfSpreadBps: HTR_FHV_RUN_CONTRACT_V0.halfSpreadBps,
+    marketImpactBps: HTR_FHV_RUN_CONTRACT_V0.marketImpactBps,
+    slippageModel: HTR_FHV_RUN_CONTRACT_V0.slippageModel,
+    costModelDigest: HTR_FHV_RUN_CONTRACT_V0.costModelDigest,
+    costModelVersion: HTR_FHV_RUN_CONTRACT_V0.costModelVersion,
+    costModelFeesBps: HTR_FHV_RUN_CONTRACT_V0.costModelFeesBps,
+    costModelSlippageBps: HTR_FHV_RUN_CONTRACT_V0.costModelSlippageBps,
+  });
+}
+
 export function runHtrReadinessPreflight(
   input: HtrReadinessPreflightInput,
 ): HtrReadinessPreflightResult {
@@ -69,6 +90,7 @@ export function runHtrReadinessPreflight(
   const sourceDirtyTree = readGitDirtyTree();
 
   collectFailure(() => assertHtrExecutionServerPackageManifest(), failureCodes);
+  collectFailure(() => assertHtrReadinessCostModelAuthority(), failureCodes);
 
   if (input.mode === "self-test") {
     if (HTR_FHV_DATASET_SOURCE_CLASSIFICATION !== "NOT_AVAILABLE") {

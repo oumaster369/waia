@@ -26,6 +26,7 @@ import {
   createWp17SqliteSession,
   type Wp17SqliteSession,
 } from "@/tests/unit/helpers/wp17-execution-fixtures";
+import type { HistoricalExecutionPersistencePort } from "@/lib/trader/execution/historical-simulated-exchange";
 
 function createHistoricalExecutionService(session: Wp17SqliteSession, replayNowMs: number) {
   const db = getDb();
@@ -113,7 +114,16 @@ describe("trader corrective A3 partial entry breach integration", () => {
     expect(cancelRequested?.state).toBe("CANCEL_REQUESTED");
     expect(cancelRequested?.filledQuantity).toBe(partial?.filledQuantity);
 
-    const persistence = createWp17PersistencePort(session.repo, session.model);
+    const basePersistence = createWp17PersistencePort(session.repo, session.model);
+    const persistence: HistoricalExecutionPersistencePort = {
+      ...basePersistence,
+      transitionOrderCancelledFromRequested: async (context, order) =>
+        session.repo.transitionOrder(context, {
+          orderId: order.id,
+          expectedStateVersion: order.stateVersion,
+          toState: "CANCELLED",
+        }),
+    };
     await session.exchange.advanceOnClosedBar({
       context: session.context,
       closedBar: {
@@ -131,6 +141,7 @@ describe("trader corrective A3 partial entry breach integration", () => {
       model: session.model,
       persistence,
       replayNowMs: Date.parse("2026-01-01T00:02:59.999Z") + session.model.cancelLatencyMs,
+      resolveLatestOrder: (orderId) => session.repo.getOrderById(session.context, orderId),
       refreshAccountState: async () => ({
         positions: [],
         openOrderCount: 0,

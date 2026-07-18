@@ -83,7 +83,6 @@ export type HistoricalExecutionCostProvenance = {
   executionModelId: string;
   executionModelSchemaVersion: string;
   executionFactKind: "HISTORICAL_SIMULATED_FILL_V1";
-  costModelDigest: string;
   fillCount: number;
   aggregateEconomicsDigest: string;
   fills: SerializedHistoricalFillEconomicsExport[];

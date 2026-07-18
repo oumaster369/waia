@@ -12,6 +12,14 @@ export type ExecutionFactKind =
   | typeof EXECUTION_FACT_KIND_VENUE_FILL
   | typeof EXECUTION_FACT_KIND_HISTORICAL_SIMULATED;
 
+export type HistoricalExecutionModelAuthorityBindingV1 = Readonly<{
+  modelId: typeof HISTORICAL_EXECUTION_MODEL_ID;
+  schemaVersion: typeof HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION;
+  takerFeeBps: "20";
+  halfSpreadBpsPerSide: "5";
+  impactValueBps: "10";
+}>;
+
 export type HistoricalExecutionModelV1 = {
   modelId: typeof HISTORICAL_EXECUTION_MODEL_ID;
   schemaVersion: typeof HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION;

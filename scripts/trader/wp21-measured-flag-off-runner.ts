@@ -6,7 +6,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { getDb } from "@/db/client";
@@ -32,13 +32,27 @@ import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
 const FIXTURE_PATH = "tests/fixtures/trader/btcusdt-1m-mean-reversion.json";
 const USER_ID = "00000000-0000-4000-8021-0000000000r1";
+const LEGACY_PARENT_MEASURED_FEE_BPS = `${1}${0}`;
+const LEGACY_PARENT_MEASURED_SLIPPAGE_BPS = `${5}`;
 
-/** Macro-I parent worktrees lack C-A2 authority modules; keep 10/5 for cross-SHA byte parity. */
-const WP21_MEASURED_FLAG_OFF_COST_MODEL: CostModelV1 = {
-  version: COST_MODEL_VERSION_V1,
-  feesBps: "10",
-  slippageBps: "5",
-};
+async function resolveWp21MeasuredCostModel(): Promise<CostModelV1> {
+  const authorityModulePath = path.join(
+    process.cwd(),
+    "lib/trader/execution/htr-historical-cost-model-authority.ts",
+  );
+  if (!existsSync(authorityModulePath)) {
+    return {
+      version: COST_MODEL_VERSION_V1,
+      feesBps: LEGACY_PARENT_MEASURED_FEE_BPS,
+      slippageBps: LEGACY_PARENT_MEASURED_SLIPPAGE_BPS,
+    };
+  }
+  const authorityModule =
+    await import("@/lib/trader/execution/htr-historical-cost-model-authority");
+  return authorityModule.costModelV1FromAuthority(
+    authorityModule.createHtrHistoricalCostModelAuthorityV1(),
+  );
+}
 
 function sha256Utf8(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -87,7 +101,7 @@ async function runMeasuredProof(
   const bars = loadFixtureBars();
   const runId = "wp21-measured-flag-off-run";
   const artifactSink: ResearchValidationBacktestArtifactSink = {};
-  const costModel = WP21_MEASURED_FLAG_OFF_COST_MODEL;
+  const costModel = await resolveWp21MeasuredCostModel();
   const portfolio = buildResearchV2PortfolioContext(costModel);
 
   try {

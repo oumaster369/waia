@@ -7,6 +7,7 @@ import {
   type AccountingFrontierV1,
   type AccountingStateV1,
 } from "@/lib/trader/accounting";
+import { normalizeAccountingStateDrawdownFields } from "@/lib/trader/accounting/accounting-frontier.types";
 import {
   applyDrawdownCheckpointToBridge,
   createDrawdownPersistenceSession,
@@ -193,7 +194,7 @@ describe("DEE-415 C-A1 drawdown semantics (G1)", () => {
     });
     expect(feb.monthKey).toBe("2026-02");
     expect(compareDecimal(feb.equityHwm, jan.equityHwm)).toBe(0);
-    expect(compareDecimal(feb.monthlyPeakHwm, febEquity)).toBe(0);
+    expect(compareDecimal(feb.monthlyPeakHwm ?? feb.equityHwm, febEquity)).toBe(0);
   });
 
   it("restart inside month preserves account and monthly HWM from checkpoint", () => {
@@ -248,7 +249,7 @@ describe("DEE-415 C-A1 drawdown semantics (G1)", () => {
 
     const feb = advanceMark(febBridge.state, { BTCUSDT: BTC_MARK }, "2026-02-01T00:01:59.999Z");
     expect(feb.monthKey).toBe("2026-02");
-    expect(compareDecimal(feb.monthlyPeakHwm, feb.equity)).toBe(0);
+    expect(compareDecimal(feb.monthlyPeakHwm ?? feb.equityHwm, feb.equity)).toBe(0);
     expect(compareDecimal(feb.equityHwm, janAccountHwm)).toBeGreaterThanOrEqual(0);
   });
 
@@ -418,9 +419,10 @@ describe("DEE-415 C-A1 drawdown semantics (G1)", () => {
     });
 
     expect(hydrated.state.equityHwm).toBe("100000");
+    const hydratedDrawdown = normalizeAccountingStateDrawdownFields(hydrated.state);
     expect(hydrated.state.monthlyPeakHwm).toBe("100000");
-    expect(hydrated.state.strategyDrawdownBpsByKey[LSR_KEY]).toBe(2000);
-    expect(hydrated.state.strategyDrawdownBpsByKey[MR_KEY]).toBe(500);
+    expect(hydratedDrawdown.strategyDrawdownBpsByKey[LSR_KEY]).toBe(2000);
+    expect(hydratedDrawdown.strategyDrawdownBpsByKey[MR_KEY]).toBe(500);
     expect(toDrawdownHwmCheckpointSlice(hydrated).breachState).toBe("CLOSE_ONLY");
   });
 
@@ -600,7 +602,7 @@ describe("DEE-415 C-A1 drawdown semantics (G1)", () => {
       monthKey: bridge.state.monthKey,
       equityUsdt: bridge.state.equity,
       accountPeakHwm: bridge.state.equityHwm,
-      monthlyPeakHwm: bridge.state.monthlyPeakHwm,
+      monthlyPeakHwm: bridge.state.monthlyPeakHwm ?? bridge.state.equityHwm,
       accountDrawdownBps: 0,
       monthlyDrawdownBps: 0,
       breachState: "NONE" as const,

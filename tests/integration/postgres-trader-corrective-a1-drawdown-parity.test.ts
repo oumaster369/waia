@@ -14,6 +14,7 @@ import {
   restoreAccountingBridgeFromCheckpoint,
   toAccountingCheckpointSlice,
 } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
+import { normalizeAccountingStateDrawdownFields } from "@/lib/trader/accounting/accounting-frontier.types";
 import {
   buildAccountDrawdownCheckpointFromBridgeState,
   createAccountDrawdownRepositoryPostgres,
@@ -237,9 +238,10 @@ describe.skipIf(!integrationEnabled || !url)(
         strategyId: LIQUIDITY_SWEEP_REVERSAL_V0,
         strategyVersion: LIQUIDITY_SWEEP_REVERSAL_V0_VERSION,
       });
-      expect(loadedLsr?.strategyPeakHwm).toBe(bridge.state.strategyPeakHwmByKey[LSR_KEY]);
+      const drawdownState = normalizeAccountingStateDrawdownFields(bridge.state);
+      expect(loadedLsr?.strategyPeakHwm).toBe(drawdownState.strategyPeakHwmByKey[LSR_KEY]);
       expect(loadedLsr?.strategyDrawdownBps).toBe(
-        bridge.state.strategyDrawdownBpsByKey[LSR_KEY] ?? 0,
+        drawdownState.strategyDrawdownBpsByKey[LSR_KEY] ?? 0,
       );
     });
 

@@ -84,7 +84,7 @@ function resolveCostEvidence(
     costModel.slippageBps !== canonicalCostModel.slippageBps
   ) {
     return {
-      state: "UNAVAILABLE",
+      state: "NOT_APPLICABLE",
       grossExpectedReward: null,
       expectedFees: null,
       expectedSlippage: null,

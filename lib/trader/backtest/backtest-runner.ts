@@ -43,9 +43,11 @@ import {
   createFhvTraceEvidenceSink,
   NOOP_REPLAY_EVIDENCE_SINK,
   type ReplayEvidenceSink,
-  type ReplayRetentionMode,
-  type StreamingEvidenceManifestRef,
-} from "@/lib/trader/backtest/streaming-evidence";
+} from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-sink";
+import type {
+  StreamingEvidenceManifestRef,
+  ReplayRetentionMode,
+} from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 import type { BarReplaySource } from "@/lib/trader/market-data/types";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
@@ -552,6 +554,8 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
             input.deps.execution.transitionOrderExpired!(context, order),
           transitionOrderCancelled: (context, order) =>
             input.deps.execution.transitionOrderCancelled!(context, order),
+          transitionOrderCancelledFromRequested: (context, order) =>
+            input.deps.execution.transitionOrderCancelled!(context, order),
         };
         const advance = await advanceHistoricalExecutionOnClosedBar(
           input.historicalExecutionProfile.exchange,
@@ -562,6 +566,8 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
             model: input.historicalExecutionProfile.model,
             persistence,
             replayNowMs: new Date(snapshot.evaluatedAt).getTime(),
+            resolveLatestOrder: (orderId) =>
+              costAwareRepository.getOrderById(input.context, orderId),
             refreshAccountState: async () => {
               const openOrders = await costAwareRepository.listOpenOrders(input.context, {
                 executionMode: "mock",

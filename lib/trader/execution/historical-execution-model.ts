@@ -2,6 +2,7 @@ import {
   HISTORICAL_EXECUTION_MODEL_ID,
   HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION,
   EXECUTION_FACT_KIND_HISTORICAL_SIMULATED,
+  type HistoricalExecutionModelAuthorityBindingV1,
   type HistoricalExecutionModelV1,
 } from "@/lib/trader/execution/historical-execution-model.types";
 import {
@@ -14,6 +15,17 @@ export class InvalidHistoricalExecutionModelError extends Error {
     super(message);
     this.name = "InvalidHistoricalExecutionModelError";
   }
+}
+
+/** Authority-aligned projection of the canonical D-5 historical execution model. */
+export function createHistoricalExecutionModelAuthorityBindingV1(): HistoricalExecutionModelAuthorityBindingV1 {
+  return {
+    modelId: HISTORICAL_EXECUTION_MODEL_ID,
+    schemaVersion: HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION,
+    takerFeeBps: "20",
+    halfSpreadBpsPerSide: "5",
+    impactValueBps: "10",
+  };
 }
 
 /** Human-approved D-5 model (HTR-WP17). Canonical economics are also exposed via cost-model authority. */

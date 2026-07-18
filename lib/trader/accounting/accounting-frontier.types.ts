@@ -39,12 +39,33 @@ export type AccountingStateV1 = {
   markedPositionValue: string;
   equity: string;
   equityHwm: string;
+  /** Populated by C-A1 hot path; absent on legacy 0100 frontier rows until hydration. */
+  monthlyPeakHwm?: string;
+  monthlyDrawdownBps?: number;
+  strategyPeakHwmByKey?: Record<string, string>;
+  strategyDrawdownBpsByKey?: Record<string, number>;
+  accountDrawdownBps: number;
+  consumedFillIds: string[];
+};
+
+export function normalizeAccountingStateDrawdownFields(
+  state: AccountingStateV1,
+): AccountingStateWithDrawdownV1 {
+  return {
+    ...state,
+    monthlyPeakHwm: state.monthlyPeakHwm ?? state.equityHwm,
+    monthlyDrawdownBps: state.monthlyDrawdownBps ?? 0,
+    strategyPeakHwmByKey: state.strategyPeakHwmByKey ?? {},
+    strategyDrawdownBpsByKey: state.strategyDrawdownBpsByKey ?? {},
+  };
+}
+
+/** Accounting state with drawdown fields materialized (C-A1 hot path). */
+export type AccountingStateWithDrawdownV1 = AccountingStateV1 & {
   monthlyPeakHwm: string;
   monthlyDrawdownBps: number;
   strategyPeakHwmByKey: Record<string, string>;
   strategyDrawdownBpsByKey: Record<string, number>;
-  accountDrawdownBps: number;
-  consumedFillIds: string[];
 };
 
 /** In-memory drawdown authority aligned with 0094/0096 checkpoint semantics (C-A1). */

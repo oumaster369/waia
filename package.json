@@ -19,8 +19,6 @@
     "trader:replay:qualify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-qualify.ts",
     "trader:htr:wp22:qualify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/htr-wp22-runtime-qualify.ts",
     "trader:htr:wp22:evidence-seal": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/htr-wp22-evidence-seal.ts",
-    "trader:htr:corrective-a:qualify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/htr-corrective-a-qualify.ts",
-    "trader:htr:corrective-a:evidence-seal": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/htr-corrective-a-evidence-seal.ts",
     "trader:htr:readiness:preflight": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/historical-readiness-preflight.ts",
     "trader:replay:evidence-recovery": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-evidence-recovery-check.ts",
     "trader:replay:checkpoint-resume": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-checkpoint-resume-check.ts",

@@ -10,6 +10,7 @@ import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { AccountDrawdownState } from "@/lib/trader/risk/drawdown-policy.types";
 import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
+import { normalizeAccountingStateDrawdownFields } from "@/lib/trader/accounting/accounting-frontier.types";
 import type { HtrGuardianBreachState } from "@/lib/trader/guardian/htr-guardian-exit-taxonomy";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
 import type {
@@ -191,19 +192,20 @@ export function buildAccountDrawdownCheckpointFromBridgeState(input: {
   id: string;
   breachState: HtrGuardianBreachState;
 }): AppendAccountDrawdownCheckpointInput {
+  const drawdownState = normalizeAccountingStateDrawdownFields(input.state);
   return {
     id: input.id,
-    accountKey: input.state.accountKey,
+    accountKey: drawdownState.accountKey,
     portfolioId: input.portfolioId,
-    runId: input.state.runId,
+    runId: drawdownState.runId,
     seq: input.seq,
-    asOf: input.state.frontierAsOf,
-    monthKey: input.state.monthKey,
-    equityUsdt: input.state.equity,
-    accountPeakHwm: input.state.equityHwm,
-    monthlyPeakHwm: input.state.monthlyPeakHwm,
-    accountDrawdownBps: input.state.accountDrawdownBps,
-    monthlyDrawdownBps: input.state.monthlyDrawdownBps,
+    asOf: drawdownState.frontierAsOf,
+    monthKey: drawdownState.monthKey,
+    equityUsdt: drawdownState.equity,
+    accountPeakHwm: drawdownState.equityHwm,
+    monthlyPeakHwm: drawdownState.monthlyPeakHwm,
+    accountDrawdownBps: drawdownState.accountDrawdownBps,
+    monthlyDrawdownBps: drawdownState.monthlyDrawdownBps,
     breachState: input.breachState,
   };
 }

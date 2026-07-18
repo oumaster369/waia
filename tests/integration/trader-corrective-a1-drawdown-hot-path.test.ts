@@ -15,6 +15,7 @@ import {
   toDrawdownHwmCheckpointSlice,
   type HtrDrawdownPersistencePort,
 } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
+import { normalizeAccountingStateDrawdownFields } from "@/lib/trader/accounting/accounting-frontier.types";
 import {
   advanceAccountingFrontier,
   computeAccountingSemanticDigest,
@@ -109,7 +110,12 @@ describe("DEE-415 C-A1 drawdown hot-path integration (G1)", () => {
     );
     expect(bridge.state.monthKey).toBe("2026-02");
     expect(compareDecimal(bridge.state.equityHwm, janAccountHwm)).toBeGreaterThanOrEqual(0);
-    expect(compareDecimal(bridge.state.monthlyPeakHwm, bridge.state.equity)).toBe(0);
+    expect(
+      compareDecimal(
+        normalizeAccountingStateDrawdownFields(bridge.state).monthlyPeakHwm,
+        bridge.state.equity,
+      ),
+    ).toBe(0);
     expect(bridge.state.monthlyPeakHwm).not.toBe(janMonthlyHwm);
   });
 
@@ -154,8 +160,9 @@ describe("DEE-415 C-A1 drawdown hot-path integration (G1)", () => {
       expect.arrayContaining(["BTCUSDT", "ETHUSDT"]),
     );
     expect(compareDecimal(bridge.state.equity, bridge.state.cash)).toBe(1);
-    expect(bridge.state.strategyPeakHwmByKey[LSR_KEY]).toBeDefined();
-    expect(bridge.state.strategyPeakHwmByKey[MR_KEY]).toBeDefined();
+    const drawdownState = normalizeAccountingStateDrawdownFields(bridge.state);
+    expect(drawdownState.strategyPeakHwmByKey[LSR_KEY]).toBeDefined();
+    expect(drawdownState.strategyPeakHwmByKey[MR_KEY]).toBeDefined();
   });
 
   it("fees and unrealized PnL are counted once in mark-to-market drawdown", () => {

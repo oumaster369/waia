@@ -59,6 +59,8 @@ export type HistoricalExecutionPersistencePort = {
   ): Promise<void>;
   transitionOrderExpired(context: OrgContext, order: OrderRow): Promise<OrderRow>;
   transitionOrderCancelled(context: OrgContext, order: OrderRow): Promise<OrderRow>;
+  /** Finalize CANCELLED when repository row is already CANCEL_REQUESTED (breach cancel path). */
+  transitionOrderCancelledFromRequested?(context: OrgContext, order: OrderRow): Promise<OrderRow>;
 };
 
 export type AdvanceHistoricalExecutionInput = {
@@ -68,6 +70,8 @@ export type AdvanceHistoricalExecutionInput = {
   model: HistoricalExecutionModelV1;
   persistence: HistoricalExecutionPersistencePort;
   replayNowMs: number;
+  /** Refresh repository order row before cancel persistence (breach path may advance state). */
+  resolveLatestOrder?: (orderId: string) => Promise<OrderRow | null>;
   refreshAccountState: () => Promise<AccountRiskState>;
   reconcileOrder: (orderId: string) => Promise<void>;
 };
@@ -236,7 +240,12 @@ export function createHistoricalSimulatedExchange(
           orderId: entry.order.id,
           fillSequence: entry.fillSequence,
           run: async () => {
-            const updated = await persistence.transitionOrderCancelled(context, entry.order);
+            const latestOrder = (await input.resolveLatestOrder?.(entry.order.id)) ?? entry.order;
+            const updated =
+              latestOrder.state === "CANCEL_REQUESTED" &&
+              persistence.transitionOrderCancelledFromRequested
+                ? await persistence.transitionOrderCancelledFromRequested(context, latestOrder)
+                : await persistence.transitionOrderCancelled(context, latestOrder);
             entry.order = updated;
             openOrders.delete(entry.order.id);
             await input.reconcileOrder(entry.order.id);

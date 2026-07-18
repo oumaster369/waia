@@ -145,14 +145,14 @@ function applyEquityDrawdownState(
   const hwm = updateDrawdownHighWaterMarks({
     equityUsdt,
     accountPeakHwm: state.equityHwm,
-    monthlyPeakHwm: state.monthlyPeakHwm,
+    monthlyPeakHwm: state.monthlyPeakHwm ?? state.equityHwm,
     priorMonthKey: state.monthKey,
     monthKey,
   });
   const strategyMaps = updateStrategyDrawdownMaps({
     equityUsdt,
-    strategyPeakHwmByKey: state.strategyPeakHwmByKey,
-    strategyDrawdownBpsByKey: state.strategyDrawdownBpsByKey,
+    strategyPeakHwmByKey: state.strategyPeakHwmByKey ?? {},
+    strategyDrawdownBpsByKey: state.strategyDrawdownBpsByKey ?? {},
   });
   return {
     ...state,

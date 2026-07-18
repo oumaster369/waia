@@ -38,6 +38,8 @@ import {
 } from "@/lib/trader/portfolio";
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
 import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
+import type { BreachCancellationResultV1 } from "@/lib/trader/execution/execution-service.types";
+import type { HistoricalSimulatedExchange } from "@/lib/trader/execution/historical-simulated-exchange";
 import type {
   PaperCycleDeps,
   PaperCycleGuardianExecution,
@@ -48,6 +50,20 @@ import type {
   RunMultiPaperCyclesResult,
   RunPollPaperCyclesInput,
 } from "@/lib/trader/paper/paper-cycle.types";
+
+export type PaperCycleHtrBreachCancellationOptions = {
+  historicalExchange?: HistoricalSimulatedExchange;
+  cancelLatencyMs?: number;
+  replayNowMs?: () => number;
+};
+
+export type PaperCycleInputWithHtrBreachCancellation = PaperCycleInput & {
+  htrBreachCancellation?: PaperCycleHtrBreachCancellationOptions;
+};
+
+export type PaperCycleResultWithHtrBreachCancellation = PaperCycleResult & {
+  htrBreachCancellation?: BreachCancellationResultV1;
+};
 
 /**
  * Runs one paper trading cycle: intelligence evaluation → signal mapping → mock/paper
@@ -182,13 +198,13 @@ async function refreshAccountStateIfConfigured(
 
 async function runHtrGuardianPhase(
   deps: PaperCycleDeps,
-  input: PaperCycleInput,
+  input: PaperCycleInputWithHtrBreachCancellation,
   evaluation: ReturnType<typeof runEvaluationCycle>,
   accountState: PaperCycleInput["accountState"],
   cycleIndex?: number,
 ): Promise<{
-  htrGuardian?: PaperCycleResult["htrGuardian"];
-  htrBreachCancellation?: PaperCycleResult["htrBreachCancellation"];
+  htrGuardian?: PaperCycleResultWithHtrBreachCancellation["htrGuardian"];
+  htrBreachCancellation?: PaperCycleResultWithHtrBreachCancellation["htrBreachCancellation"];
   accountState: PaperCycleInput["accountState"];
 }> {
   if (!input.htrAccounting) {
@@ -228,7 +244,7 @@ async function runHtrGuardianPhase(
     );
   }
 
-  let htrBreachCancellation: PaperCycleResult["htrBreachCancellation"];
+  let htrBreachCancellation: PaperCycleResultWithHtrBreachCancellation["htrBreachCancellation"];
   const guardianCycleForCancellation = getHtrGuardianCycleForCancellation(
     input.htrAccounting.bridge,
   );
@@ -450,8 +466,8 @@ async function runGuardianPhase(
 
 export async function runPaperCycleOnce(
   deps: PaperCycleDeps,
-  input: PaperCycleInput,
-): Promise<PaperCycleResult> {
+  input: PaperCycleInputWithHtrBreachCancellation,
+): Promise<PaperCycleResultWithHtrBreachCancellation> {
   const { snapshot, context } = input;
   const executionMode = input.executionMode ?? "mock";
   const cycleNewId = input.newId ?? deps.researchReplayDeterminism?.newId;

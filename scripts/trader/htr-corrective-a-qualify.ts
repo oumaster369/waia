@@ -13,6 +13,7 @@ import {
   attachClosed1mMarkToAccountingBridge,
   createHtrAccountingCycleBridge,
 } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
+import { normalizeAccountingStateDrawdownFields } from "@/lib/trader/accounting/accounting-frontier.types";
 import {
   assertProductionReplayEvidenceSinkConfigured,
   NOOP_REPLAY_EVIDENCE_SINK,
@@ -186,6 +187,7 @@ function evaluateCorrectiveAG3BreachGate(): HtrCorrectiveAGateStatus {
   });
   state.equity = "50000";
   state.accountDrawdownBps = DEFAULT_D20_DRAWDOWN_POLICY.accountBps + 1;
+  const drawdownState = normalizeAccountingStateDrawdownFields(state);
 
   const guardian = evaluateHtrGuardianCycle({
     reconciliation: {
@@ -193,8 +195,8 @@ function evaluateCorrectiveAG3BreachGate(): HtrCorrectiveAGateStatus {
       startingEquityUsdt: "100000",
       startingCashUsdt: "100000",
     },
-    accountPeakHwm: state.equityHwm,
-    monthlyPeakHwm: state.monthlyPeakHwm,
+    accountPeakHwm: drawdownState.equityHwm,
+    monthlyPeakHwm: drawdownState.monthlyPeakHwm,
     equityUsdt: state.equity,
   });
 

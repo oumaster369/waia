@@ -155,12 +155,6 @@ export type PaperCycleInput = {
   costModel?: CostModelV1;
   /** HTR-WP18/WP19/WP20: accounting + reconciliation + guardian authority on research path. */
   htrAccounting?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrAccountingCycleContext;
-  /** HTR-FINAL-AUDIT-CORRECTIVE-A C-A3: historical breach cancellation wiring. */
-  htrBreachCancellation?: {
-    historicalExchange?: import("@/lib/trader/execution/historical-simulated-exchange").HistoricalSimulatedExchange;
-    cancelLatencyMs?: number;
-    replayNowMs?: () => number;
-  };
 };
 
 export type PaperCycleSkipReason = "no_signal" | "no_submit";
@@ -194,8 +188,6 @@ export type PaperCycleResult = {
   guardianExecutions?: PaperCycleGuardianExecution[];
   /** HTR-WP20: authoritative guardian cycle on default historical research path. */
   htrGuardian?: import("@/lib/trader/guardian/htr-guardian-risk-bridge").HtrGuardianCycleResult;
-  /** HTR-C-A3: breach partial-entry cancellation outcome when guardian triggers cancel. */
-  htrBreachCancellation?: import("@/lib/trader/execution/execution-service.types").BreachCancellationResultV1;
   /** HTR-WP18..WP20: observable production runtime call order proof. */
   htrRuntimeCallOrder?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrRuntimeCallEvent[];
   /** PR-2 MI Core: updated session state for next cycle. */

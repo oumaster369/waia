@@ -11,6 +11,10 @@ import {
   type BacktestEvaluationExportInput,
   type HistoricalExecutionCostProvenance,
 } from "@/lib/trader/backtest/backtest-evaluation-export.types";
+
+type HistoricalExecutionCostProvenanceWithDigest = HistoricalExecutionCostProvenance & {
+  costModelDigest: string;
+};
 import type { PaperPnLWindow } from "@/lib/trader/paper/paper-pnl-period.types";
 import { toBacktestEvaluationExportDocument } from "@/lib/trader/backtest/serialize-backtest-evaluation-export";
 import {
@@ -61,9 +65,9 @@ async function buildHistoricalExecutionCostProvenance(
   context: OrgContext,
   orderRepository: OrderRepository,
   executionMode: NonNullable<BacktestEvaluationExportInput["executionMode"]>,
-): Promise<HistoricalExecutionCostProvenance | undefined> {
+): Promise<HistoricalExecutionCostProvenanceWithDigest | undefined> {
   const orders = await orderRepository.listOrders(context, { executionMode });
-  const fills: HistoricalExecutionCostProvenance["fills"] = [];
+  const fills: HistoricalExecutionCostProvenanceWithDigest["fills"] = [];
 
   for (const order of orders) {
     const events = await orderRepository.listEvents(context, order.id);

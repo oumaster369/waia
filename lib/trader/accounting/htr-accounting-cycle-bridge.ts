@@ -15,6 +15,7 @@ import type {
   AccountingStateV1,
   MarksJsonV1,
 } from "@/lib/trader/accounting/accounting-frontier.types";
+import { normalizeAccountingStateDrawdownFields } from "@/lib/trader/accounting/accounting-frontier.types";
 import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
 import type {
@@ -590,17 +591,18 @@ export function evaluateHtrGuardianForBridge(
   },
 ): HtrGuardianCycleResult {
   assertBridgeActive(bridge);
+  const drawdownState = normalizeAccountingStateDrawdownFields(bridge.state);
   const reconciliation = buildHtrReconciliationInput(bridge, {
     inventoryOpenQtyBySymbol: input.inventoryOpenQtyBySymbol,
   });
   const dominantStrategy = resolveDominantStrategyDrawdown({
-    strategyDrawdownBpsByKey: bridge.state.strategyDrawdownBpsByKey,
-    strategyPeakHwmByKey: bridge.state.strategyPeakHwmByKey,
+    strategyDrawdownBpsByKey: drawdownState.strategyDrawdownBpsByKey,
+    strategyPeakHwmByKey: drawdownState.strategyPeakHwmByKey,
   });
   const cycle = evaluateHtrGuardianCycle({
     reconciliation,
-    accountPeakHwm: bridge.state.equityHwm,
-    monthlyPeakHwm: bridge.state.monthlyPeakHwm,
+    accountPeakHwm: drawdownState.equityHwm,
+    monthlyPeakHwm: drawdownState.monthlyPeakHwm,
     equityUsdt: input.equityUsdt,
     strategyDrawdownBps: dominantStrategy.strategyDrawdownBps,
     strategyEquityUsdt: dominantStrategy.strategyEquityUsdt,
@@ -758,25 +760,26 @@ export function deriveAccountRiskStateFromBridge(
     portfolio,
     openOrderCount: input.openOrderCount,
     accountPeakHwm: bridge.state.equityHwm,
-    monthlyPeakHwm: bridge.state.monthlyPeakHwm,
+    monthlyPeakHwm: normalizeAccountingStateDrawdownFields(bridge.state).monthlyPeakHwm,
   });
 }
 
 export function toAccountingCheckpointSlice(
   bridge: HtrAccountingCycleBridge,
 ): ReplayAccountingFrontierState {
+  const drawdownState = normalizeAccountingStateDrawdownFields(bridge.state);
   return {
-    accountingSequence: bridge.state.accountingSequence,
-    frontierAsOf: bridge.state.frontierAsOf,
-    cash: bridge.state.cash,
-    equity: bridge.state.equity,
-    equityHwm: bridge.state.equityHwm,
-    monthlyPeakHwm: bridge.state.monthlyPeakHwm,
-    monthKey: bridge.state.monthKey,
-    accountDrawdownBps: bridge.state.accountDrawdownBps,
-    monthlyDrawdownBps: bridge.state.monthlyDrawdownBps,
-    strategyPeakHwmByKey: { ...bridge.state.strategyPeakHwmByKey },
-    strategyDrawdownBpsByKey: { ...bridge.state.strategyDrawdownBpsByKey },
+    accountingSequence: drawdownState.accountingSequence,
+    frontierAsOf: drawdownState.frontierAsOf,
+    cash: drawdownState.cash,
+    equity: drawdownState.equity,
+    equityHwm: drawdownState.equityHwm,
+    monthlyPeakHwm: drawdownState.monthlyPeakHwm,
+    monthKey: drawdownState.monthKey,
+    accountDrawdownBps: drawdownState.accountDrawdownBps,
+    monthlyDrawdownBps: drawdownState.monthlyDrawdownBps,
+    strategyPeakHwmByKey: { ...drawdownState.strategyPeakHwmByKey },
+    strategyDrawdownBpsByKey: { ...drawdownState.strategyDrawdownBpsByKey },
     marksJson: bridge.state.marks,
     positionsJson: bridge.state.positions,
     consumedFillIds: [...bridge.state.consumedFillIds],
@@ -790,15 +793,16 @@ export function toAccountingCheckpointSlice(
 export function toDrawdownHwmCheckpointSlice(
   bridge: HtrAccountingCycleBridge,
 ): ReplayDrawdownHwmState {
+  const drawdownState = normalizeAccountingStateDrawdownFields(bridge.state);
   return {
-    accountPeakHwm: bridge.state.equityHwm,
-    monthlyPeakHwm: bridge.state.monthlyPeakHwm,
-    monthKey: bridge.state.monthKey,
+    accountPeakHwm: drawdownState.equityHwm,
+    monthlyPeakHwm: drawdownState.monthlyPeakHwm,
+    monthKey: drawdownState.monthKey,
     breachState: bridge.breachState,
-    strategyPeaks: { ...bridge.state.strategyPeakHwmByKey },
-    strategyDrawdownBpsByKey: { ...bridge.state.strategyDrawdownBpsByKey },
-    monthlyDrawdownBps: bridge.state.monthlyDrawdownBps,
-    accountDrawdownBps: bridge.state.accountDrawdownBps,
+    strategyPeaks: { ...drawdownState.strategyPeakHwmByKey },
+    strategyDrawdownBpsByKey: { ...drawdownState.strategyDrawdownBpsByKey },
+    monthlyDrawdownBps: drawdownState.monthlyDrawdownBps,
+    accountDrawdownBps: drawdownState.accountDrawdownBps,
   };
 }
 

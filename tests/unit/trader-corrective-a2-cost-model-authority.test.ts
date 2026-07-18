@@ -49,11 +49,15 @@ function scanProductionCostModelSites(): {
   executableCostModel10_5Sites: string[];
   executableCostModel20_10Sites: string[];
   adHocCreateCostModelSites: string[];
+  adHocLiteralCostModelSites: string[];
+  conditionalAuthorityBypassSites: string[];
 } {
   const roots = [join(REPO_ROOT, "lib"), join(REPO_ROOT, "scripts")];
   const executableCostModel10_5Sites: string[] = [];
   const executableCostModel20_10Sites: string[] = [];
   const adHocCreateCostModelSites: string[] = [];
+  const adHocLiteralCostModelSites: string[] = [];
+  const conditionalAuthorityBypassSites: string[] = [];
 
   for (const root of roots) {
     for (const filePath of listTypeScriptFiles(root)) {
@@ -71,6 +75,15 @@ function scanProductionCostModelSites(): {
       if (/createCostModelV1\s*\(/.test(source)) {
         adHocCreateCostModelSites.push(relPath);
       }
+      if (
+        /feesBps\s*:\s*["']10["'][\s\S]{0,120}slippageBps\s*:\s*["']5["']/.test(source) ||
+        /slippageBps\s*:\s*["']5["'][\s\S]{0,120}feesBps\s*:\s*["']10["']/.test(source)
+      ) {
+        adHocLiteralCostModelSites.push(relPath);
+      }
+      if (/usesCanonicalD5Economics/.test(source) || /if\s*\(\s*usesCanonical/.test(source)) {
+        conditionalAuthorityBypassSites.push(relPath);
+      }
     }
   }
 
@@ -78,6 +91,8 @@ function scanProductionCostModelSites(): {
     executableCostModel10_5Sites,
     executableCostModel20_10Sites,
     adHocCreateCostModelSites,
+    adHocLiteralCostModelSites,
+    conditionalAuthorityBypassSites,
   };
 }
 
@@ -189,6 +204,8 @@ describe("trader corrective A2 cost model authority", () => {
     expect(scan.executableCostModel10_5Sites).toEqual([]);
     expect(scan.executableCostModel20_10Sites).toEqual([]);
     expect(scan.adHocCreateCostModelSites).toEqual([]);
+    expect(scan.adHocLiteralCostModelSites).toEqual([]);
+    expect(scan.conditionalAuthorityBypassSites).toEqual([]);
   });
 
   it("fhv-contract digest matches authority", () => {
