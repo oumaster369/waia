@@ -33,14 +33,14 @@ state:
   childPlanStatus: APPROVED
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: HTR_MACRO_J_PHASE_A_REPROVED_AFTER_GAP043_CORRECTION_READY_FOR_FRESH_INDEPENDENT_PHASE_B
+  composerTerminalState: HTR_MACRO_J_WP22_PHASE_B_COMPLETE_WP23_PENDING_INDEPENDENT_PHASE_B
   activeWorkPackage: HTR-WP23
   currentWorkPackage: HTR-WP23
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-J
-  activeMacroWorkPackages: [HTR-WP22, HTR-WP23]
-  activeMacroStatus: PHASE_A_COMPLETE_PENDING_INDEPENDENT_PHASE_B
+  activeMacroWorkPackages: [HTR-WP23]
+  activeMacroStatus: WP22_PHASE_B_COMPLETE_WP23_PENDING_INDEPENDENT_PHASE_B
   macroJPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25
   macroJPacketPath: .cursor/plans/dee-415-macro-j/approval-candidates/5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25/dee-415-htr-macro-j-exact-packet.plan.md
   macroJSupersededPacketSha256: 91be9b0f462e5f9f36ba08d3007eafd9bd00ee4ee5dea48749bc83c5e954fe58
@@ -54,12 +54,21 @@ state:
   wp22SerializationRemediationSha: afd9a3107f58ea2d6782a4881a76dcfeeca9227d
   wp22EvidenceCliCorrectionSha: cd9ff5b4e176236d388e873627cded7b869cb216
   wp22MultiPositionProofSha: c982660b61c68e8c1319dae20fd4ebdc698821be
-  wp22PhaseAStatus: WP22_PHASE_A_GATE_PASS_PENDING_INDEPENDENT_PHASE_B
+  wp22PhaseAStatus: WP22_PHASE_A_GATE_PASS
+  wp22PhaseBVerdict: PASS
+  wp22ImplementationStatus: WORK_PACKAGE_COMPLETE
+  wp22Status: WORK_PACKAGE_COMPLETE
   wp22EffectivePhaseACandidateSha: c982660b61c68e8c1319dae20fd4ebdc698821be
+  wp22EffectiveValidatedProductionSha: c982660b61c68e8c1319dae20fd4ebdc698821be
   wp22PhaseAGovernanceBindingAuthority: GIT_HEAD
   wp22PhaseAGateBindingSha: 3b02ad3aa5da46a2ac4061e0c71f9e2dcb040490
   wp22EvidenceManifestDigest: 2c2238e7d4e055e8735ba2009433e3758f0b3e4b5872545d84643ff1e87cf2d2
   wp22EvidenceSemanticDigest: a7ca958c9784a2d3d70f2cd286318be26fb6395107273947eaaef043c58d0e67
+  wp22EvidencePromoted: true
+  wp22AcceptedEvidencePath: replay-runs/RI-P7/htr-wp22-runtime-qualification/
+  wp22AcceptedEvidenceSourceGitSha: c982660b61c68e8c1319dae20fd4ebdc698821be
+  wp22AcceptedEvidenceManifestDigest: 2c2238e7d4e055e8735ba2009433e3758f0b3e4b5872545d84643ff1e87cf2d2
+  wp22AcceptedEvidenceSemanticDigest: a7ca958c9784a2d3d70f2cd286318be26fb6395107273947eaaef043c58d0e67
   wp22HermeticValidation:
     classification: PASS
     previous81FailureResult: INVALID_NON_HERMETIC_INVOCATION_POSTGRES_ENV_LEAK
@@ -76,7 +85,7 @@ state:
   d11bHarnessSha256: 518c7338fe5b030ad2a6662e2ca1fe127f176ca2fcf573a05ae921cebb96cab3
   d11bPayloadSha256: 6821c8f7ee47d6f2ea04ce4577ac2df795940fd676e1a98e20d46353d0944624
   d11bReplacementAttempt: PASS
-  wp22EvidenceStatus: STAGED_PENDING_INDEPENDENT_REVIEW
+  wp22EvidenceStatus: ACCEPTED
   wp22KnownCliDefect: CLOSED
   wp22MultiPositionCorrectnessProof: PASS
   wp22MultiPositionProofScopeAmendment:
@@ -160,12 +169,16 @@ state:
   wp23PrematureDraftStatus: REAPPLIED_REAUDITED_AND_COMMITTED_AS_ACCEPTED_PHASE_A_WORK
   wp23QuarantineStashPreserved: true
   wp23QuarantineReapplicationStatus: REAPPLIED_REAUDITED_AND_COMMITTED
-  planningTerminalState: HTR_MACRO_J_PHASE_A_REPROVED_AFTER_GAP043_CORRECTION_READY_FOR_FRESH_INDEPENDENT_PHASE_B
-  nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B
-  newHumanTokenRequired: true
-  requiredHumanTokens:
-    - AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B
-  nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B
+  planningTerminalState: HTR_MACRO_J_WP22_PHASE_B_COMPLETE_WP23_PENDING_INDEPENDENT_PHASE_B
+  nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B_WP23
+  newHumanTokenRequired: false
+  requiredHumanTokens: []
+  nextHumanGate: null
+  macroJPhaseBFreshIndependentAuthorization:
+    status: CONSUMED
+    token: AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B
+    wp22PhaseBVerdict: PASS
+    wp22CloseoutPending: true
   macroJPhaseAHandoffToken: AUTHORIZE-HTR-WP23-QUARANTINE-REAPPLICATION-AND-PHASE-A-RESUME
   macroJPhaseAHandoffTokenStatus: CONSUMED
   macroJActivationAmendDeviation:
@@ -250,8 +263,14 @@ state:
   completedWorkPackages:
     [HTR-WP01, HTR-WP02, HTR-WP03, HTR-WP04, HTR-WP05, HTR-WP06, HTR-WP07, HTR-WP08,
      HTR-WP09, HTR-WP10, HTR-WP11, HTR-WP12, HTR-WP13, HTR-WP14, HTR-WP15, HTR-WP16,
-     HTR-WP17, HTR-WP18, HTR-WP19, HTR-WP20, HTR-WP21]
-  remainingWorkPackages: [HTR-WP22, HTR-WP23]
+     HTR-WP17, HTR-WP18, HTR-WP19, HTR-WP20, HTR-WP21, HTR-WP22]
+  remainingWorkPackages: [HTR-WP23]
+  htrGap005: CLOSED
+  htrGap024: CLOSED
+  htrGap026: CLOSED
+  htrGap027: CLOSED
+  htrGap029: CLOSED
+  htrGap044: CLOSED
   htrGap010: CLOSED
   htrGap036: CLOSED
   htrGap037: CLOSED
@@ -260,9 +279,11 @@ state:
   htrGap040: CLOSED
   htrGap035: CLOSED
   htrGap043: OPEN
-  htrGap044: OPEN
   htrGap045: OPEN
-  latestValidatedProductionCodeSha: b71a381327d042640f5c3bd9912fe1fd5d3cd4c4
+  readyForFullHistoricalTest: false
+  finalPrAuthorized: false
+  wp22EffectiveValidatedProductionSha: c982660b61c68e8c1319dae20fd4ebdc698821be
+  latestValidatedProductionCodeSha: c982660b61c68e8c1319dae20fd4ebdc698821be
   latestIndependentlyValidatedPreWp21ProductionSha: 96144e0cc384942e2f82d78fecbc0e67a1da8b9d
   macroJPolicyDecisionsConsumed:
     wp22Migration: none
@@ -2555,7 +2576,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP19 | Reality reconciliation + M9-class regression closure | WP18 | backend | APPROVED | — |
 | HTR-WP20 | Guardian/exits completion + closed-trade reality invariants | WP18,WP19 | backend | APPROVED | — |
 | HTR-WP21 | Outcome Resolution, Forecast Calibration & Knowledge Confidence Update | WP14,WP15,WP19,WP20 | ai | pending | — |
-| HTR-WP22 | Resilience + performance qualification | WP04,WP05,WP09,WP16,WP19,WP21 | backend | pending | — |
+| HTR-WP22 | Resilience + performance qualification | WP04,WP05,WP09,WP16,WP19,WP21 | backend | COMPLETE (independent Phase-B PASS 2026-07-18; WORK c982660; accepted evidence replay-runs/RI-P7/htr-wp22-runtime-qualification/ manifest 2c2238e7… semantic a7ca958c…; HTR-GAP-005/024/026/027/029/044 CLOSED) | `c982660` (WORK) |
 | HTR-WP23 | Operator runbook + readiness preflight + Execution Server package + Certification prep | WP20,WP22 | infra | IN_PROGRESS_PHASE_A_COMPLETE_PENDING_INDEPENDENT_PHASE_B (corrective `6647b90`; official evidence CLI `6647b90`; evidence staged) | `6647b90` (GAP-043 corrective + evidence reseal) |
 
 Mandatory tail: **HTR-WP21 → HTR-WP22 → HTR-WP23**; also **HTR-WP16 → HTR-WP22**. Full dependency graph: parent master §40.
@@ -2579,7 +2600,7 @@ A single PR is opened only after HTR-WP23, final full validation, and the final 
 
 ## Current work package (HTR-WP23 — historical readiness package)
 
-**CURRENT (2026-07-18):** HTR-MACRO-J **Phase A COMPLETE pending independent Phase B**; independent per-file GAP-043/GAP-044 verification and controller-truth reconciliation completed; corrective source **`6647b9035c19bd4ea55d3c610d1f637ddf3eb668`**; official WP23 evidence verified at **`8093c418…` / `1665f093…`**; GAP-043 **13 files / 29 executed / 0 failed / 0 skipped**; GAP-044 **2 files / 12 executed / 0 failed / 0 skipped**; `3234b1f` bundle **SUPERSEDED_NOT_PHASE_B_PROMOTABLE_BY_WP23_GAP043_CORRECTION** (historical only); WP22 effective candidate unchanged **`c982660`**; `BUILD_AUTHORIZED: NO`; `nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B`; `nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B`.
+**CURRENT (2026-07-18):** HTR-WP22 **independent Phase-B PASS**; accepted evidence **`replay-runs/RI-P7/htr-wp22-runtime-qualification/`** at manifest **`2c2238e7…`** / semantic **`a7ca958c…`**; HTR-GAP-005/024/026/027/029/044 **CLOSED**; HTR-WP23 **Phase A COMPLETE pending independent Phase B**; official WP23 evidence verified at **`8093c418…` / `1665f093…`**; `BUILD_AUTHORIZED: NO`; `remainingWorkPackages: [HTR-WP23]`.
 
 **HISTORICAL (SUPERSEDED / INVALIDATED):** Prior current-facing statement claiming GAP-043 **13/29 PASS** at `3234b1f` — invalidated by mandatory live regression 2026-07-18; retained only in `wp23Gap043InvalidatedAuditRecord`.
 

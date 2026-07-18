@@ -74,8 +74,8 @@ Link: [`docs/waia-governance/NON-GOALS.md`](../waia-governance/NON-GOALS.md).
 ### CG-B — Replay runtime
 
 - [ ] Replay benchmark methodology approved (D-11A) with golden fixtures (HTR-WP03).
-- [ ] Per-stage timing and memory instrumentation (HTR-WP03; qualification HTR-WP22).
-- [ ] Checkpoint/resume and pipeline DB-disconnect resilience (HTR-WP05; qualification HTR-WP22).
+- [x] Per-stage timing and memory instrumentation (HTR-WP03; qualification HTR-WP22).
+- [x] Checkpoint/resume and pipeline DB-disconnect resilience (HTR-WP05; qualification HTR-WP22).
 - [ ] No-lookahead and determinism property suites green (HTR-WP10).
 
 ### CG-C — Market Canvas & MTF
@@ -109,8 +109,8 @@ Link: [`docs/waia-governance/NON-GOALS.md`](../waia-governance/NON-GOALS.md).
 
 ### CG-G — Evidence / quality / ops (+ Execution Server package)
 
-- [ ] Streaming evidence with partial sealing and crash-recovery reconstruction (HTR-WP04; qualification HTR-WP22).
-- [ ] Bounded in-memory trace; complete-runtime memory soak (HTR-WP04 primary, HTR-WP22 closure for HTR-GAP-005).
+- [x] Streaming evidence with partial sealing and crash-recovery reconstruction (HTR-WP04; qualification HTR-WP22).
+- [x] Bounded in-memory trace; complete-runtime memory soak (HTR-WP04 primary, HTR-WP22 closure for HTR-GAP-005).
 - [ ] Campaign manifest and readiness preflight CLI (HTR-WP23).
 - [ ] Full test matrix green (`pnpm lint`, `typecheck`, `test --run`, `build`, `validate:canon`; Postgres integration when in scope).
 - [ ] **Code-ready Execution Server package** (Option A): manifests, contracts, resource assumptions, commands, checkpoint/evidence semantics, operator instructions — ready for Human-operated deployment; **not** "server already deployed" (HTR-WP23, §32B).

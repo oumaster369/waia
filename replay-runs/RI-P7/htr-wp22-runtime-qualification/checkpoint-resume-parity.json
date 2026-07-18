@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "htr-wp22-checkpoint-resume-parity/v1",
+  "terminalState": "HTR_WP22_CHECKPOINT_RESUME_PASS",
+  "gitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+  "dirtyTree": false,
+  "upstreamHarness": {
+    "terminalState": "REPLAY_RUN_OK",
+    "parity": {
+      "evidenceDigestMatch": true,
+      "semanticReproDigestMatch": true,
+      "semanticParityDigestMatch": true,
+      "cycleCountMatch": true
+    },
+    "frontierSeparation": {
+      "evidenceAheadCycleIndex": 39,
+      "safeResumeThroughCycleIndex": -1,
+      "passed": true
+    },
+    "disconnectTerminal": {
+      "transientClassified": true,
+      "infraFailureCode": "CAMPAIGN_INFRA_DISCONNECT",
+      "passed": true
+    },
+    "uninterruptedSemanticParityDigest": "733d72b8696abcf264e000b5b93b87ef4b8caa08f61a5a396c65145adf7dfdd4",
+    "resumedSemanticParityDigest": "733d72b8696abcf264e000b5b93b87ef4b8caa08f61a5a396c65145adf7dfdd4"
+  },
+  "payloadSha256": "843d87b3451646c45f0f1e6c2de21e669a5a464a815ee0a25ecda7d2bb14b56f"
+}

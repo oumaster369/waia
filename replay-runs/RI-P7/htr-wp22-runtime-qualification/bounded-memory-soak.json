@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "htr-wp22-bounded-memory-soak/v1",
+  "terminalState": "HTR_WP22_BOUNDED_MEMORY_PASS",
+  "gitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+  "dirtyTree": false,
+  "retainedPaperCycleResults": 0,
+  "peakBufferedProjections": 32,
+  "maxBufferedProjectionsGate": 32,
+  "maxN2P95PostGcLiveHeapDeltaBytesGate": 4194304,
+  "boundednessObservations": [
+    {
+      "cycleCount": 81,
+      "peakBufferedProjections": 32
+    },
+    {
+      "cycleCount": 40,
+      "peakBufferedProjections": 32
+    }
+  ],
+  "payloadSha256": "fe4b3b7dd1e1ab708789d425371d31eb13a1b93ab080a2bc2f4607895925dd98"
+}

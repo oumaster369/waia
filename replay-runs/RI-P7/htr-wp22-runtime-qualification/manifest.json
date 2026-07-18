@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "htr-wp22-runtime-evidence-manifest/v2",
+  "contractId": "waia.htr.evidence-integrity.v2",
+  "sourceGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+  "sourceDirtyTree": false,
+  "generatorProvenance": "lib/trader/backtest/htr-wp22-evidence-harness.ts",
+  "artifactIndex": [
+    {
+      "path": "completed-runtime-d11b.json",
+      "sizeBytes": 16924,
+      "fileSha256": "52080356e282735b5b0991aeb91568cd7e48909b6e4d65735fda888c2e34b216",
+      "payloadSha256": "6821c8f7ee47d6f2ea04ce4577ac2df795940fd676e1a98e20d46353d0944624",
+      "schemaVersion": "htr-wp22-completed-runtime-qualification/v1",
+      "artifactSourceGitSha": "afd9a3107f58ea2d6782a4881a76dcfeeca9227d",
+      "generatorGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+      "generatorSha256": "64ed84cea0abb22ce8273807c3226ce5a8a4bab82f369f364eba9a57b1ab4f7f",
+      "sourceDirtyTree": false,
+      "generatorProvenance": "lib/trader/backtest/htr-wp22-evidence-harness.ts"
+    },
+    {
+      "path": "crash-recovery-matrix.json",
+      "sizeBytes": 1804,
+      "fileSha256": "45f43c41b109181cfb1395be1ee25b4c04b0ccd3541b6674d70bf73fa16d9c9e",
+      "payloadSha256": "0a872234b26b56634bd4a636fd3bceac01c7e4954375522767e867005b5eda11",
+      "schemaVersion": "htr-wp22-crash-recovery-matrix/v1",
+      "artifactSourceGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+      "generatorGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+      "generatorSha256": "64ed84cea0abb22ce8273807c3226ce5a8a4bab82f369f364eba9a57b1ab4f7f",
+      "sourceDirtyTree": false,
+      "generatorProvenance": "lib/trader/backtest/htr-wp22-evidence-harness.ts"
+    },
+    {
+      "path": "checkpoint-resume-parity.json",
+      "sizeBytes": 1007,
+      "fileSha256": "43ac24724d02e5d66e5ec919a3f3d60f8acbf54bbbb787dae1e5341ee5aae407",
+      "payloadSha256": "843d87b3451646c45f0f1e6c2de21e669a5a464a815ee0a25ecda7d2bb14b56f",
+      "schemaVersion": "htr-wp22-checkpoint-resume-parity/v1",
+      "artifactSourceGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+      "generatorGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+      "generatorSha256": "64ed84cea0abb22ce8273807c3226ce5a8a4bab82f369f364eba9a57b1ab4f7f",
+      "sourceDirtyTree": false,
+      "generatorProvenance": "lib/trader/backtest/htr-wp22-evidence-harness.ts"
+    },
+    {
+      "path": "bounded-memory-soak.json",
+      "sizeBytes": 608,
+      "fileSha256": "8f8e6876cff39aefe5ec3cbe19a643401b286134f15671016c5fdfc807380e63",
+      "payloadSha256": "fe4b3b7dd1e1ab708789d425371d31eb13a1b93ab080a2bc2f4607895925dd98",
+      "schemaVersion": "htr-wp22-bounded-memory-soak/v1",
+      "artifactSourceGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+      "generatorGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+      "generatorSha256": "64ed84cea0abb22ce8273807c3226ce5a8a4bab82f369f364eba9a57b1ab4f7f",
+      "sourceDirtyTree": false,
+      "generatorProvenance": "lib/trader/backtest/htr-wp22-evidence-harness.ts"
+    },
+    {
+      "path": "multi-position-fixture-manifest.json",
+      "sizeBytes": 1021,
+      "fileSha256": "7e1372817e82345a162c320e940b00637ce9b1e4d9c09bf9b4aade52b174ba82",
+      "payloadSha256": "8738a4717fe04699d58edb1c05456fd947091450bae31638dff624d6e1d0244a",
+      "schemaVersion": "htr-wp22-multi-position-fixture-manifest/v1",
+      "artifactSourceGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+      "generatorGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+      "generatorSha256": "64ed84cea0abb22ce8273807c3226ce5a8a4bab82f369f364eba9a57b1ab4f7f",
+      "sourceDirtyTree": false,
+      "generatorProvenance": "lib/trader/backtest/htr-wp22-evidence-harness.ts"
+    },
+    {
+      "path": "multi-position-correctness-result.json",
+      "sizeBytes": 3007,
+      "fileSha256": "7d342c6d1be0361000cd94d87133adbe0e8646c3aaf5c495838385224275d7ed",
+      "payloadSha256": "33afaad1ab75ece708bccef64fc135b2ff3dd8a1b69d5d8fee2280255644621a",
+      "schemaVersion": "htr-wp22-multi-position-correctness/v1",
+      "artifactSourceGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+      "generatorGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+      "generatorSha256": "64ed84cea0abb22ce8273807c3226ce5a8a4bab82f369f364eba9a57b1ab4f7f",
+      "sourceDirtyTree": false,
+      "generatorProvenance": "lib/trader/backtest/htr-wp22-evidence-harness.ts"
+    }
+  ]
+}
