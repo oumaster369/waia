@@ -45,6 +45,7 @@ import {
   emitExecutionTransitionEvent,
 } from "@/lib/trader/execution/execution-telemetry";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
+import type { BreachOrderCancelOutcome } from "@/lib/trader/guardian/htr-breach-partial-entry-cancellation";
 import { isTerminalReject } from "@/lib/trader/risk/decision";
 import type { RiskEngineDecision } from "@/lib/trader/risk/evaluate.types";
 import {
@@ -68,6 +69,13 @@ type PgExecutionExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
 
 const KILL_SWITCH_REJECT_PAYLOAD = JSON.stringify({ reason: "kill_switch" });
 const CONNECTOR_REJECT_PAYLOAD = JSON.stringify({ reason: "connector" });
+const BREACH_CANCEL_PAYLOAD = JSON.stringify({ reason: "guardian_breach_partial_entry" });
+
+const BREACH_CANCELLABLE_STATES = new Set<OrderState>([
+  "SENT_TO_EXCHANGE",
+  "ACCEPTED",
+  "PARTIALLY_FILLED",
+]);
 
 /** Dispatch allowed only from RISK_APPROVED (DEE-249). */
 export function canDispatch(order: OrderRow): boolean {
@@ -631,7 +639,13 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
   }
 
   async function transitionOrderCancelled(context: OrgContext, order: OrderRow): Promise<OrderRow> {
-    const cancelRequested = await transitionOrConflict(context, order, "CANCEL_REQUESTED");
+    if (order.state === "CANCELLED") {
+      return order;
+    }
+    const cancelRequested =
+      order.state === "CANCEL_REQUESTED"
+        ? { order }
+        : await transitionOrConflict(context, order, "CANCEL_REQUESTED");
     if ("conflict" in cancelRequested) {
       throw new OrderVersionConflictError(cancelRequested.orderId, order.stateVersion);
     }
@@ -642,10 +656,41 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     return cancelled.order;
   }
 
+  async function cancelOrderForBreach(
+    context: OrgContext,
+    order: OrderRow,
+  ): Promise<BreachOrderCancelOutcome> {
+    if (order.state === "CANCEL_REQUESTED" || isTerminal(order.state)) {
+      return { status: "idempotent_skip", order };
+    }
+
+    if (!BREACH_CANCELLABLE_STATES.has(order.state)) {
+      return { status: "failed", order };
+    }
+
+    if (historicalExecution?.enabled && order.executionMode === "mock") {
+      const cancelRequested = await transitionOrConflict(context, order, "CANCEL_REQUESTED", {
+        eventPayload: BREACH_CANCEL_PAYLOAD,
+      });
+      if ("conflict" in cancelRequested) {
+        return { status: "failed", order };
+      }
+      return { status: "cancel_requested", order: cancelRequested.order };
+    }
+
+    try {
+      const cancelled = await transitionOrderCancelled(context, order);
+      return { status: "cancelled", order: cancelled };
+    } catch {
+      return { status: "failed", order };
+    }
+  }
+
   return {
     recordSimulatedFill,
     transitionOrderExpired,
     transitionOrderCancelled,
+    cancelOrderForBreach,
     async submitOrder(context: OrgContext, input: SubmitOrderInput): Promise<SubmitOrderResult> {
       const orgContext = requireOrgContext(context.organizationId);
       const startedMs = nowMs();

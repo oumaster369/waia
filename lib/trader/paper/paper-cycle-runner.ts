@@ -8,9 +8,13 @@ import {
   deriveAccountRiskStateFromBridge,
   derivePortfolioFromAccountingState,
   evaluateHtrGuardianForBridge,
+  getHtrGuardianCycleForCancellation,
   persistDrawdownCycleAfterGuardian,
+  recordBreachCancellationOnBridge,
   runAutomaticAccountingReconciliation,
 } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
+import { executeBreachPartialEntryCancellation } from "@/lib/trader/guardian/htr-breach-partial-entry-cancellation";
+import { requiresHtrPartialEntryCancellation } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
 import { compareDecimal } from "@/lib/trader/risk/numeric";
 import { assertLifecycleFillWalkOpenQtyParity } from "@/lib/trader/lifecycle";
 import {
@@ -177,12 +181,14 @@ async function refreshAccountStateIfConfigured(
 }
 
 async function runHtrGuardianPhase(
+  deps: PaperCycleDeps,
   input: PaperCycleInput,
   evaluation: ReturnType<typeof runEvaluationCycle>,
   accountState: PaperCycleInput["accountState"],
   cycleIndex?: number,
 ): Promise<{
   htrGuardian?: PaperCycleResult["htrGuardian"];
+  htrBreachCancellation?: PaperCycleResult["htrBreachCancellation"];
   accountState: PaperCycleInput["accountState"];
 }> {
   if (!input.htrAccounting) {
@@ -222,13 +228,46 @@ async function runHtrGuardianPhase(
     );
   }
 
-  return { htrGuardian, accountState };
+  let htrBreachCancellation: PaperCycleResult["htrBreachCancellation"];
+  const guardianCycleForCancellation = getHtrGuardianCycleForCancellation(
+    input.htrAccounting.bridge,
+  );
+  if (
+    guardianCycleForCancellation &&
+    requiresHtrPartialEntryCancellation(guardianCycleForCancellation) &&
+    input.orderRepository &&
+    deps.execution.cancelOrderForBreach
+  ) {
+    const openOrders = await input.orderRepository.listOpenOrders(input.context, {
+      executionMode: input.executionMode ?? "mock",
+    });
+    htrBreachCancellation = await executeBreachPartialEntryCancellation({
+      context: input.context,
+      guardianCycle: guardianCycleForCancellation,
+      openOrders,
+      openQtyBySymbol: inventoryOpenQtyBySymbol,
+      cancelOrder: (context, order) => deps.execution.cancelOrderForBreach!(context, order),
+      historicalExchange: input.htrBreachCancellation?.historicalExchange,
+      cancelLatencyMs: input.htrBreachCancellation?.cancelLatencyMs,
+      replayNowMs: input.htrBreachCancellation?.replayNowMs?.(),
+    });
+    recordBreachCancellationOnBridge(
+      input.htrAccounting.bridge,
+      htrBreachCancellation,
+      cycleIndex ?? 0,
+    );
+  }
+
+  return { htrGuardian, htrBreachCancellation, accountState };
 }
 
 function assertHtrOrderSubmissionPermitted(
   input: PaperCycleInput,
   order: PlaceOrderInput,
 ): { permitted: boolean; reason: string | null } {
+  if (input.htrAccounting?.bridge.breachCancellationFailed) {
+    return { permitted: false, reason: "breach_cancellation_failed" };
+  }
   if (!input.htrAccounting?.bridge.lastGuardianCycle) {
     return { permitted: true, reason: null };
   }
@@ -461,6 +500,7 @@ export async function runPaperCycleOnce(
   accountState = guardianPhase.accountState;
 
   const htrGuardianPhase = await runHtrGuardianPhase(
+    deps,
     input,
     evaluation,
     accountState,
@@ -531,6 +571,7 @@ export async function runPaperCycleOnce(
       guardian: guardianPhase.guardianResult,
       guardianExecutions: guardianPhase.guardianExecutions,
       htrGuardian: htrGuardianPhase.htrGuardian,
+      htrBreachCancellation: htrGuardianPhase.htrBreachCancellation,
       htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
       hypothesisSessionState: evaluation.hypothesisSessionState,
     };
@@ -681,6 +722,7 @@ export async function runPaperCycleOnce(
     guardian: guardianPhase.guardianResult,
     guardianExecutions: guardianPhase.guardianExecutions,
     htrGuardian: htrGuardianPhase.htrGuardian,
+    htrBreachCancellation: htrGuardianPhase.htrBreachCancellation,
     htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
     hypothesisSessionState: evaluation.hypothesisSessionState,
   };

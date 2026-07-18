@@ -25,6 +25,7 @@ import {
   evaluateHtrGuardianCycle,
   type HtrGuardianCycleResult,
 } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
+import type { BreachCancellationResultV1 } from "@/lib/trader/execution/execution-service.types";
 import type { HtrGuardianExitReasonV1 } from "@/lib/trader/guardian/htr-guardian-exit-taxonomy";
 import type { HtrGuardianBreachState } from "@/lib/trader/guardian/htr-guardian-exit-taxonomy";
 import type {
@@ -68,6 +69,7 @@ export type HtrRuntimeCallKind =
   | "WP19_RECONCILIATION_PASS"
   | "WP19_RECONCILIATION_FAIL"
   | "WP20_GUARDIAN_EVALUATED"
+  | "WP20_BREACH_CANCELLATION_EXECUTED"
   | "WP20_DRAWDOWN_PERSISTED"
   | "CHECKPOINT_RESTORED"
   | "TERMINAL_EXPORT";
@@ -89,6 +91,8 @@ export type HtrAccountingCycleBridge = {
   cashEvents: HtrAccountingCashEvent[];
   callOrder: HtrRuntimeCallEvent[];
   lastGuardianCycle: HtrGuardianCycleResult | null;
+  lastBreachCancellation: BreachCancellationResultV1 | null;
+  breachCancellationFailed: boolean;
   breachState: HtrGuardianBreachState;
   guardianReason: HtrGuardianExitReasonV1 | null;
   runTerminated: boolean;
@@ -447,6 +451,8 @@ export function createHtrAccountingCycleBridge(input: {
     cashEvents: [],
     callOrder: [],
     lastGuardianCycle: null,
+    lastBreachCancellation: null,
+    breachCancellationFailed: false,
     breachState: "NONE",
     guardianReason: null,
     runTerminated: false,
@@ -609,6 +615,28 @@ export function evaluateHtrGuardianForBridge(
     detail: cycle.breachState,
   });
   return cycle;
+}
+
+export function recordBreachCancellationOnBridge(
+  bridge: HtrAccountingCycleBridge,
+  result: BreachCancellationResultV1,
+  cycleIndex: number,
+): void {
+  assertBridgeActive(bridge);
+  bridge.lastBreachCancellation = result;
+  bridge.breachCancellationFailed = result.breachCancellationFailed;
+  recordRuntimeCall(bridge, "WP20_BREACH_CANCELLATION_EXECUTED", {
+    cycleIndex,
+    detail: result.breachCancellationFailed
+      ? `failed:${result.failedOrderIds.join(",")}`
+      : `cancelled:${result.cancelledOrderIds.join(",")}`,
+  });
+}
+
+export function getHtrGuardianCycleForCancellation(
+  bridge: HtrAccountingCycleBridge,
+): HtrGuardianCycleResult | null {
+  return bridge.lastGuardianCycle;
 }
 
 export function derivePortfolioFromAccountingState(input: {

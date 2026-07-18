@@ -234,11 +234,17 @@ export function createWp17PersistencePort(
     },
     async transitionOrderCancelled(context, order) {
       const current = await latestOrder(context, order.id);
-      const cancelRequested = await repo.transitionOrder(context, {
-        orderId: current.id,
-        expectedStateVersion: current.stateVersion,
-        toState: "CANCEL_REQUESTED",
-      });
+      if (current.state === "CANCELLED") {
+        return current;
+      }
+      const cancelRequested =
+        current.state === "CANCEL_REQUESTED"
+          ? current
+          : await repo.transitionOrder(context, {
+              orderId: current.id,
+              expectedStateVersion: current.stateVersion,
+              toState: "CANCEL_REQUESTED",
+            });
       return repo.transitionOrder(context, {
         orderId: cancelRequested.id,
         expectedStateVersion: cancelRequested.stateVersion,

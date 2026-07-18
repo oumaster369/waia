@@ -16,6 +16,15 @@ import type {
   SimulatedFillEvent,
 } from "@/lib/trader/execution/historical-execution-model.types";
 import type { HistoricalSimulatedExchange } from "@/lib/trader/execution/historical-simulated-exchange";
+import type { BreachOrderCancelOutcome } from "@/lib/trader/guardian/htr-breach-partial-entry-cancellation";
+
+export type BreachCancellationResultV1 = {
+  cancelledOrderIds: string[];
+  failedOrderIds: string[];
+  idempotentSkipped: string[];
+  deterministicOrder: string[];
+  breachCancellationFailed: boolean;
+};
 
 export type HistoricalExecutionRuntime = {
   enabled: boolean;
@@ -95,4 +104,5 @@ export type OrderExecutionService = {
   ): Promise<OrderRow>;
   transitionOrderExpired?(context: OrgContext, order: OrderRow): Promise<OrderRow>;
   transitionOrderCancelled?(context: OrgContext, order: OrderRow): Promise<OrderRow>;
+  cancelOrderForBreach?(context: OrgContext, order: OrderRow): Promise<BreachOrderCancelOutcome>;
 };

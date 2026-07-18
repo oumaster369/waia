@@ -106,6 +106,7 @@ export type HistoricalSimulatedExchange = {
     ordersById: Map<string, OrderRow>,
   ): void;
   listOpenOrders(): ReadonlyArray<OpenHistoricalOrder>;
+  hasOpenOrder?(orderId: string): boolean;
 };
 
 function requireFiniteNonNegativeVolume(volume: string, symbol: string): string {
@@ -175,6 +176,10 @@ export function createHistoricalSimulatedExchange(
       requestedAtTs,
       cancelEffectiveTs: requestedAtTs + cancelLatencyMs,
     };
+  }
+
+  function hasOpenOrder(orderId: string): boolean {
+    return openOrders.has(orderId);
   }
 
   function buildCheckpointSlice(): HistoricalExecutionCheckpointSlice {
@@ -334,7 +339,25 @@ export function createHistoricalSimulatedExchange(
     buildCheckpointSlice,
     restoreFromCheckpointSlice,
     listOpenOrders: () => [...openOrders.values()],
+    hasOpenOrder,
   };
+}
+
+export function requestHistoricalBreachCancelIfOpen(
+  exchange: HistoricalSimulatedExchange,
+  orderId: string,
+  requestedAtTs: number,
+  cancelLatencyMs: number,
+): boolean {
+  const isOpen =
+    typeof exchange.hasOpenOrder === "function"
+      ? exchange.hasOpenOrder(orderId)
+      : exchange.listOpenOrders().some((entry) => entry.order.id === orderId);
+  if (!isOpen) {
+    return false;
+  }
+  exchange.requestCancel(orderId, requestedAtTs, cancelLatencyMs);
+  return true;
 }
 
 export async function advanceHistoricalExecutionOnClosedBar(

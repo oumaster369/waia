@@ -40,6 +40,7 @@ import {
 } from "@/lib/trader/backtest/replay-substrate-mode";
 import { resetFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
 import {
+  createFhvTraceEvidenceSink,
   NOOP_REPLAY_EVIDENCE_SINK,
   type ReplayEvidenceSink,
   type ReplayRetentionMode,
@@ -92,10 +93,11 @@ import type {
 import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
 import { computeAccountingSemanticDigest } from "@/lib/trader/accounting";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { PaperPnLMarkPrices } from "@/lib/trader/paper/paper-pnl.types";
 import type { PaperPnLWindow } from "@/lib/trader/paper/paper-pnl-period.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
-import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-contract";
 import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
 import {
   isHistoricalProfileActive,
@@ -120,6 +122,7 @@ import type { ConfidenceUpdateSink } from "@/lib/trader/knowledge/knowledge-conf
 import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
 import type { Wp21CheckpointState } from "@/lib/trader/intelligence/outcome-resolution/wp21-checkpoint-state";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 export type RunBacktestInput = {
   context: OrgContext;
@@ -208,6 +211,12 @@ export type RunBacktestInput = {
   htrDrawdownPersistence?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrDrawdownPersistencePort;
   /** DEE-415 C-A1: restored drawdown HWM slice for replay resume validation. */
   initialDrawdownHwmState?: ReplayDrawdownHwmState;
+  /** DEE-415 C-A4: FHV semantic trace + report emission (replaces NOOP evidence sink). */
+  fhvObservability?: Readonly<{
+    runLogRoot: string;
+    resumeSeq?: number;
+    provenance?: import("@/lib/trader/readiness/htr-operator-report-schema.v1").HtrOperatorReportProvenanceSection;
+  }>;
 };
 
 export type RunBacktestResult = {
@@ -419,7 +428,38 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   const costAwareRepository = activeRepository;
   const benchmarkObserver = input.benchmarkObserver ?? NOOP_REPLAY_BENCHMARK_OBSERVER;
   const retentionMode = input.retentionMode ?? "FULL";
-  const evidenceSink = input.evidenceSink ?? NOOP_REPLAY_EVIDENCE_SINK;
+  let finalizeAccountingState: AccountingStateV1 | undefined;
+  const evidenceSink =
+    input.evidenceSink ??
+    (input.fhvObservability
+      ? createFhvTraceEvidenceSink({
+          runLogRoot: input.fhvObservability.runLogRoot,
+          organizationId: input.context.organizationId,
+          accountKey: input.accountKey,
+          runId: input.runId,
+          resumeSeq: input.fhvObservability.resumeSeq,
+          provenance: input.fhvObservability.provenance ?? {
+            codeSha: "unknown",
+            dirtyTree: false,
+            datasetManifestDigest: input.datasetId,
+            runConfigDigest: computeSemanticSha256Hex({
+              runId: input.runId,
+              strategyId: input.strategyId,
+              strategyVersion: input.strategyVersion,
+            }),
+            strategyVersions: [`${input.strategyId}@${input.strategyVersion}`],
+            costModelVersion: input.costModel.version,
+            riskPolicyVersion: "htr-wp16-d20-drawdown/v1",
+            initialPortfolioDigest: HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
+          },
+          getFinalizeContext: () =>
+            finalizeAccountingState
+              ? {
+                  accountingState: finalizeAccountingState,
+                }
+              : undefined,
+        })
+      : NOOP_REPLAY_EVIDENCE_SINK);
 
   const cycleResults: PaperCycleResult[] = [];
   let cycleCount = 0;
@@ -675,6 +715,19 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         runId: input.runId,
         costModel: input.costModel,
         htrAccounting: htrAccounting ?? undefined,
+        htrBreachCancellation:
+          wp17Active && input.historicalExecutionProfile
+            ? {
+                historicalExchange: input.historicalExecutionProfile.exchange,
+                cancelLatencyMs: input.historicalExecutionProfile.model.cancelLatencyMs,
+                replayNowMs: () =>
+                  new Date(
+                    snapshot.evaluatedAt ??
+                      snapshot.bars.at(-1)?.barCloseTime ??
+                      snapshot.quote.timestamp,
+                  ).getTime(),
+              }
+            : undefined,
       });
     } catch (error) {
       if (error instanceof HtrAccountingReconciliationTerminationError) {
@@ -879,6 +932,8 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   ]);
   evidenceExportTimer.end();
   benchmarkObserver.sampleMemory("evidence-export", null);
+
+  finalizeAccountingState = htrAccountingBridge?.state;
 
   let streamingManifestRef: StreamingEvidenceManifestRef | undefined;
   const sealMode = input.evidenceSealMode ?? "complete";

@@ -34,6 +34,10 @@ export type HtrGuardianCycleResult = {
   permitRiskReducingExit: boolean;
 };
 
+export function requiresHtrPartialEntryCancellation(cycle: HtrGuardianCycleResult): boolean {
+  return cycle.cancelPartialEntry;
+}
+
 export function evaluateHtrGuardianCycle(input: HtrGuardianCycleInput): HtrGuardianCycleResult {
   try {
     assertAccountingReconciliation(input.reconciliation);
