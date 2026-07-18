@@ -18,6 +18,10 @@ export type StrategyAttributionKey = {
   strategyVersion: string;
 };
 
+export function buildStrategyAttributionKey(strategyId: string, strategyVersion: string): string {
+  return `${strategyId}:${strategyVersion}`;
+}
+
 export const FHV_V0_TOTAL_VIRTUAL_EQUITY_USDT = HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT;
 export const FHV_V0_LSR_ALLOCATION_USDT = "50000";
 export const FHV_V0_MR_ALLOCATION_USDT = "50000";

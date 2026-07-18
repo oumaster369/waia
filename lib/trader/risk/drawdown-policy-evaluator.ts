@@ -1,4 +1,9 @@
-import { compareDecimal, parseDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
+import {
+  compareDecimal,
+  formatDecimal,
+  parseDecimal,
+  subtractDecimal,
+} from "@/lib/trader/risk/numeric";
 import {
   DEFAULT_D20_DRAWDOWN_POLICY,
   type DrawdownBreachState,
@@ -35,6 +40,45 @@ export function computePeakEquityDrawdownBps(equityUsdt: string, peakHwm: string
   }
   const bps = (drawdownScaled * 10000n) / peakScaled;
   return Number(bps);
+}
+
+export function resolveDominantStrategyDrawdown(input: {
+  strategyDrawdownBpsByKey: Record<string, number>;
+  strategyPeakHwmByKey: Record<string, string>;
+}): {
+  strategyDrawdownBps?: number;
+  strategyEquityUsdt?: string;
+  strategyPeakHwm?: string;
+} {
+  let worstBps = -1;
+  let worstKey: string | undefined;
+  for (const [key, bps] of Object.entries(input.strategyDrawdownBpsByKey)) {
+    if (bps > worstBps) {
+      worstBps = bps;
+      worstKey = key;
+    }
+  }
+  if (worstKey == null || worstBps < 0) {
+    return {};
+  }
+  const strategyPeakHwm = input.strategyPeakHwmByKey[worstKey];
+  if (!strategyPeakHwm) {
+    return { strategyDrawdownBps: worstBps };
+  }
+  if (worstBps === 0) {
+    return {
+      strategyDrawdownBps: 0,
+      strategyEquityUsdt: strategyPeakHwm,
+      strategyPeakHwm,
+    };
+  }
+  const peakScaled = parseDecimal(strategyPeakHwm);
+  const drawdownScaled = (peakScaled * BigInt(worstBps)) / 10000n;
+  return {
+    strategyDrawdownBps: worstBps,
+    strategyEquityUsdt: formatDecimal(peakScaled - drawdownScaled),
+    strategyPeakHwm,
+  };
 }
 
 export function isDrawdownBreach(drawdownBps: number, limitBps: number): boolean {

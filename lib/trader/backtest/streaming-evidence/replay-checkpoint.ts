@@ -43,7 +43,10 @@ export type ReplayDrawdownHwmState = {
   monthlyPeakHwm: string;
   monthKey: string;
   breachState: "NONE" | "CLOSE_ONLY" | "STOP_ACCOUNT";
-  strategyPeaks?: Readonly<Record<string, string>>;
+  strategyPeaks: Readonly<Record<string, string>>;
+  strategyDrawdownBpsByKey: Readonly<Record<string, number>>;
+  monthlyDrawdownBps: number;
+  accountDrawdownBps: number;
 };
 
 export type ReplayAccountingFrontierState = {
@@ -52,7 +55,12 @@ export type ReplayAccountingFrontierState = {
   cash: string;
   equity: string;
   equityHwm: string;
+  monthlyPeakHwm: string;
+  monthKey: string;
   accountDrawdownBps: number;
+  monthlyDrawdownBps: number;
+  strategyPeakHwmByKey: Record<string, string>;
+  strategyDrawdownBpsByKey: Record<string, number>;
   marksJson: Record<string, { price: string; barCloseTime: string }>;
   positionsJson: Record<
     string,
@@ -71,7 +79,12 @@ export function buildReplayAccountingFrontierState(input: {
   cash: string;
   equity: string;
   equityHwm: string;
+  monthlyPeakHwm: string;
+  monthKey: string;
   accountDrawdownBps: number;
+  monthlyDrawdownBps: number;
+  strategyPeakHwmByKey: Record<string, string>;
+  strategyDrawdownBpsByKey: Record<string, number>;
   marksJson: Record<string, { price: string; barCloseTime: string }>;
   positionsJson: Record<
     string,

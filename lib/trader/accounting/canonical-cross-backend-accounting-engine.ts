@@ -8,8 +8,14 @@ import {
   updateDrawdownHighWaterMarks,
 } from "@/lib/trader/risk/drawdown-policy-evaluator";
 import {
+  buildStrategyAttributionKey,
+  computeStrategyEquity,
+  computeVirtualStrategyAllocations,
+} from "@/lib/trader/risk/strategy-attribution";
+import {
   addDecimal,
   compareDecimal,
+  divideDecimal,
   formatDecimal,
   multiplyDecimal,
   parseDecimal,
@@ -70,6 +76,97 @@ function truncateAllocateBasis(basis: string, soldQty: string, preQty: string): 
   return formatDecimal(allocated);
 }
 
+function emptyDrawdownMaps(): {
+  strategyPeakHwmByKey: Record<string, string>;
+  strategyDrawdownBpsByKey: Record<string, number>;
+} {
+  return { strategyPeakHwmByKey: {}, strategyDrawdownBpsByKey: {} };
+}
+
+function initialStrategyPeaksFromAllocations(startingEquity: string): Record<string, string> {
+  const allocations = computeVirtualStrategyAllocations({ totalVirtualEquityUsdt: startingEquity });
+  const peaks: Record<string, string> = {};
+  for (const [key, allocation] of Object.entries(allocations)) {
+    if (compareDecimal(allocation, "0") > 0) {
+      peaks[key] = allocation;
+    }
+  }
+  return peaks;
+}
+
+function updateStrategyDrawdownMaps(input: {
+  equityUsdt: string;
+  strategyPeakHwmByKey: Record<string, string>;
+  strategyDrawdownBpsByKey: Record<string, number>;
+}): {
+  strategyPeakHwmByKey: Record<string, string>;
+  strategyDrawdownBpsByKey: Record<string, number>;
+} {
+  const allocations = computeVirtualStrategyAllocations();
+  const totalAllocation = Object.values(allocations).reduce(
+    (sum, value) => addDecimal(sum, value),
+    "0",
+  );
+  const strategyPeakHwmByKey = { ...input.strategyPeakHwmByKey };
+  const strategyDrawdownBpsByKey = { ...input.strategyDrawdownBpsByKey };
+  for (const [rawKey, allocation] of Object.entries(allocations)) {
+    if (compareDecimal(allocation, "0") <= 0) {
+      continue;
+    }
+    const [strategyId, strategyVersion] = rawKey.split("@");
+    if (!strategyId || !strategyVersion) {
+      continue;
+    }
+    const attrKey = buildStrategyAttributionKey(strategyId, strategyVersion);
+    const prorataEquity =
+      compareDecimal(totalAllocation, "0") > 0
+        ? divideDecimal(multiplyDecimal(input.equityUsdt, allocation), totalAllocation)
+        : allocation;
+    const strategyEquity = computeStrategyEquity({
+      allocationUsdt: allocation,
+      cumulativeRealizedNetPnlUsdt: subtractDecimal(prorataEquity, allocation),
+      pointInTimeUnrealizedNetPnlUsdt: "0",
+      attributableCostsUsdt: "0",
+    });
+    const priorPeak = strategyPeakHwmByKey[attrKey] ?? allocation;
+    const nextPeak = compareDecimal(strategyEquity, priorPeak) > 0 ? strategyEquity : priorPeak;
+    strategyPeakHwmByKey[attrKey] = nextPeak;
+    strategyDrawdownBpsByKey[attrKey] = computePeakEquityDrawdownBps(strategyEquity, nextPeak);
+  }
+  return { strategyPeakHwmByKey, strategyDrawdownBpsByKey };
+}
+
+function applyEquityDrawdownState(
+  state: AccountingStateV1,
+  equityUsdt: string,
+  frontierAsOf: string,
+): AccountingStateV1 {
+  const monthKey = resolveMonthKeyUtc(frontierAsOf);
+  const hwm = updateDrawdownHighWaterMarks({
+    equityUsdt,
+    accountPeakHwm: state.equityHwm,
+    monthlyPeakHwm: state.monthlyPeakHwm,
+    priorMonthKey: state.monthKey,
+    monthKey,
+  });
+  const strategyMaps = updateStrategyDrawdownMaps({
+    equityUsdt,
+    strategyPeakHwmByKey: state.strategyPeakHwmByKey,
+    strategyDrawdownBpsByKey: state.strategyDrawdownBpsByKey,
+  });
+  return {
+    ...state,
+    equity: equityUsdt,
+    equityHwm: hwm.accountPeakHwm,
+    monthlyPeakHwm: hwm.monthlyPeakHwm,
+    monthKey,
+    accountDrawdownBps: computePeakEquityDrawdownBps(equityUsdt, hwm.accountPeakHwm),
+    monthlyDrawdownBps: computePeakEquityDrawdownBps(equityUsdt, hwm.monthlyPeakHwm),
+    strategyPeakHwmByKey: strategyMaps.strategyPeakHwmByKey,
+    strategyDrawdownBpsByKey: strategyMaps.strategyDrawdownBpsByKey,
+  };
+}
+
 function zeroFlatPosition(position: SymbolPositionBasis): void {
   if (compareDecimal(position.quantity, "0") === 0) {
     position.grossPositionBasis = "0";
@@ -87,6 +184,15 @@ export function createInitialAccountingState(input: {
   const startingCash = input.startingCash ?? HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT;
   const frontierAsOf = input.frontierAsOf ?? new Date(0).toISOString();
   const monthKey = resolveMonthKeyUtc(frontierAsOf);
+  const strategyPeaks = initialStrategyPeaksFromAllocations(startingCash);
+  const strategyPeaksByAttrKey: Record<string, string> = {};
+  for (const [rawKey, allocation] of Object.entries(strategyPeaks)) {
+    const [strategyId, strategyVersion] = rawKey.split("@");
+    if (strategyId && strategyVersion) {
+      strategyPeaksByAttrKey[buildStrategyAttributionKey(strategyId, strategyVersion)] = allocation;
+    }
+  }
+  const { strategyDrawdownBpsByKey } = emptyDrawdownMaps();
   return {
     schemaVersion: ACCOUNTING_FRONTIER_SCHEMA_VERSION,
     engineId: ACCOUNTING_ENGINE_ID,
@@ -105,6 +211,10 @@ export function createInitialAccountingState(input: {
     markedPositionValue: "0",
     equity: startingCash,
     equityHwm: startingCash,
+    monthlyPeakHwm: startingCash,
+    monthlyDrawdownBps: 0,
+    strategyPeakHwmByKey: strategyPeaksByAttrKey,
+    strategyDrawdownBpsByKey,
     accountDrawdownBps: 0,
     consumedFillIds: [],
   };
@@ -202,18 +312,7 @@ export function attachAccountingMarks(
   }
   next.markedPositionValue = markedPositionValue;
   next.equity = addDecimal(next.cash, markedPositionValue);
-  const monthKey = resolveMonthKeyUtc(frontierAsOf);
-  const hwm = updateDrawdownHighWaterMarks({
-    equityUsdt: next.equity,
-    accountPeakHwm: state.equityHwm,
-    monthlyPeakHwm: state.equityHwm,
-    priorMonthKey: state.monthKey,
-    monthKey,
-  });
-  next.equityHwm = hwm.accountPeakHwm;
-  next.monthKey = monthKey;
-  next.accountDrawdownBps = computePeakEquityDrawdownBps(next.equity, next.equityHwm);
-  return next;
+  return applyEquityDrawdownState(next, next.equity, frontierAsOf);
 }
 
 export function computeAccountingSemanticDigest(state: AccountingStateV1): string {
@@ -242,6 +341,10 @@ export function computeAccountingSemanticDigest(state: AccountingStateV1): strin
         markedPositionValue: state.markedPositionValue,
         equity: state.equity,
         equityHwm: state.equityHwm,
+        monthlyPeakHwm: state.monthlyPeakHwm,
+        monthlyDrawdownBps: state.monthlyDrawdownBps,
+        strategyPeakHwmByKey: state.strategyPeakHwmByKey,
+        strategyDrawdownBpsByKey: state.strategyDrawdownBpsByKey,
         accountDrawdownBps: state.accountDrawdownBps,
       }),
       "utf8",
@@ -272,17 +375,7 @@ export function advanceAccountingFrontier(
       markedPositionValue: "0",
       marks: {},
     };
-    const monthKey = resolveMonthKeyUtc(input.frontierAsOf);
-    const hwm = updateDrawdownHighWaterMarks({
-      equityUsdt: state.equity,
-      accountPeakHwm: state.equityHwm,
-      monthlyPeakHwm: state.equityHwm,
-      priorMonthKey: state.monthKey,
-      monthKey,
-    });
-    state.equityHwm = hwm.accountPeakHwm;
-    state.monthKey = monthKey;
-    state.accountDrawdownBps = computePeakEquityDrawdownBps(state.equity, state.equityHwm);
+    state = applyEquityDrawdownState(state, state.equity, input.frontierAsOf);
   }
 
   const nextSequence = state.accountingSequence + 1;

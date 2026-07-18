@@ -71,17 +71,24 @@ import {
 import {
   attachClosed1mMarkToAccountingBridge,
   consumeWp17FillIntoAccountingBridge,
+  compareReplayDrawdownHwmState,
+  createDrawdownPersistenceSession,
   createHtrAccountingCycleBridge,
   deriveAccountRiskStateFromBridge,
+  hydrateBridgeDrawdownFromPersistence,
   HtrAccountingReconciliationTerminationError,
   restoreAccountingBridgeFromCheckpoint,
   runAutomaticAccountingReconciliation,
   toAccountingCheckpointSlice,
+  toDrawdownHwmCheckpointSlice,
   type HtrAccountingCycleBridge,
   type HtrAccountingCycleContext,
 } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
-import type { ReplayAccountingFrontierState } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import type {
+  ReplayAccountingFrontierState,
+  ReplayDrawdownHwmState,
+} from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
 import { computeAccountingSemanticDigest } from "@/lib/trader/accounting";
@@ -197,6 +204,10 @@ export type RunBacktestInput = {
   cycleIdPrefix?: string;
   /** HTR-WP18: restored accounting frontier for checkpoint resume. */
   initialAccountingFrontierState?: ReplayAccountingFrontierState;
+  /** DEE-415 C-A1: Option-B drawdown persistence (0094/0096). */
+  htrDrawdownPersistence?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrDrawdownPersistencePort;
+  /** DEE-415 C-A1: restored drawdown HWM slice for replay resume validation. */
+  initialDrawdownHwmState?: ReplayDrawdownHwmState;
 };
 
 export type RunBacktestResult = {
@@ -217,6 +228,7 @@ export type RunBacktestResult = {
   accountingState?: AccountingStateV1;
   htrPnlReportV1?: HtrPnlReportV1;
   accountingFrontierState?: ReplayAccountingFrontierState;
+  drawdownHwmState?: ReplayDrawdownHwmState;
   htrRuntimeCallOrder?: HtrAccountingCycleBridge["callOrder"];
   /** HTR-WP21: terminal checkpoint state after epistemic closure. */
   wp21CheckpointState?: Wp21CheckpointState;
@@ -322,6 +334,7 @@ function buildHtrAccountingContext(input: {
   bridge: HtrAccountingCycleBridge;
   context: OrgContext;
   orderRepository: OrderRepository;
+  drawdownPersistence?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrDrawdownPersistencePort;
 }): HtrAccountingCycleContext {
   return {
     bridge: input.bridge,
@@ -330,6 +343,12 @@ function buildHtrAccountingContext(input: {
         context: input.context,
         orderRepository: input.orderRepository,
       }),
+    drawdownPersistence: input.drawdownPersistence
+      ? {
+          port: input.drawdownPersistence,
+          session: createDrawdownPersistenceSession(),
+        }
+      : undefined,
   };
 }
 
@@ -373,6 +392,16 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       orderRepository: input.orderRepository,
       phase: "checkpoint_restore",
     });
+    if (input.initialDrawdownHwmState) {
+      compareReplayDrawdownHwmState(
+        input.initialDrawdownHwmState,
+        toDrawdownHwmCheckpointSlice(htrAccountingBridge),
+      );
+    }
+  }
+
+  if (htrAccountingBridge && input.htrDrawdownPersistence) {
+    await hydrateBridgeDrawdownFromPersistence(htrAccountingBridge, input.htrDrawdownPersistence);
   }
 
   const htrAccounting =
@@ -381,6 +410,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       bridge: htrAccountingBridge,
       context: input.context,
       orderRepository: input.orderRepository,
+      drawdownPersistence: input.htrDrawdownPersistence,
     });
 
   const activeRepository = wp17Active
@@ -507,7 +537,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
                   portfolio,
                   openOrderCount: openOrders.length,
                   accountPeakHwm: htrAccountingBridge.state.equityHwm,
-                  monthlyPeakHwm: htrAccountingBridge.state.equityHwm,
+                  monthlyPeakHwm: htrAccountingBridge.state.monthlyPeakHwm,
                 });
               }
               return deriveAccountRiskStateFromBridge(htrAccountingBridge, {
@@ -576,7 +606,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
             portfolio,
             openOrderCount: openOrders.length,
             accountPeakHwm: htrAccountingBridge.state.equityHwm,
-            monthlyPeakHwm: htrAccountingBridge.state.equityHwm,
+            monthlyPeakHwm: htrAccountingBridge.state.monthlyPeakHwm,
           });
         } else {
           accountState = deriveAccountRiskStateFromBridge(htrAccountingBridge, {
@@ -733,7 +763,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           portfolio,
           openOrderCount: openOrders.length,
           accountPeakHwm: htrAccountingBridge.state.equityHwm,
-          monthlyPeakHwm: htrAccountingBridge.state.equityHwm,
+          monthlyPeakHwm: htrAccountingBridge.state.monthlyPeakHwm,
         });
       } else if (htrAccountingBridge) {
         accountState = deriveAccountRiskStateFromBridge(htrAccountingBridge, {
@@ -887,6 +917,9 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     htrPnlReportV1: exportBundle.htrPnlReportV1,
     accountingFrontierState: htrAccountingBridge
       ? toAccountingCheckpointSlice(htrAccountingBridge)
+      : undefined,
+    drawdownHwmState: htrAccountingBridge
+      ? toDrawdownHwmCheckpointSlice(htrAccountingBridge)
       : undefined,
     htrRuntimeCallOrder: htrAccountingBridge?.callOrder,
     wp21CheckpointState,

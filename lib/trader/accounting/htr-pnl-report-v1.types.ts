@@ -21,7 +21,10 @@ export type HtrPnlReportV1 = {
   netUnrealizedPnlUsdt: string;
   totalExecutionCostUsdt: string;
   accountDrawdownBps: number;
+  monthlyDrawdownBps: number;
   equityHwmUsdt: string;
+  monthlyPeakHwmUsdt: string;
+  strategyDrawdownBpsByKey: Record<string, number>;
   terminalOpenPositions: HtrPnlReportTerminalOpenPositionV1[];
   accountingSequence: number;
   semanticDigest: string;

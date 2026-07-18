@@ -56,7 +56,7 @@ export function toAccountRiskState(input: ToAccountRiskStateInput): Wp16AccountR
     openPositionCount: portfolio.openPositionCount,
     projectedOrderRiskUsdt: "0",
     accountPeakHwm: input.accountPeakHwm ?? portfolio.equityUsdt,
-    monthlyPeakHwm: input.monthlyPeakHwm ?? input.accountPeakHwm ?? portfolio.equityUsdt,
+    monthlyPeakHwm: input.monthlyPeakHwm ?? portfolio.equityUsdt,
   };
 }
 

@@ -9,7 +9,17 @@ import { and, desc, eq } from "drizzle-orm";
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { AccountDrawdownState } from "@/lib/trader/risk/drawdown-policy.types";
+import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
+import type { HtrGuardianBreachState } from "@/lib/trader/guardian/htr-guardian-exit-taxonomy";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
+import type {
+  HtrDrawdownPersistencePort,
+  HtrDrawdownResumeMode,
+} from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
+import {
+  appendStrategyDrawdownCheckpoint,
+  createStrategyDrawdownRepositoryPostgres,
+} from "@/lib/trader/risk/strategy-drawdown-repository-postgres";
 import {
   orgScopedWhere,
   requireOrgContext,
@@ -170,6 +180,77 @@ export function createAccountDrawdownRepositoryPostgres(
         throw new Error("[wp16] account drawdown checkpoint insert failed");
       }
       return mapRow(rows[0]);
+    },
+  };
+}
+
+export function buildAccountDrawdownCheckpointFromBridgeState(input: {
+  state: AccountingStateV1;
+  portfolioId: string;
+  seq: number;
+  id: string;
+  breachState: HtrGuardianBreachState;
+}): AppendAccountDrawdownCheckpointInput {
+  return {
+    id: input.id,
+    accountKey: input.state.accountKey,
+    portfolioId: input.portfolioId,
+    runId: input.state.runId,
+    seq: input.seq,
+    asOf: input.state.frontierAsOf,
+    monthKey: input.state.monthKey,
+    equityUsdt: input.state.equity,
+    accountPeakHwm: input.state.equityHwm,
+    monthlyPeakHwm: input.state.monthlyPeakHwm,
+    accountDrawdownBps: input.state.accountDrawdownBps,
+    monthlyDrawdownBps: input.state.monthlyDrawdownBps,
+    breachState: input.breachState,
+  };
+}
+
+export function createHtrDrawdownPersistencePortPostgres(input: {
+  db: PgReadExecutor & PgWriteExecutor & Partial<Pick<WaiaPostgresDb, "transaction">>;
+  context: OrgContext;
+  portfolioId: string;
+  accountKey: string;
+  runId: string;
+  resumeMode: HtrDrawdownResumeMode;
+  newCheckpointId: HtrDrawdownPersistencePort["newCheckpointId"];
+}): HtrDrawdownPersistencePort {
+  const accountRepo = createAccountDrawdownRepositoryPostgres(input.db);
+  const strategyRepo = createStrategyDrawdownRepositoryPostgres(input.db);
+  return {
+    portfolioId: input.portfolioId,
+    resumeMode: input.resumeMode,
+    organizationId: input.context.organizationId,
+    accountKey: input.accountKey,
+    runId: input.runId,
+    loadAccountCheckpoint: () =>
+      accountRepo.loadLatest(input.context, {
+        accountKey: input.accountKey,
+        portfolioId: input.portfolioId,
+        runId: input.runId,
+      }),
+    loadStrategyCheckpoint: (strategyId, strategyVersion) =>
+      strategyRepo.loadLatest(input.context, {
+        accountKey: input.accountKey,
+        portfolioId: input.portfolioId,
+        runId: input.runId,
+        strategyId,
+        strategyVersion,
+      }),
+    appendAccountCheckpoint: async (row) => {
+      await appendAccountDrawdownCheckpoint(accountRepo, input.context, row);
+    },
+    appendStrategyCheckpoint: async (row) => {
+      await appendStrategyDrawdownCheckpoint(strategyRepo, input.context, row);
+    },
+    newCheckpointId: input.newCheckpointId,
+    runInTransaction: async (fn) => {
+      if (typeof input.db.transaction === "function") {
+        return input.db.transaction(async () => fn());
+      }
+      return fn();
     },
   };
 }

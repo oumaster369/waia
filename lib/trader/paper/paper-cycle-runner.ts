@@ -8,6 +8,7 @@ import {
   deriveAccountRiskStateFromBridge,
   derivePortfolioFromAccountingState,
   evaluateHtrGuardianForBridge,
+  persistDrawdownCycleAfterGuardian,
   runAutomaticAccountingReconciliation,
 } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import { compareDecimal } from "@/lib/trader/risk/numeric";
@@ -144,7 +145,7 @@ async function refreshAccountStateIfConfigured(
         portfolio,
         openOrderCount: openOrders.length,
         accountPeakHwm: input.htrAccounting.bridge.state.equityHwm,
-        monthlyPeakHwm: input.htrAccounting.bridge.state.equityHwm,
+        monthlyPeakHwm: input.htrAccounting.bridge.state.monthlyPeakHwm,
       });
     }
     return deriveAccountRiskStateFromBridge(input.htrAccounting.bridge, {
@@ -210,6 +211,15 @@ async function runHtrGuardianPhase(
 
   if (htrGuardian.breachState !== "NONE" && input.htrAccounting.bridge.guardianReason) {
     input.htrAccounting.bridge.guardianReason = htrGuardian.reason;
+  }
+
+  if (input.htrAccounting.drawdownPersistence) {
+    await persistDrawdownCycleAfterGuardian(
+      input.htrAccounting.bridge,
+      input.htrAccounting.drawdownPersistence.port,
+      input.htrAccounting.drawdownPersistence.session,
+      cycleIndex ?? 0,
+    );
   }
 
   return { htrGuardian, accountState };

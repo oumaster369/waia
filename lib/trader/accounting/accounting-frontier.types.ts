@@ -39,8 +39,23 @@ export type AccountingStateV1 = {
   markedPositionValue: string;
   equity: string;
   equityHwm: string;
+  monthlyPeakHwm: string;
+  monthlyDrawdownBps: number;
+  strategyPeakHwmByKey: Record<string, string>;
+  strategyDrawdownBpsByKey: Record<string, number>;
   accountDrawdownBps: number;
   consumedFillIds: string[];
+};
+
+/** In-memory drawdown authority aligned with 0094/0096 checkpoint semantics (C-A1). */
+export type DrawdownHotPathStateV1 = {
+  accountPeakHwm: string;
+  monthlyPeakHwm: string;
+  monthKey: string;
+  strategyPeakHwmByKey: Record<string, string>;
+  accountDrawdownBps: number;
+  monthlyDrawdownBps: number;
+  strategyDrawdownBpsByKey: Record<string, number>;
 };
 
 export type AccountingFrontierV1 = AccountingStateV1 & {

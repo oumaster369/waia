@@ -17,7 +17,10 @@ import type {
 } from "@/lib/trader/accounting/accounting-frontier.types";
 import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
-import type { ReplayAccountingFrontierState } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import type {
+  ReplayAccountingFrontierState,
+  ReplayDrawdownHwmState,
+} from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import {
   evaluateHtrGuardianCycle,
   type HtrGuardianCycleResult,
@@ -36,6 +39,20 @@ import { defaultStopDistanceProvider } from "@/lib/trader/portfolio/default-stop
 import { toAccountRiskState } from "@/lib/trader/portfolio/to-account-risk-state";
 import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-contract";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
+import { resolveDominantStrategyDrawdown } from "@/lib/trader/risk/drawdown-policy-evaluator";
+import type { AppendAccountDrawdownCheckpointInput } from "@/lib/trader/risk/account-drawdown-repository-postgres";
+import { buildAccountDrawdownCheckpointFromBridgeState } from "@/lib/trader/risk/account-drawdown-repository-postgres";
+import type { AppendStrategyDrawdownCheckpointInput } from "@/lib/trader/risk/strategy-drawdown-repository-postgres";
+import { buildStrategyDrawdownCheckpointsFromBridgeState } from "@/lib/trader/risk/strategy-drawdown-repository-postgres";
+import type {
+  AccountDrawdownState,
+  DrawdownBreachState,
+  StrategyDrawdownState,
+} from "@/lib/trader/risk/drawdown-policy.types";
+import {
+  buildStrategyAttributionKey,
+  computeVirtualStrategyAllocations,
+} from "@/lib/trader/risk/strategy-attribution";
 import {
   addDecimal,
   compareDecimal,
@@ -51,6 +68,7 @@ export type HtrRuntimeCallKind =
   | "WP19_RECONCILIATION_PASS"
   | "WP19_RECONCILIATION_FAIL"
   | "WP20_GUARDIAN_EVALUATED"
+  | "WP20_DRAWDOWN_PERSISTED"
   | "CHECKPOINT_RESTORED"
   | "TERMINAL_EXPORT";
 
@@ -82,7 +100,300 @@ export type HtrAccountingCycleBridge = {
 export type HtrAccountingCycleContext = {
   bridge: HtrAccountingCycleBridge;
   resolveInventoryOpenQtyBySymbol: () => Promise<Record<string, string>>;
+  drawdownPersistence?: {
+    port: HtrDrawdownPersistencePort;
+    session: HtrDrawdownPersistenceSession;
+  };
 };
+
+export type HtrDrawdownResumeMode = "fresh" | "resumable";
+
+export type HtrDrawdownHydrationErrorCode =
+  | "DRAWDOWN_MISSING_ACCOUNT_CHECKPOINT"
+  | "DRAWDOWN_MISSING_STRATEGY_CHECKPOINT"
+  | "DRAWDOWN_CHECKPOINT_IDENTITY_MISMATCH"
+  | "DRAWDOWN_CHECKPOINT_SEQ_GAP"
+  | "DRAWDOWN_CHECKPOINT_STALE"
+  | "DRAWDOWN_CHECKPOINT_DIVERGENT_RETRY";
+
+export class HtrDrawdownHydrationError extends Error {
+  readonly code: HtrDrawdownHydrationErrorCode;
+
+  constructor(code: HtrDrawdownHydrationErrorCode, message: string) {
+    super(message);
+    this.name = "HtrDrawdownHydrationError";
+    this.code = code;
+  }
+}
+
+export type HtrDrawdownPersistencePort = {
+  portfolioId: string;
+  resumeMode: HtrDrawdownResumeMode;
+  organizationId: string;
+  accountKey: string;
+  runId: string;
+  loadAccountCheckpoint: () => Promise<AccountDrawdownState | null>;
+  loadStrategyCheckpoint: (
+    strategyId: string,
+    strategyVersion: string,
+  ) => Promise<(StrategyDrawdownState & { strategyAllocationUsdt: string }) | null>;
+  appendAccountCheckpoint: (input: AppendAccountDrawdownCheckpointInput) => Promise<void>;
+  appendStrategyCheckpoint: (input: AppendStrategyDrawdownCheckpointInput) => Promise<void>;
+  newCheckpointId: (input: {
+    kind: "account" | "strategy";
+    attrKey?: string;
+    seq: number;
+  }) => string;
+  runInTransaction?: <T>(fn: () => Promise<T>) => Promise<T>;
+};
+
+export type HtrDrawdownPersistenceSession = {
+  lastAccountSeq: number;
+  lastAccountContentDigest: string | null;
+  lastStrategySeqByKey: Record<string, number>;
+  lastStrategyContentDigestByKey: Record<string, string>;
+};
+
+export function createDrawdownPersistenceSession(): HtrDrawdownPersistenceSession {
+  return {
+    lastAccountSeq: 0,
+    lastAccountContentDigest: null,
+    lastStrategySeqByKey: {},
+    lastStrategyContentDigestByKey: {},
+  };
+}
+
+function expectedTradeEligibleStrategyKeys(): string[] {
+  const allocations = computeVirtualStrategyAllocations();
+  const keys: string[] = [];
+  for (const [rawKey, allocation] of Object.entries(allocations)) {
+    if (compareDecimal(allocation, "0") <= 0) {
+      continue;
+    }
+    const [strategyId, strategyVersion] = rawKey.split("@");
+    if (!strategyId || !strategyVersion) {
+      continue;
+    }
+    keys.push(buildStrategyAttributionKey(strategyId, strategyVersion));
+  }
+  return keys.sort((a, b) => a.localeCompare(b));
+}
+
+function assertDrawdownCheckpointIdentity(
+  port: HtrDrawdownPersistencePort,
+  row: { organizationId: string; accountKey: string; portfolioId: string; runId: string },
+): void {
+  if (
+    row.organizationId !== port.organizationId ||
+    row.accountKey !== port.accountKey ||
+    row.portfolioId !== port.portfolioId ||
+    row.runId !== port.runId
+  ) {
+    throw new HtrDrawdownHydrationError(
+      "DRAWDOWN_CHECKPOINT_IDENTITY_MISMATCH",
+      "[htr/drawdown] checkpoint identity mismatch",
+    );
+  }
+}
+
+export function applyDrawdownCheckpointToBridge(
+  bridge: HtrAccountingCycleBridge,
+  input: {
+    account: AccountDrawdownState;
+    strategies: Array<StrategyDrawdownState & { strategyAllocationUsdt: string }>;
+  },
+): void {
+  bridge.state.equityHwm = input.account.accountPeakHwm;
+  bridge.state.monthlyPeakHwm = input.account.monthlyPeakHwm;
+  bridge.state.monthKey = input.account.monthKey;
+  bridge.state.accountDrawdownBps = input.account.accountDrawdownBps;
+  bridge.state.monthlyDrawdownBps = input.account.monthlyDrawdownBps;
+  bridge.breachState = input.account.breachState;
+
+  const strategyPeakHwmByKey: Record<string, string> = {};
+  const strategyDrawdownBpsByKey: Record<string, number> = {};
+  for (const row of input.strategies) {
+    const key = buildStrategyAttributionKey(row.strategyId, row.strategyVersion);
+    strategyPeakHwmByKey[key] = row.strategyPeakHwm;
+    strategyDrawdownBpsByKey[key] = row.strategyDrawdownBps;
+  }
+  bridge.state.strategyPeakHwmByKey = strategyPeakHwmByKey;
+  bridge.state.strategyDrawdownBpsByKey = strategyDrawdownBpsByKey;
+}
+
+export async function hydrateBridgeDrawdownFromPersistence(
+  bridge: HtrAccountingCycleBridge,
+  port: HtrDrawdownPersistencePort,
+): Promise<void> {
+  if (port.resumeMode === "fresh") {
+    return;
+  }
+
+  const account = await port.loadAccountCheckpoint();
+  if (!account) {
+    terminateBridgeRun(bridge, "DRAWDOWN_MISSING_ACCOUNT_CHECKPOINT");
+    throw new HtrDrawdownHydrationError(
+      "DRAWDOWN_MISSING_ACCOUNT_CHECKPOINT",
+      "[htr/drawdown] missing account drawdown checkpoint for resumable run",
+    );
+  }
+  assertDrawdownCheckpointIdentity(port, account);
+
+  const expectedKeys = expectedTradeEligibleStrategyKeys();
+  const strategies: Array<StrategyDrawdownState & { strategyAllocationUsdt: string }> = [];
+  for (const attrKey of expectedKeys) {
+    const [strategyId, strategyVersion] = attrKey.split(":");
+    if (!strategyId || !strategyVersion) {
+      continue;
+    }
+    const row = await port.loadStrategyCheckpoint(strategyId, strategyVersion);
+    if (!row) {
+      terminateBridgeRun(bridge, "DRAWDOWN_MISSING_STRATEGY_CHECKPOINT");
+      throw new HtrDrawdownHydrationError(
+        "DRAWDOWN_MISSING_STRATEGY_CHECKPOINT",
+        `[htr/drawdown] missing strategy checkpoint for ${attrKey}`,
+      );
+    }
+    assertDrawdownCheckpointIdentity(port, row);
+    if (row.seq !== account.seq) {
+      terminateBridgeRun(bridge, "DRAWDOWN_CHECKPOINT_SEQ_GAP");
+      throw new HtrDrawdownHydrationError(
+        "DRAWDOWN_CHECKPOINT_SEQ_GAP",
+        `[htr/drawdown] strategy/account seq mismatch for ${attrKey}`,
+      );
+    }
+    strategies.push(row);
+  }
+
+  applyDrawdownCheckpointToBridge(bridge, { account, strategies });
+  recordRuntimeCall(bridge, "CHECKPOINT_RESTORED", {
+    detail: `drawdown-seq-${account.seq}`,
+  });
+}
+
+export function compareReplayDrawdownHwmState(
+  expected: ReplayDrawdownHwmState,
+  actual: ReplayDrawdownHwmState,
+): void {
+  if (
+    expected.accountPeakHwm !== actual.accountPeakHwm ||
+    expected.monthlyPeakHwm !== actual.monthlyPeakHwm ||
+    expected.monthKey !== actual.monthKey ||
+    expected.accountDrawdownBps !== actual.accountDrawdownBps ||
+    expected.monthlyDrawdownBps !== actual.monthlyDrawdownBps ||
+    expected.breachState !== actual.breachState
+  ) {
+    throw new HtrDrawdownHydrationError(
+      "DRAWDOWN_CHECKPOINT_IDENTITY_MISMATCH",
+      "[htr/drawdown] replay drawdown HWM state mismatch",
+    );
+  }
+  const expectedKeys = Object.keys(expected.strategyPeaks).sort();
+  const actualKeys = Object.keys(actual.strategyPeaks).sort();
+  if (expectedKeys.join("|") !== actualKeys.join("|")) {
+    throw new HtrDrawdownHydrationError(
+      "DRAWDOWN_CHECKPOINT_IDENTITY_MISMATCH",
+      "[htr/drawdown] replay strategy peak key mismatch",
+    );
+  }
+  for (const key of expectedKeys) {
+    if (expected.strategyPeaks[key] !== actual.strategyPeaks[key]) {
+      throw new HtrDrawdownHydrationError(
+        "DRAWDOWN_CHECKPOINT_IDENTITY_MISMATCH",
+        `[htr/drawdown] replay strategy peak mismatch for ${key}`,
+      );
+    }
+    if (
+      (expected.strategyDrawdownBpsByKey[key] ?? 0) !== (actual.strategyDrawdownBpsByKey[key] ?? 0)
+    ) {
+      throw new HtrDrawdownHydrationError(
+        "DRAWDOWN_CHECKPOINT_IDENTITY_MISMATCH",
+        `[htr/drawdown] replay strategy drawdown mismatch for ${key}`,
+      );
+    }
+  }
+}
+
+export async function persistDrawdownCycleAfterGuardian(
+  bridge: HtrAccountingCycleBridge,
+  port: HtrDrawdownPersistencePort,
+  session: HtrDrawdownPersistenceSession,
+  cycleIndex: number,
+): Promise<void> {
+  assertBridgeActive(bridge);
+  const seq = bridge.state.accountingSequence;
+  const accountInput = buildAccountDrawdownCheckpointFromBridgeState({
+    state: bridge.state,
+    portfolioId: port.portfolioId,
+    seq,
+    id: port.newCheckpointId({ kind: "account", seq }),
+    breachState: bridge.breachState,
+  });
+  const accountDigest = JSON.stringify({
+    seq: accountInput.seq,
+    accountPeakHwm: accountInput.accountPeakHwm,
+    monthlyPeakHwm: accountInput.monthlyPeakHwm,
+    monthKey: accountInput.monthKey,
+    accountDrawdownBps: accountInput.accountDrawdownBps,
+    monthlyDrawdownBps: accountInput.monthlyDrawdownBps,
+    breachState: accountInput.breachState,
+  });
+
+  if (session.lastAccountSeq === seq && session.lastAccountContentDigest === accountDigest) {
+    return;
+  }
+  if (session.lastAccountSeq === seq && session.lastAccountContentDigest !== accountDigest) {
+    terminateBridgeRun(bridge, "DRAWDOWN_CHECKPOINT_DIVERGENT_RETRY");
+    throw new HtrDrawdownHydrationError(
+      "DRAWDOWN_CHECKPOINT_DIVERGENT_RETRY",
+      "[htr/drawdown] divergent retry at same seq",
+    );
+  }
+
+  const strategyInputs = buildStrategyDrawdownCheckpointsFromBridgeState({
+    state: bridge.state,
+    portfolioId: port.portfolioId,
+    seqByKey: Object.fromEntries(expectedTradeEligibleStrategyKeys().map((key) => [key, seq])),
+    idFactory: (attrKey) => port.newCheckpointId({ kind: "strategy", attrKey, seq }),
+    breachState: bridge.breachState,
+  }).sort((a, b) =>
+    buildStrategyAttributionKey(a.strategyId, a.strategyVersion).localeCompare(
+      buildStrategyAttributionKey(b.strategyId, b.strategyVersion),
+    ),
+  );
+
+  const persist = async (): Promise<void> => {
+    await port.appendAccountCheckpoint(accountInput);
+    for (const strategyInput of strategyInputs) {
+      await port.appendStrategyCheckpoint(strategyInput);
+    }
+  };
+
+  if (port.runInTransaction) {
+    await port.runInTransaction(persist);
+  } else {
+    await persist();
+  }
+
+  session.lastAccountSeq = seq;
+  session.lastAccountContentDigest = accountDigest;
+  for (const strategyInput of strategyInputs) {
+    const key = buildStrategyAttributionKey(
+      strategyInput.strategyId,
+      strategyInput.strategyVersion,
+    );
+    session.lastStrategySeqByKey[key] = seq;
+    session.lastStrategyContentDigestByKey[key] = JSON.stringify({
+      seq: strategyInput.seq,
+      strategyPeakHwm: strategyInput.strategyPeakHwm,
+      strategyDrawdownBps: strategyInput.strategyDrawdownBps,
+    });
+  }
+  recordRuntimeCall(bridge, "WP20_DRAWDOWN_PERSISTED", {
+    cycleIndex,
+    detail: `drawdown-persist-seq-${seq}`,
+  });
+}
 
 export class HtrAccountingReconciliationTerminationError extends Error {
   readonly code = "HTR_ACCOUNTING_RECONCILIATION_TERMINATED";
@@ -276,11 +587,18 @@ export function evaluateHtrGuardianForBridge(
   const reconciliation = buildHtrReconciliationInput(bridge, {
     inventoryOpenQtyBySymbol: input.inventoryOpenQtyBySymbol,
   });
+  const dominantStrategy = resolveDominantStrategyDrawdown({
+    strategyDrawdownBpsByKey: bridge.state.strategyDrawdownBpsByKey,
+    strategyPeakHwmByKey: bridge.state.strategyPeakHwmByKey,
+  });
   const cycle = evaluateHtrGuardianCycle({
     reconciliation,
     accountPeakHwm: bridge.state.equityHwm,
-    monthlyPeakHwm: bridge.state.equityHwm,
+    monthlyPeakHwm: bridge.state.monthlyPeakHwm,
     equityUsdt: input.equityUsdt,
+    strategyDrawdownBps: dominantStrategy.strategyDrawdownBps,
+    strategyEquityUsdt: dominantStrategy.strategyEquityUsdt,
+    strategyPeakHwm: dominantStrategy.strategyPeakHwm,
     missingMark: input.missingMark,
   });
   bridge.lastGuardianCycle = cycle;
@@ -412,7 +730,7 @@ export function deriveAccountRiskStateFromBridge(
     portfolio,
     openOrderCount: input.openOrderCount,
     accountPeakHwm: bridge.state.equityHwm,
-    monthlyPeakHwm: bridge.state.equityHwm,
+    monthlyPeakHwm: bridge.state.monthlyPeakHwm,
   });
 }
 
@@ -425,7 +743,12 @@ export function toAccountingCheckpointSlice(
     cash: bridge.state.cash,
     equity: bridge.state.equity,
     equityHwm: bridge.state.equityHwm,
+    monthlyPeakHwm: bridge.state.monthlyPeakHwm,
+    monthKey: bridge.state.monthKey,
     accountDrawdownBps: bridge.state.accountDrawdownBps,
+    monthlyDrawdownBps: bridge.state.monthlyDrawdownBps,
+    strategyPeakHwmByKey: { ...bridge.state.strategyPeakHwmByKey },
+    strategyDrawdownBpsByKey: { ...bridge.state.strategyDrawdownBpsByKey },
     marksJson: bridge.state.marks,
     positionsJson: bridge.state.positions,
     consumedFillIds: [...bridge.state.consumedFillIds],
@@ -434,6 +757,56 @@ export function toAccountingCheckpointSlice(
     netRealizedPnl: bridge.state.netRealizedPnl,
     semanticContentDigest: computeAccountingSemanticDigest(bridge.state),
   };
+}
+
+export function toDrawdownHwmCheckpointSlice(
+  bridge: HtrAccountingCycleBridge,
+): ReplayDrawdownHwmState {
+  return {
+    accountPeakHwm: bridge.state.equityHwm,
+    monthlyPeakHwm: bridge.state.monthlyPeakHwm,
+    monthKey: bridge.state.monthKey,
+    breachState: bridge.breachState,
+    strategyPeaks: { ...bridge.state.strategyPeakHwmByKey },
+    strategyDrawdownBpsByKey: { ...bridge.state.strategyDrawdownBpsByKey },
+    monthlyDrawdownBps: bridge.state.monthlyDrawdownBps,
+    accountDrawdownBps: bridge.state.accountDrawdownBps,
+  };
+}
+
+export type DrawdownCheckpointPersistenceContext = {
+  portfolioId: string;
+  nextAccountSeq: number;
+  nextStrategySeqByKey: Record<string, number>;
+  accountCheckpointId: string;
+  strategyCheckpointIdFactory: (attrKey: string) => string;
+  appendAccount: (input: AppendAccountDrawdownCheckpointInput) => Promise<void>;
+  appendStrategy: (input: AppendStrategyDrawdownCheckpointInput) => Promise<void>;
+};
+
+export async function persistDrawdownCheckpointsFromBridge(
+  bridge: HtrAccountingCycleBridge,
+  context: DrawdownCheckpointPersistenceContext,
+): Promise<void> {
+  await context.appendAccount(
+    buildAccountDrawdownCheckpointFromBridgeState({
+      state: bridge.state,
+      portfolioId: context.portfolioId,
+      seq: context.nextAccountSeq,
+      id: context.accountCheckpointId,
+      breachState: bridge.breachState,
+    }),
+  );
+  const strategyCheckpoints = buildStrategyDrawdownCheckpointsFromBridgeState({
+    state: bridge.state,
+    portfolioId: context.portfolioId,
+    seqByKey: context.nextStrategySeqByKey,
+    idFactory: context.strategyCheckpointIdFactory,
+    breachState: bridge.breachState,
+  });
+  for (const checkpoint of strategyCheckpoints) {
+    await context.appendStrategy(checkpoint);
+  }
 }
 
 export function restoreAccountingBridgeFromCheckpoint(
@@ -447,7 +820,12 @@ export function restoreAccountingBridgeFromCheckpoint(
     cash: slice.cash,
     equity: slice.equity,
     equityHwm: slice.equityHwm,
+    monthlyPeakHwm: slice.monthlyPeakHwm,
+    monthKey: slice.monthKey,
     accountDrawdownBps: slice.accountDrawdownBps,
+    monthlyDrawdownBps: slice.monthlyDrawdownBps,
+    strategyPeakHwmByKey: { ...slice.strategyPeakHwmByKey },
+    strategyDrawdownBpsByKey: { ...slice.strategyDrawdownBpsByKey },
     marks: { ...slice.marksJson },
     positions: { ...slice.positionsJson },
     consumedFillIds: [...slice.consumedFillIds],

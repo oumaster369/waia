@@ -20,6 +20,9 @@ export type HtrGuardianCycleInput = {
   accountPeakHwm: string;
   monthlyPeakHwm: string;
   equityUsdt: string;
+  strategyDrawdownBps?: number;
+  strategyEquityUsdt?: string;
+  strategyPeakHwm?: string;
   missingMark?: boolean;
 };
 
@@ -61,14 +64,18 @@ export function evaluateHtrGuardianCycle(input: HtrGuardianCycleInput): HtrGuard
       equityUsdt: input.equityUsdt,
       accountPeakHwm: input.accountPeakHwm,
       monthlyPeakHwm: input.monthlyPeakHwm,
+      strategyEquityUsdt: input.strategyEquityUsdt,
+      strategyPeakHwm: input.strategyPeakHwm,
     },
     DEFAULT_D20_DRAWDOWN_POLICY,
   );
   const resolved = resolveDrawdownBreachState({
     accountDrawdownBps,
     monthlyDrawdownBps,
+    strategyDrawdownBps: input.strategyDrawdownBps,
     accountLimitBps: DEFAULT_D20_DRAWDOWN_POLICY.accountBps,
     monthlyLimitBps: DEFAULT_D20_DRAWDOWN_POLICY.monthlyBps,
+    strategyLimitBps: DEFAULT_D20_DRAWDOWN_POLICY.strategyBps,
   });
 
   const breachState =

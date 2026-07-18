@@ -9,6 +9,10 @@ import { and, desc, eq } from "drizzle-orm";
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { StrategyDrawdownState } from "@/lib/trader/risk/drawdown-policy.types";
+import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
+import type { HtrGuardianBreachState } from "@/lib/trader/guardian/htr-guardian-exit-taxonomy";
+import { formatDecimal, parseDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
+import { resolveVirtualAllocation } from "@/lib/trader/risk/strategy-attribution";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
 import {
   orgScopedWhere,
@@ -187,4 +191,41 @@ export function createStrategyDrawdownRepositoryPostgres(
       return mapRow(rows[0]);
     },
   };
+}
+
+export function buildStrategyDrawdownCheckpointsFromBridgeState(input: {
+  state: AccountingStateV1;
+  portfolioId: string;
+  seqByKey: Record<string, number>;
+  idFactory: (attrKey: string) => string;
+  breachState: HtrGuardianBreachState;
+}): AppendStrategyDrawdownCheckpointInput[] {
+  const checkpoints: AppendStrategyDrawdownCheckpointInput[] = [];
+  for (const [attrKey, peak] of Object.entries(input.state.strategyPeakHwmByKey)) {
+    const [strategyId, strategyVersion] = attrKey.split(":");
+    if (!strategyId || !strategyVersion) {
+      continue;
+    }
+    const allocation = resolveVirtualAllocation(strategyId, strategyVersion);
+    const drawdownBps = input.state.strategyDrawdownBpsByKey[attrKey] ?? 0;
+    const peakScaled = parseDecimal(peak);
+    const drawdownScaled = drawdownBps > 0 ? (peakScaled * BigInt(drawdownBps)) / 10000n : 0n;
+    const strategyEquityUsdt = drawdownBps > 0 ? formatDecimal(peakScaled - drawdownScaled) : peak;
+    checkpoints.push({
+      id: input.idFactory(attrKey),
+      accountKey: input.state.accountKey,
+      portfolioId: input.portfolioId,
+      runId: input.state.runId,
+      strategyId,
+      strategyVersion,
+      seq: input.seqByKey[attrKey] ?? 1,
+      asOf: input.state.frontierAsOf,
+      strategyAllocationUsdt: allocation,
+      strategyEquityUsdt,
+      strategyPeakHwm: peak,
+      strategyDrawdownBps: drawdownBps,
+      breachState: input.breachState,
+    });
+  }
+  return checkpoints;
 }
