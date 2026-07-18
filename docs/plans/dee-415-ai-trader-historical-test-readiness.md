@@ -33,7 +33,7 @@ state:
   childPlanStatus: APPROVED
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: HTR_MACRO_J_PHASE_B_COMPLETE_READY_FOR_FINAL_WHOLE_PROGRAM_OPUS_AUDIT
+  composerTerminalState: DEE_415_POST_MACRO_J_PHASE_B_TRUTH_RECONCILED_READY_FOR_FINAL_WHOLE_PROGRAM_OPUS_AUDIT
   activeWorkPackage: null
   currentWorkPackage: null
   activeCorrection: null
@@ -179,7 +179,7 @@ state:
   wp23PrematureDraftStatus: REAPPLIED_REAUDITED_AND_COMMITTED_AS_ACCEPTED_PHASE_A_WORK
   wp23QuarantineStashPreserved: true
   wp23QuarantineReapplicationStatus: REAPPLIED_REAUDITED_AND_COMMITTED
-  planningTerminalState: HTR_MACRO_J_PHASE_B_COMPLETE_READY_FOR_FINAL_WHOLE_PROGRAM_OPUS_AUDIT
+  planningTerminalState: DEE_415_POST_MACRO_J_PHASE_B_TRUTH_RECONCILED_READY_FOR_FINAL_WHOLE_PROGRAM_OPUS_AUDIT
   nextAction: FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_AUDIT
   newHumanTokenRequired: true
   requiredHumanTokens:
@@ -191,6 +191,15 @@ state:
     wp22PhaseBVerdict: PASS
     wp23PhaseBVerdict: PASS
     macroJFinalIndependentPhaseBVerdict: PASS
+  postMacroJPhaseBTruthReconciliation:
+    classification: GOVERNANCE_ONLY
+    gap043PhaseBReportClassification: REPORT_ONLY_TEST_COUNT_TRANSCRIPTION_ERROR
+    wp22CloseoutCommitSha: 7b87f3320006801545a77f9a37d95e35e8cd98e2
+    wp23CloseoutCommitSha: 4e1345e46aa5588fd0b40d2ed23964fdd5cb3a8b
+    codeChanged: false
+    testsChanged: false
+    evidenceChanged: false
+    migrationsChanged: false
   macroJPhaseAHandoffToken: AUTHORIZE-HTR-WP23-QUARANTINE-REAPPLICATION-AND-PHASE-A-RESUME
   macroJPhaseAHandoffTokenStatus: CONSUMED
   macroJActivationAmendDeviation:
@@ -1159,7 +1168,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: MACRO_ACTIVE` — **HTR-WP01..HTR-WP21 COMPLETE**; **HTR-MACRO-I COMPLETE**; active macro **HTR-MACRO-J** (`PHASE_A_COMPLETE_PENDING_INDEPENDENT_PHASE_B`); WP22 Phase A gate **PASS pending independent Phase B** (`c982660`); WP23 Phase A **COMPLETE pending independent Phase B** (corrective `6647b90`; official evidence CLI `6647b90`); evidence staged (not promoted); `BUILD_AUTHORIZED: NO`; `nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B`. |
+| Plan state | `state.status: in-progress` · `programStatus: AWAITING_FINAL_AUDIT` — **HTR-WP01..HTR-WP23 COMPLETE**; **HTR-MACRO-I COMPLETE**; **HTR-MACRO-J COMPLETE** (independent Phase-B PASS 2026-07-18; WP22 CLOSEOUT `7b87f33`; WP23 CLOSEOUT `4e1345e4`); WP22/WP23 accepted evidence promoted; `BUILD_AUTHORIZED: NO`; `FINAL_PR_AUTHORIZED: NO`; `readyForFullHistoricalTest: false`; `nextAction: FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_AUDIT`; `nextHumanGate: AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-AUDIT`. |
 
 ## Approved decisions (recorded)
 
@@ -2581,14 +2590,14 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP11 | PIT provider context + gateway enforcement + absent-lane | WP01,WP09 | backend | COMPLETE (Opus Macro-D Phase B PASS 2026-07-14; WORK `f6cefb0`; single sanctioned `buildHistoricalIngressContext` + sidecar-v3 PIT selection, all 15 optional lanes explicit incl. UNAVAILABLE/SIDECAR_LANE_ABSENT, no live provider/network call, replay/live parity; accepted evidence `replay-runs/RI-P7/htr-wp11-pit-provider-context/` manifest digest `b8f043ac…`; post-WORK non-semantic corrections (assertNoFutureEvidence reorder, quoteForReplayCycle fixture-timestamp binding, evidence gitSha restamp) classified, no fabricated availability, no future evidence reachable; HTR-GAP-012/013 CLOSED) | `f6cefb0` (WORK) |
 | HTR-WP12 | Ingress bar-integrity gate + versioned dataset manifest | WP01 | backend | COMPLETE (Opus Macro-D Phase B PASS 2026-07-14; WORK `993fdab`; nine fail-closed integrity classes gate HistoricalBarReplaySource/HistoricalBarSource/loadQualificationBars before first Canvas advance; immutable `fhv-dataset-manifest/v1` HTX_ONLY SPOT BTCUSDT+ETHUSDT 1m→closed-bar 15m/1h/4h/1d, UTC half-open partitions, source checksums, normalized+bar-set digests, `FHV_GAP_POLICY_V1` zero-tolerance, self-digest exclusion; semantic digest `fd7d4895…` (= evidence-bundle manifest digest); blind holdout RESERVED_SEALED_NOT_ACCESSED; no WP09 invalidation; real HTX 2020–2025 dataset NOT acquired/qualified — final pinning HTR-WP23; HTR-GAP-014/015 CLOSED) | `993fdab` (WORK) |
 | HTR-WP13 | Intelligence-chain activation (historical run profile) | WP09,WP10,WP11,WP12 | ai | COMPLETE (Composer Phase-B PASS_WITH_BOUNDED_FIXES) | `d07bb654` (WORK) + `2d63eca` (CLOSEOUT) |
-| HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW (WORK `b8eeadb`; migration HUMAN_CONFIRMED_V2) | — |
-| HTR-WP15 | MKB read-model integration for replay | WP14 | ai | PHASE_A_IMPLEMENTED_VALIDATED_PENDING_INDEPENDENT_POST_REVIEW (Macro F; migration NONE_READ_MODEL_ONLY) | — |
+| HTR-WP14 | Forecast + Decision records + whyNotCash + CDE disambiguation | WP13 | ai | COMPLETE (Composer independent Phase-B PASS 2026-07-15; WORK `b8eeadb`; CLOSEOUT `e4a3a38`; HTR-GAP-008/011 CLOSED) | `b8eeadb` (WORK) |
+| HTR-WP15 | MKB read-model integration for replay | WP14 | ai | COMPLETE (Composer independent Phase-B PASS 2026-07-15; WORK `645f4be`; CLOSEOUT `c6e94d9`; migration NONE_READ_MODEL_ONLY; HTR-GAP-010 CLOSED) | `645f4be` (WORK) |
 | HTR-WP16 | Strategy pinning + gating + trial accounting + D-20 drawdown | WP13 | ai | COMPLETE (Composer independent Phase-B PASS 2026-07-15; WORK `93d6908`; migrations 0090–0097; accepted evidence `replay-runs/RI-P7/htr-wp16-strategy-gating/` semantic digest `97865938…`; HTR-GAP-020/021 CLOSED) | `93d6908` (WORK) |
 | HTR-WP17 | Historical execution-simulation realism | WP09 | backend | **complete** | WORK `7b4304d` + correction `6c6e693`; Composer 2.5 fresh independent Phase-B PASS |
-| HTR-WP18 | Inventory & accounting parity | WP17 | backend | APPROVED | — |
-| HTR-WP19 | Reality reconciliation + M9-class regression closure | WP18 | backend | APPROVED | — |
-| HTR-WP20 | Guardian/exits completion + closed-trade reality invariants | WP18,WP19 | backend | APPROVED | — |
-| HTR-WP21 | Outcome Resolution, Forecast Calibration & Knowledge Confidence Update | WP14,WP15,WP19,WP20 | ai | pending | — |
+| HTR-WP18 | Inventory & accounting parity | WP17 | backend | COMPLETE (Composer independent Phase-B PASS 2026-07-17; WORK `09573c5`; CLOSEOUT `0444e94`; HTR-GAP-023 CLOSED) | `09573c5` (WORK) |
+| HTR-WP19 | Reality reconciliation + M9-class regression closure | WP18 | backend | COMPLETE (Composer independent Phase-B PASS 2026-07-17; WORK `5558860`; CLOSEOUT `d1a47ac`; HTR-GAP-018/019/035 CLOSED) | `5558860` (WORK) |
+| HTR-WP20 | Guardian/exits completion + closed-trade reality invariants | WP18,WP19 | backend | COMPLETE (Composer independent Phase-B PASS 2026-07-17; WORK `b820a06`; CLOSEOUT `e9cca67`; HTR-GAP-022 CLOSED) | `b820a06` (WORK) |
+| HTR-WP21 | Outcome Resolution, Forecast Calibration & Knowledge Confidence Update | WP14,WP15,WP19,WP20 | ai | COMPLETE (independent Phase-B PASS 2026-07-17; WORK `b71a381`; CLOSEOUT `0dff99c`; HTR-GAP-010/036/037/038/039/040 CLOSED) | `b71a381` (WORK) |
 | HTR-WP22 | Resilience + performance qualification | WP04,WP05,WP09,WP16,WP19,WP21 | backend | COMPLETE (independent Phase-B PASS 2026-07-18; WORK c982660; accepted evidence replay-runs/RI-P7/htr-wp22-runtime-qualification/ manifest 2c2238e7… semantic a7ca958c…; HTR-GAP-005/024/026/027/029/044 CLOSED) | `c982660` (WORK) |
 | HTR-WP23 | Operator runbook + readiness preflight + Execution Server package + Certification prep | WP20,WP22 | infra | COMPLETE (independent Phase-B PASS 2026-07-18; WORK 6647b903; accepted evidence replay-runs/RI-P7/htr-wp23-readiness-package/ manifest 8093c418… semantic 1665f093…; HTR-GAP-028/042/043 CLOSED; HTR-GAP-045 remains external nonblocking OPEN) | `6647b903` (WORK) |
 
