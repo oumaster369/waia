@@ -5,8 +5,8 @@ horizon: v1
 owner: Architect
 linkedSpec: docs/product-specs/ai-trader-historical-test-readiness-completion.md
 linkedGapRegistry: docs/gaps/ai-trader-historical-test-readiness-gap-registry.md
-lastReviewed: 2026-07-14
-version: 0.1.0
+lastReviewed: 2026-07-18
+version: 0.1.1
 ---
 
 # AI-TRADER Historical-Test Readiness — Integration Roadmap
@@ -44,6 +44,7 @@ Sequence gap closure and implementation work for the Historical-Test Readiness p
 | IB-HTR-21 | HTR-WP21 | Outcome Resolution, Forecast Calibration & Knowledge Confidence Update | IB-HTR-14, IB-HTR-15, IB-HTR-19, IB-HTR-20 | T2 | planned | null | HTR-GAP-010,036,037,038,039,040 | Epistemic closure; calibration; confidence update |
 | IB-HTR-22 | HTR-WP22 | Resilience + performance qualification | IB-HTR-04, IB-HTR-05, IB-HTR-09, IB-HTR-16, IB-HTR-19, IB-HTR-21 | T2 | complete | docs/plans/dee-415-ai-trader-historical-test-readiness.md | HTR-GAP-005,024,026,027,029,044 | Independent Phase-B PASS 2026-07-18; WORK c982660; accepted evidence replay-runs/RI-P7/htr-wp22-runtime-qualification/ manifest 2c2238e7… semantic a7ca958c…; D-11B bound to afd9a310; multi-position BTC/ETH 100000 USDT shared portfolio |
 | IB-HTR-23 | HTR-WP23 | Operator runbook + readiness preflight + Execution Server package + Certification prep | IB-HTR-20, IB-HTR-22 | T1 | complete | docs/plans/dee-415-ai-trader-historical-test-readiness.md | HTR-GAP-028,042,043 | Independent Phase-B PASS 2026-07-18; WORK 6647b903; accepted evidence replay-runs/RI-P7/htr-wp23-readiness-package/ manifest 8093c418… semantic 1665f093…; FHV contract pinned SEALED_NOT_ACCESSED; HTX NOT_AVAILABLE; Option A code-ready package |
+| IB-HTR-CORR-A | HTR-FINAL-AUDIT-CORRECTIVE-A | Final audit corrective closure (FA-001..FA-004) + integrated qualification + re-audit | IB-HTR-23 | T2 | planned | docs/plans/dee-415-ai-trader-historical-test-readiness.md | HTR-GAP-046,047,048,049 | Human rejected prior PASS classification; exact corrective packet pending Human review; blocks CERTIFY-HTR-READY and final PR until C-A5 re-audit PASS |
 
 All batches use `linearIssue: DEE-415`. Whole-program `riskTier: T2`; per-batch tier describes work-package nature (informative).
 

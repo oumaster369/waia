@@ -11,8 +11,8 @@ sourceOfTruth:
   - docs/plans/dee-415-ai-trader-historical-test-readiness.md
 relatedGaps: docs/gaps/ai-trader-historical-test-readiness-gap-registry.md
 relatedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
-lastReviewed: 2026-07-12
-version: 0.1.0
+lastReviewed: 2026-07-18
+version: 0.1.1
 ---
 
 # AI-TRADER — Historical-Test Readiness Completion Specification
@@ -52,6 +52,22 @@ Link: [`docs/waia-governance/NON-GOALS.md`](../waia-governance/NON-GOALS.md).
 ## Acceptance criteria
 
 `READY_FOR_FULL_HISTORICAL_TEST` is granted **only** when all gate groups below are measurably true **and** the Human Architect certifies (`CERTIFY-HTR-READY`, D-12). Default state: `NOT_READY`. Composer never sets `READY_FOR_FULL_HISTORICAL_TEST`.
+
+### Program control state (2026-07-18)
+
+```text
+PROGRAM_STATUS=FINAL_AUDIT_CORRECTIVE_PACKET_PENDING_HUMAN_REVIEW
+ORIGINAL_WORK_PACKAGES_COMPLETE=HTR-WP01..HTR-WP23
+FINAL_AUDIT_VERDICT=HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE
+CERTIFY_HTR_READY=NOT_ISSUED
+READY_FOR_FULL_HISTORICAL_TEST=NO
+FINAL_PR_AUTHORIZED=NO
+ACTIVE_CORRECTION=HTR-FINAL-AUDIT-CORRECTIVE-A
+ACTIVE_CORRECTION_STATUS=EXACT_PACKET_READY_PENDING_HUMAN_REVIEW
+NEXT_HUMAN_GATE=APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-PACKET
+```
+
+Final Opus whole-program audit **technical coverage preserved**; Human **rejected** prior PASS certification recommendation due to contract-classification contradictions (FA-001..FA-004). Corrective closure required before `CERTIFY-HTR-READY` or final PR.
 
 ### Governance / activation (CG-Gov)
 

@@ -29,14 +29,18 @@ state:
   status: in-progress
   humanApproval: HTR_MACRO_J_V3_PACKET_AND_BUILD_APPROVED_CONSUMED
   historicalMacroIHumanApproval: HTR_MACRO_I_HUMAN_APPROVED_CONSUMED
-  programStatus: AWAITING_FINAL_AUDIT
+  programStatus: FINAL_AUDIT_CORRECTIVE_PACKET_PENDING_HUMAN_REVIEW
   childPlanStatus: APPROVED
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: DEE_415_FINAL_AUDIT_CONTROLLERS_STRICTLY_UNIQUE_READY_FOR_FRESH_OPUS_WHOLE_PROGRAM_AUDIT
+  composerTerminalState: DEE_415_FINAL_AUDIT_CORRECTIVE_PACKET_READY_FOR_HUMAN_REVIEW
   activeWorkPackage: null
   currentWorkPackage: null
-  activeCorrection: null
+  activeCorrection: HTR-FINAL-AUDIT-CORRECTIVE-A
+  activeCorrectionStatus: EXACT_PACKET_READY_PENDING_HUMAN_REVIEW
+  finalAuditVerdict: HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE
+  certifyHtrReady: NOT_ISSUED
+  originalWorkPackagesComplete: HTR-WP01..HTR-WP23
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: null
   activeMacroWorkPackages: []
@@ -179,12 +183,24 @@ state:
   wp23PrematureDraftStatus: REAPPLIED_REAUDITED_AND_COMMITTED_AS_ACCEPTED_PHASE_A_WORK
   wp23QuarantineStashPreserved: true
   wp23QuarantineReapplicationStatus: REAPPLIED_REAUDITED_AND_COMMITTED
-  planningTerminalState: DEE_415_FINAL_AUDIT_CONTROLLERS_STRICTLY_UNIQUE_READY_FOR_FRESH_OPUS_WHOLE_PROGRAM_AUDIT
-  nextAction: FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_AUDIT
+  planningTerminalState: DEE_415_FINAL_AUDIT_CORRECTIVE_PACKET_READY_FOR_HUMAN_REVIEW
+  nextAction: HUMAN_REVIEW_FINAL_AUDIT_CORRECTIVE_PACKET
   newHumanTokenRequired: true
   requiredHumanTokens:
-    - AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-AUDIT
-  nextHumanGate: AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-AUDIT
+    - APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-PACKET
+  nextHumanGate: APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-PACKET
+  correctiveAPacketSha256: e73e7a422ebb9692ef097ecbea3e4e629704a04ff0d950dda4f24bae69bd89da
+  correctiveAPacketPath: .cursor/plans/dee-415-final-audit-corrective/e73e7a422ebb9692ef097ecbea3e4e629704a04ff0d950dda4f24bae69bd89da/dee-415-final-audit-corrective-exact-packet.plan.md
+  correctiveAPacketBytes: 34322
+  correctiveAPacketLines: 553
+  correctiveAPacketAuthoringHead: d8bc4a38a7ddffe42246fdb1864933f2bd4b20bc
+  historicalFinalAuditGateSuperseded:
+    planningTerminalState: DEE_415_FINAL_AUDIT_CONTROLLERS_STRICTLY_UNIQUE_READY_FOR_FRESH_OPUS_WHOLE_PROGRAM_AUDIT
+    nextAction: FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_AUDIT
+    nextHumanGate: AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-AUDIT
+    requiredHumanTokens:
+      - AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-AUDIT
+    classification: HISTORICAL_SUPERSEDED_BY_HUMAN_REJECTION_OF_PASS_CLASSIFICATION
   macroJPhaseBFreshIndependentAuthorization:
     status: CONSUMED
     token: AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B
@@ -1164,7 +1180,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: AWAITING_FINAL_AUDIT` — **HTR-WP01..HTR-WP23 COMPLETE**; **HTR-MACRO-I COMPLETE**; **HTR-MACRO-J COMPLETE** (independent Phase-B PASS 2026-07-18; WP22 CLOSEOUT `7b87f33`; WP23 CLOSEOUT `4e1345e4`); WP22/WP23 accepted evidence promoted; `BUILD_AUTHORIZED: NO`; `FINAL_PR_AUTHORIZED: NO`; `readyForFullHistoricalTest: false`; `nextAction: FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_AUDIT`; `nextHumanGate: AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-AUDIT`. |
+| Plan state | `state.status: in-progress` · `programStatus: FINAL_AUDIT_CORRECTIVE_PACKET_PENDING_HUMAN_REVIEW` — **HTR-WP01..HTR-WP23 COMPLETE** (`ORIGINAL_WORK_PACKAGES_COMPLETE`); **HTR-MACRO-I COMPLETE**; **HTR-MACRO-J COMPLETE**; final Opus audit technical coverage preserved; Human rejected PASS classification (`FINAL_AUDIT_VERDICT: HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE`); `ACTIVE_CORRECTION: HTR-FINAL-AUDIT-CORRECTIVE-A`; `ACTIVE_CORRECTION_STATUS: EXACT_PACKET_READY_PENDING_HUMAN_REVIEW`; `BUILD_AUTHORIZED: NO`; `FINAL_PR_AUTHORIZED: NO`; `readyForFullHistoricalTest: false`; `CERTIFY_HTR_READY: NOT_ISSUED`; `nextAction: HUMAN_REVIEW_FINAL_AUDIT_CORRECTIVE_PACKET`; `nextHumanGate: APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-PACKET`. |
 
 ## Approved decisions (recorded)
 
@@ -2616,9 +2632,11 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## Current work package (whole program — awaiting final Opus audit)
+## Current work package (whole program — final audit corrective pending Human review)
 
-**CURRENT (2026-07-18):** HTR-MACRO-J **independent Phase-B COMPLETE**; all **23 work packages COMPLETE**; WP22 accepted evidence **`replay-runs/RI-P7/htr-wp22-runtime-qualification/`**; WP23 accepted evidence **`replay-runs/RI-P7/htr-wp23-readiness-package/`**; HTR-GAP-045 remains **OPEN / NON_BLOCKING_EXTERNAL_BACKLOG**; `programStatus: AWAITING_FINAL_AUDIT`; `BUILD_AUTHORIZED: NO`; `FINAL_PR_AUTHORIZED: NO`; `readyForFullHistoricalTest: false`; `nextAction: FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_AUDIT`; `nextHumanGate: AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-AUDIT`.
+**CURRENT (2026-07-18):** HTR-MACRO-J **independent Phase-B COMPLETE**; all **23 work packages COMPLETE** (`ORIGINAL_WORK_PACKAGES_COMPLETE=HTR-WP01..HTR-WP23`); WP22 accepted evidence **`replay-runs/RI-P7/htr-wp22-runtime-qualification/`**; WP23 accepted evidence **`replay-runs/RI-P7/htr-wp23-readiness-package/`**; final Opus audit technical coverage **preserved**; Human **rejected** prior PASS certification recommendation (`FINAL_AUDIT_VERDICT: HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE`); blocking defects FA-001..FA-004 adjudicated; `ACTIVE_CORRECTION: HTR-FINAL-AUDIT-CORRECTIVE-A`; `ACTIVE_CORRECTION_STATUS: EXACT_PACKET_READY_PENDING_HUMAN_REVIEW`; HTR-GAP-046..049 **OPEN** (corrective closure); HTR-GAP-045 remains **OPEN / NON_BLOCKING_EXTERNAL_BACKLOG**; `programStatus: FINAL_AUDIT_CORRECTIVE_PACKET_PENDING_HUMAN_REVIEW`; `BUILD_AUTHORIZED: NO`; `FINAL_PR_AUTHORIZED: NO`; `readyForFullHistoricalTest: false`; `CERTIFY_HTR_READY: NOT_ISSUED`; `nextAction: HUMAN_REVIEW_FINAL_AUDIT_CORRECTIVE_PACKET`; `nextHumanGate: APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-PACKET`.
+
+**HISTORICAL (SUPERSEDED):** Prior current-facing gate `FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_AUDIT` / `AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-AUDIT` / `DEE_415_FINAL_AUDIT_CONTROLLERS_STRICTLY_UNIQUE_READY_FOR_FRESH_OPUS_WHOLE_PROGRAM_AUDIT` — superseded by Human rejection of PASS classification; retained in `state.historicalFinalAuditGateSuperseded`.
 
 **HISTORICAL (SUPERSEDED / INVALIDATED):** Prior current-facing statement claiming GAP-043 **13/29 PASS** at `3234b1f` — invalidated by mandatory live regression 2026-07-18; retained only in `wp23Gap043InvalidatedAuditRecord`.
 
