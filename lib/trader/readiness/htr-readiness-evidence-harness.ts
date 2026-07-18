@@ -12,7 +12,30 @@ import {
 import path from "node:path";
 
 import { readGitCodeSha, readGitDirtyTree } from "@/lib/trader/backtest/replay-benchmark-harness";
+import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import {
+  createFhvRuntimeTraceWriter,
+  readFhvSemanticEventsFromFile,
+} from "@/lib/trader/observability/fhv-runtime-trace-writer";
+import {
+  FHV_LOG_SUBDIRS,
+  FHV_REPORT_FILE_NAMES,
+  resolveFhvReportsDir,
+  resolveFhvRunLogRoot,
+  resolveFhvSemanticEventsPath,
+} from "@/lib/trader/observability/fhv-run-log-layout";
+import type { FhvSemanticEventV1 } from "@/lib/trader/observability/fhv-semantic-event.types";
+import { buildFhvDecisionTraceReportV1 } from "@/lib/trader/readiness/build-fhv-decision-trace-report.v1";
+import { buildFhvExecutionAndPositionReportV1 } from "@/lib/trader/readiness/build-fhv-execution-position-report.v1";
+import { buildFhvKnowledgeAndCalibrationReportV1 } from "@/lib/trader/readiness/build-fhv-knowledge-calibration-report.v1";
+import { buildFhvModuleHealthReportV1 } from "@/lib/trader/readiness/build-fhv-module-health-report.v1";
+import { buildFhvPnlReportV1 } from "@/lib/trader/readiness/build-fhv-pnl-report.v1";
+import { buildFhvReconciliationReportV1 } from "@/lib/trader/readiness/build-fhv-reconciliation-report.v1";
+import {
+  buildHtrOperatorReportV1,
+  type BuildHtrOperatorReportInputV1,
+} from "@/lib/trader/readiness/build-htr-operator-report.v1";
 import {
   buildHtrExecutionServerPackageManifest,
   computeHtrExecutionServerPackageDigest,
@@ -430,4 +453,108 @@ export function runHtrWp23OfficialEvidenceSeal(
     executionServerMutation: false,
     artifactCount: sealed.manifest.artifactIndex.length,
   };
+}
+
+export type HtrFhvReportArtifactsV1 = Readonly<{
+  operatorReport: ReturnType<typeof buildHtrOperatorReportV1>;
+  fhvPnlReport: ReturnType<typeof buildFhvPnlReportV1>;
+  fhvModuleHealthReport: ReturnType<typeof buildFhvModuleHealthReportV1>;
+  fhvDecisionTraceReport: ReturnType<typeof buildFhvDecisionTraceReportV1>;
+  fhvExecutionAndPositionReport: ReturnType<typeof buildFhvExecutionAndPositionReportV1>;
+  fhvReconciliationReport: ReturnType<typeof buildFhvReconciliationReportV1>;
+  fhvKnowledgeAndCalibrationReport: ReturnType<typeof buildFhvKnowledgeAndCalibrationReportV1>;
+}>;
+
+export function buildAllFhvReportsFromSemanticEvents(
+  input: BuildHtrOperatorReportInputV1,
+): HtrFhvReportArtifactsV1 {
+  return {
+    operatorReport: buildHtrOperatorReportV1(input),
+    fhvPnlReport: buildFhvPnlReportV1(input),
+    fhvModuleHealthReport: buildFhvModuleHealthReportV1(input),
+    fhvDecisionTraceReport: buildFhvDecisionTraceReportV1(input),
+    fhvExecutionAndPositionReport: buildFhvExecutionAndPositionReportV1(input),
+    fhvReconciliationReport: buildFhvReconciliationReportV1(input),
+    fhvKnowledgeAndCalibrationReport: buildFhvKnowledgeAndCalibrationReportV1(input),
+  };
+}
+
+export function reconcileFhvReportsWithSemanticEvents(
+  reports: HtrFhvReportArtifactsV1,
+  events: readonly FhvSemanticEventV1[],
+): boolean {
+  const reportList = [
+    reports.fhvPnlReport,
+    reports.fhvModuleHealthReport,
+    reports.fhvDecisionTraceReport,
+    reports.fhvExecutionAndPositionReport,
+    reports.fhvReconciliationReport,
+    reports.fhvKnowledgeAndCalibrationReport,
+  ];
+  return reportList.every(
+    (report) => report.eventCount === events.length && report.semanticEventsDigest.length === 64,
+  );
+}
+
+export function emitFhvReportsFromSemanticEvents(input: {
+  runLogRoot: string;
+  organizationId: string;
+  accountKey: string;
+  runId: string;
+  reportInput: Omit<
+    BuildHtrOperatorReportInputV1,
+    "semanticEvents" | "runId" | "organizationId" | "accountKey"
+  >;
+  events?: readonly FhvSemanticEventV1[];
+}): HtrFhvReportArtifactsV1 {
+  const runRoot = resolveFhvRunLogRoot({
+    root: input.runLogRoot,
+    organizationId: input.organizationId,
+    accountKey: input.accountKey,
+    runId: input.runId,
+  });
+  const events =
+    input.events ?? readFhvSemanticEventsFromFile(resolveFhvSemanticEventsPath(runRoot));
+  const buildInput: BuildHtrOperatorReportInputV1 = {
+    ...input.reportInput,
+    runId: input.runId,
+    organizationId: input.organizationId,
+    accountKey: input.accountKey,
+    semanticEvents: events,
+  };
+  const reports = buildAllFhvReportsFromSemanticEvents(buildInput);
+  const reportsDir = resolveFhvReportsDir(runRoot);
+  mkdirSync(reportsDir, { recursive: true });
+
+  const writtenFiles: Record<string, string> = {};
+  const writeReport = (fileName: string, payload: unknown) => {
+    const absolutePath = path.join(reportsDir, fileName);
+    writeFileAtomic(absolutePath, `${JSON.stringify(payload, null, 2)}\n`);
+    writtenFiles[path.join(FHV_LOG_SUBDIRS.reports, fileName)] = absolutePath;
+  };
+
+  writeReport(FHV_REPORT_FILE_NAMES.operatorReport, reports.operatorReport);
+  writeReport(FHV_REPORT_FILE_NAMES.pnlReport, reports.fhvPnlReport);
+  writeReport(FHV_REPORT_FILE_NAMES.moduleHealthReport, reports.fhvModuleHealthReport);
+  writeReport(FHV_REPORT_FILE_NAMES.decisionTraceReport, reports.fhvDecisionTraceReport);
+  writeReport(FHV_REPORT_FILE_NAMES.executionPositionReport, reports.fhvExecutionAndPositionReport);
+  writeReport(FHV_REPORT_FILE_NAMES.reconciliationReport, reports.fhvReconciliationReport);
+  writeReport(
+    FHV_REPORT_FILE_NAMES.knowledgeCalibrationReport,
+    reports.fhvKnowledgeAndCalibrationReport,
+  );
+
+  const traceWriter = createFhvRuntimeTraceWriter({
+    root: input.runLogRoot,
+    organizationId: input.organizationId,
+    accountKey: input.accountKey,
+    runId: input.runId,
+  });
+  traceWriter.writeRunManifest(writtenFiles);
+
+  if (!reconcileFhvReportsWithSemanticEvents(reports, events)) {
+    throw new Error("HTR_FHV_REPORT_EMISSION:REPORT_EVENT_RECONCILIATION_FAILED");
+  }
+
+  return reports;
 }

@@ -79,9 +79,14 @@ export {
   type ReplayRunChainReadResult,
 } from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
 export {
+  assertProductionReplayEvidenceSinkConfigured,
+  createFhvTraceEvidenceSink,
   createStreamingEvidenceSink,
   createShutdownCoordinator,
   NOOP_REPLAY_EVIDENCE_SINK,
+  paperCycleResultToSemanticEvents,
+  type CreateFhvTraceEvidenceSinkInput,
+  type FhvTraceReplayEvidenceSink,
   type ReplayEvidenceSink,
   type ShutdownCoordinator,
 } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-sink";
