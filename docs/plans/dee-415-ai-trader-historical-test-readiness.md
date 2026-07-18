@@ -33,9 +33,9 @@ state:
   childPlanStatus: APPROVED
   buildAuthorized: true
   buildAuthorizedScope: HTR-MACRO-J_PHASE_A_ONLY
-  composerTerminalState: HTR_WP22_PHASE_A_GATE_PASS_MULTI_POSITION_PROVEN_WP23_DRAFT_QUARANTINED
-  activeWorkPackage: HTR-WP22
-  currentWorkPackage: HTR-WP22
+  composerTerminalState: HTR_WP22_PHASE_A_GATE_PASS_PENDING_WP23_QUARANTINE_REAPPLICATION
+  activeWorkPackage: HTR-WP23
+  currentWorkPackage: HTR-WP23
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-J
@@ -53,9 +53,23 @@ state:
   wp22GapRemediationSha: 420b31e1a743b27654a43c663cc7d94a0efc90e2
   wp22SerializationRemediationSha: afd9a3107f58ea2d6782a4881a76dcfeeca9227d
   wp22EvidenceCliCorrectionSha: cd9ff5b4e176236d388e873627cded7b869cb216
-  wp22MultiPositionProofSha: PENDING_COMMIT
+  wp22MultiPositionProofSha: c982660b61c68e8c1319dae20fd4ebdc698821be
   wp22PhaseAStatus: WP22_PHASE_A_GATE_PASS_PENDING_INDEPENDENT_PHASE_B
-  wp22EffectivePhaseACandidateSha: PENDING_COMMIT
+  wp22EffectivePhaseACandidateSha: c982660b61c68e8c1319dae20fd4ebdc698821be
+  wp22PhaseAGovernanceBindingAuthority: GIT_HEAD
+  wp22EvidenceManifestDigest: 2c2238e7d4e055e8735ba2009433e3758f0b3e4b5872545d84643ff1e87cf2d2
+  wp22EvidenceSemanticDigest: a7ca958c9784a2d3d70f2cd286318be26fb6395107273947eaaef043c58d0e67
+  wp22HermeticValidation:
+    classification: PASS
+    previous81FailureResult: INVALID_NON_HERMETIC_INVOCATION_POSTGRES_ENV_LEAK
+    command: env -u WAIA_PG_INTEGRATION -u WAIA_DB_BACKEND -u DATABASE_URL_POSTGRES -u DATABASE_URL -u DATABASE_URL_POSTGRES_SESSION pnpm test --run
+    testFilesPassed: 528
+    testFilesSkipped: 43
+    testsPassed: 2903
+    testsSkipped: 183
+    testsFailed: 0
+  wp22MultiPositionProductionEquivalence:
+    classification: TEST_HARNESS_ORCHESTRATION_EQUIVALENT_TO_PRODUCTION_COMPONENT_CONTRACT
   wp22FirstValidD11bAttemptConsumed: true
   d11bQualificationSourceGitSha: afd9a3107f58ea2d6782a4881a76dcfeeca9227d
   d11bHarnessSha256: 518c7338fe5b030ad2a6662e2ca1fe127f176ca2fcf573a05ae921cebb96cab3
@@ -87,13 +101,14 @@ state:
     rootCause: WP22_QUALIFICATION_SEMANTIC_PROJECTION_DEFECT
     unsupportedPath: qualificationAttempt nested optional fields with runtime undefined
   wp23WorkCommitSha: null
-  wp23PrematureDraftStatus: QUARANTINED_NOT_ACCEPTED
+  wp23PrematureDraftStatus: AUTHORIZED_QUARANTINE_REAPPLICATION_PENDING_REVALIDATION
   wp23QuarantineStashOid: a6ead010bf0d35f67f4beffc93f15cde901a6948
   wp23QuarantineFileCount: 29
-  nextAction: HUMAN_REVIEW_BEFORE_WP23_DRAFT_REAPPLICATION
-  newHumanTokenRequired: true
-  requiredHumanTokens:
-    - AUTHORIZE-HTR-WP23-QUARANTINE-REAPPLICATION-AND-PHASE-A-RESUME
+  nextAction: REAPPLY_AND_REVALIDATE_HTR_WP23_QUARANTINE
+  newHumanTokenRequired: false
+  requiredHumanTokens: []
+  macroJPhaseAResumeToken: AUTHORIZE-HTR-WP23-QUARANTINE-REAPPLICATION-AND-PHASE-A-RESUME
+  macroJPhaseAResumeTokenStatus: CONSUMED
   macroJActivationAmendDeviation:
     classification: BOUNDED_GOVERNANCE_ONLY_PRE_WP22_PROCESS_DEVIATION
     originalActivationSha: 5a7833961fe02b6744d7ff902ca1fd1178cab9cc
@@ -203,12 +218,11 @@ state:
     executionServerPackageMode:
       mode: option-a-code-ready
       actualServerMutation: PROHIBITED
-  planningTerminalState: HTR_WP22_PHASE_A_GATE_PASS_MULTI_POSITION_PROVEN_WP23_DRAFT_QUARANTINED
-  newHumanTokenRequired: true
-  requiredHumanTokens:
-    - AUTHORIZE-HTR-WP23-QUARANTINE-REAPPLICATION-AND-PHASE-A-RESUME
-  nextHumanGate: AUTHORIZE-HTR-WP23-QUARANTINE-REAPPLICATION-AND-PHASE-A-RESUME
-  nextAction: HUMAN_REVIEW_BEFORE_WP23_DRAFT_REAPPLICATION
+  planningTerminalState: HTR_WP22_PHASE_A_GATE_PASS_PENDING_WP23_QUARANTINE_REAPPLICATION
+  newHumanTokenRequired: false
+  requiredHumanTokens: []
+  nextHumanGate: null
+  nextAction: REAPPLY_AND_REVALIDATE_HTR_WP23_QUARANTINE
   macroJHumanActivation:
     status: HUMAN_APPROVED_CONSUMED
     approvedPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25
@@ -1029,7 +1043,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: APPROVED_IDLE` — **HTR-WP01..HTR-WP21 COMPLETE**; **HTR-MACRO-I COMPLETE**; active macro **HTR-MACRO-J** (`V3_EXACT_PENDING_HUMAN_REVIEW`); `MACRO_J_PACKET_SHA256: 5a506e23…` (supersedes `91be9b0f…`); policy decisions consumed; packet approval pending; current work package **HTR-WP22**; `BUILD_AUTHORIZED: NO`; `nextAction: HUMAN_REVIEW_HTR_MACRO_J_V3_EXACT_PACKET`; `nextHumanGate: APPROVE-HTR-MACRO-J-PACKET`. |
+| Plan state | `state.status: in-progress` · `programStatus: MACRO_ACTIVE` — **HTR-WP01..HTR-WP21 COMPLETE**; **HTR-MACRO-I COMPLETE**; active macro **HTR-MACRO-J** (`PHASE_A_ACTIVE`); WP22 Phase A gate **PASS pending independent Phase B** (`c982660`); multi-position proof **PASS**; D-11B **PASS** bound `afd9a31`; evidence staged; current work package **HTR-WP23**; `BUILD_AUTHORIZED: YES` (`HTR-MACRO-J_PHASE_A_ONLY`); `nextAction: REAPPLY_AND_REVALIDATE_HTR_WP23_QUARANTINE`. |
 
 ## Approved decisions (recorded)
 
@@ -2481,11 +2495,11 @@ Every HTR-WPxx is implemented and validated locally on the same DEE-415 branch.
 A single PR is opened only after HTR-WP23, final full validation, and the final Opus whole-program audit.
 ```
 
-## Current work package (HTR-WP22 — corrected Macro-J packet bound)
+## Current work package (HTR-WP23 — historical readiness package)
 
-**CURRENT (2026-07-17):** HTR-MACRO-J v3 exact packet **V3_EXACT_PENDING_HUMAN_REVIEW** (`MACRO_J_PACKET_SHA256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25`; supersedes `91be9b0f…` as `SUPERSEDED_NOT_APPROVABLE_WP22_FORWARD_DEPENDENCY_AND_CONTROLLER_MIRROR_CONTRADICTIONS`); zero WP22→WP23 forward dependencies; Macro-J policy decisions consumed; packet approval pending; HTR-MACRO-I **COMPLETE**; HTR-WP21 closeout `0dff99c`; `BUILD_AUTHORIZED: NO`; migrations **NONE**; HTX **NOT_AVAILABLE**; D-11B thresholds unchanged; `nextAction: HUMAN_REVIEW_HTR_MACRO_J_V3_EXACT_PACKET`.
+**CURRENT (2026-07-18):** HTR-MACRO-J Phase A active; WP22 Phase A gate **PASS pending independent Phase B** (`WP22_MULTI_POSITION_PROOF_SHA: c982660`); hermetic full-suite **PASS** (528 files / 2903 tests); multi-position production-equivalence **A**; official WP22 evidence sealed (`manifest.digest: 2c2238e7…`); D-11B **PASS** bound `afd9a31` (not rerun); WP23 quarantine **authorized for reapplication** (`AUTHORIZE-HTR-WP23-QUARANTINE-REAPPLICATION-AND-PHASE-A-RESUME` consumed); `BUILD_AUTHORIZED: YES` (`HTR-MACRO-J_PHASE_A_ONLY`); HTX **NOT_AVAILABLE**; holdout **SEALED_NOT_ACCESSED**; `nextAction: REAPPLY_AND_REVALIDATE_HTR_WP23_QUARANTINE`.
 
-**Next action:** `HUMAN_REVIEW_HTR_MACRO_J_V3_EXACT_PACKET` → human gate `APPROVE-HTR-MACRO-J-PACKET`.
+**Next action:** `REAPPLY_AND_REVALIDATE_HTR_WP23_QUARANTINE` → complete WP23 Phase A WORK + evidence staging.
 
 **HISTORICAL (NON_OPERATIONAL):** Sections below describing Macro-I Phase-A activation/Build authorization are audit history only.
 
