@@ -33,14 +33,14 @@ state:
   childPlanStatus: APPROVED
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: HTR_MACRO_J_PHASE_A_COMPLETE_PENDING_FRESH_INDEPENDENT_PHASE_B
+  composerTerminalState: HTR_MACRO_J_PHASE_A_COMPLETE_OFFICIAL_WP23_EVIDENCE_READY_FOR_FRESH_INDEPENDENT_PHASE_B
   activeWorkPackage: HTR-WP23
   currentWorkPackage: HTR-WP23
   activeCorrection: null
   activeChildPlan: .cursor/plans/dee-415-htr-wp18-wp23-tail-rolling.plan.md
   activeMacroPackage: HTR-MACRO-J
   activeMacroWorkPackages: [HTR-WP22, HTR-WP23]
-  activeMacroStatus: PHASE_A_ACTIVE
+  activeMacroStatus: PHASE_A_COMPLETE_PENDING_INDEPENDENT_PHASE_B
   macroJPacketSha256: 5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25
   macroJPacketPath: .cursor/plans/dee-415-macro-j/approval-candidates/5a506e23e0604be04946c89b1a712b212befb7f5d24ea8f914d7b1a9021bcc25/dee-415-htr-macro-j-exact-packet.plan.md
   macroJSupersededPacketSha256: 91be9b0f462e5f9f36ba08d3007eafd9bd00ee4ee5dea48749bc83c5e954fe58
@@ -102,15 +102,26 @@ state:
     rootCause: WP22_QUALIFICATION_SEMANTIC_PROJECTION_DEFECT
     unsupportedPath: qualificationAttempt nested optional fields with runtime undefined
   wp23WorkCommitSha: 69cb6d77910f474cb4a71b79d8dc279783769d53
+  wp23EvidenceCliCorrectionSha: 3234b1f4766602749f79129ef4c22ecb6f73c1ac
+  wp23EffectivePhaseACandidateSha: 3234b1f4766602749f79129ef4c22ecb6f73c1ac
+  wp23EvidenceSourceGitSha: 3234b1f4766602749f79129ef4c22ecb6f73c1ac
   wp23PhaseAStatus: WP23_PHASE_A_COMPLETE_PENDING_INDEPENDENT_PHASE_B
   wp23EvidenceStatus: STAGED_PENDING_INDEPENDENT_REVIEW
-  wp23EvidenceManifestDigest: d3418a376dc1f78d4bac24855163978eb996de6f44770c8c419cb35771883551
-  wp23EvidenceSemanticDigest: a8086947eb9ef0c25dd7074a9bf5f2c201a8c6e9a90e10a0d5a9df4fa63faebb
+  wp23EvidenceManifestDigest: 07ff3fa24f85291f9f309200aed205c66de147efa5f3b706fe2ea56dbd1584e9
+  wp23EvidenceSemanticDigest: a973717243db6e847847fd3968c67e6c8b57e0b7fa16ea242cef95cbbd840187
+  wp23EvidenceSealMethod: OFFICIAL_CLI
+  wp23KnownCliDefect: CLOSED
+  wp23EvidenceCliRecoveryToken: AUTHORIZE-HTR-WP23-OFFICIAL-EVIDENCE-CLI-RECOVERY
+  wp23EvidenceCliRecoveryTokenStatus: CONSUMED
+  wp23SupersededInternalApiStaging:
+    sourceGitSha: 69cb6d77910f474cb4a71b79d8dc279783769d53
+    classification: DIAGNOSTIC_NOT_PHASE_B_PROMOTABLE_SUPERSEDED_BY_OFFICIAL_CLI_RESEAL
+    manifestDigest: d3418a376dc1f78d4bac24855163978eb996de6f44770c8c419cb35771883551
+    semanticDigest: a8086947eb9ef0c25dd7074a9bf5f2c201a8c6e9a90e10a0d5a9df4fa63faebb
   wp23PrematureDraftStatus: REAPPLIED_REAUDITED_AND_COMMITTED_AS_ACCEPTED_PHASE_A_WORK
   wp23QuarantineStashPreserved: true
   wp23QuarantineReapplicationStatus: REAPPLIED_REAUDITED_AND_COMMITTED
-  activeMacroStatus: PHASE_A_COMPLETE_PENDING_INDEPENDENT_PHASE_B
-  planningTerminalState: HTR_MACRO_J_PHASE_A_COMPLETE_PENDING_FRESH_INDEPENDENT_PHASE_B
+  planningTerminalState: HTR_MACRO_J_PHASE_A_COMPLETE_OFFICIAL_WP23_EVIDENCE_READY_FOR_FRESH_INDEPENDENT_PHASE_B
   nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B
   newHumanTokenRequired: true
   requiredHumanTokens:
@@ -227,7 +238,7 @@ state:
     executionServerPackageMode:
       mode: option-a-code-ready
       actualServerMutation: PROHIBITED
-  planningTerminalState: HTR_MACRO_J_PHASE_A_COMPLETE_PENDING_FRESH_INDEPENDENT_PHASE_B
+  planningTerminalState: HTR_MACRO_J_PHASE_A_COMPLETE_OFFICIAL_WP23_EVIDENCE_READY_FOR_FRESH_INDEPENDENT_PHASE_B
   newHumanTokenRequired: true
   requiredHumanTokens:
     - AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B
@@ -1053,7 +1064,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: MACRO_ACTIVE` — **HTR-WP01..HTR-WP21 COMPLETE**; **HTR-MACRO-I COMPLETE**; active macro **HTR-MACRO-J** (`PHASE_A_ACTIVE`); WP22 Phase A gate **PASS pending independent Phase B** (`c982660`); multi-position proof **PASS**; D-11B **PASS** bound `afd9a31`; evidence staged; current work package **HTR-WP23**; `BUILD_AUTHORIZED: YES` (`HTR-MACRO-J_PHASE_A_ONLY`); `nextAction: REAPPLY_AND_REVALIDATE_HTR_WP23_QUARANTINE`. |
+| Plan state | `state.status: in-progress` · `programStatus: MACRO_ACTIVE` — **HTR-WP01..HTR-WP21 COMPLETE**; **HTR-MACRO-I COMPLETE**; active macro **HTR-MACRO-J** (`PHASE_A_COMPLETE_PENDING_INDEPENDENT_PHASE_B`); WP22 Phase A gate **PASS pending independent Phase B** (`c982660`); WP23 Phase A **COMPLETE pending independent Phase B** (WORK `69cb6d7`, official evidence CLI `3234b1f`); evidence staged (not promoted); `BUILD_AUTHORIZED: NO`; `nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B`. |
 
 ## Approved decisions (recorded)
 
@@ -2484,7 +2495,7 @@ WP01 detail lives in the child plan `.cursor/plans/dee-415-htr-wp01-readiness-ca
 | HTR-WP20 | Guardian/exits completion + closed-trade reality invariants | WP18,WP19 | backend | APPROVED | — |
 | HTR-WP21 | Outcome Resolution, Forecast Calibration & Knowledge Confidence Update | WP14,WP15,WP19,WP20 | ai | pending | — |
 | HTR-WP22 | Resilience + performance qualification | WP04,WP05,WP09,WP16,WP19,WP21 | backend | pending | — |
-| HTR-WP23 | Operator runbook + readiness preflight + Execution Server package + Certification prep | WP20,WP22 | infra | pending | — |
+| HTR-WP23 | Operator runbook + readiness preflight + Execution Server package + Certification prep | WP20,WP22 | infra | IN_PROGRESS_PHASE_A_COMPLETE_PENDING_INDEPENDENT_PHASE_B (WORK `69cb6d7`; official evidence CLI `3234b1f`; evidence staged) | `3234b1f` (evidence CLI correction) |
 
 Mandatory tail: **HTR-WP21 → HTR-WP22 → HTR-WP23**; also **HTR-WP16 → HTR-WP22**. Full dependency graph: parent master §40.
 
@@ -2507,7 +2518,7 @@ A single PR is opened only after HTR-WP23, final full validation, and the final 
 
 ## Current work package (HTR-WP23 — historical readiness package)
 
-**CURRENT (2026-07-18):** HTR-MACRO-J Phase A **COMPLETE pending independent Phase B**; WP22 Phase A gate **PASS pending independent Phase B** (`c982660` proof, binding `3b02ad3`); WP23 Phase A **COMPLETE pending independent Phase B** (`69cb6d7`); hermetic full-suite **PASS**; GAP-044 **12/12**; GAP-043 **13/29 PASS** (per-file validate profile); evidence staged (not promoted); `BUILD_AUTHORIZED: NO`; `nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B`.
+**CURRENT (2026-07-18):** HTR-MACRO-J Phase A **COMPLETE pending independent Phase B**; WP22 Phase A gate **PASS pending independent Phase B** (`c982660` proof, binding `3b02ad3`); WP23 Phase A **COMPLETE pending independent Phase B** (WORK `69cb6d7`, official evidence CLI correction `3234b1f`); WP23 evidence sealed via **official CLI only** (manifest `07ff3fa…`); superseded internal-API bundle `69cb6d7` retained as diagnostic-only; hermetic full-suite **PASS**; GAP-044 **12/12**; GAP-043 **13/29 PASS** (per-file validate profile); evidence staged (not promoted); `BUILD_AUTHORIZED: NO`; `nextAction: FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B`.
 
 **Next action:** `FRESH_INDEPENDENT_HTR_MACRO_J_PHASE_B` → human gate `AUTHORIZE-FRESH-INDEPENDENT-HTR-MACRO-J-PHASE-B`.
 
