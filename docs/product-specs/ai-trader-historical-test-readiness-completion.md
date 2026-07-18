@@ -12,7 +12,7 @@ sourceOfTruth:
 relatedGaps: docs/gaps/ai-trader-historical-test-readiness-gap-registry.md
 relatedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
 lastReviewed: 2026-07-18
-version: 0.1.2
+version: 0.1.3
 ---
 
 # AI-TRADER — Historical-Test Readiness Completion Specification
@@ -56,18 +56,25 @@ Link: [`docs/waia-governance/NON-GOALS.md`](../waia-governance/NON-GOALS.md).
 ### Program control state (2026-07-18)
 
 ```text
-PROGRAM_STATUS=FINAL_AUDIT_CORRECTIVE_PACKET_PENDING_HUMAN_REVIEW
+PROGRAM_STATUS=FINAL_AUDIT_CORRECTIVE_SUPERSEDING_PACKET_PENDING_HUMAN_REVIEW
 ORIGINAL_WORK_PACKAGES_COMPLETE=HTR-WP01..HTR-WP23
 FINAL_AUDIT_VERDICT=HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE
 CERTIFY_HTR_READY=NOT_ISSUED
 READY_FOR_FULL_HISTORICAL_TEST=NO
 FINAL_PR_AUTHORIZED=NO
+BUILD_AUTHORIZED=NO
+BUILD_AUTHORIZED_SCOPE=null
 ACTIVE_CORRECTION=HTR-FINAL-AUDIT-CORRECTIVE-A
-ACTIVE_CORRECTION_STATUS=EXACT_PACKET_READY_PENDING_HUMAN_REVIEW
-NEXT_HUMAN_GATE=APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-PACKET
+ACTIVE_CORRECTION_STATUS=SUPERSEDING_EXACT_PACKET_READY_PENDING_HUMAN_REVIEW
+ACTIVE_CORRECTIVE_PACKET_SHA256=04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2
+REJECTED_CORRECTIVE_PACKET_SHA256=e73e7a422ebb9692ef097ecbea3e4e629704a04ff0d950dda4f24bae69bd89da
+C_A1_MIGRATION_DECISION=NONE
+C_A1_PERSISTENCE_OPTION=OPTION_B_REUSE_EXISTING_0094_0096
+NEXT_ACTION=HUMAN_REVIEW_FINAL_AUDIT_CORRECTIVE_SUPERSEDING_PACKET
+NEXT_HUMAN_GATE=APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-SUPERSEDING-PACKET
 ```
 
-Final Opus whole-program audit **technical coverage preserved**; Human **rejected** prior PASS certification recommendation due to contract-classification contradictions (FA-001..FA-004). Corrective closure required before `CERTIFY-HTR-READY` or final PR.
+Final Opus whole-program audit **technical coverage preserved**; Human **rejected** prior PASS certification recommendation due to contract-classification contradictions (FA-001..FA-004). The first corrective exact packet (`e73e7a42…`) was **rejected** (`NOT_APPROVABLE_MANIFEST_AND_MIGRATION_CONTRACT_DEFECTS`) and **superseded** by packet `04863e7a…` (Option B; no migration). Corrective closure required before `CERTIFY-HTR-READY` or final PR.
 
 ### Governance / activation (CG-Gov)
 

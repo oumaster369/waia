@@ -6,7 +6,7 @@ owner: Architect
 linkedSpec: docs/product-specs/ai-trader-historical-test-readiness-completion.md
 linkedGapRegistry: docs/gaps/ai-trader-historical-test-readiness-gap-registry.md
 lastReviewed: 2026-07-18
-version: 0.1.2
+version: 0.1.3
 ---
 
 # AI-TRADER Historical-Test Readiness — Integration Roadmap
@@ -59,7 +59,9 @@ Bounded post-WP23 corrective closure units inside the existing DEE-415 integrati
 
 | correctiveBatchId | correctiveUnit | dependsOn | riskTier | status | packetSha256 | packetPath | gapRefs | acceptanceSummary |
 |-------------------|------------------|-----------|----------|--------|--------------|------------|---------|-------------------|
-| IB-HTR-CORR-A | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-23 | T2 | planned | e73e7a422ebb9692ef097ecbea3e4e629704a04ff0d950dda4f24bae69bd89da | .cursor/plans/dee-415-final-audit-corrective/e73e7a422ebb9692ef097ecbea3e4e629704a04ff0d950dda4f24bae69bd89da/dee-415-final-audit-corrective-exact-packet.plan.md | HTR-GAP-046, HTR-GAP-047, HTR-GAP-048, HTR-GAP-049 | Human rejected prior PASS classification; exact corrective packet pending Human review (`APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-PACKET`); blocks CERTIFY-HTR-READY and final PR until C-A5 integrated re-audit PASS |
+| IB-HTR-CORR-A | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-23 | T2 | planned | 04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2 | .cursor/plans/dee-415-final-audit-corrective/04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2/dee-415-final-audit-corrective-exact-packet.plan.md | HTR-GAP-046, HTR-GAP-047, HTR-GAP-048, HTR-GAP-049 | Superseding exact packet (Option B, no migration) pending Human review (`APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-SUPERSEDING-PACKET`); blocks CERTIFY-HTR-READY and final PR until C-A5 integrated re-audit PASS |
+
+**Supersession history (IB-HTR-CORR-A):** packet `e73e7a422ebb9692ef097ecbea3e4e629704a04ff0d950dda4f24bae69bd89da` was `SUPERSEDED_NOT_APPROVABLE` (classification `NOT_APPROVABLE_MANIFEST_AND_MIGRATION_CONTRACT_DEFECTS`: colliding Option-A migration number; dual persistence-authority risk; wrong MODIFY path; inaccurate manifest totals; duplicate path ownership; incomplete cost-model consumer treatment) and superseded by active packet `04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2` per `REJECT-DEE-415-FINAL-AUDIT-CORRECTIVE-PACKET` + `AUTHORIZE-DEE-415-FINAL-AUDIT-CORRECTIVE-PACKET-RESPIN` + `ACK-DEE-415-CORRECTIVE-A-MIGRATION: decision=NONE, persistenceOption=OPTION_B_REUSE_EXISTING_0094_0096`. The active packet introduces no new migration (`newMigrationFiles=0`); recomputed manifest CREATE=26, MODIFY=41. The rejected packet bytes remain immutable; the supersession relationship is recorded outside them.
 
 ## Batch schema (ordinary work packages)
 

@@ -6,7 +6,7 @@ owner: Architect
 linkedSpec: docs/product-specs/ai-trader-historical-test-readiness-completion.md
 linkedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
 lastReviewed: 2026-07-18
-version: 0.1.4
+version: 0.1.5
 ---
 
 # AI-TRADER Historical-Test Readiness — Gap Registry
@@ -89,6 +89,8 @@ Make missing or partial work explicit for the Historical-Test Readiness program.
 | HTR-GAP-047 | D-5 vs FHV cost-model contradiction; no single authoritative cost object (FA-002) | blocker | open (2026-07-18; D-5 20/5/10 bps vs FHV pin 10/5 bps on default path) | HTR-WP17 | HTR-WP18, HTR-WP19, HTR-WP22, HTR-WP23 | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-CORR-A |
 | HTR-GAP-048 | cancelPartialEntry emitted on breach but unconsumed; partial entry remainder not cancelled (FA-003) | blocker | open (2026-07-18; safety contract defect; WP20 partial-entry cancellation incomplete) | HTR-WP20 | HTR-WP17, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-CORR-A |
 | HTR-GAP-049 | FHV semantic trace + operator/six-report emitters missing; schema-only (FA-004) | blocker | open (2026-07-18; blocks code-ready FHV capability; not post-DEE-415 deferral) | HTR-WP23 | HTR-WP04, HTR-WP13, HTR-WP14, HTR-WP18, HTR-WP19, HTR-WP20, HTR-WP21, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-CORR-A |
+
+> **HTR-GAP-046..049 remain OPEN blockers.** Closure unit `HTR-FINAL-AUDIT-CORRECTIVE-A` is now governed by the **superseding** exact packet `04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2` (Option B, `newMigrationFiles=0`); the prior packet `e73e7a422ebb9692ef097ecbea3e4e629704a04ff0d950dda4f24bae69bd89da` is `SUPERSEDED_NOT_APPROVABLE`. No gap is closed by this governance session; closure requires Phase-A implementation + independent Phase-B evidence.
 
 ## Intake rules
 
