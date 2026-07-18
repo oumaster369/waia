@@ -1,5 +1,14 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 import { readGitCodeSha, readGitDirtyTree } from "@/lib/trader/backtest/replay-benchmark-harness";
@@ -14,11 +23,38 @@ import {
 } from "@/lib/trader/readiness/htr-fhv-run-contract-v0";
 import { HTR_OPERATOR_REPORT_SCHEMA_VERSION } from "@/lib/trader/readiness/htr-operator-report-schema.v1";
 import { listHtrReadinessGateGroupsRequiringPreflight } from "@/lib/trader/readiness/htr-readiness-gate-groups";
-import type { HtrReadinessPreflightResult } from "@/lib/trader/readiness/htr-readiness-preflight";
+import {
+  assertHtrReadinessPreflightPass,
+  runHtrReadinessPreflight,
+  type HtrReadinessPreflightResult,
+} from "@/lib/trader/readiness/htr-readiness-preflight";
 
 export const HTR_WP23_EVIDENCE_INTEGRITY_CONTRACT_ID = "waia.htr.evidence-integrity.v2" as const;
 export const HTR_WP23_EVIDENCE_MANIFEST_SCHEMA = "htr-wp23-readiness-evidence-manifest/v1" as const;
 export const HTR_WP23_EVIDENCE_STAGING_ROOT = ".cursor/plans/dee-415-wp23/evidence-staging";
+export const HTR_WP23_ACCEPTED_REPLAY_RUNS_EVIDENCE_PATH =
+  "replay-runs/RI-P7/htr-wp23-readiness-package";
+
+const FULL_GIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
+
+const HTR_WP23_EVIDENCE_ARTIFACT_FILES = [
+  "readiness-preflight-report.json",
+  "fhv-run-contract-v0.json",
+  "execution-server-package-manifest.json",
+  "gate-groups-index.json",
+  "manifest.json",
+  "manifest.digest",
+  "semantic.digest",
+] as const;
+
+const HTR_WP23_CREDENTIAL_PATTERNS = [
+  /postgresql:\/\//i,
+  /DATABASE_URL/i,
+  /BEGIN (RSA |EC )?PRIVATE KEY/i,
+  /api[_-]?key\s*[:=]/i,
+  /secret\s*[:=]/i,
+  /password\s*[:=]/i,
+] as const;
 
 export type HtrWp23EvidenceArtifactEntry = {
   path: string;
@@ -44,7 +80,118 @@ export type HtrWp23EvidenceBundleInput = {
   sourceGitSha: string;
   sourceDirtyTree?: boolean;
   preflightResult: HtrReadinessPreflightResult;
+  cwd?: string;
 };
+
+export type HtrWp23OfficialEvidenceSealResult = {
+  stagingDir: string;
+  sourceGitSha: string;
+  sourceDirtyTree: false;
+  generatorGitSha: string;
+  manifestDigest: string;
+  semanticDigest: string;
+  manifestVerification: true;
+  semanticVerification: true;
+  credentialsDetected: false;
+  holdoutRead: false;
+  executionServerMutation: false;
+  artifactCount: number;
+};
+
+export function assertHtrWp23EvidenceSourceGitSha(sourceGitSha: string): void {
+  if (sourceGitSha.length !== 40) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:SOURCE_GIT_SHA_SHORT_OR_LONG");
+  }
+  if (sourceGitSha !== sourceGitSha.toLowerCase()) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:SOURCE_GIT_SHA_NOT_LOWERCASE");
+  }
+  if (!FULL_GIT_SHA_PATTERN.test(sourceGitSha)) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:SOURCE_GIT_SHA_MALFORMED");
+  }
+}
+
+export function assertHtrWp23EvidenceGitHeadMatches(
+  sourceGitSha: string,
+  headSha = readGitCodeSha(),
+): void {
+  assertHtrWp23EvidenceSourceGitSha(sourceGitSha);
+  if (headSha !== sourceGitSha) {
+    throw new Error(
+      `HTR_WP23_EVIDENCE_SEAL:SOURCE_GIT_SHA_HEAD_MISMATCH:expected=${sourceGitSha}:actual=${headSha}`,
+    );
+  }
+}
+
+export function assertHtrWp23EvidenceGitTreeClean(dirtyTree = readGitDirtyTree()): void {
+  if (dirtyTree) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:DIRTY_SOURCE_TREE");
+  }
+}
+
+function assertResolvedPathUnderRoot(resolvedPath: string, resolvedRoot: string): void {
+  const rootWithSep = resolvedRoot.endsWith(path.sep) ? resolvedRoot : `${resolvedRoot}${path.sep}`;
+  if (resolvedPath !== resolvedRoot && !resolvedPath.startsWith(rootWithSep)) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:PATH_TRAVERSAL");
+  }
+}
+
+export function assertHtrWp23EvidenceStagingTargetAllowed(
+  sourceGitSha: string,
+  cwd = process.cwd(),
+): string {
+  assertHtrWp23EvidenceSourceGitSha(sourceGitSha);
+  const stagingDir = resolveHtrWp23EvidenceStagingDir(sourceGitSha, cwd);
+  const resolvedStaging = path.resolve(stagingDir);
+  const resolvedRoot = path.resolve(cwd, HTR_WP23_EVIDENCE_STAGING_ROOT);
+  const resolvedAccepted = path.resolve(cwd, HTR_WP23_ACCEPTED_REPLAY_RUNS_EVIDENCE_PATH);
+
+  assertResolvedPathUnderRoot(resolvedStaging, resolvedRoot);
+  if (path.basename(resolvedStaging) !== sourceGitSha) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:PATH_TRAVERSAL");
+  }
+  if (
+    resolvedStaging === resolvedAccepted ||
+    resolvedStaging.startsWith(`${resolvedAccepted}${path.sep}`)
+  ) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:ACCEPTED_PATH_SUBSTITUTION_FORBIDDEN");
+  }
+
+  if (existsSync(resolvedStaging)) {
+    const leafStat = lstatSync(resolvedStaging);
+    if (leafStat.isSymbolicLink()) {
+      throw new Error("HTR_WP23_EVIDENCE_SEAL:STAGING_DIR_LEAF_IS_SYMLINK");
+    }
+    const realStaging = realpathSync(resolvedStaging);
+    assertResolvedPathUnderRoot(realStaging, resolvedRoot);
+  }
+
+  return resolvedStaging;
+}
+
+export function assertHtrWp23EvidenceStagingTargetWritable(stagingDir: string): void {
+  const manifestPath = path.join(stagingDir, "manifest.json");
+  if (!existsSync(manifestPath)) {
+    return;
+  }
+  if (verifyHtrWp23EvidenceStaging(stagingDir)) {
+    throw new Error("HTR_WP23_EVIDENCE_STAGING_ALREADY_SEALED");
+  }
+  throw new Error("HTR_WP23_EVIDENCE_STAGING_PARTIAL_NOT_ACCEPTED");
+}
+
+export function scanHtrWp23EvidenceCredentials(stagingDir: string): boolean {
+  for (const fileName of HTR_WP23_EVIDENCE_ARTIFACT_FILES) {
+    const filePath = path.join(stagingDir, fileName);
+    if (!existsSync(filePath)) {
+      continue;
+    }
+    const contents = readFileSync(filePath, "utf8");
+    if (HTR_WP23_CREDENTIAL_PATTERNS.some((pattern) => pattern.test(contents))) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export function sha256FileBytes(filePath: string): string {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
@@ -162,7 +309,9 @@ export function sealHtrWp23EvidenceStaging(bundle: HtrWp23EvidenceBundleInput): 
   stagingDir: string;
   manifest: HtrWp23EvidenceManifest;
 } {
-  const stagingDir = resolveHtrWp23EvidenceStagingDir(bundle.sourceGitSha);
+  const cwd = bundle.cwd ?? process.cwd();
+  const stagingDir = resolveHtrWp23EvidenceStagingDir(bundle.sourceGitSha, cwd);
+  assertHtrWp23EvidenceStagingTargetWritable(stagingDir);
   const manifest = buildHtrWp23EvidenceManifest(stagingDir, bundle);
   const manifestPath = path.join(stagingDir, "manifest.json");
   const manifestSerialized = `${JSON.stringify(manifest, null, 2)}\n`;
@@ -219,5 +368,66 @@ export function buildDefaultHtrWp23EvidenceBundle(
     sourceGitSha,
     sourceDirtyTree: readGitDirtyTree(),
     preflightResult,
+  };
+}
+
+export function runHtrWp23OfficialEvidenceSeal(
+  sourceGitSha: string,
+  cwd = process.cwd(),
+): HtrWp23OfficialEvidenceSealResult {
+  assertHtrWp23EvidenceGitHeadMatches(sourceGitSha);
+  assertHtrWp23EvidenceGitTreeClean();
+  const stagingDir = assertHtrWp23EvidenceStagingTargetAllowed(sourceGitSha, cwd);
+  assertHtrWp23EvidenceStagingTargetWritable(stagingDir);
+
+  const preflightResult = runHtrReadinessPreflight({
+    mode: "self-test",
+    sourceGitSha,
+  });
+  assertHtrReadinessPreflightPass(preflightResult);
+  if (preflightResult.holdoutNoReadAttestation !== true) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:HOLDOUT_READ_ATTESTATION_FAILED");
+  }
+  if (preflightResult.noServerMutationAttestation !== true) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:EXECUTION_SERVER_MUTATION_ATTESTATION_FAILED");
+  }
+
+  const generatorGitSha = readGitCodeSha();
+  const sealed = sealHtrWp23EvidenceStaging({
+    sourceGitSha,
+    sourceDirtyTree: false,
+    preflightResult,
+    cwd,
+  });
+
+  if (!verifyHtrWp23EvidenceStaging(sealed.stagingDir)) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:INTERNAL_VERIFICATION_FAILED");
+  }
+  if (scanHtrWp23EvidenceCredentials(sealed.stagingDir)) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:CREDENTIALS_DETECTED");
+  }
+
+  const manifestDigest = readFileSync(
+    path.join(sealed.stagingDir, "manifest.digest"),
+    "utf8",
+  ).trim();
+  const semanticDigest = readFileSync(
+    path.join(sealed.stagingDir, "semantic.digest"),
+    "utf8",
+  ).trim();
+
+  return {
+    stagingDir: sealed.stagingDir,
+    sourceGitSha,
+    sourceDirtyTree: false,
+    generatorGitSha,
+    manifestDigest,
+    semanticDigest,
+    manifestVerification: true,
+    semanticVerification: true,
+    credentialsDetected: false,
+    holdoutRead: false,
+    executionServerMutation: false,
+    artifactCount: sealed.manifest.artifactIndex.length,
   };
 }

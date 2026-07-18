@@ -4,57 +4,53 @@
  * Usage:
  *   pnpm trader:htr:readiness:preflight -- --self-test
  *   pnpm trader:htr:readiness:preflight -- --candidate-json '<json>'
+ *   pnpm trader:htr:readiness:preflight -- \
+ *     --emit-evidence \
+ *     --staging-only \
+ *     --source-git-sha <EXACT_CLEAN_HEAD_SHA>
  */
 
 import {
   assertHtrReadinessPreflightPass,
+  parseHtrWp23ReadinessPreflightCliArgs,
   runHtrReadinessPreflight,
   type HtrReadinessPreflightInput,
 } from "@/lib/trader/readiness/htr-readiness-preflight";
+import { runHtrWp23OfficialEvidenceSeal } from "@/lib/trader/readiness/htr-readiness-evidence-harness";
 import type { HtrFhvRunCandidateInput } from "@/lib/trader/readiness/htr-fhv-run-contract-v0";
-
-function parseArgs(argv: string[]): {
-  selfTest?: boolean;
-  candidateJson?: string;
-  validatePostgres?: boolean;
-} {
-  const candidateIndex = argv.indexOf("--candidate-json");
-  return {
-    selfTest: argv.includes("--self-test"),
-    candidateJson: candidateIndex >= 0 ? argv[candidateIndex + 1] : undefined,
-    validatePostgres: argv.includes("--validate-postgres-connection"),
-  };
-}
 
 function main(): void {
   if (process.env.WAIA_TRADER_CLI !== "1") {
     throw new Error("WAIA_TRADER_CLI=1 required");
   }
 
-  const { selfTest, candidateJson, validatePostgres } = parseArgs(process.argv.slice(2));
-  if (!selfTest && !candidateJson) {
-    throw new Error("HTR_WP23_PREFLIGHT_CLI:SELF_TEST_OR_CANDIDATE_JSON_REQUIRED");
+  const mode = parseHtrWp23ReadinessPreflightCliArgs(process.argv.slice(2));
+
+  if (mode.kind === "evidence-seal") {
+    const sealed = runHtrWp23OfficialEvidenceSeal(mode.sourceGitSha);
+    console.log(JSON.stringify(sealed, null, 2));
+    return;
   }
 
   let input: HtrReadinessPreflightInput;
-  if (selfTest) {
+  if (mode.kind === "self-test") {
     input = {
       mode: "self-test",
-      validatePostgresConnection: validatePostgres,
+      validatePostgresConnection: mode.validatePostgresConnection,
     };
   } else {
-    const candidate = JSON.parse(candidateJson!) as HtrFhvRunCandidateInput;
+    const candidate = JSON.parse(mode.candidateJson) as HtrFhvRunCandidateInput;
     input = {
       mode: "candidate-run",
       candidate,
-      validatePostgresConnection: validatePostgres,
+      validatePostgresConnection: mode.validatePostgresConnection,
     };
   }
 
   const result = runHtrReadinessPreflight(input);
   console.log(JSON.stringify(result, null, 2));
 
-  if (selfTest) {
+  if (mode.kind === "self-test") {
     assertHtrReadinessPreflightPass(result);
   }
 

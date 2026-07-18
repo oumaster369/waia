@@ -130,3 +130,104 @@ export function assertHtrReadinessPreflightPass(result: HtrReadinessPreflightRes
     throw new Error(`HTR_WP23_PREFLIGHT:FAIL:${result.failureCodes.join(",") || "UNKNOWN"}`);
   }
 }
+
+const HTR_WP23_CLI_KNOWN_FLAGS = new Set([
+  "--self-test",
+  "--candidate-json",
+  "--validate-postgres-connection",
+  "--emit-evidence",
+  "--staging-only",
+  "--source-git-sha",
+]);
+
+const HTR_WP23_CLI_FORBIDDEN_FLAGS = new Set([
+  "--holdout-read",
+  "--read-holdout",
+  "--mutate-execution-server",
+  "--execution-server-mutation",
+  "--accepted-path",
+  "--promote-evidence",
+]);
+
+export type HtrWp23ReadinessPreflightCliMode =
+  | { kind: "self-test"; validatePostgresConnection?: boolean }
+  | { kind: "candidate-run"; candidateJson: string; validatePostgresConnection?: boolean }
+  | { kind: "evidence-seal"; sourceGitSha: string; validatePostgresConnection?: boolean };
+
+function readFlagValue(argv: string[], flag: string): string | undefined {
+  const indexes = argv.reduce<number[]>((found, token, index) => {
+    if (token === flag) {
+      found.push(index);
+    }
+    return found;
+  }, []);
+  if (indexes.length > 1) {
+    throw new Error(
+      `HTR_WP23_PREFLIGHT_CLI:DUPLICATE_${flag.slice(2).replace(/-/g, "_").toUpperCase()}`,
+    );
+  }
+  const index = indexes[0];
+  if (index === undefined) {
+    return undefined;
+  }
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error(
+      `HTR_WP23_PREFLIGHT_CLI:${flag.slice(2).replace(/-/g, "_").toUpperCase()}_VALUE_REQUIRED`,
+    );
+  }
+  return value;
+}
+
+export function parseHtrWp23ReadinessPreflightCliArgs(
+  argv: string[],
+): HtrWp23ReadinessPreflightCliMode {
+  const normalizedArgv = argv.filter((token) => token !== "--");
+  for (const token of normalizedArgv) {
+    if (!token.startsWith("--")) {
+      continue;
+    }
+    if (HTR_WP23_CLI_FORBIDDEN_FLAGS.has(token)) {
+      throw new Error(`HTR_WP23_PREFLIGHT_CLI:FORBIDDEN_FLAG:${token}`);
+    }
+    if (!HTR_WP23_CLI_KNOWN_FLAGS.has(token)) {
+      throw new Error(`HTR_WP23_PREFLIGHT_CLI:UNKNOWN_FLAG:${token}`);
+    }
+  }
+
+  const validatePostgresConnection = normalizedArgv.includes("--validate-postgres-connection");
+  const emitEvidence = normalizedArgv.includes("--emit-evidence");
+  const stagingOnly = normalizedArgv.includes("--staging-only");
+  const selfTest = normalizedArgv.includes("--self-test");
+  const candidateJson = readFlagValue(normalizedArgv, "--candidate-json");
+  const sourceGitSha = readFlagValue(normalizedArgv, "--source-git-sha");
+
+  if (emitEvidence) {
+    if (!stagingOnly) {
+      throw new Error("HTR_WP23_EVIDENCE_SEAL:STAGING_ONLY_REQUIRED");
+    }
+    if (!sourceGitSha) {
+      throw new Error("HTR_WP23_EVIDENCE_SEAL:SOURCE_GIT_SHA_REQUIRED");
+    }
+    if (selfTest || candidateJson !== undefined) {
+      throw new Error("HTR_WP23_EVIDENCE_SEAL:INCOMPATIBLE_MODE_FLAGS");
+    }
+    return { kind: "evidence-seal", sourceGitSha, validatePostgresConnection };
+  }
+
+  if (stagingOnly || sourceGitSha) {
+    throw new Error("HTR_WP23_EVIDENCE_SEAL:EMIT_EVIDENCE_REQUIRED");
+  }
+
+  if (selfTest && candidateJson !== undefined) {
+    throw new Error("HTR_WP23_PREFLIGHT_CLI:SELF_TEST_AND_CANDIDATE_JSON_EXCLUSIVE");
+  }
+  if (selfTest) {
+    return { kind: "self-test", validatePostgresConnection };
+  }
+  if (candidateJson !== undefined) {
+    return { kind: "candidate-run", candidateJson, validatePostgresConnection };
+  }
+
+  throw new Error("HTR_WP23_PREFLIGHT_CLI:SELF_TEST_OR_CANDIDATE_JSON_OR_EVIDENCE_REQUIRED");
+}
