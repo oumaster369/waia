@@ -12,7 +12,7 @@ sourceOfTruth:
 relatedGaps: docs/gaps/ai-trader-historical-test-readiness-gap-registry.md
 relatedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
 lastReviewed: 2026-07-19
-version: 0.1.4
+version: 0.1.5
 ---
 
 # AI-TRADER — Historical-Test Readiness Completion Specification
@@ -53,12 +53,12 @@ Link: [`docs/waia-governance/NON-GOALS.md`](../waia-governance/NON-GOALS.md).
 
 `READY_FOR_FULL_HISTORICAL_TEST` is granted **only** when all gate groups below are measurably true **and** the Human Architect certifies (`CERTIFY-HTR-READY`, D-12). Default state: `NOT_READY`. Composer never sets `READY_FOR_FULL_HISTORICAL_TEST`.
 
-### Program control state (2026-07-18)
+### Program control state (2026-07-19)
 
 ```text
-PROGRAM_STATUS=FINAL_AUDIT_CORRECTIVE_G2_B5_V6_PHASE_B_COMPLETE_READY_FOR_FINAL_WHOLE_PROGRAM_AUDIT
+PROGRAM_STATUS=FINAL_AUDIT_BLOCKERS_CLOSED_READY_FOR_FRESH_FINAL_WHOLE_PROGRAM_REAUDIT
 ORIGINAL_WORK_PACKAGES_COMPLETE=HTR-WP01..HTR-WP23
-FINAL_AUDIT_VERDICT=HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE
+FINAL_AUDIT_VERDICT=OPUS_FINAL_AUDIT_BLOCKERS_CLOSED_PENDING_REAUDIT
 CORRECTIVE_A=COMPLETE
 CORRECTIVE_A_PHASE_A=PASS
 CORRECTIVE_A_PHASE_B=PASS
@@ -98,12 +98,19 @@ REJECTED_B5_V3_PACKET_SHA256=04ebb3d7cfc553b0f074848464d691c09a8159419b62f4ae914
 REJECTED_B5_V2_PACKET_SHA256=49b547e105aa0ae6b3422382a7264d2382680a7145afca77427847553be54ea2
 C_A1_MIGRATION_DECISION=NONE
 C_A1_PERSISTENCE_OPTION=OPTION_B_REUSE_EXISTING_0094_0096
-NEXT_ACTION=FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_AUDIT
-NEXT_HUMAN_GATE=AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-AUDIT
+WP23_ACCEPTED_EVIDENCE_PATH=replay-runs/RI-P7/htr-wp23-readiness-package/
+WP23_ACCEPTED_EVIDENCE_SOURCE_GIT_SHA=5e8e8b6ca454bdda77222efc182b3d517cd2a1d1
+WP23_ACCEPTED_EVIDENCE_MANIFEST_DIGEST=d694526cc69b9781e6ba1da31c3515405ad904305ee47632d72f4dbfb4773608
+WP23_ACCEPTED_EVIDENCE_SEMANTIC_DIGEST=fd11d242adc7c4d51345560beeb17b748c2afba559232900446c2a386cc50bd8
+WP23_SUPERSEDED_EVIDENCE_PATH=replay-runs/RI-P7/htr-wp23-readiness-package/superseded/6647b9035c19bd4ea55d3c610d1f637ddf3eb668/
+FINAL_AUDIT_BLOCKER_CLOSURE=COMPLETE
+READY_FOR_FRESH_FINAL_WHOLE_PROGRAM_REAUDIT=YES
+NEXT_ACTION=FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_REAUDIT
+NEXT_HUMAN_GATE=AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-REAUDIT
 EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED=NO
 ```
 
-Final Opus whole-program audit **technical coverage preserved**; Human **rejected** prior PASS certification recommendation due to contract-classification contradictions (FA-001..FA-004). Corrective closure **COMPLETE** at independent Phase-B PASS; final whole-program re-audit required before `CERTIFY-HTR-READY` or final PR.
+Opus final whole-program audit identified confirmed blockers (Postgres CA-001..CA-004 reproduction, WP23 stale D-5 evidence, canonical/controller drift). **Bounded blocker closure COMPLETE** (2026-07-19); corrective closure **COMPLETE** at independent Phase-B PASS. Fresh final whole-program re-audit required before `CERTIFY-HTR-READY` or final PR.
 
 ### Governance / activation (CG-Gov)
 
@@ -113,8 +120,8 @@ Final Opus whole-program audit **technical coverage preserved**; Human **rejecte
 - [x] Runtime-substrate interpretation recorded (`APPROVE-HTR-RUNTIME-SUBSTRATE: deterministic-historical-readiness-substrate`, D-16; HTR-WP01).
 - [x] Repository-first program state synchronized (canonical integration plan + Linear + parent ledger after each work package; all 23 WPs closed).
 - [x] All 23 work packages COMPLETE with WORK + CLOSEOUT commits on the shared branch (`HTR-WP01..HTR-WP23`; independent Phase-B PASS per WP).
-- [ ] Final whole-program Opus audit PASS; full validation matrix green; readiness package exists (Human rejected prior PASS; corrective closure pending).
-- [ ] Human certification (`CERTIFY-HTR-READY`, D-12) after corrective closure + re-audit PASS.
+- [ ] Final whole-program Opus re-audit PASS; full validation matrix green with zero skipped corrective-matrix cases (confirmed blockers closed 2026-07-19; re-audit not yet run).
+- [ ] Human certification (`CERTIFY-HTR-READY`, D-12) after fresh final whole-program re-audit PASS.
 
 ### CG-A — Data & dataset
 

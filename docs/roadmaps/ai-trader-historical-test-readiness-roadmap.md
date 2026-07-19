@@ -6,7 +6,7 @@ owner: Architect
 linkedSpec: docs/product-specs/ai-trader-historical-test-readiness-completion.md
 linkedGapRegistry: docs/gaps/ai-trader-historical-test-readiness-gap-registry.md
 lastReviewed: 2026-07-19
-version: 0.1.4
+version: 0.1.5
 ---
 
 # AI-TRADER Historical-Test Readiness — Integration Roadmap
@@ -45,7 +45,7 @@ Post-final-audit corrective closure units (`HTR-FINAL-AUDIT-CORRECTIVE-<ID>`) ar
 | IB-HTR-20 | HTR-WP20 | Guardian/exits completion + closed-trade reality invariants | IB-HTR-18, IB-HTR-19 | T2 | complete | docs/plans/dee-415-ai-trader-historical-test-readiness.md | HTR-GAP-022 | WORK b820a06 + CLOSEOUT e9cca67; independent Phase-B PASS; Guardian exit taxonomy + closed-trade invariants; evidence replay-runs/RI-P7/htr-wp20-guardian-exit-reality/ semantic digest e5fa84d6…; HTR-GAP-022 CLOSED |
 | IB-HTR-21 | HTR-WP21 | Outcome Resolution, Forecast Calibration & Knowledge Confidence Update | IB-HTR-14, IB-HTR-15, IB-HTR-19, IB-HTR-20 | T2 | complete | docs/plans/dee-415-ai-trader-historical-test-readiness.md | HTR-GAP-010,036,037,038,039,040 | WORK f72eed4..b71a381 + CLOSEOUT 0dff99c; independent Phase-B PASS; epistemic closure; evidence replay-runs/RI-P7/htr-wp21-epistemic-closure/ semantic digest c9c52c49…; HTR-GAP-010/036/037/038/039/040 CLOSED |
 | IB-HTR-22 | HTR-WP22 | Resilience + performance qualification | IB-HTR-04, IB-HTR-05, IB-HTR-09, IB-HTR-16, IB-HTR-19, IB-HTR-21 | T2 | complete | docs/plans/dee-415-ai-trader-historical-test-readiness.md | HTR-GAP-005,024,026,027,029,044 | Independent Phase-B PASS 2026-07-18; WORK c982660; accepted evidence replay-runs/RI-P7/htr-wp22-runtime-qualification/ manifest 2c2238e7… semantic a7ca958c…; D-11B bound to afd9a310; multi-position BTC/ETH 100000 USDT shared portfolio |
-| IB-HTR-23 | HTR-WP23 | Operator runbook + readiness preflight + Execution Server package + Certification prep | IB-HTR-20, IB-HTR-22 | T1 | complete | docs/plans/dee-415-ai-trader-historical-test-readiness.md | HTR-GAP-028,042,043 | Independent Phase-B PASS 2026-07-18; WORK 6647b903; accepted evidence replay-runs/RI-P7/htr-wp23-readiness-package/ manifest 8093c418… semantic 1665f093…; FHV contract pinned SEALED_NOT_ACCESSED; HTX NOT_AVAILABLE; Option A code-ready package schema (FA-004 emitter gap remains open at HTR-GAP-049) |
+| IB-HTR-23 | HTR-WP23 | Operator runbook + readiness preflight + Execution Server package + Certification prep | IB-HTR-20, IB-HTR-22 | T1 | complete | docs/plans/dee-415-ai-trader-historical-test-readiness.md | HTR-GAP-028,042,043 | Independent Phase-B PASS 2026-07-18; WORK 6647b903; accepted evidence replay-runs/RI-P7/htr-wp23-readiness-package/ resealed 2026-07-19 at 5e8e8b6 manifest d694526c… semantic fd11d242… (D-5 authority 20/5/10); FHV contract pinned SEALED_NOT_ACCESSED; HTX NOT_AVAILABLE; Option A code-ready package schema; HTR-GAP-049 CLOSED at CORR-A |
 
 All batches use `linearIssue: DEE-415`. Whole-program `riskTier: T2`; per-batch tier describes work-package nature (informative).
 

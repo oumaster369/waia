@@ -68,16 +68,9 @@
     "externalWithdrawalsDuringRun": 0,
     "portfolioMode": "SHARED_MULTI_INSTRUMENT"
   },
-  "costModelId": "htr-historical-execution-v1",
-  "costModelSchemaVersion": "waia.trader.historical-execution-model.v1",
-  "feeBps": "20",
-  "halfSpreadBps": "5",
-  "marketImpactBps": "10",
-  "slippageModel": "MERGED_INTO_IMPACT",
-  "costModelDigest": "a4b994f7865425edb27e4a87d84f0ca958bd455121147411dfec163c58431b79",
-  "costModelVersion": "waia.trader.historical-execution-model.v1",
-  "costModelFeesBps": "20",
-  "costModelSlippageBps": "15",
+  "costModelVersion": "waia.trader.cost-model.v1",
+  "costModelFeesBps": "10",
+  "costModelSlippageBps": "5",
   "drawdownPolicyVersion": "htr-wp16-d20-drawdown/v1",
   "maxAccountDrawdownPct": 25,
   "maxMonthlyDrawdownPct": 15,
@@ -89,5 +82,5 @@
   "datasetSourceClassification": "NOT_AVAILABLE",
   "holdoutAccess": "PROHIBITED_UNTIL_OPERATOR_PROCEDURE",
   "silentDatasetSubstitution": "PROHIBITED",
-  "payloadSha256": "3b1ba9b3669e868418dabdf4bf705ea6a63507d6f38f1ccd15013d665109fa67"
+  "payloadSha256": "5431f4e0f462332823523059cef054fcc72087ed4f35737e1d94520153d65df4"
 }

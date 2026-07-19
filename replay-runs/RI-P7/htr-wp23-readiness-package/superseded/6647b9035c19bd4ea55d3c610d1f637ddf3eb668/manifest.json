@@ -1,47 +1,47 @@
 {
   "schemaVersion": "htr-wp23-readiness-evidence-manifest/v1",
   "contractId": "waia.htr.evidence-integrity.v2",
-  "sourceGitSha": "5e8e8b6ca454bdda77222efc182b3d517cd2a1d1",
+  "sourceGitSha": "6647b9035c19bd4ea55d3c610d1f637ddf3eb668",
   "sourceDirtyTree": false,
   "generatorProvenance": "lib/trader/readiness/htr-readiness-evidence-harness.ts",
   "artifactIndex": [
     {
       "path": "readiness-preflight-report.json",
       "sizeBytes": 874,
-      "fileSha256": "fc0923fd720a4d1722f52dfd68c7faac7a9b111ec10af298099f6d62ffde2276",
-      "payloadSha256": "d9f582da4b42d599840b426305adab3d8d7cd71fd51740e154b4551600c93fb0",
+      "fileSha256": "51618a990faef58b6e5821b5bfb7f8ae23ae7e77ff6c452c0d336929740eae9f",
+      "payloadSha256": "a5ef693fe0fb28f523a77e6a421cd99eaec31cbb1469d849aa654ad19fe3ae85",
       "schemaVersion": "htr-wp23-readiness-preflight-report/v1",
-      "sourceGitSha": "5e8e8b6ca454bdda77222efc182b3d517cd2a1d1",
+      "sourceGitSha": "6647b9035c19bd4ea55d3c610d1f637ddf3eb668",
       "sourceDirtyTree": false,
       "generatorProvenance": "lib/trader/readiness/htr-readiness-evidence-harness.ts"
     },
     {
       "path": "fhv-run-contract-v0.json",
-      "sizeBytes": 2900,
-      "fileSha256": "136fddf3a1d646fee2d86f6fd50ab5801660085269a38a4f1083f57a3a8e8da1",
-      "payloadSha256": "3b1ba9b3669e868418dabdf4bf705ea6a63507d6f38f1ccd15013d665109fa67",
+      "sizeBytes": 2563,
+      "fileSha256": "f15ad1cafc72f80acc46f841f44a789e4138b3a36701fcc4f9d7c8a0e3407d23",
+      "payloadSha256": "5431f4e0f462332823523059cef054fcc72087ed4f35737e1d94520153d65df4",
       "schemaVersion": "htr-fhv-run-contract/v0",
-      "sourceGitSha": "5e8e8b6ca454bdda77222efc182b3d517cd2a1d1",
+      "sourceGitSha": "6647b9035c19bd4ea55d3c610d1f637ddf3eb668",
       "sourceDirtyTree": false,
       "generatorProvenance": "lib/trader/readiness/htr-readiness-evidence-harness.ts"
     },
     {
       "path": "execution-server-package-manifest.json",
-      "sizeBytes": 2785,
-      "fileSha256": "6a5f5b3d63ad7914d28de5abb6519d625ce8a9daf5052491294a79bb537268b2",
-      "payloadSha256": "d49ccd0b92108ba66047616fd4560299d59d9bf9bc4019d8a8321b5cdcbd01e5",
+      "sizeBytes": 2696,
+      "fileSha256": "aba31e14ef51d24520643c0758f5c0da0c37eee174d27bee85ab05f2127257ee",
+      "payloadSha256": "1cdde6154ab5b52c95f3ec9f4cd43f8c551e79bf5942105f5e01fb0b2a47a18d",
       "schemaVersion": "htr-execution-server-code-ready-package/v1",
-      "sourceGitSha": "5e8e8b6ca454bdda77222efc182b3d517cd2a1d1",
+      "sourceGitSha": "6647b9035c19bd4ea55d3c610d1f637ddf3eb668",
       "sourceDirtyTree": false,
       "generatorProvenance": "lib/trader/readiness/htr-readiness-evidence-harness.ts"
     },
     {
       "path": "gate-groups-index.json",
       "sizeBytes": 2575,
-      "fileSha256": "95b9d416123d76b540b264fa58dd75bc1874c09fc3ae5e225ea95cafebad5404",
-      "payloadSha256": "1d48c519b202b91e133d18cb4756a916c75aefa3a58474b4adc24e24e5bea7db",
+      "fileSha256": "c958464db31c4685a9c08ea9078fc87854180bac9f8b24f84e49e9465772dc43",
+      "payloadSha256": "24c8c6fde457ace718aa5ccae8e063c4cce3eb7efe0508e51ae4653810aad262",
       "schemaVersion": "htr-wp23-gate-groups-index/v1",
-      "sourceGitSha": "5e8e8b6ca454bdda77222efc182b3d517cd2a1d1",
+      "sourceGitSha": "6647b9035c19bd4ea55d3c610d1f637ddf3eb668",
       "sourceDirtyTree": false,
       "generatorProvenance": "lib/trader/readiness/htr-readiness-evidence-harness.ts"
     }

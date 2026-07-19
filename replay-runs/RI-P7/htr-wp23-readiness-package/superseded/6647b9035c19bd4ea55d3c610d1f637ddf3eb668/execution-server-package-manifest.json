@@ -2,8 +2,7 @@
   "schemaVersion": "htr-execution-server-code-ready-package/v1",
   "packageMode": "option-a-code-ready",
   "packageId": "HTR-WP23-EXECUTION-SERVER-CODE-READY",
-  "fhvRunContractDigest": "694f96d9f16f32e450ced1c1564c15f9ee097ab8d6cf99c2f3182c1fcea390cb",
-  "costModelDigest": "a4b994f7865425edb27e4a87d84f0ca958bd455121147411dfec163c58431b79",
+  "fhvRunContractDigest": "5431f4e0f462332823523059cef054fcc72087ed4f35737e1d94520153d65df4",
   "operatorReportSchemaVersion": "htr-operator-report/v1",
   "attestation": {
     "actualServerMutation": "PROHIBITED",
@@ -65,5 +64,5 @@
     "APPROVE-HTR-FHV-DATASET-SOURCE",
     "APPROVE-HTR-EXECSERVER-PACKAGE-MODE:option-a-code-ready"
   ],
-  "payloadSha256": "d49ccd0b92108ba66047616fd4560299d59d9bf9bc4019d8a8321b5cdcbd01e5"
+  "payloadSha256": "1cdde6154ab5b52c95f3ec9f4cd43f8c551e79bf5942105f5e01fb0b2a47a18d"
 }
