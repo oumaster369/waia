@@ -24,28 +24,43 @@ import {
   HTR_CORRECTIVE_A_PACKET_SHA256,
   runHtrCorrectiveAIntegratedQualification,
 } from "../../scripts/trader/htr-corrective-a-qualify";
+import type { HtrCorrectiveAIntegratedQualificationResult } from "../../scripts/trader/htr-corrective-a-qualify";
+import type { HtrCorrectiveAEvidenceSealResult } from "../../scripts/trader/htr-corrective-a-evidence-seal";
+
+type SealedCorrectiveAEvidenceFixture = {
+  tempRoot: string;
+  stagingDir: string;
+  sourceGitSha: string;
+  qualification: HtrCorrectiveAIntegratedQualificationResult;
+  sealed: HtrCorrectiveAEvidenceSealResult;
+};
+
+function sealCorrectiveAEvidenceFixture(): SealedCorrectiveAEvidenceFixture {
+  const sourceGitSha = readGitCodeSha();
+  const qualification = runHtrCorrectiveAIntegratedQualification({ sourceGitSha });
+
+  assertHtrCorrectiveAIntegratedQualificationPass(qualification);
+  expect(qualification.sourceDirtyTree).toBe(false);
+  expect(qualification.packetSha256).toBe(HTR_CORRECTIVE_A_PACKET_SHA256);
+  expect(qualification.gateStatuses).toHaveLength(4);
+  expect(qualification.gateStatuses.every((gate) => gate.terminalState === "PASS")).toBe(true);
+
+  const tempRoot = mkdtempSync(join(tmpdir(), "htr-corrective-a5-"));
+  const stagingDir = resolveHtrCorrectiveAEvidenceStagingDir(sourceGitSha, tempRoot);
+  const sealed = sealHtrCorrectiveAEvidenceStaging({
+    sourceGitSha,
+    qualification,
+    cwd: tempRoot,
+  });
+
+  return { tempRoot, stagingDir, sourceGitSha, qualification, sealed };
+}
 
 describe("DEE-415 C-A5 integrated qualification (G5)", () => {
   it("runs C-A1..A4 gates together, seals evidence, and rejects one-byte mutation", () => {
-    const sourceGitSha = readGitCodeSha();
-    const qualification = runHtrCorrectiveAIntegratedQualification({ sourceGitSha });
-
-    assertHtrCorrectiveAIntegratedQualificationPass(qualification);
-    expect(qualification.sourceDirtyTree).toBe(false);
-    expect(qualification.packetSha256).toBe(HTR_CORRECTIVE_A_PACKET_SHA256);
-    expect(qualification.gateStatuses).toHaveLength(4);
-    expect(qualification.gateStatuses.every((gate) => gate.terminalState === "PASS")).toBe(true);
-
-    const tempRoot = mkdtempSync(join(tmpdir(), "htr-corrective-a5-"));
-    const stagingDir = resolveHtrCorrectiveAEvidenceStagingDir(sourceGitSha, tempRoot);
+    const { tempRoot, stagingDir, sourceGitSha, sealed } = sealCorrectiveAEvidenceFixture();
 
     try {
-      const sealed = sealHtrCorrectiveAEvidenceStaging({
-        sourceGitSha,
-        qualification,
-        cwd: tempRoot,
-      });
-
       expect(sealed.sourceGitSha).toBe(sourceGitSha);
       expect(sealed.sourceDirtyTree).toBe(false);
       expect(sealed.packetSha256).toBe(HTR_CORRECTIVE_A_PACKET_SHA256);
@@ -70,6 +85,17 @@ describe("DEE-415 C-A5 integrated qualification (G5)", () => {
         sealed.semanticDigest,
       );
 
+      assertCorrectiveAEvidenceOneByteMutationRejected(stagingDir);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects one-byte mutation of sealed evidence", () => {
+    const { tempRoot, stagingDir } = sealCorrectiveAEvidenceFixture();
+
+    try {
+      expect(verifyHtrCorrectiveAEvidenceStaging(stagingDir)).toBe(true);
       assertCorrectiveAEvidenceOneByteMutationRejected(stagingDir);
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
