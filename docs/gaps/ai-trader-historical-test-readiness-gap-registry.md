@@ -90,7 +90,7 @@ Make missing or partial work explicit for the Historical-Test Readiness program.
 | HTR-GAP-048 | cancelPartialEntry emitted on breach but unconsumed; partial entry remainder not cancelled (FA-003) | blocker | open (2026-07-18; safety contract defect; WP20 partial-entry cancellation incomplete) | HTR-WP20 | HTR-WP17, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-CORR-A |
 | HTR-GAP-049 | FHV semantic trace + operator/six-report emitters missing; schema-only (FA-004) | blocker | open (2026-07-18; blocks code-ready FHV capability; not post-DEE-415 deferral) | HTR-WP23 | HTR-WP04, HTR-WP13, HTR-WP14, HTR-WP18, HTR-WP19, HTR-WP20, HTR-WP21, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-CORR-A |
 
-> **HTR-GAP-046..049 remain OPEN blockers.** Closure unit `HTR-FINAL-AUDIT-CORRECTIVE-A` is now governed by the **superseding** exact packet `04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2` (Option B, `newMigrationFiles=0`); the prior packet `e73e7a422ebb9692ef097ecbea3e4e629704a04ff0d950dda4f24bae69bd89da` is `SUPERSEDED_NOT_APPROVABLE`. No gap is closed by this governance session; closure requires Phase-A implementation + independent Phase-B evidence.
+> **HTR-GAP-046..049 remain OPEN blockers.** Closure unit `HTR-FINAL-AUDIT-CORRECTIVE-A` is governed by G2 B4 superseding packet `38e4e9f3badfcf08b769b2a7c6d45811d6bbd359becc03f660f3182582e95422` (`B4_DETERMINISTIC_PARENT_WORKTREE_INSTRUMENTATION_PATCH_V1`; supersedes `04863e7a…` with classification `SUPERSEDED_NOT_APPROVABLE_G2_WP21_PARENT_PARITY_CONTRADICTION`). No gap is closed by this governance session; closure requires Phase-A implementation + independent Phase-B evidence.
 
 ## Intake rules
 

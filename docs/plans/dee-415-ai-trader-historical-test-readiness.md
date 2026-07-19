@@ -29,7 +29,7 @@ state:
   status: in-progress
   humanApproval: HTR_MACRO_J_V3_PACKET_AND_BUILD_APPROVED_CONSUMED
   historicalMacroIHumanApproval: HTR_MACRO_I_HUMAN_APPROVED_CONSUMED
-  programStatus: FINAL_AUDIT_CORRECTIVE_SUPERSEDING_PACKET_PENDING_HUMAN_REVIEW
+  programStatus: FINAL_AUDIT_CORRECTIVE_G2_SUPERSEDING_PACKET_PENDING_INDEPENDENT_AUDIT
   childPlanStatus: APPROVED
   buildAuthorized: false
   buildAuthorizedScope: null
@@ -189,12 +189,18 @@ state:
   requiredHumanTokens:
     - APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-SUPERSEDING-PACKET
   nextHumanGate: APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-SUPERSEDING-PACKET
-  correctiveAPacketSha256: 04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2
-  correctiveAPacketPath: .cursor/plans/dee-415-final-audit-corrective/04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2/dee-415-final-audit-corrective-exact-packet.plan.md
-  correctiveAPacketBytes: 42152
-  correctiveAPacketPhysicalLines: 761
-  correctiveAPacketNonBlankLines: 590
-  correctiveAPacketAuthoringHead: e7fcc4c773cdba87d6232390fa5efdf7abff6a64
+  correctiveAPacketSha256: 38e4e9f3badfcf08b769b2a7c6d45811d6bbd359becc03f660f3182582e95422
+  correctiveAPacketPath: .cursor/plans/dee-415-final-audit-corrective/38e4e9f3badfcf08b769b2a7c6d45811d6bbd359becc03f660f3182582e95422/dee-415-g2-wp21-superseding-corrective-exact-packet.plan.md
+  correctiveAPacketBytes: 18012
+  correctiveAPacketPhysicalLines: 464
+  correctiveAPacketAuthoringHead: feb78adeed3d3e70b5a4fd0033ad20c4f2371e70
+  correctiveASelectedArchitecture: B4_DETERMINISTIC_PARENT_WORKTREE_INSTRUMENTATION_PATCH_V1
+  correctiveASupersedesPacketSha256: 04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2
+  correctiveASupersedesClassification: SUPERSEDED_NOT_APPROVABLE_G2_WP21_PARENT_PARITY_CONTRADICTION
+  activeCorrectionStatus: G2_B4_SUPERSEDING_PACKET_AUTHORED_PENDING_INDEPENDENT_AUDIT
+  nextAction: FRESH_INDEPENDENT_DEE_415_G2_SUPERSEDING_PACKET_AUDIT
+  nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-SUPERSEDING-PACKET-AUDIT
+  buildAuthorized: false
   correctiveAPersistenceOption: OPTION_B_REUSE_EXISTING_0094_0096
   correctiveAMigrationDecision: NONE
   correctiveANewMigrationFiles: 0
