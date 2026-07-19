@@ -1,0 +1,13 @@
+{
+  "packetSha256": "67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13",
+  "macroPackage": "HTR-FINAL-AUDIT-CORRECTIVE-A",
+  "correctiveItems": [
+    "C-A1",
+    "C-A2",
+    "C-A3",
+    "C-A4",
+    "C-A5"
+  ],
+  "evidenceHarnessSha256": "f3589d64fc27940f5a77be3d1aca7262cf910e9b9d51cd8a9d2b3dd3b7f97d6c",
+  "payloadSha256": "0dda70e5d8c92920f7b68556684969add9c2845b28d869d321d9578242e8e7cf"
+}

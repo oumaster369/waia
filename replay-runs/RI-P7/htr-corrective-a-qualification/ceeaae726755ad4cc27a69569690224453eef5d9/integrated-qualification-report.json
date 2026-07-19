@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "htr-corrective-a-integrated-qualification/v1",
+  "phase": "corrective-a-integrated-g5",
+  "terminalState": "HTR_CORRECTIVE_A_INTEGRATED_QUALIFICATION_PASS",
+  "sourceGitSha": "ceeaae726755ad4cc27a69569690224453eef5d9",
+  "sourceDirtyTree": false,
+  "packetSha256": "67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13",
+  "gateStatuses": [
+    {
+      "gate": "G1",
+      "correctiveArea": "C-A1",
+      "terminalState": "PASS",
+      "proofSummary": "month-boundary monthly HWM reset preserves account HWM"
+    },
+    {
+      "gate": "G2",
+      "correctiveArea": "C-A2",
+      "terminalState": "PASS",
+      "proofSummary": "D-5 authority digest matches FHV contract and preflight accepts candidate"
+    },
+    {
+      "gate": "G3",
+      "correctiveArea": "C-A3",
+      "terminalState": "PASS",
+      "proofSummary": "guardian cancelPartialEntry surfaces to deterministic cancellation consumer"
+    },
+    {
+      "gate": "G4",
+      "correctiveArea": "C-A4",
+      "terminalState": "PASS",
+      "proofSummary": "FHV operator report builder active and production NOOP sink forbidden"
+    }
+  ],
+  "qualificationHarnessSha256": "d52be8ff0749b5643489c3933814ba2ca0087aeed2e48e04b05b8f8d306bd741",
+  "payloadSha256": "0d7497437b3cfe7a0452336d246dbc58a3047e4d92efb9b5f37a932362bc7fc7"
+}

@@ -11,8 +11,8 @@ sourceOfTruth:
   - docs/plans/dee-415-ai-trader-historical-test-readiness.md
 relatedGaps: docs/gaps/ai-trader-historical-test-readiness-gap-registry.md
 relatedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
-lastReviewed: 2026-07-18
-version: 0.1.3
+lastReviewed: 2026-07-19
+version: 0.1.4
 ---
 
 # AI-TRADER — Historical-Test Readiness Completion Specification
@@ -56,16 +56,25 @@ Link: [`docs/waia-governance/NON-GOALS.md`](../waia-governance/NON-GOALS.md).
 ### Program control state (2026-07-18)
 
 ```text
-PROGRAM_STATUS=FINAL_AUDIT_CORRECTIVE_G2_B5_V6_PACKET_PENDING_INDEPENDENT_AUDIT
+PROGRAM_STATUS=FINAL_AUDIT_CORRECTIVE_G2_B5_V6_PHASE_B_COMPLETE_READY_FOR_FINAL_WHOLE_PROGRAM_AUDIT
 ORIGINAL_WORK_PACKAGES_COMPLETE=HTR-WP01..HTR-WP23
 FINAL_AUDIT_VERDICT=HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE
+CORRECTIVE_A=COMPLETE
+CORRECTIVE_A_PHASE_A=PASS
+CORRECTIVE_A_PHASE_B=PASS
+WORK_SHA=640616074969162223a3324109b193823e743fcd
+OBSERVABILITY_REPAIR_SHA=ceeaae726755ad4cc27a69569690224453eef5d9
+CORRECTIVE_A_EVIDENCE_PATH=replay-runs/RI-P7/htr-corrective-a-qualification/ceeaae726755ad4cc27a69569690224453eef5d9/
+CORRECTIVE_A_EVIDENCE_MANIFEST_DIGEST=b6d2f1559d276d68670ae523aa49c2bd749d19dcaa86870e660c3dc4731f693a
+CORRECTIVE_A_EVIDENCE_SEMANTIC_DIGEST=4a596f8e3bf609eccf71d2c29ebd4a99535cf167c0a35c4fc7c130532ba94484
 CERTIFY_HTR_READY=NOT_ISSUED
 READY_FOR_FULL_HISTORICAL_TEST=NO
+READY_FOR_FINAL_WHOLE_PROGRAM_AUDIT=YES
 FINAL_PR_AUTHORIZED=NO
 BUILD_AUTHORIZED=NO
 BUILD_AUTHORIZED_SCOPE=null
 ACTIVE_CORRECTION=HTR-FINAL-AUDIT-CORRECTIVE-A
-ACTIVE_CORRECTION_STATUS=G2_B5_V6_PACKET_AUTHORED_PENDING_INDEPENDENT_AUDIT
+ACTIVE_CORRECTION_STATUS=G2_B5_V6_CORRECTIVE_A_COMPLETE
 ACTIVE_CORRECTIVE_PACKET_SHA256=67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13
 ACTIVE_CORRECTIVE_PACKET_BYTES=13121
 ACTIVE_CORRECTIVE_PACKET_PHYSICAL_LINES=237
@@ -89,11 +98,12 @@ REJECTED_B5_V3_PACKET_SHA256=04ebb3d7cfc553b0f074848464d691c09a8159419b62f4ae914
 REJECTED_B5_V2_PACKET_SHA256=49b547e105aa0ae6b3422382a7264d2382680a7145afca77427847553be54ea2
 C_A1_MIGRATION_DECISION=NONE
 C_A1_PERSISTENCE_OPTION=OPTION_B_REUSE_EXISTING_0094_0096
-NEXT_ACTION=FRESH_INDEPENDENT_DEE_415_G2_B5_V6_PACKET_AUDIT
-NEXT_HUMAN_GATE=AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-V6-PACKET-AUDIT
+NEXT_ACTION=FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_AUDIT
+NEXT_HUMAN_GATE=AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-AUDIT
+EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED=NO
 ```
 
-Final Opus whole-program audit **technical coverage preserved**; Human **rejected** prior PASS certification recommendation due to contract-classification contradictions (FA-001..FA-004). Prior corrective packets remain immutable historical artifacts; active closure is governed by B5 V6 minimal envelope protocol `B5_PACKET_PROTOCOL_V6` with byte-identical V5 semantic assets (`B5_PACKET_PROTOCOL_V5`). Corrective closure required before `CERTIFY-HTR-READY` or final PR.
+Final Opus whole-program audit **technical coverage preserved**; Human **rejected** prior PASS certification recommendation due to contract-classification contradictions (FA-001..FA-004). Corrective closure **COMPLETE** at independent Phase-B PASS; final whole-program re-audit required before `CERTIFY-HTR-READY` or final PR.
 
 ### Governance / activation (CG-Gov)
 
@@ -139,17 +149,17 @@ Final Opus whole-program audit **technical coverage preserved**; Human **rejecte
 ### CG-E — Trading simulation & reality
 
 - [x] Historical execution-simulation realism: cancel/expire/partial-fill, spread/impact/latency (HTR-WP17 WORK 7b4304d + default-path CLOSEOUT 0e1b904; HTR-GAP-016/017 CLOSED_REVALIDATED).
-- [ ] Single authoritative cost model on default fills; net vs gross accounting without D-5/FHV contradiction (HTR-WP17, HTR-WP18; **HTR-GAP-047**).
+- [x] Single authoritative cost model on default fills; net vs gross accounting without D-5/FHV contradiction (HTR-FINAL-AUDIT-CORRECTIVE-A WORK 6406160; C-A2 PASS; HTR-GAP-047 CLOSED).
 - [x] Unified inventory and accounting parity; dual-inventory eliminated (HTR-WP18 WORK 09573c5 + CLOSEOUT 0444e94; HTR-GAP-023 CLOSED).
 - [x] Reality reconciliation and M9-class regression closure (HTR-WP19 WORK 5558860 + CLOSEOUT d1a47ac; HTR-GAP-018/019 CLOSED).
 - [x] Postgres parity validated beyond CI-only skip (HTR-WP19; HTR-GAP-035 CLOSED).
-- [ ] D-20 monthly/strategy drawdown contract enforced in hot path (peak-equity HWM, monthly/strategy attribution, fail-closed response; **HTR-GAP-046**).
+- [x] D-20 monthly/strategy drawdown contract enforced in hot path (peak-equity HWM, monthly/strategy attribution, fail-closed response; HTR-FINAL-AUDIT-CORRECTIVE-A; Postgres CA-001..CA-004; C-A1 PASS; HTR-GAP-046 CLOSED).
 
 ### CG-F — Guardian & exits
 
 - [x] Guardian vocabulary complete; exit-reason invariants (HTR-WP20 WORK b820a06 + CLOSEOUT e9cca67; HTR-GAP-022 CLOSED).
 - [x] Closed-trade reality invariants aligned with LD-10 (HTR-WP20).
-- [ ] Partial-entry cancellation consumed end-to-end on Guardian breach (`cancelPartialEntry` not merely emitted; **HTR-GAP-048**).
+- [x] Partial-entry cancellation consumed end-to-end on Guardian breach (`cancelPartialEntry` not merely emitted; HTR-FINAL-AUDIT-CORRECTIVE-A; C-A3 PASS; HTR-GAP-048 CLOSED).
 
 ### CG-G — Evidence / quality / ops (+ Execution Server package)
 
@@ -157,8 +167,8 @@ Final Opus whole-program audit **technical coverage preserved**; Human **rejecte
 - [x] Bounded in-memory trace; complete-runtime memory soak (HTR-WP04 primary, HTR-WP22 closure for HTR-GAP-005).
 - [x] Campaign manifest and readiness preflight CLI (HTR-WP23 WORK 6647b903 + CLOSEOUT 4e1345e; HTR-GAP-028 CLOSED).
 - [x] Full test matrix green (`pnpm lint`, `typecheck`, `test --run`, `build`, `validate:canon`; Postgres integration when in scope; validated at HTR-WP23 closeout).
-- [ ] FHV semantic trace JSONL emitter + six operator report builders (not schema-only; **HTR-GAP-049**).
-- [ ] **Code-ready Execution Server package** (Option A): manifests, contracts, resource assumptions, commands, checkpoint/evidence semantics, operator instructions — ready for Human-operated deployment; **not** "server already deployed" (HTR-WP23 schema present; emitter/trace gap blocks acceptance until **HTR-GAP-049** closure; §32B).
+- [x] FHV semantic trace JSONL emitter + six operator report builders (HTR-FINAL-AUDIT-CORRECTIVE-A; buildHtrOperatorReportV1 active; C-A4 PASS; HTR-GAP-049 CLOSED).
+- [x] **Code-ready Execution Server package** (Option A): manifests, contracts, resource assumptions, commands, checkpoint/evidence semantics, operator instructions — ready for Human-operated deployment; **not** "server already deployed" (HTR-WP23 schema + corrective C-A4 PASS; §32B).
 
 ### CG-H — Outcome resolution, calibration & knowledge confidence
 
