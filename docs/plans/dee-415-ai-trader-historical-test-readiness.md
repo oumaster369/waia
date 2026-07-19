@@ -33,7 +33,7 @@ state:
   childPlanStatus: APPROVED
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: DEE_415_G2_B5_V3_SUPERSEDING_PACKET_READY_FOR_FRESH_INDEPENDENT_AUDIT
+  composerTerminalState: DEE_415_G2_B5_V3_TRUTH_RECONCILED_READY_FOR_FRESH_INDEPENDENT_AUDIT
   activeWorkPackage: null
   currentWorkPackage: null
   activeCorrection: HTR-FINAL-AUDIT-CORRECTIVE-A
@@ -183,7 +183,7 @@ state:
   wp23PrematureDraftStatus: REAPPLIED_REAUDITED_AND_COMMITTED_AS_ACCEPTED_PHASE_A_WORK
   wp23QuarantineStashPreserved: true
   wp23QuarantineReapplicationStatus: REAPPLIED_REAUDITED_AND_COMMITTED
-  planningTerminalState: DEE_415_G2_B5_V3_SUPERSEDING_PACKET_READY_FOR_FRESH_INDEPENDENT_AUDIT
+  planningTerminalState: DEE_415_G2_B5_V3_TRUTH_RECONCILED_READY_FOR_FRESH_INDEPENDENT_AUDIT
   nextAction: FRESH_INDEPENDENT_DEE_415_G2_B5_V3_PACKET_AUDIT
   newHumanTokenRequired: true
   requiredHumanTokens:
