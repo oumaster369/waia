@@ -29,15 +29,15 @@ state:
   status: in-progress
   humanApproval: HTR_MACRO_J_V3_PACKET_AND_BUILD_APPROVED_CONSUMED
   historicalMacroIHumanApproval: HTR_MACRO_I_HUMAN_APPROVED_CONSUMED
-  programStatus: FINAL_AUDIT_CORRECTIVE_G2_B5_V4_PACKET_PENDING_INDEPENDENT_AUDIT
+  programStatus: FINAL_AUDIT_CORRECTIVE_G2_B5_V5_PACKET_PENDING_INDEPENDENT_AUDIT
   childPlanStatus: APPROVED
   buildAuthorized: false
   buildAuthorizedScope: null
-  composerTerminalState: DEE_415_G2_B5_V4_SELF_CONTAINED_PACKET_READY_FOR_FRESH_INDEPENDENT_AUDIT
+  composerTerminalState: DEE_415_G2_B5_V5_ALL_CONFIRMED_BLOCKERS_CLOSED_READY_FOR_FRESH_INDEPENDENT_AUDIT
   activeWorkPackage: null
   currentWorkPackage: null
   activeCorrection: HTR-FINAL-AUDIT-CORRECTIVE-A
-  activeCorrectionStatus: G2_B5_V4_PACKET_AUTHORED_PENDING_INDEPENDENT_AUDIT
+  activeCorrectionStatus: G2_B5_V5_PACKET_AUTHORED_PENDING_INDEPENDENT_AUDIT
   finalAuditVerdict: HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE
   certifyHtrReady: NOT_ISSUED
   originalWorkPackagesComplete: HTR-WP01..HTR-WP23
@@ -183,35 +183,37 @@ state:
   wp23PrematureDraftStatus: REAPPLIED_REAUDITED_AND_COMMITTED_AS_ACCEPTED_PHASE_A_WORK
   wp23QuarantineStashPreserved: true
   wp23QuarantineReapplicationStatus: REAPPLIED_REAUDITED_AND_COMMITTED
-  planningTerminalState: DEE_415_G2_B5_V4_SELF_CONTAINED_PACKET_READY_FOR_FRESH_INDEPENDENT_AUDIT
-  nextAction: FRESH_INDEPENDENT_DEE_415_G2_B5_V4_PACKET_AUDIT
+  planningTerminalState: DEE_415_G2_B5_V5_ALL_CONFIRMED_BLOCKERS_CLOSED_READY_FOR_FRESH_INDEPENDENT_AUDIT
+  nextAction: FRESH_INDEPENDENT_DEE_415_G2_B5_V5_PACKET_AUDIT
   newHumanTokenRequired: true
   requiredHumanTokens:
-    - AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-V4-PACKET-AUDIT
-  nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-V4-PACKET-AUDIT
-  correctiveAPacketSha256: e545c787e4fe628d9638bbe57e96a5b921945190f90ae607f366396786db1437
-  correctiveAPacketPath: .cursor/plans/dee-415-final-audit-corrective/e545c787e4fe628d9638bbe57e96a5b921945190f90ae607f366396786db1437/dee-415-g2-wp21-b5-v4-superseding-corrective-exact-packet.plan.md
-  correctiveAPacketBytes: 12018
-  correctiveAPacketPhysicalLines: 214
-  correctiveAPacketAuthoringHead: 3194bfa562ad2590d0c7dbf32e48d8fd858d2f80
+    - AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-V5-PACKET-AUDIT
+  nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-V5-PACKET-AUDIT
+  correctiveAPacketSha256: 201d197a303ba64ac577c3184a866b0dacedcde87016d7f08c39c1158f58c5cb
+  correctiveAPacketPath: .cursor/plans/dee-415-final-audit-corrective/201d197a303ba64ac577c3184a866b0dacedcde87016d7f08c39c1158f58c5cb/dee-415-g2-wp21-b5-v5-superseding-corrective-exact-packet.plan.md
+  correctiveAPacketBytes: 11387
+  correctiveAPacketPhysicalLines: 209
+  correctiveAPacketAuthoringHead: 54ec12c32ad44ad1ef4352d54e015785d3c144ce
   humanApprovedArchitectureId: B5_SPLIT_PROOF_ZERO_FILL_WP21_PLUS_PARENT_COST_VECTOR_ORACLE_V1
-  packetProtocolVersion: B5_PACKET_PROTOCOL_V4
+  packetProtocolVersion: B5_PACKET_PROTOCOL_V5
   parentPatchVersion: V2
   correctiveASelectedArchitecture: B5_SPLIT_PROOF_ZERO_FILL_WP21_PLUS_PARENT_COST_VECTOR_ORACLE_V1
   correctiveAParentOraclePatchSha256: 4d707c39cf1856bb999a92db1a2715e217c64effca78fdface03940dd9cd7126
   correctiveACostVectorFixtureSha256: 8e89180c23ed93fb9dc2703c5133ff627aa330aeb9d69920e97f50b06cc7eefc
-  correctiveAManifestRegistrySha256: 486fe39070e14f0c4a4adda7e44c2199f270d738321699db733e8a47c3f46e6f
-  correctiveATestMatrixSha256: cc04283ff9f44a893dd8977e2ab611f8d68426257aa055ca56727df6be5113f3
-  correctiveABundleManifestDigest: a4887fc00e1b61abe12bb0b67bded7c1800bbc9b5722535ec968838d8a5a0b18
-  correctiveANormativeLaneContractsSha256: 393f96495385595a318b4ad322509939673d3bec9488e216786db87273303d45
+  correctiveAManifestRegistrySha256: 343f2b1b60dbd75342353e247c5767c4e1e49bb779a19b0945b189fbf2c0abc6
+  correctiveATestMatrixSha256: 445cd6dbb14622f7f51a13108e80083ffb7009e2c22f11573728646ebff76769
+  correctiveABundleManifestDigest: 2cad6f4fbe5bf1f7b093f2aeb5e80ea7e6eabc3193d934931051807da331c747
+  correctiveANormativeLaneContractsSha256: f058c2dddcb21bbd4a7389ce2d3c685c639e2288bbabd4b5ce407b3c08af8256
+  correctiveASupersedesV4PacketSha256: e545c787e4fe628d9638bbe57e96a5b921945190f90ae607f366396786db1437
+  correctiveASupersedesV4Classification: SUPERSEDED_NOT_APPROVABLE_MATRIX_REPLACEMENT_GRAPH_LANE_D_SCHEMA_SCANNER_VECTOR_AND_CONTROLLER_MANIFEST_BINDING_DEFECTS
   correctiveASupersedesV3PacketSha256: 04ebb3d7cfc553b0f074848464d691c09a8159419b62f4ae914a3a6cc5a4620b
   correctiveASupersedesV3Classification: SUPERSEDED_NOT_APPROVABLE_MANIFEST_METADATA_EXTERNAL_BINDING_NOTATION_LANE_C_LANE_D_SCHEMA_AND_CONTROLLER_DEFECTS
   correctiveAAbandonedB4V2PrototypePatchSha256: 215cab07b44d65f7b5e96870aaf84ea9e192263b7077256ed0b76fbef6713d31
   correctiveASupersedesPacketSha256: 49b547e105aa0ae6b3422382a7264d2382680a7145afca77427847553be54ea2
   correctiveASupersedesClassification: SUPERSEDED_NOT_APPROVABLE_BUNDLE_MANIFEST_LEGACY_AUTHORITY_PARITY_SCANNER_VALIDATION_APPROVAL_ACTIVATION_AND_CONTROLLER_DEFECTS
-  activeCorrectionStatus: G2_B5_V4_PACKET_AUTHORED_PENDING_INDEPENDENT_AUDIT
-  nextAction: FRESH_INDEPENDENT_DEE_415_G2_B5_V4_PACKET_AUDIT
-  nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-V4-PACKET-AUDIT
+  activeCorrectionStatus: G2_B5_V5_PACKET_AUTHORED_PENDING_INDEPENDENT_AUDIT
+  nextAction: FRESH_INDEPENDENT_DEE_415_G2_B5_V5_PACKET_AUDIT
+  nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-V5-PACKET-AUDIT
   buildAuthorized: false
   correctiveAPersistenceOption: OPTION_B_REUSE_EXISTING_0094_0096
   correctiveAMigrationDecision: NONE
@@ -1212,7 +1214,7 @@ Bring AI-TRADER from `dev@f23c51e` to `READY_FOR_FULL_HISTORICAL_TEST` = a code-
 | PR target / merge | `dev` / squash |
 | Planned PR count | 1 · Planned merge count | 1 · Work-package count | 23 |
 | Baseline | `dev` @ `f23c51e0ac2eab3ca374e2bd6aee3ceb0ea935e1` (activation baseline / branch base) |
-| Plan state | `state.status: in-progress` · `programStatus: FINAL_AUDIT_CORRECTIVE_G2_B5_V4_PACKET_PENDING_INDEPENDENT_AUDIT` — **HTR-WP01..HTR-WP23 COMPLETE** (`ORIGINAL_WORK_PACKAGES_COMPLETE`); **HTR-MACRO-I COMPLETE**; **HTR-MACRO-J COMPLETE**; final Opus audit technical coverage preserved; Human rejected PASS classification (`FINAL_AUDIT_VERDICT: HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE`); active corrective packet `e545c787…` (B5 V4; `B5_SPLIT_PROOF_ZERO_FILL_WP21_PLUS_PARENT_COST_VECTOR_ORACLE_V1`); `ACTIVE_CORRECTION: HTR-FINAL-AUDIT-CORRECTIVE-A`; `ACTIVE_CORRECTION_STATUS: G2_B5_V4_PACKET_AUTHORED_PENDING_INDEPENDENT_AUDIT`; `BUILD_AUTHORIZED: NO`; `FINAL_PR_AUTHORIZED: NO`; `readyForFullHistoricalTest: false`; `CERTIFY_HTR_READY: NOT_ISSUED`; `nextAction: FRESH_INDEPENDENT_DEE_415_G2_B5_V4_PACKET_AUDIT`; `nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-V4-PACKET-AUDIT`. |
+| Plan state | `state.status: in-progress` · `programStatus: FINAL_AUDIT_CORRECTIVE_G2_B5_V5_PACKET_PENDING_INDEPENDENT_AUDIT` — **HTR-WP01..HTR-WP23 COMPLETE** (`ORIGINAL_WORK_PACKAGES_COMPLETE`); **HTR-MACRO-I COMPLETE**; **HTR-MACRO-J COMPLETE**; final Opus audit technical coverage preserved; Human rejected PASS classification (`FINAL_AUDIT_VERDICT: HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE`); active corrective packet `201d197a…` (B5 V5; `B5_SPLIT_PROOF_ZERO_FILL_WP21_PLUS_PARENT_COST_VECTOR_ORACLE_V1`); `ACTIVE_CORRECTION: HTR-FINAL-AUDIT-CORRECTIVE-A`; `ACTIVE_CORRECTION_STATUS: G2_B5_V5_PACKET_AUTHORED_PENDING_INDEPENDENT_AUDIT`; `BUILD_AUTHORIZED: NO`; `FINAL_PR_AUTHORIZED: NO`; `readyForFullHistoricalTest: false`; `CERTIFY_HTR_READY: NOT_ISSUED`; `nextAction: FRESH_INDEPENDENT_DEE_415_G2_B5_V5_PACKET_AUDIT`; `nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-V5-PACKET-AUDIT`. |
 
 ## Approved decisions (recorded)
 
@@ -2666,7 +2668,7 @@ A single PR is opened only after HTR-WP23, final full validation, and the final 
 
 ## Current work package (whole program — final audit corrective pending Human review)
 
-**CURRENT (2026-07-19):** HTR-MACRO-J **independent Phase-B COMPLETE**; all **23 work packages COMPLETE** (`ORIGINAL_WORK_PACKAGES_COMPLETE=HTR-WP01..HTR-WP23`); WP22 accepted evidence **`replay-runs/RI-P7/htr-wp22-runtime-qualification/`**; WP23 accepted evidence **`replay-runs/RI-P7/htr-wp23-readiness-package/`**; final Opus audit technical coverage **preserved**; Human **rejected** prior PASS certification recommendation (`FINAL_AUDIT_VERDICT: HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE`); blocking defects FA-001..FA-004 adjudicated; active corrective packet **`e545c787…`** (B5 V4; `B5_SPLIT_PROOF_ZERO_FILL_WP21_PLUS_PARENT_COST_VECTOR_ORACLE_V1`; protocol `B5_PACKET_PROTOCOL_V4`); `ACTIVE_CORRECTION: HTR-FINAL-AUDIT-CORRECTIVE-A`; `ACTIVE_CORRECTION_STATUS: G2_B5_V4_PACKET_AUTHORED_PENDING_INDEPENDENT_AUDIT`; HTR-GAP-046..049 **OPEN** (corrective closure); HTR-GAP-045 remains **OPEN / NON_BLOCKING_EXTERNAL_BACKLOG**; `programStatus: FINAL_AUDIT_CORRECTIVE_G2_B5_V4_PACKET_PENDING_INDEPENDENT_AUDIT`; `BUILD_AUTHORIZED: NO`; `FINAL_PR_AUTHORIZED: NO`; `readyForFullHistoricalTest: false`; `CERTIFY_HTR_READY: NOT_ISSUED`; `nextAction: FRESH_INDEPENDENT_DEE_415_G2_B5_V4_PACKET_AUDIT`; `nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-V4-PACKET-AUDIT`.
+**CURRENT (2026-07-19):** HTR-MACRO-J **independent Phase-B COMPLETE**; all **23 work packages COMPLETE** (`ORIGINAL_WORK_PACKAGES_COMPLETE=HTR-WP01..HTR-WP23`); WP22 accepted evidence **`replay-runs/RI-P7/htr-wp22-runtime-qualification/`**; WP23 accepted evidence **`replay-runs/RI-P7/htr-wp23-readiness-package/`**; final Opus audit technical coverage **preserved**; Human **rejected** prior PASS certification recommendation (`FINAL_AUDIT_VERDICT: HUMAN_REJECTED_PENDING_CORRECTIVE_CLOSURE`); blocking defects FA-001..FA-004 adjudicated; active corrective packet **`201d197a…`** (B5 V5; `B5_SPLIT_PROOF_ZERO_FILL_WP21_PLUS_PARENT_COST_VECTOR_ORACLE_V1`; protocol `B5_PACKET_PROTOCOL_V5`); `ACTIVE_CORRECTION: HTR-FINAL-AUDIT-CORRECTIVE-A`; `ACTIVE_CORRECTION_STATUS: G2_B5_V5_PACKET_AUTHORED_PENDING_INDEPENDENT_AUDIT`; HTR-GAP-046..049 **OPEN** (corrective closure); HTR-GAP-045 remains **OPEN / NON_BLOCKING_EXTERNAL_BACKLOG**; `programStatus: FINAL_AUDIT_CORRECTIVE_G2_B5_V5_PACKET_PENDING_INDEPENDENT_AUDIT`; `BUILD_AUTHORIZED: NO`; `FINAL_PR_AUTHORIZED: NO`; `readyForFullHistoricalTest: false`; `CERTIFY_HTR_READY: NOT_ISSUED`; `nextAction: FRESH_INDEPENDENT_DEE_415_G2_B5_V5_PACKET_AUDIT`; `nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-V5-PACKET-AUDIT`.
 
 **HISTORICAL (SUPERSEDED):** Prior current-facing gate `FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_AUDIT` / `AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-AUDIT` / `DEE_415_FINAL_AUDIT_CONTROLLERS_STRICTLY_UNIQUE_READY_FOR_FRESH_OPUS_WHOLE_PROGRAM_AUDIT` — superseded by Human rejection of PASS classification; retained in `state.historicalFinalAuditGateSuperseded`.
 
