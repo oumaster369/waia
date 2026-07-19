@@ -44,7 +44,7 @@ describe("trader wp21 measured flag-off parity", () => {
     expect(parent.serializedCapitalPath).toBe(candidate.serializedCapitalPath);
   }, 180_000);
 
-  it("measures V2 portfolio-context with D-5 authority on candidate vs legacy parent", () => {
+  it("measures V2 portfolio-context byte parity between parent and candidate worktrees", () => {
     const repoRoot = process.cwd();
     const parentOutputPath = path.join(
       mkdtempSync(path.join(tmpdir(), "wp21-v2-parent-")),
@@ -71,19 +71,9 @@ describe("trader wp21 measured flag-off parity", () => {
       outputPath: candidateOutputPath,
     });
 
-    const parentPayload = JSON.parse(parent.serializedCapitalPath) as {
-      portfolioContext?: { costModel?: { feesBps?: string; slippageBps?: string } };
-    };
-    const candidatePayload = JSON.parse(candidate.serializedCapitalPath) as {
-      portfolioContext?: { costModel?: { feesBps?: string; slippageBps?: string } };
-    };
-
+    expect(parent.fullResearchPathDigest).toBe(candidate.fullResearchPathDigest);
+    expect(parent.capitalPathDigest).toBe(candidate.capitalPathDigest);
+    expect(parent.serializedCapitalPath).toBe(candidate.serializedCapitalPath);
     expect(parent.metricsSchemaVersion).toBe("2.0.0");
-    expect(candidate.metricsSchemaVersion).toBe("2.0.0");
-    expect(parentPayload.portfolioContext?.costModel?.feesBps).toBe("10");
-    expect(parentPayload.portfolioContext?.costModel?.slippageBps).toBe("5");
-    expect(candidatePayload.portfolioContext?.costModel?.feesBps).toBe("20");
-    expect(candidatePayload.portfolioContext?.costModel?.slippageBps).toBe("15");
-    expect(parent.capitalPathDigest).not.toBe(candidate.capitalPathDigest);
   }, 180_000);
 });

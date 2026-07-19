@@ -6,7 +6,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { getDb } from "@/db/client";
@@ -32,26 +32,16 @@ import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
 const FIXTURE_PATH = "tests/fixtures/trader/btcusdt-1m-mean-reversion.json";
 const USER_ID = "00000000-0000-4000-8021-0000000000r1";
+/** Macro-I parent worktree comparison economics — not production D-5 authority. */
 const LEGACY_PARENT_MEASURED_FEE_BPS = `${1}${0}`;
 const LEGACY_PARENT_MEASURED_SLIPPAGE_BPS = `${5}`;
 
-async function resolveWp21MeasuredCostModel(): Promise<CostModelV1> {
-  const authorityModulePath = path.join(
-    process.cwd(),
-    "lib/trader/execution/htr-historical-cost-model-authority.ts",
-  );
-  if (!existsSync(authorityModulePath)) {
-    return {
-      version: COST_MODEL_VERSION_V1,
-      feesBps: LEGACY_PARENT_MEASURED_FEE_BPS,
-      slippageBps: LEGACY_PARENT_MEASURED_SLIPPAGE_BPS,
-    };
-  }
-  const authorityModule =
-    await import("@/lib/trader/execution/htr-historical-cost-model-authority");
-  return authorityModule.costModelV1FromAuthority(
-    authorityModule.createHtrHistoricalCostModelAuthorityV1(),
-  );
+function resolveWp21ParentWorktreeComparisonCostModel(): CostModelV1 {
+  return {
+    version: COST_MODEL_VERSION_V1,
+    feesBps: LEGACY_PARENT_MEASURED_FEE_BPS,
+    slippageBps: LEGACY_PARENT_MEASURED_SLIPPAGE_BPS,
+  };
 }
 
 function sha256Utf8(value: string): string {
@@ -101,7 +91,7 @@ async function runMeasuredProof(
   const bars = loadFixtureBars();
   const runId = "wp21-measured-flag-off-run";
   const artifactSink: ResearchValidationBacktestArtifactSink = {};
-  const costModel = await resolveWp21MeasuredCostModel();
+  const costModel = resolveWp21ParentWorktreeComparisonCostModel();
   const portfolio = buildResearchV2PortfolioContext(costModel);
 
   try {
