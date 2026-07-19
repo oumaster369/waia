@@ -1,8 +1,13 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import {
+  scanLegacyAuthorityNegativeVector,
+  scanProductionLegacyCostAuthoritySites,
+  WP21_LEGACY_AUTHORITY_NEGATIVE_VECTORS,
+} from "@/lib/trader/research/htr-legacy-cost-authority-scanner";
 import { applyCostToFill } from "@/lib/trader/execution/cost-model";
 import { applyHistoricalExecutionEconomics } from "@/lib/trader/execution/fill-economics";
 import { createHistoricalExecutionModelV1 } from "@/lib/trader/execution/historical-execution-model";
@@ -47,52 +52,32 @@ function listTypeScriptFiles(rootDir: string): string[] {
 
 function scanProductionCostModelSites(): {
   executableCostModel10_5Sites: string[];
-  executableCostModel20_10Sites: string[];
-  adHocCreateCostModelSites: string[];
-  adHocLiteralCostModelSites: string[];
-  conditionalAuthorityBypassSites: string[];
+  legacyScannerHits: ReturnType<typeof scanProductionLegacyCostAuthoritySites>;
 } {
   const roots = [join(REPO_ROOT, "lib"), join(REPO_ROOT, "scripts")];
   const executableCostModel10_5Sites: string[] = [];
-  const executableCostModel20_10Sites: string[] = [];
-  const adHocCreateCostModelSites: string[] = [];
-  const adHocLiteralCostModelSites: string[] = [];
-  const conditionalAuthorityBypassSites: string[] = [];
+  const legacyScannerHits = [];
 
   for (const root of roots) {
     for (const filePath of listTypeScriptFiles(root)) {
       if (filePath.endsWith("lib/trader/execution/cost-model.ts")) {
         continue;
       }
+      if (filePath.endsWith("lib/trader/research/htr-legacy-cost-authority-scanner.ts")) {
+        continue;
+      }
       const source = readFileSync(filePath, "utf8");
       const relPath = relative(REPO_ROOT, filePath);
+      legacyScannerHits.push(...scanProductionLegacyCostAuthoritySites(source, relPath));
       if (/createCostModelV1\s*\(\s*["']10["']\s*,\s*["']5["']\s*\)/.test(source)) {
         executableCostModel10_5Sites.push(relPath);
-      }
-      if (/createCostModelV1\s*\(\s*["']20["']\s*,\s*["']10["']\s*\)/.test(source)) {
-        executableCostModel20_10Sites.push(relPath);
-      }
-      if (/createCostModelV1\s*\(/.test(source)) {
-        adHocCreateCostModelSites.push(relPath);
-      }
-      if (
-        /feesBps\s*:\s*["']10["'][\s\S]{0,120}slippageBps\s*:\s*["']5["']/.test(source) ||
-        /slippageBps\s*:\s*["']5["'][\s\S]{0,120}feesBps\s*:\s*["']10["']/.test(source)
-      ) {
-        adHocLiteralCostModelSites.push(relPath);
-      }
-      if (/usesCanonicalD5Economics/.test(source) || /if\s*\(\s*usesCanonical/.test(source)) {
-        conditionalAuthorityBypassSites.push(relPath);
       }
     }
   }
 
   return {
     executableCostModel10_5Sites,
-    executableCostModel20_10Sites,
-    adHocCreateCostModelSites,
-    adHocLiteralCostModelSites,
-    conditionalAuthorityBypassSites,
+    legacyScannerHits,
   };
 }
 
@@ -202,10 +187,18 @@ describe("trader corrective A2 cost model authority", () => {
   it("static guard: zero production ad-hoc cost model sites", () => {
     const scan = scanProductionCostModelSites();
     expect(scan.executableCostModel10_5Sites).toEqual([]);
-    expect(scan.executableCostModel20_10Sites).toEqual([]);
-    expect(scan.adHocCreateCostModelSites).toEqual([]);
-    expect(scan.adHocLiteralCostModelSites).toEqual([]);
-    expect(scan.conditionalAuthorityBypassSites).toEqual([]);
+    expect(scan.legacyScannerHits).toEqual([]);
+  });
+
+  it("executes all twelve legacy scanner vectors through canonical AST scanner", () => {
+    for (const vector of WP21_LEGACY_AUTHORITY_NEGATIVE_VECTORS) {
+      const result = scanLegacyAuthorityNegativeVector(vector);
+      expect(result.verdict).toBe(vector.expectedVerdict);
+      expect(result.ruleId).toBe(vector.expectedRuleId);
+      expect(result.sinkCategory).toBe(vector.expectedSinkCategory);
+      expect(result.detectedValues).toEqual(vector.expectedDetectedValues);
+      expect(result.diagnosticCode).toBe(vector.expectedDiagnosticCode);
+    }
   });
 
   it("fhv-contract digest matches authority", () => {

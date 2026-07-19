@@ -10,7 +10,11 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { getDb } from "@/db/client";
-import { COST_MODEL_VERSION_V1, type CostModelV1 } from "@/lib/trader/execution/cost-model";
+import { type CostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/htr-historical-cost-model-authority";
 import { MEAN_REVERSION_V0, type Bar } from "@/lib/trader/intelligence/types";
 import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
@@ -32,16 +36,9 @@ import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
 const FIXTURE_PATH = "tests/fixtures/trader/btcusdt-1m-mean-reversion.json";
 const USER_ID = "00000000-0000-4000-8021-0000000000r1";
-/** Macro-I parent worktree comparison economics — not production D-5 authority. */
-const LEGACY_PARENT_MEASURED_FEE_BPS = `${1}${0}`;
-const LEGACY_PARENT_MEASURED_SLIPPAGE_BPS = `${5}`;
-
-function resolveWp21ParentWorktreeComparisonCostModel(): CostModelV1 {
-  return {
-    version: COST_MODEL_VERSION_V1,
-    feesBps: LEGACY_PARENT_MEASURED_FEE_BPS,
-    slippageBps: LEGACY_PARENT_MEASURED_SLIPPAGE_BPS,
-  };
+/** Candidate canonical D-5 authority — parent historical 10/5 exists only in sealed parent assets. */
+function resolveWp21CandidateComparisonCostModel(): CostModelV1 {
+  return costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
 }
 
 function sha256Utf8(value: string): string {
@@ -91,7 +88,7 @@ async function runMeasuredProof(
   const bars = loadFixtureBars();
   const runId = "wp21-measured-flag-off-run";
   const artifactSink: ResearchValidationBacktestArtifactSink = {};
-  const costModel = resolveWp21ParentWorktreeComparisonCostModel();
+  const costModel = resolveWp21CandidateComparisonCostModel();
   const portfolio = buildResearchV2PortfolioContext(costModel);
 
   try {

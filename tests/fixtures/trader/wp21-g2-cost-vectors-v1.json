@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "waia.trader.wp21.g2-cost-vectors.v1",
+  "vectorSetId": "wp21-g2-cost-vectors-v1",
+  "parentGitSha": "5e9fb1061723614b22604aee86ee129e8f226616",
+  "parentCostAuthority": {
+    "feesBps": "10",
+    "slippageBps": "5",
+    "costModelVersion": "waia.trader.cost-model.v1"
+  },
+  "candidateCostAuthority": {
+    "modelId": "htr-historical-execution-v1",
+    "schemaVersion": "waia.trader.historical-execution-model.v1",
+    "feeBps": "20",
+    "halfSpreadBps": "5",
+    "marketImpactBps": "10"
+  },
+  "vectors": [
+    {
+      "vectorId": "V001_ORDINARY_BUY",
+      "side": "buy",
+      "grossFillPrice": "100",
+      "quantity": "1"
+    },
+    {
+      "vectorId": "V002_ORDINARY_SELL",
+      "side": "sell",
+      "grossFillPrice": "100",
+      "quantity": "1"
+    },
+    {
+      "vectorId": "V003_SUBCENT_ROUNDING",
+      "side": "buy",
+      "grossFillPrice": "0.00001234",
+      "quantity": "1000"
+    },
+    {
+      "vectorId": "V004_HIGH_NOTIONAL",
+      "side": "buy",
+      "grossFillPrice": "64000",
+      "quantity": "10"
+    },
+    {
+      "vectorId": "V005_LOW_NOTIONAL",
+      "side": "sell",
+      "grossFillPrice": "0.01",
+      "quantity": "0.001"
+    },
+    {
+      "vectorId": "V006_FRACTIONAL_QUANTITY",
+      "side": "buy",
+      "grossFillPrice": "50000",
+      "quantity": "0.00123456"
+    },
+    {
+      "vectorId": "V007_HALF_UP_BOUNDARY",
+      "side": "sell",
+      "grossFillPrice": "33333.33333333",
+      "quantity": "0.00000003"
+    },
+    {
+      "vectorId": "V008_REPEAT_DETERMINISM_A",
+      "side": "buy",
+      "grossFillPrice": "100",
+      "quantity": "1"
+    },
+    {
+      "vectorId": "V009_REPEAT_DETERMINISM_B",
+      "side": "buy",
+      "grossFillPrice": "100",
+      "quantity": "1"
+    }
+  ]
+}

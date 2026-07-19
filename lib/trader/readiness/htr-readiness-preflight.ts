@@ -22,6 +22,12 @@ import {
   listHtrReadinessGateGroupsRequiringPreflight,
 } from "@/lib/trader/readiness/htr-readiness-gate-groups";
 import { assertHtrPostgresConnectionEnvironment } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
+import {
+  WP21_BOUND_VECTOR_FIXTURE_SHA256,
+  WP21_PARENT_ORACLE_SEMANTIC_DIGEST,
+  WP21_PARENT_PATCH_SHA256,
+  WP21_ZERO_FILL_SEMANTIC_DIGEST,
+} from "@/lib/trader/research/wp21-g2-parent-seal-orchestrator";
 
 export const HTR_READINESS_PREFLIGHT_SCHEMA_VERSION = "htr-readiness-preflight-report/v1" as const;
 
@@ -65,6 +71,32 @@ function collectFailure(run: () => void, codes: string[]): void {
   }
 }
 
+export function assertHtrB5ParentSealGateBindings(): void {
+  if (
+    WP21_PARENT_PATCH_SHA256 !== "4d707c39cf1856bb999a92db1a2715e217c64effca78fdface03940dd9cd7126"
+  ) {
+    throw new Error("HTR_WP23_PREFLIGHT:B5_PARENT_PATCH_SHA256_MISMATCH");
+  }
+  if (
+    WP21_BOUND_VECTOR_FIXTURE_SHA256 !==
+    "8e89180c23ed93fb9dc2703c5133ff627aa330aeb9d69920e97f50b06cc7eefc"
+  ) {
+    throw new Error("HTR_WP23_PREFLIGHT:B5_VECTOR_FIXTURE_SHA256_MISMATCH");
+  }
+  if (
+    WP21_ZERO_FILL_SEMANTIC_DIGEST !==
+    "2073f646997d445e05189942d4fb81c16e3130a499fedee7b206c3d892173f11"
+  ) {
+    throw new Error("HTR_WP23_PREFLIGHT:B5_ZERO_FILL_SEMANTIC_DIGEST_MISMATCH");
+  }
+  if (
+    WP21_PARENT_ORACLE_SEMANTIC_DIGEST !==
+    "7c6cad83becb96aa4d534edb51c32aab17102652521a552d9c3a122ade69b6c7"
+  ) {
+    throw new Error("HTR_WP23_PREFLIGHT:B5_PARENT_ORACLE_SEMANTIC_DIGEST_MISMATCH");
+  }
+}
+
 export function assertHtrReadinessCostModelAuthority(): void {
   const authority = createHtrHistoricalCostModelAuthorityV1();
   assertHtrHistoricalCostModelMatch(authority);
@@ -91,6 +123,7 @@ export function runHtrReadinessPreflight(
 
   collectFailure(() => assertHtrExecutionServerPackageManifest(), failureCodes);
   collectFailure(() => assertHtrReadinessCostModelAuthority(), failureCodes);
+  collectFailure(() => assertHtrB5ParentSealGateBindings(), failureCodes);
 
   if (input.mode === "self-test") {
     if (HTR_FHV_DATASET_SOURCE_CLASSIFICATION !== "NOT_AVAILABLE") {

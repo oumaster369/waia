@@ -37,10 +37,48 @@ import {
 } from "@/lib/trader/readiness/htr-fhv-run-contract-v0";
 import { runHtrReadinessPreflight } from "@/lib/trader/readiness/htr-readiness-preflight";
 import { DEFAULT_D20_DRAWDOWN_POLICY } from "@/lib/trader/risk/drawdown-policy.types";
+import {
+  WP21_BOUND_VECTOR_FIXTURE_SHA256,
+  WP21_PARENT_ORACLE_SEMANTIC_DIGEST,
+  WP21_PARENT_PATCH_SHA256,
+  WP21_ZERO_FILL_SEMANTIC_DIGEST,
+} from "@/lib/trader/research/wp21-g2-parent-seal-orchestrator";
 import { makeWp17Bar } from "@/tests/unit/helpers/wp17-execution-fixtures";
 
 export const HTR_CORRECTIVE_A_PACKET_SHA256 =
-  "04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2" as const;
+  "67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13" as const;
+
+export const HTR_CORRECTIVE_A_BUNDLE_MANIFEST_DIGEST =
+  "fc261f59969cf8c8faf2072848ed2e94bc09fecbd375ee1ebb241fbc2331fff3" as const;
+
+export const HTR_CORRECTIVE_A_THREE_MANIFEST_REGISTRY_SHA256 =
+  "343f2b1b60dbd75342353e247c5767c4e1e49bb779a19b0945b189fbf2c0abc6" as const;
+
+export const HTR_CORRECTIVE_A_CORRECTIVE_TEST_MATRIX_SHA256 =
+  "445cd6dbb14622f7f51a13108e80083ffb7009e2c22f11573728646ebff76769" as const;
+
+export const HTR_CORRECTIVE_A_NORMATIVE_LANE_CONTRACTS_SHA256 =
+  "f058c2dddcb21bbd4a7389ce2d3c685c639e2288bbabd4b5ce407b3c08af8256" as const;
+
+export const HTR_CORRECTIVE_A_PARENT_PATCH_SHA256 =
+  "4d707c39cf1856bb999a92db1a2715e217c64effca78fdface03940dd9cd7126" as const;
+
+export const HTR_CORRECTIVE_A_COST_VECTOR_FIXTURE_SHA256 =
+  "8e89180c23ed93fb9dc2703c5133ff627aa330aeb9d69920e97f50b06cc7eefc" as const;
+
+export const HTR_CORRECTIVE_A_ZERO_FILL_SEMANTIC_DIGEST =
+  "2073f646997d445e05189942d4fb81c16e3130a499fedee7b206c3d892173f11" as const;
+
+export const HTR_CORRECTIVE_A_PARENT_ORACLE_SEMANTIC_DIGEST =
+  "7c6cad83becb96aa4d534edb51c32aab17102652521a552d9c3a122ade69b6c7" as const;
+
+export const HTR_CORRECTIVE_A_BOUNDED_BUILD_MANIFEST = {
+  createCount: 16,
+  modifyCount: 7,
+  deleteCount: 0,
+} as const;
+
+export const HTR_CORRECTIVE_A_MATRIX_CASE_TOTAL = 113 as const;
 
 export const HTR_CORRECTIVE_A_EVIDENCE_STAGING_ROOT =
   "replay-runs/RI-P7/htr-corrective-a-qualification" as const;
@@ -164,8 +202,18 @@ function evaluateCorrectiveAG2CostGate(): HtrCorrectiveAGateStatus {
     },
   });
 
+  const b5BindingsExact =
+    HTR_CORRECTIVE_A_BUNDLE_MANIFEST_DIGEST ===
+      "fc261f59969cf8c8faf2072848ed2e94bc09fecbd375ee1ebb241fbc2331fff3" &&
+    HTR_CORRECTIVE_A_PARENT_PATCH_SHA256 === WP21_PARENT_PATCH_SHA256 &&
+    HTR_CORRECTIVE_A_COST_VECTOR_FIXTURE_SHA256 === WP21_BOUND_VECTOR_FIXTURE_SHA256 &&
+    HTR_CORRECTIVE_A_ZERO_FILL_SEMANTIC_DIGEST === WP21_ZERO_FILL_SEMANTIC_DIGEST &&
+    HTR_CORRECTIVE_A_PARENT_ORACLE_SEMANTIC_DIGEST === WP21_PARENT_ORACLE_SEMANTIC_DIGEST &&
+    HTR_CORRECTIVE_A_MATRIX_CASE_TOTAL === 113;
+
   const pass =
     digestMatch &&
+    b5BindingsExact &&
     preflight.terminalState === "HTR_WP23_READINESS_PREFLIGHT_PASS" &&
     preflight.fhvRunContractDigest === computeHtrFhvRunContractDigest();
 

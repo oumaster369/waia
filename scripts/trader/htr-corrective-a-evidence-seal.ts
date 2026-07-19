@@ -21,7 +21,10 @@ function readGitDirtyTree(cwd = process.cwd()): boolean {
 }
 
 export const HTR_CORRECTIVE_A_PACKET_SHA256 =
-  "04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2" as const;
+  "67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13" as const;
+
+export const HTR_CORRECTIVE_A_BUNDLE_MANIFEST_DIGEST =
+  "fc261f59969cf8c8faf2072848ed2e94bc09fecbd375ee1ebb241fbc2331fff3" as const;
 
 export const HTR_CORRECTIVE_A_EVIDENCE_STAGING_ROOT =
   "replay-runs/RI-P7/htr-corrective-a-qualification" as const;

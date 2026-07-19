@@ -149,3 +149,17 @@ export function writeMeasuredProofJson(outputPath: string, payload: Wp21Measured
 
 export const WP21_PROOF_METRICS_V1 = RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1;
 export const WP21_PROOF_METRICS_V2 = RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION;
+
+export {
+  generateWp21G2ParentSeal,
+  assertExpectedParentSealDigests,
+  WP21_ZERO_FILL_SEMANTIC_DIGEST,
+  WP21_PARENT_ORACLE_SEMANTIC_DIGEST,
+} from "@/lib/trader/research/wp21-g2-parent-seal-orchestrator";
+export {
+  compareWp21ZeroFillStructuralSemantics,
+  exportWp21ZeroFillStructuralCandidate,
+  createWp21ZeroFillStructuralSession,
+} from "@/lib/trader/research/wp21-g2-zero-fill-structural-comparison";
+export { runWp21G2CostVectorComparison } from "@/lib/trader/research/wp21-g2-cost-vector-comparison";
+export { runGuardianCostCausalScenarioComparison } from "@/lib/trader/research/wp21-g2-guardian-cost-causal-harness";
