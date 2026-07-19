@@ -29,7 +29,7 @@ state:
   status: in-progress
   humanApproval: HTR_MACRO_J_V3_PACKET_AND_BUILD_APPROVED_CONSUMED
   historicalMacroIHumanApproval: HTR_MACRO_I_HUMAN_APPROVED_CONSUMED
-  programStatus: FINAL_AUDIT_CORRECTIVE_G2_SUPERSEDING_PACKET_PENDING_INDEPENDENT_AUDIT
+  programStatus: FINAL_AUDIT_CORRECTIVE_G2_B5_SUPERSEDING_PACKET_PENDING_INDEPENDENT_AUDIT
   childPlanStatus: APPROVED
   buildAuthorized: false
   buildAuthorizedScope: null
@@ -189,17 +189,21 @@ state:
   requiredHumanTokens:
     - APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-SUPERSEDING-PACKET
   nextHumanGate: APPROVE-DEE-415-FINAL-AUDIT-CORRECTIVE-SUPERSEDING-PACKET
-  correctiveAPacketSha256: 38e4e9f3badfcf08b769b2a7c6d45811d6bbd359becc03f660f3182582e95422
-  correctiveAPacketPath: .cursor/plans/dee-415-final-audit-corrective/38e4e9f3badfcf08b769b2a7c6d45811d6bbd359becc03f660f3182582e95422/dee-415-g2-wp21-superseding-corrective-exact-packet.plan.md
-  correctiveAPacketBytes: 18012
-  correctiveAPacketPhysicalLines: 464
-  correctiveAPacketAuthoringHead: feb78adeed3d3e70b5a4fd0033ad20c4f2371e70
-  correctiveASelectedArchitecture: B4_DETERMINISTIC_PARENT_WORKTREE_INSTRUMENTATION_PATCH_V1
-  correctiveASupersedesPacketSha256: 04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2
-  correctiveASupersedesClassification: SUPERSEDED_NOT_APPROVABLE_G2_WP21_PARENT_PARITY_CONTRADICTION
-  activeCorrectionStatus: G2_B4_SUPERSEDING_PACKET_AUTHORED_PENDING_INDEPENDENT_AUDIT
-  nextAction: FRESH_INDEPENDENT_DEE_415_G2_SUPERSEDING_PACKET_AUDIT
-  nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-SUPERSEDING-PACKET-AUDIT
+  correctiveAPacketSha256: fb04dd4d16e275c002a68db52991c15a70f39615c934beed317b5a25acd4727f
+  correctiveAPacketPath: .cursor/plans/dee-415-final-audit-corrective/fb04dd4d16e275c002a68db52991c15a70f39615c934beed317b5a25acd4727f/dee-415-g2-wp21-superseding-corrective-exact-packet.plan.md
+  correctiveAPacketBytes: 39695
+  correctiveAPacketPhysicalLines: 853
+  correctiveAPacketAuthoringHead: 9281ac57405eaa48fa08710fe33217a885fd50e8
+  correctiveASelectedArchitecture: B5_SPLIT_PROOF_ZERO_FILL_WP21_PLUS_PARENT_COST_VECTOR_ORACLE_V1
+  correctiveAParentOraclePatchSha256: 0d8471d888a06fa67b30c99953d39e6d080acaf654eab7d526f0e53be1b8b117
+  correctiveACostVectorFixtureSha256: 8e89180c23ed93fb9dc2703c5133ff627aa330aeb9d69920e97f50b06cc7eefc
+  correctiveABundleManifestDigest: 5b57e5bf82292b52e3f5c3de63f62f0832b34ffa0b3d5f4cb83fe414c3bac27c
+  correctiveAAbandonedB4V2PrototypePatchSha256: 215cab07b44d65f7b5e96870aaf84ea9e192263b7077256ed0b76fbef6713d31
+  correctiveASupersedesPacketSha256: 38e4e9f3badfcf08b769b2a7c6d45811d6bbd359becc03f660f3182582e95422
+  correctiveASupersedesClassification: SUPERSEDED_NOT_APPROVABLE_B4_PACKET_SELF_CONTAINMENT_PATCH_SEMANTICS_MANIFEST_TEST_AND_CONTROLLER_DEFECTS
+  activeCorrectionStatus: G2_B5_SPLIT_PROOF_SUPERSEDING_EXACT_PACKET_PENDING_INDEPENDENT_AUDIT
+  nextAction: FRESH_INDEPENDENT_DEE_415_G2_B5_PACKET_AUDIT
+  nextHumanGate: AUTHORIZE-FRESH-INDEPENDENT-DEE-415-G2-B5-PACKET-AUDIT
   buildAuthorized: false
   correctiveAPersistenceOption: OPTION_B_REUSE_EXISTING_0094_0096
   correctiveAMigrationDecision: NONE
