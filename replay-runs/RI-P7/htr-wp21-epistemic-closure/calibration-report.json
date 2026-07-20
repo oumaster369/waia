@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.909Z",
+  "nodeVersion": "v22.22.3",
+  "command": "pnpm exec vitest run tests/unit/trader-wp21-calibration-boundary-proof.test.ts tests/unit/trader-wp21-calibration-brier-logloss.test.ts",
+  "exitCode": 0,
+  "status": "PASS",
+  "minSamples": 30,
+  "window": "FULL_RUN_CUMULATIVE",
+  "partition": [
+    "forecast_model_version",
+    "regime",
+    "horizon"
+  ],
+  "roundHalfEven4dp": true,
+  "logLossEpsilon": 1e-12,
+  "sampleBoundaries": [
+    29,
+    30,
+    31
+  ],
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "6d45dc59935618f0443cc4fb5950400e70254f136542d302a0b99c7babfbca8e"
+}

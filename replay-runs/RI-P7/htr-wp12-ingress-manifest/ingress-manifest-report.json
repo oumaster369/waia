@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "htr-wp12-ingress-manifest/v1",
+  "fixturePath": "tests/fixtures/trader/btcusdt-1m-mean-reversion.json",
+  "gapPolicy": {
+    "policyId": "FHV_GAP_POLICY_V1",
+    "maxTotalMissingBars": 0,
+    "maxSingleGapBars": 0,
+    "interpolationAllowed": false,
+    "syntheticBarInsertionAllowed": false,
+    "silentGapDropAllowed": false,
+    "crossVenueSubstitutionAllowed": false,
+    "onAnyGap": "HTR_WP12_DATASET_GAP_POLICY_DECISION_REQUIRED"
+  },
+  "gapPolicyResult": "PASS",
+  "partitions": {
+    "development": {
+      "startUtc": "2020-01-01T00:00:00.000Z",
+      "endUtc": "2023-01-01T00:00:00.000Z"
+    },
+    "walkForward": {
+      "startUtc": "2023-01-01T00:00:00.000Z",
+      "endUtc": "2025-01-01T00:00:00.000Z"
+    },
+    "blindHoldout": {
+      "startUtc": "2025-01-01T00:00:00.000Z",
+      "endUtc": "2026-01-01T00:00:00.000Z",
+      "status": "SEALED_NOT_ACCESSED"
+    }
+  },
+  "manifest": {
+    "schemaVersion": "fhv-dataset-manifest/v1",
+    "venueScope": "HTX_ONLY",
+    "marketType": "SPOT",
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT"
+    ],
+    "baseInterval": "1m",
+    "derivedIntervals": [
+      "15m",
+      "1h",
+      "4h",
+      "1d"
+    ],
+    "derivedIntervalRule": "CLOSED_BARS_ONLY",
+    "sourceObjects": [
+      {
+        "sourceObjectId": "tests/fixtures/trader/btcusdt-1m-mean-reversion.json",
+        "retrieval": {
+          "retrievedAtUtc": "2026-01-01T00:00:00.000Z",
+          "method": "fixture-read",
+          "uri": "tests/fixtures/trader/btcusdt-1m-mean-reversion.json"
+        },
+        "sourceChecksumSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "normalizedContentDigest": "7a35e16c6a5db480e869453c95319d61d3d7f07f9e76182591849e8fc5a97c9f",
+    "barSetDigest": "51fd94b5f3e26319574fc5cd5b0328d129ccdc44f590bf26d4e5bc708cdeeb2b",
+    "perBarContentDigestAlgo": "computeBarContentDigest",
+    "expectedBarCount": 25,
+    "observedBarCount": 25,
+    "intervalBoundaries": {
+      "startUtc": "2026-01-01T00:00:00.000Z",
+      "endUtc": "2026-01-01T00:25:00.000Z"
+    },
+    "integrityResults": {
+      "monotonic": true,
+      "duplicates": false,
+      "outOfOrder": false,
+      "nonFinite": false,
+      "negativeVolume": false,
+      "invalidRelation": false
+    },
+    "gaps": [],
+    "gapPolicy": "FHV_GAP_POLICY_V1",
+    "gapPolicyResult": "PASS",
+    "mtfDerivation": {
+      "rule": "CLOSED_BARS_ONLY",
+      "intervals": [
+        "15m",
+        "1h",
+        "4h",
+        "1d"
+      ]
+    },
+    "pointInTimeAvailability": {
+      "availabilityModel": "sidecar-v3-timeline"
+    },
+    "absentLaneRepresentation": "SIDECAR_LANE_ABSENT",
+    "partitions": {
+      "development": {
+        "startUtc": "2020-01-01T00:00:00.000Z",
+        "endUtc": "2023-01-01T00:00:00.000Z"
+      },
+      "walkForward": {
+        "startUtc": "2023-01-01T00:00:00.000Z",
+        "endUtc": "2025-01-01T00:00:00.000Z"
+      },
+      "blindHoldout": {
+        "startUtc": "2025-01-01T00:00:00.000Z",
+        "endUtc": "2026-01-01T00:00:00.000Z",
+        "status": "SEALED_NOT_ACCESSED"
+      }
+    },
+    "holdoutSeal": {
+      "contaminationStatus": "RESERVED_SEALED_NOT_ACCESSED"
+    },
+    "manifestVersion": 1,
+    "manifestSemanticDigest": "fd7d489595f8fc20e4311c74e5d82b2957e7cca5b80319b8cb8d5f0893544663"
+  },
+  "gitSha": "f6cefb064c562ae29f506cac5e319c826da3912b",
+  "dirtyTree": true,
+  "reproductionCommand": "pnpm trader:dataset:manifest"
+}

@@ -23,6 +23,7 @@ import {
 import { traderAuditActions } from "@/lib/trader/types";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
@@ -95,6 +96,9 @@ function mockRepository(orders: OrderRow[]): OrderRepository {
     recordFill: async () => {
       throw new Error("not implemented");
     },
+    recordFillProgress: async () => {
+      throw new Error("not implemented");
+    },
     listEvents: async () => [],
     listFills: async (_context, orderId) => fillsByOrderId[orderId] ?? [],
   };
@@ -108,7 +112,7 @@ async function buildAssembly(orgId: string, strategyId = STRATEGY_ID, strategyVe
     orderRepository: mockRepository([buy, sell]),
     window: { start: new Date(100), end: new Date(200) },
     strategySignalIds: [STRATEGY_SIGNAL],
-    executionMode: "mock",
+    executionMode: "paper",
     exportedAt: new Date("2026-06-18T12:00:00.000Z"),
   });
 
@@ -123,6 +127,7 @@ async function buildAssembly(orgId: string, strategyId = STRATEGY_ID, strategyVe
     failureModes: ["liquidity vacuum"],
     reasonCodeDistribution: { STRAT_MR_ZSCORE_BUY: 3 },
     paperTradingEvidenceDocument: document,
+    researchEvidenceDocument: buildValidResearchEvidenceDocument(orgId, { strategyId }),
     confidenceAttestation: {
       edgeNetOfCosts: "Net edge after costs.",
       liveTracksPaper: "Live should track paper.",

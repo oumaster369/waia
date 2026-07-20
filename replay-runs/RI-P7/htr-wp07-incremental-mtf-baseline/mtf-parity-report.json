@@ -1,0 +1,11 @@
+{
+  "terminalState": "CANVAS_MTF_PARITY_OK",
+  "perIntervalMatch": {
+    "15m": true,
+    "1h": true,
+    "4h": true,
+    "1d": true
+  },
+  "gapCount": 0,
+  "intentionalDefectCorrection": true
+}

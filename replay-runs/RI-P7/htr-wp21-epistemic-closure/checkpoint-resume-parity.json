@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.909Z",
+  "nodeVersion": "v22.22.3",
+  "command": "pnpm exec vitest run tests/unit/trader-wp21-checkpoint-resume-parity.test.ts",
+  "exitCode": 0,
+  "status": "PASS",
+  "uninterruptedEqualsResumed": true,
+  "cycleIdPrefixDeterministic": true,
+  "crossPhaseCollisionPrevented": true,
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "30057feba016091328f8c6744708eb669f3dd9e34986dc46e94fab4a36d898d2"
+}

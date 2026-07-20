@@ -51,6 +51,7 @@ export {
   createPostgresOrderRepositoryFromExecutor,
   createSqliteOrderRepository,
 } from "@/lib/trader/execution/repository-adapters";
+export { deleteMockExecutionArtifactsForOrgPostgres } from "@/lib/trader/execution/repository-postgres";
 export {
   createOrderExecutionServiceFromDeps,
   createPostgresOrderExecutionService,
@@ -129,3 +130,28 @@ export {
   type OrderState,
   type OrderType,
 } from "@/lib/trader/execution/types";
+export {
+  createHistoricalExecutionModelV1,
+  assertModelMatchesD5,
+} from "@/lib/trader/execution/historical-execution-model";
+export {
+  applyHistoricalExecutionEconomics,
+  assertCompleteHistoricalFillEconomics,
+  computeEconomicsContentDigest,
+} from "@/lib/trader/execution/fill-economics";
+export {
+  deterministicUuidV8,
+  historicalFillId,
+  DeterministicExecutionIdCollisionError,
+} from "@/lib/trader/execution/deterministic-execution-id";
+export {
+  createHistoricalSimulatedExchange,
+  advanceHistoricalExecutionOnClosedBar,
+  bindHistoricalSimulatedExchange,
+} from "@/lib/trader/execution/historical-simulated-exchange";
+export type {
+  HistoricalExecutionModelV1,
+  SimulatedFillEvent,
+  CostedFillEconomics,
+  ExecutionFactKind,
+} from "@/lib/trader/execution/historical-execution-model.types";

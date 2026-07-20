@@ -5,6 +5,7 @@ WAIA DEV OS operational layer:
 | Doc | Topic |
 |-----|-------|
 | [**`WAIA-DEV-OS.md`**](WAIA-DEV-OS.md) | **Constitution — roles, lifecycle, gates, MCP, validation canon** |
+| [`WAIA-DEV-OS-ARCHITECTURE-SPECIFICATION.md`](WAIA-DEV-OS-ARCHITECTURE-SPECIFICATION.md) | **Primary DEV OS architecture specification (T0)** — how WAIA development is organized: document hierarchy, execution-surface boundaries, AUTO/CONFIRM/HUMAN-ONLY classification; subordinate to product specs and governance topic owners; does not own product meaning or module runtime architecture |
 | [`WAIA-NORTH-STAR.md`](WAIA-NORTH-STAR.md) | **Ecosystem orientation — purpose field (interpretive; non-binding)** |
 | [`WAIA-OPERATING-MEMORY.md`](WAIA-OPERATING-MEMORY.md) | **Layer 2 — current operational truth snapshot (sync hub)** |
 | [`CORE-PRINCIPLES.md`](CORE-PRINCIPLES.md) | Ethos |
@@ -26,8 +27,10 @@ WAIA DEV OS operational layer:
 | [`EXECUTABLE-GOVERNANCE-HOOKS.md`](EXECUTABLE-GOVERNANCE-HOOKS.md) | CI/Cursor/GitHub hooks |
 | [`AGENT-EXECUTION-LABELS.md`](AGENT-EXECUTION-LABELS.md) | Label ownership matrix |
 | [`AGENT-AUTO-ADVANCE.md`](AGENT-AUTO-ADVANCE.md) | Safe auto-advance preconditions |
+| [`ROADMAP-AUTOPILOT.md`](ROADMAP-AUTOPILOT.md) | Roadmap autopilot preparation (read-only contract; no runtime) |
 | [`LINEAR-ID-COLLISION-RECOVERY.md`](LINEAR-ID-COLLISION-RECOVERY.md) | ID collision incident playbook |
 | [`GOVERNANCE-VERSIONING.md`](GOVERNANCE-VERSIONING.md) | Evolution log |
+| [`EVIDENCE-POLICY.md`](EVIDENCE-POLICY.md) | Evidence taxonomy and storage |
 | [`AGENT-ROLES.md`](AGENT-ROLES.md) | Planner/executor/etc. |
 | [`FAILURE-PATTERNS.md`](FAILURE-PATTERNS.md) | Incident knowledge |
 | [`HUMAN-OVERRIDE.md`](HUMAN-OVERRIDE.md) | Emergency path |
@@ -48,3 +51,5 @@ WAIA DEV OS operational layer:
 Architectural WHY: [`../adr/`](../adr/README.md).
 
 Product onboarding hub: [`../product/WAIA-V1-MVP-SPEC.md`](../product/WAIA-V1-MVP-SPEC.md).
+
+Module product canon (non-governance): [AI-TRADER Product Constitution](../AI-TRADER-PRODUCT-CONSTITUTION.md) — product-level definition of the finished AI-TRADER module; indexed from [`../ai-trader/README.md`](../ai-trader/README.md).

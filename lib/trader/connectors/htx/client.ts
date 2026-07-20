@@ -1,5 +1,6 @@
 import {
   HTX_ENDPOINTS,
+  HTX_MARKET_HISTORY_CANDLES_MAX_SIZE,
   htxHostFromUrl,
   resolveHtxRestHost,
 } from "@/lib/trader/connectors/htx/config";
@@ -14,7 +15,10 @@ import type {
   HtxKlineResponse,
   HtxKlineRow,
   HtxLegacyResponse,
+  HtxMarketDepthResponse,
+  HtxMarketHistoryTradeResponse,
   HtxMarketMergedResponse,
+  HtxMarketTradeRow,
   HtxMatchResultRow,
   HtxOrderRow,
   HtxV2Response,
@@ -63,7 +67,8 @@ export class HtxRestClient {
     this.restHost = resolveHtxRestHost(config.restHost);
     this.host = htxHostFromUrl(this.restHost);
     this.transportPolicy = config.transportPolicy ?? DEFAULT_HTX_TRANSPORT_POLICY;
-    this.transport = new HtxTransport(config.fetchImpl ?? fetch, this.transportPolicy);
+    const fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.transport = new HtxTransport(fetchImpl, this.transportPolicy);
   }
 
   getRestHost(): string {
@@ -199,30 +204,134 @@ export class HtxRestClient {
     return (await response.json()) as HtxMarketMergedResponse;
   }
 
+  async getMarketDepth(input: {
+    symbol: string;
+    type?: "step0" | "step1" | "step2" | "step3" | "step4" | "step5";
+  }): Promise<HtxMarketDepthResponse> {
+    const params = new URLSearchParams({
+      symbol: input.symbol,
+      type: input.type ?? "step0",
+    });
+    const url = `${this.restHost}${HTX_ENDPOINTS.marketDepth}?${params.toString()}`;
+    const response = await this.transport.fetch(url, { method: "GET" });
+    if (!response.ok) {
+      throw new HtxApiError("http-error", `HTTP ${response.status} for market depth`);
+    }
+    const body = (await response.json()) as HtxMarketDepthResponse;
+    if (body.status === "error") {
+      throw new HtxApiError(
+        body["err-code"] ?? "unknown",
+        body["err-msg"] ?? "HTX market depth error",
+      );
+    }
+    return body;
+  }
+
+  async getMarketHistoryTrade(input: {
+    symbol: string;
+    size?: number;
+  }): Promise<HtxMarketTradeRow[]> {
+    const params = new URLSearchParams({
+      symbol: input.symbol,
+      size: String(input.size ?? 50),
+    });
+    const url = `${this.restHost}${HTX_ENDPOINTS.marketHistoryTrade}?${params.toString()}`;
+    const response = await this.transport.fetch(url, { method: "GET" });
+    if (!response.ok) {
+      throw new HtxApiError("http-error", `HTTP ${response.status} for market history trade`);
+    }
+    const body = (await response.json()) as HtxMarketHistoryTradeResponse;
+    if (body.status === "error") {
+      throw new HtxApiError(
+        body["err-code"] ?? "unknown",
+        body["err-msg"] ?? "HTX market history trade error",
+      );
+    }
+    if (body.status !== "ok") {
+      throw new HtxApiError("invalid-response", "Unexpected HTX market history trade response");
+    }
+    return body.data ?? [];
+  }
+
   async getMarketHistoryKline(input: {
     symbol: string;
     period: string;
     size?: number;
+    /**
+     * Passed through to query string only; `/market/history/kline` ignores `from`
+     * and always returns the latest N candles. Use {@link getMarketHistoryCandles}
+     * for paginated deep history.
+     */
+    from?: number;
+  }): Promise<HtxKlineRow[]> {
+    return this.fetchMarketKlineEnvelope({
+      endpoint: HTX_ENDPOINTS.marketHistoryKline,
+      symbol: input.symbol,
+      period: input.period,
+      size: input.size ?? 25,
+      from: input.from,
+      errorLabel: "market history kline",
+    });
+  }
+
+  /**
+   * Spot historical candles with forward time paging (`from`/`to` in seconds).
+   * Max {@link HTX_MARKET_HISTORY_CANDLES_MAX_SIZE} rows per request.
+   */
+  async getMarketHistoryCandles(input: {
+    symbol: string;
+    period: string;
+    size?: number;
+    from?: number;
+    to?: number;
+  }): Promise<HtxKlineRow[]> {
+    const requestedSize = input.size ?? HTX_MARKET_HISTORY_CANDLES_MAX_SIZE;
+    const size = Math.min(requestedSize, HTX_MARKET_HISTORY_CANDLES_MAX_SIZE);
+    return this.fetchMarketKlineEnvelope({
+      endpoint: HTX_ENDPOINTS.marketHistoryCandles,
+      symbol: input.symbol,
+      period: input.period,
+      size,
+      from: input.from,
+      to: input.to,
+      errorLabel: "market history candles",
+    });
+  }
+
+  private async fetchMarketKlineEnvelope(input: {
+    endpoint: string;
+    symbol: string;
+    period: string;
+    size: number;
+    from?: number;
+    to?: number;
+    errorLabel: string;
   }): Promise<HtxKlineRow[]> {
     const params = new URLSearchParams({
       symbol: input.symbol,
       period: input.period,
-      size: String(input.size ?? 25),
+      size: String(input.size),
     });
-    const url = `${this.restHost}${HTX_ENDPOINTS.marketHistoryKline}?${params.toString()}`;
+    if (input.from !== undefined) {
+      params.set("from", String(input.from));
+    }
+    if (input.to !== undefined) {
+      params.set("to", String(input.to));
+    }
+    const url = `${this.restHost}${input.endpoint}?${params.toString()}`;
     const response = await this.transport.fetch(url, { method: "GET" });
     if (!response.ok) {
-      throw new HtxApiError("http-error", `HTTP ${response.status} for market history kline`);
+      throw new HtxApiError("http-error", `HTTP ${response.status} for ${input.errorLabel}`);
     }
     const body = (await response.json()) as HtxKlineResponse;
     if (body.status === "error") {
       throw new HtxApiError(
         body["err-code"] ?? "unknown",
-        body["err-msg"] ?? "HTX market history kline error",
+        body["err-msg"] ?? `HTX ${input.errorLabel} error`,
       );
     }
     if (body.status !== "ok") {
-      throw new HtxApiError("invalid-response", "Unexpected HTX market history kline response");
+      throw new HtxApiError("invalid-response", `Unexpected HTX ${input.errorLabel} response`);
     }
     return body.data ?? [];
   }

@@ -7,6 +7,7 @@ export type WatcherLogger = {
   log(payload: WatcherLogPayload): void;
 };
 
+/** Cron-safe stdout logger (avoid alert-router sink interop in workerd bundles). */
 export function createStdoutWatcherLogger(): WatcherLogger {
   return {
     log(payload) {

@@ -15,7 +15,11 @@
 
 **Linear groom verified:** <!-- yes (via /groom) OR n/a with Architect approval -->
 
-**Plan:** <!-- `.cursor/plans/<file>.md` or `n/a` -->
+**Includes:** <!-- optional child issue ids: `DEE-YYY`, `DEE-ZZZ` — not validated; not auto-closed on merge -->
+
+**Deferred:** <!-- optional: child work not delivered in this batch — Linear children stay open -->
+
+**Plan:** <!-- `docs/plans/dee-NN-slug.md` or `n/a` (Architect-approved bootstrap only) -->
 
 ## Risk tier
 

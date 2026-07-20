@@ -13,6 +13,19 @@ export type PaperClosedTrade = {
   tradePnl: string;
 };
 
+/** Synthetic window-boundary mark-to-close (H2). */
+export type PaperMarkToCloseTrade = {
+  syntheticId: string;
+  symbol: string;
+  executedAt: Date;
+  quantity: string;
+  boundaryClosePrice: string;
+  adjustedSellPrice: string;
+  sellFee: string;
+  tradePnl: string;
+  syntheticClose: true;
+};
+
 /** Org-scoped operational strategy evaluation read model for mock/paper execution modes. */
 export type PaperStrategyEvaluation = {
   organizationId: string;
@@ -29,6 +42,10 @@ export type PaperStrategyEvaluation = {
   endSnapshot: PaperPnL;
   closedTrades: PaperClosedTrade[];
   closedTradeCount: number;
+  markToCloseTrades: PaperMarkToCloseTrade[];
+  markToCloseTradeCount: number;
+  openPositionCount: number;
+  periodMarkedPnl: string;
   winCount: number;
   lossCount: number;
   breakevenCount: number;

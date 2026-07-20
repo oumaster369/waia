@@ -26,16 +26,21 @@ import { createPostgresReconciliationCaseRepository } from "@/lib/trader/settlem
 import { effectiveOutcome } from "@/lib/trader/settlement/reconciliation/effective-outcome";
 import { createPostgresSettlementService } from "@/lib/trader/settlement/settlement-service";
 import { createPostgresSettlementApplicationsRepository } from "@/lib/trader/settlement/settlement-applications-repository-postgres";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
+import {
+  deleteHtrPostgresSettlementDomainForOrg,
+  seedHtrPostgresUser,
+} from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 
-const USER_A = "00000000-0000-4000-8000-0000000s3cbpg";
+const USER_A = "00000000-0000-4000-8022-0000003cb001";
 const EXCHANGE = "htx-recon-s3cb-pg";
 const VALUED = "150.000000";
+const PAYMENT_ADDRESS_ID = "00000000-0000-4000-8022-0000003cb003";
 
 describe.skipIf(!integrationEnabled || !url)(
   "postgres reconciliation workflow parity (AT-E12 S3-C-B)",
@@ -44,24 +49,9 @@ describe.skipIf(!integrationEnabled || !url)(
 
     async function cleanup(): Promise<void> {
       const orgId = personalOrganizationIdFromUserId(USER_A);
+      await deleteHtrPostgresSettlementDomainForOrg(url!, orgId);
       const sql = postgres(url!, { max: 1 });
       try {
-        await sql.unsafe(
-          `DELETE FROM trader_settlement_reconciliation_events WHERE organization_id = $1`,
-          [orgId],
-        );
-        await sql.unsafe(
-          `DELETE FROM trader_settlement_reconciliation_cases WHERE organization_id = $1`,
-          [orgId],
-        );
-        await sql.unsafe(`DELETE FROM trader_settlement_applications WHERE organization_id = $1`, [
-          orgId,
-        ]);
-        await sql.unsafe(`DELETE FROM trader_settlements WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM trader_invoices WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM payment_events WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM payments WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM audit_logs WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM organizations WHERE id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM user_platform_roles WHERE user_id = $1`, [USER_A]);
@@ -118,21 +108,11 @@ describe.skipIf(!integrationEnabled || !url)(
     }
 
     beforeAll(async () => {
+      await verifyHtrPostgresConnectionIdentity();
       await cleanup();
-      const sql = postgres(url!, { max: 1 });
-      try {
-        await sql.unsafe(`INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [
-          USER_A,
-        ]);
-      } finally {
-        await sql.end({ timeout: 5 });
-      }
+      orgA = await seedHtrPostgresUser(url!, USER_A, "Recon PG Parity");
 
-      const db = getPostgresDrizzle();
-      orgA = await ensureUserCoreSeedPostgres(db, {
-        userId: USER_A,
-        displayName: "Recon PG Parity",
-      });
+      getPostgresDrizzle();
     });
 
     afterAll(async () => {
@@ -153,6 +133,7 @@ describe.skipIf(!integrationEnabled || !url)(
       const detected = await paymentService.detectPayment(context, {
         idempotencyKey: `pg-recon-${txHash}`,
         subjectModule: "trader",
+        subjectInvoiceId: targetInvoiceId,
       });
       const transfer = {
         txHash,
@@ -182,7 +163,7 @@ describe.skipIf(!integrationEnabled || !url)(
         settlementTxHash: confirmed.settlementTxHash,
         transferIndex: confirmed.transferIndex,
         blockHeight: transfer.blockHeight,
-        paymentAddressId: null,
+        paymentAddressId: PAYMENT_ADDRESS_ID,
         exchangeAccountId: EXCHANGE,
         updatedAt: confirmed.updatedAt,
       });
@@ -303,6 +284,7 @@ describe.skipIf(!integrationEnabled || !url)(
       const detected = await paymentService.detectPayment(context, {
         idempotencyKey: `pg-fault-${txHash}`,
         subjectModule: "trader",
+        subjectInvoiceId: targetInvoiceId,
       });
       const transfer = {
         txHash,
@@ -332,7 +314,7 @@ describe.skipIf(!integrationEnabled || !url)(
         settlementTxHash: confirmed.settlementTxHash,
         transferIndex: confirmed.transferIndex,
         blockHeight: transfer.blockHeight,
-        paymentAddressId: null,
+        paymentAddressId: PAYMENT_ADDRESS_ID,
         exchangeAccountId: EXCHANGE,
         updatedAt: confirmed.updatedAt,
       });

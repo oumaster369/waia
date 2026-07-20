@@ -28,6 +28,7 @@ import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
+import { loadSidecarV1Fixture } from "@/tests/unit/helpers/wp11-wp12-fixture";
 
 const USER_A = "00000000-0000-4000-8000-0000000260";
 const NOW = 1_735_689_600_000;
@@ -118,7 +119,7 @@ describe("trader paper cycle runner integration (DEE-260)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-paper-cycle-260");
   });
 
-  it("runs 3 fixture cycles with unique idempotency keys and 12 intelligence telemetry lines", async () => {
+  it("runs 3 fixture cycles with unique idempotency keys and 15 intelligence telemetry lines", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);
@@ -131,6 +132,7 @@ describe("trader paper cycle runner integration (DEE-260)", () => {
       context,
       n: 3,
       replay,
+      providerSidecar: loadSidecarV1Fixture(),
       accountKey: "acct-paper-cycle-260",
       defaultQuantity: "0.01",
       executionMode: "mock",
@@ -160,14 +162,17 @@ describe("trader paper cycle runner integration (DEE-260)", () => {
     expect(idempotencyKeys.has("client-paper-cycle-dee-260-2-mean_reversion_v0")).toBe(true);
 
     const intelligenceLines = lines.filter(isIntelligenceCounter);
-    expect(intelligenceLines).toHaveLength(12);
+    expect(intelligenceLines).toHaveLength(21);
 
     for (let cycle = 0; cycle < 3; cycle += 1) {
-      const offset = cycle * 4;
+      const offset = cycle * 7;
       expect(parseCounter(intelligenceLines[offset]!).domain).toBe("decision");
       expect(parseCounter(intelligenceLines[offset + 1]!).domain).toBe("decision");
-      expect(parseCounter(intelligenceLines[offset + 2]!).domain).toBe("strategy");
-      expect(parseCounter(intelligenceLines[offset + 3]!).domain).toBe("strategy");
+      expect(parseCounter(intelligenceLines[offset + 2]!).domain).toBe("decision");
+      expect(parseCounter(intelligenceLines[offset + 3]!).code).toBe("NEWS_SENTIMENT_DEFERRED_PR3");
+      expect(parseCounter(intelligenceLines[offset + 4]!).domain).toBe("strategy");
+      expect(parseCounter(intelligenceLines[offset + 5]!).domain).toBe("strategy");
+      expect(parseCounter(intelligenceLines[offset + 6]!).domain).toBe("strategy");
     }
   });
 });

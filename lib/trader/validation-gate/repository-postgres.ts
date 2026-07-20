@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -35,6 +35,12 @@ function mapRow(
     reasonCodeDistribution: row.reasonCodeDistributionJson as Record<string, number>,
     paperTradingEvidence:
       row.paperTradingEvidenceJson as StrategyPromotionRecordView["paperTradingEvidence"],
+    researchEvidence: (() => {
+      if (!row.researchEvidenceJson) {
+        throw new Error("STRATEGY_PROMOTION_RESEARCH_EVIDENCE_NOT_PERSISTED");
+      }
+      return row.researchEvidenceJson as StrategyPromotionRecordView["researchEvidence"];
+    })(),
     evidenceContentDigest: row.evidenceContentDigest,
     confidenceAttestation:
       row.confidenceAttestationJson as StrategyPromotionRecordView["confidenceAttestation"],
@@ -70,6 +76,7 @@ function payloadToRowValues(input: InsertPromotionRecordInput) {
     failureModesJson: input.failureModes,
     reasonCodeDistributionJson: input.reasonCodeDistribution,
     paperTradingEvidenceJson: input.paperTradingEvidence,
+    researchEvidenceJson: input.researchEvidence,
     evidenceContentDigest: input.paperTradingEvidence.contentDigest,
     confidenceAttestationJson: input.confidenceAttestation,
     recordContentDigest: input.recordContentDigest,
@@ -162,6 +169,30 @@ export async function getEffectivePromotionPostgres(
         eq(pgSchema.traderStrategyPromotionRecords.state, "EFFECTIVE"),
       ),
     )
+    .limit(1);
+  const row = rows[0];
+  return row ? mapRow(row) : null;
+}
+
+const pendingPromotionStates = ["PENDING_CONFIRM", "COOLING_OFF"] as const;
+
+export async function getLatestPendingPromotionPostgres(
+  ex: PgPromotionExecutor,
+  context: OrgContext,
+  strategyId: string,
+): Promise<StrategyPromotionRecordView | null> {
+  const scoped = requireOrgContext(context.organizationId);
+  const rows = await ex
+    .select()
+    .from(pgSchema.traderStrategyPromotionRecords)
+    .where(
+      and(
+        orgScopedWhere(pgSchema.traderStrategyPromotionRecords.organizationId, scoped),
+        eq(pgSchema.traderStrategyPromotionRecords.strategyId, strategyId),
+        inArray(pgSchema.traderStrategyPromotionRecords.state, [...pendingPromotionStates]),
+      ),
+    )
+    .orderBy(desc(pgSchema.traderStrategyPromotionRecords.requestedAt))
     .limit(1);
   const row = rows[0];
   return row ? mapRow(row) : null;

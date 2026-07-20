@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "htr-wp05-provenance/v1",
+  "gitSha": "f90faa9f02e12b3a4a724311cd4b7805f9c12f7c",
+  "dirtyTree": true,
+  "fixturePath": "/Users/legco/Projects/waia/tests/fixtures/trader/dee-337-p5-btcusdt-1m-replay.json",
+  "fixtureSha256": "814981bc3055d8fd52d1277d60a0b443de7644416aceba8cbe99819c70242061",
+  "datasetContentDigest": "b709e6a4b7269b32dc85e182a62cc8ba1436078131808210f9bef192f9bd9801",
+  "command": "pnpm trader:replay:checkpoint-resume"
+}

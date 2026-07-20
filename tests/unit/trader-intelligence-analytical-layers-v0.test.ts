@@ -36,13 +36,15 @@ describe("analytical layers v0 (DEE-200)", () => {
     });
   });
 
-  it("keeps crowd and future context as MVP stubs", () => {
+  it("keeps crowd and future context as MVP stubs without fused context", () => {
     expect(buildCrowdPsychologyLayer()).toEqual({
       fearGreedIndex: null,
-      newsSentiment: "0",
+      newsSentiment: null,
     });
     expect(buildFutureContextLayer()).toEqual({
       eventRiskScore: "0",
+      sessionPhase: "UNKNOWN",
+      asianRangeCorridorPresent: false,
     });
   });
 });

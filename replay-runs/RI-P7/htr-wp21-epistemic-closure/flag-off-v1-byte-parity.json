@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.908Z",
+  "nodeVersion": "v22.22.3",
+  "command": "trader-wp21-measured-flag-off-parity.test.ts + wp21-measured-flag-off-runner.ts",
+  "exitCode": 0,
+  "parentGitSha": "5e9fb1061723614b22604aee86ee129e8f226616",
+  "candidateGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "FLAG_OFF_V1_BYTE_PARITY": "PASS",
+  "unexplainedDifferences": 0,
+  "parentBytesSha256": "71ef26b969214d8dbf8350f82dd53769cd3a41fd9a7b35dd65db36945d4a6938",
+  "candidateBytesSha256": "71ef26b969214d8dbf8350f82dd53769cd3a41fd9a7b35dd65db36945d4a6938",
+  "parentCapitalPathDigest": "10c9017f3a57d0b566a60998134b576baf243f2ff7f3ca09b67455a796784228",
+  "candidateCapitalPathDigest": "10c9017f3a57d0b566a60998134b576baf243f2ff7f3ca09b67455a796784228",
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "c17b66bdc016c3df70dd79dce65956ae16476b70e1eca4203fad4483b5bdfedd"
+}

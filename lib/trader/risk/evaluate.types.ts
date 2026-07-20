@@ -21,6 +21,7 @@ export type EvaluateOrderRequestInput = {
   referencePrice: string;
   accountKey: string;
   accountState?: AccountRiskState;
+  stopDistanceUsdt?: string;
 };
 
 /**

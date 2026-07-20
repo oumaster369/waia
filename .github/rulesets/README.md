@@ -30,6 +30,6 @@ If CI job names change, update **both** `ci.yml` and `dev-main-protection.json`,
 
 `PR governance` enforces explicit **Linear:** field, title/branch/id alignment, disclaimer collision detection, and (when `LINEAR_API_KEY` is set) Linear issue scope verification — see [`scripts/linear/validate-pr-linear-id.sh`](../../scripts/linear/validate-pr-linear-id.sh).
 
-## Advisory PR governance
+## PR governance (blocking)
 
-[`.github/workflows/pr-governance.yml`](../workflows/pr-governance.yml) adds non-blocking comments when branch names or Linear IDs are missing — complements server-side rulesets.
+[`.github/workflows/pr-governance.yml`](../workflows/pr-governance.yml) is a **blocking required check** (`PR governance`) when branch names or Linear IDs are missing or inconsistent — complements server-side rulesets.

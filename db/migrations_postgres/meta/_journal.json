@@ -400,6 +400,377 @@
       "when": 1780000000019,
       "tag": "0056_trader_reconciliation_workflow",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1780000000020,
+      "tag": "0057_trader_position_trade_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1780000000021,
+      "tag": "0058_trader_position_trade_snapshots_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1780000000022,
+      "tag": "0059_account_status_event_suspended",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1780000000023,
+      "tag": "0060_trader_billing_governance",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1780000000024,
+      "tag": "0061_trader_billing_governance_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1780000000025,
+      "tag": "0062_trader_org_live_enable",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1780000000026,
+      "tag": "0063_trader_org_live_enable_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1780000000027,
+      "tag": "0064_research_intelligence_substrate",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1780000000028,
+      "tag": "0065_research_intelligence_substrate_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1780000000029,
+      "tag": "0066_strategy_promotion_research_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1780000000030,
+      "tag": "0067_trader_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1780000000031,
+      "tag": "0068_trader_lifecycle_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1780000000039,
+      "tag": "0069_trader_portfolio_risk_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1780000000040,
+      "tag": "0070_trader_mi_pattern_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1780000000041,
+      "tag": "0071_trader_mi_pattern_catalog_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1780000000042,
+      "tag": "0072_trader_event_attribution_memory",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1780000000043,
+      "tag": "0073_trader_event_attribution_memory_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1780000000044,
+      "tag": "0074_trader_discovery_substrate",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1780000000045,
+      "tag": "0075_trader_discovery_substrate_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1780000000046,
+      "tag": "0076_trader_intelligence_cycle_envelope",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1780000000047,
+      "tag": "0077_trader_intelligence_cycle_envelope_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1780000000048,
+      "tag": "0078_trader_intelligence_hypothesis_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1780000000049,
+      "tag": "0079_trader_intelligence_hypothesis_record_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1780000000050,
+      "tag": "0080_trader_intelligence_conviction_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1780000000051,
+      "tag": "0081_trader_intelligence_conviction_record_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1780000000052,
+      "tag": "0082_trader_intelligence_forecast_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1780000000053,
+      "tag": "0083_trader_intelligence_forecast_record_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1780000000054,
+      "tag": "0084_trader_intelligence_decision_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1780000000055,
+      "tag": "0085_trader_intelligence_decision_record_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1780000000056,
+      "tag": "0086_trader_intelligence_decision_forecast_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1780000000057,
+      "tag": "0087_trader_intelligence_decision_forecast_link_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1780000000058,
+      "tag": "0088_trader_intelligence_entry_purpose_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1780000000059,
+      "tag": "0089_trader_intelligence_entry_purpose_record_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1780000000060,
+      "tag": "0090_trader_strategy_lifecycle_event",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1780000000061,
+      "tag": "0091_trader_strategy_lifecycle_event_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1780000000062,
+      "tag": "0092_trader_strategy_trial",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1780000000063,
+      "tag": "0093_trader_strategy_trial_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1780000000064,
+      "tag": "0094_trader_account_drawdown_checkpoint",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1780000000065,
+      "tag": "0095_trader_account_drawdown_checkpoint_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1780000000066,
+      "tag": "0096_trader_strategy_drawdown_checkpoint",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1780000000067,
+      "tag": "0097_trader_strategy_drawdown_checkpoint_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1780000000068,
+      "tag": "0098_trader_fill_execution_economics",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1780000000069,
+      "tag": "0099_trader_fill_execution_economics_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1780000000070,
+      "tag": "0100_trader_accounting_frontier",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1780000000071,
+      "tag": "0101_trader_accounting_frontier_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1780000000072,
+      "tag": "0102_trader_forecast_outcome_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1780000000073,
+      "tag": "0103_trader_forecast_outcome_record_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1780000000074,
+      "tag": "0104_trader_hypothesis_outcome_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1780000000075,
+      "tag": "0105_trader_hypothesis_outcome_record_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1780000000076,
+      "tag": "0106_trader_calibration_and_abstention_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1780000000077,
+      "tag": "0107_trader_calibration_and_abstention_records_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1780000000078,
+      "tag": "0108_trader_knowledge_confidence_update_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1780000000079,
+      "tag": "0109_trader_knowledge_confidence_update_record_rls",
+      "breakpoints": true
     }
   ]
 }

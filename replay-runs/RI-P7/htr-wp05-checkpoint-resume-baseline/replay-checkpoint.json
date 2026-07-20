@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "htr-wp05-replay-checkpoint/v1",
+  "backtestRunId": "htr-wp05-checkpoint-resume-run",
+  "datasetContentDigest": "b709e6a4b7269b32dc85e182a62cc8ba1436078131808210f9bef192f9bd9801",
+  "datasetId": "htr-wp05-checkpoint",
+  "codeSha": "f90faa9f02e12b3a4a724311cd4b7805f9c12f7c",
+  "activePhase": "validation",
+  "dbDurableThroughPhase": "none",
+  "evidenceDurableThroughCycleIndex": 39,
+  "safeResumeThroughCycleIndex": -1,
+  "evidenceRunDir": "/var/folders/0x/438cbk_502jd7ppl38xxk29w0000gn/T/waia-wp05-checkpoint-ijacCR/segments/partial-interrupted",
+  "evidenceChainDigest": "0b96551057082a788de1e719b7d9c1191a27b43cd5aada31d232a141353ac854",
+  "evidenceTerminalState": "STREAMING_EVIDENCE_SEALED_PARTIAL",
+  "dbConnectionMode": "harness",
+  "replayTerminalState": "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE",
+  "fixtureSha256": "814981bc3055d8fd52d1277d60a0b443de7644416aceba8cbe99819c70242061",
+  "checkpointDigest": "ad982197c4ffa2a0cf298fc7314a093a8c977f5034b6d833f8a30ff36cb9edf6"
+}

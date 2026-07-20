@@ -1,0 +1,150 @@
+{
+  "runtimeEntrypoints": [
+    "runResearchValidationBacktest",
+    "runBacktest",
+    "runPaperCycleOnce"
+  ],
+  "callOrder": [
+    {
+      "kind": "WP18_INITIAL_STATE",
+      "at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "kind": "WP18_MARK_ATTACHED",
+      "at": "2026-01-01T00:20:00.000Z",
+      "cycleIndex": 0,
+      "detail": "BTCUSDT"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:20:00.000Z",
+      "cycleIndex": 0,
+      "detail": "frontier_mutation"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:20:00.000Z",
+      "cycleIndex": null,
+      "detail": "before_guardian"
+    },
+    {
+      "kind": "WP20_GUARDIAN_EVALUATED",
+      "at": "2026-01-01T00:20:00.000Z",
+      "cycleIndex": null,
+      "detail": "NONE"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:20:00.000Z",
+      "cycleIndex": 0,
+      "detail": "before_cycle_complete"
+    },
+    {
+      "kind": "WP17_FILL_CONSUMED",
+      "at": "2026-01-01T00:21:00.000Z",
+      "cycleIndex": 1,
+      "detail": "0ba9029d-8cf0-83cd-8c51-af5aa4172f38"
+    },
+    {
+      "kind": "WP18_MARK_ATTACHED",
+      "at": "2026-01-01T00:21:00.000Z",
+      "cycleIndex": 1,
+      "detail": "BTCUSDT"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:21:00.000Z",
+      "cycleIndex": 1,
+      "detail": "frontier_mutation"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:21:00.000Z",
+      "cycleIndex": null,
+      "detail": "before_guardian"
+    },
+    {
+      "kind": "WP20_GUARDIAN_EVALUATED",
+      "at": "2026-01-01T00:21:00.000Z",
+      "cycleIndex": null,
+      "detail": "NONE"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:21:00.000Z",
+      "cycleIndex": 1,
+      "detail": "before_cycle_complete"
+    },
+    {
+      "kind": "WP18_MARK_ATTACHED",
+      "at": "2026-01-01T00:22:00.000Z",
+      "cycleIndex": 2,
+      "detail": "BTCUSDT"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:22:00.000Z",
+      "cycleIndex": 2,
+      "detail": "frontier_mutation"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:22:00.000Z",
+      "cycleIndex": null,
+      "detail": "before_guardian"
+    },
+    {
+      "kind": "WP20_GUARDIAN_EVALUATED",
+      "at": "2026-01-01T00:22:00.000Z",
+      "cycleIndex": null,
+      "detail": "NONE"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:22:00.000Z",
+      "cycleIndex": 2,
+      "detail": "before_cycle_complete"
+    },
+    {
+      "kind": "WP18_MARK_ATTACHED",
+      "at": "2026-01-01T00:23:00.000Z",
+      "cycleIndex": 3,
+      "detail": "BTCUSDT"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:23:00.000Z",
+      "cycleIndex": 3,
+      "detail": "frontier_mutation"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:23:00.000Z",
+      "cycleIndex": null,
+      "detail": "before_guardian"
+    },
+    {
+      "kind": "WP20_GUARDIAN_EVALUATED",
+      "at": "2026-01-01T00:23:00.000Z",
+      "cycleIndex": null,
+      "detail": "NONE"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:23:00.000Z",
+      "cycleIndex": 3,
+      "detail": "before_cycle_complete"
+    },
+    {
+      "kind": "WP19_RECONCILIATION_PASS",
+      "at": "2026-01-01T00:23:00.000Z",
+      "detail": "before_terminal_export"
+    }
+  ],
+  "v1Path": "runResearchValidationBacktest(metricsSchemaVersion=V1)",
+  "v2Path": "runResearchValidationBacktest(metricsSchemaVersion=V2)",
+  "wp18ConsumedFillCount": 1,
+  "wp19ReconciliationPass": false,
+  "wp20GuardianEvaluated": true,
+  "guardianAfterReconciliation": true
+}

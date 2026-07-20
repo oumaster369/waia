@@ -1,19 +1,17 @@
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
-import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
-import { emitMsvDecisionCounters } from "@/lib/trader/intelligence/decision-telemetry";
-import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
-import {
-  evaluateRegisteredStrategies,
-  selectPrimaryStrategySignal,
-} from "@/lib/trader/intelligence/strategies/registry";
-import { emitStrategySignalCounters } from "@/lib/trader/intelligence/strategy-telemetry";
+import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
+import type { MarketUnderstandingSnapshot } from "@/lib/trader/intelligence/market-understanding.types";
 import type { Bar, InstrumentId, Quote, StrategySignal } from "@/lib/trader/intelligence/types";
+import type { FeatureSnapshot, MsvEnvelope } from "@/lib/trader/intelligence/types";
+import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
 import {
   DATA_QUALITY_HALT_REASON,
   evaluateDataQualityGate,
   evaluateIngestionFailureGate,
   INGESTION_HALT_REASON,
 } from "@/lib/trader/market-data/data-quality-gate";
+
+import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
 
 export type MarketBrainPipelineInput = {
   organizationId: string;
@@ -22,6 +20,7 @@ export type MarketBrainPipelineInput = {
   quote?: Quote;
   evaluatedAt?: string;
   ingestionError?: string;
+  fusedContext?: FusedMarketContext;
   newId?: () => string;
   telemetrySink?: WaiaTraderTelemetrySink;
 };
@@ -31,14 +30,16 @@ export type MarketBrainPipelineResult = {
   halted: boolean;
   haltReasonCode: typeof DATA_QUALITY_HALT_REASON | typeof INGESTION_HALT_REASON | null;
   ingestionError?: string;
-  features: ReturnType<typeof computeFeatureSnapshot> | null;
-  msv: ReturnType<typeof buildMsvEnvelope> | null;
+  features: FeatureSnapshot | null;
+  msv: MsvEnvelope | null;
+  understanding?: MarketUnderstandingSnapshot;
   signals: StrategySignal[] | null;
   signal: StrategySignal | null;
 };
 
 /**
- * Pipeline P3/P4 orchestrator: Feature Engine → data-quality fail-closed → CDE/MSV → strategies.
+ * Pipeline P3/P4 orchestrator: Feature Engine → data-quality fail-closed → evaluation cycle
+ * (understanding bridge + CDE/MSV) → strategies.
  * Halts before strategy evaluation when ingestion fails or data quality is below threshold.
  */
 export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketBrainPipelineResult {
@@ -49,6 +50,7 @@ export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketB
     ingestionError: input.ingestionError,
     features: null,
     msv: null,
+    understanding: undefined,
     signals: null,
     signal: null,
   };
@@ -76,33 +78,30 @@ export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketB
       haltReasonCode: DATA_QUALITY_HALT_REASON,
       features,
       msv: null,
+      understanding: undefined,
       signals: null,
       signal: null,
     };
   }
 
-  const msv = buildMsvEnvelope({ features, newId: input.newId });
-  emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
-
-  const signals = evaluateRegisteredStrategies(msv, features, {
+  const evaluation = runEvaluationCycle({
     organizationId: input.organizationId,
     bars: input.bars,
+    quote: input.quote,
+    evaluatedAt: input.evaluatedAt,
+    fusedContext: input.fusedContext,
     newId: input.newId,
+    telemetrySink: input.telemetrySink,
   });
-
-  for (const strategySignal of signals) {
-    emitStrategySignalCounters(strategySignal, input.telemetrySink);
-  }
-
-  const signal = selectPrimaryStrategySignal(signals);
 
   return {
     instrumentId: input.instrumentId,
     halted: false,
     haltReasonCode: null,
-    features,
-    msv,
-    signals,
-    signal,
+    features: evaluation.features,
+    msv: evaluation.msv,
+    understanding: evaluation.understanding,
+    signals: evaluation.signals,
+    signal: evaluation.signal,
   };
 }

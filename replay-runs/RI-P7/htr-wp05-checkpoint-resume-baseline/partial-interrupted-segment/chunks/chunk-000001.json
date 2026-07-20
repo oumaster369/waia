@@ -1,0 +1,4605 @@
+{
+  "schemaVersion": "htr-wp04-streaming-evidence/v1",
+  "seq": 1,
+  "cycleIndexRange": {
+    "startInclusive": 32,
+    "endInclusive": 39
+  },
+  "payload": [
+    {
+      "schemaVersion": "htr-wp04-cycle-projection/v1",
+      "cycleIndex": 32,
+      "evaluatedAtMs": 1767228720000,
+      "regime": "CHOP",
+      "skipReason": null,
+      "strategyExecutions": [
+        {
+          "signalId": "mean_reversion_v0",
+          "side": "sell",
+          "submitBlocked": true,
+          "skipReason": null,
+          "executionStatus": "risk_rejected",
+          "orderState": null,
+          "orderId": null
+        }
+      ],
+      "guardian": null,
+      "msv": {
+        "crowd": {
+          "fearGreedIndex": null,
+          "newsSentiment": null
+        },
+        "derived": {
+          "allowedStrategyIds": [
+            "liquidity_sweep_reversal_v0",
+            "mean_reversion_v0"
+          ],
+          "dataQualityScore": "0.0000",
+          "reasonCodes": [
+            "CDE_QUALITY_ALLOW_TRADING",
+            "CDE_UNDERSTANDING_REDUCED_RISK",
+            "CDE_REGIME_UNKNOWN",
+            "NEWS_SENTIMENT_DEFERRED_PR3"
+          ],
+          "regime": "CHOP",
+          "riskMultiplier": "0.5",
+          "tradingPermission": "ALLOW_REDUCED_RISK"
+        },
+        "evaluatedAt": "2026-01-01T00:52:00.000Z",
+        "futureContext": {
+          "asianRangeCorridorPresent": false,
+          "eventRiskScore": "0",
+          "sessionPhase": "ASIA"
+        },
+        "instrumentId": "BTC/USDT",
+        "liquidity": {
+          "spreadBps": "0.1538"
+        },
+        "physics": {
+          "close": "65000.00",
+          "realizedVol20": "0",
+          "zscoreVsSma20": "0"
+        }
+      },
+      "m9Trace": {
+        "evaluatedAt": "2026-01-01T00:52:00.000Z",
+        "fused": {
+          "schemaVersion": "waia.trader.fused_context.v2",
+          "fusedAtUtc": "2026-01-01T00:52:00.000Z",
+          "instrumentId": "BTC/USDT",
+          "sessionPhase": "ASIA",
+          "mtfBars": {
+            "1m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:52:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 52,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:52:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "15m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "15m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:52:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 4,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:52:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:52:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:52:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "4h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "4h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:52:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:52:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1d": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1d",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:52:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:52:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ]
+          },
+          "primaryQuote": {
+            "schemaVersion": "waia.trader.observation.v1",
+            "kind": "quote_l1",
+            "sessionPhase": "ASIA",
+            "provenance": {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+            },
+            "health": "HEALTHY",
+            "freshnessMs": 0,
+            "latencyMs": 0,
+            "confidence": 1,
+            "payload": {
+              "bid": "64999.50",
+              "ask": "65000.50",
+              "last": "65000.00",
+              "timestamp": "2026-01-01T01:40:00.000Z"
+            }
+          },
+          "crossVenueTriangulation": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "macroEvidence": [],
+          "newsEvidence": [],
+          "blockchainEvidence": [],
+          "regulatoryEvidence": [],
+          "protocolEvidence": [],
+          "aggregateHealth": "HEALTHY",
+          "aggregateConfidence": 1,
+          "provenance": [
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:52:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:52:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:52:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:52:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:52:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:52:00.000Z"
+            }
+          ],
+          "degradationReasons": []
+        },
+        "understanding": {
+          "schemaVersion": "waia.trader.market_understanding.v0",
+          "instrumentId": "BTC/USDT",
+          "evaluatedAt": "2026-01-01T00:52:00.000Z",
+          "questionEvaluations": [
+            {
+              "questionId": "Q_WHAT_HAPPENING",
+              "status": "ANSWERED",
+              "answerSummary": "RANGING",
+              "confidence": 0.8,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_WHY_HAPPENING",
+              "status": "PARTIAL",
+              "answerSummary": "mtf_unclear",
+              "confidence": 0.55,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_HTF_ALIGNED",
+              "status": "UNKNOWN",
+              "answerSummary": "UNCLEAR/UNCLEAR",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LTF_ALIGNED",
+              "status": "ANSWERED",
+              "answerSummary": "FLAT/FLAT",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROSS_VENUE",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROWD",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LIQUIDITY",
+              "status": "ANSWERED",
+              "answerSummary": "SUFFICIENT",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_DATA_TRUST",
+              "status": "ANSWERED",
+              "answerSummary": "TRUSTED",
+              "confidence": 0.85,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_UNKNOWN",
+              "status": "ANSWERED",
+              "answerSummary": "6_gaps",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": false
+            },
+            {
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            }
+          ],
+          "knowledgeGaps": [
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_WHY_HAPPENING",
+              "description": "Q_WHY_HAPPENING:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_WHY_HAPPENING_PARTIAL"
+            },
+            {
+              "kind": "UNKNOWN",
+              "questionId": "Q_HTF_ALIGNED",
+              "description": "Q_HTF_ALIGNED:UNKNOWN",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_HTF_ALIGNED_UNKNOWN"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROSS_VENUE",
+              "description": "Q_CROSS_VENUE:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROSS_VENUE_UNAVAILABLE"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROWD",
+              "description": "Q_CROWD:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROWD_UNAVAILABLE"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "description": "Q_PRESERVE_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+            }
+          ],
+          "confidenceAttribution": {
+            "priorConfidence": 1,
+            "finalConfidence": 0,
+            "confidenceDelta": -1,
+            "contributors": [
+              {
+                "source": "fused_context_aggregate",
+                "direction": "INCREASE",
+                "magnitude": 1,
+                "reasonCode": "PRIOR_FUSED_CONFIDENCE"
+              }
+            ]
+          },
+          "reasoningInputs": {
+            "evidenceUsed": [
+              "htx_spot:ohlcv_bar:2026-01-01T00:52:00.000Z",
+              "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+            ],
+            "evidenceIgnored": [],
+            "conflicts": [],
+            "unknowns": [
+              "GAP_Q_HTF_ALIGNED_UNKNOWN",
+              "GAP_Q_CROSS_VENUE_UNAVAILABLE",
+              "GAP_Q_CROWD_UNAVAILABLE"
+            ]
+          },
+          "mtfBackdrop": {
+            "1m": "FLAT",
+            "15m": "FLAT",
+            "1h": "UNCLEAR",
+            "4h": "UNCLEAR",
+            "1d": "UNCLEAR"
+          },
+          "mtfAlignment": "UNCLEAR",
+          "regimeHint": "RANGING",
+          "crossVenue": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "globalContext": "UNAVAILABLE",
+          "crowdPsychology": "UNAVAILABLE",
+          "liquiditySufficiency": "SUFFICIENT",
+          "dataQualitySufficient": true,
+          "dataQualityReasonCodes": [],
+          "asianCorridorPresent": false,
+          "spotPosture": "REDUCE_RISK",
+          "postureRationale": [
+            "POSTURE_CROSS_VENUE_UNAVAILABLE"
+          ],
+          "understandingConfidence": 0
+        },
+        "decisionChain": null,
+        "signal": {
+          "strategySignalId": "00000000-0000-4000-8000-000000416063",
+          "strategyId": "liquidity_sweep_reversal_v0",
+          "strategyVersion": "0.1.0",
+          "organizationId": "a535129d-133b-4905-ab0c-888996e9b014",
+          "symbol": "BTC/USDT",
+          "msvId": "00000000-0000-4000-8000-000000416062",
+          "featureSetId": "00000000-0000-4000-8000-000000416061",
+          "evaluatedAt": "2026-01-01T00:52:00.000Z",
+          "outcome": "SIGNAL",
+          "side": "sell",
+          "confidence": "0.65",
+          "expectedEdge": "0",
+          "horizon": "1h",
+          "maxRisk": "700.00",
+          "reasonCodes": [
+            "STRAT_LSR_RECOVERY_EXIT"
+          ]
+        },
+        "guardian": null,
+        "guardianExecutions": []
+      }
+    },
+    {
+      "schemaVersion": "htr-wp04-cycle-projection/v1",
+      "cycleIndex": 33,
+      "evaluatedAtMs": 1767228780000,
+      "regime": "CHOP",
+      "skipReason": null,
+      "strategyExecutions": [
+        {
+          "signalId": "mean_reversion_v0",
+          "side": "sell",
+          "submitBlocked": true,
+          "skipReason": null,
+          "executionStatus": "risk_rejected",
+          "orderState": null,
+          "orderId": null
+        }
+      ],
+      "guardian": null,
+      "msv": {
+        "crowd": {
+          "fearGreedIndex": null,
+          "newsSentiment": null
+        },
+        "derived": {
+          "allowedStrategyIds": [
+            "liquidity_sweep_reversal_v0",
+            "mean_reversion_v0"
+          ],
+          "dataQualityScore": "0.0000",
+          "reasonCodes": [
+            "CDE_QUALITY_ALLOW_TRADING",
+            "CDE_UNDERSTANDING_REDUCED_RISK",
+            "CDE_REGIME_UNKNOWN",
+            "NEWS_SENTIMENT_DEFERRED_PR3"
+          ],
+          "regime": "CHOP",
+          "riskMultiplier": "0.5",
+          "tradingPermission": "ALLOW_REDUCED_RISK"
+        },
+        "evaluatedAt": "2026-01-01T00:53:00.000Z",
+        "futureContext": {
+          "asianRangeCorridorPresent": false,
+          "eventRiskScore": "0",
+          "sessionPhase": "ASIA"
+        },
+        "instrumentId": "BTC/USDT",
+        "liquidity": {
+          "spreadBps": "0.1538"
+        },
+        "physics": {
+          "close": "65000.00",
+          "realizedVol20": "0",
+          "zscoreVsSma20": "0"
+        }
+      },
+      "m9Trace": {
+        "evaluatedAt": "2026-01-01T00:53:00.000Z",
+        "fused": {
+          "schemaVersion": "waia.trader.fused_context.v2",
+          "fusedAtUtc": "2026-01-01T00:53:00.000Z",
+          "instrumentId": "BTC/USDT",
+          "sessionPhase": "ASIA",
+          "mtfBars": {
+            "1m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:53:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 53,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:53:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "15m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "15m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:53:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 4,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:53:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:53:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:53:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "4h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "4h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:53:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:53:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1d": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1d",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:53:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:53:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ]
+          },
+          "primaryQuote": {
+            "schemaVersion": "waia.trader.observation.v1",
+            "kind": "quote_l1",
+            "sessionPhase": "ASIA",
+            "provenance": {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+            },
+            "health": "HEALTHY",
+            "freshnessMs": 0,
+            "latencyMs": 0,
+            "confidence": 1,
+            "payload": {
+              "bid": "64999.50",
+              "ask": "65000.50",
+              "last": "65000.00",
+              "timestamp": "2026-01-01T01:40:00.000Z"
+            }
+          },
+          "crossVenueTriangulation": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "macroEvidence": [],
+          "newsEvidence": [],
+          "blockchainEvidence": [],
+          "regulatoryEvidence": [],
+          "protocolEvidence": [],
+          "aggregateHealth": "HEALTHY",
+          "aggregateConfidence": 1,
+          "provenance": [
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:53:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:53:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:53:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:53:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:53:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:53:00.000Z"
+            }
+          ],
+          "degradationReasons": []
+        },
+        "understanding": {
+          "schemaVersion": "waia.trader.market_understanding.v0",
+          "instrumentId": "BTC/USDT",
+          "evaluatedAt": "2026-01-01T00:53:00.000Z",
+          "questionEvaluations": [
+            {
+              "questionId": "Q_WHAT_HAPPENING",
+              "status": "ANSWERED",
+              "answerSummary": "RANGING",
+              "confidence": 0.8,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_WHY_HAPPENING",
+              "status": "PARTIAL",
+              "answerSummary": "mtf_unclear",
+              "confidence": 0.55,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_HTF_ALIGNED",
+              "status": "UNKNOWN",
+              "answerSummary": "UNCLEAR/UNCLEAR",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LTF_ALIGNED",
+              "status": "ANSWERED",
+              "answerSummary": "FLAT/FLAT",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROSS_VENUE",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROWD",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LIQUIDITY",
+              "status": "ANSWERED",
+              "answerSummary": "SUFFICIENT",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_DATA_TRUST",
+              "status": "ANSWERED",
+              "answerSummary": "TRUSTED",
+              "confidence": 0.85,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_UNKNOWN",
+              "status": "ANSWERED",
+              "answerSummary": "6_gaps",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": false
+            },
+            {
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            }
+          ],
+          "knowledgeGaps": [
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_WHY_HAPPENING",
+              "description": "Q_WHY_HAPPENING:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_WHY_HAPPENING_PARTIAL"
+            },
+            {
+              "kind": "UNKNOWN",
+              "questionId": "Q_HTF_ALIGNED",
+              "description": "Q_HTF_ALIGNED:UNKNOWN",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_HTF_ALIGNED_UNKNOWN"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROSS_VENUE",
+              "description": "Q_CROSS_VENUE:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROSS_VENUE_UNAVAILABLE"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROWD",
+              "description": "Q_CROWD:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROWD_UNAVAILABLE"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "description": "Q_PRESERVE_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+            }
+          ],
+          "confidenceAttribution": {
+            "priorConfidence": 1,
+            "finalConfidence": 0,
+            "confidenceDelta": -1,
+            "contributors": [
+              {
+                "source": "fused_context_aggregate",
+                "direction": "INCREASE",
+                "magnitude": 1,
+                "reasonCode": "PRIOR_FUSED_CONFIDENCE"
+              }
+            ]
+          },
+          "reasoningInputs": {
+            "evidenceUsed": [
+              "htx_spot:ohlcv_bar:2026-01-01T00:53:00.000Z",
+              "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+            ],
+            "evidenceIgnored": [],
+            "conflicts": [],
+            "unknowns": [
+              "GAP_Q_HTF_ALIGNED_UNKNOWN",
+              "GAP_Q_CROSS_VENUE_UNAVAILABLE",
+              "GAP_Q_CROWD_UNAVAILABLE"
+            ]
+          },
+          "mtfBackdrop": {
+            "1m": "FLAT",
+            "15m": "FLAT",
+            "1h": "UNCLEAR",
+            "4h": "UNCLEAR",
+            "1d": "UNCLEAR"
+          },
+          "mtfAlignment": "UNCLEAR",
+          "regimeHint": "RANGING",
+          "crossVenue": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "globalContext": "UNAVAILABLE",
+          "crowdPsychology": "UNAVAILABLE",
+          "liquiditySufficiency": "SUFFICIENT",
+          "dataQualitySufficient": true,
+          "dataQualityReasonCodes": [],
+          "asianCorridorPresent": false,
+          "spotPosture": "REDUCE_RISK",
+          "postureRationale": [
+            "POSTURE_CROSS_VENUE_UNAVAILABLE"
+          ],
+          "understandingConfidence": 0
+        },
+        "decisionChain": null,
+        "signal": {
+          "strategySignalId": "00000000-0000-4000-8000-000000416068",
+          "strategyId": "liquidity_sweep_reversal_v0",
+          "strategyVersion": "0.1.0",
+          "organizationId": "a535129d-133b-4905-ab0c-888996e9b014",
+          "symbol": "BTC/USDT",
+          "msvId": "00000000-0000-4000-8000-000000416067",
+          "featureSetId": "00000000-0000-4000-8000-000000416066",
+          "evaluatedAt": "2026-01-01T00:53:00.000Z",
+          "outcome": "SIGNAL",
+          "side": "sell",
+          "confidence": "0.65",
+          "expectedEdge": "0",
+          "horizon": "1h",
+          "maxRisk": "700.00",
+          "reasonCodes": [
+            "STRAT_LSR_RECOVERY_EXIT"
+          ]
+        },
+        "guardian": null,
+        "guardianExecutions": []
+      }
+    },
+    {
+      "schemaVersion": "htr-wp04-cycle-projection/v1",
+      "cycleIndex": 34,
+      "evaluatedAtMs": 1767228840000,
+      "regime": "CHOP",
+      "skipReason": null,
+      "strategyExecutions": [
+        {
+          "signalId": "mean_reversion_v0",
+          "side": "sell",
+          "submitBlocked": true,
+          "skipReason": null,
+          "executionStatus": "risk_rejected",
+          "orderState": null,
+          "orderId": null
+        }
+      ],
+      "guardian": null,
+      "msv": {
+        "crowd": {
+          "fearGreedIndex": null,
+          "newsSentiment": null
+        },
+        "derived": {
+          "allowedStrategyIds": [
+            "liquidity_sweep_reversal_v0",
+            "mean_reversion_v0"
+          ],
+          "dataQualityScore": "0.0000",
+          "reasonCodes": [
+            "CDE_QUALITY_ALLOW_TRADING",
+            "CDE_UNDERSTANDING_REDUCED_RISK",
+            "CDE_REGIME_UNKNOWN",
+            "NEWS_SENTIMENT_DEFERRED_PR3"
+          ],
+          "regime": "CHOP",
+          "riskMultiplier": "0.5",
+          "tradingPermission": "ALLOW_REDUCED_RISK"
+        },
+        "evaluatedAt": "2026-01-01T00:54:00.000Z",
+        "futureContext": {
+          "asianRangeCorridorPresent": false,
+          "eventRiskScore": "0",
+          "sessionPhase": "ASIA"
+        },
+        "instrumentId": "BTC/USDT",
+        "liquidity": {
+          "spreadBps": "0.1538"
+        },
+        "physics": {
+          "close": "65000.00",
+          "realizedVol20": "0",
+          "zscoreVsSma20": "0"
+        }
+      },
+      "m9Trace": {
+        "evaluatedAt": "2026-01-01T00:54:00.000Z",
+        "fused": {
+          "schemaVersion": "waia.trader.fused_context.v2",
+          "fusedAtUtc": "2026-01-01T00:54:00.000Z",
+          "instrumentId": "BTC/USDT",
+          "sessionPhase": "ASIA",
+          "mtfBars": {
+            "1m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:54:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 54,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:54:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "15m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "15m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:54:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 4,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:54:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:54:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:54:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "4h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "4h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:54:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:54:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1d": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1d",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:54:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:54:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ]
+          },
+          "primaryQuote": {
+            "schemaVersion": "waia.trader.observation.v1",
+            "kind": "quote_l1",
+            "sessionPhase": "ASIA",
+            "provenance": {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+            },
+            "health": "HEALTHY",
+            "freshnessMs": 0,
+            "latencyMs": 0,
+            "confidence": 1,
+            "payload": {
+              "bid": "64999.50",
+              "ask": "65000.50",
+              "last": "65000.00",
+              "timestamp": "2026-01-01T01:40:00.000Z"
+            }
+          },
+          "crossVenueTriangulation": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "macroEvidence": [],
+          "newsEvidence": [],
+          "blockchainEvidence": [],
+          "regulatoryEvidence": [],
+          "protocolEvidence": [],
+          "aggregateHealth": "HEALTHY",
+          "aggregateConfidence": 1,
+          "provenance": [
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:54:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:54:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:54:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:54:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:54:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:54:00.000Z"
+            }
+          ],
+          "degradationReasons": []
+        },
+        "understanding": {
+          "schemaVersion": "waia.trader.market_understanding.v0",
+          "instrumentId": "BTC/USDT",
+          "evaluatedAt": "2026-01-01T00:54:00.000Z",
+          "questionEvaluations": [
+            {
+              "questionId": "Q_WHAT_HAPPENING",
+              "status": "ANSWERED",
+              "answerSummary": "RANGING",
+              "confidence": 0.8,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_WHY_HAPPENING",
+              "status": "PARTIAL",
+              "answerSummary": "mtf_unclear",
+              "confidence": 0.55,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_HTF_ALIGNED",
+              "status": "UNKNOWN",
+              "answerSummary": "UNCLEAR/UNCLEAR",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LTF_ALIGNED",
+              "status": "ANSWERED",
+              "answerSummary": "FLAT/FLAT",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROSS_VENUE",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROWD",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LIQUIDITY",
+              "status": "ANSWERED",
+              "answerSummary": "SUFFICIENT",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_DATA_TRUST",
+              "status": "ANSWERED",
+              "answerSummary": "TRUSTED",
+              "confidence": 0.85,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_UNKNOWN",
+              "status": "ANSWERED",
+              "answerSummary": "6_gaps",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": false
+            },
+            {
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            }
+          ],
+          "knowledgeGaps": [
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_WHY_HAPPENING",
+              "description": "Q_WHY_HAPPENING:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_WHY_HAPPENING_PARTIAL"
+            },
+            {
+              "kind": "UNKNOWN",
+              "questionId": "Q_HTF_ALIGNED",
+              "description": "Q_HTF_ALIGNED:UNKNOWN",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_HTF_ALIGNED_UNKNOWN"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROSS_VENUE",
+              "description": "Q_CROSS_VENUE:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROSS_VENUE_UNAVAILABLE"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROWD",
+              "description": "Q_CROWD:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROWD_UNAVAILABLE"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "description": "Q_PRESERVE_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+            }
+          ],
+          "confidenceAttribution": {
+            "priorConfidence": 1,
+            "finalConfidence": 0,
+            "confidenceDelta": -1,
+            "contributors": [
+              {
+                "source": "fused_context_aggregate",
+                "direction": "INCREASE",
+                "magnitude": 1,
+                "reasonCode": "PRIOR_FUSED_CONFIDENCE"
+              }
+            ]
+          },
+          "reasoningInputs": {
+            "evidenceUsed": [
+              "htx_spot:ohlcv_bar:2026-01-01T00:54:00.000Z",
+              "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+            ],
+            "evidenceIgnored": [],
+            "conflicts": [],
+            "unknowns": [
+              "GAP_Q_HTF_ALIGNED_UNKNOWN",
+              "GAP_Q_CROSS_VENUE_UNAVAILABLE",
+              "GAP_Q_CROWD_UNAVAILABLE"
+            ]
+          },
+          "mtfBackdrop": {
+            "1m": "FLAT",
+            "15m": "FLAT",
+            "1h": "UNCLEAR",
+            "4h": "UNCLEAR",
+            "1d": "UNCLEAR"
+          },
+          "mtfAlignment": "UNCLEAR",
+          "regimeHint": "RANGING",
+          "crossVenue": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "globalContext": "UNAVAILABLE",
+          "crowdPsychology": "UNAVAILABLE",
+          "liquiditySufficiency": "SUFFICIENT",
+          "dataQualitySufficient": true,
+          "dataQualityReasonCodes": [],
+          "asianCorridorPresent": false,
+          "spotPosture": "REDUCE_RISK",
+          "postureRationale": [
+            "POSTURE_CROSS_VENUE_UNAVAILABLE"
+          ],
+          "understandingConfidence": 0
+        },
+        "decisionChain": null,
+        "signal": {
+          "strategySignalId": "00000000-0000-4000-8000-000000416073",
+          "strategyId": "liquidity_sweep_reversal_v0",
+          "strategyVersion": "0.1.0",
+          "organizationId": "a535129d-133b-4905-ab0c-888996e9b014",
+          "symbol": "BTC/USDT",
+          "msvId": "00000000-0000-4000-8000-000000416072",
+          "featureSetId": "00000000-0000-4000-8000-000000416071",
+          "evaluatedAt": "2026-01-01T00:54:00.000Z",
+          "outcome": "SIGNAL",
+          "side": "sell",
+          "confidence": "0.65",
+          "expectedEdge": "0",
+          "horizon": "1h",
+          "maxRisk": "700.00",
+          "reasonCodes": [
+            "STRAT_LSR_RECOVERY_EXIT"
+          ]
+        },
+        "guardian": null,
+        "guardianExecutions": []
+      }
+    },
+    {
+      "schemaVersion": "htr-wp04-cycle-projection/v1",
+      "cycleIndex": 35,
+      "evaluatedAtMs": 1767228900000,
+      "regime": "CHOP",
+      "skipReason": null,
+      "strategyExecutions": [
+        {
+          "signalId": "mean_reversion_v0",
+          "side": "sell",
+          "submitBlocked": true,
+          "skipReason": null,
+          "executionStatus": "risk_rejected",
+          "orderState": null,
+          "orderId": null
+        }
+      ],
+      "guardian": null,
+      "msv": {
+        "crowd": {
+          "fearGreedIndex": null,
+          "newsSentiment": null
+        },
+        "derived": {
+          "allowedStrategyIds": [
+            "liquidity_sweep_reversal_v0",
+            "mean_reversion_v0"
+          ],
+          "dataQualityScore": "0.0000",
+          "reasonCodes": [
+            "CDE_QUALITY_ALLOW_TRADING",
+            "CDE_UNDERSTANDING_REDUCED_RISK",
+            "CDE_REGIME_UNKNOWN",
+            "NEWS_SENTIMENT_DEFERRED_PR3"
+          ],
+          "regime": "CHOP",
+          "riskMultiplier": "0.5",
+          "tradingPermission": "ALLOW_REDUCED_RISK"
+        },
+        "evaluatedAt": "2026-01-01T00:55:00.000Z",
+        "futureContext": {
+          "asianRangeCorridorPresent": false,
+          "eventRiskScore": "0",
+          "sessionPhase": "ASIA"
+        },
+        "instrumentId": "BTC/USDT",
+        "liquidity": {
+          "spreadBps": "0.1538"
+        },
+        "physics": {
+          "close": "65000.00",
+          "realizedVol20": "0",
+          "zscoreVsSma20": "0"
+        }
+      },
+      "m9Trace": {
+        "evaluatedAt": "2026-01-01T00:55:00.000Z",
+        "fused": {
+          "schemaVersion": "waia.trader.fused_context.v2",
+          "fusedAtUtc": "2026-01-01T00:55:00.000Z",
+          "instrumentId": "BTC/USDT",
+          "sessionPhase": "ASIA",
+          "mtfBars": {
+            "1m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:55:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 55,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:55:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "15m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "15m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:55:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 4,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:55:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:55:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:55:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "4h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "4h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:55:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:55:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1d": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1d",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:55:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:55:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ]
+          },
+          "primaryQuote": {
+            "schemaVersion": "waia.trader.observation.v1",
+            "kind": "quote_l1",
+            "sessionPhase": "ASIA",
+            "provenance": {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+            },
+            "health": "HEALTHY",
+            "freshnessMs": 0,
+            "latencyMs": 0,
+            "confidence": 1,
+            "payload": {
+              "bid": "64999.50",
+              "ask": "65000.50",
+              "last": "65000.00",
+              "timestamp": "2026-01-01T01:40:00.000Z"
+            }
+          },
+          "crossVenueTriangulation": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "macroEvidence": [],
+          "newsEvidence": [],
+          "blockchainEvidence": [],
+          "regulatoryEvidence": [],
+          "protocolEvidence": [],
+          "aggregateHealth": "HEALTHY",
+          "aggregateConfidence": 1,
+          "provenance": [
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:55:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:55:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:55:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:55:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:55:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:55:00.000Z"
+            }
+          ],
+          "degradationReasons": []
+        },
+        "understanding": {
+          "schemaVersion": "waia.trader.market_understanding.v0",
+          "instrumentId": "BTC/USDT",
+          "evaluatedAt": "2026-01-01T00:55:00.000Z",
+          "questionEvaluations": [
+            {
+              "questionId": "Q_WHAT_HAPPENING",
+              "status": "ANSWERED",
+              "answerSummary": "RANGING",
+              "confidence": 0.8,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_WHY_HAPPENING",
+              "status": "PARTIAL",
+              "answerSummary": "mtf_unclear",
+              "confidence": 0.55,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_HTF_ALIGNED",
+              "status": "UNKNOWN",
+              "answerSummary": "UNCLEAR/UNCLEAR",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LTF_ALIGNED",
+              "status": "ANSWERED",
+              "answerSummary": "FLAT/FLAT",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROSS_VENUE",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROWD",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LIQUIDITY",
+              "status": "ANSWERED",
+              "answerSummary": "SUFFICIENT",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_DATA_TRUST",
+              "status": "ANSWERED",
+              "answerSummary": "TRUSTED",
+              "confidence": 0.85,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_UNKNOWN",
+              "status": "ANSWERED",
+              "answerSummary": "6_gaps",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": false
+            },
+            {
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            }
+          ],
+          "knowledgeGaps": [
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_WHY_HAPPENING",
+              "description": "Q_WHY_HAPPENING:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_WHY_HAPPENING_PARTIAL"
+            },
+            {
+              "kind": "UNKNOWN",
+              "questionId": "Q_HTF_ALIGNED",
+              "description": "Q_HTF_ALIGNED:UNKNOWN",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_HTF_ALIGNED_UNKNOWN"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROSS_VENUE",
+              "description": "Q_CROSS_VENUE:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROSS_VENUE_UNAVAILABLE"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROWD",
+              "description": "Q_CROWD:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROWD_UNAVAILABLE"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "description": "Q_PRESERVE_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+            }
+          ],
+          "confidenceAttribution": {
+            "priorConfidence": 1,
+            "finalConfidence": 0,
+            "confidenceDelta": -1,
+            "contributors": [
+              {
+                "source": "fused_context_aggregate",
+                "direction": "INCREASE",
+                "magnitude": 1,
+                "reasonCode": "PRIOR_FUSED_CONFIDENCE"
+              }
+            ]
+          },
+          "reasoningInputs": {
+            "evidenceUsed": [
+              "htx_spot:ohlcv_bar:2026-01-01T00:55:00.000Z",
+              "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+            ],
+            "evidenceIgnored": [],
+            "conflicts": [],
+            "unknowns": [
+              "GAP_Q_HTF_ALIGNED_UNKNOWN",
+              "GAP_Q_CROSS_VENUE_UNAVAILABLE",
+              "GAP_Q_CROWD_UNAVAILABLE"
+            ]
+          },
+          "mtfBackdrop": {
+            "1m": "FLAT",
+            "15m": "FLAT",
+            "1h": "UNCLEAR",
+            "4h": "UNCLEAR",
+            "1d": "UNCLEAR"
+          },
+          "mtfAlignment": "UNCLEAR",
+          "regimeHint": "RANGING",
+          "crossVenue": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "globalContext": "UNAVAILABLE",
+          "crowdPsychology": "UNAVAILABLE",
+          "liquiditySufficiency": "SUFFICIENT",
+          "dataQualitySufficient": true,
+          "dataQualityReasonCodes": [],
+          "asianCorridorPresent": false,
+          "spotPosture": "REDUCE_RISK",
+          "postureRationale": [
+            "POSTURE_CROSS_VENUE_UNAVAILABLE"
+          ],
+          "understandingConfidence": 0
+        },
+        "decisionChain": null,
+        "signal": {
+          "strategySignalId": "00000000-0000-4000-8000-000000416078",
+          "strategyId": "liquidity_sweep_reversal_v0",
+          "strategyVersion": "0.1.0",
+          "organizationId": "a535129d-133b-4905-ab0c-888996e9b014",
+          "symbol": "BTC/USDT",
+          "msvId": "00000000-0000-4000-8000-000000416077",
+          "featureSetId": "00000000-0000-4000-8000-000000416076",
+          "evaluatedAt": "2026-01-01T00:55:00.000Z",
+          "outcome": "SIGNAL",
+          "side": "sell",
+          "confidence": "0.65",
+          "expectedEdge": "0",
+          "horizon": "1h",
+          "maxRisk": "700.00",
+          "reasonCodes": [
+            "STRAT_LSR_RECOVERY_EXIT"
+          ]
+        },
+        "guardian": null,
+        "guardianExecutions": []
+      }
+    },
+    {
+      "schemaVersion": "htr-wp04-cycle-projection/v1",
+      "cycleIndex": 36,
+      "evaluatedAtMs": 1767228960000,
+      "regime": "CHOP",
+      "skipReason": null,
+      "strategyExecutions": [
+        {
+          "signalId": "mean_reversion_v0",
+          "side": "sell",
+          "submitBlocked": true,
+          "skipReason": null,
+          "executionStatus": "risk_rejected",
+          "orderState": null,
+          "orderId": null
+        }
+      ],
+      "guardian": null,
+      "msv": {
+        "crowd": {
+          "fearGreedIndex": null,
+          "newsSentiment": null
+        },
+        "derived": {
+          "allowedStrategyIds": [
+            "liquidity_sweep_reversal_v0",
+            "mean_reversion_v0"
+          ],
+          "dataQualityScore": "0.0000",
+          "reasonCodes": [
+            "CDE_QUALITY_ALLOW_TRADING",
+            "CDE_UNDERSTANDING_REDUCED_RISK",
+            "CDE_REGIME_UNKNOWN",
+            "NEWS_SENTIMENT_DEFERRED_PR3"
+          ],
+          "regime": "CHOP",
+          "riskMultiplier": "0.5",
+          "tradingPermission": "ALLOW_REDUCED_RISK"
+        },
+        "evaluatedAt": "2026-01-01T00:56:00.000Z",
+        "futureContext": {
+          "asianRangeCorridorPresent": false,
+          "eventRiskScore": "0",
+          "sessionPhase": "ASIA"
+        },
+        "instrumentId": "BTC/USDT",
+        "liquidity": {
+          "spreadBps": "0.1538"
+        },
+        "physics": {
+          "close": "65000.00",
+          "realizedVol20": "0",
+          "zscoreVsSma20": "0"
+        }
+      },
+      "m9Trace": {
+        "evaluatedAt": "2026-01-01T00:56:00.000Z",
+        "fused": {
+          "schemaVersion": "waia.trader.fused_context.v2",
+          "fusedAtUtc": "2026-01-01T00:56:00.000Z",
+          "instrumentId": "BTC/USDT",
+          "sessionPhase": "ASIA",
+          "mtfBars": {
+            "1m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:56:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 56,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:56:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "15m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "15m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:56:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 4,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:56:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:56:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:56:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "4h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "4h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:56:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:56:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1d": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1d",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:56:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:56:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ]
+          },
+          "primaryQuote": {
+            "schemaVersion": "waia.trader.observation.v1",
+            "kind": "quote_l1",
+            "sessionPhase": "ASIA",
+            "provenance": {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+            },
+            "health": "HEALTHY",
+            "freshnessMs": 0,
+            "latencyMs": 0,
+            "confidence": 1,
+            "payload": {
+              "bid": "64999.50",
+              "ask": "65000.50",
+              "last": "65000.00",
+              "timestamp": "2026-01-01T01:40:00.000Z"
+            }
+          },
+          "crossVenueTriangulation": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "macroEvidence": [],
+          "newsEvidence": [],
+          "blockchainEvidence": [],
+          "regulatoryEvidence": [],
+          "protocolEvidence": [],
+          "aggregateHealth": "HEALTHY",
+          "aggregateConfidence": 1,
+          "provenance": [
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:56:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:56:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:56:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:56:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:56:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:56:00.000Z"
+            }
+          ],
+          "degradationReasons": []
+        },
+        "understanding": {
+          "schemaVersion": "waia.trader.market_understanding.v0",
+          "instrumentId": "BTC/USDT",
+          "evaluatedAt": "2026-01-01T00:56:00.000Z",
+          "questionEvaluations": [
+            {
+              "questionId": "Q_WHAT_HAPPENING",
+              "status": "ANSWERED",
+              "answerSummary": "RANGING",
+              "confidence": 0.8,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_WHY_HAPPENING",
+              "status": "PARTIAL",
+              "answerSummary": "mtf_unclear",
+              "confidence": 0.55,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_HTF_ALIGNED",
+              "status": "UNKNOWN",
+              "answerSummary": "UNCLEAR/UNCLEAR",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LTF_ALIGNED",
+              "status": "ANSWERED",
+              "answerSummary": "FLAT/FLAT",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROSS_VENUE",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROWD",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LIQUIDITY",
+              "status": "ANSWERED",
+              "answerSummary": "SUFFICIENT",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_DATA_TRUST",
+              "status": "ANSWERED",
+              "answerSummary": "TRUSTED",
+              "confidence": 0.85,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_UNKNOWN",
+              "status": "ANSWERED",
+              "answerSummary": "6_gaps",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": false
+            },
+            {
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            }
+          ],
+          "knowledgeGaps": [
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_WHY_HAPPENING",
+              "description": "Q_WHY_HAPPENING:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_WHY_HAPPENING_PARTIAL"
+            },
+            {
+              "kind": "UNKNOWN",
+              "questionId": "Q_HTF_ALIGNED",
+              "description": "Q_HTF_ALIGNED:UNKNOWN",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_HTF_ALIGNED_UNKNOWN"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROSS_VENUE",
+              "description": "Q_CROSS_VENUE:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROSS_VENUE_UNAVAILABLE"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROWD",
+              "description": "Q_CROWD:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROWD_UNAVAILABLE"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "description": "Q_PRESERVE_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+            }
+          ],
+          "confidenceAttribution": {
+            "priorConfidence": 1,
+            "finalConfidence": 0,
+            "confidenceDelta": -1,
+            "contributors": [
+              {
+                "source": "fused_context_aggregate",
+                "direction": "INCREASE",
+                "magnitude": 1,
+                "reasonCode": "PRIOR_FUSED_CONFIDENCE"
+              }
+            ]
+          },
+          "reasoningInputs": {
+            "evidenceUsed": [
+              "htx_spot:ohlcv_bar:2026-01-01T00:56:00.000Z",
+              "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+            ],
+            "evidenceIgnored": [],
+            "conflicts": [],
+            "unknowns": [
+              "GAP_Q_HTF_ALIGNED_UNKNOWN",
+              "GAP_Q_CROSS_VENUE_UNAVAILABLE",
+              "GAP_Q_CROWD_UNAVAILABLE"
+            ]
+          },
+          "mtfBackdrop": {
+            "1m": "FLAT",
+            "15m": "FLAT",
+            "1h": "UNCLEAR",
+            "4h": "UNCLEAR",
+            "1d": "UNCLEAR"
+          },
+          "mtfAlignment": "UNCLEAR",
+          "regimeHint": "RANGING",
+          "crossVenue": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "globalContext": "UNAVAILABLE",
+          "crowdPsychology": "UNAVAILABLE",
+          "liquiditySufficiency": "SUFFICIENT",
+          "dataQualitySufficient": true,
+          "dataQualityReasonCodes": [],
+          "asianCorridorPresent": false,
+          "spotPosture": "REDUCE_RISK",
+          "postureRationale": [
+            "POSTURE_CROSS_VENUE_UNAVAILABLE"
+          ],
+          "understandingConfidence": 0
+        },
+        "decisionChain": null,
+        "signal": {
+          "strategySignalId": "00000000-0000-4000-8000-000000416083",
+          "strategyId": "liquidity_sweep_reversal_v0",
+          "strategyVersion": "0.1.0",
+          "organizationId": "a535129d-133b-4905-ab0c-888996e9b014",
+          "symbol": "BTC/USDT",
+          "msvId": "00000000-0000-4000-8000-000000416082",
+          "featureSetId": "00000000-0000-4000-8000-000000416081",
+          "evaluatedAt": "2026-01-01T00:56:00.000Z",
+          "outcome": "SIGNAL",
+          "side": "sell",
+          "confidence": "0.65",
+          "expectedEdge": "0",
+          "horizon": "1h",
+          "maxRisk": "700.00",
+          "reasonCodes": [
+            "STRAT_LSR_RECOVERY_EXIT"
+          ]
+        },
+        "guardian": null,
+        "guardianExecutions": []
+      }
+    },
+    {
+      "schemaVersion": "htr-wp04-cycle-projection/v1",
+      "cycleIndex": 37,
+      "evaluatedAtMs": 1767229020000,
+      "regime": "CHOP",
+      "skipReason": null,
+      "strategyExecutions": [
+        {
+          "signalId": "mean_reversion_v0",
+          "side": "sell",
+          "submitBlocked": true,
+          "skipReason": null,
+          "executionStatus": "risk_rejected",
+          "orderState": null,
+          "orderId": null
+        }
+      ],
+      "guardian": null,
+      "msv": {
+        "crowd": {
+          "fearGreedIndex": null,
+          "newsSentiment": null
+        },
+        "derived": {
+          "allowedStrategyIds": [
+            "liquidity_sweep_reversal_v0",
+            "mean_reversion_v0"
+          ],
+          "dataQualityScore": "0.0000",
+          "reasonCodes": [
+            "CDE_QUALITY_ALLOW_TRADING",
+            "CDE_UNDERSTANDING_REDUCED_RISK",
+            "CDE_REGIME_UNKNOWN",
+            "NEWS_SENTIMENT_DEFERRED_PR3"
+          ],
+          "regime": "CHOP",
+          "riskMultiplier": "0.5",
+          "tradingPermission": "ALLOW_REDUCED_RISK"
+        },
+        "evaluatedAt": "2026-01-01T00:57:00.000Z",
+        "futureContext": {
+          "asianRangeCorridorPresent": false,
+          "eventRiskScore": "0",
+          "sessionPhase": "ASIA"
+        },
+        "instrumentId": "BTC/USDT",
+        "liquidity": {
+          "spreadBps": "0.1538"
+        },
+        "physics": {
+          "close": "65000.00",
+          "realizedVol20": "0",
+          "zscoreVsSma20": "0"
+        }
+      },
+      "m9Trace": {
+        "evaluatedAt": "2026-01-01T00:57:00.000Z",
+        "fused": {
+          "schemaVersion": "waia.trader.fused_context.v2",
+          "fusedAtUtc": "2026-01-01T00:57:00.000Z",
+          "instrumentId": "BTC/USDT",
+          "sessionPhase": "ASIA",
+          "mtfBars": {
+            "1m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:57:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 57,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:57:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "15m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "15m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:57:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 4,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:57:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:57:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:57:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "4h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "4h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:57:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:57:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1d": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1d",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:57:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:57:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ]
+          },
+          "primaryQuote": {
+            "schemaVersion": "waia.trader.observation.v1",
+            "kind": "quote_l1",
+            "sessionPhase": "ASIA",
+            "provenance": {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+            },
+            "health": "HEALTHY",
+            "freshnessMs": 0,
+            "latencyMs": 0,
+            "confidence": 1,
+            "payload": {
+              "bid": "64999.50",
+              "ask": "65000.50",
+              "last": "65000.00",
+              "timestamp": "2026-01-01T01:40:00.000Z"
+            }
+          },
+          "crossVenueTriangulation": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "macroEvidence": [],
+          "newsEvidence": [],
+          "blockchainEvidence": [],
+          "regulatoryEvidence": [],
+          "protocolEvidence": [],
+          "aggregateHealth": "HEALTHY",
+          "aggregateConfidence": 1,
+          "provenance": [
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:57:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:57:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:57:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:57:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:57:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:57:00.000Z"
+            }
+          ],
+          "degradationReasons": []
+        },
+        "understanding": {
+          "schemaVersion": "waia.trader.market_understanding.v0",
+          "instrumentId": "BTC/USDT",
+          "evaluatedAt": "2026-01-01T00:57:00.000Z",
+          "questionEvaluations": [
+            {
+              "questionId": "Q_WHAT_HAPPENING",
+              "status": "ANSWERED",
+              "answerSummary": "RANGING",
+              "confidence": 0.8,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_WHY_HAPPENING",
+              "status": "PARTIAL",
+              "answerSummary": "mtf_unclear",
+              "confidence": 0.55,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_HTF_ALIGNED",
+              "status": "UNKNOWN",
+              "answerSummary": "UNCLEAR/UNCLEAR",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LTF_ALIGNED",
+              "status": "ANSWERED",
+              "answerSummary": "FLAT/FLAT",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROSS_VENUE",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROWD",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LIQUIDITY",
+              "status": "ANSWERED",
+              "answerSummary": "SUFFICIENT",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_DATA_TRUST",
+              "status": "ANSWERED",
+              "answerSummary": "TRUSTED",
+              "confidence": 0.85,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_UNKNOWN",
+              "status": "ANSWERED",
+              "answerSummary": "6_gaps",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": false
+            },
+            {
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            }
+          ],
+          "knowledgeGaps": [
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_WHY_HAPPENING",
+              "description": "Q_WHY_HAPPENING:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_WHY_HAPPENING_PARTIAL"
+            },
+            {
+              "kind": "UNKNOWN",
+              "questionId": "Q_HTF_ALIGNED",
+              "description": "Q_HTF_ALIGNED:UNKNOWN",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_HTF_ALIGNED_UNKNOWN"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROSS_VENUE",
+              "description": "Q_CROSS_VENUE:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROSS_VENUE_UNAVAILABLE"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROWD",
+              "description": "Q_CROWD:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROWD_UNAVAILABLE"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "description": "Q_PRESERVE_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+            }
+          ],
+          "confidenceAttribution": {
+            "priorConfidence": 1,
+            "finalConfidence": 0,
+            "confidenceDelta": -1,
+            "contributors": [
+              {
+                "source": "fused_context_aggregate",
+                "direction": "INCREASE",
+                "magnitude": 1,
+                "reasonCode": "PRIOR_FUSED_CONFIDENCE"
+              }
+            ]
+          },
+          "reasoningInputs": {
+            "evidenceUsed": [
+              "htx_spot:ohlcv_bar:2026-01-01T00:57:00.000Z",
+              "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+            ],
+            "evidenceIgnored": [],
+            "conflicts": [],
+            "unknowns": [
+              "GAP_Q_HTF_ALIGNED_UNKNOWN",
+              "GAP_Q_CROSS_VENUE_UNAVAILABLE",
+              "GAP_Q_CROWD_UNAVAILABLE"
+            ]
+          },
+          "mtfBackdrop": {
+            "1m": "FLAT",
+            "15m": "FLAT",
+            "1h": "UNCLEAR",
+            "4h": "UNCLEAR",
+            "1d": "UNCLEAR"
+          },
+          "mtfAlignment": "UNCLEAR",
+          "regimeHint": "RANGING",
+          "crossVenue": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "globalContext": "UNAVAILABLE",
+          "crowdPsychology": "UNAVAILABLE",
+          "liquiditySufficiency": "SUFFICIENT",
+          "dataQualitySufficient": true,
+          "dataQualityReasonCodes": [],
+          "asianCorridorPresent": false,
+          "spotPosture": "REDUCE_RISK",
+          "postureRationale": [
+            "POSTURE_CROSS_VENUE_UNAVAILABLE"
+          ],
+          "understandingConfidence": 0
+        },
+        "decisionChain": null,
+        "signal": {
+          "strategySignalId": "00000000-0000-4000-8000-000000416088",
+          "strategyId": "liquidity_sweep_reversal_v0",
+          "strategyVersion": "0.1.0",
+          "organizationId": "a535129d-133b-4905-ab0c-888996e9b014",
+          "symbol": "BTC/USDT",
+          "msvId": "00000000-0000-4000-8000-000000416087",
+          "featureSetId": "00000000-0000-4000-8000-000000416086",
+          "evaluatedAt": "2026-01-01T00:57:00.000Z",
+          "outcome": "SIGNAL",
+          "side": "sell",
+          "confidence": "0.65",
+          "expectedEdge": "0",
+          "horizon": "1h",
+          "maxRisk": "700.00",
+          "reasonCodes": [
+            "STRAT_LSR_RECOVERY_EXIT"
+          ]
+        },
+        "guardian": null,
+        "guardianExecutions": []
+      }
+    },
+    {
+      "schemaVersion": "htr-wp04-cycle-projection/v1",
+      "cycleIndex": 38,
+      "evaluatedAtMs": 1767229080000,
+      "regime": "CHOP",
+      "skipReason": null,
+      "strategyExecutions": [
+        {
+          "signalId": "mean_reversion_v0",
+          "side": "sell",
+          "submitBlocked": true,
+          "skipReason": null,
+          "executionStatus": "risk_rejected",
+          "orderState": null,
+          "orderId": null
+        }
+      ],
+      "guardian": null,
+      "msv": {
+        "crowd": {
+          "fearGreedIndex": null,
+          "newsSentiment": null
+        },
+        "derived": {
+          "allowedStrategyIds": [
+            "liquidity_sweep_reversal_v0",
+            "mean_reversion_v0"
+          ],
+          "dataQualityScore": "0.0000",
+          "reasonCodes": [
+            "CDE_QUALITY_ALLOW_TRADING",
+            "CDE_UNDERSTANDING_REDUCED_RISK",
+            "CDE_REGIME_UNKNOWN",
+            "NEWS_SENTIMENT_DEFERRED_PR3"
+          ],
+          "regime": "CHOP",
+          "riskMultiplier": "0.5",
+          "tradingPermission": "ALLOW_REDUCED_RISK"
+        },
+        "evaluatedAt": "2026-01-01T00:58:00.000Z",
+        "futureContext": {
+          "asianRangeCorridorPresent": false,
+          "eventRiskScore": "0",
+          "sessionPhase": "ASIA"
+        },
+        "instrumentId": "BTC/USDT",
+        "liquidity": {
+          "spreadBps": "0.1538"
+        },
+        "physics": {
+          "close": "65000.00",
+          "realizedVol20": "0",
+          "zscoreVsSma20": "0"
+        }
+      },
+      "m9Trace": {
+        "evaluatedAt": "2026-01-01T00:58:00.000Z",
+        "fused": {
+          "schemaVersion": "waia.trader.fused_context.v2",
+          "fusedAtUtc": "2026-01-01T00:58:00.000Z",
+          "instrumentId": "BTC/USDT",
+          "sessionPhase": "ASIA",
+          "mtfBars": {
+            "1m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:58:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 58,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:58:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "15m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "15m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:58:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 4,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:58:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:58:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:58:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "4h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "4h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:58:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:58:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1d": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1d",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:58:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:58:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ]
+          },
+          "primaryQuote": {
+            "schemaVersion": "waia.trader.observation.v1",
+            "kind": "quote_l1",
+            "sessionPhase": "ASIA",
+            "provenance": {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+            },
+            "health": "HEALTHY",
+            "freshnessMs": 0,
+            "latencyMs": 0,
+            "confidence": 1,
+            "payload": {
+              "bid": "64999.50",
+              "ask": "65000.50",
+              "last": "65000.00",
+              "timestamp": "2026-01-01T01:40:00.000Z"
+            }
+          },
+          "crossVenueTriangulation": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "macroEvidence": [],
+          "newsEvidence": [],
+          "blockchainEvidence": [],
+          "regulatoryEvidence": [],
+          "protocolEvidence": [],
+          "aggregateHealth": "HEALTHY",
+          "aggregateConfidence": 1,
+          "provenance": [
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:58:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:58:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:58:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:58:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:58:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:58:00.000Z"
+            }
+          ],
+          "degradationReasons": []
+        },
+        "understanding": {
+          "schemaVersion": "waia.trader.market_understanding.v0",
+          "instrumentId": "BTC/USDT",
+          "evaluatedAt": "2026-01-01T00:58:00.000Z",
+          "questionEvaluations": [
+            {
+              "questionId": "Q_WHAT_HAPPENING",
+              "status": "ANSWERED",
+              "answerSummary": "RANGING",
+              "confidence": 0.8,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_WHY_HAPPENING",
+              "status": "PARTIAL",
+              "answerSummary": "mtf_unclear",
+              "confidence": 0.55,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_HTF_ALIGNED",
+              "status": "UNKNOWN",
+              "answerSummary": "UNCLEAR/UNCLEAR",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LTF_ALIGNED",
+              "status": "ANSWERED",
+              "answerSummary": "FLAT/FLAT",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROSS_VENUE",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROWD",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LIQUIDITY",
+              "status": "ANSWERED",
+              "answerSummary": "SUFFICIENT",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_DATA_TRUST",
+              "status": "ANSWERED",
+              "answerSummary": "TRUSTED",
+              "confidence": 0.85,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_UNKNOWN",
+              "status": "ANSWERED",
+              "answerSummary": "6_gaps",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": false
+            },
+            {
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            }
+          ],
+          "knowledgeGaps": [
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_WHY_HAPPENING",
+              "description": "Q_WHY_HAPPENING:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_WHY_HAPPENING_PARTIAL"
+            },
+            {
+              "kind": "UNKNOWN",
+              "questionId": "Q_HTF_ALIGNED",
+              "description": "Q_HTF_ALIGNED:UNKNOWN",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_HTF_ALIGNED_UNKNOWN"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROSS_VENUE",
+              "description": "Q_CROSS_VENUE:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROSS_VENUE_UNAVAILABLE"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROWD",
+              "description": "Q_CROWD:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROWD_UNAVAILABLE"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "description": "Q_PRESERVE_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+            }
+          ],
+          "confidenceAttribution": {
+            "priorConfidence": 1,
+            "finalConfidence": 0,
+            "confidenceDelta": -1,
+            "contributors": [
+              {
+                "source": "fused_context_aggregate",
+                "direction": "INCREASE",
+                "magnitude": 1,
+                "reasonCode": "PRIOR_FUSED_CONFIDENCE"
+              }
+            ]
+          },
+          "reasoningInputs": {
+            "evidenceUsed": [
+              "htx_spot:ohlcv_bar:2026-01-01T00:58:00.000Z",
+              "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+            ],
+            "evidenceIgnored": [],
+            "conflicts": [],
+            "unknowns": [
+              "GAP_Q_HTF_ALIGNED_UNKNOWN",
+              "GAP_Q_CROSS_VENUE_UNAVAILABLE",
+              "GAP_Q_CROWD_UNAVAILABLE"
+            ]
+          },
+          "mtfBackdrop": {
+            "1m": "FLAT",
+            "15m": "FLAT",
+            "1h": "UNCLEAR",
+            "4h": "UNCLEAR",
+            "1d": "UNCLEAR"
+          },
+          "mtfAlignment": "UNCLEAR",
+          "regimeHint": "RANGING",
+          "crossVenue": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "globalContext": "UNAVAILABLE",
+          "crowdPsychology": "UNAVAILABLE",
+          "liquiditySufficiency": "SUFFICIENT",
+          "dataQualitySufficient": true,
+          "dataQualityReasonCodes": [],
+          "asianCorridorPresent": false,
+          "spotPosture": "REDUCE_RISK",
+          "postureRationale": [
+            "POSTURE_CROSS_VENUE_UNAVAILABLE"
+          ],
+          "understandingConfidence": 0
+        },
+        "decisionChain": null,
+        "signal": {
+          "strategySignalId": "00000000-0000-4000-8000-000000416093",
+          "strategyId": "liquidity_sweep_reversal_v0",
+          "strategyVersion": "0.1.0",
+          "organizationId": "a535129d-133b-4905-ab0c-888996e9b014",
+          "symbol": "BTC/USDT",
+          "msvId": "00000000-0000-4000-8000-000000416092",
+          "featureSetId": "00000000-0000-4000-8000-000000416091",
+          "evaluatedAt": "2026-01-01T00:58:00.000Z",
+          "outcome": "SIGNAL",
+          "side": "sell",
+          "confidence": "0.65",
+          "expectedEdge": "0",
+          "horizon": "1h",
+          "maxRisk": "700.00",
+          "reasonCodes": [
+            "STRAT_LSR_RECOVERY_EXIT"
+          ]
+        },
+        "guardian": null,
+        "guardianExecutions": []
+      }
+    },
+    {
+      "schemaVersion": "htr-wp04-cycle-projection/v1",
+      "cycleIndex": 39,
+      "evaluatedAtMs": 1767229140000,
+      "regime": "CHOP",
+      "skipReason": null,
+      "strategyExecutions": [
+        {
+          "signalId": "mean_reversion_v0",
+          "side": "sell",
+          "submitBlocked": true,
+          "skipReason": null,
+          "executionStatus": "risk_rejected",
+          "orderState": null,
+          "orderId": null
+        }
+      ],
+      "guardian": null,
+      "msv": {
+        "crowd": {
+          "fearGreedIndex": null,
+          "newsSentiment": null
+        },
+        "derived": {
+          "allowedStrategyIds": [
+            "liquidity_sweep_reversal_v0",
+            "mean_reversion_v0"
+          ],
+          "dataQualityScore": "0.0000",
+          "reasonCodes": [
+            "CDE_QUALITY_ALLOW_TRADING",
+            "CDE_UNDERSTANDING_REDUCED_RISK",
+            "CDE_REGIME_UNKNOWN",
+            "NEWS_SENTIMENT_DEFERRED_PR3"
+          ],
+          "regime": "CHOP",
+          "riskMultiplier": "0.5",
+          "tradingPermission": "ALLOW_REDUCED_RISK"
+        },
+        "evaluatedAt": "2026-01-01T00:59:00.000Z",
+        "futureContext": {
+          "asianRangeCorridorPresent": false,
+          "eventRiskScore": "0",
+          "sessionPhase": "ASIA"
+        },
+        "instrumentId": "BTC/USDT",
+        "liquidity": {
+          "spreadBps": "0.1538"
+        },
+        "physics": {
+          "close": "65000.00",
+          "realizedVol20": "0",
+          "zscoreVsSma20": "0"
+        }
+      },
+      "m9Trace": {
+        "evaluatedAt": "2026-01-01T00:59:00.000Z",
+        "fused": {
+          "schemaVersion": "waia.trader.fused_context.v2",
+          "fusedAtUtc": "2026-01-01T00:59:00.000Z",
+          "instrumentId": "BTC/USDT",
+          "sessionPhase": "ASIA",
+          "mtfBars": {
+            "1m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:59:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 59,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:59:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "15m": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "15m",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:59:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 4,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:59:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:59:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:59:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "4h": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "4h",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:59:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:59:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ],
+            "1d": [
+              {
+                "schemaVersion": "waia.trader.observation.v1",
+                "kind": "ohlcv_bar",
+                "interval": "1d",
+                "sessionPhase": "ASIA",
+                "provenance": {
+                  "providerId": "htx_spot",
+                  "venue": "htx",
+                  "feedKind": "ohlcv_bar",
+                  "symbol": "BTC/USDT",
+                  "eventTimeUtc": "2026-01-01T00:59:00.000Z",
+                  "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+                },
+                "health": "HEALTHY",
+                "freshnessMs": 0,
+                "latencyMs": 0,
+                "confidence": 1,
+                "payload": {
+                  "barCount": 1,
+                  "latestClose": "65000.00",
+                  "latestBarCloseTime": "2026-01-01T00:59:00.000Z",
+                  "openCloseDeltaPct": 0
+                }
+              }
+            ]
+          },
+          "primaryQuote": {
+            "schemaVersion": "waia.trader.observation.v1",
+            "kind": "quote_l1",
+            "sessionPhase": "ASIA",
+            "provenance": {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+            },
+            "health": "HEALTHY",
+            "freshnessMs": 0,
+            "latencyMs": 0,
+            "confidence": 1,
+            "payload": {
+              "bid": "64999.50",
+              "ask": "65000.50",
+              "last": "65000.00",
+              "timestamp": "2026-01-01T01:40:00.000Z"
+            }
+          },
+          "crossVenueTriangulation": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "macroEvidence": [],
+          "newsEvidence": [],
+          "blockchainEvidence": [],
+          "regulatoryEvidence": [],
+          "protocolEvidence": [],
+          "aggregateHealth": "HEALTHY",
+          "aggregateConfidence": 1,
+          "provenance": [
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:59:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:59:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:59:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:59:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "ohlcv_bar",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T00:59:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+            },
+            {
+              "providerId": "htx_spot",
+              "venue": "htx",
+              "feedKind": "quote_l1",
+              "symbol": "BTC/USDT",
+              "eventTimeUtc": "2026-01-01T01:40:00.000Z",
+              "ingestTimeUtc": "2026-01-01T00:59:00.000Z"
+            }
+          ],
+          "degradationReasons": []
+        },
+        "understanding": {
+          "schemaVersion": "waia.trader.market_understanding.v0",
+          "instrumentId": "BTC/USDT",
+          "evaluatedAt": "2026-01-01T00:59:00.000Z",
+          "questionEvaluations": [
+            {
+              "questionId": "Q_WHAT_HAPPENING",
+              "status": "ANSWERED",
+              "answerSummary": "RANGING",
+              "confidence": 0.8,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_WHY_HAPPENING",
+              "status": "PARTIAL",
+              "answerSummary": "mtf_unclear",
+              "confidence": 0.55,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_HTF_ALIGNED",
+              "status": "UNKNOWN",
+              "answerSummary": "UNCLEAR/UNCLEAR",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LTF_ALIGNED",
+              "status": "ANSWERED",
+              "answerSummary": "FLAT/FLAT",
+              "confidence": 0.45,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROSS_VENUE",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_CROWD",
+              "status": "UNAVAILABLE",
+              "answerSummary": "UNAVAILABLE",
+              "confidence": 0,
+              "evidenceProvenanceIds": [],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_LIQUIDITY",
+              "status": "ANSWERED",
+              "answerSummary": "SUFFICIENT",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_DATA_TRUST",
+              "status": "ANSWERED",
+              "answerSummary": "TRUSTED",
+              "confidence": 0.85,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_UNKNOWN",
+              "status": "ANSWERED",
+              "answerSummary": "6_gaps",
+              "confidence": 0.75,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": false
+            },
+            {
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            },
+            {
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "status": "PARTIAL",
+              "answerSummary": "REDUCE_RISK",
+              "confidence": 0,
+              "evidenceProvenanceIds": [
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+                "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+              ],
+              "influencesPermission": false,
+              "influencesPosture": true
+            }
+          ],
+          "knowledgeGaps": [
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_WHY_HAPPENING",
+              "description": "Q_WHY_HAPPENING:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_WHY_HAPPENING_PARTIAL"
+            },
+            {
+              "kind": "UNKNOWN",
+              "questionId": "Q_HTF_ALIGNED",
+              "description": "Q_HTF_ALIGNED:UNKNOWN",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_HTF_ALIGNED_UNKNOWN"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROSS_VENUE",
+              "description": "Q_CROSS_VENUE:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROSS_VENUE_UNAVAILABLE"
+            },
+            {
+              "kind": "UNAVAILABLE",
+              "questionId": "Q_CROWD",
+              "description": "Q_CROWD:UNAVAILABLE",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_CROWD_UNAVAILABLE"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_DEPLOY_CAPITAL",
+              "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
+            },
+            {
+              "kind": "NEED_MORE_EVIDENCE",
+              "questionId": "Q_PRESERVE_CAPITAL",
+              "description": "Q_PRESERVE_CAPITAL:PARTIAL",
+              "blocksPermission": false,
+              "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+            }
+          ],
+          "confidenceAttribution": {
+            "priorConfidence": 1,
+            "finalConfidence": 0,
+            "confidenceDelta": -1,
+            "contributors": [
+              {
+                "source": "fused_context_aggregate",
+                "direction": "INCREASE",
+                "magnitude": 1,
+                "reasonCode": "PRIOR_FUSED_CONFIDENCE"
+              }
+            ]
+          },
+          "reasoningInputs": {
+            "evidenceUsed": [
+              "htx_spot:ohlcv_bar:2026-01-01T00:59:00.000Z",
+              "htx_spot:quote_l1:2026-01-01T01:40:00.000Z"
+            ],
+            "evidenceIgnored": [],
+            "conflicts": [],
+            "unknowns": [
+              "GAP_Q_HTF_ALIGNED_UNKNOWN",
+              "GAP_Q_CROSS_VENUE_UNAVAILABLE",
+              "GAP_Q_CROWD_UNAVAILABLE"
+            ]
+          },
+          "mtfBackdrop": {
+            "1m": "FLAT",
+            "15m": "FLAT",
+            "1h": "UNCLEAR",
+            "4h": "UNCLEAR",
+            "1d": "UNCLEAR"
+          },
+          "mtfAlignment": "UNCLEAR",
+          "regimeHint": "RANGING",
+          "crossVenue": {
+            "agreement": "UNAVAILABLE",
+            "binanceDeltaBps": null,
+            "bybitDeltaBps": null,
+            "triangulationConfidence": 0,
+            "reasonCodes": [
+              "CROSS_VENUE_UNAVAILABLE"
+            ]
+          },
+          "globalContext": "UNAVAILABLE",
+          "crowdPsychology": "UNAVAILABLE",
+          "liquiditySufficiency": "SUFFICIENT",
+          "dataQualitySufficient": true,
+          "dataQualityReasonCodes": [],
+          "asianCorridorPresent": false,
+          "spotPosture": "REDUCE_RISK",
+          "postureRationale": [
+            "POSTURE_CROSS_VENUE_UNAVAILABLE"
+          ],
+          "understandingConfidence": 0
+        },
+        "decisionChain": null,
+        "signal": {
+          "strategySignalId": "00000000-0000-4000-8000-000000416098",
+          "strategyId": "liquidity_sweep_reversal_v0",
+          "strategyVersion": "0.1.0",
+          "organizationId": "a535129d-133b-4905-ab0c-888996e9b014",
+          "symbol": "BTC/USDT",
+          "msvId": "00000000-0000-4000-8000-000000416097",
+          "featureSetId": "00000000-0000-4000-8000-000000416096",
+          "evaluatedAt": "2026-01-01T00:59:00.000Z",
+          "outcome": "SIGNAL",
+          "side": "sell",
+          "confidence": "0.65",
+          "expectedEdge": "0",
+          "horizon": "1h",
+          "maxRisk": "700.00",
+          "reasonCodes": [
+            "STRAT_LSR_RECOVERY_EXIT"
+          ]
+        },
+        "guardian": null,
+        "guardianExecutions": []
+      }
+    }
+  ],
+  "payloadDigest": "451699e797b3d9af7d8e3dc52438a7059f5284261532e7541f76a83a11d1f877",
+  "prevChunkDigest": "7f293f2d338c28e44ccefa68c6c35326fa6d73e09c206cbbd8ddf22135ac40e8",
+  "chunkDigest": "0dc67fd538b45c645c51cfa95d00d9da7fca6e0d1645f1be068a86f2eb8cec62"
+}

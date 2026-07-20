@@ -2,6 +2,7 @@ import { loadPaperFillEvents, type PaperPnLFillEvent } from "@/lib/trader/paper/
 import { derivePaperPnLPeriod } from "@/lib/trader/paper/derive-paper-pnl-period";
 import { derivePaperStrategyEvaluations } from "@/lib/trader/paper/derive-paper-strategy-eval";
 import { orderMatchesStrategyEvidenceScope } from "@/lib/trader/paper/strategy-evidence-scope";
+import { buildHtrPnlReportV1 } from "@/lib/trader/accounting/build-htr-pnl-report-v1";
 import { PaperEvaluationExportError } from "@/lib/trader/paper/paper-evaluation-export.errors";
 import {
   PAPER_EVALUATION_EXPORT_SCHEMA_VERSION,
@@ -113,9 +114,22 @@ export async function buildPaperEvaluationExport(
       fillEventCount: fillEvents.length,
       filledOrderCount: filledOrders.length,
       strategySignalIds: sortedStrategySignalIds,
-      readModelSlices: ["paper-pnl.v1", "paper-pnl-period.v1", "paper-strategy-eval.v1"],
+      readModelSlices: [
+        "paper-pnl.v1",
+        "paper-pnl-period.v1",
+        "paper-strategy-eval.v1",
+        ...(input.accountingState ? (["htr-pnl-report.v1"] as const) : []),
+      ],
     },
     exportedAt: input.exportedAt,
+    ...(input.accountingState
+      ? {
+          htrPnlReportV1: buildHtrPnlReportV1({
+            state: input.accountingState,
+            semanticDigest: input.htrPnlReportSemanticDigest ?? "0".repeat(64),
+          }),
+        }
+      : {}),
   };
 }
 

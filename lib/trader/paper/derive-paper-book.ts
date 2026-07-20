@@ -1,23 +1,23 @@
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
-import type { OrgContext } from "@/lib/waia-core/scope/org-context";
-
-import { addDecimal, compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
-
+import { buildQuoteCurrencyBySymbol } from "@/lib/trader/paper/derive-paper-pnl";
+import {
+  deriveCanonicalInventory,
+  openPositionsFromCanonicalInventory,
+} from "@/lib/trader/paper/derive-canonical-inventory";
+import { loadPaperFillEvents } from "@/lib/trader/paper/load-paper-fill-events";
 import type {
   PaperBook,
   PaperBookExecutionMode,
   PaperPosition,
 } from "@/lib/trader/paper/paper-book.types";
+import { addDecimal, compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
+import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 export type DerivePaperBookInput = {
   context: OrgContext;
   orderRepository: OrderRepository;
   executionMode?: PaperBookExecutionMode;
 };
-
-function floorAtZero(value: string): string {
-  return compareDecimal(value, "0") < 0 ? "0" : value;
-}
 
 type FilledOrderSlice = {
   id: string;
@@ -27,6 +27,10 @@ type FilledOrderSlice = {
   filledQuantity: string;
   createdAt: Date;
 };
+
+function floorAtZero(value: string): string {
+  return compareDecimal(value, "0") < 0 ? "0" : value;
+}
 
 function sortOrdersDeterministically(orders: readonly FilledOrderSlice[]): FilledOrderSlice[] {
   return [...orders].sort((a, b) => {
@@ -39,7 +43,8 @@ function sortOrdersDeterministically(orders: readonly FilledOrderSlice[]): Fille
 }
 
 /**
- * Pure position net from FILLED orders. Exported for fill-walk cross-check tests.
+ * Legacy order-net projection (order.createdAt sort + floorAtZero).
+ * Retained for regression comparison — canonical inventory uses fill-walk instead.
  */
 export function netPositionsFromFilledOrders(
   orders: readonly FilledOrderSlice[],
@@ -65,26 +70,33 @@ export function netPositionsFromFilledOrders(
   return positionBySymbol;
 }
 
-function mapToPaperPositions(positionBySymbol: Map<string, string>): PaperPosition[] {
-  return [...positionBySymbol.entries()]
-    .filter(([, quantity]) => compareDecimal(quantity, "0") > 0)
-    .map(([symbol, quantity]) => ({ symbol, quantity }));
+function mapToPaperPositions(
+  positions: readonly { symbol: string; quantity: string }[],
+): PaperPosition[] {
+  return positions.map(({ symbol, quantity }) => ({ symbol, quantity }));
 }
 
 /**
- * Idempotent derived Paper Book from persisted mock/paper orders.
+ * Idempotent derived Paper Book from persisted mock/paper fills (canonical inventory).
  *
  * Read-only projection — not PnL, not cash balances, not accounting.
  */
 export async function derivePaperBook(input: DerivePaperBookInput): Promise<PaperBook> {
   const executionMode = input.executionMode ?? "mock";
-  const orders = await input.orderRepository.listOrders(input.context, { executionMode });
-  const positionBySymbol = netPositionsFromFilledOrders(orders);
+  const { fillEvents } = await loadPaperFillEvents({
+    context: input.context,
+    orderRepository: input.orderRepository,
+    executionMode,
+  });
+  const symbols = [...new Set(fillEvents.map((event) => event.order.symbol))];
+  const quoteCurrencyBySymbol = buildQuoteCurrencyBySymbol(symbols);
+  const inventory = deriveCanonicalInventory(fillEvents, quoteCurrencyBySymbol);
+  const positions = mapToPaperPositions(openPositionsFromCanonicalInventory(inventory));
 
   return {
     organizationId: input.context.organizationId,
     executionMode,
-    positions: mapToPaperPositions(positionBySymbol),
+    positions,
     derivedAt: new Date(),
   };
 }

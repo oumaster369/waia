@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.908Z",
+  "nodeVersion": "v22.22.3",
+  "command": "pnpm exec vitest run tests/unit/trader-wp21-canonical-authority.test.ts",
+  "exitCode": 0,
+  "status": "PASS",
+  "probabilitySource": "forecast_confidence_json.confidence_value",
+  "knowledgeConfidenceClass": "EVIDENCE_AND_MKB_READ_MODEL_ONLY",
+  "sameRunDecisionAuthority": "PROHIBITED",
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "ce555c5dc910455f4028ed2a0e4ee20378cf03dccf639649a9ddb0b43c93ba6e"
+}

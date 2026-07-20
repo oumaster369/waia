@@ -65,6 +65,9 @@ function metadata(
     maxDrawdown: overrides.maxDrawdown ?? "1000",
     maxOpenOrders: overrides.maxOpenOrders ?? 10,
     maxQuoteExposure: overrides.maxQuoteExposure ?? "1000000",
+    maxRiskPerTradePct: overrides.maxRiskPerTradePct ?? "0.10",
+    maxPortfolioRiskPct: overrides.maxPortfolioRiskPct ?? "0.50",
+    maxConcurrentPositions: overrides.maxConcurrentPositions ?? 10,
   };
 }
 

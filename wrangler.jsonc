@@ -21,8 +21,17 @@
     "NEXT_PUBLIC_SITE_URL": "https://waia.life",
     "NEXT_PUBLIC_TRADER_URL": "https://trader.waia.life",
     "WAIA_TRADER_HOST": "trader.waia.life",
+    "WAIA_TRADER_ORG0_ORGANIZATION_ID": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
     "OAUTH_PUBLIC_BASE_URL": "https://waia.life",
     "WAIA_DB_BACKEND": "postgres",
+    "WAIA_DEPLOYMENT_TIER": "production",
+    "WATCHER_ENABLED": "1",
+    "WATCHER_LEASE_TTL_SECONDS": "120",
+    "MARKET_BRAIN_ENABLED": "1",
+    "MARKET_BRAIN_ORGANIZATION_ID": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+    "PAPER_LOOP_ENABLED": "1",
+    "PAPER_LOOP_ORGANIZATION_ID": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+    "PAPER_LOOP_ACCOUNT_KEY": "org0-paper-primary",
     "WAIA_AI_GATEWAY_FOUNDATION": "1",
     "WAIA_AI_PROVIDER": "openai-compatible",
     "WAIA_AI_OPENAI_MODEL": "gpt-5.5",
@@ -32,14 +41,11 @@
     "NEXT_PUBLIC_SUPABASE_URL": "https://wdsnuvldxyrkqcjxvuxp.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_wXZ5eaR4l6UKYXQMxr4fuw_cxz-Kk58",
   },
-  // DEE-220 / DEE-221 — secrets_store_secrets is added at ops time after Secrets Store provisioning.
-  // Do NOT commit a placeholder store_id (breaks Workers Builds). See docs/ops/DEE-220-MASTER-KEY-RUNBOOK.md §2.D.
-  // Production credential storage/decryption requires binding AI_TRADER_MASTER_KEY before persisting HTX keys.
-  // "secrets_store_secrets": [
-  //   {
-  //     "binding": "AI_TRADER_MASTER_KEY",
-  //     "store_id": "<WAIA_SECRETS_STORE_ID>",
-  //     "secret_name": "ai-trader-master-key-v1",
-  //   },
-  // ],
+  "secrets_store_secrets": [
+    {
+      "binding": "AI_TRADER_MASTER_KEY",
+      "store_id": "3180bb84656446f5823f3fa42504105e",
+      "secret_name": "ai-trader-master-key-v1",
+    },
+  ],
 }

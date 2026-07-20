@@ -1,4 +1,4 @@
-# Copy to `.dev.vars` in the `waia-app/` root for `pnpm cloudflare:preview` / Wrangler local Workers dev.
+# Copy to `.dev.vars` at the repository root for `pnpm cloudflare:preview` / Wrangler local Workers dev.
 # `.dev.vars` is gitignored — never commit production secrets here.
 #
 # Legend: PUBLIC = safe for NEXT_PUBLIC_* in Workers; SECRET = server-only (Wrangler secrets in production).
@@ -37,6 +37,13 @@ DATABASE_URL=file:./.data/waia.dev.db
 # DATABASE_URL_POSTGRES=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
 #
 # Optional later hardening: Cloudflare **Hyperdrive** in front of Postgres — not required for DEE-74; same env contract (connection string) once wired.
+#
+# SECRET — long-running CLI campaigns only (DEE-399, e.g. `pnpm trader:m9:campaign`), NOT used by
+# Workers runtime. A multi-hour single-connection process must not hold the transaction pooler
+# (it recycles held connections — observed as a mid-write CAMPAIGN_CRASH). Prefer Supabase's
+# **session-mode** pooler (same host, port 5432) or a **direct** connection
+# (db.[ref].supabase.co:5432). Falls back to DATABASE_URL_POSTGRES with a console warning if unset.
+# DATABASE_URL_POSTGRES_SESSION=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres
 
 # SECRET — direct OpenAI API. MUST NOT ship to browser/client bundles.
 # OPENAI_API_KEY=
@@ -59,3 +66,35 @@ DATABASE_URL=file:./.data/waia.dev.db
 # WATCHER_ENABLED=
 # WATCHER_CONFIRMATIONS_REQUIRED=
 # WATCHER_RESCAN_WINDOW=
+
+# ─── Market Brain worker (Pipeline P3) — MI gateway cron ───
+# MARKET_BRAIN_ENABLED=
+# MARKET_BRAIN_ORGANIZATION_ID=
+# HTX_REST_HOST=
+# COINGECKO_API_KEY=
+
+# ─── PR-2 Market Intelligence Core (evaluation cycle) ───
+# Default OFF; when disabled the pipeline is byte-identical to understanding → CDE.
+# WAIA_MI_CORE_ENABLED=1
+
+# ─── Full Market Data Source Integration (DEE-393) — optional MI providers ───
+# FRED_API_KEY=
+# AI_TRADER_INFURA_PROJECT_ID=
+# AI_TRADER_INFURA_API_SECRET=
+# AI_TRADER_TRONGRID_API_KEY=
+# AI_TRADER_GITHUB_TOKEN=
+# AI_TRADER_SEC_EDGAR_USER_AGENT=YourOrgName contact@example.com
+# AI_TRADER_CME_FEDWATCH_ENABLED=
+
+# ─── Paper loop worker (Pipeline P5) — uses HtxBarPollSource / gateway ───
+# PAPER_LOOP_ENABLED=
+# PAPER_LOOP_ORGANIZATION_ID=
+# PAPER_LOOP_ACCOUNT_KEY=
+# PAPER_LOOP_DEFAULT_QUANTITY=
+# PAPER_LOOP_CYCLE_ID_PREFIX=
+
+# ─── AI-TRADER alerting (DEE-223 / BP-9) — dedicated Alerts Bot only ───
+# SECRET — never reuse TELEGRAM_BOT_TOKEN (OAuth). Production: wrangler secret put.
+# TELEGRAM_ALERTS_BOT_TOKEN=
+# TELEGRAM_ALERTS_CHAT_ID=
+# TELEGRAM_ALERTS_THREAD_ID=

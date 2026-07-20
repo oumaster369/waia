@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "htr-wp05-run-chain/v1",
+  "backtestRunId": "htr-wp05-checkpoint-resume-run",
+  "activePhase": "validation",
+  "segments": [
+    {
+      "runDir": "/var/folders/0x/438cbk_502jd7ppl38xxk29w0000gn/T/waia-wp05-checkpoint-ijacCR/segments/partial-interrupted",
+      "chainDigest": "0b96551057082a788de1e719b7d9c1191a27b43cd5aada31d232a141353ac854",
+      "role": "superseded",
+      "terminalState": "STREAMING_EVIDENCE_SEALED_PARTIAL",
+      "sealedThroughCycleIndex": 39
+    },
+    {
+      "runDir": "/var/folders/0x/438cbk_502jd7ppl38xxk29w0000gn/T/waia-wp05-checkpoint-ijacCR/segments/continuation",
+      "chainDigest": "47d5688c3986eb02ad22d840975404415a2cb958f087b1fab268219ac85e3cfa",
+      "role": "authoritative",
+      "continuesFromRunDir": "/var/folders/0x/438cbk_502jd7ppl38xxk29w0000gn/T/waia-wp05-checkpoint-ijacCR/segments/partial-interrupted",
+      "continuesFromChainDigest": "0b96551057082a788de1e719b7d9c1191a27b43cd5aada31d232a141353ac854",
+      "terminalState": "STREAMING_EVIDENCE_OK",
+      "sealedThroughCycleIndex": 80
+    }
+  ],
+  "composedChainDigest": "a75d1f03329945fbd96f5bdb12e95a5aa7de9b3607d580b23828baf448da8a8f"
+}

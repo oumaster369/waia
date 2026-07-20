@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "htr-macro-h-fixture-postgres-gate-final-corrective-evidence/v1",
+  "sourceGitSha": "077ea4379c191b4d0cd475b393d83326f4a3c0f2",
+  "sourceDirtyTree": false,
+  "files": [
+    "default-path-runtime-proof.json",
+    "fixture-contract-proof.json",
+    "m9-real-run-mismatch-proof.json",
+    "real-run-mismatch-failure.json",
+    "reconciliation-report.json",
+    "terminal-export-result.json"
+  ],
+  "fileDigests": {
+    "reconciliation-report.json": "3b59adfbd0460e8d06b07fda2fbfe692e7ad25f1d2f49d17797f90e0207e707c",
+    "default-path-runtime-proof.json": "d8f853b9a765fc7b3680cfaf959dfd771f2a8f19cd5c13872ac4b377f61f9825",
+    "real-run-mismatch-failure.json": "8f74774213c0cbd37d1a00ebb4ecdec48b715dfea2b2125978acd9edebcafff5",
+    "terminal-export-result.json": "1d41289e67cf7e06c79858036371eb2c28915fa3c532ba4c68347f19c261453b",
+    "fixture-contract-proof.json": "5e5eabe1012ff4154dacc20bd057f512b6d9ca1f7bab4188ce9704bcc5d93ad8",
+    "m9-real-run-mismatch-proof.json": "8f74774213c0cbd37d1a00ebb4ecdec48b715dfea2b2125978acd9edebcafff5"
+  },
+  "semanticDigest": "393d6ccc9216ef9133131c3e56b1229ddecd37e75c5e8951db5b5b52cfec69ef",
+  "manifestDigest": "4f248a424cdcac532ee7a3ffa33b52cd5cb15997f81e600c87cfce645f79cb0f"
+}

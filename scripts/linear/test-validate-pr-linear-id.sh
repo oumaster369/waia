@@ -109,6 +109,13 @@ run_case "plain Linear with bold Tier still fails Linear" 1 \
 **Tier:** T1" \
   "dee-261-governance-pr-body-preflight" || fail=1
 
+run_case "Includes field does not change resolved Linear id" 0 \
+  "DEE-403 infra(governance): lifecycle integration boundary" \
+  "**Linear:** \`DEE-403\`
+**Includes:** \`DEE-402\`, \`DEE-401\`
+**Tier:** T2" \
+  "dee-403-devos-lifecycle-integration" || fail=1
+
 if [[ "$fail" -ne 0 ]]; then
   echo "Some tests failed." >&2
   exit 1

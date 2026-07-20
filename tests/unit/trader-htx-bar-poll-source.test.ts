@@ -27,7 +27,10 @@ function jsonResponse(body: unknown, status = 200): Response {
 function createMockFetch(fixture: HtxKlineFixture) {
   return (async (input: RequestInfo | URL) => {
     const url = new URL(typeof input === "string" ? input : input.toString());
-    if (url.pathname.endsWith(HTX_ENDPOINTS.marketHistoryKline)) {
+    if (
+      url.pathname.endsWith(HTX_ENDPOINTS.marketHistoryKline) ||
+      url.pathname.endsWith(HTX_ENDPOINTS.marketHistoryCandles)
+    ) {
       return jsonResponse(fixture.kline);
     }
     if (url.pathname.endsWith(HTX_ENDPOINTS.marketDetailMerged)) {
@@ -37,13 +40,18 @@ function createMockFetch(fixture: HtxKlineFixture) {
   }) as typeof fetch;
 }
 
+function pollOptions(fixture: HtxKlineFixture, overrides: Record<string, unknown> = {}) {
+  return {
+    fetchImpl: createMockFetch(fixture),
+    disableOptionalProviders: true,
+    ...overrides,
+  };
+}
+
 describe("HtxBarPollSource (AT-E3 S4)", () => {
   it("fetchSnapshot returns 25 ascending bars and increments cycleId", async () => {
     const fixture = loadFixture();
-    const poll = new HtxBarPollSource({
-      fetchImpl: createMockFetch(fixture),
-      cycleIdPrefix: "test-htx-poll",
-    });
+    const poll = new HtxBarPollSource(pollOptions(fixture, { cycleIdPrefix: "test-htx-poll" }));
 
     const first = await poll.fetchSnapshot();
     const second = await poll.fetchSnapshot();
@@ -58,7 +66,7 @@ describe("HtxBarPollSource (AT-E3 S4)", () => {
 
   it("uses neutral default cycleIdPrefix when not overridden", async () => {
     const fixture = loadFixture();
-    const poll = new HtxBarPollSource({ fetchImpl: createMockFetch(fixture) });
+    const poll = new HtxBarPollSource(pollOptions(fixture));
     const snapshot = await poll.fetchSnapshot();
     expect(snapshot.cycleId).toBe("htx-poll-0");
   });
@@ -69,20 +77,16 @@ describe("HtxBarPollSource (AT-E3 S4)", () => {
       ...fixture,
       kline: { ...fixture.kline, data: fixture.kline.data!.slice(0, 10) },
     };
-    const poll = new HtxBarPollSource({
-      fetchImpl: createMockFetch(shortFixture),
-      cycleIdPrefix: "test-htx-poll",
-    });
+    const poll = new HtxBarPollSource(
+      pollOptions(shortFixture, { cycleIdPrefix: "test-htx-poll" }),
+    );
 
     await expect(poll.fetchSnapshot()).rejects.toThrow(/need at least 20/);
   });
 
   it("reset restores cycleIndex", async () => {
     const fixture = loadFixture();
-    const poll = new HtxBarPollSource({
-      fetchImpl: createMockFetch(fixture),
-      cycleIdPrefix: "test-htx-poll",
-    });
+    const poll = new HtxBarPollSource(pollOptions(fixture, { cycleIdPrefix: "test-htx-poll" }));
 
     await poll.fetchSnapshot();
     poll.reset();

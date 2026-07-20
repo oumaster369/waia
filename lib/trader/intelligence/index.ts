@@ -12,6 +12,31 @@ export {
   type BuildMsvEnvelopeInput,
 } from "@/lib/trader/intelligence/cde-v0";
 export { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
+export { isMiCoreEnabled } from "@/lib/trader/intelligence/mi-core-flag";
+export {
+  createEmptyHypothesisSessionState,
+  MARKET_STATE_SNAPSHOT_SCHEMA_VERSION,
+  type CycleObservationRecord,
+  type DecisionChain,
+  type HypothesisSessionState,
+  type MarketStateSnapshot,
+} from "@/lib/trader/intelligence/mi-core.types";
+export { buildReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction";
+export type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction";
+export { buildHypothesisSet, hypothesisTypeEnum } from "@/lib/trader/intelligence/hypothesis";
+export type {
+  HypothesisSet,
+  MarketHypothesis,
+  MarketOpportunity,
+} from "@/lib/trader/intelligence/hypothesis";
+export {
+  DEFAULT_EXIT_INTELLIGENCE_RUN_CONFIG,
+  EXIT_INTELLIGENCE_CONTEXT_SCHEMA_VERSION,
+  buildExitIntelligenceContext,
+  type BuildExitIntelligenceContextInput,
+  type ExitIntelligenceContext,
+  type ExitIntelligenceRunConfig,
+} from "@/lib/trader/intelligence/m5";
 export {
   emitDecisionReasonCodeCounter,
   emitMsvDecisionCounters,
@@ -75,3 +100,29 @@ export {
   type StrategySignal,
   type TradingPermission,
 } from "@/lib/trader/intelligence/types";
+export {
+  HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
+  HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1_DIGEST,
+  isHistoricalProfileActive,
+  assertHistoricalProfileNotGlobalDefault,
+  canonicalizeHistoricalProfile,
+  computeHistoricalProfileDigest,
+  type HistoricalIntelligenceProfile,
+  type HistoricalProfileId,
+} from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+export {
+  TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1,
+  TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1_DIGEST,
+  assertTimeframeLaneAuthority,
+  assertNoProviderAccessFromTimeframe,
+  canonicalizeMatrix,
+  computeMatrixDigest,
+  countMatrixLanes,
+} from "@/lib/trader/intelligence/matrix/timeframe-evidence-lane-authority-matrix-v1";
+export {
+  universalTerminalReasonCodes,
+  resolveUniversalTerminalReason,
+  type UniversalTerminalReasonCode,
+} from "@/lib/trader/intelligence/terminal-reason/universal-terminal-reason";
+export * from "@/lib/trader/intelligence/records";
+export * from "@/lib/trader/intelligence/forecast-decision";

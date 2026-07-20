@@ -1,9 +1,6 @@
-import { createRequire } from "node:module";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
 
-const require = createRequire(import.meta.url);
-if (process.env.VITEST !== "true") {
-  require("server-only");
-}
+enforceServerOnly();
 
 import type { WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -23,8 +20,24 @@ import type {
   SubmitOrderInput,
   SubmitOrderResult,
 } from "@/lib/trader/execution/execution-service.types";
-import { OrderVersionConflictError } from "@/lib/trader/execution/order-repository.errors";
-import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
+import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
+import {
+  OrderVersionConflictError,
+  OrderNotFoundError,
+} from "@/lib/trader/execution/order-repository.errors";
+import type {
+  OrderRow,
+  RecordFillProgressInput,
+} from "@/lib/trader/execution/order-repository.types";
+import { applyHistoricalExecutionEconomics } from "@/lib/trader/execution/fill-economics";
+import { buildRecordFillPayload } from "@/lib/trader/execution/historical-simulated-exchange";
+import type { SimulatedFillEvent } from "@/lib/trader/execution/historical-execution-model.types";
+import {
+  addDecimal,
+  compareDecimal,
+  divideDecimal,
+  multiplyDecimal,
+} from "@/lib/trader/risk/numeric";
 import { isTerminal } from "@/lib/trader/execution/order-state-machine";
 import type { OrderExecutionMode, OrderState } from "@/lib/trader/execution/types";
 import {
@@ -32,6 +45,7 @@ import {
   emitExecutionTransitionEvent,
 } from "@/lib/trader/execution/execution-telemetry";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
+import type { BreachOrderCancelOutcome } from "@/lib/trader/guardian/htr-breach-partial-entry-cancellation";
 import { isTerminalReject } from "@/lib/trader/risk/decision";
 import type { RiskEngineDecision } from "@/lib/trader/risk/evaluate.types";
 import {
@@ -44,6 +58,7 @@ import {
   createPostgresOrderRepositoryFromExecutor,
   createSqliteOrderRepository,
 } from "@/lib/trader/execution/repository-adapters";
+import type { TradeLineageAtOpen } from "@/lib/trader/lifecycle/trade-lifecycle.types";
 import {
   createKillSwitchResolver,
   createPostgresKillSwitchRepository,
@@ -54,6 +69,13 @@ type PgExecutionExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
 
 const KILL_SWITCH_REJECT_PAYLOAD = JSON.stringify({ reason: "kill_switch" });
 const CONNECTOR_REJECT_PAYLOAD = JSON.stringify({ reason: "connector" });
+const BREACH_CANCEL_PAYLOAD = JSON.stringify({ reason: "guardian_breach_partial_entry" });
+
+const BREACH_CANCELLABLE_STATES = new Set<OrderState>([
+  "SENT_TO_EXCHANGE",
+  "ACCEPTED",
+  "PARTIALLY_FILLED",
+]);
 
 /** Dispatch allowed only from RISK_APPROVED (DEE-249). */
 export function canDispatch(order: OrderRow): boolean {
@@ -61,7 +83,13 @@ export function canDispatch(order: OrderRow): boolean {
 }
 
 function venueForMode(executionMode: OrderExecutionMode): string {
-  return executionMode === "mock" || executionMode === "paper" ? "mock" : executionMode;
+  if (executionMode === "mock" || executionMode === "paper") {
+    return "mock";
+  }
+  if (executionMode === "live") {
+    return "htx";
+  }
+  return executionMode;
 }
 
 function placeOrderInputFromSubmit(
@@ -218,7 +246,66 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     writeAudit,
     nowMs,
     executionTelemetrySink: telemetrySink,
+    assertLiveAuthorized,
+    lifecycleRecorder,
+    historicalExecution,
   } = deps;
+
+  function buildTradeLineageFromSubmit(
+    order: OrderRow,
+    input: SubmitOrderInput,
+  ): TradeLineageAtOpen {
+    return {
+      strategySignalId: order.strategySignalId ?? input.strategySignalId ?? "",
+      strategyId: input.strategyId ?? "unknown",
+      strategyVersion: input.strategyVersion ?? "0.0.0",
+      riskDecisionId: order.riskDecisionId,
+      allocationDecisionId: order.allocationDecisionId ?? input.allocationDecisionId ?? null,
+      signalConfidence: input.signalConfidence ?? null,
+      openingRegime: input.openingRegime ?? null,
+      openingMsvId: input.openingMsvId ?? null,
+      openingFeatureSetId: input.openingFeatureSetId ?? null,
+    };
+  }
+
+  async function recordLifecycleForFill(
+    context: OrgContext,
+    order: OrderRow,
+    input: SubmitOrderInput,
+    fillId: string,
+  ): Promise<void> {
+    if (!lifecycleRecorder) {
+      return;
+    }
+
+    const fills = await orderRepository.listFills(context, order.id);
+    const fill = fills.find((entry) => entry.id === fillId);
+    if (!fill) {
+      return;
+    }
+
+    await lifecycleRecorder.recordFillLifecycle({
+      context,
+      order,
+      fill,
+      accountKey: input.accountKey,
+      lineage: buildTradeLineageFromSubmit(order, input),
+    });
+  }
+
+  async function authorizeLivePath(
+    orgContext: OrgContext,
+    input: SubmitOrderInput,
+    riskDecision?: RiskEngineDecision,
+  ): Promise<void> {
+    if (input.executionMode !== "live") {
+      return;
+    }
+    if (!assertLiveAuthorized) {
+      throw new LiveExecutionNotSupportedError("live");
+    }
+    await assertLiveAuthorized(orgContext, input, { riskDecision });
+  }
 
   function finishSubmitOrder(
     orgContext: OrgContext,
@@ -428,10 +515,22 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
 
     let current = accepted.order;
 
+    if (historicalExecution?.enabled && input.executionMode === "mock" && input.type === "market") {
+      historicalExecution.exchange.registerOrder(
+        {
+          ...current,
+          symbol: normalizeSymbolForHistoricalExecution(current.symbol),
+        },
+        historicalExecution.getDecisionBarIndex(),
+        historicalExecution.getReplayNowMs(),
+      );
+      return { status: "submitted", order: current, riskDecision, auditIds };
+    }
+
     if (connectorOrder.status === "filled" || connectorOrder.status === "partially_filled") {
       const trade = await resolveTradeForOrder(connector, current, connectorOrder);
       if (trade) {
-        await orderRepository.recordFill(context, {
+        const fillRow = await orderRepository.recordFill(context, {
           orderId: current.id,
           exchangeTradeId: trade.tradeId,
           price: trade.price,
@@ -440,6 +539,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
           feeAsset: trade.feeAsset,
           executedAt: new Date(trade.executedAt),
         });
+        await recordLifecycleForFill(context, current, input, fillRow.id);
       }
 
       const fillTarget = mapConnectorStatusToOrderState(connectorOrder.status);
@@ -468,15 +568,141 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     return { status: "submitted", order: current, riskDecision, auditIds };
   }
 
+  async function recordSimulatedFill(
+    context: OrgContext,
+    order: OrderRow,
+    event: SimulatedFillEvent,
+    isFirstSlice: boolean,
+  ): Promise<OrderRow> {
+    const economics = applyHistoricalExecutionEconomics(event, historicalExecution!.model);
+    const newFilledQty = addDecimal(order.filledQuantity, event.sliceQuantity);
+    const avgFillPrice =
+      compareDecimal(order.filledQuantity, "0") === 0
+        ? economics.netFillPrice
+        : divideDecimal(
+            addDecimal(
+              multiplyDecimal(order.avgFillPrice ?? "0", order.filledQuantity),
+              multiplyDecimal(economics.netFillPrice, event.sliceQuantity),
+            ),
+            newFilledQty,
+          );
+
+    const payload = buildRecordFillPayload(
+      event,
+      economics,
+      context.organizationId,
+      order.id,
+      order.side,
+      avgFillPrice,
+      newFilledQty,
+      !isFirstSlice,
+    );
+
+    if (isFirstSlice) {
+      const fillTarget =
+        compareDecimal(event.remainingQuantityAfter, "0") === 0 ? "FILLED" : "PARTIALLY_FILLED";
+      const transitioned = await transitionOrConflict(context, order, fillTarget, {
+        filledQuantity: newFilledQty,
+        avgFillPrice,
+      });
+      if ("conflict" in transitioned) {
+        throw new OrderVersionConflictError(transitioned.orderId, order.stateVersion);
+      }
+      await orderRepository.recordFill(context, payload);
+      return transitioned.order;
+    }
+
+    await orderRepository.recordFillProgress(context, payload as RecordFillProgressInput);
+    const updated = await orderRepository.getOrderById(context, order.id);
+    if (!updated) {
+      throw new OrderNotFoundError(order.id);
+    }
+    if (compareDecimal(event.remainingQuantityAfter, "0") === 0) {
+      const filled = await transitionOrConflict(context, updated, "FILLED", {
+        filledQuantity: newFilledQty,
+        avgFillPrice,
+      });
+      if ("conflict" in filled) {
+        throw new OrderVersionConflictError(filled.orderId, updated.stateVersion);
+      }
+      return filled.order;
+    }
+    return updated;
+  }
+
+  async function transitionOrderExpired(context: OrgContext, order: OrderRow): Promise<OrderRow> {
+    const result = await transitionOrConflict(context, order, "EXPIRED");
+    if ("conflict" in result) {
+      throw new OrderVersionConflictError(result.orderId, order.stateVersion);
+    }
+    return result.order;
+  }
+
+  async function transitionOrderCancelled(context: OrgContext, order: OrderRow): Promise<OrderRow> {
+    if (order.state === "CANCELLED") {
+      return order;
+    }
+    const cancelRequested =
+      order.state === "CANCEL_REQUESTED"
+        ? { order }
+        : await transitionOrConflict(context, order, "CANCEL_REQUESTED");
+    if ("conflict" in cancelRequested) {
+      throw new OrderVersionConflictError(cancelRequested.orderId, order.stateVersion);
+    }
+    const cancelled = await transitionOrConflict(context, cancelRequested.order, "CANCELLED");
+    if ("conflict" in cancelled) {
+      throw new OrderVersionConflictError(cancelled.orderId, cancelRequested.order.stateVersion);
+    }
+    return cancelled.order;
+  }
+
+  async function cancelOrderForBreach(
+    context: OrgContext,
+    order: OrderRow,
+  ): Promise<BreachOrderCancelOutcome> {
+    if (order.state === "CANCEL_REQUESTED" || isTerminal(order.state)) {
+      return { status: "idempotent_skip", order };
+    }
+
+    if (!BREACH_CANCELLABLE_STATES.has(order.state)) {
+      return { status: "failed", order };
+    }
+
+    if (historicalExecution?.enabled && order.executionMode === "mock") {
+      const cancelRequested = await transitionOrConflict(context, order, "CANCEL_REQUESTED", {
+        eventPayload: BREACH_CANCEL_PAYLOAD,
+      });
+      if ("conflict" in cancelRequested) {
+        return { status: "failed", order };
+      }
+      return { status: "cancel_requested", order: cancelRequested.order };
+    }
+
+    try {
+      const cancelled = await transitionOrderCancelled(context, order);
+      return { status: "cancelled", order: cancelled };
+    } catch {
+      return { status: "failed", order };
+    }
+  }
+
   return {
+    recordSimulatedFill,
+    transitionOrderExpired,
+    transitionOrderCancelled,
+    cancelOrderForBreach,
     async submitOrder(context: OrgContext, input: SubmitOrderInput): Promise<SubmitOrderResult> {
       const orgContext = requireOrgContext(context.organizationId);
       const startedMs = nowMs();
 
-      if (input.executionMode === "live") {
+      if (input.executionMode === "live" && !assertLiveAuthorized) {
         throw new LiveExecutionNotSupportedError("live");
       }
-      if (input.executionMode !== "mock" && input.executionMode !== "paper") {
+      if (
+        input.executionMode !== "mock" &&
+        input.executionMode !== "paper" &&
+        input.executionMode !== "live"
+      ) {
         throw new UnsupportedExecutionModeError(input.executionMode);
       }
 
@@ -489,6 +715,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
         (await orderRepository.findOrderByIdempotencyKey(orgContext, input.idempotencyKey));
 
       if (existing) {
+        await authorizeLivePath(orgContext, input);
         const resume = resumeResultForExistingOrder(existing);
         if (resume) {
           return finishSubmitOrder(orgContext, input, startedMs, resume);
@@ -517,6 +744,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
         referencePrice: input.referencePrice,
         accountKey: input.accountKey,
         accountState: input.accountState,
+        stopDistanceUsdt: input.stopDistanceUsdt,
       });
 
       if (isTerminalReject(riskDecision.decision.outcome)) {
@@ -526,6 +754,8 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
           order: null,
         });
       }
+
+      await authorizeLivePath(orgContext, input, riskDecision);
 
       const quantity =
         riskDecision.decision.outcome === "RESIZE" && riskDecision.decision.resize

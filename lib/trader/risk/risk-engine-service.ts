@@ -15,12 +15,9 @@
  * - The snapshot describes the originally-requested order; trimmed values live
  *   only in the resize hint.
  */
-import { createRequire } from "node:module";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
 
-const require = createRequire(import.meta.url);
-if (process.env.VITEST !== "true") {
-  require("server-only");
-}
+enforceServerOnly();
 
 import type { WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -42,6 +39,7 @@ import type {
   RiskEngineService,
   RiskEngineServiceDeps,
 } from "@/lib/trader/risk/evaluate.types";
+import type { DrawdownPolicyEvaluationResult } from "@/lib/trader/risk/drawdown-policy.types";
 import {
   createPostgresRiskLimitsService,
   createSqliteRiskLimitsService,
@@ -68,6 +66,14 @@ import type {
 } from "@/lib/trader/risk/types";
 import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/lib/trader/types";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
+
+type Wp16EvaluateOrderRequestInput = EvaluateOrderRequestInput & {
+  drawdownEvaluation?: DrawdownPolicyEvaluationResult;
+};
+
+function asWp16EvaluateInput(input: EvaluateOrderRequestInput): Wp16EvaluateOrderRequestInput {
+  return input as Wp16EvaluateOrderRequestInput;
+}
 
 type PgRiskEngineExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
 
@@ -101,7 +107,7 @@ function mergeChecks(a: RiskCheckName[], b: RiskCheckName[]): RiskCheckName[] {
  * result through the appropriate factory so resize metadata can only attach to
  * a RESIZE outcome (INV-1/INV-2).
  */
-function mergeDecisions(
+export function mergeDecisions(
   tradeAbuse: RiskDecision,
   capital: RiskDecision,
   evaluatedAt: string,
@@ -154,6 +160,7 @@ export function createRiskEngineService(deps: RiskEngineServiceDeps): RiskEngine
 
   return {
     async evaluateOrderRequest(input: EvaluateOrderRequestInput): Promise<RiskEngineDecision> {
+      const wp16Input = asWp16EvaluateInput(input);
       const orgContext = requireOrgContext(input.context.organizationId);
       const limitsContext: OrgContext = input.context.userId
         ? { organizationId: orgContext.organizationId, userId: input.context.userId }
@@ -217,6 +224,8 @@ export function createRiskEngineService(deps: RiskEngineServiceDeps): RiskEngine
                     order: evaluatedOrder,
                     referencePrice: input.referencePrice,
                     accountState: input.accountState,
+                    stopDistanceUsdt: input.stopDistanceUsdt,
+                    drawdownEvaluation: wp16Input.drawdownEvaluation,
                   },
                   toCapitalLimitsConfig(metadata),
                   { nowMs: deps.nowMs },

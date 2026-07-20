@@ -5,12 +5,9 @@
  * Future venue/strategy resolution (most-specific match: strategy → venue → org) is deferred to
  * DEE-241+ — columns exist but v0 service methods hardcode org scope only.
  */
-import { createRequire } from "node:module";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
 
-const require = createRequire(import.meta.url);
-if (process.env.VITEST !== "true") {
-  require("server-only");
-}
+enforceServerOnly();
 
 import type { WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";

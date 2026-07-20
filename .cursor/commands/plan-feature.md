@@ -1,6 +1,6 @@
 # /plan-feature
 
-Switch to **Plan Mode** and use the strongest reasoning model available (e.g. Claude Opus 4.x) to design the implementation **before any code changes**.
+Switch to **Plan Mode** and use the **`reasoning`** model class ([`MODEL-COST-POLICY.md`](../../docs/waia-governance/MODEL-COST-POLICY.md) — strongest tier available in Cursor, e.g. Opus) to design the implementation **before any code changes**.
 
 ## What you must do
 
@@ -13,7 +13,8 @@ Switch to **Plan Mode** and use the strongest reasoning model available (e.g. Cl
    - **Tests** — what unit and e2e tests will be added/changed
    - **Risk / rollout** notes
    - **Open questions** (if any) — ask the user before continuing
-5. Save the final plan to `.cursor/plans/<YYYY-MM-DD>-<slug>.md` and reference it in the next phase.
+5. Save the draft to `.cursor/plans/<YYYY-MM-DD>-<slug>.md`.
+6. On human approval (CONFIRM), promote to **`docs/plans/dee-<NN>-<slug>.md`** with frontmatter per [`docs/plans/README.md`](../../docs/plans/README.md) and `state.status: approved`.
 
 ## Hard rules
 

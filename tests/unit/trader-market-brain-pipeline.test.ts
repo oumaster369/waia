@@ -7,7 +7,9 @@ import { HTX_ENDPOINTS } from "@/lib/trader/connectors/htx/config";
 import type { HtxKlineResponse, HtxMarketMergedResponse } from "@/lib/trader/connectors/htx/types";
 import { BTC_USDT, ETH_USDT } from "@/lib/trader/intelligence/types";
 import { runHtxIngestionCycle } from "@/lib/trader/market-brain/htx-ingestion";
+import { CANONICAL_MARKET_QUESTION_IDS } from "@/lib/trader/intelligence/market-understanding.types";
 import { runMarketBrainPipeline } from "@/lib/trader/market-brain/market-brain-pipeline";
+import { buildReplayFusedContext } from "@/lib/trader/market-data/replay-fused-context-builder";
 import {
   DATA_QUALITY_HALT_REASON,
   INGESTION_HALT_REASON,
@@ -48,6 +50,35 @@ function createMockFetch(fixture: HtxKlineFixture, ethSymbol = "ethusdt") {
 }
 
 describe("market brain pipeline (P3 DEE-197–202)", () => {
+  it("produces understanding when fusedContext is supplied", () => {
+    const fixture = loadMeanReversionFixture();
+    const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
+    const fusedContext = buildReplayFusedContext({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+      instrumentId: "BTC/USDT",
+    });
+
+    const result = runMarketBrainPipeline({
+      organizationId: "org-p3",
+      instrumentId: BTC_USDT,
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+      fusedContext,
+      newId: () => "p3-test-id",
+    });
+
+    expect(result.halted).toBe(false);
+    expect(result.understanding).toBeDefined();
+    expect(result.understanding!.questionEvaluations).toHaveLength(11);
+    expect(result.understanding!.questionEvaluations.map((q) => q.questionId).sort()).toEqual(
+      [...CANONICAL_MARKET_QUESTION_IDS].sort(),
+    );
+    expect(result.msv?.understanding?.spotPosture).toBe(result.understanding!.spotPosture);
+  });
+
   it("runs full intelligence path on good fixture data", () => {
     const fixture = loadMeanReversionFixture();
     const result = runMarketBrainPipeline({

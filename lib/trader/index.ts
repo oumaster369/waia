@@ -221,3 +221,6 @@ export {
   type TradingPermission,
 } from "@/lib/trader/intelligence";
 export { mapSignalToSubmitOrder, type MapSignalToSubmitOrderInput } from "@/lib/trader/paper";
+export * from "@/lib/trader/portfolio";
+export * from "@/lib/trader/guardian";
+export * from "@/lib/trader/exits";

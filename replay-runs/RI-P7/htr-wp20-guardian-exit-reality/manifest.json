@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "htr-macro-h-fixture-postgres-gate-final-corrective-evidence/v1",
+  "sourceGitSha": "077ea4379c191b4d0cd475b393d83326f4a3c0f2",
+  "sourceDirtyTree": false,
+  "files": [
+    "checkpoint-resume-result.json",
+    "closed-trade-open-qty-parity.json",
+    "default-path-runtime-proof.json",
+    "guardian-decisions.json",
+    "persisted-exit-reason-proof.json",
+    "submission-restrictions.json"
+  ],
+  "fileDigests": {
+    "guardian-decisions.json": "bb9f3e600f6f5f93ab63c77d9e00905841647767324b491ea0e402248dca25e3",
+    "submission-restrictions.json": "a21f6da2271bdb8fb7aeef4051c6677c83ae25638712b7851e91466d084a4539",
+    "persisted-exit-reason-proof.json": "0ee7b382379081ba00ae9568e1459cea1cd00b801eb5fb5c18989e67705ef9cd",
+    "default-path-runtime-proof.json": "d8f853b9a765fc7b3680cfaf959dfd771f2a8f19cd5c13872ac4b377f61f9825",
+    "checkpoint-resume-result.json": "1f5f24c90f97b034cd9180393d06483f1fe3ee3dcff8c19a08e210f717032320",
+    "closed-trade-open-qty-parity.json": "b7b8ee6bee5bdeb7c0a1f4bd5418dbfc62ef9e461ce766849c7c20c1945133a4"
+  },
+  "semanticDigest": "e5fa84d6e1f913d2a43cd084a95a07fa3e7a40b356a141d4768b2c95e9ce1873",
+  "manifestDigest": "a65bbd936680974108b76f02660d9295f0c2c83874d021b9b83681ec8144a515"
+}

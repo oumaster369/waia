@@ -1,5 +1,5 @@
-import { isAddressActiveForAttribution } from "@/lib/waia-core/payment-addresses";
-import { IllegalPaymentTransitionError } from "@/lib/waia-core/payments";
+import { isAddressActiveForAttribution } from "@/lib/waia-core/payment-addresses/payment-address-lifecycle.transitions";
+import { IllegalPaymentTransitionError } from "@/lib/waia-core/payments/payment.errors";
 import { buildSettlementEvidence } from "@/lib/waia-core/payment-watcher/build-settlement-evidence";
 import {
   computeConfirmationDepth,
@@ -36,6 +36,44 @@ function emptyReport(
   };
 }
 
+/** Recover orphaned leases when scan lag exceeds the health stale threshold. */
+export async function tryAcquireWatcherLeaseWithStaleRecovery(
+  deps: WatcherDeps,
+  now: Date = deps.now?.() ?? new Date(),
+): Promise<boolean> {
+  const { config } = deps;
+  const acquired = await deps.checkpointRepository.tryAcquireLease(
+    config.network,
+    config.leaseTtlSeconds,
+  );
+  if (acquired) {
+    return true;
+  }
+
+  const checkpoint = await deps.checkpointRepository.load(config.network);
+  if (!checkpoint?.leaseUntil) {
+    return false;
+  }
+
+  const scanLagSeconds = Math.max(
+    0,
+    Math.floor((now.getTime() - checkpoint.lastScannedAt.getTime()) / 1000),
+  );
+  const leaseStillActive = checkpoint.leaseUntil.getTime() > now.getTime();
+  if (!leaseStillActive || scanLagSeconds < config.staleThresholdSeconds) {
+    return false;
+  }
+
+  deps.logger.log({
+    event: "waia_payment_watcher",
+    phase: "lease_stale_recovery",
+    network: config.network,
+    scan_lag_seconds: scanLagSeconds,
+  });
+  await deps.checkpointRepository.releaseLease(config.network);
+  return deps.checkpointRepository.tryAcquireLease(config.network, config.leaseTtlSeconds);
+}
+
 /** Host-agnostic watcher cycle entrypoint (ADR-0014). */
 export async function runWatcherCycle(deps: WatcherDeps): Promise<CycleReport> {
   const startMs = Date.now();
@@ -52,10 +90,12 @@ export async function runWatcherCycle(deps: WatcherDeps): Promise<CycleReport> {
     return emptyReport(deps, "noop_disabled", startMs);
   }
 
-  const leaseAcquired = await deps.checkpointRepository.tryAcquireLease(
-    config.network,
-    config.leaseTtlSeconds,
-  );
+  let checkpoint = await deps.checkpointRepository.load(config.network);
+  if (!checkpoint) {
+    checkpoint = await deps.checkpointRepository.bootstrap(config.network, config.startBlock);
+  }
+
+  const leaseAcquired = await tryAcquireWatcherLeaseWithStaleRecovery(deps, now);
   if (!leaseAcquired) {
     deps.logger.log({
       event: "waia_payment_watcher",
@@ -73,10 +113,7 @@ export async function runWatcherCycle(deps: WatcherDeps): Promise<CycleReport> {
   let toBlock: string | null = null;
 
   try {
-    let checkpoint = await deps.checkpointRepository.load(config.network);
-    if (!checkpoint) {
-      checkpoint = await deps.checkpointRepository.bootstrap(config.network, config.startBlock);
-    }
+    checkpoint = (await deps.checkpointRepository.load(config.network)) ?? checkpoint;
 
     const tipResult = await deps.chainAdapter.getTipBlock();
     if (!tipResult.ok) {

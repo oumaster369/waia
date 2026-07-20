@@ -1,0 +1,11 @@
+-- DEE-415 / HTR-WP21: trader knowledge confidence update record RLS (ADR-0007)
+
+ALTER TABLE public.trader_knowledge_confidence_update_record ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS trader_knowledge_confidence_update_record_deny_authenticated_select ON public.trader_knowledge_confidence_update_record;
+CREATE POLICY trader_knowledge_confidence_update_record_deny_authenticated_select ON public.trader_knowledge_confidence_update_record FOR SELECT TO authenticated, anon USING (false);
+DROP POLICY IF EXISTS trader_knowledge_confidence_update_record_deny_authenticated_insert ON public.trader_knowledge_confidence_update_record;
+CREATE POLICY trader_knowledge_confidence_update_record_deny_authenticated_insert ON public.trader_knowledge_confidence_update_record FOR INSERT TO authenticated, anon WITH CHECK (false);
+DROP POLICY IF EXISTS trader_knowledge_confidence_update_record_deny_authenticated_update ON public.trader_knowledge_confidence_update_record;
+CREATE POLICY trader_knowledge_confidence_update_record_deny_authenticated_update ON public.trader_knowledge_confidence_update_record FOR UPDATE TO authenticated, anon USING (false);
+DROP POLICY IF EXISTS trader_knowledge_confidence_update_record_deny_authenticated_delete ON public.trader_knowledge_confidence_update_record;
+CREATE POLICY trader_knowledge_confidence_update_record_deny_authenticated_delete ON public.trader_knowledge_confidence_update_record FOR DELETE TO authenticated, anon USING (false);

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "htr-wp04-evidence-manifest/v1",
+  "runId": "htr-wp05-checkpoint-resume-run",
+  "terminalState": "STREAMING_EVIDENCE_OK",
+  "chainDigest": "47d5688c3986eb02ad22d840975404415a2cb958f087b1fab268219ac85e3cfa",
+  "expectedCycleCount": 81,
+  "chunkCount": 3,
+  "sealedThroughCycleIndex": 80,
+  "timelineChunkCount": 2,
+  "provenance": {
+    "gitSha": "f90faa9f02e12b3a4a724311cd4b7805f9c12f7c",
+    "environment": "htr-wp05-checkpoint-resume-harness",
+    "dbConnectionMode": null,
+    "sealedAt": "2026-07-12T17:51:37.486Z",
+    "sealReason": null
+  }
+}

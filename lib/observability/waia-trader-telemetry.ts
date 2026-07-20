@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createAlertRouterSink } from "@/lib/observability/alerting/alert-router";
+
 /**
  * Structured stdout telemetry for trader service-layer events (DEE-253 / AT-E15 S1).
  *
@@ -8,7 +10,12 @@ import "server-only";
  * @see docs/migrations/DEE-222-TRADER-TELEMETRY-SCHEMA.md — field meanings and grep examples.
  * @see docs/migrations/DEE-95G-RUNTIME-TELEMETRY-RUNBOOK.md — where stdout logs appear.
  */
-export type WaiaTraderEventKind = "execution" | "reconciliation" | "counter" | "paper_loop";
+export type WaiaTraderEventKind =
+  | "execution"
+  | "reconciliation"
+  | "counter"
+  | "paper_loop"
+  | "reasoning";
 
 export type WaiaTraderTelemetrySeverity = "info" | "critical";
 
@@ -61,9 +68,11 @@ export const FORBIDDEN_TRADER_TELEMETRY_KEYS = [
 
 const forbiddenKeySet = new Set<string>(FORBIDDEN_TRADER_TELEMETRY_KEYS);
 
-const defaultSink: WaiaTraderTelemetrySink = (line) => {
+const stdoutSink: WaiaTraderTelemetrySink = (line) => {
   console.info(line);
 };
+
+const defaultSink: WaiaTraderTelemetrySink = createAlertRouterSink(stdoutSink);
 
 export function safeTraderTelemetryErrorClass(err: unknown): string | undefined {
   if (err instanceof Error) {

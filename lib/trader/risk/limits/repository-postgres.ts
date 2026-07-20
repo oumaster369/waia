@@ -1,4 +1,6 @@
-import "server-only";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
+
+enforceServerOnly();
 
 import { and, eq } from "drizzle-orm";
 
@@ -35,6 +37,9 @@ function mapRow(row: typeof pgSchema.traderRiskLimits.$inferSelect): RiskLimitsR
     maxDrawdown: row.maxDrawdown,
     maxOpenOrders: row.maxOpenOrders,
     maxQuoteExposure: row.maxQuoteExposure,
+    maxRiskPerTradePct: row.maxRiskPerTradePct,
+    maxPortfolioRiskPct: row.maxPortfolioRiskPct,
+    maxConcurrentPositions: row.maxConcurrentPositions,
     configVersion: row.configVersion,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -61,6 +66,9 @@ function rowValuesFromInput(input: UpsertRiskLimitsRowInput) {
     maxDrawdown: input.maxDrawdown,
     maxOpenOrders: input.maxOpenOrders,
     maxQuoteExposure: input.maxQuoteExposure,
+    maxRiskPerTradePct: input.maxRiskPerTradePct,
+    maxPortfolioRiskPct: input.maxPortfolioRiskPct,
+    maxConcurrentPositions: input.maxConcurrentPositions,
     configVersion: input.configVersion,
   };
 }

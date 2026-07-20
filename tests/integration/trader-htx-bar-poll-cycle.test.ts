@@ -7,13 +7,13 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { getDb } from "@/db/client";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
-import { HTX_ENDPOINTS } from "@/lib/trader/connectors/htx/config";
 import type { HtxKlineResponse, HtxMarketMergedResponse } from "@/lib/trader/connectors/htx/types";
 import {
   createOrderExecutionServiceFromDeps,
   createSqliteOrderRepository,
   createSqliteReconciliationService,
 } from "@/lib/trader/execution";
+import { CANONICAL_MARKET_QUESTION_IDS } from "@/lib/trader/intelligence/market-understanding.types";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
 import { runPaperCycleOnce, runPollPaperCycles } from "@/lib/trader/paper/paper-cycle-runner";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
@@ -29,6 +29,7 @@ import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store
 import type { TraderAuditInput } from "@/lib/trader/types";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
+import { htxPollSourceOptions } from "@/tests/helpers/htx-gateway-mock-fetch";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
@@ -51,26 +52,6 @@ type HtxKlineFixture = {
 function loadHtxFixture(): HtxKlineFixture {
   const filePath = path.join(process.cwd(), "tests/fixtures/trader/htx-kline-btcusdt-1m.json");
   return JSON.parse(readFileSync(filePath, "utf8")) as HtxKlineFixture;
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function createMockFetch(fixture: HtxKlineFixture) {
-  return (async (input: RequestInfo | URL) => {
-    const url = new URL(typeof input === "string" ? input : input.toString());
-    if (url.pathname.endsWith(HTX_ENDPOINTS.marketHistoryKline)) {
-      return jsonResponse(fixture.kline);
-    }
-    if (url.pathname.endsWith(HTX_ENDPOINTS.marketDetailMerged)) {
-      return jsonResponse(fixture.merged);
-    }
-    throw new Error(`Unexpected fetch: ${url.toString()}`);
-  }) as typeof fetch;
 }
 
 function buildPaperCycleDeps(
@@ -143,21 +124,27 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);
     const fixture = loadHtxFixture();
-    const poll = new HtxBarPollSource({
-      fetchImpl: createMockFetch(fixture),
-      cycleIdPrefix: "test-htx-poll",
-    });
+    const poll = new HtxBarPollSource(
+      htxPollSourceOptions(fixture, { cycleIdPrefix: "test-htx-poll" }),
+    );
 
-    const snapshot = await poll.fetchSnapshot();
+    const bundle = await poll.fetchEvaluationBundle();
     const result = await runPaperCycleOnce(deps, {
       context,
-      snapshot,
+      snapshot: bundle.snapshot,
+      fusedContext: bundle.fusedContext,
       accountKey: "acct-htx-poll",
       defaultQuantity: "0.01",
       executionMode: "mock",
       accountState: EMPTY_STATE,
       newId: () => crypto.randomUUID(),
     });
+
+    expect(result.evaluation.understanding).toBeDefined();
+    expect(result.evaluation.understanding!.questionEvaluations).toHaveLength(11);
+    expect(
+      result.evaluation.understanding!.questionEvaluations.map((q) => q.questionId).sort(),
+    ).toEqual([...CANONICAL_MARKET_QUESTION_IDS].sort());
 
     expect(result.evaluation.signal.outcome).toBe("SIGNAL");
     expect(result.submitBlocked).toBe(false);
@@ -178,10 +165,9 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);
     const fixture = loadHtxFixture();
-    const poll = new HtxBarPollSource({
-      fetchImpl: createMockFetch(fixture),
-      cycleIdPrefix: "test-htx-poll-multi",
-    });
+    const poll = new HtxBarPollSource(
+      htxPollSourceOptions(fixture, { cycleIdPrefix: "test-htx-poll-multi" }),
+    );
 
     const { results } = await runPollPaperCycles({
       deps,
@@ -199,6 +185,12 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
 
     const idempotencyKeys = new Set<string>();
     for (const result of results) {
+      expect(result.evaluation.understanding).toBeDefined();
+      expect(result.evaluation.understanding!.questionEvaluations).toHaveLength(11);
+      expect(
+        result.evaluation.understanding!.questionEvaluations.map((q) => q.questionId).sort(),
+      ).toEqual([...CANONICAL_MARKET_QUESTION_IDS].sort());
+
       expect(result.evaluation.signal.outcome).toBe("SIGNAL");
       expect(result.submitBlocked).toBe(false);
       expect(result.execution?.status).toBe("submitted");

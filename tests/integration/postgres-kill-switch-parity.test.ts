@@ -18,14 +18,15 @@ import {
 import { killSwitchReasonCodes } from "@/lib/trader/risk/reason-codes";
 import { createPostgresRiskEngineService } from "@/lib/trader/risk/risk-engine-service";
 import { traderAuditActions } from "@/lib/trader/types";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
+import { seedHtrPostgresUser } from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 
-const USER_A = "00000000-0000-4000-8000-0000000243f1";
+const USER_A = "00000000-0000-4000-8022-000000024301";
 const SERVICE_ACTOR = { actorType: "service" as const, actorId: null };
 const OWNER_ACTOR = { actorType: "user" as const, actorId: USER_A };
 
@@ -39,7 +40,7 @@ describe.skipIf(!integrationEnabled || !url)("postgres kill switch parity (DEE-2
       await sql.unsafe(`ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_block_delete`);
       await sql.unsafe(
         `DELETE FROM audit_logs WHERE organization_id = $1 OR entity_id IN (
-        SELECT id FROM trader_kill_switches WHERE organization_id = $1 OR organization_id IS NULL
+        SELECT id::text FROM trader_kill_switches WHERE organization_id = $1 OR organization_id IS NULL
       )`,
         [orgId],
       );
@@ -60,21 +61,11 @@ describe.skipIf(!integrationEnabled || !url)("postgres kill switch parity (DEE-2
   }
 
   beforeAll(async () => {
+    await verifyHtrPostgresConnectionIdentity();
     await cleanup();
-    const sql = postgres(url!, { max: 1 });
-    try {
-      await sql.unsafe(`INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [
-        USER_A,
-      ]);
-    } finally {
-      await sql.end({ timeout: 5 });
-    }
+    orgA = await seedHtrPostgresUser(url!, USER_A, "Kill Switch Postgres Parity");
 
     const db = getPostgresDrizzle();
-    orgA = await ensureUserCoreSeedPostgres(db, {
-      userId: USER_A,
-      displayName: "Kill Switch Postgres Parity",
-    });
   });
 
   afterAll(async () => {
@@ -125,6 +116,16 @@ describe.skipIf(!integrationEnabled || !url)("postgres kill switch parity (DEE-2
   });
 
   it("risk engine enforces tripped org switch via postgres resolver (DEE-244)", async () => {
+    const sql = postgres(url!, { max: 1 });
+    try {
+      await sql.unsafe(
+        `DELETE FROM trader_kill_switches WHERE organization_id = $1 OR organization_id IS NULL`,
+        [orgA],
+      );
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+
     const db = getPostgresDrizzle();
     const killSwitchService = createPostgresKillSwitchService(db);
 

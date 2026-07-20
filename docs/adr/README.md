@@ -25,5 +25,13 @@ See policy: [`../waia-governance/ADR-POLICY.md`](../waia-governance/ADR-POLICY.m
 | [0015](0015-tron-settlement-finality-rpc-trust-doctrine.md) | Tron Settlement, Finality, and RPC Trust Doctrine | Accepted | AT-E12 S3; `DEE-319` |
 | [0016](0016-settlement-exception-reconciliation.md) | Settlement Exception Reconciliation (immutable EXCEPTION row, separate reconciliation aggregate, derived effective outcome) | Accepted | AT-E12 S3-C; `DEE-216`, `DEE-323` |
 | [0017](0017-postgres-only-trader-mvp.md) | Postgres-only for new AI-TRADER MVP code (Execution Freeze) | Accepted | P1 NEW-2 / `DEE-328`; ADR-0002 partial supersession |
+| [0018](0018-research-intelligence-market-knowledge-base.md) | Research Intelligence Layer & Market Knowledge Base | Accepted | RI program M11; ADR-0010 amendment |
+| [0019](0019-ai-operator-intelligence-authority.md) | AI Operator Intelligence authority boundaries (recommend-only) | Accepted | RI-P5; ADR-0011 |
+| [0020](0020-m8-discovery-architecture-no-reinforcement.md) | M8 Discovery Architecture & No-Reinforcement Boundaries | Accepted | DEE-383; M8 program |
+| [0021](0021-deterministic-research-replay-clock-and-state-isolation.md) | Deterministic Research Replay Clock & State Isolation | Accepted | DEE-397; Pre-Repeat-M9 Remediation PR1 |
+| [0022](0022-content-bound-operator-authorization-and-idempotent-dataset-lifecycle.md) | Content-Bound Operator Authorization & Idempotent Research Dataset Lifecycle | Accepted | DEE-398; Pre-Repeat-M9 Remediation PR2 |
+| [0023](0023-execution-server-ai-trader-only-execution-plane.md) | Execution Server as AI-TRADER-only execution plane | Accepted | DEE-406; vNext Slice D1 |
 
 Add rows as new decisions land.**Superseded** decisions keep file for history — index notes replacement.
+
+**Proposed (not yet authored):** **ADR-0024** — Roadmap autopilot activation (read-only selector + reconciliation proposer; human merge gate retained). Preparation contract: [`../waia-governance/ROADMAP-AUTOPILOT.md`](../waia-governance/ROADMAP-AUTOPILOT.md) (DEE-410; vNext Slice H). Author ADR only when an activation slice is Architect-approved — not in Slice H.

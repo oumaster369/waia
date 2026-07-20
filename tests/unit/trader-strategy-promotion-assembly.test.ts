@@ -6,6 +6,7 @@ import type {
   OrderRow,
 } from "@/lib/trader/execution/order-repository.types";
 import { buildPaperEvaluationExportDocument } from "@/lib/trader/paper/build-paper-evaluation-export";
+import { buildValidResearchEvidenceDocument } from "@/tests/helpers/build-research-evidence-fixture";
 import {
   assembleStrategyPromotionRecord,
   StrategyPromotionValidationError,
@@ -83,6 +84,7 @@ function mockRepository(orders: OrderRow[]): OrderRepository {
     ),
     transitionOrder: vi.fn(),
     recordFill: vi.fn(),
+    recordFillProgress: vi.fn(),
     listEvents: vi.fn(),
     listFills: vi.fn(async (_context, orderId) => fillsByOrderId[orderId] ?? []),
   };
@@ -96,7 +98,7 @@ async function buildValidEvidenceDocument() {
     orderRepository: mockRepository([buy, sell]),
     window: { start: new Date(100), end: new Date(200) },
     strategySignalIds: [STRATEGY_SIGNAL],
-    executionMode: "mock",
+    executionMode: "paper",
     exportedAt: EXPORTED_AT,
   });
 }
@@ -113,6 +115,7 @@ function baseAssemblyInput(document: Awaited<ReturnType<typeof buildValidEvidenc
     failureModes: ["liquidity vacuum"],
     reasonCodeDistribution: { STRAT_MR_ZSCORE_BUY: 3 },
     paperTradingEvidenceDocument: document,
+    researchEvidenceDocument: buildValidResearchEvidenceDocument(ORG_A),
     confidenceAttestation: {
       edgeNetOfCosts: "Net edge after costs.",
       liveTracksPaper: "Live should track paper.",

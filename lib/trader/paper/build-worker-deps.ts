@@ -1,11 +1,6 @@
-import { createRequire } from "node:module";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
 
-const require = createRequire(import.meta.url);
-if (process.env.VITEST !== "true") {
-  require("server-only");
-}
-
-import { getCloudflareContext } from "@opennextjs/cloudflare";
+enforceServerOnly();
 
 import { createPerRequestPostgresRuntime } from "@/db/postgres-client";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
@@ -20,28 +15,13 @@ import type {
   PaperLoopCycleDeps,
   PaperLoopWorkerConfig,
 } from "@/lib/trader/paper/paper-loop-worker.types";
+import { DEFAULT_PORTFOLIO_RUN_CONFIG } from "@/lib/trader/portfolio/portfolio-run-config.types";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import { createPostgresRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
 import type { TraderAuditInput } from "@/lib/trader/types";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
-
-function mergeEnv(explicitEnv?: Record<string, unknown>): Record<string, unknown> {
-  if (explicitEnv) {
-    for (const [key, value] of Object.entries(process.env)) {
-      if (explicitEnv[key] === undefined && value !== undefined) {
-        explicitEnv[key] = value;
-      }
-    }
-    return explicitEnv;
-  }
-  try {
-    const cfEnv = getCloudflareContext().env as unknown as Record<string, unknown>;
-    return { ...process.env, ...cfEnv };
-  } catch {
-    return { ...process.env };
-  }
-}
+import { bridgeTraderCronEnvToProcess, mergeCronEnv } from "@/lib/trader/cron/worker-cron-env";
 
 function parseEnabled(raw: unknown): boolean {
   if (typeof raw !== "string") {
@@ -66,6 +46,16 @@ export function loadPaperLoopConfig(env: Record<string, unknown>): PaperLoopWork
     env.PAPER_LOOP_CYCLE_ID_PREFIX.trim() !== ""
       ? env.PAPER_LOOP_CYCLE_ID_PREFIX.trim()
       : "paper-loop-worker";
+  const startingBalanceUsdt =
+    typeof env.PAPER_LOOP_STARTING_BALANCE_USDT === "string" &&
+    env.PAPER_LOOP_STARTING_BALANCE_USDT.trim() !== ""
+      ? env.PAPER_LOOP_STARTING_BALANCE_USDT.trim()
+      : DEFAULT_PORTFOLIO_RUN_CONFIG.startingBalanceUsdt;
+  const defaultStopDistancePct =
+    typeof env.PAPER_LOOP_DEFAULT_STOP_DISTANCE_PCT === "string" &&
+    env.PAPER_LOOP_DEFAULT_STOP_DISTANCE_PCT.trim() !== ""
+      ? env.PAPER_LOOP_DEFAULT_STOP_DISTANCE_PCT.trim()
+      : DEFAULT_PORTFOLIO_RUN_CONFIG.defaultStopDistancePct;
 
   return {
     enabled:
@@ -73,6 +63,8 @@ export function loadPaperLoopConfig(env: Record<string, unknown>): PaperLoopWork
     organizationId,
     accountKey,
     defaultQuantity,
+    startingBalanceUsdt,
+    defaultStopDistancePct,
     cycleIdPrefix,
     htxRestHost:
       typeof env.HTX_REST_HOST === "string" && env.HTX_REST_HOST.trim() !== ""
@@ -93,9 +85,15 @@ function createStdoutPaperLoopLogger(): PaperLoopCycleDeps["logger"] {
 export async function buildPaperLoopDepsFromEnv(
   explicitEnv?: Record<string, unknown>,
 ): Promise<{ deps: PaperLoopCycleDeps; dispose: () => Promise<void> }> {
-  const env = mergeEnv(explicitEnv);
+  const env = mergeCronEnv(explicitEnv);
+  bridgeTraderCronEnvToProcess(env);
   const config = loadPaperLoopConfig(env);
-  const runtime = await createPerRequestPostgresRuntime();
+  const postgresUrl =
+    typeof env.DATABASE_URL_POSTGRES === "string" ? env.DATABASE_URL_POSTGRES.trim() : "";
+  if (postgresUrl) {
+    process.env.DATABASE_URL_POSTGRES = postgresUrl;
+  }
+  const runtime = createPerRequestPostgresRuntime();
   const db = runtime.db;
   const orderRepository = createPostgresOrderRepository(db);
   const writeAudit = (input: TraderAuditInput) => writeTraderAuditLogPostgres(db, input);

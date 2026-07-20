@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createAlertRouterSink } from "@/lib/observability/alerting/alert-router";
 import type { PostgresDisposeOutcome } from "@/db/postgres-client";
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 
@@ -32,7 +33,30 @@ export type WaiaRuntimeRouteKey =
   | "trader_exchange_credentials_connect"
   | "trader_exchange_credentials_list"
   | "trader_exchange_credentials_sync_balances"
-  | "trader_balance_snapshots_list";
+  | "trader_balance_snapshots_list"
+  | "trader_research_runs_list"
+  | "trader_exchange_credentials_sync_positions"
+  | "trader_position_snapshots_list"
+  | "trader_exchange_credentials_sync_trades"
+  | "trader_trade_history_snapshots_list"
+  | "trader_admin_organizations_list"
+  | "trader_admin_audit_list"
+  | "trader_admin_runtime_health"
+  | "trader_admin_overview"
+  | "trader_admin_kill_switches"
+  | "trader_admin_kill_switch_commands"
+  | "trader_admin_org_live_enable"
+  | "trader_admin_org_live_enable_commands"
+  | "trader_admin_strategy_promotions"
+  | "trader_admin_strategy_promotion_commands"
+  | "trader_admin_invoices_list"
+  | "trader_admin_invoice_detail"
+  | "trader_admin_invoice_commands"
+  | "trader_admin_reporting_period_commands"
+  | "trader_admin_billing_disputes"
+  | "trader_admin_billing_dispute_commands"
+  | "trader_admin_account_status"
+  | "trader_admin_exchange_credentials";
 
 export type WaiaRuntimeRouteOutcome =
   | "success"
@@ -117,9 +141,11 @@ export type WaiaRuntimeRouteTelemetryPayload = {
 
 export type WaiaRuntimeRouteTelemetrySink = (line: string) => void;
 
-const defaultSink: WaiaRuntimeRouteTelemetrySink = (line) => {
+const stdoutSink: WaiaRuntimeRouteTelemetrySink = (line) => {
   console.info(line);
 };
+
+const defaultSink: WaiaRuntimeRouteTelemetrySink = createAlertRouterSink(stdoutSink);
 
 export function emitWaiaRuntimeRouteTelemetry(
   payload: WaiaRuntimeRouteTelemetryPayload,

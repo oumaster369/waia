@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { traderStrategyPromotionRecords } from "@/db/schema";
 import type { WaiaDb } from "@/db/types";
@@ -36,6 +36,12 @@ function mapRow(
     failureModes: parseJson<string[]>(row.failureModesJson),
     reasonCodeDistribution: parseJson<Record<string, number>>(row.reasonCodeDistributionJson),
     paperTradingEvidence: parseJson(row.paperTradingEvidenceJson),
+    researchEvidence: (() => {
+      if (!row.researchEvidenceJson) {
+        throw new Error("STRATEGY_PROMOTION_RESEARCH_EVIDENCE_NOT_PERSISTED");
+      }
+      return parseJson(row.researchEvidenceJson);
+    })(),
     evidenceContentDigest: row.evidenceContentDigest,
     confidenceAttestation: parseJson(row.confidenceAttestationJson),
     recordContentDigest: row.recordContentDigest,
@@ -69,6 +75,7 @@ function payloadToRowValues(input: InsertPromotionRecordInput) {
     failureModesJson: JSON.stringify(input.failureModes),
     reasonCodeDistributionJson: JSON.stringify(input.reasonCodeDistribution),
     paperTradingEvidenceJson: JSON.stringify(input.paperTradingEvidence),
+    researchEvidenceJson: JSON.stringify(input.researchEvidence),
     evidenceContentDigest: input.paperTradingEvidence.contentDigest,
     confidenceAttestationJson: JSON.stringify(input.confidenceAttestation),
     recordContentDigest: input.recordContentDigest,
@@ -154,6 +161,30 @@ export function getEffectivePromotionSqlite(
         eq(traderStrategyPromotionRecords.state, "EFFECTIVE"),
       ),
     )
+    .limit(1)
+    .all()[0];
+  return row ? mapRow(row) : null;
+}
+
+const pendingPromotionStates = ["PENDING_CONFIRM", "COOLING_OFF"] as const;
+
+export function getLatestPendingPromotionSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  strategyId: string,
+): StrategyPromotionRecordView | null {
+  const scoped = requireOrgContext(context.organizationId);
+  const row = db
+    .select()
+    .from(traderStrategyPromotionRecords)
+    .where(
+      and(
+        orgScopedWhere(traderStrategyPromotionRecords.organizationId, scoped),
+        eq(traderStrategyPromotionRecords.strategyId, strategyId),
+        inArray(traderStrategyPromotionRecords.state, [...pendingPromotionStates]),
+      ),
+    )
+    .orderBy(desc(traderStrategyPromotionRecords.requestedAt))
     .limit(1)
     .all()[0];
   return row ? mapRow(row) : null;

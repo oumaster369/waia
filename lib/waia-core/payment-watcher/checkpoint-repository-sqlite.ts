@@ -1,4 +1,6 @@
-import "server-only";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
+
+enforceServerOnly();
 
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 

@@ -1,0 +1,30 @@
+{
+  "guardianReason": "GUARDIAN_ACCOUNT_STOP",
+  "breachState": "NONE",
+  "runtimeCallOrder": [
+    {
+      "kind": "WP20_GUARDIAN_EVALUATED",
+      "at": "2026-01-01T00:20:00.000Z",
+      "cycleIndex": null,
+      "detail": "NONE"
+    },
+    {
+      "kind": "WP20_GUARDIAN_EVALUATED",
+      "at": "2026-01-01T00:21:00.000Z",
+      "cycleIndex": null,
+      "detail": "NONE"
+    },
+    {
+      "kind": "WP20_GUARDIAN_EVALUATED",
+      "at": "2026-01-01T00:22:00.000Z",
+      "cycleIndex": null,
+      "detail": "NONE"
+    },
+    {
+      "kind": "WP20_GUARDIAN_EVALUATED",
+      "at": "2026-01-01T00:23:00.000Z",
+      "cycleIndex": null,
+      "detail": "NONE"
+    }
+  ]
+}

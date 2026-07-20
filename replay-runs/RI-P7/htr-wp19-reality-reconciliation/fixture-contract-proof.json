@@ -1,0 +1,34 @@
+{
+  "fixturePath": "tests/fixtures/trader/m9-v0.1.6-partial-inventory-mismatch.json",
+  "lifecycleFields": [
+    "lots",
+    "expectedPartialQty",
+    "expectedTotalExitQty",
+    "expectedPartialLotId",
+    "canonicalOpenQty"
+  ],
+  "wp19Fields": [
+    "fixtureId",
+    "symbol",
+    "partialLotQty",
+    "expectedReconciliation",
+    "canonicalOpenQty"
+  ],
+  "expectedPartialQty": "0.00231991",
+  "consumers": [
+    "tests/unit/trader-lifecycle-open-qty-parity.test.ts",
+    "tests/unit/trader-htr-m9-partial-inventory-regression.test.ts",
+    "tests/unit/trader-m9-fixture-contract.test.ts"
+  ],
+  "lifecycleParity": {
+    "pass": 4,
+    "fail": 0,
+    "skip": 0,
+    "tests": [
+      "passes when lifecycle open lots match canonical inventory walk",
+      "fails closed on M9-class inventory mismatch fixture",
+      "computeExitQuantity emits inventory-capped partial for second lot in batch",
+      "multi-lot FIFO partial fixture leaves expected remainder after partial sell"
+    ]
+  }
+}

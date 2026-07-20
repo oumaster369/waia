@@ -1,4 +1,6 @@
-import "server-only";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
+
+enforceServerOnly();
 
 import { and, eq, max, notInArray } from "drizzle-orm";
 
@@ -10,6 +12,9 @@ import {
   OrderNotFoundError,
   OrderVersionConflictError,
 } from "@/lib/trader/execution/order-repository.errors";
+import { DeterministicExecutionIdCollisionError } from "@/lib/trader/execution/deterministic-execution-id";
+import { EXECUTION_FACT_KIND_HISTORICAL_SIMULATED } from "@/lib/trader/execution/historical-execution-model.types";
+import { assertCompleteHistoricalFillEconomics } from "@/lib/trader/execution/fill-economics";
 import {
   fillPayloadMatches,
   isUniqueConstraintError,
@@ -20,6 +25,7 @@ import {
   type OrderRow,
   type OpenOrdersFilter,
   type RecordFillInput,
+  type RecordFillProgressInput,
   type TransitionOrderInput,
 } from "@/lib/trader/execution/order-repository.types";
 import {
@@ -34,6 +40,7 @@ import {
 
 type PgReadExecutor = Pick<WaiaPostgresDb, "select">;
 type PgWriteExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
+type PgDeleteExecutor = Pick<WaiaPostgresDb, "delete">;
 
 function mapOrderRow(row: typeof pgSchema.traderOrders.$inferSelect): OrderRow {
   return {
@@ -398,12 +405,107 @@ export async function transitionOrderPostgres(
   return updated;
 }
 
+async function insertHistoricalEconomicsIfPresent(
+  ex: PgWriteExecutor,
+  scoped: ReturnType<typeof requireOrgContext>,
+  input: RecordFillInput,
+  fillId: string,
+): Promise<void> {
+  if (input.executionFactKind !== EXECUTION_FACT_KIND_HISTORICAL_SIMULATED || !input.economicsRow) {
+    return;
+  }
+  const row = input.economicsRow;
+  const existingEconomics = await ex
+    .select()
+    .from(pgSchema.traderFillExecutionEconomics)
+    .where(
+      and(
+        eq(pgSchema.traderFillExecutionEconomics.organizationId, scoped.organizationId),
+        eq(pgSchema.traderFillExecutionEconomics.fillId, fillId),
+      ),
+    )
+    .limit(1);
+
+  if (existingEconomics[0]) {
+    if (existingEconomics[0].economicsContentDigest !== row.economicsContentDigest) {
+      throw new DeterministicExecutionIdCollisionError(
+        `[trader] economics content conflict for fill ${fillId}`,
+      );
+    }
+    return;
+  }
+
+  await ex.insert(pgSchema.traderFillExecutionEconomics).values({
+    id: row.id,
+    organizationId: scoped.organizationId,
+    fillId,
+    orderId: row.orderId,
+    exchangeTradeId: row.exchangeTradeId,
+    fillSequence: row.fillSequence,
+    symbol: row.symbol,
+    side: row.side,
+    quantity: row.quantity,
+    grossFillPrice: row.grossFillPrice,
+    grossNotional: row.grossNotional,
+    feeAmount: row.feeAmount,
+    feeAsset: row.feeAsset,
+    spreadCost: row.spreadCost,
+    impactSlippageCost: row.impactSlippageCost,
+    totalExecutionCost: row.totalExecutionCost,
+    netFillPrice: row.netFillPrice,
+    netCashEffect: row.netCashEffect,
+    remainingQuantityAfter: row.remainingQuantityAfter,
+    executionModelId: row.executionModelId,
+    executionModelSchemaVersion: row.executionModelSchemaVersion,
+    simulatorId: row.simulatorId,
+    simulatorVersion: row.simulatorVersion,
+    sourceBarTimestamp: row.sourceBarTimestamp,
+    sourceBarIndex: row.sourceBarIndex,
+    acceptedAt: row.acceptedAt,
+    fillTimestamp: row.fillTimestamp,
+    submitLatencyMs: row.submitLatencyMs,
+    cancelLatencyMs: row.cancelLatencyMs,
+    executionFactKind: row.executionFactKind,
+    economicsContentDigest: row.economicsContentDigest,
+    schemaVersion: row.schemaVersion,
+  });
+}
+
 export async function recordFillPostgres(
   ex: PgWriteExecutor,
   context: OrgContext,
   input: RecordFillInput,
 ): Promise<FillRow> {
   const scoped = requireOrgContext(context.organizationId);
+
+  if (input.executionFactKind === EXECUTION_FACT_KIND_HISTORICAL_SIMULATED) {
+    assertCompleteHistoricalFillEconomics(input);
+  }
+
+  const fillId = input.fillId;
+  if (fillId) {
+    const existingByFillId = await ex
+      .select()
+      .from(pgSchema.traderFills)
+      .where(
+        and(
+          eq(pgSchema.traderFills.id, fillId),
+          orgScopedWhere(pgSchema.traderFills.organizationId, scoped),
+        ),
+      )
+      .limit(1);
+    if (existingByFillId[0]) {
+      const mapped = mapFillRow(existingByFillId[0]);
+      if (!fillPayloadMatches(mapped, input)) {
+        throw new DeterministicExecutionIdCollisionError(
+          `[trader] fill id content conflict for ${fillId}`,
+        );
+      }
+      await insertHistoricalEconomicsIfPresent(ex, scoped, input, fillId);
+      return mapped;
+    }
+  }
+
   const existingRows = await ex
     .select()
     .from(pgSchema.traderFills)
@@ -429,7 +531,7 @@ export async function recordFillPostgres(
     throw new OrderNotFoundError(input.orderId);
   }
 
-  const id = crypto.randomUUID();
+  const id = fillId ?? crypto.randomUUID();
   const now = new Date();
   const fee = input.fee ?? "0";
   const feeAsset = input.feeAsset ?? "";
@@ -447,6 +549,7 @@ export async function recordFillPostgres(
       executedAt: input.executedAt,
       createdAt: now,
     });
+    await insertHistoricalEconomicsIfPresent(ex, scoped, input, id);
   } catch (error) {
     if (!isPgUniqueViolation(error)) {
       throw error;
@@ -487,9 +590,92 @@ export async function recordFillPostgres(
   return mapFillRow(insertedRows[0]);
 }
 
+export async function recordFillProgressPostgres(
+  ex: PgWriteExecutor,
+  context: OrgContext,
+  input: RecordFillProgressInput,
+): Promise<FillRow> {
+  assertCompleteHistoricalFillEconomics(input);
+  const existing = await getOrderByIdPostgres(ex, context, input.orderId);
+  if (!existing) {
+    throw new OrderNotFoundError(input.orderId);
+  }
+
+  const fillRow = await recordFillPostgres(ex, context, input);
+  const scoped = requireOrgContext(context.organizationId);
+  const now = new Date();
+
+  const updateResult = await ex
+    .update(pgSchema.traderOrders)
+    .set({
+      filledQuantity: input.filledQuantity,
+      avgFillPrice: input.avgFillPrice,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(pgSchema.traderOrders.id, input.orderId),
+        orgScopedWhere(pgSchema.traderOrders.organizationId, scoped),
+      ),
+    )
+    .returning();
+
+  if (updateResult.length === 0) {
+    throw new OrderNotFoundError(input.orderId);
+  }
+
+  const maxSeqRows = await ex
+    .select({ maxSeq: max(pgSchema.traderOrderEvents.seq) })
+    .from(pgSchema.traderOrderEvents)
+    .where(
+      and(
+        eq(pgSchema.traderOrderEvents.orderId, input.orderId),
+        orgScopedWhere(pgSchema.traderOrderEvents.organizationId, scoped),
+      ),
+    )
+    .limit(1);
+
+  const nextSeq = (maxSeqRows[0]?.maxSeq ?? 0) + 1;
+  await ex.insert(pgSchema.traderOrderEvents).values({
+    id: crypto.randomUUID(),
+    organizationId: scoped.organizationId,
+    orderId: input.orderId,
+    seq: nextSeq,
+    fromState: existing.state,
+    toState: existing.state,
+    eventType: "fill_recorded",
+    payload: null,
+    occurredAt: input.executedAt,
+  });
+
+  return fillRow;
+}
+
 function isPgUniqueViolation(error: unknown): boolean {
   if (error && typeof error === "object" && "code" in error) {
     return (error as { code: string }).code === "23505";
   }
   return isUniqueConstraintError(error);
+}
+
+/**
+ * Removes org-scoped mock execution orders for research backtest isolation.
+ *
+ * `trader_fills` and `trader_order_events` cascade via FK on `trader_orders`.
+ * Live and paper orders are never deleted.
+ */
+export async function deleteMockExecutionArtifactsForOrgPostgres(
+  ex: PgDeleteExecutor,
+  context: OrgContext,
+): Promise<void> {
+  const scoped = requireOrgContext(context.organizationId);
+
+  await ex
+    .delete(pgSchema.traderOrders)
+    .where(
+      and(
+        eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
+        eq(pgSchema.traderOrders.executionMode, "mock"),
+      ),
+    );
 }

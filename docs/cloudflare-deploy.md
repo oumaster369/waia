@@ -12,7 +12,7 @@ We do **not** use the legacy `@cloudflare/next-on-pages` flow.
 
 - Cloudflare account; ability to create a **Worker** (rename in [`wrangler.jsonc`](../wrangler.jsonc) `name` / `services[].service` if needed — they must match).
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) installed (already a **devDependency**).
-- `pnpm install` in `waia-app/`.
+- `pnpm install` at the repository root.
 - `wrangler login` before first deploy.
 
 ---
@@ -30,7 +30,7 @@ We do **not** use the legacy `@cloudflare/next-on-pages` flow.
 
 ## Commands
 
-From `waia-app/`:
+From the repository root:
 
 | Script | What it does |
 |--------|----------------|

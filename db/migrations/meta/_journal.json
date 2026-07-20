@@ -239,6 +239,48 @@
       "when": 1780000000018,
       "tag": "0033_trader_reconciliation_workflow",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1780000000020,
+      "tag": "0034_trader_position_trade_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1780000000023,
+      "tag": "0035_trader_billing_governance",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1780000000024,
+      "tag": "0036_trader_org_live_enable",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1780000000030,
+      "tag": "0037_strategy_promotion_research_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1780000000038,
+      "tag": "0038_trader_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1780000000039,
+      "tag": "0039_trader_portfolio_risk_limits",
+      "breakpoints": true
     }
   ]
 }

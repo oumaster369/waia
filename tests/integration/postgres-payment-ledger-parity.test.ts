@@ -15,14 +15,19 @@ import {
   verifyPaymentEventChain,
 } from "@/lib/waia-core/payments";
 import { listPaymentEventsForPaymentPostgres } from "@/lib/waia-core/payments/payment-events-repository-postgres";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
+import {
+  deleteHtrPostgresPaymentLedgerForOrg,
+  deleteHtrPostgresAuditLogsForOrg,
+  seedHtrPostgresUser,
+} from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 
-const USER_A = "00000000-0000-4000-8000-000000031201";
+const USER_A = "00000000-0000-4000-8022-000000031201";
 const INVOICE_ID = "invoice-312-pg";
 
 const SETTLEMENT = {
@@ -46,13 +51,18 @@ describe.skipIf(!integrationEnabled || !url)("postgres payment ledger parity (DE
   let orgA: string;
   let service: ReturnType<typeof createPostgresPaymentService>;
 
+  async function resetPaymentLedger(): Promise<void> {
+    const orgId = personalOrganizationIdFromUserId(USER_A);
+    await deleteHtrPostgresPaymentLedgerForOrg(url!, orgId);
+    await deleteHtrPostgresAuditLogsForOrg(url!, orgId);
+  }
+
   async function cleanup(): Promise<void> {
     const orgId = personalOrganizationIdFromUserId(USER_A);
+    await deleteHtrPostgresPaymentLedgerForOrg(url!, orgId);
+    await deleteHtrPostgresAuditLogsForOrg(url!, orgId);
     const sql = postgres(url!, { max: 1 });
     try {
-      await sql.unsafe(`DELETE FROM payment_events WHERE organization_id = $1`, [orgId]);
-      await sql.unsafe(`DELETE FROM payments WHERE organization_id = $1`, [orgId]);
-      await sql.unsafe(`DELETE FROM audit_logs WHERE organization_id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM organizations WHERE id = $1`, [orgId]);
       await sql.unsafe(`DELETE FROM user_platform_roles WHERE user_id = $1`, [USER_A]);
@@ -65,21 +75,11 @@ describe.skipIf(!integrationEnabled || !url)("postgres payment ledger parity (DE
   }
 
   beforeAll(async () => {
+    await verifyHtrPostgresConnectionIdentity();
     await cleanup();
-    const sql = postgres(url!, { max: 1 });
-    try {
-      await sql.unsafe(`INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [
-        USER_A,
-      ]);
-    } finally {
-      await sql.end({ timeout: 5 });
-    }
+    orgA = await seedHtrPostgresUser(url!, USER_A, "Payment Ledger Postgres Parity");
 
     const db = getPostgresDrizzle();
-    orgA = await ensureUserCoreSeedPostgres(db, {
-      userId: USER_A,
-      displayName: "Payment Ledger Postgres Parity",
-    });
     service = createPostgresPaymentService(db, {}, db);
   });
 
@@ -89,7 +89,7 @@ describe.skipIf(!integrationEnabled || !url)("postgres payment ledger parity (DE
   });
 
   it("detects, confirms, rebuilds, and verifies hash chain", async () => {
-    await cleanup();
+    await resetPaymentLedger();
     const context = requireOrgContext(orgA);
     const db = getPostgresDrizzle();
 

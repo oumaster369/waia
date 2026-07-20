@@ -1,0 +1,26 @@
+{
+  "strategyId": "liquidity_sweep_reversal_v0",
+  "strategyVersion": "0.1.0",
+  "gitCommitSha": "421805110c5f6dc481ad7cf7515b9854f4330046",
+  "hypothesis": "Liquidity sweep reversal on BTC/USDT spot: stop-run beyond recent range low/high followed by recovery triggers contrarian entry; recovery exit closes when price reclaims sweep level.",
+  "intendedRegime": "SWEEP_RECOVERY",
+  "costModel": {
+    "feesBps": "10",
+    "slippageBps": "30",
+    "notes": "Conservative HTX spot taker fee + elevated slippage for sweep-entry volatility."
+  },
+  "failureModes": [
+    "Continued trend after sweep (no recovery) -> stop-loss / kill-switch STOP_TRADING",
+    "False sweep in low-liquidity window -> max-quote-exposure cap blocks re-entry",
+    "Pattern miss rate spike -> strategy-not-allowed guard via CDE permission layer"
+  ],
+  "reasonCodeDistribution": {
+    "STRAT_LSR_SWEEP_ENTRY": 720,
+    "STRAT_LSR_RECOVERY_EXIT": 720
+  },
+  "confidenceAttestation": {
+    "edgeNetOfCosts": "720 closed round-trip trades over the 48h synthetic window demonstrate sweep-entry to recovery-exit sequencing under mock execution with clean reconciliation. Modeled 10bps fees + 30bps slippage are documented; promotion judgment reflects pattern integrity across golden fixture scenarios, not mock PnL.",
+    "liveTracksPaper": "Live Org-0 behavior is expected to preserve sweep-detection and recovery-exit ordering observed in paper replay; Risk Engine guards limit divergence impact.",
+    "downsideRiskBounded": "Continued-trend failure maps to STOP_TRADING; false-sweep and pattern-miss paths map to exposure cap and CDE strategy-not-allowed controls."
+  }
+}

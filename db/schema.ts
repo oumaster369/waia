@@ -11,7 +11,11 @@ import {
 import { sql } from "drizzle-orm";
 
 import {
+  accountStatusEventTypeEnum,
   auditActorTypeEnum,
+  invoiceCorrectionTypeEnum,
+  invoiceDisputeEventTypeEnum,
+  invoiceDisputeStatusEnum,
   organizationKindEnum,
   organizationMemberRoleEnum,
   paymentAddressEventTypeEnum,
@@ -426,6 +430,68 @@ export const traderBalanceSnapshots = sqliteTable(
   ],
 );
 
+/** AI-TRADER: point-in-time position snapshots (DEE-350 / AT-E2). */
+export const traderPositionSnapshots = sqliteTable(
+  "trader_position_snapshots",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: text("credential_id")
+      .notNull()
+      .references(() => exchangeCredentials.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    positions: text("positions").notNull(),
+    positionCount: integer("position_count").notNull(),
+    syncedAt: integer("synced_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_position_snapshots_org_cred_synced_idx").on(
+      t.organizationId,
+      t.credentialId,
+      t.syncedAt,
+    ),
+    index("trader_position_snapshots_org_synced_idx").on(t.organizationId, t.syncedAt),
+  ],
+);
+
+/** AI-TRADER: point-in-time trade-history snapshots (DEE-350 / AT-E2). */
+export const traderTradeHistorySnapshots = sqliteTable(
+  "trader_trade_history_snapshots",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    credentialId: text("credential_id")
+      .notNull()
+      .references(() => exchangeCredentials.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    symbol: text("symbol").notNull(),
+    trades: text("trades").notNull(),
+    tradeCount: integer("trade_count").notNull(),
+    syncedAt: integer("synced_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_trade_history_snapshots_org_cred_symbol_synced_idx").on(
+      t.organizationId,
+      t.credentialId,
+      t.symbol,
+      t.syncedAt,
+    ),
+    index("trader_trade_history_snapshots_org_synced_idx").on(t.organizationId, t.syncedAt),
+  ],
+);
+
 export const riskLimitsScopeTypeEnum = ["organization", "venue", "strategy"] as const;
 export type RiskLimitsScopeType = (typeof riskLimitsScopeTypeEnum)[number];
 
@@ -451,6 +517,9 @@ export const traderRiskLimits = sqliteTable(
     maxDrawdown: text("max_drawdown").notNull(),
     maxOpenOrders: integer("max_open_orders").notNull(),
     maxQuoteExposure: text("max_quote_exposure").notNull(),
+    maxRiskPerTradePct: text("max_risk_per_trade_pct").notNull().default("0.01"),
+    maxPortfolioRiskPct: text("max_portfolio_risk_pct").notNull().default("0.05"),
+    maxConcurrentPositions: integer("max_concurrent_positions").notNull().default(3),
     configVersion: integer("config_version").notNull().default(1),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
@@ -560,7 +629,7 @@ export type InvoiceStatusDb = (typeof invoiceStatusEnum)[number];
 export const accountStatusEnum = ["ACTIVE", "SUSPENDED"] as const;
 export type AccountStatusDb = (typeof accountStatusEnum)[number];
 
-export const accountStatusEventTypeEnum = ["REACTIVATED"] as const;
+export { accountStatusEventTypeEnum };
 export type AccountStatusEventTypeDb = (typeof accountStatusEventTypeEnum)[number];
 
 export const settlementOutcomeEnum = ["APPLIED", "EXCEPTION"] as const;
@@ -1118,6 +1187,7 @@ export const traderStrategyPromotionRecords = sqliteTable(
     failureModesJson: text("failure_modes_json").notNull(),
     reasonCodeDistributionJson: text("reason_code_distribution_json").notNull(),
     paperTradingEvidenceJson: text("paper_trading_evidence_json").notNull(),
+    researchEvidenceJson: text("research_evidence_json"),
     evidenceContentDigest: text("evidence_content_digest").notNull(),
     confidenceAttestationJson: text("confidence_attestation_json").notNull(),
     recordContentDigest: text("record_content_digest").notNull(),
@@ -1282,6 +1352,103 @@ export const traderInvoices = sqliteTable(
       t.exchangeAccountId,
       t.reportingPeriodId,
     ),
+  ],
+);
+
+/** AI-TRADER: invoice dispute projection (AT-E11 / DEE-215). */
+export const traderInvoiceDisputes = sqliteTable(
+  "trader_invoice_disputes",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => traderInvoices.id, { onDelete: "cascade" }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    status: text("status", { enum: [...invoiceDisputeStatusEnum] }).notNull(),
+    reason: text("reason"),
+    openedBy: text("opened_by"),
+    openedAt: integer("opened_at", { mode: "timestamp_ms" }).notNull(),
+    resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+    resolutionReason: text("resolution_reason"),
+    lastEventSeq: integer("last_event_seq").notNull(),
+    lastEventDigest: text("last_event_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_invoice_disputes_org_invoice_idx").on(t.organizationId, t.invoiceId),
+    index("trader_invoice_disputes_org_status_idx").on(t.organizationId, t.status),
+  ],
+);
+
+/** AI-TRADER: append-only invoice dispute event ledger (AT-E11 / DEE-215). */
+export const traderInvoiceDisputeEvents = sqliteTable(
+  "trader_invoice_dispute_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    disputeId: text("dispute_id")
+      .notNull()
+      .references(() => traderInvoiceDisputes.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: text("event_type", { enum: [...invoiceDisputeEventTypeEnum] }).notNull(),
+    reason: text("reason"),
+    actorType: text("actor_type", { enum: [...auditActorTypeEnum] }).notNull(),
+    actorId: text("actor_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("trader_invoice_dispute_events_dispute_seq_unique").on(t.disputeId, t.seq)],
+);
+
+/** AI-TRADER: append-only invoice correction ledger (AT-E11 / DEE-215). */
+export const traderInvoiceCorrections = sqliteTable(
+  "trader_invoice_corrections",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => traderInvoices.id, { onDelete: "cascade" }),
+    disputeId: text("dispute_id").references(() => traderInvoiceDisputes.id, {
+      onDelete: "set null",
+    }),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    reportingPeriodId: text("reporting_period_id").notNull(),
+    correctionType: text("correction_type", { enum: [...invoiceCorrectionTypeEnum] }).notNull(),
+    amount: text("amount").notNull(),
+    currency: text("currency").notNull(),
+    restoredHwm: text("restored_hwm").notNull(),
+    hwmLedgerEntryId: text("hwm_ledger_entry_id")
+      .notNull()
+      .references(() => traderHwmLedger.id, { onDelete: "restrict" }),
+    reason: text("reason").notNull(),
+    actorType: text("actor_type", { enum: [...auditActorTypeEnum] }).notNull(),
+    actorId: text("actor_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_invoice_corrections_org_invoice_idx").on(t.organizationId, t.invoiceId),
+    index("trader_invoice_corrections_dispute_idx").on(t.disputeId),
   ],
 );
 
@@ -1610,6 +1777,265 @@ export const traderFills = sqliteTable(
     uniqueIndex("trader_fills_order_exchange_trade_id_unique").on(t.orderId, t.exchangeTradeId),
     index("trader_fills_org_order_idx").on(t.organizationId, t.orderId),
   ],
+);
+
+export const positionSideEnum = ["LONG", "SHORT"] as const;
+export type PositionSideDb = (typeof positionSideEnum)[number];
+
+export const instrumentKindEnum = ["SPOT", "PERP", "FUTURE"] as const;
+export type InstrumentKindDb = (typeof instrumentKindEnum)[number];
+
+export const positionLotStateEnum = ["OPEN", "CLOSED"] as const;
+export type PositionLotStateDb = (typeof positionLotStateEnum)[number];
+
+export const tradeStateEnum = ["OPEN", "CLOSED", "FORCED_FLAT"] as const;
+export type TradeStateDb = (typeof tradeStateEnum)[number];
+
+export const tradeLegKindEnum = ["OPEN_FILL", "CLOSE_FILL", "FORCED_FLAT"] as const;
+export type TradeLegKindDb = (typeof tradeLegKindEnum)[number];
+
+export const lifecycleEventPhaseEnum = [
+  "SIGNAL_ACCEPTED",
+  "ORDER_SUBMITTED",
+  "ORDER_FILLED",
+  "TRADE_OPENED",
+  "TRADE_CLOSED",
+  "FORCED_FLAT",
+  "GUARDIAN_EVALUATED",
+  "GUARDIAN_EXIT_INTENT",
+] as const;
+export type LifecycleEventPhaseDb = (typeof lifecycleEventPhaseEnum)[number];
+
+export const lifecycleEntityTypeEnum = [
+  "TRADE",
+  "POSITION_LOT",
+  "ORDER",
+  "FILL",
+  "STRATEGY_SIGNAL",
+] as const;
+export type LifecycleEntityTypeDb = (typeof lifecycleEntityTypeEnum)[number];
+
+/** AI-TRADER: round-trip knowledge records (M1 / DEE-376). */
+export const traderTrades = sqliteTable(
+  "trader_trades",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    venue: text("venue").notNull(),
+    accountKey: text("account_key").notNull(),
+    positionSide: text("position_side", { enum: [...positionSideEnum] }).notNull(),
+    instrumentKind: text("instrument_kind", { enum: [...instrumentKindEnum] }).notNull(),
+    strategySignalId: text("strategy_signal_id").notNull(),
+    strategyId: text("strategy_id").notNull(),
+    strategyVersion: text("strategy_version").notNull(),
+    state: text("state", { enum: [...tradeStateEnum] }).notNull(),
+    semanticsVersion: text("semantics_version").notNull(),
+    openedAt: integer("opened_at", { mode: "timestamp_ms" }).notNull(),
+    closedAt: integer("closed_at", { mode: "timestamp_ms" }),
+    realizedPnl: text("realized_pnl").notNull().default("0"),
+    markedPnl: text("marked_pnl").notNull().default("0"),
+    hypothesisId: text("hypothesis_id"),
+    patternId: text("pattern_id"),
+    riskDecisionId: text("risk_decision_id").notNull(),
+    allocationDecisionId: text("allocation_decision_id"),
+    reasoningSessionId: text("reasoning_session_id"),
+    signalConfidence: text("signal_confidence"),
+    openingRegime: text("opening_regime"),
+    openingMsvId: text("opening_msv_id"),
+    openingFeatureSetId: text("opening_feature_set_id"),
+    closingMsvId: text("closing_msv_id"),
+    closingFeatureSetId: text("closing_feature_set_id"),
+    closingRegime: text("closing_regime"),
+    frozenAt: integer("frozen_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_trades_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_trades_org_strategy_signal_idx").on(t.organizationId, t.strategySignalId),
+    index("trader_trades_org_state_idx").on(t.organizationId, t.state),
+  ],
+);
+
+/** AI-TRADER: live position lots (M1 / DEE-376). */
+export const traderPositionLots = sqliteTable(
+  "trader_position_lots",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    venue: text("venue").notNull(),
+    accountKey: text("account_key").notNull(),
+    positionSide: text("position_side", { enum: [...positionSideEnum] }).notNull(),
+    instrumentKind: text("instrument_kind", { enum: [...instrumentKindEnum] }).notNull(),
+    strategySignalId: text("strategy_signal_id").notNull(),
+    state: text("state", { enum: [...positionLotStateEnum] }).notNull(),
+    openQty: text("open_qty").notNull(),
+    remainingQty: text("remaining_qty").notNull(),
+    avgCost: text("avg_cost").notNull(),
+    openedAt: integer("opened_at", { mode: "timestamp_ms" }).notNull(),
+    closedAt: integer("closed_at", { mode: "timestamp_ms" }),
+    tradeId: text("trade_id").notNull(),
+    hedgeGroupId: text("hedge_group_id"),
+    targetLotId: text("target_lot_id"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_position_lots_id_organization_unique").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.tradeId, t.organizationId],
+      foreignColumns: [traderTrades.id, traderTrades.organizationId],
+    }).onDelete("cascade"),
+    index("trader_position_lots_org_state_idx").on(t.organizationId, t.state),
+    index("trader_position_lots_org_symbol_strategy_idx").on(
+      t.organizationId,
+      t.symbol,
+      t.strategySignalId,
+    ),
+  ],
+);
+
+/** AI-TRADER: append-only trade legs (M1 / DEE-376). */
+export const traderTradeLegs = sqliteTable(
+  "trader_trade_legs",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    tradeId: text("trade_id").notNull(),
+    positionLotId: text("position_lot_id").notNull(),
+    kind: text("kind", { enum: [...tradeLegKindEnum] }).notNull(),
+    orderId: text("order_id").notNull(),
+    fillId: text("fill_id"),
+    syntheticId: text("synthetic_id"),
+    quantity: text("quantity").notNull(),
+    price: text("price").notNull(),
+    fee: text("fee").notNull().default("0"),
+    executedAt: integer("executed_at", { mode: "timestamp_ms" }).notNull(),
+    legPnl: text("leg_pnl").notNull().default("0"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_trade_legs_id_organization_unique").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.tradeId, t.organizationId],
+      foreignColumns: [traderTrades.id, traderTrades.organizationId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.positionLotId, t.organizationId],
+      foreignColumns: [traderPositionLots.id, traderPositionLots.organizationId],
+    }).onDelete("cascade"),
+    index("trader_trade_legs_org_trade_idx").on(t.organizationId, t.tradeId),
+  ],
+);
+
+/** AI-TRADER: append-only lifecycle trace (M1 / DEE-376). */
+export const traderLifecycleEvents = sqliteTable(
+  "trader_lifecycle_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    entityType: text("entity_type", { enum: [...lifecycleEntityTypeEnum] }).notNull(),
+    entityId: text("entity_id").notNull(),
+    phase: text("phase", { enum: [...lifecycleEventPhaseEnum] }).notNull(),
+    payload: text("payload"),
+    occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+    researchRunId: text("research_run_id"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("trader_lifecycle_events_org_entity_idx").on(t.organizationId, t.entityType, t.entityId),
+    index("trader_lifecycle_events_org_phase_idx").on(t.organizationId, t.phase),
+  ],
+);
+
+/** AI-TRADER: org-level live-enable governance states (DEE-212 / BP-7). */
+export const traderOrgLiveEnableStateEnum = [
+  "DISABLED",
+  "REQUESTED",
+  "COOLING_OFF",
+  "ENABLED",
+  "CANCELLED",
+] as const;
+export type TraderOrgLiveEnableState = (typeof traderOrgLiveEnableStateEnum)[number];
+
+export const traderOrgLiveEnableEventTypeEnum = [
+  "REQUESTED",
+  "CONFIRMED",
+  "ENABLED",
+  "DISABLED",
+  "CANCELLED",
+] as const;
+export type TraderOrgLiveEnableEventType = (typeof traderOrgLiveEnableEventTypeEnum)[number];
+
+/** AI-TRADER: org-level live-enable projection (DEE-212 / BP-7). One row per organization. */
+export const traderOrgLiveEnable = sqliteTable("trader_org_live_enable", {
+  organizationId: text("organization_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  state: text("state", { enum: [...traderOrgLiveEnableStateEnum] })
+    .notNull()
+    .default("DISABLED"),
+  maxNotionalCap: text("max_notional_cap").notNull(),
+  requestedAt: integer("requested_at", { mode: "timestamp_ms" }),
+  coolingOffEndsAt: integer("cooling_off_ends_at", { mode: "timestamp_ms" }),
+  enabledAt: integer("enabled_at", { mode: "timestamp_ms" }),
+  disabledAt: integer("disabled_at", { mode: "timestamp_ms" }),
+  operatorAckPhraseHash: text("operator_ack_phrase_hash"),
+  stateVersion: integer("state_version").notNull().default(1),
+  lastEventSeq: integer("last_event_seq").notNull().default(0),
+  lastEventDigest: text("last_event_digest"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/** AI-TRADER: append-only org live-enable event log (DEE-212 / BP-7). */
+export const traderOrgLiveEnableEvents = sqliteTable(
+  "trader_org_live_enable_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    eventType: text("event_type", { enum: [...traderOrgLiveEnableEventTypeEnum] }).notNull(),
+    maxNotionalCap: text("max_notional_cap"),
+    reason: text("reason"),
+    actorType: text("actor_type", { enum: [...auditActorTypeEnum] }).notNull(),
+    actorId: text("actor_id"),
+    schemaVersion: text("schema_version").notNull(),
+    recordContentDigest: text("record_content_digest").notNull(),
+    prevEventDigest: text("prev_event_digest"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("trader_org_live_enable_events_org_seq_unique").on(t.organizationId, t.seq)],
 );
 
 /** AI-TRADER: org-scoped module anchor (AT-E1 / DEE-193). One row per organization. */

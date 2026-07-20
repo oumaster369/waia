@@ -1,4 +1,6 @@
-import "server-only";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
+
+enforceServerOnly();
 
 import { and, eq, max, notInArray } from "drizzle-orm";
 
@@ -20,8 +22,14 @@ import {
   type OrderRow,
   type OpenOrdersFilter,
   type RecordFillInput,
+  type RecordFillProgressInput,
   type TransitionOrderInput,
 } from "@/lib/trader/execution/order-repository.types";
+import { EXECUTION_FACT_KIND_HISTORICAL_SIMULATED } from "@/lib/trader/execution/historical-execution-model.types";
+import {
+  assertCompleteHistoricalFillEconomics,
+  serializeHistoricalFillEconomicsForExport,
+} from "@/lib/trader/execution/fill-economics";
 import {
   assertTransition,
   TERMINAL_ORDER_STATES,
@@ -31,6 +39,19 @@ import {
   requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
+
+export type SqliteOrderRepositoryClockDeps = {
+  newId?: () => string;
+  now?: () => Date;
+};
+
+function resolveOrderNewId(deps?: SqliteOrderRepositoryClockDeps): () => string {
+  return deps?.newId ?? (() => crypto.randomUUID());
+}
+
+function resolveOrderNow(deps?: SqliteOrderRepositoryClockDeps): Date {
+  return deps?.now?.() ?? new Date();
+}
 
 function mapOrderRow(row: typeof traderOrders.$inferSelect): OrderRow {
   return {
@@ -57,6 +78,45 @@ function mapOrderRow(row: typeof traderOrders.$inferSelect): OrderRow {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function appendHistoricalFillRecordedEvent(
+  db: WaiaDb,
+  context: OrgContext,
+  input: {
+    orderId: string;
+    occurredAt: Date;
+    economics: NonNullable<RecordFillInput["economics"]>;
+    fromState: OrderRow["state"];
+  },
+  deps: SqliteOrderRepositoryClockDeps = {},
+): void {
+  const newId = resolveOrderNewId(deps);
+  const scoped = requireOrgContext(context.organizationId);
+  const maxSeqRow = db
+    .select({ maxSeq: max(traderOrderEvents.seq) })
+    .from(traderOrderEvents)
+    .where(
+      and(
+        eq(traderOrderEvents.orderId, input.orderId),
+        orgScopedWhere(traderOrderEvents.organizationId, scoped),
+      ),
+    )
+    .all()[0];
+  const nextSeq = (maxSeqRow?.maxSeq ?? 0) + 1;
+  db.insert(traderOrderEvents)
+    .values({
+      id: newId(),
+      organizationId: scoped.organizationId,
+      orderId: input.orderId,
+      seq: nextSeq,
+      fromState: input.fromState,
+      toState: input.fromState,
+      eventType: "fill_recorded",
+      payload: serializeHistoricalFillEconomicsForExport(input.economics),
+      occurredAt: input.occurredAt,
+    })
+    .run();
 }
 
 function mapEventRow(row: typeof traderOrderEvents.$inferSelect): OrderEventRow {
@@ -239,8 +299,10 @@ export function createOrderSqlite(
   db: WaiaDb,
   context: OrgContext,
   input: CreateOrderInput,
+  deps: SqliteOrderRepositoryClockDeps = {},
 ): OrderRow {
   const scoped = requireOrgContext(context.organizationId);
+  const newId = resolveOrderNewId(deps);
 
   const byClientOrderId = findOrderByClientOrderIdSqlite(db, context, input.clientOrderId);
   if (byClientOrderId) {
@@ -252,8 +314,8 @@ export function createOrderSqlite(
     return resolveExistingOrderForCreate(byIdempotencyKey, input);
   }
 
-  const id = crypto.randomUUID();
-  const now = new Date();
+  const id = newId();
+  const now = resolveOrderNow(deps);
 
   try {
     db.insert(traderOrders)
@@ -282,7 +344,7 @@ export function createOrderSqlite(
 
     db.insert(traderOrderEvents)
       .values({
-        id: crypto.randomUUID(),
+        id: newId(),
         organizationId: scoped.organizationId,
         orderId: id,
         seq: 0,
@@ -319,7 +381,9 @@ export function transitionOrderSqlite(
   db: WaiaDb,
   context: OrgContext,
   input: TransitionOrderInput,
+  deps: SqliteOrderRepositoryClockDeps = {},
 ): OrderRow {
+  const newId = resolveOrderNewId(deps);
   const existing = getOrderByIdSqlite(db, context, input.orderId);
   if (!existing) {
     throw new OrderNotFoundError(input.orderId);
@@ -327,7 +391,7 @@ export function transitionOrderSqlite(
 
   assertTransition(existing.state, input.toState);
 
-  const now = new Date();
+  const now = resolveOrderNow(deps);
   const result = db
     .update(traderOrders)
     .set({
@@ -369,7 +433,7 @@ export function transitionOrderSqlite(
 
   db.insert(traderOrderEvents)
     .values({
-      id: crypto.randomUUID(),
+      id: newId(),
       organizationId: scoped.organizationId,
       orderId: input.orderId,
       seq: nextSeq,
@@ -388,7 +452,14 @@ export function transitionOrderSqlite(
   return updated;
 }
 
-export function recordFillSqlite(db: WaiaDb, context: OrgContext, input: RecordFillInput): FillRow {
+export function recordFillSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  input: RecordFillInput,
+  deps: SqliteOrderRepositoryClockDeps = {},
+  options?: { skipFillRecordedEvent?: boolean },
+): FillRow {
+  const newId = resolveOrderNewId(deps);
   const scoped = requireOrgContext(context.organizationId);
   const existingFill = db
     .select()
@@ -416,8 +487,12 @@ export function recordFillSqlite(db: WaiaDb, context: OrgContext, input: RecordF
     throw new OrderNotFoundError(input.orderId);
   }
 
-  const id = crypto.randomUUID();
-  const now = new Date();
+  if (input.executionFactKind === EXECUTION_FACT_KIND_HISTORICAL_SIMULATED) {
+    assertCompleteHistoricalFillEconomics(input);
+  }
+
+  const id = input.fillId ?? newId();
+  const now = resolveOrderNow(deps);
   const fee = input.fee ?? "0";
   const feeAsset = input.feeAsset ?? "";
 
@@ -470,5 +545,102 @@ export function recordFillSqlite(db: WaiaDb, context: OrgContext, input: RecordF
   if (!inserted) {
     throw new Error("[trader] fill insert failed");
   }
+
+  if (
+    !options?.skipFillRecordedEvent &&
+    input.executionFactKind === EXECUTION_FACT_KIND_HISTORICAL_SIMULATED &&
+    input.economics
+  ) {
+    appendHistoricalFillRecordedEvent(
+      db,
+      context,
+      {
+        orderId: input.orderId,
+        occurredAt: input.executedAt,
+        economics: input.economics,
+        fromState: parent.state,
+      },
+      deps,
+    );
+  }
+
   return mapFillRow(inserted);
+}
+
+export function recordFillProgressSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  input: RecordFillProgressInput,
+  deps: SqliteOrderRepositoryClockDeps = {},
+): FillRow {
+  assertCompleteHistoricalFillEconomics(input);
+  const newId = resolveOrderNewId(deps);
+  const scoped = requireOrgContext(context.organizationId);
+  const existing = getOrderByIdSqlite(db, context, input.orderId);
+  if (!existing) {
+    throw new OrderNotFoundError(input.orderId);
+  }
+
+  const fillRow = recordFillSqlite(
+    db,
+    context,
+    {
+      orderId: input.orderId,
+      exchangeTradeId: input.exchangeTradeId,
+      price: input.price,
+      quantity: input.quantity,
+      fee: input.fee,
+      feeAsset: input.feeAsset,
+      executedAt: input.executedAt,
+      executionFactKind: input.executionFactKind,
+      economics: input.economics,
+      fillId: input.fillId,
+      economicsRow: input.economicsRow,
+    },
+    deps,
+    { skipFillRecordedEvent: true },
+  );
+
+  const now = resolveOrderNow(deps);
+  const result = db
+    .update(traderOrders)
+    .set({
+      filledQuantity: input.filledQuantity,
+      avgFillPrice: input.avgFillPrice,
+      updatedAt: now,
+    })
+    .where(and(eq(traderOrders.id, input.orderId), orgOrderConditions(context)))
+    .run();
+
+  if (result.changes === 0) {
+    throw new OrderNotFoundError(input.orderId);
+  }
+
+  const maxSeqRow = db
+    .select({ maxSeq: max(traderOrderEvents.seq) })
+    .from(traderOrderEvents)
+    .where(
+      and(
+        eq(traderOrderEvents.orderId, input.orderId),
+        orgScopedWhere(traderOrderEvents.organizationId, scoped),
+      ),
+    )
+    .all()[0];
+  const nextSeq = (maxSeqRow?.maxSeq ?? 0) + 1;
+
+  db.insert(traderOrderEvents)
+    .values({
+      id: newId(),
+      organizationId: scoped.organizationId,
+      orderId: input.orderId,
+      seq: nextSeq,
+      fromState: existing.state,
+      toState: existing.state,
+      eventType: "fill_recorded",
+      payload: serializeHistoricalFillEconomicsForExport(input.economics),
+      occurredAt: input.executedAt,
+    })
+    .run();
+
+  return fillRow;
 }

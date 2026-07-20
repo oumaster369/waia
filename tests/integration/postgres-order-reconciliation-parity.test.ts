@@ -10,14 +10,15 @@ import postgres from "postgres";
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
 import { createPostgresReconciliationService } from "@/lib/trader/execution";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
+import { seedHtrPostgresUser } from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 
-const USER_A = "00000000-0000-4000-8000-0000000250d1";
+const USER_A = "00000000-0000-4000-8022-000000025001";
 
 describe.skipIf(!integrationEnabled || !url)(
   "postgres order reconciliation parity (DEE-250)",
@@ -45,21 +46,11 @@ describe.skipIf(!integrationEnabled || !url)(
     }
 
     beforeAll(async () => {
+      await verifyHtrPostgresConnectionIdentity();
       await cleanup();
-      const sql = postgres(url!, { max: 1 });
-      try {
-        await sql.unsafe(`INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [
-          USER_A,
-        ]);
-      } finally {
-        await sql.end({ timeout: 5 });
-      }
+      orgA = await seedHtrPostgresUser(url!, USER_A, "Order Recon Postgres Parity");
 
-      const db = getPostgresDrizzle();
-      orgA = await ensureUserCoreSeedPostgres(db, {
-        userId: USER_A,
-        displayName: "Order Recon Postgres Parity",
-      });
+    const db = getPostgresDrizzle();
 
       connector = new MockExchangeConnector();
       await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });

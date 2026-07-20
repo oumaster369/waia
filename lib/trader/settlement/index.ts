@@ -11,6 +11,16 @@ export {
   buildSettlementDepsFromEnv,
   runSettlementCycle,
 } from "@/lib/trader/settlement/build-worker-deps";
+export { runOverdueSuspensionCycle } from "@/lib/trader/settlement/run-overdue-suspension-cycle";
+export { createPostgresOverdueInvoicesReader } from "@/lib/trader/settlement/overdue-invoices-reader-postgres";
+export { createSqliteOverdueInvoicesReader } from "@/lib/trader/settlement/overdue-invoices-reader-sqlite";
+export {
+  assertSuspensionAllowed,
+  isInvoiceOverdue,
+  resolveStatusAfterSuspension,
+  shouldAppendSuspensionEvent,
+} from "@/lib/trader/settlement/account-status.transitions";
+export { DEFAULT_INVOICE_PAYMENT_GRACE_PERIOD_MS } from "@/lib/trader/settlement/account-status-policy";
 export {
   createPostgresSettlementService,
   createSettlementService,

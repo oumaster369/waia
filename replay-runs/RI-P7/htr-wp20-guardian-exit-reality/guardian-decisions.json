@@ -1,0 +1,30 @@
+[
+  {
+    "breachState": "NONE",
+    "reason": null,
+    "allowNewExposure": true,
+    "cancelPartialEntry": false,
+    "permitRiskReducingExit": true
+  },
+  {
+    "breachState": "NONE",
+    "reason": null,
+    "allowNewExposure": true,
+    "cancelPartialEntry": false,
+    "permitRiskReducingExit": true
+  },
+  {
+    "breachState": "NONE",
+    "reason": null,
+    "allowNewExposure": true,
+    "cancelPartialEntry": false,
+    "permitRiskReducingExit": true
+  },
+  {
+    "breachState": "NONE",
+    "reason": null,
+    "allowNewExposure": true,
+    "cancelPartialEntry": false,
+    "permitRiskReducingExit": true
+  }
+]

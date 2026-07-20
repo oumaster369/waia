@@ -7,11 +7,15 @@ export type ChatRole = "system" | "user" | "assistant";
 
 export type ProviderMessage = { role: ChatRole; content: string };
 
+export type CompletionResponseFormat = "json_object" | "text";
+
 export type CompletionRequest = {
   model: string;
   messages: ProviderMessage[];
   maxOutputTokens: number;
   temperature?: number;
+  /** Vendor-specific structured output; adapters map to API flags. */
+  responseFormat?: CompletionResponseFormat;
 };
 
 export type CompletionResult =
@@ -20,6 +24,7 @@ export type CompletionResult =
       text: string;
       usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
       providerRequestId?: string;
+      finishReason?: string;
     }
   | {
       ok: false;

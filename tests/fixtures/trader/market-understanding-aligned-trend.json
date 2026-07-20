@@ -1,0 +1,351 @@
+{
+  "schemaVersion": "waia.trader.market_understanding.v0",
+  "instrumentId": "BTC/USDT",
+  "evaluatedAt": "2026-01-01T00:25:00.000Z",
+  "questionEvaluations": [
+    {
+      "questionId": "Q_WHAT_HAPPENING",
+      "status": "PARTIAL",
+      "answerSummary": "UNCLEAR",
+      "confidence": 0.4,
+      "evidenceProvenanceIds": [
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z"
+      ],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_WHY_HAPPENING",
+      "status": "PARTIAL",
+      "answerSummary": "mtf_unclear",
+      "confidence": 0.55,
+      "evidenceProvenanceIds": [
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:quote_l1:2026-01-01T00:25:00.000Z",
+        "htx_spot:order_book_snapshot:2026-01-01T00:25:00.000Z",
+        "htx_spot:market_trades_snapshot:2026-01-01T00:25:00.000Z",
+        "binance_public:cross_exchange_confirmation:2026-01-01T00:25:00.000Z",
+        "alternative_me:fear_greed_index:2026-01-01T00:25:00.000Z",
+        "coingecko_global:global_market_stats:2026-01-01T00:25:00.000Z",
+        "fred:macro_series:2026-01-01T00:25:00.000Z",
+        "federal_reserve:macro_calendar_event:2026-01-01T00:25:00.000Z",
+        "cme_fedwatch:macro_probability:2026-01-01T00:25:00.000Z",
+        "gdelt:news_headline:2026-01-01T00:25:00.000Z",
+        "gdelt:news_event_cluster:2026-01-01T00:25:00.000Z",
+        "binance_announcements:exchange_announcement:2026-01-01T00:25:00.000Z",
+        "infura_rpc:blockchain_network_stats:2026-01-01T00:25:00.000Z",
+        "mempool_space:mempool_stats:2026-01-01T00:25:00.000Z",
+        "sec_edgar:regulatory_filing:2026-01-01T00:25:00.000Z",
+        "github_releases:protocol_release:2026-01-01T00:25:00.000Z"
+      ],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_HTF_ALIGNED",
+      "status": "UNKNOWN",
+      "answerSummary": "UNCLEAR/UNCLEAR",
+      "confidence": 0.45,
+      "evidenceProvenanceIds": [
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z"
+      ],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_LTF_ALIGNED",
+      "status": "ANSWERED",
+      "answerSummary": "DOWN/DOWN",
+      "confidence": 0.45,
+      "evidenceProvenanceIds": [
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z"
+      ],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_CROSS_VENUE",
+      "status": "ANSWERED",
+      "answerSummary": "AGREE",
+      "confidence": 0.95,
+      "evidenceProvenanceIds": [
+        "binance_public:cross_exchange_confirmation:2026-01-01T00:25:00.000Z"
+      ],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_CROWD",
+      "status": "ANSWERED",
+      "answerSummary": "ELEVATED",
+      "confidence": 0.7,
+      "evidenceProvenanceIds": [
+        "alternative_me:fear_greed_index:2026-01-01T00:25:00.000Z"
+      ],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_LIQUIDITY",
+      "status": "ANSWERED",
+      "answerSummary": "SUFFICIENT",
+      "confidence": 0.75,
+      "evidenceProvenanceIds": [
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:quote_l1:2026-01-01T00:25:00.000Z",
+        "htx_spot:order_book_snapshot:2026-01-01T00:25:00.000Z"
+      ],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_DATA_TRUST",
+      "status": "ANSWERED",
+      "answerSummary": "TRUSTED",
+      "confidence": 0.65,
+      "evidenceProvenanceIds": [
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:quote_l1:2026-01-01T00:25:00.000Z",
+        "htx_spot:order_book_snapshot:2026-01-01T00:25:00.000Z",
+        "htx_spot:market_trades_snapshot:2026-01-01T00:25:00.000Z",
+        "binance_public:cross_exchange_confirmation:2026-01-01T00:25:00.000Z",
+        "alternative_me:fear_greed_index:2026-01-01T00:25:00.000Z",
+        "coingecko_global:global_market_stats:2026-01-01T00:25:00.000Z",
+        "fred:macro_series:2026-01-01T00:25:00.000Z",
+        "federal_reserve:macro_calendar_event:2026-01-01T00:25:00.000Z",
+        "cme_fedwatch:macro_probability:2026-01-01T00:25:00.000Z",
+        "gdelt:news_headline:2026-01-01T00:25:00.000Z",
+        "gdelt:news_event_cluster:2026-01-01T00:25:00.000Z",
+        "binance_announcements:exchange_announcement:2026-01-01T00:25:00.000Z",
+        "infura_rpc:blockchain_network_stats:2026-01-01T00:25:00.000Z",
+        "mempool_space:mempool_stats:2026-01-01T00:25:00.000Z",
+        "sec_edgar:regulatory_filing:2026-01-01T00:25:00.000Z",
+        "github_releases:protocol_release:2026-01-01T00:25:00.000Z"
+      ],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_UNKNOWN",
+      "status": "ANSWERED",
+      "answerSummary": "12_gaps",
+      "confidence": 0.75,
+      "evidenceProvenanceIds": [
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:quote_l1:2026-01-01T00:25:00.000Z",
+        "htx_spot:order_book_snapshot:2026-01-01T00:25:00.000Z",
+        "htx_spot:market_trades_snapshot:2026-01-01T00:25:00.000Z",
+        "binance_public:cross_exchange_confirmation:2026-01-01T00:25:00.000Z",
+        "alternative_me:fear_greed_index:2026-01-01T00:25:00.000Z",
+        "coingecko_global:global_market_stats:2026-01-01T00:25:00.000Z",
+        "fred:macro_series:2026-01-01T00:25:00.000Z",
+        "federal_reserve:macro_calendar_event:2026-01-01T00:25:00.000Z",
+        "cme_fedwatch:macro_probability:2026-01-01T00:25:00.000Z",
+        "gdelt:news_headline:2026-01-01T00:25:00.000Z",
+        "gdelt:news_event_cluster:2026-01-01T00:25:00.000Z",
+        "binance_announcements:exchange_announcement:2026-01-01T00:25:00.000Z",
+        "infura_rpc:blockchain_network_stats:2026-01-01T00:25:00.000Z",
+        "mempool_space:mempool_stats:2026-01-01T00:25:00.000Z",
+        "sec_edgar:regulatory_filing:2026-01-01T00:25:00.000Z",
+        "github_releases:protocol_release:2026-01-01T00:25:00.000Z"
+      ],
+      "influencesPermission": false,
+      "influencesPosture": false
+    },
+    {
+      "questionId": "Q_DEPLOY_CAPITAL",
+      "status": "PARTIAL",
+      "answerSummary": "REDUCE_RISK",
+      "confidence": 0.85,
+      "evidenceProvenanceIds": [
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:quote_l1:2026-01-01T00:25:00.000Z",
+        "htx_spot:order_book_snapshot:2026-01-01T00:25:00.000Z",
+        "htx_spot:market_trades_snapshot:2026-01-01T00:25:00.000Z",
+        "binance_public:cross_exchange_confirmation:2026-01-01T00:25:00.000Z",
+        "alternative_me:fear_greed_index:2026-01-01T00:25:00.000Z",
+        "coingecko_global:global_market_stats:2026-01-01T00:25:00.000Z",
+        "fred:macro_series:2026-01-01T00:25:00.000Z",
+        "federal_reserve:macro_calendar_event:2026-01-01T00:25:00.000Z",
+        "cme_fedwatch:macro_probability:2026-01-01T00:25:00.000Z",
+        "gdelt:news_headline:2026-01-01T00:25:00.000Z",
+        "gdelt:news_event_cluster:2026-01-01T00:25:00.000Z",
+        "binance_announcements:exchange_announcement:2026-01-01T00:25:00.000Z",
+        "infura_rpc:blockchain_network_stats:2026-01-01T00:25:00.000Z",
+        "mempool_space:mempool_stats:2026-01-01T00:25:00.000Z",
+        "sec_edgar:regulatory_filing:2026-01-01T00:25:00.000Z",
+        "github_releases:protocol_release:2026-01-01T00:25:00.000Z"
+      ],
+      "influencesPermission": false,
+      "influencesPosture": true
+    },
+    {
+      "questionId": "Q_PRESERVE_CAPITAL",
+      "status": "PARTIAL",
+      "answerSummary": "REDUCE_RISK",
+      "confidence": 0.85,
+      "evidenceProvenanceIds": [
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+        "htx_spot:quote_l1:2026-01-01T00:25:00.000Z",
+        "htx_spot:order_book_snapshot:2026-01-01T00:25:00.000Z",
+        "htx_spot:market_trades_snapshot:2026-01-01T00:25:00.000Z",
+        "binance_public:cross_exchange_confirmation:2026-01-01T00:25:00.000Z",
+        "alternative_me:fear_greed_index:2026-01-01T00:25:00.000Z",
+        "coingecko_global:global_market_stats:2026-01-01T00:25:00.000Z",
+        "fred:macro_series:2026-01-01T00:25:00.000Z",
+        "federal_reserve:macro_calendar_event:2026-01-01T00:25:00.000Z",
+        "cme_fedwatch:macro_probability:2026-01-01T00:25:00.000Z",
+        "gdelt:news_headline:2026-01-01T00:25:00.000Z",
+        "gdelt:news_event_cluster:2026-01-01T00:25:00.000Z",
+        "binance_announcements:exchange_announcement:2026-01-01T00:25:00.000Z",
+        "infura_rpc:blockchain_network_stats:2026-01-01T00:25:00.000Z",
+        "mempool_space:mempool_stats:2026-01-01T00:25:00.000Z",
+        "sec_edgar:regulatory_filing:2026-01-01T00:25:00.000Z",
+        "github_releases:protocol_release:2026-01-01T00:25:00.000Z"
+      ],
+      "influencesPermission": false,
+      "influencesPosture": true
+    }
+  ],
+  "knowledgeGaps": [
+    {
+      "kind": "NEED_MORE_EVIDENCE",
+      "questionId": "Q_WHAT_HAPPENING",
+      "description": "Q_WHAT_HAPPENING:PARTIAL",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_WHAT_HAPPENING_PARTIAL"
+    },
+    {
+      "kind": "NEED_MORE_EVIDENCE",
+      "questionId": "Q_WHY_HAPPENING",
+      "description": "Q_WHY_HAPPENING:PARTIAL",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_WHY_HAPPENING_PARTIAL"
+    },
+    {
+      "kind": "UNKNOWN",
+      "questionId": "Q_HTF_ALIGNED",
+      "description": "Q_HTF_ALIGNED:UNKNOWN",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_HTF_ALIGNED_UNKNOWN"
+    },
+    {
+      "kind": "NEED_MORE_EVIDENCE",
+      "questionId": "Q_DEPLOY_CAPITAL",
+      "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
+    },
+    {
+      "kind": "NEED_MORE_EVIDENCE",
+      "questionId": "Q_PRESERVE_CAPITAL",
+      "description": "Q_PRESERVE_CAPITAL:PARTIAL",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+    }
+  ],
+  "confidenceAttribution": {
+    "priorConfidence": 0.85,
+    "finalConfidence": 0.85,
+    "confidenceDelta": 0,
+    "contributors": [
+      {
+        "source": "fused_context_aggregate",
+        "direction": "INCREASE",
+        "magnitude": 0.85,
+        "reasonCode": "PRIOR_FUSED_CONFIDENCE"
+      }
+    ]
+  },
+  "reasoningInputs": {
+    "evidenceUsed": [
+      "htx_spot:ohlcv_bar:2026-01-01T00:25:00.000Z",
+      "htx_spot:quote_l1:2026-01-01T00:25:00.000Z",
+      "htx_spot:order_book_snapshot:2026-01-01T00:25:00.000Z",
+      "htx_spot:market_trades_snapshot:2026-01-01T00:25:00.000Z",
+      "binance_public:cross_exchange_confirmation:2026-01-01T00:25:00.000Z",
+      "alternative_me:fear_greed_index:2026-01-01T00:25:00.000Z",
+      "coingecko_global:global_market_stats:2026-01-01T00:25:00.000Z",
+      "fred:macro_series:2026-01-01T00:25:00.000Z",
+      "federal_reserve:macro_calendar_event:2026-01-01T00:25:00.000Z",
+      "cme_fedwatch:macro_probability:2026-01-01T00:25:00.000Z",
+      "gdelt:news_headline:2026-01-01T00:25:00.000Z",
+      "gdelt:news_event_cluster:2026-01-01T00:25:00.000Z",
+      "binance_announcements:exchange_announcement:2026-01-01T00:25:00.000Z",
+      "infura_rpc:blockchain_network_stats:2026-01-01T00:25:00.000Z",
+      "mempool_space:mempool_stats:2026-01-01T00:25:00.000Z",
+      "sec_edgar:regulatory_filing:2026-01-01T00:25:00.000Z",
+      "github_releases:protocol_release:2026-01-01T00:25:00.000Z"
+    ],
+    "evidenceIgnored": [],
+    "conflicts": [],
+    "unknowns": [
+      "GAP_Q_HTF_ALIGNED_UNKNOWN"
+    ]
+  },
+  "mtfBackdrop": {
+    "1m": "DOWN",
+    "15m": "DOWN",
+    "1h": "UNCLEAR",
+    "4h": "UNCLEAR",
+    "1d": "UNCLEAR"
+  },
+  "mtfAlignment": "UNCLEAR",
+  "regimeHint": "UNCLEAR",
+  "crossVenue": {
+    "agreement": "AGREE",
+    "binanceDeltaBps": 0.8000000000004092,
+    "bybitDeltaBps": 0.9375,
+    "triangulationConfidence": 0.95,
+    "reasonCodes": [
+      "CROSS_VENUE_AGREE"
+    ]
+  },
+  "globalContext": "NEUTRAL",
+  "crowdPsychology": "ELEVATED",
+  "liquiditySufficiency": "SUFFICIENT",
+  "dataQualitySufficient": true,
+  "dataQualityReasonCodes": [],
+  "asianCorridorPresent": false,
+  "spotPosture": "REDUCE_RISK",
+  "postureRationale": [
+    "POSTURE_REDUCED_RISK_UNCLEAR"
+  ],
+  "understandingConfidence": 0.85
+}

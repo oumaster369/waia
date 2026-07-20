@@ -57,7 +57,7 @@ Optionally include `?expand=1` on the compare URL if you want the rich compare v
 
 ### 6. PR title and body (ready to paste)
 
-1. **Read** [`.github/pull_request_template.md`](../../.github/pull_request_template.md) — the **only** canonical PR body source. Do **not** invent a compact YAML-style metadata header.
+1. **Read** [`.github/pull_request_template.md`](../../.github/pull_request_template.md) and derive content from the **canonical plan** in `docs/plans/<branch>.md` when it exists.
 2. **Copy** the template structure verbatim; fill placeholders (Summary, Linked issue, Risk tier, Test plan, etc.).
 3. **Required field syntax** (validator-enforced — plain text fails CI):
 
@@ -88,7 +88,7 @@ Checkbox rule: only check template items **actually verified**.
 
 ### 7. Report validation results
 
-Echo the commands that were run for this task and their outcome (see [`AGENTS.md`](../../AGENTS.md) validation section — minimally **`pnpm lint`** and **`pnpm typecheck`**; full gate list applies before calling work PR-ready unless the issuing task narrows scope).
+Echo the commands that were run for this task and their outcome (see [`AGENTS.md`](../../AGENTS.md) validation section — full gate before PR-readiness: **`pnpm lint && pnpm typecheck && pnpm test --run && pnpm build`** plus **`pnpm validate:pr-governance`**; add **`pnpm test:e2e`** when UI/user-visible behavior changed; unless the issuing task narrows scope).
 
 ### 8. Stop and wait
 
@@ -105,6 +105,12 @@ gh pr create --base dev --title "DEE-NN type(scope): subject" --body-file .curso
 ```
 
 Do **not** use `--fill` alone when a pre-rendered body file exists — it bypasses the filled template you validated. Still **never** `gh pr merge`.
+
+## Integration boundary ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md))
+
+- Refuse a second PR for an integration id with an existing open/merged PR.
+- Include `**Includes:**` and `**Deferred:**` in the rendered body when applicable.
+- Synchronize with `origin/dev` via merge before opening PR if the branch was already pushed.
 
 ## Hard rules
 

@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "waia.trader.research-rejection-record.v1",
+  "envelope": {
+    "contentDigest": "9b36a13ab4d091d46294385cf7ca77478719164e6aff4cd4ecf80f6bec27e6a4"
+  },
+  "recordBody": {
+    "organizationId": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
+    "strategyId": "mean_reversion_v0",
+    "strategyVersion": "0.1.7+mi-repeat-20260709",
+    "candidateId": "c00a6864-d8f0-49cc-9d74-055cf4a8b9fb",
+    "datasetId": "m9-v2-research-campaign-org0",
+    "backtestRunId": "unknown",
+    "blindValidationResultId": "unknown",
+    "failureCode": "CAMPAIGN_INFRA_DISCONNECT",
+    "failureMessage": "write CONNECTION_CLOSED aws-1-eu-central-1.pooler.supabase.com:5432",
+    "blindConsumed": false,
+    "walkForwardWindowCount": 0,
+    "validationMetrics": {
+      "schemaVersion": "2.0.0",
+      "closedTradeSemanticsVersion": "waia.trader.closed-trade.v2",
+      "tradeLifecycleSemanticsVersion": "waia.trader.trade-lifecycle.v2",
+      "costModelVersion": "waia.trader.cost-model.v1",
+      "submittedOrders": 0,
+      "acceptedOrders": 0,
+      "filledOrders": 0,
+      "openPositions": 0,
+      "closedTrades": 0,
+      "markToCloseTrades": 0,
+      "realizedPnl": "0",
+      "markedPnl": "0",
+      "periodTotalFees": "0",
+      "rejectedSignals": 0,
+      "skippedSignals": 0,
+      "byRegime": []
+    },
+    "blindMetrics": {
+      "schemaVersion": "2.0.0",
+      "closedTradeSemanticsVersion": "waia.trader.closed-trade.v2",
+      "tradeLifecycleSemanticsVersion": "waia.trader.trade-lifecycle.v2",
+      "costModelVersion": "waia.trader.cost-model.v1",
+      "submittedOrders": 0,
+      "acceptedOrders": 0,
+      "filledOrders": 0,
+      "openPositions": 0,
+      "closedTrades": 0,
+      "markToCloseTrades": 0,
+      "realizedPnl": "0",
+      "markedPnl": "0",
+      "periodTotalFees": "0",
+      "rejectedSignals": 0,
+      "skippedSignals": 0,
+      "byRegime": []
+    },
+    "bundleRegimeCoverage": {
+      "regimeLabels": [],
+      "hasNonTrending": false,
+      "hasDown": false,
+      "satisfiesRequirement": false
+    },
+    "observedRegimes": [],
+    "missingBuckets": [
+      "non_trending",
+      "down_regime"
+    ],
+    "builderGitSha": null,
+    "rejectedAt": "2026-07-09T17:34:48.032Z"
+  }
+}

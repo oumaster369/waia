@@ -49,7 +49,7 @@ After the loop is green twice, **safe auto-advance** per [`AGENTS.md`](../../AGE
 
    `git add -A` is acceptable **only** when every dirty path is genuinely in scope for the active issue.
 
-3. **Continue into PR readiness** — same checklist as [`/prepare-pr`](prepare-pr.md): push `dee-*` to `origin` with `-u` if needed, render PR body from [`.github/pull_request_template.md`](../../.github/pull_request_template.md), run `./scripts/linear/preflight-pr-governance.sh --body-file .cursor/pr-body-DEE-NN.md` (must pass), compare URL `dev...HEAD`, paste-ready title/body or `--body-file`, report validation, **stop before merge**.
+3. **Continue into PR readiness** — update plan `state.lastValidatedGitSha` when a canonical plan exists; same checklist as [`/prepare-pr`](prepare-pr.md): push `dee-*` to `origin` with `-u` if needed, render PR body from plan + template, run `preflight-pr-governance.sh`, compare URL, **stop before merge**.
 
 4. **Move the Linear issue to `In Review`** (existing DEE status) and add a PR-ready comment with the compare URL.
 
@@ -58,3 +58,10 @@ After the loop is green twice, **safe auto-advance** per [`AGENTS.md`](../../AGE
 No separate "now run /prepare-pr" prompt is required for normal task completion. If any auto-advance precondition fails (validation, scope, branch, Linear id, risk tier, open STOP, constitutional Architect hold), do **not** auto-advance — surface the blocker.
 
 Use `/prepare-pr` only when you need a standalone retry (e.g. push failed earlier) without re-running the full test loop; its §1 STOP remains the safety net if the tree is unexpectedly dirty.
+
+## Integration boundary ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md))
+
+- Loop gates locally many times; **one PR** only when integration-ready.
+- Render `**Includes:**` / `**Deferred:**` when child work is in scope.
+- Do not open a second PR for the same integration issue — spawn a new batch instead.
+- Sync branch with `origin/dev` via merge (not rebase) before PR when branch was already pushed.

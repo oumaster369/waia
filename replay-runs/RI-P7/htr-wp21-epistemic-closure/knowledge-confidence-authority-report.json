@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.909Z",
+  "nodeVersion": "v22.22.3",
+  "command": "pnpm exec vitest run tests/unit/trader-wp21-confidence-update-decay.test.ts",
+  "exitCode": 0,
+  "status": "PASS",
+  "updateCap": 0.05,
+  "bounds": [
+    0,
+    1
+  ],
+  "halfLifeBars": 120,
+  "barUnit": "CLOSED_BASE_1M_BARS",
+  "sameRunDecisionAuthority": "PROHIBITED",
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "3105d672d41c90a5faa27a6e175879df7fed7f1e7376ff6b338854c734b1544e"
+}

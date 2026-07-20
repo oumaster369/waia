@@ -10,7 +10,7 @@ If any required field is missing (`Context`, `Goal`, `Scope`, `Do NOT`, `Accepta
 
 ## Status flow (target)
 
-Documented in `AGENTS.md` as Backlog → Todo → In Progress → Done. Some workspaces may omit `Todo` — **mirror board reality**: see [`LINEAR-GOVERNANCE.md`](LINEAR-GOVERNANCE.md).
+Documented in `AGENTS.md` as Backlog → Todo → In Progress → In Review → Done. Some workspaces may omit `Todo` — **mirror board reality**: see [`LINEAR-GOVERNANCE.md`](LINEAR-GOVERNANCE.md).
 
 ### Selection order
 

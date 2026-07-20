@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "htr_wp10_candidate_staging_manifest_v1",
+  "workCommitSha": "521ddd11a47a735769f04aa52d0139cf2075d4dc",
+  "harnessSourceSha256": "077e7f2a0ceb58f19b56232c187361f526b65de58425e87e38e7e20e1a2c4409",
+  "candidateStagingManifestDigest": "13c2d68f821c150d3154741380aafa47c7c9c86557083ce330e191f0866dceb3",
+  "candidateStagingManifestDigestAlgorithm": "htr_wp10_staging_manifest_digest_v1",
+  "files": [
+    {
+      "path": "manifest.json",
+      "sha256": "c614e2dfc86072662fae2725ff49870c6910a8424210b73ff35c67a8db668703"
+    },
+    {
+      "path": "README.md",
+      "sha256": "1b6b1b5761107fe196431baf8658b16654a91d5934b142cef1bbb447125382cc"
+    },
+    {
+      "path": "provenance.json",
+      "sha256": "607abf49027250b6dec741b2a8f98098a3743f5da5f5de654b255d6e76f317e9"
+    }
+  ]
+}

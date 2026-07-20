@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { OrderRepository, OrderRow } from "@/lib/trader/execution/order-repository.types";
+import type {
+  FillRow,
+  OrderRepository,
+  OrderRow,
+} from "@/lib/trader/execution/order-repository.types";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -35,7 +39,36 @@ function mockOrder(overrides: Partial<OrderRow> & Pick<OrderRow, "id">): OrderRo
   return { ...base, ...overrides };
 }
 
+function mockFill(orderId: string, overrides: Partial<FillRow> = {}): FillRow {
+  return {
+    id: overrides.id ?? `fill-${orderId}`,
+    organizationId: ORG,
+    orderId,
+    exchangeTradeId: overrides.exchangeTradeId ?? `trade-${orderId}`,
+    price: overrides.price ?? "64000",
+    quantity: overrides.quantity ?? "0.01",
+    fee: overrides.fee ?? "0",
+    feeAsset: overrides.feeAsset ?? "",
+    executedAt: overrides.executedAt ?? new Date(0),
+    createdAt: overrides.createdAt ?? new Date(0),
+  };
+}
+
 function mockRepository(orders: OrderRow[], openOrders: OrderRow[] = []): OrderRepository {
+  const fillsByOrderId: Record<string, FillRow[]> = {};
+
+  for (const order of orders) {
+    if (order.state === "FILLED" && Number(order.filledQuantity) > 0) {
+      fillsByOrderId[order.id] = [
+        mockFill(order.id, {
+          organizationId: order.organizationId,
+          quantity: order.filledQuantity,
+          price: order.avgFillPrice ?? "64000",
+        }),
+      ];
+    }
+  }
+
   return {
     createOrder: vi.fn(),
     getOrderById: vi.fn(),
@@ -55,8 +88,9 @@ function mockRepository(orders: OrderRow[], openOrders: OrderRow[] = []): OrderR
     }),
     transitionOrder: vi.fn(),
     recordFill: vi.fn(),
+    recordFillProgress: vi.fn(),
     listEvents: vi.fn(),
-    listFills: vi.fn(),
+    listFills: vi.fn(async (_context, orderId) => fillsByOrderId[orderId] ?? []),
   };
 }
 
@@ -93,7 +127,7 @@ describe("deriveAccountRiskStateFromMockOrders (AT-E9 S6)", () => {
     expect(state.drawdown).toBe("0");
   });
 
-  it("reduces net position on sells without reducing quote exposure", async () => {
+  it("legacy path keeps buy-only quote exposure after sells (M2 portfolio adapter supersedes)", async () => {
     const buy = mockOrder({
       id: "order-buy-partial",
       filledQuantity: "0.02",

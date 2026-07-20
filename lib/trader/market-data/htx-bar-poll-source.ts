@@ -1,65 +1,68 @@
-import { internalSymbolToHtx } from "@/lib/trader/connectors/htx/mappers";
-import { HtxRestClient, type HtxFetchFn } from "@/lib/trader/connectors/htx/client";
+import { MarketDataGateway } from "@/lib/trader/market-data/market-data-gateway";
 import { BTC_USDT, type InstrumentId } from "@/lib/trader/intelligence/types";
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
-import { mapHtxKlinesToBars, mapHtxMergedToQuote } from "@/lib/trader/market-data/htx-kline-mapper";
-import { buildMarketSnapshot } from "@/lib/trader/market-data/market-snapshot";
 import type {
   BarPollSource,
   HtxBarPollOptions,
   MarketSnapshot,
 } from "@/lib/trader/market-data/types";
+import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
 
 export const DEFAULT_HTX_POLL_CYCLE_ID_PREFIX = "htx-poll";
 export const DEFAULT_HTX_KLINE_SIZE = 25;
 export const DEFAULT_HTX_KLINE_PERIOD = "1min";
 
 export class HtxBarPollSource implements BarPollSource {
-  private readonly client: HtxRestClient;
-  private readonly internalSymbol: InstrumentId;
-  private readonly htxSymbol: string;
-  private readonly size: number;
-  private readonly period: string;
+  private readonly gateway: MarketDataGateway;
   private readonly cycleIdPrefix: string;
-  private cycleIndex = 0;
+  private lastFusedContext: FusedMarketContext | undefined;
 
   constructor(options: HtxBarPollOptions = {}) {
-    const fetchImpl: HtxFetchFn | undefined = options.fetchImpl;
-    this.client = new HtxRestClient({
-      apiKey: "public",
-      apiSecret: "public",
-      restHost: options.restHost,
-      fetchImpl,
+    this.gateway = new MarketDataGateway({
+      internalSymbol: options.internalSymbol ?? BTC_USDT,
+      htxRestHost: options.restHost,
+      fetchImpl: options.fetchImpl,
+      disableOptionalProviders: options.disableOptionalProviders ?? false,
+      coingeckoApiKey: process.env.COINGECKO_API_KEY,
     });
-    this.internalSymbol = options.internalSymbol ?? BTC_USDT;
-    this.htxSymbol = internalSymbolToHtx(this.internalSymbol);
-    this.size = options.size ?? DEFAULT_HTX_KLINE_SIZE;
-    this.period = options.period ?? DEFAULT_HTX_KLINE_PERIOD;
     this.cycleIdPrefix = options.cycleIdPrefix ?? DEFAULT_HTX_POLL_CYCLE_ID_PREFIX;
   }
 
+  getFusedContext(): FusedMarketContext | undefined {
+    return this.lastFusedContext;
+  }
+
   reset(): void {
-    this.cycleIndex = 0;
+    this.gateway.reset();
+    this.lastFusedContext = undefined;
   }
 
   async fetchSnapshot(): Promise<MarketSnapshot> {
-    const klines = await this.client.getMarketHistoryKline({
-      symbol: this.htxSymbol,
-      period: this.period,
-      size: this.size,
+    const bundle = await this.gateway.pollEvaluationBundle({
+      cycleIdPrefix: this.cycleIdPrefix,
     });
 
-    if (klines.length < EXPAND_MIN_BARS) {
+    if (bundle.snapshot.bars.length < EXPAND_MIN_BARS) {
       throw new Error(
-        `[market-data] HTX poll returned ${klines.length} bars; need at least ${EXPAND_MIN_BARS}`,
+        `[market-data] gateway poll returned ${bundle.snapshot.bars.length} bars; need at least ${EXPAND_MIN_BARS}`,
       );
     }
 
-    const merged = await this.client.getMarketDetailMerged(this.htxSymbol);
-    const bars = mapHtxKlinesToBars(this.internalSymbol, klines);
-    const quote = mapHtxMergedToQuote(this.internalSymbol, merged);
-    const snapshot = buildMarketSnapshot(bars, quote, this.cycleIndex, this.cycleIdPrefix);
-    this.cycleIndex += 1;
-    return snapshot;
+    this.lastFusedContext = bundle.fusedContext;
+    return bundle.snapshot;
+  }
+
+  async fetchEvaluationBundle(): Promise<{
+    snapshot: MarketSnapshot;
+    fusedContext: FusedMarketContext;
+  }> {
+    const bundle = await this.gateway.pollEvaluationBundle({
+      cycleIdPrefix: this.cycleIdPrefix,
+    });
+    this.lastFusedContext = bundle.fusedContext;
+    return {
+      snapshot: bundle.snapshot,
+      fusedContext: bundle.fusedContext,
+    };
   }
 }

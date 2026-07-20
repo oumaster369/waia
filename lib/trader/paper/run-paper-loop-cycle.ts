@@ -1,11 +1,26 @@
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
+import type { Bar } from "@/lib/trader/intelligence/types";
 import { emitPaperBarCloseCycleComplete } from "@/lib/trader/paper/paper-bar-close-loop-telemetry";
-import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
 import type {
   PaperLoopCycleReport,
+  PaperLoopWorkerConfig,
   RunPaperLoopCycleInput,
 } from "@/lib/trader/paper/paper-loop-worker.types";
+import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
+import type { PaperPnLMarkPrices } from "@/lib/trader/paper/paper-pnl.types";
+import {
+  defaultStopDistanceProvider,
+  derivePortfolioAccountState,
+  toAccountRiskState,
+} from "@/lib/trader/portfolio";
+import { DEFAULT_PORTFOLIO_RUN_CONFIG } from "@/lib/trader/portfolio/portfolio-run-config.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
+import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
+import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const EMPTY_STATE: AccountRiskState = {
@@ -15,6 +30,59 @@ const EMPTY_STATE: AccountRiskState = {
   drawdown: "0",
   quoteExposureByCurrency: {},
 };
+
+function buildPaperLoopPortfolioContext(
+  config: PaperLoopWorkerConfig,
+  markPrices?: PaperPnLMarkPrices,
+): PortfolioCycleContext {
+  return {
+    runConfig: {
+      ...DEFAULT_PORTFOLIO_RUN_CONFIG,
+      startingBalanceUsdt: config.startingBalanceUsdt,
+      defaultStopDistancePct: config.defaultStopDistancePct,
+    },
+    limits: {
+      maxRiskPerTradePct: DEFAULT_ORG_RISK_LIMITS.maxRiskPerTradePct!,
+      maxPortfolioRiskPct: DEFAULT_ORG_RISK_LIMITS.maxPortfolioRiskPct!,
+      maxConcurrentPositions: DEFAULT_ORG_RISK_LIMITS.maxConcurrentPositions!,
+      maxNotional: DEFAULT_ORG_RISK_LIMITS.maxNotional,
+    },
+    stopDistanceProvider: defaultStopDistanceProvider,
+    costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
+    markPrices,
+  };
+}
+
+function buildMarkPricesFromSnapshot(bars: readonly Bar[]): PaperPnLMarkPrices | undefined {
+  if (bars.length === 0) {
+    return undefined;
+  }
+  const marks: Record<string, string> = {};
+  for (const bar of bars) {
+    marks[bar.symbol] = bar.close;
+  }
+  return { marks };
+}
+
+async function refreshPortfolioAccountState(
+  context: OrgContext,
+  input: RunPaperLoopCycleInput,
+  portfolio: PortfolioCycleContext,
+): Promise<AccountRiskState> {
+  const portfolioState = await derivePortfolioAccountState({
+    context,
+    orderRepository: input.deps.orderRepository,
+    runConfig: portfolio.runConfig,
+    limits: portfolio.limits,
+    stopDistanceProvider: portfolio.stopDistanceProvider,
+    executionMode: "mock",
+    markPrices: portfolio.markPrices,
+  });
+  const openOrders = await input.deps.orderRepository.listOpenOrders(context, {
+    executionMode: "mock",
+  });
+  return toAccountRiskState({ portfolio: portfolioState, openOrderCount: openOrders.length });
+}
 
 /** Runs one scheduled paper-loop cycle: startup reconciliation → HTX poll → multi-strategy paper dispatch (P5). */
 export async function runPaperLoopCycle(
@@ -45,18 +113,19 @@ export async function runPaperLoopCycle(
   const context = requireOrgContext(config.organizationId);
   const startup = await deps.startupReconciliation.runStartupReconciliation(context, "mock");
 
+  const snapshot = await deps.poll.fetchSnapshot();
+  const portfolio = buildPaperLoopPortfolioContext(
+    config,
+    buildMarkPricesFromSnapshot(snapshot.bars),
+  );
+
   let accountState = EMPTY_STATE;
   try {
-    accountState = await deriveAccountRiskStateFromMockOrders({
-      context,
-      orderRepository: deps.orderRepository,
-      executionMode: "mock",
-    });
+    accountState = await refreshPortfolioAccountState(context, input, portfolio);
   } catch {
     accountState = EMPTY_STATE;
   }
 
-  const snapshot = await deps.poll.fetchSnapshot();
   const result = await runPaperCycleOnce(deps.paperCycleDeps, {
     context,
     snapshot,
@@ -68,15 +137,12 @@ export async function runPaperLoopCycle(
     newId: input.newId,
     orderRepository: deps.orderRepository,
     refreshAccountStateBetweenStrategies: true,
+    portfolio,
   });
 
   let accountStateAfterCycle = accountState;
   try {
-    accountStateAfterCycle = await deriveAccountRiskStateFromMockOrders({
-      context,
-      orderRepository: deps.orderRepository,
-      executionMode: "mock",
-    });
+    accountStateAfterCycle = await refreshPortfolioAccountState(context, input, portfolio);
   } catch {
     accountStateAfterCycle = accountState;
   }

@@ -9,15 +9,23 @@ Repository-specific execution contract for AI coding agents. **Router only** —
 | Resource | Location |
 |---------|----------|
 | WAIA DEV OS constitution | [`docs/waia-governance/WAIA-DEV-OS.md`](docs/waia-governance/WAIA-DEV-OS.md) |
+| WAIA DEV OS architecture specification (primary DEV OS organization canon; T0 documentation; does not own product meaning or module runtime architecture) | [`docs/waia-governance/WAIA-DEV-OS-ARCHITECTURE-SPECIFICATION.md`](docs/waia-governance/WAIA-DEV-OS-ARCHITECTURE-SPECIFICATION.md) |
 | North Star | [`docs/waia-governance/WAIA-NORTH-STAR.md`](docs/waia-governance/WAIA-NORTH-STAR.md) |
 | Operating memory | [`docs/waia-governance/WAIA-OPERATING-MEMORY.md`](docs/waia-governance/WAIA-OPERATING-MEMORY.md) |
 | MVP index | [`docs/product/WAIA-V1-MVP-SPEC.md`](docs/product/WAIA-V1-MVP-SPEC.md) |
 | Execution contract + risk | [`docs/waia-governance/EXECUTION-CONTRACT.md`](docs/waia-governance/EXECUTION-CONTRACT.md), [`RISK-TIERS.md`](docs/waia-governance/RISK-TIERS.md) |
-| Linear + task lifecycle | [`docs/waia-governance/LINEAR-GOVERNANCE.md`](docs/waia-governance/LINEAR-GOVERNANCE.md), [`TASK-LIFECYCLE.md`](docs/waia-governance/TASK-LIFECYCLE.md) |
+| Linear + task lifecycle | [`docs/waia-governance/LINEAR-GOVERNANCE.md`](docs/waia-governance/LINEAR-GOVERNANCE.md), [`TASK-LIFECYCLE.md`](docs/waia-governance/TASK-LIFECYCLE.md), [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) |
+| Integration boundaries | [`docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md`](docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md) |
 | Execution label ownership | [`docs/waia-governance/AGENT-EXECUTION-LABELS.md`](docs/waia-governance/AGENT-EXECUTION-LABELS.md) |
 | Auto-advance preconditions | [`docs/waia-governance/AGENT-AUTO-ADVANCE.md`](docs/waia-governance/AGENT-AUTO-ADVANCE.md) |
 | Agent automation topology | [`docs/AGENT_AUTOMATION.md`](docs/AGENT_AUTOMATION.md) |
 | Governance index | [`docs/waia-governance/README.md`](docs/waia-governance/README.md) |
+| Canonical integration plans | [`docs/plans/README.md`](docs/plans/README.md) |
+| Product completion specs | [`docs/waia-governance/PRODUCT-COMPLETION-SPEC-STANDARD.md`](docs/waia-governance/PRODUCT-COMPLETION-SPEC-STANDARD.md), [`docs/product-specs/`](docs/product-specs/) |
+| Gap registries | [`docs/gaps/GAP-REGISTRY-STANDARD.md`](docs/gaps/GAP-REGISTRY-STANDARD.md) |
+| Roadmaps (integration batches) | [`docs/roadmaps/ROADMAP-STANDARD.md`](docs/roadmaps/ROADMAP-STANDARD.md) |
+| Roadmap autopilot (prep) | [`docs/waia-governance/ROADMAP-AUTOPILOT.md`](docs/waia-governance/ROADMAP-AUTOPILOT.md) |
+| Execution surfaces | [`docs/ops/EXECUTION-SURFACES.md`](docs/ops/EXECUTION-SURFACES.md) |
 | ADRs | [`docs/adr/README.md`](docs/adr/README.md) |
 
 ---
@@ -30,9 +38,11 @@ Module/platform architecture (the "how it's built" canon, distinct from governan
 |---------|----------|
 | WAIA Core Architecture (shared platform — identity, tenancy, entitlements, payments, audit; wins on conflict) | [`docs/waia-core/WAIA-CORE-ARCHITECTURE.md`](docs/waia-core/WAIA-CORE-ARCHITECTURE.md) |
 | AI-TRADER corpus (index → vision, master spec, scope, roadmap, program, security, billing, integration, journey) | [`docs/ai-trader/README.md`](docs/ai-trader/README.md) |
+| AI-TRADER Product Constitution (product-level canon — what the finished module is) | [`docs/AI-TRADER-PRODUCT-CONSTITUTION.md`](docs/AI-TRADER-PRODUCT-CONSTITUTION.md) |
 | AI-TRADER Master Spec v2 (governing technical spec) | [`docs/ai-trader/AI-TRADER-MASTER-SPEC-v2.md`](docs/ai-trader/AI-TRADER-MASTER-SPEC-v2.md) |
+| AI-TRADER Target Runtime Architecture (completed-system runtime topology and end-to-end algorithm; subordinate to Product Constitution and Master Spec; documentation target only, not implementation scope) | [`docs/ai-trader/AI-TRADER-TARGET-ARCHITECTURE.md`](docs/ai-trader/AI-TRADER-TARGET-ARCHITECTURE.md) |
 | AI-TRADER Implementation Program v1.2 (execution blueprint → Linear) | [`docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md`](docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md) |
-| ADR corpus (AI-TRADER decisions = ADR-0005 … ADR-0011) | [`docs/adr/README.md`](docs/adr/README.md) |
+| ADR corpus (AI-TRADER decisions = ADR-0005 … ADR-0023) | [`docs/adr/README.md`](docs/adr/README.md) |
 
 ---
 
@@ -53,7 +63,7 @@ Recovery order — then escalate per [`EXECUTION-CONTRACT.md`](docs/waia-governa
 1. Never push directly to `main` or `dev`.
 2. Work on **`dee-<NN>-<slug>`** linked to Linear; open PR to `dev`.
 3. Never commit secrets.
-4. Follow the 4-phase workflow without skipping steps.
+4. Follow the lifecycle in [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) without skipping steps; **PR = integration boundary** ([`INTEGRATION-BOUNDARY-POLICY.md`](docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)).
 5. Linear project **WAIA** is the source of executable work.
 6. Only atomic issues with exactly one execution label.
 7. Missing detail blocks execution → STOP and ask.
@@ -82,6 +92,8 @@ AI-Twin builds a structured digital personality via dialogue, diary, and behavio
 ---
 
 ## Required workflow
+
+Canonical lifecycle: [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) · Integration boundaries: [`INTEGRATION-BOUNDARY-POLICY.md`](docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md).
 
 | Phase | Command | Mode | Model |
 |-------|---------|------|-------|

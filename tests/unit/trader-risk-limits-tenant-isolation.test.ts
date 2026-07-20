@@ -85,4 +85,30 @@ describe("trader risk limits tenant isolation (DEE-239 / ADR-0007)", () => {
   it("empty organization id throws OrgScopeError", () => {
     expect(() => requireOrgContext("")).toThrow(OrgScopeError);
   });
+
+  it("M2 portfolio limit columns remain org-scoped", async () => {
+    const db = getDb();
+    const service = createSqliteRiskLimitsService(db);
+
+    await service.upsertLimitsForOrg(requireOrgContext(orgA), {
+      ...DEFAULT_ORG_RISK_LIMITS,
+      maxRiskPerTradePct: "0.02",
+      maxPortfolioRiskPct: "0.10",
+      maxConcurrentPositions: 5,
+    });
+    const orgBLimits = await service.upsertLimitsForOrg(requireOrgContext(orgB), {
+      ...DEFAULT_ORG_RISK_LIMITS,
+      maxRiskPerTradePct: "0.005",
+      maxPortfolioRiskPct: "0.02",
+      maxConcurrentPositions: 1,
+    });
+    const orgALimits = await service.getLimitsForOrg(requireOrgContext(orgA));
+
+    expect(orgBLimits.maxRiskPerTradePct).toBe("0.005");
+    expect(orgBLimits.maxPortfolioRiskPct).toBe("0.02");
+    expect(orgBLimits.maxConcurrentPositions).toBe(1);
+    expect(orgALimits?.maxRiskPerTradePct).toBe("0.02");
+    expect(orgALimits?.maxPortfolioRiskPct).toBe("0.1");
+    expect(orgALimits?.maxConcurrentPositions).toBe(5);
+  });
 });

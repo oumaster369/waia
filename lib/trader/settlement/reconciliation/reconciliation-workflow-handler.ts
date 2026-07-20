@@ -1,9 +1,6 @@
-import { createRequire } from "node:module";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
 
-const require = createRequire(import.meta.url);
-if (process.env.VITEST !== "true") {
-  require("server-only");
-}
+enforceServerOnly();
 
 import type { ApiErrorEnvelope } from "@/lib/auth/json-errors";
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";

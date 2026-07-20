@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "htr-wp22-crash-recovery-matrix/v1",
+  "terminalState": "HTR_WP22_CRASH_RECOVERY_PASS",
+  "gitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+  "dirtyTree": false,
+  "upstreamHarness": {
+    "terminalState": "STREAMING_EVIDENCE_OK",
+    "reconstructionOutcome": "RECOVERED_PARTIAL",
+    "sigtermPartialManifest": "/var/folders/0x/438cbk_502jd7ppl38xxk29w0000gn/T/waia-wp04-recovery-harness-QCwa2T/sigterm-run/manifest.partial.json",
+    "parity": {
+      "evidenceDigestMatch": true,
+      "semanticReproDigestMatch": true,
+      "metricsMatch": true,
+      "cycleCountMatch": true
+    },
+    "memoryBoundedness": {
+      "retainedPaperCycleResults": 0,
+      "peakBufferedProjections": 32,
+      "maxBatchCycles": 32,
+      "cycleCount": 81,
+      "boundedness": [
+        {
+          "cycleCount": 81,
+          "peakBufferedProjections": 32
+        },
+        {
+          "cycleCount": 40,
+          "peakBufferedProjections": 32
+        }
+      ],
+      "provenance": {
+        "gitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+        "dirtyTree": false
+      }
+    }
+  },
+  "matrix": [
+    {
+      "caseId": "complete-vs-stream-parity",
+      "passed": true,
+      "detail": "evidence=true semantic=true cycles=true"
+    },
+    {
+      "caseId": "sigterm-partial-manifest",
+      "passed": true,
+      "detail": "/var/folders/0x/438cbk_502jd7ppl38xxk29w0000gn/T/waia-wp04-recovery-harness-QCwa2T/sigterm-run/manifest.partial.json"
+    },
+    {
+      "caseId": "hard-kill-reconstruction",
+      "passed": true,
+      "detail": "RECOVERED_PARTIAL"
+    },
+    {
+      "caseId": "memory-bounded-stream-only",
+      "passed": true,
+      "detail": "retained=0 peakBuffered=32"
+    }
+  ],
+  "payloadSha256": "0a872234b26b56634bd4a636fd3bceac01c7e4954375522767e867005b5eda11"
+}

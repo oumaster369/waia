@@ -7,36 +7,39 @@ import {
   type InstrumentId,
   type Quote,
 } from "@/lib/trader/intelligence/types";
-
-const ONE_MINUTE_MS = 60_000;
-const DEFAULT_INTERVAL: BarInterval = "1m";
+import { intervalDurationMs } from "@/lib/trader/market-data/mtf/mtf-bar-aggregator";
 
 function formatDecimal(value: number): string {
   return value.toFixed(8).replace(/\.?0+$/, "") || "0";
 }
 
-function barTimesFromOpenSeconds(openSeconds: number): {
+function barTimesFromOpenSeconds(
+  openSeconds: number,
+  interval: BarInterval,
+): {
   barOpenTime: string;
   barCloseTime: string;
 } {
+  const durationMs = intervalDurationMs(interval);
   const barOpenTime = new Date(openSeconds * 1000).toISOString();
-  const barCloseTime = new Date(openSeconds * 1000 + ONE_MINUTE_MS).toISOString();
+  const barCloseTime = new Date(openSeconds * 1000 + durationMs).toISOString();
   return { barOpenTime, barCloseTime };
 }
 
 export function mapHtxKlinesToBars(
   internalSymbol: InstrumentId,
   klines: readonly HtxKlineRow[],
+  interval: BarInterval = "1m",
 ): Bar[] {
   const sorted = [...klines].sort((left, right) => left.id - right.id);
 
   return sorted.map((row) => {
-    const { barOpenTime, barCloseTime } = barTimesFromOpenSeconds(row.id);
+    const { barOpenTime, barCloseTime } = barTimesFromOpenSeconds(row.id, interval);
     const volume = row.amount ?? row.vol;
 
     return {
       symbol: internalSymbol,
-      interval: DEFAULT_INTERVAL,
+      interval,
       open: formatDecimal(row.open),
       high: formatDecimal(row.high),
       low: formatDecimal(row.low),

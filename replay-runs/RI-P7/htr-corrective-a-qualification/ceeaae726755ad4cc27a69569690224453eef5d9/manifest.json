@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "htr-corrective-a-evidence-manifest/v1",
+  "contractId": "waia.htr.evidence-integrity.v2",
+  "sourceGitSha": "ceeaae726755ad4cc27a69569690224453eef5d9",
+  "sourceDirtyTree": false,
+  "packetSha256": "67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13",
+  "generatorProvenance": "scripts/trader/htr-corrective-a-evidence-seal.ts",
+  "artifactIndex": [
+    {
+      "path": "integrated-qualification-report.json",
+      "sizeBytes": 1322,
+      "fileSha256": "14d2a76a1f9ace2822f2a5502b23050e3dc4ac298eedfa7847d87f2b85507637",
+      "payloadSha256": "0d7497437b3cfe7a0452336d246dbc58a3047e4d92efb9b5f37a932362bc7fc7",
+      "schemaVersion": "htr-corrective-a-integrated-qualification/v1",
+      "sourceGitSha": "ceeaae726755ad4cc27a69569690224453eef5d9",
+      "sourceDirtyTree": false,
+      "packetSha256": "67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13",
+      "generatorProvenance": "scripts/trader/htr-corrective-a-evidence-seal.ts"
+    },
+    {
+      "path": "corrective-a-packet-binding.json",
+      "sizeBytes": 408,
+      "fileSha256": "7ec7095b7597217ce1b48d506fee828e350107e40ab5f5a0486145142c9d0958",
+      "payloadSha256": "0dda70e5d8c92920f7b68556684969add9c2845b28d869d321d9578242e8e7cf",
+      "schemaVersion": "htr-corrective-a-packet-binding/v1",
+      "sourceGitSha": "ceeaae726755ad4cc27a69569690224453eef5d9",
+      "sourceDirtyTree": false,
+      "packetSha256": "67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13",
+      "generatorProvenance": "scripts/trader/htr-corrective-a-evidence-seal.ts"
+    },
+    {
+      "path": "gate-status-index.json",
+      "sizeBytes": 938,
+      "fileSha256": "c1175a52dc6449d80564504347cef888fde922dee0a4dbcd57924f995f872389",
+      "payloadSha256": "1188200336ca7b3616ade217e8b6b7a5bde7cf469b22072b30a4349cf60b8463",
+      "schemaVersion": "htr-corrective-a-gate-status-index/v1",
+      "sourceGitSha": "ceeaae726755ad4cc27a69569690224453eef5d9",
+      "sourceDirtyTree": false,
+      "packetSha256": "67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13",
+      "generatorProvenance": "scripts/trader/htr-corrective-a-evidence-seal.ts"
+    }
+  ]
+}

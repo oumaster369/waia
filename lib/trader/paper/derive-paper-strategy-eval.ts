@@ -1,12 +1,16 @@
+import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import {
   buildPaperPnLFromLedger,
   buildQuoteCurrencyBySymbol,
   computeUnrealizedFromLedgerForMarks,
+  countOpenPositionsFromLedger,
+  extractForcedFlatMarkToCloseTrades,
   extractInWindowClosedTrades,
   loadPaperFillEvents,
   resolvePaperPnLQuoteCurrency,
   walkFillsForPnL,
+  type PaperMarkToCloseTrade,
   type PaperPnLFillEvent,
 } from "@/lib/trader/paper/derive-paper-pnl";
 import { orderMatchesStrategyEvidenceScope } from "@/lib/trader/paper/strategy-evidence-scope";
@@ -36,6 +40,14 @@ export type DerivePaperStrategyEvaluationInput = {
   markPrices?: PaperPnLMarkPrices;
   /** Skip repository load when batching multiple strategies/windows. */
   fillEvents?: PaperPnLFillEvent[];
+  forcedFlat?: ForcedFlatMarkToCloseInput;
+};
+
+export type ForcedFlatMarkToCloseInput = {
+  boundaryClosePrice: string;
+  boundaryTimestamp: Date;
+  costModel: CostModelV1;
+  newSyntheticId?: (symbol: string) => string;
 };
 
 export type DerivePaperStrategyEvaluationsInput = {
@@ -47,6 +59,7 @@ export type DerivePaperStrategyEvaluationsInput = {
   markPrices?: PaperPnLMarkPrices;
   fillEvents?: PaperPnLFillEvent[];
   derivedAt?: Date;
+  forcedFlat?: ForcedFlatMarkToCloseInput;
 };
 
 function assertValidWindow(window: PaperPnLWindow): void {
@@ -218,6 +231,10 @@ function computeTradeStatistics(
   };
 }
 
+function sumMarkToClosePnl(trades: readonly PaperMarkToCloseTrade[]): string {
+  return trades.reduce((total, trade) => addDecimal(total, trade.tradePnl), "0");
+}
+
 function derivePaperStrategyEvaluationFromEvents(input: {
   organizationId: string;
   executionMode: PaperBookExecutionMode;
@@ -226,6 +243,7 @@ function derivePaperStrategyEvaluationFromEvents(input: {
   markPrices?: PaperPnLMarkPrices;
   fillEvents: readonly PaperPnLFillEvent[];
   derivedAt?: Date;
+  forcedFlat?: ForcedFlatMarkToCloseInput;
 }): PaperStrategyEvaluation {
   const strategyEvents = filterFillEventsByStrategy(input.fillEvents, input.strategySignalId);
   const symbols = collectSymbols(strategyEvents);
@@ -284,6 +302,21 @@ function derivePaperStrategyEvaluationFromEvents(input: {
   );
   const tradeStats = computeTradeStatistics(rawClosedTrades, periodRealizedPnl);
 
+  const openPositionCount = countOpenPositionsFromLedger(endWalk.ledgerBySymbol);
+  let markToCloseTrades: PaperMarkToCloseTrade[] = [];
+  if (input.forcedFlat) {
+    markToCloseTrades = extractForcedFlatMarkToCloseTrades({
+      openingEvents,
+      inWindowEvents,
+      quoteCurrencyBySymbol,
+      boundaryClosePrice: input.forcedFlat.boundaryClosePrice,
+      boundaryTimestamp: input.forcedFlat.boundaryTimestamp,
+      costModel: input.forcedFlat.costModel,
+      newSyntheticId: input.forcedFlat.newSyntheticId,
+    });
+  }
+  const periodMarkedPnl = addDecimal(periodRealizedPnl, sumMarkToClosePnl(markToCloseTrades));
+
   return {
     organizationId: input.organizationId,
     executionMode: input.executionMode,
@@ -298,6 +331,10 @@ function derivePaperStrategyEvaluationFromEvents(input: {
     periodTotalPnlChange,
     endSnapshot,
     derivedAt,
+    markToCloseTrades,
+    markToCloseTradeCount: markToCloseTrades.length,
+    openPositionCount,
+    periodMarkedPnl,
     ...tradeStats,
   };
 }
@@ -336,6 +373,7 @@ export async function derivePaperStrategyEvaluation(
     window: input.window,
     markPrices: input.markPrices,
     fillEvents,
+    forcedFlat: input.forcedFlat,
   });
 }
 
@@ -374,6 +412,7 @@ export async function derivePaperStrategyEvaluations(
       markPrices: input.markPrices,
       fillEvents,
       derivedAt,
+      forcedFlat: input.forcedFlat,
     }),
   );
 }

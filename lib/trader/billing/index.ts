@@ -257,3 +257,28 @@ export {
   createPostgresInvoiceIssuanceService,
   createSqliteInvoiceIssuanceService,
 } from "@/lib/trader/billing/invoice-issuance-service";
+
+export {
+  createBillingGovernanceService,
+  createPostgresBillingGovernanceService,
+  createSqliteBillingGovernanceService,
+  isInvoiceDisputable,
+  isInvoiceEnforcementFrozen,
+  type ApplyOverchargeCorrectionInput,
+  type ApplyOverchargeCorrectionResult,
+  type BillingGovernanceService,
+  type OpenInvoiceDisputeInput,
+  verifyInvoiceCorrectionDigest,
+  verifyInvoiceDisputeEventDigest,
+} from "@/lib/trader/billing/governance";
+
+export {
+  createBillingPeriodCloseOrchestrator,
+  createPostgresBillingPeriodCloseOrchestrator,
+  createSqliteBillingPeriodCloseOrchestrator,
+  type BillingPeriodCloseOrchestrator,
+  type BillingPeriodCloseOrchestratorDeps,
+  type BillingPeriodCloseResult,
+  type CloseAndMaterializeInput,
+  type MaterializeDraftInput,
+} from "@/lib/trader/billing/billing-period-close-orchestrator";

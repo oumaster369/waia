@@ -1,0 +1,13 @@
+{
+  "description": "FIFO partial sell across two lots under single strategy signal scope",
+  "symbol": "BTC/USDT",
+  "strategySignalId": "sig-fifo-1",
+  "accountKey": "paper",
+  "lots": [
+    { "id": "lot-a", "remainingQty": "0.003", "openedAt": "2026-01-01T00:00:00.000Z" },
+    { "id": "lot-b", "remainingQty": "0.004", "openedAt": "2026-01-01T00:05:00.000Z" }
+  ],
+  "sellFillQty": "0.005",
+  "expectedFirstLotRemaining": "0",
+  "expectedSecondLotRemaining": "0.002"
+}

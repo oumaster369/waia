@@ -1,0 +1,764 @@
+diff --git a/lib/trader/research/wp21-parent-zero-fill-structural-support.ts b/lib/trader/research/wp21-parent-zero-fill-structural-support.ts
+new file mode 100644
+index 0000000..4a114bf
+--- /dev/null
++++ b/lib/trader/research/wp21-parent-zero-fill-structural-support.ts
+@@ -0,0 +1,469 @@
++/**
++ * WP21 parent zero-fill structural export support — parent worktree local only (B5 lane v2).
++ */
++import { createHash } from "node:crypto";
++import fs from "node:fs";
++import path from "node:path";
++
++import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
++import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
++import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
++import type { Bar, EvaluationCycleResult } from "@/lib/trader/intelligence/types";
++import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
++import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
++import { canonicalJsonString } from "@/lib/trader/research/digest";
++import {
++  createHtrInitialAccountRiskState,
++  HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
++} from "@/lib/trader/research/htr-initial-portfolio-contract";
++import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
++import { buildResearchValidationCycleIdPrefix } from "@/lib/trader/research/research-backtest-cycle-id";
++import { buildResearchV2PortfolioContext } from "@/lib/trader/research/research-portfolio-config";
++import {
++  RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
++  RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
++} from "@/lib/trader/research/strategy-candidate.types";
++import type { OrgContext } from "@/lib/waia-core/scope/org-context";
++
++export const WP21_ZERO_FILL_STRUCTURAL_PARENT_SCHEMA =
++  "waia.trader.wp21.zero-fill-structural-parent.v2" as const;
++
++export const WP21_PARENT_GIT_SHA = "5e9fb1061723614b22604aee86ee129e8f226616" as const;
++
++export const WP21_BOUND_ZERO_FILL_FIXTURE_PATH =
++  "tests/fixtures/trader/btcusdt-1m-mean-reversion.json" as const;
++
++export const WP21_PARENT_FIXTURE_USER_ID = "00000000-0000-4000-8021-000000000004" as const;
++
++export type Wp21ZeroFillStrategyDecisionProjection = {
++  decisionChainDigest: string;
++  signalCount: number;
++  primarySignalId: string | null;
++};
++
++export type Wp21ZeroFillPositionStateProjection = {
++  openPositionCount: number;
++  symbols: string[];
++};
++
++export type Wp21ZeroFillMetricsProjectionV1 =
++  | {
++      schemaVersion: typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1;
++      tradeCount: number;
++      periodRealizedPnl: string;
++      periodTotalFees: string;
++      byRegime: [];
++    }
++  | {
++      schemaVersion: typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION;
++      closedTradeSemanticsVersion: string;
++      tradeLifecycleSemanticsVersion: string;
++      costModelVersion: string;
++      submittedOrders: number;
++      acceptedOrders: number;
++      filledOrders: number;
++      openPositions: number;
++      closedTrades: number;
++      markToCloseTrades: number;
++      realizedPnl: string;
++      markedPnl: string;
++      periodTotalFees: string;
++      rejectedSignals: number;
++      skippedSignals: number;
++      byRegime: [];
++    };
++
++export type Wp21ZeroFillStructuralCycleRow = {
++  cycleId: string;
++  cycleIndex: number;
++  timestamp: string;
++  strategyId: string;
++  signalIdentity: string | null;
++  strategyDecision: Wp21ZeroFillStrategyDecisionProjection;
++  tradingPermission: string;
++  riskOutcome: string;
++  orderIntentPresent: boolean;
++  positionState: Wp21ZeroFillPositionStateProjection;
++  accountGrossState: {
++    equity: string;
++    equityHwm: string;
++    cash: string | null;
++  };
++  guardianDecision: string | null;
++  guardianReason: string | null;
++  noFillCapitalState: {
++    startingBalanceUsdt: string;
++    endingBalanceUsdt: string;
++    realizedPnl: string;
++    unrealizedPnl: string;
++  };
++};
++
++export type Wp21ZeroFillStructuralParentSemanticV2 = {
++  schemaVersion: typeof WP21_ZERO_FILL_STRUCTURAL_PARENT_SCHEMA;
++  parentGitSha: typeof WP21_PARENT_GIT_SHA;
++  inputFixturePath: typeof WP21_BOUND_ZERO_FILL_FIXTURE_PATH;
++  inputFixtureSha256: string;
++  parentCostAuthority: {
++    feesBps: "10";
++    slippageBps: "5";
++    costModelVersion: "waia.trader.cost-model.v1";
++  };
++  cycleCount: number;
++  submittedOrders: number;
++  acceptedOrders: number;
++  filledOrders: number;
++  cycles: Wp21ZeroFillStructuralCycleRow[];
++  metrics: Wp21ZeroFillMetricsProjectionV1;
++  metricsSchemaVersion:
++    | typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1
++    | typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION;
++  semanticResultDigest: string;
++};
++
++export type Wp21ZeroFillStructuralExportCliArgs = {
++  fixturePath: string;
++  fixtureSha256: string;
++  metricsSchemaVersion:
++    | typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1
++    | typeof RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION;
++  outPath: string;
++};
++
++export type Wp21ZeroFillStructuralSession = {
++  deps: PaperCycleDeps;
++  orderRepository: OrderRepository;
++  historicalExecutionProfile: Awaited<
++    ReturnType<typeof createInMemoryResearchBacktestSession>
++  >["historicalExecutionProfile"];
++  cleanup: () => void;
++};
++
++function sha256Utf8(value: string): string {
++  return createHash("sha256").update(value, "utf8").digest("hex");
++}
++
++function projectStrategyDecision(
++  evaluation: EvaluationCycleResult,
++): Wp21ZeroFillStrategyDecisionProjection {
++  const decisionChain = evaluation.decisionChain ?? null;
++  return {
++    decisionChainDigest: sha256Utf8(canonicalJsonString(decisionChain)),
++    signalCount: evaluation.signals.length,
++    primarySignalId: evaluation.signal?.strategySignalId ?? null,
++  };
++}
++
++function projectPositionState(): Wp21ZeroFillPositionStateProjection {
++  return { openPositionCount: 0, symbols: [] };
++}
++
++function resolveCycleAccountGrossState(): {
++  equity: string;
++  equityHwm: string;
++  cash: string | null;
++} {
++  const balance = HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT;
++  return { equity: balance, equityHwm: balance, cash: balance };
++}
++
++function resolveTradingPermission(cycle: {
++  submitBlocked?: boolean;
++  skipReason?: string | null;
++}): string {
++  if (cycle.submitBlocked) return "BLOCKED";
++  if (cycle.skipReason) return "SKIPPED";
++  return "PERMITTED";
++}
++
++function resolveRiskOutcome(cycle: {
++  strategyExecutions: Array<{
++    submitBlocked?: boolean;
++    skipReason?: string | null;
++    execution?: { status?: string | null } | null;
++  }>;
++}): string {
++  for (const entry of cycle.strategyExecutions) {
++    if (entry.submitBlocked) return "RISK_REJECTED";
++    if (entry.skipReason?.includes("risk")) return "RISK_REJECTED";
++    if (entry.execution?.status === "rejected") return "RISK_REJECTED";
++  }
++  return "RISK_ACCEPTED";
++}
++
++function resolveGuardianFields(cycle: {
++  htrGuardian?: {
++    breachState?: string;
++    reason?: { code?: string } | string | null;
++    allowNewExposure?: boolean;
++  } | null;
++  guardian?: {
++    evaluations?: Array<{ decision?: string }>;
++    exitIntents?: unknown[];
++  } | null;
++}): { guardianDecision: string | null; guardianReason: string | null } {
++  if (cycle.htrGuardian) {
++    const reason =
++      cycle.htrGuardian.reason == null
++        ? null
++        : typeof cycle.htrGuardian.reason === "string"
++          ? cycle.htrGuardian.reason
++          : (cycle.htrGuardian.reason.code ?? null);
++    return {
++      guardianDecision: cycle.htrGuardian.breachState ?? null,
++      guardianReason: reason,
++    };
++  }
++  if (cycle.guardian?.evaluations?.length) {
++    const first = cycle.guardian.evaluations[0];
++    return {
++      guardianDecision: first?.decision ?? null,
++      guardianReason: null,
++    };
++  }
++  return { guardianDecision: null, guardianReason: null };
++}
++
++function countOrderMetrics(cycleResults: Array<{
++  strategyExecutions: Array<{ execution?: { status?: string; order?: unknown } | null }>;
++}>): { submittedOrders: number; acceptedOrders: number; filledOrders: number } {
++  let submittedOrders = 0;
++  let acceptedOrders = 0;
++  const filledOrders = 0;
++  for (const cycle of cycleResults) {
++    for (const entry of cycle.strategyExecutions) {
++      const execution = entry.execution;
++      if (!execution) continue;
++      if (execution.status === "submitted" && execution.order) {
++        submittedOrders += 1;
++        acceptedOrders += 1;
++      }
++    }
++  }
++  return { submittedOrders, acceptedOrders, filledOrders };
++}
++
++function resolveOrderIntentPresent(cycle: {
++  strategyExecutions: Array<{
++    execution?: { order?: unknown; orderId?: string; status?: string } | null;
++  }>;
++}): boolean {
++  return cycle.strategyExecutions.some((entry) => {
++    const execution = entry.execution;
++    if (!execution) return false;
++    if (execution.status === "submitted" && execution.order) return true;
++    if ("orderId" in execution && execution.orderId) return true;
++    return false;
++  });
++}
++
++function resolveSignalIdentity(cycle: {
++  evaluation: { signals?: Array<{ strategySignalId?: string }>; signal?: { strategySignalId?: string } | null };
++}): string | null {
++  const primary = cycle.evaluation.signal?.strategySignalId ?? null;
++  if (primary) return primary;
++  const first = cycle.evaluation.signals?.[0]?.strategySignalId ?? null;
++  return first;
++}
++
++function buildMetricsProjection(input: {
++  metricsSchemaVersion: Wp21ZeroFillStructuralExportCliArgs["metricsSchemaVersion"];
++  costModelVersion: string;
++  submittedOrders: number;
++  acceptedOrders: number;
++  filledOrders: number;
++  periodRealizedPnl: string;
++}): Wp21ZeroFillMetricsProjectionV1 {
++  if (input.metricsSchemaVersion === RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1) {
++    return {
++      schemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
++      tradeCount: input.filledOrders,
++      periodRealizedPnl: input.periodRealizedPnl,
++      periodTotalFees: "0",
++      byRegime: [],
++    };
++  }
++  return {
++    schemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION,
++    closedTradeSemanticsVersion: "v1",
++    tradeLifecycleSemanticsVersion: "v1",
++    costModelVersion: input.costModelVersion,
++    submittedOrders: input.submittedOrders,
++    acceptedOrders: input.acceptedOrders,
++    filledOrders: input.filledOrders,
++    openPositions: 0,
++    closedTrades: 0,
++    markToCloseTrades: 0,
++    realizedPnl: input.periodRealizedPnl,
++    markedPnl: "0",
++    periodTotalFees: "0",
++    rejectedSignals: 0,
++    skippedSignals: 0,
++    byRegime: [],
++  };
++}
++
++export function parseWp21ZeroFillStructuralExportCliArgs(
++  argv: string[],
++): Wp21ZeroFillStructuralExportCliArgs {
++  const args = new Map<string, string>();
++  for (const arg of argv) {
++    if (!arg.startsWith("--")) continue;
++    const body = arg.slice(2);
++    const eq = body.indexOf("=");
++    if (eq === -1) args.set(body, "true");
++    else args.set(body.slice(0, eq), body.slice(eq + 1));
++  }
++  const fixturePath = args.get("fixture-path")?.trim();
++  const fixtureSha256 = args.get("fixture-sha256")?.trim();
++  const outPath = args.get("out")?.trim();
++  const rawSchema = args.get("metrics-schema-version")?.trim();
++  if (!fixturePath || !fixtureSha256 || !outPath || !rawSchema) {
++    throw new Error("WP21_ZERO_FILL_EXPORT_CLI_MISSING_REQUIRED_ARGS");
++  }
++  const metricsSchemaVersion =
++    rawSchema === "2.0.0" || rawSchema === RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION
++      ? RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION
++      : rawSchema === "1.0.0" || rawSchema === RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1
++        ? RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1
++        : (() => {
++            throw new Error(`WP21_ZERO_FILL_EXPORT_INVALID_METRICS_SCHEMA:${rawSchema}`);
++          })();
++  return { fixturePath, fixtureSha256, metricsSchemaVersion, outPath };
++}
++
++export function loadWp21ZeroFillFixtureBars(fixturePath: string, expectedSha256: string): Bar[] {
++  const abs = path.isAbsolute(fixturePath) ? fixturePath : path.join(process.cwd(), fixturePath);
++  const raw = fs.readFileSync(abs, "utf8");
++  const digest = sha256Utf8(raw);
++  if (digest !== expectedSha256) {
++    throw new Error("WP21_ZERO_FILL_EXPORT_FIXTURE_DIGEST_MISMATCH");
++  }
++  return (JSON.parse(raw) as { bars: Bar[] }).bars;
++}
++
++export async function exportWp21ZeroFillStructuralParent(input: {
++  cli: Wp21ZeroFillStructuralExportCliArgs;
++  context: OrgContext;
++  strategyId: string;
++  strategyVersion: string;
++  session: Wp21ZeroFillStructuralSession;
++}): Promise<Wp21ZeroFillStructuralParentSemanticV2> {
++  const costModel = createCostModelV1("10", "5");
++  const bars = loadWp21ZeroFillFixtureBars(input.cli.fixturePath, input.cli.fixtureSha256);
++  const session = input.session;
++  const runId = "wp21-zero-fill-structural-export-v1";
++  const window = {
++    start: new Date(bars[0]!.barOpenTime),
++    end: new Date(bars.at(-1)!.barCloseTime),
++  };
++  const cycleIdPrefix = buildResearchValidationCycleIdPrefix(runId);
++  const barSource = new HistoricalBarReplaySource({ bars, cycleIdPrefix });
++  const portfolioContext =
++    input.cli.metricsSchemaVersion === RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION
++      ? buildResearchV2PortfolioContext(costModel)
++      : undefined;
++
++  const backtest = await runBacktest({
++    context: input.context,
++    barSource,
++    deps: session.deps,
++    orderRepository: session.orderRepository,
++    accountKey: "wp21-zero-fill-structural",
++    defaultQuantity: "0.01",
++    costModel,
++    strategySignalIds: [input.strategyId],
++    strategyId: input.strategyId,
++    strategyVersion: input.strategyVersion,
++    regimeLabel: "AGGREGATE",
++    datasetId: "dataset-wp21-zero-fill-structural",
++    runId,
++    split: "validation",
++    window,
++    accountState: createHtrInitialAccountRiskState(),
++    exportedAt: window.end,
++    activeStrategyIds: [input.strategyId],
++    refreshAccountStateBetweenStrategies: true,
++    portfolio: portfolioContext,
++    markPrices: { marks: { [bars.at(-1)!.symbol]: bars.at(-1)!.close } },
++    historicalExecutionProfile: session.historicalExecutionProfile,
++  });
++
++  const terminalEquity = HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT;
++  const periodRealizedPnl = backtest.regimeMetrics[0]?.periodRealizedPnl ?? "0";
++  const orderMetrics = countOrderMetrics(backtest.cycleResults);
++  const accountGross = resolveCycleAccountGrossState();
++  const positionState = projectPositionState();
++
++  const cycles: Wp21ZeroFillStructuralCycleRow[] = backtest.cycleResults.map((cycle, cycleIndex) => {
++    const bar = bars[cycleIndex];
++    const timestamp = bar?.barCloseTime ?? window.end.toISOString();
++    const guardianFields = resolveGuardianFields(cycle);
++    return {
++      cycleId: `${cycleIdPrefix}-${cycleIndex}`,
++      cycleIndex,
++      timestamp,
++      strategyId: input.strategyId,
++      signalIdentity: resolveSignalIdentity(cycle),
++      strategyDecision: projectStrategyDecision(cycle.evaluation),
++      tradingPermission: resolveTradingPermission(cycle),
++      riskOutcome: resolveRiskOutcome(cycle),
++      orderIntentPresent: resolveOrderIntentPresent(cycle),
++      positionState,
++      accountGrossState: accountGross,
++      guardianDecision: guardianFields.guardianDecision,
++      guardianReason: guardianFields.guardianReason,
++      noFillCapitalState: {
++        startingBalanceUsdt: HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
++        endingBalanceUsdt: terminalEquity,
++        realizedPnl: periodRealizedPnl,
++        unrealizedPnl: "0",
++      },
++    };
++  });
++
++  const { submittedOrders, acceptedOrders, filledOrders } = orderMetrics;
++
++  const metrics = buildMetricsProjection({
++    metricsSchemaVersion: input.cli.metricsSchemaVersion,
++    costModelVersion: costModel.version,
++    submittedOrders,
++    acceptedOrders,
++    filledOrders,
++    periodRealizedPnl,
++  });
++
++  const semanticBody = {
++    schemaVersion: WP21_ZERO_FILL_STRUCTURAL_PARENT_SCHEMA,
++    parentGitSha: WP21_PARENT_GIT_SHA,
++    inputFixturePath: WP21_BOUND_ZERO_FILL_FIXTURE_PATH,
++    inputFixtureSha256: input.cli.fixtureSha256,
++    parentCostAuthority: {
++      feesBps: "10" as const,
++      slippageBps: "5" as const,
++      costModelVersion: "waia.trader.cost-model.v1" as const,
++    },
++    cycleCount: backtest.cycleCount,
++    submittedOrders,
++    acceptedOrders,
++    filledOrders,
++    cycles,
++    metrics,
++    metricsSchemaVersion: input.cli.metricsSchemaVersion,
++  };
++
++  return {
++    ...semanticBody,
++    semanticResultDigest: sha256Utf8(canonicalJsonString(semanticBody)),
++  };
++}
++
++export async function createWp21ZeroFillStructuralSession(): Promise<Wp21ZeroFillStructuralSession> {
++  const session = await createInMemoryResearchBacktestSession();
++  return {
++    deps: session.deps,
++    orderRepository: session.orderRepository,
++    historicalExecutionProfile: session.historicalExecutionProfile,
++    cleanup: session.cleanup,
++  };
++}
+diff --git a/scripts/trader/wp21-parent-cost-vector-oracle-v1.ts b/scripts/trader/wp21-parent-cost-vector-oracle-v1.ts
+new file mode 100644
+index 0000000..9ea7fa6
+--- /dev/null
++++ b/scripts/trader/wp21-parent-cost-vector-oracle-v1.ts
+@@ -0,0 +1,210 @@
++/**
++ * WP21 parent cost-vector oracle v1 — parent-worktree local only (B5 split-proof lane v2).
++ * Isolated deterministic parent-native CostModelV1 economics; no DB, network, or candidate imports.
++ */
++import { createHash } from "node:crypto";
++import { readFileSync, writeFileSync } from "node:fs";
++import path from "node:path";
++
++import {
++  applyCostToFill,
++  COST_MODEL_VERSION_V1,
++  createCostModelV1,
++} from "@/lib/trader/execution/cost-model";
++import { canonicalJsonString } from "@/lib/trader/research/digest";
++import {
++  addDecimal,
++  divideDecimal,
++  multiplyDecimal,
++  subtractDecimal,
++} from "@/lib/trader/risk/numeric";
++
++export const WP21_PARENT_COST_VECTOR_ORACLE_SCHEMA =
++  "waia.trader.wp21.parent-cost-vector-oracle.v2" as const;
++
++export const WP21_PARENT_GIT_SHA = "5e9fb1061723614b22604aee86ee129e8f226616" as const;
++
++export const WP21_BOUND_VECTOR_FIXTURE_PATH =
++  "tests/fixtures/trader/wp21-g2-cost-vectors-v1.json" as const;
++
++const PARENT_FEES_BPS = "10" as const;
++const PARENT_SLIPPAGE_BPS = "5" as const;
++
++export type Wp21CostVectorInput = {
++  vectorId: string;
++  side: "buy" | "sell";
++  grossFillPrice: string;
++  quantity: string;
++};
++
++export type Wp21ParentCostVectorRow = {
++  vectorId: string;
++  side: "buy" | "sell";
++  grossFillPrice: string;
++  quantity: string;
++  adjustedPrice: string;
++  feeAmount: string;
++  slippageCost: string;
++  grossNotional: string;
++  netCashEffect: string;
++  parentCostModelVersion: typeof COST_MODEL_VERSION_V1;
++};
++
++export type Wp21ParentCostVectorOracleSemanticV2 = {
++  schemaVersion: typeof WP21_PARENT_COST_VECTOR_ORACLE_SCHEMA;
++  parentGitSha: typeof WP21_PARENT_GIT_SHA;
++  vectorFixturePath: typeof WP21_BOUND_VECTOR_FIXTURE_PATH;
++  vectorFixtureSha256: string;
++  parentFeesBps: typeof PARENT_FEES_BPS;
++  parentSlippageBps: typeof PARENT_SLIPPAGE_BPS;
++  vectorCount: number;
++  rows: Wp21ParentCostVectorRow[];
++  semanticResultDigest: string;
++};
++
++export type Wp21ParentCostVectorOracleProvenanceEnvelope = {
++  cliFixturePath: string;
++};
++
++export type Wp21ParentCostVectorOracleRunResult = {
++  semantic: Wp21ParentCostVectorOracleSemanticV2;
++  provenanceEnvelope?: Wp21ParentCostVectorOracleProvenanceEnvelope;
++};
++
++function sha256Utf8(value: string): string {
++  return createHash("sha256").update(value, "utf8").digest("hex");
++}
++
++function assertDecimalString(value: string, field: string): void {
++  if (!/^-?\d+(\.\d+)?$/.test(value.trim())) {
++    throw new Error(`WP21_PARENT_ORACLE_NON_DECIMAL:${field}`);
++  }
++}
++
++function computeSlippageCost(grossFillPrice: string, quantity: string): string {
++  const grossNotional = multiplyDecimal(grossFillPrice, quantity);
++  return multiplyDecimal(grossNotional, divideDecimal(PARENT_SLIPPAGE_BPS, "10000"));
++}
++
++function computeNetCashEffect(
++  side: "buy" | "sell",
++  grossNotional: string,
++  feeAmount: string,
++): string {
++  if (side === "buy") {
++    return subtractDecimal("0", addDecimal(grossNotional, feeAmount));
++  }
++  return subtractDecimal(grossNotional, feeAmount);
++}
++
++export function computeParentCostVectorRow(vector: Wp21CostVectorInput): Wp21ParentCostVectorRow {
++  assertDecimalString(vector.grossFillPrice, "grossFillPrice");
++  assertDecimalString(vector.quantity, "quantity");
++  const costModel = createCostModelV1(PARENT_FEES_BPS, PARENT_SLIPPAGE_BPS);
++  const { adjustedPrice, fee: feeAmount } = applyCostToFill(
++    vector.grossFillPrice,
++    vector.quantity,
++    vector.side,
++    costModel,
++  );
++  const grossNotional = multiplyDecimal(adjustedPrice, vector.quantity);
++  const slippageCost = computeSlippageCost(vector.grossFillPrice, vector.quantity);
++  const netCashEffect = computeNetCashEffect(vector.side, grossNotional, feeAmount);
++  return {
++    vectorId: vector.vectorId,
++    side: vector.side,
++    grossFillPrice: vector.grossFillPrice,
++    quantity: vector.quantity,
++    adjustedPrice,
++    feeAmount,
++    slippageCost,
++    grossNotional,
++    netCashEffect,
++    parentCostModelVersion: COST_MODEL_VERSION_V1,
++  };
++}
++
++type VectorFixture = {
++  schemaVersion: string;
++  vectors: Wp21CostVectorInput[];
++};
++
++export function loadCostVectorFixture(fixturePath: string, expectedSha256: string): VectorFixture {
++  const abs = path.isAbsolute(fixturePath) ? fixturePath : path.join(process.cwd(), fixturePath);
++  const raw = readFileSync(abs, "utf8");
++  const digest = sha256Utf8(raw);
++  if (digest !== expectedSha256) {
++    throw new Error("WP21_PARENT_ORACLE_VECTOR_FIXTURE_DIGEST_MISMATCH");
++  }
++  return JSON.parse(raw) as VectorFixture;
++}
++
++export function runParentCostVectorOracle(input: {
++  fixturePath: string;
++  fixtureSha256: string;
++  includeProvenance?: boolean;
++}): Wp21ParentCostVectorOracleRunResult {
++  const fixture = loadCostVectorFixture(input.fixturePath, input.fixtureSha256);
++  const rows = fixture.vectors.map((vector) => computeParentCostVectorRow(vector));
++  const semanticBody = {
++    schemaVersion: WP21_PARENT_COST_VECTOR_ORACLE_SCHEMA,
++    parentGitSha: WP21_PARENT_GIT_SHA,
++    vectorFixturePath: WP21_BOUND_VECTOR_FIXTURE_PATH,
++    vectorFixtureSha256: input.fixtureSha256,
++    parentFeesBps: PARENT_FEES_BPS,
++    parentSlippageBps: PARENT_SLIPPAGE_BPS,
++    vectorCount: rows.length,
++    rows,
++  };
++  const semantic: Wp21ParentCostVectorOracleSemanticV2 = {
++    ...semanticBody,
++    semanticResultDigest: sha256Utf8(canonicalJsonString(semanticBody)),
++  };
++  const result: Wp21ParentCostVectorOracleRunResult = { semantic };
++  if (input.includeProvenance) {
++    result.provenanceEnvelope = { cliFixturePath: input.fixturePath };
++  }
++  return result;
++}
++
++function parseCliArgs(argv: string[]): {
++  fixturePath: string;
++  fixtureSha256: string;
++  outPath: string;
++  includeProvenance: boolean;
++} {
++  const args = new Map<string, string>();
++  for (const arg of argv) {
++    if (!arg.startsWith("--")) continue;
++    const body = arg.slice(2);
++    const eq = body.indexOf("=");
++    if (eq === -1) args.set(body, "true");
++    else args.set(body.slice(0, eq), body.slice(eq + 1));
++  }
++  const fixturePath = args.get("fixture-path")?.trim();
++  const fixtureSha256 = args.get("fixture-sha256")?.trim();
++  const outPath = args.get("out")?.trim();
++  const includeProvenance = args.get("include-provenance") === "true";
++  if (!fixturePath || !fixtureSha256 || !outPath) {
++    throw new Error("WP21_PARENT_ORACLE_CLI_MISSING_REQUIRED_ARGS");
++  }
++  return { fixturePath, fixtureSha256, outPath, includeProvenance };
++}
++
++async function main() {
++  const cli = parseCliArgs(process.argv.slice(2));
++  const result = runParentCostVectorOracle(cli);
++  const output = cli.includeProvenance
++    ? { ...result.semantic, provenanceEnvelope: result.provenanceEnvelope }
++    : result.semantic;
++  writeFileSync(cli.outPath, `${JSON.stringify(output, null, 2)}\n`, "utf8");
++}
++
++if (process.env.WAIA_TRADER_CLI === "1") {
++  main().catch((err: unknown) => {
++    console.error(err instanceof Error ? err.message : err);
++    process.exitCode = 1;
++  });
++}
++
++export { main as runWp21ParentCostVectorOracleCli };
+diff --git a/scripts/trader/wp21-parent-zero-fill-structural-export-v1.ts b/scripts/trader/wp21-parent-zero-fill-structural-export-v1.ts
+new file mode 100644
+index 0000000..a77c378
+--- /dev/null
++++ b/scripts/trader/wp21-parent-zero-fill-structural-export-v1.ts
+@@ -0,0 +1,67 @@
++/**
++ * WP21 parent zero-fill structural export v1 — parent-worktree local only (B5 lane v2).
++ */
++import { writeFileSync } from "node:fs";
++
++import { getDb } from "@/db/client";
++import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
++import {
++  createWp21ZeroFillStructuralSession,
++  exportWp21ZeroFillStructuralParent,
++  parseWp21ZeroFillStructuralExportCliArgs,
++  WP21_PARENT_FIXTURE_USER_ID,
++  WP21_PARENT_GIT_SHA,
++} from "@/lib/trader/research/wp21-parent-zero-fill-structural-support";
++import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
++import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
++import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
++import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
++import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
++
++async function exportZeroFillStructural(argv: string[]) {
++  const cli = parseWp21ZeroFillStructuralExportCliArgs(argv);
++  const session = await createWp21ZeroFillStructuralSession();
++  try {
++    const db = getDb();
++    insertEmailPasswordUser(db, {
++      id: WP21_PARENT_FIXTURE_USER_ID,
++      email: "wp21-zero-fill-structural@waia.invalid",
++      password: "password123",
++      identityLabel: "WP21 Zero Fill Structural",
++    });
++    const orgId = ensureUserCoreSeedSqlite(db, {
++      userId: WP21_PARENT_FIXTURE_USER_ID,
++      displayName: "WP21 Zero Fill Structural",
++    });
++    const context = requireOrgContext(orgId);
++    await createSqliteRiskLimitsService(db).upsertLimitsForOrg(context, {
++      ...DEFAULT_ORG_RISK_LIMITS,
++    });
++    const semantic = await exportWp21ZeroFillStructuralParent({
++      cli,
++      context,
++      strategyId: MEAN_REVERSION_V0,
++      strategyVersion: "0.1.0",
++      session,
++    });
++    if (semantic.parentGitSha !== WP21_PARENT_GIT_SHA) {
++      throw new Error("WP21_ZERO_FILL_EXPORT_PARENT_SHA_MISMATCH");
++    }
++    writeFileSync(cli.outPath, `${JSON.stringify(semantic, null, 2)}\n`, "utf8");
++  } finally {
++    session.cleanup();
++  }
++}
++
++async function main() {
++  await exportZeroFillStructural(process.argv.slice(2));
++}
++
++if (process.env.WAIA_TRADER_CLI === "1") {
++  main().catch((err: unknown) => {
++    console.error(err instanceof Error ? err.message : err);
++    process.exitCode = 1;
++  });
++}
++
++export { exportZeroFillStructural };

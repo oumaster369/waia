@@ -1,0 +1,51 @@
+{
+  "pass": 13,
+  "fail": 0,
+  "skip": 0,
+  "suites": [
+    {
+      "file": "tests/integration/postgres-trader-accounting-frontier-parity.test.ts",
+      "pass": 10,
+      "fail": 0,
+      "skip": 0,
+      "tests": [
+        "creates trader_accounting_frontier table with expected schema",
+        "persists accounting frontier with content-addressed semantic digest (privileged validate-profile table-owner append permitted)",
+        "loadLatest returns highest accounting_sequence frontier (privileged validate-profile table-owner readback permitted)",
+        "idempotency same key same content returns existing frontier",
+        "same key different content fails closed",
+        "rejects append-only mutation on accounting frontier table",
+        "denies authenticated role SELECT on trader_accounting_frontier (42501 insufficient privilege)",
+        "denies authenticated role INSERT on trader_accounting_frontier (42501 insufficient privilege)",
+        "denies anon role SELECT on trader_accounting_frontier (42501 insufficient privilege)",
+        "denies anon role INSERT on trader_accounting_frontier (42501 insufficient privilege)"
+      ]
+    },
+    {
+      "file": "tests/integration/trader-htr-accounting-sqlite-postgres-parity.test.ts",
+      "pass": 3,
+      "fail": 0,
+      "skip": 0,
+      "tests": [
+        "memory and postgres agree on semantic digest for identical frontier input",
+        "postgres round-trip loadLatest preserves memory semantic digest",
+        "sequential append parity across memory and postgres repositories"
+      ]
+    }
+  ],
+  "environmentProvenance": {
+    "WAIA_PG_INTEGRATION": "shell-export",
+    "DATABASE_URL_POSTGRES": "canonical-local-validate-profile-shell-override",
+    "loaderOrScript": "docs/postgres-development.md + docker-compose.postgres-validate.yml",
+    "sourceClass": "isolated local/test",
+    "productionDatabase": false
+  },
+  "migrationProof": {
+    "migration0100Applied": true,
+    "migration0101Applied": true,
+    "traderAccountingFrontierTable": true,
+    "rlsPolicyCount": 4,
+    "appendOnlyTriggerCount": 2
+  },
+  "rlsRuntimeProofFile": "rls-runtime-proof.json"
+}

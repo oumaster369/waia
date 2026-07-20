@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.910Z",
+  "nodeVersion": "v22.22.3",
+  "command": "postgres-trader-wp21-six-table-matrix.test.ts RLS probes",
+  "exitCode": 0,
+  "waia_validateSelectInsert": "permitted",
+  "authenticated": "42501 table privilege denial",
+  "anon": "42501 table privilege denial",
+  "ownerUpdateDelete": "append-only trigger denial",
+  "status": "PASS",
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "e156f70eaac9d0b64d4c40f3e8a66901f3f7a93595611d6a78db8776279f5d65"
+}
