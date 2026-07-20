@@ -71,22 +71,13 @@ describe("HTR-WP12 ingress loader coverage", () => {
   it("loadQualificationBars runs gate when digest matches approved N1 fixture", () => {
     const n1Path = path.join(
       process.cwd(),
-      ".cursor/plans/dee-415-d11b/normalized/btcusdt-1m-2023q2clean.N1.json",
+      "tests/fixtures/trader/d11b/normalized/btcusdt-1m-2023q2clean.N1.json",
     );
 
-    try {
-      const spy = vi.spyOn(barIntegrityGate, "assertIngestBarsIntegrityOrThrow");
-      const bars = loadQualificationBars("N1", n1Path);
-      expect(spy).toHaveBeenCalled();
-      expect(bars.length).toBeGreaterThan(0);
-      spy.mockRestore();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("ENOENT")) {
-        expect(message).toMatch(/ENOENT/);
-        return;
-      }
-      throw error;
-    }
+    const spy = vi.spyOn(barIntegrityGate, "assertIngestBarsIntegrityOrThrow");
+    const bars = loadQualificationBars("N1", n1Path);
+    expect(spy).toHaveBeenCalled();
+    expect(bars.length).toBeGreaterThan(0);
+    spy.mockRestore();
   });
 });

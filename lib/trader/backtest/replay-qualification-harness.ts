@@ -771,8 +771,11 @@ export function spawnFreshQualificationMeasurement(input: {
   }
 }
 
-export function verifyReferenceHostFingerprint(expectedSha256: string): void {
-  verifyCanonicalHostFingerprint(expectedSha256);
+export function verifyReferenceHostFingerprint(
+  expectedSha256: string,
+  referencePath?: string,
+): void {
+  verifyCanonicalHostFingerprint(expectedSha256, referencePath);
 }
 
 export function readQualificationHarnessSha256(): string {

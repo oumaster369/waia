@@ -22,6 +22,20 @@ import {
 } from "@/lib/trader/backtest/d11b-host-fingerprint";
 import { sha256File } from "@/lib/trader/backtest/replay-benchmark-harness";
 
+const HTR_D11B_HERMETIC_FIXTURE_ROOT = path.join(process.cwd(), "tests/fixtures/trader/d11b");
+const HTR_D11B_HERMETIC_N1_DATASET_PATH = path.join(
+  HTR_D11B_HERMETIC_FIXTURE_ROOT,
+  "normalized/btcusdt-1m-2023q2clean.N1.json",
+);
+const HTR_D11B_HERMETIC_N2_DATASET_PATH = path.join(
+  HTR_D11B_HERMETIC_FIXTURE_ROOT,
+  "normalized/btcusdt-1m-2023q2clean.N2.json",
+);
+const HTR_D11B_HERMETIC_REFERENCE_HOST_PATH = path.join(
+  HTR_D11B_HERMETIC_FIXTURE_ROOT,
+  "reference-host-environment.json",
+);
+
 function isD11bQualificationHost(): boolean {
   try {
     hostEnvironmentsMatch(loadReferenceHostEnvironment(), collectLiveHostEnvironment());
@@ -43,9 +57,9 @@ describe("WP09 qualification harness (HTR-WP09)", () => {
   );
 
   it("verifyReferenceHostFingerprint fails closed on mismatch", () => {
-    expect(() => verifyReferenceHostFingerprint("0".repeat(64))).toThrow(
-      /\[d11b-host\] (live host mismatch|canonical fingerprint mismatch)/,
-    );
+    expect(() =>
+      verifyReferenceHostFingerprint("0".repeat(64), HTR_D11B_HERMETIC_REFERENCE_HOST_PATH),
+    ).toThrow(/\[d11b-host\] (live host mismatch|canonical fingerprint mismatch)/);
   });
 
   it("pins approved host fingerprint constant for Stage-C preflight", () => {
@@ -60,19 +74,11 @@ describe("WP09 qualification harness (HTR-WP09)", () => {
   });
 
   it("accepts approved N1 normalized digest", () => {
-    const n1Path = path.join(
-      process.cwd(),
-      ".cursor/plans/dee-415-d11b/normalized/btcusdt-1m-2023q2clean.N1.json",
-    );
-    expect(sha256File(n1Path)).toBe(D11B_N1_NORMALIZED_SHA256);
+    expect(sha256File(HTR_D11B_HERMETIC_N1_DATASET_PATH)).toBe(D11B_N1_NORMALIZED_SHA256);
   });
 
   it("accepts approved N2 dataset digest", () => {
-    const n2Path = path.join(
-      process.cwd(),
-      ".cursor/plans/dee-415-d11b/normalized/btcusdt-1m-2023q2clean.N2.json",
-    );
-    expect(sha256File(n2Path)).toBe(D11B_APPROVED_DATASET_SHA256);
+    expect(sha256File(HTR_D11B_HERMETIC_N2_DATASET_PATH)).toBe(D11B_APPROVED_DATASET_SHA256);
   });
 
   it("exposes stable harness sha for evidence binding", () => {

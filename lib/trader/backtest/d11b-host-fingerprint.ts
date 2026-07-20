@@ -199,12 +199,15 @@ export function hostEnvironmentsMatch(
   }
 }
 
-export function verifyCanonicalHostFingerprint(expectedSha256: string): {
+export function verifyCanonicalHostFingerprint(
+  expectedSha256: string,
+  referencePath?: string,
+): {
   reference: D11bHostEnvironment;
   live: D11bHostEnvironment;
   canonicalSha256: string;
 } {
-  const reference = loadReferenceHostEnvironment();
+  const reference = loadReferenceHostEnvironment(referencePath);
   const live = collectLiveHostEnvironment();
   hostEnvironmentsMatch(reference, live);
   const canonicalSha256 = computeCanonicalHostFingerprintSha256(reference);

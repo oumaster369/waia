@@ -116,8 +116,29 @@ export function runMeasuredFlagOffRunnerInWorktree(input: {
   return JSON.parse(readFileSync(input.outputPath, "utf8")) as Wp21MeasuredProofOutput;
 }
 
+function ensureGitCommitAvailable(repoRoot: string, sha: string): void {
+  try {
+    execSync(`git cat-file -e ${sha}^{commit}`, { cwd: repoRoot, stdio: "pipe" });
+    return;
+  } catch {
+    // Shallow CI checkouts may not include historical parent commits until fetched.
+  }
+
+  execSync(`git fetch --no-tags --depth=1 origin ${sha}`, {
+    cwd: repoRoot,
+    stdio: "pipe",
+    env: {
+      ...process.env,
+      GIT_TERMINAL_PROMPT: "0",
+    },
+  });
+
+  execSync(`git cat-file -e ${sha}^{commit}`, { cwd: repoRoot, stdio: "pipe" });
+}
+
 export function withTemporaryWorktree<T>(sha: string, fn: (worktreePath: string) => T): T {
   const repoRoot = process.cwd();
+  ensureGitCommitAvailable(repoRoot, sha);
   const worktreeRoot = path.join(repoRoot, ".cursor/proof-worktrees");
   mkdirSync(worktreeRoot, { recursive: true });
   const worktreePath = path.join(worktreeRoot, sha.slice(0, 12));
