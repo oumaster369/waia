@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "htr-wp23-readiness-evidence-manifest/v1",
+  "contractId": "waia.htr.evidence-integrity.v2",
+  "sourceGitSha": "5e8e8b6ca454bdda77222efc182b3d517cd2a1d1",
+  "sourceDirtyTree": false,
+  "generatorProvenance": "lib/trader/readiness/htr-readiness-evidence-harness.ts",
+  "artifactIndex": [
+    {
+      "path": "readiness-preflight-report.json",
+      "sizeBytes": 874,
+      "fileSha256": "fc0923fd720a4d1722f52dfd68c7faac7a9b111ec10af298099f6d62ffde2276",
+      "payloadSha256": "d9f582da4b42d599840b426305adab3d8d7cd71fd51740e154b4551600c93fb0",
+      "schemaVersion": "htr-wp23-readiness-preflight-report/v1",
+      "sourceGitSha": "5e8e8b6ca454bdda77222efc182b3d517cd2a1d1",
+      "sourceDirtyTree": false,
+      "generatorProvenance": "lib/trader/readiness/htr-readiness-evidence-harness.ts"
+    },
+    {
+      "path": "fhv-run-contract-v0.json",
+      "sizeBytes": 2900,
+      "fileSha256": "136fddf3a1d646fee2d86f6fd50ab5801660085269a38a4f1083f57a3a8e8da1",
+      "payloadSha256": "3b1ba9b3669e868418dabdf4bf705ea6a63507d6f38f1ccd15013d665109fa67",
+      "schemaVersion": "htr-fhv-run-contract/v0",
+      "sourceGitSha": "5e8e8b6ca454bdda77222efc182b3d517cd2a1d1",
+      "sourceDirtyTree": false,
+      "generatorProvenance": "lib/trader/readiness/htr-readiness-evidence-harness.ts"
+    },
+    {
+      "path": "execution-server-package-manifest.json",
+      "sizeBytes": 2785,
+      "fileSha256": "6a5f5b3d63ad7914d28de5abb6519d625ce8a9daf5052491294a79bb537268b2",
+      "payloadSha256": "d49ccd0b92108ba66047616fd4560299d59d9bf9bc4019d8a8321b5cdcbd01e5",
+      "schemaVersion": "htr-execution-server-code-ready-package/v1",
+      "sourceGitSha": "5e8e8b6ca454bdda77222efc182b3d517cd2a1d1",
+      "sourceDirtyTree": false,
+      "generatorProvenance": "lib/trader/readiness/htr-readiness-evidence-harness.ts"
+    },
+    {
+      "path": "gate-groups-index.json",
+      "sizeBytes": 2575,
+      "fileSha256": "95b9d416123d76b540b264fa58dd75bc1874c09fc3ae5e225ea95cafebad5404",
+      "payloadSha256": "1d48c519b202b91e133d18cb4756a916c75aefa3a58474b4adc24e24e5bea7db",
+      "schemaVersion": "htr-wp23-gate-groups-index/v1",
+      "sourceGitSha": "5e8e8b6ca454bdda77222efc182b3d517cd2a1d1",
+      "sourceDirtyTree": false,
+      "generatorProvenance": "lib/trader/readiness/htr-readiness-evidence-harness.ts"
+    }
+  ]
+}

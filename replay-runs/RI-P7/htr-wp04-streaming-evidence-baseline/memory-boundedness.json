@@ -1,0 +1,20 @@
+{
+  "retainedPaperCycleResults": 0,
+  "peakBufferedProjections": 32,
+  "maxBatchCycles": 32,
+  "cycleCount": 81,
+  "boundedness": [
+    {
+      "cycleCount": 81,
+      "peakBufferedProjections": 32
+    },
+    {
+      "cycleCount": 40,
+      "peakBufferedProjections": 32
+    }
+  ],
+  "provenance": {
+    "gitSha": "b3abe7b9483be9b54752d5dfb38b29155c7a891d",
+    "dirtyTree": true
+  }
+}

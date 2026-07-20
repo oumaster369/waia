@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.912Z",
+  "nodeVersion": "v22.22.3",
+  "command": "WAIA_PG_INTEGRATION=1 vitest run wp21 mandatory postgres suites",
+  "exitCode": 0,
+  "passedFiles": 4,
+  "passedTests": 32,
+  "failedTests": 0,
+  "skippedTests": 0,
+  "durationSeconds": 37.58,
+  "leakedConnections": 0,
+  "openHandles": 0,
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "756b7b3cae02da64932c724131f8138687497ade4d736babbbcea0dd581cfd38"
+}

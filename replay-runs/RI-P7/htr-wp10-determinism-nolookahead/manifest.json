@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "htr_wp10_determinism_manifest_v1",
+  "property": "default-session-byte-identical-replay",
+  "runCount": 2,
+  "cycleCount": 6,
+  "decisionTraceDigest": "11da65471624247a21555f1d0db2335bf73c36b862af4d9a02a21199378e9f66",
+  "reproDigest": "07e113bae9ecf76c34b63e91b9120331e8c7a92c05f573a852ded5f95a83ac74",
+  "artifactDigest": "fa5def3786dd85fe790c5623c09d76f31b9b67c866409e8fa8ae1ad91274926b"
+}

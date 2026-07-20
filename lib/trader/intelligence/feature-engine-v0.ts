@@ -174,7 +174,11 @@ export function isInsufficientBars(bars: readonly Bar[]): boolean {
   return bars.length < SMA_WINDOW;
 }
 
-export function featureQualityReasonCodes(bars: readonly Bar[], quote?: Quote): string[] {
+export function featureQualityReasonCodes(
+  bars: readonly Bar[],
+  quote?: Quote,
+  nowMs: number = Date.now(),
+): string[] {
   const reasons: string[] = [];
   if (isInsufficientBars(bars)) {
     reasons.push(featureReasonCodes.insufficientBars);
@@ -183,7 +187,7 @@ export function featureQualityReasonCodes(bars: readonly Bar[], quote?: Quote): 
     reasons.push(featureReasonCodes.barGapDetected);
   }
   if (quote) {
-    const ageMs = Date.now() - Date.parse(quote.timestamp);
+    const ageMs = nowMs - Date.parse(quote.timestamp);
     if (ageMs > STALE_QUOTE_MS) {
       reasons.push(featureReasonCodes.staleQuote);
     }

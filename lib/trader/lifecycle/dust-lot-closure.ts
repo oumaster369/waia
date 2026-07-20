@@ -29,6 +29,7 @@ export async function recordDustRemainderFlat(
   deps: {
     repository: LifecycleRepository;
     newId?: () => string;
+    nowMs?: () => number;
     recordLifecyclePhase: RecordLifecyclePhase;
   },
   input: RecordDustRemainderFlatInput,
@@ -43,11 +44,11 @@ export async function recordDustRemainderFlat(
 
   const newId = deps.newId ?? (() => crypto.randomUUID());
   const syntheticId = `dust-remainder:${lot.id}`;
-  const executedAt = new Date();
+  const executedAt = deps.nowMs ? new Date(deps.nowMs()) : new Date();
   const proceeds = multiplyDecimal(markPrice, lot.remainingQty);
   const cost = multiplyDecimal(lot.remainingQty, lot.avgCost);
   const legPnl = subtractDecimal(proceeds, cost);
-  const frozenAt = new Date();
+  const frozenAt = deps.nowMs ? new Date(deps.nowMs()) : new Date();
 
   await deps.repository.insertTradeLeg(input.context, {
     leg: {

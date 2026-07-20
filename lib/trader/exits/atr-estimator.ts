@@ -1,28 +1,10 @@
 import type { Bar } from "@/lib/trader/intelligence/types";
 import {
-  absDecimal,
-  compareDecimal,
-  divideDecimal,
-  formatDecimal,
-  multiplyDecimal,
-  parseDecimal,
-  subtractDecimal,
-} from "@/lib/trader/risk/numeric";
-
-function trueRange(current: Bar, previousClose: string): string {
-  const highLow = subtractDecimal(current.high, current.low);
-  const highPrev = absDecimal(subtractDecimal(current.high, previousClose));
-  const lowPrev = absDecimal(subtractDecimal(current.low, previousClose));
-
-  let max = highLow;
-  if (compareDecimal(highPrev, max) > 0) {
-    max = highPrev;
-  }
-  if (compareDecimal(lowPrev, max) > 0) {
-    max = lowPrev;
-  }
-  return max;
-}
+  seedAtrFromTrs,
+  trueRange,
+  wilderNextAtr,
+} from "@/lib/trader/intelligence/reconstruction/reconstruction-kernel";
+import { compareDecimal } from "@/lib/trader/risk/numeric";
 
 function sortBarsByCloseTime(bars: readonly Bar[]): Bar[] {
   return [...bars].sort((a, b) => {
@@ -34,11 +16,6 @@ function sortBarsByCloseTime(bars: readonly Bar[]): Bar[] {
   });
 }
 
-/**
- * Collapse duplicate bars sharing the same (symbol, barCloseTime) key, keeping
- * the last occurrence in sorted order. Duplicate bars would otherwise double-count
- * true-range and corrupt the ATR deterministically-but-wrongly.
- */
 function dedupBars(sorted: readonly Bar[]): Bar[] {
   const byKey = new Map<string, Bar>();
   for (const bar of sorted) {
@@ -89,18 +66,10 @@ export function computeAtrUsdt(bars: readonly Bar[], period: number): string | n
       trueRanges.push(trueRange(bar, previousClose));
     }
 
-    let sum = 0n;
-    for (let index = 0; index < period; index += 1) {
-      sum += parseDecimal(trueRanges[index]!);
-    }
-    let atr = formatDecimal(sum / BigInt(period));
+    let atr = seedAtrFromTrs(trueRanges, period);
 
     for (let index = period; index < trueRanges.length; index += 1) {
-      const weightedPrev = multiplyDecimal(atr, String(period - 1));
-      const numerator = formatDecimal(
-        parseDecimal(weightedPrev) + parseDecimal(trueRanges[index]!),
-      );
-      atr = divideDecimal(numerator, String(period));
+      atr = wilderNextAtr(atr, trueRanges[index]!, period);
     }
 
     if (compareDecimal(atr, "0") <= 0) {

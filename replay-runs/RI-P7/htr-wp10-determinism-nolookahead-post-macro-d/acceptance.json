@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "htr_wp10_compatibility_acceptance_v1",
+  "status": "ACCEPTED_BY_FINAL_OPUS_PHASE_B",
+  "acceptedCandidateWorkCommitSha": "521ddd11a47a735769f04aa52d0139cf2075d4dc",
+  "initialFailedWorkCommitSha": "017fcbe4dad60bc36dcb93e538b7c52ff7be7585",
+  "writerGuardFailedWorkCommitSha": "f2413b23e2d8890d5e0f40f37fe64af2600d873a",
+  "candidateStagingManifestDigest": "13c2d68f821c150d3154741380aafa47c7c9c86557083ce330e191f0866dceb3",
+  "harnessSourceSha256": "077e7f2a0ceb58f19b56232c187361f526b65de58425e87e38e7e20e1a2c4409",
+  "compatibilityArtifactDigest": "3d3f7cf348228f56e294a55dce027e426957250036b4aa0f2f993d5a926b7e89",
+  "originalWp10ArtifactDigest": "fa5def3786dd85fe790c5623c09d76f31b9b67c866409e8fa8ae1ad91274926b",
+  "originalWp10SealPreserved": true,
+  "purpose": "POST_MACRO_D_COMPATIBILITY_EVIDENCE_NOT_REPLACEMENT_OF_ORIGINAL_WP10_SEAL"
+}

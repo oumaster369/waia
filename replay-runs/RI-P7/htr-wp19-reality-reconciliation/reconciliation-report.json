@@ -1,0 +1,15 @@
+{
+  "pass": false,
+  "violations": [
+    {
+      "code": "ACCOUNTING_CASH_LEDGER_TERMINAL",
+      "message": "cash-ledger terminal != terminal cash"
+    }
+  ],
+  "organizationId": "c218df5a-3df0-4c61-aa36-191a921bf90f",
+  "accountKey": "macro-h-evidence",
+  "runId": "run-macro-h-evidence",
+  "accountingSequence": 6,
+  "terminalEquityUsdt": "99997.725",
+  "terminalCashUsdt": "99347.725"
+}

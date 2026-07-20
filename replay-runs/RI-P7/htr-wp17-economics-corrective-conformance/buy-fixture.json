@@ -1,0 +1,12 @@
+{
+  "grossFillPrice": "10000",
+  "quantity": "0.10000000",
+  "grossNotional": "1000",
+  "feeAmount": "2",
+  "spreadCost": "0.5",
+  "impactSlippageCost": "1",
+  "totalExecutionCost": "3.5",
+  "netFillPrice": "10015",
+  "netCashEffect": "-1003.5",
+  "economicsContentDigest": "computed-at-runtime-by-tests"
+}

@@ -1,0 +1,18 @@
+{
+  "profileDigest": "9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe",
+  "matrixDigest": "6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6",
+  "everyCycleHasExactlyOneDecision": true,
+  "everyCycleHasZeroOrMoreForecasts": true,
+  "noTradeCyclesHaveNoEntryPurpose": true,
+  "cdeMsvSnapshotOnlyNotDecision": true,
+  "deterministicRecordIds": true,
+  "deterministicContentDigests": true,
+  "twoGenerationSemanticParity": "EXACT",
+  "semanticDigest": "6fd8d3d7d7acac0b69cf3d897b22797ca30cc52f788674cc61e829bbd263e882",
+  "provenance": {
+    "baseGitSha": "250994f92bed9dd5604bcc5fcb663de0d190506b",
+    "trackedWorktreeDirty": true,
+    "profileDigest": "9221974607d3a8a569c380b4699495600277449055f76391c4fa5377a6088abe",
+    "matrixDigest": "6296c54e35aeb311739f3ab1c30a0c452637c5abf7f2464f0b0cd906a6ef04a6"
+  }
+}

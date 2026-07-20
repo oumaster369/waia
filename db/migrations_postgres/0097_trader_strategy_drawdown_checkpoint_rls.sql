@@ -1,0 +1,11 @@
+-- DEE-415 / HTR-WP16: strategy drawdown checkpoint RLS (ADR-0007 deny authenticated/anon)
+
+ALTER TABLE public.trader_strategy_drawdown_checkpoint ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS trader_strategy_drawdown_checkpoint_deny_authenticated_select ON public.trader_strategy_drawdown_checkpoint;
+CREATE POLICY trader_strategy_drawdown_checkpoint_deny_authenticated_select ON public.trader_strategy_drawdown_checkpoint FOR SELECT TO authenticated, anon USING (false);
+DROP POLICY IF EXISTS trader_strategy_drawdown_checkpoint_deny_authenticated_insert ON public.trader_strategy_drawdown_checkpoint;
+CREATE POLICY trader_strategy_drawdown_checkpoint_deny_authenticated_insert ON public.trader_strategy_drawdown_checkpoint FOR INSERT TO authenticated, anon WITH CHECK (false);
+DROP POLICY IF EXISTS trader_strategy_drawdown_checkpoint_deny_authenticated_update ON public.trader_strategy_drawdown_checkpoint;
+CREATE POLICY trader_strategy_drawdown_checkpoint_deny_authenticated_update ON public.trader_strategy_drawdown_checkpoint FOR UPDATE TO authenticated, anon USING (false);
+DROP POLICY IF EXISTS trader_strategy_drawdown_checkpoint_deny_authenticated_delete ON public.trader_strategy_drawdown_checkpoint;
+CREATE POLICY trader_strategy_drawdown_checkpoint_deny_authenticated_delete ON public.trader_strategy_drawdown_checkpoint FOR DELETE TO authenticated, anon USING (false);

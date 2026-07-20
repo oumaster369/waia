@@ -119,6 +119,7 @@ function mockRepository(
     }),
     transitionOrder: vi.fn(),
     recordFill: vi.fn(),
+    recordFillProgress: vi.fn(),
     listEvents: vi.fn(),
     listFills: vi.fn(async (_context, orderId) => fillsByOrderId[orderId] ?? []),
   };
@@ -388,5 +389,61 @@ describe("buildBacktestEvaluationExport (RI-P2 / Batch C)", () => {
     expect(bundle.dataQuality.strategiesWithNoFills).toEqual([STRATEGY_B]);
     const emptyEval = bundle.strategyEvaluations.find((e) => e.strategySignalId === STRATEGY_B);
     expect(emptyEval?.closedTradeCount).toBe(0);
+  });
+
+  it("includes historical execution cost decomposition when WP17 model is active", async () => {
+    const order = mockOrder({ id: "wp17-order", strategySignalId: STRATEGY_A, state: "FILLED" });
+    const economicsPayload = JSON.stringify({
+      schemaVersion: "waia.trader.historical-fill-economics-export.v1",
+      executionFactKind: "HISTORICAL_SIMULATED_FILL_V1",
+      executionModelId: "htr-historical-execution-v1",
+      executionModelSchemaVersion: "waia.trader.historical-execution-model.v1",
+      grossFillPrice: "100",
+      grossNotional: "1",
+      feeAmount: "0.002",
+      spreadCost: "0.001",
+      impactSlippageCost: "0.001",
+      totalExecutionCost: "0.004",
+      netFillPrice: "100.004",
+      netCashEffect: "-1.004",
+      economicsContentDigest: "a".repeat(64),
+      fillSequence: 1,
+    });
+    const repo = mockRepository([order], {
+      fillsByOrderId: {
+        "wp17-order": [
+          mockFill("wp17-order", { price: "100.004", quantity: "0.01", executedAt: new Date(150) }),
+        ],
+      },
+    });
+    vi.mocked(repo.listEvents).mockResolvedValue([
+      {
+        id: "evt-1",
+        organizationId: ORG_A,
+        orderId: "wp17-order",
+        seq: 1,
+        fromState: "ACCEPTED",
+        toState: "ACCEPTED",
+        eventType: "fill_recorded",
+        payload: economicsPayload,
+        occurredAt: new Date(150),
+        createdAt: new Date(150),
+      },
+    ]);
+
+    const bundle = await buildBacktestEvaluationExport(
+      baseExportInput({
+        orderRepository: repo,
+        historicalExecutionModel: {
+          modelId: "htr-historical-execution-v1",
+          schemaVersion: "waia.trader.historical-execution-model.v1",
+        } as never,
+      }),
+    );
+
+    expect(bundle.historicalExecutionCost?.fillCount).toBe(1);
+    expect(bundle.historicalExecutionCost?.executionFactKind).toBe("HISTORICAL_SIMULATED_FILL_V1");
+    expect(bundle.provenance.readModelSlices).toContain("historical-execution-cost.v1");
+    expect(bundle.historicalExecutionCost?.fills[0]?.spreadCost).toBe("0.001");
   });
 });

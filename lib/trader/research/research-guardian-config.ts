@@ -6,6 +6,8 @@ export type ResearchGuardianConfig = {
   maxHoldBars?: number;
   barIntervalMs?: number;
   enableExitEngine?: boolean;
+  /** HTR-WP20: when true on historical research path, legacy M3 guardian is skipped in favor of HTR bridge. */
+  htrAuthoritative?: boolean;
 };
 
 export function buildResearchGuardianContext(

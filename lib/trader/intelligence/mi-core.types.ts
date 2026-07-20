@@ -56,6 +56,9 @@ export type DecisionChain = Readonly<{
 
 export const DECISION_CHAIN_SCHEMA_VERSION = "waia.trader.decision_chain.v1" as const;
 
+/** D-4: CDE/MSV permission is context only; LD-7 Decision is persisted separately in WP14. */
+export const LD7_DECISION_CHAIN_BOUNDARY = "CDE_MSV_PERMISSION_NOT_LD7_DECISION" as const;
+
 export type HypothesisSessionState = Readonly<{
   schemaVersion: typeof HYPOTHESIS_SESSION_STATE_SCHEMA_VERSION;
   /** Per-hypothesis-type sustained conviction cycle counts. */

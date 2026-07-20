@@ -8,6 +8,8 @@ import { resolve } from "node:path";
 import { isTransientConnectionError, withCampaignDbRetry } from "@/db/postgres-client";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
+import type { StreamingEvidenceManifestRef } from "@/lib/trader/backtest/streaming-evidence";
+import type { ReplayRunTerminalState } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import type { CanonicalInventoryWalkResult } from "@/lib/trader/paper/derive-canonical-inventory";
 import { PaperPnLReconciliationError } from "@/lib/trader/paper/paper-pnl.errors";
 import {
@@ -61,6 +63,8 @@ export type FinalizeResearchCampaignOutcomeInput = {
   parityMessage?: string | null;
   builderGitSha?: string | null;
   orderRepository?: OrderRepository;
+  streamingManifestRef?: StreamingEvidenceManifestRef | null;
+  replayTerminalState?: ReplayRunTerminalState | null;
 };
 
 export type FinalizeResearchCampaignOutcomeResult = {
@@ -96,6 +100,33 @@ function resolveFailureMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function resolveStreamingEvidenceDiagnostics(
+  manifestRef: StreamingEvidenceManifestRef | null | undefined,
+  outcomeKind: CampaignTerminationKind,
+  replayTerminalState?: ReplayRunTerminalState | null,
+): CampaignOperatorDiagnostics["recordBody"]["streamingEvidence"] {
+  if (!manifestRef) {
+    return null;
+  }
+  const { manifest, runDir } = manifestRef;
+  const terminalState =
+    outcomeKind === "success"
+      ? manifest.terminalState === "STREAMING_EVIDENCE_OK"
+        ? manifest.terminalState
+        : "STREAMING_EVIDENCE_FAILED"
+      : manifest.terminalState === "STREAMING_EVIDENCE_SEALED_PARTIAL"
+        ? manifest.terminalState
+        : manifest.terminalState;
+  return {
+    terminalState,
+    chainDigest: manifest.chainDigest,
+    expectedCycleCount: manifest.expectedCycleCount,
+    sealedThroughCycleIndex: manifest.sealedThroughCycleIndex,
+    runDir,
+    replayTerminalState: replayTerminalState ?? null,
+  };
 }
 
 async function buildGovernedRejectRejectionRecord(
@@ -190,6 +221,19 @@ export async function finalizeResearchCampaignOutcomePostgres(
   input: FinalizeResearchCampaignOutcomeInput,
 ): Promise<FinalizeResearchCampaignOutcomeResult> {
   const { scope, kind } = input;
+  const streamingEvidence = resolveStreamingEvidenceDiagnostics(
+    input.streamingManifestRef,
+    kind,
+    input.replayTerminalState,
+  );
+
+  if (
+    kind === "success" &&
+    input.replayTerminalState &&
+    input.replayTerminalState !== "REPLAY_RUN_OK"
+  ) {
+    throw new Error("WP05_FALSE_SUCCESS: replay terminal state blocks success finalization");
+  }
 
   if (kind === "success") {
     const operatorDiagnostics = buildCampaignOperatorDiagnostics({
@@ -201,6 +245,7 @@ export async function finalizeResearchCampaignOutcomePostgres(
       parityStatus: input.parityStatus ?? "ok",
       parityMessage: input.parityMessage,
       builderGitSha: input.builderGitSha ?? null,
+      streamingEvidence,
     });
     return { kind, operatorDiagnostics };
   }
@@ -222,6 +267,7 @@ export async function finalizeResearchCampaignOutcomePostgres(
       parityStatus: input.parityStatus ?? "not_checked",
       parityMessage: input.parityMessage,
       builderGitSha: input.builderGitSha ?? null,
+      streamingEvidence,
     });
     const evolutionCycle = buildEvolutionCycleMvp({ rejectionRecord });
     return { kind, rejectionRecord, operatorDiagnostics, evolutionCycle };
@@ -258,6 +304,7 @@ export async function finalizeResearchCampaignOutcomePostgres(
     parityStatus: input.parityStatus ?? "not_checked",
     parityMessage: input.parityMessage,
     builderGitSha: input.builderGitSha ?? null,
+    streamingEvidence,
   });
 
   const evolutionCycle = buildEvolutionCycleMvp({ rejectionRecord });

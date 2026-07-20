@@ -15,15 +15,19 @@ import { createPostgresReconciliationCaseRepository } from "@/lib/trader/settlem
 import { createPostgresReconciliationEvidenceReader } from "@/lib/trader/settlement/reconciliation/reconciliation-evidence-postgres";
 import { createPostgresReconciliationReader } from "@/lib/trader/settlement/reconciliation/reconciliation-reader-postgres";
 import { createPostgresSettlementService } from "@/lib/trader/settlement/settlement-service";
-import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
+import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
+import {
+  deleteHtrPostgresSettlementDomainForOrg,
+  seedHtrPostgresUser,
+} from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 
-const USER_A = "00000000-0000-4000-8000-0000000321ca";
+const USER_A = "00000000-0000-4000-8022-000000032101";
 const EXCHANGE_ACCOUNT_ID = "htx-reconciliation-s3ca-pg";
 const PERFORMANCE_FEE = "200.000000";
 
@@ -34,24 +38,9 @@ describe.skipIf(!integrationEnabled || !url)(
 
     async function cleanup(): Promise<void> {
       const orgId = personalOrganizationIdFromUserId(USER_A);
+      await deleteHtrPostgresSettlementDomainForOrg(url!, orgId);
       const sql = postgres(url!, { max: 1 });
       try {
-        await sql.unsafe(
-          `DELETE FROM trader_settlement_reconciliation_events WHERE organization_id = $1`,
-          [orgId],
-        );
-        await sql.unsafe(
-          `DELETE FROM trader_settlement_reconciliation_cases WHERE organization_id = $1`,
-          [orgId],
-        );
-        await sql.unsafe(`DELETE FROM trader_settlement_applications WHERE organization_id = $1`, [
-          orgId,
-        ]);
-        await sql.unsafe(`DELETE FROM trader_settlements WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM trader_invoices WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM payment_events WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM payments WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM audit_logs WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM organizations WHERE id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM user_platform_roles WHERE user_id = $1`, [USER_A]);
@@ -64,21 +53,11 @@ describe.skipIf(!integrationEnabled || !url)(
     }
 
     beforeAll(async () => {
+      await verifyHtrPostgresConnectionIdentity();
       await cleanup();
-      const sql = postgres(url!, { max: 1 });
-      try {
-        await sql.unsafe(`INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [
-          USER_A,
-        ]);
-      } finally {
-        await sql.end({ timeout: 5 });
-      }
+      orgA = await seedHtrPostgresUser(url!, USER_A, "Reconciliation Postgres Parity");
 
-      const db = getPostgresDrizzle();
-      orgA = await ensureUserCoreSeedPostgres(db, {
-        userId: USER_A,
-        displayName: "Reconciliation Postgres Parity",
-      });
+      getPostgresDrizzle();
     });
 
     afterAll(async () => {
@@ -95,6 +74,7 @@ describe.skipIf(!integrationEnabled || !url)(
       const detected = await paymentService.detectPayment(context, {
         idempotencyKey: "pg-reconciliation-exception",
         subjectModule: "trader",
+        subjectInvoiceId: "invoice-reconciliation-exception-pg",
       });
       const transfer = {
         txHash: "pg-reconciliation-exception-tx",

@@ -54,6 +54,12 @@ export function mapSignalToSubmitOrder(
     return null;
   }
 
+  const quantity =
+    input.quantity ?? allocateQuantity(signal, input.referencePrice, input.defaultQuantity);
+  if (compareDecimal(quantity, "0") <= 0) {
+    return null;
+  }
+
   return {
     clientOrderId: input.clientOrderId ?? crypto.randomUUID(),
     idempotencyKey: input.idempotencyKey ?? crypto.randomUUID(),
@@ -61,8 +67,7 @@ export function mapSignalToSubmitOrder(
     symbol: signal.symbol,
     side: signal.side,
     type: "market",
-    quantity:
-      input.quantity ?? allocateQuantity(signal, input.referencePrice, input.defaultQuantity),
+    quantity,
     strategySignalId: signal.strategySignalId,
     strategyId: signal.strategyId,
     strategyVersion: signal.strategyVersion,

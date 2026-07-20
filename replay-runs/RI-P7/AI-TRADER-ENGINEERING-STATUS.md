@@ -3,24 +3,22 @@
 > **Document role:** The **single** canonical entry point for engineering recovery after M9 closure.  
 > Do not create parallel status, checkpoint, or recovery documents — update **this file** only.
 
-**Last synchronized:** 2026-07-08 (DEE-398 Canonical Pre-Repeat-M9 Remediation PR2 — Task B + Task C, content-bound authorization + dataset idempotency; in progress)  
-**Integration branch:** `dev` @ `108a632`  
-**Approved active roadmap:** `.cursor/plans/ai-trader_intelligence_evolution_48358215.plan.md` (Cursor plan — local; not committed per `.gitignore`)
+**Last synchronized:** 2026-07-12 (HTR-WP02 post-M9 forensic + status truth-up — DEE-415)  
+**HTR integration branch:** `dee-415-ai-trader-historical-test-readiness` @ `60310d5` (WP01 CLOSEOUT; activation baseline `dev` @ `f23c51e` / PR #400)  
+**Approved active program authority:** [`docs/plans/dee-415-ai-trader-historical-test-readiness.md`](../../docs/plans/dee-415-ai-trader-historical-test-readiness.md) (DEE-415 Historical-Test Readiness — 23 work packages)  
+**Forensic truth-up canon:** [`docs/ai-trader/AI-TRADER-POST-M9-FORENSIC-AND-STATUS-TRUTH-UP.md`](../../docs/ai-trader/AI-TRADER-POST-M9-FORENSIC-AND-STATUS-TRUTH-UP.md)
+
+> **Supersession (2026-07-12):** The intelligence_evolution Cursor plan (`.cursor/plans/ai-trader_intelligence_evolution_48358215.plan.md`) is **superseded as program authority** by D-13 / HTR DEE-415. It is retained as historical/evidence source only. Forward engineering resume is through HTR work packages — not by treating the old PR2→Repeat M9 sequence as the active program gate.
 
 ---
 
 ## Current engineering phase
 
-**Phase I — Post-M9 Recovery (Canonical Pre-Repeat-M9 Remediation Strategy — PR2 in progress)**
+**Phase II — Historical-Test Readiness (HTR DEE-415)**
 
-The Final Pre-M9 Architectural Readiness Audit (run after Pre-M9 Provider Fusion Remediation
-merged) found three Critical findings gating Repeat M9 v0.1.7: Task A (deterministic replay
-substrate), Task B (operator blind authorization was label-bound, not content-bound), Task C
-(dataset creation was an unconditional insert with no idempotency/preflight). **PR1 (DEE-397,
-Task A, ADR-0021) is merged.** **PR2 (DEE-398, Task B + Task C, ADR-0022) is in progress** —
-this is the final remediation PR before the final architectural re-audit. Gate A remains
-**open** until Architect re-audit PASS and Repeat M9 v0.1.7 completes under the validated
-20/20 provider stack with truthful replay fusion.
+M9 v2 closed with official result **`M9_BLOCKED_BY_ACCOUNTING_DEFECT`** (SPOT inventory / position accounting). Repeat M9 v0.1.7 additionally recorded **`CAMPAIGN_INFRA_DISCONNECT`** (Postgres pooler disconnect — infrastructure, not accounting). The **M9 Accounting Gate** (formerly "Gate A" in AI-TRADER prose) remains **open** until HTR work packages deliver accounting parity, resilience, and the full historical-test readiness gate groups (CG-A..CG-H).
+
+**Active work package:** HTR-WP02 complete (forensic + truth-up); forward runtime remediation is owned by later HTR work packages (see forensic canon).
 
 ---
 
@@ -28,12 +26,12 @@ this is the final remediation PR before the final architectural re-audit. Gate A
 
 | Field | Value |
 |-------|--------|
-| **Resume at** | **PR2 (DEE-398) review/merge** → **final Architect re-audit** → then **Repeat M9 v0.1.7** (operator authorization) |
-| **Linear** | DEE-392 **Done** · DEE-393 **Done** · DEE-394 **Done** · DEE-397 **Done** · DEE-398 **In Review** |
-| **Branch** | `dev` @ `108a632`; PR2 on `dee-398-m9-authorization-dataset-idempotency` |
-| **Do not start** | Repeat M9 (until re-audit PASS), PR3, PR4, M10, or live trading until Gate A passes |
+| **Resume at** | **HTR program** — canonical integration plan `docs/plans/dee-415-ai-trader-historical-test-readiness.md`; next unblocked work package after WP02 Opus closeout |
+| **Linear** | **DEE-415** In Progress (whole program) |
+| **Branch** | `dee-415-ai-trader-historical-test-readiness` (one integration boundary; one final PR after HTR-WP23) |
+| **Do not start** | Repeat M9 rerun, walk-forward, holdout, paper/live, or Execution Server mutation outside approved HTR work packages |
 
-**Immediate next action for implementers:** None — await Architect re-audit. Operators may run sidecar capture and validation per runbook when authorized.
+**Immediate next action for implementers:** Follow the approved HTR child plan for the active work package. M9/Repeat M9 **must not be rerun** as part of status reconciliation — evidence-only forensic (HTR-WP02).
 
 **Operator provisioning (canonical):** [`docs/ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md`](../../docs/ai-trader/AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md)
 
@@ -45,76 +43,29 @@ this is the final remediation PR before the final architectural re-audit. Gate A
 |------|--------|
 | Milestone closed | M9 v2 research campaign |
 | Official result | **`M9_BLOCKED_BY_ACCOUNTING_DEFECT`** |
-| Root cause | SPOT inventory / position accounting (`PaperPnLReconciliationError`) |
-| PR1 | Merged — canonical inventory + guardian caps (#375) |
-| PR2 | Merged — lifecycle hardening + failure sealing (DEE-389) |
-| PR2.5 | Merged — Market Intelligence Integration (#377) |
-| PR2.6 | Merged — Pre-M9 Market Understanding Bridge (#378 / DEE-391) |
-| Data Provider Readiness | Merged — operator/env gate (#379 / DEE-392) |
-| Full Market Data Source Integration | Merged (#381 / DEE-393) |
-| Pre-M9 Provider Fusion Remediation | Merged (#382 / DEE-394) |
-| Final Pre-M9 Architectural Readiness Audit | 3 Critical findings (Task A/B/C) — remediation PR1 + PR2 |
-| Remediation PR1 (Task A — deterministic replay) | Merged (DEE-397, ADR-0021) |
-| Remediation PR2 (Task B + C — content-bound auth + dataset idempotency) | In progress (DEE-398, ADR-0022) |
-| Gate A | **Open** — closes after final re-audit PASS + Repeat M9 v0.1.7 success |
+| Repeat M9 v0.1.7 | **`CAMPAIGN_INFRA_DISCONNECT`** (infra — not accounting) |
+| Root cause (M9) | SPOT inventory / position accounting (`PaperPnLReconciliationError`) |
+| Program authority | HTR DEE-415 (supersedes intelligence_evolution plan) |
+| M9 Accounting Gate (formerly "Gate A") | **Open** — closes via HTR readiness program, not a standalone Repeat M9 under old roadmap |
 
 M9 milestone evidence: `m9-v2-research-campaign-org0/` — **not** the recovery entry point.  
-Gate A input: `m9-v2-research-campaign-org0/GATE-A-VALIDATION.md`.
+M9 Accounting Gate input artifact (filename unchanged): `m9-v2-research-campaign-org0/GATE-A-VALIDATION.md`.
 
 ---
 
-## Canonical next engineering sequence
+## Historical — Phase I Post-M9 Recovery (pre-HTR; preserved facts)
 
-Implementation proceeds **only** through the approved Intelligence Evolution roadmap.  
-**PR3 and PR4 do not start until Gate A passes.**
+*The following records the intelligence_evolution sequence as it stood before HTR supersession (2026-07-08 sync). It is **historical** — not the active resume authority.*
 
-```text
-PR2.6 (merged)
-  ↓
-Data Provider Readiness (merged #379)
-  ↓
-Full Market Data Source Integration (merged #381)
-  ↓
-Pre-M9 Provider Fusion Remediation (merged #382)
-  ↓
-Final Pre-M9 Architectural Readiness Audit (3 Critical findings: Task A/B/C)
-  ↓
-Remediation PR1 — Task A: deterministic replay (merged, DEE-397, ADR-0021)
-  ↓
-Remediation PR2 — Task B + C: content-bound auth + dataset idempotency (DEE-398, ADR-0022)  ← CURRENT
-  ↓
-Final architectural re-audit
-  ↓
-Repeat M9 v0.1.7  (NOT STARTED — BLOCKED)
-  ↓
-Gate A
-  ↓
-PR3 → PR4 → M10
-```
+**Phase I label:** Canonical Pre-Repeat-M9 Remediation Strategy — PR1 merged; PR2 (DEE-398 Task B + C) was in progress at last pre-HTR sync.
 
-| Step | Task | Status |
-|------|------|--------|
-| **1** | **PR1 — Canonical Position Ledger** | ✅ Merged (#375) |
-| **2** | **PR2 — Spot Lifecycle Hardening + Failure Sealing** | ✅ Merged (DEE-389) |
-| **3** | **PR2.5 — Market Intelligence Integration** | ✅ Merged (#377) |
-| **4** | **PR2.6 — Pre-M9 Market Understanding Bridge** | ✅ Merged (#378 / DEE-391) |
-| **5** | **Data Provider Readiness** | ✅ Merged (#379 / DEE-392) |
-| **6** | **Full Market Data Source Integration** | ✅ Merged (#381 / DEE-393) |
-| **7** | **Pre-M9 Provider Fusion Remediation** | ✅ Merged (#382 / DEE-394) |
-| **8** | **Final Pre-M9 Architectural Readiness Audit** | ✅ Complete — 3 Critical findings (Task A/B/C) |
-| **9** | **Remediation PR1 — Task A (deterministic replay)** | ✅ Merged (DEE-397, ADR-0021) |
-| **10** | **Remediation PR2 — Task B + C (content-bound auth + dataset idempotency)** | **In progress** (DEE-398, ADR-0022) |
-| **11** | **Final architectural re-audit** | **PENDING** — after PR2 merges |
-| **12** | **Repeat M9 v0.1.7** | **NOT STARTED — BLOCKED** until re-audit PASS + operator authorization |
-| **13** | **Gate A** verification | After Repeat M9 success |
-| **14** | **PR3 — Market Context + MSV Depth** | **BLOCKED** until Gate A |
-| **15** | **PR4 — Market Memory + Knowledge Loop** | **BLOCKED** until Gate A |
-| **16** | **M10 Paper Soak** | **BLOCKED** until PR1–PR4 + Gate A + Gate B |
-| **17** | **First HTX Live Account** | After all human governance gates |
+| Item | Historical value (2026-07-08) |
+|------|-------------------------------|
+| Integration branch cited | `dev` @ `108a632` |
+| Remediation PR2 | DEE-398 In Review (content-bound auth + dataset idempotency) |
+| Resume sequence | PR2 merge → re-audit → Repeat M9 v0.1.7 → M9 Accounting Gate (formerly Gate A) → PR3 → PR4 |
 
----
-
-## M9 merge lineage (`dev`)
+### Historical merge lineage (`dev`)
 
 | Phase | Linear | PR | Notes |
 |-------|--------|-----|-------|
@@ -127,9 +78,28 @@ PR3 → PR4 → M10
 | PR2.6 understanding | DEE-391 | #378 | Market understanding bridge |
 | Data Provider Readiness | DEE-392 | #379 | Operator/env + validation |
 | Full Market Data Source Integration | DEE-393 | #381 | 20/20 providers + fused context v2 |
-| Pre-M9 Provider Fusion Remediation | DEE-394 | #382 | Sidecar v2 + truthful replay fusion + artifacts |
-| Remediation PR1 (Task A) | DEE-397 | — | Deterministic research replay clock & state isolation (ADR-0021) |
-| Remediation PR2 (Task B + C) | DEE-398 | — | Content-bound operator authorization + idempotent dataset lifecycle (ADR-0022) |
+| Pre-M9 Provider Fusion Remediation | DEE-394 | #382 | Sidecar v2 + truthful replay fusion |
+| Remediation PR1 (Task A) | DEE-397 | — | Deterministic research replay (ADR-0021) |
+| Remediation PR2 (Task B + C) | DEE-398 | — | Content-bound auth + idempotent dataset (ADR-0022) |
+
+### Historical canonical sequence (pre-HTR)
+
+```text
+PR2.6 (merged) → Data Provider Readiness (#379) → Full Market Data Integration (#381)
+  → Pre-M9 Provider Fusion (#382) → Remediation PR1 (DEE-397) → Remediation PR2 (DEE-398)
+  → re-audit → Repeat M9 v0.1.7 (BLOCKED / infra disconnect recorded)
+  → M9 Accounting Gate (formerly Gate A) → PR3 → PR4 → M10
+```
+
+| Step | Task | Historical status |
+|------|------|-------------------|
+| 1–7 | PR1 through Pre-M9 Provider Fusion | ✅ Merged (see table) |
+| 8 | Final Pre-M9 Architectural Readiness Audit | ✅ Complete — 3 Critical findings |
+| 9 | Remediation PR1 (Task A) | ✅ Merged (DEE-397) |
+| 10 | Remediation PR2 (Task B + C) | In progress at 2026-07-08 sync (DEE-398) |
+| 11–12 | Re-audit / Repeat M9 v0.1.7 | Repeat M9: **CAMPAIGN_INFRA_DISCONNECT** on 0.1.7 attempt |
+| 13 | M9 Accounting Gate verification | **Not reached** under old sequence |
+| 14–17 | PR3 / PR4 / M10 / Live | **Blocked** — now mapped to HTR-WP15/WP21 and later gates |
 
 ---
 
@@ -138,11 +108,10 @@ PR3 → PR4 → M10
 | Document | Role | Recovery entry? |
 |----------|------|-----------------|
 | **This file** | Canonical recovery + current phase + resume point | **Yes — only this** |
-| `GATE-A-VALIDATION.md` | Gate A checklist | No |
+| `AI-TRADER-POST-M9-FORENSIC-AND-STATUS-TRUTH-UP.md` | HTR-WP02 forensic + supersession + gap evidence | No — cites here |
+| `GATE-A-VALIDATION.md` | M9 Accounting Gate checklist (filename historical) | No |
 | `AI-TRADER-DATA-PROVIDERS.md` | Binding provider spec | No |
 | `AI-TRADER-MARKET-DATA-PROVIDER-PROVISIONING-GUIDE.md` | **Canonical operator provisioning** | No |
 | `DEE-392-DATA-PROVIDER-READINESS-RUNBOOK.md` | DEE-392 phase gate record | No |
-| `DEE-393-FULL-MARKET-DATA-INTEGRATION-RUNBOOK.md` | DEE-393 phase gate record | No |
-| `M9-PROVIDER-FUSION-REMEDIATION-GATE.md` | DEE-394 phase gate record | No |
 | `M9-ENGINEERING-CLOSURE.md` | M9 milestone closure evidence | No — points here |
 | `M9-OPERATOR-RUNBOOK.md` | Operator execution procedures | No |

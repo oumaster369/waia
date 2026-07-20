@@ -1,4 +1,8 @@
+import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
+import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
+import type { HistoricalExecutionModelV1 } from "@/lib/trader/execution/historical-execution-model.types";
+import type { SerializedHistoricalFillEconomicsExport } from "@/lib/trader/execution/fill-economics";
 import type { PaperBookExecutionMode } from "@/lib/trader/paper/paper-book.types";
 import type { PaperPnLMarkPrices } from "@/lib/trader/paper/paper-pnl.types";
 import type {
@@ -44,6 +48,11 @@ export type BacktestEvaluationExportInput = {
   markPrices?: PaperPnLMarkPrices;
   /** Caller-supplied audit timestamp; excluded from content digest. */
   exportedAt: Date;
+  /** When WP17 historical execution is active, enables cost-decomposition provenance. */
+  historicalExecutionModel?: HistoricalExecutionModelV1;
+  /** HTR-WP18: optional accounting state for HTR_PNL_REPORT_V1 embed. */
+  accountingState?: AccountingStateV1;
+  htrPnlReportSemanticDigest?: string;
 };
 
 export type BacktestEvaluationDataQuality = {
@@ -67,12 +76,16 @@ export type BacktestEvaluationProvenance = {
   fillEventCount: number;
   filledOrderCount: number;
   strategySignalIds: string[];
-  readModelSlices: [
-    "paper-pnl.v1",
-    "paper-pnl-period.v1",
-    "paper-strategy-eval.v1",
-    "backtest-cost-model.v1",
-  ];
+  readModelSlices: readonly string[];
+};
+
+export type HistoricalExecutionCostProvenance = {
+  executionModelId: string;
+  executionModelSchemaVersion: string;
+  executionFactKind: "HISTORICAL_SIMULATED_FILL_V1";
+  fillCount: number;
+  aggregateEconomicsDigest: string;
+  fills: SerializedHistoricalFillEconomicsExport[];
 };
 
 export type BacktestEvaluationExportBundle = {
@@ -92,6 +105,8 @@ export type BacktestEvaluationExportBundle = {
   strategyEvaluations: PaperStrategyEvaluation[];
   dataQuality: BacktestEvaluationDataQuality;
   provenance: BacktestEvaluationProvenance;
+  historicalExecutionCost?: HistoricalExecutionCostProvenance;
+  htrPnlReportV1?: HtrPnlReportV1;
   exportedAt: Date;
 };
 

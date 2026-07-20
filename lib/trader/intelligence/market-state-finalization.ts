@@ -7,6 +7,7 @@ import {
   type MarketStateSnapshot,
 } from "@/lib/trader/intelligence/mi-core.types";
 import type { TradingPermission } from "@/lib/trader/intelligence/types";
+import { resolveUniversalTerminalReason } from "@/lib/trader/intelligence/terminal-reason/universal-terminal-reason";
 
 export type FinalizeMarketStateInput = {
   reconstruction: ReconstructionSnapshot;
@@ -57,15 +58,22 @@ export function resolveTerminalReasonCode(input: {
   opportunityAuthorized: boolean;
   tradingPermission: TradingPermission;
   conviction: number;
+  activeHypothesisType?: string | null;
+  sourceReasonCodes?: readonly string[];
+  insufficientBars?: boolean;
 }): string {
-  if (input.opportunityAuthorized && input.tradingPermission === "ALLOW_TRADING") {
-    return miCoreReasonCodes.cdeConvictionAllowTrading;
-  }
-  if (input.opportunityAuthorized && input.tradingPermission === "ALLOW_REDUCED_RISK") {
-    return miCoreReasonCodes.cdeConvictionAllowReducedRisk;
-  }
-  if (!input.opportunityAuthorized) {
-    return miCoreReasonCodes.opportunityNotAuthorized;
-  }
-  return miCoreReasonCodes.hypothesisConvictionBelowThreshold;
+  return resolveUniversalTerminalReason({
+    sourceTerminalReasonCode: input.opportunityAuthorized
+      ? input.tradingPermission === "ALLOW_TRADING"
+        ? miCoreReasonCodes.cdeConvictionAllowTrading
+        : input.tradingPermission === "ALLOW_REDUCED_RISK"
+          ? miCoreReasonCodes.cdeConvictionAllowReducedRisk
+          : miCoreReasonCodes.opportunityNotAuthorized
+      : miCoreReasonCodes.opportunityNotAuthorized,
+    sourceReasonCodes: input.sourceReasonCodes,
+    opportunityAuthorized: input.opportunityAuthorized,
+    tradingPermission: input.tradingPermission,
+    activeHypothesisType: input.activeHypothesisType ?? null,
+    insufficientBars: input.insufficientBars,
+  });
 }

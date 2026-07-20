@@ -32,6 +32,37 @@ export {
   sealResearchDataset,
   splitBarsThreeWay,
 } from "@/lib/trader/market-data/research-dataset";
+export {
+  FHV_DATASET_MANIFEST_SCHEMA_VERSION,
+  FHV_DATASET_PARTITIONS_V1,
+  buildFhvDatasetManifest,
+  buildFhvDatasetManifestFromBars,
+  computeFhvDatasetManifestDigest,
+  type BuildFhvDatasetManifestInput,
+  type FhvBlindHoldoutPartition,
+  type FhvDatasetManifestV1,
+  type FhvDatasetPartitionsV1,
+  type FhvUtcHalfOpenInterval,
+} from "@/lib/trader/market-data/dataset/fhv-dataset-manifest";
+export {
+  FHV_GAP_POLICY_V1,
+  evaluateGapPolicy,
+  type FhvGapPolicyV1,
+  type GapPolicyResult,
+} from "@/lib/trader/market-data/dataset/fhv-gap-policy";
+export {
+  assertIngestBarsIntegrity,
+  assertIngestBarsIntegrityOrThrow,
+  INGRESS_INTEGRITY_REASON_CODES,
+  type AssertIngestBarsIntegrityInput,
+  type GapRecord,
+  type IngressIntegrityFailure,
+  type IngressIntegrityReasonCode,
+  type IngressIntegrityResult,
+  type IngressIntegrityResults,
+  type IngressIntegritySuccess,
+  type IngressSourceProvenance,
+} from "@/lib/trader/market-data/ingress/bar-integrity-gate";
 export type {
   BarPollSource,
   BarReplayMode,
@@ -75,3 +106,25 @@ export {
 } from "@/lib/trader/market-data/fusion/context-fusion-v1";
 export { classifySessionPhaseUtc } from "@/lib/trader/market-data/session/session-phase-classifier";
 export { computeAsianRangeCorridorMetadata } from "@/lib/trader/market-data/session/asian-range-corridor";
+export {
+  detectGap,
+  validateOhlcv,
+  validateTimestamps,
+} from "@/lib/trader/market-data/canvas/market-canvas";
+export {
+  REPLAY_PROVIDER_SIDECAR_V3,
+  type ReplayProviderSidecarLaneKey,
+  type ReplayProviderSidecarTimelineEntryV3,
+  type ReplayProviderSidecarV3,
+} from "@/lib/trader/market-data/replay/provider-sidecar-types";
+export {
+  assertNoNetworkImport,
+  buildHistoricalIngressContext,
+  HTR_WP11_FABRICATED_AVAILABILITY,
+  HTR_WP11_FUTURE_EVIDENCE_REACHABLE,
+  HTR_WP11_INGRESS_BYPASS,
+  HTR_WP11_LIVE_PROVIDER_CALL_FORBIDDEN,
+  HTR_WP11_STRATEGY_DIRECT_PROVIDER_IMPORT,
+  type HistoricalIngressInput,
+  type HistoricalIngressResult,
+} from "@/lib/trader/market-data/replay/historical-ingress-gateway";

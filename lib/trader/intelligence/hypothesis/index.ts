@@ -17,3 +17,8 @@ export {
   resolveEligibleStrategyFamilies,
   STRATEGY_FAMILY_BY_HYPOTHESIS,
 } from "@/lib/trader/intelligence/hypothesis/strategy-family-mapping";
+export {
+  HYPOTHESIS_LINK_SCHEMA_VERSION,
+  deriveAuthoritativeHypothesisLinkDigest,
+  deriveHypothesisRecordId,
+} from "@/lib/trader/intelligence/hypothesis/hypothesis-link";

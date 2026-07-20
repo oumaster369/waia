@@ -115,7 +115,7 @@ pnpm lint && pnpm typecheck && pnpm test --run && pnpm build
 - [ ] **Full Market Data Source Integration — PASS**
 - [ ] Pre-M9 Provider Fusion Remediation engineering merged (DEE-394 / #382)
 - [ ] **Repeat M9 v0.1.7 may be operator-authorized** only after DEE-394 Architect re-audit PASS + fresh campaign authorization
-- [ ] Gate A still open until Repeat M9 succeeds
+- [ ] M9 Accounting Gate (formerly "Gate A") still open until Repeat M9 succeeds under HTR program gates
 
 **Sign-off**
 

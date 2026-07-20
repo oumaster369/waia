@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "htr_wp10_candidate_completion_v1",
+  "status": "COMPLETE_NOT_ACCEPTED",
+  "workCommitSha": "521ddd11a47a735769f04aa52d0139cf2075d4dc",
+  "requiredFiles": [
+    "manifest.json",
+    "README.md",
+    "provenance.json",
+    "staging-manifest.json",
+    "completion.json"
+  ],
+  "fileDigests": {
+    "manifest.json": "c614e2dfc86072662fae2725ff49870c6910a8424210b73ff35c67a8db668703",
+    "README.md": "1b6b1b5761107fe196431baf8658b16654a91d5934b142cef1bbb447125382cc",
+    "provenance.json": "607abf49027250b6dec741b2a8f98098a3743f5da5f5de654b255d6e76f317e9",
+    "staging-manifest.json": "21e2a2ab538071c29e81c0ae8ee36343b5ece5f5f700c5ba5896bf60ec4cb5f8"
+  },
+  "stagingManifestDigest": "13c2d68f821c150d3154741380aafa47c7c9c86557083ce330e191f0866dceb3"
+}

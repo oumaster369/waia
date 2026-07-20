@@ -1,4 +1,7 @@
-import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { emitPaperBarCloseCycleComplete } from "@/lib/trader/paper/paper-bar-close-loop-telemetry";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
@@ -45,7 +48,7 @@ function buildPaperLoopPortfolioContext(
       maxNotional: DEFAULT_ORG_RISK_LIMITS.maxNotional,
     },
     stopDistanceProvider: defaultStopDistanceProvider,
-    costModel: createCostModelV1("10", "5"),
+    costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
     markPrices,
   };
 }

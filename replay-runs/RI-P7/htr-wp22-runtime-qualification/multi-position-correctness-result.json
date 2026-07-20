@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "htr-wp22-multi-position-correctness/v1",
+  "terminalState": "HTR_WP22_MULTI_POSITION_CORRECTNESS_PASS",
+  "sourceGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+  "sourceDirtyTree": false,
+  "generatorGitSha": "c982660b61c68e8c1319dae20fd4ebdc698821be",
+  "generatorSha256": "2a416015465a3993d96329d7916cc3a1315164fb2c138001a20f8ebd86df0976",
+  "fixtureAuthority": "SYNTHETIC_HTR_WP22_FIXTURE_V1",
+  "fixtureManifestPayloadSha256": "8738a4717fe04699d58edb1c05456fd947091450bae31638dff624d6e1d0244a",
+  "fixtureFileSha256s": {
+    "BTCUSDT": "3f81e386bc0cc4545d907219bd4631f31184257b9e0e61c34c765a0630cf6197",
+    "ETHUSDT": "c462f6e7245db8cfa2ddeb1c08679f3c2952269c99728fca9d415ffb05b2297a"
+  },
+  "initialCash": "100000.00",
+  "initialInventories": {
+    "BTC": "0",
+    "ETH": "0"
+  },
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT"
+  ],
+  "timeRange": {
+    "start": "2026-01-01T00:00:00.000Z",
+    "end": "2026-01-01T02:00:00.000Z"
+  },
+  "executionBoundaryClassification": "EXISTING_WP17_EXECUTION_WP18_ACCOUNTING_WP19_RECONCILIATION",
+  "intentSeamClassification": "HTR_WP22_TEST_ONLY_PRE_REGISTERED_ORDERS",
+  "orders": {
+    "total": 4,
+    "bySymbol": {
+      "BTCUSDT": 2,
+      "ETHUSDT": 2
+    }
+  },
+  "fills": {
+    "total": 4,
+    "bySymbol": {
+      "BTCUSDT": 2,
+      "ETHUSDT": 2
+    },
+    "partialFillCount": 0,
+    "cancelledRemainderCount": 0
+  },
+  "portfolio": {
+    "endingCash": "99866.72075",
+    "endingBTCInventory": "0",
+    "endingETHInventory": "0",
+    "grossPnl": "-13.665",
+    "fees": "68.48925",
+    "executionCosts": "119.8561875",
+    "netPnl": "-133.27925",
+    "finalEquity": "99866.72075",
+    "hwm": "115529.64133",
+    "maxDrawdown": 1355
+  },
+  "perSymbol": {
+    "BTCUSDT": {
+      "realizedPnl": "-6.06115",
+      "fillCount": 2,
+      "executedNotional": "1608.075"
+    },
+    "ETHUSDT": {
+      "realizedPnl": "-127.2181",
+      "fillCount": 2,
+      "executedNotional": "32636.55"
+    }
+  },
+  "reconciliation": {
+    "orderFillParity": "PASS",
+    "cashParity": "PASS",
+    "inventoryParity": "PASS",
+    "pnlParity": "PASS",
+    "equityParity": "PASS",
+    "hwmParity": "PASS",
+    "drawdownParity": "PASS",
+    "crossSymbolContamination": "PASS"
+  },
+  "checkpointResume": {
+    "uninterruptedSemanticDigest": "39f2737f0cdb004f3211eb4c17fda91d4077f4e2a55828bd618f1cba1807efc0",
+    "resumedSemanticDigest": "39f2737f0cdb004f3211eb4c17fda91d4077f4e2a55828bd618f1cba1807efc0",
+    "semanticParity": "EXACT",
+    "digestParity": "EXACT"
+  },
+  "terminalReasons": [
+    "HTR_WP22_MULTI_POSITION_SCENARIO_COMPLETE"
+  ],
+  "assertions": {
+    "bothSymbolsExecuted": true,
+    "nonzeroExecutedNotional": true,
+    "concurrentExposureObserved": true,
+    "noNegativeCash": true,
+    "noNegativeBtc": true,
+    "noNegativeEth": true,
+    "noLeverageBorrowShort": true,
+    "checkpointResumeDigestParity": true,
+    "allReconciliationPass": true
+  },
+  "payloadSha256": "33afaad1ab75ece708bccef64fc135b2ff3dd8a1b69d5d8fee2280255644621a"
+}

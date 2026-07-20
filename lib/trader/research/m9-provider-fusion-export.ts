@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
+import type { StreamingEvidenceReader } from "@/lib/trader/backtest/streaming-evidence";
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
+import { countM9InputCycles, iterateM9Cycles } from "@/lib/trader/research/m9-projection-source";
+import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import {
   MARKET_DATA_PROVIDER_IDS,
   type MarketDataProviderId,
@@ -186,7 +189,7 @@ function buildInfluenceTrace(input: {
 }
 
 export function buildProviderCoverageMatrix(input: {
-  fusedSamples: readonly FusedMarketContext[];
+  fusedSamples: Iterable<FusedMarketContext>;
   providerSidecar?: ReplayProviderSidecar;
 }): ProviderCoverageMatrixRow[] {
   const perProvider = new Map<
@@ -278,21 +281,61 @@ export function computeProviderFusionContentDigest(
   return computeReplayReproContentDigest(exportDoc);
 }
 
+/**
+ * Yields one FusedMarketContext per cycle lazily. In STREAM_ONLY mode this re-reads projections
+ * from disk on demand (O(1) memory) instead of materializing every cycle into an array, preserving
+ * the WP04 bound that no M9 exporter converts the streaming iterator to an unbounded array.
+ */
+function* iterateFusedSamples(input: {
+  fusedSamples?: readonly FusedMarketContext[];
+  cycleResults?: readonly PaperCycleResult[];
+  projectionReader?: StreamingEvidenceReader;
+}): Generator<FusedMarketContext> {
+  if (input.fusedSamples) {
+    yield* input.fusedSamples;
+    return;
+  }
+  for (const cycle of iterateM9Cycles(input)) {
+    const fused = cycle.evaluation.fusedContext;
+    if (fused !== undefined) {
+      yield fused;
+    }
+  }
+}
+
 export function buildM9ProviderFusionExport(input: {
   organizationId: string;
   strategyId: string;
   strategyVersion: string;
   instrumentId: string;
-  fusedSamples: readonly FusedMarketContext[];
+  fusedSamples?: readonly FusedMarketContext[];
+  cycleResults?: readonly PaperCycleResult[];
+  projectionReader?: StreamingEvidenceReader;
   providerSidecar?: ReplayProviderSidecar;
   generatedAt?: string;
 }): M9ProviderFusionExport {
+  // Fresh iterable per pass; a generator can only be consumed once, so each consumer re-derives it.
+  const fusedSource = (): Iterable<FusedMarketContext> =>
+    input.fusedSamples ?? iterateFusedSamples(input);
+
   const coverageMatrix = buildProviderCoverageMatrix({
-    fusedSamples: input.fusedSamples,
+    fusedSamples: fusedSource(),
     providerSidecar: input.providerSidecar,
   });
 
-  const sample = input.fusedSamples[0];
+  // Single bounded pass: capture the first sample (laneSummary) and fold HTX supremacy without
+  // holding all fused contexts in memory. `.every` over an empty set is true; the fold matches.
+  let sample: FusedMarketContext | undefined;
+  let htxSupremacyMaintained = true;
+  for (const fused of fusedSource()) {
+    if (sample === undefined) {
+      sample = fused;
+    }
+    if (fused.primaryQuote?.provenance.providerId !== "htx_spot") {
+      htxSupremacyMaintained = false;
+    }
+  }
+
   const laneSummary = {
     macroEvidenceCount: sample?.macroEvidence?.length ?? 0,
     newsEvidenceCount: sample?.newsEvidence?.length ?? 0,
@@ -311,9 +354,7 @@ export function buildM9ProviderFusionExport(input: {
       (row) =>
         row.captured && !row.fusedCycleCount && row.influenceClass === "DECISION_INFLUENTIAL",
     ).length,
-    htxSupremacyMaintained: input.fusedSamples.every(
-      (fused) => fused.primaryQuote?.provenance.providerId === "htx_spot",
-    ),
+    htxSupremacyMaintained,
     pr3BoundaryLocked: coverageMatrix
       .filter((row) => row.influenceClass === "DEFERRED_PR3")
       .every((row) => row.influence.stopReason === "PR3_BOUNDARY_CONTEXT_LANE"),
@@ -332,7 +373,7 @@ export function buildM9ProviderFusionExport(input: {
       input.providerSidecar && isReplayProviderSidecarV2(input.providerSidecar)
         ? input.providerSidecar.captureAsOfUtc
         : null,
-    sampleCycleCount: input.fusedSamples.length,
+    sampleCycleCount: input.fusedSamples?.length ?? countM9InputCycles(input),
     coverageMatrix,
     laneSummary,
     truthfulnessGuards,

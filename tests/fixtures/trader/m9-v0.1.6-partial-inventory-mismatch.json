@@ -1,6 +1,7 @@
 {
-  "description": "M9 v0.1.6 class — two open lots totaling 0.01 BTC but canonical inventory is 0.00731991",
-  "symbol": "BTC/USDT",
+  "fixtureId": "m9-v0.1.6-partial-inventory-mismatch",
+  "description": "M9 v0.1.6 class — dual-purpose lifecycle open-quantity parity and WP19 accounting reconciliation",
+  "symbol": "BTCUSDT",
   "canonicalOpenQty": "0.00731991",
   "lots": [
     { "id": "lot-1", "remainingQty": "0.005", "openedAt": "2026-01-01T00:00:00.000Z" },
@@ -8,5 +9,7 @@
   ],
   "expectedTotalExitQty": "0.00731991",
   "expectedPartialLotId": "lot-2",
-  "expectedPartialQty": "0.00231991"
+  "expectedPartialQty": "0.00231991",
+  "partialLotQty": "0.00231991",
+  "expectedReconciliation": "PASS_AFTER_WP18_ENGINE"
 }

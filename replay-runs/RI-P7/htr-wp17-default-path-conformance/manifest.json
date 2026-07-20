@@ -1,0 +1,49 @@
+{
+  "command": "pnpm trader:wp17:default-path-correction-evidence",
+  "schemaVersion": "htr-wp17-default-path-conformance-correction-evidence/v1",
+  "sourceGitSha": "bc39900bf3245adb95766d7b72eb85c045ff257a",
+  "sourceGitParentSha": "04e903b851efb23b1858d539eafebcdc0d4cda78",
+  "dirtyTree": false,
+  "historicalApprovedPacketSha256": "ba8daf2608dcea83aeae918150a73fd3c0713f951750a9ff45edfe1e2653baaa",
+  "supersededComponentEvidencePath": "replay-runs/RI-P7/htr-wp17-execution-simulation/",
+  "supersededComponentEvidenceClassification": "HISTORICAL_ACCEPTED_COMPONENT_EVIDENCE_PATH_B_NOT_SUFFICIENT_ALONE_FOR_DEFAULT_PATH_CONFORMANCE",
+  "profileId": "htr-historical-execution-profile/v1",
+  "executionModelId": "htr-historical-execution-v1",
+  "executionModelSchemaVersion": "waia.trader.historical-execution-model.v1",
+  "initialPortfolioSchemaVersion": "htr-initial-portfolio/v1",
+  "startingBalanceUsdt": "100000.00",
+  "startingPositions": {
+    "BTC": "0",
+    "ETH": "0"
+  },
+  "defaultResearchPathWp17ProfilePropagation": "PASS",
+  "defaultResearchPathSingleCostApplicationPoint": "PASS",
+  "defaultResearchPathNoSameBarFill": "PASS",
+  "defaultResearchPathHistoricalEconomicsComplete": "PASS",
+  "defaultResearchPathNoDuplicateReconciliationFill": "PASS",
+  "initialPortfolioV1": "PASS",
+  "initialPortfolioV2": "PASS",
+  "initialPortfolioCrossEntrypointParity": "PASS",
+  "checkpointResumeParity": "PASS",
+  "sqlitePostgresExecutionFactParity": "PASS",
+  "defaultResearchEntrypointsTested": [
+    "runResearchValidationBacktest",
+    "runResearchValidationBacktestV1",
+    "runResearchValidationBacktestV2",
+    "rederiveValidationMetricsFromSealedDataset",
+    "buildIsolatedBacktestInput"
+  ],
+  "targetedTestFiles": [
+    "tests/integration/trader-default-research-wp17-conformance.test.ts",
+    "tests/unit/trader-htr-initial-portfolio-contract.test.ts"
+  ],
+  "targetedTestCount": 66,
+  "postgresResult": "PASS",
+  "gap035ContractA": "IDENTICAL",
+  "gap035ContractB": "NOT_RUN",
+  "gap035ContractC": "NOT_RUN",
+  "candidateStatus": "COMPLETE_PENDING_FRESH_INDEPENDENT_DEFAULT_PATH_REVIEW",
+  "outputMode": "GITIGNORED_STAGING",
+  "semanticDigest": "fbb8f354f901de21b71efcd013d1f922490df015e22db377d503ae7b8198bc5a",
+  "manifestDigest": "2b9152cb919bf3b1b8f7a9b79b52920a3251f42c4cd6688f7ca64188d75947fe"
+}

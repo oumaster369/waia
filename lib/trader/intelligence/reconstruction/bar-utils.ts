@@ -1,4 +1,5 @@
 import type { Bar, BarInterval } from "@/lib/trader/intelligence/types";
+import { classifyBiasFromCloses } from "@/lib/trader/intelligence/reconstruction/reconstruction-kernel";
 import { compareDecimal } from "@/lib/trader/risk/numeric";
 
 export const STRUCTURE_TIMEFRAMES: readonly BarInterval[] = ["15m", "1h", "4h", "1d"];
@@ -136,14 +137,5 @@ export function classifyTimeframeBias(
   if (bars.length < 3) {
     return "UNCLEAR";
   }
-  const first = Number(bars[0]!.close);
-  const last = Number(bars.at(-1)!.close);
-  if (!Number.isFinite(first) || !Number.isFinite(last) || first <= 0) {
-    return "UNCLEAR";
-  }
-  const changePct = ((last - first) / first) * 100;
-  if (Math.abs(changePct) < 0.15) {
-    return "NEUTRAL";
-  }
-  return changePct > 0 ? "BULLISH" : "BEARISH";
+  return classifyBiasFromCloses(bars[0]!.close, bars.at(-1)!.close, bars.length);
 }

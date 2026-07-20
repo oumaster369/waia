@@ -1,25 +1,39 @@
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
+import { computePeakEquityDrawdownBps } from "@/lib/trader/risk/drawdown-policy-evaluator";
 import { addDecimal, compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 
 import type { PortfolioAccountState } from "@/lib/trader/portfolio/portfolio-account.types";
+
+export type Wp16AccountRiskState = AccountRiskState & {
+  accountPeakHwm?: string;
+  monthlyPeakHwm?: string;
+};
 
 export type ToAccountRiskStateInput = {
   portfolio: PortfolioAccountState;
   openOrderCount: number;
   quoteExposureUsdt?: string;
+  /** HTR-WP16: running account peak-equity HWM (defaults to current equity). */
+  accountPeakHwm?: string;
+  /** HTR-WP16: calendar-month peak-equity HWM (defaults to account peak). */
+  monthlyPeakHwm?: string;
 };
 
 /**
  * Maps M2 portfolio ledger into legacy {@link AccountRiskState} for the risk engine.
  * Populates M2 portfolio extension fields when present.
  */
-export function toAccountRiskState(input: ToAccountRiskStateInput): AccountRiskState {
+export function toAccountRiskState(input: ToAccountRiskStateInput): Wp16AccountRiskState {
   const { portfolio } = input;
   const dailyPnl = subtractDecimal(portfolio.equityUsdt, portfolio.startingBalanceUsdt);
+  const accountPeak = input.accountPeakHwm ?? portfolio.equityUsdt;
+  const drawdownBps = computePeakEquityDrawdownBps(portfolio.equityUsdt, accountPeak);
   const drawdown =
-    compareDecimal(portfolio.equityUsdt, portfolio.startingBalanceUsdt) < 0
-      ? subtractDecimal(portfolio.startingBalanceUsdt, portfolio.equityUsdt)
-      : "0";
+    drawdownBps > 0
+      ? subtractDecimal(accountPeak, portfolio.equityUsdt)
+      : compareDecimal(portfolio.equityUsdt, portfolio.startingBalanceUsdt) < 0
+        ? subtractDecimal(portfolio.startingBalanceUsdt, portfolio.equityUsdt)
+        : "0";
 
   const quoteExposure =
     input.quoteExposureUsdt ??
@@ -41,6 +55,8 @@ export function toAccountRiskState(input: ToAccountRiskStateInput): AccountRiskS
     openRiskUsdt: portfolio.openRiskUsdt,
     openPositionCount: portfolio.openPositionCount,
     projectedOrderRiskUsdt: "0",
+    accountPeakHwm: input.accountPeakHwm ?? portfolio.equityUsdt,
+    monthlyPeakHwm: input.monthlyPeakHwm ?? portfolio.equityUsdt,
   };
 }
 

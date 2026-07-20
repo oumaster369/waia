@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "htr-wp09-d11b-forensic-annotation/v1",
+  "annotatedAt": "2026-07-13T00:00:00.000Z",
+  "originalQualificationStatus": "THRESHOLDS_NOT_MET",
+  "originalContractStatus": "VALID_FAIL",
+  "replacementManifestDigest": "bff973996e69c14e923e4b84421a36f61921345f673367e76cb332da9c73c6cd",
+  "forensicVerdict": "VALID_THRESHOLD_FAIL_GATE_DEFINITION_MISALIGNED",
+  "originalRssGrowthBytes": 5308416,
+  "originalRssGrowthCapBytes": 1048576,
+  "originalRssGateResult": "FAIL",
+  "approvedContractDefinedHeapGrowth": true,
+  "originalHarnessEvaluatedHeapGrowth": false,
+  "heapGateAccountingClassification": "HEAP_GATE_NOT_EVALUATED",
+  "correctHeapGrowthBytes": 39796120,
+  "composerReportedHeapGrowthBytes": 40733120,
+  "composerReportedHeapGrowthCorrect": false,
+  "attemptInvalidated": false,
+  "terminalFailChangedByHeapOmission": false,
+  "sealedEvidenceRegenerated": false,
+  "retroactivePassClaimed": false
+}

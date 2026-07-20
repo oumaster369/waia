@@ -19,8 +19,11 @@ export type LoadPaperFillEventsInput = {
   executionMode: PaperBookExecutionMode;
 };
 
-function isFilledOrder(order: OrderRow): boolean {
-  return order.state === "FILLED" && compareDecimal(order.filledQuantity, "0") > 0;
+function isExecutedOrderWithFills(order: OrderRow): boolean {
+  return (
+    (order.state === "FILLED" || order.state === "EXPIRED" || order.state === "CANCELLED") &&
+    compareDecimal(order.filledQuantity, "0") > 0
+  );
 }
 
 export async function loadPaperFillEvents(
@@ -29,7 +32,7 @@ export async function loadPaperFillEvents(
   const orders = await input.orderRepository.listOrders(input.context, {
     executionMode: input.executionMode,
   });
-  const filledOrders = orders.filter(isFilledOrder);
+  const filledOrders = orders.filter(isExecutedOrderWithFills);
   const fillEvents: PaperPnLFillEvent[] = [];
 
   for (const order of filledOrders) {

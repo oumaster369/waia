@@ -1,0 +1,11 @@
+-- DEE-415 / HTR-WP13: intelligence cycle envelope RLS (ADR-0007 deny authenticated/anon)
+
+ALTER TABLE public.trader_intelligence_cycle_envelope ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS trader_intelligence_cycle_envelope_deny_authenticated_select ON public.trader_intelligence_cycle_envelope;
+CREATE POLICY trader_intelligence_cycle_envelope_deny_authenticated_select ON public.trader_intelligence_cycle_envelope FOR SELECT TO authenticated, anon USING (false);
+DROP POLICY IF EXISTS trader_intelligence_cycle_envelope_deny_authenticated_insert ON public.trader_intelligence_cycle_envelope;
+CREATE POLICY trader_intelligence_cycle_envelope_deny_authenticated_insert ON public.trader_intelligence_cycle_envelope FOR INSERT TO authenticated, anon WITH CHECK (false);
+DROP POLICY IF EXISTS trader_intelligence_cycle_envelope_deny_authenticated_update ON public.trader_intelligence_cycle_envelope;
+CREATE POLICY trader_intelligence_cycle_envelope_deny_authenticated_update ON public.trader_intelligence_cycle_envelope FOR UPDATE TO authenticated, anon USING (false);
+DROP POLICY IF EXISTS trader_intelligence_cycle_envelope_deny_authenticated_delete ON public.trader_intelligence_cycle_envelope;
+CREATE POLICY trader_intelligence_cycle_envelope_deny_authenticated_delete ON public.trader_intelligence_cycle_envelope FOR DELETE TO authenticated, anon USING (false);

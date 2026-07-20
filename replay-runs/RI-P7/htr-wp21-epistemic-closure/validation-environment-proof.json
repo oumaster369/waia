@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.903Z",
+  "nodeVersion": "v22.22.3",
+  "command": "pnpm exec vitest run tests/unit/vitest-hermetic-environment-proof.test.ts",
+  "startedAt": "2026-07-17T13:25:52.000Z",
+  "exitCode": 0,
+  "defaultProfileHermetic": true,
+  "repositoryDotenvLocalLoaded": false,
+  "databaseUrlPresent": false,
+  "waiaPgIntegrationPresent": false,
+  "waiaDbBackendSource": "NONE_OR_EXPLICIT_TEST_VALUE",
+  "explicitChildProcessEnvPreserved": true,
+  "classifications": {
+    "DEFAULT_VITEST_ENV_PROFILE": "HERMETIC",
+    "REPOSITORY_DOTENV_LOCAL_LOADED": false,
+    "EXPLICIT_PROCESS_ENV_PRESERVED": true
+  },
+  "semanticAssertions": {
+    "vitestEnvDir": "tests/env/vitest-hermetic",
+    "repositoryDotenvLocalUntouched": true
+  },
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "c49743e0b9af8b1c578072744def9b5ef212ef7b28e877d5b424d4ee0a621cea"
+}

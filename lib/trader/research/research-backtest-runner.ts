@@ -2,6 +2,14 @@ import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
 import { COST_MODEL_VERSION_V1 } from "@/lib/trader/execution/cost-model";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
+import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
+import {
+  StreamingEvidenceError,
+  StreamingRegimeTimelineReader,
+  type ReplayEvidenceSink,
+  type ReplayRetentionMode,
+  type StreamingEvidenceManifestRef,
+} from "@/lib/trader/backtest/streaming-evidence";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import type { Bar, Regime } from "@/lib/trader/intelligence/types";
 import {
@@ -27,6 +35,8 @@ import {
   buildResearchV2PortfolioContext,
   type ResearchPortfolioConfig,
 } from "@/lib/trader/research/research-portfolio-config";
+import { assertHtrHistoricalExecutionSessionConfiguration } from "@/lib/trader/research/htr-historical-execution-configuration";
+import { createHtrInitialAccountRiskState } from "@/lib/trader/research/htr-initial-portfolio-contract";
 import { addDecimal, divideDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import { buildResearchRegimeCoverage } from "@/lib/trader/research/regime-taxonomy";
 import {
@@ -47,6 +57,15 @@ import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import type { PatternCatalogRunConfig } from "@/lib/trader/mi/pattern-catalog.types";
 import type { EventAttributionRunConfig } from "@/lib/trader/events/event-attribution.types";
 import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
+import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
+import type { IntelligenceCycleBundleRepository } from "@/lib/trader/intelligence/records/repository-adapters";
+import type { ForecastDecisionBundleRepository } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
+import type { CalibrationSink } from "@/lib/trader/intelligence/calibration/calibration.types";
+import type { OutcomeResolutionSink } from "@/lib/trader/intelligence/outcome-resolution/outcome-resolution.types";
+import type { Wp21RuntimeDeps } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
+import type { ConfidenceUpdateSink } from "@/lib/trader/knowledge/knowledge-confidence-update-repository-postgres";
+import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
+import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { orderMatchesStrategyEvidenceScope } from "@/lib/trader/paper/strategy-evidence-scope";
 import {
   buildQuoteCurrencyBySymbol,
@@ -58,6 +77,9 @@ import type { PaperClosedTrade } from "@/lib/trader/paper/paper-strategy-eval.ty
 export type ResearchValidationBacktestArtifactSink = {
   cycleResults?: PaperCycleResult[];
   portfolioContext?: PortfolioCycleContext;
+  streamingManifestRef?: StreamingEvidenceManifestRef;
+  /** Active sink during STREAM_ONLY runs — for graceful shutdown sealing in campaign CLIs. */
+  evidenceSink?: ReplayEvidenceSink;
 };
 
 export { buildResearchV2PortfolioContext, type ResearchPortfolioConfig };
@@ -119,15 +141,37 @@ export type RunResearchValidationBacktestInput = {
   providerSidecar?: ReplayProviderSidecar;
   /** When false, skips replay fused context builder (legacy behavior). */
   enableReplayFusedContext?: boolean;
+  retentionMode?: ReplayRetentionMode;
+  evidenceSink?: ReplayEvidenceSink;
+  /** Bounded cycle cap for interrupt/resume harness scenarios. */
+  maxCycles?: number;
+  /** STREAM_ONLY resume cursor — discard bar-source cycles below this index. */
+  resumeCycleStartIndex?: number;
+  evidenceSealMode?: "complete" | "partial" | "none";
+  evidenceSealReason?: string;
+  /** HTR-WP17: versioned historical execution profile for default research replay. */
+  historicalExecutionProfile?: HistoricalExecutionProfileV1;
+  /** HTR-WP21: opt-in epistemic closure fields. */
+  historicalProfile?: HistoricalIntelligenceProfile;
+  intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
+  forecastDecisionSink?: ForecastDecisionBundleRepository;
+  outcomeResolutionSink?: OutcomeResolutionSink;
+  calibrationSink?: CalibrationSink;
+  confidenceUpdateSink?: ConfidenceUpdateSink;
+  wp21RuntimeDeps?: Wp21RuntimeDeps;
+  outcomeResolutionReadPort?: OutcomeResolutionReadPort;
+  wp21PostgresExecutor?: Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
+  wp21Provenance?: { codeSha: string; datasetContentDigest: string };
 };
 
-const EMPTY_ACCOUNT_STATE: AccountRiskState = {
-  positions: [],
-  openOrderCount: 0,
-  dailyPnl: "0",
-  drawdown: "0",
-  quoteExposureByCurrency: {},
-};
+function resolveResearchV1InitialAccountState(
+  input: RunResearchValidationBacktestInput,
+): AccountRiskState {
+  if (input.accountState) {
+    return input.accountState;
+  }
+  return createHtrInitialAccountRiskState();
+}
 
 function researchV2InitialAccountState(portfolio: PortfolioCycleContext): AccountRiskState {
   return toAccountRiskState({
@@ -159,6 +203,43 @@ type CycleRegimeTimelineEntry = {
   evaluatedAtMs: number;
   regime: Regime;
 };
+
+function assertStreamingAnalyticsHooksAllowed(input: RunResearchValidationBacktestInput): void {
+  if (input.retentionMode !== "STREAM_ONLY") {
+    return;
+  }
+  const patternEnabled =
+    input.patternCatalog?.enabled === true && input.patternCatalog.onBacktestComplete;
+  const eventEnabled =
+    input.eventAttribution?.enabled === true && input.eventAttribution.onBacktestComplete;
+  if (patternEnabled || eventEnabled) {
+    throw new StreamingEvidenceError(
+      "WP04_STREAMING_INCOMPATIBLE_ANALYTICS_HOOK",
+      "[research] pattern/event analytics hooks are unsupported in STREAM_ONLY retention mode",
+    );
+  }
+}
+
+function wrapEvidenceSinkWithOnlineAccumulators(
+  baseSink: ReplayEvidenceSink,
+  onCycle: (cycle: PaperCycleResult) => void,
+): ReplayEvidenceSink {
+  return {
+    onCycle(cycleIndex, result) {
+      onCycle(result);
+      return baseSink.onCycle(cycleIndex, result);
+    },
+    sealComplete(expectedCycleCount) {
+      return baseSink.sealComplete(expectedCycleCount);
+    },
+    sealPartial(expectedCycleCount, reason) {
+      return baseSink.sealPartial(expectedCycleCount, reason);
+    },
+    peakBufferedProjections() {
+      return baseSink.peakBufferedProjections();
+    },
+  };
+}
 
 function parseWindowFromBars(bars: readonly Bar[]): { start: Date; end: Date } {
   const start = new Date(bars[0]!.barOpenTime);
@@ -209,39 +290,46 @@ function accumulateCycleSignalOrderMetrics(
   accumulators: Map<Regime, ResearchRegimeMetricSliceV2>,
 ): void {
   for (const cycle of cycleResults) {
-    const regime = cycle.evaluation.msv.derived.regime;
-    const slice = getOrCreateRegimeSliceV2(accumulators, regime);
+    accumulateSingleCycleSignalOrderMetrics(cycle, accumulators);
+  }
+}
 
-    if (cycle.strategyExecutions.length === 0) {
-      if (cycle.skipReason === "no_signal") {
-        slice.skippedSignals += 1;
+function accumulateSingleCycleSignalOrderMetrics(
+  cycle: PaperCycleResult,
+  accumulators: Map<Regime, ResearchRegimeMetricSliceV2>,
+): void {
+  const regime = cycle.evaluation.msv.derived.regime;
+  const slice = getOrCreateRegimeSliceV2(accumulators, regime);
+
+  if (cycle.strategyExecutions.length === 0) {
+    if (cycle.skipReason === "no_signal") {
+      slice.skippedSignals += 1;
+    }
+    return;
+  }
+
+  for (const entry of cycle.strategyExecutions) {
+    if (entry.skipReason === "no_submit") {
+      slice.skippedSignals += 1;
+      continue;
+    }
+
+    if (entry.execution?.status === "risk_rejected") {
+      slice.rejectedSignals += 1;
+      continue;
+    }
+
+    if (entry.execution?.status === "submitted") {
+      slice.submittedOrders += 1;
+      slice.acceptedOrders += 1;
+      if (entry.execution.order.state === "FILLED") {
+        slice.filledOrders += 1;
       }
       continue;
     }
 
-    for (const entry of cycle.strategyExecutions) {
-      if (entry.skipReason === "no_submit") {
-        slice.skippedSignals += 1;
-        continue;
-      }
-
-      if (entry.execution?.status === "risk_rejected") {
-        slice.rejectedSignals += 1;
-        continue;
-      }
-
-      if (entry.execution?.status === "submitted") {
-        slice.submittedOrders += 1;
-        slice.acceptedOrders += 1;
-        if (entry.execution.order.state === "FILLED") {
-          slice.filledOrders += 1;
-        }
-        continue;
-      }
-
-      if (entry.submitBlocked) {
-        slice.rejectedSignals += 1;
-      }
+    if (entry.submitBlocked) {
+      slice.rejectedSignals += 1;
     }
   }
 }
@@ -356,10 +444,33 @@ async function runResearchValidationBacktestV1(
   window: { start: Date; end: Date },
   exportedAt: Date,
 ): Promise<ResearchValidationMetricsV1> {
+  assertStreamingAnalyticsHooksAllowed(input);
   const barSource = new HistoricalBarReplaySource({
     bars: input.bars,
     cycleIdPrefix: input.cycleIdPrefix,
   });
+
+  const regimeAccumulators = new Map<Regime, RegimeAccumulatorV1>();
+  const retentionMode = input.retentionMode ?? "FULL";
+  let evidenceSink = input.evidenceSink;
+  if (retentionMode === "STREAM_ONLY" && evidenceSink) {
+    evidenceSink = wrapEvidenceSinkWithOnlineAccumulators(evidenceSink, (cycle) => {
+      const regime = cycle.evaluation.msv.derived.regime;
+      const submitted = cycle.strategyExecutions.filter(
+        (entry) => entry.execution?.status === "submitted",
+      );
+      if (submitted.length === 0) {
+        return;
+      }
+      const current = regimeAccumulators.get(regime) ?? {
+        tradeCount: 0,
+        periodRealizedPnl: "0",
+        periodTotalFees: "0",
+      };
+      current.tradeCount += submitted.length;
+      regimeAccumulators.set(regime, current);
+    });
+  }
 
   const backtest = await runBacktest({
     context: input.context,
@@ -377,33 +488,54 @@ async function runResearchValidationBacktestV1(
     runId: input.runId,
     split: input.split,
     window,
-    accountState: input.accountState ?? EMPTY_ACCOUNT_STATE,
+    accountState: resolveResearchV1InitialAccountState(input),
     exportedAt,
     activeStrategyIds: [input.strategyId],
     refreshAccountStateBetweenStrategies: true,
     newId: input.newId,
     providerSidecar: input.providerSidecar,
     enableReplayFusedContext: input.enableReplayFusedContext,
+    retentionMode,
+    evidenceSink,
+    maxCycles: input.maxCycles,
+    resumeCycleStartIndex: input.resumeCycleStartIndex,
+    evidenceSealMode: input.evidenceSealMode,
+    evidenceSealReason: input.evidenceSealReason,
+    historicalExecutionProfile: input.historicalExecutionProfile,
+    historicalProfile: input.historicalProfile,
+    intelligenceRecordsSink: input.intelligenceRecordsSink,
+    forecastDecisionSink: input.forecastDecisionSink,
+    outcomeResolutionSink: input.outcomeResolutionSink,
+    calibrationSink: input.calibrationSink,
+    confidenceUpdateSink: input.confidenceUpdateSink,
+    wp21RuntimeDeps: input.wp21RuntimeDeps,
+    outcomeResolutionReadPort: input.outcomeResolutionReadPort,
+    wp21PostgresExecutor: input.wp21PostgresExecutor,
+    wp21Provenance: input.wp21Provenance,
+    cycleIdPrefix: input.cycleIdPrefix,
   });
 
-  const regimeAccumulators = new Map<Regime, RegimeAccumulatorV1>();
+  if (input.artifactSink && retentionMode !== "STREAM_ONLY") {
+    input.artifactSink.cycleResults = [...backtest.cycleResults];
+  }
 
-  for (const cycle of backtest.cycleResults) {
-    const regime = cycle.evaluation.msv.derived.regime;
-    const submitted = cycle.strategyExecutions.filter(
-      (entry) => entry.execution?.status === "submitted",
-    );
-    if (submitted.length === 0) {
-      continue;
+  if (retentionMode === "FULL") {
+    for (const cycle of backtest.cycleResults) {
+      const regime = cycle.evaluation.msv.derived.regime;
+      const submitted = cycle.strategyExecutions.filter(
+        (entry) => entry.execution?.status === "submitted",
+      );
+      if (submitted.length === 0) {
+        continue;
+      }
+      const current = regimeAccumulators.get(regime) ?? {
+        tradeCount: 0,
+        periodRealizedPnl: "0",
+        periodTotalFees: "0",
+      };
+      current.tradeCount += submitted.length;
+      regimeAccumulators.set(regime, current);
     }
-
-    const current = regimeAccumulators.get(regime) ?? {
-      tradeCount: 0,
-      periodRealizedPnl: "0",
-      periodTotalFees: "0",
-    };
-    current.tradeCount += submitted.length;
-    regimeAccumulators.set(regime, current);
   }
 
   const evaluations = await derivePaperStrategyEvaluations({
@@ -421,7 +553,13 @@ async function runResearchValidationBacktestV1(
   const closedTradeCount = aggregate?.closedTradeCount ?? 0;
 
   if (closedTradeCount > 0 && regimeAccumulators.size === 0) {
-    const fallbackRegime = backtest.cycleResults.at(-1)?.evaluation.msv.derived.regime ?? "RANGE";
+    const fallbackRegime =
+      backtest.cycleResults.at(-1)?.evaluation.msv.derived.regime ??
+      (backtest.streamingManifestRef
+        ? new StreamingRegimeTimelineReader(
+            backtest.streamingManifestRef.runDir,
+          ).resolveRegimeAtTimestamp(window.end)
+        : "RANGE");
     regimeAccumulators.set(fallbackRegime, {
       tradeCount: closedTradeCount,
       periodRealizedPnl,
@@ -463,6 +601,7 @@ async function runResearchValidationBacktestV2(
   window: { start: Date; end: Date },
   exportedAt: Date,
 ): Promise<ResearchValidationMetricsV2> {
+  assertStreamingAnalyticsHooksAllowed(input);
   const lastBar = input.bars.at(-1)!;
   const barSource = new HistoricalBarReplaySource({
     bars: input.bars,
@@ -470,6 +609,14 @@ async function runResearchValidationBacktestV2(
   });
 
   const portfolioContext = resolveResearchV2PortfolioContext(input);
+  const retentionMode = input.retentionMode ?? "FULL";
+  const regimeAccumulators = new Map<Regime, ResearchRegimeMetricSliceV2>();
+  let evidenceSink = input.evidenceSink;
+  if (retentionMode === "STREAM_ONLY" && evidenceSink) {
+    evidenceSink = wrapEvidenceSinkWithOnlineAccumulators(evidenceSink, (cycle) => {
+      accumulateSingleCycleSignalOrderMetrics(cycle, regimeAccumulators);
+    });
+  }
 
   const backtest = await runBacktest({
     context: input.context,
@@ -497,16 +644,49 @@ async function runResearchValidationBacktestV2(
     markPrices: { marks: { [lastBar.symbol]: lastBar.close } },
     providerSidecar: input.providerSidecar,
     enableReplayFusedContext: input.enableReplayFusedContext,
+    retentionMode,
+    evidenceSink,
+    maxCycles: input.maxCycles,
+    resumeCycleStartIndex: input.resumeCycleStartIndex,
+    evidenceSealMode: input.evidenceSealMode,
+    evidenceSealReason: input.evidenceSealReason,
+    historicalExecutionProfile: input.historicalExecutionProfile,
+    historicalProfile: input.historicalProfile,
+    intelligenceRecordsSink: input.intelligenceRecordsSink,
+    forecastDecisionSink: input.forecastDecisionSink,
+    outcomeResolutionSink: input.outcomeResolutionSink,
+    calibrationSink: input.calibrationSink,
+    confidenceUpdateSink: input.confidenceUpdateSink,
+    wp21RuntimeDeps: input.wp21RuntimeDeps,
+    outcomeResolutionReadPort: input.outcomeResolutionReadPort,
+    wp21PostgresExecutor: input.wp21PostgresExecutor,
+    wp21Provenance: input.wp21Provenance,
+    cycleIdPrefix: input.cycleIdPrefix,
   });
 
   if (input.artifactSink) {
-    input.artifactSink.cycleResults = [...backtest.cycleResults];
     input.artifactSink.portfolioContext = portfolioContext;
+    if (retentionMode === "STREAM_ONLY") {
+      input.artifactSink.streamingManifestRef = backtest.streamingManifestRef;
+      if (evidenceSink) {
+        input.artifactSink.evidenceSink = evidenceSink;
+      }
+    } else {
+      input.artifactSink.cycleResults = [...backtest.cycleResults];
+    }
   }
 
-  const timeline = buildCycleRegimeTimeline(backtest.cycleResults);
-  const regimeAccumulators = new Map<Regime, ResearchRegimeMetricSliceV2>();
-  accumulateCycleSignalOrderMetrics(backtest.cycleResults, regimeAccumulators);
+  const timelineReader =
+    retentionMode === "STREAM_ONLY" && backtest.streamingManifestRef
+      ? new StreamingRegimeTimelineReader(backtest.streamingManifestRef.runDir)
+      : null;
+  const timeline = timelineReader
+    ? [...timelineReader.iterate()]
+    : buildCycleRegimeTimeline(backtest.cycleResults);
+
+  if (retentionMode === "FULL") {
+    accumulateCycleSignalOrderMetrics(backtest.cycleResults, regimeAccumulators);
+  }
 
   const evaluations = await derivePaperStrategyEvaluations({
     context: input.context,
@@ -602,6 +782,7 @@ async function runResearchValidationBacktestV2(
   const boundaryRegime =
     timeline.at(-1)?.regime ??
     backtest.cycleResults.at(-1)?.evaluation.msv.derived.regime ??
+    timelineReader?.resolveRegimeAtTimestamp(window.end) ??
     "RANGE";
 
   for (const trade of evaluation.markToCloseTrades) {
@@ -694,6 +875,11 @@ export async function runResearchValidationBacktest(
   if (input.bars.length < 20) {
     throw new Error("[research] validation backtest requires at least 20 bars");
   }
+
+  assertHtrHistoricalExecutionSessionConfiguration({
+    deps: input.deps,
+    historicalExecutionProfile: input.historicalExecutionProfile,
+  });
 
   const window = parseWindowFromBars(input.bars);
   const exportedAt = input.exportedAt ?? new Date(window.end);

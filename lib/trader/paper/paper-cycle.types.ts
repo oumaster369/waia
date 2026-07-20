@@ -42,6 +42,12 @@ import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 export type ResearchReplayDeterminismDeps = {
   clock: DeterministicReplayClock;
   resetWindowState(): void;
+  /** Default id factory when callers omit `PaperCycleInput.newId` (HTR-WP10). */
+  newId?: () => string;
+  /** HTR-WP17: current closed-bar index for historical order registration. */
+  setDecisionBarIndex?: (index: number) => void;
+  /** HTR-WP17: marks deps wired with enabled historical execution simulation. */
+  historicalExecutionSession?: boolean;
 };
 
 /** M2 deposit-aware sizing context (optional — legacy cycles omit this). */
@@ -92,6 +98,29 @@ export type PaperCycleDeps = {
 
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
 import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
+import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
+import type { StrategyLifecycleState } from "@/lib/trader/intelligence/strategies/strategy-lifecycle.types";
+import type { StrategyLifecycleService } from "@/lib/trader/intelligence/strategies/strategy-lifecycle-service";
+import type { StrategyTrialService } from "@/lib/trader/intelligence/strategies/strategy-trial-service";
+import type { DrawdownPolicyEvaluationResult } from "@/lib/trader/risk/drawdown-policy.types";
+
+/** HTR-WP16 strategy gating + drawdown context (optional — legacy cycles omit). */
+export type Wp16GatingContext = {
+  runId: string;
+  portfolioId: string;
+  historicalProfile?: HistoricalIntelligenceProfile;
+  lifecycleService?: StrategyLifecycleService;
+  trialService?: StrategyTrialService;
+  lifecycleStateResolver?: (
+    strategyId: string,
+    strategyVersion: string,
+    asOf: string,
+  ) => Promise<StrategyLifecycleState | null> | StrategyLifecycleState | null;
+  drawdownEvaluation?: DrawdownPolicyEvaluationResult;
+  accountPeakHwm?: string;
+  monthlyPeakHwm?: string;
+  entryPurposeStrategyVersion?: string | null;
+};
 
 export type PaperCycleInput = {
   context: OrgContext;
@@ -114,6 +143,18 @@ export type PaperCycleInput = {
   hypothesisSessionState?: HypothesisSessionState;
   /** PR-2 MI Core: explicit flag override (defaults to WAIA_MI_CORE_ENABLED env). */
   miCoreEnabled?: boolean;
+  /** HTR-WP09: prebuilt incremental reconstruction from canvas view. */
+  reconstruction?: import("@/lib/trader/intelligence/reconstruction/reconstruction.types").ReconstructionSnapshot;
+  /** HTR-WP16: strategy eligibility, trial, and drawdown gating context. */
+  wp16?: Wp16GatingContext;
+  /** HTR-WP13/WP14: explicit historical intelligence profile for evaluation-cycle records. */
+  historicalProfile?: HistoricalIntelligenceProfile;
+  /** HTR-WP13/WP14: research run identifier for intelligence record lineage. */
+  runId?: string;
+  /** HTR-WP14: cost model for net-economics fail-closed decision records. */
+  costModel?: CostModelV1;
+  /** HTR-WP18/WP19/WP20: accounting + reconciliation + guardian authority on research path. */
+  htrAccounting?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrAccountingCycleContext;
 };
 
 export type PaperCycleSkipReason = "no_signal" | "no_submit";
@@ -145,6 +186,10 @@ export type PaperCycleResult = {
   /** M3 guardian evaluations + exit intents when guardian enabled. */
   guardian?: GuardianCycleResult;
   guardianExecutions?: PaperCycleGuardianExecution[];
+  /** HTR-WP20: authoritative guardian cycle on default historical research path. */
+  htrGuardian?: import("@/lib/trader/guardian/htr-guardian-risk-bridge").HtrGuardianCycleResult;
+  /** HTR-WP18..WP20: observable production runtime call order proof. */
+  htrRuntimeCallOrder?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrRuntimeCallEvent[];
   /** PR-2 MI Core: updated session state for next cycle. */
   hypothesisSessionState?: HypothesisSessionState;
 };

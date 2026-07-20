@@ -24,6 +24,10 @@ export type ValidatedResearchEvidenceProvenance = {
   blindValidationResultId: string;
 };
 
+export type ValidateResearchEvidenceProvenanceOptions = Readonly<{
+  requireRegimeCoverage?: boolean;
+}>;
+
 /**
  * Loads and cross-checks every artifact referenced by a research evidence document
  * against persisted Postgres state. Rejects fabricated or mismatched UUIDs.
@@ -32,15 +36,17 @@ export async function validateResearchEvidenceProvenancePostgres(
   ex: PgReadExecutor,
   context: OrgContext,
   document: ResearchEvidenceDocument,
+  options?: ValidateResearchEvidenceProvenanceOptions,
 ): Promise<ValidatedResearchEvidenceProvenance> {
   const body = document.evidenceBody;
   const envelope = document.envelope;
+  const requireRegimeCoverage = options?.requireRegimeCoverage ?? true;
 
   if (body.executionMode !== "backtest") {
     throw new ResearchEvidenceProvenanceError("RESEARCH_EVIDENCE_MODE_INVALID");
   }
 
-  if (!hasSufficientResearchRegimeCoverage(body.regimeCoverage)) {
+  if (requireRegimeCoverage && !hasSufficientResearchRegimeCoverage(body.regimeCoverage)) {
     throw new ResearchEvidenceProvenanceError("RESEARCH_EVIDENCE_REGIME_COVERAGE_INSUFFICIENT");
   }
 

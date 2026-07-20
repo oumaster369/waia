@@ -1,0 +1,23 @@
+{
+  "command": "pnpm trader:wp17:evidence",
+  "schemaVersion": "htr-wp17-execution-simulation-evidence/v1",
+  "sourceGitSha": "6c6e69371719c5be41d54dcb613a9eb32a86073d",
+  "dirtyTree": false,
+  "executionModelId": "htr-historical-execution-v1",
+  "executionModelSchemaVersion": "waia.trader.historical-execution-model.v1",
+  "migrationSchemaVersion": "0098-0099",
+  "noSameBarFillProof": true,
+  "multiBarPartialCases": true,
+  "cancelExpiryCases": true,
+  "grossNetDecompositionProof": true,
+  "noDoubleCostProof": true,
+  "replayParityDigest": "032545b95febf944412ecb6062216ccdf768120e9d08904dd8a05415250ab2a1",
+  "checkpointResumeParity": "PASS",
+  "gap035ContractA": "IDENTICAL",
+  "gap035ContractB": "PASS",
+  "gap035ContractC": "PASS",
+  "candidateStatus": "COMPLETE_PENDING_INDEPENDENT_REVIEW",
+  "outputMode": "GITIGNORED_STAGING",
+  "semanticDigest": "73b1720722fa434a28b0f8b4d33302f4edcbb175923e0d8e68be958434e2f68b",
+  "manifestDigest": "a8402a9c2a6d448714af75a2d48e227790a61b850cb900f2047c7466b4ffd938"
+}

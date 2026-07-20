@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence/v1",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "completedAt": "2026-07-17T13:59:36.909Z",
+  "nodeVersion": "v22.22.3",
+  "command": ".cursor/plans/dee-415-wp21/tmp-capture-entrypoint-counts.ts (V2)",
+  "exitCode": 0,
+  "productionChain": [
+    "runResearchPipelinePostgres",
+    "runIsolatedResearchBacktest",
+    "runResearchValidationBacktest",
+    "runBacktest"
+  ],
+  "metricsSchemaVersion": "2.0.0",
+  "portfolioContextPresent": true,
+  "wp13CycleEnvelopeRows": 56,
+  "wp14ForecastRows": 56,
+  "wp14DecisionRows": 56,
+  "wp21TableRows": {
+    "trader_forecast_outcome_record": 29,
+    "trader_hypothesis_outcome_record": 440,
+    "trader_calibration_observation_record": 0,
+    "trader_calibration_snapshot_record": 0,
+    "trader_abstention_outcome_record": 55,
+    "trader_knowledge_confidence_update_record": 0
+  },
+  "wp21RowTotal": 524,
+  "resolvedForecastOutcomeRows": 29,
+  "orphanRows": 0,
+  "unexpectedDuplicates": 0,
+  "transactionRollbacks": 0,
+  "status": "PASS",
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "payloadSha256": "09451a826fda6898988349ecd68c4cb672e0f3efa68d662e5b845a7b2718d05c"
+}

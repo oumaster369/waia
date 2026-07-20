@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "htr-fhv-run-contract/v0",
+  "contractId": "FULL_HISTORICAL_VALIDATION_RUN_CONTRACT_V0",
+  "executionPhase": "AFTER_DEE_415_AND_CERTIFY_HTR_READY",
+  "venue": "HTX",
+  "venueScope": "HTX_ONLY",
+  "marketType": "SPOT",
+  "instruments": [
+    "BTCUSDT",
+    "ETHUSDT"
+  ],
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT"
+  ],
+  "venueClass": "spot",
+  "primaryInterval": "1m",
+  "baseInterval": "1m",
+  "derivedIntervals": [
+    "15m",
+    "1h",
+    "4h",
+    "1d"
+  ],
+  "derivedIntervalRule": "CLOSED_BARS_ONLY",
+  "d11bDatasetVenueRole": "D11B_INFRASTRUCTURE_QUALIFICATION_ONLY",
+  "fullPeriod": {
+    "startUtc": "2020-01-01T00:00:00.000Z",
+    "endUtc": "2025-12-31T23:59:00.000Z"
+  },
+  "developmentCalibration": {
+    "startUtc": "2020-01-01T00:00:00.000Z",
+    "endUtc": "2022-12-31T23:59:00.000Z"
+  },
+  "walkForward": {
+    "startUtc": "2023-01-01T00:00:00.000Z",
+    "endUtc": "2024-12-31T23:59:00.000Z"
+  },
+  "blindHoldout": {
+    "startUtc": "2025-01-01T00:00:00.000Z",
+    "endUtc": "2025-12-31T23:59:00.000Z",
+    "status": "SEALED_NOT_ACCESSED"
+  },
+  "partitions": {
+    "development": {
+      "startUtc": "2020-01-01T00:00:00.000Z",
+      "endUtc": "2023-01-01T00:00:00.000Z"
+    },
+    "walkForward": {
+      "startUtc": "2023-01-01T00:00:00.000Z",
+      "endUtc": "2025-01-01T00:00:00.000Z"
+    },
+    "blindHoldout": {
+      "startUtc": "2025-01-01T00:00:00.000Z",
+      "endUtc": "2026-01-01T00:00:00.000Z",
+      "status": "SEALED_NOT_ACCESSED"
+    }
+  },
+  "initialPortfolio": {
+    "quoteCurrency": "USDT",
+    "cashUsdt": "100000",
+    "btcQuantity": "0",
+    "ethQuantity": "0",
+    "leverage": 0,
+    "borrowing": "PROHIBITED",
+    "shortSelling": "PROHIBITED",
+    "externalDepositsDuringRun": 0,
+    "externalWithdrawalsDuringRun": 0,
+    "portfolioMode": "SHARED_MULTI_INSTRUMENT"
+  },
+  "costModelId": "htr-historical-execution-v1",
+  "costModelSchemaVersion": "waia.trader.historical-execution-model.v1",
+  "feeBps": "20",
+  "halfSpreadBps": "5",
+  "marketImpactBps": "10",
+  "slippageModel": "MERGED_INTO_IMPACT",
+  "costModelDigest": "a4b994f7865425edb27e4a87d84f0ca958bd455121147411dfec163c58431b79",
+  "costModelVersion": "waia.trader.historical-execution-model.v1",
+  "costModelFeesBps": "20",
+  "costModelSlippageBps": "15",
+  "drawdownPolicyVersion": "htr-wp16-d20-drawdown/v1",
+  "maxAccountDrawdownPct": 25,
+  "maxMonthlyDrawdownPct": 15,
+  "maxStrategyDrawdownPct": 20,
+  "breachAction": "CLOSE_ONLY_THEN_STOP_ACCOUNT",
+  "hwmBasis": "PEAK_EQUITY_MARK_TO_MARKET",
+  "billingHwmDistinct": true,
+  "datasetManifestSemanticDigestPin": "fd7d489595f8fc20e4311c74e5d82b2957e7cca5b80319b8cb8d5f0893544663",
+  "datasetSourceClassification": "NOT_AVAILABLE",
+  "holdoutAccess": "PROHIBITED_UNTIL_OPERATOR_PROCEDURE",
+  "silentDatasetSubstitution": "PROHIBITED",
+  "payloadSha256": "3b1ba9b3669e868418dabdf4bf705ea6a63507d6f38f1ccd15013d665109fa67"
+}

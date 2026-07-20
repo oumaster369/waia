@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "htr-execution-server-code-ready-package/v1",
+  "packageMode": "option-a-code-ready",
+  "packageId": "HTR-WP23-EXECUTION-SERVER-CODE-READY",
+  "fhvRunContractDigest": "5431f4e0f462332823523059cef054fcc72087ed4f35737e1d94520153d65df4",
+  "operatorReportSchemaVersion": "htr-operator-report/v1",
+  "attestation": {
+    "actualServerMutation": "PROHIBITED",
+    "holdoutRead": "PROHIBITED",
+    "blindHoldoutStatus": "SEALED_NOT_ACCESSED",
+    "datasetAcquisitionRequiredBeforeActualFhv": true,
+    "deploymentQualificationDeferred": true
+  },
+  "resourceAssumptions": [
+    {
+      "id": "exec-host-baseline",
+      "description": "Dedicated execution host with pinned git SHA checkout, Docker build capability, and Postgres session-mode connectivity.",
+      "minimumMemoryGb": 16,
+      "minimumDiskGb": 256,
+      "networkEgress": "HTX_MARKET_DATA_AND_POSTGRES_ONLY"
+    }
+  ],
+  "commandReferences": [
+    {
+      "id": "preflight-read-only",
+      "classification": "READ_ONLY",
+      "path": "scripts/ops/execution-server-preflight.sh",
+      "purpose": "Verify checkout SHA and stale-code guard before any human-operated deploy."
+    },
+    {
+      "id": "sync-human-only",
+      "classification": "HUMAN_ONLY_MUTATION",
+      "path": "scripts/ops/execution-server-sync.sh",
+      "purpose": "Pin host checkout to approved integration SHA (requires --confirm)."
+    },
+    {
+      "id": "build-human-only",
+      "classification": "HUMAN_ONLY_MUTATION",
+      "path": "scripts/ops/execution-server-build.sh",
+      "purpose": "Build execution host container image (requires --confirm)."
+    },
+    {
+      "id": "deploy-human-only",
+      "classification": "HUMAN_ONLY_MUTATION",
+      "path": "scripts/ops/execution-server-deploy.sh",
+      "purpose": "Deploy execution host container (requires --confirm)."
+    },
+    {
+      "id": "htr-readiness-preflight",
+      "classification": "READ_ONLY",
+      "path": "scripts/trader/historical-readiness-preflight.ts",
+      "purpose": "Fail-closed readiness preflight for FHV Run Contract v0 pinning."
+    }
+  ],
+  "checkpointEvidencePaths": [
+    ".cursor/plans/dee-415-wp23/evidence-staging",
+    "replay-runs/RI-P7/htr-wp23-readiness-package"
+  ],
+  "operatorRunbookPath": "docs/ops/HISTORICAL-TEST-READINESS-RUNBOOK.md",
+  "packageDocPath": "docs/ops/HTR-EXECUTION-SERVER-CODE-READY-PACKAGE.md",
+  "executionServerRunbookPath": "docs/ops/EXECUTION-SERVER-RUNBOOK.md",
+  "requiredConfirmationTokens": [
+    "CERTIFY-HTR-READY",
+    "APPROVE-HTR-FHV-DATASET-SOURCE",
+    "APPROVE-HTR-EXECSERVER-PACKAGE-MODE:option-a-code-ready"
+  ],
+  "payloadSha256": "1cdde6154ab5b52c95f3ec9f4cd43f8c551e79bf5942105f5e01fb0b2a47a18d"
+}

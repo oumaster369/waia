@@ -1,0 +1,35 @@
+{
+  "accountingFrontierState": {
+    "accountingSequence": 6,
+    "frontierAsOf": "2026-01-01T00:23:00.000Z",
+    "cash": "99347.725",
+    "equity": "99997.725",
+    "equityHwm": "100000.00",
+    "accountDrawdownBps": 0,
+    "marksJson": {
+      "BTCUSDT": {
+        "price": "65000.00",
+        "barCloseTime": "2026-01-01T00:23:00.000Z"
+      }
+    },
+    "positionsJson": {
+      "BTCUSDT": {
+        "quantity": "0.01",
+        "grossPositionBasis": "650",
+        "netPositionBasis": "652.275"
+      }
+    },
+    "consumedFillIds": [
+      "0ba9029d-8cf0-83cd-8c51-af5aa4172f38"
+    ],
+    "cashEventsJson": [
+      {
+        "fillId": "0ba9029d-8cf0-83cd-8c51-af5aa4172f38",
+        "netCashEffect": "-652.275"
+      }
+    ],
+    "grossRealizedPnl": "0",
+    "netRealizedPnl": "0",
+    "semanticContentDigest": "176a4b7f62aaf65eb162c3f7be2fd0db39927dd1f510c3c66982202d21693474"
+  }
+}

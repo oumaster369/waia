@@ -11,6 +11,28 @@ import type { TraderAuditInput } from "@/lib/trader/types";
 import type { LivePathAuthorizationHook } from "@/lib/trader/live/assert-live-path-authorized";
 import type { LifecycleRecorder } from "@/lib/trader/lifecycle/lifecycle-recorder";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import type {
+  HistoricalExecutionModelV1,
+  SimulatedFillEvent,
+} from "@/lib/trader/execution/historical-execution-model.types";
+import type { HistoricalSimulatedExchange } from "@/lib/trader/execution/historical-simulated-exchange";
+import type { BreachOrderCancelOutcome } from "@/lib/trader/guardian/htr-breach-partial-entry-cancellation";
+
+export type BreachCancellationResultV1 = {
+  cancelledOrderIds: string[];
+  failedOrderIds: string[];
+  idempotentSkipped: string[];
+  deterministicOrder: string[];
+  breachCancellationFailed: boolean;
+};
+
+export type HistoricalExecutionRuntime = {
+  enabled: boolean;
+  model: HistoricalExecutionModelV1;
+  exchange: HistoricalSimulatedExchange;
+  getDecisionBarIndex: () => number;
+  getReplayNowMs: () => number;
+};
 
 export type SubmissionAuditIds = {
   submissionStarted?: string;
@@ -69,8 +91,18 @@ export type OrderExecutionServiceDeps = {
   /** Injected only on bounded operator CLI path; Worker defaults omit this hook. */
   assertLiveAuthorized?: LivePathAuthorizationHook;
   lifecycleRecorder?: LifecycleRecorder;
+  historicalExecution?: HistoricalExecutionRuntime;
 };
 
 export type OrderExecutionService = {
   submitOrder(context: OrgContext, input: SubmitOrderInput): Promise<SubmitOrderResult>;
+  recordSimulatedFill?(
+    context: OrgContext,
+    order: OrderRow,
+    event: SimulatedFillEvent,
+    isFirstSlice: boolean,
+  ): Promise<OrderRow>;
+  transitionOrderExpired?(context: OrgContext, order: OrderRow): Promise<OrderRow>;
+  transitionOrderCancelled?(context: OrgContext, order: OrderRow): Promise<OrderRow>;
+  cancelOrderForBreach?(context: OrgContext, order: OrderRow): Promise<BreachOrderCancelOutcome>;
 };

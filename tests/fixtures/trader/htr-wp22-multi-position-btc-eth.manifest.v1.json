@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "htr-wp22-multi-position-fixture-manifest/v1",
+  "sourceAuthority": "SYNTHETIC_HTR_WP22_FIXTURE_V1",
+  "initialCashUsdt": "100000.00",
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT"
+  ],
+  "timeRange": {
+    "start": "2026-01-01T00:00:00.000Z",
+    "end": "2026-01-01T02:00:00.000Z"
+  },
+  "holdoutContent": "PROHIBITED",
+  "htxSubstitution": "PROHIBITED",
+  "d11bPerformanceDatasetSubstitution": "PROHIBITED",
+  "legs": [
+    {
+      "symbol": "BTCUSDT",
+      "fixtureRelativePath": "tests/fixtures/trader/htr-wp22-btcusdt-1m-correctness.v1.json",
+      "fileSha256": "3f81e386bc0cc4545d907219bd4631f31184257b9e0e61c34c765a0630cf6197",
+      "barCount": 120
+    },
+    {
+      "symbol": "ETHUSDT",
+      "fixtureRelativePath": "tests/fixtures/trader/htr-wp22-ethusdt-1m-correctness.v1.json",
+      "fileSha256": "c462f6e7245db8cfa2ddeb1c08679f3c2952269c99728fca9d415ffb05b2297a",
+      "barCount": 120
+    }
+  ]
+}

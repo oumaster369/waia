@@ -107,6 +107,7 @@ function mockRepository(
     listFills: vi.fn(async (_context, orderId) => fillsByOrderId[orderId] ?? []),
     transitionOrder: vi.fn(),
     recordFill: vi.fn(),
+    recordFillProgress: vi.fn(),
     listEvents: vi.fn(async () => []),
   };
 }

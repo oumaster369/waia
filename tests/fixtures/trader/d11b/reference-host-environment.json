@@ -1,0 +1,14 @@
+{
+  "arch": "x64",
+  "cpuModel": "HTR D-11B Hermetic Test Fixture",
+  "efficiencyCoreCount": 4,
+  "logicalCpuCount": 8,
+  "lowPowerMode": false,
+  "nodeOptions": "",
+  "nodeVersion": "v20.0.0",
+  "osVersion": "linux 6.8.0 (hermetic-fixture)",
+  "performanceCoreCount": 4,
+  "platform": "linux",
+  "powerSource": "AC",
+  "totalMemBytes": 8589934592
+}

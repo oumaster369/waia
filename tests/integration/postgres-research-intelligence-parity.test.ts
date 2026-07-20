@@ -36,8 +36,16 @@ import {
 } from "@/lib/trader/research/m9-operator-authorization";
 import { computeM9DatasetSealPreviewPostgres } from "@/lib/trader/research/m9-dataset-seal-preview";
 import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
+import { parseResearchValidationMetricsJson } from "@/lib/trader/research/parse-research-validation-metrics";
+import { listWalkForwardWindowsForCandidatePostgres } from "@/lib/trader/research/strategy-candidate-repository-postgres";
 import { RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION } from "@/lib/trader/research/strategy-candidate.types";
 import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/research/validate-research-evidence-provenance";
+import { hasSufficientCanonicalRegimeCoverage } from "@/lib/trader/research/regime-taxonomy";
+import {
+  buildHtrWp22MultiRegimePostgresEvidence,
+  buildHtrGap044ResearchEvidenceDocumentFromPipeline,
+} from "@/lib/trader/backtest/htr-wp22-multi-regime-postgres-evidence";
+import { COST_MODEL_VERSION_V1, createCostModelV1 } from "@/lib/trader/execution/cost-model";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import {
   createKillSwitchResolver,
@@ -58,6 +66,11 @@ import {
   buildResearchIntegrationBars,
   RESEARCH_INTEGRATION_BAR_COUNT,
 } from "@/tests/helpers/build-research-integration-bars";
+import {
+  buildHtrGap044PipelineBacktestOptions,
+  buildHtrPostgresResearchSession,
+  ensureAuthUsersSeed,
+} from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -147,57 +160,19 @@ function mockRepository(orders: OrderRow[]): OrderRepository {
     recordFill: async () => {
       throw new Error("not implemented");
     },
+    recordFillProgress: async () => {
+      throw new Error("not implemented");
+    },
     listEvents: async () => [],
     listFills: async (_context, orderId) => fillsByOrderId[orderId] ?? [],
   };
 }
 
-async function buildPostgresResearchDeps(
+async function buildPostgresResearchSession(
   db: ReturnType<typeof getPostgresDrizzle>,
   orgId: string,
-): Promise<PaperCycleDeps> {
-  const context = requireOrgContext(orgId);
-  const writeAudit = (input: Parameters<typeof writeTraderAuditLogPostgres>[1]) =>
-    writeTraderAuditLogPostgres(db, input);
-  const nowMs = () => Date.now();
-  const connector = new MockExchangeConnector();
-  await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
-
-  const limits = createPostgresRiskLimitsService(db);
-  await limits.upsertLimitsForOrg(context, {
-    ...DEFAULT_ORG_RISK_LIMITS,
-    maxOrdersPerWindow: 500,
-  });
-
-  const killSwitchResolver = createKillSwitchResolver({
-    repository: createPostgresKillSwitchRepository(db),
-    nowMs,
-  });
-  const orderRepository = createPostgresOrderRepository(db);
-  const riskEngine = createPostgresRiskEngineService(db, {
-    limitsService: limits,
-    killSwitchResolver,
-    rateStore: createInMemoryOrderRateStore(),
-    writeAudit,
-    nowMs,
-    newDecisionId: () => crypto.randomUUID(),
-  });
-
-  return {
-    execution: createOrderExecutionServiceFromDeps({
-      riskEngine,
-      orderRepository,
-      killSwitchResolver,
-      connectorForMode: () => connector,
-      writeAudit,
-      nowMs,
-    }),
-    reconciliation: createPostgresReconciliationService(db, {
-      connectorForMode: () => connector,
-      nowMs,
-      writeAudit,
-    }),
-  };
+) {
+  return buildHtrPostgresResearchSession(db, orgId, { replayNamespaceSeed: 0x400_400 });
 }
 
 describe.skipIf(!integrationEnabled || !url)(
@@ -266,14 +241,7 @@ describe.skipIf(!integrationEnabled || !url)(
 
     beforeAll(async () => {
       await cleanup();
-      const sql = postgres(url!, { max: 1 });
-      try {
-        await sql.unsafe(`INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [
-          USER_A,
-        ]);
-      } finally {
-        await sql.end({ timeout: 5 });
-      }
+      await ensureAuthUsersSeed(url!, [USER_A]);
 
       db = getPostgresDrizzle();
       await db.insert(pgSchema.users).values({
@@ -308,10 +276,13 @@ describe.skipIf(!integrationEnabled || !url)(
 
     it("runs bars → dataset → backtest → walk-forward → blind → evidence → knowledge", async () => {
       const context = requireOrgContext(orgA);
-      const deps = await buildPostgresResearchDeps(db, orgA);
+      const session = await buildPostgresResearchSession(db, orgA);
       const pipelineInput = {
         context,
-        deps,
+        deps: session.deps,
+        historicalExecutionProfile: session.historicalExecutionProfile,
+        requireMultiRegimeCoverage: false,
+        pipelineBacktest: buildHtrGap044PipelineBacktestOptions(),
         createOrderRepository: () => createPostgresOrderRepository(db),
         newId: createResearchPipelineIdFactory(),
         ...RESEARCH_PIPELINE_BASE,
@@ -339,7 +310,9 @@ describe.skipIf(!integrationEnabled || !url)(
       expect(dataset?.validationBarCount).toBeGreaterThan(0);
       expect(dataset?.blindBarCount).toBeGreaterThan(0);
 
-      await validateResearchEvidenceProvenancePostgres(db, context, first.evidenceDocument);
+      await validateResearchEvidenceProvenancePostgres(db, context, first.evidenceDocument, {
+        requireRegimeCoverage: false,
+      });
 
       const knowledgeRows = await db
         .select()
@@ -370,22 +343,50 @@ describe.skipIf(!integrationEnabled || !url)(
       for (const order of mockOrders) {
         expect(order.clientOrderId).toContain("ri-blind-");
       }
+
+      const walkForwardMetrics = (
+        await listWalkForwardWindowsForCandidatePostgres(db, context, first.strategyCandidateId)
+      ).map((window) => parseResearchValidationMetricsJson(window.metricsJson));
+
+      const regimeEvidence = buildHtrWp22MultiRegimePostgresEvidence({
+        validationMetrics: first.validationMetrics,
+        walkForwardMetrics,
+        blindMetrics: first.blindMetrics,
+        validationCycleResults: first.validationCycleResults,
+      });
+      expect(regimeEvidence.metricsSources.metricsObservedRegimes).toBe(true);
+      expect(hasSufficientCanonicalRegimeCoverage(regimeEvidence.regimeCoverage)).toBe(true);
+      expect(regimeEvidence.regimeCoverage.nonTrendingCount).toBeGreaterThan(0);
+      expect(regimeEvidence.regimeCoverage.downRegimeCount).toBeGreaterThan(0);
+      expect(
+        first.evidenceDocument.evidenceBody.regimeCoverage.regimes.every((label) =>
+          regimeEvidence.regimeCoverage.regimes.includes(label),
+        ),
+      ).toBe(true);
     });
 
     it("DEE-398: repeat-run idempotency — second run reuses the existing dataset row", async () => {
       const context = requireOrgContext(orgA);
-      const deps = await buildPostgresResearchDeps(db, orgA);
+      const session = await buildPostgresResearchSession(db, orgA);
       const datasetName = "ri-repeat-idempotency";
+      let idCounter = 0;
+      const sharedNewId = () => {
+        idCounter += 1;
+        return `00000000-0000-4000-8000-${idCounter.toString(16).padStart(12, "0")}`;
+      };
       const pipelineInput = {
         context,
-        deps,
+        deps: session.deps,
+        historicalExecutionProfile: session.historicalExecutionProfile,
+        requireMultiRegimeCoverage: false,
+        pipelineBacktest: buildHtrGap044PipelineBacktestOptions(),
         createOrderRepository: () => createPostgresOrderRepository(db),
+        newId: sharedNewId,
         ...RESEARCH_PIPELINE_BASE,
       };
 
       const first = await runResearchPipelinePostgres(db, {
         ...pipelineInput,
-        newId: createResearchPipelineIdFactory(),
         datasetName,
         strategyVersion: "0.1.210",
       });
@@ -394,7 +395,6 @@ describe.skipIf(!integrationEnabled || !url)(
       // research_dataset_org_name_unique constraint and does not duplicate the row.
       const second = await runResearchPipelinePostgres(db, {
         ...pipelineInput,
-        newId: createResearchPipelineIdFactory(),
         datasetName,
         strategyVersion: "0.1.211",
       });
@@ -416,7 +416,7 @@ describe.skipIf(!integrationEnabled || !url)(
 
     it("DEE-398: happy path — valid content-bound blind authorization proceeds through blind holdout", async () => {
       const context = requireOrgContext(orgA);
-      const deps = await buildPostgresResearchDeps(db, orgA);
+      const session = await buildPostgresResearchSession(db, orgA);
       const datasetName = "ri-auth-happy-path";
       const strategyVersion = "0.1.220";
 
@@ -445,12 +445,15 @@ describe.skipIf(!integrationEnabled || !url)(
       const result = await runResearchPipelinePostgres(db, {
         context,
         datasetName,
-        deps,
+        deps: session.deps,
+        historicalExecutionProfile: session.historicalExecutionProfile,
+        requireMultiRegimeCoverage: false,
         createOrderRepository: () => createPostgresOrderRepository(db),
         newId: createResearchPipelineIdFactory(),
         ...RESEARCH_PIPELINE_BASE,
         strategyVersion,
         pipelineBacktest: {
+          ...buildHtrGap044PipelineBacktestOptions(),
           operatorBlindAuthorization,
           blindAuthorizationScope: blindScope,
         },
@@ -462,7 +465,7 @@ describe.skipIf(!integrationEnabled || !url)(
 
     it("DEE-398: runtime content mismatch fails closed before any dataset or blind side effect", async () => {
       const context = requireOrgContext(orgA);
-      const deps = await buildPostgresResearchDeps(db, orgA);
+      const session = await buildPostgresResearchSession(db, orgA);
       const datasetName = "ri-auth-content-mismatch";
       const strategyVersion = "0.1.221";
 
@@ -489,15 +492,17 @@ describe.skipIf(!integrationEnabled || !url)(
         runResearchPipelinePostgres(db, {
           context,
           datasetName,
-          deps,
+          deps: session.deps,
+          historicalExecutionProfile: session.historicalExecutionProfile,
+          pipelineBacktest: {
+            ...buildHtrGap044PipelineBacktestOptions(),
+            operatorBlindAuthorization,
+            blindAuthorizationScope: blindScope,
+          },
           createOrderRepository: () => createPostgresOrderRepository(db),
           newId: createResearchPipelineIdFactory(),
           ...RESEARCH_PIPELINE_BASE,
           strategyVersion,
-          pipelineBacktest: {
-            operatorBlindAuthorization,
-            blindAuthorizationScope: blindScope,
-          },
         }),
       ).rejects.toMatchObject({ code: "M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH" });
 
@@ -507,11 +512,14 @@ describe.skipIf(!integrationEnabled || !url)(
 
     it("rejects promotion when research evidence references fabricated artifact IDs", async () => {
       const context = requireOrgContext(orgA);
-      const deps = await buildPostgresResearchDeps(db, orgA);
+      const session = await buildPostgresResearchSession(db, orgA);
       const pipeline = await runResearchPipelinePostgres(db, {
         context,
         datasetName: "ri-promotion-gate-run",
-        deps,
+        deps: session.deps,
+        historicalExecutionProfile: session.historicalExecutionProfile,
+        requireMultiRegimeCoverage: false,
+        pipelineBacktest: buildHtrGap044PipelineBacktestOptions(),
         createOrderRepository: () => createPostgresOrderRepository(db),
         ...RESEARCH_PIPELINE_BASE,
       });
@@ -561,14 +569,30 @@ describe.skipIf(!integrationEnabled || !url)(
 
     it("accepts promotion when research evidence matches persisted pipeline artifacts", async () => {
       const context = requireOrgContext(orgA);
-      const deps = await buildPostgresResearchDeps(db, orgA);
+      const session = await buildPostgresResearchSession(db, orgA);
       const pipeline = await runResearchPipelinePostgres(db, {
         context,
         datasetName: "ri-promotion-accept-run",
-        deps,
+        deps: session.deps,
+        historicalExecutionProfile: session.historicalExecutionProfile,
+        requireMultiRegimeCoverage: false,
+        pipelineBacktest: buildHtrGap044PipelineBacktestOptions(),
         createOrderRepository: () => createPostgresOrderRepository(db),
         ...RESEARCH_PIPELINE_BASE,
       });
+
+      const walkForwardMetrics = (
+        await listWalkForwardWindowsForCandidatePostgres(db, context, pipeline.strategyCandidateId)
+      ).map((window) => parseResearchValidationMetricsJson(window.metricsJson));
+      const promotionResearchEvidence = buildHtrGap044ResearchEvidenceDocumentFromPipeline({
+        organizationId: orgA,
+        strategyId: RESEARCH_PIPELINE_BASE.strategyId,
+        strategyVersion: RESEARCH_PIPELINE_BASE.strategyVersion,
+        costModelVersion: createCostModelV1("10", "5").version ?? COST_MODEL_VERSION_V1,
+        pipeline,
+        walkForwardMetrics,
+      });
+      await validateResearchEvidenceProvenancePostgres(db, context, promotionResearchEvidence);
 
       const paperDocument = await buildPaperEvaluationExportDocument({
         context,
@@ -593,7 +617,7 @@ describe.skipIf(!integrationEnabled || !url)(
         failureModes: ["liquidity vacuum"],
         reasonCodeDistribution: { STRAT_MR_ZSCORE_BUY: 3 },
         paperTradingEvidenceDocument: paperDocument,
-        researchEvidenceDocument: pipeline.evidenceDocument,
+        researchEvidenceDocument: promotionResearchEvidence,
         confidenceAttestation: {
           edgeNetOfCosts: "Net edge after costs.",
           liveTracksPaper: "Live should track paper.",
@@ -608,7 +632,7 @@ describe.skipIf(!integrationEnabled || !url)(
       });
       expect(record.state).toBe("PENDING_CONFIRM");
       expect(record.researchEvidence?.contentDigest).toBe(
-        pipeline.evidenceDocument.envelope.contentDigest,
+        promotionResearchEvidence.envelope.contentDigest,
       );
     });
 

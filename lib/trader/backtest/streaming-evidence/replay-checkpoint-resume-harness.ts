@@ -1,0 +1,582 @@
+import fs from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import {
+  HTR_WP03_BENCHMARK_EXPECTED_CYCLES,
+  HTR_WP03_BENCHMARK_FIXTURE_PATH,
+  HTR_WP03_BENCHMARK_FIXTURE_SHA256,
+  loadApprovedBenchmarkFixture,
+  readGitCodeSha,
+  readGitDirtyTree,
+  seedBenchmarkSession,
+  sha256File,
+} from "@/lib/trader/backtest/replay-benchmark-harness";
+import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
+import {
+  createStreamingEvidenceSink,
+  reconstructStreamingEvidence,
+  type StreamingEvidenceManifestRef,
+} from "@/lib/trader/backtest/streaming-evidence";
+import {
+  buildReplayRunChainManifest,
+  emptyDbPhaseFrontier,
+  readReplayCheckpoint,
+  resolveEvidenceFrontier,
+  resolveResumeBoundary,
+  writeReplayCheckpoint,
+  writeReplayRunChainManifest,
+  type ReplayCheckpointRecord,
+  type ReplayRunTerminalState,
+} from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import {
+  computeSemanticParityDigest,
+  readReplayRunChainProjections,
+  readSegmentProjections,
+} from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
+import { REPLAY_CHECKPOINT_SCHEMA_VERSION } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
+import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
+import {
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
+} from "@/lib/trader/execution/cost-model";
+import { type HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
+import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
+import type { HistoricalExecutionCheckpointSlice } from "@/lib/trader/execution/historical-execution-model.types";
+import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
+import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import { ReplayCheckpointError } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
+import { buildResearchValidationCycleIdPrefix } from "@/lib/trader/research/research-backtest-cycle-id";
+import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
+import { isTransientConnectionError } from "@/db/postgres-client";
+import { resolveResearchCampaignCrashFailureCode } from "@/lib/trader/research/finalize-research-campaign-outcome";
+
+export const HTR_WP05_CHECKPOINT_RESUME_BASELINE_DIR = path.join(
+  process.cwd(),
+  "replay-runs/RI-P7/htr-wp05-checkpoint-resume-baseline",
+);
+
+export const HTR_WP05_CHECKPOINT_RESUME_COMMAND = "pnpm trader:replay:checkpoint-resume";
+
+const BENCHMARK_STRATEGY_VERSION = "0.1.0";
+const INTERRUPT_AT_CYCLE = 40;
+
+export type CheckpointFixtureRunResult = {
+  cycleCount: number;
+  evidenceDigest: string;
+  semanticReproDigest: string;
+  streamingManifestRef?: StreamingEvidenceManifestRef;
+  semanticParityDigest?: string;
+};
+
+export type CheckpointResumeHarnessResult = {
+  schemaVersion: "htr-wp05-checkpoint-resume/v1";
+  terminalState: ReplayRunTerminalState;
+  fixturePath: string;
+  fixtureSha256: string;
+  datasetContentDigest: string;
+  expectedCycles: number;
+  uninterrupted: CheckpointFixtureRunResult;
+  interruptedPartial: CheckpointFixtureRunResult;
+  resumed: CheckpointFixtureRunResult;
+  parity: {
+    evidenceDigestMatch: boolean;
+    semanticReproDigestMatch: boolean;
+    semanticParityDigestMatch: boolean;
+    cycleCountMatch: boolean;
+  };
+  authoritativeStream: {
+    cycleCount: number;
+    duplicateCount: number;
+    gapCount: number;
+    supersededSegmentCount: number;
+  };
+  uninterruptedSemanticParityDigest: string;
+  resumedSemanticParityDigest: string;
+  frontierSeparation: {
+    evidenceAheadCycleIndex: number;
+    safeResumeThroughCycleIndex: number;
+    passed: boolean;
+  };
+  disconnectTerminal: {
+    transientClassified: boolean;
+    infraFailureCode: string;
+    passed: boolean;
+  };
+  checkpointRecord: ReplayCheckpointRecord;
+  runRootDir: string;
+};
+
+function createBenchmarkNewIdFactory(): () => string {
+  let sequence = 0;
+  return () => {
+    sequence += 1;
+    return `00000000-0000-4000-8000-${String(415900 + sequence).padStart(12, "0")}`;
+  };
+}
+
+export async function restoreWp17ExecutionFromCheckpoint(input: {
+  profile: HistoricalExecutionProfileV1;
+  slice: HistoricalExecutionCheckpointSlice;
+  orderRepository: OrderRepository;
+  context: OrgContext;
+}): Promise<void> {
+  if (input.slice.executionModelSchemaVersion !== input.profile.model.schemaVersion) {
+    throw new ReplayCheckpointError(
+      "REPLAY_CHECKPOINT_CORRUPT",
+      "executionState schema version mismatch",
+    );
+  }
+  const ordersById = new Map(
+    (
+      await Promise.all(
+        input.slice.openOrders.map(async (entry) => {
+          const order = await input.orderRepository.getOrderById(input.context, entry.orderId);
+          return order ? ([entry.orderId, order] as const) : null;
+        }),
+      )
+    ).filter((entry): entry is readonly [string, NonNullable<typeof entry>[1]] => entry !== null),
+  );
+  if (ordersById.size !== input.slice.openOrders.length) {
+    throw new ReplayCheckpointError(
+      "REPLAY_CHECKPOINT_CORRUPT",
+      "checkpoint open-order book missing durable order facts",
+    );
+  }
+  input.profile.exchange.restoreFromCheckpointSlice(input.slice, ordersById);
+}
+
+async function withDeterministicRandomUuid<T>(run: () => Promise<T>): Promise<T> {
+  let sequence = 0;
+  const originalRandomUuid = crypto.randomUUID.bind(crypto);
+  crypto.randomUUID = () => {
+    sequence += 1;
+    return `00000000-0000-4000-8000-${String(415950 + sequence).padStart(12, "0")}`;
+  };
+  try {
+    return await run();
+  } finally {
+    crypto.randomUUID = originalRandomUuid;
+  }
+}
+
+async function runFixtureStreamOnly(input: {
+  runDir: string;
+  runId: string;
+  maxCycles?: number;
+  evidenceSealMode?: "complete" | "partial" | "none";
+  evidenceSealReason?: string;
+  historicalExecutionProfile?: HistoricalExecutionProfileV1;
+  resumeExecutionState?: HistoricalExecutionCheckpointSlice;
+  orderRepository?: OrderRepository;
+  resumeContext?: OrgContext;
+}): Promise<CheckpointFixtureRunResult> {
+  return withDeterministicRandomUuid(async () => {
+    const fixture = loadApprovedBenchmarkFixture();
+    const { session, context } = await seedBenchmarkSession();
+    const researchSession = input.historicalExecutionProfile
+      ? await createInMemoryResearchBacktestSession()
+      : null;
+    const activeContext = input.resumeContext ?? context;
+    const activeOrderRepository =
+      input.orderRepository ?? researchSession?.orderRepository ?? session.orderRepository;
+    const activeDeps = researchSession?.deps ?? session.deps;
+
+    if (input.resumeExecutionState && input.historicalExecutionProfile && input.resumeContext) {
+      await restoreWp17ExecutionFromCheckpoint({
+        profile: input.historicalExecutionProfile,
+        slice: input.resumeExecutionState,
+        orderRepository: activeOrderRepository,
+        context: input.resumeContext,
+      });
+    }
+
+    mkdirSync(input.runDir, { recursive: true });
+    const evidenceSink = createStreamingEvidenceSink({
+      runDir: input.runDir,
+      runId: input.runId,
+      gitSha: readGitCodeSha(),
+      environment: "htr-wp05-checkpoint-resume-harness",
+    });
+    const window = {
+      start: new Date(fixture.bars[0]!.barOpenTime),
+      end: new Date(fixture.bars.at(-1)!.barCloseTime),
+    };
+    const cycleIdPrefix = buildResearchValidationCycleIdPrefix(input.runId);
+    const barSource = new HistoricalBarReplaySource({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      cycleIdPrefix,
+    });
+
+    try {
+      const backtest = await runBacktest({
+        context: activeContext,
+        barSource,
+        deps: activeDeps,
+        orderRepository: activeOrderRepository,
+        accountKey: "htr-wp05-checkpoint",
+        defaultQuantity: "0.01",
+        costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
+        strategySignalIds: [MEAN_REVERSION_V0],
+        strategyId: MEAN_REVERSION_V0,
+        strategyVersion: BENCHMARK_STRATEGY_VERSION,
+        regimeLabel: "AGGREGATE",
+        datasetId: "htr-wp05-checkpoint",
+        runId: input.runId,
+        split: "validation",
+        window,
+        accountState: {
+          positions: [],
+          openOrderCount: 0,
+          dailyPnl: "0",
+          drawdown: "0",
+          quoteExposureByCurrency: {},
+        },
+        exportedAt: new Date(window.end),
+        activeStrategyIds: [MEAN_REVERSION_V0],
+        newId: createBenchmarkNewIdFactory(),
+        retentionMode: "STREAM_ONLY",
+        evidenceSink,
+        maxCycles: input.maxCycles,
+        evidenceSealMode: input.evidenceSealMode,
+        evidenceSealReason: input.evidenceSealReason,
+        historicalExecutionProfile: input.historicalExecutionProfile,
+      });
+
+      return {
+        cycleCount: backtest.cycleCount,
+        evidenceDigest: backtest.evidenceDigest,
+        semanticReproDigest: computeReplayReproContentDigest(backtest.exportDocument),
+        streamingManifestRef: backtest.streamingManifestRef,
+      };
+    } finally {
+      session.cleanup();
+      researchSession?.cleanup();
+    }
+  });
+}
+
+function buildCheckpointRecord(input: {
+  runRootDir: string;
+  backtestRunId: string;
+  datasetContentDigest: string;
+  evidenceRunDir: string;
+  replayTerminalState: ReplayRunTerminalState;
+  executionState?: HistoricalExecutionCheckpointSlice;
+}): ReplayCheckpointRecord {
+  const evidence = resolveEvidenceFrontier(input.evidenceRunDir);
+  const boundary = resolveResumeBoundary({
+    activePhase: "validation",
+    dbDurablePhaseRunDir: null,
+    dbFrontier: emptyDbPhaseFrontier(),
+    phaseLastCycleIndex: {},
+  });
+  const withoutDigest = {
+    schemaVersion: REPLAY_CHECKPOINT_SCHEMA_VERSION,
+    backtestRunId: input.backtestRunId,
+    datasetContentDigest: input.datasetContentDigest,
+    datasetId: "htr-wp05-checkpoint",
+    codeSha: readGitCodeSha(),
+    activePhase: "validation" as const,
+    dbDurableThroughPhase: boundary.dbDurableThroughPhase,
+    evidenceDurableThroughCycleIndex: evidence.evidenceDurableThroughCycleIndex,
+    safeResumeThroughCycleIndex: boundary.safeResumeThroughCycleIndex,
+    evidenceRunDir: input.evidenceRunDir,
+    evidenceChainDigest: evidence.evidenceChainDigest,
+    evidenceTerminalState: evidence.evidenceTerminalState,
+    dbConnectionMode: "harness",
+    replayTerminalState: input.replayTerminalState,
+    fixtureSha256: HTR_WP03_BENCHMARK_FIXTURE_SHA256,
+    executionState: input.executionState,
+  };
+  return {
+    ...withoutDigest,
+    checkpointDigest: "",
+  };
+}
+
+export async function runCheckpointResumeHarness(): Promise<CheckpointResumeHarnessResult> {
+  const fixture = loadApprovedBenchmarkFixture();
+  const datasetContentDigest = computeBarSetDigest(fixture.bars);
+  const backtestRunId = "htr-wp05-checkpoint-resume-run";
+  const runRootDir = fs.mkdtempSync(path.join(os.tmpdir(), "waia-wp05-checkpoint-"));
+  const uninterruptedDir = path.join(runRootDir, "segments", "uninterrupted");
+  const partialDir = path.join(runRootDir, "segments", "partial-interrupted");
+  const continuationDir = path.join(runRootDir, "segments", "continuation");
+
+  const uninterrupted = await runFixtureStreamOnly({
+    runDir: uninterruptedDir,
+    runId: backtestRunId,
+  });
+
+  const interruptedPartial = await runFixtureStreamOnly({
+    runDir: partialDir,
+    runId: backtestRunId,
+    maxCycles: INTERRUPT_AT_CYCLE,
+    evidenceSealMode: "partial",
+    evidenceSealReason: "HARNESS_INTERRUPT",
+  });
+
+  const checkpointBody = buildCheckpointRecord({
+    runRootDir,
+    backtestRunId,
+    datasetContentDigest,
+    evidenceRunDir: partialDir,
+    replayTerminalState: "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE",
+  });
+  writeReplayCheckpoint(runRootDir, checkpointBody);
+  const checkpointRecord = readReplayCheckpoint(runRootDir)!;
+
+  const partialReconstruction = reconstructStreamingEvidence(partialDir);
+  const resumed = await runFixtureStreamOnly({
+    runDir: continuationDir,
+    runId: backtestRunId,
+  });
+
+  const continuationReconstruction = reconstructStreamingEvidence(continuationDir);
+  // Audit lineage vs authoritative stream (HTR-WP05 §continuation): the interrupted partial segment
+  // is retained as an immutable SUPERSEDED audit attempt; the re-executed phase (from its phase start,
+  // safeResume = -1) is the sole AUTHORITATIVE segment. Overlap between the two is audit-only and never
+  // enters the authoritative composed stream.
+  const chainManifest = buildReplayRunChainManifest({
+    backtestRunId,
+    activePhase: "validation",
+    segments: [
+      {
+        runDir: partialDir,
+        chainDigest: partialReconstruction.chainDigest ?? "",
+        role: "superseded",
+        terminalState: "STREAMING_EVIDENCE_SEALED_PARTIAL",
+        sealedThroughCycleIndex: partialReconstruction.sealedThroughCycleIndex,
+      },
+      {
+        runDir: continuationDir,
+        chainDigest: continuationReconstruction.chainDigest ?? "",
+        role: "authoritative",
+        continuesFromRunDir: partialDir,
+        continuesFromChainDigest: partialReconstruction.chainDigest ?? undefined,
+        terminalState: "STREAMING_EVIDENCE_OK",
+        sealedThroughCycleIndex: continuationReconstruction.sealedThroughCycleIndex,
+      },
+    ],
+  });
+  writeReplayRunChainManifest(runRootDir, chainManifest);
+
+  const chainRead = readReplayRunChainProjections(runRootDir);
+  // Like-for-like parity: BOTH digests are computed by computeSemanticParityDigest over the same
+  // normalized ascending-cycle projection stream (uninterrupted single segment vs resumed authoritative
+  // composition). This is the corrected comparison (Phase-B): the prior harness compared the export-doc
+  // repro digest against the projection-stream digest, which are incommensurable.
+  const uninterruptedSemanticParityDigest = computeSemanticParityDigest(
+    readSegmentProjections(uninterruptedDir),
+  );
+  const resumedSemanticParityDigest = chainRead.semanticParityDigest;
+  const resumedWithParity: CheckpointFixtureRunResult = {
+    ...resumed,
+    semanticParityDigest: resumedSemanticParityDigest,
+  };
+
+  const evidenceAheadCycleIndex = partialReconstruction.sealedThroughCycleIndex;
+  const frontierBoundary = resolveResumeBoundary({
+    activePhase: "validation",
+    dbDurablePhaseRunDir: null,
+    dbFrontier: emptyDbPhaseFrontier(),
+    phaseLastCycleIndex: {},
+  });
+
+  const infraError = new Error("CONNECTION_CLOSED");
+  const disconnectTerminal = {
+    transientClassified: isTransientConnectionError(infraError),
+    infraFailureCode: resolveResearchCampaignCrashFailureCode(infraError),
+    passed:
+      isTransientConnectionError(infraError) &&
+      resolveResearchCampaignCrashFailureCode(infraError) === "CAMPAIGN_INFRA_DISCONNECT",
+  };
+
+  const parity = {
+    evidenceDigestMatch: uninterrupted.evidenceDigest === resumed.evidenceDigest,
+    semanticReproDigestMatch: uninterrupted.semanticReproDigest === resumed.semanticReproDigest,
+    semanticParityDigestMatch: uninterruptedSemanticParityDigest === resumedSemanticParityDigest,
+    cycleCountMatch: uninterrupted.cycleCount === resumed.cycleCount,
+  };
+
+  const authoritativeStream = {
+    cycleCount: chainRead.authoritativeCycleCount,
+    duplicateCount: chainRead.authoritativeDuplicateCount,
+    gapCount: chainRead.authoritativeGapCount,
+    supersededSegmentCount: chainRead.supersededSegmentRunDirs.length,
+  };
+
+  const frontierSeparation = {
+    evidenceAheadCycleIndex,
+    safeResumeThroughCycleIndex: frontierBoundary.safeResumeThroughCycleIndex,
+    passed:
+      evidenceAheadCycleIndex >= 0 &&
+      frontierBoundary.safeResumeThroughCycleIndex < evidenceAheadCycleIndex,
+  };
+
+  const terminalState: ReplayRunTerminalState =
+    parity.evidenceDigestMatch && parity.semanticParityDigestMatch
+      ? "REPLAY_RUN_OK"
+      : "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE";
+
+  return {
+    schemaVersion: "htr-wp05-checkpoint-resume/v1",
+    terminalState,
+    fixturePath: HTR_WP03_BENCHMARK_FIXTURE_PATH,
+    fixtureSha256: sha256File(HTR_WP03_BENCHMARK_FIXTURE_PATH),
+    datasetContentDigest,
+    expectedCycles: HTR_WP03_BENCHMARK_EXPECTED_CYCLES,
+    uninterrupted: { ...uninterrupted, semanticParityDigest: uninterruptedSemanticParityDigest },
+    interruptedPartial,
+    resumed: resumedWithParity,
+    parity,
+    authoritativeStream,
+    uninterruptedSemanticParityDigest,
+    resumedSemanticParityDigest,
+    frontierSeparation,
+    disconnectTerminal,
+    checkpointRecord,
+    runRootDir,
+  };
+}
+
+export function writeCheckpointResumeBaseline(
+  harness: CheckpointResumeHarnessResult,
+  targetDir: string = HTR_WP05_CHECKPOINT_RESUME_BASELINE_DIR,
+): { baselineDir: string } {
+  fs.rmSync(targetDir, { recursive: true, force: true });
+  mkdirSync(targetDir, { recursive: true });
+
+  const copySegment = (name: string, sourceDir: string) => {
+    const dest = path.join(targetDir, name);
+    fs.cpSync(sourceDir, dest, { recursive: true });
+    return dest;
+  };
+
+  copySegment("uninterrupted-segment", path.join(harness.runRootDir, "segments", "uninterrupted"));
+  copySegment(
+    "partial-interrupted-segment",
+    path.join(harness.runRootDir, "segments", "partial-interrupted"),
+  );
+  copySegment("continuation-segment", path.join(harness.runRootDir, "segments", "continuation"));
+
+  fs.copyFileSync(
+    path.join(harness.runRootDir, "replay-checkpoint.json"),
+    path.join(targetDir, "replay-checkpoint.json"),
+  );
+  fs.copyFileSync(
+    path.join(harness.runRootDir, "run-chain.json"),
+    path.join(targetDir, "run-chain.json"),
+  );
+
+  writeFileSync(
+    path.join(targetDir, "resume-parity-report.json"),
+    JSON.stringify(
+      {
+        schemaVersion: "htr-wp05-resume-parity/v2",
+        uninterrupted: {
+          evidenceDigest: harness.uninterrupted.evidenceDigest,
+          semanticReproDigest: harness.uninterrupted.semanticReproDigest,
+          semanticParityDigest: harness.uninterrupted.semanticParityDigest,
+          cycleCount: harness.uninterrupted.cycleCount,
+        },
+        resumed: {
+          evidenceDigest: harness.resumed.evidenceDigest,
+          semanticReproDigest: harness.resumed.semanticReproDigest,
+          semanticParityDigest: harness.resumed.semanticParityDigest,
+          cycleCount: harness.resumed.cycleCount,
+        },
+        uninterruptedSemanticParityDigest: harness.uninterruptedSemanticParityDigest,
+        resumedSemanticParityDigest: harness.resumedSemanticParityDigest,
+        authoritativeStream: harness.authoritativeStream,
+        parity: harness.parity,
+      },
+      null,
+      2,
+    ),
+  );
+
+  writeFileSync(
+    path.join(targetDir, "frontier-separation-report.json"),
+    JSON.stringify(
+      {
+        schemaVersion: "htr-wp05-frontier-separation/v1",
+        ...harness.frontierSeparation,
+      },
+      null,
+      2,
+    ),
+  );
+
+  writeFileSync(
+    path.join(targetDir, "disconnect-terminal-report.json"),
+    JSON.stringify(
+      {
+        schemaVersion: "htr-wp05-disconnect-terminal/v1",
+        ...harness.disconnectTerminal,
+      },
+      null,
+      2,
+    ),
+  );
+
+  writeFileSync(
+    path.join(targetDir, "provenance.json"),
+    JSON.stringify(
+      {
+        schemaVersion: "htr-wp05-provenance/v1",
+        gitSha: readGitCodeSha(),
+        dirtyTree: readGitDirtyTree(),
+        fixturePath: harness.fixturePath,
+        fixtureSha256: harness.fixtureSha256,
+        datasetContentDigest: harness.datasetContentDigest,
+        command: HTR_WP05_CHECKPOINT_RESUME_COMMAND,
+      },
+      null,
+      2,
+    ),
+  );
+
+  writeFileSync(
+    path.join(targetDir, "README.md"),
+    `# HTR-WP05 checkpoint/resume baseline
+
+Generated by \`${HTR_WP05_CHECKPOINT_RESUME_COMMAND}\`.
+
+- Uninterrupted and resumed composed digests must match.
+- Partial segment is immutable; continuation supersedes for parity.
+- No secrets; research-only fixture harness.
+`,
+  );
+
+  return { baselineDir: targetDir };
+}
+
+export function assertCheckpointResumeHarness(harness: CheckpointResumeHarnessResult): void {
+  if (!harness.parity.evidenceDigestMatch) {
+    throw new Error("WP05_RESUME_DIVERGENCE: evidenceDigest mismatch");
+  }
+  if (!harness.parity.semanticReproDigestMatch) {
+    throw new Error("WP05_RESUME_DIVERGENCE: semanticReproDigest mismatch");
+  }
+  if (!harness.parity.semanticParityDigestMatch) {
+    throw new Error("WP05_RESUME_DIVERGENCE: semanticParityDigest mismatch");
+  }
+  if (harness.authoritativeStream.duplicateCount !== 0) {
+    throw new Error("WP05_DUPLICATE_OUTPUT: authoritative stream has duplicate cycle indexes");
+  }
+  if (harness.authoritativeStream.gapCount !== 0) {
+    throw new Error("WP05_RESUME_DIVERGENCE: authoritative stream has cycle gaps");
+  }
+  if (!harness.frontierSeparation.passed) {
+    throw new Error("WP05_RESUME_DIVERGENCE: frontier separation failed");
+  }
+  if (!harness.disconnectTerminal.passed) {
+    throw new Error("WP05_FALSE_SUCCESS: disconnect terminal classification failed");
+  }
+}

@@ -10,7 +10,8 @@ import {
 } from "@/lib/trader/backtest/backtest-repository-postgres";
 import {
   COST_MODEL_VERSION_V1,
-  createCostModelV1,
+  costModelV1FromAuthority,
+  createHtrHistoricalCostModelAuthorityV1,
   type CostModelV1,
 } from "@/lib/trader/execution/cost-model";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
@@ -33,6 +34,15 @@ import { barsFromMarketBarRecords } from "@/lib/trader/research/m9-dataset-seal-
 import { resolveM9ResearchDatasetPostgres } from "@/lib/trader/research/m9-dataset-preflight";
 import { buildResearchGuardianContext } from "@/lib/trader/research/research-guardian-config";
 import type { ResearchPipelineBacktestOptions } from "@/lib/trader/research/research-pipeline-config.types";
+import type { StreamingEvidenceManifestRef } from "@/lib/trader/backtest/streaming-evidence";
+import {
+  compareReplayResumeIdentity,
+  readReplayCheckpoint,
+  type ReplayRunTerminalState,
+} from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import type { ResearchValidationBacktestArtifactSink } from "@/lib/trader/research/research-backtest-runner";
 import {
   RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
@@ -68,6 +78,15 @@ import {
 import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/research/validate-research-evidence-provenance";
 import { assertResearchPipelineRegimeCoverage } from "@/lib/trader/research/regime-coverage";
 import { runWalkForwardValidation } from "@/lib/trader/research/walk-forward-engine";
+import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
+import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
+import type { IntelligenceCycleBundleRepository } from "@/lib/trader/intelligence/records/repository-adapters";
+import type { ForecastDecisionBundleRepository } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
+import type { CalibrationSink } from "@/lib/trader/intelligence/calibration/calibration.types";
+import type { OutcomeResolutionSink } from "@/lib/trader/intelligence/outcome-resolution/outcome-resolution.types";
+import type { Wp21RuntimeDeps } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
+import type { ConfidenceUpdateSink } from "@/lib/trader/knowledge/knowledge-confidence-update-repository-postgres";
+import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete">;
@@ -93,6 +112,33 @@ export type RunResearchPipelineInput = {
   requireMultiRegimeCoverage?: boolean;
   /** M9 v2 wiring — metrics schema, portfolio, guardian, blind authorization. */
   pipelineBacktest?: ResearchPipelineBacktestOptions;
+  /** Optional filesystem checkpoint resume root (HTR-WP05). */
+  replayResume?: {
+    runRootDir: string;
+    codeSha: string;
+  };
+  /** HTR-WP17: optional historical execution profile for HTR default research replay. */
+  historicalExecutionProfile?: HistoricalExecutionProfileV1;
+  /** HTR-WP21: opt-in historical intelligence profile for epistemic closure. */
+  historicalProfile?: HistoricalIntelligenceProfile;
+  /** HTR-WP13: intelligence records Postgres sink. */
+  intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
+  /** HTR-WP14: forecast-decision Postgres sink. */
+  forecastDecisionSink?: ForecastDecisionBundleRepository;
+  /** HTR-WP21: outcome resolution sink. */
+  outcomeResolutionSink?: OutcomeResolutionSink;
+  /** HTR-WP21: calibration sink. */
+  calibrationSink?: CalibrationSink;
+  /** HTR-WP21: confidence update sink. */
+  confidenceUpdateSink?: ConfidenceUpdateSink;
+  /** HTR-WP21: bundled runtime deps. */
+  wp21RuntimeDeps?: Wp21RuntimeDeps;
+  /** HTR-WP21: MKB outcome read port. */
+  outcomeResolutionReadPort?: OutcomeResolutionReadPort;
+  /** HTR-WP21: Postgres executor for terminal MKB query. */
+  wp21PostgresExecutor?: Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
+  /** HTR-WP21: provenance for epistemic records. */
+  wp21Provenance?: { codeSha: string; datasetContentDigest: string };
 };
 
 export type RunResearchPipelineResult = {
@@ -107,6 +153,8 @@ export type RunResearchPipelineResult = {
   blindMetrics: ResearchValidationMetrics;
   validationCycleResults?: readonly PaperCycleResult[];
   validationPortfolioContext?: PortfolioCycleContext;
+  validationStreamingManifestRef?: StreamingEvidenceManifestRef;
+  replayTerminalState?: ReplayRunTerminalState | null;
 };
 
 async function resolveOrderRepository(
@@ -155,7 +203,36 @@ function buildIsolatedBacktestInput(
     guardian: buildResearchGuardianContext(pipelineBacktest?.guardian),
     artifactSink: params.artifactSink,
     providerSidecar: pipelineBacktest?.providerSidecar,
+    retentionMode: pipelineBacktest?.retentionMode,
+    evidenceSink:
+      pipelineBacktest?.evidenceSink ??
+      (pipelineBacktest?.retentionMode === "STREAM_ONLY" && pipelineBacktest.evidenceRunDir
+        ? createStreamingEvidenceSink({
+            runDir: ensureEvidenceRunDir(pipelineBacktest.evidenceRunDir, params.runId),
+            runId: params.runId,
+            gitSha: pipelineBacktest.evidenceGitSha ?? null,
+            environment: pipelineBacktest.evidenceEnvironment ?? "research-pipeline",
+            dbConnectionMode: pipelineBacktest.evidenceDbConnectionMode ?? null,
+          })
+        : undefined),
+    historicalExecutionProfile: input.historicalExecutionProfile,
+    historicalProfile: input.historicalProfile,
+    intelligenceRecordsSink: input.intelligenceRecordsSink,
+    forecastDecisionSink: input.forecastDecisionSink,
+    outcomeResolutionSink: input.outcomeResolutionSink,
+    calibrationSink: input.calibrationSink,
+    confidenceUpdateSink: input.confidenceUpdateSink,
+    wp21RuntimeDeps: input.wp21RuntimeDeps,
+    outcomeResolutionReadPort: input.outcomeResolutionReadPort,
+    wp21PostgresExecutor: input.wp21PostgresExecutor,
+    wp21Provenance: input.wp21Provenance,
   };
+}
+
+function ensureEvidenceRunDir(baseDir: string, runId: string): string {
+  const runDir = join(baseDir, runId);
+  mkdirSync(runDir, { recursive: true });
+  return runDir;
 }
 
 /**
@@ -169,7 +246,7 @@ export async function runResearchPipelinePostgres(
 ): Promise<RunResearchPipelineResult> {
   const newId = input.newId ?? crypto.randomUUID.bind(crypto);
   const costModel =
-    input.costModel ?? createCostModelV1(input.feesBps ?? "10", input.slippageBps ?? "5");
+    input.costModel ?? costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
   const accountKey = input.accountKey ?? "research-default";
   const defaultQuantity = input.defaultQuantity ?? "0.01";
   const oosBarCount = input.oosBarCount ?? 20;
@@ -258,7 +335,31 @@ export async function runResearchPipelinePostgres(
     status: "registered",
   });
 
-  const backtestRunId = newId();
+  const backtestRunId = (() => {
+    if (input.replayResume) {
+      const checkpoint = readReplayCheckpoint(input.replayResume.runRootDir);
+      if (!checkpoint) {
+        throw new ResearchOrchestratorError(
+          "REPLAY_CHECKPOINT_MISSING",
+          "replay resume requested but checkpoint missing",
+        );
+      }
+      compareReplayResumeIdentity(
+        {
+          backtestRunId: checkpoint.backtestRunId,
+          datasetContentDigest: checkpoint.datasetContentDigest,
+          codeSha: checkpoint.codeSha,
+        },
+        {
+          backtestRunId: checkpoint.backtestRunId,
+          datasetContentDigest: computeBarSetDigest(bars),
+          codeSha: input.replayResume.codeSha,
+        },
+      );
+      return checkpoint.backtestRunId;
+    }
+    return newId();
+  })();
   await createBacktestRunPostgres(ex, input.context, {
     id: backtestRunId,
     datasetId: dataset.id,
@@ -434,7 +535,9 @@ export async function runResearchPipelinePostgres(
     blindMetrics: blind.metrics,
   });
 
-  await validateResearchEvidenceProvenancePostgres(ex, input.context, evidenceDocument);
+  await validateResearchEvidenceProvenancePostgres(ex, input.context, evidenceDocument, {
+    requireRegimeCoverage: requireMultiRegimeCoverage,
+  });
 
   const knowledge = await recordResearchPipelineKnowledgePostgres(ex, input.context, {
     evidenceDocument,
@@ -453,6 +556,10 @@ export async function runResearchPipelinePostgres(
     blindMetrics: blind.metrics,
     validationCycleResults: validationArtifactSink?.cycleResults,
     validationPortfolioContext: validationArtifactSink?.portfolioContext,
+    validationStreamingManifestRef: validationArtifactSink?.streamingManifestRef,
+    // A full pipeline that reaches this return is completed; downstream finalization uses this to
+    // block false success (a run that ended INFRA_DISCONNECT/SEALED_PARTIAL never reaches here).
+    replayTerminalState: "REPLAY_RUN_OK",
   };
 }
 

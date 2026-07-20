@@ -1,0 +1,321 @@
+{
+  "schemaVersion": "htr-wp03-benchmark/v1",
+  "terminalState": "BENCHMARK_OK",
+  "coldRun": {
+    "schemaVersion": "htr-wp03-benchmark/v1",
+    "telemetry": {
+      "schemaVersion": "htr-wp03-benchmark/v1",
+      "perStage": {
+        "bar-source-next": {
+          "sampleCount": 81,
+          "totalNs": "153461",
+          "maxNs": "34125"
+        },
+        "fused-context-build": {
+          "sampleCount": 81,
+          "totalNs": "6305332",
+          "maxNs": "593292"
+        },
+        "clock-advance": {
+          "sampleCount": 81,
+          "totalNs": "43460",
+          "maxNs": "4875"
+        },
+        "paper-cycle": {
+          "sampleCount": 81,
+          "totalNs": "114154254",
+          "maxNs": "5627042"
+        },
+        "account-state-refresh": {
+          "sampleCount": 81,
+          "totalNs": "46493625",
+          "maxNs": "973042"
+        },
+        "evidence-export": {
+          "sampleCount": 1,
+          "totalNs": "3392417",
+          "maxNs": "3392417"
+        }
+      },
+      "memoryHighWater": {
+        "rssBytes": 169672704,
+        "heapUsedBytes": 45660776
+      }
+    },
+    "terminalState": "BENCHMARK_OK"
+  },
+  "warmRuns": [
+    {
+      "schemaVersion": "htr-wp03-benchmark/v1",
+      "telemetry": {
+        "schemaVersion": "htr-wp03-benchmark/v1",
+        "perStage": {
+          "bar-source-next": {
+            "sampleCount": 81,
+            "totalNs": "78791",
+            "maxNs": "2875"
+          },
+          "fused-context-build": {
+            "sampleCount": 81,
+            "totalNs": "4696005",
+            "maxNs": "411250"
+          },
+          "clock-advance": {
+            "sampleCount": 81,
+            "totalNs": "29003",
+            "maxNs": "666"
+          },
+          "paper-cycle": {
+            "sampleCount": 81,
+            "totalNs": "92034124",
+            "maxNs": "4062666"
+          },
+          "account-state-refresh": {
+            "sampleCount": 81,
+            "totalNs": "44954459",
+            "maxNs": "1461083"
+          },
+          "evidence-export": {
+            "sampleCount": 1,
+            "totalNs": "1328334",
+            "maxNs": "1328334"
+          }
+        },
+        "memoryHighWater": {
+          "rssBytes": 171491328,
+          "heapUsedBytes": 47534312
+        }
+      },
+      "terminalState": "BENCHMARK_OK"
+    },
+    {
+      "schemaVersion": "htr-wp03-benchmark/v1",
+      "telemetry": {
+        "schemaVersion": "htr-wp03-benchmark/v1",
+        "perStage": {
+          "bar-source-next": {
+            "sampleCount": 81,
+            "totalNs": "70372",
+            "maxNs": "2833"
+          },
+          "fused-context-build": {
+            "sampleCount": 81,
+            "totalNs": "3980208",
+            "maxNs": "75500"
+          },
+          "clock-advance": {
+            "sampleCount": 81,
+            "totalNs": "27914",
+            "maxNs": "542"
+          },
+          "paper-cycle": {
+            "sampleCount": 81,
+            "totalNs": "89011620",
+            "maxNs": "3604458"
+          },
+          "account-state-refresh": {
+            "sampleCount": 81,
+            "totalNs": "42721882",
+            "maxNs": "1034250"
+          },
+          "evidence-export": {
+            "sampleCount": 1,
+            "totalNs": "1227166",
+            "maxNs": "1227166"
+          }
+        },
+        "memoryHighWater": {
+          "rssBytes": 173015040,
+          "heapUsedBytes": 48447464
+        }
+      },
+      "terminalState": "BENCHMARK_OK"
+    },
+    {
+      "schemaVersion": "htr-wp03-benchmark/v1",
+      "telemetry": {
+        "schemaVersion": "htr-wp03-benchmark/v1",
+        "perStage": {
+          "bar-source-next": {
+            "sampleCount": 81,
+            "totalNs": "98374",
+            "maxNs": "25417"
+          },
+          "fused-context-build": {
+            "sampleCount": 81,
+            "totalNs": "3949421",
+            "maxNs": "72833"
+          },
+          "clock-advance": {
+            "sampleCount": 81,
+            "totalNs": "27709",
+            "maxNs": "625"
+          },
+          "paper-cycle": {
+            "sampleCount": 81,
+            "totalNs": "87371376",
+            "maxNs": "3608042"
+          },
+          "account-state-refresh": {
+            "sampleCount": 81,
+            "totalNs": "42487166",
+            "maxNs": "910958"
+          },
+          "evidence-export": {
+            "sampleCount": 1,
+            "totalNs": "1501291",
+            "maxNs": "1501291"
+          }
+        },
+        "memoryHighWater": {
+          "rssBytes": 174342144,
+          "heapUsedBytes": 49510696
+        }
+      },
+      "terminalState": "BENCHMARK_OK"
+    },
+    {
+      "schemaVersion": "htr-wp03-benchmark/v1",
+      "telemetry": {
+        "schemaVersion": "htr-wp03-benchmark/v1",
+        "perStage": {
+          "bar-source-next": {
+            "sampleCount": 81,
+            "totalNs": "67087",
+            "maxNs": "3417"
+          },
+          "fused-context-build": {
+            "sampleCount": 81,
+            "totalNs": "3898912",
+            "maxNs": "70708"
+          },
+          "clock-advance": {
+            "sampleCount": 81,
+            "totalNs": "26291",
+            "maxNs": "541"
+          },
+          "paper-cycle": {
+            "sampleCount": 81,
+            "totalNs": "85783285",
+            "maxNs": "3358208"
+          },
+          "account-state-refresh": {
+            "sampleCount": 81,
+            "totalNs": "41992084",
+            "maxNs": "1008000"
+          },
+          "evidence-export": {
+            "sampleCount": 1,
+            "totalNs": "1684459",
+            "maxNs": "1684459"
+          }
+        },
+        "memoryHighWater": {
+          "rssBytes": 175669248,
+          "heapUsedBytes": 50851608
+        }
+      },
+      "terminalState": "BENCHMARK_OK"
+    },
+    {
+      "schemaVersion": "htr-wp03-benchmark/v1",
+      "telemetry": {
+        "schemaVersion": "htr-wp03-benchmark/v1",
+        "perStage": {
+          "bar-source-next": {
+            "sampleCount": 81,
+            "totalNs": "67795",
+            "maxNs": "2750"
+          },
+          "fused-context-build": {
+            "sampleCount": 81,
+            "totalNs": "3913916",
+            "maxNs": "73292"
+          },
+          "clock-advance": {
+            "sampleCount": 81,
+            "totalNs": "26093",
+            "maxNs": "667"
+          },
+          "paper-cycle": {
+            "sampleCount": 81,
+            "totalNs": "85963747",
+            "maxNs": "3397875"
+          },
+          "account-state-refresh": {
+            "sampleCount": 81,
+            "totalNs": "42072463",
+            "maxNs": "1197042"
+          },
+          "evidence-export": {
+            "sampleCount": 1,
+            "totalNs": "1165541",
+            "maxNs": "1165541"
+          }
+        },
+        "memoryHighWater": {
+          "rssBytes": 177061888,
+          "heapUsedBytes": 52056272
+        }
+      },
+      "terminalState": "BENCHMARK_OK"
+    }
+  ],
+  "aggregate": {
+    "perStageTiming": {
+      "bar-source-next": {
+        "medianTotalNs": "70372",
+        "p95TotalNs": "98374",
+        "maxTotalNs": "98374"
+      },
+      "fused-context-build": {
+        "medianTotalNs": "3949421",
+        "p95TotalNs": "4696005",
+        "maxTotalNs": "4696005"
+      },
+      "clock-advance": {
+        "medianTotalNs": "27709",
+        "p95TotalNs": "29003",
+        "maxTotalNs": "29003"
+      },
+      "paper-cycle": {
+        "medianTotalNs": "87371376",
+        "p95TotalNs": "92034124",
+        "maxTotalNs": "92034124"
+      },
+      "account-state-refresh": {
+        "medianTotalNs": "42487166",
+        "p95TotalNs": "44954459",
+        "maxTotalNs": "44954459"
+      },
+      "evidence-export": {
+        "medianTotalNs": "1328334",
+        "p95TotalNs": "1684459",
+        "maxTotalNs": "1684459"
+      }
+    },
+    "memoryHighWater": {
+      "rssBytes": {
+        "median": 174342144,
+        "p95": 177061888,
+        "max": 177061888
+      },
+      "heapUsedBytes": {
+        "median": 49510696,
+        "p95": 52056272,
+        "max": 52056272
+      }
+    }
+  },
+  "environment": {
+    "nodeVersion": "v22.22.3",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M5",
+    "cpuCount": 10,
+    "totalMemBytes": 17179869184
+  },
+  "semanticReproDigest": "b1cf1d8145f3d7906a7a6fb42153b7b1367830b7143abbe2efe7c75d3c86df3a",
+  "evidenceDigest": "9652e2b45a0acf8fe8232c30efa8f41444f34d67e583ddee249189b9ad2991d4",
+  "cycleCount": 81
+}

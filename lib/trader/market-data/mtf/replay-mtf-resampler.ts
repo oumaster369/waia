@@ -1,7 +1,13 @@
 import type { Bar, BarInterval } from "@/lib/trader/intelligence/types";
 import { MTF_BAR_INTERVALS } from "@/lib/trader/market-data/observation-types";
 
-const INTERVAL_MS: Record<BarInterval, number> = {
+import {
+  appendBarToBucket,
+  createBucketAccumulator,
+  finalizeBucket,
+} from "@/lib/trader/market-data/mtf/mtf-bucket-accumulator";
+
+export const INTERVAL_MS: Record<BarInterval, number> = {
   "1m": 60_000,
   "15m": 15 * 60_000,
   "1h": 60 * 60_000,
@@ -9,34 +15,20 @@ const INTERVAL_MS: Record<BarInterval, number> = {
   "1d": 24 * 60 * 60_000,
 };
 
-function floorToInterval(timestampMs: number, intervalMs: number): number {
+export function floorToInterval(timestampMs: number, intervalMs: number): number {
   return Math.floor(timestampMs / intervalMs) * intervalMs;
 }
 
-function aggregateBucket(bucket: Bar[], interval: BarInterval): Bar {
-  const first = bucket[0]!;
-  const last = bucket.at(-1)!;
-  let high = Number.NEGATIVE_INFINITY;
-  let low = Number.POSITIVE_INFINITY;
-  let volume = 0;
-
-  for (const bar of bucket) {
-    high = Math.max(high, Number(bar.high));
-    low = Math.min(low, Number(bar.low));
-    volume += Number(bar.volume);
+export function aggregateBucket(bucket: Bar[], interval: BarInterval): Bar {
+  if (bucket.length === 0) {
+    throw new Error("aggregateBucket requires at least one bar");
   }
-
-  return {
-    symbol: first.symbol,
-    interval,
-    open: first.open,
-    high: String(high),
-    low: String(low),
-    close: last.close,
-    volume: String(volume),
-    barOpenTime: first.barOpenTime,
-    barCloseTime: last.barCloseTime,
-  };
+  const acc = bucket.reduce(
+    (current, bar) =>
+      current ? appendBarToBucket(current, bar) : createBucketAccumulator(bar, interval),
+    null as ReturnType<typeof createBucketAccumulator> | null,
+  );
+  return finalizeBucket(acc!, interval);
 }
 
 /**

@@ -20,6 +20,21 @@ export const capitalReasonCodes = {
   invalidStopDistance: "RISK_INVALID_STOP_DISTANCE",
 } as const;
 
+/** HTR-WP16 D-20 drawdown policy reason codes. */
+export const drawdownReasonCodes = {
+  accountDrawdown: "RISK_D20_ACCOUNT_DRAWDOWN",
+  monthlyDrawdown: "RISK_D20_MONTHLY_DRAWDOWN",
+  strategyDrawdown: "RISK_D20_STRATEGY_DRAWDOWN",
+} as const;
+
+export const strategyGateReasonCodes = {
+  versionNotRegistered: "STRAT_VERSION_NOT_REGISTERED",
+  lifecycleNotEligible: "STRAT_LIFECYCLE_NOT_ELIGIBLE",
+  trialNotEligible: "STRAT_TRIAL_NOT_ELIGIBLE",
+  strategyNotAllowed: "STRAT_TM_STRATEGY_NOT_ALLOWED",
+  entryPurposeVersionMismatch: "STRAT_ENTRY_PURPOSE_VERSION_MISMATCH",
+} as const;
+
 /**
  * Engine-level fail-closed reason codes (DEE-241). Emitted by the risk engine
  * orchestrator when an order cannot be evaluated safely — not by an individual evaluator.
@@ -39,6 +54,7 @@ export const killSwitchReasonCodes = {
 export const riskReasonCodes = {
   ...tradeAbuseReasonCodes,
   ...capitalReasonCodes,
+  ...drawdownReasonCodes,
   ...engineReasonCodes,
   ...killSwitchReasonCodes,
 } as const;
@@ -53,8 +69,11 @@ export type EngineReasonCode = (typeof engineReasonCodes)[keyof typeof engineRea
 export type KillSwitchReasonCode =
   (typeof killSwitchReasonCodes)[keyof typeof killSwitchReasonCodes];
 
+export type DrawdownReasonCode = (typeof drawdownReasonCodes)[keyof typeof drawdownReasonCodes];
+
 export type RiskReasonCode =
   | TradeAbuseReasonCode
   | CapitalLimitsReasonCode
   | EngineReasonCode
-  | KillSwitchReasonCode;
+  | KillSwitchReasonCode
+  | DrawdownReasonCode;

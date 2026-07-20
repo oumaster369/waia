@@ -1,0 +1,221 @@
+{
+  "schemaVersion": "htr-wp21-corrective-evidence-manifest/v2",
+  "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "sourceDirtyTree": false,
+  "digestContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "correctiveScope": "HTR-WP21_VALIDATION_ENVIRONMENT_REMEDIATION_AND_PROOF_CLOSURE",
+  "wp21EffectivePhaseACandidateSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+  "governanceStateAuthority": "GIT_HEAD",
+  "generatorTracked": false,
+  "generatorPath": ".cursor/plans/dee-415-wp21/evidence-integrity-repair.mjs",
+  "generatorSha256": "d35ac1e8986e0da9f70d90e89de05cdb9e06d0c7fb01eafc4976579c8cd09532",
+  "generatorCommand": "node .cursor/plans/dee-415-wp21/evidence-integrity-repair.mjs",
+  "generatorContractVersion": "waia.htr.wp21.evidence-integrity.v2",
+  "supersededEvidence": {
+    "f642d5d5005fd52f5d5660a14f6c9ed61e1a4a1d": "SUPERSEDED_BY_FINAL_VALIDATION_PROFILE_CORRECTION_NOT_PROMOTABLE",
+    "0c80b2d5ef7b5398780dbb1dc0cfe0a96d1f5eb8": "SUPERSEDED_BY_FINAL_VALIDATION_PROFILE_CORRECTION_NOT_PROMOTABLE"
+  },
+  "localForensicBackup": "evidence-integrity-v1-invalid",
+  "localForensicBackupClassification": "SUPERSEDED_DIGEST_BINDING_INVALID",
+  "artifactIndex": [
+    {
+      "path": "abstention-scoring-report.json",
+      "sizeBytes": 602,
+      "fileSha256": "e88a0db9d285ae8ad0f5451cd1a086ba6abeba555427629b6a318485822d8e91",
+      "payloadSha256": "441fd72a61877c17e5e3c0de66edb8391afcf73f9d44bf247e635043ef1e5de2",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "calibration-report.json",
+      "sizeBytes": 805,
+      "fileSha256": "b6f1fb5d3739655b5eaccc189d990abd6ebc5cb4a68c43ed1935c2ee8cd17315",
+      "payloadSha256": "6d45dc59935618f0443cc4fb5950400e70254f136542d302a0b99c7babfbca8e",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "canonical-authority-proof.json",
+      "sizeBytes": 677,
+      "fileSha256": "883972898eeda0e856e7d57143166a56e511a611be4502a90b9d3204bf693bce",
+      "payloadSha256": "ce555c5dc910455f4028ed2a0e4ee20378cf03dccf639649a9ddb0b43c93ba6e",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "checkpoint-resume-parity.json",
+      "sizeBytes": 620,
+      "fileSha256": "7059ac1b89df581a616c3359e0c32272f4525abb6248d92571a7f4ba580127e8",
+      "payloadSha256": "30057feba016091328f8c6744708eb669f3dd9e34986dc46e94fab4a36d898d2",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "deterministic-rerun-proof.json",
+      "sizeBytes": 527,
+      "fileSha256": "c783fc08ec43cd9e0efb6147c3dfe6b974abd252eb12fdb9ddfa1abe9bc1b89d",
+      "payloadSha256": "a111442787702ba9c6ad9b46d18c45e2076ee70341b19893c0d7f08845083db3",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "flag-off-v1-byte-parity.json",
+      "sizeBytes": 1064,
+      "fileSha256": "179e5cbc643aa179721c2ee27f483b61823758b96e30a3b8be4bd665ba63fa5b",
+      "payloadSha256": "c17b66bdc016c3df70dd79dce65956ae16476b70e1eca4203fad4483b5bdfedd",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "flag-off-v2-byte-parity.json",
+      "sizeBytes": 1064,
+      "fileSha256": "ad63ed670648667d6e9cf8f99b97a69bcf7ea9ec0ca479028c3dce20b3ae6a90",
+      "payloadSha256": "ea7c8ba8eac623d52d13aef279165470edd952c352721301d28dbeb3d54a6bc6",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "flag-on-v1-production-entrypoint.json",
+      "sizeBytes": 1237,
+      "fileSha256": "c739a99f370137317665b2de6229c033addcb874004aa78ffdf4590f2b48a206",
+      "payloadSha256": "5bd334b7a35a8507905cf1cb85769d4186ce46d9621ae2eebd6ec25bc20db978",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "flag-on-v2-production-entrypoint.json",
+      "sizeBytes": 1236,
+      "fileSha256": "49d4a98445d81443f8893c140fedcf762fa7f8a91c1271018a804a71137f55ad",
+      "payloadSha256": "09451a826fda6898988349ecd68c4cb672e0f3efa68d662e5b845a7b2718d05c",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "forecast-resolution-report.json",
+      "sizeBytes": 672,
+      "fileSha256": "700c83e25d667a92c8064f381cdf47134999ffac0a7c7d4840e8e6d55d45d2a1",
+      "payloadSha256": "575224e830c36c2dd62e4aafc59cfe30766bbc74c99a0d8e826c6d59d2c890f7",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "full-suite-run-1.json",
+      "sizeBytes": 696,
+      "fileSha256": "3b19c34367d8f165a33aa994bbdc4287427ad5b8f91a2c6c8c96cb2ef9ed63ea",
+      "payloadSha256": "d06bd927c011523fdd9fbc09cf3d355e46766af8506984ee67b55a27ee5fedbe",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "full-suite-run-2.json",
+      "sizeBytes": 696,
+      "fileSha256": "fa6a9402041273b723ff0905f69586e176ef021e2453fd5aa43db74082e20209",
+      "payloadSha256": "594990cbbfa5fff4d08acde5373d4598d2dc034ca5481b8eae79623db3c2ad41",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "gap-closure-candidate-map.json",
+      "sizeBytes": 763,
+      "fileSha256": "0fb450f26f674f5f4b1d79572fa9214dc51711a3e4ed6724d033ea4bfeb07618",
+      "payloadSha256": "45828dad292fb5db492a748a3b624c03453e75939c8fa61957e40ef24801f65a",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "hypothesis-evidence-authority-report.json",
+      "sizeBytes": 563,
+      "fileSha256": "a432b152db53a2ea8312210ae3c3705b52fc00deff38f521cd29088a914f1d5b",
+      "payloadSha256": "6ea1beb481861a714c3431eb2743bc5563d2eb1bf11f04701eca8b7638cd76ed",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "knowledge-confidence-authority-report.json",
+      "sizeBytes": 659,
+      "fileSha256": "cd2bef56978e4310a59693ea7b057b6308085408821365efd81d7096526aa8d6",
+      "payloadSha256": "3105d672d41c90a5faa27a6e175879df7fed7f1e7376ff6b338854c734b1544e",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "postgres-mandatory-run-1.json",
+      "sizeBytes": 627,
+      "fileSha256": "d657f6e1491e63fc8c7d3684df8437b1851582184e5a69a8872535417939e89c",
+      "payloadSha256": "756b7b3cae02da64932c724131f8138687497ade4d736babbbcea0dd581cfd38",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "postgres-mandatory-run-2.json",
+      "sizeBytes": 627,
+      "fileSha256": "222750740af3365c89f24901d41714caba0919fca7f80a7e1414f614ffbb4f70",
+      "payloadSha256": "f84ee6397773ce42a01cdabaea72c969adac8d582a0de6c5a7659b1f21a24e15",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "postgres-six-table-results.json",
+      "sizeBytes": 604,
+      "fileSha256": "0317a52dcbcd744b22b1c912706294bba7531e5638ed5551f3f7b93bf3790eec",
+      "payloadSha256": "e6938dd8f8db086c28cee6237e445d2a2e208139ae64ae93501478f113867b76",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "rls-runtime-proof.json",
+      "sizeBytes": 674,
+      "fileSha256": "151dfe4be7f2b20aebf98d2cfe36984d47f2bb3a3f883ef8d39e9b9a45e88758",
+      "payloadSha256": "e156f70eaac9d0b64d4c40f3e8a66901f3f7a93595611d6a78db8776279f5d65",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "same-run-no-feedback-proof.json",
+      "sizeBytes": 696,
+      "fileSha256": "6f0ca89d6121658b5b5c4f87c8a222e16ebaab676e3de81bb674d63019b2c51d",
+      "payloadSha256": "e6b56ca911ea6c055a9e608379f238fb161996abe6cd8309bb4c37f7c70b911e",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "transaction-atomicity-proof.json",
+      "sizeBytes": 623,
+      "fileSha256": "a86c37a568f594359aedf4a458c079dcab140268d35f98a08a2ed89257e7ea39",
+      "payloadSha256": "6fcea71a44f12e30c417a1f51cbf710a8c1799a4487813d44b4b33d5601beb58",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    },
+    {
+      "path": "validation-environment-proof.json",
+      "sizeBytes": 1051,
+      "fileSha256": "8f42f560105aa70bb091e82e5c943663b3462f8b549f964f385fb51472e1ff84",
+      "payloadSha256": "c49743e0b9af8b1c578072744def9b5ef212ef7b28e877d5b424d4ee0a621cea",
+      "schemaVersion": "htr-wp21-corrective-evidence/v1",
+      "sourceGitSha": "b71a381327d042640f5c3bd9912fe1fd5d3cd4c4",
+      "sourceDirtyTree": false
+    }
+  ],
+  "semanticDigest": "c9c52c49ef0b6c88329d5d6ed94310344bc205a0ba7ae0e895aefd725b3c35a8"
+}

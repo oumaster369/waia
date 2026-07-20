@@ -1,0 +1,81 @@
+{
+  "command": "python-inline-economics-corrective-evidence",
+  "schemaVersion": "htr-wp17-economics-corrective-evidence/v1",
+  "sourceGitSha": "f3368b2aa56bedf011ecd5c3fe8d10a94bf9621f",
+  "sourceGitParentSha": "0e1b90492f9b600e9fa91352c934daa71997ed2e",
+  "sourceDirtyTree": false,
+  "migrationDecision": "NONE",
+  "backfillRequired": false,
+  "defectA": "MULTIPLY_BPS_SCALE_1E8",
+  "defectB": "NET_CASH_EFFECT_PRINCIPAL_SIGN_INVERTED",
+  "executionModelId": "htr-historical-execution-v1",
+  "executionModelSchemaVersion": "waia.trader.historical-execution-model.v1",
+  "takerFeeBps": "20",
+  "halfSpreadBpsPerSide": "5",
+  "impactValueBps": "10",
+  "buyFixture": {
+    "grossFillPrice": "10000",
+    "quantity": "0.10000000",
+    "grossNotional": "1000",
+    "feeAmount": "2",
+    "spreadCost": "0.5",
+    "impactSlippageCost": "1",
+    "totalExecutionCost": "3.5",
+    "netFillPrice": "10015",
+    "netCashEffect": "-1003.5",
+    "economicsContentDigest": "computed-at-runtime-by-tests"
+  },
+  "sellFixture": {
+    "grossFillPrice": "10000",
+    "quantity": "0.10000000",
+    "grossNotional": "1000",
+    "feeAmount": "2",
+    "spreadCost": "0.5",
+    "impactSlippageCost": "1",
+    "totalExecutionCost": "3.5",
+    "netFillPrice": "9985",
+    "netCashEffect": "996.5",
+    "economicsContentDigest": "computed-at-runtime-by-tests"
+  },
+  "signedCashIdentities": {
+    "buyNegative": true,
+    "sellPositive": true,
+    "buyExactNetCashEffect": "-1003.5",
+    "sellExactNetCashEffect": "996.5"
+  },
+  "costIdentities": {
+    "buySpreadImpactIdentity": true,
+    "sellSpreadImpactIdentity": true,
+    "feeIdentity": true,
+    "totalExecutionCostIdentity": true
+  },
+  "defaultResearchPathV1": "PASS",
+  "defaultResearchPathV2": "PASS",
+  "partialFillFixture": "PASS",
+  "cancelAfterPartialFillFixture": "PASS",
+  "expiryAfterPartialFillFixture": "PASS",
+  "sqlitePersistenceOutput": "PASS",
+  "postgresPersistenceOutput": "PASS",
+  "deterministicDigestParity": true,
+  "targetedTestFiles": [
+    "tests/unit/trader-fill-economics.test.ts",
+    "tests/unit/trader-execution-cost-single-application-point.test.ts",
+    "tests/unit/trader-historical-simulated-exchange.test.ts",
+    "tests/unit/trader-partial-fill-simulation.test.ts",
+    "tests/unit/trader-cancel-expiry-simulation.test.ts",
+    "tests/unit/trader-historical-execution-checkpoint-resume.test.ts",
+    "tests/unit/trader-replay-checkpoint-resume-harness-wp17.test.ts",
+    "tests/integration/trader-default-research-wp17-conformance.test.ts",
+    "tests/integration/postgres-trader-fill-execution-economics-parity.test.ts"
+  ],
+  "targetedTestCount": 66,
+  "targetedCommands": [
+    "pnpm vitest run tests/unit/trader-fill-economics.test.ts",
+    "pnpm vitest run tests/unit/trader-execution-cost-single-application-point.test.ts tests/unit/trader-historical-simulated-exchange.test.ts tests/unit/trader-partial-fill-simulation.test.ts tests/unit/trader-cancel-expiry-simulation.test.ts tests/unit/trader-historical-execution-checkpoint-resume.test.ts tests/unit/trader-replay-checkpoint-resume-harness-wp17.test.ts tests/integration/trader-default-research-wp17-conformance.test.ts",
+    "pnpm vitest run tests/integration/postgres-trader-fill-execution-economics-parity.test.ts"
+  ],
+  "candidateStatus": "VALIDATED_PENDING_INDEPENDENT_PHASE_B",
+  "outputMode": "GITIGNORED_STAGING",
+  "semanticDigest": "f00d69fe6a1445eb99453e4388eaab69f1192fbbcf7790fedc266d25dc2f50eb",
+  "manifestDigest": "d5089c51860e446be3adab9ed7ef31723c67bdd4eb9e54016a8238a369fee279"
+}

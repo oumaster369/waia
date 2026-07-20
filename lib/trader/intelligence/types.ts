@@ -14,6 +14,10 @@ import type {
 } from "@/lib/trader/intelligence/mi-core.types";
 import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
 import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
+import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
+import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
+import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
+import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
 
 /** Canonical spot symbol for MVP intelligence slice (HTX-style slash form). */
 export const BTC_USDT = "BTC/USDT" as const;
@@ -229,10 +233,15 @@ export const liquiditySweepReasonCodes = {
 export type StrategySignal = {
   strategySignalId: string;
   strategyId: MvpStrategyId;
+  /** Exact registered semver; no alias/latest substitution (HTR-WP16 version pin). */
   strategyVersion: string;
   organizationId: string;
   symbol: InstrumentId;
   outcome: SignalOutcome;
+  /** Raw evaluator outcome before trade-eligibility projection (D-2 research-only consumers). */
+  researchEvaluationOutcome?: SignalOutcome;
+  /** Whether this signal may participate in trade-eligible primary selection. */
+  tradeEligible?: boolean;
   side?: "buy" | "sell";
   confidence?: string;
   expectedEdge?: string;
@@ -256,6 +265,18 @@ export type EvaluationCycleInput = {
   miCoreEnabled?: boolean;
   /** PR-2 MI Core: within-session conviction state (caller-owned). */
   hypothesisSessionState?: HypothesisSessionState;
+  /** HTR-WP09: prebuilt incremental reconstruction from canvas view (skips full recompute). */
+  reconstruction?: ReconstructionSnapshot;
+  /** HTR-WP13: explicit historical intelligence profile (never global default). */
+  historicalProfile?: HistoricalIntelligenceProfile;
+  /** HTR-WP13: run identifier for intelligence records. */
+  runId?: string;
+  /** HTR-WP13: cycle identifier for intelligence records. */
+  cycleId?: string;
+  /** HTR-WP13: symbol for intelligence records (defaults to bar symbol). */
+  symbol?: string;
+  /** HTR-WP14: cost model for net-economics fail-closed decision records. */
+  costModel?: CostModelV1;
 };
 
 export type EvaluationCycleResult = {
@@ -273,4 +294,8 @@ export type EvaluationCycleResult = {
   marketStateSnapshot?: MarketStateSnapshot;
   decisionChain?: DecisionChain;
   hypothesisSessionState?: HypothesisSessionState;
+  /** HTR-WP13: intelligence cycle bundle when historical profile active. */
+  intelligenceCycleBundle?: IntelligenceCycleBundle;
+  /** HTR-WP14: forecast-decision bundle when historical profile active. */
+  forecastDecisionBundle?: ForecastDecisionBundle;
 };

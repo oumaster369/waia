@@ -14,6 +14,16 @@ import type {
   MarketPrediction,
   MarketPredictionVerificationResult,
 } from "@/lib/trader/knowledge/knowledge.types";
+import { createMkbReadModelSourcePostgres } from "@/lib/trader/knowledge/mkb-read-model-postgres";
+import {
+  queryMkbReadModel,
+  type QueryMkbReadModelDeps,
+} from "@/lib/trader/knowledge/mkb-read-model";
+import type {
+  MkbReadModelQuery,
+  MkbReadModelResult,
+  OutcomeResolutionReadPort,
+} from "@/lib/trader/knowledge/mkb-read-model.types";
 import {
   getMarketPredictionByIdPostgres,
   insertMarketPredictionPostgres,
@@ -168,4 +178,18 @@ export async function updateEdgeConfidenceFromVerification(
     verified: adjusted.verified,
     updatedAt: input.updatedAt ?? new Date(),
   });
+}
+
+export async function queryMarketKnowledgeReadModel(
+  ex: Pick<WaiaPostgresDb, "select">,
+  context: OrgContext,
+  query: MkbReadModelQuery,
+  asOf: Date,
+  outcomePort?: OutcomeResolutionReadPort,
+): Promise<MkbReadModelResult> {
+  const deps: QueryMkbReadModelDeps = {
+    source: createMkbReadModelSourcePostgres(ex),
+    outcomePort,
+  };
+  return queryMkbReadModel(context, query, asOf, deps);
 }

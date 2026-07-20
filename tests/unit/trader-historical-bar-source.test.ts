@@ -146,4 +146,10 @@ describe("HistoricalBarSource", () => {
     const snapshot = await source.fetchSnapshot();
     expect(snapshot.evaluatedAt).toBe(snapshot.bars.at(-1)!.barCloseTime);
   });
+
+  it("rejects invalid bars via HTR-WP12 ingress gate at construction", () => {
+    const bars = makeBars(25);
+    bars[3] = { ...bars[3]!, close: "NaN" };
+    expect(() => new HistoricalBarSource({ bars })).toThrow(/HTR_WP12_INGRESS_NON_FINITE_OHLCV/);
+  });
 });

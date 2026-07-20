@@ -181,8 +181,8 @@ Optional providers must **never** crash Market Brain or paper cycles.
 |-----------|---------------|
 | **Full Market Data Source Integration** | Data Provider Readiness PR merged + operator sign-off |
 | **Repeat M9 v0.1.7** | Data Provider Readiness **and** Full Market Data Source Integration pass |
-| **PR3 / PR4** | Gate A passes |
-| **M10 paper soak** | PR1–PR4 + Gate A + Gate B |
+| **PR3 / PR4** | M9 Accounting Gate (formerly "Gate A") passes |
+| **M10 paper soak** | PR1–PR4 + M9 Accounting Gate (formerly "Gate A") + Gate B |
 
 ---
 

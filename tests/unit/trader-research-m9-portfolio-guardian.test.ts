@@ -14,9 +14,10 @@ import {
 import { RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION } from "@/lib/trader/research/strategy-candidate.types";
 
 describe("M9 research portfolio config", () => {
-  it("defaults starting balance to 1M USDT", () => {
+  it("defaults starting balance to canonical HTR 100k USDT", () => {
     const resolved = resolveResearchPortfolioConfig();
     expect(resolved.startingBalanceUsdt).toBe(DEFAULT_RESEARCH_V2_STARTING_BALANCE_USDT);
+    expect(resolved.startingBalanceUsdt).toBe("100000.00");
   });
 
   it("builds portfolio context with CLI overrides", () => {

@@ -34,4 +34,20 @@ describe("HistoricalBarReplaySource (RI-P7 OOS)", () => {
 
     expect(first.snapshot.bars).toHaveLength(20);
   });
+
+  it("cursor mode yields one new bar per cycle after warm-up", () => {
+    const source = new HistoricalBarReplaySource({
+      bars: buildBars(25),
+      windowMode: "cursor",
+    });
+    const first = source.next();
+    expect(first.done).toBe(false);
+    if (first.done) return;
+    expect(first.snapshot.bars).toHaveLength(EXPAND_MIN_BARS);
+
+    const second = source.next();
+    expect(second.done).toBe(false);
+    if (second.done) return;
+    expect(second.snapshot.bars).toHaveLength(1);
+  });
 });

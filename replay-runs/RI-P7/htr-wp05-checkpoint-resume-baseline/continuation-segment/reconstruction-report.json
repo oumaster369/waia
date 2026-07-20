@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "htr-wp04-reconstruction/v1",
+  "outcome": "RECOVERED_COMPLETE",
+  "terminalState": "STREAMING_EVIDENCE_OK",
+  "validChunkCount": 3,
+  "sealedThroughCycleIndex": 80,
+  "chainDigest": "47d5688c3986eb02ad22d840975404415a2cb958f087b1fab268219ac85e3cfa",
+  "orphanTempDeleted": 0,
+  "quarantinedSeqs": []
+}

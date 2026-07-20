@@ -79,6 +79,10 @@ import {
 import { createManualReplayClock } from "@/lib/trader/research/deterministic-replay-clock";
 import { buildM9V2MetricsExport } from "@/lib/trader/research/m9-v2-metrics-export";
 import {
+  createShutdownCoordinator,
+  StreamingEvidenceReader,
+} from "@/lib/trader/backtest/streaming-evidence";
+import {
   finalizeResearchCampaignOutcomePostgres,
   sealResearchCampaignOutcomeArtifacts,
 } from "@/lib/trader/research/finalize-research-campaign-outcome";
@@ -359,6 +363,34 @@ async function main(): Promise<void> {
     const barSetDigest = computeBarSetDigest(barRecords);
     const builderGitSha = process.env.GITHUB_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null;
     const validationArtifactSink: ResearchValidationBacktestArtifactSink = {};
+    const evidenceRunDir = resolve(vaultDir, "streaming-evidence");
+    mkdirSync(evidenceRunDir, { recursive: true });
+
+    const shutdownCoordinator = createShutdownCoordinator();
+    let shutdownSignalHandlersRegistered = false;
+    const registerShutdownHandlers = (): void => {
+      if (shutdownSignalHandlersRegistered) {
+        return;
+      }
+      shutdownSignalHandlersRegistered = true;
+      shutdownCoordinator.onShutdown(async () => {
+        const sink = validationArtifactSink.evidenceSink;
+        if (!sink) {
+          return;
+        }
+        const cycleCount =
+          validationArtifactSink.streamingManifestRef?.manifest.expectedCycleCount ?? 0;
+        await sink.sealPartial(cycleCount, "graceful-shutdown");
+      });
+      // Delegate exit to the coordinator: it performs the partial seal and then exits with the
+      // signal-appropriate code (143/130). Exiting synchronously here would abort the async seal.
+      const onSignal = (signal: "SIGTERM" | "SIGINT"): void => {
+        shutdownCoordinator.requestShutdown(signal);
+      };
+      process.on("SIGTERM", () => onSignal("SIGTERM"));
+      process.on("SIGINT", () => onSignal("SIGINT"));
+    };
+    registerShutdownHandlers();
 
     try {
       const result = await runResearchPipelinePostgres(db, {
@@ -391,8 +423,24 @@ async function main(): Promise<void> {
           blindAuthorizationScope: blindScope,
           validationArtifactSink,
           providerSidecar,
+          retentionMode: "STREAM_ONLY",
+          evidenceRunDir,
+          evidenceGitSha: builderGitSha,
+          evidenceEnvironment: "m9-v2-research-campaign",
+          evidenceDbConnectionMode: urlSource,
         },
       });
+
+      const streamingManifestRef =
+        result.validationStreamingManifestRef ?? validationArtifactSink.streamingManifestRef;
+      const projectionReader = streamingManifestRef
+        ? new StreamingEvidenceReader(streamingManifestRef.runDir)
+        : null;
+      const m9ProjectionSource = projectionReader
+        ? { projectionReader }
+        : validationArtifactSink.cycleResults
+          ? { cycleResults: validationArtifactSink.cycleResults }
+          : null;
 
       const edgeVerified = result.evidenceDocument.evidenceBody.regimeCoverage.satisfiesRequirement;
       const pka = buildProductionKnowledgeAsset({
@@ -437,25 +485,25 @@ async function main(): Promise<void> {
       writeFileSync(lifecycleTracePath, `${JSON.stringify(lifecycleTrace, null, 2)}\n`, "utf8");
 
       let guardianSamplePath: string | null = null;
-      if (enableGuardianExits && result.validationCycleResults) {
+      if (enableGuardianExits && m9ProjectionSource) {
         guardianSamplePath = resolve(vaultDir, "m9-guardian-reason-sample.json");
         const guardianSample = buildM9GuardianReasonSampleExport({
           organizationId,
           strategyId: baseStrategy.strategyId,
           strategyVersion,
-          cycleResults: result.validationCycleResults,
+          ...m9ProjectionSource,
         });
         writeFileSync(guardianSamplePath, `${JSON.stringify(guardianSample, null, 2)}\n`, "utf8");
       }
 
       let marketUnderstandingSamplePath: string | null = null;
-      if (validationArtifactSink.cycleResults && validationArtifactSink.cycleResults.length > 0) {
+      if (m9ProjectionSource) {
         marketUnderstandingSamplePath = resolve(vaultDir, "m9-market-understanding-sample.json");
         const understandingSample = buildM9MarketUnderstandingSampleExport({
           organizationId,
           strategyId: baseStrategy.strategyId,
           strategyVersion,
-          cycleResults: validationArtifactSink.cycleResults,
+          ...m9ProjectionSource,
         });
         writeFileSync(
           marketUnderstandingSamplePath,
@@ -472,18 +520,14 @@ async function main(): Promise<void> {
       let providerCoverageMatrixDigest: string | null = null;
       let decisionTraceDigest: string | null = null;
 
-      if (validationArtifactSink.cycleResults && validationArtifactSink.cycleResults.length > 0) {
-        const fusedSamples = validationArtifactSink.cycleResults
-          .map((cycle) => cycle.evaluation.fusedContext)
-          .filter((fused): fused is NonNullable<typeof fused> => fused !== undefined);
-
+      if (m9ProjectionSource) {
         providerFusionPath = resolve(vaultDir, "m9-provider-fusion.json");
         const providerFusion = buildM9ProviderFusionExport({
           organizationId,
           strategyId: baseStrategy.strategyId,
           strategyVersion,
           instrumentId: symbol,
-          fusedSamples,
+          ...m9ProjectionSource,
           providerSidecar,
         });
         if (requireProviderFusion) {
@@ -503,7 +547,7 @@ async function main(): Promise<void> {
           organizationId,
           strategyId: baseStrategy.strategyId,
           strategyVersion,
-          cycleResults: validationArtifactSink.cycleResults,
+          ...m9ProjectionSource,
         });
         const decisionTraceJson = `${JSON.stringify(decisionTrace, null, 2)}\n`;
         writeFileSync(decisionTracePath, decisionTraceJson, "utf8");
@@ -585,6 +629,7 @@ async function main(): Promise<void> {
           },
           inventory,
           builderGitSha,
+          streamingManifestRef: streamingManifestRef ?? null,
         }),
       );
 
@@ -619,6 +664,7 @@ async function main(): Promise<void> {
           governedReject: error,
           orderRepository,
           builderGitSha,
+          streamingManifestRef: validationArtifactSink.streamingManifestRef ?? null,
         });
         const artifactPaths = sealResearchCampaignOutcomeArtifacts({
           vaultDir,
@@ -649,6 +695,7 @@ async function main(): Promise<void> {
         error,
         orderRepository,
         builderGitSha,
+        streamingManifestRef: validationArtifactSink.streamingManifestRef ?? null,
       });
       const artifactPaths = sealResearchCampaignOutcomeArtifacts({
         vaultDir,
