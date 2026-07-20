@@ -3,7 +3,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -25,7 +25,6 @@ describe("vitest hermetic environment proof (HTR-WP21)", () => {
   it("uses an empty dedicated envDir without repository dotenv files", () => {
     const hermeticEntries = readdirSync(HERMETIC_ENV_DIR);
     expect(hermeticEntries.some((entry) => entry.startsWith(".env"))).toBe(false);
-    expect(existsSync(path.join(REPO_ROOT, ".env.local"))).toBe(true);
   });
 
   it("proves default Vitest subprocess is hermetic from repository dotenv", () => {

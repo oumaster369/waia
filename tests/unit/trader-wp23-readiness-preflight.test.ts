@@ -1,5 +1,4 @@
 import {
-  existsSync,
   lstatSync,
   mkdtempSync,
   mkdirSync,
@@ -10,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -175,7 +175,7 @@ describe("HTR-WP23 official evidence seal", () => {
   it("rejects symlink escape under staging root", () => {
     const root = join(repoCwd, HTR_WP23_EVIDENCE_STAGING_ROOT);
     mkdirSync(root, { recursive: true });
-    const outside = mkdtempSync(join(repoCwd, "tests/tmp/htr-wp23-outside-"));
+    const outside = mkdtempSync(join(tmpdir(), "htr-wp23-outside-"));
     const linkPath = join(root, SYMLINK_TEST_SHA);
     removeStagingPath(linkPath);
     symlinkSync(outside, linkPath);

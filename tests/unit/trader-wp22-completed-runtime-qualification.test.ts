@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import path from "node:path";
 
 import {
   collectLiveHostEnvironment,
@@ -353,6 +354,10 @@ describe("HTR-WP22 evidence seal harness", () => {
   const qualificationSourceGitSha = "afd9a3107f58ea2d6782a4881a76dcfeeca9227d";
   const expectedD11bPayloadSha256 =
     "6821c8f7ee47d6f2ea04ce4577ac2df795940fd676e1a98e20d46353d0944624";
+  const hermeticQualificationStagingRoot = path.join(
+    process.cwd(),
+    "tests/fixtures/trader/wp22/qualification-staging",
+  );
 
   it("declares sequential resilience task order without Promise.all orchestration", async () => {
     const { HTR_WP22_EVIDENCE_SEAL_RESILIENCE_TASK_ORDER } =
@@ -369,6 +374,7 @@ describe("HTR-WP22 evidence seal harness", () => {
       await import("@/lib/trader/backtest/htr-wp22-evidence-harness");
     const loaded = loadHtrWp22CompletedRuntimeFromQualificationStaging({
       qualificationSourceGitSha,
+      stagingRoot: hermeticQualificationStagingRoot,
     });
     expect(loaded.terminalState).toBe("HTR_WP22_COMPLETED_RUNTIME_D11B_PASS");
     expect(loaded.sourceGitSha).toBe(qualificationSourceGitSha);
@@ -382,6 +388,7 @@ describe("HTR-WP22 evidence seal harness", () => {
     expect(() =>
       loadHtrWp22CompletedRuntimeFromQualificationStaging({
         qualificationSourceGitSha: "0".repeat(40),
+        stagingRoot: hermeticQualificationStagingRoot,
       }),
     ).toThrow(/QUALIFICATION_ARTIFACT_MISSING|QUALIFICATION_SHA_MISMATCH/);
   });
@@ -396,6 +403,7 @@ describe("HTR-WP22 evidence seal harness", () => {
       await import("@/lib/trader/backtest/htr-wp22-fixture-manifest");
     const completedRuntime = loadHtrWp22CompletedRuntimeFromQualificationStaging({
       qualificationSourceGitSha,
+      stagingRoot: hermeticQualificationStagingRoot,
     });
     const assemblyGitSha = readGitCodeSha();
     const manifest = buildHtrWp22EvidenceManifest("/tmp/unused", {
@@ -425,12 +433,43 @@ describe("HTR-WP22 evidence seal harness", () => {
   });
 
   it("rejects already-sealed staging targets and partial bundles", async () => {
-    const { assertHtrWp22EvidenceStagingTargetWritable, resolveHtrWp22EvidenceStagingDir } =
-      await import("@/lib/trader/backtest/htr-wp22-evidence-harness");
-    const sealedDir = resolveHtrWp22EvidenceStagingDir(qualificationSourceGitSha);
-    expect(() => assertHtrWp22EvidenceStagingTargetWritable(sealedDir)).toThrow(
-      /ALREADY_SEALED|PARTIAL_NOT_ACCEPTED/,
-    );
+    const {
+      assertHtrWp22EvidenceStagingTargetWritable,
+      resolveHtrWp22EvidenceStagingDir,
+      loadHtrWp22CompletedRuntimeFromQualificationStaging,
+      sealHtrWp22EvidenceStaging,
+    } = await import("@/lib/trader/backtest/htr-wp22-evidence-harness");
+    const { buildHtrWp22FixtureManifest } =
+      await import("@/lib/trader/backtest/htr-wp22-fixture-manifest");
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+
+    const testSha = "b".repeat(40);
+    const tmpRoot = mkdtempSync(join(tmpdir(), "htr-wp22-sealed-"));
+    try {
+      const completedRuntime = loadHtrWp22CompletedRuntimeFromQualificationStaging({
+        qualificationSourceGitSha,
+        stagingRoot: hermeticQualificationStagingRoot,
+      });
+      sealHtrWp22EvidenceStaging({
+        sourceGitSha: testSha,
+        cwd: tmpRoot,
+        bundle: {
+          sourceGitSha: readGitCodeSha(),
+          qualificationSourceGitSha,
+          sourceDirtyTree: false,
+          completedRuntime,
+          fixtureManifest: buildHtrWp22FixtureManifest(),
+        },
+      });
+      const sealedDir = resolveHtrWp22EvidenceStagingDir(testSha, tmpRoot);
+      expect(() => assertHtrWp22EvidenceStagingTargetWritable(sealedDir)).toThrow(
+        /ALREADY_SEALED|PARTIAL_NOT_ACCEPTED/,
+      );
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 
   it("fails verification on one-byte artifact mutation", async () => {
@@ -447,6 +486,7 @@ describe("HTR-WP22 evidence seal harness", () => {
 
     const completedRuntime = loadHtrWp22CompletedRuntimeFromQualificationStaging({
       qualificationSourceGitSha,
+      stagingRoot: hermeticQualificationStagingRoot,
     });
     const tmpRoot = mkdtempSync(join(tmpdir(), "htr-wp22-evidence-mutation-"));
     const sealed = sealHtrWp22EvidenceStaging({

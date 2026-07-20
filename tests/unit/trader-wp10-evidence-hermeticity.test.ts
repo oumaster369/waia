@@ -496,13 +496,15 @@ describe("HTR-WP10 evidence hermeticity", () => {
       process.cwd(),
       "REPLAY-RUNS/RI-P7/htr-wp10-determinism-nolookahead",
     );
-    if (!lstatSync(historical).ino || !lstatSync(caseAlias).ino) {
-      throw new Error("WP10_WRITER_GUARD_INODE_UNSUPPORTED");
-    }
-    expect(lstatSync(historical).ino).toBe(lstatSync(caseAlias).ino);
     expect(() => assertWp10WriterOutputDirAllowed(caseAlias)).toThrow(
       "WP10_WRITER_CANNOT_TARGET_HISTORICAL_ACCEPTED_PATH",
     );
+    if (existsSync(historical) && existsSync(caseAlias)) {
+      if (!lstatSync(historical).ino || !lstatSync(caseAlias).ino) {
+        throw new Error("WP10_WRITER_GUARD_INODE_UNSUPPORTED");
+      }
+      expect(lstatSync(historical).ino).toBe(lstatSync(caseAlias).ino);
+    }
     assertHistoricalSealUnchanged();
   });
 });

@@ -20,6 +20,8 @@ import type { HtrWp22FixtureManifest } from "@/lib/trader/backtest/htr-wp22-fixt
 export const HTR_WP22_EVIDENCE_INTEGRITY_CONTRACT_ID = "waia.htr.evidence-integrity.v2" as const;
 export const HTR_WP22_EVIDENCE_MANIFEST_SCHEMA = "htr-wp22-runtime-evidence-manifest/v2" as const;
 export const HTR_WP22_EVIDENCE_STAGING_ROOT = ".cursor/plans/dee-415-wp22/evidence-staging";
+export const HTR_WP22_HERMETIC_QUALIFICATION_STAGING_ROOT =
+  "tests/fixtures/trader/wp22/qualification-staging" as const;
 
 export type HtrWp22EvidenceArtifactEntry = {
   path: string;
@@ -82,8 +84,10 @@ export function computeReportPayloadSha256(payload: Record<string, unknown>): st
 export function resolveHtrWp22EvidenceStagingDir(
   sourceGitSha: string,
   cwd = process.cwd(),
+  options?: { stagingRoot?: string },
 ): string {
-  return path.join(cwd, HTR_WP22_EVIDENCE_STAGING_ROOT, sourceGitSha);
+  const root = options?.stagingRoot ?? path.join(cwd, HTR_WP22_EVIDENCE_STAGING_ROOT);
+  return path.join(root, sourceGitSha);
 }
 
 export function computeHtrWp22EvidenceGeneratorSha256(
@@ -109,10 +113,13 @@ export function assertHtrWp22EvidenceStagingTargetWritable(stagingDir: string): 
 export function loadHtrWp22CompletedRuntimeFromQualificationStaging(input: {
   qualificationSourceGitSha: string;
   cwd?: string;
+  stagingRoot?: string;
 }): HtrWp22CompletedRuntimeQualificationResult {
   const cwd = input.cwd ?? process.cwd();
   const artifactPath = path.join(
-    resolveHtrWp22EvidenceStagingDir(input.qualificationSourceGitSha, cwd),
+    resolveHtrWp22EvidenceStagingDir(input.qualificationSourceGitSha, cwd, {
+      stagingRoot: input.stagingRoot,
+    }),
     "completed-runtime-d11b.json",
   );
   if (!existsSync(artifactPath)) {
