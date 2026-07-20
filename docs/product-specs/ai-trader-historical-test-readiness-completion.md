@@ -11,8 +11,8 @@ sourceOfTruth:
   - docs/plans/dee-415-ai-trader-historical-test-readiness.md
 relatedGaps: docs/gaps/ai-trader-historical-test-readiness-gap-registry.md
 relatedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
-lastReviewed: 2026-07-19
-version: 0.1.5
+lastReviewed: 2026-07-20
+version: 0.1.6
 ---
 
 # AI-TRADER — Historical-Test Readiness Completion Specification
@@ -53,12 +53,16 @@ Link: [`docs/waia-governance/NON-GOALS.md`](../waia-governance/NON-GOALS.md).
 
 `READY_FOR_FULL_HISTORICAL_TEST` is granted **only** when all gate groups below are measurably true **and** the Human Architect certifies (`CERTIFY-HTR-READY`, D-12). Default state: `NOT_READY`. Composer never sets `READY_FOR_FULL_HISTORICAL_TEST`.
 
-### Program control state (2026-07-19)
+### Program control state (2026-07-20)
 
 ```text
-PROGRAM_STATUS=FINAL_AUDIT_BLOCKERS_CLOSED_READY_FOR_FRESH_FINAL_WHOLE_PROGRAM_REAUDIT
+PROGRAM_STATUS=INTEGRATION_READY
 ORIGINAL_WORK_PACKAGES_COMPLETE=HTR-WP01..HTR-WP23
-FINAL_AUDIT_VERDICT=OPUS_FINAL_AUDIT_BLOCKERS_CLOSED_PENDING_REAUDIT
+FINAL_WHOLE_PROGRAM_AUDIT=PASS
+FINAL_WHITE_BOX_REAUDIT=PASS
+FINAL_TRACE_COMMIT_ACCEPTANCE=PASS
+FINAL_TRACE_CORRECTIVE_ACCEPTANCE=PASS
+FINAL_AUDIT_VERDICT=OPUS_FINAL_WHOLE_PROGRAM_PASS
 CORRECTIVE_A=COMPLETE
 CORRECTIVE_A_PHASE_A=PASS
 CORRECTIVE_A_PHASE_B=PASS
@@ -67,50 +71,38 @@ OBSERVABILITY_REPAIR_SHA=ceeaae726755ad4cc27a69569690224453eef5d9
 CORRECTIVE_A_EVIDENCE_PATH=replay-runs/RI-P7/htr-corrective-a-qualification/ceeaae726755ad4cc27a69569690224453eef5d9/
 CORRECTIVE_A_EVIDENCE_MANIFEST_DIGEST=b6d2f1559d276d68670ae523aa49c2bd749d19dcaa86870e660c3dc4731f693a
 CORRECTIVE_A_EVIDENCE_SEMANTIC_DIGEST=4a596f8e3bf609eccf71d2c29ebd4a99535cf167c0a35c4fc7c130532ba94484
-CERTIFY_HTR_READY=NOT_ISSUED
+TRACE_OBSERVABILITY_COMMIT=273c230e6e62effcd9ab9420963e2879b5ffa1af
+TRACE_CORRECTIVE_COMMIT=37dba8c20471033ee5f96d46ceabc67a4c686caf
+TRACE_01_10=10/10
+TRACE_06_VARIANTS=6/6
+CORRECTIVE_MATRIX=113/113
+POSTGRESQL_CA_001_CA_004=4/4
+G5_MUT_01=PASS
+FULL_VALIDATION=PASS
+CERTIFY_HTR_READY=ISSUED
+CERTIFY_HTR_READY_DECISION=D-12
+CERTIFIED_REPOSITORY_HEAD=37dba8c20471033ee5f96d46ceabc67a4c686caf
 READY_FOR_FULL_HISTORICAL_TEST=NO
-READY_FOR_FINAL_WHOLE_PROGRAM_AUDIT=YES
-FINAL_PR_AUTHORIZED=NO
+READY_FOR_FINAL_PR_TO_DEV=YES
+FINAL_PR_AUTHORIZED=YES
+READY_FOR_EXECUTION_SERVER_DATA_QUALIFICATION=YES
+HISTORICAL_DATASET_QUALIFICATION=NOT_EXECUTED
 BUILD_AUTHORIZED=NO
 BUILD_AUTHORIZED_SCOPE=null
-ACTIVE_CORRECTION=HTR-FINAL-AUDIT-CORRECTIVE-A
-ACTIVE_CORRECTION_STATUS=G2_B5_V6_CORRECTIVE_A_COMPLETE
+ACTIVE_WORK_PACKAGE=NONE
+ACTIVE_CORRECTION=NONE
+ACTIVE_MACRO=NONE
 ACTIVE_CORRECTIVE_PACKET_SHA256=67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13
-ACTIVE_CORRECTIVE_PACKET_BYTES=13121
-ACTIVE_CORRECTIVE_PACKET_PHYSICAL_LINES=237
-BUNDLE_MANIFEST_DIGEST=fc261f59969cf8c8faf2072848ed2e94bc09fecbd375ee1ebb241fbc2331fff3
-THREE_MANIFEST_REGISTRY_SHA256=343f2b1b60dbd75342353e247c5767c4e1e49bb779a19b0945b189fbf2c0abc6
 CORRECTIVE_TEST_MATRIX_SHA256=445cd6dbb14622f7f51a13108e80083ffb7009e2c22f11573728646ebff76769
-NORMATIVE_LANE_CONTRACTS_SHA256=f058c2dddcb21bbd4a7389ce2d3c685c639e2288bbabd4b5ce407b3c08af8256
-BOUNDED_BUILD_CREATE_COUNT=16
-BOUNDED_BUILD_MODIFY_COUNT=7
-BOUNDED_BUILD_DELETE_COUNT=0
-HUMAN_APPROVED_ARCHITECTURE_ID=B5_SPLIT_PROOF_ZERO_FILL_WP21_PLUS_PARENT_COST_VECTOR_ORACLE_V1
-PACKET_PROTOCOL_VERSION=B5_PACKET_PROTOCOL_V6
-PACKET_ENVELOPE_PROTOCOL=B5_PACKET_PROTOCOL_V6
-SEMANTIC_ASSETS_PROTOCOL=B5_PACKET_PROTOCOL_V5
-PARENT_PATCH_VERSION=V2
-REJECTED_B5_V5_PACKET_SHA256=201d197a303ba64ac577c3184a866b0dacedcde87016d7f08c39c1158f58c5cb
-REJECTED_B5_V5_CLASSIFICATION=SUPERSEDED_NOT_APPROVABLE_BUNDLE_METADATA_AND_EXTERNAL_CONTROLLER_BINDING_DEFECTS
-REJECTED_B5_V4_PACKET_SHA256=e545c787e4fe628d9638bbe57e96a5b921945190f90ae607f366396786db1437
-REJECTED_B5_V4_CLASSIFICATION=SUPERSEDED_NOT_APPROVABLE_MATRIX_REPLACEMENT_GRAPH_LANE_D_SCHEMA_SCANNER_VECTOR_AND_CONTROLLER_MANIFEST_BINDING_DEFECTS
-REJECTED_B5_V3_PACKET_SHA256=04ebb3d7cfc553b0f074848464d691c09a8159419b62f4ae914a3a6cc5a4620b
-REJECTED_B5_V2_PACKET_SHA256=49b547e105aa0ae6b3422382a7264d2382680a7145afca77427847553be54ea2
-C_A1_MIGRATION_DECISION=NONE
-C_A1_PERSISTENCE_OPTION=OPTION_B_REUSE_EXISTING_0094_0096
 WP23_ACCEPTED_EVIDENCE_PATH=replay-runs/RI-P7/htr-wp23-readiness-package/
 WP23_ACCEPTED_EVIDENCE_SOURCE_GIT_SHA=5e8e8b6ca454bdda77222efc182b3d517cd2a1d1
-WP23_ACCEPTED_EVIDENCE_MANIFEST_DIGEST=d694526cc69b9781e6ba1da31c3515405ad904305ee47632d72f4dbfb4773608
-WP23_ACCEPTED_EVIDENCE_SEMANTIC_DIGEST=fd11d242adc7c4d51345560beeb17b748c2afba559232900446c2a386cc50bd8
-WP23_SUPERSEDED_EVIDENCE_PATH=replay-runs/RI-P7/htr-wp23-readiness-package/superseded/6647b9035c19bd4ea55d3c610d1f637ddf3eb668/
-FINAL_AUDIT_BLOCKER_CLOSURE=COMPLETE
-READY_FOR_FRESH_FINAL_WHOLE_PROGRAM_REAUDIT=YES
-NEXT_ACTION=FRESH_OPUS_DEE_415_FINAL_WHOLE_PROGRAM_REAUDIT
-NEXT_HUMAN_GATE=AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-REAUDIT
+NEXT_ACTION=PREPARE_SINGLE_FINAL_PR_TO_DEV
+NEXT_HUMAN_GATE=HUMAN_REVIEW_AND_SQUASH_MERGE_FINAL_PR_TO_DEV
 EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED=NO
+LIVE_TRADING_AUTHORIZED=NO
 ```
 
-Opus final whole-program audit identified confirmed blockers (Postgres CA-001..CA-004 reproduction, WP23 stale D-5 evidence, canonical/controller drift). **Bounded blocker closure COMPLETE** (2026-07-19); corrective closure **COMPLETE** at independent Phase-B PASS. Fresh final whole-program re-audit required before `CERTIFY-HTR-READY` or final PR.
+Human D-12 `CERTIFY-HTR-READY` issued 2026-07-20 after independent final whole-program, white-box capital-path, trace-evidence, PostgreSQL, and corrective-matrix acceptance. Certification authorizes integration PR to `dev` and subsequent Execution Server **data** qualification — not full historical test, live trading, or Execution Server deployment.
 
 ### Governance / activation (CG-Gov)
 
@@ -120,8 +112,8 @@ Opus final whole-program audit identified confirmed blockers (Postgres CA-001..C
 - [x] Runtime-substrate interpretation recorded (`APPROVE-HTR-RUNTIME-SUBSTRATE: deterministic-historical-readiness-substrate`, D-16; HTR-WP01).
 - [x] Repository-first program state synchronized (canonical integration plan + Linear + parent ledger after each work package; all 23 WPs closed).
 - [x] All 23 work packages COMPLETE with WORK + CLOSEOUT commits on the shared branch (`HTR-WP01..HTR-WP23`; independent Phase-B PASS per WP).
-- [ ] Final whole-program Opus re-audit PASS; full validation matrix green with zero skipped corrective-matrix cases (confirmed blockers closed 2026-07-19; re-audit not yet run).
-- [ ] Human certification (`CERTIFY-HTR-READY`, D-12) after fresh final whole-program re-audit PASS.
+- [x] Final whole-program Opus re-audit PASS; full validation matrix green with zero skipped corrective-matrix cases (113/113 corrective matrix; PostgreSQL CA-001..CA-004 4/4; trace TRACE-01..10 10/10; G5-MUT-01 PASS; 2026-07-20).
+- [x] Human certification (`CERTIFY-HTR-READY`, D-12) issued 2026-07-20; certified implementation HEAD `37dba8c20471033ee5f96d46ceabc67a4c686caf`.
 
 ### CG-A — Data & dataset
 
@@ -214,6 +206,7 @@ Program and architecture-scope tokens recorded at HTR-WP01:
 | `APPROVE-HTR-EXECSERVER: option-a-code-ready` | D-19 — Option A code-ready package (§32B) |
 | `APPROVE-HTR-D10: divergence-register-v1` | D-10 — Approved Semantic Divergence Register framework |
 | `APPROVE-HTR-EXECUTION-TOPOLOGY: one-integration-issue-one-branch-one-final-pr-23-sequential-child-build-plans` | One DEE-415 boundary, 23 WPs, one final PR |
+| `CERTIFY-HTR-READY` | D-12 — Human certification issued 2026-07-20; integration-ready at HEAD `37dba8c20471033ee5f96d46ceabc67a4c686caf`; authorizes final PR to `dev` and Execution Server data qualification; does **not** authorize full historical test, dataset qualification, Execution Server deployment, or live trading |
 
 ### Contradiction register resolutions (CR-01..CR-16)
 

@@ -5,8 +5,8 @@ scope: ai-trader
 owner: Architect
 linkedSpec: docs/product-specs/ai-trader-historical-test-readiness-completion.md
 linkedRoadmap: docs/roadmaps/ai-trader-historical-test-readiness-roadmap.md
-lastReviewed: 2026-07-19
-version: 0.1.6
+lastReviewed: 2026-07-20
+version: 0.1.7
 ---
 
 # AI-TRADER Historical-Test Readiness — Gap Registry
@@ -90,7 +90,7 @@ Make missing or partial work explicit for the Historical-Test Readiness program.
 | HTR-GAP-048 | cancelPartialEntry emitted on breach but unconsumed; partial entry remainder not cancelled (FA-003) | blocker | closed (2026-07-19; HTR-FINAL-AUDIT-CORRECTIVE-A independent Phase-B PASS; requiresHtrPartialEntryCancellation + executeBreachPartialEntryCancellation consumer wired; C-A3 integrated gate PASS; accepted evidence replay-runs/RI-P7/htr-corrective-a-qualification/ceeaae726755ad4cc27a69569690224453eef5d9/) | HTR-WP20 | HTR-WP17, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-CORR-A |
 | HTR-GAP-049 | FHV semantic trace + operator/six-report emitters missing; schema-only (FA-004) | blocker | closed (2026-07-19; HTR-FINAL-AUDIT-CORRECTIVE-A independent Phase-B PASS; buildHtrOperatorReportV1 active; production NOOP sink forbidden; C-A4 integrated gate PASS; accepted evidence replay-runs/RI-P7/htr-corrective-a-qualification/ceeaae726755ad4cc27a69569690224453eef5d9/) | HTR-WP23 | HTR-WP04, HTR-WP13, HTR-WP14, HTR-WP18, HTR-WP19, HTR-WP20, HTR-WP21, HTR-WP22 | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-CORR-A |
 
-> **HTR-GAP-046..049 CLOSED** at HTR-FINAL-AUDIT-CORRECTIVE-A independent Phase-B PASS (2026-07-19). Closure unit governed by G2 B5 V6 minimal envelope superseding packet `67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13` (`B5_SPLIT_PROOF_ZERO_FILL_WP21_PLUS_PARENT_COST_VECTOR_ORACLE_V1`; envelope protocol `B5_PACKET_PROTOCOL_V6`; semantic assets `B5_PACKET_PROTOCOL_V5`; parent patch `V2`). WORK `640616074969162223a3324109b193823e743fcd`; observability repair `ceeaae726755ad4cc27a69569690224453eef5d9`; accepted evidence `replay-runs/RI-P7/htr-corrective-a-qualification/ceeaae726755ad4cc27a69569690224453eef5d9/` (manifest digest `b6d2f155…`, semantic digest `4a596f8e…`). Opus final whole-program audit confirmed blockers closed 2026-07-19; program next gate: fresh final whole-program Opus re-audit (`AUTHORIZE-FRESH-OPUS-DEE-415-FINAL-WHOLE-PROGRAM-REAUDIT`).
+> **HTR-GAP-046..049 CLOSED** at HTR-FINAL-AUDIT-CORRECTIVE-A independent Phase-B PASS (2026-07-19). Closure unit governed by G2 B5 V6 minimal envelope superseding packet `67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13` (`B5_SPLIT_PROOF_ZERO_FILL_WP21_PLUS_PARENT_COST_VECTOR_ORACLE_V1`; envelope protocol `B5_PACKET_PROTOCOL_V6`; semantic assets `B5_PACKET_PROTOCOL_V5`; parent patch `V2`). WORK `640616074969162223a3324109b193823e743fcd`; observability repair `ceeaae726755ad4cc27a69569690224453eef5d9`; trace observability commit `273c230e6e62effcd9ab9420963e2879b5ffa1af`; trace corrective commit `37dba8c20471033ee5f96d46ceabc67a4c686caf`; accepted evidence `replay-runs/RI-P7/htr-corrective-a-qualification/ceeaae726755ad4cc27a69569690224453eef5d9/` (manifest digest `b6d2f155…`, semantic digest `4a596f8e…`). Human D-12 `CERTIFY-HTR-READY` issued 2026-07-20; program next gate: Human squash merge final PR to `dev`.
 
 ## Intake rules
 

@@ -5,8 +5,8 @@ horizon: v1
 owner: Architect
 linkedSpec: docs/product-specs/ai-trader-historical-test-readiness-completion.md
 linkedGapRegistry: docs/gaps/ai-trader-historical-test-readiness-gap-registry.md
-lastReviewed: 2026-07-19
-version: 0.1.5
+lastReviewed: 2026-07-20
+version: 0.1.6
 ---
 
 # AI-TRADER Historical-Test Readiness — Integration Roadmap
@@ -49,7 +49,7 @@ Post-final-audit corrective closure units (`HTR-FINAL-AUDIT-CORRECTIVE-<ID>`) ar
 
 All batches use `linearIssue: DEE-415`. Whole-program `riskTier: T2`; per-batch tier describes work-package nature (informative).
 
-**Execution topology:** No intermediate PRs. Local WORK + CLOSEOUT commits per work package on the shared branch. Single PR after corrective closure + final Opus whole-program re-audit PASS + Human `CERTIFY-HTR-READY`.
+**Execution topology:** No intermediate PRs. Local WORK + CLOSEOUT commits per work package on the shared branch. Single PR after Human D-12 `CERTIFY-HTR-READY` (2026-07-20); certified implementation HEAD `37dba8c20471033ee5f96d46ceabc67a4c686caf`.
 
 ## Final-audit corrective batches
 
@@ -59,7 +59,7 @@ Bounded post-WP23 corrective closure units inside the existing DEE-415 integrati
 
 | correctiveBatchId | correctiveUnit | dependsOn | riskTier | status | packetSha256 | packetPath | gapRefs | acceptanceSummary |
 |-------------------|------------------|-----------|----------|--------|--------------|------------|---------|-------------------|
-| IB-HTR-CORR-A | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-23 | T2 | complete | 67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13 | .cursor/plans/dee-415-final-audit-corrective/67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13/dee-415-g2-wp21-b5-v6-superseding-corrective-exact-packet.plan.md | HTR-GAP-046, HTR-GAP-047, HTR-GAP-048, HTR-GAP-049 | G2 B5 V6 independent Phase-B PASS 2026-07-19; WORK 6406160 + observability repair ceeaae7; 113/113 matrix + Postgres 4/4 + C-A5 integrated qualification PASS; accepted evidence replay-runs/RI-P7/htr-corrective-a-qualification/ceeaae726755ad4cc27a69569690224453eef5d9/ manifest b6d2f155… semantic 4a596f8e…; HTR-GAP-046..049 CLOSED; next gate final whole-program Opus audit |
+| IB-HTR-CORR-A | HTR-FINAL-AUDIT-CORRECTIVE-A | IB-HTR-23 | T2 | complete | 67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13 | .cursor/plans/dee-415-final-audit-corrective/67273f73b8411584a47822621c6590180f10a1d44ceecfa768fa2980da41ba13/dee-415-g2-wp21-b5-v6-superseding-corrective-exact-packet.plan.md | HTR-GAP-046, HTR-GAP-047, HTR-GAP-048, HTR-GAP-049 | G2 B5 V6 independent Phase-B PASS 2026-07-19; WORK 6406160 + observability repair ceeaae7; 113/113 matrix + Postgres 4/4 + C-A5 integrated qualification PASS; trace observability 273c230e + trace corrective 37dba8c accepted; Human D-12 CERTIFY-HTR-READY 2026-07-20; accepted evidence replay-runs/RI-P7/htr-corrective-a-qualification/ceeaae726755ad4cc27a69569690224453eef5d9/ manifest b6d2f155… semantic 4a596f8e…; HTR-GAP-046..049 CLOSED; next gate Human squash merge final PR to dev |
 
 **Supersession history (IB-HTR-CORR-A):** packet `e73e7a422ebb9692ef097ecbea3e4e629704a04ff0d950dda4f24bae69bd89da` was `SUPERSEDED_NOT_APPROVABLE` (`NOT_APPROVABLE_MANIFEST_AND_MIGRATION_CONTRACT_DEFECTS`). Packet `04863e7af156a3593ff5380d519decff0e33168bf518c4b05886b1ad2f82c6a2` was superseded with classification `SUPERSEDED_NOT_APPROVABLE_G2_WP21_PARENT_PARITY_CONTRADICTION`. Rejected B4 packet `38e4e9f3badfcf08b769b2a7c6d45811d6bbd359becc03f660f3182582e95422` was superseded with classification `SUPERSEDED_NOT_APPROVABLE_B4_PACKET_SELF_CONTAINMENT_PATCH_SEMANTICS_MANIFEST_TEST_AND_CONTROLLER_DEFECTS` (B4-v2 prototype `215cab07b44d65f7b5e96870aaf84ea9e192263b7077256ed0b76fbef6713d31` abandoned). Rejected B5 V1 packet `fb04dd4d16e275c002a68db52991c15a70f39615c934beed317b5a25acd4727f` was superseded with classification `SUPERSEDED_NOT_APPROVABLE_B5_V1_PACKET_DELTA_MANIFEST_TEST_AND_SCHEMA_DEFECTS`. Rejected B5 V2 packet `49b547e105aa0ae6b3422382a7264d2382680a7145afca77427847553be54ea2` was superseded with classification `SUPERSEDED_NOT_APPROVABLE_BUNDLE_MANIFEST_LEGACY_AUTHORITY_PARITY_SCANNER_VALIDATION_APPROVAL_ACTIVATION_AND_CONTROLLER_DEFECTS`. Rejected B5 V3 packet `04ebb3d7cfc553b0f074848464d691c09a8159419b62f4ae914a3a6cc5a4620b` was superseded with classification `SUPERSEDED_NOT_APPROVABLE_MANIFEST_METADATA_EXTERNAL_BINDING_NOTATION_LANE_C_LANE_D_SCHEMA_AND_CONTROLLER_DEFECTS`. Active packet `e545c787…` retains the Human-approved B5 split-proof zero-fill + parent cost-vector oracle architecture under packet protocol V4. Rejected/superseded packet bytes remain immutable.
 
