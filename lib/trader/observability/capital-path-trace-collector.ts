@@ -53,6 +53,14 @@ const OBSERVATION_ONLY_EFFECT: CapitalPathTraceEconomicEffect = {
   realizedPnlDeltaReason: "OBSERVATION_ONLY",
 };
 
+export const CAPITAL_PATH_TRACE_EMPTY_STATE_DIGEST = computeSemanticSha256Hex({
+  schema: "capital-path-trace-empty-state/v1",
+  cash: "0",
+  equity: "0",
+  positions: {},
+  consumedFillIds: [],
+});
+
 function emptyPersistentRefs(): CapitalPathTracePersistentRecordReferences {
   return {
     orderId: null,
@@ -61,6 +69,7 @@ function emptyPersistentRefs(): CapitalPathTracePersistentRecordReferences {
     reconciliationId: null,
     closedTradeId: null,
     checkpointId: null,
+    decisionRecordId: null,
   };
 }
 
@@ -77,6 +86,36 @@ function digestValue(value: unknown): string {
         typeof inner === "number" && !Number.isFinite(inner) ? String(inner) : inner,
       ),
     );
+  }
+}
+
+class TraceStateTracker {
+  private digest = CAPITAL_PATH_TRACE_EMPTY_STATE_DIGEST;
+
+  snapshotBefore(): string {
+    return this.digest;
+  }
+
+  observeReadOnly(): { stateBeforeDigest: string; stateAfterDigest: string } {
+    return {
+      stateBeforeDigest: this.digest,
+      stateAfterDigest: this.digest,
+    };
+  }
+
+  observeTransition(observation: unknown): { stateBeforeDigest: string; stateAfterDigest: string } {
+    const stateBeforeDigest = this.digest;
+    this.digest = digestValue({ prior: stateBeforeDigest, observation });
+    return { stateBeforeDigest, stateAfterDigest: this.digest };
+  }
+
+  anchorAccountingState(state: AccountingStateV1): {
+    stateBeforeDigest: string;
+    stateAfterDigest: string;
+  } {
+    const stateBeforeDigest = this.digest;
+    this.digest = computeAccountingSemanticDigest(state);
+    return { stateBeforeDigest, stateAfterDigest: this.digest };
   }
 }
 
@@ -104,6 +143,15 @@ function mapRuntimeKindToStage(kind: HtrRuntimeCallEvent["kind"]): CapitalPathSt
     default:
       return "RECONCILIATION";
   }
+}
+
+function resolvePrimaryRiskReasonCode(
+  execution: Extract<
+    NonNullable<PaperCycleResult["strategyExecutions"][number]["execution"]>,
+    { status: "risk_rejected" }
+  >,
+): string {
+  return execution.riskDecision.decision.reasonCodes[0] ?? execution.riskDecision.decision.outcome;
 }
 
 export function createCapitalPathTraceCollector(
@@ -208,7 +256,7 @@ export function emitCapitalPathTraceFromBacktest(
   input: EmitCapitalPathTraceFromBacktestInput,
 ): CapitalPathTraceEventV1[] {
   const symbol = input.symbol ?? "BTC/USDT";
-  let priorAccountingDigest = digestValue(null);
+  const tracker = new TraceStateTracker();
 
   for (let cycleIndex = 0; cycleIndex < input.cycleResults.length; cycleIndex += 1) {
     const cycle = input.cycleResults[cycleIndex]!;
@@ -218,6 +266,7 @@ export function emitCapitalPathTraceFromBacktest(
       cycle.htrRuntimeCallOrder?.[0]?.at ??
       new Date(Date.parse("2026-01-01T00:00:00.000Z") + cycleIndex * 60_000).toISOString();
 
+    const barIngressState = tracker.observeReadOnly();
     input.collector.append({
       replayTimestamp,
       capitalPathStage: "BAR_INGRESS",
@@ -227,14 +276,14 @@ export function emitCapitalPathTraceFromBacktest(
       callee: "HistoricalBarReplaySource.next",
       inputDigest: digestValue({ cycleIndex }),
       outputDigest: digestValue({ barCount: cycle.evaluation.features ? 1 : 0 }),
-      stateBeforeDigest: priorAccountingDigest,
-      stateAfterDigest: priorAccountingDigest,
+      ...barIngressState,
       decisionOrReasonCode: "BAR_CLOSED",
       economicEffect: NO_ECONOMIC_EFFECT,
       persistentRecordReferences: emptyPersistentRefs(),
       assertedInvariants: satisfiedInvariants(["BAR_INGRESS_READ_ONLY"]),
     });
 
+    const intelligenceState = tracker.observeReadOnly();
     input.collector.append({
       replayTimestamp,
       capitalPathStage: "INTELLIGENCE",
@@ -248,9 +297,10 @@ export function emitCapitalPathTraceFromBacktest(
       }),
       outputDigest: digestValue({
         primarySignal: cycle.evaluation.signal?.strategySignalId ?? null,
+        terminalReasonCode:
+          cycle.evaluation.intelligenceCycleBundle?.envelope.terminalReasonCode ?? null,
       }),
-      stateBeforeDigest: priorAccountingDigest,
-      stateAfterDigest: priorAccountingDigest,
+      ...intelligenceState,
       decisionOrReasonCode: cycle.evaluation.signal?.strategySignalId ?? "NO_PRIMARY_SIGNAL",
       economicEffect: NO_ECONOMIC_EFFECT,
       persistentRecordReferences: emptyPersistentRefs(),
@@ -258,6 +308,7 @@ export function emitCapitalPathTraceFromBacktest(
     });
 
     for (const strategyExecution of cycle.strategyExecutions) {
+      const gateState = tracker.observeReadOnly();
       input.collector.append({
         replayTimestamp,
         capitalPathStage: "CDE_PERMISSION",
@@ -267,14 +318,14 @@ export function emitCapitalPathTraceFromBacktest(
         callee: "evaluateStrategyEligibilityGate",
         inputDigest: digestValue({ signalId: strategyExecution.signal.strategySignalId }),
         outputDigest: digestValue({ submitBlocked: strategyExecution.submitBlocked }),
-        stateBeforeDigest: priorAccountingDigest,
-        stateAfterDigest: priorAccountingDigest,
+        ...gateState,
         decisionOrReasonCode: strategyExecution.submitBlocked ? "SUBMIT_BLOCKED" : "ACTIONABLE",
         economicEffect: NO_ECONOMIC_EFFECT,
         persistentRecordReferences: emptyPersistentRefs(),
         assertedInvariants: satisfiedInvariants(["CDE_GATE_READ_ONLY"]),
       });
 
+      const decisionState = tracker.observeReadOnly();
       input.collector.append({
         replayTimestamp,
         capitalPathStage: "DECISION",
@@ -287,8 +338,7 @@ export function emitCapitalPathTraceFromBacktest(
           strategyId: strategyExecution.signal.strategyId,
         }),
         outputDigest: digestValue({ blocked: strategyExecution.submitBlocked }),
-        stateBeforeDigest: priorAccountingDigest,
-        stateAfterDigest: priorAccountingDigest,
+        ...decisionState,
         decisionOrReasonCode: strategyExecution.signal.side ?? null,
         economicEffect: NO_ECONOMIC_EFFECT,
         persistentRecordReferences: emptyPersistentRefs(),
@@ -297,6 +347,8 @@ export function emitCapitalPathTraceFromBacktest(
 
       const execution = strategyExecution.execution;
       if (execution?.status === "risk_rejected") {
+        const riskReasonCode = resolvePrimaryRiskReasonCode(execution);
+        const riskState = tracker.observeReadOnly();
         input.collector.append({
           replayTimestamp,
           capitalPathStage: "RISK_EVALUATION",
@@ -305,10 +357,12 @@ export function emitCapitalPathTraceFromBacktest(
           caller: "OrderExecutionService.submitOrder",
           callee: "RiskEngineService.evaluateOrderRequest",
           inputDigest: digestValue({ signalId: strategyExecution.signal.strategySignalId }),
-          outputDigest: digestValue({ outcome: execution.riskDecision.decision.outcome }),
-          stateBeforeDigest: priorAccountingDigest,
-          stateAfterDigest: priorAccountingDigest,
-          decisionOrReasonCode: execution.riskDecision.decision.outcome,
+          outputDigest: digestValue({
+            outcome: execution.riskDecision.decision.outcome,
+            reasonCodes: execution.riskDecision.decision.reasonCodes,
+          }),
+          ...riskState,
+          decisionOrReasonCode: riskReasonCode,
           economicEffect: NO_ECONOMIC_EFFECT,
           persistentRecordReferences: {
             ...emptyPersistentRefs(),
@@ -324,10 +378,12 @@ export function emitCapitalPathTraceFromBacktest(
           caller: "OrderExecutionService.submitOrder",
           callee: "terminalRiskRejected",
           inputDigest: digestValue({ clientOrderId: strategyExecution.signal.strategySignalId }),
-          outputDigest: digestValue({ status: "risk_rejected" }),
-          stateBeforeDigest: priorAccountingDigest,
-          stateAfterDigest: priorAccountingDigest,
-          decisionOrReasonCode: execution.riskDecision.decision.outcome,
+          outputDigest: digestValue({
+            status: "risk_rejected",
+            reasonCodes: execution.riskDecision.decision.reasonCodes,
+          }),
+          ...riskState,
+          decisionOrReasonCode: riskReasonCode,
           economicEffect: NO_ECONOMIC_EFFECT,
           persistentRecordReferences: {
             ...emptyPersistentRefs(),
@@ -339,6 +395,7 @@ export function emitCapitalPathTraceFromBacktest(
       }
 
       if (execution?.status === "submitted" && execution.order) {
+        const riskState = tracker.observeReadOnly();
         input.collector.append({
           replayTimestamp,
           capitalPathStage: "RISK_EVALUATION",
@@ -348,12 +405,16 @@ export function emitCapitalPathTraceFromBacktest(
           callee: "RiskEngineService.evaluateOrderRequest",
           inputDigest: digestValue({ signalId: strategyExecution.signal.strategySignalId }),
           outputDigest: digestValue({ status: "APPROVE" }),
-          stateBeforeDigest: priorAccountingDigest,
-          stateAfterDigest: priorAccountingDigest,
+          ...riskState,
           decisionOrReasonCode: "APPROVE",
           economicEffect: NO_ECONOMIC_EFFECT,
           persistentRecordReferences: emptyPersistentRefs(),
           assertedInvariants: satisfiedInvariants(["RISK_APPROVED"]),
+        });
+        const orderState = tracker.observeTransition({
+          stage: "ORDER_SUBMIT",
+          orderId: execution.order.id,
+          state: execution.order.state,
         });
         input.collector.append({
           replayTimestamp,
@@ -364,8 +425,7 @@ export function emitCapitalPathTraceFromBacktest(
           callee: "OrderExecutionService.submitOrder",
           inputDigest: digestValue({ side: strategyExecution.signal.side }),
           outputDigest: digestValue({ orderId: execution.order.id, state: execution.order.state }),
-          stateBeforeDigest: priorAccountingDigest,
-          stateAfterDigest: priorAccountingDigest,
+          ...orderState,
           decisionOrReasonCode: execution.order.state,
           economicEffect: OBSERVATION_ONLY_EFFECT,
           persistentRecordReferences: {
@@ -377,7 +437,7 @@ export function emitCapitalPathTraceFromBacktest(
       }
     }
 
-    const primarySignal = cycle.evaluation.signal;
+    const decisionRecord = cycle.evaluation.forecastDecisionBundle?.decision;
     const submissionAttempted = cycle.strategyExecutions.some(
       (entry) => entry.execution !== undefined && entry.execution !== null,
     );
@@ -386,6 +446,12 @@ export function emitCapitalPathTraceFromBacktest(
       (cycle.strategyExecutions.length === 0 ||
         cycle.strategyExecutions.every((entry) => entry.submitBlocked))
     ) {
+      const abstainDecision =
+        cycle.strategyExecutions.every((entry) => entry.submitBlocked) &&
+        cycle.strategyExecutions.length > 0
+          ? "ABSTAIN"
+          : "NO_TRADE";
+      const noTradeState = tracker.observeReadOnly();
       input.collector.append({
         replayTimestamp,
         capitalPathStage: "NO_TRADE",
@@ -393,25 +459,45 @@ export function emitCapitalPathTraceFromBacktest(
         symbol,
         caller: "runEvaluationCycle",
         callee: "resolveTerminalReasonCode",
-        inputDigest: digestValue({ cycleIndex, signal: primarySignal?.strategySignalId ?? null }),
-        outputDigest: digestValue({
-          decision: cycle.strategyExecutions.every((entry) => entry.submitBlocked)
-            ? "ABSTAIN"
-            : "NO_TRADE",
+        inputDigest: digestValue({
+          cycleIndex,
+          signal: cycle.evaluation.signal?.strategySignalId ?? null,
+          terminalReasonCode: decisionRecord?.universalTerminalReasonCode ?? null,
         }),
-        stateBeforeDigest: priorAccountingDigest,
-        stateAfterDigest: priorAccountingDigest,
-        decisionOrReasonCode: cycle.strategyExecutions.every((entry) => entry.submitBlocked)
-          ? "ABSTAIN"
-          : "NO_TRADE",
+        outputDigest: digestValue({
+          decision: abstainDecision,
+          decisionClass: decisionRecord?.decisionClass ?? null,
+          whyNotCashJson: decisionRecord?.whyNotCashJson ?? null,
+          whyCashOrAbstainJson: decisionRecord?.whyCashOrAbstainJson ?? null,
+          explanationDigest: digestValue({
+            whyNotCashJson: decisionRecord?.whyNotCashJson ?? null,
+            whyCashOrAbstainJson: decisionRecord?.whyCashOrAbstainJson ?? null,
+          }),
+        }),
+        ...noTradeState,
+        decisionOrReasonCode: decisionRecord?.universalTerminalReasonCode ?? abstainDecision,
         economicEffect: NO_ECONOMIC_EFFECT,
-        persistentRecordReferences: emptyPersistentRefs(),
+        persistentRecordReferences: {
+          ...emptyPersistentRefs(),
+          decisionRecordId: decisionRecord?.id ?? null,
+        },
         assertedInvariants: satisfiedInvariants(["ZERO_ORDERS", "ZERO_EXPOSURE_CHANGE"]),
       });
     }
 
     for (const runtimeEvent of cycle.htrRuntimeCallOrder ?? []) {
       const stage = mapRuntimeKindToStage(runtimeEvent.kind);
+      const isEconomic =
+        runtimeEvent.kind === "WP17_FILL_CONSUMED" ||
+        runtimeEvent.kind === "WP20_BREACH_CANCELLATION_EXECUTED" ||
+        runtimeEvent.kind === "WP18_MARK_ATTACHED";
+      const runtimeState = isEconomic
+        ? tracker.observeTransition({
+            kind: runtimeEvent.kind,
+            cycleIndex: runtimeEvent.cycleIndex ?? cycleIndex,
+            detail: runtimeEvent.detail ?? null,
+          })
+        : tracker.observeReadOnly();
       input.collector.append({
         replayTimestamp: runtimeEvent.at,
         capitalPathStage: stage,
@@ -421,10 +507,7 @@ export function emitCapitalPathTraceFromBacktest(
         callee: runtimeEvent.kind,
         inputDigest: digestValue({ cycleIndex: runtimeEvent.cycleIndex ?? cycleIndex }),
         outputDigest: digestValue({ detail: runtimeEvent.detail ?? null }),
-        stateBeforeDigest: priorAccountingDigest,
-        stateAfterDigest: input.accountingState
-          ? computeAccountingSemanticDigest(input.accountingState)
-          : priorAccountingDigest,
+        ...runtimeState,
         decisionOrReasonCode: runtimeEvent.kind,
         economicEffect:
           runtimeEvent.kind === "WP17_FILL_CONSUMED" ||
@@ -437,6 +520,7 @@ export function emitCapitalPathTraceFromBacktest(
     }
 
     if (cycle.htrGuardian) {
+      const guardianState = tracker.observeReadOnly();
       input.collector.append({
         replayTimestamp,
         capitalPathStage: "GUARDIAN_CYCLE",
@@ -448,10 +532,10 @@ export function emitCapitalPathTraceFromBacktest(
         outputDigest: digestValue({
           allowNewExposure: cycle.htrGuardian.allowNewExposure,
           permitRiskReducingExit: cycle.htrGuardian.permitRiskReducingExit,
+          reason: cycle.htrGuardian.reason,
         }),
-        stateBeforeDigest: priorAccountingDigest,
-        stateAfterDigest: priorAccountingDigest,
-        decisionOrReasonCode: cycle.htrGuardian.breachState,
+        ...guardianState,
+        decisionOrReasonCode: cycle.htrGuardian.reason ?? cycle.htrGuardian.breachState,
         economicEffect: NO_ECONOMIC_EFFECT,
         persistentRecordReferences: emptyPersistentRefs(),
         assertedInvariants: satisfiedInvariants(["GUARDIAN_EVALUATED"]),
@@ -460,6 +544,11 @@ export function emitCapitalPathTraceFromBacktest(
 
     for (const guardianExecution of cycle.guardianExecutions ?? []) {
       if (guardianExecution.execution?.status === "submitted") {
+        const exitState = tracker.observeTransition({
+          stage: "EXIT_ORDER",
+          intentId: guardianExecution.intentId,
+          orderId: guardianExecution.execution.order?.id ?? null,
+        });
         input.collector.append({
           replayTimestamp,
           capitalPathStage: "EXIT_ORDER",
@@ -471,8 +560,7 @@ export function emitCapitalPathTraceFromBacktest(
           outputDigest: digestValue({
             orderId: guardianExecution.execution?.order?.id ?? null,
           }),
-          stateBeforeDigest: priorAccountingDigest,
-          stateAfterDigest: priorAccountingDigest,
+          ...exitState,
           decisionOrReasonCode: "GUARDIAN_EXIT",
           economicEffect: OBSERVATION_ONLY_EFFECT,
           persistentRecordReferences: {
@@ -488,6 +576,7 @@ export function emitCapitalPathTraceFromBacktest(
       const failed =
         (cycle.reconciliation.counts.TERMINAL_DRIFT ?? 0) > 0 ||
         (cycle.reconciliation.counts.UNKNOWN_POSITION ?? 0) > 0;
+      const reconciliationState = tracker.observeReadOnly();
       input.collector.append({
         replayTimestamp,
         capitalPathStage: "RECONCILIATION",
@@ -497,8 +586,7 @@ export function emitCapitalPathTraceFromBacktest(
         callee: "reconcile",
         inputDigest: digestValue({ cycleIndex }),
         outputDigest: digestValue({ failed, counts: cycle.reconciliation.counts }),
-        stateBeforeDigest: priorAccountingDigest,
-        stateAfterDigest: priorAccountingDigest,
+        ...reconciliationState,
         decisionOrReasonCode: failed ? "RECONCILIATION_FAIL" : "RECONCILIATION_OK",
         economicEffect: NO_ECONOMIC_EFFECT,
         persistentRecordReferences: emptyPersistentRefs(),
@@ -507,10 +595,6 @@ export function emitCapitalPathTraceFromBacktest(
         ]),
       });
     }
-
-    if (input.accountingState) {
-      priorAccountingDigest = computeAccountingSemanticDigest(input.accountingState);
-    }
   }
 
   if (input.accountingState) {
@@ -518,6 +602,7 @@ export function emitCapitalPathTraceFromBacktest(
       input.barTimestamps?.at(-1) ??
       input.cycleResults.at(-1)?.htrRuntimeCallOrder?.at(-1)?.at ??
       new Date().toISOString();
+    const terminalState = tracker.anchorAccountingState(input.accountingState);
     input.collector.append({
       replayTimestamp: terminalTimestamp,
       capitalPathStage: "TERMINAL_REPORT",
@@ -526,9 +611,8 @@ export function emitCapitalPathTraceFromBacktest(
       caller: "runBacktest",
       callee: "buildBacktestEvaluationExport",
       inputDigest: digestValue({ cycleCount: input.cycleResults.length }),
-      outputDigest: priorAccountingDigest,
-      stateBeforeDigest: priorAccountingDigest,
-      stateAfterDigest: priorAccountingDigest,
+      outputDigest: terminalState.stateAfterDigest,
+      ...terminalState,
       decisionOrReasonCode: "TERMINAL_EXPORT",
       economicEffect: {
         cashDelta: input.accountingState.cash,
@@ -543,6 +627,7 @@ export function emitCapitalPathTraceFromBacktest(
     });
 
     if (compareDecimal(input.accountingState.netRealizedPnl, "0") !== 0) {
+      const closedTradeState = tracker.observeReadOnly();
       input.collector.append({
         replayTimestamp: terminalTimestamp,
         capitalPathStage: "CLOSED_TRADE",
@@ -552,8 +637,7 @@ export function emitCapitalPathTraceFromBacktest(
         callee: "deriveTradesFromFills",
         inputDigest: digestValue({ fillCount: input.accountingState.consumedFillIds.length }),
         outputDigest: digestValue({ netRealizedPnl: input.accountingState.netRealizedPnl }),
-        stateBeforeDigest: priorAccountingDigest,
-        stateAfterDigest: priorAccountingDigest,
+        ...closedTradeState,
         decisionOrReasonCode:
           compareDecimal(input.accountingState.netRealizedPnl, "0") > 0
             ? "PROFITABLE_CLOSED_TRADE"

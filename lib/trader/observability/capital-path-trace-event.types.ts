@@ -56,6 +56,7 @@ export type CapitalPathTracePersistentRecordReferences = Readonly<{
   reconciliationId: string | null;
   closedTradeId: string | null;
   checkpointId: string | null;
+  decisionRecordId: string | null;
 }>;
 
 export type CapitalPathTraceAssertedInvariants = Readonly<{
@@ -90,9 +91,17 @@ export type CapitalPathTraceIndexEntryV1 = Readonly<{
   firstTimestamp: string;
   lastTimestamp: string;
   terminalReason: string;
-  economicTerminalState: string;
+  startingCash: string;
+  endingCash: string;
+  terminalPosition: string;
+  grossPnl: string;
+  netPnl: string;
+  fees: string;
+  spreadCost: string;
+  marketImpactCost: string;
   semanticDigest: string;
   result: "PASS" | "FAIL";
+  failedInvariants: readonly string[];
 }>;
 
 export type CapitalPathTraceIndexV1 = Readonly<{
@@ -102,6 +111,19 @@ export type CapitalPathTraceIndexV1 = Readonly<{
   tracePassed: number;
   traceFailed: number;
   traceSkipped: number;
+  uniqueTraceIds: number;
+  duplicateTraceIds: number;
+  trace02GuardianStopObserved: boolean;
+  trace03CanonicalAbstentionObserved: boolean;
+  trace04ExactRiskReasonObserved: boolean;
+  drawdownVariantsExpected: number;
+  drawdownVariantsObserved: number;
+  drawdownVariantsPassed: number;
+  drawdownVariantsFailed: number;
+  trace08CapitalPathDuplicateSuppressed: boolean;
+  trace09RunnerIngressRejected: boolean;
+  perEventStateDigestsValid: boolean;
+  fullEconomicNonInterference: boolean;
   indexDigest: string;
   entries: readonly CapitalPathTraceIndexEntryV1[];
 }>;
@@ -205,4 +227,17 @@ export function computeCapitalPathTraceIndexDigest(
   index: Omit<CapitalPathTraceIndexV1, "indexDigest">,
 ): string {
   return computeSemanticSha256Hex(index);
+}
+
+export function assertCapitalPathTraceStateDigestContinuity(
+  events: readonly CapitalPathTraceEventV1[],
+): boolean {
+  for (let index = 1; index < events.length; index += 1) {
+    const previous = events[index - 1]!;
+    const current = events[index]!;
+    if (current.stateBeforeDigest !== previous.stateAfterDigest) {
+      return false;
+    }
+  }
+  return true;
 }

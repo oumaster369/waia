@@ -4,40 +4,50 @@ import { tmpdir } from "node:os";
 
 import { getDb } from "@/db/client";
 import { computeAccountingSemanticDigest } from "@/lib/trader/accounting";
-import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
+import { normalizeAccountingStateDrawdownFields } from "@/lib/trader/accounting/accounting-frontier.types";
+import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
+import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
+import { runBacktest, type RunBacktestResult } from "@/lib/trader/backtest/backtest-runner";
+import { HTR_GUARDIAN_EXIT_REASON_V1 } from "@/lib/trader/guardian/htr-guardian-exit-taxonomy";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
-import { assertIngestBarsIntegrity } from "@/lib/trader/market-data/ingress/bar-integrity-gate";
 import {
   costModelV1FromAuthority,
   createHtrHistoricalCostModelAuthorityV1,
 } from "@/lib/trader/execution/htr-historical-cost-model-authority";
+import type { OrderRepository, OrderRow } from "@/lib/trader/execution/order-repository.types";
+import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import { MEAN_REVERSION_V0, type Bar } from "@/lib/trader/intelligence/types";
-import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
-import {
-  createHtrInitialAccountRiskState,
-  HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
-} from "@/lib/trader/research/htr-initial-portfolio-contract";
-import { buildResearchV2PortfolioContext } from "@/lib/trader/research/research-portfolio-config";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import {
   createCapitalPathTraceCollector,
   emitCapitalPathTraceFromBacktest,
+  CAPITAL_PATH_TRACE_EMPTY_STATE_DIGEST,
   type CapitalPathTraceCollector,
 } from "@/lib/trader/observability/capital-path-trace-collector";
-import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import {
-  computeCapitalPathTraceIndexDigest,
+  assertCapitalPathTraceStateDigestContinuity,
   computeCapitalPathTraceCheckpointComparableDigest,
+  computeCapitalPathTraceIndexDigest,
   CAPITAL_PATH_TRACE_INDEX_SCHEMA_VERSION,
   type CapitalPathTraceIndexEntryV1,
   type CapitalPathTraceIndexV1,
 } from "@/lib/trader/observability/capital-path-trace-event.types";
 import type { BreachCancellationResultV1 } from "@/lib/trader/execution/execution-service.types";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
+import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
+import {
+  createHtrInitialAccountRiskState,
+  HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
+} from "@/lib/trader/research/htr-initial-portfolio-contract";
+import { buildResearchV2PortfolioContext } from "@/lib/trader/research/research-portfolio-config";
 import { DEFAULT_D20_DRAWDOWN_POLICY } from "@/lib/trader/risk/drawdown-policy.types";
+import { capitalReasonCodes } from "@/lib/trader/risk/reason-codes";
 import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import { compareDecimal } from "@/lib/trader/risk/numeric";
+import { buildStrategyAttributionKey } from "@/lib/trader/risk/strategy-attribution";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { createAcceptedMarketOrder } from "@/tests/unit/helpers/wp17-execution-fixtures";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
@@ -60,6 +70,21 @@ export const TRACE_SCENARIOS = [
 
 export type TraceScenarioId = (typeof TRACE_SCENARIOS)[number];
 
+export type TraceScenarioMetrics = {
+  eventCount: number;
+  firstTimestamp: string;
+  lastTimestamp: string;
+  startingCash: string;
+  endingCash: string;
+  terminalPosition: string;
+  grossPnl: string;
+  netPnl: string;
+  fees: string;
+  spreadCost: string;
+  marketImpactCost: string;
+  semanticDigest: string;
+};
+
 export type TraceScenarioResult = {
   scenario: TraceScenarioId;
   collector: CapitalPathTraceCollector;
@@ -67,6 +92,38 @@ export type TraceScenarioResult = {
   terminalReason: string;
   economicTerminalState: string;
   failureReason?: string;
+  failedInvariants: string[];
+  metrics: TraceScenarioMetrics;
+  trace02GuardianStopObserved?: boolean;
+  trace03CanonicalAbstentionObserved?: boolean;
+  trace04ExactRiskReasonObserved?: boolean;
+  drawdownVariantResults?: readonly DrawdownVariantResult[];
+  trace08CapitalPathDuplicateSuppressed?: boolean;
+  trace09RunnerIngressRejected?: boolean;
+};
+
+export type DrawdownVariantResult = {
+  variantId: string;
+  passed: boolean;
+  crossed: boolean;
+  drawdownBps: number;
+  thresholdBps: number;
+  breachState: string;
+  guardianReason: string | null;
+};
+
+type TraceScenarioFlags = {
+  trace02GuardianStopObserved: boolean;
+  trace03CanonicalAbstentionObserved: boolean;
+  trace04ExactRiskReasonObserved: boolean;
+  drawdownVariantsExpected: number;
+  drawdownVariantsObserved: number;
+  drawdownVariantsPassed: number;
+  drawdownVariantsFailed: number;
+  trace08CapitalPathDuplicateSuppressed: boolean;
+  trace09RunnerIngressRejected: boolean;
+  perEventStateDigestsValid: boolean;
+  fullEconomicNonInterference: boolean;
 };
 
 function htrTraceCostModel() {
@@ -94,6 +151,108 @@ type CycleWithBreachCancellation = PaperCycleResult & {
 
 function digestPayload(value: unknown): string {
   return computeSemanticSha256Hex(value);
+}
+
+function failedInvariantNames(checks: Record<string, boolean>): string[] {
+  return Object.entries(checks)
+    .filter(([, satisfied]) => !satisfied)
+    .map(([name]) => name);
+}
+
+function allInvariantsPass(checks: Record<string, boolean>): boolean {
+  return Object.values(checks).every(Boolean);
+}
+
+function buildScenarioMetrics(input: {
+  collector: CapitalPathTraceCollector;
+  accountingState?: AccountingStateV1 | null;
+  htrPnlReport?: HtrPnlReportV1 | null;
+}): TraceScenarioMetrics {
+  const events = input.collector.events;
+  const state = input.accountingState;
+  const report = input.htrPnlReport;
+  return {
+    eventCount: events.length,
+    firstTimestamp: events[0]?.replayTimestamp ?? "",
+    lastTimestamp: events.at(-1)?.replayTimestamp ?? "",
+    startingCash: HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
+    endingCash: state?.cash ?? HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
+    terminalPosition: state?.positions.BTCUSDT?.quantity ?? "0",
+    grossPnl: state?.grossRealizedPnl ?? report?.grossRealizedPnlUsdt ?? "0",
+    netPnl: state?.netRealizedPnl ?? report?.netRealizedPnlUsdt ?? "0",
+    fees: report?.totalExecutionCostUsdt ?? "0",
+    spreadCost: report?.totalExecutionCostUsdt ?? "0",
+    marketImpactCost: "0",
+    semanticDigest: input.collector.semanticDigest(),
+  };
+}
+
+function finalizeScenarioResult(input: {
+  scenario: TraceScenarioId;
+  collector: CapitalPathTraceCollector;
+  invariants: Record<string, boolean>;
+  terminalReason: string;
+  economicTerminalState: string;
+  accountingState?: AccountingStateV1 | null;
+  htrPnlReport?: HtrPnlReportV1 | null;
+  extras?: Partial<TraceScenarioResult>;
+}): TraceScenarioResult {
+  const failedInvariants = failedInvariantNames(input.invariants);
+  const passed = failedInvariants.length === 0;
+  return {
+    scenario: input.scenario,
+    collector: input.collector,
+    passed,
+    terminalReason: passed ? input.terminalReason : `${input.scenario}_ASSERTION_FAILED`,
+    economicTerminalState: input.economicTerminalState,
+    failureReason: passed
+      ? undefined
+      : `failed invariants: ${failedInvariants.join(", ") || "unknown"}`,
+    failedInvariants,
+    metrics: buildScenarioMetrics({
+      collector: input.collector,
+      accountingState: input.accountingState,
+      htrPnlReport: input.htrPnlReport,
+    }),
+    ...input.extras,
+  };
+}
+
+function barsWithMarkSequence(closes: string[]): Bar[] {
+  const minimum = Math.max(closes.length, 25);
+  const bars: Bar[] = [];
+  for (let index = 0; index < minimum; index += 1) {
+    const close = closes[Math.min(index, closes.length - 1)]!;
+    const openTime = new Date(
+      Date.parse("2026-01-01T00:00:00.000Z") + index * 60_000,
+    ).toISOString();
+    const closeTime = new Date(Date.parse(openTime) + 60_000).toISOString();
+    bars.push({
+      symbol: "BTC/USDT",
+      interval: "1m",
+      barOpenTime: openTime,
+      barCloseTime: closeTime,
+      open: close,
+      high: close,
+      low: close,
+      close,
+      volume: "12.50",
+    });
+  }
+  return bars;
+}
+
+function barsForDrawdownCursorScenario(input: {
+  preBreachClose: string;
+  breachClose: string;
+  breachFromPhysicalIndex: number;
+  totalBars?: number;
+}): Bar[] {
+  const totalBars = input.totalBars ?? input.breachFromPhysicalIndex + 3;
+  const closes = Array.from({ length: totalBars }, (_, index) =>
+    index < input.breachFromPhysicalIndex ? input.preBreachClose : input.breachClose,
+  );
+  return barsWithMarkSequence(closes);
 }
 
 function resolveTerminalGuardian(
@@ -180,6 +339,9 @@ async function runInstrumentedBacktest(input: {
     ReturnType<typeof runBacktest>
   >["accountingFrontierState"];
   portfolio?: ReturnType<typeof buildResearchV2PortfolioContext>;
+  activeStrategyIds?: readonly string[];
+  historicalProfile?: typeof HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1;
+  windowMode?: "expanding" | "cursor";
 }) {
   const window = {
     start: new Date(input.bars[0]!.barOpenTime),
@@ -194,6 +356,7 @@ async function runInstrumentedBacktest(input: {
     barSource: new HistoricalBarReplaySource({
       bars: input.bars,
       cycleIdPrefix: input.runId,
+      windowMode: input.windowMode,
     }),
     deps: input.session.deps,
     orderRepository: input.session.orderRepository,
@@ -213,7 +376,8 @@ async function runInstrumentedBacktest(input: {
     historicalExecutionProfile: input.session.historicalExecutionProfile,
     maxCycles: input.maxCycles,
     enableReplayFusedContext: false,
-    activeStrategyIds: ["__htr-blocked__"],
+    activeStrategyIds: input.activeStrategyIds ?? ["__htr-blocked__"],
+    historicalProfile: input.historicalProfile,
     portfolio: input.portfolio,
     resumeCycleStartIndex: input.resumeCycleStartIndex,
     initialAccountingFrontierState: input.initialAccountingFrontierState,
@@ -225,6 +389,127 @@ async function runInstrumentedBacktest(input: {
     barTimestamps: barTimestamps(input.bars.slice(0, input.maxCycles + 20)),
   });
   return { result };
+}
+
+async function buildFullEconomicObservation(input: {
+  result: RunBacktestResult;
+  orderRepository: OrderRepository;
+  context: OrgContext;
+}): Promise<unknown> {
+  const orders = await input.orderRepository.listOrders(input.context, {
+    executionMode: "mock",
+  });
+  const state = input.result.accountingState;
+  const drawdownState = state ? normalizeAccountingStateDrawdownFields(state) : null;
+  const lastCycle = input.result.cycleResults.at(-1);
+  const strategyKey = buildStrategyAttributionKey(MEAN_REVERSION_V0, STRATEGY_VERSION);
+  return {
+    decisions: input.result.cycleResults.map((cycle) => ({
+      terminalReasonCode:
+        cycle.evaluation.intelligenceCycleBundle?.envelope.terminalReasonCode ?? null,
+      decisionClass: cycle.evaluation.forecastDecisionBundle?.decision.decisionClass ?? null,
+      strategyExecutionCount: cycle.strategyExecutions.length,
+      riskRejectedCount: cycle.strategyExecutions.filter(
+        (entry) => entry.execution?.status === "risk_rejected",
+      ).length,
+      submittedCount: cycle.strategyExecutions.filter(
+        (entry) => entry.execution?.status === "submitted",
+      ).length,
+    })),
+    orders: orders.map((order) => ({
+      id: order.id,
+      state: order.state,
+      side: order.side,
+      quantity: order.quantity,
+      filledQuantity: order.filledQuantity,
+      clientOrderId: order.clientOrderId,
+      idempotencyKey: order.idempotencyKey,
+    })),
+    orderTransitionCount: orders.length,
+    fillCount: state?.consumedFillIds.length ?? 0,
+    consumedFillIds: state?.consumedFillIds ?? [],
+    cash: state?.cash ?? "0",
+    positions: state?.positions ?? {},
+    grossRealizedPnl: state?.grossRealizedPnl ?? "0",
+    netRealizedPnl: state?.netRealizedPnl ?? "0",
+    unrealizedPnl: input.result.htrPnlReportV1?.netUnrealizedPnlUsdt ?? "0",
+    equity: state?.equity ?? "0",
+    accountHwm: state?.equityHwm ?? "0",
+    monthlyHwm: drawdownState?.monthlyPeakHwm ?? "0",
+    strategyHwm: drawdownState?.strategyPeakHwmByKey[strategyKey] ?? "0",
+    accountDrawdownBps: drawdownState?.accountDrawdownBps ?? 0,
+    monthlyDrawdownBps: drawdownState?.monthlyDrawdownBps ?? 0,
+    strategyDrawdownBps: drawdownState?.strategyDrawdownBpsByKey[strategyKey] ?? 0,
+    guardianState: lastCycle?.htrGuardian ?? null,
+    reconciliation: lastCycle?.reconciliation?.counts ?? null,
+    terminalReport: input.result.htrPnlReportV1 ?? null,
+    checkpointState: input.result.accountingFrontierState ?? null,
+    exportDigest: input.result.evidenceDigest,
+  };
+}
+
+function digestFullEconomicObservation(observation: unknown): string {
+  return computeSemanticSha256Hex(observation);
+}
+
+function buildEconomicsComparableDigest(input: {
+  result: RunBacktestResult;
+  orders: readonly OrderRow[];
+}): string {
+  const state = input.result.accountingState;
+  const report = input.result.htrPnlReportV1;
+  const drawdownState = state ? normalizeAccountingStateDrawdownFields(state) : null;
+  const strategyKey = buildStrategyAttributionKey(MEAN_REVERSION_V0, STRATEGY_VERSION);
+  return computeSemanticSha256Hex({
+    decisions: input.result.cycleResults.map((cycle) => ({
+      terminalReasonCode:
+        cycle.evaluation.intelligenceCycleBundle?.envelope.terminalReasonCode ?? null,
+      decisionClass: cycle.evaluation.forecastDecisionBundle?.decision.decisionClass ?? null,
+      strategyExecutionCount: cycle.strategyExecutions.length,
+      riskRejectedCount: cycle.strategyExecutions.filter(
+        (entry) => entry.execution?.status === "risk_rejected",
+      ).length,
+      submittedCount: cycle.strategyExecutions.filter(
+        (entry) => entry.execution?.status === "submitted",
+      ).length,
+    })),
+    orders: [...input.orders]
+      .map((order) => ({
+        state: order.state,
+        side: order.side,
+        quantity: order.quantity,
+        filledQuantity: order.filledQuantity,
+      }))
+      .sort((left, right) =>
+        `${left.side}:${left.state}`.localeCompare(`${right.side}:${right.state}`),
+      ),
+    fillCount: state?.consumedFillIds.length ?? 0,
+    cash: state?.cash ?? "0",
+    positions: state?.positions ?? {},
+    grossRealizedPnl: state?.grossRealizedPnl ?? "0",
+    netRealizedPnl: state?.netRealizedPnl ?? "0",
+    unrealizedPnl: report?.netUnrealizedPnlUsdt ?? "0",
+    equity: state?.equity ?? "0",
+    accountHwm: state?.equityHwm ?? "0",
+    monthlyHwm: drawdownState?.monthlyPeakHwm ?? "0",
+    strategyHwm: drawdownState?.strategyPeakHwmByKey[strategyKey] ?? "0",
+    accountDrawdownBps: drawdownState?.accountDrawdownBps ?? 0,
+    monthlyDrawdownBps: drawdownState?.monthlyDrawdownBps ?? 0,
+    strategyDrawdownBps: drawdownState?.strategyDrawdownBpsByKey[strategyKey] ?? 0,
+    guardianState: input.result.cycleResults.at(-1)?.htrGuardian ?? null,
+    reconciliation: input.result.cycleResults.at(-1)?.reconciliation?.counts ?? null,
+    terminalReport: report
+      ? {
+          terminalCashUsdt: report.terminalCashUsdt,
+          terminalEquityUsdt: report.terminalEquityUsdt,
+          grossRealizedPnlUsdt: report.grossRealizedPnlUsdt,
+          netRealizedPnlUsdt: report.netRealizedPnlUsdt,
+          totalExecutionCostUsdt: report.totalExecutionCostUsdt,
+          accountDrawdownBps: report.accountDrawdownBps,
+        }
+      : null,
+    checkpointSequence: input.result.accountingFrontierState?.accountingSequence ?? null,
+  });
 }
 
 export async function runTraceScenario01(): Promise<TraceScenarioResult> {
@@ -295,17 +580,22 @@ export async function runTraceScenario01(): Promise<TraceScenarioResult> {
       accountingState: result.accountingState,
       barTimestamps: barTimestamps(bars),
     });
-    const passed =
-      (result.accountingState?.consumedFillIds.length ?? 0) >= 2 &&
-      compareDecimal(result.accountingState?.netRealizedPnl ?? "0", "0") > 0;
-    return {
+    const invariants = {
+      ENTRY_AND_EXIT_FILLS: (result.accountingState?.consumedFillIds.length ?? 0) >= 2,
+      POSITIVE_NET_REALIZED_PNL:
+        compareDecimal(result.accountingState?.netRealizedPnl ?? "0", "0") > 0,
+      POSITIVE_GROSS_REALIZED_PNL:
+        compareDecimal(result.accountingState?.grossRealizedPnl ?? "0", "0") > 0,
+    };
+    return finalizeScenarioResult({
       scenario: "TRACE-01",
       collector,
-      passed,
-      terminalReason: passed ? "PROFITABLE_CLOSED_TRADE" : "TRACE-01_ASSERTION_FAILED",
+      invariants,
+      terminalReason: "PROFITABLE_CLOSED_TRADE",
       economicTerminalState: result.accountingState?.netRealizedPnl ?? "0",
-      failureReason: passed ? undefined : "expected positive net realized PnL with closed trade",
-    };
+      accountingState: result.accountingState,
+      htrPnlReport: result.htrPnlReportV1,
+    });
   } finally {
     session.cleanup();
   }
@@ -318,20 +608,14 @@ export async function runTraceScenario02(): Promise<TraceScenarioResult> {
   });
   const { session, context } = await seedResearchSession(TRACE_SCENARIO_SLOT["TRACE-02"]);
   try {
-    const bars = flatBars(25, "80000.00");
-    bars[22] = {
-      ...bars[22]!,
-      close: "30000.00",
-      low: "30000.00",
-      high: "30000.00",
-      open: "30000.00",
-    };
-    const window = {
-      start: new Date(bars[0]!.barOpenTime),
-      end: new Date(bars.at(-1)!.barCloseTime),
-    };
+    const bars = barsForDrawdownCursorScenario({
+      preBreachClose: "80000.00",
+      breachClose: "28000.00",
+      breachFromPhysicalIndex: 23,
+      totalBars: 28,
+    });
     const buyOrder = await createAcceptedMarketOrder(session.orderRepository, context, {
-      quantity: "0.01000000",
+      quantity: "0.50000000",
       symbol: "BTC/USDT",
     });
     session.historicalExecutionProfile.exchange.registerOrder(
@@ -340,61 +624,62 @@ export async function runTraceScenario02(): Promise<TraceScenarioResult> {
       Date.parse(bars[0]!.barCloseTime),
     );
     const sellOrder = await createAcceptedMarketOrder(session.orderRepository, context, {
-      quantity: "0.01000000",
+      quantity: "0.50000000",
       symbol: "BTC/USDT",
       side: "sell",
     });
     session.historicalExecutionProfile.exchange.registerOrder(
       { ...sellOrder, symbol: "BTCUSDT" },
-      2,
-      Date.parse(bars[2]!.barCloseTime),
+      6,
+      Date.parse(bars[6]!.barCloseTime),
     );
-    const costModel = htrTraceCostModel();
-    const result = await runBacktest({
+    const { result } = await runInstrumentedBacktest({
+      session,
       context,
-      barSource: new HistoricalBarReplaySource({ bars, cycleIdPrefix: "trace-02" }),
-      deps: session.deps,
-      orderRepository: session.orderRepository,
-      accountKey: "trace-02",
-      defaultQuantity: "0.01",
-      costModel,
-      strategySignalIds: [MEAN_REVERSION_V0],
-      strategyId: MEAN_REVERSION_V0,
-      strategyVersion: STRATEGY_VERSION,
-      regimeLabel: "AGGREGATE",
-      datasetId: "dataset-trace-02",
+      bars,
       runId: "trace-02",
-      split: "validation",
-      window,
-      accountState: createHtrInitialAccountRiskState(),
-      exportedAt: new Date(window.end),
-      historicalExecutionProfile: session.historicalExecutionProfile,
       maxCycles: 8,
-      enableReplayFusedContext: false,
-      activeStrategyIds: ["__htr-blocked__"],
-    });
-    emitCapitalPathTraceFromBacktest({
       collector,
-      cycleResults: result.cycleResults,
-      accountingState: result.accountingState,
-      barTimestamps: barTimestamps(bars),
     });
-    const guardianObserved =
-      (result.htrRuntimeCallOrder?.some((event) => event.kind === "WP20_GUARDIAN_EVALUATED") ??
-        resolveTerminalGuardian(result.cycleResults) !== undefined) ||
-      (result.accountingState?.consumedFillIds.length ?? 0) >= 2;
-    const passed =
-      (result.accountingState?.consumedFillIds.length ?? 0) >= 2 &&
-      compareDecimal(result.accountingState?.netRealizedPnl ?? "0", "0") < 0 &&
-      guardianObserved;
-    return {
+    const stopCycle = result.cycleResults.find(
+      (cycle) => cycle.htrGuardian?.breachState === "STOP_ACCOUNT",
+    );
+    const guardianReason = stopCycle?.htrGuardian?.reason ?? null;
+    const guardianStopEvent = collector.events.find(
+      (event) =>
+        event.capitalPathStage === "GUARDIAN_CYCLE" &&
+        event.decisionOrReasonCode === guardianReason,
+    );
+    const invariants = {
+      ACTIONABLE_ENTRY_FILL: (result.accountingState?.consumedFillIds.length ?? 0) >= 1,
+      GUARDIAN_STOP_DECISION: stopCycle?.htrGuardian?.breachState === "STOP_ACCOUNT",
+      GUARDIAN_REASON:
+        guardianReason === HTR_GUARDIAN_EXIT_REASON_V1.accountStop ||
+        guardianReason === HTR_GUARDIAN_EXIT_REASON_V1.accountDrawdownBreach,
+      GUARDIAN_TRACE_REASON: guardianStopEvent != null,
+      EXIT_FILL: (result.accountingState?.consumedFillIds.length ?? 0) >= 2,
+      ZERO_TERMINAL_POSITION:
+        compareDecimal(result.accountingState?.positions.BTCUSDT?.quantity ?? "0", "0") === 0,
+      NEGATIVE_GROSS_PNL: compareDecimal(result.accountingState?.grossRealizedPnl ?? "0", "0") < 0,
+      NEGATIVE_NET_PNL: compareDecimal(result.accountingState?.netRealizedPnl ?? "0", "0") < 0,
+      D5_COSTS_INCLUDED:
+        compareDecimal(result.htrPnlReportV1?.totalExecutionCostUsdt ?? "0", "0") > 0,
+    };
+    return finalizeScenarioResult({
       scenario: "TRACE-02",
       collector,
-      passed,
-      terminalReason: passed ? "LOSING_STOP_EXIT" : "TRACE-02_ASSERTION_FAILED",
+      invariants,
+      terminalReason: guardianReason ?? "LOSING_GUARDIAN_STOP",
       economicTerminalState: result.accountingState?.netRealizedPnl ?? "0",
-      failureReason: passed ? undefined : "expected negative PnL with guardian evaluation",
-    };
+      accountingState: result.accountingState,
+      htrPnlReport: result.htrPnlReportV1,
+      extras: {
+        trace02GuardianStopObserved:
+          stopCycle?.htrGuardian?.breachState === "STOP_ACCOUNT" &&
+          guardianReason != null &&
+          guardianStopEvent != null,
+      },
+    });
   } finally {
     session.cleanup();
   }
@@ -407,32 +692,59 @@ export async function runTraceScenario03(): Promise<TraceScenarioResult> {
   });
   const { session, context } = await seedResearchSession(TRACE_SCENARIO_SLOT["TRACE-03"]);
   try {
-    const bars = flatBars(22);
+    const bars = flatBars(30, "65000.00");
     const { result } = await runInstrumentedBacktest({
       session,
       context,
       bars,
       runId: "trace-03",
-      maxCycles: 5,
+      maxCycles: 8,
       collector,
+      activeStrategyIds: [MEAN_REVERSION_V0],
+      historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
     });
     const orders = await session.orderRepository.listOrders(context, { executionMode: "mock" });
-    const hasNoTrade = collector.events.some((event) => event.capitalPathStage === "NO_TRADE");
-    const passed =
-      orders.length === 0 &&
-      hasNoTrade &&
-      compareDecimal(
-        result.accountingState?.cash ?? "0",
-        HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
-      ) === 0;
-    return {
+    const abstainCycle = result.cycleResults.find((cycle) => {
+      const decision = cycle.evaluation.forecastDecisionBundle?.decision;
+      return (
+        decision?.decisionClass === "NO_TRADE" &&
+        (decision.whyNotCashJson != null || decision.whyCashOrAbstainJson != null)
+      );
+    });
+    const decision = abstainCycle?.evaluation.forecastDecisionBundle?.decision;
+    const explanationPresent = Boolean(
+      decision?.whyNotCashJson != null || decision?.whyCashOrAbstainJson != null,
+    );
+    const invariants = {
+      VALID_DATA_ACCEPTED: result.cycleResults.length > 0,
+      INTELLIGENCE_CYCLE_EXECUTED: result.cycleResults.some(
+        (cycle) => cycle.evaluation.features != null,
+      ),
+      CANONICAL_NO_TRADE_DECISION: decision?.decisionClass === "NO_TRADE",
+      EXPLANATION_POPULATED: explanationPresent,
+      ZERO_ORDERS: orders.length === 0,
+      ZERO_FILLS: (result.accountingState?.consumedFillIds.length ?? 0) === 0,
+      ZERO_CASH_MUTATION:
+        compareDecimal(
+          result.accountingState?.cash ?? "0",
+          HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
+        ) === 0,
+      ZERO_EXPOSURE: compareDecimal(result.accountingState?.markedPositionValue ?? "0", "0") === 0,
+    };
+    return finalizeScenarioResult({
       scenario: "TRACE-03",
       collector,
-      passed,
-      terminalReason: hasNoTrade ? "NO_TRADE" : "TRACE-03_ASSERTION_FAILED",
-      economicTerminalState: HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
-      failureReason: passed ? undefined : "expected zero orders and NO_TRADE stage",
-    };
+      invariants,
+      terminalReason: decision?.universalTerminalReasonCode ?? "NO_TRADE",
+      economicTerminalState:
+        result.accountingState?.cash ?? HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
+      accountingState: result.accountingState,
+      htrPnlReport: result.htrPnlReportV1,
+      extras: {
+        trace03CanonicalAbstentionObserved:
+          decision?.decisionClass === "NO_TRADE" && explanationPresent,
+      },
+    });
   } finally {
     session.cleanup();
   }
@@ -500,22 +812,41 @@ export async function runTraceScenario04(): Promise<TraceScenarioResult> {
       accountingState: result.accountingState,
       barTimestamps: barTimestamps(bars),
     });
-    const riskRejected = collector.events.some(
-      (event) => event.capitalPathStage === "RISK_REJECTION",
-    );
-    const rejectedInCycle = result.cycleResults.some((cycle) =>
-      cycle.strategyExecutions.some((entry) => entry.execution?.status === "risk_rejected"),
+    const riskRejectedExecution = result.cycleResults
+      .flatMap((cycle) => cycle.strategyExecutions)
+      .find((entry) => entry.execution?.status === "risk_rejected");
+    const exactRiskReason =
+      riskRejectedExecution?.execution?.status === "risk_rejected"
+        ? riskRejectedExecution.execution.riskDecision.decision.reasonCodes.includes(
+            capitalReasonCodes.maxOpenOrdersExceeded,
+          )
+        : false;
+    const riskEvent = collector.events.find(
+      (event) =>
+        event.capitalPathStage === "RISK_REJECTION" &&
+        event.decisionOrReasonCode === capitalReasonCodes.maxOpenOrdersExceeded,
     );
     const orders = await session.orderRepository.listOrders(context, { executionMode: "mock" });
-    const passed = riskRejected && rejectedInCycle && orders.length === 1;
-    return {
+    const invariants = {
+      ACTIONABLE_SIGNAL: result.cycleResults.some((cycle) => cycle.evaluation.signals.length > 0),
+      RISK_ENGINE_REACHED: riskRejectedExecution != null,
+      EXACT_RISK_MAX_OPEN_ORDERS: exactRiskReason,
+      TRACE_EVENT_REASON_CODE: riskEvent != null,
+      NO_NEW_ORDER: orders.length === 1,
+      NO_FILL: (result.accountingState?.consumedFillIds.length ?? 0) === 0,
+      NO_EXPOSURE: compareDecimal(result.accountingState?.markedPositionValue ?? "0", "0") === 0,
+      NO_PNL_DELTA: compareDecimal(result.accountingState?.netRealizedPnl ?? "0", "0") === 0,
+    };
+    return finalizeScenarioResult({
       scenario: "TRACE-04",
       collector,
-      passed,
-      terminalReason: riskRejected ? "RISK_REJECTED" : "TRACE-04_ASSERTION_FAILED",
+      invariants,
+      terminalReason: capitalReasonCodes.maxOpenOrdersExceeded,
       economicTerminalState: String(orders.length),
-      failureReason: passed ? undefined : "expected risk rejection without new order",
-    };
+      accountingState: result.accountingState,
+      htrPnlReport: result.htrPnlReportV1,
+      extras: { trace04ExactRiskReasonObserved: exactRiskReason && riskEvent != null },
+    });
   } finally {
     session.cleanup();
   }
@@ -547,193 +878,83 @@ export async function runTraceScenario05(): Promise<TraceScenarioResult> {
       0,
       Date.parse(bars[0]!.barCloseTime),
     );
-    const exitOrder = await createAcceptedMarketOrder(session.orderRepository, context, {
-      quantity: "1.00000000",
-      symbol: "BTC/USDT",
-      side: "sell",
-    });
-    session.historicalExecutionProfile.exchange.registerOrder(
-      { ...exitOrder, symbol: "BTCUSDT" },
-      28,
-      Date.parse(bars[28]!.barCloseTime),
-    );
     const { result } = await runInstrumentedBacktest({
       session,
       context,
       bars,
       runId: "trace-05",
-      maxCycles: 29,
+      maxCycles: 26,
       collector,
     });
     const orders = await session.orderRepository.listOrders(context, { executionMode: "mock" });
     const partialOrder = orders.find((row) => row.id === entryOrder.id);
-    if (partialOrder && partialOrder.state === "PARTIALLY_FILLED") {
-      collector.append({
-        replayTimestamp: bars[1]!.barCloseTime,
-        capitalPathStage: "PARTIAL_FILL",
-        repositoryPath: "lib/trader/execution/historical-simulated-exchange",
-        symbol: "BTC/USDT",
-        caller: "runBacktest",
-        callee: "advanceOnClosedBar",
-        inputDigest: digestPayload({ orderId: entryOrder.id }),
-        outputDigest: digestPayload({
-          filledQuantity: partialOrder.filledQuantity,
-        }),
-        stateBeforeDigest: digestPayload({ state: "ACCEPTED" }),
-        stateAfterDigest: digestPayload({ state: partialOrder.state }),
-        decisionOrReasonCode: "PARTIALLY_FILLED",
-        economicEffect: {
-          cashDelta: null,
-          cashDeltaReason: "OBSERVATION_ONLY",
-          exposureDelta: partialOrder.filledQuantity,
-          exposureDeltaReason: null,
-          realizedPnlDelta: null,
-          realizedPnlDeltaReason: "NO_ECONOMIC_MUTATION",
-        },
-        persistentRecordReferences: {
-          orderId: entryOrder.id,
-          fillId: null,
-          riskDecisionId: null,
-          reconciliationId: null,
-          closedTradeId: null,
-          checkpointId: null,
-        },
-        assertedInvariants: { codes: ["PARTIAL_FILL_OBSERVED"], allSatisfied: true },
-      });
-    }
     const breachCancellation = findBreachCancellation(
       result.cycleResults as CycleWithBreachCancellation[],
     );
-    const terminalGuardian = resolveTerminalGuardian(result.cycleResults);
-    if (breachCancellation) {
-      collector.append({
-        replayTimestamp: bars[24]!.barCloseTime,
-        capitalPathStage: "BREACH_CANCELLATION",
-        repositoryPath: "lib/trader/guardian/htr-breach-partial-entry-cancellation",
-        symbol: "BTC/USDT",
-        caller: "runPaperCycle",
-        callee: "executeBreachPartialEntryCancellation",
-        inputDigest: digestPayload({
-          breach: terminalGuardian?.breachState ?? "NONE",
-        }),
-        outputDigest: digestPayload({
-          cancelledOrderIds: breachCancellation.cancelledOrderIds,
-        }),
-        stateBeforeDigest: digestPayload({ state: "PARTIALLY_FILLED" }),
-        stateAfterDigest: digestPayload({ state: "CANCEL_REQUESTED" }),
-        decisionOrReasonCode: "BREACH_PARTIAL_ENTRY_CANCEL",
-        economicEffect: {
-          cashDelta: null,
-          cashDeltaReason: "NO_ECONOMIC_MUTATION",
-          exposureDelta: partialOrder?.filledQuantity ?? null,
-          exposureDeltaReason: partialOrder ? null : "NOT_APPLICABLE_STAGE",
-          realizedPnlDelta: null,
-          realizedPnlDeltaReason: "NO_ECONOMIC_MUTATION",
-        },
-        persistentRecordReferences: {
-          orderId: entryOrder.id,
-          fillId: null,
-          riskDecisionId: null,
-          reconciliationId: null,
-          closedTradeId: null,
-          checkpointId: null,
-        },
-        assertedInvariants: {
-          codes: ["UNFILLED_QTY_CANCELLED", "FILLED_QTY_REMAINS"],
-          allSatisfied: true,
-        },
-      });
-    }
-    const passed = Boolean(
-      (partialOrder?.state === "PARTIALLY_FILLED" ||
-        result.htrRuntimeCallOrder?.some((event) => event.kind === "WP17_FILL_CONSUMED")) &&
-      (breachCancellation !== undefined ||
+    const partialFillObserved =
+      result.htrRuntimeCallOrder?.some((event) => event.kind === "WP17_FILL_CONSUMED") === true;
+    const guardianPartialCancel = result.cycleResults.some(
+      (cycle) => cycle.htrGuardian?.cancelPartialEntry === true,
+    );
+    const invariants = {
+      PARTIAL_FILL_RUNTIME: partialFillObserved,
+      GUARDIAN_PARTIAL_CANCEL_ARMED: guardianPartialCancel,
+      BREACH_CANCELLATION: breachCancellation != null,
+      RUNTIME_BREACH_CANCELLATION:
         result.htrRuntimeCallOrder?.some(
           (event) => event.kind === "WP20_BREACH_CANCELLATION_EXECUTED",
-        )),
-    );
-    return {
+        ) === true,
+      OPEN_ENTRY_ORDER_PRESENT: partialOrder != null,
+    };
+    return finalizeScenarioResult({
       scenario: "TRACE-05",
       collector,
-      passed,
-      terminalReason: passed ? "PARTIAL_BREACH_HANDLED" : "TRACE-05_ASSERTION_FAILED",
+      invariants,
+      terminalReason: "PARTIAL_BREACH_HANDLED",
       economicTerminalState: result.accountingState?.netRealizedPnl ?? "0",
-      failureReason: passed
-        ? undefined
-        : "expected partial fill and breach cancellation on full path",
-    };
+      accountingState: result.accountingState,
+      htrPnlReport: result.htrPnlReportV1,
+    });
   } finally {
     session.cleanup();
   }
 }
 
-export async function runTraceScenario06(): Promise<TraceScenarioResult> {
-  const collector = createCapitalPathTraceCollector({
-    traceId: "trace-06-drawdown-domains",
-    scenario: "TRACE-06",
-  });
-  const { session, context } = await seedResearchSession(TRACE_SCENARIO_SLOT["TRACE-06"]);
+async function runDrawdownDomainVariant(input: {
+  collector: CapitalPathTraceCollector;
+  scenarioSlot: number;
+  variantId: string;
+  domain: "account" | "monthly" | "strategy";
+  expectCross: boolean;
+  bars: Bar[];
+  maxCycles: number;
+  registerOrders?: (input: {
+    session: Awaited<ReturnType<typeof seedResearchSession>>["session"];
+    context: OrgContext;
+    bars: Bar[];
+  }) => Promise<void>;
+}): Promise<DrawdownVariantResult> {
+  const thresholdBps =
+    input.domain === "account"
+      ? DEFAULT_D20_DRAWDOWN_POLICY.accountBps
+      : input.domain === "monthly"
+        ? DEFAULT_D20_DRAWDOWN_POLICY.monthlyBps
+        : DEFAULT_D20_DRAWDOWN_POLICY.strategyBps;
+  const { session, context } = await seedResearchSession(input.scenarioSlot);
   try {
-    const bars = flatBars(30, "80000.00");
-    bars[24] = {
-      ...bars[24]!,
-      close: "30000.00",
-      low: "30000.00",
-      high: "30000.00",
-      open: "30000.00",
-    };
-    for (let index = 25; index < bars.length; index += 1) {
-      bars[index] = {
-        ...bars[index]!,
-        close: "30000.00",
-        low: "30000.00",
-        high: "30000.00",
-        open: "30000.00",
-      };
-    }
-    const buyOrder = await createAcceptedMarketOrder(session.orderRepository, context, {
-      quantity: "0.50000000",
-      symbol: "BTC/USDT",
-    });
-    session.historicalExecutionProfile.exchange.registerOrder(
-      { ...buyOrder, symbol: "BTCUSDT" },
-      0,
-      Date.parse(bars[0]!.barCloseTime),
-    );
-    const { result } = await runInstrumentedBacktest({
-      session,
-      context,
-      bars,
-      runId: "trace-06",
-      maxCycles: 28,
-      collector,
-    });
-    const terminalGuardian = resolveTerminalGuardian(result.cycleResults);
-    for (const threshold of [
-      { domain: "account_25", limit: DEFAULT_D20_DRAWDOWN_POLICY.accountBps },
-      { domain: "monthly_15", limit: DEFAULT_D20_DRAWDOWN_POLICY.monthlyBps },
-      { domain: "strategy_20", limit: DEFAULT_D20_DRAWDOWN_POLICY.strategyBps },
-    ]) {
-      collector.append({
-        replayTimestamp: bars[24]!.barCloseTime,
-        capitalPathStage: "DRAWDOWN_DOMAIN",
-        repositoryPath: "lib/trader/guardian/htr-guardian-risk-bridge",
+    if (input.collector.events.length > 0) {
+      input.collector.append({
+        replayTimestamp: input.bars[0]!.barOpenTime,
+        capitalPathStage: "CHECKPOINT",
+        repositoryPath: "lib/trader/research/capital-path-trace-harness",
         symbol: "BTC/USDT",
-        caller: "evaluateHtrGuardianForBridge",
-        callee: "evaluateHtrGuardianCycle",
-        inputDigest: digestPayload({
-          domain: threshold.domain,
-          limit: threshold.limit,
-          equityHwm: result.accountingState?.equityHwm ?? "0",
-        }),
-        outputDigest: digestPayload({
-          breachState: terminalGuardian?.breachState ?? "NONE",
-        }),
-        stateBeforeDigest: digestPayload({ crossed: false }),
-        stateAfterDigest: digestPayload({
-          crossed: (terminalGuardian?.breachState ?? "NONE") !== "NONE",
-        }),
-        decisionOrReasonCode: terminalGuardian?.breachState ?? "NONE",
+        caller: "runDrawdownDomainVariant",
+        callee: "variantBoundary",
+        inputDigest: digestPayload({ variantId: input.variantId }),
+        outputDigest: CAPITAL_PATH_TRACE_EMPTY_STATE_DIGEST,
+        stateBeforeDigest: input.collector.events.at(-1)!.stateAfterDigest,
+        stateAfterDigest: CAPITAL_PATH_TRACE_EMPTY_STATE_DIGEST,
+        decisionOrReasonCode: input.variantId,
         economicEffect: {
           cashDelta: null,
           cashDeltaReason: "NO_ECONOMIC_MUTATION",
@@ -748,30 +969,178 @@ export async function runTraceScenario06(): Promise<TraceScenarioResult> {
           riskDecisionId: null,
           reconciliationId: null,
           closedTradeId: null,
-          checkpointId: null,
+          checkpointId: input.variantId,
+          decisionRecordId: null,
         },
         assertedInvariants: {
-          codes: [`INDEPENDENT_HWM_${threshold.domain}`, "FIRST_CAUSAL_CROSSING"],
-          allSatisfied:
-            result.htrRuntimeCallOrder?.some((event) => event.kind === "WP20_DRAWDOWN_PERSISTED") ??
-            false,
+          codes: ["INDEPENDENT_VARIANT_BOUNDARY"],
+          allSatisfied: true,
         },
       });
     }
-    const passed =
-      collector.events.filter((event) => event.capitalPathStage === "DRAWDOWN_DOMAIN").length >=
-        3 && (terminalGuardian?.breachState ?? "NONE") !== "NONE";
+    if (input.registerOrders) {
+      await input.registerOrders({ session, context, bars: input.bars });
+    }
+    const { result } = await runInstrumentedBacktest({
+      session,
+      context,
+      bars: input.bars,
+      runId: `trace-06-${input.variantId.toLowerCase()}`,
+      maxCycles: input.maxCycles,
+      collector: input.collector,
+    });
+    const drawdownState = result.accountingState
+      ? normalizeAccountingStateDrawdownFields(result.accountingState)
+      : null;
+    const strategyKey = buildStrategyAttributionKey(MEAN_REVERSION_V0, STRATEGY_VERSION);
+    const drawdownBps =
+      input.domain === "account"
+        ? (drawdownState?.accountDrawdownBps ?? 0)
+        : input.domain === "monthly"
+          ? (drawdownState?.monthlyDrawdownBps ?? 0)
+          : (drawdownState?.strategyDrawdownBpsByKey[strategyKey] ?? 0);
+    const guardian = resolveTerminalGuardian(result.cycleResults);
+    const crossed = drawdownBps >= thresholdBps;
+    const runtimeDrawdownEvents =
+      result.htrRuntimeCallOrder?.filter(
+        (event) =>
+          event.kind === "WP20_DRAWDOWN_PERSISTED" || event.kind === "WP20_GUARDIAN_EVALUATED",
+      ).length ?? 0;
+    const passed = input.expectCross
+      ? crossed && (guardian?.breachState ?? "NONE") !== "NONE" && runtimeDrawdownEvents > 0
+      : drawdownBps < thresholdBps &&
+        (guardian?.breachState ?? "NONE") === "NONE" &&
+        runtimeDrawdownEvents >= 0;
     return {
-      scenario: "TRACE-06",
-      collector,
+      variantId: input.variantId,
       passed,
-      terminalReason: passed ? "DRAWDOWN_DOMAINS_TRACED" : "TRACE-06_ASSERTION_FAILED",
-      economicTerminalState: terminalGuardian?.breachState ?? "NONE",
-      failureReason: passed ? undefined : "expected drawdown domain crossing on production runner",
+      crossed,
+      drawdownBps,
+      thresholdBps,
+      breachState: guardian?.breachState ?? "NONE",
+      guardianReason: guardian?.reason ?? null,
     };
   } finally {
     session.cleanup();
   }
+}
+
+export async function runTraceScenario06(): Promise<TraceScenarioResult> {
+  const collector = createCapitalPathTraceCollector({
+    traceId: "trace-06-drawdown-domains",
+    scenario: "TRACE-06",
+  });
+  const registerEntry = async (input: {
+    session: Awaited<ReturnType<typeof seedResearchSession>>["session"];
+    context: OrgContext;
+    bars: Bar[];
+  }) => {
+    const buyOrder = await createAcceptedMarketOrder(input.session.orderRepository, input.context, {
+      quantity: "0.50000000",
+      symbol: "BTC/USDT",
+    });
+    input.session.historicalExecutionProfile.exchange.registerOrder(
+      { ...buyOrder, symbol: "BTCUSDT" },
+      0,
+      Date.parse(input.bars[0]!.barCloseTime),
+    );
+  };
+  const variantResults: DrawdownVariantResult[] = [];
+  variantResults.push(
+    await runDrawdownDomainVariant({
+      collector,
+      scenarioSlot: TRACE_SCENARIO_SLOT["TRACE-06"] * 10 + 1,
+      variantId: "TRACE-06-A-NO-CROSS",
+      domain: "account",
+      expectCross: false,
+      bars: flatBars(28, "65000.00"),
+      maxCycles: 6,
+    }),
+  );
+  variantResults.push(
+    await runDrawdownDomainVariant({
+      collector,
+      scenarioSlot: TRACE_SCENARIO_SLOT["TRACE-06"] * 10 + 2,
+      variantId: "TRACE-06-A-CROSS",
+      domain: "account",
+      expectCross: true,
+      bars: barsForDrawdownCursorScenario({
+        preBreachClose: "80000.00",
+        breachClose: "28000.00",
+        breachFromPhysicalIndex: 23,
+        totalBars: 28,
+      }),
+      maxCycles: 10,
+      registerOrders: registerEntry,
+    }),
+  );
+  variantResults.push(
+    await runDrawdownDomainVariant({
+      collector,
+      scenarioSlot: TRACE_SCENARIO_SLOT["TRACE-06"] * 10 + 3,
+      variantId: "TRACE-06-M-NO-CROSS",
+      domain: "monthly",
+      expectCross: false,
+      bars: flatBars(28, "64000.00"),
+      maxCycles: 6,
+    }),
+  );
+  variantResults.push(
+    await runDrawdownDomainVariant({
+      collector,
+      scenarioSlot: TRACE_SCENARIO_SLOT["TRACE-06"] * 10 + 4,
+      variantId: "TRACE-06-M-CROSS",
+      domain: "monthly",
+      expectCross: true,
+      bars: barsForDrawdownCursorScenario({
+        preBreachClose: "80000.00",
+        breachClose: "28000.00",
+        breachFromPhysicalIndex: 23,
+        totalBars: 28,
+      }),
+      maxCycles: 10,
+      registerOrders: registerEntry,
+    }),
+  );
+  variantResults.push(
+    await runDrawdownDomainVariant({
+      collector,
+      scenarioSlot: TRACE_SCENARIO_SLOT["TRACE-06"] * 10 + 5,
+      variantId: "TRACE-06-S-NO-CROSS",
+      domain: "strategy",
+      expectCross: false,
+      bars: flatBars(28, "64500.00"),
+      maxCycles: 6,
+    }),
+  );
+  variantResults.push(
+    await runDrawdownDomainVariant({
+      collector,
+      scenarioSlot: TRACE_SCENARIO_SLOT["TRACE-06"] * 10 + 6,
+      variantId: "TRACE-06-S-CROSS",
+      domain: "strategy",
+      expectCross: true,
+      bars: barsForDrawdownCursorScenario({
+        preBreachClose: "80000.00",
+        breachClose: "28000.00",
+        breachFromPhysicalIndex: 23,
+        totalBars: 28,
+      }),
+      maxCycles: 10,
+      registerOrders: registerEntry,
+    }),
+  );
+  const invariants = Object.fromEntries(
+    variantResults.map((variant) => [variant.variantId, variant.passed]),
+  );
+  return finalizeScenarioResult({
+    scenario: "TRACE-06",
+    collector,
+    invariants,
+    terminalReason: "DRAWDOWN_DOMAINS_TRACED",
+    economicTerminalState: String(variantResults.filter((variant) => variant.passed).length),
+    extras: { drawdownVariantResults: variantResults },
+  });
 }
 
 export async function runTraceScenario07(): Promise<TraceScenarioResult> {
@@ -821,9 +1190,7 @@ export async function runTraceScenario07(): Promise<TraceScenarioResult> {
       barSource: new HistoricalBarReplaySource({ bars, cycleIdPrefix }),
       maxCycles: 6,
     });
-    uninterruptedAccountingDigest = digestTraceEconomicTerminalState(
-      uninterrupted.accountingState!,
-    );
+    uninterruptedAccountingDigest = computeAccountingSemanticDigest(uninterrupted.accountingState!);
     emitCapitalPathTraceFromBacktest({
       collector: uninterruptedCollector,
       cycleResults: uninterrupted.cycleResults,
@@ -856,7 +1223,7 @@ export async function runTraceScenario07(): Promise<TraceScenarioResult> {
       resumeCycleStartIndex: 3,
       initialAccountingFrontierState: first.accountingFrontierState,
     });
-    resumedAccountingDigest = digestTraceEconomicTerminalState(resumed.accountingState!);
+    resumedAccountingDigest = computeAccountingSemanticDigest(resumed.accountingState!);
     emitCapitalPathTraceFromBacktest({
       collector: resumedCollector,
       cycleResults: [...first.cycleResults, ...resumed.cycleResults],
@@ -899,6 +1266,7 @@ export async function runTraceScenario07(): Promise<TraceScenarioResult> {
       reconciliationId: null,
       closedTradeId: null,
       checkpointId: "trace-07-checkpoint",
+      decisionRecordId: null,
     },
     assertedInvariants: {
       codes: ["TRACE_DIGEST_PARITY", "ACCOUNTING_DIGEST_PARITY"],
@@ -906,14 +1274,100 @@ export async function runTraceScenario07(): Promise<TraceScenarioResult> {
     },
   });
   const passed = digestMatch && accountingMatch;
-  return {
+  return finalizeScenarioResult({
     scenario: "TRACE-07",
     collector: uninterruptedCollector,
-    passed,
+    invariants: {
+      TRACE_DIGEST_PARITY: digestMatch,
+      ACCOUNTING_DIGEST_PARITY: accountingMatch,
+    },
     terminalReason: passed ? "CHECKPOINT_RESUME_PARITY" : "TRACE-07_ASSERTION_FAILED",
     economicTerminalState: HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
-    failureReason: passed ? undefined : "checkpoint/resume digest mismatch",
-  };
+  });
+}
+
+async function runTrace08CapitalPathRun(input: {
+  duplicateRetry: boolean;
+  runId: string;
+}): Promise<{
+  observationDigest: string;
+  firstOrderId: string | null;
+  retryOrderId: string | null;
+  orderCount: number;
+  consumedFillCount: number;
+}> {
+  const { session, context } = await seedResearchSession(
+    input.duplicateRetry
+      ? TRACE_SCENARIO_SLOT["TRACE-08"] * 10 + 2
+      : TRACE_SCENARIO_SLOT["TRACE-08"] * 10 + 1,
+  );
+  const bars = flatBars(10, "65000.00");
+  const idempotencyKey = "trace-08-capital-path-idem";
+  const clientOrderId = "trace-08-capital-path-client";
+  let firstOrderId: string | null = null;
+  let retryOrderId: string | null = null;
+  try {
+    const submitBase = {
+      clientOrderId,
+      idempotencyKey,
+      executionMode: "mock" as const,
+      symbol: "BTC/USDT",
+      side: "buy" as const,
+      type: "market" as const,
+      quantity: "0.01000000",
+      referencePrice: "65000.00",
+      accountKey: input.runId,
+      accountState: createHtrInitialAccountRiskState(),
+      strategySignalId: MEAN_REVERSION_V0,
+    };
+    const firstSubmit = await session.deps.execution.submitOrder(context, submitBase);
+    if (firstSubmit.status === "submitted") {
+      firstOrderId = firstSubmit.order.id;
+    }
+    if (input.duplicateRetry) {
+      const retrySubmit = await session.deps.execution.submitOrder(context, submitBase);
+      if (retrySubmit.status === "submitted") {
+        retryOrderId = retrySubmit.order.id;
+      }
+    }
+    const window = {
+      start: new Date(bars[0]!.barOpenTime),
+      end: new Date(bars.at(-1)!.barCloseTime),
+    };
+    const result = await runBacktest({
+      context,
+      barSource: new HistoricalBarReplaySource({ bars, cycleIdPrefix: input.runId }),
+      deps: session.deps,
+      orderRepository: session.orderRepository,
+      accountKey: input.runId,
+      defaultQuantity: "0.01",
+      costModel: htrTraceCostModel(),
+      strategySignalIds: [MEAN_REVERSION_V0],
+      strategyId: MEAN_REVERSION_V0,
+      strategyVersion: STRATEGY_VERSION,
+      regimeLabel: "AGGREGATE",
+      datasetId: `dataset-${input.runId}`,
+      runId: input.runId,
+      split: "validation",
+      window,
+      accountState: createHtrInitialAccountRiskState(),
+      exportedAt: new Date(window.end),
+      historicalExecutionProfile: session.historicalExecutionProfile,
+      maxCycles: 4,
+      enableReplayFusedContext: false,
+      activeStrategyIds: ["__htr-blocked__"],
+    });
+    const orders = await session.orderRepository.listOrders(context, { executionMode: "mock" });
+    return {
+      observationDigest: buildEconomicsComparableDigest({ result, orders }),
+      firstOrderId,
+      retryOrderId,
+      orderCount: orders.length,
+      consumedFillCount: result.accountingState?.consumedFillIds.length ?? 0,
+    };
+  } finally {
+    session.cleanup();
+  }
 }
 
 export async function runTraceScenario08(): Promise<TraceScenarioResult> {
@@ -921,69 +1375,83 @@ export async function runTraceScenario08(): Promise<TraceScenarioResult> {
     traceId: "trace-08-idempotency",
     scenario: "TRACE-08",
   });
-  const { session, context } = await seedResearchSession(TRACE_SCENARIO_SLOT["TRACE-08"]);
-  try {
-    const idempotencyKey = "trace-08-idem-key";
-    const clientOrderId = "trace-08-client";
-    const createInput = {
-      venue: "HTX" as const,
-      executionMode: "mock" as const,
-      symbol: "BTCUSDT",
-      side: "buy" as const,
-      type: "market" as const,
-      quantity: "0.01",
-      clientOrderId,
-      idempotencyKey,
-      riskDecisionId: "00000000-0000-4000-8000-000000000008",
-    };
-    const first = await session.orderRepository.createOrder(context, createInput);
-    const duplicate = await session.orderRepository.createOrder(context, createInput);
-    collector.append({
-      replayTimestamp: "2026-01-01T00:00:08.000Z",
-      capitalPathStage: "IDEMPOTENCY",
-      repositoryPath: "lib/trader/execution/order-repository",
-      symbol: "BTCUSDT",
-      caller: "createOrder",
-      callee: "idempotencyLookup",
-      inputDigest: digestPayload({ idempotencyKey }),
-      outputDigest: digestPayload({ orderId: duplicate.id }),
-      stateBeforeDigest: digestPayload({ orderCount: 0 }),
-      stateAfterDigest: digestPayload({ orderCount: 1 }),
-      decisionOrReasonCode: "IDEMPOTENT_RETURN",
-      economicEffect: {
-        cashDelta: null,
-        cashDeltaReason: "NO_ECONOMIC_MUTATION",
-        exposureDelta: null,
-        exposureDeltaReason: "NO_ECONOMIC_MUTATION",
-        realizedPnlDelta: null,
-        realizedPnlDeltaReason: "NO_ECONOMIC_MUTATION",
-      },
-      persistentRecordReferences: {
-        orderId: duplicate.id,
-        fillId: null,
-        riskDecisionId: null,
-        reconciliationId: null,
-        closedTradeId: null,
-        checkpointId: null,
-      },
-      assertedInvariants: {
-        codes: ["NO_DUPLICATE_ORDER", "NO_DUPLICATE_INVENTORY", "NO_DUPLICATE_CASH"],
-        allSatisfied: first.id === duplicate.id,
-      },
-    });
-    const orders = await session.orderRepository.listOrders(context, { executionMode: "mock" });
-    const passed = first.id === duplicate.id && orders.length === 1;
-    return {
-      scenario: "TRACE-08",
-      collector,
-      passed,
-      terminalReason: passed ? "IDEMPOTENCY_PRESERVED" : "TRACE-08_ASSERTION_FAILED",
-      economicTerminalState: String(orders.length),
-      failureReason: passed ? undefined : "duplicate idempotency key created second order",
-    };
-  } finally {
-    session.cleanup();
-  }
+  const control = await runTrace08CapitalPathRun({
+    duplicateRetry: false,
+    runId: "trace-08-control",
+  });
+  const duplicate = await runTrace08CapitalPathRun({
+    duplicateRetry: true,
+    runId: "trace-08-duplicate",
+  });
+  const controlDigest = control.observationDigest;
+  const duplicateDigest = duplicate.observationDigest;
+  const suppressionReason =
+    duplicate.firstOrderId != null &&
+    duplicate.retryOrderId != null &&
+    duplicate.firstOrderId === duplicate.retryOrderId
+      ? "IDEMPOTENT_RETURN"
+      : "DUPLICATE_NOT_SUPPRESSED";
+  collector.append({
+    replayTimestamp: "2026-01-01T00:00:08.000Z",
+    capitalPathStage: "IDEMPOTENCY",
+    repositoryPath: "lib/trader/execution/order-execution-service",
+    symbol: "BTC/USDT",
+    caller: "runTraceScenario08",
+    callee: "OrderExecutionService.submitOrder",
+    inputDigest: digestPayload({
+      idempotencyKey: "trace-08-capital-path-idem",
+      duplicateRetry: true,
+    }),
+    outputDigest: digestPayload({
+      firstOrderId: duplicate.firstOrderId,
+      retryOrderId: duplicate.retryOrderId,
+      controlDigest,
+      duplicateDigest,
+    }),
+    stateBeforeDigest: controlDigest,
+    stateAfterDigest: duplicateDigest,
+    decisionOrReasonCode: suppressionReason,
+    economicEffect: {
+      cashDelta: null,
+      cashDeltaReason: "NO_ECONOMIC_MUTATION",
+      exposureDelta: null,
+      exposureDeltaReason: "NO_ECONOMIC_MUTATION",
+      realizedPnlDelta: null,
+      realizedPnlDeltaReason: "NO_ECONOMIC_MUTATION",
+    },
+    persistentRecordReferences: {
+      orderId: duplicate.retryOrderId,
+      fillId: null,
+      riskDecisionId: null,
+      reconciliationId: null,
+      closedTradeId: null,
+      checkpointId: null,
+      decisionRecordId: null,
+    },
+    assertedInvariants: {
+      codes: ["CAPITAL_PATH_DUPLICATE_SUPPRESSED", "CONTROL_DIGEST_MATCH"],
+      allSatisfied: suppressionReason === "IDEMPOTENT_RETURN" && controlDigest === duplicateDigest,
+    },
+  });
+  const invariants = {
+    DUPLICATE_RETRY_REACHED: duplicate.retryOrderId != null,
+    SAME_IDEMPOTENCY_IDENTITY:
+      duplicate.firstOrderId != null &&
+      duplicate.retryOrderId != null &&
+      duplicate.firstOrderId === duplicate.retryOrderId,
+    SINGLE_ORDER_RECORD: duplicate.orderCount === 1,
+    CONTROL_DIGEST_MATCH: controlDigest === duplicateDigest,
+    NO_DUPLICATE_FILL: control.consumedFillCount === duplicate.consumedFillCount,
+    SUPPRESSION_REASON_CAPTURED: suppressionReason === "IDEMPOTENT_RETURN",
+  };
+  return finalizeScenarioResult({
+    scenario: "TRACE-08",
+    collector,
+    invariants,
+    terminalReason: suppressionReason,
+    economicTerminalState: String(duplicate.orderCount),
+    extras: { trace08CapitalPathDuplicateSuppressed: suppressionReason === "IDEMPOTENT_RETURN" },
+  });
 }
 
 export async function runTraceScenario09(): Promise<TraceScenarioResult> {
@@ -993,24 +1461,28 @@ export async function runTraceScenario09(): Promise<TraceScenarioResult> {
   });
   const bars = flatBars(20);
   const malformed = [...bars];
-  malformed[10] = { ...malformed[10]!, close: "not-a-decimal" };
-  const integrity = assertIngestBarsIntegrity({
-    bars: malformed,
-    expectedSymbol: "BTC/USDT",
-    expectedInterval: "1m",
-  });
-  const reasonCode = integrity.ok ? "UNKNOWN" : integrity.reason;
+  malformed[10] = { ...malformed[10]!, volume: "-1.00" };
+  let reasonCode = "UNKNOWN";
+  let runnerConstructed = false;
+  try {
+    new HistoricalBarReplaySource({ bars: malformed, cycleIdPrefix: "trace-09" });
+    runnerConstructed = true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const match = message.match(/\[market-data\] ([A-Z0-9_]+):/);
+    reasonCode = match?.[1] ?? "UNKNOWN";
+  }
   collector.append({
     replayTimestamp: malformed[10]!.barCloseTime,
     capitalPathStage: "DATA_TRUTH_REJECTION",
-    repositoryPath: "lib/trader/market-data/ingress/bar-integrity-gate",
+    repositoryPath: "lib/trader/market-data/historical-bar-replay-source",
     symbol: "BTC/USDT",
-    caller: "HistoricalBarReplaySource",
-    callee: "assertIngestBarsIntegrityOrThrow",
-    inputDigest: digestPayload({ barIndex: 10 }),
-    outputDigest: digestPayload({ reasonCode }),
-    stateBeforeDigest: digestPayload({ intelligence: false }),
-    stateAfterDigest: digestPayload({ intelligence: false }),
+    caller: "runBacktest",
+    callee: "HistoricalBarReplaySource.constructor",
+    inputDigest: digestPayload({ barIndex: 10, volume: malformed[10]!.volume }),
+    outputDigest: digestPayload({ reasonCode, runnerConstructed }),
+    stateBeforeDigest: CAPITAL_PATH_TRACE_EMPTY_STATE_DIGEST,
+    stateAfterDigest: CAPITAL_PATH_TRACE_EMPTY_STATE_DIGEST,
     decisionOrReasonCode: reasonCode,
     economicEffect: {
       cashDelta: null,
@@ -1027,23 +1499,37 @@ export async function runTraceScenario09(): Promise<TraceScenarioResult> {
       reconciliationId: null,
       closedTradeId: null,
       checkpointId: null,
+      decisionRecordId: null,
     },
     assertedInvariants: {
-      codes: ["NO_INTELLIGENCE_CYCLE", "NO_DECISION", "NO_ORDER", "NO_CAPITAL_MUTATION"],
-      allSatisfied: reasonCode !== "UNKNOWN",
+      codes: [
+        "RUNNER_INGRESS_REJECTED",
+        "NO_INTELLIGENCE_CYCLE",
+        "NO_DECISION",
+        "NO_ORDER",
+        "NO_CAPITAL_MUTATION",
+      ],
+      allSatisfied: reasonCode !== "UNKNOWN" && !runnerConstructed,
     },
   });
-  const passed =
-    reasonCode !== "UNKNOWN" &&
-    !collector.events.some((event) => event.capitalPathStage === "INTELLIGENCE");
-  return {
+  const invariants = {
+    RUNNER_INGRESS_ATTEMPTED: true,
+    RUNNER_CONSTRUCTION_REJECTED: !runnerConstructed,
+    EXACT_INGRESS_REASON: reasonCode === "HTR_WP12_INGRESS_NEGATIVE_VOLUME",
+    ZERO_DOWNSTREAM_STAGES: !collector.events.some((event) =>
+      ["INTELLIGENCE", "DECISION", "RISK_EVALUATION", "ORDER_SUBMIT"].includes(
+        event.capitalPathStage,
+      ),
+    ),
+  };
+  return finalizeScenarioResult({
     scenario: "TRACE-09",
     collector,
-    passed,
+    invariants,
     terminalReason: reasonCode,
     economicTerminalState: "REJECTED_PRE_INTELLIGENCE",
-    failureReason: passed ? undefined : "invalid data was not rejected before intelligence",
-  };
+    extras: { trace09RunnerIngressRejected: reasonCode === "HTR_WP12_INGRESS_NEGATIVE_VOLUME" },
+  });
 }
 
 export async function runTraceScenario10(): Promise<TraceScenarioResult> {
@@ -1108,6 +1594,7 @@ export async function runTraceScenario10(): Promise<TraceScenarioResult> {
         reconciliationId: null,
         closedTradeId: null,
         checkpointId: null,
+        decisionRecordId: null,
       },
       assertedInvariants: {
         codes: ["NO_SILENT_POSITION_DISAPPEARANCE", "CASH_INVENTORY_PNL_RECONCILE"],
@@ -1118,14 +1605,19 @@ export async function runTraceScenario10(): Promise<TraceScenarioResult> {
     const passed =
       hasOpenPosition &&
       result.exportBundle.htrPnlReportV1?.terminalCashUsdt === result.accountingState?.cash;
-    return {
+    return finalizeScenarioResult({
       scenario: "TRACE-10",
       collector,
-      passed,
+      invariants: {
+        OPEN_POSITION_PRESERVED: hasOpenPosition,
+        TERMINAL_CASH_RECONCILED:
+          result.exportBundle.htrPnlReportV1?.terminalCashUsdt === result.accountingState?.cash,
+      },
       terminalReason: hasOpenPosition ? "OPEN_POSITION_REPORTED" : "TRACE-10_ASSERTION_FAILED",
       economicTerminalState: openQty,
-      failureReason: passed ? undefined : "expected terminal open position preserved and reported",
-    };
+      accountingState: result.accountingState,
+      htrPnlReport: result.htrPnlReportV1,
+    });
   } finally {
     session.cleanup();
   }
@@ -1147,22 +1639,67 @@ const SCENARIO_RUNNERS: Record<TraceScenarioId, () => Promise<TraceScenarioResul
 export async function runAllCapitalPathTraceScenarios(): Promise<{
   results: TraceScenarioResult[];
   index: CapitalPathTraceIndexV1;
+  flags: TraceScenarioFlags;
 }> {
   const results: TraceScenarioResult[] = [];
   for (const scenario of TRACE_SCENARIOS) {
     results.push(await SCENARIO_RUNNERS[scenario]());
   }
+
+  const traceIds = results.map((result) => result.collector.traceId);
+  const uniqueTraceIds = new Set(traceIds).size;
+  const drawdownVariantResults =
+    results.find((result) => result.scenario === "TRACE-06")?.drawdownVariantResults ?? [];
+  const perEventStateDigestsValid = results.every((result) =>
+    assertCapitalPathTraceStateDigestContinuity(result.collector.events),
+  );
+
   const entries: CapitalPathTraceIndexEntryV1[] = results.map((result) => ({
     traceId: result.collector.traceId,
     scenario: result.scenario,
-    eventCount: result.collector.events.length,
-    firstTimestamp: result.collector.events[0]?.replayTimestamp ?? "",
-    lastTimestamp: result.collector.events.at(-1)?.replayTimestamp ?? "",
+    eventCount: result.metrics.eventCount,
+    firstTimestamp: result.metrics.firstTimestamp,
+    lastTimestamp: result.metrics.lastTimestamp,
     terminalReason: result.terminalReason,
-    economicTerminalState: result.economicTerminalState,
-    semanticDigest: result.collector.semanticDigest(),
+    startingCash: result.metrics.startingCash,
+    endingCash: result.metrics.endingCash,
+    terminalPosition: result.metrics.terminalPosition,
+    grossPnl: result.metrics.grossPnl,
+    netPnl: result.metrics.netPnl,
+    fees: result.metrics.fees,
+    spreadCost: result.metrics.spreadCost,
+    marketImpactCost: result.metrics.marketImpactCost,
+    semanticDigest: result.metrics.semanticDigest,
     result: result.passed ? "PASS" : "FAIL",
+    failedInvariants: result.failedInvariants,
   }));
+
+  const fullEconomicNonInterference = await proveTraceInstrumentationDoesNotAlterEconomics();
+
+  const flags: TraceScenarioFlags = {
+    trace02GuardianStopObserved: results.some(
+      (result) => result.trace02GuardianStopObserved === true,
+    ),
+    trace03CanonicalAbstentionObserved: results.some(
+      (result) => result.trace03CanonicalAbstentionObserved === true,
+    ),
+    trace04ExactRiskReasonObserved: results.some(
+      (result) => result.trace04ExactRiskReasonObserved === true,
+    ),
+    drawdownVariantsExpected: 6,
+    drawdownVariantsObserved: drawdownVariantResults.length,
+    drawdownVariantsPassed: drawdownVariantResults.filter((variant) => variant.passed).length,
+    drawdownVariantsFailed: drawdownVariantResults.filter((variant) => !variant.passed).length,
+    trace08CapitalPathDuplicateSuppressed: results.some(
+      (result) => result.trace08CapitalPathDuplicateSuppressed === true,
+    ),
+    trace09RunnerIngressRejected: results.some(
+      (result) => result.trace09RunnerIngressRejected === true,
+    ),
+    perEventStateDigestsValid,
+    fullEconomicNonInterference,
+  };
+
   const indexBody = {
     schemaVersion: CAPITAL_PATH_TRACE_INDEX_SCHEMA_VERSION,
     traceExpected: TRACE_SCENARIOS.length,
@@ -1170,13 +1707,26 @@ export async function runAllCapitalPathTraceScenarios(): Promise<{
     tracePassed: results.filter((result) => result.passed).length,
     traceFailed: results.filter((result) => !result.passed).length,
     traceSkipped: 0,
+    uniqueTraceIds,
+    duplicateTraceIds: traceIds.length - uniqueTraceIds,
+    trace02GuardianStopObserved: flags.trace02GuardianStopObserved,
+    trace03CanonicalAbstentionObserved: flags.trace03CanonicalAbstentionObserved,
+    trace04ExactRiskReasonObserved: flags.trace04ExactRiskReasonObserved,
+    drawdownVariantsExpected: flags.drawdownVariantsExpected,
+    drawdownVariantsObserved: flags.drawdownVariantsObserved,
+    drawdownVariantsPassed: flags.drawdownVariantsPassed,
+    drawdownVariantsFailed: flags.drawdownVariantsFailed,
+    trace08CapitalPathDuplicateSuppressed: flags.trace08CapitalPathDuplicateSuppressed,
+    trace09RunnerIngressRejected: flags.trace09RunnerIngressRejected,
+    perEventStateDigestsValid: flags.perEventStateDigestsValid,
+    fullEconomicNonInterference: flags.fullEconomicNonInterference,
     entries,
   };
   const index: CapitalPathTraceIndexV1 = {
     ...indexBody,
     indexDigest: computeCapitalPathTraceIndexDigest(indexBody),
   };
-  return { results, index };
+  return { results, index, flags };
 }
 
 export function writeCapitalPathTraceArtifacts(input: {
@@ -1204,67 +1754,60 @@ export async function proveTraceInstrumentationDoesNotAlterEconomics(): Promise<
     end: new Date(bars.at(-1)!.barCloseTime),
   };
   const costModel = htrTraceCostModel();
-  const baselineSession = await seedResearchSession(91);
-  let baselineEconomics = "";
-  try {
-    const baseline = await runBacktest({
-      context: baselineSession.context,
-      barSource: new HistoricalBarReplaySource({ bars, cycleIdPrefix: "trace-parity" }),
-      deps: baselineSession.session.deps,
-      orderRepository: baselineSession.session.orderRepository,
-      accountKey: "trace-parity",
-      defaultQuantity: "0.01",
-      costModel,
-      strategySignalIds: [MEAN_REVERSION_V0],
-      strategyId: MEAN_REVERSION_V0,
-      strategyVersion: STRATEGY_VERSION,
-      regimeLabel: "AGGREGATE",
-      datasetId: "dataset-trace-parity",
-      runId: "trace-parity",
-      split: "validation",
-      window,
-      accountState: createHtrInitialAccountRiskState(),
-      exportedAt: new Date(window.end),
-      historicalExecutionProfile: baselineSession.session.historicalExecutionProfile,
-      maxCycles: 3,
-      enableReplayFusedContext: false,
-      activeStrategyIds: ["__htr-blocked__"],
-    });
-    baselineEconomics = digestTraceEconomicTerminalState(baseline.accountingState!);
-  } finally {
-    baselineSession.session.cleanup();
+
+  async function runBaseline(traced: boolean): Promise<string> {
+    const slot = traced ? 92 : 91;
+    const seeded = await seedResearchSession(slot);
+    try {
+      const collector = traced
+        ? createCapitalPathTraceCollector({
+            traceId: "trace-parity-traced",
+            scenario: "PARITY-ON",
+          })
+        : null;
+      const result = await runBacktest({
+        context: seeded.context,
+        barSource: new HistoricalBarReplaySource({ bars, cycleIdPrefix: "trace-parity" }),
+        deps: seeded.session.deps,
+        orderRepository: seeded.session.orderRepository,
+        accountKey: "trace-parity",
+        defaultQuantity: "0.01",
+        costModel,
+        strategySignalIds: [MEAN_REVERSION_V0],
+        strategyId: MEAN_REVERSION_V0,
+        strategyVersion: STRATEGY_VERSION,
+        regimeLabel: "AGGREGATE",
+        datasetId: "dataset-trace-parity",
+        runId: "trace-parity",
+        split: "validation",
+        window,
+        accountState: createHtrInitialAccountRiskState(),
+        exportedAt: new Date(window.end),
+        historicalExecutionProfile: seeded.session.historicalExecutionProfile,
+        maxCycles: 3,
+        enableReplayFusedContext: false,
+        activeStrategyIds: ["__htr-blocked__"],
+      });
+      if (collector) {
+        emitCapitalPathTraceFromBacktest({
+          collector,
+          cycleResults: result.cycleResults,
+          accountingState: result.accountingState,
+          barTimestamps: barTimestamps(bars),
+        });
+      }
+      const orders = await seeded.session.orderRepository.listOrders(seeded.context, {
+        executionMode: "mock",
+      });
+      return buildEconomicsComparableDigest({ result, orders });
+    } finally {
+      seeded.session.cleanup();
+    }
   }
 
-  const tracedSession = await seedResearchSession(92);
-  try {
-    const instrumented = await runInstrumentedBacktest({
-      session: tracedSession.session,
-      context: tracedSession.context,
-      bars,
-      runId: "trace-parity",
-      maxCycles: 3,
-      collector: createCapitalPathTraceCollector({
-        traceId: "trace-parity-traced",
-        scenario: "PARITY-ON",
-      }),
-    });
-    return (
-      digestTraceEconomicTerminalState(instrumented.result.accountingState!) === baselineEconomics
-    );
-  } finally {
-    tracedSession.session.cleanup();
-  }
-}
-
-function digestTraceEconomicTerminalState(
-  state: NonNullable<Awaited<ReturnType<typeof runBacktest>>["accountingState"]>,
-): string {
-  return computeSemanticSha256Hex({
-    cash: state.cash,
-    equity: state.equity,
-    positions: state.positions,
-    grossRealizedPnl: state.grossRealizedPnl,
-    netRealizedPnl: state.netRealizedPnl,
-    consumedFillIds: state.consumedFillIds,
-  });
+  const baselineA = await runBaseline(false);
+  const tracedA = await runBaseline(true);
+  const baselineB = await runBaseline(false);
+  const tracedB = await runBaseline(true);
+  return baselineA === tracedA && baselineB === tracedB && baselineA === baselineB;
 }

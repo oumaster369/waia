@@ -13,6 +13,7 @@ import {
 } from "@/lib/trader/observability/capital-path-trace-collector";
 import {
   assertCapitalPathTraceEventV1,
+  assertCapitalPathTraceStateDigestContinuity,
   CAPITAL_PATH_TRACE_EVENT_REQUIRED_KEYS,
   CAPITAL_PATH_TRACE_EVENT_SCHEMA_VERSION,
   computeCapitalPathTraceSemanticDigest,
@@ -27,7 +28,7 @@ import {
 
 describe("DEE-415 capital-path trace evidence (TRACE-01..TRACE-10)", () => {
   it("executes all TRACE scenarios with schema-valid chronological evidence", async () => {
-    const { results, index } = await runAllCapitalPathTraceScenarios();
+    const { results, index, flags } = await runAllCapitalPathTraceScenarios();
     const stagingDir = writeCapitalPathTraceArtifacts({ results, index });
 
     try {
@@ -36,12 +37,29 @@ describe("DEE-415 capital-path trace evidence (TRACE-01..TRACE-10)", () => {
       expect(index.tracePassed).toBe(10);
       expect(index.traceFailed).toBe(0);
       expect(index.traceSkipped).toBe(0);
+      expect(index.uniqueTraceIds).toBe(10);
+      expect(index.duplicateTraceIds).toBe(0);
       expect(index.entries).toHaveLength(10);
+
+      expect(index.trace02GuardianStopObserved).toBe(true);
+      expect(index.trace03CanonicalAbstentionObserved).toBe(true);
+      expect(index.trace04ExactRiskReasonObserved).toBe(true);
+      expect(index.drawdownVariantsExpected).toBe(6);
+      expect(index.drawdownVariantsObserved).toBe(6);
+      expect(index.drawdownVariantsPassed).toBe(6);
+      expect(index.drawdownVariantsFailed).toBe(0);
+      expect(index.trace08CapitalPathDuplicateSuppressed).toBe(true);
+      expect(index.trace09RunnerIngressRejected).toBe(true);
+      expect(index.perEventStateDigestsValid).toBe(true);
+      expect(index.fullEconomicNonInterference).toBe(true);
+      expect(flags.fullEconomicNonInterference).toBe(true);
 
       for (const scenario of TRACE_SCENARIOS) {
         const result = results.find((entry) => entry.scenario === scenario);
         expect(result?.passed, result?.failureReason).toBe(true);
+        expect(result?.failedInvariants).toEqual([]);
         expect(result?.collector.events.length).toBeGreaterThan(0);
+        expect(assertCapitalPathTraceStateDigestContinuity(result!.collector.events)).toBe(true);
 
         const jsonl = readFileSync(join(stagingDir, `${scenario}.jsonl`), "utf8");
         const events = jsonl
