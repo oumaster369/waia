@@ -1,5 +1,7 @@
 /** DEE-424 / DEE-431 — bounded Linux systemd unit configuration for FHV rehearsal supervision. */
 
+export const FHV_REHEARSAL_RUNTIME_MAX_SEC = 300;
+
 export const FHV_SYSTEMD_CAMPAIGN_UNIT = "waia-fhv-campaign.service" as const;
 export const FHV_SYSTEMD_OBSERVER_UNIT = "waia-fhv-observer.service" as const;
 
@@ -28,8 +30,8 @@ export type FhvSystemdUnitConfigV1 = Readonly<{
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const CONTROL_CHARS = /[\0\r\n\t]/;
-const UNSAFE_SYSTEMD_CHARS = /[;|`$(){}<>\\]/;
-const ABSOLUTE_PATH = /^\/[^\0\r\n\t]+$/;
+const UNSAFE_SYSTEMD_CHARS = /[;|`$(){}<>\\&%#='" ]/;
+const ABSOLUTE_SAFE_PATH = /^\/(?:[a-zA-Z0-9@._-]+\/)*[a-zA-Z0-9@._-]+$/;
 const SAFE_IDENTIFIER = /^[a-zA-Z0-9._-]+$/;
 const SAFE_RUN_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -45,10 +47,10 @@ export class FhvSystemdUnitConfigError extends Error {
 }
 
 function assertAbsoluteSafePath(field: string, value: string): void {
-  if (!value || !ABSOLUTE_PATH.test(value) || value.includes("..")) {
+  if (!value || !ABSOLUTE_SAFE_PATH.test(value) || value.includes("..")) {
     throw new FhvSystemdUnitConfigError(
       "INVALID_ABSOLUTE_PATH",
-      `${field} must be an absolute safe path.`,
+      `${field} must be an absolute safe path using [a-zA-Z0-9/._-] segments only.`,
     );
   }
   if (CONTROL_CHARS.test(value) || UNSAFE_SYSTEMD_CHARS.test(value)) {

@@ -247,7 +247,7 @@ Reads `previousGitSha` and `imageTag` from `deployed-revision.json` when overrid
 
 For FHV rehearsal and campaign supervision on qualified Linux hosts, use **systemd units** (`waia-fhv-campaign.service`, `waia-fhv-observer.service`) rendered and installed via guarded tooling under [`scripts/ops/fhv-supervisor/`](../../scripts/ops/fhv-supervisor/). See [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md) and [`FHV-RELEASE-IDENTITY-CONTRACT.md`](FHV-RELEASE-IDENTITY-CONTRACT.md).
 
-**Release identity:** `EXECUTION_SERVER_TARGET_SHA` is unresolved until the next Human dev → main release. Never pin a prior release SHA or feature squash SHA in active deploy/rehearse commands.
+**Release identity:** `EXECUTION_SERVER_TARGET_SHA` is unresolved until the next Human dev → main release. Never pin a prior release SHA or feature branch head SHA in active deploy/rehearse commands.
 
 Legacy note: `tmux` or `nohup` may still be used for non-FHV long CLIs until explicitly retired; **FHV campaigns must not use tmux/nohup as the production supervisor** on qualified Linux/systemd hosts.
 

@@ -1026,15 +1026,22 @@ flowchart TB
 | 3 | PR-1 merge (WP-A / DEE-417) | Human squash | release identity (preferred before rehearsal) | **DONE** (PR #405 → `2680e5b…`) |
 | 4 | PR-2 `PASS-FHV-ECONOMIC-NON-INTERFERENCE` | CI + Architect | PR-2 merge | **DONE** |
 | 5 | PR-2 merge to `dev` | Human squash | baseline ops availability | **DONE** (PR #406 → `1e15f789…`) |
-| 5a | Canonical plan status sync | Human squash | release-to-main readiness | **pending** (this docs-only PR) |
-| 5b | dev-to-main release PR | Human merge commit | production promotion | **NOT_EXECUTED** |
-| 6 | `HOST_OS` qualification + supervisor install | Human | execution-server deploy |
-| 7 | `AUTHORIZE-FHV-OPS-DEPLOY` | Human | rehearsal |
-| 8 | Execution Server rehearsal PASS (WP-K) | Human operator | production FHV campaign |
-| 9 | PR-3 merge (WP-J) + REC isolation proof | Human squash | REC availability (optional track) |
-| 10 | Dataset qualification decision | Human | `READY_FOR_FULL_HISTORICAL_TEST` |
-| 11 | `AUTHORIZE-FULL-HISTORICAL-VALIDATION` | Human | multi-day FHV run |
-| 12 | FHV closure report sign-off | Human | next phase |
+| 5a | Canonical plan status sync (PR #407) | Human squash | release-to-main readiness | **DONE** |
+| 5b | dev-to-main release PR (PR #408) | Human merge commit | production promotion | **DONE** (`1744301f…`, tag `v2026.07.21.1744301`, peel PASS) |
+| 5c | main → dev back-sync (PR #409) | Human merge commit | ancestry sync | **DONE** (`48c7749f…`) |
+| 5d | HOST_OS / systemd qualification | Human + repository | supervisor contract | **DONE** (repository; host install pending T4) |
+| 5e | PR #410 DEE-424 systemd rehearsal implementation | Human squash | rehearsal tooling on `dev` | **DONE** (`2f6b164b…`) |
+| 5f | PR #411 DEE-431 release identity correction | Human squash | ops doc/runtime gates | **OPEN** — awaiting Human merge |
+| 5g | Next dev-to-main release | Human merge commit | next production promotion | **NOT_EXECUTED** |
+| 5h | Next main → dev back-sync | Human merge commit | post-release ancestry | **NOT_EXECUTED** |
+| 6 | `HOST_OS` qualification + supervisor install on Execution Server | Human | execution-server deploy | **NOT_EXECUTED** (units not installed) |
+| 7 | `AUTHORIZE-FHV-OPS-DEPLOY` | Human | rehearsal | **NOT_ISSUED** |
+| 8 | Execution Server rehearsal PASS (WP-K / T4) | Human operator | production FHV campaign | **NOT_EXECUTED** |
+| 9 | PR-3 merge (WP-J) + REC isolation proof | Human squash | REC availability (optional track) | **DEFERRED** (DEE-423) |
+| 10 | Dataset qualification decision | Human | `READY_FOR_FULL_HISTORICAL_TEST` | **NOT_EXECUTED** |
+| 11 | Control replay ceremony | Human | control replay gate | **NOT_EXECUTED** |
+| 12 | `AUTHORIZE-FULL-HISTORICAL-VALIDATION` | Human | multi-day FHV run | **NOT_EXECUTED** |
+| 13 | FHV closure report sign-off | Human | next phase | **NOT_EXECUTED** |
 
 **Not in this program:** Cloudflare production SHA confirmation / Worker redeploy (separate release operation).
 

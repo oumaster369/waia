@@ -11,7 +11,9 @@ export type FhvCampaignHeartbeatV1 = Readonly<{
   campaignProcessIdentity: string;
   heartbeatSequence: number;
   heartbeatAtUtc: string;
-  barsProcessed: number;
+  cyclesProcessed: number;
+  /** @deprecated use cyclesProcessed */
+  barsProcessed?: number;
   phase: string;
 }>;
 

@@ -1,5 +1,6 @@
 import {
   assertFhvSystemdUnitConfig,
+  FHV_REHEARSAL_RUNTIME_MAX_SEC,
   FHV_SYSTEMD_CAMPAIGN_UNIT,
   FHV_SYSTEMD_OBSERVER_UNIT,
   type FhvSystemdUnitConfigV1,
@@ -46,6 +47,7 @@ ExecStartPre=${wd}/scripts/ops/execution-server-preflight.sh --repo-path ${wd} -
 ExecStart=${nodeBin} --import tsx --conditions=react-server ${wd}/scripts/trader/fhv-campaign-cli.ts
 Restart=on-failure
 RestartSec=10
+RuntimeMaxSec=${String(FHV_REHEARSAL_RUNTIME_MAX_SEC)}
 StartLimitIntervalSec=300
 StartLimitBurst=3
 TimeoutStopSec=120

@@ -6,10 +6,6 @@ import { writeFhvCampaignHeartbeat } from "@/lib/trader/observability/fhv-campai
 import { assertFhvCampaignRuntimeIdentity } from "@/lib/trader/observability/fhv-campaign-runtime-identity";
 import { FHV_CAMPAIGN_HEARTBEAT_SCHEMA_VERSION } from "@/lib/trader/observability/fhv-observability.constants";
 import {
-  FHV_REHEARSAL_MAX_RUNTIME_MS,
-  readFhvRehearsalManifest,
-} from "@/lib/trader/observability/fhv-rehearsal-launcher";
-import {
   readFhvRehearsalCampaignProgress,
   runFhvRehearsalCampaign,
 } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
@@ -19,7 +15,6 @@ const runId = process.env.FHV_RUN_ID?.trim();
 const organizationId = process.env.FHV_ORGANIZATION_ID?.trim();
 const targetSha = process.env.FHV_TARGET_SHA?.trim();
 const rehearsalMode = process.env.FHV_REHEARSAL_MODE === "true";
-const resumeFromCheckpoint = process.env.FHV_RESUME_FROM_CHECKPOINT === "true";
 
 async function main(): Promise<void> {
   if (!runRoot || !runId || !organizationId) {
@@ -33,15 +28,14 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const manifest = readFhvRehearsalManifest(runRoot);
-  assertFhvCampaignRuntimeIdentity({ runRoot, targetSha, runId, organizationId });
+  const manifest = assertFhvCampaignRuntimeIdentity({ runRoot, targetSha, runId, organizationId });
   const startedAt = Date.now();
   let heartbeatSequence = 0;
-  let lastBarsProcessed = 0;
+  let lastCyclesProcessed = 0;
 
   const heartbeatTimer = setInterval(() => {
     const progress = readFhvRehearsalCampaignProgress(runRoot);
-    lastBarsProcessed = progress?.barsProcessed ?? lastBarsProcessed;
+    lastCyclesProcessed = progress?.cyclesProcessed ?? lastCyclesProcessed;
     heartbeatSequence += 1;
     writeFhvCampaignHeartbeat(runRoot, {
       schemaVersion: FHV_CAMPAIGN_HEARTBEAT_SCHEMA_VERSION,
@@ -50,7 +44,7 @@ async function main(): Promise<void> {
       campaignProcessIdentity: `fhv-campaign-${process.pid}`,
       heartbeatSequence,
       heartbeatAtUtc: new Date().toISOString(),
-      barsProcessed: lastBarsProcessed,
+      cyclesProcessed: lastCyclesProcessed,
       phase: progress?.phase ?? "rehearsal",
     });
   }, 1_000);
@@ -61,17 +55,16 @@ async function main(): Promise<void> {
       runId,
       organizationId,
       targetSha: targetSha!,
-      resumeFromCheckpoint,
     });
-    lastBarsProcessed = result.barsProcessed;
+    lastCyclesProcessed = result.cyclesProcessed;
     const elapsedMs = Date.now() - startedAt;
-    if (elapsedMs > (manifest.maxRuntimeMs ?? FHV_REHEARSAL_MAX_RUNTIME_MS)) {
+    if (elapsedMs > manifest.maxRuntimeMs) {
       process.stderr.write("[fhv-campaign-cli] REHEARSAL_TIMEOUT\n");
       process.exitCode = 1;
       return;
     }
     process.stdout.write(
-      `[fhv-campaign-cli] classification=${result.classification} barsProcessed=${result.barsProcessed} digest=${result.semanticReproDigest.slice(0, 12)}…\n`,
+      `[fhv-campaign-cli] classification=${result.classification} cyclesProcessed=${result.cyclesProcessed} digest=${result.semanticReproDigest.slice(0, 12)}…\n`,
     );
     process.exitCode =
       result.classification === "REHEARSAL_OK"

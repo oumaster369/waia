@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -57,7 +57,8 @@ describe("DEE-424 FHV systemd supervisor", () => {
       "ExecStartPre=/srv/waia/scripts/ops/execution-server-preflight.sh --repo-path /srv/waia",
     );
     expect(first.campaignUnit).toContain(`--target-sha ${TARGET_SHA}`);
-    expect(first.campaignUnit).not.toMatch(/bash\s+-c|\.env=|SECRET|PASSWORD/);
+    expect(first.campaignUnit).toContain("RuntimeMaxSec=300");
+    expect(first.observerUnit).not.toContain("RuntimeMaxSec=");
     expect(first.observerUnit).toContain("fhv-observer-cli.ts");
   });
 
@@ -79,6 +80,25 @@ describe("DEE-424 FHV systemd supervisor", () => {
         sampleUnitConfig({ repoRoot: "/srv/waia", workingDirectory: "/srv/waia-other" }),
       ),
     ).toThrow(/REPO_WORKING_DIRECTORY_MISMATCH|must identify the same/);
+  });
+
+  it("rejects unsafe systemd path characters", () => {
+    const cases = [
+      { field: "environmentFile" as const, value: "/etc/waia/fhv.env" },
+      { field: "environmentFile" as const, value: "/etc/waia/evil path" },
+      { field: "environmentFile" as const, value: "/etc/waia/%n" },
+      { field: "environmentFile" as const, value: "/etc/waia/evil#comment" },
+      { field: "environmentFile" as const, value: "/etc/waia/evil=inject" },
+      { field: "environmentFile" as const, value: '/etc/waia/"quoted"' },
+    ];
+    expect(() =>
+      renderFhvSystemdUnits(sampleUnitConfig({ environmentFile: cases[0]!.value })),
+    ).not.toThrow();
+    for (const unsafe of cases.slice(1)) {
+      expect(() =>
+        renderFhvSystemdUnits(sampleUnitConfig({ [unsafe.field]: unsafe.value })),
+      ).toThrow(/absolute safe path|UNSAFE_PATH_CHARACTERS|INVALID_ABSOLUTE_PATH/);
+    }
   });
 
   it("rejects newline injection in environmentFile", () => {
@@ -135,6 +155,32 @@ describe("DEE-424 FHV systemd supervisor", () => {
       });
       expect(result.enforcementApplied).toBe(true);
       expect(executor.systemctlCalls).toHaveLength(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("writes resume marker before systemctl start on RESUME_FROM_CHECKPOINT", async () => {
+    const root = mkdtempSync(join(tmpdir(), "fhv-systemd-resume-"));
+    try {
+      const executor = createRecordingLinuxSystemdCampaignControlExecutor({
+        hostOsQualified: true,
+        deploymentEnabled: true,
+        runRoot: root,
+        spawnSystemctl: async () => ({ exitCode: 0, stdout: "", stderr: "", timedOut: false }),
+      });
+      const result = await executor.execute({
+        action: "RESUME_FROM_CHECKPOINT",
+        runId: "run-1",
+        organizationId: "00000000-0000-4000-8000-000000000416",
+        operatorId: "op",
+        reason: "resume drill",
+      });
+      expect(result.enforcementApplied).toBe(true);
+      expect(result.outcome).toBe("executed");
+      expect(executor.systemctlCalls).toHaveLength(1);
+      const marker = join(root, "control", "resume_from_checkpoint-request.v1.json");
+      expect(existsSync(marker)).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

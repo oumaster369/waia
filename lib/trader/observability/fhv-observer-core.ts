@@ -62,6 +62,7 @@ export type FhvObserverConfig = Readonly<{
 export type FhvObserverTickInput = Readonly<{
   nowMs?: number;
   barsProcessed?: number;
+  cyclesProcessed?: number;
   barsTotal?: number;
   phase?: string;
   startedAt?: string;
@@ -139,7 +140,11 @@ export async function runFhvObserverTick(
     datasetReadable: null,
   });
 
-  const barsProcessed = input.barsProcessed ?? checkpoint?.evidenceDurableThroughCycleIndex ?? 0;
+  const barsProcessed =
+    input.cyclesProcessed ??
+    input.barsProcessed ??
+    checkpoint?.evidenceDurableThroughCycleIndex ??
+    0;
   const barsTotal = input.barsTotal ?? state.config.pinnedBarsTotal ?? null;
   if (barsProcessed > state.lastBarsProcessed) {
     state.lastBarsProcessed = barsProcessed;

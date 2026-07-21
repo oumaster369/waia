@@ -219,6 +219,8 @@ export type RunBacktestInput = {
     resumeSeq?: number;
     provenance?: import("@/lib/trader/readiness/htr-operator-report-schema.v1").HtrOperatorReportProvenanceSection;
   }>;
+  /** DEE-431: optional non-economic per-cycle boundary hook (default no-op). */
+  onCycleBoundary?: (input: { cycleIndex: number; cycleCount: number }) => "continue" | "stop";
 };
 
 export type RunBacktestResult = {
@@ -805,6 +807,9 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     }
     await evidenceSink.onCycle(cycleIndex, result);
     cycleCount += 1;
+    if (input.onCycleBoundary?.({ cycleIndex, cycleCount }) === "stop") {
+      break;
+    }
 
     const accountRefreshTimer = benchmarkObserver.beginStage("account-state-refresh", cycleIndex);
     if (input.refreshAccountStateBetweenStrategies) {

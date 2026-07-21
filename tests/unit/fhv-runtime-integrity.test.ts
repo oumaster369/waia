@@ -101,6 +101,7 @@ function writeHeartbeat(
     heartbeatSequence: input.sequence,
     heartbeatAtUtc: input.heartbeatAtUtc,
     barsProcessed: input.barsProcessed ?? 0,
+    cyclesProcessed: input.barsProcessed ?? 0,
     phase: "validation",
   });
 }

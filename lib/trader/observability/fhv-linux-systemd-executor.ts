@@ -150,14 +150,15 @@ function mapOperatorActionToSystemd(
   action: FhvOperatorAction,
 ):
   | { kind: "systemctl"; systemdAction: FhvSystemdAllowedAction; unit: string }
-  | { kind: "control_file" } {
+  | { kind: "control_file" }
+  | { kind: "resume_from_checkpoint" } {
   switch (action) {
     case "GRACEFUL_STOP":
       return { kind: "systemctl", systemdAction: "stop", unit: FHV_SYSTEMD_CAMPAIGN_UNIT };
     case "EMERGENCY_STOP":
       return { kind: "systemctl", systemdAction: "stop", unit: FHV_SYSTEMD_CAMPAIGN_UNIT };
     case "RESUME_FROM_CHECKPOINT":
-      return { kind: "systemctl", systemdAction: "start", unit: FHV_SYSTEMD_CAMPAIGN_UNIT };
+      return { kind: "resume_from_checkpoint" };
     case "PAUSE_AT_CHECKPOINT":
     case "CREATE_DIAGNOSTIC_BUNDLE":
       return { kind: "control_file" };
@@ -197,6 +198,50 @@ export function createLinuxSystemdCampaignControlExecutor(
         return {
           outcome: "executed",
           message: `Control request recorded for ${input.action}`,
+          enforcementApplied: true,
+        };
+      }
+
+      if (mapped.kind === "resume_from_checkpoint") {
+        try {
+          writeFhvCampaignControlRequest(config.runRoot, {
+            schemaVersion: "fhv-campaign-control-request/v1",
+            action: "RESUME_FROM_CHECKPOINT",
+            runId: input.runId,
+            organizationId: input.organizationId,
+            operatorId: input.operatorId,
+            reason: input.reason,
+            requestedAtUtc: new Date().toISOString(),
+          });
+        } catch {
+          return {
+            outcome: "failed",
+            message: "RESUME_CONTROL_WRITE_FAILED",
+            enforcementApplied: false,
+          };
+        }
+        const args = buildSystemctlArgumentArray("start", FHV_SYSTEMD_CAMPAIGN_UNIT);
+        const result = await spawnFn(args, {
+          timeoutMs: config.timeoutMs,
+          maxOutputBytes: config.maxOutputBytes,
+        });
+        if (result.timedOut) {
+          return {
+            outcome: "failed",
+            message: "SYSTEMCTL_TIMEOUT",
+            enforcementApplied: false,
+          };
+        }
+        if (result.exitCode !== 0) {
+          return {
+            outcome: "failed",
+            message: "SYSTEMCTL_START_FAILED",
+            enforcementApplied: false,
+          };
+        }
+        return {
+          outcome: "executed",
+          message: "resume marker recorded; start waia-fhv-campaign.service",
           enforcementApplied: true,
         };
       }
