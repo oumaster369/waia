@@ -47,12 +47,13 @@ describe("BP-6 execution host health (DEE-339)", () => {
 });
 
 describe("BP-6 architecture boundaries (DEE-339 ratification)", () => {
-  it("allows exactly one service under services/", () => {
+  it("allows only approved host services under services/", () => {
     const entries = readdirSync(SERVICES_DIR, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name);
+      .map((entry) => entry.name)
+      .sort();
 
-    expect(entries).toEqual(["ai-trader-execution-host"]);
+    expect(entries).toEqual(["ai-trader-execution-host", "ai-trader-fhv-observer"]);
   });
 
   it("keeps execution host free of Cloudflare Worker imports", () => {
