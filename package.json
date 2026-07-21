@@ -53,6 +53,7 @@
     "trader:live:status": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/live-cli.ts status",
     "trader:live:cycle": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/live-cli.ts cycle",
     "trader:alert:drill": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/alert-drill-cli.ts",
+    "trader:fhv:observer": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-observer-cli.ts",
     "db:studio": "drizzle-kit studio",
     "dev": "next dev",
     "build": "next build",
