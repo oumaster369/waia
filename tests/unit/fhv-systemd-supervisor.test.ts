@@ -25,7 +25,7 @@ import {
 } from "@/lib/trader/observability/fhv-linux-systemd-executor";
 import { renderFhvSystemdUnits } from "@/lib/trader/observability/fhv-systemd-unit-renderer";
 
-const TARGET_SHA = "1744301f6ed31c754b183634daa37372a7d898cb";
+const TARGET_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 function sampleUnitConfig(overrides: Partial<FhvSystemdUnitConfigV1> = {}): FhvSystemdUnitConfigV1 {
   return {

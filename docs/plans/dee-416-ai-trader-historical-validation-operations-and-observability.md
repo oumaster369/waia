@@ -178,6 +178,7 @@ No release SHA, tag, or production deployment is recorded for DEE-416 in this se
 
 | Flag | Value |
 |------|-------|
+| EXECUTION_SERVER_TARGET_SHA | **UNRESOLVED_UNTIL_NEXT_RELEASE** |
 | DEE-415 | **COMPLETE** |
 | DEE-416 | **IN_PROGRESS** |
 | DEE-424 | **IN_PROGRESS** |
@@ -195,6 +196,7 @@ No release SHA, tag, or production deployment is recorded for DEE-416 in this se
 | executionServerCleanCheckoutProvisioned | false |
 | rehearsalLauncherImplemented | true |
 | executionServerRehearsalExecuted | false |
+| CONTROL_REPLAY_EXECUTED | false |
 | HISTORICAL_DATASET_QUALIFICATION | NOT_EXECUTED |
 | READY_FOR_FULL_HISTORICAL_TEST | NO |
 | EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED | NO |
