@@ -12,43 +12,43 @@ includedIssues:
     role: pr-1-release-fix
     linearUrl: https://linear.app/deepsense/issue/DEE-417/hv-ops-a-release-workflow-identity-prevention
     branch: dee-417-release-target-commitish-fix
-    status: pending
+    status: done
   - id: DEE-425
     role: work-package-B
-    status: pending
+    status: done
   - id: DEE-418
     role: work-package-C
-    status: pending
+    status: done
   - id: DEE-422
     role: work-package-D
-    status: pending
+    status: done
   - id: DEE-420
     role: work-package-E
-    status: pending
+    status: done
   - id: DEE-419
     role: work-package-F
-    status: pending
+    status: done
   - id: DEE-421
     role: work-package-G
-    status: pending
+    status: done
   - id: DEE-429
     role: work-package-H
-    status: pending
+    status: done
   - id: DEE-427
     role: work-package-I
-    status: pending
+    status: done
   - id: DEE-424
     role: work-package-K
-    status: pending
+    status: in_progress
   - id: DEE-430
     role: work-package-L
-    status: pending
+    status: done
   - id: DEE-428
     role: work-package-M
-    status: pending
+    status: done
   - id: DEE-426
     role: work-package-N
-    status: pending
+    status: done
   - id: DEE-423
     role: pr-3-rec-integration
     linearUrl: https://linear.app/deepsense/issue/DEE-423/hv-ops-j-research-evolution-campaign-integration
@@ -59,16 +59,32 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: approved
-  currentWorkPackage: PR-2-tranche-1
-  completedWorkPackages: [groom]
-  remainingWorkPackages: [PR-2-tranche-1, PR-2-tranche-2, PR-2-tranche-3, PR-2-tranche-4, PR-2-tranche-5, PR-2-tranche-6, PR-1, PR-3]
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  status: in-progress
+  currentWorkPackage: WP-K-execution-server-rehearsal
+  completedWorkPackages:
+    - groom
+    - PR-1-DEE-417
+    - PR-2-DEE-416-implementation
+    - WP-B
+    - WP-C
+    - WP-D
+    - WP-E
+    - WP-F
+    - WP-G
+    - WP-H
+    - WP-I
+    - WP-L-monitoring-implementation
+    - WP-M-monitoring-implementation
+    - WP-N-ceremony-scaffolding
+  remainingWorkPackages:
+    - WP-K-DEE-424-execution-server-rehearsal
+    - PR-3-WP-J-DEE-423-rec-deferred
+  prNumber: 406
+  prUrl: https://github.com/oumaster369/waia/pull/406
+  lastValidatedGitSha: 1e15f7890e386cb6a9f67319edd216fdbb7192fc
+  lastValidationAt: "2026-07-21"
   blockedReason: null
-  nextAction: "Parallel PR-1 (DEE-417) and PR-2 (DEE-416) implementation from origin/dev 1c9ac63"
+  nextAction: "Human-authorized dev-to-main release of merged PR-1/PR-2 baseline, followed by separate T4 HOST_OS qualification and DEE-424 rehearsal. DEE-423 remains deferred and non-blocking."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -80,7 +96,7 @@ provenance:
 
 # AI-TRADER Historical Validation Operations and Observability
 
-## Preflight (verified read-only)
+## Grooming preflight — historical snapshot, 2026-07-21
 
 | Check | Result |
 |-------|--------|
@@ -94,7 +110,87 @@ provenance:
 | target plan | `htr_ops_observability_365b2c7d.plan.md` (this file — edited in place) |
 | replacement plan created | **no** |
 
-**Stop condition:** none — preflight PASS.
+**Stop condition at grooming:** none — preflight PASS.
+
+---
+
+## Post-merge snapshot (current, 2026-07-21)
+
+| Check | Result |
+|-------|--------|
+| `dev` | `1e15f7890e386cb6a9f67319edd216fdbb7192fc` |
+| `main` | `ca5c6dfdc3846f48e4abedc3eda9b06b9b9a4291` |
+| PR #405 (DEE-417) | **MERGED** — squash `2680e5b72908f0d8bc64e765bc3b4e9162d7e3e7` |
+| PR #406 (DEE-416) | **MERGED** — squash `1e15f7890e386cb6a9f67319edd216fdbb7192fc` |
+| PR #406 post-merge CI | run `29824130627` — **success** |
+| `releaseToMain` | **NOT_EXECUTED_FOR_DEE_416** |
+| DEE-416 parent | **In Progress** (DEE-424 + DEE-423 remain open) |
+
+---
+
+## Merged delivery status
+
+### PR-1 / DEE-417
+
+| Field | Value |
+|-------|-------|
+| PR | https://github.com/oumaster369/waia/pull/405 |
+| Feature head | `e8aa62244318d6b142dacbc3093d24408d52da9a` |
+| Squash SHA on `dev` | `2680e5b72908f0d8bc64e765bc3b4e9162d7e3e7` |
+| Status | **merged** |
+| Delivered | Release tag identity prevention (`target_commitish`, tag-peel verification, full SHA in release body) |
+
+### PR-2 / DEE-416
+
+| Field | Value |
+|-------|-------|
+| PR | https://github.com/oumaster369/waia/pull/406 |
+| Feature head | `ed21bde5984489e1e3df60d5065c1b8acdea3ef3` |
+| Squash SHA on `dev` | `1e15f7890e386cb6a9f67319edd216fdbb7192fc` |
+| Post-merge CI | run `29824130627` — **success** |
+| Status | **merged** |
+| Economic gate | `PASS-FHV-ECONOMIC-NON-INTERFERENCE` |
+| Browser CSRF gate | dedicated `pnpm test:e2e:fhv-csrf` — **PASS** in post-merge CI |
+
+### PR-3 / DEE-423
+
+| Field | Value |
+|-------|-------|
+| PR | **none** |
+| Status | **deferred** |
+| Blocks baseline FHV deployment readiness? | **No** |
+
+No release SHA, tag, or production deployment is recorded for DEE-416 in this section.
+
+### Work-package completion semantics (post-merge)
+
+| WP | Linear | Implementation merged | Human ceremony executed |
+|----|--------|----------------------|-------------------------|
+| L | DEE-430 | monitoring surfaces — **yes** | dataset qualification — **no** |
+| M | DEE-428 | monitoring surfaces — **yes** | control replay — **no** |
+| N | DEE-426 | ceremony/report scaffolding — **yes** | full FHV validation — **no** |
+| K | DEE-424 | rehearsal contract/docs — **yes** | real Execution Server rehearsal — **no** |
+| J | DEE-423 | — | REC — **deferred, not implemented** |
+
+---
+
+## Safety flags (current)
+
+| Flag | Value |
+|------|-------|
+| DEE-415 | **COMPLETE** |
+| DEE-416 | **IN_PROGRESS** |
+| DEE-424 | **IN_PROGRESS** |
+| DEE-423 | **DEFERRED** |
+| HOST_OS | **UNKNOWN_UNTIL_EXECUTION_SERVER_PREFLIGHT** |
+| commandContractFailClosed | true |
+| commandsActuallyEnforced | false |
+| supervisorExecutorImplemented | false |
+| supervisorQualificationRequired | true |
+| HISTORICAL_DATASET_QUALIFICATION | NOT_EXECUTED |
+| READY_FOR_FULL_HISTORICAL_TEST | NO |
+| EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED | NO |
+| LIVE_TRADING_AUTHORIZED | NO |
 
 ---
 
@@ -118,17 +214,28 @@ provenance:
 - No **`pnpm trader:fhv:run`** orchestrator for full pinned FHV contract on real data.
 - Research orchestrator `replayResume` reuses run ID only — does not propagate `resumeCycleStartIndex` / checkpoint slices.
 - Telegram alerting not bound to long-running host CLIs (stdout-only unless log shipper added).
-- Admin has **no FHV progress UI** despite `GET /api/trader/admin/runtime-health`.
+
+### IMPLEMENTED_NOT_DEPLOYED (merged PR #406 — not yet on Execution Server)
+
+- **Host-resident FHV status contract** — `fhv-operator-status/v1` types, builder, bounded writer ([`lib/trader/observability/`](lib/trader/observability/)).
+- **FHV operator dashboard** — `/admin/fhv-operations` + Worker admin API routes ([`app/(trader)/admin/fhv-operations/`](app/(trader)/admin/fhv-operations/)).
+- **Host observer daemon** — localhost HTTP server ([`services/ai-trader-fhv-observer/`](services/ai-trader-fhv-observer/)); not deployed to Execution Server.
+- **Authenticated observer tunnel contract** — bridge/transport auth implemented; tunnel **not deployed**.
+- **Dataset qualification / control replay / ceremony monitoring** — status surfaces merged (WP-L/M/N); **no real dataset qualification, control replay, or full FHV ceremony executed**.
+
+### IMPLEMENTED_FAIL_CLOSED_PRE_T4
+
+- **Authenticated command contract** — CSRF v2, strict schema, run-bound manual confirmation, atomic rate limits, bounded replay protection ([`lib/trader/fhv-admin-handler.ts`](lib/trader/fhv-admin-handler.ts)).
+- **Real supervisor executor** — **NOT_IMPLEMENTED_UNTIL_HOST_OS_QUALIFICATION** (`commandsActuallyEnforced=false`, `supervisorExecutorImplemented=false`).
 
 ### PARTIAL / TARGET_ONLY / ABSENT
 
 | Capability | Status |
 |------------|--------|
-| Full FHV campaign on execution server | TARGET_ONLY (contract + preflight exist; dataset `NOT_AVAILABLE`) |
-| Host-resident status contract | ABSENT |
-| Supervised long-run FHV (beyond tmux/nohup) | PARTIAL (DEE-170 systemd precedent in docs; no committed unit for FHV) |
-| Research Evolution closed loop | PARTIAL (RI pipeline runnable; M8 discovery in-memory only; actuation bridges draft-only) |
-| Release tag SHA pinning | PARTIAL ([`.github/workflows/release.yml`](.github/workflows/release.yml) lacks explicit `target_commitish` + peel proof) |
+| Full FHV campaign on execution server | **NOT_EXECUTED** (contract + preflight exist; no qualified supervisor deploy) |
+| Supervised long-run FHV (beyond tmux/nohup) | PARTIAL (rehearsal contract + runbook merged; qualified supervisor units not installed) |
+| Research Evolution closed loop | **DEFERRED_NOT_IMPLEMENTED** (PR-3 / DEE-423 separate) |
+| Release tag SHA pinning | **IMPLEMENTED_AND_MERGED** via DEE-417 / PR #405 ([`.github/workflows/release.yml`](.github/workflows/release.yml)) |
 
 **Governance boundary:** DEE-415 / HTR program is **COMPLETE** (`CERTIFY-HTR-READY` issued). This program is a **new integration parent** — do not reopen DEE-415.
 
@@ -145,7 +252,7 @@ provenance:
 | **URL** | https://linear.app/deepsense/issue/DEE-416/ai-trader-historical-validation-operations-and-observability |
 | **Project** | WAIA Development |
 | **Team** | DEE |
-| **Status** | Todo |
+| **Status** | In Progress |
 | **Labels** | `infra`, `program:ai-trader` |
 | **DEE-415** | COMPLETE — **not** a parent/child link |
 
@@ -864,9 +971,11 @@ flowchart TB
 |-------|------|-------|--------|
 | 1 | `APPROVE-HV-OPS-PLAN` | Architect | `/implement` | **DONE** |
 | 2 | `/groom` risk classification + Linear creation | Architect | branch work | **DONE** (DEE-416 + A–N) |
-| 3 | PR-1 merge (WP-A / DEE-417) | Human squash | release identity (preferred before rehearsal) |
-| 4 | PR-2 `PASS-FHV-ECONOMIC-NON-INTERFERENCE` | CI + Architect | PR-2 merge |
-| 5 | PR-2 merge to `dev` | Human squash | baseline ops availability |
+| 3 | PR-1 merge (WP-A / DEE-417) | Human squash | release identity (preferred before rehearsal) | **DONE** (PR #405 → `2680e5b…`) |
+| 4 | PR-2 `PASS-FHV-ECONOMIC-NON-INTERFERENCE` | CI + Architect | PR-2 merge | **DONE** |
+| 5 | PR-2 merge to `dev` | Human squash | baseline ops availability | **DONE** (PR #406 → `1e15f789…`) |
+| 5a | Canonical plan status sync | Human squash | release-to-main readiness | **pending** (this docs-only PR) |
+| 5b | dev-to-main release PR | Human merge commit | production promotion | **NOT_EXECUTED** |
 | 6 | `HOST_OS` qualification + supervisor install | Human | execution-server deploy |
 | 7 | `AUTHORIZE-FHV-OPS-DEPLOY` | Human | rehearsal |
 | 8 | Execution Server rehearsal PASS (WP-K) | Human operator | production FHV campaign |
@@ -928,44 +1037,29 @@ flowchart TB
 
 ## Terminal classification
 
-**`AI_TRADER_HV_OPS_GROOMED_READY_FOR_PARALLEL_PR1_PR2_IMPLEMENTATION`**
+**`DEE_416_PR406_POST_MERGE_IMPLEMENTATION_MERGED_AWAITING_RELEASE_AND_T4`**
 
 | Flag | Value |
 |------|-------|
 | parentLinearCreated | true |
 | allFourteenChildrenCreated | true |
 | realLinearIdsRecorded | true |
-| riskClassificationComplete | true |
-| alertPolicyHumanFieldsResolved | true |
-| cursorPlanUpdatedInPlace | true |
-| replacementCursorPlanCreated | false |
-| canonicalPlanPromoted | true |
-| implementationStarted | false |
-| pr1Ready | true |
-| pr2Ready | true |
+| pr1Merged | true |
+| pr2Merged | true |
 | pr3DeferredNonBlocking | true |
-| planEditedInPlace | true |
-| replacementPlanCreated | false |
-| codeChanged | false |
-| branchCreated | false |
-| commitCreated | false |
-| pullRequestCreated | false |
-| linearMutated | true |
+| canonicalPlanPromoted | true |
+| canonicalPlanStatusTruthful | true (after this sync PR merge) |
+| implementationMergedToDev | true |
+| releaseToMainExecuted | false |
+| dee416ParentInProgress | true |
+| dee424InProgress | true |
+| dee423Deferred | true |
 | executionServerAccessed | false |
 | datasetAccessed | false |
 | replayStarted | false |
 | liveTradingStarted | false |
-| releaseFixSeparatePr | true |
-| fhvOpsCoreSeparatePr | true |
-| researchEvolutionSeparatePr | true |
-| researchEvolutionBlocksBaseline | false |
-| statusContractBounded | true |
-| campaignOwnsSemanticAbort | true |
-| operatorCommandsAuthenticated | true |
-| alertPolicyVersioned | true |
-| supervisorTargetRequiresHostQualification | true |
-| blindHoldoutRedacted | true |
 | HISTORICAL_DATASET_QUALIFICATION | NOT_EXECUTED |
 | READY_FOR_FULL_HISTORICAL_TEST | NO |
 | EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED | NO |
 | LIVE_TRADING_AUTHORIZED | NO |
+| READY_FOR_DEE_416_RELEASE_TO_MAIN | pending canonical plan sync PR merge |
