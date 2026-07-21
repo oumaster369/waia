@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -40,7 +40,7 @@ function sampleUnitConfig(overrides: Partial<FhvSystemdUnitConfigV1> = {}): FhvS
     nodeBin: "/usr/bin/node",
     fhvRunRoot: "/var/lib/waia/fhv-runs/rehearsal-1",
     fhvRunId: "rehearsal-1",
-    fhvOrganizationId: "00000000-0000-4000-8000-0000000416",
+    fhvOrganizationId: "00000000-0000-4000-8000-000000000416",
     observerPort: 9471,
     ...overrides,
   };
@@ -54,7 +54,7 @@ describe("DEE-424 FHV systemd supervisor", () => {
     expect(first.observerUnit).toBe(second.observerUnit);
     expect(first.campaignUnit).toContain("Description=WAIA FHV rehearsal campaign");
     expect(first.campaignUnit).toContain(
-      "ExecStartPre=/srv/waia/scripts/ops/execution-server-preflight.sh",
+      "ExecStartPre=/srv/waia/scripts/ops/execution-server-preflight.sh --repo-path /srv/waia",
     );
     expect(first.campaignUnit).toContain(`--target-sha ${TARGET_SHA}`);
     expect(first.campaignUnit).not.toMatch(/bash\s+-c|\.env=|SECRET|PASSWORD/);
@@ -71,6 +71,22 @@ describe("DEE-424 FHV systemd supervisor", () => {
     expect(() => assertFhvSystemdAllowedUnit("evil.service")).toThrow(/Unit not allowlisted/);
     expect(() => assertFhvSystemdAllowedAction("start")).not.toThrow();
     expect(() => assertFhvSystemdAllowedAction("enable")).toThrow(/Action not allowlisted/);
+  });
+
+  it("rejects repoRoot and workingDirectory mismatch", () => {
+    expect(() =>
+      renderFhvSystemdUnits(
+        sampleUnitConfig({ repoRoot: "/srv/waia", workingDirectory: "/srv/waia-other" }),
+      ),
+    ).toThrow(/REPO_WORKING_DIRECTORY_MISMATCH|must identify the same/);
+  });
+
+  it("rejects newline injection in environmentFile", () => {
+    expect(() =>
+      renderFhvSystemdUnits(
+        sampleUnitConfig({ environmentFile: "/etc/waia/fhv.env\nExecStart=evil" }),
+      ),
+    ).toThrow(/UNSAFE_PATH_CHARACTERS|absolute safe path/);
   });
 
   it("rejects shell injection in systemctl argument builder", () => {
@@ -93,7 +109,7 @@ describe("DEE-424 FHV systemd supervisor", () => {
     const result = await executor.execute({
       action: "GRACEFUL_STOP",
       runId: "run-1",
-      organizationId: "00000000-0000-4000-8000-0000000416",
+      organizationId: "00000000-0000-4000-8000-000000000416",
       operatorId: "op",
       reason: "test",
     });
@@ -113,7 +129,7 @@ describe("DEE-424 FHV systemd supervisor", () => {
       const result = await executor.execute({
         action: "PAUSE_AT_CHECKPOINT",
         runId: "run-1",
-        organizationId: "00000000-0000-4000-8000-0000000416",
+        organizationId: "00000000-0000-4000-8000-000000000416",
         operatorId: "op",
         reason: "pause drill",
       });
@@ -141,7 +157,7 @@ describe("DEE-424 FHV systemd supervisor", () => {
       const result = await executor.execute({
         action: "GRACEFUL_STOP",
         runId: "run-1",
-        organizationId: "00000000-0000-4000-8000-0000000416",
+        organizationId: "00000000-0000-4000-8000-000000000416",
         operatorId: "op",
         reason: "stop drill",
       });
@@ -171,7 +187,7 @@ describe("DEE-424 FHV systemd supervisor", () => {
     const result = await executor.execute({
       action: "EMERGENCY_STOP",
       runId: "run-1",
-      organizationId: "00000000-0000-4000-8000-0000000416",
+      organizationId: "00000000-0000-4000-8000-000000000416",
       operatorId: "op",
       reason: "timeout",
     });
@@ -195,7 +211,7 @@ describe("DEE-424 FHV rehearsal launcher", () => {
         fixtureId: "HTR_WP03_BENCHMARK",
         targetSha: TARGET_SHA,
         runId,
-        organizationId: "00000000-0000-4000-8000-0000000416",
+        organizationId: "00000000-0000-4000-8000-000000000416",
         artifactRoot: root,
       }),
     );
@@ -204,7 +220,7 @@ describe("DEE-424 FHV rehearsal launcher", () => {
         fixtureId: "HTR_WP03_BENCHMARK",
         targetSha: TARGET_SHA,
         runId,
-        organizationId: "00000000-0000-4000-8000-0000000416",
+        organizationId: "00000000-0000-4000-8000-000000000416",
         artifactRoot: root,
       }),
     ).toThrow(/Rehearsal run directory already exists|RUN_DIRECTORY_COLLISION/);
@@ -213,7 +229,7 @@ describe("DEE-424 FHV rehearsal launcher", () => {
         fixtureId: "HTR_WP03_BENCHMARK",
         targetSha: TARGET_SHA,
         runId: "another-run",
-        organizationId: "00000000-0000-4000-8000-0000000416",
+        organizationId: "00000000-0000-4000-8000-000000000416",
         artifactRoot: root,
         maxRuntimeMs: FHV_REHEARSAL_MAX_RUNTIME_MS + 1,
       }),
@@ -223,36 +239,132 @@ describe("DEE-424 FHV rehearsal launcher", () => {
 });
 
 describe("DEE-424 guarded installer scripts", () => {
+  const installArgs = [
+    "--target-sha",
+    TARGET_SHA,
+    "--working-directory",
+    process.cwd(),
+    "--service-user",
+    "waia-fhv",
+    "--environment-file",
+    "/etc/waia/fhv.env",
+    "--fhv-run-root",
+    "/var/lib/waia/fhv-runs/test",
+    "--fhv-run-id",
+    "test-run",
+    "--fhv-organization-id",
+    "00000000-0000-4000-8000-000000000416",
+  ];
+
+  function runScript(
+    scriptRel: string,
+    args: string[],
+    mockBin: string,
+    extraEnv: Record<string, string> = {},
+  ): { stdout: string; stderr: string; status: number } {
+    const script = join(process.cwd(), scriptRel);
+    const result = spawnSync("bash", [script, ...args], {
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${mockBin}:${process.env.PATH ?? ""}`, ...extraEnv },
+    });
+    return {
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+      status: result.status ?? 1,
+    };
+  }
+
+  function writeMockBin(
+    overrides: {
+      analyzeExit?: number;
+      systemctl?: string;
+    } = {},
+  ): string {
+    const mockBin = mkdtempSync(join(tmpdir(), "fhv-mock-bin-"));
+    writeFileSync(
+      join(mockBin, "systemd-analyze"),
+      `#!/usr/bin/env bash\nexit ${overrides.analyzeExit ?? 0}\n`,
+    );
+    chmodSync(join(mockBin, "systemd-analyze"), 0o755);
+    writeFileSync(
+      join(mockBin, "systemctl"),
+      overrides.systemctl ??
+        `#!/usr/bin/env bash
+case "$1" in
+  daemon-reload) exit 0 ;;
+  enable) exit 0 ;;
+  stop) exit 0 ;;
+  disable) exit 0 ;;
+  is-active) exit 1 ;;
+  is-enabled) exit 1 ;;
+  *) exit 0 ;;
+esac
+`,
+    );
+    chmodSync(join(mockBin, "systemctl"), 0o755);
+    return mockBin;
+  }
+
   it("install-units.sh exits without mutation when --confirm is absent", () => {
-    const script = join(process.cwd(), "scripts/ops/fhv-supervisor/install-units.sh");
-    let stderr = "";
-    try {
-      execFileSync(
-        "bash",
-        [
-          script,
-          "--target-sha",
-          TARGET_SHA,
-          "--working-directory",
-          process.cwd(),
-          "--service-user",
-          "waia-fhv",
-          "--environment-file",
-          "/etc/waia/fhv.env",
-          "--fhv-run-root",
-          "/var/lib/waia/fhv-runs/test",
-          "--fhv-run-id",
-          "test-run",
-          "--fhv-organization-id",
-          "00000000-0000-4000-8000-0000000416",
-        ],
-        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-      );
-    } catch (error) {
-      const err = error as { stderr?: string; stdout?: string; status?: number };
-      stderr = `${err.stderr ?? ""}${err.stdout ?? ""}`;
-      expect(err.status).not.toBe(0);
-    }
-    expect(stderr).toContain("NO-OP");
+    const mockBin = writeMockBin();
+    const result = runScript("scripts/ops/fhv-supervisor/install-units.sh", installArgs, mockBin);
+    const combined = `${result.stdout}${result.stderr}`;
+    expect(result.status).toBe(0);
+    expect(combined).toContain("No mutation performed");
+    expect(combined).toContain("planned: install");
+    rmSync(mockBin, { recursive: true, force: true });
+  });
+
+  it("rollback-units.sh exits without mutation when --confirm is absent", () => {
+    const mockBin = writeMockBin();
+    const result = runScript("scripts/ops/fhv-supervisor/rollback-units.sh", [], mockBin);
+    const combined = `${result.stdout}${result.stderr}`;
+    expect(result.status).toBe(0);
+    expect(combined).toContain("No mutation performed");
+    expect(combined).toContain("planned: systemctl stop");
+    rmSync(mockBin, { recursive: true, force: true });
+  });
+
+  it("render-units.sh fails when systemd-analyze verify fails", () => {
+    const mockBin = writeMockBin({ analyzeExit: 1 });
+    const outputDir = mkdtempSync(join(tmpdir(), "fhv-render-out-"));
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/render-units.sh",
+      [...installArgs, "--output-dir", outputDir],
+      mockBin,
+    );
+    expect(result.status).not.toBe(0);
+    rmSync(mockBin, { recursive: true, force: true });
+    rmSync(outputDir, { recursive: true, force: true });
+  });
+
+  it("install-units.sh with --confirm does not install when verify fails", () => {
+    const mockBin = writeMockBin({ analyzeExit: 1 });
+    const systemdDir = mkdtempSync(join(tmpdir(), "fhv-systemd-dir-"));
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/install-units.sh",
+      [...installArgs, "--confirm", "--systemd-dir", systemdDir],
+      mockBin,
+    );
+    expect(result.status).not.toBe(0);
+    expect(readdirSync(systemdDir)).toHaveLength(0);
+    rmSync(mockBin, { recursive: true, force: true });
+    rmSync(systemdDir, { recursive: true, force: true });
+  });
+
+  it("install-units.sh with --confirm installs only allowlisted units when verify passes", () => {
+    const mockBin = writeMockBin();
+    const systemdDir = mkdtempSync(join(tmpdir(), "fhv-systemd-dir-"));
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/install-units.sh",
+      [...installArgs, "--confirm", "--systemd-dir", systemdDir],
+      mockBin,
+    );
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("Install complete");
+    const installed = readdirSync(systemdDir).sort();
+    expect(installed).toEqual(["waia-fhv-campaign.service", "waia-fhv-observer.service"]);
+    rmSync(mockBin, { recursive: true, force: true });
+    rmSync(systemdDir, { recursive: true, force: true });
   });
 });

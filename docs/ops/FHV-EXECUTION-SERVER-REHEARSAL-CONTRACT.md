@@ -25,7 +25,7 @@ See also: [`FHV-RELEASE-IDENTITY-CONTRACT.md`](FHV-RELEASE-IDENTITY-CONTRACT.md)
 
 | Command | Purpose |
 |---------|---------|
-| `pnpm trader:fhv:rehearsal -- --target-sha "$EXECUTION_SERVER_TARGET_SHA" --run-id <id>` | Prepare rehearsal manifest under `replay-runs/RI-P7/fhv-ops-rehearsal/<run-id>/` |
+| `pnpm trader:fhv:rehearsal -- --target-sha "$EXECUTION_SERVER_TARGET_SHA" --run-id <human-approved-unique-run-id>` | Prepare rehearsal manifest under `replay-runs/RI-P7/fhv-ops-rehearsal/<run-id>/` |
 | `scripts/ops/fhv-supervisor/render-units.sh` | Render `waia-fhv-campaign.service` + `waia-fhv-observer.service` (no install) |
 | `scripts/ops/fhv-supervisor/install-units.sh` | **Human-only T4** — install units with `--confirm` on Execution Server |
 | `scripts/ops/fhv-supervisor/rollback-units.sh` | **Human-only T4** — stop/disable/remove units with `--confirm` |
@@ -48,7 +48,7 @@ Both units run SHA guard (`execution-server-preflight.sh`) in `ExecStartPre`.
    ```bash
    pnpm trader:fhv:rehearsal -- \
      --target-sha "$EXECUTION_SERVER_TARGET_SHA" \
-     --run-id fhv-ops-rehearsal-<date>
+     --run-id "<human-approved-unique-run-id>"
    ```
 
 5. Render and install qualified **systemd** units only (`waia-fhv-campaign`, `waia-fhv-observer`) with `--confirm`.

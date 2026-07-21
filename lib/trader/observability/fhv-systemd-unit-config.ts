@@ -1,4 +1,4 @@
-/** DEE-424 — bounded Linux systemd unit configuration for FHV rehearsal supervision. */
+/** DEE-424 / DEE-431 — bounded Linux systemd unit configuration for FHV rehearsal supervision. */
 
 export const FHV_SYSTEMD_CAMPAIGN_UNIT = "waia-fhv-campaign.service" as const;
 export const FHV_SYSTEMD_OBSERVER_UNIT = "waia-fhv-observer.service" as const;
@@ -27,6 +27,12 @@ export type FhvSystemdUnitConfigV1 = Readonly<{
 }>;
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
+const CONTROL_CHARS = /[\0\r\n\t]/;
+const UNSAFE_SYSTEMD_CHARS = /[;|`$(){}<>\\]/;
+const ABSOLUTE_PATH = /^\/[^\0\r\n\t]+$/;
+const SAFE_IDENTIFIER = /^[a-zA-Z0-9._-]+$/;
+const SAFE_RUN_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export class FhvSystemdUnitConfigError extends Error {
   constructor(
@@ -35,6 +41,33 @@ export class FhvSystemdUnitConfigError extends Error {
   ) {
     super(message);
     this.name = "FhvSystemdUnitConfigError";
+  }
+}
+
+function assertAbsoluteSafePath(field: string, value: string): void {
+  if (!value || !ABSOLUTE_PATH.test(value) || value.includes("..")) {
+    throw new FhvSystemdUnitConfigError(
+      "INVALID_ABSOLUTE_PATH",
+      `${field} must be an absolute safe path.`,
+    );
+  }
+  if (CONTROL_CHARS.test(value) || UNSAFE_SYSTEMD_CHARS.test(value)) {
+    throw new FhvSystemdUnitConfigError(
+      "UNSAFE_PATH_CHARACTERS",
+      `${field} contains forbidden control or injection characters.`,
+    );
+  }
+}
+
+function assertSafeIdentifier(field: string, value: string, pattern: RegExp): void {
+  if (!value || CONTROL_CHARS.test(value) || UNSAFE_SYSTEMD_CHARS.test(value)) {
+    throw new FhvSystemdUnitConfigError(
+      "UNSAFE_IDENTIFIER",
+      `${field} contains forbidden characters.`,
+    );
+  }
+  if (!pattern.test(value)) {
+    throw new FhvSystemdUnitConfigError("INVALID_IDENTIFIER", `${field} format is invalid.`);
   }
 }
 
@@ -51,23 +84,20 @@ export function assertFhvSystemdUnitConfig(input: FhvSystemdUnitConfigV1): void 
       "targetSha must be a 40-character lowercase hex git SHA.",
     );
   }
-  for (const [field, value] of Object.entries({
-    repoRoot: input.repoRoot,
-    workingDirectory: input.workingDirectory,
-    serviceUser: input.serviceUser,
-    environmentFile: input.environmentFile,
-    nodeBin: input.nodeBin,
-    fhvRunRoot: input.fhvRunRoot,
-    fhvRunId: input.fhvRunId,
-    fhvOrganizationId: input.fhvOrganizationId,
-  })) {
-    if (!value || value.includes("..") || value.includes("\0") || value.includes(";")) {
-      throw new FhvSystemdUnitConfigError(
-        "INVALID_PATH_OR_IDENTIFIER",
-        `${field} contains invalid characters.`,
-      );
-    }
+  if (input.repoRoot !== input.workingDirectory) {
+    throw new FhvSystemdUnitConfigError(
+      "REPO_WORKING_DIRECTORY_MISMATCH",
+      "repoRoot and workingDirectory must identify the same clean release checkout.",
+    );
   }
+  assertAbsoluteSafePath("repoRoot", input.repoRoot);
+  assertAbsoluteSafePath("workingDirectory", input.workingDirectory);
+  assertAbsoluteSafePath("environmentFile", input.environmentFile);
+  assertAbsoluteSafePath("nodeBin", input.nodeBin);
+  assertAbsoluteSafePath("fhvRunRoot", input.fhvRunRoot);
+  assertSafeIdentifier("serviceUser", input.serviceUser, SAFE_IDENTIFIER);
+  assertSafeIdentifier("fhvRunId", input.fhvRunId, SAFE_RUN_ID);
+  assertSafeIdentifier("fhvOrganizationId", input.fhvOrganizationId, UUID_V4);
   if (input.observerPort < 1 || input.observerPort > 65535) {
     throw new FhvSystemdUnitConfigError("INVALID_OBSERVER_PORT", "observerPort out of range.");
   }

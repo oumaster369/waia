@@ -14,6 +14,8 @@ FHV_RUN_ID=""
 FHV_ORGANIZATION_ID=""
 UNIT=""
 SYSTEMD_DIR="/etc/systemd/system"
+SYSTEMD_ANALYZE="${SYSTEMD_ANALYZE:-systemd-analyze}"
+SYSTEMCTL="${SYSTEMCTL:-systemctl}"
 
 usage() {
   cat >&2 <<'EOF'
@@ -67,6 +69,15 @@ trap 'rm -rf "$tmp_dir"' EXIT
   --fhv-organization-id "$FHV_ORGANIZATION_ID" \
   --output-dir "$tmp_dir" >/dev/null
 
+verify_rendered_units() {
+  if ! command -v "$SYSTEMD_ANALYZE" >/dev/null 2>&1; then
+    die "systemd-analyze is required for unit verification"
+  fi
+  "$SYSTEMD_ANALYZE" verify "${tmp_dir}/${FHV_CAMPAIGN_UNIT}" "${tmp_dir}/${FHV_OBSERVER_UNIT}"
+}
+
+verify_rendered_units
+
 install_one() {
   local unit_name="$1"
   assert_allowed_unit "$unit_name"
@@ -75,9 +86,6 @@ install_one() {
     return 1
   fi
   install -m 0644 "${tmp_dir}/${unit_name}" "${SYSTEMD_DIR}/${unit_name}"
-  if command -v systemd-analyze >/dev/null 2>&1; then
-    systemd-analyze verify "${SYSTEMD_DIR}/${unit_name}"
-  fi
 }
 
 reload_and_enable() {
@@ -87,26 +95,42 @@ reload_and_enable() {
   if ! require_confirm_or_noop "enable"; then
     return 1
   fi
-  systemctl daemon-reload
-  systemctl enable "$unit_name"
+  "$SYSTEMCTL" daemon-reload
+  "$SYSTEMCTL" enable "$unit_name"
 }
 
-rc=0
+if [[ "$CONFIRM" -eq 0 ]]; then
+  case "$UNIT" in
+    all)
+      log "planned: install ${SYSTEMD_DIR}/${FHV_CAMPAIGN_UNIT}"
+      log "planned: install ${SYSTEMD_DIR}/${FHV_OBSERVER_UNIT}"
+      log "planned: systemctl daemon-reload"
+      log "planned: systemctl enable ${FHV_CAMPAIGN_UNIT}"
+      log "planned: systemctl enable ${FHV_OBSERVER_UNIT}"
+      ;;
+    "$FHV_CAMPAIGN_UNIT"|"$FHV_OBSERVER_UNIT")
+      log "planned: install ${SYSTEMD_DIR}/${UNIT}"
+      log "planned: systemctl daemon-reload"
+      log "planned: systemctl enable ${UNIT}"
+      ;;
+    *) die "invalid --unit value" ;;
+  esac
+  print_noop_footer
+  exit 0
+fi
+
 case "$UNIT" in
   all)
-    install_one "$FHV_CAMPAIGN_UNIT" || rc=1
-    install_one "$FHV_OBSERVER_UNIT" || rc=1
-    reload_and_enable "$FHV_CAMPAIGN_UNIT" || rc=1
-    reload_and_enable "$FHV_OBSERVER_UNIT" || rc=1
+    install_one "$FHV_CAMPAIGN_UNIT"
+    install_one "$FHV_OBSERVER_UNIT"
+    reload_and_enable "$FHV_CAMPAIGN_UNIT"
+    reload_and_enable "$FHV_OBSERVER_UNIT"
     ;;
   "$FHV_CAMPAIGN_UNIT"|"$FHV_OBSERVER_UNIT")
-    install_one "$UNIT" || rc=1
-    reload_and_enable "$UNIT" || rc=1
+    install_one "$UNIT"
+    reload_and_enable "$UNIT"
     ;;
   *) die "invalid --unit value" ;;
 esac
 
-if [[ "$CONFIRM" -eq 0 ]]; then
-  print_noop_footer
-fi
-exit "$rc"
+log "Install complete."

@@ -21,7 +21,6 @@ function renderCampaignUnit(config: FhvSystemdUnitConfigV1): string {
   const envFile = escapeSystemdValue(config.environmentFile);
   const user = escapeSystemdValue(config.serviceUser);
   const nodeBin = escapeSystemdValue(config.nodeBin);
-  const repoRoot = escapeSystemdValue(config.repoRoot);
   const targetSha = escapeSystemdValue(config.targetSha);
   const runRoot = escapeSystemdValue(config.fhvRunRoot);
   const runId = escapeSystemdValue(config.fhvRunId);
@@ -43,7 +42,7 @@ Environment=FHV_RUN_ID=${runId}
 Environment=FHV_ORGANIZATION_ID=${orgId}
 Environment=FHV_TARGET_SHA=${targetSha}
 Environment=FHV_REHEARSAL_MODE=true
-ExecStartPre=${repoRoot}/scripts/ops/execution-server-preflight.sh --repo-path ${repoRoot} --target-sha ${targetSha}
+ExecStartPre=${wd}/scripts/ops/execution-server-preflight.sh --repo-path ${wd} --target-sha ${targetSha}
 ExecStart=${nodeBin} --import tsx --conditions=react-server ${wd}/scripts/trader/fhv-campaign-cli.ts
 Restart=on-failure
 RestartSec=10
@@ -70,7 +69,6 @@ function renderObserverUnit(config: FhvSystemdUnitConfigV1): string {
   const envFile = escapeSystemdValue(config.environmentFile);
   const user = escapeSystemdValue(config.serviceUser);
   const nodeBin = escapeSystemdValue(config.nodeBin);
-  const repoRoot = escapeSystemdValue(config.repoRoot);
   const targetSha = escapeSystemdValue(config.targetSha);
   const runRoot = escapeSystemdValue(config.fhvRunRoot);
   const runId = escapeSystemdValue(config.fhvRunId);
@@ -93,7 +91,7 @@ Environment=FHV_RUN_ID=${runId}
 Environment=FHV_ORGANIZATION_ID=${orgId}
 Environment=FHV_OBSERVER_PORT=${port}
 Environment=FHV_TARGET_SHA=${targetSha}
-ExecStartPre=${repoRoot}/scripts/ops/execution-server-preflight.sh --repo-path ${repoRoot} --target-sha ${targetSha}
+ExecStartPre=${wd}/scripts/ops/execution-server-preflight.sh --repo-path ${wd} --target-sha ${targetSha}
 ExecStart=${nodeBin} --import tsx --conditions=react-server ${wd}/scripts/trader/fhv-observer-cli.ts
 Restart=on-failure
 RestartSec=5

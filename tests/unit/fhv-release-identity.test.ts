@@ -1,8 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
+
+import { validateFhvReleaseIdentityMarkdown } from "@/lib/trader/observability/fhv-release-identity-validator";
 
 const ROOT = process.cwd();
 const VALIDATOR = join(ROOT, "scripts/ops/validate-fhv-release-identity.sh");
@@ -15,16 +17,31 @@ describe("FHV release identity regression (DEE-431)", () => {
     expect(output).toContain("all checks passed");
   });
 
-  it("rejects active rehearsal instructions with literal previous-release target-sha", () => {
-    const body = readFileSync(REHEARSAL, "utf8");
-    const active = body.split("## Historical evidence")[0] ?? body;
-    expect(active).not.toMatch(new RegExp(`--target-sha ${PREVIOUS_RELEASE}`));
-    expect(active).toContain('--target-sha "$EXECUTION_SERVER_TARGET_SHA"');
+  it("rejects fixture documents with literal operational SHAs", () => {
+    const dir = mkdtempSync(join(tmpdir(), "fhv-release-id-fixture-"));
+    try {
+      const bad = `# Ops\nRun: pnpm trader:fhv:rehearsal -- --target-sha ${PREVIOUS_RELEASE}\n`;
+      const badPath = join(dir, "bad.md");
+      writeFileSync(badPath, bad);
+      expect(validateFhvReleaseIdentityMarkdown(bad).ok).toBe(false);
+      let failed = false;
+      try {
+        execFileSync("bash", [VALIDATOR, badPath], { encoding: "utf8", stdio: "pipe" });
+      } catch {
+        failed = true;
+      }
+      expect(failed).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("preserves previous release SHA only in historical evidence section", () => {
     const body = readFileSync(REHEARSAL, "utf8");
     expect(body).toContain(PREVIOUS_RELEASE);
     expect(body).toContain("## Historical evidence");
+    const active = body.split("## Historical evidence")[0] ?? body;
+    expect(active).not.toContain(PREVIOUS_RELEASE);
+    expect(active).toContain("$EXECUTION_SERVER_TARGET_SHA");
   });
 });

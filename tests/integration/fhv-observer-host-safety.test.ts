@@ -51,7 +51,7 @@ describe("DEE-416 FHV observer host safety escalation", () => {
     const state = createFhvObserverState({
       runRoot: root,
       runId: "host-safety-run",
-      organizationId: "00000000-0000-4000-8000-0000000416",
+      organizationId: "00000000-0000-4000-8000-000000000416",
       commandSecret: "fhv-test-command-secret",
       observerTunnelSecret: "fhv-test-tunnel-secret",
       campaignControlExecutor: createSuccessfulFhvCampaignControlExecutor(),

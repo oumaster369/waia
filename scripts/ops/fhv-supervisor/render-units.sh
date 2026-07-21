@@ -97,7 +97,7 @@ else
 fi
 
 if command -v systemd-analyze >/dev/null 2>&1 && [[ -n "$OUTPUT_DIR" ]]; then
-  systemd-analyze verify "${OUTPUT_DIR}/${FHV_CAMPAIGN_UNIT}" "${OUTPUT_DIR}/${FHV_OBSERVER_UNIT}" || true
+  systemd-analyze verify "${OUTPUT_DIR}/${FHV_CAMPAIGN_UNIT}" "${OUTPUT_DIR}/${FHV_OBSERVER_UNIT}"
 fi
 
 log "Render complete (no install performed)."
