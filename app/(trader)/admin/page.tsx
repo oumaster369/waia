@@ -13,6 +13,7 @@ import {
 import { WaiaSurface } from "@/components/waia/waia-surface";
 
 const SECTIONS = [
+  { href: "/admin/fhv-operations", label: "FHV operations" },
   { href: "/admin/kill-switches", label: "Kill switches" },
   { href: "/admin/live-enable", label: "Live enable" },
   { href: "/admin/strategy-promotions", label: "Strategy promotions" },
