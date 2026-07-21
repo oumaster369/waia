@@ -32,7 +32,7 @@ function baseUnsignedCommand(overrides: Partial<UnsignedCommand> = {}): Unsigned
     nonce: "nonce-416-abc123",
     idempotencyKey: "idem-416-001",
     expectedCampaignState: { phase: "REPLAY", checkpointSeq: 42 },
-    confirmationPhraseClass: "NONE",
+    confirmationPhraseClass: "PAUSE",
     ...overrides,
   };
 }
@@ -133,5 +133,34 @@ describe("DEE-416 FHV operator command v1", () => {
     } catch (error) {
       expect(error).toMatchObject({ code: "FHV_COMMAND_SIGNATURE_INVALID" });
     }
+  });
+
+  it("rejects confirmation class mismatch for destructive actions", () => {
+    const command = signCommand({ confirmationPhraseClass: "STOP" });
+    expect(() => verifyInput(command)).toThrow(FhvCommandVerificationError);
+    try {
+      verifyInput(command);
+    } catch (error) {
+      expect(error).toMatchObject({ code: "FHV_COMMAND_CONFIRMATION_CLASS_MISMATCH" });
+    }
+  });
+
+  it("rejects invalid issuedAt timestamps", () => {
+    const command = signCommand({ issuedAtUtc: "not-a-date" });
+    expect(() => verifyInput(command)).toThrow(FhvCommandVerificationError);
+    try {
+      verifyInput(command);
+    } catch (error) {
+      expect(error).toMatchObject({ code: "FHV_COMMAND_TIMESTAMP_INVALID" });
+    }
+  });
+
+  it("rejects issuedAt beyond allowed future skew", () => {
+    const nowMs = Date.parse("2026-07-21T12:00:00.000Z");
+    const command = signCommand({
+      issuedAtUtc: new Date(nowMs + 10 * 60 * 1000).toISOString(),
+      expiresAtUtc: new Date(nowMs + 15 * 60 * 1000).toISOString(),
+    });
+    expect(() => verifyInput(command, { nowMs })).toThrow(FhvCommandVerificationError);
   });
 });

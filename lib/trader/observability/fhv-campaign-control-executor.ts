@@ -70,6 +70,6 @@ export function mapFhvActionToConfirmationPhraseClass(
     case "CREATE_DIAGNOSTIC_BUNDLE":
       return "DIAGNOSTIC";
     default:
-      return "NONE";
+      throw new Error(`Unknown FHV operator action: ${String(action satisfies never)}`);
   }
 }

@@ -28,7 +28,7 @@ describe("DEE-416 FHV tenant isolation", () => {
         nonce: "nonce-tenant-416",
         idempotencyKey: "idem-tenant-416",
         expectedCampaignState: { phase: "REPLAY" },
-        confirmationPhraseClass: "NONE",
+        confirmationPhraseClass: "STOP",
       },
       SECRET,
     );
@@ -77,7 +77,7 @@ describe("DEE-416 FHV tenant isolation", () => {
         nonce: "nonce-tenant-416-ok",
         idempotencyKey: "idem-tenant-416-ok",
         expectedCampaignState: { phase: "REPLAY" },
-        confirmationPhraseClass: "NONE",
+        confirmationPhraseClass: "DIAGNOSTIC",
       },
       SECRET,
     );

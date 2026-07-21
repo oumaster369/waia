@@ -30,9 +30,13 @@ import { buildFhvOperatorStatusV1 } from "@/lib/trader/observability/build-fhv-o
 import {
   buildAndWriteFhvOperatorStatus,
   readFhvOperatorStatusTolerant,
-  statFhvOperatorStatusMtime,
 } from "@/lib/trader/observability/fhv-status-writer";
 import { deliverFhvAlertWithRetry } from "@/lib/trader/observability/fhv-telegram-delivery";
+import { validateFhvCampaignHeartbeat } from "@/lib/trader/observability/fhv-campaign-heartbeat";
+import {
+  initializeFhvObserverProgressState,
+  persistFhvObserverProgressFromTick,
+} from "@/lib/trader/observability/fhv-observer-progress-state";
 import {
   measureBoundedDirectoryBytes,
   resolveCampaignTerminalState,
@@ -95,13 +99,25 @@ export function readFhvEvidenceHealth(runRoot: string): "ok" | "degraded" | "fai
 }
 
 export function createFhvObserverState(config: FhvObserverConfig) {
+  const persisted = initializeFhvObserverProgressState({
+    runRoot: config.runRoot,
+    runId: config.runId,
+    organizationId: config.organizationId,
+  });
+  const lastProgressMs = persisted.lastProgressAtUtc
+    ? Date.parse(persisted.lastProgressAtUtc)
+    : persisted.restoredConservatively
+      ? 0
+      : Date.now();
   return {
     config,
     lastFiredAtById: new Map<string, number>(),
     telegramDedupe: new Set<string>(),
-    lastBarsProcessed: 0,
-    lastProgressMs: Date.now(),
-    lastRestartCount: 0,
+    lastBarsProcessed: persisted.lastBarsProcessed,
+    lastProgressMs: Number.isFinite(lastProgressMs) ? lastProgressMs : 0,
+    lastRestartCount: persisted.processRestartCount,
+    lastHeartbeatSequence: persisted.lastHeartbeatSequence,
+    restoredConservatively: persisted.restoredConservatively,
   };
 }
 
@@ -128,10 +144,26 @@ export async function runFhvObserverTick(
   if (barsProcessed > state.lastBarsProcessed) {
     state.lastBarsProcessed = barsProcessed;
     state.lastProgressMs = nowMs;
+    state.restoredConservatively = false;
   }
-  const stallSec = Math.floor((nowMs - state.lastProgressMs) / 1000);
-  const statusMtime = statFhvOperatorStatusMtime(state.config.runRoot);
-  const heartbeatAgeSec = statusMtime !== null ? Math.floor((nowMs - statusMtime) / 1000) : 9999;
+  const stallSec =
+    state.lastProgressMs > 0
+      ? Math.floor((nowMs - state.lastProgressMs) / 1000)
+      : state.restoredConservatively
+        ? 9999
+        : 0;
+
+  const heartbeatValidation = validateFhvCampaignHeartbeat({
+    runRoot: state.config.runRoot,
+    organizationId: state.config.organizationId,
+    runId: state.config.runId,
+    nowMs,
+    lastSeenSequence: state.lastHeartbeatSequence ?? undefined,
+  });
+  const heartbeatAgeSec = heartbeatValidation.ok ? heartbeatValidation.heartbeatAgeSec : 9999;
+  if (heartbeatValidation.ok) {
+    state.lastHeartbeatSequence = heartbeatValidation.heartbeat.heartbeatSequence;
+  }
   const checkpointAgeSec = checkpointWrittenAt
     ? Math.floor((nowMs - Date.parse(checkpointWrittenAt)) / 1000)
     : null;
@@ -209,7 +241,9 @@ export async function runFhvObserverTick(
     barsTotal: barsTotal ?? undefined,
     startedAt: input.startedAt ?? observedAt,
     lastCheckpointAt: checkpointWrittenAt,
-    heartbeatAt: input.heartbeatAt ?? observedAt,
+    heartbeatAt: heartbeatValidation.ok ? heartbeatValidation.heartbeat.heartbeatAtUtc : null,
+    heartbeatState: heartbeatValidation.ok ? "OK" : heartbeatValidation.heartbeatState,
+    heartbeatAgeMs: heartbeatValidation.ok ? heartbeatValidation.heartbeatAgeSec * 1000 : null,
     processRestartCount,
     terminalState: resolveCampaignTerminalState({
       explicitTerminalState: input.terminalState ?? null,
@@ -228,6 +262,18 @@ export async function runFhvObserverTick(
     })),
   });
 
+  persistFhvObserverProgressFromTick({
+    runRoot: state.config.runRoot,
+    runId: state.config.runId,
+    organizationId: state.config.organizationId,
+    lastBarsProcessed: state.lastBarsProcessed,
+    lastProgressAtUtc:
+      state.lastProgressMs > 0 ? new Date(state.lastProgressMs).toISOString() : null,
+    lastHeartbeatSequence: state.lastHeartbeatSequence,
+    processRestartCount: state.lastRestartCount,
+    restoredConservatively: state.restoredConservatively,
+  });
+
   void measureBoundedDirectoryBytes;
 
   return { statusWritten: true, alertsFired, hostSafetyEscalation };
@@ -237,6 +283,7 @@ export async function handleFhvObserverCommand(
   state: FhvObserverState,
   command: FhvOperatorCommandV1,
   source: "worker_tunnel" | "local_break_glass" | "test" = "worker_tunnel",
+  options?: { nowMs?: number },
 ): Promise<FhvCommandResultV1> {
   const existing = findFhvCommandResultByIdempotencyKey(
     state.config.runRoot,
@@ -260,6 +307,7 @@ export async function handleFhvObserverCommand(
       currentCheckpointSeq: undefined,
       seenNonces: ledger.nonces,
       seenIdempotencyKeys: ledger.idempotencyKeys,
+      nowMs: options?.nowMs,
     });
   } catch (error) {
     const message =

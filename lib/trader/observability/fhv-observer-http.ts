@@ -14,6 +14,7 @@ import {
   sha256Hex,
   verifyFhvObserverAuthToken,
 } from "@/lib/trader/observability/fhv-observer-transport-auth";
+import { createFhvObserverTransportNonceCacheForRunRoot } from "@/lib/trader/observability/fhv-observer-transport-nonce-cache";
 
 const OBSERVER_RATE_LIMIT_PER_MINUTE = 120;
 
@@ -60,7 +61,7 @@ export function createFhvObserverHttpServer(config: FhvObserverConfig): http.Ser
   assertLocalhostBinding(host);
   const port = config.port ?? 9471;
   const state = createFhvObserverState(config);
-  const seenNonces = new Set<string>();
+  const nonceCache = createFhvObserverTransportNonceCacheForRunRoot(config.runRoot);
   const rateBuckets = new Map<string, ObserverRateBucket>();
 
   function checkRateLimit(key: string, nowMs: number): boolean {
@@ -103,7 +104,7 @@ export function createFhvObserverHttpServer(config: FhvObserverConfig): http.Ser
       },
       secret: config.observerTunnelSecret,
       nowMs: input.nowMs,
-      seenNonces,
+      nonceCache,
     });
   }
 

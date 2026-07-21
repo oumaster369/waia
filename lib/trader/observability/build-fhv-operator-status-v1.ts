@@ -49,7 +49,9 @@ export type BuildFhvOperatorStatusInput = Readonly<{
   barsTotal?: number;
   startedAt?: string;
   lastCheckpointAt?: string | null;
-  heartbeatAt?: string;
+  heartbeatAt?: string | null;
+  heartbeatState?: string;
+  heartbeatAgeMs?: number | null;
   processRestartCount?: number;
   terminalState?: string;
   terminalReason?: string | null;
@@ -63,7 +65,8 @@ export type BuildFhvOperatorStatusInput = Readonly<{
 export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): FhvOperatorStatusV1 {
   const observedAt = input.observedAt ?? new Date().toISOString();
   const startedAt = input.startedAt ?? observedAt;
-  const heartbeatAt = input.heartbeatAt ?? observedAt;
+  const heartbeatAt = input.heartbeatAt ?? null;
+  const heartbeatState = input.heartbeatState ?? (heartbeatAt ? "OK" : "UNKNOWN_OR_MISSING");
   const barsProcessed =
     input.barsProcessed ?? input.checkpoint?.evidenceDurableThroughCycleIndex ?? 0;
   const barsTotal = resolveBarsTotal({
@@ -76,7 +79,10 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
   const checkpointAgeMs = input.lastCheckpointAt
     ? Math.max(0, Date.parse(observedAt) - Date.parse(input.lastCheckpointAt))
     : null;
-  const heartbeatAgeMs = Math.max(0, Date.parse(observedAt) - Date.parse(heartbeatAt));
+  const heartbeatAgeMs =
+    heartbeatAt !== null
+      ? Math.max(0, Date.parse(observedAt) - Date.parse(heartbeatAt))
+      : (input.heartbeatAgeMs ?? null);
   const throughputCurrent = elapsedMs > 0 ? Math.round((barsProcessed / elapsedMs) * 1000 * 60) : 0;
 
   const accounting = input.checkpoint?.accountingFrontierState;
@@ -109,6 +115,7 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
       lastCheckpointAt: input.lastCheckpointAt ?? null,
       checkpointAgeMs,
       heartbeatAt,
+      heartbeatState,
       heartbeatAgeMs,
       processRestartCount: input.processRestartCount ?? 0,
       terminalState: resolveCampaignTerminalState({

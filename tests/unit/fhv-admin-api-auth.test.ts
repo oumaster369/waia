@@ -37,34 +37,90 @@ afterEach(() => {
 });
 
 describe("DEE-416 FHV admin API auth", () => {
-  it("creates and verifies organization-bound CSRF tokens", () => {
-    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
-    expect(token.split(".")).toHaveLength(3);
-    expect(verifyFhvAdminCsrfToken(token, CSRF_SECRET, ORG_A)).toBe(true);
-    expect(verifyFhvAdminCsrfToken(token, CSRF_SECRET, ORG_B)).toBe(false);
-    expect(verifyFhvAdminCsrfToken(token, "wrong-secret", ORG_A)).toBe(false);
+  it("creates and verifies organization- and operator-bound CSRF tokens", () => {
+    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A, OPERATOR_ID);
+    expect(token.split(".")).toHaveLength(2);
+    expect(
+      verifyFhvAdminCsrfToken({
+        token,
+        secret: CSRF_SECRET,
+        organizationId: ORG_A,
+        operatorId: OPERATOR_ID,
+      }),
+    ).toBe(true);
+    expect(
+      verifyFhvAdminCsrfToken({
+        token,
+        secret: CSRF_SECRET,
+        organizationId: ORG_B,
+        operatorId: OPERATOR_ID,
+      }),
+    ).toBe(false);
+    expect(
+      verifyFhvAdminCsrfToken({
+        token,
+        secret: "wrong-secret",
+        organizationId: ORG_A,
+        operatorId: OPERATOR_ID,
+      }),
+    ).toBe(false);
   });
 
-  it("validates matching CSRF header and cookie for the same organization", () => {
-    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
-    expect(validateFhvAdminCsrf(buildCsrfRequest(token, ORG_A), CSRF_SECRET, ORG_A)).toBe(true);
+  it("rejects CSRF when operator binding does not match", () => {
+    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A, OPERATOR_ID);
+    expect(
+      verifyFhvAdminCsrfToken({
+        token,
+        secret: CSRF_SECRET,
+        organizationId: ORG_A,
+        operatorId: "other-operator",
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects expired CSRF tokens", () => {
+    const nowMs = Date.parse("2026-07-21T12:00:00.000Z");
+    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A, OPERATOR_ID, nowMs);
+    expect(
+      verifyFhvAdminCsrfToken({
+        token,
+        secret: CSRF_SECRET,
+        organizationId: ORG_A,
+        operatorId: OPERATOR_ID,
+        nowMs: nowMs + 2 * 60 * 60 * 1000,
+      }),
+    ).toBe(false);
+  });
+
+  it("validates matching CSRF header and cookie for the same organization and operator", () => {
+    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A, OPERATOR_ID);
+    expect(
+      validateFhvAdminCsrf(buildCsrfRequest(token, ORG_A), CSRF_SECRET, ORG_A, OPERATOR_ID),
+    ).toBe(true);
   });
 
   it("rejects CSRF when header and cookie tokens differ", () => {
-    const headerToken = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
-    const cookieToken = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
+    const headerToken = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A, OPERATOR_ID);
+    const cookieToken = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A, OPERATOR_ID);
     expect(
-      validateFhvAdminCsrf(buildCsrfRequest(headerToken, ORG_A, cookieToken), CSRF_SECRET, ORG_A),
+      validateFhvAdminCsrf(
+        buildCsrfRequest(headerToken, ORG_A, cookieToken),
+        CSRF_SECRET,
+        ORG_A,
+        OPERATOR_ID,
+      ),
     ).toBe(false);
   });
 
   it("rejects CSRF when organization binding does not match", () => {
-    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
-    expect(validateFhvAdminCsrf(buildCsrfRequest(token, ORG_A), CSRF_SECRET, ORG_B)).toBe(false);
+    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A, OPERATOR_ID);
+    expect(
+      validateFhvAdminCsrf(buildCsrfRequest(token, ORG_A), CSRF_SECRET, ORG_B, OPERATOR_ID),
+    ).toBe(false);
   });
 
   it("builds Set-Cookie without exposing secrets in the header value", () => {
-    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
+    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A, OPERATOR_ID);
     const header = buildFhvAdminCsrfSetCookieHeader(token, true);
     expect(header).toContain(`${FHV_ADMIN_CSRF_COOKIE}=`);
     expect(header).toContain("Secure");

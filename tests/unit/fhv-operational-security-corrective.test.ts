@@ -28,6 +28,7 @@ import {
   requireFhvCommandSecret,
   requireFhvCsrfSecret,
 } from "@/lib/trader/observability/fhv-runtime-secrets";
+import { FhvRuntimeResponseValidationError } from "@/lib/trader/observability/fhv-runtime-response-validators";
 import { assertFhvStatusOrganizationBinding } from "@/lib/trader/observability/fhv-telemetry-probes";
 import { FHV_OPERATOR_COMMAND_SCHEMA_VERSION } from "@/lib/trader/observability/fhv-observability.constants";
 import { signFhvOperatorCommandV1 } from "@/lib/trader/observability/fhv-operator-command-v1";
@@ -112,7 +113,9 @@ describe("DEE-416 operational security corrective", () => {
     );
 
     try {
-      const result = await handleFhvObserverCommand(state, command, "test");
+      const result = await handleFhvObserverCommand(state, command, "test", {
+        nowMs: Date.parse("2026-07-21T12:01:00.000Z"),
+      });
       expect(result.status).toBe("rejected");
       expect(result.message).toBe("SUPERVISOR_NOT_CONFIGURED");
     } finally {
@@ -152,7 +155,9 @@ describe("DEE-416 operational security corrective", () => {
     );
 
     try {
-      const result = await handleFhvObserverCommand(state, command, "test");
+      const result = await handleFhvObserverCommand(state, command, "test", {
+        nowMs: Date.parse("2026-07-21T12:01:00.000Z"),
+      });
       expect(result.status).toBe("executed");
       expect(result.enforcementApplied).toBe(true);
     } finally {
@@ -181,7 +186,7 @@ describe("DEE-416 operational security corrective", () => {
 
     await expect(
       bridge.fetchStatus({ organizationId: ORG_B, campaignRunId: RUN_ID }),
-    ).rejects.toThrow("FHV_STATUS_ORG_MISMATCH");
+    ).rejects.toThrow(FhvRuntimeResponseValidationError);
 
     rmSync(root, { recursive: true, force: true });
   });
@@ -203,10 +208,11 @@ describe("DEE-416 operational security corrective", () => {
   });
 });
 
-describe("DEE-416 CSRF browser lifecycle (route-level)", () => {
-  it("GET Set-Cookie + header token supports credentialed POST validation", () => {
+describe("DEE-416 CSRF cryptographic helpers (unit)", () => {
+  it("validates matching header and cookie tokens with operator binding", () => {
     const secret = "fhv-browser-csrf-secret";
-    const token = createFhvAdminCsrfToken(secret, ORG_A);
+    const operatorId = "operator-browser-416";
+    const token = createFhvAdminCsrfToken(secret, ORG_A, operatorId);
     const setCookie = buildFhvAdminCsrfSetCookieHeader(token, false);
     const cookiePair = setCookie.split(";")[0] ?? "";
     const [, cookieValueRaw] = cookiePair.split("=");
@@ -223,6 +229,6 @@ describe("DEE-416 CSRF browser lifecycle (route-level)", () => {
       },
     );
 
-    expect(validateFhvAdminCsrf(postRequest, secret, ORG_A)).toBe(true);
+    expect(validateFhvAdminCsrf(postRequest, secret, ORG_A, operatorId)).toBe(true);
   });
 });

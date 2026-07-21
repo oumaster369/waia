@@ -30,7 +30,15 @@ export function verifyFhvObserverAuthToken(input: {
   payload: FhvObserverAuthPayload;
   secret: string;
   nowMs?: number;
-  seenNonces?: Set<string>;
+  nonceCache?: {
+    has(input: { nonce: string; organizationId: string; campaignRunId: string }): boolean;
+    remember(input: {
+      nonce: string;
+      organizationId: string;
+      campaignRunId: string;
+      nowMs?: number;
+    }): void;
+  };
   maxSkewMs?: number;
 }): void {
   if (!input.headerValue?.trim()) {
@@ -47,7 +55,16 @@ export function verifyFhvObserverAuthToken(input: {
   if (!Number.isFinite(timestampMs) || Math.abs(nowMs - timestampMs) > maxSkewMs) {
     throw new Error("FHV_OBSERVER_AUTH_EXPIRED");
   }
-  if (!nonce || input.seenNonces?.has(nonce)) {
+  if (!nonce) {
+    throw new Error("FHV_OBSERVER_AUTH_INVALID");
+  }
+  if (
+    input.nonceCache?.has({
+      nonce,
+      organizationId: input.payload.organizationId,
+      campaignRunId: input.payload.campaignRunId,
+    })
+  ) {
     throw new Error("FHV_OBSERVER_AUTH_REPLAY");
   }
   const expected = buildFhvObserverAuthToken(
@@ -59,7 +76,12 @@ export function verifyFhvObserverAuthToken(input: {
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
     throw new Error("FHV_OBSERVER_AUTH_INVALID");
   }
-  input.seenNonces?.add(nonce);
+  input.nonceCache?.remember({
+    nonce,
+    organizationId: input.payload.organizationId,
+    campaignRunId: input.payload.campaignRunId,
+    nowMs,
+  });
 }
 
 export function createFhvObserverAuthNonce(): string {

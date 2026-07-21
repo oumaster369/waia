@@ -55,7 +55,45 @@ export function requireFhvObserverTunnelBaseUrl(env: NodeJS.ProcessEnv = process
       "FHV_OBSERVER_TUNNEL_BASE_URL is required.",
     );
   }
-  return baseUrl.replace(/\/+$/, "");
+  const normalized = baseUrl.replace(/\/+$/, "");
+  assertSecureFhvObserverTunnelBaseUrl(normalized, env);
+  return normalized;
+}
+
+export function assertSecureFhvObserverTunnelBaseUrl(
+  baseUrl: string,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new FhvRuntimeConfigError(
+      "FHV_OBSERVER_TUNNEL_URL_INVALID",
+      "Observer tunnel URL invalid.",
+    );
+  }
+  if (isFhvProductionRuntime(env)) {
+    if (parsed.protocol !== "https:") {
+      throw new FhvRuntimeConfigError(
+        "FHV_OBSERVER_TUNNEL_INSECURE",
+        "Production observer tunnel must use HTTPS.",
+      );
+    }
+    return;
+  }
+  const host = parsed.hostname;
+  if (
+    parsed.protocol !== "https:" &&
+    host !== "127.0.0.1" &&
+    host !== "localhost" &&
+    host !== "::1"
+  ) {
+    throw new FhvRuntimeConfigError(
+      "FHV_OBSERVER_TUNNEL_INSECURE",
+      "Non-local observer tunnel must use HTTPS.",
+    );
+  }
 }
 
 export function isLocalDevelopmentStatusAdapterEnabled(

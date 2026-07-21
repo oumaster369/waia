@@ -1,10 +1,13 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import {
+  FHV_COMMAND_ISSUED_AT_MAX_FUTURE_SKEW_MS,
   FHV_COMMAND_MAX_TTL_MS,
+  FHV_OPERATOR_ACTIONS,
   FHV_OPERATOR_COMMAND_SCHEMA_VERSION,
   type FhvOperatorAction,
 } from "@/lib/trader/observability/fhv-observability.constants";
+import { mapFhvActionToConfirmationPhraseClass } from "@/lib/trader/observability/fhv-campaign-control-executor";
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
 export type FhvOperatorCommandV1 = Readonly<{
@@ -33,7 +36,10 @@ export type FhvCommandVerificationErrorCode =
   | "FHV_COMMAND_STALE_STATE"
   | "FHV_COMMAND_SECRET_VIOLATION"
   | "FHV_COMMAND_REPLAY"
-  | "FHV_COMMAND_SCHEMA_INVALID";
+  | "FHV_COMMAND_SCHEMA_INVALID"
+  | "FHV_COMMAND_ACTION_NOT_ALLOWED"
+  | "FHV_COMMAND_CONFIRMATION_CLASS_MISMATCH"
+  | "FHV_COMMAND_TIMESTAMP_INVALID";
 
 export class FhvCommandVerificationError extends Error {
   readonly code: FhvCommandVerificationErrorCode;
@@ -91,13 +97,46 @@ export function verifyFhvOperatorCommandV1(input: {
   if (input.command.schemaVersion !== FHV_OPERATOR_COMMAND_SCHEMA_VERSION) {
     throw new FhvCommandVerificationError("FHV_COMMAND_SCHEMA_INVALID", "Invalid command schema");
   }
+  if (input.command.signatureAlgorithm !== "HMAC-SHA256") {
+    throw new FhvCommandVerificationError(
+      "FHV_COMMAND_SCHEMA_INVALID",
+      "Invalid signature algorithm",
+    );
+  }
+  if (!FHV_OPERATOR_ACTIONS.includes(input.command.action)) {
+    throw new FhvCommandVerificationError(
+      "FHV_COMMAND_ACTION_NOT_ALLOWED",
+      "Action not in allowlist",
+    );
+  }
+  const expectedConfirmationClass = mapFhvActionToConfirmationPhraseClass(input.command.action);
+  if (
+    expectedConfirmationClass === "NONE" ||
+    input.command.confirmationPhraseClass !== expectedConfirmationClass
+  ) {
+    throw new FhvCommandVerificationError(
+      "FHV_COMMAND_CONFIRMATION_CLASS_MISMATCH",
+      "Confirmation class mismatch",
+    );
+  }
+  const issuedMs = Date.parse(input.command.issuedAtUtc);
+  const expiresMs = Date.parse(input.command.expiresAtUtc);
+  if (!Number.isFinite(issuedMs) || !Number.isFinite(expiresMs)) {
+    throw new FhvCommandVerificationError("FHV_COMMAND_TIMESTAMP_INVALID", "Invalid timestamps");
+  }
+  if (issuedMs - nowMs > FHV_COMMAND_ISSUED_AT_MAX_FUTURE_SKEW_MS) {
+    throw new FhvCommandVerificationError("FHV_COMMAND_TIMESTAMP_INVALID", "issuedAt in future");
+  }
+  if (expiresMs <= issuedMs) {
+    throw new FhvCommandVerificationError(
+      "FHV_COMMAND_TIMESTAMP_INVALID",
+      "expiresAt before issuedAt",
+    );
+  }
   if (Date.parse(input.command.expiresAtUtc) < nowMs) {
     throw new FhvCommandVerificationError("FHV_COMMAND_EXPIRED", "Command expired");
   }
-  if (
-    Date.parse(input.command.expiresAtUtc) - Date.parse(input.command.issuedAtUtc) >
-    FHV_COMMAND_MAX_TTL_MS
-  ) {
+  if (expiresMs - issuedMs > FHV_COMMAND_MAX_TTL_MS) {
     throw new FhvCommandVerificationError("FHV_COMMAND_EXPIRED", "Command TTL exceeded");
   }
   if (scanFhvCommandSecretViolation(input.command.reason)) {

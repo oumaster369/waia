@@ -46,8 +46,9 @@ export type FhvOperatorStatusV1 = Readonly<{
     elapsedMs: number;
     lastCheckpointAt: string | null;
     checkpointAgeMs: number | null;
-    heartbeatAt: string;
-    heartbeatAgeMs: number;
+    heartbeatAt: string | null;
+    heartbeatState: string;
+    heartbeatAgeMs: number | null;
     processRestartCount: number;
     terminalState: string;
     terminalReason: string | null;

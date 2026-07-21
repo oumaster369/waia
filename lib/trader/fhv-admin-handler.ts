@@ -16,10 +16,15 @@ import {
 import {
   buildFhvAdminCsrfSetCookieHeader,
   createFhvAdminCsrfToken,
+  FHV_ADMIN_CSRF_HEADER,
   validateFhvAdminCsrf,
 } from "@/lib/trader/fhv-admin-csrf";
+import { FhvCampaignRunIdError, validateFhvCampaignRunId } from "@/lib/trader/fhv-campaign-run-id";
 import { checkAndRecordFhvCommandRateLimit } from "@/lib/trader/fhv-admin-rate-limit-durable";
-import { mapFhvActionToConfirmationPhraseClass } from "@/lib/trader/observability/fhv-campaign-control-executor";
+import {
+  FhvAdminCommandRequestError,
+  parseFhvAdminCommandRequest,
+} from "@/lib/trader/observability/fhv-admin-command-request-schema";
 import {
   redactHoldoutPayload,
   assertHoldoutGateClosedExposure,
@@ -28,16 +33,14 @@ import {
   resolveFhvObserverBridge,
   type FhvObserverBridge,
 } from "@/lib/trader/observability/fhv-observer-bridge";
-import {
-  signFhvOperatorCommandV1,
-  type FhvOperatorCommandV1,
-} from "@/lib/trader/observability/fhv-operator-command-v1";
+import { signFhvOperatorCommandV1 } from "@/lib/trader/observability/fhv-operator-command-v1";
 import {
   FhvRuntimeConfigError,
   isFhvProductionRuntime,
   requireFhvCommandSecret,
   requireFhvCsrfSecret,
 } from "@/lib/trader/observability/fhv-runtime-secrets";
+import { FhvRuntimeResponseValidationError } from "@/lib/trader/observability/fhv-runtime-response-validators";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 export type FhvAdminHandlerDeps = AdminRouteHandlerDeps & {
@@ -45,10 +48,23 @@ export type FhvAdminHandlerDeps = AdminRouteHandlerDeps & {
   env?: NodeJS.ProcessEnv;
 };
 
+export const FHV_COMMAND_CAPABILITY = {
+  commandContractFailClosed: true,
+  commandsActuallyEnforced: false,
+  supervisorExecutorImplemented: false,
+  supervisorQualificationRequired: true,
+} as const;
+
 function mapRuntimeConfigError(err: unknown): AdminRouteHandlerResult {
   if (err instanceof FhvRuntimeConfigError) {
     const status = err.code === "FHV_OBSERVER_UNAVAILABLE" ? 503 : 500;
     return adminClientError(status, err.code, err.message);
+  }
+  if (err instanceof FhvRuntimeResponseValidationError) {
+    return adminClientError(502, err.code, err.message);
+  }
+  if (err instanceof FhvCampaignRunIdError || err instanceof FhvAdminCommandRequestError) {
+    return adminClientError(400, err.code, err.message);
   }
   if (err instanceof Error) {
     return adminClientError(400, "BAD_REQUEST", err.message);
@@ -61,11 +77,35 @@ function resolveBridge(deps: FhvAdminHandlerDeps): FhvObserverBridge {
 }
 
 function resolveCampaignRunId(url: URL, bodyRunId?: string): string | AdminRouteHandlerResult {
-  const runId = bodyRunId?.trim() || url.searchParams.get("campaign_run_id")?.trim();
-  if (!runId) {
-    return adminClientError(400, "CAMPAIGN_RUN_ID_REQUIRED", "campaign_run_id is required.");
+  try {
+    const runId = bodyRunId?.trim() || url.searchParams.get("campaign_run_id")?.trim() || "";
+    return validateFhvCampaignRunId(runId);
+  } catch (err) {
+    return mapRuntimeConfigError(err);
   }
-  return runId;
+}
+
+function assertStatusRunBinding(
+  status: { campaign: { runId: string } },
+  expectedRunId: string,
+): void {
+  if (status.campaign.runId !== expectedRunId) {
+    throw new FhvRuntimeResponseValidationError("RUN_BINDING_FAILED", "Status run mismatch.");
+  }
+}
+
+function fhvAdminSuccess(
+  body: Record<string, unknown>,
+  waiaDbBackend: "sqlite" | "postgres" | undefined,
+  responseHeaders?: Record<string, string>,
+): AdminRouteHandlerResult {
+  return {
+    status: 200,
+    body,
+    outcome: "success",
+    waiaDbBackend,
+    responseHeaders,
+  };
 }
 
 export async function handleAdminFhvOperationsStatusGet(
@@ -97,37 +137,32 @@ export async function handleAdminFhvOperationsStatusGet(
       campaignRunId,
       operatorId: auth.userId,
     });
+    assertStatusRunBinding(status, campaignRunId);
 
     const redacted = redactHoldoutPayload(status as unknown as Record<string, unknown>, false);
     assertHoldoutGateClosedExposure(redacted);
 
     const csrfSecret = requireFhvCsrfSecret(deps.env);
-    const csrfToken = createFhvAdminCsrfToken(csrfSecret, orgParsed);
+    const csrfToken = createFhvAdminCsrfToken(csrfSecret, orgParsed, auth.userId);
     const secure = isFhvProductionRuntime(deps.env);
 
-    return fhvAdminSuccess({ status: redacted }, runtime.kind, {
-      "Set-Cookie": buildFhvAdminCsrfSetCookieHeader(csrfToken, secure),
-      "x-fhv-csrf-token": csrfToken,
-    });
+    return fhvAdminSuccess(
+      {
+        status: redacted,
+        campaignRunId,
+        capabilities: FHV_COMMAND_CAPABILITY,
+      },
+      runtime.kind,
+      {
+        "Set-Cookie": buildFhvAdminCsrfSetCookieHeader(csrfToken, secure),
+        [FHV_ADMIN_CSRF_HEADER]: csrfToken,
+      },
+    );
   } catch (err) {
     return mapRuntimeConfigError(err);
   } finally {
     await deps.disposeRuntimeDb(runtime);
   }
-}
-
-function fhvAdminSuccess(
-  body: Record<string, unknown>,
-  waiaDbBackend: "sqlite" | "postgres" | undefined,
-  responseHeaders?: Record<string, string>,
-): AdminRouteHandlerResult {
-  return {
-    status: 200,
-    body,
-    outcome: "success",
-    waiaDbBackend,
-    responseHeaders,
-  };
 }
 
 export async function handleAdminFhvOperationsDetailGet(
@@ -165,30 +200,12 @@ export async function handleAdminFhvOperationsDetailGet(
       cursor,
       limit,
     });
-    return fhvAdminSuccess({ ...page }, runtime.kind);
+    return fhvAdminSuccess({ ...page, schemaVersion: "fhv-detail-page/v1" }, runtime.kind);
   } catch (err) {
     return mapRuntimeConfigError(err);
   } finally {
     await deps.disposeRuntimeDb(runtime);
   }
-}
-
-type FhvCommandBody = {
-  organization_id?: string;
-  action?: FhvOperatorCommandV1["action"];
-  reason?: string;
-  campaign_run_id?: string;
-  expected_phase?: string;
-  expected_checkpoint_seq?: number;
-  idempotency_key?: string;
-  confirmation_phrase?: string;
-};
-
-function parseFhvCommandBody(raw: unknown): FhvCommandBody | AdminRouteHandlerResult {
-  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
-    return adminClientError(400, "INVALID_BODY", "JSON body required.");
-  }
-  return raw as FhvCommandBody;
 }
 
 export async function handleAdminFhvOperationsCommandPost(
@@ -203,11 +220,6 @@ export async function handleAdminFhvOperationsCommandPost(
 
   let runtime;
   try {
-    const csrfSecret = requireFhvCsrfSecret(deps.env);
-    if (!validateFhvAdminCsrf(request, csrfSecret, orgParsed)) {
-      return adminClientError(403, "CSRF_INVALID", "CSRF validation failed.");
-    }
-
     const auth = await authorizeAdminRoute(deps, orgParsed, "admin.trader.operations.mutate");
     if (!auth.ok) {
       return auth.result;
@@ -215,30 +227,22 @@ export async function handleAdminFhvOperationsCommandPost(
     runtime = auth.runtime;
     requireOrgContext(orgParsed);
 
-    const bodyParsed = parseFhvCommandBody(await request.json());
-    if ("status" in bodyParsed) {
-      return bodyParsed;
+    const csrfSecret = requireFhvCsrfSecret(deps.env);
+    if (!validateFhvAdminCsrf(request, csrfSecret, orgParsed, auth.userId)) {
+      return adminClientError(403, "CSRF_INVALID", "CSRF validation failed.");
     }
 
-    if (bodyParsed.organization_id && bodyParsed.organization_id !== orgParsed) {
-      return adminClientError(403, "ORGANIZATION_MISMATCH", "organization_id mismatch.");
-    }
-
-    const action = bodyParsed.action;
-    const reason = bodyParsed.reason?.trim();
-    if (!action || !reason) {
-      return adminClientError(400, "COMMAND_INVALID", "action and reason required.");
-    }
-
-    const campaignRunId = resolveCampaignRunId(url, bodyParsed.campaign_run_id);
-    if (typeof campaignRunId !== "string") {
-      return campaignRunId;
-    }
+    const urlCampaignRunId = url.searchParams.get("campaign_run_id");
+    const parsed = parseFhvAdminCommandRequest({
+      organizationId: orgParsed,
+      urlCampaignRunId,
+      rawBody: await request.json(),
+    });
 
     const rate = await checkAndRecordFhvCommandRateLimit(runtime, {
-      organizationId: orgParsed,
+      organizationId: parsed.organizationId,
       operatorId: auth.userId,
-      action,
+      action: parsed.action,
     });
     if (!rate.allowed) {
       return adminClientError(429, "RATE_LIMITED", "Command rate limit exceeded.");
@@ -246,47 +250,43 @@ export async function handleAdminFhvOperationsCommandPost(
 
     const bridge = resolveBridge(deps);
     const status = await bridge.fetchStatus({
-      organizationId: orgParsed,
-      campaignRunId,
+      organizationId: parsed.organizationId,
+      campaignRunId: parsed.campaignRunId,
       operatorId: auth.userId,
     });
-
-    const confirmationPhraseClass = mapFhvActionToConfirmationPhraseClass(action);
-    if (confirmationPhraseClass !== "NONE" && !bodyParsed.confirmation_phrase?.trim()) {
-      return adminClientError(
-        400,
-        "CONFIRMATION_REQUIRED",
-        `confirmation_phrase required for ${confirmationPhraseClass}`,
-      );
-    }
+    assertStatusRunBinding(status, parsed.campaignRunId);
 
     const issuedAtUtc = new Date().toISOString();
     const expiresAtUtc = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const expectedCampaignState =
+      parsed.expectedCheckpointSeq !== undefined
+        ? {
+            phase: parsed.expectedPhase ?? status.campaign.phase,
+            checkpointSeq: parsed.expectedCheckpointSeq,
+          }
+        : { phase: parsed.expectedPhase ?? status.campaign.phase };
     const command = signFhvOperatorCommandV1(
       {
         schemaVersion: "fhv-operator-command/v1",
         commandId: crypto.randomUUID(),
-        campaignRunId,
-        organizationId: orgParsed,
+        campaignRunId: parsed.campaignRunId,
+        organizationId: parsed.organizationId,
         operatorId: auth.userId,
-        action,
-        reason,
+        action: parsed.action,
+        reason: parsed.reason,
         issuedAtUtc,
         expiresAtUtc,
         nonce: crypto.randomUUID().replace(/-/g, ""),
-        idempotencyKey: bodyParsed.idempotency_key ?? crypto.randomUUID(),
-        expectedCampaignState: {
-          phase: bodyParsed.expected_phase ?? status.campaign.phase,
-          checkpointSeq: bodyParsed.expected_checkpoint_seq,
-        },
-        confirmationPhraseClass,
+        idempotencyKey: parsed.idempotencyKey ?? crypto.randomUUID(),
+        expectedCampaignState,
+        confirmationPhraseClass: parsed.confirmationPhraseClass,
       },
       requireFhvCommandSecret(deps.env),
     );
 
     const commandResult = await bridge.forwardCommand({
-      organizationId: orgParsed,
-      campaignRunId,
+      organizationId: parsed.organizationId,
+      campaignRunId: parsed.campaignRunId,
       operatorId: auth.userId,
       command,
     });
@@ -295,6 +295,7 @@ export async function handleAdminFhvOperationsCommandPost(
       {
         commandResult,
         actor: adminActor(auth.userId),
+        capabilities: FHV_COMMAND_CAPABILITY,
       },
       runtime.kind,
     );

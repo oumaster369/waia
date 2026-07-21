@@ -18,7 +18,14 @@ import {
   requireFhvObserverTunnelSecret,
   requireLocalDevelopmentStatusPath,
 } from "@/lib/trader/observability/fhv-runtime-secrets";
-import { assertFhvStatusOrganizationBinding } from "@/lib/trader/observability/fhv-telemetry-probes";
+import {
+  FHV_RESPONSE_BYTE_CAPS,
+  FhvRuntimeResponseValidationError,
+  parseBoundedJsonResponse,
+  validateFhvCommandResultV1Response,
+  validateFhvDetailPageV1Response,
+  validateFhvOperatorStatusV1Response,
+} from "@/lib/trader/observability/fhv-runtime-response-validators";
 
 export type FhvObserverBridgeRequest = Readonly<{
   organizationId: string;
@@ -38,7 +45,7 @@ export type FhvObserverBridge = Readonly<{
   fetchStatus(input: FhvObserverBridgeRequest): Promise<FhvOperatorStatusV1>;
   fetchDetail(
     input: FhvObserverDetailRequest,
-  ): Promise<{ items: readonly unknown[]; nextCursor: string | null }>;
+  ): Promise<{ items: readonly unknown[]; nextCursor: string | null; schemaVersion: string }>;
   forwardCommand(input: {
     organizationId: string;
     campaignRunId: string;
@@ -46,8 +53,6 @@ export type FhvObserverBridge = Readonly<{
     command: FhvOperatorCommandV1;
   }): Promise<FhvCommandResultV1>;
 }>;
-
-const MAX_RESPONSE_BYTES = 256 * 1024;
 
 function readStatusFile(path: string): FhvOperatorStatusV1 {
   return readFhvOperatorStatusFromFile(path);
@@ -71,11 +76,17 @@ function createLocalDevelopmentStatusAdapter(env: NodeJS.ProcessEnv): FhvObserve
     kind: "LOCAL_DEVELOPMENT_STATUS_ADAPTER",
     async fetchStatus(input) {
       const status = readStatusFile(statusPath);
-      assertFhvStatusOrganizationBinding(status, input.organizationId, input.campaignRunId);
-      return status;
+      return validateFhvOperatorStatusV1Response({
+        payload: status,
+        organizationId: input.organizationId,
+        campaignRunId: input.campaignRunId,
+      });
     },
     async fetchDetail() {
-      return { items: [], nextCursor: null };
+      const page = validateFhvDetailPageV1Response({
+        payload: { schemaVersion: "fhv-detail-page/v1", items: [], nextCursor: null },
+      });
+      return { ...page, schemaVersion: "fhv-detail-page/v1" };
     },
     async forwardCommand() {
       throw new FhvRuntimeConfigError(
@@ -137,15 +148,16 @@ function createAuthenticatedObserverTunnelAdapter(env: NodeJS.ProcessEnv): FhvOb
         throw new FhvRuntimeConfigError("FHV_OBSERVER_UNAVAILABLE", "Observer status unavailable.");
       }
       const text = await response.text();
-      if (Buffer.byteLength(text, "utf8") > MAX_RESPONSE_BYTES) {
-        throw new FhvRuntimeConfigError(
-          "FHV_OBSERVER_RESPONSE_TOO_LARGE",
-          "Observer response too large.",
-        );
-      }
-      const status = JSON.parse(text) as FhvOperatorStatusV1;
-      assertFhvStatusOrganizationBinding(status, input.organizationId, input.campaignRunId);
-      return status;
+      const payload = parseBoundedJsonResponse({
+        text,
+        maxBytes: FHV_RESPONSE_BYTE_CAPS.status,
+        contentType: response.headers.get("content-type"),
+      });
+      return validateFhvOperatorStatusV1Response({
+        payload,
+        organizationId: input.organizationId,
+        campaignRunId: input.campaignRunId,
+      });
     },
     async fetchDetail(input) {
       const path =
@@ -164,7 +176,14 @@ function createAuthenticatedObserverTunnelAdapter(env: NodeJS.ProcessEnv): FhvOb
       if (!response.ok) {
         throw new FhvRuntimeConfigError("FHV_OBSERVER_UNAVAILABLE", "Observer detail unavailable.");
       }
-      return (await response.json()) as { items: readonly unknown[]; nextCursor: string | null };
+      const text = await response.text();
+      const payload = parseBoundedJsonResponse({
+        text,
+        maxBytes: FHV_RESPONSE_BYTE_CAPS.detail,
+        contentType: response.headers.get("content-type"),
+      });
+      const page = validateFhvDetailPageV1Response({ payload });
+      return { ...page, schemaVersion: "fhv-detail-page/v1" };
     },
     async forwardCommand(input) {
       const path = `/v1/commands?organization_id=${encodeURIComponent(input.organizationId)}&campaign_run_id=${encodeURIComponent(input.campaignRunId)}`;
@@ -182,7 +201,13 @@ function createAuthenticatedObserverTunnelAdapter(env: NodeJS.ProcessEnv): FhvOb
           "Observer command forwarding failed.",
         );
       }
-      return (await response.json()) as FhvCommandResultV1;
+      const text = await response.text();
+      const payload = parseBoundedJsonResponse({
+        text,
+        maxBytes: FHV_RESPONSE_BYTE_CAPS.commandResult,
+        contentType: response.headers.get("content-type"),
+      });
+      return validateFhvCommandResultV1Response({ payload });
     },
   };
 }
@@ -203,3 +228,5 @@ export function resolveFhvObserverBridge(env: NodeJS.ProcessEnv = process.env): 
 export function readBoundStatusFileForTests(path: string): FhvOperatorStatusV1 {
   return JSON.parse(readFileSync(path, "utf8")) as FhvOperatorStatusV1;
 }
+
+export { FhvRuntimeResponseValidationError };
