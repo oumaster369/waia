@@ -22,6 +22,21 @@ describe("FHV release identity validator (generic)", () => {
 
   it("rejects quoted literal, equals syntax, abbreviated, empty, and wrong variable", () => {
     expect(
+      validateFhvReleaseIdentityMarkdown('--target-sha=""').violations.some(
+        (v) => v.code === "EMPTY_TARGET",
+      ),
+    ).toBe(true);
+    expect(
+      validateFhvReleaseIdentityMarkdown("--target-sha=''").violations.some(
+        (v) => v.code === "EMPTY_TARGET",
+      ),
+    ).toBe(true);
+    expect(
+      validateFhvReleaseIdentityMarkdown('--target-sha = ""').violations.some(
+        (v) => v.code === "EMPTY_TARGET",
+      ),
+    ).toBe(true);
+    expect(
       validateFhvReleaseIdentityMarkdown('--target-sha="abcdef0123456789abcdef0123456789abcdef01"')
         .ok,
     ).toBe(false);
@@ -33,7 +48,7 @@ describe("FHV release identity validator (generic)", () => {
     expect(validateFhvReleaseIdentityMarkdown('--target-sha "$DEV_HEAD_SHA"').ok).toBe(false);
     expect(
       validateFhvReleaseIdentityMarkdown(
-        `${SYMBOLIC}\npnpm trader:fhv:rehearsal -- --target-sha "$EXECUTION_SERVER_TARGET_SHA"\npnpm trader:fhv:rehearsal -- --target-sha `,
+        `${SYMBOLIC}\npnpm trader:fhv:rehearsal -- --target-sha "$EXECUTION_SERVER_TARGET_SHA"\npnpm trader:fhv:rehearsal -- --target-sha ""`,
       ).violations.some((v) => v.code === "EMPTY_TARGET"),
     ).toBe(true);
     expect(

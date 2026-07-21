@@ -58,7 +58,11 @@ describe("DEE-424 FHV systemd supervisor", () => {
     );
     expect(first.campaignUnit).toContain(`--target-sha ${TARGET_SHA}`);
     expect(first.campaignUnit).toContain("RuntimeMaxSec=300");
+    expect(first.campaignUnit).toContain("Restart=no");
+    expect(first.campaignUnit).not.toContain("Restart=on-failure");
+    expect(first.campaignUnit).not.toContain("StartLimitIntervalSec=");
     expect(first.observerUnit).not.toContain("RuntimeMaxSec=");
+    expect(first.observerUnit).toContain("Restart=on-failure");
     expect(first.observerUnit).toContain("fhv-observer-cli.ts");
   });
 

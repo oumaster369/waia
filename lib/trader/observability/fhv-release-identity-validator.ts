@@ -25,7 +25,7 @@ const LITERAL_CHECKOUT_TARGET =
   /(?:fresh clean checkout|provision(?:.*checkout)?|deploy target|released SHA|git checkout)(?:\s+at)?\s+[`"']?[0-9a-f]{40}/i;
 const ANY_LITERAL_SHA = /\b[0-9a-f]{40}\b/;
 const ABBREVIATED_TARGET = /--target-sha(?:=|\s+)["']?[0-9a-f]{7,39}["']?/i;
-const EMPTY_TARGET = /--target-sha(?:=|\s*)["']?\s*(?:\n|$)/;
+const EMPTY_TARGET = /--target-sha(?:\s*=\s*|\s+)(?:["']\s*["']|["']?\s*(?:$|\n|,|\)|\s--))/i;
 const WRONG_VARIABLE = /--target-sha\s+"?\$(?!EXECUTION_SERVER_TARGET_SHA\b)[A-Z_]+/;
 
 function isHistoricalHeading(line: string): boolean {

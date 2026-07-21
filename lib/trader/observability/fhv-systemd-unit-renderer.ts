@@ -45,11 +45,8 @@ Environment=FHV_TARGET_SHA=${targetSha}
 Environment=FHV_REHEARSAL_MODE=true
 ExecStartPre=${wd}/scripts/ops/execution-server-preflight.sh --repo-path ${wd} --target-sha ${targetSha}
 ExecStart=${nodeBin} --import tsx --conditions=react-server ${wd}/scripts/trader/fhv-campaign-cli.ts
-Restart=on-failure
-RestartSec=10
+Restart=no
 RuntimeMaxSec=${String(FHV_REHEARSAL_RUNTIME_MAX_SEC)}
-StartLimitIntervalSec=300
-StartLimitBurst=3
 TimeoutStopSec=120
 KillMode=mixed
 KillSignal=SIGTERM

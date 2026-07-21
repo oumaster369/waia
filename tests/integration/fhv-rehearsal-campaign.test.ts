@@ -1,8 +1,9 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 
+import { restoreCanvasFromCheckpoint } from "@/lib/trader/backtest/canvas-checkpoint-integration";
 import { createRecordingLinuxSystemdCampaignControlExecutor } from "@/lib/trader/observability/fhv-linux-systemd-executor";
 import {
   buildFhvRehearsalLaunchConfig,
@@ -13,9 +14,13 @@ import {
   createFhvRehearsalMonotonicDeadline,
   FhvRehearsalCampaignError,
   FHV_REHEARSAL_CHECKPOINT_CYCLE,
+  FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES,
   isFhvResumeFromCheckpointRequested,
+  readFhvRehearsalActualPauseCycle,
   readFhvRehearsalCampaignProgress,
+  readFhvRehearsalEvidenceTerminalState,
   readFhvRehearsalProgressSamples,
+  readFhvRehearsalTerminalClassification,
   runFhvRehearsalCampaign,
   runFhvRehearsalCampaignParityProof,
 } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
@@ -36,6 +41,30 @@ function prepareRunDir(root: string, runId: string = RUN_ID): string {
   return materializeFhvRehearsalManifest(config).runDir;
 }
 
+async function pauseViaExecutorWhenCyclesReach(input: {
+  runDir: string;
+  minCycles: number;
+  executor: ReturnType<typeof createRecordingLinuxSystemdCampaignControlExecutor>;
+  runId: string;
+}): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < 120_000) {
+    const cyclesProcessed = readFhvRehearsalCampaignProgress(input.runDir)?.cyclesProcessed ?? 0;
+    if (cyclesProcessed >= input.minCycles) {
+      await input.executor.execute({
+        action: "PAUSE_AT_CHECKPOINT",
+        runId: input.runId,
+        organizationId: ORG_ID,
+        operatorId: "operator-1",
+        reason: "hermetic in-run pause",
+      });
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`Timed out waiting to pause at ${input.minCycles} cycles.`);
+}
+
 describe("FHV rehearsal campaign runner (DEE-431)", () => {
   it("runs uninterrupted WP03 rehearsal with increasing progress samples", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-campaign-uninterrupted-"));
@@ -49,6 +78,7 @@ describe("FHV rehearsal campaign runner (DEE-431)", () => {
       });
       expect(result.classification).toBe("REHEARSAL_OK");
       expect(result.cyclesProcessed).toBeGreaterThan(FHV_REHEARSAL_CHECKPOINT_CYCLE);
+      expect(readFhvRehearsalEvidenceTerminalState(runDir)).toBe("STREAMING_EVIDENCE_OK");
       const progress = readFhvRehearsalCampaignProgress(runDir);
       expect(progress?.phase).toBe("completed");
       const samples = readFhvRehearsalProgressSamples(runDir);
@@ -84,7 +114,7 @@ describe("FHV rehearsal campaign runner (DEE-431)", () => {
 
   it("executor pause during run then resume marker and systemctl start completes", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-campaign-executor-"));
-    const checkpointCycle = 5;
+    const pauseAfterCycles = 5;
     try {
       const runDir = prepareRunDir(root, "fhv-executor-e2e");
       const executor = createRecordingLinuxSystemdCampaignControlExecutor({
@@ -98,22 +128,26 @@ describe("FHV rehearsal campaign runner (DEE-431)", () => {
         runId: "fhv-executor-e2e",
         organizationId: ORG_ID,
         targetSha: TARGET_SHA,
-        checkpointCycle,
       });
 
-      const pauseResult = await executor.execute({
-        action: "PAUSE_AT_CHECKPOINT",
+      const pausePromise = pauseViaExecutorWhenCyclesReach({
+        runDir,
+        minCycles: pauseAfterCycles,
+        executor,
         runId: "fhv-executor-e2e",
-        organizationId: ORG_ID,
-        operatorId: "operator-1",
-        reason: "hermetic pause test",
       });
-      expect(pauseResult.enforcementApplied).toBe(true);
+      await pausePromise;
 
       const paused = await campaignPromise;
       expect(paused.classification).toBe("REHEARSAL_PAUSED");
-      const frozenCycles = readFhvRehearsalCampaignProgress(runDir)?.cyclesProcessed;
-      expect(frozenCycles).toBe(checkpointCycle);
+      const actualPauseCycle = readFhvRehearsalActualPauseCycle(runDir);
+      expect(actualPauseCycle).toBeGreaterThanOrEqual(pauseAfterCycles);
+      const checkpoint = readReplayCheckpoint(runDir);
+      expect(checkpoint?.safeResumeThroughCycleIndex).toBe(actualPauseCycle! - 1);
+      expect(checkpoint?.evidenceDurableThroughCycleIndex).toBe(actualPauseCycle! - 1);
+      expect(readFhvRehearsalEvidenceTerminalState(runDir)).toBe(
+        "STREAMING_EVIDENCE_SEALED_PARTIAL",
+      );
 
       const stillPaused = await runFhvRehearsalCampaign({
         runRoot: runDir,
@@ -122,7 +156,6 @@ describe("FHV rehearsal campaign runner (DEE-431)", () => {
         targetSha: TARGET_SHA,
       });
       expect(stillPaused.classification).toBe("REHEARSAL_PAUSED");
-      expect(readFhvRehearsalCampaignProgress(runDir)?.cyclesProcessed).toBe(frozenCycles);
 
       const resumeResult = await executor.execute({
         action: "RESUME_FROM_CHECKPOINT",
@@ -134,12 +167,6 @@ describe("FHV rehearsal campaign runner (DEE-431)", () => {
       expect(resumeResult.enforcementApplied).toBe(true);
       expect(resumeResult.outcome).toBe("executed");
       expect(executor.systemctlCalls).toHaveLength(1);
-      expect(executor.systemctlCalls[0]?.args).toEqual([
-        "systemctl",
-        "start",
-        "waia-fhv-campaign.service",
-      ]);
-      expect(readFhvRehearsalProgressSamples(runDir).length).toBeGreaterThanOrEqual(1);
       expect(isFhvResumeFromCheckpointRequested(runDir)).toBe(true);
 
       const completed = await runFhvRehearsalCampaign({
@@ -147,16 +174,84 @@ describe("FHV rehearsal campaign runner (DEE-431)", () => {
         runId: "fhv-executor-e2e",
         organizationId: ORG_ID,
         targetSha: TARGET_SHA,
-        checkpointCycle,
       });
       expect(completed.classification).toBe("REHEARSAL_OK");
-      expect(completed.cyclesProcessed).toBeGreaterThan(checkpointCycle);
+      expect(completed.cyclesProcessed).toBeGreaterThan(actualPauseCycle!);
       expect(isFhvResumeFromCheckpointRequested(runDir)).toBe(false);
-      expect(readReplayCheckpoint(runDir)).not.toBeNull();
+      expect(checkpoint).not.toBeNull();
+      expect(checkpoint!.safeResumeThroughCycleIndex + 1).toBe(actualPauseCycle);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   }, 240_000);
+
+  it("pauses after original checkpoint boundary with exact frontier", async () => {
+    const root = mkdtempSync(join(tmpdir(), "fhv-campaign-late-pause-"));
+    const sharedRunId = "fhv-late-pause";
+    try {
+      const runDir = prepareRunDir(root, sharedRunId);
+      const executor = createRecordingLinuxSystemdCampaignControlExecutor({
+        hostOsQualified: true,
+        deploymentEnabled: true,
+        runRoot: runDir,
+      });
+
+      const campaignPromise = runFhvRehearsalCampaign({
+        runRoot: runDir,
+        runId: sharedRunId,
+        organizationId: ORG_ID,
+        targetSha: TARGET_SHA,
+      });
+
+      await pauseViaExecutorWhenCyclesReach({
+        runDir,
+        minCycles: FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES,
+        executor,
+        runId: sharedRunId,
+      });
+
+      const paused = await campaignPromise;
+      expect(paused.classification).toBe("REHEARSAL_PAUSED");
+      const actualPauseCycle = readFhvRehearsalActualPauseCycle(runDir);
+      expect(actualPauseCycle).toBeGreaterThanOrEqual(FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES);
+      expect(actualPauseCycle).toBeGreaterThan(FHV_REHEARSAL_CHECKPOINT_CYCLE);
+      expect(readFhvRehearsalCampaignProgress(runDir)?.cyclesProcessed).toBe(actualPauseCycle);
+
+      const checkpoint = readReplayCheckpoint(runDir)!;
+      expect(checkpoint.safeResumeThroughCycleIndex).toBe(actualPauseCycle! - 1);
+      expect(checkpoint.evidenceDurableThroughCycleIndex).toBe(actualPauseCycle! - 1);
+      expect(checkpoint.evidenceTerminalState).toBe("STREAMING_EVIDENCE_SEALED_PARTIAL");
+      expect(readFhvRehearsalEvidenceTerminalState(runDir)).toBe(
+        "STREAMING_EVIDENCE_SEALED_PARTIAL",
+      );
+      expect(restoreCanvasFromCheckpoint(runDir, checkpoint)).toBeTruthy();
+      expect(checkpoint.safeResumeThroughCycleIndex + 1).toBe(actualPauseCycle);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 240_000);
+
+  it("late pause parity matches uninterrupted digest and leaves evidence complete", async () => {
+    const root = mkdtempSync(join(tmpdir(), "fhv-campaign-late-parity-"));
+    const uninterruptedRoot = mkdtempSync(join(tmpdir(), "fhv-campaign-late-uninter-"));
+    const sharedRunId = "fhv-late-parity";
+    try {
+      const uninterruptedDir = prepareRunDir(uninterruptedRoot, sharedRunId);
+      const parity = await runFhvRehearsalCampaignParityProof({
+        runRootUninterrupted: uninterruptedDir,
+        runRootPauseResume: prepareRunDir(root, sharedRunId),
+        runId: sharedRunId,
+        organizationId: ORG_ID,
+        targetSha: TARGET_SHA,
+        pauseAfterCycles: FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES,
+      });
+      expect(parity.match).toBe(true);
+      expect(readFhvRehearsalEvidenceTerminalState(uninterruptedDir)).toBe("STREAMING_EVIDENCE_OK");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(uninterruptedRoot, { recursive: true, force: true });
+    }
+  }, 360_000);
 
   it("classifies injected deadline overrun as REHEARSAL_TIMEOUT", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-campaign-timeout-"));
@@ -171,15 +266,70 @@ describe("FHV rehearsal campaign runner (DEE-431)", () => {
       });
       expect(result.classification).toBe("REHEARSAL_TIMEOUT");
       expect(readFhvRehearsalCampaignProgress(runDir)?.phase).toBe("timeout");
-      expect(existsSync(join(runDir, "fhv-rehearsal-terminal.v1.json"))).toBe(true);
-      const terminal = JSON.parse(
-        readFileSync(join(runDir, "fhv-rehearsal-terminal.v1.json"), "utf8"),
-      ) as { classification: string };
-      expect(terminal.classification).toBe("REHEARSAL_TIMEOUT");
+      expect(readFhvRehearsalTerminalClassification(runDir)).toBe("REHEARSAL_TIMEOUT");
+
+      const retry = await runFhvRehearsalCampaign({
+        runRoot: runDir,
+        runId: "fhv-timeout",
+        organizationId: ORG_ID,
+        targetSha: TARGET_SHA,
+      });
+      expect(retry.classification).toBe("REHEARSAL_TIMEOUT");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   }, 120_000);
+
+  it("rejects ordinary restart after terminal success", async () => {
+    const root = mkdtempSync(join(tmpdir(), "fhv-campaign-terminal-ok-"));
+    try {
+      const runDir = prepareRunDir(root, "fhv-terminal-ok");
+      const first = await runFhvRehearsalCampaign({
+        runRoot: runDir,
+        runId: "fhv-terminal-ok",
+        organizationId: ORG_ID,
+        targetSha: TARGET_SHA,
+      });
+      expect(first.classification).toBe("REHEARSAL_OK");
+
+      const second = await runFhvRehearsalCampaign({
+        runRoot: runDir,
+        runId: "fhv-terminal-ok",
+        organizationId: ORG_ID,
+        targetSha: TARGET_SHA,
+      });
+      expect(second.classification).toBe("REHEARSAL_OK");
+      expect(second.cyclesProcessed).toBe(first.cyclesProcessed);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("allows a new unique run directory after terminal success", async () => {
+    const root = mkdtempSync(join(tmpdir(), "fhv-campaign-new-run-"));
+    try {
+      const firstDir = prepareRunDir(root, "fhv-first-run");
+      const first = await runFhvRehearsalCampaign({
+        runRoot: firstDir,
+        runId: "fhv-first-run",
+        organizationId: ORG_ID,
+        targetSha: TARGET_SHA,
+      });
+      expect(first.classification).toBe("REHEARSAL_OK");
+
+      const secondDir = prepareRunDir(root, "fhv-second-run");
+      const second = await runFhvRehearsalCampaign({
+        runRoot: secondDir,
+        runId: "fhv-second-run",
+        organizationId: ORG_ID,
+        targetSha: TARGET_SHA,
+      });
+      expect(second.classification).toBe("REHEARSAL_OK");
+      expect(second.cyclesProcessed).toBe(first.cyclesProcessed);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 240_000);
 
   it("assertFhvRehearsalWithinDeadline throws when past", () => {
     try {

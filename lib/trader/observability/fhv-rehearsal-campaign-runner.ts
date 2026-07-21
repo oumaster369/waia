@@ -20,8 +20,10 @@ import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evi
 import {
   readReplayCheckpoint,
   REPLAY_CHECKPOINT_SCHEMA_VERSION,
+  resolveEvidenceFrontier,
   type ReplayRunTerminalState,
 } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import { reconstructStreamingEvidence } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-reconstructor";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
@@ -37,6 +39,7 @@ import { assertFhvCampaignRuntimeIdentity } from "@/lib/trader/observability/fhv
 import type { FhvRehearsalLaunchConfigV1 } from "@/lib/trader/observability/fhv-rehearsal-launcher";
 
 export const FHV_REHEARSAL_CHECKPOINT_CYCLE = 40;
+export const FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES = 45;
 export const FHV_REHEARSAL_RUNTIME_MAX_SEC = 300;
 const BENCHMARK_STRATEGY_VERSION = "0.1.0";
 
@@ -191,7 +194,7 @@ async function runWp03Segment(input: {
   evidenceDir?: string;
   deadline?: FhvRehearsalMonotonicDeadline;
   onCycleComplete?: (cyclesProcessed: number) => void;
-  shouldStopAfterCycle?: (cyclesProcessed: number) => boolean;
+  shouldPauseAfterCycle?: (cyclesProcessed: number) => boolean;
 }): Promise<{
   cycleCount: number;
   evidenceDigest: string;
@@ -256,16 +259,15 @@ async function runWp03Segment(input: {
         resumeCycleStartIndex: input.resumeCycleStartIndex,
         initialCanvasState: input.initialCanvasState,
         initialBars1mPrefix: input.initialBars1mPrefix,
-        evidenceSealMode: input.evidenceSealMode ?? (input.maxCycles ? "partial" : "complete"),
-        evidenceSealReason: input.maxCycles ? "fhv-rehearsal-checkpoint-boundary" : undefined,
+        evidenceSealMode: input.evidenceSealMode ?? "complete",
         onCycleBoundary: ({ cycleCount }) => {
           if (input.deadline) {
             assertFhvRehearsalWithinDeadline(input.deadline);
           }
           input.onCycleComplete?.(cycleCount);
-          if (input.shouldStopAfterCycle?.(cycleCount)) {
+          if (input.shouldPauseAfterCycle?.(cycleCount)) {
             stoppedEarly = true;
-            return "stop";
+            return { action: "stop", evidenceSeal: "partial" as const };
           }
           return "continue";
         },
@@ -287,9 +289,32 @@ function writePausedCheckpoint(input: {
   runRoot: string;
   runId: string;
   partial: Awaited<ReturnType<typeof runWp03Segment>>;
-  checkpointCycle: number;
+  actualPauseCycle: number;
 }): void {
   const fixture = loadApprovedBenchmarkFixture();
+  const evidenceDir = resolveFhvRehearsalEvidenceDir(input.runRoot);
+  const evidence = resolveEvidenceFrontier(evidenceDir);
+  const safeResumeThroughCycleIndex = input.actualPauseCycle - 1;
+
+  if (input.partial.cycleCount !== input.actualPauseCycle) {
+    throw new FhvRehearsalCampaignError(
+      "FHV_PAUSE_CYCLE_MISMATCH",
+      `Pause cycle ${input.actualPauseCycle} does not match segment cycle count ${input.partial.cycleCount}.`,
+    );
+  }
+  if (evidence.evidenceDurableThroughCycleIndex !== safeResumeThroughCycleIndex) {
+    throw new FhvRehearsalCampaignError(
+      "FHV_EVIDENCE_FRONTIER_MISMATCH",
+      `Evidence durable index ${evidence.evidenceDurableThroughCycleIndex} != ${safeResumeThroughCycleIndex}.`,
+    );
+  }
+  if (evidence.evidenceTerminalState !== "STREAMING_EVIDENCE_SEALED_PARTIAL") {
+    throw new FhvRehearsalCampaignError(
+      "FHV_EVIDENCE_TERMINAL_MISMATCH",
+      `Expected partial evidence seal, got ${evidence.evidenceTerminalState}.`,
+    );
+  }
+
   writeCanvasSidecarBeforeCheckpoint({
     runRootDir: input.runRoot,
     canvasState: input.partial.canvasState,
@@ -301,11 +326,11 @@ function writePausedCheckpoint(input: {
       codeSha: readGitCodeSha(),
       activePhase: "validation",
       dbDurableThroughPhase: "none",
-      evidenceDurableThroughCycleIndex: input.checkpointCycle - 1,
-      safeResumeThroughCycleIndex: input.checkpointCycle - 1,
-      evidenceRunDir: resolveFhvRehearsalEvidenceDir(input.runRoot),
-      evidenceChainDigest: null,
-      evidenceTerminalState: "STREAMING_EVIDENCE_SEALED_PARTIAL",
+      evidenceDurableThroughCycleIndex: evidence.evidenceDurableThroughCycleIndex,
+      safeResumeThroughCycleIndex,
+      evidenceRunDir: evidenceDir,
+      evidenceChainDigest: evidence.evidenceChainDigest,
+      evidenceTerminalState: evidence.evidenceTerminalState,
       dbConnectionMode: "harness",
       replayTerminalState: "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE",
       fixtureSha256: HTR_WP03_BENCHMARK_FIXTURE_SHA256,
@@ -317,13 +342,13 @@ async function finalizePauseAtCheckpoint(input: {
   runRoot: string;
   runId: string;
   partial: Awaited<ReturnType<typeof runWp03Segment>>;
-  checkpointCycle: number;
+  actualPauseCycle: number;
 }): Promise<FhvRehearsalCampaignResult> {
   writePausedCheckpoint(input);
   writeFhvRehearsalCampaignProgress(input.runRoot, {
     schemaVersion: "fhv-rehearsal-campaign-progress/v1",
     runId: input.runId,
-    cyclesProcessed: input.partial.cycleCount,
+    cyclesProcessed: input.actualPauseCycle,
     expectedCycles: HTR_WP03_BENCHMARK_EXPECTED_CYCLES,
     phase: "paused_at_checkpoint",
     updatedAtUtc: new Date().toISOString(),
@@ -331,11 +356,11 @@ async function finalizePauseAtCheckpoint(input: {
   consumeFhvCampaignControlMarker(input.runRoot, "PAUSE_AT_CHECKPOINT");
   writeFileAtomic(
     join(input.runRoot, "fhv-rehearsal-terminal.v1.json"),
-    `${JSON.stringify({ classification: "REHEARSAL_PAUSED", cyclesProcessed: input.partial.cycleCount }, null, 2)}\n`,
+    `${JSON.stringify({ classification: "REHEARSAL_PAUSED", cyclesProcessed: input.actualPauseCycle, actualPauseCycle: input.actualPauseCycle }, null, 2)}\n`,
   );
   return {
     terminalState: "REHEARSAL_PAUSED",
-    cyclesProcessed: input.partial.cycleCount,
+    cyclesProcessed: input.actualPauseCycle,
     evidenceDigest: input.partial.evidenceDigest,
     semanticReproDigest: input.partial.semanticReproDigest,
     classification: "REHEARSAL_PAUSED",
@@ -347,19 +372,13 @@ async function runCampaignWithPauseSupport(input: {
   runId: string;
   manifest: FhvRehearsalLaunchConfigV1;
   monotonicDeadline?: FhvRehearsalMonotonicDeadline;
-  checkpointCycle?: number;
 }): Promise<FhvRehearsalCampaignResult> {
-  const checkpointCycle = input.checkpointCycle ?? FHV_REHEARSAL_CHECKPOINT_CYCLE;
   const deadline =
     input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
-  let pauseObserved = isFhvPauseAtCheckpointRequested(input.runRoot);
 
   const segment = await runWp03Segment({
     runRoot: input.runRoot,
     runId: input.runId,
-    checkpointRunRoot: pauseObserved ? input.runRoot : undefined,
-    evidenceSealMode: pauseObserved ? "partial" : "complete",
-    maxCycles: pauseObserved ? checkpointCycle : undefined,
     deadline,
     onCycleComplete: (cyclesProcessed) => {
       writeFhvRehearsalCampaignProgress(input.runRoot, {
@@ -372,21 +391,16 @@ async function runCampaignWithPauseSupport(input: {
       });
       appendFhvRehearsalProgressSample(input.runRoot, cyclesProcessed);
     },
-    shouldStopAfterCycle: (cyclesProcessed) => {
-      if (isFhvPauseAtCheckpointRequested(input.runRoot)) {
-        pauseObserved = true;
-        return cyclesProcessed >= checkpointCycle;
-      }
-      return false;
-    },
+    shouldPauseAfterCycle: () => isFhvPauseAtCheckpointRequested(input.runRoot),
   });
 
-  if (pauseObserved && (segment.stoppedEarly || segment.cycleCount >= checkpointCycle)) {
+  if (segment.stoppedEarly) {
+    const actualPauseCycle = segment.cycleCount;
     return finalizePauseAtCheckpoint({
       runRoot: input.runRoot,
       runId: input.runId,
       partial: segment,
-      checkpointCycle,
+      actualPauseCycle,
     });
   }
 
@@ -482,6 +496,34 @@ async function runResumeFromCheckpoint(input: {
   };
 }
 
+export function readFhvRehearsalTerminalClassification(runRoot: string): string | null {
+  const path = join(runRoot, "fhv-rehearsal-terminal.v1.json");
+  if (!existsSync(path)) {
+    return null;
+  }
+  return (
+    (JSON.parse(readFileSync(path, "utf8")) as { classification?: string }).classification ?? null
+  );
+}
+
+export function readFhvRehearsalEvidenceTerminalState(runRoot: string): string | null {
+  const evidenceDir = resolveFhvRehearsalEvidenceDir(runRoot);
+  const reconstruction = reconstructStreamingEvidence(evidenceDir);
+  return reconstruction.terminalState;
+}
+
+export function readFhvRehearsalActualPauseCycle(runRoot: string): number | null {
+  const path = join(runRoot, "fhv-rehearsal-terminal.v1.json");
+  if (!existsSync(path)) {
+    return null;
+  }
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as {
+    actualPauseCycle?: number;
+    cyclesProcessed?: number;
+  };
+  return parsed.actualPauseCycle ?? parsed.cyclesProcessed ?? null;
+}
+
 export async function runFhvRehearsalCampaign(input: {
   runRoot: string;
   targetSha: string;
@@ -489,8 +531,6 @@ export async function runFhvRehearsalCampaign(input: {
   organizationId: string;
   /** Hermetic tests may inject a monotonic deadline override. */
   monotonicDeadline?: FhvRehearsalMonotonicDeadline;
-  /** Hermetic tests may lower the checkpoint boundary (default 40). */
-  checkpointCycle?: number;
 }): Promise<FhvRehearsalCampaignResult> {
   const manifest = assertFhvCampaignRuntimeIdentity(input);
   mkdirSync(resolveFhvRehearsalEvidenceDir(input.runRoot), { recursive: true });
@@ -504,7 +544,29 @@ export async function runFhvRehearsalCampaign(input: {
     });
   }
 
+  const terminalClassification = readFhvRehearsalTerminalClassification(input.runRoot);
   const existingProgress = readFhvRehearsalCampaignProgress(input.runRoot);
+
+  if (terminalClassification === "REHEARSAL_TIMEOUT") {
+    return {
+      terminalState: "REHEARSAL_TIMEOUT",
+      cyclesProcessed: existingProgress?.cyclesProcessed ?? 0,
+      evidenceDigest: "",
+      semanticReproDigest: "",
+      classification: "REHEARSAL_TIMEOUT",
+    };
+  }
+
+  if (terminalClassification === "REHEARSAL_OK") {
+    return {
+      terminalState: "REPLAY_RUN_OK",
+      cyclesProcessed: existingProgress?.cyclesProcessed ?? 0,
+      evidenceDigest: "",
+      semanticReproDigest: "",
+      classification: "REHEARSAL_OK",
+    };
+  }
+
   const existingCheckpoint = readReplayCheckpoint(input.runRoot);
   if (
     existingProgress?.phase === "paused_at_checkpoint" &&
@@ -526,7 +588,6 @@ export async function runFhvRehearsalCampaign(input: {
       runId: input.runId,
       manifest,
       monotonicDeadline: input.monotonicDeadline,
-      checkpointCycle: input.checkpointCycle,
     });
   } catch (error) {
     if (
@@ -563,20 +624,26 @@ export async function runFhvRehearsalCampaignParityProof(input: {
   runId: string;
   targetSha: string;
   organizationId: string;
+  pauseAfterCycles?: number;
 }): Promise<{ uninterruptedDigest: string; resumedDigest: string; match: boolean }> {
+  const pauseAfterCycles = input.pauseAfterCycles ?? FHV_REHEARSAL_CHECKPOINT_CYCLE;
   const uninterrupted = await runFhvRehearsalCampaign({
     runRoot: input.runRootUninterrupted,
     runId: input.runId,
     targetSha: input.targetSha,
     organizationId: input.organizationId,
   });
-  writeFhvCampaignControlPauseRequest(input.runRootPauseResume);
-  const paused = await runFhvRehearsalCampaign({
+  expectUninterruptedEvidenceComplete(input.runRootUninterrupted);
+
+  const pausePromise = runFhvRehearsalCampaign({
     runRoot: input.runRootPauseResume,
     runId: input.runId,
     targetSha: input.targetSha,
     organizationId: input.organizationId,
   });
+  await waitForFhvRehearsalCycles(input.runRootPauseResume, pauseAfterCycles);
+  writeFhvCampaignControlPauseRequest(input.runRootPauseResume);
+  const paused = await pausePromise;
   if (paused.classification !== "REHEARSAL_PAUSED") {
     throw new Error("Expected paused rehearsal classification.");
   }
@@ -592,6 +659,37 @@ export async function runFhvRehearsalCampaignParityProof(input: {
     resumedDigest: resumed.semanticReproDigest,
     match: uninterrupted.semanticReproDigest === resumed.semanticReproDigest,
   };
+}
+
+function expectUninterruptedEvidenceComplete(runRoot: string): void {
+  const terminalState = readFhvRehearsalEvidenceTerminalState(runRoot);
+  if (terminalState !== "STREAMING_EVIDENCE_OK") {
+    throw new FhvRehearsalCampaignError(
+      "FHV_UNINTERRUPTED_EVIDENCE_NOT_COMPLETE",
+      `Expected STREAMING_EVIDENCE_OK, got ${terminalState ?? "null"}.`,
+    );
+  }
+}
+
+export async function waitForFhvRehearsalCycles(
+  runRoot: string,
+  minCycles: number,
+  options: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<number> {
+  const timeoutMs = options.timeoutMs ?? 120_000;
+  const intervalMs = options.intervalMs ?? 25;
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const cyclesProcessed = readFhvRehearsalCampaignProgress(runRoot)?.cyclesProcessed ?? 0;
+    if (cyclesProcessed >= minCycles) {
+      return cyclesProcessed;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new FhvRehearsalCampaignError(
+    "FHV_REHEARSAL_WAIT_TIMEOUT",
+    `Timed out waiting for ${minCycles} cycles.`,
+  );
 }
 
 export function writeFhvCampaignControlPauseRequest(runRoot: string): void {

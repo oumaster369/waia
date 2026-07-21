@@ -219,9 +219,31 @@ export type RunBacktestInput = {
     resumeSeq?: number;
     provenance?: import("@/lib/trader/readiness/htr-operator-report-schema.v1").HtrOperatorReportProvenanceSection;
   }>;
-  /** DEE-431: optional non-economic per-cycle boundary hook (default no-op). */
-  onCycleBoundary?: (input: { cycleIndex: number; cycleCount: number }) => "continue" | "stop";
+  /** DEE-431: optional non-economic per-cycle boundary hook after cycle post-processing (default no-op). */
+  onCycleBoundary?: (input: {
+    cycleIndex: number;
+    cycleCount: number;
+  }) => BacktestCycleBoundaryDecision;
 };
+
+/** DEE-431: structured non-economic stop result for checkpoint/pause paths. */
+export type BacktestCycleBoundaryDecision =
+  | "continue"
+  | "stop"
+  | Readonly<{ action: "stop"; evidenceSeal: "partial" | "complete" }>;
+
+function parseBacktestCycleBoundaryDecision(decision: BacktestCycleBoundaryDecision | undefined): {
+  stop: boolean;
+  evidenceSealOverride: "partial" | "complete" | null;
+} {
+  if (decision === "stop") {
+    return { stop: true, evidenceSealOverride: null };
+  }
+  if (typeof decision === "object" && decision.action === "stop") {
+    return { stop: true, evidenceSealOverride: decision.evidenceSeal };
+  }
+  return { stop: false, evidenceSealOverride: null };
+}
 
 export type RunBacktestResult = {
   cycleCount: number;
@@ -476,6 +498,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   let canvasAppliedBarCount = input.initialCanvasState?.closedBarCount ?? 0;
   const bars1mPrefix: Bar[] = input.initialBars1mPrefix ? [...input.initialBars1mPrefix] : [];
   let wp21CheckpointState = input.wp21CheckpointState;
+  let boundaryEvidenceSealOverride: "partial" | "complete" | null = null;
 
   const wp21Active =
     profileActive &&
@@ -807,9 +830,6 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     }
     await evidenceSink.onCycle(cycleIndex, result);
     cycleCount += 1;
-    if (input.onCycleBoundary?.({ cycleIndex, cycleCount }) === "stop") {
-      break;
-    }
 
     const accountRefreshTimer = benchmarkObserver.beginStage("account-state-refresh", cycleIndex);
     if (input.refreshAccountStateBetweenStrategies) {
@@ -869,6 +889,19 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     }
     accountRefreshTimer.end();
     benchmarkObserver.sampleMemory("account-state-refresh", cycleIndex);
+
+    const boundaryDecision = parseBacktestCycleBoundaryDecision(
+      input.onCycleBoundary?.({ cycleIndex, cycleCount }),
+    );
+    if (boundaryDecision.stop) {
+      boundaryEvidenceSealOverride = boundaryDecision.evidenceSealOverride;
+      break;
+    }
+    if (input.onCycleBoundary) {
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+    }
   }
 
   if (htrAccountingBridge && !htrAccountingBridge.runTerminated) {
@@ -947,14 +980,20 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   finalizeAccountingRef.state = htrAccountingBridge?.state;
 
   let streamingManifestRef: StreamingEvidenceManifestRef | undefined;
-  const sealMode = input.evidenceSealMode ?? "complete";
+  let sealMode = input.evidenceSealMode ?? "complete";
+  if (boundaryEvidenceSealOverride === "partial") {
+    sealMode = "partial";
+  } else if (boundaryEvidenceSealOverride === "complete") {
+    sealMode = "complete";
+  }
+  const sealReason =
+    boundaryEvidenceSealOverride === "partial"
+      ? (input.evidenceSealReason ?? "CYCLE_BOUNDARY_STOP")
+      : input.evidenceSealReason;
   if (sealMode === "none") {
     streamingManifestRef = undefined;
   } else if (sealMode === "partial") {
-    streamingManifestRef = await evidenceSink.sealPartial(
-      cycleCount,
-      input.evidenceSealReason ?? "PARTIAL",
-    );
+    streamingManifestRef = await evidenceSink.sealPartial(cycleCount, sealReason ?? "PARTIAL");
   } else {
     streamingManifestRef = await evidenceSink.sealComplete(cycleCount);
   }
