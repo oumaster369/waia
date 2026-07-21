@@ -68,6 +68,7 @@ export default function FhvOperationsAdminPage() {
   const [status, setStatus] = React.useState<Record<string, unknown> | null>(null);
   const [capabilities, setCapabilities] = React.useState<CommandCapabilities>(DEFAULT_CAPABILITIES);
   const [csrfToken, setCsrfToken] = React.useState("");
+  const [confirmationInput, setConfirmationInput] = React.useState("");
   const [pageError, setPageError] = React.useState<string | null>(null);
   const [pageLoading, setPageLoading] = React.useState(false);
   const [showRawJson, setShowRawJson] = React.useState(false);
@@ -76,6 +77,13 @@ export default function FhvOperationsAdminPage() {
   const [reason, setReason] = React.useState("Operator-requested campaign control");
 
   const runValidationError = validateRunIdInput(campaignRunId);
+  const trimmedRunId = campaignRunId.trim();
+  const requiredConfirmationPhrase =
+    !runValidationError && trimmedRunId
+      ? buildRequiredConfirmationPhrase(trimmedRunId, action)
+      : "";
+  const confirmationMatches =
+    requiredConfirmationPhrase.length > 0 && confirmationInput === requiredConfirmationPhrase;
   const commandsAvailable =
     capabilities.commandsActuallyEnforced && capabilities.supervisorExecutorImplemented;
 
@@ -83,6 +91,7 @@ export default function FhvOperationsAdminPage() {
     setStatus(null);
     setCsrfToken("");
     setPageError(null);
+    setConfirmationInput("");
   }, []);
 
   const handleOrganizationChange = React.useCallback(
@@ -101,6 +110,11 @@ export default function FhvOperationsAdminPage() {
     [clearLoadedState],
   );
 
+  const handleActionChange = React.useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+    setAction(event.target.value as (typeof APPROVED_ACTIONS)[number]);
+    setConfirmationInput("");
+  }, []);
+
   const loadStatus = React.useCallback(async () => {
     if (!organizationId) return;
     const validationError = validateRunIdInput(campaignRunId);
@@ -110,7 +124,7 @@ export default function FhvOperationsAdminPage() {
     }
     setPageLoading(true);
     setPageError(null);
-    const path = buildFhvAdminStatusPath(organizationId, campaignRunId.trim());
+    const path = buildFhvAdminStatusPath(organizationId, trimmedRunId);
     const response = await fetch(path, { cache: "no-store", credentials: "include" });
     const body = (await response.json()) as {
       status?: Record<string, unknown>;
@@ -130,7 +144,7 @@ export default function FhvOperationsAdminPage() {
         "runId" in (returnedStatus.campaign as object)
           ? (returnedStatus.campaign as { runId: string }).runId
           : null;
-      if (returnedRunId && returnedRunId !== campaignRunId.trim()) {
+      if (returnedRunId && returnedRunId !== trimmedRunId) {
         setPageError("Returned status run ID does not match selection.");
         setStatus(null);
         setCsrfToken("");
@@ -141,15 +155,13 @@ export default function FhvOperationsAdminPage() {
       }
     }
     setPageLoading(false);
-  }, [organizationId, campaignRunId]);
+  }, [organizationId, campaignRunId, trimmedRunId]);
 
   const submitCommand = React.useCallback(async () => {
-    if (!organizationId || !csrfToken || runValidationError) return;
+    if (!organizationId || !csrfToken || runValidationError || !confirmationMatches) return;
     setPageLoading(true);
     setPageError(null);
-    const trimmedRunId = campaignRunId.trim();
     const path = buildFhvAdminCommandPath(organizationId, trimmedRunId);
-    const confirmationPhrase = buildRequiredConfirmationPhrase(trimmedRunId, action);
     const response = await fetch(path, {
       method: "POST",
       credentials: "include",
@@ -162,7 +174,7 @@ export default function FhvOperationsAdminPage() {
         campaign_run_id: trimmedRunId,
         action,
         reason,
-        confirmation_phrase: confirmationPhrase,
+        confirmation_phrase: confirmationInput,
         expected_phase:
           typeof status?.campaign === "object" &&
           status.campaign &&
@@ -172,6 +184,7 @@ export default function FhvOperationsAdminPage() {
       }),
     });
     const body = (await response.json()) as { error?: { message?: string } };
+    setConfirmationInput("");
     if (!response.ok) {
       setPageError(body.error?.message ?? "Command failed.");
     } else {
@@ -185,8 +198,10 @@ export default function FhvOperationsAdminPage() {
     reason,
     status,
     loadStatus,
-    campaignRunId,
+    trimmedRunId,
     runValidationError,
+    confirmationMatches,
+    confirmationInput,
   ]);
 
   return (
@@ -218,7 +233,7 @@ export default function FhvOperationsAdminPage() {
         {runValidationError ? <AdminErrorState message={runValidationError} /> : null}
         <p className="text-muted-foreground text-xs">
           Selected org: <span className="font-mono">{organizationId || "—"}</span> · run:{" "}
-          <span className="font-mono">{campaignRunId.trim() || "—"}</span>
+          <span className="font-mono">{trimmedRunId || "—"}</span>
         </p>
       </WaiaSurface>
 
@@ -259,9 +274,10 @@ export default function FhvOperationsAdminPage() {
           sent from JavaScript.
         </p>
         <select
+          data-testid="fhv-action-select"
           className="border-border bg-background w-full max-w-md rounded-md border px-3 py-2 text-sm"
           value={action}
-          onChange={(event) => setAction(event.target.value as (typeof APPROVED_ACTIONS)[number])}
+          onChange={handleActionChange}
           disabled={!commandsAvailable}
         >
           {APPROVED_ACTIONS.map((item) => (
@@ -276,11 +292,33 @@ export default function FhvOperationsAdminPage() {
           onChange={(event) => setReason(event.target.value)}
           disabled={!commandsAvailable}
         />
+        {requiredConfirmationPhrase ? (
+          <p
+            className="text-muted-foreground text-sm"
+            data-testid="fhv-required-confirmation-phrase"
+          >
+            Type exactly: <span className="font-mono">{requiredConfirmationPhrase}</span>
+          </p>
+        ) : null}
+        <label className="block space-y-1 text-sm">
+          <span className="font-medium">Confirmation phrase</span>
+          <input
+            data-testid="fhv-confirmation-input"
+            className="border-border bg-background w-full max-w-xl rounded-md border px-3 py-2 font-mono text-sm"
+            value={confirmationInput}
+            onChange={(event) => setConfirmationInput(event.target.value)}
+            disabled={!commandsAvailable}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </label>
         <Button
           type="button"
           data-testid="fhv-submit-command"
           onClick={() => void submitCommand()}
-          disabled={!csrfToken || Boolean(runValidationError) || !commandsAvailable}
+          disabled={
+            !csrfToken || Boolean(runValidationError) || !commandsAvailable || !confirmationMatches
+          }
         >
           Submit signed command
         </Button>

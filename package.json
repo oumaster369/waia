@@ -70,6 +70,7 @@
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:e2e": "playwright test",
+    "test:e2e:fhv-csrf": "playwright test --config=playwright.fhv-csrf.config.ts",
     "test:e2e:ui": "playwright test --ui",
     "validate:pr-governance": "bash scripts/linear/test-validate-pr-linear-id.sh && bash scripts/linear/test-preflight-pr-governance.sh",
     "validate:canon": "bash scripts/ops/validate-canonical-docs.sh",
