@@ -51,7 +51,7 @@ export type FhvAdminHandlerDeps = AdminRouteHandlerDeps & {
 export const FHV_COMMAND_CAPABILITY = {
   commandContractFailClosed: true,
   commandsActuallyEnforced: false,
-  supervisorExecutorImplemented: false,
+  supervisorExecutorImplemented: true,
   supervisorQualificationRequired: true,
 } as const;
 

@@ -39,7 +39,7 @@ type CommandCapabilities = Readonly<{
 const DEFAULT_CAPABILITIES: CommandCapabilities = {
   commandContractFailClosed: true,
   commandsActuallyEnforced: false,
-  supervisorExecutorImplemented: false,
+  supervisorExecutorImplemented: true,
   supervisorQualificationRequired: true,
 };
 
