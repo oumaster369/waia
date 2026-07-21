@@ -25,6 +25,7 @@ export type FhvOperatorStatusV1 = Readonly<{
   campaignKind: FhvCampaignKind;
   alertPolicyDigest: string;
   campaign: Readonly<{
+    organizationId: string;
     runId: string;
     phase: string;
     codeSha: string;
@@ -36,8 +37,8 @@ export type FhvOperatorStatusV1 = Readonly<{
     historicalCursor: string | null;
     partition: string;
     barsProcessed: number;
-    barsTotal: number;
-    completionPct: number;
+    barsTotal: number | null;
+    completionPct: number | null;
     throughputCurrent: number;
     throughputRolling: number;
     etaUtc: string | null;
@@ -66,7 +67,7 @@ export type FhvOperatorStatusV1 = Readonly<{
     processStatus: string;
     serviceStatus: string;
     postgresConnectivity: "ok" | "degraded" | "unavailable" | "unknown";
-    datasetReadable: boolean;
+    datasetReadable: boolean | null;
     openFiles: number | null;
     ntpHealthy: boolean | null;
   }>;
@@ -118,6 +119,7 @@ export type FhvOperatorStatusV1 = Readonly<{
     eventStreamLagMs: number | null;
     lastSealedArtifactRef: string | null;
     artifactWriteHealth: "ok" | "degraded" | "failed";
+    evidenceHealth: "ok" | "degraded" | "failed";
     digestState: string;
     reportGenerationState: string;
     checkpointIntegrity: "ok" | "degraded" | "failed";

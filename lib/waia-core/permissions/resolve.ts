@@ -15,6 +15,7 @@ const ADMIN_PERMISSIONS = new Set([
   "admin.audit.read",
   "admin.org.read",
   "admin.entitlement.manage",
+  "admin.trader.operations.mutate",
 ]);
 
 const USER_PERMISSIONS = new Set(["org.member.read", "org.subscription.read"]);

@@ -58,7 +58,8 @@ export type WaiaRuntimeRouteKey =
   | "trader_admin_account_status"
   | "trader_admin_exchange_credentials"
   | "trader_admin_fhv_operations_status"
-  | "trader_admin_fhv_operations_commands";
+  | "trader_admin_fhv_operations_commands"
+  | "trader_admin_fhv_operations_detail";
 
 export type WaiaRuntimeRouteOutcome =
   | "success"

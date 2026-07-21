@@ -121,6 +121,7 @@ describe("DEE-416 FHV synthetic replay E2E", () => {
         runId,
         organizationId: context.organizationId,
         commandSecret: "fhv-test-command-secret",
+        observerTunnelSecret: "fhv-test-tunnel-secret",
       });
       const tick = await runFhvObserverTick(observerState, {
         nowMs: Date.parse("2026-07-21T06:00:00.000Z"),

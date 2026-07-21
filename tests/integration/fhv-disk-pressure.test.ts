@@ -10,6 +10,7 @@ import {
   createFhvObserverState,
   runFhvObserverTick,
 } from "@/lib/trader/observability/fhv-observer-core";
+import { createSuccessfulFhvCampaignControlExecutor } from "@/lib/trader/observability/fhv-campaign-control-executor";
 import { GIB } from "@/lib/trader/observability/fhv-observability.constants";
 import { readFhvOperatorStatusTolerant } from "@/lib/trader/observability/fhv-status-writer";
 
@@ -65,6 +66,7 @@ describe("DEE-416 FHV disk pressure alerts", () => {
       runId: "disk-soft-run",
       organizationId: "00000000-0000-4000-8000-0000000416",
       commandSecret: "fhv-test-command-secret",
+      observerTunnelSecret: "fhv-test-tunnel-secret",
     });
 
     try {
@@ -101,6 +103,8 @@ describe("DEE-416 FHV disk pressure alerts", () => {
       runId: "disk-hard-run",
       organizationId: "00000000-0000-4000-8000-0000000416",
       commandSecret: "fhv-test-command-secret",
+      observerTunnelSecret: "fhv-test-tunnel-secret",
+      campaignControlExecutor: createSuccessfulFhvCampaignControlExecutor(),
     });
 
     try {

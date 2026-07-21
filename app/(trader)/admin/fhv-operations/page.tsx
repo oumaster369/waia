@@ -2,15 +2,16 @@
 
 import * as React from "react";
 
+import { FhvOperationsDashboard } from "@/components/trader/admin/fhv-operations-dashboard";
 import {
   AdminErrorState,
   AdminLoadingState,
   AdminOrgSelector,
-  adminFetch,
   useAdminOrganizations,
 } from "@/components/trader/admin/admin-org-selector";
 import { Button } from "@/components/ui/button";
 import { WaiaSurface } from "@/components/waia/waia-surface";
+import { FHV_ADMIN_CSRF_HEADER, FHV_ADMIN_CSRF_COOKIE } from "@/lib/trader/fhv-admin-csrf";
 
 const APPROVED_ACTIONS = [
   "PAUSE_AT_CHECKPOINT",
@@ -28,6 +29,7 @@ export default function FhvOperationsAdminPage() {
   const [csrfToken, setCsrfToken] = React.useState("");
   const [pageError, setPageError] = React.useState<string | null>(null);
   const [pageLoading, setPageLoading] = React.useState(false);
+  const [showRawJson, setShowRawJson] = React.useState(false);
   const [action, setAction] =
     React.useState<(typeof APPROVED_ACTIONS)[number]>("PAUSE_AT_CHECKPOINT");
   const [reason, setReason] = React.useState("Operator-requested campaign control");
@@ -36,15 +38,21 @@ export default function FhvOperationsAdminPage() {
     if (!organizationId) return;
     setPageLoading(true);
     setPageError(null);
-    const result = await adminFetch<{ status: Record<string, unknown>; csrfToken: string }>(
+    const response = await fetch(
       `/api/trader/admin/fhv-operations/status?organization_id=${encodeURIComponent(organizationId)}`,
+      { cache: "no-store", credentials: "include" },
     );
-    if (!result.ok) {
-      setPageError(result.message);
+    const body = (await response.json()) as {
+      status?: Record<string, unknown>;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      setPageError(body.error?.message ?? "Request failed.");
       setStatus(null);
+      setCsrfToken("");
     } else {
-      setStatus(result.data.status);
-      setCsrfToken(result.data.csrfToken);
+      setStatus(body.status ?? null);
+      setCsrfToken(response.headers.get(FHV_ADMIN_CSRF_HEADER) ?? "");
     }
     setPageLoading(false);
   }, [organizationId]);
@@ -57,10 +65,10 @@ export default function FhvOperationsAdminPage() {
       `/api/trader/admin/fhv-operations/commands?organization_id=${encodeURIComponent(organizationId)}`,
       {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-fhv-csrf-token": csrfToken,
-          cookie: `fhv_admin_csrf=${csrfToken}`,
+          [FHV_ADMIN_CSRF_HEADER]: csrfToken,
         },
         body: JSON.stringify({
           organization_id: organizationId,
@@ -107,14 +115,20 @@ export default function FhvOperationsAdminPage() {
         {pageLoading ? <AdminLoadingState label="Loading FHV status…" /> : null}
         {pageError ? <AdminErrorState message={pageError} /> : null}
         {status ? (
-          <pre className="bg-muted/30 overflow-auto rounded-md p-3 text-xs">
-            {JSON.stringify(status, null, 2)}
-          </pre>
+          <FhvOperationsDashboard
+            status={status}
+            showRawJson={showRawJson}
+            onToggleRawJson={() => setShowRawJson((value) => !value)}
+          />
         ) : null}
       </WaiaSurface>
 
       <WaiaSurface variant="raised" className="space-y-3 p-4">
         <h2 className="text-lg font-medium">Operator actions</h2>
+        <p className="text-muted-foreground text-xs">
+          CSRF cookie ({FHV_ADMIN_CSRF_COOKIE}) is set by the server; only the matching header is
+          sent from JavaScript.
+        </p>
         <select
           className="border-border bg-background w-full max-w-md rounded-md border px-3 py-2 text-sm"
           value={action}

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { readReplayCheckpoint } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
@@ -33,15 +33,26 @@ import {
   statFhvOperatorStatusMtime,
 } from "@/lib/trader/observability/fhv-status-writer";
 import { deliverFhvAlertWithRetry } from "@/lib/trader/observability/fhv-telegram-delivery";
-import { FHV_SUPERVISOR_NEUTRAL_CONTRACT } from "@/lib/trader/observability/fhv-supervisor-contract";
+import {
+  measureBoundedDirectoryBytes,
+  resolveCampaignTerminalState,
+  resolveCheckpointWrittenAtUtc,
+} from "@/lib/trader/observability/fhv-telemetry-probes";
+import {
+  UNCONFIGURED_FHV_CAMPAIGN_CONTROL_EXECUTOR,
+  type FhvCampaignControlExecutor,
+} from "@/lib/trader/observability/fhv-campaign-control-executor";
 
 export type FhvObserverConfig = Readonly<{
   runRoot: string;
   runId: string;
   organizationId: string;
   commandSecret: string;
+  observerTunnelSecret: string;
   bindHost?: string;
   port?: number;
+  campaignControlExecutor?: FhvCampaignControlExecutor;
+  pinnedBarsTotal?: number | null;
 }>;
 
 export type FhvObserverTickInput = Readonly<{
@@ -51,6 +62,8 @@ export type FhvObserverTickInput = Readonly<{
   phase?: string;
   startedAt?: string;
   processRestartCount?: number;
+  heartbeatAt?: string;
+  terminalState?: string;
   sendTelegram?: (text: string) => Promise<{ ok: boolean; error?: string }>;
 }>;
 
@@ -82,19 +95,13 @@ export function readFhvEvidenceHealth(runRoot: string): "ok" | "degraded" | "fai
 }
 
 export function createFhvObserverState(config: FhvObserverConfig) {
-  const lastFiredAtById = new Map<string, number>();
-  const telegramDedupe = new Set<string>();
-  const lastBarsProcessed = 0;
-  const lastProgressMs = Date.now();
-  const lastRestartCount = 0;
-
   return {
     config,
-    lastFiredAtById,
-    telegramDedupe,
-    lastBarsProcessed,
-    lastProgressMs,
-    lastRestartCount,
+    lastFiredAtById: new Map<string, number>(),
+    telegramDedupe: new Set<string>(),
+    lastBarsProcessed: 0,
+    lastProgressMs: Date.now(),
+    lastRestartCount: 0,
   };
 }
 
@@ -107,14 +114,17 @@ export async function runFhvObserverTick(
   const nowMs = input.nowMs ?? Date.now();
   const observedAt = new Date(nowMs).toISOString();
   const checkpoint = readFhvCampaignCheckpoint(state.config.runRoot);
+  const checkpointPath = join(state.config.runRoot, "replay-checkpoint.json");
+  const checkpointWrittenAt = resolveCheckpointWrittenAtUtc(checkpointPath);
   const hostTelemetry = collectFhvHostTelemetry({
-    artifactDirBytes: safeDirSize(state.config.runRoot),
+    runRoot: state.config.runRoot,
+    filesystemPath: state.config.runRoot,
     postgresConnectivity: "unknown",
-    datasetReadable: false,
+    datasetReadable: null,
   });
 
   const barsProcessed = input.barsProcessed ?? checkpoint?.evidenceDurableThroughCycleIndex ?? 0;
-  const barsTotal = input.barsTotal ?? barsProcessed;
+  const barsTotal = input.barsTotal ?? state.config.pinnedBarsTotal ?? null;
   if (barsProcessed > state.lastBarsProcessed) {
     state.lastBarsProcessed = barsProcessed;
     state.lastProgressMs = nowMs;
@@ -122,7 +132,9 @@ export async function runFhvObserverTick(
   const stallSec = Math.floor((nowMs - state.lastProgressMs) / 1000);
   const statusMtime = statFhvOperatorStatusMtime(state.config.runRoot);
   const heartbeatAgeSec = statusMtime !== null ? Math.floor((nowMs - statusMtime) / 1000) : 9999;
-  const checkpointAgeSec = null;
+  const checkpointAgeSec = checkpointWrittenAt
+    ? Math.floor((nowMs - Date.parse(checkpointWrittenAt)) / 1000)
+    : null;
 
   const processRestartCount = input.processRestartCount ?? 0;
   if (processRestartCount > state.lastRestartCount) {
@@ -169,8 +181,23 @@ export async function runFhvObserverTick(
   }
 
   const evidenceHealth = readFhvEvidenceHealth(state.config.runRoot);
+  let hostSafetyEscalation = false;
+  if (hostTelemetry.diskHardBreached) {
+    const executor =
+      state.config.campaignControlExecutor ?? UNCONFIGURED_FHV_CAMPAIGN_CONTROL_EXECUTOR;
+    const enforcement = await executor.execute({
+      action: "EMERGENCY_STOP",
+      runId: state.config.runId,
+      organizationId: state.config.organizationId,
+      operatorId: "observer-host-safety",
+      reason: "Disk hard threshold breached",
+    });
+    hostSafetyEscalation = enforcement.enforcementApplied;
+  }
+
   buildAndWriteFhvOperatorStatus(state.config.runRoot, {
     observedAt,
+    organizationId: state.config.organizationId,
     runId: state.config.runId,
     phase: input.phase ?? checkpoint?.activePhase ?? "validation",
     codeSha: checkpoint?.codeSha ?? "unknown",
@@ -179,15 +206,20 @@ export async function runFhvObserverTick(
     datasetDigest: checkpoint?.datasetContentDigest ?? "unknown",
     configurationDigest: checkpoint?.checkpointDigest ?? "unknown",
     barsProcessed,
-    barsTotal,
+    barsTotal: barsTotal ?? undefined,
     startedAt: input.startedAt ?? observedAt,
-    lastCheckpointAt: null,
-    heartbeatAt: observedAt,
+    lastCheckpointAt: checkpointWrittenAt,
+    heartbeatAt: input.heartbeatAt ?? observedAt,
     processRestartCount,
-    terminalState: checkpoint?.replayTerminalState ?? "REPLAY_RUN_OK",
+    terminalState: resolveCampaignTerminalState({
+      explicitTerminalState: input.terminalState ?? null,
+      checkpointTerminalState: checkpoint?.replayTerminalState ?? null,
+      campaignRunning: !checkpoint?.replayTerminalState,
+    }),
     terminalReason: null,
     checkpoint,
     hostTelemetry,
+    evidenceHealth,
     recentAlerts: alertsFired.map((alertId) => ({
       id: alertId,
       label: alertId,
@@ -196,24 +228,22 @@ export async function runFhvObserverTick(
     })),
   });
 
-  const hostSafetyEscalation = hostTelemetry.diskHardBreached;
-  void evidenceHealth;
-  void FHV_SUPERVISOR_NEUTRAL_CONTRACT;
+  void measureBoundedDirectoryBytes;
 
   return { statusWritten: true, alertsFired, hostSafetyEscalation };
 }
 
-export function handleFhvObserverCommand(
+export async function handleFhvObserverCommand(
   state: FhvObserverState,
   command: FhvOperatorCommandV1,
   source: "worker_tunnel" | "local_break_glass" | "test" = "worker_tunnel",
-): FhvCommandResultV1 {
+): Promise<FhvCommandResultV1> {
   const existing = findFhvCommandResultByIdempotencyKey(
     state.config.runRoot,
     command.idempotencyKey,
   );
   if (existing) {
-    return existing;
+    return { ...existing, status: "duplicate" };
   }
 
   const status = readFhvOperatorStatusTolerant(state.config.runRoot);
@@ -241,6 +271,7 @@ export function handleFhvObserverCommand(
       status: "rejected",
       message,
       completedAtUtc: new Date().toISOString(),
+      enforcementApplied: false,
     };
     appendFhvCommandLedger(state.config.runRoot, {
       recordedAtUtc: result.completedAtUtc,
@@ -251,13 +282,29 @@ export function handleFhvObserverCommand(
     return result;
   }
 
+  const executor =
+    state.config.campaignControlExecutor ?? UNCONFIGURED_FHV_CAMPAIGN_CONTROL_EXECUTOR;
+  const execution = await executor.execute({
+    action: command.action,
+    runId: state.config.runId,
+    organizationId: state.config.organizationId,
+    operatorId: command.operatorId,
+    reason: command.reason,
+  });
+
   const result: FhvCommandResultV1 = {
     schemaVersion: "fhv-command-result/v1",
     commandId: command.commandId,
     idempotencyKey: command.idempotencyKey,
-    status: "accepted",
-    message: `Command ${command.action} accepted for supervisor enforcement`,
+    status:
+      execution.message === "SUPERVISOR_NOT_CONFIGURED"
+        ? "rejected"
+        : execution.outcome === "executed"
+          ? "executed"
+          : "failed",
+    message: execution.message,
     completedAtUtc: new Date().toISOString(),
+    enforcementApplied: execution.enforcementApplied,
   };
   appendFhvCommandLedger(state.config.runRoot, {
     recordedAtUtc: result.completedAtUtc,
@@ -266,14 +313,6 @@ export function handleFhvObserverCommand(
   });
   writeFhvCommandResult(state.config.runRoot, result);
   return result;
-}
-
-function safeDirSize(runRoot: string): number | null {
-  try {
-    return statSync(runRoot).size;
-  } catch {
-    return null;
-  }
 }
 
 export function buildFhvObserverStatusSnapshot(state: FhvObserverState) {

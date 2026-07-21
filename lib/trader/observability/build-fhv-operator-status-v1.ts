@@ -17,6 +17,10 @@ import {
   FHV_STATUS_MAX_VETOES,
   type FhvCampaignKind,
 } from "@/lib/trader/observability/fhv-observability.constants";
+import {
+  resolveBarsTotal,
+  resolveCampaignTerminalState,
+} from "@/lib/trader/observability/fhv-telemetry-probes";
 import type {
   FhvBoundedSummaryItem,
   FhvOperatorStatusV1,
@@ -30,6 +34,7 @@ export type BuildFhvOperatorStatusInput = Readonly<{
   observedAt?: string;
   campaignKind?: FhvCampaignKind;
   alertPolicyDigest?: string;
+  organizationId?: string;
   runId: string;
   phase: string;
   codeSha: string;
@@ -52,6 +57,7 @@ export type BuildFhvOperatorStatusInput = Readonly<{
   hostTelemetry?: Partial<FhvOperatorStatusV1["host"]>;
   holdoutDatasetDigest?: string;
   recentAlerts?: readonly FhvBoundedSummaryItem[];
+  evidenceHealth?: "ok" | "degraded" | "failed";
 }>;
 
 export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): FhvOperatorStatusV1 {
@@ -60,8 +66,12 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
   const heartbeatAt = input.heartbeatAt ?? observedAt;
   const barsProcessed =
     input.barsProcessed ?? input.checkpoint?.evidenceDurableThroughCycleIndex ?? 0;
-  const barsTotal = input.barsTotal ?? barsProcessed;
-  const completionPct = barsTotal > 0 ? Math.min(100, (barsProcessed / barsTotal) * 100) : 0;
+  const barsTotal = resolveBarsTotal({
+    pinnedBarsTotal: input.barsTotal ?? null,
+    manifestBarsTotal: null,
+  });
+  const completionPct =
+    barsTotal !== null && barsTotal > 0 ? Math.min(100, (barsProcessed / barsTotal) * 100) : null;
   const elapsedMs = Math.max(0, Date.parse(observedAt) - Date.parse(startedAt));
   const checkpointAgeMs = input.lastCheckpointAt
     ? Math.max(0, Date.parse(observedAt) - Date.parse(input.lastCheckpointAt))
@@ -77,6 +87,7 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
     campaignKind: input.campaignKind ?? "CERTIFIED_BASELINE_FHV",
     alertPolicyDigest: input.alertPolicyDigest ?? computeFhvAlertPolicyDigest(),
     campaign: {
+      organizationId: input.organizationId ?? "unknown",
       runId: input.runId,
       phase: input.phase,
       codeSha: input.codeSha,
@@ -100,8 +111,11 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
       heartbeatAt,
       heartbeatAgeMs,
       processRestartCount: input.processRestartCount ?? 0,
-      terminalState:
-        input.terminalState ?? input.checkpoint?.replayTerminalState ?? "REPLAY_RUN_OK",
+      terminalState: resolveCampaignTerminalState({
+        explicitTerminalState: input.terminalState,
+        checkpointTerminalState: input.checkpoint?.replayTerminalState ?? null,
+        campaignRunning: input.terminalState === "RUNNING",
+      }),
       terminalReason: input.terminalReason ?? null,
     },
     host: {
@@ -174,7 +188,8 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
       lastSealedArtifactRef: input.checkpoint?.evidenceChainDigest
         ? `fhv-artifact/v1/evidence-chunk/${input.runId}/manifest#0`
         : null,
-      artifactWriteHealth: "ok",
+      artifactWriteHealth: input.evidenceHealth ?? "ok",
+      evidenceHealth: input.evidenceHealth ?? "ok",
       digestState: input.checkpoint?.checkpointDigest ?? "unknown",
       reportGenerationState: "pending",
       checkpointIntegrity: input.checkpoint ? "ok" : "degraded",

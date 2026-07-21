@@ -8,6 +8,7 @@ import {
   createFhvObserverState,
   runFhvObserverTick,
 } from "@/lib/trader/observability/fhv-observer-core";
+import { createSuccessfulFhvCampaignControlExecutor } from "@/lib/trader/observability/fhv-campaign-control-executor";
 import { readFhvOperatorStatusTolerant } from "@/lib/trader/observability/fhv-status-writer";
 
 const BASE_TELEMETRY: hostTelemetryModule.FhvHostTelemetrySnapshot = {
@@ -52,6 +53,8 @@ describe("DEE-416 FHV observer host safety escalation", () => {
       runId: "host-safety-run",
       organizationId: "00000000-0000-4000-8000-0000000416",
       commandSecret: "fhv-test-command-secret",
+      observerTunnelSecret: "fhv-test-tunnel-secret",
+      campaignControlExecutor: createSuccessfulFhvCampaignControlExecutor(),
     });
 
     try {

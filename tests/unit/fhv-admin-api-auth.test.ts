@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  FHV_ADMIN_CSRF_COOKIE,
+  FHV_ADMIN_CSRF_HEADER,
+  buildFhvAdminCsrfSetCookieHeader,
   createFhvAdminCsrfToken,
-  fhvAdminCsrfCookieName,
-  fhvAdminCsrfHeaderName,
   validateFhvAdminCsrf,
   verifyFhvAdminCsrfToken,
 } from "@/lib/trader/fhv-admin-csrf";
@@ -14,16 +15,21 @@ import {
 import { FHV_COMMAND_RATE_LIMIT_PER_HOUR } from "@/lib/trader/observability/fhv-observability.constants";
 
 const CSRF_SECRET = "fhv-test-csrf-secret-416";
+const ORG_A = "00000000-0000-4000-8000-0000000416a1";
+const ORG_B = "00000000-0000-4000-8000-0000000416b2";
 const OPERATOR_ID = "operator-416";
 
-function buildCsrfRequest(token: string, cookieToken = token): Request {
-  return new Request("http://localhost/api/trader/admin/fhv-operations/commands", {
-    method: "POST",
-    headers: {
-      [fhvAdminCsrfHeaderName()]: token,
-      cookie: `${fhvAdminCsrfCookieName()}=${cookieToken}`,
+function buildCsrfRequest(token: string, organizationId: string, cookieToken = token): Request {
+  return new Request(
+    `http://localhost/api/trader/admin/fhv-operations/commands?organization_id=${organizationId}`,
+    {
+      method: "POST",
+      headers: {
+        [FHV_ADMIN_CSRF_HEADER]: token,
+        cookie: `${FHV_ADMIN_CSRF_COOKIE}=${encodeURIComponent(cookieToken)}`,
+      },
     },
-  });
+  );
 }
 
 afterEach(() => {
@@ -31,24 +37,38 @@ afterEach(() => {
 });
 
 describe("DEE-416 FHV admin API auth", () => {
-  it("creates and verifies CSRF tokens", () => {
-    const token = createFhvAdminCsrfToken(CSRF_SECRET);
-    expect(token.split(".")).toHaveLength(2);
-    expect(verifyFhvAdminCsrfToken(token, CSRF_SECRET)).toBe(true);
-    expect(verifyFhvAdminCsrfToken(token, "wrong-secret")).toBe(false);
+  it("creates and verifies organization-bound CSRF tokens", () => {
+    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
+    expect(token.split(".")).toHaveLength(3);
+    expect(verifyFhvAdminCsrfToken(token, CSRF_SECRET, ORG_A)).toBe(true);
+    expect(verifyFhvAdminCsrfToken(token, CSRF_SECRET, ORG_B)).toBe(false);
+    expect(verifyFhvAdminCsrfToken(token, "wrong-secret", ORG_A)).toBe(false);
   });
 
-  it("validates matching CSRF header and cookie", () => {
-    const token = createFhvAdminCsrfToken(CSRF_SECRET);
-    expect(validateFhvAdminCsrf(buildCsrfRequest(token), CSRF_SECRET)).toBe(true);
+  it("validates matching CSRF header and cookie for the same organization", () => {
+    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
+    expect(validateFhvAdminCsrf(buildCsrfRequest(token, ORG_A), CSRF_SECRET, ORG_A)).toBe(true);
   });
 
   it("rejects CSRF when header and cookie tokens differ", () => {
-    const headerToken = createFhvAdminCsrfToken(CSRF_SECRET);
-    const cookieToken = createFhvAdminCsrfToken(CSRF_SECRET);
-    expect(validateFhvAdminCsrf(buildCsrfRequest(headerToken, cookieToken), CSRF_SECRET)).toBe(
-      false,
-    );
+    const headerToken = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
+    const cookieToken = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
+    expect(
+      validateFhvAdminCsrf(buildCsrfRequest(headerToken, ORG_A, cookieToken), CSRF_SECRET, ORG_A),
+    ).toBe(false);
+  });
+
+  it("rejects CSRF when organization binding does not match", () => {
+    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
+    expect(validateFhvAdminCsrf(buildCsrfRequest(token, ORG_A), CSRF_SECRET, ORG_B)).toBe(false);
+  });
+
+  it("builds Set-Cookie without exposing secrets in the header value", () => {
+    const token = createFhvAdminCsrfToken(CSRF_SECRET, ORG_A);
+    const header = buildFhvAdminCsrfSetCookieHeader(token, true);
+    expect(header).toContain(`${FHV_ADMIN_CSRF_COOKIE}=`);
+    expect(header).toContain("Secure");
+    expect(header).not.toContain(CSRF_SECRET);
   });
 
   it("enforces per-operator command rate limit", () => {

@@ -1,28 +1,15 @@
-import { FHV_COMMAND_RATE_LIMIT_PER_HOUR } from "@/lib/trader/observability/fhv-observability.constants";
+import {
+  checkFhvAdminCommandRateLimitInMemory,
+  resetFhvAdminCommandRateLimitsForTests,
+} from "@/lib/trader/fhv-admin-rate-limit-durable";
 
-type RateLimitBucket = {
-  timestamps: number[];
-};
-
-const buckets = new Map<string, RateLimitBucket>();
-
+/** @deprecated Use durable audit-backed rate limiting in production handlers. */
 export function checkFhvAdminCommandRateLimit(
   operatorId: string,
   nowMs = Date.now(),
-  limit = FHV_COMMAND_RATE_LIMIT_PER_HOUR,
-): { allowed: boolean; remaining: number } {
-  const windowMs = 60 * 60 * 1000;
-  const bucket = buckets.get(operatorId) ?? { timestamps: [] };
-  bucket.timestamps = bucket.timestamps.filter((ts) => nowMs - ts < windowMs);
-  if (bucket.timestamps.length >= limit) {
-    buckets.set(operatorId, bucket);
-    return { allowed: false, remaining: 0 };
-  }
-  bucket.timestamps.push(nowMs);
-  buckets.set(operatorId, bucket);
-  return { allowed: true, remaining: limit - bucket.timestamps.length };
+  limit?: number,
+): ReturnType<typeof checkFhvAdminCommandRateLimitInMemory> {
+  return checkFhvAdminCommandRateLimitInMemory(operatorId, nowMs, limit);
 }
 
-export function resetFhvAdminCommandRateLimitsForTests(): void {
-  buckets.clear();
-}
+export { resetFhvAdminCommandRateLimitsForTests };

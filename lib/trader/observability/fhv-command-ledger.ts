@@ -14,9 +14,10 @@ export type FhvCommandResultV1 = Readonly<{
   schemaVersion: "fhv-command-result/v1";
   commandId: string;
   idempotencyKey: string;
-  status: "accepted" | "rejected" | "duplicate";
+  status: "accepted" | "executed" | "rejected" | "failed" | "duplicate";
   message: string;
   completedAtUtc: string;
+  enforcementApplied?: boolean;
 }>;
 
 export function resolveFhvCommandLedgerPath(runRoot: string): string {
