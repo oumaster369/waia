@@ -245,7 +245,34 @@ Reads `previousGitSha` and `imageTag` from `deployed-revision.json` when overrid
 
 ### Long-running jobs
 
-Use `tmux` or `nohup` for multi-hour `pnpm trader:live:*` / campaign CLIs so SSH disconnect does not kill the process. Record session name and PID in operator log (not git).
+For FHV rehearsal and campaign supervision on qualified Linux hosts, use **systemd units** (`waia-fhv-campaign.service`, `waia-fhv-observer.service`) rendered and installed via guarded tooling under [`scripts/ops/fhv-supervisor/`](../../scripts/ops/fhv-supervisor/). See [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md).
+
+Legacy note: `tmux` or `nohup` may still be used for non-FHV long CLIs until explicitly retired; **FHV campaigns must not use tmux/nohup as the production supervisor** on qualified Linux/systemd hosts.
+
+### FHV systemd supervisor tooling (DEE-424)
+
+| Script | Purpose | `--confirm` effect |
+|--------|---------|-------------------|
+| [`fhv-supervisor/render-units.sh`](../../scripts/ops/fhv-supervisor/render-units.sh) | Render unit files locally | N/A (read-only render) |
+| [`fhv-supervisor/install-units.sh`](../../scripts/ops/fhv-supervisor/install-units.sh) | Install allowlisted units | copy to `/etc/systemd/system`, `daemon-reload`, `enable` |
+| [`fhv-supervisor/rollback-units.sh`](../../scripts/ops/fhv-supervisor/rollback-units.sh) | Remove allowlisted units | `stop`, `disable`, remove unit files |
+
+Without `--confirm`: print planned actions and exit — **no mutation**. Agents must never pass `--confirm`.
+
+### T4 legacy checkout preservation policy (Human-only)
+
+When provisioning a fresh checkout on the Execution Server:
+
+1. Move the entire stale checkout (including untracked files) to a timestamped legacy directory **outside** the new working tree.
+2. Do **not** inspect, copy, or reuse ignored/secret files automatically.
+3. Do **not** delete untracked legacy entries during preservation.
+4. Treat old RI-P7 artifacts as legacy evidence only — not rehearsal inputs.
+5. Clone/sync a **clean** checkout at the released SHA; verify SHA guard + clean tree.
+6. Keep the legacy BP-6 health container (`waia-execution-host:bp6`) running until separately authorized cutover.
+7. Write `deployed-revision.json` only after successful deployment.
+8. Preserve rollback route via guarded rollback scripts.
+
+Do not record host IPs, SSH aliases, or secret paths in repository files.
 
 ---
 

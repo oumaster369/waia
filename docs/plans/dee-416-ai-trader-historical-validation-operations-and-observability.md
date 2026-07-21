@@ -182,11 +182,19 @@ No release SHA, tag, or production deployment is recorded for DEE-416 in this se
 | DEE-416 | **IN_PROGRESS** |
 | DEE-424 | **IN_PROGRESS** |
 | DEE-423 | **DEFERRED** |
-| HOST_OS | **UNKNOWN_UNTIL_EXECUTION_SERVER_PREFLIGHT** |
+| HOST_OS | **LINUX_SYSTEMD_QUALIFIED** |
+| qualifiedSupervisor | **SYSTEMD** |
+| hostResourceContract | **PASS** |
 | commandContractFailClosed | true |
 | commandsActuallyEnforced | false |
-| supervisorExecutorImplemented | false |
+| supervisorExecutorImplemented | true |
 | supervisorQualificationRequired | true |
+| systemdUnitsImplemented | true |
+| systemdUnitsInstalled | false |
+| executionServerLegacyStateInventoryComplete | true |
+| executionServerCleanCheckoutProvisioned | false |
+| rehearsalLauncherImplemented | true |
+| executionServerRehearsalExecuted | false |
 | HISTORICAL_DATASET_QUALIFICATION | NOT_EXECUTED |
 | READY_FOR_FULL_HISTORICAL_TEST | NO |
 | EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED | NO |
@@ -226,7 +234,7 @@ No release SHA, tag, or production deployment is recorded for DEE-416 in this se
 ### IMPLEMENTED_FAIL_CLOSED_PRE_T4
 
 - **Authenticated command contract** — CSRF v2, strict schema, run-bound manual confirmation, atomic rate limits, bounded replay protection ([`lib/trader/fhv-admin-handler.ts`](lib/trader/fhv-admin-handler.ts)).
-- **Real supervisor executor** — **NOT_IMPLEMENTED_UNTIL_HOST_OS_QUALIFICATION** (`commandsActuallyEnforced=false`, `supervisorExecutorImplemented=false`).
+- **Real supervisor executor** — **IMPLEMENTED_IN_REPOSITORY** (`supervisorExecutorImplemented=true`; `commandsActuallyEnforced=false` until Human T4 deployment proves host path).
 
 ### PARTIAL / TARGET_ONLY / ABSENT
 
@@ -947,13 +955,14 @@ flowchart TB
 
 **PR-1:** `.github/workflows/release.yml`, `scripts/github/generate-release-notes.sh`
 
-**PR-2:**
+**PR-2 / DEE-424 (Linux systemd — repository implementation):**
 - `services/ai-trader-fhv-observer/*`
 - `lib/trader/observability/fhv-operator-status-v1.*`, `fhv-operator-command-v1.*`, `fhv-alert-policy-v1.*`, `fhv-alert-catalogue.v1.ts`, `fhv-economic-non-interference-harness.ts`
-- `scripts/trader/fhv-campaign-cli.ts`
-- `scripts/ops/fhv-supervisor/*` (qualified OS only)
+- `lib/trader/observability/fhv-systemd-unit-config.ts`, `fhv-systemd-unit-renderer.ts`, `fhv-linux-systemd-executor.ts`, `fhv-rehearsal-launcher.ts`
+- `scripts/trader/fhv-campaign-cli.ts`, `scripts/trader/fhv-rehearsal-cli.ts`
+- `scripts/ops/fhv-supervisor/*` (Linux systemd; Human `--confirm` on host only)
 - `app/(trader)/admin/fhv-operations/**`, `app/api/trader/admin/fhv-operations/**`
-- `docs/ops/FHV-OPERATIONS-RUNBOOK.md`, `FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`
+- `docs/ops/FHV-OPERATIONS-RUNBOOK.md`, `FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`, `EXECUTION-SERVER-RUNBOOK.md`
 
 **PR-3:**
 - `lib/trader/research/rec-campaign-contract-v1.ts`
