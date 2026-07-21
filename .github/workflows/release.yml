@@ -1,6 +1,6 @@
 name: release
 
-# On push to main: tag and draft GitHub Release with DEE-NN changelog.
+# On push to main: tag and publish GitHub Release with DEE-NN changelog.
 
 on:
   push:
@@ -38,6 +38,8 @@ jobs:
 
       - name: Generate release notes
         id: notes
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
           chmod +x scripts/github/generate-release-notes.sh
@@ -52,8 +54,26 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: WAIA ${{ steps.tag.outputs.tag }}
           body: ${{ steps.notes.outputs.body }}
           generate_release_notes: false
           draft: false
           prerelease: false
+
+      - name: Verify release tag peel
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          EXPECTED_SHA="${{ github.sha }}"
+
+          git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+
+          ACTUAL_SHA="$(git rev-parse "${TAG}^{commit}")"
+
+          if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
+            echo "::error::Release tag peel mismatch: ${ACTUAL_SHA} != ${EXPECTED_SHA}"
+            exit 1
+          fi
+
+          echo "Release tag verified: ${TAG} -> ${ACTUAL_SHA}"
