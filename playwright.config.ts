@@ -21,7 +21,7 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: /trader-host\.spec\.ts/,
+      testIgnore: /trader-host\.spec\.ts|fhv-operations-csrf-browser\.spec\.ts/,
     },
     {
       name: "trader-host",
@@ -70,6 +70,9 @@ export default defineConfig({
       WAIA_PRIMARY_HOST: "127.0.0.1",
       WAIA_TRADER_HOST: "trader.localhost",
       NEXT_PUBLIC_TRADER_URL: `http://trader.localhost:${PLAYWRIGHT_PORT}`,
+      /** Deterministic Twin dialogue stub — never inherit live OpenAI keys from `.env.local`. */
+      WAIA_AI_PROVIDER: "fake",
+      WAIA_AI_OPENAI_API_KEY: "",
     },
   },
 });
