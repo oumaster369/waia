@@ -9,9 +9,15 @@ import {
 import { adminErrorEnvelope, type AdminRouteHandlerResult } from "@/lib/trader/admin-route-shared";
 
 export function jsonFromAdminResult(result: AdminRouteHandlerResult): NextResponse {
+  const headers = new Headers({ "Cache-Control": "private, no-store" });
+  if (result.responseHeaders) {
+    for (const [key, value] of Object.entries(result.responseHeaders)) {
+      headers.set(key, value);
+    }
+  }
   return NextResponse.json(result.body, {
     status: result.status,
-    headers: { "Cache-Control": "private, no-store" },
+    headers,
   });
 }
 

@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   serverExternalPackages: ["better-sqlite3"],
+  /** Dev-only: Playwright FHV CSRF suite uses `http://127.0.0.1:<port>` with `pnpm dev`. */
+  allowedDevOrigins: ["127.0.0.1"],
 
   async redirects() {
     return buildTraderHostIsolationRedirects();
