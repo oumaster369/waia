@@ -12,6 +12,8 @@ export type FhvCampaignControlRequestV1 = Readonly<{
   operatorId: string;
   reason: string;
   requestedAtUtc: string;
+  status?: "pending" | "consumed";
+  consumedAtUtc?: string;
 }>;
 
 function controlDir(runRoot: string): string {
@@ -28,4 +30,15 @@ export function writeFhvCampaignControlRequest(
   const path = join(controlDir(runRoot), filename);
   writeFileAtomic(path, `${JSON.stringify(request, null, 2)}\n`);
   return path;
+}
+
+export function consumeFhvCampaignControlRequest(
+  runRoot: string,
+  request: FhvCampaignControlRequestV1,
+): void {
+  writeFhvCampaignControlRequest(runRoot, {
+    ...request,
+    status: "consumed",
+    consumedAtUtc: new Date().toISOString(),
+  });
 }

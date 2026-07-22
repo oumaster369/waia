@@ -42,6 +42,8 @@ export class FhvRehearsalLaunchError extends Error {
 }
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const ABSOLUTE_SAFE_PATH = /^\/[a-zA-Z0-9@/._-]+$/;
 
 export function resolveFhvRehearsalAlertPolicyDigest(): string {
   return computeFhvAlertPolicyDigest();
@@ -139,16 +141,172 @@ export function materializeFhvRehearsalManifest(config: FhvRehearsalLaunchConfig
   return { runDir, manifestPath };
 }
 
-export function readFhvRehearsalManifest(runDir: string): FhvRehearsalLaunchConfigV1 {
-  const manifestPath = join(runDir, "fhv-rehearsal-manifest.v1.json");
-  if (!existsSync(manifestPath)) {
-    throw new FhvRehearsalLaunchError("MANIFEST_MISSING", "Rehearsal manifest not found.");
+const MANIFEST_REQUIRED_FIELDS = [
+  "schemaVersion",
+  "fixtureId",
+  "targetSha",
+  "runId",
+  "organizationId",
+  "artifactRoot",
+  "alertPolicyDigest",
+  "maxRuntimeMs",
+] as const;
+
+function assertAbsoluteSafeArtifactPath(field: string, value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    !ABSOLUTE_SAFE_PATH.test(value) ||
+    value.includes("..")
+  ) {
+    throw new FhvRehearsalLaunchError(
+      "INVALID_ARTIFACT_ROOT",
+      `${field} must be an absolute safe path.`,
+    );
   }
-  const parsed = JSON.parse(readFileSync(manifestPath, "utf8")) as FhvRehearsalLaunchConfigV1;
+  return value;
+}
+
+export function validateFhvRehearsalManifestAtRuntime(input: {
+  runRoot: string;
+  raw?: unknown;
+}): FhvRehearsalLaunchConfigV1 {
+  let parsed: Record<string, unknown>;
+  if (input.raw !== undefined) {
+    if (typeof input.raw !== "object" || input.raw === null || Array.isArray(input.raw)) {
+      throw new FhvRehearsalLaunchError(
+        "MANIFEST_INVALID_JSON",
+        "Rehearsal manifest must be a JSON object.",
+      );
+    }
+    parsed = input.raw as Record<string, unknown>;
+  } else {
+    const manifestPath = join(input.runRoot, "fhv-rehearsal-manifest.v1.json");
+    if (!existsSync(manifestPath)) {
+      throw new FhvRehearsalLaunchError("MANIFEST_MISSING", "Rehearsal manifest not found.");
+    }
+    try {
+      parsed = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    } catch {
+      throw new FhvRehearsalLaunchError(
+        "MANIFEST_INVALID_JSON",
+        "Rehearsal manifest is not valid JSON.",
+      );
+    }
+  }
+
+  const allowedKeys = new Set<string>(MANIFEST_REQUIRED_FIELDS);
+  for (const key of Object.keys(parsed)) {
+    if (!allowedKeys.has(key)) {
+      throw new FhvRehearsalLaunchError(
+        "MANIFEST_UNKNOWN_FIELD",
+        `Rehearsal manifest contains unknown field: ${key}`,
+      );
+    }
+  }
+  for (const field of MANIFEST_REQUIRED_FIELDS) {
+    if (!(field in parsed)) {
+      throw new FhvRehearsalLaunchError(
+        "MANIFEST_MISSING_FIELD",
+        `Rehearsal manifest missing required field: ${field}`,
+      );
+    }
+  }
+
   if (parsed.schemaVersion !== "fhv-rehearsal-launch/v1") {
-    throw new FhvRehearsalLaunchError("MANIFEST_INVALID", "Rehearsal manifest schema mismatch.");
+    throw new FhvRehearsalLaunchError(
+      "MANIFEST_SCHEMA_MISMATCH",
+      "Rehearsal manifest schemaVersion mismatch.",
+    );
   }
-  return parsed;
+
+  const fixtureId = parsed.fixtureId;
+  if (typeof fixtureId !== "string" || !(fixtureId in FHV_REHEARSAL_ALLOWED_FIXTURES)) {
+    throw new FhvRehearsalLaunchError(
+      "MANIFEST_FIXTURE_NOT_ALLOWLISTED",
+      "fixtureId must belong to FHV_REHEARSAL_ALLOWED_FIXTURES.",
+    );
+  }
+
+  const targetSha = parsed.targetSha;
+  if (typeof targetSha !== "string" || !FULL_SHA.test(targetSha)) {
+    throw new FhvRehearsalLaunchError(
+      "MANIFEST_INVALID_TARGET_SHA",
+      "targetSha must be a full lowercase 40-character git SHA.",
+    );
+  }
+
+  const runId = parsed.runId;
+  if (typeof runId !== "string") {
+    throw new FhvRehearsalLaunchError("MANIFEST_INVALID_RUN_ID", "runId must be a string.");
+  }
+  assertFhvRehearsalRunId(runId);
+
+  const organizationId = parsed.organizationId;
+  if (typeof organizationId !== "string" || !UUID_V4.test(organizationId)) {
+    throw new FhvRehearsalLaunchError(
+      "MANIFEST_INVALID_ORGANIZATION_ID",
+      "organizationId must be a valid UUID.",
+    );
+  }
+
+  const artifactRoot = assertAbsoluteSafeArtifactPath("artifactRoot", parsed.artifactRoot);
+
+  const alertPolicyDigest = parsed.alertPolicyDigest;
+  if (typeof alertPolicyDigest !== "string" || !/^[0-9a-f]{64}$/.test(alertPolicyDigest)) {
+    throw new FhvRehearsalLaunchError(
+      "MANIFEST_INVALID_ALERT_POLICY_DIGEST",
+      "alertPolicyDigest must be a 64-character hex digest.",
+    );
+  }
+  if (alertPolicyDigest !== resolveFhvRehearsalAlertPolicyDigest()) {
+    throw new FhvRehearsalLaunchError(
+      "MANIFEST_ALERT_POLICY_DIGEST_MISMATCH",
+      "alertPolicyDigest does not match the current pinned policy digest.",
+    );
+  }
+
+  const maxRuntimeMs = parsed.maxRuntimeMs;
+  if (typeof maxRuntimeMs !== "number" || !Number.isFinite(maxRuntimeMs)) {
+    throw new FhvRehearsalLaunchError(
+      "MANIFEST_INVALID_MAX_RUNTIME",
+      "maxRuntimeMs must be a finite number.",
+    );
+  }
+  if (maxRuntimeMs <= 0 || maxRuntimeMs > FHV_REHEARSAL_MAX_RUNTIME_MS) {
+    throw new FhvRehearsalLaunchError(
+      "MANIFEST_MAX_RUNTIME_OUT_OF_BOUNDS",
+      `maxRuntimeMs must be >0 and <= ${FHV_REHEARSAL_MAX_RUNTIME_MS}.`,
+    );
+  }
+
+  const expectedRunRoot = resolveFhvRehearsalRunDirectory(artifactRoot, runId);
+  const normalizedRunRoot = input.runRoot.replace(/\/+$/, "");
+  const normalizedExpected = expectedRunRoot.replace(/\/+$/, "");
+  if (normalizedRunRoot !== normalizedExpected) {
+    throw new FhvRehearsalLaunchError(
+      "MANIFEST_RUN_ROOT_MISMATCH",
+      "runRoot does not match artifactRoot canonical run path.",
+    );
+  }
+
+  const fixture = FHV_REHEARSAL_ALLOWED_FIXTURES[fixtureId as FhvRehearsalFixtureId];
+  rejectExternalDatasetPath(fixture.fixturePath, process.cwd());
+
+  return {
+    schemaVersion: "fhv-rehearsal-launch/v1",
+    fixtureId: fixtureId as FhvRehearsalFixtureId,
+    targetSha,
+    runId,
+    organizationId,
+    artifactRoot,
+    alertPolicyDigest,
+    maxRuntimeMs,
+  };
+}
+
+export function readFhvRehearsalManifest(runDir: string): FhvRehearsalLaunchConfigV1 {
+  return validateFhvRehearsalManifestAtRuntime({ runRoot: runDir });
 }
 
 export function computeFhvRehearsalTerminalClassification(input: {

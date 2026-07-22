@@ -54,7 +54,7 @@
     "trader:live:cycle": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/live-cli.ts cycle",
     "trader:alert:drill": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/alert-drill-cli.ts",
     "trader:fhv:observer": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-observer-cli.ts",
-    "trader:fhv:campaign": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-campaign-cli.ts",
+    "trader:fhv:campaign": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/fhv-campaign-cli.ts",
     "trader:fhv:rehearsal": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-rehearsal-cli.ts",
     "db:studio": "drizzle-kit studio",
     "dev": "next dev",
@@ -75,7 +75,7 @@
     "test:e2e:fhv-csrf": "playwright test --config=playwright.fhv-csrf.config.ts",
     "test:e2e:ui": "playwright test --ui",
     "validate:pr-governance": "bash scripts/linear/test-validate-pr-linear-id.sh && bash scripts/linear/test-preflight-pr-governance.sh",
-    "validate:canon": "bash scripts/ops/validate-canonical-docs.sh",
+    "validate:canon": "bash scripts/ops/validate-canonical-docs.sh && bash scripts/ops/validate-fhv-release-identity.sh",
     "validate:provider-readiness": "node --import tsx scripts/trader/validate-provider-readiness.ts",
     "validate:market-data-integration": "node --import tsx scripts/trader/validate-market-data-integration.ts"
   },

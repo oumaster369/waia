@@ -14,6 +14,8 @@ FHV_RUN_ID=""
 FHV_ORGANIZATION_ID=""
 UNIT=""
 SYSTEMD_DIR="/etc/systemd/system"
+SYSTEMD_ANALYZE="${SYSTEMD_ANALYZE:-systemd-analyze}"
+SYSTEMCTL="${SYSTEMCTL:-systemctl}"
 
 usage() {
   cat >&2 <<'EOF'
@@ -67,46 +69,124 @@ trap 'rm -rf "$tmp_dir"' EXIT
   --fhv-organization-id "$FHV_ORGANIZATION_ID" \
   --output-dir "$tmp_dir" >/dev/null
 
-install_one() {
-  local unit_name="$1"
-  assert_allowed_unit "$unit_name"
-  log "planned: install ${SYSTEMD_DIR}/${unit_name}"
-  if ! require_confirm_or_noop "install"; then
-    return 1
+verify_rendered_units() {
+  if ! command -v "$SYSTEMD_ANALYZE" >/dev/null 2>&1; then
+    die "systemd-analyze is required for unit verification"
   fi
-  install -m 0644 "${tmp_dir}/${unit_name}" "${SYSTEMD_DIR}/${unit_name}"
-  if command -v systemd-analyze >/dev/null 2>&1; then
-    systemd-analyze verify "${SYSTEMD_DIR}/${unit_name}"
-  fi
+  "$SYSTEMD_ANALYZE" verify "${tmp_dir}/${FHV_CAMPAIGN_UNIT}" "${tmp_dir}/${FHV_OBSERVER_UNIT}"
 }
 
-reload_and_enable() {
-  local unit_name="$1"
-  log "planned: systemctl daemon-reload"
-  log "planned: systemctl enable ${unit_name}"
-  if ! require_confirm_or_noop "enable"; then
-    return 1
-  fi
-  systemctl daemon-reload
-  systemctl enable "$unit_name"
-}
+verify_rendered_units
 
-rc=0
-case "$UNIT" in
-  all)
-    install_one "$FHV_CAMPAIGN_UNIT" || rc=1
-    install_one "$FHV_OBSERVER_UNIT" || rc=1
-    reload_and_enable "$FHV_CAMPAIGN_UNIT" || rc=1
-    reload_and_enable "$FHV_OBSERVER_UNIT" || rc=1
-    ;;
-  "$FHV_CAMPAIGN_UNIT"|"$FHV_OBSERVER_UNIT")
-    install_one "$UNIT" || rc=1
-    reload_and_enable "$UNIT" || rc=1
-    ;;
-  *) die "invalid --unit value" ;;
-esac
+resolve_install_units() {
+  case "$UNIT" in
+    all) printf '%s\n%s\n' "$FHV_CAMPAIGN_UNIT" "$FHV_OBSERVER_UNIT" ;;
+    "$FHV_CAMPAIGN_UNIT"|"$FHV_OBSERVER_UNIT") printf '%s\n' "$UNIT" ;;
+    *) die "invalid --unit value" ;;
+  esac
+}
 
 if [[ "$CONFIRM" -eq 0 ]]; then
+  while IFS= read -r unit_name; do
+    [[ -n "$unit_name" ]] || continue
+    log "planned: install ${SYSTEMD_DIR}/${unit_name}"
+    log "planned: systemctl enable ${unit_name}"
+  done < <(resolve_install_units)
+  log "planned: systemctl daemon-reload"
   print_noop_footer
+  exit 0
 fi
-exit "$rc"
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  log "dry-run: planned actions only; no mutation performed"
+  exit 0
+fi
+
+INSTALL_UNITS=()
+while IFS= read -r unit_name; do
+  [[ -n "$unit_name" ]] || continue
+  INSTALL_UNITS+=("$unit_name")
+done < <(resolve_install_units)
+
+snapshot_dir="$(mktemp -d)"
+snapshot_manifest="${snapshot_dir}/snapshot.tsv"
+: >"$snapshot_manifest"
+
+capture_snapshot() {
+  local unit_name dest enabled_state
+  for unit_name in "${INSTALL_UNITS[@]}"; do
+    assert_allowed_unit "$unit_name"
+    dest="${SYSTEMD_DIR}/${unit_name}"
+    if [[ -f "$dest" ]]; then
+      cp "$dest" "${snapshot_dir}/${unit_name}.bak"
+      printf '%s\tpresent\t' "$unit_name" >>"$snapshot_manifest"
+    else
+      printf '%s\tabsent\t' "$unit_name" >>"$snapshot_manifest"
+    fi
+    enabled_state="$(classify_systemctl_is_enabled "$unit_name")"
+    printf '%s\n' "$enabled_state" >>"$snapshot_manifest"
+  done
+}
+
+restore_snapshot() {
+  local restore_failed=0 line unit_name file_state enabled_state dest
+  while IFS=$'\t' read -r unit_name file_state enabled_state; do
+    [[ -n "$unit_name" ]] || continue
+    dest="${SYSTEMD_DIR}/${unit_name}"
+    if [[ "$file_state" == "present" ]]; then
+      cp "${snapshot_dir}/${unit_name}.bak" "$dest" || restore_failed=1
+    else
+      rm -f "$dest" || restore_failed=1
+    fi
+    case "$enabled_state" in
+      enabled) "$SYSTEMCTL" enable "$unit_name" >/dev/null 2>&1 || restore_failed=1 ;;
+      disabled|not-found) "$SYSTEMCTL" disable "$unit_name" >/dev/null 2>&1 || restore_failed=1 ;;
+      *) restore_failed=1 ;;
+    esac
+  done <"$snapshot_manifest"
+  "$SYSTEMCTL" daemon-reload || restore_failed=1
+  if [[ "$restore_failed" -ne 0 ]]; then
+    log "error: rollback restoration reported failures"
+    return 1
+  fi
+  return 0
+}
+
+install_units_transaction() {
+  local unit_name enabled_state
+  for unit_name in "${INSTALL_UNITS[@]}"; do
+    install -m 0644 "${tmp_dir}/${unit_name}" "${SYSTEMD_DIR}/${unit_name}" || return 1
+  done
+  "$SYSTEMCTL" daemon-reload || return 1
+  for unit_name in "${INSTALL_UNITS[@]}"; do
+    "$SYSTEMCTL" enable "$unit_name" || return 1
+  done
+  for unit_name in "${INSTALL_UNITS[@]}"; do
+    [[ -f "${SYSTEMD_DIR}/${unit_name}" ]] || return 1
+    enabled_state="$(classify_systemctl_is_enabled "$unit_name")" || return 1
+    if [[ "$enabled_state" != "enabled" ]]; then
+      log "error: final verification failed for ${unit_name}: expected enabled, got ${enabled_state}"
+      return 1
+    fi
+  done
+}
+
+capture_snapshot || die "failed to snapshot prior unit state"
+
+set +e
+install_units_transaction
+install_status=$?
+set -e
+
+if [[ "$install_status" -ne 0 ]]; then
+  set +e
+  restore_snapshot
+  restore_status=$?
+  set -e
+  if [[ "$restore_status" -ne 0 ]]; then
+    die "install transaction failed with exit ${install_status}; rollback attempted but restoration failed"
+  fi
+  die "install transaction failed with exit ${install_status}; rollback restoration succeeded"
+fi
+
+log "Install complete."

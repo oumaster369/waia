@@ -25,7 +25,7 @@ function parseArg(flag: string): string | undefined {
 async function main(): Promise<void> {
   const targetSha = parseArg("--target-sha") ?? process.env.FHV_TARGET_SHA?.trim();
   const runId = parseArg("--run-id") ?? `fhv-rehearsal-${Date.now()}`;
-  const organizationId = parseArg("--organization-id") ?? "00000000-0000-4000-8000-0000000416";
+  const organizationId = parseArg("--organization-id") ?? "00000000-0000-4000-8000-000000000416";
   const fixtureId = (parseArg("--fixture") ?? "HTR_WP03_BENCHMARK") as FhvRehearsalFixtureId;
   const artifactRoot = parseArg("--artifact-root") ?? join(process.cwd(), "replay-runs");
 

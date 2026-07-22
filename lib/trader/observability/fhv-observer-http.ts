@@ -56,11 +56,14 @@ async function readBoundedBody(req: http.IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-export function createFhvObserverHttpServer(config: FhvObserverConfig): http.Server {
+export function createFhvObserverHttpServer(
+  config: FhvObserverConfig,
+  options?: { state?: ReturnType<typeof createFhvObserverState> },
+): http.Server {
   const host = config.bindHost ?? "127.0.0.1";
   assertLocalhostBinding(host);
   const port = config.port ?? 9471;
-  const state = createFhvObserverState(config);
+  const state = options?.state ?? createFhvObserverState(config);
   const nonceCache = createFhvObserverTransportNonceCacheForRunRoot(config.runRoot);
   const rateBuckets = new Map<string, ObserverRateBucket>();
 

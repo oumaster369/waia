@@ -49,6 +49,11 @@ includedIssues:
   - id: DEE-426
     role: work-package-N
     status: done
+  - id: DEE-431
+    role: release-identity-correction
+    linearUrl: https://linear.app/deepsense/issue/DEE-431/fix-fhv-release-identity-and-historical-validation-launch-gates
+    branch: dee-431-fhv-release-identity-correction
+    status: in_progress
   - id: DEE-423
     role: pr-3-rec-integration
     linearUrl: https://linear.app/deepsense/issue/DEE-423/hv-ops-j-research-evolution-campaign-integration
@@ -60,11 +65,14 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-K-execution-server-rehearsal
+  currentWorkPackage: DEE-431-release-identity-correction
   completedWorkPackages:
     - groom
     - PR-1-DEE-417
     - PR-2-DEE-416-implementation
+    - PR-408-release-dev-to-main
+    - PR-409-release-back-sync
+    - PR-410-DEE-424-systemd-rehearsal
     - WP-B
     - WP-C
     - WP-D
@@ -77,14 +85,15 @@ state:
     - WP-M-monitoring-implementation
     - WP-N-ceremony-scaffolding
   remainingWorkPackages:
+    - DEE-431-release-identity-correction
     - WP-K-DEE-424-execution-server-rehearsal
     - PR-3-WP-J-DEE-423-rec-deferred
-  prNumber: 406
-  prUrl: https://github.com/oumaster369/waia/pull/406
-  lastValidatedGitSha: 1e15f7890e386cb6a9f67319edd216fdbb7192fc
+  prNumber: 411
+  prUrl: https://github.com/oumaster369/waia/pull/411
+  lastValidatedGitSha: 2f6b164b732ac33275dd47a943fc06467d61be5e
   lastValidationAt: "2026-07-21"
   blockedReason: null
-  nextAction: "Human-authorized dev-to-main release of merged PR-1/PR-2 baseline, followed by separate T4 HOST_OS qualification and DEE-424 rehearsal. DEE-423 remains deferred and non-blocking."
+  nextAction: "Human squash merge PR #411 (DEE-431), then dev→main release merge commit, main→dev back-sync, resolve EXECUTION_SERVER_TARGET_SHA, then separate AUTHORIZE-FHV-OPS-DEPLOY for T4 rehearsal."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -118,15 +127,47 @@ provenance:
 
 | Check | Result |
 |-------|--------|
-| `dev` | `1e15f7890e386cb6a9f67319edd216fdbb7192fc` |
-| `main` | `ca5c6dfdc3846f48e4abedc3eda9b06b9b9a4291` |
-| PR #405 (DEE-417) | **MERGED** — squash `2680e5b72908f0d8bc64e765bc3b4e9162d7e3e7` |
-| PR #406 (DEE-416) | **MERGED** — squash `1e15f7890e386cb6a9f67319edd216fdbb7192fc` |
-| PR #406 post-merge CI | run `29824130627` — **success** |
-| `releaseToMain` | **NOT_EXECUTED_FOR_DEE_416** |
-| DEE-416 parent | **In Progress** (DEE-424 + DEE-423 remain open) |
+| `dev` | `2f6b164b732ac33275dd47a943fc06467d61be5e` |
+| `main` | `1744301f6ed31c754b183634daa37372a7d898cb` |
+| PR #411 (DEE-431) | **OPEN** — release identity correction |
+| DEE-416 parent | **In Progress** |
+| DEE-424 | **In Progress** (T4 rehearsal pending) |
+| DEE-423 | **Deferred** |
+
+### Completed release cycle (historical)
+
+| Step | Value |
+|------|-------|
+| PR #408 dev → main | **MERGED** (merge commit) |
+| Main release SHA | `1744301f6ed31c754b183634daa37372a7d898cb` |
+| Release tag | `v2026.07.21.1744301` |
+| Tag peel | **PASS** |
+| PR #409 main → dev back-sync | **MERGED** (merge commit) |
+| Post-back-sync dev | `48c7749f704ca68ecda69a917d68099ecd9da543` |
+
+### PR #410 (DEE-424 systemd rehearsal)
+
+| Field | Value |
+|-------|-------|
+| Feature head | `dfb7b87c31450e1c494da84acaf5d5582f4daa4d` |
+| Dev squash SHA | `2f6b164b732ac33275dd47a943fc06467d61be5e` |
+| Post-merge CI | run `29850941349` — **success** |
 
 ---
+
+### PR #411 (DEE-431 release identity correction)
+
+| Field | Value |
+|-------|-------|
+| PR | https://github.com/oumaster369/waia/pull/411 |
+| Branch | `dee-431-fhv-release-identity-correction` |
+| Base (`dev`) | `2f6b164b732ac33275dd47a943fc06467d61be5e` |
+| Status | **OPEN** — pre-merge hardening in progress |
+| Scope | Release identity contract, runtime enforcement, systemd fail-closed, bounded T4 rehearsal capability, **true incremental checkpoint resume** (canvas restore + dual authoritative run-chain; quiescent-only pause/resume at `QUIESCENT_NO_ECONOMIC_STATE`; run/org-scoped identity frontier; process-B no-rescan artifact; not full replay-from-zero; generic active economic recovery not claimed) |
+
+---
+
+## Post-merge snapshot (historical — PR #406 merge, 2026-07-21)
 
 ## Merged delivery status
 
@@ -178,6 +219,7 @@ No release SHA, tag, or production deployment is recorded for DEE-416 in this se
 
 | Flag | Value |
 |------|-------|
+| EXECUTION_SERVER_TARGET_SHA | **UNRESOLVED_UNTIL_NEXT_RELEASE** |
 | DEE-415 | **COMPLETE** |
 | DEE-416 | **IN_PROGRESS** |
 | DEE-424 | **IN_PROGRESS** |
@@ -195,6 +237,7 @@ No release SHA, tag, or production deployment is recorded for DEE-416 in this se
 | executionServerCleanCheckoutProvisioned | false |
 | rehearsalLauncherImplemented | true |
 | executionServerRehearsalExecuted | false |
+| CONTROL_REPLAY_EXECUTED | false |
 | HISTORICAL_DATASET_QUALIFICATION | NOT_EXECUTED |
 | READY_FOR_FULL_HISTORICAL_TEST | NO |
 | EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED | NO |
@@ -983,15 +1026,22 @@ flowchart TB
 | 3 | PR-1 merge (WP-A / DEE-417) | Human squash | release identity (preferred before rehearsal) | **DONE** (PR #405 → `2680e5b…`) |
 | 4 | PR-2 `PASS-FHV-ECONOMIC-NON-INTERFERENCE` | CI + Architect | PR-2 merge | **DONE** |
 | 5 | PR-2 merge to `dev` | Human squash | baseline ops availability | **DONE** (PR #406 → `1e15f789…`) |
-| 5a | Canonical plan status sync | Human squash | release-to-main readiness | **pending** (this docs-only PR) |
-| 5b | dev-to-main release PR | Human merge commit | production promotion | **NOT_EXECUTED** |
-| 6 | `HOST_OS` qualification + supervisor install | Human | execution-server deploy |
-| 7 | `AUTHORIZE-FHV-OPS-DEPLOY` | Human | rehearsal |
-| 8 | Execution Server rehearsal PASS (WP-K) | Human operator | production FHV campaign |
-| 9 | PR-3 merge (WP-J) + REC isolation proof | Human squash | REC availability (optional track) |
-| 10 | Dataset qualification decision | Human | `READY_FOR_FULL_HISTORICAL_TEST` |
-| 11 | `AUTHORIZE-FULL-HISTORICAL-VALIDATION` | Human | multi-day FHV run |
-| 12 | FHV closure report sign-off | Human | next phase |
+| 5a | Canonical plan status sync (PR #407) | Human squash | release-to-main readiness | **DONE** |
+| 5b | dev-to-main release PR (PR #408) | Human merge commit | production promotion | **DONE** (`1744301f…`, tag `v2026.07.21.1744301`, peel PASS) |
+| 5c | main → dev back-sync (PR #409) | Human merge commit | ancestry sync | **DONE** (`48c7749f…`) |
+| 5d | HOST_OS / systemd qualification | Human + repository | supervisor contract | **DONE** (repository; host install pending T4) |
+| 5e | PR #410 DEE-424 systemd rehearsal implementation | Human squash | rehearsal tooling on `dev` | **DONE** (`2f6b164b…`) |
+| 5f | PR #411 DEE-431 release identity correction | Human squash | ops doc/runtime gates | **OPEN** — awaiting Human merge |
+| 5g | Next dev-to-main release | Human merge commit | next production promotion | **NOT_EXECUTED** |
+| 5h | Next main → dev back-sync | Human merge commit | post-release ancestry | **NOT_EXECUTED** |
+| 6 | `HOST_OS` qualification + supervisor install on Execution Server | Human | execution-server deploy | **NOT_EXECUTED** (units not installed) |
+| 7 | `AUTHORIZE-FHV-OPS-DEPLOY` | Human | rehearsal | **NOT_ISSUED** |
+| 8 | Execution Server rehearsal PASS (WP-K / T4) | Human operator | production FHV campaign | **NOT_EXECUTED** |
+| 9 | PR-3 merge (WP-J) + REC isolation proof | Human squash | REC availability (optional track) | **DEFERRED** (DEE-423) |
+| 10 | Dataset qualification decision | Human | `READY_FOR_FULL_HISTORICAL_TEST` | **NOT_EXECUTED** |
+| 11 | Control replay ceremony | Human | control replay gate | **NOT_EXECUTED** |
+| 12 | `AUTHORIZE-FULL-HISTORICAL-VALIDATION` | Human | multi-day FHV run | **NOT_EXECUTED** |
+| 13 | FHV closure report sign-off | Human | next phase | **NOT_EXECUTED** |
 
 **Not in this program:** Cloudflare production SHA confirmation / Worker redeploy (separate release operation).
 
@@ -1041,12 +1091,57 @@ flowchart TB
 | Non-interference matrix | `docs/product-specs/fhv-economic-non-interference-matrix.md` |
 | REC contract | `lib/trader/research/rec-campaign-contract-v1.ts` |
 | Rehearsal contract | `docs/ops/FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md` |
+| Release identity contract | `docs/ops/FHV-RELEASE-IDENTITY-CONTRACT.md` |
+| Release identity validator | `scripts/ops/validate-fhv-release-identity.sh` |
+| Release identity validator (library) | `lib/trader/observability/fhv-release-identity-validator.ts` |
+| Campaign runtime identity | `lib/trader/observability/fhv-campaign-runtime-identity.ts` |
+| Rehearsal campaign runner | `lib/trader/observability/fhv-rehearsal-campaign-runner.ts` |
+| Systemd unit config/renderer | `lib/trader/observability/fhv-systemd-unit-config.ts`, `fhv-systemd-unit-renderer.ts` |
+| Systemd supervisor scripts | `scripts/ops/fhv-supervisor/` |
 
 ---
 
-## Terminal classification
+## Terminal classification (current)
 
-**`DEE_416_PR406_POST_MERGE_IMPLEMENTATION_MERGED_AWAITING_RELEASE_AND_T4`**
+**`DEE_416_PR411_RELEASE_IDENTITY_CORRECTION_AWAITING_HUMAN_SQUASH_MERGE`**
+
+| Flag | Value |
+|------|-------|
+| parentLinearCreated | true |
+| allFourteenChildrenCreated | true |
+| realLinearIdsRecorded | true |
+| pr1Merged | true |
+| pr2Merged | true |
+| pr3DeferredNonBlocking | true |
+| pr408ReleaseToMainExecuted | true |
+| pr409BackSyncExecuted | true |
+| pr410MergedToDev | true |
+| pr411Open | true |
+| canonicalPlanPromoted | true |
+| canonicalPlanStatusTruthful | true |
+| implementationMergedToDev | true (through PR #410) |
+| releaseToMainExecuted | true (PR #408 — `1744301f…`) |
+| dee416ParentInProgress | true |
+| dee424InProgress | true |
+| dee423Deferred | true |
+| dee431InProgress | true |
+| executionServerAccessed | false |
+| datasetAccessed | false |
+| replayStarted | false |
+| liveTradingStarted | false |
+| EXECUTION_SERVER_TARGET_SHA | UNRESOLVED_UNTIL_NEXT_RELEASE |
+| HISTORICAL_DATASET_QUALIFICATION | NOT_EXECUTED |
+| CONTROL_REPLAY_EXECUTED | false |
+| READY_FOR_FULL_HISTORICAL_TEST | NO |
+| EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED | NO |
+| LIVE_TRADING_AUTHORIZED | NO |
+| READY_FOR_DEE_416_RELEASE_TO_MAIN | pending PR #411 squash merge + next release cycle |
+
+---
+
+## Terminal classification (historical — superseded 2026-07-21)
+
+**`DEE_416_PR406_POST_MERGE_IMPLEMENTATION_MERGED_AWAITING_RELEASE_AND_T4`** — superseded after PR #408 release and PR #410 merge.
 
 | Flag | Value |
 |------|-------|
@@ -1057,9 +1152,9 @@ flowchart TB
 | pr2Merged | true |
 | pr3DeferredNonBlocking | true |
 | canonicalPlanPromoted | true |
-| canonicalPlanStatusTruthful | true (after this sync PR merge) |
+| canonicalPlanStatusTruthful | true (at time of PR #406 merge) |
 | implementationMergedToDev | true |
-| releaseToMainExecuted | false |
+| releaseToMainExecuted | false (at time of classification) |
 | dee416ParentInProgress | true |
 | dee424InProgress | true |
 | dee423Deferred | true |
@@ -1071,4 +1166,4 @@ flowchart TB
 | READY_FOR_FULL_HISTORICAL_TEST | NO |
 | EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED | NO |
 | LIVE_TRADING_AUTHORIZED | NO |
-| READY_FOR_DEE_416_RELEASE_TO_MAIN | pending canonical plan sync PR merge |
+| READY_FOR_DEE_416_RELEASE_TO_MAIN | pending canonical plan sync PR merge (superseded) |

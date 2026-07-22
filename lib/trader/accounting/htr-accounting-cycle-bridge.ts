@@ -39,7 +39,7 @@ import type { StopDistanceProvider } from "@/lib/trader/portfolio/stop-distance-
 import { DEFAULT_PORTFOLIO_RUN_CONFIG } from "@/lib/trader/portfolio/portfolio-run-config.types";
 import { defaultStopDistanceProvider } from "@/lib/trader/portfolio/default-stop-distance-provider";
 import { toAccountRiskState } from "@/lib/trader/portfolio/to-account-risk-state";
-import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-contract";
+import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-constants";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import { resolveDominantStrategyDrawdown } from "@/lib/trader/risk/drawdown-policy-evaluator";
 import type { AppendAccountDrawdownCheckpointInput } from "@/lib/trader/risk/account-drawdown-repository-postgres";

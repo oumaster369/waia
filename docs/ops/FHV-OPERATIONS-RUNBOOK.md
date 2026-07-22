@@ -73,6 +73,39 @@ No holdout economic outputs may be returned, logged, or rendered.
 | `EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED` | `NO` |
 | `LIVE_TRADING_AUTHORIZED` | `NO` |
 
+### Human T4 — enable FHV operator command enforcement
+
+After repository release is deployed to the Execution Server checkout, the Human operator must set **both** enforcement gates in the host `EnvironmentFile` referenced by the rendered systemd units (for example `/etc/waia/fhv.env`):
+
+```bash
+FHV_HOST_OS_QUALIFIED=true
+FHV_COMMAND_ENFORCEMENT_ENABLED=true
+```
+
+Requirements:
+
+- Values must be exact lowercase `true` (not `TRUE`, `1`, or `yes`).
+- Both must be present; either missing or malformed keeps enforcement disabled at runtime.
+- Do **not** bake these into rendered unit files; the EnvironmentFile is the sole source of truth.
+- Reload/restart `waia-fhv-observer.service` only after the EnvironmentFile is updated on the host.
+
+## Checkpoint resume (repository implementation)
+
+`RESUME_FROM_CHECKPOINT` is **true incremental resume** for bounded T4 only when the pause frontier is **quiescent** (`QUIESCENT_NO_ECONOMIC_STATE`), not a full replay from cycle zero:
+
+1. Validate checkpoint identity and **quiescent economic frontier** (`assertFhvRehearsalResumeIdentity` — rejects missing/tampered frontier, non-quiescent pause, wrong run/org binding).
+2. Restore canvas from the checkpoint sidecar (`restoreCanvasFromCheckpoint`).
+3. Prove process B begins with an empty repository (`assertFreshResumeRepositoryQuiescent`).
+4. Resume at `safeResumeThroughCycleIndex + 1` with the exact `initialBars1mPrefix` substrate slice.
+5. Restore the **campaign identity frontier** (`runId`, `organizationId`, `newIdSeq`, `randomUuidSeq`) from the checkpoint slice; IDs are scoped by `organizationId + runId + identityStream + sequence`.
+6. Enforce `getFullHistoryRescanCount() === 0` in-process and write `fhv-resume-runtime-proof.v1.json` from process B (`fullHistoryRescanDelta === 0`).
+7. Write a dual **authoritative** run-chain: partial segment (cycles `0..pauseFrontier`) + continuation segment (cycles `pauseFrontier..terminal`). The partial segment is retained as authoritative audit lineage; it is **not** superseded on genuine incremental resume.
+8. Progress and heartbeat continue from the paused frontier; they must never regress to `0`/`1` after resume.
+
+**Not claimed:** recovery of active orders, fills, positions, accounting, WP17 execution, or WP21 state across pause/resume.
+
+Hermetic proofs: `tests/integration/fhv-cross-process-resume.test.ts`, `tests/integration/fhv-true-incremental-resume.test.ts`, `tests/unit/fhv-campaign-identity-frontier.test.ts`, `tests/unit/fhv-rehearsal-economic-frontier.test.ts`, `tests/unit/fhv-identity-frontier-write-guard.test.ts`, `tests/unit/fhv-server-only-boundary.test.ts`, `tests/unit/fhv-incremental-resume-guards.test.ts`, `tests/unit/fhv-resume-timeout.test.ts`.
+
 ## Related documents
 
 - [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](./FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md)
