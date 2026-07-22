@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import {
   assertCanvasDigestStable,
+  restoreCanvasFromCheckpoint,
   writeCanvasSidecarBeforeCheckpoint,
 } from "@/lib/trader/backtest/canvas-checkpoint-integration";
 import {
@@ -13,6 +14,7 @@ import {
   seedBenchmarkSession,
 } from "@/lib/trader/backtest/replay-benchmark-harness";
 import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
+import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-sink";
 import {
@@ -26,6 +28,7 @@ import {
 } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import { reconstructStreamingEvidence } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-reconstructor";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
+import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import {
@@ -105,20 +108,53 @@ export function assertFhvRehearsalWithinDeadline(deadline: FhvRehearsalMonotonic
   }
 }
 
-function createBenchmarkNewIdFactory(): () => string {
-  let sequence = 0;
+function barsThroughCycleCount(cycleCount: number): number {
+  if (cycleCount <= 0) {
+    return 0;
+  }
+  if (cycleCount === 1) {
+    return EXPAND_MIN_BARS;
+  }
+  return EXPAND_MIN_BARS + (cycleCount - 1);
+}
+
+type CampaignIdentityState = {
+  newIdSeq: number;
+  randomUuidSeq: number;
+};
+
+const campaignIdentityStateByKey = new Map<string, CampaignIdentityState>();
+
+function campaignIdentityKey(runRoot: string, runId: string): string {
+  return `${runRoot}:${runId}`;
+}
+
+function resolveCampaignIdentityState(runRoot: string, runId: string): CampaignIdentityState {
+  const key = campaignIdentityKey(runRoot, runId);
+  const existing = campaignIdentityStateByKey.get(key);
+  if (existing) {
+    return existing;
+  }
+  const created = { newIdSeq: 0, randomUuidSeq: 0 };
+  campaignIdentityStateByKey.set(key, created);
+  return created;
+}
+
+function createBenchmarkNewIdFactory(state: CampaignIdentityState): () => string {
   return () => {
-    sequence += 1;
-    return `00000000-0000-4000-8000-${String(416900 + sequence).padStart(12, "0")}`;
+    state.newIdSeq += 1;
+    return `00000000-0000-4000-8000-${String(416900 + state.newIdSeq).padStart(12, "0")}`;
   };
 }
 
-async function withDeterministicRandomUuid<T>(run: () => Promise<T>): Promise<T> {
-  let sequence = 0;
+async function withDeterministicRandomUuid<T>(
+  state: CampaignIdentityState,
+  run: () => Promise<T>,
+): Promise<T> {
   const originalRandomUuid = crypto.randomUUID.bind(crypto);
   crypto.randomUUID = () => {
-    sequence += 1;
-    return `00000000-0000-4000-8000-${String(416950 + sequence).padStart(12, "0")}`;
+    state.randomUuidSeq += 1;
+    return `00000000-0000-4000-8000-${String(416950 + state.randomUuidSeq).padStart(12, "0")}`;
   };
   try {
     return await run();
@@ -278,7 +314,8 @@ async function runWp03Segment(input: {
   canvasState: Awaited<ReturnType<typeof runBacktest>>["canvasState"];
   stoppedEarly: boolean;
 }> {
-  return withDeterministicRandomUuid(async () => {
+  const identityState = resolveCampaignIdentityState(input.runRoot, input.runId);
+  return withDeterministicRandomUuid(identityState, async () => {
     const fixture = loadApprovedBenchmarkFixture();
     const { session, context } = await seedBenchmarkSession();
     const evidenceDir = input.evidenceDir ?? resolveFhvRehearsalEvidenceDir(input.runRoot);
@@ -326,7 +363,7 @@ async function runWp03Segment(input: {
         },
         exportedAt: new Date(window.end),
         activeStrategyIds: [MEAN_REVERSION_V0],
-        newId: createBenchmarkNewIdFactory(),
+        newId: createBenchmarkNewIdFactory(identityState),
         substrateMode: "incremental",
         retentionMode: "STREAM_ONLY",
         evidenceSink,
@@ -511,8 +548,9 @@ async function runResumeFromCheckpoint(input: {
   manifest: FhvRehearsalLaunchConfigV1;
   monotonicDeadline?: FhvRehearsalMonotonicDeadline;
 }): Promise<FhvRehearsalCampaignResult> {
+  let checkpoint;
   try {
-    assertFhvRehearsalResumeIdentity({
+    checkpoint = assertFhvRehearsalResumeIdentity({
       runRoot: input.runRoot,
       manifest: input.manifest,
       targetSha: input.targetSha,
@@ -523,15 +561,55 @@ async function runResumeFromCheckpoint(input: {
     }
     throw error;
   }
+
+  const restored = restoreCanvasFromCheckpoint(input.runRoot, checkpoint);
+  if (!restored) {
+    throw new FhvRehearsalCampaignError(
+      "FHV_REHEARSAL_CANVAS_RESTORE_FAILED",
+      "Canvas restore failed.",
+    );
+  }
+
+  const pausedProgress = readFhvRehearsalCampaignProgress(input.runRoot);
+  const resumeFromCycle = checkpoint.safeResumeThroughCycleIndex + 1;
+  if (checkpoint.safeResumeThroughCycleIndex !== checkpoint.evidenceDurableThroughCycleIndex) {
+    throw new FhvRehearsalCampaignError(
+      "FHV_RESUME_FRONTIER_MISMATCH",
+      "Safe resume frontier does not match evidence durable frontier.",
+    );
+  }
+  if (pausedProgress && pausedProgress.cyclesProcessed !== resumeFromCycle) {
+    throw new FhvRehearsalCampaignError(
+      "FHV_RESUME_PROGRESS_FRONTIER_MISMATCH",
+      `Progress cyclesProcessed ${pausedProgress.cyclesProcessed} != resumeFromCycle ${resumeFromCycle}.`,
+    );
+  }
+
+  const prefixBars = loadApprovedBenchmarkFixture().bars.slice(
+    0,
+    barsThroughCycleCount(resumeFromCycle),
+  );
   const deadline =
     input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
+  let lastProgress = pausedProgress?.cyclesProcessed ?? 0;
+
   const resumed = await runWp03Segment({
     runRoot: input.runRoot,
     runId: input.runId,
+    resumeCycleStartIndex: resumeFromCycle,
+    initialCanvasState: restored,
+    initialBars1mPrefix: prefixBars,
     evidenceSealMode: "complete",
     evidenceDir: join(input.runRoot, "streaming-evidence-resume"),
     deadline,
     onCycleComplete: (cyclesProcessed) => {
+      if (cyclesProcessed <= lastProgress) {
+        throw new FhvRehearsalCampaignError(
+          "FHV_RESUME_PROGRESS_REGRESSION",
+          `Progress regressed from ${lastProgress} to ${cyclesProcessed}.`,
+        );
+      }
+      lastProgress = cyclesProcessed;
       writeFhvRehearsalCampaignProgress(input.runRoot, {
         schemaVersion: "fhv-rehearsal-campaign-progress/v1",
         runId: input.runId,
@@ -543,6 +621,14 @@ async function runResumeFromCheckpoint(input: {
       appendFhvRehearsalProgressSample(input.runRoot, cyclesProcessed);
     },
   });
+
+  if (getFullHistoryRescanCount() !== 0) {
+    throw new FhvRehearsalCampaignError(
+      "FHV_REHEARSAL_RESUME_FULL_HISTORY_RESCAN",
+      "Resume triggered full-history rescan.",
+    );
+  }
+
   const partialDir = resolveFhvRehearsalEvidenceDir(input.runRoot);
   const continuationDir = join(input.runRoot, "streaming-evidence-resume");
   const partialReconstruction = reconstructStreamingEvidence(partialDir);
@@ -556,7 +642,7 @@ async function runResumeFromCheckpoint(input: {
         {
           runDir: partialDir,
           chainDigest: partialReconstruction.chainDigest ?? "",
-          role: "superseded",
+          role: "authoritative",
           terminalState: "STREAMING_EVIDENCE_SEALED_PARTIAL",
           sealedThroughCycleIndex: partialReconstruction.sealedThroughCycleIndex,
         },

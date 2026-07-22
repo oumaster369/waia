@@ -163,7 +163,7 @@ provenance:
 | Branch | `dee-431-fhv-release-identity-correction` |
 | Base (`dev`) | `2f6b164b732ac33275dd47a943fc06467d61be5e` |
 | Status | **OPEN** — pre-merge hardening in progress |
-| Scope | Release identity contract, runtime enforcement, systemd fail-closed, bounded T4 rehearsal capability |
+| Scope | Release identity contract, runtime enforcement, systemd fail-closed, bounded T4 rehearsal capability, **true incremental checkpoint resume** (canvas restore + dual authoritative run-chain; not full replay-from-zero) |
 
 ---
 

@@ -89,6 +89,19 @@ Requirements:
 - Do **not** bake these into rendered unit files; the EnvironmentFile is the sole source of truth.
 - Reload/restart `waia-fhv-observer.service` only after the EnvironmentFile is updated on the host.
 
+## Checkpoint resume (repository implementation)
+
+`RESUME_FROM_CHECKPOINT` is **true incremental resume**, not a full replay from cycle zero:
+
+1. Validate checkpoint identity (`assertFhvRehearsalResumeIdentity`).
+2. Restore canvas from the checkpoint sidecar (`restoreCanvasFromCheckpoint`).
+3. Resume at `safeResumeThroughCycleIndex + 1` with the exact `initialBars1mPrefix` substrate slice.
+4. Enforce `getFullHistoryRescanCount() === 0` (fail closed on full-history rescan).
+5. Write a dual **authoritative** run-chain: partial segment (cycles `0..pauseFrontier`) + continuation segment (cycles `pauseFrontier..terminal`). The partial segment is retained as authoritative audit lineage; it is **not** superseded on genuine incremental resume.
+6. Progress and heartbeat continue from the paused frontier; they must never regress to `0`/`1` after resume.
+
+Hermetic proofs: `tests/integration/fhv-true-incremental-resume.test.ts`, `tests/unit/fhv-incremental-resume-guards.test.ts`, `tests/unit/fhv-resume-timeout.test.ts`.
+
 ## Related documents
 
 - [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](./FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md)

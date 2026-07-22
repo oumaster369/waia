@@ -259,10 +259,10 @@ describe("FHV production composition (DEE-431)", () => {
     expect(runChain?.segments).toHaveLength(2);
     expect(
       runChain?.segments.filter((segment) => segmentRole(segment) === "authoritative"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     expect(
       runChain?.segments.filter((segment) => segmentRole(segment) === "superseded"),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
 
     const chainRead = readReplayRunChainProjections(runDir);
     expect(chainRead.authoritativeGapCount).toBe(0);
