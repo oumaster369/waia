@@ -1,30 +1,15 @@
-import { startFhvObserverServer } from "@/lib/trader/observability/fhv-observer-http";
+import { startFhvObserverRuntimeFromEnv } from "@/lib/trader/observability/fhv-observer-runtime";
 
-const runRoot = process.env.FHV_RUN_ROOT?.trim();
-const runId = process.env.FHV_RUN_ID?.trim();
-const organizationId = process.env.FHV_ORGANIZATION_ID?.trim();
-const commandSecret = process.env.FHV_OPERATOR_COMMAND_SECRET?.trim();
-const observerTunnelSecret = process.env.FHV_OBSERVER_TUNNEL_SECRET?.trim();
-
-if (!runRoot || !runId || !organizationId || !commandSecret || !observerTunnelSecret) {
-  process.stderr.write(
-    "[fhv-observer-cli] FHV_RUN_ROOT, FHV_RUN_ID, FHV_ORGANIZATION_ID, FHV_OPERATOR_COMMAND_SECRET, FHV_OBSERVER_TUNNEL_SECRET required\n",
-  );
-  process.exit(1);
-}
-
-const server = startFhvObserverServer({
-  runRoot,
-  runId,
-  organizationId,
-  commandSecret,
-  observerTunnelSecret,
-  bindHost: "127.0.0.1",
-  port: Number(process.env.FHV_OBSERVER_PORT ?? 9471),
-});
+const runtime = startFhvObserverRuntimeFromEnv(process.env);
+process.stdout.write(
+  `[ai-trader-fhv-observer] listening ${runtime.env.bindHost}:${runtime.env.port}\n`,
+);
 
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, () => {
-    server.close(() => process.exit(0));
+    void runtime.stop().then(
+      () => process.exit(0),
+      () => process.exit(1),
+    );
   });
 }

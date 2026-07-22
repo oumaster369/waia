@@ -78,6 +78,11 @@ if [[ "$CONFIRM" -eq 0 ]]; then
   exit 0
 fi
 
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  log "dry-run: planned actions only; no mutation performed"
+  exit 0
+fi
+
 case "$UNIT" in
   all)
     rollback_one "$FHV_OBSERVER_UNIT"

@@ -21,6 +21,8 @@ import {
   readReplayCheckpoint,
   REPLAY_CHECKPOINT_SCHEMA_VERSION,
   resolveEvidenceFrontier,
+  buildReplayRunChainManifest,
+  writeReplayRunChainManifest,
   type ReplayRunTerminalState,
 } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import { reconstructStreamingEvidence } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-reconstructor";
@@ -37,6 +39,14 @@ import { buildResearchValidationCycleIdPrefix } from "@/lib/trader/research/rese
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
 import { assertFhvCampaignRuntimeIdentity } from "@/lib/trader/observability/fhv-campaign-runtime-identity";
 import type { FhvRehearsalLaunchConfigV1 } from "@/lib/trader/observability/fhv-rehearsal-launcher";
+import {
+  consumeFhvCampaignControlRequest,
+  writeFhvCampaignControlRequest,
+} from "@/lib/trader/observability/fhv-campaign-control-files";
+import {
+  readFhvCampaignControlRequest,
+  FhvControlRequestError,
+} from "@/lib/trader/observability/fhv-control-request-validator";
 
 export const FHV_REHEARSAL_CHECKPOINT_CYCLE = 40;
 export const FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES = 45;
@@ -159,26 +169,97 @@ function readControlFileContent(path: string): string {
   return readFileSync(path, "utf8").trim();
 }
 
-export function isFhvPauseAtCheckpointRequested(runRoot: string): boolean {
-  const path = join(runRoot, "control", "pause_at_checkpoint-request.v1.json");
-  if (!existsSync(path)) {
-    return false;
+function controlRequestContext(runRoot: string): {
+  runId: string;
+  organizationId: string;
+} | null {
+  const progress = readFhvRehearsalCampaignProgress(runRoot);
+  if (!progress) {
+    return null;
   }
-  return readControlFileContent(path).length > 0;
+  const manifestPath = join(runRoot, "fhv-rehearsal-manifest.v1.json");
+  if (!existsSync(manifestPath)) {
+    return { runId: progress.runId, organizationId: "" };
+  }
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+    runId?: string;
+    organizationId?: string;
+  };
+  return {
+    runId: manifest.runId ?? progress.runId,
+    organizationId: manifest.organizationId ?? "",
+  };
+}
+
+function isPendingControlRequest(input: {
+  runRoot: string;
+  action: "PAUSE_AT_CHECKPOINT" | "RESUME_FROM_CHECKPOINT";
+  runId: string;
+  organizationId: string;
+}): boolean {
+  try {
+    return readFhvCampaignControlRequest(input) !== null;
+  } catch (error) {
+    if (error instanceof FhvControlRequestError && error.code === "CONTROL_REQUEST_CONSUMED") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+export function isFhvPauseAtCheckpointRequested(runRoot: string): boolean {
+  const context = controlRequestContext(runRoot);
+  if (!context?.organizationId) {
+    const path = join(runRoot, "control", "pause_at_checkpoint-request.v1.json");
+    return existsSync(path) && readControlFileContent(path).length > 0;
+  }
+  return isPendingControlRequest({
+    runRoot,
+    action: "PAUSE_AT_CHECKPOINT",
+    runId: context.runId,
+    organizationId: context.organizationId,
+  });
 }
 
 export function isFhvResumeFromCheckpointRequested(runRoot: string): boolean {
-  const path = join(runRoot, "control", "resume_from_checkpoint-request.v1.json");
-  if (!existsSync(path)) {
-    return false;
+  const context = controlRequestContext(runRoot);
+  if (!context?.organizationId) {
+    const path = join(runRoot, "control", "resume_from_checkpoint-request.v1.json");
+    return existsSync(path) && readControlFileContent(path).length > 0;
   }
-  return readControlFileContent(path).length > 0;
+  return isPendingControlRequest({
+    runRoot,
+    action: "RESUME_FROM_CHECKPOINT",
+    runId: context.runId,
+    organizationId: context.organizationId,
+  });
 }
 
-export function consumeFhvCampaignControlMarker(runRoot: string, action: string): void {
-  const path = join(runRoot, "control", `${action.toLowerCase()}-request.v1.json`);
-  if (existsSync(path)) {
-    writeFileAtomic(path, "");
+export function consumeFhvCampaignControlMarker(
+  runRoot: string,
+  action: string,
+  identity?: { runId: string; organizationId: string },
+): void {
+  const operatorAction =
+    action === "PAUSE_AT_CHECKPOINT" || action === "RESUME_FROM_CHECKPOINT"
+      ? action
+      : (action.toUpperCase() as "PAUSE_AT_CHECKPOINT" | "RESUME_FROM_CHECKPOINT");
+  const context = identity ?? controlRequestContext(runRoot);
+  if (!context?.organizationId) {
+    const path = join(runRoot, "control", `${action.toLowerCase()}-request.v1.json`);
+    if (existsSync(path)) {
+      writeFileAtomic(path, "");
+    }
+    return;
+  }
+  const request = readFhvCampaignControlRequest({
+    runRoot,
+    action: operatorAction,
+    runId: context.runId,
+    organizationId: context.organizationId,
+  });
+  if (request) {
+    consumeFhvCampaignControlRequest(runRoot, request);
   }
 }
 
@@ -474,6 +555,35 @@ async function runResumeFromCheckpoint(input: {
       "Resume triggered full-history rescan.",
     );
   }
+  const partialDir = resolveFhvRehearsalEvidenceDir(input.runRoot);
+  const continuationDir = join(input.runRoot, "streaming-evidence-resume");
+  const partialReconstruction = reconstructStreamingEvidence(partialDir);
+  const continuationReconstruction = reconstructStreamingEvidence(continuationDir);
+  writeReplayRunChainManifest(
+    input.runRoot,
+    buildReplayRunChainManifest({
+      backtestRunId: input.runId,
+      activePhase: "validation",
+      segments: [
+        {
+          runDir: partialDir,
+          chainDigest: partialReconstruction.chainDigest ?? "",
+          role: "superseded",
+          terminalState: "STREAMING_EVIDENCE_SEALED_PARTIAL",
+          sealedThroughCycleIndex: partialReconstruction.sealedThroughCycleIndex,
+        },
+        {
+          runDir: continuationDir,
+          chainDigest: continuationReconstruction.chainDigest ?? "",
+          role: "authoritative",
+          continuesFromRunDir: partialDir,
+          continuesFromChainDigest: partialReconstruction.chainDigest ?? undefined,
+          terminalState: "STREAMING_EVIDENCE_OK",
+          sealedThroughCycleIndex: continuationReconstruction.sealedThroughCycleIndex,
+        },
+      ],
+    }),
+  );
   consumeFhvCampaignControlMarker(input.runRoot, "RESUME_FROM_CHECKPOINT");
   writeFhvRehearsalCampaignProgress(input.runRoot, {
     schemaVersion: "fhv-rehearsal-campaign-progress/v1",
@@ -642,12 +752,12 @@ export async function runFhvRehearsalCampaignParityProof(input: {
     organizationId: input.organizationId,
   });
   await waitForFhvRehearsalCycles(input.runRootPauseResume, pauseAfterCycles);
-  writeFhvCampaignControlPauseRequest(input.runRootPauseResume);
+  writeFhvCampaignControlPauseRequest(input.runRootPauseResume, input.runId, input.organizationId);
   const paused = await pausePromise;
   if (paused.classification !== "REHEARSAL_PAUSED") {
     throw new Error("Expected paused rehearsal classification.");
   }
-  writeFhvCampaignControlResumeRequest(input.runRootPauseResume);
+  writeFhvCampaignControlResumeRequest(input.runRootPauseResume, input.runId, input.organizationId);
   const resumed = await runFhvRehearsalCampaign({
     runRoot: input.runRootPauseResume,
     runId: input.runId,
@@ -692,20 +802,36 @@ export async function waitForFhvRehearsalCycles(
   );
 }
 
-export function writeFhvCampaignControlPauseRequest(runRoot: string): void {
-  mkdirSync(join(runRoot, "control"), { recursive: true });
-  writeFileAtomic(
-    join(runRoot, "control", "pause_at_checkpoint-request.v1.json"),
-    `${JSON.stringify({ action: "PAUSE_AT_CHECKPOINT" }, null, 2)}\n`,
-  );
+export function writeFhvCampaignControlPauseRequest(
+  runRoot: string,
+  runId: string,
+  organizationId: string,
+): void {
+  writeFhvCampaignControlRequest(runRoot, {
+    schemaVersion: "fhv-campaign-control-request/v1",
+    action: "PAUSE_AT_CHECKPOINT",
+    runId,
+    organizationId,
+    operatorId: "fhv-rehearsal-runner",
+    reason: "checkpoint pause",
+    requestedAtUtc: new Date().toISOString(),
+  });
 }
 
-export function writeFhvCampaignControlResumeRequest(runRoot: string): void {
-  mkdirSync(join(runRoot, "control"), { recursive: true });
-  writeFileAtomic(
-    join(runRoot, "control", "resume_from_checkpoint-request.v1.json"),
-    `${JSON.stringify({ action: "RESUME_FROM_CHECKPOINT" }, null, 2)}\n`,
-  );
+export function writeFhvCampaignControlResumeRequest(
+  runRoot: string,
+  runId: string,
+  organizationId: string,
+): void {
+  writeFhvCampaignControlRequest(runRoot, {
+    schemaVersion: "fhv-campaign-control-request/v1",
+    action: "RESUME_FROM_CHECKPOINT",
+    runId,
+    organizationId,
+    operatorId: "fhv-rehearsal-runner",
+    reason: "checkpoint resume",
+    requestedAtUtc: new Date().toISOString(),
+  });
 }
 
 export function assertCanvasDigestStableForTests(

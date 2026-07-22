@@ -16,9 +16,12 @@ is_full_sha() {
 
 require_confirm_or_noop() {
   local action="$1"
+  if [[ "${DRY_RUN:-0}" -eq 1 ]]; then
+    log "fhv-supervisor ${action}: NO-OP (dry-run mode)"
+    return 1
+  fi
   if [[ "${CONFIRM:-0}" -eq 0 ]]; then
     log "fhv-supervisor ${action}: NO-OP (missing --confirm)"
-    [[ "${DRY_RUN:-0}" -eq 1 ]] && log "  mode: dry-run"
     return 1
   fi
   return 0
