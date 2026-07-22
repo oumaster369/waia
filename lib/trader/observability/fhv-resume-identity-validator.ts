@@ -24,6 +24,10 @@ import {
   readFhvRehearsalCampaignProgress,
   resolveFhvRehearsalEvidenceDir,
 } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
+import {
+  assertFhvCampaignIdentityFrontierPresent,
+  FhvCampaignIdentityError,
+} from "@/lib/trader/observability/fhv-campaign-identity";
 
 export type FhvResumeIdentityErrorCode =
   | "FHV_RESUME_CHECKPOINT_MISSING"
@@ -44,7 +48,10 @@ export type FhvResumeIdentityErrorCode =
   | "FHV_RESUME_CONTROL_REQUEST_INVALID"
   | "FHV_RESUME_ORG_MISMATCH"
   | "FHV_RESUME_TARGET_SHA_MISMATCH"
-  | "FHV_RESUME_RUN_CHAIN_ALREADY_COMPLETE";
+  | "FHV_RESUME_RUN_CHAIN_ALREADY_COMPLETE"
+  | "FHV_RESUME_IDENTITY_FRONTIER_MISSING"
+  | "FHV_RESUME_IDENTITY_FRONTIER_MISMATCH"
+  | "FHV_RESUME_IDENTITY_FRONTIER_ROLLBACK";
 
 export class FhvResumeIdentityError extends Error {
   constructor(
@@ -199,6 +206,21 @@ export function assertFhvRehearsalResumeIdentity(input: {
   }
   if (controlRequest.organizationId !== input.manifest.organizationId) {
     throw new FhvResumeIdentityError("FHV_RESUME_ORG_MISMATCH", "Control request org mismatch.");
+  }
+
+  try {
+    assertFhvCampaignIdentityFrontierPresent(checkpoint);
+  } catch (error) {
+    if (error instanceof FhvCampaignIdentityError) {
+      const code =
+        error.code === "FHV_CAMPAIGN_IDENTITY_FRONTIER_MISSING"
+          ? "FHV_RESUME_IDENTITY_FRONTIER_MISSING"
+          : error.code === "FHV_CAMPAIGN_IDENTITY_FRONTIER_ROLLBACK"
+            ? "FHV_RESUME_IDENTITY_FRONTIER_ROLLBACK"
+            : "FHV_RESUME_IDENTITY_FRONTIER_MISMATCH";
+      throw new FhvResumeIdentityError(code, error.message);
+    }
+    throw error;
   }
 
   return checkpoint;

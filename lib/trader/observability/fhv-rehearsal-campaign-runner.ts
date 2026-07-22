@@ -55,6 +55,12 @@ import {
   assertFhvRehearsalResumeIdentity,
   FhvResumeIdentityError,
 } from "@/lib/trader/observability/fhv-resume-identity-validator";
+import {
+  createFhvCampaignIdentityContext,
+  runWithScopedRandomUuidFactory,
+  type FhvCampaignIdentityContext,
+  type FhvCampaignIdentityFrontierState,
+} from "@/lib/trader/observability/fhv-campaign-identity";
 
 export const FHV_REHEARSAL_CHECKPOINT_CYCLE = 40;
 export const FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES = 45;
@@ -116,51 +122,6 @@ function barsThroughCycleCount(cycleCount: number): number {
     return EXPAND_MIN_BARS;
   }
   return EXPAND_MIN_BARS + (cycleCount - 1);
-}
-
-type CampaignIdentityState = {
-  newIdSeq: number;
-  randomUuidSeq: number;
-};
-
-const campaignIdentityStateByKey = new Map<string, CampaignIdentityState>();
-
-function campaignIdentityKey(runRoot: string, runId: string): string {
-  return `${runRoot}:${runId}`;
-}
-
-function resolveCampaignIdentityState(runRoot: string, runId: string): CampaignIdentityState {
-  const key = campaignIdentityKey(runRoot, runId);
-  const existing = campaignIdentityStateByKey.get(key);
-  if (existing) {
-    return existing;
-  }
-  const created = { newIdSeq: 0, randomUuidSeq: 0 };
-  campaignIdentityStateByKey.set(key, created);
-  return created;
-}
-
-function createBenchmarkNewIdFactory(state: CampaignIdentityState): () => string {
-  return () => {
-    state.newIdSeq += 1;
-    return `00000000-0000-4000-8000-${String(416900 + state.newIdSeq).padStart(12, "0")}`;
-  };
-}
-
-async function withDeterministicRandomUuid<T>(
-  state: CampaignIdentityState,
-  run: () => Promise<T>,
-): Promise<T> {
-  const originalRandomUuid = crypto.randomUUID.bind(crypto);
-  crypto.randomUUID = () => {
-    state.randomUuidSeq += 1;
-    return `00000000-0000-4000-8000-${String(416950 + state.randomUuidSeq).padStart(12, "0")}`;
-  };
-  try {
-    return await run();
-  } finally {
-    crypto.randomUUID = originalRandomUuid;
-  }
 }
 
 export function resolveFhvRehearsalEvidenceDir(runRoot: string): string {
@@ -307,6 +268,7 @@ async function runWp03Segment(input: {
   deadline?: FhvRehearsalMonotonicDeadline;
   onCycleComplete?: (cyclesProcessed: number) => void;
   shouldPauseAfterCycle?: (cyclesProcessed: number) => boolean;
+  identityContext: FhvCampaignIdentityContext;
 }): Promise<{
   cycleCount: number;
   evidenceDigest: string;
@@ -314,8 +276,10 @@ async function runWp03Segment(input: {
   canvasState: Awaited<ReturnType<typeof runBacktest>>["canvasState"];
   stoppedEarly: boolean;
 }> {
-  const identityState = resolveCampaignIdentityState(input.runRoot, input.runId);
-  return withDeterministicRandomUuid(identityState, async () => {
+  const identityContext = input.identityContext;
+  const newId = identityContext.createNewIdFactory();
+  const randomUuid = identityContext.createRandomUuidFactory();
+  return runWithScopedRandomUuidFactory(randomUuid, async () => {
     const fixture = loadApprovedBenchmarkFixture();
     const { session, context } = await seedBenchmarkSession();
     const evidenceDir = input.evidenceDir ?? resolveFhvRehearsalEvidenceDir(input.runRoot);
@@ -363,7 +327,7 @@ async function runWp03Segment(input: {
         },
         exportedAt: new Date(window.end),
         activeStrategyIds: [MEAN_REVERSION_V0],
-        newId: createBenchmarkNewIdFactory(identityState),
+        newId,
         substrateMode: "incremental",
         retentionMode: "STREAM_ONLY",
         evidenceSink,
@@ -404,6 +368,7 @@ function writePausedCheckpoint(input: {
   targetSha: string;
   partial: Awaited<ReturnType<typeof runWp03Segment>>;
   actualPauseCycle: number;
+  identityFrontier: FhvCampaignIdentityFrontierState;
 }): void {
   const fixture = loadApprovedBenchmarkFixture();
   const evidenceDir = resolveFhvRehearsalEvidenceDir(input.runRoot);
@@ -448,6 +413,7 @@ function writePausedCheckpoint(input: {
       dbConnectionMode: "harness",
       replayTerminalState: "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE",
       fixtureSha256: HTR_WP03_BENCHMARK_FIXTURE_SHA256,
+      campaignIdentityFrontierState: input.identityFrontier,
     },
   });
 }
@@ -458,8 +424,10 @@ async function finalizePauseAtCheckpoint(input: {
   targetSha: string;
   partial: Awaited<ReturnType<typeof runWp03Segment>>;
   actualPauseCycle: number;
+  identityContext: FhvCampaignIdentityContext;
 }): Promise<FhvRehearsalCampaignResult> {
-  writePausedCheckpoint(input);
+  const identityFrontier = input.identityContext.captureFrontier(input.actualPauseCycle - 1);
+  writePausedCheckpoint({ ...input, identityFrontier });
   writeFhvRehearsalCampaignProgress(input.runRoot, {
     schemaVersion: "fhv-rehearsal-campaign-progress/v1",
     runId: input.runId,
@@ -491,9 +459,11 @@ async function runCampaignWithPauseSupport(input: {
   const deadline =
     input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
 
+  const identityContext = createFhvCampaignIdentityContext({ runId: input.runId });
   const segment = await runWp03Segment({
     runRoot: input.runRoot,
     runId: input.runId,
+    identityContext,
     deadline,
     onCycleComplete: (cyclesProcessed) => {
       writeFhvRehearsalCampaignProgress(input.runRoot, {
@@ -517,6 +487,7 @@ async function runCampaignWithPauseSupport(input: {
       targetSha: input.manifest.targetSha,
       partial: segment,
       actualPauseCycle,
+      identityContext,
     });
   }
 
@@ -589,6 +560,10 @@ async function runResumeFromCheckpoint(input: {
     0,
     barsThroughCycleCount(resumeFromCycle),
   );
+  const identityContext = createFhvCampaignIdentityContext({
+    runId: input.runId,
+    restoredFrontier: checkpoint.campaignIdentityFrontierState,
+  });
   const deadline =
     input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
   let lastProgress = pausedProgress?.cyclesProcessed ?? 0;
@@ -596,6 +571,7 @@ async function runResumeFromCheckpoint(input: {
   const resumed = await runWp03Segment({
     runRoot: input.runRoot,
     runId: input.runId,
+    identityContext,
     resumeCycleStartIndex: resumeFromCycle,
     initialCanvasState: restored,
     initialBars1mPrefix: prefixBars,

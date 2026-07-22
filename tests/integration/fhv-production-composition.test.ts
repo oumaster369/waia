@@ -87,6 +87,7 @@ function signedCommand(input: {
   idempotencyKey: string;
   nonce: string;
   checkpointSeq?: number;
+  expectedPhase?: string;
 }): ReturnType<typeof signFhvOperatorCommandV1> {
   const issuedAtUtc = new Date().toISOString();
   const expiresAtUtc = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -105,8 +106,8 @@ function signedCommand(input: {
       idempotencyKey: input.idempotencyKey,
       expectedCampaignState:
         input.checkpointSeq !== undefined
-          ? { phase: "validation", checkpointSeq: input.checkpointSeq }
-          : { phase: "validation" },
+          ? { phase: input.expectedPhase ?? "running", checkpointSeq: input.checkpointSeq }
+          : { phase: input.expectedPhase ?? "running" },
       confirmationPhraseClass: input.action === "PAUSE_AT_CHECKPOINT" ? "PAUSE" : "RESUME",
     },
     COMMAND_SECRET,
@@ -207,6 +208,11 @@ describe("FHV production composition (DEE-431)", () => {
     });
 
     await waitForFhvRehearsalCycles(runDir, 5, { timeoutMs: 120_000, intervalMs: 25 });
+    const runningSnapshot = resolveFhvCampaignState({
+      runRoot: runDir,
+      runId: RUN_ID,
+      organizationId: ORG_ID,
+    });
     const pauseResult = await postObserverCommand(
       baseUrl,
       signedCommand({
@@ -214,6 +220,7 @@ describe("FHV production composition (DEE-431)", () => {
         commandId: "prod-pause-1",
         idempotencyKey: "prod-pause-1",
         nonce: "prod-pause-nonce-1",
+        expectedPhase: runningSnapshot.phase,
       }),
     );
     expect(pauseResult.response.status).toBe(200);
@@ -240,6 +247,7 @@ describe("FHV production composition (DEE-431)", () => {
         idempotencyKey: "prod-resume-1",
         nonce: "prod-resume-nonce-1",
         checkpointSeq: pausedSnapshot.checkpointSeq,
+        expectedPhase: pausedSnapshot.phase,
       }),
     );
     expect(resumeResult.response.status).toBe(200);

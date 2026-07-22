@@ -37,6 +37,7 @@ export class ReplayCheckpointError extends Error {
 }
 
 import type { HistoricalExecutionCheckpointSlice } from "@/lib/trader/execution/historical-execution-model.types";
+import type { FhvCampaignIdentityFrontierState } from "@/lib/trader/observability/fhv-campaign-identity";
 
 export type ReplayDrawdownHwmState = {
   accountPeakHwm: string;
@@ -122,6 +123,8 @@ export type ReplayCheckpointRecord = {
   executionState?: HistoricalExecutionCheckpointSlice;
   /** HTR-WP18: accounting frontier restart slice. */
   accountingFrontierState?: ReplayAccountingFrontierState;
+  /** DEE-431: cross-process campaign identity generator frontier (integrity-protected). */
+  campaignIdentityFrontierState?: FhvCampaignIdentityFrontierState;
   checkpointDigest: string;
 };
 

@@ -7,7 +7,7 @@ import {
   TREND_MOMENTUM_V0_VERSION,
 } from "@/lib/trader/intelligence/types";
 import { addDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
-import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-contract";
+import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-constants";
 
 export type StrategyAttributionKey = {
   organizationId: string;

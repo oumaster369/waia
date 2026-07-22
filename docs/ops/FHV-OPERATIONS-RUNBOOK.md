@@ -96,11 +96,12 @@ Requirements:
 1. Validate checkpoint identity (`assertFhvRehearsalResumeIdentity`).
 2. Restore canvas from the checkpoint sidecar (`restoreCanvasFromCheckpoint`).
 3. Resume at `safeResumeThroughCycleIndex + 1` with the exact `initialBars1mPrefix` substrate slice.
-4. Enforce `getFullHistoryRescanCount() === 0` (fail closed on full-history rescan).
-5. Write a dual **authoritative** run-chain: partial segment (cycles `0..pauseFrontier`) + continuation segment (cycles `pauseFrontier..terminal`). The partial segment is retained as authoritative audit lineage; it is **not** superseded on genuine incremental resume.
-6. Progress and heartbeat continue from the paused frontier; they must never regress to `0`/`1` after resume.
+4. Restore the **campaign identity frontier** (`newIdSeq`, `randomUuidSeq`) from the checkpoint slice so a fresh systemd-spawned process continues deterministic ID generation without process-local memory.
+5. Enforce `getFullHistoryRescanCount() === 0` (fail closed on full-history rescan).
+6. Write a dual **authoritative** run-chain: partial segment (cycles `0..pauseFrontier`) + continuation segment (cycles `pauseFrontier..terminal`). The partial segment is retained as authoritative audit lineage; it is **not** superseded on genuine incremental resume.
+7. Progress and heartbeat continue from the paused frontier; they must never regress to `0`/`1` after resume.
 
-Hermetic proofs: `tests/integration/fhv-true-incremental-resume.test.ts`, `tests/unit/fhv-incremental-resume-guards.test.ts`, `tests/unit/fhv-resume-timeout.test.ts`.
+Hermetic proofs: `tests/integration/fhv-cross-process-resume.test.ts`, `tests/integration/fhv-true-incremental-resume.test.ts`, `tests/unit/fhv-campaign-identity-frontier.test.ts`, `tests/unit/fhv-incremental-resume-guards.test.ts`, `tests/unit/fhv-resume-timeout.test.ts`.
 
 ## Related documents
 

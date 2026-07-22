@@ -315,7 +315,6 @@ export async function handleFhvObserverCommand(
     return { ...existing, status: "duplicate" };
   }
 
-  const status = readFhvOperatorStatusTolerant(state.config.runRoot);
   const checkpoint = readFhvCampaignCheckpoint(state.config.runRoot);
   const ledger = loadFhvCommandLedgerNonces(state.config.runRoot);
   const nowMs = options?.nowMs ?? Date.now();
@@ -332,7 +331,7 @@ export async function handleFhvObserverCommand(
       secret: state.config.commandSecret,
       expectedRunId: state.config.runId,
       expectedOrganizationId: state.config.organizationId,
-      currentPhase: status?.campaign.phase ?? checkpoint?.activePhase ?? "validation",
+      currentPhase: campaignSnapshot.phase,
       currentCheckpointSeq: campaignSnapshot.checkpointSeq,
       seenNonces: ledger.nonces,
       seenIdempotencyKeys: ledger.idempotencyKeys,
