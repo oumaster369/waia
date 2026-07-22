@@ -57,7 +57,7 @@ Both units run SHA guard (`execution-server-preflight.sh`) in `ExecStartPre`.
 8. Verify:
    - Bounded `fhv-operator-status/v1` under 256 KiB
    - Checkpoint/resume visibility
-   - **True incremental checkpoint resume:** canvas restored from checkpoint sidecar; replay continues at `safeResumeThroughCycleIndex + 1` with no full-history rescan; campaign identity frontier (`newIdSeq`/`randomUuidSeq`) persisted in checkpoint digest and restored across separate processes; partial + continuation segments are both **authoritative** in the run-chain (partial is never superseded for a genuine resume)
+   - **True incremental checkpoint resume (bounded T4, quiescent-only):** canvas restored from checkpoint sidecar; replay continues at `safeResumeThroughCycleIndex + 1` with no full-history rescan; campaign identity frontier (`runId`, `organizationId`, `newIdSeq`, `randomUuidSeq`) and **quiescent economic frontier** (`FhvRehearsalEconomicFrontierV1`, mode `QUIESCENT_NO_ECONOMIC_STATE`) persisted in checkpoint digest; pause/resume allowed only when measured economic state is zero (no orders, fills, positions, PnL, fees, or active accounting/WP17/WP21 flags); generic active economic recovery is **not** claimed; process B writes `fhv-resume-runtime-proof.v1.json` with `fullHistoryRescanDelta === 0`; partial + continuation segments are both **authoritative** in the run-chain (partial is never superseded for a genuine resume)
    - Alert policy digest match
    - Signed operator command auth drill (`PAUSE_AT_CHECKPOINT`, `RESUME_FROM_CHECKPOINT`)
 9. SSH disconnect → **observer restart** → prove campaign economic state unchanged.

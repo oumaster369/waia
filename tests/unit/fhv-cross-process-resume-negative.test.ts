@@ -189,11 +189,13 @@ describe("FHV cross-process resume negative matrix (DEE-431)", () => {
         frontier: {
           schemaVersion: "bogus/v0" as never,
           runId: RUN_ID,
+          organizationId: ORG_ID,
           safeResumeThroughCycleIndex: 44,
           newIdSeq: 10,
           randomUuidSeq: 10,
         },
         runId: RUN_ID,
+        organizationId: ORG_ID,
         safeResumeThroughCycleIndex: 44,
       }),
     ).toThrow(FhvCampaignIdentityError);
@@ -201,31 +203,35 @@ describe("FHV cross-process resume negative matrix (DEE-431)", () => {
 
   it("rejects identity frontier with mismatched checkpoint frontier index", () => {
     expect(() =>
-      assertFhvCampaignIdentityFrontierPresent({
-        schemaVersion: REPLAY_CHECKPOINT_SCHEMA_VERSION,
-        backtestRunId: RUN_ID,
-        datasetContentDigest: "digest",
-        datasetId: "fhv-rehearsal-wp03",
-        codeSha: TARGET_SHA,
-        activePhase: "validation",
-        dbDurableThroughPhase: "none",
-        evidenceDurableThroughCycleIndex: 44,
-        safeResumeThroughCycleIndex: 44,
-        evidenceRunDir: "/tmp/evidence",
-        evidenceChainDigest: "chain",
-        evidenceTerminalState: "STREAMING_EVIDENCE_SEALED_PARTIAL",
-        dbConnectionMode: "harness",
-        replayTerminalState: "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE",
-        fixtureSha256: HTR_WP03_BENCHMARK_FIXTURE_SHA256,
-        campaignIdentityFrontierState: {
-          schemaVersion: "fhv-campaign-identity-frontier/v1",
-          runId: RUN_ID,
-          safeResumeThroughCycleIndex: 99,
-          newIdSeq: 10,
-          randomUuidSeq: 10,
+      assertFhvCampaignIdentityFrontierPresent(
+        {
+          schemaVersion: REPLAY_CHECKPOINT_SCHEMA_VERSION,
+          backtestRunId: RUN_ID,
+          datasetContentDigest: "digest",
+          datasetId: "fhv-rehearsal-wp03",
+          codeSha: TARGET_SHA,
+          activePhase: "validation",
+          dbDurableThroughPhase: "none",
+          evidenceDurableThroughCycleIndex: 44,
+          safeResumeThroughCycleIndex: 44,
+          evidenceRunDir: "/tmp/evidence",
+          evidenceChainDigest: "chain",
+          evidenceTerminalState: "STREAMING_EVIDENCE_SEALED_PARTIAL",
+          dbConnectionMode: "harness",
+          replayTerminalState: "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE",
+          fixtureSha256: HTR_WP03_BENCHMARK_FIXTURE_SHA256,
+          campaignIdentityFrontierState: {
+            schemaVersion: "fhv-campaign-identity-frontier/v1",
+            runId: RUN_ID,
+            organizationId: ORG_ID,
+            safeResumeThroughCycleIndex: 99,
+            newIdSeq: 10,
+            randomUuidSeq: 10,
+          },
+          checkpointDigest: "",
         },
-        checkpointDigest: "",
-      }),
+        ORG_ID,
+      ),
     ).toThrow(FhvCampaignIdentityError);
   });
 });

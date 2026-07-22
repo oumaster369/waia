@@ -14,7 +14,10 @@ import {
   seedBenchmarkSession,
 } from "@/lib/trader/backtest/replay-benchmark-harness";
 import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
-import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
+import {
+  getFullHistoryRescanCount,
+  resetFullHistoryRescanCount,
+} from "@/lib/trader/backtest/replay-runtime-metrics";
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-sink";
 import {
@@ -56,11 +59,20 @@ import {
   FhvResumeIdentityError,
 } from "@/lib/trader/observability/fhv-resume-identity-validator";
 import {
+  assertIdentityFrontierMonotonicWrite,
   createFhvCampaignIdentityContext,
   runWithScopedRandomUuidFactory,
   type FhvCampaignIdentityContext,
   type FhvCampaignIdentityFrontierState,
 } from "@/lib/trader/observability/fhv-campaign-identity";
+import {
+  assertFhvRehearsalEconomicFrontierQuiescent,
+  FhvRehearsalEconomicFrontierError,
+  measureFhvRehearsalEconomicState,
+  validateFhvRehearsalEconomicFrontierBinding,
+  type FhvRehearsalEconomicFrontierV1,
+} from "@/lib/trader/observability/fhv-rehearsal-economic-frontier";
+import { writeFhvResumeRuntimeProof } from "@/lib/trader/observability/fhv-resume-runtime-proof";
 
 export const FHV_REHEARSAL_CHECKPOINT_CYCLE = 40;
 export const FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES = 45;
@@ -258,6 +270,7 @@ export function consumeFhvCampaignControlMarker(
 async function runWp03Segment(input: {
   runRoot: string;
   runId: string;
+  organizationId: string;
   maxCycles?: number;
   checkpointRunRoot?: string;
   resumeCycleStartIndex?: number;
@@ -275,6 +288,7 @@ async function runWp03Segment(input: {
   semanticReproDigest: string;
   canvasState: Awaited<ReturnType<typeof runBacktest>>["canvasState"];
   stoppedEarly: boolean;
+  economicSnapshot: FhvRehearsalEconomicFrontierV1;
 }> {
   const identityContext = input.identityContext;
   const newId = identityContext.createNewIdFactory();
@@ -301,6 +315,7 @@ async function runWp03Segment(input: {
       windowMode: "cursor",
     });
     let stoppedEarly = false;
+    let economicSnapshot: FhvRehearsalEconomicFrontierV1;
     try {
       const backtest = await runBacktest({
         context,
@@ -349,12 +364,31 @@ async function runWp03Segment(input: {
           return "continue";
         },
       });
+      const safeResumeThroughCycleIndex =
+        input.resumeCycleStartIndex !== undefined
+          ? input.resumeCycleStartIndex - 1
+          : backtest.cycleCount - (stoppedEarly ? 1 : 0);
+      economicSnapshot = await measureFhvRehearsalEconomicState({
+        context,
+        orderRepository: session.orderRepository,
+        organizationId: input.organizationId,
+        runId: input.runId,
+        safeResumeThroughCycleIndex,
+        window,
+        runtimeFlags: {
+          htrAccountingActive: backtest.accountingState !== undefined,
+          historicalExecutionActive: false,
+          portfolioAccountingActive: false,
+          wp21RuntimeActive: backtest.wp21CheckpointState !== undefined,
+        },
+      });
       return {
         cycleCount: backtest.cycleCount,
         evidenceDigest: backtest.evidenceDigest,
         semanticReproDigest: computeReplayReproContentDigest(backtest.exportDocument),
         canvasState: backtest.canvasState,
         stoppedEarly,
+        economicSnapshot,
       };
     } finally {
       session.cleanup();
@@ -365,6 +399,7 @@ async function runWp03Segment(input: {
 function writePausedCheckpoint(input: {
   runRoot: string;
   runId: string;
+  organizationId: string;
   targetSha: string;
   partial: Awaited<ReturnType<typeof runWp03Segment>>;
   actualPauseCycle: number;
@@ -374,6 +409,26 @@ function writePausedCheckpoint(input: {
   const evidenceDir = resolveFhvRehearsalEvidenceDir(input.runRoot);
   const evidence = resolveEvidenceFrontier(evidenceDir);
   const safeResumeThroughCycleIndex = input.actualPauseCycle - 1;
+
+  try {
+    validateFhvRehearsalEconomicFrontierBinding({
+      frontier: input.partial.economicSnapshot,
+      runId: input.runId,
+      organizationId: input.organizationId,
+      safeResumeThroughCycleIndex,
+    });
+    assertFhvRehearsalEconomicFrontierQuiescent(input.partial.economicSnapshot);
+  } catch (error) {
+    if (error instanceof FhvRehearsalEconomicFrontierError) {
+      throw new FhvRehearsalCampaignError(error.code, error.message);
+    }
+    throw error;
+  }
+
+  assertIdentityFrontierMonotonicWrite({
+    runRoot: input.runRoot,
+    frontier: input.identityFrontier,
+  });
 
   if (input.partial.cycleCount !== input.actualPauseCycle) {
     throw new FhvRehearsalCampaignError(
@@ -414,6 +469,7 @@ function writePausedCheckpoint(input: {
       replayTerminalState: "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE",
       fixtureSha256: HTR_WP03_BENCHMARK_FIXTURE_SHA256,
       campaignIdentityFrontierState: input.identityFrontier,
+      rehearsalEconomicFrontierState: input.partial.economicSnapshot,
     },
   });
 }
@@ -421,6 +477,7 @@ function writePausedCheckpoint(input: {
 async function finalizePauseAtCheckpoint(input: {
   runRoot: string;
   runId: string;
+  organizationId: string;
   targetSha: string;
   partial: Awaited<ReturnType<typeof runWp03Segment>>;
   actualPauseCycle: number;
@@ -453,16 +510,21 @@ async function finalizePauseAtCheckpoint(input: {
 async function runCampaignWithPauseSupport(input: {
   runRoot: string;
   runId: string;
+  organizationId: string;
   manifest: FhvRehearsalLaunchConfigV1;
   monotonicDeadline?: FhvRehearsalMonotonicDeadline;
 }): Promise<FhvRehearsalCampaignResult> {
   const deadline =
     input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
 
-  const identityContext = createFhvCampaignIdentityContext({ runId: input.runId });
+  const identityContext = createFhvCampaignIdentityContext({
+    runId: input.runId,
+    organizationId: input.organizationId,
+  });
   const segment = await runWp03Segment({
     runRoot: input.runRoot,
     runId: input.runId,
+    organizationId: input.organizationId,
     identityContext,
     deadline,
     onCycleComplete: (cyclesProcessed) => {
@@ -484,6 +546,7 @@ async function runCampaignWithPauseSupport(input: {
     return finalizePauseAtCheckpoint({
       runRoot: input.runRoot,
       runId: input.runId,
+      organizationId: input.organizationId,
       targetSha: input.manifest.targetSha,
       partial: segment,
       actualPauseCycle,
@@ -512,6 +575,49 @@ async function runCampaignWithPauseSupport(input: {
   };
 }
 
+async function assertFreshResumeRepositoryQuiescent(input: {
+  runId: string;
+  organizationId: string;
+  safeResumeThroughCycleIndex: number;
+}): Promise<void> {
+  const fixture = loadApprovedBenchmarkFixture();
+  const { session, context } = await seedBenchmarkSession();
+  try {
+    const window = {
+      start: new Date(fixture.bars[0]!.barOpenTime),
+      end: new Date(fixture.bars.at(-1)!.barCloseTime),
+    };
+    const frontier = await measureFhvRehearsalEconomicState({
+      context,
+      orderRepository: session.orderRepository,
+      organizationId: input.organizationId,
+      runId: input.runId,
+      safeResumeThroughCycleIndex: input.safeResumeThroughCycleIndex,
+      window,
+      runtimeFlags: {
+        htrAccountingActive: false,
+        historicalExecutionActive: false,
+        portfolioAccountingActive: false,
+        wp21RuntimeActive: false,
+      },
+    });
+    validateFhvRehearsalEconomicFrontierBinding({
+      frontier,
+      runId: input.runId,
+      organizationId: input.organizationId,
+      safeResumeThroughCycleIndex: input.safeResumeThroughCycleIndex,
+    });
+    assertFhvRehearsalEconomicFrontierQuiescent(frontier);
+  } catch (error) {
+    if (error instanceof FhvRehearsalEconomicFrontierError) {
+      throw new FhvRehearsalCampaignError(error.code, error.message);
+    }
+    throw error;
+  } finally {
+    session.cleanup();
+  }
+}
+
 async function runResumeFromCheckpoint(input: {
   runRoot: string;
   runId: string;
@@ -519,6 +625,7 @@ async function runResumeFromCheckpoint(input: {
   manifest: FhvRehearsalLaunchConfigV1;
   monotonicDeadline?: FhvRehearsalMonotonicDeadline;
 }): Promise<FhvRehearsalCampaignResult> {
+  const organizationId = input.manifest.organizationId;
   let checkpoint;
   try {
     checkpoint = assertFhvRehearsalResumeIdentity({
@@ -560,17 +667,30 @@ async function runResumeFromCheckpoint(input: {
     0,
     barsThroughCycleCount(resumeFromCycle),
   );
+
+  await assertFreshResumeRepositoryQuiescent({
+    runId: input.runId,
+    organizationId,
+    safeResumeThroughCycleIndex: checkpoint.safeResumeThroughCycleIndex,
+  });
+
   const identityContext = createFhvCampaignIdentityContext({
     runId: input.runId,
+    organizationId,
     restoredFrontier: checkpoint.campaignIdentityFrontierState,
   });
   const deadline =
     input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
   let lastProgress = pausedProgress?.cyclesProcessed ?? 0;
+  resetFullHistoryRescanCount();
+  const rescanBefore = getFullHistoryRescanCount();
+  let firstExecutedCycleIndex: number | null = null;
+  let lastExecutedCycleIndex: number | null = null;
 
   const resumed = await runWp03Segment({
     runRoot: input.runRoot,
     runId: input.runId,
+    organizationId,
     identityContext,
     resumeCycleStartIndex: resumeFromCycle,
     initialCanvasState: restored,
@@ -585,6 +705,10 @@ async function runResumeFromCheckpoint(input: {
           `Progress regressed from ${lastProgress} to ${cyclesProcessed}.`,
         );
       }
+      if (firstExecutedCycleIndex === null) {
+        firstExecutedCycleIndex = cyclesProcessed;
+      }
+      lastExecutedCycleIndex = cyclesProcessed;
       lastProgress = cyclesProcessed;
       writeFhvRehearsalCampaignProgress(input.runRoot, {
         schemaVersion: "fhv-rehearsal-campaign-progress/v1",
@@ -598,12 +722,26 @@ async function runResumeFromCheckpoint(input: {
     },
   });
 
-  if (getFullHistoryRescanCount() !== 0) {
+  const rescanAfter = getFullHistoryRescanCount();
+  if (rescanAfter !== rescanBefore) {
     throw new FhvRehearsalCampaignError(
       "FHV_REHEARSAL_RESUME_FULL_HISTORY_RESCAN",
       "Resume triggered full-history rescan.",
     );
   }
+
+  writeFhvResumeRuntimeProof(input.runRoot, {
+    schemaVersion: "fhv-resume-runtime-proof/v1",
+    runId: input.runId,
+    organizationId,
+    processPid: process.pid,
+    resumeCycleStartIndex: resumeFromCycle,
+    firstExecutedCycleIndex: firstExecutedCycleIndex ?? resumeFromCycle,
+    lastExecutedCycleIndex: lastExecutedCycleIndex ?? resumed.cycleCount,
+    fullHistoryRescanCountBefore: rescanBefore,
+    fullHistoryRescanCountAfter: rescanAfter,
+    fullHistoryRescanDelta: rescanAfter - rescanBefore,
+  });
 
   const partialDir = resolveFhvRehearsalEvidenceDir(input.runRoot);
   const continuationDir = join(input.runRoot, "streaming-evidence-resume");
@@ -866,6 +1004,7 @@ export async function runFhvRehearsalCampaign(input: {
     return await runCampaignWithPauseSupport({
       runRoot: input.runRoot,
       runId: input.runId,
+      organizationId: input.organizationId,
       manifest,
       monotonicDeadline: input.monotonicDeadline,
     });

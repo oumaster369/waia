@@ -28,6 +28,12 @@ import {
   assertFhvCampaignIdentityFrontierPresent,
   FhvCampaignIdentityError,
 } from "@/lib/trader/observability/fhv-campaign-identity";
+import {
+  assertFhvRehearsalEconomicFrontierPresent,
+  assertFhvRehearsalEconomicFrontierQuiescent,
+  FhvRehearsalEconomicFrontierError,
+  validateFhvRehearsalEconomicFrontierBinding,
+} from "@/lib/trader/observability/fhv-rehearsal-economic-frontier";
 
 export type FhvResumeIdentityErrorCode =
   | "FHV_RESUME_CHECKPOINT_MISSING"
@@ -51,7 +57,9 @@ export type FhvResumeIdentityErrorCode =
   | "FHV_RESUME_RUN_CHAIN_ALREADY_COMPLETE"
   | "FHV_RESUME_IDENTITY_FRONTIER_MISSING"
   | "FHV_RESUME_IDENTITY_FRONTIER_MISMATCH"
-  | "FHV_RESUME_IDENTITY_FRONTIER_ROLLBACK";
+  | "FHV_RESUME_IDENTITY_FRONTIER_ROLLBACK"
+  | "FHV_REHEARSAL_ECONOMIC_FRONTIER_INVALID"
+  | "FHV_REHEARSAL_ECONOMIC_FRONTIER_NOT_QUIESCENT";
 
 export class FhvResumeIdentityError extends Error {
   constructor(
@@ -209,7 +217,7 @@ export function assertFhvRehearsalResumeIdentity(input: {
   }
 
   try {
-    assertFhvCampaignIdentityFrontierPresent(checkpoint);
+    assertFhvCampaignIdentityFrontierPresent(checkpoint, input.manifest.organizationId);
   } catch (error) {
     if (error instanceof FhvCampaignIdentityError) {
       const code =
@@ -219,6 +227,29 @@ export function assertFhvRehearsalResumeIdentity(input: {
             ? "FHV_RESUME_IDENTITY_FRONTIER_ROLLBACK"
             : "FHV_RESUME_IDENTITY_FRONTIER_MISMATCH";
       throw new FhvResumeIdentityError(code, error.message);
+    }
+    throw error;
+  }
+
+  try {
+    const economicFrontier = assertFhvRehearsalEconomicFrontierPresent(
+      checkpoint.rehearsalEconomicFrontierState,
+    );
+    validateFhvRehearsalEconomicFrontierBinding({
+      frontier: economicFrontier,
+      runId: input.manifest.runId,
+      organizationId: input.manifest.organizationId,
+      safeResumeThroughCycleIndex: checkpoint.safeResumeThroughCycleIndex,
+    });
+    assertFhvRehearsalEconomicFrontierQuiescent(economicFrontier);
+  } catch (error) {
+    if (error instanceof FhvRehearsalEconomicFrontierError) {
+      throw new FhvResumeIdentityError(
+        error.code === "FHV_REHEARSAL_ECONOMIC_FRONTIER_NOT_QUIESCENT"
+          ? "FHV_REHEARSAL_ECONOMIC_FRONTIER_NOT_QUIESCENT"
+          : "FHV_REHEARSAL_ECONOMIC_FRONTIER_INVALID",
+        error.message,
+      );
     }
     throw error;
   }

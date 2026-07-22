@@ -14,6 +14,10 @@ import {
   readSegmentProjections,
 } from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
 import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
+import {
+  readFhvResumeRuntimeProof,
+  validateFhvResumeRuntimeProof,
+} from "@/lib/trader/observability/fhv-resume-runtime-proof";
 import { canvasStateContentDigest } from "@/lib/trader/market-data/canvas/market-canvas-serialization";
 import type { FhvSystemctlInvocationResult } from "@/lib/trader/observability/fhv-linux-systemd-executor";
 import { createFhvObserverRuntime } from "@/lib/trader/observability/fhv-observer-runtime";
@@ -345,6 +349,11 @@ describe("FHV cross-process checkpoint resume (DEE-431)", () => {
       expect(checkpoint!.campaignIdentityFrontierState!.newIdSeq).toBeGreaterThan(0);
       expect(checkpoint!.campaignIdentityFrontierState!.randomUuidSeq).toBeGreaterThan(0);
       expect(checkpoint!.safeResumeThroughCycleIndex).toBe(actualPauseCycle! - 1);
+      expect(checkpoint!.rehearsalEconomicFrontierState).toBeDefined();
+      expect(checkpoint!.rehearsalEconomicFrontierState!.totalOrderCount).toBe(0);
+      expect(checkpoint!.rehearsalEconomicFrontierState!.openOrderCount).toBe(0);
+      expect(checkpoint!.rehearsalEconomicFrontierState!.fillCount).toBe(0);
+      expect(checkpoint!.rehearsalEconomicFrontierState!.mode).toBe("QUIESCENT_NO_ECONOMIC_STATE");
 
       const restored = restoreCanvasFromCheckpoint(runDir, checkpoint!);
       expect(restored).not.toBeUndefined();
@@ -376,14 +385,26 @@ describe("FHV cross-process checkpoint resume (DEE-431)", () => {
       expect(resumeStartRequested).toBe(true);
       expect(systemctlCalls.some((call) => call.args.includes("start"))).toBe(true);
 
-      const rescanBefore = getFullHistoryRescanCount();
       const processB = await runCampaignCliProcess(cliEnv);
-      expect(getFullHistoryRescanCount()).toBe(rescanBefore);
 
       expect(processA.pid).toBeGreaterThan(0);
       expect(processB.pid).toBeGreaterThan(0);
       expect(processA.pid).not.toBe(processB.pid);
       expect(processB.exitCode).toBe(0);
+
+      const runtimeProof = readFhvResumeRuntimeProof(runDir);
+      expect(runtimeProof).not.toBeNull();
+      expect(runtimeProof!.processPid).toBeGreaterThan(0);
+      expect(runtimeProof!.processPid).not.toBe(processA.pid);
+      validateFhvResumeRuntimeProof({
+        proof: runtimeProof!,
+        runId: RUN_ID,
+        organizationId: ORG_ID,
+        expectedProcessPid: runtimeProof!.processPid,
+        resumeCycleStartIndex: actualPauseCycle!,
+      });
+      expect(runtimeProof!.fullHistoryRescanDelta).toBe(0);
+      expect(getFullHistoryRescanCount()).toBe(0);
       expect(readFhvRehearsalTerminalClassification(runDir)).toBe("REHEARSAL_OK");
 
       const continuationDir = join(runDir, "streaming-evidence-resume");

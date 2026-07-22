@@ -6,11 +6,7 @@ import { createRequire } from "node:module";
  * `import.meta.url` is absent and `createRequire` would throw at module load.
  */
 export function enforceServerOnly(): void {
-  if (
-    process.env.VITEST === "true" ||
-    process.env.WAIA_POSTGRES_CLI === "1" ||
-    process.env.WAIA_TRADER_CLI === "1"
-  ) {
+  if (process.env.VITEST === "true" || process.env.WAIA_POSTGRES_CLI === "1") {
     return;
   }
   const metaUrl = import.meta.url;
