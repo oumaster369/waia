@@ -153,15 +153,15 @@ restore_snapshot() {
 install_units_transaction() {
   local unit_name
   for unit_name in "${INSTALL_UNITS[@]}"; do
-    install -m 0644 "${tmp_dir}/${unit_name}" "${SYSTEMD_DIR}/${unit_name}"
+    install -m 0644 "${tmp_dir}/${unit_name}" "${SYSTEMD_DIR}/${unit_name}" || return 1
   done
-  "$SYSTEMCTL" daemon-reload
+  "$SYSTEMCTL" daemon-reload || return 1
   for unit_name in "${INSTALL_UNITS[@]}"; do
-    "$SYSTEMCTL" enable "$unit_name"
+    "$SYSTEMCTL" enable "$unit_name" || return 1
   done
   for unit_name in "${INSTALL_UNITS[@]}"; do
-    [[ -f "${SYSTEMD_DIR}/${unit_name}" ]] || die "verification failed: missing ${SYSTEMD_DIR}/${unit_name}"
-    classify_systemctl_is_enabled "$unit_name" >/dev/null
+    [[ -f "${SYSTEMD_DIR}/${unit_name}" ]] || return 1
+    classify_systemctl_is_enabled "$unit_name" >/dev/null || return 1
   done
 }
 

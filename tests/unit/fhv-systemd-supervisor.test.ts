@@ -439,4 +439,71 @@ esac
     rmSync(mockBin, { recursive: true, force: true });
     rmSync(systemdDir, { recursive: true, force: true });
   });
+
+  it("install-units.sh rolls back when daemon-reload fails", () => {
+    const mockBin = writeMockBin({
+      systemctl: `#!/usr/bin/env bash
+case "$1" in
+  daemon-reload) exit 5 ;;
+  enable) exit 0 ;;
+  disable) exit 0 ;;
+  is-active) echo inactive; exit 3 ;;
+  is-enabled) echo disabled; exit 1 ;;
+  *) exit 0 ;;
+esac
+`,
+    });
+    const systemdDir = mkdtempSync(join(tmpdir(), "fhv-systemd-dir-"));
+    writeFileSync(join(systemdDir, "waia-fhv-campaign.service"), "[Unit]\n");
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/install-units.sh",
+      [...installArgs, "--confirm", "--systemd-dir", systemdDir],
+      mockBin,
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/install transaction failed|rollback attempted/);
+    rmSync(mockBin, { recursive: true, force: true });
+    rmSync(systemdDir, { recursive: true, force: true });
+  });
+
+  it("rollback-units.sh dry-run with --confirm performs no mutation", () => {
+    const mockBin = writeMockBin();
+    const systemdDir = mkdtempSync(join(tmpdir(), "fhv-systemd-dir-"));
+    writeFileSync(join(systemdDir, "waia-fhv-campaign.service"), "[Unit]\n");
+    writeFileSync(join(systemdDir, "waia-fhv-observer.service"), "[Unit]\n");
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/rollback-units.sh",
+      ["--confirm", "--dry-run", "--systemd-dir", systemdDir],
+      mockBin,
+    );
+    expect(result.status).toBe(0);
+    expect(readdirSync(systemdDir)).toHaveLength(2);
+    expect(result.stderr).toContain("dry-run");
+    rmSync(mockBin, { recursive: true, force: true });
+    rmSync(systemdDir, { recursive: true, force: true });
+  });
+
+  it("rollback-units.sh preserves unit files on unclassified is-active exit", () => {
+    const mockBin = writeMockBin({
+      systemctl: `#!/usr/bin/env bash
+case "$1" in
+  is-active) exit 99 ;;
+  is-enabled) echo disabled; exit 1 ;;
+  *) exit 0 ;;
+esac
+`,
+    });
+    const systemdDir = mkdtempSync(join(tmpdir(), "fhv-systemd-dir-"));
+    writeFileSync(join(systemdDir, "waia-fhv-campaign.service"), "[Unit]\n");
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/rollback-units.sh",
+      ["--confirm", "--unit", "waia-fhv-campaign.service", "--systemd-dir", systemdDir],
+      mockBin,
+    );
+    expect(result.status).not.toBe(0);
+    expect(existsSync(join(systemdDir, "waia-fhv-campaign.service"))).toBe(true);
+    expect(result.stderr).toMatch(/unclassified is-active|fatal/);
+    rmSync(mockBin, { recursive: true, force: true });
+    rmSync(systemdDir, { recursive: true, force: true });
+  });
 });
