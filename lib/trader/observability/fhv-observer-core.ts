@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { readReplayCheckpoint } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import { readReplayRunChainManifest } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import { readReplayRunChainProjections } from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
 import { reconstructStreamingEvidence } from "@/lib/trader/backtest/streaming-evidence";
 import {
   appendFhvAlertLedger,
@@ -46,6 +48,12 @@ import {
   UNCONFIGURED_FHV_CAMPAIGN_CONTROL_EXECUTOR,
   type FhvCampaignControlExecutor,
 } from "@/lib/trader/observability/fhv-campaign-control-executor";
+import {
+  assertFhvCampaignActionAllowed,
+  assertFhvResumePreconditions,
+  FhvCampaignStateTransitionError,
+  resolveFhvCampaignState,
+} from "@/lib/trader/observability/fhv-campaign-state";
 
 export type FhvObserverConfig = Readonly<{
   runRoot: string;
@@ -62,6 +70,7 @@ export type FhvObserverConfig = Readonly<{
 export type FhvObserverTickInput = Readonly<{
   nowMs?: number;
   barsProcessed?: number;
+  cyclesProcessed?: number;
   barsTotal?: number;
   phase?: string;
   startedAt?: string;
@@ -86,6 +95,15 @@ export function readFhvCampaignCheckpoint(runRoot: string) {
 }
 
 export function readFhvEvidenceHealth(runRoot: string): "ok" | "degraded" | "failed" {
+  const runChain = readReplayRunChainManifest(runRoot);
+  if (runChain) {
+    try {
+      readReplayRunChainProjections(runRoot);
+      return "ok";
+    } catch {
+      return "failed";
+    }
+  }
   const evidenceDir = join(runRoot, "streaming-evidence");
   if (!existsSync(evidenceDir)) {
     return "degraded";
@@ -139,7 +157,11 @@ export async function runFhvObserverTick(
     datasetReadable: null,
   });
 
-  const barsProcessed = input.barsProcessed ?? checkpoint?.evidenceDurableThroughCycleIndex ?? 0;
+  const barsProcessed =
+    input.cyclesProcessed ??
+    input.barsProcessed ??
+    checkpoint?.evidenceDurableThroughCycleIndex ??
+    0;
   const barsTotal = input.barsTotal ?? state.config.pinnedBarsTotal ?? null;
   if (barsProcessed > state.lastBarsProcessed) {
     state.lastBarsProcessed = barsProcessed;
@@ -293,9 +315,15 @@ export async function handleFhvObserverCommand(
     return { ...existing, status: "duplicate" };
   }
 
-  const status = readFhvOperatorStatusTolerant(state.config.runRoot);
   const checkpoint = readFhvCampaignCheckpoint(state.config.runRoot);
   const ledger = loadFhvCommandLedgerNonces(state.config.runRoot);
+  const nowMs = options?.nowMs ?? Date.now();
+  const campaignSnapshot = resolveFhvCampaignState({
+    runRoot: state.config.runRoot,
+    runId: state.config.runId,
+    organizationId: state.config.organizationId,
+    nowMs,
+  });
 
   try {
     verifyFhvOperatorCommandV1({
@@ -303,15 +331,51 @@ export async function handleFhvObserverCommand(
       secret: state.config.commandSecret,
       expectedRunId: state.config.runId,
       expectedOrganizationId: state.config.organizationId,
-      currentPhase: status?.campaign.phase ?? checkpoint?.activePhase ?? "validation",
-      currentCheckpointSeq: undefined,
+      currentPhase: campaignSnapshot.phase,
+      currentCheckpointSeq: campaignSnapshot.checkpointSeq,
       seenNonces: ledger.nonces,
       seenIdempotencyKeys: ledger.idempotencyKeys,
-      nowMs: options?.nowMs,
+      nowMs,
     });
   } catch (error) {
     const message =
       error instanceof FhvCommandVerificationError ? error.message : "Command rejected";
+    const result: FhvCommandResultV1 = {
+      schemaVersion: "fhv-command-result/v1",
+      commandId: command.commandId,
+      idempotencyKey: command.idempotencyKey,
+      status: "rejected",
+      message,
+      completedAtUtc: new Date().toISOString(),
+      enforcementApplied: false,
+    };
+    appendFhvCommandLedger(state.config.runRoot, {
+      recordedAtUtc: result.completedAtUtc,
+      command,
+      source,
+    });
+    writeFhvCommandResult(state.config.runRoot, result);
+    return result;
+  }
+
+  try {
+    assertFhvCampaignActionAllowed({
+      action: command.action,
+      snapshot: campaignSnapshot,
+    });
+    if (command.action === "RESUME_FROM_CHECKPOINT") {
+      assertFhvResumePreconditions({
+        runRoot: state.config.runRoot,
+        runId: state.config.runId,
+        organizationId: state.config.organizationId,
+        snapshot: campaignSnapshot,
+      });
+    }
+  } catch (error) {
+    const message =
+      error instanceof FhvCampaignStateTransitionError
+        ? error.message
+        : "Campaign action not allowed";
     const result: FhvCommandResultV1 = {
       schemaVersion: "fhv-command-result/v1",
       commandId: command.commandId,

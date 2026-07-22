@@ -32,6 +32,7 @@ import { FhvRuntimeResponseValidationError } from "@/lib/trader/observability/fh
 import { assertFhvStatusOrganizationBinding } from "@/lib/trader/observability/fhv-telemetry-probes";
 import { FHV_OPERATOR_COMMAND_SCHEMA_VERSION } from "@/lib/trader/observability/fhv-observability.constants";
 import { signFhvOperatorCommandV1 } from "@/lib/trader/observability/fhv-operator-command-v1";
+import { writeFhvRehearsalCampaignProgress } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
 
 const ORG_A = "00000000-0000-4000-8000-0000000416a1";
 const ORG_B = "00000000-0000-4000-8000-0000000416b2";
@@ -84,6 +85,14 @@ describe("DEE-416 operational security corrective", () => {
   it("rejects commands when supervisor executor is not configured", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-command-reject-"));
     mkdirSync(root, { recursive: true });
+    writeFhvRehearsalCampaignProgress(root, {
+      schemaVersion: "fhv-rehearsal-campaign-progress/v1",
+      runId: RUN_ID,
+      cyclesProcessed: 5,
+      expectedCycles: 100,
+      phase: "running",
+      updatedAtUtc: new Date().toISOString(),
+    });
     const state = createFhvObserverState({
       runRoot: root,
       runId: RUN_ID,
@@ -106,7 +115,7 @@ describe("DEE-416 operational security corrective", () => {
         expiresAtUtc: "2026-07-21T12:10:00.000Z",
         nonce: "nonce-unconfigured",
         idempotencyKey: "idem-unconfigured",
-        expectedCampaignState: { phase: "validation" },
+        expectedCampaignState: { phase: "running" },
         confirmationPhraseClass: "STOP",
       },
       COMMAND_SECRET,
@@ -126,6 +135,14 @@ describe("DEE-416 operational security corrective", () => {
   it("executes commands when a supervisor-neutral executor is configured", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-command-exec-"));
     mkdirSync(root, { recursive: true });
+    writeFhvRehearsalCampaignProgress(root, {
+      schemaVersion: "fhv-rehearsal-campaign-progress/v1",
+      runId: RUN_ID,
+      cyclesProcessed: 5,
+      expectedCycles: 100,
+      phase: "running",
+      updatedAtUtc: new Date().toISOString(),
+    });
     const state = createFhvObserverState({
       runRoot: root,
       runId: RUN_ID,
@@ -148,7 +165,7 @@ describe("DEE-416 operational security corrective", () => {
         expiresAtUtc: "2026-07-21T12:10:00.000Z",
         nonce: "nonce-executed",
         idempotencyKey: "idem-executed",
-        expectedCampaignState: { phase: "validation" },
+        expectedCampaignState: { phase: "running" },
         confirmationPhraseClass: "DIAGNOSTIC",
       },
       COMMAND_SECRET,
