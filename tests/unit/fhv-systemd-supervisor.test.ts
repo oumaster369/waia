@@ -1,5 +1,13 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -362,13 +370,29 @@ describe("DEE-424 guarded installer scripts", () => {
       join(mockBin, "systemctl"),
       overrides.systemctl ??
         `#!/usr/bin/env bash
+STATE_FILE="$(dirname "$0")/enabled-units.txt"
+touch "$STATE_FILE"
 case "$1" in
   daemon-reload) exit 0 ;;
-  enable) exit 0 ;;
+  enable)
+    grep -Fxq "$2" "$STATE_FILE" 2>/dev/null || echo "$2" >>"$STATE_FILE"
+    exit 0 ;;
+  disable)
+    if [[ -f "$STATE_FILE" ]]; then
+      grep -Fvx "$2" "$STATE_FILE" >"\${STATE_FILE}.tmp" || true
+      mv "\${STATE_FILE}.tmp" "$STATE_FILE"
+    fi
+    exit 0 ;;
   stop) exit 0 ;;
-  disable) exit 0 ;;
   is-active) echo inactive; exit 3 ;;
-  is-enabled) echo disabled; exit 1 ;;
+  is-enabled)
+    if grep -Fxq "$2" "$STATE_FILE" 2>/dev/null; then
+      echo enabled
+      exit 0
+    fi
+    echo disabled
+    exit 1
+    ;;
   *) exit 0 ;;
 esac
 `,
@@ -503,6 +527,95 @@ esac
     expect(result.status).not.toBe(0);
     expect(existsSync(join(systemdDir, "waia-fhv-campaign.service"))).toBe(true);
     expect(result.stderr).toMatch(/unclassified is-active|fatal/);
+    rmSync(mockBin, { recursive: true, force: true });
+    rmSync(systemdDir, { recursive: true, force: true });
+  });
+
+  it("install-units.sh fails when enable succeeds but final is-enabled is disabled", () => {
+    const mockBin = writeMockBin({
+      systemctl: `#!/usr/bin/env bash
+case "$1" in
+  daemon-reload) exit 0 ;;
+  enable) exit 0 ;;
+  disable) exit 0 ;;
+  is-active) echo inactive; exit 3 ;;
+  is-enabled) echo disabled; exit 1 ;;
+  *) exit 0 ;;
+esac
+`,
+    });
+    const systemdDir = mkdtempSync(join(tmpdir(), "fhv-systemd-dir-"));
+    writeFileSync(join(systemdDir, "waia-fhv-campaign.service"), "[Unit]\n# prior\n");
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/install-units.sh",
+      [...installArgs, "--confirm", "--systemd-dir", systemdDir],
+      mockBin,
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).not.toContain("Install complete");
+    expect(result.stderr).toMatch(/install transaction failed|rollback restoration succeeded/);
+    expect(readFileSync(join(systemdDir, "waia-fhv-campaign.service"), "utf8")).toContain(
+      "# prior",
+    );
+    rmSync(mockBin, { recursive: true, force: true });
+    rmSync(systemdDir, { recursive: true, force: true });
+  });
+
+  it("install-units.sh fails when enable succeeds but final is-enabled is not-found", () => {
+    const mockBin = writeMockBin({
+      systemctl: `#!/usr/bin/env bash
+case "$1" in
+  daemon-reload) exit 0 ;;
+  enable) exit 0 ;;
+  disable) exit 0 ;;
+  is-active) echo inactive; exit 3 ;;
+  is-enabled) echo not-found; exit 1 ;;
+  *) exit 0 ;;
+esac
+`,
+    });
+    const systemdDir = mkdtempSync(join(tmpdir(), "fhv-systemd-dir-"));
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/install-units.sh",
+      [...installArgs, "--confirm", "--systemd-dir", systemdDir],
+      mockBin,
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).not.toContain("Install complete");
+    expect(result.stderr).toMatch(/expected enabled, got not-found/);
+    rmSync(mockBin, { recursive: true, force: true });
+    rmSync(systemdDir, { recursive: true, force: true });
+  });
+
+  it("install-units.sh reports restoration failure when disable rollback fails", () => {
+    const mockBin = writeMockBin({
+      systemctl: `#!/usr/bin/env bash
+case "$1" in
+  daemon-reload) exit 0 ;;
+  enable) exit 0 ;;
+  disable) exit 5 ;;
+  is-active) echo inactive; exit 3 ;;
+  is-enabled) echo disabled; exit 1 ;;
+  *) exit 0 ;;
+esac
+`,
+    });
+    const systemdDir = mkdtempSync(join(tmpdir(), "fhv-systemd-dir-"));
+    writeFileSync(join(systemdDir, "waia-fhv-campaign.service"), "[Unit]\n# prior\n");
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/install-units.sh",
+      [
+        ...installArgs,
+        "--confirm",
+        "--systemd-dir",
+        systemdDir,
+        "--unit",
+        "waia-fhv-campaign.service",
+      ],
+      mockBin,
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/restoration failed/);
     rmSync(mockBin, { recursive: true, force: true });
     rmSync(systemdDir, { recursive: true, force: true });
   });

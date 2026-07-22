@@ -129,7 +129,7 @@ capture_snapshot() {
 }
 
 restore_snapshot() {
-  local restore_failed=0 line unit_name file_state enabled_state
+  local restore_failed=0 line unit_name file_state enabled_state dest
   while IFS=$'\t' read -r unit_name file_state enabled_state; do
     [[ -n "$unit_name" ]] || continue
     dest="${SYSTEMD_DIR}/${unit_name}"
@@ -140,18 +140,20 @@ restore_snapshot() {
     fi
     case "$enabled_state" in
       enabled) "$SYSTEMCTL" enable "$unit_name" >/dev/null 2>&1 || restore_failed=1 ;;
-      disabled|not-found) "$SYSTEMCTL" disable "$unit_name" >/dev/null 2>&1 || true ;;
+      disabled|not-found) "$SYSTEMCTL" disable "$unit_name" >/dev/null 2>&1 || restore_failed=1 ;;
       *) restore_failed=1 ;;
     esac
   done <"$snapshot_manifest"
   "$SYSTEMCTL" daemon-reload || restore_failed=1
   if [[ "$restore_failed" -ne 0 ]]; then
     log "error: rollback restoration reported failures"
+    return 1
   fi
+  return 0
 }
 
 install_units_transaction() {
-  local unit_name
+  local unit_name enabled_state
   for unit_name in "${INSTALL_UNITS[@]}"; do
     install -m 0644 "${tmp_dir}/${unit_name}" "${SYSTEMD_DIR}/${unit_name}" || return 1
   done
@@ -161,7 +163,11 @@ install_units_transaction() {
   done
   for unit_name in "${INSTALL_UNITS[@]}"; do
     [[ -f "${SYSTEMD_DIR}/${unit_name}" ]] || return 1
-    classify_systemctl_is_enabled "$unit_name" >/dev/null || return 1
+    enabled_state="$(classify_systemctl_is_enabled "$unit_name")" || return 1
+    if [[ "$enabled_state" != "enabled" ]]; then
+      log "error: final verification failed for ${unit_name}: expected enabled, got ${enabled_state}"
+      return 1
+    fi
   done
 }
 
@@ -173,8 +179,14 @@ install_status=$?
 set -e
 
 if [[ "$install_status" -ne 0 ]]; then
+  set +e
   restore_snapshot
-  die "install transaction failed with exit ${install_status}; rollback attempted"
+  restore_status=$?
+  set -e
+  if [[ "$restore_status" -ne 0 ]]; then
+    die "install transaction failed with exit ${install_status}; rollback attempted but restoration failed"
+  fi
+  die "install transaction failed with exit ${install_status}; rollback restoration succeeded"
 fi
 
 log "Install complete."

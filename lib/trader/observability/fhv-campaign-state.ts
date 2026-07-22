@@ -8,6 +8,7 @@ import {
   isFhvCampaignControlRequestPending,
   resolveFhvControlRequestDisposition,
 } from "@/lib/trader/observability/fhv-control-request-validator";
+import { validateFhvCanonicalRunChainCompletion } from "@/lib/trader/observability/fhv-canonical-run-chain";
 import {
   readFhvRehearsalCampaignProgress,
   readFhvRehearsalTerminalClassification,
@@ -119,10 +120,43 @@ export function resolveFhvCampaignState(input: {
       corruptControlReason: null,
     };
   }
-  if (
-    terminal === "REHEARSAL_OK" ||
-    runChain?.segments.some((s) => s.terminalState === "STREAMING_EVIDENCE_OK")
-  ) {
+
+  if (runChain) {
+    const canonical = validateFhvCanonicalRunChainCompletion(input.runRoot);
+    if (canonical.ok) {
+      return {
+        state: "COMPLETED_OK",
+        phase,
+        checkpointSeq,
+        terminalClassification: terminal ?? "REHEARSAL_OK",
+        progressPhase: progress?.phase ?? "completed",
+        replayTerminalState: checkpoint?.replayTerminalState ?? "REPLAY_RUN_OK",
+        corruptControlReason: null,
+      };
+    }
+    if (terminal === "REHEARSAL_OK") {
+      return {
+        state: "INCONSISTENT",
+        phase,
+        checkpointSeq,
+        terminalClassification: terminal,
+        progressPhase: progress?.phase ?? null,
+        replayTerminalState: checkpoint?.replayTerminalState ?? null,
+        corruptControlReason: canonical.code,
+      };
+    }
+    return {
+      state: "FAILED_NONRESUMABLE",
+      phase,
+      checkpointSeq,
+      terminalClassification: terminal ?? "REHEARSAL_FAILED",
+      progressPhase: progress?.phase ?? "failed",
+      replayTerminalState: checkpoint?.replayTerminalState ?? null,
+      corruptControlReason: canonical.code,
+    };
+  }
+
+  if (terminal === "REHEARSAL_OK") {
     return {
       state: "COMPLETED_OK",
       phase,

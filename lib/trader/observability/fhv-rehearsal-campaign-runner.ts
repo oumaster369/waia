@@ -3,7 +3,6 @@ import { join } from "node:path";
 
 import {
   assertCanvasDigestStable,
-  restoreCanvasFromCheckpoint,
   writeCanvasSidecarBeforeCheckpoint,
 } from "@/lib/trader/backtest/canvas-checkpoint-integration";
 import {
@@ -14,7 +13,6 @@ import {
   seedBenchmarkSession,
 } from "@/lib/trader/backtest/replay-benchmark-harness";
 import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
-import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-sink";
 import {
@@ -28,7 +26,6 @@ import {
 } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import { reconstructStreamingEvidence } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-reconstructor";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
-import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import {
@@ -38,6 +35,7 @@ import {
 import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
 import { buildResearchValidationCycleIdPrefix } from "@/lib/trader/research/research-backtest-cycle-id";
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
+import { validateFhvCanonicalRunChainCompletion } from "@/lib/trader/observability/fhv-canonical-run-chain";
 import { assertFhvCampaignRuntimeIdentity } from "@/lib/trader/observability/fhv-campaign-runtime-identity";
 import type { FhvRehearsalLaunchConfigV1 } from "@/lib/trader/observability/fhv-rehearsal-launcher";
 import {
@@ -105,16 +103,6 @@ export function assertFhvRehearsalWithinDeadline(deadline: FhvRehearsalMonotonic
       "Campaign exceeded the configured rehearsal runtime deadline.",
     );
   }
-}
-
-function barsThroughCycleCount(cycleCount: number): number {
-  if (cycleCount <= 0) {
-    return 0;
-  }
-  if (cycleCount === 1) {
-    return EXPAND_MIN_BARS;
-  }
-  return EXPAND_MIN_BARS + (cycleCount - 1);
 }
 
 function createBenchmarkNewIdFactory(): () => string {
@@ -523,9 +511,8 @@ async function runResumeFromCheckpoint(input: {
   manifest: FhvRehearsalLaunchConfigV1;
   monotonicDeadline?: FhvRehearsalMonotonicDeadline;
 }): Promise<FhvRehearsalCampaignResult> {
-  let checkpoint;
   try {
-    checkpoint = assertFhvRehearsalResumeIdentity({
+    assertFhvRehearsalResumeIdentity({
       runRoot: input.runRoot,
       manifest: input.manifest,
       targetSha: input.targetSha,
@@ -536,26 +523,11 @@ async function runResumeFromCheckpoint(input: {
     }
     throw error;
   }
-  const restored = restoreCanvasFromCheckpoint(input.runRoot, checkpoint);
-  if (!restored) {
-    throw new FhvRehearsalCampaignError(
-      "FHV_REHEARSAL_CANVAS_RESTORE_FAILED",
-      "Canvas restore failed.",
-    );
-  }
   const deadline =
     input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
-  const resumeFromCycle = checkpoint.safeResumeThroughCycleIndex + 1;
-  const prefixBars = loadApprovedBenchmarkFixture().bars.slice(
-    0,
-    barsThroughCycleCount(resumeFromCycle),
-  );
   const resumed = await runWp03Segment({
     runRoot: input.runRoot,
     runId: input.runId,
-    resumeCycleStartIndex: resumeFromCycle,
-    initialCanvasState: restored,
-    initialBars1mPrefix: prefixBars,
     evidenceSealMode: "complete",
     evidenceDir: join(input.runRoot, "streaming-evidence-resume"),
     deadline,
@@ -571,12 +543,6 @@ async function runResumeFromCheckpoint(input: {
       appendFhvRehearsalProgressSample(input.runRoot, cyclesProcessed);
     },
   });
-  if (getFullHistoryRescanCount() !== 0) {
-    throw new FhvRehearsalCampaignError(
-      "FHV_REHEARSAL_RESUME_FULL_HISTORY_RESCAN",
-      "Resume triggered full-history rescan.",
-    );
-  }
   const partialDir = resolveFhvRehearsalEvidenceDir(input.runRoot);
   const continuationDir = join(input.runRoot, "streaming-evidence-resume");
   const partialReconstruction = reconstructStreamingEvidence(partialDir);
@@ -590,7 +556,7 @@ async function runResumeFromCheckpoint(input: {
         {
           runDir: partialDir,
           chainDigest: partialReconstruction.chainDigest ?? "",
-          role: "authoritative",
+          role: "superseded",
           terminalState: "STREAMING_EVIDENCE_SEALED_PARTIAL",
           sealedThroughCycleIndex: partialReconstruction.sealedThroughCycleIndex,
         },
@@ -656,6 +622,90 @@ export function readFhvRehearsalActualPauseCycle(runRoot: string): number | null
   return parsed.actualPauseCycle ?? parsed.cyclesProcessed ?? null;
 }
 
+function writeFhvRehearsalTimeoutEvidence(input: {
+  runRoot: string;
+  runId: string;
+  source: "initial_replay" | "resumed_replay";
+  consumeResumeMarker: boolean;
+}): FhvRehearsalCampaignResult {
+  const cyclesProcessed = readFhvRehearsalCampaignProgress(input.runRoot)?.cyclesProcessed ?? 0;
+  if (input.consumeResumeMarker) {
+    consumeFhvCampaignControlMarker(input.runRoot, "RESUME_FROM_CHECKPOINT");
+  }
+  writeFhvRehearsalCampaignProgress(input.runRoot, {
+    schemaVersion: "fhv-rehearsal-campaign-progress/v1",
+    runId: input.runId,
+    cyclesProcessed,
+    expectedCycles: HTR_WP03_BENCHMARK_EXPECTED_CYCLES,
+    phase: "timeout",
+    updatedAtUtc: new Date().toISOString(),
+  });
+  writeFileAtomic(
+    join(input.runRoot, "fhv-rehearsal-terminal.v1.json"),
+    `${JSON.stringify(
+      {
+        classification: "REHEARSAL_TIMEOUT",
+        source: input.source,
+        cyclesProcessed,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  return {
+    terminalState: "REHEARSAL_TIMEOUT",
+    cyclesProcessed,
+    evidenceDigest: "",
+    semanticReproDigest: "",
+    classification: "REHEARSAL_TIMEOUT",
+  };
+}
+
+function resolveFhvCanonicalCompletionResult(input: {
+  runRoot: string;
+  existingProgress: ReturnType<typeof readFhvRehearsalCampaignProgress>;
+  terminalClassification: string | null;
+}): FhvRehearsalCampaignResult | null {
+  const runChain = readReplayRunChainManifest(input.runRoot);
+  if (!runChain) {
+    if (input.terminalClassification === "REHEARSAL_OK") {
+      return {
+        terminalState: "REPLAY_RUN_OK",
+        cyclesProcessed: input.existingProgress?.cyclesProcessed ?? 0,
+        evidenceDigest: "",
+        semanticReproDigest: "",
+        classification: "REHEARSAL_OK",
+      };
+    }
+    return null;
+  }
+
+  const canonical = validateFhvCanonicalRunChainCompletion(input.runRoot);
+  if (canonical.ok) {
+    return {
+      terminalState: "REPLAY_RUN_OK",
+      cyclesProcessed: canonical.read.authoritativeCycleCount,
+      evidenceDigest: "",
+      semanticReproDigest: "",
+      classification: "REHEARSAL_OK",
+    };
+  }
+
+  if (input.terminalClassification === "REHEARSAL_OK") {
+    throw new FhvRehearsalCampaignError(
+      canonical.code,
+      `Stale terminal REHEARSAL_OK contradicted by run-chain: ${canonical.reason}`,
+    );
+  }
+
+  return {
+    terminalState: "REPLAY_RUN_FAILED_NONRESUMABLE",
+    cyclesProcessed: input.existingProgress?.cyclesProcessed ?? 0,
+    evidenceDigest: "",
+    semanticReproDigest: "",
+    classification: "REHEARSAL_FAILED",
+  };
+}
 export async function runFhvRehearsalCampaign(input: {
   runRoot: string;
   targetSha: string;
@@ -670,11 +720,6 @@ export async function runFhvRehearsalCampaign(input: {
   const terminalClassification = readFhvRehearsalTerminalClassification(input.runRoot);
   const existingProgress = readFhvRehearsalCampaignProgress(input.runRoot);
   const runChain = readReplayRunChainManifest(input.runRoot);
-  const completedViaRunChain = runChain?.segments.some(
-    (segment) =>
-      (segment.role ?? "authoritative") === "authoritative" &&
-      segment.terminalState === "STREAMING_EVIDENCE_OK",
-  );
 
   if (terminalClassification === "REHEARSAL_TIMEOUT") {
     return {
@@ -709,7 +754,16 @@ export async function runFhvRehearsalCampaign(input: {
     };
   }
 
-  if (terminalClassification === "REHEARSAL_OK" || completedViaRunChain) {
+  if (runChain) {
+    const canonicalCompletion = resolveFhvCanonicalCompletionResult({
+      runRoot: input.runRoot,
+      existingProgress,
+      terminalClassification,
+    });
+    if (canonicalCompletion) {
+      return canonicalCompletion;
+    }
+  } else if (terminalClassification === "REHEARSAL_OK") {
     return {
       terminalState: "REPLAY_RUN_OK",
       cyclesProcessed: existingProgress?.cyclesProcessed ?? 0,
@@ -734,17 +788,19 @@ export async function runFhvRehearsalCampaign(input: {
     };
   }
 
-  if (isFhvResumeFromCheckpointRequested(input.runRoot)) {
-    return runResumeFromCheckpoint({
-      runRoot: input.runRoot,
-      runId: input.runId,
-      targetSha: input.targetSha,
-      manifest,
-      monotonicDeadline: input.monotonicDeadline,
-    });
-  }
+  const resuming = isFhvResumeFromCheckpointRequested(input.runRoot);
 
   try {
+    if (resuming) {
+      return await runResumeFromCheckpoint({
+        runRoot: input.runRoot,
+        runId: input.runId,
+        targetSha: input.targetSha,
+        manifest,
+        monotonicDeadline: input.monotonicDeadline,
+      });
+    }
+
     return await runCampaignWithPauseSupport({
       runRoot: input.runRoot,
       runId: input.runId,
@@ -756,25 +812,12 @@ export async function runFhvRehearsalCampaign(input: {
       error instanceof FhvRehearsalCampaignError &&
       error.code === "REHEARSAL_DEADLINE_EXCEEDED"
     ) {
-      writeFhvRehearsalCampaignProgress(input.runRoot, {
-        schemaVersion: "fhv-rehearsal-campaign-progress/v1",
+      return writeFhvRehearsalTimeoutEvidence({
+        runRoot: input.runRoot,
         runId: input.runId,
-        cyclesProcessed: readFhvRehearsalCampaignProgress(input.runRoot)?.cyclesProcessed ?? 0,
-        expectedCycles: HTR_WP03_BENCHMARK_EXPECTED_CYCLES,
-        phase: "timeout",
-        updatedAtUtc: new Date().toISOString(),
+        source: resuming ? "resumed_replay" : "initial_replay",
+        consumeResumeMarker: resuming,
       });
-      writeFileAtomic(
-        join(input.runRoot, "fhv-rehearsal-terminal.v1.json"),
-        `${JSON.stringify({ classification: "REHEARSAL_TIMEOUT" }, null, 2)}\n`,
-      );
-      return {
-        terminalState: "REHEARSAL_TIMEOUT",
-        cyclesProcessed: readFhvRehearsalCampaignProgress(input.runRoot)?.cyclesProcessed ?? 0,
-        evidenceDigest: "",
-        semanticReproDigest: "",
-        classification: "REHEARSAL_TIMEOUT",
-      };
     }
     throw error;
   }

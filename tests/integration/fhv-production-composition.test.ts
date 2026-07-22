@@ -3,8 +3,16 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { readReplayRunChainManifest } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
-import { readReplayRunChainProjections } from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
+import { HTR_WP03_BENCHMARK_EXPECTED_CYCLES } from "@/lib/trader/backtest/replay-benchmark-harness";
+import {
+  readReplayRunChainManifest,
+  segmentRole,
+} from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import {
+  computeSemanticParityDigest,
+  readReplayRunChainProjections,
+  readSegmentProjections,
+} from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
 import { createFhvObserverRuntime } from "@/lib/trader/observability/fhv-observer-runtime";
 import type { FhvSystemctlInvocationResult } from "@/lib/trader/observability/fhv-linux-systemd-executor";
 import {
@@ -17,6 +25,7 @@ import {
   readFhvRehearsalTerminalClassification,
   runFhvRehearsalCampaign,
   waitForFhvRehearsalCycles,
+  resolveFhvRehearsalEvidenceDir,
   type FhvRehearsalCampaignResult,
 } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
 import { resolveFhvCampaignState } from "@/lib/trader/observability/fhv-campaign-state";
@@ -153,6 +162,20 @@ describe("FHV production composition (DEE-431)", () => {
       artifactRoot: root,
     });
     const runDir = materializeFhvRehearsalManifest(config).runDir;
+    const uninterruptedConfig = buildFhvRehearsalLaunchConfig({
+      fixtureId: "HTR_WP03_BENCHMARK",
+      targetSha: TARGET_SHA,
+      runId: RUN_ID,
+      organizationId: ORG_ID,
+      artifactRoot: join(root, "reference"),
+    });
+    const uninterruptedDir = materializeFhvRehearsalManifest(uninterruptedConfig).runDir;
+    await runFhvRehearsalCampaign({
+      runRoot: uninterruptedDir,
+      runId: RUN_ID,
+      organizationId: ORG_ID,
+      targetSha: TARGET_SHA,
+    });
     const spawnSystemctl = async (
       args: readonly string[],
     ): Promise<FhvSystemctlInvocationResult> => {
@@ -234,12 +257,21 @@ describe("FHV production composition (DEE-431)", () => {
 
     const runChain = readReplayRunChainManifest(runDir);
     expect(runChain?.segments).toHaveLength(2);
-    expect(runChain?.segments.every((segment) => segment.role === "authoritative")).toBe(true);
+    expect(
+      runChain?.segments.filter((segment) => segmentRole(segment) === "authoritative"),
+    ).toHaveLength(1);
+    expect(
+      runChain?.segments.filter((segment) => segmentRole(segment) === "superseded"),
+    ).toHaveLength(1);
 
     const chainRead = readReplayRunChainProjections(runDir);
     expect(chainRead.authoritativeGapCount).toBe(0);
     expect(chainRead.authoritativeDuplicateCount).toBe(0);
-    expect(chainRead.authoritativeCycleCount).toBeGreaterThan(0);
+    expect(chainRead.authoritativeCycleCount).toBe(HTR_WP03_BENCHMARK_EXPECTED_CYCLES);
+    const uninterruptedDigest = computeSemanticParityDigest(
+      readSegmentProjections(resolveFhvRehearsalEvidenceDir(uninterruptedDir)),
+    );
+    expect(chainRead.semanticParityDigest).toBe(uninterruptedDigest);
     expect(readFhvEvidenceHealth(runDir)).toBe("ok");
 
     await runtime.stop();

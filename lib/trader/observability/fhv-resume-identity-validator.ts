@@ -11,13 +11,13 @@ import {
 } from "@/lib/trader/backtest/replay-benchmark-harness";
 import {
   readReplayCheckpoint,
-  readReplayRunChainManifest,
   resolveEvidenceFrontier,
   type ReplayCheckpointRecord,
 } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import { reconstructStreamingEvidence } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-reconstructor";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
 import { assertFhvTargetSha } from "@/lib/trader/observability/fhv-campaign-runtime-identity";
+import { isFhvCanonicalRunChainComplete } from "@/lib/trader/observability/fhv-canonical-run-chain";
 import type { FhvRehearsalLaunchConfigV1 } from "@/lib/trader/observability/fhv-rehearsal-launcher";
 import { readFhvCampaignControlRequest } from "@/lib/trader/observability/fhv-control-request-validator";
 import {
@@ -63,8 +63,7 @@ export function assertFhvRehearsalResumeIdentity(input: {
   manifest: FhvRehearsalLaunchConfigV1;
   targetSha: string;
 }): ReplayCheckpointRecord {
-  const runChain = readReplayRunChainManifest(input.runRoot);
-  if (runChain?.segments.some((segment) => segment.terminalState === "STREAMING_EVIDENCE_OK")) {
+  if (isFhvCanonicalRunChainComplete(input.runRoot)) {
     throw new FhvResumeIdentityError(
       "FHV_RESUME_RUN_CHAIN_ALREADY_COMPLETE",
       "Authoritative run-chain already complete.",
