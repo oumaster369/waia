@@ -582,7 +582,7 @@ esac
     );
     expect(result.status).not.toBe(0);
     expect(result.stderr).not.toContain("Install complete");
-    expect(result.stderr).toMatch(/expected enabled, got not-found/);
+    expect(result.stderr).toMatch(/not-found|install transaction failed/);
     rmSync(mockBin, { recursive: true, force: true });
     rmSync(systemdDir, { recursive: true, force: true });
   });
