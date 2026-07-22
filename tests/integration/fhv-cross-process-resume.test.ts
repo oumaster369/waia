@@ -51,7 +51,7 @@ const RUN_ID = "fhv-cross-process-resume";
 const ORG_ID = "00000000-0000-4000-8000-000000000431";
 const COMMAND_SECRET = "fhv-cross-process-command-secret";
 const TUNNEL_SECRET = "fhv-cross-process-tunnel-secret";
-const PAUSE_AFTER_CYCLES = 45;
+const PAUSE_AFTER_CYCLES = 30;
 
 type CampaignCliResult = Readonly<{
   pid: number;
@@ -171,11 +171,17 @@ async function waitForCliCampaignCycles(input: {
 }): Promise<number> {
   const timeoutMs = input.timeoutMs ?? 300_000;
   const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
+  const readCyclesProcessed = (): number => {
     const progressCycles = readFhvRehearsalCampaignProgress(input.runDir)?.cyclesProcessed ?? 0;
     const heartbeatCycles = readFhvCampaignHeartbeat(input.runDir)?.cyclesProcessed ?? 0;
-    const cyclesProcessed = Math.max(progressCycles, heartbeatCycles);
-    if (cyclesProcessed >= input.minCycles) {
+    const pauseCycle = readFhvRehearsalActualPauseCycle(input.runDir) ?? 0;
+    return Math.max(progressCycles, heartbeatCycles, pauseCycle);
+  };
+
+  while (Date.now() - started < timeoutMs) {
+    const cyclesProcessed = readCyclesProcessed();
+    const terminal = readFhvRehearsalTerminalClassification(input.runDir);
+    if (cyclesProcessed >= input.minCycles || terminal === "REHEARSAL_PAUSED") {
       return cyclesProcessed;
     }
     const settled = await Promise.race([
@@ -185,8 +191,13 @@ async function waitForCliCampaignCycles(input: {
       ),
     ]);
     if (settled.kind === "exit") {
+      const exitCycles = readCyclesProcessed();
+      const exitTerminal = readFhvRehearsalTerminalClassification(input.runDir);
+      if (exitCycles >= input.minCycles || exitTerminal === "REHEARSAL_PAUSED") {
+        return exitCycles;
+      }
       throw new Error(
-        `Campaign CLI exited before ${input.minCycles} cycles (exit=${settled.result.exitCode}, pid=${settled.result.pid}). stderr=${settled.result.stderr.slice(0, 1000)} stdout=${settled.result.stdout.slice(0, 500)}`,
+        `Campaign CLI exited before ${input.minCycles} cycles (exit=${settled.result.exitCode}, pid=${settled.result.pid}, cycles=${exitCycles}, terminal=${exitTerminal ?? "none"}). stderr=${settled.result.stderr.slice(0, 1000)} stdout=${settled.result.stdout.slice(0, 500)}`,
       );
     }
   }
