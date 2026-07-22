@@ -70,7 +70,9 @@ extract_first_dee() {
   printf '%s' "$1" | grep -oiE 'DEE-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]' || true
 }
 
-# Canonical source: **Linear:** `DEE-NN` or **Linear:** DEE-NN (with optional link text)
+# Canonical source: **Linear:** `DEE-NN`, **Linear:** DEE-NN, or **Linear:** [DEE-NN]
+# immediately after the field label. Identifiers in explanatory prose (including on
+# `n/a` lines) must never resolve as the explicit Linear id.
 extract_explicit_linear() {
   local body="$1"
   local id=""
@@ -83,18 +85,79 @@ extract_explicit_linear() {
       | tr '[:lower:]' '[:upper:]' \
       || true
   )"
-  if [[ -z "$id" ]]; then
-    id="$(
-      printf '%s' "$body" \
-        | grep -oiE '\*\*Linear:\*\*[^`]*DEE-[0-9]+' \
-        | head -1 \
-        | grep -oiE 'DEE-[0-9]+' \
-        | head -1 \
-        | tr '[:lower:]' '[:upper:]' \
-        || true
-    )"
-  fi
   printf '%s' "$id"
+}
+
+extract_linear_completion_values() {
+  local body="$1"
+  printf '%s' "$body" \
+    | grep -oiE '\*\*Linear completion:\*\*[[:space:]]*[a-z-]+' \
+    | sed -E 's/^\*\*Linear completion:\*\*[[:space:]]*//i' \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed 's/[[:space:]]//g' \
+    || true
+}
+
+extract_linear_completion_reason() {
+  local body="$1"
+  local reason=""
+  reason="$(
+    printf '%s' "$body" \
+      | grep -oiE '\*\*Linear completion reason:\*\*[[:space:]]*.+' \
+      | head -1 \
+      | sed -E 's/^\*\*Linear completion reason:\*\*[[:space:]]*//i' \
+      | sed -E 's/[[:space:]]+$//' \
+      || true
+  )"
+  printf '%s' "$reason"
+}
+
+validate_linear_completion_contract() {
+  local body="$1"
+  local explicit_id="$2"
+  local values value_count keep_open_count auto_close_count
+  local reason=""
+
+  values="$(extract_linear_completion_values "$body")"
+  if [[ -z "$values" ]]; then
+    linear_completion_mode="auto-close"
+    linear_completion_reason=""
+    return 0
+  fi
+
+  value_count="$(printf '%s\n' "$values" | grep -c . || true)"
+  keep_open_count="$(printf '%s\n' "$values" | grep -cx 'keep-open' || true)"
+  auto_close_count="$(printf '%s\n' "$values" | grep -cx 'auto-close' || true)"
+
+  if [[ "$value_count" -gt 1 ]]; then
+    add_failure 'PR body contains duplicate or conflicting **Linear completion:** fields.'
+    return 1
+  fi
+
+  if [[ "$keep_open_count" -eq 1 ]]; then
+    linear_completion_mode="keep-open"
+  elif [[ "$auto_close_count" -eq 1 ]]; then
+    linear_completion_mode="auto-close"
+  else
+    add_failure 'PR body **Linear completion:** must be exactly `keep-open` or `auto-close`.'
+    return 1
+  fi
+
+  reason="$(extract_linear_completion_reason "$body")"
+  linear_completion_reason="$reason"
+
+  if [[ "$linear_completion_mode" == "keep-open" ]]; then
+    if [[ -z "$explicit_id" ]]; then
+      add_failure '**Linear completion:** keep-open requires an explicit **Linear:** `DEE-NN` field.'
+      return 1
+    fi
+    if [[ -z "$reason" ]]; then
+      add_failure '**Linear completion:** keep-open requires a non-empty **Linear completion reason:** field.'
+      return 1
+    fi
+  fi
+
+  return 0
 }
 
 extract_branch_nn() {
@@ -276,6 +339,10 @@ fi
 
 check_disclaimer_collision "$PR_BODY" "$PR_TITLE" "$PR_BRANCH" || true
 
+linear_completion_mode="auto-close"
+linear_completion_reason=""
+validate_linear_completion_contract "$PR_BODY" "$explicit_id" || true
+
 resolved_id="$explicit_id"
 if [[ "$release_promotion" == true && "$release_linear_na" == true ]]; then
   resolved_id=""
@@ -336,6 +403,16 @@ fi
 
 printf 'RESOLVED_DEE_ID=%s\n' "$resolved_id"
 emit_merge_strategy_note
+
+if [[ "$linear_completion_mode" == "keep-open" ]]; then
+  printf 'LINEAR_COMPLETION=keep-open\n'
+  printf 'KEEP_OPEN_REASON=%s\n' "$linear_completion_reason"
+  if [[ "$MODE" == "linear-done" ]]; then
+    printf 'SKIP_LINEAR_DONE=1\n'
+    printf 'SKIP_REASON=explicit_keep_open\n'
+    exit 2
+  fi
+fi
 
 if [[ "$MODE" == "linear-done" ]]; then
   exit 0

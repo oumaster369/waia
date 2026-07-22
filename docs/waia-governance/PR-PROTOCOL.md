@@ -53,11 +53,34 @@ Canonical structure: [`.github/pull_request_template.md`](../../.github/pull_req
 | Field | Required syntax |
 |-------|-----------------|
 | Linear | `**Linear:** \`DEE-NN\`` (+ optional URL) |
+| Linear completion (optional) | `**Linear completion:** auto-close` (default) or `**Linear completion:** keep-open` |
+| Linear completion reason (required with keep-open) | `**Linear completion reason:** <non-empty explanation>` |
 | Tier | `**Tier:** T0`–`T4` per [`RISK-TIERS.md`](RISK-TIERS.md) |
 | Parent (optional) | `**Parent:** \`DEE-NN\`` — child issues only; not validated |
 | ADR | Link or **`n/a`** + rationale if Tier ≤ `T1` small change |
 | Human gate | `no`/`yes — reason` |
 | Migration impacted | `no`/`yes — tracker link sentence` |
+
+### Linear completion lifecycle (default = auto-close)
+
+Ordinary atomic PRs need only **`Linear:** \`DEE-NN\``**. On merge to `dev`, [`linear-done.yml`](../../.github/workflows/linear-done.yml) transitions that issue to **Done** when validation passes.
+
+**Keep-open** is reserved for PRs that belong to an **active parent or integration issue** with unfinished governed work (for example a docs-only canonical-plan refresh under an open program). It must **not** be used to avoid closing a genuinely completed atomic issue.
+
+Required fields when keep-open applies:
+
+```markdown
+**Linear:** `DEE-NN`
+**Linear completion:** keep-open
+**Linear completion reason:** <non-empty explanation>
+```
+
+Rules:
+
+- Keep-open **does not** bypass title/branch/`Linear` alignment, scope verification, CI, review, or Human merge gates.
+- Keep-open PRs **pass** PR governance but **skip** Linear Done automation with `SKIP_REASON=explicit_keep_open`.
+- Identifiers in explanatory prose — including on `**Linear:** n/a (...)` lines — are **never** parsed as the explicit Linear id.
+- Release promotion remains a separate class: `**Linear:** n/a (release promotion)` only.
 
 ### Semantic-impact signal **(when touched)**
 
