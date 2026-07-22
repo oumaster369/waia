@@ -12,6 +12,7 @@ import {
   createRecordingLinuxSystemdCampaignControlExecutor,
   spawnSystemctlBounded,
   type FhvLinuxSystemdExecutorConfig,
+  type FhvSystemctlInvocationResult,
 } from "@/lib/trader/observability/fhv-linux-systemd-executor";
 import {
   UNCONFIGURED_FHV_CAMPAIGN_CONTROL_EXECUTOR,
@@ -51,14 +52,33 @@ export type FhvObserverRuntime = Readonly<{
 export type CreateFhvObserverRuntimeInput = Readonly<{
   env?: NodeJS.ProcessEnv;
   campaignControlExecutor?: FhvCampaignControlExecutor;
+  spawnSystemctl?: (
+    args: readonly string[],
+    options?: { timeoutMs?: number; maxOutputBytes?: number },
+  ) => Promise<FhvSystemctlInvocationResult>;
   systemdShowReader?: FhvSystemdShowReader;
   tickIntervalMs?: number;
   startServer?: boolean;
 }>;
 
+function writeDegradedObserverEvidence(runRoot: string, error: unknown): void {
+  writeFileAtomic(
+    join(runRoot, "fhv-observer-degraded.v1.json"),
+    `${JSON.stringify(
+      {
+        degradedAtUtc: new Date().toISOString(),
+        message: error instanceof Error ? error.message : String(error),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
 function buildCampaignControlExecutor(input: {
   env: FhvObserverRuntimeEnvConfig;
   override?: FhvCampaignControlExecutor;
+  spawnSystemctl?: CreateFhvObserverRuntimeInput["spawnSystemctl"];
 }): FhvCampaignControlExecutor {
   if (input.override) {
     return input.override;
@@ -70,13 +90,16 @@ function buildCampaignControlExecutor(input: {
     hostOsQualified: input.env.hostOsQualified,
     deploymentEnabled: input.env.commandEnforcementEnabled,
     runRoot: input.env.runRoot,
+    spawnSystemctl: input.spawnSystemctl,
   };
   return createLinuxSystemdCampaignControlExecutor(config);
 }
 
-function buildDefaultSystemdShowReader(): FhvSystemdShowReader {
+function buildDefaultSystemdShowReader(
+  spawnSystemctl: NonNullable<CreateFhvObserverRuntimeInput["spawnSystemctl"]>,
+): FhvSystemdShowReader {
   return async (unit) => {
-    const result = await spawnSystemctlBounded(buildSystemctlArgumentArray("show", unit));
+    const result = await spawnSystemctl(buildSystemctlArgumentArray("show", unit));
     if (result.exitCode !== 0 || !result.stdout.trim()) {
       return null;
     }
@@ -94,9 +117,11 @@ export function createFhvObserverRuntime(
     runId: env.runId,
     organizationId: env.organizationId,
   });
+  const spawnSystemctl = input.spawnSystemctl ?? spawnSystemctlBounded;
   const campaignControlExecutor = buildCampaignControlExecutor({
     env,
     override: input.campaignControlExecutor,
+    spawnSystemctl,
   });
   const state = createFhvObserverState({
     runRoot: env.runRoot,
@@ -127,9 +152,14 @@ export function createFhvObserverRuntime(
   let stopping = false;
   const systemdShowReader =
     input.systemdShowReader ??
-    (isFhvCommandEnforcementActive(env) ? buildDefaultSystemdShowReader() : undefined);
+    (isFhvCommandEnforcementActive(env)
+      ? buildDefaultSystemdShowReader(spawnSystemctl)
+      : undefined);
 
   async function runTickOnce(): Promise<void> {
+    if (stopping) {
+      return;
+    }
     if (tickInFlight) {
       await tickInFlight;
       return;
@@ -163,15 +193,15 @@ export function createFhvObserverRuntime(
   }
 
   function scheduleTicks(): void {
-    if (tickTimer) {
-      clearInterval(tickTimer);
+    if (stopping || tickTimer) {
+      return;
     }
     tickTimer = setInterval(() => {
-      void runTickOnce().catch(() => {
-        writeFileAtomic(
-          join(env.runRoot, "fhv-observer-degraded.v1.json"),
-          `${JSON.stringify({ degradedAtUtc: new Date().toISOString() }, null, 2)}\n`,
-        );
+      if (stopping) {
+        return;
+      }
+      void runTickOnce().catch((error) => {
+        writeDegradedObserverEvidence(env.runRoot, error);
       });
     }, tickIntervalMs);
     if (typeof tickTimer.unref === "function") {
@@ -192,14 +222,23 @@ export function createFhvObserverRuntime(
       return address.port;
     },
     start() {
-      return new Promise<void>((resolve) => {
-        if (input.startServer !== false) {
-          server.listen(env.port, env.bindHost, () => resolve());
-        } else {
+      return new Promise<void>((resolve, reject) => {
+        const onListening = () => {
+          scheduleTicks();
+          void runTickOnce().catch((error) => {
+            writeDegradedObserverEvidence(env.runRoot, error);
+          });
           resolve();
+        };
+        if (input.startServer === false) {
+          onListening();
+          return;
         }
-        scheduleTicks();
-        void runTickOnce();
+        server.once("error", reject);
+        server.listen(env.port, env.bindHost, () => {
+          server.off("error", reject);
+          onListening();
+        });
       });
     },
     async stop() {
@@ -212,8 +251,12 @@ export function createFhvObserverRuntime(
         await tickInFlight;
       }
       await new Promise<void>((resolve, reject) => {
+        if (!server.listening) {
+          resolve();
+          return;
+        }
         server.close((error) => {
-          if (error && !stopping) {
+          if (error) {
             reject(error);
             return;
           }

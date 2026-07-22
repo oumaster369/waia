@@ -13,6 +13,7 @@ import {
 } from "@/lib/trader/observability/fhv-rehearsal-launcher";
 import {
   assertFhvSystemdAllowedUnit,
+  assertFhvSystemdUnitConfig,
   FHV_SYSTEMD_ALLOWED_UNITS,
   type FhvSystemdUnitConfigV1,
 } from "@/lib/trader/observability/fhv-systemd-unit-config";
@@ -63,9 +64,28 @@ describe("DEE-424 FHV systemd supervisor", () => {
     expect(first.campaignUnit).not.toContain("StartLimitIntervalSec=");
     expect(first.observerUnit).not.toContain("RuntimeMaxSec=");
     expect(first.observerUnit).toContain("Restart=on-failure");
-    expect(first.observerUnit).toContain("FHV_HOST_OS_QUALIFIED=true");
-    expect(first.observerUnit).toContain("FHV_COMMAND_ENFORCEMENT_ENABLED=true");
+    expect(first.observerUnit).not.toContain("FHV_HOST_OS_QUALIFIED=true");
+    expect(first.observerUnit).not.toContain("FHV_COMMAND_ENFORCEMENT_ENABLED=true");
+    expect(first.observerUnit).toContain("EnvironmentFile=/etc/waia/fhv.env");
+    expect(first.observerUnit).toContain("UMask=0077");
+    expect(first.observerUnit).toContain("RestrictSUIDSGID=true");
+    expect(first.observerUnit).toContain("LockPersonality=true");
+    expect(first.observerUnit).toContain("CapabilityBoundingSet=");
     expect(first.observerUnit).toContain("fhv-observer-cli.ts");
+  });
+
+  it("rejects root and UID-0 service users", () => {
+    expect(() => renderFhvSystemdUnits(sampleUnitConfig({ serviceUser: "root" }))).toThrow(
+      /UID 0 is forbidden/,
+    );
+    expect(() => renderFhvSystemdUnits(sampleUnitConfig({ serviceUser: "0" }))).toThrow(
+      /UID 0 is forbidden/,
+    );
+    expect(() =>
+      assertFhvSystemdUnitConfig(sampleUnitConfig(), {
+        resolveUid: () => 0,
+      }),
+    ).toThrow(/UID 0 is forbidden/);
   });
 
   it("enforces fixed unit and action allowlists", () => {
@@ -347,8 +367,8 @@ case "$1" in
   enable) exit 0 ;;
   stop) exit 0 ;;
   disable) exit 0 ;;
-  is-active) exit 1 ;;
-  is-enabled) exit 1 ;;
+  is-active) echo inactive; exit 3 ;;
+  is-enabled) echo disabled; exit 1 ;;
   *) exit 0 ;;
 esac
 `,

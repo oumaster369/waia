@@ -73,7 +73,39 @@ function assertSafeIdentifier(field: string, value: string, pattern: RegExp): vo
   }
 }
 
-export function assertFhvSystemdUnitConfig(input: FhvSystemdUnitConfigV1): void {
+const ROOT_SERVICE_USERS = new Set(["root", "0"]);
+
+export type FhvServiceUserValidationSeam = Readonly<{
+  resolveUid?: (user: string) => number | null;
+}>;
+
+export function assertFhvSystemdServiceUserNotRoot(
+  serviceUser: string,
+  seam: FhvServiceUserValidationSeam = {},
+): void {
+  const normalized = serviceUser.trim().toLowerCase();
+  if (ROOT_SERVICE_USERS.has(normalized)) {
+    throw new FhvSystemdUnitConfigError(
+      "SERVICE_USER_ROOT_FORBIDDEN",
+      "Service user root/UID 0 is forbidden for FHV systemd units.",
+    );
+  }
+  const resolveUid = seam.resolveUid;
+  if (resolveUid) {
+    const uid = resolveUid(serviceUser);
+    if (uid === 0) {
+      throw new FhvSystemdUnitConfigError(
+        "SERVICE_USER_ROOT_FORBIDDEN",
+        "Resolved service user UID 0 is forbidden for FHV systemd units.",
+      );
+    }
+  }
+}
+
+export function assertFhvSystemdUnitConfig(
+  input: FhvSystemdUnitConfigV1,
+  seam: FhvServiceUserValidationSeam = {},
+): void {
   if (input.hostOs !== "linux" || input.qualifiedSupervisor !== "SYSTEMD") {
     throw new FhvSystemdUnitConfigError(
       "HOST_NOT_QUALIFIED",
@@ -98,6 +130,7 @@ export function assertFhvSystemdUnitConfig(input: FhvSystemdUnitConfigV1): void 
   assertAbsoluteSafePath("nodeBin", input.nodeBin);
   assertAbsoluteSafePath("fhvRunRoot", input.fhvRunRoot);
   assertSafeIdentifier("serviceUser", input.serviceUser, SAFE_IDENTIFIER);
+  assertFhvSystemdServiceUserNotRoot(input.serviceUser, seam);
   assertSafeIdentifier("fhvRunId", input.fhvRunId, SAFE_RUN_ID);
   assertSafeIdentifier("fhvOrganizationId", input.fhvOrganizationId, UUID_V4);
   if (input.observerPort < 1 || input.observerPort > 65535) {

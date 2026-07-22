@@ -33,47 +33,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=_fhv-supervisor-common.sh
 source "${SCRIPT_DIR}/_fhv-supervisor-common.sh"
 
-rollback_one() {
-  local unit_name="$1"
-  assert_allowed_unit "$unit_name"
-  log "planned: systemctl stop ${unit_name}"
-  log "planned: systemctl disable ${unit_name}"
-  log "planned: rm -f ${SYSTEMD_DIR}/${unit_name}"
-  if ! require_confirm_or_noop "rollback"; then
-    return 1
-  fi
-  if "$SYSTEMCTL" is-active --quiet "$unit_name"; then
-    "$SYSTEMCTL" stop "$unit_name"
-  else
-    log "note: ${unit_name} already stopped (idempotent)"
-  fi
-  if "$SYSTEMCTL" is-enabled --quiet "$unit_name" 2>/dev/null; then
-    "$SYSTEMCTL" disable "$unit_name"
-  else
-    log "note: ${unit_name} already disabled or not installed (idempotent)"
-  fi
-  rm -f "${SYSTEMD_DIR}/${unit_name}"
+resolve_rollback_units() {
+  case "$UNIT" in
+    all) printf '%s\n%s\n' "$FHV_OBSERVER_UNIT" "$FHV_CAMPAIGN_UNIT" ;;
+    "$FHV_CAMPAIGN_UNIT"|"$FHV_OBSERVER_UNIT") printf '%s\n' "$UNIT" ;;
+    *) die "invalid --unit value" ;;
+  esac
 }
 
 if [[ "$CONFIRM" -eq 0 ]]; then
-  case "$UNIT" in
-    all)
-      log "planned: systemctl stop ${FHV_OBSERVER_UNIT}"
-      log "planned: systemctl stop ${FHV_CAMPAIGN_UNIT}"
-      log "planned: systemctl disable ${FHV_OBSERVER_UNIT}"
-      log "planned: systemctl disable ${FHV_CAMPAIGN_UNIT}"
-      log "planned: rm -f ${SYSTEMD_DIR}/${FHV_OBSERVER_UNIT}"
-      log "planned: rm -f ${SYSTEMD_DIR}/${FHV_CAMPAIGN_UNIT}"
-      log "planned: systemctl daemon-reload"
-      ;;
-    "$FHV_CAMPAIGN_UNIT"|"$FHV_OBSERVER_UNIT")
-      log "planned: systemctl stop ${UNIT}"
-      log "planned: systemctl disable ${UNIT}"
-      log "planned: rm -f ${SYSTEMD_DIR}/${UNIT}"
-      log "planned: systemctl daemon-reload"
-      ;;
-    *) die "invalid --unit value" ;;
-  esac
+  while IFS= read -r unit_name; do
+    [[ -n "$unit_name" ]] || continue
+    log "planned: systemctl stop ${unit_name}"
+    log "planned: systemctl disable ${unit_name}"
+    log "planned: rm -f ${SYSTEMD_DIR}/${unit_name}"
+  done < <(resolve_rollback_units)
+  log "planned: systemctl daemon-reload"
   print_noop_footer
   exit 0
 fi
@@ -83,17 +58,44 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit 0
 fi
 
-case "$UNIT" in
-  all)
-    rollback_one "$FHV_OBSERVER_UNIT"
-    rollback_one "$FHV_CAMPAIGN_UNIT"
-    ;;
-  "$FHV_CAMPAIGN_UNIT"|"$FHV_OBSERVER_UNIT")
-    rollback_one "$UNIT"
-    ;;
-  *) die "invalid --unit value" ;;
-esac
+rollback_one() {
+  local unit_name="$1"
+  assert_allowed_unit "$unit_name"
+  local active_state enabled_state
+  active_state="$(classify_systemctl_is_active "$unit_name")"
+  enabled_state="$(classify_systemctl_is_enabled "$unit_name")"
 
-log "planned: systemctl daemon-reload"
+  case "$active_state" in
+    active)
+      "$SYSTEMCTL" stop "$unit_name"
+      ;;
+    inactive|not-found)
+      log "note: ${unit_name} already inactive or not found (benign)"
+      ;;
+    *)
+      die "fatal: unclassified is-active state '${active_state}' for ${unit_name}; unit file preserved"
+      ;;
+  esac
+
+  case "$enabled_state" in
+    enabled)
+      "$SYSTEMCTL" disable "$unit_name"
+      ;;
+    disabled|not-found)
+      log "note: ${unit_name} already disabled or not installed (benign)"
+      ;;
+    *)
+      die "fatal: unclassified is-enabled state '${enabled_state}' for ${unit_name}; unit file preserved"
+      ;;
+  esac
+
+  rm -f "${SYSTEMD_DIR}/${unit_name}"
+}
+
+while IFS= read -r unit_name; do
+  [[ -n "$unit_name" ]] || continue
+  rollback_one "$unit_name"
+done < <(resolve_rollback_units)
+
 "$SYSTEMCTL" daemon-reload
 log "Rollback complete."

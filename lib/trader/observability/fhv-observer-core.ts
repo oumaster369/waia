@@ -101,17 +101,6 @@ export function readFhvEvidenceHealth(runRoot: string): "ok" | "degraded" | "fai
       readReplayRunChainProjections(runRoot);
       return "ok";
     } catch {
-      const authoritative = runChain.segments.find((segment) => segment.role === "authoritative");
-      if (authoritative) {
-        try {
-          const reconstruction = reconstructStreamingEvidence(authoritative.runDir);
-          if (reconstruction.terminalState === "STREAMING_EVIDENCE_OK") {
-            return "ok";
-          }
-        } catch {
-          return "failed";
-        }
-      }
       return "failed";
     }
   }

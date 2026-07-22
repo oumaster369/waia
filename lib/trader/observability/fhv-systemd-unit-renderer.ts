@@ -50,10 +50,14 @@ RuntimeMaxSec=${String(FHV_REHEARSAL_RUNTIME_MAX_SEC)}
 TimeoutStopSec=120
 KillMode=mixed
 KillSignal=SIGTERM
+UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
 ReadWritePaths=${runRoot}
 StandardOutput=journal
 StandardError=journal
@@ -90,8 +94,6 @@ Environment=FHV_RUN_ID=${runId}
 Environment=FHV_ORGANIZATION_ID=${orgId}
 Environment=FHV_OBSERVER_PORT=${port}
 Environment=FHV_TARGET_SHA=${targetSha}
-Environment=FHV_HOST_OS_QUALIFIED=true
-Environment=FHV_COMMAND_ENFORCEMENT_ENABLED=true
 Environment=FHV_OBSERVER_TICK_INTERVAL_MS=5000
 ExecStartPre=${wd}/scripts/ops/execution-server-preflight.sh --repo-path ${wd} --target-sha ${targetSha}
 ExecStart=${nodeBin} --import tsx --conditions=react-server ${wd}/scripts/trader/fhv-observer-cli.ts
@@ -102,10 +104,14 @@ StartLimitBurst=5
 TimeoutStopSec=30
 KillMode=mixed
 KillSignal=SIGTERM
+UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
 ReadWritePaths=${runRoot}
 StandardOutput=journal
 StandardError=journal

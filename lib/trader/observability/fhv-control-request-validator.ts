@@ -168,9 +168,32 @@ export function isFhvCampaignControlRequestPending(input: {
   runId: string;
   organizationId: string;
 }): boolean {
+  return resolveFhvControlRequestDisposition(input) === "pending";
+}
+
+export type FhvControlRequestDisposition = "missing" | "pending" | "consumed" | "corrupt";
+
+export function resolveFhvControlRequestDisposition(input: {
+  runRoot: string;
+  action: FhvOperatorAction;
+  runId: string;
+  organizationId: string;
+}): FhvControlRequestDisposition {
+  const path = controlRequestPath(input.runRoot, input.action);
+  if (!existsSync(path)) {
+    return "missing";
+  }
+  const content = readFileSync(path, "utf8").trim();
+  if (!content) {
+    return "missing";
+  }
   try {
-    return readFhvCampaignControlRequest(input) !== null;
-  } catch {
-    return false;
+    readFhvCampaignControlRequest(input);
+    return "pending";
+  } catch (error) {
+    if (error instanceof FhvControlRequestError && error.code === "CONTROL_REQUEST_CONSUMED") {
+      return "consumed";
+    }
+    return "corrupt";
   }
 }

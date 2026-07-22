@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { readReplayCheckpoint } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import { readReplayRunChainManifest } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import type { FhvOperatorAction } from "@/lib/trader/observability/fhv-observability.constants";
-import { isFhvCampaignControlRequestPending } from "@/lib/trader/observability/fhv-control-request-validator";
+import {
+  isFhvCampaignControlRequestPending,
+  resolveFhvControlRequestDisposition,
+} from "@/lib/trader/observability/fhv-control-request-validator";
 import {
   readFhvRehearsalCampaignProgress,
   readFhvRehearsalTerminalClassification,
@@ -33,6 +36,7 @@ export type FhvCampaignStateSnapshot = Readonly<{
   terminalClassification: string | null;
   progressPhase: string | null;
   replayTerminalState: string | null;
+  corruptControlReason: string | null;
 }>;
 
 export class FhvCampaignStateTransitionError extends Error {
@@ -63,19 +67,6 @@ export function resolveFhvCampaignState(input: {
     nowMs: input.nowMs,
   });
 
-  const pausePending = isFhvCampaignControlRequestPending({
-    runRoot: input.runRoot,
-    action: "PAUSE_AT_CHECKPOINT",
-    runId: input.runId,
-    organizationId: input.organizationId,
-  });
-  const resumePending = isFhvCampaignControlRequestPending({
-    runRoot: input.runRoot,
-    action: "RESUME_FROM_CHECKPOINT",
-    runId: input.runId,
-    organizationId: input.organizationId,
-  });
-
   const phase =
     progress?.phase ?? status?.campaign.phase ?? checkpoint?.activePhase ?? "validation";
   const checkpointSeq =
@@ -83,6 +74,51 @@ export function resolveFhvCampaignState(input: {
       ? checkpoint.safeResumeThroughCycleIndex + 1
       : undefined;
 
+  const pauseDisposition = resolveFhvControlRequestDisposition({
+    runRoot: input.runRoot,
+    action: "PAUSE_AT_CHECKPOINT",
+    runId: input.runId,
+    organizationId: input.organizationId,
+  });
+  const resumeDisposition = resolveFhvControlRequestDisposition({
+    runRoot: input.runRoot,
+    action: "RESUME_FROM_CHECKPOINT",
+    runId: input.runId,
+    organizationId: input.organizationId,
+  });
+  const corruptControlReason =
+    pauseDisposition === "corrupt"
+      ? "FHV_CONTROL_PAUSE_CORRUPT"
+      : resumeDisposition === "corrupt"
+        ? "FHV_CONTROL_RESUME_CORRUPT"
+        : null;
+
+  if (corruptControlReason) {
+    return {
+      state: "INCONSISTENT",
+      phase,
+      checkpointSeq,
+      terminalClassification: terminal,
+      progressPhase: progress?.phase ?? null,
+      replayTerminalState: checkpoint?.replayTerminalState ?? null,
+      corruptControlReason,
+    };
+  }
+
+  const pausePending = pauseDisposition === "pending";
+  const resumePending = resumeDisposition === "pending";
+
+  if (terminal === "REHEARSAL_FAILED") {
+    return {
+      state: "FAILED_NONRESUMABLE",
+      phase,
+      checkpointSeq,
+      terminalClassification: terminal,
+      progressPhase: progress?.phase ?? "failed",
+      replayTerminalState: checkpoint?.replayTerminalState ?? null,
+      corruptControlReason: null,
+    };
+  }
   if (
     terminal === "REHEARSAL_OK" ||
     runChain?.segments.some((s) => s.terminalState === "STREAMING_EVIDENCE_OK")
@@ -94,6 +130,7 @@ export function resolveFhvCampaignState(input: {
       terminalClassification: terminal,
       progressPhase: progress?.phase ?? "completed",
       replayTerminalState: checkpoint?.replayTerminalState ?? "REPLAY_RUN_OK",
+      corruptControlReason: null,
     };
   }
   if (terminal === "REHEARSAL_TIMEOUT") {
@@ -104,6 +141,7 @@ export function resolveFhvCampaignState(input: {
       terminalClassification: terminal,
       progressPhase: progress?.phase ?? "timeout",
       replayTerminalState: checkpoint?.replayTerminalState ?? null,
+      corruptControlReason: null,
     };
   }
   if (terminal === "REHEARSAL_PAUSED" || progress?.phase === "paused_at_checkpoint") {
@@ -114,6 +152,7 @@ export function resolveFhvCampaignState(input: {
       terminalClassification: terminal,
       progressPhase: progress?.phase ?? "paused_at_checkpoint",
       replayTerminalState: checkpoint?.replayTerminalState ?? "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE",
+      corruptControlReason: null,
     };
   }
   if (pausePending) {
@@ -124,6 +163,7 @@ export function resolveFhvCampaignState(input: {
       terminalClassification: terminal,
       progressPhase: progress?.phase ?? "running",
       replayTerminalState: checkpoint?.replayTerminalState ?? null,
+      corruptControlReason: null,
     };
   }
   if (progress?.phase === "running" || heartbeat.ok) {
@@ -134,6 +174,7 @@ export function resolveFhvCampaignState(input: {
       terminalClassification: terminal,
       progressPhase: progress?.phase ?? "running",
       replayTerminalState: checkpoint?.replayTerminalState ?? null,
+      corruptControlReason: null,
     };
   }
   if (progress?.phase === "timeout") {
@@ -144,6 +185,7 @@ export function resolveFhvCampaignState(input: {
       terminalClassification: terminal ?? "REHEARSAL_TIMEOUT",
       progressPhase: progress.phase,
       replayTerminalState: checkpoint?.replayTerminalState ?? null,
+      corruptControlReason: null,
     };
   }
   if (existsSync(join(input.runRoot, "fhv-rehearsal-campaign-progress.v1.json"))) {
@@ -154,6 +196,7 @@ export function resolveFhvCampaignState(input: {
       terminalClassification: terminal,
       progressPhase: progress?.phase ?? null,
       replayTerminalState: checkpoint?.replayTerminalState ?? null,
+      corruptControlReason: null,
     };
   }
   return {
@@ -163,6 +206,7 @@ export function resolveFhvCampaignState(input: {
     terminalClassification: terminal,
     progressPhase: progress?.phase ?? null,
     replayTerminalState: checkpoint?.replayTerminalState ?? null,
+    corruptControlReason: null,
   };
 }
 
@@ -195,6 +239,12 @@ export function assertFhvCampaignActionAllowed(input: {
   action: FhvOperatorAction;
   snapshot: FhvCampaignStateSnapshot;
 }): void {
+  if (input.snapshot.state === "INCONSISTENT") {
+    throw new FhvCampaignStateTransitionError(
+      input.snapshot.corruptControlReason ?? "FHV_CAMPAIGN_INCONSISTENT",
+      "Campaign control state is corrupt and must be resolved before further actions.",
+    );
+  }
   const allowed = ALLOWED_TRANSITIONS[input.action];
   if (!allowed.includes(input.snapshot.state)) {
     throw new FhvCampaignStateTransitionError(

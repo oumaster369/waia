@@ -19,6 +19,7 @@ import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic
 import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-sink";
 import {
   readReplayCheckpoint,
+  readReplayRunChainManifest,
   REPLAY_CHECKPOINT_SCHEMA_VERSION,
   resolveEvidenceFrontier,
   buildReplayRunChainManifest,
@@ -46,7 +47,13 @@ import {
 import {
   readFhvCampaignControlRequest,
   FhvControlRequestError,
+  resolveFhvControlRequestDisposition,
+  type FhvControlRequestDisposition,
 } from "@/lib/trader/observability/fhv-control-request-validator";
+import {
+  assertFhvRehearsalResumeIdentity,
+  FhvResumeIdentityError,
+} from "@/lib/trader/observability/fhv-resume-identity-validator";
 
 export const FHV_REHEARSAL_CHECKPOINT_CYCLE = 40;
 export const FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES = 45;
@@ -369,6 +376,7 @@ async function runWp03Segment(input: {
 function writePausedCheckpoint(input: {
   runRoot: string;
   runId: string;
+  targetSha: string;
   partial: Awaited<ReturnType<typeof runWp03Segment>>;
   actualPauseCycle: number;
 }): void {
@@ -404,7 +412,7 @@ function writePausedCheckpoint(input: {
       backtestRunId: input.runId,
       datasetContentDigest: computeBarSetDigest(fixture.bars),
       datasetId: "fhv-rehearsal-wp03",
-      codeSha: readGitCodeSha(),
+      codeSha: input.targetSha,
       activePhase: "validation",
       dbDurableThroughPhase: "none",
       evidenceDurableThroughCycleIndex: evidence.evidenceDurableThroughCycleIndex,
@@ -422,6 +430,7 @@ function writePausedCheckpoint(input: {
 async function finalizePauseAtCheckpoint(input: {
   runRoot: string;
   runId: string;
+  targetSha: string;
   partial: Awaited<ReturnType<typeof runWp03Segment>>;
   actualPauseCycle: number;
 }): Promise<FhvRehearsalCampaignResult> {
@@ -480,6 +489,7 @@ async function runCampaignWithPauseSupport(input: {
     return finalizePauseAtCheckpoint({
       runRoot: input.runRoot,
       runId: input.runId,
+      targetSha: input.manifest.targetSha,
       partial: segment,
       actualPauseCycle,
     });
@@ -509,13 +519,22 @@ async function runCampaignWithPauseSupport(input: {
 async function runResumeFromCheckpoint(input: {
   runRoot: string;
   runId: string;
+  targetSha: string;
   manifest: FhvRehearsalLaunchConfigV1;
   monotonicDeadline?: FhvRehearsalMonotonicDeadline;
 }): Promise<FhvRehearsalCampaignResult> {
-  const fixture = loadApprovedBenchmarkFixture();
-  const checkpoint = readReplayCheckpoint(input.runRoot);
-  if (!checkpoint) {
-    throw new FhvRehearsalCampaignError("FHV_REHEARSAL_CHECKPOINT_MISSING", "Checkpoint missing.");
+  let checkpoint;
+  try {
+    checkpoint = assertFhvRehearsalResumeIdentity({
+      runRoot: input.runRoot,
+      manifest: input.manifest,
+      targetSha: input.targetSha,
+    });
+  } catch (error) {
+    if (error instanceof FhvResumeIdentityError) {
+      throw new FhvRehearsalCampaignError(error.code, error.message);
+    }
+    throw error;
   }
   const restored = restoreCanvasFromCheckpoint(input.runRoot, checkpoint);
   if (!restored) {
@@ -527,7 +546,10 @@ async function runResumeFromCheckpoint(input: {
   const deadline =
     input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
   const resumeFromCycle = checkpoint.safeResumeThroughCycleIndex + 1;
-  const prefixBars = fixture.bars.slice(0, barsThroughCycleCount(resumeFromCycle));
+  const prefixBars = loadApprovedBenchmarkFixture().bars.slice(
+    0,
+    barsThroughCycleCount(resumeFromCycle),
+  );
   const resumed = await runWp03Segment({
     runRoot: input.runRoot,
     runId: input.runId,
@@ -568,7 +590,7 @@ async function runResumeFromCheckpoint(input: {
         {
           runDir: partialDir,
           chainDigest: partialReconstruction.chainDigest ?? "",
-          role: "superseded",
+          role: "authoritative",
           terminalState: "STREAMING_EVIDENCE_SEALED_PARTIAL",
           sealedThroughCycleIndex: partialReconstruction.sealedThroughCycleIndex,
         },
@@ -645,17 +667,14 @@ export async function runFhvRehearsalCampaign(input: {
   const manifest = assertFhvCampaignRuntimeIdentity(input);
   mkdirSync(resolveFhvRehearsalEvidenceDir(input.runRoot), { recursive: true });
 
-  if (isFhvResumeFromCheckpointRequested(input.runRoot)) {
-    return runResumeFromCheckpoint({
-      runRoot: input.runRoot,
-      runId: input.runId,
-      manifest,
-      monotonicDeadline: input.monotonicDeadline,
-    });
-  }
-
   const terminalClassification = readFhvRehearsalTerminalClassification(input.runRoot);
   const existingProgress = readFhvRehearsalCampaignProgress(input.runRoot);
+  const runChain = readReplayRunChainManifest(input.runRoot);
+  const completedViaRunChain = runChain?.segments.some(
+    (segment) =>
+      (segment.role ?? "authoritative") === "authoritative" &&
+      segment.terminalState === "STREAMING_EVIDENCE_OK",
+  );
 
   if (terminalClassification === "REHEARSAL_TIMEOUT") {
     return {
@@ -667,7 +686,30 @@ export async function runFhvRehearsalCampaign(input: {
     };
   }
 
-  if (terminalClassification === "REHEARSAL_OK") {
+  if (terminalClassification === "REHEARSAL_FAILED") {
+    return {
+      terminalState: "REPLAY_RUN_FAILED_NONRESUMABLE",
+      cyclesProcessed: existingProgress?.cyclesProcessed ?? 0,
+      evidenceDigest: "",
+      semanticReproDigest: "",
+      classification: "REHEARSAL_FAILED",
+    };
+  }
+
+  const failedViaRunChain = runChain?.segments.some(
+    (segment) => segment.terminalState === "STREAMING_EVIDENCE_FAILED",
+  );
+  if (failedViaRunChain) {
+    return {
+      terminalState: "REPLAY_RUN_FAILED_NONRESUMABLE",
+      cyclesProcessed: existingProgress?.cyclesProcessed ?? 0,
+      evidenceDigest: "",
+      semanticReproDigest: "",
+      classification: "REHEARSAL_FAILED",
+    };
+  }
+
+  if (terminalClassification === "REHEARSAL_OK" || completedViaRunChain) {
     return {
       terminalState: "REPLAY_RUN_OK",
       cyclesProcessed: existingProgress?.cyclesProcessed ?? 0,
@@ -690,6 +732,16 @@ export async function runFhvRehearsalCampaign(input: {
       semanticReproDigest: "",
       classification: "REHEARSAL_PAUSED",
     };
+  }
+
+  if (isFhvResumeFromCheckpointRequested(input.runRoot)) {
+    return runResumeFromCheckpoint({
+      runRoot: input.runRoot,
+      runId: input.runId,
+      targetSha: input.targetSha,
+      manifest,
+      monotonicDeadline: input.monotonicDeadline,
+    });
   }
 
   try {

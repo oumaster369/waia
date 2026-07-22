@@ -73,6 +73,22 @@ No holdout economic outputs may be returned, logged, or rendered.
 | `EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED` | `NO` |
 | `LIVE_TRADING_AUTHORIZED` | `NO` |
 
+### Human T4 — enable FHV operator command enforcement
+
+After repository release is deployed to the Execution Server checkout, the Human operator must set **both** enforcement gates in the host `EnvironmentFile` referenced by the rendered systemd units (for example `/etc/waia/fhv.env`):
+
+```bash
+FHV_HOST_OS_QUALIFIED=true
+FHV_COMMAND_ENFORCEMENT_ENABLED=true
+```
+
+Requirements:
+
+- Values must be exact lowercase `true` (not `TRUE`, `1`, or `yes`).
+- Both must be present; either missing or malformed keeps enforcement disabled at runtime.
+- Do **not** bake these into rendered unit files; the EnvironmentFile is the sole source of truth.
+- Reload/restart `waia-fhv-observer.service` only after the EnvironmentFile is updated on the host.
+
 ## Related documents
 
 - [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](./FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md)

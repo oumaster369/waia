@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { readReplayRunChainManifest } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
-import { createRecordingLinuxSystemdCampaignControlExecutor } from "@/lib/trader/observability/fhv-linux-systemd-executor";
+import { readReplayRunChainProjections } from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
 import { createFhvObserverRuntime } from "@/lib/trader/observability/fhv-observer-runtime";
+import type { FhvSystemctlInvocationResult } from "@/lib/trader/observability/fhv-linux-systemd-executor";
 import {
   buildFhvRehearsalLaunchConfig,
   materializeFhvRehearsalManifest,
@@ -124,8 +125,10 @@ describe("FHV production composition (DEE-431)", () => {
   let root: string;
   let runtime: ReturnType<typeof createFhvObserverRuntime> | null = null;
   let campaignPromise: Promise<FhvRehearsalCampaignResult> | null = null;
+  const systemctlCalls: Array<{ args: readonly string[] }> = [];
 
   afterEach(async () => {
+    systemctlCalls.length = 0;
     if (campaignPromise) {
       await campaignPromise.catch(() => undefined);
       campaignPromise = null;
@@ -140,7 +143,7 @@ describe("FHV production composition (DEE-431)", () => {
     }
   });
 
-  it("wires observer runtime factory, HTTP auth, state machine, and run-chain resume", async () => {
+  it("wires default production factory, spawn adapter, HTTP auth, state machine, and canonical run-chain", async () => {
     root = mkdtempSync(join(tmpdir(), "fhv-production-composition-"));
     const config = buildFhvRehearsalLaunchConfig({
       fixtureId: "HTR_WP03_BENCHMARK",
@@ -150,15 +153,24 @@ describe("FHV production composition (DEE-431)", () => {
       artifactRoot: root,
     });
     const runDir = materializeFhvRehearsalManifest(config).runDir;
-    const executor = createRecordingLinuxSystemdCampaignControlExecutor({
-      hostOsQualified: true,
-      deploymentEnabled: true,
-      runRoot: runDir,
-    });
+    const spawnSystemctl = async (
+      args: readonly string[],
+    ): Promise<FhvSystemctlInvocationResult> => {
+      systemctlCalls.push({ args });
+      if (args[1] === "show") {
+        return {
+          exitCode: 0,
+          stdout: "ActiveState=inactive\nResult=success\n",
+          stderr: "",
+          timedOut: false,
+        };
+      }
+      return { exitCode: 0, stdout: "", stderr: "", timedOut: false };
+    };
 
     runtime = createFhvObserverRuntime({
       env: buildRuntimeEnv(runDir),
-      campaignControlExecutor: executor,
+      spawnSystemctl,
       tickIntervalMs: 500,
     });
     await runtime.start();
@@ -209,7 +221,7 @@ describe("FHV production composition (DEE-431)", () => {
     );
     expect(resumeResult.response.status).toBe(200);
     expect(resumeResult.body.status).toBe("executed");
-    expect(executor.systemctlCalls.some((call) => call.args.includes("start"))).toBe(true);
+    expect(systemctlCalls.some((call) => call.args.includes("start"))).toBe(true);
 
     const completed = await runFhvRehearsalCampaign({
       runRoot: runDir,
@@ -222,7 +234,15 @@ describe("FHV production composition (DEE-431)", () => {
 
     const runChain = readReplayRunChainManifest(runDir);
     expect(runChain?.segments).toHaveLength(2);
-    expect(runChain?.segments.some((segment) => segment.role === "authoritative")).toBe(true);
+    expect(runChain?.segments.every((segment) => segment.role === "authoritative")).toBe(true);
+
+    const chainRead = readReplayRunChainProjections(runDir);
+    expect(chainRead.authoritativeGapCount).toBe(0);
+    expect(chainRead.authoritativeDuplicateCount).toBe(0);
+    expect(chainRead.authoritativeCycleCount).toBeGreaterThan(0);
     expect(readFhvEvidenceHealth(runDir)).toBe("ok");
+
+    await runtime.stop();
+    runtime = null;
   }, 240_000);
 });
