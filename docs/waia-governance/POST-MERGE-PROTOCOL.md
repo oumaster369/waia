@@ -20,7 +20,11 @@ Move issue **`Done`** (or board terminal success) plus abbreviated **five-memory
 
 Link merged PR URL.
 
-**Automation:** when repository secret `LINEAR_API_KEY` is set, [`.github/workflows/linear-done.yml`](../../.github/workflows/linear-done.yml) transitions `DEE-NN` to **Done** on merge to `dev` (parsed from PR title/body/branch). Humans still paste five-memory closeout when semantics warrant it.
+**Automation:** when repository secret `LINEAR_API_KEY` is set, [`.github/workflows/linear-done.yml`](../../.github/workflows/linear-done.yml) transitions `DEE-NN` to **Done** on merge to `dev` when the PR body declares the default auto-close lifecycle (explicit `**Linear:** \`DEE-NN\`` with no keep-open contract). Humans still paste five-memory closeout when semantics warrant it.
+
+**Keep-open PRs:** when the merged PR body includes validated **`Linear completion: keep-open`** plus a non-empty **`Linear completion reason:`**, automation intentionally skips the Done transition. Verify the parent/integration issue remains **In Progress** during post-merge reconciliation — no manual Done transition is required for that skip.
+
+**Release promotion:** `**Linear:** n/a (release promotion)` remains a separate intentional skip class; it must not be used on ordinary feature PRs.
 
 ## Tracker / docs
 

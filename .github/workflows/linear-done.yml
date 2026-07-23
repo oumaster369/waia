@@ -45,7 +45,13 @@ jobs:
           set -e
 
           if [[ $code -eq 2 || $code -eq 1 ]]; then
+            skip_reason="$(printf '%s' "$result" | sed -n 's/^SKIP_REASON=//p' | head -1)"
+            keep_open_reason="$(printf '%s' "$result" | sed -n 's/^KEEP_OPEN_REASON=//p' | head -1)"
             echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=${skip_reason}" >> "$GITHUB_OUTPUT"
+            echo "keep_open_reason<<EOF_KEEP_OPEN" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "$keep_open_reason" >> "$GITHUB_OUTPUT"
+            echo "EOF_KEEP_OPEN" >> "$GITHUB_OUTPUT"
             echo "reason<<EOF_SKIP" >> "$GITHUB_OUTPUT"
             printf '%s\n' "$result" >> "$GITHUB_OUTPUT"
             echo "EOF_SKIP" >> "$GITHUB_OUTPUT"
@@ -90,6 +96,8 @@ jobs:
         uses: actions/github-script@v7
         env:
           REASON: ${{ steps.resolve.outputs.reason }}
+          SKIP_REASON: ${{ steps.resolve.outputs.skip_reason }}
+          KEEP_OPEN_REASON: ${{ steps.resolve.outputs.keep_open_reason }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         with:
           script: |
@@ -98,13 +106,28 @@ jobs:
             if (!pr) return;
 
             const reason = (process.env.REASON || "unknown").trim();
-            const body =
-              `${marker}\n### Linear Done automation skipped\n\n` +
-              `Merged PR was **not** auto-closed in Linear.\n\n` +
-              `**Reason:**\n\`\`\`\n${reason}\n\`\`\`\n\n` +
-              `**Required:** PR body must include explicit \`**Linear:** \\\`DEE-NN\\\`\` matching groomed issue scope.\n` +
-              `Update Linear manually per [POST-MERGE-PROTOCOL.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/dev/docs/waia-governance/POST-MERGE-PROTOCOL.md).\n\n` +
-              `_PR: ${process.env.PR_URL}_`;
+            const skipReason = (process.env.SKIP_REASON || "").trim();
+            const keepOpenReason = (process.env.KEEP_OPEN_REASON || "").trim();
+            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/blob/dev/docs/waia-governance/POST-MERGE-PROTOCOL.md`;
+
+            let body;
+            if (skipReason === "explicit_keep_open") {
+              body =
+                `${marker}\n### Linear issue intentionally kept open\n\n` +
+                `Merged PR used the validated **Linear completion:** \`keep-open\` contract.\n\n` +
+                `The linked Linear issue **remains active by design**. No manual Done transition is required.\n\n` +
+                `**Validated keep-open reason:**\n\n> ${keepOpenReason || "(none recorded)"}\n\n` +
+                `Post-merge reconciliation must verify the parent/integration issue is still active before follow-on work.\n\n` +
+                `_PR: ${process.env.PR_URL}_`;
+            } else {
+              body =
+                `${marker}\n### Linear Done automation skipped\n\n` +
+                `Merged PR was **not** auto-closed in Linear.\n\n` +
+                `**Reason:**\n\`\`\`\n${reason}\n\`\`\`\n\n` +
+                `**Required:** PR body must include explicit \`**Linear:** \\\`DEE-NN\\\`\` matching groomed issue scope.\n` +
+                `Update Linear manually per [POST-MERGE-PROTOCOL.md](${repoUrl}).\n\n` +
+                `_PR: ${process.env.PR_URL}_`;
+            }
 
             const { owner, repo } = context.repo;
             const { data: comments } = await github.rest.issues.listComments({
