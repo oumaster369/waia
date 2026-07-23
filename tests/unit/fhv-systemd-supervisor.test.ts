@@ -22,6 +22,8 @@ import {
 import {
   assertFhvSystemdAllowedUnit,
   assertFhvSystemdUnitConfig,
+  FHV_OBSERVER_START_LIMIT_BURST,
+  FHV_OBSERVER_START_LIMIT_INTERVAL_SEC,
   FHV_SYSTEMD_ALLOWED_UNITS,
   type FhvSystemdUnitConfigV1,
 } from "@/lib/trader/observability/fhv-systemd-unit-config";
@@ -35,6 +37,38 @@ import {
 import { renderFhvSystemdUnits } from "@/lib/trader/observability/fhv-systemd-unit-renderer";
 
 const TARGET_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+function parseSystemdSections(unit: string): Record<string, string[]> {
+  const sections: Record<string, string[]> = {};
+  let current = "";
+  for (const raw of unit.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith("[") && line.endsWith("]")) {
+      current = line.slice(1, -1);
+      sections[current] ??= [];
+      continue;
+    }
+    if (current) {
+      sections[current]!.push(line);
+    }
+  }
+  return sections;
+}
+
+function countDirectiveOccurrences(unit: string, directive: string): number {
+  return unit.split("\n").filter((line) => line.trim().startsWith(`${directive}=`)).length;
+}
+
+function systemdAnalyzeAvailable(): boolean {
+  if (process.platform !== "linux") return false;
+  try {
+    execFileSync("systemd-analyze", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function sampleUnitConfig(overrides: Partial<FhvSystemdUnitConfigV1> = {}): FhvSystemdUnitConfigV1 {
   return {
@@ -80,6 +114,40 @@ describe("DEE-424 FHV systemd supervisor", () => {
     expect(first.observerUnit).toContain("LockPersonality=true");
     expect(first.observerUnit).toContain("CapabilityBoundingSet=");
     expect(first.observerUnit).toContain("fhv-observer-cli.ts");
+  });
+
+  it("renders observer start-limit directives in Unit section only", () => {
+    const { campaignUnit, observerUnit } = renderFhvSystemdUnits(sampleUnitConfig());
+    const campaignSections = parseSystemdSections(campaignUnit);
+    const observerSections = parseSystemdSections(observerUnit);
+
+    expect(observerSections.Unit).toEqual(
+      expect.arrayContaining(["StartLimitIntervalSec=300", "StartLimitBurst=5"]),
+    );
+    expect(observerSections.Service).not.toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^StartLimitIntervalSec=/),
+        expect.stringMatching(/^StartLimitBurst=/),
+      ]),
+    );
+    for (const section of Object.values(observerSections)) {
+      expect(section.some((line) => line.startsWith("StartLimitIntervalSec="))).toBe(
+        section === observerSections.Unit,
+      );
+      expect(section.some((line) => line.startsWith("StartLimitBurst="))).toBe(
+        section === observerSections.Unit,
+      );
+    }
+    expect(countDirectiveOccurrences(observerUnit, "StartLimitIntervalSec")).toBe(1);
+    expect(countDirectiveOccurrences(observerUnit, "StartLimitBurst")).toBe(1);
+    expect(countDirectiveOccurrences(campaignUnit, "StartLimitIntervalSec")).toBe(0);
+    expect(countDirectiveOccurrences(campaignUnit, "StartLimitBurst")).toBe(0);
+    expect(FHV_OBSERVER_START_LIMIT_INTERVAL_SEC).toBe(300);
+    expect(FHV_OBSERVER_START_LIMIT_BURST).toBe(5);
+    expect(campaignSections.Service).toContain("Restart=no");
+    expect(observerSections.Service).toContain("Restart=on-failure");
+    expect(observerSections.Service).toContain("RestartSec=5");
+    expect(observerSections.Service).toContain("TimeoutStopSec=30");
   });
 
   it("rejects root and UID-0 service users", () => {
@@ -272,6 +340,34 @@ describe("DEE-424 FHV systemd supervisor", () => {
       reason: "timeout",
     });
     expect(result.message).toBe("SYSTEMCTL_TIMEOUT");
+  });
+});
+
+describe.skipIf(!systemdAnalyzeAvailable())("DEE-433 FHV systemd-analyze verify (linux)", () => {
+  it("renders waia-fhv units without verifier warnings", () => {
+    const units = renderFhvSystemdUnits(sampleUnitConfig());
+    const outputDir = mkdtempSync(join(tmpdir(), "fhv-systemd-analyze-"));
+    const campaignPath = join(outputDir, units.campaignUnitName);
+    const observerPath = join(outputDir, units.observerUnitName);
+    try {
+      writeFileSync(campaignPath, units.campaignUnit, "utf8");
+      writeFileSync(observerPath, units.observerUnit, "utf8");
+      const result = spawnSync("systemd-analyze", ["verify", campaignPath, observerPath], {
+        encoding: "utf8",
+      });
+      const combined = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+      expect(result.status).toBe(0);
+      for (const pattern of [
+        "Unknown key name",
+        "Failed to parse",
+        "Invalid argument",
+        "ignoring",
+      ]) {
+        expect(combined).not.toContain(pattern);
+      }
+    } finally {
+      rmSync(outputDir, { recursive: true, force: true });
+    }
   });
 });
 
