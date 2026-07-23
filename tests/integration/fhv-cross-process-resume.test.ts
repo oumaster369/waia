@@ -20,6 +20,10 @@ import {
 } from "@/lib/trader/observability/fhv-resume-runtime-proof";
 import { canvasStateContentDigest } from "@/lib/trader/market-data/canvas/market-canvas-serialization";
 import type { FhvSystemctlInvocationResult } from "@/lib/trader/observability/fhv-linux-systemd-executor";
+import {
+  readFhvCampaignControlRequest,
+  resolveFhvControlRequestDisposition,
+} from "@/lib/trader/observability/fhv-control-request-validator";
 import { createFhvObserverRuntime } from "@/lib/trader/observability/fhv-observer-runtime";
 import {
   buildFhvRehearsalLaunchConfig,
@@ -29,6 +33,11 @@ import { readFhvEvidenceHealth } from "@/lib/trader/observability/fhv-observer-c
 import { resolveFhvCampaignState } from "@/lib/trader/observability/fhv-campaign-state";
 import type { FhvCampaignStateSnapshot } from "@/lib/trader/observability/fhv-campaign-state";
 import {
+  readFhvCrossProcessPauseTestBarrierStatus,
+  releaseFhvCrossProcessPauseTestBarrier,
+  waitForFhvCrossProcessPauseTestBarrierReady,
+} from "@/lib/trader/observability/fhv-rehearsal-pause-test-barrier";
+import {
   readFhvRehearsalActualPauseCycle,
   readFhvRehearsalCampaignProgress,
   readFhvRehearsalProgressSamples,
@@ -37,7 +46,6 @@ import {
   resolveFhvRehearsalEvidenceDir,
 } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
 import { segmentRole } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
-import { readFhvCampaignHeartbeat } from "@/lib/trader/observability/fhv-campaign-heartbeat";
 import { FHV_OPERATOR_COMMAND_SCHEMA_VERSION } from "@/lib/trader/observability/fhv-observability.constants";
 import { signFhvOperatorCommandV1 } from "@/lib/trader/observability/fhv-operator-command-v1";
 import {
@@ -54,6 +62,15 @@ const COMMAND_SECRET = "fhv-cross-process-command-secret";
 const TUNNEL_SECRET = "fhv-cross-process-tunnel-secret";
 const PAUSE_AFTER_CYCLES = 30;
 
+function pauseControlRequestInput(runDir: string) {
+  return {
+    runRoot: runDir,
+    action: "PAUSE_AT_CHECKPOINT" as const,
+    runId: RUN_ID,
+    organizationId: ORG_ID,
+  };
+}
+
 type CampaignCliResult = Readonly<{
   pid: number;
   exitCode: number;
@@ -61,19 +78,32 @@ type CampaignCliResult = Readonly<{
   stderr: string;
 }>;
 
+type CampaignCliHandle = Readonly<{
+  pid: number;
+  promise: Promise<CampaignCliResult>;
+}>;
+
 function campaignCliEnv(input: {
   runRoot: string;
   runId: string;
   organizationId: string;
   targetSha: string;
+  pauseBarrier?: boolean;
 }): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    NODE_ENV: "test",
     FHV_RUN_ROOT: input.runRoot,
     FHV_RUN_ID: input.runId,
     FHV_ORGANIZATION_ID: input.organizationId,
     FHV_TARGET_SHA: input.targetSha,
     FHV_REHEARSAL_MODE: "true",
+    ...(input.pauseBarrier
+      ? {
+          FHV_CROSS_PROCESS_PAUSE_BARRIER: "true",
+          FHV_CROSS_PROCESS_PAUSE_BARRIER_CYCLE: String(PAUSE_AFTER_CYCLES),
+        }
+      : {}),
   };
 }
 
@@ -164,63 +194,85 @@ async function postObserverCommand(
   return { response, body: (await response.json()) as { status: string; message?: string } };
 }
 
-async function waitForCliCampaignCycles(input: {
+function formatBarrierFailure(input: {
   runDir: string;
-  runId: string;
-  organizationId: string;
-  minCycles: number;
-  childPromise: Promise<CampaignCliResult>;
-  timeoutMs?: number;
-}): Promise<{ cyclesProcessed: number; snapshot: FhvCampaignStateSnapshot }> {
-  const timeoutMs = input.timeoutMs ?? 300_000;
-  const started = Date.now();
-  const readCyclesProcessed = (): number => {
-    const progressCycles = readFhvRehearsalCampaignProgress(input.runDir)?.cyclesProcessed ?? 0;
-    const heartbeatCycles = readFhvCampaignHeartbeat(input.runDir)?.cyclesProcessed ?? 0;
-    const pauseCycle = readFhvRehearsalActualPauseCycle(input.runDir) ?? 0;
-    return Math.max(progressCycles, heartbeatCycles, pauseCycle);
-  };
-  const readRunningSnapshot = (): FhvCampaignStateSnapshot =>
-    resolveFhvCampaignState({
-      runRoot: input.runDir,
-      runId: input.runId,
-      organizationId: input.organizationId,
-    });
-  const isPauseReady = (snapshot: FhvCampaignStateSnapshot, cyclesProcessed: number): boolean =>
-    cyclesProcessed >= input.minCycles &&
-    snapshot.state === "RUNNING" &&
-    snapshot.phase === "running" &&
-    readFhvRehearsalCampaignProgress(input.runDir)?.phase === "running";
+  childPid: number;
+  childExitCode?: number;
+  childStdout?: string;
+  childStderr?: string;
+  snapshot?: FhvCampaignStateSnapshot;
+}): string {
+  const barrier = readFhvCrossProcessPauseTestBarrierStatus(input.runDir);
+  const progress = readFhvRehearsalCampaignProgress(input.runDir);
+  return JSON.stringify({
+    childPid: input.childPid,
+    readyMarkerStatus: barrier.readyPresent ? "present" : "absent",
+    releaseMarkerStatus: barrier.releasePresent ? "present" : "absent",
+    readyMarkerCycles: barrier.readyMarker?.cyclesProcessed ?? null,
+    readyMarkerPid: barrier.readyMarker?.processPid ?? null,
+    progressCycles: progress?.cyclesProcessed ?? null,
+    progressPhase: progress?.phase ?? null,
+    campaignState: input.snapshot?.state ?? null,
+    campaignPhase: input.snapshot?.phase ?? null,
+    terminalClassification: readFhvRehearsalTerminalClassification(input.runDir),
+    childExitCode: input.childExitCode ?? null,
+    childStdout: input.childStdout?.slice(0, 500) ?? null,
+    childStderr: input.childStderr?.slice(0, 1000) ?? null,
+  });
+}
 
-  while (Date.now() - started < timeoutMs) {
-    const cyclesProcessed = readCyclesProcessed();
-    const snapshot = readRunningSnapshot();
-    const terminal = readFhvRehearsalTerminalClassification(input.runDir);
-    if (isPauseReady(snapshot, cyclesProcessed) || terminal === "REHEARSAL_PAUSED") {
-      return { cyclesProcessed, snapshot };
-    }
-    const settled = await Promise.race([
-      input.childPromise.then((result) => ({ kind: "exit" as const, result })),
-      new Promise<{ kind: "pending" }>((resolve) =>
-        setTimeout(() => resolve({ kind: "pending" }), 250),
-      ),
-    ]);
-    if (settled.kind === "exit") {
-      const exitCycles = readCyclesProcessed();
-      const exitSnapshot = readRunningSnapshot();
-      const exitTerminal = readFhvRehearsalTerminalClassification(input.runDir);
-      if (isPauseReady(exitSnapshot, exitCycles) || exitTerminal === "REHEARSAL_PAUSED") {
-        return { cyclesProcessed: exitCycles, snapshot: exitSnapshot };
-      }
-      throw new Error(
-        `Campaign CLI exited before pause-ready state (exit=${settled.result.exitCode}, pid=${settled.result.pid}, cycles=${exitCycles}, state=${exitSnapshot.state}, phase=${exitSnapshot.phase}, terminal=${exitTerminal ?? "none"}). stderr=${settled.result.stderr.slice(0, 1000)} stdout=${settled.result.stdout.slice(0, 500)}`,
-      );
-    }
-  }
-  const timedOutSnapshot = readRunningSnapshot();
-  throw new Error(
-    `Timed out waiting for pause-ready CLI campaign state (cycles=${readCyclesProcessed()}, state=${timedOutSnapshot.state}, phase=${timedOutSnapshot.phase}, progressPhase=${readFhvRehearsalCampaignProgress(input.runDir)?.phase ?? "none"}).`,
-  );
+function buildCampaignCliSpawn(input: { env: NodeJS.ProcessEnv }): {
+  command: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+} {
+  return {
+    command: process.execPath,
+    args: [
+      "--import",
+      "tsx",
+      "--require",
+      "./scripts/trader/trader-cli-server-only-prelude.cjs",
+      "--conditions=react-server",
+      "scripts/trader/fhv-campaign-cli.ts",
+    ],
+    env: {
+      ...input.env,
+      WAIA_TRADER_CLI: "1",
+    },
+  };
+}
+
+function spawnCampaignCliProcess(env: NodeJS.ProcessEnv): CampaignCliHandle {
+  const spawnSpec = buildCampaignCliSpawn({ env });
+  let pid = -1;
+  const promise = new Promise<CampaignCliResult>((resolve, reject) => {
+    const child = spawn(spawnSpec.command, spawnSpec.args, {
+      cwd: process.cwd(),
+      env: spawnSpec.env,
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: false,
+    });
+    pid = child.pid ?? -1;
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk: Buffer | string) => {
+      stdout += String(chunk);
+    });
+    child.stderr?.on("data", (chunk: Buffer | string) => {
+      stderr += String(chunk);
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      resolve({
+        pid: child.pid ?? pid,
+        exitCode: code ?? 1,
+        stdout,
+        stderr,
+      });
+    });
+  });
+  return { pid, promise };
 }
 
 function formatObserverCommandFailure(input: {
@@ -251,10 +303,11 @@ function formatObserverCommandFailure(input: {
 }
 
 async function runCampaignCliProcess(env: NodeJS.ProcessEnv): Promise<CampaignCliResult> {
+  const spawnSpec = buildCampaignCliSpawn({ env });
   return await new Promise((resolve, reject) => {
-    const child = spawn("pnpm", ["run", "trader:fhv:campaign"], {
+    const child = spawn(spawnSpec.command, spawnSpec.args, {
       cwd: process.cwd(),
-      env,
+      env: spawnSpec.env,
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
     });
@@ -332,6 +385,7 @@ describe("FHV cross-process checkpoint resume (DEE-431)", () => {
         runId: RUN_ID,
         organizationId: ORG_ID,
         targetSha: TARGET_SHA,
+        pauseBarrier: true,
       });
 
       const uninterrupted = await runFhvRehearsalCampaign({
@@ -370,21 +424,39 @@ describe("FHV cross-process checkpoint resume (DEE-431)", () => {
       await runtime.start();
       const baseUrl = `http://127.0.0.1:${runtime.getBoundPort()}`;
 
-      const processAPromise = runCampaignCliProcess(cliEnv);
-      await waitForCliCampaignCycles({
-        runDir,
-        runId: RUN_ID,
-        organizationId: ORG_ID,
-        minCycles: PAUSE_AFTER_CYCLES,
-        childPromise: processAPromise,
+      const processAHandle = spawnCampaignCliProcess(cliEnv);
+      expect(processAHandle.pid).toBeGreaterThan(0);
+
+      const readyMarker = await waitForFhvCrossProcessPauseTestBarrierReady({
+        runRoot: runDir,
+        minCycle: PAUSE_AFTER_CYCLES,
       });
+      expect(readyMarker.cyclesProcessed).toBeGreaterThanOrEqual(PAUSE_AFTER_CYCLES);
+      expect(readyMarker.processPid).toBe(processAHandle.pid);
+
       const pauseSnapshot = resolveFhvCampaignState({
         runRoot: runDir,
         runId: RUN_ID,
         organizationId: ORG_ID,
       });
-      expect(pauseSnapshot.state).toBe("RUNNING");
-      expect(pauseSnapshot.phase).toBe("running");
+      const progress = readFhvRehearsalCampaignProgress(runDir);
+      const terminalBeforePause = readFhvRehearsalTerminalClassification(runDir);
+      const barrierStatusBeforePause = readFhvCrossProcessPauseTestBarrierStatus(runDir);
+
+      expect(
+        pauseSnapshot.state === "RUNNING" &&
+          pauseSnapshot.phase === "running" &&
+          progress?.phase === "running" &&
+          !terminalBeforePause &&
+          barrierStatusBeforePause.readyPresent &&
+          !barrierStatusBeforePause.releasePresent,
+        formatBarrierFailure({
+          runDir,
+          childPid: processAHandle.pid,
+          snapshot: pauseSnapshot,
+        }),
+      ).toBe(true);
+
       const pauseResult = await postObserverCommand(
         baseUrl,
         signedCommand({
@@ -404,13 +476,37 @@ describe("FHV cross-process checkpoint resume (DEE-431)", () => {
           body: pauseResult.body,
           snapshot: pauseSnapshot,
           runDir,
-          processPhase: "pause-after-running",
+          processPhase: "pause-after-barrier-ready",
         }),
       ).toBe("executed");
 
-      const processA = await processAPromise;
+      const pauseControlRequest = readFhvCampaignControlRequest(pauseControlRequestInput(runDir));
+      expect(pauseControlRequest).not.toBeNull();
+      expect(resolveFhvControlRequestDisposition(pauseControlRequestInput(runDir))).toBe("pending");
+      expect(readFhvRehearsalTerminalClassification(runDir)).toBeNull();
+
+      releaseFhvCrossProcessPauseTestBarrier(runDir);
+
+      const processA = await processAHandle.promise;
       expect(processA.exitCode).toBe(0);
-      expect(readFhvRehearsalTerminalClassification(runDir)).toBe("REHEARSAL_PAUSED");
+      expect(
+        readFhvRehearsalTerminalClassification(runDir),
+        formatBarrierFailure({
+          runDir,
+          childPid: processA.pid,
+          childExitCode: processA.exitCode,
+          childStdout: processA.stdout,
+          childStderr: processA.stderr,
+          snapshot: resolveFhvCampaignState({
+            runRoot: runDir,
+            runId: RUN_ID,
+            organizationId: ORG_ID,
+          }),
+        }),
+      ).toBe("REHEARSAL_PAUSED");
+      expect(resolveFhvControlRequestDisposition(pauseControlRequestInput(runDir))).toBe(
+        "consumed",
+      );
 
       const actualPauseCycle = readFhvRehearsalActualPauseCycle(runDir);
       expect(actualPauseCycle).toBeGreaterThanOrEqual(PAUSE_AFTER_CYCLES);
@@ -466,7 +562,14 @@ describe("FHV cross-process checkpoint resume (DEE-431)", () => {
       expect(resumeStartRequested).toBe(true);
       expect(systemctlCalls.some((call) => call.args.includes("start"))).toBe(true);
 
-      const processB = await runCampaignCliProcess(cliEnv);
+      const processB = await runCampaignCliProcess(
+        campaignCliEnv({
+          runRoot: runDir,
+          runId: RUN_ID,
+          organizationId: ORG_ID,
+          targetSha: TARGET_SHA,
+        }),
+      );
 
       expect(processA.pid).toBeGreaterThan(0);
       expect(processB.pid).toBeGreaterThan(0);
