@@ -65,7 +65,7 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: next-dev-main-release
+  currentWorkPackage: WP-K-DEE-424-execution-server-rehearsal
   completedWorkPackages:
     - groom
     - PR-1-DEE-417
@@ -74,6 +74,9 @@ state:
     - PR-409-release-back-sync
     - PR-410-DEE-424-systemd-rehearsal
     - DEE-431-release-identity-correction
+    - PR-413-release-dev-to-main
+    - PR-414-release-back-sync
+    - PR-415-DEE-432-keep-open-governance
     - WP-B
     - WP-C
     - WP-D
@@ -86,16 +89,12 @@ state:
     - WP-M-monitoring-implementation
     - WP-N-ceremony-scaffolding
   remainingWorkPackages:
-    - next-dev-main-release
-    - next-main-dev-back-sync
     - WP-K-DEE-424-execution-server-rehearsal
     - PR-3-WP-J-DEE-423-rec-deferred
-  prNumber: 411
-  prUrl: https://github.com/oumaster369/waia/pull/411
-  lastValidatedGitSha: bb3f5a66c9886455f5ef7a9b9f5dc16a84cef389
-  lastValidationAt: "2026-07-22"
+  lastValidatedGitSha: 4044f347b20a6d91b2db89e4297322f25c1264fb
+  lastValidationAt: "2026-07-23"
   blockedReason: null
-  nextAction: "Open the next Human dev→main release-promotion PR; merge it with Create a merge commit, verify release/tag/Cloudflare identity, immediately complete main→dev back-sync with Create a merge commit, then resolve EXECUTION_SERVER_TARGET_SHA and await separate AUTHORIZE-FHV-OPS-DEPLOY for T4 rehearsal."
+  nextAction: "After Human merge and successful post-merge reconciliation of this plan refresh, perform a separate read-only T4 Execution Server Launch Readiness Audit. Only after that audit passes may the Human consider issuing AUTHORIZE-FHV-OPS-DEPLOY."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -125,7 +124,46 @@ provenance:
 
 ---
 
-## Post-merge snapshot (current, 2026-07-22)
+## Post-merge snapshot (current, 2026-07-23)
+
+| Check | Result |
+|-------|--------|
+| `main` | `6e617461085282b3ba55fc2e93cc18e66195174c` |
+| `dev` (pre plan-refresh) | `4044f347b20a6d91b2db89e4297322f25c1264fb` |
+| `main` ancestor of `dev` | **yes** (`0 / 4`) |
+| `main` / `dev` tree diff | empty at back-sync baseline; `dev` ahead with PR #415 governance delta only |
+| DEE-416 parent | **In Progress** (restored 2026-07-23 after premature PR #414 Linear Done) |
+| DEE-424 | **In Progress** (T4 rehearsal pending) |
+| DEE-423 | **Deferred** |
+| DEE-432 | **Done** (PR #415 keep-open governance) |
+
+### Completed release cycle (current)
+
+| Step | Value |
+|------|-------|
+| PR #413 dev → main | **MERGED** (Create a merge commit) — https://github.com/oumaster369/waia/pull/413 |
+| Released `dev` head | `ea2dffd3288fe54dbfb162ecf05823636d673061` |
+| Main release SHA | `6e617461085282b3ba55fc2e93cc18e66195174c` |
+| Release tag | `v2026.07.22.6e61746` |
+| Tag peel | **PASS** |
+| GitHub Release | **published** (non-draft, non-prerelease) |
+| Cloudflare production build | `861a0ec8-6c64-4545-acd7-ca39aefd3175` |
+| Cloudflare production source SHA | `6e617461085282b3ba55fc2e93cc18e66195174c` |
+| PR #414 main → dev back-sync | **MERGED** (Create a merge commit) — https://github.com/oumaster369/waia/pull/414 |
+| Back-sync PR head | `0bfc5454d8424edde467e1d4f5c6e69c4b3ed4a9` |
+| Post-back-sync `dev` merge SHA | `1c1b386272983a4247aff7f8e163172ffd792be2` |
+| Post-back-sync CI | run `29952004496` — **success** |
+| PR #415 / DEE-432 keep-open governance | **MERGED** — merge commit `4044f347b20a6d91b2db89e4297322f25c1264fb` (Human used Create a merge commit; process deviation — ordinary feature PRs require squash) |
+| Post-#415 CI | run `29968394510` — **success** |
+| `MAIN_TO_DEV_BACK_SYNC_REQUIRED` | **NO** |
+
+**Release identity (immutable):** `EXECUTION_SERVER_TARGET_SHA=6e617461085282b3ba55fc2e93cc18e66195174c` · `RELEASE_TAG=v2026.07.22.6e61746`. These must **not** be replaced by back-sync head `0bfc5454…`, post-back-sync dev `1c1b386…`, current `dev`, a short SHA, or the tag string without peel proof.
+
+**Plan-refresh boundaries:** this docs-only refresh does **not** authorize T4; no Execution Server connection occurred; no real historical dataset was accessed; blind holdout remains sealed; no new release is required solely for PR #415 or this plan refresh — a later release is required only if new runtime code must become the Execution Server target.
+
+---
+
+## Post-merge snapshot (historical — PR #411 merge, 2026-07-22)
 
 | Check | Result |
 |-------|--------|
@@ -139,7 +177,7 @@ provenance:
 | DEE-424 | **In Progress** (T4 rehearsal pending) |
 | DEE-423 | **Deferred** |
 
-### Completed release cycle (historical)
+### Completed release cycle (historical — PR #408 / PR #409)
 
 | Step | Value |
 |------|-------|
@@ -227,9 +265,12 @@ No release SHA, tag, or production deployment is recorded for DEE-416 in this se
 
 | Flag | Value |
 |------|-------|
-| EXECUTION_SERVER_TARGET_SHA | **UNRESOLVED_UNTIL_NEXT_RELEASE** |
+| EXECUTION_SERVER_TARGET_SHA | **`6e617461085282b3ba55fc2e93cc18e66195174c`** |
+| RELEASE_TAG | **`v2026.07.22.6e61746`** (peel PASS) |
+| AUTHORIZE_FHV_OPS_DEPLOY | **NOT_ISSUED** |
+| T4_REHEARSAL | **NOT_EXECUTED** |
 | DEE-415 | **COMPLETE** |
-| DEE-416 | **IN_PROGRESS** |
+| DEE-416 | **IN_PROGRESS** (restored 2026-07-23) |
 | DEE-424 | **IN_PROGRESS** |
 | DEE-423 | **DEFERRED** |
 | HOST_OS | **LINUX_SYSTEMD_QUALIFIED** |
@@ -248,8 +289,10 @@ No release SHA, tag, or production deployment is recorded for DEE-416 in this se
 | CONTROL_REPLAY_EXECUTED | false |
 | HISTORICAL_DATASET_QUALIFICATION | NOT_EXECUTED |
 | READY_FOR_FULL_HISTORICAL_TEST | NO |
+| AUTHORIZE_FULL_HISTORICAL_VALIDATION | NOT_ISSUED |
 | EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED | NO |
 | LIVE_TRADING_AUTHORIZED | NO |
+| blind holdout | **sealed** — not accessed in this plan refresh |
 
 ---
 
@@ -1040,8 +1083,10 @@ flowchart TB
 | 5d | HOST_OS / systemd qualification | Human + repository | supervisor contract | **DONE** (repository; host install pending T4) |
 | 5e | PR #410 DEE-424 systemd rehearsal implementation | Human squash | rehearsal tooling on `dev` | **DONE** (`2f6b164b…`) |
 | 5f | PR #411 DEE-431 release identity correction | Human squash | ops doc/runtime gates | **DONE** (`bb3f5a6…`) |
-| 5g | Next dev-to-main release | Human merge commit | next production promotion | **NOT_EXECUTED** |
-| 5h | Next main → dev back-sync | Human merge commit | post-release ancestry | **NOT_EXECUTED** |
+| 5g | PR #413 dev-to-main release | Human merge commit | production promotion | **DONE** (`6e617461…`, tag `v2026.07.22.6e61746`, peel PASS) |
+| 5h | PR #414 main → dev back-sync | Human merge commit | post-release ancestry | **DONE** (`1c1b386…`, CI `29952004496` success) |
+| 5i | PR #415 / DEE-432 keep-open governance | Human merge commit *(process deviation)* | Linear lifecycle safety | **DONE** (`4044f347…`) |
+| 5j | Post-release canonical plan refresh | Human squash | T4 readiness audit gate | **PENDING** (this integration) |
 | 6 | `HOST_OS` qualification + supervisor install on Execution Server | Human | execution-server deploy | **NOT_EXECUTED** (units not installed) |
 | 7 | `AUTHORIZE-FHV-OPS-DEPLOY` | Human | rehearsal | **NOT_ISSUED** |
 | 8 | Execution Server rehearsal PASS (WP-K / T4) | Human operator | production FHV campaign | **NOT_EXECUTED** |
@@ -1111,7 +1156,54 @@ flowchart TB
 
 ## Terminal classification (current)
 
-**`DEE_416_PR411_POST_MERGE_READY_FOR_NEXT_RELEASE`**
+**`DEE_416_POST_RELEASE_CANONICAL_STATE_AWAITING_T4_READINESS_AUDIT`**
+
+| Flag | Value |
+|------|-------|
+| parentLinearCreated | true |
+| allFourteenChildrenCreated | true |
+| realLinearIdsRecorded | true |
+| pr1Merged | true |
+| pr2Merged | true |
+| pr3DeferredNonBlocking | true |
+| pr408ReleaseToMainExecuted | true |
+| pr409BackSyncExecuted | true |
+| pr410MergedToDev | true |
+| pr411Merged | true |
+| pr413ReleaseToMainExecuted | true |
+| pr414BackSyncExecuted | true |
+| pr415KeepOpenGovernanceMerged | true |
+| pr415MergeMethodDeviation | create_merge_commit (process history only) |
+| canonicalPlanPromoted | true |
+| canonicalPlanStatusTruthful | true (pending Human merge of plan refresh) |
+| implementationMergedToDev | true |
+| releaseToMainExecuted | true (PR #413 — `6e617461…`) |
+| mainToDevBackSyncRequired | false |
+| dee416ParentInProgress | true (restored 2026-07-23 after PR #414 premature Done) |
+| dee424InProgress | true |
+| dee423Deferred | true |
+| dee431Done | true |
+| dee432Done | true |
+| executionServerAccessed | false |
+| datasetAccessed | false |
+| replayStarted | false |
+| liveTradingStarted | false |
+| EXECUTION_SERVER_TARGET_SHA | `6e617461085282b3ba55fc2e93cc18e66195174c` |
+| AUTHORIZE_FHV_OPS_DEPLOY | NOT_ISSUED |
+| T4_REHEARSAL | NOT_EXECUTED |
+| HISTORICAL_DATASET_QUALIFICATION | NOT_EXECUTED |
+| CONTROL_REPLAY_EXECUTED | false |
+| READY_FOR_FULL_HISTORICAL_TEST | NO |
+| AUTHORIZE_FULL_HISTORICAL_VALIDATION | NOT_ISSUED |
+| EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED | NO |
+| LIVE_TRADING_AUTHORIZED | NO |
+| READY_FOR_DEE_416_RELEASE_TO_MAIN | false (superseded — PR #413 release complete) |
+
+---
+
+## Terminal classification (historical — superseded 2026-07-22)
+
+**`DEE_416_PR411_POST_MERGE_READY_FOR_NEXT_RELEASE`** — superseded after PR #413 release, PR #414 back-sync, PR #415 keep-open governance, and DEE-416 Linear restoration.
 
 | Flag | Value |
 |------|-------|
@@ -1127,7 +1219,7 @@ flowchart TB
 | pr411Open | false |
 | pr411Merged | true |
 | canonicalPlanPromoted | true |
-| canonicalPlanStatusTruthful | true |
+| canonicalPlanStatusTruthful | true (at time of classification) |
 | implementationMergedToDev | true |
 | releaseToMainExecuted | true (PR #408 — `1744301f…`) |
 | dee416ParentInProgress | true |
