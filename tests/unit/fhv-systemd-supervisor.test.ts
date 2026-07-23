@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -68,6 +69,54 @@ function systemdAnalyzeAvailable(): boolean {
   } catch {
     return false;
   }
+}
+
+function formatSystemdAnalyzeFailure(input: {
+  command: readonly string[];
+  result: ReturnType<typeof spawnSync>;
+  campaignUnit: string;
+  observerUnit: string;
+  campaignPath: string;
+  observerPath: string;
+  outputDir: string;
+}): string {
+  return [
+    `command=${input.command.join(" ")}`,
+    `status=${String(input.result.status)}`,
+    `signal=${String(input.result.signal ?? "null")}`,
+    `stdout=${JSON.stringify(String(input.result.stdout ?? ""))}`,
+    `stderr=${JSON.stringify(String(input.result.stderr ?? ""))}`,
+    `campaignPath=${input.campaignPath}`,
+    `observerPath=${input.observerPath}`,
+    `outputDir=${input.outputDir}`,
+    `campaignUnit=${input.campaignUnit}`,
+    `observerUnit=${input.observerUnit}`,
+  ].join("\n");
+}
+
+function materializeLinuxSystemdAnalyzeFixture(): {
+  config: FhvSystemdUnitConfigV1;
+  cleanup: () => void;
+} {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "fhv-systemd-analyze-fixture-"));
+  const environmentFile = join(fixtureRoot, "fhv.env");
+  const fhvRunRoot = join(fixtureRoot, "fhv-run-root");
+  writeFileSync(environmentFile, "# FHV systemd-analyze verify fixture\n", "utf8");
+  mkdirSync(fhvRunRoot, { recursive: true });
+  const repoRoot = process.cwd();
+  return {
+    config: sampleUnitConfig({
+      repoRoot,
+      workingDirectory: repoRoot,
+      serviceUser: "nobody",
+      environmentFile,
+      nodeBin: process.execPath,
+      fhvRunRoot,
+    }),
+    cleanup: () => {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    },
+  };
 }
 
 function sampleUnitConfig(overrides: Partial<FhvSystemdUnitConfigV1> = {}): FhvSystemdUnitConfigV1 {
@@ -345,28 +394,40 @@ describe("DEE-424 FHV systemd supervisor", () => {
 
 describe.skipIf(!systemdAnalyzeAvailable())("DEE-433 FHV systemd-analyze verify (linux)", () => {
   it("renders waia-fhv units without verifier warnings", () => {
-    const units = renderFhvSystemdUnits(sampleUnitConfig());
+    const { config, cleanup: cleanupFixture } = materializeLinuxSystemdAnalyzeFixture();
+    const units = renderFhvSystemdUnits(config);
     const outputDir = mkdtempSync(join(tmpdir(), "fhv-systemd-analyze-"));
     const campaignPath = join(outputDir, units.campaignUnitName);
     const observerPath = join(outputDir, units.observerUnitName);
+    const verifyArgs = [campaignPath, observerPath] as const;
     try {
       writeFileSync(campaignPath, units.campaignUnit, "utf8");
       writeFileSync(observerPath, units.observerUnit, "utf8");
-      const result = spawnSync("systemd-analyze", ["verify", campaignPath, observerPath], {
+      const result = spawnSync("systemd-analyze", ["verify", ...verifyArgs], {
         encoding: "utf8",
       });
       const combined = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-      expect(result.status).toBe(0);
+      const diagnostics = formatSystemdAnalyzeFailure({
+        command: ["systemd-analyze", "verify", ...verifyArgs],
+        result,
+        campaignUnit: units.campaignUnit,
+        observerUnit: units.observerUnit,
+        campaignPath,
+        observerPath,
+        outputDir,
+      });
+      expect(result.status, diagnostics).toBe(0);
       for (const pattern of [
         "Unknown key name",
         "Failed to parse",
         "Invalid argument",
         "ignoring",
       ]) {
-        expect(combined).not.toContain(pattern);
+        expect(combined, diagnostics).not.toContain(pattern);
       }
     } finally {
       rmSync(outputDir, { recursive: true, force: true });
+      cleanupFixture();
     }
   });
 });

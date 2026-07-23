@@ -27,6 +27,7 @@ import {
 } from "@/lib/trader/observability/fhv-rehearsal-launcher";
 import { readFhvEvidenceHealth } from "@/lib/trader/observability/fhv-observer-core";
 import { resolveFhvCampaignState } from "@/lib/trader/observability/fhv-campaign-state";
+import type { FhvCampaignStateSnapshot } from "@/lib/trader/observability/fhv-campaign-state";
 import {
   readFhvRehearsalActualPauseCycle,
   readFhvRehearsalCampaignProgress,
@@ -165,10 +166,12 @@ async function postObserverCommand(
 
 async function waitForCliCampaignCycles(input: {
   runDir: string;
+  runId: string;
+  organizationId: string;
   minCycles: number;
   childPromise: Promise<CampaignCliResult>;
   timeoutMs?: number;
-}): Promise<number> {
+}): Promise<{ cyclesProcessed: number; snapshot: FhvCampaignStateSnapshot }> {
   const timeoutMs = input.timeoutMs ?? 300_000;
   const started = Date.now();
   const readCyclesProcessed = (): number => {
@@ -177,12 +180,24 @@ async function waitForCliCampaignCycles(input: {
     const pauseCycle = readFhvRehearsalActualPauseCycle(input.runDir) ?? 0;
     return Math.max(progressCycles, heartbeatCycles, pauseCycle);
   };
+  const readRunningSnapshot = (): FhvCampaignStateSnapshot =>
+    resolveFhvCampaignState({
+      runRoot: input.runDir,
+      runId: input.runId,
+      organizationId: input.organizationId,
+    });
+  const isPauseReady = (snapshot: FhvCampaignStateSnapshot, cyclesProcessed: number): boolean =>
+    cyclesProcessed >= input.minCycles &&
+    snapshot.state === "RUNNING" &&
+    snapshot.phase === "running" &&
+    readFhvRehearsalCampaignProgress(input.runDir)?.phase === "running";
 
   while (Date.now() - started < timeoutMs) {
     const cyclesProcessed = readCyclesProcessed();
+    const snapshot = readRunningSnapshot();
     const terminal = readFhvRehearsalTerminalClassification(input.runDir);
-    if (cyclesProcessed >= input.minCycles || terminal === "REHEARSAL_PAUSED") {
-      return cyclesProcessed;
+    if (isPauseReady(snapshot, cyclesProcessed) || terminal === "REHEARSAL_PAUSED") {
+      return { cyclesProcessed, snapshot };
     }
     const settled = await Promise.race([
       input.childPromise.then((result) => ({ kind: "exit" as const, result })),
@@ -192,16 +207,47 @@ async function waitForCliCampaignCycles(input: {
     ]);
     if (settled.kind === "exit") {
       const exitCycles = readCyclesProcessed();
+      const exitSnapshot = readRunningSnapshot();
       const exitTerminal = readFhvRehearsalTerminalClassification(input.runDir);
-      if (exitCycles >= input.minCycles || exitTerminal === "REHEARSAL_PAUSED") {
-        return exitCycles;
+      if (isPauseReady(exitSnapshot, exitCycles) || exitTerminal === "REHEARSAL_PAUSED") {
+        return { cyclesProcessed: exitCycles, snapshot: exitSnapshot };
       }
       throw new Error(
-        `Campaign CLI exited before ${input.minCycles} cycles (exit=${settled.result.exitCode}, pid=${settled.result.pid}, cycles=${exitCycles}, terminal=${exitTerminal ?? "none"}). stderr=${settled.result.stderr.slice(0, 1000)} stdout=${settled.result.stdout.slice(0, 500)}`,
+        `Campaign CLI exited before pause-ready state (exit=${settled.result.exitCode}, pid=${settled.result.pid}, cycles=${exitCycles}, state=${exitSnapshot.state}, phase=${exitSnapshot.phase}, terminal=${exitTerminal ?? "none"}). stderr=${settled.result.stderr.slice(0, 1000)} stdout=${settled.result.stdout.slice(0, 500)}`,
       );
     }
   }
-  throw new Error(`Timed out waiting for ${input.minCycles} CLI campaign cycles.`);
+  const timedOutSnapshot = readRunningSnapshot();
+  throw new Error(
+    `Timed out waiting for pause-ready CLI campaign state (cycles=${readCyclesProcessed()}, state=${timedOutSnapshot.state}, phase=${timedOutSnapshot.phase}, progressPhase=${readFhvRehearsalCampaignProgress(input.runDir)?.phase ?? "none"}).`,
+  );
+}
+
+function formatObserverCommandFailure(input: {
+  action: string;
+  commandId: string;
+  body: { status: string; message?: string };
+  snapshot: FhvCampaignStateSnapshot;
+  runDir: string;
+  processPhase?: string;
+  processExitCode?: number;
+  processStderr?: string;
+}): string {
+  return JSON.stringify({
+    action: input.action,
+    commandId: input.commandId,
+    commandStatus: input.body.status,
+    rejectionReason: input.body.message ?? "unknown",
+    campaignState: input.snapshot.state,
+    campaignPhase: input.snapshot.phase,
+    checkpointSeq: input.snapshot.checkpointSeq ?? null,
+    progressPhase: readFhvRehearsalCampaignProgress(input.runDir)?.phase ?? null,
+    progressCycles: readFhvRehearsalCampaignProgress(input.runDir)?.cyclesProcessed ?? null,
+    terminalClassification: readFhvRehearsalTerminalClassification(input.runDir),
+    processPhase: input.processPhase ?? null,
+    processExitCode: input.processExitCode ?? null,
+    processStderr: input.processStderr?.slice(0, 1000) ?? null,
+  });
 }
 
 async function runCampaignCliProcess(env: NodeJS.ProcessEnv): Promise<CampaignCliResult> {
@@ -327,14 +373,18 @@ describe("FHV cross-process checkpoint resume (DEE-431)", () => {
       const processAPromise = runCampaignCliProcess(cliEnv);
       await waitForCliCampaignCycles({
         runDir,
+        runId: RUN_ID,
+        organizationId: ORG_ID,
         minCycles: PAUSE_AFTER_CYCLES,
         childPromise: processAPromise,
       });
-      const runningSnapshot = resolveFhvCampaignState({
+      const pauseSnapshot = resolveFhvCampaignState({
         runRoot: runDir,
         runId: RUN_ID,
         organizationId: ORG_ID,
       });
+      expect(pauseSnapshot.state).toBe("RUNNING");
+      expect(pauseSnapshot.phase).toBe("running");
       const pauseResult = await postObserverCommand(
         baseUrl,
         signedCommand({
@@ -342,11 +392,21 @@ describe("FHV cross-process checkpoint resume (DEE-431)", () => {
           commandId: "cross-process-pause",
           idempotencyKey: "cross-process-pause",
           nonce: "cross-process-pause-nonce",
-          expectedPhase: runningSnapshot.phase,
+          expectedPhase: pauseSnapshot.phase,
         }),
       );
       expect(pauseResult.response.status).toBe(200);
-      expect(pauseResult.body.status).toBe("executed");
+      expect(
+        pauseResult.body.status,
+        formatObserverCommandFailure({
+          action: "PAUSE_AT_CHECKPOINT",
+          commandId: "cross-process-pause",
+          body: pauseResult.body,
+          snapshot: pauseSnapshot,
+          runDir,
+          processPhase: "pause-after-running",
+        }),
+      ).toBe("executed");
 
       const processA = await processAPromise;
       expect(processA.exitCode).toBe(0);
@@ -392,7 +452,17 @@ describe("FHV cross-process checkpoint resume (DEE-431)", () => {
         }),
       );
       expect(resumeResult.response.status).toBe(200);
-      expect(resumeResult.body.status).toBe("executed");
+      expect(
+        resumeResult.body.status,
+        formatObserverCommandFailure({
+          action: "RESUME_FROM_CHECKPOINT",
+          commandId: "cross-process-resume",
+          body: resumeResult.body,
+          snapshot: pausedSnapshot,
+          runDir,
+          processPhase: "resume-after-pause",
+        }),
+      ).toBe("executed");
       expect(resumeStartRequested).toBe(true);
       expect(systemctlCalls.some((call) => call.args.includes("start"))).toBe(true);
 
