@@ -94,7 +94,7 @@ state:
   lastValidatedGitSha: 4044f347b20a6d91b2db89e4297322f25c1264fb
   lastValidationAt: "2026-07-23"
   blockedReason: null
-  nextAction: "After Human merge and successful post-merge reconciliation of this plan refresh, perform a separate read-only T4 Execution Server Launch Readiness Audit. Only after that audit passes may the Human consider issuing AUTHORIZE-FHV-OPS-DEPLOY."
+  nextAction: "After Human Squash and merge of PR #416 and successful mechanical post-merge reconciliation, proceed directly to the Human-operated WP-K / DEE-424 T4 Execution Server rehearsal under docs/ops/FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md: verify contract preconditions (exact released target SHA, fresh clean checkout, qualified Ubuntu 24.04/systemd host, required EnvironmentFile inputs by name, rollback availability), obtain explicit Human AUTHORIZE-FHV-OPS-DEPLOY, then execute the bounded T4 sequence (HTR_WP03_BENCHMARK only; no real HTX dataset; maximum 5 minutes; no live trading; agents do not connect; Human performs server operations). No separate read-only audit phase is required."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -159,7 +159,7 @@ provenance:
 
 **Release identity (immutable):** `EXECUTION_SERVER_TARGET_SHA=6e617461085282b3ba55fc2e93cc18e66195174c` · `RELEASE_TAG=v2026.07.22.6e61746`. These must **not** be replaced by back-sync head `0bfc5454…`, post-back-sync dev `1c1b386…`, current `dev`, a short SHA, or the tag string without peel proof.
 
-**Plan-refresh boundaries:** this docs-only refresh does **not** authorize T4; no Execution Server connection occurred; no real historical dataset was accessed; blind holdout remains sealed; no new release is required solely for PR #415 or this plan refresh — a later release is required only if new runtime code must become the Execution Server target.
+**Plan-refresh boundaries:** this docs-only refresh does **not** authorize T4; no Execution Server connection occurred; no real historical dataset was accessed; blind holdout remains sealed; no new release is required solely for PR #415 or this plan refresh — a later release is required only if new runtime code must become the Execution Server target. After Human merge and post-merge reconciliation, the next operation is the Human-operated T4 rehearsal sequence under [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](docs/ops/FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md) — not a separate read-only audit.
 
 ---
 
@@ -1086,15 +1086,15 @@ flowchart TB
 | 5g | PR #413 dev-to-main release | Human merge commit | production promotion | **DONE** (`6e617461…`, tag `v2026.07.22.6e61746`, peel PASS) |
 | 5h | PR #414 main → dev back-sync | Human merge commit | post-release ancestry | **DONE** (`1c1b386…`, CI `29952004496` success) |
 | 5i | PR #415 / DEE-432 keep-open governance | Human merge commit *(process deviation)* | Linear lifecycle safety | **DONE** (`4044f347…`) |
-| 5j | Post-release canonical plan refresh | Human squash | T4 readiness audit gate | **PENDING** (this integration) |
-| 6 | `HOST_OS` qualification + supervisor install on Execution Server | Human | execution-server deploy | **NOT_EXECUTED** (units not installed) |
-| 7 | `AUTHORIZE-FHV-OPS-DEPLOY` | Human | rehearsal | **NOT_ISSUED** |
-| 8 | Execution Server rehearsal PASS (WP-K / T4) | Human operator | production FHV campaign | **NOT_EXECUTED** |
+| 5j | Post-release canonical plan refresh (PR #416) | Human squash | pre-T4 documentation reconciliation | **PENDING** (this integration) |
+| 6 | WP-K / DEE-424 T4 preflight (contract preconditions + clean checkout + host qualification) | Human operator | T4 deployment | **NOT_EXECUTED** (see [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](docs/ops/FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md)) |
+| 7 | `AUTHORIZE-FHV-OPS-DEPLOY` | Human | T4 deployment + rehearsal | **NOT_ISSUED** |
+| 8 | Execution Server rehearsal PASS (WP-K / T4) | Human operator | Historical Dataset Qualification | **NOT_EXECUTED** |
 | 9 | PR-3 merge (WP-J) + REC isolation proof | Human squash | REC availability (optional track) | **DEFERRED** (DEE-423) |
-| 10 | Dataset qualification decision | Human | `READY_FOR_FULL_HISTORICAL_TEST` | **NOT_EXECUTED** |
-| 11 | Control replay ceremony | Human | control replay gate | **NOT_EXECUTED** |
-| 12 | `AUTHORIZE-FULL-HISTORICAL-VALIDATION` | Human | multi-day FHV run | **NOT_EXECUTED** |
-| 13 | FHV closure report sign-off | Human | next phase | **NOT_EXECUTED** |
+| 10 | Historical Dataset Qualification ceremony | Human | Control Replay ceremony | **NOT_EXECUTED** |
+| 11 | Deterministic Control Replay ceremony | Human | `AUTHORIZE-FULL-HISTORICAL-VALIDATION` | **NOT_EXECUTED** |
+| 12 | `AUTHORIZE-FULL-HISTORICAL-VALIDATION` | Human | multi-day Full Historical Validation run | **NOT_EXECUTED** |
+| 13 | Full Historical Validation run + FHV closure report sign-off | Human | next phase | **NOT_EXECUTED** |
 
 **Not in this program:** Cloudflare production SHA confirmation / Worker redeploy (separate release operation).
 
@@ -1156,7 +1156,7 @@ flowchart TB
 
 ## Terminal classification (current)
 
-**`DEE_416_POST_RELEASE_CANONICAL_STATE_AWAITING_T4_READINESS_AUDIT`**
+**`DEE_416_POST_RELEASE_CANONICAL_STATE_AWAITING_T4_EXECUTION`**
 
 | Flag | Value |
 |------|-------|
@@ -1198,6 +1198,7 @@ flowchart TB
 | EXECUTION_SERVER_DEPLOYMENT_AUTHORIZED | NO |
 | LIVE_TRADING_AUTHORIZED | NO |
 | READY_FOR_DEE_416_RELEASE_TO_MAIN | false (superseded — PR #413 release complete) |
+| separateT4LaunchReadinessAuditRequired | false |
 
 ---
 
