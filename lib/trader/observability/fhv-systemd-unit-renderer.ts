@@ -1,5 +1,7 @@
 import {
   assertFhvSystemdUnitConfig,
+  FHV_OBSERVER_START_LIMIT_BURST,
+  FHV_OBSERVER_START_LIMIT_INTERVAL_SEC,
   FHV_REHEARSAL_RUNTIME_MAX_SEC,
   FHV_SYSTEMD_CAMPAIGN_UNIT,
   FHV_SYSTEMD_OBSERVER_UNIT,
@@ -82,6 +84,8 @@ function renderObserverUnit(config: FhvSystemdUnitConfigV1): string {
 Description=WAIA FHV observer (localhost-only control plane)
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=${String(FHV_OBSERVER_START_LIMIT_INTERVAL_SEC)}
+StartLimitBurst=${String(FHV_OBSERVER_START_LIMIT_BURST)}
 
 [Service]
 Type=simple
@@ -99,8 +103,6 @@ ExecStartPre=${wd}/scripts/ops/execution-server-preflight.sh --repo-path ${wd} -
 ExecStart=${nodeBin} --import tsx --conditions=react-server ${wd}/scripts/trader/fhv-observer-cli.ts
 Restart=on-failure
 RestartSec=5
-StartLimitIntervalSec=300
-StartLimitBurst=5
 TimeoutStopSec=30
 KillMode=mixed
 KillSignal=SIGTERM

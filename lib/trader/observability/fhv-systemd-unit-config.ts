@@ -1,6 +1,8 @@
 /** DEE-424 / DEE-431 — bounded Linux systemd unit configuration for FHV rehearsal supervision. */
 
 export const FHV_REHEARSAL_RUNTIME_MAX_SEC = 300;
+export const FHV_OBSERVER_START_LIMIT_INTERVAL_SEC = 300;
+export const FHV_OBSERVER_START_LIMIT_BURST = 5;
 
 export const FHV_SYSTEMD_CAMPAIGN_UNIT = "waia-fhv-campaign.service" as const;
 export const FHV_SYSTEMD_OBSERVER_UNIT = "waia-fhv-observer.service" as const;
