@@ -54,19 +54,32 @@ export function readFhvCommandResult(
   return JSON.parse(readFileSync(path, "utf8")) as FhvCommandResultV1;
 }
 
+export function readFhvCommandLedgerEntries(runRoot: string): FhvCommandLedgerEntry[] {
+  const ledgerPath = resolveFhvCommandLedgerPath(runRoot);
+  if (!existsSync(ledgerPath)) {
+    return [];
+  }
+  const entries: FhvCommandLedgerEntry[] = [];
+  for (const [index, line] of readFileSync(ledgerPath, "utf8").split("\n").entries()) {
+    if (!line.trim()) continue;
+    try {
+      entries.push(JSON.parse(line) as FhvCommandLedgerEntry);
+    } catch (error) {
+      throw new Error(
+        `Corrupt command ledger line ${index + 1}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return entries;
+}
+
 export function loadFhvCommandLedgerNonces(runRoot: string): {
   nonces: Set<string>;
   idempotencyKeys: Set<string>;
 } {
   const nonces = new Set<string>();
   const idempotencyKeys = new Set<string>();
-  const ledgerPath = resolveFhvCommandLedgerPath(runRoot);
-  if (!existsSync(ledgerPath)) {
-    return { nonces, idempotencyKeys };
-  }
-  for (const line of readFileSync(ledgerPath, "utf8").split("\n")) {
-    if (!line.trim()) continue;
-    const entry = JSON.parse(line) as FhvCommandLedgerEntry;
+  for (const entry of readFhvCommandLedgerEntries(runRoot)) {
     nonces.add(entry.command.nonce);
     idempotencyKeys.add(entry.command.idempotencyKey);
   }

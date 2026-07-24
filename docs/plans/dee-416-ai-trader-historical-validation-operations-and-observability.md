@@ -101,8 +101,8 @@ state:
     - PR-3-WP-J-DEE-423-rec-deferred
   lastValidatedGitSha: e3598756c646fd25d047a665188077f25a07b5d3
   lastValidationAt: "2026-07-23"
-  blockedReason: "T4 is blocked because release 6e617461085282b3ba55fc2e93cc18e66195174c contains the systemd release defect proven by the old Phase B4 attempt. The DEE-433 correction is merged to dev only. A new Human-approved dev→main release, release-tag peel proof, GitHub Release verification, and mandatory main→dev back-sync are required before any fresh T4 attempt."
-  nextAction: "After Human squash merge of the DEE-434 plan-reconciliation PR and mechanical post-merge reconciliation, prepare a separate Human-approved dev→main release-promotion PR. That release PR must be merged with Create a merge commit. After the release workflow, tag-peel proof, GitHub Release verification, and mandatory main→dev back-sync, resolve the new full main release SHA. Only then may a fresh WP-K/T4 preflight be proposed with a new checkout, run ID, manifest, rendered units, and digests."
+  blockedReason: "T4A operator surface implementation in DEE-436; Execution Server T4A rehearsal awaits DEE-436 release to main, mandatory main→dev back-sync, and Human AUTHORIZE-FHV-OPS-DEPLOY."
+  nextAction: "Merge DEE-436 PR to dev; Human release promotion dev→main; mandatory main→dev back-sync; resolve post-DEE-436 NEXT_T4_EXECUTION_SERVER_TARGET_SHA; Human AUTHORIZE-FHV-OPS-DEPLOY; execute T4A per T4_OPERATOR_PACKET_V5.md."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -187,14 +187,15 @@ Do **not** resume the old process; do **not** reuse the old checkout, run ID, ma
 | Field | Value |
 |-------|-------|
 | `OLD_BLOCKED_EXECUTION_SERVER_TARGET_SHA` | `6e617461085282b3ba55fc2e93cc18e66195174c` |
-| `NEXT_T4_EXECUTION_SERVER_TARGET_SHA` | **NOT_RESOLVED** |
-| `NEW_RELEASE_REQUIRED` | **YES** |
+| `NEXT_T4_EXECUTION_SERVER_TARGET_SHA` | **`d4c0cf8f6f338fb4efa66679d1137bf26aa1adbd`** (DEE-435 release; tag `v2026.07.24.d4c0cf8`) |
+| `NEXT_T4_RELEASE_TAG` | **`v2026.07.24.d4c0cf8`** |
+| `POST_BACK_SYNC_DEV_SHA` | **`a4f6e056599909875e4b1f5d3f4e83837a66e40f`** |
+| `NEW_RELEASE_REQUIRED` | **YES** (after DEE-436 merge — DEE-436 closure verifiers not yet on `main`) |
 | `NEW_RELEASE_PROMOTION_EXECUTED` | **NO** |
-| `NEW_RELEASE_TAG` | **NOT_CREATED** |
-| `NEW_GITHUB_RELEASE` | **NOT_CREATED** |
-| `MANDATORY_MAIN_TO_DEV_BACK_SYNC` | **PENDING_AFTER_RELEASE** |
+| `MANDATORY_MAIN_TO_DEV_BACK_SYNC` | **PENDING_AFTER_DEE436_RELEASE** |
 | `AUTHORIZE_FHV_OPS_DEPLOY` | **NOT_ISSUED** |
-| `T4_REHEARSAL` | **BLOCKED_PENDING_NEW_RELEASE_IDENTITY** |
+| `T4A_REHEARSAL` | **NOT_EXECUTED** |
+| `T4B_QUALIFICATION` | **NOT_EXECUTED** (DEE-437 Backlog) |
 
 ---
 
@@ -340,15 +341,15 @@ No release SHA, tag, or production deployment is recorded for DEE-416 in this se
 | Flag | Value |
 |------|-------|
 | OLD_BLOCKED_EXECUTION_SERVER_TARGET_SHA | **`6e617461085282b3ba55fc2e93cc18e66195174c`** |
-| NEXT_T4_EXECUTION_SERVER_TARGET_SHA | **NOT_RESOLVED** |
-| OLD_RELEASE_TAG | **`v2026.07.22.6e61746`** (peel PASS — historical blocked release) |
-| NEW_RELEASE_REQUIRED | **YES** |
+| NEXT_T4_EXECUTION_SERVER_TARGET_SHA | **`d4c0cf8f6f338fb4efa66679d1137bf26aa1adbd`** (DEE-435 release; superseded after DEE-436 release) |
+| NEXT_T4_RELEASE_TAG | **`v2026.07.24.d4c0cf8`** |
+| NEW_RELEASE_REQUIRED | **YES** (after DEE-436 merge — T4A closure verifiers not yet on `main`) |
 | NEW_RELEASE_PROMOTION_EXECUTED | **NO** |
-| NEW_RELEASE_TAG | **NOT_CREATED** |
-| NEW_GITHUB_RELEASE | **NOT_CREATED** |
-| MANDATORY_MAIN_TO_DEV_BACK_SYNC | **PENDING_AFTER_RELEASE** |
+| NEW_GITHUB_RELEASE | **NOT_CREATED** (post-DEE-436) |
+| MANDATORY_MAIN_TO_DEV_BACK_SYNC | **PENDING_AFTER_DEE436_RELEASE** |
 | AUTHORIZE_FHV_OPS_DEPLOY | **NOT_ISSUED** |
-| T4_REHEARSAL | **BLOCKED_PENDING_NEW_RELEASE_IDENTITY** |
+| T4A_REHEARSAL | **NOT_EXECUTED** — awaiting DEE-436 release + `AUTHORIZE-FHV-OPS-DEPLOY` |
+| T4B_QUALIFICATION | **NOT_EXECUTED** (DEE-437 Backlog) |
 | OLD_T4_RUN_ID | **`dee424-t4-20260723-120505z-6e61746`** |
 | OLD_T4_RESULT | **`PHASE_B4_RESULT=BLOCKED_BY_RELEASE_DEFECT`** |
 | OLD_T4_INSTALL_AUTHORIZED | **NO** |
@@ -1021,13 +1022,14 @@ type HoldoutStatusV1 = {
 
 **Sequence (Human-operated):**
 
-1. `NEXT_T4_EXECUTION_SERVER_TARGET_SHA` preflight PASS (proven released `main` SHA after gates 5m/5n; not `dev`, not `6e617461…`) + `HOST_OS` qualified
+1. `NEXT_T4_EXECUTION_SERVER_TARGET_SHA` preflight PASS (proven released `main` SHA; currently `d4c0cf8…` until DEE-436 release supersedes) + `HOST_OS` qualified
 2. Install qualified supervisor units (observer + campaign)
-3. Short deterministic replay (under 5 min)
-4. Verify bounded status, checkpoint, alert policy digest, command auth drill
-5. SSH disconnect + observer restart + campaign resume
-6. Worker dashboard via tunnel
-7. Seal evidence → `replay-runs/RI-P7/fhv-ops-rehearsal-<date>/`
+3. Short deterministic T4A replay (under 5 min, one shared budget)
+4. Verify bounded status, checkpoint, alert policy digest, command auth drill, continuity, ceremony (`T4A_RESULT=PASS`, `GATE8_RESULT=PASS`)
+5. SSH disconnect + observer restart + continuity verification
+6. Seal evidence → `replay-runs/RI-P7/fhv-ops-rehearsal-<date>/`
+
+**Not in T4A:** Worker dashboard via authenticated tunnel (T4B / DEE-437).
 
 ---
 
@@ -1179,7 +1181,7 @@ flowchart TB
 | 5n | Mandatory main→dev back-sync after release | Human merge commit | post-release ancestry repair | **NOT_EXECUTED** |
 | 6 | WP-K / DEE-424 T4 preflight (contract preconditions + clean checkout + host qualification) | Human operator | T4 deployment | **NOT_EXECUTED — BLOCKED_PENDING_5M_AND_5N_AND_NEW_RELEASE_IDENTITY** (see [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](docs/ops/FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md)) |
 | 7 | `AUTHORIZE-FHV-OPS-DEPLOY` | Human | T4 deployment + rehearsal | **NOT_ISSUED** |
-| 8 | Execution Server rehearsal PASS (WP-K / T4) | Human operator | Historical Dataset Qualification | **NOT_EXECUTED** |
+| 8 | **T4A** Execution Server host runtime rehearsal PASS (WP-K / DEE-424) | Human operator | Historical Dataset Qualification | **NOT_EXECUTED** — awaiting DEE-436 release + `AUTHORIZE-FHV-OPS-DEPLOY` |
 | 9 | PR-3 merge (WP-J) + REC isolation proof | Human squash | REC availability (optional track) | **DEFERRED** (DEE-423) |
 | 10 | Historical Dataset Qualification ceremony | Human | Control Replay ceremony | **NOT_EXECUTED** |
 | 11 | Deterministic Control Replay ceremony | Human | `AUTHORIZE-FULL-HISTORICAL-VALIDATION` | **NOT_EXECUTED** |
@@ -1297,9 +1299,11 @@ flowchart TB
 | replayStarted | false |
 | liveTradingStarted | false |
 | OLD_BLOCKED_EXECUTION_SERVER_TARGET_SHA | `6e617461085282b3ba55fc2e93cc18e66195174c` |
-| NEXT_T4_EXECUTION_SERVER_TARGET_SHA | NOT_RESOLVED |
+| NEXT_T4_EXECUTION_SERVER_TARGET_SHA | `d4c0cf8f6f338fb4efa66679d1137bf26aa1adbd` |
+| NEXT_T4_RELEASE_TAG | `v2026.07.24.d4c0cf8` |
 | AUTHORIZE_FHV_OPS_DEPLOY | NOT_ISSUED |
-| T4_REHEARSAL | BLOCKED_PENDING_NEW_RELEASE_IDENTITY |
+| T4A_REHEARSAL | NOT_EXECUTED |
+| T4B_QUALIFICATION | NOT_EXECUTED |
 | HISTORICAL_DATASET_QUALIFICATION | NOT_EXECUTED |
 | CONTROL_REPLAY_EXECUTED | false |
 | READY_FOR_FULL_HISTORICAL_TEST | NO |

@@ -5,11 +5,13 @@ Operational guide for AI-TRADER Historical Validation host-resident observabilit
 ## Scope
 
 - Bounded operator status contract (`fhv-operator-status/v1`)
-- Host observer daemon (`pnpm trader:fhv:observer`)
-- Worker admin dashboard (`/admin/fhv-operations`)
+- Host observer daemon (`corepack pnpm@10 trader:fhv:observer`)
 - Authenticated operator commands (`fhv-operator-command/v1`)
+- **T4A** host runtime rehearsal operator surface (`trader:fhv:t4:*` including closure verifiers)
 
-**Out of scope for agents:** Execution Server deployment, real HTX dataset qualification, full historical replay, live trading.
+**T4B (separate):** Worker admin dashboard (`/admin/fhv-operations`) via production authenticated Cloudflare tunnel is governed by `DEE-437` and is **not** part of T4A success. T4B is not deployed by this runbook revision.
+
+**Out of scope for agents:** Execution Server deployment, real HTX dataset qualification, full historical replay, live trading, Cloudflare Tunnel creation.
 
 ## Host qualification gate
 
@@ -105,6 +107,19 @@ Requirements:
 **Not claimed:** recovery of active orders, fills, positions, accounting, WP17 execution, or WP21 state across pause/resume.
 
 Hermetic proofs: `tests/integration/fhv-cross-process-resume.test.ts`, `tests/integration/fhv-true-incremental-resume.test.ts`, `tests/unit/fhv-campaign-identity-frontier.test.ts`, `tests/unit/fhv-rehearsal-economic-frontier.test.ts`, `tests/unit/fhv-identity-frontier-write-guard.test.ts`, `tests/unit/fhv-server-only-boundary.test.ts`, `tests/unit/fhv-incremental-resume-guards.test.ts`, `tests/unit/fhv-resume-timeout.test.ts`.
+
+## T4A continuity (disconnect / reconnect)
+
+During T4A, capture continuity digests **before** SSH disconnect and **after** reconnect (observer restart recorded on the after snapshot):
+
+```bash
+corepack pnpm@10 trader:fhv:t4:capture-continuity-before
+# … Human disconnect / reconnect …
+corepack pnpm@10 trader:fhv:t4:capture-continuity-after
+corepack pnpm@10 trader:fhv:t4:verify-continuity
+```
+
+Success classification: `FHV_T4_CONTINUITY_VERIFICATION_PASS`. Ceremony requires `CONTINUITY_RESULT=PASS`. Full sequence: [`T4_OPERATOR_PACKET_V5.md`](./T4_OPERATOR_PACKET_V5.md) and [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](./FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md).
 
 ## Related documents
 
