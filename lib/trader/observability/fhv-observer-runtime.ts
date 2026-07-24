@@ -131,6 +131,8 @@ export function createFhvObserverRuntime(
     observerTunnelSecret: env.observerTunnelSecret,
     bindHost: env.bindHost,
     port: env.port,
+    targetSha: env.targetSha,
+    commandEnforcementEnabled: env.commandEnforcementEnabled,
     campaignControlExecutor,
   });
   const server = createFhvObserverHttpServer(
@@ -142,6 +144,8 @@ export function createFhvObserverRuntime(
       observerTunnelSecret: env.observerTunnelSecret,
       bindHost: env.bindHost,
       port: env.port,
+      targetSha: env.targetSha,
+      commandEnforcementEnabled: env.commandEnforcementEnabled,
       campaignControlExecutor,
     },
     { state },

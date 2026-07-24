@@ -54,6 +54,18 @@ import {
   FhvCampaignStateTransitionError,
   resolveFhvCampaignState,
 } from "@/lib/trader/observability/fhv-campaign-state";
+import {
+  readFhvRehearsalManifest,
+  type FhvRehearsalLaunchConfigV1,
+} from "@/lib/trader/observability/fhv-rehearsal-launcher";
+import {
+  assertFhvT4PreArmPauseCommand,
+  FhvT4DeterministicPauseError,
+  isFhvT4DeterministicPauseManifest,
+  writeFhvT4PauseArmedRecord,
+  FHV_T4_DETERMINISTIC_PAUSE_SCHEMA_VERSION,
+} from "@/lib/trader/observability/fhv-t4-deterministic-pause";
+import { FHV_REHEARSAL_CHECKPOINT_CYCLE } from "@/lib/trader/observability/fhv-observability.constants";
 
 export type FhvObserverConfig = Readonly<{
   runRoot: string;
@@ -63,6 +75,8 @@ export type FhvObserverConfig = Readonly<{
   observerTunnelSecret: string;
   bindHost?: string;
   port?: number;
+  targetSha?: string;
+  commandEnforcementEnabled?: boolean;
   campaignControlExecutor?: FhvCampaignControlExecutor;
   pinnedBarsTotal?: number | null;
 }>;
@@ -359,21 +373,94 @@ export async function handleFhvObserverCommand(
   }
 
   try {
-    assertFhvCampaignActionAllowed({
-      action: command.action,
-      snapshot: campaignSnapshot,
-    });
-    if (command.action === "RESUME_FROM_CHECKPOINT") {
-      assertFhvResumePreconditions({
+    let manifest: FhvRehearsalLaunchConfigV1 | undefined;
+    let isT4PreArm = false;
+    if (
+      command.action === "PAUSE_AT_CHECKPOINT" &&
+      (campaignSnapshot.state === "NOT_STARTED" || campaignSnapshot.state === "STARTING")
+    ) {
+      try {
+        manifest = readFhvRehearsalManifest(state.config.runRoot);
+        isT4PreArm = isFhvT4DeterministicPauseManifest(manifest);
+      } catch {
+        isT4PreArm = false;
+      }
+    }
+
+    if (isT4PreArm && manifest) {
+      assertFhvT4PreArmPauseCommand({
+        command,
+        manifest,
+        targetSha: state.config.targetSha ?? manifest.targetSha,
+        commandEnforcementEnabled: state.config.commandEnforcementEnabled ?? false,
         runRoot: state.config.runRoot,
-        runId: state.config.runId,
-        organizationId: state.config.organizationId,
+      });
+    } else {
+      assertFhvCampaignActionAllowed({
+        action: command.action,
         snapshot: campaignSnapshot,
       });
+      if (command.action === "RESUME_FROM_CHECKPOINT") {
+        assertFhvResumePreconditions({
+          runRoot: state.config.runRoot,
+          runId: state.config.runId,
+          organizationId: state.config.organizationId,
+          snapshot: campaignSnapshot,
+        });
+      }
     }
+
+    const executor =
+      state.config.campaignControlExecutor ?? UNCONFIGURED_FHV_CAMPAIGN_CONTROL_EXECUTOR;
+    const execution = await executor.execute({
+      action: command.action,
+      runId: state.config.runId,
+      organizationId: state.config.organizationId,
+      operatorId: command.operatorId,
+      reason: command.reason,
+    });
+
+    const result: FhvCommandResultV1 = {
+      schemaVersion: "fhv-command-result/v1",
+      commandId: command.commandId,
+      idempotencyKey: command.idempotencyKey,
+      status:
+        execution.message === "SUPERVISOR_NOT_CONFIGURED"
+          ? "rejected"
+          : execution.outcome === "executed"
+            ? "executed"
+            : "failed",
+      message: execution.message,
+      completedAtUtc: new Date().toISOString(),
+      enforcementApplied: execution.enforcementApplied,
+    };
+    appendFhvCommandLedger(state.config.runRoot, {
+      recordedAtUtc: result.completedAtUtc,
+      command,
+      source,
+    });
+    writeFhvCommandResult(state.config.runRoot, result);
+
+    if (result.status === "executed" && isT4PreArm && manifest) {
+      writeFhvT4PauseArmedRecord(state.config.runRoot, {
+        schemaVersion: FHV_T4_DETERMINISTIC_PAUSE_SCHEMA_VERSION,
+        runId: manifest.runId,
+        organizationId: manifest.organizationId,
+        targetSha: manifest.targetSha,
+        fixtureId: "HTR_WP03_BENCHMARK",
+        deterministicPauseAtCycle: FHV_REHEARSAL_CHECKPOINT_CYCLE,
+        commandId: command.commandId,
+        idempotencyKey: command.idempotencyKey,
+        operatorId: command.operatorId,
+        armedAtUtc: result.completedAtUtc,
+      });
+    }
+
+    return result;
   } catch (error) {
     const message =
-      error instanceof FhvCampaignStateTransitionError
+      error instanceof FhvCampaignStateTransitionError ||
+      error instanceof FhvT4DeterministicPauseError
         ? error.message
         : "Campaign action not allowed";
     const result: FhvCommandResultV1 = {
@@ -393,38 +480,6 @@ export async function handleFhvObserverCommand(
     writeFhvCommandResult(state.config.runRoot, result);
     return result;
   }
-
-  const executor =
-    state.config.campaignControlExecutor ?? UNCONFIGURED_FHV_CAMPAIGN_CONTROL_EXECUTOR;
-  const execution = await executor.execute({
-    action: command.action,
-    runId: state.config.runId,
-    organizationId: state.config.organizationId,
-    operatorId: command.operatorId,
-    reason: command.reason,
-  });
-
-  const result: FhvCommandResultV1 = {
-    schemaVersion: "fhv-command-result/v1",
-    commandId: command.commandId,
-    idempotencyKey: command.idempotencyKey,
-    status:
-      execution.message === "SUPERVISOR_NOT_CONFIGURED"
-        ? "rejected"
-        : execution.outcome === "executed"
-          ? "executed"
-          : "failed",
-    message: execution.message,
-    completedAtUtc: new Date().toISOString(),
-    enforcementApplied: execution.enforcementApplied,
-  };
-  appendFhvCommandLedger(state.config.runRoot, {
-    recordedAtUtc: result.completedAtUtc,
-    command,
-    source,
-  });
-  writeFhvCommandResult(state.config.runRoot, result);
-  return result;
 }
 
 export function buildFhvObserverStatusSnapshot(state: FhvObserverState) {

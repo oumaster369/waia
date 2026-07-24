@@ -75,7 +75,9 @@ import {
 } from "@/lib/trader/observability/fhv-rehearsal-economic-frontier";
 import { writeFhvResumeRuntimeProof } from "@/lib/trader/observability/fhv-resume-runtime-proof";
 
-export const FHV_REHEARSAL_CHECKPOINT_CYCLE = 40;
+import { FHV_REHEARSAL_CHECKPOINT_CYCLE } from "@/lib/trader/observability/fhv-observability.constants";
+import { shouldFhvT4PauseAtCycle } from "@/lib/trader/observability/fhv-t4-deterministic-pause";
+export { FHV_REHEARSAL_CHECKPOINT_CYCLE };
 export const FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES = 45;
 export const FHV_REHEARSAL_RUNTIME_MAX_SEC = 300;
 const BENCHMARK_STRATEGY_VERSION = "0.1.0";
@@ -543,7 +545,13 @@ async function runCampaignWithPauseSupport(input: {
         cyclesProcessed,
       });
     },
-    shouldPauseAfterCycle: () => isFhvPauseAtCheckpointRequested(input.runRoot),
+    shouldPauseAfterCycle: (cyclesProcessed) =>
+      shouldFhvT4PauseAtCycle({
+        runRoot: input.runRoot,
+        manifest: input.manifest,
+        cyclesProcessed,
+        pauseRequested: isFhvPauseAtCheckpointRequested(input.runRoot),
+      }),
   });
 
   if (segment.stoppedEarly) {
