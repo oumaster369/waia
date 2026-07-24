@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import { readFhvCommandLedgerEntries } from "@/lib/trader/observability/fhv-command-ledger";
 import { readFhvRehearsalManifest } from "@/lib/trader/observability/fhv-rehearsal-launcher";
@@ -14,14 +15,18 @@ import {
   FHV_T4_CAMPAIGN_RUNTIME_FILENAME,
   readFhvT4CampaignRuntimeProof,
 } from "@/lib/trader/observability/fhv-t4-closure-verifiers";
-
 import {
+  assertFhvT4CampaignProcessUnchanged,
   assertFhvT4ObserverRestartProven,
   type FhvT4ObserverSystemdIdentityV1,
 } from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
 
-export const FHV_T4_CONTINUITY_SNAPSHOT_SCHEMA_VERSION = "fhv-t4-continuity-snapshot/v2" as const;
+export const FHV_T4_CONTINUITY_SNAPSHOT_SCHEMA_VERSION = "fhv-t4-continuity-snapshot/v3" as const;
 export const FHV_T4_CONTINUITY_VERIFICATION_PASS = "FHV_T4_CONTINUITY_VERIFICATION_PASS" as const;
+export const FHV_T4_CONTINUITY_VERIFICATION_PROOF_SCHEMA_VERSION =
+  "fhv-t4-continuity-verification-proof/v1" as const;
+export const FHV_T4_CONTINUITY_VERIFICATION_PROOF_FILENAME =
+  "fhv-t4-continuity-verification-proof.v1.json" as const;
 
 export type FhvT4ContinuityCapturePhase = "before_disconnect" | "after_reconnect";
 
@@ -42,9 +47,23 @@ export type FhvT4ContinuitySnapshotV1 = Readonly<{
   organizationId: string;
   targetSha: string;
   capturePhase: FhvT4ContinuityCapturePhase;
-  operatorEvent?: "SSH_DISCONNECT" | "SSH_RECONNECT";
+  /** Narrative metadata only; never machine proof. */
+  operatorNarrativeEvent?: "SSH_DISCONNECT" | "SSH_RECONNECT";
   observerSystemdIdentity: FhvT4ObserverSystemdIdentityV1;
+  campaignSystemdIdentity: FhvT4ObserverSystemdIdentityV1;
   digests: Readonly<Record<FhvT4ContinuityDigestKey, string>>;
+  contentDigest: string;
+}>;
+
+export type FhvT4ContinuityVerificationProofV1 = Readonly<{
+  schemaVersion: typeof FHV_T4_CONTINUITY_VERIFICATION_PROOF_SCHEMA_VERSION;
+  runId: string;
+  organizationId: string;
+  targetSha: string;
+  beforeDigest: string;
+  afterDigest: string;
+  classification: typeof FHV_T4_CONTINUITY_VERIFICATION_PASS;
+  capturedAtUtc: string;
   contentDigest: string;
 }>;
 
@@ -128,6 +147,10 @@ function digestCampaignRuntimeProof(runRoot: string): string {
   return computePayloadDigest(proof);
 }
 
+export function resolveFhvT4ContinuityVerificationProofPath(runRoot: string): string {
+  return join(runRoot, "control", FHV_T4_CONTINUITY_VERIFICATION_PROOF_FILENAME);
+}
+
 export function captureFhvT4ContinuitySnapshot(input: {
   runRoot: string;
   repoRoot: string;
@@ -136,7 +159,8 @@ export function captureFhvT4ContinuitySnapshot(input: {
   targetSha: string;
   capturePhase: FhvT4ContinuityCapturePhase;
   observerSystemdIdentity: FhvT4ObserverSystemdIdentityV1;
-  operatorEvent?: "SSH_DISCONNECT" | "SSH_RECONNECT";
+  campaignSystemdIdentity: FhvT4ObserverSystemdIdentityV1;
+  operatorNarrativeEvent?: "SSH_DISCONNECT" | "SSH_RECONNECT";
 }): FhvT4ContinuitySnapshotV1 {
   const manifest = readFhvRehearsalManifest(input.runRoot);
   if (manifest.runId !== input.runId || manifest.organizationId !== input.organizationId) {
@@ -149,6 +173,18 @@ export function captureFhvT4ContinuitySnapshot(input: {
     throw new FhvT4ContinuityCaptureError(
       "FHV_T4_CONTINUITY_TARGET_SHA_MISMATCH",
       "Manifest targetSha mismatch.",
+    );
+  }
+  if (!input.campaignSystemdIdentity.unitName.includes("campaign")) {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_CAMPAIGN_UNIT_INVALID",
+      "campaignSystemdIdentity.unitName must identify the campaign unit.",
+    );
+  }
+  if (!input.observerSystemdIdentity.unitName.includes("observer")) {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_OBSERVER_UNIT_INVALID",
+      "observerSystemdIdentity.unitName must identify the observer unit.",
     );
   }
 
@@ -170,19 +206,6 @@ export function captureFhvT4ContinuitySnapshot(input: {
     requireFile(path, code);
   }
 
-  if (input.capturePhase === "before_disconnect" && input.operatorEvent !== "SSH_DISCONNECT") {
-    throw new FhvT4ContinuityCaptureError(
-      "FHV_T4_CONTINUITY_BEFORE_EVENT_REQUIRED",
-      "before_disconnect capture requires operatorEvent=SSH_DISCONNECT.",
-    );
-  }
-  if (input.capturePhase === "after_reconnect" && input.operatorEvent !== "SSH_RECONNECT") {
-    throw new FhvT4ContinuityCaptureError(
-      "FHV_T4_CONTINUITY_AFTER_EVENT_REQUIRED",
-      "after_reconnect capture requires operatorEvent=SSH_RECONNECT.",
-    );
-  }
-
   const digests: Record<FhvT4ContinuityDigestKey, string> = {
     manifest: sha256File(manifestPath),
     terminal: sha256File(terminalPath),
@@ -201,8 +224,11 @@ export function captureFhvT4ContinuitySnapshot(input: {
     organizationId: input.organizationId,
     targetSha: input.targetSha,
     capturePhase: input.capturePhase,
-    ...(input.operatorEvent ? { operatorEvent: input.operatorEvent } : {}),
+    ...(input.operatorNarrativeEvent
+      ? { operatorNarrativeEvent: input.operatorNarrativeEvent }
+      : {}),
     observerSystemdIdentity: input.observerSystemdIdentity,
+    campaignSystemdIdentity: input.campaignSystemdIdentity,
     digests,
   };
 
@@ -268,6 +294,10 @@ export function verifyFhvT4ContinuitySnapshots(input: {
     before: input.before.observerSystemdIdentity,
     after: input.after.observerSystemdIdentity,
   });
+  assertFhvT4CampaignProcessUnchanged({
+    before: input.before.campaignSystemdIdentity,
+    after: input.after.campaignSystemdIdentity,
+  });
 
   for (const key of REQUIRED_DIGEST_KEYS) {
     if (!input.before.digests[key] || !input.after.digests[key]) {
@@ -287,6 +317,81 @@ export function verifyFhvT4ContinuitySnapshots(input: {
   return { classification: FHV_T4_CONTINUITY_VERIFICATION_PASS };
 }
 
+export function writeFhvT4ContinuityVerificationProofAtomic(input: {
+  runRoot: string;
+  before: FhvT4ContinuitySnapshotV1;
+  after: FhvT4ContinuitySnapshotV1;
+}): FhvT4ContinuityVerificationProofV1 {
+  const verified = verifyFhvT4ContinuitySnapshots({ before: input.before, after: input.after });
+  const withoutDigest = {
+    schemaVersion: FHV_T4_CONTINUITY_VERIFICATION_PROOF_SCHEMA_VERSION,
+    runId: input.before.runId,
+    organizationId: input.before.organizationId,
+    targetSha: input.before.targetSha,
+    beforeDigest: input.before.contentDigest,
+    afterDigest: input.after.contentDigest,
+    classification: verified.classification,
+    capturedAtUtc: new Date().toISOString(),
+  };
+  const proof: FhvT4ContinuityVerificationProofV1 = {
+    ...withoutDigest,
+    contentDigest: computePayloadDigest(withoutDigest),
+  };
+  writeFileAtomic(
+    resolveFhvT4ContinuityVerificationProofPath(input.runRoot),
+    `${JSON.stringify(proof, null, 2)}\n`,
+  );
+  return proof;
+}
+
+export function readFhvT4ContinuityVerificationProof(
+  runRoot: string,
+): FhvT4ContinuityVerificationProofV1 | null {
+  const path = resolveFhvT4ContinuityVerificationProofPath(runRoot);
+  if (!existsSync(path)) {
+    return null;
+  }
+  return JSON.parse(readFileSync(path, "utf8")) as FhvT4ContinuityVerificationProofV1;
+}
+
+export function verifyFhvT4ContinuityVerificationProofArtifact(input: {
+  runRoot: string;
+  targetSha: string;
+  runId: string;
+  organizationId: string;
+  beforeDigest: string;
+  afterDigest: string;
+}): FhvT4ContinuityVerificationProofV1 {
+  const proof = readFhvT4ContinuityVerificationProof(input.runRoot);
+  if (!proof) {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_VERIFICATION_PROOF_MISSING",
+      "Continuity verification proof is required.",
+    );
+  }
+  const { contentDigest, ...withoutDigest } = proof;
+  if (computePayloadDigest(withoutDigest) !== contentDigest) {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_VERIFICATION_PROOF_DIGEST_MISMATCH",
+      "Continuity verification proof contentDigest mismatch.",
+    );
+  }
+  if (
+    proof.runId !== input.runId ||
+    proof.organizationId !== input.organizationId ||
+    proof.targetSha !== input.targetSha ||
+    proof.beforeDigest !== input.beforeDigest ||
+    proof.afterDigest !== input.afterDigest ||
+    proof.classification !== FHV_T4_CONTINUITY_VERIFICATION_PASS
+  ) {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_VERIFICATION_PROOF_IDENTITY_MISMATCH",
+      "Continuity verification proof identity mismatch.",
+    );
+  }
+  return proof;
+}
+
 export function parseFhvT4ContinuitySnapshot(raw: unknown): FhvT4ContinuitySnapshotV1 {
   if (typeof raw !== "object" || raw === null) {
     throw new FhvT4ContinuityCaptureError(
@@ -299,6 +404,12 @@ export function parseFhvT4ContinuitySnapshot(raw: unknown): FhvT4ContinuitySnaps
     throw new FhvT4ContinuityCaptureError(
       "FHV_T4_CONTINUITY_SCHEMA_MISMATCH",
       "Snapshot schemaVersion mismatch.",
+    );
+  }
+  if (!snapshot.campaignSystemdIdentity) {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_CAMPAIGN_IDENTITY_MISSING",
+      "campaignSystemdIdentity is required.",
     );
   }
   return snapshot;

@@ -73,12 +73,19 @@ if docker.returncode == 0:
             "running": running == "true",
         }
 
+boot_id = None
+try:
+    boot_id = open("/proc/sys/kernel/random/boot_id", "r", encoding="utf-8").read().strip()
+except OSError:
+    boot_id = None
+
 payload = {
     "active": {campaign: active_state(campaign), observer: active_state(observer)},
     "enabled": {campaign: enabled_state(campaign), observer: enabled_state(observer)},
     "unitFiles": {campaign: unit_exists(campaign), observer: unit_exists(observer)},
     "processes": processes,
     "legacy": legacy,
+    "hostBootId": boot_id,
 }
 print(json.dumps(payload, indent=2))
 PY

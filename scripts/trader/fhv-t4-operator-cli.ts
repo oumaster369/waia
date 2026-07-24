@@ -112,15 +112,19 @@ export function resolveFhvT4OperatorCliConfig(
   argv: readonly string[] = process.argv.slice(2),
 ): FhvT4OperatorCliConfig {
   const subcommand = parseFhvT4OperatorSubcommand(argv);
+  if (argv.includes("--command-secret") || argv.includes("--tunnel-secret")) {
+    throw new FhvT4OperatorCliError(
+      "FHV_T4_CLI_SECRET_ARGV_FORBIDDEN",
+      "Secrets must not be supplied via argv; use EnvironmentFile/environment only.",
+    );
+  }
   const runRoot = parseFlag(argv, "--run-root") ?? env.FHV_RUN_ROOT?.trim() ?? "";
   const runId = parseFlag(argv, "--run-id") ?? env.FHV_RUN_ID?.trim() ?? "";
   const organizationId =
     parseFlag(argv, "--organization-id") ?? env.FHV_ORGANIZATION_ID?.trim() ?? "";
   const targetSha = parseFlag(argv, "--target-sha") ?? env.FHV_TARGET_SHA?.trim() ?? "";
-  const commandSecret =
-    parseFlag(argv, "--command-secret") ?? env.FHV_OPERATOR_COMMAND_SECRET?.trim() ?? "";
-  const observerTunnelSecret =
-    parseFlag(argv, "--tunnel-secret") ?? env.FHV_OBSERVER_TUNNEL_SECRET?.trim() ?? "";
+  const commandSecret = env.FHV_OPERATOR_COMMAND_SECRET?.trim() ?? "";
+  const observerTunnelSecret = env.FHV_OBSERVER_TUNNEL_SECRET?.trim() ?? "";
   const operatorId =
     parseFlag(argv, "--operator-id") ?? env.FHV_OPERATOR_ID?.trim() ?? "t4-operator";
   const observerHost =

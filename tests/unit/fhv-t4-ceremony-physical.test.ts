@@ -103,12 +103,17 @@ describe("fhv-t4 physically consistent ceremony proofs (DEE-436)", () => {
       serviceUser: "fhv",
       workingDirectory: "/opt/waia",
       environmentFile: "/etc/waia/fhv.env",
+      unitUser: "fhv",
+      unitWorkingDirectory: "/opt/waia",
+      unitEnvironmentFile: "/etc/waia/fhv.env",
       renderedUnitDigests: deployment.installedDigests,
       installedUnitDigests: deployment.installedDigests,
       deploymentRecordDigest: computePayloadDigest(record),
       legacyContainerName: "ai-trader-execution-host",
       legacyContainerImage: "waia-execution-host:bp6",
       legacyContainerRunning: true,
+      hostBootId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      hostProbeProofDigest: "c".repeat(64),
       capturedAtUtc: new Date().toISOString(),
     });
 
@@ -187,6 +192,9 @@ describe("fhv-t4 physically consistent ceremony proofs (DEE-436)", () => {
       serviceUser: "fhv",
       workingDirectory: "/opt/waia",
       environmentFile: "/etc/waia/fhv.env",
+      unitUser: "fhv",
+      unitWorkingDirectory: "/opt/waia",
+      unitEnvironmentFile: "/etc/waia/fhv.env",
       renderedUnitDigests: {
         [FHV_SYSTEMD_CAMPAIGN_UNIT]: "a".repeat(64),
         [FHV_SYSTEMD_OBSERVER_UNIT]: "b".repeat(64),
@@ -199,6 +207,8 @@ describe("fhv-t4 physically consistent ceremony proofs (DEE-436)", () => {
       legacyContainerName: "ai-trader-execution-host",
       legacyContainerImage: "waia-execution-host:bp6",
       legacyContainerRunning: true,
+      hostBootId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      hostProbeProofDigest: "c".repeat(64),
       capturedAtUtc: new Date(Date.now() + 5000).toISOString(),
     });
     writeFhvT4RollbackProofAtomic(runDir, {
@@ -260,6 +270,9 @@ describe("fhv-t4 physically consistent ceremony proofs (DEE-436)", () => {
         sealDestination: join(root, "missing-seal"),
         continuityBeforePath: join(runDir, "control/continuity-before.json"),
         continuityAfterPath: join(runDir, "control/continuity-after.json"),
+        serviceUser: "fhv",
+        workingDirectory: "/opt/waia",
+        environmentFile: "/etc/waia/fhv.env",
       }),
     ).toThrow();
   });

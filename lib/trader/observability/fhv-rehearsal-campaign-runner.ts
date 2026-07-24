@@ -19,6 +19,7 @@ import {
   resetFullHistoryRescanCount,
 } from "@/lib/trader/backtest/replay-runtime-metrics";
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
+import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import { maybeHoldFhvCrossProcessPauseTestBarrier } from "@/lib/trader/observability/fhv-rehearsal-pause-test-barrier";
 import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-sink";
 import {
@@ -78,6 +79,7 @@ import {
   ensureFhvT4CampaignRuntimeStarted,
   finalizeFhvT4CampaignRuntimeProof,
   readFhvT4CampaignRuntimeStart,
+  resolveFhvT4SharedMonotonicDeadline,
 } from "@/lib/trader/observability/fhv-t4-closure-verifiers";
 import { readFhvT4HostMonotonicSample } from "@/lib/trader/observability/fhv-t4-host-monotonic-clock";
 
@@ -108,9 +110,27 @@ export type FhvRehearsalCampaignResult = Readonly<{
   classification: "REHEARSAL_OK" | "REHEARSAL_FAILED" | "REHEARSAL_PAUSED" | "REHEARSAL_TIMEOUT";
 }>;
 
-export type FhvRehearsalMonotonicDeadline = Readonly<{
+export type FhvT4HostMonotonicDeadline = Readonly<{
+  kind: "t4-host-monotonic";
+  hostBootId: string;
+  startedMonotonicNs: string;
+  deadlineMonotonicNs: string;
+  maximumRuntimeMs: number;
+  releaseSha: string;
+  runId: string;
+  organizationId: string;
+  fixtureId: "HTR_WP03_BENCHMARK";
+  repoRoot: string;
+}>;
+
+export type FhvRehearsalWallClockDeadline = Readonly<{
+  kind?: "wall-clock";
   deadlineMs: number;
 }>;
+
+export type FhvRehearsalMonotonicDeadline =
+  | FhvRehearsalWallClockDeadline
+  | FhvT4HostMonotonicDeadline;
 
 export class FhvRehearsalCampaignError extends Error {
   constructor(
@@ -125,15 +145,50 @@ export class FhvRehearsalCampaignError extends Error {
 export function createFhvRehearsalMonotonicDeadline(
   maxRuntimeMs: number,
   startedAtMs: number = Date.now(),
-): FhvRehearsalMonotonicDeadline {
-  return { deadlineMs: startedAtMs + maxRuntimeMs };
+): FhvRehearsalWallClockDeadline {
+  return { kind: "wall-clock", deadlineMs: startedAtMs + maxRuntimeMs };
 }
 
 function resolveCampaignRepoRoot(): string {
   return process.env.FHV_REPO_ROOT?.trim() || process.cwd();
 }
 
-function prepareT4DeterministicRuntimeDeadline(input: {
+function buildT4HostMonotonicDeadlineFromStart(input: {
+  runRoot: string;
+  start: NonNullable<ReturnType<typeof readFhvT4CampaignRuntimeStart>>;
+  repoRoot: string;
+  maxRuntimeMs: number;
+}): FhvT4HostMonotonicDeadline {
+  const resolved = resolveFhvT4SharedMonotonicDeadline(
+    input.runRoot,
+    input.repoRoot,
+    input.maxRuntimeMs,
+  );
+  if (
+    resolved.hostBootId !== input.start.hostBootId ||
+    resolved.startedMonotonicNs.toString() !== input.start.startedMonotonicNs
+  ) {
+    throw new FhvRehearsalCampaignError(
+      "FHV_T4_CAMPAIGN_RUNTIME_START_IDENTITY_MISMATCH",
+      "Shared monotonic deadline diverged from start marker.",
+    );
+  }
+  return {
+    kind: "t4-host-monotonic",
+    hostBootId: input.start.hostBootId,
+    startedMonotonicNs: input.start.startedMonotonicNs,
+    deadlineMonotonicNs: resolved.deadlineMonotonicNs.toString(),
+    maximumRuntimeMs: input.maxRuntimeMs,
+    releaseSha: input.start.targetSha,
+    runId: input.start.runId,
+    organizationId: input.start.organizationId,
+    fixtureId: "HTR_WP03_BENCHMARK",
+    repoRoot: input.repoRoot,
+  };
+}
+
+/** Resolves the immutable T4A host-monotonic deadline for initial and resumed paths. */
+export function prepareT4DeterministicRuntimeDeadline(input: {
   runRoot: string;
   manifest: FhvRehearsalLaunchConfigV1;
   runId: string;
@@ -148,22 +203,76 @@ function prepareT4DeterministicRuntimeDeadline(input: {
       input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs)
     );
   }
-  if (!readFhvT4CampaignRuntimeStart(input.runRoot)) {
-    const sample = readFhvT4HostMonotonicSample(repoRoot);
-    ensureFhvT4CampaignRuntimeStarted(input.runRoot, {
-      runId: input.runId,
-      organizationId: input.organizationId,
-      targetSha: input.targetSha,
-      fixtureId: "HTR_WP03_BENCHMARK",
-      hostBootId: sample.bootId,
-      startedMonotonicNs: sample.monotonicNs,
-      repoRoot,
-    });
-    return createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
+  if (input.monotonicDeadline && input.monotonicDeadline.kind === "t4-host-monotonic") {
+    return input.monotonicDeadline;
   }
-  const start = readFhvT4CampaignRuntimeStart(input.runRoot);
-  const startedMs = start ? new Date(start.startedAtUtc).getTime() : Date.now();
-  return createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs, startedMs);
+
+  const existing = readFhvT4CampaignRuntimeStart(input.runRoot);
+  const resuming = isFhvResumeFromCheckpointRequested(input.runRoot);
+  if (resuming) {
+    if (!existing) {
+      throw new FhvRehearsalCampaignError(
+        "FHV_T4_CAMPAIGN_RUNTIME_START_MISSING_ON_RESUME",
+        "Resumed T4A campaign requires the original host-monotonic start marker.",
+      );
+    }
+    const { contentDigest, ...withoutDigest } = existing;
+    if (computePayloadDigest(withoutDigest) !== contentDigest) {
+      throw new FhvRehearsalCampaignError(
+        "FHV_T4_CAMPAIGN_RUNTIME_START_DIGEST_MISMATCH",
+        "Campaign runtime start digest mismatch on resume.",
+      );
+    }
+    if (
+      existing.runId !== input.runId ||
+      existing.organizationId !== input.organizationId ||
+      existing.targetSha !== input.targetSha
+    ) {
+      throw new FhvRehearsalCampaignError(
+        "FHV_T4_CAMPAIGN_RUNTIME_START_IDENTITY_MISMATCH",
+        "Campaign runtime start identity mismatch on resume.",
+      );
+    }
+    return buildT4HostMonotonicDeadlineFromStart({
+      runRoot: input.runRoot,
+      start: existing,
+      repoRoot,
+      maxRuntimeMs: input.manifest.maxRuntimeMs,
+    });
+  }
+
+  if (existing) {
+    const { contentDigest, ...withoutDigest } = existing;
+    if (computePayloadDigest(withoutDigest) !== contentDigest) {
+      throw new FhvRehearsalCampaignError(
+        "FHV_T4_CAMPAIGN_RUNTIME_START_DIGEST_MISMATCH",
+        "Campaign runtime start digest mismatch.",
+      );
+    }
+    return buildT4HostMonotonicDeadlineFromStart({
+      runRoot: input.runRoot,
+      start: existing,
+      repoRoot,
+      maxRuntimeMs: input.manifest.maxRuntimeMs,
+    });
+  }
+
+  const sample = readFhvT4HostMonotonicSample(repoRoot);
+  const start = ensureFhvT4CampaignRuntimeStarted(input.runRoot, {
+    runId: input.runId,
+    organizationId: input.organizationId,
+    targetSha: input.targetSha,
+    fixtureId: "HTR_WP03_BENCHMARK",
+    hostBootId: sample.bootId,
+    startedMonotonicNs: sample.monotonicNs,
+    repoRoot,
+  });
+  return buildT4HostMonotonicDeadlineFromStart({
+    runRoot: input.runRoot,
+    start,
+    repoRoot,
+    maxRuntimeMs: input.manifest.maxRuntimeMs,
+  });
 }
 
 function finalizeT4DeterministicRuntimeIfNeeded(
@@ -180,6 +289,22 @@ function finalizeT4DeterministicRuntimeIfNeeded(
 }
 
 export function assertFhvRehearsalWithinDeadline(deadline: FhvRehearsalMonotonicDeadline): void {
+  if (deadline.kind === "t4-host-monotonic") {
+    const sample = readFhvT4HostMonotonicSample(deadline.repoRoot);
+    if (sample.bootId !== deadline.hostBootId) {
+      throw new FhvRehearsalCampaignError(
+        "FHV_T4_HOST_MONOTONIC_BOOT_ID_CHANGED",
+        "Host boot ID changed; T4A campaign budget is invalid across reboot.",
+      );
+    }
+    if (BigInt(sample.monotonicNs) > BigInt(deadline.deadlineMonotonicNs)) {
+      throw new FhvRehearsalCampaignError(
+        "REHEARSAL_DEADLINE_EXCEEDED",
+        "Campaign exceeded the configured host-monotonic rehearsal runtime deadline.",
+      );
+    }
+    return;
+  }
   if (Date.now() > deadline.deadlineMs) {
     throw new FhvRehearsalCampaignError(
       "REHEARSAL_DEADLINE_EXCEEDED",

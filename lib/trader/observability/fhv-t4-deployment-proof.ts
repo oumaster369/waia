@@ -16,7 +16,7 @@ import {
   FHV_SYSTEMD_OBSERVER_UNIT,
 } from "@/lib/trader/observability/fhv-systemd-unit-config";
 
-export const FHV_T4_DEPLOYMENT_PROOF_SCHEMA_VERSION = "fhv-t4-deployment-proof/v1" as const;
+export const FHV_T4_DEPLOYMENT_PROOF_SCHEMA_VERSION = "fhv-t4-deployment-proof/v2" as const;
 export const FHV_T4_DEPLOYMENT_PROOF_FILENAME = "fhv-t4-deployment-proof.v1.json" as const;
 
 export type FhvT4DeploymentProofV1 = Readonly<{
@@ -29,12 +29,17 @@ export type FhvT4DeploymentProofV1 = Readonly<{
   serviceUser: string;
   workingDirectory: string;
   environmentFile: string;
+  unitUser: string;
+  unitWorkingDirectory: string;
+  unitEnvironmentFile: string;
   renderedUnitDigests: Readonly<Record<string, string>>;
   installedUnitDigests: Readonly<Record<string, string>>;
   deploymentRecordDigest: string;
   legacyContainerName: typeof FHV_SYSTEMD_LEGACY_CONTAINER_NAME;
   legacyContainerImage: typeof FHV_SYSTEMD_LEGACY_CONTAINER_IMAGE;
-  legacyContainerRunning: true;
+  legacyContainerRunning: boolean;
+  hostBootId: string | null;
+  hostProbeProofDigest: string;
   capturedAtUtc: string;
   contentDigest: string;
 }>;
@@ -57,6 +62,31 @@ export function writeFhvT4DeploymentProofAtomic(
   runRoot: string,
   input: Omit<FhvT4DeploymentProofV1, "schemaVersion" | "contentDigest">,
 ): FhvT4DeploymentProofV1 {
+  if (input.legacyContainerRunning !== true) {
+    throw new FhvT4DeploymentProofError(
+      "FHV_T4_DEPLOYMENT_PROOF_LEGACY_NOT_RUNNING",
+      "Deployment proof requires observed legacyContainerRunning=true.",
+    );
+  }
+  if (
+    input.legacyContainerName !== FHV_SYSTEMD_LEGACY_CONTAINER_NAME ||
+    input.legacyContainerImage !== FHV_SYSTEMD_LEGACY_CONTAINER_IMAGE
+  ) {
+    throw new FhvT4DeploymentProofError(
+      "FHV_T4_DEPLOYMENT_PROOF_LEGACY_IDENTITY_INVALID",
+      "Deployment proof legacy container identity invalid.",
+    );
+  }
+  if (
+    input.serviceUser !== input.unitUser ||
+    input.workingDirectory !== input.unitWorkingDirectory ||
+    input.environmentFile !== input.unitEnvironmentFile
+  ) {
+    throw new FhvT4DeploymentProofError(
+      "FHV_T4_DEPLOYMENT_PROOF_UNIT_FIELD_MISMATCH",
+      "Observed unit User/WorkingDirectory/EnvironmentFile must match expected values.",
+    );
+  }
   const withoutDigest = {
     schemaVersion: FHV_T4_DEPLOYMENT_PROOF_SCHEMA_VERSION,
     ...input,
@@ -83,6 +113,9 @@ export function verifyFhvT4DeploymentProofArtifact(input: {
   releaseTag: string;
   runId: string;
   organizationId: string;
+  serviceUser: string;
+  workingDirectory: string;
+  environmentFile: string;
 }): FhvT4DeploymentProofV1 {
   const proof = readFhvT4DeploymentProof(input.runRoot);
   if (!proof) {
@@ -107,6 +140,19 @@ export function verifyFhvT4DeploymentProofArtifact(input: {
     throw new FhvT4DeploymentProofError(
       "FHV_T4_DEPLOYMENT_PROOF_IDENTITY_MISMATCH",
       "Deployment proof identity mismatch.",
+    );
+  }
+  if (
+    proof.serviceUser !== input.serviceUser ||
+    proof.workingDirectory !== input.workingDirectory ||
+    proof.environmentFile !== input.environmentFile ||
+    proof.unitUser !== input.serviceUser ||
+    proof.unitWorkingDirectory !== input.workingDirectory ||
+    proof.unitEnvironmentFile !== input.environmentFile
+  ) {
+    throw new FhvT4DeploymentProofError(
+      "FHV_T4_DEPLOYMENT_PROOF_UNIT_REBIND_MISMATCH",
+      "Deployment proof User/WorkingDirectory/EnvironmentFile rebind failed.",
     );
   }
   for (const unit of [FHV_SYSTEMD_CAMPAIGN_UNIT, FHV_SYSTEMD_OBSERVER_UNIT]) {

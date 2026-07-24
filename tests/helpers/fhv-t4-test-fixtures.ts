@@ -55,10 +55,11 @@ export function fhvT4ObserverIdentity(input: {
   mainPid: number;
   activeEnterTimestampMonotonicUs?: string;
   bootId?: string;
+  unitName?: string;
 }): FhvT4ObserverSystemdIdentityV1 {
   return {
     schemaVersion: "fhv-t4-observer-systemd-identity/v1",
-    unitName: "waia-fhv-observer.service",
+    unitName: input.unitName ?? "waia-fhv-observer.service",
     bootId: input.bootId ?? FHV_T4_TEST_OBSERVER_BOOT_ID,
     invocationId: input.invocationId,
     mainPid: input.mainPid,
@@ -66,6 +67,21 @@ export function fhvT4ObserverIdentity(input: {
       input.activeEnterTimestampMonotonicUs ?? String(input.mainPid * 1_000_000),
     activeState: "active",
   };
+}
+
+export function fhvT4CampaignIdentity(input: {
+  invocationId?: string;
+  mainPid?: number;
+  activeEnterTimestampMonotonicUs?: string;
+  bootId?: string;
+}): FhvT4ObserverSystemdIdentityV1 {
+  return fhvT4ObserverIdentity({
+    unitName: "waia-fhv-campaign.service",
+    invocationId: input.invocationId ?? "cccccccccccccccccccccccccccccccc",
+    mainPid: input.mainPid ?? 4242,
+    activeEnterTimestampMonotonicUs: input.activeEnterTimestampMonotonicUs ?? "4242000000",
+    bootId: input.bootId ?? FHV_T4_TEST_OBSERVER_BOOT_ID,
+  });
 }
 
 export function writeFhvT4TestCampaignRuntimeStart(

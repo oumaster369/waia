@@ -110,16 +110,27 @@ Hermetic proofs: `tests/integration/fhv-cross-process-resume.test.ts`, `tests/in
 
 ## T4A continuity (disconnect / reconnect)
 
-During T4A, capture continuity digests **before** SSH disconnect and **after** reconnect (observer restart recorded on the after snapshot):
+During T4A, capture continuity snapshots **before** SSH disconnect and **after** reconnect. Machine proof is systemd identity for both `waia-fhv-observer.service` and `waia-fhv-campaign.service` (boot ID, InvocationID, MainPID, ActiveEnterTimestampMonotonic). Operator SSH disconnect/reconnect may be recorded as narrative metadata only — never as a substitute for machine evidence.
 
 ```bash
 corepack pnpm@10 trader:fhv:t4:capture-continuity-before
-# … Human disconnect / reconnect …
+# … Human disconnect / reconnect (narrative only) …
+# … observer-only restart (campaign must remain the same process identity) …
 corepack pnpm@10 trader:fhv:t4:capture-continuity-after
 corepack pnpm@10 trader:fhv:t4:verify-continuity
 ```
 
-Success classification: `FHV_T4_CONTINUITY_VERIFICATION_PASS`. Ceremony requires `CONTINUITY_RESULT=PASS`. Full sequence: [`T4_OPERATOR_PACKET_V5.md`](./T4_OPERATOR_PACKET_V5.md) and [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](./FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md).
+Success classification: `FHV_T4_CONTINUITY_VERIFICATION_PASS` plus immutable `fhv-t4-continuity-verification-proof.v1.json`. Ceremony requires `CONTINUITY_RESULT=PASS`. Full sequence: [`T4_OPERATOR_PACKET_V5.md`](./T4_OPERATOR_PACKET_V5.md) and [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](./FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md).
+
+## T4A release checkout identity
+
+Do **not** use `validate-fhv-release-identity.sh` as a Git checkout verifier (it is a Markdown contract linter). Use:
+
+- `scripts/ops/fhv-release-checkout-identity.sh` for HEAD + release-tag peel + clean tracked tree
+- `scripts/ops/execution-server-preflight.sh` for exact HEAD SHA guard
+- `trader:fhv:t4:record-checkout-identity` (service user) for the immutable POST_AUTHORIZED proof
+
+Clone from the declared Human binding `FHV_ORIGIN_URL` (non-empty, no embedded credentials).
 
 ## Related documents
 

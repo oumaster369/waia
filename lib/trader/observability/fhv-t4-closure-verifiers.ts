@@ -62,6 +62,7 @@ import {
 import {
   parseFhvT4ContinuitySnapshot,
   verifyFhvT4ContinuitySnapshots,
+  verifyFhvT4ContinuityVerificationProofArtifact,
 } from "@/lib/trader/observability/fhv-t4-continuity-capture";
 import {
   verifyFhvT4DeploymentProofArtifact,
@@ -72,6 +73,12 @@ import {
   FHV_T4_CAMPAIGN_RUNTIME_MAX_BUDGET_MS,
   readFhvT4HostMonotonicSample,
 } from "@/lib/trader/observability/fhv-t4-host-monotonic-clock";
+import { verifyFhvT4HostProbeProofArtifact } from "@/lib/trader/observability/fhv-t4-host-probe-proof";
+import {
+  verifyFhvT4FinalVerificationProofArtifact,
+  verifyFhvT4PausedVerificationProofArtifact,
+} from "@/lib/trader/observability/fhv-t4-paused-final-proofs";
+import { verifyFhvT4CheckoutIdentityProofArtifact } from "@/lib/trader/observability/fhv-t4-release-checkout-identity";
 import {
   verifyFhvT4RollbackProofArtifact,
   type FhvT4RollbackProofV1,
@@ -1044,27 +1051,72 @@ export function verifyFhvT4Ceremony(input: {
   sealDestination: string;
   continuityBeforePath: string;
   continuityAfterPath: string;
+  serviceUser: string;
+  workingDirectory: string;
+  environmentFile: string;
 }): {
   classification: typeof FHV_T4_CEREMONY_VERIFICATION_PASS;
   passFields: FhvT4CeremonyPassFields;
   deploymentProof: FhvT4DeploymentProofV1;
   rollbackProof: FhvT4RollbackProofV1;
 } {
+  const releaseTag = input.identity.releaseTag ?? "";
+  verifyFhvT4CheckoutIdentityProofArtifact({
+    runRoot: input.identity.runRoot,
+    targetSha: input.identity.targetSha,
+    releaseTag,
+    runId: input.identity.runId,
+    organizationId: input.identity.organizationId,
+  });
+  const pausedProof = verifyFhvT4PausedVerificationProofArtifact({
+    runRoot: input.identity.runRoot,
+    targetSha: input.identity.targetSha,
+    releaseTag,
+    runId: input.identity.runId,
+    organizationId: input.identity.organizationId,
+  });
+  const finalProof = verifyFhvT4FinalVerificationProofArtifact({
+    runRoot: input.identity.runRoot,
+    targetSha: input.identity.targetSha,
+    releaseTag,
+    runId: input.identity.runId,
+    organizationId: input.identity.organizationId,
+  });
   verifyFhvT4FinalState(input.identity);
-  const proof = readFhvResumeRuntimeProof(input.identity.runRoot);
-  if (!proof || proof.fullHistoryRescanDelta !== 0) {
+  const resumeProof = readFhvResumeRuntimeProof(input.identity.runRoot);
+  if (!resumeProof || resumeProof.fullHistoryRescanDelta !== 0) {
     throw new FhvT4ClosureVerifierError(
       "FHV_T4_CEREMONY_RESCAN_INVALID",
       "Ceremony requires fullHistoryRescanDelta=0.",
     );
   }
+  const hostProbe = verifyFhvT4HostProbeProofArtifact({
+    runRoot: input.identity.runRoot,
+    targetSha: input.identity.targetSha,
+    runId: input.identity.runId,
+    organizationId: input.identity.organizationId,
+    requireLegacyRunning: true,
+  });
   const deploymentProof = verifyFhvT4DeploymentProofArtifact({
     runRoot: input.identity.runRoot,
     targetSha: input.identity.targetSha,
-    releaseTag: input.identity.releaseTag ?? "",
+    releaseTag,
     runId: input.identity.runId,
     organizationId: input.identity.organizationId,
+    serviceUser: input.serviceUser,
+    workingDirectory: input.workingDirectory,
+    environmentFile: input.environmentFile,
   });
+  if (
+    deploymentProof.hostProbeProofDigest !== hostProbe.contentDigest ||
+    deploymentProof.legacyContainerRunning !== true ||
+    hostProbe.legacy.running !== true
+  ) {
+    throw new FhvT4ClosureVerifierError(
+      "FHV_T4_CEREMONY_LEGACY_CONTAINER_INVALID",
+      "Ceremony legacy-container/host-probe proof mismatch.",
+    );
+  }
   const rollbackProof = verifyFhvT4RollbackProofArtifact({
     runRoot: input.identity.runRoot,
     targetSha: input.identity.targetSha,
@@ -1078,6 +1130,7 @@ export function verifyFhvT4Ceremony(input: {
     runId: input.identity.runId,
     organizationId: input.identity.organizationId,
     releaseTag: input.identity.releaseTag,
+    serviceUser: input.serviceUser,
   });
   if (seal.classification !== FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS) {
     throw new FhvT4ClosureVerifierError(
@@ -1092,14 +1145,32 @@ export function verifyFhvT4Ceremony(input: {
     JSON.parse(readFileSync(input.continuityAfterPath, "utf8")) as unknown,
   );
   verifyFhvT4ContinuitySnapshots({ before, after });
+  verifyFhvT4ContinuityVerificationProofArtifact({
+    runRoot: input.identity.runRoot,
+    targetSha: input.identity.targetSha,
+    runId: input.identity.runId,
+    organizationId: input.identity.organizationId,
+    beforeDigest: before.contentDigest,
+    afterDigest: after.contentDigest,
+  });
+  const manifest = readFhvRehearsalManifest(input.identity.runRoot);
+  assertAlertPolicyDigest(input.identity.runRoot, manifest.alertPolicyDigest);
 
   const passFields: FhvT4CeremonyPassFields = {
     T4A_RESULT: "PASS",
     GATE8_RESULT: "PASS",
-    PAUSE_RESULT: "REHEARSAL_PAUSED_AT_CYCLE_40",
-    RESUME_RESULT: "REHEARSAL_OK",
+    PAUSE_RESULT:
+      pausedProof.actualPauseCycle === 40
+        ? "REHEARSAL_PAUSED_AT_CYCLE_40"
+        : (() => {
+            throw new FhvT4ClosureVerifierError(
+              "FHV_T4_CEREMONY_PAUSE_RESULT_INVALID",
+              "Paused proof cycle is not 40.",
+            );
+          })(),
+    RESUME_RESULT: finalProof.finalTerminal,
     FULL_HISTORY_RESCAN_DELTA: "0",
-    CANONICAL_RUN_CHAIN_RESULT: "PASS",
+    CANONICAL_RUN_CHAIN_RESULT: finalProof.canonicalRunChainResult,
     DEPLOYMENT_RECORD_RESULT: "PASS",
     ALERT_POLICY_RESULT: "PASS",
     LEGACY_CONTAINER_RESULT: "PASS",

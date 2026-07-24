@@ -78,19 +78,19 @@ Both units run SHA guard (`execution-server-preflight.sh`) in `ExecStartPre`.
 
 ## Sequence (Human-operated T4A)
 
-1. **Resolve release identity:** after Human dev → main release merge, set `EXECUTION_SERVER_TARGET_SHA` to the exact new `main` release merge SHA. Verify tag peel and GitHub Release identify the same full SHA. Fail closed if unresolved.
+1. **Resolve release identity:** after Human dev → main release merge, set `EXECUTION_SERVER_TARGET_SHA` to the exact new `main` release merge SHA. Verify tag peel and GitHub Release identify the same full SHA. Fail closed if unresolved. On the host, verify with `scripts/ops/fhv-release-checkout-identity.sh` (HEAD + tag peel + clean tracked tree) and `scripts/ops/execution-server-preflight.sh` (exact HEAD). Do **not** treat `validate-fhv-release-identity.sh` as a Git checkout verifier.
 2. **Legacy preservation (when contract-required):** if an old checkout exists and relocation is mandatory for the chosen fresh distinct path, inventory + timestamped move once; never delete untracked legacy files. If the new checkout path is already distinct and relocation is not mandatory, leave the historical checkout untouched and record that decision.
-3. Provision **fresh clean checkout** at `"$EXECUTION_SERVER_TARGET_SHA"`; verify clean tree + SHA guard PASS.
+3. Provision **fresh clean checkout** from `${FHV_ORIGIN_URL}` at `"$EXECUTION_SERVER_TARGET_SHA"`; verify clean tracked tree + SHA/tag identity PASS; then record immutable checkout-identity proof under the run-root as the service user.
 4. Prepare rehearsal manifest with `--t4-deterministic-pause`; derive `FHV_RUN_DIR` from artifact root + run ID; bind `runDir`/`manifestPath` from CLI output.
 5. Render and install qualified **systemd** units only (`waia-fhv-campaign`, `waia-fhv-observer`) with `--confirm`. Prove installed digests equal rendered digests via `trader:fhv:t4:verify-deployment`.
 6. Pin `fhv-alert-policy/v1` digest from rehearsal manifest.
-7. Start observer, then campaign under **one shared 300000ms** monotonic deadline.
+7. Start observer, then campaign under **one shared 300000ms host-monotonic (CLOCK_BOOTTIME) deadline** bound to an immutable start marker + host boot ID (`Date.now` / `startedAtUtc` are informational only).
 8. Verify with released surfaces only:
    - Bounded `fhv-operator-status/v1` under 256 KiB
    - `trader:fhv:t4:verify-paused` after deterministic pause at cycle 40
    - Signed `RESUME_FROM_CHECKPOINT`
    - `trader:fhv:t4:verify-final` (canonical run-chain via `validateFhvCanonicalRunChainCompletion`, `fullHistoryRescanDelta===0`, `REHEARSAL_OK`)
-9. SSH disconnect → **observer restart** → `trader:fhv:t4:capture-continuity-before` before disconnect; after reconnect + observer restart run `trader:fhv:t4:capture-continuity-after`; `trader:fhv:t4:verify-continuity` must emit `FHV_T4_CONTINUITY_VERIFICATION_PASS`.
+9. Capture continuity-before (observer + campaign systemd identities) → Human SSH disconnect/reconnect narrative → **observer-only restart** → continuity-after → `trader:fhv:t4:verify-continuity` must emit `FHV_T4_CONTINUITY_VERIFICATION_PASS` and write the continuity-verification proof. Campaign InvocationID/MainPID/activation identity must remain unchanged.
 10. Seal evidence via `trader:fhv:t4:seal-evidence` then `trader:fhv:t4:verify-seal`.
 11. Rollback with preview proof then `--confirm`; `trader:fhv:t4:verify-rollback`.
 12. `trader:fhv:t4:verify-ceremony` for machine-derived T4A + Gate 8 fields (`T4A_RESULT=PASS`, `GATE8_RESULT=PASS`, `T4B_RESULT=NOT_EXECUTED_SEPARATE_GATE`).

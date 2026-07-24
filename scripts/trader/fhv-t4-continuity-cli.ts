@@ -8,10 +8,14 @@ import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic
 import {
   captureFhvT4ContinuitySnapshot,
   FhvT4ContinuityCaptureError,
-  verifyFhvT4ContinuitySnapshots,
   parseFhvT4ContinuitySnapshot,
+  writeFhvT4ContinuityVerificationProofAtomic,
 } from "@/lib/trader/observability/fhv-t4-continuity-capture";
-import { readFhvT4ObserverSystemdIdentity } from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
+import {
+  FHV_SYSTEMD_CAMPAIGN_UNIT,
+  FHV_SYSTEMD_OBSERVER_UNIT,
+} from "@/lib/trader/observability/fhv-systemd-unit-config";
+import { readFhvT4SystemdUnitIdentity } from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
 
 export type FhvT4ContinuitySubcommand = "capture-before" | "capture-after" | "verify";
 
@@ -97,32 +101,12 @@ export async function runFhvT4ContinuityCli(
   try {
     requireIdentity(config);
     switch (config.subcommand) {
-      case "capture-before": {
-        if (!config.outputPath) {
-          throw new FhvT4ContinuityCliError(
-            "FHV_T4_CONTINUITY_OUTPUT_REQUIRED",
-            "--output required for capture-before",
-          );
-        }
-        const snapshot = captureFhvT4ContinuitySnapshot({
-          runRoot: config.runRoot,
-          repoRoot: config.repoRoot,
-          runId: config.runId,
-          organizationId: config.organizationId,
-          targetSha: config.targetSha,
-          capturePhase: "before_disconnect",
-          operatorEvent: "SSH_DISCONNECT",
-          observerSystemdIdentity: readFhvT4ObserverSystemdIdentity(config.repoRoot),
-        });
-        writeFileAtomic(config.outputPath, `${JSON.stringify(snapshot, null, 2)}\n`);
-        lines.push(`classification=FHV_T4_CONTINUITY_CAPTURE_BEFORE_OK`);
-        return { exitCode: 0, lines, payload: snapshot };
-      }
+      case "capture-before":
       case "capture-after": {
         if (!config.outputPath) {
           throw new FhvT4ContinuityCliError(
             "FHV_T4_CONTINUITY_OUTPUT_REQUIRED",
-            "--output required for capture-after",
+            "--output required for continuity capture",
           );
         }
         const snapshot = captureFhvT4ContinuitySnapshot({
@@ -131,12 +115,25 @@ export async function runFhvT4ContinuityCli(
           runId: config.runId,
           organizationId: config.organizationId,
           targetSha: config.targetSha,
-          capturePhase: "after_reconnect",
-          operatorEvent: "SSH_RECONNECT",
-          observerSystemdIdentity: readFhvT4ObserverSystemdIdentity(config.repoRoot),
+          capturePhase:
+            config.subcommand === "capture-before" ? "before_disconnect" : "after_reconnect",
+          observerSystemdIdentity: readFhvT4SystemdUnitIdentity(
+            config.repoRoot,
+            FHV_SYSTEMD_OBSERVER_UNIT,
+          ),
+          campaignSystemdIdentity: readFhvT4SystemdUnitIdentity(
+            config.repoRoot,
+            FHV_SYSTEMD_CAMPAIGN_UNIT,
+          ),
         });
         writeFileAtomic(config.outputPath, `${JSON.stringify(snapshot, null, 2)}\n`);
-        lines.push(`classification=FHV_T4_CONTINUITY_CAPTURE_AFTER_OK`);
+        lines.push(
+          `classification=${
+            config.subcommand === "capture-before"
+              ? "FHV_T4_CONTINUITY_CAPTURE_BEFORE_OK"
+              : "FHV_T4_CONTINUITY_CAPTURE_AFTER_OK"
+          }`,
+        );
         return { exitCode: 0, lines, payload: snapshot };
       }
       case "verify": {
@@ -152,9 +149,13 @@ export async function runFhvT4ContinuityCli(
         const after = parseFhvT4ContinuitySnapshot(
           JSON.parse(readFileSync(config.afterPath, "utf8")) as unknown,
         );
-        const result = verifyFhvT4ContinuitySnapshots({ before, after });
-        lines.push(`classification=${result.classification}`);
-        return { exitCode: 0, lines, payload: result };
+        const proof = writeFhvT4ContinuityVerificationProofAtomic({
+          runRoot: config.runRoot,
+          before,
+          after,
+        });
+        lines.push(`classification=${proof.classification}`);
+        return { exitCode: 0, lines, payload: proof };
       }
       default:
         throw new FhvT4ContinuityCliError(
@@ -176,7 +177,7 @@ export async function runFhvT4ContinuityCli(
 async function main(): Promise<void> {
   const config = resolveFhvT4ContinuityCliConfig();
   const result = await runFhvT4ContinuityCli(config);
-  if (result.payload !== undefined) {
+  if (result.exitCode === 0 && result.payload !== undefined) {
     process.stdout.write(`${JSON.stringify(result.payload, null, 2)}\n`);
   }
   for (const line of result.lines) {

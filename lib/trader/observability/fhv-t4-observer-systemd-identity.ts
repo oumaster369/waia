@@ -111,14 +111,27 @@ export function readFhvT4ObserverSystemdIdentity(
   if (readerOverride) {
     return readerOverride(unitName);
   }
-  const injected = env.FHV_T4_OBSERVER_SYSTEMD_IDENTITY_JSON?.trim();
+  const injected =
+    (unitName.includes("campaign")
+      ? env.FHV_T4_CAMPAIGN_SYSTEMD_IDENTITY_JSON?.trim()
+      : env.FHV_T4_OBSERVER_SYSTEMD_IDENTITY_JSON?.trim()) ||
+    env.FHV_T4_SYSTEMD_IDENTITY_JSON?.trim();
   if (injected) {
-    return parseFhvT4ObserverSystemdIdentity(JSON.parse(injected));
+    const parsed = parseFhvT4ObserverSystemdIdentity(JSON.parse(injected));
+    if (parsed.unitName !== unitName) {
+      throw new FhvT4ObserverSystemdIdentityError(
+        "FHV_T4_SYSTEMD_IDENTITY_UNIT_MISMATCH",
+        `Injected systemd identity unit ${parsed.unitName} != ${unitName}`,
+      );
+    }
+    return parsed;
   }
   const script = join(repoRoot, "scripts/ops/fhv-t4-observer-systemd-identity-read.sh");
   const output = execFileSync("bash", [script, unitName], { encoding: "utf8" }).trim();
   return parseFhvT4ObserverSystemdIdentity(JSON.parse(output));
 }
+
+export const readFhvT4SystemdUnitIdentity = readFhvT4ObserverSystemdIdentity;
 
 export function assertFhvT4ObserverRestartProven(input: {
   before: FhvT4ObserverSystemdIdentityV1;
@@ -155,6 +168,50 @@ export function assertFhvT4ObserverRestartProven(input: {
     throw new FhvT4ObserverSystemdIdentityError(
       "FHV_T4_OBSERVER_RESTART_NOT_ACTIVE",
       "Observer must be active after restart.",
+    );
+  }
+}
+
+export function assertFhvT4CampaignProcessUnchanged(input: {
+  before: FhvT4ObserverSystemdIdentityV1;
+  after: FhvT4ObserverSystemdIdentityV1;
+}): void {
+  if (input.before.unitName !== input.after.unitName) {
+    throw new FhvT4ObserverSystemdIdentityError(
+      "FHV_T4_CAMPAIGN_CONTINUITY_UNIT_MISMATCH",
+      "Campaign unitName mismatch.",
+    );
+  }
+  if (input.before.bootId !== input.after.bootId) {
+    throw new FhvT4ObserverSystemdIdentityError(
+      "FHV_T4_CAMPAIGN_CONTINUITY_BOOT_ID_CHANGED",
+      "Host reboot invalidates campaign continuity proof.",
+    );
+  }
+  if (input.before.invocationId !== input.after.invocationId) {
+    throw new FhvT4ObserverSystemdIdentityError(
+      "FHV_T4_CAMPAIGN_CONTINUITY_INVOCATION_CHANGED",
+      "Campaign InvocationID must remain unchanged.",
+    );
+  }
+  if (input.before.mainPid !== input.after.mainPid) {
+    throw new FhvT4ObserverSystemdIdentityError(
+      "FHV_T4_CAMPAIGN_CONTINUITY_PID_CHANGED",
+      "Campaign MainPID must remain unchanged.",
+    );
+  }
+  if (
+    input.before.activeEnterTimestampMonotonicUs !== input.after.activeEnterTimestampMonotonicUs
+  ) {
+    throw new FhvT4ObserverSystemdIdentityError(
+      "FHV_T4_CAMPAIGN_CONTINUITY_ACTIVE_ENTER_CHANGED",
+      "Campaign activation identity must remain unchanged.",
+    );
+  }
+  if (input.after.activeState !== "active") {
+    throw new FhvT4ObserverSystemdIdentityError(
+      "FHV_T4_CAMPAIGN_CONTINUITY_NOT_ACTIVE",
+      "Campaign must remain active.",
     );
   }
 }

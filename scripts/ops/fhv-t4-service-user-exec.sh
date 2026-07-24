@@ -22,6 +22,8 @@ ALLOWLIST=(
   "trader:fhv:t4:capture-continuity-after"
   "trader:fhv:t4:verify-continuity"
   "trader:fhv:t4:build-evidence-inventory"
+  "trader:fhv:t4:ingest-host-probe"
+  "trader:fhv:t4:record-checkout-identity"
 )
 
 usage() {
@@ -34,6 +36,7 @@ Usage: fhv-t4-service-user-exec.sh \
 
 Runs: cd REPO_ROOT && corepack pnpm@10 <package-script> [args...]
 Secrets are sourced from EnvironmentFile inside the service-user shell only.
+Paths and arguments are passed via positional parameters (no shell interpolation).
 EOF
 }
 
@@ -51,6 +54,7 @@ done
 [[ -n "$SERVICE_USER" && -n "$ENVIRONMENT_FILE" && -n "$REPO_ROOT" ]] || { usage; exit 2; }
 [[ $# -ge 1 ]] || { usage; exit 2; }
 [[ -f "$ENVIRONMENT_FILE" ]] || { printf 'error: environment file missing\n' >&2; exit 2; }
+[[ -d "$REPO_ROOT" ]] || { printf 'error: repo-root is not a directory\n' >&2; exit 2; }
 
 SCRIPT="$1"
 shift
@@ -66,12 +70,50 @@ if [[ "$allowed" -ne 1 ]]; then
   exit 2
 fi
 
-# Never print EnvironmentFile contents; source inside service-user subshell only.
-runuser -u "$SERVICE_USER" -- bash -lc "
+# Reject secret-bearing argv flags before privilege transition.
+for arg in "$@"; do
+  case "$arg" in
+    --command-secret|--tunnel-secret)
+      printf 'error: secret flags are forbidden on argv\n' >&2
+      exit 2
+      ;;
+  esac
+done
+
+# Pass paths/script/args as positional parameters into a non-login bash.
+# No untrusted values are interpolated into the executable shell text.
+# Allowlist only non-secret machine-observation env vars from the parent shell.
+PASS_ENV=(
+  "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  "HOME=$(getent passwd "$SERVICE_USER" | cut -d: -f6)"
+  "USER=${SERVICE_USER}"
+  "LOGNAME=${SERVICE_USER}"
+  "LANG=${LANG:-C.UTF-8}"
+)
+for key in \
+  FHV_T4_HOST_PROBE_JSON \
+  FHV_T4_OBSERVER_SYSTEMD_IDENTITY_JSON \
+  FHV_T4_CAMPAIGN_SYSTEMD_IDENTITY_JSON \
+  FHV_T4_SYSTEMD_IDENTITY_JSON \
+  FHV_T4_HOST_MONOTONIC_JSON
+do
+  if [[ -n "${!key:-}" ]]; then
+    PASS_ENV+=("${key}=${!key}")
+  fi
+done
+
+runuser -u "$SERVICE_USER" -- \
+  env -i "${PASS_ENV[@]}" \
+  bash --noprofile --norc -c '
 set -euo pipefail
-cd \"${REPO_ROOT}\"
+REPO_ROOT="$1"
+ENVIRONMENT_FILE="$2"
+SCRIPT="$3"
+shift 3
+cd "$REPO_ROOT"
 set -a
-source \"${ENVIRONMENT_FILE}\"
+# shellcheck disable=SC1090
+source "$ENVIRONMENT_FILE"
 set +a
-exec corepack pnpm@10 \"${SCRIPT}\" \"\$@\"
-" bash "$@"
+exec corepack pnpm@10 "$SCRIPT" "$@"
+' bash "$REPO_ROOT" "$ENVIRONMENT_FILE" "$SCRIPT" "$@"
