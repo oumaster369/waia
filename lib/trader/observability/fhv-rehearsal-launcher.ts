@@ -7,6 +7,7 @@ import {
   HTR_WP03_BENCHMARK_FIXTURE_SHA256,
 } from "@/lib/trader/backtest/replay-benchmark-harness";
 import { computeFhvAlertPolicyDigest } from "@/lib/trader/observability/fhv-alert-policy-v1";
+import { FHV_REHEARSAL_CHECKPOINT_CYCLE } from "@/lib/trader/observability/fhv-observability.constants";
 
 export const FHV_REHEARSAL_MAX_RUNTIME_MS = 5 * 60 * 1000;
 
@@ -29,6 +30,8 @@ export type FhvRehearsalLaunchConfigV1 = Readonly<{
   artifactRoot: string;
   alertPolicyDigest: string;
   maxRuntimeMs: number;
+  t4DeterministicPause?: boolean;
+  deterministicPauseAtCycle?: number;
 }>;
 
 export class FhvRehearsalLaunchError extends Error {
@@ -102,6 +105,7 @@ export function buildFhvRehearsalLaunchConfig(input: {
   organizationId: string;
   artifactRoot: string;
   maxRuntimeMs?: number;
+  t4DeterministicPause?: boolean;
 }): FhvRehearsalLaunchConfigV1 {
   if (!FULL_SHA.test(input.targetSha)) {
     throw new FhvRehearsalLaunchError("INVALID_TARGET_SHA", "targetSha must be a full git SHA.");
@@ -127,6 +131,12 @@ export function buildFhvRehearsalLaunchConfig(input: {
     artifactRoot: input.artifactRoot,
     alertPolicyDigest: resolveFhvRehearsalAlertPolicyDigest(),
     maxRuntimeMs,
+    ...(input.t4DeterministicPause
+      ? {
+          t4DeterministicPause: true as const,
+          deterministicPauseAtCycle: FHV_REHEARSAL_CHECKPOINT_CYCLE,
+        }
+      : {}),
   };
 }
 
@@ -140,6 +150,8 @@ export function materializeFhvRehearsalManifest(config: FhvRehearsalLaunchConfig
   writeFileSync(manifestPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
   return { runDir, manifestPath };
 }
+
+const MANIFEST_OPTIONAL_FIELDS = ["t4DeterministicPause", "deterministicPauseAtCycle"] as const;
 
 const MANIFEST_REQUIRED_FIELDS = [
   "schemaVersion",
@@ -195,7 +207,7 @@ export function validateFhvRehearsalManifestAtRuntime(input: {
     }
   }
 
-  const allowedKeys = new Set<string>(MANIFEST_REQUIRED_FIELDS);
+  const allowedKeys = new Set<string>([...MANIFEST_REQUIRED_FIELDS, ...MANIFEST_OPTIONAL_FIELDS]);
   for (const key of Object.keys(parsed)) {
     if (!allowedKeys.has(key)) {
       throw new FhvRehearsalLaunchError(
@@ -293,6 +305,36 @@ export function validateFhvRehearsalManifestAtRuntime(input: {
   const fixture = FHV_REHEARSAL_ALLOWED_FIXTURES[fixtureId as FhvRehearsalFixtureId];
   rejectExternalDatasetPath(fixture.fixturePath, process.cwd());
 
+  const t4DeterministicPause = parsed.t4DeterministicPause === true;
+  const deterministicPauseAtCycle =
+    parsed.deterministicPauseAtCycle === undefined
+      ? undefined
+      : Number(parsed.deterministicPauseAtCycle);
+  if (t4DeterministicPause) {
+    if (deterministicPauseAtCycle !== FHV_REHEARSAL_CHECKPOINT_CYCLE) {
+      throw new FhvRehearsalLaunchError(
+        "MANIFEST_T4_PAUSE_CYCLE_INVALID",
+        `deterministicPauseAtCycle must be ${FHV_REHEARSAL_CHECKPOINT_CYCLE} when t4DeterministicPause is true.`,
+      );
+    }
+    if (fixtureId !== "HTR_WP03_BENCHMARK") {
+      throw new FhvRehearsalLaunchError(
+        "MANIFEST_T4_FIXTURE_INVALID",
+        "T4 deterministic pause requires HTR_WP03_BENCHMARK fixture.",
+      );
+    }
+  } else if (parsed.t4DeterministicPause !== undefined && parsed.t4DeterministicPause !== false) {
+    throw new FhvRehearsalLaunchError(
+      "MANIFEST_T4_FLAG_INVALID",
+      "t4DeterministicPause must be boolean.",
+    );
+  } else if (deterministicPauseAtCycle !== undefined) {
+    throw new FhvRehearsalLaunchError(
+      "MANIFEST_T4_PAUSE_CYCLE_WITHOUT_FLAG",
+      "deterministicPauseAtCycle requires t4DeterministicPause=true.",
+    );
+  }
+
   return {
     schemaVersion: "fhv-rehearsal-launch/v1",
     fixtureId: fixtureId as FhvRehearsalFixtureId,
@@ -302,6 +344,12 @@ export function validateFhvRehearsalManifestAtRuntime(input: {
     artifactRoot,
     alertPolicyDigest,
     maxRuntimeMs,
+    ...(t4DeterministicPause
+      ? {
+          t4DeterministicPause: true as const,
+          deterministicPauseAtCycle: FHV_REHEARSAL_CHECKPOINT_CYCLE,
+        }
+      : {}),
   };
 }
 

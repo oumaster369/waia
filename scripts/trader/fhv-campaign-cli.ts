@@ -9,6 +9,7 @@ import {
   readFhvRehearsalCampaignProgress,
   runFhvRehearsalCampaign,
 } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
+import { assertFhvT4PauseArmedBeforeCampaignStart } from "@/lib/trader/observability/fhv-t4-deterministic-pause";
 
 const runRoot = process.env.FHV_RUN_ROOT?.trim();
 const runId = process.env.FHV_RUN_ID?.trim();
@@ -29,6 +30,7 @@ async function main(): Promise<void> {
   }
 
   const manifest = assertFhvCampaignRuntimeIdentity({ runRoot, targetSha, runId, organizationId });
+  assertFhvT4PauseArmedBeforeCampaignStart({ runRoot, manifest });
   const startedAt = Date.now();
   let heartbeatSequence = 0;
   let lastCyclesProcessed = 0;

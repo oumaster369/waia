@@ -33,7 +33,8 @@ After Human **Create a merge commit** merge of dev → main:
 4. Prove GitHub Release body identifies the same full `NEW_RELEASE_SHA`.
 5. Prove fresh Execution Server checkout `HEAD == EXECUTION_SERVER_TARGET_SHA`.
 6. Prove rehearsal manifest `targetSha == EXECUTION_SERVER_TARGET_SHA`.
-7. Prove `deployed-revision.json` `gitSha == EXECUTION_SERVER_TARGET_SHA` after successful deployment.
+7. Prove `.ops/fhv-systemd-deployed-revision.v1.json` `releaseSha == EXECUTION_SERVER_TARGET_SHA` after successful FHV systemd deployment (see [`AI-TRADER-FHV-SYSTEMD-DEPLOYMENT-RECORD.md`](../ai-trader/AI-TRADER-FHV-SYSTEMD-DEPLOYMENT-RECORD.md)).
+8. Prove legacy `.ops/deployed-revision.json` `gitSha == EXECUTION_SERVER_TARGET_SHA` when the Docker health container record is maintained separately.
 
 A dev-branch SHA is never the production target until promoted through dev → main. After merge commit, the production target is the **main merge commit**, not the pre-release dev tip.
 
@@ -65,7 +66,8 @@ If any of these differ, stop before campaign start:
 - checkout `HEAD`
 - systemd unit SHA guard target
 - rehearsal manifest `targetSha`
-- `deployed-revision.json` `gitSha`
+- `.ops/fhv-systemd-deployed-revision.v1.json` `releaseSha` (FHV systemd supervision — **not** the legacy Docker record alone)
+- legacy `.ops/deployed-revision.json` `gitSha` (BP-6 health container — maintained separately; must not be conflated with FHV systemd record)
 - GitHub Release / tag peel SHA (when release-bound)
 
 ## Historical evidence

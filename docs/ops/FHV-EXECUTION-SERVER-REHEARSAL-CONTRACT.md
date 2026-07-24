@@ -29,6 +29,9 @@ See also: [`FHV-RELEASE-IDENTITY-CONTRACT.md`](FHV-RELEASE-IDENTITY-CONTRACT.md)
 | `scripts/ops/fhv-supervisor/render-units.sh` | Render `waia-fhv-campaign.service` + `waia-fhv-observer.service` (no install) |
 | `scripts/ops/fhv-supervisor/install-units.sh` | **Human-only T4** — install units with `--confirm` on Execution Server |
 | `scripts/ops/fhv-supervisor/rollback-units.sh` | **Human-only T4** — stop/disable/remove units with `--confirm` |
+| `scripts/ops/fhv-systemd-record-deploy.sh` | **Human-only T4** — write `.ops/fhv-systemd-deployed-revision.v1.json` with `--confirm` (preview without) |
+| `scripts/ops/fhv-systemd-verify-deploy.sh` | Verify FHV systemd deployment record matches target SHA and rehearsal identity |
+| `pnpm trader:fhv:t4:status` / `arm-pause` / `resume` / `verify` | Released file-based T4 operator CLI (localhost observer bridge) |
 
 Systemd units require operator-supplied:
 
