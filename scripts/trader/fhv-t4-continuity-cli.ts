@@ -2,14 +2,16 @@
  * DEE-436 — released file-based T4A continuity capture CLI.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
+import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import {
   captureFhvT4ContinuitySnapshot,
   FhvT4ContinuityCaptureError,
   verifyFhvT4ContinuitySnapshots,
   parseFhvT4ContinuitySnapshot,
 } from "@/lib/trader/observability/fhv-t4-continuity-capture";
+import { readFhvT4ObserverSystemdIdentity } from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
 
 export type FhvT4ContinuitySubcommand = "capture-before" | "capture-after" | "verify";
 
@@ -109,9 +111,10 @@ export async function runFhvT4ContinuityCli(
           organizationId: config.organizationId,
           targetSha: config.targetSha,
           capturePhase: "before_disconnect",
-          observerRestartRecorded: false,
+          operatorEvent: "SSH_DISCONNECT",
+          observerSystemdIdentity: readFhvT4ObserverSystemdIdentity(config.repoRoot),
         });
-        writeFileSync(config.outputPath, `${JSON.stringify(snapshot, null, 2)}\n`);
+        writeFileAtomic(config.outputPath, `${JSON.stringify(snapshot, null, 2)}\n`);
         lines.push(`classification=FHV_T4_CONTINUITY_CAPTURE_BEFORE_OK`);
         return { exitCode: 0, lines, payload: snapshot };
       }
@@ -129,9 +132,10 @@ export async function runFhvT4ContinuityCli(
           organizationId: config.organizationId,
           targetSha: config.targetSha,
           capturePhase: "after_reconnect",
-          observerRestartRecorded: true,
+          operatorEvent: "SSH_RECONNECT",
+          observerSystemdIdentity: readFhvT4ObserverSystemdIdentity(config.repoRoot),
         });
-        writeFileSync(config.outputPath, `${JSON.stringify(snapshot, null, 2)}\n`);
+        writeFileAtomic(config.outputPath, `${JSON.stringify(snapshot, null, 2)}\n`);
         lines.push(`classification=FHV_T4_CONTINUITY_CAPTURE_AFTER_OK`);
         return { exitCode: 0, lines, payload: snapshot };
       }

@@ -78,8 +78,8 @@ import {
   ensureFhvT4CampaignRuntimeStarted,
   finalizeFhvT4CampaignRuntimeProof,
   readFhvT4CampaignRuntimeStart,
-  resolveFhvT4SharedMonotonicDeadline,
 } from "@/lib/trader/observability/fhv-t4-closure-verifiers";
+import { readFhvT4HostMonotonicSample } from "@/lib/trader/observability/fhv-t4-host-monotonic-clock";
 
 import { FHV_REHEARSAL_CHECKPOINT_CYCLE } from "@/lib/trader/observability/fhv-observability.constants";
 import {
@@ -129,41 +129,53 @@ export function createFhvRehearsalMonotonicDeadline(
   return { deadlineMs: startedAtMs + maxRuntimeMs };
 }
 
+function resolveCampaignRepoRoot(): string {
+  return process.env.FHV_REPO_ROOT?.trim() || process.cwd();
+}
+
 function prepareT4DeterministicRuntimeDeadline(input: {
   runRoot: string;
   manifest: FhvRehearsalLaunchConfigV1;
   runId: string;
   organizationId: string;
   targetSha: string;
+  repoRoot?: string;
   monotonicDeadline?: FhvRehearsalMonotonicDeadline;
 }): FhvRehearsalMonotonicDeadline {
+  const repoRoot = input.repoRoot ?? resolveCampaignRepoRoot();
   if (!isFhvT4DeterministicPauseManifest(input.manifest)) {
     return (
       input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs)
     );
   }
   if (!readFhvT4CampaignRuntimeStart(input.runRoot)) {
-    const startedAtMs = Date.now();
+    const sample = readFhvT4HostMonotonicSample(repoRoot);
     ensureFhvT4CampaignRuntimeStarted(input.runRoot, {
       runId: input.runId,
       organizationId: input.organizationId,
       targetSha: input.targetSha,
       fixtureId: "HTR_WP03_BENCHMARK",
-      startedAtMs,
+      hostBootId: sample.bootId,
+      startedMonotonicNs: sample.monotonicNs,
+      repoRoot,
     });
-    return createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs, startedAtMs);
+    return createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
   }
-  const shared = resolveFhvT4SharedMonotonicDeadline(input.runRoot, input.manifest.maxRuntimeMs);
-  return { deadlineMs: shared.deadlineMs };
+  const start = readFhvT4CampaignRuntimeStart(input.runRoot);
+  const startedMs = start ? new Date(start.startedAtUtc).getTime() : Date.now();
+  return createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs, startedMs);
 }
 
 function finalizeT4DeterministicRuntimeIfNeeded(
   runRoot: string,
   manifest: FhvRehearsalLaunchConfigV1,
   classification: FhvRehearsalCampaignResult["classification"],
+  repoRoot?: string,
 ): void {
   if (isFhvT4DeterministicPauseManifest(manifest) && classification === "REHEARSAL_OK") {
-    finalizeFhvT4CampaignRuntimeProof(runRoot, Date.now());
+    finalizeFhvT4CampaignRuntimeProof(runRoot, {
+      repoRoot: repoRoot ?? resolveCampaignRepoRoot(),
+    });
   }
 }
 

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { readReplayCheckpoint } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import {
@@ -28,6 +28,7 @@ import {
   FHV_T4_DETERMINISTIC_PAUSE_SCHEMA_VERSION,
   writeFhvT4PauseArmedRecord,
 } from "@/lib/trader/observability/fhv-t4-deterministic-pause";
+import { setFhvT4HostMonotonicReaderForTests } from "@/lib/trader/observability/fhv-t4-host-monotonic-clock";
 import { validateFhvCanonicalRunChainCompletion } from "@/lib/trader/observability/fhv-canonical-run-chain";
 
 const TARGET_SHA = "dddddddddddddddddddddddddddddddddddddddd";
@@ -70,6 +71,26 @@ function armDeterministicPause(runDir: string, runId: string): void {
 }
 
 describe("FHV T4 deterministic pause integration (DEE-435)", () => {
+  let monotonicNs = 1_000_000_000n;
+
+  beforeEach(() => {
+    monotonicNs = 1_000_000_000n;
+    setFhvT4HostMonotonicReaderForTests(() => {
+      monotonicNs += 10_000_000n;
+      return {
+        schemaVersion: "fhv-t4-host-monotonic-sample/v1",
+        clockSource: "CLOCK_BOOTTIME",
+        bootId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        monotonicNs: monotonicNs.toString(),
+      };
+    });
+    process.env.FHV_REPO_ROOT = process.cwd();
+  });
+
+  afterEach(() => {
+    setFhvT4HostMonotonicReaderForTests(null);
+  });
+
   it.each(Array.from({ length: 10 }, (_, index) => index + 1))(
     "run %i pauses at cycle 40 and resumes to REHEARSAL_OK with zero rescan delta",
     async (iteration) => {

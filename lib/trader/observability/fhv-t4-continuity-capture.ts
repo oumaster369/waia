@@ -15,7 +15,12 @@ import {
   readFhvT4CampaignRuntimeProof,
 } from "@/lib/trader/observability/fhv-t4-closure-verifiers";
 
-export const FHV_T4_CONTINUITY_SNAPSHOT_SCHEMA_VERSION = "fhv-t4-continuity-snapshot/v1" as const;
+import {
+  assertFhvT4ObserverRestartProven,
+  type FhvT4ObserverSystemdIdentityV1,
+} from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
+
+export const FHV_T4_CONTINUITY_SNAPSHOT_SCHEMA_VERSION = "fhv-t4-continuity-snapshot/v2" as const;
 export const FHV_T4_CONTINUITY_VERIFICATION_PASS = "FHV_T4_CONTINUITY_VERIFICATION_PASS" as const;
 
 export type FhvT4ContinuityCapturePhase = "before_disconnect" | "after_reconnect";
@@ -37,7 +42,8 @@ export type FhvT4ContinuitySnapshotV1 = Readonly<{
   organizationId: string;
   targetSha: string;
   capturePhase: FhvT4ContinuityCapturePhase;
-  observerRestartRecorded: boolean;
+  operatorEvent?: "SSH_DISCONNECT" | "SSH_RECONNECT";
+  observerSystemdIdentity: FhvT4ObserverSystemdIdentityV1;
   digests: Readonly<Record<FhvT4ContinuityDigestKey, string>>;
   contentDigest: string;
 }>;
@@ -129,7 +135,8 @@ export function captureFhvT4ContinuitySnapshot(input: {
   organizationId: string;
   targetSha: string;
   capturePhase: FhvT4ContinuityCapturePhase;
-  observerRestartRecorded: boolean;
+  observerSystemdIdentity: FhvT4ObserverSystemdIdentityV1;
+  operatorEvent?: "SSH_DISCONNECT" | "SSH_RECONNECT";
 }): FhvT4ContinuitySnapshotV1 {
   const manifest = readFhvRehearsalManifest(input.runRoot);
   if (manifest.runId !== input.runId || manifest.organizationId !== input.organizationId) {
@@ -163,10 +170,16 @@ export function captureFhvT4ContinuitySnapshot(input: {
     requireFile(path, code);
   }
 
-  if (input.capturePhase === "after_reconnect" && input.observerRestartRecorded !== true) {
+  if (input.capturePhase === "before_disconnect" && input.operatorEvent !== "SSH_DISCONNECT") {
     throw new FhvT4ContinuityCaptureError(
-      "FHV_T4_CONTINUITY_OBSERVER_RESTART_REQUIRED",
-      "after_reconnect capture requires observerRestartRecorded=true.",
+      "FHV_T4_CONTINUITY_BEFORE_EVENT_REQUIRED",
+      "before_disconnect capture requires operatorEvent=SSH_DISCONNECT.",
+    );
+  }
+  if (input.capturePhase === "after_reconnect" && input.operatorEvent !== "SSH_RECONNECT") {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_AFTER_EVENT_REQUIRED",
+      "after_reconnect capture requires operatorEvent=SSH_RECONNECT.",
     );
   }
 
@@ -188,7 +201,8 @@ export function captureFhvT4ContinuitySnapshot(input: {
     organizationId: input.organizationId,
     targetSha: input.targetSha,
     capturePhase: input.capturePhase,
-    observerRestartRecorded: input.observerRestartRecorded,
+    ...(input.operatorEvent ? { operatorEvent: input.operatorEvent } : {}),
+    observerSystemdIdentity: input.observerSystemdIdentity,
     digests,
   };
 
@@ -244,12 +258,16 @@ export function verifyFhvT4ContinuitySnapshots(input: {
       "Before/after targetSha mismatch.",
     );
   }
-  if (input.after.observerRestartRecorded !== true) {
+  if (input.after.observerSystemdIdentity.activeState !== "active") {
     throw new FhvT4ContinuityCaptureError(
-      "FHV_T4_CONTINUITY_OBSERVER_RESTART_NOT_RECORDED",
-      "After snapshot must record observer restart.",
+      "FHV_T4_CONTINUITY_OBSERVER_NOT_ACTIVE",
+      "Observer must be active after reconnect.",
     );
   }
+  assertFhvT4ObserverRestartProven({
+    before: input.before.observerSystemdIdentity,
+    after: input.after.observerSystemdIdentity,
+  });
 
   for (const key of REQUIRED_DIGEST_KEYS) {
     if (!input.before.digests[key] || !input.after.digests[key]) {

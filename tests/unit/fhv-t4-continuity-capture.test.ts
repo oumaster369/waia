@@ -26,14 +26,25 @@ import {
   resolveFhvT4ContinuityCliConfig,
   runFhvT4ContinuityCli,
 } from "@/scripts/trader/fhv-t4-continuity-cli";
+import {
+  FHV_T4_TEST_BOOT_ID,
+  FHV_T4_TEST_STARTED_NS,
+  fhvT4HostMonotonicSample,
+  fhvT4ObserverIdentity,
+  installFhvT4HostMonotonicTestReader,
+  writeFhvT4TestCampaignRuntimeProof,
+} from "../helpers/fhv-t4-test-fixtures";
 
 const TARGET_SHA = "dddddddddddddddddddddddddddddddddddddddd";
 const RUN_ID = "fhv-t4a-continuity";
 const ORG_ID = "00000000-0000-4000-8000-000000000437";
 
 let root = "";
+let cleanupMonotonic: (() => void) | undefined;
 
 afterEach(() => {
+  cleanupMonotonic?.();
+  cleanupMonotonic = undefined;
   if (root) {
     rmSync(root, { recursive: true, force: true });
     root = "";
@@ -43,6 +54,9 @@ afterEach(() => {
 describe("fhv-t4 campaign runtime start/finalize (DEE-436)", () => {
   it("writes start marker once and finalizes shared-budget proof", () => {
     root = mkdtempSync(join(tmpdir(), "fhv-runtime-"));
+    cleanupMonotonic = installFhvT4HostMonotonicTestReader([
+      fhvT4HostMonotonicSample("290000000000"),
+    ]);
     const runDir = resolveFhvRehearsalRunDirectory(root, RUN_ID);
     mkdirSync(runDir, { recursive: true });
 
@@ -51,28 +65,33 @@ describe("fhv-t4 campaign runtime start/finalize (DEE-436)", () => {
       organizationId: ORG_ID,
       targetSha: TARGET_SHA,
       fixtureId: "HTR_WP03_BENCHMARK",
-      startedAtMs: 1_000,
+      hostBootId: FHV_T4_TEST_BOOT_ID,
+      startedMonotonicNs: FHV_T4_TEST_STARTED_NS,
+      repoRoot: root,
     });
-    expect(start.startedAtMs).toBe(1_000);
+    expect(start.startedMonotonicNs).toBe(FHV_T4_TEST_STARTED_NS);
 
     const again = ensureFhvT4CampaignRuntimeStarted(runDir, {
       runId: RUN_ID,
       organizationId: ORG_ID,
       targetSha: TARGET_SHA,
       fixtureId: "HTR_WP03_BENCHMARK",
-      startedAtMs: 9_999,
+      hostBootId: FHV_T4_TEST_BOOT_ID,
+      startedMonotonicNs: FHV_T4_TEST_STARTED_NS,
+      repoRoot: root,
     });
-    expect(again.startedAtMs).toBe(1_000);
+    expect(again.startedMonotonicNs).toBe(FHV_T4_TEST_STARTED_NS);
 
-    const proof = finalizeFhvT4CampaignRuntimeProof(runDir, 290_000);
-    expect(proof.startedAtMs).toBe(1_000);
-    expect(proof.completedAtMs).toBe(290_000);
+    const proof = finalizeFhvT4CampaignRuntimeProof(runDir, { repoRoot: root });
+    expect(proof.startedMonotonicNs).toBe(FHV_T4_TEST_STARTED_NS);
+    expect(proof.completedMonotonicNs).toBe("290000000000");
     expect(proof.targetSha).toBe(TARGET_SHA);
     expect(readFhvT4CampaignRuntimeProof(runDir)?.fixtureId).toBe("HTR_WP03_BENCHMARK");
   });
 
-  it("finalize rejects completedAtMs before startedAtMs", () => {
+  it("finalize rejects completed monotonic before started monotonic", () => {
     root = mkdtempSync(join(tmpdir(), "fhv-runtime-"));
+    cleanupMonotonic = installFhvT4HostMonotonicTestReader([fhvT4HostMonotonicSample("500000000")]);
     const runDir = resolveFhvRehearsalRunDirectory(root, RUN_ID);
     mkdirSync(runDir, { recursive: true });
     ensureFhvT4CampaignRuntimeStarted(runDir, {
@@ -80,10 +99,12 @@ describe("fhv-t4 campaign runtime start/finalize (DEE-436)", () => {
       organizationId: ORG_ID,
       targetSha: TARGET_SHA,
       fixtureId: "HTR_WP03_BENCHMARK",
-      startedAtMs: 5_000,
+      hostBootId: FHV_T4_TEST_BOOT_ID,
+      startedMonotonicNs: FHV_T4_TEST_STARTED_NS,
+      repoRoot: root,
     });
-    expect(() => finalizeFhvT4CampaignRuntimeProof(runDir, 4_999)).toThrow(
-      /completedAtMs must be >= startedAtMs/,
+    expect(() => finalizeFhvT4CampaignRuntimeProof(runDir, { repoRoot: root })).toThrow(
+      /completedMonotonicNs must be >= startedMonotonicNs/,
     );
   });
 });
@@ -142,23 +163,11 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
       join(runDir, "control/command-ledger.jsonl"),
       `${JSON.stringify({ command: { action: "PAUSE_AT_CHECKPOINT" } })}\n`,
     );
-    writeFileSync(
-      join(runDir, "fhv-t4-campaign-runtime.v1.json"),
-      `${JSON.stringify(
-        {
-          schemaVersion: "fhv-t4-campaign-runtime/v1",
-          runId: RUN_ID,
-          organizationId: ORG_ID,
-          targetSha: TARGET_SHA,
-          fixtureId: "HTR_WP03_BENCHMARK",
-          startedAtMs: 1,
-          completedAtMs: 2,
-          contentDigest: "c".repeat(64),
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    writeFhvT4TestCampaignRuntimeProof(runDir, {
+      runId: RUN_ID,
+      organizationId: ORG_ID,
+      targetSha: TARGET_SHA,
+    });
     writeFhvSystemdDeployedRevisionAtomic(repoRoot, {
       releaseSha: TARGET_SHA,
       releaseTag: "v2026.07.24.test437",
@@ -174,6 +183,15 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
       legacyContainerRunning: true,
     });
 
+    const beforeIdentity = fhvT4ObserverIdentity({
+      invocationId: "11111111111111111111111111111111",
+      mainPid: 100,
+    });
+    const afterIdentity = fhvT4ObserverIdentity({
+      invocationId: "22222222222222222222222222222222",
+      mainPid: 200,
+    });
+
     const before = captureFhvT4ContinuitySnapshot({
       runRoot: runDir,
       repoRoot,
@@ -181,7 +199,8 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
       organizationId: ORG_ID,
       targetSha: TARGET_SHA,
       capturePhase: "before_disconnect",
-      observerRestartRecorded: false,
+      observerSystemdIdentity: beforeIdentity,
+      operatorEvent: "SSH_DISCONNECT",
     });
     const after = captureFhvT4ContinuitySnapshot({
       runRoot: runDir,
@@ -190,7 +209,8 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
       organizationId: ORG_ID,
       targetSha: TARGET_SHA,
       capturePhase: "after_reconnect",
-      observerRestartRecorded: true,
+      observerSystemdIdentity: afterIdentity,
+      operatorEvent: "SSH_RECONNECT",
     });
     expect(verifyFhvT4ContinuitySnapshots({ before, after }).classification).toBe(
       "FHV_T4_CONTINUITY_VERIFICATION_PASS",
@@ -207,7 +227,8 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
       organizationId: ORG_ID,
       targetSha: TARGET_SHA,
       capturePhase: "after_reconnect",
-      observerRestartRecorded: true,
+      observerSystemdIdentity: afterIdentity,
+      operatorEvent: "SSH_RECONNECT",
     });
     expect(() => verifyFhvT4ContinuitySnapshots({ before, after: afterTampered })).toThrow(
       /Continuity digest changed/,
@@ -269,14 +290,11 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
       join(runDir, "control/command-ledger.jsonl"),
       `${JSON.stringify({ command: { action: "PAUSE_AT_CHECKPOINT" } })}\n`,
     );
-    ensureFhvT4CampaignRuntimeStarted(runDir, {
+    writeFhvT4TestCampaignRuntimeProof(runDir, {
       runId: RUN_ID,
       organizationId: ORG_ID,
       targetSha: TARGET_SHA,
-      fixtureId: "HTR_WP03_BENCHMARK",
-      startedAtMs: 1,
     });
-    finalizeFhvT4CampaignRuntimeProof(runDir, 2);
     writeFhvSystemdDeployedRevisionAtomic(repoRoot, {
       releaseSha: TARGET_SHA,
       releaseTag: "v2026.07.24.test437",
@@ -304,7 +322,11 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
           organizationId: ORG_ID,
           targetSha: TARGET_SHA,
           capturePhase: "before_disconnect",
-          observerRestartRecorded: false,
+          observerSystemdIdentity: fhvT4ObserverIdentity({
+            invocationId: "11111111111111111111111111111111",
+            mainPid: 100,
+          }),
+          operatorEvent: "SSH_DISCONNECT",
         }),
         null,
         2,
@@ -320,7 +342,11 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
           organizationId: ORG_ID,
           targetSha: TARGET_SHA,
           capturePhase: "after_reconnect",
-          observerRestartRecorded: true,
+          observerSystemdIdentity: fhvT4ObserverIdentity({
+            invocationId: "22222222222222222222222222222222",
+            mainPid: 200,
+          }),
+          operatorEvent: "SSH_RECONNECT",
         }),
         null,
         2,

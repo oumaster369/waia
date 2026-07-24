@@ -14,6 +14,18 @@ import {
   type FhvT4HostProbe,
 } from "@/lib/trader/observability/fhv-t4-closure-verifiers";
 import {
+  waitFhvT4FinalTerminal,
+  waitFhvT4PausedTerminal,
+} from "@/lib/trader/observability/fhv-t4-bounded-wait";
+import { writeFhvT4DeploymentProofAtomic } from "@/lib/trader/observability/fhv-t4-deployment-proof";
+import { buildFhvT4MandatoryEvidenceInventory } from "@/lib/trader/observability/fhv-t4-mandatory-evidence-inventory";
+import {
+  captureFhvT4RollbackProofFromHost,
+  writeFhvT4RollbackProofAtomic,
+} from "@/lib/trader/observability/fhv-t4-rollback-proof";
+import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
+import { readFhvSystemdDeployedRevision } from "@/lib/trader/observability/fhv-systemd-deployed-revision";
+import {
   FhvT4EvidenceSealError,
   sealFhvT4EvidenceRoot,
   verifyFhvT4EvidenceSeal,
@@ -30,7 +42,10 @@ export type FhvT4ClosureSubcommand =
   | "verify-rollback"
   | "verify-seal"
   | "seal-evidence"
-  | "verify-ceremony";
+  | "verify-ceremony"
+  | "wait-paused"
+  | "wait-final"
+  | "build-evidence-inventory";
 
 export type FhvT4ClosureCliConfig = Readonly<{
   subcommand: FhvT4ClosureSubcommand;
@@ -80,6 +95,9 @@ export function parseFhvT4ClosureSubcommand(argv: readonly string[]): FhvT4Closu
     "verify-seal",
     "seal-evidence",
     "verify-ceremony",
+    "wait-paused",
+    "wait-final",
+    "build-evidence-inventory",
   ];
   if (positional && (allowed as string[]).includes(positional)) {
     return positional as FhvT4ClosureSubcommand;
@@ -228,6 +246,30 @@ export async function runFhvT4ClosureCli(
           renderedUnitsDir: config.renderedUnitsDir,
           installedUnitsDir: config.installedUnitsDir,
         });
+        const record = readFhvSystemdDeployedRevision(config.repoRoot);
+        if (!record) {
+          throw new FhvT4ClosureCliError(
+            "FHV_T4_DEPLOYMENT_RECORD_MISSING",
+            "Deployment record missing after verification.",
+          );
+        }
+        writeFhvT4DeploymentProofAtomic(config.runRoot, {
+          releaseSha: config.targetSha,
+          releaseTag: config.releaseTag,
+          runId: config.runId,
+          organizationId: config.organizationId,
+          operatorId: config.operatorId,
+          serviceUser: config.serviceUser,
+          workingDirectory: config.workingDirectory,
+          environmentFile: config.environmentFile,
+          renderedUnitDigests: result.installedDigests,
+          installedUnitDigests: result.installedDigests,
+          deploymentRecordDigest: computePayloadDigest(record),
+          legacyContainerName: record.legacyContainerName,
+          legacyContainerImage: record.legacyContainerImage,
+          legacyContainerRunning: true,
+          capturedAtUtc: new Date().toISOString(),
+        });
         lines.push(`classification=${result.classification}`);
         return { exitCode: 0, lines, payload: result };
       }
@@ -247,6 +289,23 @@ export async function runFhvT4ClosureCli(
           ],
           host,
         });
+        const record = readFhvSystemdDeployedRevision(config.repoRoot);
+        if (!record) {
+          throw new FhvT4ClosureCliError(
+            "FHV_T4_ROLLBACK_DEPLOYMENT_RECORD_MISSING",
+            "Deployment record missing for rollback proof.",
+          );
+        }
+        writeFhvT4RollbackProofAtomic(
+          config.runRoot,
+          captureFhvT4RollbackProofFromHost({
+            targetSha: config.targetSha,
+            runId: config.runId,
+            organizationId: config.organizationId,
+            deploymentRecordDigest: computePayloadDigest(record),
+            host,
+          }),
+        );
         lines.push(`classification=${result.classification}`);
         return { exitCode: 0, lines, payload: result };
       }
@@ -270,16 +329,22 @@ export async function runFhvT4ClosureCli(
       }
       case "seal-evidence": {
         requireIdentity(config);
-        if (!config.sealDestination || !config.evidenceListPath || !config.releaseTag) {
+        if (!config.sealDestination || !config.releaseTag || !config.serviceUser) {
           throw new FhvT4ClosureCliError(
             "FHV_T4_CLOSURE_SEAL_CONFIG_INCOMPLETE",
-            "seal-destination, evidence-list, release-tag required",
+            "seal-destination, release-tag, and service-user required",
           );
         }
-        const evidenceFiles = JSON.parse(readFileSync(config.evidenceListPath, "utf8")) as Array<{
-          absolutePath: string;
-          relativePath: string;
-        }>;
+        const evidenceFiles = buildFhvT4MandatoryEvidenceInventory({
+          runRoot: config.runRoot,
+          repoRoot: config.repoRoot,
+          renderedUnitsDir: config.renderedUnitsDir,
+          continuityBeforePath: config.continuityBeforePath,
+          continuityAfterPath: config.continuityAfterPath,
+        }).map((entry) => ({
+          absolutePath: entry.absolutePath,
+          relativePath: entry.relativePath,
+        }));
         const result = sealFhvT4EvidenceRoot({
           sealDestination: config.sealDestination,
           evidenceFiles,
@@ -287,6 +352,7 @@ export async function runFhvT4ClosureCli(
           releaseTag: config.releaseTag,
           runId: config.runId,
           organizationId: config.organizationId,
+          serviceUser: config.serviceUser,
         });
         lines.push(`classification=${result.classification}`);
         lines.push(`rootDigest=${result.rootDigest}`);
@@ -296,20 +362,15 @@ export async function runFhvT4ClosureCli(
         requireIdentity(config);
         if (
           !config.releaseTag ||
-          !config.renderedUnitsDir ||
-          !config.serviceUser ||
-          !config.workingDirectory ||
-          !config.environmentFile ||
           !config.sealDestination ||
           !config.continuityBeforePath ||
           !config.continuityAfterPath
         ) {
           throw new FhvT4ClosureCliError(
             "FHV_T4_CLOSURE_CEREMONY_CONFIG_INCOMPLETE",
-            "ceremony requires deployment, seal, and continuity identity inputs",
+            "ceremony requires release-tag, seal destination, and continuity paths",
           );
         }
-        const host = deps?.host ?? defaultHostProbe();
         const result = verifyFhvT4Ceremony({
           identity: {
             runRoot: config.runRoot,
@@ -318,32 +379,6 @@ export async function runFhvT4ClosureCli(
             targetSha: config.targetSha,
             releaseTag: config.releaseTag,
             repoRoot: config.repoRoot,
-          },
-          deployment: {
-            repoRoot: config.repoRoot,
-            targetSha: config.targetSha,
-            releaseTag: config.releaseTag,
-            runId: config.runId,
-            organizationId: config.organizationId,
-            operatorId: config.operatorId,
-            serviceUser: config.serviceUser,
-            workingDirectory: config.workingDirectory,
-            environmentFile: config.environmentFile,
-            renderedUnitsDir: config.renderedUnitsDir,
-            installedUnitsDir: config.installedUnitsDir,
-          },
-          rollback: {
-            runRoot: config.runRoot,
-            repoRoot: config.repoRoot,
-            targetSha: config.targetSha,
-            requiredEvidencePaths: [
-              `${config.runRoot}/fhv-rehearsal-manifest.v1.json`,
-              `${config.runRoot}/fhv-rehearsal-terminal.v1.json`,
-              `${config.runRoot}/control/command-ledger.jsonl`,
-              `${config.runRoot}/control/fhv-t4-pause-armed.v1.json`,
-              `${config.runRoot}/fhv-resume-runtime-proof.v1.json`,
-            ],
-            host,
           },
           sealDestination: config.sealDestination,
           continuityBeforePath: config.continuityBeforePath,
@@ -356,6 +391,42 @@ export async function runFhvT4ClosureCli(
         // Ensure unit names appear in ceremony payload for operators
         lines.push(`units=${FHV_SYSTEMD_CAMPAIGN_UNIT},${FHV_SYSTEMD_OBSERVER_UNIT}`);
         return { exitCode: 0, lines, payload: result };
+      }
+      case "wait-paused": {
+        requireIdentity(config);
+        const result = await waitFhvT4PausedTerminal({ runRoot: config.runRoot });
+        lines.push(`classification=${result.classification}`);
+        lines.push(`actualPauseCycle=${result.actualPauseCycle}`);
+        return { exitCode: 0, lines, payload: result };
+      }
+      case "wait-final": {
+        requireIdentity(config);
+        const result = await waitFhvT4FinalTerminal({ runRoot: config.runRoot });
+        lines.push(`classification=${result.classification}`);
+        return { exitCode: 0, lines, payload: result };
+      }
+      case "build-evidence-inventory": {
+        requireIdentity(config);
+        if (
+          !config.renderedUnitsDir ||
+          !config.continuityBeforePath ||
+          !config.continuityAfterPath
+        ) {
+          throw new FhvT4ClosureCliError(
+            "FHV_T4_CLOSURE_INVENTORY_CONFIG_INCOMPLETE",
+            "rendered-units-dir, continuity-before, continuity-after required",
+          );
+        }
+        const inventory = buildFhvT4MandatoryEvidenceInventory({
+          runRoot: config.runRoot,
+          repoRoot: config.repoRoot,
+          renderedUnitsDir: config.renderedUnitsDir,
+          continuityBeforePath: config.continuityBeforePath,
+          continuityAfterPath: config.continuityAfterPath,
+          hostProbeJsonPath: parseFlag(process.argv.slice(2), "--host-probe-json-path"),
+        });
+        lines.push(`inventoryCount=${inventory.length}`);
+        return { exitCode: 0, lines, payload: inventory };
       }
       default:
         throw new FhvT4ClosureCliError(

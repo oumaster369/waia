@@ -45,12 +45,16 @@ import {
   verifyFhvT4FinalState,
   verifyFhvT4PausedState,
   verifyFhvT4RollbackState,
-  writeFhvT4CampaignRuntimeProof,
 } from "@/lib/trader/observability/fhv-t4-closure-verifiers";
 import {
   sealFhvT4EvidenceRoot,
   verifyFhvT4EvidenceSeal,
 } from "@/lib/trader/observability/fhv-t4-evidence-seal";
+import {
+  FHV_T4_TEST_COMPLETED_NS,
+  FHV_T4_TEST_STARTED_NS,
+  writeFhvT4TestCampaignRuntimeProof,
+} from "../helpers/fhv-t4-test-fixtures";
 
 const TARGET_SHA = "dddddddddddddddddddddddddddddddddddddddd";
 const RUN_ID = "fhv-t4a-closure";
@@ -352,13 +356,10 @@ describe("fhv-t4-closure-verifiers (DEE-436)", () => {
       fullHistoryRescanCountAfter: 1,
       fullHistoryRescanDelta: 1,
     });
-    writeFhvT4CampaignRuntimeProof(runDir, {
+    writeFhvT4TestCampaignRuntimeProof(runDir, {
       runId: RUN_ID,
       organizationId: ORG_ID,
       targetSha: TARGET_SHA,
-      fixtureId: "HTR_WP03_BENCHMARK",
-      startedAtMs: 1_000,
-      completedAtMs: 2_000,
     });
     expect(() =>
       verifyFhvT4FinalState({
@@ -419,13 +420,13 @@ describe("fhv-t4-closure-verifiers (DEE-436)", () => {
       fullHistoryRescanCountAfter: 0,
       fullHistoryRescanDelta: 0,
     });
-    writeFhvT4CampaignRuntimeProof(runDir, {
+    writeFhvT4TestCampaignRuntimeProof(runDir, {
       runId: RUN_ID,
       organizationId: ORG_ID,
       targetSha: TARGET_SHA,
-      fixtureId: "HTR_WP03_BENCHMARK",
-      startedAtMs: 0,
-      completedAtMs: 300_001,
+      startedMonotonicNs: FHV_T4_TEST_STARTED_NS,
+      completedMonotonicNs: "301000000000",
+      elapsedMonotonicNs: "300000000000",
     });
     // Will fail earlier on run-chain unless we get to budget — ensure budget path with max 1ms after chain fails
     expect(() =>
@@ -578,6 +579,10 @@ Environment=FHV_ORGANIZATION_ID=${ORG_ID}
 
   it("evidence seal detects tampering of evidence/inventory/metadata/root", () => {
     root = mkdtempSync(join(tmpdir(), "fhv-seal-"));
+    process.env.FHV_T4_SERVICE_USER_IDS_JSON = JSON.stringify({
+      uid: process.getuid?.() ?? 501,
+      gid: process.getgid?.() ?? 20,
+    });
     const evidenceSrc = join(root, "src");
     mkdirSync(evidenceSrc, { recursive: true });
     const fileA = join(evidenceSrc, "a.txt");
@@ -590,7 +595,7 @@ Environment=FHV_ORGANIZATION_ID=${ORG_ID}
       releaseTag: RELEASE_TAG,
       runId: RUN_ID,
       organizationId: ORG_ID,
-      ownership: { uid: 1000, gid: 1000, mode: "0750" },
+      serviceUser: "fhv",
     });
     expect(
       verifyFhvT4EvidenceSeal({
@@ -633,6 +638,7 @@ Environment=FHV_ORGANIZATION_ID=${ORG_ID}
       releaseTag: RELEASE_TAG,
       runId: RUN_ID,
       organizationId: ORG_ID,
+      serviceUser: "fhv",
     });
     const metadataPath = join(sealDestination, "metadata.json");
     const metadata = JSON.parse(readFileSync(metadataPath, "utf8")) as Record<string, unknown>;
@@ -655,6 +661,7 @@ Environment=FHV_ORGANIZATION_ID=${ORG_ID}
       releaseTag: RELEASE_TAG,
       runId: RUN_ID,
       organizationId: ORG_ID,
+      serviceUser: "fhv",
     });
     writeFileSync(join(sealDestination, "SEAL_ROOT.sha256"), `${"0".repeat(64)}\n`);
     expect(() =>
@@ -665,5 +672,6 @@ Environment=FHV_ORGANIZATION_ID=${ORG_ID}
         organizationId: ORG_ID,
       }),
     ).toThrow(/SEAL_ROOT\.sha256 mismatch/);
+    delete process.env.FHV_T4_SERVICE_USER_IDS_JSON;
   });
 });

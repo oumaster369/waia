@@ -3,8 +3,10 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
+import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 
 import { HTR_WP03_BENCHMARK_EXPECTED_CYCLES } from "@/lib/trader/backtest/replay-benchmark-harness";
 import {
@@ -61,16 +63,29 @@ import {
   parseFhvT4ContinuitySnapshot,
   verifyFhvT4ContinuitySnapshots,
 } from "@/lib/trader/observability/fhv-t4-continuity-capture";
+import {
+  verifyFhvT4DeploymentProofArtifact,
+  type FhvT4DeploymentProofV1,
+} from "@/lib/trader/observability/fhv-t4-deployment-proof";
+import {
+  assertFhvT4HostMonotonicBudget,
+  FHV_T4_CAMPAIGN_RUNTIME_MAX_BUDGET_MS,
+  readFhvT4HostMonotonicSample,
+} from "@/lib/trader/observability/fhv-t4-host-monotonic-clock";
+import {
+  verifyFhvT4RollbackProofArtifact,
+  type FhvT4RollbackProofV1,
+} from "@/lib/trader/observability/fhv-t4-rollback-proof";
 
 export const FHV_T4_PAUSED_VERIFICATION_PASS = "FHV_T4_PAUSED_VERIFICATION_PASS" as const;
 export const FHV_T4_FINAL_VERIFICATION_PASS = "FHV_T4_FINAL_VERIFICATION_PASS" as const;
 export const FHV_T4_DEPLOYMENT_VERIFICATION_PASS = "FHV_T4_DEPLOYMENT_VERIFICATION_PASS" as const;
 export const FHV_T4_ROLLBACK_VERIFICATION_PASS = "FHV_T4_ROLLBACK_VERIFICATION_PASS" as const;
 export const FHV_T4_CEREMONY_VERIFICATION_PASS = "FHV_T4_CEREMONY_VERIFICATION_PASS" as const;
-export const FHV_T4_CAMPAIGN_RUNTIME_SCHEMA_VERSION = "fhv-t4-campaign-runtime/v1" as const;
+export const FHV_T4_CAMPAIGN_RUNTIME_SCHEMA_VERSION = "fhv-t4-campaign-runtime/v2" as const;
 export const FHV_T4_CAMPAIGN_RUNTIME_FILENAME = "fhv-t4-campaign-runtime.v1.json" as const;
 export const FHV_T4_CAMPAIGN_RUNTIME_START_SCHEMA_VERSION =
-  "fhv-t4-campaign-runtime-start/v1" as const;
+  "fhv-t4-campaign-runtime-start/v2" as const;
 export const FHV_T4_CAMPAIGN_RUNTIME_START_FILENAME =
   "fhv-t4-campaign-runtime-start.v1.json" as const;
 
@@ -111,7 +126,9 @@ export type FhvT4CampaignRuntimeStartV1 = Readonly<{
   organizationId: string;
   targetSha: string;
   fixtureId: "HTR_WP03_BENCHMARK";
-  startedAtMs: number;
+  hostBootId: string;
+  startedMonotonicNs: string;
+  startedAtUtc: string;
   contentDigest: string;
 }>;
 
@@ -121,8 +138,13 @@ export type FhvT4CampaignRuntimeV1 = Readonly<{
   organizationId: string;
   targetSha: string;
   fixtureId: "HTR_WP03_BENCHMARK";
-  startedAtMs: number;
-  completedAtMs: number;
+  hostBootId: string;
+  startedMonotonicNs: string;
+  completedMonotonicNs: string;
+  elapsedMonotonicNs: string;
+  maxBudgetMs: number;
+  startedAtUtc: string;
+  completedAtUtc: string;
   contentDigest: string;
 }>;
 
@@ -174,7 +196,7 @@ export function writeFhvT4CampaignRuntimeProof(
     ...withoutDigest,
     contentDigest: computePayloadDigest(withoutDigest),
   };
-  writeFileSync(
+  writeFileAtomic(
     join(runRoot, FHV_T4_CAMPAIGN_RUNTIME_FILENAME),
     `${JSON.stringify(record, null, 2)}\n`,
   );
@@ -199,7 +221,10 @@ export function readFhvT4CampaignRuntimeStart(runRoot: string): FhvT4CampaignRun
 
 export function ensureFhvT4CampaignRuntimeStarted(
   runRoot: string,
-  input: Omit<FhvT4CampaignRuntimeStartV1, "schemaVersion" | "contentDigest">,
+  input: Omit<FhvT4CampaignRuntimeStartV1, "schemaVersion" | "contentDigest" | "startedAtUtc"> & {
+    repoRoot: string;
+    startedAtUtc?: string;
+  },
 ): FhvT4CampaignRuntimeStartV1 {
   const existing = readFhvT4CampaignRuntimeStart(runRoot);
   if (existing) {
@@ -214,7 +239,9 @@ export function ensureFhvT4CampaignRuntimeStarted(
       existing.runId !== input.runId ||
       existing.organizationId !== input.organizationId ||
       existing.targetSha !== input.targetSha ||
-      existing.fixtureId !== input.fixtureId
+      existing.fixtureId !== input.fixtureId ||
+      existing.hostBootId !== input.hostBootId ||
+      existing.startedMonotonicNs !== input.startedMonotonicNs
     ) {
       throw new FhvT4ClosureVerifierError(
         "FHV_T4_CAMPAIGN_RUNTIME_START_IDENTITY_MISMATCH",
@@ -226,13 +253,19 @@ export function ensureFhvT4CampaignRuntimeStarted(
 
   const withoutDigest = {
     schemaVersion: FHV_T4_CAMPAIGN_RUNTIME_START_SCHEMA_VERSION,
-    ...input,
+    runId: input.runId,
+    organizationId: input.organizationId,
+    targetSha: input.targetSha,
+    fixtureId: input.fixtureId,
+    hostBootId: input.hostBootId,
+    startedMonotonicNs: input.startedMonotonicNs,
+    startedAtUtc: input.startedAtUtc ?? new Date().toISOString(),
   };
   const record: FhvT4CampaignRuntimeStartV1 = {
     ...withoutDigest,
     contentDigest: computePayloadDigest(withoutDigest),
   };
-  writeFileSync(
+  writeFileAtomic(
     join(runRoot, FHV_T4_CAMPAIGN_RUNTIME_START_FILENAME),
     `${JSON.stringify(record, null, 2)}\n`,
   );
@@ -241,7 +274,7 @@ export function ensureFhvT4CampaignRuntimeStarted(
 
 export function finalizeFhvT4CampaignRuntimeProof(
   runRoot: string,
-  completedAtMs: number,
+  input: { repoRoot: string; completedAtUtc?: string },
 ): FhvT4CampaignRuntimeV1 {
   const start = readFhvT4CampaignRuntimeStart(runRoot);
   if (!start) {
@@ -257,33 +290,59 @@ export function finalizeFhvT4CampaignRuntimeProof(
       "Campaign runtime start digest mismatch.",
     );
   }
-  if (completedAtMs < start.startedAtMs) {
+  const completedSample = readFhvT4HostMonotonicSample(input.repoRoot);
+  if (completedSample.bootId !== start.hostBootId) {
     throw new FhvT4ClosureVerifierError(
-      "FHV_T4_CAMPAIGN_RUNTIME_INVALID",
-      "completedAtMs must be >= startedAtMs.",
+      "FHV_T4_CAMPAIGN_RUNTIME_BOOT_ID_CHANGED",
+      "Host boot ID changed during campaign runtime.",
     );
   }
+  const startedNs = BigInt(start.startedMonotonicNs);
+  const completedNs = BigInt(completedSample.monotonicNs);
+  if (completedNs < startedNs) {
+    throw new FhvT4ClosureVerifierError(
+      "FHV_T4_CAMPAIGN_RUNTIME_INVALID",
+      "completedMonotonicNs must be >= startedMonotonicNs.",
+    );
+  }
+  const elapsedMonotonicNs = (completedNs - startedNs).toString();
 
   return writeFhvT4CampaignRuntimeProof(runRoot, {
     runId: start.runId,
     organizationId: start.organizationId,
     targetSha: start.targetSha,
     fixtureId: start.fixtureId,
-    startedAtMs: start.startedAtMs,
-    completedAtMs,
+    hostBootId: start.hostBootId,
+    startedMonotonicNs: start.startedMonotonicNs,
+    completedMonotonicNs: completedSample.monotonicNs,
+    elapsedMonotonicNs,
+    maxBudgetMs: FHV_T4_CAMPAIGN_RUNTIME_MAX_BUDGET_MS,
+    startedAtUtc: start.startedAtUtc,
+    completedAtUtc: input.completedAtUtc ?? new Date().toISOString(),
   });
 }
 
 export function resolveFhvT4SharedMonotonicDeadline(
   runRoot: string,
+  repoRoot: string,
   maxRuntimeMs: number,
-): { deadlineMs: number; startedAtMs: number } {
+): { deadlineMonotonicNs: bigint; startedMonotonicNs: bigint; hostBootId: string } {
   const start = readFhvT4CampaignRuntimeStart(runRoot);
   if (!start) {
-    const startedAtMs = Date.now();
-    return { startedAtMs, deadlineMs: startedAtMs + maxRuntimeMs };
+    const sample = readFhvT4HostMonotonicSample(repoRoot);
+    const startedMonotonicNs = BigInt(sample.monotonicNs);
+    return {
+      hostBootId: sample.bootId,
+      startedMonotonicNs,
+      deadlineMonotonicNs: startedMonotonicNs + BigInt(maxRuntimeMs) * 1_000_000n,
+    };
   }
-  return { startedAtMs: start.startedAtMs, deadlineMs: start.startedAtMs + maxRuntimeMs };
+  const startedMonotonicNs = BigInt(start.startedMonotonicNs);
+  return {
+    hostBootId: start.hostBootId,
+    startedMonotonicNs,
+    deadlineMonotonicNs: startedMonotonicNs + BigInt(maxRuntimeMs) * 1_000_000n,
+  };
 }
 
 function assertCampaignRuntimeBudget(input: FhvT4IdentityInput, maxMs: number): number {
@@ -318,26 +377,33 @@ function assertCampaignRuntimeBudget(input: FhvT4IdentityInput, maxMs: number): 
     );
   }
   const start = readFhvT4CampaignRuntimeStart(input.runRoot);
-  if (start && start.startedAtMs !== runtime.startedAtMs) {
+  if (
+    start &&
+    (start.startedMonotonicNs !== runtime.startedMonotonicNs ||
+      start.hostBootId !== runtime.hostBootId)
+  ) {
     throw new FhvT4ClosureVerifierError(
       "FHV_T4_CAMPAIGN_RUNTIME_BUDGET_RESET",
-      "Campaign runtime startedAtMs must match start marker (no resumed budget reset).",
+      "Campaign runtime start marker must match final proof (no resumed budget reset).",
     );
   }
-  const elapsed = runtime.completedAtMs - runtime.startedAtMs;
-  if (!Number.isFinite(elapsed) || elapsed < 0) {
+  const { elapsedMs } = assertFhvT4HostMonotonicBudget({
+    hostBootId: runtime.hostBootId,
+    startedMonotonicNs: runtime.startedMonotonicNs,
+    completedMonotonicNs: runtime.completedMonotonicNs,
+    expectedBootId: runtime.hostBootId,
+    maxBudgetMs: maxMs,
+  });
+  if (
+    runtime.elapsedMonotonicNs !==
+    (BigInt(runtime.completedMonotonicNs) - BigInt(runtime.startedMonotonicNs)).toString()
+  ) {
     throw new FhvT4ClosureVerifierError(
-      "FHV_T4_CAMPAIGN_RUNTIME_INVALID",
-      "Campaign runtime timestamps invalid.",
+      "FHV_T4_CAMPAIGN_RUNTIME_ELAPSED_MISMATCH",
+      "elapsedMonotonicNs must equal completed-started.",
     );
   }
-  if (elapsed > maxMs) {
-    throw new FhvT4ClosureVerifierError(
-      "FHV_T4_CAMPAIGN_BUDGET_EXCEEDED",
-      `Shared campaign budget exceeded: ${elapsed}ms > ${maxMs}ms.`,
-    );
-  }
-  return elapsed;
+  return elapsedMs;
 }
 
 function assertAlertPolicyDigest(runRoot: string, expectedDigest: string): void {
@@ -975,14 +1041,14 @@ export function verifyFhvT4ContinuityDigests(input: {
 
 export function verifyFhvT4Ceremony(input: {
   identity: FhvT4IdentityInput;
-  deployment: Parameters<typeof verifyFhvT4DeploymentTruth>[0];
-  rollback: Parameters<typeof verifyFhvT4RollbackState>[0];
   sealDestination: string;
   continuityBeforePath: string;
   continuityAfterPath: string;
 }): {
   classification: typeof FHV_T4_CEREMONY_VERIFICATION_PASS;
   passFields: FhvT4CeremonyPassFields;
+  deploymentProof: FhvT4DeploymentProofV1;
+  rollbackProof: FhvT4RollbackProofV1;
 } {
   verifyFhvT4FinalState(input.identity);
   const proof = readFhvResumeRuntimeProof(input.identity.runRoot);
@@ -992,8 +1058,20 @@ export function verifyFhvT4Ceremony(input: {
       "Ceremony requires fullHistoryRescanDelta=0.",
     );
   }
-  verifyFhvT4DeploymentTruth(input.deployment);
-  verifyFhvT4RollbackState(input.rollback);
+  const deploymentProof = verifyFhvT4DeploymentProofArtifact({
+    runRoot: input.identity.runRoot,
+    targetSha: input.identity.targetSha,
+    releaseTag: input.identity.releaseTag ?? "",
+    runId: input.identity.runId,
+    organizationId: input.identity.organizationId,
+  });
+  const rollbackProof = verifyFhvT4RollbackProofArtifact({
+    runRoot: input.identity.runRoot,
+    targetSha: input.identity.targetSha,
+    runId: input.identity.runId,
+    organizationId: input.identity.organizationId,
+    deploymentProof,
+  });
   const seal = verifyFhvT4EvidenceSeal({
     sealDestination: input.sealDestination,
     releaseSha: input.identity.targetSha,
@@ -1034,5 +1112,7 @@ export function verifyFhvT4Ceremony(input: {
   return {
     classification: FHV_T4_CEREMONY_VERIFICATION_PASS,
     passFields,
+    deploymentProof,
+    rollbackProof,
   };
 }

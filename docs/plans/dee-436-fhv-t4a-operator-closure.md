@@ -26,7 +26,9 @@ bindings:
     - trader:fhv:t4:verify-seal
     - trader:fhv:t4:seal-evidence
     - trader:fhv:t4:verify-ceremony
-    - trader:fhv:t4:capture-continuity-before
+    - trader:fhv:t4:wait-paused
+    - trader:fhv:t4:wait-final
+    - trader:fhv:t4:build-evidence-inventory
     - trader:fhv:t4:capture-continuity-after
     - trader:fhv:t4:verify-continuity
   humanDecisionToken: AUTHORIZE-T4A-T4B-CONTRACT-SPLIT
