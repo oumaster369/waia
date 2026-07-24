@@ -34,12 +34,14 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
+  const t4DeterministicPause = process.argv.includes("--t4-deterministic-pause");
   const config = buildFhvRehearsalLaunchConfig({
     fixtureId,
     targetSha,
     runId,
     organizationId,
     artifactRoot,
+    t4DeterministicPause,
   });
   const { runDir, manifestPath } = materializeFhvRehearsalManifest(config);
   mkdirSync(join(runDir, "streaming-evidence"), { recursive: true });

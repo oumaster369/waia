@@ -43,6 +43,9 @@ export const FHV_OPERATOR_ACTIONS: readonly FhvOperatorAction[] = [
   "CREATE_DIAGNOSTIC_BUNDLE",
 ];
 
+/** Canonical rehearsal checkpoint cycle (T4 deterministic pause boundary). */
+export const FHV_REHEARSAL_CHECKPOINT_CYCLE = 40;
+
 export const FHV_COMMAND_ISSUED_AT_MAX_FUTURE_SKEW_MS = 60_000;
 export const FHV_DETAIL_RESPONSE_MAX_BYTES = 256 * 1024;
 export const FHV_COMMAND_RESULT_MAX_BYTES = 64 * 1024;
