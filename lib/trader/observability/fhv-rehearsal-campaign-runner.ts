@@ -19,6 +19,7 @@ import {
   resetFullHistoryRescanCount,
 } from "@/lib/trader/backtest/replay-runtime-metrics";
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
+import { maybeHoldFhvCrossProcessPauseTestBarrier } from "@/lib/trader/observability/fhv-rehearsal-pause-test-barrier";
 import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-sink";
 import {
   readReplayCheckpoint,
@@ -537,6 +538,10 @@ async function runCampaignWithPauseSupport(input: {
         updatedAtUtc: new Date().toISOString(),
       });
       appendFhvRehearsalProgressSample(input.runRoot, cyclesProcessed);
+      maybeHoldFhvCrossProcessPauseTestBarrier({
+        runRoot: input.runRoot,
+        cyclesProcessed,
+      });
     },
     shouldPauseAfterCycle: () => isFhvPauseAtCheckpointRequested(input.runRoot),
   });
