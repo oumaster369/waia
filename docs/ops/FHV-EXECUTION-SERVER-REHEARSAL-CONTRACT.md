@@ -50,7 +50,12 @@ Unchanged hard requirements:
 
 | Command | Purpose |
 |---------|---------|
-| `corepack pnpm@10 trader:fhv:rehearsal -- --target-sha "$EXECUTION_SERVER_TARGET_SHA" --run-id <human-approved-unique-run-id> --t4-deterministic-pause --fixture HTR_WP03_BENCHMARK` | Prepare rehearsal manifest under `replay-runs/RI-P7/fhv-ops-rehearsal/<run-id>/` |
+| `corepack pnpm@10 trader:fhv:rehearsal -- --target-sha "$EXECUTION_SERVER_TARGET_SHA" --run-id <human-approved-unique-run-id> --artifact-root "$FHV_ARTIFACT_ROOT" --t4-deterministic-pause --fixture HTR_WP03_BENCHMARK` | Prepare rehearsal manifest under `$FHV_ARTIFACT_ROOT/RI-P7/fhv-ops-rehearsal/<run-id>/` |
+| `scripts/ops/fhv-validate-origin-url.sh` | Exact approved origin validator (dependency-free) |
+| `scripts/ops/fhv-t4-host-preflight.sh` | PRE_AUTHORIZED dependency-free host binding verifier |
+| `scripts/ops/fhv-service-user-checkout.sh` | POST_AUTHORIZED service-user fresh checkout |
+| `scripts/ops/fhv-service-user-install-deps.sh` | POST_AUTHORIZED frozen lockfile install as service user |
+| `scripts/ops/fhv-t4-campaign-systemd-identity-read.sh` | Completed inactive/success campaign unit identity |
 | `scripts/ops/fhv-supervisor/render-units.sh` | Render `waia-fhv-campaign.service` + `waia-fhv-observer.service` (no install) |
 | `scripts/ops/fhv-supervisor/install-units.sh` | **Human-only T4A** — install units with `--confirm` on Execution Server |
 | `scripts/ops/fhv-supervisor/rollback-units.sh` | **Human-only T4A** — stop/disable/remove units with `--confirm` |
@@ -84,7 +89,7 @@ Both units run SHA guard (`execution-server-preflight.sh`) in `ExecStartPre`.
 4. Prepare rehearsal manifest with `--t4-deterministic-pause`; derive `FHV_RUN_DIR` from artifact root + run ID; bind `runDir`/`manifestPath` from CLI output.
 5. Render and install qualified **systemd** units only (`waia-fhv-campaign`, `waia-fhv-observer`) with `--confirm`. Prove installed digests equal rendered digests via `trader:fhv:t4:verify-deployment`.
 6. Pin `fhv-alert-policy/v1` digest from rehearsal manifest.
-7. Start observer, then campaign under **one shared 300000ms host-monotonic (CLOCK_BOOTTIME) deadline** bound to an immutable start marker + host boot ID (`Date.now` / `startedAtUtc` are informational only).
+7. Start observer; verify active/health; arm signed PAUSE@40; verify pre-arm proof; then start campaign under **one shared 300000ms host-monotonic (CLOCK_BOOTTIME) deadline** bound to an immutable start marker + host boot ID (`Date.now` / `startedAtUtc` are informational only).
 8. Verify with released surfaces only:
    - Bounded `fhv-operator-status/v1` under 256 KiB
    - `trader:fhv:t4:verify-paused` after deterministic pause at cycle 40

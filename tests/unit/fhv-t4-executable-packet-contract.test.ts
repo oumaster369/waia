@@ -95,15 +95,6 @@ describe("T4 packet V5 executable parser contract (DEE-436)", () => {
     }
   });
 
-  it("does not use validate-fhv-release-identity.md linter for checkout HEAD proof", () => {
-    const body = readFileSync(PACKET, "utf8");
-    expect(body).not.toMatch(/validate-fhv-release-identity\.sh[^\n]*--repo-path/);
-    expect(body).toContain("fhv-release-checkout-identity.sh");
-    expect(body).toContain("execution-server-preflight.sh");
-    expect(body).toContain("FHV_ORIGIN_URL");
-    expect(body).toContain('git clone "${FHV_ORIGIN_URL}"');
-  });
-
   it("forbids secret argv and bare pnpm in executable blocks", () => {
     const body = readFileSync(PACKET, "utf8");
     for (const block of extractBashBlocks(body)) {
@@ -111,6 +102,7 @@ describe("T4 packet V5 executable parser contract (DEE-436)", () => {
       const withoutCorepack = block.replaceAll("corepack pnpm@10", "");
       expect(withoutCorepack).not.toMatch(/\bpnpm\b/);
       expect(block).not.toMatch(/\|\|\s*true/);
+      expect(block).not.toMatch(/chown "\$\{FHV_SERVICE_USER\}:\$\{FHV_SERVICE_USER\}"/);
     }
   });
 
@@ -126,7 +118,29 @@ describe("T4 packet V5 executable parser contract (DEE-436)", () => {
     ).toThrow(/secret|forbidden|unsupported|unknown/i);
   });
 
-  it("documents the exact PRE→STOP→POST state machine and 32-step POST order", () => {
+  it("does not require reference checkout or invalid origin test syntax in pre-auth", () => {
+    const body = readFileSync(PACKET, "utf8");
+    expect(body).not.toContain("FHV_REFERENCE_REPO_ROOT");
+    expect(body).not.toMatch(/test "\$\{FHV_ORIGIN_URL\}" != \*:\*@\*/);
+    expect(body).toContain("fhv-validate-origin-url.sh");
+    expect(body).toContain("fhv-t4-host-preflight.sh");
+    expect(body).toContain("fhv-service-user-checkout.sh");
+  });
+
+  it("documents observer-before-arm and completed campaign identity readers", () => {
+    const body = readFileSync(PACKET, "utf8");
+    expect(body.indexOf("systemctl start waia-fhv-observer.service")).toBeLessThan(
+      body.indexOf("trader:fhv:t4:arm-pause"),
+    );
+    expect(body.indexOf("trader:fhv:t4:verify \\\n  --run-root")).toBeLessThan(
+      body.indexOf("systemctl start waia-fhv-campaign.service"),
+    );
+    expect(body).toContain("fhv-t4-campaign-systemd-identity-read.sh");
+    expect(body).toContain("--artifact-root");
+    expect(body).toContain("fhv-service-user-install-deps.sh");
+  });
+
+  it("documents the exact PRE→STOP→POST state machine and POST order", () => {
     const body = readFileSync(PACKET, "utf8");
     expect(body.indexOf("PRE_AUTHORIZED_READ_ONLY_PHASE")).toBeLessThan(
       body.indexOf("### STOP — `AUTHORIZE-FHV-OPS-DEPLOY`"),
@@ -136,8 +150,10 @@ describe("T4 packet V5 executable parser contract (DEE-436)", () => {
     );
     const post = body.slice(body.indexOf("POST_AUTHORIZED_T4A_PHASE"));
     const order = [
-      "git clone",
+      "fhv-validate-origin-url.sh",
+      "fhv-service-user-checkout.sh",
       "fhv-release-checkout-identity.sh",
+      "fhv-service-user-install-deps.sh",
       "trader:fhv:rehearsal",
       "record-checkout-identity",
       "render-units.sh",
@@ -145,14 +161,17 @@ describe("T4 packet V5 executable parser contract (DEE-436)", () => {
       "fhv-systemd-record-deploy",
       "ingest-host-probe",
       "verify-deployment",
-      "arm-pause",
       "systemctl start waia-fhv-observer.service",
+      "fhv-t4-observer-wait-active.sh",
+      "trader:fhv:t4:arm-pause",
+      "trader:fhv:t4:verify \\\n",
       "systemctl start waia-fhv-campaign.service",
       "wait-paused",
       "verify-paused",
       "trader:fhv:t4:resume",
       "wait-final",
       "verify-final",
+      "fhv-t4-campaign-systemd-identity-read.sh",
       "capture-continuity-before",
       "capture-continuity-after",
       "verify-continuity",

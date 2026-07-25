@@ -76,8 +76,12 @@ describe("T4 operator packet V5 (DEE-436)", () => {
     expect(preAuthIndex).toBeGreaterThan(-1);
     expect(authGateIndex).toBeGreaterThan(preAuthIndex);
     expect(postAuthIndex).toBeGreaterThan(authGateIndex);
-    expect(pauseArmIndex).toBeGreaterThan(postAuthIndex);
-    expect(campaignStartIndex).toBeGreaterThan(pauseArmIndex);
+    const observerStartIndex = body.indexOf("systemctl start waia-fhv-observer.service");
+    const verifyPreArmIndex = body.indexOf("trader:fhv:t4:verify \\\n  --run-root");
+    expect(observerStartIndex).toBeGreaterThan(postAuthIndex);
+    expect(pauseArmIndex).toBeGreaterThan(observerStartIndex);
+    expect(verifyPreArmIndex).toBeGreaterThan(pauseArmIndex);
+    expect(campaignStartIndex).toBeGreaterThan(verifyPreArmIndex);
     expect(rollbackVerifyIndex).toBeGreaterThan(campaignStartIndex);
     expect(sealIndex).toBeGreaterThan(rollbackVerifyIndex);
   });

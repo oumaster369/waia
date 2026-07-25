@@ -9,6 +9,8 @@ ALLOWLIST=(
   "trader:fhv:rehearsal"
   "trader:fhv:t4:arm-pause"
   "trader:fhv:t4:resume"
+  "trader:fhv:t4:status"
+  "trader:fhv:t4:verify"
   "trader:fhv:t4:verify-paused"
   "trader:fhv:t4:verify-final"
   "trader:fhv:t4:wait-paused"
@@ -95,7 +97,8 @@ for key in \
   FHV_T4_OBSERVER_SYSTEMD_IDENTITY_JSON \
   FHV_T4_CAMPAIGN_SYSTEMD_IDENTITY_JSON \
   FHV_T4_SYSTEMD_IDENTITY_JSON \
-  FHV_T4_HOST_MONOTONIC_JSON
+  FHV_T4_HOST_MONOTONIC_JSON \
+  FHV_COREPACK_BIN
 do
   if [[ -n "${!key:-}" ]]; then
     PASS_ENV+=("${key}=${!key}")
@@ -115,5 +118,6 @@ set -a
 # shellcheck disable=SC1090
 source "$ENVIRONMENT_FILE"
 set +a
-exec corepack pnpm@10 "$SCRIPT" "$@"
+COREPACK_BIN="${FHV_COREPACK_BIN:-corepack}"
+exec "$COREPACK_BIN" pnpm@10 "$SCRIPT" "$@"
 ' bash "$REPO_ROOT" "$ENVIRONMENT_FILE" "$SCRIPT" "$@"

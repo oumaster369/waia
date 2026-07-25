@@ -15,6 +15,7 @@ import {
   FHV_SYSTEMD_CAMPAIGN_UNIT,
   FHV_SYSTEMD_OBSERVER_UNIT,
 } from "@/lib/trader/observability/fhv-systemd-unit-config";
+import { readFhvT4CompletedCampaignSystemdIdentity } from "@/lib/trader/observability/fhv-t4-completed-campaign-systemd-identity";
 import { readFhvT4SystemdUnitIdentity } from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
 
 export type FhvT4ContinuitySubcommand = "capture-before" | "capture-after" | "verify";
@@ -121,7 +122,7 @@ export async function runFhvT4ContinuityCli(
             config.repoRoot,
             FHV_SYSTEMD_OBSERVER_UNIT,
           ),
-          campaignSystemdIdentity: readFhvT4SystemdUnitIdentity(
+          campaignSystemdIdentity: readFhvT4CompletedCampaignSystemdIdentity(
             config.repoRoot,
             FHV_SYSTEMD_CAMPAIGN_UNIT,
           ),

@@ -29,7 +29,7 @@ import {
 import {
   FHV_T4_TEST_BOOT_ID,
   FHV_T4_TEST_STARTED_NS,
-  fhvT4CampaignIdentity,
+  fhvT4CompletedCampaignIdentity,
   fhvT4HostMonotonicSample,
   fhvT4ObserverIdentity,
   installFhvT4HostMonotonicTestReader,
@@ -197,7 +197,7 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
         invocationId: "11111111111111111111111111111111",
         mainPid: 100,
       }),
-      campaignSystemdIdentity: fhvT4CampaignIdentity({}),
+      campaignSystemdIdentity: fhvT4CompletedCampaignIdentity({}),
     });
     const sameObserver = captureFhvT4ContinuitySnapshot({
       runRoot: runDir,
@@ -210,7 +210,7 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
         invocationId: "11111111111111111111111111111111",
         mainPid: 100,
       }),
-      campaignSystemdIdentity: fhvT4CampaignIdentity({}),
+      campaignSystemdIdentity: fhvT4CompletedCampaignIdentity({}),
     });
     expect(() => verifyFhvT4ContinuitySnapshots({ before, after: sameObserver })).toThrow(
       /InvocationID must change/i,
@@ -227,9 +227,9 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
         invocationId: "22222222222222222222222222222222",
         mainPid: 200,
       }),
-      campaignSystemdIdentity: fhvT4CampaignIdentity({
+      campaignSystemdIdentity: fhvT4CompletedCampaignIdentity({
         invocationId: "dddddddddddddddddddddddddddddddd",
-        mainPid: 9999,
+        execMainPid: 9999,
       }),
     });
     expect(() => verifyFhvT4ContinuitySnapshots({ before, after: campaignRestarted })).toThrow(
@@ -327,7 +327,7 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
       targetSha: TARGET_SHA,
       capturePhase: "before_disconnect",
       observerSystemdIdentity: beforeIdentity,
-      campaignSystemdIdentity: fhvT4CampaignIdentity({}),
+      campaignSystemdIdentity: fhvT4CompletedCampaignIdentity({}),
       operatorNarrativeEvent: "SSH_DISCONNECT",
     });
     const after = captureFhvT4ContinuitySnapshot({
@@ -338,7 +338,7 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
       targetSha: TARGET_SHA,
       capturePhase: "after_reconnect",
       observerSystemdIdentity: afterIdentity,
-      campaignSystemdIdentity: fhvT4CampaignIdentity({}),
+      campaignSystemdIdentity: fhvT4CompletedCampaignIdentity({}),
       operatorNarrativeEvent: "SSH_RECONNECT",
     });
     expect(verifyFhvT4ContinuitySnapshots({ before, after }).classification).toBe(
@@ -357,7 +357,7 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
       targetSha: TARGET_SHA,
       capturePhase: "after_reconnect",
       observerSystemdIdentity: afterIdentity,
-      campaignSystemdIdentity: fhvT4CampaignIdentity({}),
+      campaignSystemdIdentity: fhvT4CompletedCampaignIdentity({}),
       operatorNarrativeEvent: "SSH_RECONNECT",
     });
     expect(() => verifyFhvT4ContinuitySnapshots({ before, after: afterTampered })).toThrow(
@@ -456,7 +456,7 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
             invocationId: "11111111111111111111111111111111",
             mainPid: 100,
           }),
-          campaignSystemdIdentity: fhvT4CampaignIdentity({}),
+          campaignSystemdIdentity: fhvT4CompletedCampaignIdentity({}),
           operatorNarrativeEvent: "SSH_DISCONNECT",
         }),
         null,
@@ -477,7 +477,7 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
             invocationId: "22222222222222222222222222222222",
             mainPid: 200,
           }),
-          campaignSystemdIdentity: fhvT4CampaignIdentity({}),
+          campaignSystemdIdentity: fhvT4CompletedCampaignIdentity({}),
           operatorNarrativeEvent: "SSH_RECONNECT",
         }),
         null,

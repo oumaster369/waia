@@ -16,12 +16,16 @@ import {
   readFhvT4CampaignRuntimeProof,
 } from "@/lib/trader/observability/fhv-t4-closure-verifiers";
 import {
-  assertFhvT4CampaignProcessUnchanged,
+  assertFhvT4CompletedCampaignProcessUnchanged,
+  parseFhvT4CompletedCampaignSystemdIdentity,
+  type FhvT4CompletedCampaignSystemdIdentityV1,
+} from "@/lib/trader/observability/fhv-t4-completed-campaign-systemd-identity";
+import {
   assertFhvT4ObserverRestartProven,
   type FhvT4ObserverSystemdIdentityV1,
 } from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
 
-export const FHV_T4_CONTINUITY_SNAPSHOT_SCHEMA_VERSION = "fhv-t4-continuity-snapshot/v3" as const;
+export const FHV_T4_CONTINUITY_SNAPSHOT_SCHEMA_VERSION = "fhv-t4-continuity-snapshot/v4" as const;
 export const FHV_T4_CONTINUITY_VERIFICATION_PASS = "FHV_T4_CONTINUITY_VERIFICATION_PASS" as const;
 export const FHV_T4_CONTINUITY_VERIFICATION_PROOF_SCHEMA_VERSION =
   "fhv-t4-continuity-verification-proof/v1" as const;
@@ -50,7 +54,7 @@ export type FhvT4ContinuitySnapshotV1 = Readonly<{
   /** Narrative metadata only; never machine proof. */
   operatorNarrativeEvent?: "SSH_DISCONNECT" | "SSH_RECONNECT";
   observerSystemdIdentity: FhvT4ObserverSystemdIdentityV1;
-  campaignSystemdIdentity: FhvT4ObserverSystemdIdentityV1;
+  campaignSystemdIdentity: FhvT4CompletedCampaignSystemdIdentityV1;
   digests: Readonly<Record<FhvT4ContinuityDigestKey, string>>;
   contentDigest: string;
 }>;
@@ -159,7 +163,7 @@ export function captureFhvT4ContinuitySnapshot(input: {
   targetSha: string;
   capturePhase: FhvT4ContinuityCapturePhase;
   observerSystemdIdentity: FhvT4ObserverSystemdIdentityV1;
-  campaignSystemdIdentity: FhvT4ObserverSystemdIdentityV1;
+  campaignSystemdIdentity: FhvT4CompletedCampaignSystemdIdentityV1;
   operatorNarrativeEvent?: "SSH_DISCONNECT" | "SSH_RECONNECT";
 }): FhvT4ContinuitySnapshotV1 {
   const manifest = readFhvRehearsalManifest(input.runRoot);
@@ -294,7 +298,7 @@ export function verifyFhvT4ContinuitySnapshots(input: {
     before: input.before.observerSystemdIdentity,
     after: input.after.observerSystemdIdentity,
   });
-  assertFhvT4CampaignProcessUnchanged({
+  assertFhvT4CompletedCampaignProcessUnchanged({
     before: input.before.campaignSystemdIdentity,
     after: input.after.campaignSystemdIdentity,
   });
@@ -412,5 +416,6 @@ export function parseFhvT4ContinuitySnapshot(raw: unknown): FhvT4ContinuitySnaps
       "campaignSystemdIdentity is required.",
     );
   }
+  parseFhvT4CompletedCampaignSystemdIdentity(snapshot.campaignSystemdIdentity);
   return snapshot;
 }

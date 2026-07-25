@@ -1,3 +1,5 @@
+import type { FhvT4CompletedCampaignSystemdIdentityV1 } from "@/lib/trader/observability/fhv-t4-completed-campaign-systemd-identity";
+import { serializeFhvT4CompletedCampaignSystemdIdentity } from "@/lib/trader/observability/fhv-t4-completed-campaign-systemd-identity";
 import type { FhvT4ObserverSystemdIdentityV1 } from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
 import {
   FHV_T4_CAMPAIGN_RUNTIME_SCHEMA_VERSION,
@@ -69,6 +71,33 @@ export function fhvT4ObserverIdentity(input: {
   };
 }
 
+export function fhvT4CompletedCampaignIdentity(input: {
+  invocationId?: string;
+  execMainPid?: number;
+  execMainStartTimestampMonotonic?: string;
+  execMainExitTimestampMonotonic?: string;
+  bootId?: string;
+  nRestarts?: number;
+}): FhvT4CompletedCampaignSystemdIdentityV1 {
+  const execMainPid = input.execMainPid ?? 4242;
+  return serializeFhvT4CompletedCampaignSystemdIdentity({
+    schemaVersion: "fhv-t4-completed-campaign-systemd-identity/v1",
+    unitName: "waia-fhv-campaign.service",
+    bootId: input.bootId ?? FHV_T4_TEST_OBSERVER_BOOT_ID,
+    activeState: "inactive",
+    subState: "dead",
+    result: "success",
+    invocationId: input.invocationId ?? "cccccccccccccccccccccccccccccccc",
+    execMainPid,
+    execMainStartTimestampMonotonic: input.execMainStartTimestampMonotonic ?? "4242000000",
+    execMainExitTimestampMonotonic: input.execMainExitTimestampMonotonic ?? "4242999999",
+    execMainCode: 0,
+    execMainStatus: 0,
+    nRestarts: input.nRestarts ?? 0,
+  });
+}
+
+/** @deprecated Use fhvT4CompletedCampaignIdentity for post-final continuity. */
 export function fhvT4CampaignIdentity(input: {
   invocationId?: string;
   mainPid?: number;
