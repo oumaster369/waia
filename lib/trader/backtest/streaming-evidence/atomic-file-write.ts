@@ -1,9 +1,62 @@
-import { closeSync, fsyncSync, openSync, renameSync, writeFileSync, writeSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  openSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { dirname } from "node:path";
 
 import { StreamingEvidenceError } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 
 let tempCounter = 0;
+
+export class AtomicFileWriteError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AtomicFileWriteError";
+  }
+}
+
+/** Create finalPath exclusively (O_EXCL); fail if the target already exists. */
+export function writeFileAtomicExclusive(finalPath: string, bytes: Buffer | string): void {
+  if (existsSync(finalPath)) {
+    throw new AtomicFileWriteError(
+      "PHASE_RECEIPT_OVERWRITE_ALLOWED",
+      `Refusing to overwrite existing file: ${finalPath}`,
+    );
+  }
+  const payload = typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes;
+  let fd: number | null = null;
+  try {
+    fd = openSync(finalPath, "wx");
+    writeSync(fd, payload);
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = null;
+  } catch (error) {
+    if (fd !== null) {
+      closeSync(fd);
+    }
+    try {
+      if (existsSync(finalPath)) {
+        unlinkSync(finalPath);
+      }
+    } catch {
+      // best-effort cleanup after failed exclusive create
+    }
+    throw new AtomicFileWriteError(
+      "STREAMING_EVIDENCE_ATOMIC_EXCLUSIVE_WRITE_FAILED",
+      `exclusive write failed for ${finalPath}: ${String(error)}`,
+    );
+  }
+}
 
 export function writeFileAtomic(finalPath: string, bytes: Buffer | string): void {
   const payload = typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes;

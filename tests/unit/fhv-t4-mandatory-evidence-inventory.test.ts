@@ -28,6 +28,10 @@ describe("fhv-t4 mandatory evidence inventory (DEE-436)", () => {
         continuityBeforePath: join(runRoot, "control/before.json"),
         continuityAfterPath: join(runRoot, "control/after.json"),
         hostProbeJsonPath: join(runRoot, "control/fhv-t4-host-probe-proof.v1.json"),
+        postRollbackHostProbeJsonPath: join(
+          runRoot,
+          "control/fhv-t4-post-rollback-host-probe-proof.v1.json",
+        ),
       }),
     ).toThrow(/missing|Mandatory/i);
   });
@@ -49,6 +53,10 @@ describe("fhv-t4 mandatory evidence inventory (DEE-436)", () => {
         continuityBeforePath: join(runRoot, "control/before.json"),
         continuityAfterPath: join(runRoot, "control/after.json"),
         hostProbeJsonPath: join(runRoot, "control/fhv-t4-host-probe-proof.v1.json"),
+        postRollbackHostProbeJsonPath: join(
+          runRoot,
+          "control/fhv-t4-post-rollback-host-probe-proof.v1.json",
+        ),
       }),
     ).toThrow(/ESCAPE|missing|Mandatory|realpath|NOT_FILE|SYMLINK/i);
   });
@@ -67,6 +75,10 @@ describe("fhv-t4 mandatory evidence inventory (DEE-436)", () => {
         continuityBeforePath: join(runRoot, "control/before.json"),
         continuityAfterPath: join(runRoot, "control/after.json"),
         hostProbeJsonPath: wrong,
+        postRollbackHostProbeJsonPath: join(
+          runRoot,
+          "control/fhv-t4-post-rollback-host-probe-proof.v1.json",
+        ),
       }),
     ).toThrow(/host-probe|HOST_PROBE|mismatch|required|missing/i);
   });

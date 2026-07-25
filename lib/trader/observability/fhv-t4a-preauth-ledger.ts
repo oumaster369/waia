@@ -29,6 +29,7 @@ const MUTATING_PATTERNS = [
 const READ_ONLY_PATTERNS = [
   /^bash -s --/,
   /^test /,
+  /^sudo -n test /,
   /^sudo -n true$/,
   /fhv-validate-origin-url/,
   /fhv-t4-host-preflight/,

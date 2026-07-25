@@ -2,6 +2,10 @@
  * DEE-436 — immutable observer qualification proof (pre-campaign / post-restart).
  */
 
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import { normalizeFhvT4BootId } from "@/lib/trader/observability/fhv-t4-boot-id";
 
@@ -103,5 +107,31 @@ export function parseFhvT4ObserverQualificationProof(
       "contentDigest mismatch.",
     );
   }
+  return proof;
+}
+
+export function resolveFhvT4ObserverQualificationPreCampaignPath(runRoot: string): string {
+  return join(runRoot, "control", "fhv-t4-observer-qualification-pre-campaign.v1.json");
+}
+
+export function resolveFhvT4ObserverQualificationPostRestartPath(runRoot: string): string {
+  return join(runRoot, "control", "fhv-t4-observer-qualification-post-restart.v1.json");
+}
+
+export function resolveFhvT4ObserverQualificationProofPath(
+  runRoot: string,
+  phase: FhvT4ObserverQualificationPhase,
+): string {
+  return phase === "PRE_CAMPAIGN"
+    ? resolveFhvT4ObserverQualificationPreCampaignPath(runRoot)
+    : resolveFhvT4ObserverQualificationPostRestartPath(runRoot);
+}
+
+export function writeFhvT4ObserverQualificationProofAtomic(
+  outputPath: string,
+  input: Omit<FhvT4ObserverQualificationProofV1, "contentDigest">,
+): FhvT4ObserverQualificationProofV1 {
+  const proof = serializeFhvT4ObserverQualificationProof(input);
+  writeFileAtomic(outputPath, `${JSON.stringify(proof, null, 2)}\n`);
   return proof;
 }

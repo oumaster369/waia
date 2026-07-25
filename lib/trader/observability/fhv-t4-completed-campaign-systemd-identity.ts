@@ -185,6 +185,7 @@ export function readFhvT4CompletedCampaignSystemdIdentity(
   repoRoot: string,
   unitName = "waia-fhv-campaign.service",
   env: NodeJS.ProcessEnv = process.env,
+  options?: Readonly<{ systemctlBin?: string; pythonBin?: string }>,
 ): FhvT4CompletedCampaignSystemdIdentityV1 {
   if (readerOverride) {
     return readerOverride(unitName);
@@ -201,7 +202,14 @@ export function readFhvT4CompletedCampaignSystemdIdentity(
     return parsed;
   }
   const script = join(repoRoot, "scripts/ops/fhv-t4-campaign-systemd-identity-read.sh");
-  const output = execFileSync("bash", [script, unitName], { encoding: "utf8" }).trim();
+  const systemctlBin =
+    options?.systemctlBin?.trim() || env.FHV_SYSTEMCTL_BIN?.trim() || "systemctl";
+  const pythonBin = options?.pythonBin?.trim() || env.FHV_PYTHON_BIN?.trim() || "python3";
+  const output = execFileSync(
+    "bash",
+    [script, "--systemctl-bin", systemctlBin, "--python-bin", pythonBin, unitName],
+    { encoding: "utf8" },
+  ).trim();
   return parseFhvT4CompletedCampaignSystemdIdentity(JSON.parse(output));
 }
 

@@ -27,6 +27,8 @@ export type FhvT4ContinuityCliConfig = Readonly<{
   organizationId: string;
   targetSha: string;
   repoRoot: string;
+  systemctlBin: string;
+  pythonBin: string;
   outputPath: string;
   beforePath: string;
   afterPath: string;
@@ -74,6 +76,8 @@ export function resolveFhvT4ContinuityCliConfig(
     organizationId: parseFlag(argv, "--organization-id") ?? env.FHV_ORGANIZATION_ID?.trim() ?? "",
     targetSha: parseFlag(argv, "--target-sha") ?? env.FHV_TARGET_SHA?.trim() ?? "",
     repoRoot: parseFlag(argv, "--repo-root") ?? env.FHV_REPO_ROOT?.trim() ?? process.cwd(),
+    systemctlBin: parseFlag(argv, "--systemctl-bin") ?? env.FHV_SYSTEMCTL_BIN?.trim() ?? "",
+    pythonBin: parseFlag(argv, "--python-bin") ?? env.FHV_PYTHON_BIN?.trim() ?? "",
     outputPath: parseFlag(argv, "--output") ?? env.FHV_CONTINUITY_OUTPUT?.trim() ?? "",
     beforePath: parseFlag(argv, "--before") ?? env.FHV_CONTINUITY_BEFORE?.trim() ?? "",
     afterPath: parseFlag(argv, "--after") ?? env.FHV_CONTINUITY_AFTER?.trim() ?? "",
@@ -81,10 +85,17 @@ export function resolveFhvT4ContinuityCliConfig(
 }
 
 function requireIdentity(config: FhvT4ContinuityCliConfig): void {
-  if (!config.runRoot || !config.runId || !config.organizationId || !config.targetSha) {
+  if (
+    !config.runRoot ||
+    !config.runId ||
+    !config.organizationId ||
+    !config.targetSha ||
+    !config.systemctlBin ||
+    !config.pythonBin
+  ) {
     throw new FhvT4ContinuityCliError(
       "FHV_T4_CONTINUITY_CONFIG_INCOMPLETE",
-      "FHV_RUN_ROOT, FHV_RUN_ID, FHV_ORGANIZATION_ID, FHV_TARGET_SHA required",
+      "FHV_RUN_ROOT, FHV_RUN_ID, FHV_ORGANIZATION_ID, FHV_TARGET_SHA, --systemctl-bin, --python-bin required",
     );
   }
 }
@@ -121,10 +132,20 @@ export async function runFhvT4ContinuityCli(
           observerSystemdIdentity: readFhvT4SystemdUnitIdentity(
             config.repoRoot,
             FHV_SYSTEMD_OBSERVER_UNIT,
+            process.env,
+            {
+              systemctlBin: config.systemctlBin,
+              pythonBin: config.pythonBin,
+            },
           ),
           campaignSystemdIdentity: readFhvT4CompletedCampaignSystemdIdentity(
             config.repoRoot,
             FHV_SYSTEMD_CAMPAIGN_UNIT,
+            process.env,
+            {
+              systemctlBin: config.systemctlBin,
+              pythonBin: config.pythonBin,
+            },
           ),
         });
         writeFileAtomic(config.outputPath, `${JSON.stringify(snapshot, null, 2)}\n`);

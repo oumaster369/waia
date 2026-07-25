@@ -572,7 +572,12 @@ esac
 
   it("rollback-units.sh exits without mutation when --confirm is absent", () => {
     const mockBin = writeMockBin();
-    const result = runScript("scripts/ops/fhv-supervisor/rollback-units.sh", [], mockBin);
+    const systemdDir = mkdtempSync(join(tmpdir(), "fhv-systemd-dir-"));
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/rollback-units.sh",
+      ["--systemctl-bin", join(mockBin, "systemctl"), "--systemd-dir", systemdDir],
+      mockBin,
+    );
     const combined = `${result.stdout}${result.stderr}`;
     expect(result.status).toBe(0);
     expect(combined).toContain("No mutation performed");
@@ -656,7 +661,14 @@ esac
     writeFileSync(join(systemdDir, "waia-fhv-observer.service"), "[Unit]\n");
     const result = runScript(
       "scripts/ops/fhv-supervisor/rollback-units.sh",
-      ["--confirm", "--dry-run", "--systemd-dir", systemdDir],
+      [
+        "--confirm",
+        "--dry-run",
+        "--systemctl-bin",
+        join(mockBin, "systemctl"),
+        "--systemd-dir",
+        systemdDir,
+      ],
       mockBin,
     );
     expect(result.status).toBe(0);
@@ -680,7 +692,15 @@ esac
     writeFileSync(join(systemdDir, "waia-fhv-campaign.service"), "[Unit]\n");
     const result = runScript(
       "scripts/ops/fhv-supervisor/rollback-units.sh",
-      ["--confirm", "--unit", "waia-fhv-campaign.service", "--systemd-dir", systemdDir],
+      [
+        "--confirm",
+        "--unit",
+        "waia-fhv-campaign.service",
+        "--systemctl-bin",
+        join(mockBin, "systemctl"),
+        "--systemd-dir",
+        systemdDir,
+      ],
       mockBin,
     );
     expect(result.status).not.toBe(0);

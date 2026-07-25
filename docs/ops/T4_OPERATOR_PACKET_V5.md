@@ -71,6 +71,7 @@ export FHV_GIT_BIN="<absolute-path-to-git>"
 export FHV_PYTHON_BIN="<absolute-path-to-python3>"
 export FHV_DOCKER_BIN="<absolute-path-to-docker>"
 export FHV_SYSTEMCTL_BIN="<absolute-path-to-systemctl>"
+export FHV_SYSTEMD_ANALYZE_BIN="<absolute-path-to-systemd-analyze>"
 export FHV_EXPECTED_LEGACY_CONTAINER_NAME="ai-trader-execution-host"
 export FHV_EXPECTED_LEGACY_CONTAINER_IMAGE="waia-execution-host:bp6"
 export FHV_ORIGIN_URL="https://github.com/oumaster369/waia.git"
@@ -86,6 +87,7 @@ export FHV_SEAL_DESTINATION="${FHV_ARTIFACT_ROOT}/RI-P7/fhv-ops-rehearsal-seals/
 export FHV_CONTINUITY_BEFORE="${FHV_RUN_DIR}/control/fhv-t4-continuity-before.v1.json"
 export FHV_CONTINUITY_AFTER="${FHV_RUN_DIR}/control/fhv-t4-continuity-after.v1.json"
 export FHV_HOST_PROBE_PATH="${FHV_RUN_DIR}/control/fhv-t4-host-probe-proof.v1.json"
+export FHV_POST_ROLLBACK_HOST_PROBE_PATH="${FHV_RUN_DIR}/control/fhv-t4-post-rollback-host-probe-proof.v1.json"
 ```
 
 ### WORKSTATION — canonical operator phases

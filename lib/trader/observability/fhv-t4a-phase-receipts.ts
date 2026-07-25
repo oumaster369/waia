@@ -3,14 +3,16 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import {
   FHV_T4A_LEGACY_CONTAINER_IMAGE,
   FHV_T4A_LEGACY_CONTAINER_NAME,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
+import type { FhvT4aPreauthLedgerEntry } from "@/lib/trader/observability/fhv-t4a-preauth-ledger";
 
 export const FHV_T4A_LOCAL_RELEASE_RECEIPT_SCHEMA = "fhv-t4a-local-release-receipt/v1" as const;
 export const FHV_T4A_PREAUTH_RECEIPT_SCHEMA = "fhv-t4a-preauth-receipt/v1" as const;
@@ -26,6 +28,14 @@ export class FhvT4aPhaseReceiptError extends Error {
     this.name = "FhvT4aPhaseReceiptError";
   }
 }
+
+export type FhvT4aPreflightHostFactsV1 = Readonly<{
+  serviceUid: number;
+  serviceGid: number;
+  servicePrimaryGroup: string;
+  hostname: string;
+  machineIdSha256: string;
+}>;
 
 export type FhvT4aLocalReleaseReceiptV1 = Readonly<{
   schemaVersion: typeof FHV_T4A_LOCAL_RELEASE_RECEIPT_SCHEMA;
@@ -58,11 +68,16 @@ export type FhvT4aPreauthReceiptV1 = Readonly<{
   pythonBin: string;
   dockerBin: string;
   systemctlBin: string;
+  systemdAnalyzeBin: string;
   legacyContainerName: string;
   legacyContainerImage: string;
   bootstrapBlobDigests: Readonly<Record<string, string>>;
   bindingDigest: string;
-  preauthRemoteWriteCount: number;
+  preauthLedger: readonly FhvT4aPreauthLedgerEntry[];
+  preauthLedgerDigest: string;
+  rejectedCommandCount: number;
+  mutatingCommandCount: number;
+  preflightHostFacts: FhvT4aPreflightHostFactsV1;
   completedAtUtc: string;
   contentDigest: string;
 }>;
@@ -73,9 +88,16 @@ export type FhvT4aPostBeforeReceiptV1 = Readonly<{
   releaseTag: string;
   runId: string;
   organizationId: string;
+  execHost: string;
+  sshUser: string;
+  bindingDigest: string;
   runDir: string;
   continuityBeforePath: string;
   continuityBeforeDigest: string;
+  observerIdentityDigest: string;
+  campaignIdentityDigest: string;
+  observerQualificationPrePath: string;
+  observerQualificationPreDigest: string;
   stepProofDigests: Readonly<Record<string, string>>;
   completedAtUtc: string;
   contentDigest: string;
@@ -87,10 +109,13 @@ export type FhvT4aPostFinalizeReceiptV1 = Readonly<{
   releaseTag: string;
   runId: string;
   organizationId: string;
+  bindingDigest: string;
+  postBeforeReceiptDigest: string;
   continuityAfterPath: string;
   continuityAfterDigest: string;
   ceremonyClassifications: Readonly<Record<string, string>>;
   stepProofDigests: Readonly<Record<string, string>>;
+  proofDigestBundle: Readonly<Record<string, string>>;
   completedAtUtc: string;
   contentDigest: string;
 }>;
@@ -104,8 +129,20 @@ function withDigest<T extends { contentDigest: string }>(payload: Omit<T, "conte
   return { ...payload, contentDigest } as T;
 }
 
+function validateReceiptDigest<T extends { contentDigest: string }>(receipt: T, code: string): T {
+  const { contentDigest, ...body } = receipt;
+  if (computePayloadDigest(body) !== contentDigest) {
+    throw new FhvT4aPhaseReceiptError(code, "digest mismatch.");
+  }
+  return receipt;
+}
+
 export function fhvT4aBindingDigest(input: Readonly<Record<string, string>>): string {
   return sha256Hex(JSON.stringify(input, Object.keys(input).sort()));
+}
+
+export function fhvT4aPreauthLedgerDigest(entries: readonly FhvT4aPreauthLedgerEntry[]): string {
+  return sha256Hex(JSON.stringify(entries));
 }
 
 export function fhvT4aFullBindingFields(
@@ -147,6 +184,11 @@ function assertReceiptNotExists(path: string, code: string): void {
   }
 }
 
+function writeReceiptExclusive<T>(path: string, receipt: T): void {
+  assertReceiptNotExists(path, "PHASE_RECEIPT_OVERWRITE_ALLOWED");
+  writeFileAtomicExclusive(path, `${JSON.stringify(receipt)}\n`);
+}
+
 export function fhvT4aPhaseReceiptPath(localStateDir: string, name: string): string {
   return join(localStateDir, name);
 }
@@ -157,13 +199,12 @@ export function writeFhvT4aLocalReleaseReceipt(
 ): FhvT4aLocalReleaseReceiptV1 {
   mkdirSync(localStateDir, { recursive: true });
   const path = fhvT4aPhaseReceiptPath(localStateDir, "fhv-t4a-local-release-receipt.v1.json");
-  assertReceiptNotExists(path, "PHASE_RECEIPT_OVERWRITE_ALLOWED");
   const receipt = withDigest<FhvT4aLocalReleaseReceiptV1>({
     schemaVersion: FHV_T4A_LOCAL_RELEASE_RECEIPT_SCHEMA,
     ...input,
     completedAtUtc: new Date().toISOString(),
   });
-  writeFileSync(path, `${JSON.stringify(receipt)}\n`);
+  writeReceiptExclusive(path, receipt);
   return receipt;
 }
 
@@ -178,13 +219,12 @@ export function readFhvT4aLocalReleaseReceipt(
       "Local release receipt missing.",
     );
   }
-  const receipt = JSON.parse(readFileSync(path, "utf8")) as FhvT4aLocalReleaseReceiptV1;
+  const receipt = validateReceiptDigest(
+    JSON.parse(readFileSync(path, "utf8")) as FhvT4aLocalReleaseReceiptV1,
+    "FHV_T4A_LOCAL_RELEASE_RECEIPT_DIGEST",
+  );
   if (receipt.schemaVersion !== FHV_T4A_LOCAL_RELEASE_RECEIPT_SCHEMA) {
     throw new FhvT4aPhaseReceiptError("FHV_T4A_LOCAL_RELEASE_RECEIPT_INVALID", "schema mismatch.");
-  }
-  const { contentDigest, ...body } = receipt;
-  if (computePayloadDigest(body) !== contentDigest) {
-    throw new FhvT4aPhaseReceiptError("FHV_T4A_LOCAL_RELEASE_RECEIPT_DIGEST", "digest mismatch.");
   }
   if (expectedBindingDigest && receipt.bindingDigest !== expectedBindingDigest) {
     throw new FhvT4aPhaseReceiptError(
@@ -208,7 +248,6 @@ export function writeFhvT4aPreauthReceipt(
 ): FhvT4aPreauthReceiptV1 {
   mkdirSync(localStateDir, { recursive: true });
   const path = fhvT4aPhaseReceiptPath(localStateDir, "fhv-t4a-preauth-receipt.v1.json");
-  assertReceiptNotExists(path, "PHASE_RECEIPT_OVERWRITE_ALLOWED");
   const receipt = withDigest<FhvT4aPreauthReceiptV1>({
     schemaVersion: FHV_T4A_PREAUTH_RECEIPT_SCHEMA,
     ...input,
@@ -216,7 +255,7 @@ export function writeFhvT4aPreauthReceipt(
     legacyContainerImage: FHV_T4A_LEGACY_CONTAINER_IMAGE,
     completedAtUtc: new Date().toISOString(),
   });
-  writeFileSync(path, `${JSON.stringify(receipt)}\n`);
+  writeReceiptExclusive(path, receipt);
   return receipt;
 }
 
@@ -231,18 +270,29 @@ export function readFhvT4aPreauthReceipt(
       "PRE_AUTH receipt missing.",
     );
   }
-  const receipt = JSON.parse(readFileSync(path, "utf8")) as FhvT4aPreauthReceiptV1;
+  const receipt = validateReceiptDigest(
+    JSON.parse(readFileSync(path, "utf8")) as FhvT4aPreauthReceiptV1,
+    "FHV_T4A_PREAUTH_RECEIPT_DIGEST",
+  );
   if (receipt.schemaVersion !== FHV_T4A_PREAUTH_RECEIPT_SCHEMA) {
     throw new FhvT4aPhaseReceiptError("FHV_T4A_PREAUTH_RECEIPT_INVALID", "schema mismatch.");
   }
-  const { contentDigest, ...body } = receipt;
-  if (computePayloadDigest(body) !== contentDigest) {
-    throw new FhvT4aPhaseReceiptError("FHV_T4A_PREAUTH_RECEIPT_DIGEST", "digest mismatch.");
-  }
-  if (receipt.preauthRemoteWriteCount !== 0) {
+  if (receipt.mutatingCommandCount !== 0) {
     throw new FhvT4aPhaseReceiptError(
       "FHV_T4A_PREAUTH_REMOTE_WRITES",
-      `PRE_AUTH remote write count must be 0, got ${receipt.preauthRemoteWriteCount}.`,
+      `PRE_AUTH mutating command count must be 0, got ${receipt.mutatingCommandCount}.`,
+    );
+  }
+  if (receipt.rejectedCommandCount !== 0) {
+    throw new FhvT4aPhaseReceiptError(
+      "FHV_T4A_PREAUTH_REJECTED_COMMANDS",
+      `PRE_AUTH rejected command count must be 0, got ${receipt.rejectedCommandCount}.`,
+    );
+  }
+  if (fhvT4aPreauthLedgerDigest(receipt.preauthLedger) !== receipt.preauthLedgerDigest) {
+    throw new FhvT4aPhaseReceiptError(
+      "FHV_T4A_PREAUTH_LEDGER_DIGEST_MISMATCH",
+      "PRE_AUTH ledger digest mismatch.",
     );
   }
   if (expectedBindingDigest && receipt.bindingDigest !== expectedBindingDigest) {
@@ -281,13 +331,12 @@ export function writeFhvT4aPostBeforeReceipt(
 ): FhvT4aPostBeforeReceiptV1 {
   mkdirSync(localStateDir, { recursive: true });
   const path = fhvT4aPhaseReceiptPath(localStateDir, "fhv-t4a-post-before-receipt.v1.json");
-  assertReceiptNotExists(path, "PHASE_RECEIPT_OVERWRITE_ALLOWED");
   const receipt = withDigest<FhvT4aPostBeforeReceiptV1>({
     schemaVersion: FHV_T4A_POST_BEFORE_RECEIPT_SCHEMA,
     ...input,
     completedAtUtc: new Date().toISOString(),
   });
-  writeFileSync(path, `${JSON.stringify(receipt)}\n`);
+  writeReceiptExclusive(path, receipt);
   return receipt;
 }
 
@@ -299,10 +348,24 @@ export function readFhvT4aPostBeforeReceipt(localStateDir: string): FhvT4aPostBe
       "POST before receipt missing.",
     );
   }
-  const receipt = JSON.parse(readFileSync(path, "utf8")) as FhvT4aPostBeforeReceiptV1;
-  const { contentDigest, ...body } = receipt;
-  if (computePayloadDigest(body) !== contentDigest) {
-    throw new FhvT4aPhaseReceiptError("FHV_T4A_POST_BEFORE_RECEIPT_DIGEST", "digest mismatch.");
+  const receipt = validateReceiptDigest(
+    JSON.parse(readFileSync(path, "utf8")) as FhvT4aPostBeforeReceiptV1,
+    "FHV_T4A_POST_BEFORE_RECEIPT_DIGEST",
+  );
+  if (receipt.schemaVersion !== FHV_T4A_POST_BEFORE_RECEIPT_SCHEMA) {
+    throw new FhvT4aPhaseReceiptError("FHV_T4A_POST_BEFORE_RECEIPT_INVALID", "schema mismatch.");
+  }
+  if (
+    !receipt.bindingDigest ||
+    !receipt.observerIdentityDigest ||
+    !receipt.campaignIdentityDigest ||
+    !receipt.observerQualificationPrePath ||
+    !receipt.observerQualificationPreDigest
+  ) {
+    throw new FhvT4aPhaseReceiptError(
+      "PHASE_RECEIPT_FULL_BINDING_GAP",
+      "POST before receipt missing persisted continuity baseline fields.",
+    );
   }
   return receipt;
 }
@@ -313,13 +376,36 @@ export function writeFhvT4aPostFinalizeReceipt(
 ): FhvT4aPostFinalizeReceiptV1 {
   mkdirSync(localStateDir, { recursive: true });
   const path = fhvT4aPhaseReceiptPath(localStateDir, "fhv-t4a-post-finalize-receipt.v1.json");
-  assertReceiptNotExists(path, "PHASE_RECEIPT_OVERWRITE_ALLOWED");
   const receipt = withDigest<FhvT4aPostFinalizeReceiptV1>({
     schemaVersion: FHV_T4A_POST_FINALIZE_RECEIPT_SCHEMA,
     ...input,
     completedAtUtc: new Date().toISOString(),
   });
-  writeFileSync(path, `${JSON.stringify(receipt)}\n`);
+  writeReceiptExclusive(path, receipt);
+  return receipt;
+}
+
+export function readFhvT4aPostFinalizeReceipt(localStateDir: string): FhvT4aPostFinalizeReceiptV1 {
+  const path = fhvT4aPhaseReceiptPath(localStateDir, "fhv-t4a-post-finalize-receipt.v1.json");
+  if (!existsSync(path)) {
+    throw new FhvT4aPhaseReceiptError(
+      "FHV_T4A_POST_FINALIZE_RECEIPT_MISSING",
+      "POST finalize receipt missing.",
+    );
+  }
+  const receipt = validateReceiptDigest(
+    JSON.parse(readFileSync(path, "utf8")) as FhvT4aPostFinalizeReceiptV1,
+    "FHV_T4A_POST_FINALIZE_RECEIPT_DIGEST",
+  );
+  if (receipt.schemaVersion !== FHV_T4A_POST_FINALIZE_RECEIPT_SCHEMA) {
+    throw new FhvT4aPhaseReceiptError("FHV_T4A_POST_FINALIZE_RECEIPT_INVALID", "schema mismatch.");
+  }
+  if (!receipt.bindingDigest || !receipt.postBeforeReceiptDigest) {
+    throw new FhvT4aPhaseReceiptError(
+      "PHASE_RECEIPT_FULL_BINDING_GAP",
+      "POST finalize receipt missing binding linkage fields.",
+    );
+  }
   return receipt;
 }
 

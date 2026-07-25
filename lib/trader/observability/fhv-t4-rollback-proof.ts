@@ -33,6 +33,7 @@ export type FhvT4RollbackProofV1 = Readonly<{
   legacyContainerImage: typeof FHV_SYSTEMD_LEGACY_CONTAINER_IMAGE;
   legacyContainerRunning: true;
   deploymentRecordDigest: string;
+  postRollbackHostProbeDigest: string;
   capturedAtUtc: string;
   contentDigest: string;
 }>;
@@ -56,6 +57,7 @@ export function captureFhvT4RollbackProofFromHost(input: {
   runId: string;
   organizationId: string;
   deploymentRecordDigest: string;
+  postRollbackHostProbeDigest: string;
   host: FhvT4HostProbe;
   capturedAtUtc?: string;
 }): Omit<FhvT4RollbackProofV1, "schemaVersion" | "contentDigest"> {
@@ -98,6 +100,7 @@ export function captureFhvT4RollbackProofFromHost(input: {
     legacyContainerImage: FHV_SYSTEMD_LEGACY_CONTAINER_IMAGE,
     legacyContainerRunning: true,
     deploymentRecordDigest: input.deploymentRecordDigest,
+    postRollbackHostProbeDigest: input.postRollbackHostProbeDigest,
     capturedAtUtc: input.capturedAtUtc ?? new Date().toISOString(),
   };
 }

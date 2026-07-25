@@ -66,6 +66,7 @@ export type FhvT4ClosureSubcommand =
   | "wait-final"
   | "build-evidence-inventory"
   | "ingest-host-probe"
+  | "write-observer-qualification-proof"
   | "record-checkout-identity";
 
 export type FhvT4ClosureCliConfig = Readonly<{
@@ -86,7 +87,12 @@ export type FhvT4ClosureCliConfig = Readonly<{
   continuityBeforePath: string;
   continuityAfterPath: string;
   hostProbeJsonPath: string;
+  postRollbackHostProbeJsonPath: string;
   rawHostProbeJsonPath: string;
+  hostProbePhase: "DEPLOYMENT" | "POST_ROLLBACK";
+  observerQualificationPhase: "PRE_CAMPAIGN" | "POST_RESTART" | "";
+  observerQualificationProofJson: string;
+  outputPath: string;
   timeoutMs: number | null;
   rawHostProbeJson: string;
 }>;
@@ -138,6 +144,7 @@ const SUBCOMMAND_FLAGS: Record<FhvT4ClosureSubcommand, ReadonlySet<string>> = {
     "--organization-id",
     "--target-sha",
     "--repo-root",
+    "--raw-host-probe-json-path",
   ]),
   "verify-seal": new Set([
     "--run-root",
@@ -161,6 +168,7 @@ const SUBCOMMAND_FLAGS: Record<FhvT4ClosureSubcommand, ReadonlySet<string>> = {
     "--continuity-before",
     "--continuity-after",
     "--host-probe-json-path",
+    "--post-rollback-host-probe-json-path",
   ]),
   "verify-ceremony": new Set([
     "--run-root",
@@ -203,6 +211,7 @@ const SUBCOMMAND_FLAGS: Record<FhvT4ClosureSubcommand, ReadonlySet<string>> = {
     "--continuity-before",
     "--continuity-after",
     "--host-probe-json-path",
+    "--post-rollback-host-probe-json-path",
   ]),
   "ingest-host-probe": new Set([
     "--run-root",
@@ -211,6 +220,16 @@ const SUBCOMMAND_FLAGS: Record<FhvT4ClosureSubcommand, ReadonlySet<string>> = {
     "--target-sha",
     "--host-probe-json-path",
     "--raw-host-probe-json-path",
+    "--host-probe-phase",
+  ]),
+  "write-observer-qualification-proof": new Set([
+    "--run-root",
+    "--run-id",
+    "--organization-id",
+    "--target-sha",
+    "--phase",
+    "--output",
+    "--proof-json",
   ]),
   "record-checkout-identity": new Set([
     "--run-root",
@@ -331,7 +350,15 @@ export function resolveFhvT4ClosureCliConfig(
       collectFlag(argv, "--continuity-after") ?? env.FHV_CONTINUITY_AFTER?.trim() ?? "",
     hostProbeJsonPath:
       collectFlag(argv, "--host-probe-json-path") ?? env.FHV_HOST_PROBE_PATH?.trim() ?? "",
+    postRollbackHostProbeJsonPath: collectFlag(argv, "--post-rollback-host-probe-json-path") ?? "",
     rawHostProbeJsonPath: collectFlag(argv, "--raw-host-probe-json-path") ?? "",
+    hostProbePhase:
+      (collectFlag(argv, "--host-probe-phase") as "DEPLOYMENT" | "POST_ROLLBACK" | undefined) ??
+      "DEPLOYMENT",
+    observerQualificationPhase:
+      (collectFlag(argv, "--phase") as "PRE_CAMPAIGN" | "POST_RESTART" | undefined) ?? "",
+    observerQualificationProofJson: collectFlag(argv, "--proof-json") ?? "",
+    outputPath: collectFlag(argv, "--output") ?? "",
     timeoutMs: parseTimeoutMs(collectFlag(argv, "--timeout-ms"), timeoutRequired),
     rawHostProbeJson: env.FHV_T4_HOST_PROBE_JSON?.trim() ?? "",
   };
@@ -358,6 +385,32 @@ function assertManifestIdentity(config: FhvT4ClosureCliConfig): void {
       "Manifest identity does not match wait/verify identity flags.",
     );
   }
+}
+
+function resolveRollbackHostProbe(config: FhvT4ClosureCliConfig): FhvT4HostProbe {
+  const rawPath = config.rawHostProbeJsonPath.trim();
+  if (!rawPath) {
+    throw new FhvT4ClosureCliError(
+      "FHV_T4_ROLLBACK_HOST_PROBE_REQUIRED",
+      "verify-rollback requires --raw-host-probe-json-path (POST_ROLLBACK probe).",
+    );
+  }
+  const raw = config.rawHostProbeJson || readFileSync(rawPath, "utf8");
+  const parsed = JSON.parse(raw) as {
+    active: Record<string, string>;
+    enabled: Record<string, string>;
+    unitFiles: Record<string, boolean>;
+    processes: string[];
+    legacy: { name: string; image: string; running: boolean } | null;
+  };
+  return {
+    systemctlIsActive: (unit) => ({ state: parsed.active[unit] ?? "unknown" }),
+    systemctlIsEnabled: (unit) => ({ state: parsed.enabled[unit] ?? "unknown" }),
+    unitFileExists: (unit) => parsed.unitFiles[unit] === true,
+    listMatchingProcesses: (pattern) =>
+      (parsed.processes ?? []).filter((line) => line.includes(pattern)),
+    inspectLegacyContainer: () => parsed.legacy,
+  };
 }
 
 function defaultHostProbe(config: FhvT4ClosureCliConfig): FhvT4HostProbe {
@@ -445,9 +498,34 @@ export async function runFhvT4ClosureCli(
           runId: config.runId,
           organizationId: config.organizationId,
           rawProbeJson: raw,
-          requireLegacyRunning: true,
+          hostProbePhase: config.hostProbePhase,
+          requireLegacyRunning: config.hostProbePhase === "DEPLOYMENT",
         });
         lines.push("classification=FHV_T4_HOST_PROBE_PROOF_OK");
+        return { exitCode: 0, lines, payload: proof };
+      }
+      case "write-observer-qualification-proof": {
+        requireIdentity(config);
+        if (!config.observerQualificationPhase || !config.observerQualificationProofJson) {
+          throw new FhvT4ClosureCliError(
+            "FHV_T4_OBSERVER_QUALIFICATION_WRITE_INCOMPLETE",
+            "--phase and --proof-json required",
+          );
+        }
+        if (!config.outputPath) {
+          throw new FhvT4ClosureCliError(
+            "FHV_T4_OBSERVER_QUALIFICATION_OUTPUT_REQUIRED",
+            "--output required",
+          );
+        }
+        const { writeFhvT4ObserverQualificationProofAtomic } =
+          await import("@/lib/trader/observability/fhv-t4-observer-qualification-proof");
+        const parsed = JSON.parse(config.observerQualificationProofJson) as Omit<
+          import("@/lib/trader/observability/fhv-t4-observer-qualification-proof").FhvT4ObserverQualificationProofV1,
+          "contentDigest"
+        >;
+        const proof = writeFhvT4ObserverQualificationProofAtomic(config.outputPath, parsed);
+        lines.push("classification=FHV_T4_OBSERVER_QUALIFICATION_PROOF_OK");
         return { exitCode: 0, lines, payload: proof };
       }
       case "verify-paused": {
@@ -604,7 +682,7 @@ export async function runFhvT4ClosureCli(
       }
       case "verify-rollback": {
         requireIdentity(config);
-        const host = deps?.host ?? defaultHostProbe(config);
+        const host = deps?.host ?? resolveRollbackHostProbe(config);
         const result = verifyFhvT4RollbackState({
           runRoot: config.runRoot,
           repoRoot: config.repoRoot,
@@ -625,6 +703,14 @@ export async function runFhvT4ClosureCli(
             "Deployment record missing for rollback proof.",
           );
         }
+        const postRollbackProof = verifyFhvT4HostProbeProofArtifact({
+          runRoot: config.runRoot,
+          targetSha: config.targetSha,
+          runId: config.runId,
+          organizationId: config.organizationId,
+          hostProbePhase: "POST_ROLLBACK",
+          requireLegacyRunning: true,
+        });
         writeFhvT4RollbackProofAtomic(
           config.runRoot,
           captureFhvT4RollbackProofFromHost({
@@ -632,6 +718,7 @@ export async function runFhvT4ClosureCli(
             runId: config.runId,
             organizationId: config.organizationId,
             deploymentRecordDigest: computePayloadDigest(record),
+            postRollbackHostProbeDigest: postRollbackProof.contentDigest,
             host,
           }),
         );
@@ -664,11 +751,12 @@ export async function runFhvT4ClosureCli(
           !config.renderedUnitsDir ||
           !config.continuityBeforePath ||
           !config.continuityAfterPath ||
-          !config.hostProbeJsonPath
+          !config.hostProbeJsonPath ||
+          !config.postRollbackHostProbeJsonPath
         ) {
           throw new FhvT4ClosureCliError(
             "FHV_T4_CLOSURE_INVENTORY_CONFIG_INCOMPLETE",
-            "rendered-units-dir, continuity-before, continuity-after, host-probe-json-path required",
+            "rendered-units-dir, continuity-before, continuity-after, host-probe-json-path, post-rollback-host-probe-json-path required",
           );
         }
         const inventory = buildFhvT4MandatoryEvidenceInventory({
@@ -678,6 +766,7 @@ export async function runFhvT4ClosureCli(
           continuityBeforePath: config.continuityBeforePath,
           continuityAfterPath: config.continuityAfterPath,
           hostProbeJsonPath: config.hostProbeJsonPath,
+          postRollbackHostProbeJsonPath: config.postRollbackHostProbeJsonPath,
         });
         if (config.subcommand === "build-evidence-inventory") {
           lines.push(`inventoryCount=${inventory.length}`);

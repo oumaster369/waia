@@ -139,6 +139,7 @@ describe("fhv-t4 physically consistent ceremony proofs (DEE-436)", () => {
       legacyContainerImage: "waia-execution-host:bp6",
       legacyContainerRunning: true,
       deploymentRecordDigest: computePayloadDigest(record),
+      postRollbackHostProbeDigest: "d".repeat(64),
       capturedAtUtc: new Date(Date.now() + 1000).toISOString(),
     });
 
@@ -232,6 +233,7 @@ describe("fhv-t4 physically consistent ceremony proofs (DEE-436)", () => {
       legacyContainerImage: "waia-execution-host:bp6",
       legacyContainerRunning: true,
       deploymentRecordDigest: recordDigest,
+      postRollbackHostProbeDigest: "d".repeat(64),
       capturedAtUtc: new Date().toISOString(),
     });
     expect(() =>

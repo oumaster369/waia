@@ -5,7 +5,11 @@
 import { createHash } from "node:crypto";
 
 import type { FhvT4ObserverQualificationPhase } from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
-import { serializeFhvT4ObserverQualificationProof } from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
+import {
+  resolveFhvT4ObserverQualificationProofPath,
+  serializeFhvT4ObserverQualificationProof,
+  writeFhvT4ObserverQualificationProofAtomic,
+} from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
 import type { FhvT4aExecContext } from "@/lib/trader/observability/fhv-t4a-operator-executor";
 import { FhvT4aOperatorError } from "@/scripts/ops/fhv-t4a-operator";
 
@@ -79,16 +83,9 @@ function serviceUserExec(
   ctx: FhvT4aExecContext,
   packageScript: string,
   args: readonly string[],
-  extraEnv?: Record<string, string>,
 ): { exitCode: number; stdout: string; stderr: string } {
   const b = ctx.bindings;
-  const envPrefix = extraEnv
-    ? Object.entries(extraEnv)
-        .map(([key, value]) => `${key}=${shellQuote(value)}`)
-        .join(" ")
-    : "";
   const cmd = [
-    envPrefix,
     `"${ctx.repoRoot}/scripts/ops/fhv-t4-service-user-exec.sh"`,
     `--service-user ${shellQuote(b.serviceUser)}`,
     `--environment-file ${shellQuote(b.environmentFile)}`,
@@ -97,9 +94,7 @@ function serviceUserExec(
     `--corepack-bin ${shellQuote(b.corepackBin)}`,
     `-- ${packageScript}`,
     ...args.map(shellQuote),
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].join(" ");
   return ctx.transport.ssh({ remoteCommand: cmd, asRoot: true });
 }
 
@@ -108,7 +103,7 @@ export type FhvT4aObserverQualificationResult = Readonly<{
   proofDigest: string;
   statusDigest: string;
   observerIdentity: SystemdIdentity;
-  completedCampaignIdentity: SystemdIdentity;
+  completedCampaignIdentity?: SystemdIdentity;
 }>;
 
 export function captureFhvT4aObserverQualification(
@@ -117,10 +112,7 @@ export function captureFhvT4aObserverQualification(
   priorObserverInvocationId?: string,
 ): FhvT4aObserverQualificationResult {
   const b = ctx.bindings;
-  const proofPath =
-    phase === "PRE_CAMPAIGN"
-      ? `${ctx.runDir}/control/fhv-t4-observer-qualification-pre-campaign.v1.json`
-      : `${ctx.runDir}/control/fhv-t4-observer-qualification-post-restart.v1.json`;
+  const proofPath = resolveFhvT4ObserverQualificationProofPath(ctx.runDir, phase);
 
   const waitCmd = [
     `"${ctx.repoRoot}/scripts/ops/fhv-t4-observer-wait-active.sh"`,
@@ -139,10 +131,11 @@ export function captureFhvT4aObserverQualification(
     throw new FhvT4aOperatorError("FHV_T4A_OBSERVER_STATUS_FAILED", status.stderr || status.stdout);
   }
   const identityAfter = readObserverIdentity(ctx);
-  const completedCampaignIdentity = readCompletedCampaignIdentity(ctx);
 
-  if (phase === "POST_RESTART" && priorObserverInvocationId) {
-    if (identityAfter.invocationId === priorObserverInvocationId) {
+  let completedCampaignIdentity: SystemdIdentity | undefined;
+  if (phase === "POST_RESTART") {
+    completedCampaignIdentity = readCompletedCampaignIdentity(ctx);
+    if (priorObserverInvocationId && identityAfter.invocationId === priorObserverInvocationId) {
       throw new FhvT4aOperatorError(
         "FHV_T4A_OBSERVER_RESTART_IDENTITY_UNCHANGED",
         "Post-restart observer invocation must change.",
@@ -175,12 +168,19 @@ export function captureFhvT4aObserverQualification(
     capturedAtUtc: new Date().toISOString(),
   });
 
-  const writeCmd = `cat > ${shellQuote(proofPath)} <<'FHV_T4A_QUAL_EOF'\n${JSON.stringify(proof)}\nFHV_T4A_QUAL_EOF`;
-  const write = ctx.transport.ssh({ remoteCommand: writeCmd, asRoot: true });
-  if (write.exitCode !== 0) {
+  const writeResult = serviceUserExec(ctx, "trader:fhv:t4:write-observer-qualification-proof", [
+    ...identityArgs(ctx),
+    "--phase",
+    phase,
+    "--output",
+    proofPath,
+    "--proof-json",
+    JSON.stringify(proof),
+  ]);
+  if (writeResult.exitCode !== 0) {
     throw new FhvT4aOperatorError(
       "FHV_T4A_OBSERVER_QUALIFICATION_WRITE_FAILED",
-      write.stderr || write.stdout,
+      writeResult.stderr || writeResult.stdout,
     );
   }
   if (!ctx.transport.remoteFileExists(proofPath)) {
@@ -198,3 +198,6 @@ export function captureFhvT4aObserverQualification(
     completedCampaignIdentity,
   };
 }
+
+/** Exported for closure CLI service-user writes. */
+export { writeFhvT4ObserverQualificationProofAtomic };

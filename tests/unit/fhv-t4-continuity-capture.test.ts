@@ -499,6 +499,10 @@ describe("fhv-t4 continuity capture (DEE-436)", () => {
       ORG_ID,
       "--target-sha",
       TARGET_SHA,
+      "--systemctl-bin",
+      "/usr/bin/systemctl",
+      "--python-bin",
+      "/usr/bin/python3",
     ]);
     const result = await runFhvT4ContinuityCli(config);
     expect(result.exitCode).toBe(0);

@@ -14,6 +14,10 @@ import {
 
 export const FHV_T4_HOST_PROBE_PROOF_SCHEMA_VERSION = "fhv-t4-host-probe-proof/v1" as const;
 export const FHV_T4_HOST_PROBE_PROOF_FILENAME = "fhv-t4-host-probe-proof.v1.json" as const;
+export const FHV_T4_POST_ROLLBACK_HOST_PROBE_PROOF_FILENAME =
+  "fhv-t4-post-rollback-host-probe-proof.v1.json" as const;
+
+export type FhvT4HostProbePhase = "DEPLOYMENT" | "POST_ROLLBACK";
 
 export type FhvT4HostProbeLegacyV1 = Readonly<{
   name: string;
@@ -23,6 +27,7 @@ export type FhvT4HostProbeLegacyV1 = Readonly<{
 
 export type FhvT4HostProbeProofV1 = Readonly<{
   schemaVersion: typeof FHV_T4_HOST_PROBE_PROOF_SCHEMA_VERSION;
+  hostProbePhase: FhvT4HostProbePhase;
   releaseSha: string;
   runId: string;
   organizationId: string;
@@ -48,6 +53,19 @@ export class FhvT4HostProbeProofError extends Error {
 
 export function resolveFhvT4HostProbeProofPath(runRoot: string): string {
   return join(runRoot, "control", FHV_T4_HOST_PROBE_PROOF_FILENAME);
+}
+
+export function resolveFhvT4PostRollbackHostProbeProofPath(runRoot: string): string {
+  return join(runRoot, "control", FHV_T4_POST_ROLLBACK_HOST_PROBE_PROOF_FILENAME);
+}
+
+export function resolveFhvT4HostProbeProofPathForPhase(
+  runRoot: string,
+  phase: FhvT4HostProbePhase,
+): string {
+  return phase === "POST_ROLLBACK"
+    ? resolveFhvT4PostRollbackHostProbeProofPath(runRoot)
+    : resolveFhvT4HostProbeProofPath(runRoot);
 }
 
 export function parseFhvT4RawHostProbeJson(raw: string): {
@@ -88,9 +106,11 @@ export function ingestFhvT4HostProbeProofAtomic(input: {
   runId: string;
   organizationId: string;
   rawProbeJson: string;
+  hostProbePhase?: FhvT4HostProbePhase;
   requireLegacyRunning?: boolean;
   capturedAtUtc?: string;
 }): FhvT4HostProbeProofV1 {
+  const hostProbePhase = input.hostProbePhase ?? "DEPLOYMENT";
   const probe = parseFhvT4RawHostProbeJson(input.rawProbeJson);
   if (
     !probe.legacy ||
@@ -110,6 +130,7 @@ export function ingestFhvT4HostProbeProofAtomic(input: {
   }
   const withoutDigest = {
     schemaVersion: FHV_T4_HOST_PROBE_PROOF_SCHEMA_VERSION,
+    hostProbePhase,
     releaseSha: input.releaseSha,
     runId: input.runId,
     organizationId: input.organizationId,
@@ -130,18 +151,25 @@ export function ingestFhvT4HostProbeProofAtomic(input: {
     contentDigest: computePayloadDigest(withoutDigest),
   };
   writeFileAtomic(
-    resolveFhvT4HostProbeProofPath(input.runRoot),
+    resolveFhvT4HostProbeProofPathForPhase(input.runRoot, hostProbePhase),
     `${JSON.stringify(proof, null, 2)}\n`,
   );
   return proof;
 }
 
-export function readFhvT4HostProbeProof(runRoot: string): FhvT4HostProbeProofV1 | null {
-  const path = resolveFhvT4HostProbeProofPath(runRoot);
+export function readFhvT4HostProbeProof(
+  runRoot: string,
+  phase: FhvT4HostProbePhase = "DEPLOYMENT",
+): FhvT4HostProbeProofV1 | null {
+  const path = resolveFhvT4HostProbeProofPathForPhase(runRoot, phase);
   if (!existsSync(path)) {
     return null;
   }
   return JSON.parse(readFileSync(path, "utf8")) as FhvT4HostProbeProofV1;
+}
+
+export function readFhvT4PostRollbackHostProbeProof(runRoot: string): FhvT4HostProbeProofV1 | null {
+  return readFhvT4HostProbeProof(runRoot, "POST_ROLLBACK");
 }
 
 export function verifyFhvT4HostProbeProofArtifact(input: {
@@ -149,9 +177,11 @@ export function verifyFhvT4HostProbeProofArtifact(input: {
   targetSha: string;
   runId: string;
   organizationId: string;
+  hostProbePhase?: FhvT4HostProbePhase;
   requireLegacyRunning?: boolean;
 }): FhvT4HostProbeProofV1 {
-  const proof = readFhvT4HostProbeProof(input.runRoot);
+  const hostProbePhase = input.hostProbePhase ?? "DEPLOYMENT";
+  const proof = readFhvT4HostProbeProof(input.runRoot, hostProbePhase);
   if (!proof) {
     throw new FhvT4HostProbeProofError(
       "FHV_T4_HOST_PROBE_PROOF_MISSING",
@@ -163,6 +193,12 @@ export function verifyFhvT4HostProbeProofArtifact(input: {
     throw new FhvT4HostProbeProofError(
       "FHV_T4_HOST_PROBE_PROOF_DIGEST_MISMATCH",
       "Host probe proof contentDigest mismatch.",
+    );
+  }
+  if (proof.hostProbePhase !== hostProbePhase) {
+    throw new FhvT4HostProbeProofError(
+      "FHV_T4_HOST_PROBE_PROOF_PHASE_MISMATCH",
+      "Host probe proof phase mismatch.",
     );
   }
   if (

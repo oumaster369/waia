@@ -89,12 +89,32 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+const REMOTE_READ_BYTE_CAP = 10 * 1024 * 1024;
+const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
+
+export type FhvT4aRemoteFsTools = Readonly<{
+  testBin: string;
+  catBin: string;
+  sha256sumBin: string;
+}>;
+
+export function resolveFhvT4aRemoteFsTools(
+  env: NodeJS.ProcessEnv = process.env,
+): FhvT4aRemoteFsTools {
+  return {
+    testBin: env.FHV_REMOTE_TEST_BIN?.trim() || "/usr/bin/test",
+    catBin: env.FHV_REMOTE_CAT_BIN?.trim() || "/bin/cat",
+    sha256sumBin: env.FHV_REMOTE_SHA256SUM_BIN?.trim() || "/usr/bin/sha256sum",
+  };
+}
+
 export function createFhvT4aLiveTransport(
   env: NodeJS.ProcessEnv = process.env,
 ): FhvT4aOperatorTransport {
   let remoteWrites = 0;
   const invocations: FhvT4aSshInvocation[] = [];
   const preauthLedger = createFhvT4aPreauthLedger();
+  const remoteFs = resolveFhvT4aRemoteFsTools(env);
   const execHost = env.EXEC_HOST?.trim() ?? "";
   const sshUser = env.SSH_USER?.trim() ?? "";
   const localReleaseRoot = env.FHV_LOCAL_RELEASE_ROOT?.trim() ?? "";
@@ -146,22 +166,33 @@ export function createFhvT4aLiveTransport(
       }
     },
     remoteFileExists: (remotePath) => {
-      const result = sshExec(`test -f ${shellQuote(remotePath)}`);
+      const result = sshExec(`${shellQuote(remoteFs.testBin)} -f ${shellQuote(remotePath)}`);
       return result.exitCode === 0;
     },
     readRemoteFile: (remotePath) => {
-      const result = sshExec(`cat ${shellQuote(remotePath)}`);
+      const result = sshExec(
+        `${shellQuote(remoteFs.catBin)} ${shellQuote(remotePath)} | head -c ${REMOTE_READ_BYTE_CAP}`,
+      );
       if (result.exitCode !== 0) {
         throw new Error(`FHV_T4A_REMOTE_READ_FAILED:${remotePath}`);
+      }
+      if (result.stdout.length >= REMOTE_READ_BYTE_CAP) {
+        throw new Error(`FHV_T4A_REMOTE_READ_BYTE_CAP:${remotePath}`);
       }
       return result.stdout;
     },
     remoteSha256: (remotePath) => {
-      const result = sshExec(`sha256sum ${shellQuote(remotePath)} | awk '{print $1}'`);
+      const result = sshExec(
+        `${shellQuote(remoteFs.sha256sumBin)} ${shellQuote(remotePath)} | awk '{print $1}'`,
+      );
       if (result.exitCode !== 0) {
         throw new Error(`FHV_T4A_REMOTE_SHA256_FAILED:${remotePath}`);
       }
-      return result.stdout.trim();
+      const digest = result.stdout.trim().toLowerCase();
+      if (!SHA256_HEX_PATTERN.test(digest)) {
+        throw new Error(`FHV_T4A_REMOTE_SHA256_INVALID:${remotePath}`);
+      }
+      return digest;
     },
     sudoNoninteractiveProbe: () => {
       try {

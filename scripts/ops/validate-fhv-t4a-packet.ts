@@ -11,11 +11,16 @@ import {
   formatFhvT4aClosureCounters,
 } from "@/lib/trader/observability/fhv-t4a-closure-counter-audit";
 import {
+  assertFhvT4aBindingParity,
+  resolveFhvT4aOperatorBindingEnvNames,
+} from "@/lib/trader/observability/fhv-t4a-binding-parity";
+import {
   FHV_T4A_LEGACY_CONTAINER_IMAGE,
   FHV_T4A_LEGACY_CONTAINER_NAME,
   FHV_T4A_OPERATOR_STEPS,
   fhvT4aOperatorReleaseCheckoutIdentityArgs,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
+import { resolveFhvT4aOperatorBindings } from "@/scripts/ops/fhv-t4a-operator";
 
 const ROOT = process.cwd();
 const PACKET = join(ROOT, "docs/ops/T4_OPERATOR_PACKET_V5.md");
@@ -114,6 +119,22 @@ function main(): void {
   }
   if (!operatorBody.includes("FHV_T4A_LOCAL_STATE_DIR")) {
     fail("operator must bind FHV_T4A_LOCAL_STATE_DIR for workstation receipts");
+  }
+
+  try {
+    assertFhvT4aBindingParity(executableBody);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+
+  const operatorBindingEnvNames = resolveFhvT4aOperatorBindingEnvNames();
+  for (const name of operatorBindingEnvNames) {
+    if (!operatorBody.includes(name)) {
+      fail(`operator resolveFhvT4aOperatorBindings must require env ${name}`);
+    }
+  }
+  if (typeof resolveFhvT4aOperatorBindings !== "function") {
+    fail("resolveFhvT4aOperatorBindings export missing");
   }
 
   const counters = auditFhvT4aClosureCounters({ root: ROOT, evidenceProvided: true });

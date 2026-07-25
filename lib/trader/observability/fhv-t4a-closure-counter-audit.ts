@@ -120,6 +120,13 @@ function countBareCriticalInvocations(root: string): number {
     "scripts/ops/fhv-t4-campaign-systemd-identity-read.sh": ["--systemctl-bin", "--python-bin"],
     "scripts/ops/fhv-t4-observer-systemd-identity-read.sh": ["--systemctl-bin", "--python-bin"],
     "scripts/ops/fhv-t4-observer-wait-active.sh": ["--systemctl-bin", "--python-bin"],
+    "scripts/ops/fhv-t4-host-probe.sh": [
+      "--python-bin",
+      "--systemctl-bin",
+      "--docker-bin",
+      "--installed-units-dir",
+    ],
+    "scripts/ops/fhv-supervisor/rollback-units.sh": ["--systemctl-bin", "--systemd-dir"],
   };
   let hits = 0;
   for (const [rel, flags] of Object.entries(requiredBindings)) {
@@ -525,10 +532,67 @@ export function auditFhvT4aClosureCounters(
   }
 
   if (
-    !operatorBody.includes("FHV_ORGANIZATION_ID") ||
-    !operatorBody.includes("resolveFhvT4aOperatorBindings")
+    !transportBody.includes("resolveFhvT4aRemoteFsTools") ||
+    transportBody.includes("`cat ${shellQuote(remotePath)}`") ||
+    transportBody.includes("`test -f ${shellQuote(remotePath)}`")
+  ) {
+    counters.BARE_CRITICAL_TOOL_INVOCATIONS += 1;
+  }
+
+  if (
+    !existsSync(join(root, "lib/trader/observability/fhv-t4a-binding-parity.ts")) ||
+    !read(root, "lib/trader/observability/fhv-t4a-binding-parity.ts").includes(
+      "FHV_SYSTEMD_ANALYZE_BIN",
+    ) ||
+    !operatorBody.includes("resolveFhvT4aOperatorBindings") ||
+    !operatorBody.includes("FHV_ORGANIZATION_ID")
   ) {
     counters.RUN_BINDING_VALIDATION_GAP = 1;
+  }
+
+  const closureCli = read(root, "scripts/trader/fhv-t4-closure-cli.ts");
+  const verifyRollbackBlock =
+    closureCli.match(/case "verify-rollback":[\s\S]*?case "verify-seal"/)?.[0] ?? "";
+  if (
+    !closureCli.includes("resolveRollbackHostProbe") ||
+    verifyRollbackBlock.includes("defaultHostProbe")
+  ) {
+    counters.STEP32_CLOSURE_ARGV_INVALID = 1;
+  }
+
+  const phaseReceipts = read(root, "lib/trader/observability/fhv-t4a-phase-receipts.ts");
+  if (
+    !phaseReceipts.includes("preauthLedger") ||
+    !phaseReceipts.includes("writeFileAtomicExclusive") ||
+    !phaseReceipts.includes("observerQualificationPreDigest")
+  ) {
+    counters.PHASE_RECEIPT_FULL_BINDING_GAP = 1;
+  }
+
+  const rollbackScript = read(root, "scripts/ops/fhv-supervisor/rollback-units.sh");
+  if (
+    rollbackScript.includes('SYSTEMCTL="${SYSTEMCTL:-systemctl}"') ||
+    !rollbackScript.includes("--systemctl-bin")
+  ) {
+    counters.INSTALL_UNITS_ARGV_INVALID += 1;
+  }
+
+  if (
+    !executorBody.includes("postRollbackHostProbePath") ||
+    !executorBody.includes("rollbackArgs")
+  ) {
+    counters.STEP32_CLOSURE_ARGV_INVALID = 1;
+  }
+
+  if (
+    !existsSync(join(root, "tests/unit/fhv-t4-binding-parity.test.ts")) ||
+    !existsSync(join(root, "tests/unit/fhv-t4-rollback-units-contract.test.ts"))
+  ) {
+    counters.MISSING_TEST_CASES += 1;
+  }
+
+  if (!operatorBody.includes("FHV_SYSTEMD_ANALYZE_BIN") || !operatorBody.includes("test -x")) {
+    counters.PREAUTH_UNMEASURED_ZERO_CLAIM += 1;
   }
 
   const stateMachineTest = join(root, "tests/integration/fhv-t4a-operator-state-machine.test.ts");

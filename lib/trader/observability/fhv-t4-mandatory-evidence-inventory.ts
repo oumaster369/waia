@@ -17,7 +17,11 @@ import {
 } from "@/lib/trader/observability/fhv-t4-continuity-capture";
 import { resolveFhvT4DeploymentProofPath } from "@/lib/trader/observability/fhv-t4-deployment-proof";
 import { FHV_T4_PAUSE_ARMED_FILENAME } from "@/lib/trader/observability/fhv-t4-deterministic-pause";
-import { resolveFhvT4HostProbeProofPath } from "@/lib/trader/observability/fhv-t4-host-probe-proof";
+import { resolveFhvT4HostProbeProofPathForPhase } from "@/lib/trader/observability/fhv-t4-host-probe-proof";
+import {
+  resolveFhvT4ObserverQualificationPostRestartPath,
+  resolveFhvT4ObserverQualificationPreCampaignPath,
+} from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
 import {
   resolveFhvT4FinalProofPath,
   resolveFhvT4PausedProofPath,
@@ -106,11 +110,13 @@ export function buildFhvT4MandatoryEvidenceInventory(input: {
   continuityBeforePath: string;
   continuityAfterPath: string;
   hostProbeJsonPath: string;
+  postRollbackHostProbeJsonPath: string;
 }): readonly FhvT4MandatoryEvidenceEntry[] {
   const runRoot = resolve(input.runRoot);
   const repoRoot = resolve(input.repoRoot);
   const renderedUnitsDir = resolve(input.renderedUnitsDir);
   const hostProbePath = resolve(input.hostProbeJsonPath);
+  const postRollbackHostProbePath = resolve(input.postRollbackHostProbeJsonPath);
   const continuityBefore = resolve(input.continuityBeforePath);
   const continuityAfter = resolve(input.continuityAfterPath);
 
@@ -250,6 +256,18 @@ export function buildFhvT4MandatoryEvidenceInventory(input: {
       code: "FHV_T4_INV_CONT_VERIFY",
     },
     {
+      abs: resolveFhvT4ObserverQualificationPreCampaignPath(runRoot),
+      namespace: "run-root",
+      category: "observer-qualification-pre",
+      code: "FHV_T4_INV_OBSERVER_QUAL_PRE",
+    },
+    {
+      abs: resolveFhvT4ObserverQualificationPostRestartPath(runRoot),
+      namespace: "run-root",
+      category: "observer-qualification-post",
+      code: "FHV_T4_INV_OBSERVER_QUAL_POST",
+    },
+    {
       abs: resolveFhvT4RollbackProofPath(runRoot),
       namespace: "run-root",
       category: "rollback-proof",
@@ -262,19 +280,31 @@ export function buildFhvT4MandatoryEvidenceInventory(input: {
       code: "FHV_T4_INV_DEPLOY_RECORD",
     },
     {
-      abs: resolveFhvT4HostProbeProofPath(runRoot),
+      abs: resolveFhvT4HostProbeProofPathForPhase(runRoot, "DEPLOYMENT"),
       namespace: "host-proof",
       category: "host-probe",
       code: "FHV_T4_INV_HOST_PROBE",
     },
+    {
+      abs: resolveFhvT4HostProbeProofPathForPhase(runRoot, "POST_ROLLBACK"),
+      namespace: "host-proof",
+      category: "host-probe-post-rollback",
+      code: "FHV_T4_INV_HOST_PROBE_POST_ROLLBACK",
+    },
   ];
 
-  // hostProbeJsonPath must be the normalized host-probe proof path (lexical + realpath when present)
-  const expectedHostProbePath = resolveFhvT4HostProbeProofPath(runRoot);
+  const expectedHostProbePath = resolveFhvT4HostProbeProofPathForPhase(runRoot, "DEPLOYMENT");
   if (hostProbePath !== resolve(expectedHostProbePath)) {
     throw new FhvT4MandatoryEvidenceInventoryError(
       "FHV_T4_INV_HOST_PROBE_PATH_MISMATCH",
-      "host-probe-json-path must be the normalized service-user host-probe proof path.",
+      "host-probe-json-path must be the normalized deployment host-probe proof path.",
+    );
+  }
+  const expectedPostRollbackPath = resolveFhvT4HostProbeProofPathForPhase(runRoot, "POST_ROLLBACK");
+  if (postRollbackHostProbePath !== resolve(expectedPostRollbackPath)) {
+    throw new FhvT4MandatoryEvidenceInventoryError(
+      "FHV_T4_INV_POST_ROLLBACK_HOST_PROBE_PATH_MISMATCH",
+      "post-rollback-host-probe-json-path must be the normalized post-rollback host-probe proof path.",
     );
   }
 
