@@ -95,6 +95,7 @@ function buildEnv(
     FHV_PYTHON_BIN: "/usr/bin/python3",
     FHV_DOCKER_BIN: "/usr/bin/docker",
     FHV_SYSTEMCTL_BIN: "/usr/bin/systemctl",
+    FHV_SYSTEMD_ANALYZE_BIN: "/usr/bin/systemd-analyze",
     ...extra,
   };
 }

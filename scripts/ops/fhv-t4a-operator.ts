@@ -30,6 +30,7 @@ import { validateFhvT4aOperatorBindings } from "@/lib/trader/observability/fhv-t
 import {
   assertPreauthReceiptMatches,
   fhvT4aBindingDigest,
+  fhvT4aFullBindingFields,
   readFhvT4aLocalReleaseReceipt,
   readFhvT4aPostBeforeReceipt,
   readFhvT4aPreauthReceipt,
@@ -76,6 +77,7 @@ export type FhvT4aOperatorBindings = Readonly<{
   pythonBin: string;
   dockerBin: string;
   systemctlBin: string;
+  systemdAnalyzeBin: string;
   authorization?: string;
   workstationTracePath: string;
 }>;
@@ -141,6 +143,7 @@ export function resolveFhvT4aOperatorBindings(
     pythonBin: requireEnv("FHV_PYTHON_BIN", env),
     dockerBin: requireEnv("FHV_DOCKER_BIN", env),
     systemctlBin: requireEnv("FHV_SYSTEMCTL_BIN", env),
+    systemdAnalyzeBin: requireEnv("FHV_SYSTEMD_ANALYZE_BIN", env),
     authorization: env.FHV_T4A_AUTHORIZATION?.trim(),
     workstationTracePath:
       env.FHV_T4A_WORKSTATION_TRACE_PATH?.trim() ??
@@ -282,10 +285,11 @@ function streamBootstrapScript(
   scriptPath: string,
   remoteArgs: readonly string[],
   asRoot: boolean,
+  preauthPhase = false,
 ): void {
   const scriptBody = transport.gitShowBlob(bindings.targetSha, scriptPath);
   const remoteCommand = `bash -s -- ${remoteArgs.map((arg) => `'${arg.replace(/'/g, `'\\''`)}'`).join(" ")}`;
-  const result = transport.ssh({ remoteCommand, stdin: scriptBody, asRoot });
+  const result = transport.ssh({ remoteCommand, stdin: scriptBody, asRoot, preauthPhase });
   if (result.exitCode !== 0) {
     throw new FhvT4aOperatorError(
       "FHV_T4A_BOOTSTRAP_STREAM_FAILED",
@@ -325,13 +329,7 @@ export function runFhvT4aOperatorPhase(
 
   if (phase === "verify-local-release") {
     const digests = verifyFhvT4aLocalRelease(bindings, transport);
-    const bindingDigest = fhvT4aBindingDigest({
-      targetSha: bindings.targetSha,
-      releaseTag: bindings.releaseTag,
-      originUrl: bindings.originUrl,
-      runId: bindings.runId,
-      organizationId: bindings.organizationId,
-    });
+    const bindingDigest = fhvT4aBindingDigest(fhvT4aFullBindingFields(bindings));
     writeFhvT4aLocalReleaseReceipt(bindings.localStateDir, {
       targetSha: bindings.targetSha,
       releaseTag: bindings.releaseTag,
@@ -361,7 +359,8 @@ export function runFhvT4aOperatorPhase(
   }
 
   if (phase === "pre-auth") {
-    readFhvT4aLocalReleaseReceipt(bindings.localStateDir);
+    const expectedBindingDigest = fhvT4aBindingDigest(fhvT4aFullBindingFields(bindings));
+    readFhvT4aLocalReleaseReceipt(bindings.localStateDir, expectedBindingDigest);
     transport.resetRemoteWrites();
     const sudo = transport.sudoNoninteractiveProbe();
     if (sudo.exitCode !== 0) {
@@ -376,6 +375,7 @@ export function runFhvT4aOperatorPhase(
       "scripts/ops/fhv-validate-origin-url.sh",
       ["--origin-url", bindings.originUrl],
       false,
+      true,
     );
     streamBootstrapScript(
       transport,
@@ -410,15 +410,19 @@ export function runFhvT4aOperatorPhase(
         FHV_T4A_LEGACY_CONTAINER_IMAGE,
       ],
       true,
+      true,
     );
-    const writes = transport.remoteWriteCount();
+    const writes = transport.preauthMeasuredRemoteWriteCount();
     if (writes !== 0) {
       throw new FhvT4aOperatorError(
         "FHV_T4A_PREAUTH_REMOTE_WRITES",
-        `pre-auth remote write count must be 0, got ${writes}.`,
+        `pre-auth measured remote write count must be 0, got ${writes}.`,
       );
     }
-    const localReceipt = readFhvT4aLocalReleaseReceipt(bindings.localStateDir);
+    const localReceipt = readFhvT4aLocalReleaseReceipt(
+      bindings.localStateDir,
+      expectedBindingDigest,
+    );
     writeFhvT4aPreauthReceipt(bindings.localStateDir, {
       targetSha: bindings.targetSha,
       releaseTag: bindings.releaseTag,
@@ -467,8 +471,12 @@ export function runFhvT4aOperatorPhase(
   const ctx = buildFhvT4aExecContext(bindings, transport);
 
   if (phase === "post-auth-before-disconnect") {
-    const localReceipt = readFhvT4aLocalReleaseReceipt(bindings.localStateDir);
-    const preauthReceipt = readFhvT4aPreauthReceipt(bindings.localStateDir);
+    const expectedBindingDigest = fhvT4aBindingDigest(fhvT4aFullBindingFields(bindings));
+    const localReceipt = readFhvT4aLocalReleaseReceipt(
+      bindings.localStateDir,
+      expectedBindingDigest,
+    );
+    const preauthReceipt = readFhvT4aPreauthReceipt(bindings.localStateDir, expectedBindingDigest);
     assertPreauthReceiptMatches(preauthReceipt, {
       targetSha: bindings.targetSha,
       releaseTag: bindings.releaseTag,
@@ -497,7 +505,7 @@ export function runFhvT4aOperatorPhase(
       );
       stepProofDigests[String(step)] = sha256Hex(JSON.stringify(result));
     }
-    if (!existsSync(ctx.continuityBefore)) {
+    if (!transport.remoteFileExists(ctx.continuityBefore)) {
       throw new FhvT4aOperatorError(
         "FHV_T4A_CONTINUITY_BEFORE_MISSING",
         "Real continuity-before artifact required.",
@@ -510,7 +518,7 @@ export function runFhvT4aOperatorPhase(
       organizationId: bindings.organizationId,
       runDir: ctx.runDir,
       continuityBeforePath: ctx.continuityBefore,
-      continuityBeforeDigest: digestFile(ctx.continuityBefore),
+      continuityBeforeDigest: transport.remoteSha256(ctx.continuityBefore),
       stepProofDigests,
     });
     return FHV_T4A_TERMINAL_AWAITING_HUMAN_DISCONNECT_RECONNECT;
@@ -518,7 +526,7 @@ export function runFhvT4aOperatorPhase(
 
   if (phase === "post-reconnect-finalize") {
     const postBefore = readFhvT4aPostBeforeReceipt(bindings.localStateDir);
-    if (!existsSync(postBefore.continuityBeforePath)) {
+    if (!transport.remoteFileExists(postBefore.continuityBeforePath)) {
       throw new FhvT4aOperatorError(
         "FHV_T4A_CONTINUITY_BEFORE_MISSING",
         "continuity-before proof required for post-reconnect-finalize.",
@@ -558,7 +566,7 @@ export function runFhvT4aOperatorPhase(
       runId: bindings.runId,
       organizationId: bindings.organizationId,
       continuityAfterPath: ctx.continuityAfter,
-      continuityAfterDigest: digestFile(ctx.continuityAfter),
+      continuityAfterDigest: transport.remoteSha256(ctx.continuityAfter),
       ceremonyClassifications: ceremonyLines,
       stepProofDigests,
     });

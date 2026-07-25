@@ -2,11 +2,16 @@
  * DEE-436 — hermetic T4A operator transport (integration + subprocess tests).
  */
 
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { createFhvT4aHermeticSimulation } from "@/lib/trader/observability/fhv-t4a-hermetic-simulation";
+import {
+  classifyFhvT4aPreauthRemoteCommand,
+  createFhvT4aPreauthLedger,
+} from "@/lib/trader/observability/fhv-t4a-preauth-ledger";
 import {
   assertExactlyOneSudoTransition,
   buildEffectiveRemoteCommand,
@@ -33,6 +38,10 @@ export type FhvT4aHermeticTransportOptions = Readonly<{
   dockerBin: string;
   systemctlBin: string;
 }>;
+
+function sha256Hex(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
 
 export function createFhvT4aHermeticTransport(
   options: FhvT4aHermeticTransportOptions,
@@ -70,12 +79,19 @@ export function createFhvT4aHermeticTransport(
   mkdirSync(options.checkoutParent, { recursive: true });
 
   const invocations: FhvT4aSshInvocation[] = [];
+  const preauthLedger = createFhvT4aPreauthLedger();
+  const localGitBin = process.env.FHV_LOCAL_GIT_BIN?.trim() || "git";
 
   return {
     kind: "hermetic",
     remoteWriteCount: () => simulation.remoteWriteCount(),
-    resetRemoteWrites: () => simulation.resetRemoteWrites(),
+    resetRemoteWrites: () => {
+      simulation.resetRemoteWrites();
+      preauthLedger.entries();
+    },
     sshInvocations: () => invocations,
+    preauthLedgerEntries: () => preauthLedger.entries(),
+    preauthMeasuredRemoteWriteCount: () => preauthLedger.measuredRemoteWriteCount(),
     gitShowBlob: simulation.gitShowBlob,
     localGit: (args) => {
       if (
@@ -95,7 +111,7 @@ export function createFhvT4aHermeticTransport(
         return { exitCode: 0, stdout: `${options.targetSha}\n`, stderr: "" };
       }
       try {
-        const stdout = execFileSync("git", ["-C", options.localReleaseRoot, ...args], {
+        const stdout = execFileSync(localGitBin, ["-C", options.localReleaseRoot, ...args], {
           encoding: "utf8",
         });
         return { exitCode: 0, stdout, stderr: "" };
@@ -108,10 +124,24 @@ export function createFhvT4aHermeticTransport(
         };
       }
     },
+    remoteFileExists: (remotePath) => simulation.remoteFileExists(remotePath),
+    readRemoteFile: (remotePath) => simulation.readRemoteFile(remotePath),
+    remoteSha256: (remotePath) => simulation.remoteSha256(remotePath),
     sudoNoninteractiveProbe: () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    ssh: ({ remoteCommand, stdin, asRoot = false }) => {
+    ssh: ({ remoteCommand, stdin, asRoot = false, preauthPhase = false }) => {
       const effectiveRemoteCommand = buildEffectiveRemoteCommand(remoteCommand, asRoot);
       assertExactlyOneSudoTransition(effectiveRemoteCommand, asRoot);
+      if (preauthPhase) {
+        const classified = classifyFhvT4aPreauthRemoteCommand(remoteCommand, Boolean(stdin));
+        preauthLedger.record(classified);
+        if (classified.classification === "rejected") {
+          return {
+            exitCode: 2,
+            stdout: "",
+            stderr: `PRE_AUTH rejected command: ${classified.reason}`,
+          };
+        }
+      }
       const result = simulation.ssh(remoteCommand, stdin, asRoot);
       invocations.push({
         remoteCommand,
@@ -154,4 +184,22 @@ export function createFhvT4aHermeticTransportFromEnv(
     dockerBin: requireEnv("FHV_DOCKER_BIN"),
     systemctlBin: requireEnv("FHV_SYSTEMCTL_BIN"),
   });
+}
+
+export function assertHermeticRemotePathGuard(
+  remotePath: string,
+  workstationRoots: string[],
+): void {
+  for (const root of workstationRoots) {
+    if (remotePath === root || remotePath.startsWith(`${root}/`)) {
+      throw new Error(`HERMETIC_REMOTE_PATH_ACCESSED_BY_LOCAL_FS:${remotePath}`);
+    }
+  }
+  if (!existsSync(remotePath)) {
+    throw new Error(`HERMETIC_REMOTE_PATH_MISSING:${remotePath}`);
+  }
+}
+
+export function hermeticRemoteSha256(remotePath: string): string {
+  return sha256Hex(readFileSync(remotePath, "utf8"));
 }

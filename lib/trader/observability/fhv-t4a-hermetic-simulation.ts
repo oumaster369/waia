@@ -75,6 +75,8 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
   let campaignCompleted = false;
   let resumeEnforced = false;
 
+  const preCampaignObserverInvocationId = "";
+
   const observer: SystemdUnitState = {
     invocationId: "",
     mainPid: 0,
@@ -137,6 +139,7 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       observer.invocationId = nextInvocation();
       observer.mainPid = 2000 + invocationCounter;
       observer.activeState = "active";
+      observer.activeEnterMonotonic = String(2_000_000 + invocationCounter);
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     if (/start waia-fhv-campaign\.service/.test(cmd) && !resumeEnforced) {
@@ -233,6 +236,44 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       writeJson(out, { schemaVersion: "fhv-t4-continuity-after/v1", bound: true, bootId });
       return { exitCode: 0, stdout: "CONTINUITY_RESULT=PASS\n", stderr: "" };
     }
+    if (packageScript === "trader:fhv:t4:ingest-host-probe") {
+      const rawPath =
+        args[args.indexOf("--raw-host-probe-json-path") + 1] ??
+        join(runDir, "control/fhv-t4-host-probe-raw.v1.json");
+      if (!existsSync(rawPath)) {
+        return { exitCode: 2, stdout: "", stderr: "HOST_PROBE_RAW_SOURCE_MISSING" };
+      }
+      const raw = readFileSync(rawPath, "utf8");
+      writeJson(join(runDir, "control/fhv-t4-host-probe-proof.v1.json"), {
+        schemaVersion: "fhv-t4-host-probe-proof/v1",
+        targetSha: options.targetSha,
+        runId: options.runId,
+        rawDigest: sha256Hex(raw),
+      });
+      return { exitCode: 0, stdout: "classification=FHV_T4_HOST_PROBE_INGEST_OK\n", stderr: "" };
+    }
+    if (packageScript === "trader:fhv:t4:verify-deployment") {
+      return { exitCode: 0, stdout: "classification=FHV_T4_DEPLOYMENT_VERIFY_OK\n", stderr: "" };
+    }
+    if (packageScript === "trader:fhv:t4:verify-rollback") {
+      return { exitCode: 0, stdout: "classification=FHV_T4_ROLLBACK_VERIFY_OK\n", stderr: "" };
+    }
+    if (packageScript === "trader:fhv:t4:build-evidence-inventory") {
+      return { exitCode: 0, stdout: "classification=FHV_T4_EVIDENCE_INVENTORY_OK\n", stderr: "" };
+    }
+    if (packageScript === "trader:fhv:t4:seal-evidence") {
+      const sealPath =
+        args[args.indexOf("--seal-destination") + 1] ??
+        join(options.artifactRoot, "RI-P7/fhv-ops-rehearsal-seals", options.runId);
+      writeJson(join(sealPath, "fhv-t4-evidence-seal.v1.json"), {
+        schemaVersion: "fhv-t4-evidence-seal/v1",
+        runId: options.runId,
+      });
+      return { exitCode: 0, stdout: "classification=FHV_T4_EVIDENCE_SEAL_OK\n", stderr: "" };
+    }
+    if (packageScript === "trader:fhv:t4:verify-seal") {
+      return { exitCode: 0, stdout: "classification=FHV_T4_EVIDENCE_SEAL_VERIFY_OK\n", stderr: "" };
+    }
     if (packageScript === "trader:fhv:t4:verify-continuity") {
       return { exitCode: 0, stdout: "CONTINUITY_RESULT=PASS\n", stderr: "" };
     }
@@ -256,9 +297,9 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     }
     if (packageScript.startsWith("trader:fhv:t4:")) {
       return {
-        exitCode: 0,
-        stdout: `classification=FHV_T4_${packageScript.split(":").pop()?.toUpperCase()}_OK\n`,
-        stderr: "",
+        exitCode: 2,
+        stdout: "",
+        stderr: `HERMETIC_UNKNOWN_COMMAND_SUCCESS:${packageScript}`,
       };
     }
     return { exitCode: 1, stdout: "", stderr: `unknown package ${packageScript}` };
@@ -438,6 +479,9 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       resumeEnforced = true;
       writeJson(join(runDir, "control/fhv-t4-resume-enforcement-proof.v1.json"), {
         schemaVersion: "fhv-t4-resume-enforcement-proof/v1",
+        runId: options.runId,
+        organizationId: options.organizationId,
+        targetSha: options.targetSha,
         newInvocationId: nextInvocation(),
         nRestarts: campaign.nRestarts,
       });
@@ -472,9 +516,55 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     if (/fhv-t4-observer-systemd-identity-read\.sh/.test(remoteCommand)) {
       return {
         exitCode: 0,
-        stdout: `${JSON.stringify({ bootId, invocationId: observer.invocationId, mainPid: observer.mainPid, activeState: observer.activeState })}\n`,
+        stdout: `${JSON.stringify({
+          bootId,
+          invocationId: observer.invocationId,
+          mainPid: observer.mainPid,
+          activeEnterTimestampMonotonicUs: observer.activeEnterMonotonic,
+          activeState: observer.activeState,
+        })}\n`,
         stderr: "",
       };
+    }
+
+    if (/fhv-t4-host-probe\.sh/.test(remoteCommand)) {
+      const rawPathMatch = remoteCommand.match(/>\s+'([^']+)'/);
+      const rawPath = rawPathMatch?.[1] ?? join(runDir, "control/fhv-t4-host-probe-raw.v1.json");
+      writeJson(rawPath, {
+        schemaVersion: "fhv-t4-host-probe-raw/v1",
+        bootId,
+        campaignUnit: "waia-fhv-campaign.service",
+        observerUnit: "waia-fhv-observer.service",
+        legacyContainerName: "ai-trader-execution-host",
+        legacyContainerImage: "waia-execution-host:bp6",
+        legacyContainerRunning: true,
+      });
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+
+    if (/fhv-t4-rendered-unit-digests\.sh/.test(remoteCommand)) {
+      return {
+        exitCode: 0,
+        stdout: '{"waia-fhv-campaign.service":"abc","waia-fhv-observer.service":"def"}\n',
+        stderr: "",
+      };
+    }
+
+    if (/cat > .*fhv-t4-observer-qualification/.test(remoteCommand)) {
+      const pathMatch = remoteCommand.match(/cat > '([^']+)'/);
+      const qualPath = pathMatch?.[1];
+      if (qualPath) {
+        const start = remoteCommand.indexOf("<<'FHV_T4A_QUAL_EOF'\n");
+        const end = remoteCommand.indexOf("\nFHV_T4A_QUAL_EOF");
+        const body =
+          start >= 0 && end > start
+            ? remoteCommand.slice(start + "<<'FHV_T4A_QUAL_EOF'\n".length, end)
+            : "{}";
+        recordWrite(qualPath);
+        mkdirSync(dirname(qualPath), { recursive: true });
+        writeFileSync(qualPath, `${body.trim()}\n`);
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
     }
 
     if (/fhv-t4-service-user-exec\.sh/.test(remoteCommand)) {
@@ -499,8 +589,10 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       return { exitCode: 0, stdout: "classification=FHV_T4_CHECKOUT_IDENTITY_OK\n", stderr: "" };
     }
 
-    return { exitCode: 0, stdout: "", stderr: "" };
+    return { exitCode: 2, stdout: "", stderr: `unknown remote command: ${remoteCommand}` };
   };
+
+  const resolveRemotePath = (remotePath: string): string => remotePath;
 
   return {
     repoRoot,
@@ -510,6 +602,10 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     resetRemoteWrites: () => {
       remoteWrites = 0;
     },
+    remoteFileExists: (remotePath: string) => existsSync(resolveRemotePath(remotePath)),
+    readRemoteFile: (remotePath: string) => readFileSync(resolveRemotePath(remotePath), "utf8"),
+    remoteSha256: (remotePath: string) =>
+      sha256Hex(readFileSync(resolveRemotePath(remotePath), "utf8")),
     ssh: (
       remoteCommand: string,
       stdin: string | undefined,

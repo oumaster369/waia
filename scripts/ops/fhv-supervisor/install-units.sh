@@ -43,6 +43,8 @@ while [[ $# -gt 0 ]]; do
     --fhv-organization-id) FHV_ORGANIZATION_ID="${2:-}"; shift 2 ;;
     --unit) UNIT="${2:-}"; shift 2 ;;
     --systemd-dir) SYSTEMD_DIR="${2:-}"; shift 2 ;;
+    --systemctl-bin) SYSTEMCTL="${2:-}"; shift 2 ;;
+    --systemd-analyze) SYSTEMD_ANALYZE="${2:-}"; shift 2 ;;
     --node-bin) NODE_BIN="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -57,6 +59,8 @@ source "${SCRIPT_DIR}/_fhv-supervisor-common.sh"
 [[ -n "$TARGET_SHA" ]] || die "--target-sha is required"
 is_full_sha "$TARGET_SHA" || die "invalid target SHA"
 [[ -n "$NODE_BIN" ]] || die "--node-bin is required"
+[[ -n "$SYSTEMCTL" ]] || die "--systemctl-bin is required"
+[[ -n "$SYSTEMD_ANALYZE" ]] || die "--systemd-analyze is required"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT

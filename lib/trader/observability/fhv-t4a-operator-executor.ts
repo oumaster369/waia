@@ -1,21 +1,24 @@
 /**
- * DEE-436 — real T4A operator step executor (no trace-only loops).
+ * DEE-436 — real T4A operator step executor (live-executable argv + remote FS only).
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { captureFhvT4aObserverQualification } from "@/lib/trader/observability/fhv-t4a-observer-qualification";
 import {
   FHV_T4A_LEGACY_CONTAINER_IMAGE,
   FHV_T4A_LEGACY_CONTAINER_NAME,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
 import type { FhvT4aOperatorTransport } from "@/lib/trader/observability/fhv-t4a-operator-transport";
-import { digestFile } from "@/lib/trader/observability/fhv-t4a-phase-receipts";
+import {
+  buildFhvT4aRemotePathContext,
+  isFhvT4aRemotePath,
+} from "@/lib/trader/observability/fhv-t4a-remote-fs";
 import type { FhvT4aOperatorBindings } from "@/scripts/ops/fhv-t4a-operator";
 import { FhvT4aOperatorError } from "@/scripts/ops/fhv-t4a-operator";
 
-export type FhvT4aExecContext = Readonly<{
+export type FhvT4aExecContext = {
   bindings: FhvT4aOperatorBindings;
   transport: FhvT4aOperatorTransport;
   repoRoot: string;
@@ -26,9 +29,13 @@ export type FhvT4aExecContext = Readonly<{
   continuityAfter: string;
   sealDestination: string;
   hostProbePath: string;
+  rawHostProbePath: string;
   workstationTracePath: string;
   localStateDir: string;
-}>;
+  remotePathContext: ReturnType<typeof buildFhvT4aRemotePathContext>;
+  preCampaignObserverInvocationId?: string;
+  preCampaignCampaignInvocationId?: string;
+};
 
 export type FhvT4aStepResult = Readonly<{
   step: number;
@@ -80,12 +87,31 @@ function requireOk(
   }
 }
 
+function requireRemoteProof(
+  ctx: FhvT4aExecContext,
+  remotePath: string,
+  step: number,
+  label: string,
+): string {
+  if (!isFhvT4aRemotePath(remotePath, ctx.remotePathContext)) {
+    throw new FhvT4aOperatorError(
+      "REMOTE_PATH_ACCESSED_BY_LOCAL_FS",
+      `Expected remote path for ${label}: ${remotePath}`,
+    );
+  }
+  if (!ctx.transport.remoteFileExists(remotePath)) {
+    throw new FhvT4aOperatorError(`FHV_T4A_STEP_${step}_${label}_MISSING`, `${label} missing`);
+  }
+  return ctx.transport.remoteSha256(remotePath);
+}
+
 export function buildFhvT4aExecContext(
   bindings: FhvT4aOperatorBindings,
   transport: FhvT4aOperatorTransport,
 ): FhvT4aExecContext {
   const repoRoot = join(bindings.checkoutParent, `waia-${bindings.targetSha}`);
   const runDir = join(bindings.artifactRoot, "RI-P7/fhv-ops-rehearsal", bindings.runId);
+  const remotePathContext = buildFhvT4aRemotePathContext(bindings, repoRoot, runDir);
   return {
     bindings,
     transport,
@@ -97,8 +123,10 @@ export function buildFhvT4aExecContext(
     continuityAfter: join(runDir, "control/fhv-t4-continuity-after.v1.json"),
     sealDestination: join(bindings.artifactRoot, "RI-P7/fhv-ops-rehearsal-seals", bindings.runId),
     hostProbePath: join(runDir, "control/fhv-t4-host-probe-proof.v1.json"),
+    rawHostProbePath: join(runDir, "control/fhv-t4-host-probe-raw.v1.json"),
     workstationTracePath: bindings.workstationTracePath,
     localStateDir: bindings.localStateDir,
+    remotePathContext,
   };
 }
 
@@ -153,6 +181,29 @@ function identityArgs(ctx: FhvT4aExecContext): readonly string[] {
     "--target-sha",
     b.targetSha,
   ];
+}
+
+function installUnitsArgs(ctx: FhvT4aExecContext, confirm: boolean): string {
+  const b = ctx.bindings;
+  const parts = [
+    `"${ctx.repoRoot}/scripts/ops/fhv-supervisor/install-units.sh"`,
+    `--target-sha ${shellQuote(b.targetSha)}`,
+    `--repo-path ${shellQuote(ctx.repoRoot)}`,
+    `--working-directory ${shellQuote(ctx.repoRoot)}`,
+    `--service-user ${shellQuote(b.serviceUser)}`,
+    `--environment-file ${shellQuote(b.environmentFile)}`,
+    `--fhv-run-root ${shellQuote(ctx.runDir)}`,
+    `--fhv-run-id ${shellQuote(b.runId)}`,
+    `--fhv-organization-id ${shellQuote(b.organizationId)}`,
+    `--node-bin ${shellQuote(b.nodeBin)}`,
+    `--systemd-dir ${shellQuote(ctx.installedUnitsDir)}`,
+    `--systemctl-bin ${shellQuote(b.systemctlBin)}`,
+    `--systemd-analyze ${shellQuote(b.systemdAnalyzeBin)}`,
+  ];
+  if (confirm) {
+    parts.push("--confirm");
+  }
+  return parts.join(" ");
 }
 
 export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aStepResult {
@@ -273,12 +324,17 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
     }
     case 6: {
       result = serviceUserExec(ctx, "trader:fhv:rehearsal", [
-        ...identityArgs(ctx).slice(0, 6),
+        "--target-sha",
+        b.targetSha,
+        "--run-id",
+        b.runId,
+        "--organization-id",
+        b.organizationId,
         "--artifact-root",
         b.artifactRoot,
-        "--t4-deterministic-pause",
         "--fixture",
         "HTR_WP03_BENCHMARK",
+        "--t4-deterministic-pause",
       ]);
       requireOk(result, step, "manifest");
       return {
@@ -331,8 +387,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       };
     }
     case 9: {
-      const cmd = `"${ctx.repoRoot}/scripts/ops/fhv-supervisor/install-units.sh" --rendered-units-dir ${shellQuote(ctx.renderedUnitsDir)} --installed-units-dir ${shellQuote(ctx.installedUnitsDir)}`;
-      result = runSsh(ctx, cmd, true);
+      result = runSsh(ctx, installUnitsArgs(ctx, false), true);
       requireOk(result, step, "install preview");
       return {
         step,
@@ -343,8 +398,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       };
     }
     case 10: {
-      const cmd = `"${ctx.repoRoot}/scripts/ops/fhv-supervisor/install-units.sh" --rendered-units-dir ${shellQuote(ctx.renderedUnitsDir)} --installed-units-dir ${shellQuote(ctx.installedUnitsDir)} --confirm`;
-      result = runSsh(ctx, cmd, true);
+      result = runSsh(ctx, installUnitsArgs(ctx, true), true);
       requireOk(result, step, "install units");
       return {
         step,
@@ -355,29 +409,62 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       };
     }
     case 11: {
-      const cmd = `"${ctx.repoRoot}/scripts/ops/fhv-systemd-record-deploy.sh" --run-root ${shellQuote(ctx.runDir)} --target-sha ${shellQuote(b.targetSha)} --confirm`;
+      const digestsCmd = [
+        `"${ctx.repoRoot}/scripts/ops/fhv-t4-rendered-unit-digests.sh"`,
+        `--rendered-dir ${shellQuote(ctx.renderedUnitsDir)}`,
+      ].join(" ");
+      const digestsResult = runSsh(ctx, digestsCmd, true);
+      requireOk(digestsResult, step, "rendered unit digests");
+      const cmd = [
+        `"${ctx.repoRoot}/scripts/ops/fhv-systemd-record-deploy.sh"`,
+        `--target-sha ${shellQuote(b.targetSha)}`,
+        `--release-tag ${shellQuote(b.releaseTag)}`,
+        `--run-id ${shellQuote(b.runId)}`,
+        `--organization-id ${shellQuote(b.organizationId)}`,
+        `--operator ${shellQuote(b.operatorId)}`,
+        `--service-user ${shellQuote(b.serviceUser)}`,
+        `--rendered-unit-digests ${shellQuote(digestsResult.stdout.trim())}`,
+        `--repo-path ${shellQuote(ctx.repoRoot)}`,
+        `--node-bin ${shellQuote(b.nodeBin)}`,
+        `--git-bin ${shellQuote(b.gitBin)}`,
+        `--docker-bin ${shellQuote(b.dockerBin)}`,
+        `--confirm`,
+      ].join(" ");
       result = runSsh(ctx, cmd, true);
       requireOk(result, step, "deployment record");
       return {
         step,
         ...result,
         classification: "FHV_T4A_STEP_11_OK",
-        prerequisiteProofDigests: prereq,
+        prerequisiteProofDigests: [sha256Hex(digestsResult.stdout.trim())],
         resultingProofDigests: proofs,
       };
     }
     case 12: {
+      const captureCmd = [
+        `"${ctx.repoRoot}/scripts/ops/fhv-t4-host-probe.sh"`,
+        `> ${shellQuote(ctx.rawHostProbePath)}`,
+      ].join(" ");
+      result = runSsh(ctx, captureCmd, true);
+      requireOk(result, step, "host probe capture");
+      if (!ctx.transport.remoteFileExists(ctx.rawHostProbePath)) {
+        throw new FhvT4aOperatorError(
+          "HOST_PROBE_RAW_SOURCE_MISSING",
+          "Raw host probe JSON missing after capture.",
+        );
+      }
       result = serviceUserExec(ctx, "trader:fhv:t4:ingest-host-probe", [
         ...identityArgs(ctx),
-        "--host-probe-json-path",
-        ctx.hostProbePath,
+        "--raw-host-probe-json-path",
+        ctx.rawHostProbePath,
       ]);
       requireOk(result, step, "host probe ingest");
+      proofs.push(requireRemoteProof(ctx, ctx.hostProbePath, step, "HOST_PROBE_PROOF"));
       return {
         step,
         ...result,
         classification: "FHV_T4A_STEP_12_OK",
-        prerequisiteProofDigests: prereq,
+        prerequisiteProofDigests: [ctx.transport.remoteSha256(ctx.rawHostProbePath)],
         resultingProofDigests: proofs,
       };
     }
@@ -402,6 +489,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         b.operatorId,
       ]);
       requireOk(result, step, "verify deployment");
+      proofs.push(requireRemoteProof(ctx, ctx.hostProbePath, step, "HOST_PROBE_PROOF"));
       return {
         step,
         ...result,
@@ -422,21 +510,15 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       };
     }
     case 15: {
-      const waitCmd = `"${ctx.repoRoot}/scripts/ops/fhv-t4-observer-wait-active.sh" --systemctl-bin ${shellQuote(b.systemctlBin)} --python-bin ${shellQuote(b.pythonBin)} waia-fhv-observer.service 60000`;
-      result = runSsh(ctx, waitCmd, true);
-      requireOk(result, step, "observer wait");
-      result = serviceUserExec(ctx, "trader:fhv:t4:status", identityArgs(ctx));
-      requireOk(result, step, "observer status");
-      const qualPath = join(
-        ctx.runDir,
-        "control/fhv-t4-observer-qualification-pre-campaign.v1.json",
-      );
-      if (existsSync(qualPath)) {
-        proofs.push(digestFile(qualPath));
-      }
+      const qual = captureFhvT4aObserverQualification(ctx, "PRE_CAMPAIGN");
+      ctx.preCampaignObserverInvocationId = qual.observerIdentity.invocationId;
+      ctx.preCampaignCampaignInvocationId = qual.completedCampaignIdentity.invocationId;
+      proofs.push(qual.proofDigest);
       return {
         step,
-        ...result,
+        exitCode: 0,
+        stdout: `classification=FHV_T4A_STEP_15_OK\n`,
+        stderr: "",
         classification: "FHV_T4A_STEP_15_OK",
         prerequisiteProofDigests: prereq,
         resultingProofDigests: proofs,
@@ -527,14 +609,24 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       ].join(" ");
       result = runSsh(ctx, rootCmd, true);
       requireOk(result, step, "resume root enforcement");
-      const proof = join(ctx.runDir, "control/fhv-t4-resume-enforcement-proof.v1.json");
-      if (!existsSync(proof)) {
+      const proofPath = join(ctx.runDir, "control/fhv-t4-resume-enforcement-proof.v1.json");
+      const remoteBody = ctx.transport.readRemoteFile(proofPath);
+      const parsed = JSON.parse(remoteBody) as {
+        runId?: string;
+        organizationId?: string;
+        targetSha?: string;
+      };
+      if (
+        parsed.runId !== b.runId ||
+        parsed.organizationId !== b.organizationId ||
+        parsed.targetSha?.toLowerCase() !== b.targetSha
+      ) {
         throw new FhvT4aOperatorError(
-          "FHV_T4A_STEP_21_ENFORCEMENT_PROOF_MISSING",
-          "resume enforcement proof missing",
+          "FHV_T4A_STEP_21_ENFORCEMENT_PROOF_IDENTITY",
+          "Resume enforcement proof identity mismatch.",
         );
       }
-      proofs.push(digestFile(proof));
+      proofs.push(ctx.transport.remoteSha256(proofPath));
       return {
         step,
         ...result,
@@ -609,13 +701,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         ctx.continuityBefore,
       ]);
       requireOk(result, step, "continuity before");
-      if (!existsSync(ctx.continuityBefore)) {
-        throw new FhvT4aOperatorError(
-          "FHV_T4A_STEP_26_CONTINUITY_MISSING",
-          "continuity-before artifact missing",
-        );
-      }
-      proofs.push(digestFile(ctx.continuityBefore));
+      proofs.push(requireRemoteProof(ctx, ctx.continuityBefore, step, "CONTINUITY_BEFORE"));
       return {
         step,
         ...result,
@@ -636,14 +722,26 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       };
     }
     case 29: {
-      const waitCmd = `"${ctx.repoRoot}/scripts/ops/fhv-t4-observer-wait-active.sh" --systemctl-bin ${shellQuote(b.systemctlBin)} --python-bin ${shellQuote(b.pythonBin)} waia-fhv-observer.service 60000`;
-      result = runSsh(ctx, waitCmd, true);
-      requireOk(result, step, "post-restart observer wait");
-      result = serviceUserExec(ctx, "trader:fhv:t4:status", identityArgs(ctx));
-      requireOk(result, step, "post-restart status");
+      const qual = captureFhvT4aObserverQualification(
+        ctx,
+        "POST_RESTART",
+        ctx.preCampaignObserverInvocationId,
+      );
+      if (
+        ctx.preCampaignCampaignInvocationId &&
+        qual.completedCampaignIdentity.invocationId !== ctx.preCampaignCampaignInvocationId
+      ) {
+        throw new FhvT4aOperatorError(
+          "FHV_T4A_CAMPAIGN_IDENTITY_CHANGED_POST_RESTART",
+          "Completed campaign identity must remain unchanged post-restart.",
+        );
+      }
+      proofs.push(qual.proofDigest);
       return {
         step,
-        ...result,
+        exitCode: 0,
+        stdout: `classification=FHV_T4A_STEP_29_OK\n`,
+        stderr: "",
         classification: "FHV_T4A_STEP_29_OK",
         prerequisiteProofDigests: prereq,
         resultingProofDigests: proofs,
@@ -658,13 +756,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         ctx.continuityAfter,
       ]);
       requireOk(result, step, "continuity after");
-      if (!existsSync(ctx.continuityAfter)) {
-        throw new FhvT4aOperatorError(
-          "FHV_T4A_STEP_30_CONTINUITY_MISSING",
-          "continuity-after artifact missing",
-        );
-      }
-      proofs.push(digestFile(ctx.continuityAfter));
+      proofs.push(requireRemoteProof(ctx, ctx.continuityAfter, step, "CONTINUITY_AFTER"));
       return {
         step,
         ...result,
@@ -698,34 +790,78 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       requireOk(result, step, "rollback");
       result = serviceUserExec(ctx, "trader:fhv:t4:verify-rollback", [
         ...identityArgs(ctx),
-        "--rendered-units-dir",
-        ctx.renderedUnitsDir,
-        "--installed-units-dir",
-        ctx.installedUnitsDir,
+        "--repo-root",
+        ctx.repoRoot,
       ]);
       requireOk(result, step, "verify rollback");
-      result = serviceUserExec(ctx, "trader:fhv:t4:build-evidence-inventory", identityArgs(ctx));
-      requireOk(result, step, "evidence inventory");
-      result = serviceUserExec(ctx, "trader:fhv:t4:seal-evidence", [
+      result = serviceUserExec(ctx, "trader:fhv:t4:build-evidence-inventory", [
         ...identityArgs(ctx),
-        "--seal-destination",
-        ctx.sealDestination,
-      ]);
-      requireOk(result, step, "seal evidence");
-      result = serviceUserExec(ctx, "trader:fhv:t4:verify-seal", [
-        ...identityArgs(ctx),
-        "--seal-destination",
-        ctx.sealDestination,
-      ]);
-      requireOk(result, step, "verify seal");
-      result = serviceUserExec(ctx, "trader:fhv:t4:verify-ceremony", [
-        ...identityArgs(ctx),
+        "--repo-root",
+        ctx.repoRoot,
+        "--rendered-units-dir",
+        ctx.renderedUnitsDir,
         "--continuity-before",
         ctx.continuityBefore,
         "--continuity-after",
         ctx.continuityAfter,
+        "--host-probe-json-path",
+        ctx.hostProbePath,
+      ]);
+      requireOk(result, step, "evidence inventory");
+      result = serviceUserExec(ctx, "trader:fhv:t4:seal-evidence", [
+        ...identityArgs(ctx),
+        "--release-tag",
+        b.releaseTag,
+        "--repo-root",
+        ctx.repoRoot,
         "--seal-destination",
         ctx.sealDestination,
+        "--service-user",
+        b.serviceUser,
+        "--rendered-units-dir",
+        ctx.renderedUnitsDir,
+        "--continuity-before",
+        ctx.continuityBefore,
+        "--continuity-after",
+        ctx.continuityAfter,
+        "--host-probe-json-path",
+        ctx.hostProbePath,
+      ]);
+      requireOk(result, step, "seal evidence");
+      result = serviceUserExec(ctx, "trader:fhv:t4:verify-seal", [
+        ...identityArgs(ctx),
+        "--release-tag",
+        b.releaseTag,
+        "--seal-destination",
+        ctx.sealDestination,
+        "--service-user",
+        b.serviceUser,
+      ]);
+      requireOk(result, step, "verify seal");
+      result = serviceUserExec(ctx, "trader:fhv:t4:verify-ceremony", [
+        ...identityArgs(ctx),
+        "--release-tag",
+        b.releaseTag,
+        "--repo-root",
+        ctx.repoRoot,
+        "--seal-destination",
+        ctx.sealDestination,
+        "--continuity-before",
+        ctx.continuityBefore,
+        "--continuity-after",
+        ctx.continuityAfter,
+        "--service-user",
+        b.serviceUser,
+        "--working-directory",
+        ctx.repoRoot,
+        "--environment-file",
+        b.environmentFile,
+        "--operator-id",
+        b.operatorId,
+        "--rendered-units-dir",
+        ctx.renderedUnitsDir,
+        "--installed-units-dir",
+        ctx.installedUnitsDir,
       ]);
       requireOk(result, step, "verify ceremony");
       const ceremony = parseCeremony(result.stdout);

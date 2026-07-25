@@ -74,6 +74,19 @@ export const FHV_T4A_CLOSURE_COUNTER_NAMES = [
   "NONEXECUTABLE_COMMAND_COPY",
   "BARE_OPERATOR_NODE",
   "CEREMONY_OUTPUT_NOT_REACHED",
+  "REMOTE_PATH_ACCESSED_BY_LOCAL_FS",
+  "STEP6_TARGET_SHA_MISSING",
+  "INSTALL_UNITS_ARGV_INVALID",
+  "DEPLOY_RECORD_ARGV_INVALID",
+  "HOST_PROBE_RAW_SOURCE_MISSING",
+  "SYSTEMD_IDENTITY_TOOL_FLAGS_MISSING",
+  "OBSERVER_QUALIFICATION_PROOF_OPTIONAL",
+  "STEP32_CLOSURE_ARGV_INVALID",
+  "HERMETIC_UNKNOWN_COMMAND_SUCCESS",
+  "LOCAL_GIT_BINARY_IGNORED",
+  "PHASE_RECEIPT_FULL_BINDING_GAP",
+  "PHASE_RECEIPT_OVERWRITE_ALLOWED",
+  "PREAUTH_UNMEASURED_ZERO_CLAIM",
 ] as const;
 
 export type FhvT4aClosureCounterName = (typeof FHV_T4A_CLOSURE_COUNTER_NAMES)[number];
@@ -237,8 +250,96 @@ export function auditFhvT4aClosureCounters(
   ) {
     counters.SYNTHETIC_CONTINUITY_PROOF_WRITES = 1;
   }
-  if (/remoteWrites\s*\+/.test(transportBody) && /stdin/.test(transportBody)) {
+  if (
+    /remoteWrites\s*\+/.test(transportBody) &&
+    /stdin/.test(transportBody) &&
+    !transportBody.includes("preauthMeasuredRemoteWriteCount")
+  ) {
     counters.LIVE_PREAUTH_FALSE_WRITE_ACCOUNTING = 1;
+  }
+  if (
+    !operatorBody.includes("preauthMeasuredRemoteWriteCount") ||
+    !transportBody.includes("preauthLedgerEntries")
+  ) {
+    counters.PREAUTH_UNMEASURED_ZERO_CLAIM = 1;
+  }
+  if (!transportBody.includes("FHV_LOCAL_GIT_BIN")) {
+    counters.LOCAL_GIT_BINARY_IGNORED = 1;
+  }
+  if (
+    !executorBody.includes("--systemctl-bin") ||
+    !executorBody.includes("--python-bin") ||
+    !read(root, "lib/trader/observability/fhv-t4a-observer-qualification.ts").includes(
+      "--systemctl-bin",
+    )
+  ) {
+    counters.SYSTEMD_IDENTITY_TOOL_FLAGS_MISSING = 1;
+  }
+  if (
+    executorBody.includes("existsSync(") ||
+    executorBody.includes("readFileSync(") ||
+    executorBody.includes("digestFile(")
+  ) {
+    counters.REMOTE_PATH_ACCESSED_BY_LOCAL_FS = 1;
+  }
+  if (
+    !executorBody.includes('"--target-sha"') ||
+    executorBody.includes("identityArgs(ctx).slice(0, 6)")
+  ) {
+    counters.STEP6_TARGET_SHA_MISSING = 1;
+  }
+  if (
+    !executorBody.includes("installUnitsArgs") ||
+    !executorBody.includes("--systemctl-bin") ||
+    !executorBody.includes("--systemd-analyze")
+  ) {
+    counters.INSTALL_UNITS_ARGV_INVALID = 1;
+  }
+  const step11Block = executorBody.match(/case 11:\s*\{[\s\S]*?case 12:/)?.[0] ?? "";
+  if (
+    !step11Block.includes("fhv-systemd-record-deploy.sh") ||
+    !step11Block.includes("--rendered-unit-digests") ||
+    step11Block.includes("--run-root")
+  ) {
+    counters.DEPLOY_RECORD_ARGV_INVALID = 1;
+  }
+  if (
+    !executorBody.includes("fhv-t4-host-probe.sh") ||
+    !executorBody.includes("--raw-host-probe-json-path")
+  ) {
+    counters.HOST_PROBE_RAW_SOURCE_MISSING = 1;
+  }
+  if (
+    !executorBody.includes("captureFhvT4aObserverQualification") ||
+    executorBody.includes("if (existsSync(qualPath))")
+  ) {
+    counters.OBSERVER_QUALIFICATION_PROOF_OPTIONAL = 1;
+  }
+  if (
+    !executorBody.includes("trader:fhv:t4:verify-ceremony") ||
+    !executorBody.includes("--host-probe-json-path")
+  ) {
+    counters.STEP32_CLOSURE_ARGV_INVALID = 1;
+  }
+  if (
+    !existsSync(join(root, "lib/trader/observability/fhv-t4a-hermetic-simulation.ts")) ||
+    !read(root, "lib/trader/observability/fhv-t4a-hermetic-simulation.ts").includes(
+      "HERMETIC_UNKNOWN_COMMAND_SUCCESS",
+    )
+  ) {
+    counters.HERMETIC_UNKNOWN_COMMAND_SUCCESS = 1;
+  }
+  if (
+    !existsSync(join(root, "lib/trader/observability/fhv-t4a-phase-receipts.ts")) ||
+    !read(root, "lib/trader/observability/fhv-t4a-phase-receipts.ts").includes(
+      "fhvT4aFullBindingFields",
+    ) ||
+    !read(root, "lib/trader/observability/fhv-t4a-phase-receipts.ts").includes(
+      "assertReceiptNotExists",
+    )
+  ) {
+    counters.PHASE_RECEIPT_FULL_BINDING_GAP = 1;
+    counters.PHASE_RECEIPT_OVERWRITE_ALLOWED = 1;
   }
   if (operatorBody.includes('transport.kind === "hermetic"') && operatorBody.includes("return")) {
     counters.HERMETIC_SSH_BYPASS = 1;
