@@ -52,6 +52,29 @@ function resolveReleaseTag(): string {
   }
 }
 
+function hermeticTransport(
+  releaseRoot: string,
+  sha: string,
+  env: NodeJS.ProcessEnv,
+): ReturnType<typeof createFhvT4aHermeticTransport> {
+  return createFhvT4aHermeticTransport({
+    localReleaseRoot: releaseRoot,
+    targetSha: sha,
+    releaseTag: env.FHV_RELEASE_TAG ?? resolveReleaseTag(),
+    serviceUser: "fhv",
+    serviceUserHome: "/home/fhv",
+    checkoutParent: env.FHV_CHECKOUT_PARENT!,
+    artifactRoot: env.FHV_ARTIFACT_ROOT!,
+    environmentFile: env.FHV_ENVIRONMENT_FILE!,
+    nodeBin: process.execPath,
+    corepackBin: process.execPath,
+    gitBin: "/usr/bin/git",
+    pythonBin: "/usr/bin/python3",
+    dockerBin: "/usr/bin/docker",
+    systemctlBin: "/usr/bin/systemctl",
+  });
+}
+
 function baseEnv(releaseRoot: string, sha: string): NodeJS.ProcessEnv {
   const work = mkdtempSync(join(tmpdir(), "fhv-t4a-work-"));
   tempDirs.push(work);
@@ -106,21 +129,7 @@ describe("fhv-t4a operator state machine (DEE-436)", () => {
       return;
     }
     const env = baseEnv(releaseRoot, sha);
-    const transport = createFhvT4aHermeticTransport({
-      localReleaseRoot: releaseRoot,
-      targetSha: sha,
-      serviceUser: "fhv",
-      serviceUserHome: "/home/fhv",
-      checkoutParent: env.FHV_CHECKOUT_PARENT!,
-      artifactRoot: env.FHV_ARTIFACT_ROOT!,
-      environmentFile: env.FHV_ENVIRONMENT_FILE!,
-      nodeBin: process.execPath,
-      corepackBin: process.execPath,
-      gitBin: "/usr/bin/git",
-      pythonBin: "/usr/bin/python3",
-      dockerBin: "/usr/bin/docker",
-      systemctlBin: "/usr/bin/systemctl",
-    });
+    const transport = hermeticTransport(releaseRoot, sha, env);
     setFhvT4aOperatorTransportForTests(transport);
     const bindings = resolveFhvT4aOperatorBindings(env);
     const digests = verifyFhvT4aLocalRelease(bindings, transport);
@@ -136,21 +145,7 @@ describe("fhv-t4a operator state machine (DEE-436)", () => {
       ...baseEnv(releaseRoot, sha),
       FHV_T4A_AUTHORIZATION: FHV_T4A_AUTHORIZATION_LITERAL,
     } as NodeJS.ProcessEnv;
-    const transport = createFhvT4aHermeticTransport({
-      localReleaseRoot: releaseRoot,
-      targetSha: sha,
-      serviceUser: "fhv",
-      serviceUserHome: "/home/fhv",
-      checkoutParent: env.FHV_CHECKOUT_PARENT!,
-      artifactRoot: env.FHV_ARTIFACT_ROOT!,
-      environmentFile: env.FHV_ENVIRONMENT_FILE!,
-      nodeBin: process.execPath,
-      corepackBin: process.execPath,
-      gitBin: "/usr/bin/git",
-      pythonBin: "/usr/bin/python3",
-      dockerBin: "/usr/bin/docker",
-      systemctlBin: "/usr/bin/systemctl",
-    });
+    const transport = hermeticTransport(releaseRoot, sha, env);
     setFhvT4aOperatorTransportForTests(transport);
     const bindings = resolveFhvT4aOperatorBindings(env);
     const dirty = execFileSync("git", ["-C", releaseRoot, "status", "--porcelain=v1"], {
@@ -222,21 +217,7 @@ describe("fhv-t4a operator state machine (DEE-436)", () => {
         tempDirs.push(dirtyPath);
         execFileSync("git", ["-C", releaseRoot, "add", ".fhv-t4a-dirty-test-marker"]);
       }
-      const transport = createFhvT4aHermeticTransport({
-        localReleaseRoot: releaseRoot,
-        targetSha: sha,
-        serviceUser: "fhv",
-        serviceUserHome: "/home/fhv",
-        checkoutParent: env.FHV_CHECKOUT_PARENT!,
-        artifactRoot: env.FHV_ARTIFACT_ROOT!,
-        environmentFile: env.FHV_ENVIRONMENT_FILE!,
-        nodeBin: process.execPath,
-        corepackBin: process.execPath,
-        gitBin: "/usr/bin/git",
-        pythonBin: "/usr/bin/python3",
-        dockerBin: "/usr/bin/docker",
-        systemctlBin: "/usr/bin/systemctl",
-      });
+      const transport = hermeticTransport(releaseRoot, sha, env);
       let activeTransport: FhvT4aOperatorTransport = transport;
       if (negative.id === "D-04") {
         activeTransport = {
@@ -274,6 +255,7 @@ describe("fhv-t4a operator state machine (DEE-436)", () => {
     const transport = createFhvT4aHermeticTransport({
       localReleaseRoot: releaseRoot,
       targetSha: sha,
+      releaseTag: resolveReleaseTag(),
       serviceUser: "fhv",
       serviceUserHome: "/home/fhv",
       checkoutParent: mkdtempSync(join(tmpdir(), "fhv-t4a-parent-")),

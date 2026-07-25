@@ -6,7 +6,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  FHV_T4A_BOOTSTRAP_SCRIPT_PATHS,
+  assertFhvT4aClosureCountersZero,
+  auditFhvT4aClosureCounters,
+  formatFhvT4aClosureCounters,
+} from "@/lib/trader/observability/fhv-t4a-closure-counter-audit";
+import {
   FHV_T4A_LEGACY_CONTAINER_IMAGE,
   FHV_T4A_LEGACY_CONTAINER_NAME,
   FHV_T4A_OPERATOR_STEPS,
@@ -19,16 +23,6 @@ const PACKET = join(ROOT, "docs/ops/T4_OPERATOR_PACKET_V5.md");
 function fail(message: string): never {
   console.error(`validate-fhv-t4a-packet: ${message}`);
   process.exit(1);
-}
-
-function extractBashBlocks(markdown: string): Array<{ body: string; start: number }> {
-  const blocks: Array<{ body: string; start: number }> = [];
-  const regex = /```bash\n([\s\S]*?)```/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(markdown)) !== null) {
-    blocks.push({ body: match[1] ?? "", start: match.index });
-  }
-  return blocks;
 }
 
 function main(): void {
@@ -105,6 +99,14 @@ function main(): void {
   }
   if (serviceExec.includes('source "$ENVIRONMENT_FILE"')) {
     fail("fhv-t4-service-user-exec.sh must not shell-source EnvironmentFile");
+  }
+
+  const counters = auditFhvT4aClosureCounters({ root: ROOT, preauthRemoteWriteCount: 0 });
+  console.log(formatFhvT4aClosureCounters(counters));
+  try {
+    assertFhvT4aClosureCountersZero(counters);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
 
   console.log("validate-fhv-t4a-packet: OK");

@@ -22,6 +22,7 @@ import {
   getFhvT4aOperatorTransportForTests,
   type FhvT4aOperatorTransport,
 } from "@/lib/trader/observability/fhv-t4a-operator-transport";
+import { validateFhvT4aOperatorBindings } from "@/lib/trader/observability/fhv-t4-binding-validation";
 
 export class FhvT4aOperatorError extends Error {
   constructor(
@@ -93,7 +94,7 @@ function requireEnv(name: string, env: NodeJS.ProcessEnv = process.env): string 
 export function resolveFhvT4aOperatorBindings(
   env: NodeJS.ProcessEnv = process.env,
 ): FhvT4aOperatorBindings {
-  return {
+  const bindings = {
     execHost: requireEnv("EXEC_HOST", env),
     sshUser: requireEnv("SSH_USER", env),
     localReleaseRoot: requireEnv("FHV_LOCAL_RELEASE_ROOT", env),
@@ -118,6 +119,18 @@ export function resolveFhvT4aOperatorBindings(
     authorization: env.FHV_T4A_AUTHORIZATION?.trim(),
     tracePath: env.FHV_T4A_OPERATOR_TRACE_PATH?.trim(),
   };
+  validateFhvT4aOperatorBindings({
+    targetSha: bindings.targetSha,
+    releaseTag: bindings.releaseTag,
+    runId: bindings.runId,
+    organizationId: bindings.organizationId,
+    checkoutParent: bindings.checkoutParent,
+    artifactRoot: bindings.artifactRoot,
+    repoRoot: join(bindings.checkoutParent, `waia-${bindings.targetSha}`),
+    runDir: join(bindings.artifactRoot, "RI-P7/fhv-ops-rehearsal", bindings.runId),
+    sealDestination: join(bindings.artifactRoot, "RI-P7/fhv-ops-rehearsal-seals", bindings.runId),
+  });
+  return bindings;
 }
 
 function resolveTransport(env: NodeJS.ProcessEnv): FhvT4aOperatorTransport {
@@ -166,7 +179,7 @@ export function verifyFhvT4aLocalRelease(
   const checks: Array<[string, readonly string[]]> = [
     ["status", ["status", "--porcelain=v1"]],
     ["head", ["rev-parse", "HEAD"]],
-    ["tag", ["describe", "--tags", "--exact-match", "HEAD"]],
+    ["tag-peel", ["rev-parse", `${bindings.releaseTag}^{}`]],
     ["origin", ["remote", "get-url", "origin"]],
   ];
   for (const [label, args] of checks) {
@@ -186,8 +199,11 @@ export function verifyFhvT4aLocalRelease(
     if (label === "head" && result.stdout.trim().toLowerCase() !== bindings.targetSha) {
       throw new FhvT4aOperatorError("FHV_T4A_LOCAL_HEAD_MISMATCH", "Local HEAD != target SHA.");
     }
-    if (label === "tag" && result.stdout.trim() !== bindings.releaseTag) {
-      throw new FhvT4aOperatorError("FHV_T4A_LOCAL_TAG_MISMATCH", "Local tag peel mismatch.");
+    if (label === "tag-peel" && result.stdout.trim().toLowerCase() !== bindings.targetSha) {
+      throw new FhvT4aOperatorError(
+        "FHV_T4A_LOCAL_TAG_MISMATCH",
+        "Release tag peel != target SHA.",
+      );
     }
     if (label === "origin" && result.stdout.trim() !== bindings.originUrl) {
       throw new FhvT4aOperatorError("FHV_T4A_LOCAL_ORIGIN_MISMATCH", "Local origin mismatch.");

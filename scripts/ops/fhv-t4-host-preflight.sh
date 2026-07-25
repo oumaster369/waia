@@ -121,6 +121,16 @@ done
 require_abs "environment-file" "$ENVIRONMENT_FILE"
 require_abs "artifact-root" "$ARTIFACT_ROOT"
 require_abs "checkout-parent" "$CHECKOUT_PARENT"
+case "$CHECKOUT_PARENT" in
+  /home/*)
+    fail "checkout-parent under /home is incompatible with ProtectHome=true systemd sandbox"
+    ;;
+esac
+case "$ARTIFACT_ROOT" in
+  /home/*)
+    fail "artifact-root under /home is incompatible with ProtectHome=true systemd sandbox"
+    ;;
+esac
 require_abs "node-bin" "$NODE_BIN"
 require_abs "corepack-bin" "$COREPACK_BIN"
 require_abs "git-bin" "$GIT_BIN"

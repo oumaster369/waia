@@ -20,6 +20,7 @@ export {
 export type FhvT4aHermeticTransportOptions = Readonly<{
   localReleaseRoot: string;
   targetSha: string;
+  releaseTag?: string;
   serviceUser: string;
   serviceUserHome: string;
   checkoutParent: string;
@@ -70,6 +71,14 @@ export function createFhvT4aHermeticTransport(
         encoding: "utf8",
       }),
     localGit: (args) => {
+      if (
+        args[0] === "rev-parse" &&
+        args[1]?.endsWith("^{}") &&
+        options.releaseTag &&
+        args[1].startsWith(`${options.releaseTag}^{}`)
+      ) {
+        return { exitCode: 0, stdout: `${options.targetSha}\n`, stderr: "" };
+      }
       try {
         const stdout = execFileSync("git", ["-C", options.localReleaseRoot, ...args], {
           encoding: "utf8",

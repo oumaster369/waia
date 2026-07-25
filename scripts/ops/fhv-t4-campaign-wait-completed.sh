@@ -2,18 +2,32 @@
 # DEE-436 — identity-aware bounded wait for completed inactive/success campaign unit.
 set -euo pipefail
 
-UNIT="${1:-waia-fhv-campaign.service}"
-TIMEOUT_MS="${2:-120000}"
-RUN_ROOT="${3:-}"
-EXPECTED_TERMINAL="${4:-REHEARSAL_OK}"
-SYSTEMCTL="${SYSTEMCTL:-systemctl}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 fail() {
   printf 'error: %s\n' "$1" >&2
   exit 2
 }
 
+SYSTEMCTL=""
+PYTHON_BIN=""
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --systemctl-bin) SYSTEMCTL="${2:-}"; shift 2 ;;
+    --python-bin) PYTHON_BIN="${2:-}"; shift 2 ;;
+    -*) fail "unknown flag: $1" ;;
+    *) POSITIONAL+=("$1"); shift ;;
+  esac
+done
+set -- "${POSITIONAL[@]}"
+
+UNIT="${1:-waia-fhv-campaign.service}"
+TIMEOUT_MS="${2:-120000}"
+RUN_ROOT="${3:-}"
+EXPECTED_TERMINAL="${4:-REHEARSAL_OK}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+[[ -n "$SYSTEMCTL" && -x "$SYSTEMCTL" ]] || fail "--systemctl-bin required"
+[[ -n "$PYTHON_BIN" && -x "$PYTHON_BIN" ]] || fail "--python-bin required"
 [[ -n "$RUN_ROOT" ]] || fail "run-root required"
 [[ "$RUN_ROOT" = /* ]] || fail "run-root must be absolute"
 
@@ -33,7 +47,6 @@ normalize_boot_id() {
 }
 
 START_BOOT_ID="$(normalize_boot_id "$(tr -d '\n' < /proc/sys/kernel/random/boot_id)")"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
 EXPECTED_INVOCATION=""
 EXPECTED_N_RESTARTS=""
 RESUME_PROOF="${RUN_ROOT}/control/fhv-t4-resume-enforcement-proof.v1.json"
@@ -60,10 +73,8 @@ while true; do
   fi
 
   ACTIVE_STATE="$(read_unit_field ActiveState)"
-  SUB_STATE="$(read_unit_field SubState)"
   RESULT="$(read_unit_field Result)"
   INVOCATION_ID="$(read_unit_field InvocationID)"
-  EXEC_MAIN_PID="$(read_unit_field ExecMainPID)"
   N_RESTARTS="$(read_unit_field NRestarts)"
   TERMINAL_FILE="${RUN_ROOT}/fhv-rehearsal-terminal.v1.json"
   TERMINAL_CLASS=""
@@ -83,7 +94,7 @@ while true; do
 
   if [[ "$ACTIVE_STATE" == "active" || "$ACTIVE_STATE" == "activating" || "$ACTIVE_STATE" == "deactivating" ]]; then
     if [[ -n "$EXPECTED_INVOCATION" && -n "$INVOCATION_ID" && "$INVOCATION_ID" == "$EXPECTED_INVOCATION" ]]; then
-      : # same invocation unwinding — continue polling
+      :
     elif [[ -z "$EXPECTED_INVOCATION" ]]; then
       fail "campaign became active under a new invocation"
     fi
@@ -94,7 +105,10 @@ while true; do
       if [[ -n "$EXPECTED_INVOCATION" && -n "$INVOCATION_ID" && "$INVOCATION_ID" != "$EXPECTED_INVOCATION" ]]; then
         fail "completed invocation mismatch"
       fi
-      bash "${SCRIPT_DIR}/fhv-t4-campaign-systemd-identity-read.sh" "$UNIT" >/dev/null
+      bash "${SCRIPT_DIR}/fhv-t4-campaign-systemd-identity-read.sh" \
+        --systemctl-bin "$SYSTEMCTL" \
+        --python-bin "$PYTHON_BIN" \
+        "$UNIT" >/dev/null
       printf 'classification=FHV_T4_CAMPAIGN_COMPLETED_WAIT_OK\n'
       exit 0
     fi

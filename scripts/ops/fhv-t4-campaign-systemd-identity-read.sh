@@ -2,9 +2,28 @@
 # DEE-436 — capture completed waia-fhv-campaign.service systemd identity fields.
 set -euo pipefail
 
+fail() {
+  printf 'error: %s\n' "$1" >&2
+  exit 2
+}
+
+SYSTEMCTL=""
+PYTHON_BIN=""
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --systemctl-bin) SYSTEMCTL="${2:-}"; shift 2 ;;
+    --python-bin) PYTHON_BIN="${2:-}"; shift 2 ;;
+    -*) fail "unknown flag: $1" ;;
+    *) POSITIONAL+=("$1"); shift ;;
+  esac
+done
+set -- "${POSITIONAL[@]}"
+
 UNIT="${1:-waia-fhv-campaign.service}"
-SYSTEMCTL="${SYSTEMCTL:-systemctl}"
-PYTHON_BIN="${FHV_PYTHON_BIN:-${PYTHON_BIN:-python3}}"
+
+[[ -n "$SYSTEMCTL" && -x "$SYSTEMCTL" ]] || fail "--systemctl-bin required"
+[[ -n "$PYTHON_BIN" && -x "$PYTHON_BIN" ]] || fail "--python-bin required"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
   printf '{"error":"FHV_T4_COMPLETED_CAMPAIGN_IDENTITY_LINUX_ONLY"}\n' >&2
