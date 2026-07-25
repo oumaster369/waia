@@ -49,11 +49,11 @@ resolve_rollback_units() {
 if [[ "$CONFIRM" -eq 0 ]]; then
   while IFS= read -r unit_name; do
     [[ -n "$unit_name" ]] || continue
-    log "planned: ${SYSTEMCTL} stop ${unit_name}"
-    log "planned: ${SYSTEMCTL} disable ${unit_name}"
+    log "planned: systemctl stop ${unit_name} (via ${SYSTEMCTL})"
+    log "planned: systemctl disable ${unit_name} (via ${SYSTEMCTL})"
     log "planned: rm -f ${SYSTEMD_DIR}/${unit_name}"
   done < <(resolve_rollback_units)
-  log "planned: ${SYSTEMCTL} daemon-reload"
+  log "planned: systemctl daemon-reload (via ${SYSTEMCTL})"
   print_noop_footer
   exit 0
 fi
