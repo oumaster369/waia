@@ -66,9 +66,11 @@ export FHV_COREPACK_BIN="<absolute-path-to-corepack>"
 export FHV_GIT_BIN="<absolute-path-to-git>"
 export FHV_PYTHON_BIN="<absolute-path-to-python3>"
 export FHV_DOCKER_BIN="<absolute-path-to-docker>"
-export FHV_EXPECTED_LEGACY_CONTAINER_NAME="<legacy-container-name>"
-export FHV_EXPECTED_LEGACY_CONTAINER_IMAGE="<legacy-container-image>"
+export FHV_SYSTEMCTL_BIN="<absolute-path-to-systemctl>"
+export FHV_EXPECTED_LEGACY_CONTAINER_NAME="ai-trader-execution-host"
+export FHV_EXPECTED_LEGACY_CONTAINER_IMAGE="waia-execution-host:bp6"
 export FHV_ORIGIN_URL="https://github.com/oumaster369/waia.git"
+export FHV_T4A_OPERATOR_TRACE_PATH="${FHV_ARTIFACT_ROOT}/RI-P7/fhv-ops-rehearsal/${FHV_RUN_ID}/control/fhv-t4a-operator-trace.jsonl"
 
 # --- Derived (remote checkout created during POST bootstrap) ---
 export FHV_REPO_ROOT="${FHV_CHECKOUT_PARENT}/waia-${EXECUTION_SERVER_TARGET_SHA}"
@@ -82,100 +84,106 @@ export FHV_CONTINUITY_AFTER="${FHV_RUN_DIR}/control/fhv-t4-continuity-after.v1.j
 export FHV_HOST_PROBE_PATH="${FHV_RUN_DIR}/control/fhv-t4-host-probe-proof.v1.json"
 ```
 
-### WORKSTATION — verify local release handoff checkout
+### WORKSTATION — canonical operator phases
 
 **Locus:** WORKSTATION
 
-Before Phase A, prove `${FHV_LOCAL_RELEASE_ROOT}` is the reviewed release tree (not the Execution Server service-user checkout):
+The released Human operator surface is **`scripts/ops/fhv-t4a-operator.sh`**. It owns the exact workstation→Execution Server state machine. Do **not** retype low-level SSH blocks — invoke these phases only.
+
+Transport: SSH **BatchMode** + **`sudo -n`** (noninteractive). Bootstrap bytes are streamed from **`git show "${EXECUTION_SERVER_TARGET_SHA}:<path>"`** (committed object), never from a dirty working tree.
 
 ```bash
-test -d "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops"
-test "$(git -C "${FHV_LOCAL_RELEASE_ROOT}" rev-parse HEAD)" = "${EXECUTION_SERVER_TARGET_SHA}"
-test "$(git -C "${FHV_LOCAL_RELEASE_ROOT}" describe --tags --exact-match HEAD)" = "${FHV_RELEASE_TAG}"
-test "$(git -C "${FHV_LOCAL_RELEASE_ROOT}" remote get-url origin)" = "${FHV_ORIGIN_URL}"
+chmod +x "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh"
+"${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" verify-local-release
+"${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" pre-auth
 ```
 
-**Authorization is not issued by this packet.** A Human operator must issue **`AUTHORIZE-FHV-OPS-DEPLOY`** before any POST_AUTHORIZED step.
+**Authorization is not issued by this packet.** A Human operator must issue **`AUTHORIZE-FHV-OPS-DEPLOY`** before POST phases.
 
 ---
 
 ## Phase A — `PRE_AUTHORIZED_READ_ONLY_PHASE`
 
-Read-only inspection only. **Zero filesystem mutation on the Execution Server.** No target release checkout, no `node_modules`, no `tsx`, no `pnpm`, no manifest, render, install, deployment record, continuity, evidence, sealing, or systemd mutation.
+Read-only inspection only. **Zero filesystem mutation on the Execution Server.** Invoked by **`fhv-t4a-operator.sh pre-auth`** (after **`verify-local-release`**).
 
-Scripts are streamed from `${FHV_LOCAL_RELEASE_ROOT}` over SSH stdin. Do **not** copy scripts to `/tmp` or any other remote path.
+Semantic steps (operator-owned): **`fhv-validate-origin-url.sh`** exact approved origin validation; **`fhv-t4-host-preflight.sh`** dependency-free host preflight with embedded `CLOCK_BOOTTIME` sample; **`sudo -n`** probe; canonical legacy container name **`ai-trader-execution-host`** and image **`waia-execution-host:bp6`**. Bootstrap streams also include **`fhv-service-user-checkout.sh`** and **`fhv-service-user-install-deps.sh`** (committed git objects only).
 
-### A1 — exact approved origin (dependency-free)
+---
 
-**Locus:** WORKSTATION → SSH_STDIN
-
-```bash
-ssh "${SSH_USER}@${EXEC_HOST}" 'bash -s' -- \
-  --origin-url "${FHV_ORIGIN_URL}" \
-  < "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-validate-origin-url.sh"
-```
-
-### A2 — dependency-free host preflight (read-only stdout; includes CLOCK_BOOTTIME)
-
-**Locus:** WORKSTATION → SSH_STDIN → REMOTE_ROOT
-
-Preflight stdout JSON includes `hostMonotonicSample` with `clockSource=CLOCK_BOOTTIME`, `bootId`, and `monotonicNs`. There is **no** separate `fhv-t4-host-monotonic-read.sh` step.
-
-```bash
-ssh "${SSH_USER}@${EXEC_HOST}" 'sudo bash -s' -- \
-  --expected-hostname "${FHV_EXPECTED_HOSTNAME}" \
-  --expected-machine-id-sha256 "${FHV_EXPECTED_MACHINE_ID_SHA256}" \
-  --service-user "${FHV_SERVICE_USER}" \
-  --environment-file "${FHV_ENVIRONMENT_FILE}" \
-  --artifact-root "${FHV_ARTIFACT_ROOT}" \
-  --checkout-parent "${FHV_CHECKOUT_PARENT}" \
-  --node-bin "${FHV_NODE_BIN}" \
-  --corepack-bin "${FHV_COREPACK_BIN}" \
-  --git-bin "${FHV_GIT_BIN}" \
-  --python-bin "${FHV_PYTHON_BIN}" \
-  --docker-bin "${FHV_DOCKER_BIN}" \
-  --expected-legacy-container-name "${FHV_EXPECTED_LEGACY_CONTAINER_NAME}" \
-  --expected-legacy-container-image "${FHV_EXPECTED_LEGACY_CONTAINER_IMAGE}" \
-  < "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4-host-preflight.sh"
-```
-
-### STOP — `AUTHORIZE-FHV-OPS-DEPLOY`
+## STOP — `AUTHORIZE-FHV-OPS-DEPLOY`
 
 **Do not proceed** until a Human operator issues **`AUTHORIZE-FHV-OPS-DEPLOY`**.
-
-Before this gate: no fresh checkout, no dependency installation, no `trader:fhv:rehearsal`, no `render-units.sh --output-dir`, no `install-units.sh`, no `fhv-systemd-record-deploy.sh`, no run-root writes, no `/tmp` staging, no remote script drops.
 
 ---
 
 ## Phase B — `POST_AUTHORIZED_T4A_PHASE`
 
-Only after **`AUTHORIZE-FHV-OPS-DEPLOY`**. Exact **32-step** state machine.
+Only after **`AUTHORIZE-FHV-OPS-DEPLOY`**. Exact **32-step** state machine owned by **`fhv-t4a-operator.sh`**. Workstation CLI phases: **`post-auth-before-disconnect`** (Steps 1–26 through continuity-before), human disconnect narrative (Step 27), then **`post-reconnect-finalize`** (Steps 28–32).
 
-**Bootstrap rule:** Steps 1–5 stream bootstrap scripts from `${FHV_LOCAL_RELEASE_ROOT}` via SSH stdin. After checkout identity is verified (Step 4), **every** subsequent ops script path is `${FHV_REPO_ROOT}/scripts/ops/...` on the Execution Server.
+**Bootstrap rule:** Steps 2–5 stream bootstrap scripts from committed git objects via SSH stdin. After checkout identity is verified (Step 4), every subsequent ops script path is `${FHV_REPO_ROOT}/scripts/ops/...` on the Execution Server.
 
-Shared **SERVICE_USER** wrapper pattern (used from **REMOTE_ROOT** after Step 5):
+Step 4 exact identity call (operator-enforced; **`--git-bin`** and **`--python-bin`** required):
+
+```bash
+"${FHV_REPO_ROOT}/scripts/ops/fhv-release-checkout-identity.sh" \
+  --repo-path "${FHV_REPO_ROOT}" \
+  --target-sha "${EXECUTION_SERVER_TARGET_SHA}" \
+  --release-tag "${FHV_RELEASE_TAG}" \
+  --git-bin "${FHV_GIT_BIN}" \
+  --python-bin "${FHV_PYTHON_BIN}"
+```
+
+**RESUME root handoff:** after signed **`trader:fhv:t4:resume`** returns **`status=accepted`**, the operator invokes root-only **`scripts/ops/fhv-t4-resume-campaign-root.sh`** to start **`waia-fhv-campaign.service`** and write **`fhv-t4-resume-enforcement-proof.v1.json`**. Completed campaign wait uses identity-aware **`fhv-t4-campaign-wait-completed.sh`** (accepts active/deactivating for the same invocation). Step 26 continuity capture uses **`trader:fhv:t4:capture-continuity-before`** before the human disconnect narrative.
+
+**Service-user wrapper** (requires **`--node-bin`** and **`--corepack-bin`**; strict EnvironmentFile parser — never shell **`source`**):
 
 ```bash
 "${FHV_REPO_ROOT}/scripts/ops/fhv-t4-service-user-exec.sh" \
   --service-user "${FHV_SERVICE_USER}" \
   --environment-file "${FHV_ENVIRONMENT_FILE}" \
   --repo-root "${FHV_REPO_ROOT}" \
+  --node-bin "${FHV_NODE_BIN}" \
+  --corepack-bin "${FHV_COREPACK_BIN}" \
   -- trader:fhv:t4:<subcommand> [args...]
 ```
 
-### Step 1 — Authorization confirmed + effective root
+### Semantic 32-step sequence (operator trace)
 
-**Locus:** WORKSTATION → REMOTE_ROOT
+| Step | Name | Phase boundary |
+|------|------|----------------|
+| 1 | Authorization + effective root | POST start |
+| 2–5 | Bootstrap origin/checkout/identity/deps | SSH stdin streams |
+| 6–13 | Manifest, units, deployment proof | POST |
+| 14–17 | Observer start, qualification, pause arm | POST |
+| 18–21 | Campaign, pause/final proofs, RESUME + root enforcement | POST |
+| 22–26 | Final proof, completed wait, continuity-before | POST → **`AWAITING_HUMAN_DISCONNECT_RECONNECT`** |
+| 27 | Human disconnect/reconnect narrative | WORKSTATION only |
+| 28–32 | Observer restart qualification, continuity-after, rollback, seal, ceremony | reconnect-finalize phase |
 
-Human confirms **`AUTHORIZE-FHV-OPS-DEPLOY`** is issued for this `FHV_RUN_ID` and `EXECUTION_SERVER_TARGET_SHA`.
+After Steps 1–26 (through **`trader:fhv:t4:capture-continuity-before`**), invoke POST operator phases:
 
 ```bash
-ssh "${SSH_USER}@${EXEC_HOST}" 'sudo bash -s' <<'EOF'
-test "$(id -u)" -eq 0
-EOF
+export FHV_T4A_AUTHORIZATION="AUTHORIZE-FHV-OPS-DEPLOY"
+"${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" post-auth-before-disconnect
+# Human disconnect/reconnect narrative (Step 27) — no CLI
+"${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" post-reconnect-finalize
 ```
 
-### Step 2 — Strict origin validation (bootstrap stream)
+Ceremony stdout must include:
+
+- `T4A_RESULT=PASS`
+- `GATE8_RESULT=PASS`
+- `T4B_RESULT=NOT_EXECUTED_SEPARATE_GATE`
+- `PAUSE_RESULT=REHEARSAL_PAUSED_AT_CYCLE_40`
+- `CONTINUITY_RESULT=PASS`
+
+---
+
+## NON_EXECUTABLE — contract reference (do not run verbatim)
+
+The blocks below are **reference-only** historical command shapes. The canonical executable owner is **`fhv-t4a-operator.sh`**. CI drift detection: **`corepack pnpm@10 validate:fhv-t4a-packet`**.
+
+<!-- Legacy reference blocks retained for audit readability only. -->
 
 **Locus:** WORKSTATION → SSH_STDIN
 
@@ -565,6 +573,22 @@ test "\$(id -u)" -eq 0
   --run-id "${FHV_RUN_ID}" \
   --organization-id "${FHV_ORGANIZATION_ID}" \
   --target-sha "${EXECUTION_SERVER_TARGET_SHA}"
+EOF
+```
+
+### Step 21b — Root RESUME enforcement (after `status=accepted`)
+
+**Locus:** WORKSTATION → REMOTE_ROOT
+
+```bash
+ssh "${SSH_USER}@${EXEC_HOST}" "sudo bash -s" <<EOF
+test "\$(id -u)" -eq 0
+"${FHV_REPO_ROOT}/scripts/ops/fhv-t4-resume-campaign-root.sh" \
+  --run-root "${FHV_RUN_DIR}" \
+  --run-id "${FHV_RUN_ID}" \
+  --organization-id "${FHV_ORGANIZATION_ID}" \
+  --target-sha "${EXECUTION_SERVER_TARGET_SHA}" \
+  --systemctl-bin "${FHV_SYSTEMCTL_BIN}"
 EOF
 ```
 

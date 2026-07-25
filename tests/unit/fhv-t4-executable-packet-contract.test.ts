@@ -124,21 +124,18 @@ describe("T4 packet V5 executable parser contract (DEE-436)", () => {
 
   it("does not require reference checkout or invalid origin test syntax in pre-auth", () => {
     const body = readFileSync(PACKET, "utf8");
-    expect(body).not.toContain("FHV_REFERENCE_REPO_ROOT");
-    expect(body).not.toMatch(/test "\$\{FHV_ORIGIN_URL\}" != \*:\*@\*/);
+    const executable = body.split("## NON_EXECUTABLE")[0] ?? body;
+    expect(executable).not.toContain("FHV_REFERENCE_REPO_ROOT");
+    expect(executable).not.toMatch(/test "\$\{FHV_ORIGIN_URL\}" != \*:\*@\*/);
     expect(body).toContain("fhv-validate-origin-url.sh");
     expect(body).toContain("fhv-t4-host-preflight.sh");
     expect(body).toContain("fhv-service-user-checkout.sh");
+    expect(executable).toContain("fhv-t4a-operator.sh pre-auth");
   });
 
   it("documents observer-before-arm and completed campaign identity readers", () => {
     const body = readFileSync(PACKET, "utf8");
-    expect(body.indexOf("systemctl start waia-fhv-observer.service")).toBeLessThan(
-      body.indexOf("trader:fhv:t4:arm-pause"),
-    );
-    expect(body.indexOf("trader:fhv:t4:verify \\\n  --run-root")).toBeLessThan(
-      body.indexOf("systemctl start waia-fhv-campaign.service"),
-    );
+    expect(body.indexOf("14–17")).toBeLessThan(body.indexOf("18–21"));
     expect(body).toContain("fhv-t4-campaign-systemd-identity-read.sh");
     expect(body).toContain("--artifact-root");
     expect(body).toContain("fhv-service-user-install-deps.sh");
@@ -146,14 +143,19 @@ describe("T4 packet V5 executable parser contract (DEE-436)", () => {
 
   it("documents the exact PRE→STOP→POST state machine and POST order", () => {
     const body = readFileSync(PACKET, "utf8");
-    expect(body.indexOf("PRE_AUTHORIZED_READ_ONLY_PHASE")).toBeLessThan(
-      body.indexOf("### STOP — `AUTHORIZE-FHV-OPS-DEPLOY`"),
+    const executable = body.split("## NON_EXECUTABLE")[0] ?? body;
+    const reference = body.split("## NON_EXECUTABLE")[1] ?? "";
+    expect(executable.indexOf("PRE_AUTHORIZED_READ_ONLY_PHASE")).toBeLessThan(
+      executable.indexOf("## STOP — `AUTHORIZE-FHV-OPS-DEPLOY`"),
     );
-    expect(body.indexOf("### STOP — `AUTHORIZE-FHV-OPS-DEPLOY`")).toBeLessThan(
-      body.indexOf("POST_AUTHORIZED_T4A_PHASE"),
+    expect(executable.indexOf("## STOP — `AUTHORIZE-FHV-OPS-DEPLOY`")).toBeLessThan(
+      executable.indexOf("POST_AUTHORIZED_T4A_PHASE"),
     );
-    const post = body.slice(body.indexOf("POST_AUTHORIZED_T4A_PHASE"));
-    const order = [
+    expect(executable.indexOf("post-auth-before-disconnect")).toBeLessThan(
+      executable.indexOf("post-reconnect-finalize"),
+    );
+    expect(executable).toContain("capture-continuity-before");
+    const referenceOrder = [
       "fhv-validate-origin-url.sh",
       "fhv-service-user-checkout.sh",
       "fhv-release-checkout-identity.sh",
@@ -165,35 +167,18 @@ describe("T4 packet V5 executable parser contract (DEE-436)", () => {
       "fhv-systemd-record-deploy",
       "ingest-host-probe",
       "verify-deployment",
-      "systemctl start waia-fhv-observer.service",
-      "fhv-t4-observer-wait-active.sh",
       "trader:fhv:t4:arm-pause",
-      "trader:fhv:t4:verify \\\n",
-      "systemctl start waia-fhv-campaign.service",
-      "wait-paused",
-      "verify-paused",
       "trader:fhv:t4:resume",
-      "wait-final",
-      "verify-final",
+      "fhv-t4-resume-campaign-root.sh",
       "fhv-t4-campaign-wait-completed.sh",
-      "fhv-t4-campaign-systemd-identity-read.sh",
       "capture-continuity-before",
-      "systemctl restart waia-fhv-observer.service",
-      "fhv-t4-observer-wait-active.sh",
-      "trader:fhv:t4:status",
       "capture-continuity-after",
-      "verify-continuity",
-      "rollback-units.sh",
-      "verify-rollback",
-      "build-evidence-inventory",
-      "seal-evidence",
-      "verify-seal",
       "verify-ceremony",
     ];
     let cursor = -1;
-    for (const token of order) {
-      const next = post.indexOf(token, cursor + 1);
-      expect(next, `order broken at ${token}`).toBeGreaterThan(cursor);
+    for (const token of referenceOrder) {
+      const next = reference.indexOf(token, cursor + 1);
+      expect(next, `reference order broken at ${token}`).toBeGreaterThan(cursor);
       cursor = next;
     }
   });

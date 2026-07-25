@@ -55,6 +55,10 @@ import {
   FHV_T4_TEST_STARTED_NS,
   writeFhvT4TestCampaignRuntimeProof,
 } from "../helpers/fhv-t4-test-fixtures";
+import {
+  FHV_T4_RESUME_ENFORCEMENT_PROOF_FILENAME,
+  serializeFhvT4ResumeEnforcementProof,
+} from "@/lib/trader/observability/fhv-t4-resume-enforcement-proof";
 
 const TARGET_SHA = "dddddddddddddddddddddddddddddddddddddddd";
 const RUN_ID = "fhv-t4a-closure";
@@ -223,6 +227,60 @@ function writePausedArtifacts(runDir: string): void {
   );
 }
 
+function writeResumeAcceptedAndEnforcement(runDir: string, commandId = RESUME_COMMAND_ID): void {
+  appendFhvCommandLedger(runDir, {
+    recordedAtUtc: new Date().toISOString(),
+    source: "test",
+    command: {
+      schemaVersion: FHV_OPERATOR_COMMAND_SCHEMA_VERSION,
+      commandId,
+      campaignRunId: RUN_ID,
+      organizationId: ORG_ID,
+      operatorId: "t4-operator",
+      action: "RESUME_FROM_CHECKPOINT",
+      reason: "test",
+      issuedAtUtc: new Date().toISOString(),
+      expiresAtUtc: new Date(Date.now() + 600_000).toISOString(),
+      nonce: `nonce-${commandId}`,
+      idempotencyKey: `idem-${commandId}`,
+      expectedCampaignState: { phase: "PAUSED_RESUMABLE", checkpointSeq: 40 },
+      confirmationPhraseClass: "RESUME",
+      signature: "sig",
+      signatureAlgorithm: "HMAC-SHA256",
+    },
+  });
+  writeFhvCommandResult(runDir, {
+    schemaVersion: "fhv-command-result/v1",
+    commandId,
+    idempotencyKey: `idem-${commandId}`,
+    status: "accepted",
+    message: "RESUME accepted; root systemd enforcement required",
+    completedAtUtc: new Date().toISOString(),
+    enforcementApplied: false,
+  });
+  mkdirSync(join(runDir, "control"), { recursive: true });
+  const proof = serializeFhvT4ResumeEnforcementProof({
+    schemaVersion: "fhv-t4-resume-enforcement-proof/v1",
+    runId: RUN_ID,
+    organizationId: ORG_ID,
+    targetSha: TARGET_SHA,
+    resumeCommandId: commandId,
+    resumeIdempotencyKey: `idem-${commandId}`,
+    bootId: "11111111-2222-4333-8444-555555555555",
+    campaignUnitName: "waia-fhv-campaign.service",
+    previousInvocationId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    newInvocationId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    execMainPid: 4242,
+    execMainStartTimestampMonotonic: "4242000000",
+    nRestarts: 0,
+    enforcedAtUtc: new Date().toISOString(),
+  });
+  writeFileSync(
+    join(runDir, "control", FHV_T4_RESUME_ENFORCEMENT_PROOF_FILENAME),
+    `${JSON.stringify(proof, null, 2)}\n`,
+  );
+}
+
 describe("fhv-t4-closure-verifiers (DEE-436)", () => {
   it("verify-paused passes on exact synthetic paused frontier", () => {
     const runDir = prepareManifest();
@@ -339,11 +397,35 @@ describe("fhv-t4-closure-verifiers (DEE-436)", () => {
       schemaVersion: "fhv-command-result/v1",
       commandId: RESUME_COMMAND_ID,
       idempotencyKey: "idem-resume-1",
-      status: "executed",
-      message: "resumed",
+      status: "accepted",
+      message: "RESUME accepted; root systemd enforcement required",
       completedAtUtc: new Date().toISOString(),
-      enforcementApplied: true,
+      enforcementApplied: false,
     });
+    mkdirSync(join(runDir, "control"), { recursive: true });
+    writeFileSync(
+      join(runDir, "control", FHV_T4_RESUME_ENFORCEMENT_PROOF_FILENAME),
+      `${JSON.stringify(
+        serializeFhvT4ResumeEnforcementProof({
+          schemaVersion: "fhv-t4-resume-enforcement-proof/v1",
+          runId: RUN_ID,
+          organizationId: ORG_ID,
+          targetSha: TARGET_SHA,
+          resumeCommandId: RESUME_COMMAND_ID,
+          resumeIdempotencyKey: "idem-resume-1",
+          bootId: "11111111-2222-4333-8444-555555555555",
+          campaignUnitName: "waia-fhv-campaign.service",
+          previousInvocationId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          newInvocationId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          execMainPid: 4242,
+          execMainStartTimestampMonotonic: "4242000000",
+          nRestarts: 0,
+          enforcedAtUtc: new Date().toISOString(),
+        }),
+        null,
+        2,
+      )}\n`,
+    );
     writeFhvResumeRuntimeProof(runDir, {
       schemaVersion: "fhv-resume-runtime-proof/v1",
       runId: RUN_ID,
@@ -378,36 +460,7 @@ describe("fhv-t4-closure-verifiers (DEE-436)", () => {
       join(runDir, "fhv-rehearsal-terminal.v1.json"),
       `${JSON.stringify({ classification: "REHEARSAL_OK" }, null, 2)}\n`,
     );
-    appendFhvCommandLedger(runDir, {
-      recordedAtUtc: new Date().toISOString(),
-      source: "test",
-      command: {
-        schemaVersion: FHV_OPERATOR_COMMAND_SCHEMA_VERSION,
-        commandId: RESUME_COMMAND_ID,
-        campaignRunId: RUN_ID,
-        organizationId: ORG_ID,
-        operatorId: "t4-operator",
-        action: "RESUME_FROM_CHECKPOINT",
-        reason: "test",
-        issuedAtUtc: new Date().toISOString(),
-        expiresAtUtc: new Date(Date.now() + 600_000).toISOString(),
-        nonce: "nonce-resume-2",
-        idempotencyKey: "idem-resume-2",
-        expectedCampaignState: { phase: "PAUSED_RESUMABLE", checkpointSeq: 40 },
-        confirmationPhraseClass: "RESUME",
-        signature: "sig",
-        signatureAlgorithm: "HMAC-SHA256",
-      },
-    });
-    writeFhvCommandResult(runDir, {
-      schemaVersion: "fhv-command-result/v1",
-      commandId: RESUME_COMMAND_ID,
-      idempotencyKey: "idem-resume-2",
-      status: "executed",
-      message: "resumed",
-      completedAtUtc: new Date().toISOString(),
-      enforcementApplied: true,
-    });
+    writeResumeAcceptedAndEnforcement(runDir, RESUME_COMMAND_ID);
     writeFhvResumeRuntimeProof(runDir, {
       schemaVersion: "fhv-resume-runtime-proof/v1",
       runId: RUN_ID,

@@ -62,38 +62,29 @@ describe("T4 operator packet V5 (DEE-436)", () => {
 
   it("validates every bash block and authorization ordering semantics", () => {
     const body = readFileSync(PACKET, "utf8");
-    const blocks = extractBashBlocks(body);
-    expect(blocks.length).toBeGreaterThan(5);
+    const executable = body.split("## NON_EXECUTABLE")[0] ?? body;
+    const blocks = extractBashBlocks(executable);
+    expect(blocks.length).toBeGreaterThan(1);
     for (const block of blocks) {
       execFileSync("bash", ["-n", "-c", block], { stdio: "pipe" });
       expect(block).not.toMatch(/\|\|\s*true/);
     }
-    const preAuthIndex = body.indexOf("PRE_AUTHORIZED_READ_ONLY_PHASE");
-    const authGateIndex = body.indexOf("### STOP — `AUTHORIZE-FHV-OPS-DEPLOY`");
-    const postAuthIndex = body.indexOf("POST_AUTHORIZED_T4A_PHASE");
-    const pauseArmIndex = body.indexOf("trader:fhv:t4:arm-pause");
-    const campaignStartIndex = body.indexOf("systemctl start waia-fhv-campaign.service");
-    const sealIndex = body.lastIndexOf("trader:fhv:t4:seal-evidence");
-    const rollbackVerifyIndex = body.indexOf("trader:fhv:t4:verify-rollback");
+    expect(executable).toContain("fhv-t4a-operator.sh");
+    expect(executable).toContain("verify-local-release");
+    expect(executable).toContain("pre-auth");
+    expect(executable).toContain("post-auth-before-disconnect");
+    expect(executable).toContain("post-reconnect-finalize");
+    const preAuthIndex = executable.indexOf("PRE_AUTHORIZED_READ_ONLY_PHASE");
+    const authGateIndex = executable.indexOf("## STOP — `AUTHORIZE-FHV-OPS-DEPLOY`");
+    const postAuthIndex = executable.indexOf("POST_AUTHORIZED_T4A_PHASE");
     expect(preAuthIndex).toBeGreaterThan(-1);
     expect(authGateIndex).toBeGreaterThan(preAuthIndex);
     expect(postAuthIndex).toBeGreaterThan(authGateIndex);
-    const observerStartIndex = body.indexOf("systemctl start waia-fhv-observer.service");
-    const verifyPreArmIndex = body.indexOf("trader:fhv:t4:verify \\\n  --run-root");
-    expect(observerStartIndex).toBeGreaterThan(postAuthIndex);
-    expect(pauseArmIndex).toBeGreaterThan(observerStartIndex);
-    expect(verifyPreArmIndex).toBeGreaterThan(pauseArmIndex);
-    expect(campaignStartIndex).toBeGreaterThan(verifyPreArmIndex);
-    expect(rollbackVerifyIndex).toBeGreaterThan(campaignStartIndex);
-    const observerRestartIndex = body.indexOf("systemctl restart waia-fhv-observer.service");
-    expect(observerRestartIndex).toBeGreaterThan(body.indexOf("capture-continuity-before"));
-    expect(body.indexOf("fhv-t4-observer-wait-active.sh", observerRestartIndex)).toBeGreaterThan(
-      observerRestartIndex,
+    expect(executable.indexOf("resume-campaign-root.sh")).toBeGreaterThan(postAuthIndex);
+    expect(executable).toContain("capture-continuity-before");
+    expect(executable).toContain("post-reconnect-finalize");
+    expect(executable.indexOf("post-auth-before-disconnect")).toBeLessThan(
+      executable.indexOf("post-reconnect-finalize"),
     );
-    expect(body.indexOf("trader:fhv:t4:status", observerRestartIndex)).toBeGreaterThan(
-      observerRestartIndex,
-    );
-    expect(body.indexOf("capture-continuity-after")).toBeGreaterThan(observerRestartIndex);
-    expect(sealIndex).toBeGreaterThan(rollbackVerifyIndex);
   });
 });

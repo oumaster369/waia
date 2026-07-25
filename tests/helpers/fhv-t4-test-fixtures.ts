@@ -18,8 +18,8 @@ import {
   type FhvT4HostMonotonicSampleV1,
 } from "@/lib/trader/observability/fhv-t4-host-monotonic-clock";
 
-export const FHV_T4_TEST_BOOT_ID = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-export const FHV_T4_TEST_OBSERVER_BOOT_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+export const FHV_T4_TEST_BOOT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+export const FHV_T4_TEST_OBSERVER_BOOT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 export const FHV_T4_TEST_STARTED_NS = "1_000_000_000".replace(/_/g, "");
 export const FHV_T4_TEST_COMPLETED_NS = "290_000_000_000".replace(/_/g, "");
 export const FHV_T4_TEST_SERVICE_USER_IDS = { uid: 1001, gid: 1001 };

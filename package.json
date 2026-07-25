@@ -95,6 +95,7 @@
     "test:e2e:ui": "playwright test --ui",
     "validate:pr-governance": "bash scripts/linear/test-validate-pr-linear-id.sh && bash scripts/linear/test-preflight-pr-governance.sh",
     "validate:canon": "bash scripts/ops/validate-canonical-docs.sh && bash scripts/ops/validate-fhv-release-identity.sh",
+    "validate:fhv-t4a-packet": "WAIA_TRADER_CLI=1 node --import tsx scripts/ops/validate-fhv-t4a-packet.ts",
     "validate:provider-readiness": "node --import tsx scripts/trader/validate-provider-readiness.ts",
     "validate:market-data-integration": "node --import tsx scripts/trader/validate-market-data-integration.ts"
   },

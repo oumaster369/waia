@@ -41,11 +41,18 @@ function run(
   }
 }
 
+const VALID_ENV_FILE = [
+  "FHV_HOST_OS_QUALIFIED=true",
+  "FHV_COMMAND_ENFORCEMENT_ENABLED=true",
+  "FHV_OPERATOR_COMMAND_SECRET=test-secret",
+  "FHV_OBSERVER_TUNNEL_SECRET=test-tunnel",
+].join("\n");
+
 describe("fhv-t4-service-user-exec.sh (DEE-436)", () => {
   it("rejects unallowlisted package command", () => {
     root = mkdtempSync(join(tmpdir(), "fhv-sue-"));
     const envFile = join(root, "env");
-    writeFileSync(envFile, "FHV_HOST_OS_QUALIFIED=true\n");
+    writeFileSync(envFile, `${VALID_ENV_FILE}\n`);
     const result = run([
       "--service-user",
       "nobody",
@@ -53,6 +60,10 @@ describe("fhv-t4-service-user-exec.sh (DEE-436)", () => {
       envFile,
       "--repo-root",
       root,
+      "--node-bin",
+      process.execPath,
+      "--corepack-bin",
+      process.execPath,
       "--",
       "trader:fhv:t4:not-a-real-script",
     ]);
@@ -63,7 +74,7 @@ describe("fhv-t4-service-user-exec.sh (DEE-436)", () => {
   it("rejects secret argv flags before privilege transition", () => {
     root = mkdtempSync(join(tmpdir(), "fhv-sue-secret-"));
     const envFile = join(root, "env");
-    writeFileSync(envFile, "FHV_HOST_OS_QUALIFIED=true\n");
+    writeFileSync(envFile, `${VALID_ENV_FILE}\n`);
     for (const flag of ["--command-secret", "--tunnel-secret"]) {
       const result = run([
         "--service-user",
@@ -72,6 +83,10 @@ describe("fhv-t4-service-user-exec.sh (DEE-436)", () => {
         envFile,
         "--repo-root",
         root,
+        "--node-bin",
+        process.execPath,
+        "--corepack-bin",
+        process.execPath,
         "--",
         "trader:fhv:t4:verify-paused",
         flag,
@@ -87,7 +102,7 @@ describe("fhv-t4-service-user-exec.sh (DEE-436)", () => {
   it("rejects shell metacharacters via early path validation without interpolating them", () => {
     root = mkdtempSync(join(tmpdir(), "fhv-sue-meta-"));
     const envFile = join(root, "env");
-    writeFileSync(envFile, "FHV_HOST_OS_QUALIFIED=true\n");
+    writeFileSync(envFile, `${VALID_ENV_FILE}\n`);
     const result = run([
       "--service-user",
       "nobody",
@@ -95,17 +110,21 @@ describe("fhv-t4-service-user-exec.sh (DEE-436)", () => {
       `${envFile};touch ${join(root, "pwned")}`,
       "--repo-root",
       root,
+      "--node-bin",
+      process.execPath,
+      "--corepack-bin",
+      process.execPath,
       "--",
       "trader:fhv:t4:verify-paused",
     ]);
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toMatch(/environment file missing|No such file/i);
+    expect(result.stderr).toMatch(/environment file missing|No such file|FHV_T4_ENVIRONMENT/i);
   });
 
   it("rejects unknown wrapper flags", () => {
     root = mkdtempSync(join(tmpdir(), "fhv-sue-flag-"));
     const envFile = join(root, "env");
-    writeFileSync(envFile, "FHV_HOST_OS_QUALIFIED=true\n");
+    writeFileSync(envFile, `${VALID_ENV_FILE}\n`);
     const result = run([
       "--service-user",
       "nobody",

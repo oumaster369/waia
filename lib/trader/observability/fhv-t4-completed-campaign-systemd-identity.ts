@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
+import { normalizeFhvT4BootId } from "@/lib/trader/observability/fhv-t4-boot-id";
 
 export const FHV_T4_COMPLETED_CAMPAIGN_SYSTEMD_IDENTITY_SCHEMA_VERSION =
   "fhv-t4-completed-campaign-systemd-identity/v1" as const;
@@ -37,7 +38,11 @@ export class FhvT4CompletedCampaignSystemdIdentityError extends Error {
   }
 }
 
-const BOOT_ID_PATTERN = /^[0-9a-f]{32}$/;
+const BOOT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function normalizeBootIdField(raw: string): string {
+  return normalizeFhvT4BootId(raw);
+}
 
 export type FhvT4CompletedCampaignSystemdIdentityReader = (
   unitName?: string,
@@ -83,7 +88,7 @@ export function parseFhvT4CompletedCampaignSystemdIdentity(
       "unitName must identify the campaign unit.",
     );
   }
-  if (!BOOT_ID_PATTERN.test(identity.bootId.trim())) {
+  if (!BOOT_ID_PATTERN.test(normalizeBootIdField(identity.bootId))) {
     throw new FhvT4CompletedCampaignSystemdIdentityError(
       "FHV_T4_COMPLETED_CAMPAIGN_IDENTITY_BOOT_ID_INVALID",
       "bootId invalid.",
@@ -154,7 +159,7 @@ export function parseFhvT4CompletedCampaignSystemdIdentity(
   const normalized = {
     schemaVersion: identity.schemaVersion,
     unitName: identity.unitName.trim(),
-    bootId: identity.bootId.trim(),
+    bootId: normalizeBootIdField(identity.bootId),
     activeState: identity.activeState.trim(),
     subState: identity.subState.trim(),
     result: identity.result.trim(),

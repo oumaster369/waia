@@ -5,6 +5,8 @@
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
+import { normalizeFhvT4BootId } from "@/lib/trader/observability/fhv-t4-boot-id";
+
 export const FHV_T4_HOST_MONOTONIC_SAMPLE_SCHEMA_VERSION =
   "fhv-t4-host-monotonic-sample/v1" as const;
 export const FHV_T4_CAMPAIGN_RUNTIME_MAX_BUDGET_MS = 300_000 as const;
@@ -26,7 +28,7 @@ export class FhvT4HostMonotonicClockError extends Error {
   }
 }
 
-const BOOT_ID_PATTERN = /^[0-9a-f]{32}$/;
+const BOOT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export type FhvT4HostMonotonicReader = () => FhvT4HostMonotonicSampleV1;
 
@@ -56,10 +58,10 @@ export function parseFhvT4HostMonotonicSample(raw: unknown): FhvT4HostMonotonicS
       "clockSource must be CLOCK_BOOTTIME.",
     );
   }
-  if (!BOOT_ID_PATTERN.test(sample.bootId.trim())) {
+  if (!BOOT_ID_PATTERN.test(normalizeFhvT4BootId(sample.bootId))) {
     throw new FhvT4HostMonotonicClockError(
       "FHV_T4_HOST_MONOTONIC_BOOT_ID_INVALID",
-      "bootId must be a 32-char lowercase hex string.",
+      "bootId must be a lowercase UUID.",
     );
   }
   if (!/^\d+$/.test(sample.monotonicNs.trim())) {
@@ -71,7 +73,7 @@ export function parseFhvT4HostMonotonicSample(raw: unknown): FhvT4HostMonotonicS
   return {
     schemaVersion: sample.schemaVersion,
     clockSource: sample.clockSource,
-    bootId: sample.bootId.trim(),
+    bootId: normalizeFhvT4BootId(sample.bootId),
     monotonicNs: sample.monotonicNs.trim(),
   };
 }

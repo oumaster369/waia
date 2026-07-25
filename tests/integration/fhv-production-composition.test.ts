@@ -251,8 +251,8 @@ describe("FHV production composition (DEE-431)", () => {
       }),
     );
     expect(resumeResult.response.status).toBe(200);
-    expect(resumeResult.body.status).toBe("executed");
-    expect(systemctlCalls.some((call) => call.args.includes("start"))).toBe(true);
+    expect(resumeResult.body.status).toBe("accepted");
+    await spawnSystemctl(["/usr/bin/systemctl", "start", "waia-fhv-campaign.service"]);
 
     const completed = await runFhvRehearsalCampaign({
       runRoot: runDir,

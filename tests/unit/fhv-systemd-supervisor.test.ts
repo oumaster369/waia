@@ -311,7 +311,7 @@ describe("DEE-424 FHV systemd supervisor", () => {
     }
   });
 
-  it("writes resume marker before systemctl start on RESUME_FROM_CHECKPOINT", async () => {
+  it("writes resume acceptance without systemctl start on RESUME_FROM_CHECKPOINT", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-systemd-resume-"));
     try {
       const executor = createRecordingLinuxSystemdCampaignControlExecutor({
@@ -327,9 +327,9 @@ describe("DEE-424 FHV systemd supervisor", () => {
         operatorId: "op",
         reason: "resume drill",
       });
-      expect(result.enforcementApplied).toBe(true);
-      expect(result.outcome).toBe("executed");
-      expect(executor.systemctlCalls).toHaveLength(1);
+      expect(result.enforcementApplied).toBe(false);
+      expect(result.outcome).toBe("accepted");
+      expect(executor.systemctlCalls).toHaveLength(0);
       const marker = join(root, "control", "resume_from_checkpoint-request.v1.json");
       expect(existsSync(marker)).toBe(true);
     } finally {

@@ -78,11 +78,15 @@ import {
   verifyFhvT4FinalVerificationProofArtifact,
   verifyFhvT4PausedVerificationProofArtifact,
 } from "@/lib/trader/observability/fhv-t4-paused-final-proofs";
-import { verifyFhvT4CheckoutIdentityProofArtifact } from "@/lib/trader/observability/fhv-t4-release-checkout-identity";
+import {
+  readFhvT4ResumeEnforcementProof,
+  verifyFhvT4ResumeEnforcementProofMatchesRun,
+} from "@/lib/trader/observability/fhv-t4-resume-enforcement-proof";
 import {
   verifyFhvT4RollbackProofArtifact,
   type FhvT4RollbackProofV1,
 } from "@/lib/trader/observability/fhv-t4-rollback-proof";
+import { verifyFhvT4CheckoutIdentityProofArtifact } from "@/lib/trader/observability/fhv-t4-release-checkout-identity";
 
 export const FHV_T4_PAUSED_VERIFICATION_PASS = "FHV_T4_PAUSED_VERIFICATION_PASS" as const;
 export const FHV_T4_FINAL_VERIFICATION_PASS = "FHV_T4_FINAL_VERIFICATION_PASS" as const;
@@ -480,6 +484,38 @@ function assertExecutedCommandResult(
   }
 }
 
+function assertAcceptedResumeCommandResult(
+  runRoot: string,
+  commandId: string,
+  idempotencyKey: string,
+): void {
+  const result = readFhvCommandResult(runRoot, commandId);
+  if (!result) {
+    throw new FhvT4ClosureVerifierError(
+      "FHV_T4_COMMAND_RESULT_MISSING",
+      `Command result missing for ${commandId}.`,
+    );
+  }
+  if (result.status !== "accepted") {
+    throw new FhvT4ClosureVerifierError(
+      "FHV_T4_RESUME_RESULT_NOT_ACCEPTED",
+      `RESUME result status is ${result.status}, expected accepted.`,
+    );
+  }
+  if (result.enforcementApplied !== false) {
+    throw new FhvT4ClosureVerifierError(
+      "FHV_T4_RESUME_ENFORCEMENT_APPLIED_INVALID",
+      "RESUME acceptance must defer enforcement to root handoff.",
+    );
+  }
+  if (result.commandId !== commandId || result.idempotencyKey !== idempotencyKey) {
+    throw new FhvT4ClosureVerifierError(
+      "FHV_T4_COMMAND_RESULT_IDENTITY_MISMATCH",
+      "Command result identity mismatch.",
+    );
+  }
+}
+
 export function verifyFhvT4PausedState(input: FhvT4IdentityInput): {
   classification: typeof FHV_T4_PAUSED_VERIFICATION_PASS;
   checks: string[];
@@ -719,12 +755,20 @@ export function verifyFhvT4FinalState(
       `expected checkpointSeq must be ${expectedCheckpointSeq}.`,
     );
   }
-  assertExecutedCommandResult(
+  assertAcceptedResumeCommandResult(
     input.runRoot,
     resumeEntry.command.commandId,
     resumeEntry.command.idempotencyKey,
   );
   checks.push("resume-command");
+
+  verifyFhvT4ResumeEnforcementProofMatchesRun({
+    runRoot: input.runRoot,
+    runId: input.runId,
+    organizationId: input.organizationId,
+    targetSha: input.targetSha,
+  });
+  checks.push("resume-enforcement-proof");
 
   const checkpoint = readReplayCheckpoint(input.runRoot);
   if (!checkpoint) {

@@ -40,23 +40,20 @@ function runBash(
 }
 
 describe("fhv-t4 packet simulation (DEE-436)", () => {
-  it("documents SSH stdin bootstrap and root POST gate without remote script paths in PRE_AUTH", () => {
+  it("documents canonical operator phases and bootstrap contract", () => {
     const body = readFileSync(PACKET, "utf8");
-    const pre = body.slice(
-      body.indexOf("PRE_AUTHORIZED_READ_ONLY_PHASE"),
-      body.indexOf("POST_AUTHORIZED_T4A_PHASE"),
+    const executable = body.split("## NON_EXECUTABLE")[0] ?? body;
+    const pre = executable.slice(
+      executable.indexOf("PRE_AUTHORIZED_READ_ONLY_PHASE"),
+      executable.indexOf("POST_AUTHORIZED_T4A_PHASE"),
     );
-    expect(pre).toContain("bash -s");
-    expect(pre).toContain("FHV_LOCAL_RELEASE_ROOT");
-    expect(pre).not.toMatch(/^\s*[^<]*scripts\/ops\/fhv-t4-host-preflight\.sh/m);
-    expect(pre).toContain('< "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4-host-preflight.sh"');
-    expect(body).toContain('test "$(id -u)" -eq 0');
-    expect(body).toContain("fhv-t4-campaign-wait-completed.sh");
-    expect(body.indexOf("wait-final")).toBeLessThan(
-      body.indexOf("fhv-t4-campaign-wait-completed.sh"),
-    );
-    expect(body.indexOf("systemctl restart waia-fhv-observer.service")).toBeLessThan(
-      body.indexOf("fhv-t4-observer-wait-active.sh", body.indexOf("Step 27")),
+    expect(pre).toContain("fhv-t4a-operator.sh");
+    expect(pre).toContain("pre-auth");
+    expect(executable).toContain("git show");
+    expect(executable).toContain("fhv-t4-campaign-wait-completed.sh");
+    expect(executable).toContain("resume-campaign-root.sh");
+    expect(executable.indexOf("post-auth-before-disconnect")).toBeLessThan(
+      executable.indexOf("post-reconnect-finalize"),
     );
   });
 

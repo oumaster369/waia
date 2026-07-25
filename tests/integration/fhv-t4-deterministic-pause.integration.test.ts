@@ -130,7 +130,8 @@ describe("FHV T4 deterministic pause integration (DEE-435)", () => {
           operatorId: "t4-operator",
           reason: "deterministic T4 resume",
         });
-        expect(resumeResult.outcome).toBe("executed");
+        expect(resumeResult.outcome).toBe("accepted");
+        expect(resumeResult.enforcementApplied).toBe(false);
         expect(isFhvResumeFromCheckpointRequested(runDir)).toBe(true);
 
         const completed = await runFhvRehearsalCampaign({
