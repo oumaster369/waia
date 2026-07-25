@@ -55,6 +55,11 @@ done
 
 [[ -n "$SERVICE_USER" && -n "$ENVIRONMENT_FILE" && -n "$REPO_ROOT" ]] || { usage; exit 2; }
 [[ $# -ge 1 ]] || { usage; exit 2; }
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_fhv-t4-privilege-common.sh
+source "${SCRIPT_DIR}/_fhv-t4-privilege-common.sh"
+
 [[ -f "$ENVIRONMENT_FILE" ]] || { printf 'error: environment file missing\n' >&2; exit 2; }
 [[ -d "$REPO_ROOT" ]] || { printf 'error: repo-root is not a directory\n' >&2; exit 2; }
 
@@ -81,6 +86,9 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+fhv_t4_require_effective_root
+fhv_t4_resolve_service_user_identity "$SERVICE_USER"
 
 # Pass paths/script/args as positional parameters into a non-login bash.
 # No untrusted values are interpolated into the executable shell text.

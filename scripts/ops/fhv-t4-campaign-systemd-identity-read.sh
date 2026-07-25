@@ -4,6 +4,7 @@ set -euo pipefail
 
 UNIT="${1:-waia-fhv-campaign.service}"
 SYSTEMCTL="${SYSTEMCTL:-systemctl}"
+PYTHON_BIN="${FHV_PYTHON_BIN:-${PYTHON_BIN:-python3}}"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
   printf '{"error":"FHV_T4_COMPLETED_CAMPAIGN_IDENTITY_LINUX_ONLY"}\n' >&2
@@ -22,26 +23,32 @@ EXEC_MAIN_CODE="$("$SYSTEMCTL" show "$UNIT" -p ExecMainCode --value 2>/dev/null 
 EXEC_MAIN_STATUS="$("$SYSTEMCTL" show "$UNIT" -p ExecMainStatus --value 2>/dev/null || true)"
 N_RESTARTS="$("$SYSTEMCTL" show "$UNIT" -p NRestarts --value 2>/dev/null || true)"
 
-python3 - <<PY
-import json
+export FHV_JSON_PAYLOAD
+FHV_JSON_PAYLOAD="$(
+  UNIT="$UNIT" BOOT_ID="$BOOT_ID" INVOCATION_ID="$INVOCATION_ID" ACTIVE_STATE="$ACTIVE_STATE" SUB_STATE="$SUB_STATE" RESULT="$RESULT" \
+  EXEC_MAIN_PID="$EXEC_MAIN_PID" EXEC_MAIN_START="$EXEC_MAIN_START" EXEC_MAIN_EXIT="$EXEC_MAIN_EXIT" \
+  EXEC_MAIN_CODE="$EXEC_MAIN_CODE" EXEC_MAIN_STATUS="$EXEC_MAIN_STATUS" N_RESTARTS="$N_RESTARTS" \
+  "$PYTHON_BIN" - <<'PY'
+import json, os
 from hashlib import sha256
-
 payload = {
     "schemaVersion": "fhv-t4-completed-campaign-systemd-identity/v1",
-    "unitName": "${UNIT}",
-    "bootId": "${BOOT_ID}",
-    "activeState": "${ACTIVE_STATE}",
-    "subState": "${SUB_STATE}",
-    "result": "${RESULT}",
-    "invocationId": "${INVOCATION_ID}",
-    "execMainPid": int("${EXEC_MAIN_PID}" or "0"),
-    "execMainStartTimestampMonotonic": "${EXEC_MAIN_START}",
-    "execMainExitTimestampMonotonic": "${EXEC_MAIN_EXIT}",
-    "execMainCode": int("${EXEC_MAIN_CODE}" or "0"),
-    "execMainStatus": int("${EXEC_MAIN_STATUS}" or "0"),
-    "nRestarts": int("${N_RESTARTS}" or "0"),
+    "unitName": os.environ["UNIT"],
+    "bootId": os.environ["BOOT_ID"],
+    "activeState": os.environ["ACTIVE_STATE"],
+    "subState": os.environ["SUB_STATE"],
+    "result": os.environ["RESULT"],
+    "invocationId": os.environ["INVOCATION_ID"],
+    "execMainPid": int(os.environ["EXEC_MAIN_PID"] or "0"),
+    "execMainStartTimestampMonotonic": os.environ["EXEC_MAIN_START"],
+    "execMainExitTimestampMonotonic": os.environ["EXEC_MAIN_EXIT"],
+    "execMainCode": int(os.environ["EXEC_MAIN_CODE"] or "0"),
+    "execMainStatus": int(os.environ["EXEC_MAIN_STATUS"] or "0"),
+    "nRestarts": int(os.environ["N_RESTARTS"] or "0"),
 }
 digest = sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 payload["contentDigest"] = digest
 print(json.dumps(payload, separators=(",", ":")))
 PY
+)"
+printf '%s\n' "$FHV_JSON_PAYLOAD"

@@ -91,7 +91,7 @@ export function fhvT4CompletedCampaignIdentity(input: {
     execMainPid,
     execMainStartTimestampMonotonic: input.execMainStartTimestampMonotonic ?? "4242000000",
     execMainExitTimestampMonotonic: input.execMainExitTimestampMonotonic ?? "4242999999",
-    execMainCode: 0,
+    execMainCode: 1,
     execMainStatus: 0,
     nRestarts: input.nRestarts ?? 0,
   });

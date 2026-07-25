@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# DEE-436 — service-user fresh checkout wrapper (dependency-free).
+# DEE-436 — service-user fresh checkout wrapper (dependency-free; root caller).
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_fhv-t4-privilege-common.sh
+source "${SCRIPT_DIR}/_fhv-t4-privilege-common.sh"
 
 APPROVED_ORIGIN="https://github.com/oumaster369/waia.git"
 
@@ -13,9 +17,10 @@ Usage: fhv-service-user-checkout.sh \
   --target-sha FULL_SHA \
   --release-tag TAG \
   --git-bin ABS_PATH \
+  --python-bin ABS_PATH \
   [--origin-url URL]
 
-Creates a fresh detached checkout owned by the service user.
+Root-only wrapper: delegates clone/checkout to the non-root FHV service user.
 EOF
 }
 
@@ -25,6 +30,7 @@ CHECKOUT_DIR=""
 TARGET_SHA=""
 RELEASE_TAG=""
 GIT_BIN=""
+PYTHON_BIN=""
 ORIGIN_URL="$APPROVED_ORIGIN"
 
 fail() {
@@ -50,19 +56,20 @@ while [[ $# -gt 0 ]]; do
     --target-sha) TARGET_SHA="${2:-}"; shift 2 ;;
     --release-tag) RELEASE_TAG="${2:-}"; shift 2 ;;
     --git-bin) GIT_BIN="${2:-}"; shift 2 ;;
+    --python-bin) PYTHON_BIN="${2:-}"; shift 2 ;;
     --origin-url) ORIGIN_URL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) fail "unknown argument: $1" ;;
   esac
 done
 
-[[ -n "$SERVICE_USER" && -n "$CHECKOUT_PARENT" && -n "$CHECKOUT_DIR" && -n "$TARGET_SHA" && -n "$RELEASE_TAG" && -n "$GIT_BIN" ]] || usage
+[[ -n "$SERVICE_USER" && -n "$CHECKOUT_PARENT" && -n "$CHECKOUT_DIR" && -n "$TARGET_SHA" && -n "$RELEASE_TAG" && -n "$GIT_BIN" && -n "$PYTHON_BIN" ]] || usage
 require_abs "checkout-parent" "$CHECKOUT_PARENT"
 require_abs "git-bin" "$GIT_BIN"
+require_abs "python-bin" "$PYTHON_BIN"
 
-if [[ "$(id -u)" -eq 0 ]]; then
-  fail "must not run as root"
-fi
+fhv_t4_require_effective_root
+fhv_t4_resolve_service_user_identity "$SERVICE_USER"
 
 TARGET_SHA="$(printf '%s' "$TARGET_SHA" | tr '[:upper:]' '[:lower:]')"
 if ! [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -80,17 +87,12 @@ esac
 CHECKOUT_PATH="${CHECKOUT_PARENT%/}/${CHECKOUT_DIR}"
 [[ ! -e "$CHECKOUT_PATH" ]] || fail "checkout path already exists"
 
-if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
-  fail "service user does not exist"
-fi
-if [[ "$(id -u "$SERVICE_USER")" -eq 0 ]]; then
-  fail "service user UID must be nonzero"
-fi
 [[ -d "$CHECKOUT_PARENT" ]] || fail "checkout parent missing"
 if ! runuser -u "$SERVICE_USER" -- test -w "$CHECKOUT_PARENT"; then
   fail "checkout parent not writable by service user"
 fi
 [[ -x "$GIT_BIN" ]] || fail "git-bin not executable"
+[[ -x "$PYTHON_BIN" ]] || fail "python-bin not executable"
 
 runuser -u "$SERVICE_USER" -- "$GIT_BIN" clone --depth 1 --branch "$RELEASE_TAG" "$ORIGIN_URL" "$CHECKOUT_PATH"
 runuser -u "$SERVICE_USER" -- "$GIT_BIN" -C "$CHECKOUT_PATH" fetch --depth 1 origin "$TARGET_SHA"
@@ -116,21 +118,28 @@ if [[ "$ORIGIN_REMOTE" != "$APPROVED_ORIGIN" ]]; then
 fi
 
 CHECKOUT_UID="$(stat -c '%u' "$CHECKOUT_PATH" 2>/dev/null || stat -f '%u' "$CHECKOUT_PATH")"
-SERVICE_UID="$(id -u "$SERVICE_USER")"
-if [[ "$CHECKOUT_UID" != "$SERVICE_UID" ]]; then
+if [[ "$CHECKOUT_UID" != "$FHV_SERVICE_UID" ]]; then
   fail "checkout not owned by service user"
 fi
 
-python3 - <<PY
-import json
+export FHV_JSON_PAYLOAD
+FHV_JSON_PAYLOAD="$(
+  CHECKOUT_PATH="$CHECKOUT_PATH" TARGET_SHA="$TARGET_SHA" RELEASE_TAG="$RELEASE_TAG" \
+    FHV_SERVICE_UID="$FHV_SERVICE_UID" FHV_SERVICE_GID="$FHV_SERVICE_GID" FHV_SERVICE_GROUP="$FHV_SERVICE_GROUP" \
+    "$PYTHON_BIN" - <<'PY'
+import json, os
 print(json.dumps({
     "schemaVersion": "fhv-t4-service-user-checkout/v1",
     "classification": "FHV_T4_SERVICE_USER_CHECKOUT_OK",
-    "checkoutPath": """$CHECKOUT_PATH""",
-    "releaseSha": """$TARGET_SHA""",
-    "releaseTag": """$RELEASE_TAG""",
-    "originUrl": """$APPROVED_ORIGIN""",
-    "serviceUid": $SERVICE_UID,
+    "checkoutPath": os.environ["CHECKOUT_PATH"],
+    "releaseSha": os.environ["TARGET_SHA"],
+    "releaseTag": os.environ["RELEASE_TAG"],
+    "originUrl": "https://github.com/oumaster369/waia.git",
+    "serviceUid": int(os.environ["FHV_SERVICE_UID"]),
+    "serviceGid": int(os.environ["FHV_SERVICE_GID"]),
+    "servicePrimaryGroup": os.environ["FHV_SERVICE_GROUP"],
 }, separators=(",", ":")))
 PY
+)"
+printf '%s\n' "$FHV_JSON_PAYLOAD"
 printf 'classification=FHV_T4_SERVICE_USER_CHECKOUT_OK\n'

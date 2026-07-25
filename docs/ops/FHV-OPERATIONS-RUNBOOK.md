@@ -110,7 +110,9 @@ Hermetic proofs: `tests/integration/fhv-cross-process-resume.test.ts`, `tests/in
 
 ## T4A continuity (disconnect / reconnect)
 
-During T4A, capture continuity snapshots **before** SSH disconnect and **after** reconnect. Machine proof is systemd identity for both `waia-fhv-observer.service` and `waia-fhv-campaign.service` (boot ID, InvocationID, MainPID, ActiveEnterTimestampMonotonic). Operator SSH disconnect/reconnect may be recorded as narrative metadata only — never as a substitute for machine evidence.
+During T4A, capture continuity snapshots **before** SSH disconnect and **after** reconnect. After observer-only restart, re-qualify observer with bounded active wait, new systemd identity capture, and signed `trader:fhv:t4:status` before `capture-continuity-after`. Machine proof is systemd identity for both `waia-fhv-observer.service` and completed `waia-fhv-campaign.service` (boot ID, InvocationID, retained ExecMainPID/timestamps for campaign). Operator SSH disconnect/reconnect may be recorded as narrative metadata only — never as a substitute for machine evidence.
+
+**Privilege model:** POST_AUTHORIZED host mutation requires effective UID 0. Root performs systemd/Docker observation; `runuser` delegates checkout, installs, and evidence writes to the non-root FHV service user. PRE_AUTH scripts stream over SSH stdin from the workstation release checkout (`FHV_LOCAL_RELEASE_ROOT`) with zero remote staging writes.
 
 ```bash
 corepack pnpm@10 trader:fhv:t4:capture-continuity-before

@@ -45,7 +45,11 @@ function extractPackageCommands(block: string): string[] {
 }
 
 function extractScriptPaths(block: string): string[] {
-  return [...block.matchAll(/(?:^|\s)(scripts\/ops\/[^\s\\]+)/gm)].map((m) => m[1]!);
+  return [
+    ...block.matchAll(
+      /(?:^|\s|\$\{FHV_(?:LOCAL_RELEASE_ROOT|REPO_ROOT)\}\/)(scripts\/ops\/[^\s\\"']+)/gm,
+    ),
+  ].map((m) => m[1]!);
 }
 
 describe("T4 packet V5 executable parser contract (DEE-436)", () => {
@@ -171,8 +175,12 @@ describe("T4 packet V5 executable parser contract (DEE-436)", () => {
       "trader:fhv:t4:resume",
       "wait-final",
       "verify-final",
+      "fhv-t4-campaign-wait-completed.sh",
       "fhv-t4-campaign-systemd-identity-read.sh",
       "capture-continuity-before",
+      "systemctl restart waia-fhv-observer.service",
+      "fhv-t4-observer-wait-active.sh",
+      "trader:fhv:t4:status",
       "capture-continuity-after",
       "verify-continuity",
       "rollback-units.sh",

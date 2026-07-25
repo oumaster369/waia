@@ -491,6 +491,8 @@ describe("DEE-424 guarded installer scripts", () => {
     "test-run",
     "--fhv-organization-id",
     "00000000-0000-4000-8000-000000000416",
+    "--node-bin",
+    process.execPath,
   ];
 
   function runScript(

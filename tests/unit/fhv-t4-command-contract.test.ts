@@ -33,6 +33,7 @@ const SCRIPT_FLAG_ALLOWLIST: Record<string, readonly string[]> = {
     "--fhv-organization-id",
     "--unit",
     "--systemd-dir",
+    "--node-bin",
     "--confirm",
     "--dry-run",
   ],
@@ -78,9 +79,21 @@ describe("T4 operator packet command contract (DEE-436)", () => {
         if (!block.includes(script)) {
           continue;
         }
-        const scriptLines = block
-          .split("\n")
-          .filter((line) => line.includes(script) || /^\s*--/.test(line));
+        const scriptLines: string[] = [];
+        let capture = false;
+        for (const line of block.split("\n")) {
+          if (line.includes(script)) {
+            capture = true;
+          } else if (capture && /scripts\/ops\//.test(line)) {
+            break;
+          }
+          if (capture) {
+            scriptLines.push(line);
+            if (!line.trimEnd().endsWith("\\")) {
+              capture = false;
+            }
+          }
+        }
         const scriptBlock = scriptLines.join("\n");
         if (!scriptBlock.includes(script)) {
           continue;

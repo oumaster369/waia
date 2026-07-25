@@ -114,4 +114,16 @@ describe("fhv-release-checkout-identity (DEE-436)", () => {
       }),
     ).toThrow();
   });
+
+  it("shell CLI requires --git-bin and --python-bin", () => {
+    const script = join(process.cwd(), "scripts/ops/fhv-release-checkout-identity.sh");
+    const { repo, sha, tag } = initRepo();
+    expect(() =>
+      execFileSync(
+        "bash",
+        [script, "--repo-path", repo, "--target-sha", sha, "--release-tag", tag],
+        { encoding: "utf8", stdio: "pipe" },
+      ),
+    ).toThrow();
+  });
 });

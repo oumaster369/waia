@@ -51,7 +51,9 @@ describe("T4 operator packet V5 (DEE-436)", () => {
     expect(body).toContain("trader:fhv:t4:capture-continuity-after");
     expect(body).toContain("trader:fhv:t4:verify-continuity");
     expect(body).toContain("fhv-t4-service-user-exec.sh");
-    expect(body).toContain("fhv-t4-host-monotonic-read.sh");
+    expect(body).toContain("hostMonotonicSample");
+    expect(body).toContain("fhv-t4-campaign-wait-completed.sh");
+    expect(body).not.toMatch(/fhv-t4-host-monotonic-read\.sh["']/);
   });
 
   it("passes bash syntax check for fhv-t4-host-probe.sh", () => {
@@ -83,6 +85,15 @@ describe("T4 operator packet V5 (DEE-436)", () => {
     expect(verifyPreArmIndex).toBeGreaterThan(pauseArmIndex);
     expect(campaignStartIndex).toBeGreaterThan(verifyPreArmIndex);
     expect(rollbackVerifyIndex).toBeGreaterThan(campaignStartIndex);
+    const observerRestartIndex = body.indexOf("systemctl restart waia-fhv-observer.service");
+    expect(observerRestartIndex).toBeGreaterThan(body.indexOf("capture-continuity-before"));
+    expect(body.indexOf("fhv-t4-observer-wait-active.sh", observerRestartIndex)).toBeGreaterThan(
+      observerRestartIndex,
+    );
+    expect(body.indexOf("trader:fhv:t4:status", observerRestartIndex)).toBeGreaterThan(
+      observerRestartIndex,
+    );
+    expect(body.indexOf("capture-continuity-after")).toBeGreaterThan(observerRestartIndex);
     expect(sealIndex).toBeGreaterThan(rollbackVerifyIndex);
   });
 });

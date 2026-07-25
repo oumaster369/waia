@@ -9,46 +9,20 @@ import {
   readFhvRehearsalCampaignProgress,
   runFhvRehearsalCampaign,
 } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
-import { readFhvT4CampaignRuntimeProof } from "@/lib/trader/observability/fhv-t4-closure-verifiers";
+import { classifyFhvT4CampaignCliExit } from "@/lib/trader/observability/fhv-t4-campaign-cli-verdict";
 import {
   assertFhvT4PauseArmedBeforeCampaignStart,
   isFhvT4DeterministicPauseManifest,
 } from "@/lib/trader/observability/fhv-t4-deterministic-pause";
-import { FHV_T4_CAMPAIGN_RUNTIME_MAX_BUDGET_MS } from "@/lib/trader/observability/fhv-t4-host-monotonic-clock";
 
 const runRoot = process.env.FHV_RUN_ROOT?.trim();
 const runId = process.env.FHV_RUN_ID?.trim();
 const organizationId = process.env.FHV_ORGANIZATION_ID?.trim();
 const targetSha = process.env.FHV_TARGET_SHA?.trim();
+const repoRoot = process.env.FHV_REPO_ROOT?.trim() || process.cwd();
 const rehearsalMode = process.env.FHV_REHEARSAL_MODE === "true";
 
-export function classifyFhvCampaignCliExit(input: {
-  classification: string;
-  t4Deterministic: boolean;
-  runRoot: string;
-  wallClockStartedAtMs: number;
-  maxRuntimeMs: number;
-}): { exitCode: number; reason?: string } {
-  if (input.classification === "REHEARSAL_OK" || input.classification === "REHEARSAL_PAUSED") {
-    if (input.t4Deterministic) {
-      const runtime = readFhvT4CampaignRuntimeProof(input.runRoot);
-      if (!runtime) {
-        return { exitCode: 1, reason: "FHV_T4_CAMPAIGN_RUNTIME_MISSING" };
-      }
-      const elapsedMs = Number(BigInt(runtime.elapsedMonotonicNs) / 1_000_000n);
-      if (elapsedMs > FHV_T4_CAMPAIGN_RUNTIME_MAX_BUDGET_MS) {
-        return { exitCode: 1, reason: "FHV_T4_CAMPAIGN_RUNTIME_BUDGET_EXCEEDED" };
-      }
-      return { exitCode: 0 };
-    }
-    const wallElapsedMs = Date.now() - input.wallClockStartedAtMs;
-    if (wallElapsedMs > input.maxRuntimeMs) {
-      return { exitCode: 1, reason: "REHEARSAL_TIMEOUT" };
-    }
-    return { exitCode: 0 };
-  }
-  return { exitCode: 1 };
-}
+export { classifyFhvT4CampaignCliExit };
 
 async function main(): Promise<void> {
   if (!runRoot || !runId || !organizationId) {
@@ -93,10 +67,11 @@ async function main(): Promise<void> {
       targetSha: targetSha!,
     });
     lastCyclesProcessed = result.cyclesProcessed;
-    const verdict = classifyFhvCampaignCliExit({
+    const verdict = classifyFhvT4CampaignCliExit({
       classification: result.classification,
       t4Deterministic,
       runRoot,
+      repoRoot,
       wallClockStartedAtMs: startedAt,
       maxRuntimeMs: manifest.maxRuntimeMs,
     });

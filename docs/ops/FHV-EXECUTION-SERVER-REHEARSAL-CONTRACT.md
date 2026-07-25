@@ -52,10 +52,11 @@ Unchanged hard requirements:
 |---------|---------|
 | `corepack pnpm@10 trader:fhv:rehearsal -- --target-sha "$EXECUTION_SERVER_TARGET_SHA" --run-id <human-approved-unique-run-id> --artifact-root "$FHV_ARTIFACT_ROOT" --t4-deterministic-pause --fixture HTR_WP03_BENCHMARK` | Prepare rehearsal manifest under `$FHV_ARTIFACT_ROOT/RI-P7/fhv-ops-rehearsal/<run-id>/` |
 | `scripts/ops/fhv-validate-origin-url.sh` | Exact approved origin validator (dependency-free) |
-| `scripts/ops/fhv-t4-host-preflight.sh` | PRE_AUTHORIZED dependency-free host binding verifier |
-| `scripts/ops/fhv-service-user-checkout.sh` | POST_AUTHORIZED service-user fresh checkout |
-| `scripts/ops/fhv-service-user-install-deps.sh` | POST_AUTHORIZED frozen lockfile install as service user |
-| `scripts/ops/fhv-t4-campaign-systemd-identity-read.sh` | Completed inactive/success campaign unit identity |
+| `scripts/ops/fhv-t4-host-preflight.sh` | PRE_AUTHORIZED dependency-free host binding verifier (root caller; streamed over SSH stdin from workstation release checkout; zero remote writes without `--output`) |
+| `scripts/ops/fhv-service-user-checkout.sh` | POST_AUTHORIZED root wrapper → `runuser` fresh checkout as FHV service user |
+| `scripts/ops/fhv-service-user-install-deps.sh` | POST_AUTHORIZED root wrapper → `runuser` frozen lockfile install as service user |
+| `scripts/ops/fhv-t4-campaign-wait-completed.sh` | Bounded wait for inactive/success campaign unit + final runtime proof |
+| `scripts/ops/fhv-t4-campaign-systemd-identity-read.sh` | Completed inactive/success campaign unit identity (ExecMainCode=1 CLD_EXITED) |
 | `scripts/ops/fhv-supervisor/render-units.sh` | Render `waia-fhv-campaign.service` + `waia-fhv-observer.service` (no install) |
 | `scripts/ops/fhv-supervisor/install-units.sh` | **Human-only T4A** — install units with `--confirm` on Execution Server |
 | `scripts/ops/fhv-supervisor/rollback-units.sh` | **Human-only T4A** — stop/disable/remove units with `--confirm` |

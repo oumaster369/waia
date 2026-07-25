@@ -119,10 +119,36 @@ export function parseFhvT4CompletedCampaignSystemdIdentity(
       "nRestarts must be a non-negative integer.",
     );
   }
-  if (identity.execMainCode !== 0 || identity.execMainStatus !== 0) {
+  if (identity.execMainCode !== 1) {
     throw new FhvT4CompletedCampaignSystemdIdentityError(
-      "FHV_T4_COMPLETED_CAMPAIGN_IDENTITY_EXIT_INVALID",
-      "Completed campaign must have ExecMainCode=0 and ExecMainStatus=0.",
+      "FHV_T4_COMPLETED_CAMPAIGN_IDENTITY_EXIT_CODE_INVALID",
+      "Completed campaign ExecMainCode must be 1 (CLD_EXITED).",
+    );
+  }
+  if (identity.execMainStatus !== 0) {
+    throw new FhvT4CompletedCampaignSystemdIdentityError(
+      "FHV_T4_COMPLETED_CAMPAIGN_IDENTITY_EXIT_STATUS_INVALID",
+      "Completed campaign ExecMainStatus must be 0.",
+    );
+  }
+  if (
+    !identity.execMainStartTimestampMonotonic.trim() ||
+    identity.execMainStartTimestampMonotonic.trim() === "0" ||
+    !identity.execMainExitTimestampMonotonic.trim() ||
+    identity.execMainExitTimestampMonotonic.trim() === "0"
+  ) {
+    throw new FhvT4CompletedCampaignSystemdIdentityError(
+      "FHV_T4_COMPLETED_CAMPAIGN_IDENTITY_TIMESTAMPS_INVALID",
+      "Retained execution timestamps must be nonzero.",
+    );
+  }
+  if (
+    BigInt(identity.execMainExitTimestampMonotonic.trim()) <=
+    BigInt(identity.execMainStartTimestampMonotonic.trim())
+  ) {
+    throw new FhvT4CompletedCampaignSystemdIdentityError(
+      "FHV_T4_COMPLETED_CAMPAIGN_IDENTITY_TIMESTAMP_ORDER_INVALID",
+      "ExecMainExitTimestampMonotonic must be after start.",
     );
   }
   const normalized = {

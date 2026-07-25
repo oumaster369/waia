@@ -131,6 +131,23 @@ git diff --check
 corepack pnpm@10 validate:canon
 corepack pnpm@10 lint
 corepack pnpm@10 typecheck
+corepack pnpm@10 test --run tests/unit/fhv-t4-*.test.ts
 corepack pnpm@10 test --run
 corepack pnpm@10 build
 ```
+
+## Bootstrap / privilege / pause closure (PR #424 corrective batch)
+
+Closed on branch `dee-436-fhv-t4a-operator-closure`:
+
+- One privilege model: POST root (`id -u` = 0) + `runuser` for FHV service user mutations
+- PRE_AUTH SSH stdin streaming from `FHV_LOCAL_RELEASE_ROOT` (zero remote script staging)
+- Host preflight v2: root-only, systemd PID 1, min free disk, embedded CLOCK_BOOTTIME sample
+- Explicit `--node-bin` / `--git-bin` / `--python-bin` propagation through render/install/checkout
+- Controlled `REHEARSAL_PAUSED` exit 0 without final runtime proof; `REHEARSAL_OK` requires final proof
+- Completed campaign systemd semantics: inactive/success, ExecMainCode=1 (CLD_EXITED), retained timestamps
+- Bounded `fhv-t4-campaign-wait-completed.sh` before identity capture
+- Post-restart observer re-qualification: wait → identity → signed status → continuity-after
+- Hermetic packet simulation tests (`fhv-t4-packet-simulation.test.ts`)
+
+**Linear completion:** keep-open until Human squash merge, dev→main release, main→dev back-sync, independent audit of released Packet V5, and separately authorized T4A Execution Server evidence.

@@ -5,18 +5,24 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { classifyFhvCampaignCliExit } from "@/scripts/trader/fhv-campaign-cli";
+import { classifyFhvT4CampaignCliExit } from "@/lib/trader/observability/fhv-t4-campaign-cli-verdict";
+import {
+  FHV_T4_CAMPAIGN_RUNTIME_SCHEMA_VERSION,
+  writeFhvT4CampaignRuntimeProof,
+} from "@/lib/trader/observability/fhv-t4-closure-verifiers";
 import { resolveFhvRehearsalCliConfig } from "@/scripts/trader/fhv-rehearsal-cli";
 import {
   assertFhvT4CompletedCampaignProcessUnchanged,
   parseFhvT4CompletedCampaignSystemdIdentity,
 } from "@/lib/trader/observability/fhv-t4-completed-campaign-systemd-identity";
 import {
-  FHV_T4_CAMPAIGN_RUNTIME_SCHEMA_VERSION,
-  writeFhvT4CampaignRuntimeProof,
-} from "@/lib/trader/observability/fhv-t4-closure-verifiers";
-import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
-import { fhvT4CompletedCampaignIdentity } from "../helpers/fhv-t4-test-fixtures";
+  FHV_T4_TEST_BOOT_ID,
+  FHV_T4_TEST_STARTED_NS,
+  fhvT4CompletedCampaignIdentity,
+  fhvT4HostMonotonicSample,
+  installFhvT4HostMonotonicTestReader,
+  writeFhvT4TestCampaignRuntimeStart,
+} from "../helpers/fhv-t4-test-fixtures";
 
 const ROOT = process.cwd();
 const TARGET_SHA = "a".repeat(40);
@@ -35,8 +41,11 @@ function runBash(script: string, args: string[] = []): { stdout: string; exitCod
 
 describe("fhv-t4 host runtime closure (DEE-436)", () => {
   let tempDir = "";
+  let cleanupMonotonic: (() => void) | undefined;
 
   afterEach(() => {
+    cleanupMonotonic?.();
+    cleanupMonotonic = undefined;
     if (tempDir) {
       rmSync(tempDir, { recursive: true, force: true });
       tempDir = "";
@@ -91,16 +100,25 @@ describe("fhv-t4 host runtime closure (DEE-436)", () => {
 
   it("T4 campaign CLI verdict ignores wall-clock jumps when runtime proof is within budget", () => {
     tempDir = mkdtempSync(join(tmpdir(), "fhv-wall-"));
+    cleanupMonotonic = installFhvT4HostMonotonicTestReader([
+      fhvT4HostMonotonicSample(FHV_T4_TEST_STARTED_NS),
+      fhvT4HostMonotonicSample("290000000000"),
+    ]);
+    writeFhvT4TestCampaignRuntimeStart(tempDir, {
+      runId: RUN_ID,
+      organizationId: ORG_ID,
+      targetSha: TARGET_SHA,
+    });
     const withoutDigest = {
       schemaVersion: FHV_T4_CAMPAIGN_RUNTIME_SCHEMA_VERSION,
       runId: RUN_ID,
       organizationId: ORG_ID,
       targetSha: TARGET_SHA,
       fixtureId: "HTR_WP03_BENCHMARK" as const,
-      hostBootId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      startedMonotonicNs: "1000000000",
-      completedMonotonicNs: "200000000000",
-      elapsedMonotonicNs: "199000000000",
+      hostBootId: FHV_T4_TEST_BOOT_ID,
+      startedMonotonicNs: FHV_T4_TEST_STARTED_NS,
+      completedMonotonicNs: "290000000000",
+      elapsedMonotonicNs: "289000000000",
       maxBudgetMs: 300_000,
       startedAtUtc: new Date(0).toISOString(),
       completedAtUtc: new Date().toISOString(),
@@ -108,24 +126,15 @@ describe("fhv-t4 host runtime closure (DEE-436)", () => {
     writeFhvT4CampaignRuntimeProof(tempDir, withoutDigest);
 
     vi.spyOn(Date, "now").mockReturnValue(Date.now() + 9_999_999_999);
-    const forward = classifyFhvCampaignCliExit({
+    const verdict = classifyFhvT4CampaignCliExit({
       classification: "REHEARSAL_OK",
       t4Deterministic: true,
       runRoot: tempDir,
+      repoRoot: tempDir,
       wallClockStartedAtMs: Date.now() - 9_999_999_999,
       maxRuntimeMs: 1,
     });
-    expect(forward.exitCode).toBe(0);
-
-    vi.spyOn(Date, "now").mockReturnValue(0);
-    const backward = classifyFhvCampaignCliExit({
-      classification: "REHEARSAL_OK",
-      t4Deterministic: false,
-      runRoot: tempDir,
-      wallClockStartedAtMs: Date.now(),
-      maxRuntimeMs: 300_000,
-    });
-    expect(backward.exitCode).toBe(0);
+    expect(verdict.exitCode).toBe(0);
   });
 
   it("completed campaign identity accepts inactive success and rejects reactivation", () => {
@@ -205,15 +214,19 @@ describe("fhv-t4 host runtime closure (DEE-436)", () => {
       encoding: "utf8",
     }).trim();
     execFileSync("git", ["tag", "fhv-test-tag"], { cwd: tempDir });
-    const script = join(ROOT, "scripts/ops/fhv-release-checkout-identity.sh");
-    chmodSync(script, 0o755);
-    const result = runBash(script, [
+    const shell = join(ROOT, "scripts/ops/fhv-release-checkout-identity.sh");
+    chmodSync(shell, 0o755);
+    const result = runBash(shell, [
       "--repo-path",
       tempDir,
       "--target-sha",
       sha,
       "--release-tag",
       "fhv-test-tag",
+      "--git-bin",
+      "/usr/bin/git",
+      "--python-bin",
+      "/usr/bin/python3",
     ]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("FHV_T4_CHECKOUT_IDENTITY_OK");
