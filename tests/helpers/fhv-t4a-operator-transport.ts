@@ -21,6 +21,7 @@ export type FhvT4aHermeticTransportOptions = Readonly<{
   localReleaseRoot: string;
   targetSha: string;
   releaseTag?: string;
+  originUrl?: string;
   serviceUser: string;
   serviceUserHome: string;
   checkoutParent: string;
@@ -71,6 +72,14 @@ export function createFhvT4aHermeticTransport(
         encoding: "utf8",
       }),
     localGit: (args) => {
+      if (
+        args[0] === "remote" &&
+        args[1] === "get-url" &&
+        args[2] === "origin" &&
+        options.originUrl
+      ) {
+        return { exitCode: 0, stdout: `${options.originUrl}\n`, stderr: "" };
+      }
       if (
         args[0] === "rev-parse" &&
         args[1]?.endsWith("^{}") &&
