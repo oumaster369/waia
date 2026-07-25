@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { FHV_T4A_OPERATOR_STEPS } from "@/lib/trader/observability/fhv-t4a-operator-contract";
+
 const ROOT = process.cwd();
 const PACKET = join(ROOT, "docs/ops/T4_OPERATOR_PACKET_V5.md");
 const HOST_PROBE = join(ROOT, "scripts/ops/fhv-t4-host-probe.sh");
@@ -49,7 +51,13 @@ describe("T4 operator packet V5 (DEE-436)", () => {
     const body = readFileSync(PACKET, "utf8");
     expect(body).toContain("trader:fhv:t4:capture-continuity-before");
     expect(body).toContain("trader:fhv:t4:capture-continuity-after");
-    expect(body).toContain("trader:fhv:t4:verify-continuity");
+    expect(
+      FHV_T4A_OPERATOR_STEPS.some(
+        (step) =>
+          step.commandOwner.kind === "package" &&
+          step.commandOwner.command === "trader:fhv:t4:verify-ceremony",
+      ),
+    ).toBe(true);
     expect(body).toContain("fhv-t4-service-user-exec.sh");
     expect(body).toContain("hostMonotonicSample");
     expect(body).toContain("fhv-t4-campaign-wait-completed.sh");

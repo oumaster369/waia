@@ -2,9 +2,12 @@
  * DEE-436 — machine-derived T4A closure defect counters (static + hermetic probes).
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { createFhvT4aHermeticTransport } from "@/lib/trader/observability/fhv-t4a-hermetic-transport";
 import {
   FHV_T4A_BOOTSTRAP_SCRIPT_PATHS,
   FHV_T4A_LEGACY_CONTAINER_IMAGE,
@@ -55,6 +58,22 @@ export const FHV_T4A_CLOSURE_COUNTER_NAMES = [
   "BUILD_FAILURES",
   "FRESH_CHECK_FAILURES",
   "FRESH_CHECKS_PENDING",
+  "TRACE_ONLY_POST_STEPS",
+  "POST_STEP_EXECUTION_MISSING",
+  "SYNTHETIC_CONTINUITY_PROOF_WRITES",
+  "LIVE_PREAUTH_FALSE_WRITE_ACCOUNTING",
+  "HERMETIC_SSH_BYPASS",
+  "DOUBLE_SUDO_TRANSITIONS",
+  "LOCAL_REMOTE_TRACE_PATH_ALIAS",
+  "LOCAL_RELEASE_RECEIPT_MISSING",
+  "PREAUTH_RECEIPT_MISSING",
+  "PHASE_ORDER_BYPASS",
+  "REAL_GIT_INDEX_MUTATION_IN_TESTS",
+  "CI_PACKET_GATE_MISSING",
+  "COUNTER_DEFAULT_ZERO_PATHS",
+  "NONEXECUTABLE_COMMAND_COPY",
+  "BARE_OPERATOR_NODE",
+  "CEREMONY_OUTPUT_NOT_REACHED",
 ] as const;
 
 export type FhvT4aClosureCounterName = (typeof FHV_T4A_CLOSURE_COUNTER_NAMES)[number];
@@ -75,7 +94,8 @@ function countBareCriticalInvocations(root: string): number {
   const requiredBindings: Record<string, readonly string[]> = {
     "scripts/ops/fhv-t4-service-user-exec.sh": ["--node-bin", "--corepack-bin"],
     "scripts/ops/fhv-service-user-install-deps.sh": ["--node-bin"],
-    "scripts/ops/fhv-t4-resume-campaign-root.sh": ["--systemctl-bin"],
+    "scripts/ops/fhv-t4-resume-campaign-root.sh": ["--systemctl-bin", "--node-bin"],
+    "scripts/ops/fhv-t4a-operator.sh": ["FHV_LOCAL_NODE_BIN"],
     "scripts/ops/fhv-t4-host-preflight.sh": [
       "--node-bin",
       "--corepack-bin",
@@ -105,6 +125,50 @@ function countBareCriticalInvocations(root: string): number {
   return hits;
 }
 
+function probePreauthRemoteWrites(root: string): number {
+  const sha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const work = mkdtempSync(join(tmpdir(), "fhv-t4a-audit-preauth-"));
+  try {
+    const envFile = join(work, "fhv.env");
+    const artifactRoot = join(work, "artifacts");
+    const checkoutParent = join(work, "checkouts");
+    const transport = createFhvT4aHermeticTransport({
+      localReleaseRoot: root,
+      targetSha: sha,
+      releaseTag: "local-dev",
+      originUrl: "https://github.com/oumaster369/waia.git",
+      serviceUser: "fhv",
+      serviceUserHome: "/home/fhv",
+      checkoutParent,
+      artifactRoot,
+      environmentFile: envFile,
+      runId: "audit-preauth",
+      organizationId: "00000000-0000-4000-8000-000000000001",
+      nodeBin: process.execPath,
+      corepackBin: process.execPath,
+      gitBin: "/usr/bin/git",
+      pythonBin: "/usr/bin/python3",
+      dockerBin: "/usr/bin/docker",
+      systemctlBin: "/usr/bin/systemctl",
+    });
+    transport.resetRemoteWrites();
+    for (const scriptPath of [
+      "scripts/ops/fhv-validate-origin-url.sh",
+      "scripts/ops/fhv-t4-host-preflight.sh",
+    ]) {
+      const scriptBody = transport.gitShowBlob(sha, scriptPath);
+      transport.ssh({
+        remoteCommand: "bash -s --",
+        stdin: scriptBody,
+        asRoot: scriptPath.includes("host-preflight"),
+      });
+    }
+    return transport.remoteWriteCount();
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
 export type FhvT4aClosureCounterAuditOptions = Readonly<{
   root?: string;
   preauthRemoteWriteCount?: number;
@@ -115,6 +179,7 @@ export type FhvT4aClosureCounterAuditOptions = Readonly<{
   buildFailures?: number;
   freshCheckFailures?: number;
   freshChecksPending?: number;
+  evidenceProvided?: boolean;
 }>;
 
 export function auditFhvT4aClosureCounters(
@@ -122,11 +187,16 @@ export function auditFhvT4aClosureCounters(
 ): FhvT4aClosureCounterMap {
   const root = options.root ?? process.cwd();
   const counters = zeroCounters();
+  const evidenceProvided = options.evidenceProvided === true;
 
   const packetPath = join(root, "docs/ops/T4_OPERATOR_PACKET_V5.md");
   const packet = readFileSync(packetPath, "utf8");
   const nonExecutableStart = packet.indexOf("## NON_EXECUTABLE");
   const executableBody = nonExecutableStart === -1 ? packet : packet.slice(0, nonExecutableStart);
+
+  if (nonExecutableStart !== -1) {
+    counters.NONEXECUTABLE_COMMAND_COPY = 1;
+  }
 
   const operatorSh = join(root, "scripts/ops/fhv-t4a-operator.sh");
   const operatorTs = join(root, "scripts/ops/fhv-t4a-operator.ts");
@@ -142,6 +212,85 @@ export function auditFhvT4aClosureCounters(
   }
 
   const operatorBody = read(root, "scripts/ops/fhv-t4a-operator.ts");
+  const executorBody = existsSync(
+    join(root, "lib/trader/observability/fhv-t4a-operator-executor.ts"),
+  )
+    ? read(root, "lib/trader/observability/fhv-t4a-operator-executor.ts")
+    : "";
+  const transportBody = read(root, "lib/trader/observability/fhv-t4a-operator-transport.ts");
+
+  if (
+    /for \(let step = 1; step <= 26/.test(operatorBody) &&
+    !operatorBody.includes("executeFhvT4aStep")
+  ) {
+    counters.TRACE_ONLY_POST_STEPS = 1;
+  }
+  if (
+    !operatorBody.includes("executeFhvT4aStep") ||
+    !existsSync(join(root, "lib/trader/observability/fhv-t4a-operator-executor.ts"))
+  ) {
+    counters.POST_STEP_EXECUTION_MISSING = 1;
+  }
+  if (
+    operatorBody.includes('"bound":true,"step":26') ||
+    operatorBody.includes('{"bound":true,"step":26}')
+  ) {
+    counters.SYNTHETIC_CONTINUITY_PROOF_WRITES = 1;
+  }
+  if (/remoteWrites\s*\+/.test(transportBody) && /stdin/.test(transportBody)) {
+    counters.LIVE_PREAUTH_FALSE_WRITE_ACCOUNTING = 1;
+  }
+  if (operatorBody.includes('transport.kind === "hermetic"') && operatorBody.includes("return")) {
+    counters.HERMETIC_SSH_BYPASS = 1;
+  }
+  if (!transportBody.includes("assertExactlyOneSudoTransition")) {
+    counters.DOUBLE_SUDO_TRANSITIONS = 1;
+  }
+  if (
+    operatorBody.includes("FHV_T4A_OPERATOR_TRACE_PATH") ||
+    (!operatorBody.includes("FHV_T4A_LOCAL_STATE_DIR") &&
+      operatorBody.includes("workstationTracePath"))
+  ) {
+    counters.LOCAL_REMOTE_TRACE_PATH_ALIAS = 1;
+  }
+  if (!operatorBody.includes("writeFhvT4aLocalReleaseReceipt")) {
+    counters.LOCAL_RELEASE_RECEIPT_MISSING = 1;
+  }
+  if (!operatorBody.includes("writeFhvT4aPreauthReceipt")) {
+    counters.PREAUTH_RECEIPT_MISSING = 1;
+  }
+  if (
+    !operatorBody.includes("readFhvT4aLocalReleaseReceipt") ||
+    !operatorBody.includes("readFhvT4aPreauthReceipt") ||
+    !operatorBody.includes("readFhvT4aPostBeforeReceipt")
+  ) {
+    counters.PHASE_ORDER_BYPASS = 1;
+  }
+  if (
+    operatorBody.includes("classification: `FHV_T4A_STEP_${step}_OK`") ||
+    operatorBody.includes("predetermined")
+  ) {
+    counters.TRACE_ONLY_POST_STEPS += 1;
+  }
+  if (!executorBody.includes("verify-ceremony") || !operatorBody.includes("ceremonyLines")) {
+    counters.CEREMONY_OUTPUT_NOT_REACHED = 1;
+  }
+
+  const operatorShBody = existsSync(operatorSh)
+    ? read(root, "scripts/ops/fhv-t4a-operator.sh")
+    : "";
+  if (operatorShBody.includes("exec node ") || /\bnode --import tsx/.test(operatorShBody)) {
+    counters.BARE_OPERATOR_NODE = 1;
+  }
+
+  const ciWorkflow = join(root, ".github/workflows/ci.yml");
+  if (
+    !existsSync(ciWorkflow) ||
+    !read(root, ".github/workflows/ci.yml").includes("validate:fhv-t4a-packet")
+  ) {
+    counters.CI_PACKET_GATE_MISSING = 1;
+  }
+
   if (
     !operatorBody.includes("--porcelain=v1") ||
     !operatorBody.includes("FHV_T4A_LOCAL_RELEASE_DIRTY")
@@ -170,11 +319,12 @@ export function auditFhvT4aClosureCounters(
     }
   }
 
-  counters.PREAUTH_REMOTE_WRITE_COUNT = options.preauthRemoteWriteCount ?? 0;
+  counters.PREAUTH_REMOTE_WRITE_COUNT =
+    options.preauthRemoteWriteCount ?? probePreauthRemoteWrites(root);
 
   if (
     !operatorBody.includes("sudoNoninteractiveProbe") ||
-    !read(root, "lib/trader/observability/fhv-t4a-operator-transport.ts").includes("BatchMode=yes")
+    !transportBody.includes("BatchMode=yes")
   ) {
     counters.SUDO_NONINTERACTIVE_GAP = 1;
   }
@@ -288,16 +438,18 @@ export function auditFhvT4aClosureCounters(
     if (
       !smBody.includes("post-auth-before-disconnect") ||
       !smBody.includes("post-reconnect-finalize") ||
-      !smBody.includes("createFhvT4aHermeticTransport")
+      !smBody.includes("fhv-t4a-operator.sh")
     ) {
       counters.EXACT_32_STEP_SIMULATION_MISSING = 1;
     }
     if (
-      smBody.includes("indexOf") &&
-      !smBody.includes("runFhvT4aOperatorPhase") &&
-      !smBody.includes("verifyFhvT4aLocalRelease")
+      !smBody.includes("FHV_T4A_HERMETIC_INTEGRATION") ||
+      !smBody.includes("assertSourceCheckoutClean")
     ) {
       counters.STATIC_ONLY_REQUIRED_TEST_CASES = 1;
+    }
+    if (smBody.includes("git add") || smBody.includes('["add"')) {
+      counters.REAL_GIT_INDEX_MUTATION_IN_TESTS = 1;
     }
   }
 
@@ -308,6 +460,23 @@ export function auditFhvT4aClosureCounters(
   for (const scriptPath of FHV_T4A_BOOTSTRAP_SCRIPT_PATHS) {
     if (!existsSync(join(root, scriptPath))) {
       counters.MISSING_TEST_CASES = 1;
+    }
+  }
+
+  const runtimeCounters: Array<keyof FhvT4aClosureCounterAuditOptions> = [
+    "targetedTestFailures",
+    "integrationTestFailures",
+    "fullTestFailures",
+    "cleanRunnerFailures",
+    "buildFailures",
+    "freshCheckFailures",
+    "freshChecksPending",
+  ];
+  if (!evidenceProvided) {
+    for (const key of runtimeCounters) {
+      if (options[key] === undefined) {
+        counters.COUNTER_DEFAULT_ZERO_PATHS += 1;
+      }
     }
   }
 

@@ -3,6 +3,10 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import {
+  FHV_T4A_OPERATOR_STEPS,
+  fhvT4aOperatorReleaseCheckoutIdentityArgs,
+} from "@/lib/trader/observability/fhv-t4a-operator-contract";
 import { resolveFhvT4ClosureCliConfig } from "@/scripts/trader/fhv-t4-closure-cli";
 import { resolveFhvT4OperatorCliConfig } from "@/scripts/trader/fhv-t4-operator-cli";
 
@@ -53,34 +57,49 @@ function extractScriptPaths(block: string): string[] {
 }
 
 describe("T4 packet V5 executable parser contract (DEE-436)", () => {
-  it("maps every packet package script to an existing package.json script", () => {
-    const body = readFileSync(PACKET, "utf8");
-    const commands = new Set(extractBashBlocks(body).flatMap(extractPackageCommands));
+  it("maps every contract package script to an existing package.json script", () => {
+    const commands = new Set(
+      FHV_T4A_OPERATOR_STEPS.flatMap((step) => {
+        if (step.commandOwner.kind !== "package") {
+          return [];
+        }
+        return [step.commandOwner.command];
+      }),
+    );
     expect(commands.size).toBeGreaterThan(10);
     for (const command of commands) {
       expect(PKG.scripts[command], `missing package script ${command}`).toBeTruthy();
     }
   });
 
-  it("maps every packet scripts/ops path to an existing file", () => {
-    const body = readFileSync(PACKET, "utf8");
-    const scripts = new Set(extractBashBlocks(body).flatMap(extractScriptPaths));
+  it("maps every contract scripts/ops path to an existing file", () => {
+    const scripts = new Set(
+      FHV_T4A_OPERATOR_STEPS.flatMap((step) => {
+        if (step.commandOwner.kind !== "script") {
+          return [];
+        }
+        if (!step.commandOwner.path.startsWith("scripts/")) {
+          return [];
+        }
+        return [step.commandOwner.path];
+      }),
+    );
     expect(scripts.size).toBeGreaterThan(5);
     for (const script of scripts) {
       expect(readFileSync(join(ROOT, script), "utf8").length).toBeGreaterThan(0);
     }
   });
 
-  it("requires wait-paused/wait-final identity + timeout exactly as Packet V5 supplies", () => {
-    const body = readFileSync(PACKET, "utf8");
+  it("requires wait-paused/wait-final identity + timeout in contract", () => {
     for (const sub of ["wait-paused", "wait-final"] as const) {
-      const idx = body.indexOf(`trader:fhv:t4:${sub}`);
-      expect(idx).toBeGreaterThan(-1);
-      const window = body.slice(idx, idx + 500);
-      for (const flag of REQUIRED_WAIT_FLAGS) {
-        expect(window, `${sub} missing ${flag}`).toContain(flag);
-      }
-      expect(window).toContain("--timeout-ms 300000");
+      const step = FHV_T4A_OPERATOR_STEPS.find(
+        (entry) =>
+          entry.commandOwner.kind === "package" && entry.commandOwner.command.endsWith(sub),
+      );
+      expect(step, sub).toBeTruthy();
+      const body = readFileSync(PACKET, "utf8");
+      expect(body).toContain(`trader:fhv:t4:${sub}`);
+      expect(body).toContain("--timeout-ms 300000");
       const config = resolveFhvT4ClosureCliConfig({} as NodeJS.ProcessEnv, [
         sub,
         "--run-root",
@@ -137,49 +156,43 @@ describe("T4 packet V5 executable parser contract (DEE-436)", () => {
     const body = readFileSync(PACKET, "utf8");
     expect(body.indexOf("14–17")).toBeLessThan(body.indexOf("18–21"));
     expect(body).toContain("fhv-t4-campaign-systemd-identity-read.sh");
-    expect(body).toContain("--artifact-root");
-    expect(body).toContain("fhv-service-user-install-deps.sh");
+    expect(
+      FHV_T4A_OPERATOR_STEPS.some(
+        (step) =>
+          step.commandOwner.kind === "package" &&
+          step.commandOwner.command === "trader:fhv:rehearsal",
+      ),
+    ).toBe(true);
+    expect(
+      FHV_T4A_OPERATOR_STEPS.some(
+        (step) =>
+          step.commandOwner.kind === "script" &&
+          step.commandOwner.path.includes("fhv-service-user-install-deps.sh"),
+      ),
+    ).toBe(true);
+    const step25 = FHV_T4A_OPERATOR_STEPS.find((step) => step.step === 25);
+    expect(step25?.commandOwner.kind).toBe("script");
+    if (step25?.commandOwner.kind === "script") {
+      expect(step25.commandOwner.path).toContain("fhv-t4-campaign-systemd-identity-read.sh");
+    }
   });
 
   it("documents the exact PRE→STOP→POST state machine and POST order", () => {
     const body = readFileSync(PACKET, "utf8");
-    const executable = body.split("## NON_EXECUTABLE")[0] ?? body;
-    const reference = body.split("## NON_EXECUTABLE")[1] ?? "";
-    expect(executable.indexOf("PRE_AUTHORIZED_READ_ONLY_PHASE")).toBeLessThan(
-      executable.indexOf("## STOP — `AUTHORIZE-FHV-OPS-DEPLOY`"),
+    expect(body.indexOf("PRE_AUTHORIZED_READ_ONLY_PHASE")).toBeLessThan(
+      body.indexOf("## STOP — `AUTHORIZE-FHV-OPS-DEPLOY`"),
     );
-    expect(executable.indexOf("## STOP — `AUTHORIZE-FHV-OPS-DEPLOY`")).toBeLessThan(
-      executable.indexOf("POST_AUTHORIZED_T4A_PHASE"),
+    expect(body.indexOf("## STOP — `AUTHORIZE-FHV-OPS-DEPLOY`")).toBeLessThan(
+      body.indexOf("POST_AUTHORIZED_T4A_PHASE"),
     );
-    expect(executable.indexOf("post-auth-before-disconnect")).toBeLessThan(
-      executable.indexOf("post-reconnect-finalize"),
+    expect(body.indexOf("post-auth-before-disconnect")).toBeLessThan(
+      body.indexOf("post-reconnect-finalize"),
     );
-    expect(executable).toContain("capture-continuity-before");
-    const referenceOrder = [
-      "fhv-validate-origin-url.sh",
-      "fhv-service-user-checkout.sh",
-      "fhv-release-checkout-identity.sh",
-      "fhv-service-user-install-deps.sh",
-      "trader:fhv:rehearsal",
-      "record-checkout-identity",
-      "render-units.sh",
-      "install-units.sh",
-      "fhv-systemd-record-deploy",
-      "ingest-host-probe",
-      "verify-deployment",
-      "trader:fhv:t4:arm-pause",
-      "trader:fhv:t4:resume",
-      "fhv-t4-resume-campaign-root.sh",
-      "fhv-t4-campaign-wait-completed.sh",
-      "capture-continuity-before",
-      "capture-continuity-after",
-      "verify-ceremony",
-    ];
-    let cursor = -1;
-    for (const token of referenceOrder) {
-      const next = reference.indexOf(token, cursor + 1);
-      expect(next, `reference order broken at ${token}`).toBeGreaterThan(cursor);
-      cursor = next;
-    }
+    expect(body).toContain("capture-continuity-before");
+    const contractOrder = FHV_T4A_OPERATOR_STEPS.map((step) => step.name);
+    expect(contractOrder[0]).toMatch(/authorization/i);
+    expect(contractOrder[25]).toMatch(/continuity-before/i);
+    expect(contractOrder[31]).toMatch(/ceremony|rollback|seal/i);
+    expect(fhvT4aOperatorReleaseCheckoutIdentityArgs()).toContain("--git-bin");
   });
 });

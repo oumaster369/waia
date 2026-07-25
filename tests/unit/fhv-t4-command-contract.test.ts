@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { FHV_T4A_OPERATOR_STEPS } from "@/lib/trader/observability/fhv-t4a-operator-contract";
+
 const ROOT = process.cwd();
 const PACKET = join(ROOT, "docs/ops/T4_OPERATOR_PACKET_V5.md");
 
@@ -115,9 +117,18 @@ describe("T4 operator packet command contract (DEE-436)", () => {
 
   it("declares bounded wait and inventory builder package commands", () => {
     const body = readFileSync(PACKET, "utf8");
-    expect(body).toContain("trader:fhv:t4:wait-paused");
-    expect(body).toContain("trader:fhv:t4:wait-final");
-    expect(body).toContain("trader:fhv:t4:build-evidence-inventory");
+    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    for (const command of ["trader:fhv:t4:wait-paused", "trader:fhv:t4:wait-final"]) {
+      expect(
+        FHV_T4A_OPERATOR_STEPS.some(
+          (step) => step.commandOwner.kind === "package" && step.commandOwner.command === command,
+        ),
+        command,
+      ).toBe(true);
+    }
+    expect(pkg.scripts["trader:fhv:t4:build-evidence-inventory"]).toBeTruthy();
     expect(body).not.toContain("--evidence-list");
     expect(body).toContain("PRE_AUTHORIZED_READ_ONLY_PHASE");
     expect(body).toContain("POST_AUTHORIZED_T4A_PHASE");

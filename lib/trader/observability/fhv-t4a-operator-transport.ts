@@ -11,10 +11,19 @@ export type FhvT4aTransportExecResult = Readonly<{
   stderr: string;
 }>;
 
+export type FhvT4aSshInvocation = Readonly<{
+  remoteCommand: string;
+  stdin?: string;
+  asRoot: boolean;
+  effectiveRemoteCommand: string;
+  exitCode: number;
+}>;
+
 export type FhvT4aOperatorTransport = Readonly<{
   kind: "hermetic" | "live";
   remoteWriteCount: () => number;
   resetRemoteWrites: () => void;
+  sshInvocations: () => readonly FhvT4aSshInvocation[];
   ssh: (input: {
     remoteCommand: string;
     stdin?: string;
@@ -38,13 +47,41 @@ export function getFhvT4aOperatorTransportForTests(): FhvT4aOperatorTransport | 
   return injectedTransport;
 }
 
+export function buildEffectiveRemoteCommand(remoteCommand: string, asRoot: boolean): string {
+  const trimmed = remoteCommand.trim();
+  if (!asRoot) {
+    return trimmed;
+  }
+  if (/^sudo\s+-n\b/.test(trimmed)) {
+    return trimmed;
+  }
+  return `sudo -n ${trimmed}`;
+}
+
+export function assertExactlyOneSudoTransition(
+  effectiveRemoteCommand: string,
+  asRoot: boolean,
+): void {
+  if (!asRoot) {
+    return;
+  }
+  const matches = effectiveRemoteCommand.match(/\bsudo\s+-n\b/g);
+  if (!matches || matches.length !== 1) {
+    throw new Error(
+      `FHV_T4A_DOUBLE_SUDO: expected exactly one 'sudo -n', got ${matches?.length ?? 0}`,
+    );
+  }
+}
+
 export function createFhvT4aLiveTransport(
   env: NodeJS.ProcessEnv = process.env,
 ): FhvT4aOperatorTransport {
   let remoteWrites = 0;
+  const invocations: FhvT4aSshInvocation[] = [];
   const execHost = env.EXEC_HOST?.trim() ?? "";
   const sshUser = env.SSH_USER?.trim() ?? "";
   const localReleaseRoot = env.FHV_LOCAL_RELEASE_ROOT?.trim() ?? "";
+  const sshBin = env.FHV_LOCAL_SSH_BIN?.trim() || "ssh";
   const sshBase = [
     "-o",
     "BatchMode=yes",
@@ -61,6 +98,7 @@ export function createFhvT4aLiveTransport(
     resetRemoteWrites: () => {
       remoteWrites = 0;
     },
+    sshInvocations: () => invocations,
     gitShowBlob: (commitSha, path) =>
       execFileSync("git", ["-C", localReleaseRoot, "show", `${commitSha}:${path}`], {
         encoding: "utf8",
@@ -78,27 +116,33 @@ export function createFhvT4aLiveTransport(
     },
     sudoNoninteractiveProbe: () => {
       try {
-        execFileSync("ssh", [...sshBase, "sudo", "-n", "true"], { stdio: "pipe" });
+        execFileSync(sshBin, [...sshBase, "sudo", "-n", "true"], { stdio: "pipe" });
         return { exitCode: 0, stdout: "", stderr: "" };
       } catch (error) {
         const err = error as { status?: number; stdout?: string; stderr?: string };
         return { exitCode: err.status ?? 1, stdout: err.stdout ?? "", stderr: err.stderr ?? "" };
       }
     },
-    ssh: ({ remoteCommand, stdin, asRoot }) => {
-      const remote = asRoot ? `sudo -n ${remoteCommand}` : remoteCommand;
-      const result = spawnSync("ssh", [...sshBase, remote], {
+    ssh: ({ remoteCommand, stdin, asRoot = false }) => {
+      const effectiveRemoteCommand = buildEffectiveRemoteCommand(remoteCommand, asRoot);
+      assertExactlyOneSudoTransition(effectiveRemoteCommand, asRoot);
+      const result = spawnSync(sshBin, [...sshBase, effectiveRemoteCommand], {
         input: stdin,
         encoding: "utf8",
       });
-      if (asRoot && result.status === 0 && stdin) {
-        remoteWrites += 1;
-      }
-      return {
+      const execResult = {
         exitCode: result.status ?? 1,
         stdout: result.stdout ?? "",
         stderr: result.stderr ?? "",
       };
+      invocations.push({
+        remoteCommand,
+        stdin,
+        asRoot,
+        effectiveRemoteCommand,
+        exitCode: execResult.exitCode,
+      });
+      return execResult;
     },
   };
 }

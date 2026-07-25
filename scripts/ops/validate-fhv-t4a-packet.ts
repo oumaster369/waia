@@ -101,7 +101,22 @@ function main(): void {
     fail("fhv-t4-service-user-exec.sh must not shell-source EnvironmentFile");
   }
 
-  const counters = auditFhvT4aClosureCounters({ root: ROOT, preauthRemoteWriteCount: 0 });
+  if (nonExecutableStart !== -1) {
+    fail("packet must not retain NON_EXECUTABLE command copy");
+  }
+
+  const operatorBody = readFileSync(join(ROOT, "scripts/ops/fhv-t4a-operator.ts"), "utf8");
+  if (!operatorBody.includes("executeFhvT4aStep")) {
+    fail("operator must execute steps via executeFhvT4aStep (no trace-only POST loops)");
+  }
+  if (operatorBody.includes("FHV_T4A_OPERATOR_TRACE_PATH")) {
+    fail("operator must not alias remote trace path for workstation trace");
+  }
+  if (!operatorBody.includes("FHV_T4A_LOCAL_STATE_DIR")) {
+    fail("operator must bind FHV_T4A_LOCAL_STATE_DIR for workstation receipts");
+  }
+
+  const counters = auditFhvT4aClosureCounters({ root: ROOT, evidenceProvided: true });
   console.log(formatFhvT4aClosureCounters(counters));
   try {
     assertFhvT4aClosureCountersZero(counters);

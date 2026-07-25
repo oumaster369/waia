@@ -1,282 +1,292 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync, type SpawnSyncReturns } from "node:child_process";
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   FHV_T4A_AUTHORIZATION_LITERAL,
   FHV_T4A_TERMINAL_AWAITING_HUMAN_DISCONNECT_RECONNECT,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
-import { setFhvT4aOperatorTransportForTests } from "@/lib/trader/observability/fhv-t4a-operator-transport";
-import type { FhvT4aOperatorTransport } from "@/lib/trader/observability/fhv-t4a-operator-transport";
-import {
-  FhvT4aOperatorError,
-  resolveFhvT4aOperatorBindings,
-  runFhvT4aOperatorPhase,
-  verifyFhvT4aLocalRelease,
-} from "@/scripts/ops/fhv-t4a-operator";
-import {
-  createFhvT4aHermeticTransport,
-  sha256Hex,
-} from "@/tests/helpers/fhv-t4a-operator-transport";
+import { sha256Hex } from "@/tests/helpers/fhv-t4a-operator-transport";
 
 const ROOT = process.cwd();
+const OPERATOR_SH = join(ROOT, "scripts/ops/fhv-t4a-operator.sh");
+const LOCAL_NODE = process.execPath;
+const LOCAL_GIT = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+const LOCAL_SSH = execFileSync("which", ["ssh"], { encoding: "utf8" }).trim();
 
 let tempDirs: string[] = [];
+let statusAtTestStart = "";
 
-afterEach(() => {
-  setFhvT4aOperatorTransportForTests(null);
-  for (const dir of tempDirs) {
-    rmSync(dir, { recursive: true, force: true });
-  }
-  tempDirs = [];
-});
+function trackDir(path: string): string {
+  tempDirs.push(path);
+  return path;
+}
 
-function initGitRelease(): { releaseRoot: string; sha: string } {
-  const releaseRoot = ROOT;
+function assertSourceCheckoutClean(): void {
+  const status = execFileSync("git", ["-C", ROOT, "status", "--porcelain=v1"], {
+    encoding: "utf8",
+  }).trim();
+  expect(status).toBe(statusAtTestStart);
+}
+
+function createTempReleaseCheckout(): { releaseRoot: string; sha: string; tag: string } {
+  const releaseRoot = trackDir(mkdtempSync(join(tmpdir(), "fhv-t4a-release-")));
+  execFileSync("git", ["-C", ROOT, "worktree", "add", "--detach", releaseRoot, "HEAD"], {
+    stdio: "pipe",
+  });
   const sha = execFileSync("git", ["-C", releaseRoot, "rev-parse", "HEAD"], {
     encoding: "utf8",
   }).trim();
-  return { releaseRoot, sha };
+  const tag = "local-dev";
+  return { releaseRoot, sha, tag };
 }
 
-function resolveReleaseTag(): string {
-  try {
-    return execFileSync("git", ["describe", "--tags", "--exact-match", "HEAD"], {
-      encoding: "utf8",
-    }).trim();
-  } catch {
-    return "local-dev";
-  }
-}
-
-function hermeticTransport(
+function buildEnv(
   releaseRoot: string,
   sha: string,
-  env: NodeJS.ProcessEnv,
-): ReturnType<typeof createFhvT4aHermeticTransport> {
-  return createFhvT4aHermeticTransport({
-    localReleaseRoot: releaseRoot,
-    targetSha: sha,
-    releaseTag: env.FHV_RELEASE_TAG ?? resolveReleaseTag(),
-    originUrl: env.FHV_ORIGIN_URL ?? "https://github.com/oumaster369/waia.git",
-    serviceUser: "fhv",
-    serviceUserHome: "/home/fhv",
-    checkoutParent: env.FHV_CHECKOUT_PARENT!,
-    artifactRoot: env.FHV_ARTIFACT_ROOT!,
-    environmentFile: env.FHV_ENVIRONMENT_FILE!,
-    nodeBin: process.execPath,
-    corepackBin: process.execPath,
-    gitBin: "/usr/bin/git",
-    pythonBin: "/usr/bin/python3",
-    dockerBin: "/usr/bin/docker",
-    systemctlBin: "/usr/bin/systemctl",
-  });
-}
-
-function baseEnv(releaseRoot: string, sha: string): NodeJS.ProcessEnv {
-  const work = mkdtempSync(join(tmpdir(), "fhv-t4a-work-"));
-  tempDirs.push(work);
+  tag: string,
+  extra: Record<string, string | undefined> = {},
+): NodeJS.ProcessEnv {
+  const work = trackDir(mkdtempSync(join(tmpdir(), "fhv-t4a-work-")));
+  const localStateDir = join(work, "state");
   const envFile = join(work, "fhv.env");
   const artifactRoot = join(work, "artifacts");
   const checkoutParent = join(work, "checkouts");
+  mkdirSync(localStateDir, { recursive: true });
   mkdirSync(artifactRoot, { recursive: true });
   mkdirSync(checkoutParent, { recursive: true });
-  writeFileSync(
-    envFile,
-    [
-      "FHV_HOST_OS_QUALIFIED=true",
-      "FHV_COMMAND_ENFORCEMENT_ENABLED=true",
-      "FHV_OPERATOR_COMMAND_SECRET=secret",
-      "FHV_OBSERVER_TUNNEL_SECRET=tunnel",
-    ].join("\n") + "\n",
-  );
   return {
     ...process.env,
-    FHV_T4A_OPERATOR_TEST_MODE: "1",
+    FHV_T4A_HERMETIC_INTEGRATION: "1",
     EXEC_HOST: "exec.test",
     SSH_USER: "operator",
     FHV_LOCAL_RELEASE_ROOT: releaseRoot,
+    FHV_T4A_LOCAL_STATE_DIR: localStateDir,
+    FHV_LOCAL_NODE_BIN: LOCAL_NODE,
+    FHV_LOCAL_GIT_BIN: LOCAL_GIT,
+    FHV_LOCAL_SSH_BIN: LOCAL_SSH,
     EXECUTION_SERVER_TARGET_SHA: sha,
-    FHV_RELEASE_TAG: resolveReleaseTag(),
+    FHV_RELEASE_TAG: tag,
     FHV_ORIGIN_URL: "https://github.com/oumaster369/waia.git",
     FHV_RUN_ID: "t4a-state-machine",
     FHV_ORGANIZATION_ID: "00000000-0000-4000-8000-000000000436",
     FHV_OPERATOR_ID: "operator-test",
     FHV_SERVICE_USER: "fhv",
+    FHV_SERVICE_USER_HOME: "/home/fhv",
     FHV_ENVIRONMENT_FILE: envFile,
     FHV_ARTIFACT_ROOT: artifactRoot,
     FHV_CHECKOUT_PARENT: checkoutParent,
     FHV_EXPECTED_HOSTNAME: "exec.test",
     FHV_EXPECTED_MACHINE_ID_SHA256: "a".repeat(64),
-    FHV_NODE_BIN: process.execPath,
-    FHV_COREPACK_BIN: process.execPath,
+    FHV_NODE_BIN: LOCAL_NODE,
+    FHV_COREPACK_BIN: LOCAL_NODE,
     FHV_GIT_BIN: "/usr/bin/git",
     FHV_PYTHON_BIN: "/usr/bin/python3",
     FHV_DOCKER_BIN: "/usr/bin/docker",
-    FHV_T4A_OPERATOR_TRACE_PATH: join(work, "trace.jsonl"),
+    FHV_SYSTEMCTL_BIN: "/usr/bin/systemctl",
+    ...extra,
   };
 }
 
-describe("fhv-t4a operator state machine (DEE-436)", () => {
-  it("runs verify-local-release on clean git release checkout", () => {
-    const { releaseRoot, sha } = initGitRelease();
-    const status = execFileSync("git", ["-C", releaseRoot, "status", "--porcelain=v1"], {
-      encoding: "utf8",
-    }).trim();
-    if (status) {
-      return;
+function runOperatorShell(phase: string, env: NodeJS.ProcessEnv): SpawnSyncReturns<string> {
+  return spawnSync("bash", [OPERATOR_SH, phase], {
+    env,
+    encoding: "utf8",
+    cwd: ROOT,
+  });
+}
+
+beforeEach(() => {
+  statusAtTestStart = execFileSync("git", ["-C", ROOT, "status", "--porcelain=v1"], {
+    encoding: "utf8",
+  }).trim();
+});
+
+afterEach(() => {
+  for (const dir of [...tempDirs].reverse()) {
+    try {
+      execFileSync("git", ["-C", ROOT, "worktree", "remove", "--force", dir], { stdio: "pipe" });
+    } catch {
+      rmSync(dir, { recursive: true, force: true });
     }
-    const env = baseEnv(releaseRoot, sha);
-    const transport = hermeticTransport(releaseRoot, sha, env);
-    setFhvT4aOperatorTransportForTests(transport);
-    const bindings = resolveFhvT4aOperatorBindings(env);
-    const digests = verifyFhvT4aLocalRelease(bindings, transport);
-    expect(Object.keys(digests).length).toBeGreaterThan(0);
-    expect(runFhvT4aOperatorPhase("verify-local-release", bindings, transport)).toBe(
-      "FHV_T4A_LOCAL_RELEASE_VERIFY_OK",
-    );
+  }
+  tempDirs = [];
+  assertSourceCheckoutClean();
+});
+
+describe("fhv-t4a operator state machine (DEE-436)", () => {
+  it("runs verify-local-release via public shell entrypoint", () => {
+    const { releaseRoot, sha, tag } = createTempReleaseCheckout();
+    const env = buildEnv(releaseRoot, sha, tag);
+    const result = runOperatorShell("verify-local-release", env);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("FHV_T4A_LOCAL_RELEASE_VERIFY_OK");
+    expect(
+      existsSync(join(env.FHV_T4A_LOCAL_STATE_DIR!, "fhv-t4a-local-release-receipt.v1.json")),
+    ).toBe(true);
   });
 
-  it("positive phase chain through awaiting human disconnect", () => {
-    const { releaseRoot, sha } = initGitRelease();
-    const env = {
-      ...baseEnv(releaseRoot, sha),
+  it("positive subprocess chain through ceremony via public shell entrypoint", () => {
+    const { releaseRoot, sha, tag } = createTempReleaseCheckout();
+    const env = buildEnv(releaseRoot, sha, tag, {
       FHV_T4A_AUTHORIZATION: FHV_T4A_AUTHORIZATION_LITERAL,
-    } as NodeJS.ProcessEnv;
-    const transport = hermeticTransport(releaseRoot, sha, env);
-    setFhvT4aOperatorTransportForTests(transport);
-    const bindings = resolveFhvT4aOperatorBindings(env);
-    const dirty = execFileSync("git", ["-C", releaseRoot, "status", "--porcelain=v1"], {
-      encoding: "utf8",
-    }).trim();
-    if (!dirty) {
-      runFhvT4aOperatorPhase("verify-local-release", bindings, transport);
+    });
+    expect(runOperatorShell("verify-local-release", env).status).toBe(0);
+    expect(runOperatorShell("pre-auth", env).status).toBe(0);
+    const postBefore = runOperatorShell("post-auth-before-disconnect", env);
+    expect(postBefore.status).toBe(0);
+    expect(postBefore.stdout).toContain(FHV_T4A_TERMINAL_AWAITING_HUMAN_DISCONNECT_RECONNECT);
+    const continuityBefore = join(
+      env.FHV_ARTIFACT_ROOT!,
+      "RI-P7/fhv-ops-rehearsal/t4a-state-machine/control/fhv-t4-continuity-before.v1.json",
+    );
+    expect(existsSync(continuityBefore)).toBe(true);
+    expect(readFileSync(continuityBefore, "utf8")).not.toContain('"step":26');
+    const postFinalize = runOperatorShell("post-reconnect-finalize", env);
+    expect(postFinalize.status).toBe(0);
+    expect(postFinalize.stdout).toContain("FHV_T4A_POST_RECONNECT_FINALIZE_OK");
+    const finalizeReceipt = JSON.parse(
+      readFileSync(
+        join(env.FHV_T4A_LOCAL_STATE_DIR!, "fhv-t4a-post-finalize-receipt.v1.json"),
+        "utf8",
+      ),
+    ) as { ceremonyClassifications: Record<string, string> };
+    for (const [key, value] of [
+      ["T4A_RESULT", "PASS"],
+      ["GATE8_RESULT", "PASS"],
+      ["T4B_RESULT", "NOT_EXECUTED_SEPARATE_GATE"],
+      ["PAUSE_RESULT", "REHEARSAL_PAUSED_AT_CYCLE_40"],
+      ["RESUME_RESULT", "REHEARSAL_OK"],
+      ["CONTINUITY_RESULT", "PASS"],
+      ["EVIDENCE_SEAL_RESULT", "PASS"],
+    ] as const) {
+      expect(finalizeReceipt.ceremonyClassifications[key]).toBe(value);
     }
-    runFhvT4aOperatorPhase("pre-auth", bindings, transport);
-    expect(transport.remoteWriteCount()).toBe(0);
-    expect(runFhvT4aOperatorPhase("post-auth-before-disconnect", bindings, transport)).toBe(
-      FHV_T4A_TERMINAL_AWAITING_HUMAN_DISCONNECT_RECONNECT,
-    );
-    expect(runFhvT4aOperatorPhase("post-reconnect-finalize", bindings, transport)).toBe(
-      "FHV_T4A_POST_RECONNECT_FINALIZE_OK",
-    );
+    const tracePath = join(env.FHV_T4A_LOCAL_STATE_DIR!, "fhv-t4a-operator-trace.jsonl");
+    expect(existsSync(tracePath)).toBe(true);
+    const traceLines = readFileSync(tracePath, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { semanticStep: number | string; exitStatus: number });
+    expect(traceLines.some((line) => line.semanticStep === 26 && line.exitStatus === 0)).toBe(true);
+    expect(traceLines.some((line) => line.semanticStep === 32 && line.exitStatus === 0)).toBe(true);
   });
 
   const negativeCases: Array<{
     id: string;
-    mutate: (env: NodeJS.ProcessEnv) => void;
+    phase: string;
+    mutate: (ctx: { env: NodeJS.ProcessEnv; releaseRoot: string }) => void;
     code: string;
   }> = [
     {
       id: "D-01",
-      mutate: (env) => {
-        delete env.FHV_GIT_BIN;
+      phase: "verify-local-release",
+      mutate: ({ env }) => {
+        delete env.FHV_SYSTEMCTL_BIN;
       },
       code: "FHV_T4A_BINDING_MISSING",
     },
     {
       id: "D-03",
-      mutate: () => {
-        /* dirty tree applied in test body */
+      phase: "verify-local-release",
+      mutate: ({ releaseRoot }) => {
+        writeFileSync(join(releaseRoot, ".fhv-dirty-marker"), "x\n");
       },
       code: "FHV_T4A_LOCAL_RELEASE_DIRTY",
     },
     {
       id: "D-04",
-      mutate: () => {
-        /* sudo probe applied in test body */
+      phase: "pre-auth",
+      mutate: ({ env }) => {
+        env.FHV_T4A_HERMETIC_INTEGRATION = "0";
+        env.FHV_T4A_OPERATOR_TEST_MODE = "1";
       },
-      code: "FHV_T4A_SUDO_NONINTERACTIVE_FAILED",
+      code: "FHV_T4A_TEST_TRANSPORT_MISSING",
     },
     {
       id: "D-04b",
-      mutate: (env) => {
+      phase: "post-auth-before-disconnect",
+      mutate: ({ env }) => {
         env.FHV_T4A_AUTHORIZATION = "AUTHORIZE";
       },
       code: "FHV_T4A_AUTHORIZATION_LITERAL_REJECTED",
     },
     {
       id: "D-13",
-      mutate: (env) => {
+      phase: "post-auth-before-disconnect",
+      mutate: ({ env }) => {
         env.FHV_T4A_AUTHORIZATION = "WRONG-TOKEN";
       },
       code: "FHV_T4A_AUTHORIZATION_REQUIRED",
     },
+    {
+      id: "D-14",
+      phase: "post-reconnect-finalize",
+      mutate: () => {
+        /* skip post-before receipt */
+      },
+      code: "FHV_T4A_POST_BEFORE_RECEIPT_MISSING",
+    },
   ];
 
   for (const negative of negativeCases) {
-    it(`negative ${negative.id} fails closed`, () => {
-      const { releaseRoot, sha } = initGitRelease();
-      const env = baseEnv(releaseRoot, sha);
-      negative.mutate(env);
-      if (negative.id === "D-03") {
-        const dirtyPath = join(releaseRoot, ".fhv-t4a-dirty-test-marker");
-        writeFileSync(dirtyPath, "x");
-        tempDirs.push(dirtyPath);
-        execFileSync("git", ["-C", releaseRoot, "add", ".fhv-t4a-dirty-test-marker"]);
+    it(`negative ${negative.id} fails closed via shell entrypoint`, () => {
+      const { releaseRoot, sha, tag } = createTempReleaseCheckout();
+      const env = buildEnv(releaseRoot, sha, tag, {
+        FHV_T4A_AUTHORIZATION: FHV_T4A_AUTHORIZATION_LITERAL,
+      });
+      negative.mutate({ env, releaseRoot });
+      if (negative.id !== "D-14" && negative.id !== "D-04b" && negative.id !== "D-13") {
+        runOperatorShell("verify-local-release", env);
       }
-      const transport = hermeticTransport(releaseRoot, sha, env);
-      let activeTransport: FhvT4aOperatorTransport = transport;
-      if (negative.id === "D-04") {
-        activeTransport = {
-          ...transport,
-          sudoNoninteractiveProbe: () => ({
-            exitCode: 1,
-            stdout: "",
-            stderr: "sudo required",
-          }),
-        };
-        setFhvT4aOperatorTransportForTests(activeTransport);
-      } else {
-        setFhvT4aOperatorTransportForTests(transport);
+      if (
+        negative.phase === "post-auth-before-disconnect" ||
+        negative.phase === "post-reconnect-finalize"
+      ) {
+        if (negative.id !== "D-04b" && negative.id !== "D-13" && negative.id !== "D-14") {
+          runOperatorShell("pre-auth", env);
+        }
+        if (negative.id !== "D-14") {
+          runOperatorShell("verify-local-release", env);
+          runOperatorShell("pre-auth", env);
+        }
       }
-      if (negative.id === "D-01") {
-        delete env.FHV_GIT_BIN;
-        expect(() => resolveFhvT4aOperatorBindings(env)).toThrow(FhvT4aOperatorError);
-        return;
+      if (negative.phase === "post-reconnect-finalize" && negative.id !== "D-14") {
+        runOperatorShell("post-auth-before-disconnect", env);
       }
-      const bindings = resolveFhvT4aOperatorBindings(env);
-      const phase =
-        negative.id === "D-13" || negative.id === "D-04b"
-          ? "post-auth-before-disconnect"
-          : negative.id === "D-04"
-            ? "pre-auth"
-            : "verify-local-release";
-      expect(() => runFhvT4aOperatorPhase(phase, bindings, activeTransport)).toThrow(
-        FhvT4aOperatorError,
-      );
+      const result = runOperatorShell(negative.phase, env);
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toMatch(new RegExp(negative.code));
     });
   }
 
   it("streams bootstrap bytes from committed git objects not dirty working tree", () => {
-    const { releaseRoot, sha } = initGitRelease();
-    const transport = createFhvT4aHermeticTransport({
-      localReleaseRoot: releaseRoot,
-      targetSha: sha,
-      releaseTag: resolveReleaseTag(),
-      originUrl: "https://github.com/oumaster369/waia.git",
-      serviceUser: "fhv",
-      serviceUserHome: "/home/fhv",
-      checkoutParent: mkdtempSync(join(tmpdir(), "fhv-t4a-parent-")),
-      artifactRoot: mkdtempSync(join(tmpdir(), "fhv-t4a-art-")),
-      environmentFile: join(mkdtempSync(join(tmpdir(), "fhv-t4a-env-")), "env"),
-      nodeBin: process.execPath,
-      corepackBin: process.execPath,
-      gitBin: "/usr/bin/git",
-      pythonBin: "/usr/bin/python3",
-      dockerBin: "/usr/bin/docker",
-      systemctlBin: "/usr/bin/systemctl",
-    });
-    const committed = transport.gitShowBlob(sha, "scripts/ops/fhv-validate-origin-url.sh");
-    const dirtyRoot = mkdtempSync(join(tmpdir(), "fhv-t4a-dirty-release-"));
-    tempDirs.push(dirtyRoot);
+    const { releaseRoot, sha } = createTempReleaseCheckout();
+    const committed = execFileSync(
+      "git",
+      ["-C", releaseRoot, "show", `${sha}:scripts/ops/fhv-validate-origin-url.sh`],
+      { encoding: "utf8" },
+    );
+    const dirtyRoot = trackDir(mkdtempSync(join(tmpdir(), "fhv-t4a-dirty-release-")));
+    cpSync(releaseRoot, dirtyRoot, { recursive: true });
     const dirtyScript = join(dirtyRoot, "scripts/ops/fhv-validate-origin-url.sh");
-    mkdirSync(join(dirtyRoot, "scripts/ops"), { recursive: true });
     writeFileSync(dirtyScript, "#!/usr/bin/env bash\nexit 99\n");
-    const streamed = transport.gitShowBlob(sha, "scripts/ops/fhv-validate-origin-url.sh");
+    const streamed = execFileSync(
+      "git",
+      ["-C", releaseRoot, "show", `${sha}:scripts/ops/fhv-validate-origin-url.sh`],
+      { encoding: "utf8" },
+    );
     expect(sha256Hex(streamed)).toBe(sha256Hex(committed));
     expect(streamed).not.toContain("exit 99");
     expect(readFileSync(dirtyScript, "utf8")).toContain("exit 99");

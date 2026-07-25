@@ -6,7 +6,8 @@ RUN_ROOT=""
 RUN_ID=""
 ORGANIZATION_ID=""
 TARGET_SHA=""
-SYSTEMCTL="${SYSTEMCTL:-systemctl}"
+SYSTEMCTL=""
+NODE_BIN=""
 UNIT="waia-fhv-campaign.service"
 
 usage() {
@@ -16,7 +17,8 @@ Usage: fhv-t4-resume-campaign-root.sh \
   --run-id ID \
   --organization-id UUID \
   --target-sha SHA \
-  [--systemctl-bin ABS_PATH]
+  --systemctl-bin ABS_PATH \
+  --node-bin ABS_PATH
 
 Root-only: verifies signed RESUME acceptance and starts campaign unit once.
 EOF
@@ -34,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --organization-id) ORGANIZATION_ID="${2:-}"; shift 2 ;;
     --target-sha) TARGET_SHA="${2:-}"; shift 2 ;;
     --systemctl-bin) SYSTEMCTL="${2:-}"; shift 2 ;;
+    --node-bin) NODE_BIN="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) fail "unknown argument: $1" ;;
   esac
@@ -41,8 +44,8 @@ done
 
 [[ -n "$RUN_ROOT" && -n "$RUN_ID" && -n "$ORGANIZATION_ID" && -n "$TARGET_SHA" ]] || usage
 [[ "$RUN_ROOT" = /* ]] || fail "run-root must be absolute"
-[[ "$SYSTEMCTL" = /* ]] || fail "systemctl-bin must be absolute"
-[[ -x "$SYSTEMCTL" ]] || fail "systemctl-bin not executable"
+[[ -n "$SYSTEMCTL" && "$SYSTEMCTL" = /* && -x "$SYSTEMCTL" ]] || fail "systemctl-bin required"
+[[ -n "$NODE_BIN" && "$NODE_BIN" = /* && -x "$NODE_BIN" ]] || fail "node-bin required"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   fail "effective UID 0 required"
@@ -55,14 +58,8 @@ if [[ -f "$PROOF_OUT" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NODE_BIN="${FHV_NODE_BIN:-}"
-if [[ -z "$NODE_BIN" || ! -x "$NODE_BIN" ]]; then
-  NODE_BIN="$(command -v node || true)"
-fi
-[[ -x "$NODE_BIN" ]] || fail "node required for resume enforcement verification"
-
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 export RUN_ROOT RUN_ID ORGANIZATION_ID TARGET_SHA REPO_ROOT
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 "$NODE_BIN" --import tsx "${SCRIPT_DIR}/fhv-t4-resume-campaign-root-cli.ts" \
   --run-root "$RUN_ROOT" \
   --run-id "$RUN_ID" \
