@@ -37,6 +37,11 @@ includedIssues:
   - id: DEE-427
     role: work-package-I
     status: done
+  - id: DEE-436
+    role: t4a-operator-repository-closure
+    linearUrl: https://linear.app/deepsense/issue/DEE-436/ai-trader-close-complete-human-executable-fhv-t4a-operator-surface
+    branch: dee-436-fhv-t4a-operator-closure
+    status: in_progress
   - id: DEE-424
     role: work-package-K
     status: in_progress
@@ -95,14 +100,18 @@ state:
     - WP-L-monitoring-implementation
     - WP-M-monitoring-implementation
     - WP-N-ceremony-scaffolding
+    - PR-424-DEE-436-T4A-operator-repository-closure
   remainingWorkPackages:
     - DEE-434-post-DEE-433-plan-reconciliation
     - WP-K-DEE-424-execution-server-rehearsal
     - PR-3-WP-J-DEE-423-rec-deferred
-  lastValidatedGitSha: e3598756c646fd25d047a665188077f25a07b5d3
-  lastValidationAt: "2026-07-23"
-  blockedReason: "T4A operator surface implementation in DEE-436; Execution Server T4A rehearsal awaits DEE-436 release to main, mandatory main→dev back-sync, and Human AUTHORIZE-FHV-OPS-DEPLOY."
-  nextAction: "Merge DEE-436 PR to dev; Human release promotion dev→main; mandatory main→dev back-sync; resolve post-DEE-436 NEXT_T4_EXECUTION_SERVER_TARGET_SHA; Human AUTHORIZE-FHV-OPS-DEPLOY; execute T4A per T4_OPERATOR_PACKET_V5.md."
+    - DEE-436-post-merge-reconciliation
+    - DEE-436-dev-to-main-release
+    - DEE-436-main-to-dev-back-sync
+  lastValidatedGitSha: 899868676e7cd1fc31898865fc5dcab7394e5daf
+  lastValidationAt: "2026-07-26"
+  blockedReason: "DEE-436 repository closure is merged into dev. T4A remains blocked pending corrected dev-to-main release, mandatory main-to-dev back-sync, independent audit of the exact released Packet V5, and Human AUTHORIZE-FHV-OPS-DEPLOY."
+  nextAction: "Merge the post-merge reconciliation PR into dev; promote dev to main through a merge commit; record and tag the exact released main SHA; perform mandatory main-to-dev back-sync; independently audit the exact released Packet V5; obtain Human authorization; execute T4A."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -132,7 +141,56 @@ provenance:
 
 ---
 
-## Post-merge snapshot (current, post-DEE-433, 2026-07-23)
+## Post-merge snapshot (current, PR #424 / DEE-436, 2026-07-26)
+
+| Check | Result |
+|-------|--------|
+| `main` | `d4c0cf8f6f338fb4efa66679d1137bf26aa1adbd` |
+| `dev` | `899868676e7cd1fc31898865fc5dcab7394e5daf` |
+| `main` ancestor of `dev` | **yes** |
+| divergence `origin/main...origin/dev` | **0 / 3** |
+| PR #424 (DEE-436) | **MERGED** — https://github.com/oumaster369/waia/pull/424 |
+| Feature head | `ff25f962f8f61f5a05fc370ac0575dfc810227ad` |
+| Published `dev` merge commit | `899868676e7cd1fc31898865fc5dcab7394e5daf` |
+| Pre-merge `dev` | `a4f6e056599909875e4b1f5d3f4e83837a66e40f` |
+| Merged at | `2026-07-26T11:15:55Z` |
+| Expected feature merge strategy | **squash** |
+| Actual feature merge strategy | **merge commit** (process deviation — ordinary feature PRs require squash) |
+| Human deviation token | `ACK-DEE-436-MERGE-COMMIT-DEVIATION-AS-IMMUTABLE-HISTORY` |
+| History posture | immutable; no revert, reset, or rewrite authorized |
+| Packet V5 on `dev` | **present** — blob `d36696398b8ff2ced44dd6b3fbf01909be663763` |
+| Packet V5 on `main` | **absent** — current production release is pre-DEE-436 |
+| PR head CI | runs `30198806872` (pr-governance), `30198806862` (cloudflare-preview), `30198806867` (ci) — **success** |
+| Post-merge CI on merge commit | run `30199806304` (ci) — **success** |
+| `linear-done` post-merge | run `30199806358` — **success**; `Mark Linear issue Done` step **skipped** |
+| DEE-436 | **In Progress** (keep-open — repository merged; T4A not executed) |
+| DEE-416 | **In Progress** |
+| DEE-424 | **In Progress** (T4A rehearsal pending) |
+| DEE-437 | **Backlog** |
+| Execution Server access | **none** |
+| `AUTHORIZE-FHV-OPS-DEPLOY` | **NOT_ISSUED** |
+| T4A rehearsal | **NOT_EXECUTED** |
+| T4B qualification | **NOT_EXECUTED** |
+
+**Plan-refresh boundaries:** this docs-only reconciliation does **not** authorize T4; no Execution Server connection occurred; no real historical dataset was accessed; blind holdout remains sealed. Repository implementation for DEE-436 is merged into `dev`, but the current production release (`d4c0cf8…`) must **not** be used as the T4A target. A corrected dev→main release is **required** before T4A; mandatory main→dev back-sync remains pending after that release.
+
+### PR #424 / DEE-436 repository closure (merged)
+
+| Field | Value |
+|-------|-------|
+| PR | https://github.com/oumaster369/waia/pull/424 |
+| Feature branch | `dee-436-fhv-t4a-operator-closure` |
+| Feature head | `ff25f962f8f61f5a05fc370ac0575dfc810227ad` |
+| Published `dev` merge commit | `899868676e7cd1fc31898865fc5dcab7394e5daf` |
+| Pre-merge `dev` | `a4f6e056599909875e4b1f5d3f4e83837a66e40f` |
+| Expected merge strategy | squash |
+| Actual merge strategy | merge commit *(Human accepted immutable history)* |
+| T4A operator repository milestone | **DONE** |
+| T4A Execution Server rehearsal (WP-K / DEE-424) | **NOT_EXECUTED** |
+
+---
+
+## Post-merge snapshot (historical — post-DEE-433, 2026-07-23)
 
 | Check | Result |
 |-------|--------|
@@ -187,10 +245,12 @@ Do **not** resume the old process; do **not** reuse the old checkout, run ID, ma
 | Field | Value |
 |-------|-------|
 | `OLD_BLOCKED_EXECUTION_SERVER_TARGET_SHA` | `6e617461085282b3ba55fc2e93cc18e66195174c` |
-| `NEXT_T4_EXECUTION_SERVER_TARGET_SHA` | **`d4c0cf8f6f338fb4efa66679d1137bf26aa1adbd`** (DEE-435 release; tag `v2026.07.24.d4c0cf8`) |
-| `NEXT_T4_RELEASE_TAG` | **`v2026.07.24.d4c0cf8`** |
-| `POST_BACK_SYNC_DEV_SHA` | **`a4f6e056599909875e4b1f5d3f4e83837a66e40f`** |
-| `NEW_RELEASE_REQUIRED` | **YES** (after DEE-436 merge — DEE-436 closure verifiers not yet on `main`) |
+| `CURRENT_MAIN_SHA` | **`d4c0cf8f6f338fb4efa66679d1137bf26aa1adbd`** (pre-DEE-436 — **must not** be used as T4A target) |
+| `CURRENT_DEV_SHA` | **`899868676e7cd1fc31898865fc5dcab7394e5daf`** (post PR #424) |
+| `NEXT_T4_EXECUTION_SERVER_TARGET_SHA` | **UNRESOLVED** — pending corrected dev→main release after DEE-436 merge |
+| `NEXT_T4_RELEASE_TAG` | **UNRESOLVED** — pending corrected dev→main release |
+| `POST_BACK_SYNC_DEV_SHA` | **`a4f6e056599909875e4b1f5d3f4e83837a66e40f`** (pre PR #424) |
+| `NEW_RELEASE_REQUIRED` | **YES** — DEE-436 closure verifiers and Packet V5 not yet on `main` |
 | `NEW_RELEASE_PROMOTION_EXECUTED` | **NO** |
 | `MANDATORY_MAIN_TO_DEV_BACK_SYNC` | **PENDING_AFTER_DEE436_RELEASE** |
 | `AUTHORIZE_FHV_OPS_DEPLOY` | **NOT_ISSUED** |

@@ -39,12 +39,25 @@ bindings:
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
-  onMerge: Done
+  onMerge: keep-open-until-t4a-evidence
 state:
-  status: implementation-active
+  status: repository-merged-t4a-pending
+  repositoryImplementation: merged
+  releaseToMain: pending
+  mainToDevBackSync: pending-after-release
+  releasedPacketAudit: pending
   executionServerSurface: none
   t4Authorization: none
-  blockedReason: null
+  t4aExecuted: false
+  t4bExecuted: false
+  linearDee436: in-progress-keep-open
+  featureHeadSha: ff25f962f8f61f5a05fc370ac0575dfc810227ad
+  repositoryMergeSha: 899868676e7cd1fc31898865fc5dcab7394e5daf
+  expectedMergeMethod: squash
+  actualMergeMethod: merge-commit
+  mergeMethodDeviation: HUMAN_ACCEPTED_IMMUTABLE_HISTORY
+  humanDecision: ACK-DEE-436-MERGE-COMMIT-DEVIATION-AS-IMMUTABLE-HISTORY
+  blockedReason: "Repository closure merged into dev. T4A blocked pending corrected dev-to-main release, mandatory main-to-dev back-sync, independent audit of exact released Packet V5, Human AUTHORIZE-FHV-OPS-DEPLOY, and successful T4A evidence."
 provenance:
   createdFrom: chat
   groomedAt: "2026-07-24"
@@ -150,4 +163,32 @@ Closed on branch `dee-436-fhv-t4a-operator-closure`:
 - Post-restart observer re-qualification: wait → identity → signed status → continuity-after
 - Hermetic packet simulation tests (`fhv-t4-packet-simulation.test.ts`)
 
-**Linear completion:** keep-open until Human squash merge, dev→main release, main→dev back-sync, independent audit of released Packet V5, and separately authorized T4A Execution Server evidence.
+**Linear completion:** keep-open until corrected dev→main release, mandatory main→dev back-sync, independent audit of released Packet V5, Human AUTHORIZE-FHV-OPS-DEPLOY, and separately authorized T4A Execution Server evidence. Repository merge into `dev` does **not** imply Linear Done.
+
+## Post-merge state (PR #424, 2026-07-26)
+
+| Field | Value |
+|-------|-------|
+| Repository implementation | **merged** into `dev` |
+| Release to `main` | **pending** |
+| Main→dev back-sync | **pending** after release |
+| Released Packet V5 audit | **pending** |
+| Execution Server authorization | **not issued** |
+| T4A | **not executed** |
+| T4B | **not executed** / DEE-437 **Backlog** |
+| Linear DEE-436 | **In Progress** / keep-open |
+| PR | https://github.com/oumaster369/waia/pull/424 |
+| Merged at | `2026-07-26T11:15:55Z` |
+| Feature head | `ff25f962f8f61f5a05fc370ac0575dfc810227ad` |
+| Published `dev` merge commit | `899868676e7cd1fc31898865fc5dcab7394e5daf` |
+| Pre-merge `dev` | `a4f6e056599909875e4b1f5d3f4e83837a66e40f` |
+| Current `main` | `d4c0cf8f6f338fb4efa66679d1137bf26aa1adbd` (pre-DEE-436 — not T4A target) |
+| Expected merge strategy | squash |
+| Actual merge strategy | merge commit |
+| Human deviation | `ACK-DEE-436-MERGE-COMMIT-DEVIATION-AS-IMMUTABLE-HISTORY` |
+| History posture | immutable; no revert, reset, or rewrite authorized |
+| PR head CI | runs `30198806872`, `30198806862`, `30198806867` — **success** |
+| Post-merge CI | run `30199806304` — **success** |
+| Execution Server access | **none** in merge or reconciliation sessions |
+
+Repository acceptance is complete: R01–R28 matrix, Packet V5, and closure verifiers are on `dev`. Issue completion remains blocked by corrected dev→main release, mandatory main→dev back-sync, independent audit of the exact released Packet V5 blob, Human `AUTHORIZE-FHV-OPS-DEPLOY`, and successful T4A Execution Server evidence. T4B remains separately governed under DEE-437 (Backlog).
