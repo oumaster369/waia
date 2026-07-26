@@ -134,6 +134,18 @@ export function resolveFhvCampaignState(input: {
         corruptControlReason: null,
       };
     }
+    if (terminal === "REHEARSAL_PAUSED" || progress?.phase === "paused_at_checkpoint") {
+      return {
+        state: resumePending ? "RESUME_REQUESTED" : "PAUSED_RESUMABLE",
+        phase,
+        checkpointSeq,
+        terminalClassification: terminal,
+        progressPhase: progress?.phase ?? "paused_at_checkpoint",
+        replayTerminalState:
+          checkpoint?.replayTerminalState ?? "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE",
+        corruptControlReason: null,
+      };
+    }
     if (terminal === "REHEARSAL_OK") {
       return {
         state: "INCONSISTENT",

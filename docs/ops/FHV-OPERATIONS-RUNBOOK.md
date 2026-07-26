@@ -5,11 +5,13 @@ Operational guide for AI-TRADER Historical Validation host-resident observabilit
 ## Scope
 
 - Bounded operator status contract (`fhv-operator-status/v1`)
-- Host observer daemon (`pnpm trader:fhv:observer`)
-- Worker admin dashboard (`/admin/fhv-operations`)
+- Host observer daemon (`corepack pnpm@10 trader:fhv:observer`)
 - Authenticated operator commands (`fhv-operator-command/v1`)
+- **T4A** host runtime rehearsal operator surface (`trader:fhv:t4:*` including closure verifiers)
 
-**Out of scope for agents:** Execution Server deployment, real HTX dataset qualification, full historical replay, live trading.
+**T4B (separate):** Worker admin dashboard (`/admin/fhv-operations`) via production authenticated Cloudflare tunnel is governed by `DEE-437` and is **not** part of T4A success. T4B is not deployed by this runbook revision.
+
+**Out of scope for agents:** Execution Server deployment, real HTX dataset qualification, full historical replay, live trading, Cloudflare Tunnel creation.
 
 ## Host qualification gate
 
@@ -105,6 +107,32 @@ Requirements:
 **Not claimed:** recovery of active orders, fills, positions, accounting, WP17 execution, or WP21 state across pause/resume.
 
 Hermetic proofs: `tests/integration/fhv-cross-process-resume.test.ts`, `tests/integration/fhv-true-incremental-resume.test.ts`, `tests/unit/fhv-campaign-identity-frontier.test.ts`, `tests/unit/fhv-rehearsal-economic-frontier.test.ts`, `tests/unit/fhv-identity-frontier-write-guard.test.ts`, `tests/unit/fhv-server-only-boundary.test.ts`, `tests/unit/fhv-incremental-resume-guards.test.ts`, `tests/unit/fhv-resume-timeout.test.ts`.
+
+## T4A continuity (disconnect / reconnect)
+
+During T4A, capture continuity snapshots **before** SSH disconnect and **after** reconnect. After observer-only restart, re-qualify observer with bounded active wait, new systemd identity capture, and signed `trader:fhv:t4:status` before `capture-continuity-after`. Machine proof is systemd identity for both `waia-fhv-observer.service` and completed `waia-fhv-campaign.service` (boot ID, InvocationID, retained ExecMainPID/timestamps for campaign). Operator SSH disconnect/reconnect may be recorded as narrative metadata only — never as a substitute for machine evidence.
+
+**Privilege model:** POST_AUTHORIZED host mutation requires effective UID 0. Root performs systemd/Docker observation; `runuser` delegates checkout, installs, and evidence writes to the non-root FHV service user. PRE_AUTH scripts stream over SSH stdin from the workstation release checkout (`FHV_LOCAL_RELEASE_ROOT`) with zero remote staging writes.
+
+```bash
+corepack pnpm@10 trader:fhv:t4:capture-continuity-before
+# … Human disconnect / reconnect (narrative only) …
+# … observer-only restart (campaign must remain the same process identity) …
+corepack pnpm@10 trader:fhv:t4:capture-continuity-after
+corepack pnpm@10 trader:fhv:t4:verify-continuity
+```
+
+Success classification: `FHV_T4_CONTINUITY_VERIFICATION_PASS` plus immutable `fhv-t4-continuity-verification-proof.v1.json`. Ceremony requires `CONTINUITY_RESULT=PASS`. Full sequence: [`T4_OPERATOR_PACKET_V5.md`](./T4_OPERATOR_PACKET_V5.md) and [`FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md`](./FHV-EXECUTION-SERVER-REHEARSAL-CONTRACT.md).
+
+## T4A release checkout identity
+
+Do **not** use `validate-fhv-release-identity.sh` as a Git checkout verifier (it is a Markdown contract linter). Use:
+
+- `scripts/ops/fhv-release-checkout-identity.sh` for HEAD + release-tag peel + clean tracked tree
+- `scripts/ops/execution-server-preflight.sh` for exact HEAD SHA guard
+- `trader:fhv:t4:record-checkout-identity` (service user) for the immutable POST_AUTHORIZED proof
+
+Clone from the declared Human binding `FHV_ORIGIN_URL` (non-empty, no embedded credentials).
 
 ## Related documents
 

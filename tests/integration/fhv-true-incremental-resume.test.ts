@@ -127,7 +127,8 @@ describe("FHV true incremental checkpoint resume (DEE-431)", () => {
         operatorId: "true-resume-operator",
         reason: "true incremental resume proof",
       });
-      expect(resumeResult.outcome).toBe("executed");
+      expect(resumeResult.outcome).toBe("accepted");
+      expect(resumeResult.enforcementApplied).toBe(false);
 
       const rescanBefore = getFullHistoryRescanCount();
       const completed = await runFhvRehearsalCampaign({
