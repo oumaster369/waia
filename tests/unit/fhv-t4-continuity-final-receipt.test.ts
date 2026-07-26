@@ -11,6 +11,7 @@ import {
   FhvT4ContinuityCaptureError,
   parseFhvT4ContinuityVerificationProof,
 } from "@/lib/trader/observability/fhv-t4-continuity-capture";
+import { FHV_T4A_CEREMONY_REQUIRED_RESULTS } from "@/lib/trader/observability/fhv-t4a-ceremony-results";
 import { FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS } from "@/lib/trader/observability/fhv-t4-evidence-seal";
 import {
   FhvT4aPhaseReceiptError,
@@ -55,7 +56,7 @@ function validFinalizeReceiptInput() {
     evidenceSealRootDigest: "f".repeat(64),
     evidenceSealManifestDigest: "a".repeat(64),
     evidenceSealVerifyClassification: FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS,
-    ceremonyClassifications: { T4A_RESULT: "PASS" },
+    ceremonyClassifications: { ...FHV_T4A_CEREMONY_REQUIRED_RESULTS },
     stepProofDigests: {},
     proofDigestBundle: {},
   };

@@ -13,6 +13,7 @@ import {
   FHV_T4A_LEGACY_CONTAINER_NAME,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
 import { FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS } from "@/lib/trader/observability/fhv-t4-evidence-seal";
+import { extractFhvT4aCeremonyClassificationsFromReceipt } from "@/lib/trader/observability/fhv-t4a-ceremony-results";
 import type { FhvT4aPreauthLedgerEntry } from "@/lib/trader/observability/fhv-t4a-preauth-ledger";
 
 export const FHV_T4A_LOCAL_RELEASE_RECEIPT_SCHEMA = "fhv-t4a-local-release-receipt/v1" as const;
@@ -456,6 +457,21 @@ export function readFhvT4aPostFinalizeReceipt(localStateDir: string): FhvT4aPost
       "FINAL_RECEIPT_CONTINUITY_VERIFICATION_PROOF_MISSING",
       "POST finalize receipt missing continuity verification proof binding.",
     );
+  }
+  if (!receipt.ceremonyClassifications) {
+    throw new FhvT4aPhaseReceiptError(
+      "CEREMONY_REQUIRED_FIELD_MISSING",
+      "POST finalize receipt missing ceremonyClassifications.",
+    );
+  }
+  try {
+    extractFhvT4aCeremonyClassificationsFromReceipt(receipt.ceremonyClassifications);
+  } catch (error) {
+    const code =
+      error instanceof Error && "code" in error
+        ? String((error as { code?: string }).code)
+        : "CEREMONY_EXACT_VALUE_NOT_ENFORCED";
+    throw new FhvT4aPhaseReceiptError(code, error instanceof Error ? error.message : String(error));
   }
   return receipt;
 }

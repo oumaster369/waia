@@ -19,6 +19,7 @@ import {
   assertFhvT4aQualificationIdentityStability,
   assertFhvT4aPostRestartInvocationChanged,
   parseFhvT4aQualificationObserverIdentity,
+  projectFhvT4ObserverQualificationIdentityCapture,
 } from "@/lib/trader/observability/fhv-t4a-qualification-identity";
 import type { FhvT4aExecContext } from "@/lib/trader/observability/fhv-t4a-operator-executor";
 import { FhvT4aOperatorError } from "@/lib/trader/observability/fhv-t4a-operator-errors";
@@ -138,21 +139,13 @@ export function captureFhvT4aObserverQualification(
   }
   const identityAfter = readObserverIdentity(ctx);
 
+  const identityBeforeCapture = projectFhvT4ObserverQualificationIdentityCapture(identityBefore);
+  const identityAfterCapture = projectFhvT4ObserverQualificationIdentityCapture(identityAfter);
+
   assertFhvT4aQualificationIdentityStability({
-    before: {
-      invocationId: identityBefore.invocationId,
-      mainPid: identityBefore.mainPid,
-      activeEnterTimestampMonotonicUs: identityBefore.activeEnterTimestampMonotonicUs,
-      activeState: identityBefore.activeState,
-    },
-    after: {
-      invocationId: identityAfter.invocationId,
-      mainPid: identityAfter.mainPid,
-      activeEnterTimestampMonotonicUs: identityAfter.activeEnterTimestampMonotonicUs,
-      activeState: identityAfter.activeState,
-    },
-    bootId: identityAfter.bootId,
-    unitName: identityBefore.unitName,
+    before: identityBeforeCapture,
+    after: identityAfterCapture,
+    proofBootId: identityAfter.bootId,
   });
 
   let completedCampaignIdentity: FhvT4CompletedCampaignSystemdIdentityV1 | undefined;
@@ -175,18 +168,8 @@ export function captureFhvT4aObserverQualification(
     targetSha: b.targetSha,
     bootId: identityAfter.bootId,
     unitName: "waia-fhv-observer.service",
-    identityBeforeCapture: {
-      invocationId: identityBefore.invocationId,
-      mainPid: identityBefore.mainPid,
-      activeEnterTimestampMonotonicUs: identityBefore.activeEnterTimestampMonotonicUs,
-      activeState: identityBefore.activeState,
-    },
-    identityAfterCapture: {
-      invocationId: identityAfter.invocationId,
-      mainPid: identityAfter.mainPid,
-      activeEnterTimestampMonotonicUs: identityAfter.activeEnterTimestampMonotonicUs,
-      activeState: identityAfter.activeState,
-    },
+    identityBeforeCapture,
+    identityAfterCapture,
     statusDigest,
     capturedAtUtc: new Date().toISOString(),
     ...(phase === "POST_RESTART" && completedCampaignIdentity

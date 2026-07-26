@@ -10,12 +10,11 @@ const ROOT = process.cwd();
 const PACKET = join(ROOT, "docs/ops/T4_OPERATOR_PACKET_V5.md");
 const HOST_PROBE = join(ROOT, "scripts/ops/fhv-t4-host-probe.sh");
 
-const REQUIRED_CEREMONY_FIELDS = [
-  "T4A_RESULT=PASS",
-  "GATE8_RESULT=PASS",
-  "T4B_RESULT=NOT_EXECUTED_SEPARATE_GATE",
-  "CONTINUITY_RESULT=PASS",
-] as const;
+import { FHV_T4A_CEREMONY_REQUIRED_RESULTS } from "@/lib/trader/observability/fhv-t4a-ceremony-results";
+
+const REQUIRED_CEREMONY_FIELDS = Object.entries(FHV_T4A_CEREMONY_REQUIRED_RESULTS).map(
+  ([key, value]) => `${key}=${value}`,
+);
 
 const FORBIDDEN_CEREMONY_FIELDS = [
   "T4_RESULT=PASS",
@@ -91,8 +90,11 @@ describe("T4 operator packet V5 (DEE-436)", () => {
     expect(executable.indexOf("resume-campaign-root.sh")).toBeGreaterThan(postAuthIndex);
     expect(executable).toContain("capture-continuity-before");
     expect(executable).toContain("post-reconnect-finalize");
-    expect(executable.indexOf("post-auth-before-disconnect")).toBeLessThan(
-      executable.indexOf("post-reconnect-finalize"),
-    );
+    expect(executable).toContain("unset FHV_T4A_AUTHORIZATION");
+    expect(body).toContain("globally unique `FHV_RUN_ID`");
+    expect(body).toContain("Human squash merge PR #424");
+    expect(body).toContain("AWAITING_HUMAN_DISCONNECT_RECONNECT");
+    expect(body).toContain("FHV_T4A_POST_RECONNECT_FINALIZE_OK");
+    expect(body).toContain("presence alone is insufficient");
   });
 });

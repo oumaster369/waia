@@ -1,5 +1,5 @@
 /**
- * DEE-436 — strict observer qualification identity validation (F-09).
+ * DEE-436 — strict observer qualification identity validation (F-09 / Q-01).
  */
 
 import { normalizeFhvT4BootId } from "@/lib/trader/observability/fhv-t4-boot-id";
@@ -19,7 +19,7 @@ export class FhvT4aQualificationIdentityError extends Error {
   }
 }
 
-const OBSERVER_UNIT = "waia-fhv-observer.service";
+export const FHV_T4A_OBSERVER_QUALIFICATION_UNIT = "waia-fhv-observer.service";
 
 export function parseFhvT4aQualificationObserverIdentity(
   raw: unknown,
@@ -34,10 +34,70 @@ export function parseFhvT4aQualificationObserverIdentity(
   }
 }
 
+export function projectFhvT4ObserverQualificationIdentityCapture(
+  identity: FhvT4ObserverSystemdIdentityV1,
+): FhvT4ObserverQualificationIdentityCapture {
+  return {
+    unitName: identity.unitName,
+    bootId: normalizeFhvT4BootId(identity.bootId),
+    invocationId: identity.invocationId,
+    mainPid: identity.mainPid,
+    activeEnterTimestampMonotonicUs: identity.activeEnterTimestampMonotonicUs,
+    activeState: identity.activeState,
+  };
+}
+
+function assertCaptureBootIdMatchesProof(
+  capture: FhvT4ObserverQualificationIdentityCapture,
+  proofBootId: string,
+  label: string,
+): void {
+  try {
+    const normalizedCaptureBootId = normalizeFhvT4BootId(capture.bootId);
+    const normalizedProofBootId = normalizeFhvT4BootId(proofBootId);
+    if (normalizedCaptureBootId !== normalizedProofBootId) {
+      throw new FhvT4aQualificationIdentityError(
+        "QUALIFICATION_PROOF_BOOT_ID_CAPTURE_MISMATCH",
+        `${label} capture bootId must equal proof bootId.`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof FhvT4aQualificationIdentityError) {
+      throw error;
+    }
+    throw new FhvT4aQualificationIdentityError(
+      "QUALIFICATION_BOOT_ID_INTERNAL_MISMATCH",
+      `${label} capture bootId invalid.`,
+    );
+  }
+}
+
 export function assertFhvT4aQualificationIdentityCapture(
   capture: FhvT4ObserverQualificationIdentityCapture,
   label: string,
+  proofBootId?: string,
 ): void {
+  if (!capture.unitName.trim()) {
+    throw new FhvT4aQualificationIdentityError(
+      "QUALIFICATION_CAPTURE_UNIT_NAME_NOT_PERSISTED",
+      `${label} capture unitName required.`,
+    );
+  }
+  if (!capture.bootId.trim()) {
+    throw new FhvT4aQualificationIdentityError(
+      "QUALIFICATION_CAPTURE_BOOT_ID_NOT_PERSISTED",
+      `${label} capture bootId required.`,
+    );
+  }
+  if (capture.unitName.trim() !== FHV_T4A_OBSERVER_QUALIFICATION_UNIT) {
+    throw new FhvT4aQualificationIdentityError(
+      "FHV_T4_OBSERVER_QUALIFICATION_UNIT_MISMATCH",
+      `${label} capture unit must be ${FHV_T4A_OBSERVER_QUALIFICATION_UNIT}.`,
+    );
+  }
+  if (proofBootId !== undefined) {
+    assertCaptureBootIdMatchesProof(capture, proofBootId, label);
+  }
   if (capture.activeState !== "active") {
     throw new FhvT4aQualificationIdentityError(
       label === "after"
@@ -69,18 +129,37 @@ export function assertFhvT4aQualificationIdentityCapture(
 export function assertFhvT4aQualificationIdentityStability(input: {
   before: FhvT4ObserverQualificationIdentityCapture;
   after: FhvT4ObserverQualificationIdentityCapture;
-  bootId: string;
-  unitName: string;
+  proofBootId: string;
 }): void {
-  assertFhvT4aQualificationIdentityCapture(input.before, "before");
-  assertFhvT4aQualificationIdentityCapture(input.after, "after");
-  const normalizedBootId = normalizeFhvT4BootId(input.bootId);
-  if (input.unitName.trim() !== OBSERVER_UNIT) {
+  assertFhvT4aQualificationIdentityCapture(input.before, "before", input.proofBootId);
+  assertFhvT4aQualificationIdentityCapture(input.after, "after", input.proofBootId);
+
+  if (input.before.unitName.trim() !== input.after.unitName.trim()) {
     throw new FhvT4aQualificationIdentityError(
-      "FHV_T4_OBSERVER_QUALIFICATION_UNIT_MISMATCH",
-      "Observer unit must be waia-fhv-observer.service.",
+      "QUALIFICATION_CAPTURE_UNIT_MISMATCH",
+      "Observer unitName drift between health and second capture.",
     );
   }
+
+  try {
+    const beforeBootId = normalizeFhvT4BootId(input.before.bootId);
+    const afterBootId = normalizeFhvT4BootId(input.after.bootId);
+    if (beforeBootId !== afterBootId) {
+      throw new FhvT4aQualificationIdentityError(
+        "QUALIFICATION_CAPTURE_BOOT_ID_MISMATCH",
+        "Observer bootId drift between health and second capture.",
+      );
+    }
+  } catch (error) {
+    if (error instanceof FhvT4aQualificationIdentityError) {
+      throw error;
+    }
+    throw new FhvT4aQualificationIdentityError(
+      "QUALIFICATION_BOOT_ID_INTERNAL_MISMATCH",
+      "Observer capture bootId invalid.",
+    );
+  }
+
   if (input.before.invocationId !== input.after.invocationId) {
     throw new FhvT4aQualificationIdentityError(
       "FHV_T4_OBSERVER_QUALIFICATION_INVOCATION_DRIFT",
@@ -105,14 +184,6 @@ export function assertFhvT4aQualificationIdentityStability(input: {
     throw new FhvT4aQualificationIdentityError(
       "FHV_T4_OBSERVER_QUALIFICATION_STATE_DRIFT",
       "Observer activeState drift between captures.",
-    );
-  }
-  try {
-    normalizeFhvT4BootId(input.bootId);
-  } catch {
-    throw new FhvT4aQualificationIdentityError(
-      "QUALIFICATION_BOOT_ID_INTERNAL_MISMATCH",
-      "Proof bootId invalid.",
     );
   }
 }

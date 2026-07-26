@@ -96,13 +96,12 @@ export function verifyFhvT4CeremonyQualificationProofs(input: {
     ["post", postProof],
   ] as const) {
     try {
-      assertFhvT4aQualificationIdentityCapture(proof.identityBeforeCapture, "before");
-      assertFhvT4aQualificationIdentityCapture(proof.identityAfterCapture, "after");
+      assertFhvT4aQualificationIdentityCapture(proof.identityBeforeCapture, "before", proof.bootId);
+      assertFhvT4aQualificationIdentityCapture(proof.identityAfterCapture, "after", proof.bootId);
       assertFhvT4aQualificationIdentityStability({
         before: proof.identityBeforeCapture,
         after: proof.identityAfterCapture,
-        bootId: proof.bootId,
-        unitName: proof.unitName,
+        proofBootId: proof.bootId,
       });
     } catch (error) {
       const code =

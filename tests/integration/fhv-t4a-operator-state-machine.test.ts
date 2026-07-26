@@ -17,6 +17,7 @@ import {
   FHV_T4A_AUTHORIZATION_LITERAL,
   FHV_T4A_TERMINAL_AWAITING_HUMAN_DISCONNECT_RECONNECT,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
+import { FHV_T4A_CEREMONY_REQUIRED_RESULTS } from "@/lib/trader/observability/fhv-t4a-ceremony-results";
 import { sha256Hex } from "@/tests/helpers/fhv-t4a-operator-transport";
 
 const ROOT = process.cwd();
@@ -163,15 +164,7 @@ describe("fhv-t4a operator state machine (DEE-436)", () => {
         "utf8",
       ),
     ) as { ceremonyClassifications: Record<string, string> };
-    for (const [key, value] of [
-      ["T4A_RESULT", "PASS"],
-      ["GATE8_RESULT", "PASS"],
-      ["T4B_RESULT", "NOT_EXECUTED_SEPARATE_GATE"],
-      ["PAUSE_RESULT", "REHEARSAL_PAUSED_AT_CYCLE_40"],
-      ["RESUME_RESULT", "REHEARSAL_OK"],
-      ["CONTINUITY_RESULT", "PASS"],
-      ["EVIDENCE_SEAL_RESULT", "PASS"],
-    ] as const) {
+    for (const [key, value] of Object.entries(FHV_T4A_CEREMONY_REQUIRED_RESULTS)) {
       expect(finalizeReceipt.ceremonyClassifications[key]).toBe(value);
     }
     const tracePath = join(env.FHV_T4A_LOCAL_STATE_DIR!, "fhv-t4a-operator-trace.jsonl");

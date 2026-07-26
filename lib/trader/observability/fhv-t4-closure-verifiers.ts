@@ -8,6 +8,10 @@ import { join } from "node:path";
 
 import { verifyFhvT4CeremonyQualificationProofs } from "@/lib/trader/observability/fhv-t4a-ceremony-qualification";
 import { FhvT4CeremonyQualificationError } from "@/lib/trader/observability/fhv-t4a-ceremony-qualification-errors";
+import {
+  buildFhvT4aCeremonyPassFields,
+  type FhvT4CeremonyPassFields,
+} from "@/lib/trader/observability/fhv-t4a-ceremony-results";
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 
 import { HTR_WP03_BENCHMARK_EXPECTED_CYCLES } from "@/lib/trader/backtest/replay-benchmark-harness";
@@ -161,21 +165,7 @@ export type FhvT4CampaignRuntimeV1 = Readonly<{
   contentDigest: string;
 }>;
 
-export type FhvT4CeremonyPassFields = Readonly<{
-  T4A_RESULT: "PASS";
-  GATE8_RESULT: "PASS";
-  PAUSE_RESULT: "REHEARSAL_PAUSED_AT_CYCLE_40";
-  RESUME_RESULT: "REHEARSAL_OK";
-  FULL_HISTORY_RESCAN_DELTA: "0";
-  CANONICAL_RUN_CHAIN_RESULT: "PASS";
-  DEPLOYMENT_RECORD_RESULT: "PASS";
-  ALERT_POLICY_RESULT: "PASS";
-  LEGACY_CONTAINER_RESULT: "PASS";
-  CONTINUITY_RESULT: "PASS";
-  ROLLBACK_RESULT: "PASS";
-  EVIDENCE_SEAL_RESULT: "PASS";
-  T4B_RESULT: "NOT_EXECUTED_SEPARATE_GATE";
-}>;
+export type { FhvT4CeremonyPassFields };
 
 function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -1217,9 +1207,7 @@ export function verifyFhvT4Ceremony(input: {
     }
     throw error;
   }
-  const passFields: FhvT4CeremonyPassFields = {
-    T4A_RESULT: "PASS",
-    GATE8_RESULT: "PASS",
+  const passFields: FhvT4CeremonyPassFields = buildFhvT4aCeremonyPassFields({
     PAUSE_RESULT:
       pausedProof.actualPauseCycle === 40
         ? "REHEARSAL_PAUSED_AT_CYCLE_40"
@@ -1230,16 +1218,8 @@ export function verifyFhvT4Ceremony(input: {
             );
           })(),
     RESUME_RESULT: finalProof.finalTerminal,
-    FULL_HISTORY_RESCAN_DELTA: "0",
     CANONICAL_RUN_CHAIN_RESULT: finalProof.canonicalRunChainResult,
-    DEPLOYMENT_RECORD_RESULT: "PASS",
-    ALERT_POLICY_RESULT: "PASS",
-    LEGACY_CONTAINER_RESULT: "PASS",
-    CONTINUITY_RESULT: "PASS",
-    ROLLBACK_RESULT: "PASS",
-    EVIDENCE_SEAL_RESULT: "PASS",
-    T4B_RESULT: "NOT_EXECUTED_SEPARATE_GATE",
-  };
+  });
 
   return {
     classification: FHV_T4_CEREMONY_VERIFICATION_PASS,

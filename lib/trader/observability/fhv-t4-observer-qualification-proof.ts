@@ -18,6 +18,8 @@ export const FHV_T4_OBSERVER_QUALIFICATION_PROOF_SCHEMA_VERSION =
 export type FhvT4ObserverQualificationPhase = "PRE_CAMPAIGN" | "POST_RESTART";
 
 export type FhvT4ObserverQualificationIdentityCapture = Readonly<{
+  unitName: string;
+  bootId: string;
   invocationId: string;
   mainPid: number;
   activeEnterTimestampMonotonicUs: string;
@@ -56,14 +58,79 @@ export class FhvT4ObserverQualificationProofError extends Error {
   }
 }
 
+const OBSERVER_QUALIFICATION_UNIT = "waia-fhv-observer.service";
+
+function normalizeCapture(
+  capture: FhvT4ObserverQualificationIdentityCapture,
+): FhvT4ObserverQualificationIdentityCapture {
+  if (!capture.unitName?.trim()) {
+    throw new FhvT4ObserverQualificationProofError(
+      "QUALIFICATION_CAPTURE_UNIT_NAME_NOT_PERSISTED",
+      "identity capture unitName required.",
+    );
+  }
+  if (!capture.bootId?.trim()) {
+    throw new FhvT4ObserverQualificationProofError(
+      "QUALIFICATION_CAPTURE_BOOT_ID_NOT_PERSISTED",
+      "identity capture bootId required.",
+    );
+  }
+  return {
+    unitName: capture.unitName.trim(),
+    bootId: normalizeFhvT4BootId(capture.bootId),
+    invocationId: capture.invocationId.trim(),
+    mainPid: capture.mainPid,
+    activeEnterTimestampMonotonicUs: capture.activeEnterTimestampMonotonicUs.trim(),
+    activeState: capture.activeState.trim(),
+  };
+}
+
 function normalizeUnsignedInput(
   input: FhvT4ObserverQualificationProofUnsignedV1,
 ): FhvT4ObserverQualificationProofUnsignedV1 {
   const normalized = {
     ...input,
     bootId: normalizeFhvT4BootId(input.bootId),
+    unitName: input.unitName.trim(),
+    identityBeforeCapture: normalizeCapture(input.identityBeforeCapture),
+    identityAfterCapture: normalizeCapture(input.identityAfterCapture),
     targetSha: input.targetSha.trim().toLowerCase(),
   };
+  if (normalized.unitName !== OBSERVER_QUALIFICATION_UNIT) {
+    throw new FhvT4ObserverQualificationProofError(
+      "FHV_T4_OBSERVER_QUALIFICATION_UNIT_MISMATCH",
+      "Proof unitName must be waia-fhv-observer.service.",
+    );
+  }
+  for (const [label, capture] of [
+    ["before", normalized.identityBeforeCapture],
+    ["after", normalized.identityAfterCapture],
+  ] as const) {
+    if (capture.unitName !== OBSERVER_QUALIFICATION_UNIT) {
+      throw new FhvT4ObserverQualificationProofError(
+        "FHV_T4_OBSERVER_QUALIFICATION_UNIT_MISMATCH",
+        `${label} capture unitName must be waia-fhv-observer.service.`,
+      );
+    }
+    if (capture.bootId !== normalized.bootId) {
+      throw new FhvT4ObserverQualificationProofError(
+        "QUALIFICATION_PROOF_BOOT_ID_CAPTURE_MISMATCH",
+        `${label} capture bootId must equal proof bootId.`,
+      );
+    }
+  }
+  if (normalized.identityBeforeCapture.unitName !== normalized.identityAfterCapture.unitName) {
+    throw new FhvT4ObserverQualificationProofError(
+      "QUALIFICATION_CAPTURE_UNIT_MISMATCH",
+      "Observer unitName drift between health and second capture.",
+    );
+  }
+  if (normalized.identityBeforeCapture.bootId !== normalized.identityAfterCapture.bootId) {
+    throw new FhvT4ObserverQualificationProofError(
+      "QUALIFICATION_CAPTURE_BOOT_ID_MISMATCH",
+      "Observer bootId drift between health and second capture.",
+    );
+  }
   if (
     normalized.identityBeforeCapture.invocationId !== normalized.identityAfterCapture.invocationId
   ) {

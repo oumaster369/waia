@@ -7,15 +7,43 @@
 
 **Execution status:** T4A **NOT EXECUTED** — this packet is the Human-executable procedure only. No live rehearsal PASS is implied by publication of DEE-436 repository closure.
 
-Ceremony success classifications (no ambiguous aggregate PASS):
-
-- `T4A_RESULT=PASS`
-- `GATE8_RESULT=PASS`
-- `T4B_RESULT=NOT_EXECUTED_SEPARATE_GATE`
-
-Do **not** use `T4_RESULT=PASS`, `T4_AGGREGATE_RESULT=PASS`, or `DASHBOARD_RESULT=PASS`.
-
 Use **`corepack pnpm@10`** only (never bare `pnpm`).
+
+---
+
+## Repository and release prerequisites
+
+**Do not execute T4A from:**
+
+- a PR head commit;
+- a feature branch checkout;
+- a synthetic merge ref;
+- an untagged `dev` commit.
+
+**Required sequence before Phase A:**
+
+1. Human squash merge PR #424 into `dev`;
+2. corrected **`dev → main` release** through merge commit (never squash);
+3. record the **exact released main SHA and tag**; perform **tag-peel verification** and confirm the peeled tag matches the recorded SHA;
+4. mandatory **`main → dev` back-sync** through merge commit;
+5. independent audit of the **exact Packet blob** from the **exact released SHA** (`docs/ops/T4_OPERATOR_PACKET_V5.md` at that SHA);
+6. confirm that **no later commit or tag movement** invalidated the audit.
+
+Only after steps 1–6 may the Human bind `FHV_LOCAL_RELEASE_ROOT` to the audited release checkout and begin this packet.
+
+---
+
+## One-run namespace and failure policy
+
+Require for every T4A attempt:
+
+- a **globally unique `FHV_RUN_ID`**;
+- a **fresh dedicated `FHV_T4A_LOCAL_STATE_DIR`** (never reuse a prior run's workstation state directory);
+- no reuse of remote run directory or seal destination for a new attempt;
+- **no deletion, replacement, truncation, or manual repair** of evidence artifacts;
+- **no rerunning a completed phase** for the same run identity;
+- on any **nonzero exit**, **missing exact ceremony classification**, **binding mismatch**, **existing-target refusal**, or **incomplete ceremony** → **immediate STOP** and **evidence preservation**;
+- **no improvised cleanup or retry** — open a new run identity only after governance review.
 
 ---
 
@@ -45,7 +73,7 @@ export SSH_USER="<ssh-login-for-sudo-capable-operator>"
 export FHV_LOCAL_NODE_BIN="<absolute-path-to-workstation-node>"
 export FHV_LOCAL_GIT_BIN="<absolute-path-to-workstation-git>"
 export FHV_LOCAL_SSH_BIN="<absolute-path-to-workstation-ssh>"
-export FHV_T4A_LOCAL_STATE_DIR="<absolute-path-to-workstation-t4a-state>"
+export FHV_T4A_LOCAL_STATE_DIR="<absolute-path-to-fresh-workstation-t4a-state>"
 
 # --- Local release handoff (WORKSTATION only) ---
 # Clean checkout of the exact released main SHA + tag (reviewed before T4A).
@@ -53,7 +81,7 @@ export FHV_LOCAL_RELEASE_ROOT="<absolute-path-to-local-waia-release-checkout>"
 export EXECUTION_SERVER_TARGET_SHA="<exact-main-release-sha-after-dee436>"
 export FHV_RELEASE_TAG="<exact-release-tag>"
 
-# --- Run identity ---
+# --- Run identity (globally unique per attempt) ---
 export FHV_RUN_ID="<human-approved-unique-run-id>"
 export FHV_ORGANIZATION_ID="<org-uuid>"
 export FHV_OPERATOR_ID="<human-operator-id>"
@@ -90,19 +118,32 @@ export FHV_HOST_PROBE_PATH="${FHV_RUN_DIR}/control/fhv-t4-host-probe-proof.v1.js
 export FHV_POST_ROLLBACK_HOST_PROBE_PATH="${FHV_RUN_DIR}/control/fhv-t4-post-rollback-host-probe-proof.v1.json"
 ```
 
-### WORKSTATION — canonical operator phases
+---
 
-**Locus:** WORKSTATION
+## PRE_AUTH procedure
 
-The released Human operator surface is **`scripts/ops/fhv-t4a-operator.sh`**. It owns the exact workstation→Execution Server state machine. Do **not** retype low-level SSH blocks — invoke these phases only.
-
-Transport: SSH **BatchMode** + **`sudo -n`** (noninteractive). Bootstrap bytes are streamed from **`git show "${EXECUTION_SERVER_TARGET_SHA}:<path>"`** (committed object), never from a dirty working tree.
+Before Phase A, on the **WORKSTATION**, explicitly clear any stale authorization:
 
 ```bash
+unset FHV_T4A_AUTHORIZATION
 chmod +x "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh"
 "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" verify-local-release
 "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" pre-auth
 ```
+
+Require **exact zero-exit** classifications:
+
+```text
+classification=FHV_T4A_LOCAL_RELEASE_VERIFY_OK
+classification=FHV_T4A_PREAUTH_OK
+```
+
+Human authorization for POST phases must be based on the **immutable PRE_AUTH receipt**, including:
+
+- exact SHA / tag / binding identity;
+- `rejectedCommandCount=0`;
+- `mutatingCommandCount=0`;
+- observed host facts from preflight.
 
 **Authorization is not issued by this packet.** A Human operator must issue **`AUTHORIZE-FHV-OPS-DEPLOY`** before POST phases.
 
@@ -112,7 +153,7 @@ chmod +x "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh"
 
 Read-only inspection only. **Zero filesystem mutation on the Execution Server.** Invoked by **`fhv-t4a-operator.sh pre-auth`** (after **`verify-local-release`**).
 
-Semantic steps (operator-owned): **`fhv-validate-origin-url.sh`** exact approved origin validation; **`fhv-t4-host-preflight.sh`** dependency-free host preflight with embedded `hostMonotonicSample` / `CLOCK_BOOTTIME` sample; **`sudo -n`** probe; canonical legacy container name **`ai-trader-execution-host`** and image **`waia-execution-host:bp6`**. Step 32 ceremony verification uses **`trader:fhv:t4:verify-ceremony`** and forwards real stdout classifications only.
+Semantic steps (operator-owned): **`fhv-validate-origin-url.sh`** exact approved origin validation; **`fhv-t4-host-preflight.sh`** dependency-free host preflight with embedded `hostMonotonicSample` / `CLOCK_BOOTTIME` sample; **`sudo -n`** probe; canonical legacy container name **`ai-trader-execution-host`** and image **`waia-execution-host:bp6`**.
 
 ---
 
@@ -124,9 +165,9 @@ Semantic steps (operator-owned): **`fhv-validate-origin-url.sh`** exact approved
 
 ## Phase B — `POST_AUTHORIZED_T4A_PHASE`
 
-Only after **`AUTHORIZE-FHV-OPS-DEPLOY`**. Exact **32-step** state machine owned by **`fhv-t4a-operator.sh`**. Workstation CLI phases: **`post-auth-before-disconnect`** (Steps 1–26 through continuity-before), human disconnect narrative (Step 27), then **`post-reconnect-finalize`** (Steps 28–32).
+Only after **`AUTHORIZE-FHV-OPS-DEPLOY`**. Exact **32-step** state machine owned by **`fhv-t4a-operator.sh`**.
 
-**Bootstrap rule:** Steps 2–5 stream bootstrap scripts from committed git objects via SSH stdin. After checkout identity is verified (Step 4), every subsequent ops script path is `${FHV_REPO_ROOT}/scripts/ops/...` on the Execution Server.
+**Bootstrap rule:** Steps 2–5 stream bootstrap scripts from committed git objects via SSH stdin (`git show "${EXECUTION_SERVER_TARGET_SHA}:<path>"`). After checkout identity is verified (Step 4), every subsequent ops script path is `${FHV_REPO_ROOT}/scripts/ops/...` on the Execution Server.
 
 Step 4 exact identity call (operator-enforced; **`--git-bin`** and **`--python-bin`** required):
 
@@ -138,8 +179,6 @@ Step 4 exact identity call (operator-enforced; **`--git-bin`** and **`--python-b
   --git-bin "${FHV_GIT_BIN}" \
   --python-bin "${FHV_PYTHON_BIN}"
 ```
-
-**RESUME root handoff:** after signed **`trader:fhv:t4:resume`** returns **`status=accepted`**, the operator invokes root-only **`scripts/ops/fhv-t4-resume-campaign-root.sh`** to start **`waia-fhv-campaign.service`** and write **`fhv-t4-resume-enforcement-proof.v1.json`**. Completed campaign wait uses identity-aware **`fhv-t4-campaign-wait-completed.sh`** (accepts active/deactivating for the same invocation). Step 26 continuity capture uses **`trader:fhv:t4:capture-continuity-before`** before the human disconnect narrative. Step 30 uses **`trader:fhv:t4:capture-continuity-after`**. Step 25 reads completed campaign identity via **`fhv-t4-campaign-systemd-identity-read.sh`**. Bounded waits use **`trader:fhv:t4:wait-paused`** and **`trader:fhv:t4:wait-final`** with **`--timeout-ms 300000`** plus full run identity flags.
 
 **Service-user wrapper** (requires **`--node-bin`** and **`--corepack-bin`**; strict EnvironmentFile parser — never shell **`source`**):
 
@@ -161,26 +200,99 @@ Step 4 exact identity call (operator-enforced; **`--git-bin`** and **`--python-b
 | 2–5 | Bootstrap origin/checkout/identity/deps | SSH stdin streams |
 | 6–13 | Manifest, units, deployment proof | POST |
 | 14–17 | Observer start, qualification, pause arm | POST |
-| 18–21 | Campaign, pause/final proofs, RESUME + root enforcement | POST |
-| 22–26 | Final proof, completed wait, continuity-before | POST → **`AWAITING_HUMAN_DISCONNECT_RECONNECT`** |
+| **18–21** | **Campaign start, wait/verify paused, RESUME + root enforcement** | POST |
+| **22–26** | **Wait/verify final, completed wait/identity, continuity-before** | POST → disconnect |
 | 27 | Human disconnect/reconnect narrative | WORKSTATION only |
-| 28–32 | Observer restart qualification, continuity-after, rollback, seal, ceremony | reconnect-finalize phase |
+| 28–32 | Observer restart qualification, continuity-after, rollback, seal, ceremony | reconnect-finalize |
 
-After Steps 1–26 (through **`trader:fhv:t4:capture-continuity-before`**), invoke POST operator phases:
+**Steps 18–21:** campaign start; bounded **`trader:fhv:t4:wait-paused`** with **`--timeout-ms 300000`**; signed **`trader:fhv:t4:resume`**; root-only **`fhv-t4-resume-campaign-root.sh`** enforcement proof.
+
+**Steps 22–26:** bounded **`trader:fhv:t4:wait-final`**; completed campaign wait via identity-aware **`fhv-t4-campaign-wait-completed.sh`**; completed campaign identity read via **`fhv-t4-campaign-systemd-identity-read.sh`**; **`trader:fhv:t4:capture-continuity-before`**.
+
+After Steps 1–26:
 
 ```bash
 export FHV_T4A_AUTHORIZATION="AUTHORIZE-FHV-OPS-DEPLOY"
 "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" post-auth-before-disconnect
-# Human disconnect/reconnect narrative (Step 27) — no CLI
+```
+
+---
+
+## Disconnect / reconnect procedure
+
+After **`post-auth-before-disconnect`**, require:
+
+```text
+classification=AWAITING_HUMAN_DISCONNECT_RECONNECT
+```
+
+The Human performs the disconnect/reconnect narrative (Step 27). A **new workstation shell** must restore the **exact same approved bindings** and the **exact authorization literal**:
+
+```bash
+export FHV_T4A_AUTHORIZATION="AUTHORIZE-FHV-OPS-DEPLOY"
+# restore all bindings from the audited release checkout section above
 "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" post-reconnect-finalize
 ```
 
-Ceremony stdout must include:
+**Do not rerun** after disconnect:
 
-- `T4A_RESULT=PASS`
-- `GATE8_RESULT=PASS`
-- `T4B_RESULT=NOT_EXECUTED_SEPARATE_GATE`
-- `CONTINUITY_RESULT=PASS`
+- `verify-local-release`;
+- `pre-auth`;
+- `post-auth-before-disconnect`.
+
+The final phase must terminate with:
+
+```text
+classification=FHV_T4A_POST_RECONNECT_FINALIZE_OK
+```
+
+Step 30 uses **`trader:fhv:t4:capture-continuity-after`**. Step 32 uses **`trader:fhv:t4:verify-ceremony`** and forwards real stdout classifications only.
+
+---
+
+## Exact ceremony results (presence alone is insufficient)
+
+Step 32 stdout must contain **exactly** these key/value pairs with **exact values**:
+
+```text
+T4A_RESULT=PASS
+GATE8_RESULT=PASS
+PAUSE_RESULT=REHEARSAL_PAUSED_AT_CYCLE_40
+RESUME_RESULT=REHEARSAL_OK
+FULL_HISTORY_RESCAN_DELTA=0
+CANONICAL_RUN_CHAIN_RESULT=PASS
+DEPLOYMENT_RECORD_RESULT=PASS
+ALERT_POLICY_RESULT=PASS
+LEGACY_CONTAINER_RESULT=PASS
+CONTINUITY_RESULT=PASS
+ROLLBACK_RESULT=PASS
+EVIDENCE_SEAL_RESULT=PASS
+T4B_RESULT=NOT_EXECUTED_SEPARATE_GATE
+```
+
+Do **not** use aggregate PASS aliases (`T4_RESULT`, `T4_AGGREGATE_RESULT`, `DASHBOARD_RESULT`).
+
+Missing fields, empty fields, unexpected values, duplicate contradictory fields, or forbidden aggregate fields → **STOP** and preserve evidence.
+
+The POST-finalize receipt **`ceremonyClassifications`** must match this exact matrix.
+
+---
+
+## Evidence preservation
+
+Preserve without modification:
+
+- exact released SHA / tag / run identity;
+- complete workstation trace (`FHV_T4A_WORKSTATION_TRACE_PATH`);
+- all four phase receipts (local-release, pre-auth, post-before, post-finalize);
+- remote run directory (`FHV_RUN_DIR`);
+- continuity snapshots and continuity verification proof;
+- observer qualification proofs (pre-campaign and post-restart);
+- deployment and rollback host-probe proofs;
+- rollback proof;
+- inventory, seal manifest, and seal root.
+
+On any failure: **STOP**, preserve all artifacts, do not retry under the same run identity.
 
 ---
 

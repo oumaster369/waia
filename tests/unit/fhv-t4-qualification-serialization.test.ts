@@ -7,9 +7,26 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   parseFhvT4ObserverQualificationProof,
   parseFhvT4ObserverQualificationProofUnsigned,
+  type FhvT4ObserverQualificationIdentityCapture,
   writeFhvT4ObserverQualificationProofAtomic,
 } from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
 import { runFhvT4ClosureCli } from "@/scripts/trader/fhv-t4-closure-cli";
+
+const QUAL_BOOT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+function captureFixture(
+  overrides: Partial<FhvT4ObserverQualificationIdentityCapture> = {},
+): FhvT4ObserverQualificationIdentityCapture {
+  return {
+    unitName: "waia-fhv-observer.service",
+    bootId: QUAL_BOOT_ID,
+    invocationId: "inv-1",
+    mainPid: 100,
+    activeEnterTimestampMonotonicUs: "1",
+    activeState: "active",
+    ...overrides,
+  };
+}
 
 describe("observer qualification single serialization (DEE-436 E-01)", () => {
   let root = "";
@@ -29,20 +46,10 @@ describe("observer qualification single serialization (DEE-436 E-01)", () => {
         runId: "run",
         organizationId: "00000000-0000-4000-8000-000000000001",
         targetSha: "a".repeat(40),
-        bootId: "b".repeat(32),
+        bootId: QUAL_BOOT_ID,
         unitName: "waia-fhv-observer.service",
-        identityBeforeCapture: {
-          invocationId: "inv-1",
-          mainPid: 100,
-          activeEnterTimestampMonotonicUs: "1",
-          activeState: "active",
-        },
-        identityAfterCapture: {
-          invocationId: "inv-1",
-          mainPid: 100,
-          activeEnterTimestampMonotonicUs: "1",
-          activeState: "active",
-        },
+        identityBeforeCapture: captureFixture(),
+        identityAfterCapture: captureFixture(),
         statusDigest: "abc",
         capturedAtUtc: new Date().toISOString(),
         contentDigest: "deadbeef",
@@ -60,20 +67,10 @@ describe("observer qualification single serialization (DEE-436 E-01)", () => {
       runId: "run",
       organizationId: "00000000-0000-4000-8000-000000000001",
       targetSha: "a".repeat(40),
-      bootId: "b".repeat(32),
+      bootId: QUAL_BOOT_ID,
       unitName: "waia-fhv-observer.service",
-      identityBeforeCapture: {
-        invocationId: "inv-1",
-        mainPid: 100,
-        activeEnterTimestampMonotonicUs: "1",
-        activeState: "active",
-      },
-      identityAfterCapture: {
-        invocationId: "inv-1",
-        mainPid: 100,
-        activeEnterTimestampMonotonicUs: "1",
-        activeState: "active",
-      },
+      identityBeforeCapture: captureFixture(),
+      identityAfterCapture: captureFixture(),
       statusDigest: "abc123",
       capturedAtUtc: new Date().toISOString(),
     };
@@ -119,20 +116,10 @@ describe("observer qualification single serialization (DEE-436 E-01)", () => {
       runId: "run",
       organizationId: "00000000-0000-4000-8000-000000000001",
       targetSha: "a".repeat(40),
-      bootId: "b".repeat(32),
+      bootId: QUAL_BOOT_ID,
       unitName: "waia-fhv-observer.service",
-      identityBeforeCapture: {
-        invocationId: "inv-1",
-        mainPid: 100,
-        activeEnterTimestampMonotonicUs: "1",
-        activeState: "active",
-      },
-      identityAfterCapture: {
-        invocationId: "inv-1",
-        mainPid: 100,
-        activeEnterTimestampMonotonicUs: "1",
-        activeState: "active",
-      },
+      identityBeforeCapture: captureFixture(),
+      identityAfterCapture: captureFixture(),
       statusDigest: "abc123",
       capturedAtUtc: new Date().toISOString(),
     });

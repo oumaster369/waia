@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import { captureFhvT4aObserverQualification } from "@/lib/trader/observability/fhv-t4a-observer-qualification";
+import { validateFhvT4aCeremonyStdout } from "@/lib/trader/observability/fhv-t4a-ceremony-results";
 import {
   parseFhvT4ContinuitySnapshot,
   parseFhvT4ContinuityVerificationProof,
@@ -1029,22 +1030,15 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       ]);
       requireOk(result, step, "verify ceremony");
       stepStdout += `${result.stdout}\n`;
-      const ceremonyClassifications = parseCeremony(result.stdout);
-      const required = [
-        "T4A_RESULT",
-        "GATE8_RESULT",
-        "T4B_RESULT",
-        "PAUSE_RESULT",
-        "RESUME_RESULT",
-        "FULL_HISTORY_RESCAN_DELTA",
-        "CONTINUITY_RESULT",
-        "ROLLBACK_RESULT",
-        "EVIDENCE_SEAL_RESULT",
-      ];
-      for (const key of required) {
-        if (!ceremonyClassifications[key]) {
-          throw new FhvT4aOperatorError("FHV_T4A_STEP_32_CEREMONY_MISSING", `Missing ${key}`);
-        }
+      let ceremonyClassifications: Record<string, string>;
+      try {
+        ceremonyClassifications = validateFhvT4aCeremonyStdout(result.stdout);
+      } catch (error) {
+        const code =
+          error instanceof Error && "code" in error
+            ? String((error as { code?: string }).code)
+            : "FHV_T4A_STEP_32_CEREMONY_INVALID";
+        throw new FhvT4aOperatorError(code, error instanceof Error ? error.message : String(error));
       }
       return {
         step,

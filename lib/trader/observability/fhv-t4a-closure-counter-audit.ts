@@ -16,6 +16,10 @@ import {
   fhvT4aOperatorReleaseCheckoutIdentityArgs,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
 import { normalizeFhvT4BootId } from "@/lib/trader/observability/fhv-t4-boot-id";
+import {
+  FHV_T4A_CEREMONY_REQUIRED_RESULTS,
+  FHV_T4A_CEREMONY_FORBIDDEN_KEYS,
+} from "@/lib/trader/observability/fhv-t4a-ceremony-results";
 
 export const FHV_T4A_CLOSURE_COUNTER_NAMES = [
   "PACKET_CANONICAL_EXECUTABLE_OWNER_MISSING",
@@ -124,6 +128,19 @@ export const FHV_T4A_CLOSURE_COUNTER_NAMES = [
   "FINAL_RECEIPT_CONTINUITY_VERIFICATION_PROOF_MISSING",
   "FINAL_RECEIPT_CONTINUITY_VERIFICATION_DIGEST_MISSING",
   "CONTINUITY_VERIFICATION_PROOF_NOT_REVALIDATED",
+  "QUALIFICATION_CAPTURE_BOOT_ID_NOT_PERSISTED",
+  "QUALIFICATION_CAPTURE_UNIT_NAME_NOT_PERSISTED",
+  "QUALIFICATION_CAPTURE_BOOT_ID_MISMATCH_ALLOWED",
+  "QUALIFICATION_CAPTURE_UNIT_MISMATCH_ALLOWED",
+  "CEREMONY_EXACT_VALUE_NOT_ENFORCED",
+  "CEREMONY_REQUIRED_FIELD_MISSING",
+  "PACKET_RELEASE_PREREQUISITES_MISSING",
+  "PACKET_FRESH_RUN_NAMESPACE_MISSING",
+  "PACKET_RETRY_PROHIBITION_MISSING",
+  "PACKET_PREAUTH_AUTHORIZATION_NOT_UNSET",
+  "PACKET_COMPLETE_CEREMONY_MATRIX_MISSING",
+  "PACKET_RECONNECT_BINDING_RESTORE_MISSING",
+  "PACKET_EVIDENCE_PRESERVATION_MISSING",
 ] as const;
 
 export type FhvT4aClosureCounterName = (typeof FHV_T4A_CLOSURE_COUNTER_NAMES)[number];
@@ -876,6 +893,108 @@ export function auditFhvT4aClosureCounters(
     !executorBody.includes("CONTINUITY_VERIFICATION_PROOF_NOT_REVALIDATED")
   ) {
     counters.CONTINUITY_VERIFICATION_PROOF_NOT_REVALIDATED = 1;
+  }
+
+  if (
+    !qualificationProof.includes("unitName: string") ||
+    !qualificationProof.includes("bootId: string") ||
+    !qualificationProof.includes("QUALIFICATION_CAPTURE_BOOT_ID_NOT_PERSISTED") ||
+    !qualificationProof.includes("QUALIFICATION_CAPTURE_UNIT_NAME_NOT_PERSISTED")
+  ) {
+    counters.QUALIFICATION_CAPTURE_BOOT_ID_NOT_PERSISTED = 1;
+    counters.QUALIFICATION_CAPTURE_UNIT_NAME_NOT_PERSISTED = 1;
+  }
+  if (
+    !qualificationProof.includes("QUALIFICATION_CAPTURE_BOOT_ID_MISMATCH") ||
+    !qualificationProof.includes("QUALIFICATION_CAPTURE_UNIT_MISMATCH") ||
+    !qualificationIdentity.includes("QUALIFICATION_CAPTURE_BOOT_ID_MISMATCH") ||
+    !qualificationIdentity.includes("QUALIFICATION_CAPTURE_UNIT_MISMATCH")
+  ) {
+    counters.QUALIFICATION_CAPTURE_BOOT_ID_MISMATCH_ALLOWED = 1;
+    counters.QUALIFICATION_CAPTURE_UNIT_MISMATCH_ALLOWED = 1;
+  }
+
+  const ceremonyResults = existsSync(
+    join(root, "lib/trader/observability/fhv-t4a-ceremony-results.ts"),
+  )
+    ? read(root, "lib/trader/observability/fhv-t4a-ceremony-results.ts")
+    : "";
+  if (
+    !ceremonyResults.includes("CEREMONY_EXACT_VALUE_NOT_ENFORCED") ||
+    !ceremonyResults.includes("CEREMONY_REQUIRED_FIELD_MISSING") ||
+    !executorBody.includes("validateFhvT4aCeremonyStdout") ||
+    !phaseReceipts.includes("extractFhvT4aCeremonyClassificationsFromReceipt") ||
+    !existsSync(join(root, "tests/unit/fhv-t4-ceremony-results.test.ts"))
+  ) {
+    counters.CEREMONY_EXACT_VALUE_NOT_ENFORCED = 1;
+    counters.CEREMONY_REQUIRED_FIELD_MISSING = 1;
+  }
+
+  if (
+    !packet.includes("Human squash merge PR #424") ||
+    !packet.includes("main → dev") ||
+    !packet.includes("tag-peel") ||
+    !packet.includes("PR head") ||
+    !packet.includes("feature branch") ||
+    !packet.includes("synthetic merge ref") ||
+    !packet.includes("untagged `dev`")
+  ) {
+    counters.PACKET_RELEASE_PREREQUISITES_MISSING = 1;
+  }
+  if (
+    !packet.includes("globally unique `FHV_RUN_ID`") ||
+    !packet.includes("FHV_T4A_LOCAL_STATE_DIR") ||
+    !packet.includes("no reuse of remote run directory")
+  ) {
+    counters.PACKET_FRESH_RUN_NAMESPACE_MISSING = 1;
+  }
+  if (
+    !packet.includes("no rerunning a completed phase") ||
+    !packet.includes("immediate STOP") ||
+    !packet.includes("no improvised cleanup or retry")
+  ) {
+    counters.PACKET_RETRY_PROHIBITION_MISSING = 1;
+  }
+  if (
+    !packet.includes("unset FHV_T4A_AUTHORIZATION") ||
+    !executableBody.includes("unset FHV_T4A_AUTHORIZATION")
+  ) {
+    counters.PACKET_PREAUTH_AUTHORIZATION_NOT_UNSET = 1;
+  }
+  for (const [key, value] of Object.entries(FHV_T4A_CEREMONY_REQUIRED_RESULTS)) {
+    if (!packet.includes(`${key}=${value}`)) {
+      counters.PACKET_COMPLETE_CEREMONY_MATRIX_MISSING = 1;
+      break;
+    }
+  }
+  for (const forbidden of FHV_T4A_CEREMONY_FORBIDDEN_KEYS) {
+    const activeLines = packet
+      .split("\n")
+      .filter((line) => !/do\s+\*\*not\*\* use/i.test(line))
+      .filter((line) => !line.includes("aggregate PASS aliases"));
+    if (activeLines.some((line) => line.includes(`${forbidden}=`))) {
+      counters.PACKET_COMPLETE_CEREMONY_MATRIX_MISSING = 1;
+      break;
+    }
+  }
+  if (
+    !packet.includes("AWAITING_HUMAN_DISCONNECT_RECONNECT") ||
+    !packet.includes("FHV_T4A_POST_RECONNECT_FINALIZE_OK") ||
+    !packet.includes("no rerunning") ||
+    !packet.includes("verify-local-release") ||
+    !packet.includes("pre-auth") ||
+    !packet.includes("post-auth-before-disconnect")
+  ) {
+    counters.PACKET_RECONNECT_BINDING_RESTORE_MISSING = 1;
+  }
+  if (
+    !packet.includes("workstation trace") ||
+    !packet.includes("phase receipts") ||
+    !packet.includes("observer qualification proofs") ||
+    !packet.includes("seal manifest") ||
+    !packet.includes("continuity snapshots")
+  ) {
+    counters.PACKET_EVIDENCE_PRESERVATION_MISSING = 1;
   }
 
   for (const scriptPath of FHV_T4A_BOOTSTRAP_SCRIPT_PATHS) {
