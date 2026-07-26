@@ -7,6 +7,7 @@ import { join } from "node:path";
 
 import { captureFhvT4aObserverQualification } from "@/lib/trader/observability/fhv-t4a-observer-qualification";
 import {
+  parseFhvT4ContinuitySnapshot,
   parseFhvT4ContinuityVerificationProof,
   resolveFhvT4ContinuityVerificationProofPath,
 } from "@/lib/trader/observability/fhv-t4-continuity-capture";
@@ -864,14 +865,22 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         buildFhvT4aRemoteFsReadOp(ctx, continuityVerificationProofPath),
       );
       const parsedProof = parseFhvT4ContinuityVerificationProof(JSON.parse(proofRaw));
-      const beforeDigest = ctx.reconnectBaseline?.continuityBeforeDigest;
-      const afterDigest = requireRemoteProof(ctx, ctx.continuityAfter, step, "CONTINUITY_AFTER");
+      const continuityBeforeSnapshot = parseFhvT4ContinuitySnapshot(
+        JSON.parse(
+          ctx.transport.readRemoteFile(buildFhvT4aRemoteFsReadOp(ctx, ctx.continuityBefore)),
+        ),
+      );
+      const continuityAfterSnapshot = parseFhvT4ContinuitySnapshot(
+        JSON.parse(
+          ctx.transport.readRemoteFile(buildFhvT4aRemoteFsReadOp(ctx, ctx.continuityAfter)),
+        ),
+      );
       if (
         parsedProof.runId !== b.runId ||
         parsedProof.organizationId !== b.organizationId ||
         parsedProof.targetSha !== b.targetSha ||
-        parsedProof.beforeDigest !== beforeDigest ||
-        parsedProof.afterDigest !== afterDigest
+        parsedProof.beforeDigest !== continuityBeforeSnapshot.contentDigest ||
+        parsedProof.afterDigest !== continuityAfterSnapshot.contentDigest
       ) {
         throw new FhvT4aOperatorError(
           "CONTINUITY_VERIFICATION_PROOF_NOT_REVALIDATED",

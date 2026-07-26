@@ -770,10 +770,34 @@ export function runFhvT4aOperatorPhase(
         mode: "read",
       }),
     );
+    const continuityBeforeSnapshot = parseFhvT4ContinuitySnapshot(
+      JSON.parse(
+        transport.readRemoteFile(
+          buildFhvT4aRemoteFsOpFromTransport({
+            transport,
+            bindings,
+            remotePath: postBefore.continuityBeforePath,
+            mode: "read",
+          }),
+        ),
+      ),
+    );
+    const continuityAfterSnapshot = parseFhvT4ContinuitySnapshot(
+      JSON.parse(
+        transport.readRemoteFile(
+          buildFhvT4aRemoteFsOpFromTransport({
+            transport,
+            bindings,
+            remotePath: ctx.continuityAfter,
+            mode: "read",
+          }),
+        ),
+      ),
+    );
     const parsedProof = parseFhvT4ContinuityVerificationProof(JSON.parse(proofRaw));
     if (
-      parsedProof.beforeDigest !== postBefore.continuityBeforeDigest ||
-      parsedProof.afterDigest !== continuityAfterDigest ||
+      parsedProof.beforeDigest !== continuityBeforeSnapshot.contentDigest ||
+      parsedProof.afterDigest !== continuityAfterSnapshot.contentDigest ||
       parsedProof.runId !== bindings.runId ||
       parsedProof.organizationId !== bindings.organizationId ||
       parsedProof.targetSha !== bindings.targetSha
