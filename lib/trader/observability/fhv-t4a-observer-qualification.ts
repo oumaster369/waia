@@ -4,14 +4,15 @@
 
 import { createHash } from "node:crypto";
 
+import type { FhvT4CompletedCampaignSystemdIdentityV1 } from "@/lib/trader/observability/fhv-t4-completed-campaign-systemd-identity";
+import { parseFhvT4CompletedCampaignSystemdIdentity } from "@/lib/trader/observability/fhv-t4-completed-campaign-systemd-identity";
 import type { FhvT4ObserverQualificationPhase } from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
 import {
   resolveFhvT4ObserverQualificationProofPath,
-  serializeFhvT4ObserverQualificationProof,
-  writeFhvT4ObserverQualificationProofAtomic,
+  type FhvT4ObserverQualificationProofUnsignedV1,
 } from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
 import type { FhvT4aExecContext } from "@/lib/trader/observability/fhv-t4a-operator-executor";
-import { FhvT4aOperatorError } from "@/scripts/ops/fhv-t4a-operator";
+import { FhvT4aOperatorError } from "@/lib/trader/observability/fhv-t4a-operator-errors";
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -47,7 +48,9 @@ function readObserverIdentity(ctx: FhvT4aExecContext): SystemdIdentity {
   return JSON.parse(result.stdout.trim()) as SystemdIdentity;
 }
 
-function readCompletedCampaignIdentity(ctx: FhvT4aExecContext): SystemdIdentity {
+function readCompletedCampaignIdentity(
+  ctx: FhvT4aExecContext,
+): FhvT4CompletedCampaignSystemdIdentityV1 {
   const b = ctx.bindings;
   const cmd = [
     `"${ctx.repoRoot}/scripts/ops/fhv-t4-campaign-systemd-identity-read.sh"`,
@@ -62,7 +65,7 @@ function readCompletedCampaignIdentity(ctx: FhvT4aExecContext): SystemdIdentity 
       result.stderr || result.stdout,
     );
   }
-  return JSON.parse(result.stdout.trim()) as SystemdIdentity;
+  return parseFhvT4CompletedCampaignSystemdIdentity(JSON.parse(result.stdout.trim()));
 }
 
 function identityArgs(ctx: FhvT4aExecContext): readonly string[] {
@@ -103,7 +106,7 @@ export type FhvT4aObserverQualificationResult = Readonly<{
   proofDigest: string;
   statusDigest: string;
   observerIdentity: SystemdIdentity;
-  completedCampaignIdentity?: SystemdIdentity;
+  completedCampaignIdentity?: FhvT4CompletedCampaignSystemdIdentityV1;
 }>;
 
 export function captureFhvT4aObserverQualification(
@@ -132,7 +135,7 @@ export function captureFhvT4aObserverQualification(
   }
   const identityAfter = readObserverIdentity(ctx);
 
-  let completedCampaignIdentity: SystemdIdentity | undefined;
+  let completedCampaignIdentity: FhvT4CompletedCampaignSystemdIdentityV1 | undefined;
   if (phase === "POST_RESTART") {
     completedCampaignIdentity = readCompletedCampaignIdentity(ctx);
     if (priorObserverInvocationId && identityAfter.invocationId === priorObserverInvocationId) {
@@ -144,7 +147,7 @@ export function captureFhvT4aObserverQualification(
   }
 
   const statusDigest = sha256Hex(status.stdout);
-  const proof = serializeFhvT4ObserverQualificationProof({
+  const unsignedPayload: FhvT4ObserverQualificationProofUnsignedV1 = {
     schemaVersion: "fhv-t4-observer-qualification-proof/v1",
     phase,
     runId: b.runId,
@@ -166,7 +169,12 @@ export function captureFhvT4aObserverQualification(
     },
     statusDigest,
     capturedAtUtc: new Date().toISOString(),
-  });
+    ...(phase === "POST_RESTART" && completedCampaignIdentity
+      ? {
+          completedCampaignIdentityDigest: completedCampaignIdentity.contentDigest,
+        }
+      : {}),
+  };
 
   const writeResult = serviceUserExec(ctx, "trader:fhv:t4:write-observer-qualification-proof", [
     ...identityArgs(ctx),
@@ -175,7 +183,7 @@ export function captureFhvT4aObserverQualification(
     "--output",
     proofPath,
     "--proof-json",
-    JSON.stringify(proof),
+    JSON.stringify(unsignedPayload),
   ]);
   if (writeResult.exitCode !== 0) {
     throw new FhvT4aOperatorError(
@@ -199,5 +207,4 @@ export function captureFhvT4aObserverQualification(
   };
 }
 
-/** Exported for closure CLI service-user writes. */
-export { writeFhvT4ObserverQualificationProofAtomic };
+/** Service-user publication is owned by closure CLI; workstation capture stays unsigned-only. */

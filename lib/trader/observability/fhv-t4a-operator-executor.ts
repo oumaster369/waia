@@ -16,8 +16,9 @@ import {
   isFhvT4aRemotePath,
 } from "@/lib/trader/observability/fhv-t4a-remote-fs";
 import type { FhvT4aPostBeforeReceiptV1 } from "@/lib/trader/observability/fhv-t4a-phase-receipts";
-import type { FhvT4aOperatorBindings } from "@/scripts/ops/fhv-t4a-operator";
-import { FhvT4aOperatorError } from "@/scripts/ops/fhv-t4a-operator";
+import type { FhvT4aReconnectBaseline } from "@/lib/trader/observability/fhv-t4a-reconnect-baseline";
+import type { FhvT4aOperatorBindings } from "@/lib/trader/observability/fhv-t4a-binding-spec";
+import { FhvT4aOperatorError } from "@/lib/trader/observability/fhv-t4a-operator-errors";
 
 export type FhvT4aExecContext = {
   bindings: FhvT4aOperatorBindings;
@@ -37,6 +38,7 @@ export type FhvT4aExecContext = {
   localStateDir: string;
   remotePathContext: ReturnType<typeof buildFhvT4aRemotePathContext>;
   postBeforeReceipt?: FhvT4aPostBeforeReceiptV1;
+  reconnectBaseline?: FhvT4aReconnectBaseline;
 };
 
 export type FhvT4aStepResult = Readonly<{
@@ -57,23 +59,27 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function parseClassification(stdout: string): string {
-  const line = stdout
-    .split("\n")
-    .map((entry) => entry.trim())
-    .find((entry) => entry.startsWith("classification="));
-  return line?.slice("classification=".length) ?? "";
-}
-
-function parseCeremony(stdout: string): Record<string, string> {
+export function parseFhvT4aTaggedKeyValueLines(stdout: string): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const line of stdout.split("\n")) {
+  for (const rawLine of stdout.split("\n")) {
+    const line = rawLine.trim().replace(/^\[[^\]]+\]\s*/, "");
+    if (!line || line.startsWith("{")) {
+      continue;
+    }
     const idx = line.indexOf("=");
     if (idx > 0) {
       out[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
     }
   }
   return out;
+}
+
+function parseClassification(stdout: string): string {
+  return parseFhvT4aTaggedKeyValueLines(stdout).classification ?? "";
+}
+
+function parseCeremony(stdout: string): Record<string, string> {
+  return parseFhvT4aTaggedKeyValueLines(stdout);
 }
 
 function requireOk(
@@ -120,7 +126,7 @@ export function buildFhvT4aExecContext(
     repoRoot,
     runDir,
     renderedUnitsDir: join(repoRoot, ".ops/rendered-units"),
-    installedUnitsDir: "/etc/systemd/system",
+    installedUnitsDir: transport.hermeticInstalledUnitsDir ?? "/etc/systemd/system",
     continuityBefore: join(runDir, "control/fhv-t4-continuity-before.v1.json"),
     continuityAfter: join(runDir, "control/fhv-t4-continuity-after.v1.json"),
     sealDestination: join(bindings.artifactRoot, "RI-P7/fhv-ops-rehearsal-seals", bindings.runId),
@@ -769,38 +775,28 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       };
     }
     case 29: {
-      if (!ctx.postBeforeReceipt) {
+      if (!ctx.reconnectBaseline) {
         throw new FhvT4aOperatorError(
-          "FHV_T4A_POST_BEFORE_RECEIPT_MISSING",
-          "POST before receipt required for post-restart qualification.",
+          "FHV_T4A_RECONNECT_BASELINE_MISSING",
+          "Reconnect baseline required for post-restart qualification.",
         );
       }
-      const preProofRaw = ctx.transport.readRemoteFile(
-        ctx.postBeforeReceipt.observerQualificationPrePath,
-      );
-      const preProof = JSON.parse(preProofRaw) as {
-        identityAfterCapture?: { invocationId?: string };
-      };
-      const priorObserverInvocationId = preProof.identityAfterCapture?.invocationId;
-      if (!priorObserverInvocationId) {
-        throw new FhvT4aOperatorError(
-          "FHV_T4A_POST_BEFORE_QUALIFICATION_BASELINE_MISSING",
-          "Pre-campaign qualification baseline missing invocationId.",
-        );
-      }
+      const priorObserverInvocationId =
+        ctx.reconnectBaseline.preQualificationProof.identityAfterCapture.invocationId;
       const qual = captureFhvT4aObserverQualification(
         ctx,
         "POST_RESTART",
         priorObserverInvocationId,
       );
-      if (qual.completedCampaignIdentity) {
-        const campaignDigest = sha256Hex(JSON.stringify(qual.completedCampaignIdentity));
-        if (campaignDigest !== ctx.postBeforeReceipt.campaignIdentityDigest) {
-          throw new FhvT4aOperatorError(
-            "FHV_T4A_CAMPAIGN_IDENTITY_CHANGED_POST_RESTART",
-            "Completed campaign identity must remain unchanged post-restart.",
-          );
-        }
+      if (
+        qual.completedCampaignIdentity &&
+        qual.completedCampaignIdentity.contentDigest !==
+          ctx.reconnectBaseline.campaignIdentityDigest
+      ) {
+        throw new FhvT4aOperatorError(
+          "FHV_T4A_CAMPAIGN_IDENTITY_CHANGED_POST_RESTART",
+          "Completed campaign identity must remain unchanged post-restart.",
+        );
       }
       proofs.push(qual.proofDigest);
       return {
@@ -895,7 +891,8 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         ctx.postRollbackHostProbePath,
       ]);
       requireOk(result, step, "evidence inventory");
-      result = serviceUserExec(ctx, "trader:fhv:t4:seal-evidence", [
+      let stepStdout = `${result.stdout}\n`;
+      const sealResult = serviceUserExec(ctx, "trader:fhv:t4:seal-evidence", [
         ...identityArgs(ctx),
         "--release-tag",
         b.releaseTag,
@@ -916,8 +913,9 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         "--post-rollback-host-probe-json-path",
         ctx.postRollbackHostProbePath,
       ]);
-      requireOk(result, step, "seal evidence");
-      result = serviceUserExec(ctx, "trader:fhv:t4:verify-seal", [
+      requireOk(sealResult, step, "seal evidence");
+      stepStdout += `${sealResult.stdout}\n`;
+      const verifySealResult = serviceUserExec(ctx, "trader:fhv:t4:verify-seal", [
         ...identityArgs(ctx),
         "--release-tag",
         b.releaseTag,
@@ -926,7 +924,8 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         "--service-user",
         b.serviceUser,
       ]);
-      requireOk(result, step, "verify seal");
+      requireOk(verifySealResult, step, "verify seal");
+      stepStdout += `${verifySealResult.stdout}\n`;
       result = serviceUserExec(ctx, "trader:fhv:t4:verify-ceremony", [
         ...identityArgs(ctx),
         "--release-tag",
@@ -953,7 +952,8 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         ctx.installedUnitsDir,
       ]);
       requireOk(result, step, "verify ceremony");
-      const ceremony = parseCeremony(result.stdout);
+      stepStdout += `${result.stdout}\n`;
+      const ceremony = parseCeremony(stepStdout);
       const required = [
         "T4A_RESULT",
         "GATE8_RESULT",
@@ -972,10 +972,12 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       }
       return {
         step,
-        ...result,
+        exitCode: result.exitCode,
+        stdout: stepStdout,
+        stderr: result.stderr,
         classification: "FHV_T4A_STEP_32_OK",
         prerequisiteProofDigests: prereq,
-        resultingProofDigests: [sha256Hex(result.stdout)],
+        resultingProofDigests: [sha256Hex(stepStdout)],
       };
     }
     default:

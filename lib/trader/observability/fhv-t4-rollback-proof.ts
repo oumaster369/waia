@@ -5,7 +5,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
+import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import {
   FHV_SYSTEMD_LEGACY_CONTAINER_IMAGE,
@@ -117,7 +117,10 @@ export function writeFhvT4RollbackProofAtomic(
     ...withoutDigest,
     contentDigest: computePayloadDigest(withoutDigest),
   };
-  writeFileAtomic(resolveFhvT4RollbackProofPath(runRoot), `${JSON.stringify(record, null, 2)}\n`);
+  writeFileAtomicExclusive(
+    resolveFhvT4RollbackProofPath(runRoot),
+    `${JSON.stringify(record, null, 2)}\n`,
+  );
   return record;
 }
 

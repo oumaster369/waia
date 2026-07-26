@@ -30,11 +30,29 @@ export class FhvT4aPhaseReceiptError extends Error {
 }
 
 export type FhvT4aPreflightHostFactsV1 = Readonly<{
+  hostname: string;
+  machineIdSha256: string;
+  serviceUser: string;
   serviceUid: number;
   serviceGid: number;
   servicePrimaryGroup: string;
-  hostname: string;
-  machineIdSha256: string;
+  environmentFile: string;
+  artifactRoot: string;
+  checkoutParent: string;
+  nodeBin: string;
+  corepackBin: string;
+  gitBin: string;
+  pythonBin: string;
+  dockerBin: string;
+  systemctlBin: string;
+  systemdAnalyzeBin: string;
+  legacyContainerName: string;
+  legacyContainerImage: string;
+  legacyContainerState: string;
+  hostBootId: string | null;
+  minimumFreeKiB: number;
+  observedFreeKiB: number;
+  hostMonotonicSample: Readonly<Record<string, unknown>>;
 }>;
 
 export type FhvT4aLocalReleaseReceiptV1 = Readonly<{
@@ -113,6 +131,9 @@ export type FhvT4aPostFinalizeReceiptV1 = Readonly<{
   postBeforeReceiptDigest: string;
   continuityAfterPath: string;
   continuityAfterDigest: string;
+  evidenceSealRootDigest: string;
+  evidenceSealManifestDigest: string;
+  evidenceSealVerifyClassification: string;
   ceremonyClassifications: Readonly<Record<string, string>>;
   stepProofDigests: Readonly<Record<string, string>>;
   proofDigestBundle: Readonly<Record<string, string>>;
@@ -404,6 +425,12 @@ export function readFhvT4aPostFinalizeReceipt(localStateDir: string): FhvT4aPost
     throw new FhvT4aPhaseReceiptError(
       "PHASE_RECEIPT_FULL_BINDING_GAP",
       "POST finalize receipt missing binding linkage fields.",
+    );
+  }
+  if (!receipt.evidenceSealRootDigest) {
+    throw new FhvT4aPhaseReceiptError(
+      "FINAL_RECEIPT_SEAL_ROOT_MISSING",
+      "POST finalize receipt missing evidenceSealRootDigest.",
     );
   }
   return receipt;

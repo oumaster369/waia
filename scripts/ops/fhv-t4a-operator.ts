@@ -18,6 +18,7 @@ import {
 import {
   buildFhvT4aExecContext,
   executeFhvT4aStep,
+  parseFhvT4aTaggedKeyValueLines,
   type FhvT4aStepResult,
 } from "@/lib/trader/observability/fhv-t4a-operator-executor";
 import {
@@ -26,7 +27,8 @@ import {
   type FhvT4aOperatorTransport,
 } from "@/lib/trader/observability/fhv-t4a-operator-transport";
 import { createFhvT4aHermeticTransportFromEnv } from "@/lib/trader/observability/fhv-t4a-hermetic-transport";
-import { validateFhvT4aOperatorBindings } from "@/lib/trader/observability/fhv-t4-binding-validation";
+import { resolveFhvT4aOperatorBindingsFromSpec } from "@/lib/trader/observability/fhv-t4a-binding-spec";
+import type { FhvT4aOperatorBindings } from "@/lib/trader/observability/fhv-t4a-binding-spec";
 import {
   assertPreauthReceiptMatches,
   fhvT4aBindingDigest,
@@ -40,48 +42,19 @@ import {
   writeFhvT4aPostFinalizeReceipt,
   writeFhvT4aPreauthReceipt,
 } from "@/lib/trader/observability/fhv-t4a-phase-receipts";
+import {
+  assertPreflightMatchesBindings,
+  parseFhvT4HostPreflightV2,
+} from "@/lib/trader/observability/fhv-t4-host-preflight";
+import { parseFhvT4CompletedCampaignSystemdIdentity } from "@/lib/trader/observability/fhv-t4-completed-campaign-systemd-identity";
+import { parseFhvT4ObserverSystemdIdentity } from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
+import { revalidateFhvT4aReconnectBaseline } from "@/lib/trader/observability/fhv-t4a-reconnect-baseline";
 import { resolveFhvT4ObserverQualificationPreCampaignPath } from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
+import { FhvT4aOperatorError } from "@/lib/trader/observability/fhv-t4a-operator-errors";
 
-export class FhvT4aOperatorError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "FhvT4aOperatorError";
-  }
-}
+export { FhvT4aOperatorError } from "@/lib/trader/observability/fhv-t4a-operator-errors";
 
-export type FhvT4aOperatorBindings = Readonly<{
-  execHost: string;
-  sshUser: string;
-  localReleaseRoot: string;
-  localStateDir: string;
-  localNodeBin: string;
-  localGitBin: string;
-  localSshBin: string;
-  targetSha: string;
-  releaseTag: string;
-  originUrl: string;
-  runId: string;
-  organizationId: string;
-  operatorId: string;
-  serviceUser: string;
-  environmentFile: string;
-  artifactRoot: string;
-  checkoutParent: string;
-  expectedHostname: string;
-  expectedMachineIdSha256: string;
-  nodeBin: string;
-  corepackBin: string;
-  gitBin: string;
-  pythonBin: string;
-  dockerBin: string;
-  systemctlBin: string;
-  systemdAnalyzeBin: string;
-  authorization?: string;
-  workstationTracePath: string;
-}>;
+export type { FhvT4aOperatorBindings } from "@/lib/trader/observability/fhv-t4a-binding-spec";
 
 export type FhvT4aOperatorTraceLine = Readonly<{
   schemaVersion: typeof FHV_T4A_OPERATOR_TRACE_SCHEMA_VERSION;
@@ -106,62 +79,10 @@ function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-function requireEnv(name: string, env: NodeJS.ProcessEnv = process.env): string {
-  const value = env[name]?.trim();
-  if (!value) {
-    throw new FhvT4aOperatorError("FHV_T4A_BINDING_MISSING", `Missing required env: ${name}`);
-  }
-  return value;
-}
-
 export function resolveFhvT4aOperatorBindings(
   env: NodeJS.ProcessEnv = process.env,
 ): FhvT4aOperatorBindings {
-  const localStateDir = requireEnv("FHV_T4A_LOCAL_STATE_DIR", env);
-  const bindings = {
-    execHost: requireEnv("EXEC_HOST", env),
-    sshUser: requireEnv("SSH_USER", env),
-    localReleaseRoot: requireEnv("FHV_LOCAL_RELEASE_ROOT", env),
-    localStateDir,
-    localNodeBin: requireEnv("FHV_LOCAL_NODE_BIN", env),
-    localGitBin: requireEnv("FHV_LOCAL_GIT_BIN", env),
-    localSshBin: requireEnv("FHV_LOCAL_SSH_BIN", env),
-    targetSha: requireEnv("EXECUTION_SERVER_TARGET_SHA", env).toLowerCase(),
-    releaseTag: requireEnv("FHV_RELEASE_TAG", env),
-    originUrl: env.FHV_ORIGIN_URL?.trim() || "https://github.com/oumaster369/waia.git",
-    runId: requireEnv("FHV_RUN_ID", env),
-    organizationId: requireEnv("FHV_ORGANIZATION_ID", env),
-    operatorId: requireEnv("FHV_OPERATOR_ID", env),
-    serviceUser: requireEnv("FHV_SERVICE_USER", env),
-    environmentFile: requireEnv("FHV_ENVIRONMENT_FILE", env),
-    artifactRoot: requireEnv("FHV_ARTIFACT_ROOT", env),
-    checkoutParent: requireEnv("FHV_CHECKOUT_PARENT", env),
-    expectedHostname: requireEnv("FHV_EXPECTED_HOSTNAME", env),
-    expectedMachineIdSha256: requireEnv("FHV_EXPECTED_MACHINE_ID_SHA256", env),
-    nodeBin: requireEnv("FHV_NODE_BIN", env),
-    corepackBin: requireEnv("FHV_COREPACK_BIN", env),
-    gitBin: requireEnv("FHV_GIT_BIN", env),
-    pythonBin: requireEnv("FHV_PYTHON_BIN", env),
-    dockerBin: requireEnv("FHV_DOCKER_BIN", env),
-    systemctlBin: requireEnv("FHV_SYSTEMCTL_BIN", env),
-    systemdAnalyzeBin: requireEnv("FHV_SYSTEMD_ANALYZE_BIN", env),
-    authorization: env.FHV_T4A_AUTHORIZATION?.trim(),
-    workstationTracePath:
-      env.FHV_T4A_WORKSTATION_TRACE_PATH?.trim() ??
-      join(localStateDir, "fhv-t4a-operator-trace.jsonl"),
-  };
-  validateFhvT4aOperatorBindings({
-    targetSha: bindings.targetSha,
-    releaseTag: bindings.releaseTag,
-    runId: bindings.runId,
-    organizationId: bindings.organizationId,
-    checkoutParent: bindings.checkoutParent,
-    artifactRoot: bindings.artifactRoot,
-    repoRoot: join(bindings.checkoutParent, `waia-${bindings.targetSha}`),
-    runDir: join(bindings.artifactRoot, "RI-P7/fhv-ops-rehearsal", bindings.runId),
-    sealDestination: join(bindings.artifactRoot, "RI-P7/fhv-ops-rehearsal-seals", bindings.runId),
-  });
-  return bindings;
+  return resolveFhvT4aOperatorBindingsFromSpec(env);
 }
 
 function resolveTransport(env: NodeJS.ProcessEnv): FhvT4aOperatorTransport {
@@ -290,7 +211,14 @@ function streamBootstrapScript(
 ): void {
   const scriptBody = transport.gitShowBlob(bindings.targetSha, scriptPath);
   const remoteCommand = `bash -s -- ${remoteArgs.map((arg) => `'${arg.replace(/'/g, `'\\''`)}'`).join(" ")}`;
-  const result = transport.ssh({ remoteCommand, stdin: scriptBody, asRoot, preauthPhase });
+  const result = transport.ssh({
+    remoteCommand,
+    stdin: scriptBody,
+    asRoot,
+    preauthPhase,
+    preauthBootstrapPath: scriptPath,
+    preauthBootstrapBody: scriptBody,
+  });
   if (result.exitCode !== 0) {
     throw new FhvT4aOperatorError(
       "FHV_T4A_BOOTSTRAP_STREAM_FAILED",
@@ -427,6 +355,8 @@ export function runFhvT4aOperatorPhase(
       stdin: preflightScriptBody,
       asRoot: true,
       preauthPhase: true,
+      preauthBootstrapPath: "scripts/ops/fhv-t4-host-preflight.sh",
+      preauthBootstrapBody: preflightScriptBody,
     });
     if (preflightResult.exitCode !== 0) {
       throw new FhvT4aOperatorError(
@@ -444,15 +374,10 @@ export function runFhvT4aOperatorPhase(
         "Host preflight JSON payload missing from stdout.",
       );
     }
-    const preflightPayload = JSON.parse(preflightJsonLine) as {
-      serviceUid: number;
-      serviceGid: number;
-      servicePrimaryGroup: string;
-      hostname: string;
-      machineIdSha256: string;
-    };
+    const preflight = parseFhvT4HostPreflightV2(JSON.parse(preflightJsonLine));
+    assertPreflightMatchesBindings(preflight, bindings);
     const ledgerEntries = transport.preauthLedgerEntries();
-    const mutatingCommandCount = transport.preauthMeasuredRemoteWriteCount();
+    const mutatingCommandCount = transport.preauthMutatingCommandCount();
     if (mutatingCommandCount !== 0) {
       throw new FhvT4aOperatorError(
         "FHV_T4A_PREAUTH_REMOTE_WRITES",
@@ -481,8 +406,8 @@ export function runFhvT4aOperatorPhase(
       expectedHostname: bindings.expectedHostname,
       expectedMachineIdSha256: bindings.expectedMachineIdSha256,
       serviceUser: bindings.serviceUser,
-      serviceUid: preflightPayload.serviceUid,
-      serviceGid: preflightPayload.serviceGid,
+      serviceUid: preflight.serviceUid,
+      serviceGid: preflight.serviceGid,
       runId: bindings.runId,
       organizationId: bindings.organizationId,
       nodeBin: bindings.nodeBin,
@@ -499,11 +424,29 @@ export function runFhvT4aOperatorPhase(
       rejectedCommandCount,
       mutatingCommandCount,
       preflightHostFacts: {
-        serviceUid: preflightPayload.serviceUid,
-        serviceGid: preflightPayload.serviceGid,
-        servicePrimaryGroup: preflightPayload.servicePrimaryGroup,
-        hostname: preflightPayload.hostname,
-        machineIdSha256: preflightPayload.machineIdSha256,
+        hostname: preflight.hostname,
+        machineIdSha256: preflight.machineIdSha256,
+        serviceUser: preflight.serviceUser,
+        serviceUid: preflight.serviceUid,
+        serviceGid: preflight.serviceGid,
+        servicePrimaryGroup: preflight.servicePrimaryGroup,
+        environmentFile: preflight.environmentFile,
+        artifactRoot: preflight.artifactRoot,
+        checkoutParent: preflight.checkoutParent,
+        nodeBin: preflight.nodeBin,
+        corepackBin: preflight.corepackBin,
+        gitBin: preflight.gitBin,
+        pythonBin: preflight.pythonBin,
+        dockerBin: preflight.dockerBin,
+        systemctlBin: bindings.systemctlBin,
+        systemdAnalyzeBin: bindings.systemdAnalyzeBin,
+        legacyContainerName: preflight.legacyContainerName,
+        legacyContainerImage: preflight.legacyContainerImage,
+        legacyContainerState: preflight.legacyContainerState,
+        hostBootId: preflight.hostBootId ?? null,
+        minimumFreeKiB: preflight.minimumFreeKiB,
+        observedFreeKiB: preflight.observedFreeKiB,
+        hostMonotonicSample: preflight.hostMonotonicSample,
       },
     });
     emitTrace(bindings, {
@@ -602,6 +545,12 @@ export function runFhvT4aOperatorPhase(
         observerIdentityResult.stderr || observerIdentityResult.stdout,
       );
     }
+    const campaignIdentity = parseFhvT4CompletedCampaignSystemdIdentity(
+      JSON.parse(campaignIdentityResult.stdout.trim()),
+    );
+    const observerIdentity = parseFhvT4ObserverSystemdIdentity(
+      JSON.parse(observerIdentityResult.stdout.trim()),
+    );
     writeFhvT4aPostBeforeReceipt(bindings.localStateDir, {
       targetSha: bindings.targetSha,
       releaseTag: bindings.releaseTag,
@@ -613,8 +562,8 @@ export function runFhvT4aOperatorPhase(
       runDir: ctx.runDir,
       continuityBeforePath: ctx.continuityBefore,
       continuityBeforeDigest: transport.remoteSha256(ctx.continuityBefore),
-      observerIdentityDigest: sha256Hex(observerIdentityResult.stdout.trim()),
-      campaignIdentityDigest: sha256Hex(campaignIdentityResult.stdout.trim()),
+      observerIdentityDigest: sha256Hex(JSON.stringify(observerIdentity)),
+      campaignIdentityDigest: campaignIdentity.contentDigest,
       observerQualificationPrePath,
       observerQualificationPreDigest: transport.remoteSha256(observerQualificationPrePath),
       stepProofDigests,
@@ -623,48 +572,19 @@ export function runFhvT4aOperatorPhase(
   }
 
   if (phase === "post-reconnect-finalize") {
-    const expectedBindingDigest = fhvT4aBindingDigest(fhvT4aFullBindingFields(bindings));
     const postBefore = readFhvT4aPostBeforeReceipt(bindings.localStateDir);
-    if (postBefore.bindingDigest !== expectedBindingDigest) {
-      throw new FhvT4aOperatorError(
-        "PHASE_RECEIPT_FULL_BINDING_GAP",
-        "POST before receipt binding digest mismatch.",
-      );
-    }
-    if (
-      postBefore.targetSha !== bindings.targetSha ||
-      postBefore.releaseTag !== bindings.releaseTag ||
-      postBefore.runId !== bindings.runId ||
-      postBefore.organizationId !== bindings.organizationId
-    ) {
-      throw new FhvT4aOperatorError(
-        "FHV_T4A_POST_BEFORE_RECEIPT_IDENTITY_MISMATCH",
-        "POST before receipt identity mismatch.",
-      );
-    }
-    if (!transport.remoteFileExists(postBefore.continuityBeforePath)) {
-      throw new FhvT4aOperatorError(
-        "FHV_T4A_CONTINUITY_BEFORE_MISSING",
-        "continuity-before proof required for post-reconnect-finalize.",
-      );
-    }
-    if (
-      transport.remoteSha256(postBefore.continuityBeforePath) !== postBefore.continuityBeforeDigest
-    ) {
-      throw new FhvT4aOperatorError(
-        "FHV_T4A_CONTINUITY_BEFORE_DIGEST_MISMATCH",
-        "continuity-before digest mismatch at reconnect.",
-      );
-    }
-    if (!transport.remoteFileExists(postBefore.observerQualificationPrePath)) {
-      throw new FhvT4aOperatorError(
-        "FHV_T4A_OBSERVER_QUALIFICATION_PRE_MISSING",
-        "Pre-campaign observer qualification proof missing at reconnect.",
-      );
-    }
+    const baseline = revalidateFhvT4aReconnectBaseline({
+      bindings,
+      transport,
+      postBeforeReceipt: postBefore,
+    });
     ctx.postBeforeReceipt = postBefore;
+    ctx.reconnectBaseline = baseline;
     const ceremonyLines: Record<string, string> = {};
     const stepProofDigests: Record<string, string> = {};
+    let evidenceSealRootDigest = "";
+    let evidenceSealManifestDigest = "";
+    let evidenceSealVerifyClassification = "";
     for (const step of [28, 29, 30, 31, 32]) {
       const result = executeFhvT4aStep(ctx, step);
       const contractStep = FHV_T4A_OPERATOR_STEPS.find((entry) => entry.step === step);
@@ -683,14 +603,37 @@ export function runFhvT4aOperatorPhase(
       );
       stepProofDigests[String(step)] = sha256Hex(JSON.stringify(result));
       if (step === 32) {
-        for (const line of result.stdout.split("\n")) {
-          const idx = line.indexOf("=");
-          if (idx > 0) {
-            ceremonyLines[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+        const tagged = parseFhvT4aTaggedKeyValueLines(result.stdout);
+        for (const [key, value] of Object.entries(tagged)) {
+          ceremonyLines[key] = value;
+          if (key === "rootDigest") {
+            evidenceSealRootDigest = value;
+          }
+          if (key === "classification" && value.includes("SEAL")) {
+            evidenceSealVerifyClassification = value;
           }
         }
       }
     }
+    if (!evidenceSealRootDigest) {
+      throw new FhvT4aOperatorError(
+        "FINAL_RECEIPT_SEAL_ROOT_MISSING",
+        "seal-evidence rootDigest missing from step 32 output.",
+      );
+    }
+    const sealManifestPath = `${ctx.sealDestination}/inventory.json`;
+    if (transport.remoteFileExists(sealManifestPath)) {
+      evidenceSealManifestDigest = transport.remoteSha256(sealManifestPath);
+    }
+    const publishedSealRootPath = `${ctx.sealDestination}/SEAL_ROOT.sha256`;
+    const publishedSealRoot = transport.readRemoteFile(publishedSealRootPath).trim();
+    if (publishedSealRoot !== evidenceSealRootDigest) {
+      throw new FhvT4aOperatorError(
+        "FINAL_RECEIPT_SEAL_ROOT_MISSING",
+        "Published seal rootDigest does not match seal-evidence capture.",
+      );
+    }
+    const expectedBindingDigest = fhvT4aBindingDigest(fhvT4aFullBindingFields(bindings));
     writeFhvT4aPostFinalizeReceipt(bindings.localStateDir, {
       targetSha: bindings.targetSha,
       releaseTag: bindings.releaseTag,
@@ -700,6 +643,9 @@ export function runFhvT4aOperatorPhase(
       postBeforeReceiptDigest: postBefore.contentDigest,
       continuityAfterPath: ctx.continuityAfter,
       continuityAfterDigest: transport.remoteSha256(ctx.continuityAfter),
+      evidenceSealRootDigest,
+      evidenceSealManifestDigest,
+      evidenceSealVerifyClassification,
       ceremonyClassifications: ceremonyLines,
       stepProofDigests,
       proofDigestBundle: {

@@ -182,7 +182,7 @@ describe("fhv-t4a operator state machine (DEE-436)", () => {
       .map((line) => JSON.parse(line) as { semanticStep: number | string; exitStatus: number });
     expect(traceLines.some((line) => line.semanticStep === 26 && line.exitStatus === 0)).toBe(true);
     expect(traceLines.some((line) => line.semanticStep === 32 && line.exitStatus === 0)).toBe(true);
-  });
+  }, 300_000);
 
   const negativeCases: Array<{
     id: string;

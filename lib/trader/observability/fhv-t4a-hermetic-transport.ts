@@ -3,7 +3,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -37,6 +37,7 @@ export type FhvT4aHermeticTransportOptions = Readonly<{
   pythonBin: string;
   dockerBin: string;
   systemctlBin: string;
+  operatorId?: string;
 }>;
 
 function sha256Hex(text: string): string {
@@ -64,6 +65,7 @@ export function createFhvT4aHermeticTransport(
     pythonBin: options.pythonBin,
     dockerBin: options.dockerBin,
     systemctlBin: options.systemctlBin,
+    operatorId: options.operatorId,
   });
 
   writeFileSync(
@@ -91,7 +93,7 @@ export function createFhvT4aHermeticTransport(
     },
     sshInvocations: () => invocations,
     preauthLedgerEntries: () => preauthLedger.entries(),
-    preauthMeasuredRemoteWriteCount: () => preauthLedger.measuredRemoteWriteCount(),
+    preauthMutatingCommandCount: () => preauthLedger.mutatingCommandCount(),
     gitShowBlob: simulation.gitShowBlob,
     localGit: (args) => {
       if (
@@ -127,18 +129,45 @@ export function createFhvT4aHermeticTransport(
     remoteFileExists: (remotePath) => simulation.remoteFileExists(remotePath),
     readRemoteFile: (remotePath) => simulation.readRemoteFile(remotePath),
     remoteSha256: (remotePath) => simulation.remoteSha256(remotePath),
+    hermeticInstalledUnitsDir: simulation.installedUnitsDir,
     sudoNoninteractiveProbe: () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    ssh: ({ remoteCommand, stdin, asRoot = false, preauthPhase = false }) => {
+    ssh: ({
+      remoteCommand,
+      stdin,
+      asRoot = false,
+      preauthPhase = false,
+      preauthBootstrapPath,
+      preauthBootstrapBody,
+    }) => {
       const effectiveRemoteCommand = buildEffectiveRemoteCommand(remoteCommand, asRoot);
       assertExactlyOneSudoTransition(effectiveRemoteCommand, asRoot);
+      const sequence = preauthLedger.entries().length + 1;
       if (preauthPhase) {
-        const classified = classifyFhvT4aPreauthRemoteCommand(remoteCommand, Boolean(stdin));
-        preauthLedger.record(classified);
+        const classified = classifyFhvT4aPreauthRemoteCommand({
+          remoteCommand,
+          hasStdinBootstrap: Boolean(stdin),
+          bootstrapRepositoryPath: preauthBootstrapPath ?? null,
+          bootstrapBody: preauthBootstrapBody ?? null,
+        });
         if (classified.classification === "rejected") {
+          preauthLedger.record({
+            sequence,
+            bootstrapRepositoryPath: classified.bootstrapRepositoryPath,
+            bootstrapBlobSha256: classified.bootstrapBlobSha256,
+            originalRemoteCommand: classified.originalRemoteCommand,
+            effectiveRemoteCommand,
+            privilegeLocus: asRoot ? "REMOTE_ROOT" : "SSH_USER",
+            stdinPresent: classified.stdinPresent,
+            classification: classified.classification,
+            classificationReason: classified.classificationReason,
+            exitStatus: 2,
+            stdoutDigest: sha256Hex(""),
+            stderrDigest: sha256Hex(classified.classificationReason),
+          });
           return {
             exitCode: 2,
             stdout: "",
-            stderr: `PRE_AUTH rejected command: ${classified.reason}`,
+            stderr: `PRE_AUTH rejected command: ${classified.classificationReason}`,
           };
         }
       }
@@ -150,6 +179,28 @@ export function createFhvT4aHermeticTransport(
         effectiveRemoteCommand,
         exitCode: result.exitCode,
       });
+      if (preauthPhase) {
+        const classified = classifyFhvT4aPreauthRemoteCommand({
+          remoteCommand,
+          hasStdinBootstrap: Boolean(stdin),
+          bootstrapRepositoryPath: preauthBootstrapPath ?? null,
+          bootstrapBody: preauthBootstrapBody ?? null,
+        });
+        preauthLedger.record({
+          sequence,
+          bootstrapRepositoryPath: classified.bootstrapRepositoryPath,
+          bootstrapBlobSha256: classified.bootstrapBlobSha256,
+          originalRemoteCommand: classified.originalRemoteCommand,
+          effectiveRemoteCommand,
+          privilegeLocus: asRoot ? "REMOTE_ROOT" : "SSH_USER",
+          stdinPresent: classified.stdinPresent,
+          classification: classified.classification,
+          classificationReason: classified.classificationReason,
+          exitStatus: result.exitCode,
+          stdoutDigest: sha256Hex(result.stdout),
+          stderrDigest: sha256Hex(result.stderr),
+        });
+      }
       return result;
     },
   };
@@ -183,6 +234,7 @@ export function createFhvT4aHermeticTransportFromEnv(
     pythonBin: requireEnv("FHV_PYTHON_BIN"),
     dockerBin: requireEnv("FHV_DOCKER_BIN"),
     systemctlBin: requireEnv("FHV_SYSTEMCTL_BIN"),
+    operatorId: requireEnv("FHV_OPERATOR_ID"),
   });
 }
 

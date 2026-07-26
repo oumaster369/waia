@@ -2,14 +2,24 @@
  * DEE-436 — T4A operator transport interface (live + test injection).
  */
 
+import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 import type { FhvT4aPreauthLedgerEntry } from "@/lib/trader/observability/fhv-t4a-preauth-ledger";
 import {
   classifyFhvT4aPreauthRemoteCommand,
   createFhvT4aPreauthLedger,
 } from "@/lib/trader/observability/fhv-t4a-preauth-ledger";
+import {
+  buildRemoteFsExistsCommand,
+  buildRemoteFsReadCommand,
+  buildRemoteFsSha256Command,
+  parseRemoteFsExistsStdout,
+  parseRemoteFsReadStdout,
+  parseRemoteFsSha256Stdout,
+} from "@/lib/trader/observability/fhv-t4a-remote-fs-ops";
 
 export type FhvT4aTransportExecResult = Readonly<{
   exitCode: number;
@@ -31,13 +41,15 @@ export type FhvT4aOperatorTransport = Readonly<{
   resetRemoteWrites: () => void;
   sshInvocations: () => readonly FhvT4aSshInvocation[];
   preauthLedgerEntries: () => readonly FhvT4aPreauthLedgerEntry[];
-  preauthMeasuredRemoteWriteCount: () => number;
+  preauthMutatingCommandCount: () => number;
   ssh: (input: {
     remoteCommand: string;
     stdin?: string;
     args?: readonly string[];
     asRoot?: boolean;
     preauthPhase?: boolean;
+    preauthBootstrapPath?: string;
+    preauthBootstrapBody?: string;
   }) => FhvT4aTransportExecResult;
   sudoNoninteractiveProbe: () => FhvT4aTransportExecResult;
   gitShowBlob: (sha: string, path: string) => string;
@@ -45,6 +57,8 @@ export type FhvT4aOperatorTransport = Readonly<{
   remoteFileExists: (remotePath: string) => boolean;
   readRemoteFile: (remotePath: string) => string;
   remoteSha256: (remotePath: string) => string;
+  /** Hermetic integration: local filesystem path backing `/etc/systemd/system`. */
+  hermeticInstalledUnitsDir?: string;
 }>;
 
 let injectedTransport: FhvT4aOperatorTransport | null = null;
@@ -85,27 +99,31 @@ export function assertExactlyOneSudoTransition(
   }
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+const REMOTE_READ_BYTE_CAP = 10 * 1024 * 1024;
+
+function sha256Hex(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-const REMOTE_READ_BYTE_CAP = 10 * 1024 * 1024;
-const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
-
-export type FhvT4aRemoteFsTools = Readonly<{
-  testBin: string;
-  catBin: string;
-  sha256sumBin: string;
-}>;
-
-export function resolveFhvT4aRemoteFsTools(
-  env: NodeJS.ProcessEnv = process.env,
-): FhvT4aRemoteFsTools {
-  return {
-    testBin: env.FHV_REMOTE_TEST_BIN?.trim() || "/usr/bin/test",
-    catBin: env.FHV_REMOTE_CAT_BIN?.trim() || "/bin/cat",
-    sha256sumBin: env.FHV_REMOTE_SHA256SUM_BIN?.trim() || "/usr/bin/sha256sum",
-  };
+function resolveApprovedRemoteRoots(env: NodeJS.ProcessEnv): string[] {
+  const artifactRoot = env.FHV_ARTIFACT_ROOT?.trim();
+  const checkoutParent = env.FHV_CHECKOUT_PARENT?.trim();
+  const targetSha = env.EXECUTION_SERVER_TARGET_SHA?.trim()?.toLowerCase();
+  const runId = env.FHV_RUN_ID?.trim();
+  const roots = ["/etc/systemd/system"];
+  if (artifactRoot) {
+    roots.push(artifactRoot);
+  }
+  if (checkoutParent) {
+    roots.push(checkoutParent);
+    if (targetSha) {
+      roots.push(join(checkoutParent, `waia-${targetSha}`));
+    }
+  }
+  if (artifactRoot && runId) {
+    roots.push(join(artifactRoot, "RI-P7/fhv-ops-rehearsal", runId));
+  }
+  return roots;
 }
 
 export function createFhvT4aLiveTransport(
@@ -114,12 +132,13 @@ export function createFhvT4aLiveTransport(
   let remoteWrites = 0;
   const invocations: FhvT4aSshInvocation[] = [];
   const preauthLedger = createFhvT4aPreauthLedger();
-  const remoteFs = resolveFhvT4aRemoteFsTools(env);
   const execHost = env.EXEC_HOST?.trim() ?? "";
   const sshUser = env.SSH_USER?.trim() ?? "";
   const localReleaseRoot = env.FHV_LOCAL_RELEASE_ROOT?.trim() ?? "";
   const localGitBin = env.FHV_LOCAL_GIT_BIN?.trim() || "git";
   const sshBin = env.FHV_LOCAL_SSH_BIN?.trim() || "ssh";
+  const remotePythonBin = env.FHV_PYTHON_BIN?.trim() ?? "";
+  const approvedRoots = resolveApprovedRemoteRoots(env);
   const sshBase = [
     "-o",
     "BatchMode=yes",
@@ -141,6 +160,12 @@ export function createFhvT4aLiveTransport(
     };
   };
 
+  const remoteFsBase = {
+    approvedRoots,
+    locus: "REMOTE_ROOT" as const,
+    pythonBin: remotePythonBin,
+  };
+
   return {
     kind: "live",
     remoteWriteCount: () => remoteWrites,
@@ -149,7 +174,7 @@ export function createFhvT4aLiveTransport(
     },
     sshInvocations: () => invocations,
     preauthLedgerEntries: () => preauthLedger.entries(),
-    preauthMeasuredRemoteWriteCount: () => preauthLedger.measuredRemoteWriteCount(),
+    preauthMutatingCommandCount: () => preauthLedger.mutatingCommandCount(),
     gitShowBlob: (commitSha, path) =>
       execFileSync(localGitBin, ["-C", localReleaseRoot, "show", `${commitSha}:${path}`], {
         encoding: "utf8",
@@ -166,33 +191,45 @@ export function createFhvT4aLiveTransport(
       }
     },
     remoteFileExists: (remotePath) => {
-      const result = sshExec(`${shellQuote(remoteFs.testBin)} -f ${shellQuote(remotePath)}`);
-      return result.exitCode === 0;
+      const result = sshExec(
+        buildRemoteFsExistsCommand({
+          ...remoteFsBase,
+          remotePath,
+        }),
+      );
+      if (result.exitCode !== 0) {
+        return false;
+      }
+      try {
+        return parseRemoteFsExistsStdout(result.stdout);
+      } catch {
+        return false;
+      }
     },
     readRemoteFile: (remotePath) => {
       const result = sshExec(
-        `${shellQuote(remoteFs.catBin)} ${shellQuote(remotePath)} | head -c ${REMOTE_READ_BYTE_CAP}`,
+        buildRemoteFsReadCommand({
+          ...remoteFsBase,
+          remotePath,
+          byteCap: REMOTE_READ_BYTE_CAP,
+        }),
       );
       if (result.exitCode !== 0) {
-        throw new Error(`FHV_T4A_REMOTE_READ_FAILED:${remotePath}`);
+        throw new Error(`FHV_T4A_REMOTE_READ_FAILED:${remotePath}:${result.stderr}`);
       }
-      if (result.stdout.length >= REMOTE_READ_BYTE_CAP) {
-        throw new Error(`FHV_T4A_REMOTE_READ_BYTE_CAP:${remotePath}`);
-      }
-      return result.stdout;
+      return parseRemoteFsReadStdout(result.stdout, REMOTE_READ_BYTE_CAP).bytes;
     },
     remoteSha256: (remotePath) => {
       const result = sshExec(
-        `${shellQuote(remoteFs.sha256sumBin)} ${shellQuote(remotePath)} | awk '{print $1}'`,
+        buildRemoteFsSha256Command({
+          ...remoteFsBase,
+          remotePath,
+        }),
       );
       if (result.exitCode !== 0) {
-        throw new Error(`FHV_T4A_REMOTE_SHA256_FAILED:${remotePath}`);
+        throw new Error(`FHV_T4A_REMOTE_SHA256_FAILED:${remotePath}:${result.stderr}`);
       }
-      const digest = result.stdout.trim().toLowerCase();
-      if (!SHA256_HEX_PATTERN.test(digest)) {
-        throw new Error(`FHV_T4A_REMOTE_SHA256_INVALID:${remotePath}`);
-      }
-      return digest;
+      return parseRemoteFsSha256Stdout(result.stdout);
     },
     sudoNoninteractiveProbe: () => {
       try {
@@ -203,17 +240,43 @@ export function createFhvT4aLiveTransport(
         return { exitCode: err.status ?? 1, stdout: err.stdout ?? "", stderr: err.stderr ?? "" };
       }
     },
-    ssh: ({ remoteCommand, stdin, asRoot = false, preauthPhase = false }) => {
+    ssh: ({
+      remoteCommand,
+      stdin,
+      asRoot = false,
+      preauthPhase = false,
+      preauthBootstrapPath,
+      preauthBootstrapBody,
+    }) => {
       const effectiveRemoteCommand = buildEffectiveRemoteCommand(remoteCommand, asRoot);
       assertExactlyOneSudoTransition(effectiveRemoteCommand, asRoot);
+      const sequence = preauthLedger.entries().length + 1;
       if (preauthPhase) {
-        const classified = classifyFhvT4aPreauthRemoteCommand(remoteCommand, Boolean(stdin));
-        preauthLedger.record(classified);
+        const classified = classifyFhvT4aPreauthRemoteCommand({
+          remoteCommand,
+          hasStdinBootstrap: Boolean(stdin),
+          bootstrapRepositoryPath: preauthBootstrapPath ?? null,
+          bootstrapBody: preauthBootstrapBody ?? null,
+        });
         if (classified.classification === "rejected") {
+          preauthLedger.record({
+            sequence,
+            bootstrapRepositoryPath: classified.bootstrapRepositoryPath,
+            bootstrapBlobSha256: classified.bootstrapBlobSha256,
+            originalRemoteCommand: classified.originalRemoteCommand,
+            effectiveRemoteCommand,
+            privilegeLocus: asRoot ? "REMOTE_ROOT" : "SSH_USER",
+            stdinPresent: classified.stdinPresent,
+            classification: classified.classification,
+            classificationReason: classified.classificationReason,
+            exitStatus: 2,
+            stdoutDigest: sha256Hex(""),
+            stderrDigest: sha256Hex(classified.classificationReason),
+          });
           return {
             exitCode: 2,
             stdout: "",
-            stderr: `PRE_AUTH rejected command: ${classified.reason}`,
+            stderr: `PRE_AUTH rejected command: ${classified.classificationReason}`,
           };
         }
       }
@@ -233,6 +296,28 @@ export function createFhvT4aLiveTransport(
         effectiveRemoteCommand,
         exitCode: execResult.exitCode,
       });
+      if (preauthPhase) {
+        const classified = classifyFhvT4aPreauthRemoteCommand({
+          remoteCommand,
+          hasStdinBootstrap: Boolean(stdin),
+          bootstrapRepositoryPath: preauthBootstrapPath ?? null,
+          bootstrapBody: preauthBootstrapBody ?? null,
+        });
+        preauthLedger.record({
+          sequence,
+          bootstrapRepositoryPath: classified.bootstrapRepositoryPath,
+          bootstrapBlobSha256: classified.bootstrapBlobSha256,
+          originalRemoteCommand: classified.originalRemoteCommand,
+          effectiveRemoteCommand,
+          privilegeLocus: asRoot ? "REMOTE_ROOT" : "SSH_USER",
+          stdinPresent: classified.stdinPresent,
+          classification: classified.classification,
+          classificationReason: classified.classificationReason,
+          exitStatus: execResult.exitCode,
+          stdoutDigest: sha256Hex(execResult.stdout),
+          stderrDigest: sha256Hex(execResult.stderr),
+        });
+      }
       if (!preauthPhase && /(>>|>\s|tee |mkdir |touch |rm |mv |cp )/.test(remoteCommand)) {
         remoteWrites += 1;
       }
@@ -262,4 +347,9 @@ export function assertFhvT4aNoGitOperationInProgress(
       throw new Error(`FHV_T4A_LOCAL_GIT_STATE_BLOCKED:${flag}`);
     }
   }
+}
+
+/** @deprecated use preauthMutatingCommandCount */
+export function preauthMeasuredRemoteWriteCount(transport: FhvT4aOperatorTransport): number {
+  return transport.preauthMutatingCommandCount();
 }

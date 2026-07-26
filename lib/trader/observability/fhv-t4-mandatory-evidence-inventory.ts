@@ -6,6 +6,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSyn
 import { join, relative, resolve, sep } from "node:path";
 
 import { resolveFhvSystemdDeployedRevisionPath } from "@/lib/trader/observability/fhv-systemd-deployed-revision";
+import { resolveFhvOperatorStatusPath } from "@/lib/trader/observability/fhv-status-writer";
 import {
   FHV_T4_CAMPAIGN_RUNTIME_FILENAME,
   FHV_T4_CAMPAIGN_RUNTIME_START_FILENAME,
@@ -214,7 +215,7 @@ export function buildFhvT4MandatoryEvidenceInventory(input: {
       code: "FHV_T4_INV_PROGRESS",
     },
     {
-      abs: join(runRoot, "fhv-operator-status.v1.json"),
+      abs: resolveFhvOperatorStatusPath(runRoot),
       namespace: "run-root",
       category: "alert-policy",
       code: "FHV_T4_INV_STATUS",
@@ -354,8 +355,16 @@ export function buildFhvT4MandatoryEvidenceInventory(input: {
   const inventory: FhvT4MandatoryEvidenceEntry[] = [];
   for (const entry of planned) {
     const root = namespaces[entry.namespace];
-    const rel = `${entry.namespace}/${relative(root, realpathStrict(entry.abs)).split(sep).join("/")}`;
+    const rootReal = realpathStrict(root);
     const absReal = realpathStrict(entry.abs);
+    const relPath = relative(rootReal, absReal).split(sep).join("/");
+    if (!relPath || relPath.startsWith("..") || relPath.split("/").includes("..")) {
+      throw new FhvT4MandatoryEvidenceInventoryError(
+        "FHV_T4_INV_RELATIVE_PATH_UNSAFE",
+        `Evidence path escapes namespace ${entry.namespace}: ${entry.abs}`,
+      );
+    }
+    const rel = `${entry.namespace}/${relPath}`;
     if (seenRelative.has(rel)) {
       throw new FhvT4MandatoryEvidenceInventoryError(
         "FHV_T4_INV_DUPLICATE_RELATIVE_PATH",

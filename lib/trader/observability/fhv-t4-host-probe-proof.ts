@@ -5,7 +5,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
+import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import {
   FHV_SYSTEMD_LEGACY_CONTAINER_IMAGE,
@@ -150,7 +150,7 @@ export function ingestFhvT4HostProbeProofAtomic(input: {
     ...withoutDigest,
     contentDigest: computePayloadDigest(withoutDigest),
   };
-  writeFileAtomic(
+  writeFileAtomicExclusive(
     resolveFhvT4HostProbeProofPathForPhase(input.runRoot, hostProbePhase),
     `${JSON.stringify(proof, null, 2)}\n`,
   );

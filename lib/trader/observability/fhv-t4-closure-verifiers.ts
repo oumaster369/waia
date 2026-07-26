@@ -6,6 +6,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { verifyFhvT4CeremonyQualificationProofs } from "@/lib/trader/observability/fhv-t4a-ceremony-qualification";
+import { FhvT4CeremonyQualificationError } from "@/lib/trader/observability/fhv-t4a-ceremony-qualification-errors";
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 
 import { HTR_WP03_BENCHMARK_EXPECTED_CYCLES } from "@/lib/trader/backtest/replay-benchmark-harness";
@@ -1200,6 +1202,21 @@ export function verifyFhvT4Ceremony(input: {
   const manifest = readFhvRehearsalManifest(input.identity.runRoot);
   assertAlertPolicyDigest(input.identity.runRoot, manifest.alertPolicyDigest);
 
+  try {
+    verifyFhvT4CeremonyQualificationProofs({
+      runRoot: input.identity.runRoot,
+      targetSha: input.identity.targetSha,
+      runId: input.identity.runId,
+      organizationId: input.identity.organizationId,
+      continuityBeforePath: input.continuityBeforePath,
+      continuityAfterPath: input.continuityAfterPath,
+    });
+  } catch (error) {
+    if (error instanceof FhvT4CeremonyQualificationError) {
+      throw new FhvT4ClosureVerifierError(error.code, error.message);
+    }
+    throw error;
+  }
   const passFields: FhvT4CeremonyPassFields = {
     T4A_RESULT: "PASS",
     GATE8_RESULT: "PASS",

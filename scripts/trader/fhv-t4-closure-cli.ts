@@ -518,12 +518,13 @@ export async function runFhvT4ClosureCli(
             "--output required",
           );
         }
-        const { writeFhvT4ObserverQualificationProofAtomic } =
-          await import("@/lib/trader/observability/fhv-t4-observer-qualification-proof");
-        const parsed = JSON.parse(config.observerQualificationProofJson) as Omit<
-          import("@/lib/trader/observability/fhv-t4-observer-qualification-proof").FhvT4ObserverQualificationProofV1,
-          "contentDigest"
-        >;
+        const {
+          writeFhvT4ObserverQualificationProofAtomic,
+          parseFhvT4ObserverQualificationProofUnsigned,
+        } = await import("@/lib/trader/observability/fhv-t4-observer-qualification-proof");
+        const parsed = parseFhvT4ObserverQualificationProofUnsigned(
+          JSON.parse(config.observerQualificationProofJson),
+        );
         const proof = writeFhvT4ObserverQualificationProofAtomic(config.outputPath, parsed);
         lines.push("classification=FHV_T4_OBSERVER_QUALIFICATION_PROOF_OK");
         return { exitCode: 0, lines, payload: proof };

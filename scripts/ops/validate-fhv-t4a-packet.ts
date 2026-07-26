@@ -20,7 +20,7 @@ import {
   FHV_T4A_OPERATOR_STEPS,
   fhvT4aOperatorReleaseCheckoutIdentityArgs,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
-import { resolveFhvT4aOperatorBindings } from "@/scripts/ops/fhv-t4a-operator";
+import { resolveFhvT4aOperatorBindingsFromSpec } from "@/lib/trader/observability/fhv-t4a-binding-spec";
 
 const ROOT = process.cwd();
 const PACKET = join(ROOT, "docs/ops/T4_OPERATOR_PACKET_V5.md");
@@ -111,14 +111,21 @@ function main(): void {
   }
 
   const operatorBody = readFileSync(join(ROOT, "scripts/ops/fhv-t4a-operator.ts"), "utf8");
+  const bindingSpecBody = readFileSync(
+    join(ROOT, "lib/trader/observability/fhv-t4a-binding-spec.ts"),
+    "utf8",
+  );
   if (!operatorBody.includes("executeFhvT4aStep")) {
     fail("operator must execute steps via executeFhvT4aStep (no trace-only POST loops)");
   }
   if (operatorBody.includes("FHV_T4A_OPERATOR_TRACE_PATH")) {
     fail("operator must not alias remote trace path for workstation trace");
   }
-  if (!operatorBody.includes("FHV_T4A_LOCAL_STATE_DIR")) {
-    fail("operator must bind FHV_T4A_LOCAL_STATE_DIR for workstation receipts");
+  if (!bindingSpecBody.includes("FHV_T4A_LOCAL_STATE_DIR")) {
+    fail("binding spec must bind FHV_T4A_LOCAL_STATE_DIR for workstation receipts");
+  }
+  if (!operatorBody.includes("resolveFhvT4aOperatorBindingsFromSpec")) {
+    fail("operator must resolve bindings from canonical binding spec");
   }
 
   try {
@@ -129,12 +136,12 @@ function main(): void {
 
   const operatorBindingEnvNames = resolveFhvT4aOperatorBindingEnvNames();
   for (const name of operatorBindingEnvNames) {
-    if (!operatorBody.includes(name)) {
-      fail(`operator resolveFhvT4aOperatorBindings must require env ${name}`);
+    if (!bindingSpecBody.includes(name)) {
+      fail(`binding spec must require env ${name}`);
     }
   }
-  if (typeof resolveFhvT4aOperatorBindings !== "function") {
-    fail("resolveFhvT4aOperatorBindings export missing");
+  if (typeof resolveFhvT4aOperatorBindingsFromSpec !== "function") {
+    fail("resolveFhvT4aOperatorBindingsFromSpec export missing");
   }
 
   const counters = auditFhvT4aClosureCounters({ root: ROOT, evidenceProvided: true });

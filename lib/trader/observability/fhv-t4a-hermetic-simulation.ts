@@ -4,7 +4,15 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  appendFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -12,11 +20,47 @@ import {
   FHV_T4A_LEGACY_CONTAINER_IMAGE,
   FHV_T4A_LEGACY_CONTAINER_NAME,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
+import { serializeFhvT4CompletedCampaignSystemdIdentity } from "@/lib/trader/observability/fhv-t4-completed-campaign-systemd-identity";
+import {
+  FHV_SYSTEMD_CAMPAIGN_UNIT,
+  FHV_SYSTEMD_OBSERVER_UNIT,
+} from "@/lib/trader/observability/fhv-systemd-unit-config";
+import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
+import { computeFhvAlertPolicyDigest } from "@/lib/trader/observability/fhv-alert-policy-v1";
+import { renderFhvSystemdUnits } from "@/lib/trader/observability/fhv-systemd-unit-renderer";
 import { writeFhvSystemdDeployedRevisionAtomic } from "@/lib/trader/observability/fhv-systemd-deployed-revision";
+import { writeFhvCampaignControlPauseRequest } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
+import {
+  FHV_T4_RESUME_ENFORCEMENT_PROOF_FILENAME,
+  serializeFhvT4ResumeEnforcementProof,
+} from "@/lib/trader/observability/fhv-t4-resume-enforcement-proof";
+
+const HERMETIC_TRADER_CLI_PRELUDE = join(
+  process.cwd(),
+  "scripts/trader/trader-cli-server-only-prelude.cjs",
+);
+
+const HERMETIC_CAMPAIGN_SYNC_TIMEOUT_MS = 180_000;
 
 const HERMETIC_STRICT_CLOSURE_PACKAGE_SCRIPTS = new Set([
+  "trader:fhv:t4:write-observer-qualification-proof",
   "trader:fhv:t4:ingest-host-probe",
+  "trader:fhv:t4:verify-deployment",
   "trader:fhv:t4:verify-rollback",
+  "trader:fhv:t4:build-evidence-inventory",
+  "trader:fhv:t4:seal-evidence",
+  "trader:fhv:t4:verify-seal",
+  "trader:fhv:t4:verify-ceremony",
+  "trader:fhv:t4:wait-paused",
+  "trader:fhv:t4:verify-paused",
+  "trader:fhv:t4:wait-final",
+  "trader:fhv:t4:verify-final",
+]);
+
+const HERMETIC_STRICT_CONTINUITY_PACKAGE_SCRIPTS = new Set([
+  "trader:fhv:t4:capture-continuity-before",
+  "trader:fhv:t4:capture-continuity-after",
+  "trader:fhv:t4:verify-continuity",
 ]);
 
 /** Marker for closure-counter audit: generic unknown-command success must stay disabled. */
@@ -66,6 +110,13 @@ function uuid(): string {
   return createHash("sha256").update(String(Math.random())).digest("hex").slice(0, 32);
 }
 
+function hermeticServiceUserIdsJson(): string {
+  return JSON.stringify({
+    uid: typeof process.getuid === "function" ? process.getuid() : 1001,
+    gid: typeof process.getgid === "function" ? process.getgid() : 1001,
+  });
+}
+
 export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulationOptions) {
   const remoteRoot = mkdtempSync(join(tmpdir(), "fhv-t4a-remote-"));
   const emptyCwd = join(remoteRoot, "empty-cwd");
@@ -76,12 +127,41 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
   const repoRoot = join(options.checkoutParent, `waia-${options.targetSha}`);
   const runDir = join(options.artifactRoot, "RI-P7/fhv-ops-rehearsal", options.runId);
   const bootId = "11111111-2222-4333-8444-555555555555";
+  const observerBootIdHex = bootId.replace(/-/g, "");
+
+  const buildHermeticCampaignIdentity = () =>
+    serializeFhvT4CompletedCampaignSystemdIdentity({
+      schemaVersion: "fhv-t4-completed-campaign-systemd-identity/v1",
+      unitName: "waia-fhv-campaign.service",
+      bootId,
+      activeState: "inactive",
+      subState: "dead",
+      result: "success",
+      invocationId: campaign.invocationId || nextInvocation(),
+      execMainPid: campaign.mainPid > 0 ? campaign.mainPid : 1001,
+      execMainStartTimestampMonotonic: "1000000",
+      execMainExitTimestampMonotonic: "2000000",
+      execMainCode: 1,
+      execMainStatus: 0,
+      nRestarts: campaign.nRestarts,
+    });
+
+  const buildHermeticObserverIdentity = () => ({
+    schemaVersion: "fhv-t4-observer-systemd-identity/v1" as const,
+    unitName: "waia-fhv-observer.service",
+    bootId: observerBootIdHex,
+    invocationId: observer.invocationId || nextInvocation(),
+    mainPid: observer.mainPid > 0 ? observer.mainPid : 1001,
+    activeEnterTimestampMonotonicUs: observer.activeEnterMonotonic || "1000000",
+    activeState: "active" as const,
+  });
 
   let remoteWrites = 0;
   let invocationCounter = 0;
   let campaignPaused = false;
   let campaignCompleted = false;
   let resumeEnforced = false;
+  let initialCampaignExecuted = false;
 
   const observer: SystemdUnitState = {
     invocationId: "",
@@ -175,33 +255,110 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
 
   loadSimulationState();
 
-  const ensureRehearsalEvidenceChain = (): void => {
+  const runHermeticRehearsalCampaignSync = (
+    mode: "initial" | "resume",
+  ): FhvT4aHermeticSshResult => {
+    ensureRunLayout();
+    const workspaceRoot = process.cwd();
+    const cliPath = join(workspaceRoot, "scripts/trader/fhv-t4a-hermetic-campaign-sync.ts");
+    const result = spawnSync(
+      options.nodeBin,
+      [
+        "--require",
+        HERMETIC_TRADER_CLI_PRELUDE,
+        "--import",
+        "tsx",
+        "--conditions=react-server",
+        cliPath,
+        mode,
+        runDir,
+        options.runId,
+        options.organizationId,
+        options.targetSha,
+        bootId,
+      ],
+      {
+        cwd: workspaceRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          WAIA_TRADER_CLI: "1",
+          VITEST: "",
+        },
+        timeout: HERMETIC_CAMPAIGN_SYNC_TIMEOUT_MS,
+      },
+    );
+    if (mode === "initial") {
+      campaignPaused = result.status === 0;
+    }
+    if (mode === "resume") {
+      campaignCompleted = result.status === 0;
+    }
+    return {
+      exitCode: result.status ?? 1,
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+    };
+  };
+
+  const appendHermeticCommandLedger = (
+    action: "PAUSE_AT_CHECKPOINT" | "RESUME_FROM_CHECKPOINT",
+    commandId: string,
+    idempotencyKey: string,
+  ): void => {
     ensureRunLayout();
     mkdirSync(join(runDir, "control"), { recursive: true });
-    const terminalPath = join(runDir, "fhv-rehearsal-terminal.v1.json");
-    if (!existsSync(terminalPath)) {
-      writeJson(terminalPath, { classification: "REHEARSAL_PAUSED_AT_CYCLE_40" });
-    }
     const ledgerPath = join(runDir, "control/command-ledger.jsonl");
     if (!existsSync(ledgerPath)) {
       writeFileSync(ledgerPath, "");
     }
-    const pausePath = join(runDir, "control/fhv-t4-pause-armed.v1.json");
-    if (!existsSync(pausePath)) {
-      writeJson(pausePath, {
-        schemaVersion: "fhv-t4-pause-armed/v1",
-        runId: options.runId,
+    const entry = {
+      recordedAtUtc: new Date().toISOString(),
+      command: {
+        schemaVersion: "fhv-operator-command/v1",
+        commandId,
+        campaignRunId: options.runId,
         organizationId: options.organizationId,
-        targetSha: options.targetSha,
-      });
-    }
-    const resumePath = join(runDir, "fhv-resume-runtime-proof.v1.json");
-    if (!existsSync(resumePath)) {
-      writeJson(resumePath, {
-        schemaVersion: "fhv-resume-runtime-proof/v1",
-        runId: options.runId,
-        organizationId: options.organizationId,
-      });
+        operatorId: options.operatorId ?? "hermetic-operator",
+        action,
+        reason: "hermetic-integration",
+        issuedAtUtc: new Date().toISOString(),
+        expiresAtUtc: new Date(Date.now() + 3_600_000).toISOString(),
+        nonce: `${commandId}-nonce`,
+        idempotencyKey,
+        expectedCampaignState:
+          action === "PAUSE_AT_CHECKPOINT"
+            ? { phase: "RUNNING" }
+            : { phase: "PAUSED_RESUMABLE", checkpointSeq: 40 },
+        confirmationPhraseClass: action === "PAUSE_AT_CHECKPOINT" ? "PAUSE" : "RESUME",
+        signature: "hermetic-signature",
+        signatureAlgorithm: "HMAC-SHA256",
+      },
+      source: "test" as const,
+    };
+    appendFileSync(ledgerPath, `${JSON.stringify(entry)}\n`);
+    mkdirSync(join(runDir, "control/command-results"), { recursive: true });
+    const isResume = action === "RESUME_FROM_CHECKPOINT";
+    writeFileSync(
+      join(runDir, "control/command-results", `${commandId}.json`),
+      `${JSON.stringify({
+        schemaVersion: "fhv-command-result/v1",
+        commandId,
+        idempotencyKey,
+        status: isResume ? "accepted" : "executed",
+        message: isResume ? "RESUME accepted; root systemd enforcement required" : "hermetic",
+        completedAtUtc: new Date().toISOString(),
+        enforcementApplied: !isResume,
+      })}\n`,
+    );
+  };
+
+  const ensureRehearsalEvidenceChain = (): void => {
+    ensureRunLayout();
+    mkdirSync(join(runDir, "control"), { recursive: true });
+    const ledgerPath = join(runDir, "control/command-ledger.jsonl");
+    if (!existsSync(ledgerPath)) {
+      writeFileSync(ledgerPath, "");
     }
   };
 
@@ -216,11 +373,25 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     const cliPath = join(workspaceRoot, "scripts/trader/fhv-t4-closure-cli.ts");
     const result = spawnSync(
       options.nodeBin,
-      ["--import", "tsx", "--conditions=react-server", cliPath, subcommand, ...args],
+      [
+        "--require",
+        HERMETIC_TRADER_CLI_PRELUDE,
+        "--import",
+        "tsx",
+        "--conditions=react-server",
+        cliPath,
+        subcommand,
+        ...args,
+      ],
       {
         cwd: workspaceRoot,
         encoding: "utf8",
-        env: { ...process.env, WAIA_TRADER_CLI: "1", VITEST: "" },
+        env: {
+          ...process.env,
+          WAIA_TRADER_CLI: "1",
+          VITEST: "",
+          FHV_T4_SERVICE_USER_IDS_JSON: hermeticServiceUserIdsJson(),
+        },
       },
     );
     return {
@@ -235,11 +406,16 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     mkdirSync(join(runDir, "control"), { recursive: true });
     if (!existsSync(join(runDir, "fhv-rehearsal-manifest.v1.json"))) {
       writeJson(join(runDir, "fhv-rehearsal-manifest.v1.json"), {
-        schemaVersion: "fhv-rehearsal-manifest/v1",
+        schemaVersion: "fhv-rehearsal-launch/v1",
+        fixtureId: "HTR_WP03_BENCHMARK",
+        targetSha: options.targetSha,
         runId: options.runId,
         organizationId: options.organizationId,
-        targetSha: options.targetSha,
-        runDir,
+        artifactRoot: options.artifactRoot,
+        alertPolicyDigest: computeFhvAlertPolicyDigest(),
+        maxRuntimeMs: 300_000,
+        t4DeterministicPause: true,
+        deterministicPauseAtCycle: 40,
       });
     }
   };
@@ -258,7 +434,15 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     if (/start waia-fhv-campaign\.service/.test(cmd) && !resumeEnforced) {
+      if (!initialCampaignExecuted) {
+        initialCampaignExecuted = true;
+        const campaignResult = runHermeticRehearsalCampaignSync("initial");
+        if (campaignResult.exitCode !== 0) {
+          return campaignResult;
+        }
+      }
       startUnit(campaign);
+      campaignPaused = true;
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     if (/start waia-fhv-campaign\.service/.test(cmd) && resumeEnforced) {
@@ -270,10 +454,57 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     return { exitCode: 1, stdout: "", stderr: "systemctl: unit not handled" };
   };
 
+  const runHermeticStrictContinuityScript = (
+    packageScript: string,
+    args: readonly string[],
+  ): FhvT4aHermeticSshResult => {
+    ensureRehearsalEvidenceChain();
+    mkdirSync(repoRoot, { recursive: true });
+    const workspaceRoot = process.cwd();
+    const subcommand =
+      packageScript === "trader:fhv:t4:verify-continuity"
+        ? "verify"
+        : `capture-${packageScript.slice("trader:fhv:t4:capture-continuity-".length)}`;
+    const cliPath = join(workspaceRoot, "scripts/trader/fhv-t4-continuity-cli.ts");
+    const result = spawnSync(
+      options.nodeBin,
+      [
+        "--require",
+        HERMETIC_TRADER_CLI_PRELUDE,
+        "--import",
+        "tsx",
+        "--conditions=react-server",
+        cliPath,
+        subcommand,
+        ...args,
+      ],
+      {
+        cwd: workspaceRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          WAIA_TRADER_CLI: "1",
+          VITEST: "",
+          FHV_T4_OBSERVER_SYSTEMD_IDENTITY_JSON: JSON.stringify(buildHermeticObserverIdentity()),
+          FHV_T4_CAMPAIGN_SYSTEMD_IDENTITY_JSON: JSON.stringify(buildHermeticCampaignIdentity()),
+          FHV_T4_SERVICE_USER_IDS_JSON: hermeticServiceUserIdsJson(),
+        },
+      },
+    );
+    return {
+      exitCode: result.status ?? 1,
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+    };
+  };
+
   const handlePackage = (packageScript: string, args: string[]): FhvT4aHermeticSshResult => {
     ensureRunLayout();
     if (HERMETIC_STRICT_CLOSURE_PACKAGE_SCRIPTS.has(packageScript)) {
       return runHermeticStrictPackageScript(packageScript, args);
+    }
+    if (HERMETIC_STRICT_CONTINUITY_PACKAGE_SCRIPTS.has(packageScript)) {
+      return runHermeticStrictContinuityScript(packageScript, args);
     }
     if (packageScript === "trader:fhv:rehearsal") {
       return {
@@ -283,12 +514,23 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       };
     }
     if (packageScript === "trader:fhv:t4:record-checkout-identity") {
-      writeJson(join(runDir, "control/fhv-t4-checkout-identity.v1.json"), {
-        schemaVersion: "fhv-t4-checkout-identity/v1",
-        targetSha: options.targetSha,
+      const withoutDigest = {
+        schemaVersion: "fhv-t4-checkout-identity/v1" as const,
+        repoPath: repoRoot,
+        releaseSha: options.targetSha,
         releaseTag: options.releaseTag,
+        headSha: options.targetSha,
+        tagPeelSha: options.targetSha,
+        trackedTreeClean: true as const,
+        stagedChanges: false as const,
+        mergeInProgress: false as const,
         runId: options.runId,
         organizationId: options.organizationId,
+        capturedAtUtc: new Date().toISOString(),
+      };
+      writeJson(join(runDir, "control/fhv-t4-checkout-identity.v1.json"), {
+        ...withoutDigest,
+        contentDigest: computePayloadDigest(withoutDigest),
       });
       return { exitCode: 0, stdout: "classification=FHV_T4_CHECKOUT_IDENTITY_OK\n", stderr: "" };
     }
@@ -300,48 +542,44 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       };
     }
     if (packageScript === "trader:fhv:t4:arm-pause") {
+      const withoutDigest = {
+        schemaVersion: "fhv-t4-pause-armed/v1" as const,
+        runId: options.runId,
+        organizationId: options.organizationId,
+        targetSha: options.targetSha,
+        fixtureId: "HTR_WP03_BENCHMARK" as const,
+        deterministicPauseAtCycle: 40 as const,
+        commandId: "hermetic-pause-cmd",
+        idempotencyKey: "hermetic-pause-key",
+        operatorId: options.operatorId ?? "hermetic-operator",
+        armedAtUtc: new Date().toISOString(),
+      };
+      writeJson(join(runDir, "control/fhv-t4-pause-armed.v1.json"), {
+        ...withoutDigest,
+        contentDigest: computePayloadDigest(withoutDigest),
+      });
+      appendHermeticCommandLedger(
+        "PAUSE_AT_CHECKPOINT",
+        "hermetic-pause-cmd",
+        "hermetic-pause-key",
+      );
+      writeFhvCampaignControlPauseRequest(runDir, options.runId, options.organizationId);
       return { exitCode: 0, stdout: "classification=FHV_T4_PAUSE_ARMED\n", stderr: "" };
     }
     if (packageScript === "trader:fhv:t4:verify") {
       return { exitCode: 0, stdout: "classification=FHV_T4_VERIFY_OK\n", stderr: "" };
     }
-    if (packageScript === "trader:fhv:t4:wait-paused") {
-      campaignPaused = true;
-      campaign.activeState = "inactive";
-      campaign.result = "success";
-      writeJson(join(runDir, "fhv-rehearsal-terminal.v1.json"), {
-        classification: "REHEARSAL_PAUSED_AT_CYCLE_40",
-      });
-      writeJson(join(runDir, "control/fhv-t4-paused-verification-proof.v1.json"), {
-        schemaVersion: "fhv-t4-paused-verification-proof/v1",
-        classification: "REHEARSAL_PAUSED_AT_CYCLE_40",
-      });
-      return { exitCode: 0, stdout: "PAUSE_RESULT=REHEARSAL_PAUSED_AT_CYCLE_40\n", stderr: "" };
-    }
-    if (packageScript === "trader:fhv:t4:verify-paused") {
-      return { exitCode: 0, stdout: "classification=FHV_T4_PAUSED_VERIFY_OK\n", stderr: "" };
-    }
     if (packageScript === "trader:fhv:t4:resume") {
+      appendHermeticCommandLedger(
+        "RESUME_FROM_CHECKPOINT",
+        "hermetic-resume-cmd",
+        "hermetic-resume-key",
+      );
       return {
         exitCode: 0,
         stdout: "status=accepted\nclassification=FHV_T4_RESUME_ACCEPTED\n",
         stderr: "",
       };
-    }
-    if (packageScript === "trader:fhv:t4:wait-final") {
-      if (!resumeEnforced) {
-        return { exitCode: 2, stdout: "", stderr: "resume enforcement missing" };
-      }
-      campaign.activeState = "active";
-      writeJson(join(runDir, "fhv-t4-campaign-runtime.v1.json"), {
-        schemaVersion: "fhv-t4-campaign-runtime/v1",
-        bootId,
-        invocationId: campaign.invocationId,
-      });
-      return { exitCode: 0, stdout: "classification=FHV_T4_FINAL_WAIT_OK\n", stderr: "" };
-    }
-    if (packageScript === "trader:fhv:t4:verify-final") {
-      return { exitCode: 0, stdout: "classification=FHV_T4_FINAL_VERIFY_OK\n", stderr: "" };
     }
     if (packageScript === "trader:fhv:t4:capture-continuity-before") {
       const out =
@@ -393,49 +631,6 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       return {
         exitCode: 0,
         stdout: "classification=FHV_T4_OBSERVER_QUALIFICATION_PROOF_OK\n",
-        stderr: "",
-      };
-    }
-    if (packageScript === "trader:fhv:t4:verify-deployment") {
-      return { exitCode: 0, stdout: "classification=FHV_T4_DEPLOYMENT_VERIFY_OK\n", stderr: "" };
-    }
-    if (packageScript === "trader:fhv:t4:verify-rollback") {
-      return { exitCode: 0, stdout: "classification=FHV_T4_ROLLBACK_VERIFY_OK\n", stderr: "" };
-    }
-    if (packageScript === "trader:fhv:t4:build-evidence-inventory") {
-      return { exitCode: 0, stdout: "classification=FHV_T4_EVIDENCE_INVENTORY_OK\n", stderr: "" };
-    }
-    if (packageScript === "trader:fhv:t4:seal-evidence") {
-      const sealPath =
-        args[args.indexOf("--seal-destination") + 1] ??
-        join(options.artifactRoot, "RI-P7/fhv-ops-rehearsal-seals", options.runId);
-      writeJson(join(sealPath, "fhv-t4-evidence-seal.v1.json"), {
-        schemaVersion: "fhv-t4-evidence-seal/v1",
-        runId: options.runId,
-      });
-      return { exitCode: 0, stdout: "classification=FHV_T4_EVIDENCE_SEAL_OK\n", stderr: "" };
-    }
-    if (packageScript === "trader:fhv:t4:verify-seal") {
-      return { exitCode: 0, stdout: "classification=FHV_T4_EVIDENCE_SEAL_VERIFY_OK\n", stderr: "" };
-    }
-    if (packageScript === "trader:fhv:t4:verify-continuity") {
-      return { exitCode: 0, stdout: "CONTINUITY_RESULT=PASS\n", stderr: "" };
-    }
-    if (packageScript === "trader:fhv:t4:verify-ceremony") {
-      return {
-        exitCode: 0,
-        stdout:
-          [
-            "T4A_RESULT=PASS",
-            "GATE8_RESULT=PASS",
-            "T4B_RESULT=NOT_EXECUTED_SEPARATE_GATE",
-            "PAUSE_RESULT=REHEARSAL_PAUSED_AT_CYCLE_40",
-            "RESUME_RESULT=REHEARSAL_OK",
-            "FULL_HISTORY_RESCAN_DELTA=0",
-            "CONTINUITY_RESULT=PASS",
-            "ROLLBACK_RESULT=PASS",
-            "EVIDENCE_SEAL_RESULT=PASS",
-          ].join("\n") + "\n",
         stderr: "",
       };
     }
@@ -569,6 +764,20 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
             serviceUid: 1001,
             serviceGid: 1001,
             servicePrimaryGroup: options.serviceUser,
+            environmentFile: options.environmentFile,
+            artifactRoot: options.artifactRoot,
+            checkoutParent: options.checkoutParent,
+            nodeBin: options.nodeBin,
+            corepackBin: options.corepackBin,
+            gitBin: options.gitBin,
+            pythonBin: options.pythonBin,
+            dockerBin: options.dockerBin,
+            legacyContainerName: FHV_T4A_LEGACY_CONTAINER_NAME,
+            legacyContainerImage: FHV_T4A_LEGACY_CONTAINER_IMAGE,
+            legacyContainerState: "running",
+            minimumFreeKiB: 1000000,
+            observedFreeKiB: 5000000,
+            hostMonotonicSample: { source: "CLOCK_MONOTONIC", value: 12345 },
           })}\nclassification=FHV_T4_HOST_PREFLIGHT_OK\n`,
           stderr: "",
         };
@@ -632,16 +841,31 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     }
 
     if (/fhv-t4-resume-campaign-root\.sh/.test(remoteCommand)) {
+      const previousInvocationId = campaign.invocationId || nextInvocation();
       resumeEnforced = true;
-      writeJson(join(runDir, "control/fhv-t4-resume-enforcement-proof.v1.json"), {
+      const campaignResult = runHermeticRehearsalCampaignSync("resume");
+      if (campaignResult.exitCode !== 0) {
+        return campaignResult;
+      }
+      startUnit(campaign);
+      const proof = serializeFhvT4ResumeEnforcementProof({
         schemaVersion: "fhv-t4-resume-enforcement-proof/v1",
         runId: options.runId,
         organizationId: options.organizationId,
         targetSha: options.targetSha,
-        newInvocationId: nextInvocation(),
+        resumeCommandId: "hermetic-resume-cmd",
+        resumeIdempotencyKey: "hermetic-resume-key",
+        bootId,
+        campaignUnitName: FHV_SYSTEMD_CAMPAIGN_UNIT,
+        previousInvocationId,
+        newInvocationId: campaign.invocationId,
+        execMainPid: campaign.mainPid,
+        execMainStartTimestampMonotonic: campaign.activeEnterMonotonic,
         nRestarts: campaign.nRestarts,
+        enforcedAtUtc: new Date().toISOString(),
       });
-      startUnit(campaign);
+      writeJson(join(runDir, "control", FHV_T4_RESUME_ENFORCEMENT_PROOF_FILENAME), proof);
+      campaignCompleted = true;
       return { exitCode: 0, stdout: "classification=FHV_T4_RESUME_ENFORCEMENT_OK\n", stderr: "" };
     }
 
@@ -660,7 +884,7 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     if (/fhv-t4-campaign-systemd-identity-read\.sh/.test(remoteCommand)) {
       return {
         exitCode: 0,
-        stdout: `${JSON.stringify({ bootId, invocationId: campaign.invocationId, activeState: campaign.activeState })}\n`,
+        stdout: `${JSON.stringify(buildHermeticCampaignIdentity())}\n`,
         stderr: "",
       };
     }
@@ -672,13 +896,7 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     if (/fhv-t4-observer-systemd-identity-read\.sh/.test(remoteCommand)) {
       return {
         exitCode: 0,
-        stdout: `${JSON.stringify({
-          bootId,
-          invocationId: observer.invocationId,
-          mainPid: observer.mainPid,
-          activeEnterTimestampMonotonicUs: observer.activeEnterMonotonic,
-          activeState: observer.activeState,
-        })}\n`,
+        stdout: `${JSON.stringify(buildHermeticObserverIdentity())}\n`,
         stderr: "",
       };
     }
@@ -757,15 +975,12 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       if (!remoteCommand.includes("--systemctl-bin") || !remoteCommand.includes("--confirm")) {
         return { exitCode: 0, stdout: "planned install\n", stderr: "" };
       }
-      recordWrite(join(repoRoot, ".ops/rendered-units/units.stamp"));
+      installHermeticUnits();
       return { exitCode: 0, stdout: "classification=FHV_T4_INSTALL_OK\n", stderr: "" };
     }
 
     if (/render-units\.sh/.test(remoteCommand)) {
-      recordWrite(join(repoRoot, ".ops/rendered-units/units.stamp"));
-      mkdirSync(join(repoRoot, ".ops/rendered-units"), { recursive: true });
-      writeFileSync(join(repoRoot, ".ops/rendered-units/waia-fhv-campaign.service"), "[Unit]\n");
-      writeFileSync(join(repoRoot, ".ops/rendered-units/waia-fhv-observer.service"), "[Unit]\n");
+      writeHermeticRenderedUnits();
       return { exitCode: 0, stdout: "classification=FHV_T4_RENDER_OK\n", stderr: "" };
     }
 
@@ -780,15 +995,21 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
         return { exitCode: 0, stdout: "planned deploy record\n", stderr: "" };
       }
       mkdirSync(repoRoot, { recursive: true });
+      writeHermeticRenderedUnits();
+      const renderedDigests = {
+        [FHV_SYSTEMD_CAMPAIGN_UNIT]: sha256Hex(
+          readFileSync(join(repoRoot, ".ops/rendered-units", FHV_SYSTEMD_CAMPAIGN_UNIT), "utf8"),
+        ),
+        [FHV_SYSTEMD_OBSERVER_UNIT]: sha256Hex(
+          readFileSync(join(repoRoot, ".ops/rendered-units", FHV_SYSTEMD_OBSERVER_UNIT), "utf8"),
+        ),
+      };
       writeFhvSystemdDeployedRevisionAtomic(repoRoot, {
         releaseSha: options.targetSha,
         releaseTag: options.releaseTag,
         runId: options.runId,
         organizationId: options.organizationId,
-        renderedUnitDigests: {
-          "waia-fhv-campaign.service": "a".repeat(64),
-          "waia-fhv-observer.service": "b".repeat(64),
-        },
+        renderedUnitDigests: renderedDigests,
         installedAtUtc: new Date().toISOString(),
         operatorId: options.operatorId ?? "hermetic-operator",
         serviceUser: options.serviceUser,
@@ -823,8 +1044,47 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     installedUnitsDir: join(remoteRoot, "etc/systemd/system"),
   };
 
+  const writeHermeticRenderedUnits = (): void => {
+    const units = renderFhvSystemdUnits({
+      schemaVersion: "fhv-systemd-unit-config/v1",
+      hostOs: "linux",
+      qualifiedSupervisor: "SYSTEMD",
+      repoRoot,
+      workingDirectory: repoRoot,
+      serviceUser: options.serviceUser,
+      environmentFile: options.environmentFile,
+      targetSha: options.targetSha,
+      nodeBin: options.nodeBin,
+      fhvRunRoot: runDir,
+      fhvRunId: options.runId,
+      fhvOrganizationId: options.organizationId,
+      observerPort: 9471,
+    });
+    mkdirSync(join(repoRoot, ".ops/rendered-units"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, ".ops/rendered-units", FHV_SYSTEMD_CAMPAIGN_UNIT),
+      units.campaignUnit,
+    );
+    writeFileSync(
+      join(repoRoot, ".ops/rendered-units", FHV_SYSTEMD_OBSERVER_UNIT),
+      units.observerUnit,
+    );
+    recordWrite(join(repoRoot, ".ops/rendered-units"));
+  };
+
+  const installHermeticUnits = (): void => {
+    writeHermeticRenderedUnits();
+    mkdirSync(remoteNamespaceRoots.installedUnitsDir, { recursive: true });
+    for (const unit of [FHV_SYSTEMD_CAMPAIGN_UNIT, FHV_SYSTEMD_OBSERVER_UNIT] as const) {
+      const renderedPath = join(repoRoot, ".ops/rendered-units", unit);
+      const installedPath = join(remoteNamespaceRoots.installedUnitsDir, unit);
+      writeFileSync(installedPath, readFileSync(renderedPath, "utf8"));
+      recordWrite(installedPath);
+    }
+  };
+
   const resolveRemotePath = (remotePath: string): string => {
-    if (remotePath.startsWith(remoteNamespaceRoots.installedUnitsDir)) {
+    if (remotePath.startsWith("/etc/systemd/system")) {
       return remotePath.replace("/etc/systemd/system", remoteNamespaceRoots.installedUnitsDir);
     }
     return remotePath;
@@ -834,6 +1094,7 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     repoRoot,
     runDir,
     bootId,
+    installedUnitsDir: remoteNamespaceRoots.installedUnitsDir,
     remoteWriteCount: () => remoteWrites,
     resetRemoteWrites: () => {
       remoteWrites = 0;

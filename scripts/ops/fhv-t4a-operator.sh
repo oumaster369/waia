@@ -12,4 +12,4 @@ exec env WAIA_TRADER_CLI=1 \
   FHV_LOCAL_NODE_BIN="${FHV_LOCAL_NODE_BIN}" \
   FHV_LOCAL_GIT_BIN="${FHV_LOCAL_GIT_BIN}" \
   FHV_LOCAL_SSH_BIN="${FHV_LOCAL_SSH_BIN}" \
-  "${FHV_LOCAL_NODE_BIN}" --import tsx "${SCRIPT_DIR}/fhv-t4a-operator.ts" "$@"
+  "${FHV_LOCAL_NODE_BIN}" --require "${SCRIPT_DIR}/../trader/trader-cli-server-only-prelude.cjs" --import tsx "${SCRIPT_DIR}/fhv-t4a-operator.ts" "$@"

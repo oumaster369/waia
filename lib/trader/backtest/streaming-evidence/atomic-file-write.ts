@@ -8,7 +8,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
-import { dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { StreamingEvidenceError } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 
@@ -24,7 +24,7 @@ export class AtomicFileWriteError extends Error {
   }
 }
 
-/** Create finalPath exclusively (O_EXCL); fail if the target already exists. */
+/** Create finalPath exclusively; fail closed if the target already exists. */
 export function writeFileAtomicExclusive(finalPath: string, bytes: Buffer | string): void {
   if (existsSync(finalPath)) {
     throw new AtomicFileWriteError(
@@ -33,23 +33,37 @@ export function writeFileAtomicExclusive(finalPath: string, bytes: Buffer | stri
     );
   }
   const payload = typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes;
+  const directory = dirname(finalPath);
+  tempCounter += 1;
+  const tempPath = join(
+    directory,
+    `.${basename(finalPath)}.tmp-${process.pid}-${process.hrtime.bigint()}-${tempCounter}`,
+  );
   let fd: number | null = null;
   try {
-    fd = openSync(finalPath, "wx");
+    fd = openSync(tempPath, "wx");
     writeSync(fd, payload);
     fsyncSync(fd);
     closeSync(fd);
     fd = null;
+    renameSync(tempPath, finalPath);
+    try {
+      const dirFd = openSync(directory, "r");
+      fsyncSync(dirFd);
+      closeSync(dirFd);
+    } catch {
+      // Directory fsync is best-effort on platforms without directory fd support.
+    }
   } catch (error) {
     if (fd !== null) {
       closeSync(fd);
     }
     try {
-      if (existsSync(finalPath)) {
-        unlinkSync(finalPath);
+      if (existsSync(tempPath)) {
+        unlinkSync(tempPath);
       }
     } catch {
-      // best-effort cleanup after failed exclusive create
+      // best-effort cleanup of writer-owned temp only
     }
     throw new AtomicFileWriteError(
       "STREAMING_EVIDENCE_ATOMIC_EXCLUSIVE_WRITE_FAILED",

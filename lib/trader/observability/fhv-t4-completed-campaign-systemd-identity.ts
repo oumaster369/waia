@@ -202,13 +202,18 @@ export function readFhvT4CompletedCampaignSystemdIdentity(
     return parsed;
   }
   const script = join(repoRoot, "scripts/ops/fhv-t4-campaign-systemd-identity-read.sh");
-  const systemctlBin =
-    options?.systemctlBin?.trim() || env.FHV_SYSTEMCTL_BIN?.trim() || "systemctl";
-  const pythonBin = options?.pythonBin?.trim() || env.FHV_PYTHON_BIN?.trim() || "python3";
+  const systemctlBin = options?.systemctlBin?.trim() || env.FHV_SYSTEMCTL_BIN?.trim();
+  const pythonBin = options?.pythonBin?.trim() || env.FHV_PYTHON_BIN?.trim();
+  if (!systemctlBin?.startsWith("/") || !pythonBin?.startsWith("/")) {
+    throw new FhvT4CompletedCampaignSystemdIdentityError(
+      "CONTINUITY_IDENTITY_TOOL_BINDING_MISSING",
+      "systemctlBin and pythonBin must be absolute executable paths.",
+    );
+  }
   const output = execFileSync(
-    "bash",
-    [script, "--systemctl-bin", systemctlBin, "--python-bin", pythonBin, unitName],
-    { encoding: "utf8" },
+    script,
+    ["--systemctl-bin", systemctlBin, "--python-bin", pythonBin, unitName],
+    { encoding: "utf8", env: { ...env, PATH: "" } },
   ).trim();
   return parseFhvT4CompletedCampaignSystemdIdentity(JSON.parse(output));
 }

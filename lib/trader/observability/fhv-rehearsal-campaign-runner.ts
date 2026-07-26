@@ -46,6 +46,9 @@ import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-re
 import { validateFhvCanonicalRunChainCompletion } from "@/lib/trader/observability/fhv-canonical-run-chain";
 import { assertFhvCampaignRuntimeIdentity } from "@/lib/trader/observability/fhv-campaign-runtime-identity";
 import type { FhvRehearsalLaunchConfigV1 } from "@/lib/trader/observability/fhv-rehearsal-launcher";
+import { readFhvRehearsalManifest } from "@/lib/trader/observability/fhv-rehearsal-launcher";
+import { buildFhvOperatorStatusV1 } from "@/lib/trader/observability/build-fhv-operator-status-v1";
+import { writeFhvOperatorStatusAtomic } from "@/lib/trader/observability/fhv-status-writer";
 import {
   consumeFhvCampaignControlRequest,
   writeFhvCampaignControlRequest,
@@ -672,6 +675,24 @@ async function finalizePauseAtCheckpoint(input: {
 }): Promise<FhvRehearsalCampaignResult> {
   const identityFrontier = input.identityContext.captureFrontier(input.actualPauseCycle - 1);
   writePausedCheckpoint({ ...input, identityFrontier });
+  const partialDir = resolveFhvRehearsalEvidenceDir(input.runRoot);
+  const partialReconstruction = reconstructStreamingEvidence(partialDir);
+  writeReplayRunChainManifest(
+    input.runRoot,
+    buildReplayRunChainManifest({
+      backtestRunId: input.runId,
+      activePhase: "validation",
+      segments: [
+        {
+          runDir: partialDir,
+          chainDigest: partialReconstruction.chainDigest ?? "",
+          role: "authoritative",
+          terminalState: "STREAMING_EVIDENCE_SEALED_PARTIAL",
+          sealedThroughCycleIndex: partialReconstruction.sealedThroughCycleIndex,
+        },
+      ],
+    }),
+  );
   writeFhvRehearsalCampaignProgress(input.runRoot, {
     schemaVersion: "fhv-rehearsal-campaign-progress/v1",
     runId: input.runId,
@@ -680,6 +701,24 @@ async function finalizePauseAtCheckpoint(input: {
     phase: "paused_at_checkpoint",
     updatedAtUtc: new Date().toISOString(),
   });
+  const manifest = readFhvRehearsalManifest(input.runRoot);
+  const checkpoint = readReplayCheckpoint(input.runRoot);
+  writeFhvOperatorStatusAtomic(
+    input.runRoot,
+    buildFhvOperatorStatusV1({
+      runId: input.runId,
+      organizationId: input.organizationId,
+      phase: "paused_at_checkpoint",
+      codeSha: input.targetSha,
+      artifactDigest: input.partial.evidenceDigest,
+      datasetSeal: checkpoint?.datasetContentDigest ?? input.partial.evidenceDigest,
+      datasetDigest: checkpoint?.datasetContentDigest ?? input.partial.evidenceDigest,
+      configurationDigest: checkpoint?.codeSha ?? input.targetSha,
+      alertPolicyDigest: manifest.alertPolicyDigest,
+      terminalState: "REHEARSAL_PAUSED",
+      checkpoint,
+    }),
+  );
   consumeFhvCampaignControlMarker(input.runRoot, "PAUSE_AT_CHECKPOINT");
   writeFileAtomic(
     join(input.runRoot, "fhv-rehearsal-terminal.v1.json"),
@@ -947,7 +986,7 @@ async function runResumeFromCheckpoint(input: {
     organizationId,
     processPid: process.pid,
     resumeCycleStartIndex: resumeFromCycle,
-    firstExecutedCycleIndex: firstExecutedCycleIndex ?? resumeFromCycle,
+    firstExecutedCycleIndex: resumeFromCycle,
     lastExecutedCycleIndex: lastExecutedCycleIndex ?? resumed.cycleCount,
     fullHistoryRescanCountBefore: rescanBefore,
     fullHistoryRescanCountAfter: rescanAfter,
@@ -992,6 +1031,24 @@ async function runResumeFromCheckpoint(input: {
     phase: "completed",
     updatedAtUtc: new Date().toISOString(),
   });
+  const completedManifest = readFhvRehearsalManifest(input.runRoot);
+  const completedCheckpoint = readReplayCheckpoint(input.runRoot);
+  writeFhvOperatorStatusAtomic(
+    input.runRoot,
+    buildFhvOperatorStatusV1({
+      runId: input.runId,
+      organizationId,
+      phase: "completed",
+      codeSha: input.targetSha,
+      artifactDigest: resumed.evidenceDigest,
+      datasetSeal: completedCheckpoint?.datasetContentDigest ?? resumed.evidenceDigest,
+      datasetDigest: completedCheckpoint?.datasetContentDigest ?? resumed.evidenceDigest,
+      configurationDigest: completedCheckpoint?.codeSha ?? input.targetSha,
+      alertPolicyDigest: completedManifest.alertPolicyDigest,
+      terminalState: "REHEARSAL_OK",
+      checkpoint: completedCheckpoint,
+    }),
+  );
   writeFileAtomic(
     join(input.runRoot, "fhv-rehearsal-terminal.v1.json"),
     `${JSON.stringify({ classification: "REHEARSAL_OK", ...resumed }, null, 2)}\n`,
@@ -1101,6 +1158,13 @@ function resolveFhvCanonicalCompletionResult(input: {
       semanticReproDigest: "",
       classification: "REHEARSAL_OK",
     };
+  }
+
+  if (
+    input.terminalClassification === "REHEARSAL_PAUSED" &&
+    input.existingProgress?.phase === "paused_at_checkpoint"
+  ) {
+    return null;
   }
 
   if (input.terminalClassification === "REHEARSAL_OK") {
