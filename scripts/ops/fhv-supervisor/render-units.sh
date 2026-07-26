@@ -76,13 +76,13 @@ export FHV_RENDER_OBSERVER_PORT="$OBSERVER_PORT"
 rendered="$(
   (
     cd "$REPO_ROOT"
-    WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server \
+    WAIA_TRADER_CLI=1 "$NODE_BIN" --import tsx --conditions=react-server \
       scripts/ops/fhv-supervisor/render-units-cli.ts
   )
 )"
 
-campaign_unit="$(printf '%s' "$rendered" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const j=JSON.parse(s);process.stdout.write(j.campaignUnit);})')"
-observer_unit="$(printf '%s' "$rendered" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const j=JSON.parse(s);process.stdout.write(j.observerUnit);})')"
+campaign_unit="$(printf '%s' "$rendered" | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const j=JSON.parse(s);process.stdout.write(j.campaignUnit);})')"
+observer_unit="$(printf '%s' "$rendered" | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const j=JSON.parse(s);process.stdout.write(j.observerUnit);})')"
 
 if [[ -n "$OUTPUT_DIR" ]]; then
   mkdir -p "$OUTPUT_DIR"

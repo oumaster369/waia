@@ -311,7 +311,7 @@ describe("DEE-424 FHV systemd supervisor", () => {
     }
   });
 
-  it("writes resume marker before systemctl start on RESUME_FROM_CHECKPOINT", async () => {
+  it("writes resume acceptance without systemctl start on RESUME_FROM_CHECKPOINT", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-systemd-resume-"));
     try {
       const executor = createRecordingLinuxSystemdCampaignControlExecutor({
@@ -327,9 +327,9 @@ describe("DEE-424 FHV systemd supervisor", () => {
         operatorId: "op",
         reason: "resume drill",
       });
-      expect(result.enforcementApplied).toBe(true);
-      expect(result.outcome).toBe("executed");
-      expect(executor.systemctlCalls).toHaveLength(1);
+      expect(result.enforcementApplied).toBe(false);
+      expect(result.outcome).toBe("accepted");
+      expect(executor.systemctlCalls).toHaveLength(0);
       const marker = join(root, "control", "resume_from_checkpoint-request.v1.json");
       expect(existsSync(marker)).toBe(true);
     } finally {
@@ -491,6 +491,8 @@ describe("DEE-424 guarded installer scripts", () => {
     "test-run",
     "--fhv-organization-id",
     "00000000-0000-4000-8000-000000000416",
+    "--node-bin",
+    process.execPath,
   ];
 
   function runScript(
@@ -570,7 +572,12 @@ esac
 
   it("rollback-units.sh exits without mutation when --confirm is absent", () => {
     const mockBin = writeMockBin();
-    const result = runScript("scripts/ops/fhv-supervisor/rollback-units.sh", [], mockBin);
+    const systemdDir = mkdtempSync(join(tmpdir(), "fhv-systemd-dir-"));
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/rollback-units.sh",
+      ["--systemctl-bin", join(mockBin, "systemctl"), "--systemd-dir", systemdDir],
+      mockBin,
+    );
     const combined = `${result.stdout}${result.stderr}`;
     expect(result.status).toBe(0);
     expect(combined).toContain("No mutation performed");
@@ -654,7 +661,14 @@ esac
     writeFileSync(join(systemdDir, "waia-fhv-observer.service"), "[Unit]\n");
     const result = runScript(
       "scripts/ops/fhv-supervisor/rollback-units.sh",
-      ["--confirm", "--dry-run", "--systemd-dir", systemdDir],
+      [
+        "--confirm",
+        "--dry-run",
+        "--systemctl-bin",
+        join(mockBin, "systemctl"),
+        "--systemd-dir",
+        systemdDir,
+      ],
       mockBin,
     );
     expect(result.status).toBe(0);
@@ -678,7 +692,15 @@ esac
     writeFileSync(join(systemdDir, "waia-fhv-campaign.service"), "[Unit]\n");
     const result = runScript(
       "scripts/ops/fhv-supervisor/rollback-units.sh",
-      ["--confirm", "--unit", "waia-fhv-campaign.service", "--systemd-dir", systemdDir],
+      [
+        "--confirm",
+        "--unit",
+        "waia-fhv-campaign.service",
+        "--systemctl-bin",
+        join(mockBin, "systemctl"),
+        "--systemd-dir",
+        systemdDir,
+      ],
       mockBin,
     );
     expect(result.status).not.toBe(0);

@@ -1,9 +1,10 @@
 /**
- * DEE-435 — signed T4 operator CLI (localhost observer bridge).
+ * DEE-435 / DEE-436 — signed T4 operator CLI (localhost observer bridge).
  */
 
 import { randomBytes } from "node:crypto";
 
+import { createAbortTimeout } from "@/lib/http/create-abort-timeout";
 import { FHV_OPERATOR_COMMAND_SCHEMA_VERSION } from "@/lib/trader/observability/fhv-observability.constants";
 import { resolveFhvCampaignState } from "@/lib/trader/observability/fhv-campaign-state";
 import type { FhvCommandResultV1 } from "@/lib/trader/observability/fhv-command-ledger";
@@ -68,6 +69,19 @@ export class FhvT4OperatorCliError extends Error {
 
 const DEFAULT_OBSERVER_HOST = "127.0.0.1";
 const DEFAULT_OBSERVER_PORT = 9471;
+export const FHV_T4_OPERATOR_HTTP_TIMEOUT_DEFAULT_MS = 10_000;
+
+export function resolveFhvT4OperatorHttpTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw =
+    env.FHV_T4_OPERATOR_HTTP_TIMEOUT_MS?.trim() ||
+    env.FHV_OBSERVER_TUNNEL_TIMEOUT_MS?.trim() ||
+    String(FHV_T4_OPERATOR_HTTP_TIMEOUT_DEFAULT_MS);
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return FHV_T4_OPERATOR_HTTP_TIMEOUT_DEFAULT_MS;
+  }
+  return parsed;
+}
 
 function parseFlag(argv: readonly string[], flag: string): string | undefined {
   const index = argv.indexOf(flag);
@@ -98,15 +112,19 @@ export function resolveFhvT4OperatorCliConfig(
   argv: readonly string[] = process.argv.slice(2),
 ): FhvT4OperatorCliConfig {
   const subcommand = parseFhvT4OperatorSubcommand(argv);
+  if (argv.includes("--command-secret") || argv.includes("--tunnel-secret")) {
+    throw new FhvT4OperatorCliError(
+      "FHV_T4_CLI_SECRET_ARGV_FORBIDDEN",
+      "Secrets must not be supplied via argv; use EnvironmentFile/environment only.",
+    );
+  }
   const runRoot = parseFlag(argv, "--run-root") ?? env.FHV_RUN_ROOT?.trim() ?? "";
   const runId = parseFlag(argv, "--run-id") ?? env.FHV_RUN_ID?.trim() ?? "";
   const organizationId =
     parseFlag(argv, "--organization-id") ?? env.FHV_ORGANIZATION_ID?.trim() ?? "";
   const targetSha = parseFlag(argv, "--target-sha") ?? env.FHV_TARGET_SHA?.trim() ?? "";
-  const commandSecret =
-    parseFlag(argv, "--command-secret") ?? env.FHV_OPERATOR_COMMAND_SECRET?.trim() ?? "";
-  const observerTunnelSecret =
-    parseFlag(argv, "--tunnel-secret") ?? env.FHV_OBSERVER_TUNNEL_SECRET?.trim() ?? "";
+  const commandSecret = env.FHV_OPERATOR_COMMAND_SECRET?.trim() ?? "";
+  const observerTunnelSecret = env.FHV_OBSERVER_TUNNEL_SECRET?.trim() ?? "";
   const operatorId =
     parseFlag(argv, "--operator-id") ?? env.FHV_OPERATOR_ID?.trim() ?? "t4-operator";
   const observerHost =
@@ -162,7 +180,7 @@ function observerBaseUrl(config: FhvT4OperatorCliConfig): string {
 export async function signedFhvT4ObserverFetch(
   config: FhvT4OperatorCliConfig,
   input: { method: string; path: string; body?: unknown },
-  deps?: { fetchFn?: typeof fetch },
+  deps?: { fetchFn?: typeof fetch; timeoutMs?: number; env?: NodeJS.ProcessEnv },
 ): Promise<Response> {
   const fetchFn = deps?.fetchFn ?? fetch;
   const bodyText = input.body === undefined ? "" : JSON.stringify(input.body);
@@ -178,16 +196,31 @@ export async function signedFhvT4ObserverFetch(
     },
     config.observerTunnelSecret,
   );
-  return fetchFn(`${observerBaseUrl(config)}${input.path}`, {
-    method: input.method,
-    headers: {
-      "Content-Type": "application/json",
-      [FHV_OBSERVER_AUTH_HEADER]: authToken,
-      "x-fhv-organization-id": config.organizationId,
-      "x-fhv-campaign-run-id": config.runId,
-    },
-    body: bodyText.length > 0 ? bodyText : undefined,
-  });
+  const timeoutMs = deps?.timeoutMs ?? resolveFhvT4OperatorHttpTimeoutMs(deps?.env);
+  const abort = createAbortTimeout(timeoutMs);
+  try {
+    return await fetchFn(`${observerBaseUrl(config)}${input.path}`, {
+      method: input.method,
+      headers: {
+        "Content-Type": "application/json",
+        [FHV_OBSERVER_AUTH_HEADER]: authToken,
+        "x-fhv-organization-id": config.organizationId,
+        "x-fhv-campaign-run-id": config.runId,
+      },
+      body: bodyText.length > 0 ? bodyText : undefined,
+      signal: abort.signal,
+    });
+  } catch (error) {
+    if ((error instanceof Error && error.name === "AbortError") || abort.signal.aborted) {
+      throw new FhvT4OperatorCliError(
+        "FHV_T4_OPERATOR_HTTP_TIMEOUT",
+        `Observer HTTP call exceeded ${timeoutMs}ms bounded timeout.`,
+      );
+    }
+    throw error;
+  } finally {
+    abort.clearTimer();
+  }
 }
 
 export function buildFhvT4SignedOperatorCommand(

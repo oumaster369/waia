@@ -1,6 +1,6 @@
 import type { FhvOperatorAction } from "@/lib/trader/observability/fhv-observability.constants";
 
-export type FhvCampaignControlExecutionOutcome = "executed" | "failed";
+export type FhvCampaignControlExecutionOutcome = "executed" | "failed" | "accepted";
 
 export type FhvCampaignControlExecutionResult = Readonly<{
   outcome: FhvCampaignControlExecutionOutcome;

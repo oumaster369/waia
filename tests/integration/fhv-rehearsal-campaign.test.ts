@@ -164,9 +164,9 @@ describe("FHV rehearsal campaign runner (DEE-431)", () => {
         operatorId: "operator-1",
         reason: "hermetic resume test",
       });
-      expect(resumeResult.enforcementApplied).toBe(true);
-      expect(resumeResult.outcome).toBe("executed");
-      expect(executor.systemctlCalls).toHaveLength(1);
+      expect(resumeResult.outcome).toBe("accepted");
+      expect(resumeResult.enforcementApplied).toBe(false);
+      expect(executor.systemctlCalls).toHaveLength(0);
       expect(isFhvResumeFromCheckpointRequested(runDir)).toBe(true);
 
       const completed = await runFhvRehearsalCampaign({

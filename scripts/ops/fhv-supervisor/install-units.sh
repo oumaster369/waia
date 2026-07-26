@@ -14,6 +14,7 @@ FHV_RUN_ID=""
 FHV_ORGANIZATION_ID=""
 UNIT=""
 SYSTEMD_DIR="/etc/systemd/system"
+NODE_BIN=""
 SYSTEMD_ANALYZE="${SYSTEMD_ANALYZE:-systemd-analyze}"
 SYSTEMCTL="${SYSTEMCTL:-systemctl}"
 
@@ -22,7 +23,7 @@ usage() {
 Usage: install-units.sh --target-sha SHA --working-directory PATH --service-user USER \
   --environment-file PATH --fhv-run-root PATH --fhv-run-id ID --fhv-organization-id UUID \
   [--unit waia-fhv-campaign.service|waia-fhv-observer.service|all] [--repo-path PATH] \
-  [--systemd-dir DIR] [--dry-run] [--confirm]
+  [--systemd-dir DIR] [--node-bin PATH] [--dry-run] [--confirm]
 
 Without --confirm: print planned actions and exit without mutation.
 EOF
@@ -42,6 +43,9 @@ while [[ $# -gt 0 ]]; do
     --fhv-organization-id) FHV_ORGANIZATION_ID="${2:-}"; shift 2 ;;
     --unit) UNIT="${2:-}"; shift 2 ;;
     --systemd-dir) SYSTEMD_DIR="${2:-}"; shift 2 ;;
+    --systemctl-bin) SYSTEMCTL="${2:-}"; shift 2 ;;
+    --systemd-analyze) SYSTEMD_ANALYZE="${2:-}"; shift 2 ;;
+    --node-bin) NODE_BIN="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
@@ -54,6 +58,9 @@ source "${SCRIPT_DIR}/_fhv-supervisor-common.sh"
 
 [[ -n "$TARGET_SHA" ]] || die "--target-sha is required"
 is_full_sha "$TARGET_SHA" || die "invalid target SHA"
+[[ -n "$NODE_BIN" ]] || die "--node-bin is required"
+[[ -n "$SYSTEMCTL" ]] || die "--systemctl-bin is required"
+[[ -n "$SYSTEMD_ANALYZE" ]] || die "--systemd-analyze is required"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
@@ -67,6 +74,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
   --fhv-run-root "$FHV_RUN_ROOT" \
   --fhv-run-id "$FHV_RUN_ID" \
   --fhv-organization-id "$FHV_ORGANIZATION_ID" \
+  --node-bin "$NODE_BIN" \
   --output-dir "$tmp_dir" >/dev/null
 
 verify_rendered_units() {

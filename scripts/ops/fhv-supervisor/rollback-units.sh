@@ -2,16 +2,21 @@
 # Rollback FHV systemd units (Human-only, requires --confirm).
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_fhv-supervisor-common.sh
+source "${SCRIPT_DIR}/_fhv-supervisor-common.sh"
+
 CONFIRM=0
 DRY_RUN=0
 UNIT="all"
-SYSTEMD_DIR="/etc/systemd/system"
-SYSTEMCTL="${SYSTEMCTL:-systemctl}"
+SYSTEMD_DIR=""
+SYSTEMCTL=""
 
 usage() {
   cat >&2 <<'EOF'
-Usage: rollback-units.sh [--unit waia-fhv-campaign.service|waia-fhv-observer.service|all] \
-  [--systemd-dir DIR] [--dry-run] [--confirm]
+Usage: rollback-units.sh --systemctl-bin PATH --systemd-dir DIR \
+  [--unit waia-fhv-campaign.service|waia-fhv-observer.service|all] \
+  [--dry-run] [--confirm]
 
 Stops, disables, and removes allowlisted FHV systemd units.
 Without --confirm: print planned actions only.
@@ -23,15 +28,15 @@ while [[ $# -gt 0 ]]; do
     --confirm) CONFIRM=1; shift ;;
     --unit) UNIT="${2:-}"; shift 2 ;;
     --systemd-dir) SYSTEMD_DIR="${2:-}"; shift 2 ;;
+    --systemctl-bin) SYSTEMCTL="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=_fhv-supervisor-common.sh
-source "${SCRIPT_DIR}/_fhv-supervisor-common.sh"
+[[ -n "$SYSTEMCTL" && -x "$SYSTEMCTL" ]] || die "--systemctl-bin required and must be executable"
+[[ -n "$SYSTEMD_DIR" && -d "$SYSTEMD_DIR" ]] || die "--systemd-dir required and must exist"
 
 resolve_rollback_units() {
   case "$UNIT" in
@@ -44,11 +49,11 @@ resolve_rollback_units() {
 if [[ "$CONFIRM" -eq 0 ]]; then
   while IFS= read -r unit_name; do
     [[ -n "$unit_name" ]] || continue
-    log "planned: systemctl stop ${unit_name}"
-    log "planned: systemctl disable ${unit_name}"
+    log "planned: systemctl stop ${unit_name} (via ${SYSTEMCTL})"
+    log "planned: systemctl disable ${unit_name} (via ${SYSTEMCTL})"
     log "planned: rm -f ${SYSTEMD_DIR}/${unit_name}"
   done < <(resolve_rollback_units)
-  log "planned: systemctl daemon-reload"
+  log "planned: systemctl daemon-reload (via ${SYSTEMCTL})"
   print_noop_footer
   exit 0
 fi

@@ -220,29 +220,10 @@ export function createLinuxSystemdCampaignControlExecutor(
             enforcementApplied: false,
           };
         }
-        const args = buildSystemctlArgumentArray("start", FHV_SYSTEMD_CAMPAIGN_UNIT);
-        const result = await spawnFn(args, {
-          timeoutMs: config.timeoutMs,
-          maxOutputBytes: config.maxOutputBytes,
-        });
-        if (result.timedOut) {
-          return {
-            outcome: "failed",
-            message: "SYSTEMCTL_TIMEOUT",
-            enforcementApplied: false,
-          };
-        }
-        if (result.exitCode !== 0) {
-          return {
-            outcome: "failed",
-            message: "SYSTEMCTL_START_FAILED",
-            enforcementApplied: false,
-          };
-        }
         return {
-          outcome: "executed",
-          message: "resume marker recorded; start waia-fhv-campaign.service",
-          enforcementApplied: true,
+          outcome: "accepted",
+          message: "RESUME accepted; root systemd enforcement required",
+          enforcementApplied: false,
         };
       }
 

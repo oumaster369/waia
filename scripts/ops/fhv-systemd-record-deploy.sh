@@ -32,21 +32,22 @@ is_full_sha() {
 }
 
 inspect_legacy_container_running() {
-  if ! command -v docker >/dev/null 2>&1; then
+  local docker_bin="${DOCKER_BIN:-docker}"
+  if ! command -v "$docker_bin" >/dev/null 2>&1; then
     die "docker required to inspect legacy container (inspection only)"
   fi
   local name="ai-trader-execution-host"
   local image="waia-execution-host:bp6"
-  if ! docker inspect "$name" >/dev/null 2>&1; then
+  if ! "$docker_bin" inspect "$name" >/dev/null 2>&1; then
     die "legacy container missing: ${name}"
   fi
   local actual_image
-  actual_image="$(docker inspect --format='{{.Config.Image}}' "$name")"
+  actual_image="$("$docker_bin" inspect --format='{{.Config.Image}}' "$name")"
   if [[ "$actual_image" != "$image" ]]; then
     die "legacy container image mismatch: expected ${image}, got ${actual_image}"
   fi
   local running
-  running="$(docker inspect --format='{{.State.Running}}' "$name")"
+  running="$("$docker_bin" inspect --format='{{.State.Running}}' "$name")"
   if [[ "$running" != "true" ]]; then
     die "legacy container not running: ${name}"
   fi
@@ -63,6 +64,9 @@ RENDERED_UNIT_DIGESTS=""
 REPO_PATH=""
 CONFIRM=0
 DRY_RUN=0
+NODE_BIN=""
+GIT_BIN=""
+DOCKER_BIN=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -74,6 +78,9 @@ while [[ $# -gt 0 ]]; do
     --service-user) SERVICE_USER="${2:-}"; shift 2 ;;
     --rendered-unit-digests) RENDERED_UNIT_DIGESTS="${2:-}"; shift 2 ;;
     --repo-path) REPO_PATH="${2:-}"; shift 2 ;;
+    --node-bin) NODE_BIN="${2:-}"; shift 2 ;;
+    --git-bin) GIT_BIN="${2:-}"; shift 2 ;;
+    --docker-bin) DOCKER_BIN="${2:-}"; shift 2 ;;
     --confirm) CONFIRM=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -84,9 +91,12 @@ done
 [[ -n "$TARGET_SHA" && -n "$RELEASE_TAG" && -n "$RUN_ID" && -n "$ORGANIZATION_ID" && -n "$OPERATOR" && -n "$SERVICE_USER" && -n "$RENDERED_UNIT_DIGESTS" ]] \
   || die "all identity fields required (see --help)"
 is_full_sha "$TARGET_SHA" || die "invalid target SHA"
+[[ -n "$NODE_BIN" ]] || die "--node-bin is required"
+[[ -n "$GIT_BIN" ]] || die "--git-bin is required"
+[[ -n "$DOCKER_BIN" ]] || die "--docker-bin is required"
 
 if [[ -n "$REPO_PATH" ]]; then
-  REPO_ROOT="$(git -C "$REPO_PATH" rev-parse --show-toplevel)"
+  REPO_ROOT="$("$GIT_BIN" -C "$REPO_PATH" rev-parse --show-toplevel)"
 else
   REPO_ROOT="$ROOT"
 fi
@@ -102,6 +112,7 @@ log "  operator: ${OPERATOR}"
 log "  service user: ${SERVICE_USER}"
 
 if [[ "$CONFIRM" -eq 1 ]]; then
+  export DOCKER_BIN
   inspect_legacy_container_running
 else
   log "  legacy container: preview mode (no docker inspection without --confirm)"
@@ -128,7 +139,7 @@ if [[ "$CONFIRM" -eq 0 ]]; then
   [[ "$DRY_RUN" -eq 1 ]] && log "  mode: dry-run"
 fi
 
-WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server \
+WAIA_TRADER_CLI=1 "$NODE_BIN" --import tsx --conditions=react-server \
   "${ROOT}/scripts/ops/fhv-systemd-record-deploy-cli.ts" "${CLI_ARGS[@]}"
 
 if [[ "$CONFIRM" -eq 0 ]]; then

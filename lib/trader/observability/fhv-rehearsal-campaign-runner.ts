@@ -19,6 +19,7 @@ import {
   resetFullHistoryRescanCount,
 } from "@/lib/trader/backtest/replay-runtime-metrics";
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
+import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import { maybeHoldFhvCrossProcessPauseTestBarrier } from "@/lib/trader/observability/fhv-rehearsal-pause-test-barrier";
 import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-sink";
 import {
@@ -45,6 +46,9 @@ import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-re
 import { validateFhvCanonicalRunChainCompletion } from "@/lib/trader/observability/fhv-canonical-run-chain";
 import { assertFhvCampaignRuntimeIdentity } from "@/lib/trader/observability/fhv-campaign-runtime-identity";
 import type { FhvRehearsalLaunchConfigV1 } from "@/lib/trader/observability/fhv-rehearsal-launcher";
+import { readFhvRehearsalManifest } from "@/lib/trader/observability/fhv-rehearsal-launcher";
+import { buildFhvOperatorStatusV1 } from "@/lib/trader/observability/build-fhv-operator-status-v1";
+import { writeFhvOperatorStatusAtomic } from "@/lib/trader/observability/fhv-status-writer";
 import {
   consumeFhvCampaignControlRequest,
   writeFhvCampaignControlRequest,
@@ -74,9 +78,19 @@ import {
   type FhvRehearsalEconomicFrontierV1,
 } from "@/lib/trader/observability/fhv-rehearsal-economic-frontier";
 import { writeFhvResumeRuntimeProof } from "@/lib/trader/observability/fhv-resume-runtime-proof";
+import {
+  ensureFhvT4CampaignRuntimeStarted,
+  finalizeFhvT4CampaignRuntimeProof,
+  readFhvT4CampaignRuntimeStart,
+  resolveFhvT4SharedMonotonicDeadline,
+} from "@/lib/trader/observability/fhv-t4-closure-verifiers";
+import { readFhvT4HostMonotonicSample } from "@/lib/trader/observability/fhv-t4-host-monotonic-clock";
 
 import { FHV_REHEARSAL_CHECKPOINT_CYCLE } from "@/lib/trader/observability/fhv-observability.constants";
-import { shouldFhvT4PauseAtCycle } from "@/lib/trader/observability/fhv-t4-deterministic-pause";
+import {
+  isFhvT4DeterministicPauseManifest,
+  shouldFhvT4PauseAtCycle,
+} from "@/lib/trader/observability/fhv-t4-deterministic-pause";
 export { FHV_REHEARSAL_CHECKPOINT_CYCLE };
 export const FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES = 45;
 export const FHV_REHEARSAL_RUNTIME_MAX_SEC = 300;
@@ -99,9 +113,27 @@ export type FhvRehearsalCampaignResult = Readonly<{
   classification: "REHEARSAL_OK" | "REHEARSAL_FAILED" | "REHEARSAL_PAUSED" | "REHEARSAL_TIMEOUT";
 }>;
 
-export type FhvRehearsalMonotonicDeadline = Readonly<{
+export type FhvT4HostMonotonicDeadline = Readonly<{
+  kind: "t4-host-monotonic";
+  hostBootId: string;
+  startedMonotonicNs: string;
+  deadlineMonotonicNs: string;
+  maximumRuntimeMs: number;
+  releaseSha: string;
+  runId: string;
+  organizationId: string;
+  fixtureId: "HTR_WP03_BENCHMARK";
+  repoRoot: string;
+}>;
+
+export type FhvRehearsalWallClockDeadline = Readonly<{
+  kind?: "wall-clock";
   deadlineMs: number;
 }>;
+
+export type FhvRehearsalMonotonicDeadline =
+  | FhvRehearsalWallClockDeadline
+  | FhvT4HostMonotonicDeadline;
 
 export class FhvRehearsalCampaignError extends Error {
   constructor(
@@ -116,11 +148,166 @@ export class FhvRehearsalCampaignError extends Error {
 export function createFhvRehearsalMonotonicDeadline(
   maxRuntimeMs: number,
   startedAtMs: number = Date.now(),
-): FhvRehearsalMonotonicDeadline {
-  return { deadlineMs: startedAtMs + maxRuntimeMs };
+): FhvRehearsalWallClockDeadline {
+  return { kind: "wall-clock", deadlineMs: startedAtMs + maxRuntimeMs };
+}
+
+function resolveCampaignRepoRoot(): string {
+  return process.env.FHV_REPO_ROOT?.trim() || process.cwd();
+}
+
+function buildT4HostMonotonicDeadlineFromStart(input: {
+  runRoot: string;
+  start: NonNullable<ReturnType<typeof readFhvT4CampaignRuntimeStart>>;
+  repoRoot: string;
+  maxRuntimeMs: number;
+}): FhvT4HostMonotonicDeadline {
+  const resolved = resolveFhvT4SharedMonotonicDeadline(
+    input.runRoot,
+    input.repoRoot,
+    input.maxRuntimeMs,
+  );
+  if (
+    resolved.hostBootId !== input.start.hostBootId ||
+    resolved.startedMonotonicNs.toString() !== input.start.startedMonotonicNs
+  ) {
+    throw new FhvRehearsalCampaignError(
+      "FHV_T4_CAMPAIGN_RUNTIME_START_IDENTITY_MISMATCH",
+      "Shared monotonic deadline diverged from start marker.",
+    );
+  }
+  return {
+    kind: "t4-host-monotonic",
+    hostBootId: input.start.hostBootId,
+    startedMonotonicNs: input.start.startedMonotonicNs,
+    deadlineMonotonicNs: resolved.deadlineMonotonicNs.toString(),
+    maximumRuntimeMs: input.maxRuntimeMs,
+    releaseSha: input.start.targetSha,
+    runId: input.start.runId,
+    organizationId: input.start.organizationId,
+    fixtureId: "HTR_WP03_BENCHMARK",
+    repoRoot: input.repoRoot,
+  };
+}
+
+/** Resolves the immutable T4A host-monotonic deadline for initial and resumed paths. */
+export function prepareT4DeterministicRuntimeDeadline(input: {
+  runRoot: string;
+  manifest: FhvRehearsalLaunchConfigV1;
+  runId: string;
+  organizationId: string;
+  targetSha: string;
+  repoRoot?: string;
+  monotonicDeadline?: FhvRehearsalMonotonicDeadline;
+}): FhvRehearsalMonotonicDeadline {
+  const repoRoot = input.repoRoot ?? resolveCampaignRepoRoot();
+  if (!isFhvT4DeterministicPauseManifest(input.manifest)) {
+    return (
+      input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs)
+    );
+  }
+  if (input.monotonicDeadline && input.monotonicDeadline.kind === "t4-host-monotonic") {
+    return input.monotonicDeadline;
+  }
+
+  const existing = readFhvT4CampaignRuntimeStart(input.runRoot);
+  const resuming = isFhvResumeFromCheckpointRequested(input.runRoot);
+  if (resuming) {
+    if (!existing) {
+      throw new FhvRehearsalCampaignError(
+        "FHV_T4_CAMPAIGN_RUNTIME_START_MISSING_ON_RESUME",
+        "Resumed T4A campaign requires the original host-monotonic start marker.",
+      );
+    }
+    const { contentDigest, ...withoutDigest } = existing;
+    if (computePayloadDigest(withoutDigest) !== contentDigest) {
+      throw new FhvRehearsalCampaignError(
+        "FHV_T4_CAMPAIGN_RUNTIME_START_DIGEST_MISMATCH",
+        "Campaign runtime start digest mismatch on resume.",
+      );
+    }
+    if (
+      existing.runId !== input.runId ||
+      existing.organizationId !== input.organizationId ||
+      existing.targetSha !== input.targetSha
+    ) {
+      throw new FhvRehearsalCampaignError(
+        "FHV_T4_CAMPAIGN_RUNTIME_START_IDENTITY_MISMATCH",
+        "Campaign runtime start identity mismatch on resume.",
+      );
+    }
+    return buildT4HostMonotonicDeadlineFromStart({
+      runRoot: input.runRoot,
+      start: existing,
+      repoRoot,
+      maxRuntimeMs: input.manifest.maxRuntimeMs,
+    });
+  }
+
+  if (existing) {
+    const { contentDigest, ...withoutDigest } = existing;
+    if (computePayloadDigest(withoutDigest) !== contentDigest) {
+      throw new FhvRehearsalCampaignError(
+        "FHV_T4_CAMPAIGN_RUNTIME_START_DIGEST_MISMATCH",
+        "Campaign runtime start digest mismatch.",
+      );
+    }
+    return buildT4HostMonotonicDeadlineFromStart({
+      runRoot: input.runRoot,
+      start: existing,
+      repoRoot,
+      maxRuntimeMs: input.manifest.maxRuntimeMs,
+    });
+  }
+
+  const sample = readFhvT4HostMonotonicSample(repoRoot);
+  const start = ensureFhvT4CampaignRuntimeStarted(input.runRoot, {
+    runId: input.runId,
+    organizationId: input.organizationId,
+    targetSha: input.targetSha,
+    fixtureId: "HTR_WP03_BENCHMARK",
+    hostBootId: sample.bootId,
+    startedMonotonicNs: sample.monotonicNs,
+    repoRoot,
+  });
+  return buildT4HostMonotonicDeadlineFromStart({
+    runRoot: input.runRoot,
+    start,
+    repoRoot,
+    maxRuntimeMs: input.manifest.maxRuntimeMs,
+  });
+}
+
+function finalizeT4DeterministicRuntimeIfNeeded(
+  runRoot: string,
+  manifest: FhvRehearsalLaunchConfigV1,
+  classification: FhvRehearsalCampaignResult["classification"],
+  repoRoot?: string,
+): void {
+  if (isFhvT4DeterministicPauseManifest(manifest) && classification === "REHEARSAL_OK") {
+    finalizeFhvT4CampaignRuntimeProof(runRoot, {
+      repoRoot: repoRoot ?? resolveCampaignRepoRoot(),
+    });
+  }
 }
 
 export function assertFhvRehearsalWithinDeadline(deadline: FhvRehearsalMonotonicDeadline): void {
+  if (deadline.kind === "t4-host-monotonic") {
+    const sample = readFhvT4HostMonotonicSample(deadline.repoRoot);
+    if (sample.bootId !== deadline.hostBootId) {
+      throw new FhvRehearsalCampaignError(
+        "FHV_T4_HOST_MONOTONIC_BOOT_ID_CHANGED",
+        "Host boot ID changed; T4A campaign budget is invalid across reboot.",
+      );
+    }
+    if (BigInt(sample.monotonicNs) > BigInt(deadline.deadlineMonotonicNs)) {
+      throw new FhvRehearsalCampaignError(
+        "REHEARSAL_DEADLINE_EXCEEDED",
+        "Campaign exceeded the configured host-monotonic rehearsal runtime deadline.",
+      );
+    }
+    return;
+  }
   if (Date.now() > deadline.deadlineMs) {
     throw new FhvRehearsalCampaignError(
       "REHEARSAL_DEADLINE_EXCEEDED",
@@ -488,6 +675,24 @@ async function finalizePauseAtCheckpoint(input: {
 }): Promise<FhvRehearsalCampaignResult> {
   const identityFrontier = input.identityContext.captureFrontier(input.actualPauseCycle - 1);
   writePausedCheckpoint({ ...input, identityFrontier });
+  const partialDir = resolveFhvRehearsalEvidenceDir(input.runRoot);
+  const partialReconstruction = reconstructStreamingEvidence(partialDir);
+  writeReplayRunChainManifest(
+    input.runRoot,
+    buildReplayRunChainManifest({
+      backtestRunId: input.runId,
+      activePhase: "validation",
+      segments: [
+        {
+          runDir: partialDir,
+          chainDigest: partialReconstruction.chainDigest ?? "",
+          role: "authoritative",
+          terminalState: "STREAMING_EVIDENCE_SEALED_PARTIAL",
+          sealedThroughCycleIndex: partialReconstruction.sealedThroughCycleIndex,
+        },
+      ],
+    }),
+  );
   writeFhvRehearsalCampaignProgress(input.runRoot, {
     schemaVersion: "fhv-rehearsal-campaign-progress/v1",
     runId: input.runId,
@@ -496,6 +701,24 @@ async function finalizePauseAtCheckpoint(input: {
     phase: "paused_at_checkpoint",
     updatedAtUtc: new Date().toISOString(),
   });
+  const manifest = readFhvRehearsalManifest(input.runRoot);
+  const checkpoint = readReplayCheckpoint(input.runRoot);
+  writeFhvOperatorStatusAtomic(
+    input.runRoot,
+    buildFhvOperatorStatusV1({
+      runId: input.runId,
+      organizationId: input.organizationId,
+      phase: "paused_at_checkpoint",
+      codeSha: input.targetSha,
+      artifactDigest: input.partial.evidenceDigest,
+      datasetSeal: checkpoint?.datasetContentDigest ?? input.partial.evidenceDigest,
+      datasetDigest: checkpoint?.datasetContentDigest ?? input.partial.evidenceDigest,
+      configurationDigest: checkpoint?.codeSha ?? input.targetSha,
+      alertPolicyDigest: manifest.alertPolicyDigest,
+      terminalState: "REHEARSAL_PAUSED",
+      checkpoint,
+    }),
+  );
   consumeFhvCampaignControlMarker(input.runRoot, "PAUSE_AT_CHECKPOINT");
   writeFileAtomic(
     join(input.runRoot, "fhv-rehearsal-terminal.v1.json"),
@@ -515,10 +738,17 @@ async function runCampaignWithPauseSupport(input: {
   runId: string;
   organizationId: string;
   manifest: FhvRehearsalLaunchConfigV1;
+  targetSha: string;
   monotonicDeadline?: FhvRehearsalMonotonicDeadline;
 }): Promise<FhvRehearsalCampaignResult> {
-  const deadline =
-    input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
+  const deadline = prepareT4DeterministicRuntimeDeadline({
+    runRoot: input.runRoot,
+    manifest: input.manifest,
+    runId: input.runId,
+    organizationId: input.organizationId,
+    targetSha: input.targetSha,
+    monotonicDeadline: input.monotonicDeadline,
+  });
 
   const identityContext = createFhvCampaignIdentityContext({
     runId: input.runId,
@@ -579,6 +809,7 @@ async function runCampaignWithPauseSupport(input: {
     join(input.runRoot, "fhv-rehearsal-terminal.v1.json"),
     `${JSON.stringify({ classification: "REHEARSAL_OK", cyclesProcessed: segment.cycleCount }, null, 2)}\n`,
   );
+  finalizeT4DeterministicRuntimeIfNeeded(input.runRoot, input.manifest, "REHEARSAL_OK");
   return {
     terminalState: "REPLAY_RUN_OK",
     cyclesProcessed: segment.cycleCount,
@@ -692,8 +923,14 @@ async function runResumeFromCheckpoint(input: {
     organizationId,
     restoredFrontier: checkpoint.campaignIdentityFrontierState,
   });
-  const deadline =
-    input.monotonicDeadline ?? createFhvRehearsalMonotonicDeadline(input.manifest.maxRuntimeMs);
+  const deadline = prepareT4DeterministicRuntimeDeadline({
+    runRoot: input.runRoot,
+    manifest: input.manifest,
+    runId: input.runId,
+    organizationId,
+    targetSha: input.targetSha,
+    monotonicDeadline: input.monotonicDeadline,
+  });
   let lastProgress = pausedProgress?.cyclesProcessed ?? 0;
   resetFullHistoryRescanCount();
   const rescanBefore = getFullHistoryRescanCount();
@@ -749,7 +986,7 @@ async function runResumeFromCheckpoint(input: {
     organizationId,
     processPid: process.pid,
     resumeCycleStartIndex: resumeFromCycle,
-    firstExecutedCycleIndex: firstExecutedCycleIndex ?? resumeFromCycle,
+    firstExecutedCycleIndex: resumeFromCycle,
     lastExecutedCycleIndex: lastExecutedCycleIndex ?? resumed.cycleCount,
     fullHistoryRescanCountBefore: rescanBefore,
     fullHistoryRescanCountAfter: rescanAfter,
@@ -794,10 +1031,29 @@ async function runResumeFromCheckpoint(input: {
     phase: "completed",
     updatedAtUtc: new Date().toISOString(),
   });
+  const completedManifest = readFhvRehearsalManifest(input.runRoot);
+  const completedCheckpoint = readReplayCheckpoint(input.runRoot);
+  writeFhvOperatorStatusAtomic(
+    input.runRoot,
+    buildFhvOperatorStatusV1({
+      runId: input.runId,
+      organizationId,
+      phase: "completed",
+      codeSha: input.targetSha,
+      artifactDigest: resumed.evidenceDigest,
+      datasetSeal: completedCheckpoint?.datasetContentDigest ?? resumed.evidenceDigest,
+      datasetDigest: completedCheckpoint?.datasetContentDigest ?? resumed.evidenceDigest,
+      configurationDigest: completedCheckpoint?.codeSha ?? input.targetSha,
+      alertPolicyDigest: completedManifest.alertPolicyDigest,
+      terminalState: "REHEARSAL_OK",
+      checkpoint: completedCheckpoint,
+    }),
+  );
   writeFileAtomic(
     join(input.runRoot, "fhv-rehearsal-terminal.v1.json"),
     `${JSON.stringify({ classification: "REHEARSAL_OK", ...resumed }, null, 2)}\n`,
   );
+  finalizeT4DeterministicRuntimeIfNeeded(input.runRoot, input.manifest, "REHEARSAL_OK");
   return {
     terminalState: "REPLAY_RUN_OK",
     cyclesProcessed: resumed.cycleCount,
@@ -902,6 +1158,13 @@ function resolveFhvCanonicalCompletionResult(input: {
       semanticReproDigest: "",
       classification: "REHEARSAL_OK",
     };
+  }
+
+  if (
+    input.terminalClassification === "REHEARSAL_PAUSED" &&
+    input.existingProgress?.phase === "paused_at_checkpoint"
+  ) {
+    return null;
   }
 
   if (input.terminalClassification === "REHEARSAL_OK") {
@@ -1019,6 +1282,7 @@ export async function runFhvRehearsalCampaign(input: {
       runId: input.runId,
       organizationId: input.organizationId,
       manifest,
+      targetSha: input.targetSha,
       monotonicDeadline: input.monotonicDeadline,
     });
   } catch (error) {

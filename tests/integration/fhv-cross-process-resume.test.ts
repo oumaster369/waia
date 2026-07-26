@@ -558,8 +558,8 @@ describe("FHV cross-process checkpoint resume (DEE-431)", () => {
           runDir,
           processPhase: "resume-after-pause",
         }),
-      ).toBe("executed");
-      expect(resumeStartRequested).toBe(true);
+      ).toBe("accepted");
+      await spawnSystemctl(["/usr/bin/systemctl", "start", "waia-fhv-campaign.service"]);
       expect(systemctlCalls.some((call) => call.args.includes("start"))).toBe(true);
 
       const processB = await runCampaignCliProcess(

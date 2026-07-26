@@ -427,9 +427,11 @@ export async function handleFhvObserverCommand(
       status:
         execution.message === "SUPERVISOR_NOT_CONFIGURED"
           ? "rejected"
-          : execution.outcome === "executed"
-            ? "executed"
-            : "failed",
+          : execution.outcome === "accepted"
+            ? "accepted"
+            : execution.outcome === "executed"
+              ? "executed"
+              : "failed",
       message: execution.message,
       completedAtUtc: new Date().toISOString(),
       enforcementApplied: execution.enforcementApplied,
