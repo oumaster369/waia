@@ -7,6 +7,11 @@ import { join } from "node:path";
 
 import { captureFhvT4aObserverQualification } from "@/lib/trader/observability/fhv-t4a-observer-qualification";
 import {
+  parseFhvT4ContinuityVerificationProof,
+  resolveFhvT4ContinuityVerificationProofPath,
+} from "@/lib/trader/observability/fhv-t4-continuity-capture";
+import { FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS } from "@/lib/trader/observability/fhv-t4-evidence-seal";
+import {
   FHV_T4A_LEGACY_CONTAINER_IMAGE,
   FHV_T4A_LEGACY_CONTAINER_NAME,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
@@ -19,6 +24,11 @@ import type { FhvT4aPostBeforeReceiptV1 } from "@/lib/trader/observability/fhv-t
 import type { FhvT4aReconnectBaseline } from "@/lib/trader/observability/fhv-t4a-reconnect-baseline";
 import type { FhvT4aOperatorBindings } from "@/lib/trader/observability/fhv-t4a-binding-spec";
 import { FhvT4aOperatorError } from "@/lib/trader/observability/fhv-t4a-operator-errors";
+import {
+  buildFhvT4aRemoteFsExistsOp,
+  buildFhvT4aRemoteFsReadOp,
+  buildFhvT4aRemoteFsSha256Op,
+} from "@/lib/trader/observability/fhv-t4a-remote-fs-transport-helpers";
 
 export type FhvT4aExecContext = {
   bindings: FhvT4aOperatorBindings;
@@ -49,6 +59,11 @@ export type FhvT4aStepResult = Readonly<{
   classification: string;
   prerequisiteProofDigests: readonly string[];
   resultingProofDigests: readonly string[];
+  sealEvidenceRootDigest?: string;
+  verifySealClassification?: string;
+  ceremonyClassifications?: Readonly<Record<string, string>>;
+  continuityVerificationProofPath?: string;
+  continuityVerificationProofDigest?: string;
 }>;
 
 function sha256Hex(text: string): string {
@@ -107,10 +122,10 @@ function requireRemoteProof(
       `Expected remote path for ${label}: ${remotePath}`,
     );
   }
-  if (!ctx.transport.remoteFileExists(remotePath)) {
+  if (!ctx.transport.remoteFileExists(buildFhvT4aRemoteFsExistsOp(ctx, remotePath))) {
     throw new FhvT4aOperatorError(`FHV_T4A_STEP_${step}_${label}_MISSING`, `${label} missing`);
   }
-  return ctx.transport.remoteSha256(remotePath);
+  return ctx.transport.remoteSha256(buildFhvT4aRemoteFsSha256Op(ctx, remotePath));
 }
 
 export function buildFhvT4aExecContext(
@@ -504,7 +519,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
     case 12: {
       result = runSsh(ctx, hostProbeArgs(ctx, ctx.rawHostProbePath), true);
       requireOk(result, step, "host probe capture");
-      if (!ctx.transport.remoteFileExists(ctx.rawHostProbePath)) {
+      if (!ctx.transport.remoteFileExists(buildFhvT4aRemoteFsExistsOp(ctx, ctx.rawHostProbePath))) {
         throw new FhvT4aOperatorError(
           "HOST_PROBE_RAW_SOURCE_MISSING",
           "Raw host probe JSON missing after capture.",
@@ -521,7 +536,9 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         step,
         ...result,
         classification: "FHV_T4A_STEP_12_OK",
-        prerequisiteProofDigests: [ctx.transport.remoteSha256(ctx.rawHostProbePath)],
+        prerequisiteProofDigests: [
+          ctx.transport.remoteSha256(buildFhvT4aRemoteFsSha256Op(ctx, ctx.rawHostProbePath)),
+        ],
         resultingProofDigests: proofs,
       };
     }
@@ -665,7 +682,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       result = runSsh(ctx, rootCmd, true);
       requireOk(result, step, "resume root enforcement");
       const proofPath = join(ctx.runDir, "control/fhv-t4-resume-enforcement-proof.v1.json");
-      const remoteBody = ctx.transport.readRemoteFile(proofPath);
+      const remoteBody = ctx.transport.readRemoteFile(buildFhvT4aRemoteFsReadOp(ctx, proofPath));
       const parsed = JSON.parse(remoteBody) as {
         runId?: string;
         organizationId?: string;
@@ -681,7 +698,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
           "Resume enforcement proof identity mismatch.",
         );
       }
-      proofs.push(ctx.transport.remoteSha256(proofPath));
+      proofs.push(ctx.transport.remoteSha256(buildFhvT4aRemoteFsSha256Op(ctx, proofPath)));
       return {
         step,
         ...result,
@@ -834,12 +851,42 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         ctx.continuityAfter,
       ]);
       requireOk(result, step, "verify continuity");
+      const continuityVerificationProofPath = resolveFhvT4ContinuityVerificationProofPath(
+        ctx.runDir,
+      );
+      const continuityVerificationProofDigest = requireRemoteProof(
+        ctx,
+        continuityVerificationProofPath,
+        step,
+        "CONTINUITY_VERIFICATION_PROOF",
+      );
+      const proofRaw = ctx.transport.readRemoteFile(
+        buildFhvT4aRemoteFsReadOp(ctx, continuityVerificationProofPath),
+      );
+      const parsedProof = parseFhvT4ContinuityVerificationProof(JSON.parse(proofRaw));
+      const beforeDigest = ctx.reconnectBaseline?.continuityBeforeDigest;
+      const afterDigest = requireRemoteProof(ctx, ctx.continuityAfter, step, "CONTINUITY_AFTER");
+      if (
+        parsedProof.runId !== b.runId ||
+        parsedProof.organizationId !== b.organizationId ||
+        parsedProof.targetSha !== b.targetSha ||
+        parsedProof.beforeDigest !== beforeDigest ||
+        parsedProof.afterDigest !== afterDigest
+      ) {
+        throw new FhvT4aOperatorError(
+          "CONTINUITY_VERIFICATION_PROOF_NOT_REVALIDATED",
+          "Continuity verification proof identity mismatch at Step 31.",
+        );
+      }
+      proofs.push(continuityVerificationProofDigest);
       return {
         step,
         ...result,
         classification: "FHV_T4A_STEP_31_OK",
         prerequisiteProofDigests: prereq,
         resultingProofDigests: proofs,
+        continuityVerificationProofPath,
+        continuityVerificationProofDigest,
       };
     }
     case 32: {
@@ -850,7 +897,11 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       requireOk(result, step, "rollback");
       result = runSsh(ctx, hostProbeArgs(ctx, ctx.postRollbackRawHostProbePath), true);
       requireOk(result, step, "post-rollback host probe capture");
-      if (!ctx.transport.remoteFileExists(ctx.postRollbackRawHostProbePath)) {
+      if (
+        !ctx.transport.remoteFileExists(
+          buildFhvT4aRemoteFsExistsOp(ctx, ctx.postRollbackRawHostProbePath),
+        )
+      ) {
         throw new FhvT4aOperatorError(
           "HOST_PROBE_RAW_SOURCE_MISSING",
           "Post-rollback raw host probe JSON missing after capture.",
@@ -915,6 +966,14 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       ]);
       requireOk(sealResult, step, "seal evidence");
       stepStdout += `${sealResult.stdout}\n`;
+      const sealTagged = parseCeremony(sealResult.stdout);
+      const sealEvidenceRootDigest = sealTagged.rootDigest?.trim();
+      if (!sealEvidenceRootDigest) {
+        throw new FhvT4aOperatorError(
+          "FINAL_RECEIPT_SEAL_ROOT_MISSING",
+          "seal-evidence rootDigest missing from seal stdout.",
+        );
+      }
       const verifySealResult = serviceUserExec(ctx, "trader:fhv:t4:verify-seal", [
         ...identityArgs(ctx),
         "--release-tag",
@@ -926,6 +985,14 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       ]);
       requireOk(verifySealResult, step, "verify seal");
       stepStdout += `${verifySealResult.stdout}\n`;
+      const verifySealTagged = parseCeremony(verifySealResult.stdout);
+      const verifySealClassification = verifySealTagged.classification?.trim();
+      if (verifySealClassification !== FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS) {
+        throw new FhvT4aOperatorError(
+          "FINAL_RECEIPT_VERIFY_SEAL_CLASSIFICATION_EMPTY",
+          `verify-seal classification must be ${FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS}.`,
+        );
+      }
       result = serviceUserExec(ctx, "trader:fhv:t4:verify-ceremony", [
         ...identityArgs(ctx),
         "--release-tag",
@@ -953,7 +1020,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       ]);
       requireOk(result, step, "verify ceremony");
       stepStdout += `${result.stdout}\n`;
-      const ceremony = parseCeremony(stepStdout);
+      const ceremonyClassifications = parseCeremony(result.stdout);
       const required = [
         "T4A_RESULT",
         "GATE8_RESULT",
@@ -966,7 +1033,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         "EVIDENCE_SEAL_RESULT",
       ];
       for (const key of required) {
-        if (!ceremony[key]) {
+        if (!ceremonyClassifications[key]) {
           throw new FhvT4aOperatorError("FHV_T4A_STEP_32_CEREMONY_MISSING", `Missing ${key}`);
         }
       }
@@ -978,6 +1045,9 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         classification: "FHV_T4A_STEP_32_OK",
         prerequisiteProofDigests: prereq,
         resultingProofDigests: [sha256Hex(stepStdout)],
+        sealEvidenceRootDigest,
+        verifySealClassification,
+        ceremonyClassifications,
       };
     }
     default:

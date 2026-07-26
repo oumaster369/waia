@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
 import { createFhvT4aHermeticSimulation } from "@/lib/trader/observability/fhv-t4a-hermetic-simulation";
 import {
@@ -15,9 +15,16 @@ import {
 import {
   assertExactlyOneSudoTransition,
   buildEffectiveRemoteCommand,
+  FHV_T4A_REMOTE_READ_BYTE_CAP,
+  resolveApprovedRemoteRoots,
   type FhvT4aOperatorTransport,
   type FhvT4aSshInvocation,
 } from "@/lib/trader/observability/fhv-t4a-operator-transport";
+import type {
+  FhvT4aRemoteFsExistsOperation,
+  FhvT4aRemoteFsReadOperation,
+  FhvT4aRemoteFsSha256Operation,
+} from "@/lib/trader/observability/fhv-t4a-remote-fs-ops";
 
 export type FhvT4aHermeticTransportOptions = Readonly<{
   localReleaseRoot: string;
@@ -37,6 +44,7 @@ export type FhvT4aHermeticTransportOptions = Readonly<{
   pythonBin: string;
   dockerBin: string;
   systemctlBin: string;
+  systemdAnalyzeBin: string;
   operatorId?: string;
 }>;
 
@@ -65,6 +73,7 @@ export function createFhvT4aHermeticTransport(
     pythonBin: options.pythonBin,
     dockerBin: options.dockerBin,
     systemctlBin: options.systemctlBin,
+    systemdAnalyzeBin: options.systemdAnalyzeBin,
     operatorId: options.operatorId,
   });
 
@@ -83,9 +92,18 @@ export function createFhvT4aHermeticTransport(
   const invocations: FhvT4aSshInvocation[] = [];
   const preauthLedger = createFhvT4aPreauthLedger();
   const localGitBin = process.env.FHV_LOCAL_GIT_BIN?.trim() || "git";
+  const approvedRemoteRoots = [
+    options.artifactRoot,
+    options.checkoutParent,
+    join(options.checkoutParent, `waia-${options.targetSha}`),
+    join(options.artifactRoot, "RI-P7/fhv-ops-rehearsal", options.runId),
+    "/etc/systemd/system",
+  ];
 
   return {
     kind: "hermetic",
+    approvedRemoteRoots,
+    remoteReadByteCap: FHV_T4A_REMOTE_READ_BYTE_CAP,
     remoteWriteCount: () => simulation.remoteWriteCount(),
     resetRemoteWrites: () => {
       simulation.resetRemoteWrites();
@@ -126,9 +144,11 @@ export function createFhvT4aHermeticTransport(
         };
       }
     },
-    remoteFileExists: (remotePath) => simulation.remoteFileExists(remotePath),
-    readRemoteFile: (remotePath) => simulation.readRemoteFile(remotePath),
-    remoteSha256: (remotePath) => simulation.remoteSha256(remotePath),
+    remoteFileExists: (op: FhvT4aRemoteFsExistsOperation) =>
+      simulation.remoteFileExists(op.remotePath),
+    readRemoteFile: (op: FhvT4aRemoteFsReadOperation) =>
+      simulation.readRemoteFile(op.remotePath, op.byteCap),
+    remoteSha256: (op: FhvT4aRemoteFsSha256Operation) => simulation.remoteSha256(op.remotePath),
     hermeticInstalledUnitsDir: simulation.installedUnitsDir,
     sudoNoninteractiveProbe: () => ({ exitCode: 0, stdout: "", stderr: "" }),
     ssh: ({
@@ -234,6 +254,7 @@ export function createFhvT4aHermeticTransportFromEnv(
     pythonBin: requireEnv("FHV_PYTHON_BIN"),
     dockerBin: requireEnv("FHV_DOCKER_BIN"),
     systemctlBin: requireEnv("FHV_SYSTEMCTL_BIN"),
+    systemdAnalyzeBin: requireEnv("FHV_SYSTEMD_ANALYZE_BIN"),
     operatorId: requireEnv("FHV_OPERATOR_ID"),
   });
 }

@@ -11,6 +11,15 @@ import {
   resolveFhvT4ObserverQualificationProofPath,
   type FhvT4ObserverQualificationProofUnsignedV1,
 } from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
+import {
+  buildFhvT4aRemoteFsExistsOp,
+  buildFhvT4aRemoteFsSha256Op,
+} from "@/lib/trader/observability/fhv-t4a-remote-fs-transport-helpers";
+import {
+  assertFhvT4aQualificationIdentityStability,
+  assertFhvT4aPostRestartInvocationChanged,
+  parseFhvT4aQualificationObserverIdentity,
+} from "@/lib/trader/observability/fhv-t4a-qualification-identity";
 import type { FhvT4aExecContext } from "@/lib/trader/observability/fhv-t4a-operator-executor";
 import { FhvT4aOperatorError } from "@/lib/trader/observability/fhv-t4a-operator-errors";
 
@@ -22,13 +31,7 @@ function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-type SystemdIdentity = Readonly<{
-  bootId: string;
-  invocationId: string;
-  mainPid: number;
-  activeEnterTimestampMonotonicUs: string;
-  activeState: string;
-}>;
+type SystemdIdentity = ReturnType<typeof parseFhvT4aQualificationObserverIdentity>;
 
 function readObserverIdentity(ctx: FhvT4aExecContext): SystemdIdentity {
   const b = ctx.bindings;
@@ -45,7 +48,7 @@ function readObserverIdentity(ctx: FhvT4aExecContext): SystemdIdentity {
       result.stderr || result.stdout,
     );
   }
-  return JSON.parse(result.stdout.trim()) as SystemdIdentity;
+  return parseFhvT4aQualificationObserverIdentity(JSON.parse(result.stdout.trim()));
 }
 
 function readCompletedCampaignIdentity(
@@ -135,14 +138,31 @@ export function captureFhvT4aObserverQualification(
   }
   const identityAfter = readObserverIdentity(ctx);
 
+  assertFhvT4aQualificationIdentityStability({
+    before: {
+      invocationId: identityBefore.invocationId,
+      mainPid: identityBefore.mainPid,
+      activeEnterTimestampMonotonicUs: identityBefore.activeEnterTimestampMonotonicUs,
+      activeState: identityBefore.activeState,
+    },
+    after: {
+      invocationId: identityAfter.invocationId,
+      mainPid: identityAfter.mainPid,
+      activeEnterTimestampMonotonicUs: identityAfter.activeEnterTimestampMonotonicUs,
+      activeState: identityAfter.activeState,
+    },
+    bootId: identityAfter.bootId,
+    unitName: identityBefore.unitName,
+  });
+
   let completedCampaignIdentity: FhvT4CompletedCampaignSystemdIdentityV1 | undefined;
   if (phase === "POST_RESTART") {
     completedCampaignIdentity = readCompletedCampaignIdentity(ctx);
-    if (priorObserverInvocationId && identityAfter.invocationId === priorObserverInvocationId) {
-      throw new FhvT4aOperatorError(
-        "FHV_T4A_OBSERVER_RESTART_IDENTITY_UNCHANGED",
-        "Post-restart observer invocation must change.",
-      );
+    if (priorObserverInvocationId) {
+      assertFhvT4aPostRestartInvocationChanged({
+        preCampaignInvocationId: priorObserverInvocationId,
+        postRestartInvocationId: identityAfter.invocationId,
+      });
     }
   }
 
@@ -191,13 +211,13 @@ export function captureFhvT4aObserverQualification(
       writeResult.stderr || writeResult.stdout,
     );
   }
-  if (!ctx.transport.remoteFileExists(proofPath)) {
+  if (!ctx.transport.remoteFileExists(buildFhvT4aRemoteFsExistsOp(ctx, proofPath))) {
     throw new FhvT4aOperatorError(
       "FHV_T4A_OBSERVER_QUALIFICATION_PROOF_MISSING",
       "Observer qualification proof missing after write.",
     );
   }
-  const remoteDigest = ctx.transport.remoteSha256(proofPath);
+  const remoteDigest = ctx.transport.remoteSha256(buildFhvT4aRemoteFsSha256Op(ctx, proofPath));
   return {
     proofPath,
     proofDigest: remoteDigest,

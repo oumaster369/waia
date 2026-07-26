@@ -12,6 +12,7 @@ import {
   FHV_T4A_LEGACY_CONTAINER_IMAGE,
   FHV_T4A_LEGACY_CONTAINER_NAME,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
+import { FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS } from "@/lib/trader/observability/fhv-t4-evidence-seal";
 import type { FhvT4aPreauthLedgerEntry } from "@/lib/trader/observability/fhv-t4a-preauth-ledger";
 
 export const FHV_T4A_LOCAL_RELEASE_RECEIPT_SCHEMA = "fhv-t4a-local-release-receipt/v1" as const;
@@ -49,7 +50,7 @@ export type FhvT4aPreflightHostFactsV1 = Readonly<{
   legacyContainerName: string;
   legacyContainerImage: string;
   legacyContainerState: string;
-  hostBootId: string | null;
+  hostBootId: string;
   minimumFreeKiB: number;
   observedFreeKiB: number;
   hostMonotonicSample: Readonly<Record<string, unknown>>;
@@ -131,6 +132,8 @@ export type FhvT4aPostFinalizeReceiptV1 = Readonly<{
   postBeforeReceiptDigest: string;
   continuityAfterPath: string;
   continuityAfterDigest: string;
+  continuityVerificationProofPath: string;
+  continuityVerificationProofDigest: string;
   evidenceSealRootDigest: string;
   evidenceSealManifestDigest: string;
   evidenceSealVerifyClassification: string;
@@ -431,6 +434,27 @@ export function readFhvT4aPostFinalizeReceipt(localStateDir: string): FhvT4aPost
     throw new FhvT4aPhaseReceiptError(
       "FINAL_RECEIPT_SEAL_ROOT_MISSING",
       "POST finalize receipt missing evidenceSealRootDigest.",
+    );
+  }
+  if (!receipt.evidenceSealManifestDigest) {
+    throw new FhvT4aPhaseReceiptError(
+      "FINAL_RECEIPT_SEAL_MANIFEST_DIGEST_EMPTY",
+      "POST finalize receipt missing evidenceSealManifestDigest.",
+    );
+  }
+  if (
+    !receipt.evidenceSealVerifyClassification ||
+    receipt.evidenceSealVerifyClassification !== FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS
+  ) {
+    throw new FhvT4aPhaseReceiptError(
+      "FINAL_RECEIPT_VERIFY_SEAL_CLASSIFICATION_EMPTY",
+      "POST finalize receipt verify-seal classification invalid.",
+    );
+  }
+  if (!receipt.continuityVerificationProofPath || !receipt.continuityVerificationProofDigest) {
+    throw new FhvT4aPhaseReceiptError(
+      "FINAL_RECEIPT_CONTINUITY_VERIFICATION_PROOF_MISSING",
+      "POST finalize receipt missing continuity verification proof binding.",
     );
   }
   return receipt;

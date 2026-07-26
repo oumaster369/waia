@@ -2,6 +2,8 @@
  * DEE-436 — host preflight v2 parsing and binding parity.
  */
 
+import { normalizeFhvT4BootId } from "@/lib/trader/observability/fhv-t4-boot-id";
+
 export const FHV_T4_HOST_PREFLIGHT_SCHEMA_VERSION = "fhv-t4-host-preflight/v2" as const;
 
 export type FhvT4HostPreflightV2 = Readonly<{
@@ -21,12 +23,12 @@ export type FhvT4HostPreflightV2 = Readonly<{
   gitBin: string;
   pythonBin: string;
   dockerBin: string;
-  systemctlBin?: string;
-  systemdAnalyzeBin?: string;
+  systemctlBin: string;
+  systemdAnalyzeBin: string;
   legacyContainerName: string;
   legacyContainerImage: string;
   legacyContainerState: string;
-  hostBootId?: string;
+  hostBootId: string;
   minimumFreeKiB: number;
   observedFreeKiB: number;
   hostMonotonicSample: Readonly<Record<string, unknown>>;
@@ -69,6 +71,9 @@ export function parseFhvT4HostPreflightV2(raw: unknown): FhvT4HostPreflightV2 {
     "gitBin",
     "pythonBin",
     "dockerBin",
+    "systemctlBin",
+    "systemdAnalyzeBin",
+    "hostBootId",
     "legacyContainerName",
     "legacyContainerImage",
     "legacyContainerState",
@@ -109,7 +114,21 @@ export function parseFhvT4HostPreflightV2(raw: unknown): FhvT4HostPreflightV2 {
       "hostMonotonicSample required.",
     );
   }
-  return payload;
+  const normalizedHostBootId = normalizeFhvT4BootId(payload.hostBootId);
+  const sampleBootId =
+    typeof payload.hostMonotonicSample.bootId === "string"
+      ? payload.hostMonotonicSample.bootId
+      : "";
+  if (normalizeFhvT4BootId(sampleBootId) !== normalizedHostBootId) {
+    throw new FhvT4HostPreflightError(
+      "PREFLIGHT_HOST_BOOT_ID_DROPPED",
+      "hostBootId must match hostMonotonicSample.bootId.",
+    );
+  }
+  return {
+    ...payload,
+    hostBootId: normalizedHostBootId,
+  };
 }
 
 export function assertPreflightMatchesBindings(
@@ -151,13 +170,13 @@ export function assertPreflightMatchesBindings(
       );
     }
   }
-  if (preflight.systemctlBin && preflight.systemctlBin !== bindings.systemctlBin) {
+  if (preflight.systemctlBin !== bindings.systemctlBin) {
     throw new FhvT4HostPreflightError(
       "FHV_T4_PREFLIGHT_BINDING_MISMATCH",
       "systemctlBin mismatch.",
     );
   }
-  if (preflight.systemdAnalyzeBin && preflight.systemdAnalyzeBin !== bindings.systemdAnalyzeBin) {
+  if (preflight.systemdAnalyzeBin !== bindings.systemdAnalyzeBin) {
     throw new FhvT4HostPreflightError(
       "FHV_T4_PREFLIGHT_BINDING_MISMATCH",
       "systemdAnalyzeBin mismatch.",

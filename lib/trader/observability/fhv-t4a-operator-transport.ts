@@ -19,6 +19,9 @@ import {
   parseRemoteFsExistsStdout,
   parseRemoteFsReadStdout,
   parseRemoteFsSha256Stdout,
+  type FhvT4aRemoteFsExistsOperation,
+  type FhvT4aRemoteFsReadOperation,
+  type FhvT4aRemoteFsSha256Operation,
 } from "@/lib/trader/observability/fhv-t4a-remote-fs-ops";
 
 export type FhvT4aTransportExecResult = Readonly<{
@@ -35,8 +38,12 @@ export type FhvT4aSshInvocation = Readonly<{
   exitCode: number;
 }>;
 
+export const FHV_T4A_REMOTE_READ_BYTE_CAP = 10 * 1024 * 1024;
+
 export type FhvT4aOperatorTransport = Readonly<{
   kind: "hermetic" | "live";
+  approvedRemoteRoots: readonly string[];
+  remoteReadByteCap: number;
   remoteWriteCount: () => number;
   resetRemoteWrites: () => void;
   sshInvocations: () => readonly FhvT4aSshInvocation[];
@@ -54,10 +61,9 @@ export type FhvT4aOperatorTransport = Readonly<{
   sudoNoninteractiveProbe: () => FhvT4aTransportExecResult;
   gitShowBlob: (sha: string, path: string) => string;
   localGit: (args: readonly string[]) => FhvT4aTransportExecResult;
-  remoteFileExists: (remotePath: string) => boolean;
-  readRemoteFile: (remotePath: string) => string;
-  remoteSha256: (remotePath: string) => string;
-  /** Hermetic integration: local filesystem path backing `/etc/systemd/system`. */
+  remoteFileExists: (op: FhvT4aRemoteFsExistsOperation) => boolean;
+  readRemoteFile: (op: FhvT4aRemoteFsReadOperation) => string;
+  remoteSha256: (op: FhvT4aRemoteFsSha256Operation) => string;
   hermeticInstalledUnitsDir?: string;
 }>;
 
@@ -99,13 +105,11 @@ export function assertExactlyOneSudoTransition(
   }
 }
 
-const REMOTE_READ_BYTE_CAP = 10 * 1024 * 1024;
-
 function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-function resolveApprovedRemoteRoots(env: NodeJS.ProcessEnv): string[] {
+export function resolveApprovedRemoteRoots(env: NodeJS.ProcessEnv): string[] {
   const artifactRoot = env.FHV_ARTIFACT_ROOT?.trim();
   const checkoutParent = env.FHV_CHECKOUT_PARENT?.trim();
   const targetSha = env.EXECUTION_SERVER_TARGET_SHA?.trim()?.toLowerCase();
@@ -138,7 +142,9 @@ export function createFhvT4aLiveTransport(
   const localGitBin = env.FHV_LOCAL_GIT_BIN?.trim() || "git";
   const sshBin = env.FHV_LOCAL_SSH_BIN?.trim() || "ssh";
   const remotePythonBin = env.FHV_PYTHON_BIN?.trim() ?? "";
+  const serviceUser = env.FHV_SERVICE_USER?.trim() ?? "";
   const approvedRoots = resolveApprovedRemoteRoots(env);
+
   const sshBase = [
     "-o",
     "BatchMode=yes",
@@ -160,14 +166,10 @@ export function createFhvT4aLiveTransport(
     };
   };
 
-  const remoteFsBase = {
-    approvedRoots,
-    locus: "REMOTE_ROOT" as const,
-    pythonBin: remotePythonBin,
-  };
-
   return {
     kind: "live",
+    approvedRemoteRoots: approvedRoots,
+    remoteReadByteCap: FHV_T4A_REMOTE_READ_BYTE_CAP,
     remoteWriteCount: () => remoteWrites,
     resetRemoteWrites: () => {
       remoteWrites = 0;
@@ -190,13 +192,8 @@ export function createFhvT4aLiveTransport(
         return { exitCode: err.status ?? 1, stdout: err.stdout ?? "", stderr: err.stderr ?? "" };
       }
     },
-    remoteFileExists: (remotePath) => {
-      const result = sshExec(
-        buildRemoteFsExistsCommand({
-          ...remoteFsBase,
-          remotePath,
-        }),
-      );
+    remoteFileExists: (op) => {
+      const result = sshExec(buildRemoteFsExistsCommand(op));
       if (result.exitCode !== 0) {
         return false;
       }
@@ -206,28 +203,17 @@ export function createFhvT4aLiveTransport(
         return false;
       }
     },
-    readRemoteFile: (remotePath) => {
-      const result = sshExec(
-        buildRemoteFsReadCommand({
-          ...remoteFsBase,
-          remotePath,
-          byteCap: REMOTE_READ_BYTE_CAP,
-        }),
-      );
+    readRemoteFile: (op) => {
+      const result = sshExec(buildRemoteFsReadCommand(op));
       if (result.exitCode !== 0) {
-        throw new Error(`FHV_T4A_REMOTE_READ_FAILED:${remotePath}:${result.stderr}`);
+        throw new Error(`FHV_T4A_REMOTE_READ_FAILED:${op.remotePath}:${result.stderr}`);
       }
-      return parseRemoteFsReadStdout(result.stdout, REMOTE_READ_BYTE_CAP).bytes;
+      return parseRemoteFsReadStdout(result.stdout, op.byteCap).bytes;
     },
-    remoteSha256: (remotePath) => {
-      const result = sshExec(
-        buildRemoteFsSha256Command({
-          ...remoteFsBase,
-          remotePath,
-        }),
-      );
+    remoteSha256: (op) => {
+      const result = sshExec(buildRemoteFsSha256Command(op));
       if (result.exitCode !== 0) {
-        throw new Error(`FHV_T4A_REMOTE_SHA256_FAILED:${remotePath}:${result.stderr}`);
+        throw new Error(`FHV_T4A_REMOTE_SHA256_FAILED:${op.remotePath}:${result.stderr}`);
       }
       return parseRemoteFsSha256Stdout(result.stdout);
     },

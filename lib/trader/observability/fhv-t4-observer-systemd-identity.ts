@@ -5,6 +5,8 @@
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
+import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
+
 export const FHV_T4_OBSERVER_SYSTEMD_IDENTITY_SCHEMA_VERSION =
   "fhv-t4-observer-systemd-identity/v1" as const;
 
@@ -101,6 +103,12 @@ export function parseFhvT4ObserverSystemdIdentity(raw: unknown): FhvT4ObserverSy
     activeEnterTimestampMonotonicUs: identity.activeEnterTimestampMonotonicUs.trim(),
     activeState: identity.activeState.trim(),
   };
+}
+
+export function computeFhvT4ObserverSystemdIdentityDigest(
+  identity: FhvT4ObserverSystemdIdentityV1,
+): string {
+  return computePayloadDigest(identity);
 }
 
 export function readFhvT4ObserverSystemdIdentity(

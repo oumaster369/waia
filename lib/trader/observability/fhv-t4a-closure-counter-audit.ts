@@ -105,6 +105,25 @@ export const FHV_T4A_CLOSURE_COUNTER_NAMES = [
   "FINAL_RECEIPT_SEAL_ROOT_MISSING",
   "HERMETIC_CANNED_CLOSURE_SUCCESS",
   "BINDING_PARITY_MANUAL_DUPLICATION",
+  "ATOMIC_RENAME_CAN_OVERWRITE_TARGET",
+  "ATOMIC_CONCURRENCY_TEST_NOT_CONCURRENT",
+  "RECONNECT_CONTINUITY_NOT_STRICTLY_PARSED",
+  "REMOTE_FS_PRIVILEGE_LOCUS_IGNORED",
+  "REMOTE_FS_UNBOUNDED_READ",
+  "REMOTE_FS_PARENT_SYMLINK_ESCAPE",
+  "FINAL_RECEIPT_VERIFY_SEAL_CLASSIFICATION_EMPTY",
+  "FINAL_RECEIPT_SEAL_MANIFEST_DIGEST_EMPTY",
+  "PREFLIGHT_SYSTEMCTL_FACT_SYNTHETIC",
+  "PREFLIGHT_SYSTEMD_ANALYZE_FACT_SYNTHETIC",
+  "PREFLIGHT_HOST_BOOT_ID_DROPPED",
+  "STEP_TRACE_SERVICE_UID_HARDCODED",
+  "QUALIFICATION_SECOND_CAPTURE_NOT_ACTIVE",
+  "QUALIFICATION_ACTIVE_ENTER_TIMESTAMP_DRIFT",
+  "QUALIFICATION_IDENTITY_NOT_CANONICALLY_PARSED",
+  "QUALIFICATION_BOOT_ID_INTERNAL_MISMATCH",
+  "FINAL_RECEIPT_CONTINUITY_VERIFICATION_PROOF_MISSING",
+  "FINAL_RECEIPT_CONTINUITY_VERIFICATION_DIGEST_MISSING",
+  "CONTINUITY_VERIFICATION_PROOF_NOT_REVALIDATED",
 ] as const;
 
 export type FhvT4aClosureCounterName = (typeof FHV_T4A_CLOSURE_COUNTER_NAMES)[number];
@@ -188,6 +207,7 @@ function probePreauthRemoteWrites(root: string): number {
       pythonBin: "/usr/bin/python3",
       dockerBin: "/usr/bin/docker",
       systemctlBin: "/usr/bin/systemctl",
+      systemdAnalyzeBin: "/usr/bin/systemd-analyze",
     });
     transport.resetRemoteWrites();
     for (const scriptPath of [
@@ -401,7 +421,10 @@ export function auditFhvT4aClosureCounters(
   ) {
     counters.TRACE_ONLY_POST_STEPS += 1;
   }
-  if (!executorBody.includes("verify-ceremony") || !operatorBody.includes("ceremonyLines")) {
+  if (
+    !executorBody.includes("verify-ceremony") ||
+    (!operatorBody.includes("ceremonyClassifications") && !operatorBody.includes("ceremonyLines"))
+  ) {
     counters.CEREMONY_OUTPUT_NOT_REACHED = 1;
   }
 
@@ -731,6 +754,128 @@ export function auditFhvT4aClosureCounters(
     !operatorBody.includes("resolveFhvT4aOperatorBindingsFromSpec")
   ) {
     counters.BINDING_PARITY_MANUAL_DUPLICATION = 1;
+  }
+
+  if (
+    atomicWrite.includes("renameSync(tempPath, finalPath)") &&
+    !atomicWrite.includes("publishAtomicExclusiveTemp")
+  ) {
+    counters.ATOMIC_RENAME_CAN_OVERWRITE_TARGET = 1;
+  }
+  const raceTest = join(root, "tests/unit/fhv-t4-atomic-exclusive-race.test.ts");
+  const raceWorker = join(root, "tests/helpers/fhv-t4-atomic-race-worker.ts");
+  if (
+    !existsSync(raceTest) ||
+    !existsSync(raceWorker) ||
+    !readFileSync(raceTest, "utf8").includes("fork(") ||
+    !readFileSync(raceTest, "utf8").includes("publishAtomicExclusiveTemp")
+  ) {
+    counters.ATOMIC_CONCURRENCY_TEST_NOT_CONCURRENT = 1;
+  }
+  if (
+    !reconnectBaseline.includes("parseFhvT4ContinuitySnapshot") ||
+    !existsSync(join(root, "tests/unit/fhv-t4-reconnect-baseline.test.ts"))
+  ) {
+    counters.RECONNECT_CONTINUITY_NOT_STRICTLY_PARSED = 1;
+  }
+  if (
+    !remoteFsOps.includes("applyRemoteFsPrivilegeLocus") ||
+    !remoteFsOps.includes('case "SERVICE_USER"')
+  ) {
+    counters.REMOTE_FS_PRIVILEGE_LOCUS_IGNORED = 1;
+  }
+  if (!remoteFsOps.includes("cap + 1") || !remoteFsOps.includes("len(data) > cap")) {
+    counters.REMOTE_FS_UNBOUNDED_READ = 1;
+  }
+  if (
+    !remoteFsOps.includes("PARENT_SYMLINK_ESCAPE") ||
+    !existsSync(join(root, "tests/unit/fhv-t4-remote-fs-ops.test.ts"))
+  ) {
+    counters.REMOTE_FS_PARENT_SYMLINK_ESCAPE = 1;
+  }
+  if (
+    !phaseReceipts.includes("FINAL_RECEIPT_VERIFY_SEAL_CLASSIFICATION_EMPTY") ||
+    !operatorBody.includes("verifySealClassification") ||
+    !existsSync(join(root, "tests/unit/fhv-t4-seal-receipt-parsing.test.ts"))
+  ) {
+    counters.FINAL_RECEIPT_VERIFY_SEAL_CLASSIFICATION_EMPTY = 1;
+  }
+  if (
+    !phaseReceipts.includes("FINAL_RECEIPT_SEAL_MANIFEST_DIGEST_EMPTY") ||
+    !operatorBody.includes("evidenceSealManifestDigest")
+  ) {
+    counters.FINAL_RECEIPT_SEAL_MANIFEST_DIGEST_EMPTY = 1;
+  }
+  const hostPreflightTs = existsSync(
+    join(root, "lib/trader/observability/fhv-t4-host-preflight.ts"),
+  )
+    ? read(root, "lib/trader/observability/fhv-t4-host-preflight.ts")
+    : "";
+  if (
+    !hostPreflightTs.includes("systemctlBin: string") ||
+    !preflight.includes("--systemctl-bin") ||
+    !existsSync(join(root, "tests/unit/fhv-t4-host-preflight-v2.test.ts"))
+  ) {
+    counters.PREFLIGHT_SYSTEMCTL_FACT_SYNTHETIC = 1;
+  }
+  if (
+    !hostPreflightTs.includes("systemdAnalyzeBin: string") ||
+    !preflight.includes("--systemd-analyze-bin")
+  ) {
+    counters.PREFLIGHT_SYSTEMD_ANALYZE_FACT_SYNTHETIC = 1;
+  }
+  if (!hostPreflightTs.includes("hostBootId: string") || !preflight.includes("hostBootId")) {
+    counters.PREFLIGHT_HOST_BOOT_ID_DROPPED = 1;
+  }
+  if (
+    operatorBody.includes('expectedEffectiveUid: locus === "SERVICE_USER" ? 1000') ||
+    !operatorBody.includes("resolveExpectedEffectiveUid")
+  ) {
+    counters.STEP_TRACE_SERVICE_UID_HARDCODED = 1;
+  }
+  const qualificationIdentity = existsSync(
+    join(root, "lib/trader/observability/fhv-t4a-qualification-identity.ts"),
+  )
+    ? read(root, "lib/trader/observability/fhv-t4a-qualification-identity.ts")
+    : "";
+  if (
+    !qualificationIdentity.includes("QUALIFICATION_SECOND_CAPTURE_NOT_ACTIVE") ||
+    !existsSync(join(root, "tests/unit/fhv-t4-qualification-identity.test.ts"))
+  ) {
+    counters.QUALIFICATION_SECOND_CAPTURE_NOT_ACTIVE = 1;
+  }
+  if (!qualificationIdentity.includes("QUALIFICATION_ACTIVE_ENTER_TIMESTAMP_DRIFT")) {
+    counters.QUALIFICATION_ACTIVE_ENTER_TIMESTAMP_DRIFT = 1;
+  }
+  if (
+    !qualificationIdentity.includes("QUALIFICATION_IDENTITY_NOT_CANONICALLY_PARSED") ||
+    !read(root, "lib/trader/observability/fhv-t4a-observer-qualification.ts").includes(
+      "parseFhvT4aQualificationObserverIdentity",
+    )
+  ) {
+    counters.QUALIFICATION_IDENTITY_NOT_CANONICALLY_PARSED = 1;
+  }
+  if (!qualificationIdentity.includes("QUALIFICATION_BOOT_ID_INTERNAL_MISMATCH")) {
+    counters.QUALIFICATION_BOOT_ID_INTERNAL_MISMATCH = 1;
+  }
+  if (
+    !phaseReceipts.includes("continuityVerificationProofPath") ||
+    !operatorBody.includes("continuityVerificationProofDigest") ||
+    !existsSync(join(root, "tests/unit/fhv-t4-continuity-final-receipt.test.ts"))
+  ) {
+    counters.FINAL_RECEIPT_CONTINUITY_VERIFICATION_PROOF_MISSING = 1;
+  }
+  if (
+    !phaseReceipts.includes("continuityVerificationProofDigest") ||
+    !executorBody.includes("continuityVerificationProofDigest")
+  ) {
+    counters.FINAL_RECEIPT_CONTINUITY_VERIFICATION_DIGEST_MISSING = 1;
+  }
+  if (
+    !operatorBody.includes("CONTINUITY_VERIFICATION_PROOF_NOT_REVALIDATED") ||
+    !executorBody.includes("CONTINUITY_VERIFICATION_PROOF_NOT_REVALIDATED")
+  ) {
+    counters.CONTINUITY_VERIFICATION_PROOF_NOT_REVALIDATED = 1;
   }
 
   for (const scriptPath of FHV_T4A_BOOTSTRAP_SCRIPT_PATHS) {

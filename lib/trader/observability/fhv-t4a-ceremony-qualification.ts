@@ -14,6 +14,11 @@ import {
   type FhvT4ObserverQualificationProofV1,
 } from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
 import { FhvT4CeremonyQualificationError } from "@/lib/trader/observability/fhv-t4a-ceremony-qualification-errors";
+import {
+  assertFhvT4aPostRestartInvocationChanged,
+  assertFhvT4aQualificationIdentityCapture,
+  assertFhvT4aQualificationIdentityStability,
+} from "@/lib/trader/observability/fhv-t4a-qualification-identity";
 
 export function verifyFhvT4CeremonyQualificationProofs(input: {
   runRoot: string;
@@ -83,6 +88,43 @@ export function verifyFhvT4CeremonyQualificationProofs(input: {
     throw new FhvT4CeremonyQualificationError(
       "FHV_T4_CEREMONY_QUALIFICATION_POST_PHASE_INVALID",
       "Post proof must be POST_RESTART.",
+    );
+  }
+
+  for (const [label, proof] of [
+    ["pre", preProof],
+    ["post", postProof],
+  ] as const) {
+    try {
+      assertFhvT4aQualificationIdentityCapture(proof.identityBeforeCapture, "before");
+      assertFhvT4aQualificationIdentityCapture(proof.identityAfterCapture, "after");
+      assertFhvT4aQualificationIdentityStability({
+        before: proof.identityBeforeCapture,
+        after: proof.identityAfterCapture,
+        bootId: proof.bootId,
+        unitName: proof.unitName,
+      });
+    } catch (error) {
+      const code =
+        error instanceof Error && "code" in error
+          ? String((error as { code?: string }).code)
+          : "QUALIFICATION_NOT_SEMANTICALLY_VERIFIED_BY_CEREMONY";
+      throw new FhvT4CeremonyQualificationError(
+        code,
+        `Ceremony qualification ${label} proof identity stability failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  try {
+    assertFhvT4aPostRestartInvocationChanged({
+      preCampaignInvocationId: preProof.identityAfterCapture.invocationId,
+      postRestartInvocationId: postProof.identityAfterCapture.invocationId,
+    });
+  } catch (error) {
+    throw new FhvT4CeremonyQualificationError(
+      "FHV_T4_CEREMONY_OBSERVER_RESTART_NOT_PROVEN",
+      error instanceof Error ? error.message : String(error),
     );
   }
 

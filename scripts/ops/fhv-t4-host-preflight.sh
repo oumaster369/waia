@@ -46,6 +46,8 @@ Usage: fhv-t4-host-preflight.sh \
   --git-bin ABS_PATH \
   --python-bin ABS_PATH \
   --docker-bin ABS_PATH \
+  --systemctl-bin ABS_PATH \
+  --systemd-analyze-bin ABS_PATH \
   --expected-legacy-container-name VALUE \
   --expected-legacy-container-image VALUE \
   [--output ABS_PATH]
@@ -77,6 +79,8 @@ COREPACK_BIN=""
 GIT_BIN=""
 PYTHON_BIN=""
 DOCKER_BIN=""
+SYSTEMCTL_BIN=""
+SYSTEMD_ANALYZE_BIN=""
 EXPECTED_LEGACY_CONTAINER_NAME=""
 EXPECTED_LEGACY_CONTAINER_IMAGE=""
 OUTPUT=""
@@ -109,6 +113,8 @@ while [[ $# -gt 0 ]]; do
     --git-bin) track_flag "$1"; GIT_BIN="${2:-}"; shift 2 ;;
     --python-bin) track_flag "$1"; PYTHON_BIN="${2:-}"; shift 2 ;;
     --docker-bin) track_flag "$1"; DOCKER_BIN="${2:-}"; shift 2 ;;
+    --systemctl-bin) track_flag "$1"; SYSTEMCTL_BIN="${2:-}"; shift 2 ;;
+    --systemd-analyze-bin) track_flag "$1"; SYSTEMD_ANALYZE_BIN="${2:-}"; shift 2 ;;
     --expected-legacy-container-name) track_flag "$1"; EXPECTED_LEGACY_CONTAINER_NAME="${2:-}"; shift 2 ;;
     --expected-legacy-container-image) track_flag "$1"; EXPECTED_LEGACY_CONTAINER_IMAGE="${2:-}"; shift 2 ;;
     --output) track_flag "$1"; OUTPUT="${2:-}"; shift 2 ;;
@@ -136,6 +142,10 @@ require_abs "corepack-bin" "$COREPACK_BIN"
 require_abs "git-bin" "$GIT_BIN"
 require_abs "python-bin" "$PYTHON_BIN"
 require_abs "docker-bin" "$DOCKER_BIN"
+require_abs "systemctl-bin" "$SYSTEMCTL_BIN"
+require_abs "systemd-analyze-bin" "$SYSTEMD_ANALYZE_BIN"
+[[ -x "$SYSTEMCTL_BIN" ]] || fail "systemctl-bin not executable"
+[[ -x "$SYSTEMD_ANALYZE_BIN" ]] || fail "systemd-analyze-bin not executable"
 [[ -n "$EXPECTED_LEGACY_CONTAINER_NAME" && -n "$EXPECTED_LEGACY_CONTAINER_IMAGE" ]] || usage
 
 fhv_t4_require_effective_root
@@ -148,8 +158,11 @@ fi
 if [[ "$(readlink -f /proc/1/exe 2>/dev/null || true)" != *systemd* ]]; then
   fail "systemd must be the active init (PID 1)"
 fi
-if ! command -v systemctl >/dev/null 2>&1; then
-  fail "systemctl required"
+if ! "$SYSTEMCTL_BIN" --version >/dev/null 2>&1; then
+  fail "systemctl probe failed"
+fi
+if ! "$SYSTEMD_ANALYZE_BIN" critical-chain --no-pager systemd-journald.service >/dev/null 2>&1; then
+  fail "systemd-analyze probe failed"
 fi
 
 ACTUAL_HOSTNAME="$(hostname)"
@@ -213,14 +226,16 @@ CONTAINER_IMAGE="$("$DOCKER_BIN" inspect -f '{{.Config.Image}}' "$EXPECTED_LEGAC
 
 MONOTONIC_JSON="$("$PYTHON_BIN" - <<'PY'
 import json, pathlib, time
+boot_id = pathlib.Path("/proc/sys/kernel/random/boot_id").read_text().strip()
 print(json.dumps({
     "schemaVersion": "fhv-t4-host-monotonic-sample/v1",
     "clockSource": "CLOCK_BOOTTIME",
-    "bootId": pathlib.Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
+    "bootId": boot_id,
     "monotonicNs": str(time.clock_gettime_ns(time.CLOCK_BOOTTIME)),
 }, separators=(",", ":")))
 PY
 )"
+HOST_BOOT_ID="$(printf '%s' "$MONOTONIC_JSON" | "$PYTHON_BIN" -c 'import json,sys; print(json.load(sys.stdin)["bootId"])')"
 
 export FHV_JSON_PAYLOAD
 FHV_JSON_PAYLOAD="$(
@@ -238,6 +253,9 @@ FHV_JSON_PAYLOAD="$(
   GIT_BIN="$GIT_BIN" \
   PYTHON_BIN="$PYTHON_BIN" \
   DOCKER_BIN="$DOCKER_BIN" \
+  SYSTEMCTL_BIN="$SYSTEMCTL_BIN" \
+  SYSTEMD_ANALYZE_BIN="$SYSTEMD_ANALYZE_BIN" \
+  HOST_BOOT_ID="$HOST_BOOT_ID" \
   EXPECTED_LEGACY_CONTAINER_NAME="$EXPECTED_LEGACY_CONTAINER_NAME" \
   CONTAINER_IMAGE="$CONTAINER_IMAGE" \
   CONTAINER_STATE="$CONTAINER_STATE" \
@@ -263,6 +281,9 @@ payload = {
     "gitBin": os.environ["GIT_BIN"],
     "pythonBin": os.environ["PYTHON_BIN"],
     "dockerBin": os.environ["DOCKER_BIN"],
+    "systemctlBin": os.environ["SYSTEMCTL_BIN"],
+    "systemdAnalyzeBin": os.environ["SYSTEMD_ANALYZE_BIN"],
+    "hostBootId": os.environ["HOST_BOOT_ID"],
     "legacyContainerName": os.environ["EXPECTED_LEGACY_CONTAINER_NAME"],
     "legacyContainerImage": os.environ["CONTAINER_IMAGE"],
     "legacyContainerState": os.environ["CONTAINER_STATE"],

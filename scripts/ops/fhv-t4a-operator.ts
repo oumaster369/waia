@@ -18,9 +18,14 @@ import {
 import {
   buildFhvT4aExecContext,
   executeFhvT4aStep,
-  parseFhvT4aTaggedKeyValueLines,
   type FhvT4aStepResult,
 } from "@/lib/trader/observability/fhv-t4a-operator-executor";
+import { FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS } from "@/lib/trader/observability/fhv-t4-evidence-seal";
+import {
+  parseFhvT4ContinuitySnapshot,
+  parseFhvT4ContinuityVerificationProof,
+  resolveFhvT4ContinuityVerificationProofPath,
+} from "@/lib/trader/observability/fhv-t4-continuity-capture";
 import {
   createFhvT4aLiveTransport,
   getFhvT4aOperatorTransportForTests,
@@ -37,6 +42,7 @@ import {
   readFhvT4aLocalReleaseReceipt,
   readFhvT4aPostBeforeReceipt,
   readFhvT4aPreauthReceipt,
+  type FhvT4aPreauthReceiptV1,
   writeFhvT4aLocalReleaseReceipt,
   writeFhvT4aPostBeforeReceipt,
   writeFhvT4aPostFinalizeReceipt,
@@ -47,8 +53,12 @@ import {
   parseFhvT4HostPreflightV2,
 } from "@/lib/trader/observability/fhv-t4-host-preflight";
 import { parseFhvT4CompletedCampaignSystemdIdentity } from "@/lib/trader/observability/fhv-t4-completed-campaign-systemd-identity";
-import { parseFhvT4ObserverSystemdIdentity } from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
+import {
+  computeFhvT4ObserverSystemdIdentityDigest,
+  parseFhvT4ObserverSystemdIdentity,
+} from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
 import { revalidateFhvT4aReconnectBaseline } from "@/lib/trader/observability/fhv-t4a-reconnect-baseline";
+import { buildFhvT4aRemoteFsOpFromTransport } from "@/lib/trader/observability/fhv-t4a-remote-fs-transport-helpers";
 import { resolveFhvT4ObserverQualificationPreCampaignPath } from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
 import { FhvT4aOperatorError } from "@/lib/trader/observability/fhv-t4a-operator-errors";
 
@@ -109,6 +119,26 @@ function emitTrace(bindings: FhvT4aOperatorBindings, line: FhvT4aOperatorTraceLi
   process.stdout.write(serialized);
 }
 
+export function resolveExpectedEffectiveUid(
+  locus: string,
+  preauthReceipt: FhvT4aPreauthReceiptV1 | undefined,
+): number | "n/a" {
+  if (locus === "SERVICE_USER") {
+    const uid = preauthReceipt?.serviceUid ?? preauthReceipt?.preflightHostFacts.serviceUid;
+    if (uid === undefined || !Number.isInteger(uid) || uid <= 0) {
+      throw new FhvT4aOperatorError(
+        "STEP_TRACE_SERVICE_UID_HARDCODED",
+        "PRE_AUTH receipt service UID required for SERVICE_USER trace emission.",
+      );
+    }
+    return uid;
+  }
+  if (locus === "REMOTE_ROOT") {
+    return 0;
+  }
+  return "n/a";
+}
+
 function emitStepTrace(
   bindings: FhvT4aOperatorBindings,
   phase: string,
@@ -117,13 +147,14 @@ function emitStepTrace(
   commandOwner: string,
   mutationClass: string,
   result: FhvT4aStepResult,
+  preauthReceipt?: FhvT4aPreauthReceiptV1,
 ): void {
   emitTrace(bindings, {
     schemaVersion: FHV_T4A_OPERATOR_TRACE_SCHEMA_VERSION,
     phase,
     semanticStep: step,
     locus,
-    expectedEffectiveUid: locus === "SERVICE_USER" ? 1000 : locus === "REMOTE_ROOT" ? 0 : "n/a",
+    expectedEffectiveUid: resolveExpectedEffectiveUid(locus, preauthReceipt),
     commandOwner,
     targetSha: bindings.targetSha,
     releaseTag: bindings.releaseTag,
@@ -340,6 +371,10 @@ export function runFhvT4aOperatorPhase(
       bindings.pythonBin,
       "--docker-bin",
       bindings.dockerBin,
+      "--systemctl-bin",
+      bindings.systemctlBin,
+      "--systemd-analyze-bin",
+      bindings.systemdAnalyzeBin,
       "--expected-legacy-container-name",
       FHV_T4A_LEGACY_CONTAINER_NAME,
       "--expected-legacy-container-image",
@@ -415,8 +450,8 @@ export function runFhvT4aOperatorPhase(
       gitBin: bindings.gitBin,
       pythonBin: bindings.pythonBin,
       dockerBin: bindings.dockerBin,
-      systemctlBin: bindings.systemctlBin,
-      systemdAnalyzeBin: bindings.systemdAnalyzeBin,
+      systemctlBin: preflight.systemctlBin,
+      systemdAnalyzeBin: preflight.systemdAnalyzeBin,
       bootstrapBlobDigests: localReceipt.bootstrapBlobDigests,
       bindingDigest: localReceipt.bindingDigest,
       preauthLedger: ledgerEntries,
@@ -438,12 +473,12 @@ export function runFhvT4aOperatorPhase(
         gitBin: preflight.gitBin,
         pythonBin: preflight.pythonBin,
         dockerBin: preflight.dockerBin,
-        systemctlBin: bindings.systemctlBin,
-        systemdAnalyzeBin: bindings.systemdAnalyzeBin,
+        systemctlBin: preflight.systemctlBin,
+        systemdAnalyzeBin: preflight.systemdAnalyzeBin,
         legacyContainerName: preflight.legacyContainerName,
         legacyContainerImage: preflight.legacyContainerImage,
         legacyContainerState: preflight.legacyContainerState,
-        hostBootId: preflight.hostBootId ?? null,
+        hostBootId: preflight.hostBootId,
         minimumFreeKiB: preflight.minimumFreeKiB,
         observedFreeKiB: preflight.observedFreeKiB,
         hostMonotonicSample: preflight.hostMonotonicSample,
@@ -505,10 +540,17 @@ export function runFhvT4aOperatorPhase(
               : "unknown",
         contractStep?.mutationClass ?? "remote-mutate",
         result,
+        preauthReceipt,
       );
       stepProofDigests[String(step)] = sha256Hex(JSON.stringify(result));
     }
-    if (!transport.remoteFileExists(ctx.continuityBefore)) {
+    const continuityExistsOp = buildFhvT4aRemoteFsOpFromTransport({
+      transport,
+      bindings,
+      remotePath: ctx.continuityBefore,
+      mode: "exists",
+    });
+    if (!transport.remoteFileExists(continuityExistsOp)) {
       throw new FhvT4aOperatorError(
         "FHV_T4A_CONTINUITY_BEFORE_MISSING",
         "Real continuity-before artifact required.",
@@ -517,39 +559,39 @@ export function runFhvT4aOperatorPhase(
     const observerQualificationPrePath = resolveFhvT4ObserverQualificationPreCampaignPath(
       ctx.runDir,
     );
-    if (!transport.remoteFileExists(observerQualificationPrePath)) {
+    const preQualExistsOp = buildFhvT4aRemoteFsOpFromTransport({
+      transport,
+      bindings,
+      remotePath: observerQualificationPrePath,
+      mode: "exists",
+    });
+    if (!transport.remoteFileExists(preQualExistsOp)) {
       throw new FhvT4aOperatorError(
         "FHV_T4A_OBSERVER_QUALIFICATION_PRE_MISSING",
         "Pre-campaign observer qualification proof required.",
       );
     }
-    const campaignIdentityCmd = `"${ctx.repoRoot}/scripts/ops/fhv-t4-campaign-systemd-identity-read.sh" --systemctl-bin '${bindings.systemctlBin.replace(/'/g, `'\\''`)}' --python-bin '${bindings.pythonBin.replace(/'/g, `'\\''`)}' waia-fhv-campaign.service`;
-    const campaignIdentityResult = transport.ssh({
-      remoteCommand: campaignIdentityCmd,
-      asRoot: true,
+    const continuityReadOp = buildFhvT4aRemoteFsOpFromTransport({
+      transport,
+      bindings,
+      remotePath: ctx.continuityBefore,
+      mode: "read",
     });
-    if (campaignIdentityResult.exitCode !== 0) {
-      throw new FhvT4aOperatorError(
-        "FHV_T4A_CAMPAIGN_IDENTITY_READ_FAILED",
-        campaignIdentityResult.stderr || campaignIdentityResult.stdout,
-      );
-    }
-    const observerIdentityCmd = `"${ctx.repoRoot}/scripts/ops/fhv-t4-observer-systemd-identity-read.sh" --systemctl-bin '${bindings.systemctlBin.replace(/'/g, `'\\''`)}' --python-bin '${bindings.pythonBin.replace(/'/g, `'\\''`)}' waia-fhv-observer.service`;
-    const observerIdentityResult = transport.ssh({
-      remoteCommand: observerIdentityCmd,
-      asRoot: true,
-    });
-    if (observerIdentityResult.exitCode !== 0) {
-      throw new FhvT4aOperatorError(
-        "FHV_T4A_OBSERVER_IDENTITY_READ_FAILED",
-        observerIdentityResult.stderr || observerIdentityResult.stdout,
-      );
-    }
-    const campaignIdentity = parseFhvT4CompletedCampaignSystemdIdentity(
-      JSON.parse(campaignIdentityResult.stdout.trim()),
-    );
+    const continuityBeforeRaw = transport.readRemoteFile(continuityReadOp);
+    const continuityBefore = parseFhvT4ContinuitySnapshot(JSON.parse(continuityBeforeRaw));
     const observerIdentity = parseFhvT4ObserverSystemdIdentity(
-      JSON.parse(observerIdentityResult.stdout.trim()),
+      continuityBefore.observerSystemdIdentity,
+    );
+    const campaignIdentity = parseFhvT4CompletedCampaignSystemdIdentity(
+      continuityBefore.campaignSystemdIdentity,
+    );
+    const continuityBeforeDigest = transport.remoteSha256(
+      buildFhvT4aRemoteFsOpFromTransport({
+        transport,
+        bindings,
+        remotePath: ctx.continuityBefore,
+        mode: "sha256",
+      }),
     );
     writeFhvT4aPostBeforeReceipt(bindings.localStateDir, {
       targetSha: bindings.targetSha,
@@ -561,11 +603,18 @@ export function runFhvT4aOperatorPhase(
       bindingDigest: expectedBindingDigest,
       runDir: ctx.runDir,
       continuityBeforePath: ctx.continuityBefore,
-      continuityBeforeDigest: transport.remoteSha256(ctx.continuityBefore),
-      observerIdentityDigest: sha256Hex(JSON.stringify(observerIdentity)),
+      continuityBeforeDigest,
+      observerIdentityDigest: computeFhvT4ObserverSystemdIdentityDigest(observerIdentity),
       campaignIdentityDigest: campaignIdentity.contentDigest,
       observerQualificationPrePath,
-      observerQualificationPreDigest: transport.remoteSha256(observerQualificationPrePath),
+      observerQualificationPreDigest: transport.remoteSha256(
+        buildFhvT4aRemoteFsOpFromTransport({
+          transport,
+          bindings,
+          remotePath: observerQualificationPrePath,
+          mode: "sha256",
+        }),
+      ),
       stepProofDigests,
     });
     return FHV_T4A_TERMINAL_AWAITING_HUMAN_DISCONNECT_RECONNECT;
@@ -573,6 +622,8 @@ export function runFhvT4aOperatorPhase(
 
   if (phase === "post-reconnect-finalize") {
     const postBefore = readFhvT4aPostBeforeReceipt(bindings.localStateDir);
+    const expectedBindingDigest = fhvT4aBindingDigest(fhvT4aFullBindingFields(bindings));
+    const preauthReceipt = readFhvT4aPreauthReceipt(bindings.localStateDir, expectedBindingDigest);
     const baseline = revalidateFhvT4aReconnectBaseline({
       bindings,
       transport,
@@ -580,11 +631,13 @@ export function runFhvT4aOperatorPhase(
     });
     ctx.postBeforeReceipt = postBefore;
     ctx.reconnectBaseline = baseline;
-    const ceremonyLines: Record<string, string> = {};
     const stepProofDigests: Record<string, string> = {};
     let evidenceSealRootDigest = "";
     let evidenceSealManifestDigest = "";
     let evidenceSealVerifyClassification = "";
+    let ceremonyClassifications: Record<string, string> = {};
+    let continuityVerificationProofPath = "";
+    let continuityVerificationProofDigest = "";
     for (const step of [28, 29, 30, 31, 32]) {
       const result = executeFhvT4aStep(ctx, step);
       const contractStep = FHV_T4A_OPERATOR_STEPS.find((entry) => entry.step === step);
@@ -600,40 +653,137 @@ export function runFhvT4aOperatorPhase(
             : "unknown",
         contractStep?.mutationClass ?? "service-user-mutate",
         result,
+        preauthReceipt,
       );
       stepProofDigests[String(step)] = sha256Hex(JSON.stringify(result));
-      if (step === 32) {
-        const tagged = parseFhvT4aTaggedKeyValueLines(result.stdout);
-        for (const [key, value] of Object.entries(tagged)) {
-          ceremonyLines[key] = value;
-          if (key === "rootDigest") {
-            evidenceSealRootDigest = value;
-          }
-          if (key === "classification" && value.includes("SEAL")) {
-            evidenceSealVerifyClassification = value;
-          }
+      if (step === 31) {
+        if (!result.continuityVerificationProofPath || !result.continuityVerificationProofDigest) {
+          throw new FhvT4aOperatorError(
+            "FINAL_RECEIPT_CONTINUITY_VERIFICATION_PROOF_MISSING",
+            "Step 31 must capture continuity verification proof path and digest.",
+          );
         }
+        continuityVerificationProofPath = result.continuityVerificationProofPath;
+        continuityVerificationProofDigest = result.continuityVerificationProofDigest;
+      }
+      if (step === 32) {
+        if (!result.sealEvidenceRootDigest || !result.verifySealClassification) {
+          throw new FhvT4aOperatorError(
+            "FINAL_RECEIPT_SEAL_ROOT_MISSING",
+            "Step 32 must capture seal root digest and verify-seal classification separately.",
+          );
+        }
+        evidenceSealRootDigest = result.sealEvidenceRootDigest;
+        evidenceSealVerifyClassification = result.verifySealClassification;
+        ceremonyClassifications = { ...(result.ceremonyClassifications ?? {}) };
       }
     }
-    if (!evidenceSealRootDigest) {
+    if (evidenceSealVerifyClassification !== FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS) {
       throw new FhvT4aOperatorError(
-        "FINAL_RECEIPT_SEAL_ROOT_MISSING",
-        "seal-evidence rootDigest missing from step 32 output.",
+        "FINAL_RECEIPT_VERIFY_SEAL_CLASSIFICATION_EMPTY",
+        `verify-seal classification must be ${FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS}.`,
       );
     }
     const sealManifestPath = `${ctx.sealDestination}/inventory.json`;
-    if (transport.remoteFileExists(sealManifestPath)) {
-      evidenceSealManifestDigest = transport.remoteSha256(sealManifestPath);
+    const sealManifestExistsOp = buildFhvT4aRemoteFsOpFromTransport({
+      transport,
+      bindings,
+      remotePath: sealManifestPath,
+      mode: "exists",
+    });
+    if (!transport.remoteFileExists(sealManifestExistsOp)) {
+      throw new FhvT4aOperatorError(
+        "FINAL_RECEIPT_SEAL_MANIFEST_DIGEST_EMPTY",
+        "Seal manifest inventory.json missing.",
+      );
+    }
+    evidenceSealManifestDigest = transport.remoteSha256(
+      buildFhvT4aRemoteFsOpFromTransport({
+        transport,
+        bindings,
+        remotePath: sealManifestPath,
+        mode: "sha256",
+      }),
+    );
+    if (!evidenceSealManifestDigest) {
+      throw new FhvT4aOperatorError(
+        "FINAL_RECEIPT_SEAL_MANIFEST_DIGEST_EMPTY",
+        "Seal manifest digest empty.",
+      );
     }
     const publishedSealRootPath = `${ctx.sealDestination}/SEAL_ROOT.sha256`;
-    const publishedSealRoot = transport.readRemoteFile(publishedSealRootPath).trim();
+    const publishedSealRoot = transport
+      .readRemoteFile(
+        buildFhvT4aRemoteFsOpFromTransport({
+          transport,
+          bindings,
+          remotePath: publishedSealRootPath,
+          mode: "read",
+        }),
+      )
+      .trim();
     if (publishedSealRoot !== evidenceSealRootDigest) {
       throw new FhvT4aOperatorError(
         "FINAL_RECEIPT_SEAL_ROOT_MISSING",
         "Published seal rootDigest does not match seal-evidence capture.",
       );
     }
-    const expectedBindingDigest = fhvT4aBindingDigest(fhvT4aFullBindingFields(bindings));
+    const continuityProofExistsOp = buildFhvT4aRemoteFsOpFromTransport({
+      transport,
+      bindings,
+      remotePath: continuityVerificationProofPath,
+      mode: "exists",
+    });
+    if (!transport.remoteFileExists(continuityProofExistsOp)) {
+      throw new FhvT4aOperatorError(
+        "FINAL_RECEIPT_CONTINUITY_VERIFICATION_PROOF_MISSING",
+        "Continuity verification proof missing before final receipt.",
+      );
+    }
+    const continuityProofReReadDigest = transport.remoteSha256(
+      buildFhvT4aRemoteFsOpFromTransport({
+        transport,
+        bindings,
+        remotePath: continuityVerificationProofPath,
+        mode: "sha256",
+      }),
+    );
+    if (continuityProofReReadDigest !== continuityVerificationProofDigest) {
+      throw new FhvT4aOperatorError(
+        "CONTINUITY_VERIFICATION_PROOF_NOT_REVALIDATED",
+        "Continuity verification proof digest changed after Step 31.",
+      );
+    }
+    const continuityAfterDigest = transport.remoteSha256(
+      buildFhvT4aRemoteFsOpFromTransport({
+        transport,
+        bindings,
+        remotePath: ctx.continuityAfter,
+        mode: "sha256",
+      }),
+    );
+    const proofRaw = transport.readRemoteFile(
+      buildFhvT4aRemoteFsOpFromTransport({
+        transport,
+        bindings,
+        remotePath: continuityVerificationProofPath,
+        mode: "read",
+      }),
+    );
+    const parsedProof = parseFhvT4ContinuityVerificationProof(JSON.parse(proofRaw));
+    if (
+      parsedProof.beforeDigest !== postBefore.continuityBeforeDigest ||
+      parsedProof.afterDigest !== continuityAfterDigest ||
+      parsedProof.runId !== bindings.runId ||
+      parsedProof.organizationId !== bindings.organizationId ||
+      parsedProof.targetSha !== bindings.targetSha
+    ) {
+      throw new FhvT4aOperatorError(
+        "CONTINUITY_VERIFICATION_PROOF_NOT_REVALIDATED",
+        "Continuity verification proof binding mismatch before final receipt.",
+      );
+    }
+    const observerQualificationPostPath = `${ctx.runDir}/control/fhv-t4-observer-qualification-post-restart.v1.json`;
     writeFhvT4aPostFinalizeReceipt(bindings.localStateDir, {
       targetSha: bindings.targetSha,
       releaseTag: bindings.releaseTag,
@@ -642,23 +792,50 @@ export function runFhvT4aOperatorPhase(
       bindingDigest: expectedBindingDigest,
       postBeforeReceiptDigest: postBefore.contentDigest,
       continuityAfterPath: ctx.continuityAfter,
-      continuityAfterDigest: transport.remoteSha256(ctx.continuityAfter),
+      continuityAfterDigest,
+      continuityVerificationProofPath,
+      continuityVerificationProofDigest,
       evidenceSealRootDigest,
       evidenceSealManifestDigest,
       evidenceSealVerifyClassification,
-      ceremonyClassifications: ceremonyLines,
+      ceremonyClassifications,
       stepProofDigests,
       proofDigestBundle: {
         continuityBefore: postBefore.continuityBeforeDigest,
-        continuityAfter: transport.remoteSha256(ctx.continuityAfter),
+        continuityAfter: continuityAfterDigest,
+        continuityVerificationProof: continuityVerificationProofDigest,
         observerQualificationPre: postBefore.observerQualificationPreDigest,
         observerQualificationPost: transport.remoteSha256(
-          `${ctx.runDir}/control/fhv-t4-observer-qualification-post-restart.v1.json`,
+          buildFhvT4aRemoteFsOpFromTransport({
+            transport,
+            bindings,
+            remotePath: observerQualificationPostPath,
+            mode: "sha256",
+          }),
         ),
-        hostProbeDeployment: transport.remoteSha256(ctx.hostProbePath),
-        hostProbePostRollback: transport.remoteSha256(ctx.postRollbackHostProbePath),
+        hostProbeDeployment: transport.remoteSha256(
+          buildFhvT4aRemoteFsOpFromTransport({
+            transport,
+            bindings,
+            remotePath: ctx.hostProbePath,
+            mode: "sha256",
+          }),
+        ),
+        hostProbePostRollback: transport.remoteSha256(
+          buildFhvT4aRemoteFsOpFromTransport({
+            transport,
+            bindings,
+            remotePath: ctx.postRollbackHostProbePath,
+            mode: "sha256",
+          }),
+        ),
         rollbackProof: transport.remoteSha256(
-          `${ctx.runDir}/control/fhv-t4-rollback-proof.v1.json`,
+          buildFhvT4aRemoteFsOpFromTransport({
+            transport,
+            bindings,
+            remotePath: `${ctx.runDir}/control/fhv-t4-rollback-proof.v1.json`,
+            mode: "sha256",
+          }),
         ),
       },
     });

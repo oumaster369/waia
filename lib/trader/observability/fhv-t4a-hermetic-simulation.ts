@@ -84,6 +84,7 @@ export type FhvT4aHermeticSimulationOptions = Readonly<{
   pythonBin: string;
   dockerBin: string;
   systemctlBin: string;
+  systemdAnalyzeBin: string;
   operatorId?: string;
 }>;
 
@@ -772,12 +773,20 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
             gitBin: options.gitBin,
             pythonBin: options.pythonBin,
             dockerBin: options.dockerBin,
+            systemctlBin: options.systemctlBin,
+            systemdAnalyzeBin: options.systemdAnalyzeBin,
             legacyContainerName: FHV_T4A_LEGACY_CONTAINER_NAME,
             legacyContainerImage: FHV_T4A_LEGACY_CONTAINER_IMAGE,
             legacyContainerState: "running",
+            hostBootId: bootId,
             minimumFreeKiB: 1000000,
             observedFreeKiB: 5000000,
-            hostMonotonicSample: { source: "CLOCK_MONOTONIC", value: 12345 },
+            hostMonotonicSample: {
+              schemaVersion: "fhv-t4-host-monotonic-sample/v1",
+              clockSource: "CLOCK_BOOTTIME",
+              bootId,
+              monotonicNs: "12345",
+            },
           })}\nclassification=FHV_T4_HOST_PREFLIGHT_OK\n`,
           stderr: "",
         };
@@ -1100,7 +1109,13 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       remoteWrites = 0;
     },
     remoteFileExists: (remotePath: string) => existsSync(resolveRemotePath(remotePath)),
-    readRemoteFile: (remotePath: string) => readFileSync(resolveRemotePath(remotePath), "utf8"),
+    readRemoteFile: (remotePath: string, byteCap?: number) => {
+      const content = readFileSync(resolveRemotePath(remotePath), "utf8");
+      if (byteCap !== undefined && Buffer.byteLength(content, "utf8") > byteCap) {
+        throw new Error(`FHV_T4A_REMOTE_READ_BYTE_CAP_EXCEEDED:${remotePath}`);
+      }
+      return content;
+    },
     remoteSha256: (remotePath: string) =>
       sha256Hex(readFileSync(resolveRemotePath(remotePath), "utf8")),
     ssh: (

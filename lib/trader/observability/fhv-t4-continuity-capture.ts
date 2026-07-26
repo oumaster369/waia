@@ -396,6 +396,51 @@ export function verifyFhvT4ContinuityVerificationProofArtifact(input: {
   return proof;
 }
 
+export function parseFhvT4ContinuityVerificationProof(
+  raw: unknown,
+): FhvT4ContinuityVerificationProofV1 {
+  if (typeof raw !== "object" || raw === null) {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_VERIFICATION_PROOF_INVALID",
+      "Continuity verification proof must be an object.",
+    );
+  }
+  const proof = raw as FhvT4ContinuityVerificationProofV1;
+  if (proof.schemaVersion !== FHV_T4_CONTINUITY_VERIFICATION_PROOF_SCHEMA_VERSION) {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_VERIFICATION_PROOF_SCHEMA_MISMATCH",
+      "Continuity verification proof schemaVersion mismatch.",
+    );
+  }
+  if (
+    !proof.runId?.trim() ||
+    !proof.organizationId?.trim() ||
+    !proof.targetSha?.trim() ||
+    !proof.beforeDigest?.trim() ||
+    !proof.afterDigest?.trim() ||
+    !proof.capturedAtUtc?.trim()
+  ) {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_VERIFICATION_PROOF_FIELD_MISSING",
+      "Continuity verification proof missing required fields.",
+    );
+  }
+  if (proof.classification !== FHV_T4_CONTINUITY_VERIFICATION_PASS) {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_VERIFICATION_PROOF_CLASSIFICATION_INVALID",
+      "Continuity verification proof classification invalid.",
+    );
+  }
+  const { contentDigest, ...withoutDigest } = proof;
+  if (computePayloadDigest(withoutDigest) !== contentDigest) {
+    throw new FhvT4ContinuityCaptureError(
+      "FHV_T4_CONTINUITY_VERIFICATION_PROOF_DIGEST_MISMATCH",
+      "Continuity verification proof contentDigest mismatch.",
+    );
+  }
+  return proof;
+}
+
 export function parseFhvT4ContinuitySnapshot(raw: unknown): FhvT4ContinuitySnapshotV1 {
   if (typeof raw !== "object" || raw === null) {
     throw new FhvT4ContinuityCaptureError(
