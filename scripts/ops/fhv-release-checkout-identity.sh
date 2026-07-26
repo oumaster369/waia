@@ -2,6 +2,10 @@
 # DEE-436 — dependency-free Git checkout / release-tag identity verifier.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=_fhv-git-trust.sh
+source "${SCRIPT_DIR}/_fhv-git-trust.sh"
+
 usage() {
   cat >&2 <<'EOF'
 Usage: fhv-release-checkout-identity.sh \
@@ -23,18 +27,7 @@ fail() {
 }
 
 require_abs_safe_path() {
-  local label="$1"
-  local value="$2"
-  [[ -n "$value" ]] || fail "${label} is required"
-  [[ "$value" = /* ]] || fail "${label} must be absolute"
-  case "$value" in
-    *".."*) fail "${label} must not contain .." ;;
-    *$'\n'*|*$'\r'*|*$'\t'*) fail "${label} must not contain control characters" ;;
-    *'"'*) fail "${label} must not contain double quotes" ;;
-  esac
-  if printf '%s' "$value" | LC_ALL=C grep -q '[[:cntrl:]]'; then
-    fail "${label} must not contain control characters"
-  fi
+  fhv_git_trust_require_abs_safe_path "$1" "$2"
 }
 
 REPO_PATH=""
@@ -74,10 +67,8 @@ if [[ "$EXPECTED_ORIGIN" != "https://github.com/oumaster369/waia.git" ]]; then
   fail "expected-origin must be approved WAIA origin"
 fi
 
-# Command-scoped safe.directory for root verification of service-user-owned repos.
-# No persistent system/global/user Git configuration is modified.
 repo_git() {
-  "$GIT_BIN" -c "safe.directory=${REPO_PATH}" -C "$REPO_PATH" "$@"
+  fhv_git_trust_repo_git "$GIT_BIN" "$REPO_PATH" "$@"
 }
 
 worktree_out=""

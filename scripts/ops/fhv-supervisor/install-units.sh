@@ -14,6 +14,7 @@ FHV_RUN_ID=""
 FHV_ORGANIZATION_ID=""
 UNIT=""
 SYSTEMD_DIR="/etc/systemd/system"
+GIT_BIN=""
 NODE_BIN=""
 SYSTEMD_ANALYZE="${SYSTEMD_ANALYZE:-systemd-analyze}"
 SYSTEMCTL="${SYSTEMCTL:-systemctl}"
@@ -23,7 +24,7 @@ usage() {
 Usage: install-units.sh --target-sha SHA --working-directory PATH --service-user USER \
   --environment-file PATH --fhv-run-root PATH --fhv-run-id ID --fhv-organization-id UUID \
   [--unit waia-fhv-campaign.service|waia-fhv-observer.service|all] [--repo-path PATH] \
-  [--systemd-dir DIR] [--node-bin PATH] [--dry-run] [--confirm]
+  [--git-bin PATH] [--systemd-dir DIR] [--node-bin PATH] [--dry-run] [--confirm]
 
 Without --confirm: print planned actions and exit without mutation.
 EOF
@@ -35,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --confirm) CONFIRM=1; shift ;;
     --target-sha) TARGET_SHA="${2:-}"; shift 2 ;;
     --repo-path) REPO_PATH="${2:-}"; shift 2 ;;
+    --git-bin) GIT_BIN="${2:-}"; shift 2 ;;
     --working-directory) WORKING_DIRECTORY="${2:-}"; shift 2 ;;
     --service-user) SERVICE_USER="${2:-}"; shift 2 ;;
     --environment-file) ENVIRONMENT_FILE="${2:-}"; shift 2 ;;
@@ -68,6 +70,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 "${SCRIPT_DIR}/render-units.sh" \
   --target-sha "$TARGET_SHA" \
   --repo-path "$REPO_PATH" \
+  --git-bin "$GIT_BIN" \
   --working-directory "$WORKING_DIRECTORY" \
   --service-user "$SERVICE_USER" \
   --environment-file "$ENVIRONMENT_FILE" \

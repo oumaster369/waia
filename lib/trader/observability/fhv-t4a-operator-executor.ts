@@ -229,6 +229,7 @@ function installUnitsArgs(ctx: FhvT4aExecContext, confirm: boolean): string {
     `--fhv-run-id ${shellQuote(b.runId)}`,
     `--fhv-organization-id ${shellQuote(b.organizationId)}`,
     `--node-bin ${shellQuote(b.nodeBin)}`,
+    `--git-bin ${shellQuote(b.gitBin)}`,
     `--systemd-dir ${shellQuote(ctx.installedUnitsDir)}`,
     `--systemctl-bin ${shellQuote(b.systemctlBin)}`,
     `--systemd-analyze ${shellQuote(b.systemdAnalyzeBin)}`,
@@ -453,6 +454,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         `--repo-path ${shellQuote(ctx.repoRoot)}`,
         `--output-dir ${shellQuote(ctx.renderedUnitsDir)}`,
         `--node-bin ${shellQuote(b.nodeBin)}`,
+        `--git-bin ${shellQuote(b.gitBin)}`,
       ].join(" ");
       result = runSsh(ctx, cmd, true);
       requireOk(result, step, "render units");
@@ -680,6 +682,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         `--target-sha ${shellQuote(b.targetSha)}`,
         `--systemctl-bin ${shellQuote(b.systemctlBin)}`,
         `--node-bin ${shellQuote(b.nodeBin)}`,
+        `--repo-root ${shellQuote(ctx.repoRoot)}`,
       ].join(" ");
       result = runSsh(ctx, rootCmd, true);
       requireOk(result, step, "resume root enforcement");
