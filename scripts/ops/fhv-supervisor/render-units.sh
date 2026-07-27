@@ -13,6 +13,7 @@ FHV_RUN_ROOT=""
 FHV_RUN_ID=""
 FHV_ORGANIZATION_ID=""
 OUTPUT_DIR=""
+GIT_BIN=""
 NODE_BIN="$(command -v node || true)"
 OBSERVER_PORT=9471
 
@@ -20,7 +21,7 @@ usage() {
   cat >&2 <<'EOF'
 Usage: render-units.sh --target-sha SHA --working-directory PATH --service-user USER \
   --environment-file PATH --fhv-run-root PATH --fhv-run-id ID --fhv-organization-id UUID \
-  [--repo-path PATH] [--output-dir DIR] [--node-bin PATH] [--observer-port PORT]
+  [--repo-path PATH] [--git-bin PATH] [--output-dir DIR] [--node-bin PATH] [--observer-port PORT]
 
 Renders waia-fhv-campaign.service and waia-fhv-observer.service to stdout or --output-dir.
 No systemd mutation is performed.
@@ -31,6 +32,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --target-sha) TARGET_SHA="${2:-}"; shift 2 ;;
     --repo-path) REPO_PATH="${2:-}"; shift 2 ;;
+    --git-bin) GIT_BIN="${2:-}"; shift 2 ;;
     --working-directory) WORKING_DIRECTORY="${2:-}"; shift 2 ;;
     --service-user) SERVICE_USER="${2:-}"; shift 2 ;;
     --environment-file) ENVIRONMENT_FILE="${2:-}"; shift 2 ;;
@@ -60,7 +62,7 @@ is_full_sha "$TARGET_SHA" || die "--target-sha must be a 40-char lowercase hex S
 [[ -n "$FHV_ORGANIZATION_ID" ]] || die "--fhv-organization-id is required"
 [[ -n "$NODE_BIN" ]] || die "node binary not found; pass --node-bin"
 
-REPO_ROOT="$(resolve_repo_root "$REPO_PATH")"
+REPO_ROOT="$(resolve_repo_root "$REPO_PATH" "$GIT_BIN")"
 
 export FHV_RENDER_REPO_ROOT="$REPO_ROOT"
 export FHV_RENDER_WORKING_DIRECTORY="$WORKING_DIRECTORY"

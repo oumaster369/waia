@@ -4,6 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck source=_fhv-git-trust.sh
+source "${SCRIPT_DIR}/_fhv-git-trust.sh"
 
 usage() {
   cat >&2 <<EOF
@@ -15,7 +17,7 @@ Usage: $(basename "$0") \\
   --operator <id> \\
   --service-user <user> \\
   --rendered-unit-digests '<json>' \\
-  [--repo-path PATH] [--confirm] [--dry-run]
+  [--repo-path PATH] [--node-bin PATH] [--git-bin PATH] [--docker-bin PATH] [--confirm] [--dry-run]
 
 Preview writes .ops/fhv-systemd-deployed-revision.v1.json without --confirm.
 Atomic write occurs only with --confirm.
@@ -29,6 +31,21 @@ die() { log "error: $*"; exit 2; }
 is_full_sha() {
   local sha="$1"
   [[ "${#sha}" -eq 40 && "$sha" =~ ^[0-9a-f]{40}$ ]]
+}
+
+repo_git() {
+  fhv_git_trust_repo_git "$GIT_BIN" "$REPO_PATH" "$@"
+}
+
+resolve_record_repo_root() {
+  if [[ -n "$REPO_PATH" ]]; then
+    fhv_git_trust_require_abs_safe_path "repo-path" "$REPO_PATH"
+    fhv_git_trust_require_abs_safe_path "git-bin" "$GIT_BIN"
+    [[ -x "$GIT_BIN" ]] || die "git-bin not executable"
+    fhv_git_trust_resolve_bound_repo_root "$GIT_BIN" "$REPO_PATH"
+    return 0
+  fi
+  printf '%s\n' "$ROOT"
 }
 
 inspect_legacy_container_running() {
@@ -94,12 +111,10 @@ is_full_sha "$TARGET_SHA" || die "invalid target SHA"
 [[ -n "$NODE_BIN" ]] || die "--node-bin is required"
 [[ -n "$GIT_BIN" ]] || die "--git-bin is required"
 [[ -n "$DOCKER_BIN" ]] || die "--docker-bin is required"
+fhv_git_trust_require_abs_safe_path "node-bin" "$NODE_BIN"
+[[ -x "$NODE_BIN" ]] || die "node-bin not executable"
 
-if [[ -n "$REPO_PATH" ]]; then
-  REPO_ROOT="$("$GIT_BIN" -C "$REPO_PATH" rev-parse --show-toplevel)"
-else
-  REPO_ROOT="$ROOT"
-fi
+REPO_ROOT="$(resolve_record_repo_root)"
 
 INSTALLED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 log "fhv-systemd record deploy"
@@ -139,8 +154,9 @@ if [[ "$CONFIRM" -eq 0 ]]; then
   [[ "$DRY_RUN" -eq 1 ]] && log "  mode: dry-run"
 fi
 
+fhv_ops_cd_repo_root "$REPO_ROOT"
 WAIA_TRADER_CLI=1 "$NODE_BIN" --import tsx --conditions=react-server \
-  "${ROOT}/scripts/ops/fhv-systemd-record-deploy-cli.ts" "${CLI_ARGS[@]}"
+  scripts/ops/fhv-systemd-record-deploy-cli.ts "${CLI_ARGS[@]}"
 
 if [[ "$CONFIRM" -eq 0 ]]; then
   log ""
