@@ -41,16 +41,29 @@ afterEach(() => {
   cleanupPaths = [];
 });
 
-function gitPrDiffSummaryRange(): string {
+function gitPrDiffSummaryRange(): string | null {
   const baseSha = process.env.GITHUB_BASE_SHA?.trim();
   if (baseSha) {
-    return `${baseSha}...HEAD`;
+    try {
+      execFileSync("git", ["rev-parse", "--verify", `${baseSha}^{commit}`], {
+        stdio: "pipe",
+        cwd: ROOT,
+      });
+      return `${baseSha}...HEAD`;
+    } catch {
+      return null;
+    }
   }
   try {
     execFileSync("git", ["rev-parse", "--verify", "origin/dev"], { stdio: "pipe", cwd: ROOT });
     return "origin/dev...HEAD";
   } catch {
-    return "HEAD~1...HEAD";
+    try {
+      execFileSync("git", ["rev-parse", "--verify", "HEAD~1"], { stdio: "pipe", cwd: ROOT });
+      return "HEAD~1...HEAD";
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -240,7 +253,18 @@ describe("fhv-t4a direct execution executable Git modes (DEE-436 step 11 closure
   });
 
   it("mode-only Git changes are limited to the two direct-execution scripts", () => {
-    const summary = execFileSync("git", ["diff", "--summary", gitPrDiffSummaryRange()], {
+    const modeOnlyTargets = [
+      "scripts/ops/fhv-t4-observer-systemd-identity-read.sh",
+      "scripts/ops/fhv-t4-rendered-unit-digests.sh",
+    ] as const;
+    for (const path of modeOnlyTargets) {
+      expect(gitLsTreeMode("HEAD", path)).toBe("100755");
+    }
+    const diffRange = gitPrDiffSummaryRange();
+    if (!diffRange) {
+      return;
+    }
+    const summary = execFileSync("git", ["diff", "--summary", diffRange], {
       encoding: "utf8",
       cwd: ROOT,
     });
@@ -438,8 +462,13 @@ linuxDescribe("fhv-t4a linux clean checkout rehearsal (PR #431 audit)", () => {
       join(mockBin, "systemctl"),
       `#!/usr/bin/env bash
 if [[ "$1" == "show" ]]; then
-  echo "inactive"
-  exit 0
+  case "$4" in
+    InvocationID) echo "inv-test"; exit 0 ;;
+    MainPID) echo "0"; exit 0 ;;
+    ActiveState) echo "inactive"; exit 0 ;;
+    ActiveEnterTimestampMonotonic) echo "0"; exit 0 ;;
+    *) echo ""; exit 0 ;;
+  esac
 fi
 exit 0
 `,
