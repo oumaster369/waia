@@ -21,6 +21,7 @@ import {
   FHV_T4A_SSH_STDIN_SCRIPT_PATHS,
   fhvT4aDirectExecutionScriptPaths,
 } from "@/lib/trader/observability/fhv-t4a-direct-execution-contract";
+import { deriveFhvT4aExecutionGraphFromSources } from "@/lib/trader/observability/fhv-t4a-execution-graph-derive";
 import { executeFhvT4aStep } from "@/lib/trader/observability/fhv-t4a-operator-executor";
 import { createFhvT4aHermeticTransport } from "@/lib/trader/observability/fhv-t4a-hermetic-transport";
 import type { FhvT4aOperatorTransport } from "@/lib/trader/observability/fhv-t4a-operator-transport";
@@ -54,6 +55,16 @@ function gitLsTreeMode(rev: string, path: string): string {
 function gitIndexMode(path: string): string {
   const line = execFileSync("git", ["ls-files", "-s", path], { encoding: "utf8" }).trim();
   return line.split(/\s+/)[0] ?? "";
+}
+
+function gitArchiveCheckout(rev: string, dest: string): void {
+  const tarPath = join(trackDir("fhv-archive-tar-"), "repo.tar");
+  execFileSync("git", ["archive", "--format=tar", "-o", tarPath, rev], {
+    cwd: ROOT,
+    stdio: "pipe",
+  });
+  mkdirSync(dest, { recursive: true });
+  execFileSync("tar", ["-xf", tarPath, "-C", dest], { stdio: "pipe" });
 }
 
 function materializeIndexCheckout(dest: string, paths: readonly string[]): void {
@@ -144,9 +155,26 @@ function createHermeticFixture(targetSha: string) {
 }
 
 describe("fhv-t4a direct execution executable Git modes (DEE-436 step 11 closure)", () => {
+  it("mechanically derives the same direct and SSH-stdin sets as the canonical contract", () => {
+    const derived = deriveFhvT4aExecutionGraphFromSources(ROOT);
+    const matrixDirect = [...fhvT4aDirectExecutionScriptPaths()].sort();
+    const matrixStdin = [...FHV_T4A_SSH_STDIN_SCRIPT_PATHS].sort();
+    expect(derived.directPaths).toEqual(matrixDirect);
+    expect(derived.sshStdinPaths).toEqual(matrixStdin);
+    expect(derived.directPaths).toHaveLength(13);
+    expect(derived.sshStdinPaths).toHaveLength(4);
+    expect(derived.sourcedPaths.length).toBeGreaterThan(0);
+    for (const path of derived.directPaths) {
+      expect(path.startsWith("scripts/ops/")).toBe(true);
+    }
+    for (const path of derived.sshStdinPaths) {
+      expect(derived.directPaths).not.toContain(path);
+    }
+  });
+
   it("records the Steps 1–32 direct-execution matrix with required Git mode 100755", () => {
-    const paths = fhvT4aDirectExecutionScriptPaths();
-    expect(paths.length).toBeGreaterThanOrEqual(13);
+    const derived = deriveFhvT4aExecutionGraphFromSources(ROOT);
+    expect(fhvT4aDirectExecutionScriptPaths()).toHaveLength(derived.directPaths.length);
     for (const entry of FHV_T4A_DIRECT_EXECUTION_SCRIPTS) {
       expect(entry.invocation).toBe("direct-path");
       expect(entry.path.startsWith("scripts/ops/")).toBe(true);
@@ -166,6 +194,35 @@ describe("fhv-t4a direct execution executable Git modes (DEE-436 step 11 closure
         FHV_T4A_REQUIRED_EXECUTABLE_GIT_MODE,
       );
     }
+  });
+
+  it("uses LF line endings and shebang on every direct-execution script", () => {
+    for (const path of fhvT4aDirectExecutionScriptPaths()) {
+      const body = readFileSync(join(ROOT, path), "utf8");
+      expect(body.includes("\r"), `${path} must use LF line endings`).toBe(false);
+      expect(body.startsWith("#!/"), `${path} must begin with shebang`).toBe(true);
+    }
+  });
+
+  it("does not invoke ambient python3 in fhv-t4-rendered-unit-digests.sh", () => {
+    const body = readFileSync(join(ROOT, "scripts/ops/fhv-t4-rendered-unit-digests.sh"), "utf8");
+    expect(body).toContain("--python-bin");
+    expect(body).not.toMatch(/\bpython3\b/);
+  });
+
+  it("mode-only Git changes are limited to the two direct-execution scripts", () => {
+    const summary = execFileSync("git", ["diff", "--summary", "origin/dev...HEAD"], {
+      encoding: "utf8",
+      cwd: ROOT,
+    });
+    const modeLines = summary
+      .split("\n")
+      .filter((line) => line.includes(" mode change "))
+      .map((line) => line.trim());
+    expect(modeLines).toEqual([
+      "mode change 100644 => 100755 scripts/ops/fhv-t4-observer-systemd-identity-read.sh",
+      "mode change 100644 => 100755 scripts/ops/fhv-t4-rendered-unit-digests.sh",
+    ]);
   });
 
   it("does not require executable Git mode for SSH-stdin bootstrap scripts", () => {
@@ -306,5 +363,86 @@ describe("fhv-t4a direct execution executable Git modes (DEE-436 step 11 closure
     execFileSync("bash", ["-n", join(ROOT, "scripts/ops/fhv-t4-rendered-unit-digests.sh")], {
       stdio: "pipe",
     });
+  });
+});
+
+const linuxDescribe = process.platform === "linux" ? describe : describe.skip;
+
+linuxDescribe("fhv-t4a linux clean checkout rehearsal (PR #431 audit)", () => {
+  it("preserves executable bits through git archive checkout on Linux", () => {
+    const archiveRoot = trackDir("fhv-linux-archive-");
+    gitArchiveCheckout("HEAD", archiveRoot);
+    for (const path of fhvT4aDirectExecutionScriptPaths()) {
+      const checkedOut = join(archiveRoot, path);
+      expect(existsSync(checkedOut), checkedOut).toBe(true);
+      expect(statSync(checkedOut).mode & 0o111).not.toBe(0);
+    }
+  });
+
+  it("executes Step 11 digest command under sudo with minimal PATH", () => {
+    const archiveRoot = trackDir("fhv-linux-sudo-digest-");
+    gitArchiveCheckout("HEAD", archiveRoot);
+    const script = join(archiveRoot, "scripts/ops/fhv-t4-rendered-unit-digests.sh");
+    const rendered = makeRenderedFixture(archiveRoot);
+    const pythonPath =
+      execFileSync("command", ["-v", "python3"], { encoding: "utf8" }).trim() || "/usr/bin/python3";
+    const result = spawnSync(
+      "sudo",
+      ["-n", script, "--rendered-dir", rendered, "--python-bin", pythonPath],
+      {
+        encoding: "utf8",
+        env: { ...process.env, PATH: "/usr/bin:/bin" },
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim())).toEqual({
+      "waia-fhv-campaign.service": sha256File(join(rendered, "waia-fhv-campaign.service")),
+      "waia-fhv-observer.service": sha256File(join(rendered, "waia-fhv-observer.service")),
+    });
+  });
+
+  it("executes observer identity script as a direct path without 126/127", () => {
+    const archiveRoot = trackDir("fhv-linux-observer-");
+    gitArchiveCheckout("HEAD", archiveRoot);
+    const script = join(archiveRoot, "scripts/ops/fhv-t4-observer-systemd-identity-read.sh");
+    const mockBin = trackDir("fhv-linux-mock-bin-");
+    writeFileSync(
+      join(mockBin, "systemctl"),
+      `#!/usr/bin/env bash
+if [[ "$1" == "show" ]]; then
+  echo "inactive"
+  exit 0
+fi
+exit 0
+`,
+    );
+    chmodSync(join(mockBin, "systemctl"), 0o755);
+    const pythonPath =
+      execFileSync("command", ["-v", "python3"], { encoding: "utf8" }).trim() || "/usr/bin/python3";
+    const result = spawnSync(
+      script,
+      [
+        "--systemctl-bin",
+        join(mockBin, "systemctl"),
+        "--python-bin",
+        pythonPath,
+        "waia-fhv-observer.service",
+      ],
+      { encoding: "utf8" },
+    );
+    expect(result.status).not.toBe(126);
+    expect(result.status).not.toBe(127);
+    expect(result.stdout.trim()).toContain("fhv-t4-observer-systemd-identity/v1");
+  });
+
+  it("loads every direct script via kernel exec without bash prefix (help or usage path)", () => {
+    const archiveRoot = trackDir("fhv-linux-direct-load-");
+    gitArchiveCheckout("HEAD", archiveRoot);
+    for (const path of fhvT4aDirectExecutionScriptPaths()) {
+      const script = join(archiveRoot, path);
+      const result = spawnSync(script, ["--help"], { encoding: "utf8" });
+      expect(result.status, `${path} direct --help`).not.toBe(126);
+      expect(result.status, `${path} direct --help`).not.toBe(127);
+    }
   });
 });
