@@ -628,6 +628,36 @@ esac
     rmSync(systemdDir, { recursive: true, force: true });
   });
 
+  it("install-units.sh with --skip-enable installs units disabled and disables prior enabled state", () => {
+    const mockBin = writeMockBin();
+    const systemdDir = mkdtempSync(join(tmpdir(), "fhv-systemd-dir-"));
+    writeFileSync(join(systemdDir, "waia-fhv-observer.service"), "[Unit]\n# prior\n");
+    execFileSync(join(mockBin, "systemctl"), ["enable", "waia-fhv-observer.service"], {
+      stdio: "pipe",
+    });
+    const result = runScript(
+      "scripts/ops/fhv-supervisor/install-units.sh",
+      [...installArgs, "--confirm", "--skip-enable", "--systemd-dir", systemdDir],
+      mockBin,
+    );
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("Install complete");
+    const enabledProbe = spawnSync(
+      join(mockBin, "systemctl"),
+      ["is-enabled", "waia-fhv-observer.service"],
+      {
+        encoding: "utf8",
+      },
+    );
+    expect(enabledProbe.stdout.trim()).toBe("disabled");
+    expect(readdirSync(systemdDir).sort()).toEqual([
+      "waia-fhv-campaign.service",
+      "waia-fhv-observer.service",
+    ]);
+    rmSync(mockBin, { recursive: true, force: true });
+    rmSync(systemdDir, { recursive: true, force: true });
+  });
+
   it("install-units.sh rolls back when daemon-reload fails", () => {
     const mockBin = writeMockBin({
       systemctl: `#!/usr/bin/env bash

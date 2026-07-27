@@ -14,6 +14,9 @@ export const FHV_T4A_LEGACY_CONTAINER_IMAGE = FHV_SYSTEMD_LEGACY_CONTAINER_IMAGE
 
 export const FHV_T4A_AUTHORIZATION_LITERAL = "AUTHORIZE-FHV-OPS-DEPLOY" as const;
 
+export const FHV_T4A_RESIDUAL_RECOVERY_AUTHORIZATION_LITERAL =
+  "AUTHORIZE-FHV-T4A-RESIDUAL-UNIT-RECOVERY" as const;
+
 export const FHV_T4A_TERMINAL_AWAITING_HUMAN_DISCONNECT_RECONNECT =
   "AWAITING_HUMAN_DISCONNECT_RECONNECT" as const;
 
@@ -27,6 +30,8 @@ export const FHV_T4A_BOOTSTRAP_SCRIPT_PATHS = [
 export type FhvT4aOperatorPhase =
   | "verify-local-release"
   | "pre-auth"
+  | "residual-recovery-preview"
+  | "residual-recovery"
   | "post-auth-before-disconnect"
   | "post-reconnect-finalize";
 

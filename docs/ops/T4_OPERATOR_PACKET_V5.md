@@ -143,9 +143,47 @@ Human authorization for POST phases must be based on the **immutable PRE_AUTH re
 - exact SHA / tag / binding identity;
 - `rejectedCommandCount=0`;
 - `mutatingCommandCount=0`;
-- observed host facts from preflight.
+- observed host facts from preflight;
+- **`supervisorResidualClassification=FHV_T4A_SUPERVISOR_RESIDUAL_SAFE`** and bound **`supervisorResidualStateDigest`**.
+
+If PRE_AUTH reports **`FHV_T4A_SUPERVISOR_RESIDUAL_BLOCKED_*`**, do **not** proceed. Use the governed residual recovery procedure below, then re-run **`pre-auth`**.
 
 **Authorization is not issued by this packet.** A Human operator must issue **`AUTHORIZE-FHV-OPS-DEPLOY`** before POST phases.
+
+---
+
+## Residual supervisor recovery (Human-only, before fresh PRE_AUTH)
+
+When a prior failed T4A run left **`waia-fhv-observer.service`** or **`waia-fhv-campaign.service`** enabled/active, use this **separate** recovery gate. It is **not** PRE_AUTH and **not** `AUTHORIZE-FHV-OPS-DEPLOY`.
+
+1. Set failed-run bindings (example):
+
+```bash
+export FHV_T4A_RESIDUAL_RECOVERY_FAILED_RUN_ID="fhv-t4a-20260727t125110z-03d2b13"
+export FHV_T4A_RESIDUAL_RECOVERY_FAILED_TARGET_SHA="03d2b1311b4e01bd469f6393bdde0c8aafab7da5"
+export FHV_T4A_RESIDUAL_RECOVERY_FAILED_RELEASE_TAG="v2026.07.27.03d2b13"
+```
+
+2. Preview (read-only, zero mutations):
+
+```bash
+"${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" residual-recovery-preview
+```
+
+Require: `classification=FHV_T4A_RESIDUAL_RECOVERY_PREVIEW_OK`
+
+3. Human issues **`AUTHORIZE-FHV-T4A-RESIDUAL-UNIT-RECOVERY`**, then mutating recovery:
+
+```bash
+export FHV_T4A_RESIDUAL_RECOVERY_AUTHORIZATION="AUTHORIZE-FHV-T4A-RESIDUAL-UNIT-RECOVERY"
+"${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" residual-recovery
+```
+
+Require: `classification=FHV_T4A_RESIDUAL_RECOVERY_OK` and immutable receipt **`fhv-t4a-residual-recovery-receipt.v1.json`**.
+
+4. **STOP.** Do not chain into PRE_AUTH or T4A in the same session. Start a **fresh** run namespace and re-run **`verify-local-release`** → **`pre-auth`**.
+
+Recovery stops/disables only the two allowlisted FHV units, preserves unit files and all failed checkout/run/evidence, and refuses replay.
 
 ---
 
@@ -153,7 +191,7 @@ Human authorization for POST phases must be based on the **immutable PRE_AUTH re
 
 Read-only inspection only. **Zero filesystem mutation on the Execution Server.** Invoked by **`fhv-t4a-operator.sh pre-auth`** (after **`verify-local-release`**).
 
-Semantic steps (operator-owned): **`fhv-validate-origin-url.sh`** exact approved origin validation; **`fhv-t4-host-preflight.sh`** dependency-free host preflight with embedded `hostMonotonicSample` / `CLOCK_BOOTTIME` sample; **`sudo -n`** probe; canonical legacy container name **`ai-trader-execution-host`** and image **`waia-execution-host:bp6`**.
+Semantic steps (operator-owned): **`fhv-validate-origin-url.sh`** exact approved origin validation; **`fhv-t4-host-preflight.sh`** dependency-free host preflight with embedded `hostMonotonicSample` / `CLOCK_BOOTTIME` sample; **`fhv-t4-supervisor-residual-state-read.sh`** read-only supervisor residual-state proof for **`waia-fhv-observer.service`** and **`waia-fhv-campaign.service`**; **`sudo -n`** probe; canonical legacy container name **`ai-trader-execution-host`** and image **`waia-execution-host:bp6`**.
 
 ---
 
@@ -198,9 +236,9 @@ Step 4 exact identity call (operator-enforced; **`--git-bin`** and **`--python-b
 |------|------|----------------|
 | 1 | Authorization + effective root | POST start |
 | 2–5 | Bootstrap origin/checkout/identity/deps | SSH stdin streams |
-| 6–13 | Manifest, units, deployment proof | POST |
-| 14–17 | Observer start, qualification, pause arm | POST |
-| **18–21** | **Campaign start, wait/verify paused, RESUME + root enforcement** | POST |
+| 6–13 | Manifest, units, deployment proof | POST — Step 10 installs units **disabled** (`--skip-enable`) |
+| 14–17 | Observer **enable+start**, qualification, pause arm | POST |
+| **18–21** | **Campaign enable+start, wait/verify paused, RESUME + root enforcement** | POST |
 | **22–26** | **Wait/verify final, completed wait/identity, continuity-before** | POST → disconnect |
 | 27 | Human disconnect/reconnect narrative | WORKSTATION only |
 | 28–32 | Observer restart qualification, continuity-after, rollback, seal, ceremony | reconnect-finalize |

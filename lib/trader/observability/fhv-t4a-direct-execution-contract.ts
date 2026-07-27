@@ -18,6 +18,7 @@ export const FHV_T4A_SSH_STDIN_SCRIPT_PATHS = [
   "scripts/ops/fhv-service-user-checkout.sh",
   "scripts/ops/fhv-service-user-install-deps.sh",
   "scripts/ops/fhv-t4-host-preflight.sh",
+  "scripts/ops/fhv-t4-supervisor-residual-state-read.sh",
 ] as const;
 
 export const FHV_T4A_DIRECT_EXECUTION_SCRIPTS: readonly FhvT4aDirectExecutionInvocation[] = [

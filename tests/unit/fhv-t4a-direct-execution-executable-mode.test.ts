@@ -204,7 +204,7 @@ describe("fhv-t4a direct execution executable Git modes (DEE-436 step 11 closure
     expect(derived.directPaths).toEqual(matrixDirect);
     expect(derived.sshStdinPaths).toEqual(matrixStdin);
     expect(derived.directPaths).toHaveLength(13);
-    expect(derived.sshStdinPaths).toHaveLength(4);
+    expect(derived.sshStdinPaths).toHaveLength(5);
     expect(derived.sourcedPaths.length).toBeGreaterThan(0);
     for (const path of derived.directPaths) {
       expect(path.startsWith("scripts/ops/")).toBe(true);
@@ -402,13 +402,13 @@ describe("fhv-t4a direct execution executable Git modes (DEE-436 step 11 closure
     expect(() => executeFhvT4aStep(ctx, 11)).toThrow(/rendered unit digests failed/);
   });
 
-  it("documents residual installed units as safe for a future fresh run (install-units overwrites)", () => {
+  it("documents Step 10 skip-enable leaves units non-boot-startable until governed enable", () => {
     const installScript = readFileSync(
       join(ROOT, "scripts/ops/fhv-supervisor/install-units.sh"),
       "utf8",
     );
-    expect(installScript).toMatch(/capture_snapshot/);
-    expect(installScript).toMatch(/install_units_transaction/);
+    expect(installScript).toMatch(/skip-enable/);
+    expect(installScript).toMatch(/disable "\$unit_name"/);
     expect(installScript).not.toMatch(/refuse.*already installed/i);
   });
 

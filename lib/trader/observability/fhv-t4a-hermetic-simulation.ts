@@ -422,6 +422,12 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
   };
 
   const handleSystemctl = (cmd: string): FhvT4aHermeticSshResult => {
+    if (/enable waia-fhv-observer\.service/.test(cmd)) {
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    if (/enable waia-fhv-campaign\.service/.test(cmd)) {
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
     if (/start waia-fhv-observer\.service/.test(cmd)) {
       startUnit(observer);
       return { exitCode: 0, stdout: "", stderr: "" };
@@ -791,6 +797,111 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
           stderr: "",
         };
       }
+      if (/fhv-t4-supervisor-residual-state-read\.sh/.test(stdin)) {
+        return {
+          exitCode: 0,
+          stdout: `${JSON.stringify({
+            schemaVersion: "fhv-t4-supervisor-residual-state/v1",
+            expectedRunId: options.runId,
+            expectedTargetSha: options.targetSha,
+            expectedOrganizationId: options.organizationId,
+            expectedHostname: "exec.test",
+            expectedMachineIdSha256: "a".repeat(64),
+            observedHostname: "exec.test",
+            observedMachineIdSha256: "a".repeat(64),
+            hostBootId: bootId,
+            units: [
+              {
+                unitName: "waia-fhv-observer.service",
+                unitFileExists: false,
+                unitFilePath: "/etc/systemd/system/waia-fhv-observer.service",
+                unitFileSha256: null,
+                loadState: "not-found",
+                unitFileState: "absent",
+                activeState: "inactive",
+                subState: "dead",
+                fragmentPath: "",
+                enabledState: "not-found",
+                activeClass: "not-found",
+                isFailed: false,
+                execStart: "",
+                workingDirectory: "",
+                environmentFilePath: "",
+                embeddedRunId: null,
+                embeddedTargetSha: null,
+                embeddedOrganizationId: null,
+              },
+              {
+                unitName: "waia-fhv-campaign.service",
+                unitFileExists: false,
+                unitFilePath: "/etc/systemd/system/waia-fhv-campaign.service",
+                unitFileSha256: null,
+                loadState: "not-found",
+                unitFileState: "absent",
+                activeState: "inactive",
+                subState: "dead",
+                fragmentPath: "",
+                enabledState: "not-found",
+                activeClass: "not-found",
+                isFailed: false,
+                execStart: "",
+                workingDirectory: "",
+                environmentFilePath: "",
+                embeddedRunId: null,
+                embeddedTargetSha: null,
+                embeddedOrganizationId: null,
+              },
+            ],
+          })}\n`,
+          stderr: "",
+        };
+      }
+      if (/fhv-t4-supervisor-residual-recovery\.sh/.test(stdin)) {
+        const preview = bootstrapArgs.includes("--preview");
+        const unitEvidence = (unitName: string) => ({
+          unitName,
+          unitFileExists: true,
+          unitFilePath: `/etc/systemd/system/${unitName}`,
+          unitFileSha256: "f".repeat(64),
+          loadState: "loaded",
+          activeState: "inactive",
+          subState: "dead",
+          fragmentPath: `/etc/systemd/system/${unitName}`,
+          enabledState: preview ? "enabled" : "disabled",
+          activeClass: "inactive",
+          execStart: "/usr/bin/node campaign",
+          workingDirectory: `/opt/waia/waia-${options.targetSha}`,
+          environmentFilePath: options.environmentFile,
+        });
+        const payload: Record<string, unknown> = {
+          schemaVersion: "fhv-t4-supervisor-residual-recovery/v1",
+          phase: preview ? "preview" : "recovery",
+          classification: preview
+            ? "FHV_T4A_RESIDUAL_RECOVERY_PREVIEW_OK"
+            : "FHV_T4A_RESIDUAL_RECOVERY_OK",
+          failedRunId: options.runId,
+          failedTargetSha: options.targetSha,
+          failedReleaseTag: options.releaseTag,
+          organizationId: options.organizationId,
+          operatorId: options.operatorId ?? "hermetic-operator",
+          hostBootId: bootId,
+          beforeState: {
+            units: [
+              unitEvidence("waia-fhv-observer.service"),
+              unitEvidence("waia-fhv-campaign.service"),
+            ],
+          },
+        };
+        if (!preview) {
+          payload.afterState = {
+            units: [
+              { ...unitEvidence("waia-fhv-observer.service"), enabledState: "disabled" },
+              { ...unitEvidence("waia-fhv-campaign.service"), enabledState: "disabled" },
+            ],
+          };
+        }
+        return { exitCode: 0, stdout: `${JSON.stringify(payload)}\n`, stderr: "" };
+      }
       if (/fhv-service-user-checkout\.sh/.test(stdin)) {
         const expected = execFileSync(
           "git",
@@ -845,7 +956,10 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       };
     }
 
-    if (/systemctl (start|restart)/.test(remoteCommand)) {
+    if (
+      /systemctl (start|restart|enable)/.test(remoteCommand) ||
+      /enable waia-fhv-/.test(remoteCommand)
+    ) {
       return handleSystemctl(remoteCommand);
     }
 

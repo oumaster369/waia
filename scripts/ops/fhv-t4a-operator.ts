@@ -60,6 +60,13 @@ import {
 import { revalidateFhvT4aReconnectBaseline } from "@/lib/trader/observability/fhv-t4a-reconnect-baseline";
 import { buildFhvT4aRemoteFsOpFromTransport } from "@/lib/trader/observability/fhv-t4a-remote-fs-transport-helpers";
 import { resolveFhvT4ObserverQualificationPreCampaignPath } from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
+import {
+  readFhvT4aSupervisorResidualStateDuringPreauth,
+  resolveFhvT4aResidualRecoveryBindings,
+  runFhvT4aResidualRecoveryConfirm,
+  runFhvT4aResidualRecoveryPreview,
+  fhvT4aSupervisorResidualStateDigest,
+} from "@/lib/trader/observability/fhv-t4a-residual-recovery-operator";
 import { FhvT4aOperatorError } from "@/lib/trader/observability/fhv-t4a-operator-errors";
 
 export { FhvT4aOperatorError } from "@/lib/trader/observability/fhv-t4a-operator-errors";
@@ -280,6 +287,8 @@ export function runFhvT4aOperatorPhase(
   phase:
     | "verify-local-release"
     | "pre-auth"
+    | "residual-recovery-preview"
+    | "residual-recovery"
     | "post-auth-before-disconnect"
     | "post-reconnect-finalize",
   bindings: FhvT4aOperatorBindings,
@@ -411,6 +420,11 @@ export function runFhvT4aOperatorPhase(
     }
     const preflight = parseFhvT4HostPreflightV2(JSON.parse(preflightJsonLine));
     assertPreflightMatchesBindings(preflight, bindings);
+    const supervisorResidualState = readFhvT4aSupervisorResidualStateDuringPreauth({
+      bindings,
+      transport,
+    });
+    const supervisorResidualClassification = "FHV_T4A_SUPERVISOR_RESIDUAL_SAFE";
     const ledgerEntries = transport.preauthLedgerEntries();
     const mutatingCommandCount = transport.preauthMutatingCommandCount();
     if (mutatingCommandCount !== 0) {
@@ -483,6 +497,9 @@ export function runFhvT4aOperatorPhase(
         observedFreeKiB: preflight.observedFreeKiB,
         hostMonotonicSample: preflight.hostMonotonicSample,
       },
+      supervisorResidualState,
+      supervisorResidualStateDigest: fhvT4aSupervisorResidualStateDigest(supervisorResidualState),
+      supervisorResidualClassification,
     });
     emitTrace(bindings, {
       schemaVersion: FHV_T4A_OPERATOR_TRACE_SCHEMA_VERSION,
@@ -503,6 +520,16 @@ export function runFhvT4aOperatorPhase(
       resultingProofDigests: [],
     });
     return "FHV_T4A_PREAUTH_OK";
+  }
+
+  if (phase === "residual-recovery-preview") {
+    const recovery = resolveFhvT4aResidualRecoveryBindings(process.env);
+    return runFhvT4aResidualRecoveryPreview(recovery, transport);
+  }
+
+  if (phase === "residual-recovery") {
+    const recovery = resolveFhvT4aResidualRecoveryBindings(process.env);
+    return runFhvT4aResidualRecoveryConfirm(recovery, transport);
   }
 
   requireAuthorization(bindings);
@@ -874,6 +901,8 @@ function parsePhase(argv: readonly string[]): Parameters<typeof runFhvT4aOperato
   const allowed = [
     "verify-local-release",
     "pre-auth",
+    "residual-recovery-preview",
+    "residual-recovery",
     "post-auth-before-disconnect",
     "post-reconnect-finalize",
   ] as const;
