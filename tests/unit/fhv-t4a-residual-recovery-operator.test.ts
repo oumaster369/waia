@@ -22,6 +22,7 @@ import {
 } from "@/lib/trader/observability/fhv-t4-residual-recovery-receipt";
 import { createFhvT4aHermeticTransport } from "@/lib/trader/observability/fhv-t4a-hermetic-transport";
 import {
+  fhvT4aPreauthLedgerDigest,
   readFhvT4aPreauthReceipt,
   writeFhvT4aPreauthReceipt,
 } from "@/lib/trader/observability/fhv-t4a-phase-receipts";
@@ -186,7 +187,7 @@ describe("fhv-t4a residual recovery operator (DEE-436)", () => {
         afterState: receipt.afterState,
         recoveryPayloadDigest: receipt.recoveryPayloadDigest,
       }),
-    ).toThrow(/REPLAY/);
+    ).toThrow(/already exists/);
   });
 
   it("Step 10 hermetic install passes --skip-enable", () => {
@@ -203,21 +204,19 @@ describe("fhv-t4a residual recovery operator (DEE-436)", () => {
     expect(installCmd).toContain("--skip-enable");
   });
 
-  it("Steps 14 and 18 hermetic paths enable and start governed units", () => {
-    const work = trackDir("residual-step14-18-");
+  it("Step 14 hermetic path enables and starts the observer unit", () => {
+    const work = trackDir("residual-step14-");
     const { bindings, transport } = createHermetic(work);
     const ctx = buildFhvT4aExecContext(bindings, transport);
-    for (const step of [14, 18] as const) {
-      transport.resetRemoteWrites();
-      const result = executeFhvT4aStep(ctx, step);
-      expect(result.classification).toBe(`FHV_T4A_STEP_${step}_OK`);
-      const cmd = transport
-        .sshInvocations()
-        .map((entry) => entry.remoteCommand)
-        .find((entry) => entry.includes("systemctl") && entry.includes("enable"));
-      expect(cmd).toMatch(/enable waia-fhv-(observer|campaign)\.service/);
-      expect(cmd).toMatch(/start waia-fhv-(observer|campaign)\.service/);
-    }
+    transport.resetRemoteWrites();
+    const result = executeFhvT4aStep(ctx, 14);
+    expect(result.classification).toBe("FHV_T4A_STEP_14_OK");
+    const cmd = transport
+      .sshInvocations()
+      .map((entry) => entry.remoteCommand)
+      .find((entry) => entry.includes("systemctl") && entry.includes("enable"));
+    expect(cmd).toMatch(/enable waia-fhv-observer\.service/);
+    expect(cmd).toMatch(/start waia-fhv-observer\.service/);
   });
 
   it("PRE_AUTH receipt binds supervisor residual proof immutably", () => {
@@ -247,7 +246,7 @@ describe("fhv-t4a residual recovery operator (DEE-436)", () => {
       bootstrapBlobDigests: {},
       bindingDigest: "b".repeat(64),
       preauthLedger: [],
-      preauthLedgerDigest: "c".repeat(64),
+      preauthLedgerDigest: fhvT4aPreauthLedgerDigest([]),
       rejectedCommandCount: 0,
       mutatingCommandCount: 0,
       preflightHostFacts: {

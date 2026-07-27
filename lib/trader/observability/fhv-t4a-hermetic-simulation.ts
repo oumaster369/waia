@@ -422,22 +422,19 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
   };
 
   const handleSystemctl = (cmd: string): FhvT4aHermeticSshResult => {
-    if (/enable waia-fhv-observer\.service/.test(cmd)) {
-      return { exitCode: 0, stdout: "", stderr: "" };
-    }
-    if (/enable waia-fhv-campaign\.service/.test(cmd)) {
-      return { exitCode: 0, stdout: "", stderr: "" };
-    }
-    if (/start waia-fhv-observer\.service/.test(cmd)) {
-      startUnit(observer);
-      return { exitCode: 0, stdout: "", stderr: "" };
-    }
     if (/restart waia-fhv-observer\.service/.test(cmd)) {
       observer.activeState = "deactivating";
       observer.invocationId = nextInvocation();
       observer.mainPid = 2000 + invocationCounter;
       observer.activeState = "active";
       observer.activeEnterMonotonic = String(2_000_000 + invocationCounter);
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    if (/start waia-fhv-observer\.service/.test(cmd)) {
+      startUnit(observer);
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    if (/enable waia-fhv-observer\.service/.test(cmd)) {
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     if (/start waia-fhv-campaign\.service/.test(cmd) && !resumeEnforced) {
@@ -456,6 +453,9 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       campaign.activeState = "inactive";
       startUnit(campaign);
       campaignCompleted = false;
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    if (/enable waia-fhv-campaign\.service/.test(cmd)) {
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     return { exitCode: 1, stdout: "", stderr: "systemctl: unit not handled" };
