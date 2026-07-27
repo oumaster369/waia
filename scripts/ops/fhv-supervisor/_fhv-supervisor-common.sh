@@ -6,6 +6,10 @@ readonly FHV_CAMPAIGN_UNIT="waia-fhv-campaign.service"
 readonly FHV_OBSERVER_UNIT="waia-fhv-observer.service"
 readonly FHV_ALLOWED_UNITS=("$FHV_CAMPAIGN_UNIT" "$FHV_OBSERVER_UNIT")
 
+SCRIPT_DIR_COMMON="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../_fhv-git-trust.sh
+source "${SCRIPT_DIR_COMMON}/../_fhv-git-trust.sh"
+
 log() { printf '%s\n' "$*" >&2; }
 die() { log "error: $*"; exit 2; }
 
@@ -43,13 +47,21 @@ assert_allowed_unit() {
 }
 
 resolve_repo_root() {
-  local start="${1:-}"
-  if [[ -n "$start" ]]; then
-    git -C "$start" rev-parse --show-toplevel && return 0
-    die "--repo-path is not a git work tree: ${start}"
+  local repo_path="${1:-}"
+  local git_bin="${2:-}"
+  if [[ -n "$repo_path" ]]; then
+    [[ -n "$git_bin" ]] || die "--git-bin is required with --repo-path"
+    fhv_git_trust_resolve_bound_repo_root "$git_bin" "$repo_path"
+    return 0
   fi
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -n "$git_bin" ]]; then
+    fhv_git_trust_require_abs_safe_path "git-bin" "$git_bin"
+    [[ -x "$git_bin" ]] || die "git-bin not executable"
+    fhv_git_trust_repo_git "$git_bin" "${script_dir}/../.." rev-parse --show-toplevel
+    return 0
+  fi
   git -C "${script_dir}/../.." rev-parse --show-toplevel
 }
 

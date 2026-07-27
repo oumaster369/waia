@@ -2,10 +2,15 @@
 # DEE-436 — root-only RESUME systemd enforcement for T4A.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=_fhv-git-trust.sh
+source "${SCRIPT_DIR}/_fhv-git-trust.sh"
+
 RUN_ROOT=""
 RUN_ID=""
 ORGANIZATION_ID=""
 TARGET_SHA=""
+REPO_ROOT=""
 SYSTEMCTL=""
 NODE_BIN=""
 UNIT="waia-fhv-campaign.service"
@@ -17,6 +22,7 @@ Usage: fhv-t4-resume-campaign-root.sh \
   --run-id ID \
   --organization-id UUID \
   --target-sha SHA \
+  --repo-root ABS_PATH \
   --systemctl-bin ABS_PATH \
   --node-bin ABS_PATH
 
@@ -35,6 +41,7 @@ while [[ $# -gt 0 ]]; do
     --run-id) RUN_ID="${2:-}"; shift 2 ;;
     --organization-id) ORGANIZATION_ID="${2:-}"; shift 2 ;;
     --target-sha) TARGET_SHA="${2:-}"; shift 2 ;;
+    --repo-root) REPO_ROOT="${2:-}"; shift 2 ;;
     --systemctl-bin) SYSTEMCTL="${2:-}"; shift 2 ;;
     --node-bin) NODE_BIN="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -42,8 +49,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$RUN_ROOT" && -n "$RUN_ID" && -n "$ORGANIZATION_ID" && -n "$TARGET_SHA" ]] || usage
+[[ -n "$RUN_ROOT" && -n "$RUN_ID" && -n "$ORGANIZATION_ID" && -n "$TARGET_SHA" && -n "$REPO_ROOT" ]] || usage
 [[ "$RUN_ROOT" = /* ]] || fail "run-root must be absolute"
+fhv_git_trust_require_abs_safe_path "repo-root" "$REPO_ROOT"
 [[ -n "$SYSTEMCTL" && "$SYSTEMCTL" = /* && -x "$SYSTEMCTL" ]] || fail "systemctl-bin required"
 [[ -n "$NODE_BIN" && "$NODE_BIN" = /* && -x "$NODE_BIN" ]] || fail "node-bin required"
 
@@ -57,10 +65,9 @@ if [[ -f "$PROOF_OUT" ]]; then
   fail "resume enforcement proof already exists"
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export RUN_ROOT RUN_ID ORGANIZATION_ID TARGET_SHA REPO_ROOT
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-"$NODE_BIN" --import tsx "${SCRIPT_DIR}/fhv-t4-resume-campaign-root-cli.ts" \
+fhv_ops_cd_repo_root "$REPO_ROOT"
+"$NODE_BIN" --import tsx scripts/ops/fhv-t4-resume-campaign-root-cli.ts \
   --run-root "$RUN_ROOT" \
   --run-id "$RUN_ID" \
   --organization-id "$ORGANIZATION_ID" \

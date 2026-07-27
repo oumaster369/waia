@@ -2,6 +2,10 @@
 # DEE-436 — dependency-free Git checkout / release-tag identity verifier.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=_fhv-git-trust.sh
+source "${SCRIPT_DIR}/_fhv-git-trust.sh"
+
 usage() {
   cat >&2 <<'EOF'
 Usage: fhv-release-checkout-identity.sh \
@@ -15,6 +19,15 @@ Usage: fhv-release-checkout-identity.sh \
 
 Read-only unless --output is supplied (POST_AUTHORIZED immutable proof only).
 EOF
+}
+
+fail() {
+  printf 'error: %s\n' "$1" >&2
+  exit 2
+}
+
+require_abs_safe_path() {
+  fhv_git_trust_require_abs_safe_path "$1" "$2"
 }
 
 REPO_PATH=""
@@ -35,68 +48,79 @@ while [[ $# -gt 0 ]]; do
     --expected-origin) EXPECTED_ORIGIN="${2:-}"; shift 2 ;;
     --output) OUTPUT="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
-    *) printf 'error: unknown argument: %s\n' "$1" >&2; exit 2 ;;
+    *) fail "unknown argument: $1" ;;
   esac
 done
 
 [[ -n "$REPO_PATH" && -n "$TARGET_SHA" && -n "$RELEASE_TAG" && -n "$GIT_BIN" && -n "$PYTHON_BIN" ]] || { usage; exit 2; }
-[[ -x "$GIT_BIN" ]] || { printf 'error: git-bin not executable\n' >&2; exit 2; }
-[[ -x "$PYTHON_BIN" ]] || { printf 'error: python-bin not executable\n' >&2; exit 2; }
+require_abs_safe_path "repo-path" "$REPO_PATH"
+require_abs_safe_path "git-bin" "$GIT_BIN"
+[[ -x "$GIT_BIN" ]] || fail "git-bin not executable"
+[[ -x "$PYTHON_BIN" ]] || fail "python-bin not executable"
 
 TARGET_SHA="$(printf '%s' "$TARGET_SHA" | tr '[:upper:]' '[:lower:]')"
 if ! [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-  printf 'error: target-sha must be 40-char hex\n' >&2
-  exit 2
+  fail "target-sha must be 40-char hex"
 fi
 
 if [[ "$EXPECTED_ORIGIN" != "https://github.com/oumaster369/waia.git" ]]; then
-  printf 'error: expected-origin must be approved WAIA origin\n' >&2
+  fail "expected-origin must be approved WAIA origin"
+fi
+
+repo_git() {
+  fhv_git_trust_repo_git "$GIT_BIN" "$REPO_PATH" "$@"
+}
+
+worktree_out=""
+worktree_err=""
+if ! worktree_out="$(repo_git rev-parse --is-inside-work-tree 2>&1)"; then
+  if [[ -n "$worktree_out" ]]; then
+    worktree_err="$worktree_out"
+  else
+    worktree_err="git rev-parse --is-inside-work-tree failed"
+  fi
+  printf 'error: git worktree check failed for %s: %s\n' "$REPO_PATH" "$worktree_err" >&2
+  exit 2
+fi
+if [[ "$worktree_out" != "true" ]]; then
+  printf 'error: not inside git worktree: %s (rev-parse returned: %s)\n' "$REPO_PATH" "$worktree_out" >&2
   exit 2
 fi
 
-if ! "$GIT_BIN" -C "$REPO_PATH" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  printf 'error: not a git worktree: %s\n' "$REPO_PATH" >&2
-  exit 2
+if ! repo_git cat-file -e "${TARGET_SHA}^{commit}" 2>/dev/null; then
+  fail "target-sha does not resolve"
 fi
 
-if ! "$GIT_BIN" -C "$REPO_PATH" cat-file -e "${TARGET_SHA}^{commit}" 2>/dev/null; then
-  printf 'error: target-sha does not resolve\n' >&2
-  exit 2
-fi
-
-HEAD_SHA="$("$GIT_BIN" -C "$REPO_PATH" rev-parse HEAD | tr '[:upper:]' '[:lower:]')"
+HEAD_SHA="$(repo_git rev-parse HEAD | tr '[:upper:]' '[:lower:]')"
 if [[ "$HEAD_SHA" != "$TARGET_SHA" ]]; then
   printf 'error: HEAD %s != target %s\n' "$HEAD_SHA" "$TARGET_SHA" >&2
   exit 2
 fi
 
-if ! "$GIT_BIN" -C "$REPO_PATH" rev-parse --verify "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+if ! repo_git rev-parse --verify "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
   printf 'error: release tag missing locally: %s\n' "$RELEASE_TAG" >&2
   exit 2
 fi
 
-TAG_PEEL_SHA="$("$GIT_BIN" -C "$REPO_PATH" rev-parse "${RELEASE_TAG}^{}" | tr '[:upper:]' '[:lower:]')"
+TAG_PEEL_SHA="$(repo_git rev-parse "${RELEASE_TAG}^{}" | tr '[:upper:]' '[:lower:]')"
 if [[ "$TAG_PEEL_SHA" != "$TARGET_SHA" ]]; then
   printf 'error: tag peel %s != target %s\n' "$TAG_PEEL_SHA" "$TARGET_SHA" >&2
   exit 2
 fi
 
-if [[ -n "$("$GIT_BIN" -C "$REPO_PATH" status --porcelain=v1 -uno)" ]]; then
-  printf 'error: tracked tree is not clean\n' >&2
-  exit 2
+if [[ -n "$(repo_git status --porcelain=v1 -uno)" ]]; then
+  fail "tracked tree is not clean"
 fi
 
-if [[ -n "$("$GIT_BIN" -C "$REPO_PATH" diff --cached --name-only)" ]]; then
-  printf 'error: staged changes present\n' >&2
-  exit 2
+if [[ -n "$(repo_git diff --cached --name-only)" ]]; then
+  fail "staged changes present"
 fi
 
 if [[ -f "$REPO_PATH/.git/MERGE_HEAD" || -d "$REPO_PATH/.git/rebase-merge" || -d "$REPO_PATH/.git/rebase-apply" ]]; then
-  printf 'error: merge/rebase in progress\n' >&2
-  exit 2
+  fail "merge/rebase in progress"
 fi
 
-ORIGIN_URL="$("$GIT_BIN" -C "$REPO_PATH" remote get-url origin 2>/dev/null || true)"
+ORIGIN_URL="$(repo_git remote get-url origin 2>/dev/null || true)"
 if [[ "$ORIGIN_URL" != "$EXPECTED_ORIGIN" ]]; then
   printf 'error: origin %s != expected %s\n' "${ORIGIN_URL:-<missing>}" "$EXPECTED_ORIGIN" >&2
   exit 2
@@ -127,6 +151,5 @@ printf '%s\n' "$FHV_JSON_PAYLOAD"
 printf 'classification=FHV_T4_CHECKOUT_IDENTITY_OK\n'
 
 if [[ -n "$OUTPUT" ]]; then
-  printf 'error: --output proof write requires trader:fhv:t4:record-checkout-identity after dependencies install\n' >&2
-  exit 2
+  fail "--output proof write requires trader:fhv:t4:record-checkout-identity after dependencies install"
 fi

@@ -161,7 +161,7 @@ function countBareCriticalInvocations(root: string): number {
   const requiredBindings: Record<string, readonly string[]> = {
     "scripts/ops/fhv-t4-service-user-exec.sh": ["--node-bin", "--corepack-bin"],
     "scripts/ops/fhv-service-user-install-deps.sh": ["--node-bin"],
-    "scripts/ops/fhv-t4-resume-campaign-root.sh": ["--systemctl-bin", "--node-bin"],
+    "scripts/ops/fhv-t4-resume-campaign-root.sh": ["--systemctl-bin", "--node-bin", "--repo-root"],
     "scripts/ops/fhv-t4a-operator.sh": ["FHV_LOCAL_NODE_BIN"],
     "scripts/ops/fhv-t4-host-preflight.sh": [
       "--node-bin",
