@@ -949,7 +949,7 @@ export function auditFhvT4aClosureCounters(
   }
 
   if (
-    !packet.includes("Human squash merge PR #424") ||
+    !packet.includes("PR #431") ||
     !packet.includes("main → dev") ||
     !packet.includes("tag-peel") ||
     !packet.includes("PR head") ||

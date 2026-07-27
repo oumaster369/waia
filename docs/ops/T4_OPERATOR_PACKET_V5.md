@@ -20,16 +20,19 @@ Use **`corepack pnpm@10`** only (never bare `pnpm`).
 - a synthetic merge ref;
 - an untagged `dev` commit.
 
-**Required sequence before Phase A:**
+**Required sequence before Phase A (DEE-436 T4A + residual recovery closure):**
 
-1. Human squash merge PR #424 into `dev`;
-2. corrected **`dev → main` release** through merge commit (never squash);
-3. record the **exact released main SHA and tag**; perform **tag-peel verification** and confirm the peeled tag matches the recorded SHA;
-4. mandatory **`main → dev` back-sync** through merge commit;
-5. independent audit of the **exact Packet blob** from the **exact released SHA** (`docs/ops/T4_OPERATOR_PACKET_V5.md` at that SHA);
-6. confirm that **no later commit or tag movement** invalidated the audit.
+1. Human squash merge **PR #431** into `dev`;
+2. post-merge **`dev` synchronization** and green push CI;
+3. governed **`dev → main` release** through merge commit (never squash);
+4. record the **exact released main SHA and tag**; perform **tag-peel verification** and confirm the peeled tag matches the recorded SHA;
+5. mandatory **`main → dev` back-sync** through merge commit;
+6. independent audit of the **exact Packet blob** from the **exact released SHA** (`docs/ops/T4_OPERATOR_PACKET_V5.md` at that SHA);
+7. create an **exact local checkout** of the new released SHA and bind `FHV_LOCAL_RELEASE_ROOT` to it.
 
-Only after steps 1–6 may the Human bind `FHV_LOCAL_RELEASE_ROOT` to the audited release checkout and begin this packet.
+Only after steps 1–7 may the Human run residual recovery (if required) or begin a fresh T4A namespace.
+
+**Never run recovery or T4A from:** a PR head, untagged `dev`, or the old failed release SHA.
 
 ---
 
@@ -156,12 +159,25 @@ If PRE_AUTH reports **`FHV_T4A_SUPERVISOR_RESIDUAL_BLOCKED_*`**, do **not** proc
 
 When a prior failed T4A run left **`waia-fhv-observer.service`** or **`waia-fhv-campaign.service`** enabled/active, use this **separate** recovery gate. It is **not** PRE_AUTH and **not** `AUTHORIZE-FHV-OPS-DEPLOY`.
 
-1. Set failed-run bindings (example):
+**Implementation vs evidence separation (mandatory):**
+
+| Binding | Purpose |
+|---------|---------|
+| `FHV_LOCAL_RELEASE_ROOT` + `EXECUTION_SERVER_TARGET_SHA` + `FHV_RELEASE_TAG` | **Audited recovery implementation** — workstation checkout that contains `fhv-t4-supervisor-residual-recovery.sh` |
+| `FHV_T4A_RESIDUAL_RECOVERY_FAILED_*` | **Immutable failed-run evidence** — never used to fetch executable recovery code |
+
+Recovery script bytes MUST come from the audited implementation SHA only. The failed SHA/tag/run bindings select which residual units must match before stop/disable.
+
+1. Verify local implementation release and set failed-run evidence bindings (example):
 
 ```bash
+export FHV_LOCAL_RELEASE_ROOT="<absolute-path-to-audited-main-release-checkout>"
+export EXECUTION_SERVER_TARGET_SHA="<exact-audited-main-release-sha>"
+export FHV_RELEASE_TAG="<exact-audited-release-tag>"
 export FHV_T4A_RESIDUAL_RECOVERY_FAILED_RUN_ID="fhv-t4a-20260727t125110z-03d2b13"
 export FHV_T4A_RESIDUAL_RECOVERY_FAILED_TARGET_SHA="03d2b1311b4e01bd469f6393bdde0c8aafab7da5"
 export FHV_T4A_RESIDUAL_RECOVERY_FAILED_RELEASE_TAG="v2026.07.27.03d2b13"
+"${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" verify-local-release
 ```
 
 2. Preview (read-only, zero mutations):
@@ -170,20 +186,20 @@ export FHV_T4A_RESIDUAL_RECOVERY_FAILED_RELEASE_TAG="v2026.07.27.03d2b13"
 "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" residual-recovery-preview
 ```
 
-Require: `classification=FHV_T4A_RESIDUAL_RECOVERY_PREVIEW_OK`
+Require: `classification=FHV_T4A_RESIDUAL_RECOVERY_PREVIEW_OK` and immutable workstation receipt **`fhv-t4a-residual-recovery-preview-receipt.v1.json`** with `mutatingCommandCount=0`, bound `beforeStateDigest`, and `unitIdentityClassification=FHV_T4A_RESIDUAL_UNIT_IDENTITY_MATCH`.
 
-3. Human issues **`AUTHORIZE-FHV-T4A-RESIDUAL-UNIT-RECOVERY`**, then mutating recovery:
+3. Human issues **`AUTHORIZE-FHV-T4A-RESIDUAL-UNIT-RECOVERY`** only after reviewing the preview receipt digest, then mutating recovery:
 
 ```bash
 export FHV_T4A_RESIDUAL_RECOVERY_AUTHORIZATION="AUTHORIZE-FHV-T4A-RESIDUAL-UNIT-RECOVERY"
 "${FHV_LOCAL_RELEASE_ROOT}/scripts/ops/fhv-t4a-operator.sh" residual-recovery
 ```
 
-Require: `classification=FHV_T4A_RESIDUAL_RECOVERY_OK` and immutable receipt **`fhv-t4a-residual-recovery-receipt.v1.json`**.
+Require: `classification=FHV_T4A_RESIDUAL_RECOVERY_OK` and immutable final receipt **`fhv-t4a-residual-recovery-receipt.v1.json`** linking the preview receipt digest and confirm-attempt marker.
 
 4. **STOP.** Do not chain into PRE_AUTH or T4A in the same session. Start a **fresh** run namespace and re-run **`verify-local-release`** → **`pre-auth`**.
 
-Recovery stops/disables only the two allowlisted FHV units, preserves unit files and all failed checkout/run/evidence, and refuses replay.
+Recovery stops/disables only the two allowlisted FHV units whose embedded identity matches the bound failed run, preserves unit files and all failed checkout/run/evidence, refuses replay before remote mutation, and revalidates preview-bound before-state immediately before confirm.
 
 ---
 

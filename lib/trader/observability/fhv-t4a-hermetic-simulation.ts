@@ -857,21 +857,50 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
         };
       }
       if (/fhv-t4-supervisor-residual-recovery\.sh/.test(stdin)) {
+        const expected = execFileSync(
+          "git",
+          [
+            "-C",
+            options.localReleaseRoot,
+            "show",
+            `${options.targetSha}:scripts/ops/fhv-t4-supervisor-residual-recovery.sh`,
+          ],
+          { encoding: "utf8" },
+        );
+        if (sha256Hex(stdin) !== sha256Hex(expected)) {
+          return {
+            exitCode: 2,
+            stdout: "",
+            stderr: "stdin bytes != committed recovery script blob",
+          };
+        }
         const preview = bootstrapArgs.includes("--preview");
+        const argValue = (flag: string): string | undefined => {
+          const index = bootstrapArgs.indexOf(flag);
+          return index >= 0 ? bootstrapArgs[index + 1] : undefined;
+        };
+        const failedRunId = argValue("--failed-run-id") ?? options.runId;
+        const failedTargetSha = argValue("--failed-target-sha") ?? options.targetSha;
+        const failedOrgId = argValue("--expected-organization-id") ?? options.organizationId;
         const unitEvidence = (unitName: string) => ({
           unitName,
           unitFileExists: true,
           unitFilePath: `/etc/systemd/system/${unitName}`,
           unitFileSha256: "f".repeat(64),
           loadState: "loaded",
-          activeState: "inactive",
-          subState: "dead",
+          unitFileState: "enabled",
+          activeState: preview ? "active" : "inactive",
+          subState: preview ? "running" : "dead",
           fragmentPath: `/etc/systemd/system/${unitName}`,
           enabledState: preview ? "enabled" : "disabled",
-          activeClass: "inactive",
+          activeClass: preview ? "active" : "inactive",
+          isFailed: false,
           execStart: "/usr/bin/node campaign",
-          workingDirectory: `/opt/waia/waia-${options.targetSha}`,
+          workingDirectory: `/opt/waia/waia-${failedTargetSha}`,
           environmentFilePath: options.environmentFile,
+          embeddedRunId: failedRunId,
+          embeddedTargetSha: failedTargetSha,
+          embeddedOrganizationId: failedOrgId,
         });
         const payload: Record<string, unknown> = {
           schemaVersion: "fhv-t4-supervisor-residual-recovery/v1",
@@ -879,12 +908,14 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
           classification: preview
             ? "FHV_T4A_RESIDUAL_RECOVERY_PREVIEW_OK"
             : "FHV_T4A_RESIDUAL_RECOVERY_OK",
-          failedRunId: options.runId,
-          failedTargetSha: options.targetSha,
-          failedReleaseTag: options.releaseTag,
-          organizationId: options.organizationId,
-          operatorId: options.operatorId ?? "hermetic-operator",
+          failedRunId,
+          failedTargetSha,
+          failedReleaseTag: argValue("--failed-release-tag") ?? options.releaseTag,
+          organizationId: failedOrgId,
+          operatorId:
+            argValue("--expected-operator-id") ?? options.operatorId ?? "hermetic-operator",
           hostBootId: bootId,
+          unitIdentityClassification: "FHV_T4A_RESIDUAL_UNIT_IDENTITY_MATCH",
           beforeState: {
             units: [
               unitEvidence("waia-fhv-observer.service"),
@@ -893,10 +924,23 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
           },
         };
         if (!preview) {
+          recordWrite(join(runDir, "control/fhv-t4-residual-recovery-mutation.v1.json"));
           payload.afterState = {
             units: [
-              { ...unitEvidence("waia-fhv-observer.service"), enabledState: "disabled" },
-              { ...unitEvidence("waia-fhv-campaign.service"), enabledState: "disabled" },
+              {
+                ...unitEvidence("waia-fhv-observer.service"),
+                enabledState: "disabled",
+                activeClass: "inactive",
+                activeState: "inactive",
+                subState: "dead",
+              },
+              {
+                ...unitEvidence("waia-fhv-campaign.service"),
+                enabledState: "disabled",
+                activeClass: "inactive",
+                activeState: "inactive",
+                subState: "dead",
+              },
             ],
           };
         }

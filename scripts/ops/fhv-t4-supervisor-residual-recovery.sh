@@ -92,9 +92,13 @@ capture_unit_evidence() {
   local unit_path="${SYSTEMD_DIR}/${unit_name}"
   local unit_file_exists="false"
   local unit_file_sha256=""
+  local embedded_run_id="" embedded_target_sha="" embedded_org_id=""
   if [[ -f "$unit_path" ]]; then
     unit_file_exists="true"
     unit_file_sha256="$(sha256sum "$unit_path" | awk '{print $1}')"
+    embedded_run_id="$(grep -E '^Environment=FHV_RUN_ID=' "$unit_path" | head -n1 | sed 's/^Environment=FHV_RUN_ID=//' || true)"
+    embedded_target_sha="$(grep -E '^Environment=FHV_TARGET_SHA=' "$unit_path" | head -n1 | sed 's/^Environment=FHV_TARGET_SHA=//' || true)"
+    embedded_org_id="$(grep -E '^Environment=FHV_ORGANIZATION_ID=' "$unit_path" | head -n1 | sed 's/^Environment=FHV_ORGANIZATION_ID=//' || true)"
   fi
   UNIT_NAME="$unit_name" UNIT_FILE_EXISTS="$unit_file_exists" UNIT_FILE_PATH="$unit_path" \
   UNIT_FILE_SHA256="$unit_file_sha256" \
@@ -107,6 +111,7 @@ capture_unit_evidence() {
   EXEC_START="$("$SYSTEMCTL" show "$unit_name" -p ExecStart --value 2>/dev/null || true)" \
   WORKING_DIRECTORY="$("$SYSTEMCTL" show "$unit_name" -p WorkingDirectory --value 2>/dev/null || true)" \
   ENVIRONMENT_FILE="$("$SYSTEMCTL" show "$unit_name" -p EnvironmentFile --value 2>/dev/null || true)" \
+  EMBEDDED_RUN_ID="$embedded_run_id" EMBEDDED_TARGET_SHA="$embedded_target_sha" EMBEDDED_ORG_ID="$embedded_org_id" \
   "$PYTHON_BIN" - <<'PY'
 import json, os
 print(json.dumps({
@@ -115,14 +120,19 @@ print(json.dumps({
     "unitFilePath": os.environ["UNIT_FILE_PATH"],
     "unitFileSha256": os.environ["UNIT_FILE_SHA256"] or None,
     "loadState": os.environ["LOAD_STATE"],
+    "unitFileState": os.environ["LOAD_STATE"],
     "activeState": os.environ["ACTIVE_STATE"],
     "subState": os.environ["SUB_STATE"],
     "fragmentPath": os.environ["FRAGMENT_PATH"],
     "enabledState": os.environ["ENABLED_STATE"],
     "activeClass": os.environ["ACTIVE_CLASS"],
+    "isFailed": os.environ["ACTIVE_STATE"] == "failed" or os.environ["SUB_STATE"] == "failed",
     "execStart": os.environ["EXEC_START"],
     "workingDirectory": os.environ["WORKING_DIRECTORY"],
     "environmentFilePath": os.environ["ENVIRONMENT_FILE"],
+    "embeddedRunId": os.environ["EMBEDDED_RUN_ID"] or None,
+    "embeddedTargetSha": os.environ["EMBEDDED_TARGET_SHA"] or None,
+    "embeddedOrganizationId": os.environ["EMBEDDED_ORG_ID"] or None,
 }, separators=(",", ":")))
 PY
 }
