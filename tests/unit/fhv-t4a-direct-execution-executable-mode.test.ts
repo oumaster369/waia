@@ -41,6 +41,35 @@ afterEach(() => {
   cleanupPaths = [];
 });
 
+function gitPrDiffSummaryRange(): string {
+  const baseSha = process.env.GITHUB_BASE_SHA?.trim();
+  if (baseSha) {
+    return `${baseSha}...HEAD`;
+  }
+  try {
+    execFileSync("git", ["rev-parse", "--verify", "origin/dev"], { stdio: "pipe", cwd: ROOT });
+    return "origin/dev...HEAD";
+  } catch {
+    return "HEAD~1...HEAD";
+  }
+}
+
+function resolveLinuxPythonBin(): string {
+  for (const candidate of [
+    process.env.FHV_PYTHON_BIN?.trim(),
+    "/usr/bin/python3",
+    "/usr/local/bin/python3",
+  ]) {
+    if (!candidate || !existsSync(candidate)) {
+      continue;
+    }
+    if ((statSync(candidate).mode & 0o111) !== 0) {
+      return candidate;
+    }
+  }
+  return execFileSync("which", ["python3"], { encoding: "utf8" }).trim();
+}
+
 function trackDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   cleanupPaths.push(dir);
@@ -211,7 +240,7 @@ describe("fhv-t4a direct execution executable Git modes (DEE-436 step 11 closure
   });
 
   it("mode-only Git changes are limited to the two direct-execution scripts", () => {
-    const summary = execFileSync("git", ["diff", "--summary", "origin/dev...HEAD"], {
+    const summary = execFileSync("git", ["diff", "--summary", gitPrDiffSummaryRange()], {
       encoding: "utf8",
       cwd: ROOT,
     });
@@ -384,8 +413,7 @@ linuxDescribe("fhv-t4a linux clean checkout rehearsal (PR #431 audit)", () => {
     gitArchiveCheckout("HEAD", archiveRoot);
     const script = join(archiveRoot, "scripts/ops/fhv-t4-rendered-unit-digests.sh");
     const rendered = makeRenderedFixture(archiveRoot);
-    const pythonPath =
-      execFileSync("command", ["-v", "python3"], { encoding: "utf8" }).trim() || "/usr/bin/python3";
+    const pythonPath = resolveLinuxPythonBin();
     const result = spawnSync(
       "sudo",
       ["-n", script, "--rendered-dir", rendered, "--python-bin", pythonPath],
@@ -417,8 +445,7 @@ exit 0
 `,
     );
     chmodSync(join(mockBin, "systemctl"), 0o755);
-    const pythonPath =
-      execFileSync("command", ["-v", "python3"], { encoding: "utf8" }).trim() || "/usr/bin/python3";
+    const pythonPath = resolveLinuxPythonBin();
     const result = spawnSync(
       script,
       [
