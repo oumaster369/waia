@@ -2,7 +2,7 @@
  * DEE-436 — immutable workstation recovery receipts (preview, confirm attempt, final, failure).
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
@@ -18,6 +18,8 @@ export const FHV_T4A_RESIDUAL_RECOVERY_PREVIEW_RECEIPT_SCHEMA =
   "fhv-t4a-residual-recovery-preview-receipt/v1" as const;
 export const FHV_T4A_RESIDUAL_RECOVERY_CONFIRM_ATTEMPT_SCHEMA =
   "fhv-t4a-residual-recovery-confirm-attempt/v1" as const;
+export const FHV_T4A_RESIDUAL_RECOVERY_CONFIRM_COMPLETION_SCHEMA =
+  "fhv-t4a-residual-recovery-confirm-completion/v1" as const;
 export const FHV_T4A_RESIDUAL_RECOVERY_RECEIPT_SCHEMA =
   "fhv-t4a-residual-recovery-receipt/v1" as const;
 export const FHV_T4A_RESIDUAL_RECOVERY_FAILURE_RECEIPT_SCHEMA =
@@ -30,6 +32,7 @@ export type FhvT4aResidualRecoveryEvidenceV1 = Readonly<{
 export type FhvT4aResidualRecoveryPreviewReceiptV1 = Readonly<{
   schemaVersion: typeof FHV_T4A_RESIDUAL_RECOVERY_PREVIEW_RECEIPT_SCHEMA;
   classification: "FHV_T4A_RESIDUAL_RECOVERY_PREVIEW_OK";
+  recoveryId: string;
   recoveryImplementationSha: string;
   recoveryImplementationTag: string;
   recoveryImplementationScriptDigest: string;
@@ -53,19 +56,30 @@ export type FhvT4aResidualRecoveryPreviewReceiptV1 = Readonly<{
 
 export type FhvT4aResidualRecoveryConfirmAttemptV1 = Readonly<{
   schemaVersion: typeof FHV_T4A_RESIDUAL_RECOVERY_CONFIRM_ATTEMPT_SCHEMA;
+  recoveryId: string;
   previewReceiptDigest: string;
   failedRunId: string;
-  status: "in_progress" | "completed" | "failed";
+  status: "in_progress";
   startedAtUtc: string;
-  completedAtUtc?: string;
+  contentDigest: string;
+}>;
+
+export type FhvT4aResidualRecoveryConfirmCompletionV1 = Readonly<{
+  schemaVersion: typeof FHV_T4A_RESIDUAL_RECOVERY_CONFIRM_COMPLETION_SCHEMA;
+  recoveryId: string;
+  confirmAttemptDigest: string;
+  status: "completed" | "failed";
+  completedAtUtc: string;
   contentDigest: string;
 }>;
 
 export type FhvT4aResidualRecoveryReceiptV1 = Readonly<{
   schemaVersion: typeof FHV_T4A_RESIDUAL_RECOVERY_RECEIPT_SCHEMA;
   classification: "FHV_T4A_RESIDUAL_RECOVERY_OK";
+  recoveryId: string;
   previewReceiptDigest: string;
   confirmAttemptDigest: string;
+  confirmCompletionDigest: string;
   recoveryImplementationSha: string;
   recoveryImplementationTag: string;
   failedRunId: string;
@@ -90,8 +104,10 @@ export type FhvT4aResidualRecoveryReceiptV1 = Readonly<{
 export type FhvT4aResidualRecoveryFailureReceiptV1 = Readonly<{
   schemaVersion: typeof FHV_T4A_RESIDUAL_RECOVERY_FAILURE_RECEIPT_SCHEMA;
   classification: "FHV_T4A_RESIDUAL_RECOVERY_FAILED";
+  recoveryId: string;
   previewReceiptDigest: string;
   confirmAttemptDigest: string;
+  confirmCompletionDigest: string;
   failedRunId: string;
   failedTargetSha: string;
   failedReleaseTag: string;
@@ -136,6 +152,10 @@ export function fhvT4aResidualRecoveryPreviewReceiptPath(localStateDir: string):
 
 export function fhvT4aResidualRecoveryConfirmAttemptPath(localStateDir: string): string {
   return join(localStateDir, "fhv-t4a-residual-recovery-confirm-attempt.v1.json");
+}
+
+export function fhvT4aResidualRecoveryConfirmCompletionPath(localStateDir: string): string {
+  return join(localStateDir, "fhv-t4a-residual-recovery-confirm-completion.v1.json");
 }
 
 export function fhvT4aResidualRecoveryReceiptPath(localStateDir: string): string {
@@ -230,27 +250,58 @@ export function readFhvT4aResidualRecoveryConfirmAttempt(
       "Confirm attempt missing.",
     );
   }
-  return validateDigest(
+  const attempt = validateDigest(
     JSON.parse(readFileSync(path, "utf8")) as FhvT4aResidualRecoveryConfirmAttemptV1,
     "FHV_T4A_RESIDUAL_RECOVERY_CONFIRM_ATTEMPT_DIGEST",
   );
+  if (attempt.status !== "in_progress") {
+    throw new FhvT4aResidualRecoveryReceiptError(
+      "FHV_T4A_RESIDUAL_RECOVERY_CONFIRM_ATTEMPT_MUTATED",
+      "Pre-mutation confirm attempt must remain in_progress.",
+    );
+  }
+  return attempt;
 }
 
-export function finalizeFhvT4aResidualRecoveryConfirmAttempt(
+export function writeFhvT4aResidualRecoveryConfirmCompletion(
   localStateDir: string,
-  status: "completed" | "failed",
-): FhvT4aResidualRecoveryConfirmAttemptV1 {
-  const attempt = readFhvT4aResidualRecoveryConfirmAttempt(localStateDir);
-  const updated = withDigest<FhvT4aResidualRecoveryConfirmAttemptV1>({
-    ...attempt,
-    status,
+  input: Omit<
+    FhvT4aResidualRecoveryConfirmCompletionV1,
+    "schemaVersion" | "contentDigest" | "completedAtUtc"
+  >,
+): FhvT4aResidualRecoveryConfirmCompletionV1 {
+  mkdirSync(localStateDir, { recursive: true });
+  const path = fhvT4aResidualRecoveryConfirmCompletionPath(localStateDir);
+  if (existsSync(path)) {
+    throw new FhvT4aResidualRecoveryReceiptError(
+      "FHV_T4A_RESIDUAL_RECOVERY_CONFIRM_COMPLETION_REPLAY",
+      "Confirm completion marker already exists.",
+    );
+  }
+  readFhvT4aResidualRecoveryConfirmAttempt(localStateDir);
+  const completion = withDigest<FhvT4aResidualRecoveryConfirmCompletionV1>({
+    schemaVersion: FHV_T4A_RESIDUAL_RECOVERY_CONFIRM_COMPLETION_SCHEMA,
+    ...input,
     completedAtUtc: new Date().toISOString(),
   });
-  writeFileSync(
-    fhvT4aResidualRecoveryConfirmAttemptPath(localStateDir),
-    `${JSON.stringify(updated, null, 2)}\n`,
+  writeFileAtomicExclusive(path, `${JSON.stringify(completion, null, 2)}\n`);
+  return completion;
+}
+
+export function readFhvT4aResidualRecoveryConfirmCompletion(
+  localStateDir: string,
+): FhvT4aResidualRecoveryConfirmCompletionV1 {
+  const path = fhvT4aResidualRecoveryConfirmCompletionPath(localStateDir);
+  if (!existsSync(path)) {
+    throw new FhvT4aResidualRecoveryReceiptError(
+      "FHV_T4A_RESIDUAL_RECOVERY_CONFIRM_COMPLETION_MISSING",
+      "Confirm completion marker missing.",
+    );
+  }
+  return validateDigest(
+    JSON.parse(readFileSync(path, "utf8")) as FhvT4aResidualRecoveryConfirmCompletionV1,
+    "FHV_T4A_RESIDUAL_RECOVERY_CONFIRM_COMPLETION_DIGEST",
   );
-  return updated;
 }
 
 export function assertFhvT4aResidualRecoveryReplaySafe(localStateDir: string): void {
@@ -258,6 +309,18 @@ export function assertFhvT4aResidualRecoveryReplaySafe(localStateDir: string): v
     throw new FhvT4aResidualRecoveryReceiptError(
       "FHV_T4A_RESIDUAL_RECOVERY_RECEIPT_REPLAY",
       "Final recovery receipt already exists.",
+    );
+  }
+  if (existsSync(fhvT4aResidualRecoveryFailureReceiptPath(localStateDir))) {
+    throw new FhvT4aResidualRecoveryReceiptError(
+      "FHV_T4A_RESIDUAL_RECOVERY_FAILURE_RECEIPT_REPLAY",
+      "Failure recovery receipt already exists.",
+    );
+  }
+  if (existsSync(fhvT4aResidualRecoveryConfirmCompletionPath(localStateDir))) {
+    throw new FhvT4aResidualRecoveryReceiptError(
+      "FHV_T4A_RESIDUAL_RECOVERY_CONFIRM_COMPLETION_REPLAY",
+      "Confirm completion marker already exists.",
     );
   }
   if (existsSync(fhvT4aResidualRecoveryConfirmAttemptPath(localStateDir))) {

@@ -3,12 +3,12 @@
  */
 
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 
 import type { FhvT4aOperatorBindings } from "@/lib/trader/observability/fhv-t4a-binding-spec";
 import { FhvT4aOperatorError } from "@/lib/trader/observability/fhv-t4a-operator-errors";
 import { FHV_T4A_RESIDUAL_RECOVERY_AUTHORIZATION_LITERAL } from "@/lib/trader/observability/fhv-t4a-operator-contract";
 import type { FhvT4aOperatorTransport } from "@/lib/trader/observability/fhv-t4a-operator-transport";
+import { assertFhvT4aRecoveryImplementationRelease } from "@/lib/trader/observability/fhv-t4a-recovery-release-verify";
 import {
   assertFhvT4aResidualRecoveryBeforeStateMatches,
   assertFhvT4aResidualUnitIdentityMatch,
@@ -24,8 +24,7 @@ import {
 } from "@/lib/trader/observability/fhv-t4-supervisor-residual-state";
 import {
   assertFhvT4aResidualRecoveryReplaySafe,
-  finalizeFhvT4aResidualRecoveryConfirmAttempt,
-  fhvT4aResidualRecoveryFailureReceiptPath,
+  writeFhvT4aResidualRecoveryConfirmCompletion,
   parseFhvT4aResidualRecoveryPayload,
   readFhvT4aResidualRecoveryPreviewReceipt,
   writeFhvT4aResidualRecoveryConfirmAttempt,
@@ -39,8 +38,11 @@ const RECOVERY_SCRIPT_PATH = "scripts/ops/fhv-t4-supervisor-residual-recovery.sh
 export type FhvT4aResidualRecoveryBindings = Readonly<{
   execHost: string;
   sshUser: string;
+  recoveryId: string;
   localStateDir: string;
   localReleaseRoot: string;
+  localGitBin: string;
+  originUrl: string;
   implementationTargetSha: string;
   implementationReleaseTag: string;
   failedRunId: string;
@@ -78,8 +80,11 @@ export function resolveFhvT4aResidualRecoveryBindings(
   return {
     execHost: requireEnv("EXEC_HOST", env),
     sshUser: requireEnv("SSH_USER", env),
+    recoveryId: requireEnv("FHV_T4A_RESIDUAL_RECOVERY_ID", env),
     localStateDir: requireEnv("FHV_T4A_LOCAL_STATE_DIR", env),
     localReleaseRoot: requireEnv("FHV_LOCAL_RELEASE_ROOT", env),
+    localGitBin: requireEnv("FHV_LOCAL_GIT_BIN", env),
+    originUrl: requireEnv("FHV_ORIGIN_URL", env),
     implementationTargetSha: requireEnv("EXECUTION_SERVER_TARGET_SHA", env).toLowerCase(),
     implementationReleaseTag: requireEnv("FHV_RELEASE_TAG", env),
     failedRunId: requireEnv("FHV_T4A_RESIDUAL_RECOVERY_FAILED_RUN_ID", env),
@@ -96,50 +101,7 @@ export function resolveFhvT4aResidualRecoveryBindings(
   };
 }
 
-export function assertFhvT4aRecoveryImplementationRelease(input: {
-  recovery: FhvT4aResidualRecoveryBindings;
-  transport: FhvT4aOperatorTransport;
-}): { recoveryScriptDigest: string } {
-  const { recovery, transport } = input;
-  const localHead = execFileSync("git", ["-C", recovery.localReleaseRoot, "rev-parse", "HEAD"], {
-    encoding: "utf8",
-  })
-    .trim()
-    .toLowerCase();
-  if (localHead !== recovery.implementationTargetSha) {
-    throw new FhvT4aOperatorError(
-      "FHV_T4A_RESIDUAL_RECOVERY_IMPLEMENTATION_SHA_MISMATCH",
-      "FHV_LOCAL_RELEASE_ROOT HEAD must equal EXECUTION_SERVER_TARGET_SHA for recovery implementation.",
-    );
-  }
-  let implementationScriptBody: string;
-  try {
-    implementationScriptBody = transport.gitShowBlob(
-      recovery.implementationTargetSha,
-      RECOVERY_SCRIPT_PATH,
-    );
-  } catch {
-    throw new FhvT4aOperatorError(
-      "FHV_T4A_RESIDUAL_RECOVERY_IMPLEMENTATION_SCRIPT_MISSING",
-      "Recovery implementation SHA does not contain the audited recovery script.",
-    );
-  }
-  try {
-    transport.gitShowBlob(recovery.failedTargetSha, RECOVERY_SCRIPT_PATH);
-    throw new FhvT4aOperatorError(
-      "FHV_T4A_RESIDUAL_RECOVERY_FAILED_SHA_CONTAINS_SCRIPT",
-      "Failed evidence SHA must not contain the recovery script.",
-    );
-  } catch (error) {
-    if (
-      error instanceof FhvT4aOperatorError &&
-      error.code === "FHV_T4A_RESIDUAL_RECOVERY_FAILED_SHA_CONTAINS_SCRIPT"
-    ) {
-      throw error;
-    }
-  }
-  return { recoveryScriptDigest: sha256Hex(implementationScriptBody) };
-}
+export { assertFhvT4aRecoveryImplementationRelease } from "@/lib/trader/observability/fhv-t4a-recovery-release-verify";
 
 function extractJsonLine(stdout: string, schemaNeedle: string): string {
   const line = stdout
@@ -313,6 +275,7 @@ export function runFhvT4aResidualRecoveryPreview(
     );
   }
   writeFhvT4aResidualRecoveryPreviewReceipt(recovery.localStateDir, {
+    recoveryId: recovery.recoveryId,
     recoveryImplementationSha: recovery.implementationTargetSha,
     recoveryImplementationTag: recovery.implementationReleaseTag,
     recoveryImplementationScriptDigest: recoveryScriptDigest,
@@ -347,19 +310,48 @@ export function runFhvT4aResidualRecoveryConfirm(
   }
   assertFhvT4aRecoveryImplementationRelease({ recovery, transport });
   const confirmAttempt = writeFhvT4aResidualRecoveryConfirmAttempt(recovery.localStateDir, {
+    recoveryId: recovery.recoveryId,
     previewReceiptDigest: previewReceipt.contentDigest,
     failedRunId: recovery.failedRunId,
   });
 
-  const preConfirmPreview = invokeRecoveryScript(recovery, transport, "--preview");
-  if (preConfirmPreview.exitCode !== 0) {
-    finalizeFhvT4aResidualRecoveryConfirmAttempt(recovery.localStateDir, "failed");
+  const recordFailure = (input: {
+    hostBootId: string;
+    beforeState: typeof previewReceipt.beforeState;
+    afterState?: typeof previewReceipt.beforeState;
+    beforeStateDigest: string;
+    afterStateDigest?: string;
+    remoteExitStatus: number;
+    remoteStdoutDigest: string;
+    remoteStderrDigest: string;
+  }) => {
+    const completion = writeFhvT4aResidualRecoveryConfirmCompletion(recovery.localStateDir, {
+      recoveryId: recovery.recoveryId,
+      confirmAttemptDigest: confirmAttempt.contentDigest,
+      status: "failed",
+    });
     writeFhvT4aResidualRecoveryFailureReceipt(recovery.localStateDir, {
+      recoveryId: recovery.recoveryId,
       previewReceiptDigest: previewReceipt.contentDigest,
       confirmAttemptDigest: confirmAttempt.contentDigest,
+      confirmCompletionDigest: completion.contentDigest,
       failedRunId: recovery.failedRunId,
       failedTargetSha: recovery.failedTargetSha,
       failedReleaseTag: recovery.failedReleaseTag,
+      hostBootId: input.hostBootId,
+      beforeState: input.beforeState,
+      afterState: input.afterState,
+      beforeStateDigest: input.beforeStateDigest,
+      afterStateDigest: input.afterStateDigest,
+      remoteExitStatus: input.remoteExitStatus,
+      remoteStdoutDigest: input.remoteStdoutDigest,
+      remoteStderrDigest: input.remoteStderrDigest,
+    });
+  };
+
+  const preConfirmPreview = invokeRecoveryScript(recovery, transport, "--preview");
+  if (preConfirmPreview.exitCode !== 0) {
+    recordFailure({
       hostBootId: previewReceipt.hostBootId,
       beforeState: previewReceipt.beforeState,
       beforeStateDigest: previewReceipt.beforeStateDigest,
@@ -387,13 +379,7 @@ export function runFhvT4aResidualRecoveryConfirm(
       failedOrganizationId: recovery.organizationId,
     });
   } catch (error) {
-    finalizeFhvT4aResidualRecoveryConfirmAttempt(recovery.localStateDir, "failed");
-    writeFhvT4aResidualRecoveryFailureReceipt(recovery.localStateDir, {
-      previewReceiptDigest: previewReceipt.contentDigest,
-      confirmAttemptDigest: confirmAttempt.contentDigest,
-      failedRunId: recovery.failedRunId,
-      failedTargetSha: recovery.failedTargetSha,
-      failedReleaseTag: recovery.failedReleaseTag,
+    recordFailure({
       hostBootId: driftPayload.hostBootId,
       beforeState: previewReceipt.beforeState,
       afterState: driftPayload.beforeState,
@@ -414,7 +400,6 @@ export function runFhvT4aResidualRecoveryConfirm(
     recovery.recoveryAuthorization,
   );
   if (result.exitCode !== 0) {
-    finalizeFhvT4aResidualRecoveryConfirmAttempt(recovery.localStateDir, "failed");
     let afterState = driftPayload.beforeState;
     try {
       const partial = parseRecoveryPayload(result.stdout);
@@ -424,12 +409,7 @@ export function runFhvT4aResidualRecoveryConfirm(
     } catch {
       // preserve authorized before evidence only
     }
-    writeFhvT4aResidualRecoveryFailureReceipt(recovery.localStateDir, {
-      previewReceiptDigest: previewReceipt.contentDigest,
-      confirmAttemptDigest: confirmAttempt.contentDigest,
-      failedRunId: recovery.failedRunId,
-      failedTargetSha: recovery.failedTargetSha,
-      failedReleaseTag: recovery.failedReleaseTag,
+    recordFailure({
       hostBootId: previewReceipt.hostBootId,
       beforeState: previewReceipt.beforeState,
       afterState,
@@ -446,24 +426,41 @@ export function runFhvT4aResidualRecoveryConfirm(
   }
   const payload = parseRecoveryPayload(result.stdout);
   if (payload.classification !== "FHV_T4A_RESIDUAL_RECOVERY_OK" || !payload.afterState) {
-    finalizeFhvT4aResidualRecoveryConfirmAttempt(recovery.localStateDir, "failed");
+    recordFailure({
+      hostBootId: previewReceipt.hostBootId,
+      beforeState: previewReceipt.beforeState,
+      beforeStateDigest: previewReceipt.beforeStateDigest,
+      remoteExitStatus: result.exitCode,
+      remoteStdoutDigest: sha256Hex(result.stdout),
+      remoteStderrDigest: sha256Hex(result.stderr),
+    });
     throw new FhvT4aOperatorError("FHV_T4A_RESIDUAL_RECOVERY_FAILED", payload.classification);
   }
   if (transport.remoteWriteCount() <= writesBeforeConfirm) {
-    finalizeFhvT4aResidualRecoveryConfirmAttempt(recovery.localStateDir, "failed");
+    recordFailure({
+      hostBootId: previewReceipt.hostBootId,
+      beforeState: previewReceipt.beforeState,
+      beforeStateDigest: previewReceipt.beforeStateDigest,
+      remoteExitStatus: 0,
+      remoteStdoutDigest: sha256Hex(result.stdout),
+      remoteStderrDigest: sha256Hex(result.stderr),
+    });
     throw new FhvT4aOperatorError(
       "FHV_T4A_RESIDUAL_RECOVERY_FAILED",
       "Confirm did not perform expected remote mutations.",
     );
   }
-  const finalizedAttempt = finalizeFhvT4aResidualRecoveryConfirmAttempt(
-    recovery.localStateDir,
-    "completed",
-  );
+  const confirmCompletion = writeFhvT4aResidualRecoveryConfirmCompletion(recovery.localStateDir, {
+    recoveryId: recovery.recoveryId,
+    confirmAttemptDigest: confirmAttempt.contentDigest,
+    status: "completed",
+  });
   const recoveryPayloadDigest = sha256Hex(JSON.stringify(payload));
   writeFhvT4aResidualRecoveryReceipt(recovery.localStateDir, {
+    recoveryId: recovery.recoveryId,
     previewReceiptDigest: previewReceipt.contentDigest,
-    confirmAttemptDigest: finalizedAttempt.contentDigest,
+    confirmAttemptDigest: confirmAttempt.contentDigest,
+    confirmCompletionDigest: confirmCompletion.contentDigest,
     recoveryImplementationSha: recovery.implementationTargetSha,
     recoveryImplementationTag: recovery.implementationReleaseTag,
     failedRunId: recovery.failedRunId,

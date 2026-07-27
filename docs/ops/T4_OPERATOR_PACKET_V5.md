@@ -166,7 +166,19 @@ When a prior failed T4A run left **`waia-fhv-observer.service`** or **`waia-fhv-
 | `FHV_LOCAL_RELEASE_ROOT` + `EXECUTION_SERVER_TARGET_SHA` + `FHV_RELEASE_TAG` | **Audited recovery implementation** — workstation checkout that contains `fhv-t4-supervisor-residual-recovery.sh` |
 | `FHV_T4A_RESIDUAL_RECOVERY_FAILED_*` | **Immutable failed-run evidence** — never used to fetch executable recovery code |
 
-Recovery script bytes MUST come from the audited implementation SHA only. The failed SHA/tag/run bindings select which residual units must match before stop/disable.
+Recovery script bytes MUST come from the audited implementation SHA only. The failed SHA/tag/run bindings select which residual units must match before stop/disable. The failed SHA is **evidence-only** — it may or may not contain recovery tooling; executable bytes are never fetched from it.
+
+**Fresh recovery namespace (mandatory before step 1):**
+
+Create a **globally unique recovery operation ID** and a **dedicated recovery local state directory** that is separate from every T4A run directory and both terminal failed-run state directories. Never reuse `/t4a/<failed-run-id>` or any prior T4A `FHV_T4A_LOCAL_STATE_DIR`.
+
+```bash
+export FHV_T4A_RESIDUAL_RECOVERY_ID="<globally-unique-recovery-operation-id>"
+export FHV_T4A_LOCAL_STATE_DIR="<absolute-path-to-fresh-residual-recovery-state/${FHV_T4A_RESIDUAL_RECOVERY_ID}>"
+mkdir -p "${FHV_T4A_LOCAL_STATE_DIR}"
+export FHV_LOCAL_GIT_BIN="<absolute-path-to-workstation-git>"
+export FHV_ORIGIN_URL="https://github.com/oumaster369/waia.git"
+```
 
 1. Verify local implementation release and set failed-run evidence bindings (example):
 

@@ -15,10 +15,12 @@ import {
   readFhvT4aSupervisorResidualStateDuringPreauth,
   runFhvT4aResidualRecoveryConfirm,
   runFhvT4aResidualRecoveryPreview,
+  type FhvT4aResidualRecoveryBindings,
 } from "@/lib/trader/observability/fhv-t4a-residual-recovery-operator";
 import {
   fhvT4aResidualRecoveryConfirmAttemptPath,
   fhvT4aResidualRecoveryPreviewReceiptPath,
+  readFhvT4aResidualRecoveryConfirmAttempt,
   readFhvT4aResidualRecoveryPreviewReceipt,
   readFhvT4aResidualRecoveryReceipt,
 } from "@/lib/trader/observability/fhv-t4-residual-recovery-receipt";
@@ -27,14 +29,20 @@ import type { FhvT4aOperatorTransport } from "@/lib/trader/observability/fhv-t4a
 import {
   fhvT4aPreauthLedgerDigest,
   readFhvT4aPreauthReceipt,
+  writeFhvT4aLocalReleaseReceipt,
   writeFhvT4aPreauthReceipt,
 } from "@/lib/trader/observability/fhv-t4a-phase-receipts";
 import { fhvT4aSupervisorResidualStateDigest } from "@/lib/trader/observability/fhv-t4-supervisor-residual-state";
 
 const ROOT = process.cwd();
-const IMPLEMENTATION_SHA = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const IMPLEMENTATION_SHA = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" })
+  .trim()
+  .toLowerCase();
 const FAILED_SHA = "03d2b1311b4e01bd469f6393bdde0c8aafab7da5";
+const FAILED_RUN_ID = "fhv-t4a-20260727t125110z-03d2b13";
 const RECOVERY_SCRIPT = "scripts/ops/fhv-t4-supervisor-residual-recovery.sh";
+const RELEASE_TAG = "v2026.07.27.residual-test";
+const ORIGIN_URL = "https://github.com/oumaster369/waia.git";
 const tempDirs: string[] = [];
 
 function trackDir(prefix: string): string {
@@ -54,6 +62,27 @@ afterEach(() => {
   }
 });
 
+function recoveryReadyTransport(base: FhvT4aOperatorTransport): FhvT4aOperatorTransport {
+  return {
+    ...base,
+    localGit(args) {
+      if (args[0] === "status" && args[1] === "--porcelain=v1") {
+        return { exitCode: 0, stdout: "", stderr: "" };
+      }
+      if (args[0] === "rev-parse" && args[1] === "HEAD") {
+        return { exitCode: 0, stdout: `${IMPLEMENTATION_SHA}\n`, stderr: "" };
+      }
+      if (args[0] === "rev-parse" && args[1] === `${RELEASE_TAG}^{}`) {
+        return { exitCode: 0, stdout: `${IMPLEMENTATION_SHA}\n`, stderr: "" };
+      }
+      if (args[0] === "remote" && args[1] === "get-url" && args[2] === "origin") {
+        return { exitCode: 0, stdout: `${ORIGIN_URL}\n`, stderr: "" };
+      }
+      return base.localGit(args);
+    },
+  };
+}
+
 function hermeticBindings(work: string): FhvT4aOperatorBindings {
   const localStateDir = join(work, "state");
   mkdirSync(localStateDir, { recursive: true });
@@ -66,8 +95,8 @@ function hermeticBindings(work: string): FhvT4aOperatorBindings {
     localGitBin: execFileSync("which", ["git"], { encoding: "utf8" }).trim(),
     localSshBin: execFileSync("which", ["ssh"], { encoding: "utf8" }).trim(),
     targetSha: IMPLEMENTATION_SHA,
-    releaseTag: "v2026.07.27.residual-test",
-    originUrl: "https://github.com/oumaster369/waia.git",
+    releaseTag: RELEASE_TAG,
+    originUrl: ORIGIN_URL,
     runId: "fhv-t4a-residual-recovery-test",
     organizationId: "00000000-0000-4000-8000-000000000436",
     operatorId: "operator-test",
@@ -93,39 +122,48 @@ function createHermetic(work: string) {
   mkdirSync(bindings.checkoutParent, { recursive: true });
   mkdirSync(bindings.artifactRoot, { recursive: true });
   writeFileSync(bindings.environmentFile, "FHV_TEST=1\n");
-  const transport = createFhvT4aHermeticTransport({
-    localReleaseRoot: ROOT,
-    targetSha: bindings.targetSha,
-    releaseTag: bindings.releaseTag,
-    originUrl: bindings.originUrl,
-    serviceUser: bindings.serviceUser,
-    serviceUserHome: join(work, "home"),
-    checkoutParent: bindings.checkoutParent,
-    artifactRoot: bindings.artifactRoot,
-    environmentFile: bindings.environmentFile,
-    runId: bindings.runId,
-    organizationId: bindings.organizationId,
-    nodeBin: bindings.nodeBin,
-    corepackBin: bindings.corepackBin,
-    gitBin: bindings.gitBin,
-    pythonBin: bindings.pythonBin,
-    dockerBin: bindings.dockerBin,
-    systemctlBin: bindings.systemctlBin,
-    systemdAnalyzeBin: bindings.systemdAnalyzeBin,
-    operatorId: bindings.operatorId,
-  });
+  const transport = recoveryReadyTransport(
+    createFhvT4aHermeticTransport({
+      localReleaseRoot: ROOT,
+      targetSha: bindings.targetSha,
+      releaseTag: bindings.releaseTag,
+      originUrl: bindings.originUrl,
+      serviceUser: bindings.serviceUser,
+      serviceUserHome: join(work, "home"),
+      checkoutParent: bindings.checkoutParent,
+      artifactRoot: bindings.artifactRoot,
+      environmentFile: bindings.environmentFile,
+      runId: bindings.runId,
+      organizationId: bindings.organizationId,
+      nodeBin: bindings.nodeBin,
+      corepackBin: bindings.corepackBin,
+      gitBin: bindings.gitBin,
+      pythonBin: bindings.pythonBin,
+      dockerBin: bindings.dockerBin,
+      systemctlBin: bindings.systemctlBin,
+      systemdAnalyzeBin: bindings.systemdAnalyzeBin,
+      operatorId: bindings.operatorId,
+    }),
+  );
   return { bindings, transport };
 }
 
-function recoveryBindings(work: string) {
+function recoveryBindings(work: string, overrides: Partial<FhvT4aResidualRecoveryBindings> = {}) {
+  const recoveryId = overrides.recoveryId ?? `fhv-t4a-residual-recovery-${Date.now()}`;
+  const localGitBin = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+  const localStateDir = overrides.localStateDir ?? join(work, "recovery-state", recoveryId);
+  mkdirSync(localStateDir, { recursive: true });
   return {
     execHost: "exec.test",
     sshUser: "operator",
-    localStateDir: join(work, "state"),
+    recoveryId,
+    localStateDir,
     localReleaseRoot: ROOT,
+    localGitBin,
+    originUrl: ORIGIN_URL,
     implementationTargetSha: IMPLEMENTATION_SHA,
-    implementationReleaseTag: "v2026.07.27.residual-test",
-    failedRunId: "fhv-t4a-20260727t125110z-03d2b13",
+    implementationReleaseTag: RELEASE_TAG,
+    failedRunId: FAILED_RUN_ID,
     failedTargetSha: FAILED_SHA,
     failedReleaseTag: "v2026.07.27.03d2b13",
     organizationId: "00000000-0000-4000-8000-000000000436",
@@ -136,11 +174,22 @@ function recoveryBindings(work: string) {
     pythonBin: "/usr/bin/python3",
     installedUnitsDir: "/etc/systemd/system",
     recoveryAuthorization: FHV_T4A_RESIDUAL_RECOVERY_AUTHORIZATION_LITERAL,
+    ...overrides,
   };
 }
 
+function seedRecoveryLocalReleaseReceipt(recovery: FhvT4aResidualRecoveryBindings): void {
+  writeFhvT4aLocalReleaseReceipt(recovery.localStateDir, {
+    targetSha: recovery.implementationTargetSha,
+    releaseTag: recovery.implementationReleaseTag,
+    originUrl: recovery.originUrl,
+    bootstrapBlobDigests: {},
+    bindingDigest: "recovery-local-release-binding-digest",
+  });
+}
+
 describe("fhv-t4a residual recovery operator (DEE-436)", () => {
-  it("proves the old failed SHA does not contain the recovery script", () => {
+  it("proves the old failed SHA does not contain the recovery script (historical only)", () => {
     expect(() =>
       execFileSync("git", ["-C", ROOT, "show", `${FAILED_SHA}:${RECOVERY_SCRIPT}`], {
         stdio: "pipe",
@@ -162,51 +211,128 @@ describe("fhv-t4a residual recovery operator (DEE-436)", () => {
       },
     };
     const recovery = recoveryBindings(work);
+    seedRecoveryLocalReleaseReceipt(recovery);
     runFhvT4aResidualRecoveryPreview(recovery, trackingTransport);
-    expect(
-      recoveryScriptShown.filter((sha) => sha === IMPLEMENTATION_SHA).length,
-    ).toBeGreaterThanOrEqual(2);
-    expect(recoveryScriptShown.filter((sha) => sha === FAILED_SHA)).toHaveLength(1);
+    expect(recoveryScriptShown.every((sha) => sha === IMPLEMENTATION_SHA)).toBe(true);
+    expect(recoveryScriptShown.length).toBeGreaterThan(0);
+  });
+
+  it("allows failed SHA to contain the script while still fetching executable bytes from implementation SHA", () => {
+    const work = trackDir("residual-failed-has-script-");
+    const { transport } = createHermetic(work);
+    const recovery = recoveryBindings(work, {
+      failedTargetSha: IMPLEMENTATION_SHA,
+      failedReleaseTag: RELEASE_TAG,
+    });
+    seedRecoveryLocalReleaseReceipt(recovery);
+    expect(runFhvT4aResidualRecoveryPreview(recovery, transport)).toBe(
+      "FHV_T4A_RESIDUAL_RECOVERY_PREVIEW_OK",
+    );
+  });
+
+  it("refuses preview without verify-local-release receipt before SSH", () => {
+    const work = trackDir("residual-no-local-release-");
+    const { transport } = createHermetic(work);
+    const recovery = recoveryBindings(work);
+    transport.resetRemoteWrites();
+    expect(() => runFhvT4aResidualRecoveryPreview(recovery, transport)).toThrow(
+      /LOCAL_RELEASE_RECEIPT_MISSING|Local release receipt missing/,
+    );
+    expect(transport.remoteWriteCount()).toBe(0);
+  });
+
+  it("refuses preview when HEAD/tag-peel/origin checks fail before SSH", () => {
+    const work = trackDir("residual-head-mismatch-");
+    const { transport } = createHermetic(work);
+    const recovery = recoveryBindings(work);
+    seedRecoveryLocalReleaseReceipt(recovery);
+    const blockedTransport: FhvT4aOperatorTransport = {
+      ...transport,
+      localGit(args) {
+        if (args[0] === "rev-parse" && args[1] === "HEAD") {
+          return { exitCode: 0, stdout: `${"b".repeat(40)}\n`, stderr: "" };
+        }
+        return transport.localGit(args);
+      },
+    };
+    blockedTransport.resetRemoteWrites();
+    expect(() => runFhvT4aResidualRecoveryPreview(recovery, blockedTransport)).toThrow(
+      /IMPLEMENTATION_SHA_MISMATCH|HEAD must equal/,
+    );
+    expect(blockedTransport.remoteWriteCount()).toBe(0);
+  });
+
+  it("refuses recovery namespace that collides with failed T4A run state", () => {
+    const work = trackDir("residual-namespace-collision-");
+    const { transport } = createHermetic(work);
+    const recovery = recoveryBindings(work, {
+      localStateDir: join(work, "t4a", FAILED_RUN_ID),
+    });
+    seedRecoveryLocalReleaseReceipt(recovery);
+    expect(() => runFhvT4aResidualRecoveryPreview(recovery, transport)).toThrow(
+      /failed T4A run namespace/,
+    );
   });
 
   it("writes immutable preview receipt before authorization", () => {
     const work = trackDir("residual-preview-receipt-");
     const { transport } = createHermetic(work);
     const recovery = recoveryBindings(work);
+    seedRecoveryLocalReleaseReceipt(recovery);
     runFhvT4aResidualRecoveryPreview(recovery, transport);
     expect(existsSync(fhvT4aResidualRecoveryPreviewReceiptPath(recovery.localStateDir))).toBe(true);
     const receipt = readFhvT4aResidualRecoveryPreviewReceipt(recovery.localStateDir);
+    expect(receipt.recoveryId).toBe(recovery.recoveryId);
     expect(receipt.recoveryImplementationSha).toBe(IMPLEMENTATION_SHA);
     expect(receipt.failedTargetSha).toBe(FAILED_SHA);
     expect(receipt.mutatingCommandCount).toBe(0);
   });
 
-  it("confirm binds to preview receipt and writes final receipt", () => {
+  it("confirm binds to preview receipt and preserves immutable pre-mutation attempt bytes", () => {
     const work = trackDir("residual-confirm-");
     const { transport } = createHermetic(work);
     const recovery = recoveryBindings(work);
+    seedRecoveryLocalReleaseReceipt(recovery);
     runFhvT4aResidualRecoveryPreview(recovery, transport);
     const preview = readFhvT4aResidualRecoveryPreviewReceipt(recovery.localStateDir);
     expect(runFhvT4aResidualRecoveryConfirm(recovery, transport)).toBe(
       "FHV_T4A_RESIDUAL_RECOVERY_OK",
     );
+    const attemptPath = fhvT4aResidualRecoveryConfirmAttemptPath(recovery.localStateDir);
+    const attempt = readFhvT4aResidualRecoveryConfirmAttempt(recovery.localStateDir);
+    expect(attempt.status).toBe("in_progress");
+    expect(JSON.parse(readFileSync(attemptPath, "utf8")).status).toBe("in_progress");
     const finalReceipt = readFhvT4aResidualRecoveryReceipt(recovery.localStateDir);
     expect(finalReceipt.previewReceiptDigest).toBe(preview.contentDigest);
-    expect(finalReceipt.recoveryImplementationSha).toBe(IMPLEMENTATION_SHA);
-    expect(finalReceipt.failedTargetSha).toBe(FAILED_SHA);
+    expect(finalReceipt.confirmAttemptDigest).toBe(attempt.contentDigest);
+    expect(finalReceipt.recoveryId).toBe(recovery.recoveryId);
   });
 
   it("confirm replay performs zero additional remote writes", () => {
     const work = trackDir("residual-replay-");
     const { transport } = createHermetic(work);
     const recovery = recoveryBindings(work);
+    seedRecoveryLocalReleaseReceipt(recovery);
     runFhvT4aResidualRecoveryPreview(recovery, transport);
     runFhvT4aResidualRecoveryConfirm(recovery, transport);
     const writesAfterFirstConfirm = transport.remoteWriteCount();
     expect(() => runFhvT4aResidualRecoveryConfirm(recovery, transport)).toThrow(
-      /Final recovery receipt|CONFIRM_REPLAY|already exists/,
+      /Final recovery receipt|FAILURE_RECEIPT_REPLAY|CONFIRM_REPLAY|already exists/,
     );
     expect(transport.remoteWriteCount()).toBe(writesAfterFirstConfirm);
+  });
+
+  it("does not write recovery receipts into a failed-run T4A state directory", () => {
+    const work = trackDir("residual-failed-run-dir-");
+    const failedRunState = join(work, "failed-run-state", FAILED_RUN_ID);
+    mkdirSync(failedRunState, { recursive: true });
+    const { transport } = createHermetic(work);
+    const recovery = recoveryBindings(work, { localStateDir: join(work, "recovery-state", "ok") });
+    seedRecoveryLocalReleaseReceipt(recovery);
+    runFhvT4aResidualRecoveryPreview(recovery, transport);
+    expect(
+      existsSync(join(failedRunState, "fhv-t4a-residual-recovery-preview-receipt.v1.json")),
+    ).toBe(false);
   });
 
   it("confirm refuses without preview receipt", () => {
@@ -221,6 +347,7 @@ describe("fhv-t4a residual recovery operator (DEE-436)", () => {
     const work = trackDir("residual-auth-");
     const { transport } = createHermetic(work);
     const recovery = recoveryBindings(work);
+    seedRecoveryLocalReleaseReceipt(recovery);
     runFhvT4aResidualRecoveryPreview(recovery, transport);
     expect(() =>
       runFhvT4aResidualRecoveryConfirm({ ...recovery, recoveryAuthorization: "WRONG" }, transport),
@@ -234,6 +361,7 @@ describe("fhv-t4a residual recovery operator (DEE-436)", () => {
     const work = trackDir("residual-attempt-marker-");
     const { transport } = createHermetic(work);
     const recovery = recoveryBindings(work);
+    seedRecoveryLocalReleaseReceipt(recovery);
     runFhvT4aResidualRecoveryPreview(recovery, transport);
     writeFileSync(
       fhvT4aResidualRecoveryConfirmAttemptPath(recovery.localStateDir),
@@ -328,10 +456,11 @@ describe("fhv-t4a residual recovery operator (DEE-436)", () => {
     );
   });
 
-  it("documents packet separation between implementation SHA and failed evidence SHA", () => {
+  it("documents packet separation and fresh recovery namespace", () => {
     const packet = readFileSync(join(ROOT, "docs/ops/T4_OPERATOR_PACKET_V5.md"), "utf8");
     expect(packet).not.toContain("PR #424");
-    expect(packet).toMatch(/implementation/i);
+    expect(packet).toMatch(/FHV_T4A_RESIDUAL_RECOVERY_ID/);
+    expect(packet).toMatch(/residual-recovery-state/);
     expect(packet).toMatch(/FHV_T4A_RESIDUAL_RECOVERY_FAILED_TARGET_SHA/);
     expect(packet).toMatch(/fhv-t4a-residual-recovery-preview-receipt/);
   });
