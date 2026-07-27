@@ -216,7 +216,11 @@ function identityArgs(ctx: FhvT4aExecContext): readonly string[] {
   ];
 }
 
-function installUnitsArgs(ctx: FhvT4aExecContext, confirm: boolean): string {
+function installUnitsArgs(
+  ctx: FhvT4aExecContext,
+  confirm: boolean,
+  options?: { skipEnable?: boolean },
+): string {
   const b = ctx.bindings;
   const parts = [
     `"${ctx.repoRoot}/scripts/ops/fhv-supervisor/install-units.sh"`,
@@ -234,6 +238,9 @@ function installUnitsArgs(ctx: FhvT4aExecContext, confirm: boolean): string {
     `--systemctl-bin ${shellQuote(b.systemctlBin)}`,
     `--systemd-analyze ${shellQuote(b.systemdAnalyzeBin)}`,
   ];
+  if (options?.skipEnable) {
+    parts.push("--skip-enable");
+  }
   if (confirm) {
     parts.push("--confirm");
   }
@@ -478,7 +485,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       };
     }
     case 10: {
-      result = runSsh(ctx, installUnitsArgs(ctx, true), true);
+      result = runSsh(ctx, installUnitsArgs(ctx, true, { skipEnable: true }), true);
       requireOk(result, step, "install units");
       return {
         step,
@@ -492,6 +499,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       const digestsCmd = [
         `"${ctx.repoRoot}/scripts/ops/fhv-t4-rendered-unit-digests.sh"`,
         `--rendered-dir ${shellQuote(ctx.renderedUnitsDir)}`,
+        `--python-bin ${shellQuote(b.pythonBin)}`,
       ].join(" ");
       const digestsResult = runSsh(ctx, digestsCmd, true);
       requireOk(digestsResult, step, "rendered unit digests");
@@ -577,8 +585,12 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       };
     }
     case 14: {
-      result = runSsh(ctx, `${b.systemctlBin} start waia-fhv-observer.service`, true);
-      requireOk(result, step, "observer start");
+      result = runSsh(
+        ctx,
+        `${b.systemctlBin} enable waia-fhv-observer.service && ${b.systemctlBin} start waia-fhv-observer.service`,
+        true,
+      );
+      requireOk(result, step, "observer enable and start");
       return {
         step,
         ...result,
@@ -623,8 +635,12 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       };
     }
     case 18: {
-      result = runSsh(ctx, `${b.systemctlBin} start waia-fhv-campaign.service`, true);
-      requireOk(result, step, "campaign start");
+      result = runSsh(
+        ctx,
+        `${b.systemctlBin} enable waia-fhv-campaign.service && ${b.systemctlBin} start waia-fhv-campaign.service`,
+        true,
+      );
+      requireOk(result, step, "campaign enable and start");
       return {
         step,
         ...result,
