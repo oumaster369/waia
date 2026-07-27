@@ -938,6 +938,9 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     }
 
     if (/fhv-t4-rendered-unit-digests\.sh/.test(remoteCommand)) {
+      if (!remoteCommand.includes("--python-bin") || !remoteCommand.includes("--rendered-dir")) {
+        return { exitCode: 2, stdout: "", stderr: "rendered-unit-digests argv invalid" };
+      }
       return {
         exitCode: 0,
         stdout: '{"waia-fhv-campaign.service":"abc","waia-fhv-observer.service":"def"}\n',

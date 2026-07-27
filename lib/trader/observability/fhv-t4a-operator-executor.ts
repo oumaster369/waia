@@ -492,6 +492,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       const digestsCmd = [
         `"${ctx.repoRoot}/scripts/ops/fhv-t4-rendered-unit-digests.sh"`,
         `--rendered-dir ${shellQuote(ctx.renderedUnitsDir)}`,
+        `--python-bin ${shellQuote(b.pythonBin)}`,
       ].join(" ");
       const digestsResult = runSsh(ctx, digestsCmd, true);
       requireOk(digestsResult, step, "rendered unit digests");

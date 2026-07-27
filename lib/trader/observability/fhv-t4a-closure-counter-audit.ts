@@ -15,6 +15,10 @@ import {
   FHV_T4A_OPERATOR_STEPS,
   fhvT4aOperatorReleaseCheckoutIdentityArgs,
 } from "@/lib/trader/observability/fhv-t4a-operator-contract";
+import {
+  FHV_T4A_REQUIRED_EXECUTABLE_GIT_MODE,
+  fhvT4aDirectExecutionScriptPaths,
+} from "@/lib/trader/observability/fhv-t4a-direct-execution-contract";
 import { normalizeFhvT4BootId } from "@/lib/trader/observability/fhv-t4-boot-id";
 import {
   FHV_T4A_CEREMONY_REQUIRED_RESULTS,
@@ -76,6 +80,7 @@ export const FHV_T4A_CLOSURE_COUNTER_NAMES = [
   "CI_PACKET_GATE_MISSING",
   "COUNTER_DEFAULT_ZERO_PATHS",
   "NONEXECUTABLE_COMMAND_COPY",
+  "DIRECT_EXECUTION_NONEXECUTABLE_GIT_MODE",
   "BARE_OPERATOR_NODE",
   "CEREMONY_OUTPUT_NOT_REACHED",
   "REMOTE_PATH_ACCESSED_BY_LOCAL_FS",
@@ -507,6 +512,19 @@ export function auditFhvT4aClosureCounters(
   }
   if (!executableBody.includes("--git-bin") || !executableBody.includes("--python-bin")) {
     counters.STEP4_REQUIRED_GIT_BIN_MISSING += 1;
+  }
+
+  for (const scriptPath of fhvT4aDirectExecutionScriptPaths()) {
+    try {
+      const mode = execFileSync("git", ["ls-files", "-s", scriptPath], { encoding: "utf8" })
+        .trim()
+        .split(/\s+/)[0];
+      if (mode !== FHV_T4A_REQUIRED_EXECUTABLE_GIT_MODE) {
+        counters.DIRECT_EXECUTION_NONEXECUTABLE_GIT_MODE += 1;
+      }
+    } catch {
+      counters.DIRECT_EXECUTION_NONEXECUTABLE_GIT_MODE += 1;
+    }
   }
 
   const serviceExec = read(root, "scripts/ops/fhv-t4-service-user-exec.sh");
