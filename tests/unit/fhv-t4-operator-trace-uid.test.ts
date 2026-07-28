@@ -62,6 +62,20 @@ function preauthReceipt(serviceUid: number): FhvT4aPreauthReceiptV1 {
     },
     completedAtUtc: new Date().toISOString(),
     contentDigest: "e".repeat(64),
+    supervisorResidualState: {
+      schemaVersion: "fhv-t4-supervisor-residual-state/v1",
+      expectedRunId: "run",
+      expectedTargetSha: "a".repeat(40),
+      expectedOrganizationId: "00000000-0000-4000-8000-000000000436",
+      expectedHostname: "exec.test",
+      expectedMachineIdSha256: "b".repeat(64),
+      observedHostname: "exec.test",
+      observedMachineIdSha256: "b".repeat(64),
+      hostBootId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      units: [],
+    },
+    supervisorResidualStateDigest: "f".repeat(64),
+    supervisorResidualClassification: "FHV_T4A_SUPERVISOR_RESIDUAL_SAFE",
   };
 }
 

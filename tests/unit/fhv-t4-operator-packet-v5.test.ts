@@ -92,7 +92,7 @@ describe("T4 operator packet V5 (DEE-436)", () => {
     expect(executable).toContain("post-reconnect-finalize");
     expect(executable).toContain("unset FHV_T4A_AUTHORIZATION");
     expect(body).toContain("globally unique `FHV_RUN_ID`");
-    expect(body).toContain("Human squash merge PR #424");
+    expect(body).toContain("PR #431");
     expect(body).toContain("AWAITING_HUMAN_DISCONNECT_RECONNECT");
     expect(body).toContain("FHV_T4A_POST_RECONNECT_FINALIZE_OK");
     expect(body).toContain("presence alone is insufficient");

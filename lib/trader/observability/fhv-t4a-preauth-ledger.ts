@@ -41,6 +41,7 @@ const MUTATING_PATTERNS = [
 const PREAUTH_BOOTSTRAP_ALLOWLIST = new Set([
   "scripts/ops/fhv-validate-origin-url.sh",
   "scripts/ops/fhv-t4-host-preflight.sh",
+  "scripts/ops/fhv-t4-supervisor-residual-state-read.sh",
 ]);
 
 const PREAUTH_FORBIDDEN_BOOTSTRAP_PATTERNS = [

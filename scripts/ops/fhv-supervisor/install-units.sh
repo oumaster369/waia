@@ -4,6 +4,7 @@ set -euo pipefail
 
 CONFIRM=0
 DRY_RUN=0
+SKIP_ENABLE=0
 REPO_PATH=""
 TARGET_SHA=""
 WORKING_DIRECTORY=""
@@ -24,9 +25,10 @@ usage() {
 Usage: install-units.sh --target-sha SHA --working-directory PATH --service-user USER \
   --environment-file PATH --fhv-run-root PATH --fhv-run-id ID --fhv-organization-id UUID \
   [--unit waia-fhv-campaign.service|waia-fhv-observer.service|all] [--repo-path PATH] \
-  [--git-bin PATH] [--systemd-dir DIR] [--node-bin PATH] [--dry-run] [--confirm]
+  [--git-bin PATH] [--systemd-dir DIR] [--node-bin PATH] [--dry-run] [--confirm] [--skip-enable]
 
 Without --confirm: print planned actions and exit without mutation.
+With --skip-enable: install unit files and daemon-reload only; do not enable units.
 EOF
 }
 
@@ -49,6 +51,7 @@ while [[ $# -gt 0 ]]; do
     --systemd-analyze) SYSTEMD_ANALYZE="${2:-}"; shift 2 ;;
     --node-bin) NODE_BIN="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --skip-enable) SKIP_ENABLE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
@@ -101,7 +104,11 @@ if [[ "$CONFIRM" -eq 0 ]]; then
   while IFS= read -r unit_name; do
     [[ -n "$unit_name" ]] || continue
     log "planned: install ${SYSTEMD_DIR}/${unit_name}"
-    log "planned: systemctl enable ${unit_name}"
+    if [[ "$SKIP_ENABLE" -eq 0 ]]; then
+      log "planned: systemctl enable ${unit_name}"
+    else
+      log "planned: leave ${unit_name} disabled (skip-enable)"
+    fi
   done < <(resolve_install_units)
   log "planned: systemctl daemon-reload"
   print_noop_footer
@@ -169,6 +176,21 @@ install_units_transaction() {
     install -m 0644 "${tmp_dir}/${unit_name}" "${SYSTEMD_DIR}/${unit_name}" || return 1
   done
   "$SYSTEMCTL" daemon-reload || return 1
+  if [[ "$SKIP_ENABLE" -eq 1 ]]; then
+    for unit_name in "${INSTALL_UNITS[@]}"; do
+      [[ -f "${SYSTEMD_DIR}/${unit_name}" ]] || return 1
+      enabled_state="$(classify_systemctl_is_enabled "$unit_name")" || return 1
+      if [[ "$enabled_state" == "enabled" ]]; then
+        "$SYSTEMCTL" disable "$unit_name" || return 1
+      fi
+      enabled_state="$(classify_systemctl_is_enabled "$unit_name")" || return 1
+      if [[ "$enabled_state" == "enabled" ]]; then
+        log "error: skip-enable install requires ${unit_name} disabled after install, got ${enabled_state}"
+        return 1
+      fi
+    done
+    return 0
+  fi
   for unit_name in "${INSTALL_UNITS[@]}"; do
     "$SYSTEMCTL" enable "$unit_name" || return 1
   done

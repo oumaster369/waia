@@ -15,6 +15,11 @@ import {
 import { FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS } from "@/lib/trader/observability/fhv-t4-evidence-seal";
 import { extractFhvT4aCeremonyClassificationsFromReceipt } from "@/lib/trader/observability/fhv-t4a-ceremony-results";
 import type { FhvT4aPreauthLedgerEntry } from "@/lib/trader/observability/fhv-t4a-preauth-ledger";
+import {
+  assertFhvT4aSupervisorResidualStateSafe,
+  fhvT4aSupervisorResidualStateDigest,
+  type FhvT4aSupervisorResidualStateProofV1,
+} from "@/lib/trader/observability/fhv-t4-supervisor-residual-state";
 
 export const FHV_T4A_LOCAL_RELEASE_RECEIPT_SCHEMA = "fhv-t4a-local-release-receipt/v1" as const;
 export const FHV_T4A_PREAUTH_RECEIPT_SCHEMA = "fhv-t4a-preauth-receipt/v1" as const;
@@ -98,6 +103,9 @@ export type FhvT4aPreauthReceiptV1 = Readonly<{
   rejectedCommandCount: number;
   mutatingCommandCount: number;
   preflightHostFacts: FhvT4aPreflightHostFactsV1;
+  supervisorResidualState: FhvT4aSupervisorResidualStateProofV1;
+  supervisorResidualStateDigest: string;
+  supervisorResidualClassification: string;
   completedAtUtc: string;
   contentDigest: string;
 }>;
@@ -325,6 +333,40 @@ export function readFhvT4aPreauthReceipt(
       "PHASE_RECEIPT_FULL_BINDING_GAP",
       "PRE_AUTH receipt binding digest mismatch.",
     );
+  }
+  if (
+    !receipt.supervisorResidualState ||
+    !receipt.supervisorResidualStateDigest ||
+    !receipt.supervisorResidualClassification
+  ) {
+    throw new FhvT4aPhaseReceiptError(
+      "FHV_T4A_PREAUTH_RESIDUAL_PROOF_MISSING",
+      "PRE_AUTH receipt missing supervisor residual-state proof.",
+    );
+  }
+  if (
+    fhvT4aSupervisorResidualStateDigest(receipt.supervisorResidualState) !==
+    receipt.supervisorResidualStateDigest
+  ) {
+    throw new FhvT4aPhaseReceiptError(
+      "FHV_T4A_PREAUTH_RESIDUAL_DIGEST_MISMATCH",
+      "PRE_AUTH supervisor residual-state digest mismatch.",
+    );
+  }
+  if (receipt.supervisorResidualClassification !== "FHV_T4A_SUPERVISOR_RESIDUAL_SAFE") {
+    throw new FhvT4aPhaseReceiptError(
+      receipt.supervisorResidualClassification,
+      "PRE_AUTH supervisor residual-state classification is not safe.",
+    );
+  }
+  try {
+    assertFhvT4aSupervisorResidualStateSafe(receipt.supervisorResidualState);
+  } catch (error) {
+    const code =
+      error instanceof Error && "code" in error
+        ? String((error as { code: string }).code)
+        : "FHV_T4A_SUPERVISOR_RESIDUAL_BLOCKED";
+    throw new FhvT4aPhaseReceiptError(code, "PRE_AUTH residual-state proof is not safe.");
   }
   return receipt;
 }
