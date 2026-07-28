@@ -6,6 +6,10 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
+import {
+  assertFhvT4BootIdEqual,
+  normalizeFhvT4BootId,
+} from "@/lib/trader/observability/fhv-t4-boot-id";
 
 export const FHV_T4_OBSERVER_SYSTEMD_IDENTITY_SCHEMA_VERSION =
   "fhv-t4-observer-systemd-identity/v1" as const;
@@ -30,7 +34,22 @@ export class FhvT4ObserverSystemdIdentityError extends Error {
   }
 }
 
-const BOOT_ID_PATTERN = /^[0-9a-f]{32}$/;
+function parseObserverBootId(raw: unknown): string {
+  if (typeof raw !== "string") {
+    throw new FhvT4ObserverSystemdIdentityError(
+      "FHV_T4_OBSERVER_IDENTITY_BOOT_ID_INVALID",
+      "bootId invalid.",
+    );
+  }
+  try {
+    return normalizeFhvT4BootId(raw);
+  } catch {
+    throw new FhvT4ObserverSystemdIdentityError(
+      "FHV_T4_OBSERVER_IDENTITY_BOOT_ID_INVALID",
+      "bootId invalid.",
+    );
+  }
+}
 
 export type FhvT4ObserverSystemdIdentityReader = (
   unitName?: string,
@@ -64,12 +83,7 @@ export function parseFhvT4ObserverSystemdIdentity(raw: unknown): FhvT4ObserverSy
       "unitName is required.",
     );
   }
-  if (!BOOT_ID_PATTERN.test(identity.bootId.trim())) {
-    throw new FhvT4ObserverSystemdIdentityError(
-      "FHV_T4_OBSERVER_IDENTITY_BOOT_ID_INVALID",
-      "bootId invalid.",
-    );
-  }
+  const bootId = parseObserverBootId(identity.bootId);
   if (!identity.invocationId.trim()) {
     throw new FhvT4ObserverSystemdIdentityError(
       "FHV_T4_OBSERVER_IDENTITY_INVOCATION_REQUIRED",
@@ -97,7 +111,7 @@ export function parseFhvT4ObserverSystemdIdentity(raw: unknown): FhvT4ObserverSy
   return {
     schemaVersion: identity.schemaVersion,
     unitName: identity.unitName.trim(),
-    bootId: identity.bootId.trim(),
+    bootId,
     invocationId: identity.invocationId.trim(),
     mainPid: identity.mainPid,
     activeEnterTimestampMonotonicUs: identity.activeEnterTimestampMonotonicUs.trim(),
@@ -164,7 +178,9 @@ export function assertFhvT4ObserverRestartProven(input: {
       "Observer unitName mismatch.",
     );
   }
-  if (input.before.bootId !== input.after.bootId) {
+  try {
+    assertFhvT4BootIdEqual(input.before.bootId, input.after.bootId);
+  } catch {
     throw new FhvT4ObserverSystemdIdentityError(
       "FHV_T4_OBSERVER_RESTART_BOOT_ID_CHANGED",
       "Host reboot invalidates continuity proof.",
@@ -203,7 +219,9 @@ export function assertFhvT4CampaignProcessUnchanged(input: {
       "Campaign unitName mismatch.",
     );
   }
-  if (input.before.bootId !== input.after.bootId) {
+  try {
+    assertFhvT4BootIdEqual(input.before.bootId, input.after.bootId);
+  } catch {
     throw new FhvT4ObserverSystemdIdentityError(
       "FHV_T4_CAMPAIGN_CONTINUITY_BOOT_ID_CHANGED",
       "Host reboot invalidates campaign continuity proof.",

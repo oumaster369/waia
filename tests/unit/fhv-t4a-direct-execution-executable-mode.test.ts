@@ -27,6 +27,10 @@ import { createFhvT4aHermeticTransport } from "@/lib/trader/observability/fhv-t4
 import type { FhvT4aOperatorTransport } from "@/lib/trader/observability/fhv-t4a-operator-transport";
 import type { FhvT4aOperatorBindings } from "@/lib/trader/observability/fhv-t4a-binding-spec";
 import { buildFhvT4aExecContext } from "@/lib/trader/observability/fhv-t4a-operator-executor";
+import {
+  FHV_T4_OBSERVER_SYSTEMD_IDENTITY_SCHEMA_VERSION,
+  parseFhvT4ObserverSystemdIdentity,
+} from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
 
 const ROOT = process.cwd();
 const GIT_BIN = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
@@ -376,6 +380,19 @@ describe("fhv-t4a direct execution executable Git modes (DEE-436 step 11 closure
       stdio: "pipe",
     });
   });
+
+  it("passes shell-shaped observer identity JSON through the real parser", () => {
+    const parsed = parseFhvT4ObserverSystemdIdentity({
+      schemaVersion: FHV_T4_OBSERVER_SYSTEMD_IDENTITY_SCHEMA_VERSION,
+      unitName: "waia-fhv-observer.service",
+      bootId: "f4707dfd-dea7-421f-a27f-a5e1c54015c5",
+      invocationId: "11111111111111111111111111111111",
+      mainPid: 1001,
+      activeEnterTimestampMonotonicUs: "1000000",
+      activeState: "active",
+    });
+    expect(parsed.bootId).toBe("f4707dfd-dea7-421f-a27f-a5e1c54015c5");
+  });
 });
 
 const linuxDescribe = process.platform === "linux" ? describe : describe.skip;
@@ -412,6 +429,20 @@ linuxDescribe("fhv-t4a linux clean checkout rehearsal (PR #431 audit)", () => {
     });
   });
 
+  it("passes shell JSON stdout through the real observer identity parser", () => {
+    const shellShaped = {
+      schemaVersion: FHV_T4_OBSERVER_SYSTEMD_IDENTITY_SCHEMA_VERSION,
+      unitName: "waia-fhv-observer.service",
+      bootId: "f4707dfd-dea7-421f-a27f-a5e1c54015c5",
+      invocationId: "11111111111111111111111111111111",
+      mainPid: 1001,
+      activeEnterTimestampMonotonicUs: "1000000",
+      activeState: "active",
+    };
+    const parsed = parseFhvT4ObserverSystemdIdentity(shellShaped);
+    expect(parsed.bootId).toBe("f4707dfd-dea7-421f-a27f-a5e1c54015c5");
+  });
+
   it("executes observer identity script as a direct path without 126/127", () => {
     const archiveRoot = trackDir("fhv-linux-observer-");
     gitArchiveCheckout("HEAD", archiveRoot);
@@ -423,9 +454,9 @@ linuxDescribe("fhv-t4a linux clean checkout rehearsal (PR #431 audit)", () => {
 if [[ "$1" == "show" ]]; then
   case "$4" in
     InvocationID) echo "inv-test"; exit 0 ;;
-    MainPID) echo "0"; exit 0 ;;
-    ActiveState) echo "inactive"; exit 0 ;;
-    ActiveEnterTimestampMonotonic) echo "0"; exit 0 ;;
+    MainPID) echo "1001"; exit 0 ;;
+    ActiveState) echo "active"; exit 0 ;;
+    ActiveEnterTimestampMonotonic) echo "1000000"; exit 0 ;;
     *) echo ""; exit 0 ;;
   esac
 fi
@@ -448,6 +479,10 @@ exit 0
     expect(result.status).not.toBe(126);
     expect(result.status).not.toBe(127);
     expect(result.stdout.trim()).toContain("fhv-t4-observer-systemd-identity/v1");
+    const parsed = parseFhvT4ObserverSystemdIdentity(JSON.parse(result.stdout.trim()));
+    expect(parsed.bootId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(parsed.activeState).toBe("active");
+    expect(parsed.mainPid).toBe(1001);
   });
 
   it("loads every direct script via kernel exec without bash prefix (help or usage path)", () => {

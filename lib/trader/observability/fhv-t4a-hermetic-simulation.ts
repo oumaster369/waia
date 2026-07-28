@@ -128,7 +128,6 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
   const repoRoot = join(options.checkoutParent, `waia-${options.targetSha}`);
   const runDir = join(options.artifactRoot, "RI-P7/fhv-ops-rehearsal", options.runId);
   const bootId = "11111111-2222-4333-8444-555555555555";
-  const observerBootIdHex = bootId.replace(/-/g, "");
 
   const buildHermeticCampaignIdentity = () =>
     serializeFhvT4CompletedCampaignSystemdIdentity({
@@ -150,7 +149,7 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
   const buildHermeticObserverIdentity = () => ({
     schemaVersion: "fhv-t4-observer-systemd-identity/v1" as const,
     unitName: "waia-fhv-observer.service",
-    bootId: observerBootIdHex,
+    bootId,
     invocationId: observer.invocationId || nextInvocation(),
     mainPid: observer.mainPid > 0 ? observer.mainPid : 1001,
     activeEnterTimestampMonotonicUs: observer.activeEnterMonotonic || "1000000",
