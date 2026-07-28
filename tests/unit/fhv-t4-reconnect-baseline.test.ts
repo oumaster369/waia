@@ -10,7 +10,10 @@ import {
   FHV_T4_CONTINUITY_SNAPSHOT_SCHEMA_VERSION,
   type FhvT4ContinuitySnapshotV1,
 } from "@/lib/trader/observability/fhv-t4-continuity-capture";
-import { computeFhvT4ObserverSystemdIdentityDigest } from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
+import {
+  computeFhvT4ObserverSystemdIdentityDigest,
+  parseFhvT4ObserverSystemdIdentity,
+} from "@/lib/trader/observability/fhv-t4-observer-systemd-identity";
 import {
   serializeFhvT4ObserverQualificationProof,
   type FhvT4ObserverQualificationProofV1,
@@ -81,7 +84,7 @@ function buildContinuitySnapshot(
   const observer = fhvT4ObserverIdentity({
     invocationId: "11111111111111111111111111111111",
     mainPid: 1001,
-    bootId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    bootId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   });
   const campaign = fhvT4CompletedCampaignIdentity({
     invocationId: "cccccccccccccccccccccccccccccccc",
@@ -166,7 +169,7 @@ function buildPostBeforeReceipt(input: {
     continuityBeforePath: continuityPath,
     continuityBeforeDigest: sha256Hex(continuityRaw),
     observerIdentityDigest: computeFhvT4ObserverSystemdIdentityDigest(
-      input.continuity.observerSystemdIdentity,
+      parseFhvT4ObserverSystemdIdentity(input.continuity.observerSystemdIdentity),
     ),
     campaignIdentityDigest: input.continuity.campaignSystemdIdentity.contentDigest,
     observerQualificationPrePath: preQualPath,
@@ -314,7 +317,7 @@ describe("revalidateFhvT4aReconnectBaseline negatives (DEE-436 F-02)", () => {
         ...fhvT4ObserverIdentity({
           invocationId: "11111111111111111111111111111111",
           mainPid: 1234,
-          bootId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          bootId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         }),
         mainPid: -1,
       },

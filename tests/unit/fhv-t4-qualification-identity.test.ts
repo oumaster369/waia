@@ -12,6 +12,7 @@ import {
 import type { FhvT4ObserverQualificationIdentityCapture } from "@/lib/trader/observability/fhv-t4-observer-qualification-proof";
 
 const BOOT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const LINUX_SHELL_BOOT_ID = "f4707dfd-dea7-421f-a27f-a5e1c54015c5";
 
 const ACTIVE_CAPTURE: FhvT4ObserverQualificationIdentityCapture = {
   unitName: FHV_T4A_OBSERVER_QUALIFICATION_UNIT,
@@ -23,6 +24,41 @@ const ACTIVE_CAPTURE: FhvT4ObserverQualificationIdentityCapture = {
 };
 
 describe("fhv-t4 qualification identity negatives (DEE-436 Q-01)", () => {
+  it("parseFhvT4aQualificationObserverIdentity accepts shell-shaped hyphenated bootId", () => {
+    const identity = parseFhvT4aQualificationObserverIdentity({
+      schemaVersion: "fhv-t4-observer-systemd-identity/v1",
+      unitName: FHV_T4A_OBSERVER_QUALIFICATION_UNIT,
+      bootId: LINUX_SHELL_BOOT_ID,
+      invocationId: ACTIVE_CAPTURE.invocationId,
+      mainPid: ACTIVE_CAPTURE.mainPid,
+      activeEnterTimestampMonotonicUs: ACTIVE_CAPTURE.activeEnterTimestampMonotonicUs,
+      activeState: ACTIVE_CAPTURE.activeState,
+    });
+    expect(identity.bootId).toBe(LINUX_SHELL_BOOT_ID);
+    const projected = projectFhvT4ObserverQualificationIdentityCapture(identity);
+    expect(projected.bootId).toBe(LINUX_SHELL_BOOT_ID);
+  });
+
+  it("parseFhvT4aQualificationObserverIdentity wraps malformed shell bootId failures", () => {
+    try {
+      parseFhvT4aQualificationObserverIdentity({
+        schemaVersion: "fhv-t4-observer-systemd-identity/v1",
+        unitName: FHV_T4A_OBSERVER_QUALIFICATION_UNIT,
+        bootId: "not-a-boot-id",
+        invocationId: ACTIVE_CAPTURE.invocationId,
+        mainPid: ACTIVE_CAPTURE.mainPid,
+        activeEnterTimestampMonotonicUs: ACTIVE_CAPTURE.activeEnterTimestampMonotonicUs,
+        activeState: ACTIVE_CAPTURE.activeState,
+      });
+      expect.unreachable("malformed shell bootId should fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(FhvT4aQualificationIdentityError);
+      expect((error as FhvT4aQualificationIdentityError).code).toBe(
+        "QUALIFICATION_IDENTITY_NOT_CANONICALLY_PARSED",
+      );
+    }
+  });
+
   it("parseFhvT4aQualificationObserverIdentity wraps observer parser failures", () => {
     try {
       parseFhvT4aQualificationObserverIdentity({ mainPid: -1 });
