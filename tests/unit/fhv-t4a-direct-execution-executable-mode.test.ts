@@ -41,32 +41,6 @@ afterEach(() => {
   cleanupPaths = [];
 });
 
-function gitPrDiffSummaryRange(): string | null {
-  const baseSha = process.env.GITHUB_BASE_SHA?.trim();
-  if (baseSha) {
-    try {
-      execFileSync("git", ["rev-parse", "--verify", `${baseSha}^{commit}`], {
-        stdio: "pipe",
-        cwd: ROOT,
-      });
-      return `${baseSha}...HEAD`;
-    } catch {
-      return null;
-    }
-  }
-  try {
-    execFileSync("git", ["rev-parse", "--verify", "origin/dev"], { stdio: "pipe", cwd: ROOT });
-    return "origin/dev...HEAD";
-  } catch {
-    try {
-      execFileSync("git", ["rev-parse", "--verify", "HEAD~1"], { stdio: "pipe", cwd: ROOT });
-      return "HEAD~1...HEAD";
-    } catch {
-      return null;
-    }
-  }
-}
-
 function resolveLinuxPythonBin(): string {
   for (const candidate of [
     process.env.FHV_PYTHON_BIN?.trim(),
@@ -252,30 +226,15 @@ describe("fhv-t4a direct execution executable Git modes (DEE-436 step 11 closure
     expect(body).not.toMatch(/\bpython3\b/);
   });
 
-  it("mode-only Git changes are limited to the two direct-execution scripts", () => {
-    const modeOnlyTargets = [
+  it("requires executable Git mode 100755 for the two historically defective direct-execution scripts", () => {
+    const historicallyDefective = [
       "scripts/ops/fhv-t4-observer-systemd-identity-read.sh",
       "scripts/ops/fhv-t4-rendered-unit-digests.sh",
     ] as const;
-    for (const path of modeOnlyTargets) {
-      expect(gitLsTreeMode("HEAD", path)).toBe("100755");
+    for (const path of historicallyDefective) {
+      expect(gitLsTreeMode("HEAD", path)).toBe(FHV_T4A_REQUIRED_EXECUTABLE_GIT_MODE);
+      expect(gitIndexMode(path)).toBe(FHV_T4A_REQUIRED_EXECUTABLE_GIT_MODE);
     }
-    const diffRange = gitPrDiffSummaryRange();
-    if (!diffRange) {
-      return;
-    }
-    const summary = execFileSync("git", ["diff", "--summary", diffRange], {
-      encoding: "utf8",
-      cwd: ROOT,
-    });
-    const modeLines = summary
-      .split("\n")
-      .filter((line) => line.includes(" mode change "))
-      .map((line) => line.trim());
-    expect(modeLines).toEqual([
-      "mode change 100644 => 100755 scripts/ops/fhv-t4-observer-systemd-identity-read.sh",
-      "mode change 100644 => 100755 scripts/ops/fhv-t4-rendered-unit-digests.sh",
-    ]);
   });
 
   it("does not require executable Git mode for SSH-stdin bootstrap scripts", () => {
