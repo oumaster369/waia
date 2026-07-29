@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createRecordingLinuxSystemdCampaignControlExecutor } from "@/lib/trader/observability/fhv-linux-systemd-executor";
 import { createFhvObserverRuntime } from "@/lib/trader/observability/fhv-observer-runtime";
+import * as fhvCampaignState from "@/lib/trader/observability/fhv-campaign-state";
 import { FHV_OPERATOR_COMMAND_SCHEMA_VERSION } from "@/lib/trader/observability/fhv-observability.constants";
 import {
   buildFhvRehearsalLaunchConfig,
@@ -62,6 +63,7 @@ describe("fhv-t4-operator-cli (DEE-435)", () => {
   let runtime: ReturnType<typeof createFhvObserverRuntime> | null = null;
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     if (runtime) {
       await runtime.stop();
       runtime = null;
@@ -286,6 +288,80 @@ describe("fhv-t4-operator-cli (DEE-435)", () => {
     );
     const result = await forwardFhvT4OperatorCommand(config, command);
     expect(result.status).toBe("rejected");
+  });
+
+  it("returns exit 0 when RESUME is accepted for root enforcement", async () => {
+    root = mkdtempSync(join(tmpdir(), "fhv-t4-cli-resume-accept-"));
+    const runDir = prepareT4RunDir();
+    const config = await startObserver(runDir);
+    vi.spyOn(fhvCampaignState, "resolveFhvCampaignState").mockReturnValue({
+      state: "PAUSED_RESUMABLE",
+      phase: "validation",
+      checkpointSeq: 40,
+      terminalClassification: "REHEARSAL_PAUSED",
+      progressPhase: "paused",
+      replayTerminalState: null,
+      corruptControlReason: null,
+    });
+    const result = await runFhvT4OperatorCli(
+      { ...config, subcommand: "resume" },
+      {
+        fetchFn: vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                schemaVersion: "fhv-command-result/v1",
+                commandId: "t4-resume_from_checkpoint-deadbeef",
+                idempotencyKey: "t4-resume-key",
+                status: "accepted",
+                message: "RESUME accepted; root systemd enforcement required",
+                completedAtUtc: new Date().toISOString(),
+                enforcementApplied: false,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            ),
+        ),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.lines).toContain("status=accepted");
+    expect(result.lines).toContain("message=RESUME accepted; root systemd enforcement required");
+  });
+
+  it("returns nonzero when RESUME is rejected", async () => {
+    root = mkdtempSync(join(tmpdir(), "fhv-t4-cli-resume-reject-"));
+    const runDir = prepareT4RunDir();
+    const config = await startObserver(runDir);
+    vi.spyOn(fhvCampaignState, "resolveFhvCampaignState").mockReturnValue({
+      state: "PAUSED_RESUMABLE",
+      phase: "validation",
+      checkpointSeq: 40,
+      terminalClassification: "REHEARSAL_PAUSED",
+      progressPhase: "paused",
+      replayTerminalState: null,
+      corruptControlReason: null,
+    });
+    const result = await runFhvT4OperatorCli(
+      { ...config, subcommand: "resume" },
+      {
+        fetchFn: vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                schemaVersion: "fhv-command-result/v1",
+                commandId: "t4-resume_from_checkpoint-cafebabe",
+                idempotencyKey: "t4-resume-reject",
+                status: "rejected",
+                message: "RESUME rejected",
+                completedAtUtc: new Date().toISOString(),
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            ),
+        ),
+      },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.lines).toContain("status=rejected");
   });
 
   it("builds signed operator commands with schema version", () => {

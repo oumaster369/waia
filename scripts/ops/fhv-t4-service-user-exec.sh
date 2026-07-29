@@ -12,6 +12,7 @@ ALLOWLIST=(
   "trader:fhv:t4:arm-pause"
   "trader:fhv:t4:resume"
   "trader:fhv:t4:status"
+  "trader:fhv:t4:write-observer-qualification-proof"
   "trader:fhv:t4:verify"
   "trader:fhv:t4:verify-paused"
   "trader:fhv:t4:verify-final"
@@ -134,6 +135,7 @@ if [[ ! -f "$PARSE_HELPER" ]]; then
 fi
 
 mapfile -t PARSED_ENV < <(
+  cd "$REPO_ROOT"
   WAIA_TRADER_CLI=1 "$NODE_BIN" --import tsx "$PARSE_HELPER" --path "$ENVIRONMENT_FILE" --format env
 )
 
