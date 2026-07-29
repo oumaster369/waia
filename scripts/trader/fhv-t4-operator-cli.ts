@@ -387,7 +387,7 @@ export async function runFhvT4OperatorCli(
         const result = await forwardFhvT4OperatorCommand(config, command, deps);
         lines.push(`status=${result.status}`);
         lines.push(`message=${result.message}`);
-        return { exitCode: result.status === "executed" ? 0 : 1, lines };
+        return { exitCode: result.status === "accepted" ? 0 : 1, lines };
       }
       case "verify": {
         await runFhvT4OperatorVerify(config);
