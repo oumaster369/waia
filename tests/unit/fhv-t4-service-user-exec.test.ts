@@ -177,7 +177,7 @@ if [[ "$1" == "--version" ]]; then
 fi
 ENV_LOG="${pnpmEnvLog}"
 : > "$ENV_LOG"
-for key in FHV_RUN_ROOT FHV_RUN_ID FHV_ORGANIZATION_ID FHV_TARGET_SHA FHV_OPERATOR_COMMAND_SECRET FHV_OBSERVER_TUNNEL_SECRET; do
+for key in FHV_HOST_OS_QUALIFIED FHV_COMMAND_ENFORCEMENT_ENABLED FHV_OPERATOR_COMMAND_SECRET FHV_OBSERVER_TUNNEL_SECRET; do
   eval "value=\\$$key"
   if [[ -n "$value" ]]; then
     echo "$key=present" >> "$ENV_LOG"
@@ -461,10 +461,8 @@ describe("fhv-t4-service-user-exec.sh (DEE-436)", () => {
       expect(result.status).toBe(0);
       const envLog = readFileSync(harness.pnpmEnvLog, "utf8");
       for (const key of [
-        "FHV_RUN_ROOT",
-        "FHV_RUN_ID",
-        "FHV_ORGANIZATION_ID",
-        "FHV_TARGET_SHA",
+        "FHV_HOST_OS_QUALIFIED",
+        "FHV_COMMAND_ENFORCEMENT_ENABLED",
         "FHV_OPERATOR_COMMAND_SECRET",
         "FHV_OBSERVER_TUNNEL_SECRET",
       ]) {
