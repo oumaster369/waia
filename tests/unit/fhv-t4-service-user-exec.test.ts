@@ -19,7 +19,7 @@ const TSX_PKG = join(REPO_ROOT, "node_modules/tsx");
 
 const bashSupportsMapfile = (() => {
   try {
-    execFileSync("bash", ["-c", "declare -f mapfile >/dev/null 2>&1"], { stdio: "ignore" });
+    execFileSync("bash", ["-c", "type mapfile >/dev/null 2>&1"], { stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -223,6 +223,12 @@ afterEach(() => {
 });
 
 describe("fhv-t4-service-user-exec.sh (DEE-436)", () => {
+  it("requires mapfile on Linux so shell integration tests cannot be silently skipped in CI", () => {
+    if (process.platform === "linux") {
+      expect(bashSupportsMapfile).toBe(true);
+    }
+  });
+
   it("keeps the exact allowlist including observer qualification proof", () => {
     const source = readFileSync(SCRIPT, "utf8");
     for (const entry of ALLOWLIST) {
