@@ -532,10 +532,12 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
         const envFile = join(work, "fhv.env");
         const artifactRoot = join(work, "artifacts");
         const checkoutParent = join(work, "checkouts");
+        const serviceUser = execFileSync("whoami", { encoding: "utf8" }).trim();
         const stubs = writeHostPreflightStubs({
           binDir,
           sandboxRoot: work,
-          serviceUser: "nobody",
+          serviceUser,
+          canonicalHostname: sandbox.hostname,
           envFile,
           artifactRoot,
           checkoutParent,
@@ -554,6 +556,7 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
 
         const env = buildOperatorEnv(releaseRoot, sha, tag, originUrl, {
           FHV_LOCAL_SSH_BIN: fakeSsh,
+          FHV_SERVICE_USER: serviceUser,
           FHV_EXPECTED_HOSTNAME: sandbox.hostname,
           FHV_EXPECTED_MACHINE_ID_SHA256: sandbox.machineIdSha256,
           FHV_ENVIRONMENT_FILE: envFile,
@@ -574,6 +577,9 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
         expect(verify.stdout).toContain("FHV_T4A_LOCAL_RELEASE_VERIFY_OK");
 
         const preauth = runOperatorShellFromForeignCwd("pre-auth", env);
+        if (preauth.status !== 0) {
+          throw new Error(`pre-auth failed: stdout=${preauth.stdout}\nstderr=${preauth.stderr}`);
+        }
         expect(preauth.status).toBe(0);
         expect(preauth.stdout).toContain("classification=FHV_T4A_PREAUTH_OK");
 

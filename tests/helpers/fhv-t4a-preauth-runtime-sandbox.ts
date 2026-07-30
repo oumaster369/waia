@@ -33,7 +33,11 @@ export function ensureOldReleaseRevAvailable(): void {
 }
 
 export function resolveObservedHostname(): string {
-  return execFileSync("bash", ["-c", "hostname -f 2>/dev/null || hostname"], {
+  return execFileSync("hostname", { encoding: "utf8" }).trim();
+}
+
+export function resolveMachineIdSha256(): string {
+  return execFileSync("bash", ["-c", "sha256sum /etc/machine-id | awk '{print $1}'"], {
     encoding: "utf8",
   }).trim();
 }
@@ -93,8 +97,7 @@ export function createLinuxSystemdSandbox(): LinuxSystemdSandbox {
   writeFileSync(campaignUnit, "[Service]\n");
 
   const hostname = resolveObservedHostname();
-  const machineIdRaw = readFileSync("/etc/machine-id", "utf8").replace(/\n/g, "");
-  const machineIdSha256 = sha256Hex(machineIdRaw);
+  const machineIdSha256 = resolveMachineIdSha256();
   const bootId = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
 
   const pythonBin = execFileSync("which", ["python3"], { encoding: "utf8" }).trim();
@@ -206,7 +209,6 @@ export function writeFakeSshExecutable(input: {
   binDir: string;
   foreignCwd: string;
   logPath: string;
-  preflightEnv?: Record<string, string>;
 }): string {
   const fakeSsh = join(input.binDir, "ssh");
   writeFileSync(
@@ -215,12 +217,15 @@ export function writeFakeSshExecutable(input: {
 set -euo pipefail
 LOG="${input.logPath}"
 FOREIGN_CWD="${input.foreignCwd}"
+STUB_BIN="${input.binDir}"
+export PATH="${input.binDir}:$PATH"
 printf '%s\\n' "$*" >> "$LOG"
 REMOTE="\${!#}"
 STDIN="$(cat || true)"
-exec_remote() {
+run_remote() {
   local cmd="$1"
   cd "$FOREIGN_CWD"
+  export PATH="${input.binDir}:$PATH"
   bash -c "$cmd"
 }
 case "$REMOTE" in
@@ -238,18 +243,19 @@ case "$REMOTE" in
   sudo\\ -n\\ bash\\ -s\\ --*)
     args="\${REMOTE#sudo -n bash -s -- }"
     cd "$FOREIGN_CWD"
+    export PATH="${input.binDir}:$PATH"
     printf '%s' "$STDIN" | sudo -n bash -s -- $args
     exit $?
     ;;
   bash\\ -s\\ --*)
     args="\${REMOTE#bash -s -- }"
     cd "$FOREIGN_CWD"
+    export PATH="${input.binDir}:$PATH"
     printf '%s' "$STDIN" | bash -s -- $args
     exit $?
     ;;
   *)
-    cd "$FOREIGN_CWD"
-    bash -c "$REMOTE"
+    run_remote "$REMOTE"
     ;;
 esac
 `,
@@ -262,6 +268,7 @@ export function writeHostPreflightStubs(input: {
   binDir: string;
   sandboxRoot: string;
   serviceUser: string;
+  canonicalHostname: string;
   envFile: string;
   artifactRoot: string;
   checkoutParent: string;
@@ -277,10 +284,26 @@ export function writeHostPreflightStubs(input: {
   mkdirSync(input.checkoutParent, { recursive: true });
   mkdirSync(input.artifactRoot, { recursive: true });
   mkdirSync(dirnameSafe(input.artifactRoot), { recursive: true });
+  chmodSync(input.checkoutParent, 0o777);
+  chmodSync(input.artifactRoot, 0o777);
+  chmodSync(dirnameSafe(input.artifactRoot), 0o777);
   writeFileSync(
     input.envFile,
     "FHV_HOST_OS_QUALIFIED=true\nFHV_COMMAND_ENFORCEMENT_ENABLED=true\n",
     { mode: 0o644 },
+  );
+
+  const hostnameBin = join(input.binDir, "hostname");
+  writeFileSync(
+    hostnameBin,
+    `#!/usr/bin/env bash
+if [[ "\${1:-}" == "-f" ]]; then
+  printf '%s\\n' "${input.canonicalHostname}"
+  exit 0
+fi
+printf '%s\\n' "${input.canonicalHostname}"
+`,
+    { mode: 0o755 },
   );
 
   const nodeBin = join(input.binDir, "node");

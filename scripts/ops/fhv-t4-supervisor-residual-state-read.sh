@@ -139,8 +139,8 @@ classify_systemctl_is_enabled() {
   esac
 }
 
-HOSTNAME="$(hostname -f 2>/dev/null || hostname)"
-MACHINE_ID_SHA256="$(printf '%s' "$(tr -d '\n' < /etc/machine-id)" | sha256sum | awk '{print $1}')"
+HOSTNAME="$(hostname)"
+MACHINE_ID_SHA256="$(sha256sum /etc/machine-id | awk '{print $1}')"
 HOST_BOOT_ID="$(tr -d '\n' < /proc/sys/kernel/random/boot_id)"
 
 read_unit_state() {
