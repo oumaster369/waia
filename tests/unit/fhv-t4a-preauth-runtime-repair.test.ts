@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { FHV_T4A_SSH_STDIN_SCRIPT_PATHS } from "@/lib/trader/observability/fhv-t4a-direct-execution-contract";
 import { FHV_T4A_RESIDUAL_RECOVERY_AUTHORIZATION_LITERAL } from "@/lib/trader/observability/fhv-t4a-operator-contract";
@@ -25,13 +25,19 @@ import { classifyFhvT4aSupervisorResidualState } from "@/lib/trader/observabilit
 import {
   canRunLinuxPreauthLiveProof,
   APPROVED_ORIGIN_URL,
+  assertSourceRepositorySnapshotUnchanged,
+  captureSourceRepositorySnapshot,
   createIsolatedReleaseFixture,
   createLinuxSystemdSandbox,
   createOldReleaseWorktree,
   ensureOldReleaseRevAvailable,
   gitShowBlobBytes,
+  inspectLegacyPreauthTestTag,
   invokeFakeSsh,
+  LEGACY_PREAUTH_TEST_TAG,
+  listLinkedWorktreePaths,
   OLD_RELEASE_SHA,
+  OLD_RELEASE_TAG_LITERAL,
   readFakeSshLog,
   removeIsolatedReleaseFixture,
   removeOldReleaseWorktree,
@@ -39,6 +45,7 @@ import {
   sha256Hex,
   sha256HexBytes,
   shellQuote,
+  type SourceRepositorySnapshot,
   writeFakeSshExecutable,
   writeHostPreflightStubs,
 } from "../helpers/fhv-t4a-preauth-runtime-sandbox";
@@ -55,7 +62,12 @@ const isolatedReleaseFixtures: Array<{
   releaseRoot: string;
   sourceSnapshotBefore: ReturnType<typeof createIsolatedReleaseFixture>["sourceSnapshotBefore"];
 }> = [];
-const oldReleaseWorktrees: string[] = [];
+const oldReleaseWorktrees: Array<{
+  releaseRoot: string;
+  sourceSnapshotBefore: SourceRepositorySnapshot;
+}> = [];
+let suiteSourceSnapshotBefore: SourceRepositorySnapshot;
+let legacyPreauthTestTagAtSuiteStart: ReturnType<typeof inspectLegacyPreauthTestTag>;
 
 const PRE_AUTH_BOOTSTRAP_PATHS = [
   "scripts/ops/fhv-validate-origin-url.sh",
@@ -100,8 +112,8 @@ const STREAMED_BOOTSTRAP_INVENTORY = [
 ] as const;
 
 afterEach(() => {
-  for (const path of [...oldReleaseWorktrees].reverse()) {
-    removeOldReleaseWorktree(path);
+  for (const fixture of [...oldReleaseWorktrees].reverse()) {
+    removeOldReleaseWorktree(fixture.releaseRoot, fixture.sourceSnapshotBefore);
   }
   oldReleaseWorktrees.length = 0;
   for (const fixture of [...isolatedReleaseFixtures].reverse()) {
@@ -209,12 +221,65 @@ function runOperatorShellFromForeignCwd(
 describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
   beforeAll(() => {
     ensureOldReleaseRevAvailable();
+    suiteSourceSnapshotBefore = captureSourceRepositorySnapshot();
+    legacyPreauthTestTagAtSuiteStart = inspectLegacyPreauthTestTag();
+  });
+
+  afterAll(() => {
+    assertSourceRepositorySnapshotUnchanged(
+      suiteSourceSnapshotBefore,
+      captureSourceRepositorySnapshot(),
+    );
+    for (const path of listLinkedWorktreePaths()) {
+      expect(path).not.toMatch(/fhv-old-release-/);
+      expect(path).not.toMatch(/fhv-t4a-release-/);
+    }
+  });
+
+  describe("source-ref hygiene", () => {
+    it("records legacy preauth test tag without mutating refs", () => {
+      expect(LEGACY_PREAUTH_TEST_TAG).toBe("fhv-preauth-test-7655e862");
+      expect(["PRESENT", "ABSENT"]).toContain(legacyPreauthTestTagAtSuiteStart.presence);
+      if (legacyPreauthTestTagAtSuiteStart.presence === "PRESENT") {
+        expect(legacyPreauthTestTagAtSuiteStart.peeledTargetSha).toBe(OLD_RELEASE_SHA);
+      } else {
+        expect(legacyPreauthTestTagAtSuiteStart.peeledTargetSha).toBeNull();
+      }
+      const current = inspectLegacyPreauthTestTag();
+      expect(current.presence).toBe(legacyPreauthTestTagAtSuiteStart.presence);
+      if (current.presence === "PRESENT") {
+        expect(current.peeledTargetSha).toBe(legacyPreauthTestTagAtSuiteStart.peeledTargetSha);
+      }
+    });
+
+    it("preserves source HEAD, origin, and tag list across old-release worktree lifecycle", () => {
+      const before = captureSourceRepositorySnapshot();
+      const oldRelease = createOldReleaseWorktree();
+      oldReleaseWorktrees.push({
+        releaseRoot: oldRelease.releaseRoot,
+        sourceSnapshotBefore: oldRelease.sourceSnapshotBefore,
+      });
+      expect(oldRelease.tag).toBe(OLD_RELEASE_TAG_LITERAL);
+      assertSourceRepositorySnapshotUnchanged(before, captureSourceRepositorySnapshot());
+      removeOldReleaseWorktree(oldRelease.releaseRoot, oldRelease.sourceSnapshotBefore);
+      oldReleaseWorktrees.pop();
+      assertSourceRepositorySnapshotUnchanged(before, captureSourceRepositorySnapshot());
+      for (const path of listLinkedWorktreePaths()) {
+        expect(path).not.toBe(oldRelease.releaseRoot);
+      }
+    });
   });
 
   describe("red-to-green proof against old release SHA", () => {
     it("old workstation shell fails repo-local tsx resolution from foreign cwd", () => {
+      const before = captureSourceRepositorySnapshot();
       const oldRelease = createOldReleaseWorktree();
-      oldReleaseWorktrees.push(oldRelease.releaseRoot);
+      oldReleaseWorktrees.push({
+        releaseRoot: oldRelease.releaseRoot,
+        sourceSnapshotBefore: oldRelease.sourceSnapshotBefore,
+      });
+      expect(oldRelease.tag).toBe(OLD_RELEASE_TAG_LITERAL);
+      assertSourceRepositorySnapshotUnchanged(before, captureSourceRepositorySnapshot());
       const foreignCwd = trackDir("old-foreign-");
       const env = buildOperatorEnv(
         oldRelease.releaseRoot,

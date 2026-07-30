@@ -52,7 +52,29 @@ export function sha256Hex(text: string): string {
 }
 
 export const OLD_RELEASE_SHA = "7655e86296702b7032dfb1fb4f6d3752a288e23d";
+export const OLD_RELEASE_TAG_LITERAL = "v2026.07.29.7655e86";
+export const LEGACY_PREAUTH_TEST_TAG = "fhv-preauth-test-7655e862";
 export const APPROVED_ORIGIN_URL = "https://github.com/oumaster369/waia.git";
+
+export type LegacyPreauthTestTagInspection = Readonly<{
+  tag: string;
+  presence: "PRESENT" | "ABSENT";
+  peeledTargetSha: string | null;
+}>;
+
+export function inspectLegacyPreauthTestTag(): LegacyPreauthTestTagInspection {
+  const probe = spawnSync("git", ["-C", ROOT, "rev-parse", `${LEGACY_PREAUTH_TEST_TAG}^{}`], {
+    encoding: "utf8",
+  });
+  if (probe.status !== 0) {
+    return { tag: LEGACY_PREAUTH_TEST_TAG, presence: "ABSENT", peeledTargetSha: null };
+  }
+  return {
+    tag: LEGACY_PREAUTH_TEST_TAG,
+    presence: "PRESENT",
+    peeledTargetSha: (probe.stdout ?? "").trim(),
+  };
+}
 
 export type SourceRepositorySnapshot = Readonly<{
   headSha: string;
@@ -70,7 +92,8 @@ export function captureSourceRepositorySnapshot(): SourceRepositorySnapshot {
   const tags = execFileSync("git", ["-C", ROOT, "tag", "-l"], { encoding: "utf8" })
     .split("\n")
     .map((line) => line.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort();
   return { headSha, originUrl, tags };
 }
 
@@ -87,7 +110,7 @@ export function assertSourceRepositorySnapshotUnchanged(
   const beforeTags = [...before.tags].sort();
   const afterTags = [...after.tags].sort();
   if (beforeTags.join("\0") !== afterTags.join("\0")) {
-    throw new Error("source repository tags changed during isolated release fixture");
+    throw new Error("source repository tags changed during test fixture lifecycle");
   }
 }
 
@@ -192,8 +215,10 @@ export function createOldReleaseWorktree(): {
   sha: string;
   tag: string;
   originUrl: string;
+  sourceSnapshotBefore: SourceRepositorySnapshot;
 } {
   ensureOldReleaseRevAvailable();
+  const sourceSnapshotBefore = captureSourceRepositorySnapshot();
   const releaseRoot = mkdtempSync(join(tmpdir(), "fhv-old-release-"));
   execFileSync("git", ["-C", ROOT, "worktree", "add", "--detach", releaseRoot, OLD_RELEASE_SHA], {
     stdio: "pipe",
@@ -205,19 +230,51 @@ export function createOldReleaseWorktree(): {
   const sha = execFileSync("git", ["-C", releaseRoot, "rev-parse", "HEAD"], {
     encoding: "utf8",
   }).trim();
-  const tag = `fhv-preauth-test-${sha.slice(0, 8)}`;
-  execFileSync("git", ["-C", releaseRoot, "tag", "-f", tag, sha], { stdio: "pipe" });
-  return { releaseRoot, sha, tag, originUrl: APPROVED_ORIGIN_URL };
+  if (sha !== OLD_RELEASE_SHA) {
+    throw new Error(`old release worktree HEAD mismatch: expected ${OLD_RELEASE_SHA}, got ${sha}`);
+  }
+  const immediateSnapshot = captureSourceRepositorySnapshot();
+  assertSourceRepositorySnapshotUnchanged(sourceSnapshotBefore, immediateSnapshot);
+  return {
+    releaseRoot,
+    sha,
+    tag: OLD_RELEASE_TAG_LITERAL,
+    originUrl: APPROVED_ORIGIN_URL,
+    sourceSnapshotBefore,
+  };
 }
 
-export function removeOldReleaseWorktree(releaseRoot: string): void {
+export function removeOldReleaseWorktree(
+  releaseRoot: string,
+  sourceSnapshotBefore: SourceRepositorySnapshot,
+): void {
   try {
     execFileSync("git", ["-C", ROOT, "worktree", "remove", "--force", releaseRoot], {
       stdio: "pipe",
     });
   } catch {
-    // best-effort cleanup for isolated temp worktrees
+    rmSync(releaseRoot, { recursive: true, force: true });
+    try {
+      execFileSync("git", ["-C", ROOT, "worktree", "prune"], { stdio: "pipe" });
+    } catch {
+      // best-effort cleanup for orphaned linked worktrees
+    }
   }
+  const sourceSnapshotAfter = captureSourceRepositorySnapshot();
+  assertSourceRepositorySnapshotUnchanged(sourceSnapshotBefore, sourceSnapshotAfter);
+}
+
+export function listLinkedWorktreePaths(): readonly string[] {
+  const output = execFileSync("git", ["-C", ROOT, "worktree", "list", "--porcelain"], {
+    encoding: "utf8",
+  });
+  const paths: string[] = [];
+  for (const line of output.split("\n")) {
+    if (line.startsWith("worktree ")) {
+      paths.push(line.slice("worktree ".length).trim());
+    }
+  }
+  return paths;
 }
 
 export function gitShowBlob(rev: string, path: string): string {
