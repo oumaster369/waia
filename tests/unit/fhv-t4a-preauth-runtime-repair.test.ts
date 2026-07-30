@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { FHV_T4A_SSH_STDIN_SCRIPT_PATHS } from "@/lib/trader/observability/fhv-t4a-direct-execution-contract";
 import { FHV_T4A_RESIDUAL_RECOVERY_AUTHORIZATION_LITERAL } from "@/lib/trader/observability/fhv-t4a-operator-contract";
@@ -21,9 +21,11 @@ import {
   readFhvT4aPreauthReceipt,
 } from "@/lib/trader/observability/fhv-t4a-phase-receipts";
 
+import { classifyFhvT4aSupervisorResidualState } from "@/lib/trader/observability/fhv-t4-supervisor-residual-state";
 import {
   canRunLinuxPreauthLiveProof,
   createLinuxSystemdSandbox,
+  ensureOldReleaseRevAvailable,
   gitShowBlob,
   OLD_RELEASE_SHA,
   runCommittedScriptViaBashStdin,
@@ -62,7 +64,12 @@ function trackDir(prefix: string): string {
   return dir;
 }
 
-function createReleaseRoot(): { releaseRoot: string; sha: string; tag: string } {
+function createReleaseRoot(): {
+  releaseRoot: string;
+  sha: string;
+  tag: string;
+  originUrl: string;
+} {
   const releaseRoot = trackDir("fhv-t4a-release-");
   execFileSync("git", ["-C", ROOT, "worktree", "add", "--detach", releaseRoot, "HEAD"], {
     stdio: "pipe",
@@ -73,13 +80,17 @@ function createReleaseRoot(): { releaseRoot: string; sha: string; tag: string } 
   }).trim();
   const tag = `fhv-preauth-test-${sha.slice(0, 8)}`;
   execFileSync("git", ["-C", releaseRoot, "tag", "-f", tag, sha], { stdio: "pipe" });
-  return { releaseRoot, sha, tag };
+  const originUrl = execFileSync("git", ["-C", releaseRoot, "remote", "get-url", "origin"], {
+    encoding: "utf8",
+  }).trim();
+  return { releaseRoot, sha, tag, originUrl };
 }
 
 function buildOperatorEnv(
   releaseRoot: string,
   sha: string,
   tag: string,
+  originUrl: string,
   extra: Record<string, string | undefined> = {},
 ): NodeJS.ProcessEnv {
   const work = trackDir("fhv-preauth-work-");
@@ -103,7 +114,7 @@ function buildOperatorEnv(
       extra.FHV_LOCAL_SSH_BIN ?? execFileSync("which", ["ssh"], { encoding: "utf8" }).trim(),
     EXECUTION_SERVER_TARGET_SHA: sha,
     FHV_RELEASE_TAG: tag,
-    FHV_ORIGIN_URL: "https://github.com/oumaster369/waia.git",
+    FHV_ORIGIN_URL: originUrl,
     FHV_RUN_ID: "fhv-t4a-preauth-runtime-repair",
     FHV_ORGANIZATION_ID: "00000000-0000-4000-8000-000000000436",
     FHV_OPERATOR_ID: "operator-test",
@@ -144,14 +155,18 @@ function runOperatorShellFromForeignCwd(
 }
 
 describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
+  beforeAll(() => {
+    ensureOldReleaseRevAvailable();
+  });
+
   describe("red-to-green proof against old release SHA", () => {
     it("old workstation shell fails repo-local tsx resolution from foreign cwd", () => {
       const oldShell = gitShowBlob(OLD_RELEASE_SHA, "scripts/ops/fhv-t4a-operator.sh");
       const oldShellPath = join(trackDir("old-shell-"), "fhv-t4a-operator.sh");
       writeFileSync(oldShellPath, oldShell, { mode: 0o755 });
       const foreignCwd = trackDir("old-foreign-");
-      const { releaseRoot, sha, tag } = createReleaseRoot();
-      const env = buildOperatorEnv(releaseRoot, sha, tag);
+      const { releaseRoot, sha, tag, originUrl } = createReleaseRoot();
+      const env = buildOperatorEnv(releaseRoot, sha, tag, originUrl);
       const result = spawnSync("bash", [oldShellPath, "verify-local-release"], {
         env: { ...env, NODE_PATH: undefined },
         cwd: foreignCwd,
@@ -243,8 +258,8 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
 
   describe("Test A — foreign-cwd workstation entrypoint", () => {
     it("runs verify-local-release from foreign cwd via real committed shell", () => {
-      const { releaseRoot, sha, tag } = createReleaseRoot();
-      const env = buildOperatorEnv(releaseRoot, sha, tag);
+      const { releaseRoot, sha, tag, originUrl } = createReleaseRoot();
+      const env = buildOperatorEnv(releaseRoot, sha, tag, originUrl);
       const result = runOperatorShellFromForeignCwd("verify-local-release", env);
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("classification=FHV_T4A_LOCAL_RELEASE_VERIFY_OK");
@@ -307,7 +322,7 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
         expect(source).toContain('fail "unit not allowlisted');
       });
 
-      it("rejects hostname mismatch", () => {
+      it("classifies hostname mismatch as blocked host identity", () => {
         const sandbox = createLinuxSystemdSandbox();
         cleanupPaths.push(sandbox.root);
         const args = [
@@ -333,7 +348,16 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
           args,
           foreignCwd: sandbox.foreignCwd,
         });
-        expect(result.exitCode).not.toBe(0);
+        expect(result.exitCode).toBe(0);
+        const payload = JSON.parse(
+          result.stdout
+            .trim()
+            .split("\n")
+            .find((line) => line.startsWith("{"))!,
+        );
+        expect(classifyFhvT4aSupervisorResidualState(payload)).toBe(
+          "FHV_T4A_SUPERVISOR_RESIDUAL_BLOCKED_HOST_IDENTITY",
+        );
       });
     },
   );
@@ -500,7 +524,7 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
       it("reaches FHV_T4A_PREAUTH_OK with committed stdin bytes and valid receipt", () => {
         const sandbox = createLinuxSystemdSandbox();
         cleanupPaths.push(sandbox.root);
-        const { releaseRoot, sha, tag } = createReleaseRoot();
+        const { releaseRoot, sha, tag, originUrl } = createReleaseRoot();
         const work = trackDir("fhv-live-preauth-");
         const binDir = join(work, "bin");
         mkdirSync(binDir, { recursive: true });
@@ -528,7 +552,7 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
           throw new Error("Linux preflight sandbox requires /run/systemd/system");
         }
 
-        const env = buildOperatorEnv(releaseRoot, sha, tag, {
+        const env = buildOperatorEnv(releaseRoot, sha, tag, originUrl, {
           FHV_LOCAL_SSH_BIN: fakeSsh,
           FHV_EXPECTED_HOSTNAME: sandbox.hostname,
           FHV_EXPECTED_MACHINE_ID_SHA256: sandbox.machineIdSha256,
@@ -557,7 +581,7 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
         const preauthReceipt = readFhvT4aPreauthReceipt(env.FHV_T4A_LOCAL_STATE_DIR!);
         expect(preauthReceipt.targetSha).toBe(sha);
         expect(preauthReceipt.releaseTag).toBe(tag);
-        expect(preauthReceipt.originUrl).toBe("https://github.com/oumaster369/waia.git");
+        expect(preauthReceipt.originUrl).toBe(originUrl);
         expect(preauthReceipt.bindingDigest).toBe(localReceipt.bindingDigest);
         expect(preauthReceipt.rejectedCommandCount).toBe(0);
         expect(preauthReceipt.mutatingCommandCount).toBe(0);

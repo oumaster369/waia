@@ -11,14 +11,40 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+const ROOT = process.cwd();
+
 export const OLD_RELEASE_SHA = "7655e86296702b7032dfb1fb4f6d3752a288e23d";
+
+let oldReleaseRevEnsured = false;
+
+export function ensureOldReleaseRevAvailable(): void {
+  if (oldReleaseRevEnsured) {
+    return;
+  }
+  const probe = spawnSync("git", ["-C", ROOT, "cat-file", "-e", `${OLD_RELEASE_SHA}^{commit}`], {
+    encoding: "utf8",
+  });
+  if (probe.status !== 0) {
+    execFileSync("git", ["-C", ROOT, "fetch", "origin", OLD_RELEASE_SHA, "--depth", "1"], {
+      stdio: "pipe",
+    });
+  }
+  oldReleaseRevEnsured = true;
+}
+
+export function resolveObservedHostname(): string {
+  return execFileSync("bash", ["-c", "hostname -f 2>/dev/null || hostname"], {
+    encoding: "utf8",
+  }).trim();
+}
 
 export function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
 export function gitShowBlob(rev: string, path: string): string {
-  return execFileSync("git", ["show", `${rev}:${path}`], { encoding: "utf8" });
+  ensureOldReleaseRevAvailable();
+  return execFileSync("git", ["-C", ROOT, "show", `${rev}:${path}`], { encoding: "utf8" });
 }
 
 export function parseBashSArgs(remoteCommand: string): string[] {
@@ -66,7 +92,7 @@ export function createLinuxSystemdSandbox(): LinuxSystemdSandbox {
   );
   writeFileSync(campaignUnit, "[Service]\n");
 
-  const hostname = execFileSync("hostname", { encoding: "utf8" }).trim();
+  const hostname = resolveObservedHostname();
   const machineIdRaw = readFileSync("/etc/machine-id", "utf8").replace(/\n/g, "");
   const machineIdSha256 = sha256Hex(machineIdRaw);
   const bootId = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
