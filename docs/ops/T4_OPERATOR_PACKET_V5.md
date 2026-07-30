@@ -22,10 +22,10 @@ Use **`corepack pnpm@10`** only (never bare `pnpm`).
 
 **Required sequence before Phase A (DEE-436 T4A + residual recovery closure):**
 
-1. Human squash merge **PR #431** into `dev`;
-2. post-merge **`dev` synchronization** and green push CI;
+1. Human squash merged **PR #442** into `dev`, producing exact dev SHA **`7a6d12b7bf5fe5e2fc228304dd4769c5ad7117f9`** (supersedes the prior draft prerequisite referencing **PR #431**);
+2. post-merge **`dev` push CI** run **`30543234837`** completed successfully;
 3. governed **`dev → main` release** through merge commit (never squash);
-4. record the **exact released main SHA and tag**; perform **tag-peel verification** and confirm the peeled tag matches the recorded SHA;
+4. record the **exact released main SHA and release tag**; perform **tag-peel verification** and confirm the peeled tag matches the recorded SHA;
 5. mandatory **`main → dev` back-sync** through merge commit;
 6. independent audit of the **exact Packet blob** from the **exact released SHA** (`docs/ops/T4_OPERATOR_PACKET_V5.md` at that SHA);
 7. create an **exact local checkout** of the new released SHA and bind `FHV_LOCAL_RELEASE_ROOT` to it.
