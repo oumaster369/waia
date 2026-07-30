@@ -6,12 +6,49 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const ROOT = process.cwd();
+const FAKE_SSH_PY = join(dirname(fileURLToPath(import.meta.url)), "fhv-t4a-fake-ssh.py");
+
+export type FakeSshLogEntry = Readonly<{
+  argv: readonly string[];
+  target: string;
+  remoteParts: readonly string[];
+  remoteCommand: string;
+  stdinPresent: boolean;
+  stdinByteLength: number;
+  stdinSha256: string | null;
+  exitStatus: number;
+}>;
+
+export function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+export function readFakeSshLog(logPath: string): FakeSshLogEntry[] {
+  if (!existsSync(logPath)) {
+    return [];
+  }
+  return readFileSync(logPath, "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as FakeSshLogEntry);
+}
+
+export function sha256HexBytes(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+export function sha256Hex(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
 
 export const OLD_RELEASE_SHA = "7655e86296702b7032dfb1fb4f6d3752a288e23d";
 
@@ -42,8 +79,45 @@ export function resolveMachineIdSha256(): string {
   }).trim();
 }
 
-export function sha256Hex(text: string): string {
-  return createHash("sha256").update(text, "utf8").digest("hex");
+export function gitShowBlobBytes(rev: string, path: string): Buffer {
+  ensureOldReleaseRevAvailable();
+  return execFileSync("git", ["-C", ROOT, "show", `${rev}:${path}`]);
+}
+
+export function createOldReleaseWorktree(): {
+  releaseRoot: string;
+  sha: string;
+  tag: string;
+  originUrl: string;
+} {
+  ensureOldReleaseRevAvailable();
+  const releaseRoot = mkdtempSync(join(tmpdir(), "fhv-old-release-"));
+  execFileSync("git", ["-C", ROOT, "worktree", "add", "--detach", releaseRoot, OLD_RELEASE_SHA], {
+    stdio: "pipe",
+  });
+  const nodeModulesLink = join(releaseRoot, "node_modules");
+  if (!existsSync(nodeModulesLink)) {
+    symlinkSync(join(ROOT, "node_modules"), nodeModulesLink);
+  }
+  const sha = execFileSync("git", ["-C", releaseRoot, "rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
+  const tag = "v2026.07.29.7655e86";
+  execFileSync("git", ["-C", releaseRoot, "tag", "-f", tag, sha], { stdio: "pipe" });
+  const originUrl = execFileSync("git", ["-C", releaseRoot, "remote", "get-url", "origin"], {
+    encoding: "utf8",
+  }).trim();
+  return { releaseRoot, sha, tag, originUrl };
+}
+
+export function removeOldReleaseWorktree(releaseRoot: string): void {
+  try {
+    execFileSync("git", ["-C", ROOT, "worktree", "remove", "--force", releaseRoot], {
+      stdio: "pipe",
+    });
+  } catch {
+    // best-effort cleanup for isolated temp worktrees
+  }
 }
 
 export function gitShowBlob(rev: string, path: string): string {
@@ -210,58 +284,65 @@ export function writeFakeSshExecutable(input: {
   foreignCwd: string;
   logPath: string;
 }): string {
+  mkdirSync(input.binDir, { recursive: true });
+  mkdirSync(dirname(input.logPath), { recursive: true });
+  writeFileSync(input.logPath, "", { encoding: "utf8" });
+
+  const fakeSshImpl = join(input.binDir, "fhv-fake-ssh.py");
+  writeFileSync(fakeSshImpl, readFileSync(FAKE_SSH_PY));
+
   const fakeSsh = join(input.binDir, "ssh");
+  const pythonBin = execFileSync("which", ["python3"], { encoding: "utf8" }).trim();
   writeFileSync(
     fakeSsh,
     `#!/usr/bin/env bash
 set -euo pipefail
-LOG="${input.logPath}"
-FOREIGN_CWD="${input.foreignCwd}"
-STUB_BIN="${input.binDir}"
-export PATH="${input.binDir}:$PATH"
-printf '%s\\n' "$*" >> "$LOG"
-REMOTE="\${!#}"
-STDIN="$(cat || true)"
-run_remote() {
-  local cmd="$1"
-  cd "$FOREIGN_CWD"
-  export PATH="${input.binDir}:$PATH"
-  bash -c "$cmd"
-}
-case "$REMOTE" in
-  "sudo -n true")
-    if sudo -n true 2>/dev/null; then exit 0; fi
-    exit 0
-    ;;
-  sudo\\ -n\\ test\\ -x\\ *)
-    path="\${REMOTE#sudo -n test -x }"
-    path="\${path#\\'}"
-    path="\${path%\\'}"
-    if [[ -x "$path" ]]; then exit 0; fi
-    exit 1
-    ;;
-  sudo\\ -n\\ bash\\ -s\\ --*)
-    args="\${REMOTE#sudo -n bash -s -- }"
-    cd "$FOREIGN_CWD"
-    export PATH="${input.binDir}:$PATH"
-    printf '%s' "$STDIN" | sudo -n bash -s -- $args
-    exit $?
-    ;;
-  bash\\ -s\\ --*)
-    args="\${REMOTE#bash -s -- }"
-    cd "$FOREIGN_CWD"
-    export PATH="${input.binDir}:$PATH"
-    printf '%s' "$STDIN" | bash -s -- $args
-    exit $?
-    ;;
-  *)
-    run_remote "$REMOTE"
-    ;;
-esac
+export FHV_FAKE_SSH_LOG="${input.logPath}"
+export FHV_FAKE_SSH_FOREIGN_CWD="${input.foreignCwd}"
+export FHV_FAKE_SSH_STUB_BIN="${input.binDir}"
+exec "${pythonBin}" "${fakeSshImpl}" "$@"
 `,
     { mode: 0o755 },
   );
+  chmodSync(fakeSshImpl, 0o755);
   return fakeSsh;
+}
+
+export function invokeFakeSsh(input: {
+  fakeSsh: string;
+  remoteCommand: string | readonly string[];
+  stdin?: string | Buffer;
+  env?: NodeJS.ProcessEnv;
+}): { exitCode: number | null; stdout: string; stderr: string } {
+  const remoteArgs = Array.isArray(input.remoteCommand)
+    ? input.remoteCommand
+    : [input.remoteCommand];
+  const sshBase = [
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=30",
+    "-o",
+    "ServerAliveInterval=15",
+    "operator@exec.test",
+    ...remoteArgs,
+  ];
+  const stdinBody =
+    input.stdin === undefined
+      ? undefined
+      : Buffer.isBuffer(input.stdin)
+        ? input.stdin
+        : Buffer.from(input.stdin, "utf8");
+  const result = spawnSync(input.fakeSsh, sshBase, {
+    input: stdinBody,
+    encoding: "utf8",
+    env: input.env ?? process.env,
+  });
+  return {
+    exitCode: result.status,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  };
 }
 
 export function writeHostPreflightStubs(input: {

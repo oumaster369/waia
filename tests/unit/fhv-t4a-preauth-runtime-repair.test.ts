@@ -25,11 +25,18 @@ import { classifyFhvT4aSupervisorResidualState } from "@/lib/trader/observabilit
 import {
   canRunLinuxPreauthLiveProof,
   createLinuxSystemdSandbox,
+  createOldReleaseWorktree,
   ensureOldReleaseRevAvailable,
   gitShowBlob,
+  gitShowBlobBytes,
+  invokeFakeSsh,
   OLD_RELEASE_SHA,
+  readFakeSshLog,
+  removeOldReleaseWorktree,
   runCommittedScriptViaBashStdin,
   sha256Hex,
+  sha256HexBytes,
+  shellQuote,
   writeFakeSshExecutable,
   writeHostPreflightStubs,
 } from "../helpers/fhv-t4a-preauth-runtime-sandbox";
@@ -43,8 +50,55 @@ const LOCAL_GIT = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
 
 const cleanupPaths: string[] = [];
 const releaseWorktrees: string[] = [];
+const oldReleaseWorktrees: string[] = [];
+
+const PRE_AUTH_BOOTSTRAP_PATHS = [
+  "scripts/ops/fhv-validate-origin-url.sh",
+  "scripts/ops/fhv-t4-host-preflight.sh",
+  "scripts/ops/fhv-t4-supervisor-residual-state-read.sh",
+] as const;
+
+const STREAMED_BOOTSTRAP_INVENTORY = [
+  {
+    path: "scripts/ops/fhv-validate-origin-url.sh",
+    phase: "pre-auth",
+    step: 2,
+    locus: "before-checkout",
+  },
+  {
+    path: "scripts/ops/fhv-t4-host-preflight.sh",
+    phase: "pre-auth",
+    locus: "before-checkout",
+  },
+  {
+    path: "scripts/ops/fhv-t4-supervisor-residual-state-read.sh",
+    phase: "pre-auth",
+    locus: "before-checkout",
+  },
+  {
+    path: "scripts/ops/fhv-service-user-checkout.sh",
+    phase: "t4a",
+    step: 3,
+    locus: "creates-checkout",
+  },
+  {
+    path: "scripts/ops/fhv-service-user-install-deps.sh",
+    phase: "t4a",
+    step: 5,
+    locus: "after-checkout-creation",
+  },
+  {
+    path: "scripts/ops/fhv-t4-supervisor-residual-recovery.sh",
+    phase: "residual-recovery-preview/confirm",
+    locus: "governed-recovery",
+  },
+] as const;
 
 afterEach(() => {
+  for (const path of [...oldReleaseWorktrees].reverse()) {
+    removeOldReleaseWorktree(path);
+  }
+  oldReleaseWorktrees.length = 0;
   for (const path of [...releaseWorktrees].reverse()) {
     try {
       execFileSync("git", ["-C", ROOT, "worktree", "remove", "--force", path], { stdio: "pipe" });
@@ -161,21 +215,44 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
 
   describe("red-to-green proof against old release SHA", () => {
     it("old workstation shell fails repo-local tsx resolution from foreign cwd", () => {
-      const oldShell = gitShowBlob(OLD_RELEASE_SHA, "scripts/ops/fhv-t4a-operator.sh");
-      const oldShellPath = join(trackDir("old-shell-"), "fhv-t4a-operator.sh");
-      writeFileSync(oldShellPath, oldShell, { mode: 0o755 });
+      const oldRelease = createOldReleaseWorktree();
+      oldReleaseWorktrees.push(oldRelease.releaseRoot);
       const foreignCwd = trackDir("old-foreign-");
-      const { releaseRoot, sha, tag, originUrl } = createReleaseRoot();
-      const env = buildOperatorEnv(releaseRoot, sha, tag, originUrl);
+      const env = buildOperatorEnv(
+        oldRelease.releaseRoot,
+        oldRelease.sha,
+        oldRelease.tag,
+        oldRelease.originUrl,
+      );
+      const oldShellPath = join(oldRelease.releaseRoot, "scripts/ops/fhv-t4a-operator.sh");
+      expect(existsSync(oldShellPath)).toBe(true);
+      expect(existsSync(join(oldRelease.releaseRoot, "scripts/ops/fhv-t4a-operator.ts"))).toBe(
+        true,
+      );
+      expect(
+        existsSync(
+          join(oldRelease.releaseRoot, "scripts/trader/trader-cli-server-only-prelude.cjs"),
+        ),
+      ).toBe(true);
       const result = spawnSync("bash", [oldShellPath, "verify-local-release"], {
         env: { ...env, NODE_PATH: undefined },
         cwd: foreignCwd,
         encoding: "utf8",
       });
       expect(result.status).not.toBe(0);
-      expect(`${result.stderr}${result.stdout}`).toMatch(
-        /ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|Cannot find package 'tsx'|Cannot find module|repo-local tsx missing|trader-cli-server-only-prelude/,
-      );
+      const combined = `${result.stderr}${result.stdout}`;
+      expect(combined).toMatch(/ERR_MODULE_NOT_FOUND/);
+      expect(combined).toMatch(/Cannot find package 'tsx'/);
+      expect(combined).not.toMatch(/operator TypeScript entry missing/);
+      expect(combined).not.toMatch(/trader CLI prelude missing/);
+    });
+
+    it("feature-head workstation shell passes verify-local-release from foreign cwd", () => {
+      const { releaseRoot, sha, tag, originUrl } = createReleaseRoot();
+      const env = buildOperatorEnv(releaseRoot, sha, tag, originUrl);
+      const result = runOperatorShellFromForeignCwd("verify-local-release", env);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("classification=FHV_T4A_LOCAL_RELEASE_VERIFY_OK");
     });
 
     it.runIf(process.platform === "linux")(
@@ -452,59 +529,119 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
     },
   );
 
+  describe.runIf(process.platform === "linux")("fake SSH argv and stdin roundtrip", () => {
+    it("executes production bash -s quoting for origin validation", () => {
+      const sandbox = createLinuxSystemdSandbox();
+      cleanupPaths.push(sandbox.root);
+      const work = trackDir("fhv-roundtrip-");
+      const binDir = join(work, "bin");
+      mkdirSync(binDir, { recursive: true });
+      const logPath = join(work, "ssh.jsonl");
+      const fakeSsh = writeFakeSshExecutable({
+        binDir,
+        foreignCwd: sandbox.foreignCwd,
+        logPath,
+      });
+      const originUrl = "https://github.com/oumaster369/waia.git";
+      const scriptBody = readFileSync(join(ROOT, "scripts/ops/fhv-validate-origin-url.sh"), "utf8");
+      const remoteCommand = `bash -s -- ${shellQuote("--origin-url")} ${shellQuote(originUrl)}`;
+      const result = invokeFakeSsh({
+        fakeSsh,
+        remoteCommand,
+        stdin: scriptBody,
+      });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("classification=FHV_T4_ORIGIN_URL_OK");
+      expect(result.stderr).not.toContain("unknown argument");
+
+      const log = readFakeSshLog(logPath);
+      expect(log).toHaveLength(1);
+      expect(log[0]?.remoteParts).toEqual([remoteCommand]);
+      expect(log[0]?.stdinSha256).toBe(sha256Hex(scriptBody));
+    });
+
+    it("preserves shellQuote semantics for space and single-quote values", () => {
+      const sandbox = createLinuxSystemdSandbox();
+      cleanupPaths.push(sandbox.root);
+      const work = trackDir("fhv-roundtrip-quote-");
+      const binDir = join(work, "bin");
+      mkdirSync(binDir, { recursive: true });
+      const logPath = join(work, "ssh.jsonl");
+      const fakeSsh = writeFakeSshExecutable({
+        binDir,
+        foreignCwd: sandbox.foreignCwd,
+        logPath,
+      });
+      const argScript = join(work, "print-args.sh");
+      writeFileSync(
+        argScript,
+        `#!/usr/bin/env bash
+set -euo pipefail
+printf 'arg1=%s\\n' "\${1:-}"
+printf 'arg2=%s\\n' "\${2:-}"
+`,
+        { mode: 0o755 },
+      );
+      const spaceValue = "value with spaces";
+      const quoteValue = "O'Brien";
+      const remoteCommand = `bash -s -- ${shellQuote("--payload")} ${shellQuote(spaceValue)} ${shellQuote("--owner")} ${shellQuote(quoteValue)}`;
+      const result = invokeFakeSsh({
+        fakeSsh,
+        remoteCommand,
+        stdin: readFileSync(argScript),
+      });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`arg1=${spaceValue}`);
+      expect(result.stdout).toContain(`arg2=${quoteValue}`);
+      expect(result.stdout).not.toContain("'");
+    });
+
+    it("propagates real sudo -n true exit status", () => {
+      const sandbox = createLinuxSystemdSandbox();
+      cleanupPaths.push(sandbox.root);
+      const work = trackDir("fhv-roundtrip-sudo-");
+      const binDir = join(work, "bin");
+      mkdirSync(binDir, { recursive: true });
+      const logPath = join(work, "ssh.jsonl");
+      const fakeSsh = writeFakeSshExecutable({
+        binDir,
+        foreignCwd: sandbox.foreignCwd,
+        logPath,
+      });
+      const probe = invokeFakeSsh({
+        fakeSsh,
+        remoteCommand: ["sudo", "-n", "true"],
+      });
+      expect(probe.exitCode).toBe(0);
+    });
+  });
+
   describe("streamed-bootstrap inventory", () => {
-    it("lists every pre-checkout stdin bootstrap and self-contained status", () => {
-      const inventory = [
-        {
-          path: "scripts/ops/fhv-validate-origin-url.sh",
-          phase: "pre-auth",
-          usesBashSource: false,
-          sourcesSibling: false,
-          stdinSelfContained: true,
-        },
-        {
-          path: "scripts/ops/fhv-t4-host-preflight.sh",
-          phase: "pre-auth",
-          usesBashSource: false,
-          sourcesSibling: false,
-          stdinSelfContained: true,
-        },
-        {
-          path: RESIDUAL_READ,
-          phase: "pre-auth",
-          usesBashSource: false,
-          sourcesSibling: false,
-          stdinSelfContained: true,
-        },
-        {
-          path: RESIDUAL_RECOVERY,
-          phase: "residual-recovery-preview/confirm",
-          usesBashSource: false,
-          sourcesSibling: false,
-          stdinSelfContained: true,
-        },
-        ...FHV_T4A_SSH_STDIN_SCRIPT_PATHS.filter(
-          (path) =>
-            path !== "scripts/ops/fhv-validate-origin-url.sh" &&
-            path !== "scripts/ops/fhv-t4-host-preflight.sh" &&
-            path !== RESIDUAL_READ,
-        ).map((path) => ({
-          path,
-          phase: "post-checkout",
-          usesBashSource: /BASH_SOURCE/.test(readFileSync(join(ROOT, path), "utf8")),
-          sourcesSibling: /source .*\.sh/.test(readFileSync(join(ROOT, path), "utf8")),
-          stdinSelfContained: !/source .*\.sh/.test(readFileSync(join(ROOT, path), "utf8")),
-        })),
-      ];
-      for (const entry of inventory) {
+    it("lists every streamed bootstrap from production call sites", () => {
+      for (const entry of STREAMED_BOOTSTRAP_INVENTORY) {
         const body = readFileSync(join(ROOT, entry.path), "utf8");
-        if (entry.path === RESIDUAL_READ || entry.path === RESIDUAL_RECOVERY) {
-          expect(body).not.toContain("BASH_SOURCE");
-          expect(body).not.toContain("_fhv-supervisor-common.sh");
-        }
+        expect(body.startsWith("#!/")).toBe(true);
+        expect(body).not.toContain("BASH_SOURCE");
+        expect(body).not.toContain("_fhv-supervisor-common.sh");
+        expect(/source .*\.sh/.test(body)).toBe(false);
       }
       expect(
-        inventory.every((entry) => entry.stdinSelfContained || entry.phase === "post-checkout"),
+        FHV_T4A_SSH_STDIN_SCRIPT_PATHS.every((path) =>
+          STREAMED_BOOTSTRAP_INVENTORY.some((entry) => entry.path === path),
+        ),
+      ).toBe(true);
+      expect(STREAMED_BOOTSTRAP_INVENTORY.map((entry) => entry.path)).toEqual([
+        "scripts/ops/fhv-validate-origin-url.sh",
+        "scripts/ops/fhv-t4-host-preflight.sh",
+        "scripts/ops/fhv-t4-supervisor-residual-state-read.sh",
+        "scripts/ops/fhv-service-user-checkout.sh",
+        "scripts/ops/fhv-service-user-install-deps.sh",
+        "scripts/ops/fhv-t4-supervisor-residual-recovery.sh",
+      ]);
+      expect(
+        STREAMED_BOOTSTRAP_INVENTORY.some(
+          (entry) => entry.path === "scripts/ops/fhv-t4-supervisor-residual-recovery.sh",
+        ),
       ).toBe(true);
     });
   });
@@ -528,7 +665,7 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
         const work = trackDir("fhv-live-preauth-");
         const binDir = join(work, "bin");
         mkdirSync(binDir, { recursive: true });
-        const sshLog = join(work, "ssh.log");
+        const sshLog = join(work, "ssh.jsonl");
         const envFile = join(work, "fhv.env");
         const artifactRoot = join(work, "artifacts");
         const checkoutParent = join(work, "checkouts");
@@ -597,6 +734,24 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
         expect(preauthReceipt.supervisorResidualStateDigest).toMatch(/^[0-9a-f]{64}$/);
         expect(preauthReceipt.contentDigest).toMatch(/^[0-9a-f]{64}$/);
 
+        const ledgerStdinEntries = preauthReceipt.preauthLedger.filter(
+          (entry) => entry.stdinPresent,
+        );
+        const fakeSshStdinEntries = readFakeSshLog(sshLog).filter((entry) => entry.stdinPresent);
+        expect(fakeSshStdinEntries.length).toBe(ledgerStdinEntries.length);
+        expect(fakeSshStdinEntries.length).toBeGreaterThan(0);
+
+        for (let index = 0; index < ledgerStdinEntries.length; index += 1) {
+          const ledgerEntry = ledgerStdinEntries[index]!;
+          const fakeEntry = fakeSshStdinEntries[index]!;
+          expect(fakeEntry.stdinByteLength).toBeGreaterThan(0);
+          expect(fakeEntry.stdinSha256).toBe(ledgerEntry.bootstrapBlobSha256);
+          expect(PRE_AUTH_BOOTSTRAP_PATHS).toContain(ledgerEntry.bootstrapRepositoryPath);
+          const expectedBytes = gitShowBlobBytes(sha, ledgerEntry.bootstrapRepositoryPath!);
+          expect(fakeEntry.stdinSha256).toBe(sha256HexBytes(expectedBytes));
+          expect(ledgerEntry.bootstrapBlobSha256).toBe(sha256HexBytes(expectedBytes));
+        }
+
         const trace = readFileSync(
           join(env.FHV_T4A_LOCAL_STATE_DIR!, "fhv-t4a-operator-trace.jsonl"),
           "utf8",
@@ -606,7 +761,7 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
 
         const sshLogBody = readFileSync(sshLog, "utf8");
         expect(sshLogBody).toContain("bash -s");
-        expect(sshLogBody).not.toMatch(/^\s*ssh\s+/m);
+        expect(sshLogBody).toContain("stdinSha256");
 
         const residualBody = readFileSync(join(ROOT, RESIDUAL_READ), "utf8");
         expect(sha256Hex(residualBody)).toBe(
