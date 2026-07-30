@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -51,6 +52,108 @@ export function sha256Hex(text: string): string {
 }
 
 export const OLD_RELEASE_SHA = "7655e86296702b7032dfb1fb4f6d3752a288e23d";
+export const APPROVED_ORIGIN_URL = "https://github.com/oumaster369/waia.git";
+
+export type SourceRepositorySnapshot = Readonly<{
+  headSha: string;
+  originUrl: string;
+  tags: readonly string[];
+}>;
+
+export function captureSourceRepositorySnapshot(): SourceRepositorySnapshot {
+  const headSha = execFileSync("git", ["-C", ROOT, "rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
+  const originUrl = execFileSync("git", ["-C", ROOT, "remote", "get-url", "origin"], {
+    encoding: "utf8",
+  }).trim();
+  const tags = execFileSync("git", ["-C", ROOT, "tag", "-l"], { encoding: "utf8" })
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return { headSha, originUrl, tags };
+}
+
+export function assertSourceRepositorySnapshotUnchanged(
+  before: SourceRepositorySnapshot,
+  after: SourceRepositorySnapshot,
+): void {
+  if (after.headSha !== before.headSha) {
+    throw new Error(`source HEAD changed: ${before.headSha} -> ${after.headSha}`);
+  }
+  if (after.originUrl !== before.originUrl) {
+    throw new Error(`source origin changed: ${before.originUrl} -> ${after.originUrl}`);
+  }
+  const beforeTags = [...before.tags].sort();
+  const afterTags = [...after.tags].sort();
+  if (beforeTags.join("\0") !== afterTags.join("\0")) {
+    throw new Error("source repository tags changed during isolated release fixture");
+  }
+}
+
+export function createIsolatedReleaseFixture(): {
+  releaseRoot: string;
+  sha: string;
+  tag: string;
+  originUrl: string;
+  sourceSnapshotBefore: SourceRepositorySnapshot;
+} {
+  const sourceSnapshotBefore = captureSourceRepositorySnapshot();
+  const sha = sourceSnapshotBefore.headSha;
+  const releaseRoot = mkdtempSync(join(tmpdir(), "fhv-t4a-release-"));
+  execFileSync("git", ["clone", "--local", "--no-hardlinks", `file://${ROOT}`, releaseRoot], {
+    stdio: "pipe",
+  });
+  execFileSync("git", ["-C", releaseRoot, "checkout", "--detach", sha], { stdio: "pipe" });
+  execFileSync("git", ["-C", releaseRoot, "remote", "set-url", "origin", APPROVED_ORIGIN_URL], {
+    stdio: "pipe",
+  });
+  const tag = `fhv-preauth-test-${sha.slice(0, 8)}`;
+  execFileSync("git", ["-C", releaseRoot, "tag", "-f", tag, sha], { stdio: "pipe" });
+  const nodeModulesLink = join(releaseRoot, "node_modules");
+  if (!existsSync(nodeModulesLink)) {
+    symlinkSync(join(ROOT, "node_modules"), nodeModulesLink);
+  }
+  writeFileSync(join(releaseRoot, ".git", "info", "exclude"), "node_modules\n", { flag: "a" });
+
+  const head = execFileSync("git", ["-C", releaseRoot, "rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
+  if (head !== sha) {
+    throw new Error(`isolated release HEAD mismatch: expected ${sha}, got ${head}`);
+  }
+  const originUrl = execFileSync("git", ["-C", releaseRoot, "remote", "get-url", "origin"], {
+    encoding: "utf8",
+  }).trim();
+  if (originUrl !== APPROVED_ORIGIN_URL) {
+    throw new Error(
+      `isolated release origin mismatch: expected ${APPROVED_ORIGIN_URL}, got ${originUrl}`,
+    );
+  }
+  const taggedSha = execFileSync("git", ["-C", releaseRoot, "rev-parse", `${tag}^{}`], {
+    encoding: "utf8",
+  }).trim();
+  if (taggedSha !== sha) {
+    throw new Error(`isolated release tag mismatch: expected ${sha}, got ${taggedSha}`);
+  }
+  const status = execFileSync("git", ["-C", releaseRoot, "status", "--porcelain=v1"], {
+    encoding: "utf8",
+  }).trim();
+  if (status.length > 0) {
+    throw new Error(`isolated release worktree is not clean:\n${status}`);
+  }
+
+  return { releaseRoot, sha, tag, originUrl: APPROVED_ORIGIN_URL, sourceSnapshotBefore };
+}
+
+export function removeIsolatedReleaseFixture(
+  releaseRoot: string,
+  sourceSnapshotBefore: SourceRepositorySnapshot,
+): void {
+  rmSync(releaseRoot, { recursive: true, force: true });
+  const sourceSnapshotAfter = captureSourceRepositorySnapshot();
+  assertSourceRepositorySnapshotUnchanged(sourceSnapshotBefore, sourceSnapshotAfter);
+}
 
 let oldReleaseRevEnsured = false;
 
@@ -102,12 +205,9 @@ export function createOldReleaseWorktree(): {
   const sha = execFileSync("git", ["-C", releaseRoot, "rev-parse", "HEAD"], {
     encoding: "utf8",
   }).trim();
-  const tag = "v2026.07.29.7655e86";
+  const tag = `fhv-preauth-test-${sha.slice(0, 8)}`;
   execFileSync("git", ["-C", releaseRoot, "tag", "-f", tag, sha], { stdio: "pipe" });
-  const originUrl = execFileSync("git", ["-C", releaseRoot, "remote", "get-url", "origin"], {
-    encoding: "utf8",
-  }).trim();
-  return { releaseRoot, sha, tag, originUrl };
+  return { releaseRoot, sha, tag, originUrl: APPROVED_ORIGIN_URL };
 }
 
 export function removeOldReleaseWorktree(releaseRoot: string): void {

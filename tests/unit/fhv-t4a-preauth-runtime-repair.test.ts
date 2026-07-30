@@ -24,14 +24,16 @@ import {
 import { classifyFhvT4aSupervisorResidualState } from "@/lib/trader/observability/fhv-t4-supervisor-residual-state";
 import {
   canRunLinuxPreauthLiveProof,
+  APPROVED_ORIGIN_URL,
+  createIsolatedReleaseFixture,
   createLinuxSystemdSandbox,
   createOldReleaseWorktree,
   ensureOldReleaseRevAvailable,
-  gitShowBlob,
   gitShowBlobBytes,
   invokeFakeSsh,
   OLD_RELEASE_SHA,
   readFakeSshLog,
+  removeIsolatedReleaseFixture,
   removeOldReleaseWorktree,
   runCommittedScriptViaBashStdin,
   sha256Hex,
@@ -49,7 +51,10 @@ const LOCAL_NODE = process.execPath;
 const LOCAL_GIT = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
 
 const cleanupPaths: string[] = [];
-const releaseWorktrees: string[] = [];
+const isolatedReleaseFixtures: Array<{
+  releaseRoot: string;
+  sourceSnapshotBefore: ReturnType<typeof createIsolatedReleaseFixture>["sourceSnapshotBefore"];
+}> = [];
 const oldReleaseWorktrees: string[] = [];
 
 const PRE_AUTH_BOOTSTRAP_PATHS = [
@@ -99,14 +104,10 @@ afterEach(() => {
     removeOldReleaseWorktree(path);
   }
   oldReleaseWorktrees.length = 0;
-  for (const path of [...releaseWorktrees].reverse()) {
-    try {
-      execFileSync("git", ["-C", ROOT, "worktree", "remove", "--force", path], { stdio: "pipe" });
-    } catch {
-      rmSync(path, { recursive: true, force: true });
-    }
+  for (const fixture of [...isolatedReleaseFixtures].reverse()) {
+    removeIsolatedReleaseFixture(fixture.releaseRoot, fixture.sourceSnapshotBefore);
   }
-  releaseWorktrees.length = 0;
+  isolatedReleaseFixtures.length = 0;
   for (const path of cleanupPaths.splice(0)) {
     rmSync(path, { recursive: true, force: true });
   }
@@ -124,20 +125,17 @@ function createReleaseRoot(): {
   tag: string;
   originUrl: string;
 } {
-  const releaseRoot = trackDir("fhv-t4a-release-");
-  execFileSync("git", ["-C", ROOT, "worktree", "add", "--detach", releaseRoot, "HEAD"], {
-    stdio: "pipe",
+  const fixture = createIsolatedReleaseFixture();
+  isolatedReleaseFixtures.push({
+    releaseRoot: fixture.releaseRoot,
+    sourceSnapshotBefore: fixture.sourceSnapshotBefore,
   });
-  releaseWorktrees.push(releaseRoot);
-  const sha = execFileSync("git", ["-C", releaseRoot, "rev-parse", "HEAD"], {
-    encoding: "utf8",
-  }).trim();
-  const tag = `fhv-preauth-test-${sha.slice(0, 8)}`;
-  execFileSync("git", ["-C", releaseRoot, "tag", "-f", tag, sha], { stdio: "pipe" });
-  const originUrl = execFileSync("git", ["-C", releaseRoot, "remote", "get-url", "origin"], {
-    encoding: "utf8",
-  }).trim();
-  return { releaseRoot, sha, tag, originUrl };
+  return {
+    releaseRoot: fixture.releaseRoot,
+    sha: fixture.sha,
+    tag: fixture.tag,
+    originUrl: fixture.originUrl,
+  };
 }
 
 function buildOperatorEnv(
@@ -579,6 +577,8 @@ describe("fhv-t4a PRE_AUTH runtime repair (DEE-436)", () => {
 set -euo pipefail
 printf 'arg1=%s\\n' "\${1:-}"
 printf 'arg2=%s\\n' "\${2:-}"
+printf 'arg3=%s\\n' "\${3:-}"
+printf 'arg4=%s\\n' "\${4:-}"
 `,
         { mode: 0o755 },
       );
@@ -591,9 +591,13 @@ printf 'arg2=%s\\n' "\${2:-}"
         stdin: readFileSync(argScript),
       });
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(`arg1=${spaceValue}`);
-      expect(result.stdout).toContain(`arg2=${quoteValue}`);
-      expect(result.stdout).not.toContain("'");
+      expect(result.stdout).toContain("arg1=--payload");
+      expect(result.stdout).toContain("arg2=value with spaces");
+      expect(result.stdout).toContain("arg3=--owner");
+      expect(result.stdout).toContain(`arg4=${quoteValue}`);
+      expect(result.stdout).not.toMatch(/'\\''/);
+      expect(result.stdout).not.toMatch(/arg2='value with spaces'/);
+      expect(result.stdout).not.toMatch(/arg4='O'Brien'/);
     });
 
     it("propagates real sudo -n true exit status", () => {
