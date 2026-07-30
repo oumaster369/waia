@@ -222,6 +222,7 @@ function invokeRecoveryScript(
     remoteCommand,
     stdin: scriptBody,
     asRoot: true,
+    governedRemoteMutation: mode === "--confirm" ? "residual-recovery-confirm" : undefined,
   });
 }
 

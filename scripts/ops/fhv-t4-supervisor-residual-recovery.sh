@@ -266,19 +266,28 @@ fi
 recover_one() {
   local unit_name="$1"
   assert_allowed_unit "$unit_name"
-  local active_state enabled_state
+  local raw_active raw_sub raw_result active_state enabled_state
+  raw_active="$("$SYSTEMCTL" show "$unit_name" -p ActiveState --value 2>/dev/null || true)"
+  raw_sub="$("$SYSTEMCTL" show "$unit_name" -p SubState --value 2>/dev/null || true)"
+  raw_result="$("$SYSTEMCTL" show "$unit_name" -p Result --value 2>/dev/null || true)"
   active_state="$(classify_systemctl_is_active "$unit_name")"
   enabled_state="$(classify_systemctl_is_enabled "$unit_name")"
-  case "$active_state" in
-    active) "$SYSTEMCTL" stop "$unit_name" ;;
-    inactive|not-found) ;;
-    *) fail "unclassified active state for recovery: ${active_state}" ;;
-  esac
+  if [[ "$raw_active" == "active" || "$raw_active" == "activating" || "$raw_active" == "deactivating" ]]; then
+    "$SYSTEMCTL" stop "$unit_name"
+  elif [[ "$active_state" == "active" ]]; then
+    "$SYSTEMCTL" stop "$unit_name"
+  fi
   case "$enabled_state" in
     enabled) "$SYSTEMCTL" disable "$unit_name" ;;
     disabled|not-found) ;;
     *) fail "unclassified enabled state for recovery: ${enabled_state}" ;;
   esac
+  raw_active="$("$SYSTEMCTL" show "$unit_name" -p ActiveState --value 2>/dev/null || true)"
+  raw_sub="$("$SYSTEMCTL" show "$unit_name" -p SubState --value 2>/dev/null || true)"
+  raw_result="$("$SYSTEMCTL" show "$unit_name" -p Result --value 2>/dev/null || true)"
+  if [[ "$raw_active" == "failed" || "$raw_sub" == "failed" || "$raw_result" == "failed" ]]; then
+    "$SYSTEMCTL" reset-failed "$unit_name"
+  fi
 }
 
 recover_one "$FHV_OBSERVER_UNIT"
@@ -291,11 +300,17 @@ AFTER_CAMPAIGN="$(capture_unit_evidence "$FHV_CAMPAIGN_UNIT")"
 for unit_json in "$AFTER_OBSERVER" "$AFTER_CAMPAIGN"; do
   ENABLED="$(printf '%s' "$unit_json" | "$PYTHON_BIN" -c 'import json,sys; print(json.load(sys.stdin)["enabledState"])')"
   ACTIVE="$(printf '%s' "$unit_json" | "$PYTHON_BIN" -c 'import json,sys; print(json.load(sys.stdin)["activeClass"])')"
+  ACTIVE_STATE="$(printf '%s' "$unit_json" | "$PYTHON_BIN" -c 'import json,sys; print(json.load(sys.stdin)["activeState"])')"
+  SUB_STATE="$(printf '%s' "$unit_json" | "$PYTHON_BIN" -c 'import json,sys; print(json.load(sys.stdin)["subState"])')"
+  IS_FAILED="$(printf '%s' "$unit_json" | "$PYTHON_BIN" -c 'import json,sys; print(json.load(sys.stdin)["isFailed"])')"
   if [[ "$ENABLED" == "enabled" ]]; then
     fail "recovery verification failed: unit still enabled"
   fi
-  if [[ "$ACTIVE" == "active" ]]; then
+  if [[ "$ACTIVE" == "active" || "$ACTIVE_STATE" == "active" || "$ACTIVE_STATE" == "activating" || "$ACTIVE_STATE" == "deactivating" ]]; then
     fail "recovery verification failed: unit still active"
+  fi
+  if [[ "$IS_FAILED" == "True" || "$ACTIVE_STATE" == "failed" || "$SUB_STATE" == "failed" ]]; then
+    fail "recovery verification failed: unit still failed"
   fi
 done
 
