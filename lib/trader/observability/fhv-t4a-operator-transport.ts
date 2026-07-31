@@ -40,6 +40,8 @@ export type FhvT4aSshInvocation = Readonly<{
 
 export const FHV_T4A_REMOTE_READ_BYTE_CAP = 10 * 1024 * 1024;
 
+export type FhvT4aGovernedRemoteMutation = "residual-recovery-confirm";
+
 export type FhvT4aOperatorTransport = Readonly<{
   kind: "hermetic" | "live";
   approvedRemoteRoots: readonly string[];
@@ -57,6 +59,7 @@ export type FhvT4aOperatorTransport = Readonly<{
     preauthPhase?: boolean;
     preauthBootstrapPath?: string;
     preauthBootstrapBody?: string;
+    governedRemoteMutation?: FhvT4aGovernedRemoteMutation;
   }) => FhvT4aTransportExecResult;
   sudoNoninteractiveProbe: () => FhvT4aTransportExecResult;
   gitShowBlob: (sha: string, path: string) => string;
@@ -128,6 +131,16 @@ export function resolveApprovedRemoteRoots(env: NodeJS.ProcessEnv): string[] {
     roots.push(join(artifactRoot, "RI-P7/fhv-ops-rehearsal", runId));
   }
   return roots;
+}
+
+function countGovernedRemoteMutation(input: {
+  remoteCommand: string;
+  governedRemoteMutation?: FhvT4aGovernedRemoteMutation;
+}): boolean {
+  if (input.governedRemoteMutation === "residual-recovery-confirm") {
+    return true;
+  }
+  return /(>>|>\s|tee |mkdir |touch |rm |mv |cp )/.test(input.remoteCommand);
 }
 
 export function createFhvT4aLiveTransport(
@@ -233,6 +246,7 @@ export function createFhvT4aLiveTransport(
       preauthPhase = false,
       preauthBootstrapPath,
       preauthBootstrapBody,
+      governedRemoteMutation,
     }) => {
       const effectiveRemoteCommand = buildEffectiveRemoteCommand(remoteCommand, asRoot);
       assertExactlyOneSudoTransition(effectiveRemoteCommand, asRoot);
@@ -304,7 +318,7 @@ export function createFhvT4aLiveTransport(
           stderrDigest: sha256Hex(execResult.stderr),
         });
       }
-      if (!preauthPhase && /(>>|>\s|tee |mkdir |touch |rm |mv |cp )/.test(remoteCommand)) {
+      if (!preauthPhase && countGovernedRemoteMutation({ remoteCommand, governedRemoteMutation })) {
         remoteWrites += 1;
       }
       return execResult;
