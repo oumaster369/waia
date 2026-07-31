@@ -10,6 +10,7 @@ import {
   assertFhvT4BootIdEqual,
   normalizeFhvT4BootId,
 } from "@/lib/trader/observability/fhv-t4-boot-id";
+import { buildFhvT4RestrictedChildEnv } from "@/lib/trader/observability/fhv-t4-restricted-child-env";
 
 export const FHV_T4_OBSERVER_SYSTEMD_IDENTITY_SCHEMA_VERSION =
   "fhv-t4-observer-systemd-identity/v1" as const;
@@ -161,7 +162,7 @@ export function readFhvT4ObserverSystemdIdentity(
   const output = execFileSync(
     script,
     ["--systemctl-bin", systemctlBin, "--python-bin", pythonBin, unitName],
-    { encoding: "utf8", env: { ...env, PATH: "" } },
+    { encoding: "utf8", env: buildFhvT4RestrictedChildEnv(env) },
   ).trim();
   return parseFhvT4ObserverSystemdIdentity(JSON.parse(output));
 }
