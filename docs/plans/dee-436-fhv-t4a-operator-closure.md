@@ -41,23 +41,34 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: keep-open-until-t4a-evidence
 state:
-  status: repository-merged-t4a-pending
+  status: step26-corrective-pending-release
   repositoryImplementation: merged
-  releaseToMain: pending
-  mainToDevBackSync: pending-after-release
-  releasedPacketAudit: pending
-  executionServerSurface: none
+  releaseToMain: v2026.07.31.3fa104c-released
+  mainToDevBackSync: completed-v2026.07.31.3fa104c
+  releasedPacketAudit: passed-v2026.07.31.3fa104c
+  executionServerSurface: step26-failed-run-evidence-only
   t4Authorization: none
+  t4AuthorizationMeaning: no-currently-reusable-authorization-after-failed-run-and-recovery
   t4aExecuted: false
+  t4aExecutedMeaning: no-accepted-successful-t4a-execution
+  t4aAttempted: true
+  t4aAttemptRunId: fhv-t4a-20260731t144326z-1b0cf364-3fa104c
+  t4aAttemptDeployAuthorizationIssued: true
+  t4aAttemptLastSuccessfulStep: 25
+  t4aAttemptOutcome: step26-failed-not-accepted
   t4bExecuted: false
   linearDee436: in-progress-keep-open
-  featureHeadSha: ff25f962f8f61f5a05fc370ac0575dfc810227ad
-  repositoryMergeSha: 899868676e7cd1fc31898865fc5dcab7394e5daf
-  expectedMergeMethod: squash
-  actualMergeMethod: merge-commit
-  mergeMethodDeviation: HUMAN_ACCEPTED_IMMUTABLE_HISTORY
-  humanDecision: ACK-DEE-436-MERGE-COMMIT-DEVIATION-AS-IMMUTABLE-HISTORY
-  blockedReason: "Repository closure merged into dev. T4A blocked pending corrected dev-to-main release, mandatory main-to-dev back-sync, independent audit of exact released Packet V5, Human AUTHORIZE-FHV-OPS-DEPLOY, and successful T4A evidence."
+  lastReleasedSha: 3fa104c03e440a9ccf2949a1a571939eeb2d453f
+  lastReleasedTag: v2026.07.31.3fa104c
+  failedRunId: fhv-t4a-20260731t144326z-1b0cf364-3fa104c
+  failedRunLastSuccessfulStep: 25
+  failedRunStep22: PASS
+  failedRunTerminalFailure: FHV_T4A_STEP_26_FAILED
+  failedRunRootCause: zero-length-child-PATH-incompatible-with-shebang-env-bash
+  recoveryId: fhv-t4a-recovery-20260731t150735z-20b85a28-3fa104c
+  recoveryClassification: FHV_T4A_RESIDUAL_RECOVERY_OK
+  correctiveBranch: dee-436-fhv-t4a-step26-restricted-path-repair
+  blockedReason: "Step 26 corrective PR pending Human merge, release promotion, back-sync, fresh PRE_AUTH namespace, and fresh T4A execution with Human evidence acceptance."
 provenance:
   createdFrom: chat
   groomedAt: "2026-07-24"
@@ -192,3 +203,26 @@ Closed on branch `dee-436-fhv-t4a-operator-closure`:
 | Execution Server access | **none** in merge or reconciliation sessions |
 
 Repository acceptance is complete: R01–R28 matrix, Packet V5, and closure verifiers are on `dev`. Issue completion remains blocked by corrected dev→main release, mandatory main→dev back-sync, independent audit of the exact released Packet V5 blob, Human `AUTHORIZE-FHV-OPS-DEPLOY`, and successful T4A Execution Server evidence. T4B remains separately governed under DEE-437 (Backlog).
+
+## Step 26 forensic failure and corrective (2026-07-31)
+
+| Field | Value |
+|-------|-------|
+| Last released SHA | `3fa104c03e440a9ccf2949a1a571939eeb2d453f` |
+| Last released tag | `v2026.07.31.3fa104c` |
+| Failed run ID | `fhv-t4a-20260731t144326z-1b0cf364-3fa104c` |
+| PRE_AUTH | PASS |
+| Steps 1–25 | PASS |
+| Step 22 | PASS (`FHV_T4A_STEP_22_OK`) |
+| Step 26 | FAIL (`FHV_T4A_STEP_26_FAILED`) |
+| Terminal error | `/usr/bin/env: 'bash': No such file or directory` |
+| Root cause | Identity shell readers invoked repository scripts with `PATH=""`, breaking `#!/usr/bin/env bash` interpreter resolution |
+| Attempt facts | Human `AUTHORIZE-FHV-OPS-DEPLOY` was issued; T4A run executed; Steps 1–25 passed; Step 26 failed; T4A not completed or accepted; authorization not reusable after recovery |
+| Field semantics | `t4Authorization:none` = no currently reusable authorization; `t4aExecuted:false` = no accepted successful T4A; `t4aAttempted:true` records the failed forensic run |
+| Recovery ID | `fhv-t4a-recovery-20260731t150735z-20b85a28-3fa104c` |
+| Recovery result | `FHV_T4A_RESIDUAL_RECOVERY_OK` |
+| Final unit state | observer + campaign disabled/inactive/dead, `isFailed=false` |
+| Corrective branch | `dee-436-fhv-t4a-step26-restricted-path-repair` |
+| Required next lifecycle | corrective PR → Human merge to `dev` → release to `main` → back-sync → exact released Packet audit → fresh PRE_AUTH → fresh T4A run |
+
+Historical failed-run and recovery evidence is immutable forensic-only. It must not be reused, repaired, or counted as T4A PASS.
