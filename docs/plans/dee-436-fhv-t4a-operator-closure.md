@@ -48,7 +48,14 @@ state:
   releasedPacketAudit: passed-v2026.07.31.3fa104c
   executionServerSurface: step26-failed-run-evidence-only
   t4Authorization: none
+  t4AuthorizationMeaning: no-currently-reusable-authorization-after-failed-run-and-recovery
   t4aExecuted: false
+  t4aExecutedMeaning: no-accepted-successful-t4a-execution
+  t4aAttempted: true
+  t4aAttemptRunId: fhv-t4a-20260731t144326z-1b0cf364-3fa104c
+  t4aAttemptDeployAuthorizationIssued: true
+  t4aAttemptLastSuccessfulStep: 25
+  t4aAttemptOutcome: step26-failed-not-accepted
   t4bExecuted: false
   linearDee436: in-progress-keep-open
   lastReleasedSha: 3fa104c03e440a9ccf2949a1a571939eeb2d453f
@@ -57,7 +64,7 @@ state:
   failedRunLastSuccessfulStep: 25
   failedRunStep22: PASS
   failedRunTerminalFailure: FHV_T4A_STEP_26_FAILED
-  failedRunRootCause: zero-length-child-PATH-incompatible-with-usrlocalenv-bash
+  failedRunRootCause: zero-length-child-PATH-incompatible-with-shebang-env-bash
   recoveryId: fhv-t4a-recovery-20260731t150735z-20b85a28-3fa104c
   recoveryClassification: FHV_T4A_RESIDUAL_RECOVERY_OK
   correctiveBranch: dee-436-fhv-t4a-step26-restricted-path-repair
@@ -210,6 +217,8 @@ Repository acceptance is complete: R01–R28 matrix, Packet V5, and closure veri
 | Step 26 | FAIL (`FHV_T4A_STEP_26_FAILED`) |
 | Terminal error | `/usr/bin/env: 'bash': No such file or directory` |
 | Root cause | Identity shell readers invoked repository scripts with `PATH=""`, breaking `#!/usr/bin/env bash` interpreter resolution |
+| Attempt facts | Human `AUTHORIZE-FHV-OPS-DEPLOY` was issued; T4A run executed; Steps 1–25 passed; Step 26 failed; T4A not completed or accepted; authorization not reusable after recovery |
+| Field semantics | `t4Authorization:none` = no currently reusable authorization; `t4aExecuted:false` = no accepted successful T4A; `t4aAttempted:true` records the failed forensic run |
 | Recovery ID | `fhv-t4a-recovery-20260731t150735z-20b85a28-3fa104c` |
 | Recovery result | `FHV_T4A_RESIDUAL_RECOVERY_OK` |
 | Final unit state | observer + campaign disabled/inactive/dead, `isFailed=false` |

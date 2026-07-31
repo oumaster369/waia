@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -36,7 +44,11 @@ import {
   fhvT4ObserverIdentity,
   writeFhvT4TestCampaignRuntimeProof,
 } from "../helpers/fhv-t4-test-fixtures";
-import { writeFhvSystemdDeployedRevisionAtomic } from "@/lib/trader/observability/fhv-systemd-deployed-revision";
+import {
+  FHV_SYSTEMD_DEPLOYED_REVISION_FILENAME,
+  writeFhvSystemdDeployedRevisionAtomic,
+} from "@/lib/trader/observability/fhv-systemd-deployed-revision";
+import { runFhvT4ContinuityCli } from "@/scripts/trader/fhv-t4-continuity-cli";
 
 const ROOT = process.cwd();
 const IS_LINUX = process.platform === "linux";
@@ -64,6 +76,7 @@ function writeEnvBashFixture(dir: string, name: string, body: string): string {
 }
 
 function writeIdentityMockSystemctl(binDir: string): string {
+  mkdirSync(binDir, { recursive: true });
   const systemctlPath = join(binDir, "systemctl");
   writeFileSync(
     systemctlPath,
@@ -110,7 +123,126 @@ echo ""
 `,
   );
   chmodSync(systemctlPath, 0o755);
+  if (!existsSync(systemctlPath)) {
+    throw new Error(`mock systemctl fixture missing: ${systemctlPath}`);
+  }
   return systemctlPath;
+}
+
+function prepareIdentityMockTooling(workDir: string): {
+  binDir: string;
+  systemctlBin: string;
+  pythonBin: string;
+} {
+  const binDir = join(workDir, "bin");
+  const systemctlBin = writeIdentityMockSystemctl(binDir);
+  const pythonBin = resolvePythonBin();
+  expect(existsSync(systemctlBin)).toBe(true);
+  expect(() =>
+    execFileSync(systemctlBin, ["show", OBSERVER_UNIT, "-p", "ActiveState", "--value"], {
+      encoding: "utf8",
+    }),
+  ).not.toThrow();
+  return { binDir, systemctlBin, pythonBin };
+}
+
+function clearIdentityInjectionEnv(): void {
+  delete process.env.FHV_T4_OBSERVER_SYSTEMD_IDENTITY_JSON;
+  delete process.env.FHV_T4_CAMPAIGN_SYSTEMD_IDENTITY_JSON;
+  delete process.env.FHV_T4_SYSTEMD_IDENTITY_JSON;
+}
+
+function setProductionContinuityEnv(workDir: string): string | undefined {
+  clearIdentityInjectionEnv();
+  const savedDeploymentPath = process.env.FHV_SYSTEMD_DEPLOYED_REVISION_PATH;
+  process.env.FHV_SYSTEMD_DEPLOYED_REVISION_PATH = join(
+    workDir,
+    ".ops",
+    FHV_SYSTEMD_DEPLOYED_REVISION_FILENAME,
+  );
+  return savedDeploymentPath;
+}
+
+function restoreProductionContinuityEnv(savedDeploymentPath: string | undefined): void {
+  if (savedDeploymentPath === undefined) {
+    delete process.env.FHV_SYSTEMD_DEPLOYED_REVISION_PATH;
+  } else {
+    process.env.FHV_SYSTEMD_DEPLOYED_REVISION_PATH = savedDeploymentPath;
+  }
+}
+
+function prepareContinuityRunFixture(
+  root: string,
+  input: { runId: string; organizationId: string; targetSha: string },
+): string {
+  const runDir = resolveFhvRehearsalRunDirectory(root, input.runId);
+  mkdirSync(join(runDir, "control"), { recursive: true });
+  writeFileSync(
+    join(runDir, "fhv-rehearsal-manifest.v1.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: "fhv-rehearsal-launch/v1",
+        fixtureId: "HTR_WP03_BENCHMARK",
+        targetSha: input.targetSha,
+        runId: input.runId,
+        organizationId: input.organizationId,
+        artifactRoot: root,
+        alertPolicyDigest: resolveFhvRehearsalAlertPolicyDigest(),
+        maxRuntimeMs: 300_000,
+        t4DeterministicPause: true,
+        deterministicPauseAtCycle: 40,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  writeFileSync(
+    join(runDir, "fhv-rehearsal-terminal.v1.json"),
+    `${JSON.stringify({ classification: "REHEARSAL_OK" }, null, 2)}\n`,
+  );
+  writeFileSync(
+    join(runDir, "replay-checkpoint.json"),
+    `${JSON.stringify(
+      {
+        rehearsalEconomicFrontierState: {
+          mode: "QUIESCENT_NO_ECONOMIC_STATE",
+          runId: input.runId,
+          organizationId: input.organizationId,
+          safeResumeThroughCycleIndex: 39,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  writeFileSync(
+    join(runDir, "fhv-resume-runtime-proof.v1.json"),
+    `${JSON.stringify({ fullHistoryRescanDelta: 0 }, null, 2)}\n`,
+  );
+  writeFileSync(
+    join(runDir, "run-chain.json"),
+    `${JSON.stringify({ schemaVersion: "htr-wp05-run-chain/v1", segments: [] }, null, 2)}\n`,
+  );
+  writeFileSync(
+    join(runDir, "control/command-ledger.jsonl"),
+    `${JSON.stringify({ command: { action: "PAUSE_AT_CHECKPOINT" } })}\n`,
+  );
+  writeFhvT4TestCampaignRuntimeProof(runDir, input);
+  writeFhvSystemdDeployedRevisionAtomic(root, {
+    releaseSha: input.targetSha,
+    releaseTag: "v2026.07.31.3fa104c",
+    runId: input.runId,
+    organizationId: input.organizationId,
+    renderedUnitDigests: {
+      [FHV_SYSTEMD_CAMPAIGN_UNIT]: "a".repeat(64),
+      [FHV_SYSTEMD_OBSERVER_UNIT]: "b".repeat(64),
+    },
+    installedAtUtc: new Date().toISOString(),
+    operatorId: "t4-operator",
+    serviceUser: "fhv",
+    legacyContainerRunning: true,
+  });
+  return runDir;
 }
 
 let workDir = "";
@@ -271,76 +403,10 @@ describe("fhv-t4 restricted child PATH (DEE-436 Step 26 repair)", () => {
     const runId = "fhv-t4a-step26-path-test";
     const orgId = "00000000-0000-4000-8000-000000000436";
     const targetSha = "3fa104c03e440a9ccf2949a1a571939eeb2d453f";
-    const runDir = resolveFhvRehearsalRunDirectory(workDir, runId);
-    mkdirSync(join(runDir, "control"), { recursive: true });
-    writeFileSync(
-      join(runDir, "fhv-rehearsal-manifest.v1.json"),
-      `${JSON.stringify(
-        {
-          schemaVersion: "fhv-rehearsal-launch/v1",
-          fixtureId: "HTR_WP03_BENCHMARK",
-          targetSha,
-          runId,
-          organizationId: orgId,
-          artifactRoot: workDir,
-          alertPolicyDigest: resolveFhvRehearsalAlertPolicyDigest(),
-          maxRuntimeMs: 300_000,
-          t4DeterministicPause: true,
-          deterministicPauseAtCycle: 40,
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    writeFileSync(
-      join(runDir, "fhv-rehearsal-terminal.v1.json"),
-      `${JSON.stringify({ classification: "REHEARSAL_OK" }, null, 2)}\n`,
-    );
-    writeFileSync(
-      join(runDir, "replay-checkpoint.json"),
-      `${JSON.stringify(
-        {
-          rehearsalEconomicFrontierState: {
-            mode: "QUIESCENT_NO_ECONOMIC_STATE",
-            runId,
-            organizationId: orgId,
-            safeResumeThroughCycleIndex: 39,
-          },
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    writeFileSync(
-      join(runDir, "fhv-resume-runtime-proof.v1.json"),
-      `${JSON.stringify({ fullHistoryRescanDelta: 0 }, null, 2)}\n`,
-    );
-    writeFileSync(
-      join(runDir, "run-chain.json"),
-      `${JSON.stringify({ schemaVersion: "htr-wp05-run-chain/v1", segments: [] }, null, 2)}\n`,
-    );
-    writeFileSync(
-      join(runDir, "control/command-ledger.jsonl"),
-      `${JSON.stringify({ command: { action: "PAUSE_AT_CHECKPOINT" } })}\n`,
-    );
-    writeFhvT4TestCampaignRuntimeProof(runDir, {
+    const runDir = prepareContinuityRunFixture(workDir, {
       runId,
       organizationId: orgId,
       targetSha,
-    });
-    writeFhvSystemdDeployedRevisionAtomic(workDir, {
-      releaseSha: targetSha,
-      releaseTag: "v2026.07.31.3fa104c",
-      runId,
-      organizationId: orgId,
-      renderedUnitDigests: {
-        [FHV_SYSTEMD_CAMPAIGN_UNIT]: "a".repeat(64),
-        [FHV_SYSTEMD_OBSERVER_UNIT]: "b".repeat(64),
-      },
-      installedAtUtc: new Date().toISOString(),
-      operatorId: "t4-operator",
-      serviceUser: "fhv",
-      legacyContainerRunning: true,
     });
 
     const observer = fhvT4ObserverIdentity({
@@ -369,9 +435,7 @@ describe("fhv-t4 restricted child PATH (DEE-436 Step 26 repair)", () => {
     "executes observer identity shell reader under restricted PATH on Linux",
     () => {
       workDir = mkdtempSync(join(tmpdir(), "fhv-t4-observer-identity-linux-"));
-      const binDir = join(workDir, "bin");
-      const systemctlBin = writeIdentityMockSystemctl(binDir);
-      const pythonBin = resolvePythonBin();
+      const { systemctlBin, pythonBin } = prepareIdentityMockTooling(workDir);
 
       const identity = readFhvT4ObserverSystemdIdentity(ROOT, OBSERVER_UNIT, process.env, {
         systemctlBin,
@@ -387,9 +451,7 @@ describe("fhv-t4 restricted child PATH (DEE-436 Step 26 repair)", () => {
     "executes completed-campaign identity shell reader under restricted PATH on Linux",
     () => {
       workDir = mkdtempSync(join(tmpdir(), "fhv-t4-campaign-identity-linux-"));
-      const binDir = join(workDir, "bin");
-      const systemctlBin = writeIdentityMockSystemctl(binDir);
-      const pythonBin = resolvePythonBin();
+      const { systemctlBin, pythonBin } = prepareIdentityMockTooling(workDir);
 
       const identity = readFhvT4CompletedCampaignSystemdIdentity(ROOT, CAMPAIGN_UNIT, process.env, {
         systemctlBin,
@@ -406,9 +468,7 @@ describe("fhv-t4 restricted child PATH (DEE-436 Step 26 repair)", () => {
     'reproduces Step 26 /usr/bin/env bash failure when repository identity scripts run with PATH=""',
     () => {
       workDir = mkdtempSync(join(tmpdir(), "fhv-t4-step26-empty-path-linux-"));
-      const binDir = join(workDir, "bin");
-      const systemctlBin = writeIdentityMockSystemctl(binDir);
-      const pythonBin = resolvePythonBin();
+      const { systemctlBin, pythonBin } = prepareIdentityMockTooling(workDir);
       const script = join(ROOT, "scripts/ops/fhv-t4-observer-systemd-identity-read.sh");
 
       expect(() =>
@@ -427,6 +487,132 @@ describe("fhv-t4 restricted child PATH (DEE-436 Step 26 repair)", () => {
       const parsed = JSON.parse(output) as { activeState: string; mainPid: number };
       expect(parsed.activeState).toBe("active");
       expect(parsed.mainPid).toBe(4242);
+    },
+  );
+
+  it.skipIf(!IS_LINUX)(
+    "identity shell scripts resolve tr, uname, env, and bash under /usr/bin:/bin only",
+    () => {
+      const restrictedEnv = buildFhvT4RestrictedChildEnv({
+        ...process.env,
+        HOME: process.env.HOME ?? "/tmp",
+      });
+      for (const command of ["tr", "uname", "env", "bash"] as const) {
+        const resolved = execFileSync("bash", ["-c", `command -v ${command}`], {
+          encoding: "utf8",
+          env: restrictedEnv,
+        }).trim();
+        expect(resolved.startsWith("/usr/bin/") || resolved.startsWith("/bin/")).toBe(true);
+      }
+    },
+  );
+
+  it.skipIf(!IS_LINUX)(
+    "production capture-continuity-before executes repository identity scripts without injected JSON",
+    async () => {
+      workDir = mkdtempSync(join(tmpdir(), "fhv-t4-production-before-linux-"));
+      const runId = "fhv-t4a-production-before-path";
+      const orgId = "00000000-0000-4000-8000-000000000436";
+      const targetSha = "3fa104c03e440a9ccf2949a1a571939eeb2d453f";
+      const runDir = prepareContinuityRunFixture(workDir, {
+        runId,
+        organizationId: orgId,
+        targetSha,
+      });
+      const { systemctlBin, pythonBin, binDir } = prepareIdentityMockTooling(workDir);
+      const outputPath = join(workDir, "continuity-before.json");
+      const savedPath = process.env.PATH;
+      const savedDeploymentPath = setProductionContinuityEnv(workDir);
+      process.env.PATH = `${binDir}:/usr/local/malicious:/evil`;
+
+      try {
+        const result = await runFhvT4ContinuityCli({
+          subcommand: "capture-before",
+          runRoot: runDir,
+          runId,
+          organizationId: orgId,
+          targetSha,
+          repoRoot: ROOT,
+          systemctlBin,
+          pythonBin,
+          outputPath,
+          beforePath: "",
+          afterPath: "",
+        });
+        expect(result.exitCode).toBe(0);
+        expect(result.lines).toContain("classification=FHV_T4_CONTINUITY_CAPTURE_BEFORE_OK");
+        const snapshot = JSON.parse(readFileSync(outputPath, "utf8")) as {
+          capturePhase: string;
+          observerSystemdIdentity: { mainPid: number; activeState: string };
+          campaignSystemdIdentity: { execMainPid: number; activeState: string; result: string };
+        };
+        expect(snapshot.capturePhase).toBe("before_disconnect");
+        expect(snapshot.observerSystemdIdentity.mainPid).toBe(4242);
+        expect(snapshot.observerSystemdIdentity.activeState).toBe("active");
+        expect(snapshot.campaignSystemdIdentity.execMainPid).toBe(5151);
+        expect(snapshot.campaignSystemdIdentity.activeState).toBe("inactive");
+        expect(snapshot.campaignSystemdIdentity.result).toBe("success");
+      } finally {
+        restoreProductionContinuityEnv(savedDeploymentPath);
+        if (savedPath === undefined) {
+          delete process.env.PATH;
+        } else {
+          process.env.PATH = savedPath;
+        }
+      }
+    },
+  );
+
+  it.skipIf(!IS_LINUX)(
+    "production capture-continuity-after executes repository identity scripts without injected JSON",
+    async () => {
+      workDir = mkdtempSync(join(tmpdir(), "fhv-t4-production-after-linux-"));
+      const runId = "fhv-t4a-production-after-path";
+      const orgId = "00000000-0000-4000-8000-000000000436";
+      const targetSha = "3fa104c03e440a9ccf2949a1a571939eeb2d453f";
+      const runDir = prepareContinuityRunFixture(workDir, {
+        runId,
+        organizationId: orgId,
+        targetSha,
+      });
+      const { systemctlBin, pythonBin, binDir } = prepareIdentityMockTooling(workDir);
+      const outputPath = join(workDir, "continuity-after.json");
+      const savedPath = process.env.PATH;
+      const savedDeploymentPath = setProductionContinuityEnv(workDir);
+      process.env.PATH = `${binDir}:/usr/local/malicious:/evil`;
+
+      try {
+        const result = await runFhvT4ContinuityCli({
+          subcommand: "capture-after",
+          runRoot: runDir,
+          runId,
+          organizationId: orgId,
+          targetSha,
+          repoRoot: ROOT,
+          systemctlBin,
+          pythonBin,
+          outputPath,
+          beforePath: "",
+          afterPath: "",
+        });
+        expect(result.exitCode).toBe(0);
+        expect(result.lines).toContain("classification=FHV_T4_CONTINUITY_CAPTURE_AFTER_OK");
+        const snapshot = JSON.parse(readFileSync(outputPath, "utf8")) as {
+          capturePhase: string;
+          observerSystemdIdentity: { mainPid: number; activeState: string };
+          campaignSystemdIdentity: { execMainPid: number; activeState: string; result: string };
+        };
+        expect(snapshot.capturePhase).toBe("after_reconnect");
+        expect(snapshot.observerSystemdIdentity.mainPid).toBe(4242);
+        expect(snapshot.campaignSystemdIdentity.execMainPid).toBe(5151);
+      } finally {
+        restoreProductionContinuityEnv(savedDeploymentPath);
+        if (savedPath === undefined) {
+          delete process.env.PATH;
+        } else {
+          process.env.PATH = savedPath;
+        }
+      }
     },
   );
 });
