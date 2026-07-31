@@ -36,6 +36,7 @@ function resolveRecoveryShellPythonBin(): string {
 
 function writeMockTooling(binDir: string, logPath: string, statePath: string): void {
   writeFileSync(statePath, "failed\n");
+  writeFileSync(statePath.replace(/\.state$/, ".enabled"), "enabled\n");
   writeFileSync(
     join(binDir, "uname"),
     `#!/usr/bin/env bash
@@ -50,7 +51,9 @@ echo "$*" >> "${logPath}"
 cmd="$1"
 shift || true
 state_file="${statePath}"
+enabled_file="${statePath.replace(/\.state$/, ".enabled")}"
 read -r campaign_state < "$state_file" || campaign_state=failed
+read -r campaign_enabled < "$enabled_file" 2>/dev/null || campaign_enabled=enabled
 case "$cmd" in
   is-active)
     unit="$1"
@@ -63,6 +66,10 @@ case "$cmd" in
     ;;
   is-enabled)
     unit="$1"
+    if [[ "$unit" == "waia-fhv-campaign.service" && "$campaign_enabled" == "disabled" ]]; then
+      echo disabled
+      exit 1
+    fi
     if [[ "$unit" == "waia-fhv-campaign.service" && "$campaign_state" == "failed" ]]; then
       echo enabled
       exit 0
@@ -93,6 +100,20 @@ case "$cmd" in
       esac
       exit 0
     fi
+    if [[ "$unit" == "waia-fhv-campaign.service" && "$campaign_state" == "recovered" ]]; then
+      case "$field" in
+        ActiveState) echo inactive ;;
+        SubState) echo dead ;;
+        Result) echo success ;;
+        LoadState) echo loaded ;;
+        FragmentPath) echo "/etc/systemd/system/$unit" ;;
+        ExecStart) echo "/usr/bin/node campaign" ;;
+        WorkingDirectory) echo "/opt/waia/waia-failed" ;;
+        EnvironmentFile) echo "/etc/waia/fhv.env" ;;
+        *) echo "" ;;
+      esac
+      exit 0
+    fi
     case "$field" in
       ActiveState) echo inactive ;;
       SubState) echo dead ;;
@@ -108,7 +129,13 @@ case "$cmd" in
   reset-failed)
     echo recovered > "$state_file"
     ;;
-  stop|disable|daemon-reload)
+  disable)
+    unit="$1"
+    if [[ "$unit" == "waia-fhv-campaign.service" || "$unit" == "waia-fhv-observer.service" ]]; then
+      echo disabled > "$enabled_file"
+    fi
+    ;;
+  stop|daemon-reload)
     ;;
   *)
     ;;
