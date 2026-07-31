@@ -7,6 +7,7 @@ import { join } from "node:path";
 
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import { normalizeFhvT4BootId } from "@/lib/trader/observability/fhv-t4-boot-id";
+import { buildFhvT4RestrictedChildEnv } from "@/lib/trader/observability/fhv-t4-restricted-child-env";
 
 export const FHV_T4_COMPLETED_CAMPAIGN_SYSTEMD_IDENTITY_SCHEMA_VERSION =
   "fhv-t4-completed-campaign-systemd-identity/v1" as const;
@@ -213,7 +214,7 @@ export function readFhvT4CompletedCampaignSystemdIdentity(
   const output = execFileSync(
     script,
     ["--systemctl-bin", systemctlBin, "--python-bin", pythonBin, unitName],
-    { encoding: "utf8", env: { ...env, PATH: "" } },
+    { encoding: "utf8", env: buildFhvT4RestrictedChildEnv(env) },
   ).trim();
   return parseFhvT4CompletedCampaignSystemdIdentity(JSON.parse(output));
 }
