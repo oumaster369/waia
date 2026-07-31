@@ -158,6 +158,7 @@ export function createFhvT4aHermeticTransport(
       preauthPhase = false,
       preauthBootstrapPath,
       preauthBootstrapBody,
+      governedRemoteMutation,
     }) => {
       const effectiveRemoteCommand = buildEffectiveRemoteCommand(remoteCommand, asRoot);
       assertExactlyOneSudoTransition(effectiveRemoteCommand, asRoot);

@@ -10,10 +10,8 @@ import {
   runFhvRehearsalCampaign,
 } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
 import { classifyFhvT4CampaignCliExit } from "@/lib/trader/observability/fhv-t4-campaign-cli-verdict";
-import {
-  assertFhvT4PauseArmedBeforeCampaignStart,
-  isFhvT4DeterministicPauseManifest,
-} from "@/lib/trader/observability/fhv-t4-deterministic-pause";
+import { assertFhvT4CampaignEntryBeforeStart } from "@/lib/trader/observability/fhv-t4-resume-entry";
+import { isFhvT4DeterministicPauseManifest } from "@/lib/trader/observability/fhv-t4-deterministic-pause";
 
 const runRoot = process.env.FHV_RUN_ROOT?.trim();
 const runId = process.env.FHV_RUN_ID?.trim();
@@ -37,7 +35,12 @@ async function main(): Promise<void> {
   }
 
   const manifest = assertFhvCampaignRuntimeIdentity({ runRoot, targetSha, runId, organizationId });
-  assertFhvT4PauseArmedBeforeCampaignStart({ runRoot, manifest });
+  assertFhvT4CampaignEntryBeforeStart({
+    runRoot,
+    manifest,
+    targetSha: targetSha!,
+    releaseTag: process.env.FHV_RELEASE_TAG?.trim(),
+  });
   const t4Deterministic = isFhvT4DeterministicPauseManifest(manifest);
   const startedAt = Date.now();
   let heartbeatSequence = 0;
