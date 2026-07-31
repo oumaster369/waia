@@ -22,6 +22,18 @@ const ROOT = process.cwd();
 const RECOVERY_SCRIPT = join(ROOT, "scripts/ops/fhv-t4-supervisor-residual-recovery.sh");
 const IS_LINUX = process.platform === "linux";
 
+function resolveRecoveryShellPythonBin(): string {
+  const fromEnv = process.env.FHV_PYTHON_BIN?.trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+  try {
+    return execFileSync("which", ["python3"], { encoding: "utf8" }).trim();
+  } catch {
+    return "/usr/bin/python3";
+  }
+}
+
 function writeMockTooling(binDir: string, logPath: string, statePath: string): void {
   writeFileSync(statePath, "failed\n");
   writeFileSync(
@@ -152,7 +164,7 @@ Environment=FHV_ORGANIZATION_ID=00000000-0000-4000-8000-000000000436
           "--systemctl-bin",
           join(binDir, "systemctl"),
           "--python-bin",
-          process.execPath,
+          resolveRecoveryShellPythonBin(),
           "--systemd-dir",
           systemdDir,
           "--failed-run-id",
