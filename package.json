@@ -58,6 +58,8 @@
     "trader:fhv:rehearsal": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-rehearsal-cli.ts",
     "trader:fhv:run": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/fhv-full-run-cli.ts",
     "trader:fhv:dataset-qualify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-dataset-qualification-cli.ts",
+    "trader:fhv:freeze-config": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-freeze-config-cli.ts",
+    "trader:fhv:authorize-full": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-authorize-full-cli.ts",
     "trader:fhv:control-replay": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/fhv-control-replay-cli.ts",
     "trader:fhv:t4:status": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-t4-operator-cli.ts status",
     "trader:fhv:t4:arm-pause": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-t4-operator-cli.ts arm-pause",

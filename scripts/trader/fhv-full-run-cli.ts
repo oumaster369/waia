@@ -5,21 +5,19 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { buildFhvConfigurationFreeze } from "@/lib/trader/observability/fhv-configuration-freeze";
 import {
   executeFhvFullHistoricalLaunch,
   FhvFullHistoricalLaunchError,
   type FhvFullHistoricalLaunchInput,
 } from "@/lib/trader/observability/fhv-full-historical-launch";
-import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
-import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
-import { HTR_FHV_DATASET_MANIFEST_SEMANTIC_DIGEST_PIN } from "@/lib/trader/readiness/htr-fhv-run-contract-v0";
+import { readFhvConfigurationFreezeArtifact } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
+import { readFhvDatasetQualificationReceipt } from "@/lib/trader/observability/fhv-dataset-qualification";
+import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RUN_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 const ABSOLUTE_SAFE_PATH = /^\/(?:[^\0/]+\/)*[^\0/]+$/;
-const BENCHMARK_STRATEGY_VERSION = "0.1.0";
 
 function parseArgv(argv: readonly string[]): Map<string, string | true> {
   const parsed = new Map<string, string | true>();
@@ -57,12 +55,14 @@ export function resolveFhvFullRunCliConfig(
     "--organization-id",
     "--operator-id",
     "--artifact-root",
-    "--dataset-digest",
-    "--manifest-digest",
-    "--checkpoint-digest",
-    "--configuration-freeze-digest",
-    "--strategy-version",
-    "--strategy-digest",
+    "--configuration-freeze-path",
+    "--authorization-receipt-path",
+    "--authorization-receipt-digest",
+    "--dataset-qualification-receipt-path",
+    "--dataset-root",
+    "--manifest-path",
+    "--checkout-identity-proof-path",
+    "--repo-path",
     "--bounded-fixture",
   ]);
   for (const key of flags.keys()) {
@@ -83,24 +83,26 @@ export function resolveFhvFullRunCliConfig(
     (flags.get("--operator-id") as string | undefined) ?? env.FHV_OPERATOR_ID?.trim();
   const artifactRoot =
     (flags.get("--artifact-root") as string | undefined) ?? env.FHV_ARTIFACT_ROOT?.trim();
-  const datasetDigest =
-    (flags.get("--dataset-digest") as string | undefined) ??
-    env.FHV_DATASET_DIGEST?.trim() ??
-    (boundedFixture ? "bounded-fixture-digest" : HTR_FHV_DATASET_MANIFEST_SEMANTIC_DIGEST_PIN);
-  const manifestDigest =
-    (flags.get("--manifest-digest") as string | undefined) ??
-    env.FHV_MANIFEST_DIGEST?.trim() ??
-    (boundedFixture ? "bounded-fixture-manifest" : HTR_FHV_DATASET_MANIFEST_SEMANTIC_DIGEST_PIN);
-  const checkpointDigest =
-    (flags.get("--checkpoint-digest") as string | undefined) ??
-    env.FHV_CHECKPOINT_DIGEST?.trim() ??
-    "fhv-full-launch-checkpoint-v0";
-  const strategyVersion =
-    (flags.get("--strategy-version") as string | undefined) ??
-    `${MEAN_REVERSION_V0}@${BENCHMARK_STRATEGY_VERSION}`;
-  const strategyDigest =
-    (flags.get("--strategy-digest") as string | undefined) ??
-    computeSemanticSha256Hex({ strategyVersion });
+  const configurationFreezePath =
+    (flags.get("--configuration-freeze-path") as string | undefined) ??
+    env.FHV_CONFIGURATION_FREEZE_PATH?.trim();
+  const authorizationReceiptPath =
+    (flags.get("--authorization-receipt-path") as string | undefined) ??
+    env.FHV_AUTHORIZATION_RECEIPT_PATH?.trim();
+  const authorizationReceiptDigest =
+    (flags.get("--authorization-receipt-digest") as string | undefined) ??
+    env.FHV_AUTHORIZATION_RECEIPT_DIGEST?.trim();
+  const datasetQualificationReceiptPath =
+    (flags.get("--dataset-qualification-receipt-path") as string | undefined) ??
+    env.FHV_DATASET_QUALIFICATION_RECEIPT_PATH?.trim();
+  const datasetRoot =
+    (flags.get("--dataset-root") as string | undefined) ?? env.FHV_DATASET_ROOT?.trim();
+  const manifestPath =
+    (flags.get("--manifest-path") as string | undefined) ?? env.FHV_MANIFEST_PATH?.trim();
+  const checkoutIdentityProofPath =
+    (flags.get("--checkout-identity-proof-path") as string | undefined) ??
+    env.FHV_CHECKOUT_IDENTITY_PROOF_PATH?.trim();
+  const repoPath = (flags.get("--repo-path") as string | undefined) ?? env.FHV_REPO_PATH?.trim();
 
   if (!releaseSha || !FULL_SHA.test(releaseSha)) {
     throw new FhvFullHistoricalLaunchError(
@@ -126,41 +128,66 @@ export function resolveFhvFullRunCliConfig(
       "--artifact-root must be an absolute safe path.",
     );
   }
+  if (!configurationFreezePath) {
+    throw new FhvFullHistoricalLaunchError(
+      "CONFIGURATION_FREEZE_PATH_REQUIRED",
+      "--configuration-freeze-path is required.",
+    );
+  }
+  if (!authorizationReceiptPath) {
+    throw new FhvFullHistoricalLaunchError(
+      "AUTHORIZATION_RECEIPT_PATH_REQUIRED",
+      "--authorization-receipt-path is required.",
+    );
+  }
+  if (!datasetQualificationReceiptPath) {
+    throw new FhvFullHistoricalLaunchError(
+      "DATASET_QUALIFICATION_RECEIPT_PATH_REQUIRED",
+      "--dataset-qualification-receipt-path is required.",
+    );
+  }
 
-  const configurationFreezeDigest =
-    (flags.get("--configuration-freeze-digest") as string | undefined) ??
-    env.FHV_CONFIGURATION_FREEZE_DIGEST?.trim() ??
-    buildFhvConfigurationFreeze({
-      releaseSha,
-      releaseTag,
-      runId,
-      organizationId,
-      operatorId,
-      datasetDigest,
-      manifestDigest,
-      strategyVersions: [strategyVersion],
-      strategyDigests: [strategyDigest],
-      checkpointDigest,
-    }).configurationFreezeDigest;
+  const resolvedAuthorizationReceiptDigest =
+    authorizationReceiptDigest ??
+    readFhvFullHistoricalAuthorizationReceipt(authorizationReceiptPath).authorizationReceiptDigest;
+
+  if (!boundedFixture && (!datasetRoot || !manifestPath)) {
+    throw new FhvFullHistoricalLaunchError(
+      "OFFICIAL_DATASET_PATHS_REQUIRED",
+      "Official run requires --dataset-root and --manifest-path.",
+    );
+  }
+
+  if (!boundedFixture && !checkoutIdentityProofPath && !(repoPath && releaseTag)) {
+    throw new FhvFullHistoricalLaunchError(
+      "CHECKOUT_IDENTITY_REQUIRED",
+      "Official run requires --checkout-identity-proof-path or --repo-path with --release-tag.",
+    );
+  }
+
+  readFhvConfigurationFreezeArtifact(configurationFreezePath);
+  readFhvDatasetQualificationReceipt(datasetQualificationReceiptPath);
 
   return {
-    authorization: env.FHV_FULL_HISTORICAL_AUTHORIZATION ?? "",
     releaseSha,
     releaseTag,
     runId,
     organizationId,
     operatorId,
-    datasetDigest,
-    manifestDigest,
-    strategyVersions: [strategyVersion],
-    strategyDigests: [strategyDigest],
-    checkpointDigest,
-    configurationFreezeDigest,
     artifactRoot,
+    configurationFreezePath,
+    authorizationReceiptPath,
+    authorizationReceiptDigest: resolvedAuthorizationReceiptDigest,
+    datasetQualificationReceiptPath,
+    datasetRoot,
+    manifestPath,
+    checkoutIdentityProofPath,
+    repoPath,
     rehearsalMode: env.FHV_REHEARSAL_MODE === "true",
     livePathInvoked: env.FHV_LIVE_PATH_INVOKED === "true",
     holdoutAccessRequested: env.FHV_HOLDOUT_ACCESS_REQUESTED === "true",
     boundedFixture,
+    skipCheckoutIdentityVerification: env.FHV_SKIP_CHECKOUT_IDENTITY === "1",
   };
 }
 

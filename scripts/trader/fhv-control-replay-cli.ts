@@ -1,26 +1,28 @@
 /**
- * DEE-436 — FHV control replay CLI (two-run digest compare on bounded fixture).
+ * DEE-436 — FHV control replay CLI (two-run digest compare).
  *
  * Usage:
  *   pnpm trader:fhv:control-replay -- \
  *     --release-sha <40-hex> \
  *     --organization-id <uuid> \
  *     --operator-id <id> \
- *     [--artifact-root /abs/path]
+ *     --configuration-freeze-path <path> \
+ *     --authorization-receipt-path <path> \
+ *     --dataset-qualification-receipt-path <path> \
+ *     [--artifact-root /abs/path] \
+ *     [--bounded-fixture]
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
-import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
-import { FHV_FULL_HISTORICAL_VALIDATION_AUTHORIZATION } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { executeFhvFullHistoricalLaunch } from "@/lib/trader/observability/fhv-full-historical-launch";
+import { readFhvConfigurationFreezeArtifact } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
+import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const BENCHMARK_STRATEGY_VERSION = "0.1.0";
 
 export type FhvControlReplayResult = Readonly<{
   schemaVersion: "fhv-control-replay/v1";
@@ -31,13 +33,17 @@ export type FhvControlReplayResult = Readonly<{
   failureReason?: string;
 }>;
 
-function parseArgv(argv: readonly string[]): Map<string, string> {
-  const parsed = new Map<string, string>();
+function parseArgv(argv: readonly string[]): Map<string, string | true> {
+  const parsed = new Map<string, string | true>();
   const tokens = argv[0] === "--" ? argv.slice(1) : argv;
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
     if (!token.startsWith("--")) {
       throw new Error(`Unexpected positional argument: ${token}`);
+    }
+    if (token === "--bounded-fixture") {
+      parsed.set(token, true);
+      continue;
     }
     const value = tokens[index + 1]?.trim();
     if (!value || value.startsWith("--")) {
@@ -56,7 +62,13 @@ export function resolveFhvControlReplayCliConfig(
   releaseSha: string;
   organizationId: string;
   operatorId: string;
+  configurationFreezePath: string;
+  authorizationReceiptPath: string;
+  datasetQualificationReceiptPath: string;
+  datasetRoot?: string;
+  manifestPath?: string;
   artifactRoot?: string;
+  boundedFixture: boolean;
 } {
   const flags = parseArgv(argv);
   const allowed = new Set([
@@ -64,6 +76,12 @@ export function resolveFhvControlReplayCliConfig(
     "--organization-id",
     "--operator-id",
     "--artifact-root",
+    "--configuration-freeze-path",
+    "--authorization-receipt-path",
+    "--dataset-qualification-receipt-path",
+    "--dataset-root",
+    "--manifest-path",
+    "--bounded-fixture",
   ]);
   for (const key of flags.keys()) {
     if (!allowed.has(key)) {
@@ -71,14 +89,32 @@ export function resolveFhvControlReplayCliConfig(
     }
   }
 
-  const releaseSha = flags.get("--release-sha") ?? env.FHV_RELEASE_SHA?.trim();
+  const releaseSha =
+    (flags.get("--release-sha") as string | undefined) ?? env.FHV_RELEASE_SHA?.trim();
   const organizationId =
-    flags.get("--organization-id") ??
+    (flags.get("--organization-id") as string | undefined) ??
     env.FHV_ORGANIZATION_ID?.trim() ??
     "00000000-0000-4000-8000-000000000436";
   const operatorId =
-    flags.get("--operator-id") ?? env.FHV_OPERATOR_ID?.trim() ?? "control-replay-operator";
-  const artifactRoot = flags.get("--artifact-root") ?? env.FHV_ARTIFACT_ROOT?.trim();
+    (flags.get("--operator-id") as string | undefined) ??
+    env.FHV_OPERATOR_ID?.trim() ??
+    "control-replay-operator";
+  const artifactRoot =
+    (flags.get("--artifact-root") as string | undefined) ?? env.FHV_ARTIFACT_ROOT?.trim();
+  const configurationFreezePath =
+    (flags.get("--configuration-freeze-path") as string | undefined) ??
+    env.FHV_CONFIGURATION_FREEZE_PATH?.trim();
+  const authorizationReceiptPath =
+    (flags.get("--authorization-receipt-path") as string | undefined) ??
+    env.FHV_AUTHORIZATION_RECEIPT_PATH?.trim();
+  const datasetQualificationReceiptPath =
+    (flags.get("--dataset-qualification-receipt-path") as string | undefined) ??
+    env.FHV_DATASET_QUALIFICATION_RECEIPT_PATH?.trim();
+  const datasetRoot =
+    (flags.get("--dataset-root") as string | undefined) ?? env.FHV_DATASET_ROOT?.trim();
+  const manifestPath =
+    (flags.get("--manifest-path") as string | undefined) ?? env.FHV_MANIFEST_PATH?.trim();
+  const boundedFixture = flags.has("--bounded-fixture");
 
   if (!releaseSha) {
     throw new Error("FHV_RELEASE_SHA or --release-sha required");
@@ -89,12 +125,30 @@ export function resolveFhvControlReplayCliConfig(
   if (!UUID_V4.test(organizationId)) {
     throw new Error(`INVALID_ORGANIZATION_ID: ${organizationId}`);
   }
+  if (!configurationFreezePath) {
+    throw new Error("--configuration-freeze-path required");
+  }
+  if (!authorizationReceiptPath) {
+    throw new Error("--authorization-receipt-path required");
+  }
+  if (!datasetQualificationReceiptPath) {
+    throw new Error("--dataset-qualification-receipt-path required");
+  }
+  if (!boundedFixture && (!datasetRoot || !manifestPath)) {
+    throw new Error("Official control replay requires --dataset-root and --manifest-path");
+  }
 
   return {
     releaseSha,
     organizationId,
     operatorId,
+    configurationFreezePath,
+    authorizationReceiptPath,
+    datasetQualificationReceiptPath,
+    datasetRoot,
+    manifestPath,
     ...(artifactRoot ? { artifactRoot } : {}),
+    boundedFixture,
   };
 }
 
@@ -102,7 +156,15 @@ export async function runFhvControlReplay(input: {
   releaseSha: string;
   organizationId: string;
   operatorId: string;
+  configurationFreezePath: string;
+  authorizationReceiptPath: string;
+  datasetQualificationReceiptPath: string;
+  datasetRoot?: string;
+  manifestPath?: string;
   artifactRoot?: string;
+  boundedFixture?: boolean;
+  configurationFreezePathRunTwo?: string;
+  authorizationReceiptPathRunTwo?: string;
 }): Promise<FhvControlReplayResult> {
   if (!FULL_SHA.test(input.releaseSha)) {
     return {
@@ -114,52 +176,51 @@ export async function runFhvControlReplay(input: {
 
   const artifactRoot = input.artifactRoot ?? mkdtempSync(join(tmpdir(), "fhv-control-replay-"));
   const shouldCleanup = !input.artifactRoot;
-  const strategyVersion = `${MEAN_REVERSION_V0}@${BENCHMARK_STRATEGY_VERSION}`;
-  const strategyDigest = computeSemanticSha256Hex({ strategyVersion });
-  const datasetDigest = "bounded-control-replay-digest";
-  const manifestDigest = "bounded-control-replay-manifest";
-  const checkpointDigest = "bounded-control-replay-checkpoint";
-
-  const { buildFhvConfigurationFreeze } =
-    await import("@/lib/trader/observability/fhv-configuration-freeze");
+  const boundedFixture = input.boundedFixture === true;
 
   try {
-    const base = {
-      authorization: FHV_FULL_HISTORICAL_VALIDATION_AUTHORIZATION,
-      releaseSha: input.releaseSha,
-      organizationId: input.organizationId,
-      operatorId: input.operatorId,
-      datasetDigest,
-      manifestDigest,
-      strategyVersions: [strategyVersion] as const,
-      strategyDigests: [strategyDigest] as const,
-      checkpointDigest,
-      artifactRoot,
-      boundedFixture: true,
-      maxCycles: 15,
-    };
+    const freezeArtifact = readFhvConfigurationFreezeArtifact(input.configurationFreezePath);
+    const authReceipt = readFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);
 
     const runOneId = `fhv-control-replay-1-${input.releaseSha.slice(0, 8)}`;
     const runTwoId = `fhv-control-replay-2-${input.releaseSha.slice(0, 8)}`;
 
-    const freezeOne = buildFhvConfigurationFreeze({
-      ...base,
-      runId: runOneId,
-    });
-    const freezeTwo = buildFhvConfigurationFreeze({
-      ...base,
-      runId: runTwoId,
-    });
+    const baseLaunch = {
+      releaseSha: input.releaseSha,
+      organizationId: input.organizationId,
+      operatorId: input.operatorId,
+      artifactRoot,
+      configurationFreezePath: input.configurationFreezePath,
+      datasetQualificationReceiptPath: input.datasetQualificationReceiptPath,
+      boundedFixture,
+      skipCheckoutIdentityVerification: true,
+      maxCycles: 15,
+      ...(boundedFixture
+        ? {}
+        : {
+            datasetRoot: input.datasetRoot,
+            manifestPath: input.manifestPath,
+          }),
+    };
 
     const resultOne = await executeFhvFullHistoricalLaunch({
-      ...base,
+      ...baseLaunch,
       runId: runOneId,
-      configurationFreezeDigest: freezeOne.configurationFreezeDigest,
+      authorizationReceiptPath: input.authorizationReceiptPath,
+      authorizationReceiptDigest: authReceipt.authorizationReceiptDigest,
     });
+
+    const freezePathTwo = input.configurationFreezePathRunTwo ?? input.configurationFreezePath;
+    const authReceiptTwoPath =
+      input.authorizationReceiptPathRunTwo ?? input.authorizationReceiptPath;
+    const authReceiptTwo = readFhvFullHistoricalAuthorizationReceipt(authReceiptTwoPath);
+
     const resultTwo = await executeFhvFullHistoricalLaunch({
-      ...base,
+      ...baseLaunch,
       runId: runTwoId,
-      configurationFreezeDigest: freezeTwo.configurationFreezeDigest,
+      configurationFreezePath: freezePathTwo,
+      authorizationReceiptPath: authReceiptTwoPath,
+      authorizationReceiptDigest: authReceiptTwo.authorizationReceiptDigest,
     });
 
     const runOneDigest = resultOne.semanticReproDigest;

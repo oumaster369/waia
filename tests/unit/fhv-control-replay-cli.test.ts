@@ -12,12 +12,33 @@ import {
   resolveFhvControlReplayCliConfig,
   runFhvControlReplay,
 } from "@/scripts/trader/fhv-control-replay-cli";
+import { setupFhvControlReplayArtifacts } from "@/tests/helpers/fhv-official-path-test-fixtures";
 
 const RELEASE_SHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const ORG_ID = "00000000-0000-4000-8000-000000000436";
 
 describe("DEE-436 FHV control-replay CLI", () => {
   it("parses --release-sha from argv (not argv[3] positional)", () => {
+    expect(() =>
+      resolveFhvControlReplayCliConfig({}, [
+        "--",
+        "--release-sha",
+        RELEASE_SHA,
+        "--organization-id",
+        ORG_ID,
+        "--operator-id",
+        "unit-operator",
+        "--configuration-freeze-path",
+        "/tmp/freeze.json",
+        "--authorization-receipt-path",
+        "/tmp/auth.json",
+        "--dataset-qualification-receipt-path",
+        "/tmp/qualify.json",
+        "--artifact-root",
+        "/tmp/fhv-control-replay-parse",
+        "--bounded-fixture",
+      ]),
+    ).not.toThrow();
     const config = resolveFhvControlReplayCliConfig({}, [
       "--",
       "--release-sha",
@@ -26,13 +47,21 @@ describe("DEE-436 FHV control-replay CLI", () => {
       ORG_ID,
       "--operator-id",
       "unit-operator",
+      "--configuration-freeze-path",
+      "/tmp/freeze.json",
+      "--authorization-receipt-path",
+      "/tmp/auth.json",
+      "--dataset-qualification-receipt-path",
+      "/tmp/qualify.json",
       "--artifact-root",
       "/tmp/fhv-control-replay-parse",
+      "--bounded-fixture",
     ]);
     expect(config.releaseSha).toBe(RELEASE_SHA);
     expect(config.organizationId).toBe(ORG_ID);
     expect(config.operatorId).toBe("unit-operator");
     expect(config.artifactRoot).toBe("/tmp/fhv-control-replay-parse");
+    expect(config.boundedFixture).toBe(true);
   });
 
   it("rejects invalid release sha", () => {
@@ -44,11 +73,23 @@ describe("DEE-436 FHV control-replay CLI", () => {
   it("two-run bounded control replay yields CONTROL_REPLAY=PASS", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-control-replay-unit-"));
     try {
+      const prep = setupFhvControlReplayArtifacts({
+        artifactRoot: root,
+        releaseSha: RELEASE_SHA,
+        organizationId: ORG_ID,
+        operatorId: "unit-control-replay-operator",
+      });
       const result = await runFhvControlReplay({
         releaseSha: RELEASE_SHA,
         organizationId: ORG_ID,
         operatorId: "unit-control-replay-operator",
-        artifactRoot: root,
+        artifactRoot: join(root, "runs"),
+        configurationFreezePath: prep.configurationFreezePathRunOne,
+        configurationFreezePathRunTwo: prep.configurationFreezePathRunTwo,
+        authorizationReceiptPath: prep.authorizationReceiptPathRunOne,
+        authorizationReceiptPathRunTwo: prep.authorizationReceiptPathRunTwo,
+        datasetQualificationReceiptPath: prep.qualificationReceiptPath,
+        boundedFixture: true,
       });
       expect(result, JSON.stringify(result)).toMatchObject({
         classification: "CONTROL_REPLAY=PASS",

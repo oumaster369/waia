@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "fhv-dataset-manifest/v1",
+  "venueScope": "HTX_ONLY",
+  "marketType": "SPOT",
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT"
+  ],
+  "baseInterval": "1m",
+  "derivedIntervals": [
+    "15m",
+    "1h",
+    "4h",
+    "1d"
+  ],
+  "derivedIntervalRule": "CLOSED_BARS_ONLY",
+  "sourceObjects": [
+    {
+      "sourceObjectId": "tests/fixtures/trader/fhv-official-real-schema",
+      "retrieval": {
+        "retrievedAtUtc": "2026-01-01T00:00:00.000Z",
+        "method": "fixture-generate",
+        "uri": "tests/fixtures/trader/fhv-official-real-schema"
+      },
+      "sourceChecksumSha256": "7d8e9e624bae73e513b57217548680862078e5af9337fb4ddacc500d9770b7c3"
+    }
+  ],
+  "normalizedContentDigest": "07fa499356831f492737c4de413be8d695e0df17642a7248ce7148efb90aa74a",
+  "barSetDigest": "7d8e9e624bae73e513b57217548680862078e5af9337fb4ddacc500d9770b7c3",
+  "perBarContentDigestAlgo": "computeBarContentDigest",
+  "expectedBarCount": 120,
+  "observedBarCount": 120,
+  "intervalBoundaries": {
+    "startUtc": "2020-01-01T00:00:00.000Z",
+    "endUtc": "2026-01-01T00:00:00.000Z"
+  },
+  "integrityResults": {
+    "monotonic": true,
+    "duplicates": false,
+    "outOfOrder": false,
+    "nonFinite": false,
+    "negativeVolume": false,
+    "invalidRelation": false
+  },
+  "gaps": [],
+  "gapPolicy": "FHV_GAP_POLICY_V1",
+  "gapPolicyResult": "PASS",
+  "mtfDerivation": {
+    "rule": "CLOSED_BARS_ONLY",
+    "intervals": [
+      "15m",
+      "1h",
+      "4h",
+      "1d"
+    ]
+  },
+  "pointInTimeAvailability": {
+    "availabilityModel": "sidecar-v3-timeline"
+  },
+  "absentLaneRepresentation": "SIDECAR_LANE_ABSENT",
+  "partitions": {
+    "development": {
+      "startUtc": "2020-01-01T00:00:00.000Z",
+      "endUtc": "2023-01-01T00:00:00.000Z"
+    },
+    "walkForward": {
+      "startUtc": "2023-01-01T00:00:00.000Z",
+      "endUtc": "2025-01-01T00:00:00.000Z"
+    },
+    "blindHoldout": {
+      "startUtc": "2025-01-01T00:00:00.000Z",
+      "endUtc": "2026-01-01T00:00:00.000Z",
+      "status": "SEALED_NOT_ACCESSED"
+    }
+  },
+  "holdoutSeal": {
+    "contaminationStatus": "RESERVED_SEALED_NOT_ACCESSED"
+  },
+  "manifestVersion": 1,
+  "manifestSemanticDigest": "d83d0add54961d121809bf3443992214137e388028c3751d459dedff13905046"
+}

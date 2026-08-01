@@ -1,62 +1,129 @@
 /**
- * DEE-436 — FHV dataset qualification CLI (bounded fixture).
+ * DEE-436 — FHV dataset qualification CLI.
  *
- * Usage: pnpm trader:fhv:dataset-qualify -- [--fixture-path <path>]
+ * Usage:
+ *   pnpm trader:fhv:dataset-qualify -- --dataset-root <path> --manifest-path <path> [--receipt-dir <path>]
+ *   pnpm trader:fhv:dataset-qualify -- --bounded-fixture [--receipt-dir <path>]
  */
 
-import { runIngressManifestEvidenceHarness } from "@/lib/trader/market-data/dataset/ingress-manifest-evidence-harness";
-import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
-import { FHV_DATASET_PARTITIONS_V1 } from "@/lib/trader/market-data/dataset/fhv-dataset-manifest";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+
+import {
+  qualifyFhvBoundedFixtureDataset,
+  qualifyFhvOfficialDataset,
+  writeFhvDatasetQualificationReceiptAtomic,
+  type FhvDatasetQualificationReceiptV1,
+} from "@/lib/trader/observability/fhv-dataset-qualification";
 
 export type FhvDatasetQualificationResult = Readonly<{
   schemaVersion: "fhv-dataset-qualification/v1";
   classification: "DATASET_QUALIFICATION=PASS" | "DATASET_QUALIFICATION=FAIL";
-  fixturePath: string;
+  datasetRoot: string;
+  manifestPath: string;
+  datasetContentDigest: string;
   manifestSemanticDigest: string;
   partitionsDigest: string;
   gapPolicyId: string;
+  qualificationReceiptPath?: string;
   failureReason?: string;
 }>;
 
-export function runFhvDatasetQualification(): FhvDatasetQualificationResult {
-  try {
-    const harness = runIngressManifestEvidenceHarness();
-    const partitionsDigest = computeSemanticSha256Hex(FHV_DATASET_PARTITIONS_V1);
-    const manifestSemanticDigest = computeSemanticSha256Hex({
-      schemaVersion: harness.manifest.schemaVersion,
-      barSetDigest: harness.manifest.barSetDigest,
-      normalizedContentDigest: harness.manifest.normalizedContentDigest,
-      partitions: harness.manifest.partitions,
-      holdoutSeal: harness.manifest.holdoutSeal,
-    });
+function parseArgv(argv: readonly string[]): Map<string, string | true> {
+  const parsed = new Map<string, string | true>();
+  const tokens = argv[0] === "--" ? argv.slice(1) : argv;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    if (!token.startsWith("--")) {
+      throw new Error(`Unexpected positional argument: ${token}`);
+    }
+    if (token === "--bounded-fixture") {
+      parsed.set(token, true);
+      continue;
+    }
+    const value = tokens[index + 1]?.trim();
+    if (!value) {
+      throw new Error(`Missing value for ${token}`);
+    }
+    parsed.set(token, value);
+    index += 1;
+  }
+  return parsed;
+}
 
-    if (harness.manifest.holdoutSeal.contaminationStatus !== "RESERVED_SEALED_NOT_ACCESSED") {
-      return {
-        schemaVersion: "fhv-dataset-qualification/v1",
-        classification: "DATASET_QUALIFICATION=FAIL",
-        fixturePath: harness.fixturePath,
-        manifestSemanticDigest,
-        partitionsDigest,
-        gapPolicyId: harness.gapPolicy.policyId,
-        failureReason: "HOLDOUT_CONTAMINATION",
-      };
+export function resolveFhvDatasetQualificationCliConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  argv: readonly string[] = process.argv.slice(2),
+): {
+  boundedFixture: boolean;
+  datasetRoot?: string;
+  manifestPath?: string;
+  receiptDir?: string;
+} {
+  const flags = parseArgv(argv);
+  const boundedFixture = flags.has("--bounded-fixture");
+  const datasetRoot =
+    (flags.get("--dataset-root") as string | undefined) ?? env.FHV_DATASET_ROOT?.trim();
+  const manifestPath =
+    (flags.get("--manifest-path") as string | undefined) ?? env.FHV_MANIFEST_PATH?.trim();
+  const receiptDir =
+    (flags.get("--receipt-dir") as string | undefined) ?? env.FHV_RECEIPT_DIR?.trim();
+  return { boundedFixture, datasetRoot, manifestPath, receiptDir };
+}
+
+export function runFhvDatasetQualification(input?: {
+  boundedFixture?: boolean;
+  datasetRoot?: string;
+  manifestPath?: string;
+  receiptDir?: string;
+}): FhvDatasetQualificationResult {
+  const config = input ?? resolveFhvDatasetQualificationCliConfig();
+  try {
+    const body = config.boundedFixture
+      ? qualifyFhvBoundedFixtureDataset()
+      : qualifyFhvOfficialDataset({
+          datasetRoot: config.datasetRoot!,
+          manifestPath: config.manifestPath!,
+        });
+
+    let receipt: FhvDatasetQualificationReceiptV1 | undefined;
+    if (config.receiptDir) {
+      mkdirSync(config.receiptDir, { recursive: true });
+      receipt = writeFhvDatasetQualificationReceiptAtomic({
+        receiptDir: config.receiptDir,
+        datasetRoot: body.datasetRoot,
+        manifestPath: body.manifestPath,
+        boundedFixture: config.boundedFixture,
+      });
     }
 
     return {
       schemaVersion: "fhv-dataset-qualification/v1",
-      classification: "DATASET_QUALIFICATION=PASS",
-      fixturePath: harness.fixturePath,
-      manifestSemanticDigest,
-      partitionsDigest,
-      gapPolicyId: harness.gapPolicy.policyId,
+      classification: body.classification,
+      datasetRoot: body.datasetRoot,
+      manifestPath: body.manifestPath,
+      datasetContentDigest: body.datasetContentDigest,
+      manifestSemanticDigest: body.manifestSemanticDigest,
+      partitionsDigest: body.partitionsDigest,
+      gapPolicyId: body.gapPolicyId,
+      ...(receipt
+        ? {
+            qualificationReceiptPath: join(
+              config.receiptDir!,
+              "fhv-dataset-qualification-receipt.v1.json",
+            ),
+          }
+        : {}),
     };
   } catch (error) {
     return {
       schemaVersion: "fhv-dataset-qualification/v1",
       classification: "DATASET_QUALIFICATION=FAIL",
-      fixturePath: "unknown",
+      datasetRoot: config.datasetRoot ?? "unknown",
+      manifestPath: config.manifestPath ?? "unknown",
+      datasetContentDigest: "0".repeat(64),
       manifestSemanticDigest: "0".repeat(64),
-      partitionsDigest: computeSemanticSha256Hex(FHV_DATASET_PARTITIONS_V1),
+      partitionsDigest: "0".repeat(64),
       gapPolicyId: "unknown",
       failureReason: error instanceof Error ? error.message : String(error),
     };
@@ -64,7 +131,8 @@ export function runFhvDatasetQualification(): FhvDatasetQualificationResult {
 }
 
 async function main(): Promise<void> {
-  const result = runFhvDatasetQualification();
+  const config = resolveFhvDatasetQualificationCliConfig();
+  const result = runFhvDatasetQualification(config);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   process.stdout.write(`${result.classification}\n`);
   process.exitCode = result.classification === "DATASET_QUALIFICATION=PASS" ? 0 : 1;

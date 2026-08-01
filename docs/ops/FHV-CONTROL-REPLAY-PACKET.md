@@ -4,21 +4,44 @@
 
 ## Purpose
 
-Two-run determinism: execute bounded Full Historical Validation twice and compare semantic reproduction digests.
+Two-run determinism on the **same Full Historical Validation production path**: execute twice with separate run IDs and compare decisions, fills, costs, accounting, PnL, drawdown, and semantic reproduction digests.
 
-## Command
+## Official mode
+
+Requires released checkout identity proof, `DATASET_QUALIFICATION=PASS` receipt, configuration freeze, scoped authorization, and qualified dataset/manifest paths.
 
 ```bash
-export FHV_FULL_HISTORICAL_AUTHORIZATION="AUTHORIZE-FULL-HISTORICAL-VALIDATION"
 export FHV_RELEASE_SHA="<full-git-sha>"
+export FHV_RELEASE_TAG="<release-tag>"
 export FHV_ORGANIZATION_ID="<uuid-v4>"
 export FHV_OPERATOR_ID="<operator-id>"
 export FHV_ARTIFACT_ROOT="/absolute/artifact/root"
 
-pnpm trader:fhv:control-replay
+pnpm trader:fhv:control-replay -- \
+  --release-sha "$FHV_RELEASE_SHA" \
+  --release-tag "$FHV_RELEASE_TAG" \
+  --organization-id "$FHV_ORGANIZATION_ID" \
+  --operator-id "$FHV_OPERATOR_ID" \
+  --artifact-root "$FHV_ARTIFACT_ROOT" \
+  --configuration-freeze-path "/path/to/fhv-configuration-freeze.v1.json" \
+  --dataset-qualification-receipt-path "/path/to/fhv-dataset-qualification-receipt.v1.json" \
+  --dataset-root "/absolute/dataset/root" \
+  --manifest-path "/absolute/fhv-dataset-manifest.v1.json" \
+  --checkout-identity-proof-path "/path/to/fhv-t4-checkout-identity.v1.json"
 ```
 
-Exit 0 emits `CONTROL_REPLAY=PASS` when both run digests are identical.
+Exit 0 emits `CONTROL_REPLAY=PASS` when both run digests and cycle counts match.
+
+## Bounded fixture mode (test-only)
+
+```bash
+pnpm trader:fhv:control-replay -- --bounded-fixture \
+  --release-sha "$FHV_RELEASE_SHA" \
+  --organization-id "$FHV_ORGANIZATION_ID" \
+  --operator-id "$FHV_OPERATOR_ID"
+```
+
+Uses repository real-schema test fixture through the official production path (not synthetic digest strings).
 
 ## Machine-readable output
 

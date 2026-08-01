@@ -1,0 +1,224 @@
+{
+  "bars": [
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:00:00.000Z",
+      "barCloseTime": "2023-01-01T00:01:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:01:00.000Z",
+      "barCloseTime": "2023-01-01T00:02:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:02:00.000Z",
+      "barCloseTime": "2023-01-01T00:03:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:03:00.000Z",
+      "barCloseTime": "2023-01-01T00:04:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:04:00.000Z",
+      "barCloseTime": "2023-01-01T00:05:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:05:00.000Z",
+      "barCloseTime": "2023-01-01T00:06:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:06:00.000Z",
+      "barCloseTime": "2023-01-01T00:07:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:07:00.000Z",
+      "barCloseTime": "2023-01-01T00:08:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:08:00.000Z",
+      "barCloseTime": "2023-01-01T00:09:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:09:00.000Z",
+      "barCloseTime": "2023-01-01T00:10:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:10:00.000Z",
+      "barCloseTime": "2023-01-01T00:11:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:11:00.000Z",
+      "barCloseTime": "2023-01-01T00:12:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:12:00.000Z",
+      "barCloseTime": "2023-01-01T00:13:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:13:00.000Z",
+      "barCloseTime": "2023-01-01T00:14:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:14:00.000Z",
+      "barCloseTime": "2023-01-01T00:15:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:15:00.000Z",
+      "barCloseTime": "2023-01-01T00:16:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:16:00.000Z",
+      "barCloseTime": "2023-01-01T00:17:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:17:00.000Z",
+      "barCloseTime": "2023-01-01T00:18:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:18:00.000Z",
+      "barCloseTime": "2023-01-01T00:19:00.000Z"
+    },
+    {
+      "symbol": "BTC/USDT",
+      "interval": "1m",
+      "open": "65000.00",
+      "high": "65000.00",
+      "low": "65000.00",
+      "close": "65000.00",
+      "volume": "1.00",
+      "barOpenTime": "2023-01-01T00:19:00.000Z",
+      "barCloseTime": "2023-01-01T00:20:00.000Z"
+    }
+  ]
+}
