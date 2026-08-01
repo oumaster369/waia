@@ -40,6 +40,20 @@ const HERMETIC_TRADER_CLI_PRELUDE = join(
   "scripts/trader/trader-cli-server-only-prelude.cjs",
 );
 
+/**
+ * Test-equivalent of production `fhv-t4-service-user-exec.sh` `env -i` for package CLIs.
+ * Workstation `FHV_SYSTEMCTL_BIN` / `FHV_PYTHON_BIN` must never be inherited — production
+ * PASS_ENV and the strict EnvironmentFile parser do not forward those keys.
+ */
+function buildHermeticServiceUserChildEnv(
+  extras: Readonly<Record<string, string>>,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...extras };
+  delete env.FHV_SYSTEMCTL_BIN;
+  delete env.FHV_PYTHON_BIN;
+  return env;
+}
+
 const HERMETIC_CAMPAIGN_SYNC_TIMEOUT_MS = 180_000;
 
 const HERMETIC_STRICT_CLOSURE_PACKAGE_SCRIPTS = new Set([
@@ -386,12 +400,11 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       {
         cwd: workspaceRoot,
         encoding: "utf8",
-        env: {
-          ...process.env,
+        env: buildHermeticServiceUserChildEnv({
           WAIA_TRADER_CLI: "1",
           VITEST: "",
           FHV_T4_SERVICE_USER_IDS_JSON: hermeticServiceUserIdsJson(),
-        },
+        }),
       },
     );
     return {
@@ -487,14 +500,13 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
       {
         cwd: workspaceRoot,
         encoding: "utf8",
-        env: {
-          ...process.env,
+        env: buildHermeticServiceUserChildEnv({
           WAIA_TRADER_CLI: "1",
           VITEST: "",
           FHV_T4_OBSERVER_SYSTEMD_IDENTITY_JSON: JSON.stringify(buildHermeticObserverIdentity()),
           FHV_T4_CAMPAIGN_SYSTEMD_IDENTITY_JSON: JSON.stringify(buildHermeticCampaignIdentity()),
           FHV_T4_SERVICE_USER_IDS_JSON: hermeticServiceUserIdsJson(),
-        },
+        }),
       },
     );
     return {

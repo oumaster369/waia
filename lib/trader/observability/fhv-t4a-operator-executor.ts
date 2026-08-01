@@ -870,6 +870,10 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         ctx.continuityBefore,
         "--after",
         ctx.continuityAfter,
+        "--systemctl-bin",
+        b.systemctlBin,
+        "--python-bin",
+        b.pythonBin,
       ]);
       requireOk(result, step, "verify continuity");
       const continuityVerificationProofPath = resolveFhvT4ContinuityVerificationProofPath(
