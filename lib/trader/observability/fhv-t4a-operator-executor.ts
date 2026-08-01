@@ -97,8 +97,9 @@ function parseClassification(stdout: string): string {
 
 /**
  * Operator step terminal classification must be exactly FHV_T4A_STEP_<N>_OK.
- * Downstream CLIs may emit tool-specific success classes (e.g. checkout identity);
- * those are accepted as success proof but must not replace the step terminal class.
+ * Downstream CLIs may emit tool-specific success classes; those are accepted only when
+ * explicitly allowlisted and must not replace the step terminal class.
+ * Empty/absent classification fails closed.
  */
 function requireOperatorStepOkClassification(
   step: number,
@@ -107,7 +108,13 @@ function requireOperatorStepOkClassification(
 ): string {
   const stepOk = `FHV_T4A_STEP_${step}_OK`;
   const parsed = parseClassification(stdout);
-  if (!parsed || parsed === stepOk || acceptedCliClasses.includes(parsed)) {
+  if (!parsed) {
+    throw new FhvT4aOperatorError(
+      `FHV_T4A_STEP_${step}_CLASSIFICATION_MISMATCH`,
+      `Step ${step} CLI classification missing; expected ${stepOk} or one of [${acceptedCliClasses.join(", ")}].`,
+    );
+  }
+  if (parsed === stepOk || acceptedCliClasses.includes(parsed)) {
     return stepOk;
   }
   throw new FhvT4aOperatorError(
@@ -467,7 +474,7 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         step,
         ...result,
         classification: requireOperatorStepOkClassification(step, result.stdout, [
-          "FHV_T4_CHECKOUT_IDENTITY_OK",
+          "FHV_T4_CHECKOUT_IDENTITY_PROOF_OK",
         ]),
         prerequisiteProofDigests: prereq,
         resultingProofDigests: proofs,

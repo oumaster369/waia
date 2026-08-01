@@ -57,6 +57,7 @@ function buildHermeticServiceUserChildEnv(
 const HERMETIC_CAMPAIGN_SYNC_TIMEOUT_MS = 180_000;
 
 const HERMETIC_STRICT_CLOSURE_PACKAGE_SCRIPTS = new Set([
+  "trader:fhv:t4:record-checkout-identity",
   "trader:fhv:t4:write-observer-qualification-proof",
   "trader:fhv:t4:ingest-host-probe",
   "trader:fhv:t4:verify-deployment",
@@ -376,12 +377,68 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
     }
   };
 
+  /**
+   * Materialize a real git checkout for CLIs that verify release identity
+   * (record-checkout-identity). Uses clone --shared so tags created here do not
+   * mutate the operator workstation repository refs.
+   */
+  const ensureHermeticReleaseCheckout = (): void => {
+    recordWrite(repoRoot);
+    let head = "";
+    try {
+      head = execFileSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      }).trim();
+    } catch {
+      head = "";
+    }
+    if (head.toLowerCase() !== options.targetSha.toLowerCase()) {
+      rmSync(repoRoot, { recursive: true, force: true });
+      execFileSync(
+        "git",
+        ["clone", "--shared", "--no-checkout", options.localReleaseRoot, repoRoot],
+        { stdio: "pipe" },
+      );
+      execFileSync("git", ["-C", repoRoot, "checkout", "--detach", options.targetSha], {
+        stdio: "pipe",
+      });
+    }
+    const tagList = execFileSync("git", ["-C", repoRoot, "tag", "-l", options.releaseTag], {
+      encoding: "utf8",
+    }).trim();
+    let tagPeel = "";
+    if (tagList) {
+      try {
+        tagPeel = execFileSync("git", ["-C", repoRoot, "rev-parse", `${options.releaseTag}^{}`], {
+          encoding: "utf8",
+        })
+          .trim()
+          .toLowerCase();
+      } catch {
+        tagPeel = "";
+      }
+    }
+    if (tagPeel !== options.targetSha.toLowerCase()) {
+      if (tagList) {
+        execFileSync("git", ["-C", repoRoot, "tag", "-d", options.releaseTag], { stdio: "pipe" });
+      }
+      execFileSync("git", ["-C", repoRoot, "tag", options.releaseTag, options.targetSha], {
+        stdio: "pipe",
+      });
+    }
+    mkdirSync(join(repoRoot, ".ops/rendered-units"), { recursive: true });
+  };
+
   const runHermeticStrictPackageScript = (
     packageScript: string,
     args: readonly string[],
   ): FhvT4aHermeticSshResult => {
     ensureRehearsalEvidenceChain();
-    mkdirSync(repoRoot, { recursive: true });
+    if (packageScript === "trader:fhv:t4:record-checkout-identity") {
+      ensureHermeticReleaseCheckout();
+    } else {
+      mkdirSync(repoRoot, { recursive: true });
+    }
     const workspaceRoot = process.cwd();
     const subcommand = packageScript.slice("trader:fhv:t4:".length);
     const cliPath = join(workspaceRoot, "scripts/trader/fhv-t4-closure-cli.ts");
@@ -530,27 +587,6 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
         stdout: `${JSON.stringify({ runDir, manifestPath: join(runDir, "fhv-rehearsal-manifest.v1.json") })}\n`,
         stderr: "",
       };
-    }
-    if (packageScript === "trader:fhv:t4:record-checkout-identity") {
-      const withoutDigest = {
-        schemaVersion: "fhv-t4-checkout-identity/v1" as const,
-        repoPath: repoRoot,
-        releaseSha: options.targetSha,
-        releaseTag: options.releaseTag,
-        headSha: options.targetSha,
-        tagPeelSha: options.targetSha,
-        trackedTreeClean: true as const,
-        stagedChanges: false as const,
-        mergeInProgress: false as const,
-        runId: options.runId,
-        organizationId: options.organizationId,
-        capturedAtUtc: new Date().toISOString(),
-      };
-      writeJson(join(runDir, "control/fhv-t4-checkout-identity.v1.json"), {
-        ...withoutDigest,
-        contentDigest: computePayloadDigest(withoutDigest),
-      });
-      return { exitCode: 0, stdout: "classification=FHV_T4_CHECKOUT_IDENTITY_OK\n", stderr: "" };
     }
     if (packageScript === "trader:fhv:t4:status") {
       return {
@@ -971,8 +1007,7 @@ export function createFhvT4aHermeticSimulation(options: FhvT4aHermeticSimulation
         if (sha256Hex(stdin) !== sha256Hex(expected)) {
           return { exitCode: 2, stdout: "", stderr: "stdin bytes != committed checkout blob" };
         }
-        recordWrite(repoRoot);
-        mkdirSync(join(repoRoot, "scripts/ops"), { recursive: true });
+        ensureHermeticReleaseCheckout();
         return {
           exitCode: 0,
           stdout: "classification=FHV_T4_SERVICE_USER_CHECKOUT_OK\n",

@@ -254,8 +254,17 @@ Historical failed-run and recovery evidence is immutable forensic-only. It must 
 
 ### Pre-merge audit addendum (Steps 4/7 terminal classification)
 
-Zero-defect pre-merge audit of PR #452 proved Steps 4 and 7 exited 0 but recorded tool-level `FHV_T4_CHECKOUT_IDENTITY_OK` as the operator `terminalClassification`, violating the Steps 1–32 contract (`FHV_T4A_STEP_<N>_OK`). Corrective: operator executor maps accepted checkout-identity CLI success to exact `FHV_T4A_STEP_4_OK` / `FHV_T4A_STEP_7_OK` (regression: `tests/unit/fhv-t4a-step-terminal-classification.test.ts` + integration trace assertions for Steps 1–26 and 28–32).
+Zero-defect pre-merge audit of PR #452 proved Steps 4 and 7 exited 0 but recorded tool-level classifications incorrectly as operator `terminalClassification`. Follow-on real-CLI parity repair:
 
-Full AI-TRADER historical validation launch remains **not** executable after T4A repository readiness alone — blocked by Human/sequence gates (`AUTHORIZE-FHV-OPS-DEPLOY`, released T4A evidence acceptance, dataset source approval, `AUTHORIZE-FULL-HISTORICAL-VALIDATION`) and missing FULL campaign entrypoint (rehearsal-only `trader:fhv:campaign`).
+| Step | Downstream | Real tool classification | Operator terminal |
+|------|------------|--------------------------|-------------------|
+| 4 | `fhv-release-checkout-identity.sh` | `FHV_T4_CHECKOUT_IDENTITY_OK` | `FHV_T4A_STEP_4_OK` |
+| 7 | `trader:fhv:t4:record-checkout-identity` → `fhv-t4-closure-cli` | `FHV_T4_CHECKOUT_IDENTITY_PROOF_OK` | `FHV_T4A_STEP_7_OK` |
+
+Additional fail-closed rule: empty/absent CLI classification must throw `FHV_T4A_STEP_<N>_CLASSIFICATION_MISMATCH` (must not synthesize step OK). Hermetic Step 7 routes through the real closure CLI (no hand-authored success class) and writes `control/fhv-t4-checkout-identity.v1.json`.
+
+`cd96660` was **not** fully green for real Step 7 CLI parity — it accepted the shell class `FHV_T4_CHECKOUT_IDENTITY_OK` for Step 7 and hermetic hand-authored that same wrong class.
+
+Full AI-TRADER historical validation launch remains **not** executable after T4A repository readiness alone — blocked by Human/sequence gates (`AUTHORIZE-FHV-OPS-DEPLOY`, released T4A evidence acceptance, dataset source approval, `AUTHORIZE-FULL-HISTORICAL-VALIDATION`) and missing FULL campaign entrypoint (rehearsal-only `trader:fhv:campaign`). This PR proves T4A repository readiness only — not real-host T4A PASS, not historical validation PASS, not strategy validation PASS.
 
 Do not mark DEE-436 or T4A complete. Failed-run and recovery namespaces must never be reused.
