@@ -3,18 +3,11 @@ import { join } from "node:path";
 
 import { computeAccountingSemanticDigest } from "@/lib/trader/accounting";
 import { loadApprovedBenchmarkFixture } from "@/lib/trader/backtest/replay-benchmark-harness";
-import { runBacktest, type RunBacktestResult } from "@/lib/trader/backtest/backtest-runner";
+import type { RunBacktestResult } from "@/lib/trader/backtest/backtest-runner";
 import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
 import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
-import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence";
-import {
-  costModelV1FromAuthority,
-  createHtrHistoricalCostModelAuthorityV1,
-} from "@/lib/trader/execution/cost-model";
-import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { Bar } from "@/lib/trader/intelligence/types";
-import { FhvSharedPortfolioBarReplaySource } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
 import { FHV_DATASET_PARTITIONS_V1 } from "@/lib/trader/market-data/dataset/fhv-dataset-manifest";
 import { assertFhvReplayNotLiveExchangePath } from "@/lib/trader/observability/fhv-campaign-semantic-abort";
 import { shouldSkipFhvCheckoutIdentityVerification } from "@/lib/trader/observability/fhv-checkout-identity-test-hook";
@@ -33,7 +26,7 @@ import {
   assertFhvFullHistoricalAuthorizationReceiptForLaunch,
   consumeFhvFullHistoricalAuthorizationReceipt,
 } from "@/lib/trader/observability/fhv-full-historical-auth";
-import { seedFhvHistoricalExecutionSession } from "@/lib/trader/observability/fhv-historical-execution-session";
+import { runFullHistoricalBacktest } from "@/lib/trader/observability/fhv-full-historical-engine";
 import {
   verifyFhvReleaseCheckoutIdentity,
   type FhvT4CheckoutIdentityProofV1,
@@ -45,10 +38,6 @@ import {
   HTR_FHV_RUN_CONTRACT_V0,
 } from "@/lib/trader/readiness/htr-fhv-run-contract-v0";
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
-import { buildResearchValidationCycleIdPrefix } from "@/lib/trader/research/research-backtest-cycle-id";
-import { createHtrInitialAccountRiskState } from "@/lib/trader/research/htr-initial-portfolio-contract";
-import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-contract";
-import { buildResearchV2PortfolioContext } from "@/lib/trader/research/research-portfolio-config";
 
 export const FHV_FULL_LAUNCH_RECEIPT_SCHEMA_VERSION = "fhv-full-launch-receipt/v1" as const;
 export const FHV_FULL_LAUNCH_MODE = "FULL_HISTORICAL_VALIDATION" as const;
@@ -91,6 +80,7 @@ export type FhvFullHistoricalLaunchInput = Readonly<{
   holdoutAccessRequested?: boolean;
   boundedFixture?: boolean;
   maxCycles?: number;
+  executionPurpose?: "FULL_HISTORICAL_VALIDATION" | "CONTROL_REPLAY";
 }>;
 
 export type FhvFullHistoricalLaunchResult = Readonly<{
@@ -244,7 +234,7 @@ function assertCheckoutIdentityProofFile(input: {
   }
 }
 
-function assertCheckoutIdentity(input: FhvFullHistoricalLaunchInput, _runDir: string): void {
+export function assertCheckoutIdentity(input: FhvFullHistoricalLaunchInput, _runDir: string): void {
   if (shouldSkipFhvCheckoutIdentityVerification()) {
     return;
   }
@@ -368,7 +358,7 @@ export function validateFhvFullHistoricalLaunchInput(input: FhvFullHistoricalLau
     );
   }
 
-  const includeHoldout = !input.boundedFixture;
+  const includeHoldout = !input.boundedFixture && input.executionPurpose !== "CONTROL_REPLAY";
   const controlReplayReceiptDigest = resolveControlReplayReceiptDigest(input);
   if (includeHoldout && !controlReplayReceiptDigest) {
     throw new FhvFullHistoricalLaunchError(
@@ -495,111 +485,16 @@ export function writeFhvFullLaunchReceipt(input: {
   return { receiptPath, receipt };
 }
 
-function createBenchmarkNewIdFactory(): () => string {
-  let sequence = 0;
-  return () => {
-    sequence += 1;
-    return `00000000-0000-4000-8000-${String(436000 + sequence).padStart(12, "0")}`;
-  };
-}
-
-async function runFullHistoricalBacktest(input: {
-  runDir: string;
-  runId: string;
-  releaseSha: string;
-  organizationId: string;
-  operatorId: string;
-  configurationFreeze: FhvConfigurationFreezeV1;
-  bars: readonly Bar[];
-  latestQuote?: { symbol: string; bid: string; ask: string; last: string; timestamp: string };
-  boundedFixture: boolean;
-  includeHoldout: boolean;
-  maxCycles?: number;
-}): Promise<RunBacktestResult> {
-  const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
-  const portfolio = buildResearchV2PortfolioContext(costModel);
-  const accountKey = "fhv-full-historical";
-  const { session, context, cleanup } = await seedFhvHistoricalExecutionSession({
-    organizationId: input.organizationId,
-    operatorId: input.operatorId,
-    slot: 436,
-  });
-  mkdirSync(input.runDir, { recursive: true });
-  const evidenceSink = createStreamingEvidenceSink({
-    runDir: input.runDir,
-    runId: input.runId,
-    gitSha: input.releaseSha,
-    environment: input.boundedFixture
-      ? "fhv-full-historical-bounded"
-      : "fhv-full-historical-official",
-  });
-  const window = {
-    start: new Date(input.bars[0]!.barOpenTime),
-    end: new Date(input.bars.at(-1)!.barCloseTime),
-  };
-  const cycleIdPrefix = buildResearchValidationCycleIdPrefix(input.runId);
-  const barSource = new FhvSharedPortfolioBarReplaySource(input.bars, cycleIdPrefix);
-  const strategies = resolveStrategyBindings(input.configurationFreeze);
-  const accountState = createHtrInitialAccountRiskState();
-
-  try {
-    return await runBacktest({
-      context,
-      barSource,
-      deps: session.deps,
-      orderRepository: session.orderRepository,
-      accountKey,
-      defaultQuantity: "0.01",
-      costModel,
-      portfolio,
-      strategySignalIds: strategies.strategySignalIds,
-      strategyId: strategies.primaryStrategyId,
-      strategyVersion: strategies.primaryStrategyVersion,
-      regimeLabel: "AGGREGATE",
-      datasetId: input.boundedFixture
-        ? "fhv-full-historical-bounded"
-        : "fhv-full-historical-official",
-      runId: input.runId,
-      split: input.includeHoldout ? "blind" : "validation",
-      window,
-      accountState,
-      exportedAt: new Date(window.end),
-      activeStrategyIds: strategies.strategySignalIds,
-      newId: createBenchmarkNewIdFactory(),
-      retentionMode: "STREAM_ONLY",
-      evidenceSink,
-      maxCycles: input.maxCycles ?? (input.boundedFixture ? 20 : undefined),
-      enableReplayFusedContext: false,
-      historicalExecutionProfile: session.historicalExecutionProfile,
-      historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
-      wp16: {
-        runId: input.runId,
-        portfolioId: accountKey,
-        historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
-      },
-      checkpointRunRoot: input.runDir,
-      fhvObservability: {
-        runLogRoot: join(input.runDir, "fhv-trace"),
-        provenance: {
-          codeSha: input.releaseSha,
-          dirtyTree: false,
-          datasetManifestDigest: input.configurationFreeze.manifestDigest,
-          runConfigDigest: input.configurationFreeze.configurationFreezeDigest,
-          strategyVersions: [...input.configurationFreeze.strategyVersions],
-          costModelVersion: "waia.trader.historical-execution-model.v1",
-          riskPolicyVersion: input.configurationFreeze.drawdownPolicyVersion,
-          initialPortfolioDigest: HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
-        },
-      },
-    });
-  } finally {
-    cleanup();
-  }
-}
-
 export async function executeFhvFullHistoricalLaunch(
   input: FhvFullHistoricalLaunchInput,
 ): Promise<FhvFullHistoricalLaunchResult> {
+  if (input.executionPurpose === "CONTROL_REPLAY") {
+    throw new FhvFullHistoricalLaunchError(
+      "CONTROL_REPLAY_USE_DEDICATED_ENTRY",
+      "CONTROL_REPLAY must use executeFhvControlReplayLaunch, not executeFhvFullHistoricalLaunch.",
+    );
+  }
+
   const runDir = resolveFhvFullLaunchRunDirectory(input.artifactRoot, input.runId);
   assertCheckoutIdentity(input, runDir);
 
@@ -626,13 +521,10 @@ export async function executeFhvFullHistoricalLaunch(
   consumeFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);
 
   let bars: readonly Bar[];
-  let latestQuote: ReturnType<typeof loadApprovedBenchmarkFixture>["latestQuote"] | undefined;
   const includeHoldout = !input.boundedFixture;
 
   if (input.boundedFixture) {
-    const fixture = loadApprovedBenchmarkFixture();
-    bars = fixture.bars;
-    latestQuote = fixture.latestQuote;
+    bars = loadApprovedBenchmarkFixture().bars;
   } else {
     bars = loadOfficialSharedPortfolioBars({
       datasetRoot: input.datasetRoot!,
@@ -659,7 +551,6 @@ export async function executeFhvFullHistoricalLaunch(
     operatorId: input.operatorId,
     configurationFreeze,
     bars,
-    latestQuote,
     boundedFixture: input.boundedFixture === true,
     includeHoldout,
     maxCycles: input.maxCycles,

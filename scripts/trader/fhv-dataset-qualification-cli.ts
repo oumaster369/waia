@@ -14,6 +14,7 @@ import {
   qualifyFhvOfficialDataset,
   writeFhvDatasetQualificationReceiptAtomic,
   type FhvDatasetQualificationReceiptV1,
+  type FhvQualificationMode,
 } from "@/lib/trader/observability/fhv-dataset-qualification";
 
 export type FhvDatasetQualificationResult = Readonly<{
@@ -28,6 +29,9 @@ export type FhvDatasetQualificationResult = Readonly<{
   qualificationReceiptPath?: string;
   failureReason?: string;
 }>;
+
+const FULL_SHA = /^[0-9a-f]{40}$/;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function parseArgv(argv: readonly string[]): Map<string, string | true> {
   const parsed = new Map<string, string | true>();
@@ -59,6 +63,11 @@ export function resolveFhvDatasetQualificationCliConfig(
   datasetRoot?: string;
   manifestPath?: string;
   receiptDir?: string;
+  qualificationMode?: FhvQualificationMode;
+  releaseSha?: string;
+  releaseTag?: string;
+  organizationId?: string;
+  operatorId?: string;
 } {
   const flags = parseArgv(argv);
   const boundedFixture = flags.has("--bounded-fixture");
@@ -68,7 +77,51 @@ export function resolveFhvDatasetQualificationCliConfig(
     (flags.get("--manifest-path") as string | undefined) ?? env.FHV_MANIFEST_PATH?.trim();
   const receiptDir =
     (flags.get("--receipt-dir") as string | undefined) ?? env.FHV_RECEIPT_DIR?.trim();
-  return { boundedFixture, datasetRoot, manifestPath, receiptDir };
+  const qualificationMode = flags.get("--qualification-mode") as FhvQualificationMode | undefined;
+  const releaseSha =
+    (flags.get("--release-sha") as string | undefined) ?? env.FHV_RELEASE_SHA?.trim();
+  const releaseTag =
+    (flags.get("--release-tag") as string | undefined) ?? env.FHV_RELEASE_TAG?.trim();
+  const organizationId =
+    (flags.get("--organization-id") as string | undefined) ?? env.FHV_ORGANIZATION_ID?.trim();
+  const operatorId =
+    (flags.get("--operator-id") as string | undefined) ?? env.FHV_OPERATOR_ID?.trim();
+
+  if (!boundedFixture) {
+    if (!datasetRoot || !manifestPath) {
+      throw new Error("--dataset-root and --manifest-path are required.");
+    }
+    const mode = qualificationMode ?? "OFFICIAL_MULTI_YEAR";
+    if (mode === "OFFICIAL_MULTI_YEAR") {
+      if (!releaseSha || !FULL_SHA.test(releaseSha)) {
+        throw new Error("OFFICIAL_MULTI_YEAR requires --release-sha (full git SHA).");
+      }
+      if (!releaseTag?.trim()) {
+        throw new Error("OFFICIAL_MULTI_YEAR requires --release-tag.");
+      }
+      if (!organizationId || !UUID_V4.test(organizationId)) {
+        throw new Error("OFFICIAL_MULTI_YEAR requires --organization-id (UUID v4).");
+      }
+      if (!operatorId?.trim()) {
+        throw new Error("OFFICIAL_MULTI_YEAR requires --operator-id.");
+      }
+      if (!receiptDir) {
+        throw new Error("OFFICIAL_MULTI_YEAR requires --receipt-dir.");
+      }
+    }
+  }
+
+  return {
+    boundedFixture,
+    datasetRoot,
+    manifestPath,
+    receiptDir,
+    qualificationMode,
+    releaseSha,
+    releaseTag,
+    organizationId,
+    operatorId,
+  };
 }
 
 export function runFhvDatasetQualification(input?: {
@@ -76,6 +129,11 @@ export function runFhvDatasetQualification(input?: {
   datasetRoot?: string;
   manifestPath?: string;
   receiptDir?: string;
+  qualificationMode?: FhvQualificationMode;
+  releaseSha?: string;
+  releaseTag?: string;
+  organizationId?: string;
+  operatorId?: string;
 }): FhvDatasetQualificationResult {
   const config = input ?? resolveFhvDatasetQualificationCliConfig();
   try {
@@ -84,6 +142,11 @@ export function runFhvDatasetQualification(input?: {
       : qualifyFhvOfficialDataset({
           datasetRoot: config.datasetRoot!,
           manifestPath: config.manifestPath!,
+          qualificationMode: config.qualificationMode,
+          releaseSha: config.releaseSha,
+          releaseTag: config.releaseTag,
+          organizationId: config.organizationId,
+          operatorId: config.operatorId,
         });
 
     let receipt: FhvDatasetQualificationReceiptV1 | undefined;
@@ -94,6 +157,11 @@ export function runFhvDatasetQualification(input?: {
         datasetRoot: body.datasetRoot,
         manifestPath: body.manifestPath,
         boundedFixture: config.boundedFixture,
+        qualificationMode: config.qualificationMode,
+        releaseSha: config.releaseSha,
+        releaseTag: config.releaseTag,
+        organizationId: config.organizationId,
+        operatorId: config.operatorId,
       });
     }
 

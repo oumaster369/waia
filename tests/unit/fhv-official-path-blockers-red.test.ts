@@ -94,6 +94,7 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
     const result = runCliQualification({
       datasetRoot: FHV_OFFICIAL_REAL_SCHEMA_ROOT,
       manifestPath: FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
+      qualificationMode: "SCHEMA_INTEGRATION_FIXTURE",
     });
     expect(result.classification).toBe("DATASET_QUALIFICATION=PASS");
     expect(result.datasetRoot).toBe(FHV_OFFICIAL_REAL_SCHEMA_ROOT);
@@ -227,10 +228,12 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
         configurationFreezePathRunTwo: prep.configurationFreezePathRunTwo,
         authorizationReceiptPath: prep.authorizationReceiptPathRunOne,
         authorizationReceiptPathRunTwo: prep.authorizationReceiptPathRunTwo,
-        checkoutIdentityProofPath: prep.checkoutIdentityProofPathRunOne,
+        checkoutIdentityProofPathRunOne: prep.checkoutIdentityProofPathRunOne,
         datasetQualificationReceiptPath: prep.qualificationReceiptPath,
         boundedFixture: true,
         maxCycles: 10,
+        runOneId: `fhv-control-replay-1-${FHV_TEST_RELEASE_SHA.slice(0, 8)}`,
+        runTwoId: `fhv-control-replay-2-${FHV_TEST_RELEASE_SHA.slice(0, 8)}`,
       });
       expect(result.classification).toBe("CONTROL_REPLAY=PASS");
     } finally {

@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  claimFileExclusiveLock,
+  releaseFileExclusiveLock,
   writeFileAtomicCompareAndReplace,
   writeFileAtomicExclusive,
 } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
@@ -155,52 +157,58 @@ export function writeFhvFullHistoricalAuthorizationReceiptAtomic(input: {
 export function consumeFhvFullHistoricalAuthorizationReceipt(
   receiptPath: string,
 ): FhvFullHistoricalAuthorizationReceiptV1 {
-  const expectedContent = readFileSync(receiptPath, "utf8");
-  const receipt = JSON.parse(expectedContent) as FhvFullHistoricalAuthorizationReceiptV1;
-  const { authorizationReceiptDigest, ...body } = receipt;
-  if (computeAuthorizationReceiptDigest(body) !== authorizationReceiptDigest) {
-    throw new FhvFullHistoricalAuthError(
-      "AUTHORIZATION_RECEIPT_DIGEST_MISMATCH",
-      "Authorization receipt digest mismatch.",
-    );
+  const lockPath = `${receiptPath}.consume.lock`;
+  const lockFd = claimFileExclusiveLock(lockPath);
+  try {
+    const expectedContent = readFileSync(receiptPath, "utf8");
+    const receipt = JSON.parse(expectedContent) as FhvFullHistoricalAuthorizationReceiptV1;
+    const { authorizationReceiptDigest, ...body } = receipt;
+    if (computeAuthorizationReceiptDigest(body) !== authorizationReceiptDigest) {
+      throw new FhvFullHistoricalAuthError(
+        "AUTHORIZATION_RECEIPT_DIGEST_MISMATCH",
+        "Authorization receipt digest mismatch.",
+      );
+    }
+    if (receipt.consumed) {
+      throw new FhvFullHistoricalAuthError(
+        "AUTHORIZATION_ALREADY_CONSUMED",
+        "Authorization receipt has already been consumed.",
+      );
+    }
+    const consumedAtUtc = new Date().toISOString();
+    const withoutDigest = {
+      schemaVersion: receipt.schemaVersion,
+      releaseSha: receipt.releaseSha,
+      releaseTag: receipt.releaseTag,
+      datasetQualificationReceiptDigest: receipt.datasetQualificationReceiptDigest,
+      datasetDigest: receipt.datasetDigest,
+      manifestDigest: receipt.manifestDigest,
+      configurationFreezeDigest: receipt.configurationFreezeDigest,
+      ...(receipt.controlReplayReceiptDigest
+        ? { controlReplayReceiptDigest: receipt.controlReplayReceiptDigest }
+        : {}),
+      organizationId: receipt.organizationId,
+      operatorId: receipt.operatorId,
+      runId: receipt.runId,
+      oneExecution: true as const,
+      authorizedAtUtc: receipt.authorizedAtUtc,
+      consumed: true as const,
+      consumedAtUtc,
+    };
+    const consumedReceipt: FhvFullHistoricalAuthorizationReceiptV1 = {
+      ...withoutDigest,
+      authorizationReceiptDigest: computeAuthorizationReceiptDigest(withoutDigest),
+    };
+    const nextContent = `${JSON.stringify(consumedReceipt, null, 2)}\n`;
+    writeFileAtomicCompareAndReplace({
+      finalPath: receiptPath,
+      expectedContent,
+      nextContent,
+    });
+    return consumedReceipt;
+  } finally {
+    releaseFileExclusiveLock(lockPath, lockFd);
   }
-  if (receipt.consumed) {
-    throw new FhvFullHistoricalAuthError(
-      "AUTHORIZATION_ALREADY_CONSUMED",
-      "Authorization receipt has already been consumed.",
-    );
-  }
-  const consumedAtUtc = new Date().toISOString();
-  const withoutDigest = {
-    schemaVersion: receipt.schemaVersion,
-    releaseSha: receipt.releaseSha,
-    releaseTag: receipt.releaseTag,
-    datasetQualificationReceiptDigest: receipt.datasetQualificationReceiptDigest,
-    datasetDigest: receipt.datasetDigest,
-    manifestDigest: receipt.manifestDigest,
-    configurationFreezeDigest: receipt.configurationFreezeDigest,
-    ...(receipt.controlReplayReceiptDigest
-      ? { controlReplayReceiptDigest: receipt.controlReplayReceiptDigest }
-      : {}),
-    organizationId: receipt.organizationId,
-    operatorId: receipt.operatorId,
-    runId: receipt.runId,
-    oneExecution: true as const,
-    authorizedAtUtc: receipt.authorizedAtUtc,
-    consumed: true as const,
-    consumedAtUtc,
-  };
-  const consumedReceipt: FhvFullHistoricalAuthorizationReceiptV1 = {
-    ...withoutDigest,
-    authorizationReceiptDigest: computeAuthorizationReceiptDigest(withoutDigest),
-  };
-  const nextContent = `${JSON.stringify(consumedReceipt, null, 2)}\n`;
-  writeFileAtomicCompareAndReplace({
-    finalPath: receiptPath,
-    expectedContent,
-    nextContent,
-  });
-  return consumedReceipt;
 }
 
 export function assertFhvFullHistoricalAuthorizationReceiptForLaunch(input: {

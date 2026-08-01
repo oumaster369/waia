@@ -15,6 +15,7 @@ import {
   FHV_GAP_POLICY_V1,
   evaluateGapPolicy,
 } from "@/lib/trader/market-data/dataset/fhv-gap-policy";
+import type { GapRecord } from "@/lib/trader/market-data/ingress/bar-integrity-gate";
 import { mergeFhvSharedPortfolioBarsChronologically } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
 import { runIngressManifestEvidenceHarness } from "@/lib/trader/market-data/dataset/ingress-manifest-evidence-harness";
 import { assertIngestBarsIntegrity } from "@/lib/trader/market-data/ingress/bar-integrity-gate";
@@ -213,6 +214,62 @@ function validateOfficialManifest(manifest: FhvDatasetManifestV1, manifestPath: 
   }
 }
 
+const ONE_MINUTE_MS = 60_000;
+
+function computePartitionTimelineGaps(
+  bars: readonly Bar[],
+  interval: FhvUtcHalfOpenInterval,
+): GapRecord[] {
+  const sorted = [...bars].sort(
+    (left, right) => Date.parse(left.barOpenTime) - Date.parse(right.barOpenTime),
+  );
+  const gaps: GapRecord[] = [];
+  let previousOpenMs: number | null = null;
+  const startMs = Date.parse(interval.startUtc);
+  const endMs = Date.parse(interval.endUtc);
+  const expectedBarCount = (endMs - startMs) / ONE_MINUTE_MS;
+
+  for (const bar of sorted) {
+    const openMs = Date.parse(bar.barOpenTime);
+    if (previousOpenMs === null) {
+      if (openMs > startMs) {
+        gaps.push({
+          fromBarOpenUtc: interval.startUtc,
+          toBarOpenUtc: bar.barOpenTime,
+          missingBarCount: Math.round((openMs - startMs) / ONE_MINUTE_MS),
+          durationMs: openMs - startMs,
+        });
+      }
+    } else {
+      const expectedNext = previousOpenMs + ONE_MINUTE_MS;
+      if (openMs > expectedNext) {
+        gaps.push({
+          fromBarOpenUtc: new Date(expectedNext).toISOString(),
+          toBarOpenUtc: bar.barOpenTime,
+          missingBarCount: Math.round((openMs - expectedNext) / ONE_MINUTE_MS),
+          durationMs: openMs - expectedNext,
+        });
+      }
+    }
+    previousOpenMs = openMs;
+  }
+
+  if (sorted.length > 0 && sorted.length < expectedBarCount) {
+    const last = sorted.at(-1)!;
+    const lastCloseMs = Date.parse(last.barCloseTime);
+    if (lastCloseMs < endMs) {
+      gaps.push({
+        fromBarOpenUtc: last.barCloseTime,
+        toBarOpenUtc: interval.endUtc,
+        missingBarCount: Math.round((endMs - lastCloseMs) / ONE_MINUTE_MS),
+        durationMs: endMs - lastCloseMs,
+      });
+    }
+  }
+
+  return gaps;
+}
+
 function assertOfficialMultiYearPartitionCoverage(input: {
   partition: (typeof FHV_OFFICIAL_PARTITION_NAMES)[number];
   symbol: (typeof FHV_OFFICIAL_SYMBOLS)[number];
@@ -236,15 +293,25 @@ function assertOfficialMultiYearPartitionCoverage(input: {
       `First bar for ${input.partition}/${input.symbol} must open at ${interval.startUtc}.`,
     );
   }
-  const lastOpenMs = Date.parse(last.barOpenTime);
-  const endMs = Date.parse(interval.endUtc);
-  if (lastOpenMs >= endMs) {
+  if (last.barCloseTime !== interval.endUtc) {
     throw new FhvDatasetQualificationError(
-      "PARTITION_COVERAGE_END_VIOLATION",
-      `Last bar for ${input.partition}/${input.symbol} must open before ${interval.endUtc}.`,
+      "PARTITION_COVERAGE_END_MISMATCH",
+      `Last bar for ${input.partition}/${input.symbol} must close at ${interval.endUtc}.`,
     );
   }
-  const gapResult = evaluateGapPolicy([]);
+
+  const startMs = Date.parse(interval.startUtc);
+  const endMs = Date.parse(interval.endUtc);
+  const expectedBarCount = (endMs - startMs) / ONE_MINUTE_MS;
+  if (sorted.length !== expectedBarCount) {
+    throw new FhvDatasetQualificationError(
+      "PARTITION_INCOMPLETE",
+      `Partition ${input.partition}/${input.symbol} is incomplete: expected ${expectedBarCount} bars, observed ${sorted.length}.`,
+    );
+  }
+
+  const gaps = computePartitionTimelineGaps(sorted, interval);
+  const gapResult = evaluateGapPolicy(gaps);
   if (gapResult !== "PASS") {
     throw new FhvDatasetQualificationError(
       "PARTITION_GAP_POLICY_FAIL",

@@ -298,15 +298,33 @@ export function setupFhvOfficialSchemaLaunchArtifacts(input: {
   });
 
   const controlReplayReceiptPath = join(prepDir, "fhv-control-replay-receipt.v1.json");
+  const runOneId = `fhv-control-replay-1-${releaseSha.slice(0, 8)}`;
+  const runTwoId = `fhv-control-replay-2-${releaseSha.slice(0, 8)}`;
   const controlReplayReceipt = writeFhvControlReplayReceiptAtomic({
     receiptPath: controlReplayReceiptPath,
     releaseSha,
+    releaseTag: FHV_TEST_RELEASE_TAG,
     organizationId,
     operatorId,
-    runOneId: `fhv-control-replay-1-${releaseSha.slice(0, 8)}`,
-    runTwoId: `fhv-control-replay-2-${releaseSha.slice(0, 8)}`,
+    runOneId,
+    runTwoId,
     runOneDigest: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     runTwoDigest: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    datasetQualificationReceiptDigest: qualificationReceipt.qualificationReceiptDigest,
+    datasetContentDigest: qualificationReceipt.datasetContentDigest,
+    manifestSemanticDigest: qualificationReceipt.manifestSemanticDigest,
+    runOneConfigurationFreezeDigest: freeze.artifact.configurationFreeze.configurationFreezeDigest,
+    runTwoConfigurationFreezeDigest: freeze.artifact.configurationFreeze.configurationFreezeDigest,
+    runOneAuthorizationReceiptDigest:
+      "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    runTwoAuthorizationReceiptDigest:
+      "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    runOneCheckoutIdentityProofDigest:
+      "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    runTwoCheckoutIdentityProofDigest:
+      "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    runOneCycleCount: 10,
+    runTwoCycleCount: 10,
     capturedAtUtc: "2026-01-01T00:00:00.000Z",
   });
 

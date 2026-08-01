@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { FHV_FULL_HISTORICAL_VALIDATION_AUTHORIZATION } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { writeFhvFullHistoricalAuthorizationReceiptAtomic } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { readFhvConfigurationFreezeArtifact } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
+import { readFhvControlReplayReceipt } from "@/lib/trader/observability/fhv-control-replay-receipt";
 import { readFhvDatasetQualificationReceipt } from "@/lib/trader/observability/fhv-dataset-qualification";
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
@@ -54,6 +55,8 @@ export function resolveFhvAuthorizeFullCliConfig(
     flags.get("--configuration-freeze-path") ?? env.FHV_CONFIGURATION_FREEZE_PATH?.trim();
   const qualificationReceiptPath =
     flags.get("--qualification-receipt-path") ?? env.FHV_QUALIFICATION_RECEIPT_PATH?.trim();
+  const controlReplayReceiptPath =
+    flags.get("--control-replay-receipt-path") ?? env.FHV_CONTROL_REPLAY_RECEIPT_PATH?.trim();
 
   if (!releaseSha || !FULL_SHA.test(releaseSha)) {
     throw new Error("release-sha must be a full git SHA.");
@@ -79,9 +82,11 @@ export function resolveFhvAuthorizeFullCliConfig(
   if (!qualificationReceiptPath) {
     throw new Error("--qualification-receipt-path is required.");
   }
-
   const freezeArtifact = readFhvConfigurationFreezeArtifact(freezeArtifactPath);
   const qualificationReceipt = readFhvDatasetQualificationReceipt(qualificationReceiptPath);
+  const controlReplayReceipt = controlReplayReceiptPath
+    ? readFhvControlReplayReceipt(controlReplayReceiptPath)
+    : undefined;
 
   return {
     releaseSha,
@@ -92,6 +97,7 @@ export function resolveFhvAuthorizeFullCliConfig(
     receiptDir,
     freezeArtifact,
     qualificationReceipt,
+    controlReplayReceipt,
   };
 }
 
@@ -106,6 +112,11 @@ async function main(): Promise<void> {
     datasetDigest: config.freezeArtifact.configurationFreeze.datasetDigest,
     manifestDigest: config.freezeArtifact.configurationFreeze.manifestDigest,
     configurationFreezeDigest: config.freezeArtifact.configurationFreeze.configurationFreezeDigest,
+    ...(config.controlReplayReceipt
+      ? {
+          controlReplayReceiptDigest: config.controlReplayReceipt.controlReplayReceiptDigest,
+        }
+      : {}),
     organizationId: config.organizationId,
     operatorId: config.operatorId,
     runId: config.runId,

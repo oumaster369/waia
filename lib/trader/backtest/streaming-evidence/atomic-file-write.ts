@@ -3,6 +3,7 @@ import {
   existsSync,
   fsyncSync,
   linkSync,
+  mkdirSync,
   openSync,
   readFileSync,
   renameSync,
@@ -71,7 +72,37 @@ function createExclusiveTempPath(finalPath: string): string {
   );
 }
 
-/** Prepare a writer-owned temp file with full payload written and fsynced. */
+/** Acquire an exclusive O_EXCL lock file; returns fd for release. */
+export function claimFileExclusiveLock(lockPath: string): number {
+  const directory = dirname(lockPath);
+  if (!existsSync(directory)) {
+    mkdirSync(directory, { recursive: true });
+  }
+  try {
+    return openSync(lockPath, "wx");
+  } catch (error) {
+    throw new AtomicFileWriteError(
+      "EXCLUSIVE_LOCK_HELD",
+      `Exclusive lock already held: ${lockPath}: ${String(error)}`,
+    );
+  }
+}
+
+/** Release an exclusive lock acquired via claimFileExclusiveLock. */
+export function releaseFileExclusiveLock(lockPath: string, fd: number): void {
+  try {
+    closeSync(fd);
+  } finally {
+    try {
+      if (existsSync(lockPath)) {
+        unlinkSync(lockPath);
+      }
+    } catch {
+      // best-effort lock cleanup
+    }
+  }
+}
+
 export function prepareAtomicExclusiveTemp(finalPath: string, bytes: Buffer | string): string {
   const payload = typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes;
   const directory = dirname(finalPath);

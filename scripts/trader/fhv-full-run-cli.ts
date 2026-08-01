@@ -11,6 +11,7 @@ import {
   type FhvFullHistoricalLaunchInput,
 } from "@/lib/trader/observability/fhv-full-historical-launch";
 import { readFhvConfigurationFreezeArtifact } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
+import { readFhvControlReplayReceipt } from "@/lib/trader/observability/fhv-control-replay-receipt";
 import { readFhvDatasetQualificationReceipt } from "@/lib/trader/observability/fhv-dataset-qualification";
 import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
 
@@ -21,8 +22,9 @@ const ABSOLUTE_SAFE_PATH = /^\/(?:[^\0/]+\/)*[^\0/]+$/;
 
 function parseArgv(argv: readonly string[]): Map<string, string | true> {
   const parsed = new Map<string, string | true>();
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index]!;
+  const tokens = argv[0] === "--" ? argv.slice(1) : argv;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
     if (!token.startsWith("--")) {
       throw new FhvFullHistoricalLaunchError(
         "UNKNOWN_ARG",
@@ -33,7 +35,7 @@ function parseArgv(argv: readonly string[]): Map<string, string | true> {
       parsed.set(token, true);
       continue;
     }
-    const value = argv[index + 1]?.trim();
+    const value = tokens[index + 1]?.trim();
     if (!value) {
       throw new FhvFullHistoricalLaunchError("MISSING_FLAG_VALUE", `Missing value for ${token}`);
     }
@@ -62,6 +64,7 @@ export function resolveFhvFullRunCliConfig(
     "--dataset-root",
     "--manifest-path",
     "--checkout-identity-proof-path",
+    "--control-replay-receipt-path",
     "--repo-path",
     "--bounded-fixture",
   ]);
@@ -102,6 +105,9 @@ export function resolveFhvFullRunCliConfig(
   const checkoutIdentityProofPath =
     (flags.get("--checkout-identity-proof-path") as string | undefined) ??
     env.FHV_CHECKOUT_IDENTITY_PROOF_PATH?.trim();
+  const controlReplayReceiptPath =
+    (flags.get("--control-replay-receipt-path") as string | undefined) ??
+    env.FHV_CONTROL_REPLAY_RECEIPT_PATH?.trim();
   const repoPath = (flags.get("--repo-path") as string | undefined) ?? env.FHV_REPO_PATH?.trim();
 
   if (!releaseSha || !FULL_SHA.test(releaseSha)) {
@@ -165,8 +171,18 @@ export function resolveFhvFullRunCliConfig(
     );
   }
 
+  if (!boundedFixture && !controlReplayReceiptPath) {
+    throw new FhvFullHistoricalLaunchError(
+      "CONTROL_REPLAY_RECEIPT_PATH_REQUIRED",
+      "Official run requires --control-replay-receipt-path with PASS receipt.",
+    );
+  }
+
   readFhvConfigurationFreezeArtifact(configurationFreezePath);
   readFhvDatasetQualificationReceipt(datasetQualificationReceiptPath);
+  if (controlReplayReceiptPath) {
+    readFhvControlReplayReceipt(controlReplayReceiptPath);
+  }
 
   return {
     releaseSha,
@@ -182,6 +198,7 @@ export function resolveFhvFullRunCliConfig(
     datasetRoot,
     manifestPath,
     checkoutIdentityProofPath,
+    controlReplayReceiptPath,
     repoPath,
     rehearsalMode: env.FHV_REHEARSAL_MODE === "true",
     livePathInvoked: env.FHV_LIVE_PATH_INVOKED === "true",

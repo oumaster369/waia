@@ -88,10 +88,12 @@ describe("DEE-436 FHV control-replay CLI", () => {
         configurationFreezePathRunTwo: prep.configurationFreezePathRunTwo,
         authorizationReceiptPath: prep.authorizationReceiptPathRunOne,
         authorizationReceiptPathRunTwo: prep.authorizationReceiptPathRunTwo,
-        checkoutIdentityProofPath: prep.checkoutIdentityProofPathRunOne,
+        checkoutIdentityProofPathRunOne: prep.checkoutIdentityProofPathRunOne,
         datasetQualificationReceiptPath: prep.qualificationReceiptPath,
         boundedFixture: true,
         maxCycles: 10,
+        runOneId: `fhv-control-replay-1-${RELEASE_SHA.slice(0, 8)}`,
+        runTwoId: `fhv-control-replay-2-${RELEASE_SHA.slice(0, 8)}`,
       });
       expect(result, JSON.stringify(result)).toMatchObject({
         classification: "CONTROL_REPLAY=PASS",

@@ -113,10 +113,12 @@ describe("DEE-436/DEE-416 FHV final parity R1–R10", () => {
         configurationFreezePathRunTwo: prep.configurationFreezePathRunTwo,
         authorizationReceiptPath: prep.authorizationReceiptPathRunOne,
         authorizationReceiptPathRunTwo: prep.authorizationReceiptPathRunTwo,
-        checkoutIdentityProofPath: prep.checkoutIdentityProofPathRunOne,
+        checkoutIdentityProofPathRunOne: prep.checkoutIdentityProofPathRunOne,
         datasetQualificationReceiptPath: prep.qualificationReceiptPath,
         boundedFixture: true,
         maxCycles: 10,
+        runOneId: `fhv-control-replay-1-${FHV_TEST_RELEASE_SHA.slice(0, 8)}`,
+        runTwoId: `fhv-control-replay-2-${FHV_TEST_RELEASE_SHA.slice(0, 8)}`,
       });
       expect(result.classification).toBe("CONTROL_REPLAY=PASS");
     } finally {
