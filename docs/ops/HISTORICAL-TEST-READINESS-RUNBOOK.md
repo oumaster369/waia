@@ -37,11 +37,11 @@ The readiness preflight pins `FULL_HISTORICAL_VALIDATION_RUN_CONTRACT_V0`:
 | Base interval | 1m → closed-bar 15m/1h/4h/1d |
 | Initial portfolio | 100,000 USDT · 0 BTC · 0 ETH · SHARED_MULTI_INSTRUMENT |
 | Leverage / borrowing / shorting | 0 / PROHIBITED / PROHIBITED |
-| Full period | 2020-01-01T00:00:00.000Z … 2025-12-31T23:59:00.000Z |
-| Development | 2020-01-01 … 2022-12-31 |
-| Walk-forward | 2023-01-01 … 2024-12-31 |
-| Blind holdout | 2025-01-01 … 2025-12-31 · SEALED_NOT_ACCESSED |
-| Cost model | `waia.trader.cost-model.v1` · fees 10 bps · slippage 5 bps |
+| Full period | 2020-01-01T00:00:00.000Z … 2026-01-01T00:00:00.000Z (half-open) |
+| Development | 2020-01-01 … 2023-01-01 (half-open) |
+| Walk-forward | 2023-01-01 … 2025-01-01 (half-open) |
+| Blind holdout | 2025-01-01 … 2026-01-01 · SEALED_NOT_ACCESSED (half-open) |
+| Cost model | `waia.trader.historical-execution-model.v1` · fees 20 bps · half-spread 5 bps · impact 10 bps |
 | Drawdown (D-20) | account 25% · monthly 15% · strategy 20% · CLOSE_ONLY_THEN_STOP_ACCOUNT |
 | Dataset manifest digest | `fd7d489595f8fc20e4311c74e5d82b2957e7cca5b80319b8cb8d5f0893544663` (WP12 template) |
 

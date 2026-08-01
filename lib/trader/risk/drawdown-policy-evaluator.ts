@@ -144,9 +144,29 @@ export function evaluateDrawdownPolicy(
   const strategyBreached =
     strategyDrawdownBps != null ? isDrawdownBreach(strategyDrawdownBps, config.strategyBps) : false;
 
+  function breachStateForLimit(drawdownBps: number, limitBps: number): DrawdownBreachState {
+    if (drawdownBps > limitBps) {
+      return "STOP_ACCOUNT";
+    }
+    if (drawdownBps === limitBps) {
+      return "CLOSE_ONLY";
+    }
+    return "NONE";
+  }
+
+  const breachStates: DrawdownBreachState[] = [
+    breachStateForLimit(accountDrawdownBps, config.accountBps),
+    breachStateForLimit(monthlyDrawdownBps, config.monthlyBps),
+    strategyDrawdownBps != null
+      ? breachStateForLimit(strategyDrawdownBps, config.strategyBps)
+      : "NONE",
+  ];
+
   let breachState: DrawdownBreachState = "NONE";
-  if (accountBreached || monthlyBreached || strategyBreached) {
+  if (breachStates.includes("STOP_ACCOUNT")) {
     breachState = "STOP_ACCOUNT";
+  } else if (breachStates.includes("CLOSE_ONLY")) {
+    breachState = "CLOSE_ONLY";
   }
 
   return {

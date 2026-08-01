@@ -26,19 +26,19 @@
   "d11bDatasetVenueRole": "D11B_INFRASTRUCTURE_QUALIFICATION_ONLY",
   "fullPeriod": {
     "startUtc": "2020-01-01T00:00:00.000Z",
-    "endUtc": "2025-12-31T23:59:00.000Z"
+    "endUtc": "2026-01-01T00:00:00.000Z"
   },
   "developmentCalibration": {
     "startUtc": "2020-01-01T00:00:00.000Z",
-    "endUtc": "2022-12-31T23:59:00.000Z"
+    "endUtc": "2023-01-01T00:00:00.000Z"
   },
   "walkForward": {
     "startUtc": "2023-01-01T00:00:00.000Z",
-    "endUtc": "2024-12-31T23:59:00.000Z"
+    "endUtc": "2025-01-01T00:00:00.000Z"
   },
   "blindHoldout": {
     "startUtc": "2025-01-01T00:00:00.000Z",
-    "endUtc": "2025-12-31T23:59:00.000Z",
+    "endUtc": "2026-01-01T00:00:00.000Z",
     "status": "SEALED_NOT_ACCESSED"
   },
   "partitions": {
@@ -89,5 +89,5 @@
   "datasetSourceClassification": "NOT_AVAILABLE",
   "holdoutAccess": "PROHIBITED_UNTIL_OPERATOR_PROCEDURE",
   "silentDatasetSubstitution": "PROHIBITED",
-  "payloadSha256": "3b1ba9b3669e868418dabdf4bf705ea6a63507d6f38f1ccd15013d665109fa67"
+  "payloadSha256": "88126aad979b4d0ab8c30f0585780bfdf8a64af75ab285d80409732f439831ed"
 }

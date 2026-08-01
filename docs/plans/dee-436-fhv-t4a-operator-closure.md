@@ -42,7 +42,7 @@ linearStatusFlow:
   onMerge: keep-open-until-t4a-evidence
 state:
   status: step31-corrective-pending-merge
-  repositoryImplementation: merged
+  repositoryImplementation: pr-open-not-merged
   releaseToMain: v2026.07.31.df8181b-released
   mainToDevBackSync: completed-v2026.07.31.df8181b
   releasedPacketAudit: passed-v2026.07.31.df8181b
@@ -265,6 +265,6 @@ Additional fail-closed rule: empty/absent CLI classification must throw `FHV_T4A
 
 `cd96660` was **not** fully green for real Step 7 CLI parity — it accepted the shell class `FHV_T4_CHECKOUT_IDENTITY_OK` for Step 7 and hermetic hand-authored that same wrong class.
 
-Full AI-TRADER historical validation launch remains **not** executable after T4A repository readiness alone — blocked by Human/sequence gates (`AUTHORIZE-FHV-OPS-DEPLOY`, released T4A evidence acceptance, dataset source approval, `AUTHORIZE-FULL-HISTORICAL-VALIDATION`) and missing FULL campaign entrypoint (rehearsal-only `trader:fhv:campaign`). This PR proves T4A repository readiness only — not real-host T4A PASS, not historical validation PASS, not strategy validation PASS.
+Full AI-TRADER historical validation launch remains **not** executable on official multi-year HTX data after T4A repository readiness alone — blocked by Human/sequence gates (`AUTHORIZE-FHV-OPS-DEPLOY`, released T4A evidence acceptance, dataset source approval, `AUTHORIZE-FULL-HISTORICAL-VALIDATION`). Repository now exposes **`pnpm trader:fhv:run`** (Full launch receipt + bounded fixture path), **`pnpm trader:fhv:dataset-qualify`**, and **`pnpm trader:fhv:control-replay`**. This PR proves T4A repository readiness only — not real-host T4A PASS, not historical validation PASS, not strategy validation PASS.
 
 Do not mark DEE-436 or T4A complete. Failed-run and recovery namespaces must never be reused.
