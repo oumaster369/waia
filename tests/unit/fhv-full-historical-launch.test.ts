@@ -117,6 +117,21 @@ describe("DEE-436 FHV full launch fail-closed gates", () => {
     }
   });
 
+  it("rejects premature holdout access", () => {
+    const root = mkdtempSync(join(tmpdir(), "fhv-full-launch-"));
+    try {
+      const input = buildBaseInput(root, "fhv-full-holdout");
+      expect(() =>
+        validateFhvFullHistoricalLaunchInput({
+          ...input,
+          holdoutAccessRequested: true,
+        }),
+      ).toThrow(/Premature blind holdout access is prohibited/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects reused runId after receipt written", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-full-launch-"));
     const runId = "fhv-full-reuse-run";

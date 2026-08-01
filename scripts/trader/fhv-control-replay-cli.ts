@@ -1,7 +1,12 @@
 /**
  * DEE-436 — FHV control replay CLI (two-run digest compare on bounded fixture).
  *
- * Usage: pnpm trader:fhv:control-replay -- --artifact-root /abs/path --release-sha <sha> ...
+ * Usage:
+ *   pnpm trader:fhv:control-replay -- \
+ *     --release-sha <40-hex> \
+ *     --organization-id <uuid> \
+ *     --operator-id <id> \
+ *     [--artifact-root /abs/path]
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -14,6 +19,7 @@ import { FHV_FULL_HISTORICAL_VALIDATION_AUTHORIZATION } from "@/lib/trader/obser
 import { executeFhvFullHistoricalLaunch } from "@/lib/trader/observability/fhv-full-historical-launch";
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BENCHMARK_STRATEGY_VERSION = "0.1.0";
 
 export type FhvControlReplayResult = Readonly<{
@@ -24,6 +30,73 @@ export type FhvControlReplayResult = Readonly<{
   digestsMatch?: boolean;
   failureReason?: string;
 }>;
+
+function parseArgv(argv: readonly string[]): Map<string, string> {
+  const parsed = new Map<string, string>();
+  const tokens = argv[0] === "--" ? argv.slice(1) : argv;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    if (!token.startsWith("--")) {
+      throw new Error(`Unexpected positional argument: ${token}`);
+    }
+    const value = tokens[index + 1]?.trim();
+    if (!value || value.startsWith("--")) {
+      throw new Error(`Missing value for ${token}`);
+    }
+    parsed.set(token, value);
+    index += 1;
+  }
+  return parsed;
+}
+
+export function resolveFhvControlReplayCliConfig(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+  argv: readonly string[] = process.argv.slice(2),
+): {
+  releaseSha: string;
+  organizationId: string;
+  operatorId: string;
+  artifactRoot?: string;
+} {
+  const flags = parseArgv(argv);
+  const allowed = new Set([
+    "--release-sha",
+    "--organization-id",
+    "--operator-id",
+    "--artifact-root",
+  ]);
+  for (const key of flags.keys()) {
+    if (!allowed.has(key)) {
+      throw new Error(`Unknown flag: ${key}`);
+    }
+  }
+
+  const releaseSha = flags.get("--release-sha") ?? env.FHV_RELEASE_SHA?.trim();
+  const organizationId =
+    flags.get("--organization-id") ??
+    env.FHV_ORGANIZATION_ID?.trim() ??
+    "00000000-0000-4000-8000-000000000436";
+  const operatorId =
+    flags.get("--operator-id") ?? env.FHV_OPERATOR_ID?.trim() ?? "control-replay-operator";
+  const artifactRoot = flags.get("--artifact-root") ?? env.FHV_ARTIFACT_ROOT?.trim();
+
+  if (!releaseSha) {
+    throw new Error("FHV_RELEASE_SHA or --release-sha required");
+  }
+  if (!FULL_SHA.test(releaseSha)) {
+    throw new Error(`INVALID_RELEASE_SHA: ${releaseSha}`);
+  }
+  if (!UUID_V4.test(organizationId)) {
+    throw new Error(`INVALID_ORGANIZATION_ID: ${organizationId}`);
+  }
+
+  return {
+    releaseSha,
+    organizationId,
+    operatorId,
+    ...(artifactRoot ? { artifactRoot } : {}),
+  };
+}
 
 export async function runFhvControlReplay(input: {
   releaseSha: string;
@@ -91,8 +164,15 @@ export async function runFhvControlReplay(input: {
 
     const runOneDigest = resultOne.semanticReproDigest;
     const runTwoDigest = resultTwo.semanticReproDigest;
+    const cycleCountsMatch =
+      resultOne.backtest?.cycleCount != null &&
+      resultTwo.backtest?.cycleCount != null &&
+      resultOne.backtest.cycleCount === resultTwo.backtest.cycleCount;
     const digestsMatch =
-      runOneDigest != null && runTwoDigest != null && runOneDigest === runTwoDigest;
+      runOneDigest != null &&
+      runTwoDigest != null &&
+      runOneDigest === runTwoDigest &&
+      cycleCountsMatch;
 
     if (!digestsMatch) {
       return {
@@ -101,7 +181,7 @@ export async function runFhvControlReplay(input: {
         runOneDigest,
         runTwoDigest,
         digestsMatch: false,
-        failureReason: "SEMANTIC_REPRO_DIGEST_MISMATCH",
+        failureReason: cycleCountsMatch ? "SEMANTIC_REPRO_DIGEST_MISMATCH" : "CYCLE_COUNT_MISMATCH",
       };
     }
 
@@ -126,33 +206,20 @@ export async function runFhvControlReplay(input: {
 }
 
 async function main(): Promise<void> {
-  const releaseSha = process.env.FHV_RELEASE_SHA?.trim() ?? process.argv[3]?.trim();
-  const organizationId =
-    process.env.FHV_ORGANIZATION_ID?.trim() ?? "00000000-0000-4000-8000-0000000436";
-  const operatorId = process.env.FHV_OPERATOR_ID?.trim() ?? "control-replay-operator";
-  const artifactRoot = process.env.FHV_ARTIFACT_ROOT?.trim();
-
-  if (!releaseSha) {
-    process.stderr.write("[fhv-control-replay] FHV_RELEASE_SHA or --release-sha required\n");
-    process.exit(1);
+  try {
+    const config = resolveFhvControlReplayCliConfig();
+    const result = await runFhvControlReplay(config);
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    process.stdout.write(`${result.classification}\n`);
+    process.exitCode = result.classification === "CONTROL_REPLAY=PASS" ? 0 : 1;
+  } catch (error) {
+    process.stderr.write(`[fhv-control-replay] FAILED: ${String(error)}\n`);
+    process.exitCode = 1;
   }
-
-  const result = await runFhvControlReplay({
-    releaseSha,
-    organizationId,
-    operatorId,
-    artifactRoot,
-  });
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  process.stdout.write(`${result.classification}\n`);
-  process.exitCode = result.classification === "CONTROL_REPLAY=PASS" ? 0 : 1;
 }
 
 const invokedDirectly = process.argv[1]?.includes("fhv-control-replay-cli.ts") ?? false;
 
 if (invokedDirectly) {
-  main().catch((error: unknown) => {
-    process.stderr.write(`[fhv-control-replay] FAILED: ${String(error)}\n`);
-    process.exitCode = 1;
-  });
+  void main();
 }

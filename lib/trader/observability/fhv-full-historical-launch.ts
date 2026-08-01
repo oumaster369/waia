@@ -99,6 +99,24 @@ function computeLaunchReceiptDigest(
   return computeSemanticSha256Hex(receipt as unknown as Record<string, unknown>);
 }
 
+/** Strip run-identity fields that legitimately differ across control-replay runs. */
+export function stripRunIdentityForControlReplay(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stripRunIdentityForControlReplay);
+  }
+  if (value && typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      if (key === "runId" || key === "contentDigest") {
+        continue;
+      }
+      output[key] = stripRunIdentityForControlReplay(nested);
+    }
+    return output;
+  }
+  return value;
+}
+
 export function assertFhvRunContractIntervalsMatchPartitions(): void {
   const contract = HTR_FHV_RUN_CONTRACT_V0;
   if (
@@ -404,12 +422,12 @@ export async function executeFhvFullHistoricalLaunch(
     maxCycles: input.maxCycles,
   });
 
-  const semanticReproDigest = computeReplayReproContentDigest({
-    gitSha: input.releaseSha,
-    runId: input.runId,
-    cycleCount: backtest.cycleCount,
-    evidenceDigest: backtest.evidenceDigest,
-  });
+  // Economic/semantic digest must exclude per-run identity (runId) so two-run
+  // control replay can prove deterministic Full-mode outputs. contentDigest is
+  // recomputed from the stripped body, so strip runId before hashing.
+  const semanticReproDigest = computeReplayReproContentDigest(
+    stripRunIdentityForControlReplay(backtest.exportDocument),
+  );
 
   writeFileSync(
     join(runDir, "fhv-full-launch-result.v1.json"),
