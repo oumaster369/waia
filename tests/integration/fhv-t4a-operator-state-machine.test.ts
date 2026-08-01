@@ -213,9 +213,11 @@ describe("fhv-t4a operator state machine (DEE-436)", () => {
             terminalClassification?: string;
           },
       );
-    expect(traceLines.some((line) => line.semanticStep === 15 && line.exitStatus === 0)).toBe(true);
-    expect(traceLines.some((line) => line.semanticStep === 26 && line.exitStatus === 0)).toBe(true);
-    for (const step of [28, 29, 30, 31, 32] as const) {
+    const requiredTraceSteps = [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+      28, 29, 30, 31, 32,
+    ] as const;
+    for (const step of requiredTraceSteps) {
       expect(
         traceLines.some(
           (line) =>

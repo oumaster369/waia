@@ -252,4 +252,10 @@ Historical failed-run and recovery evidence is immutable forensic-only. It must 
 | Corrective branch | `dee-436-fhv-t4a-step31-required-tool-args-repair` |
 | Remaining gates | corrective PR → Human squash merge to `dev` → new dev CI → release promotion (`dev→main` merge commit) → release verification → mandatory `main→dev` back-sync → exact released Packet/blob audit → fresh unique PRE_AUTH → fresh unique T4A Steps 1–32 → Human final evidence acceptance |
 
+### Pre-merge audit addendum (Steps 4/7 terminal classification)
+
+Zero-defect pre-merge audit of PR #452 proved Steps 4 and 7 exited 0 but recorded tool-level `FHV_T4_CHECKOUT_IDENTITY_OK` as the operator `terminalClassification`, violating the Steps 1–32 contract (`FHV_T4A_STEP_<N>_OK`). Corrective: operator executor maps accepted checkout-identity CLI success to exact `FHV_T4A_STEP_4_OK` / `FHV_T4A_STEP_7_OK` (regression: `tests/unit/fhv-t4a-step-terminal-classification.test.ts` + integration trace assertions for Steps 1–26 and 28–32).
+
+Full AI-TRADER historical validation launch remains **not** executable after T4A repository readiness alone — blocked by Human/sequence gates (`AUTHORIZE-FHV-OPS-DEPLOY`, released T4A evidence acceptance, dataset source approval, `AUTHORIZE-FULL-HISTORICAL-VALIDATION`) and missing FULL campaign entrypoint (rehearsal-only `trader:fhv:campaign`).
+
 Do not mark DEE-436 or T4A complete. Failed-run and recovery namespaces must never be reused.
