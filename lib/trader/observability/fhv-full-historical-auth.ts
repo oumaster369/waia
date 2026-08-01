@@ -8,6 +8,10 @@ import {
   writeFileAtomicExclusive,
 } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
+import {
+  assertImmutableArtifactExactMatch,
+  FhvImmutableArtifactCollisionError,
+} from "@/lib/trader/observability/fhv-immutable-artifact-guard";
 
 /** Human-only authorization literal for issuing scoped authorization receipts. */
 export const FHV_FULL_HISTORICAL_VALIDATION_AUTHORIZATION =
@@ -128,6 +132,21 @@ export function readFhvFullHistoricalAuthorizationReceipt(
   return parsed;
 }
 
+const AUTHORIZATION_RECEIPT_COMPARE_KEYS = [
+  "schemaVersion",
+  "releaseSha",
+  "releaseTag",
+  "datasetQualificationReceiptDigest",
+  "datasetDigest",
+  "manifestDigest",
+  "configurationFreezeDigest",
+  "controlReplayReceiptDigest",
+  "organizationId",
+  "operatorId",
+  "runId",
+  "oneExecution",
+] as const satisfies readonly (keyof FhvFullHistoricalAuthorizationReceiptV1)[];
+
 export function writeFhvFullHistoricalAuthorizationReceiptAtomic(input: {
   receiptDir: string;
   releaseSha: string;
@@ -143,16 +162,31 @@ export function writeFhvFullHistoricalAuthorizationReceiptAtomic(input: {
 }): { receiptPath: string; receipt: FhvFullHistoricalAuthorizationReceiptV1 } {
   mkdirSync(input.receiptDir, { recursive: true });
   const receiptPath = join(input.receiptDir, FHV_FULL_HISTORICAL_AUTHORIZATION_RECEIPT_FILENAME);
+
   if (existsSync(receiptPath)) {
+    const existing = readFhvFullHistoricalAuthorizationReceipt(receiptPath);
+    const requested = buildFhvFullHistoricalAuthorizationReceipt({
+      ...input,
+      authorizedAtUtc: existing.authorizedAtUtc,
+    });
+    assertImmutableArtifactExactMatch({
+      artifactPath: receiptPath,
+      artifactLabel: "Full historical authorization receipt",
+      existing,
+      requested,
+      compareKeys: AUTHORIZATION_RECEIPT_COMPARE_KEYS,
+    });
     return {
       receiptPath,
-      receipt: readFhvFullHistoricalAuthorizationReceipt(receiptPath),
+      receipt: existing,
     };
   }
   const receipt = buildFhvFullHistoricalAuthorizationReceipt(input);
   writeFileAtomicExclusive(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
   return { receiptPath, receipt };
 }
+
+export { FhvImmutableArtifactCollisionError };
 
 export function consumeFhvFullHistoricalAuthorizationReceipt(
   receiptPath: string,

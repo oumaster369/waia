@@ -7,8 +7,11 @@ import { join } from "node:path";
 
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
+import {
+  assertFhvDatasetQualificationReceiptForExecution,
+  type FhvExecutionIdentity,
+} from "@/lib/trader/observability/fhv-artifact-authority-chain";
 import { writeFhvConfigurationFreezeArtifactAtomic } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
-import { readFhvDatasetQualificationReceipt } from "@/lib/trader/observability/fhv-dataset-qualification";
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -71,8 +74,20 @@ export function resolveFhvFreezeConfigCliConfig(
   if (!qualificationReceiptPath) {
     throw new Error("--qualification-receipt-path is required.");
   }
+  if (!releaseTag?.trim()) {
+    throw new Error("release-tag is required.");
+  }
 
-  const qualificationReceipt = readFhvDatasetQualificationReceipt(qualificationReceiptPath);
+  const identity: FhvExecutionIdentity = {
+    releaseSha,
+    releaseTag,
+    organizationId,
+    operatorId,
+  };
+  const qualificationReceipt = assertFhvDatasetQualificationReceiptForExecution({
+    receiptPath: qualificationReceiptPath,
+    identity,
+  });
 
   return {
     releaseSha,

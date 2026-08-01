@@ -2,6 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
+import {
+  assertImmutableArtifactExactMatch,
+  FhvImmutableArtifactCollisionError,
+} from "@/lib/trader/observability/fhv-immutable-artifact-guard";
 
 export const FHV_CONTROL_REPLAY_RECEIPT_SCHEMA_VERSION = "fhv-control-replay-receipt/v1" as const;
 export const FHV_CONTROL_REPLAY_HOLDOUT_STATUS = "SEALED_NOT_ACCESSED" as const;
@@ -88,6 +92,36 @@ export function readFhvControlReplayReceipt(receiptPath: string): FhvControlRepl
   return parsed;
 }
 
+const CONTROL_REPLAY_RECEIPT_COMPARE_KEYS = [
+  "schemaVersion",
+  "classification",
+  "releaseSha",
+  "releaseTag",
+  "organizationId",
+  "operatorId",
+  "runOneId",
+  "runTwoId",
+  "runOneDigest",
+  "runTwoDigest",
+  "digestsMatch",
+  "datasetQualificationReceiptDigest",
+  "datasetContentDigest",
+  "manifestSemanticDigest",
+  "runOneConfigurationFreezeDigest",
+  "runTwoConfigurationFreezeDigest",
+  "runOneAuthorizationReceiptDigest",
+  "runTwoAuthorizationReceiptDigest",
+  "runOneCheckoutIdentityProofDigest",
+  "runTwoCheckoutIdentityProofDigest",
+  "runOneCycleCount",
+  "runTwoCycleCount",
+  "runOneAccountingStateDigest",
+  "runTwoAccountingStateDigest",
+  "runOneHtrPnlReportDigest",
+  "runTwoHtrPnlReportDigest",
+  "holdoutStatus",
+] as const satisfies readonly (keyof FhvControlReplayReceiptV1)[];
+
 export function writeFhvControlReplayReceiptAtomic(input: {
   receiptPath: string;
   releaseSha: string;
@@ -115,9 +149,6 @@ export function writeFhvControlReplayReceiptAtomic(input: {
   runTwoHtrPnlReportDigest?: string;
   capturedAtUtc?: string;
 }): FhvControlReplayReceiptV1 {
-  if (existsSync(input.receiptPath)) {
-    return readFhvControlReplayReceipt(input.receiptPath);
-  }
   const body = {
     schemaVersion: FHV_CONTROL_REPLAY_RECEIPT_SCHEMA_VERSION,
     classification: "CONTROL_REPLAY=PASS" as const,
@@ -156,7 +187,26 @@ export function writeFhvControlReplayReceiptAtomic(input: {
     holdoutStatus: FHV_CONTROL_REPLAY_HOLDOUT_STATUS,
     capturedAtUtc: input.capturedAtUtc ?? new Date().toISOString(),
   };
+
+  if (existsSync(input.receiptPath)) {
+    const existing = readFhvControlReplayReceipt(input.receiptPath);
+    const requested = buildFhvControlReplayReceipt({
+      ...body,
+      capturedAtUtc: existing.capturedAtUtc,
+    });
+    assertImmutableArtifactExactMatch({
+      artifactPath: input.receiptPath,
+      artifactLabel: "Control replay receipt",
+      existing,
+      requested,
+      compareKeys: CONTROL_REPLAY_RECEIPT_COMPARE_KEYS,
+    });
+    return existing;
+  }
+
   const receipt = buildFhvControlReplayReceipt(body);
   writeFileAtomicExclusive(input.receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
   return receipt;
 }
+
+export { FhvImmutableArtifactCollisionError };

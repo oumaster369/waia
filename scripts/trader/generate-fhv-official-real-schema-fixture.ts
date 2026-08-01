@@ -14,6 +14,7 @@ import {
 import type { GapRecord } from "@/lib/trader/market-data/ingress/bar-integrity-gate";
 import { assertIngestBarsIntegrity } from "@/lib/trader/market-data/ingress/bar-integrity-gate";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
+import { compareDecimal } from "@/lib/trader/risk/numeric";
 
 const FIXTURE_ROOT = join(process.cwd(), "tests/fixtures/trader/fhv-official-real-schema");
 const PARTITIONS = [
@@ -25,25 +26,38 @@ const SYMBOLS = [
   { dir: "BTCUSDT", barSymbol: "BTC/USDT", price: "65000.00" },
   { dir: "ETHUSDT", barSymbol: "ETH/USDT", price: "3500.00" },
 ] as const;
-const BAR_COUNT = 20;
+const BAR_COUNT = 25;
+const FLAT_WARMUP_BARS = 15;
+
+function dipClose(basePrice: string, dipIndex: number): string {
+  const base = Number.parseFloat(basePrice);
+  const step = base * 0.003;
+  return (base - step * (dipIndex + 1)).toFixed(2);
+}
 
 function generateBars(startUtc: string, symbol: string, price: string): Bar[] {
   const bars: Bar[] = [];
   let openMs = Date.parse(startUtc);
+  let previousClose = price;
   for (let index = 0; index < BAR_COUNT; index += 1) {
     const barOpenTime = new Date(openMs).toISOString();
     const barCloseTime = new Date(openMs + 60_000).toISOString();
+    const close = index < FLAT_WARMUP_BARS ? price : dipClose(price, index - FLAT_WARMUP_BARS);
+    const open = index === 0 ? price : previousClose;
+    const high = compareDecimal(open, close) >= 0 ? open : close;
+    const low = compareDecimal(open, close) <= 0 ? open : close;
     bars.push({
       symbol,
       interval: "1m",
-      open: price,
-      high: price,
-      low: price,
-      close: price,
-      volume: "1.00",
+      open,
+      high,
+      low,
+      close,
+      volume: "12.50",
       barOpenTime,
       barCloseTime,
     });
+    previousClose = close;
     openMs += 60_000;
   }
   return bars;

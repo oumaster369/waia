@@ -20,8 +20,16 @@ import { readFhvControlReplayReceipt } from "@/lib/trader/observability/fhv-cont
 import {
   loadOfficialSharedPortfolioBars,
   readFhvDatasetQualificationReceipt,
+  type FhvDatasetQualificationReceiptV1,
 } from "@/lib/trader/observability/fhv-dataset-qualification";
 import { revalidateFhvDatasetAtLaunch } from "@/lib/trader/observability/fhv-dataset-launch-guard";
+import {
+  assertFhvAuthorizationReceiptForExecution,
+  assertFhvConfigurationFreezeForExecution,
+  assertFhvControlReplayReceiptForFullLaunch,
+  assertFhvDatasetQualificationReceiptForExecution,
+  type FhvExecutionIdentity,
+} from "@/lib/trader/observability/fhv-artifact-authority-chain";
 import {
   assertFhvFullHistoricalAuthorizationReceiptForLaunch,
   consumeFhvFullHistoricalAuthorizationReceipt,
@@ -86,6 +94,7 @@ export type FhvFullHistoricalLaunchInput = Readonly<{
 export type FhvFullHistoricalLaunchResult = Readonly<{
   classification:
     | "BOUNDED_FULL_HISTORICAL_END_TO_END_PASS"
+    | "FHV_SCHEMA_INTEGRATION_CEREMONY_PASS"
     | "FULL_HISTORICAL_VALIDATION_COMPLETED"
     | "FULL_HISTORICAL_LAUNCH_FAILED";
   receiptPath: string;
@@ -305,9 +314,29 @@ function writeFhvHoldoutUnsealEvidence(input: {
   return evidencePath;
 }
 
+export function resolveFhvFullHistoricalTerminalClassification(input: {
+  boundedFixture?: boolean;
+  qualificationReceipt: FhvDatasetQualificationReceiptV1;
+}): FhvFullHistoricalLaunchResult["classification"] {
+  if (input.boundedFixture) {
+    return "BOUNDED_FULL_HISTORICAL_END_TO_END_PASS";
+  }
+  if (input.qualificationReceipt.qualificationMode === "SCHEMA_INTEGRATION_FIXTURE") {
+    return "FHV_SCHEMA_INTEGRATION_CEREMONY_PASS";
+  }
+  if (input.qualificationReceipt.qualificationMode === "OFFICIAL_MULTI_YEAR") {
+    return "FULL_HISTORICAL_VALIDATION_COMPLETED";
+  }
+  throw new FhvFullHistoricalLaunchError(
+    "UNSUPPORTED_QUALIFICATION_MODE",
+    `Unsupported qualification mode for Full launch: ${input.qualificationReceipt.qualificationMode}.`,
+  );
+}
+
 export function validateFhvFullHistoricalLaunchInput(input: FhvFullHistoricalLaunchInput): {
   configurationFreeze: FhvConfigurationFreezeV1;
   freezeArtifact: FhvConfigurationFreezeArtifactV1;
+  qualificationReceipt: FhvDatasetQualificationReceiptV1;
   qualificationReceiptDigest: string;
   controlReplayReceiptDigest?: string;
 } {
@@ -348,15 +377,25 @@ export function validateFhvFullHistoricalLaunchInput(input: FhvFullHistoricalLau
     );
   }
 
-  const qualificationReceipt = readFhvDatasetQualificationReceipt(
-    input.datasetQualificationReceiptPath,
-  );
-  if (qualificationReceipt.classification !== "DATASET_QUALIFICATION=PASS") {
+  if (!input.releaseTag?.trim() && !input.boundedFixture) {
     throw new FhvFullHistoricalLaunchError(
-      "DATASET_QUALIFICATION_FAILED",
-      "Dataset qualification receipt must classify PASS.",
+      "RELEASE_TAG_REQUIRED",
+      "releaseTag is required for non-bounded Full Historical Validation.",
     );
   }
+
+  const identity: FhvExecutionIdentity = {
+    releaseSha: input.releaseSha,
+    releaseTag: input.releaseTag ?? "unknown",
+    organizationId: input.organizationId,
+    operatorId: input.operatorId,
+  };
+
+  const qualificationReceipt = assertFhvDatasetQualificationReceiptForExecution({
+    receiptPath: input.datasetQualificationReceiptPath,
+    identity,
+    requiredMode: input.boundedFixture ? undefined : undefined,
+  });
 
   const includeHoldout = !input.boundedFixture && input.executionPurpose !== "CONTROL_REPLAY";
   const controlReplayReceiptDigest = resolveControlReplayReceiptDigest(input);
@@ -367,17 +406,37 @@ export function validateFhvFullHistoricalLaunchInput(input: FhvFullHistoricalLau
     );
   }
 
-  const freezeArtifact = readFhvConfigurationFreezeArtifact(input.configurationFreezePath);
+  const freezeArtifact = assertFhvConfigurationFreezeForExecution({
+    freezePath: input.configurationFreezePath,
+    identity,
+    runId: input.runId,
+    qualificationReceipt,
+  });
   const configurationFreeze = freezeArtifact.configurationFreeze;
 
-  if (
-    freezeArtifact.datasetQualificationReceiptDigest !==
-    qualificationReceipt.qualificationReceiptDigest
-  ) {
+  const authorizationReceipt = assertFhvAuthorizationReceiptForExecution({
+    receiptPath: input.authorizationReceiptPath,
+    identity,
+    runId: input.runId,
+    qualificationReceipt,
+    freezeDigest: configurationFreeze.configurationFreezeDigest,
+    controlReplayReceiptDigest,
+  });
+
+  if (input.authorizationReceiptDigest !== authorizationReceipt.authorizationReceiptDigest) {
     throw new FhvFullHistoricalLaunchError(
-      "FREEZE_QUALIFICATION_DIGEST_MISMATCH",
-      "Configuration freeze artifact must bind dataset qualification receipt digest.",
+      "AUTHORIZATION_RECEIPT_DIGEST_MISMATCH",
+      "authorizationReceiptDigest mismatch.",
     );
+  }
+
+  if (includeHoldout && input.controlReplayReceiptPath) {
+    assertFhvControlReplayReceiptForFullLaunch({
+      receiptPath: input.controlReplayReceiptPath,
+      identity,
+      qualificationReceipt,
+      authorizationReceipt,
+    });
   }
 
   assertFhvFullHistoricalAuthorizationReceiptForLaunch({
@@ -440,6 +499,7 @@ export function validateFhvFullHistoricalLaunchInput(input: FhvFullHistoricalLau
   return {
     configurationFreeze,
     freezeArtifact,
+    qualificationReceipt,
     qualificationReceiptDigest: qualificationReceipt.qualificationReceiptDigest,
     controlReplayReceiptDigest,
   };
@@ -498,8 +558,12 @@ export async function executeFhvFullHistoricalLaunch(
   const runDir = resolveFhvFullLaunchRunDirectory(input.artifactRoot, input.runId);
   assertCheckoutIdentity(input, runDir);
 
-  const { configurationFreeze, qualificationReceiptDigest, controlReplayReceiptDigest } =
-    validateFhvFullHistoricalLaunchInput(input);
+  const {
+    configurationFreeze,
+    qualificationReceipt,
+    qualificationReceiptDigest,
+    controlReplayReceiptDigest,
+  } = validateFhvFullHistoricalLaunchInput(input);
 
   if (!input.boundedFixture && input.datasetRoot && input.manifestPath) {
     revalidateFhvDatasetAtLaunch({
@@ -560,9 +624,10 @@ export async function executeFhvFullHistoricalLaunch(
     stripRunIdentityForControlReplay(backtest.exportDocument),
   );
 
-  const classification = input.boundedFixture
-    ? ("BOUNDED_FULL_HISTORICAL_END_TO_END_PASS" as const)
-    : ("FULL_HISTORICAL_VALIDATION_COMPLETED" as const);
+  const classification = resolveFhvFullHistoricalTerminalClassification({
+    boundedFixture: input.boundedFixture === true,
+    qualificationReceipt,
+  });
 
   const launchResult = {
     schemaVersion: "fhv-full-launch-result/v1",

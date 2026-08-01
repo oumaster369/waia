@@ -277,6 +277,12 @@ async function runHtrGuardianPhase(
   return { htrGuardian, htrBreachCancellation, accountState };
 }
 
+function shouldDeferReconciliationToHistoricalExchange(
+  input: PaperCycleInputWithHtrBreachCancellation,
+): boolean {
+  return input.htrBreachCancellation?.historicalExchange !== undefined;
+}
+
 function assertHtrOrderSubmissionPermitted(
   input: PaperCycleInput,
   order: PlaceOrderInput,
@@ -424,10 +430,12 @@ async function runGuardianPhase(
       continue;
     }
 
-    const reconciliation = await deps.reconciliation.reconcile(context, {
-      kind: "order",
-      orderId: execution.order.id,
-    });
+    const reconciliation = shouldDeferReconciliationToHistoricalExchange(input)
+      ? null
+      : await deps.reconciliation.reconcile(context, {
+          kind: "order",
+          orderId: execution.order.id,
+        });
 
     guardianExecutions.push({
       intentId: intent.intentId,
@@ -714,10 +722,12 @@ export async function runPaperCycleOnce(
       continue;
     }
 
-    const reconciliation = await deps.reconciliation.reconcile(context, {
-      kind: "order",
-      orderId: execution.order.id,
-    });
+    const reconciliation = shouldDeferReconciliationToHistoricalExchange(input)
+      ? null
+      : await deps.reconciliation.reconcile(context, {
+          kind: "order",
+          orderId: execution.order.id,
+        });
 
     strategyExecutions.push({
       signal,

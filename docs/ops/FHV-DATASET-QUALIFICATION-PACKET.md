@@ -6,22 +6,24 @@
 
 Validate a Full Historical Dataset against the official contract before configuration freeze and Full launch. Produces an immutable qualification receipt binding separate `datasetContentDigest` and `manifestSemanticDigest`.
 
-## Official mode (HTX multi-year or real-schema integration)
+## Official mode (HTX multi-year)
 
 ```bash
 export FHV_RELEASE_SHA="<full-git-sha>"
 export FHV_RELEASE_TAG="<release-tag>"
 export FHV_ORGANIZATION_ID="<uuid-v4>"
 export FHV_OPERATOR_ID="<operator-id>"
+export FHV_RECEIPT_DIR="/absolute/receipt/dir"
 
 pnpm trader:fhv:dataset-qualify -- \
   --dataset-root "/absolute/dataset/root" \
   --manifest-path "/absolute/fhv-dataset-manifest.v1.json" \
+  --qualification-mode OFFICIAL_MULTI_YEAR \
   --release-sha "$FHV_RELEASE_SHA" \
   --release-tag "$FHV_RELEASE_TAG" \
   --organization-id "$FHV_ORGANIZATION_ID" \
   --operator-id "$FHV_OPERATOR_ID" \
-  --output "/absolute/fhv-dataset-qualification-receipt.v1.json"
+  --receipt-dir "$FHV_RECEIPT_DIR"
 ```
 
 Validates:
@@ -31,6 +33,22 @@ Validates:
 - Partition completeness, non-overlap, boundary continuity
 - Per-file digests, no duplicate/out-of-order bars
 - Blind holdout seal status preserved
+
+## Schema integration fixture mode (test-only — explicit flag required)
+
+```bash
+pnpm trader:fhv:dataset-qualify -- \
+  --dataset-root "/absolute/tests/fixtures/trader/fhv-official-real-schema" \
+  --manifest-path "/absolute/tests/fixtures/trader/fhv-official-real-schema/fhv-dataset-manifest.json" \
+  --qualification-mode SCHEMA_INTEGRATION_FIXTURE \
+  --release-sha "$FHV_RELEASE_SHA" \
+  --release-tag "$FHV_RELEASE_TAG" \
+  --organization-id "$FHV_ORGANIZATION_ID" \
+  --operator-id "$FHV_OPERATOR_ID" \
+  --receipt-dir "$FHV_RECEIPT_DIR"
+```
+
+Uses real-schema integration fixture. **Must not** be confused with official multi-year qualification.
 
 ## Bounded fixture mode (test-only — explicit flag required)
 
@@ -42,7 +60,7 @@ Uses ingress manifest evidence harness. **Must not** be confused with official q
 
 ## Machine-readable output
 
-Receipt schema: `fhv-dataset-qualification-receipt/v1` with fields:
+Receipt schema: `fhv-dataset-qualification-receipt/v1` written to `$FHV_RECEIPT_DIR/fhv-dataset-qualification-receipt.v1.json` with fields:
 
 - `classification`: `DATASET_QUALIFICATION=PASS` | `DATASET_QUALIFICATION=FAIL`
 - `datasetContentDigest` (content authority — distinct from manifest)

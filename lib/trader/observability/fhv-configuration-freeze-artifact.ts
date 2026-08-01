@@ -10,6 +10,10 @@ import {
   computeFhvConfigurationFreezeDigest,
   type FhvConfigurationFreezeV1,
 } from "@/lib/trader/observability/fhv-configuration-freeze";
+import {
+  assertImmutableArtifactExactMatch,
+  FhvImmutableArtifactCollisionError,
+} from "@/lib/trader/observability/fhv-immutable-artifact-guard";
 
 export const FHV_CONFIGURATION_FREEZE_ARTIFACT_SCHEMA_VERSION =
   "fhv-configuration-freeze-artifact/v1" as const;
@@ -94,6 +98,13 @@ export function readFhvConfigurationFreezeArtifact(
   return parsed;
 }
 
+const CONFIGURATION_FREEZE_ARTIFACT_COMPARE_KEYS = [
+  "schemaVersion",
+  "configurationFreeze",
+  "datasetQualificationReceiptDigest",
+  "sourceReceiptDigests",
+] as const satisfies readonly (keyof FhvConfigurationFreezeArtifactV1)[];
+
 export function writeFhvConfigurationFreezeArtifactAtomic(input: {
   artifactDir: string;
   releaseSha: string;
@@ -111,9 +122,6 @@ export function writeFhvConfigurationFreezeArtifactAtomic(input: {
 }): { artifactPath: string; artifact: FhvConfigurationFreezeArtifactV1 } {
   mkdirSync(input.artifactDir, { recursive: true });
   const artifactPath = join(input.artifactDir, FHV_CONFIGURATION_FREEZE_ARTIFACT_FILENAME);
-  if (existsSync(artifactPath)) {
-    return { artifactPath, artifact: readFhvConfigurationFreezeArtifact(artifactPath) };
-  }
 
   const configurationFreeze = buildFhvConfigurationFreeze({
     releaseSha: input.releaseSha,
@@ -128,12 +136,25 @@ export function writeFhvConfigurationFreezeArtifactAtomic(input: {
     checkpointDigest: input.checkpointDigest,
   });
 
-  const artifact = buildFhvConfigurationFreezeArtifact({
+  const requested = buildFhvConfigurationFreezeArtifact({
     configurationFreeze,
     datasetQualificationReceiptDigest: input.datasetQualificationReceiptDigest,
     sourceReceiptDigests: input.sourceReceiptDigests,
   });
-  const json = `${JSON.stringify(artifact, null, 2)}\n`;
+
+  if (existsSync(artifactPath)) {
+    const existing = readFhvConfigurationFreezeArtifact(artifactPath);
+    assertImmutableArtifactExactMatch({
+      artifactPath,
+      artifactLabel: "Configuration freeze artifact",
+      existing,
+      requested,
+      compareKeys: CONFIGURATION_FREEZE_ARTIFACT_COMPARE_KEYS,
+    });
+    return { artifactPath, artifact: existing };
+  }
+
+  const json = `${JSON.stringify(requested, null, 2)}\n`;
   writeFileAtomicExclusive(artifactPath, json);
   return { artifactPath, artifact: readFhvConfigurationFreezeArtifact(artifactPath) };
 }
@@ -144,4 +165,4 @@ export function resolveConfigurationFreezeFromArtifact(
   return readFhvConfigurationFreezeArtifact(artifactPath).configurationFreeze;
 }
 
-export { computeFhvConfigurationFreezeDigest };
+export { computeFhvConfigurationFreezeDigest, FhvImmutableArtifactCollisionError };

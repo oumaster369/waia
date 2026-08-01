@@ -126,6 +126,7 @@ describe("DEE-436 FHV public ceremony RED-1..RED-9", () => {
       await expect(
         executeFhvFullHistoricalLaunch({
           releaseSha: FHV_TEST_RELEASE_SHA,
+          releaseTag: FHV_TEST_RELEASE_TAG,
           runId,
           organizationId: ORG_ID,
           operatorId: OPERATOR_ID,
@@ -149,6 +150,7 @@ describe("DEE-436 FHV public ceremony RED-1..RED-9", () => {
       });
       const dedicated = await executeFhvControlReplayLaunch({
         releaseSha: FHV_TEST_RELEASE_SHA,
+        releaseTag: FHV_TEST_RELEASE_TAG,
         runId: `${runId}-dedicated`,
         organizationId: ORG_ID,
         operatorId: OPERATOR_ID,

@@ -10,6 +10,7 @@ import {
 } from "@/lib/trader/observability/fhv-full-historical-launch";
 import {
   FHV_TEST_RELEASE_SHA,
+  FHV_TEST_RELEASE_TAG,
   setupFhvBoundedLaunchArtifacts,
 } from "@/tests/helpers/fhv-official-path-test-fixtures";
 
@@ -26,6 +27,7 @@ function buildBaseInput(artifactRoot: string, runId: string) {
   });
   return {
     releaseSha: FHV_TEST_RELEASE_SHA,
+    releaseTag: FHV_TEST_RELEASE_TAG,
     runId,
     organizationId: ORG_ID,
     operatorId: OPERATOR_ID,

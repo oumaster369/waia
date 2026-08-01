@@ -82,11 +82,19 @@ export function setupFhvBoundedLaunchArtifacts(input: {
   const prepDir = join(input.artifactRoot, "prep", input.prepSuffix ?? input.runId);
   mkdirSync(prepDir, { recursive: true });
 
+  const releaseSha = input.releaseSha ?? FHV_TEST_RELEASE_SHA;
+  const organizationId = input.organizationId ?? FHV_TEST_ORG_ID;
+  const operatorId = input.operatorId ?? FHV_TEST_OPERATOR_ID;
+
   const qualificationReceipt = writeFhvDatasetQualificationReceiptAtomic({
     receiptDir: prepDir,
     datasetRoot: "tests/fixtures/trader/btcusdt-1m-mean-reversion.json",
     manifestPath: "tests/fixtures/trader/btcusdt-1m-mean-reversion.json",
     boundedFixture: true,
+    releaseSha,
+    releaseTag: FHV_TEST_RELEASE_TAG,
+    organizationId,
+    operatorId,
   });
   const qualificationReceiptPath = join(prepDir, FHV_DATASET_QUALIFICATION_RECEIPT_FILENAME);
 
@@ -94,10 +102,11 @@ export function setupFhvBoundedLaunchArtifacts(input: {
   const { artifactPath: configurationFreezePath, artifact: freezeArtifact } =
     writeFhvConfigurationFreezeArtifactAtomic({
       artifactDir: freezeDir,
-      releaseSha: input.releaseSha ?? FHV_TEST_RELEASE_SHA,
+      releaseSha,
+      releaseTag: FHV_TEST_RELEASE_TAG,
       runId: input.runId,
-      organizationId: input.organizationId ?? FHV_TEST_ORG_ID,
-      operatorId: input.operatorId ?? FHV_TEST_OPERATOR_ID,
+      organizationId,
+      operatorId,
       datasetDigest: qualificationReceipt.datasetContentDigest,
       manifestDigest: qualificationReceipt.manifestSemanticDigest,
       strategyVersions: [FHV_TEST_STRATEGY_VERSION],
@@ -110,22 +119,22 @@ export function setupFhvBoundedLaunchArtifacts(input: {
   const { receiptPath: authorizationReceiptPath, receipt: authReceipt } =
     writeFhvFullHistoricalAuthorizationReceiptAtomic({
       receiptDir: authDir,
-      releaseSha: input.releaseSha ?? FHV_TEST_RELEASE_SHA,
+      releaseSha,
       releaseTag: FHV_TEST_RELEASE_TAG,
       datasetQualificationReceiptDigest: qualificationReceipt.qualificationReceiptDigest,
       datasetDigest: freezeArtifact.configurationFreeze.datasetDigest,
       manifestDigest: freezeArtifact.configurationFreeze.manifestDigest,
       configurationFreezeDigest: freezeArtifact.configurationFreeze.configurationFreezeDigest,
-      organizationId: input.organizationId ?? FHV_TEST_ORG_ID,
-      operatorId: input.operatorId ?? FHV_TEST_OPERATOR_ID,
+      organizationId,
+      operatorId,
       runId: input.runId,
     });
 
   const checkoutIdentityProofPath = writeFhvTestCheckoutIdentityProof({
     proofDir: join(prepDir, "checkout"),
-    releaseSha: input.releaseSha ?? FHV_TEST_RELEASE_SHA,
+    releaseSha,
     runId: input.runId,
-    organizationId: input.organizationId ?? FHV_TEST_ORG_ID,
+    organizationId,
   });
 
   return {
@@ -158,19 +167,25 @@ export function setupFhvControlReplayArtifacts(input: {
   const prepDir = join(input.artifactRoot, "prep");
   mkdirSync(prepDir, { recursive: true });
 
+  const organizationId = input.organizationId ?? FHV_TEST_ORG_ID;
+  const operatorId = input.operatorId ?? FHV_TEST_OPERATOR_ID;
+
   const qualificationReceipt = writeFhvDatasetQualificationReceiptAtomic({
     receiptDir: prepDir,
     datasetRoot: "tests/fixtures/trader/btcusdt-1m-mean-reversion.json",
     manifestPath: "tests/fixtures/trader/btcusdt-1m-mean-reversion.json",
     boundedFixture: true,
+    releaseSha: input.releaseSha,
+    releaseTag: FHV_TEST_RELEASE_TAG,
+    organizationId,
+    operatorId,
   });
   const qualificationReceiptPath = join(prepDir, FHV_DATASET_QUALIFICATION_RECEIPT_FILENAME);
-  const organizationId = input.organizationId ?? FHV_TEST_ORG_ID;
-  const operatorId = input.operatorId ?? FHV_TEST_OPERATOR_ID;
 
   const freezeOne = writeFhvConfigurationFreezeArtifactAtomic({
     artifactDir: join(prepDir, "freeze-one"),
     releaseSha: input.releaseSha,
+    releaseTag: FHV_TEST_RELEASE_TAG,
     runId: runOneId,
     organizationId,
     operatorId,
@@ -184,6 +199,7 @@ export function setupFhvControlReplayArtifacts(input: {
   const freezeTwo = writeFhvConfigurationFreezeArtifactAtomic({
     artifactDir: join(prepDir, "freeze-two"),
     releaseSha: input.releaseSha,
+    releaseTag: FHV_TEST_RELEASE_TAG,
     runId: runTwoId,
     organizationId,
     operatorId,
@@ -255,6 +271,8 @@ export function setupFhvOfficialSchemaLaunchArtifacts(input: {
   releaseSha?: string;
   organizationId?: string;
   operatorId?: string;
+  datasetRoot?: string;
+  manifestPath?: string;
 }): {
   qualificationReceiptPath: string;
   configurationFreezePath: string;
@@ -269,11 +287,13 @@ export function setupFhvOfficialSchemaLaunchArtifacts(input: {
   const releaseSha = input.releaseSha ?? FHV_TEST_RELEASE_SHA;
   const organizationId = input.organizationId ?? FHV_TEST_ORG_ID;
   const operatorId = input.operatorId ?? FHV_TEST_OPERATOR_ID;
+  const datasetRoot = input.datasetRoot ?? FHV_OFFICIAL_REAL_SCHEMA_ROOT;
+  const manifestPath = input.manifestPath ?? FHV_OFFICIAL_REAL_SCHEMA_MANIFEST;
 
   const qualificationReceipt = writeFhvDatasetQualificationReceiptAtomic({
     receiptDir: prepDir,
-    datasetRoot: FHV_OFFICIAL_REAL_SCHEMA_ROOT,
-    manifestPath: FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
+    datasetRoot,
+    manifestPath,
     qualificationMode: "SCHEMA_INTEGRATION_FIXTURE",
     releaseSha,
     releaseTag: FHV_TEST_RELEASE_TAG,

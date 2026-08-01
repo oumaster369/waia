@@ -7,9 +7,12 @@ import { join } from "node:path";
 
 import { FHV_FULL_HISTORICAL_VALIDATION_AUTHORIZATION } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { writeFhvFullHistoricalAuthorizationReceiptAtomic } from "@/lib/trader/observability/fhv-full-historical-auth";
-import { readFhvConfigurationFreezeArtifact } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
-import { readFhvControlReplayReceipt } from "@/lib/trader/observability/fhv-control-replay-receipt";
-import { readFhvDatasetQualificationReceipt } from "@/lib/trader/observability/fhv-dataset-qualification";
+import {
+  assertFhvConfigurationFreezeForExecution,
+  assertFhvControlReplayReceiptForAuthorization,
+  assertFhvDatasetQualificationReceiptForExecution,
+  type FhvExecutionIdentity,
+} from "@/lib/trader/observability/fhv-artifact-authority-chain";
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -82,10 +85,29 @@ export function resolveFhvAuthorizeFullCliConfig(
   if (!qualificationReceiptPath) {
     throw new Error("--qualification-receipt-path is required.");
   }
-  const freezeArtifact = readFhvConfigurationFreezeArtifact(freezeArtifactPath);
-  const qualificationReceipt = readFhvDatasetQualificationReceipt(qualificationReceiptPath);
+
+  const identity: FhvExecutionIdentity = {
+    releaseSha,
+    releaseTag,
+    organizationId,
+    operatorId,
+  };
+  const qualificationReceipt = assertFhvDatasetQualificationReceiptForExecution({
+    receiptPath: qualificationReceiptPath,
+    identity,
+  });
+  const freezeArtifact = assertFhvConfigurationFreezeForExecution({
+    freezePath: freezeArtifactPath,
+    identity,
+    runId,
+    qualificationReceipt,
+  });
   const controlReplayReceipt = controlReplayReceiptPath
-    ? readFhvControlReplayReceipt(controlReplayReceiptPath)
+    ? assertFhvControlReplayReceiptForAuthorization({
+        receiptPath: controlReplayReceiptPath,
+        identity,
+        qualificationReceipt,
+      })
     : undefined;
 
   return {

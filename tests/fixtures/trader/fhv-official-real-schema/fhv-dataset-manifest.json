@@ -22,14 +22,14 @@
         "method": "fixture-generate",
         "uri": "tests/fixtures/trader/fhv-official-real-schema"
       },
-      "sourceChecksumSha256": "7d8e9e624bae73e513b57217548680862078e5af9337fb4ddacc500d9770b7c3"
+      "sourceChecksumSha256": "506e01531d91427e41d312be0a52d8b9490e7fc7324ee86b1b17b37ffa6f875a"
     }
   ],
-  "normalizedContentDigest": "07fa499356831f492737c4de413be8d695e0df17642a7248ce7148efb90aa74a",
-  "barSetDigest": "7d8e9e624bae73e513b57217548680862078e5af9337fb4ddacc500d9770b7c3",
+  "normalizedContentDigest": "b6c4576443ac56d65ed661d25b3edee7fce50619467566591c7baa8f50a5a0d8",
+  "barSetDigest": "506e01531d91427e41d312be0a52d8b9490e7fc7324ee86b1b17b37ffa6f875a",
   "perBarContentDigestAlgo": "computeBarContentDigest",
-  "expectedBarCount": 120,
-  "observedBarCount": 120,
+  "expectedBarCount": 150,
+  "observedBarCount": 150,
   "intervalBoundaries": {
     "startUtc": "2020-01-01T00:00:00.000Z",
     "endUtc": "2026-01-01T00:00:00.000Z"
@@ -77,5 +77,5 @@
     "contaminationStatus": "RESERVED_SEALED_NOT_ACCESSED"
   },
   "manifestVersion": 1,
-  "manifestSemanticDigest": "d83d0add54961d121809bf3443992214137e388028c3751d459dedff13905046"
+  "manifestSemanticDigest": "ff968ac2ac672a55eee736c434fd0b826c31f51a512fc1b3b7e2dbb2a3b3b2bd"
 }

@@ -27,8 +27,8 @@ import { runFhvControlReplay } from "@/scripts/trader/fhv-control-replay-cli";
 import {
   FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
   FHV_OFFICIAL_REAL_SCHEMA_ROOT,
-  FHV_TEST_RELEASE_TAG,
   FHV_TEST_RELEASE_SHA,
+  FHV_TEST_RELEASE_TAG,
   FHV_TEST_STRATEGY_DIGEST,
   FHV_TEST_STRATEGY_VERSION,
   setupFhvBoundedLaunchArtifacts,
@@ -70,7 +70,7 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
         maxCycles: 10,
       });
 
-      expect(result.classification).toBe("FULL_HISTORICAL_VALIDATION_COMPLETED");
+      expect(result.classification).toBe("FHV_SCHEMA_INTEGRATION_CEREMONY_PASS");
       expect(result.backtest).toBeDefined();
       expect(result.backtest!.cycleCount).toBeGreaterThan(0);
     } finally {
@@ -129,6 +129,7 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
       expect(() =>
         validateFhvFullHistoricalLaunchInput({
           releaseSha: FHV_TEST_RELEASE_SHA,
+          releaseTag: FHV_TEST_RELEASE_TAG,
           runId,
           organizationId: ORG_ID,
           operatorId: OPERATOR_ID,
@@ -192,6 +193,7 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
       });
       const result = await executeFhvFullHistoricalLaunch({
         releaseSha: FHV_TEST_RELEASE_SHA,
+        releaseTag: FHV_TEST_RELEASE_TAG,
         runId,
         organizationId: ORG_ID,
         operatorId: OPERATOR_ID,
@@ -221,6 +223,7 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
       });
       const result = await runFhvControlReplay({
         releaseSha: FHV_TEST_RELEASE_SHA,
+        releaseTag: FHV_TEST_RELEASE_TAG,
         organizationId: ORG_ID,
         operatorId: OPERATOR_ID,
         artifactRoot: join(root, "runs"),
@@ -283,6 +286,7 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
       });
       const result = await executeFhvFullHistoricalLaunch({
         releaseSha: FHV_TEST_RELEASE_SHA,
+        releaseTag: FHV_TEST_RELEASE_TAG,
         runId,
         organizationId: ORG_ID,
         operatorId: OPERATOR_ID,

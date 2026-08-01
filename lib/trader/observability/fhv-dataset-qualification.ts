@@ -19,8 +19,16 @@ import type { GapRecord } from "@/lib/trader/market-data/ingress/bar-integrity-g
 import { mergeFhvSharedPortfolioBarsChronologically } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
 import { runIngressManifestEvidenceHarness } from "@/lib/trader/market-data/dataset/ingress-manifest-evidence-harness";
 import { assertIngestBarsIntegrity } from "@/lib/trader/market-data/ingress/bar-integrity-gate";
-import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
+import {
+  accumulateBarContentDigests,
+  finalizeBarSetDigestFromBarDigests,
+} from "@/lib/trader/market-data/research-dataset";
+import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import {
+  assertImmutableArtifactExactMatch,
+  FhvImmutableArtifactCollisionError,
+} from "@/lib/trader/observability/fhv-immutable-artifact-guard";
 
 export const FHV_DATASET_QUALIFICATION_RECEIPT_SCHEMA_VERSION =
   "fhv-dataset-qualification-receipt/v1" as const;
@@ -358,12 +366,10 @@ export function qualifyFhvOfficialDataset(input: {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as FhvDatasetManifestV1;
   validateOfficialManifest(manifest, manifestPath);
 
-  const allBars: Bar[] = [];
+  const datasetBarDigestEntries: Array<{ openTimeMs: number; digest: string }> = [];
+  const btcBarDigests: string[] = [];
+  const ethBarDigests: string[] = [];
   const partitionEvidence: FhvPartitionBarEvidenceV1[] = [];
-  const symbolBars: Record<(typeof FHV_OFFICIAL_SYMBOLS)[number], Bar[]> = {
-    BTCUSDT: [],
-    ETHUSDT: [],
-  };
 
   for (const partition of FHV_OFFICIAL_PARTITION_NAMES) {
     const interval = resolvePartitionInterval(partition);
@@ -400,18 +406,29 @@ export function qualifyFhvOfficialDataset(input: {
         firstBarOpenTime: sortedBars[0]!.barOpenTime,
         lastBarOpenTime: sortedBars.at(-1)!.barOpenTime,
       });
-      symbolBars[symbol].push(...bars);
-      allBars.push(...bars);
+      for (const bar of bars) {
+        datasetBarDigestEntries.push({
+          openTimeMs: Date.parse(bar.barOpenTime),
+          digest: computeBarContentDigest(bar),
+        });
+      }
+      if (symbol === "BTCUSDT") {
+        accumulateBarContentDigests(btcBarDigests, bars);
+      } else {
+        accumulateBarContentDigests(ethBarDigests, bars);
+      }
     }
   }
 
-  allBars.sort((left, right) => Date.parse(left.barOpenTime) - Date.parse(right.barOpenTime));
-  const datasetContentDigest = computeBarSetDigest(allBars);
+  datasetBarDigestEntries.sort((left, right) => left.openTimeMs - right.openTimeMs);
+  const datasetContentDigest = finalizeBarSetDigestFromBarDigests(
+    datasetBarDigestEntries.map((entry) => entry.digest),
+  );
   const manifestSemanticDigest = manifest.manifestSemanticDigest;
   const partitionsDigest = computeStableJsonDigest(FHV_DATASET_PARTITIONS_V1);
   const symbolDigests = {
-    BTCUSDT: computeBarSetDigest(symbolBars.BTCUSDT),
-    ETHUSDT: computeBarSetDigest(symbolBars.ETHUSDT),
+    BTCUSDT: finalizeBarSetDigestFromBarDigests(btcBarDigests),
+    ETHUSDT: finalizeBarSetDigestFromBarDigests(ethBarDigests),
   } as const;
   const holdoutSealDigest = computeStableJsonDigest(manifest.holdoutSeal);
 
@@ -499,6 +516,26 @@ export function readFhvDatasetQualificationReceipt(
   return parsed;
 }
 
+const DATASET_QUALIFICATION_RECEIPT_COMPARE_KEYS = [
+  "schemaVersion",
+  "classification",
+  "qualificationMode",
+  "datasetRoot",
+  "manifestPath",
+  "datasetContentDigest",
+  "manifestSemanticDigest",
+  "partitionsDigest",
+  "gapPolicyId",
+  "releaseSha",
+  "releaseTag",
+  "organizationId",
+  "operatorId",
+  "fixtureClassification",
+  "partitionEvidence",
+  "symbolDigests",
+  "holdoutSealDigest",
+] as const satisfies readonly (keyof FhvDatasetQualificationReceiptV1)[];
+
 export function writeFhvDatasetQualificationReceiptAtomic(input: {
   receiptDir: string;
   datasetRoot: string;
@@ -512,12 +549,15 @@ export function writeFhvDatasetQualificationReceiptAtomic(input: {
 }): FhvDatasetQualificationReceiptV1 {
   mkdirSync(input.receiptDir, { recursive: true });
   const receiptPath = join(input.receiptDir, FHV_DATASET_QUALIFICATION_RECEIPT_FILENAME);
-  if (existsSync(receiptPath)) {
-    return readFhvDatasetQualificationReceipt(receiptPath);
-  }
 
   const body = input.boundedFixture
-    ? qualifyFhvBoundedFixtureDataset()
+    ? {
+        ...qualifyFhvBoundedFixtureDataset(),
+        ...(input.releaseSha ? { releaseSha: input.releaseSha.trim().toLowerCase() } : {}),
+        ...(input.releaseTag ? { releaseTag: input.releaseTag.trim() } : {}),
+        ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+        ...(input.operatorId ? { operatorId: input.operatorId.trim() } : {}),
+      }
     : qualifyFhvOfficialDataset({
         datasetRoot: input.datasetRoot,
         manifestPath: input.manifestPath,
@@ -528,6 +568,22 @@ export function writeFhvDatasetQualificationReceiptAtomic(input: {
         operatorId: input.operatorId,
       });
 
+  if (existsSync(receiptPath)) {
+    const existing = readFhvDatasetQualificationReceipt(receiptPath);
+    const requested = buildFhvDatasetQualificationReceipt({
+      ...body,
+      qualifiedAtUtc: existing.qualifiedAtUtc,
+    });
+    assertImmutableArtifactExactMatch({
+      artifactPath: receiptPath,
+      artifactLabel: "Dataset qualification receipt",
+      existing,
+      requested,
+      compareKeys: DATASET_QUALIFICATION_RECEIPT_COMPARE_KEYS,
+    });
+    return existing;
+  }
+
   const receipt = buildFhvDatasetQualificationReceipt({
     ...body,
     qualifiedAtUtc: new Date().toISOString(),
@@ -535,6 +591,8 @@ export function writeFhvDatasetQualificationReceiptAtomic(input: {
   writeFileAtomicExclusive(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
   return receipt;
 }
+
+export { FhvImmutableArtifactCollisionError };
 
 export function loadOfficialSharedPortfolioBars(input: {
   datasetRoot: string;

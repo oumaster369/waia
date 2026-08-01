@@ -233,6 +233,24 @@ export function resolveFhvControlReplayCliConfig(
   if (!controlReplayReceiptOutput) {
     throw new Error("Official control replay requires --control-replay-receipt-output");
   }
+  if (!configurationFreezePathRunTwo) {
+    throw new Error("Official control replay requires --configuration-freeze-path-run-two");
+  }
+  if (!authorizationReceiptPathRunTwo) {
+    throw new Error("Official control replay requires --authorization-receipt-path-run-two");
+  }
+  if (configurationFreezePath === configurationFreezePathRunTwo) {
+    throw new Error("Official control replay requires distinct configuration freeze paths");
+  }
+  if (authorizationReceiptPath === authorizationReceiptPathRunTwo) {
+    throw new Error("Official control replay requires distinct authorization receipt paths");
+  }
+  if (checkoutIdentityProofPathRunOne === checkoutIdentityProofPathRunTwo) {
+    throw new Error("Official control replay requires distinct checkout identity proof paths");
+  }
+  if (resolvedRunOneId === resolvedRunTwoId) {
+    throw new Error("Official control replay requires distinct run-one-id and run-two-id");
+  }
 
   return {
     releaseSha,
@@ -295,13 +313,48 @@ export async function runFhvControlReplay(input: {
     );
     const authReceipt = readFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);
 
-    const freezePathTwo = input.configurationFreezePathRunTwo ?? input.configurationFreezePath;
-    const authReceiptTwoPath =
-      input.authorizationReceiptPathRunTwo ?? input.authorizationReceiptPath;
+    const freezePathTwo = boundedFixture
+      ? (input.configurationFreezePathRunTwo ?? input.configurationFreezePath)
+      : input.configurationFreezePathRunTwo!;
+    const authReceiptTwoPath = boundedFixture
+      ? (input.authorizationReceiptPathRunTwo ?? input.authorizationReceiptPath)
+      : input.authorizationReceiptPathRunTwo!;
     const authReceiptTwo = readFhvFullHistoricalAuthorizationReceipt(authReceiptTwoPath);
     const checkoutProofRunOne = input.checkoutIdentityProofPathRunOne;
-    const checkoutProofRunTwo =
-      input.checkoutIdentityProofPathRunTwo ?? input.checkoutIdentityProofPathRunOne;
+    const checkoutProofRunTwo = boundedFixture
+      ? (input.checkoutIdentityProofPathRunTwo ?? input.checkoutIdentityProofPathRunOne)
+      : input.checkoutIdentityProofPathRunTwo!;
+
+    if (!boundedFixture) {
+      if (input.runOneId === input.runTwoId) {
+        return {
+          schemaVersion: "fhv-control-replay/v1",
+          classification: "CONTROL_REPLAY=FAIL",
+          failureReason: "IDENTICAL_RUN_IDS",
+        };
+      }
+      if (input.configurationFreezePath === freezePathTwo) {
+        return {
+          schemaVersion: "fhv-control-replay/v1",
+          classification: "CONTROL_REPLAY=FAIL",
+          failureReason: "IDENTICAL_FREEZE_PATHS",
+        };
+      }
+      if (input.authorizationReceiptPath === authReceiptTwoPath) {
+        return {
+          schemaVersion: "fhv-control-replay/v1",
+          classification: "CONTROL_REPLAY=FAIL",
+          failureReason: "IDENTICAL_AUTHORIZATION_PATHS",
+        };
+      }
+      if (checkoutProofRunOne === checkoutProofRunTwo) {
+        return {
+          schemaVersion: "fhv-control-replay/v1",
+          classification: "CONTROL_REPLAY=FAIL",
+          failureReason: "IDENTICAL_CHECKOUT_PROOF_PATHS",
+        };
+      }
+    }
 
     const baseLaunch = {
       releaseSha: input.releaseSha,

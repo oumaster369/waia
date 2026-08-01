@@ -9,7 +9,9 @@ import {
 } from "@/lib/trader/execution/cost-model";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import type { Bar } from "@/lib/trader/intelligence/types";
+import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import { FhvSharedPortfolioBarReplaySource } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
+import type { BarReplaySource } from "@/lib/trader/market-data/types";
 import type { FhvConfigurationFreezeV1 } from "@/lib/trader/observability/fhv-configuration-freeze";
 import { seedFhvHistoricalExecutionSession } from "@/lib/trader/observability/fhv-historical-execution-session";
 import { buildResearchValidationCycleIdPrefix } from "@/lib/trader/research/research-backtest-cycle-id";
@@ -83,7 +85,9 @@ export async function runFullHistoricalBacktest(input: {
     end: new Date(input.bars.at(-1)!.barCloseTime),
   };
   const cycleIdPrefix = buildResearchValidationCycleIdPrefix(input.runId);
-  const barSource = new FhvSharedPortfolioBarReplaySource(input.bars, cycleIdPrefix);
+  const barSource: BarReplaySource = input.boundedFixture
+    ? new HistoricalBarReplaySource({ bars: input.bars, cycleIdPrefix })
+    : new FhvSharedPortfolioBarReplaySource(input.bars, cycleIdPrefix);
   const strategies = resolveStrategyBindings(input.configurationFreeze);
   const accountState = createHtrInitialAccountRiskState();
 

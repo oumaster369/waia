@@ -15,6 +15,7 @@ import type {
   AccountingStateV1,
   MarksJsonV1,
 } from "@/lib/trader/accounting/accounting-frontier.types";
+import { AccountingInvariantError } from "@/lib/trader/accounting/accounting-frontier.types";
 import { normalizeAccountingStateDrawdownFields } from "@/lib/trader/accounting/accounting-frontier.types";
 import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
@@ -100,6 +101,8 @@ export type HtrAccountingCycleBridge = {
   terminationCode: string | null;
   startingCashUsdt: string;
   startingEquityUsdt: string;
+  /** Latest closed-bar mark per symbol for multi-instrument shared-portfolio replay. */
+  lastMarkBySymbol: MarksJsonV1;
 };
 
 export type HtrAccountingCycleContext = {
@@ -460,6 +463,7 @@ export function createHtrAccountingCycleBridge(input: {
     terminationCode: null,
     startingCashUsdt,
     startingEquityUsdt: startingCashUsdt,
+    lastMarkBySymbol: {},
   };
   recordRuntimeCall(bridge, "WP18_INITIAL_STATE", { at: state.frontierAsOf });
   return bridge;
@@ -478,10 +482,17 @@ export function consumeWp17FillIntoAccountingBridge(
       `[htr/accounting-bridge] duplicate fill consumption ${input.fill.fillId}`,
     );
   }
+  const normalizedFill: AccountingFillInput = {
+    ...input.fill,
+    economics: {
+      ...input.fill.economics,
+      symbol: normalizeSymbolForHistoricalExecution(input.fill.economics.symbol),
+    },
+  };
   bridge.state = advanceAccountingFrontier({
     state: bridge.state,
-    fill: input.fill,
-    frontierAsOf: input.fill.executedAt,
+    fill: normalizedFill,
+    frontierAsOf: normalizedFill.executedAt,
   });
   bridge.cashEvents.push({
     fillId: input.fill.fillId,
@@ -501,15 +512,27 @@ export function attachClosed1mMarkToAccountingBridge(
 ): void {
   assertBridgeActive(bridge);
   const symbol = normalizeSymbolForHistoricalExecution(closedBar.symbol);
-  const marks: MarksJsonV1 = {
-    [symbol]: {
-      price: closedBar.close,
-      barCloseTime: closedBar.barCloseTime,
-    },
+  bridge.lastMarkBySymbol[symbol] = {
+    price: closedBar.close,
+    barCloseTime: closedBar.barCloseTime,
   };
+  const mergedMarks: MarksJsonV1 = {};
+  for (const [openSymbol, position] of Object.entries(bridge.state.positions)) {
+    if (compareDecimal(position.quantity, "0") <= 0) {
+      continue;
+    }
+    const mark = bridge.lastMarkBySymbol[openSymbol] ?? bridge.state.marks[openSymbol];
+    if (!mark) {
+      throw new AccountingInvariantError(`[accounting] missing mark for open symbol ${openSymbol}`);
+    }
+    mergedMarks[openSymbol] = mark;
+  }
+  if (Object.keys(mergedMarks).length === 0) {
+    mergedMarks[symbol] = bridge.lastMarkBySymbol[symbol]!;
+  }
   bridge.state = advanceAccountingFrontier({
     state: bridge.state,
-    marks,
+    marks: mergedMarks,
     frontierAsOf: closedBar.barCloseTime,
   });
   recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
@@ -873,6 +896,7 @@ export function restoreAccountingBridgeFromCheckpoint(
     );
   }
   bridge.state = restoredState;
+  bridge.lastMarkBySymbol = { ...slice.marksJson };
   bridge.cashEvents = [...slice.cashEventsJson];
   recordRuntimeCall(bridge, "CHECKPOINT_RESTORED", { detail: String(slice.accountingSequence) });
 }

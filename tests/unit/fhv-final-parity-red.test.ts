@@ -30,6 +30,7 @@ import {
   FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
   FHV_OFFICIAL_REAL_SCHEMA_ROOT,
   FHV_TEST_RELEASE_SHA,
+  FHV_TEST_RELEASE_TAG,
   setupFhvBoundedLaunchArtifacts,
   setupFhvControlReplayArtifacts,
   setupFhvOfficialSchemaLaunchArtifacts,
@@ -106,6 +107,7 @@ describe("DEE-436/DEE-416 FHV final parity R1–R10", () => {
       });
       const result = await runFhvControlReplay({
         releaseSha: FHV_TEST_RELEASE_SHA,
+        releaseTag: FHV_TEST_RELEASE_TAG,
         organizationId: ORG_ID,
         operatorId: OPERATOR_ID,
         artifactRoot: join(root, "runs"),

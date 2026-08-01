@@ -13,6 +13,7 @@ import { executeFhvFullHistoricalLaunch } from "@/lib/trader/observability/fhv-f
 import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-contract";
 import {
   FHV_TEST_RELEASE_SHA,
+  FHV_TEST_RELEASE_TAG,
   setupFhvBoundedLaunchArtifacts,
 } from "@/tests/helpers/fhv-official-path-test-fixtures";
 
@@ -32,6 +33,7 @@ describe("DEE-436 FHV accounting reconciliation E2E", () => {
       });
       const result = await executeFhvFullHistoricalLaunch({
         releaseSha: FHV_TEST_RELEASE_SHA,
+        releaseTag: FHV_TEST_RELEASE_TAG,
         runId,
         organizationId: ORG_ID,
         operatorId: OPERATOR_ID,

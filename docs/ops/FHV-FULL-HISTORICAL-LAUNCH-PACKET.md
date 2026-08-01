@@ -76,8 +76,9 @@ pnpm trader:fhv:run -- --bounded-fixture \
 
 ## Terminal classifications
 
-- `FULL_HISTORICAL_VALIDATION_COMPLETED` — official path executed backtest, accounting, evidence
-- `BOUNDED_FULL_HISTORICAL_END_TO_END_PASS` — bounded real-schema integration through same path
+- `FULL_HISTORICAL_VALIDATION_COMPLETED` — official multi-year path (`qualificationMode=OFFICIAL_MULTI_YEAR`) executed backtest, accounting, evidence
+- `FHV_SCHEMA_INTEGRATION_CEREMONY_PASS` — schema integration fixture through same public CLI chain; explicitly non-official
+- `BOUNDED_FULL_HISTORICAL_END_TO_END_PASS` — bounded ingress fixture through same path
 
 ## Artifacts
 

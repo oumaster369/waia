@@ -12,7 +12,10 @@ import {
   resolveFhvControlReplayCliConfig,
   runFhvControlReplay,
 } from "@/scripts/trader/fhv-control-replay-cli";
-import { setupFhvControlReplayArtifacts } from "@/tests/helpers/fhv-official-path-test-fixtures";
+import {
+  setupFhvControlReplayArtifacts,
+  FHV_TEST_RELEASE_TAG,
+} from "@/tests/helpers/fhv-official-path-test-fixtures";
 
 const RELEASE_SHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const ORG_ID = "00000000-0000-4000-8000-000000000436";
@@ -81,6 +84,7 @@ describe("DEE-436 FHV control-replay CLI", () => {
       });
       const result = await runFhvControlReplay({
         releaseSha: RELEASE_SHA,
+        releaseTag: FHV_TEST_RELEASE_TAG,
         organizationId: ORG_ID,
         operatorId: "unit-control-replay-operator",
         artifactRoot: join(root, "runs"),
@@ -89,6 +93,7 @@ describe("DEE-436 FHV control-replay CLI", () => {
         authorizationReceiptPath: prep.authorizationReceiptPathRunOne,
         authorizationReceiptPathRunTwo: prep.authorizationReceiptPathRunTwo,
         checkoutIdentityProofPathRunOne: prep.checkoutIdentityProofPathRunOne,
+        checkoutIdentityProofPathRunTwo: prep.checkoutIdentityProofPathRunTwo,
         datasetQualificationReceiptPath: prep.qualificationReceiptPath,
         boundedFixture: true,
         maxCycles: 10,
