@@ -8,7 +8,7 @@ Two-run determinism on the **same Full Historical Validation production path**: 
 
 ## Official mode
 
-Requires released checkout identity proof, `DATASET_QUALIFICATION=PASS` receipt, configuration freeze, scoped authorization, and qualified dataset/manifest paths.
+Requires released checkout identity proof, `DATASET_QUALIFICATION=PASS` receipt, configuration freeze, scoped authorization (one per run), control-replay PASS receipt output, and qualified dataset/manifest paths.
 
 ```bash
 export FHV_RELEASE_SHA="<full-git-sha>"
@@ -24,13 +24,25 @@ pnpm trader:fhv:control-replay -- \
   --operator-id "$FHV_OPERATOR_ID" \
   --artifact-root "$FHV_ARTIFACT_ROOT" \
   --configuration-freeze-path "/path/to/fhv-configuration-freeze.v1.json" \
+  --configuration-freeze-path-run-two "/path/to/fhv-configuration-freeze-run-two.v1.json" \
+  --authorization-receipt-path "/path/to/fhv-full-historical-authorization-run-one.v1.json" \
+  --authorization-receipt-path-run-two "/path/to/fhv-full-historical-authorization-run-two.v1.json" \
   --dataset-qualification-receipt-path "/path/to/fhv-dataset-qualification-receipt.v1.json" \
   --dataset-root "/absolute/dataset/root" \
   --manifest-path "/absolute/fhv-dataset-manifest.v1.json" \
-  --checkout-identity-proof-path "/path/to/fhv-t4-checkout-identity.v1.json"
+  --checkout-identity-proof-path "/path/to/fhv-t4-checkout-identity.v1.json" \
+  --control-replay-receipt-output "/absolute/fhv-control-replay-receipt.v1.json"
 ```
 
-Exit 0 emits `CONTROL_REPLAY=PASS` when both run digests and cycle counts match.
+Exit 0 emits immutable `CONTROL_REPLAY=PASS` receipt when both run digests and cycle counts match.
+
+## Holdout sequence
+
+Before any official holdout launch:
+
+1. Run control replay and retain `--control-replay-receipt-output`
+2. Bind `controlReplayReceiptDigest` in scoped authorization receipt
+3. Launch with `--control-replay-receipt-path` (holdout unseal evidence recorded at launch)
 
 ## Bounded fixture mode (test-only)
 
@@ -38,7 +50,10 @@ Exit 0 emits `CONTROL_REPLAY=PASS` when both run digests and cycle counts match.
 pnpm trader:fhv:control-replay -- --bounded-fixture \
   --release-sha "$FHV_RELEASE_SHA" \
   --organization-id "$FHV_ORGANIZATION_ID" \
-  --operator-id "$FHV_OPERATOR_ID"
+  --operator-id "$FHV_OPERATOR_ID" \
+  --configuration-freeze-path "<path>" \
+  --authorization-receipt-path "<path>" \
+  --dataset-qualification-receipt-path "<path>"
 ```
 
 Uses repository real-schema test fixture through the official production path (not synthetic digest strings).
@@ -50,6 +65,7 @@ JSON schema: `fhv-control-replay/v1` with fields:
 - `classification`: `CONTROL_REPLAY=PASS` | `CONTROL_REPLAY=FAIL`
 - `runOneDigest` / `runTwoDigest`
 - `digestsMatch`
+- `controlReplayReceiptPath` (when `--control-replay-receipt-output` supplied)
 
 ## Related
 

@@ -5,7 +5,13 @@ import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic
 import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
 import { writeFhvConfigurationFreezeArtifactAtomic } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
 import {
+  disableFhvCheckoutIdentityTestBypass,
+  enableFhvCheckoutIdentityTestBypass,
+} from "@/lib/trader/observability/fhv-checkout-identity-test-hook";
+import { writeFhvControlReplayReceiptAtomic } from "@/lib/trader/observability/fhv-control-replay-receipt";
+import {
   FHV_DATASET_QUALIFICATION_RECEIPT_FILENAME,
+  FHV_SCHEMA_INTEGRATION_FIXTURE_ROOT,
   writeFhvDatasetQualificationReceiptAtomic,
 } from "@/lib/trader/observability/fhv-dataset-qualification";
 import {
@@ -30,6 +36,7 @@ export type FhvBoundedLaunchArtifacts = Readonly<{
   configurationFreezePath: string;
   authorizationReceiptPath: string;
   authorizationReceiptDigest: string;
+  checkoutIdentityProofPath: string;
 }>;
 
 export function writeFhvTestCheckoutIdentityProof(input: {
@@ -71,6 +78,7 @@ export function setupFhvBoundedLaunchArtifacts(input: {
   operatorId?: string;
   prepSuffix?: string;
 }): FhvBoundedLaunchArtifacts {
+  enableFhvCheckoutIdentityTestBypass();
   const prepDir = join(input.artifactRoot, "prep", input.prepSuffix ?? input.runId);
   mkdirSync(prepDir, { recursive: true });
 
@@ -113,12 +121,20 @@ export function setupFhvBoundedLaunchArtifacts(input: {
       runId: input.runId,
     });
 
+  const checkoutIdentityProofPath = writeFhvTestCheckoutIdentityProof({
+    proofDir: join(prepDir, "checkout"),
+    releaseSha: input.releaseSha ?? FHV_TEST_RELEASE_SHA,
+    runId: input.runId,
+    organizationId: input.organizationId ?? FHV_TEST_ORG_ID,
+  });
+
   return {
     artifactRoot: input.artifactRoot,
     qualificationReceiptPath,
     configurationFreezePath,
     authorizationReceiptPath,
     authorizationReceiptDigest: authReceipt.authorizationReceiptDigest,
+    checkoutIdentityProofPath,
   };
 }
 
@@ -133,7 +149,10 @@ export function setupFhvControlReplayArtifacts(input: {
   configurationFreezePathRunTwo: string;
   authorizationReceiptPathRunOne: string;
   authorizationReceiptPathRunTwo: string;
+  checkoutIdentityProofPathRunOne: string;
+  checkoutIdentityProofPathRunTwo: string;
 } {
+  enableFhvCheckoutIdentityTestBypass();
   const runOneId = `fhv-control-replay-1-${input.releaseSha.slice(0, 8)}`;
   const runTwoId = `fhv-control-replay-2-${input.releaseSha.slice(0, 8)}`;
   const prepDir = join(input.artifactRoot, "prep");
@@ -200,20 +219,125 @@ export function setupFhvControlReplayArtifacts(input: {
     runId: runTwoId,
   });
 
+  const checkoutIdentityProofPathRunOne = writeFhvTestCheckoutIdentityProof({
+    proofDir: join(prepDir, "checkout-one"),
+    releaseSha: input.releaseSha,
+    runId: runOneId,
+    organizationId,
+  });
+  const checkoutIdentityProofPathRunTwo = writeFhvTestCheckoutIdentityProof({
+    proofDir: join(prepDir, "checkout-two"),
+    releaseSha: input.releaseSha,
+    runId: runTwoId,
+    organizationId,
+  });
+
   return {
     qualificationReceiptPath,
     configurationFreezePathRunOne: freezeOne.artifactPath,
     configurationFreezePathRunTwo: freezeTwo.artifactPath,
     authorizationReceiptPathRunOne: authOne.receiptPath,
     authorizationReceiptPathRunTwo: authTwo.receiptPath,
+    checkoutIdentityProofPathRunOne,
+    checkoutIdentityProofPathRunTwo,
   };
 }
 
-export const FHV_OFFICIAL_REAL_SCHEMA_ROOT = join(
-  process.cwd(),
-  "tests/fixtures/trader/fhv-official-real-schema",
-);
+export const FHV_OFFICIAL_REAL_SCHEMA_ROOT = FHV_SCHEMA_INTEGRATION_FIXTURE_ROOT;
 export const FHV_OFFICIAL_REAL_SCHEMA_MANIFEST = join(
   FHV_OFFICIAL_REAL_SCHEMA_ROOT,
   "fhv-dataset-manifest.json",
 );
+
+export function setupFhvOfficialSchemaLaunchArtifacts(input: {
+  artifactRoot: string;
+  runId: string;
+  releaseSha?: string;
+  organizationId?: string;
+  operatorId?: string;
+}): {
+  qualificationReceiptPath: string;
+  configurationFreezePath: string;
+  authorizationReceiptPath: string;
+  authorizationReceiptDigest: string;
+  checkoutIdentityProofPath: string;
+  controlReplayReceiptPath: string;
+  controlReplayReceiptDigest: string;
+} {
+  enableFhvCheckoutIdentityTestBypass();
+  const prepDir = join(input.artifactRoot, "prep", input.runId);
+  const releaseSha = input.releaseSha ?? FHV_TEST_RELEASE_SHA;
+  const organizationId = input.organizationId ?? FHV_TEST_ORG_ID;
+  const operatorId = input.operatorId ?? FHV_TEST_OPERATOR_ID;
+
+  const qualificationReceipt = writeFhvDatasetQualificationReceiptAtomic({
+    receiptDir: prepDir,
+    datasetRoot: FHV_OFFICIAL_REAL_SCHEMA_ROOT,
+    manifestPath: FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
+    qualificationMode: "SCHEMA_INTEGRATION_FIXTURE",
+    releaseSha,
+    releaseTag: FHV_TEST_RELEASE_TAG,
+    organizationId,
+    operatorId,
+  });
+  const qualificationReceiptPath = join(prepDir, FHV_DATASET_QUALIFICATION_RECEIPT_FILENAME);
+
+  const freeze = writeFhvConfigurationFreezeArtifactAtomic({
+    artifactDir: join(prepDir, "freeze"),
+    releaseSha,
+    releaseTag: FHV_TEST_RELEASE_TAG,
+    runId: input.runId,
+    organizationId,
+    operatorId,
+    datasetDigest: qualificationReceipt.datasetContentDigest,
+    manifestDigest: qualificationReceipt.manifestSemanticDigest,
+    strategyVersions: [FHV_TEST_STRATEGY_VERSION],
+    strategyDigests: [FHV_TEST_STRATEGY_DIGEST],
+    checkpointDigest: "fhv-official-test-checkpoint",
+    datasetQualificationReceiptDigest: qualificationReceipt.qualificationReceiptDigest,
+  });
+
+  const controlReplayReceiptPath = join(prepDir, "fhv-control-replay-receipt.v1.json");
+  const controlReplayReceipt = writeFhvControlReplayReceiptAtomic({
+    receiptPath: controlReplayReceiptPath,
+    releaseSha,
+    organizationId,
+    operatorId,
+    runOneId: `fhv-control-replay-1-${releaseSha.slice(0, 8)}`,
+    runTwoId: `fhv-control-replay-2-${releaseSha.slice(0, 8)}`,
+    runOneDigest: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    runTwoDigest: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    capturedAtUtc: "2026-01-01T00:00:00.000Z",
+  });
+
+  const auth = writeFhvFullHistoricalAuthorizationReceiptAtomic({
+    receiptDir: join(prepDir, "auth"),
+    releaseSha,
+    releaseTag: FHV_TEST_RELEASE_TAG,
+    datasetQualificationReceiptDigest: qualificationReceipt.qualificationReceiptDigest,
+    datasetDigest: qualificationReceipt.datasetContentDigest,
+    manifestDigest: qualificationReceipt.manifestSemanticDigest,
+    configurationFreezeDigest: freeze.artifact.configurationFreeze.configurationFreezeDigest,
+    controlReplayReceiptDigest: controlReplayReceipt.controlReplayReceiptDigest,
+    organizationId,
+    operatorId,
+    runId: input.runId,
+  });
+
+  const checkoutIdentityProofPath = writeFhvTestCheckoutIdentityProof({
+    proofDir: join(prepDir, "checkout"),
+    releaseSha,
+    runId: input.runId,
+    organizationId,
+  });
+
+  return {
+    qualificationReceiptPath,
+    configurationFreezePath: freeze.artifactPath,
+    authorizationReceiptPath: auth.receiptPath,
+    authorizationReceiptDigest: auth.receipt.authorizationReceiptDigest,
+    checkoutIdentityProofPath,
+    controlReplayReceiptPath,
+    controlReplayReceiptDigest: controlReplayReceipt.controlReplayReceiptDigest,
+  };
+}

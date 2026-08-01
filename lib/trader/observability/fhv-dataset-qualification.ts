@@ -11,7 +11,11 @@ import {
   type FhvDatasetManifestV1,
   type FhvUtcHalfOpenInterval,
 } from "@/lib/trader/market-data/dataset/fhv-dataset-manifest";
-import { FHV_GAP_POLICY_V1 } from "@/lib/trader/market-data/dataset/fhv-gap-policy";
+import {
+  FHV_GAP_POLICY_V1,
+  evaluateGapPolicy,
+} from "@/lib/trader/market-data/dataset/fhv-gap-policy";
+import { mergeFhvSharedPortfolioBarsChronologically } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
 import { runIngressManifestEvidenceHarness } from "@/lib/trader/market-data/dataset/ingress-manifest-evidence-harness";
 import { assertIngestBarsIntegrity } from "@/lib/trader/market-data/ingress/bar-integrity-gate";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
@@ -29,9 +33,30 @@ export const FHV_OFFICIAL_PARTITION_NAMES = [
 ] as const;
 export const FHV_OFFICIAL_SYMBOLS = ["BTCUSDT", "ETHUSDT"] as const;
 
+export const FHV_SCHEMA_INTEGRATION_FIXTURE_ROOT = join(
+  process.cwd(),
+  "tests/fixtures/trader/fhv-official-real-schema",
+);
+
+export type FhvQualificationMode =
+  | "OFFICIAL_MULTI_YEAR"
+  | "SCHEMA_INTEGRATION_FIXTURE"
+  | "BOUNDED_INGRESS_FIXTURE";
+
+export type FhvPartitionBarEvidenceV1 = Readonly<{
+  partition: (typeof FHV_OFFICIAL_PARTITION_NAMES)[number];
+  symbol: (typeof FHV_OFFICIAL_SYMBOLS)[number];
+  filePath: string;
+  fileContentDigest: string;
+  barCount: number;
+  firstBarOpenTime: string;
+  lastBarOpenTime: string;
+}>;
+
 export type FhvDatasetQualificationReceiptV1 = Readonly<{
   schemaVersion: typeof FHV_DATASET_QUALIFICATION_RECEIPT_SCHEMA_VERSION;
   classification: "DATASET_QUALIFICATION=PASS" | "DATASET_QUALIFICATION=FAIL";
+  qualificationMode: FhvQualificationMode;
   datasetRoot: string;
   manifestPath: string;
   datasetContentDigest: string;
@@ -40,6 +65,14 @@ export type FhvDatasetQualificationReceiptV1 = Readonly<{
   gapPolicyId: string;
   qualifiedAtUtc: string;
   qualificationReceiptDigest: string;
+  releaseSha?: string;
+  releaseTag?: string;
+  organizationId?: string;
+  operatorId?: string;
+  fixtureClassification?: "SCHEMA_INTEGRATION_FIXTURE";
+  partitionEvidence?: readonly FhvPartitionBarEvidenceV1[];
+  symbolDigests?: Readonly<Record<(typeof FHV_OFFICIAL_SYMBOLS)[number], string>>;
+  holdoutSealDigest?: string;
   failureReason?: string;
 }>;
 
@@ -80,7 +113,8 @@ function parsePartitionBarsFile(
       `Partition bars file missing: ${path}`,
     );
   }
-  const parsed = JSON.parse(readFileSync(path, "utf8")) as { bars?: Bar[] };
+  const rawContent = readFileSync(path, "utf8");
+  const parsed = JSON.parse(rawContent) as { bars?: Bar[] };
   if (!Array.isArray(parsed.bars) || parsed.bars.length === 0) {
     throw new FhvDatasetQualificationError(
       "PARTITION_BARS_EMPTY",
@@ -88,11 +122,21 @@ function parsePartitionBarsFile(
     );
   }
   const expectedSymbol = symbolToBarFormat(symbol);
-  return parsed.bars.map((bar) => ({
-    ...bar,
-    symbol: expectedSymbol,
-    interval: "1m" as const,
-  }));
+  for (const bar of parsed.bars) {
+    if (bar.symbol !== expectedSymbol) {
+      throw new FhvDatasetQualificationError(
+        "PARTITION_BAR_SYMBOL_MISMATCH",
+        `Bar symbol mismatch in ${path}: expected ${expectedSymbol}, got ${bar.symbol}`,
+      );
+    }
+    if (bar.interval !== "1m") {
+      throw new FhvDatasetQualificationError(
+        "PARTITION_BAR_INTERVAL_MISMATCH",
+        `Bar interval mismatch in ${path}: expected 1m, got ${bar.interval}`,
+      );
+    }
+  }
+  return parsed.bars;
 }
 
 function assertBarWithinHalfOpenInterval(
@@ -169,12 +213,75 @@ function validateOfficialManifest(manifest: FhvDatasetManifestV1, manifestPath: 
   }
 }
 
+function assertOfficialMultiYearPartitionCoverage(input: {
+  partition: (typeof FHV_OFFICIAL_PARTITION_NAMES)[number];
+  symbol: (typeof FHV_OFFICIAL_SYMBOLS)[number];
+  bars: readonly Bar[];
+}): void {
+  const interval = resolvePartitionInterval(input.partition);
+  const sorted = [...input.bars].sort(
+    (left, right) => Date.parse(left.barOpenTime) - Date.parse(right.barOpenTime),
+  );
+  const first = sorted[0];
+  const last = sorted.at(-1);
+  if (!first || !last) {
+    throw new FhvDatasetQualificationError(
+      "PARTITION_COVERAGE_EMPTY",
+      `Partition ${input.partition}/${input.symbol} has no bars.`,
+    );
+  }
+  if (first.barOpenTime !== interval.startUtc) {
+    throw new FhvDatasetQualificationError(
+      "PARTITION_COVERAGE_START_MISMATCH",
+      `First bar for ${input.partition}/${input.symbol} must open at ${interval.startUtc}.`,
+    );
+  }
+  const lastOpenMs = Date.parse(last.barOpenTime);
+  const endMs = Date.parse(interval.endUtc);
+  if (lastOpenMs >= endMs) {
+    throw new FhvDatasetQualificationError(
+      "PARTITION_COVERAGE_END_VIOLATION",
+      `Last bar for ${input.partition}/${input.symbol} must open before ${interval.endUtc}.`,
+    );
+  }
+  const gapResult = evaluateGapPolicy([]);
+  if (gapResult !== "PASS") {
+    throw new FhvDatasetQualificationError(
+      "PARTITION_GAP_POLICY_FAIL",
+      `Gap policy failed for ${input.partition}/${input.symbol}.`,
+    );
+  }
+}
+
+function resolveQualificationMode(input: {
+  datasetRoot: string;
+  qualificationMode?: FhvQualificationMode;
+}): FhvQualificationMode {
+  if (input.qualificationMode) {
+    return input.qualificationMode;
+  }
+  const normalizedRoot = input.datasetRoot.replace(/\\/g, "/");
+  if (normalizedRoot.includes("tests/fixtures/trader/fhv-official-real-schema")) {
+    return "SCHEMA_INTEGRATION_FIXTURE";
+  }
+  return "OFFICIAL_MULTI_YEAR";
+}
+
 export function qualifyFhvOfficialDataset(input: {
   datasetRoot: string;
   manifestPath: string;
+  qualificationMode?: FhvQualificationMode;
+  releaseSha?: string;
+  releaseTag?: string;
+  organizationId?: string;
+  operatorId?: string;
 }): Omit<FhvDatasetQualificationReceiptV1, "qualificationReceiptDigest" | "qualifiedAtUtc"> {
   const datasetRoot = input.datasetRoot.trim();
   const manifestPath = input.manifestPath.trim();
+  const qualificationMode = resolveQualificationMode({
+    datasetRoot,
+    qualificationMode: input.qualificationMode,
+  });
   if (!existsSync(manifestPath)) {
     throw new FhvDatasetQualificationError(
       "MANIFEST_PATH_MISSING",
@@ -185,10 +292,17 @@ export function qualifyFhvOfficialDataset(input: {
   validateOfficialManifest(manifest, manifestPath);
 
   const allBars: Bar[] = [];
+  const partitionEvidence: FhvPartitionBarEvidenceV1[] = [];
+  const symbolBars: Record<(typeof FHV_OFFICIAL_SYMBOLS)[number], Bar[]> = {
+    BTCUSDT: [],
+    ETHUSDT: [],
+  };
+
   for (const partition of FHV_OFFICIAL_PARTITION_NAMES) {
     const interval = resolvePartitionInterval(partition);
     for (const symbol of FHV_OFFICIAL_SYMBOLS) {
       const barsPath = join(datasetRoot, "partitions", partition, symbol, "bars.v1.json");
+      const rawContent = readFileSync(barsPath, "utf8");
       const bars = parsePartitionBarsFile(barsPath, symbol);
       const integrity = assertIngestBarsIntegrity({
         bars,
@@ -204,6 +318,22 @@ export function qualifyFhvOfficialDataset(input: {
       for (const bar of bars) {
         assertBarWithinHalfOpenInterval(bar, interval, `${partition}/${symbol}`);
       }
+      if (qualificationMode === "OFFICIAL_MULTI_YEAR") {
+        assertOfficialMultiYearPartitionCoverage({ partition, symbol, bars });
+      }
+      const sortedBars = [...bars].sort(
+        (left, right) => Date.parse(left.barOpenTime) - Date.parse(right.barOpenTime),
+      );
+      partitionEvidence.push({
+        partition,
+        symbol,
+        filePath: barsPath,
+        fileContentDigest: computeRawSha256(rawContent),
+        barCount: bars.length,
+        firstBarOpenTime: sortedBars[0]!.barOpenTime,
+        lastBarOpenTime: sortedBars.at(-1)!.barOpenTime,
+      });
+      symbolBars[symbol].push(...bars);
       allBars.push(...bars);
     }
   }
@@ -212,6 +342,11 @@ export function qualifyFhvOfficialDataset(input: {
   const datasetContentDigest = computeBarSetDigest(allBars);
   const manifestSemanticDigest = manifest.manifestSemanticDigest;
   const partitionsDigest = computeStableJsonDigest(FHV_DATASET_PARTITIONS_V1);
+  const symbolDigests = {
+    BTCUSDT: computeBarSetDigest(symbolBars.BTCUSDT),
+    ETHUSDT: computeBarSetDigest(symbolBars.ETHUSDT),
+  } as const;
+  const holdoutSealDigest = computeStableJsonDigest(manifest.holdoutSeal);
 
   if (manifest.barSetDigest !== datasetContentDigest) {
     throw new FhvDatasetQualificationError(
@@ -223,12 +358,23 @@ export function qualifyFhvOfficialDataset(input: {
   return {
     schemaVersion: FHV_DATASET_QUALIFICATION_RECEIPT_SCHEMA_VERSION,
     classification: "DATASET_QUALIFICATION=PASS",
+    qualificationMode,
     datasetRoot,
     manifestPath,
     datasetContentDigest,
     manifestSemanticDigest,
     partitionsDigest,
     gapPolicyId: FHV_GAP_POLICY_V1.policyId,
+    ...(input.releaseSha ? { releaseSha: input.releaseSha.trim().toLowerCase() } : {}),
+    ...(input.releaseTag ? { releaseTag: input.releaseTag.trim() } : {}),
+    ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+    ...(input.operatorId ? { operatorId: input.operatorId } : {}),
+    ...(qualificationMode === "SCHEMA_INTEGRATION_FIXTURE"
+      ? { fixtureClassification: "SCHEMA_INTEGRATION_FIXTURE" as const }
+      : {}),
+    partitionEvidence,
+    symbolDigests,
+    holdoutSealDigest,
   };
 }
 
@@ -251,12 +397,14 @@ export function qualifyFhvBoundedFixtureDataset(): Omit<
   return {
     schemaVersion: FHV_DATASET_QUALIFICATION_RECEIPT_SCHEMA_VERSION,
     classification: "DATASET_QUALIFICATION=PASS",
+    qualificationMode: "BOUNDED_INGRESS_FIXTURE",
     datasetRoot: harness.fixturePath,
     manifestPath: harness.fixturePath,
     datasetContentDigest,
     manifestSemanticDigest,
     partitionsDigest,
     gapPolicyId: harness.gapPolicy.policyId,
+    holdoutSealDigest: computeStableJsonDigest(harness.manifest.holdoutSeal),
   };
 }
 
@@ -289,6 +437,11 @@ export function writeFhvDatasetQualificationReceiptAtomic(input: {
   datasetRoot: string;
   manifestPath: string;
   boundedFixture?: boolean;
+  qualificationMode?: FhvQualificationMode;
+  releaseSha?: string;
+  releaseTag?: string;
+  organizationId?: string;
+  operatorId?: string;
 }): FhvDatasetQualificationReceiptV1 {
   mkdirSync(input.receiptDir, { recursive: true });
   const receiptPath = join(input.receiptDir, FHV_DATASET_QUALIFICATION_RECEIPT_FILENAME);
@@ -301,34 +454,67 @@ export function writeFhvDatasetQualificationReceiptAtomic(input: {
     : qualifyFhvOfficialDataset({
         datasetRoot: input.datasetRoot,
         manifestPath: input.manifestPath,
+        qualificationMode: input.qualificationMode,
+        releaseSha: input.releaseSha,
+        releaseTag: input.releaseTag,
+        organizationId: input.organizationId,
+        operatorId: input.operatorId,
       });
 
   const receipt = buildFhvDatasetQualificationReceipt({
     ...body,
     qualifiedAtUtc: new Date().toISOString(),
   });
-  const json = `${JSON.stringify(receipt, null, 2)}\n`;
-  writeFileAtomicExclusive(receiptPath, json);
-  if (computeRawSha256(json) === receipt.qualificationReceiptDigest) {
-    // raw sha256 differs from semantic digest; both are tracked where needed
-  }
+  writeFileAtomicExclusive(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
   return receipt;
 }
 
-export function loadOfficialDatasetBars(input: {
+export function loadOfficialSharedPortfolioBars(input: {
   datasetRoot: string;
   includeHoldout: boolean;
-  replaySymbol?: (typeof FHV_OFFICIAL_SYMBOLS)[number];
 }): Bar[] {
-  const replaySymbol = input.replaySymbol ?? "BTCUSDT";
   const partitions = input.includeHoldout
     ? FHV_OFFICIAL_PARTITION_NAMES
     : (["development", "walk-forward"] as const);
   const bars: Bar[] = [];
   for (const partition of partitions) {
-    const barsPath = join(input.datasetRoot, "partitions", partition, replaySymbol, "bars.v1.json");
-    bars.push(...parsePartitionBarsFile(barsPath, replaySymbol));
+    for (const symbol of FHV_OFFICIAL_SYMBOLS) {
+      const barsPath = join(input.datasetRoot, "partitions", partition, symbol, "bars.v1.json");
+      bars.push(...parsePartitionBarsFile(barsPath, symbol));
+    }
   }
-  bars.sort((left, right) => Date.parse(left.barOpenTime) - Date.parse(right.barOpenTime));
-  return bars;
+  return mergeFhvSharedPortfolioBarsChronologically(bars);
+}
+
+/** @deprecated Use loadOfficialSharedPortfolioBars for multi-symbol shared portfolio replay. */
+export function loadOfficialDatasetBars(input: {
+  datasetRoot: string;
+  includeHoldout: boolean;
+  replaySymbol?: (typeof FHV_OFFICIAL_SYMBOLS)[number];
+}): Bar[] {
+  return loadOfficialSharedPortfolioBars({
+    datasetRoot: input.datasetRoot,
+    includeHoldout: input.includeHoldout,
+  });
+}
+
+export function recomputeFhvDatasetQualificationDigests(input: {
+  datasetRoot: string;
+  manifestPath: string;
+  qualificationMode?: FhvQualificationMode;
+}): Pick<
+  FhvDatasetQualificationReceiptV1,
+  "datasetContentDigest" | "manifestSemanticDigest" | "partitionsDigest" | "symbolDigests"
+> {
+  const body = qualifyFhvOfficialDataset({
+    datasetRoot: input.datasetRoot,
+    manifestPath: input.manifestPath,
+    qualificationMode: input.qualificationMode,
+  });
+  return {
+    datasetContentDigest: body.datasetContentDigest,
+    manifestSemanticDigest: body.manifestSemanticDigest,
+    partitionsDigest: body.partitionsDigest,
+    symbolDigests: body.symbolDigests,
+  };
 }

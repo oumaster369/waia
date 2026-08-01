@@ -187,7 +187,6 @@ export function resolveFhvFullRunCliConfig(
     livePathInvoked: env.FHV_LIVE_PATH_INVOKED === "true",
     holdoutAccessRequested: env.FHV_HOLDOUT_ACCESS_REQUESTED === "true",
     boundedFixture,
-    skipCheckoutIdentityVerification: env.FHV_SKIP_CHECKOUT_IDENTITY === "1",
   };
 }
 

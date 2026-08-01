@@ -34,8 +34,8 @@ function buildBaseInput(artifactRoot: string, runId: string) {
     authorizationReceiptPath: artifacts.authorizationReceiptPath,
     authorizationReceiptDigest: artifacts.authorizationReceiptDigest,
     datasetQualificationReceiptPath: artifacts.qualificationReceiptPath,
+    checkoutIdentityProofPath: artifacts.checkoutIdentityProofPath,
     boundedFixture: true as const,
-    skipCheckoutIdentityVerification: true,
     maxCycles: 10,
   };
 }
@@ -116,6 +116,7 @@ describe("DEE-436 FHV full launch fail-closed gates", () => {
           authorizationReceiptDigest: secondArtifacts.authorizationReceiptDigest,
           configurationFreezePath: secondArtifacts.configurationFreezePath,
           datasetQualificationReceiptPath: secondArtifacts.qualificationReceiptPath,
+          checkoutIdentityProofPath: secondArtifacts.checkoutIdentityProofPath,
         }),
       ).rejects.toMatchObject({
         code: "RUN_ID_REUSED",

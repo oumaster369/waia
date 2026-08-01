@@ -1,16 +1,5 @@
 /**
  * DEE-436 — FHV control replay CLI (two-run digest compare).
- *
- * Usage:
- *   pnpm trader:fhv:control-replay -- \
- *     --release-sha <40-hex> \
- *     --organization-id <uuid> \
- *     --operator-id <id> \
- *     --configuration-freeze-path <path> \
- *     --authorization-receipt-path <path> \
- *     --dataset-qualification-receipt-path <path> \
- *     [--artifact-root /abs/path] \
- *     [--bounded-fixture]
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -20,6 +9,7 @@ import { tmpdir } from "node:os";
 import { executeFhvFullHistoricalLaunch } from "@/lib/trader/observability/fhv-full-historical-launch";
 import { readFhvConfigurationFreezeArtifact } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
 import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
+import { writeFhvControlReplayReceiptAtomic } from "@/lib/trader/observability/fhv-control-replay-receipt";
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -30,6 +20,7 @@ export type FhvControlReplayResult = Readonly<{
   runOneDigest?: string;
   runTwoDigest?: string;
   digestsMatch?: boolean;
+  controlReplayReceiptPath?: string;
   failureReason?: string;
 }>;
 
@@ -60,27 +51,37 @@ export function resolveFhvControlReplayCliConfig(
   argv: readonly string[] = process.argv.slice(2),
 ): {
   releaseSha: string;
+  releaseTag?: string;
   organizationId: string;
   operatorId: string;
   configurationFreezePath: string;
+  configurationFreezePathRunTwo?: string;
   authorizationReceiptPath: string;
+  authorizationReceiptPathRunTwo?: string;
   datasetQualificationReceiptPath: string;
   datasetRoot?: string;
   manifestPath?: string;
   artifactRoot?: string;
+  checkoutIdentityProofPath?: string;
+  controlReplayReceiptOutput?: string;
   boundedFixture: boolean;
 } {
   const flags = parseArgv(argv);
   const allowed = new Set([
     "--release-sha",
+    "--release-tag",
     "--organization-id",
     "--operator-id",
     "--artifact-root",
     "--configuration-freeze-path",
+    "--configuration-freeze-path-run-two",
     "--authorization-receipt-path",
+    "--authorization-receipt-path-run-two",
     "--dataset-qualification-receipt-path",
     "--dataset-root",
     "--manifest-path",
+    "--checkout-identity-proof-path",
+    "--control-replay-receipt-output",
     "--bounded-fixture",
   ]);
   for (const key of flags.keys()) {
@@ -91,6 +92,8 @@ export function resolveFhvControlReplayCliConfig(
 
   const releaseSha =
     (flags.get("--release-sha") as string | undefined) ?? env.FHV_RELEASE_SHA?.trim();
+  const releaseTag =
+    (flags.get("--release-tag") as string | undefined) ?? env.FHV_RELEASE_TAG?.trim();
   const organizationId =
     (flags.get("--organization-id") as string | undefined) ??
     env.FHV_ORGANIZATION_ID?.trim() ??
@@ -104,9 +107,15 @@ export function resolveFhvControlReplayCliConfig(
   const configurationFreezePath =
     (flags.get("--configuration-freeze-path") as string | undefined) ??
     env.FHV_CONFIGURATION_FREEZE_PATH?.trim();
+  const configurationFreezePathRunTwo =
+    (flags.get("--configuration-freeze-path-run-two") as string | undefined) ??
+    env.FHV_CONFIGURATION_FREEZE_PATH_RUN_TWO?.trim();
   const authorizationReceiptPath =
     (flags.get("--authorization-receipt-path") as string | undefined) ??
     env.FHV_AUTHORIZATION_RECEIPT_PATH?.trim();
+  const authorizationReceiptPathRunTwo =
+    (flags.get("--authorization-receipt-path-run-two") as string | undefined) ??
+    env.FHV_AUTHORIZATION_RECEIPT_PATH_RUN_TWO?.trim();
   const datasetQualificationReceiptPath =
     (flags.get("--dataset-qualification-receipt-path") as string | undefined) ??
     env.FHV_DATASET_QUALIFICATION_RECEIPT_PATH?.trim();
@@ -114,6 +123,12 @@ export function resolveFhvControlReplayCliConfig(
     (flags.get("--dataset-root") as string | undefined) ?? env.FHV_DATASET_ROOT?.trim();
   const manifestPath =
     (flags.get("--manifest-path") as string | undefined) ?? env.FHV_MANIFEST_PATH?.trim();
+  const checkoutIdentityProofPath =
+    (flags.get("--checkout-identity-proof-path") as string | undefined) ??
+    env.FHV_CHECKOUT_IDENTITY_PROOF_PATH?.trim();
+  const controlReplayReceiptOutput =
+    (flags.get("--control-replay-receipt-output") as string | undefined) ??
+    env.FHV_CONTROL_REPLAY_RECEIPT_OUTPUT?.trim();
   const boundedFixture = flags.has("--bounded-fixture");
 
   if (!releaseSha) {
@@ -137,16 +152,24 @@ export function resolveFhvControlReplayCliConfig(
   if (!boundedFixture && (!datasetRoot || !manifestPath)) {
     throw new Error("Official control replay requires --dataset-root and --manifest-path");
   }
+  if (!boundedFixture && !checkoutIdentityProofPath) {
+    throw new Error("Official control replay requires --checkout-identity-proof-path");
+  }
 
   return {
     releaseSha,
+    releaseTag,
     organizationId,
     operatorId,
     configurationFreezePath,
+    configurationFreezePathRunTwo,
     authorizationReceiptPath,
+    authorizationReceiptPathRunTwo,
     datasetQualificationReceiptPath,
     datasetRoot,
     manifestPath,
+    checkoutIdentityProofPath,
+    controlReplayReceiptOutput,
     ...(artifactRoot ? { artifactRoot } : {}),
     boundedFixture,
   };
@@ -154,6 +177,7 @@ export function resolveFhvControlReplayCliConfig(
 
 export async function runFhvControlReplay(input: {
   releaseSha: string;
+  releaseTag?: string;
   organizationId: string;
   operatorId: string;
   configurationFreezePath: string;
@@ -165,6 +189,9 @@ export async function runFhvControlReplay(input: {
   boundedFixture?: boolean;
   configurationFreezePathRunTwo?: string;
   authorizationReceiptPathRunTwo?: string;
+  checkoutIdentityProofPath?: string;
+  controlReplayReceiptOutput?: string;
+  maxCycles?: number;
 }): Promise<FhvControlReplayResult> {
   if (!FULL_SHA.test(input.releaseSha)) {
     return {
@@ -179,7 +206,7 @@ export async function runFhvControlReplay(input: {
   const boundedFixture = input.boundedFixture === true;
 
   try {
-    const freezeArtifact = readFhvConfigurationFreezeArtifact(input.configurationFreezePath);
+    readFhvConfigurationFreezeArtifact(input.configurationFreezePath);
     const authReceipt = readFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);
 
     const runOneId = `fhv-control-replay-1-${input.releaseSha.slice(0, 8)}`;
@@ -187,19 +214,20 @@ export async function runFhvControlReplay(input: {
 
     const baseLaunch = {
       releaseSha: input.releaseSha,
+      releaseTag: input.releaseTag,
       organizationId: input.organizationId,
       operatorId: input.operatorId,
       artifactRoot,
       configurationFreezePath: input.configurationFreezePath,
       datasetQualificationReceiptPath: input.datasetQualificationReceiptPath,
       boundedFixture,
-      skipCheckoutIdentityVerification: true,
-      maxCycles: 15,
+      ...(input.maxCycles != null ? { maxCycles: input.maxCycles } : {}),
       ...(boundedFixture
         ? {}
         : {
             datasetRoot: input.datasetRoot,
             manifestPath: input.manifestPath,
+            checkoutIdentityProofPath: input.checkoutIdentityProofPath,
           }),
     };
 
@@ -246,12 +274,28 @@ export async function runFhvControlReplay(input: {
       };
     }
 
+    let controlReplayReceiptPath: string | undefined;
+    if (input.controlReplayReceiptOutput) {
+      writeFhvControlReplayReceiptAtomic({
+        receiptPath: input.controlReplayReceiptOutput,
+        releaseSha: input.releaseSha,
+        organizationId: input.organizationId,
+        operatorId: input.operatorId,
+        runOneId,
+        runTwoId,
+        runOneDigest: runOneDigest!,
+        runTwoDigest: runTwoDigest!,
+      });
+      controlReplayReceiptPath = input.controlReplayReceiptOutput;
+    }
+
     return {
       schemaVersion: "fhv-control-replay/v1",
       classification: "CONTROL_REPLAY=PASS",
       runOneDigest,
       runTwoDigest,
       digestsMatch: true,
+      controlReplayReceiptPath,
     };
   } catch (error) {
     return {

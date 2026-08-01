@@ -1,7 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
+import {
+  writeFileAtomicCompareAndReplace,
+  writeFileAtomicExclusive,
+} from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 
 /** Human-only authorization literal for issuing scoped authorization receipts. */
@@ -24,6 +27,7 @@ export type FhvFullHistoricalAuthorizationReceiptV1 = Readonly<{
   datasetDigest: string;
   manifestDigest: string;
   configurationFreezeDigest: string;
+  controlReplayReceiptDigest?: string;
   organizationId: string;
   operatorId: string;
   runId: string;
@@ -75,6 +79,7 @@ export function buildFhvFullHistoricalAuthorizationReceipt(input: {
   datasetDigest: string;
   manifestDigest: string;
   configurationFreezeDigest: string;
+  controlReplayReceiptDigest?: string;
   organizationId: string;
   operatorId: string;
   runId: string;
@@ -88,6 +93,9 @@ export function buildFhvFullHistoricalAuthorizationReceipt(input: {
     datasetDigest: input.datasetDigest,
     manifestDigest: input.manifestDigest,
     configurationFreezeDigest: input.configurationFreezeDigest,
+    ...(input.controlReplayReceiptDigest
+      ? { controlReplayReceiptDigest: input.controlReplayReceiptDigest }
+      : {}),
     organizationId: input.organizationId,
     operatorId: input.operatorId,
     runId: input.runId,
@@ -126,6 +134,7 @@ export function writeFhvFullHistoricalAuthorizationReceiptAtomic(input: {
   datasetDigest: string;
   manifestDigest: string;
   configurationFreezeDigest: string;
+  controlReplayReceiptDigest?: string;
   organizationId: string;
   operatorId: string;
   runId: string;
@@ -146,7 +155,15 @@ export function writeFhvFullHistoricalAuthorizationReceiptAtomic(input: {
 export function consumeFhvFullHistoricalAuthorizationReceipt(
   receiptPath: string,
 ): FhvFullHistoricalAuthorizationReceiptV1 {
-  const receipt = readFhvFullHistoricalAuthorizationReceipt(receiptPath);
+  const expectedContent = readFileSync(receiptPath, "utf8");
+  const receipt = JSON.parse(expectedContent) as FhvFullHistoricalAuthorizationReceiptV1;
+  const { authorizationReceiptDigest, ...body } = receipt;
+  if (computeAuthorizationReceiptDigest(body) !== authorizationReceiptDigest) {
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_RECEIPT_DIGEST_MISMATCH",
+      "Authorization receipt digest mismatch.",
+    );
+  }
   if (receipt.consumed) {
     throw new FhvFullHistoricalAuthError(
       "AUTHORIZATION_ALREADY_CONSUMED",
@@ -162,6 +179,9 @@ export function consumeFhvFullHistoricalAuthorizationReceipt(
     datasetDigest: receipt.datasetDigest,
     manifestDigest: receipt.manifestDigest,
     configurationFreezeDigest: receipt.configurationFreezeDigest,
+    ...(receipt.controlReplayReceiptDigest
+      ? { controlReplayReceiptDigest: receipt.controlReplayReceiptDigest }
+      : {}),
     organizationId: receipt.organizationId,
     operatorId: receipt.operatorId,
     runId: receipt.runId,
@@ -174,7 +194,12 @@ export function consumeFhvFullHistoricalAuthorizationReceipt(
     ...withoutDigest,
     authorizationReceiptDigest: computeAuthorizationReceiptDigest(withoutDigest),
   };
-  writeFileSync(receiptPath, `${JSON.stringify(consumedReceipt, null, 2)}\n`, "utf8");
+  const nextContent = `${JSON.stringify(consumedReceipt, null, 2)}\n`;
+  writeFileAtomicCompareAndReplace({
+    finalPath: receiptPath,
+    expectedContent,
+    nextContent,
+  });
   return consumedReceipt;
 }
 
@@ -187,6 +212,7 @@ export function assertFhvFullHistoricalAuthorizationReceiptForLaunch(input: {
   datasetDigest: string;
   manifestDigest: string;
   configurationFreezeDigest: string;
+  controlReplayReceiptDigest?: string;
   organizationId: string;
   operatorId: string;
   runId: string;
@@ -230,6 +256,15 @@ export function assertFhvFullHistoricalAuthorizationReceiptForLaunch(input: {
     throw new FhvFullHistoricalAuthError(
       "AUTHORIZATION_DIGEST_BINDING_MISMATCH",
       "Authorization receipt digest bindings mismatch.",
+    );
+  }
+  if (
+    input.controlReplayReceiptDigest &&
+    receipt.controlReplayReceiptDigest !== input.controlReplayReceiptDigest
+  ) {
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_CONTROL_REPLAY_DIGEST_MISMATCH",
+      "Authorization receipt controlReplayReceiptDigest mismatch.",
     );
   }
   if (

@@ -1,6 +1,5 @@
 /**
  * DEE-436/DEE-416 — FHV official path blocker proofs (B1–B9).
- * These tests assert corrected behavior; they must pass GREEN after implementation.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -21,12 +20,10 @@ import {
   readFhvFullHistoricalAuthorizationReceipt,
 } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { qualifyFhvOfficialDataset } from "@/lib/trader/observability/fhv-dataset-qualification";
+import { disableFhvCheckoutIdentityTestBypass } from "@/lib/trader/observability/fhv-checkout-identity-test-hook";
 import { runFhvDatasetQualification as runCliQualification } from "@/scripts/trader/fhv-dataset-qualification-cli";
 import { resolveFhvFullRunCliConfig } from "@/scripts/trader/fhv-full-run-cli";
 import { runFhvControlReplay } from "@/scripts/trader/fhv-control-replay-cli";
-import { writeFhvConfigurationFreezeArtifactAtomic } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
-import { writeFhvDatasetQualificationReceiptAtomic } from "@/lib/trader/observability/fhv-dataset-qualification";
-import { writeFhvFullHistoricalAuthorizationReceiptAtomic } from "@/lib/trader/observability/fhv-full-historical-auth";
 import {
   FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
   FHV_OFFICIAL_REAL_SCHEMA_ROOT,
@@ -36,60 +33,24 @@ import {
   FHV_TEST_STRATEGY_VERSION,
   setupFhvBoundedLaunchArtifacts,
   setupFhvControlReplayArtifacts,
+  setupFhvOfficialSchemaLaunchArtifacts,
 } from "@/tests/helpers/fhv-official-path-test-fixtures";
 
 const ORG_ID = "00000000-0000-4000-8000-000000000436";
 const OPERATOR_ID = "fhv-blocker-test-operator";
 const WRONG_SHA = "cccccccccccccccccccccccccccccccccccccccc";
 
-function setupOfficialLaunchArtifacts(root: string, runId: string) {
-  const prepDir = join(root, "prep");
-  const qualificationReceipt = writeFhvDatasetQualificationReceiptAtomic({
-    receiptDir: prepDir,
-    datasetRoot: FHV_OFFICIAL_REAL_SCHEMA_ROOT,
-    manifestPath: FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
-  });
-  const freeze = writeFhvConfigurationFreezeArtifactAtomic({
-    artifactDir: join(prepDir, "freeze"),
-    releaseSha: FHV_TEST_RELEASE_SHA,
-    releaseTag: "fhv-test-release",
-    runId,
-    organizationId: ORG_ID,
-    operatorId: OPERATOR_ID,
-    datasetDigest: qualificationReceipt.datasetContentDigest,
-    manifestDigest: qualificationReceipt.manifestSemanticDigest,
-    strategyVersions: [FHV_TEST_STRATEGY_VERSION],
-    strategyDigests: [FHV_TEST_STRATEGY_DIGEST],
-    checkpointDigest: "fhv-official-test-checkpoint",
-    datasetQualificationReceiptDigest: qualificationReceipt.qualificationReceiptDigest,
-  });
-  const auth = writeFhvFullHistoricalAuthorizationReceiptAtomic({
-    receiptDir: join(prepDir, "auth"),
-    releaseSha: FHV_TEST_RELEASE_SHA,
-    releaseTag: "fhv-test-release",
-    datasetQualificationReceiptDigest: qualificationReceipt.qualificationReceiptDigest,
-    datasetDigest: qualificationReceipt.datasetContentDigest,
-    manifestDigest: qualificationReceipt.manifestSemanticDigest,
-    configurationFreezeDigest: freeze.artifact.configurationFreeze.configurationFreezeDigest,
-    organizationId: ORG_ID,
-    operatorId: OPERATOR_ID,
-    runId,
-  });
-  return {
-    qualificationReceiptPath: join(prepDir, "fhv-dataset-qualification-receipt.v1.json"),
-    configurationFreezePath: freeze.artifactPath,
-    authorizationReceiptPath: auth.receiptPath,
-    authorizationReceiptDigest: auth.receipt.authorizationReceiptDigest,
-    qualificationReceipt,
-  };
-}
-
 describe("DEE-436 FHV official path blockers B1–B9", () => {
   it("B1: official path runs backtest and classifies FULL_HISTORICAL_VALIDATION_COMPLETED", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-b1-"));
     const runId = "fhv-b1-official-run";
     try {
-      const prep = setupOfficialLaunchArtifacts(root, runId);
+      const prep = setupFhvOfficialSchemaLaunchArtifacts({
+        artifactRoot: root,
+        runId,
+        organizationId: ORG_ID,
+        operatorId: OPERATOR_ID,
+      });
 
       const result = await executeFhvFullHistoricalLaunch({
         releaseSha: FHV_TEST_RELEASE_SHA,
@@ -104,7 +65,8 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
         datasetQualificationReceiptPath: prep.qualificationReceiptPath,
         datasetRoot: FHV_OFFICIAL_REAL_SCHEMA_ROOT,
         manifestPath: FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
-        skipCheckoutIdentityVerification: true,
+        checkoutIdentityProofPath: prep.checkoutIdentityProofPath,
+        controlReplayReceiptPath: prep.controlReplayReceiptPath,
         maxCycles: 10,
       });
 
@@ -120,10 +82,12 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
     const qualified = qualifyFhvOfficialDataset({
       datasetRoot: FHV_OFFICIAL_REAL_SCHEMA_ROOT,
       manifestPath: FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
+      qualificationMode: "SCHEMA_INTEGRATION_FIXTURE",
     });
     expect(qualified.datasetContentDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(qualified.manifestSemanticDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(qualified.datasetContentDigest).not.toBe(qualified.manifestSemanticDigest);
+    expect(qualified.fixtureClassification).toBe("SCHEMA_INTEGRATION_FIXTURE");
   });
 
   it("B3: dataset-qualify uses --dataset-root for official qualification", () => {
@@ -146,7 +110,6 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
           FHV_ORGANIZATION_ID: ORG_ID,
           FHV_OPERATOR_ID: OPERATOR_ID,
           FHV_ARTIFACT_ROOT: "/tmp/fhv-cli-artifacts",
-          FHV_SKIP_CHECKOUT_IDENTITY: "1",
         },
         ["--bounded-fixture"],
       ),
@@ -174,7 +137,6 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
           authorizationReceiptDigest: "0".repeat(64),
           datasetQualificationReceiptPath: artifacts.qualificationReceiptPath,
           boundedFixture: true,
-          skipCheckoutIdentityVerification: true,
         }),
       ).toThrow(/authorizationReceiptDigest mismatch/i);
     } finally {
@@ -237,8 +199,8 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
         authorizationReceiptPath: artifacts.authorizationReceiptPath,
         authorizationReceiptDigest: artifacts.authorizationReceiptDigest,
         datasetQualificationReceiptPath: artifacts.qualificationReceiptPath,
+        checkoutIdentityProofPath: artifacts.checkoutIdentityProofPath,
         boundedFixture: true,
-        skipCheckoutIdentityVerification: true,
         maxCycles: 5,
       });
       expect(result.backtest?.exportDocument).toBeDefined();
@@ -265,8 +227,10 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
         configurationFreezePathRunTwo: prep.configurationFreezePathRunTwo,
         authorizationReceiptPath: prep.authorizationReceiptPathRunOne,
         authorizationReceiptPathRunTwo: prep.authorizationReceiptPathRunTwo,
+        checkoutIdentityProofPath: prep.checkoutIdentityProofPathRunOne,
         datasetQualificationReceiptPath: prep.qualificationReceiptPath,
         boundedFixture: true,
+        maxCycles: 10,
       });
       expect(result.classification).toBe("CONTROL_REPLAY=PASS");
     } finally {
@@ -283,6 +247,7 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
         runId,
         operatorId: OPERATOR_ID,
       });
+      disableFhvCheckoutIdentityTestBypass();
       await expect(
         executeFhvFullHistoricalLaunch({
           releaseSha: WRONG_SHA,
@@ -323,8 +288,8 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
         authorizationReceiptPath: artifacts.authorizationReceiptPath,
         authorizationReceiptDigest: artifacts.authorizationReceiptDigest,
         datasetQualificationReceiptPath: artifacts.qualificationReceiptPath,
+        checkoutIdentityProofPath: artifacts.checkoutIdentityProofPath,
         boundedFixture: true,
-        skipCheckoutIdentityVerification: true,
         maxCycles: 5,
       });
       expect(result.backtest?.exportDocument).toBeDefined();

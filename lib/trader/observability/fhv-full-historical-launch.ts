@@ -1,36 +1,39 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  loadApprovedBenchmarkFixture,
-  seedBenchmarkSession,
-} from "@/lib/trader/backtest/replay-benchmark-harness";
+import { computeAccountingSemanticDigest } from "@/lib/trader/accounting";
+import { loadApprovedBenchmarkFixture } from "@/lib/trader/backtest/replay-benchmark-harness";
 import { runBacktest, type RunBacktestResult } from "@/lib/trader/backtest/backtest-runner";
+import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
 import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { createStreamingEvidenceSink } from "@/lib/trader/backtest/streaming-evidence";
 import {
   costModelV1FromAuthority,
   createHtrHistoricalCostModelAuthorityV1,
 } from "@/lib/trader/execution/cost-model";
+import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
-import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
 import type { Bar } from "@/lib/trader/intelligence/types";
-import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
+import { FhvSharedPortfolioBarReplaySource } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
 import { FHV_DATASET_PARTITIONS_V1 } from "@/lib/trader/market-data/dataset/fhv-dataset-manifest";
 import { assertFhvReplayNotLiveExchangePath } from "@/lib/trader/observability/fhv-campaign-semantic-abort";
+import { shouldSkipFhvCheckoutIdentityVerification } from "@/lib/trader/observability/fhv-checkout-identity-test-hook";
 import {
   readFhvConfigurationFreezeArtifact,
   type FhvConfigurationFreezeArtifactV1,
 } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
 import type { FhvConfigurationFreezeV1 } from "@/lib/trader/observability/fhv-configuration-freeze";
+import { readFhvControlReplayReceipt } from "@/lib/trader/observability/fhv-control-replay-receipt";
 import {
-  loadOfficialDatasetBars,
+  loadOfficialSharedPortfolioBars,
   readFhvDatasetQualificationReceipt,
 } from "@/lib/trader/observability/fhv-dataset-qualification";
+import { revalidateFhvDatasetAtLaunch } from "@/lib/trader/observability/fhv-dataset-launch-guard";
 import {
   assertFhvFullHistoricalAuthorizationReceiptForLaunch,
   consumeFhvFullHistoricalAuthorizationReceipt,
 } from "@/lib/trader/observability/fhv-full-historical-auth";
+import { seedFhvHistoricalExecutionSession } from "@/lib/trader/observability/fhv-historical-execution-session";
 import {
   verifyFhvReleaseCheckoutIdentity,
   type FhvT4CheckoutIdentityProofV1,
@@ -45,10 +48,12 @@ import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-re
 import { buildResearchValidationCycleIdPrefix } from "@/lib/trader/research/research-backtest-cycle-id";
 import { createHtrInitialAccountRiskState } from "@/lib/trader/research/htr-initial-portfolio-contract";
 import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-contract";
+import { buildResearchV2PortfolioContext } from "@/lib/trader/research/research-portfolio-config";
 
 export const FHV_FULL_LAUNCH_RECEIPT_SCHEMA_VERSION = "fhv-full-launch-receipt/v1" as const;
 export const FHV_FULL_LAUNCH_MODE = "FULL_HISTORICAL_VALIDATION" as const;
 export const FHV_BOUNDED_FULL_HISTORICAL_FIXTURE_ID = "HTR_WP03_BENCHMARK" as const;
+export const FHV_HOLDOUT_UNSEAL_EVIDENCE_FILENAME = "fhv-holdout-unseal-evidence.v1.json" as const;
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -79,14 +84,13 @@ export type FhvFullHistoricalLaunchInput = Readonly<{
   datasetRoot?: string;
   manifestPath?: string;
   checkoutIdentityProofPath?: string;
+  controlReplayReceiptPath?: string;
   repoPath?: string;
   rehearsalMode?: boolean;
   livePathInvoked?: boolean;
   holdoutAccessRequested?: boolean;
   boundedFixture?: boolean;
   maxCycles?: number;
-  /** @internal vitest-only */
-  skipCheckoutIdentityVerification?: boolean;
 }>;
 
 export type FhvFullHistoricalLaunchResult = Readonly<{
@@ -108,13 +112,6 @@ export class FhvFullHistoricalLaunchError extends Error {
     super(message);
     this.name = "FhvFullHistoricalLaunchError";
   }
-}
-
-function shouldSkipCheckoutIdentity(input: FhvFullHistoricalLaunchInput): boolean {
-  return (
-    input.skipCheckoutIdentityVerification === true ||
-    process.env.FHV_SKIP_CHECKOUT_IDENTITY === "1"
-  );
 }
 
 function computeLaunchReceiptDigest(
@@ -248,7 +245,7 @@ function assertCheckoutIdentityProofFile(input: {
 }
 
 function assertCheckoutIdentity(input: FhvFullHistoricalLaunchInput, _runDir: string): void {
-  if (shouldSkipCheckoutIdentity(input)) {
+  if (shouldSkipFhvCheckoutIdentityVerification()) {
     return;
   }
   if (input.checkoutIdentityProofPath) {
@@ -275,10 +272,54 @@ function assertCheckoutIdentity(input: FhvFullHistoricalLaunchInput, _runDir: st
   );
 }
 
+function resolveControlReplayReceiptDigest(
+  input: FhvFullHistoricalLaunchInput,
+): string | undefined {
+  if (!input.controlReplayReceiptPath?.trim()) {
+    return undefined;
+  }
+  return readFhvControlReplayReceipt(input.controlReplayReceiptPath).controlReplayReceiptDigest;
+}
+
+function writeFhvHoldoutUnsealEvidence(input: {
+  runDir: string;
+  releaseSha: string;
+  organizationId: string;
+  operatorId: string;
+  runId: string;
+  datasetQualificationReceiptDigest: string;
+  controlReplayReceiptDigest?: string;
+}): string {
+  const evidencePath = join(input.runDir, "control", FHV_HOLDOUT_UNSEAL_EVIDENCE_FILENAME);
+  if (existsSync(evidencePath)) {
+    return evidencePath;
+  }
+  const body = {
+    schemaVersion: "fhv-holdout-unseal-evidence/v1" as const,
+    unsealedAtUtc: new Date().toISOString(),
+    releaseSha: input.releaseSha.trim().toLowerCase(),
+    organizationId: input.organizationId,
+    operatorId: input.operatorId,
+    runId: input.runId,
+    datasetQualificationReceiptDigest: input.datasetQualificationReceiptDigest,
+    ...(input.controlReplayReceiptDigest
+      ? { controlReplayReceiptDigest: input.controlReplayReceiptDigest }
+      : {}),
+    partition: "blind-holdout" as const,
+  };
+  const evidence = {
+    ...body,
+    evidenceDigest: computePayloadDigest(body),
+  };
+  writeFileAtomicExclusive(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
+  return evidencePath;
+}
+
 export function validateFhvFullHistoricalLaunchInput(input: FhvFullHistoricalLaunchInput): {
   configurationFreeze: FhvConfigurationFreezeV1;
   freezeArtifact: FhvConfigurationFreezeArtifactV1;
   qualificationReceiptDigest: string;
+  controlReplayReceiptDigest?: string;
 } {
   assertFhvRunContractIntervalsMatchPartitions();
 
@@ -327,6 +368,15 @@ export function validateFhvFullHistoricalLaunchInput(input: FhvFullHistoricalLau
     );
   }
 
+  const includeHoldout = !input.boundedFixture;
+  const controlReplayReceiptDigest = resolveControlReplayReceiptDigest(input);
+  if (includeHoldout && !controlReplayReceiptDigest) {
+    throw new FhvFullHistoricalLaunchError(
+      "CONTROL_REPLAY_RECEIPT_REQUIRED",
+      "Official holdout launch requires controlReplayReceiptPath with PASS receipt.",
+    );
+  }
+
   const freezeArtifact = readFhvConfigurationFreezeArtifact(input.configurationFreezePath);
   const configurationFreeze = freezeArtifact.configurationFreeze;
 
@@ -349,6 +399,7 @@ export function validateFhvFullHistoricalLaunchInput(input: FhvFullHistoricalLau
     datasetDigest: configurationFreeze.datasetDigest,
     manifestDigest: configurationFreeze.manifestDigest,
     configurationFreezeDigest: configurationFreeze.configurationFreezeDigest,
+    controlReplayReceiptDigest,
     organizationId: input.organizationId,
     operatorId: input.operatorId,
     runId: input.runId,
@@ -400,6 +451,7 @@ export function validateFhvFullHistoricalLaunchInput(input: FhvFullHistoricalLau
     configurationFreeze,
     freezeArtifact,
     qualificationReceiptDigest: qualificationReceipt.qualificationReceiptDigest,
+    controlReplayReceiptDigest,
   };
 }
 
@@ -455,6 +507,8 @@ async function runFullHistoricalBacktest(input: {
   runDir: string;
   runId: string;
   releaseSha: string;
+  organizationId: string;
+  operatorId: string;
   configurationFreeze: FhvConfigurationFreezeV1;
   bars: readonly Bar[];
   latestQuote?: { symbol: string; bid: string; ask: string; last: string; timestamp: string };
@@ -462,7 +516,14 @@ async function runFullHistoricalBacktest(input: {
   includeHoldout: boolean;
   maxCycles?: number;
 }): Promise<RunBacktestResult> {
-  const { session, context } = await seedBenchmarkSession();
+  const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
+  const portfolio = buildResearchV2PortfolioContext(costModel);
+  const accountKey = "fhv-full-historical";
+  const { session, context, cleanup } = await seedFhvHistoricalExecutionSession({
+    organizationId: input.organizationId,
+    operatorId: input.operatorId,
+    slot: 436,
+  });
   mkdirSync(input.runDir, { recursive: true });
   const evidenceSink = createStreamingEvidenceSink({
     runDir: input.runDir,
@@ -477,11 +538,7 @@ async function runFullHistoricalBacktest(input: {
     end: new Date(input.bars.at(-1)!.barCloseTime),
   };
   const cycleIdPrefix = buildResearchValidationCycleIdPrefix(input.runId);
-  const barSource = new HistoricalBarReplaySource({
-    bars: input.bars,
-    ...(input.latestQuote ? { quote: input.latestQuote } : {}),
-    cycleIdPrefix,
-  });
+  const barSource = new FhvSharedPortfolioBarReplaySource(input.bars, cycleIdPrefix);
   const strategies = resolveStrategyBindings(input.configurationFreeze);
   const accountState = createHtrInitialAccountRiskState();
 
@@ -491,9 +548,10 @@ async function runFullHistoricalBacktest(input: {
       barSource,
       deps: session.deps,
       orderRepository: session.orderRepository,
-      accountKey: "fhv-full-historical",
+      accountKey,
       defaultQuantity: "0.01",
-      costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
+      costModel,
+      portfolio,
       strategySignalIds: strategies.strategySignalIds,
       strategyId: strategies.primaryStrategyId,
       strategyVersion: strategies.primaryStrategyVersion,
@@ -511,6 +569,15 @@ async function runFullHistoricalBacktest(input: {
       retentionMode: "STREAM_ONLY",
       evidenceSink,
       maxCycles: input.maxCycles ?? (input.boundedFixture ? 20 : undefined),
+      enableReplayFusedContext: false,
+      historicalExecutionProfile: session.historicalExecutionProfile,
+      historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
+      wp16: {
+        runId: input.runId,
+        portfolioId: accountKey,
+        historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
+      },
+      checkpointRunRoot: input.runDir,
       fhvObservability: {
         runLogRoot: join(input.runDir, "fhv-trace"),
         provenance: {
@@ -526,7 +593,7 @@ async function runFullHistoricalBacktest(input: {
       },
     });
   } finally {
-    session.cleanup();
+    cleanup();
   }
 }
 
@@ -536,10 +603,18 @@ export async function executeFhvFullHistoricalLaunch(
   const runDir = resolveFhvFullLaunchRunDirectory(input.artifactRoot, input.runId);
   assertCheckoutIdentity(input, runDir);
 
-  const { configurationFreeze, qualificationReceiptDigest } =
+  const { configurationFreeze, qualificationReceiptDigest, controlReplayReceiptDigest } =
     validateFhvFullHistoricalLaunchInput(input);
 
-  const { receiptPath } = writeFhvFullLaunchReceipt({
+  if (!input.boundedFixture && input.datasetRoot && input.manifestPath) {
+    revalidateFhvDatasetAtLaunch({
+      datasetQualificationReceiptPath: input.datasetQualificationReceiptPath,
+      datasetRoot: input.datasetRoot,
+      manifestPath: input.manifestPath,
+    });
+  }
+
+  const { receiptPath, receipt } = writeFhvFullLaunchReceipt({
     configurationFreeze,
     authorizationReceiptDigest: input.authorizationReceiptDigest,
     datasetQualificationReceiptDigest: qualificationReceiptDigest,
@@ -559,16 +634,29 @@ export async function executeFhvFullHistoricalLaunch(
     bars = fixture.bars;
     latestQuote = fixture.latestQuote;
   } else {
-    bars = loadOfficialDatasetBars({
+    bars = loadOfficialSharedPortfolioBars({
       datasetRoot: input.datasetRoot!,
       includeHoldout,
     });
+    if (includeHoldout) {
+      writeFhvHoldoutUnsealEvidence({
+        runDir,
+        releaseSha: input.releaseSha,
+        organizationId: input.organizationId,
+        operatorId: input.operatorId,
+        runId: input.runId,
+        datasetQualificationReceiptDigest: qualificationReceiptDigest,
+        controlReplayReceiptDigest,
+      });
+    }
   }
 
   const backtest = await runFullHistoricalBacktest({
     runDir,
     runId: input.runId,
     releaseSha: input.releaseSha,
+    organizationId: input.organizationId,
+    operatorId: input.operatorId,
     configurationFreeze,
     bars,
     latestQuote,
@@ -585,18 +673,39 @@ export async function executeFhvFullHistoricalLaunch(
     ? ("BOUNDED_FULL_HISTORICAL_END_TO_END_PASS" as const)
     : ("FULL_HISTORICAL_VALIDATION_COMPLETED" as const);
 
+  const launchResult = {
+    schemaVersion: "fhv-full-launch-result/v1",
+    classification,
+    semanticReproDigest,
+    cycleCount: backtest.cycleCount,
+    evidenceChain: {
+      qualificationReceiptDigest,
+      controlReplayReceiptDigest,
+      configurationFreezeDigest: configurationFreeze.configurationFreezeDigest,
+      authorizationReceiptDigest: input.authorizationReceiptDigest,
+      launchReceiptDigest: receipt.launchReceiptDigest,
+      datasetContentDigest: configurationFreeze.datasetDigest,
+      manifestSemanticDigest: configurationFreeze.manifestDigest,
+      accountingStateDigest: backtest.accountingState
+        ? computeAccountingSemanticDigest(backtest.accountingState)
+        : undefined,
+      htrPnlReportDigest: backtest.htrPnlReportV1
+        ? computePayloadDigest(backtest.htrPnlReportV1 as unknown as Record<string, unknown>)
+        : undefined,
+      drawdownHwm: backtest.drawdownHwmState,
+      checkpointRef: backtest.streamingManifestRef,
+      fullHistoryRescanCount: getFullHistoryRescanCount(),
+      holdoutUnsealEvidenceRef: includeHoldout
+        ? join(runDir, "control", FHV_HOLDOUT_UNSEAL_EVIDENCE_FILENAME)
+        : undefined,
+    },
+    accountingFrontierState: backtest.accountingFrontierState,
+    htrPnlReportV1: backtest.htrPnlReportV1,
+  };
+
   writeFileAtomicExclusive(
     join(runDir, "fhv-full-launch-result.v1.json"),
-    `${JSON.stringify(
-      {
-        schemaVersion: "fhv-full-launch-result/v1",
-        classification,
-        semanticReproDigest,
-        cycleCount: backtest.cycleCount,
-      },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify(launchResult, null, 2)}\n`,
   );
 
   return {

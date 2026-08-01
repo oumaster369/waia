@@ -4,6 +4,7 @@ import {
   fsyncSync,
   linkSync,
   openSync,
+  readFileSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -153,6 +154,57 @@ export function writeFileAtomicExclusive(finalPath: string, bytes: Buffer | stri
       // best-effort cleanup of writer-owned temp only
     }
     throw error;
+  }
+}
+
+/**
+ * Atomically replace an existing file only when its current bytes match `expectedContent`.
+ * Uses temp write + fsync + rename (compare-and-replace / TOCTOU guard).
+ */
+export function writeFileAtomicCompareAndReplace(input: {
+  finalPath: string;
+  expectedContent: string;
+  nextContent: string;
+}): void {
+  if (!existsSync(input.finalPath)) {
+    throw new AtomicFileWriteError(
+      "COMPARE_AND_REPLACE_TARGET_MISSING",
+      `Compare-and-replace target missing: ${input.finalPath}`,
+    );
+  }
+  const current = readFileSync(input.finalPath, "utf8");
+  if (current !== input.expectedContent) {
+    throw new AtomicFileWriteError(
+      "COMPARE_AND_REPLACE_CONTENT_MISMATCH",
+      `Compare-and-replace content mismatch for ${input.finalPath}`,
+    );
+  }
+  const directory = dirname(input.finalPath);
+  const tempPath = createExclusiveTempPath(input.finalPath);
+  let fd: number | null = null;
+  try {
+    fd = openSync(tempPath, "wx");
+    writeFully(fd, Buffer.from(input.nextContent, "utf8"));
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = null;
+    renameSync(tempPath, input.finalPath);
+    fsyncDirectoryStrict(directory);
+  } catch (error) {
+    if (fd !== null) {
+      closeSync(fd);
+    }
+    try {
+      if (existsSync(tempPath)) {
+        unlinkSync(tempPath);
+      }
+    } catch {
+      // best-effort cleanup
+    }
+    throw new AtomicFileWriteError(
+      "COMPARE_AND_REPLACE_WRITE_FAILED",
+      `Compare-and-replace failed for ${input.finalPath}: ${String(error)}`,
+    );
   }
 }
 

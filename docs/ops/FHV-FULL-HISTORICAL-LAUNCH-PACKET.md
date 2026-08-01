@@ -14,9 +14,10 @@ Official multi-year HTX run and bounded real-schema integration use the **same p
 
 1. `pnpm trader:fhv:dataset-qualify` — official mode with `--dataset-root` + `--manifest-path`
 2. `pnpm trader:fhv:freeze-config` — writes immutable `fhv-configuration-freeze.v1.json`
-3. `pnpm trader:fhv:authorize-full` — Human shell writes scoped authorization receipt (literal `AUTHORIZE-FULL-HISTORICAL-VALIDATION` consumed once)
-4. `pnpm trader:fhv:t4:record-checkout-identity` — release checkout identity proof at tagged release SHA
-5. `pnpm trader:fhv:run` — Full Historical Validation execution
+3. `pnpm trader:fhv:control-replay` — two-run determinism; retain `--control-replay-receipt-output`
+4. `pnpm trader:fhv:authorize-full` — Human shell writes scoped authorization receipt binding `controlReplayReceiptDigest`
+5. `pnpm trader:fhv:t4:record-checkout-identity` — release checkout identity proof at tagged release SHA
+6. `pnpm trader:fhv:run` — Full Historical Validation execution (holdout requires control replay receipt path)
 
 ## Command
 
@@ -40,6 +41,7 @@ pnpm trader:fhv:run -- \
   --authorization-receipt-path "/path/to/fhv-full-historical-authorization.v1.json" \
   --authorization-receipt-digest "<receipt-digest>" \
   --dataset-qualification-receipt-path "/path/to/fhv-dataset-qualification-receipt.v1.json" \
+  --control-replay-receipt-path "/path/to/fhv-control-replay-receipt.v1.json" \
   --dataset-root "/absolute/dataset/root" \
   --manifest-path "/absolute/manifest/fhv-dataset-manifest.v1.json" \
   --checkout-identity-proof-path "/path/to/fhv-t4-checkout-identity.v1.json"
@@ -62,7 +64,8 @@ pnpm trader:fhv:run -- --bounded-fixture \
 ## Fail-closed gates
 
 - Requires immutable configuration freeze artifact (no self-computed digest fallback)
-- Requires scoped authorization receipt bound to one run (rejects reuse, wrong release/dataset/freeze)
+- Requires scoped authorization receipt bound to one run (rejects reuse, wrong release/dataset/freeze/control-replay)
+- Requires control replay PASS receipt for official holdout launch (`--control-replay-receipt-path`)
 - Verifies release checkout identity (HEAD = release SHA, tag peel, clean tracked tree)
 - Binds dataset content digest and manifest semantic digest from qualification receipt (not compile-time pins)
 - Rejects reused `runId` (immutable receipt collision)
@@ -79,7 +82,7 @@ pnpm trader:fhv:run -- --bounded-fixture \
 ## Artifacts
 
 - `$FHV_ARTIFACT_ROOT/RI-P7/fhv-full-historical/<run-id>/fhv-full-launch-receipt.v1.json` (atomic exclusive)
-- `fhv-full-launch-result.v1.json` with terminal classification and semantic reproduction digest
+- `$FHV_ARTIFACT_ROOT/RI-P7/fhv-full-historical/<run-id>/fhv-full-launch-result.v1.json` — terminal classification, semantic reproduction digest, evidence chain (qualification, control replay, freeze, auth, launch digests, accountingState, htrPnlReport, drawdown, checkpoint ref, rescan count, holdout unseal ref)
 
 ## Related
 
