@@ -107,6 +107,8 @@
     "test:fhv:official-scale:full-corpus": "vitest run --config vitest.fhv-official-scale.config.ts tests/fhv/official-scale/blocking/fhv-official-full-corpus.test.ts",
     "test:fhv:official-scale": "pnpm test:fhv:official-scale:probe && pnpm test:fhv:official-scale:process-parity && pnpm test:fhv:official-scale:full-corpus",
     "test:fhv:official-scale:reader": "vitest run tests/fhv/official-scale/fhv-official-production-scale.test.ts",
+    "test:fhv:official-scale:profile:parity-gate": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/fhv-official-scale-profile-parity-gate.ts",
+    "test:fhv:official-scale:profile": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/fhv-official-scale-profile-cli.ts",
     "test:fhv:v2-scale-fixture-smoke": "vitest run tests/fhv/official-scale/fhv-official-scale.test.ts",
     "validate:pr-governance": "bash scripts/linear/test-validate-pr-linear-id.sh && bash scripts/linear/test-preflight-pr-governance.sh",
     "validate:canon": "bash scripts/ops/validate-canonical-docs.sh && bash scripts/ops/validate-fhv-release-identity.sh",

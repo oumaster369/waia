@@ -38,6 +38,7 @@ import { createHtrInitialAccountRiskState } from "@/lib/trader/research/htr-init
 import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-contract";
 import { buildResearchV2PortfolioContext } from "@/lib/trader/research/research-portfolio-config";
 import { readFhvLaunchJournal } from "@/lib/trader/observability/fhv-launch-journal";
+import { getFhvSyntheticProfilingHooks } from "@/lib/trader/observability/fhv-synthetic-profiling-hook";
 
 function parseStrategyBinding(version: string): { strategyId: string; strategyVersion: string } {
   const at = version.lastIndexOf("@");
@@ -226,6 +227,22 @@ export async function runFullHistoricalBacktest(input: {
     input.checkpointConfig?.checkpointEveryCycles ??
     input.configurationFreeze.checkpointEveryCycles;
 
+  const profilingHooks = getFhvSyntheticProfilingHooks();
+  const baseOnCycleBoundary = epochController?.onCycleBoundary;
+  const onCycleBoundary =
+    baseOnCycleBoundary || profilingHooks?.onCycle
+      ? async (boundary: Parameters<NonNullable<typeof baseOnCycleBoundary>>[0]) => {
+          profilingHooks?.onCycle?.({
+            cycleCount: boundary.cycleCount,
+            cycleIndex: boundary.cycleIndex,
+          });
+          if (!baseOnCycleBoundary) {
+            return "continue" as const;
+          }
+          return baseOnCycleBoundary(boundary);
+        }
+      : undefined;
+
   try {
     return await runBacktest({
       context,
@@ -273,7 +290,8 @@ export async function runFullHistoricalBacktest(input: {
         historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
       },
       checkpointRunRoot: input.runDir,
-      ...(epochController ? { onCycleBoundary: epochController.onCycleBoundary } : {}),
+      ...(profilingHooks?.observer ? { benchmarkObserver: profilingHooks.observer } : {}),
+      ...(onCycleBoundary ? { onCycleBoundary } : {}),
       ...(checkpointEveryCycles !== undefined
         ? { sourceCursorDigestEveryCycles: checkpointEveryCycles }
         : {}),
