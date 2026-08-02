@@ -203,6 +203,7 @@ export function assertFhvAuthorizationReceiptForExecution(input: {
   freezeDigest: string;
   controlReplayReceiptDigest?: string;
   expectedExecutionPurpose: FhvExecutionPurpose;
+  allowConsumed?: boolean;
 }): FhvFullHistoricalAuthorizationReceiptV1 {
   const receipt = readFhvFullHistoricalAuthorizationReceipt(input.receiptPath);
   if (receipt.executionPurpose === undefined || receipt.executionPurpose === null) {
@@ -266,7 +267,7 @@ export function assertFhvAuthorizationReceiptForExecution(input: {
       "Authorization control replay digest mismatch.",
     );
   }
-  if (receipt.consumed) {
+  if (receipt.consumed && !input.allowConsumed) {
     throw new FhvArtifactAuthorityError(
       "AUTHORIZATION_ALREADY_CONSUMED",
       "Authorization receipt already consumed.",

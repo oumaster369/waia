@@ -523,6 +523,15 @@ export async function runPaperCycleOnce(
   );
   accountState = guardianPhase.accountState;
 
+  if (
+    input.htrAccounting?.invalidateInventoryCache &&
+    guardianPhase.guardianExecutions.some(
+      (execution) => !execution.submitBlocked && execution.reconciliation != null,
+    )
+  ) {
+    input.htrAccounting.invalidateInventoryCache();
+  }
+
   const htrGuardianPhase = await runHtrGuardianPhase(
     deps,
     input,
@@ -740,6 +749,15 @@ export async function runPaperCycleOnce(
   }
 
   const legacy = pickLegacyExecution(strategyExecutions, guardianPhase.guardianExecutions);
+
+  if (
+    input.htrAccounting?.invalidateInventoryCache &&
+    strategyExecutions.some(
+      (execution) => !execution.submitBlocked && execution.reconciliation != null,
+    )
+  ) {
+    input.htrAccounting.invalidateInventoryCache();
+  }
 
   return {
     evaluation,

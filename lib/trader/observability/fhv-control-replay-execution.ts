@@ -1,23 +1,39 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { computeAccountingSemanticDigest } from "@/lib/trader/accounting";
 import { loadApprovedBenchmarkFixture } from "@/lib/trader/backtest/replay-benchmark-harness";
 import type { RunBacktestResult } from "@/lib/trader/backtest/backtest-runner";
 import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
-import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
+import {
+  writeFileAtomicCompareAndReplace,
+  writeFileAtomicExclusive,
+} from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { assertFhvOfficialV2DatasetArtifactsPresent } from "@/lib/trader/market-data/fhv-official-v2-required";
-import { loadOfficialSharedPortfolioBars } from "@/lib/trader/observability/fhv-dataset-qualification";
+import type { FhvConfigurationFreezeV1 } from "@/lib/trader/observability/fhv-configuration-freeze";
+import {
+  loadOfficialSharedPortfolioBars,
+  type FhvDatasetQualificationReceiptV1,
+} from "@/lib/trader/observability/fhv-dataset-qualification";
 import { revalidateFhvDatasetAtLaunch } from "@/lib/trader/observability/fhv-dataset-launch-guard";
 import { consumeFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
-import { prepareFhvOfficialLaunchExecution } from "@/lib/trader/observability/fhv-execution-checkpoint";
+import {
+  prepareFhvOfficialLaunchExecution,
+  recoverFhvExecutionWalForResume,
+} from "@/lib/trader/observability/fhv-execution-checkpoint";
 import { FHV_EXECUTION_PURPOSE_CONTROL_REPLAY } from "@/lib/trader/observability/fhv-execution-purpose";
+import {
+  takeoverFhvAuthorizationRunning,
+  resolveFhvAuthorizationClaimPath,
+} from "@/lib/trader/observability/fhv-authorization-claim";
+import { resolveFhvGenerationSessionDbPath } from "@/lib/trader/observability/fhv-generation-session-path";
 import { runFullHistoricalBacktest } from "@/lib/trader/observability/fhv-full-historical-engine";
 import {
   assertCheckoutIdentity,
   FhvFullHistoricalLaunchError,
+  readFhvFullLaunchReceipt,
   resolveFhvFullLaunchRunDirectory,
   stripRunIdentityForControlReplay,
   validateFhvFullHistoricalLaunchInput,
@@ -25,6 +41,7 @@ import {
   type FhvFullHistoricalLaunchInput,
   type FhvFullHistoricalLaunchResult,
 } from "@/lib/trader/observability/fhv-full-historical-launch";
+import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
 
 export const FHV_CONTROL_REPLAY_EXECUTION_PURPOSE = "CONTROL_REPLAY" as const;
@@ -32,6 +49,107 @@ export const FHV_CONTROL_REPLAY_EXECUTION_PURPOSE = "CONTROL_REPLAY" as const;
 export type FhvControlReplayLaunchInput = FhvFullHistoricalLaunchInput & {
   executionPurpose: typeof FHV_CONTROL_REPLAY_EXECUTION_PURPOSE;
 };
+
+async function runFhvControlReplayLaunchBacktest(input: {
+  launchInput: FhvControlReplayLaunchInput;
+  runDir: string;
+  configurationFreeze: FhvConfigurationFreezeV1;
+  qualificationReceipt: FhvDatasetQualificationReceiptV1;
+  qualificationReceiptDigest: string;
+  launchExecution: ReturnType<typeof prepareFhvOfficialLaunchExecution>;
+  launchReceiptDigest: string;
+  replaceLaunchResult?: boolean;
+}): Promise<FhvFullHistoricalLaunchResult> {
+  let bars: readonly Bar[] | undefined;
+  let datasetRoot: string | undefined;
+  const includeHoldout = false;
+
+  if (input.launchInput.boundedFixture) {
+    bars = loadApprovedBenchmarkFixture().bars;
+  } else if (input.qualificationReceipt.qualificationMode === "OFFICIAL_MULTI_YEAR") {
+    assertFhvOfficialV2DatasetArtifactsPresent({
+      datasetRoot: input.launchInput.datasetRoot!,
+      qualificationMode: input.qualificationReceipt.qualificationMode,
+    });
+    datasetRoot = input.launchInput.datasetRoot!;
+  } else if (input.qualificationReceipt.qualificationMode === "SCHEMA_INTEGRATION_FIXTURE") {
+    bars = loadOfficialSharedPortfolioBars({
+      datasetRoot: input.launchInput.datasetRoot!,
+      includeHoldout,
+    });
+  } else {
+    throw new FhvFullHistoricalLaunchError(
+      "UNSUPPORTED_QUALIFICATION_MODE",
+      `Unsupported qualification mode for control replay bar source: ${input.qualificationReceipt.qualificationMode}`,
+    );
+  }
+
+  const sessionDbPath = resolveFhvGenerationSessionDbPath(
+    input.runDir,
+    input.launchExecution.authorizationClaim.fencingGeneration,
+  );
+
+  const backtest = await runFullHistoricalBacktest({
+    runDir: input.runDir,
+    runId: input.launchInput.runId,
+    releaseSha: input.launchInput.releaseSha,
+    organizationId: input.launchInput.organizationId,
+    operatorId: input.launchInput.operatorId,
+    configurationFreeze: input.configurationFreeze,
+    bars,
+    datasetRoot,
+    qualificationMode: input.qualificationReceipt.qualificationMode,
+    boundedFixture: input.launchInput.boundedFixture === true,
+    includeHoldout,
+    controlReplay: true,
+    maxCycles: input.launchInput.maxCycles,
+    sessionDbPath,
+    walWriter: input.launchExecution.walWriter,
+    authorizationClaim: input.launchExecution.authorizationClaim,
+    claimPath: input.launchExecution.claimPath,
+    checkpointConfig: input.launchExecution.checkpointConfig,
+    resumeFromCycle: input.launchExecution.resumeFromCycle,
+  });
+
+  const semanticReproDigest = computeReplayReproContentDigest(
+    stripRunIdentityForControlReplay(backtest.exportDocument),
+  );
+
+  const classification = input.launchInput.boundedFixture
+    ? ("BOUNDED_FULL_HISTORICAL_END_TO_END_PASS" as const)
+    : ("FHV_CONTROL_REPLAY_CEREMONY_PASS" as const);
+
+  const launchResult = buildControlReplayLaunchResult({
+    classification,
+    semanticReproDigest,
+    backtest,
+    qualificationReceiptDigest: input.qualificationReceiptDigest,
+    configurationFreeze: input.configurationFreeze,
+    authorizationReceiptDigest: input.launchInput.authorizationReceiptDigest,
+    launchReceiptDigest: input.launchReceiptDigest,
+    runDir: input.runDir,
+  });
+
+  const launchResultPath = join(input.runDir, "fhv-full-launch-result.v1.json");
+  const launchResultJson = `${JSON.stringify(launchResult, null, 2)}\n`;
+  if (input.replaceLaunchResult && existsSync(launchResultPath)) {
+    writeFileAtomicCompareAndReplace({
+      finalPath: launchResultPath,
+      expectedContent: readFileSync(launchResultPath, "utf8"),
+      nextContent: launchResultJson,
+    });
+  } else {
+    writeFileAtomicExclusive(launchResultPath, launchResultJson);
+  }
+
+  return {
+    classification,
+    receiptPath: join(input.runDir, "fhv-full-launch-receipt.v1.json"),
+    runDir: input.runDir,
+    semanticReproDigest,
+    backtest,
+  };
+}
 
 export async function executeFhvControlReplayLaunch(
   input: FhvControlReplayLaunchInput,
@@ -43,7 +161,7 @@ export async function executeFhvControlReplayLaunch(
     );
   }
 
-  const runDir = resolveFhvFullLaunchRunDirectory(input.artifactRoot, input.runId);
+  const runDir = input.runDir ?? resolveFhvFullLaunchRunDirectory(input.artifactRoot, input.runId);
   assertCheckoutIdentity(input, runDir);
 
   const { configurationFreeze, qualificationReceipt, qualificationReceiptDigest } =
@@ -85,82 +203,119 @@ export async function executeFhvControlReplayLaunch(
     leaseOwner: `${input.operatorId}@${input.organizationId}`,
   });
 
-  let bars: readonly Bar[] | undefined;
-  let datasetRoot: string | undefined;
-  const includeHoldout = false;
+  const result = await runFhvControlReplayLaunchBacktest({
+    launchInput: input,
+    runDir,
+    configurationFreeze,
+    qualificationReceipt,
+    qualificationReceiptDigest,
+    launchExecution,
+    launchReceiptDigest: receipt.launchReceiptDigest,
+  });
 
-  if (input.boundedFixture) {
-    bars = loadApprovedBenchmarkFixture().bars;
-  } else if (qualificationReceipt.qualificationMode === "OFFICIAL_MULTI_YEAR") {
-    assertFhvOfficialV2DatasetArtifactsPresent({
-      datasetRoot: input.datasetRoot!,
-      qualificationMode: qualificationReceipt.qualificationMode,
-    });
-    datasetRoot = input.datasetRoot!;
-  } else if (qualificationReceipt.qualificationMode === "SCHEMA_INTEGRATION_FIXTURE") {
-    bars = loadOfficialSharedPortfolioBars({
-      datasetRoot: input.datasetRoot!,
-      includeHoldout,
-    });
-  } else {
+  return { ...result, receiptPath };
+}
+
+export async function resumeFhvControlReplayLaunch(
+  input: FhvControlReplayLaunchInput,
+): Promise<FhvFullHistoricalLaunchResult> {
+  if (input.executionPurpose !== FHV_CONTROL_REPLAY_EXECUTION_PURPOSE) {
     throw new FhvFullHistoricalLaunchError(
-      "UNSUPPORTED_QUALIFICATION_MODE",
-      `Unsupported qualification mode for control replay bar source: ${qualificationReceipt.qualificationMode}`,
+      "CONTROL_REPLAY_PURPOSE_REQUIRED",
+      "resumeFhvControlReplayLaunch requires executionPurpose CONTROL_REPLAY.",
     );
   }
 
-  const backtest = await runFullHistoricalBacktest({
+  const runDir = input.runDir ?? resolveFhvFullLaunchRunDirectory(input.artifactRoot, input.runId);
+  const receiptPath = join(runDir, "fhv-full-launch-receipt.v1.json");
+  if (!existsSync(receiptPath)) {
+    throw new FhvFullHistoricalLaunchError(
+      "LAUNCH_RECEIPT_MISSING",
+      "Resume requires an existing launch receipt.",
+    );
+  }
+  const existingReceipt = readFhvFullLaunchReceipt(receiptPath);
+  const receiptBeforeMtime = readFileSync(receiptPath).toString();
+
+  assertCheckoutIdentity(input, runDir);
+
+  const authBefore = readFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);
+
+  const { configurationFreeze, qualificationReceipt, qualificationReceiptDigest } =
+    validateFhvFullHistoricalLaunchInput(
+      {
+        ...input,
+        controlReplayReceiptPath: undefined,
+        holdoutAccessRequested: false,
+        executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
+      },
+      { resume: true },
+    );
+
+  if (!input.boundedFixture && input.datasetRoot && input.manifestPath) {
+    revalidateFhvDatasetAtLaunch({
+      datasetQualificationReceiptPath: input.datasetQualificationReceiptPath,
+      datasetRoot: input.datasetRoot,
+      manifestPath: input.manifestPath,
+    });
+  }
+
+  recoverFhvExecutionWalForResume(runDir);
+
+  const claimPath = resolveFhvAuthorizationClaimPath(runDir);
+  if (!existsSync(claimPath)) {
+    throw new FhvFullHistoricalLaunchError(
+      "AUTHORIZATION_CLAIM_MISSING",
+      "Resume requires an existing authorization claim.",
+    );
+  }
+
+  takeoverFhvAuthorizationRunning({
+    claimPath,
+    leaseOwner: `${input.operatorId}@${input.organizationId}`,
+  });
+
+  const launchExecution = prepareFhvOfficialLaunchExecution({
     runDir,
     runId: input.runId,
-    releaseSha: input.releaseSha,
-    organizationId: input.organizationId,
-    operatorId: input.operatorId,
-    configurationFreeze,
-    bars,
-    datasetRoot,
-    qualificationMode: qualificationReceipt.qualificationMode,
-    boundedFixture: input.boundedFixture === true,
-    includeHoldout,
-    controlReplay: true,
-    maxCycles: input.maxCycles,
-    walWriter: launchExecution.walWriter,
-    authorizationClaim: launchExecution.authorizationClaim,
-    claimPath: launchExecution.claimPath,
-    checkpointConfig: launchExecution.checkpointConfig,
-    resumeFromCycle: launchExecution.resumeFromCycle,
-  });
-
-  const semanticReproDigest = computeReplayReproContentDigest(
-    stripRunIdentityForControlReplay(backtest.exportDocument),
-  );
-
-  const classification = input.boundedFixture
-    ? ("BOUNDED_FULL_HISTORICAL_END_TO_END_PASS" as const)
-    : ("FHV_CONTROL_REPLAY_CEREMONY_PASS" as const);
-
-  const launchResult = buildControlReplayLaunchResult({
-    classification,
-    semanticReproDigest,
-    backtest,
-    qualificationReceiptDigest,
-    configurationFreeze,
+    executionPurpose: FHV_EXECUTION_PURPOSE_CONTROL_REPLAY,
     authorizationReceiptDigest: input.authorizationReceiptDigest,
-    launchReceiptDigest: receipt.launchReceiptDigest,
-    runDir,
+    releaseSha: input.releaseSha,
+    datasetContentDigest: configurationFreeze.datasetDigest,
+    manifestSemanticDigest: configurationFreeze.manifestDigest,
+    configurationFreeze,
+    leaseOwner: `${input.operatorId}@${input.organizationId}`,
   });
 
-  writeFileAtomicExclusive(
-    join(runDir, "fhv-full-launch-result.v1.json"),
-    `${JSON.stringify(launchResult, null, 2)}\n`,
-  );
+  const receiptAfterMtime = readFileSync(receiptPath).toString();
+  if (receiptAfterMtime !== receiptBeforeMtime) {
+    throw new FhvFullHistoricalLaunchError(
+      "LAUNCH_RECEIPT_REWRITE_FORBIDDEN",
+      "Resume must not rewrite the launch receipt.",
+    );
+  }
 
-  return {
-    classification,
-    receiptPath,
+  const authAfter = readFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);
+  if (
+    authAfter.consumedAtUtc !== authBefore.consumedAtUtc ||
+    authAfter.authorizationReceiptDigest !== authBefore.authorizationReceiptDigest
+  ) {
+    throw new FhvFullHistoricalLaunchError(
+      "AUTHORIZATION_RECONSUME_FORBIDDEN",
+      "Resume must not re-consume authorization.",
+    );
+  }
+
+  return runFhvControlReplayLaunchBacktest({
+    launchInput: input,
     runDir,
-    semanticReproDigest,
-    backtest,
-  };
+    configurationFreeze,
+    qualificationReceipt,
+    qualificationReceiptDigest,
+    launchExecution,
+    launchReceiptDigest: existingReceipt.launchReceiptDigest,
+    replaceLaunchResult: true,
+  });
 }
 
 function buildControlReplayLaunchResult(input: {

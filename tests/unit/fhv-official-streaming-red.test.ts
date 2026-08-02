@@ -43,6 +43,11 @@ import {
 } from "@/lib/trader/observability/fhv-full-historical-launch";
 import * as fhvFullHistoricalEngine from "@/lib/trader/observability/fhv-full-historical-engine";
 import {
+  buildFhvSyntheticScaleAuthority,
+  FHV_SYNTHETIC_SCALE_AUTHORITY_FILENAME,
+  writeFhvSyntheticScaleAuthorityAtomic,
+} from "@/lib/trader/observability/fhv-synthetic-scale-authority";
+import {
   buildFhvOfficialV2ScaleDataset,
   FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
   FHV_OFFICIAL_REAL_SCHEMA_ROOT,
@@ -60,6 +65,31 @@ import {
 const OPERATOR_ID = "fhv-streaming-red-operator";
 const MEMORY_CEILING_BYTES = 256 * 1024 * 1024;
 const BARS1M_PREFIX_CEILING = EXPAND_MIN_BARS * 4;
+
+function writeFhvTestSyntheticScaleAuthority(input: {
+  authorityDir: string;
+  runId: string;
+  releaseSha: string;
+  configurationFreezePath: string;
+  maxCycles: number;
+}): string {
+  const freeze = readFhvConfigurationFreezeArtifact(input.configurationFreezePath);
+  const authorityPath = join(input.authorityDir, FHV_SYNTHETIC_SCALE_AUTHORITY_FILENAME);
+  writeFhvSyntheticScaleAuthorityAtomic(
+    authorityPath,
+    buildFhvSyntheticScaleAuthority({
+      runId: input.runId,
+      organizationId: FHV_TEST_ORG_ID,
+      releaseSha: input.releaseSha,
+      datasetContentDigest: freeze.configurationFreeze.datasetDigest,
+      manifestSemanticDigest: freeze.configurationFreeze.manifestDigest,
+      maxCycles: input.maxCycles,
+      targetCycleCount: input.maxCycles,
+      checkpointEveryCycles: 5,
+    }),
+  );
+  return authorityPath;
+}
 
 describe("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
   let v2DatasetRoot: string;
@@ -92,6 +122,14 @@ describe("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
         operatorId: OPERATOR_ID,
       });
 
+      const syntheticScaleAuthorityPath = writeFhvTestSyntheticScaleAuthority({
+        authorityDir: join(root, "prep", runId),
+        runId,
+        releaseSha: FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
+        configurationFreezePath: prep.configurationFreezePath,
+        maxCycles: 8,
+      });
+
       await executeFhvFullHistoricalLaunch({
         releaseSha: FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
         releaseTag: FHV_TEST_RELEASE_TAG,
@@ -108,6 +146,7 @@ describe("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
         checkoutIdentityProofPath: prep.checkoutIdentityProofPath,
         controlReplayReceiptPath: prep.controlReplayReceiptPath,
         maxCycles: 8,
+        syntheticScaleAuthorityPath,
       });
 
       expect(backtestSpy).toHaveBeenCalled();
@@ -134,6 +173,14 @@ describe("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
         operatorId: OPERATOR_ID,
       });
 
+      const syntheticScaleAuthorityPath = writeFhvTestSyntheticScaleAuthority({
+        authorityDir: join(root, "prep"),
+        runId,
+        releaseSha: FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
+        configurationFreezePath: prep.configurationFreezePathRunOne,
+        maxCycles: 8,
+      });
+
       await executeFhvControlReplayLaunch({
         releaseSha: FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
         releaseTag: FHV_TEST_RELEASE_TAG,
@@ -152,6 +199,7 @@ describe("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
         checkoutIdentityProofPath: prep.checkoutIdentityProofPathRunOne,
         executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
         maxCycles: 8,
+        syntheticScaleAuthorityPath,
       });
 
       expect(backtestSpy).toHaveBeenCalled();

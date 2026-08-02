@@ -15,6 +15,7 @@ import {
   readFhvControlReplayLaunchAuthorizationDigest,
   readFhvControlReplayLaunchCheckoutDigest,
   readFhvControlReplayLaunchFreezeDigest,
+  resumeFhvControlReplayLaunch,
 } from "@/lib/trader/observability/fhv-control-replay-execution";
 import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { readFhvDatasetQualificationReceipt } from "@/lib/trader/observability/fhv-dataset-qualification";
@@ -42,7 +43,7 @@ function parseArgv(argv: readonly string[]): Map<string, string | true> {
     if (!token.startsWith("--")) {
       throw new Error(`Unexpected positional argument: ${token}`);
     }
-    if (token === "--bounded-fixture") {
+    if (token === "--bounded-fixture" || token === "--resume") {
       parsed.set(token, true);
       continue;
     }
@@ -78,6 +79,7 @@ export function resolveFhvControlReplayCliConfig(
   checkoutIdentityProofPathRunTwo?: string;
   controlReplayReceiptOutput?: string;
   boundedFixture: boolean;
+  resume?: boolean;
 } {
   const flags = parseArgv(argv);
   const allowed = new Set([
@@ -99,6 +101,7 @@ export function resolveFhvControlReplayCliConfig(
     "--checkout-identity-proof-path-run-two",
     "--control-replay-receipt-output",
     "--bounded-fixture",
+    "--resume",
   ]);
   for (const key of flags.keys()) {
     if (!allowed.has(key)) {
@@ -107,6 +110,7 @@ export function resolveFhvControlReplayCliConfig(
   }
 
   const boundedFixture = flags.has("--bounded-fixture");
+  const resume = flags.has("--resume");
   const releaseSha =
     (flags.get("--release-sha") as string | undefined) ?? env.FHV_RELEASE_SHA?.trim();
   const releaseTag =
@@ -201,6 +205,7 @@ export function resolveFhvControlReplayCliConfig(
       checkoutIdentityProofPathRunTwo,
       controlReplayReceiptOutput,
       boundedFixture,
+      resume,
     };
   }
 
@@ -271,6 +276,7 @@ export function resolveFhvControlReplayCliConfig(
     checkoutIdentityProofPathRunTwo,
     controlReplayReceiptOutput,
     boundedFixture,
+    resume,
   };
 }
 
@@ -294,6 +300,7 @@ export async function runFhvControlReplay(input: {
   checkoutIdentityProofPathRunTwo?: string;
   controlReplayReceiptOutput?: string;
   maxCycles?: number;
+  resume?: boolean;
 }): Promise<FhvControlReplayResult> {
   if (!FULL_SHA.test(input.releaseSha)) {
     return {
@@ -374,7 +381,10 @@ export async function runFhvControlReplay(input: {
           }),
     };
 
-    const resultOne = await executeFhvControlReplayLaunch({
+    const launchOne = input.resume ? resumeFhvControlReplayLaunch : executeFhvControlReplayLaunch;
+    const launchTwo = input.resume ? resumeFhvControlReplayLaunch : executeFhvControlReplayLaunch;
+
+    const resultOne = await launchOne({
       ...baseLaunch,
       runId: input.runOneId,
       configurationFreezePath: input.configurationFreezePath,
@@ -383,7 +393,7 @@ export async function runFhvControlReplay(input: {
       ...(checkoutProofRunOne ? { checkoutIdentityProofPath: checkoutProofRunOne } : {}),
     });
 
-    const resultTwo = await executeFhvControlReplayLaunch({
+    const resultTwo = await launchTwo({
       ...baseLaunch,
       runId: input.runTwoId,
       configurationFreezePath: freezePathTwo,

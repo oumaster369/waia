@@ -29,7 +29,7 @@ import {
 } from "@/lib/trader/observability/fhv-semantic-event.types";
 
 export const FHV_RUN_MANIFEST_SCHEMA_VERSION = "fhv-run-manifest/v1" as const;
-export const FHV_TRACE_WRITER_DEFAULT_BUFFER_LIMIT = 64;
+export const FHV_TRACE_WRITER_DEFAULT_BUFFER_LIMIT = 128;
 export const FHV_TRACE_WRITER_DEFAULT_ROTATION_BYTES = 1024 * 1024;
 
 const FHV_TRACE_FORBIDDEN_PATTERNS = [

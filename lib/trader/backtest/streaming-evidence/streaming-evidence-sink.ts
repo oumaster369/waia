@@ -33,6 +33,9 @@ import {
 } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-writer";
 import type { StreamingEvidenceManifestRef } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 
+/** Precomputed digest for empty semantic state payloads (hot-path constant). */
+const EMPTY_SEMANTIC_STATE_DIGEST = computeSemanticSha256Hex([]);
+
 export type ReplayEvidenceSink = {
   onCycle(cycleIndex: number, result: PaperCycleResult): void | Promise<void>;
   sealComplete(expectedCycleCount: number): Promise<StreamingEvidenceManifestRef>;
@@ -112,7 +115,8 @@ export function paperCycleResultToSemanticEvents(input: {
 }): Omit<FhvSemanticEventV1, "schemaVersion" | "seq">[] {
   const cycleId = String(input.cycleIndex);
   const correlationId = `${input.runId}:${cycleId}`;
-  const timestampUtc = input.timestampUtc ?? new Date().toISOString();
+  const timestampUtc =
+    input.timestampUtc ?? input.result.evaluation.msv.evaluatedAt ?? new Date().toISOString();
   const events: Omit<FhvSemanticEventV1, "schemaVersion" | "seq">[] = [
     {
       runId: input.runId,
@@ -153,7 +157,7 @@ export function paperCycleResultToSemanticEvents(input: {
         counts: input.result.reconciliation.counts,
         outcomeCount: input.result.reconciliation.outcomes.length,
       }),
-      stateDigest: computeSemanticSha256Hex([]),
+      stateDigest: EMPTY_SEMANTIC_STATE_DIGEST,
       timestampUtc,
       correlationId: `${correlationId}:reconciliation`,
     });
@@ -174,7 +178,7 @@ export function paperCycleResultToSemanticEvents(input: {
             ? input.result.execution.orderId
             : (input.result.execution.order?.id ?? null),
       }),
-      stateDigest: computeSemanticSha256Hex([]),
+      stateDigest: EMPTY_SEMANTIC_STATE_DIGEST,
       timestampUtc,
       correlationId: `${correlationId}:execution`,
     });
@@ -191,6 +195,8 @@ export type CreateFhvTraceEvidenceSinkInput = Readonly<{
   resumeSeq?: number;
   provenance: HtrOperatorReportProvenanceSection;
   getFinalizeContext?: () => Partial<BuildHtrOperatorReportInputV1> | undefined;
+  /** Buffered semantic-event lines before append (default FHV_TRACE_WRITER_DEFAULT_BUFFER_LIMIT). */
+  traceBufferLimit?: number;
 }>;
 
 function writeFhvReportArtifact(reportsDir: string, fileName: string, payload: unknown): string {
@@ -215,6 +221,7 @@ export function createFhvTraceEvidenceSink(
     accountKey: input.accountKey,
     runId: input.runId,
     resumeSeq: input.resumeSeq,
+    bufferLimit: input.traceBufferLimit,
   });
 
   const finalizeReports = (): Record<string, string> => {

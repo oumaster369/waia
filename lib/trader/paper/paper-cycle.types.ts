@@ -46,6 +46,7 @@ export type ResearchReplayDeterminismDeps = {
   newId?: () => string;
   /** HTR-WP17: current closed-bar index for historical order registration. */
   setDecisionBarIndex?: (index: number) => void;
+  getDecisionBarIndex?: () => number;
   /** HTR-WP17: marks deps wired with enabled historical execution simulation. */
   historicalExecutionSession?: boolean;
 };

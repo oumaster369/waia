@@ -160,7 +160,15 @@ export type ReplayRunChainManifest = {
   backtestRunId: string;
   activePhase: ResearchReplayPhase;
   segments: ReplayRunChainSegment[];
+  /**
+   * Legacy composed chain digest over all segment chainDigests (backward compatible).
+   * Prefer `authoritativeSemanticDigest` for uninterrupted vs resumed parity comparison.
+   */
   composedChainDigest: string;
+  /** Digest of authoritative projection stream only (semantic parity). */
+  authoritativeSemanticDigest?: string;
+  /** Digest of full audit lineage including superseded segment metadata. */
+  auditLineageDigest?: string;
 };
 
 export type DbPhaseFrontier = {
@@ -376,20 +384,40 @@ export function computeRunChainComposedDigest(segmentChainDigests: readonly stri
   return computePayloadDigest(segmentChainDigests);
 }
 
+export function computeAuditLineageDigest(segments: readonly ReplayRunChainSegment[]): string {
+  return computePayloadDigest(
+    segments.map((segment) => ({
+      runDir: segment.runDir,
+      chainDigest: segment.chainDigest,
+      role: segmentRole(segment),
+      continuesFromChainDigest: segment.continuesFromChainDigest ?? null,
+      continuesFromRunDir: segment.continuesFromRunDir ?? null,
+      terminalState: segment.terminalState,
+      sealedThroughCycleIndex: segment.sealedThroughCycleIndex,
+    })),
+  );
+}
+
 export function buildReplayRunChainManifest(input: {
   backtestRunId: string;
   activePhase: ResearchReplayPhase;
   segments: ReplayRunChainSegment[];
+  authoritativeSemanticDigest?: string;
 }): ReplayRunChainManifest {
   const composedChainDigest = computeRunChainComposedDigest(
     input.segments.map((segment) => segment.chainDigest),
   );
+  const auditLineageDigest = computeAuditLineageDigest(input.segments);
   return {
     schemaVersion: REPLAY_RUN_CHAIN_MANIFEST_SCHEMA_VERSION,
     backtestRunId: input.backtestRunId,
     activePhase: input.activePhase,
     segments: input.segments,
     composedChainDigest,
+    auditLineageDigest,
+    ...(input.authoritativeSemanticDigest
+      ? { authoritativeSemanticDigest: input.authoritativeSemanticDigest }
+      : {}),
   };
 }
 

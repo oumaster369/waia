@@ -8,6 +8,8 @@ import { join } from "node:path";
 import {
   executeFhvFullHistoricalLaunch,
   FhvFullHistoricalLaunchError,
+  resolveFhvFullLaunchRunDirectory,
+  resumeFhvFullHistoricalLaunch,
   type FhvFullHistoricalLaunchInput,
 } from "@/lib/trader/observability/fhv-full-historical-launch";
 import { readFhvConfigurationFreezeArtifact } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
@@ -31,7 +33,7 @@ function parseArgv(argv: readonly string[]): Map<string, string | true> {
         `Unexpected positional argument: ${token}`,
       );
     }
-    if (token === "--bounded-fixture") {
+    if (token === "--bounded-fixture" || token === "--resume") {
       parsed.set(token, true);
       continue;
     }
@@ -48,7 +50,7 @@ function parseArgv(argv: readonly string[]): Map<string, string | true> {
 export function resolveFhvFullRunCliConfig(
   env: NodeJS.ProcessEnv = process.env,
   argv: readonly string[] = process.argv.slice(2),
-): FhvFullHistoricalLaunchInput {
+): FhvFullHistoricalLaunchInput & { resume?: boolean } {
   const flags = parseArgv(argv);
   const allowed = new Set([
     "--release-sha",
@@ -67,6 +69,10 @@ export function resolveFhvFullRunCliConfig(
     "--control-replay-receipt-path",
     "--repo-path",
     "--bounded-fixture",
+    "--resume",
+    "--synthetic-scale-authority-path",
+    "--run-dir",
+    "--max-cycles",
   ]);
   for (const key of flags.keys()) {
     if (!allowed.has(key)) {
@@ -75,6 +81,7 @@ export function resolveFhvFullRunCliConfig(
   }
 
   const boundedFixture = flags.has("--bounded-fixture");
+  const resume = flags.has("--resume");
   const releaseSha =
     (flags.get("--release-sha") as string | undefined) ?? env.FHV_RELEASE_SHA?.trim();
   const releaseTag =
@@ -109,6 +116,19 @@ export function resolveFhvFullRunCliConfig(
     (flags.get("--control-replay-receipt-path") as string | undefined) ??
     env.FHV_CONTROL_REPLAY_RECEIPT_PATH?.trim();
   const repoPath = (flags.get("--repo-path") as string | undefined) ?? env.FHV_REPO_PATH?.trim();
+  const syntheticScaleAuthorityPath =
+    (flags.get("--synthetic-scale-authority-path") as string | undefined) ??
+    env.FHV_SYNTHETIC_SCALE_AUTHORITY_PATH?.trim();
+  const runDirOverride = (flags.get("--run-dir") as string | undefined) ?? env.FHV_RUN_DIR?.trim();
+  const maxCyclesRaw =
+    (flags.get("--max-cycles") as string | undefined) ?? env.FHV_MAX_CYCLES?.trim();
+  const maxCycles = maxCyclesRaw ? Number.parseInt(maxCyclesRaw, 10) : undefined;
+  if (maxCyclesRaw && (!Number.isFinite(maxCycles) || maxCycles! < 1)) {
+    throw new FhvFullHistoricalLaunchError(
+      "INVALID_MAX_CYCLES",
+      "max-cycles must be a positive integer.",
+    );
+  }
 
   if (!releaseSha || !FULL_SHA.test(releaseSha)) {
     throw new FhvFullHistoricalLaunchError(
@@ -184,6 +204,20 @@ export function resolveFhvFullRunCliConfig(
     readFhvControlReplayReceipt(controlReplayReceiptPath);
   }
 
+  if (
+    runDirOverride &&
+    (!ABSOLUTE_SAFE_PATH.test(runDirOverride) || runDirOverride.includes(".."))
+  ) {
+    throw new FhvFullHistoricalLaunchError(
+      "INVALID_RUN_DIR",
+      "--run-dir must be an absolute safe path.",
+    );
+  }
+
+  const runDir =
+    runDirOverride ??
+    (runId && artifactRoot ? resolveFhvFullLaunchRunDirectory(artifactRoot, runId) : undefined);
+
   return {
     releaseSha,
     releaseTag,
@@ -204,13 +238,19 @@ export function resolveFhvFullRunCliConfig(
     livePathInvoked: env.FHV_LIVE_PATH_INVOKED === "true",
     holdoutAccessRequested: env.FHV_HOLDOUT_ACCESS_REQUESTED === "true",
     boundedFixture,
+    ...(maxCycles != null ? { maxCycles } : {}),
+    ...(syntheticScaleAuthorityPath ? { syntheticScaleAuthorityPath } : {}),
+    ...(runDir ? { runDir } : {}),
+    resume,
   };
 }
 
 async function main(): Promise<void> {
-  const config = resolveFhvFullRunCliConfig();
+  const { resume, ...config } = resolveFhvFullRunCliConfig();
   mkdirSync(join(config.artifactRoot, "RI-P7", "fhv-full-historical"), { recursive: true });
-  const result = await executeFhvFullHistoricalLaunch(config);
+  const result = resume
+    ? await resumeFhvFullHistoricalLaunch(config)
+    : await executeFhvFullHistoricalLaunch(config);
   process.stdout.write(
     `[fhv-full-run] classification=${result.classification} receipt=${result.receiptPath}\n`,
   );

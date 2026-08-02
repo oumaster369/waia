@@ -16,6 +16,10 @@ import {
   fhvSymbolRank,
   type FhvOfficialPartitionName,
 } from "@/lib/trader/market-data/fhv-partition-boundaries";
+import {
+  buildFhvSourceFrontier,
+  type FhvSourceFrontier,
+} from "@/lib/trader/market-data/fhv-source-frontier";
 import type { BarReplayNextResult, BarReplaySource } from "@/lib/trader/market-data/types";
 import type { Bar } from "@/lib/trader/intelligence/types";
 
@@ -160,6 +164,8 @@ export class FhvOfficialDatasetReader implements BarReplaySource {
   private globalEventSequence = 0;
   private cycleIndex = 0;
   private closed = false;
+  private firstCycleGlobalEventSequence: number | null = null;
+  private lastBarCloseTime = "";
   private readonly symbolHistories = new Map<string, Bar[]>();
   readonly holdoutCounters: {
     custodyBytesRead: number;
@@ -311,6 +317,7 @@ export class FhvOfficialDatasetReader implements BarReplaySource {
       }
       primeLookahead(stream);
       this.globalEventSequence += 1;
+      this.lastBarCloseTime = chosen.barCloseTime;
       return chosen;
     }
     return null;
@@ -339,10 +346,25 @@ export class FhvOfficialDatasetReader implements BarReplaySource {
           this.cycleIndex,
           this.cycleIdPrefix,
         );
+        if (this.cycleIndex === 0 && this.firstCycleGlobalEventSequence === null) {
+          this.firstCycleGlobalEventSequence = this.globalEventSequence;
+        }
         this.cycleIndex += 1;
         return { done: false, snapshot };
       }
     }
+  }
+
+  captureSourceFrontier(input: { sourceExhausted: boolean }): FhvSourceFrontier {
+    const cursor = this.captureCursor();
+    return buildFhvSourceFrontier({
+      globalEventSequence: this.globalEventSequence,
+      emittedCycleCount: this.cycleIndex,
+      warmupEventCount: this.firstCycleGlobalEventSequence ?? this.globalEventSequence,
+      sourceExhausted: input.sourceExhausted,
+      cursor,
+      lastBarCloseTime: this.lastBarCloseTime,
+    });
   }
 
   captureCursor(): FhvOfficialDatasetCursorV2 {
@@ -424,6 +446,7 @@ export class FhvOfficialDatasetReader implements BarReplaySource {
 
 export interface CheckpointableBarReplaySource extends BarReplaySource {
   captureCursor(): FhvOfficialDatasetCursorV2;
+  captureSourceFrontier(input: { sourceExhausted: boolean }): FhvSourceFrontier;
   restoreCursor(cursor: FhvOfficialDatasetCursorV2): void;
   close(): void;
 }

@@ -132,6 +132,52 @@ pnpm trader:fhv:control-replay -- \
 
 Exit 0 emits immutable `CONTROL_REPLAY=PASS` receipt when both run digests and cycle counts match.
 
+### Resume after segment pause (`executionPurpose=CONTROL_REPLAY`)
+
+When a control replay run pauses at a checkpoint frontier, resume with the same run artifacts:
+
+```bash
+pnpm trader:fhv:control-replay -- --resume \
+  --release-sha "$FHV_RELEASE_SHA" \
+  --release-tag "$FHV_RELEASE_TAG" \
+  --organization-id "$FHV_ORGANIZATION_ID" \
+  --operator-id "$FHV_OPERATOR_ID" \
+  --run-one-id "$FHV_RUN_ONE_ID" \
+  --run-two-id "$FHV_RUN_TWO_ID" \
+  --artifact-root "$FHV_ARTIFACT_ROOT" \
+  --configuration-freeze-path "/path/to/fhv-configuration-freeze-run-one.v1.json" \
+  --configuration-freeze-path-run-two "/path/to/fhv-configuration-freeze-run-two.v1.json" \
+  --authorization-receipt-path "/path/to/fhv-full-historical-authorization-run-one.v1.json" \
+  --authorization-receipt-path-run-two "/path/to/fhv-full-historical-authorization-run-two.v1.json" \
+  --dataset-qualification-receipt-path "/path/to/fhv-dataset-qualification-receipt.v1.json" \
+  --dataset-root "/absolute/dataset/root" \
+  --manifest-path "/absolute/fhv-dataset-manifest.v2.json" \
+  --checkout-identity-proof-path-run-one "/path/to/run-one/control/fhv-t4-checkout-identity.v1.json" \
+  --checkout-identity-proof-path-run-two "/path/to/run-two/control/fhv-t4-checkout-identity.v1.json" \
+  --control-replay-receipt-output "/absolute/fhv-control-replay-receipt.v1.json"
+```
+
+## Resume and generation governance
+
+| Rule | Behavior |
+|------|----------|
+| authorization consumed exactly once | Each run's scoped authorization is consumed on first segment; resume must not re-consume |
+| generation takeover | New process may takeover stale authorization claim for the same run segment |
+| stale-generation rejection | Resume rejects mismatched claim/checkpoint generation |
+| terminal reconciliation | Terminal `CONTROL_REPLAY=PASS` reconciles claim, checkpoint bundle, and receipt atomically |
+| refusal to resume a completed run | `--resume` fails when terminal result is already published |
+
+## Terminal classifications
+
+Control replay (`executionPurpose=CONTROL_REPLAY`) may terminate with:
+
+| Classification | Meaning |
+|----------------|---------|
+| `FHV_CONTROL_REPLAY_CEREMONY_PASS` | Both runs completed with matching digests |
+| `FHV_SCHEMA_INTEGRATION_CEREMONY_PASS` | Bounded real-schema fixture through same production path |
+| `FHV_SYNTHETIC_PROCESS_PARITY_SEGMENT_COMPLETED` | Cross-process resume segment completed |
+| `FHV_SYNTHETIC_PROCESS_PARITY_PAUSED` | Cross-process pause at checkpoint frontier |
+
 ## Holdout sequence
 
 Before any official holdout launch:

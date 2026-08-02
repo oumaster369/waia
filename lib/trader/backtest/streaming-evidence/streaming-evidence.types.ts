@@ -6,7 +6,8 @@ export const CYCLE_PROJECTION_SCHEMA_VERSION = "htr-wp04-cycle-projection/v1" as
 export const EVIDENCE_MANIFEST_SCHEMA_VERSION = "htr-wp04-evidence-manifest/v1" as const;
 export const REGIME_TIMELINE_SCHEMA_VERSION = "htr-wp04-regime-timeline/v1" as const;
 
-export const MAX_BATCH_CYCLES = 32;
+/** Evidence chunk flush threshold — bounded memory; larger batches reduce per-cycle I/O. */
+export const MAX_BATCH_CYCLES = 64;
 
 export type ReplayRetentionMode = "FULL" | "STREAM_ONLY";
 

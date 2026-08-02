@@ -192,3 +192,12 @@ pnpm vitest run tests/unit/trader-wp23-execution-server-package.test.ts
 pnpm vitest run tests/integration/trader-wp23-negative-preflight-matrix.test.ts
 pnpm trader:htr:readiness:preflight -- --self-test
 ```
+
+**FHV official-scale gate (blocking proofs — separate Vitest profile):**
+
+```bash
+export FHV_OFFICIAL_SCALE_ARTIFACT_ROOT=".artifacts/fhv-official-scale"
+pnpm test:fhv:official-scale          # probe → process-parity → full-corpus (sequential)
+pnpm test:fhv:official-scale:reader   # reader-only production scale proof (default vitest)
+pnpm validate:fhv-public-ceremony-packets
+```

@@ -64,9 +64,10 @@ jobs:
   fhv-official-scale-gate:
     name: fhv official scale gate
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     env:
       DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -77,9 +78,16 @@ jobs:
           node-version: 22
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
-      - run: mkdir -p .data && pnpm db:migrate
-      - name: Run FHV official production scale proof
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Run FHV official scale blocking proofs
+        timeout-minutes: 135
         run: corepack pnpm@10 test:fhv:official-scale
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-official-scale-artifacts
+          path: .artifacts/
+          retention-days: 7
 
   fhv-release-validation-gate:
     name: fhv release validation gate

@@ -52,7 +52,7 @@ function formatSeq(seq: number): string {
 function writeChunkFile(chunksDir: string, envelope: StreamingEvidenceChunkEnvelope): void {
   writeFileAtomic(
     join(chunksDir, `chunk-${formatSeq(envelope.seq)}.json`),
-    JSON.stringify(envelope, null, 2),
+    JSON.stringify(envelope),
   );
 }
 
@@ -149,7 +149,7 @@ export function createStreamingEvidenceWriter(
       terminalState === "STREAMING_EVIDENCE_SEALED_PARTIAL"
         ? "manifest.partial.json"
         : "manifest.json";
-    writeFileAtomic(join(input.runDir, manifestName), JSON.stringify(manifest, null, 2));
+    writeFileAtomic(join(input.runDir, manifestName), JSON.stringify(manifest));
 
     sealedRef = { runDir: input.runDir, manifest };
     return sealedRef;

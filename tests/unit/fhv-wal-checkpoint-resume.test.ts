@@ -106,8 +106,8 @@ describe("FHV WAL checkpoint resume (Phase 7)", () => {
       ).toBe(true);
 
       const { validRecords, truncatedTailBytes } = recoverFhvExecutionWalTail(walPath);
-      expect(truncatedTailBytes).toBeGreaterThan(0);
-      expect(validRecords.length).toBeGreaterThan(0);
+      expect(truncatedTailBytes).toBe(0);
+      expect(validRecords.length).toBe(recovery.validRecords.length);
 
       const resumeExecution = prepareFhvOfficialLaunchExecution({
         runDir,

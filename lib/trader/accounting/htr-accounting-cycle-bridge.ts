@@ -108,6 +108,8 @@ export type HtrAccountingCycleBridge = {
 export type HtrAccountingCycleContext = {
   bridge: HtrAccountingCycleBridge;
   resolveInventoryOpenQtyBySymbol: () => Promise<Record<string, string>>;
+  /** Drop cached order-repository inventory after simulated fills mutate open qty. */
+  invalidateInventoryCache?: () => void;
   drawdownPersistence?: {
     port: HtrDrawdownPersistencePort;
     session: HtrDrawdownPersistenceSession;

@@ -32,6 +32,8 @@ import {
   buildSubstrateReconstruction,
   createInitialCanvasState,
 } from "@/lib/trader/backtest/canvas-replay-integration";
+import type { FhvSourceFrontier } from "@/lib/trader/market-data/fhv-source-frontier";
+import { computeFhvOfficialDatasetCursorDigest } from "@/lib/trader/market-data/fhv-official-dataset-cursor";
 import { writeCanvasStateSidecar } from "@/lib/trader/market-data/canvas/market-canvas-serialization";
 import type { MarketCanvasState } from "@/lib/trader/market-data/canvas/market-canvas.types";
 import {
@@ -127,6 +129,16 @@ import type { Wp21CheckpointState } from "@/lib/trader/intelligence/outcome-reso
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
+/** DEE-431/436: richer runtime snapshot at cycle boundary for epoch checkpointing. */
+export type FhvCycleBoundarySnapshot = {
+  cycleIndex: number;
+  cycleCount: number;
+  hypothesisSessionState?: unknown;
+  accountingFrontierState?: import("@/lib/trader/backtest/streaming-evidence/replay-checkpoint").ReplayAccountingFrontierState;
+  drawdownHwmState?: import("@/lib/trader/backtest/streaming-evidence/replay-checkpoint").ReplayDrawdownHwmState;
+  sourceCursorDigest?: string;
+};
+
 export type RunBacktestInput = {
   context: OrgContext;
   barSource: BarReplaySource;
@@ -221,10 +233,15 @@ export type RunBacktestInput = {
     provenance?: import("@/lib/trader/readiness/htr-operator-report-schema.v1").HtrOperatorReportProvenanceSection;
   }>;
   /** DEE-431: optional non-economic per-cycle boundary hook after cycle post-processing (default no-op). */
-  onCycleBoundary?: (input: {
-    cycleIndex: number;
-    cycleCount: number;
-  }) => BacktestCycleBoundaryDecision;
+  onCycleBoundary?: (
+    input: FhvCycleBoundarySnapshot,
+  ) => BacktestCycleBoundaryDecision | Promise<BacktestCycleBoundaryDecision>;
+  /**
+   * When set, compute official reader sourceCursorDigest only on cycle boundaries where
+   * cycleCount is divisible by this interval (e.g. checkpointEveryCycles). Omitting digest
+   * on other cycles avoids redundant rolling-window digest work in STREAM_ONLY hot paths.
+   */
+  sourceCursorDigestEveryCycles?: number;
 };
 
 /**
@@ -280,6 +297,10 @@ export type RunBacktestResult = {
   htrRuntimeCallOrder?: HtrAccountingCycleBridge["callOrder"];
   /** HTR-WP21: terminal checkpoint state after epistemic closure. */
   wp21CheckpointState?: Wp21CheckpointState;
+  /** PR-2 MI Core: terminal within-session conviction state. */
+  hypothesisSessionState?: HypothesisSessionState;
+  /** FHV Phase 8: official reader cursor frontier when checkpointable bar source is used. */
+  sourceFrontier?: FhvSourceFrontier;
 };
 
 function resolveWp21PostgresDb(
@@ -355,10 +376,33 @@ async function resolveHtrInventoryOpenQtyBySymbol(input: {
   return openQtyBySymbol;
 }
 
+function createHtrInventoryResolver(input: {
+  context: OrgContext;
+  orderRepository: OrderRepository;
+}): {
+  resolveInventoryOpenQtyBySymbol: () => Promise<Record<string, string>>;
+  invalidateInventoryCache: () => void;
+} {
+  let cachedInventoryOpenQtyBySymbol: Record<string, string> | null = null;
+
+  return {
+    async resolveInventoryOpenQtyBySymbol() {
+      if (cachedInventoryOpenQtyBySymbol === null) {
+        cachedInventoryOpenQtyBySymbol = await resolveHtrInventoryOpenQtyBySymbol(input);
+      }
+      return cachedInventoryOpenQtyBySymbol;
+    },
+    invalidateInventoryCache() {
+      cachedInventoryOpenQtyBySymbol = null;
+    },
+  };
+}
+
 async function reconcileHtrAccountingBridge(input: {
   bridge: HtrAccountingCycleBridge;
   context: OrgContext;
   orderRepository: OrderRepository;
+  resolveInventoryOpenQtyBySymbol: () => Promise<Record<string, string>>;
   cycleIndex?: number;
   phase:
     | "frontier_mutation"
@@ -367,10 +411,7 @@ async function reconcileHtrAccountingBridge(input: {
     | "before_cycle_complete"
     | "before_terminal_export";
 }): Promise<void> {
-  const inventoryOpenQtyBySymbol = await resolveHtrInventoryOpenQtyBySymbol({
-    context: input.context,
-    orderRepository: input.orderRepository,
-  });
+  const inventoryOpenQtyBySymbol = await input.resolveInventoryOpenQtyBySymbol();
   runAutomaticAccountingReconciliation(input.bridge, {
     inventoryOpenQtyBySymbol,
     cycleIndex: input.cycleIndex,
@@ -380,17 +421,14 @@ async function reconcileHtrAccountingBridge(input: {
 
 function buildHtrAccountingContext(input: {
   bridge: HtrAccountingCycleBridge;
-  context: OrgContext;
-  orderRepository: OrderRepository;
+  resolveInventoryOpenQtyBySymbol: () => Promise<Record<string, string>>;
+  invalidateInventoryCache: () => void;
   drawdownPersistence?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrDrawdownPersistencePort;
 }): HtrAccountingCycleContext {
   return {
     bridge: input.bridge,
-    resolveInventoryOpenQtyBySymbol: () =>
-      resolveHtrInventoryOpenQtyBySymbol({
-        context: input.context,
-        orderRepository: input.orderRepository,
-      }),
+    resolveInventoryOpenQtyBySymbol: input.resolveInventoryOpenQtyBySymbol,
+    invalidateInventoryCache: input.invalidateInventoryCache,
     drawdownPersistence: input.drawdownPersistence
       ? {
           port: input.drawdownPersistence,
@@ -429,6 +467,13 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       })
     : null;
 
+  const htrInventoryResolver = htrAccountingBridge
+    ? createHtrInventoryResolver({
+        context: input.context,
+        orderRepository: input.orderRepository,
+      })
+    : null;
+
   if (htrAccountingBridge && input.initialAccountingFrontierState) {
     restoreAccountingBridgeFromCheckpoint(
       htrAccountingBridge,
@@ -438,6 +483,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       bridge: htrAccountingBridge,
       context: input.context,
       orderRepository: input.orderRepository,
+      resolveInventoryOpenQtyBySymbol: htrInventoryResolver!.resolveInventoryOpenQtyBySymbol,
       phase: "checkpoint_restore",
     });
     if (input.initialDrawdownHwmState) {
@@ -454,10 +500,11 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
 
   const htrAccounting =
     htrAccountingBridge &&
+    htrInventoryResolver &&
     buildHtrAccountingContext({
       bridge: htrAccountingBridge,
-      context: input.context,
-      orderRepository: input.orderRepository,
+      resolveInventoryOpenQtyBySymbol: htrInventoryResolver.resolveInventoryOpenQtyBySymbol,
+      invalidateInventoryCache: htrInventoryResolver.invalidateInventoryCache,
       drawdownPersistence: input.htrDrawdownPersistence,
     });
 
@@ -512,6 +559,8 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   const bars1mPrefix: Bar[] = input.initialBars1mPrefix ? [...input.initialBars1mPrefix] : [];
   let wp21CheckpointState = input.wp21CheckpointState;
   let boundaryEvidenceSealOverride: "partial" | "complete" | null = null;
+  let sourceExhausted = false;
+  let sourceFrontier: FhvSourceFrontier | undefined;
 
   const wp21Active =
     profileActive &&
@@ -519,8 +568,10 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     input.outcomeResolutionSink !== undefined &&
     input.calibrationSink !== undefined;
 
-  if (resumeCycleStartIndex > 0 && "advanceToCycleIndex" in input.barSource) {
-    (input.barSource as HistoricalBarReplaySource).advanceToCycleIndex(resumeCycleStartIndex);
+  if (resumeCycleStartIndex > 0) {
+    if ("advanceToCycleIndex" in input.barSource) {
+      (input.barSource as HistoricalBarReplaySource).advanceToCycleIndex(resumeCycleStartIndex);
+    }
     cycleCount = resumeCycleStartIndex;
   }
 
@@ -531,6 +582,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     const next = input.barSource.next();
     barSourceTimer.end({ discard: next.done });
     if (next.done) {
+      sourceExhausted = true;
       break;
     }
     benchmarkObserver.sampleMemory("bar-source-next", cycleIndex);
@@ -671,11 +723,15 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
             cycleIndex,
           });
         }
+        if (advance.fillEvents.length > 0) {
+          htrInventoryResolver?.invalidateInventoryCache();
+        }
         attachClosed1mMarkToAccountingBridge(htrAccountingBridge, closedBar, cycleIndex);
         await reconcileHtrAccountingBridge({
           bridge: htrAccountingBridge,
           context: input.context,
           orderRepository: costAwareRepository,
+          resolveInventoryOpenQtyBySymbol: htrInventoryResolver!.resolveInventoryOpenQtyBySymbol,
           cycleIndex,
           phase: "frontier_mutation",
         });
@@ -840,7 +896,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       }
     }
 
-    hypothesisSessionState = result.hypothesisSessionState;
+    hypothesisSessionState = result.hypothesisSessionState ?? hypothesisSessionState;
     if (retentionMode === "FULL") {
       cycleResults.push(result);
     }
@@ -896,6 +952,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         bridge: htrAccountingBridge,
         context: input.context,
         orderRepository: costAwareRepository,
+        resolveInventoryOpenQtyBySymbol: htrInventoryResolver!.resolveInventoryOpenQtyBySymbol,
         cycleIndex,
         phase: "before_cycle_complete",
       });
@@ -906,18 +963,47 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     accountRefreshTimer.end();
     benchmarkObserver.sampleMemory("account-state-refresh", cycleIndex);
 
+    const shouldCaptureSourceCursorDigest =
+      "captureCursor" in input.barSource &&
+      (input.sourceCursorDigestEveryCycles === undefined ||
+        (cycleCount > 0 && cycleCount % input.sourceCursorDigestEveryCycles === 0));
+
+    const sourceCursorDigest = shouldCaptureSourceCursorDigest
+      ? computeFhvOfficialDatasetCursorDigest(
+          (
+            input.barSource as unknown as {
+              captureCursor: () => import("@/lib/trader/market-data/fhv-official-dataset-cursor").FhvOfficialDatasetCursorV2;
+            }
+          ).captureCursor(),
+        )
+      : undefined;
+
     const boundaryDecision = parseBacktestCycleBoundaryDecision(
-      input.onCycleBoundary?.({ cycleIndex, cycleCount }),
+      await input.onCycleBoundary?.({
+        cycleIndex,
+        cycleCount,
+        ...(hypothesisSessionState ? { hypothesisSessionState } : {}),
+        ...(htrAccountingBridge
+          ? {
+              accountingFrontierState: toAccountingCheckpointSlice(htrAccountingBridge),
+              drawdownHwmState: toDrawdownHwmCheckpointSlice(htrAccountingBridge),
+            }
+          : {}),
+        ...(sourceCursorDigest !== undefined ? { sourceCursorDigest } : {}),
+      }),
     );
     if (boundaryDecision.stop) {
       boundaryEvidenceSealOverride = boundaryDecision.evidenceSealOverride;
       break;
     }
-    if (input.onCycleBoundary) {
-      await new Promise<void>((resolve) => {
-        setImmediate(resolve);
-      });
-    }
+  }
+
+  if ("captureSourceFrontier" in input.barSource) {
+    sourceFrontier = (
+      input.barSource as {
+        captureSourceFrontier: (input: { sourceExhausted: boolean }) => FhvSourceFrontier;
+      }
+    ).captureSourceFrontier({ sourceExhausted });
   }
 
   if (htrAccountingBridge && !htrAccountingBridge.runTerminated) {
@@ -925,6 +1011,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       bridge: htrAccountingBridge,
       context: input.context,
       orderRepository: costAwareRepository,
+      resolveInventoryOpenQtyBySymbol: htrInventoryResolver!.resolveInventoryOpenQtyBySymbol,
       phase: "before_terminal_export",
     });
   }
@@ -1044,5 +1131,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       : undefined,
     htrRuntimeCallOrder: htrAccountingBridge?.callOrder,
     wp21CheckpointState,
+    hypothesisSessionState,
+    sourceFrontier,
   };
 }

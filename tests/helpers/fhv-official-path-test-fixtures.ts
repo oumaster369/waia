@@ -536,6 +536,7 @@ export function setupFhvOfficialV2MultiYearLaunchArtifacts(input: {
   releaseSha?: string;
   organizationId?: string;
   operatorId?: string;
+  checkpointEveryCycles?: number;
 }): {
   qualificationReceiptPath: string;
   configurationFreezePath: string;
@@ -573,6 +574,9 @@ export function setupFhvOfficialV2MultiYearLaunchArtifacts(input: {
     strategyDigests: [FHV_TEST_STRATEGY_DIGEST],
     checkpointDigest: "fhv-official-v2-test-checkpoint",
     datasetQualificationReceiptDigest: qualification.qualificationReceiptDigest,
+    ...(input.checkpointEveryCycles != null
+      ? { checkpointEveryCycles: input.checkpointEveryCycles }
+      : {}),
   });
 
   const controlReplayReceiptPath = join(prepDir, "fhv-control-replay-receipt.v1.json");

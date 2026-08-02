@@ -86,6 +86,23 @@ pnpm trader:fhv:run -- \
   --manifest-path "/absolute/manifest/fhv-dataset-manifest.v2.json" \
   --checkout-identity-proof-path "/path/to/fhv-t4-checkout-identity.v1.json"
 
+# Resume after checkpoint pause or infrastructure interruption (same run-id, same artifacts):
+pnpm trader:fhv:run -- --resume \
+  --release-sha "$FHV_RELEASE_SHA" \
+  --release-tag "$FHV_RELEASE_TAG" \
+  --run-id "$FHV_RUN_ID" \
+  --organization-id "$FHV_ORGANIZATION_ID" \
+  --operator-id "$FHV_OPERATOR_ID" \
+  --artifact-root "$FHV_ARTIFACT_ROOT" \
+  --configuration-freeze-path "/path/to/fhv-configuration-freeze.v1.json" \
+  --authorization-receipt-path "/path/to/fhv-full-historical-authorization.v1.json" \
+  --authorization-receipt-digest "<receipt-digest>" \
+  --dataset-qualification-receipt-path "/path/to/fhv-dataset-qualification-receipt.v1.json" \
+  --control-replay-receipt-path "/path/to/fhv-control-replay-receipt.v1.json" \
+  --dataset-root "/absolute/dataset/root" \
+  --manifest-path "/absolute/manifest/fhv-dataset-manifest.v2.json" \
+  --checkout-identity-proof-path "/path/to/fhv-t4-checkout-identity.v1.json"
+
 # Bounded real-schema integration (same production path, test fixture dataset):
 pnpm trader:fhv:run -- --bounded-fixture \
   --release-sha "$FHV_RELEASE_SHA" \
@@ -114,11 +131,36 @@ pnpm trader:fhv:run -- --bounded-fixture \
 - Rejects premature holdout access (holdout gate state machine)
 - Rejects live exchange path (`assertFhvReplayNotLiveExchangePath`)
 
+## Resume and generation governance
+
+Resume is **not** a new launch. The same `runId`, authorization receipt, and launch receipt must bind across segments.
+
+| Rule | Behavior |
+|------|----------|
+| authorization consumed exactly once | Initial launch consumes the scoped authorization receipt; resume must not re-consume or rewrite the receipt |
+| generation takeover | When a stale lease holder dies, a new process may takeover the authorization claim and continue from the durable checkpoint frontier |
+| stale-generation rejection | Resume rejects a claim generation that does not match the durable WAL/checkpoint bundle generation |
+| terminal reconciliation | On terminal classification, reconcile authorization claim, checkpoint bundle, and terminal result atomically |
+| refusal to resume a completed run | `--resume` on a run whose terminal result is already published fails closed |
+
+Synthetic official-scale proofs write artifacts under `$FHV_OFFICIAL_SCALE_ARTIFACT_ROOT` (default: `.artifacts/fhv-official-scale/`). This directory is gitignored.
+
 ## Terminal classifications
 
-- `FULL_HISTORICAL_VALIDATION_COMPLETED` — official multi-year path (`qualificationMode=OFFICIAL_MULTI_YEAR`) executed backtest, accounting, evidence
-- `FHV_SCHEMA_INTEGRATION_CEREMONY_PASS` — schema integration fixture through same public CLI chain; explicitly non-official
-- `BOUNDED_FULL_HISTORICAL_END_TO_END_PASS` — bounded ingress fixture through same path
+Official multi-year launch (`executionPurpose=FULL_HISTORICAL`) may terminate with:
+
+| Classification | Meaning |
+|----------------|---------|
+| `FULL_HISTORICAL_TECHNICAL_COMPLETION` | Full v2 corpus exhausted through production path; technical backtest complete |
+| `FULL_HISTORICAL_ECONOMIC_STOP_TECHNICAL_COMPLETION` | Drawdown/economic stop triggered; technical artifacts sealed |
+| `FULL_HISTORICAL_INFRASTRUCTURE_FAILURE` | Unrecoverable infrastructure fault; partial evidence retained |
+| `FHV_SYNTHETIC_SCALE_PROBE_COMPLETED` | Synthetic scale authority throughput probe segment (official-scale gate Phase 10) |
+| `FHV_SYNTHETIC_PROCESS_PARITY_SEGMENT_COMPLETED` | Cross-process resume segment completed (official-scale gate Phase 11) |
+| `FHV_SYNTHETIC_PROCESS_PARITY_PAUSED` | Cross-process pause at checkpoint frontier (official-scale gate Phase 12) |
+| `FHV_SCHEMA_INTEGRATION_CEREMONY_PASS` | Bounded real-schema integration fixture through same public CLI chain; explicitly non-official |
+| `BOUNDED_FULL_HISTORICAL_END_TO_END_PASS` | Bounded ingress fixture through same path |
+
+> **Note:** `FULL_HISTORICAL_VALIDATION_COMPLETED` is reserved for Human-certified holdout validation and is **not** required by the public ceremony packet or CI official-scale gate.
 
 ## Artifacts
 

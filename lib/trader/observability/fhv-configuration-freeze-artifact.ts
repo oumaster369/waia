@@ -119,6 +119,8 @@ export function writeFhvConfigurationFreezeArtifactAtomic(input: {
   checkpointDigest: string;
   datasetQualificationReceiptDigest: string;
   sourceReceiptDigests?: readonly string[];
+  checkpointEveryCycles?: number;
+  maxCheckpointWalBytes?: number;
 }): { artifactPath: string; artifact: FhvConfigurationFreezeArtifactV1 } {
   mkdirSync(input.artifactDir, { recursive: true });
   const artifactPath = join(input.artifactDir, FHV_CONFIGURATION_FREEZE_ARTIFACT_FILENAME);
@@ -134,6 +136,12 @@ export function writeFhvConfigurationFreezeArtifactAtomic(input: {
     strategyVersions: input.strategyVersions,
     strategyDigests: input.strategyDigests,
     checkpointDigest: input.checkpointDigest,
+    ...(input.checkpointEveryCycles != null
+      ? { checkpointEveryCycles: input.checkpointEveryCycles }
+      : {}),
+    ...(input.maxCheckpointWalBytes != null
+      ? { maxCheckpointWalBytes: input.maxCheckpointWalBytes }
+      : {}),
   });
 
   const requested = buildFhvConfigurationFreezeArtifact({

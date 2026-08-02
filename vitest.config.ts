@@ -30,7 +30,12 @@ export default defineConfig({
       "tests/integration/**/*.test.ts",
       "tests/fhv/**/*.test.ts",
     ],
-    exclude: ["tests/e2e/**", "node_modules/**", ".next/**"],
+    exclude: [
+      "tests/e2e/**",
+      "tests/fhv/official-scale/blocking/**",
+      "node_modules/**",
+      ".next/**",
+    ],
     css: false,
     fileParallelism: false,
   },

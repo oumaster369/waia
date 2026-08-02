@@ -12,12 +12,19 @@ export type FhvHistoricalExecutionSession = Readonly<{
   cleanup: () => void;
 }>;
 
+const FHV_NOOP_TELEMETRY_SINK = (): void => {};
+
 export async function seedFhvHistoricalExecutionSession(input: {
   organizationId: string;
   operatorId: string;
   slot?: number;
+  sessionDbPath?: string;
 }): Promise<FhvHistoricalExecutionSession> {
-  const session = await createInMemoryResearchBacktestSession();
+  const session = await createInMemoryResearchBacktestSession({
+    ...(input.sessionDbPath ? { sessionDbPath: input.sessionDbPath } : {}),
+    // Official FHV path must not flood stdout with per-transition trader telemetry.
+    telemetrySink: FHV_NOOP_TELEMETRY_SINK,
+  });
   const db = getDb();
   seedFhvSqliteResearchOrganization({
     db,

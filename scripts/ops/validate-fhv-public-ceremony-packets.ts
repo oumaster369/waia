@@ -1,5 +1,5 @@
 /**
- * DEE-436 — executable FHV public ceremony packet ↔ CLI contract validator.
+ * DEE-436 Phase 14 — executable FHV public ceremony packet ↔ CLI contract validator.
  */
 
 import { readFileSync } from "node:fs";
@@ -18,6 +18,12 @@ function fail(message: string): never {
 
 function readPacket(path: string): string {
   return readFileSync(path, "utf8");
+}
+
+function assertPacketContains(body: string, marker: string, label: string): void {
+  if (!body.includes(marker)) {
+    fail(`${label} must document ${marker}`);
+  }
 }
 
 function assertCeremonyStepOrder(combined: string): void {
@@ -145,6 +151,19 @@ function assertDatasetPacket(body: string): void {
   }
 }
 
+function assertResumeGovernance(body: string, label: string): void {
+  const markers = [
+    "authorization consumed exactly once",
+    "generation takeover",
+    "stale-generation rejection",
+    "terminal reconciliation",
+    "refusal to resume a completed run",
+  ] as const;
+  for (const marker of markers) {
+    assertPacketContains(body, marker, label);
+  }
+}
+
 function assertControlReplayPacket(body: string): void {
   const requiredFlags = [
     "--run-one-id",
@@ -166,27 +185,51 @@ function assertControlReplayPacket(body: string): void {
   if (!body.includes("pnpm trader:fhv:control-replay")) {
     fail("control replay packet must invoke trader:fhv:control-replay");
   }
+
+  assertPacketContains(body, "executionPurpose=CONTROL_REPLAY", "control replay packet");
+  assertPacketContains(body, "pnpm trader:fhv:control-replay -- --resume", "control replay packet");
+  assertPacketContains(body, "FHV_SCHEMA_INTEGRATION_CEREMONY_PASS", "control replay packet");
+  assertResumeGovernance(body, "control replay packet");
 }
 
 function assertFullLaunchPacket(body: string): void {
-  if (!body.includes("FHV_SCHEMA_INTEGRATION_CEREMONY_PASS")) {
-    fail("full launch packet must document FHV_SCHEMA_INTEGRATION_CEREMONY_PASS terminal class");
+  assertPacketContains(body, "executionPurpose=FULL_HISTORICAL", "full launch packet");
+  assertPacketContains(body, "pnpm trader:fhv:run", "full launch packet");
+  assertPacketContains(body, "pnpm trader:fhv:run -- --resume", "full launch packet");
+
+  const requiredClassifications = [
+    "FULL_HISTORICAL_TECHNICAL_COMPLETION",
+    "FULL_HISTORICAL_ECONOMIC_STOP_TECHNICAL_COMPLETION",
+    "FULL_HISTORICAL_INFRASTRUCTURE_FAILURE",
+    "FHV_SYNTHETIC_SCALE_PROBE_COMPLETED",
+    "FHV_SYNTHETIC_PROCESS_PARITY_SEGMENT_COMPLETED",
+    "FHV_SYNTHETIC_PROCESS_PARITY_PAUSED",
+    "FHV_SCHEMA_INTEGRATION_CEREMONY_PASS",
+  ] as const;
+  for (const classification of requiredClassifications) {
+    assertPacketContains(body, classification, "full launch packet");
   }
-  if (!body.includes("FULL_HISTORICAL_VALIDATION_COMPLETED")) {
-    fail("full launch packet must document FULL_HISTORICAL_VALIDATION_COMPLETED terminal class");
+
+  const listsValidationCompletedAsRequired =
+    /\|\s*`FULL_HISTORICAL_VALIDATION_COMPLETED`/.test(body) ||
+    /^-\s*`FULL_HISTORICAL_VALIDATION_COMPLETED`/m.test(body);
+  if (listsValidationCompletedAsRequired) {
+    fail(
+      "full launch packet must not require FULL_HISTORICAL_VALIDATION_COMPLETED as a gate terminal class",
+    );
   }
+
   if (!body.includes("--control-replay-receipt-path")) {
     fail("full launch packet must document --control-replay-receipt-path for holdout launch");
   }
   if (!body.includes("pnpm trader:fhv:t4:record-checkout-identity")) {
     fail("full launch packet must document record-checkout-identity ceremony step");
   }
-  if (!body.includes("pnpm trader:fhv:run")) {
-    fail("full launch packet must invoke trader:fhv:run");
-  }
   if (body.includes("trader:fhv:full-run")) {
     fail("full launch packet must not document obsolete trader:fhv:full-run command");
   }
+
+  assertResumeGovernance(body, "full launch packet");
 }
 
 function main(): void {

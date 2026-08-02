@@ -1,7 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
+import {
+  writeFileAtomicCompareAndReplace,
+  writeFileAtomicExclusive,
+} from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
 export const FHV_LAUNCH_JOURNAL_SCHEMA_VERSION = "fhv-launch-journal/v1" as const;
@@ -68,14 +71,15 @@ export function readFhvLaunchJournal(runRoot: string): FhvLaunchJournalV1 {
   return journal;
 }
 
-export function advanceFhvLaunchJournal(input: {
+export function advanceFhvLaunchJournalAtomic(input: {
   runRoot: string;
   lastCommittedEpoch: number;
   lastCommittedCycle: number;
   lastEpochCommitDigest: string;
 }): FhvLaunchJournalV1 {
-  const existing = readFhvLaunchJournal(input.runRoot);
   const path = join(input.runRoot, "fhv-launch-journal.v1.json");
+  const expectedContent = readFileSync(path, "utf8");
+  const existing = JSON.parse(expectedContent) as FhvLaunchJournalV1;
   const { journalDigest: _previousDigest, ...existingBody } = existing;
   const nextBody: Omit<FhvLaunchJournalV1, "journalDigest"> = {
     ...existingBody,
@@ -87,8 +91,22 @@ export function advanceFhvLaunchJournal(input: {
     ...nextBody,
     journalDigest: computeJournalDigest(nextBody),
   };
-  writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  const nextContent = `${JSON.stringify(next, null, 2)}\n`;
+  writeFileAtomicCompareAndReplace({
+    finalPath: path,
+    expectedContent,
+    nextContent,
+  });
   return next;
+}
+
+export function advanceFhvLaunchJournal(input: {
+  runRoot: string;
+  lastCommittedEpoch: number;
+  lastCommittedCycle: number;
+  lastEpochCommitDigest: string;
+}): FhvLaunchJournalV1 {
+  return advanceFhvLaunchJournalAtomic(input);
 }
 
 export function rebuildFhvLaunchJournalFromEpochCommit(input: {

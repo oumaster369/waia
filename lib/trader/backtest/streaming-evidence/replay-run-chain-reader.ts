@@ -153,6 +153,16 @@ export function readReplayRunChainProjections(runRootDir: string): ReplayRunChai
 
   const semanticParityDigest = computeSemanticParityDigest(projections);
 
+  if (
+    manifest.authoritativeSemanticDigest !== undefined &&
+    manifest.authoritativeSemanticDigest !== semanticParityDigest
+  ) {
+    throw new ReplayCheckpointError(
+      "REPLAY_RUN_CHAIN_INVALID",
+      "authoritative semantic digest mismatch",
+    );
+  }
+
   const composedChainDigest = computePayloadDigest(
     manifest.segments.map((segment) => segment.chainDigest),
   );

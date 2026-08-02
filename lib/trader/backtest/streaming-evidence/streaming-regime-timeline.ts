@@ -14,7 +14,7 @@ import {
 } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 
-const TIMELINE_BATCH_SIZE = 64;
+const TIMELINE_BATCH_SIZE = 128;
 
 function formatSeq(seq: number): string {
   return String(seq).padStart(6, "0");
@@ -61,7 +61,7 @@ export class StreamingRegimeTimelineWriter {
     };
     writeFileAtomic(
       join(this.timelineDir, `timeline-${formatSeq(this.nextSeq)}.json`),
-      JSON.stringify(envelope, null, 2),
+      JSON.stringify(envelope),
     );
     this.nextSeq += 1;
     this.chunkCountValue += 1;
