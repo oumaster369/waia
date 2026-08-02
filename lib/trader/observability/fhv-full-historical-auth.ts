@@ -2,6 +2,14 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  assertControlReplayAuthorizationPurpose,
+  assertFullHistoricalAuthorizationPurpose,
+  assertFhvExecutionPurpose,
+  FHV_EXECUTION_PURPOSE_CONTROL_REPLAY,
+  FHV_EXECUTION_PURPOSE_FULL_HISTORICAL,
+  type FhvExecutionPurpose,
+} from "@/lib/trader/observability/fhv-execution-purpose";
+import {
   claimFileExclusiveLock,
   releaseFileExclusiveLock,
   writeFileAtomicCompareAndReplace,
@@ -37,6 +45,7 @@ export type FhvFullHistoricalAuthorizationReceiptV1 = Readonly<{
   organizationId: string;
   operatorId: string;
   runId: string;
+  executionPurpose: FhvExecutionPurpose;
   oneExecution: true;
   authorizedAtUtc: string;
   authorizationReceiptDigest: string;
@@ -89,8 +98,26 @@ export function buildFhvFullHistoricalAuthorizationReceipt(input: {
   organizationId: string;
   operatorId: string;
   runId: string;
+  executionPurpose: FhvExecutionPurpose;
   authorizedAtUtc?: string;
 }): FhvFullHistoricalAuthorizationReceiptV1 {
+  if (input.executionPurpose === FHV_EXECUTION_PURPOSE_CONTROL_REPLAY) {
+    assertControlReplayAuthorizationPurpose(input.executionPurpose);
+    if (input.controlReplayReceiptDigest) {
+      throw new FhvFullHistoricalAuthError(
+        "CONTROL_REPLAY_RECEIPT_FORBIDDEN",
+        "CONTROL_REPLAY authorization must not include controlReplayReceiptDigest.",
+      );
+    }
+  } else {
+    assertFullHistoricalAuthorizationPurpose(input.executionPurpose);
+    if (!input.controlReplayReceiptDigest) {
+      throw new FhvFullHistoricalAuthError(
+        "CONTROL_REPLAY_RECEIPT_REQUIRED",
+        "FULL_HISTORICAL authorization requires controlReplayReceiptDigest.",
+      );
+    }
+  }
   const withoutDigest = {
     schemaVersion: FHV_FULL_HISTORICAL_AUTHORIZATION_RECEIPT_SCHEMA_VERSION,
     releaseSha: input.releaseSha.trim().toLowerCase(),
@@ -105,6 +132,7 @@ export function buildFhvFullHistoricalAuthorizationReceipt(input: {
     organizationId: input.organizationId,
     operatorId: input.operatorId,
     runId: input.runId,
+    executionPurpose: assertFhvExecutionPurpose(input.executionPurpose),
     oneExecution: true as const,
     authorizedAtUtc: input.authorizedAtUtc ?? new Date().toISOString(),
     consumed: false,
@@ -144,6 +172,7 @@ const AUTHORIZATION_RECEIPT_COMPARE_KEYS = [
   "organizationId",
   "operatorId",
   "runId",
+  "executionPurpose",
   "oneExecution",
 ] as const satisfies readonly (keyof FhvFullHistoricalAuthorizationReceiptV1)[];
 
@@ -159,6 +188,7 @@ export function writeFhvFullHistoricalAuthorizationReceiptAtomic(input: {
   organizationId: string;
   operatorId: string;
   runId: string;
+  executionPurpose: FhvExecutionPurpose;
 }): { receiptPath: string; receipt: FhvFullHistoricalAuthorizationReceiptV1 } {
   mkdirSync(input.receiptDir, { recursive: true });
   const receiptPath = join(input.receiptDir, FHV_FULL_HISTORICAL_AUTHORIZATION_RECEIPT_FILENAME);
@@ -224,6 +254,7 @@ export function consumeFhvFullHistoricalAuthorizationReceipt(
       organizationId: receipt.organizationId,
       operatorId: receipt.operatorId,
       runId: receipt.runId,
+      executionPurpose: receipt.executionPurpose,
       oneExecution: true as const,
       authorizedAtUtc: receipt.authorizedAtUtc,
       consumed: true as const,
@@ -325,5 +356,12 @@ export function assertFhvFullHistoricalAuthorizationReceiptForLaunch(input: {
       "Authorization receipt must declare oneExecution=true.",
     );
   }
+  if (receipt.executionPurpose === undefined || receipt.executionPurpose === null) {
+    throw new FhvFullHistoricalAuthError(
+      "EXECUTION_PURPOSE_MISSING",
+      "Authorization receipt executionPurpose is required.",
+    );
+  }
+  assertFhvExecutionPurpose(receipt.executionPurpose);
   return receipt;
 }

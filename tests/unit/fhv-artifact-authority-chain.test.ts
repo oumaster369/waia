@@ -15,6 +15,7 @@ import {
   assertFhvDatasetQualificationReceiptForExecution,
   FhvArtifactAuthorityError,
 } from "@/lib/trader/observability/fhv-artifact-authority-chain";
+import { FHV_EXECUTION_PURPOSE_FULL_HISTORICAL } from "@/lib/trader/observability/fhv-execution-purpose";
 import { readFhvControlReplayReceipt } from "@/lib/trader/observability/fhv-control-replay-receipt";
 import {
   FHV_TEST_RELEASE_SHA,
@@ -175,6 +176,7 @@ describe("DEE-436 FHV artifact authority chain negatives", () => {
             runId: "fhv-auth-authz",
             qualificationReceipt: qualification,
             freezeDigest: "0".repeat(64),
+            expectedExecutionPurpose: FHV_EXECUTION_PURPOSE_FULL_HISTORICAL,
           }),
         /FREEZE_DIGEST_MISMATCH/,
       );
@@ -225,6 +227,7 @@ describe("DEE-436 FHV artifact authority chain negatives", () => {
             runId: "fhv-auth-org",
             qualificationReceipt: qualification,
             freezeDigest: freeze.configurationFreeze.configurationFreezeDigest,
+            expectedExecutionPurpose: FHV_EXECUTION_PURPOSE_FULL_HISTORICAL,
           }),
         /ORGANIZATION_ID_MISMATCH/,
       );

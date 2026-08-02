@@ -45,6 +45,62 @@ jobs:
       - name: Validate FHV T4A packet contract
         run: corepack pnpm@10 validate:fhv-t4a-packet
 
+  fhv-public-ceremony-packet:
+    name: fhv public ceremony packet gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Validate FHV public ceremony packet contract
+        run: corepack pnpm@10 validate:fhv-public-ceremony-packets
+
+  fhv-official-scale-gate:
+    name: fhv official scale gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data && pnpm db:migrate
+      - name: Run FHV official production scale proof
+        run: corepack pnpm@10 test:fhv:official-scale
+
+  fhv-release-validation-gate:
+    name: fhv release validation gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Validate release canon and FHV ceremony contracts
+        run: |
+          corepack pnpm@10 validate:canon
+          corepack pnpm@10 validate:fhv-t4a-packet
+          corepack pnpm@10 validate:fhv-public-ceremony-packets
+          corepack pnpm@10 validate:pr-governance
+
   typecheck:
     name: typecheck
     runs-on: ubuntu-latest
@@ -103,7 +159,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, tenant-isolation, fhv-t4a-packet]
+    needs: [lint, typecheck, test, tenant-isolation, fhv-t4a-packet, fhv-public-ceremony-packet, fhv-official-scale-gate, fhv-release-validation-gate]
     env:
       DATABASE_URL: file:./.data/ci-build.sqlite
     steps:

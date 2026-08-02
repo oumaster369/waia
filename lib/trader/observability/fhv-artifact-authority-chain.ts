@@ -12,6 +12,12 @@ import {
   readFhvFullHistoricalAuthorizationReceipt,
   type FhvFullHistoricalAuthorizationReceiptV1,
 } from "@/lib/trader/observability/fhv-full-historical-auth";
+import {
+  assertFhvExecutionPurpose,
+  FHV_EXECUTION_PURPOSE_CONTROL_REPLAY,
+  FHV_EXECUTION_PURPOSE_FULL_HISTORICAL,
+  type FhvExecutionPurpose,
+} from "@/lib/trader/observability/fhv-execution-purpose";
 
 export type FhvExecutionIdentity = Readonly<{
   releaseSha: string;
@@ -196,8 +202,39 @@ export function assertFhvAuthorizationReceiptForExecution(input: {
   qualificationReceipt: FhvDatasetQualificationReceiptV1;
   freezeDigest: string;
   controlReplayReceiptDigest?: string;
+  expectedExecutionPurpose: FhvExecutionPurpose;
 }): FhvFullHistoricalAuthorizationReceiptV1 {
   const receipt = readFhvFullHistoricalAuthorizationReceipt(input.receiptPath);
+  if (receipt.executionPurpose === undefined || receipt.executionPurpose === null) {
+    throw new FhvArtifactAuthorityError(
+      "EXECUTION_PURPOSE_MISSING",
+      "Authorization receipt executionPurpose is required.",
+    );
+  }
+  assertFhvExecutionPurpose(receipt.executionPurpose);
+  if (receipt.executionPurpose !== input.expectedExecutionPurpose) {
+    throw new FhvArtifactAuthorityError(
+      "EXECUTION_PURPOSE_MISMATCH",
+      `Expected executionPurpose ${input.expectedExecutionPurpose}, got ${receipt.executionPurpose}.`,
+    );
+  }
+  if (input.expectedExecutionPurpose === FHV_EXECUTION_PURPOSE_CONTROL_REPLAY) {
+    if (receipt.controlReplayReceiptDigest) {
+      throw new FhvArtifactAuthorityError(
+        "AUTHORIZATION_CONTROL_REPLAY_RECEIPT_FORBIDDEN",
+        "CONTROL_REPLAY authorization must not include controlReplayReceiptDigest.",
+      );
+    }
+  } else if (
+    input.expectedExecutionPurpose === FHV_EXECUTION_PURPOSE_FULL_HISTORICAL &&
+    input.controlReplayReceiptDigest &&
+    !receipt.controlReplayReceiptDigest
+  ) {
+    throw new FhvArtifactAuthorityError(
+      "AUTHORIZATION_CONTROL_REPLAY_RECEIPT_REQUIRED",
+      "FULL_HISTORICAL holdout launch requires controlReplayReceiptDigest on authorization receipt.",
+    );
+  }
   assertIdentityMatch("AUTHORIZATION", input.identity, receipt);
   if (receipt.runId !== input.runId) {
     throw new FhvArtifactAuthorityError(

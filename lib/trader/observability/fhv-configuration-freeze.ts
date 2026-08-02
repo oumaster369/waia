@@ -8,6 +8,16 @@ import {
   HTR_FHV_RUN_CONTRACT_V0,
 } from "@/lib/trader/readiness/htr-fhv-run-contract-v0";
 
+import {
+  FHV_DEFAULT_CHECKPOINT_EVERY_CYCLES,
+  FHV_DEFAULT_MAX_CHECKPOINT_WAL_BYTES,
+} from "@/lib/trader/observability/fhv-execution-wal";
+
+export {
+  FHV_DEFAULT_CHECKPOINT_EVERY_CYCLES,
+  FHV_DEFAULT_MAX_CHECKPOINT_WAL_BYTES,
+} from "@/lib/trader/observability/fhv-execution-wal";
+
 export const FHV_CONFIGURATION_FREEZE_SCHEMA_VERSION = "fhv-configuration-freeze/v1" as const;
 
 export type FhvConfigurationFreezeV1 = Readonly<{
@@ -27,6 +37,8 @@ export type FhvConfigurationFreezeV1 = Readonly<{
   costModelDigest: typeof HTR_HISTORICAL_COST_MODEL_DIGEST;
   drawdownPolicyVersion: typeof D20_DRAWDOWN_POLICY_VERSION;
   checkpointDigest: string;
+  checkpointEveryCycles?: number;
+  maxCheckpointWalBytes?: number;
   configurationFreezeDigest: string;
 }>;
 
@@ -58,6 +70,8 @@ export function buildFhvConfigurationFreeze(input: {
   strategyVersions: readonly string[];
   strategyDigests: readonly string[];
   checkpointDigest: string;
+  checkpointEveryCycles?: number;
+  maxCheckpointWalBytes?: number;
 }): FhvConfigurationFreezeV1 {
   const runContractDigest = computeHtrFhvRunContractDigest(HTR_FHV_RUN_CONTRACT_V0);
   const base: Omit<FhvConfigurationFreezeV1, "configurationFreezeDigest"> = {
@@ -77,6 +91,8 @@ export function buildFhvConfigurationFreeze(input: {
     costModelDigest: HTR_HISTORICAL_COST_MODEL_DIGEST,
     drawdownPolicyVersion: D20_DRAWDOWN_POLICY_VERSION,
     checkpointDigest: input.checkpointDigest,
+    checkpointEveryCycles: input.checkpointEveryCycles ?? FHV_DEFAULT_CHECKPOINT_EVERY_CYCLES,
+    maxCheckpointWalBytes: input.maxCheckpointWalBytes ?? FHV_DEFAULT_MAX_CHECKPOINT_WAL_BYTES,
   };
   return {
     ...base,
@@ -113,4 +129,14 @@ export function assertFhvConfigurationFreezeMatch(
       "Cost model digest mismatch.",
     );
   }
+}
+
+export function resolveFhvCheckpointPolicy(freeze: FhvConfigurationFreezeV1): {
+  checkpointEveryCycles: number;
+  maxCheckpointWalBytes: number;
+} {
+  return {
+    checkpointEveryCycles: freeze.checkpointEveryCycles ?? FHV_DEFAULT_CHECKPOINT_EVERY_CYCLES,
+    maxCheckpointWalBytes: freeze.maxCheckpointWalBytes ?? FHV_DEFAULT_MAX_CHECKPOINT_WAL_BYTES,
+  };
 }

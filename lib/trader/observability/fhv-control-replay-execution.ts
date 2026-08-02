@@ -8,9 +8,12 @@ import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-
 import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import type { Bar } from "@/lib/trader/intelligence/types";
+import { assertFhvOfficialV2DatasetArtifactsPresent } from "@/lib/trader/market-data/fhv-official-v2-required";
 import { loadOfficialSharedPortfolioBars } from "@/lib/trader/observability/fhv-dataset-qualification";
 import { revalidateFhvDatasetAtLaunch } from "@/lib/trader/observability/fhv-dataset-launch-guard";
 import { consumeFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
+import { prepareFhvOfficialLaunchExecution } from "@/lib/trader/observability/fhv-execution-checkpoint";
+import { FHV_EXECUTION_PURPOSE_CONTROL_REPLAY } from "@/lib/trader/observability/fhv-execution-purpose";
 import { runFullHistoricalBacktest } from "@/lib/trader/observability/fhv-full-historical-engine";
 import {
   assertCheckoutIdentity,
@@ -43,12 +46,13 @@ export async function executeFhvControlReplayLaunch(
   const runDir = resolveFhvFullLaunchRunDirectory(input.artifactRoot, input.runId);
   assertCheckoutIdentity(input, runDir);
 
-  const { configurationFreeze, qualificationReceiptDigest } = validateFhvFullHistoricalLaunchInput({
-    ...input,
-    controlReplayReceiptPath: undefined,
-    holdoutAccessRequested: false,
-    executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
-  });
+  const { configurationFreeze, qualificationReceipt, qualificationReceiptDigest } =
+    validateFhvFullHistoricalLaunchInput({
+      ...input,
+      controlReplayReceiptPath: undefined,
+      holdoutAccessRequested: false,
+      executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
+    });
 
   if (!input.boundedFixture && input.datasetRoot && input.manifestPath) {
     revalidateFhvDatasetAtLaunch({
@@ -69,16 +73,40 @@ export async function executeFhvControlReplayLaunch(
 
   consumeFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);
 
-  let bars: readonly Bar[];
+  const launchExecution = prepareFhvOfficialLaunchExecution({
+    runDir,
+    runId: input.runId,
+    executionPurpose: FHV_EXECUTION_PURPOSE_CONTROL_REPLAY,
+    authorizationReceiptDigest: input.authorizationReceiptDigest,
+    releaseSha: input.releaseSha,
+    datasetContentDigest: configurationFreeze.datasetDigest,
+    manifestSemanticDigest: configurationFreeze.manifestDigest,
+    configurationFreeze,
+    leaseOwner: `${input.operatorId}@${input.organizationId}`,
+  });
+
+  let bars: readonly Bar[] | undefined;
+  let datasetRoot: string | undefined;
   const includeHoldout = false;
 
   if (input.boundedFixture) {
     bars = loadApprovedBenchmarkFixture().bars;
-  } else {
+  } else if (qualificationReceipt.qualificationMode === "OFFICIAL_MULTI_YEAR") {
+    assertFhvOfficialV2DatasetArtifactsPresent({
+      datasetRoot: input.datasetRoot!,
+      qualificationMode: qualificationReceipt.qualificationMode,
+    });
+    datasetRoot = input.datasetRoot!;
+  } else if (qualificationReceipt.qualificationMode === "SCHEMA_INTEGRATION_FIXTURE") {
     bars = loadOfficialSharedPortfolioBars({
       datasetRoot: input.datasetRoot!,
       includeHoldout,
     });
+  } else {
+    throw new FhvFullHistoricalLaunchError(
+      "UNSUPPORTED_QUALIFICATION_MODE",
+      `Unsupported qualification mode for control replay bar source: ${qualificationReceipt.qualificationMode}`,
+    );
   }
 
   const backtest = await runFullHistoricalBacktest({
@@ -89,9 +117,17 @@ export async function executeFhvControlReplayLaunch(
     operatorId: input.operatorId,
     configurationFreeze,
     bars,
+    datasetRoot,
+    qualificationMode: qualificationReceipt.qualificationMode,
     boundedFixture: input.boundedFixture === true,
     includeHoldout,
+    controlReplay: true,
     maxCycles: input.maxCycles,
+    walWriter: launchExecution.walWriter,
+    authorizationClaim: launchExecution.authorizationClaim,
+    claimPath: launchExecution.claimPath,
+    checkpointConfig: launchExecution.checkpointConfig,
+    resumeFromCycle: launchExecution.resumeFromCycle,
   });
 
   const semanticReproDigest = computeReplayReproContentDigest(
@@ -100,7 +136,7 @@ export async function executeFhvControlReplayLaunch(
 
   const classification = input.boundedFixture
     ? ("BOUNDED_FULL_HISTORICAL_END_TO_END_PASS" as const)
-    : ("FULL_HISTORICAL_VALIDATION_COMPLETED" as const);
+    : ("FHV_CONTROL_REPLAY_CEREMONY_PASS" as const);
 
   const launchResult = buildControlReplayLaunchResult({
     classification,
@@ -128,9 +164,7 @@ export async function executeFhvControlReplayLaunch(
 }
 
 function buildControlReplayLaunchResult(input: {
-  classification:
-    | "BOUNDED_FULL_HISTORICAL_END_TO_END_PASS"
-    | "FULL_HISTORICAL_VALIDATION_COMPLETED";
+  classification: "BOUNDED_FULL_HISTORICAL_END_TO_END_PASS" | "FHV_CONTROL_REPLAY_CEREMONY_PASS";
   semanticReproDigest: string;
   backtest: RunBacktestResult;
   qualificationReceiptDigest: string;

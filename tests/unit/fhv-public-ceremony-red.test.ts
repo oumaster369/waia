@@ -147,6 +147,7 @@ describe("DEE-436 FHV public ceremony RED-1..RED-9", () => {
         organizationId: ORG_ID,
         operatorId: OPERATOR_ID,
         prepSuffix: "dedicated-auth",
+        executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
       });
       const dedicated = await executeFhvControlReplayLaunch({
         releaseSha: FHV_TEST_RELEASE_SHA,

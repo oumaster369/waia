@@ -242,6 +242,8 @@ describe("DEE-436 FHV public ceremony shell integration", () => {
           freezeOnePath,
           "--qualification-receipt-path",
           qualificationReceiptPath,
+          "--execution-purpose",
+          "CONTROL_REPLAY",
         ],
         {
           ...process.env,
@@ -270,6 +272,8 @@ describe("DEE-436 FHV public ceremony shell integration", () => {
           freezeTwoPath,
           "--qualification-receipt-path",
           qualificationReceiptPath,
+          "--execution-purpose",
+          "CONTROL_REPLAY",
         ],
         {
           ...process.env,

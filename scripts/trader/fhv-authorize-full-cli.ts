@@ -8,6 +8,11 @@ import { join } from "node:path";
 import { FHV_FULL_HISTORICAL_VALIDATION_AUTHORIZATION } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { writeFhvFullHistoricalAuthorizationReceiptAtomic } from "@/lib/trader/observability/fhv-full-historical-auth";
 import {
+  FHV_EXECUTION_PURPOSE_CONTROL_REPLAY,
+  FHV_EXECUTION_PURPOSE_FULL_HISTORICAL,
+  assertFhvExecutionPurpose,
+} from "@/lib/trader/observability/fhv-execution-purpose";
+import {
   assertFhvConfigurationFreezeForExecution,
   assertFhvControlReplayReceiptForAuthorization,
   assertFhvDatasetQualificationReceiptForExecution,
@@ -60,6 +65,8 @@ export function resolveFhvAuthorizeFullCliConfig(
     flags.get("--qualification-receipt-path") ?? env.FHV_QUALIFICATION_RECEIPT_PATH?.trim();
   const controlReplayReceiptPath =
     flags.get("--control-replay-receipt-path") ?? env.FHV_CONTROL_REPLAY_RECEIPT_PATH?.trim();
+  const executionPurposeRaw =
+    flags.get("--execution-purpose") ?? env.FHV_EXECUTION_PURPOSE?.trim() ?? "FULL_HISTORICAL";
 
   if (!releaseSha || !FULL_SHA.test(releaseSha)) {
     throw new Error("release-sha must be a full git SHA.");
@@ -85,6 +92,7 @@ export function resolveFhvAuthorizeFullCliConfig(
   if (!qualificationReceiptPath) {
     throw new Error("--qualification-receipt-path is required.");
   }
+  const executionPurpose = assertFhvExecutionPurpose(executionPurposeRaw);
 
   const identity: FhvExecutionIdentity = {
     releaseSha,
@@ -102,6 +110,12 @@ export function resolveFhvAuthorizeFullCliConfig(
     runId,
     qualificationReceipt,
   });
+  if (executionPurpose === FHV_EXECUTION_PURPOSE_FULL_HISTORICAL && !controlReplayReceiptPath) {
+    throw new Error("--control-replay-receipt-path is required for FULL_HISTORICAL authorization.");
+  }
+  if (executionPurpose === FHV_EXECUTION_PURPOSE_CONTROL_REPLAY && controlReplayReceiptPath) {
+    throw new Error("--control-replay-receipt-path is forbidden for CONTROL_REPLAY authorization.");
+  }
   const controlReplayReceipt = controlReplayReceiptPath
     ? assertFhvControlReplayReceiptForAuthorization({
         receiptPath: controlReplayReceiptPath,
@@ -120,6 +134,7 @@ export function resolveFhvAuthorizeFullCliConfig(
     freezeArtifact,
     qualificationReceipt,
     controlReplayReceipt,
+    executionPurpose,
   };
 }
 
@@ -142,6 +157,7 @@ async function main(): Promise<void> {
     organizationId: config.organizationId,
     operatorId: config.operatorId,
     runId: config.runId,
+    executionPurpose: config.executionPurpose,
   });
   process.stdout.write(
     `[fhv-authorize-full] receipt=${receiptPath} digest=${receipt.authorizationReceiptDigest}\n`,

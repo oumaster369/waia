@@ -6,18 +6,61 @@
 
 Validate a Full Historical Dataset against the official contract before configuration freeze and Full launch. Produces an immutable qualification receipt binding separate `datasetContentDigest` and `manifestSemanticDigest`.
 
-## Official mode (HTX multi-year)
+## Official v2 ceremony chain (steps 1–4)
+
+The executable public ceremony begins with dataset preparation. Steps 5–15 are documented in [`FHV-CONTROL-REPLAY-PACKET.md`](./FHV-CONTROL-REPLAY-PACKET.md) and [`FHV-FULL-HISTORICAL-LAUNCH-PACKET.md`](./FHV-FULL-HISTORICAL-LAUNCH-PACKET.md).
+
+### Step 1 — Acquire six canonical partition files
+
+Run once per canonical `(partition, symbol)` pair (six total):
 
 ```bash
 export FHV_RELEASE_SHA="<full-git-sha>"
-export FHV_RELEASE_TAG="<release-tag>"
 export FHV_ORGANIZATION_ID="<uuid-v4>"
 export FHV_OPERATOR_ID="<operator-id>"
+export FHV_DATASET_ROOT="/absolute/dataset/root"
+export FHV_ACQUISITION_RUN_ID="<unique-acquisition-run-id>"
+
+pnpm trader:fhv:acquire-htx-v2 -- --partition development --symbol BTCUSDT --dataset-root "$FHV_DATASET_ROOT" --release-sha "$FHV_RELEASE_SHA" --organization-id "$FHV_ORGANIZATION_ID" --operator-id "$FHV_OPERATOR_ID" --acquisition-run-id "$FHV_ACQUISITION_RUN_ID"
+pnpm trader:fhv:acquire-htx-v2 -- --partition development --symbol ETHUSDT --dataset-root "$FHV_DATASET_ROOT" --release-sha "$FHV_RELEASE_SHA" --organization-id "$FHV_ORGANIZATION_ID" --operator-id "$FHV_OPERATOR_ID" --acquisition-run-id "$FHV_ACQUISITION_RUN_ID"
+pnpm trader:fhv:acquire-htx-v2 -- --partition walk-forward --symbol BTCUSDT --dataset-root "$FHV_DATASET_ROOT" --release-sha "$FHV_RELEASE_SHA" --organization-id "$FHV_ORGANIZATION_ID" --operator-id "$FHV_OPERATOR_ID" --acquisition-run-id "$FHV_ACQUISITION_RUN_ID"
+pnpm trader:fhv:acquire-htx-v2 -- --partition walk-forward --symbol ETHUSDT --dataset-root "$FHV_DATASET_ROOT" --release-sha "$FHV_RELEASE_SHA" --organization-id "$FHV_ORGANIZATION_ID" --operator-id "$FHV_OPERATOR_ID" --acquisition-run-id "$FHV_ACQUISITION_RUN_ID"
+pnpm trader:fhv:acquire-htx-v2 -- --partition blind-holdout --symbol BTCUSDT --dataset-root "$FHV_DATASET_ROOT" --release-sha "$FHV_RELEASE_SHA" --organization-id "$FHV_ORGANIZATION_ID" --operator-id "$FHV_OPERATOR_ID" --acquisition-run-id "$FHV_ACQUISITION_RUN_ID"
+pnpm trader:fhv:acquire-htx-v2 -- --partition blind-holdout --symbol ETHUSDT --dataset-root "$FHV_DATASET_ROOT" --release-sha "$FHV_RELEASE_SHA" --organization-id "$FHV_ORGANIZATION_ID" --operator-id "$FHV_OPERATOR_ID" --acquisition-run-id "$FHV_ACQUISITION_RUN_ID"
+```
+
+### Step 2 — Seal v2 dataset
+
+```bash
+pnpm trader:fhv:seal-v2-dataset -- \
+  --dataset-root "$FHV_DATASET_ROOT" \
+  --acquisition-receipt-dir "$FHV_DATASET_ROOT/control/acquisition" \
+  --seal-run-id "<unique-seal-run-id>" \
+  --release-sha "$FHV_RELEASE_SHA" \
+  --organization-id "$FHV_ORGANIZATION_ID" \
+  --operator-id "$FHV_OPERATOR_ID"
+```
+
+Publishes `fhv-dataset-manifest.v2.json` then `fhv-dataset-seal-receipt.v2.json` (logical commit marker).
+
+### Step 3 — Validate v2 bars
+
+```bash
+pnpm trader:fhv:validate-v2-dataset -- \
+  --dataset-root "$FHV_DATASET_ROOT"
+```
+
+Exit classification: `FHV_V2_DATASET_VALIDATION_PASS`.
+
+### Step 4 — Dataset qualify (official mode)
+
+```bash
+export FHV_RELEASE_TAG="<release-tag>"
 export FHV_RECEIPT_DIR="/absolute/receipt/dir"
 
 pnpm trader:fhv:dataset-qualify -- \
-  --dataset-root "/absolute/dataset/root" \
-  --manifest-path "/absolute/fhv-dataset-manifest.v1.json" \
+  --dataset-root "$FHV_DATASET_ROOT" \
+  --manifest-path "$FHV_DATASET_ROOT/fhv-dataset-manifest.v2.json" \
   --qualification-mode OFFICIAL_MULTI_YEAR \
   --release-sha "$FHV_RELEASE_SHA" \
   --release-tag "$FHV_RELEASE_TAG" \

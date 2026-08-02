@@ -10,16 +10,56 @@ Canonical Full Historical Validation launch surface. Executes the unified histor
 
 Official multi-year HTX run and bounded real-schema integration use the **same production path**; only data volume differs.
 
-## Ceremony chain (required before launch)
+## Official v2 ceremony chain (steps 12–15)
 
-1. `pnpm trader:fhv:dataset-qualify` — official mode with `--dataset-root` + `--manifest-path`
-2. `pnpm trader:fhv:freeze-config` — writes immutable `fhv-configuration-freeze.v1.json`
-3. `pnpm trader:fhv:control-replay` — two-run determinism; retain `--control-replay-receipt-output`
-4. `pnpm trader:fhv:authorize-full` — Human shell writes scoped authorization receipt binding `controlReplayReceiptDigest`
-5. `pnpm trader:fhv:t4:record-checkout-identity` — release checkout identity proof at tagged release SHA
-6. `pnpm trader:fhv:run` — Full Historical Validation execution (holdout requires control replay receipt path)
+Requires completed dataset preparation (steps 1–4) and control replay (steps 5–11). See [`FHV-DATASET-QUALIFICATION-PACKET.md`](./FHV-DATASET-QUALIFICATION-PACKET.md) and [`FHV-CONTROL-REPLAY-PACKET.md`](./FHV-CONTROL-REPLAY-PACKET.md).
 
-## Command
+### Step 12 — freeze-config (final launch)
+
+```bash
+pnpm trader:fhv:freeze-config -- \
+  --release-sha "$FHV_RELEASE_SHA" \
+  --release-tag "$FHV_RELEASE_TAG" \
+  --run-id "$FHV_RUN_ID" \
+  --organization-id "$FHV_ORGANIZATION_ID" \
+  --operator-id "$FHV_OPERATOR_ID" \
+  --artifact-dir "/path/to/freeze-final" \
+  --dataset-qualification-receipt-path "/path/to/fhv-dataset-qualification-receipt.v1.json"
+```
+
+### Step 13 — authorize-full (final, `executionPurpose=FULL_HISTORICAL`)
+
+```bash
+export FHV_FULL_HISTORICAL_AUTHORIZATION="AUTHORIZE-FULL-HISTORICAL-VALIDATION"
+export FHV_EXECUTION_PURPOSE="FULL_HISTORICAL"
+
+pnpm trader:fhv:authorize-full -- \
+  --release-sha "$FHV_RELEASE_SHA" \
+  --release-tag "$FHV_RELEASE_TAG" \
+  --run-id "$FHV_RUN_ID" \
+  --organization-id "$FHV_ORGANIZATION_ID" \
+  --operator-id "$FHV_OPERATOR_ID" \
+  --receipt-dir "/path/to/auth-final" \
+  --configuration-freeze-path "/path/to/fhv-configuration-freeze.v1.json" \
+  --qualification-receipt-path "/path/to/fhv-dataset-qualification-receipt.v1.json" \
+  --control-replay-receipt-path "/path/to/fhv-control-replay-receipt.v1.json" \
+  --execution-purpose FULL_HISTORICAL
+```
+
+Authorization receipt field: `executionPurpose: "FULL_HISTORICAL"`. **Requires** bound `controlReplayReceiptDigest`.
+
+### Step 14 — checkout proof (final)
+
+```bash
+pnpm trader:fhv:t4:record-checkout-identity -- \
+  --release-sha "$FHV_RELEASE_SHA" \
+  --release-tag "$FHV_RELEASE_TAG" \
+  --run-id "$FHV_RUN_ID" \
+  --organization-id "$FHV_ORGANIZATION_ID" \
+  --output "/path/to/fhv-t4-checkout-identity.v1.json"
+```
+
+### Step 15 — Full Historical Validation run
 
 ```bash
 export FHV_RELEASE_SHA="<full-git-sha>"
@@ -43,7 +83,7 @@ pnpm trader:fhv:run -- \
   --dataset-qualification-receipt-path "/path/to/fhv-dataset-qualification-receipt.v1.json" \
   --control-replay-receipt-path "/path/to/fhv-control-replay-receipt.v1.json" \
   --dataset-root "/absolute/dataset/root" \
-  --manifest-path "/absolute/manifest/fhv-dataset-manifest.v1.json" \
+  --manifest-path "/absolute/manifest/fhv-dataset-manifest.v2.json" \
   --checkout-identity-proof-path "/path/to/fhv-t4-checkout-identity.v1.json"
 
 # Bounded real-schema integration (same production path, test fixture dataset):

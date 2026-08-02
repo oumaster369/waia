@@ -25,6 +25,15 @@ import {
 } from "@/lib/trader/market-data/research-dataset";
 import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import type { FhvDatasetManifestV2PartitionEntry } from "@/lib/trader/market-data/fhv-dataset-manifest-v2";
+import {
+  resolveFhvDatasetManifestV2Path,
+  resolveFhvDatasetSealReceiptV2Path,
+} from "@/lib/trader/market-data/fhv-dataset-manifest-v2";
+import {
+  FhvDatasetSealError,
+  validateFhvV2DatasetReadOnly,
+} from "@/lib/trader/market-data/fhv-dataset-seal";
 import {
   assertImmutableArtifactExactMatch,
   FhvImmutableArtifactCollisionError,
@@ -342,10 +351,73 @@ function resolveQualificationMode(input: {
   return "OFFICIAL_MULTI_YEAR";
 }
 
-export function qualifyFhvOfficialDataset(input: {
+function rethrowDatasetSealError(error: unknown): never {
+  if (error instanceof FhvDatasetSealError) {
+    throw new FhvDatasetQualificationError(error.code, error.message);
+  }
+  throw error;
+}
+
+function assertOfficialMultiYearPartitionEntryCoverage(
+  entry: FhvDatasetManifestV2PartitionEntry,
+): void {
+  const interval = resolvePartitionInterval(entry.partition);
+  if (entry.firstBarOpen !== interval.startUtc) {
+    throw new FhvDatasetQualificationError(
+      "PARTITION_COVERAGE_START_MISMATCH",
+      `First bar for ${entry.partition}/${entry.symbol} must open at ${interval.startUtc}.`,
+    );
+  }
+  if (entry.lastBarClose !== interval.endUtc) {
+    throw new FhvDatasetQualificationError(
+      "PARTITION_COVERAGE_END_MISMATCH",
+      `Last bar for ${entry.partition}/${entry.symbol} must close at ${interval.endUtc}.`,
+    );
+  }
+  const startMs = Date.parse(interval.startUtc);
+  const endMs = Date.parse(interval.endUtc);
+  const expectedBarCount = (endMs - startMs) / ONE_MINUTE_MS;
+  if (entry.actualBarCount !== expectedBarCount) {
+    throw new FhvDatasetQualificationError(
+      "PARTITION_INCOMPLETE",
+      `Partition ${entry.partition}/${entry.symbol} is incomplete: expected ${expectedBarCount} bars, observed ${entry.actualBarCount}.`,
+    );
+  }
+  if (entry.actualBarCount !== entry.expectedBarCount) {
+    throw new FhvDatasetQualificationError(
+      "PARTITION_BAR_COUNT_MISMATCH",
+      `Partition ${entry.partition}/${entry.symbol} actualBarCount does not match expectedBarCount.`,
+    );
+  }
+}
+
+function assertOfficialV2HoldoutSeal(manifest: {
+  holdoutSealDigest: string;
+  partitions: readonly FhvDatasetManifestV2PartitionEntry[];
+}): void {
+  const holdoutEntry = manifest.partitions.find((entry) => entry.partition === "blind-holdout");
+  if (!holdoutEntry) {
+    throw new FhvDatasetQualificationError(
+      "HOLDOUT_PARTITION_MISSING",
+      "blind-holdout partition entry missing from manifest v2.",
+    );
+  }
+  const expectedHoldoutSealDigest = computeStableJsonDigest({
+    blindHoldoutRawSha256: holdoutEntry.rawSha256,
+    contaminationStatus: "RESERVED_SEALED_NOT_ACCESSED",
+  });
+  if (manifest.holdoutSealDigest !== expectedHoldoutSealDigest) {
+    throw new FhvDatasetQualificationError(
+      "HOLDOUT_CONTAMINATION",
+      "Holdout seal must be RESERVED_SEALED_NOT_ACCESSED before authorization.",
+    );
+  }
+}
+
+function qualifyFhvOfficialDatasetV1IntegrationFixture(input: {
   datasetRoot: string;
   manifestPath: string;
-  qualificationMode?: FhvQualificationMode;
+  qualificationMode: "SCHEMA_INTEGRATION_FIXTURE";
   releaseSha?: string;
   releaseTag?: string;
   organizationId?: string;
@@ -353,10 +425,6 @@ export function qualifyFhvOfficialDataset(input: {
 }): Omit<FhvDatasetQualificationReceiptV1, "qualificationReceiptDigest" | "qualifiedAtUtc"> {
   const datasetRoot = input.datasetRoot.trim();
   const manifestPath = input.manifestPath.trim();
-  const qualificationMode = resolveQualificationMode({
-    datasetRoot,
-    qualificationMode: input.qualificationMode,
-  });
   if (!existsSync(manifestPath)) {
     throw new FhvDatasetQualificationError(
       "MANIFEST_PATH_MISSING",
@@ -390,9 +458,6 @@ export function qualifyFhvOfficialDataset(input: {
       }
       for (const bar of bars) {
         assertBarWithinHalfOpenInterval(bar, interval, `${partition}/${symbol}`);
-      }
-      if (qualificationMode === "OFFICIAL_MULTI_YEAR") {
-        assertOfficialMultiYearPartitionCoverage({ partition, symbol, bars });
       }
       const sortedBars = [...bars].sort(
         (left, right) => Date.parse(left.barOpenTime) - Date.parse(right.barOpenTime),
@@ -442,7 +507,7 @@ export function qualifyFhvOfficialDataset(input: {
   return {
     schemaVersion: FHV_DATASET_QUALIFICATION_RECEIPT_SCHEMA_VERSION,
     classification: "DATASET_QUALIFICATION=PASS",
-    qualificationMode,
+    qualificationMode: input.qualificationMode,
     datasetRoot,
     manifestPath,
     datasetContentDigest,
@@ -453,13 +518,142 @@ export function qualifyFhvOfficialDataset(input: {
     ...(input.releaseTag ? { releaseTag: input.releaseTag.trim() } : {}),
     ...(input.organizationId ? { organizationId: input.organizationId } : {}),
     ...(input.operatorId ? { operatorId: input.operatorId } : {}),
-    ...(qualificationMode === "SCHEMA_INTEGRATION_FIXTURE"
-      ? { fixtureClassification: "SCHEMA_INTEGRATION_FIXTURE" as const }
-      : {}),
+    fixtureClassification: "SCHEMA_INTEGRATION_FIXTURE" as const,
     partitionEvidence,
     symbolDigests,
     holdoutSealDigest,
   };
+}
+
+export function qualifyFhvOfficialV2DatasetStreaming(input: {
+  datasetRoot: string;
+  manifestPath?: string;
+  releaseSha?: string;
+  releaseTag?: string;
+  organizationId?: string;
+  operatorId?: string;
+}): Omit<FhvDatasetQualificationReceiptV1, "qualificationReceiptDigest" | "qualifiedAtUtc"> {
+  const datasetRoot = input.datasetRoot.trim();
+  let validated;
+  try {
+    validated = validateFhvV2DatasetReadOnly(datasetRoot);
+  } catch (error) {
+    rethrowDatasetSealError(error);
+  }
+  const { manifest, sealReceipt } = validated;
+  const manifestPath = input.manifestPath?.trim() || resolveFhvDatasetManifestV2Path(datasetRoot);
+  if (sealReceipt.datasetContentDigest !== manifest.datasetContentDigest) {
+    throw new FhvDatasetQualificationError(
+      "SEAL_DATASET_DIGEST_MISMATCH",
+      "Seal receipt datasetContentDigest must match manifest v2.",
+    );
+  }
+  const expectedStart = FHV_DATASET_PARTITIONS_V1.development.startUtc;
+  const expectedEnd = FHV_DATASET_PARTITIONS_V1.blindHoldout.endUtc;
+  if (
+    manifest.intervalBoundaries.startUtc !== expectedStart ||
+    manifest.intervalBoundaries.endUtc !== expectedEnd
+  ) {
+    throw new FhvDatasetQualificationError(
+      "MANIFEST_INTERVAL_BOUNDARIES_MISMATCH",
+      "Manifest intervalBoundaries must be [2020-01-01, 2026-01-01) half-open.",
+    );
+  }
+  assertOfficialV2HoldoutSeal(manifest);
+
+  const partitionEvidence: FhvPartitionBarEvidenceV1[] = manifest.partitions.map((entry) => ({
+    partition: entry.partition,
+    symbol: entry.symbol,
+    filePath: join(datasetRoot, entry.filePath),
+    fileContentDigest: entry.rawSha256,
+    barCount: entry.actualBarCount,
+    firstBarOpenTime: entry.firstBarOpen,
+    lastBarOpenTime: entry.lastBarClose,
+  }));
+  for (const entry of manifest.partitions) {
+    assertOfficialMultiYearPartitionEntryCoverage(entry);
+  }
+
+  return {
+    schemaVersion: FHV_DATASET_QUALIFICATION_RECEIPT_SCHEMA_VERSION,
+    classification: "DATASET_QUALIFICATION=PASS",
+    qualificationMode: "OFFICIAL_MULTI_YEAR",
+    datasetRoot,
+    manifestPath,
+    datasetContentDigest: manifest.datasetContentDigest,
+    manifestSemanticDigest: manifest.manifestSemanticDigest,
+    partitionsDigest: computeStableJsonDigest(FHV_DATASET_PARTITIONS_V1),
+    gapPolicyId: FHV_GAP_POLICY_V1.policyId,
+    ...(input.releaseSha ? { releaseSha: input.releaseSha.trim().toLowerCase() } : {}),
+    ...(input.releaseTag ? { releaseTag: input.releaseTag.trim() } : {}),
+    ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+    ...(input.operatorId ? { operatorId: input.operatorId } : {}),
+    partitionEvidence,
+    symbolDigests: manifest.symbolDigests,
+    holdoutSealDigest: manifest.holdoutSealDigest,
+  };
+}
+
+export function qualifyFhvOfficialDataset(input: {
+  datasetRoot: string;
+  manifestPath: string;
+  qualificationMode?: FhvQualificationMode;
+  releaseSha?: string;
+  releaseTag?: string;
+  organizationId?: string;
+  operatorId?: string;
+}): Omit<FhvDatasetQualificationReceiptV1, "qualificationReceiptDigest" | "qualifiedAtUtc"> {
+  const datasetRoot = input.datasetRoot.trim();
+  const manifestPath = input.manifestPath.trim();
+  const qualificationMode = resolveQualificationMode({
+    datasetRoot,
+    qualificationMode: input.qualificationMode,
+  });
+
+  if (qualificationMode === "SCHEMA_INTEGRATION_FIXTURE") {
+    return qualifyFhvOfficialDatasetV1IntegrationFixture({
+      datasetRoot,
+      manifestPath,
+      qualificationMode,
+      releaseSha: input.releaseSha,
+      releaseTag: input.releaseTag,
+      organizationId: input.organizationId,
+      operatorId: input.operatorId,
+    });
+  }
+
+  if (qualificationMode === "OFFICIAL_MULTI_YEAR") {
+    for (const partition of FHV_OFFICIAL_PARTITION_NAMES) {
+      for (const symbol of FHV_OFFICIAL_SYMBOLS) {
+        const barsPath = join(datasetRoot, "partitions", partition, symbol, "bars.v1.json");
+        if (!existsSync(barsPath)) {
+          continue;
+        }
+        const bars = parsePartitionBarsFile(barsPath, symbol);
+        assertOfficialMultiYearPartitionCoverage({ partition, symbol, bars });
+      }
+    }
+    const sealPath = resolveFhvDatasetSealReceiptV2Path(datasetRoot);
+    if (!existsSync(sealPath)) {
+      throw new FhvDatasetQualificationError(
+        "V2_SEAL_REQUIRED",
+        "OFFICIAL_MULTI_YEAR requires sealed v2 dataset (manifest v2 + seal receipt v2).",
+      );
+    }
+    return qualifyFhvOfficialV2DatasetStreaming({
+      datasetRoot,
+      manifestPath: resolveFhvDatasetManifestV2Path(datasetRoot),
+      releaseSha: input.releaseSha,
+      releaseTag: input.releaseTag,
+      organizationId: input.organizationId,
+      operatorId: input.operatorId,
+    });
+  }
+
+  throw new FhvDatasetQualificationError(
+    "UNSUPPORTED_QUALIFICATION_MODE",
+    `Unsupported qualification mode: ${qualificationMode}.`,
+  );
 }
 
 export function qualifyFhvBoundedFixtureDataset(): Omit<

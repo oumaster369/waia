@@ -11,8 +11,17 @@ import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligenc
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import { FhvSharedPortfolioBarReplaySource } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
+import { FhvOfficialDatasetReader } from "@/lib/trader/market-data/fhv-official-dataset-reader";
+import type { FhvQualificationMode } from "@/lib/trader/observability/fhv-dataset-qualification";
+import { assertFhvOfficialV2DatasetArtifactsPresent } from "@/lib/trader/market-data/fhv-official-v2-required";
 import type { BarReplaySource } from "@/lib/trader/market-data/types";
 import type { FhvConfigurationFreezeV1 } from "@/lib/trader/observability/fhv-configuration-freeze";
+import {
+  createFhvEpochBoundaryController,
+  type FhvExecutionCheckpointConfig,
+} from "@/lib/trader/observability/fhv-execution-checkpoint";
+import type { FhvAuthorizationClaimV2 } from "@/lib/trader/observability/fhv-authorization-claim";
+import type { FhvExecutionWalWriter } from "@/lib/trader/observability/fhv-execution-wal";
 import { seedFhvHistoricalExecutionSession } from "@/lib/trader/observability/fhv-historical-execution-session";
 import { buildResearchValidationCycleIdPrefix } from "@/lib/trader/research/research-backtest-cycle-id";
 import { createHtrInitialAccountRiskState } from "@/lib/trader/research/htr-initial-portfolio-contract";
@@ -58,10 +67,18 @@ export async function runFullHistoricalBacktest(input: {
   organizationId: string;
   operatorId: string;
   configurationFreeze: FhvConfigurationFreezeV1;
-  bars: readonly Bar[];
+  bars?: readonly Bar[];
+  datasetRoot?: string;
+  qualificationMode?: FhvQualificationMode;
   boundedFixture: boolean;
   includeHoldout: boolean;
+  controlReplay?: boolean;
   maxCycles?: number;
+  walWriter?: FhvExecutionWalWriter;
+  authorizationClaim?: FhvAuthorizationClaimV2;
+  claimPath?: string;
+  checkpointConfig?: FhvExecutionCheckpointConfig;
+  resumeFromCycle?: number;
 }): Promise<RunBacktestResult> {
   const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
   const portfolio = buildResearchV2PortfolioContext(costModel);
@@ -80,16 +97,68 @@ export async function runFullHistoricalBacktest(input: {
       ? "fhv-full-historical-bounded"
       : "fhv-full-historical-official",
   });
-  const window = {
-    start: new Date(input.bars[0]!.barOpenTime),
-    end: new Date(input.bars.at(-1)!.barCloseTime),
-  };
+  const window = input.bars
+    ? {
+        start: new Date(input.bars[0]!.barOpenTime),
+        end: new Date(input.bars.at(-1)!.barCloseTime),
+      }
+    : {
+        start: new Date("2020-01-01T00:00:00.000Z"),
+        end: new Date(
+          input.includeHoldout ? "2026-01-01T00:00:00.000Z" : "2025-01-01T00:00:00.000Z",
+        ),
+      };
   const cycleIdPrefix = buildResearchValidationCycleIdPrefix(input.runId);
-  const barSource: BarReplaySource = input.boundedFixture
-    ? new HistoricalBarReplaySource({ bars: input.bars, cycleIdPrefix })
-    : new FhvSharedPortfolioBarReplaySource(input.bars, cycleIdPrefix);
+  let barSource: BarReplaySource;
+  let officialReader: FhvOfficialDatasetReader | undefined;
+  if (input.boundedFixture) {
+    if (!input.bars) {
+      throw new Error("[fhv] bounded fixture requires bars");
+    }
+    barSource = new HistoricalBarReplaySource({ bars: input.bars, cycleIdPrefix });
+  } else if (input.qualificationMode === "OFFICIAL_MULTI_YEAR") {
+    if (!input.datasetRoot) {
+      throw new Error("[fhv] OFFICIAL_MULTI_YEAR requires sealed v2 datasetRoot");
+    }
+    assertFhvOfficialV2DatasetArtifactsPresent({
+      datasetRoot: input.datasetRoot,
+      qualificationMode: input.qualificationMode,
+    });
+    officialReader = new FhvOfficialDatasetReader({
+      datasetRoot: input.datasetRoot,
+      accessPurpose: input.controlReplay ? "CONTROL_REPLAY_STRATEGY" : "FULL_VALIDATION_STRATEGY",
+      includeHoldoutStrategy: input.includeHoldout,
+      includeHoldoutPartitions: input.includeHoldout,
+      cycleIdPrefix,
+    });
+    barSource = officialReader;
+  } else if (input.qualificationMode === "SCHEMA_INTEGRATION_FIXTURE") {
+    if (!input.bars) {
+      throw new Error("[fhv] SCHEMA_INTEGRATION_FIXTURE requires eager bars");
+    }
+    barSource = new FhvSharedPortfolioBarReplaySource(input.bars, cycleIdPrefix);
+  } else {
+    throw new Error(
+      `[fhv] unsupported qualification mode for engine: ${String(input.qualificationMode)}`,
+    );
+  }
   const strategies = resolveStrategyBindings(input.configurationFreeze);
   const accountState = createHtrInitialAccountRiskState();
+
+  const epochController =
+    input.walWriter && input.authorizationClaim && input.claimPath && input.checkpointConfig
+      ? createFhvEpochBoundaryController({
+          runDir: input.runDir,
+          runId: input.runId,
+          claimPath: input.claimPath,
+          walWriter: input.walWriter,
+          authorizationClaim: input.authorizationClaim,
+          checkpointConfig: input.checkpointConfig,
+          sourceCursorDigest: input.configurationFreeze.manifestDigest,
+          resumeFromCycle: input.resumeFromCycle,
+        })
+      : undefined;
+  epochController?.beginInitialEpoch();
 
   try {
     return await runBacktest({
@@ -115,10 +184,12 @@ export async function runFullHistoricalBacktest(input: {
       exportedAt: new Date(window.end),
       activeStrategyIds: strategies.strategySignalIds,
       newId: createBenchmarkNewIdFactory(),
-      retentionMode: "STREAM_ONLY",
+      retentionMode: input.boundedFixture ? undefined : "STREAM_ONLY",
       evidenceSink,
       maxCycles: input.maxCycles ?? (input.boundedFixture ? 20 : undefined),
       enableReplayFusedContext: false,
+      resumeCycleStartIndex:
+        input.resumeFromCycle && input.resumeFromCycle > 0 ? input.resumeFromCycle : undefined,
       historicalExecutionProfile: session.historicalExecutionProfile,
       historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
       wp16: {
@@ -140,8 +211,10 @@ export async function runFullHistoricalBacktest(input: {
           initialPortfolioDigest: HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
         },
       },
+      ...(epochController ? { onCycleBoundary: epochController.onCycleBoundary } : {}),
     });
   } finally {
+    officialReader?.close();
     cleanup();
   }
 }

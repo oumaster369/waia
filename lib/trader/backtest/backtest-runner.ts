@@ -49,6 +49,7 @@ import type {
   ReplayRetentionMode,
 } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 import type { BarReplaySource } from "@/lib/trader/market-data/types";
+import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
@@ -225,6 +226,18 @@ export type RunBacktestInput = {
     cycleCount: number;
   }) => BacktestCycleBoundaryDecision;
 };
+
+/**
+ * STREAM_ONLY fused-context prefix cap: one EXPAND_MIN_BARS window per symbol plus
+ * interleave slack for shared-portfolio replay.
+ */
+export const STREAM_ONLY_BARS1M_PREFIX_CAP = EXPAND_MIN_BARS * 2 + 4;
+
+function trimBars1mPrefixForStreamOnly(prefix: Bar[]): void {
+  if (prefix.length > STREAM_ONLY_BARS1M_PREFIX_CAP) {
+    prefix.splice(0, prefix.length - STREAM_ONLY_BARS1M_PREFIX_CAP);
+  }
+}
 
 /** DEE-431: structured non-economic stop result for checkpoint/pause paths. */
 export type BacktestCycleBoundaryDecision =
@@ -529,6 +542,9 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
 
     for (const bar of snapshot.bars) {
       bars1mPrefix.push(bar);
+    }
+    if (retentionMode === "STREAM_ONLY") {
+      trimBars1mPrefixForStreamOnly(bars1mPrefix);
     }
 
     const fusedContextTimer = benchmarkObserver.beginStage("fused-context-build", cycleIndex);
