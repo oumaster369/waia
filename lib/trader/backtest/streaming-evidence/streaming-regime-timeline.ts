@@ -14,7 +14,7 @@ import {
 } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 
-const TIMELINE_BATCH_SIZE = 128;
+const TIMELINE_BATCH_SIZE = 64;
 
 function formatSeq(seq: number): string {
   return String(seq).padStart(6, "0");

@@ -996,6 +996,11 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       boundaryEvidenceSealOverride = boundaryDecision.evidenceSealOverride;
       break;
     }
+    // Cooperative yield so external pause/control writers can be observed between cycles
+    // (rehearsal campaign pause-at-checkpoint and similar cross-task control planes).
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
   }
 
   if ("captureSourceFrontier" in input.barSource) {

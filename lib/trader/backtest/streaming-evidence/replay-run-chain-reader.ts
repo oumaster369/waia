@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   ReplayCheckpointError,
@@ -58,7 +59,38 @@ export function readSegmentProjections(runDir: string): ReplayCycleEvidenceProje
       `segment runDir missing: ${runDir}`,
     );
   }
-  return [...new StreamingEvidenceReader(runDir).iterateProjections()];
+  const direct = [...new StreamingEvidenceReader(runDir).iterateProjections()];
+  if (direct.length > 0) {
+    return direct;
+  }
+  // FHV composite sink writes under evidence/epoch-{id}/generation-{gen}/.
+  const evidenceRoot = join(runDir, "evidence");
+  if (!existsSync(evidenceRoot)) {
+    return direct;
+  }
+  const epochDirs = readdirSync(evidenceRoot)
+    .filter((name) => name.startsWith("epoch-"))
+    .sort((a, b) => Number(a.slice("epoch-".length)) - Number(b.slice("epoch-".length)));
+  const projections: ReplayCycleEvidenceProjection[] = [];
+  for (const epochDir of epochDirs) {
+    const epochPath = join(evidenceRoot, epochDir);
+    if (!statSync(epochPath).isDirectory()) {
+      continue;
+    }
+    const generationDirs = readdirSync(epochPath)
+      .filter((name) => name.startsWith("generation-"))
+      .sort(
+        (a, b) => Number(a.slice("generation-".length)) - Number(b.slice("generation-".length)),
+      );
+    for (const generationDir of generationDirs) {
+      const segmentDir = join(epochPath, generationDir);
+      if (!statSync(segmentDir).isDirectory()) {
+        continue;
+      }
+      projections.push(...new StreamingEvidenceReader(segmentDir).iterateProjections());
+    }
+  }
+  return projections;
 }
 
 function verifySegmentLink(

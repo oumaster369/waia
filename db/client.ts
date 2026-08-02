@@ -37,9 +37,6 @@ export function getDb() {
     const sqlite = new Database(fp);
     sqlite.pragma("foreign_keys = ON");
     sqlite.pragma("journal_mode = WAL");
-    if (fp !== ":memory:") {
-      applyResearchReplaySqlitePragmas(sqlite);
-    }
     globalStore.__waia_sqlite__ = sqlite;
   }
   return drizzle(globalStore.__waia_sqlite__, { schema });

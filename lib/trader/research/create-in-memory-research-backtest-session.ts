@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
-import { getDb, resetWaiaSqliteSingleton } from "@/db/client";
+import { applyResearchReplaySqlitePragmas, getDb, getRawSqliteDatabase, resetWaiaSqliteSingleton } from "@/db/client";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import {
   createOrderExecutionServiceFromDeps,
@@ -40,6 +40,7 @@ function migrateInMemoryResearchDb(): void {
   resetWaiaSqliteSingleton();
   const db = getDb();
   migrate(db, { migrationsFolder: path.join(process.cwd(), "db/migrations") });
+  applyResearchReplaySqlitePragmas(getRawSqliteDatabase());
 }
 
 export type CreateInMemoryResearchBacktestSessionOptions = {
