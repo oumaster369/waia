@@ -30,8 +30,8 @@ async function main(): Promise<void> {
     );
     const wallTimeMs = Date.now() - startedAt;
     const bars = resolveBarsProcessed({
-      sourceFrontier: result.sourceFrontier,
-      cycleCount: result.cycleCount,
+      sourceFrontier: result.backtest?.sourceFrontier,
+      cycleCount: result.backtest?.cycleCount,
     });
     const collected = instrumentation.collect();
     const stages = Object.entries(collected.telemetry.perStage).map(([stage, agg]) => ({
@@ -48,7 +48,7 @@ async function main(): Promise<void> {
           wallTimeMs,
           bars,
           cps: bars / (wallTimeMs / 1000),
-          fills: result.accountingFrontierState?.consumedFillIds?.length,
+          fills: result.backtest?.accountingFrontierState?.consumedFillIds?.length,
           stages,
         },
         null,
