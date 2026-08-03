@@ -142,6 +142,10 @@ function applyEquityDrawdownState(
   frontierAsOf: string,
 ): AccountingStateV1 {
   const monthKey = resolveMonthKeyUtc(frontierAsOf);
+  // IDHPS hot path: unchanged equity within the same UTC month cannot move HWM/drawdown maps.
+  if (equityUsdt === state.equity && monthKey === state.monthKey) {
+    return state;
+  }
   const hwm = updateDrawdownHighWaterMarks({
     equityUsdt,
     accountPeakHwm: state.equityHwm,
@@ -381,14 +385,18 @@ export function advanceAccountingFrontier(
   const nextSequence = state.accountingSequence + 1;
   state = { ...state, accountingSequence: nextSequence, frontierAsOf: input.frontierAsOf };
 
-  const semanticContentDigest = computeAccountingSemanticDigest(state);
+  // Hot-path mark/fill advances (IDHPS): defer SHA-256 until checkpoint/terminal capture.
+  const semanticContentDigest = input.skipSemanticDigest
+    ? ""
+    : computeAccountingSemanticDigest(state);
   const idempotencyKey =
     input.idempotencyKey ??
     `${state.organizationId}:${state.accountKey}:${state.runId}:${nextSequence}`;
 
   return {
     ...state,
-    id: input.frontierId ?? crypto.randomUUID(),
+    // Deterministic frontier id — avoids crypto.randomUUID() on every bar.
+    id: input.frontierId ?? `${state.runId}:${nextSequence}`,
     sourceFillId,
     sourceEconomicsDigest,
     semanticContentDigest,

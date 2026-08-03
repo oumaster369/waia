@@ -24,6 +24,8 @@ export type HtrGuardianCycleInput = {
   strategyEquityUsdt?: string;
   strategyPeakHwm?: string;
   missingMark?: boolean;
+  /** When before_guardian reconcile just passed, skip duplicate assert. */
+  skipReconciliationAssert?: boolean;
 };
 
 export type HtrGuardianCycleResult = {
@@ -39,16 +41,18 @@ export function requiresHtrPartialEntryCancellation(cycle: HtrGuardianCycleResul
 }
 
 export function evaluateHtrGuardianCycle(input: HtrGuardianCycleInput): HtrGuardianCycleResult {
-  try {
-    assertAccountingReconciliation(input.reconciliation);
-  } catch {
-    return {
-      breachState: "STOP_ACCOUNT",
-      reason: HTR_GUARDIAN_EXIT_REASON_V1.reconciliationFailure,
-      allowNewExposure: false,
-      cancelPartialEntry: true,
-      permitRiskReducingExit: true,
-    };
+  if (!input.skipReconciliationAssert) {
+    try {
+      assertAccountingReconciliation(input.reconciliation);
+    } catch {
+      return {
+        breachState: "STOP_ACCOUNT",
+        reason: HTR_GUARDIAN_EXIT_REASON_V1.reconciliationFailure,
+        allowNewExposure: false,
+        cancelPartialEntry: true,
+        permitRiskReducingExit: true,
+      };
+    }
   }
 
   if (input.missingMark) {

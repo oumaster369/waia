@@ -114,6 +114,11 @@ export type AdvanceAccountingFrontierInput = {
   frontierAsOf: string;
   frontierId?: string;
   idempotencyKey?: string;
+  /**
+   * IDHPS hot path: skip SHA-256 semantic digest on every mark/fill advance.
+   * Checkpoint capture / terminal export recompute digests from state.
+   */
+  skipSemanticDigest?: boolean;
 };
 
 export class AccountingInvariantError extends Error {

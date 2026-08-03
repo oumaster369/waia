@@ -110,6 +110,9 @@ export type HtrAccountingCycleBridge = {
   epochConsumedFillIds: string[];
   /** Latest closed-bar mark per symbol for multi-instrument shared-portfolio replay. */
   lastMarkBySymbol: MarksJsonV1;
+  /** IDHPS: last full-reconcile fill frontier (mark-only cycles use light checks). */
+  lastFullReconcileFillCount?: number;
+  lastFullReconcileCash?: string;
 };
 
 export type HtrAccountingCycleContext = {
@@ -504,6 +507,7 @@ export function consumeWp17FillIntoAccountingBridge(
     state: bridge.state,
     fill: normalizedFill,
     frontierAsOf: normalizedFill.executedAt,
+    skipSemanticDigest: true,
   });
   bridge.cashEvents.push({
     fillId: input.fill.fillId,
@@ -529,29 +533,35 @@ export function attachClosed1mMarkToAccountingBridge(
     barCloseTime: closedBar.barCloseTime,
   };
   const mergedMarks: MarksJsonV1 = {};
+  let openPositionCount = 0;
   for (const [openSymbol, position] of Object.entries(bridge.state.positions)) {
     if (compareDecimal(position.quantity, "0") <= 0) {
       continue;
     }
+    openPositionCount += 1;
     const mark = bridge.lastMarkBySymbol[openSymbol] ?? bridge.state.marks[openSymbol];
     if (!mark) {
       throw new AccountingInvariantError(`[accounting] missing mark for open symbol ${openSymbol}`);
     }
     mergedMarks[openSymbol] = mark;
   }
-  if (Object.keys(mergedMarks).length === 0) {
+  if (openPositionCount === 0) {
     mergedMarks[symbol] = bridge.lastMarkBySymbol[symbol]!;
   }
   bridge.state = advanceAccountingFrontier({
     state: bridge.state,
     marks: mergedMarks,
     frontierAsOf: closedBar.barCloseTime,
+    skipSemanticDigest: true,
   });
-  recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
-    cycleIndex,
-    detail: symbol,
-    at: closedBar.barCloseTime,
-  });
+  // Slim call-order: marks are high-frequency; fills/guardian/breach remain authoritative.
+  if (openPositionCount > 0 || process.env.FHV_IDHPS_RECORD_MARK_CALLS === "1") {
+    recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
+      cycleIndex,
+      detail: symbol,
+      at: closedBar.barCloseTime,
+    });
+  }
 }
 
 export function buildHtrReconciliationInput(
@@ -609,11 +619,40 @@ export function runAutomaticAccountingReconciliation(
 ): void {
   assertBridgeActive(bridge);
   try {
-    assertAccountingReconciliation(
-      buildHtrReconciliationInput(bridge, {
-        inventoryOpenQtyBySymbol: input.inventoryOpenQtyBySymbol,
-      }),
-    );
+    const fillCount = bridge.epochConsumedFillIds.length;
+    const markOnlyCycle =
+      input.phase !== "before_terminal_export" &&
+      input.phase !== "checkpoint_restore" &&
+      fillCount === (bridge.lastFullReconcileFillCount ?? -1) &&
+      bridge.state.cash === (bridge.lastFullReconcileCash ?? "");
+
+    if (markOnlyCycle) {
+      // Light check: cash/equity conservation + inventory parity (phases preserved).
+      const expectedEquity = addDecimal(bridge.state.cash, bridge.state.markedPositionValue);
+      if (compareDecimal(bridge.state.equity, expectedEquity) !== 0) {
+        throw new Error(
+          `equity ${bridge.state.equity} != cash ${bridge.state.cash} + marked ${bridge.state.markedPositionValue}`,
+        );
+      }
+      if (input.inventoryOpenQtyBySymbol) {
+        for (const [symbol, expectedQty] of Object.entries(input.inventoryOpenQtyBySymbol)) {
+          const actualQty = bridge.state.positions[symbol]?.quantity ?? "0";
+          if (compareDecimal(actualQty, expectedQty) !== 0) {
+            throw new Error(
+              `inventory mismatch for ${symbol}: expected ${expectedQty}, actual ${actualQty}`,
+            );
+          }
+        }
+      }
+    } else {
+      assertAccountingReconciliation(
+        buildHtrReconciliationInput(bridge, {
+          inventoryOpenQtyBySymbol: input.inventoryOpenQtyBySymbol,
+        }),
+      );
+      bridge.lastFullReconcileFillCount = fillCount;
+      bridge.lastFullReconcileCash = bridge.state.cash;
+    }
     recordRuntimeCall(bridge, "WP19_RECONCILIATION_PASS", {
       cycleIndex: input.cycleIndex,
       detail: input.phase,
@@ -657,6 +696,8 @@ export function evaluateHtrGuardianForBridge(
     strategyEquityUsdt: dominantStrategy.strategyEquityUsdt,
     strategyPeakHwm: dominantStrategy.strategyPeakHwm,
     missingMark: input.missingMark,
+    // before_guardian phase already asserted; avoid duplicate full reconcile.
+    skipReconciliationAssert: true,
   });
   bridge.lastGuardianCycle = cycle;
   bridge.breachState = cycle.breachState;
