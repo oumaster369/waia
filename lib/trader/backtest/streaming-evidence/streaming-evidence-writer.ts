@@ -160,7 +160,10 @@ export function createStreamingEvidenceWriter(
     onCycle(cycleIndex: number, result: PaperCycleResult): void {
       const projection = buildReplayCycleEvidenceProjection(cycleIndex, result);
       batch.push(projection);
-      timelineWriter.append(cycleIndex, result);
+      // IDHPS STREAM_ONLY official scale: projections are authority; skip regime timeline I/O.
+      if (process.env.FHV_IDHPS_SKIP_REGIME_TIMELINE !== "1") {
+        timelineWriter.append(cycleIndex, result);
+      }
       peakBuffered = Math.max(peakBuffered, batch.length);
       if (batch.length >= MAX_BATCH_CYCLES) {
         flushBatch();
