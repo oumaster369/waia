@@ -136,6 +136,10 @@ export function computeProfilerOverheadPercent(
   return (instrumentedMsPerBar / bracketControlMsPerBar - 1) * 100;
 }
 
+/**
+ * Live machine snapshot (may include volatile fields such as freeMemoryBytes).
+ * Do not embed this record in sealed finalize artifacts.
+ */
 export function captureMachineRuntimeRecord(): Record<string, unknown> {
   const cpu = cpus()[0];
   return {
@@ -150,6 +154,48 @@ export function captureMachineRuntimeRecord(): Record<string, unknown> {
     cwd: process.cwd(),
     filesystemNote: "local workspace artifact root",
   };
+}
+
+/**
+ * Machine provenance safe for byte-stable finalize-only aggregation.
+ * Omits freeMemoryBytes (volatile between finalize invocations).
+ */
+export function captureSealedMachineRuntimeRecord(): Record<string, unknown> {
+  const live = captureMachineRuntimeRecord();
+  const sealed = { ...live };
+  delete sealed.freeMemoryBytes;
+  return {
+    ...sealed,
+    freeMemoryBytesOmittedReason:
+      "volatile_at_finalize_excluded_from_sealed_summary_measurement_rss_heap_live_in_run_metrics",
+  };
+}
+
+/**
+ * Provenance timestamp for sealed profile artifacts: maximum ISO-8601
+ * `capturedAtUtc` across the twenty immutable run-metrics inputs.
+ */
+export function resolveSourceCapturedAtUtc(allMetrics: readonly ProfileRunMetricsV1[]): string {
+  if (allMetrics.length === 0) {
+    throw new Error("BLOCKED_BY_OFFICIAL_SCALE_PROFILE_EMPTY_METRICS");
+  }
+  let max = allMetrics[0]!.capturedAtUtc;
+  for (const metrics of allMetrics) {
+    if (metrics.capturedAtUtc > max) {
+      max = metrics.capturedAtUtc;
+    }
+  }
+  return max;
+}
+
+export function sortRecordByKey<T>(record: Record<string, T>): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(record).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
+}
+
+export function stableJsonStringify(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
 }
 
 function directoryBytesSafe(path: string): number | null {
@@ -530,12 +576,30 @@ export function computeExclusiveFloorMsPerBar(input: {
   };
 }
 
-export function writeHotspotRegisterAndSummary(input: {
-  profileRoot: string;
+export function buildHotspotRegisterAndSummaryDocuments(input: {
   profilingHead: string;
   allMetrics: readonly ProfileRunMetricsV1[];
   terminalClassification: string;
-}): void {
+  /** Injected for unit tests; defaults to sealed live machine record (no freemem). */
+  sealedMachineRuntime?: Record<string, unknown>;
+}): {
+  hotspotRegister: Record<string, unknown>;
+  summary: Record<string, unknown>;
+} {
+  const scheduleLabels = FHV_OFFICIAL_SCALE_PROFILE_SCHEDULE.map((entry) => entry.runLabel);
+  if (input.allMetrics.length !== scheduleLabels.length) {
+    throw new Error(
+      `BLOCKED_BY_OFFICIAL_SCALE_PROFILE_METRIC_COUNT_MISMATCH:${input.allMetrics.length}`,
+    );
+  }
+  for (let i = 0; i < scheduleLabels.length; i += 1) {
+    if (input.allMetrics[i]!.runLabel !== scheduleLabels[i]) {
+      throw new Error(
+        `BLOCKED_BY_OFFICIAL_SCALE_PROFILE_NON_CANONICAL_ORDER:${input.allMetrics[i]!.runLabel}`,
+      );
+    }
+  }
+
   const byLabel = new Map(input.allMetrics.map((m) => [m.runLabel, m]));
   const aP0 = ["A-P0-1", "A-P0-2", "A-P0-3", "A-P0-4", "A-P0-5", "A-P0-6"].map(
     (l) => byLabel.get(l as FhvOfficialScaleProfileRunLabel)!.barsPerSecond,
@@ -668,7 +732,14 @@ export function writeHotspotRegisterAndSummary(input: {
         safeOptimizationBoundary: "informational_only_no_implementation_authorized",
       };
     })
-    .sort((a, b) => b.exclusiveTimeMs - a.exclusiveTimeMs);
+    .sort((a, b) => {
+      if (b.exclusiveTimeMs !== a.exclusiveTimeMs) {
+        return b.exclusiveTimeMs - a.exclusiveTimeMs;
+      }
+      return a.hotspotId < b.hotspotId ? -1 : a.hotspotId > b.hotspotId ? 1 : 0;
+    });
+
+  const sourceCapturedAtUtc = resolveSourceCapturedAtUtc(input.allMetrics);
 
   const hotspotRegister = {
     schemaVersion: "fhv-official-scale-hotspot-register/v1",
@@ -676,6 +747,7 @@ export function writeHotspotRegisterAndSummary(input: {
     profilingHead: input.profilingHead,
     remotePrHead: REMOTE_PR_HEAD_SHA,
     sourceRunLabel: "A-P1",
+    sourceCapturedAtUtc,
     hotspots,
   };
 
@@ -722,7 +794,7 @@ export function writeHotspotRegisterAndSummary(input: {
       semanticReproDigest: "25b48cc85dc1bcca481f99bf08f9c20662b3c5b89bdb3c6318909e0d441a4513",
       note: "profiling-disabled gate passed before A-P0-1; process-parity suite also green",
     },
-    machineRuntime: captureMachineRuntimeRecord(),
+    machineRuntime: input.sealedMachineRuntime ?? captureSealedMachineRuntimeRecord(),
     fixedTotalCycles: 860_000,
     completedCount: 20,
     runCount: 20,
@@ -773,7 +845,7 @@ export function writeHotspotRegisterAndSummary(input: {
       })),
     },
     sqliteWalEvidenceGrowth: growth,
-    profilerOverheadPercentByRun: overheadByMode,
+    profilerOverheadPercentByRun: sortRecordByKey(overheadByMode),
     exclusiveTimeReconciliation: reconciliation,
     nonRemovableExclusiveFloorMsPerBar: floor.nonRemovableExclusiveFloorMsPerBar,
     removableOverheadMsPerBar: floor.removableOverheadMsPerBar,
@@ -812,17 +884,27 @@ export function writeHotspotRegisterAndSummary(input: {
       checkpointCount: m.checkpointCount,
     })),
     terminalClassification: input.terminalClassification,
-    capturedAtUtc: new Date().toISOString(),
+    sourceCapturedAtUtc,
+    // Preserved field name; value is exactly sourceCapturedAtUtc (max run-metrics capturedAtUtc).
+    capturedAtUtc: sourceCapturedAtUtc,
   };
 
+  return { hotspotRegister, summary };
+}
+
+export function writeHotspotRegisterAndSummary(input: {
+  profileRoot: string;
+  profilingHead: string;
+  allMetrics: readonly ProfileRunMetricsV1[];
+  terminalClassification: string;
+  sealedMachineRuntime?: Record<string, unknown>;
+}): void {
+  const { hotspotRegister, summary } = buildHotspotRegisterAndSummaryDocuments(input);
   writeFileSync(
     join(input.profileRoot, "hotspot-register.v1.json"),
-    `${JSON.stringify(hotspotRegister, null, 2)}\n`,
+    stableJsonStringify(hotspotRegister),
   );
-  writeFileSync(
-    join(input.profileRoot, "profile-summary.v1.json"),
-    `${JSON.stringify(summary, null, 2)}\n`,
-  );
+  writeFileSync(join(input.profileRoot, "profile-summary.v1.json"), stableJsonStringify(summary));
 }
 
 export function enrichParitySnapshotFromRunDir(
