@@ -133,9 +133,10 @@ export function paperCycleResultToSemanticEvents(input: {
         executionStatus: input.result.execution?.status ?? null,
         guardianBreach: input.result.htrGuardian?.breachState ?? null,
       }),
+      // IDHPS: O(1) digest — do not rehash full epoch callOrder (GS-09 growth surface).
       stateDigest: computeSemanticSha256Hex({
         callCount: input.result.htrRuntimeCallOrder?.length ?? 0,
-        callKinds: (input.result.htrRuntimeCallOrder ?? []).map((entry) => entry.kind),
+        lastCallKind: input.result.htrRuntimeCallOrder?.at(-1)?.kind ?? null,
       }),
       timestampUtc,
       correlationId,

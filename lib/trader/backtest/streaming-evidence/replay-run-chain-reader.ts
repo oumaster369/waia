@@ -11,6 +11,7 @@ import { reconstructStreamingEvidence } from "@/lib/trader/backtest/streaming-ev
 import { StreamingEvidenceReader } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-reader";
 import type { ReplayCycleEvidenceProjection } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
+import { computeSemanticParityDigest } from "@/lib/trader/backtest/streaming-evidence/semantic-parity-digest";
 
 export type ReplayRunChainReadResult = {
   manifest: ReplayRunChainManifest;
@@ -25,31 +26,7 @@ export type ReplayRunChainReadResult = {
   supersededSegmentRunDirs: string[];
 };
 
-/**
- * Canonical semantic-parity digest over a normalized, ascending-cycle projection stream.
- *
- * Included: only replay-semantic cycle fields. Excluded: segment path/role/sequence, PID, wall-clock
- * timestamps unrelated to replay semantics, temporary filenames, recovery reports, host/environment
- * metadata (none of which are projection fields). Identical inputs (uninterrupted vs resumed composed)
- * MUST yield an identical digest. This is the single source of truth used by BOTH the uninterrupted and
- * the resumed paths so the comparison is like-for-like.
- */
-export function computeSemanticParityDigest(
-  projections: readonly ReplayCycleEvidenceProjection[],
-): string {
-  return computePayloadDigest(
-    projections.map((projection) => ({
-      cycleIndex: projection.cycleIndex,
-      evaluatedAtMs: projection.evaluatedAtMs,
-      regime: projection.regime,
-      skipReason: projection.skipReason,
-      strategyExecutions: projection.strategyExecutions,
-      guardian: projection.guardian,
-      msv: projection.msv,
-      m9Trace: projection.m9Trace,
-    })),
-  );
-}
+export { computeSemanticParityDigest } from "@/lib/trader/backtest/streaming-evidence/semantic-parity-digest";
 
 /** Reads a single segment's projections in on-disk order (no cross-segment composition). */
 export function readSegmentProjections(runDir: string): ReplayCycleEvidenceProjection[] {

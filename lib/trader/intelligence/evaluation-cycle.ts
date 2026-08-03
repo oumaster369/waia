@@ -117,6 +117,37 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
   });
   emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
 
+  const signals = evaluateRegisteredStrategies(msv, features, {
+    organizationId: input.organizationId,
+    bars: input.bars,
+    newId,
+    historicalProfile: profileActive ? input.historicalProfile : undefined,
+  });
+
+  for (const signal of signals) {
+    emitStrategySignalCounters(signal, input.telemetrySink);
+  }
+
+  const signal = selectPrimaryStrategySignal(signals, {
+    historicalProfile: profileActive ? input.historicalProfile : undefined,
+  });
+
+  // IDHPS: STREAM_ONLY scale omits WP13/WP14 artifact assembly when no sinks consume them.
+  // Signals/MSV/hypothesis economics above are unchanged.
+  if (input.omitIntelligenceArtifacts) {
+    return {
+      features,
+      msv,
+      signals,
+      signal,
+      fusedContext: input.fusedContext,
+      understanding,
+      reconstruction,
+      hypothesisSet,
+      hypothesisSessionState: nextSessionState,
+    };
+  }
+
   const terminalReasonCode = resolveTerminalReasonCode({
     opportunityAuthorized: hypothesisSet.opportunity?.authorized ?? false,
     tradingPermission: msv.derived.tradingPermission,
@@ -142,21 +173,6 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     marketStateSnapshot,
     tradingPermission: msv.derived.tradingPermission,
     reasonCodes: msv.derived.reasonCodes,
-  });
-
-  const signals = evaluateRegisteredStrategies(msv, features, {
-    organizationId: input.organizationId,
-    bars: input.bars,
-    newId,
-    historicalProfile: profileActive ? input.historicalProfile : undefined,
-  });
-
-  for (const signal of signals) {
-    emitStrategySignalCounters(signal, input.telemetrySink);
-  }
-
-  const signal = selectPrimaryStrategySignal(signals, {
-    historicalProfile: profileActive ? input.historicalProfile : undefined,
   });
 
   const intelligenceCycleBundle =

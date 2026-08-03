@@ -1,9 +1,27 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  constants as fsConstants,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { backupSqliteDatabaseToFile } from "@/db/client";
+import { getRawSqliteDatabase } from "@/db/client";
+import {
+  applyIdhpsDurableEpochStep10,
+  recordIdhpsCheckpointMetrics,
+  writeIdhpsCompositeMirrorForCheckpoint,
+} from "@/lib/trader/execution/idhps-session-registry";
+import { pruneFhvCheckpointBundlesToTwoNewest } from "@/lib/trader/observability/fhv-checkpoint-retention";
 import type {
   BacktestCycleBoundaryDecision,
   FhvCycleBoundarySnapshot,
@@ -208,35 +226,59 @@ export function prepareFhvOfficialLaunchExecution(input: {
   };
 }
 
-async function captureSessionDatabaseBackup(input: {
-  skipSessionBackup?: boolean;
-}): Promise<{ sessionBuffer: Buffer; sessionDatabaseDigest: string }> {
+function sha256FileSync(filePath: string): string {
+  const hash = createHash("sha256");
+  const fd = openSync(filePath, "r");
+  try {
+    const buf = Buffer.alloc(1024 * 1024);
+    let offset = 0;
+    for (;;) {
+      const n = readSync(fd, buf, 0, buf.length, offset);
+      if (n <= 0) {
+        break;
+      }
+      hash.update(buf.subarray(0, n));
+      offset += n;
+    }
+    return hash.digest("hex");
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Quiescent hot-path session backup: WAL checkpoint + copyFile + streaming digest.
+ * Avoids better-sqlite3 page backup + full integrity_check + multi-GB Buffer load
+ * (IDHPS full-corpus checkpoint budget).
+ */
+function captureSessionDatabaseBackup(input: { skipSessionBackup?: boolean }): {
+  sessionFile: Buffer | { copyFromPath: string };
+  sessionDatabaseDigest: string;
+  cleanupTempPath?: string;
+} {
   if (input.skipSessionBackup) {
     const placeholder = Buffer.from("fhv-session-backup-placeholder", "utf8");
     return {
-      sessionBuffer: placeholder,
+      sessionFile: placeholder,
       sessionDatabaseDigest: createHash("sha256").update(placeholder).digest("hex"),
     };
   }
 
+  const sqlite = getRawSqliteDatabase();
+  // Single-writer FHV path: checkpoint then copy/clone is a consistent snapshot.
+  sqlite.pragma("wal_checkpoint(TRUNCATE)");
   const tempBackupPath = join(tmpdir(), `fhv-session-backup-${process.pid}-${Date.now()}.sqlite`);
   try {
-    const backup = await backupSqliteDatabaseToFile(tempBackupPath);
-    if (backup.integrityCheck !== "ok") {
-      throw new Error(`[fhv] session backup integrity_check failed: ${backup.integrityCheck}`);
-    }
-    const sessionBuffer = readFileSync(tempBackupPath);
-    return {
-      sessionBuffer,
-      sessionDatabaseDigest: createHash("sha256").update(sessionBuffer).digest("hex"),
-    };
-  } finally {
-    try {
-      rmSync(tempBackupPath, { force: true });
-    } catch {
-      // best-effort temp cleanup
-    }
+    copyFileSync(sqlite.name, tempBackupPath, fsConstants.COPYFILE_FICLONE);
+  } catch {
+    copyFileSync(sqlite.name, tempBackupPath);
   }
+  const sessionDatabaseDigest = sha256FileSync(tempBackupPath);
+  return {
+    sessionFile: { copyFromPath: tempBackupPath },
+    sessionDatabaseDigest,
+    cleanupTempPath: tempBackupPath,
+  };
 }
 
 export async function commitFhvExecutionEpoch(input: {
@@ -259,37 +301,49 @@ export async function commitFhvExecutionEpoch(input: {
     input.snapshotDigests.evidenceFrontierDigest ??
     computeStableJsonDigest(String(evidence.evidenceDurableThroughCycleIndex));
 
-  const { sessionBuffer, sessionDatabaseDigest } = await captureSessionDatabaseBackup({
+  const sessionBackup = captureSessionDatabaseBackup({
     skipSessionBackup: input.skipSessionBackup,
   });
+  const { sessionFile, sessionDatabaseDigest } = sessionBackup;
 
   const generation = input.authorizationClaim.fencingGeneration;
   const sessionDatabasePath = resolveFhvGenerationSessionDbPath(input.runDir, generation);
 
-  const bundle = publishFhvExecutionCheckpointBundle({
-    runDir: input.runDir,
-    runId: input.runId,
-    epochId: input.epochId,
-    generation,
-    firstCycle: input.epochFirstCycle,
-    lastCycle: input.lastCycle,
-    files: {
-      ...(input.checkpointFiles ?? {}),
-      "session.sqlite": sessionBuffer,
-    },
-    sourceCursorDigest: input.snapshotDigests.sourceCursorDigest,
-    executionStateDigest: input.snapshotDigests.executionStateDigest ?? "0".repeat(64),
-    accountingFrontierDigest: input.snapshotDigests.accountingFrontierDigest ?? "0".repeat(64),
-    identityFrontierDigest: input.snapshotDigests.identityFrontierDigest ?? "0".repeat(64),
-    evidenceFrontierDigest: evidenceFrontier,
-    sessionDatabaseDigest,
-    ...(input.snapshotDigests.syntheticScaleAuthorityDigest
-      ? { syntheticScaleAuthorityDigest: input.snapshotDigests.syntheticScaleAuthorityDigest }
-      : {}),
-    ...(input.snapshotDigests.executionConfigurationDigest
-      ? { executionConfigurationDigest: input.snapshotDigests.executionConfigurationDigest }
-      : {}),
-  });
+  let bundle: ReturnType<typeof publishFhvExecutionCheckpointBundle>;
+  try {
+    bundle = publishFhvExecutionCheckpointBundle({
+      runDir: input.runDir,
+      runId: input.runId,
+      epochId: input.epochId,
+      generation,
+      firstCycle: input.epochFirstCycle,
+      lastCycle: input.lastCycle,
+      files: {
+        ...(input.checkpointFiles ?? {}),
+        "session.sqlite": sessionFile,
+      },
+      sourceCursorDigest: input.snapshotDigests.sourceCursorDigest,
+      executionStateDigest: input.snapshotDigests.executionStateDigest ?? "0".repeat(64),
+      accountingFrontierDigest: input.snapshotDigests.accountingFrontierDigest ?? "0".repeat(64),
+      identityFrontierDigest: input.snapshotDigests.identityFrontierDigest ?? "0".repeat(64),
+      evidenceFrontierDigest: evidenceFrontier,
+      sessionDatabaseDigest,
+      ...(input.snapshotDigests.syntheticScaleAuthorityDigest
+        ? { syntheticScaleAuthorityDigest: input.snapshotDigests.syntheticScaleAuthorityDigest }
+        : {}),
+      ...(input.snapshotDigests.executionConfigurationDigest
+        ? { executionConfigurationDigest: input.snapshotDigests.executionConfigurationDigest }
+        : {}),
+    });
+  } finally {
+    if (sessionBackup.cleanupTempPath) {
+      try {
+        rmSync(sessionBackup.cleanupTempPath, { force: true });
+      } catch {
+        // best-effort temp cleanup
+      }
+    }
+  }
 
   const executionCheckpointDigest = computeFhvExecutionCheckpointDigest({
     epochId: input.epochId,
@@ -441,6 +495,7 @@ export function createFhvEpochBoundaryController(input: {
       fallbackSourceCursorDigest: input.sourceCursorDigest,
     });
     const staticDigests = staticSnapshotDigests();
+    const checkpointBackupStartedAt = performance.now();
     const result = await commitFhvExecutionEpoch({
       runDir: input.runDir,
       runId: input.runId,
@@ -468,6 +523,37 @@ export function createFhvEpochBoundaryController(input: {
       checkpointFiles: capturedCheckpointFiles,
       skipSessionBackup: input.skipSessionBackup,
     });
+    const checkpointBackupDurationMs = performance.now() - checkpointBackupStartedAt;
+    // Durable authority step 10: clear epoch-scoped IDHPS mirrors only after claim.
+    applyIdhpsDurableEpochStep10();
+    // Persist post-step-10 mirrors for crash-resume parity (portfolio sizing / inventory).
+    writeIdhpsCompositeMirrorForCheckpoint(result.checkpointDir, result.epochId);
+    let walBytes: number | null = null;
+    try {
+      const sqlite = getRawSqliteDatabase();
+      // Metrics-only maintenance; never used as clear-mirror authority.
+      sqlite.pragma("wal_checkpoint(PASSIVE)");
+      const walPath = `${sqlite.name}-wal`;
+      walBytes = existsSync(walPath) ? statSync(walPath).size : 0;
+    } catch {
+      walBytes = null;
+    }
+    recordIdhpsCheckpointMetrics({ checkpointBackupDurationMs, walBytes });
+    writeFileSync(
+      join(result.checkpointDir, "idhps-checkpoint-metrics.v1.json"),
+      `${JSON.stringify(
+        {
+          schemaVersion: "idhps-checkpoint-metrics/v1",
+          epochId: result.epochId,
+          checkpointBackupDurationMs,
+          walBytes,
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    pruneFhvCheckpointBundlesToTwoNewest(input.runDir);
     authorizationClaim = result.authorizationClaim;
     previousEpochCommitDigest = result.epochCommitDigest;
     epochId += 1;

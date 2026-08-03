@@ -27,6 +27,7 @@ import {
   HISTORICAL_EXECUTION_MODEL_ID,
   HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION,
 } from "@/lib/trader/execution/historical-execution-model.types";
+import { withIdhpsOfflineRebuild } from "@/lib/trader/execution/idhps-hot-path-counters";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 
@@ -113,112 +114,115 @@ async function buildHistoricalExecutionCostProvenance(
 export async function buildBacktestEvaluationExport(
   input: BacktestEvaluationExportInput,
 ): Promise<BacktestEvaluationExportBundle> {
-  assertNonEmptyStrategySignalIds(input.strategySignalIds);
+  return withIdhpsOfflineRebuild(async () => {
+    assertNonEmptyStrategySignalIds(input.strategySignalIds);
 
-  const executionMode = input.executionMode ?? "mock";
-  const sortedStrategySignalIds = sortStrategySignalIds(input.strategySignalIds);
-  const derivedAt = input.exportedAt;
+    const executionMode = input.executionMode ?? "mock";
+    const sortedStrategySignalIds = sortStrategySignalIds(input.strategySignalIds);
+    const derivedAt = input.exportedAt;
 
-  const { fillEvents, filledOrders } = await loadPaperFillEvents({
-    context: input.context,
-    orderRepository: input.orderRepository,
-    executionMode,
-  });
-
-  const [orgPeriodRollup, strategyEvaluations] = await Promise.all([
-    derivePaperPnLPeriod({
+    const { fillEvents, filledOrders } = await loadPaperFillEvents({
       context: input.context,
       orderRepository: input.orderRepository,
       executionMode,
-      window: input.window,
-      markPrices: input.markPrices,
-      fillEvents,
-      derivedAt,
-    }),
-    derivePaperStrategyEvaluations({
-      context: input.context,
-      orderRepository: input.orderRepository,
-      strategySignalIds: sortedStrategySignalIds,
-      window: input.window,
-      executionMode,
-      markPrices: input.markPrices,
-      fillEvents,
-      derivedAt,
-    }),
-  ]);
+      allowOfflineRebuild: true,
+    });
 
-  const strategiesWithNoFills = sortedStrategySignalIds.filter(
-    (strategySignalId) => !strategyHasInWindowFills(fillEvents, strategySignalId, input.window),
-  );
-
-  const valuationGaps = mergeValuationGaps(
-    orgPeriodRollup.periodValuationGaps,
-    ...strategyEvaluations.map((evaluation) => evaluation.periodValuationGaps),
-  );
-
-  const historicalExecutionCost = input.historicalExecutionModel
-    ? await buildHistoricalExecutionCostProvenance(
-        input.context,
-        input.orderRepository,
+    const [orgPeriodRollup, strategyEvaluations] = await Promise.all([
+      derivePaperPnLPeriod({
+        context: input.context,
+        orderRepository: input.orderRepository,
         executionMode,
-      )
-    : undefined;
+        window: input.window,
+        markPrices: input.markPrices,
+        fillEvents,
+        derivedAt,
+      }),
+      derivePaperStrategyEvaluations({
+        context: input.context,
+        orderRepository: input.orderRepository,
+        strategySignalIds: sortedStrategySignalIds,
+        window: input.window,
+        executionMode,
+        markPrices: input.markPrices,
+        fillEvents,
+        derivedAt,
+      }),
+    ]);
 
-  return {
-    schemaVersion: BACKTEST_EVALUATION_EXPORT_SCHEMA_VERSION,
-    organizationId: input.context.organizationId,
-    executionMode,
-    costModel: input.costModel,
-    window: input.window,
-    strategyId: input.strategyId,
-    strategyVersion: input.strategyVersion,
-    regimeLabel: input.regimeLabel,
-    datasetId: input.datasetId,
-    runId: input.runId,
-    split: input.split,
-    cycleCount: input.cycleCount,
-    orgPeriodRollup,
-    strategyEvaluations,
-    dataQuality: {
-      reconciliationStatus: "clean",
-      valuationGapCount: valuationGaps.length,
-      valuationGaps,
-      unrealizedAvailable: input.markPrices !== undefined,
-      strategiesWithNoFills,
-    },
-    provenance: {
-      source: "backtest_run",
-      runId: input.runId,
-      datasetId: input.datasetId,
-      split: input.split,
+    const strategiesWithNoFills = sortedStrategySignalIds.filter(
+      (strategySignalId) => !strategyHasInWindowFills(fillEvents, strategySignalId, input.window),
+    );
+
+    const valuationGaps = mergeValuationGaps(
+      orgPeriodRollup.periodValuationGaps,
+      ...strategyEvaluations.map((evaluation) => evaluation.periodValuationGaps),
+    );
+
+    const historicalExecutionCost = input.historicalExecutionModel
+      ? await buildHistoricalExecutionCostProvenance(
+          input.context,
+          input.orderRepository,
+          executionMode,
+        )
+      : undefined;
+
+    return {
+      schemaVersion: BACKTEST_EVALUATION_EXPORT_SCHEMA_VERSION,
+      organizationId: input.context.organizationId,
+      executionMode,
+      costModel: input.costModel,
+      window: input.window,
       strategyId: input.strategyId,
       strategyVersion: input.strategyVersion,
       regimeLabel: input.regimeLabel,
-      costModelVersion: input.costModel.version,
+      datasetId: input.datasetId,
+      runId: input.runId,
+      split: input.split,
       cycleCount: input.cycleCount,
-      fillEventCount: fillEvents.length,
-      filledOrderCount: filledOrders.length,
-      strategySignalIds: sortedStrategySignalIds,
-      readModelSlices: [
-        "paper-pnl.v1",
-        "paper-pnl-period.v1",
-        "paper-strategy-eval.v1",
-        "backtest-cost-model.v1",
-        ...(historicalExecutionCost ? (["historical-execution-cost.v1"] as const) : []),
-        ...(input.accountingState ? (["htr-pnl-report.v1"] as const) : []),
-      ],
-    },
-    historicalExecutionCost,
-    ...(input.accountingState
-      ? {
-          htrPnlReportV1: buildHtrPnlReportV1({
-            state: input.accountingState,
-            semanticDigest: input.htrPnlReportSemanticDigest ?? "0".repeat(64),
-          }),
-        }
-      : {}),
-    exportedAt: input.exportedAt,
-  };
+      orgPeriodRollup,
+      strategyEvaluations,
+      dataQuality: {
+        reconciliationStatus: "clean",
+        valuationGapCount: valuationGaps.length,
+        valuationGaps,
+        unrealizedAvailable: input.markPrices !== undefined,
+        strategiesWithNoFills,
+      },
+      provenance: {
+        source: "backtest_run",
+        runId: input.runId,
+        datasetId: input.datasetId,
+        split: input.split,
+        strategyId: input.strategyId,
+        strategyVersion: input.strategyVersion,
+        regimeLabel: input.regimeLabel,
+        costModelVersion: input.costModel.version,
+        cycleCount: input.cycleCount,
+        fillEventCount: fillEvents.length,
+        filledOrderCount: filledOrders.length,
+        strategySignalIds: sortedStrategySignalIds,
+        readModelSlices: [
+          "paper-pnl.v1",
+          "paper-pnl-period.v1",
+          "paper-strategy-eval.v1",
+          "backtest-cost-model.v1",
+          ...(historicalExecutionCost ? (["historical-execution-cost.v1"] as const) : []),
+          ...(input.accountingState ? (["htr-pnl-report.v1"] as const) : []),
+        ],
+      },
+      historicalExecutionCost,
+      ...(input.accountingState
+        ? {
+            htrPnlReportV1: buildHtrPnlReportV1({
+              state: input.accountingState,
+              semanticDigest: input.htrPnlReportSemanticDigest ?? "0".repeat(64),
+            }),
+          }
+        : {}),
+      exportedAt: input.exportedAt,
+    };
+  });
 }
 
 export async function buildBacktestEvaluationExportDocument(

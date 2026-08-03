@@ -61,10 +61,39 @@ jobs:
       - name: Validate FHV public ceremony packet contract
         run: corepack pnpm@10 validate:fhv-public-ceremony-packets
 
-  fhv-official-scale-gate:
-    name: fhv official scale gate
+  fhv-idhps-structural-gate:
+    name: fhv idhps structural complexity gate
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-idhps-structural.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Record FINAL_HEAD
+        run: git rev-parse HEAD > .artifacts/fhv-official-scale/FINAL_HEAD.txt
+      - name: Run IDHPS structural GS suite
+        run: corepack pnpm@10 test:fhv:idhps:structural
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-idhps-structural-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
+  fhv-idhps-process-parity-gate:
+    name: fhv idhps process parity gate
+    runs-on: ubuntu-latest
+    needs: [fhv-idhps-structural-gate]
+    timeout-minutes: 60
     env:
       DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
       FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
@@ -79,14 +108,134 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
-      - name: Run FHV official scale blocking proofs
-        timeout-minutes: 135
-        run: corepack pnpm@10 test:fhv:official-scale
+      - name: Record FINAL_HEAD
+        run: git rev-parse HEAD > .artifacts/fhv-official-scale/FINAL_HEAD.txt
+      - name: Run process-parity
+        run: corepack pnpm@10 test:fhv:official-scale:process-parity
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fhv-official-scale-artifacts
-          path: .artifacts/
+          name: fhv-idhps-process-parity-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
+  fhv-idhps-durability-gate:
+    name: fhv idhps durability fault-injection gate
+    runs-on: ubuntu-latest
+    needs: [fhv-idhps-process-parity-gate]
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-idhps-durability.sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data && pnpm db:migrate
+      - name: Run parent durability RED suite
+        run: corepack pnpm@10 test:fhv:idhps:durability
+
+  fhv-idhps-stability-gate:
+    name: fhv idhps stability gate
+    runs-on: ubuntu-latest
+    needs: [fhv-idhps-durability-gate]
+    timeout-minutes: 90
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-idhps-stability.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Run IDHPS stability ladder
+        run: corepack pnpm@10 test:fhv:idhps:stability
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-idhps-stability-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
+  fhv-idhps-canonical-probe-gate:
+    name: fhv idhps canonical probe gate
+    runs-on: ubuntu-latest
+    needs: [fhv-idhps-stability-gate]
+    timeout-minutes: 60
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+      FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND: "1000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Run canonical probe (≥1000 bars/s feasibility)
+        run: corepack pnpm@10 test:fhv:official-scale:probe
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-idhps-probe-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
+  fhv-idhps-full-corpus-gate:
+    name: fhv idhps full corpus gate
+    runs-on: ubuntu-latest
+    needs: [fhv-idhps-canonical-probe-gate]
+    timeout-minutes: 180
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Restore probe metrics (feasibility precondition)
+        uses: actions/download-artifact@v4
+        with:
+          name: fhv-idhps-probe-artifacts
+          path: .artifacts/fhv-official-scale
+      - name: Disk preflight + migrate
+        run: |
+          mkdir -p .data .artifacts/fhv-official-scale
+          pnpm db:migrate
+          git rev-parse HEAD > .artifacts/fhv-official-scale/FINAL_HEAD.txt
+          AVAILABLE=$(df -PB1 . | awk 'NR==2 {print $4}')
+          echo "availableBytes=$AVAILABLE"
+          test "$AVAILABLE" -ge 28000000000 || echo "WARN: availableBytes below 28GiB floor; projection must still satisfy 70/30"
+          test -f .artifacts/fhv-official-scale/fhv-official-scale-metrics.v1.json
+      - name: Run full-corpus only
+        timeout-minutes: 125
+        run: corepack pnpm@10 test:fhv:official-scale:full-corpus
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-idhps-full-corpus-artifacts
+          path: .artifacts/fhv-official-scale/
           retention-days: 7
 
   fhv-release-validation-gate:
@@ -167,7 +316,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, tenant-isolation, fhv-t4a-packet, fhv-public-ceremony-packet, fhv-official-scale-gate, fhv-release-validation-gate]
+    needs: [lint, typecheck, test, tenant-isolation, fhv-t4a-packet, fhv-public-ceremony-packet, fhv-idhps-full-corpus-gate, fhv-release-validation-gate]
     env:
       DATABASE_URL: file:./.data/ci-build.sqlite
     steps:

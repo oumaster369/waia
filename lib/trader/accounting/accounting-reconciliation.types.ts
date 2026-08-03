@@ -9,6 +9,11 @@ export type AccountingReconciliationInput = {
   pnlReport?: HtrPnlReportV1;
   inventoryOpenQtyBySymbol?: Record<string, string>;
   cashEvents?: Array<{ fillId: string; netCashEffect: string }>;
+  /**
+   * When set, cash-event integrity only requires these fill IDs (current epoch).
+   * Defaults to `state.consumedFillIds` for full-history ledgers.
+   */
+  cashEventIntegrityFillIds?: string[];
   equitySeriesTerminal?: string;
   expectedAccountingSequence?: number;
 };

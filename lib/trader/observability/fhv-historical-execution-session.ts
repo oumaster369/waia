@@ -1,4 +1,5 @@
 import { getDb } from "@/db/client";
+import { enableIdhpsProductionBans } from "@/lib/trader/execution/idhps-hot-path-counters";
 import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
 import type { InMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
 import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
@@ -25,6 +26,7 @@ export async function seedFhvHistoricalExecutionSession(input: {
     // Official FHV path must not flood stdout with per-transition trader telemetry.
     telemetrySink: FHV_NOOP_TELEMETRY_SINK,
   });
+  enableIdhpsProductionBans();
   const db = getDb();
   seedFhvSqliteResearchOrganization({
     db,

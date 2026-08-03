@@ -1718,6 +1718,12 @@ export const traderOrders = sqliteTable(
     ),
     index("trader_orders_org_venue_symbol_idx").on(t.organizationId, t.venue, t.symbol),
     index("trader_orders_exchange_order_id_idx").on(t.exchangeOrderId),
+    index("trader_orders_org_mode_venue_state_idx").on(
+      t.organizationId,
+      t.executionMode,
+      t.venue,
+      t.state,
+    ),
   ],
 );
 
@@ -1776,6 +1782,12 @@ export const traderFills = sqliteTable(
     }).onDelete("cascade"),
     uniqueIndex("trader_fills_order_exchange_trade_id_unique").on(t.orderId, t.exchangeTradeId),
     index("trader_fills_org_order_idx").on(t.organizationId, t.orderId),
+    index("trader_fills_org_order_executed_id_idx").on(
+      t.organizationId,
+      t.orderId,
+      t.executedAt,
+      t.id,
+    ),
   ],
 );
 

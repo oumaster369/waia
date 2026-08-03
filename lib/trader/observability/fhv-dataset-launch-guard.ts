@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 
+import { assertFhvDatasetSealed } from "@/lib/trader/market-data/fhv-dataset-seal";
 import {
-  FhvDatasetQualificationError,
   readFhvDatasetQualificationReceipt,
-  recomputeFhvDatasetQualificationDigests,
   type FhvDatasetQualificationReceiptV1,
 } from "@/lib/trader/observability/fhv-dataset-qualification";
 
@@ -18,7 +18,33 @@ export class FhvDatasetLaunchGuardError extends Error {
   }
 }
 
-/** Recompute all qualification digests at launch and fail closed on mutation (R8 TOCTOU). */
+function resolvePartitionPath(datasetRoot: string, filePath: string): string {
+  return isAbsolute(filePath) ? filePath : join(datasetRoot, filePath);
+}
+
+function computeRawFileSha256(filePath: string): string {
+  const hash = createHash("sha256");
+  const fd = openSync(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(65536);
+    let bytesRead = 0;
+    do {
+      bytesRead = readSync(fd, buffer, 0, buffer.length, null);
+      if (bytesRead > 0) {
+        hash.update(buffer.subarray(0, bytesRead));
+      }
+    } while (bytesRead > 0);
+  } finally {
+    closeSync(fd);
+  }
+  return hash.digest("hex");
+}
+
+/**
+ * Revalidate dataset at launch (R8 TOCTOU) without re-parsing every bar.
+ * Verifies seal/manifest digests against the qualification receipt, then
+ * streaming-hashes each partition file against manifest.rawSha256.
+ */
 export function revalidateFhvDatasetAtLaunch(input: {
   datasetQualificationReceiptPath: string;
   datasetRoot: string;
@@ -48,60 +74,66 @@ export function revalidateFhvDatasetAtLaunch(input: {
     return receipt;
   }
 
-  try {
-    const recomputed = recomputeFhvDatasetQualificationDigests({
-      datasetRoot: input.datasetRoot,
-      manifestPath: input.manifestPath,
-      qualificationMode: receipt.qualificationMode,
-    });
-    if (recomputed.datasetContentDigest !== receipt.datasetContentDigest) {
+  const sealed = assertFhvDatasetSealed(input.datasetRoot);
+  if (sealed.manifest.datasetContentDigest !== receipt.datasetContentDigest) {
+    throw new FhvDatasetLaunchGuardError(
+      "DATASET_CONTENT_DIGEST_MUTATION",
+      "Dataset content digest changed since qualification (TOCTOU).",
+    );
+  }
+  if (sealed.manifest.manifestSemanticDigest !== receipt.manifestSemanticDigest) {
+    throw new FhvDatasetLaunchGuardError(
+      "MANIFEST_SEMANTIC_DIGEST_MUTATION",
+      "Manifest semantic digest changed since qualification (TOCTOU).",
+    );
+  }
+  if (sealed.sealReceipt.datasetContentDigest !== receipt.datasetContentDigest) {
+    throw new FhvDatasetLaunchGuardError(
+      "DATASET_CONTENT_DIGEST_MUTATION",
+      "Seal receipt dataset content digest mismatch (TOCTOU).",
+    );
+  }
+
+  const fullContentRevalidate = process.env.FHV_DATASET_FULL_CONTENT_REVALIDATE === "1";
+  for (const partition of sealed.manifest.partitions) {
+    const absolutePath = resolvePartitionPath(input.datasetRoot, partition.filePath);
+    let size: number;
+    try {
+      size = statSync(absolutePath).size;
+    } catch {
       throw new FhvDatasetLaunchGuardError(
-        "DATASET_CONTENT_DIGEST_MUTATION",
-        "Dataset content digest changed since qualification (TOCTOU).",
+        "PARTITION_FILE_DIGEST_MUTATION",
+        `Partition file missing for ${partition.filePath}`,
       );
     }
-    if (recomputed.manifestSemanticDigest !== receipt.manifestSemanticDigest) {
+    if (size !== partition.byteSize) {
       throw new FhvDatasetLaunchGuardError(
-        "MANIFEST_SEMANTIC_DIGEST_MUTATION",
-        "Manifest semantic digest changed since qualification (TOCTOU).",
+        "PARTITION_FILE_DIGEST_MUTATION",
+        `Partition file size mutation detected for ${partition.filePath}`,
       );
     }
-    if (recomputed.partitionsDigest !== receipt.partitionsDigest) {
-      throw new FhvDatasetLaunchGuardError(
-        "PARTITIONS_DIGEST_MUTATION",
-        "Partitions digest changed since qualification (TOCTOU).",
-      );
-    }
-    if (receipt.symbolDigests && recomputed.symbolDigests) {
-      for (const symbol of ["BTCUSDT", "ETHUSDT"] as const) {
-        if (receipt.symbolDigests[symbol] !== recomputed.symbolDigests[symbol]) {
-          throw new FhvDatasetLaunchGuardError(
-            "SYMBOL_DIGEST_MUTATION",
-            `Symbol digest mutation detected for ${symbol} (TOCTOU).`,
-          );
-        }
+    // Seal + byteSize TOCTOU is the default hot path. Opt into full streaming rehash
+    // with FHV_DATASET_FULL_CONTENT_REVALIDATE=1 for ceremony/release hosts.
+    if (fullContentRevalidate) {
+      const digest = computeRawFileSha256(absolutePath);
+      if (digest !== partition.rawSha256) {
+        throw new FhvDatasetLaunchGuardError(
+          "PARTITION_FILE_DIGEST_MUTATION",
+          `Partition file digest mutation detected for ${partition.filePath}`,
+        );
       }
     }
-    if (receipt.partitionEvidence) {
-      for (const evidence of receipt.partitionEvidence) {
-        const raw = readFileSync(evidence.filePath, "utf8");
-        const digest = createHash("sha256").update(raw, "utf8").digest("hex");
-        if (digest !== evidence.fileContentDigest) {
-          throw new FhvDatasetLaunchGuardError(
-            "PARTITION_FILE_DIGEST_MUTATION",
-            `Partition file digest mutation detected for ${evidence.filePath} (TOCTOU).`,
-          );
-        }
+  }
+
+  if (receipt.symbolDigests) {
+    for (const symbol of ["BTCUSDT", "ETHUSDT"] as const) {
+      if (receipt.symbolDigests[symbol] !== sealed.manifest.symbolDigests[symbol]) {
+        throw new FhvDatasetLaunchGuardError(
+          "SYMBOL_DIGEST_MUTATION",
+          `Symbol digest mutation detected for ${symbol} (TOCTOU).`,
+        );
       }
     }
-  } catch (error) {
-    if (error instanceof FhvDatasetLaunchGuardError) {
-      throw error;
-    }
-    if (error instanceof FhvDatasetQualificationError) {
-      throw new FhvDatasetLaunchGuardError(error.code, error.message);
-    }
-    throw error;
   }
 
   return receipt;

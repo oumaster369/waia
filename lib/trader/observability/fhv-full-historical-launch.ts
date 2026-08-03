@@ -864,9 +864,15 @@ async function runFhvFullHistoricalLaunchBacktest(input: {
     resumeFromCycle: input.launchExecution.resumeFromCycle,
   });
 
+  const digestStartedAt = performance.now();
   const semanticReproDigest = computeReplayReproContentDigest(
     stripRunIdentityForControlReplay(backtest.exportDocument),
   );
+  if (process.env.FHV_IDHPS_TIMINGS === "1") {
+    console.error(
+      `[fhv-idhps-timings] semantic_repro_digest_ms=${(performance.now() - digestStartedAt).toFixed(1)}`,
+    );
+  }
 
   const sourceExhausted =
     input.launchInput.maxCycles == null ? true : backtest.cycleCount < input.launchInput.maxCycles;
@@ -960,6 +966,17 @@ export async function executeFhvFullHistoricalLaunch(
     syntheticScaleAuthority,
   } = validateFhvFullHistoricalLaunchInput(input);
 
+  const timingsEnabled = process.env.FHV_IDHPS_TIMINGS === "1";
+  const mark = (label: string, startedAt: number): number => {
+    if (timingsEnabled) {
+      console.error(
+        `[fhv-idhps-timings] ${label}_ms=${(performance.now() - startedAt).toFixed(1)}`,
+      );
+    }
+    return performance.now();
+  };
+  let timingCursor = performance.now();
+
   if (!input.boundedFixture && input.datasetRoot && input.manifestPath) {
     revalidateFhvDatasetAtLaunch({
       datasetQualificationReceiptPath: input.datasetQualificationReceiptPath,
@@ -967,6 +984,7 @@ export async function executeFhvFullHistoricalLaunch(
       manifestPath: input.manifestPath,
     });
   }
+  timingCursor = mark("revalidate_dataset", timingCursor);
 
   const { receiptPath, receipt } = writeFhvFullLaunchReceipt({
     configurationFreeze,
@@ -991,6 +1009,7 @@ export async function executeFhvFullHistoricalLaunch(
     controlReplayReceiptDigest,
     leaseOwner: `${input.operatorId}@${input.organizationId}`,
   });
+  timingCursor = mark("prepare_launch_execution", timingCursor);
 
   const result = await runFhvFullHistoricalLaunchBacktest({
     launchInput: input,
@@ -1003,6 +1022,7 @@ export async function executeFhvFullHistoricalLaunch(
     launchExecution,
     launchReceiptDigest: receipt.launchReceiptDigest,
   });
+  mark("run_launch_backtest_wrapper", timingCursor);
 
   return { ...result, receiptPath };
 }

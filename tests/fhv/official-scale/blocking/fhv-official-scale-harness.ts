@@ -462,7 +462,18 @@ export function resolveFhvOfficialScaleCheckpointBytes(runDir: string): {
   try {
     const bundle = readFhvExecutionCheckpointBundle(checkpointDir);
     const checkpointBytes = bundle.manifest.files.reduce((sum, entry) => sum + entry.byteCount, 0);
-    return { checkpointBytes, checkpointBackupDurationMs: null };
+    let checkpointBackupDurationMs: number | null = null;
+    const metricsPath = join(checkpointDir, "idhps-checkpoint-metrics.v1.json");
+    if (existsSync(metricsPath)) {
+      const metrics = JSON.parse(readFileSync(metricsPath, "utf8")) as {
+        checkpointBackupDurationMs?: number;
+      };
+      checkpointBackupDurationMs =
+        typeof metrics.checkpointBackupDurationMs === "number"
+          ? metrics.checkpointBackupDurationMs
+          : null;
+    }
+    return { checkpointBytes, checkpointBackupDurationMs };
   } catch {
     return { checkpointBytes: null, checkpointBackupDurationMs: null };
   }
@@ -487,15 +498,18 @@ export function evaluateFhvOfficialScaleDiskFeasibility(input: {
 }): { projectedAdditionalBytes: number; pass: boolean } {
   const stats = statfsSync(input.artifactRoot);
   const blockSize = stats.bsize;
-  const diskFreeBytes = stats.bfree * blockSize;
-  const diskTotalBytes = stats.blocks * blockSize;
+  // Prefer bavail (unprivileged available); fall back to bfree.
+  const diskFreeBytes = Number(stats.bavail ?? stats.bfree) * Number(blockSize);
   const runDirBytes = measureBoundedDirectoryBytes(input.runDir) ?? 0;
   const projectedAdditionalBytes = Math.ceil(
     (runDirBytes / Math.max(input.cycleCount, 1)) * FHV_OFFICIAL_TOTAL_BARS,
   );
+  // Plan §9: peak ≤ 70% of availableBytes AND free-after-peak ≥ 30% of availableBytes
+  // (equivalent inequalities when free-after = available − peak).
   const withinAvailable =
     projectedAdditionalBytes <= diskFreeBytes * DISK_PROJECTED_MAX_FRACTION_OF_AVAILABLE;
-  const reserveAfter = (diskFreeBytes - projectedAdditionalBytes) / Math.max(diskTotalBytes, 1);
+  const projectedFreeBytesAfterPeak = diskFreeBytes - projectedAdditionalBytes;
+  const reserveAfter = projectedFreeBytesAfterPeak / Math.max(diskFreeBytes, Number.EPSILON);
   const pass = withinAvailable && reserveAfter >= DISK_MIN_FREE_RESERVE_FRACTION;
   return { projectedAdditionalBytes, pass };
 }

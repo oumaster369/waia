@@ -39,6 +39,23 @@ import {
   requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
+import {
+  assertIdhpsHotPathAllowsListOrders,
+  bumpIdhpsCounter,
+} from "@/lib/trader/execution/idhps-hot-path-counters";
+import {
+  getIdhpsSession,
+  invalidateIdhpsPortfolioSizingCache,
+} from "@/lib/trader/execution/idhps-session-registry";
+import { IdhpsFillIdempotencyConflictError } from "@/lib/trader/execution/idhps-prepared-statements";
+import {
+  applyFillQtyToIdhpsInventoryMirror,
+  applyOrderToIdhpsInventoryMirror,
+} from "@/lib/trader/paper/idhps-inventory-mirror";
+import { applyFillToIdhpsPortfolioSizing } from "@/lib/trader/portfolio/idhps-portfolio-sizing";
+import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
+import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-constants";
+import { addDecimal } from "@/lib/trader/risk/numeric";
 
 export type SqliteOrderRepositoryClockDeps = {
   newId?: () => string;
@@ -176,6 +193,10 @@ function resolveExistingOrderForCreate(existing: OrderRow, input: CreateOrderInp
 }
 
 export function getOrderByIdSqlite(db: WaiaDb, context: OrgContext, id: string): OrderRow | null {
+  const idhps = getIdhpsSession();
+  if (idhps) {
+    return idhps.prepared.getOrderByIdPrepared(context, id);
+  }
   const row = db
     .select()
     .from(traderOrders)
@@ -221,6 +242,13 @@ export function listOpenOrdersSqlite(
   context: OrgContext,
   filter?: OpenOrdersFilter,
 ): OrderRow[] {
+  const idhps = getIdhpsSession();
+  // Historical FHV/HTR path always uses HTX; default venue so PS-2 is used when omitted.
+  if (idhps && filter?.executionMode) {
+    const venue = filter.venue ?? "HTX";
+    return idhps.prepared.listOpenOrdersPrepared(context, filter.executionMode, venue);
+  }
+
   const conditions = [
     orgOrderConditions(context),
     notInArray(traderOrders.state, [...TERMINAL_ORDER_STATES]),
@@ -233,12 +261,15 @@ export function listOpenOrdersSqlite(
     conditions.push(eq(traderOrders.venue, filter.venue));
   }
 
-  return db
+  const rows = db
     .select()
     .from(traderOrders)
     .where(and(...conditions))
     .all()
     .map(mapOrderRow);
+  bumpIdhpsCounter("listOpenOrdersSqliteCalls");
+  bumpIdhpsCounter("listOpenOrdersSqliteRows", rows.length);
+  return rows;
 }
 
 export function listOrdersSqlite(
@@ -246,6 +277,8 @@ export function listOrdersSqlite(
   context: OrgContext,
   filter?: OpenOrdersFilter,
 ): OrderRow[] {
+  assertIdhpsHotPathAllowsListOrders();
+  bumpIdhpsCounter("listOrdersSqliteCalls");
   const conditions = [orgOrderConditions(context)];
 
   if (filter?.executionMode) {
@@ -255,12 +288,14 @@ export function listOrdersSqlite(
     conditions.push(eq(traderOrders.venue, filter.venue));
   }
 
-  return db
+  const rows = db
     .select()
     .from(traderOrders)
     .where(and(...conditions))
     .all()
     .map(mapOrderRow);
+  bumpIdhpsCounter("listOrdersSqliteRows", rows.length);
+  return rows;
 }
 
 export function listEventsSqlite(
@@ -284,8 +319,30 @@ export function listEventsSqlite(
 }
 
 export function listFillsSqlite(db: WaiaDb, context: OrgContext, orderId: string): FillRow[] {
+  const idhps = getIdhpsSession();
+  if (idhps) {
+    const all: FillRow[] = [];
+    let cursorExecutedAtMs = -1;
+    let cursorId = "";
+    for (;;) {
+      const page = idhps.prepared.listFillsSincePrepared(
+        context,
+        orderId,
+        cursorExecutedAtMs,
+        cursorId,
+        256,
+      );
+      if (page.length === 0) break;
+      all.push(...page);
+      const last = page[page.length - 1]!;
+      cursorExecutedAtMs = last.executedAt.getTime();
+      cursorId = last.id;
+      if (page.length < 256) break;
+    }
+    return all;
+  }
   const scoped = requireOrgContext(context.organizationId);
-  return db
+  const rows = db
     .select()
     .from(traderFills)
     .where(
@@ -293,6 +350,9 @@ export function listFillsSqlite(db: WaiaDb, context: OrgContext, orderId: string
     )
     .all()
     .map(mapFillRow);
+  bumpIdhpsCounter("listFillsSqliteCalls");
+  bumpIdhpsCounter("listFillsSqliteRows", rows.length);
+  return rows;
 }
 
 export function createOrderSqlite(
@@ -374,6 +434,14 @@ export function createOrderSqlite(
   if (!created) {
     throw new Error("[trader] order insert failed");
   }
+  const idhps = getIdhpsSession();
+  if (idhps) {
+    applyOrderToIdhpsInventoryMirror(idhps.inventory, {
+      ...created,
+      symbol: normalizeSymbolForHistoricalExecution(created.symbol),
+    });
+    invalidateIdhpsPortfolioSizingCache();
+  }
   return created;
 }
 
@@ -449,6 +517,14 @@ export function transitionOrderSqlite(
   if (!updated) {
     throw new OrderNotFoundError(input.orderId);
   }
+  const idhpsAfterTransition = getIdhpsSession();
+  if (idhpsAfterTransition) {
+    applyOrderToIdhpsInventoryMirror(idhpsAfterTransition.inventory, {
+      ...updated,
+      symbol: normalizeSymbolForHistoricalExecution(updated.symbol),
+    });
+    invalidateIdhpsPortfolioSizingCache();
+  }
   return updated;
 }
 
@@ -461,27 +537,7 @@ export function recordFillSqlite(
 ): FillRow {
   const newId = resolveOrderNewId(deps);
   const scoped = requireOrgContext(context.organizationId);
-  const existingFill = db
-    .select()
-    .from(traderFills)
-    .where(
-      and(
-        eq(traderFills.orderId, input.orderId),
-        eq(traderFills.exchangeTradeId, input.exchangeTradeId),
-        orgScopedWhere(traderFills.organizationId, scoped),
-      ),
-    )
-    .limit(1)
-    .all()[0];
-
-  if (existingFill) {
-    const mapped = mapFillRow(existingFill);
-    if (!fillPayloadMatches(mapped, input)) {
-      throw new FillConflictError(input.orderId, input.exchangeTradeId);
-    }
-    return mapped;
-  }
-
+  const idhps = getIdhpsSession();
   const parent = getOrderByIdSqlite(db, context, input.orderId);
   if (!parent) {
     throw new OrderNotFoundError(input.orderId);
@@ -496,9 +552,17 @@ export function recordFillSqlite(
   const fee = input.fee ?? "0";
   const feeAsset = input.feeAsset ?? "";
 
-  try {
-    db.insert(traderFills)
-      .values({
+  let mapped: FillRow;
+  let isNewFill = true;
+
+  if (idhps) {
+    try {
+      const existing = idhps.prepared.getFillByOrderExchangeTradePrepared(
+        context,
+        input.orderId,
+        input.exchangeTradeId,
+      );
+      mapped = idhps.prepared.appendFillPrepared({
         id,
         organizationId: scoped.organizationId,
         orderId: input.orderId,
@@ -507,16 +571,18 @@ export function recordFillSqlite(
         quantity: input.quantity,
         fee,
         feeAsset,
-        executedAt: input.executedAt,
-        createdAt: now,
-      })
-      .run();
-  } catch (error) {
-    if (!isUniqueConstraintError(error)) {
+        executedAtMs: input.executedAt.getTime(),
+        createdAtMs: now.getTime(),
+      });
+      isNewFill = existing == null;
+    } catch (error) {
+      if (error instanceof IdhpsFillIdempotencyConflictError) {
+        throw new FillConflictError(input.orderId, input.exchangeTradeId);
+      }
       throw error;
     }
-
-    const raced = db
+  } else {
+    const existingFill = db
       .select()
       .from(traderFills)
       .where(
@@ -529,21 +595,89 @@ export function recordFillSqlite(
       .limit(1)
       .all()[0];
 
-    if (!raced) {
-      throw error;
+    if (existingFill) {
+      mapped = mapFillRow(existingFill);
+      if (!fillPayloadMatches(mapped, input)) {
+        throw new FillConflictError(input.orderId, input.exchangeTradeId);
+      }
+      return mapped;
     }
 
-    const mapped = mapFillRow(raced);
-    if (!fillPayloadMatches(mapped, input)) {
-      throw new FillConflictError(input.orderId, input.exchangeTradeId);
+    try {
+      db.insert(traderFills)
+        .values({
+          id,
+          organizationId: scoped.organizationId,
+          orderId: input.orderId,
+          exchangeTradeId: input.exchangeTradeId,
+          price: input.price,
+          quantity: input.quantity,
+          fee,
+          feeAsset,
+          executedAt: input.executedAt,
+          createdAt: now,
+        })
+        .run();
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const raced = db
+        .select()
+        .from(traderFills)
+        .where(
+          and(
+            eq(traderFills.orderId, input.orderId),
+            eq(traderFills.exchangeTradeId, input.exchangeTradeId),
+            orgScopedWhere(traderFills.organizationId, scoped),
+          ),
+        )
+        .limit(1)
+        .all()[0];
+
+      if (!raced) {
+        throw error;
+      }
+
+      mapped = mapFillRow(raced);
+      if (!fillPayloadMatches(mapped, input)) {
+        throw new FillConflictError(input.orderId, input.exchangeTradeId);
+      }
+      return mapped;
     }
-    return mapped;
+
+    const inserted = db.select().from(traderFills).where(eq(traderFills.id, id)).limit(1).all()[0];
+
+    if (!inserted) {
+      throw new Error("[trader] fill insert failed");
+    }
+    mapped = mapFillRow(inserted);
   }
 
-  const inserted = db.select().from(traderFills).where(eq(traderFills.id, id)).limit(1).all()[0];
-
-  if (!inserted) {
-    throw new Error("[trader] fill insert failed");
+  if (idhps && isNewFill) {
+    const symbol = normalizeSymbolForHistoricalExecution(parent.symbol);
+    const side = parent.side === "sell" ? "sell" : "buy";
+    applyFillQtyToIdhpsInventoryMirror(idhps.inventory, {
+      orderId: input.orderId,
+      symbol,
+      side,
+      quantity: input.quantity,
+    });
+    applyOrderToIdhpsInventoryMirror(idhps.inventory, {
+      ...parent,
+      symbol,
+      filledQuantity: addDecimal(parent.filledQuantity, input.quantity),
+    });
+    applyFillToIdhpsPortfolioSizing(idhps.accountRisk, {
+      symbol: parent.symbol,
+      side,
+      price: input.price,
+      quantity: input.quantity,
+      fee,
+      startingBalanceUsdt: HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
+    });
+    invalidateIdhpsPortfolioSizingCache();
   }
 
   if (
@@ -564,7 +698,7 @@ export function recordFillSqlite(
     );
   }
 
-  return mapFillRow(inserted);
+  return mapped;
 }
 
 export function recordFillProgressSqlite(

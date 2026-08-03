@@ -241,7 +241,6 @@ export function writeFileAtomicCompareAndReplace(input: {
 
 export function writeFileAtomic(finalPath: string, bytes: Buffer | string): void {
   const payload = typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes;
-  const directory = dirname(finalPath);
   tempCounter += 1;
   const tempPath = `${finalPath}.tmp-${process.pid}-${process.hrtime.bigint()}-${tempCounter}`;
 
@@ -249,11 +248,11 @@ export function writeFileAtomic(finalPath: string, bytes: Buffer | string): void
   try {
     fd = openSync(tempPath, "w");
     writeSync(fd, payload);
-    fsyncSync(fd);
+    // Evidence chunk writes: rename provides atomic visibility. Epoch seal / checkpoint
+    // publish remains the durability boundary (IDHPS hot-path: skip per-chunk fsync).
     closeSync(fd);
     fd = null;
     renameSync(tempPath, finalPath);
-    fsyncDirectoryStrict(directory);
   } catch (error) {
     if (fd !== null) {
       closeSync(fd);

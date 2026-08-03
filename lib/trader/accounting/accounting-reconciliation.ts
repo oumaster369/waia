@@ -113,7 +113,8 @@ export function reconcileAccountingInvariants(
         ),
       );
     }
-    for (const fillId of state.consumedFillIds) {
+    const integrityFillIds = input.cashEventIntegrityFillIds ?? state.consumedFillIds;
+    for (const fillId of integrityFillIds) {
       if (!seen.has(fillId)) {
         violations.push(
           violation(

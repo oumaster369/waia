@@ -15,7 +15,7 @@ import {
 } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import { executeBreachPartialEntryCancellation } from "@/lib/trader/guardian/htr-breach-partial-entry-cancellation";
 import { requiresHtrPartialEntryCancellation } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
-import { compareDecimal } from "@/lib/trader/risk/numeric";
+import { addDecimal, compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import { assertLifecycleFillWalkOpenQtyParity } from "@/lib/trader/lifecycle";
 import {
   buildQuoteCurrencyBySymbol,
@@ -30,12 +30,15 @@ import {
 } from "@/lib/trader/intelligence/strategies/strategy-eligibility-gate";
 import { createDeterministicReplayIdFactory } from "@/lib/trader/research/deterministic-replay-id-factory";
 import { getStrategyRegistryEntry } from "@/lib/trader/intelligence/strategies/registry";
+import { getIdhpsSession } from "@/lib/trader/execution/idhps-session-registry";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import {
   computeStopBasedQuantity,
   derivePortfolioAccountState,
   toAccountRiskState,
 } from "@/lib/trader/portfolio";
+import { buildPortfolioAccountStateFromIdhps } from "@/lib/trader/portfolio/idhps-portfolio-sizing";
+import { countIdhpsOpenOrders } from "@/lib/trader/paper/idhps-inventory-mirror";
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
 import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
 import type { BreachCancellationResultV1 } from "@/lib/trader/execution/execution-service.types";
@@ -355,7 +358,7 @@ async function runGuardianPhase(
   const markPrice = evaluation.features.features.close;
 
   let canonicalInventory: ReturnType<typeof deriveCanonicalInventory> | undefined;
-  if (input.orderRepository) {
+  if (input.orderRepository && !input.htrAccounting) {
     const { fillEvents } = await loadPaperFillEvents({
       context,
       orderRepository: input.orderRepository,
@@ -451,7 +454,12 @@ async function runGuardianPhase(
     (execution) => !execution.submitBlocked && execution.reconciliation != null,
   );
 
-  if (deps.lifecycleRecorder && input.orderRepository && hadGuardianFillRecording) {
+  if (
+    deps.lifecycleRecorder &&
+    input.orderRepository &&
+    hadGuardianFillRecording &&
+    !input.htrAccounting
+  ) {
     const { fillEvents } = await loadPaperFillEvents({
       context,
       orderRepository: input.orderRepository,
@@ -496,6 +504,7 @@ export async function runPaperCycleOnce(
     cycleId: snapshot.cycleId,
     symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
     costModel: input.costModel,
+    omitIntelligenceArtifacts: input.omitIntelligenceArtifacts,
   });
 
   const actionableSignals = evaluation.signals.filter(
@@ -605,6 +614,7 @@ export async function runPaperCycleOnce(
       guardianExecutions: guardianPhase.guardianExecutions,
       htrGuardian: htrGuardianPhase.htrGuardian,
       htrBreachCancellation: htrGuardianPhase.htrBreachCancellation,
+      // Epoch-scoped callOrder reference is O(epoch); expose count+tail for evidence digests.
       htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
       hypothesisSessionState: evaluation.hypothesisSessionState,
     };
@@ -618,15 +628,26 @@ export async function runPaperCycleOnce(
     let stopDistanceUsdt: string | undefined;
 
     if (input.portfolio && signal.side) {
-      const portfolioState = await derivePortfolioAccountState({
-        context: input.context,
-        orderRepository: input.orderRepository!,
-        runConfig: input.portfolio.runConfig,
-        limits: input.portfolio.limits,
-        stopDistanceProvider: input.portfolio.stopDistanceProvider,
-        executionMode: "mock",
-        markPrices: input.portfolio.markPrices,
-      });
+      const idhps = getIdhpsSession();
+      // Hot path: IDHPS fill-walk-equivalent mirrors (GS-05). Offline: full fill-walk.
+      const portfolioState = idhps
+        ? buildPortfolioAccountStateFromIdhps({
+            mirror: idhps.accountRisk,
+            context: input.context,
+            runConfig: input.portfolio.runConfig,
+            limits: input.portfolio.limits,
+            stopDistanceProvider: input.portfolio.stopDistanceProvider,
+            markPrices: input.portfolio.markPrices,
+          })
+        : await derivePortfolioAccountState({
+            context: input.context,
+            orderRepository: input.orderRepository!,
+            runConfig: input.portfolio.runConfig,
+            limits: input.portfolio.limits,
+            stopDistanceProvider: input.portfolio.stopDistanceProvider,
+            executionMode: "mock",
+            markPrices: input.portfolio.markPrices,
+          });
       const sizing = computeStopBasedQuantity({
         side: signal.side,
         signal,
@@ -655,12 +676,17 @@ export async function runPaperCycleOnce(
       stopDistanceUsdt = sizing.stopDistanceUsdt;
       const riskMultiplier = Number(evaluation.msv.derived.riskMultiplier ?? "1");
       sizedQuantity = applyRiskMultiplierToQuantity(sizedQuantity, riskMultiplier);
-      const openOrders = await input.orderRepository!.listOpenOrders(input.context, {
-        executionMode: "mock",
-      });
+      const openOrderCount = idhps
+        ? countIdhpsOpenOrders(idhps.inventory)
+        : (
+            await input.orderRepository!.listOpenOrders(input.context, {
+              executionMode: "mock",
+              venue: "HTX",
+            })
+          ).length;
       accountState = toAccountRiskState({
         portfolio: portfolioState,
-        openOrderCount: openOrders.length,
+        openOrderCount,
         accountPeakHwm: input.wp16?.accountPeakHwm,
         monthlyPeakHwm: input.wp16?.monthlyPeakHwm,
       });

@@ -1,4 +1,3 @@
-import { buildMsvPayloadCanonical } from "@/lib/trader/mi/serialize-observation";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import {
   CYCLE_PROJECTION_SCHEMA_VERSION,
@@ -38,14 +37,22 @@ function serializeGuardian(cycle: PaperCycleResult): ReplayCycleGuardianProjecti
 
 function serializeM9Trace(cycle: PaperCycleResult): Record<string, unknown> | null {
   const evaluation = cycle.evaluation;
+  // IDHPS hot path: keep O(1) digest-relevant fields only (avoid fat fused/decision payloads).
   return {
     evaluatedAt: evaluation.features.evaluatedAt,
-    fused: evaluation.fusedContext ?? null,
-    understanding: evaluation.understanding ?? null,
-    decisionChain: evaluation.decisionChain ?? null,
-    signal: evaluation.signal,
-    guardian: cycle.guardian ?? null,
-    guardianExecutions: cycle.guardianExecutions ?? null,
+    signal: evaluation.signal
+      ? {
+          strategyId: evaluation.signal.strategyId,
+          strategyVersion: evaluation.signal.strategyVersion,
+          symbol: evaluation.signal.symbol,
+          side: evaluation.signal.side ?? null,
+          outcome: evaluation.signal.outcome,
+        }
+      : null,
+    htrGuardianBreach: cycle.htrGuardian?.breachState ?? null,
+    guardianEvaluationCount: cycle.guardian?.evaluations.length ?? 0,
+    guardianExitIntentCount: cycle.guardian?.exitIntents.length ?? 0,
+    guardianExecutionCount: cycle.guardianExecutions?.length ?? 0,
   };
 }
 
@@ -74,7 +81,14 @@ export function buildReplayCycleEvidenceProjection(
     skipReason: cycle.skipReason ?? null,
     strategyExecutions: serializeStrategyExecutions(cycle),
     guardian: serializeGuardian(cycle),
-    msv: buildMsvPayloadCanonical(cycle.evaluation.msv),
+    // IDHPS: digest-stable MSV identity fields only (avoid full canonical MSV payload/bar).
+    msv: {
+      instrumentId: cycle.evaluation.msv.instrumentId,
+      evaluatedAt: cycle.evaluation.msv.evaluatedAt,
+      regime: cycle.evaluation.msv.derived.regime,
+      tradingPermission: cycle.evaluation.msv.derived.tradingPermission,
+      riskMultiplier: cycle.evaluation.msv.derived.riskMultiplier ?? null,
+    },
     m9Trace: {
       ...serializeM9Trace(cycle),
       intelligenceTrace,

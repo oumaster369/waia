@@ -18,6 +18,8 @@ export type CreateFhvCompositeEvidenceSinkInput = Readonly<
     environment: string;
     epochId: number;
     generation: number;
+    /** When false, skip fhv-trace dual-write (STREAM_ONLY official scale hot path). */
+    enableTraceEvidence?: boolean;
   } & Omit<CreateFhvTraceEvidenceSinkInput, "runLogRoot"> & {
       runLogRoot: string;
     }
@@ -46,15 +48,18 @@ export function createFhvCompositeEvidenceSink(
   const segmentManifests: StreamingEvidenceManifestRef[] = [];
   let segmentDir = resolveFhvEpochEvidenceSegmentDir(input.runDir, input.epochId, input.generation);
 
-  const traceSink = createFhvTraceEvidenceSink({
-    runLogRoot: input.runLogRoot,
-    organizationId: input.organizationId,
-    accountKey: input.accountKey,
-    runId: input.runId,
-    resumeSeq: input.resumeSeq,
-    provenance: input.provenance,
-    getFinalizeContext: input.getFinalizeContext,
-  });
+  const enableTraceEvidence = input.enableTraceEvidence !== false;
+  const traceSink = enableTraceEvidence
+    ? createFhvTraceEvidenceSink({
+        runLogRoot: input.runLogRoot,
+        organizationId: input.organizationId,
+        accountKey: input.accountKey,
+        runId: input.runId,
+        resumeSeq: input.resumeSeq,
+        provenance: input.provenance,
+        getFinalizeContext: input.getFinalizeContext,
+      })
+    : null;
 
   let streamingSink = createStreamingEvidenceSink({
     runDir: segmentDir,
@@ -65,7 +70,7 @@ export function createFhvCompositeEvidenceSink(
 
   const forwardOnCycle = (cycleIndex: number, result: PaperCycleResult): void => {
     streamingSink.onCycle(cycleIndex, result);
-    traceSink.onCycle(cycleIndex, result);
+    traceSink?.onCycle(cycleIndex, result);
   };
 
   return {
@@ -77,12 +82,17 @@ export function createFhvCompositeEvidenceSink(
     },
     async sealComplete(expectedCycleCount) {
       const streamingRef = await streamingSink.sealComplete(expectedCycleCount);
-      const traceRef = await traceSink.sealComplete!(expectedCycleCount);
-      return streamingRef.runDir ? streamingRef : traceRef;
+      if (traceSink) {
+        const traceRef = await traceSink.sealComplete!(expectedCycleCount);
+        return streamingRef.runDir ? streamingRef : traceRef;
+      }
+      return streamingRef;
     },
     async sealPartial(expectedCycleCount, reason) {
       const streamingRef = await streamingSink.sealPartial(expectedCycleCount, reason);
-      await traceSink.sealPartial!(expectedCycleCount, reason);
+      if (traceSink) {
+        await traceSink.sealPartial!(expectedCycleCount, reason);
+      }
       return streamingRef;
     },
     peakBufferedProjections() {
@@ -103,6 +113,9 @@ export function createFhvCompositeEvidenceSink(
       });
     },
     getTraceSink() {
+      if (!traceSink) {
+        throw new Error("BLOCKED_BY_H_ARCH_1_TRACE_EVIDENCE_DISABLED");
+      }
       return traceSink;
     },
     getSegmentManifests() {

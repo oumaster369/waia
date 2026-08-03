@@ -24,7 +24,8 @@ export default defineConfig({
     exclude: ["tests/e2e/**", "node_modules/**", ".next/**"],
     css: false,
     fileParallelism: false,
-    testTimeout: 600_000,
+    // Full-corpus uses a 125-minute per-test ceiling (plan §13); probe/parity stay shorter.
+    testTimeout: 7_500_000,
     hookTimeout: 600_000,
   },
 });

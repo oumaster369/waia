@@ -1,17 +1,21 @@
 import { createHash } from "node:crypto";
 import {
   closeSync,
+  constants as fsConstants,
+  copyFileSync,
   existsSync,
   fsyncSync,
   mkdirSync,
   openSync,
   readFileSync,
+  readSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
   writeSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
@@ -45,6 +49,67 @@ export type FhvExecutionCheckpointManifestV1 = Readonly<{
   syntheticScaleAuthorityDigest?: string;
   executionConfigurationDigest?: string;
 }>;
+
+/** In-memory payload or zero-copy file source for large session.sqlite backups. */
+export type FhvCheckpointBundleFileContent = Buffer | string | Readonly<{ copyFromPath: string }>;
+
+function isCopyFromPath(
+  content: FhvCheckpointBundleFileContent,
+): content is Readonly<{ copyFromPath: string }> {
+  return (
+    typeof content === "object" &&
+    content !== null &&
+    "copyFromPath" in content &&
+    typeof content.copyFromPath === "string"
+  );
+}
+
+function sha256FileSync(filePath: string): { digest: string; byteCount: number } {
+  const hash = createHash("sha256");
+  const fd = openSync(filePath, "r");
+  try {
+    const buf = Buffer.alloc(1024 * 1024);
+    let byteCount = 0;
+    for (;;) {
+      const n = readSync(fd, buf, 0, buf.length, byteCount);
+      if (n <= 0) {
+        break;
+      }
+      hash.update(buf.subarray(0, n));
+      byteCount += n;
+    }
+    return { digest: hash.digest("hex"), byteCount };
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function copyFileExclusiveFsync(sourcePath: string, destPath: string): void {
+  const tempPath = `${destPath}.tmp-${process.pid}`;
+  try {
+    // Prefer filesystem clone (APFS/XFS) — critical for multi-GB session.sqlite epochs.
+    copyFileSync(sourcePath, tempPath, fsConstants.COPYFILE_FICLONE);
+  } catch {
+    copyFileSync(sourcePath, tempPath);
+  }
+  const fd = openSync(tempPath, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(tempPath, destPath);
+  try {
+    const dirFd = openSync(dirname(destPath), "r");
+    try {
+      fsyncSync(dirFd);
+    } finally {
+      closeSync(dirFd);
+    }
+  } catch {
+    // Non-Linux may lack directory fsync.
+  }
+}
 
 export class FhvExecutionCheckpointBundleError extends Error {
   constructor(
@@ -172,7 +237,7 @@ export function publishFhvExecutionCheckpointBundle(input: {
   generation: number;
   firstCycle: number;
   lastCycle: number;
-  files: Readonly<Record<string, Buffer | string>>;
+  files: Readonly<Record<string, FhvCheckpointBundleFileContent>>;
   sourceCursorDigest: string;
   executionStateDigest: string;
   accountingFrontierDigest: string;
@@ -218,15 +283,38 @@ export function publishFhvExecutionCheckpointBundle(input: {
           `Invalid checkpoint relative path: ${relativePath}`,
         );
       }
-      const payload = typeof content === "string" ? Buffer.from(content, "utf8") : content;
       const destPath = join(tempDir, relativePath);
-      mkdirSync(join(destPath, ".."), { recursive: true });
-      writeFileExclusiveFsync(destPath, payload);
-      fileEntries.push({
-        relativePath,
-        byteCount: payload.length,
-        sha256: sha256Buffer(payload),
-      });
+      mkdirSync(dirname(destPath), { recursive: true });
+      if (isCopyFromPath(content)) {
+        copyFileExclusiveFsync(content.copyFromPath, destPath);
+        // Prefer caller-supplied sessionDatabaseDigest (already streamed) to avoid a second pass.
+        if (
+          relativePath === "session.sqlite" &&
+          typeof input.sessionDatabaseDigest === "string" &&
+          input.sessionDatabaseDigest.length === 64
+        ) {
+          fileEntries.push({
+            relativePath,
+            byteCount: statSync(destPath).size,
+            sha256: input.sessionDatabaseDigest,
+          });
+        } else {
+          const hashed = sha256FileSync(destPath);
+          fileEntries.push({
+            relativePath,
+            byteCount: hashed.byteCount,
+            sha256: hashed.digest,
+          });
+        }
+      } else {
+        const payload = typeof content === "string" ? Buffer.from(content, "utf8") : content;
+        writeFileExclusiveFsync(destPath, payload);
+        fileEntries.push({
+          relativePath,
+          byteCount: payload.length,
+          sha256: sha256Buffer(payload),
+        });
+      }
     }
 
     fileEntries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));

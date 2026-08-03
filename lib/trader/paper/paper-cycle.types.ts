@@ -154,6 +154,10 @@ export type PaperCycleInput = {
   runId?: string;
   /** HTR-WP14: cost model for net-economics fail-closed decision records. */
   costModel?: CostModelV1;
+  /**
+   * IDHPS STREAM_ONLY hot path: skip WP13/WP14 artifact assembly when no sinks consume them.
+   */
+  omitIntelligenceArtifacts?: boolean;
   /** HTR-WP18/WP19/WP20: accounting + reconciliation + guardian authority on research path. */
   htrAccounting?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrAccountingCycleContext;
 };

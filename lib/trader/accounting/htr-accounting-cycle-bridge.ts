@@ -101,6 +101,13 @@ export type HtrAccountingCycleBridge = {
   terminationCode: string | null;
   startingCashUsdt: string;
   startingEquityUsdt: string;
+  /**
+   * Cash at last durable EPOCH_COMMIT (IDHPS). Epoch cashEvents are applied on top of this base.
+   * Equals startingCashUsdt until the first durable epoch authority step 10.
+   */
+  cashLedgerBaseUsdt: string;
+  /** Fill IDs consumed after the most recent durable EPOCH_COMMIT (IDHPS). */
+  epochConsumedFillIds: string[];
   /** Latest closed-bar mark per symbol for multi-instrument shared-portfolio replay. */
   lastMarkBySymbol: MarksJsonV1;
 };
@@ -465,6 +472,8 @@ export function createHtrAccountingCycleBridge(input: {
     terminationCode: null,
     startingCashUsdt,
     startingEquityUsdt: startingCashUsdt,
+    cashLedgerBaseUsdt: startingCashUsdt,
+    epochConsumedFillIds: [],
     lastMarkBySymbol: {},
   };
   recordRuntimeCall(bridge, "WP18_INITIAL_STATE", { at: state.frontierAsOf });
@@ -500,6 +509,7 @@ export function consumeWp17FillIntoAccountingBridge(
     fillId: input.fill.fillId,
     netCashEffect: input.fill.economics.netCashEffect,
   });
+  bridge.epochConsumedFillIds.push(input.fill.fillId);
   recordRuntimeCall(bridge, "WP17_FILL_CONSUMED", {
     cycleIndex: input.cycleIndex,
     detail: input.fill.fillId,
@@ -562,8 +572,10 @@ export function buildHtrReconciliationInput(
   return {
     state: bridge.state,
     startingEquityUsdt: bridge.startingEquityUsdt,
-    startingCashUsdt: bridge.startingCashUsdt,
+    // Epoch-bounded cashEvents reconcile against the post-EPOCH_COMMIT cash base (IDHPS).
+    startingCashUsdt: bridge.cashLedgerBaseUsdt,
     cashEvents: bridge.cashEvents,
+    cashEventIntegrityFillIds: bridge.epochConsumedFillIds,
     inventoryOpenQtyBySymbol: extras?.inventoryOpenQtyBySymbol,
     equitySeriesTerminal: extras?.equitySeriesTerminal,
     pnlReport,
@@ -671,13 +683,16 @@ export function derivePortfolioFromAccountingState(input: {
   runConfig: PortfolioRunConfig;
   limits: PortfolioSizingLimits;
   stopDistanceProvider: StopDistanceProvider;
+  /** Optional cycle marks (portfolio path) when accounting marks are not yet attached. */
+  markPrices?: Readonly<Record<string, string>>;
 }): PortfolioAccountState {
   const positions = Object.entries(input.state.positions)
     .filter(([, position]) => compareDecimal(position.quantity, "0") > 0)
     .map(([symbol, position]) => {
       const portfolioSymbol = accountingSymbolToPortfolioSymbol(symbol);
       const mark = input.state.marks[symbol];
-      const markPrice = mark?.price ?? "0";
+      const markPrice =
+        input.markPrices?.[portfolioSymbol] ?? input.markPrices?.[symbol] ?? mark?.price ?? "0";
       const avgCost =
         compareDecimal(position.quantity, "0") > 0
           ? divideDecimal(position.netPositionBasis, position.quantity)
@@ -809,6 +824,7 @@ export function toAccountingCheckpointSlice(
     positionsJson: bridge.state.positions,
     consumedFillIds: [...bridge.state.consumedFillIds],
     cashEventsJson: [...bridge.cashEvents],
+    cashLedgerBaseUsdt: bridge.cashLedgerBaseUsdt,
     grossRealizedPnl: bridge.state.grossRealizedPnl,
     netRealizedPnl: bridge.state.netRealizedPnl,
     semanticContentDigest: computeAccountingSemanticDigest(bridge.state),
@@ -900,6 +916,8 @@ export function restoreAccountingBridgeFromCheckpoint(
   bridge.state = restoredState;
   bridge.lastMarkBySymbol = { ...slice.marksJson };
   bridge.cashEvents = [...slice.cashEventsJson];
+  bridge.cashLedgerBaseUsdt = slice.cashLedgerBaseUsdt ?? bridge.startingCashUsdt;
+  bridge.epochConsumedFillIds = slice.cashEventsJson.map((event) => event.fillId);
   recordRuntimeCall(bridge, "CHECKPOINT_RESTORED", { detail: String(slice.accountingSequence) });
 }
 

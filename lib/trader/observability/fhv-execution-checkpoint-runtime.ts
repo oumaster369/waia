@@ -22,6 +22,7 @@ import {
 } from "@/lib/trader/research/deterministic-replay-id-factory";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import type { FhvOrderRateStoreSnapshotV1 } from "@/lib/trader/risk/order-rate-store";
+import { restoreIdhpsCompositeMirrorFromCheckpoint } from "@/lib/trader/execution/idhps-session-registry";
 
 export const FHV_CHECKPOINT_SESSION_SQLITE = "session.sqlite" as const;
 export const FHV_CHECKPOINT_SOURCE_CURSOR = "source-cursor.v2.json" as const;
@@ -301,6 +302,9 @@ export function restoreFhvExecutionCheckpointRuntime(input: {
   );
 
   const benchmarkNewId = createFhvBenchmarkNewIdFactory(identityFrontiers?.benchmarkIdFrontier);
+
+  // Resume after durable EPOCH_COMMIT: restore post-step-10 IDHPS mirrors.
+  restoreIdhpsCompositeMirrorFromCheckpoint(input.checkpointDir);
 
   return {
     ...(sourceCursor ? { sourceCursor } : {}),

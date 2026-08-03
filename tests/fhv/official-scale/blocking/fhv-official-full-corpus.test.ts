@@ -2,12 +2,16 @@
  * Phase 13 — FHV official-scale full corpus technical completion (blocking gate).
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { FHV_OFFICIAL_TOTAL_BARS } from "@/lib/trader/market-data/fhv-official-scale-corpus";
-import { executeFhvFullHistoricalLaunch } from "@/lib/trader/observability/fhv-full-historical-launch";
+import {
+  executeFhvFullHistoricalLaunch,
+  resolveFhvFullLaunchRunDirectory,
+} from "@/lib/trader/observability/fhv-full-historical-launch";
 
 import {
   buildFhvOfficialScaleHarnessContext,
@@ -21,6 +25,9 @@ import {
   LAST_TARGET_CYCLE_INDEX,
   TARGET_CYCLE_COUNT,
 } from "./fhv-official-scale-constants";
+
+/** Plan §13: 125-minute process-kill ceiling (semantic acceptance remains ≤7200s). */
+const FULL_CORPUS_TEST_TIMEOUT_MS = 7_500_000;
 
 describe("FHV official-scale full corpus (Phase 13 blocking)", () => {
   const harness = buildFhvOfficialScaleHarnessContext();
@@ -48,45 +55,53 @@ describe("FHV official-scale full corpus (Phase 13 blocking)", () => {
     expect(FHV_OFFICIAL_TOTAL_BARS).toBe(6_312_960);
   });
 
-  it("FHV_OFFICIAL_FULL_CORPUS: OFFICIAL_MULTI_YEAR technical completion", async () => {
-    const metrics = readFhvOfficialScaleMetrics(harness.artifactRoot);
-    if (!metrics?.feasibilityTimePass) {
-      expect.fail(
-        `BLOCKED_BY_CI_SCALE_TIME_FEASIBILITY: cps=${metrics?.cps?.toFixed(3) ?? "unknown"}`,
+  it(
+    "FHV_OFFICIAL_FULL_CORPUS: OFFICIAL_MULTI_YEAR technical completion",
+    async () => {
+      const metrics = readFhvOfficialScaleMetrics(harness.artifactRoot);
+      if (!metrics?.feasibilityTimePass) {
+        expect.fail(
+          `BLOCKED_BY_CI_SCALE_TIME_FEASIBILITY: cps=${metrics?.cps?.toFixed(3) ?? "unknown"}`,
+        );
+      }
+
+      const runId = "fhv-official-scale-full-corpus";
+      const paths = setupFhvOfficialScaleLaunchPaths({
+        harness,
+        runId,
+        maxCycles: null,
+        targetCycleCount: FHV_OFFICIAL_TOTAL_BARS,
+        checkpointEveryCycles: CHECKPOINT_EVERY_CYCLES,
+      });
+
+      const journalPath = join(paths.runDir, "fhv-launch-journal.v1.json");
+      const resume = existsSync(journalPath);
+      const startedAt = Date.now();
+      const result = await executeFhvFullHistoricalLaunch(
+        toFhvOfficialScaleLaunchInput(paths, { resume }),
       );
-    }
+      const wallTimeMs = Date.now() - startedAt;
+      expect(wallTimeMs / 1000).toBeLessThanOrEqual(7200);
 
-    const runId = "fhv-official-scale-full-corpus";
-    const paths = setupFhvOfficialScaleLaunchPaths({
-      harness,
-      runId,
-      maxCycles: null,
-      targetCycleCount: FHV_OFFICIAL_TOTAL_BARS,
-      checkpointEveryCycles: CHECKPOINT_EVERY_CYCLES,
-    });
+      expect(result.classification).toBe("FULL_HISTORICAL_TECHNICAL_COMPLETION");
+      expect(result.classification).not.toBe("FULL_HISTORICAL_VALIDATION_COMPLETED");
+      expect(result.backtest?.sourceFrontier?.globalEventSequence).toBe(FHV_OFFICIAL_TOTAL_BARS);
+      expect(result.backtest?.sourceFrontier?.sourceExhausted).toBe(true);
+    },
+    FULL_CORPUS_TEST_TIMEOUT_MS,
+  );
 
-    const result = await executeFhvFullHistoricalLaunch(toFhvOfficialScaleLaunchInput(paths));
-
-    expect(result.classification).toBe("FULL_HISTORICAL_TECHNICAL_COMPLETION");
-    expect(result.backtest?.sourceFrontier?.globalEventSequence).toBe(FHV_OFFICIAL_TOTAL_BARS);
-    expect(result.backtest?.sourceFrontier?.sourceExhausted).toBe(true);
-  }, 1_800_000);
-
-  it("FHV_OFFICIAL_FULL_CORPUS: must not classify FULL_HISTORICAL_VALIDATION_COMPLETED", async () => {
-    const metrics = readFhvOfficialScaleMetrics(harness.artifactRoot);
-    if (!metrics?.feasibilityTimePass) {
-      expect.fail("BLOCKED_BY_CI_SCALE_TIME_FEASIBILITY");
-    }
-
-    const runId = "fhv-official-scale-full-corpus-guard";
-    const paths = setupFhvOfficialScaleLaunchPaths({
-      harness,
-      runId,
-      maxCycles: null,
-      targetCycleCount: FHV_OFFICIAL_TOTAL_BARS,
-    });
-    const result = await executeFhvFullHistoricalLaunch(toFhvOfficialScaleLaunchInput(paths));
-    expect(result.classification).not.toBe("FULL_HISTORICAL_VALIDATION_COMPLETED");
-    expect(result.classification).toBe("FULL_HISTORICAL_TECHNICAL_COMPLETION");
-  }, 1_800_000);
+  it("FHV_OFFICIAL_FULL_CORPUS: must not classify FULL_HISTORICAL_VALIDATION_COMPLETED", () => {
+    const runDir = resolveFhvFullLaunchRunDirectory(
+      harness.artifactRoot,
+      "fhv-official-scale-full-corpus",
+    );
+    const launchResultPath = join(runDir, "fhv-full-launch-result.v1.json");
+    expect(existsSync(launchResultPath)).toBe(true);
+    const launchResult = JSON.parse(readFileSync(launchResultPath, "utf8")) as {
+      classification: string;
+    };
+    expect(launchResult.classification).not.toBe("FULL_HISTORICAL_VALIDATION_COMPLETED");
+    expect(launchResult.classification).toBe("FULL_HISTORICAL_TECHNICAL_COMPLETION");
+  });
 });

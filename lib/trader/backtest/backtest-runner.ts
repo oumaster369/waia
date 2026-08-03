@@ -54,6 +54,12 @@ import type { BarReplaySource } from "@/lib/trader/market-data/types";
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
+import { clearIdhpsEpochArraysAfterDurableCommit } from "@/lib/trader/accounting/idhps-accounting-bridge-mirror";
+import {
+  bindIdhpsAccountingBridge,
+  getIdhpsSession,
+} from "@/lib/trader/execution/idhps-session-registry";
+import { countIdhpsOpenOrders } from "@/lib/trader/paper/idhps-inventory-mirror";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import type {
   GuardianCycleContext,
@@ -362,6 +368,15 @@ async function resolveHtrInventoryOpenQtyBySymbol(input: {
   context: OrgContext;
   orderRepository: OrderRepository;
 }): Promise<Record<string, string>> {
+  const idhps = getIdhpsSession();
+  if (idhps) {
+    const openQtyBySymbol: Record<string, string> = {};
+    for (const [symbol, qty] of Object.entries(idhps.inventory.inventoryBySymbol)) {
+      if (qty === "0") continue;
+      openQtyBySymbol[normalizeSymbolForHistoricalExecution(symbol)] = qty;
+    }
+    return openQtyBySymbol;
+  }
   const { fillEvents } = await loadPaperFillEvents({
     context: input.context,
     orderRepository: input.orderRepository,
@@ -466,6 +481,9 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         frontierAsOf: input.window.start.toISOString(),
       })
     : null;
+  if (htrAccountingBridge && getIdhpsSession()) {
+    bindIdhpsAccountingBridge(htrAccountingBridge);
+  }
 
   const htrInventoryResolver = htrAccountingBridge
     ? createHtrInventoryResolver({
@@ -479,6 +497,12 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       htrAccountingBridge,
       input.initialAccountingFrontierState,
     );
+    const idhpsSession = getIdhpsSession();
+    if (idhpsSession?.resumedAfterDurableEpochCommit) {
+      // Frontier slice was captured pre step-10; align with post-commit continuous state.
+      clearIdhpsEpochArraysAfterDurableCommit(htrAccountingBridge);
+      idhpsSession.resumedAfterDurableEpochCommit = false;
+    }
     await reconcileHtrAccountingBridge({
       bridge: htrAccountingBridge,
       context: input.context,
@@ -638,93 +662,83 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     if (wp17Active && input.historicalExecutionProfile && htrAccountingBridge) {
       const closedBar = snapshot.bars.at(-1);
       if (closedBar) {
-        const persistence: HistoricalExecutionPersistencePort = {
-          recordSimulatedFill: (context, order, event, isFirstSlice) =>
-            input.deps.execution.recordSimulatedFill!(context, order, event, isFirstSlice).then(
-              () => undefined,
-            ),
-          transitionOrderExpired: (context, order) =>
-            input.deps.execution.transitionOrderExpired!(context, order),
-          transitionOrderCancelled: (context, order) =>
-            input.deps.execution.transitionOrderCancelled!(context, order),
-          transitionOrderCancelledFromRequested: (context, order) =>
-            input.deps.execution.transitionOrderCancelled!(context, order),
-        };
-        const advance = await advanceHistoricalExecutionOnClosedBar(
-          input.historicalExecutionProfile.exchange,
-          {
-            context: input.context,
-            closedBar,
-            barIndex: cycleIndex,
-            model: input.historicalExecutionProfile.model,
-            persistence,
-            replayNowMs: new Date(snapshot.evaluatedAt).getTime(),
-            resolveLatestOrder: (orderId) =>
-              costAwareRepository.getOrderById(input.context, orderId),
-            refreshAccountState: async () => {
-              const openOrders = await costAwareRepository.listOpenOrders(input.context, {
-                executionMode: "mock",
-              });
-              if (input.portfolio) {
-                const portfolio = derivePortfolioFromAccountingState({
-                  state: htrAccountingBridge.state,
-                  runConfig: input.portfolio.runConfig,
-                  limits: input.portfolio.limits,
-                  stopDistanceProvider: input.portfolio.stopDistanceProvider,
-                });
-                return toAccountRiskState({
-                  portfolio,
-                  openOrderCount: openOrders.length,
-                  accountPeakHwm: htrAccountingBridge.state.equityHwm,
-                  monthlyPeakHwm: htrAccountingBridge.state.monthlyPeakHwm,
-                });
-              }
-              return deriveAccountRiskStateFromBridge(htrAccountingBridge, {
-                openOrderCount: openOrders.length,
-              });
+        const wp17Timer = benchmarkObserver.beginStage("wp17-historical-advance", cycleIndex);
+        const historicalOpenCount =
+          input.historicalExecutionProfile.exchange.listOpenOrders().length;
+        let fillEvents: Awaited<
+          ReturnType<typeof advanceHistoricalExecutionOnClosedBar>
+        >["fillEvents"] = [];
+        if (historicalOpenCount > 0) {
+          const persistence: HistoricalExecutionPersistencePort = {
+            recordSimulatedFill: (context, order, event, isFirstSlice) =>
+              input.deps.execution.recordSimulatedFill!(context, order, event, isFirstSlice).then(
+                () => undefined,
+              ),
+            transitionOrderExpired: (context, order) =>
+              input.deps.execution.transitionOrderExpired!(context, order),
+            transitionOrderCancelled: (context, order) =>
+              input.deps.execution.transitionOrderCancelled!(context, order),
+            transitionOrderCancelledFromRequested: (context, order) =>
+              input.deps.execution.transitionOrderCancelled!(context, order),
+          };
+          const advance = await advanceHistoricalExecutionOnClosedBar(
+            input.historicalExecutionProfile.exchange,
+            {
+              context: input.context,
+              closedBar,
+              barIndex: cycleIndex,
+              model: input.historicalExecutionProfile.model,
+              persistence,
+              replayNowMs: new Date(snapshot.evaluatedAt).getTime(),
+              resolveLatestOrder: (orderId) =>
+                costAwareRepository.getOrderById(input.context, orderId),
+              // Caller rebuilds accountState after fills/marks; avoid duplicate O(positions)
+              // derive on every closed bar (including no-open-order bars).
+              refreshAccountState: async () => accountState,
+              reconcileOrder: async () => undefined,
             },
-            reconcileOrder: async () => undefined,
-          },
-        );
-        for (const event of advance.fillEvents) {
-          const order = await costAwareRepository.getOrderById(input.context, event.orderId);
-          if (!order) {
-            continue;
-          }
-          const economics = applyHistoricalExecutionEconomics(
-            event,
-            input.historicalExecutionProfile.model,
           );
-          const fillId = historicalFillId({
-            organizationId: input.context.organizationId,
-            orderId: order.id,
-            fillSequence: event.fillSequence,
-            sourceBarIndex: event.sourceBarIndex,
-          });
-          consumeWp17FillIntoAccountingBridge(htrAccountingBridge, {
-            fill: {
-              fillId,
-              economics: {
-                symbol: economics.symbol,
-                side: economics.side,
-                quantity: economics.quantity,
-                grossFillPrice: economics.grossFillPrice,
-                grossNotional: economics.grossNotional,
-                netFillPrice: economics.netFillPrice,
-                feeAmount: economics.feeAmount,
-                netCashEffect: economics.netCashEffect,
-                spreadCost: economics.spreadCost,
-                impactSlippageCost: economics.impactSlippageCost,
-                totalExecutionCost: economics.totalExecutionCost,
-                economicsContentDigest: economics.economicsContentDigest,
+          fillEvents = advance.fillEvents;
+          for (const event of fillEvents) {
+            const order = await costAwareRepository.getOrderById(input.context, event.orderId);
+            if (!order) {
+              continue;
+            }
+            const economics = applyHistoricalExecutionEconomics(
+              event,
+              input.historicalExecutionProfile.model,
+            );
+            const fillId = historicalFillId({
+              organizationId: input.context.organizationId,
+              orderId: order.id,
+              fillSequence: event.fillSequence,
+              sourceBarIndex: event.sourceBarIndex,
+            });
+            consumeWp17FillIntoAccountingBridge(htrAccountingBridge, {
+              fill: {
+                fillId,
+                economics: {
+                  symbol: economics.symbol,
+                  side: economics.side,
+                  quantity: economics.quantity,
+                  grossFillPrice: economics.grossFillPrice,
+                  grossNotional: economics.grossNotional,
+                  netFillPrice: economics.netFillPrice,
+                  feeAmount: economics.feeAmount,
+                  netCashEffect: economics.netCashEffect,
+                  spreadCost: economics.spreadCost,
+                  impactSlippageCost: economics.impactSlippageCost,
+                  totalExecutionCost: economics.totalExecutionCost,
+                  economicsContentDigest: economics.economicsContentDigest,
+                },
+                executedAt: event.fillTimestamp.toISOString(),
               },
-              executedAt: event.fillTimestamp.toISOString(),
-            },
-            cycleIndex,
-          });
-        }
-        if (advance.fillEvents.length > 0) {
-          htrInventoryResolver?.invalidateInventoryCache();
+              cycleIndex,
+            });
+          }
+          if (fillEvents.length > 0) {
+            htrInventoryResolver?.invalidateInventoryCache();
+          }
         }
         attachClosed1mMarkToAccountingBridge(htrAccountingBridge, closedBar, cycleIndex);
         await reconcileHtrAccountingBridge({
@@ -735,9 +749,10 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           cycleIndex,
           phase: "frontier_mutation",
         });
-        const openOrders = await costAwareRepository.listOpenOrders(input.context, {
-          executionMode: "mock",
-        });
+        const idhpsSession = getIdhpsSession();
+        const openOrderCount = idhpsSession
+          ? countIdhpsOpenOrders(idhpsSession.inventory)
+          : historicalOpenCount;
         if (input.portfolio) {
           const portfolio = derivePortfolioFromAccountingState({
             state: htrAccountingBridge.state,
@@ -747,15 +762,17 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           });
           accountState = toAccountRiskState({
             portfolio,
-            openOrderCount: openOrders.length,
+            openOrderCount,
             accountPeakHwm: htrAccountingBridge.state.equityHwm,
             monthlyPeakHwm: htrAccountingBridge.state.monthlyPeakHwm,
           });
         } else {
           accountState = deriveAccountRiskStateFromBridge(htrAccountingBridge, {
-            openOrderCount: openOrders.length,
+            openOrderCount,
           });
         }
+        wp17Timer.end();
+        benchmarkObserver.sampleMemory("wp17-historical-advance", cycleIndex);
       }
     }
 
@@ -817,6 +834,10 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         historicalProfile: input.historicalProfile,
         runId: input.runId,
         costModel: input.costModel,
+        omitIntelligenceArtifacts:
+          retentionMode === "STREAM_ONLY" &&
+          input.intelligenceRecordsSink == null &&
+          input.forecastDecisionSink == null,
         htrAccounting: htrAccounting ?? undefined,
         htrBreachCancellation:
           wp17Active && input.historicalExecutionProfile
@@ -841,7 +862,17 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     paperCycleTimer.end();
     benchmarkObserver.sampleMemory("paper-cycle", cycleIndex);
 
-    if (profileActive && result.evaluation.marketStateSnapshot && result.evaluation.decisionChain) {
+    if (
+      profileActive &&
+      result.evaluation.marketStateSnapshot &&
+      result.evaluation.decisionChain &&
+      // STREAM_ONLY FHV path: evidence projections carry strategy/guardian digests; skip
+      // per-cycle intelligence bundle build/persist (IDHPS hot-path budget).
+      (retentionMode !== "STREAM_ONLY" ||
+        input.intelligenceRecordsSink != null ||
+        input.forecastDecisionSink != null)
+    ) {
+      const intelligenceTimer = benchmarkObserver.beginStage("intelligence-bundle", cycleIndex);
       const intelligenceCycleId = resolveIntelligenceCycleId(input.cycleIdPrefix, cycleIndex);
       const bundle = buildIntelligenceCycleBundle({
         organizationId: input.context.organizationId,
@@ -858,7 +889,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       if (input.intelligenceRecordsSink) {
         await input.intelligenceRecordsSink.persist(input.context, bundle);
         wp13Persisted = true;
-      } else if (input.deps.researchReplayDeterminism) {
+      } else if (input.deps.researchReplayDeterminism && retentionMode !== "STREAM_ONLY") {
         await persistEvaluationCycleRecords(
           input.context,
           {
@@ -890,24 +921,35 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           await persistForecastDecisionBundleForCycle(input.context, forecastDecisionInput, {
             bundleRepository: input.forecastDecisionSink,
           });
-        } else if (input.deps.researchReplayDeterminism) {
+        } else if (input.deps.researchReplayDeterminism && retentionMode !== "STREAM_ONLY") {
           await persistForecastDecisionBundleForCycle(input.context, forecastDecisionInput, {});
         }
       }
+      intelligenceTimer.end();
+      benchmarkObserver.sampleMemory("intelligence-bundle", cycleIndex);
     }
 
     hypothesisSessionState = result.hypothesisSessionState ?? hypothesisSessionState;
     if (retentionMode === "FULL") {
       cycleResults.push(result);
     }
+    const evidenceOnCycleTimer = benchmarkObserver.beginStage("evidence-on-cycle", cycleIndex);
     await evidenceSink.onCycle(cycleIndex, result);
+    evidenceOnCycleTimer.end();
+    benchmarkObserver.sampleMemory("evidence-on-cycle", cycleIndex);
     cycleCount += 1;
 
     const accountRefreshTimer = benchmarkObserver.beginStage("account-state-refresh", cycleIndex);
     if (input.refreshAccountStateBetweenStrategies) {
-      const openOrders = await costAwareRepository.listOpenOrders(input.context, {
-        executionMode: "mock",
-      });
+      const idhpsSession = getIdhpsSession();
+      const openOrderCount = idhpsSession
+        ? countIdhpsOpenOrders(idhpsSession.inventory)
+        : (
+            await costAwareRepository.listOpenOrders(input.context, {
+              executionMode: "mock",
+              venue: "HTX",
+            })
+          ).length;
       if (htrAccountingBridge && input.portfolio) {
         const portfolio = derivePortfolioFromAccountingState({
           state: htrAccountingBridge.state,
@@ -917,13 +959,13 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         });
         accountState = toAccountRiskState({
           portfolio,
-          openOrderCount: openOrders.length,
+          openOrderCount,
           accountPeakHwm: htrAccountingBridge.state.equityHwm,
           monthlyPeakHwm: htrAccountingBridge.state.monthlyPeakHwm,
         });
       } else if (htrAccountingBridge) {
         accountState = deriveAccountRiskStateFromBridge(htrAccountingBridge, {
-          openOrderCount: openOrders.length,
+          openOrderCount,
         });
       } else if (input.portfolio) {
         const portfolio = await derivePortfolioAccountState({
@@ -937,7 +979,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         });
         accountState = toAccountRiskState({
           portfolio,
-          openOrderCount: openOrders.length,
+          openOrderCount,
         });
       } else {
         accountState = await deriveAccountRiskStateFromMockOrders({
@@ -978,6 +1020,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         )
       : undefined;
 
+    const boundaryTimer = benchmarkObserver.beginStage("cycle-boundary", cycleIndex);
     const boundaryDecision = parseBacktestCycleBoundaryDecision(
       await input.onCycleBoundary?.({
         cycleIndex,
@@ -992,15 +1035,18 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         ...(sourceCursorDigest !== undefined ? { sourceCursorDigest } : {}),
       }),
     );
+    boundaryTimer.end();
     if (boundaryDecision.stop) {
       boundaryEvidenceSealOverride = boundaryDecision.evidenceSealOverride;
       break;
     }
-    // Cooperative yield so external pause/control writers can be observed between cycles
-    // (rehearsal campaign pause-at-checkpoint and similar cross-task control planes).
-    await new Promise<void>((resolve) => {
-      setImmediate(resolve);
-    });
+    // Cooperative yield for rehearsal pause control planes. Official STREAM_ONLY scale
+    // skips per-cycle yields (IDHPS cps budget); pause hosts should use epoch boundaries.
+    if (retentionMode !== "STREAM_ONLY" && cycleCount % 32 === 0) {
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+    }
   }
 
   if ("captureSourceFrontier" in input.barSource) {

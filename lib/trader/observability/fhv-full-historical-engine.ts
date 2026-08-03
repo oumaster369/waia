@@ -111,12 +111,23 @@ export async function runFullHistoricalBacktest(input: {
     restoreFhvCheckpointSessionDatabase({ checkpointDir, sessionDbPath });
   }
 
+  const timingsEnabled = process.env.FHV_IDHPS_TIMINGS === "1";
+  const mark = (label: string, startedAt: number): number => {
+    if (timingsEnabled) {
+      console.error(
+        `[fhv-idhps-timings] ${label}_ms=${(performance.now() - startedAt).toFixed(1)}`,
+      );
+    }
+    return performance.now();
+  };
+  let timingCursor = performance.now();
   const { session, context, cleanup } = await seedFhvHistoricalExecutionSession({
     organizationId: input.organizationId,
     operatorId: input.operatorId,
     slot: 436,
     ...(sessionDbPath ? { sessionDbPath } : {}),
   });
+  timingCursor = mark("seed_session", timingCursor);
 
   const restoredRuntime =
     checkpointDir !== undefined
@@ -135,6 +146,8 @@ export async function runFullHistoricalBacktest(input: {
       : "fhv-full-historical-official",
     epochId,
     generation,
+    // Official STREAM_ONLY scale: streaming projections are authority; skip fhv-trace tax.
+    enableTraceEvidence: input.boundedFixture === true,
     runLogRoot: join(input.runDir, "fhv-trace"),
     organizationId: input.organizationId,
     accountKey,
@@ -244,7 +257,9 @@ export async function runFullHistoricalBacktest(input: {
       : undefined;
 
   try {
-    return await runBacktest({
+    timingCursor = mark("pre_run_backtest_setup", timingCursor);
+    const backtestStartedAt = performance.now();
+    const result = await runBacktest({
       context,
       barSource,
       deps: session.deps,
@@ -296,6 +311,8 @@ export async function runFullHistoricalBacktest(input: {
         ? { sourceCursorDigestEveryCycles: checkpointEveryCycles }
         : {}),
     });
+    mark("run_backtest", backtestStartedAt);
+    return result;
   } finally {
     officialReader?.close();
     cleanup();

@@ -4,7 +4,13 @@ import path from "node:path";
 
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
-import { applyResearchReplaySqlitePragmas, getDb, getRawSqliteDatabase, resetWaiaSqliteSingleton } from "@/db/client";
+import {
+  applyResearchReplaySqlitePragmas,
+  getDb,
+  getRawSqliteDatabase,
+  resetWaiaSqliteSingleton,
+} from "@/db/client";
+import { closeIdhpsSession, openIdhpsSession } from "@/lib/trader/execution/idhps-session-registry";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import {
   createOrderExecutionServiceFromDeps,
@@ -37,10 +43,12 @@ import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-s
 import type { TraderAuditInput } from "@/lib/trader/types";
 
 function migrateInMemoryResearchDb(): void {
+  closeIdhpsSession();
   resetWaiaSqliteSingleton();
   const db = getDb();
   migrate(db, { migrationsFolder: path.join(process.cwd(), "db/migrations") });
   applyResearchReplaySqlitePragmas(getRawSqliteDatabase());
+  openIdhpsSession(getRawSqliteDatabase(), { enableBans: false });
 }
 
 export type CreateInMemoryResearchBacktestSessionOptions = {
@@ -176,6 +184,7 @@ export async function createInMemoryResearchBacktestSession(
     orderNewId,
     newDecisionId,
     cleanup: () => {
+      closeIdhpsSession();
       resetWaiaSqliteSingleton();
       if (ownsTempDir && tempDir) {
         try {
