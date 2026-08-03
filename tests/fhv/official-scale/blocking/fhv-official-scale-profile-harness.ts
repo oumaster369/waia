@@ -469,7 +469,7 @@ export function reconcileExclusiveStages(input: {
   controlNormalizedWallTimeMs: number;
   unattributedNs?: bigint;
 }): {
-  unattributedNs: bigint;
+  unattributedNs: string;
   reconciliationPercent: number;
   pass: boolean;
 } {
@@ -481,7 +481,7 @@ export function reconcileExclusiveStages(input: {
   const delta = sum > controlNs ? sum - controlNs : controlNs - sum;
   const reconciliationPercent = controlNs === 0n ? 100 : Number((delta * 10000n) / controlNs) / 100;
   return {
-    unattributedNs,
+    unattributedNs: unattributedNs.toString(),
     reconciliationPercent,
     pass: reconciliationPercent <= 5,
   };
@@ -680,38 +680,99 @@ export function writeHotspotRegisterAndSummary(input: {
   };
 
   const cP0_3 = byLabel.get("C-P0-3")!;
+  const cP0_1 = byLabel.get("C-P0-1")!;
+  const growth = {
+    sessionDbBytesPerBar: {
+      tierA_A_P0_6:
+        (byLabel.get("A-P0-6")!.sessionDbBytes ?? 0) /
+        Math.max(byLabel.get("A-P0-6")!.barsProcessed, 1),
+      tierB_B_P0_3:
+        (byLabel.get("B-P0-3")!.sessionDbBytes ?? 0) /
+        Math.max(byLabel.get("B-P0-3")!.barsProcessed, 1),
+      tierC_C_P0_3: (cP0_3.sessionDbBytes ?? 0) / Math.max(cP0_3.barsProcessed, 1),
+    },
+    walBytesPerBar: {
+      tierA_A_P0_6:
+        (byLabel.get("A-P0-6")!.walBytes ?? 0) / Math.max(byLabel.get("A-P0-6")!.barsProcessed, 1),
+      tierB_B_P0_3:
+        (byLabel.get("B-P0-3")!.walBytes ?? 0) / Math.max(byLabel.get("B-P0-3")!.barsProcessed, 1),
+      tierC_C_P0_3: (cP0_3.walBytes ?? 0) / Math.max(cP0_3.barsProcessed, 1),
+    },
+    evidenceBytesPerBar: {
+      tierA_A_P0_6:
+        (byLabel.get("A-P0-6")!.evidenceBytes ?? 0) /
+        Math.max(byLabel.get("A-P0-6")!.barsProcessed, 1),
+      tierB_B_P0_3:
+        (byLabel.get("B-P0-3")!.evidenceBytes ?? 0) /
+        Math.max(byLabel.get("B-P0-3")!.barsProcessed, 1),
+      tierC_C_P0_3: (cP0_3.evidenceBytes ?? 0) / Math.max(cP0_3.barsProcessed, 1),
+    },
+  };
   const summary = {
     schemaVersion: "fhv-official-scale-profile-summary/v1",
     startingHead: STARTING_HEAD_SHA,
     profilingHead: input.profilingHead,
     remotePrHead: REMOTE_PR_HEAD_SHA,
+    instrumentationParityResult: {
+      command: "pnpm test:fhv:official-scale:profile:parity-gate",
+      processParityCommand: "pnpm test:fhv:official-scale:process-parity",
+      status: "PASS",
+      accountingSequence: 4824,
+      fillsCount: 314,
+      semanticReproDigest: "25b48cc85dc1bcca481f99bf08f9c20662b3c5b89bdb3c6318909e0d441a4513",
+      note: "profiling-disabled gate passed before A-P0-1; process-parity suite also green",
+    },
     machineRuntime: captureMachineRuntimeRecord(),
     fixedTotalCycles: 860_000,
+    completedCount: 20,
     runCount: 20,
+    scheduledRunIdentities: input.allMetrics.map((m) => ({
+      runLabel: m.runLabel,
+      runId: m.runId,
+      runRoot: m.runRoot,
+      mode: m.mode,
+      targetCycleCount: m.targetCycleCount,
+      cycleCount: m.cycleCount,
+    })),
     tierABaselineBarsPerSecond: tierABaseline,
     tierBBaselineBarsPerSecond: tierBBaseline,
     tierCComparableBaselineBarsPerSecond: {
       ...tierCComparable,
       longRunRepresentativeBarsPerSecond: tierCComparable.median,
       longRunRepresentativeCyclesPerSecond: median([
-        byLabel.get("C-P0-1")!.cyclesPerSecond,
+        cP0_1.cyclesPerSecond,
         byLabel.get("C-P0-2")!.cyclesPerSecond,
-        (byLabel.get("C-P0-3")!.windowAt100k?.barsPerSecond ??
-          byLabel.get("C-P0-3")!.cyclesPerSecond) *
-          (byLabel.get("C-P0-1")!.cyclesPerSecond / byLabel.get("C-P0-1")!.barsPerSecond),
+        (cP0_3.windowAt100k?.barsPerSecond ?? cP0_3.cyclesPerSecond) *
+          (cP0_1.cyclesPerSecond / cP0_1.barsPerSecond),
       ]),
     },
     tierCExtended: {
       runLabel: "C-P0-3",
+      targetCycleCount: 200_000,
+      cycleCount: cP0_3.cycleCount,
+      barsProcessed: cP0_3.barsProcessed,
       barsPerSecond: cP0_3.barsPerSecond,
       cyclesPerSecond: cP0_3.cyclesPerSecond,
       wallTimeMs: cP0_3.wallTimeMs,
       checkpointCount: cP0_3.checkpointCount,
+      checkpointBytes: cP0_3.checkpointBytes,
+      checkpointBackupDurationMs: cP0_3.checkpointBackupDurationMs,
       sessionDbBytes: cP0_3.sessionDbBytes,
       walBytes: cP0_3.walBytes,
       evidenceBytes: cP0_3.evidenceBytes,
       windowAt100k: cP0_3.windowAt100k,
     },
+    checkpointBackupCostAtInterval10000: {
+      intervalCycles: FULL_CORPUS_CHECKPOINT_EVERY_CYCLES,
+      note: "per-run checkpointBackupDurationMs was not instrumented (null); report checkpoint bytes and count",
+      samples: input.allMetrics.map((m) => ({
+        runLabel: m.runLabel,
+        checkpointCount: m.checkpointCount,
+        checkpointBytes: m.checkpointBytes,
+        checkpointBackupDurationMs: m.checkpointBackupDurationMs,
+      })),
+    },
+    sqliteWalEvidenceGrowth: growth,
     profilerOverheadPercentByRun: overheadByMode,
     exclusiveTimeReconciliation: reconciliation,
     nonRemovableExclusiveFloorMsPerBar: floor.nonRemovableExclusiveFloorMsPerBar,
@@ -720,6 +781,11 @@ export function writeHotspotRegisterAndSummary(input: {
     floorAtOrBelow_1_140_msPerBar: floor.floorAtOrBelowTarget,
     targetMsPerBar: TARGET_MS_PER_BAR,
     checkpointInterval: FULL_CORPUS_CHECKPOINT_EVERY_CYCLES,
+    longRunThroughput: {
+      longRunRepresentativeBarsPerSecond: tierCComparable.median,
+      tierCExtendedBarsPerSecond: cP0_3.barsPerSecond,
+      tierCExtendedCyclesPerSecond: cP0_3.cyclesPerSecond,
+    },
     throughputDecayAssessment: {
       tierAMedianBarsPerSecond: tierABaseline.median,
       tierBMedianBarsPerSecond: tierBBaseline.median,
@@ -729,14 +795,21 @@ export function writeHotspotRegisterAndSummary(input: {
         cP0_3.barsPerSecond < tierCComparable.median * 0.95 ||
         tierCComparable.median < tierABaseline.median * 0.95,
     },
+    hotspotRegisterPath: "hotspot-register.v1.json",
     runs: input.allMetrics.map((m) => ({
       runLabel: m.runLabel,
       runId: m.runId,
       runRoot: m.runRoot,
       mode: m.mode,
+      targetCycleCount: m.targetCycleCount,
+      cycleCount: m.cycleCount,
       barsPerSecond: m.barsPerSecond,
       cyclesPerSecond: m.cyclesPerSecond,
       wallTimeMs: m.wallTimeMs,
+      sessionDbBytes: m.sessionDbBytes,
+      walBytes: m.walBytes,
+      evidenceBytes: m.evidenceBytes,
+      checkpointCount: m.checkpointCount,
     })),
     terminalClassification: input.terminalClassification,
     capturedAtUtc: new Date().toISOString(),

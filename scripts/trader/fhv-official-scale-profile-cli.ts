@@ -25,10 +25,12 @@ function parseArgs(argv: string[]): {
   fromLabel: FhvOfficialScaleProfileRunLabel | null;
   onlyLabel: FhvOfficialScaleProfileRunLabel | null;
   reset: boolean;
+  finalizeOnly: boolean;
 } {
   let fromLabel: FhvOfficialScaleProfileRunLabel | null = null;
   let onlyLabel: FhvOfficialScaleProfileRunLabel | null = null;
   let reset = false;
+  let finalizeOnly = false;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
     if (arg === "--from-label") {
@@ -37,9 +39,11 @@ function parseArgs(argv: string[]): {
       onlyLabel = argv[++i] as FhvOfficialScaleProfileRunLabel;
     } else if (arg === "--reset") {
       reset = true;
+    } else if (arg === "--finalize-only") {
+      finalizeOnly = true;
     }
   }
-  return { fromLabel, onlyLabel, reset };
+  return { fromLabel, onlyLabel, reset, finalizeOnly };
 }
 
 function resolveProfilingHead(): string {
@@ -47,64 +51,70 @@ function resolveProfilingHead(): string {
 }
 
 async function main(): Promise<void> {
-  const { fromLabel, onlyLabel, reset } = parseArgs(process.argv.slice(2));
+  const { fromLabel, onlyLabel, reset, finalizeOnly } = parseArgs(process.argv.slice(2));
   const profileRoot = resolveProfileRoot();
   mkdirSync(join(profileRoot, "logs"), { recursive: true });
-  const harness = buildFhvOfficialScaleHarnessContext();
   const profilingHead = resolveProfilingHead();
 
-  let schedule = [...FHV_OFFICIAL_SCALE_PROFILE_SCHEDULE];
-  if (onlyLabel) {
-    schedule = schedule.filter((entry) => entry.runLabel === onlyLabel);
-  } else if (fromLabel) {
-    const idx = schedule.findIndex((entry) => entry.runLabel === fromLabel);
-    if (idx < 0) {
-      throw new Error(`Unknown --from-label ${fromLabel}`);
+  if (!finalizeOnly) {
+    const harness = buildFhvOfficialScaleHarnessContext();
+    let schedule = [...FHV_OFFICIAL_SCALE_PROFILE_SCHEDULE];
+    if (onlyLabel) {
+      schedule = schedule.filter((entry) => entry.runLabel === onlyLabel);
+    } else if (fromLabel) {
+      const idx = schedule.findIndex((entry) => entry.runLabel === fromLabel);
+      if (idx < 0) {
+        throw new Error(`Unknown --from-label ${fromLabel}`);
+      }
+      schedule = schedule.slice(idx);
     }
-    schedule = schedule.slice(idx);
-  }
 
-  const completed: ProfileRunMetricsV1[] = [];
-  for (const entry of FHV_OFFICIAL_SCALE_PROFILE_SCHEDULE) {
-    const metricsPath = join(
-      profileRoot,
-      "runs",
-      entry.runLabel,
-      "fhv-official-scale-profile-run-metrics.v1.json",
-    );
-    if (existsSync(metricsPath) && !schedule.some((s) => s.runLabel === entry.runLabel)) {
-      completed.push(loadProfileRunMetrics(profileRoot, entry.runLabel));
+    const completed: ProfileRunMetricsV1[] = [];
+    for (const entry of FHV_OFFICIAL_SCALE_PROFILE_SCHEDULE) {
+      const metricsPath = join(
+        profileRoot,
+        "runs",
+        entry.runLabel,
+        "fhv-official-scale-profile-run-metrics.v1.json",
+      );
+      if (existsSync(metricsPath) && !schedule.some((s) => s.runLabel === entry.runLabel)) {
+        completed.push(loadProfileRunMetrics(profileRoot, entry.runLabel));
+      }
     }
-  }
 
-  for (const entry of schedule) {
-    console.log(
-      `[fhv-profile] START ${entry.runLabel} mode=${entry.mode} cycles=${entry.targetCycleCount}`,
-    );
-    if (reset) {
-      resetProfileRunRoot(profileRoot, entry.runLabel);
+    for (const entry of schedule) {
+      console.log(
+        `[fhv-profile] START ${entry.runLabel} mode=${entry.mode} cycles=${entry.targetCycleCount}`,
+      );
+      if (reset) {
+        resetProfileRunRoot(profileRoot, entry.runLabel);
+      }
+      const metrics = await executeFhvOfficialScaleProfileRun({
+        entry,
+        harness,
+        profileRoot,
+      });
+      completed.push(metrics);
+      console.log(
+        `[fhv-profile] DONE ${entry.runLabel} bars/s=${metrics.barsPerSecond.toFixed(3)} cycles/s=${metrics.cyclesPerSecond.toFixed(3)} wallMs=${metrics.wallTimeMs}`,
+      );
+      writeFileSync(
+        join(profileRoot, "logs", "progress.v1.json"),
+        `${JSON.stringify(
+          {
+            lastCompleted: entry.runLabel,
+            completedCount: completed.length,
+            profilingHead,
+            at: new Date().toISOString(),
+          },
+          null,
+          2,
+        )}\n`,
+      );
     }
-    const metrics = await executeFhvOfficialScaleProfileRun({
-      entry,
-      harness,
-      profileRoot,
-    });
-    completed.push(metrics);
+  } else {
     console.log(
-      `[fhv-profile] DONE ${entry.runLabel} bars/s=${metrics.barsPerSecond.toFixed(3)} cycles/s=${metrics.cyclesPerSecond.toFixed(3)} wallMs=${metrics.wallTimeMs}`,
-    );
-    writeFileSync(
-      join(profileRoot, "logs", "progress.v1.json"),
-      `${JSON.stringify(
-        {
-          lastCompleted: entry.runLabel,
-          completedCount: completed.length,
-          profilingHead,
-          at: new Date().toISOString(),
-        },
-        null,
-        2,
-      )}\n`,
+      "[fhv-profile] FINALIZE-ONLY: loading existing twenty-run metrics (no re-execution)",
     );
   }
 
