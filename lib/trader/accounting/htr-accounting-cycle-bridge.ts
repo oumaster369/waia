@@ -560,15 +560,27 @@ export function buildHtrReconciliationInput(
     inventoryOpenQtyBySymbol?: Record<string, string>;
     equitySeriesTerminal?: string;
     pnlReport?: HtrPnlReportV1;
+    /**
+     * When true, assemble the full PnL report + accounting semantic digest.
+     * Hot-path automatic reconcile (default) uses terminal cash/equity only — digest
+     * meaning is unchanged at terminal export / checkpoint capture.
+     */
+    includeFullPnlReport?: boolean;
   },
 ): AccountingReconciliationInput {
   const pnlReport =
     extras?.pnlReport ??
-    buildHtrPnlReportV1({
-      state: bridge.state,
-      startingEquityUsdt: bridge.startingEquityUsdt,
-      semanticDigest: computeAccountingSemanticDigest(bridge.state),
-    });
+    (extras?.includeFullPnlReport
+      ? buildHtrPnlReportV1({
+          state: bridge.state,
+          startingEquityUsdt: bridge.startingEquityUsdt,
+          semanticDigest: computeAccountingSemanticDigest(bridge.state),
+        })
+      : {
+          // IDHPS hot path: avoid SHA-256 + full PnL assembly on every reconcile phase.
+          terminalEquityUsdt: bridge.state.equity,
+          terminalCashUsdt: bridge.state.cash,
+        });
   return {
     state: bridge.state,
     startingEquityUsdt: bridge.startingEquityUsdt,

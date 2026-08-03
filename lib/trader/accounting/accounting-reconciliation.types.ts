@@ -2,11 +2,18 @@ import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-front
 import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
 import type { AccountingInvariantCode } from "@/lib/trader/accounting/accounting-invariant-codes";
 
+/** Hot-path reconcile only needs terminal cash/equity parity vs accounting state. */
+export type AccountingReconciliationPnlTerminal = Readonly<{
+  terminalEquityUsdt: string;
+  terminalCashUsdt: string;
+}>;
+
 export type AccountingReconciliationInput = {
   state: AccountingStateV1;
   startingEquityUsdt: string;
   startingCashUsdt: string;
-  pnlReport?: HtrPnlReportV1;
+  /** Full PnL report or hot-path terminal slice (IDHPS automatic reconcile). */
+  pnlReport?: HtrPnlReportV1 | AccountingReconciliationPnlTerminal;
   inventoryOpenQtyBySymbol?: Record<string, string>;
   cashEvents?: Array<{ fillId: string; netCashEffect: string }>;
   /**

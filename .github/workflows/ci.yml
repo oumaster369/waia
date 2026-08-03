@@ -169,8 +169,8 @@ jobs:
 
   fhv-idhps-canonical-probe-gate:
     name: fhv idhps canonical probe gate
-    # Apple silicon is closer to local M-series cps budget than ubuntu-latest x64.
-    runs-on: macos-latest
+    # Public ARM64 Linux (4 vCPU / 16 GiB) — macos-latest M1 is 3 vCPU / 7 GiB and ~3× slower.
+    runs-on: ubuntu-24.04-arm
     needs: [fhv-idhps-stability-gate]
     timeout-minutes: 60
     env:
@@ -179,6 +179,7 @@ jobs:
       FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND: "1000"
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
       FHV_IDHPS_TIMINGS: "1"
+      NODE_ENV: production
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -201,13 +202,14 @@ jobs:
 
   fhv-idhps-full-corpus-gate:
     name: fhv idhps full corpus gate
-    runs-on: macos-latest
+    runs-on: ubuntu-24.04-arm
     needs: [fhv-idhps-canonical-probe-gate]
     timeout-minutes: 180
     env:
       DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
       FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
+      NODE_ENV: production
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

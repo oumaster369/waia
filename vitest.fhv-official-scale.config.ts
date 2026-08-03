@@ -19,7 +19,7 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    setupFiles: ["./vitest.setup.ts"],
+    setupFiles: ["./vitest.fhv-official-scale.setup.ts"],
     include: ["tests/fhv/official-scale/blocking/**/*.test.ts"],
     exclude: ["tests/e2e/**", "node_modules/**", ".next/**"],
     css: false,

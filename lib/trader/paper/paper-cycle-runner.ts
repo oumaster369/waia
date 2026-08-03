@@ -154,9 +154,14 @@ async function refreshAccountStateIfConfigured(
   }
 
   if (input.htrAccounting) {
-    const openOrders = await input.orderRepository.listOpenOrders(input.context, {
-      executionMode: "mock",
-    });
+    const idhps = getIdhpsSession();
+    const openOrderCount = idhps
+      ? countIdhpsOpenOrders(idhps.inventory)
+      : (
+          await input.orderRepository.listOpenOrders(input.context, {
+            executionMode: "mock",
+          })
+        ).length;
     if (input.portfolio) {
       const portfolio = derivePortfolioFromAccountingState({
         state: input.htrAccounting.bridge.state,
@@ -166,13 +171,13 @@ async function refreshAccountStateIfConfigured(
       });
       return toAccountRiskState({
         portfolio,
-        openOrderCount: openOrders.length,
+        openOrderCount,
         accountPeakHwm: input.htrAccounting.bridge.state.equityHwm,
         monthlyPeakHwm: input.htrAccounting.bridge.state.monthlyPeakHwm,
       });
     }
     return deriveAccountRiskStateFromBridge(input.htrAccounting.bridge, {
-      openOrderCount: openOrders.length,
+      openOrderCount,
     });
   }
 
