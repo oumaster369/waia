@@ -94,21 +94,21 @@ function initialStrategyPeaksFromAllocations(startingEquity: string): Record<str
   return peaks;
 }
 
-function updateStrategyDrawdownMaps(input: {
-  equityUsdt: string;
-  strategyPeakHwmByKey: Record<string, string>;
-  strategyDrawdownBpsByKey: Record<string, number>;
-}): {
-  strategyPeakHwmByKey: Record<string, string>;
-  strategyDrawdownBpsByKey: Record<string, number>;
+let cachedVirtualAllocationEntries: {
+  totalAllocation: string;
+  entries: Array<{ attrKey: string; allocation: string }>;
+} | null = null;
+
+function getVirtualAllocationEntries(): {
+  totalAllocation: string;
+  entries: Array<{ attrKey: string; allocation: string }>;
 } {
+  if (cachedVirtualAllocationEntries) {
+    return cachedVirtualAllocationEntries;
+  }
   const allocations = computeVirtualStrategyAllocations();
-  const totalAllocation = Object.values(allocations).reduce(
-    (sum, value) => addDecimal(sum, value),
-    "0",
-  );
-  const strategyPeakHwmByKey = { ...input.strategyPeakHwmByKey };
-  const strategyDrawdownBpsByKey = { ...input.strategyDrawdownBpsByKey };
+  const entries: Array<{ attrKey: string; allocation: string }> = [];
+  let totalAllocation = "0";
   for (const [rawKey, allocation] of Object.entries(allocations)) {
     if (compareDecimal(allocation, "0") <= 0) {
       continue;
@@ -117,7 +117,28 @@ function updateStrategyDrawdownMaps(input: {
     if (!strategyId || !strategyVersion) {
       continue;
     }
-    const attrKey = buildStrategyAttributionKey(strategyId, strategyVersion);
+    totalAllocation = addDecimal(totalAllocation, allocation);
+    entries.push({
+      attrKey: buildStrategyAttributionKey(strategyId, strategyVersion),
+      allocation,
+    });
+  }
+  cachedVirtualAllocationEntries = { totalAllocation, entries };
+  return cachedVirtualAllocationEntries;
+}
+
+function updateStrategyDrawdownMaps(input: {
+  equityUsdt: string;
+  strategyPeakHwmByKey: Record<string, string>;
+  strategyDrawdownBpsByKey: Record<string, number>;
+}): {
+  strategyPeakHwmByKey: Record<string, string>;
+  strategyDrawdownBpsByKey: Record<string, number>;
+} {
+  const { totalAllocation, entries } = getVirtualAllocationEntries();
+  const strategyPeakHwmByKey = { ...input.strategyPeakHwmByKey };
+  const strategyDrawdownBpsByKey = { ...input.strategyDrawdownBpsByKey };
+  for (const { attrKey, allocation } of entries) {
     const prorataEquity =
       compareDecimal(totalAllocation, "0") > 0
         ? divideDecimal(multiplyDecimal(input.equityUsdt, allocation), totalAllocation)

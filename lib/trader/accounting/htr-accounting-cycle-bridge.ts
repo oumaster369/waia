@@ -563,6 +563,7 @@ export function attachClosed1mMarkToAccountingBridge(
     if (state.marks[symbol] !== mark) {
       state.marks = { [symbol]: mark };
     }
+    // ISO frontiers are `YYYY-MM-DDTHH:mm:ss.sssZ` — month key is the YYYY-MM prefix.
     const monthKey = resolveMonthKeyUtc(closedBar.barCloseTime);
     if (monthKey !== state.monthKey) {
       const hwm = updateDrawdownHighWaterMarks({

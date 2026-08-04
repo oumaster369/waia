@@ -86,6 +86,10 @@ export function isDrawdownBreach(drawdownBps: number, limitBps: number): boolean
 }
 
 export function resolveMonthKeyUtc(asOfIso: string): string {
+  // Hot path: accounting frontiers are canonical UTC ISO (`YYYY-MM-DDTHH:mm:ss.sssZ`).
+  if (asOfIso.length >= 10 && asOfIso[4] === "-" && asOfIso[7] === "-") {
+    return asOfIso.slice(0, 7);
+  }
   const date = new Date(asOfIso);
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
