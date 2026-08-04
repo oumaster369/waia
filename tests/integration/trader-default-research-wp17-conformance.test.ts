@@ -254,41 +254,47 @@ describe("HTR-WP17 default research path conformance", () => {
     });
 
     it("preserves legacy non-HTR caller behavior without historical execution profile", async () => {
-      const db = getDb();
-      insertEmailPasswordUser(db, {
-        id: "00000000-0000-4000-8000-0000000415l",
-        email: "legacy-non-htr@waia.invalid",
-        password: "password123",
-        identityLabel: "Legacy Non-HTR",
-      });
-      const orgId = ensureUserCoreSeedSqlite(db, {
-        userId: "00000000-0000-4000-8000-0000000415l",
-        displayName: "Legacy Non-HTR",
-      });
-      await createSqliteRiskLimitsService(db).upsertLimitsForOrg(requireOrgContext(orgId), {
-        ...DEFAULT_ORG_RISK_LIMITS,
-      });
-      const legacy = buildLegacyPaperDeps(db);
-      const applyCostSpy = vi.spyOn(costModelModule, "applyCostToFill");
-      const context = requireOrgContext(orgId);
+      // Prior tests call session.cleanup() which closes the SQLite singleton; remigrate first.
+      const session = await createInMemoryResearchBacktestSession();
+      try {
+        const db = getDb();
+        insertEmailPasswordUser(db, {
+          id: "00000000-0000-4000-8000-0000000415l",
+          email: "legacy-non-htr@waia.invalid",
+          password: "password123",
+          identityLabel: "Legacy Non-HTR",
+        });
+        const orgId = ensureUserCoreSeedSqlite(db, {
+          userId: "00000000-0000-4000-8000-0000000415l",
+          displayName: "Legacy Non-HTR",
+        });
+        await createSqliteRiskLimitsService(db).upsertLimitsForOrg(requireOrgContext(orgId), {
+          ...DEFAULT_ORG_RISK_LIMITS,
+        });
+        const legacy = buildLegacyPaperDeps(db);
+        const applyCostSpy = vi.spyOn(costModelModule, "applyCostToFill");
+        const context = requireOrgContext(orgId);
 
-      await runResearchValidationBacktest({
-        context,
-        bars: flatBars(25),
-        strategyId: MEAN_REVERSION_V0,
-        strategyVersion: STRATEGY_VERSION,
-        datasetId: "dataset-legacy-non-htr",
-        runId: "run-legacy-non-htr",
-        split: "validation",
-        costModel: createCostModelV1("10", "5"),
-        deps: legacy.deps,
-        orderRepository: legacy.orderRepository,
-        accountKey: "legacy-non-htr",
-        defaultQuantity: "0.01",
-      });
+        await runResearchValidationBacktest({
+          context,
+          bars: flatBars(25),
+          strategyId: MEAN_REVERSION_V0,
+          strategyVersion: STRATEGY_VERSION,
+          datasetId: "dataset-legacy-non-htr",
+          runId: "run-legacy-non-htr",
+          split: "validation",
+          costModel: createCostModelV1("10", "5"),
+          deps: legacy.deps,
+          orderRepository: legacy.orderRepository,
+          accountKey: "legacy-non-htr",
+          defaultQuantity: "0.01",
+        });
 
-      expect(isHistoricalExecutionServiceEnabled(legacy.deps)).toBe(false);
-      expect(applyCostSpy.mock.calls.length).toBeGreaterThanOrEqual(0);
+        expect(isHistoricalExecutionServiceEnabled(legacy.deps)).toBe(false);
+        expect(applyCostSpy.mock.calls.length).toBeGreaterThanOrEqual(0);
+      } finally {
+        session.cleanup();
+      }
     });
   });
 

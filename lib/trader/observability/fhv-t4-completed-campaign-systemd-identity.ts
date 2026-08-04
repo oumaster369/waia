@@ -172,14 +172,15 @@ export function parseFhvT4CompletedCampaignSystemdIdentity(
     execMainStatus: identity.execMainStatus,
     nRestarts: identity.nRestarts,
   };
-  const { contentDigest, ...withoutDigest } = identity;
-  if (computePayloadDigest(withoutDigest) !== contentDigest) {
+  // Digest normalized body (stable insertion order) — matches shell reader + serialize.
+  const expectedDigest = computePayloadDigest(normalized);
+  if (identity.contentDigest !== expectedDigest) {
     throw new FhvT4CompletedCampaignSystemdIdentityError(
       "FHV_T4_COMPLETED_CAMPAIGN_IDENTITY_DIGEST_MISMATCH",
       "contentDigest mismatch.",
     );
   }
-  return { ...normalized, contentDigest };
+  return { ...normalized, contentDigest: expectedDigest };
 }
 
 export function readFhvT4CompletedCampaignSystemdIdentity(
