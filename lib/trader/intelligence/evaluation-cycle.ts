@@ -3,6 +3,7 @@ import { assembleDecisionChain } from "@/lib/trader/intelligence/decision-chain"
 import { emitMsvDecisionCounters } from "@/lib/trader/intelligence/decision-telemetry";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
 import { buildHypothesisSet } from "@/lib/trader/intelligence/hypothesis/build-hypothesis-set";
+import { HYPOTHESIS_SET_SCHEMA_VERSION } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 import { isMiCoreEnabled } from "@/lib/trader/intelligence/mi-core-flag";
 import { isHistoricalProfileActive } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
@@ -100,12 +101,26 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     : undefined;
 
   const sessionState = input.hypothesisSessionState ?? createEmptyHypothesisSessionState();
-  const { hypothesisSet, sessionState: nextSessionState } = buildHypothesisSet({
-    reconstruction,
-    understanding,
-    evaluatedAt,
-    sessionState,
-  });
+  // STREAM_ONLY + fusedContext off: CDE returns ALLOW_TRADING before opportunity/conviction.
+  // Skip hypothesis allocation (8 hypotheses + sort + session maps) on the IDHPS hot path.
+  const skipHypothesis = input.omitIntelligenceArtifacts === true && input.fusedContext == null;
+  const { hypothesisSet, sessionState: nextSessionState } = skipHypothesis
+    ? {
+        hypothesisSet: {
+          schemaVersion: HYPOTHESIS_SET_SCHEMA_VERSION,
+          evaluatedAt,
+          hypotheses: [],
+          activeHypothesis: null,
+          opportunity: null,
+        },
+        sessionState,
+      }
+    : buildHypothesisSet({
+        reconstruction,
+        understanding,
+        evaluatedAt,
+        sessionState,
+      });
 
   const msv = buildMsvEnvelope({
     features,

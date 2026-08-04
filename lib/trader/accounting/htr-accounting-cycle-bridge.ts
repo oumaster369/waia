@@ -1,4 +1,5 @@
 import type { Bar } from "@/lib/trader/intelligence/types";
+import { isIdhpsHotPathEnabled } from "@/lib/trader/execution/idhps-hot-path-counters";
 import {
   advanceAccountingFrontier,
   buildHtrPnlReportV1,
@@ -687,6 +688,15 @@ export function runAutomaticAccountingReconciliation(
       fillCount === (bridge.lastFullReconcileFillCount ?? -1) &&
       bridge.state.cash === (bridge.lastFullReconcileCash ?? "");
 
+    // IDHPS mark-only: keep before_guardian as the per-cycle assert; skip duplicate light checks.
+    if (
+      markOnlyCycle &&
+      isIdhpsHotPathEnabled() &&
+      (input.phase === "frontier_mutation" || input.phase === "before_cycle_complete")
+    ) {
+      return;
+    }
+
     if (markOnlyCycle) {
       // Light check: cash/equity conservation + inventory parity (phases preserved).
       if (compareDecimal(bridge.state.markedPositionValue, "0") === 0) {
@@ -779,10 +789,13 @@ export function evaluateHtrGuardianForBridge(
   bridge.lastGuardianCycle = cycle;
   bridge.breachState = cycle.breachState;
   bridge.guardianReason = cycle.reason;
-  recordRuntimeCall(bridge, "WP20_GUARDIAN_EVALUATED", {
-    cycleIndex: input.cycleIndex,
-    detail: cycle.breachState,
-  });
+  // IDHPS: NONE dominates mark-only bars — skip callOrder push (GC); record breaches.
+  if (cycle.breachState !== "NONE" || !isIdhpsHotPathEnabled()) {
+    recordRuntimeCall(bridge, "WP20_GUARDIAN_EVALUATED", {
+      cycleIndex: input.cycleIndex,
+      detail: cycle.breachState,
+    });
+  }
   return cycle;
 }
 
