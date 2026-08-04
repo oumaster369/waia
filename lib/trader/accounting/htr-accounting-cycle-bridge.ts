@@ -621,11 +621,7 @@ export function attachClosed1mMarkToAccountingBridge(
     if ("semanticContentDigest" in state) {
       (state as { semanticContentDigest: string }).semanticContentDigest = "";
     }
-    recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
-      cycleIndex,
-      detail: symbol,
-      at: closedBar.barCloseTime,
-    });
+    // IDHPS: skip WP18 callOrder on mark ticks (fill path still records WP17).
   }
 }
 

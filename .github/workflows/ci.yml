@@ -185,7 +185,7 @@ jobs:
       FHV_IDHPS_EVIDENCE_BATCH_CYCLES: "1024"
       NODE_ENV: production
       # Larger young-gen reduces GC pressure on the STREAM_ONLY hot path.
-      NODE_OPTIONS: "--max-semi-space-size=1024 --max-old-space-size=6144"
+      NODE_OPTIONS: "--max-semi-space-size=1536 --max-old-space-size=6144"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -217,7 +217,7 @@ jobs:
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
       FHV_IDHPS_EVIDENCE_BATCH_CYCLES: "1024"
       NODE_ENV: production
-      NODE_OPTIONS: "--max-semi-space-size=1024 --max-old-space-size=6144"
+      NODE_OPTIONS: "--max-semi-space-size=1536 --max-old-space-size=6144"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
