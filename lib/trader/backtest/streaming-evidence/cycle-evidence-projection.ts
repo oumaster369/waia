@@ -6,22 +6,32 @@ import {
   type ReplayCycleStrategyExecutionProjection,
 } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 
+const EMPTY_STRATEGY_EXECUTIONS: ReplayCycleStrategyExecutionProjection[] = Object.freeze(
+  [],
+) as ReplayCycleStrategyExecutionProjection[];
+
 function serializeStrategyExecutions(
   cycle: PaperCycleResult,
 ): ReplayCycleStrategyExecutionProjection[] {
-  return cycle.strategyExecutions.map((entry) => ({
-    signalId: entry.signal.strategyId,
-    side: entry.signal.side ?? null,
-    submitBlocked: entry.submitBlocked,
-    skipReason: entry.skipReason ?? null,
-    executionStatus: entry.execution?.status ?? null,
-    orderState:
-      entry.execution && entry.execution.status === "submitted"
-        ? entry.execution.order.state
-        : null,
-    orderId:
-      entry.execution && entry.execution.status === "submitted" ? entry.execution.order.id : null,
-  }));
+  const executions = cycle.strategyExecutions;
+  if (executions.length === 0) {
+    return EMPTY_STRATEGY_EXECUTIONS;
+  }
+  const out: ReplayCycleStrategyExecutionProjection[] = new Array(executions.length);
+  for (let index = 0; index < executions.length; index += 1) {
+    const entry = executions[index]!;
+    const submitted = entry.execution?.status === "submitted";
+    out[index] = {
+      signalId: entry.signal.strategyId,
+      side: entry.signal.side ?? null,
+      submitBlocked: entry.submitBlocked,
+      skipReason: entry.skipReason ?? null,
+      executionStatus: entry.execution?.status ?? null,
+      orderState: submitted ? entry.execution!.order.state : null,
+      orderId: submitted ? entry.execution!.order.id : null,
+    };
+  }
+  return out;
 }
 
 function serializeGuardian(cycle: PaperCycleResult): ReplayCycleGuardianProjection | null {

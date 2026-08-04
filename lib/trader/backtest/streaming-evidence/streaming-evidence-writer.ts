@@ -64,7 +64,7 @@ export function createStreamingEvidenceWriter(
 
   const timelineWriter = new StreamingRegimeTimelineWriter(input.runDir);
 
-  let batch: ReplayCycleEvidenceProjection[] = [];
+  const batch: ReplayCycleEvidenceProjection[] = [];
   let nextSeq = 0;
   let lastChunkDigest: string | null = null;
   const chunkDigests: string[] = [];
@@ -117,7 +117,8 @@ export function createStreamingEvidenceWriter(
     chunkDigests.push(chunkDigest);
     sealedThroughCycleIndex = batch.at(-1)!.cycleIndex;
     nextSeq += 1;
-    batch = [];
+    // Reuse the batch array (avoid reallocating the container each flush).
+    batch.length = 0;
   };
 
   const seal = (

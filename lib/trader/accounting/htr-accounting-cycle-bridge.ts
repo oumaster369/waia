@@ -783,10 +783,14 @@ export function evaluateHtrGuardianForBridge(
   bridge.lastGuardianCycle = cycle;
   bridge.breachState = cycle.breachState;
   bridge.guardianReason = cycle.reason;
-  recordRuntimeCall(bridge, "WP20_GUARDIAN_EVALUATED", {
-    cycleIndex: input.cycleIndex,
-    detail: cycle.breachState,
-  });
+  // Official-scale STREAM_ONLY: NONE dominates; skip callOrder push (GC) while still evaluating.
+  // Research/MACRO-H paths keep full WP20 callOrder (no FHV_IDHPS_SKIP_REGIME_TIMELINE).
+  if (cycle.breachState !== "NONE" || process.env.FHV_IDHPS_SKIP_REGIME_TIMELINE !== "1") {
+    recordRuntimeCall(bridge, "WP20_GUARDIAN_EVALUATED", {
+      cycleIndex: input.cycleIndex,
+      detail: cycle.breachState,
+    });
+  }
   return cycle;
 }
 

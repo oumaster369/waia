@@ -178,8 +178,7 @@ describe("a49c2c57 hot-path audits (hypothesis omit + feature equivalence)", () 
   it("artifact identity recorder binds FINAL_HEAD separately from EXECUTED_SHA on pull_request", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "fhv-identity-"));
     try {
-      const finalHead = "a49c2c57dfe1d75e80862c995d9f605a24482205";
-      const baseSha = "743ae15b906b89a46a23936ccc6144967e816c0a";
+      const pushBefore = "743ae15b906b89a46a23936ccc6144967e816c0a";
       // Push-mode fallback: FINAL_HEAD == EXECUTED_SHA (no PR event).
       execFileSync(
         "bash",
@@ -189,7 +188,7 @@ describe("a49c2c57 hot-path audits (hypothesis omit + feature equivalence)", () 
             ...process.env,
             FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: dir,
             GITHUB_EVENT_NAME: "push",
-            PUSH_BEFORE_SHA: baseSha,
+            PUSH_BEFORE_SHA: pushBefore,
           },
           stdio: ["ignore", "pipe", "pipe"],
         },
@@ -202,12 +201,18 @@ describe("a49c2c57 hot-path audits (hypothesis omit + feature equivalence)", () 
         readFileSync(path.join(dir, "artifact-identity.v1.json"), "utf8"),
       ) as { schemaVersion: string; finalHead: string; executedSha: string; baseSha: string };
       expect(identity.schemaVersion).toBe("fhv-artifact-identity/v1");
-      expect(identity.baseSha).toBe(baseSha);
+      expect(identity.baseSha).toBe(pushBefore);
       expect(identity.finalHead).toBe(identity.executedSha);
 
-      // pull_request mode with head checkout (no merge parents): FINAL_HEAD from event.
+      // pull_request mode: when HEAD is a merge commit, use real parents; otherwise head checkout.
+      const parents = execFileSync("git", ["cat-file", "-p", "HEAD"], { encoding: "utf8" })
+        .split("\n")
+        .filter((line) => line.startsWith("parent "))
+        .map((line) => line.slice("parent ".length).trim());
       const dir2 = mkdtempSync(path.join(tmpdir(), "fhv-identity-pr-"));
       try {
+        const prHead = parents.length >= 2 ? parents[1]! : executed;
+        const prBase = parents.length >= 2 ? parents[0]! : pushBefore;
         execFileSync(
           "bash",
           [path.join(process.cwd(), "scripts/ops/record-fhv-artifact-identity.sh")],
@@ -216,18 +221,21 @@ describe("a49c2c57 hot-path audits (hypothesis omit + feature equivalence)", () 
               ...process.env,
               FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: dir2,
               GITHUB_EVENT_NAME: "pull_request",
-              PR_HEAD_SHA: executed,
-              PR_BASE_SHA: baseSha,
+              PR_HEAD_SHA: prHead,
+              PR_BASE_SHA: prBase,
             },
             stdio: ["ignore", "pipe", "pipe"],
           },
         );
-        expect(readFileSync(path.join(dir2, "FINAL_HEAD.txt"), "utf8").trim()).toBe(executed);
-        expect(readFileSync(path.join(dir2, "BASE_SHA.txt"), "utf8").trim()).toBe(baseSha);
+        expect(readFileSync(path.join(dir2, "FINAL_HEAD.txt"), "utf8").trim()).toBe(prHead);
+        expect(readFileSync(path.join(dir2, "BASE_SHA.txt"), "utf8").trim()).toBe(prBase);
+        expect(readFileSync(path.join(dir2, "EXECUTED_SHA.txt"), "utf8").trim()).toBe(executed);
+        if (parents.length >= 2) {
+          expect(prHead).not.toBe(executed);
+        }
       } finally {
         rmSync(dir2, { recursive: true, force: true });
       }
-      expect(finalHead).toHaveLength(40);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
