@@ -166,6 +166,7 @@ function applyEquityDrawdownState(
    * callers (attachAccountingMarks) may already have written `state.equity`.
    */
   priorEquityUsdt?: string,
+  options?: { skipStrategyMaps?: boolean },
 ): AccountingStateV1 {
   const monthKey = resolveMonthKeyUtc(frontierAsOf);
   const priorEquity = priorEquityUsdt ?? state.equity;
@@ -180,6 +181,19 @@ function applyEquityDrawdownState(
     priorMonthKey: state.monthKey,
     monthKey,
   });
+  // Mark-only STREAM_ONLY advances: account/monthly HWM must stay correct (C-A1), but
+  // strategy maps are refreshed on fills / non-skipped digests (IDHPS cps budget).
+  if (options?.skipStrategyMaps) {
+    return {
+      ...state,
+      equity: equityUsdt,
+      equityHwm: hwm.accountPeakHwm,
+      monthlyPeakHwm: hwm.monthlyPeakHwm,
+      monthKey,
+      accountDrawdownBps: computePeakEquityDrawdownBps(equityUsdt, hwm.accountPeakHwm),
+      monthlyDrawdownBps: computePeakEquityDrawdownBps(equityUsdt, hwm.monthlyPeakHwm),
+    };
+  }
   const strategyMaps = updateStrategyDrawdownMaps({
     equityUsdt,
     strategyPeakHwmByKey: state.strategyPeakHwmByKey ?? {},
@@ -325,6 +339,7 @@ export function attachAccountingMarks(
   state: AccountingStateV1,
   marks: MarksJsonV1,
   frontierAsOf: string,
+  options?: { skipStrategyMaps?: boolean },
 ): AccountingStateV1 {
   const priorEquity = state.equity;
   const next = { ...state, marks: { ...marks }, frontierAsOf };
@@ -344,7 +359,9 @@ export function attachAccountingMarks(
   }
   next.markedPositionValue = markedPositionValue;
   next.equity = addDecimal(next.cash, markedPositionValue);
-  return applyEquityDrawdownState(next, next.equity, frontierAsOf, priorEquity);
+  return applyEquityDrawdownState(next, next.equity, frontierAsOf, priorEquity, {
+    skipStrategyMaps: options?.skipStrategyMaps,
+  });
 }
 
 export function computeAccountingSemanticDigest(state: AccountingStateV1): string {
@@ -398,7 +415,10 @@ export function advanceAccountingFrontier(
   }
 
   if (input.marks) {
-    state = attachAccountingMarks(state, input.marks, input.frontierAsOf);
+    state = attachAccountingMarks(state, input.marks, input.frontierAsOf, {
+      // Hot-path mark ticks: keep account/monthly HWM correct; defer strategy maps to fills.
+      skipStrategyMaps: input.skipSemanticDigest === true && input.fill == null,
+    });
   } else if (input.fill) {
     const priorEquity = state.equity;
     state = {
