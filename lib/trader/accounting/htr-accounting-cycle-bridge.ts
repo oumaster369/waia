@@ -583,12 +583,44 @@ export function attachClosed1mMarkToAccountingBridge(
     state.accountingSequence += 1;
     // IDHPS: flat-book marks dominate; skip callOrder push (open-book still records).
   } else {
-    bridge.state = advanceAccountingFrontier({
-      state: bridge.state,
-      marks: mergedMarks,
-      frontierAsOf: closedBar.barCloseTime,
-      skipSemanticDigest: true,
-    });
+    // Open book: mutate in place (skipSemanticDigest) — avoid advanceAccountingFrontier
+    // shallow-copies on every bar (CI probe cps). Account/monthly HWM stay correct.
+    const state = bridge.state;
+    const priorEquity = state.equity;
+    let markedPositionValue = "0";
+    for (const [openSymbol, position] of Object.entries(state.positions)) {
+      if (compareDecimal(position.quantity, "0") <= 0) {
+        continue;
+      }
+      markedPositionValue = addDecimal(
+        markedPositionValue,
+        multiplyDecimal(position.quantity, mergedMarks[openSymbol]!.price),
+      );
+    }
+    const equity = addDecimal(state.cash, markedPositionValue);
+    state.marks = mergedMarks;
+    state.markedPositionValue = markedPositionValue;
+    state.equity = equity;
+    state.frontierAsOf = closedBar.barCloseTime;
+    const monthKey = resolveMonthKeyUtc(closedBar.barCloseTime);
+    if (equity !== priorEquity || monthKey !== state.monthKey) {
+      const hwm = updateDrawdownHighWaterMarks({
+        equityUsdt: equity,
+        accountPeakHwm: state.equityHwm,
+        monthlyPeakHwm: state.monthlyPeakHwm ?? state.equityHwm,
+        priorMonthKey: state.monthKey,
+        monthKey,
+      });
+      state.equityHwm = hwm.accountPeakHwm;
+      state.monthlyPeakHwm = hwm.monthlyPeakHwm;
+      state.monthKey = monthKey;
+      state.accountDrawdownBps = computePeakEquityDrawdownBps(equity, hwm.accountPeakHwm);
+      state.monthlyDrawdownBps = computePeakEquityDrawdownBps(equity, hwm.monthlyPeakHwm);
+    }
+    state.accountingSequence += 1;
+    if ("semanticContentDigest" in state) {
+      (state as { semanticContentDigest: string }).semanticContentDigest = "";
+    }
     recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
       cycleIndex,
       detail: symbol,
