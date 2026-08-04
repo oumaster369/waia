@@ -76,7 +76,7 @@ export function buildReplayCycleEvidenceProjection(
   return {
     schemaVersion: CYCLE_PROJECTION_SCHEMA_VERSION,
     cycleIndex,
-    evaluatedAtMs: new Date(cycle.evaluation.msv.evaluatedAt).getTime(),
+    evaluatedAtMs: Date.parse(cycle.evaluation.msv.evaluatedAt),
     regime: cycle.evaluation.msv.derived.regime,
     skipReason: cycle.skipReason ?? null,
     strategyExecutions: serializeStrategyExecutions(cycle),

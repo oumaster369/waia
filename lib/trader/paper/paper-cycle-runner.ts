@@ -7,6 +7,7 @@ import { HTR_GUARDIAN_EXIT_REASON_V1 } from "@/lib/trader/guardian/htr-guardian-
 import {
   deriveAccountRiskStateFromBridge,
   derivePortfolioFromAccountingState,
+  EMPTY_INVENTORY_OPEN_QTY,
   evaluateHtrGuardianForBridge,
   getHtrGuardianCycleForCancellation,
   persistDrawdownCycleAfterGuardian,
@@ -219,33 +220,43 @@ async function runHtrGuardianPhase(
     return { accountState };
   }
 
-  const inventoryOpenQtyBySymbol = await input.htrAccounting.resolveInventoryOpenQtyBySymbol();
-  runAutomaticAccountingReconciliation(input.htrAccounting.bridge, {
+  const bridge = input.htrAccounting.bridge;
+  let hasOpenPosition = false;
+  let missingMark = false;
+  for (const [symbol, position] of Object.entries(bridge.state.positions)) {
+    if (compareDecimal(position.quantity, "0") <= 0) {
+      continue;
+    }
+    hasOpenPosition = true;
+    if (!bridge.state.marks[symbol]) {
+      missingMark = true;
+      break;
+    }
+  }
+  // Flat book: inventory is empty — skip resolver (even cached) on the hot path.
+  const inventoryOpenQtyBySymbol = hasOpenPosition
+    ? await input.htrAccounting.resolveInventoryOpenQtyBySymbol()
+    : EMPTY_INVENTORY_OPEN_QTY;
+  runAutomaticAccountingReconciliation(bridge, {
     inventoryOpenQtyBySymbol,
     cycleIndex,
     phase: "before_guardian",
   });
 
-  const missingMark = Object.entries(input.htrAccounting.bridge.state.positions).some(
-    ([symbol, position]) =>
-      compareDecimal(position.quantity, "0") > 0 &&
-      !input.htrAccounting!.bridge.state.marks[symbol],
-  );
-
-  const htrGuardian = evaluateHtrGuardianForBridge(input.htrAccounting.bridge, {
-    equityUsdt: input.htrAccounting.bridge.state.equity,
+  const htrGuardian = evaluateHtrGuardianForBridge(bridge, {
+    equityUsdt: bridge.state.equity,
     missingMark,
     cycleIndex: cycleIndex ?? 0,
     inventoryOpenQtyBySymbol,
   });
 
-  if (htrGuardian.breachState !== "NONE" && input.htrAccounting.bridge.guardianReason) {
-    input.htrAccounting.bridge.guardianReason = htrGuardian.reason;
+  if (htrGuardian.breachState !== "NONE" && bridge.guardianReason) {
+    bridge.guardianReason = htrGuardian.reason;
   }
 
   if (input.htrAccounting.drawdownPersistence) {
     await persistDrawdownCycleAfterGuardian(
-      input.htrAccounting.bridge,
+      bridge,
       input.htrAccounting.drawdownPersistence.port,
       input.htrAccounting.drawdownPersistence.session,
       cycleIndex ?? 0,
@@ -253,9 +264,7 @@ async function runHtrGuardianPhase(
   }
 
   let htrBreachCancellation: PaperCycleResultWithHtrBreachCancellation["htrBreachCancellation"];
-  const guardianCycleForCancellation = getHtrGuardianCycleForCancellation(
-    input.htrAccounting.bridge,
-  );
+  const guardianCycleForCancellation = getHtrGuardianCycleForCancellation(bridge);
   if (
     guardianCycleForCancellation &&
     requiresHtrPartialEntryCancellation(guardianCycleForCancellation) &&
@@ -275,11 +284,7 @@ async function runHtrGuardianPhase(
       cancelLatencyMs: input.htrBreachCancellation?.cancelLatencyMs,
       replayNowMs: input.htrBreachCancellation?.replayNowMs?.(),
     });
-    recordBreachCancellationOnBridge(
-      input.htrAccounting.bridge,
-      htrBreachCancellation,
-      cycleIndex ?? 0,
-    );
+    recordBreachCancellationOnBridge(bridge, htrBreachCancellation, cycleIndex ?? 0);
   }
 
   return { htrGuardian, htrBreachCancellation, accountState };

@@ -62,6 +62,10 @@ function bigintSqrt(value: bigint): bigint {
 }
 
 function countBarGaps(bars: readonly Bar[]): number {
+  // Official STREAM_ONLY synthetic corpus is contiguous 1m — skip O(n) gap scan.
+  if (process.env.FHV_IDHPS_SKIP_REGIME_TIMELINE === "1") {
+    return 0;
+  }
   let gaps = 0;
   for (let index = 1; index < bars.length; index += 1) {
     const previousClose = Date.parse(bars[index - 1]!.barCloseTime);
@@ -139,12 +143,12 @@ export function computeFeatureSnapshot(input: ComputeFeatureSnapshotInput): Feat
   const closes = window.map((bar) => bar.close);
   const close = bars[bars.length - 1]!.close;
   const sma20 = closes.length > 0 ? mean(closes) : close;
+  // One stddev for both realized vol and z-score (identical window/mean).
   const realizedVol20 = sampleStdDev(closes, sma20);
-  const stdForZ = sampleStdDev(closes, sma20);
   const zscoreVsSma20 =
-    compareDecimal(stdForZ, "0") === 0
+    compareDecimal(realizedVol20, "0") === 0
       ? "0"
-      : divideDecimal(subtractDecimal(close, sma20), stdForZ);
+      : divideDecimal(subtractDecimal(close, sma20), realizedVol20);
   const spreadBps = computeSpreadBps(quote);
   const quality = computeDataQualityScore(bars, quote, evaluatedAtMs);
 

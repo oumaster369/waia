@@ -35,6 +35,7 @@ import {
 import type { FhvSourceFrontier } from "@/lib/trader/market-data/fhv-source-frontier";
 import { computeFhvOfficialDatasetCursorDigest } from "@/lib/trader/market-data/fhv-official-dataset-cursor";
 import { writeCanvasStateSidecar } from "@/lib/trader/market-data/canvas/market-canvas-serialization";
+import { advanceMarketCanvasClosedBar } from "@/lib/trader/market-data/canvas/market-canvas";
 import type { MarketCanvasState } from "@/lib/trader/market-data/canvas/market-canvas.types";
 import {
   DEFAULT_REPLAY_SUBSTRATE_MODE,
@@ -87,6 +88,7 @@ import {
   createDrawdownPersistenceSession,
   createHtrAccountingCycleBridge,
   deriveAccountRiskStateFromBridge,
+  EMPTY_INVENTORY_OPEN_QTY,
   hydrateBridgeDrawdownFromPersistence,
   HtrAccountingReconciliationTerminationError,
   restoreAccountingBridgeFromCheckpoint,
@@ -427,7 +429,12 @@ async function reconcileHtrAccountingBridge(input: {
     | "before_cycle_complete"
     | "before_terminal_export";
 }): Promise<void> {
-  const inventoryOpenQtyBySymbol = await input.resolveInventoryOpenQtyBySymbol();
+  const hasOpenPosition = Object.values(input.bridge.state.positions).some(
+    (position) => compareDecimal(position.quantity, "0") > 0,
+  );
+  const inventoryOpenQtyBySymbol = hasOpenPosition
+    ? await input.resolveInventoryOpenQtyBySymbol()
+    : EMPTY_INVENTORY_OPEN_QTY;
   runAutomaticAccountingReconciliation(input.bridge, {
     inventoryOpenQtyBySymbol,
     cycleIndex: input.cycleIndex,
@@ -581,6 +588,8 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
 
   let canvasState = input.initialCanvasState ?? createInitialCanvasState();
   let canvasAppliedBarCount = input.initialCanvasState?.closedBarCount ?? 0;
+  /** Per-symbol incremental canvases for STREAM_ONLY reconstruction (fusedContext stays off). */
+  const streamOnlyCanvasBySymbol = new Map<string, MarketCanvasState>();
   const bars1mPrefix: Bar[] = input.initialBars1mPrefix ? [...input.initialBars1mPrefix] : [];
   let wp21CheckpointState = input.wp21CheckpointState;
   let boundaryEvidenceSealOverride: "partial" | "complete" | null = null;
@@ -650,13 +659,37 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         canvasState,
       });
       reconstruction = buildSubstrateReconstruction({ substrateMode, canvasState });
+    } else if (retentionMode === "STREAM_ONLY") {
+      // IDHPS: fusedContext stays off (official-scale economics), but feed per-symbol canvas so
+      // evaluation uses incremental reconstruction instead of full MTF rebuild each bar.
+      const canvasAdvanceTimer = benchmarkObserver.beginStage("canvas-advance", cycleIndex);
+      const closedBar = snapshot.bars.at(-1);
+      if (closedBar) {
+        let symbolCanvas = streamOnlyCanvasBySymbol.get(closedBar.symbol);
+        if (!symbolCanvas || symbolCanvas.instrumentId === null) {
+          const seeded = applyNewBarsToCanvas(createInitialCanvasState(), snapshot.bars, 0);
+          symbolCanvas = seeded.state;
+        } else {
+          const advanced = advanceMarketCanvasClosedBar(symbolCanvas, closedBar);
+          if (!advanced.ok) {
+            throw new Error(`[backtest] stream-only canvas advance failed: ${advanced.error}`);
+          }
+          symbolCanvas = advanced.state;
+        }
+        streamOnlyCanvasBySymbol.set(closedBar.symbol, symbolCanvas);
+        reconstruction = buildSubstrateReconstruction({
+          substrateMode,
+          canvasState: symbolCanvas,
+        });
+      }
+      canvasAdvanceTimer.end();
     }
 
     fusedContextTimer.end();
     benchmarkObserver.sampleMemory("fused-context-build", cycleIndex);
 
     const clockAdvanceTimer = benchmarkObserver.beginStage("clock-advance", cycleIndex);
-    input.deps.researchReplayDeterminism?.clock.setNowMs(new Date(snapshot.evaluatedAt).getTime());
+    input.deps.researchReplayDeterminism?.clock.setNowMs(Date.parse(snapshot.evaluatedAt));
     clockAdvanceTimer.end();
     benchmarkObserver.sampleMemory("clock-advance", cycleIndex);
 

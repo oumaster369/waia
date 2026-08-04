@@ -83,6 +83,10 @@ export type HtrRuntimeCallEvent = {
   detail?: string;
 };
 
+const EMPTY_STRATEGY_PEAKS: Readonly<Record<string, string>> = Object.freeze({});
+/** Shared empty inventory map for flat-book hot-path reconcile/guardian. */
+export const EMPTY_INVENTORY_OPEN_QTY: Readonly<Record<string, string>> = Object.freeze({});
+
 export type HtrAccountingCashEvent = {
   fillId: string;
   netCashEffect: string;
@@ -547,13 +551,13 @@ export function attachClosed1mMarkToAccountingBridge(
   }
   if (openPositionCount === 0) {
     // Flat book: bump sequence/frontier without full mark/drawdown recompute.
+    // Mutate in place — sole bridge owner; avoid shallow-copying the full state each bar.
     const mark = bridge.lastMarkBySymbol[symbol]!;
-    bridge.state = {
-      ...bridge.state,
-      marks: { [symbol]: mark },
-      frontierAsOf: closedBar.barCloseTime,
-      accountingSequence: bridge.state.accountingSequence + 1,
-    };
+    const state = bridge.state;
+    state.marks = { [symbol]: mark };
+    state.frontierAsOf = closedBar.barCloseTime;
+    state.accountingSequence += 1;
+    // IDHPS: skip flat-book callOrder push (dominant cycle shape); open-book marks still record.
   } else {
     bridge.state = advanceAccountingFrontier({
       state: bridge.state,
@@ -561,12 +565,12 @@ export function attachClosed1mMarkToAccountingBridge(
       frontierAsOf: closedBar.barCloseTime,
       skipSemanticDigest: true,
     });
+    recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
+      cycleIndex,
+      detail: symbol,
+      at: closedBar.barCloseTime,
+    });
   }
-  recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
-    cycleIndex,
-    detail: symbol,
-    at: closedBar.barCloseTime,
-  });
 }
 
 export function buildHtrReconciliationInput(
@@ -633,14 +637,24 @@ export function runAutomaticAccountingReconciliation(
 
     if (markOnlyCycle) {
       // Light check: cash/equity conservation + inventory parity (phases preserved).
-      const expectedEquity = addDecimal(bridge.state.cash, bridge.state.markedPositionValue);
-      if (compareDecimal(bridge.state.equity, expectedEquity) !== 0) {
-        throw new Error(
-          `equity ${bridge.state.equity} != cash ${bridge.state.cash} + marked ${bridge.state.markedPositionValue}`,
-        );
+      if (compareDecimal(bridge.state.markedPositionValue, "0") === 0) {
+        if (compareDecimal(bridge.state.equity, bridge.state.cash) !== 0) {
+          throw new Error(
+            `equity ${bridge.state.equity} != cash ${bridge.state.cash} (flat marked value)`,
+          );
+        }
+      } else {
+        const expectedEquity = addDecimal(bridge.state.cash, bridge.state.markedPositionValue);
+        if (compareDecimal(bridge.state.equity, expectedEquity) !== 0) {
+          throw new Error(
+            `equity ${bridge.state.equity} != cash ${bridge.state.cash} + marked ${bridge.state.markedPositionValue}`,
+          );
+        }
       }
-      if (input.inventoryOpenQtyBySymbol) {
-        for (const [symbol, expectedQty] of Object.entries(input.inventoryOpenQtyBySymbol)) {
+      const inventory = input.inventoryOpenQtyBySymbol;
+      if (inventory) {
+        for (const symbol in inventory) {
+          const expectedQty = inventory[symbol]!;
           const actualQty = bridge.state.positions[symbol]?.quantity ?? "0";
           if (compareDecimal(actualQty, expectedQty) !== 0) {
             throw new Error(
@@ -649,6 +663,7 @@ export function runAutomaticAccountingReconciliation(
           }
         }
       }
+      // IDHPS: light checks keep three phases but skip callOrder push (GC); full reconciles record.
     } else {
       assertAccountingReconciliation(
         buildHtrReconciliationInput(bridge, {
@@ -657,11 +672,11 @@ export function runAutomaticAccountingReconciliation(
       );
       bridge.lastFullReconcileFillCount = fillCount;
       bridge.lastFullReconcileCash = bridge.state.cash;
+      recordRuntimeCall(bridge, "WP19_RECONCILIATION_PASS", {
+        cycleIndex: input.cycleIndex,
+        detail: input.phase,
+      });
     }
-    recordRuntimeCall(bridge, "WP19_RECONCILIATION_PASS", {
-      cycleIndex: input.cycleIndex,
-      detail: input.phase,
-    });
   } catch (error) {
     recordRuntimeCall(bridge, "WP19_RECONCILIATION_FAIL", {
       cycleIndex: input.cycleIndex,
@@ -684,24 +699,29 @@ export function evaluateHtrGuardianForBridge(
   },
 ): HtrGuardianCycleResult {
   assertBridgeActive(bridge);
-  const drawdownState = normalizeAccountingStateDrawdownFields(bridge.state);
-  const reconciliation = buildHtrReconciliationInput(bridge, {
-    inventoryOpenQtyBySymbol: input.inventoryOpenQtyBySymbol,
-  });
-  const dominantStrategy = resolveDominantStrategyDrawdown({
-    strategyDrawdownBpsByKey: drawdownState.strategyDrawdownBpsByKey,
-    strategyPeakHwmByKey: drawdownState.strategyPeakHwmByKey,
-  });
+  // Hot path: read drawdown fields without spreading the full accounting state.
+  const accountPeakHwm = bridge.state.equityHwm;
+  const monthlyPeakHwm = bridge.state.monthlyPeakHwm ?? bridge.state.equityHwm;
+  const strategyDrawdownBpsByKey = bridge.state.strategyDrawdownBpsByKey;
+  let dominantStrategy: ReturnType<typeof resolveDominantStrategyDrawdown> = {};
+  if (strategyDrawdownBpsByKey) {
+    for (const _key in strategyDrawdownBpsByKey) {
+      dominantStrategy = resolveDominantStrategyDrawdown({
+        strategyDrawdownBpsByKey,
+        strategyPeakHwmByKey: bridge.state.strategyPeakHwmByKey ?? EMPTY_STRATEGY_PEAKS,
+      });
+      break;
+    }
+  }
   const cycle = evaluateHtrGuardianCycle({
-    reconciliation,
-    accountPeakHwm: drawdownState.equityHwm,
-    monthlyPeakHwm: drawdownState.monthlyPeakHwm,
+    accountPeakHwm,
+    monthlyPeakHwm,
     equityUsdt: input.equityUsdt,
     strategyDrawdownBps: dominantStrategy.strategyDrawdownBps,
     strategyEquityUsdt: dominantStrategy.strategyEquityUsdt,
     strategyPeakHwm: dominantStrategy.strategyPeakHwm,
     missingMark: input.missingMark,
-    // before_guardian phase already asserted; avoid duplicate full reconcile.
+    // before_guardian phase already asserted; avoid duplicate full reconcile + input assembly.
     skipReconciliationAssert: true,
   });
   bridge.lastGuardianCycle = cycle;
