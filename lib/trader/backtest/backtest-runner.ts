@@ -97,6 +97,7 @@ import {
   type HtrAccountingCycleContext,
 } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
+import { compareDecimal } from "@/lib/trader/risk/numeric";
 import type {
   ReplayAccountingFrontierState,
   ReplayDrawdownHwmState,
@@ -663,8 +664,10 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       const closedBar = snapshot.bars.at(-1);
       if (closedBar) {
         const wp17Timer = benchmarkObserver.beginStage("wp17-historical-advance", cycleIndex);
-        const historicalOpenCount =
-          input.historicalExecutionProfile.exchange.listOpenOrders().length;
+        const idhpsForOpen = getIdhpsSession();
+        const historicalOpenCount = idhpsForOpen
+          ? countIdhpsOpenOrders(idhpsForOpen.inventory)
+          : input.historicalExecutionProfile.exchange.listOpenOrders().length;
         let fillEvents: Awaited<
           ReturnType<typeof advanceHistoricalExecutionOnClosedBar>
         >["fillEvents"] = [];
@@ -753,23 +756,33 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         const openOrderCount = idhpsSession
           ? countIdhpsOpenOrders(idhpsSession.inventory)
           : historicalOpenCount;
-        if (input.portfolio) {
-          const portfolio = derivePortfolioFromAccountingState({
-            state: htrAccountingBridge.state,
-            runConfig: input.portfolio.runConfig,
-            limits: input.portfolio.limits,
-            stopDistanceProvider: input.portfolio.stopDistanceProvider,
-          });
-          accountState = toAccountRiskState({
-            portfolio,
-            openOrderCount,
-            accountPeakHwm: htrAccountingBridge.state.equityHwm,
-            monthlyPeakHwm: htrAccountingBridge.state.monthlyPeakHwm,
-          });
-        } else {
-          accountState = deriveAccountRiskStateFromBridge(htrAccountingBridge, {
-            openOrderCount,
-          });
+        // Rebuild risk state when fills/open-orders change, or while any position is marked.
+        const hasOpenPositions = Object.values(htrAccountingBridge.state.positions).some(
+          (position) => compareDecimal(position.quantity, "0") > 0,
+        );
+        if (
+          fillEvents.length > 0 ||
+          openOrderCount !== accountState.openOrderCount ||
+          hasOpenPositions
+        ) {
+          if (input.portfolio) {
+            const portfolio = derivePortfolioFromAccountingState({
+              state: htrAccountingBridge.state,
+              runConfig: input.portfolio.runConfig,
+              limits: input.portfolio.limits,
+              stopDistanceProvider: input.portfolio.stopDistanceProvider,
+            });
+            accountState = toAccountRiskState({
+              portfolio,
+              openOrderCount,
+              accountPeakHwm: htrAccountingBridge.state.equityHwm,
+              monthlyPeakHwm: htrAccountingBridge.state.monthlyPeakHwm,
+            });
+          } else {
+            accountState = deriveAccountRiskStateFromBridge(htrAccountingBridge, {
+              openOrderCount,
+            });
+          }
         }
         wp17Timer.end();
         benchmarkObserver.sampleMemory("wp17-historical-advance", cycleIndex);
@@ -838,6 +851,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           retentionMode === "STREAM_ONLY" &&
           input.intelligenceRecordsSink == null &&
           input.forecastDecisionSink == null,
+        strategySignalIds: input.strategySignalIds ?? input.activeStrategyIds,
         htrAccounting: htrAccounting ?? undefined,
         htrBreachCancellation:
           wp17Active && input.historicalExecutionProfile

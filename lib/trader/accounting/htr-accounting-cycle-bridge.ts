@@ -546,22 +546,27 @@ export function attachClosed1mMarkToAccountingBridge(
     mergedMarks[openSymbol] = mark;
   }
   if (openPositionCount === 0) {
-    mergedMarks[symbol] = bridge.lastMarkBySymbol[symbol]!;
-  }
-  bridge.state = advanceAccountingFrontier({
-    state: bridge.state,
-    marks: mergedMarks,
-    frontierAsOf: closedBar.barCloseTime,
-    skipSemanticDigest: true,
-  });
-  // Slim call-order: marks are high-frequency; fills/guardian/breach remain authoritative.
-  if (openPositionCount > 0 || process.env.FHV_IDHPS_RECORD_MARK_CALLS === "1") {
-    recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
-      cycleIndex,
-      detail: symbol,
-      at: closedBar.barCloseTime,
+    // Flat book: bump sequence/frontier without full mark/drawdown recompute.
+    const mark = bridge.lastMarkBySymbol[symbol]!;
+    bridge.state = {
+      ...bridge.state,
+      marks: { [symbol]: mark },
+      frontierAsOf: closedBar.barCloseTime,
+      accountingSequence: bridge.state.accountingSequence + 1,
+    };
+  } else {
+    bridge.state = advanceAccountingFrontier({
+      state: bridge.state,
+      marks: mergedMarks,
+      frontierAsOf: closedBar.barCloseTime,
+      skipSemanticDigest: true,
     });
   }
+  recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
+    cycleIndex,
+    detail: symbol,
+    at: closedBar.barCloseTime,
+  });
 }
 
 export function buildHtrReconciliationInput(

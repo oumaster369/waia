@@ -115,17 +115,28 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     miCoreEnabled: true,
     newId,
   });
-  emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
+  if (input.telemetrySink) {
+    emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
+  }
 
-  const signals = evaluateRegisteredStrategies(msv, features, {
-    organizationId: input.organizationId,
-    bars: input.bars,
-    newId,
-    historicalProfile: profileActive ? input.historicalProfile : undefined,
-  });
+  const signals = evaluateRegisteredStrategies(
+    msv,
+    features,
+    {
+      organizationId: input.organizationId,
+      bars: input.bars,
+      newId,
+      historicalProfile: profileActive ? input.historicalProfile : undefined,
+    },
+    input.strategySignalIds?.length
+      ? (input.strategySignalIds as Parameters<typeof evaluateRegisteredStrategies>[3])
+      : undefined,
+  );
 
-  for (const signal of signals) {
-    emitStrategySignalCounters(signal, input.telemetrySink);
+  if (input.telemetrySink) {
+    for (const signal of signals) {
+      emitStrategySignalCounters(signal, input.telemetrySink);
+    }
   }
 
   const signal = selectPrimaryStrategySignal(signals, {

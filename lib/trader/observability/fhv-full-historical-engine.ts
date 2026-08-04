@@ -284,7 +284,8 @@ export async function runFullHistoricalBacktest(input: {
       newId: benchmarkNewId,
       retentionMode: input.boundedFixture ? undefined : "STREAM_ONLY",
       evidenceSink: compositeEvidenceSink,
-      telemetrySink: input.boundedFixture ? undefined : () => {},
+      // STREAM_ONLY official scale: omit counter emission tax (observability-only).
+      telemetrySink: undefined,
       maxCycles: input.maxCycles ?? (input.boundedFixture ? 20 : undefined),
       enableReplayFusedContext: false,
       resumeCycleStartIndex: resumeFromCycle > 0 ? resumeFromCycle : undefined,

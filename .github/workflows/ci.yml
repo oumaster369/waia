@@ -180,6 +180,8 @@ jobs:
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
       FHV_IDHPS_TIMINGS: "1"
       NODE_ENV: production
+      # Larger young-gen reduces GC pressure on the STREAM_ONLY hot path.
+      NODE_OPTIONS: "--max-semi-space-size=256 --max-old-space-size=6144"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

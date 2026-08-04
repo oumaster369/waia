@@ -510,6 +510,7 @@ export async function runPaperCycleOnce(
     symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
     costModel: input.costModel,
     omitIntelligenceArtifacts: input.omitIntelligenceArtifacts,
+    strategySignalIds: input.strategySignalIds ?? input.snapshot.activeStrategyIds,
   });
 
   const actionableSignals = evaluation.signals.filter(

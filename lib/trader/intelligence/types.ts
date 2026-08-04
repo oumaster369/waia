@@ -282,6 +282,8 @@ export type EvaluationCycleInput = {
    * Does not alter MSV/signals/hypothesis economics.
    */
   omitIntelligenceArtifacts?: boolean;
+  /** When set, only these strategy ids are evaluated (others omitted before signal selection). */
+  strategySignalIds?: readonly string[];
 };
 
 export type EvaluationCycleResult = {
