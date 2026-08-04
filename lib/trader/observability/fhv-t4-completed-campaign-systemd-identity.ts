@@ -57,10 +57,31 @@ export function setFhvT4CompletedCampaignSystemdIdentityReaderForTests(
   readerOverride = reader;
 }
 
+function normalizeCompletedCampaignIdentityBody(
+  input: Omit<FhvT4CompletedCampaignSystemdIdentityV1, "contentDigest">,
+): Omit<FhvT4CompletedCampaignSystemdIdentityV1, "contentDigest"> {
+  // Stable insertion order — must match shell reader + computePayloadDigest(JSON.stringify).
+  return {
+    schemaVersion: input.schemaVersion,
+    unitName: input.unitName.trim(),
+    bootId: normalizeBootIdField(input.bootId),
+    activeState: input.activeState.trim(),
+    subState: input.subState.trim(),
+    result: input.result.trim(),
+    invocationId: input.invocationId.trim(),
+    execMainPid: input.execMainPid,
+    execMainStartTimestampMonotonic: input.execMainStartTimestampMonotonic.trim(),
+    execMainExitTimestampMonotonic: input.execMainExitTimestampMonotonic.trim(),
+    execMainCode: input.execMainCode,
+    execMainStatus: input.execMainStatus,
+    nRestarts: input.nRestarts,
+  };
+}
+
 export function serializeFhvT4CompletedCampaignSystemdIdentity(
   input: Omit<FhvT4CompletedCampaignSystemdIdentityV1, "contentDigest">,
 ): FhvT4CompletedCampaignSystemdIdentityV1 {
-  const withoutDigest = { ...input };
+  const withoutDigest = normalizeCompletedCampaignIdentityBody(input);
   return {
     ...withoutDigest,
     contentDigest: computePayloadDigest(withoutDigest),
@@ -157,21 +178,7 @@ export function parseFhvT4CompletedCampaignSystemdIdentity(
       "ExecMainExitTimestampMonotonic must be after start.",
     );
   }
-  const normalized = {
-    schemaVersion: identity.schemaVersion,
-    unitName: identity.unitName.trim(),
-    bootId: normalizeBootIdField(identity.bootId),
-    activeState: identity.activeState.trim(),
-    subState: identity.subState.trim(),
-    result: identity.result.trim(),
-    invocationId: identity.invocationId.trim(),
-    execMainPid: identity.execMainPid,
-    execMainStartTimestampMonotonic: identity.execMainStartTimestampMonotonic.trim(),
-    execMainExitTimestampMonotonic: identity.execMainExitTimestampMonotonic.trim(),
-    execMainCode: identity.execMainCode,
-    execMainStatus: identity.execMainStatus,
-    nRestarts: identity.nRestarts,
-  };
+  const normalized = normalizeCompletedCampaignIdentityBody(identity);
   // Digest normalized body (stable insertion order) — matches shell reader + serialize.
   const expectedDigest = computePayloadDigest(normalized);
   if (identity.contentDigest !== expectedDigest) {
