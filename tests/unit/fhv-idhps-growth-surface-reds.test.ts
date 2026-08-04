@@ -44,6 +44,10 @@ import {
   getIdhpsDecimalNormalizeCount,
 } from "@/lib/trader/paper/idhps-decimal-normalize-cache";
 import { REPLAY_RUN_CHAIN_MANIFEST_SCHEMA_VERSION } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import {
+  MAX_BATCH_CYCLES,
+  resolveEvidenceBatchCycles,
+} from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 import { buildIdhpsCompositeMirrorSnapshot } from "@/lib/trader/observability/idhps-composite-mirror-snapshot";
 import { createEmptyIdhpsAccountRiskMirror } from "@/lib/trader/paper/idhps-account-risk-mirror";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
@@ -302,6 +306,10 @@ describe("H-ARCH-1 IDHPS growth-surface RED→GREEN GS-01..14", () => {
     expect(fixture.maxBatchCycles).toBe(32);
     expect(fixture.runChainSchema).toBe("htr-wp05-run-chain/v2");
     expect(REPLAY_RUN_CHAIN_MANIFEST_SCHEMA_VERSION).toBe("htr-wp05-run-chain/v2");
+    expect(MAX_BATCH_CYCLES).toBe(32);
+    process.env.FHV_IDHPS_EVIDENCE_BATCH_CYCLES = "1024";
+    expect(resolveEvidenceBatchCycles()).toBe(32);
+    delete process.env.FHV_IDHPS_EVIDENCE_BATCH_CYCLES;
   });
 
   it("GS11_decimal_normalize_cache_red", () => {

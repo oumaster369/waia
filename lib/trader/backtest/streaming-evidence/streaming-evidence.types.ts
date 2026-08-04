@@ -6,23 +6,16 @@ export const CYCLE_PROJECTION_SCHEMA_VERSION = "htr-wp04-cycle-projection/v1" as
 export const EVIDENCE_MANIFEST_SCHEMA_VERSION = "htr-wp04-evidence-manifest/v1" as const;
 export const REGIME_TIMELINE_SCHEMA_VERSION = "htr-wp04-regime-timeline/v1" as const;
 
-/** Evidence chunk flush threshold — bounded memory (D11B / unit soak contract). */
+/** Evidence chunk flush threshold — bounded memory (D11B / H-ARCH-1 GS-10 contract). */
 export const MAX_BATCH_CYCLES = 32;
 
 /**
- * Hot-path flush size. Defaults to {@link MAX_BATCH_CYCLES}; official-scale CI may raise via
- * `FHV_IDHPS_EVIDENCE_BATCH_CYCLES` (peak buffer still reported via peakBufferedProjections).
+ * Hot-path evidence chunk flush size.
+ * H-ARCH-1 GS-10 locks chunk flush at {@link MAX_BATCH_CYCLES} (=32).
+ * `FHV_IDHPS_EVIDENCE_BATCH_CYCLES` must not raise or replace this contract.
  */
 export function resolveEvidenceBatchCycles(): number {
-  const raw = process.env.FHV_IDHPS_EVIDENCE_BATCH_CYCLES;
-  if (raw == null || raw === "") {
-    return MAX_BATCH_CYCLES;
-  }
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < MAX_BATCH_CYCLES) {
-    return MAX_BATCH_CYCLES;
-  }
-  return Math.min(Math.floor(parsed), 1024);
+  return MAX_BATCH_CYCLES;
 }
 
 export type ReplayRetentionMode = "FULL" | "STREAM_ONLY";

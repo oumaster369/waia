@@ -37,8 +37,8 @@ export type StreamingEvidenceWriter = {
   onCycle(cycleIndex: number, result: PaperCycleResult): void;
   /**
    * High-water mark of the in-flight projection batch (buffered ReplayCycleEvidenceProjection
-   * objects), NOT retained PaperCycleResult objects. Bounded by MAX_BATCH_CYCLES regardless of
-   * total cycle count. STREAM_ONLY retains zero PaperCycleResult objects (see backtest-runner).
+   * objects), NOT retained PaperCycleResult objects. Bounded by MAX_BATCH_CYCLES (=32) regardless
+   * of total cycle count. STREAM_ONLY retains zero PaperCycleResult objects (see backtest-runner).
    */
   peakBufferedProjections(): number;
   sealComplete(expectedCycleCount: number): StreamingEvidenceManifestRef;

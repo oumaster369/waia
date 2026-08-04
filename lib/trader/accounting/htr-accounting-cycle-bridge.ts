@@ -1,11 +1,11 @@
 import type { Bar } from "@/lib/trader/intelligence/types";
-import { isIdhpsHotPathEnabled } from "@/lib/trader/execution/idhps-hot-path-counters";
 import {
   advanceAccountingFrontier,
   buildHtrPnlReportV1,
   computeAccountingSemanticDigest,
   createInitialAccountingState,
 } from "@/lib/trader/accounting";
+import { noteIdhpsReconciliationCall } from "@/lib/trader/accounting/idhps-accounting-bridge-mirror";
 import {
   assertAccountingReconciliation,
   buildHistoricalRealityReconciliationReport,
@@ -680,6 +680,8 @@ export function runAutomaticAccountingReconciliation(
   },
 ): void {
   assertBridgeActive(bridge);
+  // H-ARCH-1 GS-07: every phase invocation counts and must remain capable of fail-closed.
+  noteIdhpsReconciliationCall();
   try {
     const fillCount = bridge.epochConsumedFillIds.length;
     const markOnlyCycle =
@@ -688,17 +690,9 @@ export function runAutomaticAccountingReconciliation(
       fillCount === (bridge.lastFullReconcileFillCount ?? -1) &&
       bridge.state.cash === (bridge.lastFullReconcileCash ?? "");
 
-    // IDHPS mark-only: keep before_guardian as the per-cycle assert; skip duplicate light checks.
-    if (
-      markOnlyCycle &&
-      isIdhpsHotPathEnabled() &&
-      (input.phase === "frontier_mutation" || input.phase === "before_cycle_complete")
-    ) {
-      return;
-    }
-
     if (markOnlyCycle) {
-      // Light check: cash/equity conservation + inventory parity (phases preserved).
+      // Light check: cash/equity conservation + inventory parity.
+      // All three locked phases execute this validation (do not coalesce / early-return).
       if (compareDecimal(bridge.state.markedPositionValue, "0") === 0) {
         if (compareDecimal(bridge.state.equity, bridge.state.cash) !== 0) {
           throw new Error(
@@ -789,13 +783,10 @@ export function evaluateHtrGuardianForBridge(
   bridge.lastGuardianCycle = cycle;
   bridge.breachState = cycle.breachState;
   bridge.guardianReason = cycle.reason;
-  // IDHPS: NONE dominates mark-only bars — skip callOrder push (GC); record breaches.
-  if (cycle.breachState !== "NONE" || !isIdhpsHotPathEnabled()) {
-    recordRuntimeCall(bridge, "WP20_GUARDIAN_EVALUATED", {
-      cycleIndex: input.cycleIndex,
-      detail: cycle.breachState,
-    });
-  }
+  recordRuntimeCall(bridge, "WP20_GUARDIAN_EVALUATED", {
+    cycleIndex: input.cycleIndex,
+    detail: cycle.breachState,
+  });
   return cycle;
 }
 

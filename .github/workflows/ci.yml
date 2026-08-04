@@ -78,8 +78,12 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
-      - name: Record FINAL_HEAD
-        run: git rev-parse HEAD > .artifacts/fhv-official-scale/FINAL_HEAD.txt
+      - name: Record artifact identity (FINAL_HEAD / EXECUTED_SHA / BASE_SHA)
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: bash ./scripts/ops/record-fhv-artifact-identity.sh
       - name: Run IDHPS structural GS suite
         run: corepack pnpm@10 test:fhv:idhps:structural
       - if: always()
@@ -98,7 +102,6 @@ jobs:
       DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
       FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
-      FHV_IDHPS_EVIDENCE_BATCH_CYCLES: "512"
       NODE_ENV: production
     steps:
       - uses: actions/checkout@v4
@@ -111,8 +114,12 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
-      - name: Record FINAL_HEAD
-        run: git rev-parse HEAD > .artifacts/fhv-official-scale/FINAL_HEAD.txt
+      - name: Record artifact identity (FINAL_HEAD / EXECUTED_SHA / BASE_SHA)
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: bash ./scripts/ops/record-fhv-artifact-identity.sh
       - name: Run process-parity
         run: corepack pnpm@10 test:fhv:official-scale:process-parity
       - if: always()
@@ -182,7 +189,6 @@ jobs:
       FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND: "1000"
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
       FHV_IDHPS_TIMINGS: "1"
-      FHV_IDHPS_EVIDENCE_BATCH_CYCLES: "1024"
       NODE_ENV: production
       # Larger young-gen reduces GC pressure on the STREAM_ONLY hot path.
       NODE_OPTIONS: "--max-semi-space-size=1536 --max-old-space-size=6144"
@@ -215,7 +221,6 @@ jobs:
       DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
       FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
-      FHV_IDHPS_EVIDENCE_BATCH_CYCLES: "1024"
       NODE_ENV: production
       NODE_OPTIONS: "--max-semi-space-size=1536 --max-old-space-size=6144"
     steps:
@@ -234,10 +239,14 @@ jobs:
           name: fhv-idhps-probe-artifacts
           path: .artifacts/fhv-official-scale
       - name: Disk preflight + migrate
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
         run: |
           mkdir -p .data .artifacts/fhv-official-scale
           pnpm db:migrate
-          git rev-parse HEAD > .artifacts/fhv-official-scale/FINAL_HEAD.txt
+          bash ./scripts/ops/record-fhv-artifact-identity.sh
           AVAILABLE=$(df -PB1 . | awk 'NR==2 {print $4}')
           echo "availableBytes=$AVAILABLE"
           test "$AVAILABLE" -ge 28000000000 || echo "WARN: availableBytes below 28GiB floor; projection must still satisfy 70/30"
