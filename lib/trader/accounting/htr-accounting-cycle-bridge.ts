@@ -554,9 +554,12 @@ export function attachClosed1mMarkToAccountingBridge(
     // Mutate in place — sole bridge owner; avoid shallow-copying the full state each bar.
     const mark = bridge.lastMarkBySymbol[symbol]!;
     const state = bridge.state;
-    state.marks = { [symbol]: mark };
+    if (state.marks[symbol] !== mark) {
+      state.marks = { [symbol]: mark };
+    }
     state.frontierAsOf = closedBar.barCloseTime;
     state.accountingSequence += 1;
+    // IDHPS: flat-book marks dominate; skip callOrder push (open-book still records).
   } else {
     bridge.state = advanceAccountingFrontier({
       state: bridge.state,
@@ -564,12 +567,12 @@ export function attachClosed1mMarkToAccountingBridge(
       frontierAsOf: closedBar.barCloseTime,
       skipSemanticDigest: true,
     });
+    recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
+      cycleIndex,
+      detail: symbol,
+      at: closedBar.barCloseTime,
+    });
   }
-  recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
-    cycleIndex,
-    detail: symbol,
-    at: closedBar.barCloseTime,
-  });
 }
 
 export function buildHtrReconciliationInput(
