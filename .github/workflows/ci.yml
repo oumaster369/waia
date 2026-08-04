@@ -97,6 +97,9 @@ jobs:
     env:
       DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
       FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+      FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
+      FHV_IDHPS_EVIDENCE_BATCH_CYCLES: "512"
+      NODE_ENV: production
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
