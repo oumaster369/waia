@@ -51,10 +51,11 @@ PARENT1=""
 PARENT2=""
 PARENT_PROOF="not_applicable"
 if [[ "${EVENT_NAME}" == "pull_request" ]]; then
-  parent_count="$(git rev-list --parents -n 1 HEAD | awk '{print NF-1}')"
-  if [[ "${parent_count}" -ge 2 ]]; then
-    PARENT1="$(git rev-parse HEAD^1)"
-    PARENT2="$(git rev-parse HEAD^2)"
+  # Prefer raw commit headers: shallow depth=1 merge-ref checkouts can hide parents from
+  # rev-list/rev-parse even though the merge commit object still records both parents.
+  PARENT1="$(git cat-file -p HEAD | awk '/^parent / { print $2; exit }')"
+  PARENT2="$(git cat-file -p HEAD | awk '/^parent / { if (++n == 2) { print $2; exit } }')"
+  if [[ -n "${PARENT1}" && -n "${PARENT2}" ]]; then
     if [[ "${PARENT1}" == "${BASE_SHA}" && "${PARENT2}" == "${FINAL_HEAD}" ]]; then
       PARENT_PROOF="merge_ref_parents_match"
     elif [[ "${PARENT1}" == "${FINAL_HEAD}" && "${PARENT2}" == "${BASE_SHA}" ]]; then
@@ -66,7 +67,7 @@ if [[ "${EVENT_NAME}" == "pull_request" ]]; then
   elif [[ "${EXECUTED_SHA}" == "${FINAL_HEAD}" ]]; then
     PARENT_PROOF="head_checkout_no_merge_ref"
   else
-    echo "BLOCKED_BY_PR452_H_ARCH_1_VALIDATED_HEAD_PUSH_MISMATCH: expected merge commit parents for PR checkout" >&2
+    echo "BLOCKED_BY_PR452_H_ARCH_1_VALIDATED_HEAD_PUSH_MISMATCH: expected merge commit parents for PR checkout (executed=${EXECUTED_SHA} final=${FINAL_HEAD} parent1=${PARENT1:-none} parent2=${PARENT2:-none})" >&2
     exit 1
   fi
 fi
