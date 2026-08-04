@@ -1,5 +1,9 @@
 import { getDb } from "@/db/client";
-import { enableIdhpsProductionBans } from "@/lib/trader/execution/idhps-hot-path-counters";
+import {
+  clearIdhpsHotPathBans,
+  enableIdhpsProductionBans,
+  setIdhpsHotPathEnabled,
+} from "@/lib/trader/execution/idhps-hot-path-counters";
 import { createInMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
 import type { InMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
 import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
@@ -43,6 +47,10 @@ export async function seedFhvHistoricalExecutionSession(input: {
   );
   const cleanup = () => {
     session.cleanup();
+    // Belt-and-suspenders: session.cleanup closes IDHPS, but force-clear bans if a
+    // concurrent offline rebuild finally-block raced with close.
+    setIdhpsHotPathEnabled(false);
+    clearIdhpsHotPathBans();
   };
   return {
     session,

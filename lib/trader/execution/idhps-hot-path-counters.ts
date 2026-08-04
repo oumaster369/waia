@@ -91,11 +91,16 @@ export function clearIdhpsHotPathBans(): void {
   banDerivePortfolioFillWalkOnHotPath = false;
 }
 
-/** Suspend hot-path bans for terminal/offline rebuilds; restores production bans afterward. */
+/** Suspend hot-path bans for terminal/offline rebuilds; restores prior bans only if still enabled. */
 export async function withIdhpsOfflineRebuild<T>(fn: () => Promise<T>): Promise<T> {
   if (!idhpsHotPathEnabled) {
     return fn();
   }
+  const prior = {
+    banListOrders: banListOrdersOnHotPath,
+    banLoadPaperFillEvents: banLoadPaperFillEventsOnHotPath,
+    banDerivePortfolioFillWalk: banDerivePortfolioFillWalkOnHotPath,
+  };
   setIdhpsHotPathBans({
     banListOrders: false,
     banLoadPaperFillEvents: false,
@@ -104,7 +109,12 @@ export async function withIdhpsOfflineRebuild<T>(fn: () => Promise<T>): Promise<
   try {
     return await fn();
   } finally {
-    enableIdhpsProductionBans();
+    // Session close during rebuild must not re-arm bans for later Vitest files.
+    if (idhpsHotPathEnabled) {
+      setIdhpsHotPathBans(prior);
+    } else {
+      clearIdhpsHotPathBans();
+    }
   }
 }
 

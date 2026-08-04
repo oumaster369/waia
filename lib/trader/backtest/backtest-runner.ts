@@ -251,6 +251,11 @@ export type RunBacktestInput = {
    * on other cycles avoids redundant rolling-window digest work in STREAM_ONLY hot paths.
    */
   sourceCursorDigestEveryCycles?: number;
+  /**
+   * When true, yield to the event loop every 32 cycles so external pause/control writers
+   * can interleave (rehearsal / T4). Official STREAM_ONLY scale leaves this unset.
+   */
+  enableCooperativeYield?: boolean;
 };
 
 /**
@@ -634,16 +639,14 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     }
 
     const fusedContextTimer = benchmarkObserver.beginStage("fused-context-build", cycleIndex);
+    const canvasAdvanceTimer = benchmarkObserver.beginStage("canvas-advance", cycleIndex);
     let fusedContext = undefined;
     let reconstruction = undefined;
 
     if (input.enableReplayFusedContext !== false) {
-      const canvasAdvanceTimer = benchmarkObserver.beginStage("canvas-advance", cycleIndex);
       const advanceResult = applyNewBarsToCanvas(canvasState, snapshot.bars, canvasAppliedBarCount);
       canvasState = advanceResult.state;
       canvasAppliedBarCount += advanceResult.appliedBars;
-      canvasAdvanceTimer.end();
-      benchmarkObserver.sampleMemory("canvas-advance", cycleIndex);
 
       const evaluatedAt =
         snapshot.evaluatedAt ?? snapshot.bars.at(-1)?.barCloseTime ?? snapshot.quote.timestamp;
@@ -662,7 +665,6 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     } else if (retentionMode === "STREAM_ONLY") {
       // IDHPS: fusedContext stays off (official-scale economics), but feed per-symbol canvas so
       // evaluation uses incremental reconstruction instead of full MTF rebuild each bar.
-      const canvasAdvanceTimer = benchmarkObserver.beginStage("canvas-advance", cycleIndex);
       const closedBar = snapshot.bars.at(-1);
       if (closedBar) {
         let symbolCanvas = streamOnlyCanvasBySymbol.get(closedBar.symbol);
@@ -682,8 +684,9 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           canvasState: symbolCanvas,
         });
       }
-      canvasAdvanceTimer.end();
     }
+    canvasAdvanceTimer.end();
+    benchmarkObserver.sampleMemory("canvas-advance", cycleIndex);
 
     fusedContextTimer.end();
     benchmarkObserver.sampleMemory("fused-context-build", cycleIndex);
@@ -693,10 +696,10 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     clockAdvanceTimer.end();
     benchmarkObserver.sampleMemory("clock-advance", cycleIndex);
 
+    const wp17Timer = benchmarkObserver.beginStage("wp17-historical-advance", cycleIndex);
     if (wp17Active && input.historicalExecutionProfile && htrAccountingBridge) {
       const closedBar = snapshot.bars.at(-1);
       if (closedBar) {
-        const wp17Timer = benchmarkObserver.beginStage("wp17-historical-advance", cycleIndex);
         const idhpsForOpen = getIdhpsSession();
         const historicalOpenCount = idhpsForOpen
           ? countIdhpsOpenOrders(idhpsForOpen.inventory)
@@ -817,10 +820,10 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
             });
           }
         }
-        wp17Timer.end();
-        benchmarkObserver.sampleMemory("wp17-historical-advance", cycleIndex);
       }
     }
+    wp17Timer.end();
+    benchmarkObserver.sampleMemory("wp17-historical-advance", cycleIndex);
 
     if (wp21Active && input.wp21RuntimeDeps && input.outcomeResolutionSink) {
       const evaluatedAt =
@@ -909,6 +912,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     paperCycleTimer.end();
     benchmarkObserver.sampleMemory("paper-cycle", cycleIndex);
 
+    const intelligenceTimer = benchmarkObserver.beginStage("intelligence-bundle", cycleIndex);
     if (
       profileActive &&
       result.evaluation.marketStateSnapshot &&
@@ -919,7 +923,6 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         input.intelligenceRecordsSink != null ||
         input.forecastDecisionSink != null)
     ) {
-      const intelligenceTimer = benchmarkObserver.beginStage("intelligence-bundle", cycleIndex);
       const intelligenceCycleId = resolveIntelligenceCycleId(input.cycleIdPrefix, cycleIndex);
       const bundle = buildIntelligenceCycleBundle({
         organizationId: input.context.organizationId,
@@ -972,9 +975,9 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           await persistForecastDecisionBundleForCycle(input.context, forecastDecisionInput, {});
         }
       }
-      intelligenceTimer.end();
-      benchmarkObserver.sampleMemory("intelligence-bundle", cycleIndex);
     }
+    intelligenceTimer.end();
+    benchmarkObserver.sampleMemory("intelligence-bundle", cycleIndex);
 
     hypothesisSessionState = result.hypothesisSessionState ?? hypothesisSessionState;
     if (retentionMode === "FULL") {
@@ -1087,9 +1090,13 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       boundaryEvidenceSealOverride = boundaryDecision.evidenceSealOverride;
       break;
     }
-    // Cooperative yield for rehearsal pause control planes. Official STREAM_ONLY scale
-    // skips per-cycle yields (IDHPS cps budget); pause hosts should use epoch boundaries.
-    if (retentionMode !== "STREAM_ONLY" && cycleCount % 32 === 0) {
+    // Cooperative yield for external pause/control writers. Official STREAM_ONLY scale
+    // omits enableCooperativeYield (IDHPS cps budget); rehearsal/T4 yields every cycle.
+    if (input.enableCooperativeYield === true) {
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+    } else if (retentionMode !== "STREAM_ONLY" && cycleCount % 32 === 0) {
       await new Promise<void>((resolve) => {
         setImmediate(resolve);
       });

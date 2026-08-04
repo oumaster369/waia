@@ -70,7 +70,11 @@ export function revalidateFhvDatasetAtLaunch(input: {
     );
   }
 
-  if (receipt.qualificationMode === "BOUNDED_INGRESS_FIXTURE") {
+  // Fixture modes are not sealed OFFICIAL_MULTI_YEAR datasets; digests are bound via receipt.
+  if (
+    receipt.qualificationMode === "BOUNDED_INGRESS_FIXTURE" ||
+    receipt.qualificationMode === "SCHEMA_INTEGRATION_FIXTURE"
+  ) {
     return receipt;
   }
 

@@ -10,11 +10,12 @@ import { closeIdhpsSession } from "@/lib/trader/execution/idhps-session-registry
 
 afterEach(() => {
   cleanup();
-  // IDHPS session/bans are process-global; clear so later files are not fail-closed.
+  // IDHPS session/bans are process-global; always clear so later files are not fail-closed.
   try {
     closeIdhpsSession();
   } catch {
-    setIdhpsHotPathEnabled(false);
-    clearIdhpsHotPathBans();
+    // ignore — still force-clear below
   }
+  setIdhpsHotPathEnabled(false);
+  clearIdhpsHotPathBans();
 });

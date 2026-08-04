@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
-import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
 
 import {
@@ -45,7 +44,9 @@ export function restoreMarketCanvasState(
 }
 
 export function canvasStateContentDigest(state: MarketCanvasState): string {
-  return computePayloadDigest(state);
+  // Must hash the exact bytes written to the sidecar. Do not use evidence
+  // computePayloadDigest (JSON.stringify hot-path) — sidecar uses canonicalJsonString.
+  return createHash("sha256").update(canonicalSerialize(state), "utf8").digest("hex");
 }
 
 export function estimateSerializedCanvasBytes(state: MarketCanvasState): number {

@@ -42,7 +42,12 @@ import { defaultStopDistanceProvider } from "@/lib/trader/portfolio/default-stop
 import { toAccountRiskState } from "@/lib/trader/portfolio/to-account-risk-state";
 import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-constants";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
-import { resolveDominantStrategyDrawdown } from "@/lib/trader/risk/drawdown-policy-evaluator";
+import {
+  computePeakEquityDrawdownBps,
+  resolveDominantStrategyDrawdown,
+  resolveMonthKeyUtc,
+  updateDrawdownHighWaterMarks,
+} from "@/lib/trader/risk/drawdown-policy-evaluator";
 import type { AppendAccountDrawdownCheckpointInput } from "@/lib/trader/risk/account-drawdown-repository-postgres";
 import { buildAccountDrawdownCheckpointFromBridgeState } from "@/lib/trader/risk/account-drawdown-repository-postgres";
 import type { AppendStrategyDrawdownCheckpointInput } from "@/lib/trader/risk/strategy-drawdown-repository-postgres";
@@ -550,12 +555,28 @@ export function attachClosed1mMarkToAccountingBridge(
     mergedMarks[openSymbol] = mark;
   }
   if (openPositionCount === 0) {
-    // Flat book: bump sequence/frontier without full mark/drawdown recompute.
+    // Flat book: bump sequence/frontier without full mark recompute.
     // Mutate in place — sole bridge owner; avoid shallow-copying the full state each bar.
+    // Still apply UTC month-boundary monthly HWM reset (C-A1 / drawdown semantics).
     const mark = bridge.lastMarkBySymbol[symbol]!;
     const state = bridge.state;
     if (state.marks[symbol] !== mark) {
       state.marks = { [symbol]: mark };
+    }
+    const monthKey = resolveMonthKeyUtc(closedBar.barCloseTime);
+    if (monthKey !== state.monthKey) {
+      const hwm = updateDrawdownHighWaterMarks({
+        equityUsdt: state.equity,
+        accountPeakHwm: state.equityHwm,
+        monthlyPeakHwm: state.monthlyPeakHwm ?? state.equityHwm,
+        priorMonthKey: state.monthKey,
+        monthKey,
+      });
+      state.equityHwm = hwm.accountPeakHwm;
+      state.monthlyPeakHwm = hwm.monthlyPeakHwm;
+      state.monthKey = monthKey;
+      state.accountDrawdownBps = computePeakEquityDrawdownBps(state.equity, hwm.accountPeakHwm);
+      state.monthlyDrawdownBps = computePeakEquityDrawdownBps(state.equity, hwm.monthlyPeakHwm);
     }
     state.frontierAsOf = closedBar.barCloseTime;
     state.accountingSequence += 1;

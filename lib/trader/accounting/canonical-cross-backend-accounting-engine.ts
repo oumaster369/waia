@@ -140,11 +140,17 @@ function applyEquityDrawdownState(
   state: AccountingStateV1,
   equityUsdt: string,
   frontierAsOf: string,
+  /**
+   * Equity before this advance. Required for the same-month short-circuit because
+   * callers (attachAccountingMarks) may already have written `state.equity`.
+   */
+  priorEquityUsdt?: string,
 ): AccountingStateV1 {
   const monthKey = resolveMonthKeyUtc(frontierAsOf);
+  const priorEquity = priorEquityUsdt ?? state.equity;
   // IDHPS hot path: unchanged equity within the same UTC month cannot move HWM/drawdown maps.
-  if (equityUsdt === state.equity && monthKey === state.monthKey) {
-    return state;
+  if (equityUsdt === priorEquity && monthKey === state.monthKey) {
+    return state.equity === equityUsdt ? state : { ...state, equity: equityUsdt };
   }
   const hwm = updateDrawdownHighWaterMarks({
     equityUsdt,
@@ -299,6 +305,7 @@ export function attachAccountingMarks(
   marks: MarksJsonV1,
   frontierAsOf: string,
 ): AccountingStateV1 {
+  const priorEquity = state.equity;
   const next = { ...state, marks: { ...marks }, frontierAsOf };
   let markedPositionValue = "0";
   for (const [symbol, position] of Object.entries(next.positions)) {
@@ -316,7 +323,7 @@ export function attachAccountingMarks(
   }
   next.markedPositionValue = markedPositionValue;
   next.equity = addDecimal(next.cash, markedPositionValue);
-  return applyEquityDrawdownState(next, next.equity, frontierAsOf);
+  return applyEquityDrawdownState(next, next.equity, frontierAsOf, priorEquity);
 }
 
 export function computeAccountingSemanticDigest(state: AccountingStateV1): string {
@@ -372,6 +379,7 @@ export function advanceAccountingFrontier(
   if (input.marks) {
     state = attachAccountingMarks(state, input.marks, input.frontierAsOf);
   } else if (input.fill) {
+    const priorEquity = state.equity;
     state = {
       ...state,
       frontierAsOf: input.frontierAsOf,
@@ -379,7 +387,7 @@ export function advanceAccountingFrontier(
       markedPositionValue: "0",
       marks: {},
     };
-    state = applyEquityDrawdownState(state, state.equity, input.frontierAsOf);
+    state = applyEquityDrawdownState(state, state.equity, input.frontierAsOf, priorEquity);
   }
 
   const nextSequence = state.accountingSequence + 1;
