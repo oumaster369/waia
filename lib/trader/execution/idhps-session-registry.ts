@@ -9,6 +9,7 @@ import {
   type IdhpsPreparedStatements,
 } from "@/lib/trader/execution/idhps-prepared-statements";
 import {
+  clearIdhpsHotPathBans,
   enableIdhpsProductionBans,
   isIdhpsHotPathEnabled,
   resetIdhpsHotPathCounters,
@@ -173,6 +174,8 @@ export function closeIdhpsSession(): void {
     session = null;
   }
   setIdhpsHotPathEnabled(false);
+  // Prevent ban leakage across Vitest files in the same worker.
+  clearIdhpsHotPathBans();
 }
 
 export function isIdhpsSessionOpen(): boolean {

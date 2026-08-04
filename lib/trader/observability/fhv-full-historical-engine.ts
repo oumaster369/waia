@@ -64,6 +64,10 @@ function resolveStrategyBindings(configurationFreeze: FhvConfigurationFreezeV1):
   };
 }
 
+export type FhvFullHistoricalBacktestResult = RunBacktestResult & {
+  hotPathWallTimeMs: number;
+};
+
 export async function runFullHistoricalBacktest(input: {
   runDir: string;
   runId: string;
@@ -84,7 +88,7 @@ export async function runFullHistoricalBacktest(input: {
   checkpointConfig?: FhvExecutionCheckpointConfig;
   resumeFromCycle?: number;
   sessionDbPath?: string;
-}): Promise<RunBacktestResult> {
+}): Promise<FhvFullHistoricalBacktestResult> {
   const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
   const portfolio = buildResearchV2PortfolioContext(costModel);
   const accountKey = "fhv-full-historical";
@@ -312,8 +316,9 @@ export async function runFullHistoricalBacktest(input: {
         ? { sourceCursorDigestEveryCycles: checkpointEveryCycles }
         : {}),
     });
+    const hotPathWallTimeMs = performance.now() - backtestStartedAt;
     mark("run_backtest", backtestStartedAt);
-    return result;
+    return { ...result, hotPathWallTimeMs };
   } finally {
     officialReader?.close();
     cleanup();

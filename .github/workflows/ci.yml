@@ -179,6 +179,7 @@ jobs:
       FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND: "1000"
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
       FHV_IDHPS_TIMINGS: "1"
+      FHV_IDHPS_EVIDENCE_BATCH_CYCLES: "512"
       NODE_ENV: production
       # Larger young-gen reduces GC pressure on the STREAM_ONLY hot path.
       NODE_OPTIONS: "--max-semi-space-size=512 --max-old-space-size=6144"
@@ -211,6 +212,7 @@ jobs:
       DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
       FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
+      FHV_IDHPS_EVIDENCE_BATCH_CYCLES: "512"
       NODE_ENV: production
       NODE_OPTIONS: "--max-semi-space-size=512 --max-old-space-size=6144"
     steps:

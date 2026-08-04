@@ -84,6 +84,13 @@ export function enableIdhpsProductionBans(): void {
   });
 }
 
+/** Clear production hot-path bans (session close / test isolation). */
+export function clearIdhpsHotPathBans(): void {
+  banListOrdersOnHotPath = false;
+  banLoadPaperFillEventsOnHotPath = false;
+  banDerivePortfolioFillWalkOnHotPath = false;
+}
+
 /** Suspend hot-path bans for terminal/offline rebuilds; restores production bans afterward. */
 export async function withIdhpsOfflineRebuild<T>(fn: () => Promise<T>): Promise<T> {
   if (!idhpsHotPathEnabled) {

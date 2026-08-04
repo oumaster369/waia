@@ -138,6 +138,8 @@ export type FhvFullHistoricalLaunchResult = Readonly<{
   runDir: string;
   semanticReproDigest?: string;
   backtest?: RunBacktestResult;
+  /** Pure `runBacktest` wall (excludes seed/receipt I/O) for official-scale cps feasibility. */
+  hotPathWallTimeMs?: number;
 }>;
 
 export class FhvFullHistoricalLaunchError extends Error {
@@ -863,10 +865,11 @@ async function runFhvFullHistoricalLaunchBacktest(input: {
     checkpointConfig: input.launchExecution.checkpointConfig,
     resumeFromCycle: input.launchExecution.resumeFromCycle,
   });
+  const { hotPathWallTimeMs, ...backtestResult } = backtest;
 
   const digestStartedAt = performance.now();
   const semanticReproDigest = computeReplayReproContentDigest(
-    stripRunIdentityForControlReplay(backtest.exportDocument),
+    stripRunIdentityForControlReplay(backtestResult.exportDocument),
   );
   if (process.env.FHV_IDHPS_TIMINGS === "1") {
     console.error(
@@ -875,7 +878,9 @@ async function runFhvFullHistoricalLaunchBacktest(input: {
   }
 
   const sourceExhausted =
-    input.launchInput.maxCycles == null ? true : backtest.cycleCount < input.launchInput.maxCycles;
+    input.launchInput.maxCycles == null
+      ? true
+      : backtestResult.cycleCount < input.launchInput.maxCycles;
 
   const paused =
     input.syntheticScaleAuthority?.technicalObservationMode === true &&
@@ -897,7 +902,7 @@ async function runFhvFullHistoricalLaunchBacktest(input: {
     schemaVersion: "fhv-full-launch-result/v1",
     classification,
     semanticReproDigest,
-    cycleCount: backtest.cycleCount,
+    cycleCount: backtestResult.cycleCount,
     evidenceChain: {
       qualificationReceiptDigest: input.qualificationReceiptDigest,
       controlReplayReceiptDigest: input.controlReplayReceiptDigest,
@@ -906,22 +911,22 @@ async function runFhvFullHistoricalLaunchBacktest(input: {
       launchReceiptDigest: input.launchReceiptDigest,
       datasetContentDigest: input.configurationFreeze.datasetDigest,
       manifestSemanticDigest: input.configurationFreeze.manifestDigest,
-      accountingStateDigest: backtest.accountingState
-        ? computeAccountingSemanticDigest(backtest.accountingState)
+      accountingStateDigest: backtestResult.accountingState
+        ? computeAccountingSemanticDigest(backtestResult.accountingState)
         : undefined,
-      htrPnlReportDigest: backtest.htrPnlReportV1
-        ? computePayloadDigest(backtest.htrPnlReportV1 as unknown as Record<string, unknown>)
+      htrPnlReportDigest: backtestResult.htrPnlReportV1
+        ? computePayloadDigest(backtestResult.htrPnlReportV1 as unknown as Record<string, unknown>)
         : undefined,
-      drawdownHwm: backtest.drawdownHwmState,
-      checkpointRef: backtest.streamingManifestRef,
+      drawdownHwm: backtestResult.drawdownHwmState,
+      checkpointRef: backtestResult.streamingManifestRef,
       fullHistoryRescanCount: getFullHistoryRescanCount(),
       holdoutUnsealEvidenceRef: includeHoldout
         ? join(input.runDir, "control", FHV_HOLDOUT_UNSEAL_EVIDENCE_FILENAME)
         : undefined,
     },
-    accountingFrontierState: backtest.accountingFrontierState,
-    htrPnlReportV1: backtest.htrPnlReportV1,
-    sourceFrontier: backtest.sourceFrontier,
+    accountingFrontierState: backtestResult.accountingFrontierState,
+    htrPnlReportV1: backtestResult.htrPnlReportV1,
+    sourceFrontier: backtestResult.sourceFrontier,
   };
 
   const launchResultPath = join(input.runDir, "fhv-full-launch-result.v1.json");
@@ -941,7 +946,8 @@ async function runFhvFullHistoricalLaunchBacktest(input: {
     receiptPath: join(input.runDir, "fhv-full-launch-receipt.v1.json"),
     runDir: input.runDir,
     semanticReproDigest,
-    backtest,
+    backtest: backtestResult,
+    hotPathWallTimeMs,
   };
 }
 

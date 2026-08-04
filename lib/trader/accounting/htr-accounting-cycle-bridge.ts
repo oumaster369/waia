@@ -557,7 +557,6 @@ export function attachClosed1mMarkToAccountingBridge(
     state.marks = { [symbol]: mark };
     state.frontierAsOf = closedBar.barCloseTime;
     state.accountingSequence += 1;
-    // IDHPS: skip flat-book callOrder push (dominant cycle shape); open-book marks still record.
   } else {
     bridge.state = advanceAccountingFrontier({
       state: bridge.state,
@@ -565,12 +564,12 @@ export function attachClosed1mMarkToAccountingBridge(
       frontierAsOf: closedBar.barCloseTime,
       skipSemanticDigest: true,
     });
-    recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
-      cycleIndex,
-      detail: symbol,
-      at: closedBar.barCloseTime,
-    });
   }
+  recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
+    cycleIndex,
+    detail: symbol,
+    at: closedBar.barCloseTime,
+  });
 }
 
 export function buildHtrReconciliationInput(

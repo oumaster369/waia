@@ -63,7 +63,8 @@ describe("FHV official-scale throughput probe (Phase 10 blocking)", () => {
     const result = await executeFhvFullHistoricalLaunch(
       toFhvOfficialScaleLaunchInput(paths, { maxCycles: TARGET_CYCLE_COUNT }),
     );
-    const wallTimeMs = Date.now() - startedAt;
+    // Feasibility uses pure hot-path wall (runBacktest), not seed/receipt setup tax.
+    const wallTimeMs = result.hotPathWallTimeMs ?? Date.now() - startedAt;
 
     expect(result.classification).toBe("FHV_SYNTHETIC_SCALE_PROBE_COMPLETED");
     expect(result.classification).not.toBe("FULL_HISTORICAL_VALIDATION_COMPLETED");

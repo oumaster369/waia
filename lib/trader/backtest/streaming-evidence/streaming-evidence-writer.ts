@@ -10,7 +10,7 @@ import {
   computeStreamingEvidenceChainDigest,
 } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import {
-  MAX_BATCH_CYCLES,
+  resolveEvidenceBatchCycles,
   STREAMING_EVIDENCE_SCHEMA_VERSION,
   StreamingEvidenceError,
   type ReplayCycleEvidenceProjection,
@@ -70,6 +70,7 @@ export function createStreamingEvidenceWriter(
   const chunkDigests: string[] = [];
   let sealedThroughCycleIndex = -1;
   let peakBuffered = 0;
+  const batchLimit = resolveEvidenceBatchCycles();
   // First seal wins: a complete seal must never overwrite a prior partial seal, and a complete
   // seal must occur at most once (§7 invariant). Subsequent seals return the sealed ref idempotently.
   let sealedRef: StreamingEvidenceManifestRef | null = null;
@@ -165,7 +166,7 @@ export function createStreamingEvidenceWriter(
         timelineWriter.append(cycleIndex, result);
       }
       peakBuffered = Math.max(peakBuffered, batch.length);
-      if (batch.length >= MAX_BATCH_CYCLES) {
+      if (batch.length >= batchLimit) {
         flushBatch();
       }
     },
