@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import {
   closeSync,
+  constants as fsConstants,
+  copyFileSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -11,6 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 import { getRawSqliteDatabase } from "@/db/client";
 import {
@@ -244,14 +247,12 @@ function sha256FileSync(filePath: string): string {
 }
 
 /**
- * Quiescent hot-path session backup: WAL checkpoint + single publish copy + streaming digest.
+ * Quiescent hot-path session backup: WAL checkpoint + copyFile + streaming digest.
  * Avoids better-sqlite3 page backup + full integrity_check + multi-GB Buffer load
  * (IDHPS full-corpus checkpoint budget).
  *
- * On GHA ext4 (no FICLONE), an intermediate tmpdir copy doubled full-file write amplification
- * across ~1580 official-scale checkpoints. While the hot path is quiescent at the epoch
- * boundary, digest the live session file once and let publish perform the sole durable copy
- * into the checkpoint temp directory. Semantic bytes and digests are unchanged.
+ * Snapshot into an exclusive temp file before publish so the durable checkpoint copy never
+ * reads the live SQLite path while the engine still holds it open (CI ARM probe sensitivity).
  */
 function captureSessionDatabaseBackup(input: { skipSessionBackup?: boolean }): {
   sessionFile: Buffer | { copyFromPath: string };
@@ -269,10 +270,17 @@ function captureSessionDatabaseBackup(input: { skipSessionBackup?: boolean }): {
   const sqlite = getRawSqliteDatabase();
   // Single-writer FHV path: checkpoint then copy/clone is a consistent snapshot.
   sqlite.pragma("wal_checkpoint(TRUNCATE)");
-  const sessionDatabaseDigest = sha256FileSync(sqlite.name);
+  const tempBackupPath = join(tmpdir(), `fhv-session-backup-${process.pid}-${Date.now()}.sqlite`);
+  try {
+    copyFileSync(sqlite.name, tempBackupPath, fsConstants.COPYFILE_FICLONE);
+  } catch {
+    copyFileSync(sqlite.name, tempBackupPath);
+  }
+  const sessionDatabaseDigest = sha256FileSync(tempBackupPath);
   return {
-    sessionFile: { copyFromPath: sqlite.name },
+    sessionFile: { copyFromPath: tempBackupPath },
     sessionDatabaseDigest,
+    cleanupTempPath: tempBackupPath,
   };
 }
 
