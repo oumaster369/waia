@@ -39,6 +39,7 @@ import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/resear
 import { buildResearchV2PortfolioContext } from "@/lib/trader/research/research-portfolio-config";
 import { readFhvLaunchJournal } from "@/lib/trader/observability/fhv-launch-journal";
 import { getFhvSyntheticProfilingHooks } from "@/lib/trader/observability/fhv-synthetic-profiling-hook";
+import { createFhvFullHistoricalProgressReporter } from "@/lib/trader/observability/fhv-full-historical-progress";
 
 function parseStrategyBinding(version: string): { strategyId: string; strategyVersion: string } {
   const at = version.lastIndexOf("@");
@@ -82,6 +83,8 @@ export async function runFullHistoricalBacktest(input: {
   includeHoldout: boolean;
   controlReplay?: boolean;
   maxCycles?: number;
+  targetCycleCount?: number | null;
+  artifactRoot?: string;
   walWriter?: FhvExecutionWalWriter;
   authorizationClaim?: FhvAuthorizationClaimV2;
   claimPath?: string;
@@ -217,6 +220,17 @@ export async function runFullHistoricalBacktest(input: {
   const strategies = resolveStrategyBindings(input.configurationFreeze);
   const accountState = createHtrInitialAccountRiskState();
 
+  // Opt-in observational progress (CI full-corpus/probe set FHV_IDHPS_PROGRESS=1).
+  // Default off so unit/durability fixtures stay quiet and zero-overhead.
+  const progressReporter =
+    input.boundedFixture !== true && process.env.FHV_IDHPS_PROGRESS === "1"
+      ? createFhvFullHistoricalProgressReporter({
+          runDir: input.runDir,
+          ...(input.artifactRoot ? { artifactRoot: input.artifactRoot } : {}),
+          targetCycleCount: input.targetCycleCount ?? input.maxCycles ?? null,
+        })
+      : null;
+
   const epochController =
     input.walWriter && input.authorizationClaim && input.claimPath && input.checkpointConfig
       ? createFhvEpochBoundaryController({
@@ -236,6 +250,11 @@ export async function runFullHistoricalBacktest(input: {
               boundarySnapshot: boundary,
               benchmarkNewId,
             }),
+          onCheckpointMetrics: progressReporter
+            ? ({ checkpointBackupDurationMs }) => {
+                progressReporter.noteCheckpoint(checkpointBackupDurationMs);
+              }
+            : undefined,
         })
       : undefined;
   epochController?.beginInitialEpoch();
@@ -247,11 +266,16 @@ export async function runFullHistoricalBacktest(input: {
   const profilingHooks = getFhvSyntheticProfilingHooks();
   const baseOnCycleBoundary = epochController?.onCycleBoundary;
   const onCycleBoundary =
-    baseOnCycleBoundary || profilingHooks?.onCycle
+    baseOnCycleBoundary || profilingHooks?.onCycle || progressReporter
       ? async (boundary: Parameters<NonNullable<typeof baseOnCycleBoundary>>[0]) => {
           profilingHooks?.onCycle?.({
             cycleCount: boundary.cycleCount,
             cycleIndex: boundary.cycleIndex,
+          });
+          progressReporter?.maybeReport({
+            cycleCount: boundary.cycleCount,
+            epochId: epochController?.getCurrentEpochId() ?? 0,
+            globalEventSequence: boundary.cycleCount,
           });
           if (!baseOnCycleBoundary) {
             return "continue" as const;
@@ -318,6 +342,11 @@ export async function runFullHistoricalBacktest(input: {
     });
     const hotPathWallTimeMs = performance.now() - backtestStartedAt;
     mark("run_backtest", backtestStartedAt);
+    progressReporter?.forceReport({
+      cycleCount: result.cycleCount,
+      epochId: epochController?.getCurrentEpochId() ?? 0,
+      globalEventSequence: result.sourceFrontier?.globalEventSequence ?? result.cycleCount,
+    });
     return { ...result, hotPathWallTimeMs };
   } finally {
     officialReader?.close();

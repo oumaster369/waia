@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import {
   closeSync,
-  constants as fsConstants,
-  copyFileSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -13,7 +11,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import { getRawSqliteDatabase } from "@/db/client";
 import {
@@ -247,9 +244,14 @@ function sha256FileSync(filePath: string): string {
 }
 
 /**
- * Quiescent hot-path session backup: WAL checkpoint + copyFile + streaming digest.
+ * Quiescent hot-path session backup: WAL checkpoint + single publish copy + streaming digest.
  * Avoids better-sqlite3 page backup + full integrity_check + multi-GB Buffer load
  * (IDHPS full-corpus checkpoint budget).
+ *
+ * On GHA ext4 (no FICLONE), an intermediate tmpdir copy doubled full-file write amplification
+ * across ~1580 official-scale checkpoints. While the hot path is quiescent at the epoch
+ * boundary, digest the live session file once and let publish perform the sole durable copy
+ * into the checkpoint temp directory. Semantic bytes and digests are unchanged.
  */
 function captureSessionDatabaseBackup(input: { skipSessionBackup?: boolean }): {
   sessionFile: Buffer | { copyFromPath: string };
@@ -267,17 +269,10 @@ function captureSessionDatabaseBackup(input: { skipSessionBackup?: boolean }): {
   const sqlite = getRawSqliteDatabase();
   // Single-writer FHV path: checkpoint then copy/clone is a consistent snapshot.
   sqlite.pragma("wal_checkpoint(TRUNCATE)");
-  const tempBackupPath = join(tmpdir(), `fhv-session-backup-${process.pid}-${Date.now()}.sqlite`);
-  try {
-    copyFileSync(sqlite.name, tempBackupPath, fsConstants.COPYFILE_FICLONE);
-  } catch {
-    copyFileSync(sqlite.name, tempBackupPath);
-  }
-  const sessionDatabaseDigest = sha256FileSync(tempBackupPath);
+  const sessionDatabaseDigest = sha256FileSync(sqlite.name);
   return {
-    sessionFile: { copyFromPath: tempBackupPath },
+    sessionFile: { copyFromPath: sqlite.name },
     sessionDatabaseDigest,
-    cleanupTempPath: tempBackupPath,
   };
 }
 
@@ -440,6 +435,8 @@ export function createFhvEpochBoundaryController(input: {
   skipSessionBackup?: boolean;
   snapshotDigests?: Partial<Omit<FhvEpochCommitSnapshotDigests, "sourceCursorDigest">>;
   compositeEvidenceSink?: FhvCompositeEvidenceSink;
+  /** Observational only — must not affect checkpoint authority or retention. */
+  onCheckpointMetrics?: (input: { epochId: number; checkpointBackupDurationMs: number }) => void;
 }): {
   onCycleBoundary: (boundary: FhvCycleBoundarySnapshot) => Promise<BacktestCycleBoundaryDecision>;
   beginInitialEpoch: () => void;
@@ -539,6 +536,10 @@ export function createFhvEpochBoundaryController(input: {
       walBytes = null;
     }
     recordIdhpsCheckpointMetrics({ checkpointBackupDurationMs, walBytes });
+    input.onCheckpointMetrics?.({
+      epochId: result.epochId,
+      checkpointBackupDurationMs,
+    });
     writeFileSync(
       join(result.checkpointDir, "idhps-checkpoint-metrics.v1.json"),
       `${JSON.stringify(

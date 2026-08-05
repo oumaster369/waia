@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { FHV_OFFICIAL_TOTAL_BARS } from "@/lib/trader/market-data/fhv-official-scale-corpus";
+import { FHV_DEFAULT_CHECKPOINT_EVERY_CYCLES } from "@/lib/trader/observability/fhv-execution-wal";
 import {
   executeFhvFullHistoricalLaunch,
   resolveFhvFullLaunchRunDirectory,
@@ -21,6 +22,7 @@ import {
 } from "./fhv-official-scale-harness";
 import {
   CHECKPOINT_EVERY_CYCLES,
+  FULL_CORPUS_CHECKPOINT_EVERY_CYCLES,
   LAST_COMMITTED_CYCLE_INDEX,
   LAST_TARGET_CYCLE_INDEX,
   TARGET_CYCLE_COUNT,
@@ -51,6 +53,8 @@ describe("FHV official-scale full corpus (Phase 13 blocking)", () => {
     expect(TARGET_CYCLE_COUNT).toBe(4509);
     expect(LAST_TARGET_CYCLE_INDEX).toBe(4508);
     expect(CHECKPOINT_EVERY_CYCLES).toBe(3997);
+    expect(FULL_CORPUS_CHECKPOINT_EVERY_CYCLES).toBe(FHV_DEFAULT_CHECKPOINT_EVERY_CYCLES);
+    expect(FULL_CORPUS_CHECKPOINT_EVERY_CYCLES).toBe(10_000);
     expect(LAST_COMMITTED_CYCLE_INDEX).toBe(3996);
     expect(FHV_OFFICIAL_TOTAL_BARS).toBe(6_312_960);
   });
@@ -71,7 +75,7 @@ describe("FHV official-scale full corpus (Phase 13 blocking)", () => {
         runId,
         maxCycles: null,
         targetCycleCount: FHV_OFFICIAL_TOTAL_BARS,
-        checkpointEveryCycles: CHECKPOINT_EVERY_CYCLES,
+        checkpointEveryCycles: FULL_CORPUS_CHECKPOINT_EVERY_CYCLES,
       });
 
       const journalPath = join(paths.runDir, "fhv-launch-journal.v1.json");

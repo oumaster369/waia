@@ -194,10 +194,16 @@ function loadFhvSyntheticScaleAuthorityForLaunch(input: {
   maxCycles?: number;
   qualificationMode: FhvDatasetQualificationReceiptV1["qualificationMode"];
 }): FhvSyntheticScaleAuthorityV1 | undefined {
-  if (input.qualificationMode !== "OFFICIAL_MULTI_YEAR" || input.maxCycles == null) {
+  if (input.qualificationMode !== "OFFICIAL_MULTI_YEAR") {
     return undefined;
   }
-  return readFhvSyntheticScaleAuthority(input.syntheticScaleAuthorityPath!);
+  // Load whenever a path is supplied — full-corpus (maxCycles=null) still seals
+  // targetCycleCount for observational progress / projection. Classification remains
+  // gated on maxCycles != null elsewhere.
+  if (!input.syntheticScaleAuthorityPath?.trim()) {
+    return undefined;
+  }
+  return readFhvSyntheticScaleAuthority(input.syntheticScaleAuthorityPath);
 }
 
 export function assertFhvSyntheticScaleAuthorityRequired(input: {
@@ -858,6 +864,9 @@ async function runFhvFullHistoricalLaunchBacktest(input: {
     boundedFixture: input.launchInput.boundedFixture === true,
     includeHoldout,
     maxCycles: input.launchInput.maxCycles,
+    targetCycleCount:
+      input.syntheticScaleAuthority?.targetCycleCount ?? input.launchInput.maxCycles ?? null,
+    artifactRoot: input.launchInput.artifactRoot,
     sessionDbPath,
     walWriter: input.launchExecution.walWriter,
     authorizationClaim: input.launchExecution.authorizationClaim,
