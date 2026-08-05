@@ -219,6 +219,10 @@ export function createFhvFullHistoricalProgressReporter(input: {
       }
     },
     maybeReport(sample) {
+      // Amortize clock checks: only sample every 256 cycles on the hot path.
+      if (sample.cycleCount > 0 && sample.cycleCount % 256 !== 0) {
+        return null;
+      }
       const now = performance.now();
       if (lastReportAt > 0 && now - lastReportAt < intervalMs) {
         return null;

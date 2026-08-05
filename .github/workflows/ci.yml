@@ -189,7 +189,7 @@ jobs:
       # Phase-10 visible headroom target only (default 1000). Blocking gate remains cps≥877 / ≤7200s.
       FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND: "1000"
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
-      FHV_IDHPS_PROGRESS: "1"
+      # Progress observability is for full-corpus auditability only — keep probe hot path clean.
       NODE_ENV: production
       # Default V8 young-gen + larger old-space: GS-10 flush@32 is I/O-bound; huge semi-spaces
       # starve page cache for ~197k evidence chunk writes on the full corpus.
