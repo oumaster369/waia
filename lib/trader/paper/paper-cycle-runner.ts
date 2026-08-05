@@ -221,22 +221,24 @@ async function runHtrGuardianPhase(
   }
 
   const bridge = input.htrAccounting.bridge;
-  let hasOpenPosition = false;
   let missingMark = false;
-  for (const [symbol, position] of Object.entries(bridge.state.positions)) {
-    if (compareDecimal(position.quantity, "0") <= 0) {
-      continue;
-    }
-    hasOpenPosition = true;
-    if (!bridge.state.marks[symbol]) {
-      missingMark = true;
-      break;
+  if (bridge.openPositionCount > 0) {
+    for (const symbol in bridge.state.positions) {
+      const position = bridge.state.positions[symbol]!;
+      if (position.quantity === "0" || compareDecimal(position.quantity, "0") <= 0) {
+        continue;
+      }
+      if (!bridge.state.marks[symbol]) {
+        missingMark = true;
+        break;
+      }
     }
   }
   // Flat book: inventory is empty — skip resolver (even cached) on the hot path.
-  const inventoryOpenQtyBySymbol = hasOpenPosition
-    ? await input.htrAccounting.resolveInventoryOpenQtyBySymbol()
-    : EMPTY_INVENTORY_OPEN_QTY;
+  const inventoryOpenQtyBySymbol =
+    bridge.openPositionCount > 0
+      ? await input.htrAccounting.resolveInventoryOpenQtyBySymbol()
+      : EMPTY_INVENTORY_OPEN_QTY;
   runAutomaticAccountingReconciliation(bridge, {
     inventoryOpenQtyBySymbol,
     cycleIndex,

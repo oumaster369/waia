@@ -281,6 +281,7 @@ describe("H-ARCH-1 IDHPS growth-surface RED→GREEN GS-01..14", () => {
       cashLedgerBaseUsdt: "0",
       epochConsumedFillIds: ["f1"],
       lastMarkBySymbol: {},
+      openPositionCount: 0,
     };
     clearIdhpsEpochArraysAfterDurableCommit(bridge);
     assertNoPriorEpochEntriesInBridgeArrays(bridge, 0);

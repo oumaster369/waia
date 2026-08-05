@@ -123,6 +123,8 @@ export type HtrAccountingCycleBridge = {
   /** IDHPS: last full-reconcile fill frontier (mark-only cycles use light checks). */
   lastFullReconcileFillCount?: number;
   lastFullReconcileCash?: string;
+  /** Cached count of positions with quantity > 0 (maintained on mark / fill attach). */
+  openPositionCount: number;
 };
 
 export type HtrAccountingCycleContext = {
@@ -488,9 +490,15 @@ export function createHtrAccountingCycleBridge(input: {
     cashLedgerBaseUsdt: startingCashUsdt,
     epochConsumedFillIds: [],
     lastMarkBySymbol: {},
+    openPositionCount: 0,
   };
   recordRuntimeCall(bridge, "WP18_INITIAL_STATE", { at: state.frontierAsOf });
   return bridge;
+}
+
+/** True when the bridge currently holds any open (quantity > 0) position. */
+export function bridgeHasOpenPosition(bridge: HtrAccountingCycleBridge): boolean {
+  return bridge.openPositionCount > 0;
 }
 
 export function consumeWp17FillIntoAccountingBridge(
@@ -519,6 +527,14 @@ export function consumeWp17FillIntoAccountingBridge(
     frontierAsOf: normalizedFill.executedAt,
     skipSemanticDigest: true,
   });
+  let openPositionCount = 0;
+  for (const symbol in bridge.state.positions) {
+    const quantity = bridge.state.positions[symbol]!.quantity;
+    if (quantity !== "0" && compareDecimal(quantity, "0") > 0) {
+      openPositionCount += 1;
+    }
+  }
+  bridge.openPositionCount = openPositionCount;
   bridge.cashEvents.push({
     fillId: input.fill.fillId,
     netCashEffect: input.fill.economics.netCashEffect,
@@ -544,8 +560,11 @@ export function attachClosed1mMarkToAccountingBridge(
   };
   const mergedMarks: MarksJsonV1 = {};
   let openPositionCount = 0;
-  for (const [openSymbol, position] of Object.entries(bridge.state.positions)) {
-    if (compareDecimal(position.quantity, "0") <= 0) {
+  // Avoid Object.entries allocation on the mark hot path.
+  for (const openSymbol in bridge.state.positions) {
+    const position = bridge.state.positions[openSymbol]!;
+    // Canonical closed qty is "0"; skip BigInt parse on the flat-book majority path.
+    if (position.quantity === "0" || compareDecimal(position.quantity, "0") <= 0) {
       continue;
     }
     openPositionCount += 1;
@@ -555,6 +574,7 @@ export function attachClosed1mMarkToAccountingBridge(
     }
     mergedMarks[openSymbol] = mark;
   }
+  bridge.openPositionCount = openPositionCount;
   if (openPositionCount === 0) {
     // Flat book: bump sequence/frontier without full mark recompute.
     // Mutate in place — sole bridge owner; avoid shallow-copying the full state each bar.
@@ -589,8 +609,9 @@ export function attachClosed1mMarkToAccountingBridge(
     const state = bridge.state;
     const priorEquity = state.equity;
     let markedPositionValue = "0";
-    for (const [openSymbol, position] of Object.entries(state.positions)) {
-      if (compareDecimal(position.quantity, "0") <= 0) {
+    for (const openSymbol in state.positions) {
+      const position = state.positions[openSymbol]!;
+      if (position.quantity === "0" || compareDecimal(position.quantity, "0") <= 0) {
         continue;
       }
       markedPositionValue = addDecimal(
@@ -693,26 +714,28 @@ export function runAutomaticAccountingReconciliation(
     if (markOnlyCycle) {
       // Light check: cash/equity conservation + inventory parity.
       // All three locked phases execute this validation (do not coalesce / early-return).
-      if (compareDecimal(bridge.state.markedPositionValue, "0") === 0) {
+      const marked = bridge.state.markedPositionValue;
+      if (marked === "0" || compareDecimal(marked, "0") === 0) {
+        // Flat book: cash/equity may differ in decimal formatting ("100000" vs "100000.00").
         if (compareDecimal(bridge.state.equity, bridge.state.cash) !== 0) {
           throw new Error(
             `equity ${bridge.state.equity} != cash ${bridge.state.cash} (flat marked value)`,
           );
         }
       } else {
-        const expectedEquity = addDecimal(bridge.state.cash, bridge.state.markedPositionValue);
+        const expectedEquity = addDecimal(bridge.state.cash, marked);
         if (compareDecimal(bridge.state.equity, expectedEquity) !== 0) {
           throw new Error(
-            `equity ${bridge.state.equity} != cash ${bridge.state.cash} + marked ${bridge.state.markedPositionValue}`,
+            `equity ${bridge.state.equity} != cash ${bridge.state.cash} + marked ${marked}`,
           );
         }
       }
       const inventory = input.inventoryOpenQtyBySymbol;
-      if (inventory) {
+      if (inventory && inventory !== EMPTY_INVENTORY_OPEN_QTY) {
         for (const symbol in inventory) {
           const expectedQty = inventory[symbol]!;
           const actualQty = bridge.state.positions[symbol]?.quantity ?? "0";
-          if (compareDecimal(actualQty, expectedQty) !== 0) {
+          if (actualQty !== expectedQty && compareDecimal(actualQty, expectedQty) !== 0) {
             throw new Error(
               `inventory mismatch for ${symbol}: expected ${expectedQty}, actual ${actualQty}`,
             );
@@ -785,13 +808,17 @@ export function evaluateHtrGuardianForBridge(
   bridge.guardianReason = cycle.reason;
   // Official-scale STREAM_ONLY: NONE dominates; skip callOrder push (GC) while still evaluating.
   // Research/MACRO-H paths keep full WP20 callOrder (no FHV_IDHPS_SKIP_REGIME_TIMELINE).
-  if (cycle.breachState !== "NONE" || process.env.FHV_IDHPS_SKIP_REGIME_TIMELINE !== "1") {
+  if (cycle.breachState !== "NONE" || !isOfficialScaleIdhpsHotPath()) {
     recordRuntimeCall(bridge, "WP20_GUARDIAN_EVALUATED", {
       cycleIndex: input.cycleIndex,
       detail: cycle.breachState,
     });
   }
   return cycle;
+}
+
+function isOfficialScaleIdhpsHotPath(): boolean {
+  return process.env.FHV_IDHPS_SKIP_REGIME_TIMELINE === "1";
 }
 
 export function recordBreachCancellationOnBridge(
@@ -1056,6 +1083,14 @@ export function restoreAccountingBridgeFromCheckpoint(
   bridge.cashEvents = [...slice.cashEventsJson];
   bridge.cashLedgerBaseUsdt = slice.cashLedgerBaseUsdt ?? bridge.startingCashUsdt;
   bridge.epochConsumedFillIds = slice.cashEventsJson.map((event) => event.fillId);
+  let openPositionCount = 0;
+  for (const symbol in restoredState.positions) {
+    const quantity = restoredState.positions[symbol]!.quantity;
+    if (quantity !== "0" && compareDecimal(quantity, "0") > 0) {
+      openPositionCount += 1;
+    }
+  }
+  bridge.openPositionCount = openPositionCount;
   recordRuntimeCall(bridge, "CHECKPOINT_RESTORED", { detail: String(slice.accountingSequence) });
 }
 

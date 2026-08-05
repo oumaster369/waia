@@ -240,14 +240,19 @@ export function writeFileAtomicCompareAndReplace(input: {
 }
 
 export function writeFileAtomic(finalPath: string, bytes: Buffer | string): void {
-  const payload = typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes;
+  // Prefer writing the string/Buffer directly — avoid an extra Buffer.from copy on every
+  // GS-10 evidence chunk flush (every MAX_BATCH_CYCLES=32 cycles).
   tempCounter += 1;
   const tempPath = `${finalPath}.tmp-${process.pid}-${process.hrtime.bigint()}-${tempCounter}`;
 
   let fd: number | null = null;
   try {
     fd = openSync(tempPath, "w");
-    writeSync(fd, payload);
+    if (typeof bytes === "string") {
+      writeSync(fd, bytes, null, "utf8");
+    } else {
+      writeSync(fd, bytes);
+    }
     // Evidence chunk writes: rename provides atomic visibility. Epoch seal / checkpoint
     // publish remains the durability boundary (IDHPS hot-path: skip per-chunk fsync).
     closeSync(fd);
@@ -258,7 +263,7 @@ export function writeFileAtomic(finalPath: string, bytes: Buffer | string): void
       closeSync(fd);
     }
     try {
-      writeFileSync(tempPath, payload);
+      writeFileSync(tempPath, bytes);
       renameSync(tempPath, finalPath);
     } catch {
       throw new StreamingEvidenceError(

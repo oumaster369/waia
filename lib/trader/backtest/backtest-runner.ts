@@ -86,6 +86,7 @@ import {
   consumeWp17FillIntoAccountingBridge,
   compareReplayDrawdownHwmState,
   createDrawdownPersistenceSession,
+  bridgeHasOpenPosition,
   createHtrAccountingCycleBridge,
   deriveAccountRiskStateFromBridge,
   EMPTY_INVENTORY_OPEN_QTY,
@@ -99,7 +100,6 @@ import {
   type HtrAccountingCycleContext,
 } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
-import { compareDecimal } from "@/lib/trader/risk/numeric";
 import type {
   ReplayAccountingFrontierState,
   ReplayDrawdownHwmState,
@@ -434,10 +434,7 @@ async function reconcileHtrAccountingBridge(input: {
     | "before_cycle_complete"
     | "before_terminal_export";
 }): Promise<void> {
-  const hasOpenPosition = Object.values(input.bridge.state.positions).some(
-    (position) => compareDecimal(position.quantity, "0") > 0,
-  );
-  const inventoryOpenQtyBySymbol = hasOpenPosition
+  const inventoryOpenQtyBySymbol = bridgeHasOpenPosition(input.bridge)
     ? await input.resolveInventoryOpenQtyBySymbol()
     : EMPTY_INVENTORY_OPEN_QTY;
   runAutomaticAccountingReconciliation(input.bridge, {
@@ -793,9 +790,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           ? countIdhpsOpenOrders(idhpsSession.inventory)
           : historicalOpenCount;
         // Rebuild risk state when fills/open-orders change, or while any position is marked.
-        const hasOpenPositions = Object.values(htrAccountingBridge.state.positions).some(
-          (position) => compareDecimal(position.quantity, "0") > 0,
-        );
+        const hasOpenPositions = bridgeHasOpenPosition(htrAccountingBridge);
         if (
           fillEvents.length > 0 ||
           openOrderCount !== accountState.openOrderCount ||

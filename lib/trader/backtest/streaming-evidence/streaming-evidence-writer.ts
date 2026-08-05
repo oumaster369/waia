@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -5,8 +6,6 @@ import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic
 import { buildReplayCycleEvidenceProjection } from "@/lib/trader/backtest/streaming-evidence/cycle-evidence-projection";
 import {
   buildStreamingEvidenceManifest,
-  computeChunkDigest,
-  computePayloadDigest,
   computeStreamingEvidenceChainDigest,
 } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import {
@@ -15,7 +14,6 @@ import {
   StreamingEvidenceError,
   type ReplayCycleEvidenceProjection,
   type StreamingEvidenceChunkEnvelope,
-  type StreamingEvidenceManifest,
   type StreamingEvidenceManifestRef,
   type StreamingEvidenceTerminalState,
 } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
@@ -49,11 +47,29 @@ function formatSeq(seq: number): string {
   return String(seq).padStart(6, "0");
 }
 
-function writeChunkFile(chunksDir: string, envelope: StreamingEvidenceChunkEnvelope): void {
-  writeFileAtomic(
-    join(chunksDir, `chunk-${formatSeq(envelope.seq)}.json`),
-    JSON.stringify(envelope),
-  );
+/**
+ * Serialize a chunk envelope once: payload JSON is embedded (not re-stringified), digests match
+ * the historical `JSON.stringify(envelope)` / `computePayloadDigest` / `computeChunkDigest` bytes.
+ */
+export function serializeStreamingEvidenceChunkEnvelope(input: {
+  seq: number;
+  batch: readonly ReplayCycleEvidenceProjection[];
+  prevChunkDigest: string | null;
+}): { payloadDigest: string; chunkDigest: string; envelopeJson: string } {
+  const payloadJson = JSON.stringify(input.batch);
+  const payloadDigest = createHash("sha256").update(payloadJson, "utf8").digest("hex");
+  const startInclusive = input.batch[0]!.cycleIndex;
+  const endInclusive = input.batch[input.batch.length - 1]!.cycleIndex;
+  const envelopeJsonWithoutDigest =
+    `{"schemaVersion":${JSON.stringify(STREAMING_EVIDENCE_SCHEMA_VERSION)},` +
+    `"seq":${input.seq},` +
+    `"cycleIndexRange":{"startInclusive":${startInclusive},"endInclusive":${endInclusive}},` +
+    `"payload":${payloadJson},` +
+    `"payloadDigest":${JSON.stringify(payloadDigest)},` +
+    `"prevChunkDigest":${JSON.stringify(input.prevChunkDigest)}}`;
+  const chunkDigest = createHash("sha256").update(envelopeJsonWithoutDigest, "utf8").digest("hex");
+  const envelopeJson = `${envelopeJsonWithoutDigest.slice(0, -1)},"chunkDigest":${JSON.stringify(chunkDigest)}}`;
+  return { payloadDigest, chunkDigest, envelopeJson };
 }
 
 export function createStreamingEvidenceWriter(
@@ -71,6 +87,8 @@ export function createStreamingEvidenceWriter(
   let sealedThroughCycleIndex = -1;
   let peakBuffered = 0;
   const batchLimit = resolveEvidenceBatchCycles();
+  // Capture once: process.env reads on every cycle are avoidable hot-path tax.
+  const skipRegimeTimeline = process.env.FHV_IDHPS_SKIP_REGIME_TIMELINE === "1";
   // First seal wins: a complete seal must never overwrite a prior partial seal, and a complete
   // seal must occur at most once (§7 invariant). Subsequent seals return the sealed ref idempotently.
   let sealedRef: StreamingEvidenceManifestRef | null = null;
@@ -80,26 +98,17 @@ export function createStreamingEvidenceWriter(
       return;
     }
 
-    const payloadDigest = computePayloadDigest(batch);
-    const envelopeWithoutDigest: Omit<StreamingEvidenceChunkEnvelope, "chunkDigest"> = {
-      schemaVersion: STREAMING_EVIDENCE_SCHEMA_VERSION,
+    const endInclusive = batch[batch.length - 1]!.cycleIndex;
+    const { payloadDigest, chunkDigest, envelopeJson } = serializeStreamingEvidenceChunkEnvelope({
       seq: nextSeq,
-      cycleIndexRange: {
-        startInclusive: batch[0]!.cycleIndex,
-        endInclusive: batch.at(-1)!.cycleIndex,
-      },
-      payload: batch,
-      payloadDigest,
+      batch,
       prevChunkDigest: lastChunkDigest,
-    };
-    const chunkDigest = computeChunkDigest(envelopeWithoutDigest);
-    const envelope: StreamingEvidenceChunkEnvelope = {
-      ...envelopeWithoutDigest,
-      chunkDigest,
-    };
+    });
 
     const finalPath = join(chunksDir, `chunk-${formatSeq(nextSeq)}.json`);
-    if (existsSync(finalPath)) {
+    // Official-scale STREAM_ONLY uses a fresh runDir per launch; skip per-flush existsSync
+    // (directory-stat tax grows with ~197k GS-10 chunks). Conflict check remains for resume/reuse.
+    if (!skipRegimeTimeline && existsSync(finalPath)) {
       const existing = JSON.parse(
         readFileSync(finalPath, "utf8"),
       ) as StreamingEvidenceChunkEnvelope;
@@ -109,13 +118,13 @@ export function createStreamingEvidenceWriter(
           `[streaming-evidence] seq ${nextSeq} conflict`,
         );
       }
-    } else {
-      writeChunkFile(chunksDir, envelope);
+    } else if (skipRegimeTimeline || !existsSync(finalPath)) {
+      writeFileAtomic(finalPath, envelopeJson);
     }
 
     lastChunkDigest = chunkDigest;
     chunkDigests.push(chunkDigest);
-    sealedThroughCycleIndex = batch.at(-1)!.cycleIndex;
+    sealedThroughCycleIndex = endInclusive;
     nextSeq += 1;
     // Reuse the batch array (avoid reallocating the container each flush).
     batch.length = 0;
@@ -163,7 +172,7 @@ export function createStreamingEvidenceWriter(
       const projection = buildReplayCycleEvidenceProjection(cycleIndex, result);
       batch.push(projection);
       // IDHPS STREAM_ONLY official scale: projections are authority; skip regime timeline I/O.
-      if (process.env.FHV_IDHPS_SKIP_REGIME_TIMELINE !== "1") {
+      if (!skipRegimeTimeline) {
         timelineWriter.append(cycleIndex, result);
       }
       peakBuffered = Math.max(peakBuffered, batch.length);

@@ -42,7 +42,22 @@ import {
 
 export const FHV_OFFICIAL_SCALE_METRICS_FILENAME = "fhv-official-scale-metrics.v1.json";
 export const MIN_THROUGHPUT_CPS = 877;
+/** Plan §8 probe feasibility floor (canonical CI sets FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND=1000). */
+export const DEFAULT_PROBE_MIN_THROUGHPUT_CPS = 1000;
 export const MAX_PROJECTED_FULL_CORPUS_RUNTIME_S = 7200;
+
+export function resolveProbeMinThroughputCps(): number {
+  const raw = process.env.FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND;
+  if (raw == null || raw === "") {
+    return DEFAULT_PROBE_MIN_THROUGHPUT_CPS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_PROBE_MIN_THROUGHPUT_CPS;
+  }
+  // Never weaken the hard full-corpus floor of 877 via env.
+  return Math.max(parsed, MIN_THROUGHPUT_CPS);
+}
 export const DISK_PROJECTED_MAX_FRACTION_OF_AVAILABLE = 0.7;
 export const DISK_MIN_FREE_RESERVE_FRACTION = 0.3;
 export const MIN_FILLS_AT_CHECKPOINT = 313;
@@ -482,12 +497,14 @@ export function resolveFhvOfficialScaleCheckpointBytes(runDir: string): {
 export function evaluateFhvOfficialScaleTimeFeasibility(input: {
   barsProcessed: number;
   wallTimeMs: number;
+  /** Probe jobs pass env-resolved ≥1000; full-corpus measured acceptance uses 877. */
+  minThroughputCps?: number;
 }): { cps: number; projectedRuntimeS: number; pass: boolean } {
   const wallTimeS = Math.max(input.wallTimeMs / 1000, 0.001);
   const cps = input.barsProcessed / wallTimeS;
   const projectedRuntimeS = FHV_OFFICIAL_TOTAL_BARS / Math.max(cps, Number.EPSILON);
-  const pass =
-    cps >= MIN_THROUGHPUT_CPS && projectedRuntimeS <= MAX_PROJECTED_FULL_CORPUS_RUNTIME_S;
+  const minThroughputCps = input.minThroughputCps ?? MIN_THROUGHPUT_CPS;
+  const pass = cps >= minThroughputCps && projectedRuntimeS <= MAX_PROJECTED_FULL_CORPUS_RUNTIME_S;
   return { cps, projectedRuntimeS, pass };
 }
 
@@ -739,6 +756,8 @@ export function buildFhvOfficialScaleMetrics(input: {
   const time = evaluateFhvOfficialScaleTimeFeasibility({
     barsProcessed: input.barsProcessed,
     wallTimeMs: input.wallTimeMs,
+    // Probe metrics artifact uses the plan §8 feasibility floor (env, default 1000).
+    minThroughputCps: resolveProbeMinThroughputCps(),
   });
   const disk = evaluateFhvOfficialScaleDiskFeasibility({
     artifactRoot: input.artifactRoot,
