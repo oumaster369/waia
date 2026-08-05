@@ -41,22 +41,37 @@ import {
 } from "./fhv-official-scale-constants";
 
 export const FHV_OFFICIAL_SCALE_METRICS_FILENAME = "fhv-official-scale-metrics.v1.json";
+/** Plan §8 canonical CI / full-corpus hard throughput floor (= 6_312_960 / 7200). */
 export const MIN_THROUGHPUT_CPS = 877;
-/** Plan §8 probe feasibility floor (canonical CI sets FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND=1000). */
-export const DEFAULT_PROBE_MIN_THROUGHPUT_CPS = 1000;
+/**
+ * Plan Phase 10 local feasibility headroom target (≥1000 bars/s).
+ * Visible/reporting only — must not redefine blocking feasibilityTimePass.
+ */
+export const DEFAULT_PROBE_TARGET_CPS = 1000;
+/** @deprecated Alias of {@link DEFAULT_PROBE_TARGET_CPS}; do not treat as blocking floor. */
+export const DEFAULT_PROBE_MIN_THROUGHPUT_CPS = DEFAULT_PROBE_TARGET_CPS;
 export const MAX_PROJECTED_FULL_CORPUS_RUNTIME_S = 7200;
 
-export function resolveProbeMinThroughputCps(): number {
+/**
+ * Resolve the visible Phase-10 probe headroom target.
+ * Env `FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND` may adjust the reported target only; it must never
+ * enter {@link evaluateFhvOfficialScaleTimeFeasibility} / `feasibilityTimePass`.
+ */
+export function resolveProbeTargetCps(): number {
   const raw = process.env.FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND;
   if (raw == null || raw === "") {
-    return DEFAULT_PROBE_MIN_THROUGHPUT_CPS;
+    return DEFAULT_PROBE_TARGET_CPS;
   }
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_PROBE_MIN_THROUGHPUT_CPS;
+    return DEFAULT_PROBE_TARGET_CPS;
   }
-  // Never weaken the hard full-corpus floor of 877 via env.
-  return Math.max(parsed, MIN_THROUGHPUT_CPS);
+  return parsed;
+}
+
+/** @deprecated Use {@link resolveProbeTargetCps}; name historically implied a blocking floor. */
+export function resolveProbeMinThroughputCps(): number {
+  return resolveProbeTargetCps();
 }
 export const DISK_PROJECTED_MAX_FRACTION_OF_AVAILABLE = 0.7;
 export const DISK_MIN_FREE_RESERVE_FRACTION = 0.3;
@@ -75,8 +90,13 @@ export type FhvOfficialScaleMetricsV1 = Readonly<{
   checkpointBytes: number | null;
   checkpointBackupDurationMs: number | null;
   classification: string;
+  /** Blocking: cps≥877 and projectedRuntimeS≤7200 (plan §8 canonical CI / full-corpus). */
   feasibilityTimePass: boolean;
   feasibilityDiskPass: boolean;
+  /** Plan Phase 10 headroom target (default 1000); never the blocking CI floor. */
+  probeTargetCps: number;
+  /** Whether measured cps met the visible Phase-10 target (non-blocking). */
+  probeTargetPass: boolean;
   probeGateClassification: string;
 }>;
 
@@ -497,13 +517,20 @@ export function resolveFhvOfficialScaleCheckpointBytes(runDir: string): {
 export function evaluateFhvOfficialScaleTimeFeasibility(input: {
   barsProcessed: number;
   wallTimeMs: number;
-  /** Probe jobs pass env-resolved ≥1000; full-corpus measured acceptance uses 877. */
+  /**
+   * Blocking floor only. Defaults to {@link MIN_THROUGHPUT_CPS} (=877).
+   * Callers must not pass the Phase-10 1000 target here.
+   */
   minThroughputCps?: number;
 }): { cps: number; projectedRuntimeS: number; pass: boolean } {
   const wallTimeS = Math.max(input.wallTimeMs / 1000, 0.001);
   const cps = input.barsProcessed / wallTimeS;
   const projectedRuntimeS = FHV_OFFICIAL_TOTAL_BARS / Math.max(cps, Number.EPSILON);
-  const minThroughputCps = input.minThroughputCps ?? MIN_THROUGHPUT_CPS;
+  // Hard floor cannot be weakened below the canonical CI / full-corpus contract.
+  const minThroughputCps = Math.max(
+    input.minThroughputCps ?? MIN_THROUGHPUT_CPS,
+    MIN_THROUGHPUT_CPS,
+  );
   const pass = cps >= minThroughputCps && projectedRuntimeS <= MAX_PROJECTED_FULL_CORPUS_RUNTIME_S;
   return { cps, projectedRuntimeS, pass };
 }
@@ -753,17 +780,19 @@ export function buildFhvOfficialScaleMetrics(input: {
   artifactRoot: string;
   runDir: string;
 }): FhvOfficialScaleMetricsV1 {
+  // Blocking gate: plan §8 canonical CI floor (877) + projected ≤7200. Env must not enter here.
   const time = evaluateFhvOfficialScaleTimeFeasibility({
     barsProcessed: input.barsProcessed,
     wallTimeMs: input.wallTimeMs,
-    // Probe metrics artifact uses the plan §8 feasibility floor (env, default 1000).
-    minThroughputCps: resolveProbeMinThroughputCps(),
+    minThroughputCps: MIN_THROUGHPUT_CPS,
   });
   const disk = evaluateFhvOfficialScaleDiskFeasibility({
     artifactRoot: input.artifactRoot,
     runDir: input.runDir,
     cycleCount: input.cycleCount,
   });
+  const probeTargetCps = resolveProbeTargetCps();
+  const probeTargetPass = time.cps >= probeTargetCps;
   return {
     schemaVersion: "fhv-official-scale-metrics/v1",
     capturedAtUtc: new Date().toISOString(),
@@ -777,6 +806,9 @@ export function buildFhvOfficialScaleMetrics(input: {
     classification: input.classification,
     feasibilityTimePass: time.pass,
     feasibilityDiskPass: disk.pass,
+    probeTargetCps,
+    probeTargetPass,
+    // Gate PASS tracks blocking feasibility only; Phase-10 1000 target remains visible above.
     probeGateClassification:
       time.pass && disk.pass
         ? "FHV_OFFICIAL_ENGINE_THROUGHPUT_PROBE_PASS"

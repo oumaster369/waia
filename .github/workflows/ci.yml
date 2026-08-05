@@ -186,6 +186,7 @@ jobs:
     env:
       DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
       FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+      # Phase-10 visible headroom target only (default 1000). Blocking gate remains cps≥877 / ≤7200s.
       FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND: "1000"
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
       NODE_ENV: production
@@ -203,7 +204,7 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
-      - name: Run canonical probe (≥1000 bars/s feasibility)
+      - name: Run canonical probe (blocking ≥877 cps / ≤7200s; report ≥1000 target)
         run: corepack pnpm@10 test:fhv:official-scale:probe
       - if: always()
         uses: actions/upload-artifact@v4

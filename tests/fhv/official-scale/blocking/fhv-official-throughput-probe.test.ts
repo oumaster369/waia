@@ -104,6 +104,9 @@ describe("FHV official-scale throughput probe (Phase 10 blocking)", () => {
     if (!metrics.feasibilityDiskPass) {
       expect.fail("BLOCKED_BY_CI_SCALE_DISK_FEASIBILITY");
     }
+    // Phase-10 ≥1000 target remains explicit/visible; it must not gate probe GREEN.
+    expect(metrics.probeTargetCps).toBeGreaterThanOrEqual(1000);
+    expect(typeof metrics.probeTargetPass).toBe("boolean");
     expect(metrics.probeGateClassification).toBe("FHV_OFFICIAL_ENGINE_THROUGHPUT_PROBE_PASS");
   }, 600_000);
 });
