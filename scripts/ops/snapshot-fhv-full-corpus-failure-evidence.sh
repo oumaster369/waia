@@ -142,6 +142,7 @@ if [[ "$SKIP_KILL" -eq 0 ]]; then
 fi
 
 PROGRESS_SRC="$ARTIFACT_ROOT/fhv-full-historical-progress.v1.json"
+PROGRESS_JSONL_SRC="$ARTIFACT_ROOT/fhv-full-historical-progress.v1.jsonl"
 METRICS_SRC="$ARTIFACT_ROOT/fhv-official-scale-metrics.v1.json"
 IDENTITY_SRC="$ARTIFACT_ROOT/fhv-artifact-identity.v1.json"
 RUN_DIR=""
@@ -156,11 +157,16 @@ for candidate in \
 done
 
 copy_stable_file "$PROGRESS_SRC" "$STAGING_ROOT/fhv-full-historical-progress.v1.json" || true
+# Append-only time series: the only record of throughput decay when the step is killed.
+copy_stable_file "$PROGRESS_JSONL_SRC" "$STAGING_ROOT/fhv-full-historical-progress.v1.jsonl" || true
 # Also accept progress nested under the run dir.
 if [[ -n "$RUN_DIR" ]]; then
   copy_stable_file \
     "$RUN_DIR/fhv-full-historical-progress.v1.json" \
     "$STAGING_ROOT/run/fhv-full-historical-progress.v1.json" || true
+  copy_stable_file \
+    "$RUN_DIR/fhv-full-historical-progress.v1.jsonl" \
+    "$STAGING_ROOT/run/fhv-full-historical-progress.v1.jsonl" || true
   copy_stable_file \
     "$RUN_DIR/fhv-launch-journal.v1.json" \
     "$STAGING_ROOT/run/fhv-launch-journal.v1.json" || true

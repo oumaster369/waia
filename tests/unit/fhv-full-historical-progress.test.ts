@@ -74,6 +74,16 @@ describe("fhv-full-historical-progress (observational)", () => {
       heapUsedBytes: 1,
       estimatedRemainingSeconds: 99,
       targetCycleCount: 1000,
+      rollingBarsPerSecond: null,
+      windowBarsPerSecond: null,
+      checkpointExcludedBarsPerSecond: null,
+      windowCheckpointExcludedBarsPerSecond: null,
+      estimatedRemainingSecondsLifetimeAverage: 99,
+      projectedTotalRuntimeSecondsRolling: null,
+      lastCheckpointBytes: null,
+      checkpointBytesPerSecond: null,
+      sessionDatabaseGrowthBytesPerCycle: null,
+      ficloneSucceeded: null,
     };
     writeFhvFullHistoricalProgressAtomic(path, sample);
     writeFhvFullHistoricalProgressAtomic(path, { ...sample, globalEventSequence: 20 });
