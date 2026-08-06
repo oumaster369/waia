@@ -43,6 +43,8 @@ import {
   readIdhpsCompositeMirrorSnapshot,
   writeIdhpsCompositeMirrorSnapshotAtomic,
 } from "@/lib/trader/observability/idhps-composite-mirror-snapshot";
+import type { FhvSealedLedgerIndex } from "@/lib/trader/observability/fhv-economic-ledger";
+import type { FhvSealedOrderRegistry } from "@/lib/trader/observability/fhv-economic-seal";
 
 export type IdhpsSessionRuntime = {
   prepared: IdhpsPreparedStatements;
@@ -65,6 +67,13 @@ export type IdhpsSessionRuntime = {
   portfolioSizingCacheValid: boolean;
   /** Set when composite mirror restored from a post-step-10 durable checkpoint. */
   resumedAfterDurableEpochCommit: boolean;
+  /**
+   * Run-scoped sealed-order authority (ADR-0025 AD-11/AD-13), present only in bounded-hot-state
+   * mode. Rebuilt once per seal publication, never per write, and discarded with the session —
+   * it is not a process-global registry.
+   */
+  sealedOrderRegistry: FhvSealedOrderRegistry | null;
+  sealedLedgerSnapshot: FhvSealedLedgerIndex | null;
 };
 
 let session: IdhpsSessionRuntime | null = null;
@@ -104,7 +113,20 @@ export function openIdhpsSession(
     portfolioSizingCache: null,
     portfolioSizingCacheValid: false,
     resumedAfterDurableEpochCommit: false,
+    sealedOrderRegistry: null,
+    sealedLedgerSnapshot: null,
   };
+}
+
+/** Publish the verified sealed authority for this run. Verification happens at build time. */
+export function setIdhpsSealedAuthority(input: {
+  registry: FhvSealedOrderRegistry;
+  snapshot: FhvSealedLedgerIndex;
+}): void {
+  const runtime = getIdhpsSession();
+  if (!runtime) return;
+  runtime.sealedOrderRegistry = input.registry;
+  runtime.sealedLedgerSnapshot = input.snapshot;
 }
 
 export function invalidateIdhpsPortfolioSizingCache(): void {

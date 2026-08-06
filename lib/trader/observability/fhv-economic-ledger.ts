@@ -226,3 +226,259 @@ export function verifyFhvEconomicLedger(runDir: string): {
     failures,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Verified immutable snapshot (WP-6A OPTION_E)                               */
+/* -------------------------------------------------------------------------- */
+
+export class SealedLedgerRowContractError extends Error {
+  constructor(
+    readonly classification: string,
+    detail: string,
+  ) {
+    super(`${classification}: ${detail}`);
+    this.name = "SealedLedgerRowContractError";
+  }
+}
+
+/** SQLite rowid captured at prune time, used only to replicate legacy export ordering. */
+export function readLegacyRowid(row: Readonly<Record<string, unknown>>, kind: string): number {
+  const raw = row.__rowid;
+  if (raw == null) {
+    throw new SealedLedgerRowContractError(
+      "FHV_SEALED_LEDGER_MISSING_ROWID",
+      `${kind} row ${String(row.id)} has no captured legacy rowid`,
+    );
+  }
+  const value = typeof raw === "bigint" ? Number(raw) : Number(raw);
+  if (!Number.isSafeInteger(value)) {
+    throw new SealedLedgerRowContractError(
+      "FHV_SEALED_LEDGER_UNSAFE_ROWID",
+      `${kind} row ${String(row.id)} rowid ${String(raw)} exceeds safe integer range`,
+    );
+  }
+  return value;
+}
+
+function requireString(row: Readonly<Record<string, unknown>>, column: string): string {
+  const value = row[column];
+  if (typeof value !== "string") {
+    throw new SealedLedgerRowContractError(
+      "FHV_SEALED_LEDGER_ROW_CONTRACT",
+      `column ${column} expected string, got ${typeof value}`,
+    );
+  }
+  return value;
+}
+
+function nullableString(row: Readonly<Record<string, unknown>>, column: string): string | null {
+  const value = row[column];
+  return value == null ? null : String(value);
+}
+
+/** `timestamp_ms` integer columns reconstruct to the exact same Date the legacy mapper returns. */
+function requireDate(row: Readonly<Record<string, unknown>>, column: string): Date {
+  const value = row[column];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new SealedLedgerRowContractError(
+      "FHV_SEALED_LEDGER_ROW_CONTRACT",
+      `column ${column} expected timestamp_ms number, got ${typeof value}`,
+    );
+  }
+  return new Date(value);
+}
+
+export type FhvSealedLedgerIndex = Readonly<{
+  chainDigest: string;
+  segmentCount: number;
+  rowCount: number;
+  /** Sealed orders in ascending legacy rowid order. */
+  orders: readonly { rowid: number; row: Readonly<Record<string, unknown>> }[];
+  ordersById: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
+  eventsByOrderId: ReadonlyMap<string, readonly Readonly<Record<string, unknown>>[]>;
+  fillsByOrderId: ReadonlyMap<string, readonly Readonly<Record<string, unknown>>[]>;
+}>;
+
+/**
+ * Verify the ledger once and build every index once.
+ *
+ * Reads never re-verify, re-hash or rescan. Construction is O(rows); each later lookup is an
+ * indexed map hit bounded by output size.
+ */
+export function openFhvVerifiedEconomicLedgerSnapshot(runDir: string): FhvSealedLedgerIndex {
+  const verification = verifyFhvEconomicLedger(runDir);
+  if (!verification.ok) {
+    throw new SealedLedgerRowContractError(
+      "FHV_SEALED_LEDGER_DIGEST_MISMATCH",
+      verification.failures.join(","),
+    );
+  }
+
+  const rows = readFhvEconomicLedgerRows(runDir);
+  const orders: { rowid: number; row: Readonly<Record<string, unknown>> }[] = [];
+  const ordersById = new Map<string, Readonly<Record<string, unknown>>>();
+  const eventsByOrderId = new Map<string, Readonly<Record<string, unknown>>[]>();
+  const fillsByOrderId = new Map<string, Readonly<Record<string, unknown>>[]>();
+
+  for (const entry of rows) {
+    const row = entry.row;
+    if (entry.kind === "trader_orders") {
+      const id = requireString(row, "id");
+      if (ordersById.has(id)) {
+        throw new SealedLedgerRowContractError(
+          "FHV_SEALED_LEDGER_CONFLICTING_OVERLAP",
+          `duplicate sealed order ${id}`,
+        );
+      }
+      ordersById.set(id, row);
+      orders.push({ rowid: readLegacyRowid(row, "trader_orders"), row });
+    } else if (entry.kind === "trader_order_events") {
+      const orderId = requireString(row, "order_id");
+      const list = eventsByOrderId.get(orderId) ?? [];
+      list.push(row);
+      eventsByOrderId.set(orderId, list);
+    } else if (entry.kind === "trader_fills") {
+      const orderId = requireString(row, "order_id");
+      const list = fillsByOrderId.get(orderId) ?? [];
+      list.push(row);
+      fillsByOrderId.set(orderId, list);
+    }
+  }
+
+  orders.sort((a, b) => a.rowid - b.rowid);
+  // Legacy listEvents orders by seq; the unique (order_id, seq) index makes this total.
+  for (const [orderId, list] of eventsByOrderId) {
+    const seen = new Set<number>();
+    for (const row of list) {
+      const seq = Number(row.seq);
+      if (seen.has(seq)) {
+        throw new SealedLedgerRowContractError(
+          "FHV_SEALED_LEDGER_SEQUENCE_GAP",
+          `duplicate event seq ${seq} for order ${orderId}`,
+        );
+      }
+      seen.add(seq);
+    }
+    list.sort((a, b) => Number(a.seq) - Number(b.seq));
+  }
+  // Legacy listFills under an IDHPS session orders by (executed_at, id).
+  for (const list of fillsByOrderId.values()) {
+    list.sort(
+      (a, b) =>
+        Number(a.executed_at) - Number(b.executed_at) ||
+        String(a.id).localeCompare(String(b.id)),
+    );
+  }
+
+  return {
+    chainDigest: verification.chainDigest,
+    segmentCount: verification.segmentCount,
+    rowCount: rows.length,
+    orders,
+    ordersById,
+    eventsByOrderId,
+    fillsByOrderId,
+  };
+}
+
+export function mapSealedOrderRow(row: Readonly<Record<string, unknown>>): {
+  id: string;
+  organizationId: string;
+  credentialId: string | null;
+  venue: string;
+  executionMode: string;
+  symbol: string;
+  side: string;
+  type: string;
+  price: string | null;
+  quantity: string;
+  filledQuantity: string;
+  avgFillPrice: string | null;
+  state: string;
+  stateVersion: number;
+  exchangeOrderId: string | null;
+  clientOrderId: string;
+  idempotencyKey: string;
+  riskDecisionId: string;
+  strategySignalId: string | null;
+  allocationDecisionId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+} {
+  return {
+    id: requireString(row, "id"),
+    organizationId: requireString(row, "organization_id"),
+    credentialId: nullableString(row, "credential_id"),
+    venue: requireString(row, "venue"),
+    executionMode: requireString(row, "execution_mode"),
+    symbol: requireString(row, "symbol"),
+    side: requireString(row, "side"),
+    type: requireString(row, "type"),
+    price: nullableString(row, "price"),
+    quantity: requireString(row, "quantity"),
+    filledQuantity: requireString(row, "filled_quantity"),
+    avgFillPrice: nullableString(row, "avg_fill_price"),
+    state: requireString(row, "state"),
+    stateVersion: Number(row.state_version),
+    exchangeOrderId: nullableString(row, "exchange_order_id"),
+    clientOrderId: requireString(row, "client_order_id"),
+    idempotencyKey: requireString(row, "idempotency_key"),
+    riskDecisionId: requireString(row, "risk_decision_id"),
+    strategySignalId: nullableString(row, "strategy_signal_id"),
+    allocationDecisionId: nullableString(row, "allocation_decision_id"),
+    createdAt: requireDate(row, "created_at"),
+    updatedAt: requireDate(row, "updated_at"),
+  };
+}
+
+export function mapSealedEventRow(row: Readonly<Record<string, unknown>>): {
+  id: string;
+  organizationId: string;
+  orderId: string;
+  seq: number;
+  fromState: string | null;
+  toState: string;
+  eventType: string;
+  payload: string | null;
+  occurredAt: Date;
+  createdAt: Date;
+} {
+  return {
+    id: requireString(row, "id"),
+    organizationId: requireString(row, "organization_id"),
+    orderId: requireString(row, "order_id"),
+    seq: Number(row.seq),
+    fromState: nullableString(row, "from_state"),
+    toState: requireString(row, "to_state"),
+    eventType: requireString(row, "event_type"),
+    payload: nullableString(row, "payload"),
+    occurredAt: requireDate(row, "occurred_at"),
+    createdAt: requireDate(row, "created_at"),
+  };
+}
+
+export function mapSealedFillRow(row: Readonly<Record<string, unknown>>): {
+  id: string;
+  organizationId: string;
+  orderId: string;
+  exchangeTradeId: string;
+  price: string;
+  quantity: string;
+  fee: string;
+  feeAsset: string;
+  executedAt: Date;
+  createdAt: Date;
+} {
+  return {
+    id: requireString(row, "id"),
+    organizationId: requireString(row, "organization_id"),
+    orderId: requireString(row, "order_id"),
+    exchangeTradeId: requireString(row, "exchange_trade_id"),
+    price: requireString(row, "price"),
+    quantity: requireString(row, "quantity"),
+    fee: requireString(row, "fee"),
+    feeAsset: requireString(row, "fee_asset"),
+    executedAt: requireDate(row, "executed_at"),
+    createdAt: requireDate(row, "created_at"),
+  };
+}

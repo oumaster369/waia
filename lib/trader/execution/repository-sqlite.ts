@@ -47,6 +47,11 @@ import {
   getIdhpsSession,
   invalidateIdhpsPortfolioSizingCache,
 } from "@/lib/trader/execution/idhps-session-registry";
+import {
+  raiseFhvEconomicSealBreach,
+  resolveFhvPostSealFillOutcome,
+} from "@/lib/trader/execution/fhv-post-seal-write-authority";
+import { terminateBridgeRun } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import { IdhpsFillIdempotencyConflictError } from "@/lib/trader/execution/idhps-prepared-statements";
 import {
   applyFillQtyToIdhpsInventoryMirror,
@@ -540,6 +545,33 @@ export function recordFillSqlite(
   const idhps = getIdhpsSession();
   const parent = getOrderByIdSqlite(db, context, input.orderId);
   if (!parent) {
+    // Bounded hot state may have pruned an economically sealed parent; sealed history remains
+    // authoritative for idempotency (ADR-0025 AD-13).
+    const sealed = resolveFhvPostSealFillOutcome({
+      context,
+      orderId: input.orderId,
+      exchangeTradeId: input.exchangeTradeId,
+      candidate: input,
+    });
+    if (sealed.kind === "IDEMPOTENT_DUPLICATE") {
+      return sealed.fill;
+    }
+    if (sealed.kind === "PAYLOAD_CONFLICT") {
+      throw new FillConflictError(input.orderId, input.exchangeTradeId);
+    }
+    if (sealed.kind === "SEAL_BREACH") {
+      raiseFhvEconomicSealBreach({
+        orderId: input.orderId,
+        exchangeTradeId: input.exchangeTradeId,
+        detail: "new fill against an economically sealed order",
+        terminate: (code) => {
+          const bridge = getIdhpsSession()?.accountingBridge;
+          if (bridge) {
+            terminateBridgeRun(bridge, code);
+          }
+        },
+      });
+    }
     throw new OrderNotFoundError(input.orderId);
   }
 
@@ -712,6 +744,33 @@ export function recordFillProgressSqlite(
   const scoped = requireOrgContext(context.organizationId);
   const existing = getOrderByIdSqlite(db, context, input.orderId);
   if (!existing) {
+    // Resolve sealed authority BEFORE recordFill so an idempotent duplicate never reaches the
+    // order UPDATE or the event append below.
+    const sealed = resolveFhvPostSealFillOutcome({
+      context,
+      orderId: input.orderId,
+      exchangeTradeId: input.exchangeTradeId,
+      candidate: input,
+    });
+    if (sealed.kind === "IDEMPOTENT_DUPLICATE") {
+      return sealed.fill;
+    }
+    if (sealed.kind === "PAYLOAD_CONFLICT") {
+      throw new FillConflictError(input.orderId, input.exchangeTradeId);
+    }
+    if (sealed.kind === "SEAL_BREACH") {
+      raiseFhvEconomicSealBreach({
+        orderId: input.orderId,
+        exchangeTradeId: input.exchangeTradeId,
+        detail: "new fill progress against an economically sealed order",
+        terminate: (code) => {
+          const bridge = getIdhpsSession()?.accountingBridge;
+          if (bridge) {
+            terminateBridgeRun(bridge, code);
+          }
+        },
+      });
+    }
     throw new OrderNotFoundError(input.orderId);
   }
 

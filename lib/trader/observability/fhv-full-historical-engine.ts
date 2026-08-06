@@ -30,6 +30,8 @@ import {
   restoreFhvCheckpointSessionDatabase,
   restoreFhvExecutionCheckpointRuntime,
 } from "@/lib/trader/observability/fhv-execution-checkpoint-runtime";
+import { isFhvBoundedHotStateEnabled } from "@/lib/trader/execution/fhv-hot-state-pruner";
+import { getIdhpsSession } from "@/lib/trader/execution/idhps-session-registry";
 import type { FhvAuthorizationClaimV2 } from "@/lib/trader/observability/fhv-authorization-claim";
 import type { FhvExecutionWalWriter } from "@/lib/trader/observability/fhv-execution-wal";
 import { seedFhvHistoricalExecutionSession } from "@/lib/trader/observability/fhv-historical-execution-session";
@@ -255,6 +257,24 @@ export async function runFullHistoricalBacktest(input: {
                 progressReporter.noteCheckpoint(checkpointBackupDurationMs);
               }
             : undefined,
+          ...(isFhvBoundedHotStateEnabled()
+            ? {
+                boundedHotState: {
+                  organizationId: input.organizationId,
+                  sessionIdentity: `generation-${input.authorizationClaim?.fencingGeneration ?? 1}`,
+                  // Deterministic replay clock, never wall clock.
+                  resolveSealedAtReplayMs: () => session.replayClock.nowMs(),
+                  // The accounting bridge terminates the run on any reconciliation failure, so a
+                  // live, non-terminated bridge is the clean-reconciliation proof at this boundary.
+                  isReconciliationClean: () => {
+                    const bridge = getIdhpsSession()?.accountingBridge;
+                    return bridge ? bridge.runTerminated !== true : false;
+                  },
+                  resolveReconciliationProofIdentity: () =>
+                    input.authorizationClaim?.authorizationClaimDigest ?? "",
+                },
+              }
+            : {}),
         })
       : undefined;
   epochController?.beginInitialEpoch();

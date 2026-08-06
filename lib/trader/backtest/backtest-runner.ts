@@ -1,4 +1,6 @@
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
+import { isFhvBoundedHotStateEnabled } from "@/lib/trader/execution/fhv-hot-state-pruner";
+import { createFhvLedgerBackedOrderRepository } from "@/lib/trader/execution/fhv-ledger-backed-order-repository";
 import { applyCostToFill, type CostModelV1 } from "@/lib/trader/execution/cost-model";
 import { applyHistoricalExecutionEconomics } from "@/lib/trader/execution/fill-economics";
 import { historicalFillId } from "@/lib/trader/execution/deterministic-execution-id";
@@ -147,6 +149,29 @@ export type FhvCycleBoundarySnapshot = {
   drawdownHwmState?: import("@/lib/trader/backtest/streaming-evidence/replay-checkpoint").ReplayDrawdownHwmState;
   sourceCursorDigest?: string;
 };
+
+/**
+ * Single bounded-hot-state wrap site (ADR-0025 OPTION_E, WP-6A section 6).
+ *
+ * Default-off uses the original repository directly, so the canonical export path is unchanged.
+ * There is no CI-only branch, no fixture-only path and no export-builder fork.
+ */
+function resolveFhvTerminalExportRepository(input: {
+  inner: OrderRepository;
+  context: OrgContext;
+  checkpointRunRoot?: string;
+  runId: string;
+}): OrderRepository {
+  if (!isFhvBoundedHotStateEnabled() || !input.checkpointRunRoot) {
+    return input.inner;
+  }
+  return createFhvLedgerBackedOrderRepository({
+    inner: input.inner,
+    runDir: input.checkpointRunRoot,
+    organizationId: input.context.organizationId,
+    runId: input.runId,
+  });
+}
 
 export type RunBacktestInput = {
   context: OrgContext;
@@ -1151,7 +1176,12 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
 
   const exportInput = {
     context: input.context,
-    orderRepository: costAwareRepository,
+    orderRepository: resolveFhvTerminalExportRepository({
+      inner: costAwareRepository,
+      context: input.context,
+      checkpointRunRoot: input.checkpointRunRoot,
+      runId: input.runId,
+    }),
     window: input.window,
     strategySignalIds: input.strategySignalIds,
     strategyId: input.strategyId,

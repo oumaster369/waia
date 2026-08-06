@@ -81,7 +81,14 @@ describe("WP-6A bounded hot state dual-path parity", () => {
   const outcomes = new Map<"legacy" | "bounded", PathOutcome>();
 
   async function runPath(mode: "legacy" | "bounded"): Promise<PathOutcome> {
-    const runId = `fhv-official-scale-parity-${mode}`;
+    /*
+     * Both paths use the SAME runId, executed sequentially with the run directory cleaned in
+     * between. `computeSemanticParityDigest` hashes strategyExecutions, whose clientOrderId
+     * embeds the runId, so a differing runId would make authoritativeEvidenceDigest incomparable
+     * across paths. Holding runId fixed keeps every digest — including the run-identity-bound
+     * ones — a valid parity invariant.
+     */
+    const runId = "fhv-official-scale-parity";
     rmSync(join(harness.artifactRoot, "prep", runId), { recursive: true, force: true });
     rmSync(resolveFhvFullLaunchRunDirectory(harness.artifactRoot, runId), {
       recursive: true,
@@ -172,30 +179,25 @@ describe("WP-6A bounded hot state dual-path parity", () => {
   });
 
   /**
-   * BLOCKED_BY_FHV_BOUNDED_HOT_STATE_TERMINAL_EXPORT_RECONSTRUCTION
-   *
-   * `semanticReproDigest` is `computeReplayReproContentDigest` over the terminal export document,
-   * and that document is still assembled by reading `trader_fills` / `trader_order_events` back
-   * out of SQLite (`loadPaperFillEvents`, `derivePortfolioAccountState`). Pruning those rows
-   * therefore changes the export even though every economic quantity above is identical.
-   *
-   * ADR-0025 AD-2 requires terminal export to reconstruct from the economic ledger before the
-   * bounded path can become canonical. Until then `FHV_BOUNDED_HOT_STATE` must stay off.
-   *
-   * This assertion is deliberately inverted: when reconstruction lands the digests will match,
-   * this test will fail, and whoever fixed it is forced to promote the flag rather than leave a
-   * finished feature dormant.
+   * The terminal export document is assembled by reading orders, events and fills back through
+   * the OrderRepository interface. With economically sealed rows pruned from SQLite, the
+   * ledger-backed decorator must reconstruct them exactly — including legacy rowid ordering,
+   * Date reconstruction and decimal strings — or this digest diverges.
    */
-  it("records the terminal-export reconstruction blocker that keeps the flag off", () => {
+  it("reproduces the canonical semanticReproDigest through ledger reconstruction", () => {
     const legacy = outcomes.get("legacy")!;
     const bounded = outcomes.get("bounded")!;
 
-    expect(bounded.snapshot.semanticReproDigest).not.toBe(legacy.snapshot.semanticReproDigest);
     process.stderr.write(
-      "[fhv-bounded-hot-state] BLOCKED_BY_FHV_BOUNDED_HOT_STATE_TERMINAL_EXPORT_RECONSTRUCTION " +
+      "[fhv-bounded-hot-state] " +
         `legacy_semantic=${legacy.snapshot.semanticReproDigest} ` +
         `bounded_semantic=${bounded.snapshot.semanticReproDigest}\n`,
     );
+    expect(bounded.snapshot.semanticReproDigest).toBe(legacy.snapshot.semanticReproDigest);
+    expect(bounded.snapshot.authoritativeEvidenceDigest).toBe(
+      legacy.snapshot.authoritativeEvidenceDigest,
+    );
+    expect(bounded.snapshot.accountingStateDigest).toBe(legacy.snapshot.accountingStateDigest);
   });
 
   it("keeps the economic record complete and digest-chained in the ledger", () => {

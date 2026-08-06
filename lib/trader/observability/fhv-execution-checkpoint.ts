@@ -24,11 +24,28 @@ import {
 } from "@/lib/trader/execution/idhps-session-registry";
 import { pruneFhvCheckpointBundlesToTwoNewest } from "@/lib/trader/observability/fhv-checkpoint-retention";
 import {
-  collectFhvTerminalEconomicRows,
+  collectFhvSealCandidates,
+  collectFhvSealedEconomicRows,
   isFhvBoundedHotStateEnabled,
-  pruneFhvTerminalEconomicRows,
+  pruneFhvSealedEconomicRows,
 } from "@/lib/trader/execution/fhv-hot-state-pruner";
-import { sealFhvEconomicLedgerEpoch } from "@/lib/trader/observability/fhv-economic-ledger";
+import { setIdhpsSealedAuthority } from "@/lib/trader/execution/idhps-session-registry";
+import {
+  openFhvVerifiedEconomicLedgerSnapshot,
+  sealFhvEconomicLedgerEpoch,
+  verifyFhvEconomicLedger,
+} from "@/lib/trader/observability/fhv-economic-ledger";
+import {
+  computeFhvFillIdentityCommitment,
+  FHV_ECONOMIC_SEAL_SCHEMA,
+  openFhvSealedOrderRegistry,
+  publishFhvEconomicSeals,
+} from "@/lib/trader/observability/fhv-economic-seal";
+import {
+  evaluateFhvEconomicSealEligibility,
+  type FhvSealBoundaryProof,
+  type FhvSealCandidateOrder,
+} from "@/lib/trader/observability/fhv-economic-seal-eligibility";
 import type {
   BacktestCycleBoundaryDecision,
   FhvCycleBoundarySnapshot,
@@ -302,26 +319,124 @@ function captureSessionDatabaseBackup(input: { skipSessionBackup?: boolean }): {
 }
 
 /**
- * ADR-0025 AD-1/AD-2: seal terminal economic rows into the append-only ledger, then prune them
- * from the snapshotted hot-state database.
+ * ADR-0025 OPTION_E: publish economic seals for economically complete, reconciled orders, then
+ * prune only their hot-state copies.
  *
- * Runs after the epoch checkpoint is durable, so the bundle just published still contains the
- * full pre-prune database. Sealing strictly precedes pruning: a crash in between duplicates
- * history, which is recoverable, whereas the reverse order would lose it.
+ * Required order (never reordered):
+ *   ledger append -> ledger verification -> reconciliation proof -> epoch commit
+ *   -> economic seal publication -> checkpoint durability -> prune
+ *
+ * This runs after the epoch checkpoint is durable, so the bundle just published still contains
+ * the full pre-prune database. A crash before the seal leaves the rows in place; a crash after
+ * the seal but before the prune leaves recoverable duplicates. Pruned rows without a committed
+ * seal are impossible.
+ *
+ * Terminal OrderState is deliberately not the frontier — see fhv-economic-seal.ts.
  *
  * Disabled by default; the legacy path stays canonical until dual-path parity is proven.
  */
-function applyFhvBoundedHotState(runDir: string, epochId: number): void {
+function applyFhvBoundedHotState(input: {
+  runDir: string;
+  runId: string;
+  epochId: number;
+  epochLastCycle: number;
+  organizationId: string;
+  sessionIdentity: string;
+  boundaryProof: FhvSealBoundaryProof;
+  sealedAtReplayMs: number;
+  accountingFrontierSequence: number;
+  sourceFrontierGlobalEventSequence: number;
+  reconciliationProofIdentity: string;
+}): void {
   if (!isFhvBoundedHotStateEnabled()) {
     return;
   }
   const sqlite = getRawSqliteDatabase();
-  const collected = collectFhvTerminalEconomicRows(sqlite);
-  if (collected.terminalOrderCount === 0) {
+
+  const { candidates } = collectFhvSealCandidates(sqlite);
+  const eligible = candidates
+    .map((candidate) => evaluateFhvEconomicSealEligibility(candidate, input.boundaryProof))
+    .filter((result) => result.eligible)
+    .map((result) => result.orderId);
+  if (eligible.length === 0) {
     return;
   }
-  sealFhvEconomicLedgerEpoch({ runDir, epochId, rows: collected.rows });
-  pruneFhvTerminalEconomicRows(sqlite, collected);
+
+  const collected = collectFhvSealedEconomicRows(sqlite, eligible);
+  const candidateById = new Map(candidates.map((candidate) => [candidate.orderId, candidate]));
+
+  // 1. Ledger append + durable seal of the segment.
+  const ledger = sealFhvEconomicLedgerEpoch({
+    runDir: input.runDir,
+    epochId: input.epochId,
+    rows: collected.rows,
+  });
+  // 2. Verify before anything is allowed to depend on it.
+  const verification = verifyFhvEconomicLedger(input.runDir);
+  if (!verification.ok) {
+    throw new Error(
+      `FHV_SEALED_LEDGER_DIGEST_MISMATCH: ${verification.failures.join(",")} epoch=${input.epochId}`,
+    );
+  }
+
+  // 3. Publish the economic seals.
+  publishFhvEconomicSeals({
+    runDir: input.runDir,
+    organizationId: input.organizationId,
+    runId: input.runId,
+    sessionIdentity: input.sessionIdentity,
+    seals: eligible.map((orderId) => {
+      const candidate = candidateById.get(orderId) as FhvSealCandidateOrder;
+      const identity = collected.fillIdentityByOrderId.get(orderId) ?? {
+        fillIds: [],
+        exchangeTradeIds: [],
+      };
+      return {
+        schemaVersion: FHV_ECONOMIC_SEAL_SCHEMA,
+        organizationId: input.organizationId,
+        runId: input.runId,
+        sessionIdentity: input.sessionIdentity,
+        orderId,
+        executionMode: "mock",
+        finalObservedOrderState: candidate.state,
+        finalQuantity: candidate.quantity,
+        finalFilledQuantity: candidate.filledQuantity,
+        finalAvgFillPrice: candidate.avgFillPrice,
+        lastOrderEventSeq: collected.lastEventSeqByOrderId.get(orderId) ?? -1,
+        fillIdentityCommitment: computeFhvFillIdentityCommitment(
+          identity.fillIds,
+          identity.exchangeTradeIds,
+        ),
+        fillIds: identity.fillIds,
+        exchangeTradeIds: identity.exchangeTradeIds,
+        accountingFrontierSequence: input.accountingFrontierSequence,
+        sourceFrontierGlobalEventSequence: input.sourceFrontierGlobalEventSequence,
+        owningEpochId: input.epochId,
+        owningLastCycle: input.epochLastCycle,
+        ledgerSegmentSeq: Math.max(0, ledger.segments.length - 1),
+        ledgerChainDigest: ledger.chainDigest,
+        economicExportDigest: verification.chainDigest,
+        sealedAtReplayMs: input.sealedAtReplayMs,
+        sealingReason: "EPOCH_COMMIT_ECONOMICALLY_COMPLETE",
+        reconciliationProofIdentity: input.reconciliationProofIdentity,
+      };
+    }),
+  });
+
+  // 4. Only now may the redundant hot-state copies go.
+  pruneFhvSealedEconomicRows(sqlite, eligible);
+
+  // 5. Publish the verified sealed authority for the run so post-seal writes stay idempotent
+  //    after the parent rows are gone. Built once per seal publication, never per write.
+  setIdhpsSealedAuthority({
+    registry: openFhvSealedOrderRegistry({
+      runDir: input.runDir,
+      organizationId: input.organizationId,
+      runId: input.runId,
+      sessionIdentity: input.sessionIdentity,
+    }),
+    snapshot: openFhvVerifiedEconomicLedgerSnapshot(input.runDir),
+  });
 }
 
 export async function commitFhvExecutionEpoch(input: {
@@ -485,6 +600,19 @@ export function createFhvEpochBoundaryController(input: {
   compositeEvidenceSink?: FhvCompositeEvidenceSink;
   /** Observational only — must not affect checkpoint authority or retention. */
   onCheckpointMetrics?: (input: { epochId: number; checkpointBackupDurationMs: number }) => void;
+  /**
+   * Required for the bounded-hot-state path (ADR-0025 OPTION_E). Seals are org/run scoped and
+   * carry a deterministic replay timestamp; without these the seal cannot be issued.
+   */
+  boundedHotState?: {
+    organizationId: string;
+    sessionIdentity: string;
+    /** Deterministic replay clock reading. Never wall clock. */
+    resolveSealedAtReplayMs: () => number;
+    /** Reality reconciliation produced no outstanding discrepancy at this boundary. */
+    isReconciliationClean: () => boolean;
+    resolveReconciliationProofIdentity: () => string;
+  };
 }): {
   onCycleBoundary: (boundary: FhvCycleBoundarySnapshot) => Promise<BacktestCycleBoundaryDecision>;
   beginInitialEpoch: () => void;
@@ -603,7 +731,29 @@ export function createFhvEpochBoundaryController(input: {
       "utf8",
     );
     pruneFhvCheckpointBundlesToTwoNewest(input.runDir);
-    applyFhvBoundedHotState(input.runDir, result.epochId);
+    if (input.boundedHotState) {
+      const accountingFrontier = boundary?.accountingFrontierState;
+      applyFhvBoundedHotState({
+        runDir: input.runDir,
+        runId: input.runId,
+        epochId: result.epochId,
+        epochLastCycle: lastCycle,
+        organizationId: input.boundedHotState.organizationId,
+        sessionIdentity: input.boundedHotState.sessionIdentity,
+        boundaryProof: {
+          // The epoch commit above succeeded and its checkpoint bundle is durable.
+          epochCommitted: true,
+          // The cycle boundary supplied a source cursor digest for the consumed frontier.
+          sourceFrontierProven: Boolean(capturedDigests.sourceCursorDigest),
+          reconciliationClean: input.boundedHotState.isReconciliationClean(),
+          ledgerDurable: true,
+        },
+        sealedAtReplayMs: input.boundedHotState.resolveSealedAtReplayMs(),
+        accountingFrontierSequence: accountingFrontier?.accountingSequence ?? -1,
+        sourceFrontierGlobalEventSequence: boundary?.cycleCount ?? lastCycle + 1,
+        reconciliationProofIdentity: input.boundedHotState.resolveReconciliationProofIdentity(),
+      });
+    }
     authorizationClaim = result.authorizationClaim;
     previousEpochCommitDigest = result.epochCommitDigest;
     epochId += 1;

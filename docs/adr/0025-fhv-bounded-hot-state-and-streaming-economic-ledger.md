@@ -127,6 +127,85 @@ build and e2e. It **does not** claim the official full corpus has run.
 separate, later state. Official FHV completion is later still and must never be claimed by a PR
 build.
 
+**AD-11 — Economic seal replaces terminal state as the prune frontier**
+
+A terminal `OrderState` is **not** an economic-immutability frontier. `ORDER_TRANSITIONS` makes the
+five terminal states absorbing *for state transitions*, but `recordFillSqlite` and
+`recordFillProgressSqlite` guard only on parent existence — `TERMINAL_ORDER_STATES` appears in
+`repository-sqlite.ts` solely inside `listOpenOrders`. The lifecycle therefore permits appending
+fills and updating filled quantity / average fill price on an order that already reached FILLED,
+CANCELLED, REJECTED, EXPIRED or FAILED.
+
+The authoritative cutover is an explicit, durable, versioned **economic seal** issued only by the
+epoch-commit lifecycle once the order is economically complete and reconciled, its history is
+durable and digest-verified in the ledger, the owning epoch is committed, and the source frontier
+proves consumption. Terminality is one input; it is never sufficient. Required order, never
+reordered: ledger append → ledger verification → clean reconciliation → epoch commit → seal
+publication → checkpoint durability → prune. Pruned rows without a committed seal are impossible.
+
+**AD-12 — Order collections are canonically unordered; export sorts explicitly**
+
+The legacy `listOrders` SQLite query has no `ORDER BY`, so its array order was implicit rowid
+iteration order. That is an artifact of an undefined query order, not a domain contract, and it
+cannot survive pruning because SQLite reuses rowids after `DELETE`.
+
+Repository evidence shows every economic projection already imposes its own canonical sequence:
+`sortFillEvents` orders fill events by `(executedAt, fill.id)`; historical execution cost
+provenance sorts by `(fillSequence, economicsContentDigest)`; the serializer sorts strategy
+evaluations by `strategySignalId` and valuation gaps lexically. The order collection is therefore
+consumed as a **set**.
+
+Terminal export orders the merged collection by **`(createdAt, id)`** — deterministic,
+replay-stable, backend-independent, and totally ordered by the stable order id. Proven, not
+assumed: the bounded path reproduces the accepted `semanticReproDigest`
+`25b48cc85dc1bcca481f99bf08f9c20662b3c5b89bdb3c6318909e0d441a4513` exactly, together with
+`authoritativeEvidenceDigest` and `accountingStateDigest`, with no reliance on implicit rowid.
+The accepted digest is preserved unchanged; no fixture or expected economic value was edited.
+
+Rejected: implicit rowid (reused after prune, and an accidental dependency); `createdAt` alone
+(ties are real — many orders share a bar timestamp); a new durable ordinal column or companion
+allocator (unnecessary once the collection is proven unordered, and it would add an irreversible
+schema surface); a versioned export contract (unnecessary — the accepted digest is reproducible).
+
+**AD-13 — Ledger-backed read authority and post-seal idempotency**
+
+Terminal export reads through the `OrderRepository` seam (`listOrders`, `listEvents`, `listFills`).
+A decorator merges verified sealed ledger history with bounded live SQLite state, with authority
+decided exclusively by the seal registry — never terminal state, never last-write-wins, never an
+implicit epoch comparison, never a silent fallback to incomplete SQLite. The ledger is verified
+once per immutable snapshot and indexed once; reads are indexed lookups bounded by output size.
+Conflicting overlap, scope violation, digest mismatch, identity drift and sequence gaps fail
+closed under named classifications.
+
+**AD-14 — Post-seal write authority and ledger-backed fill idempotency**
+
+Once a sealed order's rows are pruned, the parent lookup in `recordFillSqlite` /
+`recordFillProgressSqlite` no longer finds it and the `trader_fills` idempotency index is gone.
+Both write paths therefore consult a run-scoped verified sealed registry before concluding the
+parent is missing:
+
+| Case | Condition | Result |
+|---|---|---|
+| A | Mutable SQLite parent exists | Current canonical behaviour, unchanged |
+| B | Parent pruned, exact fill identity and canonical payload match sealed history | Return the canonical prior fill; no fill, event, quantity, price, inventory, portfolio or accounting mutation |
+| C | Parent pruned, same fill identity, payload differs | `FillConflictError`, fail closed, no economic mutation |
+| D | Parent pruned, sealed order, genuinely new fill | `EconomicSealBreachError`, run terminated through the accounting bridge as reconciliation-required; sealed history never mutated, order never silently reopened |
+| E | Neither SQLite parent nor sealed order | `OrderNotFoundError` preserved |
+
+`recordFillProgressSqlite` resolves sealed authority **before** delegating, so an idempotent
+duplicate never reaches the order UPDATE or the event append. Payload comparison reuses the
+existing canonical `fillPayloadMatches`. The registry lives on the IDHPS session runtime — run
+scoped, discarded with the session, never a process-global registry — and is rebuilt once per
+seal publication, never per write. Lookups are O(1) indexed; nothing is re-verified or re-hashed
+per write.
+
+**AD-15 — Migration disposition: NOT_APPLICABLE**
+
+The O3 ordering contract needs no schema change, and no other WP-6A change requires one. No
+migration was created. Fresh bounded sessions, default-off legacy sessions and existing legacy
+checkpoints are all unaffected: the ledger, seal log and seal manifest are new run-scoped
+artifacts under the run directory, and none of them participate in the default-off path.
+
 **AD-10 — Human-only operations**
 
 Merge, release promotion, back-sync, Execution Server deployment or mutation, PRE_AUTH, T4/T4A
