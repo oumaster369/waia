@@ -35,7 +35,12 @@ import {
   toFhvOfficialScaleLaunchInput,
 } from "./fhv-official-scale-harness";
 
-const BLOCKING = process.env.FHV_REPRESENTATIVE_SEGMENT_GATE === "blocking";
+/*
+ * WP-7B promotes this from diagnostic to blocking. It is the deep-state proof for merge readiness:
+ * it fails in minutes on the failure mode that previously needed a two-hour full-corpus run to
+ * reveal. Diagnostic mode remains available for local exploration.
+ */
+const BLOCKING = process.env.FHV_REPRESENTATIVE_SEGMENT_GATE !== "diagnostic";
 
 export const REPRESENTATIVE_SEGMENT_REPORT_FILENAME = "fhv-deep-state-segment-report.v1.json";
 

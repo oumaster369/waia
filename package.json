@@ -20,6 +20,7 @@
     "trader:fhv:wp3b-host-qualification": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/ops/fhv-wp3b-host-qualification.ts",
     "test:fhv:wp3b:software-gate": "vitest run --config vitest.fhv-official-scale.config.ts tests/fhv/official-scale/blocking/fhv-checkpoint-cost-model.test.ts",
     "test:fhv:wp3b:clone-equivalence": "vitest run tests/unit/fhv-native-clone-equivalence.test.ts",
+    "test:fhv:wp7b:representative-segment": "vitest run --config vitest.fhv-official-scale.config.ts tests/fhv/official-scale/blocking/fhv-official-representative-segment.test.ts",
     "trader:htr:wp22:qualify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/htr-wp22-runtime-qualify.ts",
     "trader:htr:wp22:evidence-seal": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/htr-wp22-evidence-seal.ts",
     "trader:htr:readiness:preflight": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/historical-readiness-preflight.ts",

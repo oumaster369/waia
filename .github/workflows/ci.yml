@@ -135,6 +135,39 @@ jobs:
           path: .artifacts/fhv-official-scale/
           retention-days: 7
 
+  # WP-7B MERGE-BLOCKING DEEP-STATE GATE.
+  # Fails in minutes on the failure mode that previously needed a two-hour full-corpus run to
+  # reveal: it asserts a non-trivial workload (fills, open positions, >= 3 checkpoints, evidence
+  # flushes, all three reconciliation phases) and that checkpointing does not dominate the segment.
+  fhv-wp7b-representative-segment-gate:
+    name: fhv wp7b deep-state representative gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-wp7b.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+      # The bounded-hot-state growth ceiling is only meaningful with the architecture enabled.
+      FHV_BOUNDED_HOT_STATE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Run blocking deep-state representative segment
+        run: corepack pnpm@10 test:fhv:wp7b:representative-segment
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-wp7b-representative-segment-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
   fhv-idhps-process-parity-gate:
     name: fhv idhps process parity gate
     runs-on: ubuntu-latest
@@ -414,6 +447,7 @@ jobs:
         fhv-t4a-packet,
         fhv-public-ceremony-packet,
         fhv-wp3b-checkpoint-software-gate,
+        fhv-wp7b-representative-segment-gate,
         fhv-release-validation-gate,
       ]
     env:
