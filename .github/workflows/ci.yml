@@ -93,6 +93,48 @@ jobs:
           path: .artifacts/fhv-official-scale/
           retention-days: 7
 
+  # WP-3B MERGE-BLOCKING SOFTWARE GATE (ADR-0025 AD-6a).
+  # Proves checkpoint algorithm correctness, truthful native-clone classification, clone/fallback
+  # equivalence, durability and the target-host requirement calculation. It deliberately does NOT
+  # assert the absolute 1-GiB / 400 ms contract: run 31098325969 measured 735-781 ms on macos-15
+  # and 2743-3007 ms on macos-15-intel purely from SHA-256 throughput, so hosted wall clock cannot
+  # decide software correctness. The absolute contract is unchanged and is enforced by the
+  # fail-closed Execution Server preflight (pnpm trader:fhv:wp3b-host-qualification).
+  fhv-wp3b-checkpoint-software-gate:
+    name: fhv wp3b checkpoint software gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-wp3b.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Clone/fallback equivalence, digest identity and mutation isolation
+        run: corepack pnpm@10 test:fhv:wp3b:clone-equivalence
+      - name: Checkpoint software gate and target-host requirement (native path)
+        run: corepack pnpm@10 test:fhv:wp3b:software-gate
+      - name: Checkpoint software gate on the forced fallback path
+        # ext4 runners already take this path; forcing it keeps the fallback proven even if a
+        # future runner image gains reflink support.
+        env:
+          FHV_FORCE_CLONE_UNSUPPORTED: "1"
+        run: corepack pnpm@10 test:fhv:wp3b:software-gate
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-wp3b-checkpoint-software-gate-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
   fhv-idhps-process-parity-gate:
     name: fhv idhps process parity gate
     runs-on: ubuntu-latest
@@ -214,8 +256,13 @@ jobs:
           path: .artifacts/fhv-official-scale/
           retention-days: 7
 
+  # The official full corpus is a ~2-hour campaign that belongs to the Execution Server, not to
+  # pull-request review. It stays runnable on dev/main pushes for release evidence but no longer
+  # gates a PR, and `build` no longer depends on it so a skipped run cannot cascade into skipping
+  # build or e2e.
   fhv-idhps-full-corpus-gate:
     name: fhv idhps full corpus gate
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04-arm
     needs: [fhv-idhps-canonical-probe-gate]
     timeout-minutes: 180
@@ -358,7 +405,17 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, tenant-isolation, fhv-t4a-packet, fhv-public-ceremony-packet, fhv-idhps-full-corpus-gate, fhv-release-validation-gate]
+    needs:
+      [
+        lint,
+        typecheck,
+        test,
+        tenant-isolation,
+        fhv-t4a-packet,
+        fhv-public-ceremony-packet,
+        fhv-wp3b-checkpoint-software-gate,
+        fhv-release-validation-gate,
+      ]
     env:
       DATABASE_URL: file:./.data/ci-build.sqlite
     steps:

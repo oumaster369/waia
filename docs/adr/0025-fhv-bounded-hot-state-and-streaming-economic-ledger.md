@@ -242,6 +242,76 @@ with ADR-0023 and `INTEGRATION-BOUNDARY-POLICY.md`.
   checkpoint count but each remaining checkpoint still costs Θ(database size), so the quadratic
   term survives.
 
+## AD-6a — Native clone, and splitting software qualification from target-host qualification
+
+*Human decision `APPROVE_PR452_WP3B_SPLIT_SOFTWARE_CI_GATE_AND_EXECUTION_SERVER_HOST_QUALIFICATION`.*
+
+The AD-6 contract is unchanged: a 1-GiB-equivalent checkpoint must complete its entire blocking
+interval in **≤ 400 ms**, with **≤ 250 ms** as the non-blocking engineering target. What changed is
+*where* that number is proven, and why.
+
+**Two earlier findings were wrong and are corrected here.**
+
+`copyFileSync(src, dst, COPYFILE_FICLONE)` never proved a reflink. It is documented to fall back to
+a full byte copy when the filesystem cannot clone, and it returns success either way, so every
+earlier `ficloneSucceeded=true` reading was unfalsifiable. Measured on APFS, that path took
+530–556 ms for 1 GiB while `cp -c` cloned the same file in ~0 ms; `COPYFILE_FICLONE_FORCE` raised
+`ENOSYS` because it maps to a Linux ioctl that libuv does not implement on macOS. Clone success is
+now claimed only when the strict platform mechanism itself succeeds — `clonefile` via `cp -c` on
+macOS, `FICLONE` via `cp --reflink=always` on Linux — and only after the destination is
+independently verified. Capability is never inferred from an API returning success, from the OS
+name, from a filesystem name, or from elapsed time.
+
+Consequently the earlier conclusion that 400 ms at 1 GiB is *physically impossible* was also false.
+It rested on the copy cost that the fake reflink was hiding. With a real clone the snapshot is
+O(1) — 1.8–3.9 ms measured — and the only size-proportional work left is the mandatory SHA-256.
+
+**The contract is host-class dependent, and hosted CI cannot satisfy it.** GitHub Actions run
+[31098325969](https://github.com/oumaster369/waia/actions/runs/31098325969) probed both pinned
+standard macOS classes. Both proved strict native clone on APFS, and both failed the budget purely
+on hashing speed:
+
+| Host | Clone | Snapshot | SHA-256 | Total (3 measured) |
+|---|---|---|---|---|
+| Reference workstation | proven | 1.8–3.9 ms | 385–389 ms | 394.5 / 399.0 / 400.5 ms |
+| `macos-15` (M1 Virtual, 3 vCPU) | proven | 2.6–3.8 ms | 730–775 ms | 735.0 / 781.2 / 750.2 ms |
+| `macos-15-intel` (i7-8700B) | proven | 4.2–9.9 ms | 2729–2980 ms | 3007.2 / 2777.3 / 2742.8 ms |
+
+Meeting 400 ms at 1 GiB requires roughly **2.8 GB/s sustained single-stream SHA-256**. No standard
+GitHub-hosted runner delivers half of that, and hashing one stream is single-threaded, so larger
+runner classes do not help. Ubuntu runners fail earlier still: ext4 cannot reflink at all.
+
+**Decision.** Pull-request CI remains merge-blocking for *software correctness* and runs on the
+existing hosted runners: production code path, truthful capability classification, clone/fallback
+byte and digest equivalence, mutation isolation, durability presence, crash and resume behavior,
+economic and semantic parity, cost decomposition, and the artificial-delay negative test. It also
+computes and emits the target-host requirement (`requiredSingleStreamSha256BytesPerSecond`,
+`maximumAllowedNonHashMilliseconds`, `requiredNativeCloneCapability`,
+`requiredFilesystemSemantics`, `requiredCompleteCheckpointMilliseconds = 400`).
+
+To keep runner speed from deciding correctness, the blocking measurement is normalized: checkpoint
+cost is expressed in **hash-equivalent passes**, meaning multiples of one SHA-256 pass over the
+same bytes as measured on that same host. A clone-based checkpoint sits near 1.0 everywhere; a
+reintroduced full copy lands near 2.0 and the old clone-then-rehash shape near 3.0. A slow host
+stays green; a structural regression fails everywhere.
+
+The absolute 1-GiB / 400 ms measurement moves to `pnpm trader:fhv:wp3b-host-qualification`, a
+mandatory fail-closed **post-release Execution Server preflight** that emits an identity-bound
+receipt classified as `EXECUTION_SERVER_WP3B_HOST_QUALIFIED`,
+`EXECUTION_SERVER_WP3B_HOST_NOT_QUALIFIED`, or `EXECUTION_SERVER_WP3B_HOST_EVIDENCE_INVALID`. The
+official full-corpus run must not start unless the receipt is `QUALIFIED`.
+
+**No self-hosted runner is required for PR merge readiness.** Nothing here changes the 1-GiB depth,
+the 400 ms budget, the 250 ms target, SHA-256 identity, checkpoint contents, durability, atomicity,
+crash safety, economic or semantic output, 877 cps, 7,200 s, `MAX_BATCH_CYCLES=32`, or the
+6,480-second pre-launch projection requirement.
+
+**The Execution Server has not been qualified.** It has not been contacted, and its filesystem
+remains unknown. Note that with all mandatory durability inside the timer the reference workstation
+measures 394.5–400.5 ms — at the contract boundary, not comfortably inside it — so a host slower
+than it will fail closed. Requalification is required whenever the host, filesystem, storage or
+Node version changes; rollback is to refuse launch, since the gate has no weaker passing state.
+
 ## Links
 
 - PR [#452](https://github.com/oumaster369/waia/pull/452) — DEE-436 / DEE-416

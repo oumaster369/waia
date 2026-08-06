@@ -18,6 +18,8 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import { tryNativeCloneFile } from "@/lib/trader/observability/fhv-native-clone";
+
 /**
  * FHV checkpoint cost model (WP-3A instrumentation, WP-3B gate).
  *
@@ -41,16 +43,18 @@ export const FHV_CHECKPOINT_BUDGET_MS_PER_10K = 400;
 /** Human-approved engineering target at the same depth (non-blocking). */
 export const FHV_CHECKPOINT_TARGET_MS_PER_10K = 250;
 
-/** Plan-required durability stress depth. Reported, not the blocking envelope. */
+/**
+ * Canonical qualification depth. The plan budget is "≤ 400 ms per 10,000-cycle checkpoint at
+ * deep-state / 1-GB-equivalent qualification depth" — this is the blocking depth and must not be
+ * reduced to make the gate pass.
+ */
 export const FHV_CHECKPOINT_QUALIFICATION_DEPTH_BYTES = 1_073_741_824;
 
 /**
- * Realistic worst supported bounded envelope.
+ * Projected maximum bounded envelope, reported alongside the canonical depth for context only.
  *
  * With bounded hot state the checkpointed database is projected to reach ~344 MB across the full
- * 6,312,960-bar corpus (54.26 B/cycle measured on HEAD 29447a9). 512 MB is a conservative ceiling
- * above that projection. The blocking budget applies here; 1 GB is retained as a durability
- * stress because the architecture no longer reaches it.
+ * corpus (54.26 B/cycle measured on HEAD 29447a9). This is NOT the blocking envelope.
  */
 export const FHV_CHECKPOINT_SUPPORTED_ENVELOPE_BYTES = 536_870_912;
 
@@ -58,15 +62,23 @@ const DIGEST_CHUNK_BYTES = 1 << 20;
 
 export type FhvCheckpointCostSampleV1 = Readonly<{
   sessionBytes: number;
-  /** Full copy of the live database into an exclusive temp file. */
+  /** Snapshot acquisition: strict native clone, or the fused copy+digest fallback. */
   snapshotDurationMs: number;
-  /** Streaming SHA-256 over the snapshot. */
+  /** Streaming SHA-256 over the snapshot. Fused into the snapshot pass on a non-clone host. */
   digestDurationMs: number;
-  /** Second copy into the epoch bundle plus fsync and atomic rename. */
+  /** fsync of the checkpoint file. */
+  fsyncDurationMs: number;
+  /** fsync of the containing directory, making the rename itself durable. */
+  directoryDurabilityMs: number;
+  /** Manifest and attestation identity material. */
+  manifestAttestationMs: number;
+  /** Atomic rename into the published bundle path. */
   publishDurationMs: number;
   totalDurationMs: number;
   /** Whether the copy used a copy-on-write reflink (APFS/XFS) or a full byte copy (ext4). */
   ficloneSucceeded: boolean;
+  /** True when hashing shares the snapshot pass, so the two costs cannot be separated. */
+  digestFusedIntoSnapshot: boolean;
   effectiveBytesPerSecond: number;
 }>;
 
@@ -168,48 +180,132 @@ export function measureFhvCheckpointSnapshotCost(input: {
   const bundlePath = join(input.workDir, "session.sqlite");
   const bundleTempPath = `${bundlePath}.tmp-${process.pid}`;
 
-  // Single pass: read the source once, write the snapshot and hash in flight. The previous
-  // shape cloned the file and then re-read the whole snapshot to digest it, paying an extra
-  // full read per checkpoint.
+  /*
+   * Clone first when the host proves it can. A copy-on-write clone is O(1), leaving the mandatory
+   * SHA-256 identity pass as the only size-proportional blocking work. When the filesystem cannot
+   * reflink, fall back to the fused single-pass copy+digest, which reads the source once instead
+   * of copying and then re-reading to hash.
+   */
   const snapshotStartedAt = performance.now();
-  const { ficloneSucceeded } = copyAndDigestSync(input.sessionPath, tempBackupPath);
+  const clone = tryNativeCloneFile(input.sessionPath, tempBackupPath);
+  const ficloneSucceeded = clone.status === "NATIVE_CLONE_SUCCEEDED";
+  let digestDurationMs = 0;
+  let digest: string;
+  if (ficloneSucceeded) {
+    const snapshotDurationMs = performance.now() - snapshotStartedAt;
+    // The clone shares extents with the source but is an independent file; the identity digest
+    // must still cover the checkpoint bytes.
+    const digestStartedAt = performance.now();
+    digest = sha256FileStreaming(tempBackupPath);
+    digestDurationMs = performance.now() - digestStartedAt;
+    return finishSample({
+      sessionBytes,
+      snapshotDurationMs,
+      digestDurationMs,
+      digestFusedIntoSnapshot: false,
+      ficloneSucceeded,
+      digest,
+      tempBackupPath,
+      bundleTempPath,
+      bundlePath,
+      workDir: input.workDir,
+    });
+  }
+  digest = copyAndDigestSync(input.sessionPath, tempBackupPath).digest;
   const snapshotDurationMs = performance.now() - snapshotStartedAt;
-  const digestDurationMs = 0;
+  return finishSample({
+    sessionBytes,
+    snapshotDurationMs,
+    digestDurationMs,
+    // The fallback hashes while it copies, so the two costs share one measured pass.
+    digestFusedIntoSnapshot: true,
+    ficloneSucceeded,
+    digest,
+    tempBackupPath,
+    bundleTempPath,
+    bundlePath,
+    workDir: input.workDir,
+  });
+}
 
+/** Publish half of a snapshot measurement: durability, identity and atomic rename. */
+function finishSample(input: {
+  sessionBytes: number;
+  snapshotDurationMs: number;
+  digestDurationMs: number;
+  digestFusedIntoSnapshot: boolean;
+  ficloneSucceeded: boolean;
+  digest: string;
+  tempBackupPath: string;
+  bundleTempPath: string;
+  bundlePath: string;
+  workDir: string;
+}): FhvCheckpointCostSampleV1 {
   // Publish moves the already-exclusive staged snapshot instead of copying it a second time
   // (see copyFileExclusiveFsync). Durability is unchanged: fsync still precedes the rename.
-  const publishStartedAt = performance.now();
+  const stageStartedAt = performance.now();
   try {
-    renameSync(tempBackupPath, bundleTempPath);
+    renameSync(input.tempBackupPath, input.bundleTempPath);
   } catch {
     try {
-      copyFileSync(tempBackupPath, bundleTempPath, fsConstants.COPYFILE_FICLONE);
+      copyFileSync(input.tempBackupPath, input.bundleTempPath, fsConstants.COPYFILE_FICLONE);
     } catch {
-      copyFileSync(tempBackupPath, bundleTempPath);
+      copyFileSync(input.tempBackupPath, input.bundleTempPath);
     }
   }
-  const fd = openSync(bundleTempPath, "r");
+  const stageDurationMs = performance.now() - stageStartedAt;
+
+  const fsyncStartedAt = performance.now();
+  const fd = openSync(input.bundleTempPath, "r");
   try {
     fsyncSync(fd);
   } finally {
     closeSync(fd);
   }
-  renameSync(bundleTempPath, bundlePath);
-  const publishDurationMs = performance.now() - publishStartedAt;
+  const fsyncDurationMs = performance.now() - fsyncStartedAt;
 
-  rmSync(tempBackupPath, { force: true });
-  rmSync(bundlePath, { force: true });
+  // Manifest and attestation identity binds the checkpoint bytes to the epoch record.
+  const manifestStartedAt = performance.now();
+  createHash("sha256").update(`${input.digest}:${input.sessionBytes}`).digest("hex");
+  const manifestAttestationMs = performance.now() - manifestStartedAt;
 
-  const totalDurationMs = snapshotDurationMs + digestDurationMs + publishDurationMs;
+  const publishStartedAt = performance.now();
+  renameSync(input.bundleTempPath, input.bundlePath);
+  const publishDurationMs = performance.now() - publishStartedAt + stageDurationMs;
+
+  // The rename is only durable once the directory entry itself is synced.
+  const dirStartedAt = performance.now();
+  const dirFd = openSync(input.workDir, "r");
+  try {
+    fsyncSync(dirFd);
+  } finally {
+    closeSync(dirFd);
+  }
+  const directoryDurabilityMs = performance.now() - dirStartedAt;
+
+  rmSync(input.tempBackupPath, { force: true });
+  rmSync(input.bundlePath, { force: true });
+
+  const totalDurationMs =
+    input.snapshotDurationMs +
+    input.digestDurationMs +
+    fsyncDurationMs +
+    manifestAttestationMs +
+    publishDurationMs +
+    directoryDurabilityMs;
   return {
-    sessionBytes,
-    snapshotDurationMs: Number(snapshotDurationMs.toFixed(3)),
-    digestDurationMs: Number(digestDurationMs.toFixed(3)),
+    sessionBytes: input.sessionBytes,
+    snapshotDurationMs: Number(input.snapshotDurationMs.toFixed(3)),
+    digestDurationMs: Number(input.digestDurationMs.toFixed(3)),
+    fsyncDurationMs: Number(fsyncDurationMs.toFixed(3)),
+    directoryDurabilityMs: Number(directoryDurabilityMs.toFixed(3)),
+    manifestAttestationMs: Number(manifestAttestationMs.toFixed(3)),
     publishDurationMs: Number(publishDurationMs.toFixed(3)),
     totalDurationMs: Number(totalDurationMs.toFixed(3)),
-    ficloneSucceeded,
+    ficloneSucceeded: input.ficloneSucceeded,
+    digestFusedIntoSnapshot: input.digestFusedIntoSnapshot,
     effectiveBytesPerSecond:
-      totalDurationMs > 0 ? Number((sessionBytes / (totalDurationMs / 1000)).toFixed(0)) : 0,
+      totalDurationMs > 0 ? Number((input.sessionBytes / (totalDurationMs / 1000)).toFixed(0)) : 0,
   };
 }
 
@@ -258,9 +354,9 @@ export function buildFhvCheckpointCostModel(
     0,
     linear.intercept + linear.slope * (FHV_CHECKPOINT_SUPPORTED_ENVELOPE_BYTES / gigabyte),
   );
-  // The blocking budget applies to the envelope the bounded architecture can actually reach.
-  const withinBudget = projectedSupported <= FHV_CHECKPOINT_BUDGET_MS_PER_10K;
-  const withinTarget = projectedSupported <= FHV_CHECKPOINT_TARGET_MS_PER_10K;
+  // Canonical: the budget applies at 1-GB-equivalent qualification depth.
+  const withinBudget = projected <= FHV_CHECKPOINT_BUDGET_MS_PER_10K;
+  const withinTarget = projected <= FHV_CHECKPOINT_TARGET_MS_PER_10K;
 
   return {
     schemaVersion: FHV_CHECKPOINT_COST_MODEL_SCHEMA,
