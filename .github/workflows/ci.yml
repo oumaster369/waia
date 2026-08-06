@@ -438,18 +438,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    needs:
-      [
-        lint,
-        typecheck,
-        test,
-        tenant-isolation,
-        fhv-t4a-packet,
-        fhv-public-ceremony-packet,
-        fhv-wp3b-checkpoint-software-gate,
-        fhv-wp7b-representative-segment-gate,
-        fhv-release-validation-gate,
-      ]
+    needs: [lint, typecheck, test, tenant-isolation, fhv-t4a-packet, fhv-public-ceremony-packet, fhv-wp3b-checkpoint-software-gate, fhv-wp7b-representative-segment-gate, fhv-release-validation-gate]
     env:
       DATABASE_URL: file:./.data/ci-build.sqlite
     steps:

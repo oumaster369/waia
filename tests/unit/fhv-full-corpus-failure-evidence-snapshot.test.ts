@@ -72,10 +72,16 @@ describe("snapshot-fhv-full-corpus-failure-evidence.sh", () => {
       { stdio: "pipe" },
     );
 
-    const stagedEpoch1 = join(stagingRoot, "run", "checkpoints", "epoch-1", "session.sqlite");
+    const stagedEpoch1 = join(stagingRoot, "run", "checkpoints", "epoch-1");
     const stagedEpoch2 = join(stagingRoot, "run", "checkpoints", "epoch-2");
     const stagedTransient = join(stagingRoot, "run", "checkpoints", ".epoch-3.tmp-999-1");
-    expect(existsSync(stagedEpoch1)).toBe(true);
+    // WP-10: the completed epoch is staged, but its session database is represented by a digest
+    // rather than a copy — two epochs of it were 2.33 GB of a 2.35 GB upload.
+    expect(existsSync(join(stagedEpoch1, "checkpoint-manifest.v1.json"))).toBe(true);
+    expect(existsSync(join(stagedEpoch1, "session.sqlite"))).toBe(false);
+    const digest = readFileSync(join(stagedEpoch1, "session.sqlite.digest.txt"), "utf8");
+    expect(digest).toContain("bytes=8");
+    expect(digest).toMatch(/sha256=[0-9a-f]{64}/);
     expect(existsSync(stagedEpoch2)).toBe(false);
     expect(existsSync(stagedTransient)).toBe(false);
 
