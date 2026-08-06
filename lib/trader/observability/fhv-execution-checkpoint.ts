@@ -23,6 +23,12 @@ import {
   writeIdhpsCompositeMirrorForCheckpoint,
 } from "@/lib/trader/execution/idhps-session-registry";
 import { pruneFhvCheckpointBundlesToTwoNewest } from "@/lib/trader/observability/fhv-checkpoint-retention";
+import {
+  collectFhvTerminalEconomicRows,
+  isFhvBoundedHotStateEnabled,
+  pruneFhvTerminalEconomicRows,
+} from "@/lib/trader/execution/fhv-hot-state-pruner";
+import { sealFhvEconomicLedgerEpoch } from "@/lib/trader/observability/fhv-economic-ledger";
 import type {
   BacktestCycleBoundaryDecision,
   FhvCycleBoundarySnapshot,
@@ -293,6 +299,29 @@ function captureSessionDatabaseBackup(input: { skipSessionBackup?: boolean }): {
     sessionDatabaseDigest,
     cleanupTempPath: tempBackupPath,
   };
+}
+
+/**
+ * ADR-0025 AD-1/AD-2: seal terminal economic rows into the append-only ledger, then prune them
+ * from the snapshotted hot-state database.
+ *
+ * Runs after the epoch checkpoint is durable, so the bundle just published still contains the
+ * full pre-prune database. Sealing strictly precedes pruning: a crash in between duplicates
+ * history, which is recoverable, whereas the reverse order would lose it.
+ *
+ * Disabled by default; the legacy path stays canonical until dual-path parity is proven.
+ */
+function applyFhvBoundedHotState(runDir: string, epochId: number): void {
+  if (!isFhvBoundedHotStateEnabled()) {
+    return;
+  }
+  const sqlite = getRawSqliteDatabase();
+  const collected = collectFhvTerminalEconomicRows(sqlite);
+  if (collected.terminalOrderCount === 0) {
+    return;
+  }
+  sealFhvEconomicLedgerEpoch({ runDir, epochId, rows: collected.rows });
+  pruneFhvTerminalEconomicRows(sqlite, collected);
 }
 
 export async function commitFhvExecutionEpoch(input: {
@@ -574,6 +603,7 @@ export function createFhvEpochBoundaryController(input: {
       "utf8",
     );
     pruneFhvCheckpointBundlesToTwoNewest(input.runDir);
+    applyFhvBoundedHotState(input.runDir, result.epochId);
     authorizationClaim = result.authorizationClaim;
     previousEpochCommitDigest = result.epochCommitDigest;
     epochId += 1;
