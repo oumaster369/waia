@@ -4,6 +4,7 @@ enforceServerOnly();
 
 import { spawnSync } from "node:child_process";
 import { existsSync, rmSync, statSync } from "node:fs";
+import { dirname } from "node:path";
 
 /**
  * Truthful native copy-on-write clone (ADR-0025 AD-6, WP-3B Option E).
@@ -27,6 +28,14 @@ export type FhvNativeCloneStatus =
   | "NATIVE_CLONE_UNSUPPORTED"
   /** Clone was attempted and failed for another reason; evidence is preserved. */
   | "NATIVE_CLONE_FAILED";
+
+/** Directories proven unable to reflink, so the strict probe is not repeated per checkpoint. */
+const unsupportedDirectories = new Map<string, FhvNativeCloneResult>();
+
+/** Test seam: clears cached capability so a suite can exercise both branches. */
+export function resetFhvNativeCloneCapabilityCache(): void {
+  unsupportedDirectories.clear();
+}
 
 export type FhvNativeCloneResult = Readonly<{
   status: FhvNativeCloneStatus;
@@ -86,25 +95,41 @@ export function tryNativeCloneFile(sourcePath: string, destPath: string): FhvNat
     };
   }
 
+  /*
+   * Cache per destination directory. The strict mechanism is a subprocess, so on a filesystem that
+   * cannot reflink every checkpoint would otherwise pay a spawn that is guaranteed to fail. A
+   * filesystem does not gain or lose reflink support during a run, so one probe per directory is
+   * sufficient and the fallback path stays free of per-checkpoint process overhead.
+   */
+  const destDirectory = dirname(destPath);
+  const cached = unsupportedDirectories.get(destDirectory);
+  if (cached) {
+    return { ...cached, mechanism: resolved.mechanism };
+  }
+
   const outcome = spawnSync(resolved.command, resolved.args, { encoding: "utf8" });
   if (outcome.error) {
     rmSync(destPath, { force: true });
-    return {
+    const result: FhvNativeCloneResult = {
       status: "NATIVE_CLONE_UNSUPPORTED",
       reflinkUsed: false,
       mechanism: resolved.mechanism,
       detail: `clone mechanism unavailable: ${outcome.error.message}`,
     };
+    unsupportedDirectories.set(destDirectory, result);
+    return result;
   }
   if (outcome.status !== 0) {
     rmSync(destPath, { force: true });
     // The strict flag refusing is exactly how an unsupported filesystem reports itself.
-    return {
+    const result: FhvNativeCloneResult = {
       status: "NATIVE_CLONE_UNSUPPORTED",
       reflinkUsed: false,
       mechanism: resolved.mechanism,
       detail: `exit=${outcome.status} stderr=${(outcome.stderr ?? "").trim().slice(0, 200)}`,
     };
+    unsupportedDirectories.set(destDirectory, result);
+    return result;
   }
 
   // Verify independently: a zero exit code alone is not proof.

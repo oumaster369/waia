@@ -60,6 +60,35 @@ export const FHV_CHECKPOINT_SUPPORTED_ENVELOPE_BYTES = 536_870_912;
 
 const DIGEST_CHUNK_BYTES = 1 << 20;
 
+/**
+ * I/O accounting for the WP-3B structural gate.
+ *
+ * Wall clock alone cannot distinguish "slow host" from "extra pass", so the gate also counts the
+ * bytes actually moved. A correct checkpoint reads the source once, writes the destination once,
+ * and digests once; any regression that reintroduces a pass shows up here regardless of speed.
+ */
+export type FhvCheckpointIoAccounting = {
+  sourceBytesRead: number;
+  destBytesWritten: number;
+  digestBytesProcessed: number;
+};
+
+const ioAccounting: FhvCheckpointIoAccounting = {
+  sourceBytesRead: 0,
+  destBytesWritten: 0,
+  digestBytesProcessed: 0,
+};
+
+export function resetFhvCheckpointIoAccounting(): void {
+  ioAccounting.sourceBytesRead = 0;
+  ioAccounting.destBytesWritten = 0;
+  ioAccounting.digestBytesProcessed = 0;
+}
+
+export function readFhvCheckpointIoAccounting(): Readonly<FhvCheckpointIoAccounting> {
+  return { ...ioAccounting };
+}
+
 export type FhvCheckpointCostSampleV1 = Readonly<{
   sessionBytes: number;
   /** Snapshot acquisition: strict native clone, or the fused copy+digest fallback. */
@@ -79,6 +108,10 @@ export type FhvCheckpointCostSampleV1 = Readonly<{
   ficloneSucceeded: boolean;
   /** True when hashing shares the snapshot pass, so the two costs cannot be separated. */
   digestFusedIntoSnapshot: boolean;
+  /** Complete traversals of the source, destination and digest, in units of the session size. */
+  sourceTraversals: number;
+  destTraversals: number;
+  digestPasses: number;
   effectiveBytesPerSecond: number;
 }>;
 
@@ -137,6 +170,9 @@ export function copyAndDigestSync(
       const chunk = buffer.subarray(0, read);
       writeSync(destFd, chunk, 0, read);
       hash.update(chunk);
+      ioAccounting.sourceBytesRead += read;
+      ioAccounting.destBytesWritten += read;
+      ioAccounting.digestBytesProcessed += read;
       offset += read;
     }
   } finally {
@@ -158,6 +194,8 @@ function sha256FileStreaming(path: string): string {
         break;
       }
       hash.update(buffer.subarray(0, read));
+      ioAccounting.sourceBytesRead += read;
+      ioAccounting.digestBytesProcessed += read;
       offset += read;
     }
     return hash.digest("hex");
@@ -175,6 +213,7 @@ export function measureFhvCheckpointSnapshotCost(input: {
   workDir: string;
 }): FhvCheckpointCostSampleV1 {
   mkdirSync(input.workDir, { recursive: true });
+  resetFhvCheckpointIoAccounting();
   const sessionBytes = statSync(input.sessionPath).size;
   const tempBackupPath = join(input.workDir, `fhv-cost-snapshot-${process.pid}-${Date.now()}`);
   const bundlePath = join(input.workDir, "session.sqlite");
@@ -286,6 +325,7 @@ function finishSample(input: {
   rmSync(input.tempBackupPath, { force: true });
   rmSync(input.bundlePath, { force: true });
 
+  const io = readFhvCheckpointIoAccounting();
   const totalDurationMs =
     input.snapshotDurationMs +
     input.digestDurationMs +
@@ -304,6 +344,9 @@ function finishSample(input: {
     totalDurationMs: Number(totalDurationMs.toFixed(3)),
     ficloneSucceeded: input.ficloneSucceeded,
     digestFusedIntoSnapshot: input.digestFusedIntoSnapshot,
+    sourceTraversals: Number((io.sourceBytesRead / Math.max(input.sessionBytes, 1)).toFixed(4)),
+    destTraversals: Number((io.destBytesWritten / Math.max(input.sessionBytes, 1)).toFixed(4)),
+    digestPasses: Number((io.digestBytesProcessed / Math.max(input.sessionBytes, 1)).toFixed(4)),
     effectiveBytesPerSecond:
       totalDurationMs > 0 ? Number((input.sessionBytes / (totalDurationMs / 1000)).toFixed(0)) : 0,
   };

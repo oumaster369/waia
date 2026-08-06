@@ -3,6 +3,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 enforceServerOnly();
 
 import { createHash, randomBytes } from "node:crypto";
+import { closeSync, copyFileSync, fsyncSync, openSync, rmSync, statSync } from "node:fs";
 
 import {
   FHV_CHECKPOINT_BUDGET_MS_PER_10K,
@@ -28,17 +29,25 @@ import {
 const CALIBRATION_BYTES = 64 << 20;
 
 /**
- * Cost of the checkpoint expressed as multiples of one SHA-256 pass over the same bytes.
+ * Cost of a clone-based checkpoint expressed as multiples of one SHA-256 pass over the same bytes.
  *
- * A clone-based checkpoint hashes once and does O(1) work besides, so it sits near 1.0 on every
- * host. Reintroducing a full byte copy pushes it toward 2.0, and the pre-WP-3B clone-then-rehash
- * shape sat near 3.0. Because the unit is the host's own hash speed, the ceiling means the same
- * thing on a fast workstation and a slow hosted runner.
+ * A clone hashes once and does O(1) work besides, so it sits near 1.0 on every host. Reintroducing
+ * a full byte copy pushes it toward 2.0 and the pre-WP-3B clone-then-rehash shape sat near 3.0.
+ * Hashing is CPU-bound, so normalizing against the host's own hash speed is host-independent.
  */
 export const FHV_CLONE_HOST_MAX_HASH_EQUIVALENT_PASSES = 1.45;
 
-/** Fallback hosts fuse one read, one write and the hash into a single pass. */
-export const FHV_FALLBACK_HOST_MAX_HASH_EQUIVALENT_PASSES = 3.2;
+/**
+ * Fallback ceiling, expressed against a same-host raw-copy plus hash baseline.
+ *
+ * The fallback also writes a full gigabyte, so normalizing it against hash speed alone conflates
+ * CPU with storage bandwidth: it measured 1.55 hash-equivalent passes on fast local NVMe and 4.91
+ * on a storage-bound GitHub runner, which is why a hash-only ceiling was wrong there. The
+ * structurally necessary work on any host is one source read, one destination write and one
+ * streamed digest, so the baseline is a raw durable copy plus one hash measured on that same host
+ * and filesystem. A copy-then-rehash regression adds a further full read and exceeds it.
+ */
+export const FHV_FALLBACK_HOST_MAX_NECESSARY_WORK_RATIO = 1.35;
 
 export type FhvTargetHostRequirementV1 = Readonly<{
   /** Sustained single-stream SHA-256 a host must deliver to meet the contract at 1 GiB. */
@@ -105,18 +114,38 @@ export function computeFhvTargetHostRequirement(
 
 export type FhvSoftwareGateResultV1 = Readonly<{
   hostSha256BytesPerSecond: number;
-  /** Checkpoint cost in multiples of one SHA-256 pass over the same bytes. */
-  hashEquivalentPasses: number;
-  allowedHashEquivalentPasses: number;
+  /** Work that is structurally necessary on this host: hash for a clone, copy+hash otherwise. */
+  necessaryWorkMs: number;
+  observedMs: number;
+  necessaryWorkRatio: number;
+  allowedNecessaryWorkRatio: number;
   nativeCloneObserved: boolean;
+  /** A correct checkpoint reads the source once, writes the destination once and digests once. */
+  sourceTraversals: number;
+  destTraversals: number;
+  digestPasses: number;
+  traversalsSound: boolean;
+  timingSound: boolean;
   structurallySound: boolean;
   requirement: FhvTargetHostRequirementV1;
   /** Whether this particular host could also satisfy the absolute 400 ms contract. */
   hostLaunchQualified: boolean;
 }>;
 
+/** A correct checkpoint never moves more than one copy of the session in either direction. */
+const MAX_TRAVERSALS = 1.05;
+
 /**
  * Judge the checkpoint algorithm independently of how fast this host happens to be.
+ *
+ * Two independent proofs must hold. Traversal accounting shows each byte is moved once; timing
+ * shows the run does not cost materially more than the work that is structurally necessary on
+ * this specific host and filesystem.
+ *
+ * Timing alone was not sufficient. Normalizing the fallback against hash speed conflated CPU with
+ * storage bandwidth — the same code measured 1.55 hash-equivalent passes on local NVMe and 4.91 on
+ * a storage-bound GitHub runner — so the fallback baseline now includes a real raw durable copy
+ * measured on the destination filesystem.
  *
  * `structurallySound` is the merge-blocking signal. `hostLaunchQualified` is evidence about the
  * runner and must never fail a pull request: the absolute timing contract belongs to the
@@ -125,33 +154,82 @@ export type FhvSoftwareGateResultV1 = Readonly<{
 export function evaluateFhvCheckpointSoftwareGate(input: {
   samples: readonly FhvCheckpointCostSampleV1[];
   hostSha256BytesPerSecond: number;
+  /** Same-host, same-filesystem raw durable copy throughput. Required for the fallback branch. */
+  hostRawCopyBytesPerSecond?: number;
 }): FhvSoftwareGateResultV1 {
   const deepest = [...input.samples].sort((a, b) => b.sessionBytes - a.sessionBytes)[0];
   if (!deepest) {
     throw new Error("FHV_CHECKPOINT_SOFTWARE_GATE_REQUIRES_SAMPLES");
   }
 
-  const expectedHashMs =
+  const hashMs =
     input.hostSha256BytesPerSecond > 0
       ? (deepest.sessionBytes / input.hostSha256BytesPerSecond) * 1000
       : 0;
-  const hashEquivalentPasses =
-    expectedHashMs > 0 ? Number((deepest.totalDurationMs / expectedHashMs).toFixed(4)) : 0;
-  const allowedHashEquivalentPasses = deepest.ficloneSucceeded
+  const rawCopyMs =
+    input.hostRawCopyBytesPerSecond && input.hostRawCopyBytesPerSecond > 0
+      ? (deepest.sessionBytes / input.hostRawCopyBytesPerSecond) * 1000
+      : 0;
+
+  // A clone is O(1), so only the hash is structurally necessary. The fallback must also move the
+  // bytes, which is storage-bound and therefore has to be measured rather than assumed.
+  const necessaryWorkMs = deepest.ficloneSucceeded ? hashMs : rawCopyMs + hashMs;
+  const allowedNecessaryWorkRatio = deepest.ficloneSucceeded
     ? FHV_CLONE_HOST_MAX_HASH_EQUIVALENT_PASSES
-    : FHV_FALLBACK_HOST_MAX_HASH_EQUIVALENT_PASSES;
+    : FHV_FALLBACK_HOST_MAX_NECESSARY_WORK_RATIO;
+  const necessaryWorkRatio =
+    necessaryWorkMs > 0 ? Number((deepest.totalDurationMs / necessaryWorkMs).toFixed(4)) : 0;
+
+  // A clone writes nothing through the instrumented copy path; the fallback must write exactly once.
+  const traversalsSound =
+    deepest.sourceTraversals <= MAX_TRAVERSALS &&
+    deepest.digestPasses > 0 &&
+    deepest.digestPasses <= MAX_TRAVERSALS &&
+    deepest.destTraversals <= (deepest.ficloneSucceeded ? 0.001 : MAX_TRAVERSALS) &&
+    (deepest.ficloneSucceeded || deepest.destTraversals > 0);
+  const timingSound = necessaryWorkRatio > 0 && necessaryWorkRatio <= allowedNecessaryWorkRatio;
 
   const requirement = computeFhvTargetHostRequirement(input.samples);
   return {
     hostSha256BytesPerSecond: input.hostSha256BytesPerSecond,
-    hashEquivalentPasses,
-    allowedHashEquivalentPasses,
+    necessaryWorkMs: Number(necessaryWorkMs.toFixed(3)),
+    observedMs: deepest.totalDurationMs,
+    necessaryWorkRatio,
+    allowedNecessaryWorkRatio,
     nativeCloneObserved: deepest.ficloneSucceeded,
-    structurallySound:
-      hashEquivalentPasses > 0 && hashEquivalentPasses <= allowedHashEquivalentPasses,
+    sourceTraversals: deepest.sourceTraversals,
+    destTraversals: deepest.destTraversals,
+    digestPasses: deepest.digestPasses,
+    traversalsSound,
+    timingSound,
+    structurallySound: traversalsSound && timingSound,
     requirement,
     hostLaunchQualified:
       deepest.ficloneSucceeded &&
       input.hostSha256BytesPerSecond >= requirement.requiredSingleStreamSha256BytesPerSecond,
   };
+}
+
+/**
+ * Measure a raw durable copy on the destination filesystem.
+ *
+ * This is the storage half of the fallback baseline, so it must touch the filesystem the
+ * checkpoint actually uses rather than being inferred from a memory benchmark.
+ */
+export function calibrateRawDurableCopyBytesPerSecond(input: {
+  sourcePath: string;
+  destPath: string;
+}): number {
+  const bytes = statSync(input.sourcePath).size;
+  const startedAt = performance.now();
+  copyFileSync(input.sourcePath, input.destPath);
+  const fd = openSync(input.destPath, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  const elapsedMs = performance.now() - startedAt;
+  rmSync(input.destPath, { force: true });
+  return elapsedMs > 0 ? Number((bytes / (elapsedMs / 1000)).toFixed(0)) : 0;
 }

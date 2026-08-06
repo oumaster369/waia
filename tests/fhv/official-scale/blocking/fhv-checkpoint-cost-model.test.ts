@@ -26,6 +26,7 @@ import {
   type FhvCheckpointCostSampleV1,
 } from "@/lib/trader/observability/fhv-checkpoint-cost-model";
 import {
+  calibrateRawDurableCopyBytesPerSecond,
   calibrateSingleStreamSha256BytesPerSecond,
   computeFhvTargetHostRequirement,
   evaluateFhvCheckpointSoftwareGate,
@@ -81,7 +82,10 @@ describe("FHV checkpoint cost model", () => {
 
   it("measures checkpoint duration across session-database sizes", () => {
     const samples: FhvCheckpointCostSampleV1[] = [];
-    for (const targetBytes of resolveSizes()) {
+    const sizes = resolveSizes();
+    const deepestBytes = Math.max(...sizes);
+    let rawCopyBytesPerSecond = 0;
+    for (const targetBytes of sizes) {
       const caseDir = join(root, `size-${targetBytes}`);
       mkdirSync(caseDir, { recursive: true });
       const sessionPath = join(caseDir, "session.sqlite");
@@ -92,6 +96,14 @@ describe("FHV checkpoint cost model", () => {
           workDir: join(caseDir, "work"),
         }),
       );
+      if (targetBytes === deepestBytes) {
+        // Storage half of the fallback baseline, measured with the qualification bytes on the
+        // filesystem the checkpoint actually uses.
+        rawCopyBytesPerSecond = calibrateRawDurableCopyBytesPerSecond({
+          sourcePath: sessionPath,
+          destPath: join(caseDir, "raw-copy-baseline.bin"),
+        });
+      }
       rmSync(caseDir, { recursive: true, force: true });
     }
 
@@ -133,6 +145,7 @@ describe("FHV checkpoint cost model", () => {
     const gate = evaluateFhvCheckpointSoftwareGate({
       samples: model.samples,
       hostSha256BytesPerSecond: calibrateSingleStreamSha256BytesPerSecond(),
+      hostRawCopyBytesPerSecond: rawCopyBytesPerSecond,
     });
 
     process.stderr.write(
@@ -146,8 +159,12 @@ describe("FHV checkpoint cost model", () => {
     );
     process.stderr.write(
       `[fhv-checkpoint-software-gate] host_sha256_bytes_per_second=${gate.hostSha256BytesPerSecond} ` +
-        `hash_equivalent_passes=${gate.hashEquivalentPasses} ` +
-        `allowed_passes=${gate.allowedHashEquivalentPasses} ` +
+        `host_raw_copy_bytes_per_second=${rawCopyBytesPerSecond} ` +
+        `necessary_work_ms=${gate.necessaryWorkMs} observed_ms=${gate.observedMs} ` +
+        `necessary_work_ratio=${gate.necessaryWorkRatio} allowed_ratio=${gate.allowedNecessaryWorkRatio} ` +
+        `source_traversals=${gate.sourceTraversals} dest_traversals=${gate.destTraversals} ` +
+        `digest_passes=${gate.digestPasses} traversals_sound=${gate.traversalsSound} ` +
+        `timing_sound=${gate.timingSound} ` +
         `native_clone_observed=${gate.nativeCloneObserved} ` +
         `structurally_sound=${gate.structurallySound} ` +
         `host_launch_qualified=${gate.hostLaunchQualified}\n`,
@@ -156,9 +173,17 @@ describe("FHV checkpoint cost model", () => {
     expect(model.samples.length).toBeGreaterThanOrEqual(2);
     expect(model.projectedDurationMsAtQualificationDepth).toBeGreaterThan(0);
 
-    // Merge-blocking: the checkpoint must cost about one hash pass over its own bytes. A
-    // reintroduced full copy lands near 2.0 and the pre-WP-3B clone-then-rehash shape near 3.0.
+    /*
+     * Merge-blocking, proven two independent ways: the algorithm moves each byte once, and it
+     * costs about the work that is structurally necessary on this host. Timing alone is not
+     * enough — a storage-bound runner is slow without being wrong — and traversal counting alone
+     * cannot see redundant work outside the instrumented helpers.
+     */
+    expect(gate.traversalsSound).toBe(true);
+    expect(gate.timingSound).toBe(true);
     expect(gate.structurallySound).toBe(true);
+    expect(gate.sourceTraversals).toBeLessThanOrEqual(1.05);
+    expect(gate.digestPasses).toBeGreaterThan(0);
     // Cost must not grow faster than the data it copies.
     expect(model.growthExponent).toBeLessThanOrEqual(1.15);
     // Publish must remain a move, not a second full copy, at every measured depth.
@@ -199,27 +224,55 @@ describe("FHV checkpoint cost model", () => {
 
   it("fails a structural regression regardless of how fast the host is", () => {
     const bytes = 1_073_741_824;
-    const hostBytesPerSecond = 2_700_000_000;
-    const oneHashPassMs = (bytes / hostBytesPerSecond) * 1000;
-
-    const cloneShaped = evaluateFhvCheckpointSoftwareGate({
-      samples: [{ ...baseSample(bytes, oneHashPassMs * 1.02), ficloneSucceeded: true }],
-      hostSha256BytesPerSecond: hostBytesPerSecond,
+    const hashBps = 2_700_000_000;
+    const copyBps = 400_000_000;
+    const hashMs = (bytes / hashBps) * 1000;
+    const copyMs = (bytes / copyBps) * 1000;
+    const clone = (total: number) => ({
+      ...baseSample(bytes, total),
+      ficloneSucceeded: true,
+      sourceTraversals: 1,
+      destTraversals: 0,
+      digestPasses: 1,
     });
-    expect(cloneShaped.structurallySound).toBe(true);
-
-    // A reintroduced second full pass fails even though the host is unchanged.
-    const regressed = evaluateFhvCheckpointSoftwareGate({
-      samples: [{ ...baseSample(bytes, oneHashPassMs * 2.4), ficloneSucceeded: true }],
-      hostSha256BytesPerSecond: hostBytesPerSecond,
+    const fallback = (total: number) => ({
+      ...baseSample(bytes, total),
+      ficloneSucceeded: false,
+      sourceTraversals: 1,
+      destTraversals: 1,
+      digestPasses: 1,
     });
-    expect(regressed.structurallySound).toBe(false);
+    const evaluate = (sample: FhvCheckpointCostSampleV1, hostHashBps = hashBps) =>
+      evaluateFhvCheckpointSoftwareGate({
+        samples: [sample],
+        hostSha256BytesPerSecond: hostHashBps,
+        hostRawCopyBytesPerSecond: copyBps,
+      });
+
+    expect(evaluate(clone(hashMs * 1.02)).structurallySound).toBe(true);
+    expect(evaluate(fallback(copyMs + hashMs)).structurallySound).toBe(true);
+
+    // An extra full read: the clone path rehashes instead of hashing once.
+    const extraRead = evaluate({ ...clone(hashMs * 2.2), sourceTraversals: 2, digestPasses: 2 });
+    expect(extraRead.traversalsSound).toBe(false);
+    expect(extraRead.structurallySound).toBe(false);
+
+    // An extra full copy: the fallback writes the destination twice.
+    const extraCopy = evaluate({ ...fallback(copyMs * 2 + hashMs), destTraversals: 2 });
+    expect(extraCopy.traversalsSound).toBe(false);
+
+    // Copy-then-rehash: correct traversal counts are impossible, and the timing exceeds the
+    // necessary work on this host even though the host itself is unchanged.
+    expect(evaluate(fallback(copyMs + hashMs * 2 + copyMs * 0.5)).timingSound).toBe(false);
+
+    // Omitted hashing must never look sound.
+    expect(evaluate({ ...clone(hashMs * 0.1), digestPasses: 0 }).structurallySound).toBe(false);
+
+    // False reflink reporting: claiming a clone while still writing the destination.
+    expect(evaluate({ ...clone(hashMs * 1.02), destTraversals: 1 }).traversalsSound).toBe(false);
 
     // A merely slow host stays structurally sound: runner speed must not fail a pull request.
-    const slowHost = evaluateFhvCheckpointSoftwareGate({
-      samples: [{ ...baseSample(bytes, oneHashPassMs * 1.02 * 7), ficloneSucceeded: true }],
-      hostSha256BytesPerSecond: hostBytesPerSecond / 7,
-    });
+    const slowHost = evaluate(clone(hashMs * 7 * 1.02), hashBps / 7);
     expect(slowHost.structurallySound).toBe(true);
     expect(slowHost.hostLaunchQualified).toBe(false);
   });
@@ -271,6 +324,9 @@ function baseSample(sessionBytes: number, totalDurationMs: number): FhvCheckpoin
     totalDurationMs,
     ficloneSucceeded: false,
     digestFusedIntoSnapshot: false,
+    sourceTraversals: 1,
+    destTraversals: 1,
+    digestPasses: 1,
     effectiveBytesPerSecond: Math.round(sessionBytes / (totalDurationMs / 1000)),
   };
 }

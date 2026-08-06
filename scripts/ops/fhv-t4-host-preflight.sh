@@ -219,10 +219,12 @@ if [[ "$FREE_ARTIFACT_KB" -lt "$REQUIRED_KB" ]]; then
   fail "70/30 storage policy: free ${FREE_ARTIFACT_KB} KiB < required ${REQUIRED_KB} KiB (peak ${FHV_T4_PROJECTED_PEAK_KB} + 30% reserve ${RESERVE_KB})"
 fi
 
-# WP-3B target-host qualification is mandatory and fail-closed: the 1-GiB / 400 ms checkpoint
-# contract is host-class dependent and no pull-request runner can prove it.
+# WP-3B target-host qualification is fail-closed for the official full-corpus launch, where the
+# 1-GiB / 400 ms checkpoint contract must hold. It is opt-in here because this preflight also
+# bootstraps PRE_AUTH and rehearsal, which never run a full-scale checkpoint and therefore have
+# nothing for the receipt to qualify. The official launch path sets the flag.
 FHV_WP3B_RECEIPT="${FHV_WP3B_RECEIPT:-$ARTIFACT_ROOT/fhv-wp3b-host-qualification.v1.json}"
-if [[ "${FHV_T4_REQUIRE_WP3B_QUALIFICATION:-1}" == "1" ]]; then
+if [[ "${FHV_T4_REQUIRE_WP3B_QUALIFICATION:-0}" == "1" ]]; then
   if [[ ! -f "$FHV_WP3B_RECEIPT" ]]; then
     fail "WP-3B host qualification receipt missing at $FHV_WP3B_RECEIPT (run: pnpm trader:fhv:wp3b-host-qualification)"
   fi
