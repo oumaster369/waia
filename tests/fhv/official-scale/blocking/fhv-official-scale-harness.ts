@@ -1,8 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statfsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 
 import { readReplayRunChainProjections } from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
 import { readReplayCheckpoint } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
@@ -33,6 +31,10 @@ import {
   FHV_TEST_RELEASE_TAG,
   setupFhvOfficialV2MultiYearLaunchArtifacts,
 } from "@/tests/helpers/fhv-official-path-test-fixtures";
+import {
+  acquireFhvManagedDatasetRoot,
+  releaseFhvManagedDatasetRoot,
+} from "@/tests/helpers/fhv-temp-root-registry";
 
 import {
   CHECKPOINT_EVERY_CYCLES,
@@ -103,6 +105,8 @@ export type FhvOfficialScaleMetricsV1 = Readonly<{
 export type FhvOfficialScaleHarnessContext = Readonly<{
   datasetRoot: string;
   manifestPath: string;
+  /** True when the dataset root is operator-pinned and must not be torn down. */
+  externallyOwned: boolean;
   artifactRoot: string;
   releaseSha: string;
   releaseTag: string;
@@ -173,29 +177,57 @@ export function resolveFhvOfficialScaleArtifactRoot(): string {
 export function resolveOrBuildFhvOfficialScaleDataset(): {
   datasetRoot: string;
   manifestPath: string;
+  /** True when the root is operator-pinned and must never be torn down by this process. */
+  externallyOwned: boolean;
 } {
   const cached = process.env.FHV_OFFICIAL_SCALE_DATASET_ROOT?.trim();
   if (cached && isValidCachedDatasetRoot(cached)) {
     return {
       datasetRoot: cached,
       manifestPath: resolveFhvDatasetManifestV2Path(cached),
+      externallyOwned: true,
     };
   }
-  const datasetRoot = mkdtempSync(join(tmpdir(), "fhv-official-scale-dataset-"));
-  return buildFhvOfficialV2ScaleDataset(datasetRoot);
+  const { datasetRoot } = acquireFhvManagedDatasetRoot({
+    prefix: "fhv-official-scale-dataset-",
+    build: (root) => {
+      buildFhvOfficialV2ScaleDataset(root);
+    },
+    releaseSha: FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
+  });
+  return {
+    datasetRoot,
+    manifestPath: resolveFhvDatasetManifestV2Path(datasetRoot),
+    externallyOwned: false,
+  };
 }
 
 export function buildFhvOfficialScaleHarnessContext(): FhvOfficialScaleHarnessContext {
-  const { datasetRoot, manifestPath } = resolveOrBuildFhvOfficialScaleDataset();
+  const { datasetRoot, manifestPath, externallyOwned } = resolveOrBuildFhvOfficialScaleDataset();
   return {
     datasetRoot,
     manifestPath,
+    externallyOwned,
     artifactRoot: resolveFhvOfficialScaleArtifactRoot(),
     releaseSha: FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
     releaseTag: FHV_TEST_RELEASE_TAG,
     organizationId: FHV_TEST_ORG_ID,
     operatorId: FHV_TEST_OPERATOR_ID,
   };
+}
+
+/**
+ * Release the harness dataset root. Safe to call from `afterAll` and from script `finally`
+ * blocks; operator-pinned roots (`FHV_OFFICIAL_SCALE_DATASET_ROOT`) are never removed.
+ */
+export function teardownFhvOfficialScaleHarnessContext(
+  harness: Pick<FhvOfficialScaleHarnessContext, "datasetRoot" | "externallyOwned">,
+  outcome: "PASS" | "FAIL" = "PASS",
+): void {
+  if (harness.externallyOwned) {
+    return;
+  }
+  releaseFhvManagedDatasetRoot(harness.datasetRoot, outcome);
 }
 
 export function writeFhvOfficialScaleSyntheticAuthority(input: {

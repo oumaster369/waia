@@ -5,7 +5,7 @@
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { assertFhvDatasetSealed } from "@/lib/trader/market-data/fhv-dataset-seal";
 import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
@@ -18,6 +18,7 @@ import {
   runFhvOfficialScaleCli,
   setupFhvOfficialScaleLaunchPaths,
   spawnFhvOfficialScaleCli,
+  teardownFhvOfficialScaleHarnessContext,
   toFhvOfficialScaleLaunchInput,
   waitForFhvOfficialScaleCheckpoint,
   writeFhvOfficialScaleSyntheticAuthority,
@@ -37,6 +38,10 @@ describe("FHV official-scale process crash-resume parity (Phase 11–12 blocking
     // Process parity proves correctness independently of full-corpus time feasibility.
     expect(existsSync(harness.datasetRoot)).toBe(true);
   }, 600_000);
+
+  afterAll(() => {
+    teardownFhvOfficialScaleHarnessContext(harness);
+  });
 
   it("documents process parity resume constants", () => {
     expect(RESUMED_TAIL_CYCLE_COUNT).toBe(512);

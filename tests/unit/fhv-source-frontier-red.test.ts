@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
 import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
@@ -18,6 +18,10 @@ import {
   buildFhvOfficialV2ScaleDataset,
   FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
 } from "@/tests/helpers/fhv-official-path-test-fixtures";
+import {
+  acquireFhvManagedDatasetRoot,
+  releaseFhvManagedDatasetRoot,
+} from "@/tests/helpers/fhv-temp-root-registry";
 
 const USER_ID = "00000000-0000-4000-8000-0000000437";
 
@@ -42,14 +46,26 @@ describe("FHV source frontier (Phase 8)", () => {
   let runRoot = "";
 
   beforeAll(() => {
-    v2DatasetRoot = mkdtempSync(join(tmpdir(), "fhv-source-frontier-v2-"));
-    buildFhvOfficialV2ScaleDataset(v2DatasetRoot);
+    v2DatasetRoot = acquireFhvManagedDatasetRoot({
+      prefix: "fhv-source-frontier-v2-",
+      build: (root) => {
+        buildFhvOfficialV2ScaleDataset(root);
+      },
+      releaseSha: FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
+    }).datasetRoot;
   }, 600_000);
 
   afterEach(() => {
     if (runRoot) {
       rmSync(runRoot, { recursive: true, force: true });
       runRoot = "";
+    }
+  });
+
+  afterAll(() => {
+    if (v2DatasetRoot) {
+      releaseFhvManagedDatasetRoot(v2DatasetRoot, "PASS");
+      v2DatasetRoot = "";
     }
   });
 

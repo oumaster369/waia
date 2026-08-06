@@ -30,6 +30,7 @@ import {
   extractFhvOfficialScaleParitySnapshot,
   resolveBarsProcessed,
   setupFhvOfficialScaleLaunchPaths,
+  teardownFhvOfficialScaleHarnessContext,
   toFhvOfficialScaleLaunchInput,
   type FhvOfficialScaleHarnessContext,
   type FhvOfficialScaleParitySnapshot,
@@ -1052,5 +1053,9 @@ export function resetProfileRunRoot(
   }
 }
 
-export { buildFhvOfficialScaleHarnessContext, extractFhvOfficialScaleParitySnapshot };
+export {
+  buildFhvOfficialScaleHarnessContext,
+  extractFhvOfficialScaleParitySnapshot,
+  teardownFhvOfficialScaleHarnessContext,
+};
 export { FHV_OFFICIAL_SCALE_PROFILE_SCHEDULE };

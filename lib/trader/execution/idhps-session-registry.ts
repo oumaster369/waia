@@ -52,6 +52,14 @@ export type IdhpsSessionRuntime = {
   accountingBridge: HtrAccountingCycleBridge | null;
   checkpointBackupDurationMs: number | null;
   walBytes: number | null;
+  /** Bytes of the session database snapshotted by the last checkpoint (WP-1 cost telemetry). */
+  checkpointSessionBytes: number | null;
+  /**
+   * Whether the last session snapshot used a copy-on-write reflink.
+   * APFS/XFS support it and make the copy near-free; ext4 does not and pays a full byte copy.
+   * Recorded so filesystem divergence is observable instead of swallowed by a bare catch.
+   */
+  checkpointFicloneSucceeded: boolean | null;
   /** Cached fill-walk portfolio sizing snapshot; invalidated on fill/order mutation. */
   portfolioSizingCache: unknown | null;
   portfolioSizingCacheValid: boolean;
@@ -91,6 +99,8 @@ export function openIdhpsSession(
     accountingBridge: null,
     checkpointBackupDurationMs: null,
     walBytes: null,
+    checkpointSessionBytes: null,
+    checkpointFicloneSucceeded: null,
     portfolioSizingCache: null,
     portfolioSizingCacheValid: false,
     resumedAfterDurableEpochCommit: false,
@@ -116,6 +126,17 @@ export function recordIdhpsCheckpointMetrics(input: {
   if (!runtime) return;
   runtime.checkpointBackupDurationMs = input.checkpointBackupDurationMs;
   runtime.walBytes = input.walBytes;
+}
+
+/** WP-1: record the size and copy mechanism of the last session snapshot. */
+export function recordIdhpsCheckpointSnapshotCost(input: {
+  checkpointSessionBytes: number | null;
+  ficloneSucceeded: boolean | null;
+}): void {
+  const runtime = getIdhpsSession();
+  if (!runtime) return;
+  runtime.checkpointSessionBytes = input.checkpointSessionBytes;
+  runtime.checkpointFicloneSucceeded = input.ficloneSucceeded;
 }
 
 /** Durable authority step 10: clear epoch-scoped mirrors after EPOCH_COMMIT + claim. */

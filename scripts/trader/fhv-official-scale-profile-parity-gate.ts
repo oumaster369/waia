@@ -15,6 +15,7 @@ import {
   buildFhvOfficialScaleHarnessContext,
   extractFhvOfficialScaleParitySnapshot,
   setupFhvOfficialScaleLaunchPaths,
+  teardownFhvOfficialScaleHarnessContext,
   toFhvOfficialScaleLaunchInput,
 } from "@/tests/fhv/official-scale/blocking/fhv-official-scale-harness";
 import {
@@ -40,6 +41,19 @@ async function main(): Promise<void> {
     artifactRoot: gateArtifactRoot,
   };
 
+  try {
+    await runInstrumentationParityGate({ harness, gateArtifactRoot, referencePath });
+  } finally {
+    teardownFhvOfficialScaleHarnessContext(harnessBase);
+  }
+}
+
+async function runInstrumentationParityGate(input: {
+  harness: ReturnType<typeof buildFhvOfficialScaleHarnessContext>;
+  gateArtifactRoot: string;
+  referencePath: string;
+}): Promise<void> {
+  const { harness, gateArtifactRoot, referencePath } = input;
   const runId = `fhv-profile-instrumentation-parity-${Date.now()}`;
   const paths = setupFhvOfficialScaleLaunchPaths({
     harness,

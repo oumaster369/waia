@@ -19,6 +19,7 @@ import { getRawSqliteDatabase } from "@/db/client";
 import {
   applyIdhpsDurableEpochStep10,
   recordIdhpsCheckpointMetrics,
+  recordIdhpsCheckpointSnapshotCost,
   writeIdhpsCompositeMirrorForCheckpoint,
 } from "@/lib/trader/execution/idhps-session-registry";
 import { pruneFhvCheckpointBundlesToTwoNewest } from "@/lib/trader/observability/fhv-checkpoint-retention";
@@ -271,12 +272,22 @@ function captureSessionDatabaseBackup(input: { skipSessionBackup?: boolean }): {
   // Single-writer FHV path: checkpoint then copy/clone is a consistent snapshot.
   sqlite.pragma("wal_checkpoint(TRUNCATE)");
   const tempBackupPath = join(tmpdir(), `fhv-session-backup-${process.pid}-${Date.now()}.sqlite`);
+  let ficloneSucceeded = false;
   try {
     copyFileSync(sqlite.name, tempBackupPath, fsConstants.COPYFILE_FICLONE);
+    ficloneSucceeded = true;
   } catch {
+    // ext4 has no reflink support: this fallback pays a full byte copy.
     copyFileSync(sqlite.name, tempBackupPath);
   }
   const sessionDatabaseDigest = sha256FileSync(tempBackupPath);
+  let checkpointSessionBytes: number | null = null;
+  try {
+    checkpointSessionBytes = statSync(tempBackupPath).size;
+  } catch {
+    checkpointSessionBytes = null;
+  }
+  recordIdhpsCheckpointSnapshotCost({ checkpointSessionBytes, ficloneSucceeded });
   return {
     sessionFile: { copyFromPath: tempBackupPath },
     sessionDatabaseDigest,

@@ -5,7 +5,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { FHV_OFFICIAL_TOTAL_BARS } from "@/lib/trader/market-data/fhv-official-scale-corpus";
 import { FHV_DEFAULT_CHECKPOINT_EVERY_CYCLES } from "@/lib/trader/observability/fhv-execution-wal";
@@ -18,8 +18,10 @@ import {
   buildFhvOfficialScaleHarnessContext,
   readFhvOfficialScaleMetrics,
   setupFhvOfficialScaleLaunchPaths,
+  teardownFhvOfficialScaleHarnessContext,
   toFhvOfficialScaleLaunchInput,
 } from "./fhv-official-scale-harness";
+import { assertFhvOfficialFullCorpusExecutionSurface } from "@/tests/helpers/fhv-temp-root-registry";
 import {
   CHECKPOINT_EVERY_CYCLES,
   FULL_CORPUS_CHECKPOINT_EVERY_CYCLES,
@@ -35,6 +37,8 @@ describe("FHV official-scale full corpus (Phase 13 blocking)", () => {
   const harness = buildFhvOfficialScaleHarnessContext();
 
   beforeAll(() => {
+    // Official full-corpus qualification is a CI-runner / Execution Server stage only.
+    assertFhvOfficialFullCorpusExecutionSurface();
     const metrics = readFhvOfficialScaleMetrics(harness.artifactRoot);
     if (!metrics) {
       throw new Error(
@@ -48,6 +52,10 @@ describe("FHV official-scale full corpus (Phase 13 blocking)", () => {
     }
     expect(existsSync(harness.datasetRoot)).toBe(true);
   }, 600_000);
+
+  afterAll(() => {
+    teardownFhvOfficialScaleHarnessContext(harness);
+  });
 
   it("documents full corpus completion constants", () => {
     expect(TARGET_CYCLE_COUNT).toBe(4509);

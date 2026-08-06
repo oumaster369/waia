@@ -1,20 +1,35 @@
-import { beforeAll, describe, expect, it } from "vitest";
-
-import { mkdtempSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import { FhvOfficialDatasetReader } from "@/lib/trader/market-data/fhv-official-dataset-reader";
-import { buildFhvOfficialV2ScaleDataset } from "@/tests/helpers/fhv-official-path-test-fixtures";
+import {
+  buildFhvOfficialV2ScaleDataset,
+  FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
+} from "@/tests/helpers/fhv-official-path-test-fixtures";
+import {
+  acquireFhvManagedDatasetRoot,
+  releaseFhvManagedDatasetRoot,
+} from "@/tests/helpers/fhv-temp-root-registry";
 
 describe("FHV cursor restore (Phase 8)", () => {
   let v2DatasetRoot = "";
 
   beforeAll(() => {
-    v2DatasetRoot = mkdtempSync(join(tmpdir(), "fhv-cursor-restore-v2-"));
-    buildFhvOfficialV2ScaleDataset(v2DatasetRoot);
+    v2DatasetRoot = acquireFhvManagedDatasetRoot({
+      prefix: "fhv-cursor-restore-v2-",
+      build: (root) => {
+        buildFhvOfficialV2ScaleDataset(root);
+      },
+      releaseSha: FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
+    }).datasetRoot;
   }, 600_000);
+
+  afterAll(() => {
+    if (v2DatasetRoot) {
+      releaseFhvManagedDatasetRoot(v2DatasetRoot, "PASS");
+      v2DatasetRoot = "";
+    }
+  });
 
   it("FHV_CURSOR_RESTORE_ROLLING_WINDOW_PASS: restoreCursor rebuilds rollingWindow from checkpoint", () => {
     const reader = new FhvOfficialDatasetReader({

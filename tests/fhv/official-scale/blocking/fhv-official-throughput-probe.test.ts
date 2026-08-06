@@ -4,7 +4,7 @@
 
 import { existsSync } from "node:fs";
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { executeFhvFullHistoricalLaunch } from "@/lib/trader/observability/fhv-full-historical-launch";
 
@@ -22,6 +22,7 @@ import {
   resolveFhvOfficialScaleCheckpointBytes,
   resolveWp17OpenCount,
   setupFhvOfficialScaleLaunchPaths,
+  teardownFhvOfficialScaleHarnessContext,
   toFhvOfficialScaleLaunchInput,
   writeFhvOfficialScaleMetrics,
 } from "./fhv-official-scale-harness";
@@ -40,6 +41,10 @@ describe("FHV official-scale throughput probe (Phase 10 blocking)", () => {
     expect(existsSync(harness.datasetRoot)).toBe(true);
     expect(existsSync(harness.manifestPath)).toBe(true);
   }, 600_000);
+
+  afterAll(() => {
+    teardownFhvOfficialScaleHarnessContext(harness);
+  });
 
   it("documents official-scale throughput constants", () => {
     expect(CHECKPOINT_EVERY_CYCLES).toBe(3997);

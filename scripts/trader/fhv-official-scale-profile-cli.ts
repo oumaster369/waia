@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 import {
   buildFhvOfficialScaleHarnessContext,
+  teardownFhvOfficialScaleHarnessContext,
   executeFhvOfficialScaleProfileRun,
   loadProfileRunMetrics,
   resetProfileRunRoot,
@@ -58,6 +59,51 @@ async function main(): Promise<void> {
 
   if (!finalizeOnly) {
     const harness = buildFhvOfficialScaleHarnessContext();
+    try {
+      await runProfileSchedule({
+        harness,
+        profileRoot,
+        profilingHead,
+        fromLabel,
+        onlyLabel,
+        reset,
+      });
+    } finally {
+      teardownFhvOfficialScaleHarnessContext(harness);
+    }
+  } else {
+    console.log(
+      "[fhv-profile] FINALIZE-ONLY: loading existing twenty-run metrics (no re-execution)",
+    );
+  }
+
+  // Reload full set in schedule order for report.
+  const allMetrics = FHV_OFFICIAL_SCALE_PROFILE_SCHEDULE.map((entry) =>
+    loadProfileRunMetrics(profileRoot, entry.runLabel),
+  );
+
+  const terminal = "PR452_OFFICIAL_SCALE_PROFILE_COMPLETE_AWAITING_HUMAN_ARCHITECTURE_DECISION";
+  writeHotspotRegisterAndSummary({
+    profileRoot,
+    profilingHead,
+    allMetrics,
+    terminalClassification: terminal,
+  });
+  console.log(`[fhv-profile] ${terminal}`);
+  console.log(`[fhv-profile] wrote ${join(profileRoot, "hotspot-register.v1.json")}`);
+  console.log(`[fhv-profile] wrote ${join(profileRoot, "profile-summary.v1.json")}`);
+}
+
+async function runProfileSchedule(input: {
+  harness: ReturnType<typeof buildFhvOfficialScaleHarnessContext>;
+  profileRoot: string;
+  profilingHead: string;
+  fromLabel: FhvOfficialScaleProfileRunLabel | null;
+  onlyLabel: FhvOfficialScaleProfileRunLabel | null;
+  reset: boolean;
+}): Promise<void> {
+  const { harness, profileRoot, profilingHead, fromLabel, onlyLabel, reset } = input;
+  {
     let schedule = [...FHV_OFFICIAL_SCALE_PROFILE_SCHEDULE];
     if (onlyLabel) {
       schedule = schedule.filter((entry) => entry.runLabel === onlyLabel);
@@ -112,27 +158,7 @@ async function main(): Promise<void> {
         )}\n`,
       );
     }
-  } else {
-    console.log(
-      "[fhv-profile] FINALIZE-ONLY: loading existing twenty-run metrics (no re-execution)",
-    );
   }
-
-  // Reload full set in schedule order for report.
-  const allMetrics = FHV_OFFICIAL_SCALE_PROFILE_SCHEDULE.map((entry) =>
-    loadProfileRunMetrics(profileRoot, entry.runLabel),
-  );
-
-  const terminal = "PR452_OFFICIAL_SCALE_PROFILE_COMPLETE_AWAITING_HUMAN_ARCHITECTURE_DECISION";
-  writeHotspotRegisterAndSummary({
-    profileRoot,
-    profilingHead,
-    allMetrics,
-    terminalClassification: terminal,
-  });
-  console.log(`[fhv-profile] ${terminal}`);
-  console.log(`[fhv-profile] wrote ${join(profileRoot, "hotspot-register.v1.json")}`);
-  console.log(`[fhv-profile] wrote ${join(profileRoot, "profile-summary.v1.json")}`);
 }
 
 main().catch((error: unknown) => {

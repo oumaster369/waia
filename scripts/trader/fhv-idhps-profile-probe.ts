@@ -9,6 +9,7 @@ import {
   buildFhvOfficialScaleHarnessContext,
   resolveBarsProcessed,
   setupFhvOfficialScaleLaunchPaths,
+  teardownFhvOfficialScaleHarnessContext,
   toFhvOfficialScaleLaunchInput,
 } from "@/tests/fhv/official-scale/blocking/fhv-official-scale-harness";
 
@@ -57,6 +58,7 @@ async function main(): Promise<void> {
     );
   } finally {
     clearFhvSyntheticProfilingHooks();
+    teardownFhvOfficialScaleHarnessContext(harness);
   }
 }
 
