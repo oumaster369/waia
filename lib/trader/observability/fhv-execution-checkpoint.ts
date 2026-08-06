@@ -23,6 +23,7 @@ import {
   writeIdhpsCompositeMirrorForCheckpoint,
 } from "@/lib/trader/execution/idhps-session-registry";
 import { pruneFhvCheckpointBundlesToTwoNewest } from "@/lib/trader/observability/fhv-checkpoint-retention";
+import { copyAndDigestSync } from "@/lib/trader/observability/fhv-checkpoint-cost-model";
 import {
   collectFhvSealCandidates,
   collectFhvSealedEconomicRows,
@@ -278,7 +279,11 @@ function sha256FileSync(filePath: string): string {
  * Snapshot into an exclusive temp file before publish so the durable checkpoint copy never
  * reads the live SQLite path while the engine still holds it open (CI ARM probe sensitivity).
  */
-function captureSessionDatabaseBackup(input: { skipSessionBackup?: boolean }): {
+function captureSessionDatabaseBackup(input: {
+  skipSessionBackup?: boolean;
+  /** Staging directory on the checkpoint filesystem so publish can move instead of re-copy. */
+  stagingDir?: string;
+}): {
   sessionFile: Buffer | { copyFromPath: string };
   sessionDatabaseDigest: string;
   cleanupTempPath?: string;
@@ -294,16 +299,21 @@ function captureSessionDatabaseBackup(input: { skipSessionBackup?: boolean }): {
   const sqlite = getRawSqliteDatabase();
   // Single-writer FHV path: checkpoint then copy/clone is a consistent snapshot.
   sqlite.pragma("wal_checkpoint(TRUNCATE)");
-  const tempBackupPath = join(tmpdir(), `fhv-session-backup-${process.pid}-${Date.now()}.sqlite`);
-  let ficloneSucceeded = false;
-  try {
-    copyFileSync(sqlite.name, tempBackupPath, fsConstants.COPYFILE_FICLONE);
-    ficloneSucceeded = true;
-  } catch {
-    // ext4 has no reflink support: this fallback pays a full byte copy.
-    copyFileSync(sqlite.name, tempBackupPath);
-  }
-  const sessionDatabaseDigest = sha256FileSync(tempBackupPath);
+  // Stage on the checkpoint filesystem when possible: publish then moves the file instead of
+  // paying a second full copy. Falls back to TMPDIR when no staging directory is supplied.
+  const stagingDir = input.stagingDir ?? tmpdir();
+  mkdirSync(stagingDir, { recursive: true });
+  const tempBackupPath = join(
+    stagingDir,
+    `.fhv-session-backup-${process.pid}-${Date.now()}.sqlite`,
+  );
+  // Single pass: read the live database once, writing the staged snapshot and folding each chunk
+  // into the digest. Cloning and then re-reading the snapshot to hash it paid an extra full read
+  // every checkpoint, and on a filesystem without reflink support it paid read + write + read.
+  const { digest: sessionDatabaseDigest, ficloneSucceeded } = copyAndDigestSync(
+    sqlite.name,
+    tempBackupPath,
+  );
   let checkpointSessionBytes: number | null = null;
   try {
     checkpointSessionBytes = statSync(tempBackupPath).size;
@@ -461,6 +471,7 @@ export async function commitFhvExecutionEpoch(input: {
 
   const sessionBackup = captureSessionDatabaseBackup({
     skipSessionBackup: input.skipSessionBackup,
+    stagingDir: join(input.runDir, "checkpoints"),
   });
   const { sessionFile, sessionDatabaseDigest } = sessionBackup;
 
