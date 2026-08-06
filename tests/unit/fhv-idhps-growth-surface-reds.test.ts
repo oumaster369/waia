@@ -340,7 +340,14 @@ describe("H-ARCH-1 IDHPS growth-surface RED→GREEN GS-01..14", () => {
     db.close();
   });
 
-  it("GS13_checkpoint_backup_duration_metric_red", () => {
+  /**
+   * Documentation lock only — this asserts the fixture literal and that the metric is wired,
+   * NOT that any run met the budget. Runtime enforcement lives in the checkpoint cost-model gate
+   * (`tests/fhv/official-scale/blocking/fhv-checkpoint-cost-model.test.ts`). Treating this as
+   * enforcement let a 19x breach ship: 7,647 ms against the 400 ms budget at epoch 414 of
+   * PR452 run 31011816726.
+   */
+  it("GS13_checkpoint_backup_duration_metric_is_instrumented_not_enforced_here", () => {
     const fixture = readFixture("gs13-checkpoint-metric.json");
     expect(fixture.maxCheckpointBackupDurationMsPer10k).toBe(400);
     const source = readFileSync(
@@ -349,6 +356,13 @@ describe("H-ARCH-1 IDHPS growth-surface RED→GREEN GS-01..14", () => {
     );
     expect(source).toContain("recordIdhpsCheckpointMetrics");
     expect(source).toContain("checkpointBackupDurationMs");
+    // The real budget must be enforced against measured runtime somewhere else.
+    const gate = readFileSync(
+      join(process.cwd(), "lib/trader/observability/fhv-checkpoint-cost-model.ts"),
+      "utf8",
+    );
+    expect(gate).toContain("FHV_CHECKPOINT_BUDGET_MS_PER_10K = 400");
+    expect(gate).toContain("measureFhvCheckpointSnapshotCost");
   });
 
   it("GS14_wal_bytes_metric_red", () => {
