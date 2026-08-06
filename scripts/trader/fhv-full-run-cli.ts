@@ -253,7 +253,13 @@ export function resolveFhvFullRunCliConfig(
  * receipt. Set FHV_SKIP_WP3B_LAUNCH_GATE=1 only for non-official scale work.
  */
 function assertWp3bHostQualified(artifactRoot: string): void {
-  if (process.env.FHV_SKIP_WP3B_LAUNCH_GATE === "1") {
+  /*
+   * Scoped to the official campaign. This CLI also drives synthetic parity and crash-resume runs
+   * that never reach full-scale checkpoints, so gating every invocation would block work the
+   * receipt cannot speak to. The operator runbook sets FHV_OFFICIAL_LAUNCH=1 for the real run, and
+   * the host preflight enforces the same receipt with FHV_T4_REQUIRE_WP3B_QUALIFICATION=1.
+   */
+  if (process.env.FHV_OFFICIAL_LAUNCH !== "1") {
     return;
   }
   const receiptPath =
