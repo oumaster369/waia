@@ -2,7 +2,7 @@
  * DEE-436 — Full Historical Validation launch CLI (`pnpm trader:fhv:run`).
  */
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -245,42 +245,8 @@ export function resolveFhvFullRunCliConfig(
   };
 }
 
-/**
- * WP-3B fail-closed launch gate (ADR-0025 AD-6a).
- *
- * The 1-GiB / 400 ms checkpoint contract is host-class dependent, so no pull-request runner can
- * prove it. The official run therefore refuses to start unless this host produced a qualifying
- * receipt. Set FHV_SKIP_WP3B_LAUNCH_GATE=1 only for non-official scale work.
- */
-function assertWp3bHostQualified(artifactRoot: string): void {
-  /*
-   * Scoped to the official campaign. This CLI also drives synthetic parity and crash-resume runs
-   * that never reach full-scale checkpoints, so gating every invocation would block work the
-   * receipt cannot speak to. The operator runbook sets FHV_OFFICIAL_LAUNCH=1 for the real run, and
-   * the host preflight enforces the same receipt with FHV_T4_REQUIRE_WP3B_QUALIFICATION=1.
-   */
-  if (process.env.FHV_OFFICIAL_LAUNCH !== "1") {
-    return;
-  }
-  const receiptPath =
-    process.env.FHV_WP3B_HOST_RECEIPT_PATH?.trim() ||
-    join(artifactRoot, "fhv-wp3b-host-qualification.v1.json");
-  if (!existsSync(receiptPath)) {
-    throw new Error(
-      `FHV_WP3B_HOST_NOT_QUALIFIED: receipt missing at ${receiptPath}; run pnpm trader:fhv:wp3b-host-qualification`,
-    );
-  }
-  const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as { classification?: string };
-  if (receipt.classification !== "EXECUTION_SERVER_WP3B_HOST_QUALIFIED") {
-    throw new Error(
-      `FHV_WP3B_HOST_NOT_QUALIFIED: receipt classification=${receipt.classification ?? "missing"} at ${receiptPath}`,
-    );
-  }
-}
-
 async function main(): Promise<void> {
   const { resume, ...config } = resolveFhvFullRunCliConfig();
-  assertWp3bHostQualified(config.artifactRoot);
   mkdirSync(join(config.artifactRoot, "RI-P7", "fhv-full-historical"), { recursive: true });
   const result = resume
     ? await resumeFhvFullHistoricalLaunch(config)

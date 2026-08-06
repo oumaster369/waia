@@ -219,10 +219,12 @@ if [[ "$FREE_ARTIFACT_KB" -lt "$REQUIRED_KB" ]]; then
   fail "70/30 storage policy: free ${FREE_ARTIFACT_KB} KiB < required ${REQUIRED_KB} KiB (peak ${FHV_T4_PROJECTED_PEAK_KB} + 30% reserve ${RESERVE_KB})"
 fi
 
-# WP-3B target-host qualification is fail-closed for the official full-corpus launch, where the
-# 1-GiB / 400 ms checkpoint contract must hold. It is opt-in here because this preflight also
-# bootstraps PRE_AUTH and rehearsal, which never run a full-scale checkpoint and therefore have
-# nothing for the receipt to qualify. The official launch path sets the flag.
+# Redundant early warning only. The authoritative WP-3B gate lives in the launch path, which
+# derives from validated configuration (see fhv-launch-classification.ts) and cannot be disabled by
+# an environment variable. Checking here as well lets an operator discover a missing receipt before
+# staging a campaign, but leaving this flag unset can never weaken the real gate. It stays opt-in
+# because this preflight also bootstraps PRE_AUTH and rehearsal, which never run a full-scale
+# checkpoint and so have nothing for the receipt to qualify.
 FHV_WP3B_RECEIPT="${FHV_WP3B_RECEIPT:-$ARTIFACT_ROOT/fhv-wp3b-host-qualification.v1.json}"
 if [[ "${FHV_T4_REQUIRE_WP3B_QUALIFICATION:-0}" == "1" ]]; then
   if [[ ! -f "$FHV_WP3B_RECEIPT" ]]; then

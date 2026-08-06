@@ -64,7 +64,12 @@ describe("FHV official-scale process crash-resume parity (Phase 11–12 blocking
     const child = await runFhvOfficialScaleCli(pausePaths, {
       maxCycles: CHECKPOINT_EVERY_CYCLES,
     });
-    expect(child.exitCode).toBe(0);
+    // Report the child's own output on failure; a bare `expected 1 to be 0` hides the cause.
+    expect(
+      child.exitCode,
+      `pause child exited ${String(child.exitCode)} signal=${String(child.signal)}\n` +
+        `--- stdout ---\n${child.stdout}\n--- stderr ---\n${child.stderr}`,
+    ).toBe(0);
     expect(child.stdout).toContain("FHV_SYNTHETIC_PROCESS_PARITY_PAUSED");
   }, 1_800_000);
 
@@ -112,6 +117,10 @@ describe("FHV official-scale process crash-resume parity (Phase 11–12 blocking
       runDir: crashPaths.runDir,
       lastCommittedCycle: LAST_COMMITTED_CYCLE_INDEX,
       timeoutMs: 1_800_000,
+      // Racing the child's exit turns a crashed launch into an immediate, diagnosable failure
+      // instead of a 30-minute wait followed by `expected 1 to be 0`.
+      child: childA,
+      runId: crashRunId,
     });
     expect(checkpoint.lastCommittedCycle).toBe(LAST_COMMITTED_CYCLE_INDEX);
 

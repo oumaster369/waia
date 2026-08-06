@@ -468,30 +468,104 @@ export function spawnFhvOfficialScaleCli(
   return { pid: child.pid ?? -1, promise };
 }
 
+/** Raised when the child process dies before producing the checkpoint the caller is waiting for. */
+export class FhvOfficialScaleChildExitedError extends Error {
+  constructor(
+    readonly detail: Readonly<{
+      runId: string;
+      expectedCycle: number;
+      exitCode: number | null;
+      signal: NodeJS.Signals | null;
+      stdout: string;
+      stderr: string;
+      elapsedMs: number;
+    }>,
+  ) {
+    super(
+      `[fhv-official-scale] child exited before checkpoint: runId=${detail.runId} ` +
+        `expectedCycle=${detail.expectedCycle} exitCode=${String(detail.exitCode)} ` +
+        `signal=${String(detail.signal)} elapsedMs=${detail.elapsedMs}\n` +
+        `--- stdout ---\n${detail.stdout}\n--- stderr ---\n${detail.stderr}`,
+    );
+    this.name = "FhvOfficialScaleChildExitedError";
+  }
+}
+
+/**
+ * Wait for a checkpoint, racing the child's own termination.
+ *
+ * Polling the filesystem alone cannot tell "still working" from "already dead", so a child that
+ * crashed in its first second still burned the full 1,800,000 ms timeout and then reported only
+ * `expected 1 to be 0`. Racing termination against checkpoint readiness surfaces the real exit
+ * code, signal and output within the poll interval instead.
+ */
 export async function waitForFhvOfficialScaleCheckpoint(input: {
   runDir: string;
   lastCommittedCycle?: number;
   timeoutMs: number;
+  /** When supplied, early child termination fails immediately instead of waiting for the timeout. */
+  child?: { promise: Promise<FhvOfficialScaleCliResult> };
+  runId?: string;
+  /** Test seam so the timeout path can be exercised without a 30-minute wait. */
+  pollIntervalMs?: number;
 }): Promise<{ lastCommittedCycle: number; lastCommittedEpoch: number }> {
   const targetCycle = input.lastCommittedCycle ?? LAST_COMMITTED_CYCLE_INDEX;
-  const deadline = Date.now() + input.timeoutMs;
-  while (Date.now() < deadline) {
-    if (existsSync(join(input.runDir, "fhv-launch-journal.v1.json"))) {
-      const journal = readFhvLaunchJournal(input.runDir);
-      if (journal.lastCommittedCycle >= targetCycle) {
-        const checkpointDir = resolveFhvEpochCheckpointDir(
-          input.runDir,
-          journal.lastCommittedEpoch,
-        );
-        if (existsSync(join(checkpointDir, FHV_CHECKPOINT_READY_MARKER))) {
-          return {
-            lastCommittedCycle: journal.lastCommittedCycle,
-            lastCommittedEpoch: journal.lastCommittedEpoch,
-          };
-        }
-      }
+  const startedAt = Date.now();
+  const deadline = startedAt + input.timeoutMs;
+  const pollIntervalMs = input.pollIntervalMs ?? 500;
+
+  let childResult: FhvOfficialScaleCliResult | undefined;
+  // Attaching once avoids a listener leak across poll iterations. The child promise resolves on
+  // close and never rejects, so this cannot produce an unhandled rejection.
+  void input.child?.promise.then((result) => {
+    childResult = result;
+  });
+
+  const probeCheckpoint = (): { lastCommittedCycle: number; lastCommittedEpoch: number } | null => {
+    if (!existsSync(join(input.runDir, "fhv-launch-journal.v1.json"))) {
+      return null;
     }
-    await sleep(500);
+    const journal = readFhvLaunchJournal(input.runDir);
+    if (journal.lastCommittedCycle < targetCycle) {
+      return null;
+    }
+    const checkpointDir = resolveFhvEpochCheckpointDir(input.runDir, journal.lastCommittedEpoch);
+    if (!existsSync(join(checkpointDir, FHV_CHECKPOINT_READY_MARKER))) {
+      return null;
+    }
+    return {
+      lastCommittedCycle: journal.lastCommittedCycle,
+      lastCommittedEpoch: journal.lastCommittedEpoch,
+    };
+  };
+
+  while (Date.now() < deadline) {
+    const observed = probeCheckpoint();
+    if (observed) {
+      return observed;
+    }
+
+    const exited: FhvOfficialScaleCliResult | undefined = childResult;
+    if (exited) {
+      /*
+       * A bounded child legitimately checkpoints and then exits PAUSED, and it can do both between
+       * two polls. Re-probe once so that ordinary completion is not misreported as an early death.
+       */
+      const afterExit = probeCheckpoint();
+      if (afterExit) {
+        return afterExit;
+      }
+      throw new FhvOfficialScaleChildExitedError({
+        runId: input.runId ?? "unknown",
+        expectedCycle: targetCycle,
+        exitCode: exited.exitCode,
+        signal: exited.signal,
+        stdout: exited.stdout,
+        stderr: exited.stderr,
+        elapsedMs: Date.now() - startedAt,
+      });
+    }
+    await sleep(pollIntervalMs);
   }
   throw new Error(
     `[fhv-official-scale] timed out waiting for checkpoint lastCommittedCycle>=${targetCycle}`,

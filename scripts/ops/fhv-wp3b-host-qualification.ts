@@ -204,6 +204,9 @@ function main(): void {
   const body = {
     schemaVersion: RECEIPT_SCHEMA,
     capturedAtUtc: new Date().toISOString(),
+    // Binds the receipt to the release it qualified, so a launch cannot consume evidence produced
+    // by different code.
+    releaseSha: process.env.FHV_RELEASE_SHA?.trim() || shell("git rev-parse HEAD"),
     host: {
       hostname: hostname(),
       platform: platform(),

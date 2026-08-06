@@ -306,6 +306,22 @@ the 400 ms budget, the 250 ms target, SHA-256 identity, checkpoint contents, dur
 crash safety, economic or semantic output, 877 cps, 7,200 s, `MAX_BATCH_CYCLES=32`, or the
 6,480-second pre-launch projection requirement.
 
+**The launch gate is derived from configuration, never from the environment.** An intermediate
+revision gated the receipt on `FHV_OFFICIAL_LAUNCH === "1"`, which inverted the safety property: an
+operator who simply forgot the variable would silently bypass host qualification on the real
+campaign. The gate now lives inside the launch path, immediately after the dataset qualification
+receipt is validated, and `requiresWp3bTargetHostQualification` classifies from validated facts —
+`boundedFixture`, dataset qualification mode, execution purpose, and above all whether `maxCycles`
+is absent. An unbounded official run may still carry a synthetic scale authority to bind
+`targetCycleCount`, so authority presence proves nothing; only an explicit cycle cap makes a run
+bounded. Bounded fixtures, synthetic probes, process-parity runs and PRE_AUTH bootstrap therefore
+proceed without a receipt they could never produce, while `FHV_OFFICIAL_LAUNCH`,
+`FHV_SKIP_WP3B_LAUNCH_GATE`, `NODE_ENV`, `CI` and `GITHUB_ACTIONS` cannot weaken the official path.
+The receipt itself is validated on every axis its writer binds — schema, self-digest, release
+identity, proven native clone, 1-GiB depth, every measured iteration within 400 ms, durability
+inside the timer, and negative-test validity — so a receipt that claims QUALIFIED while
+contradicting its own evidence fails closed.
+
 **The Execution Server has not been qualified.** It has not been contacted, and its filesystem
 remains unknown. Note that with all mandatory durability inside the timer the reference workstation
 measures 394.5–400.5 ms — at the contract boundary, not comfortably inside it — so a host slower

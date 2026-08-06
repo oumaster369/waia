@@ -74,6 +74,8 @@ import {
   HTR_FHV_RUN_CONTRACT_V0,
 } from "@/lib/trader/readiness/htr-fhv-run-contract-v0";
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
+import { requiresWp3bTargetHostQualification } from "@/lib/trader/observability/fhv-launch-classification";
+import { assertFhvWp3bHostQualified } from "@/lib/trader/observability/fhv-wp3b-receipt";
 
 export const FHV_FULL_LAUNCH_RECEIPT_SCHEMA_VERSION = "fhv-full-launch-receipt/v1" as const;
 export const FHV_FULL_LAUNCH_MODE = "FULL_HISTORICAL_VALIDATION" as const;
@@ -614,6 +616,28 @@ export function validateFhvFullHistoricalLaunchInput(
     maxCycles: input.maxCycles,
     syntheticScaleAuthorityPath: input.syntheticScaleAuthorityPath,
   });
+
+  /*
+   * WP-3B target-host gate (ADR-0025 AD-6a). Only the genuine official unbounded campaign reaches
+   * the 1-GiB checkpoint depth the ≤ 400 ms contract governs, so only it requires the host
+   * qualification receipt. The decision is derived from this validated configuration — never from
+   * the environment, which would let a forgotten variable silently disable the gate.
+   */
+  if (
+    requiresWp3bTargetHostQualification({
+      boundedFixture: input.boundedFixture,
+      maxCycles: input.maxCycles,
+      executionPurpose: input.executionPurpose,
+      qualificationMode: qualificationReceipt.qualificationMode,
+    })
+  ) {
+    assertFhvWp3bHostQualified({
+      receiptPath:
+        process.env.FHV_WP3B_HOST_RECEIPT_PATH?.trim() ||
+        join(input.artifactRoot, "fhv-wp3b-host-qualification.v1.json"),
+      expectedReleaseSha: input.releaseSha,
+    });
+  }
 
   const includeHoldout =
     !input.boundedFixture && input.executionPurpose !== FHV_EXECUTION_PURPOSE_CONTROL_REPLAY;
