@@ -121,13 +121,11 @@ describe("FHV checkpoint cost model", () => {
     expect(model.projectedDurationMsAtQualificationDepth).toBeGreaterThan(0);
 
     /*
-     * WP-3B blocking gate. The budget applies to the realistic worst supported bounded
-     * envelope: with bounded hot state the checkpointed database is projected to reach ~344 MB
-     * across the full corpus, so 512 MB is the conservative ceiling. The 1 GB figure is
-     * retained as a durability stress and reported, not gated, because the architecture no
-     * longer reaches that depth.
+     * WP-3B blocking gate at the canonical 1-GB-equivalent qualification depth. The depth must
+     * not be reduced to make the gate pass; the bounded-envelope figure is reported for context
+     * only.
      */
-    expect(model.projectedDurationMsAtSupportedEnvelope).toBeLessThanOrEqual(
+    expect(model.projectedDurationMsAtQualificationDepth).toBeLessThanOrEqual(
       FHV_CHECKPOINT_BUDGET_MS_PER_10K,
     );
     // Cost must not grow faster than the data it copies.
@@ -161,7 +159,7 @@ describe("FHV checkpoint cost model", () => {
     ]);
     expect(regressed.withinBudget).toBe(false);
     expect(regressed.classification).toBe("FHV_CHECKPOINT_COST_BUDGET_EXCEEDED");
-    expect(regressed.projectedDurationMsAtSupportedEnvelope).toBeGreaterThan(
+    expect(regressed.projectedDurationMsAtQualificationDepth).toBeGreaterThan(
       FHV_CHECKPOINT_BUDGET_MS_PER_10K,
     );
   });

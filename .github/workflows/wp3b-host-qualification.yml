@@ -1,0 +1,56 @@
+name: wp3b host qualification
+
+# Temporary, evidence-only probe. Scoped to one exact branch so it cannot run on dev, main,
+# any pull request, or the PR branch. Never merge this workflow into a canonical branch.
+on:
+  push:
+    branches:
+      - "ci-probe/pr452-wp3b-dual-macos-20260806T114035Z"
+
+jobs:
+  qualify:
+    name: wp3b qualify ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    # Both candidates must report; a failure on one must not cancel the other's evidence.
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+
+      - name: Native clone capability and 1-GiB canonical qualification
+        env:
+          WP3B_RUNNER_LABEL: ${{ matrix.runner }}
+        run: pnpm trader:fhv:wp3b-host-qualification
+
+      - name: Clone/fallback equivalence, digest equality and mutation isolation
+        if: always()
+        run: pnpm vitest run tests/unit/fhv-native-clone-equivalence.test.ts
+
+      - name: Checkpoint durability, crash and resume parity
+        if: always()
+        env:
+          DATABASE_URL: "file:./.data/wp3b-probe.sqlite"
+        run: |
+          pnpm vitest run \
+            tests/unit/fhv-checkpoint-bundle-red.test.ts \
+            tests/unit/fhv-epoch-commit-durability-red.test.ts \
+            tests/unit/fhv-sqlite-online-backup-red.test.ts \
+            tests/unit/fhv-final-partial-epoch-red.test.ts \
+            tests/unit/fhv-terminal-reconcile-red.test.ts \
+            tests/unit/fhv-seal-crash-recovery.test.ts
+
+      - name: Blocking cost model gate and artificial-delay negative test
+        if: always()
+        env:
+          FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+        run: pnpm vitest run --config vitest.fhv-official-scale.config.ts tests/fhv/official-scale/blocking/fhv-checkpoint-cost-model.test.ts

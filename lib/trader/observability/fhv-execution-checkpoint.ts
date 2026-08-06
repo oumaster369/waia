@@ -24,6 +24,7 @@ import {
 } from "@/lib/trader/execution/idhps-session-registry";
 import { pruneFhvCheckpointBundlesToTwoNewest } from "@/lib/trader/observability/fhv-checkpoint-retention";
 import { copyAndDigestSync } from "@/lib/trader/observability/fhv-checkpoint-cost-model";
+import { tryNativeCloneFile } from "@/lib/trader/observability/fhv-native-clone";
 import {
   collectFhvSealCandidates,
   collectFhvSealedEconomicRows,
@@ -307,13 +308,20 @@ function captureSessionDatabaseBackup(input: {
     stagingDir,
     `.fhv-session-backup-${process.pid}-${Date.now()}.sqlite`,
   );
-  // Single pass: read the live database once, writing the staged snapshot and folding each chunk
-  // into the digest. Cloning and then re-reading the snapshot to hash it paid an extra full read
-  // every checkpoint, and on a filesystem without reflink support it paid read + write + read.
-  const { digest: sessionDatabaseDigest, ficloneSucceeded } = copyAndDigestSync(
-    sqlite.name,
-    tempBackupPath,
-  );
+  /*
+   * The WAL truncate above leaves the main database file a transactionally consistent
+   * point-in-time snapshot, so clone and copy observe identical bytes. Clone first when the host
+   * proves capability — that reduces size-proportional blocking work to the mandatory SHA-256
+   * identity pass. Otherwise fall back to the fused single-pass copy+digest.
+   *
+   * Clone success is proven by the strict platform mechanism, never inferred from a
+   * fallback-capable API returning success.
+   */
+  const clone = tryNativeCloneFile(sqlite.name, tempBackupPath);
+  const ficloneSucceeded = clone.status === "NATIVE_CLONE_SUCCEEDED";
+  const sessionDatabaseDigest = ficloneSucceeded
+    ? sha256FileSync(tempBackupPath)
+    : copyAndDigestSync(sqlite.name, tempBackupPath).digest;
   let checkpointSessionBytes: number | null = null;
   try {
     checkpointSessionBytes = statSync(tempBackupPath).size;

@@ -18,6 +18,8 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import { tryNativeCloneFile } from "@/lib/trader/observability/fhv-native-clone";
+
 /**
  * FHV checkpoint cost model (WP-3A instrumentation, WP-3B gate).
  *
@@ -41,16 +43,18 @@ export const FHV_CHECKPOINT_BUDGET_MS_PER_10K = 400;
 /** Human-approved engineering target at the same depth (non-blocking). */
 export const FHV_CHECKPOINT_TARGET_MS_PER_10K = 250;
 
-/** Plan-required durability stress depth. Reported, not the blocking envelope. */
+/**
+ * Canonical qualification depth. The plan budget is "≤ 400 ms per 10,000-cycle checkpoint at
+ * deep-state / 1-GB-equivalent qualification depth" — this is the blocking depth and must not be
+ * reduced to make the gate pass.
+ */
 export const FHV_CHECKPOINT_QUALIFICATION_DEPTH_BYTES = 1_073_741_824;
 
 /**
- * Realistic worst supported bounded envelope.
+ * Projected maximum bounded envelope, reported alongside the canonical depth for context only.
  *
  * With bounded hot state the checkpointed database is projected to reach ~344 MB across the full
- * 6,312,960-bar corpus (54.26 B/cycle measured on HEAD 29447a9). 512 MB is a conservative ceiling
- * above that projection. The blocking budget applies here; 1 GB is retained as a durability
- * stress because the architecture no longer reaches it.
+ * corpus (54.26 B/cycle measured on HEAD 29447a9). This is NOT the blocking envelope.
  */
 export const FHV_CHECKPOINT_SUPPORTED_ENVELOPE_BYTES = 536_870_912;
 
@@ -168,13 +172,27 @@ export function measureFhvCheckpointSnapshotCost(input: {
   const bundlePath = join(input.workDir, "session.sqlite");
   const bundleTempPath = `${bundlePath}.tmp-${process.pid}`;
 
-  // Single pass: read the source once, write the snapshot and hash in flight. The previous
-  // shape cloned the file and then re-read the whole snapshot to digest it, paying an extra
-  // full read per checkpoint.
+  /*
+   * Clone first when the host proves it can. A copy-on-write clone is O(1), leaving the mandatory
+   * SHA-256 identity pass as the only size-proportional blocking work. When the filesystem cannot
+   * reflink, fall back to the fused single-pass copy+digest, which reads the source once instead
+   * of copying and then re-reading to hash.
+   */
   const snapshotStartedAt = performance.now();
-  const { ficloneSucceeded } = copyAndDigestSync(input.sessionPath, tempBackupPath);
+  const clone = tryNativeCloneFile(input.sessionPath, tempBackupPath);
+  const ficloneSucceeded = clone.status === "NATIVE_CLONE_SUCCEEDED";
+  let digestDurationMs = 0;
+  if (!ficloneSucceeded) {
+    copyAndDigestSync(input.sessionPath, tempBackupPath);
+  }
   const snapshotDurationMs = performance.now() - snapshotStartedAt;
-  const digestDurationMs = 0;
+  if (ficloneSucceeded) {
+    // The clone shares extents with the source but is an independent file; the identity digest
+    // must still cover the checkpoint bytes.
+    const digestStartedAt = performance.now();
+    sha256FileStreaming(tempBackupPath);
+    digestDurationMs = performance.now() - digestStartedAt;
+  }
 
   // Publish moves the already-exclusive staged snapshot instead of copying it a second time
   // (see copyFileExclusiveFsync). Durability is unchanged: fsync still precedes the rename.
@@ -258,9 +276,9 @@ export function buildFhvCheckpointCostModel(
     0,
     linear.intercept + linear.slope * (FHV_CHECKPOINT_SUPPORTED_ENVELOPE_BYTES / gigabyte),
   );
-  // The blocking budget applies to the envelope the bounded architecture can actually reach.
-  const withinBudget = projectedSupported <= FHV_CHECKPOINT_BUDGET_MS_PER_10K;
-  const withinTarget = projectedSupported <= FHV_CHECKPOINT_TARGET_MS_PER_10K;
+  // Canonical: the budget applies at 1-GB-equivalent qualification depth.
+  const withinBudget = projected <= FHV_CHECKPOINT_BUDGET_MS_PER_10K;
+  const withinTarget = projected <= FHV_CHECKPOINT_TARGET_MS_PER_10K;
 
   return {
     schemaVersion: FHV_CHECKPOINT_COST_MODEL_SCHEMA,
