@@ -10,6 +10,9 @@
 #     [--kill-pattern <regex>]
 set -euo pipefail
 
+# shellcheck source=scripts/ops/_fhv-artifact-identity-names.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_fhv-artifact-identity-names.sh"
+
 ARTIFACT_ROOT=""
 STAGING_ROOT=""
 PRIMARY_EXIT_CODE=""
@@ -91,7 +94,24 @@ copy_stable_file() {
     cp -p "$src" "$dest" 2>/dev/null || cp "$src" "$dest"
     return 0
   fi
-  echo "$src" >>"$MISSING_LIST"
+  echo "missing_required:$src" >>"$MISSING_LIST"
+  return 1
+}
+
+# Copy the first existing candidate. Only records a gap when every candidate is absent, so a
+# legacy artifact root does not read as missing evidence.
+copy_first_existing() {
+  local dest="$1"
+  shift
+  local src
+  for src in "$@"; do
+    if [[ -f "$src" ]]; then
+      mkdir -p "$(dirname "$dest")"
+      cp -p "$src" "$dest" 2>/dev/null || cp "$src" "$dest"
+      return 0
+    fi
+  done
+  echo "missing_required:$1" >>"$MISSING_LIST"
   return 1
 }
 
@@ -144,7 +164,6 @@ fi
 PROGRESS_SRC="$ARTIFACT_ROOT/fhv-full-historical-progress.v1.json"
 PROGRESS_JSONL_SRC="$ARTIFACT_ROOT/fhv-full-historical-progress.v1.jsonl"
 METRICS_SRC="$ARTIFACT_ROOT/fhv-official-scale-metrics.v1.json"
-IDENTITY_SRC="$ARTIFACT_ROOT/fhv-artifact-identity.v1.json"
 RUN_DIR=""
 # Prefer the canonical full-corpus run directory when present.
 for candidate in \
@@ -180,14 +199,37 @@ if [[ -n "$RUN_DIR" ]]; then
 fi
 
 copy_stable_file "$METRICS_SRC" "$STAGING_ROOT/fhv-official-scale-metrics.v1.json" || true
-copy_stable_file "$IDENTITY_SRC" "$STAGING_ROOT/fhv-artifact-identity.v1.json" || true
 
-# Record identity triad files if present next to metrics.
-for name in FINAL_HEAD EXECUTED_SHA BASE_SHA; do
-  copy_stable_file "$ARTIFACT_ROOT/$name" "$STAGING_ROOT/$name" || true
-done
+# H-ARCH-1 identity binding. Canonical names first, pre-WP-2 names accepted as a fallback so an
+# older artifact root is still self-proving.
+copy_first_existing \
+  "$STAGING_ROOT/$FHV_IDENTITY_MANIFEST_FILE" \
+  "$ARTIFACT_ROOT/$FHV_IDENTITY_MANIFEST_FILE" \
+  "$ARTIFACT_ROOT/$FHV_IDENTITY_LEGACY_MANIFEST_FILE" || true
+copy_first_existing \
+  "$STAGING_ROOT/$FHV_IDENTITY_FINAL_HEAD_FILE" \
+  "$ARTIFACT_ROOT/$FHV_IDENTITY_FINAL_HEAD_FILE" \
+  "$ARTIFACT_ROOT/$FHV_IDENTITY_LEGACY_FINAL_HEAD_FILE" || true
+copy_first_existing \
+  "$STAGING_ROOT/$FHV_IDENTITY_EXECUTED_SHA_FILE" \
+  "$ARTIFACT_ROOT/$FHV_IDENTITY_EXECUTED_SHA_FILE" \
+  "$ARTIFACT_ROOT/$FHV_IDENTITY_LEGACY_EXECUTED_SHA_FILE" || true
+copy_first_existing \
+  "$STAGING_ROOT/$FHV_IDENTITY_BASE_SHA_FILE" \
+  "$ARTIFACT_ROOT/$FHV_IDENTITY_BASE_SHA_FILE" \
+  "$ARTIFACT_ROOT/$FHV_IDENTITY_LEGACY_BASE_SHA_FILE" || true
 
-MISSING_COUNT="$(wc -l <"$MISSING_LIST" | tr -d ' ')"
+# Genuinely absent evidence only. Transient/incomplete/partial entries are recorded separately
+# so the count stays a meaningful fail-closed signal instead of a raw line total.
+MISSING_COUNT="$(grep -c '^missing_required:' "$MISSING_LIST" || true)"
+SKIPPED_COUNT="$(grep -c -E '^(skipped_transient|skipped_incomplete_checkpoint|partial_checkpoint_copy):' "$MISSING_LIST" || true)"
+IDENTITY_BOUND="false"
+if [[ -f "$STAGING_ROOT/$FHV_IDENTITY_FINAL_HEAD_FILE" \
+   && -f "$STAGING_ROOT/$FHV_IDENTITY_EXECUTED_SHA_FILE" \
+   && -f "$STAGING_ROOT/$FHV_IDENTITY_BASE_SHA_FILE" \
+   && -f "$STAGING_ROOT/$FHV_IDENTITY_MANIFEST_FILE" ]]; then
+  IDENTITY_BOUND="true"
+fi
 COMPLETED_CHECKPOINT_COUNT=0
 if [[ -d "$STAGING_ROOT/run/checkpoints" ]]; then
   COMPLETED_CHECKPOINT_COUNT="$(find "$STAGING_ROOT/run/checkpoints" -maxdepth 1 -type d -name 'epoch-*' | wc -l | tr -d ' ')"
@@ -204,6 +246,8 @@ manifest = {
   "primaryExitCode": int("$PRIMARY_EXIT_CODE") if "$PRIMARY_EXIT_CODE".strip() != "" else None,
   "completedCheckpointCount": int("$COMPLETED_CHECKPOINT_COUNT"),
   "missingRequiredEvidenceCount": int("$MISSING_COUNT"),
+  "skippedEvidenceEntryCount": int("$SKIPPED_COUNT"),
+  "identityBound": "$IDENTITY_BOUND" == "true",
   "missingRequiredEvidencePath": "missing-required-evidence.txt",
   "classification": "FHV_FULL_CORPUS_FAILURE_EVIDENCE_STAGED",
   "passUpgraded": False,

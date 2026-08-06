@@ -12,6 +12,9 @@
 # Does not switch CI away from merge-ref execution. Proves parent linkage when possible.
 set -euo pipefail
 
+# shellcheck source=scripts/ops/_fhv-artifact-identity-names.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_fhv-artifact-identity-names.sh"
+
 ARTIFACT_ROOT="${FHV_OFFICIAL_SCALE_ARTIFACT_ROOT:-.artifacts/fhv-official-scale}"
 mkdir -p "${ARTIFACT_ROOT}"
 
@@ -43,9 +46,9 @@ if [[ ! "${EXECUTED_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 
-printf '%s\n' "${FINAL_HEAD}" > "${ARTIFACT_ROOT}/FINAL_HEAD.txt"
-printf '%s\n' "${EXECUTED_SHA}" > "${ARTIFACT_ROOT}/EXECUTED_SHA.txt"
-printf '%s\n' "${BASE_SHA}" > "${ARTIFACT_ROOT}/BASE_SHA.txt"
+printf '%s\n' "${FINAL_HEAD}" > "${ARTIFACT_ROOT}/${FHV_IDENTITY_FINAL_HEAD_FILE}"
+printf '%s\n' "${EXECUTED_SHA}" > "${ARTIFACT_ROOT}/${FHV_IDENTITY_EXECUTED_SHA_FILE}"
+printf '%s\n' "${BASE_SHA}" > "${ARTIFACT_ROOT}/${FHV_IDENTITY_BASE_SHA_FILE}"
 
 PARENT1=""
 PARENT2=""
@@ -73,6 +76,7 @@ if [[ "${EVENT_NAME}" == "pull_request" ]]; then
 fi
 
 export ARTIFACT_ROOT FINAL_HEAD EXECUTED_SHA BASE_SHA EVENT_NAME PARENT_PROOF PARENT1 PARENT2
+export FHV_IDENTITY_MANIFEST_FILE
 node <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
@@ -88,7 +92,7 @@ const payload = {
   parent2: process.env.PARENT2 ?? "",
 };
 fs.writeFileSync(
-  path.join(root, "artifact-identity.v1.json"),
+  path.join(root, process.env.FHV_IDENTITY_MANIFEST_FILE),
   `${JSON.stringify(payload, null, 2)}\n`,
   "utf8",
 );
