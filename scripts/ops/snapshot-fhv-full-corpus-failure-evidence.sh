@@ -145,10 +145,21 @@ copy_checkpoints_stable() {
       if [[ -f "$entry/checkpoint-manifest.v1.json" && -f "$entry/.ready" ]]; then
         mkdir -p "$dest_parent/$name"
         # Copy files only (no nested live mutation). Ignore races with ENOENT.
+        # WP-10: session.sqlite is excluded — two epochs of it were 2.33 GB of a 2.35 GB upload.
+        # Its digest and size preserve identity and diagnosability at a few hundred bytes.
         (
           set +e
           cp -a "$entry"/. "$dest_parent/$name/" 2>/dev/null
+          rm -f "$dest_parent/$name/session.sqlite" "$dest_parent/$name/session.sqlite-wal" \
+            "$dest_parent/$name/session.sqlite-shm"
         ) || echo "partial_checkpoint_copy:$entry" >>"$MISSING_LIST"
+        if [[ -f "$entry/session.sqlite" ]]; then
+          {
+            echo "path=session.sqlite"
+            echo "bytes=$(wc -c <"$entry/session.sqlite" | tr -d ' ')"
+            echo "sha256=$(sha256sum "$entry/session.sqlite" 2>/dev/null | awk '{print $1}')"
+          } >"$dest_parent/$name/session.sqlite.digest.txt" 2>/dev/null || true
+        fi
       else
         echo "skipped_incomplete_checkpoint:$entry" >>"$MISSING_LIST"
       fi
