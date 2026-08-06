@@ -7,6 +7,10 @@ import { readReplayCheckpoint } from "@/lib/trader/backtest/streaming-evidence/r
 import { assertFhvDatasetSealed } from "@/lib/trader/market-data/fhv-dataset-seal";
 import { resolveFhvDatasetManifestV2Path } from "@/lib/trader/market-data/fhv-dataset-manifest-v2";
 import { FHV_OFFICIAL_TOTAL_BARS } from "@/lib/trader/market-data/fhv-official-scale-corpus";
+import {
+  FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S,
+  projectFhvGrowthAwareRuntime,
+} from "@/lib/trader/observability/fhv-growth-law";
 import type { FhvSourceFrontier } from "@/lib/trader/market-data/fhv-source-frontier";
 import {
   FHV_CHECKPOINT_READY_MARKER,
@@ -554,7 +558,28 @@ export function evaluateFhvOfficialScaleTimeFeasibility(input: {
    * Callers must not pass the Phase-10 1000 target here.
    */
   minThroughputCps?: number;
-}): { cps: number; projectedRuntimeS: number; pass: boolean } {
+  /**
+   * Growth-aware inputs (WP-8). Supplying them adds a second projection that models checkpoint
+   * cost rising with database size instead of assuming constant cost per bar. The legacy
+   * projection and the blocking constants are unchanged.
+   */
+  growth?: {
+    checkpointWallTimeMs: number;
+    checkpointCount: number;
+    sessionGrowthBytesPerCycle: number;
+    checkpointInterceptMs: number;
+    checkpointMsPerGigabyte: number;
+    checkpointEveryCycles: number;
+  };
+}): {
+  cps: number;
+  projectedRuntimeS: number;
+  pass: boolean;
+  projectedRuntimeSecondsWithGrowth: number | null;
+  prelaunchPass: boolean | null;
+  prelaunchClassification: string;
+  probeRepresentativenessWarning: string | null;
+} {
   const wallTimeS = Math.max(input.wallTimeMs / 1000, 0.001);
   const cps = input.barsProcessed / wallTimeS;
   const projectedRuntimeS = FHV_OFFICIAL_TOTAL_BARS / Math.max(cps, Number.EPSILON);
@@ -564,7 +589,58 @@ export function evaluateFhvOfficialScaleTimeFeasibility(input: {
     MIN_THROUGHPUT_CPS,
   );
   const pass = cps >= minThroughputCps && projectedRuntimeS <= MAX_PROJECTED_FULL_CORPUS_RUNTIME_S;
-  return { cps, projectedRuntimeS, pass };
+
+  if (!input.growth) {
+    return {
+      cps,
+      projectedRuntimeS,
+      pass,
+      projectedRuntimeSecondsWithGrowth: null,
+      prelaunchPass: null,
+      prelaunchClassification: "FHV_PRELAUNCH_PROJECTION_UNAVAILABLE",
+      probeRepresentativenessWarning:
+        "growth-aware projection unavailable: probe supplied no checkpoint cost series",
+    };
+  }
+
+  /*
+   * `projectedRuntimeS` divides total bars by an average that already contains checkpoint time, so
+   * it assumes cost per bar is constant. It is not: checkpoint cost is Θ(database size) and the
+   * database grows with the run, which is why run 31011816726 over-predicted feasibility by 1.562x.
+   * Model the two terms separately instead.
+   */
+  const hotPathWallTimeS = Math.max(
+    (input.wallTimeMs - input.growth.checkpointWallTimeMs) / 1000,
+    0.001,
+  );
+  const projection = projectFhvGrowthAwareRuntime({
+    hotPathBarsPerSecond: input.barsProcessed / hotPathWallTimeS,
+    sessionGrowthBytesPerCycle: input.growth.sessionGrowthBytesPerCycle,
+    checkpointInterceptMs: input.growth.checkpointInterceptMs,
+    checkpointMsPerGigabyte: input.growth.checkpointMsPerGigabyte,
+    checkpointEveryCycles: input.growth.checkpointEveryCycles,
+  });
+
+  // A segment with fewer than two checkpoints cannot show how checkpoint cost grows, so its
+  // growth term is an extrapolation from a single point.
+  const probeRepresentativenessWarning =
+    input.growth.checkpointCount < 2
+      ? `probe segment contains ${input.growth.checkpointCount} checkpoint(s); growth term is extrapolated from too few points`
+      : null;
+
+  // Distinct from the canonical 7,200 s terminal acceptance: 6,480 s is the pre-launch margin.
+  const prelaunchPass = projection.projectedRuntimeSeconds <= FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S;
+  return {
+    cps,
+    projectedRuntimeS,
+    pass,
+    projectedRuntimeSecondsWithGrowth: projection.projectedRuntimeSeconds,
+    prelaunchPass,
+    prelaunchClassification: prelaunchPass
+      ? "FHV_PRELAUNCH_PROJECTION_WITHIN_6480S"
+      : "FHV_PRELAUNCH_PROJECTION_EXCEEDS_6480S",
+    probeRepresentativenessWarning,
+  };
 }
 
 export function evaluateFhvOfficialScaleDiskFeasibility(input: {
