@@ -203,6 +203,34 @@ if [[ -z "$FREE_KB" || "$FREE_KB" -lt "$FHV_T4_MIN_FREE_KB" ]]; then
   fail "insufficient free disk space (minimum ${FHV_T4_MIN_FREE_KB} KiB required)"
 fi
 
+# WP-10 dynamic 70/30 floor (Human decision APPROVE_PR452_WP10_DYNAMIC_70_30_HOST_FLOOR).
+# The absolute floor above cannot express "will this run still leave the host healthy when it
+# peaks", so the campaign must also fit under 70% final utilization of the filesystem it writes to.
+TOTAL_KB="$(df -Pk "$ARTIFACT_WRITABLE_ROOT" 2>/dev/null | tail -n +2 | awk '{print $2}' | head -1)"
+FREE_ARTIFACT_KB="$(df -Pk "$ARTIFACT_WRITABLE_ROOT" 2>/dev/null | tail -n +2 | awk '{print $4}' | head -1)"
+if [[ -z "$TOTAL_KB" || -z "$FREE_ARTIFACT_KB" ]]; then
+  fail "cannot determine filesystem capacity for 70/30 policy at $ARTIFACT_WRITABLE_ROOT"
+fi
+# Projected additional peak for the official corpus; override per campaign when known.
+FHV_T4_PROJECTED_PEAK_KB="${FHV_T4_PROJECTED_PEAK_KB:-20971520}"
+RESERVE_KB=$(( (TOTAL_KB * 30 + 99) / 100 ))
+REQUIRED_KB=$(( FHV_T4_PROJECTED_PEAK_KB + RESERVE_KB ))
+if [[ "$FREE_ARTIFACT_KB" -lt "$REQUIRED_KB" ]]; then
+  fail "70/30 storage policy: free ${FREE_ARTIFACT_KB} KiB < required ${REQUIRED_KB} KiB (peak ${FHV_T4_PROJECTED_PEAK_KB} + 30% reserve ${RESERVE_KB})"
+fi
+
+# WP-3B target-host qualification is mandatory and fail-closed: the 1-GiB / 400 ms checkpoint
+# contract is host-class dependent and no pull-request runner can prove it.
+FHV_WP3B_RECEIPT="${FHV_WP3B_RECEIPT:-$ARTIFACT_ROOT/fhv-wp3b-host-qualification.v1.json}"
+if [[ "${FHV_T4_REQUIRE_WP3B_QUALIFICATION:-1}" == "1" ]]; then
+  if [[ ! -f "$FHV_WP3B_RECEIPT" ]]; then
+    fail "WP-3B host qualification receipt missing at $FHV_WP3B_RECEIPT (run: pnpm trader:fhv:wp3b-host-qualification)"
+  fi
+  if ! grep -q '"classification": *"EXECUTION_SERVER_WP3B_HOST_QUALIFIED"' "$FHV_WP3B_RECEIPT"; then
+    fail "WP-3B host qualification is not EXECUTION_SERVER_WP3B_HOST_QUALIFIED in $FHV_WP3B_RECEIPT"
+  fi
+fi
+
 if ! runuser -u "$SERVICE_USER" -- "$NODE_BIN" -e 'process.exit(0)'; then
   fail "node cannot execute as service user"
 fi
