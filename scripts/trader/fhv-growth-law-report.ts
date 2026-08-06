@@ -174,7 +174,8 @@ function main(): void {
      * WP-6B may only optimize ranked hotspots. Without a stage profile there is no evidence to
      * rank, so the report says so instead of implying an empty hotspot list means "nothing to do".
      */
-    hotspotEvidence: hotspots.length > 0 ? "RANKED" : "ABSENT_RUN_STAGE_PROFILE",
+    hotspotEvidence:
+      hotspots.length > 0 ? "PRESENT_EXACT_HEAD_MEASURED_PROFILE" : "ABSENT_RUN_STAGE_PROFILE",
   };
 
   const destination = outPath ?? join(runDir, FHV_GROWTH_LAW_REPORT_FILENAME);

@@ -14,6 +14,7 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { isFhvBoundedHotStateEnabled } from "@/lib/trader/execution/fhv-hot-state-pruner";
 import { getIdhpsHotPathCounters } from "@/lib/trader/execution/idhps-hot-path-counters";
 import {
   executeFhvFullHistoricalLaunch,
@@ -42,6 +43,13 @@ export const REPRESENTATIVE_SEGMENT_REPORT_FILENAME = "fhv-deep-state-segment-re
 const SEGMENT_CHECKPOINT_EVERY_CYCLES = 1_000;
 const MIN_SEGMENT_CHECKPOINTS = 3;
 const SEGMENT_RUN_ID = "fhv-official-scale-deep-state-segment";
+
+/**
+ * Half the pre-WP-6A unbounded baseline (~320 bytes/cycle). Bounded hot state measured 54-97 on
+ * exact HEAD 29447a9, so this leaves ample room for legitimate variation while still failing if
+ * unbounded economic history returns to the checkpointed database.
+ */
+export const FHV_BOUNDED_GROWTH_BYTES_PER_CYCLE_CEILING = 160;
 
 /**
  * Launch receipts and configuration freezes are single-use by design, so a repeated local run
@@ -319,6 +327,25 @@ describe("FHV deep-state representative segment", () => {
   it("produces a usable growth-law series", () => {
     expect(report?.workload.progressSamples ?? 0).toBeGreaterThan(0);
     expect(report?.throughput.effectiveBarsPerSecond ?? 0).toBeGreaterThan(0);
+  });
+
+  /**
+   * WP-6B permanent regression gate.
+   *
+   * The pre-WP-6A architecture grew the checkpointed database ~320 bytes per cycle, which is what
+   * made cumulative checkpoint I/O quadratic. Bounded hot state measured 54-97 bytes/cycle on
+   * exact HEAD 29447a9. This locks the structural property rather than an absolute throughput
+   * number, so it stays meaningful on a slower CI runner instead of turning into a flaky
+   * machine-speed assertion.
+   */
+  it("keeps session-database growth bounded when bounded hot state is enabled", () => {
+    if (!isFhvBoundedHotStateEnabled()) {
+      expect(report?.growth.sessionDatabaseGrowthBytesPerCycle ?? 0).toBeGreaterThan(0);
+      return;
+    }
+    const growth = report?.growth.sessionDatabaseGrowthBytesPerCycle;
+    expect(growth).not.toBeNull();
+    expect(growth!).toBeLessThanOrEqual(FHV_BOUNDED_GROWTH_BYTES_PER_CYCLE_CEILING);
   });
 
   it("enforces the deep-state envelope only in blocking mode", () => {
