@@ -57,6 +57,8 @@
     "trader:fhv:campaign": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/fhv-campaign-cli.ts",
     "trader:fhv:rehearsal": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-rehearsal-cli.ts",
     "trader:fhv:run": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/fhv-full-run-cli.ts",
+    "trader:fhv:growth-law-report": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/fhv-growth-law-report.ts",
+    "trader:fhv:sweep-temp-datasets": "node --import tsx scripts/ops/fhv-sweep-stale-temp-datasets.ts",
     "trader:fhv:dataset-qualify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-dataset-qualification-cli.ts",
     "trader:fhv:acquire-htx-v2": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-acquire-htx-v2.ts",
     "trader:fhv:seal-v2-dataset": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-seal-v2-dataset.ts",

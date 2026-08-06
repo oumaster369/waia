@@ -32,6 +32,23 @@ export const FHV_FULL_HISTORICAL_PROGRESS_INTERVAL_MS = 30_000;
 /** Samples retained for the rolling-rate window. */
 export const FHV_FULL_HISTORICAL_PROGRESS_ROLLING_SAMPLES = 5;
 
+/**
+ * Observational sampling interval override.
+ *
+ * Bounded diagnostic segments finish in seconds, so the 30s default yields too few windows to
+ * assess decay. Reporting cadence only — it changes no engine semantics.
+ */
+export function resolveFhvFullHistoricalProgressIntervalMs(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): number {
+  const raw = env.FHV_IDHPS_PROGRESS_INTERVAL_MS;
+  if (raw == null || raw === "") {
+    return FHV_FULL_HISTORICAL_PROGRESS_INTERVAL_MS;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : FHV_FULL_HISTORICAL_PROGRESS_INTERVAL_MS;
+}
+
 export type FhvFullHistoricalProgressV1 = Readonly<{
   schemaVersion: typeof FHV_FULL_HISTORICAL_PROGRESS_SCHEMA;
   capturedAtUtc: string;
@@ -193,7 +210,7 @@ export function createFhvFullHistoricalProgressReporter(input: {
   intervalMs?: number;
 }): FhvFullHistoricalProgressReporter {
   const startedAt = performance.now();
-  const intervalMs = input.intervalMs ?? FHV_FULL_HISTORICAL_PROGRESS_INTERVAL_MS;
+  const intervalMs = input.intervalMs ?? resolveFhvFullHistoricalProgressIntervalMs();
   const progressPath = resolveFhvFullHistoricalProgressPath(input.runDir);
   const jsonlPath = resolveFhvFullHistoricalProgressJsonlPath(input.runDir);
   const artifactProgressPath = input.artifactRoot

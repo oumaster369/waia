@@ -194,8 +194,11 @@ describe("FHV deep-state representative segment", () => {
 
   it("collects windowed throughput, growth and checkpoint cost over a representative segment", async () => {
     const previousProgress = process.env.FHV_IDHPS_PROGRESS;
-    // The segment is only useful with the WP-1 time series enabled.
+    const previousInterval = process.env.FHV_IDHPS_PROGRESS_INTERVAL_MS;
+    // The segment is only useful with the WP-1 time series enabled, and it finishes in
+    // seconds — the 30s default would yield too few windows to assess decay.
     process.env.FHV_IDHPS_PROGRESS = "1";
+    process.env.FHV_IDHPS_PROGRESS_INTERVAL_MS = process.env.FHV_IDHPS_PROGRESS_INTERVAL_MS ?? "0";
 
     try {
       const paths = setupFhvOfficialScaleLaunchPaths({
@@ -286,6 +289,11 @@ describe("FHV deep-state representative segment", () => {
         delete process.env.FHV_IDHPS_PROGRESS;
       } else {
         process.env.FHV_IDHPS_PROGRESS = previousProgress;
+      }
+      if (previousInterval == null) {
+        delete process.env.FHV_IDHPS_PROGRESS_INTERVAL_MS;
+      } else {
+        process.env.FHV_IDHPS_PROGRESS_INTERVAL_MS = previousInterval;
       }
     }
 
