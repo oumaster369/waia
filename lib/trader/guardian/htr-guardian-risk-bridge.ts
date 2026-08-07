@@ -11,10 +11,12 @@ import {
   computePeakEquityDrawdownBps,
   evaluateDrawdownPolicy,
 } from "@/lib/trader/risk/drawdown-policy-evaluator";
+import { compareDecimal } from "@/lib/trader/risk/numeric";
 import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
 
 export type HtrGuardianCycleInput = {
-  reconciliation: AccountingReconciliationInput;
+  /** Required unless `skipReconciliationAssert` is true (hot-path after before_guardian). */
+  reconciliation?: AccountingReconciliationInput;
   order?: PlaceOrderInput;
   openQtyBySymbol?: Record<string, string>;
   accountPeakHwm: string;
@@ -24,6 +26,8 @@ export type HtrGuardianCycleInput = {
   strategyEquityUsdt?: string;
   strategyPeakHwm?: string;
   missingMark?: boolean;
+  /** When before_guardian reconcile just passed, skip duplicate assert. */
+  skipReconciliationAssert?: boolean;
 };
 
 export type HtrGuardianCycleResult = {
@@ -39,16 +43,27 @@ export function requiresHtrPartialEntryCancellation(cycle: HtrGuardianCycleResul
 }
 
 export function evaluateHtrGuardianCycle(input: HtrGuardianCycleInput): HtrGuardianCycleResult {
-  try {
-    assertAccountingReconciliation(input.reconciliation);
-  } catch {
-    return {
-      breachState: "STOP_ACCOUNT",
-      reason: HTR_GUARDIAN_EXIT_REASON_V1.reconciliationFailure,
-      allowNewExposure: false,
-      cancelPartialEntry: true,
-      permitRiskReducingExit: true,
-    };
+  if (!input.skipReconciliationAssert) {
+    if (!input.reconciliation) {
+      return {
+        breachState: "STOP_ACCOUNT",
+        reason: HTR_GUARDIAN_EXIT_REASON_V1.reconciliationFailure,
+        allowNewExposure: false,
+        cancelPartialEntry: true,
+        permitRiskReducingExit: true,
+      };
+    }
+    try {
+      assertAccountingReconciliation(input.reconciliation);
+    } catch {
+      return {
+        breachState: "STOP_ACCOUNT",
+        reason: HTR_GUARDIAN_EXIT_REASON_V1.reconciliationFailure,
+        allowNewExposure: false,
+        cancelPartialEntry: true,
+        permitRiskReducingExit: true,
+      };
+    }
   }
 
   if (input.missingMark) {
@@ -57,6 +72,21 @@ export function evaluateHtrGuardianCycle(input: HtrGuardianCycleInput): HtrGuard
       reason: HTR_GUARDIAN_EXIT_REASON_V1.missingMark,
       allowNewExposure: false,
       cancelPartialEntry: true,
+      permitRiskReducingExit: true,
+    };
+  }
+
+  // Hot path: at all HWMs with zero strategy drawdown — no breach possible.
+  if (
+    (input.strategyDrawdownBps ?? 0) <= 0 &&
+    compareDecimal(input.equityUsdt, input.accountPeakHwm) >= 0 &&
+    compareDecimal(input.equityUsdt, input.monthlyPeakHwm) >= 0
+  ) {
+    return {
+      breachState: "NONE",
+      reason: null,
+      allowNewExposure: true,
+      cancelPartialEntry: false,
       permitRiskReducingExit: true,
     };
   }

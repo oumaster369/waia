@@ -535,6 +535,8 @@ async function runWp03Segment(input: {
         newId,
         substrateMode: "incremental",
         retentionMode: "STREAM_ONLY",
+        // Allow waitForFhvRehearsalCycles + pause-request writers to interleave.
+        enableCooperativeYield: true,
         evidenceSink,
         maxCycles: input.maxCycles,
         checkpointRunRoot: input.checkpointRunRoot,

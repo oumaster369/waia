@@ -3,6 +3,10 @@ import type {
   OrderRepository,
   OrderRow,
 } from "@/lib/trader/execution/order-repository.types";
+import {
+  assertIdhpsHotPathAllowsLoadPaperFillEvents,
+  bumpIdhpsCounter,
+} from "@/lib/trader/execution/idhps-hot-path-counters";
 import { PaperPnLReconciliationError } from "@/lib/trader/paper/paper-pnl.errors";
 import type { PaperBookExecutionMode } from "@/lib/trader/paper/paper-book.types";
 import { addDecimal, compareDecimal } from "@/lib/trader/risk/numeric";
@@ -17,6 +21,11 @@ export type LoadPaperFillEventsInput = {
   context: OrgContext;
   orderRepository: OrderRepository;
   executionMode: PaperBookExecutionMode;
+  /**
+   * Terminal/offline exports may rebuild fill history after the hot path completes.
+   * Callers must wrap with `withIdhpsOfflineRebuild` (or equivalent) so listOrders is allowed.
+   */
+  allowOfflineRebuild?: boolean;
 };
 
 function isExecutedOrderWithFills(order: OrderRow): boolean {
@@ -29,6 +38,11 @@ function isExecutedOrderWithFills(order: OrderRow): boolean {
 export async function loadPaperFillEvents(
   input: LoadPaperFillEventsInput,
 ): Promise<{ fillEvents: PaperPnLFillEvent[]; filledOrders: OrderRow[] }> {
+  if (!input.allowOfflineRebuild) {
+    assertIdhpsHotPathAllowsLoadPaperFillEvents();
+  }
+  bumpIdhpsCounter("loadPaperFillEventsCalls");
+
   const orders = await input.orderRepository.listOrders(input.context, {
     executionMode: input.executionMode,
   });

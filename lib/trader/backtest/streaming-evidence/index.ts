@@ -65,6 +65,7 @@ export {
   writeReplayRunChainManifest,
   readReplayRunChainManifest,
   buildReplayRunChainManifest,
+  computeAuditLineageDigest,
   compareReplayResumeIdentity,
   serializeResumableState,
   restoreResumableState,

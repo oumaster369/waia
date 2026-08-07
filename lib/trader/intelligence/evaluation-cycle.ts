@@ -3,6 +3,7 @@ import { assembleDecisionChain } from "@/lib/trader/intelligence/decision-chain"
 import { emitMsvDecisionCounters } from "@/lib/trader/intelligence/decision-telemetry";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
 import { buildHypothesisSet } from "@/lib/trader/intelligence/hypothesis/build-hypothesis-set";
+import { HYPOTHESIS_SET_SCHEMA_VERSION } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 import { isMiCoreEnabled } from "@/lib/trader/intelligence/mi-core-flag";
 import { isHistoricalProfileActive } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
@@ -100,12 +101,26 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     : undefined;
 
   const sessionState = input.hypothesisSessionState ?? createEmptyHypothesisSessionState();
-  const { hypothesisSet, sessionState: nextSessionState } = buildHypothesisSet({
-    reconstruction,
-    understanding,
-    evaluatedAt,
-    sessionState,
-  });
+  // STREAM_ONLY + fusedContext off: CDE returns ALLOW_TRADING before opportunity/conviction.
+  // Skip hypothesis allocation (8 hypotheses + sort + session maps) on the IDHPS hot path.
+  const skipHypothesis = input.omitIntelligenceArtifacts === true && input.fusedContext == null;
+  const { hypothesisSet, sessionState: nextSessionState } = skipHypothesis
+    ? {
+        hypothesisSet: {
+          schemaVersion: HYPOTHESIS_SET_SCHEMA_VERSION,
+          evaluatedAt,
+          hypotheses: [],
+          activeHypothesis: null,
+          opportunity: null,
+        },
+        sessionState,
+      }
+    : buildHypothesisSet({
+        reconstruction,
+        understanding,
+        evaluatedAt,
+        sessionState,
+      });
 
   const msv = buildMsvEnvelope({
     features,
@@ -115,7 +130,49 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     miCoreEnabled: true,
     newId,
   });
-  emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
+  if (input.telemetrySink) {
+    emitMsvDecisionCounters(msv, input.organizationId, input.telemetrySink);
+  }
+
+  const signals = evaluateRegisteredStrategies(
+    msv,
+    features,
+    {
+      organizationId: input.organizationId,
+      bars: input.bars,
+      newId,
+      historicalProfile: profileActive ? input.historicalProfile : undefined,
+    },
+    input.strategySignalIds?.length
+      ? (input.strategySignalIds as Parameters<typeof evaluateRegisteredStrategies>[3])
+      : undefined,
+  );
+
+  if (input.telemetrySink) {
+    for (const signal of signals) {
+      emitStrategySignalCounters(signal, input.telemetrySink);
+    }
+  }
+
+  const signal = selectPrimaryStrategySignal(signals, {
+    historicalProfile: profileActive ? input.historicalProfile : undefined,
+  });
+
+  // IDHPS: STREAM_ONLY scale omits WP13/WP14 artifact assembly when no sinks consume them.
+  // Signals/MSV/hypothesis economics above are unchanged.
+  if (input.omitIntelligenceArtifacts) {
+    return {
+      features,
+      msv,
+      signals,
+      signal,
+      fusedContext: input.fusedContext,
+      understanding,
+      reconstruction,
+      hypothesisSet,
+      hypothesisSessionState: nextSessionState,
+    };
+  }
 
   const terminalReasonCode = resolveTerminalReasonCode({
     opportunityAuthorized: hypothesisSet.opportunity?.authorized ?? false,
@@ -142,21 +199,6 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     marketStateSnapshot,
     tradingPermission: msv.derived.tradingPermission,
     reasonCodes: msv.derived.reasonCodes,
-  });
-
-  const signals = evaluateRegisteredStrategies(msv, features, {
-    organizationId: input.organizationId,
-    bars: input.bars,
-    newId,
-    historicalProfile: profileActive ? input.historicalProfile : undefined,
-  });
-
-  for (const signal of signals) {
-    emitStrategySignalCounters(signal, input.telemetrySink);
-  }
-
-  const signal = selectPrimaryStrategySignal(signals, {
-    historicalProfile: profileActive ? input.historicalProfile : undefined,
   });
 
   const intelligenceCycleBundle =

@@ -4,6 +4,7 @@ enforceServerOnly();
 
 import { ConnectorNotSupportedError } from "@/lib/trader/connectors/errors";
 import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connector";
+import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import type {
   AccountInfo,
   Balance,
@@ -71,6 +72,18 @@ export type MockExchangeConnectorOptions = {
   nowMs?: () => number;
   /** When true, starts with no seed positions (paper replay without venue inventory). */
   emptyPositions?: boolean;
+};
+
+export type MockExchangeConnectorCheckpointStateV1 = {
+  schemaVersion: "fhv-mock-exchange-connector/v1";
+  validated: boolean;
+  balances: Balance[];
+  positions: Position[];
+  orders: Order[];
+  trades: Trade[];
+  nextOrderSeq: number;
+  nextTradeSeq: number;
+  contentDigest: string;
 };
 
 function assertPositiveQuantity(quantity: string): void {
@@ -273,6 +286,46 @@ export class MockExchangeConnector implements ExchangeConnector {
   async placeFuturesOrder(input: PlaceOrderInput): Promise<Order> {
     void input;
     throw new ConnectorNotSupportedError("futures order placement");
+  }
+
+  captureCheckpointState(): MockExchangeConnectorCheckpointStateV1 {
+    const body = {
+      schemaVersion: "fhv-mock-exchange-connector/v1" as const,
+      validated: this.validated,
+      balances: this.balances.map(cloneBalance),
+      positions: this.positions.map((position) => ({ ...position })),
+      orders: [...this.orders.values()].map(cloneOrder),
+      trades: this.trades.map(cloneTrade),
+      nextOrderSeq: this.nextOrderSeq,
+      nextTradeSeq: this.nextTradeSeq,
+    };
+    return {
+      ...body,
+      contentDigest: computeStableJsonDigest(body),
+    };
+  }
+
+  restoreCheckpointState(state: MockExchangeConnectorCheckpointStateV1): void {
+    const body = {
+      schemaVersion: state.schemaVersion,
+      validated: state.validated,
+      balances: state.balances,
+      positions: state.positions,
+      orders: state.orders,
+      trades: state.trades,
+      nextOrderSeq: state.nextOrderSeq,
+      nextTradeSeq: state.nextTradeSeq,
+    };
+    if (computeStableJsonDigest(body) !== state.contentDigest) {
+      throw new Error("[fhv] mock exchange connector checkpoint contentDigest mismatch");
+    }
+    this.validated = state.validated;
+    this.balances = state.balances.map(cloneBalance);
+    this.positions = state.positions.map((position) => ({ ...position }));
+    this.orders = new Map(state.orders.map((order) => [order.orderId, cloneOrder(order)]));
+    this.trades = state.trades.map(cloneTrade);
+    this.nextOrderSeq = state.nextOrderSeq;
+    this.nextTradeSeq = state.nextTradeSeq;
   }
 
   private assertValidated(): void {

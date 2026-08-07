@@ -460,7 +460,7 @@ No release SHA, tag, or production deployment is recorded for DEE-416 in this se
 ### IMPLEMENTED_BUT_NOT_WIRED
 
 - FHV observability defaults **off** (`NOOP_REPLAY_EVIDENCE_SINK` unless `fhvObservability` or `STREAM_ONLY` + evidence dir).
-- No **`pnpm trader:fhv:run`** orchestrator for full pinned FHV contract on real data.
+- **`pnpm trader:fhv:run`** — Full Historical Validation launch orchestrator (receipt-first; bounded fixture for repository tests; official multi-year gated by Human auth + qualified dataset).
 - Research orchestrator `replayResume` reuses run ID only — does not propagate `resumeCycleStartIndex` / checkpoint slices.
 - Telegram alerting not bound to long-running host CLIs (stdout-only unless log shipper added).
 
@@ -983,10 +983,10 @@ Panels consume **bounded status snapshot** + paginated detail APIs — never unb
 
 | Partition | Interval (UTC half-open) |
 |-----------|--------------------------|
-| `fullPeriod` | `2020-01-01T00:00:00.000Z` → `2025-12-31T23:59:00.000Z` |
-| `developmentCalibration` | `2020-01-01T00:00:00.000Z` → `2022-12-31T23:59:00.000Z` |
-| `walkForward` | `2023-01-01T00:00:00.000Z` → `2024-12-31T23:59:00.000Z` |
-| `blindHoldout` | `2025-01-01T00:00:00.000Z` → `2025-12-31T23:59:00.000Z`; **`status: "SEALED_NOT_ACCESSED"`** |
+| `fullPeriod` | `2020-01-01T00:00:00.000Z` → `2026-01-01T00:00:00.000Z` (half-open) |
+| `developmentCalibration` | `2020-01-01T00:00:00.000Z` → `2023-01-01T00:00:00.000Z` (half-open) |
+| `walkForward` | `2023-01-01T00:00:00.000Z` → `2025-01-01T00:00:00.000Z` (half-open) |
+| `blindHoldout` | `2025-01-01T00:00:00.000Z` → `2026-01-01T00:00:00.000Z`; **`status: "SEALED_NOT_ACCESSED"`** |
 | `holdoutAccess` | **`"PROHIBITED_UNTIL_OPERATOR_PROCEDURE"`** |
 | `d11bDatasetVenueRole` | `"D11B_INFRASTRUCTURE_QUALIFICATION_ONLY"` |
 

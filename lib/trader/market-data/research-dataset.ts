@@ -93,14 +93,27 @@ export function splitBarsThreeWay(
 /** Digest over concatenated bar parts without materializing a combined Bar array. */
 export function computeBarSetDigestFromParts(...parts: readonly (readonly Bar[])[]): string {
   const barDigests: string[] = [];
+  accumulateBarContentDigests(barDigests, ...parts);
+  return finalizeBarSetDigestFromBarDigests(barDigests);
+}
+
+/** Append bar content digests from parts without retaining bar objects. */
+export function accumulateBarContentDigests(
+  barDigests: string[],
+  ...parts: readonly (readonly Bar[])[]
+): void {
   for (const part of parts) {
     for (const bar of part) {
       barDigests.push(computeBarContentDigest(bar));
     }
   }
+}
+
+/** Finalize a bar-set digest from precomputed bar content digests. */
+export function finalizeBarSetDigestFromBarDigests(barDigests: readonly string[]): string {
   return computeStableJsonDigest({
     schemaVersion: RESEARCH_DATASET_SCHEMA_VERSION,
-    barDigests,
+    barDigests: [...barDigests],
   });
 }
 

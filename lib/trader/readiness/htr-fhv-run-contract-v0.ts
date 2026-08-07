@@ -24,6 +24,9 @@ export const HTR_FHV_RUN_CONTRACT_LEGACY_COST_MODEL_SLIPPAGE_BPS = addDecimal(
 
 export const HTR_FHV_RUN_CONTRACT_SCHEMA_VERSION = "htr-fhv-run-contract/v0" as const;
 
+/** Single authority for FHV initial cash — half-open contract and launch gates use this string. */
+export const HTR_FHV_RUN_CONTRACT_INITIAL_CASH_USDT = "100000" as const;
+
 /** WP12 evidence-bundle manifest semantic digest — pinned for readiness preflight. */
 export const HTR_FHV_DATASET_MANIFEST_SEMANTIC_DIGEST_PIN =
   "fd7d489595f8fc20e4311c74e5d82b2957e7cca5b80319b8cb8d5f0893544663" as const;
@@ -58,20 +61,13 @@ export type HtrFhvRunContractV0 = Readonly<{
   derivedIntervals: readonly ["15m", "1h", "4h", "1d"];
   derivedIntervalRule: "CLOSED_BARS_ONLY";
   d11bDatasetVenueRole: "D11B_INFRASTRUCTURE_QUALIFICATION_ONLY";
-  fullPeriod: { startUtc: "2020-01-01T00:00:00.000Z"; endUtc: "2025-12-31T23:59:00.000Z" };
-  developmentCalibration: {
-    startUtc: "2020-01-01T00:00:00.000Z";
-    endUtc: "2022-12-31T23:59:00.000Z";
+  fullPeriod: {
+    startUtc: typeof FHV_DATASET_PARTITIONS_V1.development.startUtc;
+    endUtc: typeof FHV_DATASET_PARTITIONS_V1.blindHoldout.endUtc;
   };
-  walkForward: {
-    startUtc: "2023-01-01T00:00:00.000Z";
-    endUtc: "2024-12-31T23:59:00.000Z";
-  };
-  blindHoldout: {
-    startUtc: "2025-01-01T00:00:00.000Z";
-    endUtc: "2025-12-31T23:59:00.000Z";
-    status: "SEALED_NOT_ACCESSED";
-  };
+  developmentCalibration: typeof FHV_DATASET_PARTITIONS_V1.development;
+  walkForward: typeof FHV_DATASET_PARTITIONS_V1.walkForward;
+  blindHoldout: typeof FHV_DATASET_PARTITIONS_V1.blindHoldout;
   partitions: typeof FHV_DATASET_PARTITIONS_V1;
   initialPortfolio: HtrFhvRunContractInitialPortfolioV0;
   costModelId: typeof HTR_HISTORICAL_COST_MODEL_ID;
@@ -116,26 +112,16 @@ export const HTR_FHV_RUN_CONTRACT_V0: HtrFhvRunContractV0 = {
   derivedIntervalRule: "CLOSED_BARS_ONLY",
   d11bDatasetVenueRole: "D11B_INFRASTRUCTURE_QUALIFICATION_ONLY",
   fullPeriod: {
-    startUtc: "2020-01-01T00:00:00.000Z",
-    endUtc: "2025-12-31T23:59:00.000Z",
+    startUtc: FHV_DATASET_PARTITIONS_V1.development.startUtc,
+    endUtc: FHV_DATASET_PARTITIONS_V1.blindHoldout.endUtc,
   },
-  developmentCalibration: {
-    startUtc: "2020-01-01T00:00:00.000Z",
-    endUtc: "2022-12-31T23:59:00.000Z",
-  },
-  walkForward: {
-    startUtc: "2023-01-01T00:00:00.000Z",
-    endUtc: "2024-12-31T23:59:00.000Z",
-  },
-  blindHoldout: {
-    startUtc: "2025-01-01T00:00:00.000Z",
-    endUtc: "2025-12-31T23:59:00.000Z",
-    status: "SEALED_NOT_ACCESSED",
-  },
+  developmentCalibration: FHV_DATASET_PARTITIONS_V1.development,
+  walkForward: FHV_DATASET_PARTITIONS_V1.walkForward,
+  blindHoldout: FHV_DATASET_PARTITIONS_V1.blindHoldout,
   partitions: FHV_DATASET_PARTITIONS_V1,
   initialPortfolio: {
     quoteCurrency: "USDT",
-    cashUsdt: "100000",
+    cashUsdt: HTR_FHV_RUN_CONTRACT_INITIAL_CASH_USDT,
     btcQuantity: "0",
     ethQuantity: "0",
     leverage: 0,

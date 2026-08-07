@@ -46,6 +46,7 @@ export type ResearchReplayDeterminismDeps = {
   newId?: () => string;
   /** HTR-WP17: current closed-bar index for historical order registration. */
   setDecisionBarIndex?: (index: number) => void;
+  getDecisionBarIndex?: () => number;
   /** HTR-WP17: marks deps wired with enabled historical execution simulation. */
   historicalExecutionSession?: boolean;
 };
@@ -153,6 +154,12 @@ export type PaperCycleInput = {
   runId?: string;
   /** HTR-WP14: cost model for net-economics fail-closed decision records. */
   costModel?: CostModelV1;
+  /**
+   * IDHPS STREAM_ONLY hot path: skip WP13/WP14 artifact assembly when no sinks consume them.
+   */
+  omitIntelligenceArtifacts?: boolean;
+  /** Optional strategy-id filter forwarded to evaluation (FHV active set). */
+  strategySignalIds?: readonly string[];
   /** HTR-WP18/WP19/WP20: accounting + reconciliation + guardian authority on research path. */
   htrAccounting?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrAccountingCycleContext;
 };

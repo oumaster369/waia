@@ -20,10 +20,20 @@ describe("HTR-WP16 drawdown arithmetic", () => {
     const evalResult = evaluateDrawdownPolicy({
       equityUsdt: "75000",
       accountPeakHwm: "100000",
-      monthlyPeakHwm: "100000",
+      monthlyPeakHwm: "75000",
     });
     expect(evalResult.accountBreached).toBe(true);
-    expect(evalResult.breachState).toBe("STOP_ACCOUNT");
+    expect(evalResult.breachState).toBe("CLOSE_ONLY");
+  });
+
+  it("escalates to STOP_ACCOUNT above account limit", () => {
+    const aboveLimit = evaluateDrawdownPolicy({
+      equityUsdt: "74999",
+      accountPeakHwm: "100000",
+      monthlyPeakHwm: "100000",
+    });
+    expect(aboveLimit.accountBreached).toBe(true);
+    expect(aboveLimit.breachState).toBe("STOP_ACCOUNT");
   });
 
   it("initializes monthly HWM on UTC month transition only", () => {

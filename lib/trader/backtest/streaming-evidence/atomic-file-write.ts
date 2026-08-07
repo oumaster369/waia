@@ -3,7 +3,9 @@ import {
   existsSync,
   fsyncSync,
   linkSync,
+  mkdirSync,
   openSync,
+  readFileSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -70,7 +72,37 @@ function createExclusiveTempPath(finalPath: string): string {
   );
 }
 
-/** Prepare a writer-owned temp file with full payload written and fsynced. */
+/** Acquire an exclusive O_EXCL lock file; returns fd for release. */
+export function claimFileExclusiveLock(lockPath: string): number {
+  const directory = dirname(lockPath);
+  if (!existsSync(directory)) {
+    mkdirSync(directory, { recursive: true });
+  }
+  try {
+    return openSync(lockPath, "wx");
+  } catch (error) {
+    throw new AtomicFileWriteError(
+      "EXCLUSIVE_LOCK_HELD",
+      `Exclusive lock already held: ${lockPath}: ${String(error)}`,
+    );
+  }
+}
+
+/** Release an exclusive lock acquired via claimFileExclusiveLock. */
+export function releaseFileExclusiveLock(lockPath: string, fd: number): void {
+  try {
+    closeSync(fd);
+  } finally {
+    try {
+      if (existsSync(lockPath)) {
+        unlinkSync(lockPath);
+      }
+    } catch {
+      // best-effort lock cleanup
+    }
+  }
+}
+
 export function prepareAtomicExclusiveTemp(finalPath: string, bytes: Buffer | string): string {
   const payload = typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes;
   const directory = dirname(finalPath);
@@ -156,27 +188,82 @@ export function writeFileAtomicExclusive(finalPath: string, bytes: Buffer | stri
   }
 }
 
-export function writeFileAtomic(finalPath: string, bytes: Buffer | string): void {
-  const payload = typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes;
-  const directory = dirname(finalPath);
-  tempCounter += 1;
-  const tempPath = `${finalPath}.tmp-${process.pid}-${process.hrtime.bigint()}-${tempCounter}`;
-
+/**
+ * Atomically replace an existing file only when its current bytes match `expectedContent`.
+ * Uses temp write + fsync + rename (compare-and-replace / TOCTOU guard).
+ */
+export function writeFileAtomicCompareAndReplace(input: {
+  finalPath: string;
+  expectedContent: string;
+  nextContent: string;
+}): void {
+  if (!existsSync(input.finalPath)) {
+    throw new AtomicFileWriteError(
+      "COMPARE_AND_REPLACE_TARGET_MISSING",
+      `Compare-and-replace target missing: ${input.finalPath}`,
+    );
+  }
+  const current = readFileSync(input.finalPath, "utf8");
+  if (current !== input.expectedContent) {
+    throw new AtomicFileWriteError(
+      "COMPARE_AND_REPLACE_CONTENT_MISMATCH",
+      `Compare-and-replace content mismatch for ${input.finalPath}`,
+    );
+  }
+  const directory = dirname(input.finalPath);
+  const tempPath = createExclusiveTempPath(input.finalPath);
   let fd: number | null = null;
   try {
-    fd = openSync(tempPath, "w");
-    writeSync(fd, payload);
+    fd = openSync(tempPath, "wx");
+    writeFully(fd, Buffer.from(input.nextContent, "utf8"));
     fsyncSync(fd);
     closeSync(fd);
     fd = null;
-    renameSync(tempPath, finalPath);
+    renameSync(tempPath, input.finalPath);
     fsyncDirectoryStrict(directory);
   } catch (error) {
     if (fd !== null) {
       closeSync(fd);
     }
     try {
-      writeFileSync(tempPath, payload);
+      if (existsSync(tempPath)) {
+        unlinkSync(tempPath);
+      }
+    } catch {
+      // best-effort cleanup
+    }
+    throw new AtomicFileWriteError(
+      "COMPARE_AND_REPLACE_WRITE_FAILED",
+      `Compare-and-replace failed for ${input.finalPath}: ${String(error)}`,
+    );
+  }
+}
+
+export function writeFileAtomic(finalPath: string, bytes: Buffer | string): void {
+  // Prefer writing the string/Buffer directly — avoid an extra Buffer.from copy on every
+  // GS-10 evidence chunk flush (every MAX_BATCH_CYCLES=32 cycles).
+  tempCounter += 1;
+  const tempPath = `${finalPath}.tmp-${process.pid}-${process.hrtime.bigint()}-${tempCounter}`;
+
+  let fd: number | null = null;
+  try {
+    fd = openSync(tempPath, "w");
+    if (typeof bytes === "string") {
+      writeSync(fd, bytes, null, "utf8");
+    } else {
+      writeSync(fd, bytes);
+    }
+    // Evidence chunk writes: rename provides atomic visibility. Epoch seal / checkpoint
+    // publish remains the durability boundary (IDHPS hot-path: skip per-chunk fsync).
+    closeSync(fd);
+    fd = null;
+    renameSync(tempPath, finalPath);
+  } catch (error) {
+    if (fd !== null) {
+      closeSync(fd);
+    }
+    try {
+      writeFileSync(tempPath, bytes);
       renameSync(tempPath, finalPath);
     } catch {
       throw new StreamingEvidenceError(

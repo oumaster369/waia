@@ -1,4 +1,5 @@
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
+import { bumpIdhpsCounter } from "@/lib/trader/execution/idhps-hot-path-counters";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import { addDecimal, compareDecimal, multiplyDecimal } from "@/lib/trader/risk/numeric";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
@@ -38,6 +39,7 @@ function parseQuoteCurrency(symbol: string): string {
 export async function deriveAccountRiskStateFromMockOrders(
   input: DeriveAccountRiskStateInput,
 ): Promise<AccountRiskState> {
+  bumpIdhpsCounter("deriveAccountRiskStateFromMockOrdersCalls");
   const executionMode = input.executionMode ?? "mock";
   const filter = { executionMode };
 

@@ -641,8 +641,19 @@ export async function runTraceScenario02(): Promise<TraceScenarioResult> {
       maxCycles: 8,
       collector,
     });
+    // Strategy DD limit (2000 bps) is tighter than account (2500); with correct HWM updates
+    // the first STOP_ACCOUNT may be strategy before account — both are valid losing stops.
+    const acceptedGuardianStopReasons = new Set<string>([
+      HTR_GUARDIAN_EXIT_REASON_V1.accountStop,
+      HTR_GUARDIAN_EXIT_REASON_V1.accountDrawdownBreach,
+      HTR_GUARDIAN_EXIT_REASON_V1.strategyDrawdownBreach,
+      HTR_GUARDIAN_EXIT_REASON_V1.monthlyDrawdownBreach,
+    ]);
     const stopCycle = result.cycleResults.find(
-      (cycle) => cycle.htrGuardian?.breachState === "STOP_ACCOUNT",
+      (cycle) =>
+        cycle.htrGuardian?.breachState === "STOP_ACCOUNT" &&
+        cycle.htrGuardian.reason != null &&
+        acceptedGuardianStopReasons.has(cycle.htrGuardian.reason),
     );
     const guardianReason = stopCycle?.htrGuardian?.reason ?? null;
     const guardianStopEvent = collector.events.find(
@@ -653,9 +664,7 @@ export async function runTraceScenario02(): Promise<TraceScenarioResult> {
     const invariants = {
       ACTIONABLE_ENTRY_FILL: (result.accountingState?.consumedFillIds.length ?? 0) >= 1,
       GUARDIAN_STOP_DECISION: stopCycle?.htrGuardian?.breachState === "STOP_ACCOUNT",
-      GUARDIAN_REASON:
-        guardianReason === HTR_GUARDIAN_EXIT_REASON_V1.accountStop ||
-        guardianReason === HTR_GUARDIAN_EXIT_REASON_V1.accountDrawdownBreach,
+      GUARDIAN_REASON: guardianReason != null && acceptedGuardianStopReasons.has(guardianReason),
       GUARDIAN_TRACE_REASON: guardianStopEvent != null,
       EXIT_FILL: (result.accountingState?.consumedFillIds.length ?? 0) >= 2,
       ZERO_TERMINAL_POSITION:

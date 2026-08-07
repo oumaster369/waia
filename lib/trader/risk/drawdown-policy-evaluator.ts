@@ -86,6 +86,10 @@ export function isDrawdownBreach(drawdownBps: number, limitBps: number): boolean
 }
 
 export function resolveMonthKeyUtc(asOfIso: string): string {
+  // Hot path: accounting frontiers are canonical UTC ISO (`YYYY-MM-DDTHH:mm:ss.sssZ`).
+  if (asOfIso.length >= 10 && asOfIso[4] === "-" && asOfIso[7] === "-") {
+    return asOfIso.slice(0, 7);
+  }
   const date = new Date(asOfIso);
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -144,9 +148,29 @@ export function evaluateDrawdownPolicy(
   const strategyBreached =
     strategyDrawdownBps != null ? isDrawdownBreach(strategyDrawdownBps, config.strategyBps) : false;
 
+  function breachStateForLimit(drawdownBps: number, limitBps: number): DrawdownBreachState {
+    if (drawdownBps > limitBps) {
+      return "STOP_ACCOUNT";
+    }
+    if (drawdownBps === limitBps) {
+      return "CLOSE_ONLY";
+    }
+    return "NONE";
+  }
+
+  const breachStates: DrawdownBreachState[] = [
+    breachStateForLimit(accountDrawdownBps, config.accountBps),
+    breachStateForLimit(monthlyDrawdownBps, config.monthlyBps),
+    strategyDrawdownBps != null
+      ? breachStateForLimit(strategyDrawdownBps, config.strategyBps)
+      : "NONE",
+  ];
+
   let breachState: DrawdownBreachState = "NONE";
-  if (accountBreached || monthlyBreached || strategyBreached) {
+  if (breachStates.includes("STOP_ACCOUNT")) {
     breachState = "STOP_ACCOUNT";
+  } else if (breachStates.includes("CLOSE_ONLY")) {
+    breachState = "CLOSE_ONLY";
   }
 
   return {

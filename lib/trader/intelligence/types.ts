@@ -277,6 +277,13 @@ export type EvaluationCycleInput = {
   symbol?: string;
   /** HTR-WP14: cost model for net-economics fail-closed decision records. */
   costModel?: CostModelV1;
+  /**
+   * IDHPS STREAM_ONLY hot path: skip WP13/WP14 artifact assembly when no sinks consume them.
+   * Does not alter MSV/signals/hypothesis economics.
+   */
+  omitIntelligenceArtifacts?: boolean;
+  /** When set, only these strategy ids are evaluated (others omitted before signal selection). */
+  strategySignalIds?: readonly string[];
 };
 
 export type EvaluationCycleResult = {

@@ -97,6 +97,7 @@ function buildEnv(
     FHV_DOCKER_BIN: "/usr/bin/docker",
     FHV_SYSTEMCTL_BIN: "/usr/bin/systemctl",
     FHV_SYSTEMD_ANALYZE_BIN: "/usr/bin/systemd-analyze",
+    FHV_T4A_WORKSTATION_TRACE_PATH: join(localStateDir, "fhv-t4a-operator-trace.jsonl"),
     ...extra,
   };
 }
@@ -155,6 +156,12 @@ describe("fhv-t4a operator state machine (DEE-436)", () => {
     );
     expect(existsSync(continuityBefore)).toBe(true);
     expect(readFileSync(continuityBefore, "utf8")).not.toContain('"step":26');
+    // Hermetic simulation scrubs FHV_SYSTEMCTL_BIN / FHV_PYTHON_BIN from service-user
+    // child env (production env -i equivalent). Bindings remain on the workstation env
+    // for operator binding reconstruction; Step 31 must not rely on that inheritance.
+    expect(env.FHV_SYSTEMCTL_BIN).toBeTruthy();
+    expect(env.FHV_PYTHON_BIN).toBeTruthy();
+
     const postFinalize = runOperatorShell("post-reconnect-finalize", env);
     expect(postFinalize.status).toBe(0);
     expect(postFinalize.stdout).toContain("FHV_T4A_POST_RECONNECT_FINALIZE_OK");
@@ -163,20 +170,63 @@ describe("fhv-t4a operator state machine (DEE-436)", () => {
         join(env.FHV_T4A_LOCAL_STATE_DIR!, "fhv-t4a-post-finalize-receipt.v1.json"),
         "utf8",
       ),
-    ) as { ceremonyClassifications: Record<string, string> };
+    ) as {
+      schemaVersion: string;
+      contentDigest: string;
+      stepProofDigests: Record<string, string>;
+      continuityVerificationProofPath?: string;
+      continuityVerificationProofDigest?: string;
+      evidenceSealRootDigest?: string;
+      evidenceSealManifestDigest?: string;
+      evidenceSealVerifyClassification?: string;
+      ceremonyClassifications: Record<string, string>;
+    };
+    expect(finalizeReceipt.schemaVersion).toBe("fhv-t4a-post-finalize-receipt/v1");
+    expect(finalizeReceipt.stepProofDigests["28"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(finalizeReceipt.stepProofDigests["29"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(finalizeReceipt.stepProofDigests["30"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(finalizeReceipt.stepProofDigests["31"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(finalizeReceipt.stepProofDigests["32"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(finalizeReceipt.continuityVerificationProofPath).toBeTruthy();
+    expect(finalizeReceipt.continuityVerificationProofDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(finalizeReceipt.evidenceSealRootDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(finalizeReceipt.evidenceSealManifestDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(finalizeReceipt.evidenceSealVerifyClassification).toBe(
+      "FHV_T4_EVIDENCE_SEAL_VERIFICATION_PASS",
+    );
     for (const [key, value] of Object.entries(FHV_T4A_CEREMONY_REQUIRED_RESULTS)) {
       expect(finalizeReceipt.ceremonyClassifications[key]).toBe(value);
     }
+    expect(finalizeReceipt.ceremonyClassifications.T4_RESULT).toBeUndefined();
+    expect(finalizeReceipt.ceremonyClassifications.T4_AGGREGATE_RESULT).toBeUndefined();
+    expect(finalizeReceipt.ceremonyClassifications.DASHBOARD_RESULT).toBeUndefined();
     const tracePath = join(env.FHV_T4A_LOCAL_STATE_DIR!, "fhv-t4a-operator-trace.jsonl");
     expect(existsSync(tracePath)).toBe(true);
     const traceLines = readFileSync(tracePath, "utf8")
       .trim()
       .split("\n")
-      .map((line) => JSON.parse(line) as { semanticStep: number | string; exitStatus: number });
-    expect(traceLines.some((line) => line.semanticStep === 15 && line.exitStatus === 0)).toBe(true);
-    expect(traceLines.some((line) => line.semanticStep === 26 && line.exitStatus === 0)).toBe(true);
-    expect(traceLines.some((line) => line.semanticStep === 29 && line.exitStatus === 0)).toBe(true);
-    expect(traceLines.some((line) => line.semanticStep === 32 && line.exitStatus === 0)).toBe(true);
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            semanticStep: number | string;
+            exitStatus: number;
+            terminalClassification?: string;
+          },
+      );
+    const requiredTraceSteps = [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+      28, 29, 30, 31, 32,
+    ] as const;
+    for (const step of requiredTraceSteps) {
+      expect(
+        traceLines.some(
+          (line) =>
+            line.semanticStep === step &&
+            line.exitStatus === 0 &&
+            line.terminalClassification === `FHV_T4A_STEP_${step}_OK`,
+        ),
+      ).toBe(true);
+    }
   }, 300_000);
 
   const negativeCases: Array<{

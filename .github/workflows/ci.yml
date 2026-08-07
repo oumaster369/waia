@@ -45,6 +45,279 @@ jobs:
       - name: Validate FHV T4A packet contract
         run: corepack pnpm@10 validate:fhv-t4a-packet
 
+  fhv-public-ceremony-packet:
+    name: fhv public ceremony packet gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Validate FHV public ceremony packet contract
+        run: corepack pnpm@10 validate:fhv-public-ceremony-packets
+
+  fhv-idhps-structural-gate:
+    name: fhv idhps structural complexity gate
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-idhps-structural.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Record artifact identity (FINAL_HEAD / EXECUTED_SHA / BASE_SHA)
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: bash ./scripts/ops/record-fhv-artifact-identity.sh
+      - name: Run IDHPS structural GS suite
+        run: corepack pnpm@10 test:fhv:idhps:structural
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-idhps-structural-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
+  # WP-3B MERGE-BLOCKING SOFTWARE GATE (ADR-0025 AD-6a).
+  # Proves checkpoint algorithm correctness, truthful native-clone classification, clone/fallback
+  # equivalence, durability and the target-host requirement calculation. It deliberately does NOT
+  # assert the absolute 1-GiB / 400 ms contract: run 31098325969 measured 735-781 ms on macos-15
+  # and 2743-3007 ms on macos-15-intel purely from SHA-256 throughput, so hosted wall clock cannot
+  # decide software correctness. The absolute contract is unchanged and is enforced by the
+  # fail-closed Execution Server preflight (pnpm trader:fhv:wp3b-host-qualification).
+  fhv-wp3b-checkpoint-software-gate:
+    name: fhv wp3b checkpoint software gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-wp3b.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Clone/fallback equivalence, digest identity and mutation isolation
+        run: corepack pnpm@10 test:fhv:wp3b:clone-equivalence
+      - name: Checkpoint software gate and target-host requirement (native path)
+        run: corepack pnpm@10 test:fhv:wp3b:software-gate
+      - name: Checkpoint software gate on the forced fallback path
+        # ext4 runners already take this path; forcing it keeps the fallback proven even if a
+        # future runner image gains reflink support.
+        env:
+          FHV_FORCE_CLONE_UNSUPPORTED: "1"
+        run: corepack pnpm@10 test:fhv:wp3b:software-gate
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-wp3b-checkpoint-software-gate-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
+  # WP-7B MERGE-BLOCKING DEEP-STATE GATE.
+  # Fails in minutes on the failure mode that previously needed a two-hour full-corpus run to
+  # reveal: it asserts a non-trivial workload (fills, open positions, >= 3 checkpoints, evidence
+  # flushes, all three reconciliation phases) and that checkpointing does not dominate the segment.
+  fhv-wp7b-representative-segment-gate:
+    name: fhv wp7b deep-state representative gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-wp7b.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+      # The bounded-hot-state growth ceiling is only meaningful with the architecture enabled.
+      FHV_BOUNDED_HOT_STATE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Run blocking deep-state representative segment
+        run: corepack pnpm@10 test:fhv:wp7b:representative-segment
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-wp7b-representative-segment-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
+  fhv-idhps-process-parity-gate:
+    name: fhv idhps process parity gate
+    runs-on: ubuntu-latest
+    needs: [fhv-idhps-structural-gate]
+    timeout-minutes: 60
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+      FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
+      NODE_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Record artifact identity (FINAL_HEAD / EXECUTED_SHA / BASE_SHA)
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: bash ./scripts/ops/record-fhv-artifact-identity.sh
+      - name: Run process-parity
+        run: corepack pnpm@10 test:fhv:official-scale:process-parity
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-idhps-process-parity-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
+  fhv-idhps-durability-gate:
+    name: fhv idhps durability fault-injection gate
+    runs-on: ubuntu-latest
+    needs: [fhv-idhps-process-parity-gate]
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-idhps-durability.sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data && pnpm db:migrate
+      - name: Run parent durability RED suite
+        run: corepack pnpm@10 test:fhv:idhps:durability
+
+  fhv-idhps-stability-gate:
+    name: fhv idhps stability gate
+    runs-on: ubuntu-latest
+    needs: [fhv-idhps-durability-gate]
+    timeout-minutes: 90
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-idhps-stability.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Run IDHPS stability ladder
+        run: corepack pnpm@10 test:fhv:idhps:stability
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-idhps-stability-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
+  fhv-idhps-canonical-probe-gate:
+    name: fhv idhps canonical probe gate
+    # Public ARM64 Linux (4 vCPU / 16 GiB) — macos-latest M1 is 3 vCPU / 7 GiB and ~3× slower.
+    runs-on: ubuntu-24.04-arm
+    needs: [fhv-idhps-stability-gate]
+    timeout-minutes: 60
+    env:
+      DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
+      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+      # Phase-10 visible headroom target only (default 1000). Blocking gate remains cps≥877 / ≤7200s.
+      FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND: "1000"
+      FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
+      # Progress observability is for full-corpus auditability only — keep probe hot path clean.
+      NODE_ENV: production
+      # Default V8 young-gen + larger old-space: GS-10 flush@32 is I/O-bound; huge semi-spaces
+      # starve page cache for ~197k evidence chunk writes on the full corpus.
+      NODE_OPTIONS: "--max-old-space-size=6144"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Run canonical probe (blocking ≥877 cps / ≤7200s; report ≥1000 target)
+        run: corepack pnpm@10 test:fhv:official-scale:probe
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhv-idhps-probe-artifacts
+          path: .artifacts/fhv-official-scale/
+          retention-days: 7
+
+  # The official full corpus is a ~2-hour genuine campaign that belongs to the Execution Server,
+  # not to GitHub-hosted CI. It is NOT run automatically on pull_request or push: a GitHub-hosted
+  # runner cannot hold the real target-host WP-3B checkpoint and throughput qualification receipts,
+  # so the genuine unbounded launch correctly fails closed there. GitHub CI proves software and
+  # bounded/representative correctness only; authentic host qualification and full-corpus execution
+  # happen on the target Execution Server under the human-operated path
+  # (scripts/ops/fhv-wp3b-host-qualification.ts, fhv-throughput-host-qualification.ts,
+  # test:fhv:official-scale:full-corpus). No downstream job depends on this campaign.
+
+  fhv-release-validation-gate:
+    name: fhv release validation gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Validate release canon and FHV ceremony contracts
+        run: |
+          corepack pnpm@10 validate:canon
+          corepack pnpm@10 validate:fhv-t4a-packet
+          corepack pnpm@10 validate:fhv-public-ceremony-packets
+          corepack pnpm@10 validate:pr-governance
+
   typecheck:
     name: typecheck
     runs-on: ubuntu-latest
@@ -103,7 +376,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, tenant-isolation, fhv-t4a-packet]
+    needs: [lint, typecheck, test, tenant-isolation, fhv-t4a-packet, fhv-public-ceremony-packet, fhv-wp3b-checkpoint-software-gate, fhv-wp7b-representative-segment-gate, fhv-release-validation-gate]
     env:
       DATABASE_URL: file:./.data/ci-build.sqlite
     steps:

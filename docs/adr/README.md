@@ -31,6 +31,7 @@ See policy: [`../waia-governance/ADR-POLICY.md`](../waia-governance/ADR-POLICY.m
 | [0021](0021-deterministic-research-replay-clock-and-state-isolation.md) | Deterministic Research Replay Clock & State Isolation | Accepted | DEE-397; Pre-Repeat-M9 Remediation PR1 |
 | [0022](0022-content-bound-operator-authorization-and-idempotent-dataset-lifecycle.md) | Content-Bound Operator Authorization & Idempotent Research Dataset Lifecycle | Accepted | DEE-398; Pre-Repeat-M9 Remediation PR2 |
 | [0023](0023-execution-server-ai-trader-only-execution-plane.md) | Execution Server as AI-TRADER-only execution plane | Accepted | DEE-406; vNext Slice D1 |
+| [0025](0025-fhv-bounded-hot-state-and-streaming-economic-ledger.md) | FHV bounded hot state, streaming economic ledger, and the CI/Execution Server full-corpus boundary | Accepted | DEE-436 / DEE-416; PR #452 |
 
 Add rows as new decisions land.**Superseded** decisions keep file for history — index notes replacement.
 

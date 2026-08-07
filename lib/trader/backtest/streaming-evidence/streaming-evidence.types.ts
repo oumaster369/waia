@@ -6,7 +6,17 @@ export const CYCLE_PROJECTION_SCHEMA_VERSION = "htr-wp04-cycle-projection/v1" as
 export const EVIDENCE_MANIFEST_SCHEMA_VERSION = "htr-wp04-evidence-manifest/v1" as const;
 export const REGIME_TIMELINE_SCHEMA_VERSION = "htr-wp04-regime-timeline/v1" as const;
 
+/** Evidence chunk flush threshold — bounded memory (D11B / H-ARCH-1 GS-10 contract). */
 export const MAX_BATCH_CYCLES = 32;
+
+/**
+ * Hot-path evidence chunk flush size.
+ * H-ARCH-1 GS-10 locks chunk flush at {@link MAX_BATCH_CYCLES} (=32).
+ * `FHV_IDHPS_EVIDENCE_BATCH_CYCLES` must not raise or replace this contract.
+ */
+export function resolveEvidenceBatchCycles(): number {
+  return MAX_BATCH_CYCLES;
+}
 
 export type ReplayRetentionMode = "FULL" | "STREAM_ONLY";
 
