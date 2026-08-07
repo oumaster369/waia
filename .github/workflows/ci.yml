@@ -289,76 +289,14 @@ jobs:
           path: .artifacts/fhv-official-scale/
           retention-days: 7
 
-  # The official full corpus is a ~2-hour campaign that belongs to the Execution Server, not to
-  # pull-request review. It stays runnable on dev/main pushes for release evidence but no longer
-  # gates a PR, and `build` no longer depends on it so a skipped run cannot cascade into skipping
-  # build or e2e.
-  fhv-idhps-full-corpus-gate:
-    name: fhv idhps full corpus gate
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04-arm
-    needs: [fhv-idhps-canonical-probe-gate]
-    timeout-minutes: 180
-    env:
-      DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
-      FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
-      FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
-      FHV_IDHPS_PROGRESS: "1"
-      NODE_ENV: production
-      NODE_OPTIONS: "--max-old-space-size=6144"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
-      - name: Restore probe metrics (feasibility precondition)
-        uses: actions/download-artifact@v4
-        with:
-          name: fhv-idhps-probe-artifacts
-          path: .artifacts/fhv-official-scale
-      - name: Disk preflight + migrate
-        env:
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          mkdir -p .data .artifacts/fhv-official-scale
-          pnpm db:migrate
-          bash ./scripts/ops/record-fhv-artifact-identity.sh
-          AVAILABLE=$(df -PB1 . | awk 'NR==2 {print $4}')
-          echo "availableBytes=$AVAILABLE"
-          test "$AVAILABLE" -ge 28000000000 || echo "WARN: availableBytes below 28GiB floor; projection must still satisfy 70/30"
-          test -f .artifacts/fhv-official-scale/fhv-official-scale-metrics.v1.json
-      - name: Run full-corpus only
-        id: full_corpus
-        timeout-minutes: 125
-        run: corepack pnpm@10 test:fhv:official-scale:full-corpus
-      - name: Stage immutable full-corpus evidence
-        if: always()
-        run: |
-          mkdir -p .artifacts/fhv-full-corpus-failure-staging
-          PRIMARY_EXIT=1
-          if [[ "${{ steps.full_corpus.outcome }}" == "success" ]]; then
-            PRIMARY_EXIT=0
-          fi
-          bash ./scripts/ops/snapshot-fhv-full-corpus-failure-evidence.sh \
-            --artifact-root "${{ github.workspace }}/.artifacts/fhv-official-scale" \
-            --staging-root "${{ github.workspace }}/.artifacts/fhv-full-corpus-failure-staging" \
-            --primary-exit-code "$PRIMARY_EXIT"
-      - name: Upload full-corpus evidence (immutable staging)
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: fhv-idhps-full-corpus-artifacts
-          path: .artifacts/fhv-full-corpus-failure-staging/
-          retention-days: 7
-          if-no-files-found: warn
+  # The official full corpus is a ~2-hour genuine campaign that belongs to the Execution Server,
+  # not to GitHub-hosted CI. It is NOT run automatically on pull_request or push: a GitHub-hosted
+  # runner cannot hold the real target-host WP-3B checkpoint and throughput qualification receipts,
+  # so the genuine unbounded launch correctly fails closed there. GitHub CI proves software and
+  # bounded/representative correctness only; authentic host qualification and full-corpus execution
+  # happen on the target Execution Server under the human-operated path
+  # (scripts/ops/fhv-wp3b-host-qualification.ts, fhv-throughput-host-qualification.ts,
+  # test:fhv:official-scale:full-corpus). No downstream job depends on this campaign.
 
   fhv-release-validation-gate:
     name: fhv release validation gate
