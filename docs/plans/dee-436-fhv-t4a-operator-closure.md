@@ -41,11 +41,17 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: keep-open-until-t4a-evidence
 state:
-  status: step31-corrective-pending-merge
-  repositoryImplementation: pr-open-not-merged
-  releaseToMain: v2026.07.31.df8181b-released
-  mainToDevBackSync: completed-v2026.07.31.df8181b
-  releasedPacketAudit: passed-v2026.07.31.df8181b
+  status: repository-implementation-merged-dev-ci-green
+  repositoryImplementation: merged-on-dev
+  acceptedDevBaselineSha: a84d6b576b5b4575376d2cff254ed932e1b9c554
+  acceptedDevBaselineCiRun: "31175208296"
+  acceptedDevBaselineCiAttempt: 2
+  mergedPr452Sha: 270821733bbf6a56353a81025a08bb286a10ac52
+  mergedPr453Sha: a84d6b576b5b4575376d2cff254ed932e1b9c554
+  dee510Corrective: merged-on-dev
+  releaseToMain: pending-new-release-promotion
+  mainToDevBackSync: pending-after-new-release
+  releasedPacketAudit: pending-after-new-release
   executionServerSurface: step31-failed-run-evidence-preserved-after-residual-recovery
   t4Authorization: none
   t4AuthorizationMeaning: no-currently-reusable-authorization-after-failed-run-and-recovery
@@ -57,7 +63,8 @@ state:
   t4aAttemptLastSuccessfulStep: 30
   t4aAttemptOutcome: step31-failed-not-accepted
   t4bExecuted: false
-  linearDee436: in-progress-keep-open
+  linearDee436: done
+  linearDee510: done
   lastReleasedSha: df8181b2bd7349a4bfe341e892160cfb2a93623d
   lastReleasedTag: v2026.07.31.df8181b
   failedRunId: fhv-t4a-20260801t071817z-aafe21e9-df8181b
@@ -68,13 +75,30 @@ state:
   recoveryClassification: FHV_T4A_RESIDUAL_RECOVERY_OK
   recoveryFinalReceiptDigest: 111d323244c31a8e9ccaeea45c4e755953d5c0e7e1b5709b1f9418b994362f68
   correctiveBranch: dee-436-fhv-t4a-step31-required-tool-args-repair
-  blockedReason: "Step 31 corrective PR pending Human squash merge, release promotion, mandatory main-to-dev back-sync, exact released Packet/blob audit, fresh PRE_AUTH, fresh T4A Steps 1–32, and Human final evidence acceptance."
+  blockedReason: "New dev→main release promotion pending Human merge commit; mandatory main→dev back-sync pending after release; exact released Packet/blob audit; fresh PRE_AUTH; fresh T4A Steps 1–32; Human final evidence acceptance. Execution Server operations not performed."
 provenance:
   createdFrom: chat
   groomedAt: "2026-07-24"
 ---
 
 # DEE-436 — Close complete Human-executable FHV T4A operator surface
+
+## Active repository state (2026-08-07, post DEE-510)
+
+| Field | Value |
+|-------|-------|
+| Repository implementation | **merged** on `dev` — PR #452 (`2708217`) + post-merge CI topology corrective PR #453 (`a84d6b5`) |
+| Accepted dev baseline | `a84d6b576b5b4575376d2cff254ed932e1b9c554` — post-merge CI run `31175208296` attempt **2** **SUCCESS** (attempt 1: flaky unit-test timing failure) |
+| Linear DEE-436 | **Done** — integration boundary closed |
+| Linear DEE-510 | **Done** — corrective integration boundary closed |
+| Release to `main` | **pending** — this release-candidate promotion |
+| Main→dev back-sync | **pending** after new release merge |
+| Last released `main` | `df8181b2bd7349a4bfe341e892160cfb2a93623d` / tag `v2026.07.31.df8181b` |
+| T4A | **not executed** / **not accepted** |
+| T4B | **not executed** / DEE-437 **Backlog** |
+| Execution Server access | **none** in repository release-preparation sessions |
+
+Historical Step 26/31 failed-run and recovery sections below remain immutable forensic evidence. They must not be read as present-tense success.
 
 ## Contract split
 
