@@ -27,6 +27,10 @@ import {
 import type { AccountingStateV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 import { derivePortfolioFromAccountingState as derivePortfolioFromAccountingStateBridge } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import {
+  assertIdhpsHotPathAllowsDerivePortfolioFillWalk,
+  bumpIdhpsCounter,
+} from "@/lib/trader/execution/idhps-hot-path-counters";
 
 export type DerivePortfolioAccountStateInput = {
   context: OrgContext;
@@ -92,6 +96,8 @@ function buildStopDistanceSignal(context: OrgContext): StrategySignal {
 export async function derivePortfolioAccountState(
   input: DerivePortfolioAccountStateInput,
 ): Promise<PortfolioAccountState> {
+  assertIdhpsHotPathAllowsDerivePortfolioFillWalk();
+  bumpIdhpsCounter("derivePortfolioAccountStateCalls");
   const executionMode = input.executionMode ?? "mock";
   const loaded = await loadPaperFillEvents({
     context: input.context,

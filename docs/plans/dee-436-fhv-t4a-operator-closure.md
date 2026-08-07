@@ -41,34 +41,34 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: keep-open-until-t4a-evidence
 state:
-  status: step26-corrective-pending-release
-  repositoryImplementation: merged
-  releaseToMain: v2026.07.31.3fa104c-released
-  mainToDevBackSync: completed-v2026.07.31.3fa104c
-  releasedPacketAudit: passed-v2026.07.31.3fa104c
-  executionServerSurface: step26-failed-run-evidence-only
+  status: step31-corrective-pending-merge
+  repositoryImplementation: pr-open-not-merged
+  releaseToMain: v2026.07.31.df8181b-released
+  mainToDevBackSync: completed-v2026.07.31.df8181b
+  releasedPacketAudit: passed-v2026.07.31.df8181b
+  executionServerSurface: step31-failed-run-evidence-preserved-after-residual-recovery
   t4Authorization: none
   t4AuthorizationMeaning: no-currently-reusable-authorization-after-failed-run-and-recovery
   t4aExecuted: false
   t4aExecutedMeaning: no-accepted-successful-t4a-execution
   t4aAttempted: true
-  t4aAttemptRunId: fhv-t4a-20260731t144326z-1b0cf364-3fa104c
+  t4aAttemptRunId: fhv-t4a-20260801t071817z-aafe21e9-df8181b
   t4aAttemptDeployAuthorizationIssued: true
-  t4aAttemptLastSuccessfulStep: 25
-  t4aAttemptOutcome: step26-failed-not-accepted
+  t4aAttemptLastSuccessfulStep: 30
+  t4aAttemptOutcome: step31-failed-not-accepted
   t4bExecuted: false
   linearDee436: in-progress-keep-open
-  lastReleasedSha: 3fa104c03e440a9ccf2949a1a571939eeb2d453f
-  lastReleasedTag: v2026.07.31.3fa104c
-  failedRunId: fhv-t4a-20260731t144326z-1b0cf364-3fa104c
-  failedRunLastSuccessfulStep: 25
-  failedRunStep22: PASS
-  failedRunTerminalFailure: FHV_T4A_STEP_26_FAILED
-  failedRunRootCause: zero-length-child-PATH-incompatible-with-shebang-env-bash
-  recoveryId: fhv-t4a-recovery-20260731t150735z-20b85a28-3fa104c
+  lastReleasedSha: df8181b2bd7349a4bfe341e892160cfb2a93623d
+  lastReleasedTag: v2026.07.31.df8181b
+  failedRunId: fhv-t4a-20260801t071817z-aafe21e9-df8181b
+  failedRunLastSuccessfulStep: 30
+  failedRunTerminalFailure: FHV_T4A_STEP_31_FAILED
+  failedRunRootCause: STEP31_OPERATOR_REQUIRED_TOOL_ARGS_OMITTED
+  recoveryId: fhv-t4a-recovery-20260801t075556z-6e899213-df8181b
   recoveryClassification: FHV_T4A_RESIDUAL_RECOVERY_OK
-  correctiveBranch: dee-436-fhv-t4a-step26-restricted-path-repair
-  blockedReason: "Step 26 corrective PR pending Human merge, release promotion, back-sync, fresh PRE_AUTH namespace, and fresh T4A execution with Human evidence acceptance."
+  recoveryFinalReceiptDigest: 111d323244c31a8e9ccaeea45c4e755953d5c0e7e1b5709b1f9418b994362f68
+  correctiveBranch: dee-436-fhv-t4a-step31-required-tool-args-repair
+  blockedReason: "Step 31 corrective PR pending Human squash merge, release promotion, mandatory main-to-dev back-sync, exact released Packet/blob audit, fresh PRE_AUTH, fresh T4A Steps 1–32, and Human final evidence acceptance."
 provenance:
   createdFrom: chat
   groomedAt: "2026-07-24"
@@ -226,3 +226,45 @@ Repository acceptance is complete: R01–R28 matrix, Packet V5, and closure veri
 | Required next lifecycle | corrective PR → Human merge to `dev` → release to `main` → back-sync → exact released Packet audit → fresh PRE_AUTH → fresh T4A run |
 
 Historical failed-run and recovery evidence is immutable forensic-only. It must not be reused, repaired, or counted as T4A PASS.
+
+## Step 31 forensic failure and corrective (2026-08-01)
+
+| Field | Value |
+|-------|-------|
+| Failed run ID | `fhv-t4a-20260801t071817z-aafe21e9-df8181b` |
+| Failed release SHA | `df8181b2bd7349a4bfe341e892160cfb2a93623d` |
+| Failed release tag | `v2026.07.31.df8181b` |
+| PRE_AUTH | PASS |
+| Steps 1–30 | PASS |
+| Step 31 | FAIL (`FHV_T4A_STEP_31_FAILED`) |
+| Terminal error | `FHV_T4_CONTINUITY_CONFIG_INCOMPLETE` (`--systemctl-bin`, `--python-bin` required) |
+| Root cause | `STEP31_OPERATOR_REQUIRED_TOOL_ARGS_OMITTED` — Step 31 `trader:fhv:t4:verify-continuity` omitted explicit tool bindings; service-user `env -i` does not inherit workstation `FHV_SYSTEMCTL_BIN` / `FHV_PYTHON_BIN` |
+| Recovery ID | `fhv-t4a-recovery-20260801t075556z-6e899213-df8181b` |
+| Recovery result | `FHV_T4A_RESIDUAL_RECOVERY_OK` |
+| Preview receipt contentDigest | `185e22c818214979d0d431467a74467b63446fc415664166520e9510ef00d1f6` |
+| Confirm-attempt contentDigest | `4bd75b234ee378116c05974078c58d3e16fba1fca6f21aca62e480283e598b64` |
+| Confirm-completion contentDigest | `8087d24f0ca304ffb5acb9943f0411c1a1bc3303d4df963498342ca59c01d5da` |
+| Final recovery receipt contentDigest | `111d323244c31a8e9ccaeea45c4e755953d5c0e7e1b5709b1f9418b994362f68` |
+| afterStateDigest | `dd85325e9dc5c6752a64b6f1625a45d4ea0e511d3daad65c43037972ed63785d` |
+| Final unit state | observer + campaign `disabled` / `inactive` / `dead` / `isFailed=false`; unit files preserved |
+| Failed-run evidence | preserved (POST-before, 31-line T4A trace, continuity artifacts; POST-finalize absent) |
+| T4A status | **NOT PASSED** |
+| Corrective branch | `dee-436-fhv-t4a-step31-required-tool-args-repair` |
+| Remaining gates | corrective PR → Human squash merge to `dev` → new dev CI → release promotion (`dev→main` merge commit) → release verification → mandatory `main→dev` back-sync → exact released Packet/blob audit → fresh unique PRE_AUTH → fresh unique T4A Steps 1–32 → Human final evidence acceptance |
+
+### Pre-merge audit addendum (Steps 4/7 terminal classification)
+
+Zero-defect pre-merge audit of PR #452 proved Steps 4 and 7 exited 0 but recorded tool-level classifications incorrectly as operator `terminalClassification`. Follow-on real-CLI parity repair:
+
+| Step | Downstream | Real tool classification | Operator terminal |
+|------|------------|--------------------------|-------------------|
+| 4 | `fhv-release-checkout-identity.sh` | `FHV_T4_CHECKOUT_IDENTITY_OK` | `FHV_T4A_STEP_4_OK` |
+| 7 | `trader:fhv:t4:record-checkout-identity` → `fhv-t4-closure-cli` | `FHV_T4_CHECKOUT_IDENTITY_PROOF_OK` | `FHV_T4A_STEP_7_OK` |
+
+Additional fail-closed rule: empty/absent CLI classification must throw `FHV_T4A_STEP_<N>_CLASSIFICATION_MISMATCH` (must not synthesize step OK). Hermetic Step 7 routes through the real closure CLI (no hand-authored success class) and writes `control/fhv-t4-checkout-identity.v1.json`.
+
+`cd96660` was **not** fully green for real Step 7 CLI parity — it accepted the shell class `FHV_T4_CHECKOUT_IDENTITY_OK` for Step 7 and hermetic hand-authored that same wrong class.
+
+Full AI-TRADER historical validation launch remains **not** executable on official multi-year HTX data after T4A repository readiness alone — blocked by Human/sequence gates (`AUTHORIZE-FHV-OPS-DEPLOY`, released T4A evidence acceptance, dataset source approval, `AUTHORIZE-FULL-HISTORICAL-VALIDATION`). Repository now exposes **`pnpm trader:fhv:run`** (Full launch receipt + bounded fixture path), **`pnpm trader:fhv:dataset-qualify`**, and **`pnpm trader:fhv:control-replay`**. This PR proves T4A repository readiness only — not real-host T4A PASS, not historical validation PASS, not strategy validation PASS.
+
+Do not mark DEE-436 or T4A complete. Failed-run and recovery namespaces must never be reused.

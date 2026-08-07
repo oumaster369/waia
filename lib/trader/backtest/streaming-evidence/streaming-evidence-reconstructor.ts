@@ -4,7 +4,6 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
-  rmSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";

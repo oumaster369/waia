@@ -5,6 +5,7 @@ import {
   computeAccountingSemanticDigest,
   createInitialAccountingState,
 } from "@/lib/trader/accounting";
+import { noteIdhpsReconciliationCall } from "@/lib/trader/accounting/idhps-accounting-bridge-mirror";
 import {
   assertAccountingReconciliation,
   buildHistoricalRealityReconciliationReport,
@@ -15,6 +16,7 @@ import type {
   AccountingStateV1,
   MarksJsonV1,
 } from "@/lib/trader/accounting/accounting-frontier.types";
+import { AccountingInvariantError } from "@/lib/trader/accounting/accounting-frontier.types";
 import { normalizeAccountingStateDrawdownFields } from "@/lib/trader/accounting/accounting-frontier.types";
 import type { HtrPnlReportV1 } from "@/lib/trader/accounting/htr-pnl-report-v1.types";
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
@@ -41,7 +43,12 @@ import { defaultStopDistanceProvider } from "@/lib/trader/portfolio/default-stop
 import { toAccountRiskState } from "@/lib/trader/portfolio/to-account-risk-state";
 import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-constants";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
-import { resolveDominantStrategyDrawdown } from "@/lib/trader/risk/drawdown-policy-evaluator";
+import {
+  computePeakEquityDrawdownBps,
+  resolveDominantStrategyDrawdown,
+  resolveMonthKeyUtc,
+  updateDrawdownHighWaterMarks,
+} from "@/lib/trader/risk/drawdown-policy-evaluator";
 import type { AppendAccountDrawdownCheckpointInput } from "@/lib/trader/risk/account-drawdown-repository-postgres";
 import { buildAccountDrawdownCheckpointFromBridgeState } from "@/lib/trader/risk/account-drawdown-repository-postgres";
 import type { AppendStrategyDrawdownCheckpointInput } from "@/lib/trader/risk/strategy-drawdown-repository-postgres";
@@ -82,6 +89,10 @@ export type HtrRuntimeCallEvent = {
   detail?: string;
 };
 
+const EMPTY_STRATEGY_PEAKS: Readonly<Record<string, string>> = Object.freeze({});
+/** Shared empty inventory map for flat-book hot-path reconcile/guardian. */
+export const EMPTY_INVENTORY_OPEN_QTY: Readonly<Record<string, string>> = Object.freeze({});
+
 export type HtrAccountingCashEvent = {
   fillId: string;
   netCashEffect: string;
@@ -100,11 +111,27 @@ export type HtrAccountingCycleBridge = {
   terminationCode: string | null;
   startingCashUsdt: string;
   startingEquityUsdt: string;
+  /**
+   * Cash at last durable EPOCH_COMMIT (IDHPS). Epoch cashEvents are applied on top of this base.
+   * Equals startingCashUsdt until the first durable epoch authority step 10.
+   */
+  cashLedgerBaseUsdt: string;
+  /** Fill IDs consumed after the most recent durable EPOCH_COMMIT (IDHPS). */
+  epochConsumedFillIds: string[];
+  /** Latest closed-bar mark per symbol for multi-instrument shared-portfolio replay. */
+  lastMarkBySymbol: MarksJsonV1;
+  /** IDHPS: last full-reconcile fill frontier (mark-only cycles use light checks). */
+  lastFullReconcileFillCount?: number;
+  lastFullReconcileCash?: string;
+  /** Cached count of positions with quantity > 0 (maintained on mark / fill attach). */
+  openPositionCount: number;
 };
 
 export type HtrAccountingCycleContext = {
   bridge: HtrAccountingCycleBridge;
   resolveInventoryOpenQtyBySymbol: () => Promise<Record<string, string>>;
+  /** Drop cached order-repository inventory after simulated fills mutate open qty. */
+  invalidateInventoryCache?: () => void;
   drawdownPersistence?: {
     port: HtrDrawdownPersistencePort;
     session: HtrDrawdownPersistenceSession;
@@ -460,9 +487,18 @@ export function createHtrAccountingCycleBridge(input: {
     terminationCode: null,
     startingCashUsdt,
     startingEquityUsdt: startingCashUsdt,
+    cashLedgerBaseUsdt: startingCashUsdt,
+    epochConsumedFillIds: [],
+    lastMarkBySymbol: {},
+    openPositionCount: 0,
   };
   recordRuntimeCall(bridge, "WP18_INITIAL_STATE", { at: state.frontierAsOf });
   return bridge;
+}
+
+/** True when the bridge currently holds any open (quantity > 0) position. */
+export function bridgeHasOpenPosition(bridge: HtrAccountingCycleBridge): boolean {
+  return bridge.openPositionCount > 0;
 }
 
 export function consumeWp17FillIntoAccountingBridge(
@@ -478,15 +514,32 @@ export function consumeWp17FillIntoAccountingBridge(
       `[htr/accounting-bridge] duplicate fill consumption ${input.fill.fillId}`,
     );
   }
+  const normalizedFill: AccountingFillInput = {
+    ...input.fill,
+    economics: {
+      ...input.fill.economics,
+      symbol: normalizeSymbolForHistoricalExecution(input.fill.economics.symbol),
+    },
+  };
   bridge.state = advanceAccountingFrontier({
     state: bridge.state,
-    fill: input.fill,
-    frontierAsOf: input.fill.executedAt,
+    fill: normalizedFill,
+    frontierAsOf: normalizedFill.executedAt,
+    skipSemanticDigest: true,
   });
+  let openPositionCount = 0;
+  for (const symbol in bridge.state.positions) {
+    const quantity = bridge.state.positions[symbol]!.quantity;
+    if (quantity !== "0" && compareDecimal(quantity, "0") > 0) {
+      openPositionCount += 1;
+    }
+  }
+  bridge.openPositionCount = openPositionCount;
   bridge.cashEvents.push({
     fillId: input.fill.fillId,
     netCashEffect: input.fill.economics.netCashEffect,
   });
+  bridge.epochConsumedFillIds.push(input.fill.fillId);
   recordRuntimeCall(bridge, "WP17_FILL_CONSUMED", {
     cycleIndex: input.cycleIndex,
     detail: input.fill.fillId,
@@ -501,22 +554,97 @@ export function attachClosed1mMarkToAccountingBridge(
 ): void {
   assertBridgeActive(bridge);
   const symbol = normalizeSymbolForHistoricalExecution(closedBar.symbol);
-  const marks: MarksJsonV1 = {
-    [symbol]: {
-      price: closedBar.close,
-      barCloseTime: closedBar.barCloseTime,
-    },
+  bridge.lastMarkBySymbol[symbol] = {
+    price: closedBar.close,
+    barCloseTime: closedBar.barCloseTime,
   };
-  bridge.state = advanceAccountingFrontier({
-    state: bridge.state,
-    marks,
-    frontierAsOf: closedBar.barCloseTime,
-  });
-  recordRuntimeCall(bridge, "WP18_MARK_ATTACHED", {
-    cycleIndex,
-    detail: symbol,
-    at: closedBar.barCloseTime,
-  });
+  const mergedMarks: MarksJsonV1 = {};
+  let openPositionCount = 0;
+  // Avoid Object.entries allocation on the mark hot path.
+  for (const openSymbol in bridge.state.positions) {
+    const position = bridge.state.positions[openSymbol]!;
+    // Canonical closed qty is "0"; skip BigInt parse on the flat-book majority path.
+    if (position.quantity === "0" || compareDecimal(position.quantity, "0") <= 0) {
+      continue;
+    }
+    openPositionCount += 1;
+    const mark = bridge.lastMarkBySymbol[openSymbol] ?? bridge.state.marks[openSymbol];
+    if (!mark) {
+      throw new AccountingInvariantError(`[accounting] missing mark for open symbol ${openSymbol}`);
+    }
+    mergedMarks[openSymbol] = mark;
+  }
+  bridge.openPositionCount = openPositionCount;
+  if (openPositionCount === 0) {
+    // Flat book: bump sequence/frontier without full mark recompute.
+    // Mutate in place — sole bridge owner; avoid shallow-copying the full state each bar.
+    // Still apply UTC month-boundary monthly HWM reset (C-A1 / drawdown semantics).
+    const mark = bridge.lastMarkBySymbol[symbol]!;
+    const state = bridge.state;
+    if (state.marks[symbol] !== mark) {
+      state.marks = { [symbol]: mark };
+    }
+    // ISO frontiers are `YYYY-MM-DDTHH:mm:ss.sssZ` — month key is the YYYY-MM prefix.
+    const monthKey = resolveMonthKeyUtc(closedBar.barCloseTime);
+    if (monthKey !== state.monthKey) {
+      const hwm = updateDrawdownHighWaterMarks({
+        equityUsdt: state.equity,
+        accountPeakHwm: state.equityHwm,
+        monthlyPeakHwm: state.monthlyPeakHwm ?? state.equityHwm,
+        priorMonthKey: state.monthKey,
+        monthKey,
+      });
+      state.equityHwm = hwm.accountPeakHwm;
+      state.monthlyPeakHwm = hwm.monthlyPeakHwm;
+      state.monthKey = monthKey;
+      state.accountDrawdownBps = computePeakEquityDrawdownBps(state.equity, hwm.accountPeakHwm);
+      state.monthlyDrawdownBps = computePeakEquityDrawdownBps(state.equity, hwm.monthlyPeakHwm);
+    }
+    state.frontierAsOf = closedBar.barCloseTime;
+    state.accountingSequence += 1;
+    // IDHPS: flat-book marks dominate; skip callOrder push (open-book still records).
+  } else {
+    // Open book: mutate in place (skipSemanticDigest) — avoid advanceAccountingFrontier
+    // shallow-copies on every bar (CI probe cps). Account/monthly HWM stay correct.
+    const state = bridge.state;
+    const priorEquity = state.equity;
+    let markedPositionValue = "0";
+    for (const openSymbol in state.positions) {
+      const position = state.positions[openSymbol]!;
+      if (position.quantity === "0" || compareDecimal(position.quantity, "0") <= 0) {
+        continue;
+      }
+      markedPositionValue = addDecimal(
+        markedPositionValue,
+        multiplyDecimal(position.quantity, mergedMarks[openSymbol]!.price),
+      );
+    }
+    const equity = addDecimal(state.cash, markedPositionValue);
+    state.marks = mergedMarks;
+    state.markedPositionValue = markedPositionValue;
+    state.equity = equity;
+    state.frontierAsOf = closedBar.barCloseTime;
+    const monthKey = resolveMonthKeyUtc(closedBar.barCloseTime);
+    if (equity !== priorEquity || monthKey !== state.monthKey) {
+      const hwm = updateDrawdownHighWaterMarks({
+        equityUsdt: equity,
+        accountPeakHwm: state.equityHwm,
+        monthlyPeakHwm: state.monthlyPeakHwm ?? state.equityHwm,
+        priorMonthKey: state.monthKey,
+        monthKey,
+      });
+      state.equityHwm = hwm.accountPeakHwm;
+      state.monthlyPeakHwm = hwm.monthlyPeakHwm;
+      state.monthKey = monthKey;
+      state.accountDrawdownBps = computePeakEquityDrawdownBps(equity, hwm.accountPeakHwm);
+      state.monthlyDrawdownBps = computePeakEquityDrawdownBps(equity, hwm.monthlyPeakHwm);
+    }
+    state.accountingSequence += 1;
+    if ("semanticContentDigest" in state) {
+      (state as { semanticContentDigest: string }).semanticContentDigest = "";
+    }
+    // IDHPS: skip WP18 callOrder on mark ticks (fill path still records WP17).
+  }
 }
 
 export function buildHtrReconciliationInput(
@@ -525,20 +653,34 @@ export function buildHtrReconciliationInput(
     inventoryOpenQtyBySymbol?: Record<string, string>;
     equitySeriesTerminal?: string;
     pnlReport?: HtrPnlReportV1;
+    /**
+     * When true, assemble the full PnL report + accounting semantic digest.
+     * Hot-path automatic reconcile (default) uses terminal cash/equity only — digest
+     * meaning is unchanged at terminal export / checkpoint capture.
+     */
+    includeFullPnlReport?: boolean;
   },
 ): AccountingReconciliationInput {
   const pnlReport =
     extras?.pnlReport ??
-    buildHtrPnlReportV1({
-      state: bridge.state,
-      startingEquityUsdt: bridge.startingEquityUsdt,
-      semanticDigest: computeAccountingSemanticDigest(bridge.state),
-    });
+    (extras?.includeFullPnlReport
+      ? buildHtrPnlReportV1({
+          state: bridge.state,
+          startingEquityUsdt: bridge.startingEquityUsdt,
+          semanticDigest: computeAccountingSemanticDigest(bridge.state),
+        })
+      : {
+          // IDHPS hot path: avoid SHA-256 + full PnL assembly on every reconcile phase.
+          terminalEquityUsdt: bridge.state.equity,
+          terminalCashUsdt: bridge.state.cash,
+        });
   return {
     state: bridge.state,
     startingEquityUsdt: bridge.startingEquityUsdt,
-    startingCashUsdt: bridge.startingCashUsdt,
+    // Epoch-bounded cashEvents reconcile against the post-EPOCH_COMMIT cash base (IDHPS).
+    startingCashUsdt: bridge.cashLedgerBaseUsdt,
     cashEvents: bridge.cashEvents,
+    cashEventIntegrityFillIds: bridge.epochConsumedFillIds,
     inventoryOpenQtyBySymbol: extras?.inventoryOpenQtyBySymbol,
     equitySeriesTerminal: extras?.equitySeriesTerminal,
     pnlReport,
@@ -559,16 +701,61 @@ export function runAutomaticAccountingReconciliation(
   },
 ): void {
   assertBridgeActive(bridge);
+  // H-ARCH-1 GS-07: every phase invocation counts and must remain capable of fail-closed.
+  noteIdhpsReconciliationCall();
   try {
-    assertAccountingReconciliation(
-      buildHtrReconciliationInput(bridge, {
-        inventoryOpenQtyBySymbol: input.inventoryOpenQtyBySymbol,
-      }),
-    );
-    recordRuntimeCall(bridge, "WP19_RECONCILIATION_PASS", {
-      cycleIndex: input.cycleIndex,
-      detail: input.phase,
-    });
+    const fillCount = bridge.epochConsumedFillIds.length;
+    const markOnlyCycle =
+      input.phase !== "before_terminal_export" &&
+      input.phase !== "checkpoint_restore" &&
+      fillCount === (bridge.lastFullReconcileFillCount ?? -1) &&
+      bridge.state.cash === (bridge.lastFullReconcileCash ?? "");
+
+    if (markOnlyCycle) {
+      // Light check: cash/equity conservation + inventory parity.
+      // All three locked phases execute this validation (do not coalesce / early-return).
+      const marked = bridge.state.markedPositionValue;
+      if (marked === "0" || compareDecimal(marked, "0") === 0) {
+        // Flat book: cash/equity may differ in decimal formatting ("100000" vs "100000.00").
+        if (compareDecimal(bridge.state.equity, bridge.state.cash) !== 0) {
+          throw new Error(
+            `equity ${bridge.state.equity} != cash ${bridge.state.cash} (flat marked value)`,
+          );
+        }
+      } else {
+        const expectedEquity = addDecimal(bridge.state.cash, marked);
+        if (compareDecimal(bridge.state.equity, expectedEquity) !== 0) {
+          throw new Error(
+            `equity ${bridge.state.equity} != cash ${bridge.state.cash} + marked ${marked}`,
+          );
+        }
+      }
+      const inventory = input.inventoryOpenQtyBySymbol;
+      if (inventory && inventory !== EMPTY_INVENTORY_OPEN_QTY) {
+        for (const symbol in inventory) {
+          const expectedQty = inventory[symbol]!;
+          const actualQty = bridge.state.positions[symbol]?.quantity ?? "0";
+          if (actualQty !== expectedQty && compareDecimal(actualQty, expectedQty) !== 0) {
+            throw new Error(
+              `inventory mismatch for ${symbol}: expected ${expectedQty}, actual ${actualQty}`,
+            );
+          }
+        }
+      }
+      // IDHPS: light checks keep three phases but skip callOrder push (GC); full reconciles record.
+    } else {
+      assertAccountingReconciliation(
+        buildHtrReconciliationInput(bridge, {
+          inventoryOpenQtyBySymbol: input.inventoryOpenQtyBySymbol,
+        }),
+      );
+      bridge.lastFullReconcileFillCount = fillCount;
+      bridge.lastFullReconcileCash = bridge.state.cash;
+      recordRuntimeCall(bridge, "WP19_RECONCILIATION_PASS", {
+        cycleIndex: input.cycleIndex,
+        detail: input.phase,
+      });
+    }
   } catch (error) {
     recordRuntimeCall(bridge, "WP19_RECONCILIATION_FAIL", {
       cycleIndex: input.cycleIndex,
@@ -591,32 +778,47 @@ export function evaluateHtrGuardianForBridge(
   },
 ): HtrGuardianCycleResult {
   assertBridgeActive(bridge);
-  const drawdownState = normalizeAccountingStateDrawdownFields(bridge.state);
-  const reconciliation = buildHtrReconciliationInput(bridge, {
-    inventoryOpenQtyBySymbol: input.inventoryOpenQtyBySymbol,
-  });
-  const dominantStrategy = resolveDominantStrategyDrawdown({
-    strategyDrawdownBpsByKey: drawdownState.strategyDrawdownBpsByKey,
-    strategyPeakHwmByKey: drawdownState.strategyPeakHwmByKey,
-  });
+  // Hot path: read drawdown fields without spreading the full accounting state.
+  const accountPeakHwm = bridge.state.equityHwm;
+  const monthlyPeakHwm = bridge.state.monthlyPeakHwm ?? bridge.state.equityHwm;
+  const strategyDrawdownBpsByKey = bridge.state.strategyDrawdownBpsByKey;
+  let dominantStrategy: ReturnType<typeof resolveDominantStrategyDrawdown> = {};
+  if (strategyDrawdownBpsByKey) {
+    for (const _key in strategyDrawdownBpsByKey) {
+      dominantStrategy = resolveDominantStrategyDrawdown({
+        strategyDrawdownBpsByKey,
+        strategyPeakHwmByKey: bridge.state.strategyPeakHwmByKey ?? EMPTY_STRATEGY_PEAKS,
+      });
+      break;
+    }
+  }
   const cycle = evaluateHtrGuardianCycle({
-    reconciliation,
-    accountPeakHwm: drawdownState.equityHwm,
-    monthlyPeakHwm: drawdownState.monthlyPeakHwm,
+    accountPeakHwm,
+    monthlyPeakHwm,
     equityUsdt: input.equityUsdt,
     strategyDrawdownBps: dominantStrategy.strategyDrawdownBps,
     strategyEquityUsdt: dominantStrategy.strategyEquityUsdt,
     strategyPeakHwm: dominantStrategy.strategyPeakHwm,
     missingMark: input.missingMark,
+    // before_guardian phase already asserted; avoid duplicate full reconcile + input assembly.
+    skipReconciliationAssert: true,
   });
   bridge.lastGuardianCycle = cycle;
   bridge.breachState = cycle.breachState;
   bridge.guardianReason = cycle.reason;
-  recordRuntimeCall(bridge, "WP20_GUARDIAN_EVALUATED", {
-    cycleIndex: input.cycleIndex,
-    detail: cycle.breachState,
-  });
+  // Official-scale STREAM_ONLY: NONE dominates; skip callOrder push (GC) while still evaluating.
+  // Research/MACRO-H paths keep full WP20 callOrder (no FHV_IDHPS_SKIP_REGIME_TIMELINE).
+  if (cycle.breachState !== "NONE" || !isOfficialScaleIdhpsHotPath()) {
+    recordRuntimeCall(bridge, "WP20_GUARDIAN_EVALUATED", {
+      cycleIndex: input.cycleIndex,
+      detail: cycle.breachState,
+    });
+  }
   return cycle;
+}
+
+function isOfficialScaleIdhpsHotPath(): boolean {
+  return process.env.FHV_IDHPS_SKIP_REGIME_TIMELINE === "1";
 }
 
 export function recordBreachCancellationOnBridge(
@@ -646,13 +848,16 @@ export function derivePortfolioFromAccountingState(input: {
   runConfig: PortfolioRunConfig;
   limits: PortfolioSizingLimits;
   stopDistanceProvider: StopDistanceProvider;
+  /** Optional cycle marks (portfolio path) when accounting marks are not yet attached. */
+  markPrices?: Readonly<Record<string, string>>;
 }): PortfolioAccountState {
   const positions = Object.entries(input.state.positions)
     .filter(([, position]) => compareDecimal(position.quantity, "0") > 0)
     .map(([symbol, position]) => {
       const portfolioSymbol = accountingSymbolToPortfolioSymbol(symbol);
       const mark = input.state.marks[symbol];
-      const markPrice = mark?.price ?? "0";
+      const markPrice =
+        input.markPrices?.[portfolioSymbol] ?? input.markPrices?.[symbol] ?? mark?.price ?? "0";
       const avgCost =
         compareDecimal(position.quantity, "0") > 0
           ? divideDecimal(position.netPositionBasis, position.quantity)
@@ -784,6 +989,7 @@ export function toAccountingCheckpointSlice(
     positionsJson: bridge.state.positions,
     consumedFillIds: [...bridge.state.consumedFillIds],
     cashEventsJson: [...bridge.cashEvents],
+    cashLedgerBaseUsdt: bridge.cashLedgerBaseUsdt,
     grossRealizedPnl: bridge.state.grossRealizedPnl,
     netRealizedPnl: bridge.state.netRealizedPnl,
     semanticContentDigest: computeAccountingSemanticDigest(bridge.state),
@@ -873,7 +1079,18 @@ export function restoreAccountingBridgeFromCheckpoint(
     );
   }
   bridge.state = restoredState;
+  bridge.lastMarkBySymbol = { ...slice.marksJson };
   bridge.cashEvents = [...slice.cashEventsJson];
+  bridge.cashLedgerBaseUsdt = slice.cashLedgerBaseUsdt ?? bridge.startingCashUsdt;
+  bridge.epochConsumedFillIds = slice.cashEventsJson.map((event) => event.fillId);
+  let openPositionCount = 0;
+  for (const symbol in restoredState.positions) {
+    const quantity = restoredState.positions[symbol]!.quantity;
+    if (quantity !== "0" && compareDecimal(quantity, "0") > 0) {
+      openPositionCount += 1;
+    }
+  }
+  bridge.openPositionCount = openPositionCount;
   recordRuntimeCall(bridge, "CHECKPOINT_RESTORED", { detail: String(slice.accountingSequence) });
 }
 

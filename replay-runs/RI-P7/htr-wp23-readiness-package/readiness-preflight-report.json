@@ -2,9 +2,9 @@
   "schemaVersion": "htr-readiness-preflight-report/v1",
   "terminalState": "HTR_WP23_READINESS_PREFLIGHT_PASS",
   "sourceGitSha": "5e8e8b6ca454bdda77222efc182b3d517cd2a1d1",
-  "sourceDirtyTree": false,
-  "fhvRunContractDigest": "694f96d9f16f32e450ced1c1564c15f9ee097ab8d6cf99c2f3182c1fcea390cb",
-  "executionServerPackageDigest": "d49ccd0b92108ba66047616fd4560299d59d9bf9bc4019d8a8321b5cdcbd01e5",
+  "sourceDirtyTree": true,
+  "fhvRunContractDigest": "33934dd626dc3e6219e5b06906828f4510f67cadeb985246cca61e83e1baff0f",
+  "executionServerPackageDigest": "7b05a6791ab933a58b8179284fe209ada018970baae1f2123d1290836d31b30a",
   "operatorReportSchemaVersion": "htr-operator-report/v1",
   "gateGroupIds": [
     "CG-Gov",
@@ -21,6 +21,6 @@
   "holdoutNoReadAttestation": true,
   "noServerMutationAttestation": true,
   "failureCodes": [],
-  "checkedAtUtc": "2026-07-19T17:12:43.217Z",
-  "payloadSha256": "d9f582da4b42d599840b426305adab3d8d7cd71fd51740e154b4551600c93fb0"
+  "checkedAtUtc": "2026-08-01T13:47:40.183Z",
+  "payloadSha256": "b507ec87c40be84fdeb20951324f8fb6fff2d5a3bac63b4b8d567da58927090f"
 }

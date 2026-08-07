@@ -95,6 +95,34 @@ function parseClassification(stdout: string): string {
   return parseFhvT4aTaggedKeyValueLines(stdout).classification ?? "";
 }
 
+/**
+ * Operator step terminal classification must be exactly FHV_T4A_STEP_<N>_OK.
+ * Downstream CLIs may emit tool-specific success classes; those are accepted only when
+ * explicitly allowlisted and must not replace the step terminal class.
+ * Empty/absent classification fails closed.
+ */
+function requireOperatorStepOkClassification(
+  step: number,
+  stdout: string,
+  acceptedCliClasses: readonly string[] = [],
+): string {
+  const stepOk = `FHV_T4A_STEP_${step}_OK`;
+  const parsed = parseClassification(stdout);
+  if (!parsed) {
+    throw new FhvT4aOperatorError(
+      `FHV_T4A_STEP_${step}_CLASSIFICATION_MISMATCH`,
+      `Step ${step} CLI classification missing; expected ${stepOk} or one of [${acceptedCliClasses.join(", ")}].`,
+    );
+  }
+  if (parsed === stepOk || acceptedCliClasses.includes(parsed)) {
+    return stepOk;
+  }
+  throw new FhvT4aOperatorError(
+    `FHV_T4A_STEP_${step}_CLASSIFICATION_MISMATCH`,
+    `Step ${step} CLI classification ${parsed} is not accepted; expected ${stepOk} or one of [${acceptedCliClasses.join(", ")}].`,
+  );
+}
+
 function parseCeremony(stdout: string): Record<string, string> {
   return parseFhvT4aTaggedKeyValueLines(stdout);
 }
@@ -374,7 +402,9 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       return {
         step,
         ...result,
-        classification: parseClassification(result.stdout) || "FHV_T4A_STEP_4_OK",
+        classification: requireOperatorStepOkClassification(step, result.stdout, [
+          "FHV_T4_CHECKOUT_IDENTITY_OK",
+        ]),
         prerequisiteProofDigests: prereq,
         resultingProofDigests: proofs,
       };
@@ -443,7 +473,9 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
       return {
         step,
         ...result,
-        classification: parseClassification(result.stdout) || "FHV_T4A_STEP_7_OK",
+        classification: requireOperatorStepOkClassification(step, result.stdout, [
+          "FHV_T4_CHECKOUT_IDENTITY_PROOF_OK",
+        ]),
         prerequisiteProofDigests: prereq,
         resultingProofDigests: proofs,
       };
@@ -870,6 +902,10 @@ export function executeFhvT4aStep(ctx: FhvT4aExecContext, step: number): FhvT4aS
         ctx.continuityBefore,
         "--after",
         ctx.continuityAfter,
+        "--systemctl-bin",
+        b.systemctlBin,
+        "--python-bin",
+        b.pythonBin,
       ]);
       requireOk(result, step, "verify continuity");
       const continuityVerificationProofPath = resolveFhvT4ContinuityVerificationProofPath(

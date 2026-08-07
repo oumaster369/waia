@@ -4,8 +4,12 @@ export type ReplayBenchmarkStageId =
   | "canvas-serialize"
   | "fused-context-build"
   | "clock-advance"
+  | "wp17-historical-advance"
   | "paper-cycle"
+  | "intelligence-bundle"
   | "account-state-refresh"
+  | "evidence-on-cycle"
+  | "cycle-boundary"
   | "evidence-export";
 
 export const REPLAY_BENCHMARK_PER_CYCLE_STAGES: readonly ReplayBenchmarkStageId[] = [
@@ -13,8 +17,12 @@ export const REPLAY_BENCHMARK_PER_CYCLE_STAGES: readonly ReplayBenchmarkStageId[
   "canvas-advance",
   "fused-context-build",
   "clock-advance",
+  "wp17-historical-advance",
   "paper-cycle",
+  "intelligence-bundle",
   "account-state-refresh",
+  "evidence-on-cycle",
+  "cycle-boundary",
 ] as const;
 
 export const REPLAY_BENCHMARK_PER_RUN_STAGES: readonly ReplayBenchmarkStageId[] = [

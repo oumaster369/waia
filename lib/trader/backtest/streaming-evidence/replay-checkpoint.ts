@@ -1,14 +1,19 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
+import { computeSemanticParityDigest } from "@/lib/trader/backtest/streaming-evidence/semantic-parity-digest";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import { reconstructStreamingEvidence } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-reconstructor";
-import type { StreamingEvidenceTerminalState } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
+import { StreamingEvidenceReader } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-reader";
+import type {
+  ReplayCycleEvidenceProjection,
+  StreamingEvidenceTerminalState,
+} from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
 
 export const REPLAY_CHECKPOINT_SCHEMA_VERSION = "htr-wp17-replay-checkpoint/v3" as const;
-export const REPLAY_RUN_CHAIN_MANIFEST_SCHEMA_VERSION = "htr-wp05-run-chain/v1" as const;
+export const REPLAY_RUN_CHAIN_MANIFEST_SCHEMA_VERSION = "htr-wp05-run-chain/v2" as const;
 
 export type ResearchReplayPhase = "validation" | `walk-forward:${number}` | "blind" | "none";
 
@@ -70,6 +75,8 @@ export type ReplayAccountingFrontierState = {
   >;
   consumedFillIds: string[];
   cashEventsJson: Array<{ fillId: string; netCashEffect: string }>;
+  /** IDHPS: cash base for epoch-bounded cashEvents (defaults to starting cash on restore). */
+  cashLedgerBaseUsdt?: string;
   grossRealizedPnl: string;
   netRealizedPnl: string;
   semanticContentDigest: string;
@@ -94,6 +101,7 @@ export function buildReplayAccountingFrontierState(input: {
   >;
   consumedFillIds: string[];
   cashEventsJson: Array<{ fillId: string; netCashEffect: string }>;
+  cashLedgerBaseUsdt?: string;
   grossRealizedPnl: string;
   netRealizedPnl: string;
   semanticContentDigest: string;
@@ -160,7 +168,15 @@ export type ReplayRunChainManifest = {
   backtestRunId: string;
   activePhase: ResearchReplayPhase;
   segments: ReplayRunChainSegment[];
+  /**
+   * Legacy composed chain digest over all segment chainDigests (backward compatible).
+   * Prefer `authoritativeSemanticDigest` for uninterrupted vs resumed parity comparison.
+   */
   composedChainDigest: string;
+  /** Digest of authoritative projection stream only (semantic parity). Required in v2. */
+  authoritativeSemanticDigest: string;
+  /** Digest of full audit lineage including superseded segment metadata. Required in v2. */
+  auditLineageDigest: string;
 };
 
 export type DbPhaseFrontier = {
@@ -376,20 +392,80 @@ export function computeRunChainComposedDigest(segmentChainDigests: readonly stri
   return computePayloadDigest(segmentChainDigests);
 }
 
+export function computeAuditLineageDigest(segments: readonly ReplayRunChainSegment[]): string {
+  return computePayloadDigest(
+    segments.map((segment) => ({
+      runDir: segment.runDir,
+      chainDigest: segment.chainDigest,
+      role: segmentRole(segment),
+      continuesFromChainDigest: segment.continuesFromChainDigest ?? null,
+      continuesFromRunDir: segment.continuesFromRunDir ?? null,
+      terminalState: segment.terminalState,
+      sealedThroughCycleIndex: segment.sealedThroughCycleIndex,
+    })),
+  );
+}
+
+function readAuthoritativeSegmentProjections(runDir: string): ReplayCycleEvidenceProjection[] {
+  if (!existsSync(runDir)) {
+    return [];
+  }
+  const direct = [...new StreamingEvidenceReader(runDir).iterateProjections()];
+  if (direct.length > 0) {
+    return direct;
+  }
+  const evidenceRoot = join(runDir, "evidence");
+  if (!existsSync(evidenceRoot)) {
+    return direct;
+  }
+  const projections: ReplayCycleEvidenceProjection[] = [];
+  const epochDirs = readdirSync(evidenceRoot)
+    .filter((name) => name.startsWith("epoch-"))
+    .sort((a, b) => Number(a.slice("epoch-".length)) - Number(b.slice("epoch-".length)));
+  for (const epochDir of epochDirs) {
+    const epochPath = join(evidenceRoot, epochDir);
+    if (!statSync(epochPath).isDirectory()) continue;
+    const generationDirs = readdirSync(epochPath)
+      .filter((name) => name.startsWith("generation-"))
+      .sort(
+        (a, b) => Number(a.slice("generation-".length)) - Number(b.slice("generation-".length)),
+      );
+    for (const generationDir of generationDirs) {
+      const segmentDir = join(epochPath, generationDir);
+      if (!statSync(segmentDir).isDirectory()) continue;
+      projections.push(...new StreamingEvidenceReader(segmentDir).iterateProjections());
+    }
+  }
+  return projections;
+}
+
 export function buildReplayRunChainManifest(input: {
   backtestRunId: string;
   activePhase: ResearchReplayPhase;
   segments: ReplayRunChainSegment[];
+  authoritativeSemanticDigest?: string;
 }): ReplayRunChainManifest {
   const composedChainDigest = computeRunChainComposedDigest(
     input.segments.map((segment) => segment.chainDigest),
   );
+  const auditLineageDigest = computeAuditLineageDigest(input.segments);
+  let authoritativeSemanticDigest = input.authoritativeSemanticDigest;
+  if (!authoritativeSemanticDigest) {
+    const projections: ReplayCycleEvidenceProjection[] = [];
+    for (const segment of input.segments) {
+      if (segmentRole(segment) !== "authoritative") continue;
+      projections.push(...readAuthoritativeSegmentProjections(segment.runDir));
+    }
+    authoritativeSemanticDigest = computeSemanticParityDigest(projections);
+  }
   return {
     schemaVersion: REPLAY_RUN_CHAIN_MANIFEST_SCHEMA_VERSION,
     backtestRunId: input.backtestRunId,
     activePhase: input.activePhase,
     segments: input.segments,
     composedChainDigest,
+    auditLineageDigest,
+    authoritativeSemanticDigest,
   };
 }
 

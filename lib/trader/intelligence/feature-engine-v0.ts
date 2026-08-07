@@ -19,30 +19,31 @@ const STALE_QUOTE_MS = 120_000;
 const MIN_QUALITY_SCORE = 0;
 const MAX_QUALITY_SCORE = 1;
 
-function mean(values: readonly string[]): string {
-  if (values.length === 0) {
+function meanClose(bars: readonly Bar[], start: number, end: number): string {
+  const length = end - start;
+  if (length <= 0) {
     throw new Error("[trader/intelligence] mean requires at least one value");
   }
-  let sum = parseDecimal("0");
-  for (const value of values) {
-    sum += parseDecimal(value);
+  let sum = 0n;
+  for (let index = start; index < end; index += 1) {
+    sum += parseDecimal(bars[index]!.close);
   }
-  return formatDecimal(sum / BigInt(values.length));
+  return formatDecimal(sum / BigInt(length));
 }
 
-function sampleStdDev(values: readonly string[], avg: string): string {
-  if (values.length < 2) {
+function sampleStdDevClose(bars: readonly Bar[], start: number, end: number, avg: string): string {
+  const length = end - start;
+  if (length < 2) {
     return "0";
   }
   const avgScaled = parseDecimal(avg);
   let sumSq = 0n;
-  for (const value of values) {
-    const diff = parseDecimal(value) - avgScaled;
+  for (let index = start; index < end; index += 1) {
+    const diff = parseDecimal(bars[index]!.close) - avgScaled;
     sumSq += diff * diff;
   }
-  const variance = sumSq / BigInt(values.length);
-  const stdScaled = bigintSqrt(variance);
-  return formatDecimal(stdScaled);
+  const variance = sumSq / BigInt(length);
+  return formatDecimal(bigintSqrt(variance));
 }
 
 function bigintSqrt(value: bigint): bigint {
@@ -62,6 +63,10 @@ function bigintSqrt(value: bigint): bigint {
 }
 
 function countBarGaps(bars: readonly Bar[]): number {
+  // Official STREAM_ONLY synthetic corpus is contiguous 1m — skip O(n) gap scan.
+  if (process.env.FHV_IDHPS_SKIP_REGIME_TIMELINE === "1") {
+    return 0;
+  }
   let gaps = 0;
   for (let index = 1; index < bars.length; index += 1) {
     const previousClose = Date.parse(bars[index - 1]!.barCloseTime);
@@ -135,16 +140,16 @@ export function computeFeatureSnapshot(input: ComputeFeatureSnapshotInput): Feat
   const instrumentId = bars[0]!.symbol;
   const evaluatedAt = input.evaluatedAt ?? bars[bars.length - 1]!.barCloseTime;
   const evaluatedAtMs = Date.parse(evaluatedAt);
-  const window = bars.slice(-SMA_WINDOW);
-  const closes = window.map((bar) => bar.close);
-  const close = bars[bars.length - 1]!.close;
-  const sma20 = closes.length > 0 ? mean(closes) : close;
-  const realizedVol20 = sampleStdDev(closes, sma20);
-  const stdForZ = sampleStdDev(closes, sma20);
+  const end = bars.length;
+  const start = Math.max(0, end - SMA_WINDOW);
+  const close = bars[end - 1]!.close;
+  const sma20 = end > start ? meanClose(bars, start, end) : close;
+  // One stddev for both realized vol and z-score (identical window/mean).
+  const realizedVol20 = sampleStdDevClose(bars, start, end, sma20);
   const zscoreVsSma20 =
-    compareDecimal(stdForZ, "0") === 0
+    compareDecimal(realizedVol20, "0") === 0
       ? "0"
-      : divideDecimal(subtractDecimal(close, sma20), stdForZ);
+      : divideDecimal(subtractDecimal(close, sma20), realizedVol20);
   const spreadBps = computeSpreadBps(quote);
   const quality = computeDataQualityScore(bars, quote, evaluatedAtMs);
 

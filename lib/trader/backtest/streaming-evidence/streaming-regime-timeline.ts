@@ -61,7 +61,7 @@ export class StreamingRegimeTimelineWriter {
     };
     writeFileAtomic(
       join(this.timelineDir, `timeline-${formatSeq(this.nextSeq)}.json`),
-      JSON.stringify(envelope, null, 2),
+      JSON.stringify(envelope),
     );
     this.nextSeq += 1;
     this.chunkCountValue += 1;

@@ -1,0 +1,212 @@
+import { existsSync, readFileSync } from "node:fs";
+
+import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
+import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
+import {
+  assertImmutableArtifactExactMatch,
+  FhvImmutableArtifactCollisionError,
+} from "@/lib/trader/observability/fhv-immutable-artifact-guard";
+
+export const FHV_CONTROL_REPLAY_RECEIPT_SCHEMA_VERSION = "fhv-control-replay-receipt/v1" as const;
+export const FHV_CONTROL_REPLAY_HOLDOUT_STATUS = "SEALED_NOT_ACCESSED" as const;
+
+export type FhvControlReplayReceiptV1 = Readonly<{
+  schemaVersion: typeof FHV_CONTROL_REPLAY_RECEIPT_SCHEMA_VERSION;
+  classification: "CONTROL_REPLAY=PASS";
+  releaseSha: string;
+  releaseTag: string;
+  organizationId: string;
+  operatorId: string;
+  runOneId: string;
+  runTwoId: string;
+  runOneDigest: string;
+  runTwoDigest: string;
+  digestsMatch: true;
+  datasetQualificationReceiptDigest: string;
+  datasetContentDigest: string;
+  manifestSemanticDigest: string;
+  runOneConfigurationFreezeDigest: string;
+  runTwoConfigurationFreezeDigest: string;
+  runOneAuthorizationReceiptDigest: string;
+  runTwoAuthorizationReceiptDigest: string;
+  runOneCheckoutIdentityProofDigest: string;
+  runTwoCheckoutIdentityProofDigest: string;
+  runOneCycleCount: number;
+  runTwoCycleCount: number;
+  runOneAccountingStateDigest?: string;
+  runTwoAccountingStateDigest?: string;
+  runOneHtrPnlReportDigest?: string;
+  runTwoHtrPnlReportDigest?: string;
+  holdoutStatus: typeof FHV_CONTROL_REPLAY_HOLDOUT_STATUS;
+  capturedAtUtc: string;
+  controlReplayReceiptDigest: string;
+}>;
+
+export class FhvControlReplayReceiptError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "FhvControlReplayReceiptError";
+  }
+}
+
+function computeControlReplayReceiptDigest(
+  receipt: Omit<FhvControlReplayReceiptV1, "controlReplayReceiptDigest">,
+): string {
+  return computePayloadDigest(receipt);
+}
+
+export function buildFhvControlReplayReceipt(
+  body: Omit<FhvControlReplayReceiptV1, "controlReplayReceiptDigest">,
+): FhvControlReplayReceiptV1 {
+  return {
+    ...body,
+    controlReplayReceiptDigest: computeControlReplayReceiptDigest(body),
+  };
+}
+
+export function readFhvControlReplayReceipt(receiptPath: string): FhvControlReplayReceiptV1 {
+  const parsed = JSON.parse(readFileSync(receiptPath, "utf8")) as FhvControlReplayReceiptV1;
+  const { controlReplayReceiptDigest, ...body } = parsed;
+  const expected = computeControlReplayReceiptDigest(body);
+  if (expected !== controlReplayReceiptDigest) {
+    throw new FhvControlReplayReceiptError(
+      "CONTROL_REPLAY_RECEIPT_DIGEST_MISMATCH",
+      "Control replay receipt digest mismatch.",
+    );
+  }
+  if (parsed.classification !== "CONTROL_REPLAY=PASS") {
+    throw new FhvControlReplayReceiptError(
+      "CONTROL_REPLAY_RECEIPT_NOT_PASS",
+      "Control replay receipt must classify PASS.",
+    );
+  }
+  if (parsed.holdoutStatus !== FHV_CONTROL_REPLAY_HOLDOUT_STATUS) {
+    throw new FhvControlReplayReceiptError(
+      "CONTROL_REPLAY_HOLDOUT_STATUS_MISMATCH",
+      "Control replay receipt must declare holdoutStatus SEALED_NOT_ACCESSED.",
+    );
+  }
+  return parsed;
+}
+
+const CONTROL_REPLAY_RECEIPT_COMPARE_KEYS = [
+  "schemaVersion",
+  "classification",
+  "releaseSha",
+  "releaseTag",
+  "organizationId",
+  "operatorId",
+  "runOneId",
+  "runTwoId",
+  "runOneDigest",
+  "runTwoDigest",
+  "digestsMatch",
+  "datasetQualificationReceiptDigest",
+  "datasetContentDigest",
+  "manifestSemanticDigest",
+  "runOneConfigurationFreezeDigest",
+  "runTwoConfigurationFreezeDigest",
+  "runOneAuthorizationReceiptDigest",
+  "runTwoAuthorizationReceiptDigest",
+  "runOneCheckoutIdentityProofDigest",
+  "runTwoCheckoutIdentityProofDigest",
+  "runOneCycleCount",
+  "runTwoCycleCount",
+  "runOneAccountingStateDigest",
+  "runTwoAccountingStateDigest",
+  "runOneHtrPnlReportDigest",
+  "runTwoHtrPnlReportDigest",
+  "holdoutStatus",
+] as const satisfies readonly (keyof FhvControlReplayReceiptV1)[];
+
+export function writeFhvControlReplayReceiptAtomic(input: {
+  receiptPath: string;
+  releaseSha: string;
+  releaseTag: string;
+  organizationId: string;
+  operatorId: string;
+  runOneId: string;
+  runTwoId: string;
+  runOneDigest: string;
+  runTwoDigest: string;
+  datasetQualificationReceiptDigest: string;
+  datasetContentDigest: string;
+  manifestSemanticDigest: string;
+  runOneConfigurationFreezeDigest: string;
+  runTwoConfigurationFreezeDigest: string;
+  runOneAuthorizationReceiptDigest: string;
+  runTwoAuthorizationReceiptDigest: string;
+  runOneCheckoutIdentityProofDigest: string;
+  runTwoCheckoutIdentityProofDigest: string;
+  runOneCycleCount: number;
+  runTwoCycleCount: number;
+  runOneAccountingStateDigest?: string;
+  runTwoAccountingStateDigest?: string;
+  runOneHtrPnlReportDigest?: string;
+  runTwoHtrPnlReportDigest?: string;
+  capturedAtUtc?: string;
+}): FhvControlReplayReceiptV1 {
+  const body = {
+    schemaVersion: FHV_CONTROL_REPLAY_RECEIPT_SCHEMA_VERSION,
+    classification: "CONTROL_REPLAY=PASS" as const,
+    releaseSha: input.releaseSha.trim().toLowerCase(),
+    releaseTag: input.releaseTag.trim(),
+    organizationId: input.organizationId,
+    operatorId: input.operatorId,
+    runOneId: input.runOneId,
+    runTwoId: input.runTwoId,
+    runOneDigest: input.runOneDigest,
+    runTwoDigest: input.runTwoDigest,
+    digestsMatch: true as const,
+    datasetQualificationReceiptDigest: input.datasetQualificationReceiptDigest,
+    datasetContentDigest: input.datasetContentDigest,
+    manifestSemanticDigest: input.manifestSemanticDigest,
+    runOneConfigurationFreezeDigest: input.runOneConfigurationFreezeDigest,
+    runTwoConfigurationFreezeDigest: input.runTwoConfigurationFreezeDigest,
+    runOneAuthorizationReceiptDigest: input.runOneAuthorizationReceiptDigest,
+    runTwoAuthorizationReceiptDigest: input.runTwoAuthorizationReceiptDigest,
+    runOneCheckoutIdentityProofDigest: input.runOneCheckoutIdentityProofDigest,
+    runTwoCheckoutIdentityProofDigest: input.runTwoCheckoutIdentityProofDigest,
+    runOneCycleCount: input.runOneCycleCount,
+    runTwoCycleCount: input.runTwoCycleCount,
+    ...(input.runOneAccountingStateDigest
+      ? { runOneAccountingStateDigest: input.runOneAccountingStateDigest }
+      : {}),
+    ...(input.runTwoAccountingStateDigest
+      ? { runTwoAccountingStateDigest: input.runTwoAccountingStateDigest }
+      : {}),
+    ...(input.runOneHtrPnlReportDigest
+      ? { runOneHtrPnlReportDigest: input.runOneHtrPnlReportDigest }
+      : {}),
+    ...(input.runTwoHtrPnlReportDigest
+      ? { runTwoHtrPnlReportDigest: input.runTwoHtrPnlReportDigest }
+      : {}),
+    holdoutStatus: FHV_CONTROL_REPLAY_HOLDOUT_STATUS,
+    capturedAtUtc: input.capturedAtUtc ?? new Date().toISOString(),
+  };
+
+  if (existsSync(input.receiptPath)) {
+    const existing = readFhvControlReplayReceipt(input.receiptPath);
+    const requested = buildFhvControlReplayReceipt({
+      ...body,
+      capturedAtUtc: existing.capturedAtUtc,
+    });
+    assertImmutableArtifactExactMatch({
+      artifactPath: input.receiptPath,
+      artifactLabel: "Control replay receipt",
+      existing,
+      requested,
+      compareKeys: CONTROL_REPLAY_RECEIPT_COMPARE_KEYS,
+    });
+    return existing;
+  }
+
+  const receipt = buildFhvControlReplayReceipt(body);
+  writeFileAtomicExclusive(input.receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+  return receipt;
+}
+
+export { FhvImmutableArtifactCollisionError };

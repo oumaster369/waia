@@ -65,7 +65,8 @@ payload = {
     "execMainStatus": int(os.environ["EXEC_MAIN_STATUS"] or "0"),
     "nRestarts": int(os.environ["N_RESTARTS"] or "0"),
 }
-digest = sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+# Digest must match Node computePayloadDigest(JSON.stringify) — insertion order, no sort_keys.
+digest = sha256(json.dumps(payload, separators=(",", ":")).encode()).hexdigest()
 payload["contentDigest"] = digest
 print(json.dumps(payload, separators=(",", ":")))
 PY

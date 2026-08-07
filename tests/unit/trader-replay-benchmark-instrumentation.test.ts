@@ -23,11 +23,15 @@ describe("replay benchmark instrumentation (HTR-WP03)", () => {
       "canvas-advance",
       "fused-context-build",
       "clock-advance",
+      "wp17-historical-advance",
       "paper-cycle",
+      "intelligence-bundle",
       "account-state-refresh",
+      "evidence-on-cycle",
+      "cycle-boundary",
     ]);
     expect(REPLAY_BENCHMARK_PER_RUN_STAGES).toEqual(["evidence-export"]);
-    expect(REPLAY_BENCHMARK_ALL_STAGES).toHaveLength(7);
+    expect(REPLAY_BENCHMARK_ALL_STAGES).toHaveLength(11);
   });
 
   it("records positive stage durations and memory high-water with O(1) aggregates", () => {

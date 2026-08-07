@@ -151,6 +151,13 @@ export function evaluateCapitalLimits(
       if (d20.strategyBreached) reasonCodes.push(drawdownReasonCodes.strategyDrawdown);
       return stopAccountDecision(reasonCodes, baseSnapshot(), evaluatedAt);
     }
+    if (d20.breachState === "CLOSE_ONLY") {
+      const reasonCodes: RiskReasonCode[] = [];
+      if (d20.accountBreached) reasonCodes.push(drawdownReasonCodes.accountDrawdown);
+      if (d20.monthlyBreached) reasonCodes.push(drawdownReasonCodes.monthlyDrawdown);
+      if (d20.strategyBreached) reasonCodes.push(drawdownReasonCodes.strategyDrawdown);
+      return closeOnlyDecision(reasonCodes, baseSnapshot(), evaluatedAt);
+    }
   }
 
   checksApplied.push("drawdown");

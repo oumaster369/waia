@@ -103,6 +103,7 @@ describe("WP09 qualification instrumentation (HTR-WP09 post-fail correction)", (
           "canvas-serialize": { sampleCount: 0, totalNs: "0", maxNs: "0", p95Ns: "0" },
           "fused-context-build": { sampleCount: 0, totalNs: "0", maxNs: "0", p95Ns: "0" },
           "clock-advance": { sampleCount: 0, totalNs: "0", maxNs: "0", p95Ns: "0" },
+          "wp17-historical-advance": { sampleCount: 0, totalNs: "0", maxNs: "0", p95Ns: "0" },
           "paper-cycle": {
             sampleCount: 100,
             // total = 100 × 300µs = 30ms → mean 0.3ms
@@ -111,7 +112,10 @@ describe("WP09 qualification instrumentation (HTR-WP09 post-fail correction)", (
             // real p95 = 500µs (dramatically below the 69ms max)
             p95Ns: "500000",
           },
+          "intelligence-bundle": { sampleCount: 0, totalNs: "0", maxNs: "0", p95Ns: "0" },
           "account-state-refresh": { sampleCount: 0, totalNs: "0", maxNs: "0", p95Ns: "0" },
+          "evidence-on-cycle": { sampleCount: 0, totalNs: "0", maxNs: "0", p95Ns: "0" },
+          "cycle-boundary": { sampleCount: 0, totalNs: "0", maxNs: "0", p95Ns: "0" },
           "evidence-export": { sampleCount: 0, totalNs: "0", maxNs: "0", p95Ns: "0" },
         },
         memoryHighWater: { rssBytes: 1_500_000_000, heapUsedBytes: 1_400_000_000 },

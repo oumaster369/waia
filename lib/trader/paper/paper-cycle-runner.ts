@@ -7,6 +7,7 @@ import { HTR_GUARDIAN_EXIT_REASON_V1 } from "@/lib/trader/guardian/htr-guardian-
 import {
   deriveAccountRiskStateFromBridge,
   derivePortfolioFromAccountingState,
+  EMPTY_INVENTORY_OPEN_QTY,
   evaluateHtrGuardianForBridge,
   getHtrGuardianCycleForCancellation,
   persistDrawdownCycleAfterGuardian,
@@ -15,7 +16,7 @@ import {
 } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import { executeBreachPartialEntryCancellation } from "@/lib/trader/guardian/htr-breach-partial-entry-cancellation";
 import { requiresHtrPartialEntryCancellation } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
-import { compareDecimal } from "@/lib/trader/risk/numeric";
+import { addDecimal, compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import { assertLifecycleFillWalkOpenQtyParity } from "@/lib/trader/lifecycle";
 import {
   buildQuoteCurrencyBySymbol,
@@ -30,12 +31,15 @@ import {
 } from "@/lib/trader/intelligence/strategies/strategy-eligibility-gate";
 import { createDeterministicReplayIdFactory } from "@/lib/trader/research/deterministic-replay-id-factory";
 import { getStrategyRegistryEntry } from "@/lib/trader/intelligence/strategies/registry";
+import { getIdhpsSession } from "@/lib/trader/execution/idhps-session-registry";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import {
   computeStopBasedQuantity,
   derivePortfolioAccountState,
   toAccountRiskState,
 } from "@/lib/trader/portfolio";
+import { buildPortfolioAccountStateFromIdhps } from "@/lib/trader/portfolio/idhps-portfolio-sizing";
+import { countIdhpsOpenOrders } from "@/lib/trader/paper/idhps-inventory-mirror";
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
 import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
 import type { BreachCancellationResultV1 } from "@/lib/trader/execution/execution-service.types";
@@ -151,9 +155,14 @@ async function refreshAccountStateIfConfigured(
   }
 
   if (input.htrAccounting) {
-    const openOrders = await input.orderRepository.listOpenOrders(input.context, {
-      executionMode: "mock",
-    });
+    const idhps = getIdhpsSession();
+    const openOrderCount = idhps
+      ? countIdhpsOpenOrders(idhps.inventory)
+      : (
+          await input.orderRepository.listOpenOrders(input.context, {
+            executionMode: "mock",
+          })
+        ).length;
     if (input.portfolio) {
       const portfolio = derivePortfolioFromAccountingState({
         state: input.htrAccounting.bridge.state,
@@ -163,13 +172,13 @@ async function refreshAccountStateIfConfigured(
       });
       return toAccountRiskState({
         portfolio,
-        openOrderCount: openOrders.length,
+        openOrderCount,
         accountPeakHwm: input.htrAccounting.bridge.state.equityHwm,
         monthlyPeakHwm: input.htrAccounting.bridge.state.monthlyPeakHwm,
       });
     }
     return deriveAccountRiskStateFromBridge(input.htrAccounting.bridge, {
-      openOrderCount: openOrders.length,
+      openOrderCount,
     });
   }
 
@@ -211,33 +220,45 @@ async function runHtrGuardianPhase(
     return { accountState };
   }
 
-  const inventoryOpenQtyBySymbol = await input.htrAccounting.resolveInventoryOpenQtyBySymbol();
-  runAutomaticAccountingReconciliation(input.htrAccounting.bridge, {
+  const bridge = input.htrAccounting.bridge;
+  let missingMark = false;
+  if (bridge.openPositionCount > 0) {
+    for (const symbol in bridge.state.positions) {
+      const position = bridge.state.positions[symbol]!;
+      if (position.quantity === "0" || compareDecimal(position.quantity, "0") <= 0) {
+        continue;
+      }
+      if (!bridge.state.marks[symbol]) {
+        missingMark = true;
+        break;
+      }
+    }
+  }
+  // Flat book: inventory is empty — skip resolver (even cached) on the hot path.
+  const inventoryOpenQtyBySymbol =
+    bridge.openPositionCount > 0
+      ? await input.htrAccounting.resolveInventoryOpenQtyBySymbol()
+      : EMPTY_INVENTORY_OPEN_QTY;
+  runAutomaticAccountingReconciliation(bridge, {
     inventoryOpenQtyBySymbol,
     cycleIndex,
     phase: "before_guardian",
   });
 
-  const missingMark = Object.entries(input.htrAccounting.bridge.state.positions).some(
-    ([symbol, position]) =>
-      compareDecimal(position.quantity, "0") > 0 &&
-      !input.htrAccounting!.bridge.state.marks[symbol],
-  );
-
-  const htrGuardian = evaluateHtrGuardianForBridge(input.htrAccounting.bridge, {
-    equityUsdt: input.htrAccounting.bridge.state.equity,
+  const htrGuardian = evaluateHtrGuardianForBridge(bridge, {
+    equityUsdt: bridge.state.equity,
     missingMark,
     cycleIndex: cycleIndex ?? 0,
     inventoryOpenQtyBySymbol,
   });
 
-  if (htrGuardian.breachState !== "NONE" && input.htrAccounting.bridge.guardianReason) {
-    input.htrAccounting.bridge.guardianReason = htrGuardian.reason;
+  if (htrGuardian.breachState !== "NONE" && bridge.guardianReason) {
+    bridge.guardianReason = htrGuardian.reason;
   }
 
   if (input.htrAccounting.drawdownPersistence) {
     await persistDrawdownCycleAfterGuardian(
-      input.htrAccounting.bridge,
+      bridge,
       input.htrAccounting.drawdownPersistence.port,
       input.htrAccounting.drawdownPersistence.session,
       cycleIndex ?? 0,
@@ -245,9 +266,7 @@ async function runHtrGuardianPhase(
   }
 
   let htrBreachCancellation: PaperCycleResultWithHtrBreachCancellation["htrBreachCancellation"];
-  const guardianCycleForCancellation = getHtrGuardianCycleForCancellation(
-    input.htrAccounting.bridge,
-  );
+  const guardianCycleForCancellation = getHtrGuardianCycleForCancellation(bridge);
   if (
     guardianCycleForCancellation &&
     requiresHtrPartialEntryCancellation(guardianCycleForCancellation) &&
@@ -267,14 +286,16 @@ async function runHtrGuardianPhase(
       cancelLatencyMs: input.htrBreachCancellation?.cancelLatencyMs,
       replayNowMs: input.htrBreachCancellation?.replayNowMs?.(),
     });
-    recordBreachCancellationOnBridge(
-      input.htrAccounting.bridge,
-      htrBreachCancellation,
-      cycleIndex ?? 0,
-    );
+    recordBreachCancellationOnBridge(bridge, htrBreachCancellation, cycleIndex ?? 0);
   }
 
   return { htrGuardian, htrBreachCancellation, accountState };
+}
+
+function shouldDeferReconciliationToHistoricalExchange(
+  input: PaperCycleInputWithHtrBreachCancellation,
+): boolean {
+  return input.htrBreachCancellation?.historicalExchange !== undefined;
 }
 
 function assertHtrOrderSubmissionPermitted(
@@ -349,7 +370,7 @@ async function runGuardianPhase(
   const markPrice = evaluation.features.features.close;
 
   let canonicalInventory: ReturnType<typeof deriveCanonicalInventory> | undefined;
-  if (input.orderRepository) {
+  if (input.orderRepository && !input.htrAccounting) {
     const { fillEvents } = await loadPaperFillEvents({
       context,
       orderRepository: input.orderRepository,
@@ -424,10 +445,12 @@ async function runGuardianPhase(
       continue;
     }
 
-    const reconciliation = await deps.reconciliation.reconcile(context, {
-      kind: "order",
-      orderId: execution.order.id,
-    });
+    const reconciliation = shouldDeferReconciliationToHistoricalExchange(input)
+      ? null
+      : await deps.reconciliation.reconcile(context, {
+          kind: "order",
+          orderId: execution.order.id,
+        });
 
     guardianExecutions.push({
       intentId: intent.intentId,
@@ -443,7 +466,12 @@ async function runGuardianPhase(
     (execution) => !execution.submitBlocked && execution.reconciliation != null,
   );
 
-  if (deps.lifecycleRecorder && input.orderRepository && hadGuardianFillRecording) {
+  if (
+    deps.lifecycleRecorder &&
+    input.orderRepository &&
+    hadGuardianFillRecording &&
+    !input.htrAccounting
+  ) {
     const { fillEvents } = await loadPaperFillEvents({
       context,
       orderRepository: input.orderRepository,
@@ -488,6 +516,8 @@ export async function runPaperCycleOnce(
     cycleId: snapshot.cycleId,
     symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
     costModel: input.costModel,
+    omitIntelligenceArtifacts: input.omitIntelligenceArtifacts,
+    strategySignalIds: input.strategySignalIds ?? input.snapshot.activeStrategyIds,
   });
 
   const actionableSignals = evaluation.signals.filter(
@@ -514,6 +544,15 @@ export async function runPaperCycleOnce(
     executionMode,
   );
   accountState = guardianPhase.accountState;
+
+  if (
+    input.htrAccounting?.invalidateInventoryCache &&
+    guardianPhase.guardianExecutions.some(
+      (execution) => !execution.submitBlocked && execution.reconciliation != null,
+    )
+  ) {
+    input.htrAccounting.invalidateInventoryCache();
+  }
 
   const htrGuardianPhase = await runHtrGuardianPhase(
     deps,
@@ -588,6 +627,7 @@ export async function runPaperCycleOnce(
       guardianExecutions: guardianPhase.guardianExecutions,
       htrGuardian: htrGuardianPhase.htrGuardian,
       htrBreachCancellation: htrGuardianPhase.htrBreachCancellation,
+      // Epoch-scoped callOrder reference is O(epoch); expose count+tail for evidence digests.
       htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
       hypothesisSessionState: evaluation.hypothesisSessionState,
     };
@@ -601,15 +641,26 @@ export async function runPaperCycleOnce(
     let stopDistanceUsdt: string | undefined;
 
     if (input.portfolio && signal.side) {
-      const portfolioState = await derivePortfolioAccountState({
-        context: input.context,
-        orderRepository: input.orderRepository!,
-        runConfig: input.portfolio.runConfig,
-        limits: input.portfolio.limits,
-        stopDistanceProvider: input.portfolio.stopDistanceProvider,
-        executionMode: "mock",
-        markPrices: input.portfolio.markPrices,
-      });
+      const idhps = getIdhpsSession();
+      // Hot path: IDHPS fill-walk-equivalent mirrors (GS-05). Offline: full fill-walk.
+      const portfolioState = idhps
+        ? buildPortfolioAccountStateFromIdhps({
+            mirror: idhps.accountRisk,
+            context: input.context,
+            runConfig: input.portfolio.runConfig,
+            limits: input.portfolio.limits,
+            stopDistanceProvider: input.portfolio.stopDistanceProvider,
+            markPrices: input.portfolio.markPrices,
+          })
+        : await derivePortfolioAccountState({
+            context: input.context,
+            orderRepository: input.orderRepository!,
+            runConfig: input.portfolio.runConfig,
+            limits: input.portfolio.limits,
+            stopDistanceProvider: input.portfolio.stopDistanceProvider,
+            executionMode: "mock",
+            markPrices: input.portfolio.markPrices,
+          });
       const sizing = computeStopBasedQuantity({
         side: signal.side,
         signal,
@@ -638,12 +689,17 @@ export async function runPaperCycleOnce(
       stopDistanceUsdt = sizing.stopDistanceUsdt;
       const riskMultiplier = Number(evaluation.msv.derived.riskMultiplier ?? "1");
       sizedQuantity = applyRiskMultiplierToQuantity(sizedQuantity, riskMultiplier);
-      const openOrders = await input.orderRepository!.listOpenOrders(input.context, {
-        executionMode: "mock",
-      });
+      const openOrderCount = idhps
+        ? countIdhpsOpenOrders(idhps.inventory)
+        : (
+            await input.orderRepository!.listOpenOrders(input.context, {
+              executionMode: "mock",
+              venue: "HTX",
+            })
+          ).length;
       accountState = toAccountRiskState({
         portfolio: portfolioState,
-        openOrderCount: openOrders.length,
+        openOrderCount,
         accountPeakHwm: input.wp16?.accountPeakHwm,
         monthlyPeakHwm: input.wp16?.monthlyPeakHwm,
       });
@@ -714,10 +770,12 @@ export async function runPaperCycleOnce(
       continue;
     }
 
-    const reconciliation = await deps.reconciliation.reconcile(context, {
-      kind: "order",
-      orderId: execution.order.id,
-    });
+    const reconciliation = shouldDeferReconciliationToHistoricalExchange(input)
+      ? null
+      : await deps.reconciliation.reconcile(context, {
+          kind: "order",
+          orderId: execution.order.id,
+        });
 
     strategyExecutions.push({
       signal,
@@ -730,6 +788,15 @@ export async function runPaperCycleOnce(
   }
 
   const legacy = pickLegacyExecution(strategyExecutions, guardianPhase.guardianExecutions);
+
+  if (
+    input.htrAccounting?.invalidateInventoryCache &&
+    strategyExecutions.some(
+      (execution) => !execution.submitBlocked && execution.reconciliation != null,
+    )
+  ) {
+    input.htrAccounting.invalidateInventoryCache();
+  }
 
   return {
     evaluation,

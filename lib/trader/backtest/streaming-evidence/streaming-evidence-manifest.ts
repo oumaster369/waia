@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 
-import { canonicalJsonString } from "@/lib/trader/research/digest";
 import type {
   StreamingEvidenceChunkEnvelope,
   StreamingEvidenceManifest,
@@ -11,15 +10,17 @@ import { EVIDENCE_MANIFEST_SCHEMA_VERSION } from "@/lib/trader/backtest/streamin
 export function computeChunkDigest(
   envelope: Omit<StreamingEvidenceChunkEnvelope, "chunkDigest">,
 ): string {
-  return createHash("sha256").update(canonicalJsonString(envelope), "utf8").digest("hex");
+  return createHash("sha256").update(JSON.stringify(envelope), "utf8").digest("hex");
 }
 
 export function computeStreamingEvidenceChainDigest(chunkDigests: readonly string[]): string {
-  return createHash("sha256").update(canonicalJsonString(chunkDigests), "utf8").digest("hex");
+  return createHash("sha256").update(JSON.stringify(chunkDigests), "utf8").digest("hex");
 }
 
 export function computePayloadDigest(payload: unknown): string {
-  return createHash("sha256").update(canonicalJsonString(payload), "utf8").digest("hex");
+  // Hot-path digest: projections are built with stable key insertion order.
+  // Avoid canonicalJsonString deep key-sort (IDHPS evidence budget).
+  return createHash("sha256").update(JSON.stringify(payload), "utf8").digest("hex");
 }
 
 export type BuildStreamingEvidenceManifestInput = {

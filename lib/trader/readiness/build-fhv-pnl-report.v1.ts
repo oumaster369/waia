@@ -10,7 +10,7 @@ import {
   type BuildHtrOperatorReportInputV1,
   type FhvReportBuildInput,
 } from "@/lib/trader/readiness/build-htr-operator-report.v1";
-import { addDecimal, compareDecimal } from "@/lib/trader/risk/numeric";
+import { compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 
 export type BuildFhvPnlReportInputV1 = BuildHtrOperatorReportInputV1;
 
@@ -46,11 +46,9 @@ export function reconcileFhvPnlReportWithEvents(
 export function deriveFhvPnlFromOperatorCapital(
   initialEquityUsdt: string,
   finalEquityUsdt: string,
+  totalExecutionCostUsdt = "0",
 ): { grossPnlUsdt: string; netPnlUsdt: string } {
-  const delta =
-    compareDecimal(finalEquityUsdt, initialEquityUsdt) >= 0 ? finalEquityUsdt : initialEquityUsdt;
-  return {
-    grossPnlUsdt: addDecimal(delta, "0"),
-    netPnlUsdt: addDecimal(delta, "0"),
-  };
+  const grossPnlUsdt = subtractDecimal(finalEquityUsdt, initialEquityUsdt);
+  const netPnlUsdt = subtractDecimal(grossPnlUsdt, totalExecutionCostUsdt);
+  return { grossPnlUsdt, netPnlUsdt };
 }

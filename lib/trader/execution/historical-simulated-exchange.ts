@@ -232,6 +232,13 @@ export function createHistoricalSimulatedExchange(
     const fillEvents: SimulatedFillEvent[] = [];
     const scheduled: ScheduledEvent[] = [];
 
+    if (openOrders.size === 0) {
+      return {
+        fillEvents,
+        accountState: await input.refreshAccountState(),
+      };
+    }
+
     for (const entry of openOrders.values()) {
       if (entry.pendingCancel && entry.pendingCancel.cancelEffectiveTs <= replayNowMs) {
         scheduled.push({
