@@ -394,7 +394,7 @@ describe("H-ARCH-1 IDHPS growth-surface RED→GREEN GS-01..14", () => {
     expect(snapshot.contentDigest).toHaveLength(64);
   });
 
-  it("CI dependency graph includes idhps gates", () => {
+  it("CI dependency graph includes the bounded/software idhps gates", () => {
     const ci = readFileSync(join(process.cwd(), ".github/workflows/ci.yml"), "utf8");
     for (const job of [
       "fhv-idhps-structural-gate",
@@ -402,10 +402,51 @@ describe("H-ARCH-1 IDHPS growth-surface RED→GREEN GS-01..14", () => {
       "fhv-idhps-durability-gate",
       "fhv-idhps-stability-gate",
       "fhv-idhps-canonical-probe-gate",
-      "fhv-idhps-full-corpus-gate",
     ]) {
       expect(ci).toContain(job);
     }
     expect(existsSync(join(FIXTURE_DIR, "gs01-orders-growth.json"))).toBe(true);
+  });
+
+  /**
+   * Execution Server full-corpus boundary (DEE-510). The genuine ~2-hour official full-corpus
+   * campaign is an Execution Server / target-host, HUMAN-ONLY operation. It must NOT run on
+   * GitHub-hosted automatic PR/push CI: a hosted runner cannot hold the real target-host WP-3B
+   * checkpoint or throughput qualification receipts, so the genuine unbounded launch fails closed
+   * there (post-merge run 31166536264, FHV_WP3B_RECEIPT_MISSING). This locks that boundary.
+   */
+  it("CI never auto-runs the genuine full-corpus target-host campaign on PR/push", () => {
+    const ci = readFileSync(join(process.cwd(), ".github/workflows/ci.yml"), "utf8");
+    // No GitHub-hosted job executes the genuine full-corpus target-host campaign.
+    expect(ci).not.toContain("fhv-idhps-full-corpus-gate");
+    // No run step invokes the full-corpus executable (prose mentions in comments are fine).
+    expect(ci).not.toMatch(/run:[^\n]*official-scale:full-corpus/);
+    // The full-corpus executable stays available off-CI for the Execution Server ceremony.
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    expect(pkg.scripts["test:fhv:official-scale:full-corpus"]).toContain(
+      "fhv-official-full-corpus.test.ts",
+    );
+    // No build/e2e job may depend on the removed Execution Server-only campaign.
+    const buildNeeds = ci.match(/name: build[\s\S]*?needs:\s*\[([^\]]*)\]/)?.[1] ?? "";
+    expect(buildNeeds).not.toContain("full-corpus");
+  });
+
+  it("genuine full-historical launch still fails closed without a target-host receipt", () => {
+    // The launch path requires the WP-3B + throughput target-host receipts for the genuine
+    // OFFICIAL_MULTI_YEAR / unbounded campaign. A missing receipt must fail closed; this test
+    // asserts the fail-closed reader is intact rather than executing the 2-hour campaign.
+    const launch = readFileSync(
+      join(process.cwd(), "lib/trader/observability/fhv-full-historical-launch.ts"),
+      "utf8",
+    );
+    expect(launch).toContain("requiresWp3bTargetHostQualification");
+    expect(launch).toContain("assertFhvWp3bHostQualified");
+    expect(launch).toContain("assertFhvThroughputHostQualified");
+    // No environment variable may bypass the host-qualification gate.
+    expect(launch).not.toContain("FHV_OFFICIAL_LAUNCH");
+    expect(launch).not.toContain("FHV_SKIP_WP3B_LAUNCH_GATE");
+    expect(launch).not.toContain("FHV_SKIP_THROUGHPUT_QUALIFICATION");
   });
 });
