@@ -101,17 +101,27 @@ describe("FHV official-scale throughput probe (Phase 10 blocking)", () => {
       reachedCheckpoint,
     });
 
-    if (!metrics.feasibilityTimePass) {
+    /*
+     * Absolute host speed is REPORTED but no longer merge-blocking on a hosted runner (Human
+     * decision APPROVE_PR452_SPLIT_CANONICAL_THROUGHPUT_CI_GATE_AND_EXECUTION_SERVER_ABSOLUTE_PERFORMANCE_QUALIFICATION).
+     * The 877/7200 evaluator is unchanged and still classifies this host; the software gate below
+     * is what turns the PR RED. Absolute performance is a fail-closed Execution Server preflight.
+     */
+    process.stderr.write(
+      `[fhv-probe] absoluteHost: cps=${metrics.cps.toFixed(3)} ` +
+        `projected_runtime_s=${metrics.projectedRuntimeS.toFixed(1)} ` +
+        `classification=${metrics.absoluteHostClassification} (report-only)\n`,
+    );
+    if (!metrics.ciSoftwareGatePass) {
       expect.fail(
-        `BLOCKED_BY_CI_SCALE_TIME_FEASIBILITY: cps=${metrics.cps.toFixed(3)} projected_runtime_s=${metrics.projectedRuntimeS.toFixed(1)}`,
+        `BLOCKED_BY_CI_SOFTWARE_GATE: classification=${metrics.classification} ` +
+          `diskFeasibilityPass=${metrics.feasibilityDiskPass}`,
       );
-    }
-    if (!metrics.feasibilityDiskPass) {
-      expect.fail("BLOCKED_BY_CI_SCALE_DISK_FEASIBILITY");
     }
     // Phase-10 ≥1000 target remains explicit/visible; it must not gate probe GREEN.
     expect(metrics.probeTargetCps).toBeGreaterThanOrEqual(1000);
     expect(typeof metrics.probeTargetPass).toBe("boolean");
-    expect(metrics.probeGateClassification).toBe("FHV_OFFICIAL_ENGINE_THROUGHPUT_PROBE_PASS");
+    expect(metrics.ciGateClassification).toBe("FHV_CI_SOFTWARE_GATE_PASS");
+    expect(metrics.probeGateClassification).toBe(metrics.ciGateClassification);
   }, 600_000);
 });

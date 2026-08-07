@@ -73,6 +73,7 @@ export function resolveFhvFullRunCliConfig(
     "--synthetic-scale-authority-path",
     "--run-dir",
     "--max-cycles",
+    "--throughput-host-qualification-receipt-path",
   ]);
   for (const key of flags.keys()) {
     if (!allowed.has(key)) {
@@ -120,6 +121,9 @@ export function resolveFhvFullRunCliConfig(
     (flags.get("--synthetic-scale-authority-path") as string | undefined) ??
     env.FHV_SYNTHETIC_SCALE_AUTHORITY_PATH?.trim();
   const runDirOverride = (flags.get("--run-dir") as string | undefined) ?? env.FHV_RUN_DIR?.trim();
+  const throughputHostQualificationReceiptPath = (
+    flags.get("--throughput-host-qualification-receipt-path") as string | undefined
+  )?.trim();
   const maxCyclesRaw =
     (flags.get("--max-cycles") as string | undefined) ?? env.FHV_MAX_CYCLES?.trim();
   const maxCycles = maxCyclesRaw ? Number.parseInt(maxCyclesRaw, 10) : undefined;
@@ -241,6 +245,7 @@ export function resolveFhvFullRunCliConfig(
     ...(maxCycles != null ? { maxCycles } : {}),
     ...(syntheticScaleAuthorityPath ? { syntheticScaleAuthorityPath } : {}),
     ...(runDir ? { runDir } : {}),
+    ...(throughputHostQualificationReceiptPath ? { throughputHostQualificationReceiptPath } : {}),
     resume,
   };
 }

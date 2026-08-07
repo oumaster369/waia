@@ -59,6 +59,31 @@ pnpm trader:fhv:t4:record-checkout-identity -- \
   --output "/path/to/fhv-t4-checkout-identity.v1.json"
 ```
 
+### Step 14b — Execution Server host qualification (Human-only, fail-closed)
+
+Both target-host qualifications run on the actual Execution Server after release
+checkout/deployment and before any official unbounded launch authorization. Each emits an
+identity-bound receipt that the launch path validates fail-closed.
+
+```bash
+# WP-3B checkpoint host qualification (1 GiB / <=400 ms; ADR-0025 AD-6a):
+pnpm trader:fhv:wp3b-host-qualification
+#   -> fhv-wp3b-host-qualification.v1.json  (EXECUTION_SERVER_WP3B_HOST_QUALIFIED)
+
+# Throughput host qualification (ADR-0025 AD-6b). Run the representative segment with progress
+# enabled, fit the growth law, then qualify:
+FHV_IDHPS_PROGRESS=1 pnpm trader:fhv:run -- --max-cycles <representative-cycles> ...  # representative segment
+pnpm trader:fhv:growth-law-report -- --run-dir "<representative-run-dir>"
+pnpm trader:fhv:throughput-host-qualification -- --run-dir "<representative-run-dir>"
+#   -> fhv-throughput-host-qualification.v1.json  (EXECUTION_SERVER_FHV_THROUGHPUT_QUALIFIED)
+```
+
+A throughput receipt is QUALIFIED only when the growth-aware projected official runtime is
+`<= 6480` s, the hot-path decay verdict is `FLAT`, bounded hot-state growth stays within the
+structural ceiling, and the embedded `877 / 7200 / 6480` constants validate. It binds the release
+SHA and target-host identity. The official unbounded launch requires **both** this receipt and the
+WP-3B checkpoint receipt.
+
 ### Step 15 — Full Historical Validation run
 
 ```bash
@@ -84,7 +109,8 @@ pnpm trader:fhv:run -- \
   --control-replay-receipt-path "/path/to/fhv-control-replay-receipt.v1.json" \
   --dataset-root "/absolute/dataset/root" \
   --manifest-path "/absolute/manifest/fhv-dataset-manifest.v2.json" \
-  --checkout-identity-proof-path "/path/to/fhv-t4-checkout-identity.v1.json"
+  --checkout-identity-proof-path "/path/to/fhv-t4-checkout-identity.v1.json" \
+  --throughput-host-qualification-receipt-path "/path/to/fhv-throughput-host-qualification.v1.json"
 
 # Resume after checkpoint pause or infrastructure interruption (same run-id, same artifacts):
 pnpm trader:fhv:run -- --resume \
@@ -123,6 +149,7 @@ pnpm trader:fhv:run -- --bounded-fixture \
 - Requires immutable configuration freeze artifact (no self-computed digest fallback)
 - Requires scoped authorization receipt bound to one run (rejects reuse, wrong release/dataset/freeze/control-replay)
 - Requires control replay PASS receipt for official holdout launch (`--control-replay-receipt-path`)
+- **Official unbounded launch only:** requires a valid WP-3B checkpoint host-qualification receipt (`EXECUTION_SERVER_WP3B_HOST_QUALIFIED`) **and** a valid throughput host-qualification receipt (`EXECUTION_SERVER_FHV_THROUGHPUT_QUALIFIED` via `--throughput-host-qualification-receipt-path`), each fail-closed on release/host/digest/contract evidence (ADR-0025 AD-6a/AD-6b)
 - Verifies release checkout identity (HEAD = release SHA, tag peel, clean tracked tree)
 - Binds dataset content digest and manifest semantic digest from qualification receipt (not compile-time pins)
 - Rejects reused `runId` (immutable receipt collision)

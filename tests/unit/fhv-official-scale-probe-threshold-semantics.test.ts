@@ -7,12 +7,17 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildFhvOfficialScaleMetrics,
   DEFAULT_PROBE_TARGET_CPS,
+  evaluateFhvCiSoftwareGate,
   evaluateFhvOfficialScaleTimeFeasibility,
   MAX_PROJECTED_FULL_CORPUS_RUNTIME_S,
   MIN_THROUGHPUT_CPS,
   resolveProbeTargetCps,
 } from "@/tests/fhv/official-scale/blocking/fhv-official-scale-harness";
 import { FHV_OFFICIAL_TOTAL_BARS } from "@/lib/trader/market-data/fhv-official-scale-corpus";
+import {
+  FHV_CANONICAL_MAX_RUNTIME_S,
+  FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S,
+} from "@/lib/trader/observability/fhv-growth-law";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -119,7 +124,7 @@ describe("FHV official-scale probe threshold semantics (plan §8 / Phase 10)", (
       cycleCount: 10_000,
       barsProcessed,
       wallTimeMs,
-      classification: "PROBE",
+      classification: "FHV_SYNTHETIC_SCALE_PROBE_COMPLETED",
       checkpointBytes: null,
       checkpointBackupDurationMs: null,
       artifactRoot: root,
@@ -129,5 +134,72 @@ describe("FHV official-scale probe threshold semantics (plan §8 / Phase 10)", (
     expect(metrics.probeTargetCps).toBe(1000);
     expect(metrics.probeTargetPass).toBe(false);
     expect(metrics.probeGateClassification).not.toBe("BLOCKED_BY_CI_SCALE_TIME_FEASIBILITY");
+  });
+});
+
+describe("FHV throughput CI/host split (ADR-0025 AD-6b)", () => {
+  // Constants must be unchanged by the boundary correction.
+  it("locks the canonical absolute and pre-launch constants", () => {
+    expect(MIN_THROUGHPUT_CPS).toBe(877);
+    expect(MAX_PROJECTED_FULL_CORPUS_RUNTIME_S).toBe(7200);
+    expect(FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S).toBe(6480);
+    expect(FHV_CANONICAL_MAX_RUNTIME_S).toBe(7200);
+    expect(DEFAULT_PROBE_TARGET_CPS).toBe(1000);
+  });
+
+  // Regression: the exact failing CI measurement must still be an absolute RED.
+  it("absolute evaluator stays RED for the failing 874.006 cps / 7223.0 s evidence", () => {
+    const barsProcessed = 4547;
+    const wallTimeMs = 5202.481293999997;
+    const time = evaluateFhvOfficialScaleTimeFeasibility({ barsProcessed, wallTimeMs });
+    expect(time.cps).toBeCloseTo(874.006, 2);
+    expect(time.projectedRuntimeS).toBeCloseTo(7223.0, 0);
+    expect(time.cps).toBeLessThan(MIN_THROUGHPUT_CPS);
+    expect(time.projectedRuntimeS).toBeGreaterThan(MAX_PROJECTED_FULL_CORPUS_RUNTIME_S);
+    expect(time.pass).toBe(false);
+  });
+
+  // The software gate must not turn RED solely because the hosted runner is below 877.
+  it("software gate passes a structurally-sound probe below 877 cps while reporting the host FAIL", () => {
+    const root = mkdtempSync(join(tmpdir(), "fhv-ci-gate-"));
+    const runDir = mkdtempSync(join(tmpdir(), "fhv-ci-run-"));
+    const barsProcessed = 4547;
+    const wallTimeMs = (barsProcessed / 874.006) * 1000;
+    const metrics = buildFhvOfficialScaleMetrics({
+      cycleCount: 10_000,
+      barsProcessed,
+      wallTimeMs,
+      classification: "FHV_SYNTHETIC_SCALE_PROBE_COMPLETED",
+      checkpointBytes: null,
+      checkpointBackupDurationMs: null,
+      artifactRoot: root,
+      runDir,
+    });
+    // Absolute host observation stays truthful: this host did not meet 877/7200.
+    expect(metrics.feasibilityTimePass).toBe(false);
+    expect(metrics.absoluteHostTimePass).toBe(false);
+    expect(metrics.absoluteHostClassification).toBe("FHV_ABSOLUTE_HOST_877_7200_FAIL");
+    // The merge-blocking software gate passes on structure, not on hosted speed.
+    expect(metrics.ciSoftwareGatePass).toBe(true);
+    expect(metrics.ciGateClassification).toBe("FHV_CI_SOFTWARE_GATE_PASS");
+    expect(metrics.probeGateClassification).toBe("FHV_CI_SOFTWARE_GATE_PASS");
+  });
+
+  it("software gate stays RED on a wrong workload classification regardless of speed", () => {
+    const gate = evaluateFhvCiSoftwareGate({
+      classification: "BOUNDED_FULL_HISTORICAL_END_TO_END_PASS",
+      diskFeasibilityPass: true,
+    });
+    expect(gate.pass).toBe(false);
+    expect(gate.classification).toBe("BLOCKED_BY_CI_SOFTWARE_CLASSIFICATION");
+  });
+
+  it("software gate stays RED on a disk feasibility breach regardless of speed", () => {
+    const gate = evaluateFhvCiSoftwareGate({
+      classification: "FHV_SYNTHETIC_SCALE_PROBE_COMPLETED",
+      diskFeasibilityPass: false,
+    });
+    expect(gate.pass).toBe(false);
+    expect(gate.classification).toBe("BLOCKED_BY_CI_SCALE_DISK_FEASIBILITY");
   });
 });

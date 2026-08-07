@@ -328,6 +328,53 @@ measures 394.5–400.5 ms — at the contract boundary, not comfortably inside i
 than it will fail closed. Requalification is required whenever the host, filesystem, storage or
 Node version changes; rollback is to refuse launch, since the gate has no weaker passing state.
 
+## AD-6b — Splitting throughput CI observation from absolute target-host performance qualification
+
+*Human decision `APPROVE_PR452_SPLIT_CANONICAL_THROUGHPUT_CI_GATE_AND_EXECUTION_SERVER_ABSOLUTE_PERFORMANCE_QUALIFICATION`.*
+
+The throughput contract is unchanged: **877 cps** minimum, **7,200 s** canonical terminal maximum,
+**6,480 s** growth-aware pre-launch maximum, **1,000 cps** as a non-blocking engineering target, and
+`MAX_BATCH_CYCLES=32`. What changed — exactly as in AD-6a — is *where* absolute wall speed is
+authoritative, and why.
+
+PR452 CI run [31154319950](https://github.com/oumaster369/waia/actions/runs/31154319950) failed the
+canonical probe on `ubuntu-24.04-arm` with `cps=874.006` and `projected_runtime_s=7223.0` — a flat
+absolute wall-speed extrapolation, 3 cps under the floor. Every software and structural gate in the
+same run was GREEN. This is a **qualification-surface defect, not an engine-correctness defect**: a
+hosted VM's clock cannot decide whether the target Execution Server can finish the corpus in time.
+
+**Decision.** The canonical probe still runs in PR CI and still reports its true absolute
+measurements — `cps`, `projectedRuntimeS`, and an explicit `absoluteHostClassification`
+(`FHV_ABSOLUTE_HOST_877_7200_PASS`/`FAIL`). Those values are never falsified or hidden. But the
+merge-blocking signal is now the **software gate** (`ciSoftwareGatePass` / `ciGateClassification`):
+the probe must execute the production path with a coherent workload classification, reach a
+non-trivial checkpoint, and satisfy the disk-feasibility bound. The canonical absolute evaluator
+`evaluateFhvOfficialScaleTimeFeasibility` still returns `pass=false` for `cps=874.006` /
+`7223.0 s`; it is simply no longer the hosted-runner merge gate. A regression test locks that exact
+measurement to `false`.
+
+The absolute performance proof moves to `pnpm trader:fhv:throughput-host-qualification`, a
+fail-closed **post-release Execution Server preflight** that consumes the production-path growth-law
+report (never a synthetic CPU microbenchmark) and emits an identity-bound receipt classified as
+`EXECUTION_SERVER_FHV_THROUGHPUT_QUALIFIED`, `EXECUTION_SERVER_FHV_THROUGHPUT_NOT_QUALIFIED`, or
+`EXECUTION_SERVER_FHV_THROUGHPUT_EVIDENCE_INVALID`. A QUALIFIED receipt requires, fail-closed: exact
+release-SHA binding, target-host identity, self-digest integrity, a representative segment actually
+executed, sufficient progress/checkpoint samples, bounded hot-state growth within the structural
+ceiling, a `FLAT` (not `DECAYING`) hot-path verdict, an available growth-aware projection, and that
+projection within **6,480 s**. The receipt embeds and validates the canonical 877/7200/6480 constants
+so a weaker contract cannot pass through a schema-consistent file. No environment variable —
+`NODE_ENV`, `CI`, `GITHUB_ACTIONS`, or any skip flag — can weaken it.
+
+**The official unbounded launch now requires both target-host receipts.** Alongside the WP-3B
+checkpoint receipt, the launch path requires a valid throughput receipt (`--throughput-host-
+qualification-receipt-path`) before consuming authorization. The gate is configuration-derived via
+the same `requiresWp3bTargetHostQualification` classification, so bounded fixtures, synthetic
+probes, process-parity runs and PRE_AUTH bootstrap never require a receipt they cannot produce. The
+official full corpus still has its **7,200 s** terminal acceptance; 6,480 s is the pre-launch margin.
+
+**The Execution Server has not been contacted and the throughput qualification has not run.** No
+official full corpus has run.
+
 ## Links
 
 - PR [#452](https://github.com/oumaster369/waia/pull/452) — DEE-436 / DEE-416
@@ -338,4 +385,6 @@ Node version changes; rollback is to refuse launch, since the gate has no weaker
 - [`../ai-trader/AI-TRADER-TARGET-ARCHITECTURE.md`](../ai-trader/AI-TRADER-TARGET-ARCHITECTURE.md) — Execution Server owns long-running campaigns
 - [`../waia-governance/INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOUNDARY-POLICY.md) — HUMAN-ONLY operations
 - [`../../lib/trader/observability/fhv-checkpoint-cost-model.ts`](../../lib/trader/observability/fhv-checkpoint-cost-model.ts) — AD-6 enforcement
+- [`../../lib/trader/observability/fhv-throughput-receipt.ts`](../../lib/trader/observability/fhv-throughput-receipt.ts) — AD-6b throughput host-qualification receipt
+- [`../../scripts/ops/fhv-throughput-host-qualification.ts`](../../scripts/ops/fhv-throughput-host-qualification.ts) — AD-6b Execution Server throughput preflight
 - [`../../lib/trader/observability/fhv-growth-law.ts`](../../lib/trader/observability/fhv-growth-law.ts) — AD-7 projection

@@ -76,6 +76,10 @@ import {
 import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
 import { requiresWp3bTargetHostQualification } from "@/lib/trader/observability/fhv-launch-classification";
 import { assertFhvWp3bHostQualified } from "@/lib/trader/observability/fhv-wp3b-receipt";
+import {
+  assertFhvThroughputHostQualified,
+  FHV_THROUGHPUT_RECEIPT_FILENAME,
+} from "@/lib/trader/observability/fhv-throughput-receipt";
 
 export const FHV_FULL_LAUNCH_RECEIPT_SCHEMA_VERSION = "fhv-full-launch-receipt/v1" as const;
 export const FHV_FULL_LAUNCH_MODE = "FULL_HISTORICAL_VALIDATION" as const;
@@ -121,6 +125,8 @@ export type FhvFullHistoricalLaunchInput = Readonly<{
   executionPurpose?: FhvExecutionPurpose;
   syntheticScaleAuthorityPath?: string;
   runDir?: string;
+  /** Path to the Execution Server throughput host-qualification receipt (ADR-0025 AD-6b). */
+  throughputHostQualificationReceiptPath?: string;
 }>;
 
 export type FhvFullHistoricalLaunchResult = Readonly<{
@@ -635,6 +641,20 @@ export function validateFhvFullHistoricalLaunchInput(
       receiptPath:
         process.env.FHV_WP3B_HOST_RECEIPT_PATH?.trim() ||
         join(input.artifactRoot, "fhv-wp3b-host-qualification.v1.json"),
+      expectedReleaseSha: input.releaseSha,
+    });
+    /*
+     * Absolute throughput qualification (ADR-0025 AD-6b). The official unbounded campaign also
+     * requires a fail-closed target-host throughput receipt proving the growth-aware projection
+     * stays within the 6,480 s pre-launch headroom. This is distinct from WP-3B: WP-3B proves the
+     * host can checkpoint within 400 ms; this proves it can finish the corpus in time. Both are
+     * required before any official unbounded launch. Bounded fixtures, synthetic probes, process
+     * parity and PRE_AUTH never require a receipt they cannot legitimately produce.
+     */
+    assertFhvThroughputHostQualified({
+      receiptPath:
+        input.throughputHostQualificationReceiptPath?.trim() ||
+        join(input.artifactRoot, FHV_THROUGHPUT_RECEIPT_FILENAME),
       expectedReleaseSha: input.releaseSha,
     });
   }
