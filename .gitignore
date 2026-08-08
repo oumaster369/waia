@@ -66,5 +66,11 @@ replay-runs/**/_operator-forensics-stash/
 .data/
 .ops/
 
+# DEE-511 cutover operator-local snapshots must live under $HOME/.waia/…
+# Guard against accidental in-repo copies:
+scripts/github/fixtures/single-trunk-cutover/pre-cutover-state.json
+scripts/github/fixtures/single-trunk-cutover/cloudflare-preflight.json
+**/.waia/single-trunk-cutover/
+
 # Wrangler typegen output (large; run `pnpm cf-typegen`)
 cloudflare-env.d.ts

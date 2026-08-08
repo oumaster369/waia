@@ -96,6 +96,25 @@ if command -v jq >/dev/null 2>&1; then
   else
     fail_msg "ruleset approval count=${approvals} (want 0)"
   fi
+  for ctx in lint typecheck "unit tests" build "e2e tests" "PR governance" "tenant isolation gate"; do
+    if jq -e --arg c "$ctx" '
+      .rules[] | select(.type=="required_status_checks") |
+      .parameters.required_status_checks[] | select(.context==$c)
+    ' "$RULESET" >/dev/null; then
+      pass "ruleset requires: ${ctx}"
+    else
+      fail_msg "ruleset missing required context: ${ctx}"
+    fi
+  done
+  # Informational / non-standing contexts must NOT be blindly required
+  if jq -e '
+    .rules[] | select(.type=="required_status_checks") |
+    .parameters.required_status_checks[] | select(.context=="Workers Builds: waia-app")
+  ' "$RULESET" >/dev/null; then
+    fail_msg "ruleset must not require Workers Builds as standing merge blocker"
+  else
+    pass "ruleset does not require Workers Builds"
+  fi
 else
   fail_msg "jq required for ruleset assertions"
 fi
@@ -110,8 +129,13 @@ for s in apply-single-trunk-cutover.sh verify-single-trunk-cutover.sh rollback-s
 done
 assert_file_contains "apply dry-run default" "$ROOT/scripts/github/apply-single-trunk-cutover.sh" "READ-ONLY dry-run"
 assert_file_contains "apply confirm flag" "$ROOT/scripts/github/apply-single-trunk-cutover.sh" "--confirm"
+assert_file_contains "apply fail-closed refuse" "$ROOT/scripts/github/apply-single-trunk-cutover.sh" "refusing --confirm mutation"
 assert_file_contains "rollback confirm flag" "$ROOT/scripts/github/rollback-single-trunk-cutover.sh" "--confirm"
 assert_file_contains "apply does not delete dev" "$ROOT/scripts/github/apply-single-trunk-cutover.sh" "do NOT delete branch refs/heads/dev"
+assert_file_contains "cutover doc Cloudflare gate" "$ROOT/docs/ops/SINGLE-TRUNK-CUTOVER.md" "architect_contract"
+assert_file_contains "cutover doc Contract A" "$ROOT/docs/ops/SINGLE-TRUNK-CUTOVER.md" "Contract A"
+assert_file_contains "cutover doc Contract B" "$ROOT/docs/ops/SINGLE-TRUNK-CUTOVER.md" "Contract B"
+assert_file_not_contains "rollback no manual recreate" "$ROOT/scripts/github/rollback-single-trunk-cutover.sh" "recreate them manually"
 
 # 7. guard-shell still blocks direct push to main
 GUARD="$ROOT/.cursor/hooks/guard-shell.sh"

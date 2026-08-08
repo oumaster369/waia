@@ -1,7 +1,7 @@
 {
-  "description": "Template / schema for pre-cutover snapshot captured by apply-single-trunk-cutover.sh --confirm. Replace contents at cutover time; do not invent live IDs here.",
+  "description": "Schema documentation for operator-local DEE-511 snapshots. The live snapshot is written to ${WAIA_CUTOVER_STATE_DIR:-$HOME/.waia/single-trunk-cutover}/pre-cutover-state.json by apply --confirm (schema_version 2). Do not invent live ruleset IDs here.",
+  "schema_version": 2,
   "repo": "oumaster369/waia",
-  "captured_at": null,
   "default_branch": "dev",
   "merge_settings": {
     "allow_squash_merge": true,
@@ -10,18 +10,23 @@
     "allow_auto_merge": true,
     "delete_branch_on_merge": true
   },
-  "observed_live_rulesets_pre_migration": [
-    {
-      "name": "WAIA dev + main protection",
-      "note": "combined protection; discover by name at cutover"
+  "rulesets": {
+    "WAIA dev + main protection": {
+      "id": null,
+      "detail": "full GET /repos/.../rulesets/{id} payload",
+      "restore_body": "stripped POST/PUT body: name,target,enforcement,conditions,rules,bypass_actors"
     },
-    { "name": "dev", "note": "deletion + non_fast_forward on refs/heads/dev" },
-    { "name": "main", "note": "legacy short-name ruleset; not WAIA main protection" }
-  ],
-  "main_sha": "cb8bbcdc843240c3491b1724a60e4998a451d7ab",
-  "dev_sha": "213858570cce1e30fb763065c91b358fdca9915b",
-  "tree_equality_sha": "44e6c7e80074a0bef637aa6441e8e86561cd5c7e",
-  "open_prs": [],
-  "rulesets": [],
-  "notes": "Snapshot file pre-cutover-state.json is written by apply --confirm. This template documents the verified starting facts for DEE-511."
+    "dev": {
+      "id": null,
+      "detail": "full GET payload",
+      "restore_body": "stripped POST/PUT body"
+    },
+    "main": {
+      "id": null,
+      "detail": "full GET payload (includes copilot_code_review rule if present live)",
+      "restore_body": "stripped POST/PUT body"
+    }
+  },
+  "cloudflare_preflight_sidecar": "${WAIA_CUTOVER_STATE_DIR:-$HOME/.waia/single-trunk-cutover}/cloudflare-preflight.json",
+  "notes": "Rollback refuses to proceed without schema_version 2 restore bodies for every affected ruleset. No manual ruleset recreation path."
 }

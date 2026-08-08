@@ -38,6 +38,21 @@ assert_not_contains() {
 workflow="$(<"$WORKFLOW")"
 
 assert_contains \
+  "release proves main membership via merge-base" \
+  "$workflow" \
+  "git merge-base --is-ancestor"
+
+assert_contains \
+  "release rejects non-40-char target_sha" \
+  "$workflow" \
+  'target_sha must be an exact full 40-character commit SHA'
+
+assert_contains \
+  "release fetches origin main before proof" \
+  "$workflow" \
+  "git fetch origin main:refs/remotes/origin/main"
+
+assert_contains \
   "release workflow pins target_commitish to exact SHA" \
   "$workflow" \
   "target_commitish: \${{ steps.tag.outputs.target_sha }}"

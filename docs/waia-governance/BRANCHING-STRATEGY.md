@@ -34,7 +34,23 @@ Local [`.cursor/hooks/guard-shell.sh`](../../.cursor/hooks/guard-shell.sh) is no
 ./scripts/github/configure-merge-settings.sh
 ```
 
-Required CI checks on PR HEAD: `lint`, `typecheck`, `unit tests`, `build`, `e2e tests`, `PR governance` (see [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)). Full unit suite is **authoritative in GitHub PR CI** — local work packages use targeted validation; do not require a redundant full local unit suite solely because CI already gates the PR.
+Required CI checks on PR HEAD (canonical **merge-blocking** ruleset contexts):
+
+| Context | Classification |
+|---------|----------------|
+| `lint` | Mandatory merge blocker |
+| `typecheck` | Mandatory merge blocker |
+| `unit tests` | Mandatory merge blocker |
+| `build` | Mandatory merge blocker |
+| `e2e tests` | Mandatory merge blocker |
+| `PR governance` | Mandatory merge blocker |
+| `tenant isolation gate` | Mandatory merge blocker (release-blocking / tenant isolation — ADR-0007; DEV OS architecture) |
+
+**Not** blindly ruleset-required (informational, preview, path-filtered, or program-gated): Cloudflare preview/bundle jobs, Workers Builds, FHV/IDHPS gates, postgres-integration (path-filtered). Those may still run on PRs and may be required by their own governing contracts without being standing trunk ruleset contexts.
+
+Full unit suite is **authoritative in GitHub PR CI** — local work packages use targeted validation; do not require a redundant full local unit suite solely because CI already gates the PR. After merge, unchanged content must not re-run the full unit suite solely due to push/merge into `main`.
+
+Human cutover after DEE-511: [`docs/ops/SINGLE-TRUNK-CUTOVER.md`](../ops/SINGLE-TRUNK-CUTOVER.md).
 
 ## Merge strategy
 

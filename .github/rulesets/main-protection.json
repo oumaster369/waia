@@ -31,7 +31,8 @@
           { "context": "unit tests" },
           { "context": "build" },
           { "context": "e2e tests" },
-          { "context": "PR governance" }
+          { "context": "PR governance" },
+          { "context": "tenant isolation gate" }
         ],
         "strict_required_status_checks_policy": true
       }

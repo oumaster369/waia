@@ -3,25 +3,46 @@
 #
 # Usage:
 #   ./scripts/github/verify-single-trunk-cutover.sh
+#   ./scripts/github/verify-single-trunk-cutover.sh --github-only
 #
-# Exit 0 only when all target invariants hold.
+# Exit 0 only when GitHub target invariants hold AND (unless --github-only)
+# the Cloudflare Human preflight record is present with an Architect contract A|B.
+#
+# Cloudflare Git integration is known-active for Worker waia-app; this script does
+# NOT mutate Cloudflare — it only checks the operator-local recorded preflight.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-RULESET_FILE="${ROOT}/.github/rulesets/main-protection.json"
-CANONICAL_RULESET_NAME="WAIA main protection"
+# shellcheck source=lib/single-trunk-cutover-lib.sh
+source "${ROOT}/scripts/github/lib/single-trunk-cutover-lib.sh"
 
-if ! command -v gh >/dev/null 2>&1; then
-  echo "error: gh CLI is required" >&2
-  exit 1
-fi
-if ! command -v jq >/dev/null 2>&1; then
-  echo "error: jq is required" >&2
-  exit 1
-fi
+RULESET_FILE="${ROOT}/.github/rulesets/main-protection.json"
+GITHUB_ONLY=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --github-only) GITHUB_ONLY=true ;;
+    -h|--help)
+      sed -n '2,16p' "$0"
+      exit 0
+      ;;
+    *)
+      echo "error: unknown argument: $arg" >&2
+      exit 2
+      ;;
+  esac
+done
+
+require_cmd gh
+require_cmd jq
 
 REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+if [[ "$REPO" != "$EXPECTED_REPO" ]]; then
+  echo "error: repo '${REPO}' != ${EXPECTED_REPO}" >&2
+  exit 1
+fi
+
 repo_json="$(gh api "repos/${REPO}")"
 rulesets="$(gh api "repos/${REPO}/rulesets" --paginate)"
 
@@ -51,6 +72,16 @@ canonical_count="$(
   && pass "exactly one '${CANONICAL_RULESET_NAME}' ruleset" \
   || fail_msg "expected exactly one '${CANONICAL_RULESET_NAME}' (found ${canonical_count})"
 
+REQUIRED_CHECKS=(
+  "lint"
+  "typecheck"
+  "unit tests"
+  "build"
+  "e2e tests"
+  "PR governance"
+  "tenant isolation gate"
+)
+
 if [[ "$canonical_count" -eq 1 ]]; then
   cid="$(printf '%s\n' "$rulesets" | jq -r --arg name "$CANONICAL_RULESET_NAME" '.[] | select(.name == $name) | .id')"
   detail="$(gh api "repos/${REPO}/rulesets/${cid}")"
@@ -59,7 +90,7 @@ if [[ "$canonical_count" -eq 1 ]]; then
     && pass "canonical ruleset targets refs/heads/main only" \
     || fail_msg "canonical ruleset include=${includes}"
 
-  for ctx in lint typecheck "unit tests" build "e2e tests" "PR governance"; do
+  for ctx in "${REQUIRED_CHECKS[@]}"; do
     if printf '%s' "$detail" | jq -e --arg c "$ctx" '
       .rules[] | select(.type=="required_status_checks") |
       .parameters.required_status_checks[] | select(.context==$c)
@@ -70,23 +101,17 @@ if [[ "$canonical_count" -eq 1 ]]; then
     fi
   done
 
-  if printf '%s' "$detail" | jq -e '
-    .rules[] | select(.type=="deletion")
-  ' >/dev/null; then
+  if printf '%s' "$detail" | jq -e '.rules[] | select(.type=="deletion")' >/dev/null; then
     pass "deletion protection present"
   else
     fail_msg "deletion protection missing"
   fi
-  if printf '%s' "$detail" | jq -e '
-    .rules[] | select(.type=="non_fast_forward")
-  ' >/dev/null; then
+  if printf '%s' "$detail" | jq -e '.rules[] | select(.type=="non_fast_forward")' >/dev/null; then
     pass "non-fast-forward protection present"
   else
     fail_msg "non-fast-forward protection missing"
   fi
-  if printf '%s' "$detail" | jq -e '
-    .rules[] | select(.type=="pull_request")
-  ' >/dev/null; then
+  if printf '%s' "$detail" | jq -e '.rules[] | select(.type=="pull_request")' >/dev/null; then
     pass "pull_request requirement present"
   else
     fail_msg "pull_request requirement missing"
@@ -99,7 +124,6 @@ for obsolete in "WAIA dev + main protection" "dev"; do
     || fail_msg "obsolete ruleset still present: ${obsolete} (count=${oc})"
 done
 
-# Legacy short-name "main" ruleset (not the canonical "WAIA main protection") must be gone.
 legacy_main_count="$(
   printf '%s\n' "$rulesets" \
     | jq -r '[.[] | select(.name == "main")] | length'
@@ -108,15 +132,43 @@ legacy_main_count="$(
   && pass "legacy short-name ruleset 'main' absent" \
   || fail_msg "legacy short-name ruleset 'main' still present (count=${legacy_main_count})"
 
-# `dev` branch may still exist (frozen); do not require deletion.
-if git -C "$ROOT" ls-remote --heads origin dev | grep -q .; then
+if git ls-remote --heads origin dev | grep -q .; then
   pass "frozen legacy branch refs/heads/dev still exists (expected during retirement window)"
 else
   pass "refs/heads/dev already deleted (post-retirement)"
 fi
 
-# Tracked ruleset file exists
 [[ -f "$RULESET_FILE" ]] && pass "tracked ruleset file present" || fail_msg "missing ${RULESET_FILE}"
+
+# Tracked file must require tenant isolation gate
+if jq -e '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[] | select(.context=="tenant isolation gate")' "$RULESET_FILE" >/dev/null; then
+  pass "tracked main-protection.json requires tenant isolation gate"
+else
+  fail_msg "tracked main-protection.json missing tenant isolation gate"
+fi
+
+echo
+echo "=== Cloudflare Human gate ==="
+CF_FILE="$(waia_cutover_cloudflare_preflight_path)"
+if [[ "$GITHUB_ONLY" == true ]]; then
+  echo "CLOUDFLARE_HUMAN_GATE=skipped (--github-only)"
+else
+  if [[ ! -f "$CF_FILE" ]]; then
+    fail_msg "CLOUDFLARE_HUMAN_GATE=unresolved — missing ${CF_FILE}"
+    echo "Record Cloudflare Dashboard → Workers & Pages → waia-app → Settings → Builds values before cutover is complete." >&2
+    echo "See docs/ops/SINGLE-TRUNK-CUTOVER.md" >&2
+  else
+    contract="$(jq -r '.architect_contract // empty' "$CF_FILE")"
+    prod_branch="$(jq -r '.production_branch // empty' "$CF_FILE")"
+    if [[ "$contract" == "A" || "$contract" == "B" ]] \
+      && [[ -n "$prod_branch" ]] \
+      && jq -e 'has("non_production_branch_builds_enabled") and has("production_deploy_command") and has("non_production_branch_deploy_command")' "$CF_FILE" >/dev/null; then
+      pass "CLOUDFLARE_HUMAN_GATE=recorded (contract=${contract}, production_branch=${prod_branch})"
+    else
+      fail_msg "CLOUDFLARE_HUMAN_GATE=incomplete in ${CF_FILE} (need architect_contract A|B and branch/build fields)"
+    fi
+  fi
+fi
 
 echo
 if [[ "$fail" -ne 0 ]]; then

@@ -100,10 +100,10 @@ Defines every environment where WAIA work may execute, who may act there, what e
 | Aspect | Rule |
 |--------|------|
 | **Who** | Human only |
-| **Deploy path** | Human squash-merges to `main`; optional explicit Human release tag of that SHA; `release.yml` / manual `pnpm cloudflare:deploy` |
+| **Deploy path** | Human squash-merges to `main`; optional explicit Human release tag of that SHA; `release.yml` / manual `pnpm cloudflare:deploy`. **Workers Builds Git integration is active for `waia-app`** — Architect must record Contract A or B per [`SINGLE-TRUNK-CUTOVER.md`](./SINGLE-TRUNK-CUTOVER.md) before treating single-trunk cutover as production-complete. |
 | **Worker** | `waia-app`; Secrets Store for `AI_TRADER_MASTER_KEY` per [DEE-220 runbook](./DEE-220-MASTER-KEY-RUNBOOK.md) |
-| **Agents** | HUMAN-ONLY — production deploy |
-| **Evidence** | Cloudflare Workers versions & deployments; `release.yml` run |
+| **Agents** | HUMAN-ONLY — production deploy; agents never mutate Cloudflare dashboard settings |
+| **Evidence** | Cloudflare Workers versions & deployments; `release.yml` run; operator-local Cloudflare preflight record |
 
 **Never a test surface.** Validation belongs on `local`, `github-actions`, or `cloudflare-preview`.
 
