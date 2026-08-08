@@ -135,7 +135,10 @@ assert_file_contains "apply does not delete dev" "$ROOT/scripts/github/apply-sin
 assert_file_contains "cutover doc Cloudflare gate" "$ROOT/docs/ops/SINGLE-TRUNK-CUTOVER.md" "architect_contract"
 assert_file_contains "cutover doc Contract A" "$ROOT/docs/ops/SINGLE-TRUNK-CUTOVER.md" "Contract A"
 assert_file_contains "cutover doc Contract B" "$ROOT/docs/ops/SINGLE-TRUNK-CUTOVER.md" "Contract B"
+assert_file_contains "cutover Cloudflare before merge" "$ROOT/docs/ops/SINGLE-TRUNK-CUTOVER.md" "BEFORE merge"
+assert_file_contains "cutover order requires CF before squash-merge" "$ROOT/docs/ops/SINGLE-TRUNK-CUTOVER.md" "Only after that decision"
 assert_file_not_contains "rollback no manual recreate" "$ROOT/scripts/github/rollback-single-trunk-cutover.sh" "recreate them manually"
+assert_file_not_contains "apply no swallowed verify" "$ROOT/scripts/github/apply-single-trunk-cutover.sh" "--github-only || true"
 
 # 7. guard-shell still blocks direct push to main
 GUARD="$ROOT/.cursor/hooks/guard-shell.sh"

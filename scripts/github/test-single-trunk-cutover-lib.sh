@@ -99,6 +99,20 @@ assert_contains "rollback refuses missing snapshot" "$ROLLBACK" "missing operato
 VERIFY="${ROOT}/scripts/github/verify-single-trunk-cutover.sh"
 assert_contains "verify requires tenant isolation" "$VERIFY" "tenant isolation gate"
 assert_contains "verify reports Cloudflare human gate" "$VERIFY" "CLOUDFLARE_HUMAN_GATE"
+assert_not_contains "apply does not swallow verify failure" "$APPLY" "verify-single-trunk-cutover.sh\" --github-only || true"
+assert_not_contains "apply does not use || true on verify" "$APPLY" "--github-only || true"
+assert_contains "apply fails closed on verify failure" "$APPLY" "GitHub cutover is NOT verified/complete"
+assert_contains "apply points to rollback on verify failure" "$APPLY" "rollback-single-trunk-cutover.sh --confirm"
+assert_contains "apply success only after verify" "$APPLY" "GitHub cutover apply complete and verified"
+
+RECORD="${ROOT}/scripts/github/record-cloudflare-preflight.sh"
+assert_contains "record helper exists contract flag" "$RECORD" "--architect-contract"
+assert_contains "record helper does not scrape" "$RECORD" "Does NOT scrape"
+if bash -n "$RECORD"; then
+  pass "bash -n record-cloudflare-preflight.sh"
+else
+  fail_msg "bash -n failed: $RECORD"
+fi
 
 # bash -n syntax
 for s in \

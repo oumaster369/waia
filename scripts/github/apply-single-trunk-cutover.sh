@@ -71,7 +71,8 @@ echo "  2. PATCH repos/${EXPECTED_REPO} default_branch=main + squash-only merge 
 echo "  3. Create ruleset '${CANONICAL_RULESET_NAME}' from ${RULESET_FILE}"
 echo "  4. Delete obsolete legacy rulesets by exact name (fail-closed on ambiguity)"
 echo "  5. Re-verify GitHub post-cutover state"
-echo "  Cloudflare Human gate remains separate — see docs/ops/SINGLE-TRUNK-CUTOVER.md"
+echo "  Cloudflare Architect Contract A|B must already be recorded BEFORE merging PR #456"
+echo "  (see docs/ops/SINGLE-TRUNK-CUTOVER.md — pre-merge Human gate)"
 
 if [[ "$CONFIRM" != true ]]; then
   echo
@@ -180,8 +181,20 @@ for name in "${LEGACY_RULESET_NAMES[@]}"; do
 done
 
 echo
-"${ROOT}/scripts/github/verify-single-trunk-cutover.sh" --github-only || true
+echo "=== Post-mutation GitHub verification (fail-closed) ==="
+if ! "${ROOT}/scripts/github/verify-single-trunk-cutover.sh" --github-only; then
+  echo >&2
+  echo "error: GitHub cutover is NOT verified/complete — post-cutover verification failed." >&2
+  echo "Do NOT treat this cutover as successful." >&2
+  echo "Deterministic rollback (Human-authorized only; not auto-executed):" >&2
+  echo "  ./scripts/github/rollback-single-trunk-cutover.sh --confirm" >&2
+  echo "Snapshot for rollback: ${SNAPSHOT}" >&2
+  exit 1
+fi
+
 echo
-echo "GitHub cutover apply complete. Branch refs/heads/dev was NOT deleted."
-echo "Cloudflare Human gate remains required before cutover is considered complete."
+echo "GitHub cutover apply complete and verified. Branch refs/heads/dev was NOT deleted."
+echo "Cloudflare Architect contract must already be recorded pre-merge; full verify still checks it:"
+echo "  ./scripts/github/verify-single-trunk-cutover.sh"
 echo "Snapshot for deterministic rollback: ${SNAPSHOT}"
+exit 0
