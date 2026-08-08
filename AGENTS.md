@@ -60,10 +60,10 @@ Recovery order — then escalate per [`EXECUTION-CONTRACT.md`](docs/waia-governa
 
 ## TL;DR
 
-1. Never push directly to `main` or `dev`.
-2. Work on **`dee-<NN>-<slug>`** linked to Linear; open PR to `dev`.
+1. Never push directly to `main` (frozen `dev` is not an active base — do not push there either).
+2. Work on **`dee-<NN>-<slug>`** branched from **`main`**, linked to Linear; open **one PR to `main`**.
 3. Never commit secrets.
-4. Follow the lifecycle in [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) without skipping steps; **PR = integration boundary** ([`INTEGRATION-BOUNDARY-POLICY.md`](docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)).
+4. Follow the lifecycle in [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) without skipping steps; **PR = integration boundary** ([`INTEGRATION-BOUNDARY-POLICY.md`](docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)). Multiple coherent work packages / `**Includes:**` children may land in one integration batch.
 5. Linear project **WAIA** is the source of executable work.
 6. Only atomic issues with exactly one execution label.
 7. Missing detail blocks execution → STOP and ask.
@@ -82,11 +82,11 @@ AI-Twin builds a structured digital personality via dialogue, diary, and behavio
 
 ## Branching and PR
 
-- Integration: **`dev`** · Production: **`main`** — both protected (local hook + GitHub rulesets).
-- Branch: `dee-<NN>-<slug>` · Commit: `DEE-NN type(scope): subject`
+- **Single trunk:** **`main`** — protected (local hook + GitHub rulesets). `dev` is frozen/retired (not deleted in-repo yet); not an active PR base.
+- Branch from `origin/main`: `dee-<NN>-<slug>` · Commit: `DEE-NN type(scope): subject`
 - Reference `DEE-NN` in branch, commits, PR title/body.
-- Merge: human only; agents **never** `gh pr merge`.
-- **Merge method by class:** feature/fix/governance → `dev` = **squash**; release promotion (`dev→main`) and back-sync (`main→dev`) = **Create a merge commit** (never squash — squash drops the second parent and drifts ancestry). After every release promotion, immediately open a `dee-<NN>-release-back-sync-*` PR.
+- Merge: human only; agents **never** `gh pr merge`. **Squash** feature/fix/governance PRs into `main`.
+- **Official release** = explicit Human tag/release of an exact `main` SHA — **not** `dev`→`main` promotion or `main`→`dev` back-sync (those are retired).
 - Details: [`BRANCHING-STRATEGY.md`](docs/waia-governance/BRANCHING-STRATEGY.md), [`PR-PROTOCOL.md`](docs/waia-governance/PR-PROTOCOL.md), [`POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md)
 
 ---
@@ -108,7 +108,7 @@ Canonical lifecycle: [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) · Inte
 | Diagnose deploy | `/diagnose` | Agent | Sonnet |
 | Parallel fan-out | `/parallel-implement` | Agent | Sonnet |
 
-**Default completion:** green `/test-and-fix` → PR readiness per [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md) → close with the **agent completion protocol** report ([`POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md): Linear, branch, PR URL, CI, governance, exact human merge instruction, post-merge verification, whether promotion/back-sync is now due, next task) → stop. Humans review/merge; agents wait for explicit confirmation before the next task.
+**Default completion:** green `/test-and-fix` → PR readiness per [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md) → close with the **agent completion protocol** report ([`POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md): Linear, branch, PR URL to `main`, CI, governance, exact human squash-merge instruction, post-merge sync of `origin/main`, optional recommendation for an explicit Human release tag, next task) → stop. Humans review/merge; agents wait for explicit confirmation before the next task.
 
 **Auto-advance:** when all preconditions in [`AGENT-AUTO-ADVANCE.md`](docs/waia-governance/AGENT-AUTO-ADVANCE.md) hold, commit → push → Linear `In Review` → PR package without waiting.
 
@@ -129,15 +129,18 @@ Phases: Plan → Implement → Test & Fix (incl. PR readiness). Do not skip.
 
 ## Validation
 
-Before PR readiness:
+**During work packages:** targeted local validation (lint/typecheck/build + path-scoped or issue-scoped tests as appropriate).
+
+**Local PR readiness** (before handoff):
 
 ```bash
 pnpm lint
 pnpm typecheck
-pnpm test --run
 pnpm build
 ```
 
-Plus `pnpm test:e2e` when UI/user-visible behavior changes.
+Plus **targeted tests** for changed surfaces, and `pnpm test:e2e` when UI/user-visible behavior changes.
+
+**Authoritative full unit suite** (`pnpm test --run` / CI `unit tests`) runs on **GitHub PR CI** against PR HEAD. Do not require a redundant full local unit suite solely to duplicate that gate. After merge, sync `origin/main` — do not re-run the full suite on push/merge to `main` solely because the PR already passed CI.
 
 Before PR readiness, run PR governance preflight on the rendered body: `./scripts/linear/preflight-pr-governance.sh` (see [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md)). Regression tests: `pnpm validate:pr-governance`.

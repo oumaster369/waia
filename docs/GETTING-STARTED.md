@@ -16,7 +16,7 @@ This guide is the **primary onboarding entrypoint**. Implementation rules live i
 | **Database** | Supabase Postgres (`WAIA_DB_BACKEND=postgres`) |
 | **AI** | OpenAI-compatible gateway (`WAIA_AI_PROVIDER=openai-compatible`) |
 | **Runtime** | Cloudflare Workers (`waia-app`) |
-| **Branches** | Integrate on `dev` · release via `main` |
+| **Branches** | `dee-*` from `main` · PR to `main` (single trunk) |
 
 Plain vars: [`wrangler.jsonc`](../wrangler.jsonc). Secrets: Worker dashboard or `wrangler secret put`.
 
@@ -68,7 +68,7 @@ Use after a new machine, credential rotation, or env change. **Expected time: 10
 ### Setup
 
 - [ ] Node **22** + pnpm **10** (`corepack enable`)
-- [ ] `git checkout dev && git pull` · `pnpm install --frozen-lockfile`
+- [ ] `git checkout main && git pull` · `pnpm install --frozen-lockfile`
 - [ ] Restore **Mode C** `.env.local` (or copy from `.env.local.backup`)
 - [ ] If schema may be behind: `pnpm db:migrate:postgres` (reads `.env.local`)
 - [ ] `pnpm dev` → [http://localhost:3000](http://localhost:3000)
@@ -117,7 +117,7 @@ WAIA uses **`node-linker=hoisted`** ([`.npmrc`](../.npmrc)) — required for Tai
 ```bash
 git clone https://github.com/oumaster369/waia.git
 cd waia
-git checkout dev && git pull origin dev
+git checkout main && git pull origin main
 corepack enable
 pnpm install --frozen-lockfile
 ```
@@ -280,7 +280,7 @@ Run the validation canon from [`AGENTS.md`](../AGENTS.md) before every PR. Defau
 
 ```bash
 git clone https://github.com/oumaster369/waia.git && cd waia
-git checkout dev && git pull origin dev
+git checkout main && git pull origin main
 corepack enable && pnpm install --frozen-lockfile
 cp .env.example .env.local
 pnpm db:migrate && pnpm dev
@@ -296,7 +296,7 @@ Sign up at [http://localhost:3000](http://localhost:3000) — stub Twin dialogue
 |-------|----------|
 | Git, branches, PRs, validation | [`AGENTS.md`](../AGENTS.md) |
 | Linear task contract | [`waia-governance/LINEAR-GOVERNANCE.md`](waia-governance/LINEAR-GOVERNANCE.md) |
-| `dev` → `main` release | [`waia-governance/POST-MERGE-PROTOCOL.md`](waia-governance/POST-MERGE-PROTOCOL.md) |
+| Post-merge + release tag | [`waia-governance/POST-MERGE-PROTOCOL.md`](waia-governance/POST-MERGE-PROTOCOL.md) |
 | Cloudflare deploy | [`cloudflare-deploy.md`](cloudflare-deploy.md) |
 | Product scope (AI-Twin v1) | [`product/WAIA-V1-MVP-SPEC.md`](product/WAIA-V1-MVP-SPEC.md) |
 | Infra parity audit | [`waia-governance/WAIA-INFRASTRUCTURE-PARITY-AUDIT-2026.md`](waia-governance/WAIA-INFRASTRUCTURE-PARITY-AUDIT-2026.md) |

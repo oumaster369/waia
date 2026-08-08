@@ -2,7 +2,7 @@
 
 ## Branch + base + compare
 
-- **Base:** `dev`  
+- **Base:** `main`  
 - **Compare:** `dee-<NN>-<slug>` (see [`BRANCHING-STRATEGY.md`](BRANCHING-STRATEGY.md))
 
 ## Opening a PR (CLI preferred)
@@ -10,14 +10,14 @@
 From agent machine with GitHub CLI:
 
 ```bash
-gh pr create --base dev --fill
+gh pr create --base main --title "DEE-NN type(scope): subject" --body-file .cursor/pr-body-DEE-NN.md
 ```
 
-Ensure body covers template fields manually if `--fill` incomplete.
+Prefer a preflight-validated body file over `--fill` alone when a rendered body exists.
 
 ### If `gh` auth unavailable
 
-Architect opens PR via GitHub UI: Compare → base `dev` → branch `dee-…`; paste checklist from [.github](../../.github/). PR title should include **`DEE-NN`**.
+Architect opens PR via GitHub UI: Compare → base `main` → branch `dee-…`; paste checklist from [.github](../../.github/). PR title should include **`DEE-NN`**.
 
 ### Agent restrictions
 
@@ -25,26 +25,21 @@ Agents must **not** `gh pr merge` by default workflow (see [.cursor/commands/pre
 
 ### Default PR readiness after implementation
 
-After local validation succeeds, agents **normally** finish by pushing the `dee-*` branch to `origin`, printing the **GitHub compare URL** (`dev` … feature branch), PR title/body for paste, and validation results — then **halt** for human PR open/review/merge. This is bundled into `/test-and-fix` completion; `/prepare-pr` remains for standalone retries. Same **no-merge** rule: proposing a PR URL or optionally running **`gh pr create`** does **not** grant merge authority.
+After local PR-readiness validation succeeds, agents **normally** finish by syncing with `origin/main`, pushing the `dee-*` branch to `origin`, printing the **GitHub compare URL** (`main` … feature branch), PR title/body for paste, and validation results — then **halt** for human PR open/review/merge. This is bundled into `/test-and-fix` completion; `/prepare-pr` remains for standalone retries. Same **no-merge** rule: proposing a PR URL or optionally running **`gh pr create`** does **not** grant merge authority.
 
 ### Auto-merge (humans — optional)
 
 **Maintainers** may turn on GitHub auto-merge **only** for **`T0`/`T1`** PRs that meet [`RISK-TIERS.md`](RISK-TIERS.md) merge-eligibility (checks green, no gate, no meaning shift, no runtime/migration/auth/infra in scope, no escalation). **Do not** use auto-merge for semantic/product governance changes, AI-Twin / readiness / autonomy / Society semantics, **`T2+`**, active Architect gates, or unresolved ambiguity—[`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md).
 
-## Merge method (by PR class)
+## Merge method
 
-The merge **method** is not freeform — it is fixed by PR class (full table in [`BRANCHING-STRATEGY.md`](BRANCHING-STRATEGY.md)):
+| PR class | Branch → base | Merge method |
+|----------|---------------|--------------|
+| **Feature / fix / governance** | `dee-<NN>-<slug>` → `main` | **Squash and merge** |
 
-- **Feature / fix / governance PR → `dev`:** **Squash and merge** (default).
-- **Release promotion → `main`:** **Create a merge commit** — never squash.
-- **Release back-sync → `dev`:** **Create a merge commit** — never squash.
+Full table: [`BRANCHING-STRATEGY.md`](BRANCHING-STRATEGY.md). Agents surface in the completion report: **Human squash-merges to `main`**. There is no active release-promotion or back-sync PR class.
 
-**Exact human merge instruction (agents must surface this in the PR body for the latter two classes):**
-
-> **Merge this PR with "Create a merge commit". Do NOT "Squash and merge".**
-> Squash drops the second parent and re-creates `dev`/`main` ancestry drift (see [`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md)).
-
-A normal feature/governance PR to `dev` (including this protocol's own PRs, unless a PR explicitly changes merge rules) uses squash and needs no special instruction.
+A normal feature/governance PR to `main` uses squash and needs no special instruction beyond Human merge authority.
 
 ## PR body essentials
 
@@ -63,7 +58,7 @@ Canonical structure: [`.github/pull_request_template.md`](../../.github/pull_req
 
 ### Linear completion lifecycle (default = auto-close)
 
-Ordinary atomic PRs need only **`Linear:** \`DEE-NN\``**. On merge to `dev`, [`linear-done.yml`](../../.github/workflows/linear-done.yml) transitions that issue to **Done** when validation passes.
+Ordinary atomic PRs need only **`Linear:** \`DEE-NN\``**. On merge to `main`, [`linear-done.yml`](../../.github/workflows/linear-done.yml) transitions that issue to **Done** when validation passes.
 
 **Keep-open** is reserved for PRs that belong to an **active parent or integration issue** with unfinished governed work (for example a docs-only canonical-plan refresh under an open program). It must **not** be used to avoid closing a genuinely completed atomic issue.
 
@@ -80,7 +75,11 @@ Rules:
 - Keep-open **does not** bypass title/branch/`Linear` alignment, scope verification, CI, review, or Human merge gates.
 - Keep-open PRs **pass** PR governance but **skip** Linear Done automation with `SKIP_REASON=explicit_keep_open`.
 - Identifiers in explanatory prose — including on `**Linear:** n/a (...)` lines — are **never** parsed as the explicit Linear id.
-- Release promotion remains a separate class: `**Linear:** n/a (release promotion)` only.
+- Do **not** invent a release-promotion skip class for ordinary feature PRs; official release is an explicit Human tag of a `main` SHA ([`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md)).
+
+### Multi-work-package / Includes
+
+One integration batch may include multiple coherent work packages and list children under `**Includes:**` when the integration-ready contract holds ([`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md)). Preserve splitting criteria when batches are not coherent.
 
 ### Semantic-impact signal **(when touched)**
 
@@ -92,11 +91,18 @@ For **`T2` and above** ([`RISK-TIERS.md`](RISK-TIERS.md))—routes, persistence 
 
 ## Validation before green PR
 
-[`AGENTS.md`](../../AGENTS.md):  
+**Local PR readiness** ([`AGENTS.md`](../../AGENTS.md)):
 
-`pnpm lint && pnpm typecheck && pnpm test --run && pnpm build`
+```bash
+pnpm lint && pnpm typecheck && pnpm build
+# + targeted tests for changed surfaces
+# + pnpm test:e2e when UI/user-visible behavior changes
+./scripts/linear/preflight-pr-governance.sh --body-file .cursor/pr-body-DEE-NN.md
+```
 
-UI-visible flows: Playwright suite per `.cursor/commands/test-and-fix`.
+**Authoritative full unit suite** runs on **GitHub PR CI** (PR HEAD). Do not require a redundant full local `pnpm test --run` solely to duplicate that CI gate. During work packages, prefer path-scoped / targeted tests.
+
+UI-visible flows: Playwright suite per `.cursor/commands/test-and-fix` when `app/**`, `components/**`, or user-visible behavior changes.
 
 ## Risk tiers & review depth
 

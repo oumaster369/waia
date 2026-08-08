@@ -2,14 +2,14 @@
 # Local P0 PR governance preflight — mirrors .github/workflows/pr-governance.yml checks.
 #
 # Usage:
-#   PR_TITLE=... PR_BODY=... PR_BRANCH=... [PR_BASE=dev] ./scripts/linear/preflight-pr-governance.sh
+#   PR_TITLE=... PR_BODY=... PR_BRANCH=... [PR_BASE=main] ./scripts/linear/preflight-pr-governance.sh
 #   PR_TITLE=... PR_BRANCH=... ./scripts/linear/preflight-pr-governance.sh --body-file path/to/body.md
 #
 # Env:
 #   PR_TITLE      PR title (required)
 #   PR_BODY       PR body markdown (required unless --body-file)
 #   PR_BRANCH     head branch name (required)
-#   PR_BASE       base branch (default: dev)
+#   PR_BASE       base branch (default: main)
 #   LINEAR_API_KEY  optional; enables Linear API scope verification
 #
 # Exit codes:
@@ -26,7 +26,7 @@ BODY_FILE=""
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  PR_TITLE=... PR_BODY=... PR_BRANCH=... [PR_BASE=dev] ./scripts/linear/preflight-pr-governance.sh
+  PR_TITLE=... PR_BODY=... PR_BRANCH=... [PR_BASE=main] ./scripts/linear/preflight-pr-governance.sh
   PR_TITLE=... PR_BRANCH=... ./scripts/linear/preflight-pr-governance.sh --body-file path/to/body.md
 
 Runs the same P0 checks as CI pr-governance (Linear ID + Tier field).
@@ -59,7 +59,7 @@ done
 PR_TITLE="${PR_TITLE:-}"
 PR_BODY="${PR_BODY:-}"
 PR_BRANCH="${PR_BRANCH:-}"
-PR_BASE="${PR_BASE:-dev}"
+PR_BASE="${PR_BASE:-main}"
 
 if [[ -n "$BODY_FILE" ]]; then
   if [[ ! -f "$BODY_FILE" ]]; then

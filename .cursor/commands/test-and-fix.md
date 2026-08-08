@@ -1,19 +1,20 @@
 # /test-and-fix
 
-Run the full local test suite, fix anything red, and loop until everything is green.
+Run local validation, fix anything red, and loop until PR-readiness gates are green. Full unit suite is **authoritative in GitHub PR CI** — do not require a redundant full local `pnpm test --run` solely to duplicate that gate.
 
 ## Loop
 
-1. Run all gates:
+1. Run local PR-readiness gates:
 
    ```bash
-   pnpm lint && pnpm typecheck && pnpm test --run && pnpm build
+   pnpm lint && pnpm typecheck && pnpm build
+   # + targeted / path-scoped tests for changed surfaces
    ```
 
 2. If a gate fails:
    - Read the actual error message — don't guess.
    - Make the smallest possible fix.
-   - Re-run only the failing gate, then re-run the full chain.
+   - Re-run only the failing gate, then re-run the local chain.
 3. For UI changes, run e2e:
 
    ```bash
@@ -22,7 +23,7 @@ Run the full local test suite, fix anything red, and loop until everything is gr
    ```
 
 4. If e2e fails, inspect `playwright-report/` and `test-results/`, then iterate.
-5. Stop when all gates pass twice in a row.
+5. Stop when local PR-readiness gates pass twice in a row (targeted tests included).
 
 ## When to ask for help instead of looping
 
@@ -30,7 +31,7 @@ Run the full local test suite, fix anything red, and loop until everything is gr
 - A type error points to an upstream library bug -> ask before pinning workarounds.
 - A test contradicts the plan -> stop and re-plan; do not silently change tests to make them pass.
 
-After the loop is green twice, **safe auto-advance** per [`AGENTS.md`](../../AGENTS.md) "Safe auto-advance after green validation":
+After the loop is green twice, **safe auto-advance** per [`AGENTS.md`](../../AGENTS.md) / [`AGENT-AUTO-ADVANCE.md`](../../docs/waia-governance/AGENT-AUTO-ADVANCE.md):
 
 1. **Verify only in-scope files are dirty.**
 
@@ -49,11 +50,11 @@ After the loop is green twice, **safe auto-advance** per [`AGENTS.md`](../../AGE
 
    `git add -A` is acceptable **only** when every dirty path is genuinely in scope for the active issue.
 
-3. **Continue into PR readiness** — update plan `state.lastValidatedGitSha` when a canonical plan exists; same checklist as [`/prepare-pr`](prepare-pr.md): push `dee-*` to `origin` with `-u` if needed, render PR body from plan + template, run `preflight-pr-governance.sh`, compare URL, **stop before merge**.
+3. **Continue into PR readiness** — update plan `state.lastValidatedGitSha` when a canonical plan exists; same checklist as [`/prepare-pr`](prepare-pr.md): sync `origin/main` if needed, push `dee-*` to `origin` with `-u` if needed, render PR body from plan + template, run `preflight-pr-governance.sh` with `PR_BASE=main`, compare URL, **stop before merge**.
 
 4. **Move the Linear issue to `In Review`** (existing DEE status) and add a PR-ready comment with the compare URL.
 
-5. **Stop before merge.** Humans open/review/merge.
+5. **Stop before merge.** Humans open/review/squash-merge to `main`.
 
 No separate "now run /prepare-pr" prompt is required for normal task completion. If any auto-advance precondition fails (validation, scope, branch, Linear id, risk tier, open STOP, constitutional Architect hold), do **not** auto-advance — surface the blocker.
 
@@ -61,7 +62,7 @@ Use `/prepare-pr` only when you need a standalone retry (e.g. push failed earlie
 
 ## Integration boundary ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md))
 
-- Loop gates locally many times; **one PR** only when integration-ready.
+- Loop gates locally many times; **one PR to `main`** only when integration-ready.
 - Render `**Includes:**` / `**Deferred:**` when child work is in scope.
 - Do not open a second PR for the same integration issue — spawn a new batch instead.
-- Sync branch with `origin/dev` via merge (not rebase) before PR when branch was already pushed.
+- Sync branch with `origin/main` via merge (not rebase) before PR when branch was already pushed.

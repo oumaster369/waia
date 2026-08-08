@@ -122,7 +122,7 @@
     "test:fhv:official-scale:profile:parity-gate": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/fhv-official-scale-profile-parity-gate.ts",
     "test:fhv:official-scale:profile": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/fhv-official-scale-profile-cli.ts",
     "test:fhv:v2-scale-fixture-smoke": "vitest run tests/fhv/official-scale/fhv-official-scale.test.ts",
-    "validate:pr-governance": "bash scripts/linear/test-validate-pr-linear-id.sh && bash scripts/linear/test-preflight-pr-governance.sh",
+    "validate:pr-governance": "bash scripts/linear/test-validate-pr-linear-id.sh && bash scripts/linear/test-preflight-pr-governance.sh && bash scripts/github/test-single-trunk-migration.sh && bash scripts/github/test-release-workflow-identity.sh",
     "validate:canon": "bash scripts/ops/validate-canonical-docs.sh && bash scripts/ops/validate-fhv-release-identity.sh",
     "validate:fhv-t4a-packet": "WAIA_TRADER_CLI=1 node --require ./scripts/trader/trader-cli-server-only-prelude.cjs --import tsx scripts/ops/validate-fhv-t4a-packet.ts",
     "validate:fhv-public-ceremony-packets": "WAIA_TRADER_CLI=1 node --require ./scripts/trader/trader-cli-server-only-prelude.cjs --import tsx scripts/ops/validate-fhv-public-ceremony-packets.ts",

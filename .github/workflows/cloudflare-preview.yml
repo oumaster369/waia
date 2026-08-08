@@ -4,7 +4,7 @@ name: cloudflare-preview
 
 on:
   pull_request:
-    branches: [dev, main]
+    branches: [main]
 
 concurrency:
   group: cloudflare-preview-${{ github.event.pull_request.number || github.run_id }}

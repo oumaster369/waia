@@ -84,7 +84,7 @@ Within governance:
 
 **Relationship to `WAIA-DEV-OS.md`:** The constitution is a **short coordinator** (roles, gates, validation pointer). This specification is the **full architecture**. On conflict about DEV OS structure, this document prevails; the constitution should be updated to point here, not re-derive topology.
 
-**Uncertainty (repository-evidenced):** Phase 0 Governance Integration artifacts (`FOUNDERS-COUNCIL.md`, `SOURCES-OF-TRUTH.md`, `AGENT-CHARTER.md`) still state that apex-authority binding lands in **PR2 (GI-05)**. [`WAIA-GOVERNANCE-BASELINE-REPORT-v1.0.md`](WAIA-GOVERNANCE-BASELINE-REPORT-v1.0.md) records GI-05 as **not started** at report time. vNext DEV OS slices (A–H) are documented as complete on `dev`. Until GI-05 status is reconciled in governance docs, treat **day-to-day execution authority** as defined by `AGENTS.md` / `AGENT-ROLES.md` (Human Architect as final merge and scope authority) while **Founders Council reserved decisions** remain documented in `FOUNDERS-COUNCIL.md` regardless of PR2 merge state.
+**Uncertainty (repository-evidenced):** Phase 0 Governance Integration artifacts (`FOUNDERS-COUNCIL.md`, `SOURCES-OF-TRUTH.md`, `AGENT-CHARTER.md`) still state that apex-authority binding lands in **PR2 (GI-05)**. [`WAIA-GOVERNANCE-BASELINE-REPORT-v1.0.md`](WAIA-GOVERNANCE-BASELINE-REPORT-v1.0.md) records GI-05 as **not started** at report time. vNext DEV OS slices (A–H) were documented as complete on `dev` *(historical dual-branch era; current trunk is `main` per DEE-511)*. Until GI-05 status is reconciled in governance docs, treat **day-to-day execution authority** as defined by `AGENTS.md` / `AGENT-ROLES.md` (Human Architect as final merge and scope authority) while **Founders Council reserved decisions** remain documented in `FOUNDERS-COUNCIL.md` regardless of PR2 merge state.
 
 ---
 
@@ -121,12 +121,12 @@ DEV OS is **product-independent**. It builds and governs any WAIA module. The AI
 
 1. **Human meaning first.** Product and completion specs define *done*. Agents implement; they do not silently redefine semantics.
 2. **Repository-first knowledge.** The git repository is the Knowledge Base for Phase 0–1 ([`SOURCES-OF-TRUTH.md`](SOURCES-OF-TRUTH.md)). No external KB is canonical.
-3. **PR = integration boundary.** One integration batch yields exactly one merge event to `dev` ([`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md)).
+3. **PR = integration boundary.** One integration batch yields exactly one merge event to `main` ([`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md)).
 4. **Plans hold mutable state; specs hold durable intent.** Completion specs and gap registries change slowly. Canonical plans change every work package.
 5. **Surfaces declare blast radius.** Every batch lists `executionSurfaces` so operators know where live infra can be touched.
 6. **Cheapest safe model.** Model **classes** (`fast` / `mid` / `reasoning`), not pinned versions ([`MODEL-COST-POLICY.md`](MODEL-COST-POLICY.md)).
 7. **STOP on contradiction.** Silent reconciliation across product, governance, trackers, and Linear is forbidden ([`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md)).
-8. **Effective merged is derived.** Post-merge status-only commits on `dev` are forbidden; completion is PR merged + Linear `Done` + stated criteria met.
+8. **Effective merged is derived.** Post-merge status-only commits on `main` are forbidden; completion is PR merged + Linear `Done` + stated criteria met.
 9. **Evidence is classified.** Scratch never ships; accepted research lives under `replay-runs/**` per [`EVIDENCE-POLICY.md`](EVIDENCE-POLICY.md).
 10. **DEV OS is not the product.** It safely builds WAIA modules; AI-Twin v1 remains the primary **product delivery** focus per operating memory, while other modules may run as parallel engineering programs.
 
@@ -138,14 +138,14 @@ These are **architectural constants**. Tooling may change; these do not.
 |-----------|-----------|
 | **Human authority** | Humans decide scope, merge, production, and reserved matters; agents advise only |
 | **Integration boundary** | One integration issue = one plan = one branch = one PR = one merge |
-| **PR to `dev`** | All feature/governance integration lands via PR; `dev` and `main` are never directly pushed by agents |
+| **PR to `main`** | All feature/governance integration lands via PR to the single trunk; `main` is never directly pushed by agents (`dev` frozen pending Human retirement) |
 | **Repository-first knowledge** | Git repository is canonical engineering memory; no shadow knowledge base |
-| **Derived completion** | Post-merge batch completion is inferred from merge + Linear `Done`; no status-only commits on `dev` |
+| **Derived completion** | Post-merge batch completion is inferred from merge + Linear `Done`; no status-only commits on `main` |
 | **STOP on contradiction** | Unresolved cross-layer or cross-doc conflict halts work |
 | **Secrets discipline** | No secrets in git; env and operator injection only |
 | **Execution label** | Exactly one execution label per Linear issue ([`AGENT-EXECUTION-LABELS.md`](AGENT-EXECUTION-LABELS.md)) |
 | **Surface registry** | Work touching live infra must map to a registered execution surface |
-| **Release merge method** | Feature → `dev` = squash; release promotion and back-sync = merge commit — never reversed |
+| **Trunk merge method** | Feature/fix/governance → `main` = squash; official release = explicit Human tag of a `main` SHA (no promotion/back-sync) |
 | **Agent Charter ceiling** | No unauthorized agent identities; no agent merge; no persistent autonomous governance loops |
 
 ### 2.2 Expected to evolve
@@ -184,15 +184,15 @@ Canonical Plan                       docs/plans/dee-NNN-slug.md  (state primitiv
         ↓
 Agent implementation                 executor role, mid class — today: /implement
         ↓
-Validation                           pnpm lint && typecheck && test --run && build
+Validation                           lint + typecheck + build + targeted tests (full unit suite in PR CI)
         ↓
 Evidence                             classified per EVIDENCE-POLICY when applicable
         ↓
-Pull Request                         exactly one PR per integration issue → dev
+Pull Request                         exactly one PR per integration issue → main
         ↓
-Human Merge                          squash (feature); merge-commit (release/back-sync)
+Human Merge                          squash to main (feature/fix/governance)
         ↓
-Updated Canonical State              code + docs on origin/dev; plan state effectively complete
+Updated Canonical State              code + docs on origin/main; plan state effectively complete
 ```
 
 ### 3.1 Core invariant
@@ -234,15 +234,15 @@ Canonical reference: [`LIFECYCLE.md`](LIFECYCLE.md). Detailed 12-step table: [`A
 |-------|---------------|
 | Plan approved / work starts | `In Progress` |
 | Integration-ready PR opened | `In Review` |
-| Human merge to `dev` | `Done` (`linear-done.yml` when `LINEAR_API_KEY` set) |
+| Human squash merge to `main` | `Done` (`linear-done.yml` when `LINEAR_API_KEY` set) |
 
 ### 3.4 Integration batch sub-cycle (no PR until ready)
 
 1. Scope approval — human approves issue, plan, tier, surfaces, acceptance criteria.
 2. Implementation loop — many work packages, commits, pushes — **no PR**.
 3. Validation loop — repeat gates until green.
-4. Branch sync — merge `origin/dev` into feature branch (never force-push published branch).
-5. Integration-ready — contract satisfied; `preflight-pr-governance.sh` passes.
+4. Branch sync — merge `origin/main` into feature branch (never force-push published branch).
+5. Integration-ready — contract satisfied; `preflight-pr-governance.sh` passes; one PR to `main`.
 6. One PR — agent opens exactly one PR; Linear `In Review`; **stops**.
 7. Human merge — effective completion is **derived** (no post-merge status-only commit).
 
@@ -306,7 +306,7 @@ Full table: [`README.md`](README.md). Binding day-to-day topics:
 | [`LINEAR-GOVERNANCE.md`](LINEAR-GOVERNANCE.md) | Board rules, closeout template |
 | [`BRANCHING-STRATEGY.md`](BRANCHING-STRATEGY.md) | `dee-<NN>-<slug>`, merge method by PR class |
 | [`PR-PROTOCOL.md`](PR-PROTOCOL.md) | PR body, preflight, semantic-impact signals |
-| [`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md) | Hygiene, release promotion, back-sync, agent completion report |
+| [`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md) | Hygiene, sync `origin/main`, explicit release tag, agent completion report |
 | [`RISK-TIERS.md`](RISK-TIERS.md) | T0–T4 autonomy envelopes |
 | [`MODEL-COST-POLICY.md`](MODEL-COST-POLICY.md) | `fast` / `mid` / `reasoning` classes |
 | [`EXECUTABLE-GOVERNANCE-HOOKS.md`](EXECUTABLE-GOVERNANCE-HOOKS.md) | Hook and CI enforcement inventory |
@@ -364,8 +364,8 @@ Roles are **timeless**. Product names (Composer, Sonnet, Opus, Cursor) are **cur
 | Role | Model class *(current examples)* | Responsibility | Boundary |
 |------|----------------------------------|----------------|----------|
 | **Human (Architect / operator)** | — | Scope approval, merge, production deploy, Execution Server mutation, reserved decisions, STOP resolution | Does not substitute for green CI; does not bypass hooks |
-| **Planner** | `reasoning` *(Opus)* | Groom, decompose, plan; architecture ambiguity; pre-merge review when requested | No commits on `dev`; no merge; no scope expansion without CONFIRM |
-| **Executor** | `mid` *(Sonnet / Composer Agent)* | Implement, test-fix, PR prep; feature-branch code and docs | No merge; no `dev`/`main` push; no host mutation |
+| **Planner** | `reasoning` *(Opus)* | Groom, decompose, plan; architecture ambiguity; pre-merge review when requested | No commits on `main`; no merge; no scope expansion without CONFIRM |
+| **Executor** | `mid` *(Sonnet / Composer Agent)* | Implement, test-fix, PR prep; feature-branch code and docs | No merge; no `main` push; no host mutation |
 | **Fast executor** | `fast` *(Composer 2)* | T0/T1 docs, hygiene, continuity handoffs | No T3/T4 infra without escalation |
 | **IDE host** | Cursor *(current)* | Rules injection, hooks, MCP, commands | Enforcement aid — not authority |
 | **GitHub** | — | PR review, blocking CI, rulesets, `linear-done.yml`, automated review bots, preview workflow | Humans merge; agents never `gh pr merge` |
@@ -402,7 +402,7 @@ Classification exists so **low-risk batches need minimal checkpoints** while **i
 
 ### 6.1 AUTO — execute without stopping
 
-Repository inspection; read-only diagnostics; documentation and code on feature branches; local `pnpm lint && pnpm typecheck && pnpm test --run && pnpm build`; feature-branch commits and push; PR body preparation; **one PR when integration-ready**; updating canonical-plan `state` frontmatter on the feature branch.
+Repository inspection; read-only diagnostics; documentation and code on feature branches; local `pnpm lint && pnpm typecheck && pnpm build` + targeted tests; feature-branch commits and push; PR body preparation; **one PR to `main` when integration-ready**; updating canonical-plan `state` frontmatter on the feature branch.
 
 **Why:** Mechanical work with rollback = revert PR. Hooks and rulesets block protected-branch damage.
 
@@ -414,7 +414,7 @@ New Linear integration issue (unless pre-authorized); scope change; batch split/
 
 ### 6.3 HUMAN-ONLY — never perform
 
-Merge; direct push to `dev` / `main`; production deploy; Execution Server sync/build/deploy/rollback; live trading; secret mutation; destructive data ops; weakening hooks, rulesets, tests, CI, tenant isolation, or security gates.
+Merge; direct push to `main` (or frozen `dev`); production deploy; Execution Server sync/build/deploy/rollback; live trading; secret mutation; destructive data ops; weakening hooks, rulesets, tests, CI, tenant isolation, or security gates; creating production release tags.
 
 **Why:** Irreversible production impact, capital path, or governance integrity. [`AGENT-CHARTER.md`](AGENT-CHARTER.md) forbids agents opening, approving, merging, or auto-merging PRs.
 
@@ -428,13 +428,14 @@ Detail: [`OPERATOR-QUICKREF.md`](../ops/OPERATOR-QUICKREF.md).
 
 ### 6.5 Validation and PR governance
 
-**Local canon:**
+**Local PR readiness:**
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test --run && pnpm build
+pnpm lint && pnpm typecheck && pnpm build
+# + targeted / path-scoped tests for changed surfaces
 ```
 
-Add `pnpm test:e2e` when UI changes. Before PR handoff:
+Add `pnpm test:e2e` when UI changes. Full unit suite is **authoritative in GitHub PR CI**. Before PR handoff:
 
 ```bash
 pnpm validate:pr-governance
@@ -442,7 +443,7 @@ pnpm validate:pr-governance
 
 **Blocking CI:** `lint`, `typecheck`, `unit tests`, `build`, `e2e tests`, `PR governance`, and **tenant-isolation** (release-blocking per ADR-0007 — see [`BRANCHING-STRATEGY.md`](BRANCHING-STRATEGY.md)).
 
-**Hooks:** [`EXECUTABLE-GOVERNANCE-HOOKS.md`](EXECUTABLE-GOVERNANCE-HOOKS.md) — `guard-shell.sh` blocks force-push and direct `dev`/`main` push.
+**Hooks:** [`EXECUTABLE-GOVERNANCE-HOOKS.md`](EXECUTABLE-GOVERNANCE-HOOKS.md) — `guard-shell.sh` blocks force-push and direct protected-branch push (`main`; frozen `dev` until retirement).
 
 ---
 
@@ -452,9 +453,10 @@ Only what **exists in the repository today** after vNext integration.
 
 ### 7.1 Branching and merge
 
-- Branches: `dee-<NN>-<slug>` → PR to `dev` → human merge (squash for feature/governance).
-- `main` = production; `dev` = integration; both protected (hooks + GitHub rulesets).
-- Release promotion `dev` → `main` and back-sync `main` → `dev` use **merge commit**, never squash ([`BRANCHING-STRATEGY.md`](BRANCHING-STRATEGY.md)).
+- **Single trunk:** `dee-<NN>-<slug>` from `main` → PR to `main` → human **squash** merge (feature/fix/governance).
+- `main` = canonical integration + production tip (hooks + GitHub rulesets via [`main-protection.json`](../../.github/rulesets/main-protection.json)).
+- `dev` is **frozen** pending Human retirement after one successful single-trunk cycle — not an active PR base.
+- Official release = explicit Human tag/release of an exact `main` SHA — **not** `dev`→`main` promotion or `main`→`dev` back-sync ([`BRANCHING-STRATEGY.md`](BRANCHING-STRATEGY.md)). Historical dual-branch ancestry ceremony: see **FP-010** (superseded).
 
 ### 7.2 Canonical plans (Slice C+)
 
@@ -513,7 +515,7 @@ Only what **exists in the repository today** after vNext integration.
 | `feature/*` branches (new work) | `dee-<NN>-<slug>` |
 | One PR per small step inside same batch | Work packages inside one integration PR |
 | Resume from chat / master Build program alone | Canonical plan `state` + branch |
-| Direct push to `dev` / `main` | PR + human merge |
+| Direct push to `main` | PR + human squash merge |
 | Static Cloudflare Pages export as deploy model | Cloudflare Workers + OpenNext |
 | `pnpm test` without `--run` in agent workflows | `pnpm test --run` |
 
@@ -545,7 +547,7 @@ Per `ROADMAP-AUTOPILOT.md` §Next-phase boundary:
 | GitHub Action that selects/issues batches | Requires human CONFIRM per batch |
 | Auto Linear issue creation | CONFIRM gate |
 | Auto `gh pr merge` | HUMAN-ONLY |
-| Post-merge bot commits to `dev` | Forbidden reconciliation pattern |
+| Post-merge bot commits to `main` | Forbidden reconciliation pattern |
 | `/autopilot` Cursor command | Future activation slice |
 | ADR-0024 | Proposed, not authored ([`docs/adr/README.md`](../adr/README.md)) |
 | Gate B / C / D agent identities | Not authorized ([`CONSTITUTIONAL-DOCTRINE.md`](CONSTITUTIONAL-DOCTRINE.md)) |
@@ -639,7 +641,7 @@ WAIA DEV OS is ultimately intended to become a **complete engineering operating 
 
 **End state (intent, not commitment):**
 
-- **Traceable intent chain** — every merged change on `dev` traces to a completion spec criterion, a gap closure, or an explicit Architect-approved bootstrap — through a Linear issue, canonical plan, and one PR.
+- **Traceable intent chain** — every merged change on `main` traces to a completion spec criterion, a gap closure, or an explicit Architect-approved bootstrap — through a Linear issue, canonical plan, and one PR.
 - **Repository-native memory** — all durable engineering knowledge remains in git; Linear holds *status*, not *truth*.
 - **Human-merge invariant** — automation may prepare, validate, and recommend; merge and production authority never leave human operators ([`AGENT-CHARTER.md`](AGENT-CHARTER.md)).
 - **Read-only coordination** — optional autopilot may rank, resume, and detect duplicate batches **without** opening issues, merging PRs, or writing post-merge state ([`ROADMAP-AUTOPILOT.md`](ROADMAP-AUTOPILOT.md)).
@@ -685,9 +687,9 @@ flowchart TB
   end
 
   subgraph validate [Validation and boundary]
-    GATES[lint typecheck test --run build]
+    GATES[lint typecheck build + targeted tests]
     PRE[preflight-pr-governance]
-    PR[One PR to dev]
+    PR[One PR to main]
     GATES --> PRE --> PR
   end
 
@@ -702,7 +704,7 @@ flowchart TB
   end
 
   subgraph canon [Canonical state after merge]
-    DEV[origin/dev]
+    MAIN[origin/main]
     DONE[Linear Done]
   end
 
@@ -714,8 +716,8 @@ flowchart TB
   BR --> CAG
   MID --> GATES
   PR --> GHA --> HA
-  HA -->|HUMAN-ONLY merge| DEV
-  DEV --> DONE
+  HA -->|HUMAN-ONLY squash merge| MAIN
+  MAIN --> DONE
   EXS -.->|evidence| RR[replay-runs vault]
 
   subgraph notbuilt [Not implemented]

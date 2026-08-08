@@ -66,7 +66,7 @@ acceptanceSummary: "..."        # one line — full criteria live in plan/spec
 **Rules:**
 
 - One `linearIssue` per batch — aligns with [`INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOUNDARY-POLICY.md).
-- `status: complete` only after human merge to `dev` and gap entries closed.
+- `status: complete` only after human merge to `main` and gap entries closed.
 - `planPath` populated when `/plan-feature` promotes to `docs/plans/`.
 
 ---

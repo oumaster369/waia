@@ -1,6 +1,6 @@
 # Cloudflare PR preview deploys (DEE-51)
 
-GitHub Actions runs an **optional** Workers preview for PRs targeting `dev` or `main`, separate from any future **production** deploy flow.
+GitHub Actions runs an **optional** Workers preview for PRs targeting `main` (and historically `dev` while that branch remains), separate from any **production** deploy flow.
 
 Primary workflow file: [.github/workflows/cloudflare-preview.yml](../.github/workflows/cloudflare-preview.yml).  
 Existing unit/e2e/build checks remain in [.github/workflows/ci.yml](../.github/workflows/ci.yml).
@@ -19,7 +19,7 @@ Related: [cloudflare-deploy.md](cloudflare-deploy.md) (manual/production-oriente
 
    When the PR is from this repo, the job starts; a **`Check Cloudflare secrets`** step then sets `has_cloudflare_secrets`. If **`CLOUDFLARE_API_TOKEN`** or **`CLOUDFLARE_ACCOUNT_ID`** is unset or empty, a notice step logs that preview deploy was skipped — **later deploy steps do not run** and the workflow still **passes**. When both secrets exist, the workflow downloads the bundle into **`.open-next`** at the repo root and runs **`wrangler deploy`** there (alongside **`wrangler.jsonc`**). The bundle job always validates the OpenNext build independently.
 
-**Production** `waia-app` deploys are **not** triggered by this workflow (no `push` to `dev` deploy here).
+**Production** `waia-app` deploys are **not** triggered by this workflow (no automatic production deploy on push to `main` here).
 
 ---
 

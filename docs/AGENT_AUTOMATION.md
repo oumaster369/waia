@@ -21,7 +21,7 @@ User / Linear
                                                     ├─ ci-failure-triage → /fix-ci hint
                                                     ├─ linear-done on merge (if LINEAR_API_KEY set)
                                                     ├─ Cursor Bugbot review
-                                                    └─ Human merges → release.yml on main
+                                                    └─ Human squash-merges to main (optional explicit release tag)
 ```
 
 ## Models
@@ -53,9 +53,9 @@ User / Linear
 User `settings.json` allow/deny lists + [`.cursor/hooks/guard-shell.sh`](../.cursor/hooks/guard-shell.sh):
 
 - **Allowed**: `pnpm (lint|typecheck|test|build|format)…`, `gh (pr|issue|repo)…`
-- **Denied**: `git push --force`, direct push to `dev`/`main`, destructive `rm -rf`
+- **Denied**: `git push --force`, direct push to `main` (or frozen `dev`), destructive `rm -rf`
 
-**Server-side:** GitHub rulesets on `dev`/`main` — apply via [`scripts/github/apply-branch-rulesets.sh`](../scripts/github/apply-branch-rulesets.sh).
+**Server-side:** GitHub ruleset on `main` ([`main-protection.json`](../.github/rulesets/main-protection.json)) — apply via [`scripts/github/apply-branch-rulesets.sh`](../scripts/github/apply-branch-rulesets.sh).
 
 ## Background and parallel agents
 
@@ -73,4 +73,4 @@ User `settings.json` allow/deny lists + [`.cursor/hooks/guard-shell.sh`](../.cur
 - GitHub App / Bugbot integration.
 - `gh auth login`, ruleset apply (one-time maintainer).
 - `LINEAR_API_KEY` in GitHub Actions secrets for Done automation.
-- **Merging** PRs and `dev` → `main` promotion (human authority per `AGENTS.md`).
+- **Merging** PRs to `main` (squash) and creating official release tags (human authority per `AGENTS.md`).

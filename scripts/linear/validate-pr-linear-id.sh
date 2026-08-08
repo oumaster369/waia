@@ -10,7 +10,7 @@
 #   PR_TITLE      PR title
 #   PR_BODY       PR body (markdown)
 #   PR_BRANCH     head branch name
-#   PR_BASE       base branch name (optional; enables dev→main release promotion mode)
+#   PR_BASE       base branch name (optional; must be main under single-trunk)
 #   LINEAR_API_KEY  optional; enables Linear title/scope verification
 #
 # Exit codes (pr-governance):
@@ -235,37 +235,23 @@ fetch_linear_scope_context() {
   return 0
 }
 
-is_release_promotion_pr() {
+# Legacy dual-branch release promotion (head=dev, base=main) is retired under
+# single-trunk main. Official release identity is an explicit Human tag/release.
+is_legacy_release_promotion_pr() {
   [[ "$PR_BRANCH" == "dev" && "$PR_BASE" == "main" ]]
 }
 
-is_release_linear_na() {
-  local body="$1"
-  printf '%s' "$body" | grep -qE '\*\*Linear:\*\*[[:space:]]*`?n/a[[:space:]]*\(release promotion\)`?'
-}
-
-# Determine the required merge method by PR class (BRANCHING-STRATEGY.md).
-# Release promotion (base=main) and back-sync (dee-*-release-back-sync-*) require a
-# real merge commit; everything else uses squash. Informational only (stdout, never
-# blocking) — emitted as MERGE_STRATEGY=... so downstream tools/humans get deterministic
-# guidance without affecting governance pass/fail.
+# Normal integration PRs are squash → main (BRANCHING-STRATEGY.md).
+# Informational only (stdout, never blocking).
 detect_merge_strategy() {
-  if [[ "$PR_BASE" == "main" ]] \
-    || [[ "$PR_BRANCH" =~ ^dee-[0-9]+-release-(back-sync|promote) ]] \
-    || [[ "$PR_BRANCH" == "dev" && "$PR_BASE" == "main" ]]; then
-    printf 'merge-commit'
-  else
-    printf 'squash'
-  fi
+  printf 'squash'
 }
 
 emit_merge_strategy_note() {
   local strategy
   strategy="$(detect_merge_strategy)"
   printf 'MERGE_STRATEGY=%s\n' "$strategy"
-  if [[ "$strategy" == "merge-commit" ]]; then
-    printf 'MERGE_STRATEGY_NOTE=release/back-sync PR — merge with "Create a merge commit", NOT squash (BRANCHING-STRATEGY.md FP-010)\n'
-  fi
+  printf 'MERGE_STRATEGY_NOTE=feature/fix/governance PR — Squash and merge into main (BRANCHING-STRATEGY.md)\n'
 }
 
 check_disclaimer_collision() {
@@ -295,46 +281,39 @@ check_disclaimer_collision() {
 
 # --- validation ---
 
-release_promotion=false
-release_linear_na=false
-if is_release_promotion_pr; then
-  release_promotion=true
-  if is_release_linear_na "$PR_BODY"; then
-    release_linear_na=true
-  fi
+if is_legacy_release_promotion_pr; then
+  add_failure 'Legacy release-promotion PRs (head=dev → base=main) are retired. Use dee-<NN>-<slug> → main (squash). Official release is an explicit Human tag/release of a main SHA.'
 fi
 
 explicit_id="$(extract_explicit_linear "$PR_BODY")"
 title_id="$(extract_first_dee "$PR_TITLE")"
 branch_id="$(extract_branch_nn "$PR_BRANCH")"
 
-if [[ "$release_promotion" == true ]]; then
-  if [[ "$release_linear_na" != true && -z "$explicit_id" ]]; then
-    add_failure 'Release promotion PR body must include **Linear:** `DEE-NN` or **Linear:** n/a (release promotion).'
-  fi
-else
-  if [[ -z "$explicit_id" ]]; then
-    add_failure 'PR body missing explicit **Linear:** `DEE-NN` field (required — do not rely on title/branch alone).'
-  fi
+if [[ -z "$explicit_id" ]]; then
+  add_failure 'PR body missing explicit **Linear:** `DEE-NN` field (required — do not rely on title/branch alone).'
+fi
 
-  if [[ -n "$title_id" && -n "$explicit_id" ]] && ! dee_ids_equal "$title_id" "$explicit_id"; then
-    add_failure "PR title references \`${title_id}\` but **Linear:** field declares \`${explicit_id}\`."
-  fi
+if [[ -n "$title_id" && -n "$explicit_id" ]] && ! dee_ids_equal "$title_id" "$explicit_id"; then
+  add_failure "PR title references \`${title_id}\` but **Linear:** field declares \`${explicit_id}\`."
+fi
 
-  if [[ -n "$branch_id" && -n "$explicit_id" ]] && ! dee_ids_equal "$branch_id" "$explicit_id"; then
-    add_failure "Branch \`${PR_BRANCH}\` implies \`${branch_id}\` but **Linear:** field declares \`${explicit_id}\`."
-  fi
+if [[ -n "$branch_id" && -n "$explicit_id" ]] && ! dee_ids_equal "$branch_id" "$explicit_id"; then
+  add_failure "Branch \`${PR_BRANCH}\` implies \`${branch_id}\` but **Linear:** field declares \`${explicit_id}\`."
+fi
 
-  dee_branch_ok=false
-  if [[ "$PR_BRANCH" =~ ^dee-[0-9]{2,}-[a-z0-9-]+$ ]]; then
-    dee_branch_ok=true
-  elif [[ -n "$PR_BRANCH" ]]; then
-    add_failure "Branch \`${PR_BRANCH}\` does not match \`dee-<NN>-<slug>\`."
-  fi
+dee_branch_ok=false
+if [[ "$PR_BRANCH" =~ ^dee-[0-9]{2,}-[a-z0-9-]+$ ]]; then
+  dee_branch_ok=true
+elif [[ -n "$PR_BRANCH" ]]; then
+  add_failure "Branch \`${PR_BRANCH}\` does not match \`dee-<NN>-<slug>\`."
+fi
 
-  if [[ "$dee_branch_ok" == true && -z "$branch_id" && -n "$explicit_id" ]]; then
-    add_failure "Could not parse issue number from branch \`${PR_BRANCH}\`."
-  fi
+if [[ "$dee_branch_ok" == true && -z "$branch_id" && -n "$explicit_id" ]]; then
+  add_failure "Could not parse issue number from branch \`${PR_BRANCH}\`."
+fi
+
+if [[ -n "$PR_BASE" && "$PR_BASE" != "main" ]]; then
+  add_failure "PR base must be \`main\` (single-trunk). Got \`${PR_BASE}\`."
 fi
 
 check_disclaimer_collision "$PR_BODY" "$PR_TITLE" "$PR_BRANCH" || true
@@ -344,11 +323,8 @@ linear_completion_reason=""
 validate_linear_completion_contract "$PR_BODY" "$explicit_id" || true
 
 resolved_id="$explicit_id"
-if [[ "$release_promotion" == true && "$release_linear_na" == true ]]; then
-  resolved_id=""
-fi
 
-if [[ -n "$resolved_id" && -n "${LINEAR_API_KEY:-}" && "$release_promotion" != true ]]; then
+if [[ -n "$resolved_id" && -n "${LINEAR_API_KEY:-}" ]]; then
   issue_context="$(fetch_linear_scope_context "$resolved_id" || true)"
   if [[ -z "$issue_context" ]]; then
     add_failure "Linear issue \`${resolved_id}\` could not be resolved via API (check LINEAR_API_KEY and issue id)."
@@ -356,7 +332,7 @@ if [[ -n "$resolved_id" && -n "${LINEAR_API_KEY:-}" && "$release_promotion" != t
     issue_title="$(printf '%s' "$issue_context" | awk '{print $1, $2, $3, $4, $5}')"
     add_failure "Linear issue scope materially differs from PR title (no token overlap). Issue context starts: \"${issue_title}…\" vs PR title=\"${PR_TITLE}\"."
   fi
-elif [[ -n "$resolved_id" && "$release_promotion" != true ]]; then
+elif [[ -n "$resolved_id" ]]; then
   add_warning 'LINEAR_API_KEY not set — skipping Linear API title/scope verification.'
 fi
 
@@ -383,16 +359,6 @@ if [[ ${#failures[@]} -gt 0 ]]; then
 fi
 
 if [[ -z "$resolved_id" ]]; then
-  if [[ "$release_promotion" == true && "$release_linear_na" == true ]]; then
-    printf 'RESOLVED_DEE_ID=RELEASE_PROMOTION\n'
-    emit_merge_strategy_note
-    if [[ "$MODE" == "linear-done" ]]; then
-      printf 'SKIP_LINEAR_DONE=1\n'
-      printf 'SKIP_REASON=release_promotion_pr\n'
-      exit 2
-    fi
-    exit 0
-  fi
   if [[ "$MODE" == "linear-done" ]]; then
     printf 'SKIP_LINEAR_DONE=1\n'
     printf 'SKIP_REASON=missing_explicit_linear_field\n'

@@ -1,10 +1,12 @@
 name: ci
 
+# Full blocking CI validates integration PR HEADs once.
+# Unchanged content must NOT rerun the full unit suite solely because it was
+# merged into main (validated content identity → same merged content identity).
 on:
   pull_request:
-    branches: [dev, main]
-  push:
-    branches: [dev, main]
+    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

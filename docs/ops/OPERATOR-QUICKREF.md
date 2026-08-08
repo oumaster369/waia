@@ -20,7 +20,7 @@ Answer these before starting or resuming a batch:
 | **Q6** | Which **checkpoint** am I at? | Checkpoint table below |
 | **Q7** | Is the **integration-ready contract** satisfied before opening a PR? | [`INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOUNDARY-POLICY.md) §Integration-ready |
 | **Q8** | Where is **evidence** stored and classified? | Plan PR body; `replay-runs/**` when applicable |
-| **Q9** | After merge, what is **next action** (no forbidden post-merge Git write)? | [`POST-MERGE-PROTOCOL.md`](../waia-governance/POST-MERGE-PROTOCOL.md); plan `state.nextAction`; refresh `dev` only |
+| **Q9** | After merge, what is **next action** (no forbidden post-merge Git write)? | [`POST-MERGE-PROTOCOL.md`](../waia-governance/POST-MERGE-PROTOCOL.md); plan `state.nextAction`; refresh `main` only |
 
 ---
 
@@ -30,7 +30,7 @@ Answer these before starting or resuming a batch:
 |-------|------------------|----------|
 | **AUTO** | Inspect repo; read-only diagnostics; docs/code on feature branch; local gates; commits/push; PR body prep; **one PR when integration-ready**; update plan `state` | Monitor; no per-step approval on low-risk batches |
 | **CONFIRM** | **STOP** — new integration issue; scope change; batch split; plan promotion; ambiguous child completion; partial-criteria PR; constitutional edits; CI/ruleset/schema changes | Answer or approve |
-| **HUMAN-ONLY** | **Never** — merge; push `dev`/`main`; production deploy; Execution Server sync/build/deploy/rollback; live trading; secret mutation; weaken gates | Operator performs |
+| **HUMAN-ONLY** | **Never** — merge; push `main`; production deploy; Execution Server sync/build/deploy/rollback; live trading; secret mutation; weaken gates; create production release tags | Operator performs |
 
 Full matrix: [`INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOUNDARY-POLICY.md).
 

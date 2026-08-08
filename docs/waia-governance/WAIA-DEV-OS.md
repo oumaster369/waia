@@ -50,11 +50,11 @@ End-to-end flow (may be compressed in small tasks, but **approval** and **audit*
 
 1. **Recommendation** — Human or agent proposes the **next bounded** task (architecture leverage, dependencies, risk). Agent may **recommend**; human may **request** analysis only (no code).  
 2. **Approval** — Architect/human **approves** scope: Linear issue exists/updated, execution label correct, acceptance criteria clear. **No implementation** of net-new engineering work without this (see §10).  
-3. **Implementation** — Agent on a **`dee-<NN>-<slug>`** branch; matches [`AGENTS.md`](../../AGENTS.md) phased workflow (`/plan-feature` → `/implement` → `/test-and-fix`, etc.).  
-4. **Validation** — **Canon:** `pnpm lint`, `pnpm typecheck`, **`pnpm test --run`**, `pnpm build` (see §8). Optional e2e / Postgres opt-in tests per issue.  
-5. **PR** — Human-opened merge request to **`dev`** (agent supplies compare URL / body); agents **never** merge.  
-6. **Merge** — Human merges after review + green CI ([`RISK-TIERS.md`](RISK-TIERS.md) merge hints).  
-7. **Post-merge closeout** — Sync `dev`, prune branches, rerun or trust CI, tracker updates if semantics changed ([`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md)).  
+3. **Implementation** — Agent on a **`dee-<NN>-<slug>`** branch from **`main`**; matches [`AGENTS.md`](../../AGENTS.md) phased workflow (`/plan-feature` → `/implement` → `/test-and-fix`, etc.). Multiple coherent work packages may stay on one branch until integration-ready.  
+4. **Validation** — **Local PR readiness:** `pnpm lint`, `pnpm typecheck`, `pnpm build` + targeted tests (see §8). Full unit suite authoritative in GitHub PR CI. Optional e2e / Postgres opt-in tests per issue.  
+5. **PR** — One PR to **`main`** (agent supplies compare URL / body); agents **never** merge.  
+6. **Merge** — Human **squash-merges** after review + green CI ([`RISK-TIERS.md`](RISK-TIERS.md) merge hints).  
+7. **Post-merge closeout** — Sync `origin/main`, prune branches, trust PR CI, tracker updates if semantics changed ([`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md)). Official release = later explicit Human tag of a `main` SHA — not branch promotion.  
 8. **Linear update** — Issue **Done**, comment with PR link, merge commit hash, validation summary ([`DOCUMENTATION-STANDARDS.md`](DOCUMENTATION-STANDARDS.md), [`LINEAR-GOVERNANCE.md`](LINEAR-GOVERNANCE.md)).
 
 Extended loop reference: [`AUTONOMOUS-EXECUTION-LOOP.md`](AUTONOMOUS-EXECUTION-LOOP.md). **Canonical lifecycle:** [`LIFECYCLE.md`](LIFECYCLE.md) · **Integration boundaries:** [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md).
@@ -85,19 +85,19 @@ Every change should carry an honest **risk tier** (T0–T4) per [`RISK-TIERS.md`
 
 ## 8. Validation canon
 
-Default local gate before PR (per [`AGENTS.md`](../../AGENTS.md)):
+**Local PR readiness** (per [`AGENTS.md`](../../AGENTS.md)):
 
 ```bash
 pnpm lint
 pnpm typecheck
-pnpm test --run
 pnpm build
+# + targeted / path-scoped tests for changed surfaces
+# + pnpm test:e2e when UI/user-visible behavior changes
 ```
 
-Use **`pnpm test --run`** for **one-shot** Vitest (avoids watch-mode hangs). Path-scoped or env-gated tests (e.g. Postgres integration) follow issue instructions and [`../postgres-development.md`](../postgres-development.md).
+During work packages, prefer targeted tests. **Authoritative full unit suite** runs on **GitHub PR CI** — do not require a redundant full local `pnpm test --run` solely to duplicate that gate. When you do run Vitest locally, use **`pnpm test --run`** for one-shot mode (avoids watch-mode hangs). Path-scoped or env-gated tests (e.g. Postgres integration) follow issue instructions and [`../postgres-development.md`](../postgres-development.md).
 
-CI must stay aligned with the same invocation (see `.github/workflows/ci.yml`).
-
+CI on PR HEAD must stay aligned with the authoritative suite (see `.github/workflows/ci.yml`).
 ---
 
 ## 9. MCP and tooling rules
@@ -124,7 +124,7 @@ Human approval gates (summary): [`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md)
 
 Non-exhaustive; [`AGENTS.md`](../../AGENTS.md) remains authoritative:
 
-- Push to **`main`** or **`dev`** directly.
+- Push to **`main`** (or frozen `dev`) directly.
 - **Merge** or enable auto-merge for high-stakes tiers without human policy.
 - **Implement** ambiguous or multi-owner issues without split issues.
 - **Bypass** STOP / escalation when coherence breaks ([§12](#12-how-uncertainty-is-escalated)).

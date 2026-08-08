@@ -9,4 +9,4 @@
 | Branch naming detail | [`docs/waia-governance/BRANCHING-STRATEGY.md`](docs/waia-governance/BRANCHING-STRATEGY.md) |
 | Git ergonomics / deploy snippets | [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) (non-authoritative adjunct) |
 
-**Branches:** **`dee-<NN>-<slug>`** linked to Linear — not legacy `feature/*`.
+**Branches:** **`dee-<NN>-<slug>`** from **`main`** → PR to **`main`** — not legacy `feature/*`.

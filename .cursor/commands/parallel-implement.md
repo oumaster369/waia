@@ -18,7 +18,7 @@ Fan out **independent** atomic Linear issues in parallel using **git worktrees**
    ./scripts/worktrees/parallel-issue.sh DEE-101 DEE-102 DEE-103
    ```
 
-   This creates `../waia-worktrees/dee-<NN>-<slug>/` checkouts on `dee-*` branches from current `dev`.
+   This creates `../waia-worktrees/dee-<NN>-<slug>/` checkouts on `dee-*` branches from current `main`.
 
 4. For each worktree, launch a **parallel Agent** (or Background Agent) with:
 

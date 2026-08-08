@@ -54,7 +54,7 @@ Defines every environment where WAIA work may execute, who may act there, what e
 |--------|------|
 | **Who** | Operator running Agent, Plan, or Background Agent modes |
 | **Typical actions** | `/implement`, `/test-and-fix`, `/prepare-pr`, documentation edits, feature-branch commits |
-| **Boundaries** | Hooks ([`.cursor/hooks/guard-shell.sh`](../../.cursor/hooks/guard-shell.sh)) block force-push and direct push to `dev`/`main`; agents never merge |
+| **Boundaries** | Hooks ([`.cursor/hooks/guard-shell.sh`](../../.cursor/hooks/guard-shell.sh)) block force-push and direct push to `main`; agents never merge |
 | **MCP** | Linear (`plugin-linear-linear`), Supabase, Cloudflare, Playwright per [`CURSOR-ENVIRONMENT.md`](CURSOR-ENVIRONMENT.md) |
 | **Agents** | AUTO on feature branch; CONFIRM for scope/plan promotion; HUMAN-ONLY for merge and host mutation |
 | **Evidence** | `.cursor/agent-log.jsonl` (gitignored); PR body; canonical plan `state` in `docs/plans/` |
@@ -73,7 +73,7 @@ Defines every environment where WAIA work may execute, who may act there, what e
 | **Agents** | AUTO — CI runs on push/PR; agents do not mutate workflow secrets |
 | **Evidence** | Actions run URL; check status on PR |
 
-**Required before merge:** blocking checks green per [`.github/rulesets/dev-main-protection.json`](../../.github/rulesets/dev-main-protection.json).
+**Required before merge:** blocking checks green per [`.github/rulesets/main-protection.json`](../../.github/rulesets/main-protection.json).
 
 ---
 
@@ -100,7 +100,7 @@ Defines every environment where WAIA work may execute, who may act there, what e
 | Aspect | Rule |
 |--------|------|
 | **Who** | Human only |
-| **Deploy path** | Human merges `dev` → `main`; `release.yml` / manual `pnpm cloudflare:deploy` |
+| **Deploy path** | Human squash-merges to `main`; optional explicit Human release tag of that SHA; `release.yml` / manual `pnpm cloudflare:deploy` |
 | **Worker** | `waia-app`; Secrets Store for `AI_TRADER_MASTER_KEY` per [DEE-220 runbook](./DEE-220-MASTER-KEY-RUNBOOK.md) |
 | **Agents** | HUMAN-ONLY — production deploy |
 | **Evidence** | Cloudflare Workers versions & deployments; `release.yml` run |

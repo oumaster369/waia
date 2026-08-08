@@ -1,6 +1,6 @@
 # /prepare-pr
 
-**PR readiness package:** push the current `dee-*` branch to `origin`, then supply compare/PR links and a paste-ready title and body targeting **`dev`**. Human opens the PR, reviews CI/Bugbot, and merges — **agents never merge**.
+**PR readiness package:** push the current `dee-*` branch to `origin`, then supply compare/PR links and a paste-ready title and body targeting **`main`**. Human opens the PR, reviews CI/Bugbot, and squash-merges — **agents never merge**.
 
 Use this command **standalone** (e.g. retry after a rejected push) or rely on it implicitly: **`/test-and-fix` ends here by default** after gates are green (`AGENTS.md` workflow).
 
@@ -32,9 +32,9 @@ git push -u origin "$(git branch --show-current)"
 
 `-u` establishes tracking when the upstream is not set yet.
 
-Never push directly to `dev` or `main`.
+Never push directly to `main` (or frozen `dev`).
 
-### 4. Compare URL (base `dev`, head = current branch)
+### 4. Compare URL (base `main`, head = current branch)
 
 Resolve `owner/repo` from `origin` (pick one approach):
 
@@ -44,14 +44,14 @@ Resolve `owner/repo` from `origin` (pick one approach):
 Then print the **compare URL** (GitHub “Create pull request” entry point from this page):
 
 ```text
-https://github.com/OWNER/REPO/compare/dev...BRANCH
+https://github.com/OWNER/REPO/compare/main...BRANCH
 ```
 
 Use the **exact** remote branch name for `BRANCH` (URL-encode if it contains special characters).
 
 ### 5. GitHub PR creation URL
 
-The compare URL in step 4 is the primary **PR creation** link: open it in a browser, confirm base **`dev`** and compare branch, then use **Create pull request**.
+The compare URL in step 4 is the primary **PR creation** link: open it in a browser, confirm base **`main`** and compare branch, then use **Create pull request**.
 
 Optionally include `?expand=1` on the compare URL if you want the rich compare view expanded; behavior is cosmetic.
 
@@ -75,24 +75,24 @@ Optionally include `?expand=1` on the compare URL if you want the rich compare v
    ```bash
    PR_TITLE="DEE-NN type(scope): subject" \
    PR_BRANCH="$(git branch --show-current)" \
-   PR_BASE=dev \
+   PR_BASE=main \
    ./scripts/linear/preflight-pr-governance.sh --body-file .cursor/pr-body-DEE-NN.md
    ```
 
 6. **Title:** Conventional-commit style; include **Linear ID** (`DEE-NN`) per [`docs/waia-governance/PR-PROTOCOL.md`](../../docs/waia-governance/PR-PROTOCOL.md).
 7. **Deliver** only after preflight passes:
-   - **Preferred:** `gh pr create --base dev --title "..." --body-file .cursor/pr-body-DEE-NN.md`
+   - **Preferred:** `gh pr create --base main --title "..." --body-file .cursor/pr-body-DEE-NN.md`
    - **Fallback:** paste-ready body in agent report (same content that passed preflight)
 
 Checkbox rule: only check template items **actually verified**.
 
 ### 7. Report validation results
 
-Echo the commands that were run for this task and their outcome (see [`AGENTS.md`](../../AGENTS.md) validation section — full gate before PR-readiness: **`pnpm lint && pnpm typecheck && pnpm test --run && pnpm build`** plus **`pnpm validate:pr-governance`**; add **`pnpm test:e2e`** when UI/user-visible behavior changed; unless the issuing task narrows scope).
+Echo the commands that were run for this task and their outcome (see [`AGENTS.md`](../../AGENTS.md) validation section — local PR readiness: **`pnpm lint && pnpm typecheck && pnpm build`** + **targeted tests** + **`pnpm validate:pr-governance`** / preflight; add **`pnpm test:e2e`** when UI/user-visible behavior changed). Full unit suite is **authoritative in GitHub PR CI** — do not require a redundant full local `pnpm test --run` solely to duplicate that gate.
 
 ### 8. Stop and wait
 
-Do **not** merge. Hand off to a human for PR open (if using links only), review, CI green, and merge.
+Do **not** merge. Hand off to a human for PR open (if using links only), review, CI green, and squash-merge to `main`.
 
 ---
 
@@ -101,7 +101,7 @@ Do **not** merge. Hand off to a human for PR open (if using links only), review,
 Only if **`gh` is authenticated** and the operator wants the agent to open the PR form in one step — **after preflight passes**:
 
 ```bash
-gh pr create --base dev --title "DEE-NN type(scope): subject" --body-file .cursor/pr-body-DEE-NN.md --draft=false
+gh pr create --base main --title "DEE-NN type(scope): subject" --body-file .cursor/pr-body-DEE-NN.md --draft=false
 ```
 
 Do **not** use `--fill` alone when a pre-rendered body file exists — it bypasses the filled template you validated. Still **never** `gh pr merge`.
@@ -110,10 +110,10 @@ Do **not** use `--fill` alone when a pre-rendered body file exists — it bypass
 
 - Refuse a second PR for an integration id with an existing open/merged PR.
 - Include `**Includes:**` and `**Deferred:**` in the rendered body when applicable.
-- Synchronize with `origin/dev` via merge before opening PR if the branch was already pushed.
+- Synchronize with `origin/main` via merge before opening PR if the branch was already pushed.
 
 ## Hard rules
 
 - Never `gh pr merge` from the agent — merging is the human’s call.
-- Never push to `dev` or `main` directly.
+- Never push to `main` (or frozen `dev`) directly.
 - Never enable or assume auto-merge in agent workflows ([`docs/waia-governance/PR-PROTOCOL.md`](../../docs/waia-governance/PR-PROTOCOL.md)).

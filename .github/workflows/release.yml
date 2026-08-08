@@ -1,14 +1,18 @@
 name: release
 
-# On push to main: tag and publish GitHub Release with DEE-NN changelog.
+# Official release identity is an explicit Human-invoked tag/release of an exact
+# main SHA. Merge into canonical main and official release are separate concepts.
+# Do NOT auto-release on every push/merge to main.
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       tag_name:
         description: "Override tag (default: vYYYY.MM.DD.<short-sha>)"
+        required: false
+        type: string
+      target_sha:
+        description: "Exact main SHA to tag (default: current workflow SHA / checked-out HEAD)"
         required: false
         type: string
 
@@ -23,18 +27,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.target_sha || github.sha }}
 
-      - name: Compute tag
+      - name: Compute tag and target SHA
         id: tag
         run: |
           set -euo pipefail
+          TARGET_SHA="$(git rev-parse HEAD)"
           if [[ -n "${{ inputs.tag_name }}" ]]; then
             TAG="${{ inputs.tag_name }}"
           else
             TAG="v$(date -u +%Y.%m.%d).$(git rev-parse --short HEAD)"
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Tag: ${TAG}"
+          echo "target_sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Tag: ${TAG} @ ${TARGET_SHA}"
 
       - name: Generate release notes
         id: notes
@@ -54,7 +61,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ steps.tag.outputs.target_sha }}
           name: WAIA ${{ steps.tag.outputs.tag }}
           body: ${{ steps.notes.outputs.body }}
           generate_release_notes: false
@@ -65,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.tag.outputs.tag }}"
-          EXPECTED_SHA="${{ github.sha }}"
+          EXPECTED_SHA="${{ steps.tag.outputs.target_sha }}"
 
           git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
 
