@@ -1,14 +1,18 @@
 name: release
 
-# On push to main: tag and publish GitHub Release with DEE-NN changelog.
+# Official release identity is an explicit Human-invoked tag/release of an exact
+# canonical main SHA. Merge into main and official release are separate concepts.
+# Do NOT auto-release on every push/merge to main.
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       tag_name:
         description: "Override tag (default: vYYYY.MM.DD.<short-sha>)"
+        required: false
+        type: string
+      target_sha:
+        description: "Exact 40-character main SHA to tag (required for non-default; must be contained in origin/main)"
         required: false
         type: string
 
@@ -24,17 +28,71 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Compute tag
+      - name: Prove target is a full commit on canonical main
         id: tag
+        env:
+          INPUT_TAG_NAME: ${{ inputs.tag_name }}
+          INPUT_TARGET_SHA: ${{ inputs.target_sha }}
         run: |
           set -euo pipefail
-          if [[ -n "${{ inputs.tag_name }}" ]]; then
-            TAG="${{ inputs.tag_name }}"
-          else
-            TAG="v$(date -u +%Y.%m.%d).$(git rev-parse --short HEAD)"
+
+          git fetch origin --prune
+          git fetch origin main:refs/remotes/origin/main
+
+          MAIN_TIP="$(git rev-parse refs/remotes/origin/main)"
+          if [[ ! "$MAIN_TIP" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::origin/main tip is not a full 40-character SHA: ${MAIN_TIP}"
+            exit 1
           fi
+
+          RAW_TARGET="${INPUT_TARGET_SHA:-}"
+          if [[ -z "$RAW_TARGET" ]]; then
+            RAW_TARGET="$MAIN_TIP"
+          fi
+
+          # Reject abbreviated / ambiguous inputs: require exact 40-hex before resolve.
+          if [[ ! "$RAW_TARGET" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::target_sha must be an exact full 40-character commit SHA (got: ${RAW_TARGET})"
+            exit 1
+          fi
+
+          if ! git cat-file -e "${RAW_TARGET}^{commit}" 2>/dev/null; then
+            git fetch origin "$RAW_TARGET" 2>/dev/null || true
+          fi
+          if ! git cat-file -e "${RAW_TARGET}^{commit}" 2>/dev/null; then
+            echo "::error::target_sha ${RAW_TARGET} is not a commit object"
+            exit 1
+          fi
+
+          TARGET_SHA="$(git rev-parse "${RAW_TARGET}^{commit}")"
+          if [[ "$TARGET_SHA" != "$RAW_TARGET" ]]; then
+            echo "::error::target resolved to ${TARGET_SHA} but input was ${RAW_TARGET}"
+            exit 1
+          fi
+          if [[ ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::resolved target is not a full 40-character SHA: ${TARGET_SHA}"
+            exit 1
+          fi
+
+          # Membership: target must be an ancestor of (or equal to) canonical origin/main tip.
+          if ! git merge-base --is-ancestor "$TARGET_SHA" "$MAIN_TIP"; then
+            echo "::error::target ${TARGET_SHA} is NOT contained in canonical origin/main (${MAIN_TIP})"
+            echo "::error::Official release may only tag commits that are already on main."
+            exit 1
+          fi
+
+          git checkout --force "$TARGET_SHA"
+
+          if [[ -n "${INPUT_TAG_NAME}" ]]; then
+            TAG="${INPUT_TAG_NAME}"
+          else
+            TAG="v$(date -u +%Y.%m.%d).$(git rev-parse --short=12 HEAD)"
+          fi
+
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Tag: ${TAG}"
+          echo "target_sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
+          echo "main_tip=${MAIN_TIP}" >> "$GITHUB_OUTPUT"
+          echo "Proven: ${TAG} will tag main member ${TARGET_SHA} (main tip ${MAIN_TIP})"
 
       - name: Generate release notes
         id: notes
@@ -54,7 +112,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ steps.tag.outputs.target_sha }}
           name: WAIA ${{ steps.tag.outputs.tag }}
           body: ${{ steps.notes.outputs.body }}
           generate_release_notes: false
@@ -65,7 +123,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.tag.outputs.tag }}"
-          EXPECTED_SHA="${{ github.sha }}"
+          EXPECTED_SHA="${{ steps.tag.outputs.target_sha }}"
 
           git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
 
@@ -76,4 +134,10 @@ jobs:
             exit 1
           fi
 
-          echo "Release tag verified: ${TAG} -> ${ACTUAL_SHA}"
+          MAIN_TIP="${{ steps.tag.outputs.main_tip }}"
+          if ! git merge-base --is-ancestor "$ACTUAL_SHA" "$MAIN_TIP"; then
+            echo "::error::Released tag commit is not on origin/main"
+            exit 1
+          fi
+
+          echo "Release tag verified: ${TAG} -> ${ACTUAL_SHA} (on main)"

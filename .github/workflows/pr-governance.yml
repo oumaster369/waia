@@ -5,7 +5,7 @@ name: pr-governance
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
-    branches: [dev, main]
+    branches: [main]
 
 permissions:
   contents: read
@@ -104,7 +104,7 @@ jobs:
                 context.repo.owner +
                 "/" +
                 context.repo.repo +
-                "/blob/dev/docs/waia-governance/LINEAR-ID-COLLISION-RECOVERY.md) and run `/groom` before changing title/branch.\n";
+                "/blob/main/docs/waia-governance/LINEAR-ID-COLLISION-RECOVERY.md) and run `/groom` before changing title/branch.\n";
             }
 
             const { owner, repo } = context.repo;

@@ -14,9 +14,9 @@ if [[ $# -lt 1 ]]; then
 fi
 
 cd "$ROOT"
-git fetch origin dev 2>/dev/null || true
-git checkout dev
-git pull --ff-only origin dev 2>/dev/null || true
+git fetch origin main 2>/dev/null || true
+git checkout main
+git pull --ff-only origin main 2>/dev/null || true
 
 mkdir -p "$WORKTREE_ROOT"
 
@@ -35,12 +35,12 @@ for IDENT in "$@"; do
   if command -v gh >/dev/null 2>&1; then
     REMOTE_BRANCH="$(git ls-remote --heads origin "$BRANCH" | awk '{print $2}' | sed 's|refs/heads/||')"
     if [[ -z "$REMOTE_BRANCH" ]]; then
-      echo "Creating branch ${BRANCH} from dev"
-      git branch "$BRANCH" dev 2>/dev/null || git checkout -b "$BRANCH" dev
-      git checkout dev
+      echo "Creating branch ${BRANCH} from main"
+      git branch "$BRANCH" main 2>/dev/null || git checkout -b "$BRANCH" main
+      git checkout main
     fi
   else
-    git branch "$BRANCH" dev 2>/dev/null || true
+    git branch "$BRANCH" main 2>/dev/null || true
   fi
 
   DEST="${WORKTREE_ROOT}/${BRANCH}"

@@ -44,7 +44,7 @@
 
 - **Board:** Linear project WAIA is the live queue; this file does **not** mirror ticket states ([`AGENTS.md`](../../AGENTS.md) §Linear Integration).
 - **Engineering spine (names only):** DEE-64 staged persistence/runtime; **DEE-95\*** runtime routing + telemetry + ops readiness docs; **DEE-72\*** Postgres twin persistence and reasoning ports; **DEE-76–80** AI Gateway; post–DEE-105 items such as auth/OAuth `getDb()` migration called **deferred** in tracker ([`DEE-64-TRACKER.md`](../migrations/DEE-64-TRACKER.md)).
-- **Partner / production path:** Release discipline and env alignment for `dev` → `main` → production Worker documented in [`../ops/DEE-128-PARTNER-PREVIEW-RELEASE-NOTES.md`](../ops/DEE-128-PARTNER-PREVIEW-RELEASE-NOTES.md) (operator checklist; not a substitute for live infra state).
+- **Partner / production path:** Release identity and env alignment for tagged **`main` SHA** → production Worker / Execution Server documented in ops contracts (operator checklist; not a substitute for live infra state). Historical dual-branch notes may remain in older ops packets.
 - **In-repo gap:** No document titled “SENSE CODING roadmap.” Coding discipline for agents is **`AGENTS.md`** + Cursor workflow commands + [`DOCUMENTATION-STANDARDS.md`](DOCUMENTATION-STANDARDS.md) (five-memory traces).
 
 ---
@@ -53,7 +53,7 @@
 
 1. Ship **AI-Twin v1** behaviors against **`docs/product/**`** acceptance paths; avoid scope bleed into deferred modules ([`NON-GOALS.md`](NON-GOALS.md)).
 2. Keep **runtime migrations honest**: code ↔ tracker alignment; cite trackers in PRs when touching persistence/routes/telemetry ([`MIGRATION-GOVERNANCE.md`](MIGRATION-GOVERNANCE.md)).
-3. Maintain **governance hygiene**: one execution label per Linear issue, validation canon before PR readiness, no agent merge, no direct push to `main`/`dev` ([`AGENTS.md`](../../AGENTS.md)).
+3. Maintain **governance hygiene**: one execution label per Linear issue, local PR-readiness validation before handoff, no agent merge, no direct push to `main` ([`AGENTS.md`](../../AGENTS.md)). Single trunk: PR → `main`; official release = explicit Human tag of a `main` SHA.
 4. Advance **production readiness** only with ops artifacts (telemetry read path, staging checklists, rollback) per **DEE-95e** / **DEE-128** — no silent broad Postgres rollout ([`DEE-95E-OPERATIONAL-READINESS-PLAN.md`](../migrations/DEE-95E-OPERATIONAL-READINESS-PLAN.md)).
 
 ---
@@ -95,8 +95,8 @@
 ## 10. Current execution sequencing
 
 1. Linear issue approved with single execution label + acceptance criteria ([`AGENTS.md`](../../AGENTS.md) Task Contract).
-2. Branch `dee-<NN>-<slug>` → implement → `pnpm lint`, `pnpm typecheck`, `pnpm test --run`, `pnpm build` (+ e2e when UI touches per rules).
-3. PR readiness to **`dev`**; human review + merge; post-merge closeout ([`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md)).
+2. Branch `dee-<NN>-<slug>` from **`main`** → implement → targeted local validation (`pnpm lint`, `pnpm typecheck`, `pnpm build` + scoped tests; + e2e when UI). Full unit suite authoritative in GitHub PR CI.
+3. Sync `origin/main` → one PR to **`main`**; human squash merge; post-merge sync `origin/main` ([`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md)). Optional explicit Human release tag of that SHA — not branch promotion.
 4. Migration-touching PRs: declare tracker touchpoints ([`DOCUMENTATION-STANDARDS.md`](DOCUMENTATION-STANDARDS.md)).
 
 ---
@@ -147,25 +147,26 @@ From active constitutional acceptance (**binding within stated scope**): DEV OS 
 
 **Maintenance shape:** Prefer **small surgical edits** to numbered sections; bump **Last reconciled** below; avoid append-only appendices.
 
-**Last reconciled:** 2026-05-17 — Git remote + Cloudflare Worker hygiene recorded (§15); landing line unchanged (§2).
+**Last reconciled:** 2026-08-08 — single-trunk `main` operating rules (DEE-511); §15 historical dual-branch facts retained as dated memory.
 
 ---
 
 ## 15. Git and Cloudflare hygiene (recorded)
 
-**GitHub — facts (post-cleanup):**
+**GitHub — historical facts (post-cleanup, dual-branch era — retain as history):**
 
-- **Long-lived remotes:** only **`dev`** and **`main`**.
+- **Long-lived remotes (at cleanup):** **`dev`** and **`main`**.
 - **Stale design branch removed:** `dee-109-ceremonial-landing-atmosphere` **archived** as tag **`archive/dee-109-ceremonial-landing-atmosphere`** at **`0e81e4130294ee71a3c945b0138892e39944f30d`**, then the remote branch **deleted**.
-- **`origin/main` and `origin/dev`:** **identical file trees**; **`origin/main` is an ancestor of `origin/dev`** after **PR #159** (`main` history merged into `dev` with a **real merge commit**).
-- **UI noise:** GitHub may still show **`main` as “commits behind” `dev`** — that is **history count only**, not content drift.
-- **Branch roles:** **production source = `main`**; **integration / development = `dev`**.
+- **`origin/main` and `origin/dev` (at cleanup):** **identical file trees**; **`origin/main` is an ancestor of `origin/dev`** after **PR #159** (`main` history merged into `dev` with a **real merge commit**).
+- **UI noise (historical):** GitHub may still have shown **`main` as “commits behind” `dev`** — history count only, not content drift.
+- **Branch roles (historical dual-branch):** production source = `main`; integration = `dev`.
 
-**Git — operational rules:**
+**Git — forward-looking operational rules (single trunk, DEE-511):**
 
-- **Long-lived branches:** only **`dev`** and **`main`** on the remote.
-- **Temporary branches** (`dee-*`, promotion, fix, chore): **merge**, **archive** (e.g. `git tag archive/…` on the tip), or **delete** when finished — do not let orphans accumulate.
-- **After a `dev` → `main` release**, if **`main` must be joined back into `dev` for a clean DAG: merge with GitHub **Create a merge commit** — **not** squash merge and **not** rebase merge — so `main` becomes an ancestor of `dev` and comparisons stay honest.
+- **Canonical trunk:** **`main`** only for new integration. Branch `dee-*` from `origin/main`; one PR to `main`; Human **squash** merge.
+- **`dev`:** frozen/retired pending Human deletion after one successful single-trunk cycle — not an active PR base.
+- **Temporary branches** (`dee-*`, fix, chore): merge (squash to `main`), archive, or delete when finished — do not let orphans accumulate.
+- **Official release:** explicit Human tag/release of an exact `main` SHA — **not** `dev`→`main` promotion or `main`→`dev` back-sync (dual-branch ancestry ceremony superseded; see FP-010 historical).
 
 **Cloudflare — facts (post-cleanup):**
 
@@ -176,7 +177,7 @@ From active constitutional acceptance (**binding within stated scope**): DEV OS 
 
 **Cloudflare — operational rules:**
 
-- **Production `waia-app`** must remain tied to **`main`** commits promoted through the normal release path; **preview / `dev` / PR Workers** must **not** receive **`waia.life`** (or other production hostnames) unless deliberately reconfigured with full ops sign-off.
+- **Production `waia-app`** must remain tied to **`main`** commits (and Human-tagged release SHAs when used for Execution Server / FHV); **preview / PR Workers** must **not** receive **`waia.life`** (or other production hostnames) unless deliberately reconfigured with full ops sign-off.
 - **Stale preview or staging Workers** (`waia-app-pr-*`, ad-hoc staging names): **audit periodically**; **delete only after** dashboard confirmation of **no custom domains, no production routes, negligible or zero traffic, and no dependency** (OAuth callbacks, bookmarks, internal runbooks, bindings to other services).
 
 ---

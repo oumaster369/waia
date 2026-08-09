@@ -7,19 +7,19 @@ alwaysApply: true
 
 ## Branches
 
-- `main` — production, deployed to Cloudflare Workers (OpenNext) by the user. **Never push directly.**
-- `dev` — integration, protected. **Never push directly.**
-- **`dee-<NN>-<slug>`** — canonical branch for WAIA work tied to Linear **`DEE-NN`** (see [`AGENTS.md`](../../AGENTS.md) and [`docs/waia-governance/BRANCHING-STRATEGY.md`](../../docs/waia-governance/BRANCHING-STRATEGY.md)).
+- `main` — single canonical trunk (integration + production tip). Deployed to Cloudflare Workers (OpenNext) by the user / Human release. **Never push directly.**
+- `dev` — frozen/retired (not deleted in this migration); **not** an active PR base. **Never push directly.**
+- **`dee-<NN>-<slug>`** — canonical branch for WAIA work tied to Linear **`DEE-NN`**, branched from **`main`** (see [`AGENTS.md`](../../AGENTS.md) and [`docs/waia-governance/BRANCHING-STRATEGY.md`](../../docs/waia-governance/BRANCHING-STRATEGY.md)).
 - **`feature/<scope>-<slug>`** — **legacy** naming; avoid for new work unless Architect-approved and noted in the PR.
 
 ## Required steps for every change
 
-1. `git checkout dev && git pull origin dev`
+1. `git checkout main && git pull origin main`
 2. `git checkout -b dee-<NN>-<slug>`
-3. Implement, run `pnpm lint && pnpm typecheck && pnpm test --run && pnpm build` (full chain before PR per [`AGENTS.md`](../../AGENTS.md) + `/test-and-fix`)
+3. Implement; use targeted local validation during work packages; before PR readiness run `pnpm lint && pnpm typecheck && pnpm build` (+ targeted tests; + e2e when UI). Full unit suite is authoritative in GitHub PR CI ([`AGENTS.md`](../../AGENTS.md) + `/test-and-fix`)
 4. `git add -A && git commit -m "DEE-NN type(scope): subject"`
-5. `git push -u origin dee-<NN>-<slug>`
-6. Open PR via `/prepare-pr` (render body from [`.github/pull_request_template.md`](../../.github/pull_request_template.md), run `preflight-pr-governance.sh`, then `gh pr create --base dev --title "..." --body-file .cursor/pr-body-DEE-NN.md` — do **not** use `--fill` alone when a validated body exists)
+5. Sync `origin/main` if the branch was already pushed; `git push -u origin dee-<NN>-<slug>`
+6. Open PR via `/prepare-pr` (render body from [`.github/pull_request_template.md`](../../.github/pull_request_template.md), run `preflight-pr-governance.sh`, then `gh pr create --base main --title "..." --body-file .cursor/pr-body-DEE-NN.md` — do **not** use `--fill` alone when a validated body exists)
 
 ## Conventional Commits
 
@@ -31,4 +31,4 @@ Use `DEE-NN type(scope): subject` — e.g. `DEE-402 feat(home): add hero section
 - Never run `git push --force`, `git reset --hard origin/...`, or rewrite history on shared branches.
 - Never commit `.env*` files, secrets, or anything matching `*.key`/`*.pem`.
 - Never check in `node_modules/`, `.next/`, `playwright-report/`, `test-results/`.
-- One feature = one integration batch = one branch = one PR. Multiple work packages may land in one PR when the integration-ready contract holds ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)). Don't pile unrelated integration batches into the same PR.
+- One feature = one integration batch = one branch = one PR to `main`. Multiple work packages may land in one PR when the integration-ready contract holds ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)). Don't pile unrelated integration batches into the same PR.

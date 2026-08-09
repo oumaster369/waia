@@ -97,7 +97,7 @@ in-review → (effective complete) # Human merge — derived, not written by aut
 - `in-review` → `merged` via status-only commit after human merge ([`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) §Post-merge reconciliation).
 - Second PR or branch for the same `linearIssue`.
 - Auto `Done` without merge event.
-- Roadmap `complete` or gap `closed` **before** merge lands on `origin/dev`.
+- Roadmap `complete` or gap `closed` **before** merge lands on `origin/main`.
 
 ---
 
@@ -182,7 +182,7 @@ When post-merge state cannot be known at PR open (e.g., child `**Deferred:**` wo
 
 ### Autopilot role (future)
 
-Read merged PR + `origin/dev` + Linear `Done` → emit **reconciliation proposal** YAML for the *next* batch's PR body. Still no post-merge commit.
+Read merged PR + `origin/main` + Linear `Done` → emit **reconciliation proposal** YAML for the *next* batch's PR body. Still no post-merge commit.
 
 ---
 

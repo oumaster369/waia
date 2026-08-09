@@ -30,7 +30,7 @@ Triage and fix **failing PR checks** on the current `dee-*` branch. Prefer **Bac
 ## Hard rules
 
 - Never `gh pr merge`.
-- Never push to `dev`/`main`.
+- Never push to `main` (or frozen `dev`).
 - If failure contradicts the plan → STOP and re-plan; do not silently change acceptance criteria.
 - Scope stays within the active Linear issue; new failures outside scope → new issue.
 

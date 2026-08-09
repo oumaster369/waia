@@ -2,7 +2,7 @@
 
 Fail-closed contract for Execution Server deployment, systemd supervision, and FHV rehearsal targeting.
 
-**Agents must not resolve or mutate `EXECUTION_SERVER_TARGET_SHA`.** Only a Human-operated dev → main release merge establishes the next production identity.
+**Agents must not resolve or mutate `EXECUTION_SERVER_TARGET_SHA`.** Only a Human-operated official release — an explicit tag/release of an exact **`main` SHA** — establishes the next production identity.
 
 ## Symbol
 
@@ -10,7 +10,7 @@ Fail-closed contract for Execution Server deployment, systemd supervision, and F
 |----------|---------|
 | `EXECUTION_SERVER_TARGET_SHA` | Full 40-character lowercase Git SHA that every active deployment/rehearsal surface must pin |
 
-Until the next Human-merged dev → main release completes:
+Until the next Human official release of a `main` SHA completes:
 
 ```text
 EXECUTION_SERVER_TARGET_SHA=UNRESOLVED_UNTIL_NEXT_RELEASE
@@ -20,9 +20,9 @@ Any operational command that requires a target SHA **must fail closed** when the
 
 ## Resolution (Human release gate only)
 
-After Human **Create a merge commit** merge of dev → main:
+After Human creates an official release tag (workflow_dispatch or equivalent) pointing at an exact **`main` SHA**:
 
-1. `NEW_RELEASE_SHA` = exact merge commit SHA on `main` produced by that merge commit.
+1. `NEW_RELEASE_SHA` = the tagged `main` commit SHA (full 40-character lowercase).
 2. Set `EXECUTION_SERVER_TARGET_SHA="$NEW_RELEASE_SHA"`.
 3. Prove tag peel (fail closed):
 
@@ -36,7 +36,9 @@ After Human **Create a merge commit** merge of dev → main:
 7. Prove `.ops/fhv-systemd-deployed-revision.v1.json` `releaseSha == EXECUTION_SERVER_TARGET_SHA` after successful FHV systemd deployment (see [`AI-TRADER-FHV-SYSTEMD-DEPLOYMENT-RECORD.md`](../ai-trader/AI-TRADER-FHV-SYSTEMD-DEPLOYMENT-RECORD.md)).
 8. Prove legacy `.ops/deployed-revision.json` `gitSha == EXECUTION_SERVER_TARGET_SHA` when the Docker health container record is maintained separately.
 
-A dev-branch SHA is never the production target until promoted through dev → main. After merge commit, the production target is the **main merge commit**, not the pre-release dev tip.
+A feature-branch SHA is never the production target. The production target is the **tagged `main` SHA**, not an untagged tip unless Humans deliberately choose that tip as the release identity.
+
+**Historical note:** Dual-branch `dev` → `main` merge-commit promotion and mandatory `main` → `dev` back-sync are **retired** under single-trunk `main` (DEE-511). Do not invent Cloudflare live settings here; pin only Human-tagged `main` SHAs.
 
 ## Forbidden targets
 
@@ -44,9 +46,10 @@ A dev-branch SHA is never the production target until promoted through dev → m
 |----------|----------------|------|
 | Prior release SHA (e.g. previous `main` tag peel) | Historical | **Forbidden** as the next active deployment/rehearsal target |
 | Feature branch head SHA | Integration-only | **Forbidden** as production/release target |
-| Pre-release dev-only SHA | Integration-only | **Forbidden** until promoted through dev → main release |
-| Post-release main → dev back-sync merge SHA | Integration ancestry | **Not automatically** a production deployment target |
+| Untagged / non-release `main` tip (unless Humans explicitly release that tip) | Not official until tagged | **Forbidden** as Execution Server target until Human release |
 | Empty / abbreviated / ambiguous SHA | Invalid | **Fail closed** |
+
+*(Historical dual-branch rows — pre-release `dev`-only SHA; post-release back-sync merge SHA — remain invalid as production targets and are not revived as active classes.)*
 
 ## Required active command form (rehearsal)
 

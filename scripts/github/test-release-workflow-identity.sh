@@ -38,9 +38,24 @@ assert_not_contains() {
 workflow="$(<"$WORKFLOW")"
 
 assert_contains \
-  "release workflow pins target_commitish" \
+  "release proves main membership via merge-base" \
   "$workflow" \
-  "target_commitish: \${{ github.sha }}"
+  "git merge-base --is-ancestor"
+
+assert_contains \
+  "release rejects non-40-char target_sha" \
+  "$workflow" \
+  'target_sha must be an exact full 40-character commit SHA'
+
+assert_contains \
+  "release fetches origin main before proof" \
+  "$workflow" \
+  "git fetch origin main:refs/remotes/origin/main"
+
+assert_contains \
+  "release workflow pins target_commitish to exact SHA" \
+  "$workflow" \
+  "target_commitish: \${{ steps.tag.outputs.target_sha }}"
 
 assert_contains \
   "release workflow verifies tag peel" \
@@ -63,9 +78,19 @@ assert_not_contains \
   "draft GitHub Release"
 
 assert_contains \
-  "release workflow publishes non-draft release" \
+  "release is Human workflow_dispatch only" \
   "$workflow" \
-  "publish GitHub Release"
+  "workflow_dispatch:"
+
+assert_not_contains \
+  "release has no automatic push-to-main trigger" \
+  "$workflow" \
+  "branches: [main]"
+
+assert_contains \
+  "release workflow creates GitHub Release" \
+  "$workflow" \
+  "Create GitHub Release"
 
 assert_contains \
   "release workflow passes tag to notes script" \
@@ -80,7 +105,7 @@ fi
 
 notes_output="$(
   cd "$ROOT"
-  RELEASE_TAG="v2099.01.01.deadbeef" "$NOTES_SCRIPT"
+  RELEASE_TAG="v2099.01.01.deadbeef" "$NOTES_SCRIPT" "HEAD~5"
 )"
 
 assert_contains \

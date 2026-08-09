@@ -181,7 +181,7 @@ Canonical mapping: [`MODEL-COST-POLICY.md`](../waia-governance/MODEL-COST-POLICY
 
 **Agent safety boundaries** (repo-enforced):
 
-- Hooks: [`.cursor/hooks/guard-shell.sh`](../../.cursor/hooks/guard-shell.sh) blocks force-push and direct push to `dev`/`main`
+- Hooks: [`.cursor/hooks/guard-shell.sh`](../../.cursor/hooks/guard-shell.sh) blocks force-push and direct push to `main` (frozen `dev` also blocked)
 - GitHub rulesets: [`.github/rulesets/dev-main-protection.json`](../../.github/rulesets/dev-main-protection.json)
 - Agents **never merge** PRs ([`docs/waia-governance/PR-PROTOCOL.md`](../waia-governance/PR-PROTOCOL.md))
 
@@ -330,7 +330,7 @@ File: [`.cursor/hooks.json`](../../.cursor/hooks.json)
 
 | Hook | Script | Behavior |
 |------|--------|----------|
-| `beforeShellExecution` | `guard-shell.sh` | **failClosed** — blocks force-push, push to dev/main, destructive rm |
+| `beforeShellExecution` | `guard-shell.sh` | **failClosed** — blocks force-push, push to main, destructive rm |
 | `afterFileEdit` | `format-edit.sh` | ESLint --fix + Prettier on edited source files |
 | `stop` / `subagentStop` | `log-event.sh` | Append to `.cursor/agent-log.jsonl` (gitignored) |
 
@@ -455,12 +455,12 @@ If connection fails after account migration: verify `IdentitiesOnly yes` and cor
 
 ### Repository protection (already in repo)
 
-- Branch rulesets: [`.github/rulesets/dev-main-protection.json`](../../.github/rulesets/dev-main-protection.json)
+- Branch rulesets: [`.github/rulesets/main-protection.json`](../../.github/rulesets/main-protection.json)
 - Apply once per org (maintainer): `./scripts/github/apply-branch-rulesets.sh`
 
 ### Agent PR workflow
 
-Agents use `gh pr create --base dev` per [`.cursor/commands/prepare-pr.md`](../../.cursor/commands/prepare-pr.md). Humans merge.
+Agents use `gh pr create --base main` per [`.cursor/commands/prepare-pr.md`](../../.cursor/commands/prepare-pr.md). Humans squash-merge. Track **`origin/main`**.
 
 ---
 
@@ -477,7 +477,7 @@ Execute in this sequence on a **brand-new macOS + Cursor account**:
 
 3. `gh auth login`
 4. `git clone https://github.com/oumaster369/waia.git ~/Projects/waia`
-5. `cd ~/Projects/waia && git checkout dev && git pull origin dev`
+5. `cd ~/Projects/waia && git checkout main && git pull origin main`
 6. `pnpm install`
 7. Copy `.env.local` and `.dev.vars` from secure backup (or create from examples).
 8. `pnpm db:migrate`
@@ -566,14 +566,14 @@ These **cannot** be stored in git and must be handled during account migration:
 Run before migration to assess git state:
 
 ```bash
-git checkout dev && git pull origin dev
+git checkout main && git pull origin main
 git status -sb
 git branch -vv
 ```
 
 ### Expected healthy state
 
-- Branch: `dev` tracking `origin/dev`
+- Branch: `main` tracking `origin/main`
 - Ahead/behind: `0 0`
 - Working tree: clean (or known pending items documented)
 

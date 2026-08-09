@@ -1,12 +1,13 @@
 name: linear-done
 
-# On merge to dev: transition **explicit** Linear issue (from PR body) to Done.
+# On merge to main: transition **explicit** Linear issue (from PR body) to Done.
 # Never infers solely from PR title. Skips + warns on ambiguity.
+# Only the explicit **Linear:** integration issue is auto-closed — Includes children are not.
 
 on:
   pull_request:
     types: [closed]
-    branches: [dev]
+    branches: [main]
 
 permissions:
   contents: read
@@ -108,7 +109,7 @@ jobs:
             const reason = (process.env.REASON || "unknown").trim();
             const skipReason = (process.env.SKIP_REASON || "").trim();
             const keepOpenReason = (process.env.KEEP_OPEN_REASON || "").trim();
-            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/blob/dev/docs/waia-governance/POST-MERGE-PROTOCOL.md`;
+            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/docs/waia-governance/POST-MERGE-PROTOCOL.md`;
 
             let body;
             if (skipReason === "explicit_keep_open") {

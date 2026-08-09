@@ -8,20 +8,21 @@ This page keeps **additive** ergonomics: git commands, stack, deployment pointer
 
 ## Branch names (summary)
 
-- **`dee-<NN>-<slug>`** — development (Linear `DEE-NN`; full rules in **BRANCHING-STRATEGY** above).
-- **`dev`** — integration (**no direct push**).
-- **`main`** — production (**no direct push**).
+- **`dee-<NN>-<slug>`** — development from **`main`** (Linear `DEE-NN`; full rules in **BRANCHING-STRATEGY** above).
+- **`main`** — single canonical trunk (**no direct push**).
+- **`dev`** — frozen/retired (not an active PR base; Human deletion later).
 - `feature/*` — legacy only; avoid for new work.
 
 ---
 
 ## Git flow (mechanical)
 
-### 1. Sync with `dev`
+### 1. Sync with `main`
 
 ```bash
-git checkout dev
-git pull origin dev
+git fetch origin
+git checkout main
+git pull --ff-only origin main
 ```
 
 ### 2. Create branch
@@ -45,9 +46,10 @@ git push origin dee-<NN>-<task-slug>
 
 ### 5. Pull request
 
-- **Base:** `dev`
+- **Base:** `main`
 - **Compare:** `dee-<NN>-…`
-- Merge process: **[`PR-PROTOCOL.md`](waia-governance/PR-PROTOCOL.md)**
+- Sync with `origin/main` before opening if the branch was already pushed
+- Merge process: **[`PR-PROTOCOL.md`](waia-governance/PR-PROTOCOL.md)** (Human squash merge)
 
 ---
 
@@ -71,15 +73,16 @@ git branch
 
 ## Repository rules
 
-* Protected branches: `dev`, `main` (GitHub rulesets — apply once):
+* Protected trunk: `main` (GitHub rulesets — apply once):
 
   ```bash
   ./scripts/github/apply-branch-rulesets.sh
   ./scripts/github/configure-merge-settings.sh
   ```
 
-* Pull requests required; squash merge into `dev` (see **AGENTS.md**, **BRANCHING-STRATEGY**)
-* `LINEAR_API_KEY` GitHub secret → auto **Done** on merge ([`linear-done.yml`](../.github/workflows/linear-done.yml))
+* Pull requests required; squash merge into `main` (see **AGENTS.md**, **BRANCHING-STRATEGY**)
+* `LINEAR_API_KEY` GitHub secret → auto **Done** on merge to `main` ([`linear-done.yml`](../.github/workflows/linear-done.yml))
+* Official release = explicit Human tag of a `main` SHA — not branch promotion
 
 ---
 

@@ -30,9 +30,9 @@ case "$command" in
     ;;
 esac
 
-# Block direct push to protected branches.
+# Block direct push to protected trunk (and frozen legacy `dev` during retirement window).
 if printf '%s' "$command" | grep -Eq 'git[[:space:]]+push[[:space:]]+([^|;&]*[[:space:]])?(origin[[:space:]]+)?(dev|main)([[:space:]]|$)'; then
-  deny "direct push to dev/main is not allowed — use a feature branch + PR"
+  deny "direct push to main (or frozen legacy dev) is not allowed — use a dee-* branch + PR to main"
 fi
 
 printf '{"permission":"allow"}'

@@ -1,40 +1,72 @@
 # Branching strategy — WAIA
 
+## Canonical trunk
+
+**Single trunk:** **`main`** is the only long-lived integration and production branch.
+
+- Feature/fix/governance work lands via PR → **`main`** (Human **squash** merge).
+- Official release = explicit Human **workflow_dispatch** tag/release of an exact **`main` SHA** (not a branch-promotion ceremony).
+- **`dev` is retired/frozen** in this migration: still present on the remote for one successful single-trunk cycle, then Human retirement. **Not** an active integration base. Do not open new feature PRs to `dev`. Do not treat `dev` → `main` promotion or `main` → `dev` back-sync as active workflow.
+
 ## Canonical branch name
 
 **`dee-<NN>-<slug>`** where `<NN>` is the Linear issue number (zero-padded to two digits when <100, e.g. `dee-07-...` or `dee-37-...`) and `<slug>` is kebab-case describing the goal — matches [`AGENTS.md`](../../AGENTS.md) exemplar.
 
+Branch from current **`origin/main`**:
+
+```bash
+git fetch origin
+git checkout main && git pull --ff-only origin main
+git checkout -b dee-<NN>-<slug>
+```
+
 ## Base and target
 
-- Integration: **`dev`** (protected — no direct push).  
-- Production: **`main`** (protected — no direct push; deploy per Cloudflare docs).
+- Trunk / PR base: **`main`** (protected — no direct push; production deploy and Execution Server mutation remain Human-only).
+- Frozen legacy: **`dev`** — do not use as PR base for new work; Human deletes after one successful single-trunk cycle (out of band for this doc).
 
 ## Server-side protection
 
-Local [`.cursor/hooks/guard-shell.sh`](../../.cursor/hooks/guard-shell.sh) is not sufficient for cloud/background agents. Maintainers apply GitHub rulesets from [`.github/rulesets/dev-main-protection.json`](../../.github/rulesets/dev-main-protection.json):
+Local [`.cursor/hooks/guard-shell.sh`](../../.cursor/hooks/guard-shell.sh) is not sufficient for cloud/background agents. Maintainers apply GitHub rulesets from [`.github/rulesets/main-protection.json`](../../.github/rulesets/main-protection.json):
 
 ```bash
 ./scripts/github/apply-branch-rulesets.sh
 ./scripts/github/configure-merge-settings.sh
 ```
 
-Required CI checks: `lint`, `typecheck`, `unit tests`, `build`, `e2e tests` (see [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)).
+Required CI checks on PR HEAD (canonical **merge-blocking** ruleset contexts):
 
-## Merge strategy (by PR class)
+| Context | Classification |
+|---------|----------------|
+| `lint` | Mandatory merge blocker |
+| `typecheck` | Mandatory merge blocker |
+| `unit tests` | Mandatory merge blocker |
+| `build` | Mandatory merge blocker |
+| `e2e tests` | Mandatory merge blocker |
+| `PR governance` | Mandatory merge blocker |
+| `tenant isolation gate` | Mandatory merge blocker (release-blocking / tenant isolation — ADR-0007; DEV OS architecture) |
 
-WAIA merges depend on the PR **class**. This is deliberate: squash keeps `dev` history clean per atomic issue, but squash **cannot preserve a second parent**, so release-promotion and back-sync PRs **must** use a real merge commit or `dev`/`main` ancestry silently drifts (see [`FAILURE-PATTERNS.md`](FAILURE-PATTERNS.md) FP-010).
+**Not** blindly ruleset-required (informational, preview, path-filtered, or program-gated): Cloudflare preview/bundle jobs, Workers Builds, FHV/IDHPS gates, postgres-integration (path-filtered). Those may still run on PRs and may be required by their own governing contracts without being standing trunk ruleset contexts.
+
+Full unit suite is **authoritative in GitHub PR CI** — local work packages use targeted validation; do not require a redundant full local unit suite solely because CI already gates the PR. After merge, unchanged content must not re-run the full unit suite solely due to push/merge into `main`.
+
+Human cutover after DEE-511: [`docs/ops/SINGLE-TRUNK-CUTOVER.md`](../ops/SINGLE-TRUNK-CUTOVER.md).
+
+## Merge strategy
 
 | PR class | Branch → base | Merge method | Why |
 |----------|---------------|--------------|-----|
-| **Feature / fix / governance** | `dee-<NN>-<slug>` → `dev` | **Squash and merge** | One commit per atomic `dee-*` issue. |
-| **Release promotion** | `dee-<NN>-release-promote-<slug>` (or `dev`) → `main` | **Create a merge commit** | Preserve `dev` ancestry in `main`. |
-| **Release back-sync** | `dee-<NN>-release-back-sync-<slug>` → `dev` | **Create a merge commit** | Preserve `main` ancestry in `dev` after a squash-promoted release. |
+| **Feature / fix / governance** | `dee-<NN>-<slug>` → `main` | **Squash and merge** | One commit per integration batch on the trunk. |
 
-**Hard rule:** never **squash** a release-promotion or back-sync PR. Squashing drops the second parent and re-introduces ancestry drift.
+**Hard rule:** agents never merge. Humans squash-merge feature PRs to `main`. There is **no** active release-promotion or back-sync PR class.
+
+### Historical note (dual-branch era)
+
+Before single-trunk migration (DEE-511), WAIA used `dev` as integration and `main` as production, with merge-commit promotion/back-sync to preserve ancestry (see [`FAILURE-PATTERNS.md`](FAILURE-PATTERNS.md) **FP-010**, historical). That ceremony is **superseded** and must not be revived as routine workflow.
 
 ### Repository setting
 
-Both squash and merge-commit must be **available** in repo settings so humans can pick the correct method per class. Maintainers apply this via [`configure-merge-settings.sh`](../../scripts/github/configure-merge-settings.sh) (`allow_squash_merge=true`, `allow_merge_commit=true`, squash remains the default title/message). Rebase merges stay disabled. **Consequence:** because merge commits are enabled repo-wide, humans must consciously keep using **Squash** for feature PRs — only release/back-sync PRs use **Create a merge commit**. Rolling this out is a one-time admin action and requires Architect approval.
+Squash merge remains the default for trunk PRs. Maintainers apply merge availability via [`configure-merge-settings.sh`](../../scripts/github/configure-merge-settings.sh). Rebase merges stay disabled. Force-push to `main` remains forbidden.
 
 ## Legacy / exceptions
 
@@ -42,9 +74,12 @@ Both squash and merge-commit must be **available** in repo settings so humans ca
 
 ## Forbidden operations
 
-- Force-push to `main` / `dev`  
-- Rewrite shared history on integration branches  
+- Force-push to `main` (or frozen `dev`)
+- Direct push to `main` (or frozen `dev`)
+- Rewrite shared history on the trunk
 - Commits containing secrets (see [`AGENTS.md`](../../AGENTS.md))
+- Treating `dev` as the integration base for new work
+- Reviving `dev` → `main` promotion / `main` → `dev` back-sync as active workflow
 
 ## Commits
 

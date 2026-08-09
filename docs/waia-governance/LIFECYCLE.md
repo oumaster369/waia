@@ -8,9 +8,9 @@ This document is the **one lifecycle** for WAIA work. Other docs (`AGENTS.md`, [
 
 ## Core invariant
 
-**One integration Linear issue = one canonical plan = one primary branch = one PR = one merge event.**
+**One integration Linear issue = one canonical plan = one primary branch = one PR = one merge event** to **`main`**.
 
-`linear-done.yml` closes only the explicit `**Linear:**` id on merge. Child issues listed under `**Includes:**` are never auto-closed.
+`linear-done.yml` closes only the explicit `**Linear:**` id on merge. Child issues listed under `**Includes:**` are never auto-closed. Multiple coherent work packages may land in the same integration batch when the integration-ready contract holds.
 
 ---
 
@@ -21,14 +21,14 @@ This document is the **one lifecycle** for WAIA work. Other docs (`AGENTS.md`, [
 | Groom *(optional)* | `/groom` | Plan / Ask | Validate task contract |
 | Decompose *(optional)* | `/decompose` | Plan | Work-packages / child issues |
 | Plan | `/plan-feature` | Plan | Draft → promote canonical plan |
-| Implement | `/implement` | Agent | Code on `dee-<NN>-<slug>` |
+| Implement | `/implement` | Agent | Code on `dee-<NN>-<slug>` from `main` |
 | Test & Fix | `/test-and-fix` | Agent | Green gates + integration-ready |
-| PR *(retry)* | `/prepare-pr` | Agent | Push + PR body + preflight |
+| PR *(retry)* | `/prepare-pr` | Agent | Push + PR body + preflight → base `main` |
 | Background | `/bg-test-and-fix`, `/fix-ci` | Background | Unattended green loop / CI triage |
 | Diagnose | `/diagnose` | Agent | Workers deploy investigation |
 | Parallel | `/parallel-implement` | Agent | Independent issues in worktrees |
 
-**Default completion:** green `/test-and-fix` → PR readiness → agent completion report → **stop before merge**. Humans review and merge; agents wait for explicit confirmation before the next integration batch.
+**Default completion:** green `/test-and-fix` → PR readiness → agent completion report → **stop before merge**. Humans review and **squash-merge to `main`**; agents wait for explicit confirmation before the next integration batch.
 
 See [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) for when a PR opens (integration-ready contract) and [`AGENT-AUTO-ADVANCE.md`](AGENT-AUTO-ADVANCE.md) for safe auto-advance preconditions.
 
@@ -42,19 +42,19 @@ See [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) for when 
 |-------|---------------|
 | Plan approved / work starts | `In Progress` |
 | Integration-ready PR opened | `In Review` |
-| Human merge to `dev` | `Done` (via `linear-done.yml` when configured) |
+| Human squash merge to `main` | `Done` (via `linear-done.yml` when configured) |
 
 ---
 
 ## Integration batch lifecycle (fewer PRs)
 
 1. **Scope approval** — human approves integration issue, plan, risk tier, execution surfaces, acceptance criteria.
-2. **Implementation loop** — many work packages, local commits, branch pushes — **no PR yet**.
-3. **Validation loop** — repeat `pnpm lint && pnpm typecheck && pnpm test --run && pnpm build` (+ e2e when UI) until green.
-4. **Synchronize** — merge `origin/dev` into feature branch per [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) §Branch sync (never force-push a published branch).
+2. **Implementation loop** — many work packages, local commits, branch pushes — **no PR yet**. Targeted local validation per work package.
+3. **Validation loop** — repeat `pnpm lint && pnpm typecheck && pnpm build` + targeted tests (+ e2e when UI) until green. Full unit suite is authoritative in GitHub PR CI.
+4. **Synchronize** — merge `origin/main` into feature branch per [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) §Branch sync (never force-push a published branch).
 5. **Integration-ready** — all acceptance criteria met; PR body prepared; `preflight-pr-governance.sh` passes.
-6. **One PR** — agent opens exactly one PR; sets Linear `In Review`; **stops**.
-7. **Human merge** — effective `merged` state is **derived** (PR merged + Linear `Done`); no status-only follow-up commit required ([`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) §Post-merge reconciliation).
+6. **One PR** — agent opens exactly one PR to **`main`**; sets Linear `In Review`; **stops**.
+7. **Human merge** — squash to `main`; effective `merged` state is **derived** (PR merged + Linear `Done`); no status-only follow-up commit required ([`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) §Post-merge reconciliation). Sync local `origin/main`. Official release (if any) is a later explicit Human tag of that SHA — not branch promotion.
 
 ---
 

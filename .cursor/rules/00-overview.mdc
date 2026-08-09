@@ -16,7 +16,7 @@ WAIA = "Open AI infrastructure for humans, businesses and society."
 - **Package manager**: pnpm (with `node-linker=hoisted` — required by Tailwind v4 + shadcn)
 - **Testing**: Vitest + @testing-library/react (unit, `tests/unit/`), Playwright (e2e, `tests/e2e/`)
 - **Lint / format**: ESLint 9 flat config, Prettier
-- **Deploy**: Cloudflare Workers (OpenNext) from `main` (manual `dev` -> `main` merge by the user)
+- **Deploy**: Cloudflare Workers (OpenNext) from `main` (Human squash-merge to trunk; optional explicit release tag)
 
 ## Repo layout
 

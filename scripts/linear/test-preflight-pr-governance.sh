@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression tests for preflight-pr-governance.sh
+# Regression tests for preflight-pr-governance.sh (single-trunk main).
 # Usage: ./scripts/linear/test-preflight-pr-governance.sh
 
 set -euo pipefail
@@ -15,7 +15,7 @@ run_case() {
   local title="$1"
   local body="$2"
   local branch="$3"
-  local base="${4:-dev}"
+  local base="${4:-main}"
 
   set +e
   PR_TITLE="$title" PR_BODY="$body" PR_BRANCH="$branch" PR_BASE="$base" \
@@ -41,7 +41,14 @@ run_case "plain Tier rejected" 1 \
 Tier: T1" \
   "dee-261-governance-pr-body-preflight" || fail=1
 
-run_case "full valid body passes" 0 \
+run_case "full valid body passes on main" 0 \
+  "DEE-261 infra(governance): test" \
+  "**Linear:** \`DEE-261\`
+**Tier:** T1" \
+  "dee-261-governance-pr-body-preflight" \
+  "main" || fail=1
+
+run_case "default PR_BASE is main" 0 \
   "DEE-261 infra(governance): test" \
   "**Linear:** \`DEE-261\`
 **Tier:** T1" \
@@ -53,6 +60,13 @@ run_case "PR217 plain metadata pattern rejected" 1 \
 Parent: DEE-209
 Tier: T2" \
   "dee-260-bar-replay" || fail=1
+
+run_case "non-main base rejected by preflight" 1 \
+  "DEE-261 infra(governance): test" \
+  "**Linear:** \`DEE-261\`
+**Tier:** T1" \
+  "dee-261-governance-pr-body-preflight" \
+  "dev" || fail=1
 
 if [[ "$fail" -ne 0 ]]; then
   echo "Some preflight tests failed." >&2

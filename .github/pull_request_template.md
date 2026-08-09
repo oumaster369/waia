@@ -29,9 +29,9 @@
 
 ## Merge strategy
 
-<!-- `squash` for feature/fix/governance PRs (default). `merge-commit` REQUIRED for release-promotion (dev→main) and back-sync (main→dev) PRs — squash drops the second parent and re-creates ancestry drift. See `docs/waia-governance/BRANCHING-STRATEGY.md`. -->
+<!-- Single-trunk: Squash and merge into `main` for feature/fix/governance PRs. Official release is a separate Human tag/release of an exact main SHA — not a branch-to-branch promotion. -->
 
-**Merge strategy:** squash <!-- squash | merge-commit -->
+**Merge strategy:** squash
 
 ## ADR
 
