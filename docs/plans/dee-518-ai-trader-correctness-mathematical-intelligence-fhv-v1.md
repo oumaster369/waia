@@ -149,6 +149,7 @@ provenance:
   createdFrom: chat
   gateDRatificationSha: 1f10d4eebce23f92dccb3d550e8dc10812d26a9e
   humanRatificationComment: "DEE-516 HUMAN ARCHITECT RATIFICATION — FINAL AI-TRADER GATE-D PACKAGE APPROVED (2026-08-09)"
+  hpaCorrection: "HPA-1..HPA-7 applied (2026-08-09); prior commit 8182e97"
   supersedes: null
 ---
 
@@ -248,7 +249,7 @@ WP-CHALLENGER-TRIALS (dep RESEARCH-HARNESS, FEATURE-RV) ─┘
 
 **Parallel-safe groups after dependencies:**
 - Group A: WP-CANON (first)
-- Group B: WP-EXEC-ACCT, WP-FEATURE-RV, WP-FHV-STORAGE, WP-VOLUME-QUAL, WP-DATASET-QUAL (after CANON docs if needed)
+- Group B: WP-EXEC-ACCT, WP-FEATURE-RV, WP-FHV-STORAGE, WP-VOLUME-QUAL, WP-DATASET-QUAL (after WP-CANON)
 - Group C: WP-AUTHORITY, WP-FHV-SERVICE, WP-FORECAST-V2
 - Group D: WP-OBSERVABILITY, WP-DECISION-ECON, WP-RESEARCH-HARNESS, WP-KNOWLEDGE-STATE
 - Group E: WP-CONTROL-REPLAY-AUTH, WP-EXECOPP-QUAL, WP-PATTERN-RESEARCH, WP-CHALLENGER-TRIALS
@@ -279,7 +280,46 @@ Starting after current highest `0109_trader_knowledge_confidence_update_record_r
 | 0127 | RLS 0126 |
 | 0128 | `trader_forecast_calibration_observation_v2` |
 | 0129 | RLS 0128 |
-| 0130+ | WP-specific: pattern registry, knowledge checkpoint extensions as needed |
+| 0130 | `trader_pattern_definition_v1` (WP-PATTERN-RESEARCH) |
+| 0131 | RLS 0130 |
+| 0132 | `trader_pattern_occurrence_v1` |
+| 0133 | RLS 0132 |
+| 0134 | `trader_knowledge_state_checkpoint_v2` (WP-KNOWLEDGE-STATE) |
+| 0135 | RLS 0134 |
+| 0136 | `trader_research_trial_registration_v1` (WP-RESEARCH-HARNESS) |
+| 0137 | RLS 0136 |
+| 0138 | `trader_htx_volume_qualification_receipt_v1` (WP-VOLUME-QUAL) |
+| 0139 | RLS 0138 |
+| 0140 | `trader_intelligence_decision_economics_v2` (WP-DECISION-ECON) |
+| 0141 | RLS 0140 |
+| 0142 | `trader_scientific_admission_receipt_v1` (WP-EXECOPP-QUAL) |
+| 0143 | RLS 0142 |
+| 0144 | `trader_control_replay_authority_claim_v1` (WP-CONTROL-REPLAY-AUTH) |
+| 0145 | RLS 0144 |
+
+**Final highest migration:** `0145_trader_control_replay_authority_claim_v1_rls.sql`
+
+**WP persistence dispositions (no executor choice):**
+
+| WP | Disposition |
+|----|-------------|
+| DEE-519 CANON | `NO_SCHEMA_CHANGE` |
+| DEE-520 EXEC-ACCT | `NO_SCHEMA_CHANGE` |
+| DEE-521 AUTHORITY | `NO_SCHEMA_CHANGE` |
+| DEE-522 FEATURE-RV | `NO_SCHEMA_CHANGE` |
+| DEE-523 FHV-STORAGE | `NO_SCHEMA_CHANGE` |
+| DEE-524 FHV-SERVICE | `NO_SCHEMA_CHANGE` |
+| DEE-525 OBSERVABILITY | `NO_SCHEMA_CHANGE` |
+| DEE-526 VOLUME-QUAL | `0138`–`0139` |
+| DEE-527 FORECAST-V2 | `0110`–`0129` |
+| DEE-528 DECISION-ECON | `0140`–`0141` |
+| DEE-529 CONTROL-REPLAY-AUTH | `0144`–`0145` |
+| DEE-530 DATASET-QUAL | `NO_SCHEMA_CHANGE` (immutable receipts remain filesystem JSON per existing `fhv-dataset-qualification.ts` contract) |
+| DEE-531 RESEARCH-HARNESS | `0136`–`0137` |
+| DEE-532 EXECOPP-QUAL | `0142`–`0143` |
+| DEE-533 PATTERN-RESEARCH | `0130`–`0133` |
+| DEE-534 KNOWLEDGE-STATE | `0134`–`0135` |
+| DEE-535 CHALLENGER-TRIALS | `NO_SCHEMA_CHANGE` (uses Forecast V2 package artifact tables from `0114`–`0119`) |
 
 All V2 tables: org-scoped composite FKs, append-only block triggers, deferred completeness triggers. V1 tables (`trader_intelligence_forecast_record`, `trader_forecast_outcome_record`) remain quarantined/coexistent.
 
@@ -324,13 +364,25 @@ Implementation merge (DEE-518)
   → OG-FHV (DEE-541)
 ```
 
-### 1.16 Reviewability gate
+### 1.16 Reviewability gate (HPA-7 — criterion-by-criterion)
 
-**Predicted:** ~180–250 files, ~15,000–25,000 changed lines (excluding lockfiles/generated). Exceeds soft ~800-line/~20-file guidance.
+**Predicted:** ~180–250 files, ~15,000–25,000 changed lines (excluding lockfiles/generated). Exceeds soft ~800-line/~20-file guidance per `INTEGRATION-BOUNDARY-POLICY.md` §Reviewability.
 
-**Hard split criteria** (`INTEGRATION-BOUNDARY-POLICY.md` §When work must split): independent deployability; different risk tiers; infra vs app; prerequisite for parallel work; **unreviewable diff**; different approval gate; reversible intermediate value.
+**Canonical MUST-SPLIT criteria** (`INTEGRATION-BOUNDARY-POLICY.md` §When work must split) — evaluated separately:
 
-**Assessment:** Single coherent integration batch with explicit WP sections and incremental commits; correctness spine + intelligence layer are causally coupled (Decision economics requires Forecast V2 + execution repairs). No proven independent deployability boundary. **Verdict: `ONE_PR_ARCHITECTURALLY_VALID`** — retain DEE-518 as sole integration issue. Forced split contingency documented in §1.17 only if Human proves unreviewable at pre-PR.
+| # | Criterion | Result | Evidence |
+|---|-----------|--------|----------|
+| 1 | Independent deployability | `NO_SPLIT_PROVEN` | Foundation WPs (exec/accounting, authority, FHV storage/service, observability, dataset/volume tooling) are independently *valuable* and may land as incremental commits before intelligence WPs on the same branch. That is reversible intermediate value **within** one integration batch, not proof that two integration issues are mandatory. Intelligence WPs depend on foundation but the Human-ratified DEE-518 topology is explicitly one integration issue owning all children. Deploying foundation-only before intelligence completion is a post-merge operational choice, not a forced pre-merge split boundary. |
+| 2 | Different risk tiers / risk boundaries | `NO_SPLIT_PROVEN` | Integration batch risk tier is **T1**. Lower-T2 WPs (CANON, FEATURE-RV, OBSERVABILITY, DATASET-QUAL, PATTERN-RESEARCH, KNOWLEDGE-STATE, CHALLENGER-TRIALS) are subordinate work packages inside one T1 integration issue — not separate integration batches with conflicting tier gates. |
+| 3 | Infra vs docs/app separation | `NO_SPLIT_PROVEN` | FHV storage/service are infra-adjacent but causally part of the same AI-TRADER correctness+F HV product integration ratified under DEE-518; no separate infra-only deploy artifact or approval gate exists. |
+| 4 | Prerequisite for parallel work | `NO_SPLIT_PROVEN` | DAG defines parallel-safe WP groups on one branch; prerequisite edges are satisfied by sequential WP order, not by spawning a second integration issue. |
+| 5 | Unreviewable diff | `NO_SPLIT_PROVEN` (soft exceed only) | Size exceeds soft guidance, but hard "unreviewable" is **not proven**: 17 WP-scoped sections, Appendix A 21-field contracts, incremental commits per WP, IC-1…IC-4 validation gates, and Human Gate-D ratification explicitly retained one-PR default. Pre-PR Human may still judge unreviewable — that would trigger §1.17 contingency, not automatic split now. |
+| 6 | Different approval / Human gate | `NO_SPLIT_PROVEN` | Post-merge gates (DEE-536…541) are separate Linear issues with separate Human/operational approval. H3 K/M ratification applies to selected parameters after implementation, not to splitting the implementation PR. |
+| 7 | Reversible intermediate value | `NO_SPLIT_PROVEN` | Foundation commits provide reversible intermediate value **inside** the single PR (reviewable commit series). Policy lists this as a split trigger when batches should be *separated* for deploy — a foundation-first deploy path does not mandate a second integration issue while DEE-518 scope remains one approved batch. |
+
+**Soft exceed rationale (not a split trigger):** The diff is large but structurally reviewable: bounded WP boundaries, frozen math in §2, MODEL_TRIAL_SPEC in §4, explicit migration map `0110`–`0145`, and targeted test strategy per WP. Gate-D Human ratification (2026-08-09) explicitly adopted one primary integration issue → one plan → one branch → one PR.
+
+**Verdict:** `ONE_PR_ARCHITECTURALLY_VALID` — retain DEE-518 as sole integration issue. No `DEE_518_MANDATORY_SPLIT_PROVEN`.
 
 ### 1.17 Forced-split contingency (not triggered)
 
@@ -371,9 +423,44 @@ Type-7 quantiles: `EV_base = Q_0.50(mu_base_k)`, `EV_lower = Q_0.10(mu_lower_k)`
 
 `DECISION_ACTIONABLE ⇔ EV_lower > 0` + upstream gates. **No Risk allowance term.**
 
-### 2.5 Quantizer `quantizeScale8HalfUp/v1`
+### 2.5 Quantizer `quantizeScale8HalfUp/v1` (FORECAST-ONLY)
 
-Decode IEEE-754 binary64 to exact rational `(sign, mantissa, exponent2)`; value = `sign * mantissa * 2^exponent2`; multiply by `10^8`; integer HALF_UP (ties away from zero); emit fixed 8-decimal canonical string. Reject non-finite. **Does not use `lib/trader/risk/numeric.ts` multiply/divide truncation.**
+Decode IEEE-754 binary64 to exact rational `(sign, mantissa, exponent2)`; value = `sign * mantissa * 2^exponent2`; multiply by `10^8`; integer HALF_UP (ties away from zero); emit fixed 8-decimal canonical string. Reject non-finite.
+
+**Scope boundary:** `quantizeScale8HalfUp/v1` applies **only** to Forecast generative canonicalization and sealed distribution digests. It does **not** replace existing Risk/execution arithmetic.
+
+### 2.5.1 Current Risk/execution numeric semantics (verified `lib/trader/risk/numeric.ts` + execution paths — HPA-5)
+
+**`lib/trader/risk/numeric.ts` (shared scale-8 integer layer):**
+
+| Operation | Semantics |
+|-----------|-----------|
+| `parseDecimal` / `formatDecimal` | Reject inputs with **>8** fractional digits; no rounding — parse error |
+| `multiplyDecimal(a,b)` | `(parseDecimal(a) * parseDecimal(b)) / 10^8` — **BigInt integer division truncates toward zero** |
+| `divideDecimal(a,b)` | `(parseDecimal(a) * 10^8) / parseDecimal(b)` — **truncates toward zero** |
+| `addDecimal` / `subtractDecimal` | Exact integer add/subtract at scale 8 |
+| `floorDecimal` | Identity on already-valid scale-8 scaled integer (misnamed; no floor beyond parse) |
+
+**There is NO HALF_UP quantizer in `lib/trader/risk/numeric.ts`.**
+
+**Execution economics path (`lib/trader/execution/fill-economics.ts`) — separate local rounding:**
+
+| Operation | Semantics |
+|-----------|-----------|
+| `multiplyBpsRoundHalfUp(notional, bps)` | `fee/spread/impact bps` amounts: **HALF_UP** at scale 8 via local `roundHalfUpScaled` |
+| `divideRoundHalfUp(numerator, denominator)` | Used in net-fill price derivation: **HALF_UP** via `roundHalfUpScaled` on doubled intermediate |
+| `multiplyDecimal` (imported) | `grossNotional = price × qty` — **truncation toward zero** per risk numeric |
+| `parseDecimal` sums | Fee component aggregation — exact integer |
+
+**Other execution seams:**
+
+| Seam | Semantics |
+|------|-----------|
+| `historical-simulated-exchange.ts` | `multiplyDecimal` for participation capacity; `parseDecimal` for qty stepping — **truncation toward zero** |
+| `execution-service.ts` | `divideDecimal` / `multiplyDecimal` for avg-fill reconciliation — **truncation toward zero** |
+| `cost-model.ts` (live path) | `multiplyDecimal` / `divideDecimal` for slippage/fee — **truncation toward zero** |
+
+**WP-EXEC-ACCT rule:** Preserve the above semantics exactly. Do not change Risk/execution rounding to Forecast `quantizeScale8HalfUp/v1`. Any future HALF_UP unification requires explicit separate Human-approved change.
 
 ### 2.6 RNG `WAIA_RANDOM_BLOCK_V1`
 
@@ -501,7 +588,7 @@ Decode IEEE-754 binary64 to exact rational `(sign, mantissa, exponent2)`; value 
 
 **Risk:** T2.
 
-**DoD:** HAR-RV and baselines can consume `realizedVar20m_1m`.
+**DoD:** `realizedVol20m_1m` available for challengers and state conditioning.
 
 ---
 
@@ -651,21 +738,169 @@ Decode IEEE-754 binary64 to exact rational `(sign, mantissa, exponent2)`; value 
 
 **Terminal baselines (frozen §1 of user spec):** climatology; Gaussian σ=dev pop std; Student-t ν=5 scale=σ√(3/5); rolling W=2000; EWMA λ=0.94 warm-up 2000.
 
-**Gaussian CDF kernel `cdf-erf-cody715/v1`:** Cody ACM TOMS715 ERF coefficients (literal):
+**Gaussian CDF kernel `cdf-erf-cody715/v1`:** Complete transcription of ACM TOMS 715 `CALERF` path for `erf(x)` (`JINT=0`). Primary source: Cody CALERF in SPECFUN / Netlib `erf.f`.
+
+**Identity:** `cdf-erf-cody715/v1`. Normal CDF: `Phi(z) = 0.5 * (1 + erf(z / sqrt(2)))` where `sqrt(2)` is the IEEE-754 binary64 literal.
+
+**Mathematical constants:**
 
 ```
-THRESH = 0.46875, FOUR = 4.0
-A = [3.16112374387056560, 1.13864154151050156e2, 3.77485237685302021e2, 3.20937758913846947e3, 1.85777706184603153e-1]
-B = [2.36012909523441209e1, 2.44024637934444173e2, 1.28261652607737228e3, 2.84423683343917062e3]
-C = [5.64188496988670089e-1, 8.88314979438837594, 6.61191906371416295e1, 2.98635138197400131e2, 8.81952221241769090e2, 1.71204761263407058e3, 2.05107837782607147e3, 1.23033935479799725e3, 2.15311535474403846e-8]
-D = [1.57449261107098347e1, 1.17693950891312499e2, 5.37181101862009858e2, 1.62138957456669019e3, 3.29079923573345963e3, 4.36261909014324716e3, 3.43936767414372164e3, 1.23033935480374942e3]
-P = [3.05326634961232344e-1, 3.60344899949804439e-1, 1.25781726111229246e-1, 1.60837851487422766e-2, 6.58749161529837803e-4, 1.63153871373020978e-2]
-Q = [2.56852019228982242, 1.87295284992346047, 5.27905102951428412e-1, 6.05183413124413191e-2, 2.33520497626869185e-3]
+FOUR = 4.0
+ONE = 1.0
+HALF = 0.5
+TWO = 2.0
+ZERO = 0.0
+SQRPI = 0.56418958354775628695   // 1/sqrt(pi)
+THRESH = 0.46875
+SIXTEN = 16.0
 ```
 
-For |z|≤THRESH: `t=z²`; `erf(z)=z·(A4+t·(A3+t·(A2+t·(A1+t·A0))))/(B3+t·(B2+t·(B1+t·B0)))`. Φ(z)=0.5·(1+erf(z/√2)).
+**Machine-dependent constants (IEEE binary64 defaults, frozen):**
 
-**Student-t5 CDF `student-t5-cdf-betainc/v1`:** For standard t_5 with location 0, scale s: `z=x/s`; `F(z)=0.5+0.5·sign(z)·I_{ν/(ν+z²)}(ν/2,1/2)` where ν=5, `I` = regularized incomplete beta via Lentz continued fraction (max 200 iter, tol 1e-15, fail `CDF_KERNEL_NON_CONVERGENT`).
+```
+XINF = 1.79e308
+XNEG = -26.628
+XSMALL = 1.11e-16
+XBIG = 26.543
+XHUGE = 6.71e7
+XMAX = 2.53e307
+```
+
+**Coefficient arrays (1-based indexing as in source):**
+
+```
+A[1..5] = [3.16112374387056560, 1.13864154151050156e2, 3.77485237685302021e2,
+           3.20937758913846947e3, 1.85777706184603153e-1]
+B[1..4] = [2.36012909523441209e1, 2.44024637934444173e2,
+           1.28261652607737228e3, 2.84423683343917062e3]
+C[1..9] = [5.64188496988670089e-1, 8.88314979438837594, 6.61191906371416295e1,
+           2.98635138197400131e2, 8.81952221241769090e2, 1.71204761263407058e3,
+           2.05107837782607147e3, 1.23033935479799725e3, 2.15311535474403846e-8]
+D[1..8] = [1.57449261107098347e1, 1.17693950891312499e2, 5.37181101862009858e2,
+           1.62138957456669019e3, 3.29079923573345963e3, 4.36261909014324716e3,
+           3.43936767414372164e3, 1.23033935480374942e3]
+P[1..6] = [3.05326634961232344e-1, 3.60344899949804439e-1, 1.25781726111229246e-1,
+           1.60837851487422766e-2, 6.58749161529837803e-4, 1.63153871373020978e-2]
+Q[1..5] = [2.56852019228982242, 1.87295284992346047, 5.27905102951428412e-1,
+           6.05183413124413191e-2, 2.33520497626869185e-3]
+```
+
+**Algorithm `erf(x)` — `JINT=0`:**
+
+```
+X = x
+Y = abs(X)
+
+IF Y <= THRESH:
+  // Branch B1: |x| <= 0.46875 — direct erf rational
+  IF Y > XSMALL:
+    YSQ = Y * Y
+  ELSE:
+    YSQ = 0
+  XNUM = A[5] * YSQ
+  XDEN = YSQ
+  FOR I = 1 TO 3:
+    XNUM = (XNUM + A[I]) * YSQ
+    XDEN = (XDEN + B[I]) * YSQ
+  RESULT = X * (XNUM + A[4]) / (XDEN + B[4])
+  RETURN RESULT
+
+ELSE IF Y <= FOUR:
+  // Branch B2: 0.46875 < |x| <= 4.0 — erfc rational then erf = 1 - erfc
+  XNUM = C[9] * Y
+  XDEN = Y
+  FOR I = 1 TO 7:
+    XNUM = (XNUM + C[I]) * Y
+    XDEN = (XDEN + D[I]) * Y
+  RESULT = (XNUM + C[8]) / (XDEN + D[8])
+  YSQ = floor(Y * SIXTEN) / SIXTEN          // AINT(Y*16)/16
+  DEL = (Y - YSQ) * (Y + YSQ)
+  RESULT = exp(-YSQ*YSQ) * exp(-DEL) * RESULT
+  // JINT=0 fixup (label 300):
+  RESULT = (HALF - RESULT) + HALF            // 1 - erfc
+  IF X < 0:
+    RESULT = -RESULT
+  RETURN RESULT
+
+ELSE:
+  // Branch B3: |x| > 4.0 — asymptotic erfc then erf = 1 - erfc
+  RESULT = 0
+  IF Y >= XBIG:
+    IF Y >= XMAX:
+      GOTO fixup_300
+    IF Y >= XHUGE:
+      RESULT = SQRPI / Y
+      GOTO fixup_300
+  YSQ = 1 / (Y * Y)
+  XNUM = P[6] * YSQ
+  XDEN = YSQ
+  FOR I = 1 TO 4:
+    XNUM = (XNUM + P[I]) * YSQ
+    XDEN = (XDEN + Q[I]) * YSQ
+  RESULT = YSQ * (XNUM + P[5]) / (XDEN + Q[5])
+  RESULT = (SQRPI - RESULT) / Y
+  YSQ = floor(Y * SIXTEN) / SIXTEN
+  DEL = (Y - YSQ) * (Y + YSQ)
+  RESULT = exp(-YSQ*YSQ) * exp(-DEL) * RESULT
+fixup_300:
+  RESULT = (HALF - RESULT) + HALF
+  IF X < 0:
+    RESULT = -RESULT
+  RETURN RESULT
+```
+
+**Underflow/saturation:** For `|x| > XBIG` in erfc path used by B2/B3, `erfc → 0`, hence `erf → 1` (within floating limits). No separate erfcx path is used for `Phi`.
+
+**Known-answer vectors (mandatory per branch):** `x ∈ {0, ±1e-8, ±0.46874, ±0.46875, ±0.46876, ±3.999, ±4.0, ±4.001, ±6, ±26, ±40}` compared against reference `erf` implementation (mpmath/high-precision) during test authoring only.
+
+**Student-t5 CDF `student-t5-cdf-betainc/v1` (HPA-2 corrected):**
+
+For standard Student-t with `ν=5`, location `μ=0`, scale `s>0`:
+
+```
+z = (x - μ) / s
+x_beta = ν / (ν + z²)     // ν = 5
+a = ν/2 = 2.5
+b = 0.5
+I = regularized_incomplete_beta(a, b, x_beta)   // Lentz CF below
+```
+
+**CDF (correct symmetric form):**
+
+```
+IF z < 0:  F(z) = 0.5 * I
+IF z == 0: F(z) = 0.5
+IF z > 0:  F(z) = 1 - 0.5 * I
+```
+
+Equivalent for `z != 0`: `F(z) = 0.5 + 0.5 * sign(z) * (1 - I)`.
+
+**Limits (mandatory):** `F(-∞) = 0`, `F(0) = 0.5`, `F(+∞) = 1`.
+
+**Baseline scale:** `s = sigma_dev * sqrt(3/5)` where `sigma_dev` is DEVELOPMENT population std of horizon-h returns.
+
+**Incomplete beta kernel `betainc-lentz/v1`:**
+
+```
+betainc(a, b, x) for x in [0,1]
+// Use symmetry: if x > (a+1)/(a+b+2) compute via 1 - betainc(b,a,1-x)
+
+ln_beta = lgamma(a) + lgamma(b) - lgamma(a+b)
+front = exp(a*ln(x) + b*ln(1-x) - ln_beta)
+
+Use Lentz continued fraction for F(a,b;x):
+  Initialize f=1, c=1, d=0
+  For m=1..MAX_ITER:
+    compute CF term per Numerical Recipes / Lentz (frozen implementation in tests)
+    if |delta-1| < TOL: converged
+  Nonconvergence → fail CDF_KERNEL_NON_CONVERGENT
+
+MAX_ITER = 200
+TOL = 1e-15
+Tiny guard: if x==0 return 0; if x==1 return 1; if x<0 or x>1 → CDF_DOMAIN_ERROR
+```
+
+**Known-answer tests (mandatory):** `z ∈ {0, ±0.5, ±1, ±2, ±5}` validated against independent high-precision reference during test construction.
 
 **Validation protocol:** log score; stationary bootstrap L=ceil(n^(1/3)), B=10000, seed=SHA256(trial_id) mod 2^32; Holm FWER 0.05; common anchor set per (symbol,h,challenger); purge/embargo=h; beat EVERY mandatory baseline.
 
@@ -739,42 +974,80 @@ See §4 MODEL_TRIAL_SPEC registry.
 
 **Risk:** T2.
 
-**DoD:** At least one EXECUTOR_READY challenger integrated with harness; others RESEARCH_ONLY or UNIMPLEMENTED per §4.
+**DoD:** At least one full-joint EXECUTOR_READY challenger (`rv-state-conditional-empirical-joint/v1`) integrated with harness; others RESEARCH_ONLY or UNIMPLEMENTED per §4.
 
 ---
 
 ## 4. MODEL_TRIAL_SPEC registry (DEE-535)
 
-### 4.1 `har-rv-terminal/v1` — **EXECUTOR_READY**
+### 4.0 Same-package coherence invariant (HPA-1)
+
+For each `(symbol, primary_horizon)` predictive package:
+
+1. **TERMINAL_RETURN** Forecast at horizon `h` and **EXECUTION_OPPORTUNITY** Forecast at horizon `h+3` share one predictive-package/model lineage.
+2. TERMINAL_RETURN is the **exact `R_h` marginal** of the sealed joint predictive distribution — not a separate side model.
+3. Terminal bucket probabilities are computed from that exact marginal only.
+4. Execution Opportunity scoring (`energy-mc/v1`) consumes the **same** joint sample set.
+5. **No Decision-side probability reconciliation** exists.
+6. Package is PIT-safe; model fitting uses DEVELOPMENT partition only.
+7. Sampler/artifact/replay semantics are fully frozen (`WAIA_RANDOM_BLOCK_V1`, `quantizeScale8HalfUp/v1`, `distribution_semantic_digest`).
+8. A qualified package may become `FROZEN_SELECTED_PACKAGE_READY` candidate.
+
+Any challenger marked `EXECUTOR_READY` must satisfy all eight points.
+
+---
+
+### 4.1 `rv-state-conditional-empirical-joint/v1` — **EXECUTOR_READY**
+
+Full-joint conditional empirical challenger. Terminal and Execution Opportunity are deterministic projections of the **same** sealed joint sample set.
 
 | Field | Specification |
 |-------|---------------|
-| Target | `Y^R_{t,h}` terminal return, h∈{30,60} |
-| Features (PIT) | `logRV_d = log(realizedVar20m_1m aggregated over last h bars)`; `logRV_w = log(sum of realizedVar20m_1m over last 5*h bars)`; `logRV_m = log(sum over last 22*h bars)` — if any component UNAVAILABLE, forecast UNAVAILABLE |
-| Model | `log(RV_{t+h}) = β0 + β1·logRV_d + β2·logRV_w + β3·logRV_m` (HAR-RV on variance scale) |
-| Location forecast | `μ_{t,h} = 0` (zero-drift location challenger); scale `σ_{t,h} = sqrt(RV_hat_{t+h})` |
-| Distribution | Gaussian on `Y^R` with σ from HAR-RV scale (link: `σ_Y = σ_price_level ≈ σ_RV` for small returns — use `σ_Y = min(sqrt(RV_hat), σ_cap)` with `σ_cap = 5 * σ_dev` from development) |
-| Fitting | OLS on development partition only per (symbol,h); require n≥1000 rows else UNAVAILABLE |
-| Output | Terminal bucket probabilities via `Φ((edge-μ)/σ)` differences on ratified grid |
-| Artifact schema | `{β0,β1,β2,β3,σ_cap,fit_digest}` JSON canonical, ≤2KB |
-| model_transform_version | `har-rv-terminal/v1` |
-| Scores | multiclass log score (harness) |
-| Known-answer | synthetic constant-variance series → σ_hat constant |
-| Compute budget | O(1) per anchor after rolling sums cached |
+| Package roles | `TERMINAL_RETURN` @ `h` + `EXECUTION_OPPORTUNITY` @ `h+3` from one package |
+| State variable (PIT) | `realizedVol20m_1m` at anchor `t` from `feature-engine/rv/v2` — uses only closes in `(t-20m, t]` |
+| State boundaries | DEVELOPMENT-only empirical tertiles per `(symbol, h)`: `p ∈ {1/3, 2/3}` via **type-7** quantile on development `realizedVol20m_1m` values → edges `q1 < q2` |
+| State assignment at `t` | `S0` if `rv ≤ q1`; `S1` if `q1 < rv ≤ q2`; `S2` if `rv > q2` (boundary ties: `rv == q1 → S0`; `rv == q2 → S1`) |
+| Training pool | All DEVELOPMENT anchors with PIT-valid resolved 13-D outcome `o = [R_1,…,R_{h+3}, V_1,…,V_{h+3}]` and same `(symbol,h,state)` at anchor time |
+| Min pool count | If `|pool| < 30` for `(symbol,h,state)` → `FORECAST_UNAVAILABLE_STATE_EMPTY` (fail-closed for that anchor) |
+| Joint predictive at `t` | Deterministic unbiased index selection from frozen pool using `WAIA_RANDOM_BLOCK_V1` domain `rv-state-joint/v1`, root seed = package fit digest, ordinals `(replica,sample,draw)`; emit the selected observed 13-D vector `o` — **no parametric density**, **no mutable PRNG** |
+| Terminal marginal | `R_h` component of each selected joint sample; terminal bucket probabilities = empirical frequencies over sealed sample set mapped to ratified 7-bucket grid edges (RESEARCH_ONLY edges until Human ratified) |
+| Execution Opportunity | Complete 13-D samples from the **same** selection stream |
+| Coherence proof obligation | Unit test: for every sealed issuance, `marginal(R_h(samples))` equals TERMINAL forecast bucket masses within `1e-12` probability mass tolerance |
+| Artifact schema (≤64KiB) | `{q1,q2,state_edges_version:"type7-tertile/v1", pool_digest, n_S0,n_S1,n_S2, symbol, h, fit_partition:"development"}` canonical JSON |
+| model_transform_version | `rv-state-conditional-empirical-joint/v1` |
+| Fitting | One-time DEVELOPMENT fit per `(symbol,h)`; edges frozen before walk-forward/scoring |
+| Scoring | Same harness protocol as all challengers; comparable to `empirical-joint/v1` unconditional baseline on common PIT-valid anchors |
+| Known-answer | Synthetic 3-state pool with fixed outcomes → deterministic sample stream + exact marginal |
+| Compute budget | O(1) per anchor after pool index built; O(\|pool\|) one-time fit |
+| Scientific validity | Model-independent in outcome space; directly falsifiable vs unconditional `empirical-joint/v1`; PIT-safe; satisfies Gate-D same-package invariant |
 
-### 4.2 `garch11-terminal/v1` — **RESEARCH_ONLY_UNIMPLEMENTED_NONLINEAR_OPTIMIZER_NOT_FROZEN**
+---
 
-GARCH(1,1) requires constrained QMLE with ω>0, α≥0, β≥0, α+β<1 and convergence semantics not executor-frozen in Gate-D. Remains research backlog.
+### 4.2 `har-rv-terminal/v1` — **RESEARCH_ONLY_UNIMPLEMENTED_HAR_JOINT_SPEC_NOT_FROZEN**
 
-### 4.3 `ordinal-ridge-terminal/v1` — **RESEARCH_ONLY_UNIMPLEMENTED_FEATURE_SET_NOT_PINNED**
+Terminal-only HAR-RV spec rejected (HPA-4): overlapping RV aggregation double-counts squared returns; future RV target window undefined; `log(0)` absent; `sigma_cap` arbitrary; terminal Gaussian not coherent with joint package. May remain research backlog only after a complete full-joint HAR package is separately frozen from primary literature.
 
-Regularized ordinal model requires pinned feature vector version beyond `feature-engine/rv/v2` scope; defer until feature registry frozen.
+---
 
-### 4.4 `joint-locscale-execopp/v1` — **RESEARCH_ONLY_UNIMPLEMENTED_MULTIVARIATE_DENSITY_NOT_FROZEN**
+### 4.3 `garch11-terminal/v1` — **RESEARCH_ONLY_UNIMPLEMENTED_NONLINEAR_OPTIMIZER_NOT_FROZEN**
 
-13-D joint density for execution opportunity beyond empirical baselines requires additional Human scientific design.
+GARCH(1,1) requires constrained QMLE with ω>0, α≥0, β≥0, α+β<1 and convergence semantics not executor-frozen in Gate-D.
 
-### 4.5 `dynamical-state-ablation/v1` — **RESEARCH_ONLY** (owned by WP-PATTERN-RESEARCH substrate; not capital)
+---
+
+### 4.4 `ordinal-ridge-terminal/v1` — **RESEARCH_ONLY_UNIMPLEMENTED_FEATURE_SET_NOT_PINNED**
+
+Regularized ordinal model requires pinned feature vector version beyond `feature-engine/rv/v2` scope.
+
+---
+
+### 4.5 `joint-locscale-execopp/v1` — **RESEARCH_ONLY_UNIMPLEMENTED_MULTIVARIATE_DENSITY_NOT_FROZEN**
+
+Parametric joint location-scale model beyond empirical baselines requires additional Human scientific design.
+
+---
+
+### 4.6 `dynamical-state-ablation/v1` — **RESEARCH_ONLY** (owned by WP-PATTERN-RESEARCH substrate; not capital)
 
 ---
 
@@ -830,13 +1103,16 @@ Regularized ordinal model requires pinned feature vector version beyond `feature
 | Units/time semantics frozen | ✓ |
 | Decision/Risk ordering | ✓ |
 | No per-sample persistence | ✓ |
-| Quantizer not falsely attributed to risk numeric | ✓ |
+| Quantizer not falsely attributed to risk numeric | ✓ (§2.5.1) |
 | RNG/scoring stream semantics | ✓ |
-| Cody coefficients literal | ✓ |
-| Student-t5 kernel specified | ✓ |
-| At least one EXECUTOR_READY challenger | ✓ har-rv-terminal/v1 |
+| Complete Cody CALERF algorithm frozen | ✓ (§WP-RESEARCH-HARNESS) |
+| Student-t5 CDF limits correct F(-∞)=0, F(0)=0.5, F(+∞)=1 | ✓ (HPA-2) |
+| Full-joint EXECUTOR_READY challenger exists | ✓ `rv-state-conditional-empirical-joint/v1` |
+| Terminal = exact R_h marginal of same joint package | ✓ (§4.0, §4.1) |
+| HAR not falsely executor-ready | ✓ RESEARCH_ONLY_UNIMPLEMENTED |
+| No optional/as-needed persistence decisions | ✓ migrations `0110`–`0145` frozen |
 | Storage test executable | ✓ |
-| One PR topology | ✓ ONE_PR_ARCHITECTURALLY_VALID |
+| One PR topology with honest HPA-7 criterion pass | ✓ |
 | Post-merge gates not claimed in PR | ✓ |
 
 **No unresolved plan blocker identified.**
@@ -880,7 +1156,7 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 1 Purpose | Repair Gate-A execution/accounting; resume parity |
 | 2 Seams | `historical-simulated-exchange.ts:advanceOnClosedBar`, `execution-service.ts`, `repository-postgres.ts:recordFillPostgres`, `fhv-execution-checkpoint.ts` |
 | 3 Files | above + `tests/unit/execution-multi-slice.test.ts`, `tests/unit/fhv-checkpoint-frontier-digest.test.ts` |
-| 4 Formulas | fill economics: fee 20bps, half-spread 5bps, impact 10bps on notional (USDT); qty scale 8 HALF_UP via existing risk numeric on economics path only |
+| 4 Formulas | fill economics: fee 20bps, half-spread 5bps, impact 10bps on notional (USDT); bps amounts via `fill-economics.ts` local **HALF_UP**; price×qty via `multiplyDecimal` **truncation toward zero** per `risk/numeric.ts` |
 | 5 Time | entry eligible N+1..N+3 closed bars; no same-bar hindsight |
 | 6 Inputs | closed 1m bars, order row, symbol |
 | 7 Persistence | `trader_orders`, `trader_fills`, `trader_fill_execution_economics` |
@@ -948,7 +1224,7 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 17 Evidence | old vol-based calibration quarantined |
 | 18 Dependencies | none |
 | 19 Risk | T2 |
-| 20 DoD | HAR-RV can consume realizedVar20m_1m |
+| 20 DoD | `realizedVol20m_1m` consumed by `rv-state-conditional-empirical-joint/v1` |
 | 21 Human | none |
 
 ### A.5 WP-FHV-STORAGE (DEE-523)
@@ -1039,7 +1315,7 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 4 Formulas | N/A (dimensional proof) |
 | 5 Time | manifest-sealed bars |
 | 6 Inputs | HTX kline fields amount/vol, symbol map |
-| 7 Persistence | qualification receipt immutable JSON |
+| 7 Persistence | `trader_htx_volume_qualification_receipt_v1` (`0138`–`0139`) |
 | 8 Design | lineage proof → QUALIFIED or BLOCKED reason |
 | 9 Forbidden | assuming base volume without proof |
 | 10 Fail-closed | `HTX_VOLUME_AUTHORITY_BLOCKED_*` |
@@ -1048,7 +1324,7 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 13 PIT | N/A |
 | 14 Replay | receipt digest stable |
 | 15 Budget | streaming scan |
-| 16 Migration | receipt table optional |
+| 16 Migration | `0138`–`0139` |
 | 17 Evidence | unqualified volume non-authoritative |
 | 18 Dependencies | none |
 | 19 Risk | T1 |
@@ -1090,8 +1366,8 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 3 Files | `lib/trader/intelligence/decision-economics/*` |
 | 4 Formulas | §2.4; Pi from participation model; residual lower 0 USDT |
 | 5 Time | exit first slice t+h+1m |
-| 6 Inputs | sealed forecasts, admission receipt optional, C0 not sizing |
-| 7 Persistence | decision record economic fields |
+| 6 Inputs | sealed forecasts; scientific-admission receipt required for capital path (table `0142`–`0143`) |
+| 7 Persistence | `trader_intelligence_decision_economics_v2` (`0140`–`0141`) |
 | 8 Design | O(K) streaming quantiles; fail-closed w/o receipt |
 | 9 Forbidden | Risk in actionability; dev-average EV; probability reweight |
 | 10 Fail-closed | `EV_RANGE_INVALID`, `DECISION_NON_ACTIONABLE` |
@@ -1117,7 +1393,7 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 4 Formulas | parity digest over normalized surface |
 | 5 Time | CONTROL_REPLAY bounded fixture or qualified dataset window |
 | 6 Inputs | TEST_ONLY sealed fixture seed |
-| 7 Persistence | auth claim + config freeze digest |
+| 7 Persistence | `trader_control_replay_authority_claim_v1` (`0144`–`0145`) + config freeze digest |
 | 8 Design | fixtures through real Risk/Execution |
 | 9 Forbidden | bypass Risk/Execution; TEST_ONLY in production |
 | 10 Fail-closed | `TEST_ONLY_AUTHORITY_REJECTED` |
@@ -1126,7 +1402,7 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 13 PIT | N/A |
 | 14 Replay | parity digest |
 | 15 Budget | bounded fixture |
-| 16 Migration | none |
+| 16 Migration | `0144`–`0145` |
 | 17 Evidence | N/A |
 | 18 Dependencies | AUTHORITY, DECISION-ECON |
 | 19 Risk | T1 |
@@ -1178,7 +1454,7 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 13 PIT | anchor eligibility |
 | 14 Replay | bootstrap seed deterministic |
 | 15 Budget | B=10000 cap |
-| 16 Migration | trial tables optional |
+| 16 Migration | `0136`–`0137` |
 | 17 Evidence | N/A |
 | 18 Dependencies | FORECAST-V2, DATASET-QUAL |
 | 19 Risk | T1 |
@@ -1230,7 +1506,7 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 13 PIT | quantizer uses ≤t |
 | 14 Replay | pattern digest |
 | 15 Budget | bounded registry |
-| 16 Migration | 0130+ pattern tables |
+| 16 Migration | `0130`–`0133` |
 | 17 Evidence | N/A |
 | 18 Dependencies | RESEARCH-HARNESS |
 | 19 Risk | T2 |
@@ -1256,7 +1532,7 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 13 PIT | N/A |
 | 14 Replay | digest match |
 | 15 Budget | O(1) hot |
-| 16 Migration | 0131 optional |
+| 16 Migration | `0134`–`0135` |
 | 17 Evidence | N/A |
 | 18 Dependencies | FORECAST-V2 |
 | 19 Risk | T2 |
@@ -1274,11 +1550,11 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 5 Time | fit development only |
 | 6 Inputs | features, outcomes |
 | 7 Persistence | model artifacts in package bytea |
-| 8 Design | har-rv-terminal/v1 EXECUTOR_READY; others deferred |
-| 9 Forbidden | hidden lib defaults; menu optimizers |
+| 8 Design | `rv-state-conditional-empirical-joint/v1` EXECUTOR_READY; HAR research-only |
+| 9 Forbidden | hidden lib defaults; terminal-only challenger as sole EXECUTOR_READY |
 | 10 Fail-closed | UNIMPLEMENTED families skipped not invented |
-| 11 KA | har-rv synthetic |
-| 12 Tests | challenger integrates harness |
+| 11 KA | rv-state-joint synthetic coherence test |
+| 12 Tests | challenger integrates harness; marginal=terminal test |
 | 13 PIT | fit boundary |
 | 14 Replay | artifact digest |
 | 15 Budget | O(1) score per anchor |
