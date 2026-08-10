@@ -18,9 +18,19 @@ import {
   type FhvCampaignKind,
 } from "@/lib/trader/observability/fhv-observability.constants";
 import {
+  produceFhvBarsProcessed,
+  produceFhvEvidenceEventSequence,
+  produceFhvHostStringStatus,
+  produceFhvThroughputCyclesPerMinute,
+  produceFhvTradingSimulationCounts,
+  resolveFhvProducerNumber,
+  resolveFhvProducerString,
+} from "@/lib/trader/observability/fhv-operator-status-producers";
+import {
   resolveBarsTotal,
   resolveCampaignTerminalState,
 } from "@/lib/trader/observability/fhv-telemetry-probes";
+
 import type {
   FhvBoundedSummaryItem,
   FhvOperatorStatusV1,
@@ -67,14 +77,19 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
   const startedAt = input.startedAt ?? observedAt;
   const heartbeatAt = input.heartbeatAt ?? null;
   const heartbeatState = input.heartbeatState ?? (heartbeatAt ? "OK" : "UNKNOWN_OR_MISSING");
-  const barsProcessed =
-    input.barsProcessed ?? input.checkpoint?.evidenceDurableThroughCycleIndex ?? 0;
+  const barsProcessedProducer = produceFhvBarsProcessed({
+    explicitBarsProcessed: input.barsProcessed,
+    checkpoint: input.checkpoint,
+  });
+  const barsProcessed = resolveFhvProducerNumber(barsProcessedProducer);
   const barsTotal = resolveBarsTotal({
     pinnedBarsTotal: input.barsTotal ?? null,
     manifestBarsTotal: null,
   });
   const completionPct =
-    barsTotal !== null && barsTotal > 0 ? Math.min(100, (barsProcessed / barsTotal) * 100) : null;
+    barsTotal !== null && barsTotal > 0 && barsProcessed !== null
+      ? Math.min(100, (barsProcessed / barsTotal) * 100)
+      : null;
   const elapsedMs = Math.max(0, Date.parse(observedAt) - Date.parse(startedAt));
   const checkpointAgeMs = input.lastCheckpointAt
     ? Math.max(0, Date.parse(observedAt) - Date.parse(input.lastCheckpointAt))
@@ -83,7 +98,15 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
     heartbeatAt !== null
       ? Math.max(0, Date.parse(observedAt) - Date.parse(heartbeatAt))
       : (input.heartbeatAgeMs ?? null);
-  const throughputCurrent = elapsedMs > 0 ? Math.round((barsProcessed / elapsedMs) * 1000 * 60) : 0;
+  const throughputProducer = produceFhvThroughputCyclesPerMinute({
+    barsProcessed,
+    elapsedMs,
+  });
+  const throughputCurrent = resolveFhvProducerNumber(throughputProducer);
+  const tradingCounts = produceFhvTradingSimulationCounts({ checkpoint: input.checkpoint });
+  const eventSequence = resolveFhvProducerNumber(
+    produceFhvEvidenceEventSequence({ checkpoint: input.checkpoint }),
+  );
 
   const accounting = input.checkpoint?.accountingFrontierState;
 
@@ -117,7 +140,8 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
       heartbeatAt,
       heartbeatState,
       heartbeatAgeMs,
-      processRestartCount: input.processRestartCount ?? 0,
+      processRestartCount:
+        typeof input.processRestartCount === "number" ? input.processRestartCount : null,
       terminalState: resolveCampaignTerminalState({
         explicitTerminalState: input.terminalState,
         checkpointTerminalState: input.checkpoint?.replayTerminalState ?? null,
@@ -137,10 +161,17 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
       artifactDirBytes: input.hostTelemetry?.artifactDirBytes ?? null,
       artifactGrowthBytesPerHour: input.hostTelemetry?.artifactGrowthBytesPerHour ?? null,
       inodeUsedPct: input.hostTelemetry?.inodeUsedPct ?? null,
-      processStatus: input.hostTelemetry?.processStatus ?? "unknown",
-      serviceStatus: input.hostTelemetry?.serviceStatus ?? "unknown",
+      processStatus: resolveFhvProducerString(
+        produceFhvHostStringStatus(input.hostTelemetry?.processStatus),
+      ),
+      serviceStatus: resolveFhvProducerString(
+        produceFhvHostStringStatus(input.hostTelemetry?.serviceStatus),
+      ),
       postgresConnectivity: input.hostTelemetry?.postgresConnectivity ?? "unknown",
-      datasetReadable: input.hostTelemetry?.datasetReadable ?? false,
+      datasetReadable:
+        input.hostTelemetry?.datasetReadable === undefined
+          ? null
+          : input.hostTelemetry.datasetReadable,
       openFiles: input.hostTelemetry?.openFiles ?? null,
       ntpHealthy: input.hostTelemetry?.ntpHealthy ?? null,
     },
@@ -158,20 +189,18 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
     },
     strategies: {
       activeVersions: [],
-      eligibility: "unknown",
-      signalsCreated: 0,
-      signalsRejected: 0,
+      eligibility: null,
+      signalsCreated: null,
+      signalsRejected: null,
       candidateStrategiesSummary: truncateSummaries([], FHV_STATUS_MAX_CANDIDATES),
       validationStatus: null,
       promotionStatus: null,
     },
     tradingSimulation: {
-      ordersCount: input.checkpoint?.executionState?.openOrders?.length ?? 0,
-      fillsCount: accounting?.consumedFillIds?.length ?? 0,
-      openPositionsCount: accounting?.positionsJson
-        ? Object.keys(accounting.positionsJson).length
-        : 0,
-      closedPositionsCount: 0,
+      ordersCount: resolveFhvProducerNumber(tradingCounts.ordersCount),
+      fillsCount: resolveFhvProducerNumber(tradingCounts.fillsCount),
+      openPositionsCount: resolveFhvProducerNumber(tradingCounts.openPositionsCount),
+      closedPositionsCount: resolveFhvProducerNumber(tradingCounts.closedPositionsCount),
       cash: accounting?.cash ?? null,
       equity: accounting?.equity ?? null,
       grossPnl: accounting?.grossRealizedPnl ?? null,
@@ -182,7 +211,7 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
       monthlyDrawdownBps: accounting?.monthlyDrawdownBps ?? null,
       exposure: null,
       guardianState: input.checkpoint?.drawdownHwmState?.breachState ?? null,
-      reconciliationState: "unknown",
+      reconciliationState: null,
       accountingFrontierSequence: accounting?.accountingSequence ?? null,
       recentOrdersSummary: truncateSummaries([], FHV_STATUS_MAX_RECENT_ORDERS),
       recentFillsSummary: truncateSummaries([], FHV_STATUS_MAX_RECENT_FILLS),
@@ -190,7 +219,7 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
     },
     evidence: {
       lastSemanticEventId: null,
-      eventSequence: 0,
+      eventSequence,
       eventStreamLagMs: null,
       lastSealedArtifactRef: input.checkpoint?.evidenceChainDigest
         ? `fhv-artifact/v1/evidence-chunk/${input.runId}/manifest#0`

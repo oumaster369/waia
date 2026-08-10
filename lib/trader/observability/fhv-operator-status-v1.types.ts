@@ -36,11 +36,11 @@ export type FhvOperatorStatusV1 = Readonly<{
     currentSymbol: string | null;
     historicalCursor: string | null;
     partition: string;
-    barsProcessed: number;
+    barsProcessed: number | null;
     barsTotal: number | null;
     completionPct: number | null;
-    throughputCurrent: number;
-    throughputRolling: number;
+    throughputCurrent: number | null;
+    throughputRolling: number | null;
     etaUtc: string | null;
     startedAt: string;
     elapsedMs: number;
@@ -49,7 +49,7 @@ export type FhvOperatorStatusV1 = Readonly<{
     heartbeatAt: string | null;
     heartbeatState: string;
     heartbeatAgeMs: number | null;
-    processRestartCount: number;
+    processRestartCount: number | null;
     terminalState: string;
     terminalReason: string | null;
   }>;
@@ -65,8 +65,8 @@ export type FhvOperatorStatusV1 = Readonly<{
     artifactDirBytes: number | null;
     artifactGrowthBytesPerHour: number | null;
     inodeUsedPct: number | null;
-    processStatus: string;
-    serviceStatus: string;
+    processStatus: string | null;
+    serviceStatus: string | null;
     postgresConnectivity: "ok" | "degraded" | "unavailable" | "unknown";
     datasetReadable: boolean | null;
     openFiles: number | null;
@@ -86,18 +86,18 @@ export type FhvOperatorStatusV1 = Readonly<{
   }>;
   strategies: Readonly<{
     activeVersions: readonly string[];
-    eligibility: string;
-    signalsCreated: number;
-    signalsRejected: number;
+    eligibility: string | null;
+    signalsCreated: number | null;
+    signalsRejected: number | null;
     candidateStrategiesSummary: readonly FhvBoundedSummaryItem[];
     validationStatus: string | null;
     promotionStatus: string | null;
   }>;
   tradingSimulation: Readonly<{
-    ordersCount: number;
-    fillsCount: number;
-    openPositionsCount: number;
-    closedPositionsCount: number;
+    ordersCount: number | null;
+    fillsCount: number | null;
+    openPositionsCount: number | null;
+    closedPositionsCount: number | null;
     cash: string | null;
     equity: string | null;
     grossPnl: string | null;
@@ -108,7 +108,7 @@ export type FhvOperatorStatusV1 = Readonly<{
     monthlyDrawdownBps: number | null;
     exposure: string | null;
     guardianState: string | null;
-    reconciliationState: string | null;
+    reconciliationState: "ok" | "degraded" | "failed" | "unknown" | null;
     accountingFrontierSequence: number | null;
     recentOrdersSummary: readonly FhvBoundedSummaryItem[];
     recentFillsSummary: readonly FhvBoundedSummaryItem[];
@@ -116,7 +116,7 @@ export type FhvOperatorStatusV1 = Readonly<{
   }>;
   evidence: Readonly<{
     lastSemanticEventId: string | null;
-    eventSequence: number;
+    eventSequence: number | null;
     eventStreamLagMs: number | null;
     lastSealedArtifactRef: string | null;
     artifactWriteHealth: "ok" | "degraded" | "failed";
