@@ -144,7 +144,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Human plan approval (state.status -> approved) after D1-D5 byte-exact digest closure review; then /implement starting WP-CANON"
+  nextAction: "Human plan approval (state.status -> approved) after E1-E3 final micro-closure review; then /implement starting WP-CANON"
 provenance:
   createdFrom: chat
   gateDRatificationSha: 1f10d4eebce23f92dccb3d550e8dc10812d26a9e
@@ -154,6 +154,7 @@ provenance:
   bootstrapRngSizingPolicyClosure: "B1/B2/B3/B4/B5 applied (2026-08-10); prior commit c3ce72c"
   scientificIdentityPreHoldoutClosure: "C1/C2/C3/C4/C5/C6/C7/C8 applied (2026-08-10); prior commit f5d0aeb"
   byteExactDigestClosure: "D1/D2/D3/D4/D5 applied (2026-08-10); prior commit 93542c5"
+  e1E3FinalMicroClosure: "E1/E2/E3 applied (2026-08-10); prior commit 69bf603"
   supersedes: null
 ---
 
@@ -1052,7 +1053,7 @@ See §2.10 for digest layers. **Forbidden cycles:** bootstrap roots MUST NOT use
 | Bootstrap initial/restart index | `EPIBOOT1` | `k` | `resample_position_ordinal` | `0` | rejection retry |
 | Bootstrap restart Bernoulli | `EPIBOOT1` | `k` | `resample_position_ordinal` | `1` | rejection retry |
 | Aleatoric pool index draw | `ALEDRAW1` | `k` | `m` | `draw` | rejection retry |
-| Scoring stream CRN | `SCORECRN1` | `s` | `d` | `0` | rejection retry |
+| Scoring stream CRN | `SCORECRN1` | `s` | `d` | `0` | **`0` exactly** (no rejection; one block → one uint53 numerator) |
 | Validation bootstrap index/restart | `VALBOOT1` | `b` | `resample_position_ordinal` | `0` or `1` | rejection retry |
 
 **`UNBIASED_INT(N)` for `[0, N)` (integer draws — bootstrap + pool indexing):**
@@ -1092,11 +1093,11 @@ Scientific admission p-values and significance bootstraps use the **same** `stat
 | Retry | `retry_u32` for `UNBIASED_INT` rejection |
 | Block length | `L = smallest positive integer with L^3 >= n` (integer-exact; §2.4.0) |
 
-**Trial identity:** See **§2.11.5** `trial_identity_digest_32` (exact `trial-id/v1` serialization — not prose binding).
+**Trial identity:** See **§2.11.5** `trial_identity_digest_32` (exact `trial-id/v2` serialization — not prose binding; Holm rank/index MUST NOT appear in trial identity).
 
 **Forbidden:** `SHA256(trial_id) mod 2^32`; library default RNG; floating `cbrt` for L; any bootstrap implementation other than `stationary-bootstrap/v1` + `WAIA_RANDOM_BLOCK_V1`; executor-selected JSON for trial identity.
 
-**Known-answer tests:** prefix byte vectors (§2.6); `n=1,8,9,27,28` L boundaries; identical `trial_identity_digest_32` ⇒ identical resample index vectors across `B` resamples; trial-id/v1 byte vectors (§2.11.5).
+**Known-answer tests:** prefix byte vectors (§2.6); `n=1,8,9,27,28` L boundaries; identical `trial_identity_digest_32` ⇒ identical resample index vectors across `B` resamples; trial-id/v2 byte vectors (§2.11.5); permuting family comparison storage/evaluation order MUST NOT change any pairwise raw bootstrap p-value (§2.11.5).
 
 ### 2.7 Scoring streams (D3 — byte-exact CRN authority)
 
@@ -1158,8 +1159,10 @@ normalization_version_digest_hex
 For each `(s, d)` with `s ∈ {0..S-1}`, `d ∈ {0..D_SCORE_MAX-1}`:
 
 - `score_root = SHA256( score_root_prefix_16 ‖ scoring_stream_identity_digest_32 )`
-- Draw via domain **`SCORECRN1`**: `replica_u32 = s`, `sample_u32 = d`, `draw_u32 = 0`, `retry_u32` rejection loop
-- `U_s[d] = (uint64_be(block[0:8]) >> 11) / 2^53` — exact uint53 numerator semantics below
+- Draw via domain **`SCORECRN1`**: `replica_u32 = s`, `sample_u32 = d`, `draw_u32 = 0`, **`retry_u32 = 0` exactly** — frozen for every coordinate `(s,d)`; no rejection loop; no retry increment; no mutable cursor
+- One `WAIA_RANDOM_BLOCK_V1` SHA-256 block → one uint53 numerator: `U_s[d] = (uint64_be(block[0:8]) >> 11) / 2^53`
+- **`UNBIASED_INT` MUST NOT be used for SCORECRN1** — integer rejection semantics apply only where actually required (`EPIBOOT1`, `ALEDRAW1` empirical-pool index draws, `VALBOOT1`)
+- **Regression (mandatory):** any implementation that sets `retry_u32 ≠ 0` for `SCORECRN1`, or re-draws blocks for SCORECRN1, is **invalid contract usage**
 
 **Index 0 (`d=0`)** = replica-selection CRN coordinate (Gate-D F2 recovered). Every compared model at the same anchor consumes **identical** `(s,d)` addresses; unused dimensions are ignored by the scorer but still hashed for replay verification.
 
@@ -1192,11 +1195,33 @@ for s = 0 .. S-1:
 
 **Rule:** No digest may seed data needed to create itself (directly or indirectly). Every digest MUST be computable in strict topological order. Property tests MUST verify the DAG.
 
+#### Top-level line-oriented identity encoding (E1)
+
+All **`pkg-gen-id/v1`** and **`fcst-gen-id/v1`** fields use **one** canonical line encoding (UTF-8; exactly one field value per line; each line terminated by exactly one `0x0A`). **No JSON.** No locale formatting. No implicit `Number.toString` authority. **No raw32** inside these line-oriented identities — SHA-256 digest-valued fields appear only as `_hex` (64 lowercase ASCII hex chars, no `0x` prefix).
+
+| Type | Encoding |
+|------|----------|
+| Version prefix line | UTF-8 ASCII value + exactly one `0x0A` |
+| UUID (`organization_id`) | RFC-4122 lowercase hyphenated; exactly 36 ASCII chars + `0x0A` |
+| Enum / version / string ids | UTF-8 ASCII; MUST NOT contain `0x0A` inside value; value + `0x0A` |
+| Integer (`*_dec`, horizons, K/M) | Base-10 ASCII; no leading `+`; no leading zero except literal `0`; value + `0x0A` |
+| SHA-256 digest (`*_digest_hex`) | Exactly 64 lowercase `[0-9a-f]` + `0x0A` |
+| `code_release_sha` | Exact lowercase Git commit hex (40 chars for SHA-1 object name; no prefix) + `0x0A` |
+| `alpha_epi_scale8` | `quantizeScale8HalfUp/v1` canonical string for ratified first-program α_epi=`0.10` → UTF-8 `0.10000000` + `0x0A` (frozen; no executor float stringification) |
+| `K_selected_dec` / `M_selected_dec` | Human-ratified **selected integer** epistemic replica count K and aleatoric draw count M from H3 gate (exact decimal ASCII integers bound into identity; not prose placeholders `K_contract` / `M_contract`) |
+
+**Frozen digests:**
+
+```
+predictive_package_generation_identity_digest = SHA256(exact pkg-gen-id/v1 bytes)
+forecast_generation_identity_digest           = SHA256(exact fcst-gen-id/v1 bytes)
+```
+
 #### Package layer (before any bootstrap replica exists)
 
 **`predictive_package_generation_identity_digest`** — computed **before** bootstrap refits.
 
-Canonical serialization (`pkg-gen-id/v1`; UTF-8; one field per line; `\n` terminated; no optional fields):
+Canonical serialization (`pkg-gen-id/v1`; field order frozen):
 
 ```
 pkg-gen-id/v1
@@ -1204,24 +1229,48 @@ organization_id
 venue
 market
 symbol
-primary_horizon_minutes
-execution_horizon_minutes
+primary_horizon_minutes_dec
+execution_horizon_minutes_dec
 package_subject_version
-terminal_target_definition_digest
-execution_opportunity_target_definition_digest
+terminal_target_definition_digest_hex
+execution_opportunity_target_definition_digest_hex
 model_transform_version
-development_dataset_digest
+development_dataset_digest_hex
 feature_version
-normalization_version_digest
+normalization_version_digest_hex
 sampler_contract_version
 quantizer_version
 code_release_sha
-K_contract
-M_contract
-alpha_epi
+K_selected_dec
+M_selected_dec
+alpha_epi_scale8
 ```
 
-`predictive_package_generation_identity_digest = SHA256(canonical_byte_stream)`
+| Field | Exact encoding |
+|-------|----------------|
+| `organization_id` | UUID line (36 lowercase hyphenated chars) |
+| `venue` | e.g. `HTX` |
+| `market` | e.g. `SPOT` |
+| `symbol` | e.g. `BTCUSDT` |
+| `primary_horizon_minutes_dec` | int decimal (e.g. `60`) |
+| `execution_horizon_minutes_dec` | int decimal (e.g. `63` for h+3 EO horizon) |
+| `package_subject_version` | e.g. `predictive-package/v1` |
+| `terminal_target_definition_digest_hex` | 64-char hex of frozen Terminal target definition |
+| `execution_opportunity_target_definition_digest_hex` | 64-char hex of frozen EO target definition |
+| `model_transform_version` | e.g. `rv-state-conditional-empirical-joint/v1` |
+| `development_dataset_digest_hex` | 64-char hex of DEVELOPMENT SOURCE corpus receipt |
+| `feature_version` | e.g. `feature-engine/rv/v2` |
+| `normalization_version_digest_hex` | 64-char hex of normalization contract |
+| `sampler_contract_version` | `waia-cbrng/sha256-ctr/v1` |
+| `quantizer_version` | `quantizeScale8HalfUp/v1` |
+| `code_release_sha` | lowercase Git release SHA (exact bytes used elsewhere for release identity) |
+| `K_selected_dec` | Human-ratified selected K integer (H3); e.g. reference grid cell uses `50` |
+| `M_selected_dec` | Human-ratified selected M integer (H3); e.g. reference grid cell uses `80` |
+| `alpha_epi_scale8` | frozen `0.10000000` for first-program α_epi=0.10 |
+
+`predictive_package_generation_identity_digest = SHA256(exact pkg-gen-id/v1 bytes)`
+
+**Known-answer tests (mandatory):** fixed `pkg-gen-id/v1` byte vector (all fields populated with frozen fixture values) → fixed 32-byte digest; permuting field order or encoding (e.g. uppercase hex, leading-zero integer, float `alpha_epi`) → digest mismatch → fail closed.
 
 **MUST NOT include:** replica artifact digests; bootstrap roots; `predictive_package_content_digest`.
 
@@ -1251,24 +1300,39 @@ Ordered by ascending `replica_ordinal`. **No** bootstrap root may depend on this
 
 **`forecast_generation_identity_digest`** — computed **before** drawing aleatoric samples.
 
+Canonical serialization (`fcst-gen-id/v1`; field order frozen):
+
 ```
 fcst-gen-id/v1
-predictive_package_content_digest
+predictive_package_content_digest_hex
 organization_id
 venue
 market
 symbol
-anchor_closed_bar_epoch_ms
-primary_horizon_minutes
-execution_horizon_minutes
+anchor_closed_bar_epoch_ms_dec
+primary_horizon_minutes_dec
+execution_horizon_minutes_dec
 terminal_target_role_id
 execution_target_role_id
 runtime_contract_digest_hex
 ```
 
-**Design note (D1):** `replica_set_identity_digest` **removed** — redundant with ordered replica artifacts already bound in `predictive_package_content_digest`; avoids circular/redundant semantics.
+| Field | Exact encoding |
+|-------|----------------|
+| `predictive_package_content_digest_hex` | 64-char lowercase hex of sealed package content digest |
+| `organization_id` | UUID line |
+| `venue`, `market`, `symbol` | UTF-8 ASCII id lines |
+| `anchor_closed_bar_epoch_ms_dec` | int64 decimal ASCII |
+| `primary_horizon_minutes_dec`, `execution_horizon_minutes_dec` | int decimal ASCII |
+| `terminal_target_role_id` | e.g. `TERMINAL_RETURN` |
+| `execution_target_role_id` | e.g. `EXECUTION_OPPORTUNITY` |
+| `runtime_contract_digest_hex` | 64-char lowercase hex of §2.11.2 digest (pre-generation qualified runtime tuple only) |
 
-**`runtime_contract_digest_hex`** — 64-char lowercase hex of §2.11.2 digest (pre-generation qualified runtime tuple only).
+`forecast_generation_identity_digest = SHA256(exact fcst-gen-id/v1 bytes)`
+
+**Known-answer tests (mandatory):** fixed `fcst-gen-id/v1` byte vector → fixed 32-byte digest; distinct `predictive_package_content_digest_hex` or anchor epoch → distinct forecast generation identity digest.
+
+**Design note (D1):** `replica_set_identity_digest` **removed** — redundant with ordered replica artifacts already bound in `predictive_package_content_digest`; avoids circular/redundant semantics.
 
 **MUST EXCLUDE:** `distribution_semantic_digest`; `forecast_content_digest`; any field derived from generated aleatoric samples.
 
@@ -1427,12 +1491,14 @@ outcome_13d_block
 
 **Bounded replay:** pools reconstructed from DEVELOPMENT SOURCE + `bootstrap_root_k` + §2.4.0; digest recomputed before sampling.
 
-#### 2.11.5 `trial_identity_digest_32` (D4)
+#### 2.11.5 `trial_identity_digest_32` (D4 + E3)
 
-Exact trial identity (`trial-id/v1`); seeds validation bootstrap root:
+Exact trial identity (`trial-id/v2`); seeds validation bootstrap root. **E3 disposition:** `holm_family_index_dec` is **removed** from trial identity — downstream Holm rank/order is derived from observed p-values and **MUST NOT** influence bootstrap RNG used to generate those p-values.
+
+Canonical serialization (`trial-id/v2`; UTF-8 line encoding per §2.10 / §2.11.1):
 
 ```
-trial-id/v1
+trial-id/v2
 trial_registration_id
 challenger_package_content_digest_hex
 challenger_model_transform_version
@@ -1447,24 +1513,38 @@ common_anchor_set_digest_hex
 purge_duration_minutes_dec
 embargo_duration_minutes_dec
 comparison_family_id
-holm_family_index_dec
 ```
 
 | Field | Rule |
 |-------|------|
-| `challenger_package_content_digest_hex` | 64-char hex |
+| `trial_registration_id` | preregistered trial id string + `\n` |
+| `challenger_package_content_digest_hex` | 64-char lowercase hex |
+| `challenger_model_transform_version` | model version string + `\n` |
 | `baseline_id` | e.g. `empirical-joint/v1` |
+| `baseline_version` | baseline version string + `\n` |
 | `score_metric_id` | e.g. `log-score/v1` or `energy-mc/v1` |
+| `score_metric_version` | metric version string + `\n` |
 | `evaluation_partition_receipt_digest_hex` | WF_PREDICTIVE receipt for STAGE-A trials |
 | `common_anchor_set_digest_hex` | SHA-256 hex of ordered anchor id list |
-| `comparison_family_id` | binds Holm family scope |
-| `holm_family_index_dec` | decimal ASCII index within family |
+| `purge_duration_minutes_dec`, `embargo_duration_minutes_dec` | int decimal ASCII + `\n` |
+| `comparison_family_id` | binds preregistered Holm family scope (family membership; **not** post-result rank) |
 
-`trial_identity_digest_32 = SHA256(canonical_byte_stream)`.
+**Explicitly excluded from trial identity (E3):** `holm_family_index_dec`; any Holm rank/order; any field derived from observed p-values.
+
+`trial_identity_digest_32 = SHA256(exact trial-id/v2 bytes)`.
 
 `validation_bootstrap_root = SHA256( validation_bootstrap_root_prefix_16 ‖ trial_identity_digest_32 )`.
 
-**Known-answer tests:** fixed `trial-id/v1` byte vector → fixed digest; distinct comparison family → distinct bootstrap root.
+**Holm procedure (post-bootstrap; rank MUST NOT seed RNG):**
+
+1. Compute all raw pairwise bootstrap p-values first (each pairwise comparison has deterministic `validation_bootstrap_root` from its `trial-id/v2` identity — challenger package, baseline, metric, symbol, horizon, partition, anchor set, purge/embargo, `comparison_family_id`).
+2. Collect the exact preregistered family identified by `comparison_family_id`.
+3. Order p-values according to the frozen Holm algorithm.
+4. Apply Holm FWER=0.05.
+
+Post-result Holm rank/index **MAY** be persisted in the scientific receipt for audit; it **MUST NOT** seed or modify any bootstrap random stream.
+
+**Known-answer tests:** fixed `trial-id/v2` byte vector → fixed digest; distinct `comparison_family_id` → distinct bootstrap root; **regression:** permuting storage or evaluation order of family comparisons MUST NOT change any pairwise raw bootstrap p-value.
 
 ---
 
@@ -2284,11 +2364,21 @@ where `enumerated_fixed_V2_other` is receipt-enumerated global/research metadata
 | No authority-critical digest placeholders (D1) | ✓ (§2.11) |
 | `distribution_semantic_digest` quantizeScale8HalfUp/v1 (D2) | ✓ (§2.5.2) |
 | Scoring CRN model-independent byte-exact (D3) | ✓ (§2.7) |
-| `trial_identity_digest_32` byte-exact (D4) | ✓ (§2.11.5) |
+| `trial_identity_digest_32` byte-exact (D4) | ✓ (§2.11.5 `trial-id/v2`) |
 | EO has 0 target-bucket rows; 7 Terminal only (D5) | ✓ (§5) |
 | PHASE-1 vs PHASE-2 storage rows distinct (D5) | ✓ (§5) |
+| `pkg-gen-id/v1` exact field encoding (E1) | ✓ (§2.10) |
+| `fcst-gen-id/v1` exact field encoding (E1) | ✓ (§2.10) |
+| Top-level identity digest fields `_hex` lowercase (E1) | ✓ (§2.10) |
+| K/M bind Human-ratified selected integers; α_epi scale-8 frozen (E1) | ✓ (§2.10) |
+| pkg-gen / fcst-gen known-answer byte vectors (E1) | ✓ (§2.10) |
+| SCORECRN1 `retry_u32 = 0` always; no rejection loop (E2) | ✓ (§2.6, §2.7) |
+| UNBIASED_INT unchanged for EPIBOOT1 / ALEDRAW1 / VALBOOT1 (E2) | ✓ (§2.6) |
+| Holm rank/index excluded from validation RNG identity (E3) | ✓ (§2.11.5) |
+| `comparison_family_id` binds Holm family; `trial-id/v2` byte-exact (E3) | ✓ (§2.11.5) |
+| Family order permutation cannot change raw p-values (E3) | ✓ (§2.11.5) |
 
-**D1–D5 closure complete. C1–C8 preserved. No unresolved plan blocker identified for Human approval.**
+**D1–D5 + E1–E3 closure complete. C1–C8 preserved. No unresolved plan blocker identified for Human approval.**
 
 ---
 
