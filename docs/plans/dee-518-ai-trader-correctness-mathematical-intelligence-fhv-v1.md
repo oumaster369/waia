@@ -53,17 +53,17 @@ includedIssues:
     role: work-package
     slug: WP-FORECAST-V2
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress-adversarial-repair
   - id: DEE-528
     role: work-package
     slug: WP-DECISION-ECON
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress-adversarial-repair
   - id: DEE-529
     role: work-package
     slug: WP-CONTROL-REPLAY-AUTH
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress-adversarial-repair
   - id: DEE-530
     role: work-package
     slug: WP-DATASET-QUAL
@@ -73,12 +73,12 @@ includedIssues:
     role: work-package
     slug: WP-RESEARCH-HARNESS
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress-adversarial-repair
   - id: DEE-532
     role: work-package
     slug: WP-EXECOPP-QUAL
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress-adversarial-repair
   - id: DEE-533
     role: work-package
     slug: WP-PATTERN-RESEARCH
@@ -93,7 +93,7 @@ includedIssues:
     role: work-package
     slug: WP-CHALLENGER-TRIALS
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress-adversarial-repair
 postMergeGates:
   - id: DEE-536
     slug: OG-HOST-QUAL
@@ -118,8 +118,8 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
-  currentWorkPackage: null
+  status: in-progress
+  currentWorkPackage: ADVERSARIAL_IMPLEMENTATION_REPAIR_A0_A11
   completedWorkPackages:
     - WP-CANON
     - WP-EXEC-ACCT
@@ -129,27 +129,30 @@ state:
     - WP-FHV-SERVICE
     - WP-OBSERVABILITY
     - WP-VOLUME-QUAL
+    - WP-DATASET-QUAL
+    - WP-PATTERN-RESEARCH
+    - WP-KNOWLEDGE-STATE
+  remainingWorkPackages:
     - WP-FORECAST-V2
     - WP-DECISION-ECON
     - WP-CONTROL-REPLAY-AUTH
-    - WP-DATASET-QUAL
     - WP-RESEARCH-HARNESS
     - WP-EXECOPP-QUAL
-    - WP-PATTERN-RESEARCH
-    - WP-KNOWLEDGE-STATE
     - WP-CHALLENGER-TRIALS
-  remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 26f5c066aafc260acfed5498d47b4599288e9f06
+  lastValidatedGitSha: ffc0876ade1ea8de77971b5b0d8f002c6d90dafc
   lastValidationAt: "2026-08-10"
-  blockedReason: null
-  nextAction: "Adversarial code review — PR not created in BUILD MASTER run; await Human review before /prepare-pr"
+  blockedReason: ADVERSARIAL_IMPLEMENTATION_REPAIR_A0_A11
+  nextAction: "Close adversarial Code↔Canon gaps A0–A11; restore measured storage IC-4 before second code review"
+  adversarialReviewCommentId: cbedeb8b-4d13-4def-a3e0-bca5d40654ba
+  priorFalseClassification: DEE_518_IMPLEMENTATION_COMPLETE_READY_FOR_ADVERSARIAL_CODE_REVIEW
 provenance:
   createdFrom: chat
   gateDRatificationSha: 1f10d4eebce23f92dccb3d550e8dc10812d26a9e
   humanPlanApprovalDate: "2026-08-10"
   humanPlanApprovalCommit: df6e02b7375a886e45569158c9b15bdcb3d0696a
+  humanPlanApprovalRecordingCommit: abf1827c63a7c936e20136bc0ea4477c335edb99
   humanPlanApprovalSha256: 02c55a578333d182f7632946230b6f01662430ba5462d95c115cd6199c71a909
   humanPlanApprovalLinearComment: c7b3901a-3cb3-45dc-8f9a-ff73f56ed520
   humanPlanApprovalClassification: DEE_518_HUMAN_PLAN_APPROVED_IMPLEMENTATION_AUTHORIZED
