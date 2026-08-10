@@ -911,6 +911,118 @@
       "when": 1780000000099,
       "tag": "0129_trader_forecast_calibration_observation_v2_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1780000000100,
+      "tag": "0130_trader_pattern_definition_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1780000000101,
+      "tag": "0131_trader_pattern_definition_v1_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1780000000102,
+      "tag": "0132_trader_pattern_occurrence_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1780000000103,
+      "tag": "0133_trader_pattern_occurrence_v1_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1780000000104,
+      "tag": "0134_trader_knowledge_state_checkpoint_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1780000000105,
+      "tag": "0135_trader_knowledge_state_checkpoint_v2_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1780000000106,
+      "tag": "0136_trader_research_trial_registration_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1780000000107,
+      "tag": "0137_trader_research_trial_registration_v1_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1780000000138,
+      "tag": "0138_trader_htx_volume_qualification_receipt_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1780000000139,
+      "tag": "0139_trader_htx_volume_qualification_receipt_v1_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1780000000140,
+      "tag": "0140_trader_intelligence_decision_economics_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1780000000141,
+      "tag": "0141_trader_intelligence_decision_economics_v2_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1780000000142,
+      "tag": "0142_trader_scientific_admission_receipt_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1780000000143,
+      "tag": "0143_trader_scientific_admission_receipt_v1_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1780000000144,
+      "tag": "0144_trader_control_replay_authority_claim_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1780000000145,
+      "tag": "0145_trader_control_replay_authority_claim_v1_rls",
+      "breakpoints": true
     }
   ]
 }
