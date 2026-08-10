@@ -144,7 +144,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Human plan approval (state.status -> approved) after F2 nested K/M convergence random-surface micro-closure review; then /implement starting WP-CANON"
+  nextAction: "Human plan approval (state.status -> approved) after F3 K/M anchor-selection + winner-selection contract restoration review; then /implement starting WP-CANON"
 provenance:
   createdFrom: chat
   gateDRatificationSha: 1f10d4eebce23f92dccb3d550e8dc10812d26a9e
@@ -157,6 +157,7 @@ provenance:
   e1E3FinalMicroClosure: "E1/E2/E3 applied (2026-08-10); prior commit 69bf603"
   f1KmConfigurationIdentityClosure: "F1 applied (2026-08-10); prior commit 68d0482"
   f2NestedKmConvergenceSurfaceClosure: "F2 applied (2026-08-10); prior commit 6eaebfb"
+  f3KmAnchorSelectionWinnerContractRestoration: "F3 applied (2026-08-10); prior commit ee7a9c4"
   supersedes: null
 ---
 
@@ -452,7 +453,7 @@ If Human proves unreviewable: DEE-512 spawns INTEGRATION-A (WP-EXEC-ACCT…WP-CO
 
 **Frozen three-stage gate (inside DEE-539 OG-SCI-PACKAGE):**
 
-1. **PREDICTIVE_SKILL_PASS on WF_PREDICTIVE** — proper predictive scoring vs mandatory baselines (WP-RESEARCH-HARNESS / WP-EXECOPP-QUAL). Output: freeze the **already-evaluated selected candidate** tuple `(replica_root_family_identity_digest, predictive_package_generation_identity_digest, predictive_package_content_digest, model_transform_version, K_config, M_config, alpha_epi_config, decision_policy_version, economic_semantics_version)` — digests computed **before** H3 from exact nested stochastic family + `(K_config_dec, M_config_dec, alpha_epi_config_scale8)` configuration binding (§2.10 F1+F2).
+1. **PREDICTIVE_SKILL_PASS on WF_PREDICTIVE** — proper predictive scoring vs mandatory baselines (WP-RESEARCH-HARNESS / WP-EXECOPP-QUAL). Output: freeze the **already-evaluated selected candidate** tuple `(replica_root_family_identity_digest, km_global_anchor_set_digest, predictive_package_generation_identity_digest, predictive_package_content_digest, model_transform_version, K_config, M_config, alpha_epi_config, decision_policy_version, economic_semantics_version)` — digests computed **before** H3 from exact nested stochastic family + `(K_config_dec, M_config_dec, alpha_epi_config_scale8)` configuration binding + F3 anchor/winner contracts (§2.10 F1+F2+F3).
 2. **`BLOCKING_PRE_HOLDOUT_POSITION_REASSESSMENT_INTEGRATION`** — future separate integration boundary (§1.22); if it changes Forecast/Decision/executable semantics, rerun DEVELOPMENT + WF_PREDICTIVE qualification before proceeding.
 3. **`HUMAN_FHV_EXECUTABLE_POLICY_V1`** — Human receipt **after STAGE-A** (+ Position Reassessment gate when applicable) and **before WF_ECONOMIC evidence** (§1.23–§1.25).
 4. **`HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1`** — Human numeric rule sealed **before WF_ECONOMIC evidence** (not merely before PASS marker).
@@ -1313,7 +1314,7 @@ Package generation identity binds **exact model configuration**, not whether Hum
 | E. Deterministic selection rule | Yields one exact `(K_config, M_config, alpha_epi_config)` candidate tuple |
 | F. Human H3 review | Reviews evidence for the selected tuple |
 | G. Human H3 ratification | Ratifies or rejects the selected tuple |
-| H. Capital/scientific admission | Receipt binds `replica_root_family_identity_digest`, selected `K_config_dec`, `M_config_dec`, `alpha_epi_config_scale8`, `predictive_package_generation_identity_digest`, `predictive_package_content_digest`, and H3 Human receipt identity |
+| H. Capital/scientific admission | Receipt binds `replica_root_family_identity_digest`, `km_global_anchor_set_digest`, selected `K_config_dec`, `M_config_dec`, `alpha_epi_config_scale8`, `predictive_package_generation_identity_digest`, `predictive_package_content_digest`, and H3 Human receipt identity |
 
 **Forbidden cycle:** Human H3 approval MUST NOT be an input required to construct a candidate package identity or stochastic family. Selection MUST NOT regenerate bootstrap replicas or aleatoric samples under a different random identity. Rejected candidates remain research evidence only; no package acquires capital authority merely because it has a package digest.
 
@@ -1329,6 +1330,164 @@ Conceptual sample cube: `X[k,m]` for `k = 0..49`, `m = 0..79`.
 Each preregistered configuration `(K,M)` evaluates using **exactly** `X[0:K, 0:M]` — no independent cell-specific stochastic simulation; no cell-specific bootstrap seed; no cell-specific aleatoric seed.
 
 Reference configuration: `(50,80)` contains every lower cell as a prefix.
+
+#### K/M deterministic anchor selection (F3-A)
+
+F2 fixes **that** all 15 configurations share one anchor set; F3-A restores **which** 4096 anchors per `(symbol,h)` are selected.
+
+**Partition authority:** DEVELOPMENT only — `[2020-01-01T00:00:00Z, 2023-01-01T00:00:00Z)`. **Forbidden:** WF_PREDICTIVE, WF_ECONOMIC, BLIND_HOLDOUT consultation for anchor selection.
+
+**Eligibility (each `(symbol,h)` independently):** anchor `t` is eligible iff ALL hold:
+
+- `t` inside DEVELOPMENT partition above;
+- all PIT input bars required at `t` exist;
+- all outcome closes/volumes required through `t+h+3m` exist;
+- 13-D Execution Opportunity target fully resolvable;
+- normalization non-degenerate;
+- no walk-forward or holdout data consulted.
+
+**Exact order-statistic key** (per eligible anchor):
+
+```
+km_anchor_key = SHA256(
+  development_dataset_digest_raw32
+  ‖ ASCII(symbol)
+  ‖ uint32_be(primary_horizon_minutes)
+  ‖ ASCII("kmgate/v1")
+  ‖ uint64_be(anchor_epoch_min)
+)
+```
+
+| Preimage field | Encoding |
+|----------------|----------|
+| `development_dataset_digest_raw32` | exactly 32 binary SHA-256 bytes (NOT hex UTF-8) |
+| `symbol` | exact uppercase ASCII bytes `BTCUSDT` or `ETHUSDT`; no terminator; no length prefix |
+| `primary_horizon_minutes` | unsigned `uint32_be`: `30` or `60` |
+| domain separator | exact 9-byte ASCII `kmgate/v1`; no NUL |
+| `anchor_epoch_min` | UTC minutes since Unix epoch; unsigned `uint64_be` |
+
+No JSON. No locale formatting. No executor-chosen delimiters.
+
+**Select exactly 4096 per `(symbol,h)`:**
+
+1. Compute `km_anchor_key` for every eligible DEVELOPMENT anchor.
+2. Sort ascending lexicographically by the 32 raw SHA-256 key bytes.
+3. Tie-break (byte-identical keys): ascending `anchor_epoch_min`.
+4. Take the first **exactly 4096** anchors.
+
+If eligible count `< 4096` → fail closed **`KM_GATE_INSUFFICIENT_ELIGIBLE_ANCHORS`**. No replacement. No smaller sample. No random fallback.
+
+**Four surfaces (frozen):** BTCUSDT/30m, BTCUSDT/60m, ETHUSDT/30m, ETHUSDT/60m → **`4 × 4096 = 16384` unique anchors TOTAL**. Changing `K_config` or `M_config` MUST NOT change anchor selection or anchor-set digests.
+
+**Per-surface ordered identity (`km-anchor-set/v1`):**
+
+```
+km_surface_anchor_set_digest = SHA256(
+  ASCII("km-anchor-set/v1") ‖ 0x00
+  ‖ development_dataset_digest_raw32
+  ‖ uint32_be(primary_horizon_minutes)
+  ‖ ASCII(symbol)
+  ‖ for each selected anchor in km_anchor_key order:
+       uint64_be(anchor_epoch_min) ‖ km_anchor_key_raw32
+)
+```
+
+**Global aggregate identity:**
+
+```
+km_global_anchor_set_digest = SHA256(
+  ASCII("km-global-anchor-set/v1") ‖ 0x00
+  ‖ BTCUSDT_30_digest_raw32
+  ‖ BTCUSDT_60_digest_raw32
+  ‖ ETHUSDT_30_digest_raw32
+  ‖ ETHUSDT_60_digest_raw32
+)
+```
+
+Order literal and frozen. All 15 K/M configurations MUST bind/use the same `km_global_anchor_set_digest`.
+
+**Known-answer tests (mandatory):** synthetic DEVELOPMENT fixture with known eligible set → deterministic 4096 selection; permuted input order → identical digest; K/M change → identical anchor-set digest.
+
+#### K/M qualification + winner selection (F3-B)
+
+Restores the exact Human-ratified Gate-D convergence contract (grid/threshold numbers unchanged).
+
+**Grid:** K ∈ {10,20,30,40,50}, M ∈ {20,40,80} (15 configurations). **Reference:** `(K_ref, M_ref) = (50, 80)`.
+
+For every candidate `(K,M)` and every one of the same **16384** anchors, evaluate nested prefix `X[0:K, 0:M]` (§2.10 F2).
+
+**EV rate (per anchor, per candidate):**
+
+```
+ev_rate = EV_USDT / N_t
+```
+
+where the same positive `N_t = N_ref` is used for `EV_lower`, `EV_base`, `EV_upper`, and candidate/reference comparison. If `N_ref <= 0` → fail closed **`KM_GATE_INVALID_ZERO_NOTIONAL`**.
+
+**Relative error (vs reference `(50,80)` on same anchor):**
+
+```
+relative_error =
+  abs(ev_rate_candidate - ev_rate_reference)
+  / max(abs(ev_rate_reference), 5e-5)
+```
+
+(`5e-5` = 0.5 bps; dimensionless.)
+
+**95th percentile authority:** type-7 empirical quantile at `p = 0.95` over the per-anchor metric values on the common 16384-anchor set (same type-7 linear interpolation rule as replica state tertile edges §4.1 — not a new percentile definition).
+
+**Qualification rule — candidate `(K,M)` QUALIFIES iff ALL:**
+
+| Criterion | Metric | Threshold |
+|-----------|--------|-----------|
+| A | 95th percentile of `relative_error` for `EV_lower` | `<= 0.01` |
+| B | 95th percentile of `relative_error` for `EV_base` | `<= 0.01` |
+| C | 95th percentile of `relative_error` for `EV_upper` | `<= 0.01` |
+| D | 95th percentile convergence error for `MC_ES` (`energy-mc/v1` on nested prefix) | `<= 0.02` |
+| E | Per-decision operation bound (§1.12) | `<= 1e5` ops/candidate |
+
+Reference `(50,80)` is the convergence reference and is **not** rejected for zero self-error.
+
+**Winner selection (`km-winner-select/v1`) — among QUALIFYING configurations ONLY:**
+
+1. Minimal `S = K · M`
+2. Tie: minimal `K`
+3. Tie: minimal `M`
+
+This is the **only** first-program deterministic K/M winner rule. **Forbidden:** best average error; largest K/M; arbitrary enumeration order; runtime-performance preference; Human-picked winner before evidence.
+
+**No qualifier:** if no configuration qualifies → terminal state **`NO_KM_CONFIGURATION_QUALIFIES`**. **Forbidden:** default to `(50,80)`; loosen thresholds; inspect WF_PREDICTIVE/WF_ECONOMIC/holdout to choose; H3 ratification of an unqualified configuration. H3 receives evidence only after a deterministic qualifying candidate exists (or explicit no-qualifier terminal).
+
+**K/M convergence receipt (`km-convergence-receipt/v1`) MUST bind at minimum:**
+
+- `replica_root_family_identity_digest`
+- `km_global_anchor_set_digest`
+- all 15 candidate `predictive_package_generation_identity_digest` values
+- reference `(50,80)`
+- per-candidate qualification metrics + qualifying/nonqualifying status
+- selected `K_config`, `M_config`, `alpha_epi_config_scale8` (`0.10000000`)
+- `km-winner-select/v1` contract version
+- selected `predictive_package_generation_identity_digest`
+- selected `predictive_package_content_digest`
+- evidence semantic digest
+
+#### K/M compute / reproducibility boundary (F3-C)
+
+K/M qualification is **DEVELOPMENT-only** and bounded.
+
+**Human-ratified hard cap (Gate-D, unchanged):** `2 × 10^9` sample generations.
+
+**Exact count (nested F2 surface — no invented replacement formula):**
+
+```
+exact_sample_generation_count =
+  16384 unique anchors
+  × K_max (50)
+  × M_max (80)
+  = 65_536_000
+```
+
+(one common reference cube build; prefix evaluations reuse coordinates — they do not multiply this count). Executor MUST derive/report this exact count; if implementation-exact count exceeds `2 × 10^9` → fail closed **`KM_GATE_COMPUTE_BUDGET_EXCEEDED`**. No partial qualification.
 
 #### Common aleatoric sampling family (F2)
 
@@ -1494,8 +1653,11 @@ development/model semantics
 8. Shared stochastic coordinates do **not** change when K/M cell identity changes.
 9. Selected H3 candidate references exact previously evaluated candidate.
 10. H3 does not regenerate any stochastic surface.
-11. All 15 configurations use identical ordered **16384 unique anchors** (§ WP-EXECOPP-QUAL).
+11. All 15 configurations use identical ordered **16384 unique anchors** selected by **§2.10 F3-A** (`km_global_anchor_set_digest`).
 12. Convergence PASS/FAIL cannot depend on independent per-cell seed choice.
+13. Anchor selection deterministic; fewer than 4096 eligible → `KM_GATE_INSUFFICIENT_ELIGIBLE_ANCHORS` (F3-A).
+14. Winner = minimal `K·M`, tie minimal K, then minimal M; no qualifier → `NO_KM_CONFIGURATION_QUALIFIES` (F3-B).
+15. Compute count `65_536_000` ≤ `2×10^9` hard cap; exceed → `KM_GATE_COMPUTE_BUDGET_EXCEEDED` (F3-C).
 
 ### 2.11 Byte-exact nested digest contracts (D1–D4)
 
@@ -2202,19 +2364,25 @@ Symmetric check: `F(z) + F(−z) = 1` within `1e-15` absolute for finite z≠0.
 
 **Joint baselines:** `empirical-joint/v1` (unbiased dev anchor index); `marginal-independence/v1` (type-7 empirical inverse CDF per component).
 
-**K/M grid:** K∈{10,20,30,40,50}, M∈{20,40,80} (15 **configurations**); reference `(50,80)`; scale grid {0.01,0.05,0.10,0.25,0.50}·C0 for **scientific sensitivity reporting only** — MUST NOT become `FHV_EXECUTABLE_POLICY_V1` sizing (§1.23); ev_rate=EV/notional; relative error denominator max(|ev_rate_ref|,5e-5); 95th-pct max over notionals; thresholds 0.01 EV / 0.02 MC_ES.
+**K/M grid:** K∈{10,20,30,40,50}, M∈{20,40,80} (15 **configurations**); reference `(50,80)`; scale grid {0.01,0.05,0.10,0.25,0.50}·C0 for **scientific sensitivity reporting only** — MUST NOT become `FHV_EXECUTABLE_POLICY_V1` sizing (§1.23).
 
-**Anchor set (terminology frozen — F2):** **4096 unique anchors per `(symbol,h)` evaluation surface**. First program has four symbol/h surfaces: BTCUSDT/30m, BTCUSDT/60m, ETHUSDT/30m, ETHUSDT/60m → **`4 × 4096 = 16384` unique anchors TOTAL**. ALL 15 K/M configurations MUST be evaluated on the **same** 16384 unique anchor set (not 4096 independently resampled anchors per configuration). Reporting may count `15 × 16384 = 245760` configuration-anchor evaluations, but only **16384 UNIQUE** anchors exist.
+**F3-A anchor selector (§2.10):** 4096 deterministic DEVELOPMENT anchors per `(symbol,h)` via `kmgate/v1` order-statistic key; four surfaces → 16384 unique anchors shared by all 15 configurations; `km_global_anchor_set_digest` frozen. Fail closed: `KM_GATE_INSUFFICIENT_ELIGIBLE_ANCHORS`.
 
-**F1+F2 nested stochastic surface (mandatory):** Preregister `replica-root-family/v1` once per `(symbol,h,model/data)` family. Build/address common reference surface `K_max=50`, `M_max=80`. Each of the 15 configurations evaluates nested prefix `X[0:K, 0:M]` only — shared bootstrap roots from `replica_root_family_identity_digest`; shared aleatoric draws from `forecast_sampling_family_identity_digest` per anchor. Each configuration receives immutable `pkg-gen-id/v2` candidate identity (`replica_root_family_identity_digest_hex` + `K_config_dec` + `M_config_dec` + `alpha_epi_config_scale8`) → `predictive_package_generation_identity_digest` → `predictive_package_content_digest`. K/M convergence computes `energy-mc/v1` from common ALEDRAW1 cube (**not** SCORECRN1 — §2.8). Deterministic selection rule identifies one exact candidate tuple. **H3 Human ratification** attaches authority to that **already-evaluated** candidate. Human approval MUST NOT mutate or regenerate candidate identity or stochastic surfaces.
+**F1+F2 nested stochastic surface (§2.10):** Common `K_max=50`, `M_max=80` reference cube; prefix evaluation only; shared bootstrap/aleatoric coordinates.
+
+**F3-B qualification + winner (§2.10):** Per-anchor `ev_rate = EV_USDT / N_ref`; relative error vs `(50,80)` with denominator `max(|ev_rate_ref|, 5e-5)`; type-7 95th-percentile thresholds: EV_lower/base/upper `<= 0.01`, MC_ES `<= 0.02`; ops/candidate `<= 1e5`; winner = minimal `K·M`, tie minimal K, then minimal M (`km-winner-select/v1`); no qualifier → `NO_KM_CONFIGURATION_QUALIFIES`. H3 cannot override winner into unevaluated cell.
+
+**F3-C compute boundary (§2.10):** DEVELOPMENT-only; exact nested count `65_536_000` sample generations; hard cap `2×10^9`; exceed → `KM_GATE_COMPUTE_BUDGET_EXCEEDED`.
+
+**K/M convergence receipt:** binds fields listed §2.10 F3-B. **H3** reviews/ratifies exact selected already-evaluated candidate (or explicit no-qualifier terminal); MUST NOT change K/M without new preregistered qualification run.
 
 **Dependencies:** WP-FORECAST-V2, WP-VOLUME-QUAL, WP-RESEARCH-HARNESS.
 
 **Risk:** T1.
 
-**DoD:** K/M selection receipt (references `replica_root_family_identity_digest` + exact selected candidate digests); predictive scientific-admission receipt for STAGE-A; nested-prefix regression tests (§2.10 F2); does **not** alone emit `FROZEN_SELECTED_PACKAGE_READY`.
+**DoD:** `km-convergence-receipt/v1` emitter; anchor-selection known-answer tests; nested-prefix regression tests (§2.10 F2); winner-selection known-answer; does **not** alone emit `FROZEN_SELECTED_PACKAGE_READY`.
 
-**Human gate:** H3 ratification of the **selected** `(K_config, M_config, alpha_epi_config=0.10)` candidate tuple **after** K/M convergence evidence — blocks capital eligibility only; does **not** block candidate identity or stochastic-family construction.
+**Human gate:** H3 ratification **after** deterministic qualification/winner evidence — blocks capital eligibility only.
 
 ---
 
@@ -2420,7 +2588,7 @@ where `enumerated_fixed_V2_other` is receipt-enumerated global/research metadata
 | Gate | Owner | Blocks |
 |------|-------|--------|
 | Plan approval | Human | `/implement` start |
-| H3 K/M + α_epi=0.10 | Human | capital eligibility — ratifies **selected already-evaluated** `(replica_root_family, K_config, M_config, alpha_epi_config)` candidate digests (§2.10 F1+F2); does **not** block pre-H3 stochastic-family or candidate identity construction |
+| H3 K/M + α_epi=0.10 | Human | capital eligibility — ratifies **selected already-evaluated** `(replica_root_family, km_global_anchor_set, K_config, M_config, alpha_epi_config)` candidate per `km-winner-select/v1` (§2.10 F3); cannot override into unevaluated cell; does **not** block pre-H3 anchor/stochastic-family construction |
 | Target grid `HUMAN_RATIFIED_CAPITAL` | Human | capital terminal forecasts |
 | `HUMAN_FHV_EXECUTABLE_POLICY_V1` | Human | STAGE-B / WF_ECONOMIC; seals `executable_policy_digest`; **before WF_ECONOMIC evidence** (§1.25 C6 path A/B) |
 | `HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1` | Human | STAGE-B numeric rule; **before WF_ECONOMIC evidence** |
@@ -2510,7 +2678,13 @@ where `enumerated_fixed_V2_other` is receipt-enumerated global/research metadata
 | No H3→generation identity cycle; bootstrap roots pre-H3 (F1) | ✓ (§2.10) |
 | H3 binds selected candidate digests; approval does not mutate identity (F1) | ✓ (§2.10, §6, WP-EXECOPP-QUAL) |
 | K/M convergence uses common nested surface; not independent seeds (F2) | ✓ (§2.8, §2.10, WP-EXECOPP-QUAL) |
-| 4096 anchors per (symbol,h); 16384 unique anchors shared (F2) | ✓ (WP-EXECOPP-QUAL) |
+| 4096 anchors per (symbol,h); 16384 unique anchors shared (F2+F3-A) | ✓ (§2.10 F3-A, WP-EXECOPP-QUAL) |
+| `kmgate/v1` deterministic anchor selector frozen (F3-A) | ✓ (§2.10 F3-A) |
+| `km_global_anchor_set_digest` common to all 15 configs (F3-A) | ✓ (§2.10 F3-A) |
+| Qualification thresholds literal; type-7 95th pct (F3-B) | ✓ (§2.10 F3-B) |
+| Winner = min K·M, tie min K, min M (F3-B) | ✓ (§2.10 F3-B) |
+| `NO_KM_CONFIGURATION_QUALIFIES` explicit terminal (F3-B) | ✓ (§2.10 F3-B) |
+| Compute cap `2×10^9`; exact count 65_536_000 (F3-C) | ✓ (§2.10 F3-C) |
 | energy-mc K/M gate uses ALEDRAW1 cube; SCORECRN1 separate (F2) | ✓ (§2.8) |
 | pkg-gen / fcst-gen known-answer byte vectors (E1) | ✓ (§2.10) |
 | SCORECRN1 `retry_u32 = 0` always; no rejection loop (E2) | ✓ (§2.6, §2.7) |
@@ -2519,7 +2693,7 @@ where `enumerated_fixed_V2_other` is receipt-enumerated global/research metadata
 | `comparison_family_id` binds Holm family; `trial-id/v2` byte-exact (E3) | ✓ (§2.11.5) |
 | Family order permutation cannot change raw p-values (E3) | ✓ (§2.11.5) |
 
-**D1–D5 + E1–E3 + F1–F2 closure complete. C1–C8 preserved. No unresolved plan blocker identified for Human approval.**
+**D1–D5 + E1–E3 + F1–F3 closure complete. C1–C8 preserved. No unresolved plan blocker identified for Human approval.**
 
 ---
 
@@ -2869,27 +3043,27 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 
 | # | Contract |
 |---|----------|
-| 1 Purpose | Joint exec-opp qualification + K/M gate; 15 configs on common nested K_max/M_max surface |
+| 1 Purpose | Joint exec-opp qualification + K/M gate; F3 anchor selector + winner contract |
 | 2 Seams | forecast-v2 exec path, harness |
-| 3 Files | `execopp-qualification/*`, km-convergence gate |
-| 4 Formulas | energy-mc/v1 from ALEDRAW1 cube (§2.8 F2); K/M §1.14; pkg-gen-id/v2 + replica-root-family §2.10 |
-| 5 Time | development anchors only for K/M |
-| 6 Inputs | volume QUALIFIED, normalized 13-D; 16384 shared unique anchors |
-| 7 Persistence | admission receipt (replica_root_family + selected candidate digests + H3 receipt) |
-| 8 Design | nested-prefix evaluation; deterministic selection then H3 |
-| 9 Forbidden | independent per-cell seeds; capital authority from digest alone |
-| 10 Fail-closed | normalization degenerate |
-| 11 KA | nested-prefix regressions §2.10 F2 |
-| 12 Tests | admission + km gate + anchor-set identity |
-| 13 PIT | dev only for km |
-| 14 Replay | admission receipt digest |
-| 15 Budget | §K/M compute caps |
-| 16 Migration | none |
-| 17 Evidence | N/A |
+| 3 Files | `execopp-qualification/*`, km-convergence gate, km-anchor-selector |
+| 4 Formulas | §2.10 F3-A/B/C; energy-mc/v1 from ALEDRAW1 cube (§2.8 F2) |
+| 5 Time | DEVELOPMENT-only anchor selection + qualification |
+| 6 Inputs | volume QUALIFIED; `km_global_anchor_set_digest`; 16384 shared anchors |
+| 7 Persistence | `km-convergence-receipt/v1` + scientific-admission receipt (`0142`) |
+| 8 Design | kmgate/v1 selector; nested F2 prefix eval; km-winner-select/v1 |
+| 9 Forbidden | WF/holdout anchor pick; independent per-cell seeds; H3 pre-winner pick |
+| 10 Fail-closed | `KM_GATE_*`, `NO_KM_CONFIGURATION_QUALIFIES` |
+| 11 KA | anchor-selection + winner-selection known-answer (§2.10 F3) |
+| 12 Tests | receipt + nested-prefix + anchor digest |
+| 13 PIT | DEVELOPMENT eligibility only for anchor pick |
+| 14 Replay | receipt semantic digest |
+| 15 Budget | exact count 65_536_000; cap 2×10^9 (§2.10 F3-C) |
+| 16 Migration | `0142`–`0143` |
+| 17 Evidence | per-candidate metrics in receipt |
 | 18 Dependencies | FORECAST-V2, VOLUME-QUAL, RESEARCH |
 | 19 Risk | T1 |
-| 20 DoD | receipt emitter |
-| 21 Human | H3 ratifies selected `(K_config,M_config,α)` after nested-surface evidence |
+| 20 DoD | receipt emitter + F3 known-answer suite |
+| 21 Human | H3 after deterministic winner or no-qualifier terminal |
 
 ### A.15 WP-PATTERN-RESEARCH (DEE-533)
 
