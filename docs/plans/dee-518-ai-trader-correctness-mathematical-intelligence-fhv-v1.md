@@ -141,8 +141,8 @@ state:
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 26f5c066aafc260acfed5498d47b4599288e9f06
+  lastValidationAt: "2026-08-10"
   blockedReason: null
   nextAction: "Adversarial code review — PR not created in BUILD MASTER run; await Human review before /prepare-pr"
 provenance:
