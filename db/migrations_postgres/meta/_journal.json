@@ -771,6 +771,146 @@
       "when": 1780000000079,
       "tag": "0109_trader_knowledge_confidence_update_record_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1780000000080,
+      "tag": "0110_trader_forecast_target_definition_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1780000000081,
+      "tag": "0111_trader_forecast_target_definition_v2_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1780000000082,
+      "tag": "0112_trader_forecast_target_bucket_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1780000000083,
+      "tag": "0113_trader_forecast_target_bucket_v2_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1780000000084,
+      "tag": "0114_trader_forecast_predictive_package_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1780000000085,
+      "tag": "0115_trader_forecast_predictive_package_v2_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1780000000086,
+      "tag": "0116_trader_forecast_predictive_package_target_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1780000000087,
+      "tag": "0117_trader_forecast_predictive_package_target_v2_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1780000000088,
+      "tag": "0118_trader_forecast_replica_artifact_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1780000000089,
+      "tag": "0119_trader_forecast_replica_artifact_v2_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1780000000090,
+      "tag": "0120_trader_forecast_bundle_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1780000000091,
+      "tag": "0121_trader_forecast_bundle_v2_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1780000000092,
+      "tag": "0122_trader_forecast_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1780000000093,
+      "tag": "0123_trader_forecast_v2_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1780000000094,
+      "tag": "0124_trader_forecast_scenario_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1780000000095,
+      "tag": "0125_trader_forecast_scenario_v2_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1780000000096,
+      "tag": "0126_trader_forecast_outcome_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1780000000097,
+      "tag": "0127_trader_forecast_outcome_v2_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1780000000098,
+      "tag": "0128_trader_forecast_calibration_observation_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1780000000099,
+      "tag": "0129_trader_forecast_calibration_observation_v2_rls",
+      "breakpoints": true
     }
   ]
 }
