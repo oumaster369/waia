@@ -118,11 +118,10 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: WP-EXEC-ACCT
+  status: integration-ready
+  currentWorkPackage: null
   completedWorkPackages:
     - WP-CANON
-  remainingWorkPackages:
     - WP-EXEC-ACCT
     - WP-AUTHORITY
     - WP-FEATURE-RV
@@ -139,12 +138,13 @@ state:
     - WP-PATTERN-RESEARCH
     - WP-KNOWLEDGE-STATE
     - WP-CHALLENGER-TRIALS
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implementation authorized — begin WP-CANON / DEE-519 on branch dee-518-ai-trader-correctness-mathematical-intelligence-fhv-v1"
+  nextAction: "Adversarial code review — PR not created in BUILD MASTER run; await Human review before /prepare-pr"
 provenance:
   createdFrom: chat
   gateDRatificationSha: 1f10d4eebce23f92dccb3d550e8dc10812d26a9e

@@ -16,7 +16,7 @@ export type DistributionSemanticDigestInput = {
   m: number;
   normalizationVersionDigestHex: string;
   targetRoleId: string;
-  samples: readonly (readonly number[])[];
+  samples: readonly (readonly (readonly number[])[])[];
 };
 
 function assertHex64(name: string, value: string): void {
@@ -52,9 +52,9 @@ export function computeDistributionSemanticDigest(input: DistributionSemanticDig
   const hash = createHash("sha256");
   hash.update(header, "utf8");
 
-  for (let k = 0; k < input.k; k += 1) {
-    for (let m = 0; m < input.m; m += 1) {
-      const sample = input.samples[k]?.[m];
+  for (let kIdx = 0; kIdx < input.k; kIdx += 1) {
+    for (let mIdx = 0; mIdx < input.m; mIdx += 1) {
+      const sample = input.samples[kIdx]?.[mIdx];
       if (!sample || sample.length !== 13) {
         throw new Error("[forecast-v2/dist-sem] each sample must have 13 components");
       }
