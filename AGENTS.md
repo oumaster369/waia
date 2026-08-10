@@ -21,6 +21,7 @@ Repository-specific execution contract for AI coding agents. **Router only** —
 | Agent automation topology | [`docs/AGENT_AUTOMATION.md`](docs/AGENT_AUTOMATION.md) |
 | Governance index | [`docs/waia-governance/README.md`](docs/waia-governance/README.md) |
 | Canonical integration plans | [`docs/plans/README.md`](docs/plans/README.md) |
+| DEE-518 implementation plan (approved 2026-08-10) | [`docs/plans/dee-518-ai-trader-correctness-mathematical-intelligence-fhv-v1.md`](docs/plans/dee-518-ai-trader-correctness-mathematical-intelligence-fhv-v1.md) |
 | Product completion specs | [`docs/waia-governance/PRODUCT-COMPLETION-SPEC-STANDARD.md`](docs/waia-governance/PRODUCT-COMPLETION-SPEC-STANDARD.md), [`docs/product-specs/`](docs/product-specs/) |
 | Gap registries | [`docs/gaps/GAP-REGISTRY-STANDARD.md`](docs/gaps/GAP-REGISTRY-STANDARD.md) |
 | Roadmaps (integration batches) | [`docs/roadmaps/ROADMAP-STANDARD.md`](docs/roadmaps/ROADMAP-STANDARD.md) |

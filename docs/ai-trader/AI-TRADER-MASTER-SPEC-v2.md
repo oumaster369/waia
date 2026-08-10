@@ -145,6 +145,8 @@ flowchart TB
 ### 8.2 Feature Engine
 A first-class Feature Engine sits between market data and the intelligence layers and owns feature computation and the `data_quality_score`. Backtest/live feature parity must be enforceable through it. Low data quality forces `PAPER_ONLY`.
 
+**DEE-518 amendment (Gate-D):** RV semantics use log-return variance `realizedVol20m_1m` (`feature-engine/rv/v2`); legacy price-level std is `priceDispersion20` only. See [LD-6 §4-MV amendment](amendments/DEE-518-LD-6-FORECAST-V2-MV-AMENDMENT.md) and [DEE-518 plan §2.2](../plans/dee-518-ai-trader-correctness-mathematical-intelligence-fhv-v1.md).
+
 ### 8.3 Market State Vector (MSV)
 The MSV is the canonical, reproducible representation of market reality: physics, liquidity, crowd, future-context blocks plus a `derived` block (regime, trading permission, risk multiplier, allowed strategy families, reason codes, data-quality score). It is stored with enough references to reproduce it later.
 
@@ -201,6 +203,7 @@ Central brain that aggregates the layers + account risk + strategy health + data
 ## 14. Execution Engine
 
 - Receives risk-approved requests; checks account status, trading permission, and strategy health; submits orders directly to the exchange; tracks order state; reconciles status and fills; cancels stale orders; handles retries; prevents duplicates via idempotency keys; persists all events.
+- **DEE-518 amendment:** `sum(canonical fills.qty) == order.filledQuantity == accounting consumed quantity`; symbol isolation on every fill path; authoritative checkpoint frontier digest (not zero placeholder). See [DEE-518 plan WP-EXEC-ACCT](../plans/dee-518-ai-trader-correctness-mathematical-intelligence-fhv-v1.md).
 - **Order state machine:** `CREATED → RISK_APPROVED → SENT_TO_EXCHANGE → ACCEPTED → PARTIALLY_FILLED → FILLED`, with `CANCEL_REQUESTED, CANCELLED, REJECTED, EXPIRED, FAILED, RECONCILIATION_REQUIRED`.
 - **Idempotency:** every order carries `client_order_id`, `idempotency_key`, `strategy_signal_id`, `risk_decision_id`, and `allocation_decision_id` (if applicable). Retries never create duplicate exposure.
 - **Recovery:** on startup, rebuild state from exchange + Supabase before resuming.

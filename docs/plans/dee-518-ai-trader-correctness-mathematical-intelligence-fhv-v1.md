@@ -118,11 +118,11 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: approved
-  currentWorkPackage: WP-CANON
-  completedWorkPackages: []
-  remainingWorkPackages:
+  status: in-progress
+  currentWorkPackage: WP-EXEC-ACCT
+  completedWorkPackages:
     - WP-CANON
+  remainingWorkPackages:
     - WP-EXEC-ACCT
     - WP-AUTHORITY
     - WP-FEATURE-RV
