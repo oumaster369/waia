@@ -90,8 +90,25 @@ export type {
 export {
   buildKillSwitchAuditMetadata,
   mapEffectiveStateToDecision,
+  mapKillFoldToDecision,
   type KillSwitchEnforcementResult,
 } from "@/lib/trader/risk/kill-switch-enforcement";
+export {
+  assertAuthorityChainStageOrdering,
+  assertExecutionWithinRiskAuthority,
+  assertHypothesisConfidenceNonAuthoritative,
+  AUTHORITY_CHAIN_STAGES,
+  AuthorityChainViolationError,
+  CAPITAL_AUTHORITY_CHAIN_VERSION,
+  clampRiskProposalDownwardOnly,
+  extractLegacyStrategyDiagnostics,
+  isV2CapitalAuthorityPath,
+  RiskImprovementForbiddenError,
+  V2_CAPITAL_AUTHORITY_PATH,
+  type AuthorityChainStage,
+  type CapitalAuthorityPath,
+  type LegacyStrategyDiagnostics,
+} from "@/lib/trader/risk/authority-chain";
 export {
   createPostgresRiskLimitsService,
   createRiskLimitsService,
