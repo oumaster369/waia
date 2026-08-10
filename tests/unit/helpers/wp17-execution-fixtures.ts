@@ -201,7 +201,7 @@ export function createWp17PersistencePort(
       if (isFirstSlice) {
         const fillTarget =
           compareDecimal(event.remainingQuantityAfter, "0") === 0 ? "FILLED" : "PARTIALLY_FILLED";
-        await repo.transitionOrder(context, {
+        const transitioned = await repo.transitionOrder(context, {
           orderId: current.id,
           expectedStateVersion: current.stateVersion,
           toState: fillTarget,
@@ -209,13 +209,13 @@ export function createWp17PersistencePort(
           avgFillPrice,
         });
         await repo.recordFill(context, payload);
-        return;
+        return transitioned;
       }
 
       await repo.recordFillProgress(context, payload as RecordFillProgressInput);
+      const updated = await latestOrder(context, current.id);
       if (compareDecimal(event.remainingQuantityAfter, "0") === 0) {
-        const updated = await latestOrder(context, current.id);
-        await repo.transitionOrder(context, {
+        return repo.transitionOrder(context, {
           orderId: updated.id,
           expectedStateVersion: updated.stateVersion,
           toState: "FILLED",
@@ -223,6 +223,7 @@ export function createWp17PersistencePort(
           avgFillPrice,
         });
       }
+      return updated;
     },
     async transitionOrderExpired(context, order) {
       const current = await latestOrder(context, order.id);

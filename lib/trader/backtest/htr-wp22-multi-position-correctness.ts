@@ -162,12 +162,7 @@ async function runHtrWp22MultiPositionReplay(input: {
     if (closedBar) {
       const persistence: HistoricalExecutionPersistencePort = {
         recordSimulatedFill: (context, order, event, isFirstSlice) =>
-          input.session.deps.execution.recordSimulatedFill!(
-            context,
-            order,
-            event,
-            isFirstSlice,
-          ).then(() => undefined),
+          input.session.deps.execution.recordSimulatedFill!(context, order, event, isFirstSlice),
         transitionOrderExpired: (context, order) =>
           input.session.deps.execution.transitionOrderExpired!(context, order),
         transitionOrderCancelled: (context, order) =>

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { bindHistoricalExecutionModelToSession } from "@/lib/trader/backtest/historical-execution-profile";
 import { UnsupportedHistoricalOrderTypeError } from "@/lib/trader/execution/historical-simulated-exchange";
+import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
+import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
   createAcceptedMarketOrder,
   createWp17PersistencePort,
@@ -57,8 +59,9 @@ describe("HTR-WP17 historical simulated exchange", () => {
     const events: string[] = [];
 
     const persistence = {
-      recordSimulatedFill: async () => {
+      recordSimulatedFill: async (_context: OrgContext, current: OrderRow) => {
         events.push("FILL");
+        return current;
       },
       transitionOrderExpired: async () => {
         events.push("EXPIRY");

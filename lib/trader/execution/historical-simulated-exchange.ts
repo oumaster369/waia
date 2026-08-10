@@ -50,13 +50,31 @@ export class InvalidBarVolumeError extends Error {
   }
 }
 
+export class SymbolMismatchFillRejectedError extends Error {
+  readonly code = "SYMBOL_MISMATCH_FILL_REJECTED" as const;
+
+  constructor(orderSymbol: string, barSymbol: string) {
+    super(`[trader] symbol mismatch fill rejected: order=${orderSymbol} bar=${barSymbol}`);
+    this.name = "SymbolMismatchFillRejectedError";
+  }
+}
+
+export class FillQuantityInvariantBreachError extends Error {
+  readonly code = "FILL_QUANTITY_INVARIANT_BREACH" as const;
+
+  constructor(orderId: string, message: string) {
+    super(`[trader] fill quantity invariant breach for order ${orderId}: ${message}`);
+    this.name = "FillQuantityInvariantBreachError";
+  }
+}
+
 export type HistoricalExecutionPersistencePort = {
   recordSimulatedFill(
     context: OrgContext,
     order: OrderRow,
     event: SimulatedFillEvent,
     isFirstSlice: boolean,
-  ): Promise<void>;
+  ): Promise<OrderRow>;
   transitionOrderExpired(context: OrgContext, order: OrderRow): Promise<OrderRow>;
   transitionOrderCancelled(context: OrgContext, order: OrderRow): Promise<OrderRow>;
   /** Finalize CANCELLED when repository row is already CANCEL_REQUESTED (breach cancel path). */
@@ -267,6 +285,9 @@ export function createHistoricalSimulatedExchange(
         !entry.pendingCancel;
 
       if (eligible && compareDecimal(entry.remainingQty, "0") > 0) {
+        if (closedBar.symbol !== entry.order.symbol) {
+          throw new SymbolMismatchFillRejectedError(entry.order.symbol, closedBar.symbol);
+        }
         const volume = requireFiniteNonNegativeVolume(closedBar.volume, closedBar.symbol);
         const rawCapacity = multiplyDecimal(volume, model.participationCapFraction);
         const roundedCapacity = floorToQuantityStep(rawCapacity, model.quantityStep);
@@ -299,9 +320,26 @@ export function createHistoricalSimulatedExchange(
               };
               fillEvents.push(event);
               const isFirstSlice = entry.fillSequence === 0;
-              await persistence.recordSimulatedFill(context, entry.order, event, isFirstSlice);
+              const freshOrder = await persistence.recordSimulatedFill(
+                context,
+                entry.order,
+                event,
+                isFirstSlice,
+              );
+              entry.order = freshOrder;
+              if (
+                compareDecimal(
+                  freshOrder.filledQuantity,
+                  addDecimal(entry.filledQty, candidateSlice),
+                ) !== 0
+              ) {
+                throw new FillQuantityInvariantBreachError(
+                  entry.order.id,
+                  `filledQuantity=${freshOrder.filledQuantity} expected=${addDecimal(entry.filledQty, candidateSlice)}`,
+                );
+              }
               entry.fillSequence = nextSequence;
-              entry.filledQty = addDecimal(entry.filledQty, candidateSlice);
+              entry.filledQty = freshOrder.filledQuantity;
               entry.remainingQty = remainingAfter;
               if (compareDecimal(entry.remainingQty, "0") === 0) {
                 openOrders.delete(entry.order.id);
@@ -323,6 +361,9 @@ export function createHistoricalSimulatedExchange(
           orderId: entry.order.id,
           fillSequence: entry.fillSequence,
           run: async () => {
+            if (!openOrders.has(entry.order.id)) {
+              return;
+            }
             const updated = await persistence.transitionOrderExpired(context, entry.order);
             entry.order = updated;
             openOrders.delete(entry.order.id);

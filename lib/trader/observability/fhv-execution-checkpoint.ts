@@ -113,7 +113,16 @@ export type FhvEpochCommitSnapshotDigests = Readonly<{
   evidenceFrontierDigest?: string;
   syntheticScaleAuthorityDigest?: string;
   executionConfigurationDigest?: string;
+  orderFillFrontierDigest?: string;
 }>;
+
+/** Authoritative digest over canonical consumed fill id sequence (not a zero placeholder). */
+export function computeOrderFillFrontierDigest(consumedFillIds: readonly string[]): string {
+  return computeStableJsonDigest({
+    schemaVersion: "fhv-order-fill-frontier/v1",
+    consumedFillIds: [...consumedFillIds],
+  });
+}
 
 export type FhvEpochCommitResult = Readonly<{
   epochId: number;
@@ -556,7 +565,8 @@ export async function commitFhvExecutionEpoch(input: {
     sourceCursorDigest: input.snapshotDigests.sourceCursorDigest,
     executionCheckpointDigest,
     evidenceFrontier: String(evidence.evidenceDurableThroughCycleIndex),
-    orderFillFrontier: "0".repeat(64),
+    orderFillFrontier:
+      input.snapshotDigests.orderFillFrontierDigest ?? computeOrderFillFrontierDigest([]),
     authorizationClaimDigest: input.authorizationClaim.authorizationClaimDigest,
     previousCommittedEpochDigest: input.previousEpochCommitDigest,
     checkpointRelativePath: bundle.checkpointRelativePath,

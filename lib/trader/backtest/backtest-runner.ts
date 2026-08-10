@@ -732,9 +732,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         if (historicalOpenCount > 0) {
           const persistence: HistoricalExecutionPersistencePort = {
             recordSimulatedFill: (context, order, event, isFirstSlice) =>
-              input.deps.execution.recordSimulatedFill!(context, order, event, isFirstSlice).then(
-                () => undefined,
-              ),
+              input.deps.execution.recordSimulatedFill!(context, order, event, isFirstSlice),
             transitionOrderExpired: (context, order) =>
               input.deps.execution.transitionOrderExpired!(context, order),
             transitionOrderCancelled: (context, order) =>
