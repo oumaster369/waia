@@ -144,7 +144,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Human plan approval (state.status -> approved) after C1-C8 scientific/identity/pre-holdout closure review; then /implement starting WP-CANON"
+  nextAction: "Human plan approval (state.status -> approved) after D1-D5 byte-exact digest closure review; then /implement starting WP-CANON"
 provenance:
   createdFrom: chat
   gateDRatificationSha: 1f10d4eebce23f92dccb3d550e8dc10812d26a9e
@@ -153,6 +153,7 @@ provenance:
   purposeEpistemicGuardianClosure: "P1/P2/P3/E1/E2/N1/G1 applied (2026-08-10); prior commit 2bf582c"
   bootstrapRngSizingPolicyClosure: "B1/B2/B3/B4/B5 applied (2026-08-10); prior commit c3ce72c"
   scientificIdentityPreHoldoutClosure: "C1/C2/C3/C4/C5/C6/C7/C8 applied (2026-08-10); prior commit f5d0aeb"
+  byteExactDigestClosure: "D1/D2/D3/D4/D5 applied (2026-08-10); prior commit 93542c5"
   supersedes: null
 ---
 
@@ -433,7 +434,7 @@ If Human proves unreviewable: DEE-512 spawns INTEGRATION-A (WP-EXEC-ACCT…WP-CO
 - Storage-scale test PASS
 - No per-sample forecast table
 - Authority firewalls (§1.20–§1.21) encoded and tested
-- Epistemic replica + canonical pool + identity DAG contracts (§2.4.0–§2.4.2, §2.10, §4.1) encoded
+- Epistemic replica + canonical pool + identity DAG + byte-exact nested digests (§2.4.0–§2.4.2, §2.10–§2.11, §4.1) encoded
 - `stationary-bootstrap/v1` + byte-exact `WAIA_RANDOM_BLOCK_V1` (§2.4.0, §2.6) encoded
 - Sizing/allocation authority + executable-policy identity documented (§1.23–§1.24)
 - FHV-v1 Guardian disposition (§1.22) documented; mature Position Reassessment NOT claimed as FHV-v1 PASS
@@ -895,7 +896,7 @@ For every `(symbol, h, state, replica_k)` pool:
 | State assignment version | `rv-state-tertile/v1` using replica `k`'s sealed edges |
 | Outcome vector serialization | Fixed 13 × scale-8 HALF_UP canonical strings, UTF-8, `\n`-joined, for digest only |
 | Pool length | `n_pool` after eligibility filter on bootstrap multiset `D_k` |
-| Pool semantic digest | `SHA-256("pool/v2" ‖ replica_ordinal ‖ identity fields ‖ ordered (resample_position_ordinal, source_anchor_id) pairs ‖ outcome serialization stream)` |
+| Pool semantic digest | See **§2.11.4** `pool_semantic_digest` (exact byte stream — no placeholder fields) |
 | Reconstruction | Qualified DEVELOPMENT SOURCE corpus + exact `bootstrap_root_k` + `stationary-bootstrap/v1` + feature/outcome/state versions → identical replica sequence / pools / digests |
 | Verification before sampling | Recompute `pool_semantic_digest`; mismatch → `FORECAST_POOL_REPLAY_MISMATCH` fail closed |
 
@@ -910,7 +911,56 @@ For every `(symbol, h, state, replica_k)` pool:
 
 Decode IEEE-754 binary64 to exact rational `(sign, mantissa, exponent2)`; value = `sign * mantissa * 2^exponent2`; multiply by `10^8`; integer HALF_UP (ties away from zero); emit fixed 8-decimal canonical string. Reject non-finite.
 
-**Scope boundary:** `quantizeScale8HalfUp/v1` applies **only** to Forecast generative canonicalization and sealed distribution digests. It does **not** replace existing Risk/execution arithmetic.
+**Scope boundary:** `quantizeScale8HalfUp/v1` applies **only** to Forecast generative canonicalization and sealed distribution digests (§2.5.2). It does **not** replace existing Risk/execution arithmetic.
+
+### 2.5.2 `distribution_semantic_digest` (D2 — Gate-D + quantizer amendment)
+
+**Ratified encoding choice:** **B — `quantizeScale8HalfUp/v1` canonical scale-8 strings** (NOT raw IEEE-754 float64-BE). Gate-D Human ratification (2026-08-09) plus DEE-516/DEE-518 C1 quantizer amendment explicitly scopes the HALF_UP quantizer to Forecast generative seals and `distribution_semantic_digest`. Risk/execution paths remain separate (§2.5.1).
+
+**Contract version:** `dist-sem-v1`
+
+**Streaming SHA-256 procedure** (generate → hash → persist digest → discard ephemeral samples):
+
+1. **Header block** — UTF-8 bytes, one field per line, `\n` terminated, no empty lines:
+
+```
+dist-sem-v1
+forecast_generation_identity_digest_hex
+predictive_package_content_digest_hex
+K
+M
+S
+component_layout_version
+normalization_version_digest_hex
+quantizer_version
+target_role_id
+```
+
+- `forecast_generation_identity_digest_hex` = lowercase hex of 32-byte binary digest (64 ASCII chars; no `0x`).
+- `predictive_package_content_digest_hex` = same hex rule.
+- `K`, `M`, `S` = decimal ASCII integers (`S = K·M`).
+- `component_layout_version` = `exec-opp-13d-v1` (frozen component order §2.3).
+- `normalization_version_digest_hex` = hex of 32-byte digest (energy-mc normalization binding).
+- `quantizer_version` = `quantizeScale8HalfUp/v1`.
+- `target_role_id` = `EXECUTION_OPPORTUNITY` or `TERMINAL_RETURN` as applicable.
+
+2. **Sample component stream** — nested loop order **fixed**:
+
+```
+for k = 0 .. K-1:
+  for m = 0 .. M-1:
+    for c = 0 .. 12:
+      append UTF-8 bytes of quantizeScale8HalfUp/v1(sample[k,m,c])
+      append 0x0A
+```
+
+Component index `c` maps to §2.3 order: `R_1,R_2,R_3,R_h,R_{h+1},R_{h+2},R_{h+3},V_1,V_2,V_3,V_{h+1},V_{h+2},V_{h+3}`.
+
+3. **Finalize:** `distribution_semantic_digest = SHA256(header ‖ component_stream)`.
+
+**Replay rule:** At consumption, regenerate samples with identical `(forecast_generation_identity_digest, K, M, aleatoric roots)` → recompute stream → **`regenerated_distribution_semantic_digest == sealed_distribution_semantic_digest`** or fail closed **`FORECAST_DISTRIBUTION_REPLAY_MISMATCH`**.
+
+**Forbidden:** raw float64-BE in semantic stream; JSON serialization; executor choice between encodings; persisting per-sample rows.
 
 ### 2.5.1 Current Risk/execution numeric semantics (verified `lib/trader/risk/numeric.ts` + execution paths — HPA-5)
 
@@ -1042,17 +1092,93 @@ Scientific admission p-values and significance bootstraps use the **same** `stat
 | Retry | `retry_u32` for `UNBIASED_INT` rejection |
 | Block length | `L = smallest positive integer with L^3 >= n` (integer-exact; §2.4.0) |
 
-**Trial identity:** `trial_identity_digest_32` binds trial registration id, comparison series identity (pairwise challenger/baseline ids, metric definition, anchor set digest, purge/embargo `h`), and WF_PREDICTIVE/WF_ECONOMIC partition receipt when applicable — so two different comparisons cannot reuse the same resample address surface.
+**Trial identity:** See **§2.11.5** `trial_identity_digest_32` (exact `trial-id/v1` serialization — not prose binding).
 
-**Forbidden:** `SHA256(trial_id) mod 2^32`; library default RNG; floating `cbrt` for L; any bootstrap implementation other than `stationary-bootstrap/v1` + `WAIA_RANDOM_BLOCK_V1`.
+**Forbidden:** `SHA256(trial_id) mod 2^32`; library default RNG; floating `cbrt` for L; any bootstrap implementation other than `stationary-bootstrap/v1` + `WAIA_RANDOM_BLOCK_V1`; executor-selected JSON for trial identity.
 
-**Known-answer tests:** prefix byte vectors (§2.6); `n=1,8,9,27,28` L boundaries; identical `trial_identity_digest` ⇒ identical resample index vectors across `B` resamples.
+**Known-answer tests:** prefix byte vectors (§2.6); `n=1,8,9,27,28` L boundaries; identical `trial_identity_digest_32` ⇒ identical resample index vectors across `B` resamples; trial-id/v1 byte vectors (§2.11.5).
 
-### 2.7 Scoring streams
+### 2.7 Scoring streams (D3 — byte-exact CRN authority)
 
-- `scoring_stream_identity_digest` = contract identity hash
-- `scoring_stream_semantic_digest` = streaming hash of actual uint53 numerators `U_s[d]` for `s=0..S-1`, `d=0..D_SCORE_MAX-1` (`D_SCORE_MAX=16`; index 0 = replica selection) drawn via domain **`SCORECRN1`**
-- **Do not hash scale-8-quantized uniforms for RNG verification**
+**Contract versions:** `score-base/v1`, `score-stream-id/v1`, `score-stream-sem/v1`
+
+#### Step 1 — `score_base_seed` (model-independent)
+
+Computed **before** any challenger/model identity. Canonical UTF-8 `\n`-terminated lines:
+
+```
+score-base/v1
+scoring_contract_version
+evaluation_partition_receipt_digest_hex
+venue
+market
+symbol
+primary_horizon_minutes
+anchor_closed_bar_epoch_ms
+target_definition_digest_hex
+component_layout_version
+normalization_version_digest_hex
+```
+
+| Field | Rule |
+|-------|------|
+| `scoring_contract_version` | `energy-mc/v1` |
+| `evaluation_partition_receipt_digest_hex` | 64-char lowercase hex of partition receipt (WF_PREDICTIVE for STAGE-A scoring) |
+| `anchor_closed_bar_epoch_ms` | int64 decimal ASCII |
+| `target_definition_digest_hex` | execution-opportunity target definition for joint 13-D scoring |
+| `component_layout_version` | `exec-opp-13d-v1` |
+
+**MUST EXCLUDE:** challenger id; model_transform_version; package content digest; any model-specific artifact digest.
+
+`score_base_seed = SHA256(canonical_byte_stream)` → 32 bytes.
+
+#### Step 2 — `scoring_stream_identity_digest`
+
+```
+score-stream-id/v1
+score_base_seed_hex
+scoring_stream_contract_version
+S
+D_SCORE_MAX
+component_layout_version
+normalization_version_digest_hex
+```
+
+| Field | Frozen value |
+|-------|--------------|
+| `score_base_seed_hex` | 64-char hex of `score_base_seed` |
+| `scoring_stream_contract_version` | `score-stream/v1` |
+| `S` | decimal ASCII (`S = K·M`) |
+| `D_SCORE_MAX` | `16` |
+
+`scoring_stream_identity_digest = SHA256(canonical_byte_stream)`.
+
+#### Step 3 — CRN draw addressing
+
+For each `(s, d)` with `s ∈ {0..S-1}`, `d ∈ {0..D_SCORE_MAX-1}`:
+
+- `score_root = SHA256( score_root_prefix_16 ‖ scoring_stream_identity_digest_32 )`
+- Draw via domain **`SCORECRN1`**: `replica_u32 = s`, `sample_u32 = d`, `draw_u32 = 0`, `retry_u32` rejection loop
+- `U_s[d] = (uint64_be(block[0:8]) >> 11) / 2^53` — exact uint53 numerator semantics below
+
+**Index 0 (`d=0`)** = replica-selection CRN coordinate (Gate-D F2 recovered). Every compared model at the same anchor consumes **identical** `(s,d)` addresses; unused dimensions are ignored by the scorer but still hashed for replay verification.
+
+#### Step 4 — `scoring_stream_semantic_digest`
+
+Streaming SHA-256 over **actual uint53 numerators** (NOT scale-8 quantized uniforms):
+
+```
+for s = 0 .. S-1:
+  for d = 0 .. D_SCORE_MAX-1:
+    numerator_u53 = floor(U_s[d] * 2^53)   // exact integer in [0, 2^53-1]
+    append uint64_be(numerator_u53)
+```
+
+`scoring_stream_semantic_digest = SHA256(numerator_stream)`.
+
+**Replay:** Identical `scoring_stream_identity_digest` + qualified runtime → identical `scoring_stream_semantic_digest`. Mismatch → fail closed **`SCORING_STREAM_REPLAY_MISMATCH`**.
+
+**Forbidden:** mutable RNG; model-dependent score base; hashing scale-8 quantized uniforms; executor-selected JSON for identity digests.
 
 ### 2.8 energy-mc/v1
 
@@ -1105,7 +1231,7 @@ For each `k ∈ {0..K-1}`:
 
 1. `bootstrap_root_k = SHA256( bootstrap_root_prefix_16 ‖ predictive_package_generation_identity_digest_32 ‖ uint32_be(k) )`
 2. Run `stationary-bootstrap/v1` on DEVELOPMENT SOURCE corpus `D`
-3. Refit; seal `replica_artifact_digest_k` (includes `bootstrap_root_k`, edges, pool digests, counts — **not** parent content digest)
+3. Refit; seal `replica_artifact_digest_k` per **§2.11.3** (exact artifact serialization)
 
 **Package refit invalidation (C4):** if any replica has non-finite `q1/q2`, `q1_k >= q2_k`, corrupt pool digest, or invalid bootstrap reconstruction → package **`FORECAST_EPISTEMIC_REPLICA_INVALID`**; not scientifically admissible.
 
@@ -1137,9 +1263,12 @@ primary_horizon_minutes
 execution_horizon_minutes
 terminal_target_role_id
 execution_target_role_id
-replica_set_identity_digest
-runtime_contract_digest
+runtime_contract_digest_hex
 ```
+
+**Design note (D1):** `replica_set_identity_digest` **removed** — redundant with ordered replica artifacts already bound in `predictive_package_content_digest`; avoids circular/redundant semantics.
+
+**`runtime_contract_digest_hex`** — 64-char lowercase hex of §2.11.2 digest (pre-generation qualified runtime tuple only).
 
 **MUST EXCLUDE:** `distribution_semantic_digest`; `forecast_content_digest`; any field derived from generated aleatoric samples.
 
@@ -1173,6 +1302,169 @@ development_dataset_digest
 ```
 
 **Fail-closed:** any cycle detection in identity construction → `FORECAST_IDENTITY_DAG_CYCLE`.
+
+### 2.11 Byte-exact nested digest contracts (D1–D4)
+
+No authority-critical digest may use placeholder prose (`identity fields`, `contract identity`, etc.). All digests below use **SHA-256** over the exact byte streams defined. Digest-valued fields embed as **32-byte binary** unless a field explicitly says `_hex` (64 lowercase ASCII hex chars).
+
+#### 2.11.1 Field encoding rules (all §2.11 digests)
+
+| Type | Encoding |
+|------|----------|
+| Version prefix line | UTF-8 ASCII + `\n` |
+| Enum/string ids | UTF-8 ASCII + `\n`; MUST NOT contain `\n` in value |
+| uint32 | decimal ASCII + `\n` |
+| int64 epoch ms | decimal ASCII + `\n` |
+| scale-8 decimal | `quantizeScale8HalfUp/v1` canonical string UTF-8 + `\n` |
+| 32-byte digest inline | raw 32 bytes (no hex) when field name has no `_hex` suffix |
+| 32-byte digest hex | 64 lowercase hex chars + `\n` when field name ends `_hex` |
+
+#### 2.11.2 `runtime_contract_digest`
+
+Binds **only** values known before Forecast generation (OG-HOST-QUAL qualified tuple subset). **Excludes** forecast output digests and per-issuance samples.
+
+Canonical stream (`runtime-contract/v1`):
+
+```
+runtime-contract/v1
+os_class
+arch
+node_version_exact
+code_release_sha
+sampler_contract_version
+model_transform_version
+quantizer_version
+energy_mc_version
+```
+
+| Field | Example / rule |
+|-------|----------------|
+| `sampler_contract_version` | `waia-cbrng/sha256-ctr/v1` |
+| `quantizer_version` | `quantizeScale8HalfUp/v1` |
+| `energy_mc_version` | `energy-mc/v1` |
+
+`runtime_contract_digest = SHA256(canonical_byte_stream)`.
+
+Included in `forecast_generation_identity_digest` as lowercase hex line (64 chars).
+
+#### 2.11.3 `replica_artifact_digest_k` (`rv-state-conditional-empirical-joint/v1`)
+
+Exact artifact byte stream (`replica-artifact/v1`); **no JSON**:
+
+```
+replica-artifact/v1
+model_transform_version
+replica_ordinal_dec
+symbol
+primary_horizon_minutes_dec
+fit_partition
+L_block_dec
+bootstrap_root_k_raw32
+q1_scale8
+q2_scale8
+state_edges_version
+n_S0_dec
+n_S1_dec
+n_S2_dec
+pool_semantic_digest_S0_raw32
+pool_semantic_digest_S1_raw32
+pool_semantic_digest_S2_raw32
+```
+
+| Field | Encoding |
+|-------|----------|
+| `replica_ordinal_dec` | decimal ASCII + `\n` |
+| `fit_partition` | ASCII `development` + `\n` |
+| `L_block_dec` | decimal ASCII + `\n` |
+| `bootstrap_root_k_raw32` | exactly 32 bytes immediately after newline of prior field (no line terminator inside) |
+| `q1_scale8`, `q2_scale8` | quantizeScale8HalfUp/v1 + `\n` |
+| `state_edges_version` | `type7-tertile/v1` + `\n` |
+| `n_S*_dec` | decimal ASCII + `\n` |
+| `pool_semantic_digest_S*_raw32` | each exactly 32 bytes concatenated in order S0,S1,S2 |
+
+`replica_artifact_digest_k = SHA256(entire_stream)`.
+
+#### 2.11.4 `pool_semantic_digest`
+
+Exact pool byte stream (`pool-sem/v1`) for `(symbol, h, replica_k, state)`:
+
+```
+pool-sem/v1
+organization_id
+venue
+market
+symbol
+primary_horizon_minutes_dec
+replica_ordinal_dec
+state_id
+feature_version
+outcome_version
+state_assignment_version
+development_dataset_digest_raw32
+n_pool_dec
+```
+
+Then for each observation **`j` ascending `resample_position_ordinal`** (post state-filter):
+
+```
+resample_position_ordinal_dec
+closed_bar_epoch_ms_dec
+venue
+market
+symbol
+outcome_13d_block
+```
+
+| Subfield | Rule |
+|----------|------|
+| `state_id` | `S0`, `S1`, or `S2` + `\n` |
+| `outcome_version` | `exec-opp-outcome/v1` + `\n` |
+| `state_assignment_version` | `rv-state-tertile/v1` + `\n` |
+| `development_dataset_digest_raw32` | 32 bytes |
+| `outcome_13d_block` | 13 lines × scale-8 HALF_UP canonical strings, UTF-8, each line `\n`-terminated (same as §2.4.2) |
+
+`pool_semantic_digest = SHA256(entire_stream)`.
+
+**Bounded replay:** pools reconstructed from DEVELOPMENT SOURCE + `bootstrap_root_k` + §2.4.0; digest recomputed before sampling.
+
+#### 2.11.5 `trial_identity_digest_32` (D4)
+
+Exact trial identity (`trial-id/v1`); seeds validation bootstrap root:
+
+```
+trial-id/v1
+trial_registration_id
+challenger_package_content_digest_hex
+challenger_model_transform_version
+baseline_id
+baseline_version
+score_metric_id
+score_metric_version
+symbol
+primary_horizon_minutes_dec
+evaluation_partition_receipt_digest_hex
+common_anchor_set_digest_hex
+purge_duration_minutes_dec
+embargo_duration_minutes_dec
+comparison_family_id
+holm_family_index_dec
+```
+
+| Field | Rule |
+|-------|------|
+| `challenger_package_content_digest_hex` | 64-char hex |
+| `baseline_id` | e.g. `empirical-joint/v1` |
+| `score_metric_id` | e.g. `log-score/v1` or `energy-mc/v1` |
+| `evaluation_partition_receipt_digest_hex` | WF_PREDICTIVE receipt for STAGE-A trials |
+| `common_anchor_set_digest_hex` | SHA-256 hex of ordered anchor id list |
+| `comparison_family_id` | binds Holm family scope |
+| `holm_family_index_dec` | decimal ASCII index within family |
+
+`trial_identity_digest_32 = SHA256(canonical_byte_stream)`.
+
+`validation_bootstrap_root = SHA256( validation_bootstrap_root_prefix_16 ‖ trial_identity_digest_32 )`.
+
+**Known-answer tests:** fixed `trial-id/v1` byte vector → fixed digest; distinct comparison family → distinct bootstrap root.
 
 ---
 
@@ -1361,7 +1653,7 @@ development_dataset_digest
 
 **Current seams:** migrations 0082/0102 (V1), `build-forecast-records.ts`, `calibration-scorer.ts`.
 
-**Design:** Implement migrations 0110–0129 (§1.10). Package-level `bytea` artifacts ≤64KiB/replica. Per-forecast compact seal with `distribution_semantic_digest`. Non-circular identity DAG (§2.10). `trader_forecast_predictive_package_target_v2` two-role binding. `quantizeScale8HalfUp/v1` + byte-exact `WAIA_RANDOM_BLOCK_V1` (§2.6) + `stationary-bootstrap/v1` (§2.4.0). No `trader_forecast_exec_sample_v2`. Terminal = deterministic projection of package onto `R_h`. **Epistemic replicas** = DEVELOPMENT `stationary-bootstrap/v1` refits; **canonical pools** with SOURCE vs bootstrap multiplicity (§2.4.2). Fixed-K fail-closed (§4.1). Heuristic hypothesis confidence is **not** a Forecast V2 probability input (§1.21).
+**Design:** Implement migrations 0110–0129 (§1.10). Package-level `bytea` artifacts ≤64KiB/replica. Per-forecast compact seal with `distribution_semantic_digest` (§2.5.2). Non-circular identity DAG (§2.10) + byte-exact nested digests (§2.11). `trader_forecast_predictive_package_target_v2` two-role binding. `quantizeScale8HalfUp/v1` + byte-exact `WAIA_RANDOM_BLOCK_V1` (§2.6) + `stationary-bootstrap/v1` (§2.4.0). No `trader_forecast_exec_sample_v2`. Terminal = deterministic projection of package onto `R_h`. **Epistemic replicas** = DEVELOPMENT `stationary-bootstrap/v1` refits; **canonical pools** with SOURCE vs bootstrap multiplicity (§2.4.2). Fixed-K fail-closed (§4.1). Heuristic hypothesis confidence is **not** a Forecast V2 probability input (§1.21).
 
 **Fail-closed:** `FORECAST_DISTRIBUTION_REPLAY_MISMATCH`, `FORECAST_MODEL_ARTIFACT_DIGEST_MISMATCH`, `EXEC_OPP_NORMALIZATION_DEGENERATE_COMPONENT`, `FORECAST_RUNTIME_QUALIFICATION_MISMATCH`.
 
@@ -1770,7 +2062,7 @@ For each `(symbol, primary_horizon)` predictive package:
 4. Execution Opportunity scoring (`energy-mc/v1`) consumes the **same** joint sample set.
 5. **No Decision-side probability reconciliation** exists.
 6. Package is PIT-safe; model fitting uses DEVELOPMENT partition only.
-7. Sampler/artifact/replay semantics are fully frozen (`stationary-bootstrap/v1`, `WAIA_RANDOM_BLOCK_V1` §2.6, `quantizeScale8HalfUp/v1`, `distribution_semantic_digest`).
+7. Sampler/artifact/replay semantics are fully frozen (`stationary-bootstrap/v1`, `WAIA_RANDOM_BLOCK_V1` §2.6, `quantizeScale8HalfUp/v1`, `distribution_semantic_digest` §2.5.2, nested digests §2.11).
 8. A package that reaches STAGE-A predictive pass may become `FROZEN_SELECTED_PACKAGE_READY` **only after** `HUMAN_FHV_EXECUTABLE_POLICY_V1` + STAGE-B `ECONOMIC_UTILITY_PASS` (§1.19).
 
 Any challenger marked `EXECUTOR_READY` must satisfy all eight points.
@@ -1794,7 +2086,7 @@ Full-joint conditional empirical challenger with **Gate-D epistemic bootstrap re
 | Terminal marginal | `R_h` component of **the same** joint samples for replica k; bucket masses from empirical frequencies of those samples |
 | Execution Opportunity | Complete 13-D samples from the **same** replica-k sample stream |
 | Coherence | Unit test: per sealed issuance, terminal bucket masses = `R_h` marginal of joint samples within `1e-12` |
-| Artifact schema (≤64KiB / replica) | `{q1,q2,state_edges_version:"type7-tertile/v1", pool_digest_S0,S1,S2, n_S0,n_S1,n_S2, bootstrap_root_k, L_block, symbol, h, fit_partition:"development", replica_ordinal}` |
+| Artifact schema (≤64KiB / replica) | Sealed via **§2.11.3** `replica_artifact_digest_k` fields (edges, pool digests, `bootstrap_root_k`, counts) |
 | model_transform_version | `rv-state-conditional-empirical-joint/v1` |
 | Parent package seal | `K` replica artifacts + package digest over ordered replica digests; no shared single-pool shortcut |
 | Scoring | Same harness protocol; comparable to unconditional `empirical-joint/v1` on common PIT-valid anchors |
@@ -1845,14 +2137,23 @@ Parametric joint location-scale model beyond empirical baselines requires additi
 | `trader_forecast_outcome_v2` | **PER COMPLETE BUNDLE** | 2 rows / bundle (one per forecast) |
 | `trader_forecast_calibration_observation_v2` | **PER COMPLETE BUNDLE** | 2 rows / bundle (one per forecast role) |
 | `trader_forecast_scenario_v2` | **PER TERMINAL FORECAST** | 7 rows / bundle (Human-ratified 7-bucket grid; terminal forecast only) |
-| `trader_forecast_target_definition_v2` | **FIXED PER PACKAGE** | 2 target definitions / admitted package (terminal + execution roles) |
-| `trader_forecast_target_bucket_v2` | **FIXED PER TARGET DEFINITION** | 7 buckets × 2 targets = 14 rows / package (NOT multiplied per bundle) |
+| `trader_forecast_target_definition_v2` | **FIXED PER PACKAGE** | 2 target definitions / admitted package: `TERMINAL_RETURN` (`DISCRETE_SCENARIO`) + `EXECUTION_OPPORTUNITY` (`SAMPLE_ENSEMBLE`) |
+| `trader_forecast_target_bucket_v2` | **FIXED PER TARGET DEFINITION (DISCRETE_SCENARIO only)** | **7 rows TOTAL** per `(symbol,h)` package/cell — **Terminal only**; **0** EO bucket rows (`SAMPLE_ENSEMBLE` has no discrete buckets) |
 | `trader_forecast_predictive_package_v2` | **FIXED PER PACKAGE** | 1 row / admitted package |
 | `trader_forecast_predictive_package_target_v2` | **FIXED PER PACKAGE** | 2 binding rows / package |
 | `trader_forecast_replica_artifact_v2` | **FIXED PER PACKAGE** | `K_max = 50` rows × 65536 bytes each |
 | Research/pattern/knowledge tables (`0130`–`0137`) | **FIXED GLOBAL / OUT OF SCOPE** | Not included in bundle projection |
 
-**Exact proportional rows per complete bundle (worst-case):** `1 + 2 + 2 + 2 + 7 = 14` relational rows. **No `<=` cardinality** in the scale fixture.
+**Target representation semantics (D5 — reconciled with V2 DDL):**
+
+| Target role | `representation_kind` | Bucket rows in `trader_forecast_target_bucket_v2` |
+|-------------|----------------------|---------------------------------------------------|
+| `TERMINAL_RETURN` | `DISCRETE_SCENARIO` | **7** (Human-ratified quantile grid) |
+| `EXECUTION_OPPORTUNITY` | `SAMPLE_ENSEMBLE` | **0** — 13-D generative distribution; **no fabricated discrete buckets** |
+
+Per `(symbol,h)` active package/cell fixed rows: **2** target definitions + **7** target-bucket rows + package/bindings/replicas (PHASE 2). **Do not** multiply target-definition buckets per Forecast bundle.
+
+**PHASE 1 proportional rows (unchanged — per-Forecast scenarios ≠ target-definition buckets):** 1 bundle + 2 forecasts + 2 outcomes + 2 calibration + **7 terminal scenario rows** = **14** proportional rows/bundle (`trader_forecast_scenario_v2` attaches to terminal Forecast only).
 
 **Enumerated surfaces in `B0` / `B1` / projection:** all Forecast V2 tables above + their indexes + TOAST for bytea/json fields; RLS policies excluded from byte measurement.
 
@@ -1882,7 +2183,7 @@ Fresh DB; insert worst-case active package set:
 
 - 4 cells (2 symbols × 2 primary horizons) × 1 admitted package each
 - `K_max = 50` replica artifacts × 65536 bytes = **`3_276_800` bytes** replica payload per package (exact; no unexplained +2 slots)
-- 14 target-bucket rows + 2 target definitions + package/bindings as classified above
+- **7** target-bucket rows (Terminal `DISCRETE_SCENARIO` only) + **2** target definitions + package/bindings per cell
 
 Measure `package_fixed_contribution` (includes replica bytea TOAST). **Separate named overhead budget** (indexes/metadata slack) MAY be recorded in receipt but MUST NOT be labeled as unexplained “raw artifact margin.”
 
@@ -1980,8 +2281,14 @@ where `enumerated_fixed_V2_other` is receipt-enumerated global/research metadata
 | Position Reassessment PRE-HOLDOUT not post-DEE-541 (C7) | ✓ (§1.22) |
 | Storage fixture exact worst-case 14 rows/bundle (C8) | ✓ (§5) |
 | Artifact cap `50×65536 = 3_276_800` exact (C8) | ✓ (§1.12, §5) |
+| No authority-critical digest placeholders (D1) | ✓ (§2.11) |
+| `distribution_semantic_digest` quantizeScale8HalfUp/v1 (D2) | ✓ (§2.5.2) |
+| Scoring CRN model-independent byte-exact (D3) | ✓ (§2.7) |
+| `trial_identity_digest_32` byte-exact (D4) | ✓ (§2.11.5) |
+| EO has 0 target-bucket rows; 7 Terminal only (D5) | ✓ (§5) |
+| PHASE-1 vs PHASE-2 storage rows distinct (D5) | ✓ (§5) |
 
-**C1–C8 closure complete. No unresolved plan blocker identified for Human approval of scientific/identity/pre-holdout contracts.**
+**D1–D5 closure complete. C1–C8 preserved. No unresolved plan blocker identified for Human approval.**
 
 ---
 
