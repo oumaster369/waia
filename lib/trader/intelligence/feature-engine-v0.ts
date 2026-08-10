@@ -128,8 +128,59 @@ export type ComputeFeatureSnapshotInput = {
   newId?: () => string;
 };
 
+export const FEATURE_ENGINE_RV_VERSION = "feature-engine/rv/v2" as const;
+
+function logReturn(closePrev: string, closeCurr: string): string | null {
+  const prev = Number(closePrev);
+  const curr = Number(closeCurr);
+  if (!Number.isFinite(prev) || !Number.isFinite(curr) || prev <= 0 || curr <= 0) {
+    return null;
+  }
+  const logRet = Math.log(curr / prev);
+  return formatDecimal(parseDecimal(logRet.toFixed(8)));
+}
+
+function computeRealizedVar20m1m(bars: readonly Bar[], end: number): string {
+  if (end < SMA_WINDOW + 1) {
+    return "UNAVAILABLE";
+  }
+  const windowStart = end - (SMA_WINDOW + 1);
+  for (let index = windowStart + 1; index < end; index += 1) {
+    const prevOpenMs = Date.parse(bars[index - 1]!.barOpenTime);
+    const currOpenMs = Date.parse(bars[index]!.barOpenTime);
+    if (
+      !Number.isFinite(prevOpenMs) ||
+      !Number.isFinite(currOpenMs) ||
+      currOpenMs - prevOpenMs !== ONE_MINUTE_MS
+    ) {
+      return "UNAVAILABLE";
+    }
+    if (logReturn(bars[index - 1]!.close, bars[index]!.close) === null) {
+      return "UNAVAILABLE";
+    }
+  }
+  let sumSq = 0;
+  for (let index = windowStart + 1; index < end; index += 1) {
+    const r = logReturn(bars[index - 1]!.close, bars[index]!.close)!;
+    sumSq += Number(r) ** 2;
+  }
+  return formatDecimal(parseDecimal(sumSq.toFixed(8)));
+}
+
+function computeRealizedVol20m1m(realizedVar: string): string {
+  if (realizedVar === "UNAVAILABLE") {
+    return "UNAVAILABLE";
+  }
+  const varNum = Number(realizedVar);
+  if (!Number.isFinite(varNum) || varNum < 0) {
+    return "UNAVAILABLE";
+  }
+  return formatDecimal(parseDecimal(Math.sqrt(varNum).toFixed(8)));
+}
+
 /**
  * Feature Engine v0 — computes features and owns {@link FeatureSnapshot.dataQualityScore}.
+ * RV semantics: {@link FEATURE_ENGINE_RV_VERSION}.
  */
 export function computeFeatureSnapshot(input: ComputeFeatureSnapshotInput): FeatureSnapshot {
   const { bars, quote } = input;
@@ -144,12 +195,14 @@ export function computeFeatureSnapshot(input: ComputeFeatureSnapshotInput): Feat
   const start = Math.max(0, end - SMA_WINDOW);
   const close = bars[end - 1]!.close;
   const sma20 = end > start ? meanClose(bars, start, end) : close;
-  // One stddev for both realized vol and z-score (identical window/mean).
-  const realizedVol20 = sampleStdDevClose(bars, start, end, sma20);
+  const priceDispersion20 = sampleStdDevClose(bars, start, end, sma20);
+  const realizedVol20 = priceDispersion20;
   const zscoreVsSma20 =
-    compareDecimal(realizedVol20, "0") === 0
+    compareDecimal(priceDispersion20, "0") === 0
       ? "0"
-      : divideDecimal(subtractDecimal(close, sma20), realizedVol20);
+      : divideDecimal(subtractDecimal(close, sma20), priceDispersion20);
+  const realizedVar20m_1m = computeRealizedVar20m1m(bars, end);
+  const realizedVol20m_1m = computeRealizedVol20m1m(realizedVar20m_1m);
   const spreadBps = computeSpreadBps(quote);
   const quality = computeDataQualityScore(bars, quote, evaluatedAtMs);
 
@@ -162,6 +215,9 @@ export function computeFeatureSnapshot(input: ComputeFeatureSnapshotInput): Feat
       sma20,
       zscoreVsSma20,
       realizedVol20,
+      priceDispersion20,
+      realizedVar20m_1m,
+      realizedVol20m_1m,
       spreadBps,
     },
     dataQualityScore: quality.score,

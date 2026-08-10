@@ -55,7 +55,14 @@ export type FeatureVector = {
   close: string;
   sma20: string;
   zscoreVsSma20: string;
+  /** @deprecated Use priceDispersion20 — legacy price-level std mislabeled as vol */
   realizedVol20: string;
+  /** Price-level sample std over SMA window (not log-return RV). */
+  priceDispersion20?: string;
+  /** Sum of squared 1m log returns over PIT window (t-20m, t]; UNAVAILABLE if gaps. */
+  realizedVar20m_1m?: string;
+  /** sqrt(realizedVar20m_1m); no demeaning, no annualization. */
+  realizedVol20m_1m?: string;
   spreadBps: string;
 };
 
