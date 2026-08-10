@@ -118,7 +118,7 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: draft
+  status: approved
   currentWorkPackage: WP-CANON
   completedWorkPackages: []
   remainingWorkPackages:
@@ -144,10 +144,15 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Human plan approval (state.status -> approved) after F3 K/M anchor-selection + winner-selection contract restoration review; then /implement starting WP-CANON"
+  nextAction: "Implementation authorized — begin WP-CANON / DEE-519 on branch dee-518-ai-trader-correctness-mathematical-intelligence-fhv-v1"
 provenance:
   createdFrom: chat
   gateDRatificationSha: 1f10d4eebce23f92dccb3d550e8dc10812d26a9e
+  humanPlanApprovalDate: "2026-08-10"
+  humanPlanApprovalCommit: df6e02b7375a886e45569158c9b15bdcb3d0696a
+  humanPlanApprovalSha256: 02c55a578333d182f7632946230b6f01662430ba5462d95c115cd6199c71a909
+  humanPlanApprovalLinearComment: c7b3901a-3cb3-45dc-8f9a-ff73f56ed520
+  humanPlanApprovalClassification: DEE_518_HUMAN_PLAN_APPROVED_IMPLEMENTATION_AUTHORIZED
   humanRatificationComment: "DEE-516 HUMAN ARCHITECT RATIFICATION — FINAL AI-TRADER GATE-D PACKAGE APPROVED (2026-08-09)"
   hpaCorrection: "HPA-1..HPA-7 applied (2026-08-09); prior commit 8182e97"
   purposeEpistemicGuardianClosure: "P1/P2/P3/E1/E2/N1/G1 applied (2026-08-10); prior commit 2bf582c"
