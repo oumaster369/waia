@@ -1,0 +1,11 @@
+-- DEE-529 / WP-CONTROL-REPLAY-AUTH: control replay authority claim RLS (ADR-0007)
+
+ALTER TABLE public.trader_control_replay_authority_claim_v1 ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS trader_control_replay_authority_claim_v1_deny_authenticated_select ON public.trader_control_replay_authority_claim_v1;
+CREATE POLICY trader_control_replay_authority_claim_v1_deny_authenticated_select ON public.trader_control_replay_authority_claim_v1 FOR SELECT TO authenticated, anon USING (false);
+DROP POLICY IF EXISTS trader_control_replay_authority_claim_v1_deny_authenticated_insert ON public.trader_control_replay_authority_claim_v1;
+CREATE POLICY trader_control_replay_authority_claim_v1_deny_authenticated_insert ON public.trader_control_replay_authority_claim_v1 FOR INSERT TO authenticated, anon WITH CHECK (false);
+DROP POLICY IF EXISTS trader_control_replay_authority_claim_v1_deny_authenticated_update ON public.trader_control_replay_authority_claim_v1;
+CREATE POLICY trader_control_replay_authority_claim_v1_deny_authenticated_update ON public.trader_control_replay_authority_claim_v1 FOR UPDATE TO authenticated, anon USING (false);
+DROP POLICY IF EXISTS trader_control_replay_authority_claim_v1_deny_authenticated_delete ON public.trader_control_replay_authority_claim_v1;
+CREATE POLICY trader_control_replay_authority_claim_v1_deny_authenticated_delete ON public.trader_control_replay_authority_claim_v1 FOR DELETE TO authenticated, anon USING (false);
