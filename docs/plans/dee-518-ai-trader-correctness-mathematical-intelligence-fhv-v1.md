@@ -144,13 +144,14 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Human plan approval (state.status -> approved) after purpose/epistemic/guardian closure review; then /implement starting WP-CANON"
+  nextAction: "Human plan approval (state.status -> approved) after B1-B5 bootstrap/RNG/sizing/executable-policy closure review; then /implement starting WP-CANON"
 provenance:
   createdFrom: chat
   gateDRatificationSha: 1f10d4eebce23f92dccb3d550e8dc10812d26a9e
   humanRatificationComment: "DEE-516 HUMAN ARCHITECT RATIFICATION — FINAL AI-TRADER GATE-D PACKAGE APPROVED (2026-08-09)"
   hpaCorrection: "HPA-1..HPA-7 applied (2026-08-09); prior commit 8182e97"
   purposeEpistemicGuardianClosure: "P1/P2/P3/E1/E2/N1/G1 applied (2026-08-10); prior commit 2bf582c"
+  bootstrapRngSizingPolicyClosure: "B1/B2/B3/B4/B5 applied (2026-08-10); prior commit c3ce72c"
   supersedes: null
 ---
 
@@ -351,7 +352,7 @@ Pre-merge: engineering evidence via unit/integration tests + storage-scale test 
 
 ### 1.14 Rollback / versioning
 
-Additive V2 schema only; V1 quarantine. Feature versions pinned (`feature-engine/rv/v2`, `quantizeScale8HalfUp/v1`, `waia-cbrng/sha256-ctr/v1`, `energy-mc/v1`, `cdf-erf-cody715/v1`, `student-t5-cdf-betainc/v1`). Rollback = revert PR; V2 tables orphaned but append-only.
+Additive V2 schema only; V1 quarantine. Feature versions pinned (`feature-engine/rv/v2`, `quantizeScale8HalfUp/v1`, `waia-cbrng/sha256-ctr/v1`, `stationary-bootstrap/v1`, `energy-mc/v1`, `cdf-erf-cody715/v1`, `student-t5-cdf-betainc/v1`). Rollback = revert PR; V2 tables orphaned but append-only.
 
 ### 1.15 Post-merge gate graph
 
@@ -360,19 +361,25 @@ Implementation merge (DEE-518)
   → OG-HOST-QUAL (DEE-536)
   → OG-DATA-RECEIPTS (DEE-537)
   → OG-CONTROL-REPLAY (DEE-538) [NOT blocked on scientific qualification]
-  → OG-SCI-PACKAGE (DEE-539) — TWO INTERNAL STAGES (WALK_FORWARD / DEVELOPMENT only; never 2025 holdout):
+  → OG-SCI-PACKAGE (DEE-539) — THREE INTERNAL STAGES (WALK_FORWARD / DEVELOPMENT only; never 2025 holdout):
         STAGE-A PREDICTIVE_SKILL_PASS
           → freeze selected predictive package identity
           → freeze Decision policy / economic semantics version
+        HUMAN_FHV_EXECUTABLE_POLICY_V1 (Human receipt; §1.23–§1.24)
+          → freeze complete FHV_EXECUTABLE_POLICY_V1 + executable_policy_digest
+          → MUST occur after STAGE-A and BEFORE STAGE-B
         STAGE-B LOCKED WALK_FORWARD ECONOMIC-UTILITY QUALIFICATION
+          → execute FHV_EXECUTABLE_POLICY_V1 (§1.24) on WALK_FORWARD only
           → ECONOMIC_UTILITY_PASS  OR  NO_ECONOMIC_EDGE_QUALIFIES
         ONLY on ECONOMIC_UTILITY_PASS:
-          → FROZEN_SELECTED_PACKAGE_READY
+          → FROZEN_SELECTED_PACKAGE_READY (binds executable_policy_digest)
   → OG-HOLDOUT-AUTH (DEE-540) [requires CONTROL_REPLAY=PASS AND FROZEN_SELECTED_PACKAGE_READY]
-  → OG-FHV (DEE-541)
+  → OG-FHV (DEE-541) [executes IDENTICAL executable_policy_digest on BLIND_HOLDOUT; partition/receipt only may differ]
 ```
 
-**P1 invariant:** Predictive PnL MUST NOT be the Forecast model-selection score. Economic utility is a separate downstream qualification of an already-frozen predictive package + already-frozen Decision policy. No parameter/model/policy retuning after seeing economic-utility results. `NO_ECONOMIC_EDGE_QUALIFIES` preserves `BLIND_HOLDOUT = SEALED_NOT_ACCESSED`.
+**P1 invariant:** Predictive PnL MUST NOT be the Forecast model-selection score. Economic utility is a separate downstream qualification of an already-frozen predictive package + already-frozen Decision policy + already-frozen **executable policy** (§1.24). No parameter/model/policy/sizing/Guardian retuning after seeing economic-utility results. `NO_ECONOMIC_EDGE_QUALIFIES` preserves `BLIND_HOLDOUT = SEALED_NOT_ACCESSED`.
+
+**B5 invariant:** WALK_FORWARD STAGE-B and blind FHV (DEE-541) MUST bind the **same** `executable_policy_digest`. Any post-STAGE-B executable-policy mutation invalidates STAGE-B PASS and requires WALK_FORWARD requalification while holdout remains sealed.
 
 See §1.19 for exact economic-utility evidence contract.
 
@@ -407,7 +414,9 @@ If Human proves unreviewable: DEE-512 spawns INTEGRATION-A (WP-EXEC-ACCT…WP-CO
 - Storage-scale test PASS
 - No per-sample forecast table
 - Authority firewalls (§1.20–§1.21) encoded and tested
-- Epistemic replica + canonical pool contracts (§2.4.1, §4.1) encoded
+- Epistemic replica + canonical pool contracts (§2.4.0–§2.4.2, §4.1) encoded
+- `stationary-bootstrap/v1` + byte-exact `WAIA_RANDOM_BLOCK_V1` (§2.4.0, §2.6) encoded
+- Sizing/allocation authority + executable-policy identity documented (§1.23–§1.24)
 - FHV-v1 Guardian disposition (§1.22) documented; mature Position Reassessment NOT claimed as FHV-v1 PASS
 - Canon/docs/ADRs updated (WP-CANON)
 - Plan `state.status: integration-ready`
@@ -418,31 +427,39 @@ If Human proves unreviewable: DEE-512 spawns INTEGRATION-A (WP-EXEC-ACCT…WP-CO
 
 **Authority sources inspected:** ADR-0010 Strategy Validation Gate; Target Architecture §22; Gate-D ratification. **Finding:** No Human-ratified numeric acceptance threshold for first-program walk-forward economic utility exists. ADR-0010: “quantitative thresholds are set later by the operator and recorded” / “evidence class, not numeric gates.”
 
-**Frozen two-stage gate (inside DEE-539 OG-SCI-PACKAGE):**
+**Frozen three-stage gate (inside DEE-539 OG-SCI-PACKAGE):**
 
 1. **PREDICTIVE_SKILL_PASS** — proper predictive scoring vs mandatory baselines (unchanged WP-RESEARCH-HARNESS / WP-EXECOPP-QUAL protocol). Output: freeze `(predictive_package_digest, model_transform_version, K, M, α_epi, decision_policy_version, economic_semantics_version)`.
-2. **LOCKED WALK_FORWARD ECONOMIC-UTILITY QUALIFICATION** — apply the **already-frozen** package + Decision policy on WALK_FORWARD only using WP-DECISION-ECON execution-aware economics (fees, spread, impact, participation, partial entry, unfilled cash, post-horizon scientific liquidation, rounding, residual inventory, abstention). **No retuning.**
+2. **`HUMAN_FHV_EXECUTABLE_POLICY_V1`** — Human receipt **after STAGE-A** and **before STAGE-B** (§1.23–§1.24). Freezes complete `FHV_EXECUTABLE_POLICY_V1` and seals `executable_policy_digest`. Executor MUST NOT invent unfrozen sizing/Guardian/ATR parameters.
+3. **LOCKED WALK_FORWARD ECONOMIC-UTILITY QUALIFICATION** — apply the **already-frozen** package + Decision policy + **`FHV_EXECUTABLE_POLICY_V1`** on WALK_FORWARD only using WP-DECISION-ECON execution-aware economics under the frozen executable policy (fees, spread, impact, participation, partial entry, unfilled cash, Guardian exits when enabled, mandatory post-horizon liquidation, rounding, residual inventory, abstention). **No retuning.**
 
 **Exact evidence produced (executor-fixed; not a menu):**
 
 | Evidence artifact | Content |
 |-------------------|---------|
-| `economic_utility_receipt.v1` | package digests, decision_policy_version, walk-forward partition digests, cost_model_version, C0, notional grid used for reporting only |
+| `economic_utility_receipt.v1` | `predictive_package_digest`, `executable_policy_digest`, `decision_policy_version`, `sizing_policy_version`, walk-forward partition digests, cost_model_version, C0, K/M notional grid **reporting-only** (scientific sensitivity; NOT FHV sizing authority) |
 | `cash_null_comparison.v1` | path PnL/equity under selected policy vs pure-cash null (no trades) under identical costs/clock |
 | `abstention_summary.v1` | counts/rates of `DECISION_NON_ACTIONABLE` / NO_TRADE |
-| `execution_friction_summary.v1` | fees, spread, impact, residual inventory events, unresolved residual fails |
+| `execution_friction_summary.v1` | fees, spread, impact, residual inventory events, unresolved residual fails, Guardian early-exit counts |
 | `economic_utility_terminal_state` | `ECONOMIC_UTILITY_PASS` **or** `NO_ECONOMIC_EDGE_QUALIFIES` |
 
-**Null/cash comparison semantics:** Primary comparison is selected-policy net equity path vs cash-null path on the same WALK_FORWARD clock and cost model. Predictive score / log-score MUST NOT appear as the economic acceptance statistic.
+**Null/cash comparison semantics:** Primary comparison is selected-policy net equity path vs cash-null path on the same WALK_FORWARD clock and cost model under **`FHV_EXECUTABLE_POLICY_V1`**. Predictive score / log-score MUST NOT appear as the economic acceptance statistic.
 
-**No-retuning rule:** After STAGE-A freeze, any change to package parameters, Decision policy, cost model, participation, or liquidation doctrine voids the economic-utility run and requires a new STAGE-A freeze identity.
+**No-retuning rule:** After STAGE-A freeze, any change to package parameters, Decision policy, **`executable_policy_digest`**, cost model, participation, sizing/allocation, Guardian/ATR configuration, or liquidation doctrine voids the economic-utility run and requires a new STAGE-A freeze identity.
 
 **Terminal states:**
 
-- `ECONOMIC_UTILITY_PASS` → may emit `FROZEN_SELECTED_PACKAGE_READY` only after Human economic-utility ratification (§ below).
+- `ECONOMIC_UTILITY_PASS` → may emit `FROZEN_SELECTED_PACKAGE_READY` only after Human economic-utility ratification (§ below). Receipt MUST bind `executable_policy_digest`.
 - `NO_ECONOMIC_EDGE_QUALIFIES` → durable fail; **MUST** keep `BLIND_HOLDOUT = SEALED_NOT_ACCESSED`; holdout remains closed.
 
-**Human scientific gate (numeric acceptance):** Because ADR-0010 leaves quantitative thresholds operator-set, the numeric PASS rule (e.g. minimum net expectancy, max drawdown, min trade count) is **`HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1`** — recorded by Human before STAGE-B may emit PASS. Executor produces evidence only; executor MUST NOT invent the threshold.
+**Human scientific gates (numeric acceptance):**
+
+| Gate | Blocks |
+|------|--------|
+| `HUMAN_FHV_EXECUTABLE_POLICY_V1` | STAGE-B start (§1.23–§1.24) |
+| `HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1` | STAGE-B `ECONOMIC_UTILITY_PASS` numeric rule |
+
+Because ADR-0010 leaves quantitative thresholds operator-set, the numeric PASS rule (e.g. minimum net expectancy, max drawdown, min trade count) is **`HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1`** — recorded by Human before STAGE-B may emit PASS. Executor produces evidence only; executor MUST NOT invent the threshold.
 
 ### 1.20 Strategy authority disposition (P2)
 
@@ -457,14 +474,15 @@ Knowledge / state
 
 **Compatibility disposition for legacy fields (ONE choice):**
 
-`StrategySignal.confidence` and `StrategySignal.expectedEdge` are **quarantined non-authoritative legacy diagnostics**.
+`StrategySignal.confidence`, `StrategySignal.expectedEdge`, and **`StrategySignal.maxRisk`** are **quarantined non-authoritative legacy diagnostics** on the V2 capital path.
 
 - Retained on the type for structural compatibility with existing strategy modules / telemetry.
-- Renamed in Decision V2 consumers to `legacyDiagnosticConfidence` / `legacyDiagnosticExpectedEdge` when read for logging only.
+- Renamed in Decision V2 consumers to `legacyDiagnosticConfidence` / `legacyDiagnosticExpectedEdge` / `legacyDiagnosticMaxRisk` when read for logging only.
 - **V2 Decision path MUST NOT** derive Forecast probability, EV, conservative EV range, or capital actionability from these fields.
+- **V2 sizing path MUST NOT** treat `StrategySignal.maxRisk` as an independent capital-sizing authority. Current main `computeStopBasedQuantity()` clamps by `signal.maxRisk` — this seam is **deprecated on V2** and replaced by the frozen sizing policy in `FHV_EXECUTABLE_POLICY_V1` (§1.23).
 - Gross/net EV for V2 comes solely from Forecast-owned sealed samples + WP-DECISION-ECON payoff functionals `Π_base` / `Π_lower`.
 
-**Regression invariant:** For otherwise identical Forecast V2 / market state / action candidate, mutating legacy strategy `confidence` or `expectedEdge` MUST NOT alter V2 Forecast probabilities, V2 Decision EV range, or V2 Decision actionability.
+**Regression invariant:** For otherwise identical Forecast V2 / market state / action candidate, mutating legacy strategy `confidence`, `expectedEdge`, or `maxRisk` MUST NOT alter V2 Forecast probabilities, V2 Decision EV range, V2 Decision actionability, or V2 desired-size proposal.
 
 Strategy eligibility / tactical setup rules remain; this closure is authority ownership only.
 
@@ -499,20 +517,28 @@ legacy/runtime heuristic hypothesis confidence
 | Mature remaining-payoff / RR-decay / opportunity-cost reassessment | **No** (Target Architecture §17/**§23 partial**) |
 | M5 Exit Intelligence | **Read-only** overlay; does not alter Guardian decisions or emit intents |
 
-**TWO SEPARATE CONTRACTS (must remain distinct):**
+**TWO SEPARATE CONTRACTS (must remain distinct — B5):**
 
-| Contract | Role |
-|----------|------|
-| **A. Scientific precommitted post-horizon liquidation** | Forecast/economic scoring only; entry at N+1..N+3; exit first eligible slice at `t+h+1m`; continue until flat; residual fail-closed. **Must not be altered by runtime Guardian.** |
-| **B. Runtime Position Reassessment / Guardian policy** | Manages a genuinely open position under live/FHV inventory rules. **Must not retroactively rewrite scientific target A or create hindsight in A.** |
+| Contract | Version id | Role |
+|----------|------------|------|
+| **A. Scientific valuation** | `SCIENTIFIC_VALUATION_CONTRACT_V1` | Precommitted horizon target/payoff evaluation for Forecast/Decision **scientific scoring**; entry at N+1..N+3; exit first eligible slice at `t+h+1m`; continue until flat; residual fail-closed; no hindsight. May remain as a separately scored counterfactual valuation contract. **Must not be altered by runtime Guardian.** |
+| **B. FHV executable policy** | `FHV_EXECUTABLE_POLICY_V1` | Actual policy producing the WALK_FORWARD **economic-equity path** and the **identical** blind FHV path (DEE-541). Includes sizing, Portfolio, Risk, cost, participation, entry, Guardian/ATR when enabled, mandatory post-horizon liquidation, kill/close-only behavior. **Must not retroactively rewrite scientific target A or create hindsight in A.** |
 
 **FHV-v1 disposition (chosen):** Mature Position Reassessment is **intentionally beyond FHV-v1**.
 
-FHV-v1 validates only the **narrow Guardian policy**:
+FHV-v1 validates only the **narrow Guardian policy** as a **fully specified subset of `FHV_EXECUTABLE_POLICY_V1`** — never “optional” once policy is frozen:
 
-`permission/max-hold/close-only/stop-trading + optional ATR SL/TP/trailing + inventory-capped partials + read-only Exit Intelligence`.
+`permission/max-hold/close-only/stop-trading + exact enabled/disabled ATR SL/TP/trailing (when enabled per Human receipt) + inventory-capped partials + read-only Exit Intelligence`.
 
-This is sufficient for FHV-v1 claims of: execution/accounting correctness, authority chain, bounded FHV ops, Forecast/Decision economics under **scientific liquidation A**, and Control Replay. It is **NOT** proof of mature optimal-exit intelligence.
+**Exit priority ordering (frozen inside `executable_policy_digest`):**
+
+1. Safety/kill exits (`TRIPPED` fold → revoke allowances → cancel pending entries → CLOSE_ONLY → FLATTEN → HALT)
+2. Guardian exits (max-hold, permission, strategy-disallowed, ATR SL/TP/trailing when enabled)
+3. Mandatory post-horizon liquidation (when position still open and no higher-priority exit fired)
+
+**Early Guardian exit semantics:** If Guardian causes an early actual exit before horizon `h`, the **realized economic path** uses that actual exit timestamp/price. The **scientific Forecast target** and `SCIENTIFIC_VALUATION_CONTRACT_V1` resolution at `h` remain separately resolved — do **not** rewrite the Forecast target or scientific valuation evidence.
+
+This is sufficient for FHV-v1 claims of: execution/accounting correctness, authority chain, bounded FHV ops, Forecast/Decision economics under **scientific valuation A**, realized executable economic utility under **FHV executable policy B**, and Control Replay. It is **NOT** proof of mature optimal-exit intelligence.
 
 **BLOCKING PRE-LIVE carry-forward (named; Linear issue NOT created in this correction):**
 
@@ -521,6 +547,117 @@ This is sufficient for FHV-v1 claims of: execution/accounting correctness, autho
 Proposed follow-up (Human-authorized Linear creation later under DEE-512): implement/qualify bounded deterministic Position Reassessment (original/current hypothesis, regime/structure, Forecast-admissible remaining EV of HOLD vs EXIT, RR decay, invalidation, time-in-trade, data/event risk, exposure/opportunity cost) with Risk/kill constraints and stop-never-widens — **after** DEE-541 and **before** any live-capital readiness claim.
 
 **WP-AUTHORITY scope for DEE-518:** enforce Decision→Risk→Execution + kill fold; document Guardian FHV-v1 narrow policy; **do not** implement mature Position Reassessment inside DEE-518.
+
+### 1.23 Action sizing / allocation authority (B4)
+
+**Purpose blocker closed:** STAGE-B cannot freeze only `decision_policy_version` without defining how an ACTIONABLE Decision becomes desired notional / quantity.
+
+**Verified current-main seams (baseline `1f10d4ee`):**
+
+| Seam | Current behavior |
+|------|------------------|
+| `lib/trader/portfolio/stop-based-sizing.ts` | `computeStopBasedQuantity()` — stop-distance-based qty capped by portfolio limits; **also** clamps by `signal.maxRisk / entryPrice` |
+| `lib/trader/portfolio/idhps-portfolio-sizing.ts` | Portfolio allocation helpers |
+| `lib/trader/research/htr-initial-portfolio-contract.ts` | `HTR_DEFAULT_PORTFOLIO_SIZING_LIMITS`: `maxRiskPerTradePct="0.10"`, `maxPortfolioRiskPct="0.50"`, `maxConcurrentPositions=10`, `maxNotional="100000.00"` |
+| `lib/trader/portfolio/portfolio-run-config.types.ts` | `defaultStopDistancePct="0.02"`, `minOrderQty="0.00001"` |
+| `lib/trader/research/htr-initial-portfolio-constants.ts` | `C0 = startingBalanceUsdt = "100000.00"` (also §1.6) |
+| `lib/trader/observability/fhv-full-historical-engine.ts` | uses `defaultQuantity: "0.01"` (research default; **not** ratified as FHV executable policy) |
+| `lib/trader/risk/limits/defaults.ts` | `maxRiskPerTradePct: "0.01"` (generic default; **differs** from HTR contract — not authoritative for FHV without Human receipt) |
+
+**Frozen authority ordering (ONE chain):**
+
+```
+Forecast
+  → Decision action candidate + economic valuation (EV range / actionability)
+  → deterministic desired-size / allocation proposal (sizing policy)
+  → Portfolio constraints (limits, concurrency, notional caps)
+  → Risk downward-only clamp / veto (economics-blind)
+  → Execution
+```
+
+**Invariants:**
+
+- Risk MUST NOT improve/increase a proposal — only clamp/veto downward.
+- Strategy MUST NOT own an independent capital-sizing authority on V2 unless Human explicitly ratifies a bounded **downward tactical cap** inside `FHV_EXECUTABLE_POLICY_V1` (default disposition: **quarantined legacy diagnostic**, §1.20).
+- K/M notional grid in WP-EXECOPP-QUAL (`scale grid {0.01,0.05,0.10,0.25,0.50}·C0`) is **SCIENTIFIC SENSITIVITY TEST authority only** and MUST NOT silently become production/FHV sizing.
+
+**Partial literals already on main (inform Human receipt; not sufficient alone for STAGE-B):**
+
+| Parameter | Current-main literal | Source |
+|-----------|---------------------|--------|
+| `C0` | `"100000.00"` | `htr-initial-portfolio-constants.ts` / §1.6 |
+| `maxRiskPerTradePct` | `"0.10"` | `HTR_DEFAULT_PORTFOLIO_SIZING_LIMITS` |
+| `maxPortfolioRiskPct` | `"0.50"` | same |
+| `maxConcurrentPositions` | `10` | same |
+| `maxNotional` | `"100000.00"` | same |
+| `defaultStopDistancePct` | `"0.02"` | `DEFAULT_PORTFOLIO_RUN_CONFIG` |
+| `minOrderQty` | `"0.00001"` | same |
+
+**Parameters NOT ratified as first-program FHV executable policy (Human MUST freeze — executor MUST NOT invent):**
+
+- `sizing_policy_version` (e.g. stop-based-sizing rule identity)
+- `defaultQuantity` / desired-size rule beyond partial code defaults
+- max risk per trade binding when HTR vs generic defaults conflict
+- multi-symbol candidate arbitration when BTC and ETH are simultaneously ACTIONABLE
+- cash insufficiency / below-min-qty behavior on V2 path
+- quantity rounding / stepping semantics
+- explicit `StrategySignal.maxRisk` V2 disposition confirmation
+- Guardian `maxHoldBars`, ATR exit-engine enabled state and all ATR multiples (see §1.24)
+
+**Human gate `HUMAN_FHV_EXECUTABLE_POLICY_V1` (mandatory):**
+
+- **When:** after STAGE-A predictive package selection; **before** STAGE-B economic-utility execution; **before** any holdout authorization.
+- **Must freeze at minimum:** `sizing_policy_version`, `C0`, desired-size rule, max risk per trade, max portfolio risk, max notional, max concurrent positions, min order quantity, default/fallback stop-distance semantics, candidate arbitration, cash insufficiency behavior, rounding, legacy `StrategySignal.maxRisk` disposition, and all Guardian/ATR fields in §1.24 when not already separately ratified.
+- **Receipt output:** `executable_policy_digest` (§1.24) bound into `economic_utility_receipt.v1` and `FROZEN_SELECTED_PACKAGE_READY`.
+- **No parameter may be selected after STAGE-B results.**
+
+### 1.24 FHV executable policy identity (B5)
+
+**Before STAGE-B**, seal ONE complete `executable_policy_digest` over the full runtime-affecting configuration:
+
+| Component | Included in digest |
+|-----------|-------------------|
+| Predictive package | `predictive_package_digest` |
+| Decision / economic semantics | `decision_policy_version`, `economic_semantics_version` |
+| Sizing / allocation | `sizing_policy_version` + all §1.23 Human-frozen sizing fields |
+| Portfolio | portfolio schema version + limits + run config digests |
+| Risk | risk limits version + kill/flatten semantics |
+| Cost model | fee/spread/impact bps versions |
+| Participation model | participation cap semantics |
+| Entry mechanics | N+1..N+3 closed-bar entry doctrine |
+| Scientific valuation (counterfactual) | `SCIENTIFIC_VALUATION_CONTRACT_V1` version (horizon liquidation for scoring) |
+| Mandatory horizon liquidation | horizon-liquidation version for executable path |
+| Guardian | **exact** `enabled` boolean; `maxHoldBars`; bar interval |
+| ATR exit engine | **exact** `enabled` boolean; if enabled: `atrPeriod`, stop-loss ATR multiple, take-profit ATR multiple, trailing activation ATR multiple, trailing distance ATR multiple |
+| Inventory partial-exit rules | partial-exit cap semantics |
+| Close-only / STOP / kill behavior | kill-fold version |
+| Exit priority ordering | §1.22 ordering digest |
+
+**No `optional` field** is permitted in the frozen selected policy — every runtime-affecting switch is exact `enabled`/`disabled` + values.
+
+**Current-main defaults (reference only — Human receipt required; executor MUST NOT select):**
+
+| Field | Current-main default | Source |
+|-------|---------------------|--------|
+| Guardian.enabled | `true` | `DEFAULT_GUARDIAN_RUN_CONFIG` |
+| Guardian.maxHoldBars | `0` (disabled) | same |
+| ExitRunConfig.enabled | `true` | `DEFAULT_EXIT_RUN_CONFIG` |
+| atrPeriod | `14` | same |
+| stopLossAtrMultiple | `"2"` | same |
+| takeProfitAtrMultiple | `"3"` | same |
+| trailingActivationAtrMultiple | `"1.5"` | same |
+| trailingDistanceAtrMultiple | `"1"` | same |
+
+**Execution binding:**
+
+- STAGE-B (DEE-539) executes **`FHV_EXECUTABLE_POLICY_V1`** on WALK_FORWARD.
+- DEE-541 executes the **IDENTICAL** `executable_policy_digest` on BLIND_HOLDOUT; only dataset partition / authorization receipt may differ.
+- Post-STAGE-B mutation of any digested component invalidates STAGE-B PASS; holdout remains sealed until WALK_FORWARD requalification.
+
+**Predictive/scientific truth vs realized economic utility remain separately measurable:**
+
+- Scientific scoring uses `SCIENTIFIC_VALUATION_CONTRACT_V1` at horizon `h`.
+- Realized equity path uses `FHV_EXECUTABLE_POLICY_V1` including any early Guardian exits.
 
 ---
 
@@ -556,7 +693,55 @@ Type-7 quantiles over `{mu_*_k}`:
 
 Invariant: `EV_lower <= EV_base <= EV_upper` else `EV_RANGE_INVALID → DECISION_NON_ACTIONABLE`.
 
-`DECISION_ACTIONABLE ⇔ EV_lower > 0` + upstream data/calibration/scientific-admission gates. **No Risk allowance term. No StrategySignal.confidence/expectedEdge term.**
+`DECISION_ACTIONABLE ⇔ EV_lower > 0` + upstream data/calibration/scientific-admission gates. **No Risk allowance term. No StrategySignal.confidence/expectedEdge/maxRisk term.**
+
+#### 2.4.0 `stationary-bootstrap/v1` (B1 — frozen Politis-Romano semantics)
+
+**Contract version:** `stationary-bootstrap/v1`
+
+**Input source corpus:** `D = [d_0, ..., d_(n-1)]` in canonical chronological source order (§2.4.2 SOURCE corpus rules).
+
+**Output replica:** `D_k = [d_(I_0), ..., d_(I_(n-1))]` with **EXACTLY** `n` resample positions (same length as source; sampling with replacement).
+
+**Expected block length:** `L = ceil(n^(1/3))`.
+
+**Exact restart probability:** `p = 1/L` — implemented **without floating Bernoulli ambiguity**:
+
+For each output position `j > 0`:
+
+`restart_j = (UNBIASED_INT(L) == 0)` using domain `EPIBOOT1` (§2.6).
+
+**Algorithm (deterministic given root + ordinals):**
+
+1. `I_0 = UNBIASED_INT(n)` at `resample_position_ordinal = 0`, `draw_u32 = 0`.
+2. For `j = 1 .. n-1`:
+   - draw exact restart decision: `restart_j = (UNBIASED_INT(L) == 0)` at `resample_position_ordinal = j`, `draw_u32 = 1`;
+   - if `restart_j`: `I_j = UNBIASED_INT(n)` at same `j`, `draw_u32 = 0`;
+   - otherwise: `I_j = (I_(j-1) + 1) mod n` (circular continuation).
+3. Preserve output sequence order by `resample_position_ordinal = j`; emit `D_k[j] = D[I_j]`.
+
+This yields circular stationary blocks with geometric block lengths (Politis-Romano stationary bootstrap).
+
+**Random addressing (no mutable RNG cursor; no executor-selected implementation):**
+
+| Semantic draw | DOMAIN | replica_u32 | sample_u32 | draw_u32 | retry_u32 |
+|---------------|--------|-------------|------------|----------|-----------|
+| Initial source index `I_0` | `EPIBOOT1` | `k` | `0` | `0` | rejection retry |
+| Restart Bernoulli at `j>0` | `EPIBOOT1` | `k` | `j` | `1` | rejection retry |
+| Restarted source index `I_j` | `EPIBOOT1` | `k` | `j` | `0` | rejection retry |
+
+**Known-answer tests (mandatory):**
+
+| Test | Expected |
+|------|----------|
+| `L = 1` | every position `j > 0` restarts (`UNBIASED_INT(1) == 0` always) |
+| No restart path | deterministic circular continuation `(I_(j-1)+1) mod n` |
+| Wrap | source index wraps `n-1 → 0` under continuation |
+| Replacement legality | repeated source anchors in `D_k` are **valid** bootstrap multiplicity |
+| Same `(source, root, replica)` | identical index vector `[I_0..I_(n-1)]` |
+| Different replica root | independently addressed index vector |
+
+**Forbidden:** floating `p = 1/L` Bernoulli; variable output length; mutable PRNG cursor; alternative stationary-bootstrap implementations.
 
 #### 2.4.1 What K means vs what M means (E1 — P0)
 
@@ -569,26 +754,49 @@ Invariant: `EV_lower <= EV_base <= EV_upper` else `EV_RANGE_INVALID → DECISION
 
 **Replica construction (all EXECUTOR_READY packages, including §4.1):**
 
-1. Let `D` = canonical DEVELOPMENT eligible-anchor corpus for `(symbol,h)` (§2.4.2).
+1. Let `D` = canonical DEVELOPMENT **SOURCE** corpus for `(symbol,h)` (§2.4.2) — unique source anchors required **before** bootstrap.
 2. For each `k ∈ {0..K-1}`:
-   - `seed_k = uint32_be(SHA-256("epi-bootstrap/v1" ‖ predictive_package_id ‖ uint32_be(k))[0:4])`
-   - Draw a **stationary-bootstrap resample** `D_k` of `D` with expected block length `L = ceil(n_D^(1/3))` using `WAIA_RANDOM_BLOCK_V1` domain `epi-bootstrap/v1` and seed material `seed_k` (unbiased block starts via rejection; no mutable PRNG).
-   - **Refit** model parameters on `D_k` only (for §4.1: type-7 tertile edges + state-conditional pools on `D_k`).
-   - Seal replica artifact `A_k` (edges, pool digests, counts, bootstrap seed, `model_transform_version`) with `model_artifact_digest`.
-3. At issuance `t`, replica `k` produces `F_t^(k)` and emits M aleatoric samples using domain `aleatoric-draw/v1` with ordinals `(k, m, draw)` — **separate** from bootstrap seeds.
+   - `bootstrap_root_k = SHA256( bootstrap_root_prefix_16 ‖ predictive_package_digest_32 ‖ uint32_be(k) )` → **exactly 32 bytes** (§2.6). `predictive_package_digest_32` is the **decoded binary** SHA-256 digest, not hex UTF-8.
+   - Draw **`stationary-bootstrap/v1`** resample `D_k` of length `n = |D|` using `WAIA_RANDOM_BLOCK_V1` domain **`EPIBOOT1`** and `bootstrap_root_k`.
+   - **Refit** model parameters on bootstrap **multiset** `D_k` only (for §4.1: type-7 tertile edges + state-conditional pools on `D_k` preserving bootstrap multiplicity).
+   - Seal replica artifact `A_k` (edges, pool digests, counts, `bootstrap_root_k`, `L_block`, `model_transform_version`) with `model_artifact_digest`.
+3. At issuance `t`, replica `k` produces `F_t^(k)` and emits M aleatoric samples using domain **`ALEDRAW1`** with ordinals `(k, m, draw)` — **separate** from bootstrap roots.
 4. Decision consumes regenerated samples; never persists sample rows.
 
-**Forbidden redefinition:** Using `(replica,sample,draw)` ordinals merely to draw from **one** shared fitted pool — that collapses K into Monte Carlo noise and **invalidates** `Q_0.10/0.50/0.90(mu_k)` as epistemic EV.
+**Forbidden redefinition:** Using `(replica,sample,draw)` ordinals merely to draw from **one** shared fitted pool — that collapses K into Monte Carlo noise and **invalidates** `Q_0.10/0.50/0.90(mu_k)` as epistemic EV. **Forbidden:** uint32 `seed_k` as bootstrap root; long symbolic domain strings (`epi-bootstrap/v1`, `aleatoric-draw/v1`).
 
 **Proof tests:**
 
 - Holding K fixed, increasing M reduces within-replica variance of `mu_k` estimators (Monte Carlo error ↓).
-- Holding M fixed, replicas with distinct bootstrap seeds produce distinct sealed artifacts / edges when DEVELOPMENT has genuine dispersion.
-- Identical `(D, package_id, K, M, seeds)` regenerates identical digests.
+- Holding M fixed, replicas with distinct `bootstrap_root_k` produce distinct sealed artifacts / edges when DEVELOPMENT has genuine dispersion.
+- Identical `(D, predictive_package_digest, K, M, bootstrap roots)` regenerates identical digests and index vectors.
+- `stationary-bootstrap/v1` known-answer suite (§2.4.0) passes.
 
-#### 2.4.2 Canonical empirical pool order / reconstruction (E2)
+#### 2.4.2 Source corpus vs bootstrap multiset / canonical pools (E2 + B3)
 
 Index sampling addresses a **canonical pool**, never filesystem/DB return order.
+
+**SOURCE corpus identity (before bootstrap):**
+
+`source_anchor_id = (venue, market, symbol, closed_bar_epoch_ms)`
+
+| Rule | Frozen |
+|------|--------|
+| SOURCE ordering | Ascending `closed_bar_epoch_ms`; tie-break `bar_content_digest` lexicographic ascending |
+| SOURCE duplicate anchors | Duplicate `source_anchor_id` in qualified DEVELOPMENT corpus → fail closed **`SOURCE_CORPUS_DUPLICATE_ANCHOR`** |
+| Dataset integrity | Exact dataset/bar digest checks per WP-DATASET-QUAL receipt |
+
+**Bootstrap replica multiset `D_k` (after `stationary-bootstrap/v1`):**
+
+| Rule | Frozen |
+|------|--------|
+| Output length | Exactly `n = |D|` resample positions |
+| Repeated source anchors inside `D_k` | **VALID** bootstrap multiplicity — MUST NOT fail |
+| Bootstrap observation identity | `(replica_ordinal, resample_position_ordinal, source_anchor_id)` |
+| Uniqueness inside replica | `resample_position_ordinal` unique within replica `k` |
+| Pool construction for `rv-state-conditional-empirical-joint/v1` | State edges computed on bootstrap **multiset**; state-conditional empirical pools retain repeated observations according to bootstrap multiplicity |
+| Canonical pool order (post state-filter) | Ascending `resample_position_ordinal` — **do NOT** re-sort by source timestamp after bootstrap |
+| Distinct pool elements | Two occurrences of the same `source_anchor_id` at different resample positions are distinct legal empirical-pool elements |
 
 For every `(symbol, h, state, replica_k)` pool:
 
@@ -599,16 +807,18 @@ For every `(symbol, h, state, replica_k)` pool:
 | Target/outcome contract | 13-D EXECUTION_OPPORTUNITY + TERMINAL `R_h` marginal; outcome version `exec-opp-outcome/v1` |
 | PIT eligibility | Anchor `t` eligible iff all required future closes/volumes for the 13-D vector exist and no look-ahead features used |
 | State assignment version | `rv-state-tertile/v1` using replica `k`'s sealed edges |
-| Canonical anchor identity | `(venue=HTX, market=SPOT, symbol, closed_bar_epoch_ms)` |
-| Exact canonical ordering | Sort ascending by `closed_bar_epoch_ms`, tie-break by `bar_content_digest` lexicographic ascending |
-| Duplicate/tie handling | Duplicate `(symbol, closed_bar_epoch_ms)` → fail closed `POOL_DUPLICATE_ANCHOR`; equal digests at same epoch impossible after duplicate check |
 | Outcome vector serialization | Fixed 13 × scale-8 HALF_UP canonical strings, UTF-8, `\n`-joined, for digest only |
-| Pool length | `n_pool` after eligibility filter on `D_k` |
-| Pool semantic digest | `SHA-256("pool/v1" ‖ identity fields ‖ ordered anchor ids ‖ outcome serialization stream)` |
-| Reconstruction | From qualified DEVELOPMENT corpus + replica bootstrap seed + feature/outcome versions — **no** unbounded duplicate pool blob persistence |
+| Pool length | `n_pool` after eligibility filter on bootstrap multiset `D_k` |
+| Pool semantic digest | `SHA-256("pool/v2" ‖ replica_ordinal ‖ identity fields ‖ ordered (resample_position_ordinal, source_anchor_id) pairs ‖ outcome serialization stream)` |
+| Reconstruction | Qualified DEVELOPMENT SOURCE corpus + exact `bootstrap_root_k` + `stationary-bootstrap/v1` + feature/outcome/state versions → identical replica sequence / pools / digests |
 | Verification before sampling | Recompute `pool_semantic_digest`; mismatch → `FORECAST_POOL_REPLAY_MISMATCH` fail closed |
 
-**Persistence bound:** seal only compact replica artifacts (edges, digests, seeds, counts ≤64 KiB). Reconstruct pools on demand from DEVELOPMENT corpus.
+**Persistence bound:** seal only compact replica artifacts (edges, digests, `bootstrap_root_k`, counts ≤64 KiB). Reconstruct pools on demand from DEVELOPMENT SOURCE corpus + bootstrap contract.
+
+**Fail-closed codes:**
+
+- `SOURCE_CORPUS_DUPLICATE_ANCHOR` — duplicate in SOURCE corpus (invalid)
+- Bootstrap multiplicity — **never** an error
 
 ### 2.5 Quantizer `quantizeScale8HalfUp/v1` (FORECAST-ONLY)
 
@@ -649,14 +859,81 @@ Decode IEEE-754 binary64 to exact rational `(sign, mantissa, exponent2)`; value 
 
 **WP-EXEC-ACCT rule:** Preserve the above semantics exactly. Do not change Risk/execution rounding to Forecast `quantizeScale8HalfUp/v1`. Any future HALF_UP unification requires explicit separate Human-approved change.
 
-### 2.6 RNG `WAIA_RANDOM_BLOCK_V1`
+### 2.6 RNG `WAIA_RANDOM_BLOCK_V1` (B2 — byte-exact)
 
-64-byte preimage: `MAGIC(8)="WAIACBR1" | domain_tag(8) | root_seed(32) | replica_u32 | sample_u32 | draw_u32 | retry_u32`. `block = SHA256(preimage)`; `word = uint64_be(block[0:8])`; `u = (word >> 11) / 2^53`; unbiased `[0,K)` via rejection (`t = 2^64 mod K`).
+**Sampler contract version:** `waia-cbrng/sha256-ctr/v1`
+
+**64-byte preimage layout (exact offsets; all multi-byte integers big-endian):**
+
+| Offset | Size | Field | Value |
+|--------|------|-------|-------|
+| 0 | 8 | `MAGIC` | ASCII `WAIACBR1` (exactly 8 bytes; no NUL padding) |
+| 8 | 8 | `DOMAIN` | exact 8-byte ASCII domain constant (see table below) |
+| 16 | 32 | `ROOT_SEED` | exactly 32 bytes — **never** a uint32 truncation |
+| 48 | 4 | `replica_u32` | replica ordinal |
+| 52 | 4 | `sample_u32` | sample / resample-position ordinal |
+| 56 | 4 | `draw_u32` | draw semantic within `(replica, sample)` |
+| 60 | 4 | `retry_u32` | rejection retry ordinal (starts at 0) |
+
+`block = SHA256(preimage)` (32 bytes).
+
+**Frozen 8-byte DOMAIN constants (first program — no runtime hashing/truncating of human-readable strings):**
+
+| DOMAIN (8 bytes ASCII) | Use |
+|------------------------|-----|
+| `EPIBOOT1` | Epistemic stationary-bootstrap addressing (§2.4.0) |
+| `ALEDRAW1` | Aleatoric model draw from replica pool at issuance |
+| `SCORECRN1` | Scoring-stream CRN for `energy-mc/v1` / harness replica-selection dimension |
+
+**32-byte root derivations (binary digests — decoded SHA-256 bytes, not hex UTF-8):**
+
+```
+bootstrap_root_prefix_16 = ASCII "WAIAEPIBOOTROOT1"   // exactly 16 bytes
+bootstrap_root_k = SHA256( bootstrap_root_prefix_16 ‖ predictive_package_digest_32 ‖ uint32_be(k) )
+
+aleatoric_root_prefix_16 = ASCII "WAIAALEDRAWROOT1"   // exactly 16 bytes
+aleatoric_root_t = SHA256( aleatoric_root_prefix_16 ‖ predictive_package_digest_32 ‖ forecast_seal_digest_32 )
+
+score_root_prefix_16 = ASCII "WAIASCOREROOT1"         // exactly 16 bytes
+score_root = SHA256( score_root_prefix_16 ‖ scoring_stream_identity_digest_32 )
+```
+
+`forecast_seal_digest_32` = decoded binary SHA-256 of the per-issuance forecast seal identity for `(symbol, t, h, replica set)`.
+
+**Ordinal field mappings:**
+
+| Use | DOMAIN | replica_u32 | sample_u32 | draw_u32 | retry_u32 |
+|-----|--------|-------------|------------|----------|-----------|
+| Bootstrap initial/restart index | `EPIBOOT1` | `k` | `resample_position_ordinal` | `0` | rejection retry |
+| Bootstrap restart Bernoulli | `EPIBOOT1` | `k` | `resample_position_ordinal` | `1` | rejection retry |
+| Aleatoric pool index draw | `ALEDRAW1` | `k` | `m` | `draw` | rejection retry |
+| Scoring stream CRN | `SCORECRN1` | `s` | `d` | `0` | rejection retry |
+
+**`UNBIASED_INT(N)` for `[0, N)` (integer draws — bootstrap + pool indexing):**
+
+Reject `N <= 0`.
+
+```
+limit = 2^64 - (2^64 mod N)
+word = uint64_be(block[0:8])
+if word >= limit:
+  increment retry_u32 and redraw (new SHA256 block)
+else:
+  result = word mod N
+```
+
+No modulo bias. No mutable RNG cursor across calls — each semantic address is independent.
+
+**Uniform `[0,1)` for scoring verification (§2.7 only):**
+
+`u53 = (uint64_be(block[0:8]) >> 11) / 2^53` — used for scoring-stream semantic digest verification; **not** for bootstrap integer indexing.
+
+**Forbidden:** passing uint32 `seed_k` where 32-byte `ROOT_SEED` is required; long symbolic domain names as executor input; executor-selected alternative RNG implementations.
 
 ### 2.7 Scoring streams
 
 - `scoring_stream_identity_digest` = contract identity hash
-- `scoring_stream_semantic_digest` = streaming hash of actual uint53 numerators `U_s[d]` for `s=0..S-1`, `d=0..D_SCORE_MAX-1` (`D_SCORE_MAX=16`; index 0 = replica selection)
+- `scoring_stream_semantic_digest` = streaming hash of actual uint53 numerators `U_s[d]` for `s=0..S-1`, `d=0..D_SCORE_MAX-1` (`D_SCORE_MAX=16`; index 0 = replica selection) drawn via domain **`SCORECRN1`**
 - **Do not hash scale-8-quantized uniforms for RNG verification**
 
 ### 2.8 energy-mc/v1
@@ -744,11 +1021,11 @@ Decode IEEE-754 binary64 to exact rational `(sign, mantissa, exponent2)`; value 
 - `lib/trader/guardian/htr-breach-partial-entry-cancellation.ts`
 - `lib/trader/intelligence/strategies/*`, `lib/trader/intelligence/hypothesis/*`
 
-**Design:** Decision record has no Risk-allowance input and **no** StrategySignal confidence/expectedEdge economic input. Kill fold state machine: `TRIPPED → revoke exposure-increasing allowances → cancel pending entries → CLOSE_ONLY → FLATTEN → RECONCILE → HALT`. Risk verdict set: `APPROVE | APPROVE_CLAMPED | VETO | CLOSE_ONLY | HALT`. Guardian FHV-v1 = mechanical narrow policy only; mature Position Reassessment deferred (§1.22).
+**Design:** Enforce `Forecast → Decision → deterministic desired-size → Portfolio → Risk (downward-only) → Execution` and kill/flatten/HALT fold; encode Strategy/Hypothesis authority firewalls including **`StrategySignal.maxRisk` quarantine** (§1.20); document FHV-v1 narrow Guardian policy as subset of `FHV_EXECUTABLE_POLICY_V1` (§1.22–§1.24).
 
-**Forbidden:** Decision consulting downstream Risk allowance; Decision using legacy strategy edge/confidence for EV/actionability; post-HALT emergency trading; claiming FHV-v1 proves mature exit intelligence.
+**Forbidden:** Decision consulting downstream Risk allowance; Decision using legacy strategy edge/confidence/**maxRisk** for EV/actionability/sizing; Risk improving proposals; post-HALT emergency trading; claiming FHV-v1 proves mature exit intelligence; using K/M scientific notional grid as FHV sizing.
 
-**Tests:** authority ordering regression; kill-fold integration; strategy-mutation non-effect on V2 EV; hypothesis-confidence firewall.
+**Tests:** authority ordering regression; kill-fold integration; strategy-mutation non-effect on V2 EV and desired-size; hypothesis-confidence firewall; maxRisk quarantine on V2 sizing path.
 
 **Dependencies:** WP-EXEC-ACCT.
 
@@ -854,7 +1131,7 @@ Decode IEEE-754 binary64 to exact rational `(sign, mantissa, exponent2)`; value 
 
 **Current seams:** migrations 0082/0102 (V1), `build-forecast-records.ts`, `calibration-scorer.ts`.
 
-**Design:** Implement migrations 0110–0129 (§1.10). Package-level `bytea` artifacts ≤64KiB/replica. Per-forecast compact seal with `distribution_semantic_digest`. `trader_forecast_predictive_package_target_v2` two-role binding. `quantizeScale8HalfUp/v1` + `WAIA_RANDOM_BLOCK_V1`. No `trader_forecast_exec_sample_v2`. Terminal = deterministic projection of package onto `R_h`. **Epistemic replicas** = DEVELOPMENT stationary-bootstrap refits (§2.4.1); **canonical pools** (§2.4.2). Heuristic hypothesis confidence is **not** a Forecast V2 probability input (§1.21).
+**Design:** Implement migrations 0110–0129 (§1.10). Package-level `bytea` artifacts ≤64KiB/replica. Per-forecast compact seal with `distribution_semantic_digest`. `trader_forecast_predictive_package_target_v2` two-role binding. `quantizeScale8HalfUp/v1` + byte-exact `WAIA_RANDOM_BLOCK_V1` (§2.6) + `stationary-bootstrap/v1` (§2.4.0). No `trader_forecast_exec_sample_v2`. Terminal = deterministic projection of package onto `R_h`. **Epistemic replicas** = DEVELOPMENT `stationary-bootstrap/v1` refits (§2.4.0–§2.4.1); **canonical pools** with SOURCE vs bootstrap multiplicity (§2.4.2). Heuristic hypothesis confidence is **not** a Forecast V2 probability input (§1.21).
 
 **Fail-closed:** `FORECAST_DISTRIBUTION_REPLAY_MISMATCH`, `FORECAST_MODEL_ARTIFACT_DIGEST_MISMATCH`, `EXEC_OPP_NORMALIZATION_DEGENERATE_COMPONENT`, `FORECAST_RUNTIME_QUALIFICATION_MISMATCH`.
 
@@ -874,9 +1151,9 @@ Decode IEEE-754 binary64 to exact rational `(sign, mantissa, exponent2)`; value 
 
 **Current seams:** `build-decision-record.ts`, `forecast-decision-service.ts`, `historical-simulated-exchange.ts`, `cost-model.ts`.
 
-**Design:** O(K) streaming EV over regenerated sample streams from **epistemic replicas** (§2.4.1). Post-horizon **scientific** participation-sliced liquidation (Contract A, §1.22); residual lower floor 0 USDT in `Pi_lower`. `DECISION_ACTIONABLE` without Risk term and without StrategySignal confidence/expectedEdge. Capital admission consumes scientific-admission receipt; economic-utility PASS is required before `FROZEN_SELECTED_PACKAGE_READY` (§1.19). Emit interfaces for STAGE-B economic-utility evidence consumers.
+**Design:** O(K) streaming EV over regenerated sample streams from **epistemic replicas** (§2.4.0–§2.4.1). **Scientific valuation** under `SCIENTIFIC_VALUATION_CONTRACT_V1` (Contract A, §1.22–§1.24); **realized economic path** under `FHV_EXECUTABLE_POLICY_V1` (Contract B). Residual lower floor 0 USDT in `Pi_lower`. `DECISION_ACTIONABLE` without Risk term and without StrategySignal confidence/expectedEdge/maxRisk. Capital admission consumes scientific-admission receipt; **`HUMAN_FHV_EXECUTABLE_POLICY_V1`** + economic-utility PASS required before `FROZEN_SELECTED_PACKAGE_READY` (§1.19). Emit interfaces for STAGE-B economic-utility evidence consumers binding `executable_policy_digest`.
 
-**Forbidden:** Risk in actionability; legacy strategy edge as EV; heuristic hypothesis confidence as probability; using runtime Guardian exits to rewrite scientific liquidation A; retuning after economic-utility results.
+**Forbidden:** Risk in actionability; legacy strategy edge/maxRisk as EV or sizing authority; heuristic hypothesis confidence as probability; using runtime Guardian exits to rewrite scientific valuation A; retuning after economic-utility results; K/M notional grid as FHV sizing.
 
 **Dependencies:** WP-FORECAST-V2, WP-EXEC-ACCT, WP-AUTHORITY. **NOT** hard-dep WP-EXECOPP-QUAL (runtime receipt only).
 
@@ -884,7 +1161,7 @@ Decode IEEE-754 binary64 to exact rational `(sign, mantissa, exponent2)`; value 
 
 **DoD:** EV ordering tests; firewall regressions; fail-closed without receipt; scientific liquidation mechanics tests; economic-utility receipt schema ready for OG-SCI-PACKAGE STAGE-B.
 
-**Human gate:** H3 before capital; `HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1` before STAGE-B PASS.
+**Human gate:** H3 before capital; `HUMAN_FHV_EXECUTABLE_POLICY_V1` before STAGE-B; `HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1` before STAGE-B PASS.
 
 ---
 
@@ -1183,7 +1460,7 @@ Symmetric check: `F(z) + F(−z) = 1` within `1e-15` absolute for finite z≠0.
 
 **Risk:** T1.
 
-**DoD:** Bootstrap determinism known-answer; Holm known-answer; CDF kernel vectors vs § frozen table; betainc-lentz recurrence tests; epistemic K≠M separation property tests.
+**DoD:** Bootstrap determinism known-answer (`stationary-bootstrap/v1` §2.4.0); Holm known-answer; CDF kernel vectors vs § frozen table; betainc-lentz recurrence tests; epistemic K≠M separation property tests; WAIA_RANDOM_BLOCK_V1 byte-exact tests (§2.6).
 
 ---
 
@@ -1193,7 +1470,7 @@ Symmetric check: `F(z) + F(−z) = 1` within `1e-15` absolute for finite z≠0.
 
 **Joint baselines:** `empirical-joint/v1` (unbiased dev anchor index); `marginal-independence/v1` (type-7 empirical inverse CDF per component).
 
-**K/M grid:** K∈{10,20,30,40,50}, M∈{20,40,80} (15 configs); reference (50,80); 4096 anchors/cell = 16384 total; scale grid {0.01,0.05,0.10,0.25,0.50}·C0; ev_rate=EV/notional; relative error denominator max(|ev_rate_ref|,5e-5); 95th-pct max over notionals; thresholds 0.01 EV / 0.02 MC_ES.
+**K/M grid:** K∈{10,20,30,40,50}, M∈{20,40,80} (15 configs); reference (50,80); 4096 anchors/cell = 16384 total; scale grid {0.01,0.05,0.10,0.25,0.50}·C0 for **scientific sensitivity reporting only** — MUST NOT become `FHV_EXECUTABLE_POLICY_V1` sizing (§1.23); ev_rate=EV/notional; relative error denominator max(|ev_rate_ref|,5e-5); 95th-pct max over notionals; thresholds 0.01 EV / 0.02 MC_ES.
 
 **Dependencies:** WP-FORECAST-V2, WP-VOLUME-QUAL, WP-RESEARCH-HARNESS.
 
@@ -1263,8 +1540,8 @@ For each `(symbol, primary_horizon)` predictive package:
 4. Execution Opportunity scoring (`energy-mc/v1`) consumes the **same** joint sample set.
 5. **No Decision-side probability reconciliation** exists.
 6. Package is PIT-safe; model fitting uses DEVELOPMENT partition only.
-7. Sampler/artifact/replay semantics are fully frozen (`WAIA_RANDOM_BLOCK_V1`, `quantizeScale8HalfUp/v1`, `distribution_semantic_digest`).
-8. A package that reaches STAGE-A predictive pass may become `FROZEN_SELECTED_PACKAGE_READY` **only after** STAGE-B `ECONOMIC_UTILITY_PASS` (§1.19).
+7. Sampler/artifact/replay semantics are fully frozen (`stationary-bootstrap/v1`, `WAIA_RANDOM_BLOCK_V1` §2.6, `quantizeScale8HalfUp/v1`, `distribution_semantic_digest`).
+8. A package that reaches STAGE-A predictive pass may become `FROZEN_SELECTED_PACKAGE_READY` **only after** `HUMAN_FHV_EXECUTABLE_POLICY_V1` + STAGE-B `ECONOMIC_UTILITY_PASS` (§1.19).
 
 Any challenger marked `EXECUTOR_READY` must satisfy all eight points.
 
@@ -1278,20 +1555,20 @@ Full-joint conditional empirical challenger with **Gate-D epistemic bootstrap re
 |-------|---------------|
 | Package roles | `TERMINAL_RETURN` @ `h` + `EXECUTION_OPPORTUNITY` @ `h+3` from one package |
 | State variable (PIT) | `realizedVol20m_1m` at anchor `t` from `feature-engine/rv/v2` — uses only closes in `(t-20m, t]` |
-| **Epistemic replica k** | Stationary-bootstrap **refit** of DEVELOPMENT corpus `D` → `D_k` (§2.4.1). On `D_k`, compute type-7 tertile edges `{q1_k,q2_k}` and state-conditional pools. **Edges are refit per replica** — not fixed from a single parent fit. |
-| State boundaries (per replica) | On `D_k` only: empirical tertiles `p ∈ {1/3, 2/3}` via type-7 on `realizedVol20m_1m` → `q1_k < q2_k` |
+| **Epistemic replica k** | `stationary-bootstrap/v1` **refit** of DEVELOPMENT SOURCE corpus `D` → bootstrap multiset `D_k` (§2.4.0–§2.4.2). On `D_k`, compute type-7 tertile edges `{q1_k,q2_k}` and state-conditional pools preserving bootstrap multiplicity. **Edges are refit per replica** — not fixed from a single parent fit. |
+| State boundaries (per replica) | On bootstrap multiset `D_k`: empirical tertiles `p ∈ {1/3, 2/3}` via type-7 on `realizedVol20m_1m` → `q1_k < q2_k` |
 | State assignment at `t` for replica k | Using **replica k edges**: `S0` if `rv ≤ q1_k`; `S1` if `q1_k < rv ≤ q2_k`; `S2` if `rv > q2_k` (`rv==q1_k → S0`; `rv==q2_k → S1`) |
-| Replica training pool | Canonical ordered eligible anchors in `D_k` with PIT-valid resolved 13-D outcomes and state assignment under edges `(q1_k,q2_k)` — reconstruction §2.4.2 |
+| Replica training pool | Canonical ordered bootstrap observations in `D_k` with PIT-valid resolved 13-D outcomes and state assignment under edges `(q1_k,q2_k)` — ascending `resample_position_ordinal` after state filter (§2.4.2) |
 | Min pool count | If `|pool_{k,state}| < 30` → that replica marks state `UNAVAILABLE` at anchors needing it; if all states empty → `FORECAST_UNAVAILABLE_STATE_EMPTY` |
-| **Aleatoric draws m** | From replica k's sealed state pool only: unbiased index via `WAIA_RANDOM_BLOCK_V1` domain `aleatoric-draw/v1`, ordinals `(k,m,draw)`; emit observed 13-D vector — **no parametric density** |
+| **Aleatoric draws m** | From replica k's sealed state pool only: unbiased index via `WAIA_RANDOM_BLOCK_V1` domain **`ALEDRAW1`**, ordinals `(k,m,draw)`; emit observed 13-D vector — **no parametric density** |
 | Terminal marginal | `R_h` component of **the same** joint samples for replica k; bucket masses from empirical frequencies of those samples |
 | Execution Opportunity | Complete 13-D samples from the **same** replica-k sample stream |
 | Coherence | Unit test: per sealed issuance, terminal bucket masses = `R_h` marginal of joint samples within `1e-12` |
-| Artifact schema (≤64KiB / replica) | `{q1,q2,state_edges_version:"type7-tertile/v1", pool_digest_S0,S1,S2, n_S0,n_S1,n_S2, bootstrap_seed, L_block, symbol, h, fit_partition:"development", replica_ordinal}` |
+| Artifact schema (≤64KiB / replica) | `{q1,q2,state_edges_version:"type7-tertile/v1", pool_digest_S0,S1,S2, n_S0,n_S1,n_S2, bootstrap_root_k, L_block, symbol, h, fit_partition:"development", replica_ordinal}` |
 | model_transform_version | `rv-state-conditional-empirical-joint/v1` |
 | Parent package seal | `K` replica artifacts + package digest over ordered replica digests; no shared single-pool shortcut |
 | Scoring | Same harness protocol; comparable to unconditional `empirical-joint/v1` on common PIT-valid anchors |
-| Known-answer | Synthetic DEVELOPMENT with known bootstrap seeds → distinct replica edges; M↑ reduces `mu_k` MC error |
+| Known-answer | Synthetic DEVELOPMENT with known `bootstrap_root_k` → distinct replica edges; M↑ reduces `mu_k` MC error; `stationary-bootstrap/v1` suite (§2.4.0); SOURCE duplicate → `SOURCE_CORPUS_DUPLICATE_ANCHOR`; bootstrap multiplicity preserved |
 | Compute budget | Fit: O(K · \|D\|) once; issuance: O(M) after pool reconstruct |
 | Scientific validity | Full-joint; epistemic K via bootstrap refits; aleatoric M separated; PIT-safe; falsifiable vs unconditional empirical-joint |
 
@@ -1350,12 +1627,14 @@ Parametric joint location-scale model beyond empirical baselines requires additi
 | Plan approval | Human | `/implement` start |
 | H3 K/M + α_epi=0.10 | Human | capital eligibility |
 | Target grid `HUMAN_RATIFIED_CAPITAL` | Human | capital terminal forecasts |
+| `HUMAN_FHV_EXECUTABLE_POLICY_V1` | Human | STAGE-B start; seals `executable_policy_digest` (§1.23–§1.24) |
 | `HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1` | Human | STAGE-B ECONOMIC_UTILITY_PASS numeric rule |
 | OG-HOST-QUAL runtime tuple | Measured | authoritative replay |
 | OG-DATA-RECEIPTS | Measured | Control Replay |
 | OG-CONTROL-REPLAY | Measured | holdout path |
-| OG-SCI-PACKAGE STAGE-A/B | Measured + Human | `FROZEN_SELECTED_PACKAGE_READY` |
+| OG-SCI-PACKAGE STAGE-A / HUMAN_FHV / STAGE-B | Measured + Human | `FROZEN_SELECTED_PACKAGE_READY` (binds `executable_policy_digest`) |
 | OG-HOLDOUT-AUTH | Human one-shot | FHV (requires CONTROL_REPLAY=PASS **and** FROZEN_SELECTED_PACKAGE_READY) |
+| OG-FHV (DEE-541) | Measured | blind holdout with **identical** `executable_policy_digest` |
 | Squash merge | Human | production tip |
 | Position Reassessment pre-live | Human (future Linear) | live-capital readiness after DEE-541 |
 
@@ -1380,23 +1659,38 @@ Parametric joint location-scale model beyond empirical baselines requires additi
 | Decision/Risk ordering | ✓ |
 | Predictive skill ≠ economic utility (P1) | ✓ (§1.15, §1.19) |
 | Strategy not second economic brain (P2) | ✓ (§1.20) |
+| `StrategySignal.maxRisk` quarantined on V2 (B4) | ✓ (§1.20, §1.23) |
 | Hypothesis confidence firewall (P3) | ✓ (§1.21) |
+| `stationary-bootstrap/v1` literal + executable (B1) | ✓ (§2.4.0) |
+| Bootstrap output length exactly n (B1) | ✓ (§2.4.0) |
+| Restart probability exactly 1/L via UNBIASED_INT(L)==0 (B1) | ✓ (§2.4.0) |
+| Circular continuation + wrap specified (B1) | ✓ (§2.4.0) |
+| `WAIA_RANDOM_BLOCK_V1` 8-byte domains + 32-byte roots (B2) | ✓ (§2.6: EPIBOOT1, ALEDRAW1, SCORECRN1) |
+| No uint32 seed where 32-byte root required (B2) | ✓ (§2.4.1, §2.6) |
+| SOURCE duplicates fail closed; bootstrap multiplicity valid (B3) | ✓ (§2.4.2) |
 | Epistemic K = bootstrap refits; M = aleatoric (E1) | ✓ (§2.4.1) |
-| Canonical pool order/reconstruction (E2) | ✓ (§2.4.2) |
+| Canonical pool order by resample_position_ordinal (B3) | ✓ (§2.4.2) |
+| One sizing/allocation authority chain (B4) | ✓ (§1.23) |
+| K/M notional grid ≠ FHV sizing (B4) | ✓ (§1.23, WP-EXECOPP-QUAL) |
+| WALK_FORWARD STAGE-B ≡ blind FHV `executable_policy_digest` (B5) | ✓ (§1.15, §1.24) |
+| Guardian exact enabled/disabled once policy frozen — never “optional” (B5) | ✓ (§1.22, §1.24) |
+| Early Guardian exit cannot rewrite scientific Forecast target (B5) | ✓ (§1.22) |
 | Complete betainc-lentz/v1 recurrence (N1) | ✓ |
 | Student-t5 CDF limits F(-∞)=0, F(0)=0.5, F(+∞)=1 | ✓ |
 | Full-joint EXECUTOR_READY challenger | ✓ `rv-state-conditional-empirical-joint/v1` |
 | Terminal = exact R_h marginal of same joint package | ✓ |
 | HAR not falsely executor-ready | ✓ |
 | Guardian FHV-v1 vs mature Position Reassessment (G1) | ✓ (§1.22) |
-| Scientific liquidation ≠ runtime Guardian | ✓ |
+| Scientific valuation ≠ FHV executable policy | ✓ (§1.22, §1.24) |
 | No optional/as-needed persistence decisions | ✓ migrations `0110`–`0145` |
 | Quantizer not falsely attributed to risk numeric | ✓ (§2.5.1) |
 | Complete Cody CALERF algorithm frozen | ✓ |
 | One PR topology with honest HPA-7 criterion pass | ✓ |
 | Post-merge gates not claimed in PR | ✓ |
+| Mature Position Reassessment NOT falsely claimed | ✓ (§1.22 carry-forward) |
+| `state.status` remains `draft` | ✓ |
 
-**No unresolved plan blocker identified.**
+**B1–B5 closure complete. No unresolved plan blocker identified for Human approval of bootstrap/RNG/sizing/executable-policy contracts.**
 
 ---
 
@@ -1467,11 +1761,11 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 5 Time | kill fold immediate on trip; flatten until flat |
 | 6 Inputs | Decision record, Risk limits, Guardian state |
 | 7 Persistence | `trader_kill_switches`, decision/risk audit tables |
-| 8 Design | Explicit state machine; Decision excludes Risk allowance and StrategySignal EV; Guardian FHV-v1 mechanical only |
-| 9 Forbidden | Decision reading Risk allowance; StrategySignal→EV; claiming mature Position Reassessment in FHV-v1 |
+| 8 Design | Explicit state machine; sizing authority chain §1.23; Decision excludes Risk allowance and StrategySignal EV/maxRisk; Guardian as subset of FHV_EXECUTABLE_POLICY_V1 |
+| 9 Forbidden | Decision reading Risk allowance; StrategySignal→EV/sizing; Risk improving proposals; claiming mature Position Reassessment in FHV-v1 |
 | 10 Fail-closed | `KILL_SWITCH_TRIPPED`, `HALT_ACTIVE` |
 | 11 KA | trip → CLOSE_ONLY within 1 cycle |
-| 12 Tests | ordering regression; kill-fold; strategy-mutation non-effect; hypothesis firewall |
+| 12 Tests | ordering regression; kill-fold; strategy-mutation non-effect on EV and desired-size; hypothesis firewall; maxRisk quarantine |
 | 13 PIT | N/A |
 | 14 Replay | deterministic kill sequence |
 | 15 Budget | O(1) |
@@ -1649,8 +1943,8 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 5 Time | exit first slice t+h+1m |
 | 6 Inputs | sealed forecasts; scientific-admission receipt required for capital path (table `0142`–`0143`); STAGE-B economic-utility uses frozen package+policy |
 | 7 Persistence | `trader_intelligence_decision_economics_v2` (`0140`–`0141`) |
-| 8 Design | O(K) streaming quantiles over epistemic replicas; Strategy/Hypothesis non-authority; scientific liquidation Contract A |
-| 9 Forbidden | Risk in actionability; StrategySignal EV; hypothesis confidence as probability; retuning after economic utility |
+| 8 Design | O(K) streaming quantiles over epistemic replicas; SCIENTIFIC_VALUATION vs FHV_EXECUTABLE_POLICY separation; Strategy/Hypothesis/maxRisk non-authority; executable_policy_digest binding |
+| 9 Forbidden | Risk in actionability; StrategySignal EV/maxRisk sizing; hypothesis confidence as probability; retuning after economic utility; K/M grid as FHV sizing |
 | 10 Fail-closed | `EV_RANGE_INVALID`, `DECISION_NON_ACTIONABLE` |
 | 11 KA | ordering EV_lower≤base≤upper; strategy-mutation non-effect |
 | 12 Tests | economics unit; liquidation integration; firewall regressions; economic-utility receipt schema |
@@ -1662,7 +1956,7 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 18 Dependencies | FORECAST-V2, EXEC-ACCT, AUTHORITY |
 | 19 Risk | T1 |
 | 20 DoD | fail-closed + mechanics + firewalls + STAGE-B evidence interfaces |
-| 21 Human | H3; HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1 |
+| 21 Human | H3; HUMAN_FHV_EXECUTABLE_POLICY_V1; HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1 |
 
 ### A.11 WP-CONTROL-REPLAY-AUTH (DEE-529)
 
