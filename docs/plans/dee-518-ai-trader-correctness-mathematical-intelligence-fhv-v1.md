@@ -144,7 +144,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Human plan approval (state.status -> approved) after E1-E3 final micro-closure review; then /implement starting WP-CANON"
+  nextAction: "Human plan approval (state.status -> approved) after F1 K/M configuration-identity micro-closure review; then /implement starting WP-CANON"
 provenance:
   createdFrom: chat
   gateDRatificationSha: 1f10d4eebce23f92dccb3d550e8dc10812d26a9e
@@ -155,6 +155,7 @@ provenance:
   scientificIdentityPreHoldoutClosure: "C1/C2/C3/C4/C5/C6/C7/C8 applied (2026-08-10); prior commit f5d0aeb"
   byteExactDigestClosure: "D1/D2/D3/D4/D5 applied (2026-08-10); prior commit 93542c5"
   e1E3FinalMicroClosure: "E1/E2/E3 applied (2026-08-10); prior commit 69bf603"
+  f1KmConfigurationIdentityClosure: "F1 applied (2026-08-10); prior commit 68d0482"
   supersedes: null
 ---
 
@@ -450,7 +451,7 @@ If Human proves unreviewable: DEE-512 spawns INTEGRATION-A (WP-EXEC-ACCT…WP-CO
 
 **Frozen three-stage gate (inside DEE-539 OG-SCI-PACKAGE):**
 
-1. **PREDICTIVE_SKILL_PASS on WF_PREDICTIVE** — proper predictive scoring vs mandatory baselines (WP-RESEARCH-HARNESS / WP-EXECOPP-QUAL). Output: freeze `(predictive_package_generation_identity_digest, predictive_package_content_digest, model_transform_version, K, M, α_epi, decision_policy_version, economic_semantics_version)`.
+1. **PREDICTIVE_SKILL_PASS on WF_PREDICTIVE** — proper predictive scoring vs mandatory baselines (WP-RESEARCH-HARNESS / WP-EXECOPP-QUAL). Output: freeze the **already-evaluated selected candidate** tuple `(predictive_package_generation_identity_digest, predictive_package_content_digest, model_transform_version, K_config, M_config, alpha_epi_config, decision_policy_version, economic_semantics_version)` — digests computed **before** H3 from exact `(K_config_dec, M_config_dec, alpha_epi_config_scale8)` configuration binding (§2.10 F1).
 2. **`BLOCKING_PRE_HOLDOUT_POSITION_REASSESSMENT_INTEGRATION`** — future separate integration boundary (§1.22); if it changes Forecast/Decision/executable semantics, rerun DEVELOPMENT + WF_PREDICTIVE qualification before proceeding.
 3. **`HUMAN_FHV_EXECUTABLE_POLICY_V1`** — Human receipt **after STAGE-A** (+ Position Reassessment gate when applicable) and **before WF_ECONOMIC evidence** (§1.23–§1.25).
 4. **`HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1`** — Human numeric rule sealed **before WF_ECONOMIC evidence** (not merely before PASS marker).
@@ -838,7 +839,7 @@ This yields circular stationary blocks with geometric block lengths (Politis-Rom
 | **K** | Number of **epistemic model replicas**. Replica `k` is a **DEVELOPMENT-only deterministic stationary-bootstrap refit** of the forecast model — **not** a separate Monte Carlo sample stream from one fitted F. Variation across `{mu_k}` is epistemic model uncertainty. |
 | **M** | Number of **aleatoric draws** from replica `k`'s predictive distribution `F_t^(k)` at issuance. Changing M reduces Monte Carlo error in `mu_k`; it does **not** redefine epistemic dispersion. |
 | **S** | `S = K·M` total ephemeral samples for Decision/scoring (never persisted as rows). |
-| **α_epi** | First-program `0.10` (Human H3 before capital). |
+| **α_epi** | First-program configured value `0.10` (`alpha_epi_config_scale8` in `pkg-gen-id/v1`). **H3 Human ratification** is required before **capital eligibility** (§6) — not before constructing/evaluating a candidate package identity. |
 
 **Replica construction (all EXECUTOR_READY packages, including §4.1):**
 
@@ -1207,8 +1208,8 @@ All **`pkg-gen-id/v1`** and **`fcst-gen-id/v1`** fields use **one** canonical li
 | Integer (`*_dec`, horizons, K/M) | Base-10 ASCII; no leading `+`; no leading zero except literal `0`; value + `0x0A` |
 | SHA-256 digest (`*_digest_hex`) | Exactly 64 lowercase `[0-9a-f]` + `0x0A` |
 | `code_release_sha` | Exact lowercase Git commit hex (40 chars for SHA-1 object name; no prefix) + `0x0A` |
-| `alpha_epi_scale8` | `quantizeScale8HalfUp/v1` canonical string for ratified first-program α_epi=`0.10` → UTF-8 `0.10000000` + `0x0A` (frozen; no executor float stringification) |
-| `K_selected_dec` / `M_selected_dec` | Human-ratified **selected integer** epistemic replica count K and aleatoric draw count M from H3 gate (exact decimal ASCII integers bound into identity; not prose placeholders `K_contract` / `M_contract`) |
+| `alpha_epi_config_scale8` | `quantizeScale8HalfUp/v1` canonical string for first-program configured α_epi=`0.10` → UTF-8 `0.10000000` + `0x0A` (frozen configuration value; no executor float stringification) |
+| `K_config_dec` / `M_config_dec` | Exact **model-configuration** epistemic replica count K and aleatoric draw count M used to **generate/evaluate** this package candidate (decimal ASCII integers). **Configuration values — NOT** Human-approved, capital-authorized, admitted, or selected-winner authority state. Rejected grid cells retain immutable research identities. |
 
 **Frozen digests:**
 
@@ -1241,9 +1242,9 @@ normalization_version_digest_hex
 sampler_contract_version
 quantizer_version
 code_release_sha
-K_selected_dec
-M_selected_dec
-alpha_epi_scale8
+K_config_dec
+M_config_dec
+alpha_epi_config_scale8
 ```
 
 | Field | Exact encoding |
@@ -1264,23 +1265,43 @@ alpha_epi_scale8
 | `sampler_contract_version` | `waia-cbrng/sha256-ctr/v1` |
 | `quantizer_version` | `quantizeScale8HalfUp/v1` |
 | `code_release_sha` | lowercase Git release SHA (exact bytes used elsewhere for release identity) |
-| `K_selected_dec` | Human-ratified selected K integer (H3); e.g. reference grid cell uses `50` |
-| `M_selected_dec` | Human-ratified selected M integer (H3); e.g. reference grid cell uses `80` |
-| `alpha_epi_scale8` | frozen `0.10000000` for first-program α_epi=0.10 |
+| `K_config_dec` | configured epistemic replica count K for this candidate (e.g. grid cell `20` or reference `50`) |
+| `M_config_dec` | configured aleatoric draw count M for this candidate (e.g. grid cell `40` or reference `80`) |
+| `alpha_epi_config_scale8` | frozen configuration `0.10000000` for first-program α_epi=0.10 |
 
 `predictive_package_generation_identity_digest = SHA256(exact pkg-gen-id/v1 bytes)`
 
-**Known-answer tests (mandatory):** fixed `pkg-gen-id/v1` byte vector (all fields populated with frozen fixture values) → fixed 32-byte digest; permuting field order or encoding (e.g. uppercase hex, leading-zero integer, float `alpha_epi`) → digest mismatch → fail closed.
+**Known-answer tests (mandatory):** fixed `pkg-gen-id/v1` byte vector (all fields populated with frozen fixture values) → fixed 32-byte digest; permuting field order or encoding (e.g. uppercase hex, leading-zero integer, float alpha) → digest mismatch → fail closed; **regression (F1):** same complete `(K_config,M_config,alpha_epi_config)` → same generation digest; `K_config_dec` `20`→`40` changes digest; `M_config_dec` `40`→`80` changes digest; `alpha_epi_config_scale8` change changes digest; Human H3 approval metadata MUST NOT alter already-computed candidate generation/content digests; selecting a candidate MUST NOT regenerate it under a new random identity; H3 receipt MUST reference the exact candidate digests that produced qualification evidence.
 
-**MUST NOT include:** replica artifact digests; bootstrap roots; `predictive_package_content_digest`.
+**MUST NOT include:** replica artifact digests; bootstrap roots; `predictive_package_content_digest`; Human H3 receipt identity; capital-admission authority state.
+
+#### Configuration vs Human ratification (F1)
+
+Package generation identity binds **exact model configuration**, not whether Human has already ratified it.
+
+| Phase | Authority |
+|-------|-----------|
+| A. Preregister K/M grid | K∈{10,20,30,40,50}, M∈{20,40,80} (15 cells) |
+| B. Generate/evaluate candidates | Each cell uses deterministic `(K_config_dec, M_config_dec, alpha_epi_config_scale8)` in `pkg-gen-id/v1` |
+| C. K/M convergence evidence | Produced from evaluated candidates (WP-EXECOPP-QUAL) |
+| D. Deterministic selection rule | Yields one exact `(K_config, M_config, alpha_epi_config)` candidate tuple |
+| E. Human H3 review | Reviews evidence for the selected tuple |
+| F. Human H3 ratification | Ratifies or rejects the selected tuple |
+| G. Capital/scientific admission | Receipt binds selected `K_config_dec`, `M_config_dec`, `alpha_epi_config_scale8`, `predictive_package_generation_identity_digest`, `predictive_package_content_digest`, and H3 Human receipt identity |
+
+**Forbidden cycle:** Human H3 approval MUST NOT be an input required to construct a candidate package identity. Human authority attaches to the **selected already-evaluated candidate** — not to pre-evidence identity construction. Rejected candidates remain research evidence only; no package acquires capital authority merely because it has a package digest.
 
 #### Bootstrap → replica artifacts
 
+Let `K = K_config_dec` from the sealed `pkg-gen-id/v1` identity (configuration-bound; computable **before** H3).
+
 For each `k ∈ {0..K-1}`:
 
-1. `bootstrap_root_k = SHA256( bootstrap_root_prefix_16 ‖ predictive_package_generation_identity_digest_32 ‖ uint32_be(k) )`
+1. `bootstrap_root_k = SHA256( bootstrap_root_prefix_16 ‖ predictive_package_generation_identity_digest_32 ‖ uint32_be(k) )` — **no Human receipt** in root derivation (F1)
 2. Run `stationary-bootstrap/v1` on DEVELOPMENT SOURCE corpus `D`
 3. Refit; seal `replica_artifact_digest_k` per **§2.11.3** (exact artifact serialization)
+
+Distinct `(K_config_dec, M_config_dec, alpha_epi_config_scale8)` configurations receive distinct `predictive_package_generation_identity_digest` values and therefore distinct deterministic bootstrap root surfaces.
 
 **Package refit invalidation (C4):** if any replica has non-finite `q1/q2`, `q1_k >= q2_k`, corrupt pool digest, or invalid bootstrap reconstruction → package **`FORECAST_EPISTEMIC_REPLICA_INVALID`**; not scientifically admissible.
 
@@ -1733,7 +1754,7 @@ Post-result Holm rank/index **MAY** be persisted in the scientific receipt for a
 
 **Current seams:** migrations 0082/0102 (V1), `build-forecast-records.ts`, `calibration-scorer.ts`.
 
-**Design:** Implement migrations 0110–0129 (§1.10). Package-level `bytea` artifacts ≤64KiB/replica. Per-forecast compact seal with `distribution_semantic_digest` (§2.5.2). Non-circular identity DAG (§2.10) + byte-exact nested digests (§2.11). `trader_forecast_predictive_package_target_v2` two-role binding. `quantizeScale8HalfUp/v1` + byte-exact `WAIA_RANDOM_BLOCK_V1` (§2.6) + `stationary-bootstrap/v1` (§2.4.0). No `trader_forecast_exec_sample_v2`. Terminal = deterministic projection of package onto `R_h`. **Epistemic replicas** = DEVELOPMENT `stationary-bootstrap/v1` refits; **canonical pools** with SOURCE vs bootstrap multiplicity (§2.4.2). Fixed-K fail-closed (§4.1). Heuristic hypothesis confidence is **not** a Forecast V2 probability input (§1.21).
+**Design:** Implement migrations 0110–0129 (§1.10). Package-level `bytea` artifacts ≤64KiB/replica. Per-forecast compact seal with `distribution_semantic_digest` (§2.5.2). Non-circular identity DAG (§2.10) + byte-exact nested digests (§2.11). `pkg-gen-id/v1` binds `(K_config_dec, M_config_dec, alpha_epi_config_scale8)` as **configuration** values computable before H3 (§2.10 F1). `trader_forecast_predictive_package_target_v2` two-role binding. `quantizeScale8HalfUp/v1` + byte-exact `WAIA_RANDOM_BLOCK_V1` (§2.6) + `stationary-bootstrap/v1` (§2.4.0). No `trader_forecast_exec_sample_v2`. Terminal = deterministic projection of package onto `R_h`. **Epistemic replicas** = DEVELOPMENT `stationary-bootstrap/v1` refits; **canonical pools** with SOURCE vs bootstrap multiplicity (§2.4.2). Fixed-K fail-closed (§4.1). Heuristic hypothesis confidence is **not** a Forecast V2 probability input (§1.21).
 
 **Fail-closed:** `FORECAST_DISTRIBUTION_REPLAY_MISMATCH`, `FORECAST_MODEL_ARTIFACT_DIGEST_MISMATCH`, `EXEC_OPP_NORMALIZATION_DEGENERATE_COMPONENT`, `FORECAST_RUNTIME_QUALIFICATION_MISMATCH`.
 
@@ -2074,13 +2095,15 @@ Symmetric check: `F(z) + F(−z) = 1` within `1e-15` absolute for finite z≠0.
 
 **K/M grid:** K∈{10,20,30,40,50}, M∈{20,40,80} (15 configs); reference (50,80); 4096 anchors/cell = 16384 total; scale grid {0.01,0.05,0.10,0.25,0.50}·C0 for **scientific sensitivity reporting only** — MUST NOT become `FHV_EXECUTABLE_POLICY_V1` sizing (§1.23); ev_rate=EV/notional; relative error denominator max(|ev_rate_ref|,5e-5); 95th-pct max over notionals; thresholds 0.01 EV / 0.02 MC_ES.
 
+**F1 configuration identity (mandatory):** Each of the 15 preregistered `(K,M)` grid cells MUST receive a deterministic candidate package identity **before** H3: `pkg-gen-id/v1` binds exact `(K_config_dec, M_config_dec, alpha_epi_config_scale8)` → `predictive_package_generation_identity_digest` → bootstrap roots → replica artifacts → `predictive_package_content_digest`. The convergence gate evaluates all cells using the already-frozen methodology; a deterministic selection rule identifies one exact candidate tuple. **H3 Human ratification** then attaches authority to that **already-evaluated** candidate (generation/content digests + configuration values + H3 receipt). No candidate may acquire capital authority merely because it has a package digest. Human approval MUST NOT mutate or regenerate candidate identity.
+
 **Dependencies:** WP-FORECAST-V2, WP-VOLUME-QUAL, WP-RESEARCH-HARNESS.
 
 **Risk:** T1.
 
-**DoD:** K/M selection receipt; predictive scientific-admission receipt for STAGE-A; does **not** alone emit `FROZEN_SELECTED_PACKAGE_READY`.
+**DoD:** K/M selection receipt (references exact selected candidate digests); predictive scientific-admission receipt for STAGE-A; does **not** alone emit `FROZEN_SELECTED_PACKAGE_READY`.
 
-**Human gate:** H3 ratification of selected K,M,α_epi=0.10 before capital eligibility.
+**Human gate:** H3 ratification of the **selected** `(K_config, M_config, alpha_epi_config=0.10)` candidate tuple **after** K/M convergence evidence — blocks capital eligibility only; does **not** block candidate identity construction.
 
 ---
 
@@ -2286,7 +2309,7 @@ where `enumerated_fixed_V2_other` is receipt-enumerated global/research metadata
 | Gate | Owner | Blocks |
 |------|-------|--------|
 | Plan approval | Human | `/implement` start |
-| H3 K/M + α_epi=0.10 | Human | capital eligibility |
+| H3 K/M + α_epi=0.10 | Human | capital eligibility — ratifies **selected already-evaluated** `(K_config, M_config, alpha_epi_config)` candidate digests (§2.10 F1); does **not** block pre-H3 candidate identity construction |
 | Target grid `HUMAN_RATIFIED_CAPITAL` | Human | capital terminal forecasts |
 | `HUMAN_FHV_EXECUTABLE_POLICY_V1` | Human | STAGE-B / WF_ECONOMIC; seals `executable_policy_digest`; **before WF_ECONOMIC evidence** (§1.25 C6 path A/B) |
 | `HUMAN_ECONOMIC_UTILITY_ACCEPTANCE_V1` | Human | STAGE-B numeric rule; **before WF_ECONOMIC evidence** |
@@ -2370,7 +2393,9 @@ where `enumerated_fixed_V2_other` is receipt-enumerated global/research metadata
 | `pkg-gen-id/v1` exact field encoding (E1) | ✓ (§2.10) |
 | `fcst-gen-id/v1` exact field encoding (E1) | ✓ (§2.10) |
 | Top-level identity digest fields `_hex` lowercase (E1) | ✓ (§2.10) |
-| K/M bind Human-ratified selected integers; α_epi scale-8 frozen (E1) | ✓ (§2.10) |
+| K/M bind configuration integers (`K_config_dec`, `M_config_dec`); α_epi configuration frozen (E1+F1) | ✓ (§2.10) |
+| No H3→generation identity cycle; bootstrap roots pre-H3 (F1) | ✓ (§2.10) |
+| H3 binds selected candidate digests; approval does not mutate identity (F1) | ✓ (§2.10, §6, WP-EXECOPP-QUAL) |
 | pkg-gen / fcst-gen known-answer byte vectors (E1) | ✓ (§2.10) |
 | SCORECRN1 `retry_u32 = 0` always; no rejection loop (E2) | ✓ (§2.6, §2.7) |
 | UNBIASED_INT unchanged for EPIBOOT1 / ALEDRAW1 / VALBOOT1 (E2) | ✓ (§2.6) |
@@ -2378,7 +2403,7 @@ where `enumerated_fixed_V2_other` is receipt-enumerated global/research metadata
 | `comparison_family_id` binds Holm family; `trial-id/v2` byte-exact (E3) | ✓ (§2.11.5) |
 | Family order permutation cannot change raw p-values (E3) | ✓ (§2.11.5) |
 
-**D1–D5 + E1–E3 closure complete. C1–C8 preserved. No unresolved plan blocker identified for Human approval.**
+**D1–D5 + E1–E3 + F1 closure complete. C1–C8 preserved. No unresolved plan blocker identified for Human approval.**
 
 ---
 
@@ -2728,17 +2753,17 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 
 | # | Contract |
 |---|----------|
-| 1 Purpose | Joint exec-opp qualification + K/M gate |
+| 1 Purpose | Joint exec-opp qualification + K/M gate; 15 grid cells each with pre-H3 config identity |
 | 2 Seams | forecast-v2 exec path, harness |
 | 3 Files | `execopp-qualification/*`, km-convergence gate |
-| 4 Formulas | energy-mc/v1; K/M §1.14 user spec |
+| 4 Formulas | energy-mc/v1; K/M §1.14 user spec; pkg-gen-id/v1 config binding §2.10 F1 |
 | 5 Time | development anchors only for K/M |
 | 6 Inputs | volume QUALIFIED, normalized 13-D |
-| 7 Persistence | admission receipt |
-| 8 Design | empirical-joint + marginal-independence baselines |
-| 9 Forbidden | blockbootstrap name without contract |
+| 7 Persistence | admission receipt (binds selected candidate digests + H3 receipt) |
+| 8 Design | empirical-joint + marginal-independence baselines; deterministic selection then H3 |
+| 9 Forbidden | blockbootstrap name without contract; capital authority from digest alone |
 | 10 Fail-closed | normalization degenerate |
-| 11 KA | K/M selection deterministic |
+| 11 KA | K/M selection deterministic; config identity regressions §2.10 F1 |
 | 12 Tests | admission + km gate |
 | 13 PIT | dev only for km |
 | 14 Replay | admission receipt digest |
@@ -2748,7 +2773,7 @@ Each WP below uses the mandatory 21-field executor contract. Implementation occu
 | 18 Dependencies | FORECAST-V2, VOLUME-QUAL, RESEARCH |
 | 19 Risk | T1 |
 | 20 DoD | receipt emitter |
-| 21 Human | H3 K/M α |
+| 21 Human | H3 ratifies selected `(K_config,M_config,α)` after evidence — not before candidate identity |
 
 ### A.15 WP-PATTERN-RESEARCH (DEE-533)
 
