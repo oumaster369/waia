@@ -19,7 +19,7 @@ state:
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
+  lastValidatedGitSha: "850f91861e6134ad90c344cea3dcc641992ce5de"
   lastValidationAt: "2026-08-11T14:15:00Z"
   blockedReason: null
   nextAction: "Open PR to main; await human squash-merge"
