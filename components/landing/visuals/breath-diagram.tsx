@@ -15,7 +15,7 @@ export function BreathDiagram() {
       testId="landing-breath-media"
       label="Breath of WAIA transparency diagram"
       description="Two inseparable sides: resource transparency and work transparency, joined by traceability. GitHub represents inspectable engineering truth. No published amounts shown."
-      className="max-h-[28rem] lg:max-h-none"
+      className="max-h-[28rem] border-[rgba(150,195,205,0.26)] bg-[radial-gradient(ellipse_at_28%_18%,rgba(120,180,195,0.12),transparent_52%),radial-gradient(ellipse_at_78%_78%,rgba(40,90,110,0.18),transparent_48%),rgba(4,12,22,0.9)] lg:max-h-none"
     >
       <text
         x="160"

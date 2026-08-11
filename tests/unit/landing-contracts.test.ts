@@ -5,6 +5,7 @@ import {
   formatBreathRunway,
   getBreathPublicSnapshot,
 } from "@/lib/landing/breath-public";
+import { getBreathSupportChannel } from "@/lib/landing/breath-support";
 import {
   FINAL_VISUAL_ALT,
   FINAL_VISUAL_BUDGET_BYTES,
@@ -42,6 +43,14 @@ describe("breath-public contract", () => {
     expect(snap.work.githubUrl).toBe(WAIA_PUBLIC_GITHUB_URL);
     expect(formatBreathAmount(null, null)).toBe("Not yet published");
     expect(formatBreathRunway(snap.runway)).toBe("Not yet published");
+  });
+});
+
+describe("breath-support channel", () => {
+  it("remains pending with no invented destination until Finance publishes", () => {
+    const channel = getBreathSupportChannel();
+    expect(channel.status).toBe("pending");
+    expect(channel.href).toBeNull();
   });
 });
 

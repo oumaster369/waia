@@ -182,7 +182,26 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("landing-ai-marketplace-waia-path")).toHaveTextContent(/Need →/i);
     expect(screen.getByTestId("landing-breath-stage")).toBeInTheDocument();
     expect(screen.getByTestId("landing-breath-budget")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-breath-runway")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway")).toHaveAttribute(
+      "data-runway-state",
+      "pending",
+    );
+    expect(screen.getByTestId("landing-breath-runway-value")).toHaveTextContent(
+      /Runway awaiting treasury publication/i,
+    );
+    expect(screen.getByTestId("landing-breath-runway-pulse")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway")).not.toHaveAttribute("data-runway-percent");
+    expect(screen.getByTestId("landing-breath-support-cta")).toHaveTextContent(
+      "KEEP WAIA BREATHING",
+    );
+    expect(screen.getByTestId("landing-breath-support-cta")).toBeDisabled();
+    expect(screen.getByTestId("landing-breath-support")).toHaveAttribute(
+      "data-support-status",
+      "pending",
+    );
+    expect(screen.getByTestId("landing-breath-support-pending")).toHaveTextContent(
+      /Support channel will open/i,
+    );
     expect(screen.getByTestId("landing-breath-inflows-empty")).toBeInTheDocument();
     expect(screen.getByTestId("landing-breath-outflows-empty")).toBeInTheDocument();
     expect(screen.getByTestId("landing-living-legacy-example")).toHaveTextContent(/grandchild/i);

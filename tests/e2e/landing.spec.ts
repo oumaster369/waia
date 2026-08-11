@@ -57,15 +57,28 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-breath-budget-planned")).toContainText(
       /Not yet published/i,
     );
-    await expect(page.getByTestId("landing-breath-runway-value")).toContainText(
-      /Not yet published/i,
+    await expect(page.getByTestId("landing-breath-runway")).toHaveAttribute(
+      "data-runway-state",
+      "pending",
     );
+    await expect(page.getByTestId("landing-breath-runway-value")).toContainText(
+      /Runway awaiting treasury publication/i,
+    );
+    await expect(page.getByTestId("landing-breath-runway-pulse")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-support-cta")).toHaveText("KEEP WAIA BREATHING");
+    await expect(page.getByTestId("landing-breath-support-cta")).toBeDisabled();
+    await expect(page.getByTestId("landing-breath-support")).toHaveAttribute(
+      "data-support-status",
+      "pending",
+    );
+    await expect(page.getByTestId("landing-breath-support-pending")).toBeVisible();
     await expect(page.getByTestId("landing-breath-inflows-empty")).toBeVisible();
     await expect(page.getByTestId("landing-breath-outflows-empty")).toBeVisible();
     await expect(page.getByTestId("landing-breath-github-primary")).toHaveAttribute(
       "href",
       WAIA_PUBLIC_GITHUB_URL,
     );
+    await expect(page.getByTestId("landing-breath-media")).toBeVisible();
     await expect(page.getByTestId("landing-how-built-legco-cta")).toHaveAttribute(
       "href",
       LEGCO_RESEARCH_URL,

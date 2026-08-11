@@ -641,3 +641,27 @@ DEE-608 remains incomplete until B2.
 | Twin/Legacy delivery | removed ineffective `sizes` (single optimized WebP) |
 
 Gate: `READY_FOR_HUMAN_DEE_605_VISUAL_RHYTHM_REVIEW`
+
+---
+
+## Breath of WAIA visual / CTA corrective (Human-approved direction)
+
+Human approved overall page spacing/rhythm at `3e40984`. This pass does **not** reopen the general spacing system.
+
+### Scope
+
+- Breath-local aqueous midnight atmosphere (blue/teal haze; no particles/neon/crypto)
+- **WAIA Runway / Pulse** surface (calm living-system line; no fabricated %)
+- Primary Human CTA: **KEEP WAIA BREATHING**
+- Support destination: pending-honest until Finance (DEE-606/607) publishes a canonical channel
+- Preserve V-BREATH dual transparency diagram + GitHub work links
+- Preserve approved page rhythm / Twin / Legacy / Hero / Auth geometry
+
+### Implementation notes
+
+- `lib/landing/breath-support.ts` — `getBreathSupportChannel()` returns `{ status: "pending", href: null }` until a real destination exists
+- `BreathRunwayPulse` — pending copy: “Runway awaiting treasury publication”; pulse mark centered (not %-positioned)
+- `BreathSupportCta` — disabled button + pending note when channel unavailable
+- Financial snapshot contract (`breath-public.ts`) unchanged; DEE-606/607 remain Deferred
+
+Gate: `READY_FOR_HUMAN_BREATH_OF_WAIA_VISUAL_REVIEW`

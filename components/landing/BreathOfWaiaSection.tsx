@@ -1,9 +1,7 @@
+import { BreathSupportCta } from "@/components/landing/BreathSupportCta";
 import { BreathDiagram } from "@/components/landing/visuals/breath-diagram";
-import {
-  formatBreathAmount,
-  formatBreathRunway,
-  getBreathPublicSnapshot,
-} from "@/lib/landing/breath-public";
+import { BreathRunwayPulse } from "@/components/landing/visuals/breath-runway-pulse";
+import { formatBreathAmount, getBreathPublicSnapshot } from "@/lib/landing/breath-public";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 import { BREATH_ANCHOR_ID } from "@/lib/landing/homepage-links";
 import {
@@ -19,23 +17,42 @@ const RESOURCE_KEYS = ["entered", "allocated", "spent", "remaining", "neededNext
 
 const BUDGET_KEYS = ["planned", "funded", "committed", "spent", "remaining"] as const;
 
+/** Quieter secondary transparency cells — subordinate to Runway / support. */
+const secondaryCellClass =
+  "rounded-lg border border-[rgba(150,190,200,0.14)] bg-[rgba(4,12,22,0.28)] px-3 py-2";
+
+/**
+ * Breath of WAIA — living economic surface.
+ * Atmosphere is homepage-local; financial truth remains DEE-606-owned.
+ */
 export function BreathOfWaiaSection() {
   const snapshot = getBreathPublicSnapshot();
   const currency = snapshot.resources.currency;
 
   return (
-    <HomepageSection id={BREATH_ANCHOR_ID} testId="landing-breath" ariaLabel="Breath of WAIA">
+    <HomepageSection
+      id={BREATH_ANCHOR_ID}
+      testId="landing-breath"
+      ariaLabel="Breath of WAIA"
+      className={[
+        "border-[rgba(150,195,205,0.3)]",
+        "bg-[linear-gradient(165deg,rgba(12,42,58,0.55)_0%,rgba(3,8,19,0.72)_42%,rgba(6,28,36,0.5)_100%)]",
+        "shadow-[inset_0_1px_0_rgba(180,220,230,0.08),inset_0_-40px_80px_rgba(20,70,90,0.12)]",
+      ].join(" ")}
+    >
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:items-start lg:gap-12 xl:gap-16">
         <div className="flex flex-col gap-5 sm:gap-6">
+          {/* 1 — meaning */}
           <SectionHeading testId="landing-breath-title">{copy.title}</SectionHeading>
           <SectionBody testId="landing-breath-lead">{copy.lead}</SectionBody>
 
+          {/* 2 — stage / publication status */}
           <div
             data-testid="landing-breath-status"
             data-status={snapshot.status}
-            className="rounded-xl border border-[rgba(218,200,160,0.18)] bg-[rgba(0,0,0,0.22)] px-4 py-3"
+            className="rounded-xl border border-[rgba(150,195,205,0.22)] bg-[rgba(4,14,24,0.4)] px-4 py-3"
           >
-            <p className="text-sm font-medium text-[#e8dcc4]">
+            <p className="text-sm font-medium text-[#dcecf0]">
               {snapshot.status === "pending"
                 ? copy.pendingStatus
                 : `Published — ${snapshot.lastUpdatedAt}`}
@@ -46,25 +63,32 @@ export function BreathOfWaiaSection() {
           </div>
 
           <dl data-testid="landing-breath-stage" className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-[rgba(218,200,160,0.12)] px-3 py-2">
-              <dt className="text-xs text-[rgba(180,175,168,0.85)]">{copy.stageLabel}</dt>
-              <dd data-testid="landing-breath-stage-value" className="mt-1 text-sm text-[#ebe4d4]">
+            <div className={secondaryCellClass}>
+              <dt className="text-xs text-[rgba(170,200,210,0.78)]">{copy.stageLabel}</dt>
+              <dd data-testid="landing-breath-stage-value" className="mt-1 text-sm text-[#e4eef0]">
                 {snapshot.stageLabel ?? copy.stagePending}
               </dd>
             </div>
-            <div className="rounded-lg border border-[rgba(218,200,160,0.12)] px-3 py-2">
-              <dt className="text-xs text-[rgba(180,175,168,0.85)]">{copy.updatedLabel}</dt>
+            <div className={secondaryCellClass}>
+              <dt className="text-xs text-[rgba(170,200,210,0.78)]">{copy.updatedLabel}</dt>
               <dd
                 data-testid="landing-breath-updated-value"
-                className="mt-1 text-sm text-[#ebe4d4]"
+                className="mt-1 text-sm text-[#e4eef0]"
               >
                 {snapshot.lastUpdatedAt ?? copy.updatedPending}
               </dd>
             </div>
           </dl>
 
+          {/* 3 — Runway / Pulse (focal) */}
+          <BreathRunwayPulse runway={snapshot.runway} status={snapshot.status} />
+
+          {/* 4 — KEEP WAIA BREATHING */}
+          <BreathSupportCta />
+
+          {/* 5 — resource transparency (secondary) */}
           <div>
-            <h3 className="mb-3 text-xs font-semibold tracking-wide text-[#c9a96e] uppercase">
+            <h3 className="mb-3 text-xs font-semibold tracking-wide text-[rgba(180,210,218,0.85)] uppercase">
               Resource transparency
             </h3>
             <dl
@@ -75,12 +99,12 @@ export function BreathOfWaiaSection() {
                 <div
                   key={key}
                   data-testid={`landing-breath-resource-${key}`}
-                  className="rounded-lg border border-[rgba(218,200,160,0.12)] px-3 py-2"
+                  className={secondaryCellClass}
                 >
-                  <dt className="text-xs text-[rgba(180,175,168,0.85)]">
+                  <dt className="text-xs text-[rgba(170,200,210,0.78)]">
                     {copy.resourceLabels[key]}
                   </dt>
-                  <dd className="mt-1 font-mono text-sm text-[#ebe4d4] tabular-nums">
+                  <dd className="mt-1 font-mono text-sm text-[rgba(228,238,240,0.88)] tabular-nums">
                     {formatBreathAmount(snapshot.resources[key], currency)}
                   </dd>
                 </div>
@@ -88,8 +112,9 @@ export function BreathOfWaiaSection() {
             </dl>
           </div>
 
+          {/* 6 — budget / funding (secondary) */}
           <div>
-            <h3 className="mb-3 text-xs font-semibold tracking-wide text-[#c9a96e] uppercase">
+            <h3 className="mb-3 text-xs font-semibold tracking-wide text-[rgba(180,210,218,0.85)] uppercase">
               {copy.budgetTitle}
             </h3>
             <dl
@@ -100,12 +125,12 @@ export function BreathOfWaiaSection() {
                 <div
                   key={key}
                   data-testid={`landing-breath-budget-${key}`}
-                  className="rounded-lg border border-[rgba(218,200,160,0.12)] px-3 py-2"
+                  className={secondaryCellClass}
                 >
-                  <dt className="text-xs text-[rgba(180,175,168,0.85)]">
+                  <dt className="text-xs text-[rgba(170,200,210,0.78)]">
                     {copy.budgetLabels[key]}
                   </dt>
-                  <dd className="mt-1 font-mono text-sm text-[#ebe4d4] tabular-nums">
+                  <dd className="mt-1 font-mono text-sm text-[rgba(228,238,240,0.88)] tabular-nums">
                     {formatBreathAmount(snapshot.budget[key], snapshot.budget.currency)}
                   </dd>
                 </div>
@@ -114,7 +139,7 @@ export function BreathOfWaiaSection() {
             <div
               data-testid="landing-breath-budget-fill"
               data-has-ratio={snapshot.budget.fillRatio !== null ? "true" : "false"}
-              className="mt-3 h-2 overflow-hidden rounded-full bg-[rgba(255,252,245,0.08)]"
+              className="mt-3 h-2 overflow-hidden rounded-full bg-[rgba(140,190,200,0.1)]"
               aria-label={
                 snapshot.budget.fillRatio === null
                   ? "Budget fill pending publication"
@@ -132,37 +157,25 @@ export function BreathOfWaiaSection() {
             </div>
           </div>
 
-          <div
-            data-testid="landing-breath-runway"
-            className="rounded-lg border border-[rgba(218,200,160,0.12)] px-3 py-2"
-          >
-            <p className="text-xs text-[rgba(180,175,168,0.85)]">{copy.runwayLabel}</p>
-            <p
-              data-testid="landing-breath-runway-value"
-              className="mt-1 font-mono text-sm text-[#ebe4d4] tabular-nums"
-            >
-              {formatBreathRunway(snapshot.runway)}
-            </p>
-          </div>
-
+          {/* 7 — recent activity */}
           <div data-testid="landing-breath-activity" className="flex flex-col gap-3">
-            <h3 className="text-xs font-semibold tracking-wide text-[#c9a96e] uppercase">
+            <h3 className="text-xs font-semibold tracking-wide text-[rgba(180,210,218,0.85)] uppercase">
               {copy.activityTitle}
             </h3>
             <div className="grid gap-3 sm:grid-cols-2">
               <div data-testid="landing-breath-inflows">
-                <p className="mb-2 text-xs text-[rgba(180,175,168,0.85)]">{copy.inflowsTitle}</p>
+                <p className="mb-2 text-xs text-[rgba(170,200,210,0.78)]">{copy.inflowsTitle}</p>
                 {snapshot.recentActivity.inflows.length === 0 ? (
                   <p
                     data-testid="landing-breath-inflows-empty"
-                    className="text-sm text-[rgba(180,175,168,0.8)]"
+                    className="text-sm text-[rgba(175,200,208,0.75)]"
                   >
                     {copy.activityEmpty}
                   </p>
                 ) : (
                   <ul className="flex flex-col gap-2">
                     {snapshot.recentActivity.inflows.map((tx) => (
-                      <li key={tx.id} className="text-sm text-[#ebe4d4]">
+                      <li key={tx.id} className="text-sm text-[#e4eef0]">
                         {tx.label}
                       </li>
                     ))}
@@ -170,18 +183,18 @@ export function BreathOfWaiaSection() {
                 )}
               </div>
               <div data-testid="landing-breath-outflows">
-                <p className="mb-2 text-xs text-[rgba(180,175,168,0.85)]">{copy.outflowsTitle}</p>
+                <p className="mb-2 text-xs text-[rgba(170,200,210,0.78)]">{copy.outflowsTitle}</p>
                 {snapshot.recentActivity.outflows.length === 0 ? (
                   <p
                     data-testid="landing-breath-outflows-empty"
-                    className="text-sm text-[rgba(180,175,168,0.8)]"
+                    className="text-sm text-[rgba(175,200,208,0.75)]"
                   >
                     {copy.activityEmpty}
                   </p>
                 ) : (
                   <ul className="flex flex-col gap-2">
                     {snapshot.recentActivity.outflows.map((tx) => (
-                      <li key={tx.id} className="text-sm text-[#ebe4d4]">
+                      <li key={tx.id} className="text-sm text-[#e4eef0]">
                         {tx.label}
                       </li>
                     ))}
@@ -191,8 +204,9 @@ export function BreathOfWaiaSection() {
             </div>
           </div>
 
+          {/* 8 — work transparency / GitHub */}
           <div data-testid="landing-breath-work" className="flex flex-col gap-3">
-            <h3 className="text-xs font-semibold tracking-wide text-[#c9a96e] uppercase">
+            <h3 className="text-xs font-semibold tracking-wide text-[rgba(180,210,218,0.85)] uppercase">
               Work transparency
             </h3>
             <SectionBody>
@@ -205,7 +219,7 @@ export function BreathOfWaiaSection() {
                 href={snapshot.work.githubUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[rgba(218,200,160,0.35)] bg-[rgba(201,169,110,0.12)] px-4 text-sm font-medium text-[#e8dcc4] transition hover:bg-[rgba(201,169,110,0.22)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a96e]"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[rgba(150,195,205,0.35)] bg-[rgba(120,170,185,0.1)] px-4 text-sm font-medium text-[#dcecf0] transition hover:bg-[rgba(120,170,185,0.18)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a96e]"
               >
                 {copy.seeResourcesCta}
               </a>
@@ -214,7 +228,7 @@ export function BreathOfWaiaSection() {
                 href={snapshot.work.githubUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[rgba(218,200,160,0.22)] px-4 text-sm font-medium text-[rgba(210,205,195,0.95)] transition hover:border-[rgba(218,200,160,0.4)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a96e]"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[rgba(150,195,205,0.22)] px-4 text-sm font-medium text-[rgba(200,220,225,0.92)] transition hover:border-[rgba(150,195,205,0.4)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a96e]"
               >
                 {copy.viewSourceCta}
               </a>
