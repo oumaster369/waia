@@ -1,73 +1,60 @@
-.pulseLine {
-  position: relative;
-  height: 2px;
+.svg {
+  display: block;
   width: 100%;
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    rgba(120, 170, 185, 0.08),
-    rgba(160, 200, 210, 0.38),
-    rgba(120, 170, 185, 0.08)
-  );
+  height: auto;
+  overflow: visible;
 }
 
-.pulseLinePending {
-  opacity: 0.55;
+.baseline {
+  fill: none;
+  stroke: rgba(140, 185, 200, 0.2);
+  stroke-width: 1.25;
+  stroke-linecap: round;
 }
 
-.pulseMark {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 18px;
-  height: 10px;
-  translate: -50% -50%;
-  border-radius: 999px;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(210, 235, 240, 0.85) 0%,
-    rgba(120, 180, 195, 0.35) 45%,
-    transparent 72%
-  );
-  box-shadow: 0 0 12px rgba(140, 200, 210, 0.28);
+.wave {
+  fill: none;
+  stroke: rgba(186, 222, 230, 0.82);
+  stroke-width: 1.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.pulseMarkLive {
-  animation: breath-pulse-life 5.5s ease-in-out infinite;
+.wavePending {
+  stroke: rgba(160, 200, 210, 0.48);
+  stroke-width: 1.55;
 }
 
-.pulseMarkPending {
-  opacity: 0.45;
-  animation: breath-pulse-pending 7s ease-in-out infinite;
+.waveTrack {
+  transform-box: fill-box;
+  transform-origin: 0 0;
+  transform: translateX(0);
 }
 
-@keyframes breath-pulse-life {
-  0%,
-  100% {
-    opacity: 0.55;
-    transform: scaleX(0.92) scaleY(0.9);
+.waveTrackLive {
+  animation: breath-runway-travel 7s linear infinite;
+}
+
+.waveTrackPending {
+  animation: breath-runway-travel 8s linear infinite;
+  opacity: 0.7;
+}
+
+/* One pulse cell of twelve → seamless travel; decorative, not % consumed. */
+@keyframes breath-runway-travel {
+  from {
+    transform: translateX(0);
   }
-  50% {
-    opacity: 1;
-    transform: scaleX(1.08) scaleY(1.05);
-  }
-}
-
-@keyframes breath-pulse-pending {
-  0%,
-  100% {
-    opacity: 0.32;
-  }
-  50% {
-    opacity: 0.55;
+  to {
+    transform: translateX(calc(-100% / 12));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pulseMarkLive,
-  .pulseMarkPending {
+  .waveTrackLive,
+  .waveTrackPending {
     animation: none !important;
-    opacity: 0.7;
-    transform: none;
+    transform: none !important;
+    opacity: 0.9;
   }
 }

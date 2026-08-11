@@ -69,9 +69,9 @@ export type BreathPublicSnapshot = {
 };
 
 const PENDING_NOTE =
-  "Stage, resources, budget, runway, and recent activity publish only after the Breath of WAIA treasury ledger (DEE-606) is available. Until then, this surface shows a truthful pending state — not estimated numbers.";
+  "Stage, resources, budget, runway, and recent activity publish only after the Breath of WAIA treasury ledger is available. Until then, this surface shows a truthful pending state — not estimated numbers.";
 
-/** Homepage-facing Breath snapshot. Always pending until DEE-606 wires publication. */
+/** Homepage-facing Breath snapshot. Always pending until the treasury ledger publishes. */
 export function getBreathPublicSnapshot(): BreathPublicSnapshot {
   return {
     status: "pending",
@@ -125,4 +125,38 @@ export function formatBreathRunway(runway: BreathPublicSnapshot["runway"]): stri
     return runway.periodLabel ?? "Not yet published";
   }
   return `${runway.value} ${runway.unit}`;
+}
+
+export type BreathRunwayTick = {
+  /** Absolute position along the runway interval (0 … value). */
+  value: number;
+  /** Public label derived only from the published runway contract. */
+  label: string;
+};
+
+/**
+ * Derive five temporal tick labels (0, ¼, ½, ¾, end) from a published runway.
+ * Returns [] when runway is incomplete — never fabricates an interval.
+ */
+export function deriveBreathRunwayTicks(
+  runway: BreathPublicSnapshot["runway"],
+): BreathRunwayTick[] {
+  if (runway.value === null || runway.unit === null || runway.value <= 0) {
+    return [];
+  }
+
+  const end = runway.value;
+  const unit = runway.unit;
+  const raw = [0, end / 4, end / 2, (3 * end) / 4, end];
+
+  return raw.map((value) => {
+    const display =
+      Number.isInteger(end) && end % 4 === 0
+        ? Math.round(value)
+        : Number(value.toFixed(2).replace(/\.?0+$/, ""));
+    return {
+      value: display,
+      label: `${display} ${unit}`,
+    };
+  });
 }

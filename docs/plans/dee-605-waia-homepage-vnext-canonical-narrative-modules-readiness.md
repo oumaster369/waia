@@ -665,3 +665,18 @@ Human approved overall page spacing/rhythm at `3e40984`. This pass does **not** 
 - Financial snapshot contract (`breath-public.ts`) unchanged; DEE-606/607 remain Deferred
 
 Gate: `READY_FOR_HUMAN_BREATH_OF_WAIA_VISUAL_REVIEW`
+
+---
+
+## Final Breath pulse refinement (pre-merge Human gate)
+
+Human approved atmosphere, hierarchy, KEEP WAIA BREATHING concept, and pending Finance honesty.
+
+### Fixes in this pass
+
+1. **Public copy hygiene:** remove internal issue IDs (`DEE-606`, etc.) from visitor-facing Breath strings. Methodology note and pending labels use ledger language only.
+2. **Runway visual:** replace center-dot pulse with SVG temporal runway — NOW → integrated soft breathing waveform → RUNWAY / RUNWAY END. Published ticks derived only via `deriveBreathRunwayTicks()` from authoritative `runway.value` / `runway.unit`. Pending shows no quantitative ticks.
+3. **Motion:** CSS translate of the waveform track (~7–8s); `prefers-reduced-motion` → static.
+4. **Pending density:** secondary “Not yet published” cells remain present but lower contrast.
+
+Gate: `READY_FOR_HUMAN_FINAL_BREATH_PULSE_REVIEW`

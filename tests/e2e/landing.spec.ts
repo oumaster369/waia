@@ -62,9 +62,17 @@ test.describe("WAIA landing page", () => {
       "pending",
     );
     await expect(page.getByTestId("landing-breath-runway-value")).toContainText(
-      /Runway awaiting treasury publication/i,
+      /Runway awaiting first ledger publication/i,
     );
     await expect(page.getByTestId("landing-breath-runway-pulse")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-runway-svg")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-runway-wave")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-runway-ticks-pending")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-runway-ticks")).toHaveCount(0);
+    await expect(page.getByTestId("landing-breath-updated-value")).toContainText(
+      /Awaiting first ledger publication/i,
+    );
+    await expect(page.getByTestId("landing-breath")).not.toContainText(/DEE-\d+/i);
     await expect(page.getByTestId("landing-breath-support-cta")).toHaveText("KEEP WAIA BREATHING");
     await expect(page.getByTestId("landing-breath-support-cta")).toBeDisabled();
     await expect(page.getByTestId("landing-breath-support")).toHaveAttribute(

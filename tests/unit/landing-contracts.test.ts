@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  deriveBreathRunwayTicks,
   formatBreathAmount,
   formatBreathRunway,
   getBreathPublicSnapshot,
@@ -12,6 +13,7 @@ import {
   FINAL_VISUAL_INTRINSIC,
   FINAL_VISUAL_PATHS,
 } from "@/lib/landing/final-visuals";
+import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 import { WAIA_PUBLIC_GITHUB_URL } from "@/lib/landing/homepage-links";
 import {
   HOMEPAGE_MODULE_READINESS,
@@ -20,7 +22,7 @@ import {
 } from "@/lib/landing/module-readiness";
 
 describe("breath-public contract", () => {
-  it("returns pending empty full public surface until DEE-606 publishes", () => {
+  it("returns pending empty full public surface until the treasury ledger publishes", () => {
     const snap = getBreathPublicSnapshot();
     expect(snap.status).toBe("pending");
     expect(snap.lastUpdatedAt).toBeNull();
@@ -43,6 +45,38 @@ describe("breath-public contract", () => {
     expect(snap.work.githubUrl).toBe(WAIA_PUBLIC_GITHUB_URL);
     expect(formatBreathAmount(null, null)).toBe("Not yet published");
     expect(formatBreathRunway(snap.runway)).toBe("Not yet published");
+    expect(snap.methodologyNote).not.toMatch(/DEE-\d+/i);
+    expect(deriveBreathRunwayTicks(snap.runway)).toEqual([]);
+  });
+
+  it("derives published runway ticks only from the supplied runway value", () => {
+    const fixtureValue = 84;
+    const ticks = deriveBreathRunwayTicks({
+      value: fixtureValue,
+      unit: "days",
+      periodLabel: null,
+    });
+    expect(ticks.map((t) => t.value)).toEqual([0, 21, 42, 63, 84]);
+    expect(ticks.map((t) => t.label)).toEqual([
+      "0 days",
+      "21 days",
+      "42 days",
+      "63 days",
+      "84 days",
+    ]);
+    expect(JSON.stringify(getBreathPublicSnapshot())).not.toContain(String(fixtureValue));
+  });
+});
+
+describe("breath public copy hygiene", () => {
+  it("exposes no internal Linear issue IDs in homepage Breath strings", () => {
+    const breathBlob = JSON.stringify(HOMEPAGE_COPY.breath);
+    expect(breathBlob).not.toMatch(/DEE-\d+/i);
+    expect(HOMEPAGE_COPY.breath.updatedPending).toBe("Awaiting first ledger publication");
+    expect(HOMEPAGE_COPY.breath.runwayPendingValue).toBe(
+      "Runway awaiting first ledger publication",
+    );
+    expect(HOMEPAGE_COPY.breath.supportCta).toBe("KEEP WAIA BREATHING");
   });
 });
 

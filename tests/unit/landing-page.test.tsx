@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { AuthBlock } from "@/components/landing/AuthBlock";
 import { LandingPageContent } from "@/components/landing/landing-page-content";
+import { BreathRunwayPulse } from "@/components/landing/visuals/breath-runway-pulse";
 import { getBreathPublicSnapshot } from "@/lib/landing/breath-public";
 import { LEGCO_RESEARCH_URL, WAIA_PUBLIC_GITHUB_URL } from "@/lib/landing/homepage-links";
 import { getModuleReadiness } from "@/lib/landing/module-readiness";
@@ -187,10 +188,24 @@ describe("LandingPage", () => {
       "pending",
     );
     expect(screen.getByTestId("landing-breath-runway-value")).toHaveTextContent(
-      /Runway awaiting treasury publication/i,
+      /Runway awaiting first ledger publication/i,
     );
     expect(screen.getByTestId("landing-breath-runway-pulse")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway-svg")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway-wave")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway-wave").getAttribute("d")).toMatch(/c /i);
+    expect(screen.getByTestId("landing-breath-runway-now")).toHaveTextContent(/^NOW$/i);
+    expect(screen.getByTestId("landing-breath-runway-end")).toHaveTextContent(/^RUNWAY$/i);
+    expect(screen.getByTestId("landing-breath-runway-ticks-pending")).toBeInTheDocument();
+    expect(screen.queryByTestId("landing-breath-runway-ticks")).not.toBeInTheDocument();
     expect(screen.getByTestId("landing-breath-runway")).not.toHaveAttribute("data-runway-percent");
+    expect(screen.getByTestId("landing-breath-updated-value")).toHaveTextContent(
+      /Awaiting first ledger publication/i,
+    );
+    expect(screen.getByTestId("landing-breath-methodology").textContent ?? "").not.toMatch(
+      /DEE-\d+/i,
+    );
+    expect(screen.getByTestId("landing-breath").textContent ?? "").not.toMatch(/DEE-\d+/i);
     expect(screen.getByTestId("landing-breath-support-cta")).toHaveTextContent(
       "KEEP WAIA BREATHING",
     );
@@ -205,6 +220,26 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("landing-breath-inflows-empty")).toBeInTheDocument();
     expect(screen.getByTestId("landing-breath-outflows-empty")).toBeInTheDocument();
     expect(screen.getByTestId("landing-living-legacy-example")).toHaveTextContent(/grandchild/i);
+  });
+
+  it("renders published runway ticks derived only from supplied runway contract", () => {
+    render(
+      <BreathRunwayPulse
+        status="published"
+        runway={{ value: 84, unit: "days", periodLabel: null }}
+      />,
+    );
+    expect(screen.getByTestId("landing-breath-runway")).toHaveAttribute(
+      "data-runway-state",
+      "published",
+    );
+    expect(screen.getByTestId("landing-breath-runway-value")).toHaveTextContent("84 days");
+    expect(screen.getByTestId("landing-breath-runway-end")).toHaveTextContent(/^RUNWAY END$/i);
+    expect(screen.getByTestId("landing-breath-runway-ticks")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway-tick-0")).toHaveTextContent("0 days");
+    expect(screen.getByTestId("landing-breath-runway-tick-21")).toHaveTextContent("21 days");
+    expect(screen.getByTestId("landing-breath-runway-tick-84")).toHaveTextContent("84 days");
+    expect(screen.queryByTestId("landing-breath-runway-ticks-pending")).not.toBeInTheDocument();
   });
 
   it("renders B1 diagrams and B2 Twin/Legacy final artwork without scaffold language", async () => {
