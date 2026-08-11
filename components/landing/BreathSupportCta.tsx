@@ -1,9 +1,6 @@
 import { LandingPrimaryCta } from "@/components/landing/landing-primary-cta";
 import type { BreathMoney } from "@/lib/landing/breath-public";
-import {
-  deriveBreathFundingMarkerRatio,
-  isBreathAnnualTargetMet,
-} from "@/lib/landing/breath-public";
+import { isBreathAnnualTargetMet } from "@/lib/landing/breath-public";
 import { getBreathSupportChannel } from "@/lib/landing/breath-support";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 
@@ -15,15 +12,13 @@ type BreathSupportCtaProps = {
 /**
  * KEEP WAIA BREATHING — warm Human-action CTA.
  * Clickable only when: (1) support channel exists AND (2) annual target not met.
- * No arbitrary percentage lockout before the target.
+ * No arbitrary pre-target percentage lockout or visual threshold.
  */
 export function BreathSupportCta({ currentFreeFunds, idealAnnualBudget }: BreathSupportCtaProps) {
   const copy = HOMEPAGE_COPY.breath;
   const channel = getBreathSupportChannel();
   const channelAvailable = channel.status === "available" && Boolean(channel.href);
   const fullyFunded = isBreathAnnualTargetMet(currentFreeFunds, idealAnnualBudget);
-  const ratio = deriveBreathFundingMarkerRatio(currentFreeFunds, idealAnnualBudget);
-  const nearFull = ratio !== null && ratio >= 0.92 && ratio < 1;
   const clickable = channelAvailable && !fullyFunded;
 
   return (
@@ -65,7 +60,6 @@ export function BreathSupportCta({ currentFreeFunds, idealAnnualBudget }: Breath
           testId="landing-breath-support-cta"
           href={channel.href!}
           external={/^https?:\/\//.test(channel.href!)}
-          subdued={nearFull}
           className="w-full sm:w-auto sm:min-w-[16rem]"
         >
           {copy.supportCta}
@@ -75,7 +69,6 @@ export function BreathSupportCta({ currentFreeFunds, idealAnnualBudget }: Breath
           <LandingPrimaryCta
             testId="landing-breath-support-cta"
             disabled
-            subdued={nearFull}
             className="w-full sm:w-auto sm:min-w-[16rem]"
           >
             {copy.supportCta}

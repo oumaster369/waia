@@ -703,3 +703,16 @@ Human approved the soft travelling waveform at `417baeb` — **preserve visually
 - Homepage button-like CTAs unified via `LandingPrimaryCta` / Auth gold gradient
 
 Gate: `READY_FOR_HUMAN_BREATH_FUNDING_GAUGE_REVIEW`
+
+---
+
+## Final Breath gauge placement corrective
+
+Two Human-exact fixes on `b28499e`:
+
+1. Move `WAIA CAN BREATHE FOR` countdown below the scale into the funded/left interval (not above the full scale).
+2. Remove the arbitrary `0.92` CTA subdued threshold — disable only at free ≥ ideal.
+
+Waveform, contracts, and CTA unification unchanged.
+
+Gate: `READY_FOR_HUMAN_FINAL_BREATH_GAUGE_REVIEW`

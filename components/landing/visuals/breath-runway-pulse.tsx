@@ -17,7 +17,7 @@ type BreathFundingGaugeProps = {
 
 /**
  * One soft rise + fall (viewBox units). Width = 80 so travel % = 100 / cellCount.
- * PRESERVE — Human-approved breathing waveform from HEAD 417baeb.
+ * PRESERVE — Human-approved breathing waveform from HEAD 417baeb / b28499e.
  */
 const PULSE_CELL = "c 20 0 28 -7 40 -7 s 20 7 40 7";
 const WAVE_CELL_COUNT = 12;
@@ -32,9 +32,17 @@ function buildWavePath(cells: number): string {
 
 const WAVE_PATH = buildWavePath(WAVE_CELL_COUNT);
 
+/** Keep marker amount labels readable near the 0 / 1 endpoints. */
+function markerLabelTransform(ratio: number): string {
+  if (ratio <= 0.12) return "translateX(0)";
+  if (ratio >= 0.88) return "translateX(-100%)";
+  return "translateX(-50%)";
+}
+
 /**
  * WAIA Funding Breath scale — capacity from 0 → ideal annual budget,
- * with CURRENT FREE FUNDS marker + countdown. Waves unchanged from 417baeb.
+ * with CURRENT FREE FUNDS marker + countdown in the funded interval.
+ * Waves unchanged from the Human-approved pulse.
  */
 export function BreathFundingGauge({
   status,
@@ -48,6 +56,7 @@ export function BreathFundingGauge({
   const gaugePending = status === "pending" || ratio === null;
   const idealPublished = idealAnnualBudget.amount !== null && idealAnnualBudget.currency !== null;
   const freePublished = currentFreeFunds.amount !== null && currentFreeFunds.currency !== null;
+  const showMarker = ratio !== null && freePublished;
 
   return (
     <div
@@ -66,10 +75,6 @@ export function BreathFundingGauge({
       >
         {copy.fundingScaleTitle}
       </p>
-
-      <div className="mt-4">
-        <BreathCountdown endsAt={runway.endsAt} />
-      </div>
 
       <div data-testid="landing-breath-runway-pulse" className="mt-5">
         <div className="mb-2 flex items-start justify-between gap-3">
@@ -140,35 +145,60 @@ export function BreathFundingGauge({
           ) : null}
         </div>
 
-        {ratio !== null && freePublished ? (
-          <div
-            data-testid="landing-breath-free-funds"
-            className="relative mt-3 h-10"
-            aria-label={`Current free funds ${formatBreathAmount(currentFreeFunds.amount, currentFreeFunds.currency)}`}
-          >
+        {/* Lower info: free-funds under marker, then countdown in funded/left interval */}
+        <div
+          data-testid="landing-breath-gauge-lower"
+          className="mt-3 flex flex-col gap-3 overflow-x-hidden"
+        >
+          {showMarker ? (
             <div
-              className="absolute top-0 -translate-x-1/2 text-center"
-              style={{ left: `${ratio * 100}%` }}
+              data-testid="landing-breath-free-funds"
+              className="relative min-h-10 w-full"
+              aria-label={`Current free funds ${formatBreathAmount(currentFreeFunds.amount, currentFreeFunds.currency)}`}
             >
-              <p className="text-[0.6rem] font-semibold tracking-[0.12em] text-[rgba(170,210,220,0.7)] uppercase">
-                {copy.freeFundsLabel}
-              </p>
-              <p
-                data-testid="landing-breath-free-funds-value"
-                className="mt-0.5 font-mono text-sm text-[#e8f2f4] tabular-nums"
+              <div
+                className="relative w-max max-w-full text-center sm:absolute sm:top-0"
+                style={{
+                  left: `${ratio * 100}%`,
+                  transform: markerLabelTransform(ratio),
+                }}
               >
-                {formatBreathAmount(currentFreeFunds.amount, currentFreeFunds.currency)}
-              </p>
+                <p className="text-[0.6rem] font-semibold tracking-[0.12em] text-[rgba(170,210,220,0.7)] uppercase">
+                  {copy.freeFundsLabel}
+                </p>
+                <p
+                  data-testid="landing-breath-free-funds-value"
+                  className="mt-0.5 font-mono text-sm text-[#e8f2f4] tabular-nums"
+                >
+                  {formatBreathAmount(currentFreeFunds.amount, currentFreeFunds.currency)}
+                </p>
+              </div>
             </div>
-          </div>
-        ) : (
-          <p
-            data-testid="landing-breath-funding-pending"
-            className="mt-3 text-sm text-[rgba(185,210,218,0.72)]"
+          ) : (
+            <p
+              data-testid="landing-breath-funding-pending"
+              className="text-sm text-[rgba(185,210,218,0.72)]"
+            >
+              {copy.fundingPositionPending}
+            </p>
+          )}
+
+          <div
+            data-testid="landing-breath-countdown-region"
+            data-countdown-region={showMarker ? "funded-interval" : "pending-lower"}
+            className={cn("min-w-0", showMarker && "sm:max-w-full")}
+            style={
+              showMarker
+                ? {
+                    /* Own the left/funded side toward the marker; floor keeps mobile readable. */
+                    maxWidth: `${Math.max(ratio * 100, 42)}%`,
+                  }
+                : undefined
+            }
           >
-            {copy.fundingPositionPending}
-          </p>
-        )}
+            <BreathCountdown endsAt={runway.endsAt} />
+          </div>
+        </div>
       </div>
 
       <p

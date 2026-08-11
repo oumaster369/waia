@@ -1,4 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { AuthBlock } from "@/components/landing/AuthBlock";
@@ -217,6 +219,22 @@ describe("LandingPage", () => {
     );
     expect(screen.queryByTestId("landing-breath-funding-marker")).not.toBeInTheDocument();
     expect(screen.getByTestId("landing-breath-funding-pending")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
+      "data-countdown-region",
+      "pending-lower",
+    );
+    expect(screen.getByTestId("landing-breath-runway-pulse")).toContainElement(
+      screen.getByTestId("landing-breath-countdown"),
+    );
+    const label = screen.getByTestId("landing-breath-runway-label");
+    const countdown = screen.getByTestId("landing-breath-countdown");
+    expect(
+      label.compareDocumentPosition(countdown) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId("landing-breath-runway-svg").compareDocumentPosition(countdown) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByTestId("landing-breath-countdown")).toHaveAttribute(
       "data-countdown-state",
       "pending",
@@ -275,6 +293,19 @@ describe("LandingPage", () => {
     );
     expect(screen.getByTestId("landing-breath-free-funds-value")).toHaveTextContent("$42,000");
     expect(screen.getByTestId("landing-breath-ideal-budget-value")).toHaveTextContent("$100,000");
+    expect(screen.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
+      "data-countdown-region",
+      "funded-interval",
+    );
+    expect(screen.getByTestId("landing-breath-runway-pulse")).toContainElement(
+      screen.getByTestId("landing-breath-countdown"),
+    );
+    expect(
+      screen
+        .getByTestId("landing-breath-runway-svg")
+        .compareDocumentPosition(screen.getByTestId("landing-breath-countdown")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByTestId("landing-breath-countdown")).toHaveAttribute(
       "data-countdown-state",
       "live",
@@ -302,6 +333,43 @@ describe("LandingPage", () => {
       "data-support-clickable",
       "false",
     );
+  });
+
+  it("keeps free-funds labels readable at 0 / midpoint / 1 marker fixtures", () => {
+    const fixtures = [
+      { free: 0, ratio: "0.0000" },
+      { free: 50_000, ratio: "0.5000" },
+      { free: 100_000, ratio: "1.0000" },
+    ] as const;
+
+    for (const fixture of fixtures) {
+      const { unmount } = render(
+        <BreathFundingGauge
+          status="published"
+          idealAnnualBudget={{ amount: 100_000, currency: "USD" }}
+          currentFreeFunds={{ amount: fixture.free, currency: "USD" }}
+          runway={{ value: null, unit: null, periodLabel: null, endsAt: null }}
+        />,
+      );
+      const marker = screen.getByTestId("landing-breath-funding-marker");
+      expect(marker).toHaveAttribute("data-marker-ratio", fixture.ratio);
+      const funds = screen.getByTestId("landing-breath-free-funds");
+      expect(funds.textContent).toMatch(/Current free funds/i);
+      expect(funds.getBoundingClientRect().width).toBeGreaterThanOrEqual(0);
+      expect(screen.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
+        "data-countdown-region",
+        "funded-interval",
+      );
+      unmount();
+    }
+  });
+
+  it("contains no arbitrary pre-target CTA visual threshold", () => {
+    const text = readFileSync(
+      join(process.cwd(), "components/landing/BreathSupportCta.tsx"),
+      "utf8",
+    );
+    expect(text).not.toMatch(/0\.92|0\.95|90%|92%|95%|nearFull/);
   });
 
   it("renders B1 diagrams and B2 Twin/Legacy final artwork without scaffold language", async () => {

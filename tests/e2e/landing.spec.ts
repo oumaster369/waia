@@ -70,10 +70,20 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-breath-runway-wave")).toBeVisible();
     await expect(page.getByTestId("landing-breath-funding-marker")).toHaveCount(0);
     await expect(page.getByTestId("landing-breath-funding-pending")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
+      "data-countdown-region",
+      "pending-lower",
+    );
     await expect(page.getByTestId("landing-breath-countdown")).toHaveAttribute(
       "data-countdown-state",
       "pending",
     );
+    // Countdown lives under the scale, not as a pre-scale header.
+    const svgBox = await page.getByTestId("landing-breath-runway-svg").boundingBox();
+    const countdownBox = await page.getByTestId("landing-breath-countdown").boundingBox();
+    expect(svgBox).toBeTruthy();
+    expect(countdownBox).toBeTruthy();
+    expect(countdownBox!.y).toBeGreaterThan(svgBox!.y);
     await expect(page.getByTestId("landing-breath-updated-value")).toContainText(
       /Awaiting first ledger publication/i,
     );
