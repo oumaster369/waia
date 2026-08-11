@@ -19,7 +19,7 @@ state:
   remainingWorkPackages: []
   prNumber: 457
   prUrl: "https://github.com/oumaster369/waia/pull/457"
-  lastValidatedGitSha: pending-after-commit
+  lastValidatedGitSha: e5b067ecfb46610736b21eece2ef311318cdf783
   lastValidationAt: "2026-08-11T15:20:00Z"
   blockedReason: null
   nextAction: "Await human squash-merge of PR #457 after CI; do not merge from agent"
