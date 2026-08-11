@@ -2,18 +2,29 @@ import path from "node:path";
 
 import { expect, test } from "@playwright/test";
 
+import {
+  LEGCO_RESEARCH_URL,
+  WAIA_PUBLIC_GITHUB_URL,
+} from "../../lib/landing/homepage-links";
+
 test.describe("WAIA landing page", () => {
-  test("renders all five blocks and canonical anchors", async ({ page }) => {
+  test("renders DEE-605 narrative landmarks and English hero definition", async ({ page }) => {
     await page.goto("/");
 
     await expect(page.getByTestId("landing-hero")).toBeVisible();
+    await expect(page.getByTestId("landing-hero-definition-text")).toContainText(
+      /human-centered AI environment/i,
+    );
     await expect(page.getByTestId("landing-auth")).toBeVisible();
-    await expect(page.getByTestId("landing-context")).toBeVisible();
-    await expect(page.getByTestId("landing-modules")).toBeVisible();
-    await expect(page.getByTestId("landing-closing")).toBeVisible();
-
-    await expect(page.getByTestId("landing-context-anchor")).toHaveText("You're in the WAIA space.");
-    await expect(page.getByTestId("landing-closing-anchor")).toHaveText("Stay aligned.");
+    await expect(page.getByTestId("landing-breath")).toBeVisible();
+    await expect(page.getByTestId("landing-ai-twin")).toBeVisible();
+    await expect(page.getByTestId("landing-living-legacy")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-interstitial")).toBeVisible();
+    await expect(page.getByTestId("landing-society")).toBeVisible();
+    await expect(page.getByTestId("landing-ai-trader")).toBeVisible();
+    await expect(page.getByTestId("landing-epistemic")).toBeVisible();
+    await expect(page.getByTestId("landing-how-built")).toBeVisible();
+    await expect(page.getByTestId("landing-final-cta")).toBeVisible();
   });
 
   test("hero selects desktop heap composition on wide viewports", async ({ page }) => {
@@ -28,6 +39,33 @@ test.describe("WAIA landing page", () => {
     await page.goto("/");
     const currentSrc = await page.getByTestId("landing-hero-image").evaluate((el: HTMLImageElement) => el.currentSrc);
     expect(currentSrc).toContain("/brand/head_mobile_1.webp");
+  });
+
+  test("exposes Breath pending state and GitHub work-transparency links", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("landing-breath-status")).toHaveAttribute(
+      "data-status",
+      "pending",
+    );
+    await expect(page.getByTestId("landing-breath-resource-entered")).toContainText(
+      /Not yet published/i,
+    );
+    await expect(page.getByTestId("landing-breath-github-primary")).toHaveAttribute(
+      "href",
+      WAIA_PUBLIC_GITHUB_URL,
+    );
+    await expect(page.getByTestId("landing-how-built-legco-cta")).toHaveAttribute(
+      "href",
+      LEGCO_RESEARCH_URL,
+    );
+    await expect(page.getByTestId("landing-final-cta-register")).toHaveAttribute(
+      "href",
+      "#register",
+    );
+    await expect(page.getByTestId("landing-final-cta-breath")).toHaveAttribute(
+      "href",
+      "#breath-of-waia",
+    );
   });
 
   test("shows Create Twin by default and OAuth availability settles", async ({ page }) => {
@@ -100,9 +138,12 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-auth-identity")).toHaveValue(email);
   });
 
-  test("never surfaces an AI-Trader module card per DEE-8 §9.4", async ({ page }) => {
+  test("surfaces AI-TRADER on the public homepage per DEE-605", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText(/AI-Trader/i)).toHaveCount(0);
+    await expect(page.getByTestId("landing-ai-trader")).toBeVisible();
+    await expect(page.getByTestId("landing-ai-trader-boundary")).toContainText(
+      /No promise of profit/i,
+    );
   });
 
   test("surfaces oauth_error query as inline auth message", async ({ page }) => {

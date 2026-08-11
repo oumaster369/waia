@@ -3,6 +3,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { AuthBlock } from "@/components/landing/AuthBlock";
 import { LandingPageContent } from "@/components/landing/landing-page-content";
+import { getBreathPublicSnapshot } from "@/lib/landing/breath-public";
+import {
+  LEGCO_RESEARCH_URL,
+  WAIA_PUBLIC_GITHUB_URL,
+} from "@/lib/landing/homepage-links";
+import { getModuleReadiness } from "@/lib/landing/module-readiness";
 
 const { mockReplace, mockLocationAssign, routerStub } = vi.hoisted(() => {
   const mockReplace = vi.fn();
@@ -70,13 +76,21 @@ describe("LandingPage", () => {
     });
   }
 
-  it("renders all five blocks in order", async () => {
+  it("renders hero definition, auth, Breath, and core narrative sections", async () => {
     await renderLandingPage();
     expect(screen.getByTestId("landing-hero")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-hero-definition-text")).toHaveTextContent(
+      /human-centered AI environment/i,
+    );
     expect(screen.getByTestId("landing-auth")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-context")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-modules")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-closing")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-ai-twin")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-living-legacy")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-society")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-ai-trader")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-epistemic")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-how-built")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-final-cta")).toBeInTheDocument();
   });
 
   it("loads prepared hero web assets (desktop fallback + mobile source)", async () => {
@@ -85,47 +99,72 @@ describe("LandingPage", () => {
     expect(img).toHaveAttribute("src", "/brand/heap_comp_1.webp");
     const mobileSource = screen.getByTestId("landing-hero-source-mobile");
     expect(mobileSource).toHaveAttribute("srcset", "/brand/head_mobile_1.webp");
-    expect(screen.queryByTestId("landing-hero-logo")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("landing-hero-tagline")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("landing-hero-positioning")).not.toBeInTheDocument();
   });
 
-  it("renders the canonical Context copy", async () => {
+  it("exposes Breath pending contract without invented financial figures", async () => {
     await renderLandingPage();
-    expect(screen.getByTestId("landing-context-anchor")).toHaveTextContent(
-      "You're in the WAIA space.",
+    const snapshot = getBreathPublicSnapshot();
+    expect(snapshot.status).toBe("pending");
+    expect(snapshot.resources.entered).toBeNull();
+    expect(screen.getByTestId("landing-breath-status")).toHaveAttribute(
+      "data-status",
+      "pending",
     );
-    expect(screen.getByTestId("landing-context-description")).toHaveTextContent(/modular AI ecosystem/i);
-  });
-
-  it("renders the canonical Closing copy", async () => {
-    await renderLandingPage();
-    expect(screen.getByTestId("landing-closing-anchor")).toHaveTextContent("Stay aligned.");
-    expect(screen.getByTestId("landing-closing-narrative")).toHaveTextContent(
-      /First with yourself/i,
+    expect(screen.getByTestId("landing-breath-resource-entered")).toHaveTextContent(
+      /Not yet published/i,
     );
-  });
-
-  it("renders all three module cards in fixed order with canonical copy", async () => {
-    await renderLandingPage();
-    const aiTwin = screen.getByTestId("landing-module-ai-twin");
-    const business = screen.getByTestId("landing-module-3p-business");
-    const marketplace = screen.getByTestId("landing-module-ai-marketplace");
-    expect(aiTwin).toBeInTheDocument();
-    expect(business).toBeInTheDocument();
-    expect(marketplace).toBeInTheDocument();
-    expect(screen.getByTestId("landing-module-ai-twin-description")).toHaveTextContent(/personal digital twin/i);
-    expect(screen.getByTestId("landing-module-3p-business-description")).toHaveTextContent(
-      /Provision, Promotion, and Production/i,
+    expect(screen.getByTestId("landing-breath-github-primary")).toHaveAttribute(
+      "href",
+      WAIA_PUBLIC_GITHUB_URL,
     );
-    expect(screen.getByTestId("landing-module-ai-marketplace-description")).toHaveTextContent(
-      /economic and marketplace/i,
+    expect(screen.getByTestId("landing-breath-github-secondary")).toHaveAttribute(
+      "href",
+      WAIA_PUBLIC_GITHUB_URL,
     );
   });
 
-  it("never renders an AI-Trader card per DEE-8 §9.4", async () => {
+  it("links LEGCO research and GitHub from How WAIA Is Built and final CTA", async () => {
     await renderLandingPage();
-    expect(screen.queryByText(/AI-Trader/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-how-built-legco-cta")).toHaveAttribute(
+      "href",
+      LEGCO_RESEARCH_URL,
+    );
+    expect(screen.getByTestId("landing-how-built-github-cta")).toHaveAttribute(
+      "href",
+      WAIA_PUBLIC_GITHUB_URL,
+    );
+    expect(screen.getByTestId("landing-final-cta-register")).toHaveAttribute(
+      "href",
+      "#register",
+    );
+    expect(screen.getByTestId("landing-final-cta-breath")).toHaveAttribute(
+      "href",
+      "#breath-of-waia",
+    );
+    expect(screen.getByTestId("landing-breath-interstitial-cta")).toHaveAttribute(
+      "href",
+      "#breath-of-waia",
+    );
+  });
+
+  it("renders AI-TRADER with Product Constitution claim discipline", async () => {
+    await renderLandingPage();
+    expect(screen.getByTestId("landing-ai-trader-identity")).toHaveTextContent(
+      /knowledge|observation becomes hypothesis/i,
+    );
+    expect(screen.getByTestId("landing-ai-trader-boundary")).toHaveTextContent(
+      /No promise of profit/i,
+    );
+    expect(screen.getByTestId("landing-ai-trader-readiness-percent")).toHaveTextContent(
+      `${getModuleReadiness("ai-trader").percent}%`,
+    );
+  });
+
+  it("renders reserved media slots without final artwork images", async () => {
+    await renderLandingPage();
+    const slot = screen.getByTestId("landing-breath-media");
+    expect(slot).toHaveAttribute("data-media-slot", "reserved");
+    expect(slot.querySelector("img")).toBeNull();
   });
 
   it("renders Create Twin as default email CTA plus OAuth when availability returns providers", async () => {
@@ -135,6 +174,15 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("landing-auth-provider-google")).toBeInTheDocument();
     expect(screen.getByTestId("landing-auth-provider-apple")).toBeInTheDocument();
     expect(screen.getByTestId("landing-auth-provider-telegram")).toBeInTheDocument();
+  });
+});
+
+describe("module readiness methodology", () => {
+  it("derives percentages from declared label scores, not marketing invention", () => {
+    expect(getModuleReadiness("business-3p").percent).toBe(10);
+    expect(getModuleReadiness("ai-marketplace").percent).toBe(10);
+    expect(getModuleReadiness("waia-dev-os").percent).toBe(70);
+    expect(getModuleReadiness("ai-twin").percent).toBe(63);
   });
 });
 
