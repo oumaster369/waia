@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-review
-  currentWorkPackage: WP-5-B1
-  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5-A]
+  currentWorkPackage: WP-5-B2
+  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5-A, WP-5-B1]
   remainingWorkPackages: [WP-5-B2]
   prNumber: 457
   prUrl: "https://github.com/oumaster369/waia/pull/457"
-  lastValidatedGitSha: 6f476d5974b89e772e8c94a238881368d1b93fdd
+  lastValidatedGitSha: 74ef5d8f06c67a9310262c24d8e77d60042fc6d2
   lastValidationAt: "2026-08-11T15:40:00Z"
-  blockedReason: "READY_FOR_HUMAN_DEE_608_B1_VISUAL_IMPLEMENTATION_REVIEW — Twin/Legacy final art (B2) still open"
-  nextAction: "Human review of B1 diagrams; then approve V-TWIN / V-LEGACY production (B2). Do not merge."
+  blockedReason: "BLOCKED_WAITING_FOR_HUMAN_SUPPLIED_V_TWIN_AND_V_LEGACY_ASSETS — Marketplace marker fixed; final rasters not yet dropped into public/landing/visuals/"
+  nextAction: "Human drops ai-twin.webp + living-legacy.webp into public/landing/visuals/; agent integrates NarrativeFinalImage and removes FinalArtReadySlot. Do not merge."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -582,3 +582,23 @@ Review deterministic diagrams + slot cleanup locally / on PR preview.
 Next: approve production of **V-TWIN** and **V-LEGACY**, then B2 integration inside PR #457.  
 **Do not merge** until B2 visuals are also Human-accepted.  
 DEE-608 remains incomplete until B2.
+
+---
+
+## DEE-608 Phase B2 — Final raster integration
+
+**B1 status:** Human-approved (HEAD `74ef5d8`).
+
+**B2 progress**
+
+| Item | Status |
+|------|--------|
+| Marketplace `mkt-arrow-dim` / `mkt-arrow-gold` `<defs>` markers | **Fixed** |
+| Stable paths `public/landing/visuals/ai-twin.webp` + `living-legacy.webp` | Contract ready (`lib/landing/final-visuals.ts`, `NarrativeFinalImage`) |
+| Public alt text (no internal scaffold language) | Contract ready |
+| Human-supplied `ai-twin.webp` | **MISSING — blocked** |
+| Human-supplied `living-legacy.webp` | **MISSING — blocked** |
+| Replace `FinalArtReadySlot` in Twin/Legacy sections | Waiting on files |
+| Gate `READY_FOR_HUMAN_DEE_608_B2_FINAL_VISUAL_REVIEW` | Not yet — requires both rasters integrated |
+
+**Policy:** Do not invent programmer-art / stock / robot substitutes. Drop approved files into `public/landing/visuals/` (see README there), then continue B2 integration in this same PR.

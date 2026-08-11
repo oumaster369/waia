@@ -5,6 +5,12 @@ import {
   formatBreathRunway,
   getBreathPublicSnapshot,
 } from "@/lib/landing/breath-public";
+import {
+  FINAL_VISUAL_ALT,
+  FINAL_VISUAL_BUDGET_BYTES,
+  FINAL_VISUAL_INTRINSIC,
+  FINAL_VISUAL_PATHS,
+} from "@/lib/landing/final-visuals";
 import { WAIA_PUBLIC_GITHUB_URL } from "@/lib/landing/homepage-links";
 import {
   HOMEPAGE_MODULE_READINESS,
@@ -36,6 +42,19 @@ describe("breath-public contract", () => {
     expect(snap.work.githubUrl).toBe(WAIA_PUBLIC_GITHUB_URL);
     expect(formatBreathAmount(null, null)).toBe("Not yet published");
     expect(formatBreathRunway(snap.runway)).toBe("Not yet published");
+  });
+});
+
+describe("DEE-608 B2 final visual path contract", () => {
+  it("locks stable public paths, public alt text, and 4:5 intrinsic geometry", () => {
+    expect(FINAL_VISUAL_PATHS.twin.webp).toBe("/landing/visuals/ai-twin.webp");
+    expect(FINAL_VISUAL_PATHS.legacy.webp).toBe("/landing/visuals/living-legacy.webp");
+    expect(FINAL_VISUAL_INTRINSIC.width / FINAL_VISUAL_INTRINSIC.height).toBeCloseTo(0.8);
+    expect(FINAL_VISUAL_BUDGET_BYTES).toBe(180_000);
+    expect(FINAL_VISUAL_ALT.twin).toMatch(/co-researcher/i);
+    expect(FINAL_VISUAL_ALT.legacy).toMatch(/continuity of meaning/i);
+    expect(FINAL_VISUAL_ALT.twin).not.toMatch(/DEE-608|Human-approved|V-TWIN/i);
+    expect(FINAL_VISUAL_ALT.legacy).not.toMatch(/immortality|DEE-608|Human-approved/i);
   });
 });
 

@@ -211,6 +211,8 @@ describe("LandingPage", () => {
       "data-media-slot",
       "diagram-inline",
     );
+    expect(document.getElementById("mkt-arrow-dim")).not.toBeNull();
+    expect(document.getElementById("mkt-arrow-gold")).not.toBeNull();
 
     const twin = screen.getByTestId("landing-ai-twin-media");
     expect(twin).toHaveAttribute("data-media-slot", "final-art-ready");

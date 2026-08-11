@@ -7,6 +7,7 @@ const LINE = "rgba(218,200,160,0.32)";
 
 /**
  * V-MARKETPLACE — compact inline inversion mark (not a large plate).
+ * Directional arrows are self-contained via SVG `<defs>` markers.
  */
 export function MarketplaceDiagram({ className }: { className?: string }) {
   return (
@@ -25,6 +26,35 @@ export function MarketplaceDiagram({ className }: { className?: string }) {
         role="img"
         aria-label="Marketplace inversion diagram. Traditional path: Offer to advertising to click to funnel. WAIA path: Need to context understanding to relevant possibilities to comparison to conscious choice."
       >
+        <defs>
+          <marker
+            id="mkt-arrow-dim"
+            data-testid="landing-marketplace-marker-dim"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+            markerUnits="strokeWidth"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(218,200,160,0.45)" />
+          </marker>
+          <marker
+            id="mkt-arrow-gold"
+            data-testid="landing-marketplace-marker-gold"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+            markerUnits="strokeWidth"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" fill={GOLD} />
+          </marker>
+        </defs>
+
         {/* Traditional */}
         <text
           x="8"
@@ -106,6 +136,7 @@ export function MarketplaceDiagram({ className }: { className?: string }) {
                 y2="122"
                 stroke={GOLD}
                 strokeWidth="1.15"
+                markerEnd="url(#mkt-arrow-gold)"
               />
             ) : null}
             <rect
