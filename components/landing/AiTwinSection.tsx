@@ -1,5 +1,5 @@
 import { ModuleReadinessBar } from "@/components/landing/ModuleReadiness";
-import { NarrativeMediaSlot } from "@/components/landing/NarrativeMediaSlot";
+import { FinalArtReadySlot } from "@/components/landing/visuals/final-art-ready-slot";
 import {
   HomepageSection,
   SectionBody,
@@ -31,9 +31,11 @@ export function AiTwinSection() {
           <SectionNote testId="landing-ai-twin-boundary">{copy.boundary}</SectionNote>
           <ModuleReadinessBar readiness={readiness} testIdPrefix="landing-ai-twin" />
         </div>
-        <NarrativeMediaSlot
+        <FinalArtReadySlot
           testId="landing-ai-twin-media"
-          purpose="AI-TWIN Human Co-Researcher visual"
+          assetId="V-TWIN"
+          motif="twin"
+          purpose="AI-TWIN Human Co-Researcher visual — Mirror to Model to Observer to Co-Researcher"
         />
       </div>
     </HomepageSection>

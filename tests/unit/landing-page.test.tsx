@@ -4,10 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AuthBlock } from "@/components/landing/AuthBlock";
 import { LandingPageContent } from "@/components/landing/landing-page-content";
 import { getBreathPublicSnapshot } from "@/lib/landing/breath-public";
-import {
-  LEGCO_RESEARCH_URL,
-  WAIA_PUBLIC_GITHUB_URL,
-} from "@/lib/landing/homepage-links";
+import { LEGCO_RESEARCH_URL, WAIA_PUBLIC_GITHUB_URL } from "@/lib/landing/homepage-links";
 import { getModuleReadiness } from "@/lib/landing/module-readiness";
 
 const { mockReplace, mockLocationAssign, routerStub } = vi.hoisted(() => {
@@ -106,10 +103,7 @@ describe("LandingPage", () => {
     const snapshot = getBreathPublicSnapshot();
     expect(snapshot.status).toBe("pending");
     expect(snapshot.resources.entered).toBeNull();
-    expect(screen.getByTestId("landing-breath-status")).toHaveAttribute(
-      "data-status",
-      "pending",
-    );
+    expect(screen.getByTestId("landing-breath-status")).toHaveAttribute("data-status", "pending");
     expect(screen.getByTestId("landing-breath-resource-entered")).toHaveTextContent(
       /Not yet published/i,
     );
@@ -133,10 +127,7 @@ describe("LandingPage", () => {
       "href",
       WAIA_PUBLIC_GITHUB_URL,
     );
-    expect(screen.getByTestId("landing-final-cta-register")).toHaveAttribute(
-      "href",
-      "#register",
-    );
+    expect(screen.getByTestId("landing-final-cta-register")).toHaveAttribute("href", "#register");
     expect(screen.getByTestId("landing-final-cta-breath")).toHaveAttribute(
       "href",
       "#breath-of-waia",
@@ -179,9 +170,15 @@ describe("LandingPage", () => {
 
   it("renders corrected 3P, Marketplace, and Breath contract surfaces", async () => {
     await renderLandingPage();
-    expect(screen.getByTestId("landing-business-3p-provision")).toHaveTextContent(/Market research/i);
-    expect(screen.getByTestId("landing-business-3p-promotion")).toHaveTextContent(/Marketing strategy/i);
-    expect(screen.getByTestId("landing-business-3p-production")).toHaveTextContent(/Product and service creation/i);
+    expect(screen.getByTestId("landing-business-3p-provision")).toHaveTextContent(
+      /Market research/i,
+    );
+    expect(screen.getByTestId("landing-business-3p-promotion")).toHaveTextContent(
+      /Marketing strategy/i,
+    );
+    expect(screen.getByTestId("landing-business-3p-production")).toHaveTextContent(
+      /Product and service creation/i,
+    );
     expect(screen.getByTestId("landing-ai-marketplace-waia-path")).toHaveTextContent(/Need →/i);
     expect(screen.getByTestId("landing-breath-stage")).toBeInTheDocument();
     expect(screen.getByTestId("landing-breath-budget")).toBeInTheDocument();
@@ -191,11 +188,45 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("landing-living-legacy-example")).toHaveTextContent(/grandchild/i);
   });
 
-  it("renders reserved media slots without final artwork images", async () => {
+  it("renders B1 diagrams and final-art-ready Twin/Legacy slots without raster art", async () => {
     await renderLandingPage();
-    const slot = screen.getByTestId("landing-breath-media");
-    expect(slot).toHaveAttribute("data-media-slot", "reserved");
-    expect(slot.querySelector("img")).toBeNull();
+
+    expect(screen.getByTestId("landing-breath-media")).toHaveAttribute(
+      "data-media-slot",
+      "diagram",
+    );
+    expect(screen.getByTestId("landing-society-media")).toHaveAttribute(
+      "data-media-slot",
+      "diagram",
+    );
+    expect(screen.getByTestId("landing-ai-trader-media")).toHaveAttribute(
+      "data-media-slot",
+      "diagram",
+    );
+    expect(screen.getByTestId("landing-how-built-media")).toHaveAttribute(
+      "data-media-slot",
+      "diagram",
+    );
+    expect(screen.getByTestId("landing-ai-marketplace-diagram")).toHaveAttribute(
+      "data-media-slot",
+      "diagram-inline",
+    );
+
+    const twin = screen.getByTestId("landing-ai-twin-media");
+    expect(twin).toHaveAttribute("data-media-slot", "final-art-ready");
+    expect(twin).toHaveAttribute("data-asset-id", "V-TWIN");
+    expect(twin.querySelector("img")).toBeNull();
+
+    const legacy = screen.getByTestId("landing-living-legacy-media");
+    expect(legacy).toHaveAttribute("data-media-slot", "final-art-ready");
+    expect(legacy).toHaveAttribute("data-asset-id", "V-LEGACY");
+    expect(legacy.querySelector("img")).toBeNull();
+
+    expect(screen.queryByTestId("landing-human-bridge-media")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("landing-business-3p-media")).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-business-3p-pillars")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-epistemic-method-steps")).toHaveTextContent(/Observation/);
+    expect(screen.getByTestId("landing-ai-trader-media")).toHaveTextContent(/NO TRADE/);
   });
 
   it("renders Create Twin as default email CTA plus OAuth when availability returns providers", async () => {
@@ -237,7 +268,10 @@ describe("AuthBlock state machine", () => {
   });
 
   it("starts in VisitorIdle with empty fields and no error", async () => {
-    vi.stubGlobal("fetch", fetchWithOauthAvailability(() => oauthAvailableResponse()));
+    vi.stubGlobal(
+      "fetch",
+      fetchWithOauthAvailability(() => oauthAvailableResponse()),
+    );
 
     render(<AuthBlock />);
     await waitFor(() => {
@@ -286,7 +320,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       fetchWithOauthAvailability((input) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/sign-up")) {
           return jsonResponse({ error: { code: "WEAK_PASSWORD" } }, 400);
         }
@@ -329,7 +364,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       fetchWithOauthAvailability((input) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/sign-up")) {
           return jsonResponse({ ok: true, redirect: "/dashboard" }, 201);
         }
@@ -367,7 +403,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       fetchWithOauthAvailability((input) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/sign-in")) {
           return jsonResponse({ ok: true, redirect: "/dashboard" }, 200);
         }
@@ -438,7 +475,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       fetchWithOauthAvailability((input) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/sign-up")) {
           return jsonResponse(
             { ok: true, needsEmailConfirmation: true, redirect: "/dashboard" },
@@ -475,13 +513,18 @@ describe("AuthBlock state machine", () => {
   });
 
   it("shows password policy hint only in Create Twin mode", async () => {
-    vi.stubGlobal("fetch", fetchWithOauthAvailability(() => oauthAvailableResponse()));
+    vi.stubGlobal(
+      "fetch",
+      fetchWithOauthAvailability(() => oauthAvailableResponse()),
+    );
 
     render(<AuthBlock />);
     await waitFor(() => {
       expect(screen.getByTestId("landing-auth-provider-google")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("landing-auth-password-policy-hint")).toHaveTextContent(/8 characters/);
+    expect(screen.getByTestId("landing-auth-password-policy-hint")).toHaveTextContent(
+      /8 characters/,
+    );
     fireEvent.click(screen.getByTestId("landing-auth-mode-sign-in"));
     await waitFor(() => {
       expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Sign in");
@@ -493,7 +536,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/oauth/availability")) {
           return Promise.reject(new Error("network"));
         }
@@ -515,7 +559,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/oauth/availability")) {
           return Promise.resolve(
             jsonResponse({ google: false, apple: false, telegram: false }, 200),
@@ -535,7 +580,10 @@ describe("AuthBlock state machine", () => {
   describe("OAuth start navigation", () => {
     beforeEach(() => {
       mockLocationAssign.mockClear();
-      vi.stubGlobal("fetch", fetchWithOauthAvailability(() => oauthAvailableResponse()));
+      vi.stubGlobal(
+        "fetch",
+        fetchWithOauthAvailability(() => oauthAvailableResponse()),
+      );
       vi.stubGlobal("location", {
         assign: mockLocationAssign,
         replace: vi.fn(),

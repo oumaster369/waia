@@ -1,3 +1,4 @@
+import { BreathDiagram } from "@/components/landing/visuals/breath-diagram";
 import {
   formatBreathAmount,
   formatBreathRunway,
@@ -5,7 +6,6 @@ import {
 } from "@/lib/landing/breath-public";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 import { BREATH_ANCHOR_ID } from "@/lib/landing/homepage-links";
-import { NarrativeMediaSlot } from "@/components/landing/NarrativeMediaSlot";
 import {
   HomepageSection,
   SectionBody,
@@ -224,10 +224,7 @@ export function BreathOfWaiaSection() {
           <SectionNote testId="landing-breath-methodology">{snapshot.methodologyNote}</SectionNote>
         </div>
 
-        <NarrativeMediaSlot
-          testId="landing-breath-media"
-          purpose="Breath of WAIA resource and work transparency visual"
-        />
+        <BreathDiagram />
       </div>
     </HomepageSection>
   );

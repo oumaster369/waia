@@ -1,4 +1,5 @@
 import { ModuleReadinessBar } from "@/components/landing/ModuleReadiness";
+import { MarketplaceDiagram } from "@/components/landing/visuals/marketplace-diagram";
 import {
   HomepageSection,
   SectionBody,
@@ -15,11 +16,12 @@ export function AiMarketplaceSection() {
 
   return (
     <HomepageSection testId="landing-ai-marketplace" ariaLabel="AI-Marketplace">
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         <SectionHeading testId="landing-ai-marketplace-title">{copy.title}</SectionHeading>
         <SectionBody testId="landing-ai-marketplace-lead">{copy.lead}</SectionBody>
         <SectionBody testId="landing-ai-marketplace-traditional">{copy.traditional}</SectionBody>
         <SectionBody testId="landing-ai-marketplace-waia-path">{copy.waiaPath}</SectionBody>
+        <MarketplaceDiagram />
         <SectionBody testId="landing-ai-marketplace-meaning">{copy.meaning}</SectionBody>
         <SectionNote testId="landing-ai-marketplace-status">{copy.status}</SectionNote>
         <ModuleReadinessBar readiness={readiness} testIdPrefix="landing-ai-marketplace" />

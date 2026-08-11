@@ -1,5 +1,5 @@
 import { ModuleReadinessBar } from "@/components/landing/ModuleReadiness";
-import { NarrativeMediaSlot } from "@/components/landing/NarrativeMediaSlot";
+import { TraderDiagram } from "@/components/landing/visuals/trader-diagram";
 import {
   HomepageSection,
   SectionBody,
@@ -28,10 +28,7 @@ export function AiTraderSection() {
           <SectionNote testId="landing-ai-trader-boundary">{copy.boundary}</SectionNote>
           <ModuleReadinessBar readiness={readiness} testIdPrefix="landing-ai-trader" />
         </div>
-        <NarrativeMediaSlot
-          testId="landing-ai-trader-media"
-          purpose="AI-TRADER knowledge-first market intelligence visual"
-        />
+        <TraderDiagram />
       </div>
     </HomepageSection>
   );

@@ -1,4 +1,4 @@
-import { NarrativeMediaSlot } from "@/components/landing/NarrativeMediaSlot";
+import { HowBuiltDiagram } from "@/components/landing/visuals/how-built-diagram";
 import {
   HomepageSection,
   SectionBody,
@@ -6,10 +6,7 @@ import {
   SectionNote,
 } from "@/components/landing/homepage-section";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
-import {
-  LEGCO_RESEARCH_URL,
-  WAIA_PUBLIC_GITHUB_URL,
-} from "@/lib/landing/homepage-links";
+import { LEGCO_RESEARCH_URL, WAIA_PUBLIC_GITHUB_URL } from "@/lib/landing/homepage-links";
 
 const copy = HOMEPAGE_COPY.howBuilt;
 
@@ -51,10 +48,7 @@ export function HowWaiaIsBuiltSection() {
             </a>
           </div>
         </div>
-        <NarrativeMediaSlot
-          testId="landing-how-built-media"
-          purpose="How WAIA is built research and openness visual"
-        />
+        <HowBuiltDiagram />
       </div>
     </HomepageSection>
   );

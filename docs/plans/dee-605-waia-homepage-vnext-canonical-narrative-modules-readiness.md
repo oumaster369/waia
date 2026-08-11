@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-review
-  currentWorkPackage: WP-5
-  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4]
-  remainingWorkPackages: [WP-5]
+  currentWorkPackage: WP-5-B1
+  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5-A]
+  remainingWorkPackages: [WP-5-B2]
   prNumber: 457
   prUrl: "https://github.com/oumaster369/waia/pull/457"
-  lastValidatedGitSha: ecc02aeb3e6a287319d6e46b776b1e069d1d551d
-  lastValidationAt: "2026-08-11T15:20:00Z"
-  blockedReason: "READY_FOR_HUMAN_DEE_608_VISUAL_DIRECTION_REVIEW — Phase A proposal only; no final artwork"
-  nextAction: "Human visual-direction approval for DEE-608; then Phase B asset production inside PR #457. Do not merge."
+  lastValidatedGitSha: 358701bca5a34ccc01d57961f513ad9c0a8e8428
+  lastValidationAt: "2026-08-11T15:26:00Z"
+  blockedReason: "READY_FOR_HUMAN_DEE_608_B1_VISUAL_IMPLEMENTATION_REVIEW — Twin/Legacy final art (B2) still open"
+  nextAction: "Human review of B1 diagrams; then approve V-TWIN / V-LEGACY production (B2). Do not merge."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -83,12 +83,15 @@ Architect accepted baseline IA/visual language. Corrective-only on the existing 
 | Item | Value |
 |------|--------|
 | Live Linear | [DEE-608](https://linear.app/deepsense/issue/DEE-608/waia-homepage-visual-narrative-image-direction-and-final-asset) (parent DEE-605; status In Progress; label `design`) |
-| Phase A (this commit) | Visual-narrative review + art direction + asset plan + media-slot disposition — **no final artwork** |
-| Phase B (after Human approval) | Produce + integrate approved assets inside PR #457 |
-| Human gate | `READY_FOR_HUMAN_DEE_608_VISUAL_DIRECTION_REVIEW` |
+| Phase A (done) | Visual-narrative review + art direction + asset plan — Human-approved with refinements |
+| Phase B1 (this pass) | Deterministic diagrams + layout + Twin/Legacy ready slots + production briefs — **no Twin/Legacy raster art** |
+| Phase B2 (later) | Final Human-approved `V-TWIN` / `V-LEGACY` artwork integration |
+| Human gate (B1) | `READY_FOR_HUMAN_DEE_608_B1_VISUAL_IMPLEMENTATION_REVIEW` |
 | Content baseline SHA | `ecc02aeb3e6a287319d6e46b776b1e069d1d551d` (do not regress Hero/Auth geometry or approved copy) |
 
 Full Phase A proposal: **§ DEE-608 Phase A — Visual narrative design review** below.
+
+B1 implementation record + Twin/Legacy production briefs: **§ DEE-608 Phase B1** below.
 
 ---
 
@@ -482,3 +485,100 @@ Max concurrent ornamental motion: **one** on-screen.
 ### Human decision required
 
 Approve / amend this visual direction. Next agent step after approval: **Phase B asset production + integration inside PR #457** — still **no merge** until Human accepts the final visual result.
+
+---
+
+## DEE-608 Phase B1 — Deterministic visual implementation
+
+**Status:** implemented for Human B1 review  
+**Gate:** `READY_FOR_HUMAN_DEE_608_B1_VISUAL_IMPLEMENTATION_REVIEW`  
+**Not done:** `V-TWIN` / `V-LEGACY` final rasters (B2)
+
+### B1 delivered
+
+| Asset | Implementation |
+|-------|----------------|
+| `V-BREATH` | SVG dual resource ↔ work + GitHub inspectability (`BreathDiagram`) |
+| `V-SOCIETY` | SVG sparse person/Twin pairs; visual-**left** on desktop; text-first on mobile |
+| `V-TRADER` | SVG pipeline + equal-weight **NO TRADE**; restrained path reveal; reduced-motion static |
+| `V-MARKET` | Compact inline SVG inversion (`MarketplaceDiagram`) |
+| `V-BUILT` | SVG Question→…→Knowledge with DEV OS span + Human authority notes |
+| 3P | Media slot **removed**; pillars elevated as operating structure |
+| Human bridge | Media slot **removed**; typographic silence |
+| Epistemic | No illustration; method steps typography clarified |
+| `V-TWIN` / `V-LEGACY` | `FinalArtReadySlot` calm composition (`data-media-slot="final-art-ready"`) — **no fake final art** |
+
+### Files (B1)
+
+Added under `components/landing/visuals/`: `diagram-shell.tsx`, `breath-diagram.tsx`, `society-diagram.tsx`, `trader-diagram.tsx` + `.module.css`, `marketplace-diagram.tsx`, `how-built-diagram.tsx`, `final-art-ready-slot.tsx`.
+
+Removed: `components/landing/NarrativeMediaSlot.tsx` (superseded).
+
+Section updates: Breath, HumanBridge, AiTwin, LivingLegacy, Society, Business3P, AiTrader, Epistemic, AiMarketplace, HowBuilt.
+
+### Final production brief — V-TWIN (B2)
+
+**Asset ID:** `V-TWIN`  
+**Slot:** `landing-ai-twin-media` · desktop right · aspect **4:5** · WebP (AVIF optional) ≤ ~180 KB  
+**Semantic goal:** Relationship between one human and a progressively forming digital reflection — Mirror → Model → Observer → Co-Researcher — **not** a clone, robot, or authority.
+
+**Composition**
+
+- Vertical 4:5 field on midnight/black.
+- **Left ~40%:** warm human presence (partial profile or three-quarter, soft edge) — gold/warm skin/cloth tones, not stock “business person.”
+- **Right ~40%:** cool platinum presence — related silhouette/light-form, incomplete/porous edges suggesting formation, not a finished twin face copy.
+- **Center ~20%:** luminous threshold / soft connecting point of light (logo myth) — closeness without merger.
+- Gaze: if eyes readable, human looks slightly toward twin or shared middle; twin does **not** stare down or dominate. Prefer contemplative lateral orientation over confrontational eye contact.
+- Depth: shallow; soft rim light; one focal lamp at threshold.
+- Abstraction: semi-abstract illustration preferred over photoreal stock; allow mystery/incompleteness in the AI presence.
+- Do **not** stamp all four progression labels into the image unless Human later requests a quiet caption outside the art.
+
+**Prohibited:** humanoid robot; glowing brain; circuit head; holographic assistant; surveillance camera tropes; clone face duplicate; AI as throne/center controlling human; neural webs; neon sci-fi HUD.
+
+**Crops**
+
+- Desktop: preserve both presence fields + threshold in frame.
+- Mobile: never crop through the threshold; prefer slight vertical bias keeping both silhouettes.
+
+**Alt-text intent:** “A human presence and a related cool digital presence meet at a soft luminous threshold — AI-TWIN as co-researcher, not a machine overseer.”
+
+**Temporary B1 slot:** calm dual radial + silhouette guides (`FinalArtReadySlot` motif `twin`) — replace entirely with final art.
+
+---
+
+### Final production brief — V-LEGACY (B2)
+
+**Asset ID:** `V-LEGACY`  
+**Slot:** `landing-living-legacy-media` · desktop **visual-left** · aspect **4:5** · WebP (AVIF optional) ≤ ~180 KB  
+**Semantic goal:** Continuity of lived experience, values, stories, mistakes, and decisions across generations — **not** immortality, resurrection, ghost, or consciousness upload.
+
+**Composition**
+
+- Vertical 4:5 midnight field, restrained warmth.
+- **Present human** (foreground, warmer, clearer): quiet dignity; not grieving theatre.
+- **Subtle preserved layer** (mid): soft archival trace — light, paper, woven memory, or translucent prior presence — readable as *understood experience*, not a specter.
+- **Later-generation human** (background or lower right, softer): receiving meaning, not haunted.
+- Symbolic continuity: a thin warm continuum / soft handoff of light between figures — **not** DNA helix, family-tree infographic, or tombstone.
+- Lighting: archival evening warmth; no heaven beams; no cold horror lighting.
+- Depth: gentle layers; emotional restraint; credible and humane.
+- Abstraction: painterly or soft illustrative; avoid literal genealogy chart unless composition truly benefits (default: **no** chart).
+
+**Prohibited:** immortality / “live forever”; resurrection; ghost/apparition; digital consciousness upload; angelic afterlife; skulls/memento-mori kitsch; creepy uncanny double.
+
+**Crops**
+
+- Desktop: keep present + trace + later presence relationship.
+- Mobile: protect the continuum/handoff zone; text remains first in reading order (`order-1`).
+
+**Alt-text intent:** “A present human, a soft preserved layer of lived experience, and a later human presence — continuity of meaning across time, not immortality.”
+
+**Temporary B1 slot:** calm archival dual presence + continuum line (`FinalArtReadySlot` motif `legacy`) — replace entirely with final art.
+
+---
+
+### Human decision (B1)
+
+Review deterministic diagrams + slot cleanup locally / on PR preview.  
+Next: approve production of **V-TWIN** and **V-LEGACY**, then B2 integration inside PR #457.  
+**Do not merge** until B2 visuals are also Human-accepted.  
+DEE-608 remains incomplete until B2.

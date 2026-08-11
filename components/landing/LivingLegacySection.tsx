@@ -1,4 +1,4 @@
-import { NarrativeMediaSlot } from "@/components/landing/NarrativeMediaSlot";
+import { FinalArtReadySlot } from "@/components/landing/visuals/final-art-ready-slot";
 import {
   HomepageSection,
   SectionBody,
@@ -13,9 +13,11 @@ export function LivingLegacySection() {
   return (
     <HomepageSection testId="landing-living-legacy" ariaLabel="A Legacy That Lives">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-center">
-        <NarrativeMediaSlot
+        <FinalArtReadySlot
           testId="landing-living-legacy-media"
-          purpose="Living Legacy visual"
+          assetId="V-LEGACY"
+          motif="legacy"
+          purpose="Living Legacy visual — continuity of lived experience across generations"
           className="order-2 lg:order-1"
         />
         <div className="order-1 flex flex-col gap-3 lg:order-2">

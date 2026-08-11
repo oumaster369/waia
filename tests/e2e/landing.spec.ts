@@ -219,6 +219,68 @@ test.describe("WAIA landing page", () => {
     );
   });
 
+  test("DEE-608 B1 diagrams and final-art-ready slots without empty removed slots", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+
+    await expect(page.getByTestId("landing-breath-media")).toHaveAttribute(
+      "data-media-slot",
+      "diagram",
+    );
+    await expect(page.getByTestId("landing-society-media")).toHaveAttribute(
+      "data-media-slot",
+      "diagram",
+    );
+    await expect(page.getByTestId("landing-ai-trader-media")).toContainText(/NO TRADE/);
+    await expect(page.getByTestId("landing-how-built-media")).toContainText(/LEGCO/);
+    await expect(page.getByTestId("landing-ai-marketplace-diagram")).toBeVisible();
+    await expect(page.getByTestId("landing-ai-twin-media")).toHaveAttribute(
+      "data-media-slot",
+      "final-art-ready",
+    );
+    await expect(page.getByTestId("landing-living-legacy-media")).toHaveAttribute(
+      "data-asset-id",
+      "V-LEGACY",
+    );
+    await expect(page.getByTestId("landing-human-bridge-media")).toHaveCount(0);
+    await expect(page.getByTestId("landing-business-3p-media")).toHaveCount(0);
+    await expect(page.getByTestId("landing-business-3p-pillars")).toBeVisible();
+
+    // Society: text first in DOM reading order on mobile; visual-left on desktop via CSS order.
+    const societyTitleBox = await page.getByTestId("landing-society-title").boundingBox();
+    const societyMediaBox = await page.getByTestId("landing-society-media").boundingBox();
+    expect(societyTitleBox).toBeTruthy();
+    expect(societyMediaBox).toBeTruthy();
+    if (societyTitleBox && societyMediaBox) {
+      expect(societyMediaBox.x).toBeLessThan(societyTitleBox.x);
+    }
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      1280 + 1,
+    );
+  });
+
+  test("DEE-608 B1 mobile: diagrams present without horizontal overflow", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await expect(page.getByTestId("landing-breath-media")).toBeVisible();
+    await expect(page.getByTestId("landing-ai-marketplace-diagram")).toBeVisible();
+    await expect(page.getByTestId("landing-ai-trader-media")).toContainText(/NO TRADE/);
+    // Mobile reading order: society title above media (order-1 text).
+    const societyTitleBox = await page.getByTestId("landing-society-title").boundingBox();
+    const societyMediaBox = await page.getByTestId("landing-society-media").boundingBox();
+    expect(societyTitleBox).toBeTruthy();
+    expect(societyMediaBox).toBeTruthy();
+    if (societyTitleBox && societyMediaBox) {
+      expect(societyTitleBox.y).toBeLessThan(societyMediaBox.y);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      390 + 1,
+    );
+  });
+
   test("surfaces oauth_error query as inline auth message", async ({ page }) => {
     await page.goto("/?oauth_error=OAUTH_DENIED");
     await expect(page.getByTestId("landing-auth-error")).toBeVisible({ timeout: 15_000 });
