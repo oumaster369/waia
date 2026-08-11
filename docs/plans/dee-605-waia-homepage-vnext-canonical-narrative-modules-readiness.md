@@ -6,23 +6,23 @@ riskTier: T2
 prPolicy: one-integration-pr
 executionSurfaces: [local]
 requiredValidation: [lint, typecheck, build, unit-targeted, e2e]
-approvalGates: [plan-approved, integration-ready, human-merge]
-includedIssues: []
+approvalGates: [plan-approved, integration-ready, human-merge, visual-direction-approval]
+includedIssues: [DEE-608]
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
   onMerge: Done
 state:
   status: in-review
-  currentWorkPackage: WP-4
+  currentWorkPackage: WP-5
   completedWorkPackages: [WP-1, WP-2, WP-3, WP-4]
-  remainingWorkPackages: []
+  remainingWorkPackages: [WP-5]
   prNumber: 457
   prUrl: "https://github.com/oumaster369/waia/pull/457"
-  lastValidatedGitSha: e5b067ecfb46610736b21eece2ef311318cdf783
+  lastValidatedGitSha: ecc02aeb3e6a287319d6e46b776b1e069d1d551d
   lastValidationAt: "2026-08-11T15:20:00Z"
-  blockedReason: null
-  nextAction: "Await human squash-merge of PR #457 after CI; do not merge from agent"
+  blockedReason: "READY_FOR_HUMAN_DEE_608_VISUAL_DIRECTION_REVIEW — Phase A proposal only; no final artwork"
+  nextAction: "Human visual-direction approval for DEE-608; then Phase B asset production inside PR #457. Do not merge."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -49,7 +49,7 @@ provenance:
 
 ## Goal
 
-English public homepage that maps WAIA for a first-time visitor: definition → Breath → human/modules narrative → how WAIA is built → paths → Register + Breath CTAs — with readiness, truthful pending Breath data, and future visual slots — without trader/runtime mutation.
+English public homepage that maps WAIA for a first-time visitor: definition → Breath → human/modules narrative → how WAIA is built → paths → Register + Breath CTAs — with readiness, truthful pending Breath data, and (via included **DEE-608**) a deliberate visual narrative — without trader/runtime mutation.
 
 ## Work packages
 
@@ -75,6 +75,20 @@ Architect accepted baseline IA/visual language. Corrective-only on the existing 
 4. **Copy corrections:** AI-TWIN Co-Researcher + Mirror→… progression; Living Legacy emotional depth; 3P Provision/Promotion/Production meaning; AI-TRADER abstention; Marketplace need-first inversion.
 5. Preserve Society / How Built / LEGCO / GitHub / DEV OS / paths / final CTAs unless a real defect appears.
 6. Update targeted unit + desktop geometry e2e; push to existing PR #457 only.
+
+### WP-5 — DEE-608 visual narrative (INCLUDED under DEE-605)
+
+**Integration boundary (Human minimal-PR strategy):** Live Linear **DEE-608** is an **included** visual work package under **DEE-605**. Execute only in this worktree / branch / **PR #457**. Do **not** open `dee-608-*`, a second worktree, or a second PR. DEE-606 / DEE-607 remain deferred (finance boundary).
+
+| Item | Value |
+|------|--------|
+| Live Linear | [DEE-608](https://linear.app/deepsense/issue/DEE-608/waia-homepage-visual-narrative-image-direction-and-final-asset) (parent DEE-605; status In Progress; label `design`) |
+| Phase A (this commit) | Visual-narrative review + art direction + asset plan + media-slot disposition — **no final artwork** |
+| Phase B (after Human approval) | Produce + integrate approved assets inside PR #457 |
+| Human gate | `READY_FOR_HUMAN_DEE_608_VISUAL_DIRECTION_REVIEW` |
+| Content baseline SHA | `ecc02aeb3e6a287319d6e46b776b1e069d1d551d` (do not regress Hero/Auth geometry or approved copy) |
+
+Full Phase A proposal: **§ DEE-608 Phase A — Visual narrative design review** below.
 
 ---
 
@@ -253,9 +267,218 @@ Confirmed: **no** edits to `lib/trader/**`, trader routes, Execution Server, mig
 
 ## Out of scope
 
-- DEE-606 finance backend / invented ledger numbers
-- DEE-608 final artwork
-- DEE-607 admin finance console
+- DEE-606 finance backend / invented ledger numbers (deferred finance boundary)
+- DEE-607 admin finance console (deferred finance boundary)
+- DEE-608 Phase B final artwork **until** Human visual-direction approval
 - Any DEE-518 / trader runtime work
 - Database migrations
 - Shared design-system primitive mutations affecting trader UI
+- Separate `dee-608` branch / worktree / PR
+
+---
+
+## DEE-608 Phase A — Visual narrative design review
+
+**Status:** proposal for Human visual-direction approval  
+**Inspected composition:** `components/landing/landing-page-content.tsx` at accepted baseline `ecc02ae`  
+**Canon:** `docs/DESIGN_OS_V1.md` + existing midnight / gold / platinum homepage language  
+**Gate:** `READY_FOR_HUMAN_DEE_608_VISUAL_DIRECTION_REVIEW`
+
+### 0. Guiding questions (system answers)
+
+| Question | Proposed answer |
+|----------|-----------------|
+| What should the Human feel on first contact? | Calm recognition — “a reflective intelligence layer,” not a product pitch deck. Hero brand art + definition already carry this; visuals below must deepen, not shout. |
+| How should AI be represented without robots? | Cool platinum / silver light, dual-profile reflection (logo myth), soft thresholds and mirrored space — never humanoid machines, brains, circuits, or neural webs. |
+| Human ↔ AI-TWIN? | Two presence fields meeting at a luminous threshold (warm self / cool twin), readable as relationship and co-research — not avatar cosplay. |
+| Living Legacy without immortality kitsch? | Continuity of values and care across time: soft archival light, layered traces, quiet handoff — not resurrected faces, heaven metaphors, or “live forever” sci-fi. |
+| Society without social-graph cliché? | Distinct independent nodes with sparse, consent-thin alignment lines — constellation / shared horizon, **not** Facebook-style network blobs. |
+| 3P as business OS? | Prefer the **existing three pillar cards** as the diagram; do not add a stock “business people” plate. |
+| AI-TRADER = research → evidence → restraint → protected capital? | Process diagram with an explicit **abstain** branch; forbid candlesticks, PnL fireworks, crypto dashboards. |
+| Epistemic method across domains? | Already stated in three columns; avoid a second diagram that repeats Trader. Visual silence here preserves the method as shared language rather than another illustration. |
+| LEGCO → DEV OS → code? | Horizontal/vertical process diagram: research artifact → operating rules → inspectable repository. |
+| Where is intentional silence? | Human bridge, 3P media slot, Epistemic, Core, DEV OS (cycle text is enough), Paths, Final CTA, interstitial Breath CTA. |
+
+### 1. Page-level visual rhythm
+
+Prefer **fewer, stronger** beats. The page must not become a gallery.
+
+```
+Hero art (keep) ── silence around Auth ── Breath diagram ── silence (Human bridge)
+── AI-TWIN image (peak emotional 1) ── Legacy image left (peak emotional 2)
+── silence (interstitial CTA) ── Society diagram ── silence (Entrepreneur / 3P cards)
+── Trader process diagram ── silence (Epistemic / Marketplace text; optional tiny Marketplace mark)
+── silence (Core) ── How-built process diagram ── silence (DEV OS / Paths / Final CTA)
+```
+
+**Cadence:** image → image → diagram cluster mid-page → one build diagram → long closing silence so Register/Breath remain the last focal objects.
+
+**Alternation:** keep Living Legacy visual **left** on desktop; keep AI-TWIN / Society / Trader / How-built / Breath visual **right**. Optional Phase B: flip Society to **left** after Legacy for A-B-A breathing — only if Human prefers stronger left/right pulse.
+
+### 2. Per-section visual decisions
+
+Legend: **A** final image/illustration · **B** explanatory diagram · **C** subtle motion/data visual · **D** ambient treatment · **E** intentionally no visual
+
+| # | Section | Decision | Why (text alone is not enough?) | Current slot |
+|---|---------|----------|----------------------------------|--------------|
+| 1 | Hero / What is WAIA? | **A keep existing** (+ **E** no extra) | Brand art already encodes reflective duality; another plate would compete with definition + Auth. | Hero art (not `NarrativeMediaSlot`) |
+| 2 | Breath of WAIA | **B** (+ optional **C** later when live data) | Visitors must *see* open resource↔work transparency as a dual system, not only read pending fields. | **KEEP** → convert to diagram |
+| 3 | Human bridge | **E** | Short bridge copy; a slot here is decorative. | **REMOVE** |
+| 4 | AI-TWIN | **A** | Co-Researcher relationship and Mirror→… progression need one memorable relational image. | **KEEP** → final image |
+| 5 | Living Legacy | **A** | Emotional core of the narrative; text needs a restrained visual anchor. | **KEEP** (left) → final image |
+| 6 | Society | **B** | Coordination-without-network-cliché is hard in prose alone. | **KEEP** → abstract diagram |
+| 7 | Entrepreneur bridge | **E** | Typographic bridge only. | none |
+| 8 | 3P Business | **E** (pillars UI = diagram) | Three pillar cards already communicate OS structure; side media would be gallery filler. | **REMOVE** |
+| 9 | AI-TRADER | **B** | Restraint/abstain must be visually legible vs “trading = money” cultural default. | **KEEP** → process diagram |
+| 10 | Epistemic method | **E** | Three domain columns already carry the method; Trader diagram precedes — silence avoids diagram fatigue. | none |
+| 11 | AI-Marketplace | **B compact** (inline) | Need-first inversion benefits from a tiny compare mark; not a full hero plate. | **ADD** compact inline diagram (no full slot) |
+| 12 | WAIA Core | **E** | “Invisible spine” fails as literal imagery; text is clearer. | none |
+| 13 | How WAIA Is Built | **B** | Research → DEV OS → GitHub must be visually legible as one pipeline. | **KEEP** → process diagram |
+| 14 | WAIA DEV OS | **E** | Existing cycle monospace block *is* the visual. | none |
+| 15 | Paths synthesis | **E** | Two path cards suffice. | none |
+| 16 | Final CTA | **E** / ultra-light **D** only | Action surface needs silence; no competing artwork. | none |
+
+**Breath interstitial CTA:** **E** — keep as typographic CTA only.
+
+### 3. Art-direction system
+
+Aligned with Design OS v1; homepage-local only.
+
+| Dimension | Spec |
+|-----------|------|
+| Composition | Bilateral calm; one focal lamp per visual; generous negative space; no sticker overlays on imagery. |
+| Spatial depth | Glass-in-darkness / soft radial fields; shallow depth of field for photography-like plates; flat editorial clarity for diagrams. |
+| Lighting | Soft rim + warm gold accent budget (≤ one warm accent motion per view); cool platinum for twin/AI layer. |
+| Contrast | High enough for WCAG on text; imagery sits *behind* or *beside* copy — never washes mid-tones over body text. |
+| Texture | Ultra-subtle grain optional; no circuit boards, no neon grids. |
+| Human representation | Partial, dignified, anonymous when needed; no stock “business handshake” people; no smiling SaaS stock. Prefer silhouette, profile, hands, archival materials. |
+| AI representation | Light, reflection, cool platinum field, dual-profile threshold — **never** robots, glowing brains, circuit heads, neural webs. |
+| Abstraction | Emotional sections (Twin, Legacy): semi-abstract illustration or carefully directed still. Systems sections: crisp vector diagrams. |
+| Diagrams | Thin gold/platinum lines on midnight; labeled stages; abstain/negative paths drawn as clearly as positive ones. |
+| Line/icon language | Hairline 1–1.5px; rounded terminals; no filled emoji; no crypto icons. |
+| Motion | Breath-tier ambient only; 200–400ms functional; rare ceremonial. `prefers-reduced-motion`: static final frame. |
+| BG / FG | Midnight `#030813` field; visuals never invent a second brand palette. |
+| Media modes | Prefer illustration + diagram over stock photo. Abstract 3D only if it reads as material light/glass — not sci-fi HUD. |
+| WAIA gold / dark | Gold = human warmth + CTA lamp; platinum = twin/reflection; never “crypto gold” saturation. |
+
+**Prohibited clichés:** random robots; glowing AI brains; circuit-board heads; meaningless neural webs; stock business people; generic crypto candlesticks; sci-fi dashboards; decorative images with no semantic role; digital-immortality heaven tropes; Facebook-style node spam.
+
+### 4. Proposed final asset list (Phase B — after approval)
+
+| ID | Section | Type | Semantic purpose | Desktop AR | Approx budget |
+|----|---------|------|------------------|------------|---------------|
+| `V-HERO` | Hero | Existing brand art | Keep; do not replace unless Human asks | full-bleed | already shipped |
+| `V-BREATH` | Breath | SVG/diagram | Dual system: resources transparency ↔ open work (GitHub) | **4:5** in column (~0.8fr) | ≤ 40 KB SVG |
+| `V-TWIN` | AI-TWIN | Final illustration (WebP + AVIF) | Human ↔ Twin co-presence at luminous threshold; Co-Researcher relationship | **4:5** | ≤ 180 KB WebP |
+| `V-LEGACY` | Living Legacy | Final illustration (WebP + AVIF) | Continuity of values/care across time — emotional without immortality claim | **4:5** | ≤ 180 KB WebP |
+| `V-SOCIETY` | Society | SVG/diagram | Independent lives with sparse aligned coordination (not social graph) | **4:5** | ≤ 40 KB SVG |
+| `V-TRADER` | AI-TRADER | SVG/diagram | Observe → hypothesize → test → evidence; explicit **abstain / protect capital** branch | **4:5** | ≤ 45 KB SVG |
+| `V-MARKET` | Marketplace | Inline SVG (compact) | Offer-first funnel vs need-first path inversion | **16:9** strip or **3:1** | ≤ 20 KB SVG |
+| `V-BUILT` | How built | SVG/diagram | LEGCO research → WAIA DEV OS → GitHub inspectability | **4:5** | ≤ 40 KB SVG |
+
+**Not produced:** Human-bridge plate, 3P side media, Epistemic plate, Core plate, DEV OS plate, Paths plate, Final CTA plate.
+
+**Total new raster budget target:** ≤ ~400 KB decoded transfer for the two emotional images (modern formats + `sizes`). Diagrams: ≤ ~200 KB combined SVG.
+
+### 5. Responsive / crop / order rules
+
+| Asset | Tablet | Mobile | Crop | Text/visual order |
+|-------|--------|--------|------|-------------------|
+| `V-BREATH` | stack under copy | stack; max-h ~220px | keep both axes of dual system visible | text first |
+| `V-TWIN` | stack | stack; do not crop through the luminous threshold | preserve dual presence | text first |
+| `V-LEGACY` | stack | stack; keep soft archival center | avoid cropping “handoff” zone | **mobile: text first** (keep current `order-1` text); desktop visual left |
+| `V-SOCIETY` | stack | stack; simplify to ≤5 nodes if needed | never densify into hairball | text first |
+| `V-TRADER` | stack | stack; preserve abstain branch label | never crop away abstain | text first |
+| `V-MARKET` | full width under copy | full width | none | inline under body |
+| `V-BUILT` | stack | stack; three-stage labels remain readable | keep stage order L→R or top→bottom | text first |
+
+**Formats:** SVG for diagrams; AVIF + WebP (+ PNG fallback only if required) for illustrations; no unoptimized PNG hero dumps. Use `next/image` for rasters with explicit `width`/`height`/`sizes`.
+
+### 6. Accessibility / alt-text intent
+
+| Asset | Alt intent (not decorative) |
+|-------|-----------------------------|
+| `V-BREATH` | Describe dual open-resources and open-work relationship; do not invent treasury amounts. |
+| `V-TWIN` | Describe human and twin presence meeting as co-researchers — not “AI robot.” |
+| `V-LEGACY` | Describe continuity of care/values across time — not immortality. |
+| `V-SOCIETY` | Describe independent participants with sparse alignment — not a social network. |
+| `V-TRADER` | Describe research-to-evidence flow including the choice not to trade. |
+| `V-MARKET` | Describe need-first path vs offer-first funnel. |
+| `V-BUILT` | Describe research → operating system → public code pipeline. |
+
+Diagrams that convey unique information must not rely on color alone; labels remain in the SVG or adjacent text. Reserved slots today use `role="img"` + purpose; Phase B replaces with real `alt` / titled SVG.
+
+### 7. Motion recommendations
+
+| Location | Motion | Reduced motion |
+|----------|--------|----------------|
+| `V-TWIN` | Optional slow opacity settle / soft rim pulse (ceremonial, rare) | static |
+| `V-LEGACY` | Optional ultra-slow light drift | static |
+| `V-BREATH` | Optional very slow dual-axis “breath” opacity when DEE-606 data is live | static diagram |
+| `V-TRADER` | Optional one-time path draw on first in-view | static full path |
+| Page ambient | Do not add scroll-jacking parallax | n/a |
+
+Max concurrent ornamental motion: **one** on-screen.
+
+### 8. Media-slot disposition (current → Phase B)
+
+| Slot `testId` | Disposition | Change |
+|---------------|-------------|--------|
+| `landing-breath-media` | **KEEP** | Replace reserved shell with `V-BREATH` diagram |
+| `landing-human-bridge-media` | **REMOVE** | Drop slot; section becomes single-column text |
+| `landing-ai-twin-media` | **KEEP** | `V-TWIN` final image; may enlarge min-height to ~16–18rem desktop |
+| `landing-living-legacy-media` | **KEEP** | `V-LEGACY`; preserve left/right alternation |
+| `landing-society-media` | **KEEP** | `V-SOCIETY` diagram; optional layout flip to left |
+| `landing-business-3p-media` | **REMOVE** | Pillars remain the visual |
+| `landing-ai-trader-media` | **KEEP** | `V-TRADER` process diagram |
+| `landing-how-built-media` | **KEEP** | `V-BUILT` pipeline diagram |
+| *(new)* Marketplace | **ADD compact** | Inline under marketplace copy — not a full `NarrativeMediaSlot` card |
+
+`NarrativeMediaSlot.tsx` stays homepage-local; Phase B may extend it to accept `children` / `src` **without** touching shared design-system primitives.
+
+### 9. Proposed layout changes (Phase B only — after approval)
+
+- Remove Human-bridge and 3P media columns (homepage-local section files only).
+- Optionally enlarge Twin/Legacy media min-heights for emotional weight.
+- Optionally alternate Society to visual-left.
+- Add compact Marketplace inversion mark.
+- **Do not** change Hero `lg:-mt-20` or Auth `lg:mt-[100px]` geometry unless Human explicitly re-opens spacing.
+- **Do not** mutate shared UI primitives used by trader surfaces.
+
+### 10. Exact files Phase B would modify/add
+
+**Likely modify**
+
+- `components/landing/BreathOfWaiaSection.tsx`
+- `components/landing/HumanBridgeSection.tsx` (remove slot)
+- `components/landing/AiTwinSection.tsx`
+- `components/landing/LivingLegacySection.tsx`
+- `components/landing/SocietySection.tsx`
+- `components/landing/Business3PSection.tsx` (remove slot)
+- `components/landing/AiTraderSection.tsx`
+- `components/landing/AiMarketplaceSection.tsx`
+- `components/landing/HowWaiaIsBuiltSection.tsx`
+- `components/landing/NarrativeMediaSlot.tsx` (homepage-local capability only)
+- `tests/unit/landing-page.test.tsx`
+- `tests/e2e/landing.spec.ts` (slot keep/remove assertions; geometry unchanged)
+
+**Likely add**
+
+- `public/landing/visuals/` (or `app`-adjacent static) — `breath.svg`, `society.svg`, `trader-method.svg`, `how-built.svg`, `marketplace-inversion.svg`, `ai-twin.webp` (+ avif), `living-legacy.webp` (+ avif)
+- Optional: `components/landing/visuals/*` thin wrappers
+
+**Must not touch**
+
+- `lib/trader/**`, trader UI routes, Execution Server, DEE-518 worktree
+- Shared `components/ui/**` primitives unless STOP + Human approval
+- Approved copy in `lib/landing/homepage-copy.ts` (except typo/a11y if Human directs)
+
+### Phase A evidence
+
+- Live DEE-608 fetched: included under DEE-605; execute in PR #457; no separate integration PR.
+- Accepted content baseline: `ecc02ae` — Hero definition 80px up; Auth ~100px gap; qualitative readiness; full pending Breath contract; approved English meaning preserved.
+- Phase A produces **documentation only** in this plan (+ PR Includes update). **No final artwork generated. No approved copy rewritten.**
+
+### Human decision required
+
+Approve / amend this visual direction. Next agent step after approval: **Phase B asset production + integration inside PR #457** — still **no merge** until Human accepts the final visual result.
