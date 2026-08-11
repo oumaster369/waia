@@ -5,6 +5,7 @@ import {
   SectionBody,
   SectionHeading,
   SectionNote,
+  SectionStack,
 } from "@/components/landing/homepage-section";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 import { getModuleReadiness } from "@/lib/landing/module-readiness";
@@ -16,8 +17,8 @@ export function AiTwinSection() {
 
   return (
     <HomepageSection testId="landing-ai-twin" ariaLabel="AI-TWIN">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:items-start lg:gap-8">
-        <div className="flex flex-col gap-3">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:items-start lg:gap-12 xl:gap-16">
+        <SectionStack>
           <SectionHeading testId="landing-ai-twin-title">{copy.title}</SectionHeading>
           <SectionBody testId="landing-ai-twin-present">{copy.present}</SectionBody>
           <SectionBody testId="landing-ai-twin-purpose">{copy.purpose}</SectionBody>
@@ -30,7 +31,7 @@ export function AiTwinSection() {
           <SectionBody testId="landing-ai-twin-trajectory">{copy.trajectory}</SectionBody>
           <SectionNote testId="landing-ai-twin-boundary">{copy.boundary}</SectionNote>
           <ModuleReadinessBar readiness={readiness} testIdPrefix="landing-ai-twin" />
-        </div>
+        </SectionStack>
         <NarrativeFinalImage
           testId="landing-ai-twin-media"
           asset="twin"

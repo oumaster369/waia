@@ -4,6 +4,7 @@ import {
   SectionBody,
   SectionHeading,
   SectionNote,
+  SectionStack,
 } from "@/components/landing/homepage-section";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 import { getModuleReadiness } from "@/lib/landing/module-readiness";
@@ -18,15 +19,15 @@ export function Business3PSection() {
 
   return (
     <HomepageSection testId="landing-business-3p" ariaLabel="3P Business">
-      <div className="flex flex-col gap-5">
-        <div className="mx-auto flex max-w-3xl flex-col gap-3">
+      <div className="flex flex-col gap-6 sm:gap-8">
+        <SectionStack className="mx-auto max-w-3xl">
           <SectionHeading testId="landing-business-3p-title">{copy.title}</SectionHeading>
           <SectionBody testId="landing-business-3p-lead">{copy.lead}</SectionBody>
-        </div>
+        </SectionStack>
 
         <div
           data-testid="landing-business-3p-pillars"
-          className="grid gap-4 sm:grid-cols-3 sm:gap-5"
+          className="grid gap-4 sm:grid-cols-3 sm:gap-5 lg:gap-6"
           role="list"
         >
           {(
@@ -73,12 +74,12 @@ export function Business3PSection() {
           ))}
         </div>
 
-        <div className="mx-auto flex max-w-3xl flex-col gap-3">
+        <SectionStack className="mx-auto max-w-3xl">
           <SectionBody testId="landing-business-3p-founder">{copy.founder}</SectionBody>
           <SectionBody testId="landing-business-3p-member">{copy.member}</SectionBody>
           <SectionNote testId="landing-business-3p-status">{copy.status}</SectionNote>
           <ModuleReadinessBar readiness={readiness} testIdPrefix="landing-business-3p" />
-        </div>
+        </SectionStack>
       </div>
     </HomepageSection>
   );

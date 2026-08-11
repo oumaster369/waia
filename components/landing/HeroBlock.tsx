@@ -5,7 +5,9 @@ const HERO_MOBILE = "/brand/head_mobile_1.webp";
 
 /**
  * Brand art (existing assets — no new artwork) + English “What is WAIA?” definition.
- * Desktop: definition pulled up exactly 80px (-mt-20) relative to the prior layout.
+ *
+ * Human visual-rhythm corrective: normal document flow only.
+ * No negative margin under the hero image — ~40–48px clear air on large displays.
  */
 export function HeroBlock() {
   const copy = HOMEPAGE_COPY.hero;
@@ -35,7 +37,7 @@ export function HeroBlock() {
 
       <div
         data-testid="landing-hero-definition"
-        className="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 px-4 pt-6 pb-2 text-center sm:px-8 sm:pt-8 lg:-mt-20 lg:pt-8 lg:pb-0"
+        className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 px-4 pt-10 pb-0 text-center sm:gap-4 sm:px-8 sm:pt-11 lg:pt-12"
       >
         <p
           data-testid="landing-hero-eyebrow"

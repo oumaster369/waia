@@ -23,7 +23,15 @@ type LandingPageContentProps = {
   initialOauthErrorCode?: string | null;
 };
 
-/** Sync shell for tests and for `app/page` after session checks. */
+/**
+ * Sync shell for tests and for `app/page` after session checks.
+ *
+ * Human visual-rhythm corrective:
+ * - Hero → definition: normal flow, no negative margin
+ * - definition → Auth: ~64 / 80 / 120px responsive
+ * - Auth → Breath: ~80 / 96 / 128px responsive
+ * - major narrative separation vs tighter bridge clusters
+ */
 export function LandingPageContent({ initialOauthErrorCode = null }: LandingPageContentProps = {}) {
   return (
     <main
@@ -32,30 +40,52 @@ export function LandingPageContent({ initialOauthErrorCode = null }: LandingPage
     >
       <div className="relative w-full">
         <HeroBlock />
-        {/*
-          Flow-aware Auth placement (Human-review WP-4):
-          - no negative-margin overlap with the hero definition;
-          - desktop/lg+: ~100px gap after definition bottom (mt-[100px]);
-          - tablet/mobile: clear separation without covering the definition.
-        */}
         <div
           id={REGISTER_ANCHOR_ID}
           data-testid="landing-register-anchor"
-          className="relative z-10 mx-auto mt-8 flex w-[calc(100%-32px)] max-w-[560px] scroll-mt-8 justify-center pb-10 sm:mt-10 lg:mt-[100px]"
+          className="relative z-10 mx-auto mt-16 flex w-[calc(100%-32px)] max-w-[560px] scroll-mt-10 justify-center pb-20 sm:mt-20 sm:pb-24 lg:mt-[120px] lg:pb-32"
         >
           <AuthBlock className="w-full" initialOauthErrorCode={initialOauthErrorCode} />
         </div>
       </div>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 pt-2 pb-24 sm:gap-10 sm:px-8">
+      {/*
+        Major narrative rhythm: 64 / 80 / 96 / 112px.
+        Bridge clusters keep human/entrepreneur/interstitial moments closer
+        to the sections they conceptually introduce.
+      */}
+      <div
+        data-testid="landing-narrative-stack"
+        className="mx-auto flex w-full max-w-6xl flex-col gap-16 px-4 pb-28 sm:gap-20 sm:px-8 lg:gap-24 xl:gap-28"
+      >
         <BreathOfWaiaSection />
-        <HumanBridgeSection />
-        <AiTwinSection />
+
+        <div
+          data-testid="landing-cluster-human-twin"
+          className="flex flex-col gap-10 sm:gap-12 lg:gap-14"
+        >
+          <HumanBridgeSection />
+          <AiTwinSection />
+        </div>
+
         <LivingLegacySection />
-        <BreathInterstitialCta />
-        <SocietySection />
-        <EntrepreneurBridgeSection />
-        <Business3PSection />
+
+        <div
+          data-testid="landing-cluster-breath-society"
+          className="flex flex-col gap-10 sm:gap-12 lg:gap-14"
+        >
+          <BreathInterstitialCta />
+          <SocietySection />
+        </div>
+
+        <div
+          data-testid="landing-cluster-entrepreneur-3p"
+          className="flex flex-col gap-10 sm:gap-12 lg:gap-14"
+        >
+          <EntrepreneurBridgeSection />
+          <Business3PSection />
+        </div>
+
         <AiTraderSection />
         <EpistemicMethodSection />
         <AiMarketplaceSection />

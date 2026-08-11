@@ -2,6 +2,7 @@ import {
   HomepageSection,
   SectionBody,
   SectionHeading,
+  SectionStack,
 } from "@/components/landing/homepage-section";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 
@@ -10,9 +11,9 @@ const copy = HOMEPAGE_COPY.paths;
 export function PathsSynthesisSection() {
   return (
     <HomepageSection testId="landing-paths" ariaLabel="Human and entrepreneur paths">
-      <div className="flex flex-col gap-4">
+      <SectionStack>
         <SectionHeading testId="landing-paths-title">{copy.title}</SectionHeading>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 md:gap-5">
           <div className="rounded-xl border border-[rgba(218,200,160,0.14)] px-4 py-4">
             <p className="mb-2 text-xs font-semibold tracking-wide text-[#c9a96e] uppercase">
               Human
@@ -27,7 +28,7 @@ export function PathsSynthesisSection() {
           </div>
         </div>
         <SectionBody testId="landing-paths-synthesis">{copy.synthesis}</SectionBody>
-      </div>
+      </SectionStack>
     </HomepageSection>
   );
 }

@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-review
-  currentWorkPackage: WP-5-B2
+  currentWorkPackage: WP-6
   completedWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5-A, WP-5-B1, WP-5-B2]
-  remainingWorkPackages: []
+  remainingWorkPackages: [WP-6]
   prNumber: 457
   prUrl: "https://github.com/oumaster369/waia/pull/457"
-  lastValidatedGitSha: 9023dcb572824d4f5574a81d8e2e4f730208dd03
+  lastValidatedGitSha: f036257e7c8a3fd4d6397f07921ea0ac3fb0977d
   lastValidationAt: "2026-08-11T16:12:00Z"
-  blockedReason: "READY_FOR_HUMAN_DEE_608_B2_FINAL_VISUAL_REVIEW — final Twin/Legacy rasters integrated; await Human visual accept before merge"
-  nextAction: "Human inspects completed homepage visuals on PR #457; then may squash-merge. Do not merge from agent."
+  blockedReason: "READY_FOR_HUMAN_DEE_605_VISUAL_RHYTHM_REVIEW — spacing/rhythm corrective pending Human accept"
+  nextAction: "Human inspects visual rhythm on PR #457; do not merge until accepted."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -606,3 +606,38 @@ DEE-608 remains incomplete until B2.
 | Public alt | Contract in `FINAL_VISUAL_ALT` (no internal IDs / DEE / approval language) |
 
 **Do not merge** until Human accepts the completed visual homepage.
+
+---
+
+## WP-6 — Human visual-rhythm corrective pass
+
+**Authority:** Human review of B2 homepage on large display supersedes prior Hero `lg:-mt-20` and exact ~100px Auth geometry lock.
+
+### Pre-change audit (HEAD `f036257`)
+
+| Surface | Previous value |
+|---------|----------------|
+| Hero definition | `lg:-mt-20` (negative margin into artwork) |
+| Definition → Auth | `lg:mt-[100px]` |
+| Auth bottom | `pb-10` (~40px) + narrative `pt-2` |
+| Major section stack | `gap-8` / `sm:gap-10` (32–40px) |
+| HomepageSection pad | `py-8` / `sm:py-10` |
+| Content stacks | often `gap-3` (~12px) |
+| Text↔visual grids | often `gap-6` / `lg:gap-8` |
+
+### Corrective targets implemented
+
+| Surface | New behavior |
+|---------|----------------|
+| Hero → definition | Normal flow; `pt-10` / `sm:pt-11` / `lg:pt-12` (~40–48px); **no negative margin** |
+| Definition → Auth | `mt-16` / `sm:mt-20` / `lg:mt-[120px]` |
+| Auth → Breath | `pb-20` / `sm:pb-24` / `lg:pb-32` (~80 / 96 / 128px) |
+| Major narrative gap | `gap-16` / `sm:gap-20` / `lg:gap-24` / `xl:gap-28` |
+| Bridge clusters | tighter `gap-10` / `sm:gap-12` / `lg:gap-14` around Human→Twin, Breath CTA→Society, Entrepreneur→3P |
+| Section density | narrative `py-10…xl:py-16`; bridge `py-8…lg:py-10` |
+| Text stacks | `SectionStack` = `gap-4 sm:gap-5` |
+| Text↔visual | `lg:gap-12 xl:gap-16` |
+| Reading width | `SectionBody` / notes `max-w-[42rem]` |
+| Twin/Legacy delivery | removed ineffective `sizes` (single optimized WebP) |
+
+Gate: `READY_FOR_HUMAN_DEE_605_VISUAL_RHYTHM_REVIEW`

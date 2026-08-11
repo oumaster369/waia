@@ -8,7 +8,7 @@ export function BreathInterstitialCta() {
     <aside
       data-testid="landing-breath-interstitial"
       aria-label="Breath of WAIA contextual call to action"
-      className="flex flex-col items-start gap-3 rounded-2xl border border-[rgba(218,200,160,0.28)] bg-[rgba(201,169,110,0.08)] px-5 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8"
+      className="flex flex-col items-start gap-4 rounded-2xl border border-[rgba(218,200,160,0.28)] bg-[rgba(201,169,110,0.08)] px-5 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-9 lg:py-10"
     >
       <p
         data-testid="landing-breath-interstitial-prompt"

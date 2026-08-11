@@ -80,29 +80,78 @@ test.describe("WAIA landing page", () => {
     );
   });
 
-  test("desktop hero definition and auth keep ~100px flow gap without overlap", async ({
+  test("desktop definition→Auth ~120px and Auth→Breath ~128px without overlap", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
     const definition = page.getByTestId("landing-hero-definition");
     const auth = page.getByTestId("landing-auth");
+    const breath = page.getByTestId("landing-breath");
     await expect(definition).toBeVisible();
     await expect(auth).toBeVisible();
+    await expect(breath).toBeVisible();
 
     const defBox = await definition.boundingBox();
     const authBox = await auth.boundingBox();
-    expect(defBox).toBeTruthy();
-    expect(authBox).toBeTruthy();
-    if (!defBox || !authBox) return;
+    const breathBox = await breath.boundingBox();
+    expect(defBox && authBox && breathBox).toBeTruthy();
+    if (!defBox || !authBox || !breathBox) return;
 
-    // Auth must start after definition ends — no overlap.
     expect(authBox.y).toBeGreaterThan(defBox.y + defBox.height);
+    const defAuthGap = authBox.y - (defBox.y + defBox.height);
+    // Human visual-rhythm: ≈120px definition → Auth (±4px).
+    expect(defAuthGap).toBeGreaterThanOrEqual(116);
+    expect(defAuthGap).toBeLessThanOrEqual(124);
 
-    const gap = authBox.y - (defBox.y + defBox.height);
-    // Human requirement: ≈100px after definition bottom (±4px tolerance).
-    expect(gap).toBeGreaterThanOrEqual(96);
-    expect(gap).toBeLessThanOrEqual(104);
+    expect(breathBox.y).toBeGreaterThan(authBox.y + authBox.height);
+    const authBreathGap = breathBox.y - (authBox.y + authBox.height);
+    // Auth → Breath: ≈128px on desktop (±8px for border/scroll-mt tolerance).
+    expect(authBreathGap).toBeGreaterThanOrEqual(120);
+    expect(authBreathGap).toBeLessThanOrEqual(140);
+  });
+
+  test("large desktop viewports keep Hero image and definition from overlapping", async ({
+    page,
+  }) => {
+    const viewports = [
+      { width: 1024, height: 768 },
+      { width: 1280, height: 800 },
+      { width: 1440, height: 900 },
+      { width: 1728, height: 1117 },
+      { width: 1920, height: 1080 },
+      { width: 2200, height: 1200 },
+    ] as const;
+
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      const image = page.getByTestId("landing-hero-image");
+      const definition = page.getByTestId("landing-hero-definition");
+      const eyebrow = page.getByTestId("landing-hero-eyebrow");
+      await expect(image).toBeVisible();
+      await expect(definition).toBeVisible();
+      await expect(eyebrow).toBeVisible();
+      const imageBox = await image.boundingBox();
+      const defBox = await definition.boundingBox();
+      const eyebrowBox = await eyebrow.boundingBox();
+      expect(imageBox && defBox && eyebrowBox, `boxes missing at ${viewport.width}`).toBeTruthy();
+      if (!imageBox || !defBox || !eyebrowBox) continue;
+
+      // Layout boxes must not overlap (definition follows image in normal flow).
+      expect(defBox.y, `layout overlap at ${viewport.width}`).toBeGreaterThanOrEqual(
+        imageBox.y + imageBox.height - 0.5,
+      );
+
+      // Visual air is padding inside the definition block — measure image → eyebrow text.
+      const visualGap = eyebrowBox.y - (imageBox.y + imageBox.height);
+      expect(visualGap, `hero→definition text air at ${viewport.width}`).toBeGreaterThanOrEqual(36);
+      expect(visualGap, `hero→definition text air at ${viewport.width}`).toBeLessThanOrEqual(56);
+
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        viewport.width + 1,
+      );
+    }
   });
 
   test("mobile keeps definition visible without auth overlap", async ({ page }) => {

@@ -17,7 +17,7 @@ export function ModuleReadinessBar({ readiness, testIdPrefix }: ModuleReadinessP
   return (
     <div
       data-testid={`${testIdPrefix}-readiness`}
-      className="mt-4 flex flex-col gap-3 border-t border-[rgba(218,200,160,0.14)] pt-4"
+      className="mt-6 flex flex-col gap-3 border-t border-[rgba(218,200,160,0.14)] pt-5 sm:mt-7 sm:pt-6"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p

@@ -38,13 +38,16 @@ export function NarrativeFinalImage({
       )}
     >
       <picture data-testid={`${testId}-picture`}>
+        {/*
+          Single optimized WebP (~163–165 KB) — no srcset pipeline.
+          Do not advertise `sizes` without alternate sources.
+        */}
         <img
           data-testid={`${testId}-image`}
           src={paths.webp}
           alt={alt}
           width={FINAL_VISUAL_INTRINSIC.width}
           height={FINAL_VISUAL_INTRINSIC.height}
-          sizes="(max-width: 1023px) min(100vw, 36rem), 34vw"
           className={cn(
             "absolute inset-0 h-full w-full select-none",
             objectFit === "cover" ? "object-cover object-center" : "object-contain object-center",

@@ -1,7 +1,4 @@
-import {
-  HomepageSection,
-  SectionHeading,
-} from "@/components/landing/homepage-section";
+import { HomepageSection, SectionHeading } from "@/components/landing/homepage-section";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 import {
   BREATH_ANCHOR_ID,
@@ -19,9 +16,9 @@ export function FinalCtaSection() {
       ariaLabel="Register and Breath of WAIA"
       className="border-[rgba(218,200,160,0.32)] bg-[rgba(201,169,110,0.07)]"
     >
-      <div className="flex flex-col items-center gap-5 text-center">
+      <div className="flex flex-col items-center gap-6 text-center sm:gap-7">
         <SectionHeading testId="landing-final-cta-title">{copy.title}</SectionHeading>
-        <div className="flex w-full max-w-lg flex-col gap-3 sm:flex-row sm:justify-center">
+        <div className="flex w-full max-w-lg flex-col gap-3 sm:flex-row sm:justify-center sm:gap-4">
           <a
             data-testid="landing-final-cta-register"
             href={`#${REGISTER_ANCHOR_ID}`}

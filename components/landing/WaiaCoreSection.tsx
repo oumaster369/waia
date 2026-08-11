@@ -3,6 +3,7 @@ import {
   HomepageSection,
   SectionBody,
   SectionHeading,
+  SectionStack,
 } from "@/components/landing/homepage-section";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 import { getModuleReadiness } from "@/lib/landing/module-readiness";
@@ -14,11 +15,11 @@ export function WaiaCoreSection() {
 
   return (
     <HomepageSection testId="landing-waia-core" ariaLabel="WAIA Core">
-      <div className="flex flex-col gap-3">
+      <SectionStack>
         <SectionHeading testId="landing-waia-core-title">{copy.title}</SectionHeading>
         <SectionBody testId="landing-waia-core-body">{copy.body}</SectionBody>
         <ModuleReadinessBar readiness={readiness} testIdPrefix="landing-waia-core" />
-      </div>
+      </SectionStack>
     </HomepageSection>
   );
 }

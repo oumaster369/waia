@@ -25,8 +25,8 @@ export function BreathOfWaiaSection() {
 
   return (
     <HomepageSection id={BREATH_ANCHOR_ID} testId="landing-breath" ariaLabel="Breath of WAIA">
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:items-start">
-        <div className="flex flex-col gap-5">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:items-start lg:gap-12 xl:gap-16">
+        <div className="flex flex-col gap-5 sm:gap-6">
           <SectionHeading testId="landing-breath-title">{copy.title}</SectionHeading>
           <SectionBody testId="landing-breath-lead">{copy.lead}</SectionBody>
 

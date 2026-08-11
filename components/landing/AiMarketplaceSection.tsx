@@ -5,6 +5,7 @@ import {
   SectionBody,
   SectionHeading,
   SectionNote,
+  SectionStack,
 } from "@/components/landing/homepage-section";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 import { getModuleReadiness } from "@/lib/landing/module-readiness";
@@ -16,7 +17,7 @@ export function AiMarketplaceSection() {
 
   return (
     <HomepageSection testId="landing-ai-marketplace" ariaLabel="AI-Marketplace">
-      <div className="flex flex-col gap-4">
+      <SectionStack>
         <SectionHeading testId="landing-ai-marketplace-title">{copy.title}</SectionHeading>
         <SectionBody testId="landing-ai-marketplace-lead">{copy.lead}</SectionBody>
         <SectionBody testId="landing-ai-marketplace-traditional">{copy.traditional}</SectionBody>
@@ -25,7 +26,7 @@ export function AiMarketplaceSection() {
         <SectionBody testId="landing-ai-marketplace-meaning">{copy.meaning}</SectionBody>
         <SectionNote testId="landing-ai-marketplace-status">{copy.status}</SectionNote>
         <ModuleReadinessBar readiness={readiness} testIdPrefix="landing-ai-marketplace" />
-      </div>
+      </SectionStack>
     </HomepageSection>
   );
 }

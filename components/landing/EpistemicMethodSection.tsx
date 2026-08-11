@@ -3,6 +3,7 @@ import {
   SectionBody,
   SectionHeading,
   SectionNote,
+  SectionStack,
 } from "@/components/landing/homepage-section";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 
@@ -16,7 +17,7 @@ const METHOD_STEPS = ["Observation", "Hypothesis", "Test", "Result", "Model Upda
 export function EpistemicMethodSection() {
   return (
     <HomepageSection testId="landing-epistemic" ariaLabel="One epistemic method">
-      <div className="flex flex-col gap-4">
+      <SectionStack>
         <SectionHeading testId="landing-epistemic-title">{copy.title}</SectionHeading>
         <SectionBody testId="landing-epistemic-lead">{copy.lead}</SectionBody>
 
@@ -39,25 +40,28 @@ export function EpistemicMethodSection() {
           ))}
         </ol>
 
-        <ol data-testid="landing-epistemic-domains" className="grid list-none gap-3 sm:grid-cols-3">
-          <li className="rounded-xl border border-[rgba(218,200,160,0.14)] px-4 py-3">
-            <p className="mb-1 text-xs font-semibold tracking-wide text-[#c9a96e] uppercase">
+        <ol
+          data-testid="landing-epistemic-domains"
+          className="grid list-none gap-4 sm:grid-cols-3 sm:gap-5"
+        >
+          <li className="rounded-xl border border-[rgba(218,200,160,0.14)] px-4 py-4">
+            <p className="mb-2 text-xs font-semibold tracking-wide text-[#c9a96e] uppercase">
               Human
             </p>
             <SectionBody testId="landing-epistemic-human" className="text-sm sm:text-sm">
               {copy.human}
             </SectionBody>
           </li>
-          <li className="rounded-xl border border-[rgba(218,200,160,0.14)] px-4 py-3">
-            <p className="mb-1 text-xs font-semibold tracking-wide text-[#c9a96e] uppercase">
+          <li className="rounded-xl border border-[rgba(218,200,160,0.14)] px-4 py-4">
+            <p className="mb-2 text-xs font-semibold tracking-wide text-[#c9a96e] uppercase">
               Market
             </p>
             <SectionBody testId="landing-epistemic-market" className="text-sm sm:text-sm">
               {copy.market}
             </SectionBody>
           </li>
-          <li className="rounded-xl border border-[rgba(218,200,160,0.14)] px-4 py-3">
-            <p className="mb-1 text-xs font-semibold tracking-wide text-[#c9a96e] uppercase">
+          <li className="rounded-xl border border-[rgba(218,200,160,0.14)] px-4 py-4">
+            <p className="mb-2 text-xs font-semibold tracking-wide text-[#c9a96e] uppercase">
               Society
             </p>
             <SectionBody testId="landing-epistemic-society" className="text-sm sm:text-sm">
@@ -66,7 +70,7 @@ export function EpistemicMethodSection() {
           </li>
         </ol>
         <SectionNote testId="landing-epistemic-boundary">{copy.boundary}</SectionNote>
-      </div>
+      </SectionStack>
     </HomepageSection>
   );
 }
