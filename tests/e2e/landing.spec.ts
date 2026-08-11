@@ -44,8 +44,8 @@ test.describe("WAIA landing page", () => {
 
   test("exposes Breath pending state and GitHub work-transparency links", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByTestId("landing-breath-status")).toHaveAttribute(
-      "data-status",
+    await expect(page.getByTestId("landing-breath-stage")).toHaveAttribute(
+      "data-publication-status",
       "pending",
     );
     await expect(page.getByTestId("landing-breath-resource-entered")).toContainText(
@@ -61,18 +61,26 @@ test.describe("WAIA landing page", () => {
       "data-runway-state",
       "pending",
     );
-    await expect(page.getByTestId("landing-breath-runway-value")).toContainText(
-      /Runway awaiting first ledger publication/i,
+    await expect(page.getByTestId("landing-breath-runway-now")).toHaveText(/^0$/);
+    await expect(page.getByTestId("landing-breath-runway-end")).toContainText(
+      /Ideal annual budget/i,
     );
     await expect(page.getByTestId("landing-breath-runway-pulse")).toBeVisible();
     await expect(page.getByTestId("landing-breath-runway-svg")).toBeVisible();
     await expect(page.getByTestId("landing-breath-runway-wave")).toBeVisible();
-    await expect(page.getByTestId("landing-breath-runway-ticks-pending")).toBeVisible();
-    await expect(page.getByTestId("landing-breath-runway-ticks")).toHaveCount(0);
+    await expect(page.getByTestId("landing-breath-funding-marker")).toHaveCount(0);
+    await expect(page.getByTestId("landing-breath-funding-pending")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-countdown")).toHaveAttribute(
+      "data-countdown-state",
+      "pending",
+    );
     await expect(page.getByTestId("landing-breath-updated-value")).toContainText(
       /Awaiting first ledger publication/i,
     );
     await expect(page.getByTestId("landing-breath")).not.toContainText(/DEE-\d+/i);
+    await expect(page.getByTestId("landing-breath")).not.toContainText(
+      /Treasury figures pending publication/i,
+    );
     await expect(page.getByTestId("landing-breath-support-cta")).toHaveText("KEEP WAIA BREATHING");
     await expect(page.getByTestId("landing-breath-support-cta")).toBeDisabled();
     await expect(page.getByTestId("landing-breath-support")).toHaveAttribute(
@@ -80,8 +88,6 @@ test.describe("WAIA landing page", () => {
       "pending",
     );
     await expect(page.getByTestId("landing-breath-support-pending")).toBeVisible();
-    await expect(page.getByTestId("landing-breath-inflows-empty")).toBeVisible();
-    await expect(page.getByTestId("landing-breath-outflows-empty")).toBeVisible();
     await expect(page.getByTestId("landing-breath-github-primary")).toHaveAttribute(
       "href",
       WAIA_PUBLIC_GITHUB_URL,
@@ -99,6 +105,9 @@ test.describe("WAIA landing page", () => {
       "href",
       "#breath-of-waia",
     );
+    // Unified gold CTA family on button-like controls; prose links stay text.
+    await expect(page.getByTestId("landing-final-cta-register")).toHaveClass(/rounded-xl/);
+    await expect(page.getByTestId("landing-final-cta-research")).not.toHaveClass(/rounded-xl/);
   });
 
   test("desktop definition→Auth ~120px and Auth→Breath ~128px without overlap", async ({

@@ -1,6 +1,7 @@
 import { BreathSupportCta } from "@/components/landing/BreathSupportCta";
+import { LandingPrimaryCta } from "@/components/landing/landing-primary-cta";
 import { BreathDiagram } from "@/components/landing/visuals/breath-diagram";
-import { BreathRunwayPulse } from "@/components/landing/visuals/breath-runway-pulse";
+import { BreathFundingGauge } from "@/components/landing/visuals/breath-runway-pulse";
 import { formatBreathAmount, getBreathPublicSnapshot } from "@/lib/landing/breath-public";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 import { BREATH_ANCHOR_ID } from "@/lib/landing/homepage-links";
@@ -18,7 +19,7 @@ const RESOURCE_KEYS = ["entered", "allocated", "spent", "remaining", "neededNext
 
 const BUDGET_KEYS = ["planned", "funded", "committed", "spent", "remaining"] as const;
 
-/** Quieter secondary transparency cells — subordinate to Runway / support. */
+/** Quieter secondary transparency cells — subordinate to funding gauge / support. */
 const secondaryCellClass =
   "rounded-lg border border-[rgba(150,190,200,0.1)] bg-[rgba(4,12,22,0.22)] px-3 py-2";
 
@@ -48,27 +49,15 @@ export function BreathOfWaiaSection() {
     >
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:items-start lg:gap-12 xl:gap-16">
         <div className="flex flex-col gap-5 sm:gap-6">
-          {/* 1 — meaning */}
           <SectionHeading testId="landing-breath-title">{copy.title}</SectionHeading>
           <SectionBody testId="landing-breath-lead">{copy.lead}</SectionBody>
 
-          {/* 2 — stage / publication status */}
-          <div
-            data-testid="landing-breath-status"
-            data-status={snapshot.status}
-            className="rounded-xl border border-[rgba(150,195,205,0.22)] bg-[rgba(4,14,24,0.4)] px-4 py-3"
+          {/* Compact metadata — no large treasury status card */}
+          <dl
+            data-testid="landing-breath-stage"
+            data-publication-status={snapshot.status}
+            className="grid gap-3 sm:grid-cols-2"
           >
-            <p className="text-sm font-medium text-[#dcecf0]">
-              {snapshot.status === "pending"
-                ? copy.pendingStatus
-                : `Published — ${snapshot.lastUpdatedAt}`}
-            </p>
-            <SectionNote testId="landing-breath-pending-hint">
-              {snapshot.status === "pending" ? copy.pendingHint : snapshot.methodologyNote}
-            </SectionNote>
-          </div>
-
-          <dl data-testid="landing-breath-stage" className="grid gap-3 sm:grid-cols-2">
             <div className={secondaryCellClass}>
               <dt className="text-xs text-[rgba(170,200,210,0.62)]">{copy.stageLabel}</dt>
               <dd data-testid="landing-breath-stage-value" className={stageValueClass}>
@@ -83,13 +72,18 @@ export function BreathOfWaiaSection() {
             </div>
           </dl>
 
-          {/* 3 — Runway / Pulse (focal) */}
-          <BreathRunwayPulse runway={snapshot.runway} status={snapshot.status} />
+          <BreathFundingGauge
+            status={snapshot.status}
+            idealAnnualBudget={snapshot.idealAnnualBudget}
+            currentFreeFunds={snapshot.currentFreeFunds}
+            runway={snapshot.runway}
+          />
 
-          {/* 4 — KEEP WAIA BREATHING */}
-          <BreathSupportCta />
+          <BreathSupportCta
+            currentFreeFunds={snapshot.currentFreeFunds}
+            idealAnnualBudget={snapshot.idealAnnualBudget}
+          />
 
-          {/* 5 — resource transparency (secondary) */}
           <div
             data-testid="landing-breath-resources-block"
             className={isPending ? "opacity-80" : undefined}
@@ -118,7 +112,6 @@ export function BreathOfWaiaSection() {
             </dl>
           </div>
 
-          {/* 6 — budget / funding (secondary) */}
           <div
             data-testid="landing-breath-budget-block"
             className={isPending ? "opacity-80" : undefined}
@@ -166,7 +159,6 @@ export function BreathOfWaiaSection() {
             </div>
           </div>
 
-          {/* 7 — recent activity */}
           <div
             data-testid="landing-breath-activity"
             className={cn("flex flex-col gap-3", isPending && "opacity-80")}
@@ -216,7 +208,6 @@ export function BreathOfWaiaSection() {
             </div>
           </div>
 
-          {/* 8 — work transparency / GitHub */}
           <div data-testid="landing-breath-work" className="flex flex-col gap-3">
             <h3 className="text-xs font-semibold tracking-wide text-[rgba(180,210,218,0.85)] uppercase">
               Work transparency
@@ -226,24 +217,22 @@ export function BreathOfWaiaSection() {
                 "Inspect the public engineering record to see what project resources are producing."}
             </SectionBody>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <a
-                data-testid="landing-breath-github-primary"
+              <LandingPrimaryCta
+                testId="landing-breath-github-primary"
                 href={snapshot.work.githubUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[rgba(150,195,205,0.35)] bg-[rgba(120,170,185,0.1)] px-4 text-sm font-medium text-[#dcecf0] transition hover:bg-[rgba(120,170,185,0.18)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a96e]"
+                external
+                className="w-full sm:w-auto"
               >
                 {copy.seeResourcesCta}
-              </a>
-              <a
-                data-testid="landing-breath-github-secondary"
+              </LandingPrimaryCta>
+              <LandingPrimaryCta
+                testId="landing-breath-github-secondary"
                 href={snapshot.work.githubUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[rgba(150,195,205,0.22)] px-4 text-sm font-medium text-[rgba(200,220,225,0.92)] transition hover:border-[rgba(150,195,205,0.4)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a96e]"
+                external
+                className="w-full sm:w-auto"
               >
                 {copy.viewSourceCta}
-              </a>
+              </LandingPrimaryCta>
             </div>
           </div>
 

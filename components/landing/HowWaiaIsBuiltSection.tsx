@@ -1,4 +1,5 @@
 import { HowBuiltDiagram } from "@/components/landing/visuals/how-built-diagram";
+import { LandingPrimaryCta } from "@/components/landing/landing-primary-cta";
 import {
   HomepageSection,
   SectionBody,
@@ -29,24 +30,22 @@ export function HowWaiaIsBuiltSection() {
           <SectionBody testId="landing-how-built-openness">{copy.openness}</SectionBody>
           <SectionNote testId="landing-how-built-invite">{copy.invite}</SectionNote>
           <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <a
-              data-testid="landing-how-built-legco-cta"
+            <LandingPrimaryCta
+              testId="landing-how-built-legco-cta"
               href={LEGCO_RESEARCH_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[rgba(218,200,160,0.4)] bg-[rgba(201,169,110,0.16)] px-4 text-sm font-medium text-[#e8dcc4] transition hover:bg-[rgba(201,169,110,0.26)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a96e]"
+              external
+              className="w-full sm:w-auto"
             >
               {copy.researchCta}
-            </a>
-            <a
-              data-testid="landing-how-built-github-cta"
+            </LandingPrimaryCta>
+            <LandingPrimaryCta
+              testId="landing-how-built-github-cta"
               href={WAIA_PUBLIC_GITHUB_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[rgba(218,200,160,0.22)] px-4 text-sm font-medium text-[rgba(210,205,195,0.95)] transition hover:border-[rgba(218,200,160,0.4)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a96e]"
+              external
+              className="w-full sm:w-auto"
             >
               {copy.sourceCta}
-            </a>
+            </LandingPrimaryCta>
           </div>
         </SectionStack>
         <HowBuiltDiagram />

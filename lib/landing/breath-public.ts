@@ -33,6 +33,16 @@ export type BreathPublicSnapshot = {
   lastUpdatedAt: string | null;
   /** Current development / funding stage label when published. */
   stageLabel: string | null;
+  /**
+   * Canonical ideal annual operating budget (one-year breath capacity target).
+   * Distinct from generic budget.planned — DEE-606 publishes this explicitly.
+   */
+  idealAnnualBudget: BreathMoney;
+  /**
+   * Current free / uncommitted treasury funds available to operate.
+   * Distinct from ambiguous remaining fields — DEE-606 publishes this explicitly.
+   */
+  currentFreeFunds: BreathMoney;
   resources: {
     currency: "USD" | null;
     entered: number | null;
@@ -56,6 +66,11 @@ export type BreathPublicSnapshot = {
     periodLabel: string | null;
     value: number | null;
     unit: "days" | "weeks" | "months" | null;
+    /**
+     * Authoritative ISO-8601 instant when current free funds are projected to end.
+     * Required for the live countdown; null until the ledger publishes it.
+     */
+    endsAt: string | null;
   };
   recentActivity: {
     inflows: ReadonlyArray<BreathTransaction>;
@@ -77,6 +92,8 @@ export function getBreathPublicSnapshot(): BreathPublicSnapshot {
     status: "pending",
     lastUpdatedAt: null,
     stageLabel: null,
+    idealAnnualBudget: { currency: null, amount: null },
+    currentFreeFunds: { currency: null, amount: null },
     resources: {
       currency: null,
       entered: null,
@@ -98,6 +115,7 @@ export function getBreathPublicSnapshot(): BreathPublicSnapshot {
       periodLabel: null,
       value: null,
       unit: null,
+      endsAt: null,
     },
     recentActivity: {
       inflows: [],
@@ -127,36 +145,51 @@ export function formatBreathRunway(runway: BreathPublicSnapshot["runway"]): stri
   return `${runway.value} ${runway.unit}`;
 }
 
-export type BreathRunwayTick = {
-  /** Absolute position along the runway interval (0 … value). */
-  value: number;
-  /** Public label derived only from the published runway contract. */
-  label: string;
-};
+/**
+ * Funding-gauge marker ratio: currentFreeFunds / idealAnnualBudget.
+ * Returns null when either side is unpublished, currencies mismatch, or ideal ≤ 0.
+ * Never fabricates a position.
+ */
+export function deriveBreathFundingMarkerRatio(
+  free: BreathMoney,
+  ideal: BreathMoney,
+): number | null {
+  if (
+    free.amount === null ||
+    ideal.amount === null ||
+    free.currency === null ||
+    ideal.currency === null ||
+    free.currency !== ideal.currency ||
+    ideal.amount <= 0
+  ) {
+    return null;
+  }
+  return Math.max(0, Math.min(1, free.amount / ideal.amount));
+}
+
+/** True only when both sides are published, currencies match, and free ≥ ideal. */
+export function isBreathAnnualTargetMet(free: BreathMoney, ideal: BreathMoney): boolean {
+  if (
+    free.amount === null ||
+    ideal.amount === null ||
+    free.currency === null ||
+    ideal.currency === null ||
+    free.currency !== ideal.currency
+  ) {
+    return false;
+  }
+  return free.amount >= ideal.amount;
+}
 
 /**
- * Derive five temporal tick labels (0, ¼, ½, ¾, end) from a published runway.
- * Returns [] when runway is incomplete — never fabricates an interval.
+ * Compact remaining-time label from millisecond delta.
+ * Never negative; no seconds; format: `{d}d {h}h {m}m`.
  */
-export function deriveBreathRunwayTicks(
-  runway: BreathPublicSnapshot["runway"],
-): BreathRunwayTick[] {
-  if (runway.value === null || runway.unit === null || runway.value <= 0) {
-    return [];
-  }
-
-  const end = runway.value;
-  const unit = runway.unit;
-  const raw = [0, end / 4, end / 2, (3 * end) / 4, end];
-
-  return raw.map((value) => {
-    const display =
-      Number.isInteger(end) && end % 4 === 0
-        ? Math.round(value)
-        : Number(value.toFixed(2).replace(/\.?0+$/, ""));
-    return {
-      value: display,
-      label: `${display} ${unit}`,
-    };
-  });
+export function formatBreathCountdown(remainingMs: number): string {
+  const clamped = Math.max(0, Math.floor(remainingMs));
+  const totalMinutes = Math.floor(clamped / 60_000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  return `${days}d ${hours}h ${minutes}m`;
 }

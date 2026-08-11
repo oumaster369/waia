@@ -1,20 +1,23 @@
 import { useId } from "react";
 
-import type { BreathPublicSnapshot } from "@/lib/landing/breath-public";
-import { deriveBreathRunwayTicks, formatBreathRunway } from "@/lib/landing/breath-public";
+import { BreathCountdown } from "@/components/landing/BreathCountdown";
+import type { BreathMoney, BreathPublicSnapshot } from "@/lib/landing/breath-public";
+import { deriveBreathFundingMarkerRatio, formatBreathAmount } from "@/lib/landing/breath-public";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 import { cn } from "@/lib/utils";
 
 import styles from "@/components/landing/visuals/breath-runway-pulse.module.css";
 
-type BreathRunwayPulseProps = {
-  runway: BreathPublicSnapshot["runway"];
+type BreathFundingGaugeProps = {
   status: BreathPublicSnapshot["status"];
+  idealAnnualBudget: BreathMoney;
+  currentFreeFunds: BreathMoney;
+  runway: BreathPublicSnapshot["runway"];
 };
 
 /**
  * One soft rise + fall (viewBox units). Width = 80 so travel % = 100 / cellCount.
- * Organic low-amplitude — not ECG, chart, or visualizer.
+ * PRESERVE — Human-approved breathing waveform from HEAD 417baeb.
  */
 const PULSE_CELL = "c 20 0 28 -7 40 -7 s 20 7 40 7";
 const WAVE_CELL_COUNT = 12;
@@ -30,21 +33,27 @@ function buildWavePath(cells: number): string {
 const WAVE_PATH = buildWavePath(WAVE_CELL_COUNT);
 
 /**
- * WAIA Runway / Pulse — temporal line with an integrated breathing waveform.
- * Pending never invents ticks, percentages, or runway values.
+ * WAIA Funding Breath scale — capacity from 0 → ideal annual budget,
+ * with CURRENT FREE FUNDS marker + countdown. Waves unchanged from 417baeb.
  */
-export function BreathRunwayPulse({ runway, status }: BreathRunwayPulseProps) {
+export function BreathFundingGauge({
+  status,
+  idealAnnualBudget,
+  currentFreeFunds,
+  runway,
+}: BreathFundingGaugeProps) {
   const copy = HOMEPAGE_COPY.breath;
   const clipId = useId().replace(/:/g, "");
-  const pending = status === "pending" || runway.value === null || runway.unit === null;
-  const valueLabel = pending ? copy.runwayPendingValue : formatBreathRunway(runway);
-  const ticks = pending ? [] : deriveBreathRunwayTicks(runway);
-  const endLabel = pending ? copy.runwayEndPending : copy.runwayEnd;
+  const ratio = deriveBreathFundingMarkerRatio(currentFreeFunds, idealAnnualBudget);
+  const gaugePending = status === "pending" || ratio === null;
+  const idealPublished = idealAnnualBudget.amount !== null && idealAnnualBudget.currency !== null;
+  const freePublished = currentFreeFunds.amount !== null && currentFreeFunds.currency !== null;
 
   return (
     <div
       data-testid="landing-breath-runway"
-      data-runway-state={pending ? "pending" : "published"}
+      data-runway-state={gaugePending ? "pending" : "published"}
+      data-funding-ratio={ratio === null ? "pending" : ratio.toFixed(4)}
       className={cn(
         "rounded-2xl border px-4 py-5 sm:px-5 sm:py-6",
         "border-[rgba(150,195,205,0.28)]",
@@ -55,85 +64,110 @@ export function BreathRunwayPulse({ runway, status }: BreathRunwayPulseProps) {
         data-testid="landing-breath-runway-label"
         className="text-xs font-semibold tracking-[0.16em] text-[rgba(170,210,220,0.9)] uppercase"
       >
-        {copy.runwayTitle}
-      </p>
-      <p
-        data-testid="landing-breath-runway-value"
-        className={cn(
-          "font-waia-serif mt-3 text-[1.35rem] leading-snug text-[#e8f2f4] sm:text-[1.5rem]",
-          pending && "text-[rgba(210,225,230,0.78)]",
-        )}
-      >
-        {valueLabel}
+        {copy.fundingScaleTitle}
       </p>
 
-      <div data-testid="landing-breath-runway-pulse" className="mt-5" aria-hidden>
-        <div className="mb-2 flex items-center justify-between gap-3">
+      <div className="mt-4">
+        <BreathCountdown endsAt={runway.endsAt} />
+      </div>
+
+      <div data-testid="landing-breath-runway-pulse" className="mt-5">
+        <div className="mb-2 flex items-start justify-between gap-3">
           <span
             data-testid="landing-breath-runway-now"
             className="text-[0.65rem] font-semibold tracking-[0.14em] text-[rgba(170,210,220,0.75)] uppercase"
           >
-            {copy.runwayNow}
+            {copy.fundingZero}
           </span>
           <span
             data-testid="landing-breath-runway-end"
-            className="text-[0.65rem] font-semibold tracking-[0.14em] text-[rgba(170,210,220,0.75)] uppercase"
+            className="max-w-[11rem] text-right text-[0.65rem] font-semibold tracking-[0.1em] text-[rgba(170,210,220,0.75)] uppercase"
           >
-            {endLabel}
+            {copy.idealAnnualBudgetLabel}
+            <span
+              data-testid="landing-breath-ideal-budget-value"
+              className="mt-1 block font-mono text-[0.7rem] font-normal tracking-normal text-[rgba(200,220,225,0.78)] normal-case tabular-nums"
+            >
+              {idealPublished
+                ? formatBreathAmount(idealAnnualBudget.amount, idealAnnualBudget.currency)
+                : copy.idealAnnualBudgetPending}
+            </span>
           </span>
         </div>
 
-        <svg
-          data-testid="landing-breath-runway-svg"
-          className={styles.svg}
-          viewBox="0 0 320 44"
-          preserveAspectRatio="none"
-          role="presentation"
-        >
-          <defs>
-            <clipPath id={clipId}>
-              <rect x="0" y="0" width="320" height="44" />
-            </clipPath>
-          </defs>
+        <div className="relative" aria-hidden={ratio === null ? true : undefined}>
+          <svg
+            data-testid="landing-breath-runway-svg"
+            className={styles.svg}
+            viewBox="0 0 320 44"
+            preserveAspectRatio="none"
+            role="presentation"
+          >
+            <defs>
+              <clipPath id={clipId}>
+                <rect x="0" y="0" width="320" height="44" />
+              </clipPath>
+            </defs>
 
-          <line className={styles.baseline} x1="4" y1="22" x2="316" y2="22" />
+            <line className={styles.baseline} x1="4" y1="22" x2="316" y2="22" />
 
-          <g clipPath={`url(#${clipId})`}>
-            <g
-              data-testid="landing-breath-runway-wave-track"
-              className={cn(
-                styles.waveTrack,
-                pending ? styles.waveTrackPending : styles.waveTrackLive,
-              )}
-            >
-              <path
-                data-testid="landing-breath-runway-wave"
-                className={cn(styles.wave, pending && styles.wavePending)}
-                d={WAVE_PATH}
-              />
-            </g>
-          </g>
-        </svg>
-
-        {ticks.length > 0 ? (
-          <ol data-testid="landing-breath-runway-ticks" className="mt-2 grid grid-cols-5 gap-1">
-            {ticks.map((tick, index) => (
-              <li
-                key={tick.label}
-                data-testid={`landing-breath-runway-tick-${tick.value}`}
+            <g clipPath={`url(#${clipId})`}>
+              <g
+                data-testid="landing-breath-runway-wave-track"
                 className={cn(
-                  "font-mono text-[0.65rem] text-[rgba(175,210,220,0.72)] tabular-nums",
-                  index === 0 && "text-left",
-                  index > 0 && index < ticks.length - 1 && "text-center",
-                  index === ticks.length - 1 && "text-right",
+                  styles.waveTrack,
+                  gaugePending ? styles.waveTrackPending : styles.waveTrackLive,
                 )}
               >
-                {tick.label}
-              </li>
-            ))}
-          </ol>
+                <path
+                  data-testid="landing-breath-runway-wave"
+                  className={cn(styles.wave, gaugePending && styles.wavePending)}
+                  d={WAVE_PATH}
+                />
+              </g>
+            </g>
+          </svg>
+
+          {ratio !== null ? (
+            <div
+              data-testid="landing-breath-funding-marker"
+              data-marker-ratio={ratio.toFixed(4)}
+              className="pointer-events-none absolute inset-y-0 flex w-0 flex-col items-center"
+              style={{ left: `${ratio * 100}%` }}
+            >
+              <div className="h-full w-px bg-[rgba(210,235,240,0.85)] shadow-[0_0_8px_rgba(160,210,220,0.35)]" />
+            </div>
+          ) : null}
+        </div>
+
+        {ratio !== null && freePublished ? (
+          <div
+            data-testid="landing-breath-free-funds"
+            className="relative mt-3 h-10"
+            aria-label={`Current free funds ${formatBreathAmount(currentFreeFunds.amount, currentFreeFunds.currency)}`}
+          >
+            <div
+              className="absolute top-0 -translate-x-1/2 text-center"
+              style={{ left: `${ratio * 100}%` }}
+            >
+              <p className="text-[0.6rem] font-semibold tracking-[0.12em] text-[rgba(170,210,220,0.7)] uppercase">
+                {copy.freeFundsLabel}
+              </p>
+              <p
+                data-testid="landing-breath-free-funds-value"
+                className="mt-0.5 font-mono text-sm text-[#e8f2f4] tabular-nums"
+              >
+                {formatBreathAmount(currentFreeFunds.amount, currentFreeFunds.currency)}
+              </p>
+            </div>
+          </div>
         ) : (
-          <div data-testid="landing-breath-runway-ticks-pending" className="mt-2 h-4" aria-hidden />
+          <p
+            data-testid="landing-breath-funding-pending"
+            className="mt-3 text-sm text-[rgba(185,210,218,0.72)]"
+          >
+            {copy.fundingPositionPending}
+          </p>
         )}
       </div>
 
@@ -141,7 +175,7 @@ export function BreathRunwayPulse({ runway, status }: BreathRunwayPulseProps) {
         data-testid="landing-breath-runway-note"
         className="mt-4 text-sm leading-relaxed text-[rgba(185,210,218,0.78)]"
       >
-        {pending ? copy.runwayPendingNote : copy.runwayPublishedNote}
+        {gaugePending ? copy.fundingScalePendingNote : copy.fundingScalePublishedNote}
       </p>
     </div>
   );

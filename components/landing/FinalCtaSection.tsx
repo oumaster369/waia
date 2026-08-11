@@ -1,3 +1,4 @@
+import { LandingPrimaryCta } from "@/components/landing/landing-primary-cta";
 import { HomepageSection, SectionHeading } from "@/components/landing/homepage-section";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
 import {
@@ -19,20 +20,20 @@ export function FinalCtaSection() {
       <div className="flex flex-col items-center gap-6 text-center sm:gap-7">
         <SectionHeading testId="landing-final-cta-title">{copy.title}</SectionHeading>
         <div className="flex w-full max-w-lg flex-col gap-3 sm:flex-row sm:justify-center sm:gap-4">
-          <a
-            data-testid="landing-final-cta-register"
+          <LandingPrimaryCta
+            testId="landing-final-cta-register"
             href={`#${REGISTER_ANCHOR_ID}`}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-[rgba(218,200,160,0.45)] bg-[rgba(201,169,110,0.28)] px-5 text-sm font-semibold text-[#1a1408] transition hover:bg-[rgba(201,169,110,0.4)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a96e]"
+            className="w-full flex-1"
           >
             {copy.register}
-          </a>
-          <a
-            data-testid="landing-final-cta-breath"
+          </LandingPrimaryCta>
+          <LandingPrimaryCta
+            testId="landing-final-cta-breath"
             href={`#${BREATH_ANCHOR_ID}`}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-[rgba(218,200,160,0.4)] bg-[rgba(3,8,19,0.55)] px-5 text-sm font-semibold text-[#e8dcc4] transition hover:bg-[rgba(3,8,19,0.75)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a96e]"
+            className="w-full flex-1"
           >
             {copy.breath}
-          </a>
+          </LandingPrimaryCta>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
           <a

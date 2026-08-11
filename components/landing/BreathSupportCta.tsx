@@ -1,57 +1,85 @@
+import { LandingPrimaryCta } from "@/components/landing/landing-primary-cta";
+import type { BreathMoney } from "@/lib/landing/breath-public";
+import {
+  deriveBreathFundingMarkerRatio,
+  isBreathAnnualTargetMet,
+} from "@/lib/landing/breath-public";
 import { getBreathSupportChannel } from "@/lib/landing/breath-support";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
-import { cn } from "@/lib/utils";
+
+type BreathSupportCtaProps = {
+  currentFreeFunds: BreathMoney;
+  idealAnnualBudget: BreathMoney;
+};
 
 /**
  * KEEP WAIA BREATHING — warm Human-action CTA.
- * Wired only when a canonical Finance support destination exists.
+ * Clickable only when: (1) support channel exists AND (2) annual target not met.
+ * No arbitrary percentage lockout before the target.
  */
-export function BreathSupportCta() {
+export function BreathSupportCta({ currentFreeFunds, idealAnnualBudget }: BreathSupportCtaProps) {
   const copy = HOMEPAGE_COPY.breath;
   const channel = getBreathSupportChannel();
-  const available = channel.status === "available" && Boolean(channel.href);
+  const channelAvailable = channel.status === "available" && Boolean(channel.href);
+  const fullyFunded = isBreathAnnualTargetMet(currentFreeFunds, idealAnnualBudget);
+  const ratio = deriveBreathFundingMarkerRatio(currentFreeFunds, idealAnnualBudget);
+  const nearFull = ratio !== null && ratio >= 0.92 && ratio < 1;
+  const clickable = channelAvailable && !fullyFunded;
 
   return (
     <div
       data-testid="landing-breath-support"
-      data-support-status={channel.status}
+      data-support-status={
+        fullyFunded ? "fully-funded" : channel.status === "available" ? "available" : "pending"
+      }
+      data-support-clickable={clickable ? "true" : "false"}
       className="flex flex-col gap-3"
     >
-      <p
-        data-testid="landing-breath-support-explanation"
-        className="max-w-[42rem] text-sm leading-relaxed text-[rgba(210,220,225,0.88)] sm:text-base"
-      >
-        {copy.supportExplanation}
-      </p>
+      {!fullyFunded ? (
+        <p
+          data-testid="landing-breath-support-explanation"
+          className="max-w-[42rem] text-sm leading-relaxed text-[rgba(210,220,225,0.88)] sm:text-base"
+        >
+          {copy.supportExplanation}
+        </p>
+      ) : null}
 
-      {available ? (
-        <a
-          data-testid="landing-breath-support-cta"
+      {fullyFunded ? (
+        <>
+          <LandingPrimaryCta
+            testId="landing-breath-support-cta"
+            disabled
+            className="w-full sm:w-auto sm:min-w-[16rem]"
+          >
+            {copy.supportFullyFunded}
+          </LandingPrimaryCta>
+          <p
+            data-testid="landing-breath-support-funded"
+            className="text-sm leading-relaxed text-[rgba(185,205,212,0.78)]"
+          >
+            Current free funds meet the ideal annual budget.
+          </p>
+        </>
+      ) : clickable ? (
+        <LandingPrimaryCta
+          testId="landing-breath-support-cta"
           href={channel.href!}
-          className={cn(
-            "inline-flex min-h-12 w-full items-center justify-center rounded-lg px-5 text-sm font-semibold tracking-[0.04em] sm:w-auto sm:min-w-[16rem]",
-            "border border-[rgba(218,200,160,0.55)] bg-[rgba(201,169,110,0.32)] text-[#1a1408]",
-            "transition hover:bg-[rgba(201,169,110,0.42)]",
-            "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a96e]",
-          )}
+          external={/^https?:\/\//.test(channel.href!)}
+          subdued={nearFull}
+          className="w-full sm:w-auto sm:min-w-[16rem]"
         >
           {copy.supportCta}
-        </a>
+        </LandingPrimaryCta>
       ) : (
         <>
-          <button
-            type="button"
-            data-testid="landing-breath-support-cta"
+          <LandingPrimaryCta
+            testId="landing-breath-support-cta"
             disabled
-            aria-disabled="true"
-            className={cn(
-              "inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center rounded-lg px-5 text-sm font-semibold tracking-[0.04em] sm:w-auto sm:min-w-[16rem]",
-              "border border-[rgba(218,200,160,0.4)] bg-[rgba(201,169,110,0.2)] text-[rgba(26,20,8,0.72)]",
-              "opacity-90",
-            )}
+            subdued={nearFull}
+            className="w-full sm:w-auto sm:min-w-[16rem]"
           >
             {copy.supportCta}
-          </button>
+          </LandingPrimaryCta>
           <p
             data-testid="landing-breath-support-pending"
             className="text-sm leading-relaxed text-[rgba(185,205,212,0.78)]"

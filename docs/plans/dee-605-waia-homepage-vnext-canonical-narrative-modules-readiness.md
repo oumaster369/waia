@@ -680,3 +680,26 @@ Human approved atmosphere, hierarchy, KEEP WAIA BREATHING concept, and pending F
 4. **Pending density:** secondary “Not yet published” cells remain present but lower contrast.
 
 Gate: `READY_FOR_HUMAN_FINAL_BREATH_PULSE_REVIEW`
+
+---
+
+## Breath funding-gauge + landing CTA unification
+
+Human approved the soft travelling waveform at `417baeb` — **preserve visually**.
+
+### Contract extensions (nullable / pending until DEE-606)
+
+- `idealAnnualBudget: BreathMoney`
+- `currentFreeFunds: BreathMoney`
+- `runway.endsAt: string | null`
+
+### Semantics
+
+- Scale: **0 → Ideal annual budget** with approved waveform
+- Marker X = `currentFreeFunds / idealAnnualBudget` when both published, same currency, ideal > 0; else pending (no fabricated position)
+- Countdown: `WAIA can breathe for` from `endsAt − now` (minute tick); pending otherwise
+- Support CTA clickable only when channel exists **and** free < ideal; at free ≥ ideal → **WAIA IS FULLY FUNDED** (disabled). No 90/95% lockout.
+- Removed large “Treasury figures pending publication” card
+- Homepage button-like CTAs unified via `LandingPrimaryCta` / Auth gold gradient
+
+Gate: `READY_FOR_HUMAN_BREATH_FUNDING_GAUGE_REVIEW`
