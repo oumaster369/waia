@@ -11,19 +11,35 @@ export const HOMEPAGE_COPY = {
   },
   breath: {
     title: "Breath of WAIA",
-    lead:
-      "WAIA breathes in public. Resource transparency shows what entered, what was allocated, what was spent, what remains, and what is needed next. Work transparency shows what those resources are actually producing.",
+    lead: "WAIA breathes in public. Resource transparency shows what entered, what was allocated, what was spent, what remains, and what is needed next. Work transparency shows what those resources are actually producing.",
     seeResourcesCta: "See where the resources go. See what they become.",
     viewSourceCta: "View source on GitHub",
     pendingStatus: "Treasury figures pending publication",
     pendingHint:
       "Live financial values will appear here when the Breath of WAIA ledger is published. No estimated numbers are shown.",
+    stageLabel: "Current stage",
+    stagePending: "Not yet published",
+    updatedLabel: "Last updated",
+    updatedPending: "Awaiting DEE-606 publication",
+    runwayLabel: "Runway",
+    budgetTitle: "Current budget / funding",
+    activityTitle: "Recent activity",
+    inflowsTitle: "Recent inflows",
+    outflowsTitle: "Recent outflows",
+    activityEmpty: "No published transactions yet",
     resourceLabels: {
       entered: "Entered",
       allocated: "Allocated",
       spent: "Spent",
-      remaining: "Remaining",
+      remaining: "Remaining / available",
       neededNext: "Needed next",
+    } as const,
+    budgetLabels: {
+      planned: "Planned / required",
+      funded: "Funded",
+      committed: "Committed",
+      spent: "Spent",
+      remaining: "Remaining",
     } as const,
   },
   humanBridge: {
@@ -33,20 +49,28 @@ export const HOMEPAGE_COPY = {
   aiTwin: {
     title: "AI-TWIN — Human Co-Researcher",
     present:
-      "Today, AI-TWIN is a dialogue- and diary-driven companion for honest self-knowledge: it helps you examine values, behavior, thinking, emotions, interests, and goals while keeping private data under your control.",
+      "AI-TWIN begins as a digital reflection of a person. Today it is a dialogue- and diary-driven companion for honest self-knowledge — examining values, behavior, thinking, emotions, interests, and goals while keeping private data under your control.",
+    purpose:
+      "Its ultimate purpose is not simply to describe the person in greater detail. Its direction is to become a co-researcher with the person of the mechanism from which the experienced “I” repeatedly emerges.",
+    progression: "Mirror → Model → Observer → Co-Researcher",
     trajectory:
-      "The deeper AI-TWIN understands the user, the more it can do for them. It gradually becomes a deeply personalized assistant and digital representative that understands goals, context, preferences and boundaries, and can take on a widening range of permitted digital tasks.",
+      "The deeper AI-TWIN understands the user’s goals, context, preferences and boundaries, the more useful work the user can safely delegate to it — as a personalized assistant and digital representative.",
     boundary:
       "Unrestricted autonomy is not claimed as already shipped. Present product state and target capability stay distinct.",
   },
   livingLegacy: {
     title: "A Legacy That Lives",
     body: "People usually leave photographs, messages, and memories — while much of how they thought, decided, learned, and saw the world disappears. AI-TWIN creates a future possibility to preserve a truthful trace of lived experience, values, stories, decisions, mistakes, and lessons that may remain useful to children, grandchildren, and future generations.",
+    example:
+      "Perhaps one day, a grandchild could ask: “What would you do in my place?” The answer would be grounded in preserved stories, values, decisions, mistakes, and lessons — not presented as literal resurrection.",
+    closing:
+      "A human life is finite. Understood and transmitted experience may still remain useful beyond it.",
     boundary:
-      "This is a long-term product direction, not a claim of literal immortality, consciousness continuity, or a capability already fully delivered.",
+      "Long-term product direction — not immortality, consciousness transfer, or a capability already fully delivered.",
   },
   breathInterstitial: {
-    prompt: "Moved by what this could mean? See how the project is being built — and supported — in the open.",
+    prompt:
+      "Moved by what this could mean? See how the project is being built — and supported — in the open.",
     cta: "Open Breath of WAIA",
   },
   society: {
@@ -63,16 +87,28 @@ export const HOMEPAGE_COPY = {
   },
   business3p: {
     title: "3P (Business) — Provision, Promotion, Production",
+    lead: "3P is WAIA’s AI-native operating-system direction for business — three pillars that structure how organizations understand markets, connect to demand, and create value.",
+    provisionTitle: "Provision",
+    provision:
+      "Market research, demand analysis, forecasting, risk assessment, and opportunity discovery.",
+    promotionTitle: "Promotion",
+    promotion:
+      "Marketing strategy, content, advertising and communication, demand testing, and awareness that connects an offer to the market.",
+    productionTitle: "Production",
+    production:
+      "Product and service creation, task and team coordination, operational execution, logistics and supply where relevant, launch and scaling.",
     founder:
-      "For founders and entrepreneurs: a structured way to provision offerings, promote with integrity, and produce value inside the WAIA ecosystem.",
+      "For the founder / entrepreneur: AI helps hold the idea, meaning, strategy, and whole system while reducing coordination and routine load.",
     member:
-      "For a person or team member: clarity about how their work sits inside Provision, Promotion, and Production — so contribution stays legible.",
-    status: "Named in architecture; product runtime is future. Shown here as direction, not a shipped business suite.",
+      "For the person / team member: AI reduces routine, preserves context, and creates more room for creative, intellectual, and meaningful work.",
+    status:
+      "Concept / future direction — named in architecture; not presented as a shipped business suite.",
   },
   aiTrader: {
     title: "AI-TRADER — knowledge-first market intelligence",
     identity:
       "AI-TRADER is a system for learning the market: observation becomes hypothesis, hypothesis becomes testable forecast, and only proven advantage may become risk-controlled capital action.",
+    restraint: "When evidence is insufficient, not trading is the correct outcome.",
     waiaRole:
       "For WAIA, AI-TRADER is intended as a long-term economic sustainability and funding engine.",
     userRole:
@@ -94,7 +130,14 @@ export const HOMEPAGE_COPY = {
   },
   marketplace: {
     title: "AI-Marketplace",
-    body: "A future layer for need-, context-, and value-based matching — not advertising-driven feeds. Status: Concept.",
+    lead: "A future economic layer built around need and context — not advertising-driven attention capture.",
+    traditional:
+      "Traditional internet commerce tends to begin with an offer: Offer → advertising / attention capture → click → funnel.",
+    waiaPath:
+      "WAIA Marketplace direction begins with the human need: Need → human/context understanding → relevant possibilities → comparison → conscious choice.",
+    meaning:
+      "The system should help find what is relevant because the need exists — not manufacture the need because an advertiser paid for attention.",
+    status: "Concept / future direction — not a live recommendation engine.",
   },
   waiaCore: {
     title: "WAIA Core",
@@ -102,7 +145,8 @@ export const HOMEPAGE_COPY = {
   },
   howBuilt: {
     title: "How WAIA Is Built",
-    mantra: "Research before implementation. Openness before secrecy. Collaboration before defensive isolation.",
+    mantra:
+      "Research before implementation. Openness before secrecy. Collaboration before defensive isolation.",
     researchLed:
       "WAIA is research-led: meaningful product and architecture evolution is preceded by deep research, challenge, and documentation before it becomes an implementation contract. Code follows researched meaning — it does not replace it.",
     legco:

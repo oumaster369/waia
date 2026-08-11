@@ -5,6 +5,7 @@ const HERO_MOBILE = "/brand/head_mobile_1.webp";
 
 /**
  * Brand art (existing assets — no new artwork) + English “What is WAIA?” definition.
+ * Desktop: definition pulled up exactly 80px (-mt-20) relative to the prior layout.
  */
 export function HeroBlock() {
   const copy = HOMEPAGE_COPY.hero;
@@ -34,7 +35,7 @@ export function HeroBlock() {
 
       <div
         data-testid="landing-hero-definition"
-        className="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 px-4 pb-2 pt-6 text-center sm:px-8 sm:pt-8"
+        className="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 px-4 pt-6 pb-2 text-center sm:px-8 sm:pt-8 lg:-mt-20 lg:pt-8 lg:pb-0"
       >
         <p
           data-testid="landing-hero-eyebrow"
@@ -44,7 +45,7 @@ export function HeroBlock() {
         </p>
         <h1
           data-testid="landing-hero-definition-text"
-          className="font-waia-serif text-balance text-[clamp(1.35rem,3.2vw,1.85rem)] font-medium leading-snug text-[#e8dcc4]"
+          className="font-waia-serif text-[clamp(1.35rem,3.2vw,1.85rem)] leading-snug font-medium text-balance text-[#e8dcc4]"
         >
           {copy.definition}
         </h1>

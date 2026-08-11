@@ -1,17 +1,20 @@
 /**
- * Public module readiness for the homepage (DEE-605).
+ * Public module readiness for the homepage (DEE-605 corrective).
  *
- * Authority: maturity labels from docs/WAIA-CANONICAL-ARCHITECTURE.md.
- * Percentages are derived from the declared label→score map below — not from
- * marketing decks or informal averaging of adjectives.
+ * Authority: qualitative maturity labels from docs/WAIA-CANONICAL-ARCHITECTURE.md.
+ * No fabricated percentages. Mixed maturity is shown as explicit facets, never averaged.
  */
 
-export type MaturityLabel =
-  | "Concept"
-  | "Research"
-  | "Prototype"
-  | "Operational"
-  | "Production";
+export type MaturityLabel = "Concept" | "Research" | "Prototype" | "Operational" | "Production";
+
+/** Ordered qualitative scale — Concept → Research → Prototype → Operational → Production. */
+export const MATURITY_SCALE: ReadonlyArray<MaturityLabel> = [
+  "Concept",
+  "Research",
+  "Prototype",
+  "Operational",
+  "Production",
+] as const;
 
 export type HomepageModuleId =
   | "ai-twin"
@@ -22,129 +25,137 @@ export type HomepageModuleId =
   | "waia-core"
   | "waia-dev-os";
 
-/** Declared score map — single methodology for public %. */
-export const MATURITY_SCORE: Record<MaturityLabel, number> = {
-  Concept: 10,
-  Research: 25,
-  Prototype: 45,
-  Operational: 70,
-  Production: 95,
+export type MaturityFacet = {
+  /** Short facet name from canon (e.g. "Core journey", "Paper trading"). */
+  name: string;
+  label: MaturityLabel;
+  note?: string;
 };
 
 export type ModuleReadiness = {
   id: HomepageModuleId;
   name: string;
-  maturity: MaturityLabel;
-  /** 0–100, derived from declared methodology (never invented from decks). */
-  percent: number;
+  /**
+   * Primary highlight on the five-stage scale — the highest stage current
+   * canonical evidence supports for the module’s main public story.
+   * Facets remain authoritative when maturity is mixed.
+   */
+  primaryLabel: MaturityLabel;
+  facets: ReadonlyArray<MaturityFacet>;
   lastUpdatedAt: string;
-  methodology: string;
+  evidenceNote: string;
 };
 
 /**
  * Canon reference date for the synthesis used on the public homepage.
- * Update when the readiness methodology or underlying canon labels change.
+ * Update when underlying architecture maturity labels change.
  */
 export const READINESS_METHODOLOGY_UPDATED_AT = "2026-07-03" as const;
 
-function score(label: MaturityLabel): number {
-  return MATURITY_SCORE[label];
-}
-
 /**
- * Weighted blend of declared maturity facets. Weights must sum to 1.
- * Used only when a module has documented mixed maturity in architecture canon.
- */
-function weightedPercent(
-  facets: ReadonlyArray<{ label: MaturityLabel; weight: number }>,
-): number {
-  const totalWeight = facets.reduce((sum, f) => sum + f.weight, 0);
-  if (Math.abs(totalWeight - 1) > 1e-9) {
-    throw new Error("Readiness facet weights must sum to 1");
-  }
-  const raw = facets.reduce((sum, f) => sum + score(f.label) * f.weight, 0);
-  return Math.round(raw);
-}
-
-/**
- * Authoritative homepage readiness rows.
- * Mixed modules use explicit weights documented in `methodology`.
+ * Authoritative homepage readiness rows — qualitative only.
+ * Source: docs/WAIA-CANONICAL-ARCHITECTURE.md maturity tables.
  */
 export const HOMEPAGE_MODULE_READINESS: ReadonlyArray<ModuleReadiness> = [
   {
     id: "ai-twin",
     name: "AI-TWIN",
-    maturity: "Operational",
-    percent: weightedPercent([
-      { label: "Operational", weight: 0.7 },
-      { label: "Prototype", weight: 0.3 },
-    ]),
+    primaryLabel: "Operational",
+    facets: [
+      {
+        name: "Core journey",
+        label: "Operational",
+        note: "Landing, auth, dashboard, Twin dialogue, readiness, Diary",
+      },
+      { name: "Society preview / Socialization", label: "Prototype" },
+      { name: "Avatar", label: "Prototype", note: "Placeholder only" },
+    ],
     lastUpdatedAt: READINESS_METHODOLOGY_UPDATED_AT,
-    methodology:
-      "70% Operational (MVP partner-preview path: auth, dashboard, Twin dialogue, readiness) + 30% Prototype (Society network / avatar still incomplete).",
+    evidenceNote:
+      "Canonical architecture: Operational for MVP partner-preview path; Prototype for Society network and avatar.",
   },
   {
     id: "society",
     name: "Society",
-    maturity: "Prototype",
-    percent: weightedPercent([
-      { label: "Prototype", weight: 0.6 },
-      { label: "Concept", weight: 0.4 },
-    ]),
+    primaryLabel: "Prototype",
+    facets: [
+      { name: "Private Society preview UI", label: "Prototype" },
+      { name: "Public social network / matching", label: "Concept" },
+      {
+        name: "Collective intelligence",
+        label: "Research",
+        note: "Vision-tier — not engineering law",
+      },
+    ],
     lastUpdatedAt: READINESS_METHODOLOGY_UPDATED_AT,
-    methodology:
-      "60% Prototype (private Society preview shell) + 40% Concept (public social network / matching still future).",
+    evidenceNote:
+      "Canonical architecture: Prototype (preview); social network Concept; collective intelligence Research (vision-tier).",
   },
   {
     id: "business-3p",
     name: "3P (Business)",
-    maturity: "Concept",
-    percent: score("Concept"),
+    primaryLabel: "Concept",
+    facets: [{ name: "Module", label: "Concept", note: "Named; no product runtime yet" }],
     lastUpdatedAt: READINESS_METHODOLOGY_UPDATED_AT,
-    methodology: "Single canon label Concept — named on landing/architecture; no product runtime yet.",
+    evidenceNote: "Canonical architecture: Concept (+ landing placeholders).",
   },
   {
     id: "ai-trader",
     name: "AI-TRADER",
-    maturity: "Prototype",
-    percent: weightedPercent([
-      { label: "Research", weight: 0.35 },
-      { label: "Prototype", weight: 0.55 },
-      { label: "Concept", weight: 0.1 },
-    ]),
+    primaryLabel: "Prototype",
+    facets: [
+      { name: "Module overall", label: "Prototype" },
+      { name: "Paper / mock proving path", label: "Operational" },
+      {
+        name: "Live capital path",
+        label: "Prototype",
+        note: "Code present; governance-blocked — not production-enabled",
+      },
+      { name: "Market Intelligence spine", label: "Prototype" },
+      { name: "Research Intelligence (CLI)", label: "Operational" },
+    ],
     lastUpdatedAt: READINESS_METHODOLOGY_UPDATED_AT,
-    methodology:
-      "35% Research (doctrine/constitution), 55% Prototype (in-repo intelligence/research surfaces), 10% Concept (external live trading / user income instrument gated — ADR-0009 uncleared).",
+    evidenceNote:
+      "Canonical architecture: Prototype (module) / Operational (paper) / Prototype (live — governance-blocked). No invented aggregate score.",
   },
   {
     id: "ai-marketplace",
     name: "AI-Marketplace",
-    maturity: "Concept",
-    percent: score("Concept"),
+    primaryLabel: "Concept",
+    facets: [{ name: "Module", label: "Concept", note: "Future need/context matching" }],
     lastUpdatedAt: READINESS_METHODOLOGY_UPDATED_AT,
-    methodology: "Single canon label Concept — future need/context matching layer.",
+    evidenceNote: "Canonical architecture: Concept (+ landing placeholders).",
   },
   {
     id: "waia-core",
     name: "WAIA Core",
-    maturity: "Prototype",
-    percent: weightedPercent([
-      { label: "Operational", weight: 0.35 },
-      { label: "Prototype", weight: 0.4 },
-      { label: "Concept", weight: 0.25 },
-    ]),
+    primaryLabel: "Operational",
+    facets: [
+      { name: "Identity / session paths", label: "Operational" },
+      { name: "Tenancy / entitlements (architecture target)", label: "Operational" },
+      {
+        name: "Full Core uplift in codebase",
+        label: "Prototype",
+        note: "Core architecture notes staged uplift vs live AI-TWIN tables",
+      },
+    ],
     lastUpdatedAt: READINESS_METHODOLOGY_UPDATED_AT,
-    methodology:
-      "35% Operational (identity/session paths in production use), 40% Prototype (payments/audit slices), 25% Concept (full tenancy uplift still in progress per Core architecture).",
+    evidenceNote:
+      "Canonical architecture Core domains listed Operational; codebase uplift still staged — facets shown explicitly.",
   },
   {
     id: "waia-dev-os",
     name: "WAIA DEV OS",
-    maturity: "Operational",
-    percent: score("Operational"),
+    primaryLabel: "Operational",
+    facets: [
+      {
+        name: "Engineering operating system",
+        label: "Operational",
+        note: "Plans, Linear lifecycle, PR gates",
+      },
+    ],
     lastUpdatedAt: READINESS_METHODOLOGY_UPDATED_AT,
-    methodology:
-      "Operational engineering operating system (plans, Linear lifecycle, PR gates) — user-facing explanation only on the homepage.",
+    evidenceNote: "Canonical architecture: DEV OS Operational.",
   },
 ];
 
@@ -152,4 +163,8 @@ export function getModuleReadiness(id: HomepageModuleId): ModuleReadiness {
   const row = HOMEPAGE_MODULE_READINESS.find((m) => m.id === id);
   if (!row) throw new Error(`Unknown homepage module readiness id: ${id}`);
   return row;
+}
+
+export function maturityStageIndex(label: MaturityLabel): number {
+  return MATURITY_SCALE.indexOf(label);
 }

@@ -24,9 +24,7 @@ type LandingPageContentProps = {
 };
 
 /** Sync shell for tests and for `app/page` after session checks. */
-export function LandingPageContent({
-  initialOauthErrorCode = null,
-}: LandingPageContentProps = {}) {
+export function LandingPageContent({ initialOauthErrorCode = null }: LandingPageContentProps = {}) {
   return (
     <main
       data-testid="landing"
@@ -35,17 +33,21 @@ export function LandingPageContent({
       <div className="relative w-full">
         <HeroBlock />
         {/*
-          Overlap sits on lower dark band of hero; margins tuned so wordmark/tagline in art stay clear (esp. mobile).
+          Flow-aware Auth placement (Human-review WP-4):
+          - no negative-margin overlap with the hero definition;
+          - desktop/lg+: ~100px gap after definition bottom (mt-[100px]);
+          - tablet/mobile: clear separation without covering the definition.
         */}
         <div
           id={REGISTER_ANCHOR_ID}
-          className="relative z-10 -mt-[56px] mx-auto flex w-[calc(100%-32px)] max-w-[560px] scroll-mt-8 justify-center pb-10 sm:-mt-[72px] md:-mt-24 lg:-mt-[6rem]"
+          data-testid="landing-register-anchor"
+          className="relative z-10 mx-auto mt-8 flex w-[calc(100%-32px)] max-w-[560px] scroll-mt-8 justify-center pb-10 sm:mt-10 lg:mt-[100px]"
         >
           <AuthBlock className="w-full" initialOauthErrorCode={initialOauthErrorCode} />
         </div>
       </div>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 pb-24 pt-2 sm:gap-10 sm:px-8">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 pt-2 pb-24 sm:gap-10 sm:px-8">
         <BreathOfWaiaSection />
         <HumanBridgeSection />
         <AiTwinSection />

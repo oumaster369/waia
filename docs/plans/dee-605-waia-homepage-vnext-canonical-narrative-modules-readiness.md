@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-review
-  currentWorkPackage: WP-3
-  completedWorkPackages: [WP-1, WP-2, WP-3]
+  currentWorkPackage: WP-4
+  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4]
   remainingWorkPackages: []
   prNumber: 457
   prUrl: "https://github.com/oumaster369/waia/pull/457"
-  lastValidatedGitSha: "4bc1a2d6444b119043c13930a10d15e4c0cd06a5"
-  lastValidationAt: "2026-08-11T14:15:00Z"
+  lastValidatedGitSha: pending-after-commit
+  lastValidationAt: "2026-08-11T15:20:00Z"
   blockedReason: null
-  nextAction: "Await human squash-merge of PR #457; do not merge from agent"
+  nextAction: "Await human squash-merge of PR #457 after CI; do not merge from agent"
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -64,6 +64,17 @@ All DEE-605 sections, CTAs, accessibility, responsive layout.
 ### WP-3 — Tests + PR readiness
 
 Targeted unit + e2e; lint/typecheck/build; governance preflight; one PR to `main`.
+
+### WP-4 — Human-review corrective pass (PR #457)
+
+Architect accepted baseline IA/visual language. Corrective-only on the existing branch/PR:
+
+1. **Hero/Auth spacing (desktop):** pull “What is WAIA?” definition up exactly 80px; remove Auth negative-margin overlap; Auth top ≈ 100px after definition bottom; flow-aware layout only.
+2. **Readiness:** delete invented label→% map and weighted blends; qualitative five-stage maturity scale + explicit facets; no fabricated `%`.
+3. **Breath contract:** extend public read model (stage, resources, budget, runway, recent in/out, lastUpdated, work/GitHub) with truthful pending UI — no DEE-606 DB.
+4. **Copy corrections:** AI-TWIN Co-Researcher + Mirror→… progression; Living Legacy emotional depth; 3P Provision/Promotion/Production meaning; AI-TRADER abstention; Marketplace need-first inversion.
+5. Preserve Society / How Built / LEGCO / GitHub / DEV OS / paths / final CTAs unless a real defect appears.
+6. Update targeted unit + desktop geometry e2e; push to existing PR #457 only.
 
 ---
 

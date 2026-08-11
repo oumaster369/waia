@@ -21,6 +21,13 @@ export function LivingLegacySection() {
         <div className="order-1 flex flex-col gap-3 lg:order-2">
           <SectionHeading testId="landing-living-legacy-title">{copy.title}</SectionHeading>
           <SectionBody testId="landing-living-legacy-body">{copy.body}</SectionBody>
+          <SectionBody
+            testId="landing-living-legacy-example"
+            className="font-waia-serif text-[1.05rem] leading-snug text-[#e8dcc4] sm:text-lg"
+          >
+            {copy.example}
+          </SectionBody>
+          <SectionBody testId="landing-living-legacy-closing">{copy.closing}</SectionBody>
           <SectionNote testId="landing-living-legacy-boundary">{copy.boundary}</SectionNote>
         </div>
       </div>

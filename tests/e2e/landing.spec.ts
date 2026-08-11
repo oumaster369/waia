@@ -2,10 +2,7 @@ import path from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-import {
-  LEGCO_RESEARCH_URL,
-  WAIA_PUBLIC_GITHUB_URL,
-} from "../../lib/landing/homepage-links";
+import { LEGCO_RESEARCH_URL, WAIA_PUBLIC_GITHUB_URL } from "../../lib/landing/homepage-links";
 
 test.describe("WAIA landing page", () => {
   test("renders DEE-605 narrative landmarks and English hero definition", async ({ page }) => {
@@ -30,14 +27,18 @@ test.describe("WAIA landing page", () => {
   test("hero selects desktop heap composition on wide viewports", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto("/");
-    const currentSrc = await page.getByTestId("landing-hero-image").evaluate((el: HTMLImageElement) => el.currentSrc);
+    const currentSrc = await page
+      .getByTestId("landing-hero-image")
+      .evaluate((el: HTMLImageElement) => el.currentSrc);
     expect(currentSrc).toContain("/brand/heap_comp_1.webp");
   });
 
   test("hero selects mobile head artwork on narrow viewports", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
-    const currentSrc = await page.getByTestId("landing-hero-image").evaluate((el: HTMLImageElement) => el.currentSrc);
+    const currentSrc = await page
+      .getByTestId("landing-hero-image")
+      .evaluate((el: HTMLImageElement) => el.currentSrc);
     expect(currentSrc).toContain("/brand/head_mobile_1.webp");
   });
 
@@ -50,6 +51,17 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-breath-resource-entered")).toContainText(
       /Not yet published/i,
     );
+    await expect(page.getByTestId("landing-breath-stage-value")).toContainText(
+      /Not yet published/i,
+    );
+    await expect(page.getByTestId("landing-breath-budget-planned")).toContainText(
+      /Not yet published/i,
+    );
+    await expect(page.getByTestId("landing-breath-runway-value")).toContainText(
+      /Not yet published/i,
+    );
+    await expect(page.getByTestId("landing-breath-inflows-empty")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-outflows-empty")).toBeVisible();
     await expect(page.getByTestId("landing-breath-github-primary")).toHaveAttribute(
       "href",
       WAIA_PUBLIC_GITHUB_URL,
@@ -66,6 +78,64 @@ test.describe("WAIA landing page", () => {
       "href",
       "#breath-of-waia",
     );
+  });
+
+  test("desktop hero definition and auth keep ~100px flow gap without overlap", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    const definition = page.getByTestId("landing-hero-definition");
+    const auth = page.getByTestId("landing-auth");
+    await expect(definition).toBeVisible();
+    await expect(auth).toBeVisible();
+
+    const defBox = await definition.boundingBox();
+    const authBox = await auth.boundingBox();
+    expect(defBox).toBeTruthy();
+    expect(authBox).toBeTruthy();
+    if (!defBox || !authBox) return;
+
+    // Auth must start after definition ends — no overlap.
+    expect(authBox.y).toBeGreaterThan(defBox.y + defBox.height);
+
+    const gap = authBox.y - (defBox.y + defBox.height);
+    // Human requirement: ≈100px after definition bottom (±4px tolerance).
+    expect(gap).toBeGreaterThanOrEqual(96);
+    expect(gap).toBeLessThanOrEqual(104);
+  });
+
+  test("mobile keeps definition visible without auth overlap", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    const definition = page.getByTestId("landing-hero-definition");
+    const auth = page.getByTestId("landing-auth");
+    const defBox = await definition.boundingBox();
+    const authBox = await auth.boundingBox();
+    expect(defBox).toBeTruthy();
+    expect(authBox).toBeTruthy();
+    if (!defBox || !authBox) return;
+    expect(authBox.y).toBeGreaterThan(defBox.y + defBox.height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      390 + 1,
+    );
+  });
+
+  test("renders qualitative readiness without fabricated percentages", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("landing-ai-twin-readiness-scale")).toBeVisible();
+    await expect(page.getByTestId("landing-ai-twin-progression")).toContainText(
+      /Mirror → Model → Observer → Co-Researcher/,
+    );
+    await expect(page.getByTestId("landing-ai-trader-restraint")).toContainText(
+      /not trading is the correct outcome/i,
+    );
+    await expect(page.getByTestId("landing-business-3p-provision")).toContainText(
+      /Market research/i,
+    );
+    await expect(page.getByTestId("landing-ai-marketplace-meaning")).toContainText(/need exists/i);
+    const bodyText = await page.locator("main").innerText();
+    expect(bodyText).not.toMatch(/\d+%/);
   });
 
   test("shows Create Twin by default and OAuth availability settles", async ({ page }) => {
@@ -143,6 +213,9 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-ai-trader")).toBeVisible();
     await expect(page.getByTestId("landing-ai-trader-boundary")).toContainText(
       /No promise of profit/i,
+    );
+    await expect(page.getByTestId("landing-ai-trader-restraint")).toContainText(
+      /not trading is the correct outcome/i,
     );
   });
 

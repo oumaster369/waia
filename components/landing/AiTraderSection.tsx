@@ -20,6 +20,9 @@ export function AiTraderSection() {
         <div className="flex flex-col gap-3">
           <SectionHeading testId="landing-ai-trader-title">{copy.title}</SectionHeading>
           <SectionBody testId="landing-ai-trader-identity">{copy.identity}</SectionBody>
+          <SectionBody testId="landing-ai-trader-restraint" className="font-medium text-[#e8dcc4]">
+            {copy.restraint}
+          </SectionBody>
           <SectionBody testId="landing-ai-trader-waia-role">{copy.waiaRole}</SectionBody>
           <SectionBody testId="landing-ai-trader-user-role">{copy.userRole}</SectionBody>
           <SectionNote testId="landing-ai-trader-boundary">{copy.boundary}</SectionNote>

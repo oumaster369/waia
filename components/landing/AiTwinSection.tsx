@@ -20,6 +20,13 @@ export function AiTwinSection() {
         <div className="flex flex-col gap-3">
           <SectionHeading testId="landing-ai-twin-title">{copy.title}</SectionHeading>
           <SectionBody testId="landing-ai-twin-present">{copy.present}</SectionBody>
+          <SectionBody testId="landing-ai-twin-purpose">{copy.purpose}</SectionBody>
+          <p
+            data-testid="landing-ai-twin-progression"
+            className="rounded-xl border border-[rgba(218,200,160,0.16)] bg-[rgba(0,0,0,0.2)] px-4 py-3 font-mono text-sm text-[#ebe4d4]"
+          >
+            {copy.progression}
+          </p>
           <SectionBody testId="landing-ai-twin-trajectory">{copy.trajectory}</SectionBody>
           <SectionNote testId="landing-ai-twin-boundary">{copy.boundary}</SectionNote>
           <ModuleReadinessBar readiness={readiness} testIdPrefix="landing-ai-twin" />

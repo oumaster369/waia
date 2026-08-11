@@ -152,12 +152,43 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("landing-ai-trader-identity")).toHaveTextContent(
       /knowledge|observation becomes hypothesis/i,
     );
+    expect(screen.getByTestId("landing-ai-trader-restraint")).toHaveTextContent(
+      /not trading is the correct outcome/i,
+    );
     expect(screen.getByTestId("landing-ai-trader-boundary")).toHaveTextContent(
       /No promise of profit/i,
     );
-    expect(screen.getByTestId("landing-ai-trader-readiness-percent")).toHaveTextContent(
-      `${getModuleReadiness("ai-trader").percent}%`,
+    expect(screen.queryByTestId("landing-ai-trader-readiness-percent")).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-ai-trader-readiness-scale")).toBeInTheDocument();
+  });
+
+  it("does not render fabricated readiness percentages anywhere on the homepage", async () => {
+    await renderLandingPage();
+    expect(document.body.textContent || "").not.toMatch(/\d+%/);
+    expect(screen.queryByTestId("landing-ai-twin-readiness-percent")).not.toBeInTheDocument();
+  });
+
+  it("renders qualitative maturity facets for AI-TWIN", async () => {
+    await renderLandingPage();
+    expect(screen.getByTestId("landing-ai-twin-readiness-label")).toHaveTextContent(/Operational/i);
+    expect(screen.getByTestId("landing-ai-twin-progression")).toHaveTextContent(
+      /Mirror → Model → Observer → Co-Researcher/,
     );
+    expect(screen.getByTestId("landing-ai-twin-purpose")).toHaveTextContent(/co-researcher/i);
+  });
+
+  it("renders corrected 3P, Marketplace, and Breath contract surfaces", async () => {
+    await renderLandingPage();
+    expect(screen.getByTestId("landing-business-3p-provision")).toHaveTextContent(/Market research/i);
+    expect(screen.getByTestId("landing-business-3p-promotion")).toHaveTextContent(/Marketing strategy/i);
+    expect(screen.getByTestId("landing-business-3p-production")).toHaveTextContent(/Product and service creation/i);
+    expect(screen.getByTestId("landing-ai-marketplace-waia-path")).toHaveTextContent(/Need →/i);
+    expect(screen.getByTestId("landing-breath-stage")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-budget")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-inflows-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-outflows-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-living-legacy-example")).toHaveTextContent(/grandchild/i);
   });
 
   it("renders reserved media slots without final artwork images", async () => {
@@ -178,11 +209,12 @@ describe("LandingPage", () => {
 });
 
 describe("module readiness methodology", () => {
-  it("derives percentages from declared label scores, not marketing invention", () => {
-    expect(getModuleReadiness("business-3p").percent).toBe(10);
-    expect(getModuleReadiness("ai-marketplace").percent).toBe(10);
-    expect(getModuleReadiness("waia-dev-os").percent).toBe(70);
-    expect(getModuleReadiness("ai-twin").percent).toBe(63);
+  it("uses qualitative primary labels without invented percentages", () => {
+    expect(getModuleReadiness("business-3p").primaryLabel).toBe("Concept");
+    expect(getModuleReadiness("ai-marketplace").primaryLabel).toBe("Concept");
+    expect(getModuleReadiness("waia-dev-os").primaryLabel).toBe("Operational");
+    expect(getModuleReadiness("ai-twin").primaryLabel).toBe("Operational");
+    expect(getModuleReadiness("ai-twin")).not.toHaveProperty("percent");
   });
 });
 
