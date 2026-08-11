@@ -19,8 +19,8 @@ state:
   remainingWorkPackages: [WP-5-B2]
   prNumber: 457
   prUrl: "https://github.com/oumaster369/waia/pull/457"
-  lastValidatedGitSha: 358701bca5a34ccc01d57961f513ad9c0a8e8428
-  lastValidationAt: "2026-08-11T15:26:00Z"
+  lastValidatedGitSha: 6f476d5974b89e772e8c94a238881368d1b93fdd
+  lastValidationAt: "2026-08-11T15:40:00Z"
   blockedReason: "READY_FOR_HUMAN_DEE_608_B1_VISUAL_IMPLEMENTATION_REVIEW — Twin/Legacy final art (B2) still open"
   nextAction: "Human review of B1 diagrams; then approve V-TWIN / V-LEGACY production (B2). Do not merge."
 provenance:
