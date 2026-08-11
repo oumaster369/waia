@@ -19,8 +19,8 @@ state:
   remainingWorkPackages: []
   prNumber: 457
   prUrl: "https://github.com/oumaster369/waia/pull/457"
-  lastValidatedGitSha: 48f37e975ab574bcbc80a11713dd40a17932277f
-  lastValidationAt: "2026-08-11T16:08:00Z"
+  lastValidatedGitSha: 9023dcb572824d4f5574a81d8e2e4f730208dd03
+  lastValidationAt: "2026-08-11T16:12:00Z"
   blockedReason: "READY_FOR_HUMAN_DEE_608_B2_FINAL_VISUAL_REVIEW — final Twin/Legacy rasters integrated; await Human visual accept before merge"
   nextAction: "Human inspects completed homepage visuals on PR #457; then may squash-merge. Do not merge from agent."
 provenance:
