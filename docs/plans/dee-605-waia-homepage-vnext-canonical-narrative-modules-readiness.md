@@ -15,14 +15,14 @@ linearStatusFlow:
 state:
   status: in-review
   currentWorkPackage: WP-5-B2
-  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5-A, WP-5-B1]
-  remainingWorkPackages: [WP-5-B2]
+  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5-A, WP-5-B1, WP-5-B2]
+  remainingWorkPackages: []
   prNumber: 457
   prUrl: "https://github.com/oumaster369/waia/pull/457"
-  lastValidatedGitSha: 74ef5d8f06c67a9310262c24d8e77d60042fc6d2
-  lastValidationAt: "2026-08-11T15:40:00Z"
-  blockedReason: "BLOCKED_WAITING_FOR_HUMAN_SUPPLIED_V_TWIN_AND_V_LEGACY_ASSETS — Marketplace marker fixed; final rasters not yet dropped into public/landing/visuals/"
-  nextAction: "Human drops ai-twin.webp + living-legacy.webp into public/landing/visuals/; agent integrates NarrativeFinalImage and removes FinalArtReadySlot. Do not merge."
+  lastValidatedGitSha: 48f37e975ab574bcbc80a11713dd40a17932277f
+  lastValidationAt: "2026-08-11T16:08:00Z"
+  blockedReason: "READY_FOR_HUMAN_DEE_608_B2_FINAL_VISUAL_REVIEW — final Twin/Legacy rasters integrated; await Human visual accept before merge"
+  nextAction: "Human inspects completed homepage visuals on PR #457; then may squash-merge. Do not merge from agent."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -589,16 +589,20 @@ DEE-608 remains incomplete until B2.
 
 **B1 status:** Human-approved (HEAD `74ef5d8`).
 
-**B2 progress**
+**B2 status:** final assets integrated — gate `READY_FOR_HUMAN_DEE_608_B2_FINAL_VISUAL_REVIEW`
 
-| Item | Status |
+| Item | Result |
 |------|--------|
-| Marketplace `mkt-arrow-dim` / `mkt-arrow-gold` `<defs>` markers | **Fixed** |
-| Stable paths `public/landing/visuals/ai-twin.webp` + `living-legacy.webp` | Contract ready (`lib/landing/final-visuals.ts`, `NarrativeFinalImage`) |
-| Public alt text (no internal scaffold language) | Contract ready |
-| Human-supplied `ai-twin.webp` | **MISSING — blocked** |
-| Human-supplied `living-legacy.webp` | **MISSING — blocked** |
-| Replace `FinalArtReadySlot` in Twin/Legacy sections | Waiting on files |
-| Gate `READY_FOR_HUMAN_DEE_608_B2_FINAL_VISUAL_REVIEW` | Not yet — requires both rasters integrated |
+| Source `ai-twin-source.png` | PNG RGB 8-bit, **1122×1402**, 2,247,189 bytes, ratio ≈0.8003, no alpha; orientation normal |
+| Source `living-legacy-source.png` | PNG RGB 8-bit, **1122×1402**, 2,016,158 bytes, ratio ≈0.8003, no alpha; orientation normal |
+| Production crop | Center extract **1120×1400** (1px each edge) — exact 4:5; threshold/handoff preserved |
+| Tool | Node `sharp@0.34.5` true WebP encoder (`effort: 6`, `smartSubsample`) |
+| `ai-twin.webp` | **1120×1400**, **167,110 bytes** (~163 KB), quality **82** |
+| `living-legacy.webp` | **1120×1400**, **168,936 bytes** (~165 KB), quality **86** |
+| AVIF | **Not used** — WebP alone meets budget/quality; avoid unused complexity |
+| Source PNGs in git | **Excluded** (staging only; removed from worktree before commit) |
+| Twin/Legacy UI | `NarrativeFinalImage` → `data-media-slot="final-art"`; `FinalArtReadySlot` deleted |
+| Marketplace markers | `#mkt-arrow-dim` / `#mkt-arrow-gold` preserved |
+| Public alt | Contract in `FINAL_VISUAL_ALT` (no internal IDs / DEE / approval language) |
 
-**Policy:** Do not invent programmer-art / stock / robot substitutes. Drop approved files into `public/landing/visuals/` (see README there), then continue B2 integration in this same PR.
+**Do not merge** until Human accepts the completed visual homepage.

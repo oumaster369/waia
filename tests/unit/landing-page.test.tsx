@@ -188,7 +188,7 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("landing-living-legacy-example")).toHaveTextContent(/grandchild/i);
   });
 
-  it("renders B1 diagrams and final-art-ready Twin/Legacy slots without raster art", async () => {
+  it("renders B1 diagrams and B2 Twin/Legacy final artwork without scaffold language", async () => {
     await renderLandingPage();
 
     expect(screen.getByTestId("landing-breath-media")).toHaveAttribute(
@@ -215,20 +215,36 @@ describe("LandingPage", () => {
     expect(document.getElementById("mkt-arrow-gold")).not.toBeNull();
 
     const twin = screen.getByTestId("landing-ai-twin-media");
-    expect(twin).toHaveAttribute("data-media-slot", "final-art-ready");
-    expect(twin).toHaveAttribute("data-asset-id", "V-TWIN");
-    expect(twin.querySelector("img")).toBeNull();
+    expect(twin).toHaveAttribute("data-media-slot", "final-art");
+    const twinImg = screen.getByTestId("landing-ai-twin-media-image");
+    expect(twinImg).toHaveAttribute("src", "/landing/visuals/ai-twin.webp");
+    expect(twinImg).toHaveAttribute(
+      "alt",
+      "A human presence and a related digital presence meet at a soft threshold, suggesting AI-TWIN as a co-researcher.",
+    );
+    expect(twinImg).toHaveAttribute("width", "1120");
+    expect(twinImg).toHaveAttribute("height", "1400");
 
     const legacy = screen.getByTestId("landing-living-legacy-media");
-    expect(legacy).toHaveAttribute("data-media-slot", "final-art-ready");
-    expect(legacy).toHaveAttribute("data-asset-id", "V-LEGACY");
-    expect(legacy.querySelector("img")).toBeNull();
+    expect(legacy).toHaveAttribute("data-media-slot", "final-art");
+    const legacyImg = screen.getByTestId("landing-living-legacy-media-image");
+    expect(legacyImg).toHaveAttribute("src", "/landing/visuals/living-legacy.webp");
+    expect(legacyImg).toHaveAttribute(
+      "alt",
+      "A present human, a preserved layer of lived experience, and a later generation connected through continuity of meaning.",
+    );
 
     expect(screen.queryByTestId("landing-human-bridge-media")).not.toBeInTheDocument();
     expect(screen.queryByTestId("landing-business-3p-media")).not.toBeInTheDocument();
     expect(screen.getByTestId("landing-business-3p-pillars")).toBeInTheDocument();
     expect(screen.getByTestId("landing-epistemic-method-steps")).toHaveTextContent(/Observation/);
     expect(screen.getByTestId("landing-ai-trader-media")).toHaveTextContent(/NO TRADE/);
+
+    const main = screen.getByTestId("landing");
+    expect(main.textContent).not.toMatch(
+      /Human-approved production|Final artwork reserved|DEE-608/i,
+    );
+    expect(main.querySelector('[data-media-slot="final-art-ready"]')).toBeNull();
   });
 
   it("renders Create Twin as default email CTA plus OAuth when availability returns providers", async () => {

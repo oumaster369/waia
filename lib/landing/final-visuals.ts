@@ -1,8 +1,6 @@
 /**
  * DEE-608 B2 — stable homepage-local final raster contract.
- *
- * Drop Human-approved files at these public paths (do not invent placeholders).
- * Optional AVIF variants improve transfer when quality/size warrants them.
+ * Production WebP assets live at the public paths below (no source PNG in git).
  */
 
 export const FINAL_VISUAL_PATHS = {
@@ -27,10 +25,13 @@ export const FINAL_VISUAL_ALT = {
     "A present human, a preserved layer of lived experience, and a later generation connected through continuity of meaning.",
 } as const;
 
-/** Intrinsic 4:5 contract for CLS-safe layout before/after decode. */
+/**
+ * Intrinsic geometry of committed production WebPs (exact 4:5).
+ * Must match the actual files — do not invent dimensions.
+ */
 export const FINAL_VISUAL_INTRINSIC = {
-  width: 800,
-  height: 1000,
+  width: 1120,
+  height: 1400,
   aspectRatio: "4 / 5",
 } as const;
 

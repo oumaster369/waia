@@ -238,15 +238,28 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-ai-marketplace-diagram")).toBeVisible();
     await expect(page.getByTestId("landing-ai-twin-media")).toHaveAttribute(
       "data-media-slot",
-      "final-art-ready",
+      "final-art",
     );
-    await expect(page.getByTestId("landing-living-legacy-media")).toHaveAttribute(
-      "data-asset-id",
-      "V-LEGACY",
+    await expect(page.getByTestId("landing-ai-twin-media-image")).toHaveAttribute(
+      "src",
+      /\/landing\/visuals\/ai-twin\.webp/,
+    );
+    await expect(page.getByTestId("landing-living-legacy-media-image")).toHaveAttribute(
+      "src",
+      /\/landing\/visuals\/living-legacy\.webp/,
+    );
+    await expect(page.getByTestId("landing-ai-twin-media-image")).toHaveAttribute(
+      "alt",
+      /co-researcher/i,
+    );
+    await expect(page.getByTestId("landing-living-legacy-media-image")).toHaveAttribute(
+      "alt",
+      /continuity of meaning/i,
     );
     await expect(page.getByTestId("landing-human-bridge-media")).toHaveCount(0);
     await expect(page.getByTestId("landing-business-3p-media")).toHaveCount(0);
     await expect(page.getByTestId("landing-business-3p-pillars")).toBeVisible();
+    await expect(page.locator('[data-media-slot="final-art-ready"]')).toHaveCount(0);
 
     // Society: text first in DOM reading order on mobile; visual-left on desktop via CSS order.
     const societyTitleBox = await page.getByTestId("landing-society-title").boundingBox();
@@ -255,6 +268,17 @@ test.describe("WAIA landing page", () => {
     expect(societyMediaBox).toBeTruthy();
     if (societyTitleBox && societyMediaBox) {
       expect(societyMediaBox.x).toBeLessThan(societyTitleBox.x);
+    }
+
+    // Legacy desktop visual-left; Twin desktop visual-right.
+    const twinBox = await page.getByTestId("landing-ai-twin-media").boundingBox();
+    const twinTitleBox = await page.getByTestId("landing-ai-twin-title").boundingBox();
+    const legacyBox = await page.getByTestId("landing-living-legacy-media").boundingBox();
+    const legacyTitleBox = await page.getByTestId("landing-living-legacy-title").boundingBox();
+    expect(twinBox && twinTitleBox && legacyBox && legacyTitleBox).toBeTruthy();
+    if (twinBox && twinTitleBox && legacyBox && legacyTitleBox) {
+      expect(twinBox.x).toBeGreaterThan(twinTitleBox.x);
+      expect(legacyBox.x).toBeLessThan(legacyTitleBox.x);
     }
 
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
@@ -268,6 +292,8 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-breath-media")).toBeVisible();
     await expect(page.getByTestId("landing-ai-marketplace-diagram")).toBeVisible();
     await expect(page.getByTestId("landing-ai-trader-media")).toContainText(/NO TRADE/);
+    await expect(page.getByTestId("landing-ai-twin-media-image")).toBeVisible();
+    await expect(page.getByTestId("landing-living-legacy-media-image")).toBeVisible();
     // Mobile reading order: society title above media (order-1 text).
     const societyTitleBox = await page.getByTestId("landing-society-title").boundingBox();
     const societyMediaBox = await page.getByTestId("landing-society-media").boundingBox();
@@ -275,6 +301,15 @@ test.describe("WAIA landing page", () => {
     expect(societyMediaBox).toBeTruthy();
     if (societyTitleBox && societyMediaBox) {
       expect(societyTitleBox.y).toBeLessThan(societyMediaBox.y);
+    }
+    const twinTitleBox = await page.getByTestId("landing-ai-twin-title").boundingBox();
+    const twinMediaBox = await page.getByTestId("landing-ai-twin-media").boundingBox();
+    const legacyTitleBox = await page.getByTestId("landing-living-legacy-title").boundingBox();
+    const legacyMediaBox = await page.getByTestId("landing-living-legacy-media").boundingBox();
+    expect(twinTitleBox && twinMediaBox && legacyTitleBox && legacyMediaBox).toBeTruthy();
+    if (twinTitleBox && twinMediaBox && legacyTitleBox && legacyMediaBox) {
+      expect(twinTitleBox.y).toBeLessThan(twinMediaBox.y);
+      expect(legacyTitleBox.y).toBeLessThan(legacyMediaBox.y);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       390 + 1,

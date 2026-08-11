@@ -46,9 +46,11 @@ describe("breath-public contract", () => {
 });
 
 describe("DEE-608 B2 final visual path contract", () => {
-  it("locks stable public paths, public alt text, and 4:5 intrinsic geometry", () => {
+  it("locks stable public paths, public alt text, and actual 1120×1400 intrinsic geometry", () => {
     expect(FINAL_VISUAL_PATHS.twin.webp).toBe("/landing/visuals/ai-twin.webp");
     expect(FINAL_VISUAL_PATHS.legacy.webp).toBe("/landing/visuals/living-legacy.webp");
+    expect(FINAL_VISUAL_INTRINSIC.width).toBe(1120);
+    expect(FINAL_VISUAL_INTRINSIC.height).toBe(1400);
     expect(FINAL_VISUAL_INTRINSIC.width / FINAL_VISUAL_INTRINSIC.height).toBeCloseTo(0.8);
     expect(FINAL_VISUAL_BUDGET_BYTES).toBe(180_000);
     expect(FINAL_VISUAL_ALT.twin).toMatch(/co-researcher/i);

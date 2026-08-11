@@ -1,5 +1,5 @@
 import { ModuleReadinessBar } from "@/components/landing/ModuleReadiness";
-import { FinalArtReadySlot } from "@/components/landing/visuals/final-art-ready-slot";
+import { NarrativeFinalImage } from "@/components/landing/visuals/narrative-final-image";
 import {
   HomepageSection,
   SectionBody,
@@ -16,7 +16,7 @@ export function AiTwinSection() {
 
   return (
     <HomepageSection testId="landing-ai-twin" ariaLabel="AI-TWIN">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:items-start lg:gap-8">
         <div className="flex flex-col gap-3">
           <SectionHeading testId="landing-ai-twin-title">{copy.title}</SectionHeading>
           <SectionBody testId="landing-ai-twin-present">{copy.present}</SectionBody>
@@ -31,11 +31,10 @@ export function AiTwinSection() {
           <SectionNote testId="landing-ai-twin-boundary">{copy.boundary}</SectionNote>
           <ModuleReadinessBar readiness={readiness} testIdPrefix="landing-ai-twin" />
         </div>
-        <FinalArtReadySlot
+        <NarrativeFinalImage
           testId="landing-ai-twin-media"
-          assetId="V-TWIN"
-          motif="twin"
-          purpose="AI-TWIN Human Co-Researcher visual — Mirror to Model to Observer to Co-Researcher"
+          asset="twin"
+          className="mx-auto w-full max-w-md lg:mx-0 lg:max-w-none"
         />
       </div>
     </HomepageSection>

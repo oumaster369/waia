@@ -1,4 +1,4 @@
-import { FinalArtReadySlot } from "@/components/landing/visuals/final-art-ready-slot";
+import { NarrativeFinalImage } from "@/components/landing/visuals/narrative-final-image";
 import {
   HomepageSection,
   SectionBody,
@@ -12,13 +12,11 @@ const copy = HOMEPAGE_COPY.livingLegacy;
 export function LivingLegacySection() {
   return (
     <HomepageSection testId="landing-living-legacy" ariaLabel="A Legacy That Lives">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-center">
-        <FinalArtReadySlot
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center lg:gap-8">
+        <NarrativeFinalImage
           testId="landing-living-legacy-media"
-          assetId="V-LEGACY"
-          motif="legacy"
-          purpose="Living Legacy visual — continuity of lived experience across generations"
-          className="order-2 lg:order-1"
+          asset="legacy"
+          className="order-2 mx-auto w-full max-w-md lg:order-1 lg:mx-0 lg:max-w-none"
         />
         <div className="order-1 flex flex-col gap-3 lg:order-2">
           <SectionHeading testId="landing-living-legacy-title">{copy.title}</SectionHeading>
