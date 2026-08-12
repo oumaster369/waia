@@ -31,7 +31,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Independent Architect corrections are complete. Revised draft awaits Human review/CONFIRM. Do not implement production schema/code until Human architecture approval. Migration identity remains deferred; migration-bearing merge blocked while DEE-518 journal predecessors remain unmerged."
+  nextAction: "Final integrity corrections complete; revised plan awaits Human architecture approval. Do not implement production schema/code until Human architecture approval. Migration identity remains deferred; migration-bearing merge blocked while DEE-518 journal predecessors remain unmerged."
   migrationIdentity:
     disposition: DEFERRED_TO_IMPLEMENTATION_PREFLIGHT
     frozenTag: null
@@ -40,6 +40,9 @@ state:
   correctionPass:
     afterSha: a95b9c1c27b9d98df66cfb944c292dd1967e5f5e
     reason: "Independent Architect review corrections (T3, accounting vs detail publication, cash equation, commitments, runway as-of, reconciliation, fund-bucket deferral)."
+  integrityPass:
+    afterSha: a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0
+    reason: "Final integrity corrections: ledger inception anchor, internal-transfer observation coalescing, temporally exact reconciliation + freshness, reconciled resource flows, budget.remaining with commitments, same-org FK integrity, kind/direction constraints."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -289,15 +292,68 @@ Use table `treasury_fund_buckets`:
 
 | Field | Type | Null | Meaning |
 |-------|------|------|---------|
-| `code` | text PK | NO | stable code |
-| `organization_id` | uuid FK | NO | |
+| `organization_id` | uuid FK | NO | part of PK |
+| `code` | text | NO | part of PK; stable code |
 | `title` | text | NO | |
 | `is_active` | boolean | NO | |
 | `created_at` | timestamptz | NO | |
 
-**Seeded v1 rows only:** `OPERATING`, `RESERVE`, `UNASSIGNED`.
+**Primary key:** `(organization_id, code)`.  
+**Seeded v1 rows only (per treasury org):** `OPERATING`, `RESERVE`, `UNASSIGNED`.
 
 Future solidarity/access buckets may be inserted later after DEE-612/613 Human approval — schema remains compatible without canonizing unapproved doctrine now. DEE-606 does **not** implement solidarity workflows.
+
+### 5.1c `treasury_ledger_inceptions` (FROZEN chain/watcher start boundary)
+
+Deterministic ledger-inception anchor. Prevents `OPENING_BALANCE` + historical backfill double counting.
+
+| Field | Type | Null | Meaning |
+|-------|------|------|---------|
+| `id` | uuid PK | NO | |
+| `organization_id` | uuid FK | NO | |
+| `network` | text | NO | e.g. `TRC-20` |
+| `token_contract` | text | NO | |
+| `asset_code` | text | NO | `USDT` |
+| `inception_block` | text | NO | inclusive boundary block height |
+| `inception_block_hash` | text | YES | if provider/source supports it |
+| `inception_time` | timestamptz | NO | |
+| `opening_balance_transaction_id` | uuid | NO | FK → `treasury_transactions.id` (OPENING_BALANCE) |
+| `watcher_start_block` | text | NO | first block eligible for canonical watcher ingestion; **strictly after** inception boundary |
+| `evidence_object_id` | uuid | YES | evidence/provenance ref |
+| `status` | text | NO | `ACTIVE` \| `SUPERSEDED` |
+| `created_by_user_id` | uuid | NO | |
+| `approved_by_user_id` | uuid | NO | required for ACTIVE |
+| `created_at` | timestamptz | NO | |
+
+**Binding rules:**
+
+1. Exactly one `ACTIVE` inception per `(organization_id, network, token_contract)`.
+2. Linked `OPENING_BALANCE` represents the consolidated balance of the recon-included managed treasury address set **at the inception anchor**.
+3. That `OPENING_BALANCE` must be `VERIFIED`, evidence-backed, and linked here before watcher ingestion is considered canonical.
+4. Treasury watcher canonical ingestion starts **strictly after** the inception boundary (`watcher_start_block` > `inception_block` numerically / as defined by chain ordering).
+5. Historical transfers at or before the inception boundary **MUST NOT** also be counted as post-inception ledger movements.
+6. Initial `treasury_watcher_checkpoints.last_scanned_block` for the matching checkpoint key is **deterministically seeded** from the approved inception (`watcher_start_block − 1` / equivalent scan cursor so the first scan begins at `watcher_start_block`).
+7. Future ledger rebase / inception replacement is a separate explicit reconciliation/migration operation — **never** silent mutation of an ACTIVE inception.
+
+**Required tests:** opening + historical backfill cannot double-count; checkpoint seed matches inception; transfers at/before inception excluded from semantic ledger; replacing ACTIVE inception requires SUPERSEDED path + audit.
+
+### 5.1d Same-organization relational integrity (FROZEN)
+
+All organization-scoped references between `treasury_*` entities **MUST** be same-organization by **database constraint**, not merely application convention.
+
+Use composite unique keys + composite FKs (or equivalent Postgres-enforced pairs) for relationships including:
+
+- transaction → fund bucket `(organization_id, fund_bucket_code)` → `treasury_fund_buckets(organization_id, code)`
+- transaction → budget / funding need
+- transaction ↔ observations via observation links
+- attribution → transaction
+- evidence link → transaction / evidence object
+- commitment → budget / fulfillment transaction
+- runway snapshot → runway plan
+- inception → opening balance transaction
+- reconciliation → organization (+ inception where applicable)
+
+Cross-organization references must be impossible even through privileged app bugs. Targeted RLS remains defense-in-depth **in addition** to this invariant.
 
 ### 5.2 `treasury_watched_addresses`
 
@@ -356,6 +412,14 @@ Future solidarity/access buckets may be inserted later after DEE-612/613 Human a
 
 **Constraints:** unique `idempotency_key`; unique `(network, tx_hash, transfer_index, watched_address_id)`.
 
+**Canonical blockchain Transfer identity** (org-scoped semantic coalesce key):
+
+```
+(organization_id, network, token_contract, tx_hash, transfer_index)
+```
+
+Address-relative observations may be multiple for the same Transfer; semantic ledger coalesces to one transaction (§5.5b, §7).
+
 ### 5.5 `treasury_transactions`
 
 | Field | Type | Null | Meaning | Mutability | Public detail |
@@ -365,16 +429,18 @@ Future solidarity/access buckets may be inserted later after DEE-612/613 Human a
 | `status` | `treasury_tx_status` | NO | accounting FSM | FSM | NO |
 | `detail_publication` | enum | NO | default `PRIVATE` | publish authority | YES state |
 | `provenance` | enum | NO | | immutable | limited |
-| `observation_id` | uuid FK | YES | required if WATCHER | immutable | NO |
+| `canonical_network` | text | YES | set for watcher-origin | immutable | NO |
+| `canonical_token_contract` | text | YES | | immutable | NO |
+| `canonical_tx_hash` | text | YES | | immutable | NO |
+| `canonical_transfer_index` | int | YES | | immutable | NO |
 | `direction` | enum | NO | | immutable after NEEDS_REVIEW | if DETAIL_PUBLIC |
 | `kind` | enum | YES | null until classified | revision | if DETAIL_PUBLIC |
-| `fund_bucket_code` | text FK→fund_buckets.code | NO | default `UNASSIGNED` | revision | NO unless policy |
+| `fund_bucket_code` | text | NO | default `UNASSIGNED`; FK with org | revision | NO unless policy |
 | `native_*` | money fields | NO | | immutable after leave draft | amount if DETAIL_PUBLIC |
-| `accounting_amount_micros` | bigint | YES | required before VERIFIED | revision until VERIFIED; then correction only | amount if DETAIL_PUBLIC |
+| `accounting_amount_micros` | bigint | YES | required before VERIFIED; magnitude ≥ 0 | revision until VERIFIED; then correction only | amount if DETAIL_PUBLIC |
 | `accounting_denomination_policy` | text | YES | e.g. `USDT_NOMINAL_USD_POLICY_V1` | same | NO |
 | `cash_effect_micros` | bigint | YES | signed effect on consolidated treasury cash; set at classify/verify per §9 | system from kind rules | NO |
-| `counterparty_is_internal` | boolean | NO | true when other side is managed treasury address | classify | NO |
-| `paired_internal_transfer_id` | uuid | YES | links two legs / single INTERNAL_TRANSFER record | classify | NO |
+| `counterparty_is_internal` | boolean | NO | true when both sides are managed treasury addresses | classify / watcher objective fact | NO |
 | `occurred_at` | timestamptz | NO | | create; correction via link | if DETAIL_PUBLIC |
 | `purpose` / `category` | text | YES | | revision | if DETAIL_PUBLIC |
 | `counterparty_display` | text | YES | | revision | only if DETAIL_PUBLIC **and** `publish_counterparty` |
@@ -383,10 +449,11 @@ Future solidarity/access buckets may be inserted later after DEE-612/613 Human a
 | `budget_id` / `funding_need_id` | uuid | YES | | revision | NO |
 | `description` / `internal_notes` | text | YES | | revision | NO |
 | `public_description` | text | YES | Breath row label | revision | if DETAIL_PUBLIC |
-| `tx_hash` | text | YES | denorm | immutable if watcher | only if DETAIL_PUBLIC + policy |
+| `tx_hash` | text | YES | denorm (= canonical when watcher) | immutable if watcher | only if DETAIL_PUBLIC + policy |
 | `corrects_transaction_id` | uuid | YES | | immutable once set | if DETAIL_PUBLIC |
 | `duplicate_of_transaction_id` | uuid | YES | | on DUPLICATE | NO |
 | `detail_superseded_by_id` | uuid | YES | | detail workflow | NO |
+| `ledger_inception_id` | uuid | YES | required for OPENING_BALANCE | immutable once set | NO |
 | `verified_at` / `verified_by_user_id` | timestamptz/uuid | YES | | on VERIFIED | NO |
 | `detail_published_at` / `detail_published_by_user_id` | timestamptz/uuid | YES | | on DETAIL_PUBLIC | NO |
 | `latest_revision_id` | uuid | YES | | system | NO |
@@ -394,7 +461,57 @@ Future solidarity/access buckets may be inserted later after DEE-612/613 Human a
 | `created_by_user_id` | uuid | YES | | immutable | NO |
 | `created_at` / `updated_at` | timestamptz | NO | | system | NO |
 
-**Indexes:** `(organization_id, status)`; `(organization_id, detail_publication)`; `(organization_id, occurred_at desc)`; `(budget_id)`; `(kind, status)`; unique `(observation_id)` where not null.
+**Removed:** single authoritative `observation_id` on the transaction. Observation linkage is many-to-one via §5.5b.
+
+**Semantic idempotency (watcher-origin):** unique partial index on  
+`(organization_id, canonical_network, canonical_token_contract, canonical_tx_hash, canonical_transfer_index)`  
+where those fields are NOT NULL. Replay cannot create a second semantic treasury transaction for the same canonical Transfer.
+
+**Indexes:** `(organization_id, status)`; `(organization_id, detail_publication)`; `(organization_id, occurred_at desc)`; `(budget_id)`; `(kind, status)`.
+
+**Composite FKs (same-org):**  
+`(organization_id, fund_bucket_code)` → `treasury_fund_buckets`;  
+`(organization_id, budget_id)` → `treasury_budgets(organization_id, id)` (budgets carry unique `(organization_id, id)`); likewise funding needs.
+
+### 5.5a Kind / direction / cash-effect invariants (FROZEN)
+
+Impossible combinations must not become `VERIFIED` (CHECK constraints + service guards):
+
+| Kind | Required direction | Cash-effect rule |
+|------|--------------------|------------------|
+| `OPENING_BALANCE` | `INFLOW` (frozen representational direction) | `cash_effect_micros = +accounting_amount_micros` (`A > 0`) |
+| `CONTRIBUTION` | `INFLOW` | `+A` (`A > 0`) |
+| `EXTERNAL_INFLOW` | `INFLOW` | `+A` (`A > 0`) |
+| `EXPENSE` | `OUTFLOW` | `−A` (`A > 0`) |
+| `EXTERNAL_OUTFLOW` | `OUTFLOW` | `−A` (`A > 0`) |
+| `INTERNAL_TRANSFER` | `INTERNAL` | `0` (consolidated); `A ≥ 0` magnitude recorded for display/audit |
+| `REFUND` | `INFLOW` or `OUTFLOW` | sign follows direction (`+A` / `−A`); `A > 0` |
+| `CORRECTION` / `BALANCE_ADJUSTMENT` | must agree with signed effect | `cash_effect_micros ≠ 0`; direction `INFLOW` iff effect > 0, `OUTFLOW` iff effect < 0; evidence required |
+
+**Non-negative / positive amount constraints:** `accounting_amount_micros ≥ 0`; commitment `amount_micros > 0`; budget `planned_amount_micros > 0`; runway `daily_burn_micros > 0`; ideal `amount_micros > 0`; native atomic amounts ≥ 0.
+
+### 5.5b `treasury_transaction_observation_links` (FROZEN)
+
+| Field | Type | Null | Meaning |
+|-------|------|------|---------|
+| `id` | uuid PK | NO | |
+| `organization_id` | uuid FK | NO | |
+| `transaction_id` | uuid | NO | |
+| `observation_id` | uuid | NO | |
+| `observation_role` | text | NO | `PRIMARY` \| `INTERNAL_COUNTERPARTY` \| `SECONDARY` |
+| `created_at` | timestamptz | NO | |
+
+**Constraints:**
+
+- unique `(transaction_id, observation_id)`
+- unique `(observation_id)` — one observation links to at most one semantic transaction
+- composite FKs enforce same `organization_id` for transaction and observation
+
+**Coalescing rules:**
+
+- External inbound/outbound Transfer matching one managed address → normally **one** observation link → **one** semantic transaction.
+- Managed A → managed B (same org, both watched) → **two** address-relative observations may link to the **same** semantic transaction; `direction = INTERNAL`; `kind` classifies as `INTERNAL_TRANSFER` (or remains unclassified until human classify, but cash effect once VERIFIED is 0); **never** two independent semantic movements; **never** double-count in aggregates.
+- Watcher may objectively detect both endpoints are managed treasury addresses; it still does **not** assign business/governance meaning beyond the objective internal-transfer fact.
 
 ### 5.6 `treasury_transaction_revisions`
 
@@ -414,6 +531,8 @@ Append-only semantic history: `id`, `transaction_id`, `organization_id`, `seq`, 
 | `is_public` | boolean | NO | include in Breath budget block |
 | `notes` | text | YES | admin |
 | `created_at` / `updated_at` | timestamptz | NO | |
+
+**Constraints:** unique `(organization_id, id)` for composite FK targets; unique `(organization_id, code)`.
 
 **Derived (not stored authority):** `funded`, `committed`, `spent`, `remaining` from §9. **No admin-maintained aggregate committed scalar.**
 
@@ -490,7 +609,7 @@ Unchanged structure; share math uses VERIFIED set only (§6), independent of `de
 | `released_by_user_id` / `released_at` | uuid/timestamptz | YES | |
 | `fulfilled_by_user_id` / `fulfilled_at` | uuid/timestamptz | YES | |
 | `cancelled_by_user_id` / `cancelled_at` | uuid/timestamptz | YES | |
-| `fulfilills_transaction_id` | uuid | YES | expense/outflow that fulfills |
+| `fulfills_transaction_id` | uuid | YES | expense/outflow that fulfills |
 | `record_content_digest` | text | NO | |
 | `created_at` / `updated_at` | timestamptz | NO | |
 
@@ -517,17 +636,20 @@ Append-only `treasury_commitment_revisions` mirrors transaction revisions.
 
 ### 5.15 `treasury_balance_reconciliations`
 
-Independent control — **not** accounting SoT.
+Independent control — **not** accounting SoT. Must be temporally exact.
 
 | Field | Type | Null | Meaning |
 |-------|------|------|---------|
 | `id` | uuid PK | NO | |
 | `organization_id` | uuid FK | NO | |
-| `as_of_block` | text | NO | chain block height for balance read |
-| `as_of_time` | timestamptz | NO | |
-| `observed_onchain_balance_atomic` | bigint | NO | sum of USDT balances for `include_in_balance_recon=true` active addresses |
-| `accounting_cash_balance_micros` | bigint | NO | derived §9 at as-of |
-| `delta_micros` | bigint | NO | observed_nominal_micros − accounting |
+| `ledger_inception_id` | uuid | YES | FK to ACTIVE inception used for scope |
+| `as_of_block` | text | NO | chain block height for on-chain balance read |
+| `as_of_time` | timestamptz | NO | reconciliationAsOf wall/logical time |
+| `observed_onchain_balance_atomic` | bigint | YES | null if provider cannot prove exact snapshot |
+| `accounting_cash_balance_micros` | bigint | YES | `accountingCashBalanceAt(reconciliationAsOf)` |
+| `delta_micros` | bigint | YES | observed_nominal − accounting when both known |
+| `explained_pending_micros` | bigint | NO | default 0; sum of known OBSERVED/unconfirmed effects explaining delta |
+| `unexplained_residual_micros` | bigint | YES | delta − explained_pending |
 | `status` | enum | NO | |
 | `tolerance_micros` | bigint | NO | v1: `0` for USDT nominal |
 | `evidence_object_id` | uuid | YES | optional screenshot/export |
@@ -535,13 +657,46 @@ Independent control — **not** accounting SoT.
 | `created_by` | text | NO | `service`/`admin` |
 | `created_at` | timestamptz | NO | |
 
-**v1 rules:**
+#### Temporally exact accounting side (FROZEN)
 
-- Participating addresses: active watched addresses with `include_in_balance_recon=true`, same network/token.
-- Pending/unconfirmed watcher observations (`OBSERVED`, not `CONFIRMED`) are **excluded** from accounting and treated as expected temporary delta under `PENDING_CONFIRMATIONS` if they explain the gap.
+```
+accountingCashBalanceAt(reconciliationAsOf) =
+  Σ cash_effect_micros(t) for t in VERIFIED
+  where t is effective at or before reconciliationAsOf under these inclusion rules:
+```
+
+- **Watcher-origin VERIFIED rows:** include only if **all** linked observations have `block_height` ≤ `as_of_block` (chain boundary). If any linked observation lacks a comparable block height, treat that row as not includable for this as-of and mark recon `UNAVAILABLE` unless an approved alternate bound exists.
+- **Manual / OPENING_BALANCE / BALANCE_ADJUSTMENT / CORRECTION facts:** include only if `occurred_at` (effective time) ≤ `as_of_time`.
+- Do **not** compare a current-chain balance with an accounting total containing later movements.
+
+If the chain provider cannot prove an exact comparable balance snapshot at the captured block/time:
+
+```
+status = UNAVAILABLE
+```
+
+Never fabricate exactness. `observed_onchain_balance_atomic` may be null when UNAVAILABLE.
+
+#### Publication freshness (FROZEN)
+
+v1 maximum acceptable reconciliation age: **10 minutes** (aligned to existing ~1 minute cron; no stricter repo canon found).
+
+Breath financial aggregates may publish only when the **latest** reconciliation for the treasury org/asset is:
+
+- `MATCHED`, or
+- `PENDING_CONFIRMATIONS` **only if** the entire delta is exactly explained by known OBSERVED/unconfirmed transfers **and** `unexplained_residual_micros = 0`
+
+Fail closed:
+
+- `UNAVAILABLE` ⇒ Breath pending
+- `MISMATCH` (unexplained residual ≠ 0 beyond tolerance) ⇒ Breath pending
+- latest recon older than **10 minutes** ⇒ Breath pending (stale)
+
+#### Other v1 rules
+
+- Participating addresses: active watched addresses with `include_in_balance_recon=true`, same network/token, within the ACTIVE inception scope.
 - Internal transfers are cash-neutral in accounting and net-zero on consolidated on-chain sum.
 - Tolerance: **0 micros** under `USDT_NOMINAL_USD_POLICY_V1`.
-- Material unexplained `MISMATCH` ⇒ open material reconciliation ⇒ Breath fail-closed pending.
 - No custody/signing authority.
 
 ---
@@ -590,43 +745,69 @@ Public surface: aggregate-only; no public identity list; optional authenticated 
 
 USDT TRC-20; inbound and outbound vs active watched addresses; `TREASURY_WATCHER_ENABLED` default **false** (DARK).
 
-### Idempotency
+Requires an `ACTIVE` `treasury_ledger_inceptions` row; canonical ingestion starts at `watcher_start_block` strictly after inception. Checkpoint is seeded from that boundary. Transfers at/before inception are never ingested as post-inception semantic movements.
+
+### Observation idempotency (address-relative)
 
 ```
-idempotency_key = `${network}:${txHash}:${transferIndex}:${watchedAddressId}`
+observation_idempotency_key = `${network}:${txHash}:${transferIndex}:${watchedAddressId}`
 ```
+
+One observation per matched watched address is allowed.
+
+### Semantic transfer identity + coalescing (FROZEN)
+
+Canonical Transfer identity:
+
+```
+(organization_id, network, token_contract, tx_hash, transfer_index)
+```
+
+Semantic ledger: **exactly one** `treasury_transactions` row per canonical Transfer (unique partial index). Links via `treasury_transaction_observation_links`.
+
+| Scenario | Observations | Semantic txs | Cash effect when VERIFIED |
+|----------|--------------|--------------|---------------------------|
+| External inbound to managed A | 1 | 1 | `+A` (once classified as contribution/external inflow) |
+| External outbound from managed A | 1 | 1 | `−A` |
+| Managed A → managed B | 2 | **1** (`INTERNAL`) | **0** |
+| Replay of any of the above | no new semantic tx | still 1 | unchanged |
+
+Watcher may objectively detect internal endpoints; it does not assign further business/governance meaning.
 
 ### Observation FSM
 
-1. confirmations ≥ 1 → observation `OBSERVED`; transaction `DETECTED` → `NEEDS_REVIEW`
+1. confirmations ≥ 1 → observation `OBSERVED`; ensure semantic tx exists (`DETECTED` → `NEEDS_REVIEW`) and link observation
 2. confirmations ≥ required (default 20) → observation `CONFIRMED`
-3. disappeared after age-out → `DROPPED` + transaction `RECONCILIATION_REQUIRED`
+3. disappeared after age-out → `DROPPED` + semantic tx `RECONCILIATION_REQUIRED`
+4. Periodic / cycle-end: emit balance reconciliation at captured as-of (§5.15)
 
 ### Binding VERIFIED precondition (WATCHER)
 
-For `provenance = WATCHER`, transition to `VERIFIED` is **rejected** unless:
+For `provenance = WATCHER`, transition to `VERIFIED` is **rejected** unless **every** linked observation satisfies:
 
 ```
 observation_status = CONFIRMED
 AND confirmations_observed >= confirmations_required
 ```
 
-Human may **classify** an `OBSERVED` transaction before final confirmation, but must **not** VERIFY it.
+For internal transfers with two links, **both** must be CONFIRMED.
 
-Until VERIFIED:
+Human may **classify** while OBSERVED, but must **not** VERIFY until the precondition holds.
 
-- excluded from accounting cash
-- excluded from contribution numerator/denominator
-- excluded from public financial aggregates
+Until VERIFIED: excluded from accounting cash, contribution share, and public financial aggregates.
 
 ### Required tests
 
 - classify-before-confirm allowed; verify-before-confirm rejected
-- after CONFIRMED, verify allowed
+- after CONFIRMED (all links), verify allowed
 - OBSERVED amounts absent from aggregates and contribution share
+- external inbound ⇒ one semantic tx; external outbound ⇒ one semantic tx
+- managed A → managed B ⇒ two observations, one semantic tx, cash effect zero
+- replay ⇒ still one semantic tx
+- inception boundary: no double count with OPENING_BALANCE; checkpoint seeded correctly
 - idempotent replay; DROPPED opens reconciliation
 
-Watcher never publishes details, never sets kind/budget/attribution, never signs/broadcasts.
+Watcher never publishes details, never sets kind/budget/attribution beyond objective internal-transfer detection, never signs/broadcasts.
 
 ---
 
@@ -640,21 +821,20 @@ Reference + metadata + sha256 only. Default `ADMIN_ONLY`. `PUBLIC` evidence requ
 
 ### 9.1 Signed cash-effect semantics (per VERIFIED row)
 
-Let `A = accounting_amount_micros` (always ≥ 0 magnitude).
+Let `A = accounting_amount_micros` (magnitude ≥ 0; kind rules in §5.5a).
 
-| Kind | Direction / flags | `cash_effect_micros` |
-|------|-------------------|----------------------|
-| `OPENING_BALANCE` | — | `+A` (exactly one active opening per org+asset set; evidence required) |
-| `CONTRIBUTION` | INFLOW | `+A` |
-| `EXTERNAL_INFLOW` | INFLOW | `+A` |
-| `EXPENSE` | OUTFLOW | `−A` |
-| `EXTERNAL_OUTFLOW` | OUTFLOW | `−A` |
-| `REFUND` | INFLOW (refund received) | `+A` |
-| `REFUND` | OUTFLOW (refund paid) | `−A` |
-| `CORRECTION` / `BALANCE_ADJUSTMENT` | signed explicitly at classify | admin-set signed micros; evidence required; audits |
-| `INTERNAL_TRANSFER` | between managed treasury addresses | `0` consolidated |
+| Kind | Direction | `cash_effect_micros` |
+|------|-----------|----------------------|
+| `OPENING_BALANCE` | `INFLOW` | `+A` (linked ACTIVE inception; evidence required; establishes since-inception starting resources) |
+| `CONTRIBUTION` | `INFLOW` | `+A` |
+| `EXTERNAL_INFLOW` | `INFLOW` | `+A` |
+| `EXPENSE` | `OUTFLOW` | `−A` |
+| `EXTERNAL_OUTFLOW` | `OUTFLOW` | `−A` |
+| `REFUND` | `INFLOW` / `OUTFLOW` | `+A` / `−A` |
+| `CORRECTION` / `BALANCE_ADJUSTMENT` | agrees with sign | signed non-zero; evidence required |
+| `INTERNAL_TRANSFER` | `INTERNAL` | `0` consolidated |
 
-No hidden mutable scalar balance. `OPENING_BALANCE` and `BALANCE_ADJUSTMENT` are first-class auditable ledger rows.
+No hidden mutable scalar balance. Each semantic transaction counted **once** in aggregates (internal coalescing).
 
 ### 9.2 Derived balances
 
@@ -674,47 +854,73 @@ currentFreeFunds_micros =
 
 `currentFreeFunds` is **not** derived from DETAIL_PUBLIC rows only.
 
-### 9.3 Breath field formulas
+As-of variant for reconciliation: `accountingCashBalanceAt(reconciliationAsOf)` per §5.15.
+
+### 9.3 Public resource flows (must reconcile with cash)
+
+For Breath v1, resource-flow fields derive from VERIFIED **signed cash effects** (consolidated treasury cash), not from contribution-category alone:
+
+```
+resources.entered =
+  Σ max(cash_effect_micros(t), 0) for t in V
+
+resources.spent =
+  Σ max(−cash_effect_micros(t), 0) for t in V
+
+# INTERNAL_TRANSFER contributes 0 to both
+
+resources.remaining =
+  resources.entered − resources.spent
+  = accountingCashBalance_micros   # exact identity
+```
+
+Implications:
+
+- `OPENING_BALANCE` is included in `entered` for the since-inception Breath presentation.
+- Positive `BALANCE_ADJUSTMENT` / inbound refunds increase `entered`; negative adjustments / outflows increase `spent`.
+- `resources.spent` means **consolidated treasury cash outflow**, not merely `kind=EXPENSE`.
+- Contribution-share engine remains separate (§6) and is **not** redefined here.
+
+### 9.4 Breath field formulas
 
 Breath publishes only when:
 
 - `breath_enabled = true`
 - ideal annual budget ACTIVE+PUBLIC present
-- **no** material unresolved reconciliation (§4 fail-closed)
-- latest balance reconciliation is not unexplained `MISMATCH`
+- **no** material unresolved transaction reconciliation (§4)
+- latest balance reconciliation satisfies §5.15 publication freshness (`MATCHED`, or explained `PENDING_CONFIRMATIONS` with zero unexplained residual; not stale > 10 minutes; never `UNAVAILABLE`/`MISMATCH`)
 
 Else `status = "pending"` and numeric fields null/empty.
 
 | Field | Rule |
 |-------|------|
 | `status` | `"published"` iff gates above hold; else `"pending"` |
-| `lastUpdatedAt` | max verified_at / commitment updates / settings.updated_at when published |
+| `lastUpdatedAt` | max timestamp among authoritative inputs used in the snapshot: VERIFIED transaction changes (`verified_at`/`updated_at`), commitment lifecycle changes, latest balance reconciliation `created_at`, ideal annual budget activation/change, latest runway snapshot `created_at`, funding-need / publication-settings changes. Must not be older than any material input used. |
 | `stageLabel` | settings |
 | `idealAnnualBudget` | ACTIVE+PUBLIC ideal |
-| `resources.entered` | Σ A for VERIFIED `CONTRIBUTION` (+ inbound REFUND to contributions policy: count under contribution net, not double-count cash) — **operational display:** sum of VERIFIED contribution inflows’ accounting micros |
-| `resources.spent` | Σ A for VERIFIED `EXPENSE` |
+| `resources.entered` / `spent` / `remaining` | §9.3 |
 | `resources.allocated` | `activeCommittedFunds` (derived) |
-| `resources.remaining` | `accountingCashBalance` (accounting cash, not free) |
 | `resources.neededNext` | primary public funding need: required − derived funded; else null |
 | `currentFreeFunds` | from §9.2 |
 | `budget.planned` | active public budget planned |
 | `budget.funded` | Σ VERIFIED contributions with `budget_id = active_budget` |
-| `budget.committed` | Σ active commitments for that budget (`APPROVED`+`RELEASED`) |
-| `budget.spent` | Σ VERIFIED expenses with that `budget_id` |
-| `budget.remaining` | `planned − spent` (signed exact) |
+| `budget.committed` | Σ active commitments for that budget (`APPROVED`+`RELEASED`) — separate visible field |
+| `budget.spent` | Σ VERIFIED expenses with that `budget_id` (and other VERIFIED outflows assigned to the budget per classify rules) |
+| `budget.remaining` | `planned − budget.spent − budget.committed` (exact signed API value; **not** clamped; commitments reduce remaining without being falsely recorded as spent) |
 | `budget.fillRatio` | `clamp(funded/planned,0,1)` if planned>0 else null |
 | `runway.*` | from latest `treasury_runway_snapshots` if ACTIVE plan exists; else pending |
 | `recentActivity` | only `detail_publication = DETAIL_PUBLIC` and `status = VERIFIED` (and not SUPERSEDED) |
-| `work` / `methodologyNote` | settings |
+| `work` / `methodologyNote` | settings; methodology must state `resources.spent` = consolidated cash outflow |
 
-### 9.4 Non-equivalences
+### 9.5 Non-equivalences
 
 | Concept | Definition |
 |---------|------------|
 | On-chain wallet balance | RPC sum — reconciliation control only |
-| `accountingCashBalance` | Σ VERIFIED cash effects |
-| `activeCommittedFunds` | derived from commitment facts |
+| `accountingCashBalance` | Σ VERIFIED cash effects (= `resources.remaining`) |
+| `activeCommittedFunds` / `resources.allocated` | derived from commitment facts |
 | `currentFreeFunds` | accounting cash − active commitments |
+| Contribution totals | §6 share engine — separate from resource-flow entered |
 
 ---
 
@@ -756,14 +962,14 @@ If no ACTIVE burn plan → runway pending.
 | Permission | Use |
 |------------|-----|
 | `admin.treasury.read` | admin reads |
-| `admin.treasury.mutate` | drafts, classify, verify (with preconditions), evidence, budgets, needs, attributions, commitments lifecycle, runway drafts, opening/adjustment entries |
+| `admin.treasury.mutate` | drafts, classify, verify (with preconditions), evidence, budgets, needs, attributions, commitments lifecycle, runway drafts, opening/adjustment entries, ledger inception create/approve |
 | `admin.treasury.publish` | detail publication, Breath enable, activate PUBLIC ideal, activate runway plan, snapshot refresh |
 
 Platform `admin` receives all three. Every sensitive mutation writes `audit_logs`.
 
 ### Backend contracts for DEE-607 (no UI here)
 
-Transaction FSM; detail publication; commitments CRUD/lifecycle; budgets/needs/ideal/runway; evidence; attribution; balance reconciliation view; Breath preview using §9; correction workflow.
+Transaction FSM; detail publication; commitments CRUD/lifecycle; budgets/needs/ideal/runway; evidence; attribution; ledger inception; balance reconciliation view; Breath preview using §9; correction workflow.
 
 Public: `getBreathPublicSnapshot()` server-backed, fail-closed.
 
@@ -816,7 +1022,19 @@ Additive only; forward-fix; disable `breath_enabled` / keep `TREASURY_WATCHER_EN
 
 App-layer auth primary; targeted RLS deny `authenticated`/`anon` on all `treasury_*`; append-only triggers on observations/revisions; service role only; no browser secrets; publication fail-closed.
 
-Release-blocking tests: cross-org denial; non-admin denial; public endpoint never returns internal notes/evidence/admin identities; aggregates include PRIVATE VERIFIED without leaking detail fields; material reconciliation forces pending.
+**Same-organization composite FK integrity (§5.1d)** is mandatory in addition to RLS.
+
+Release-blocking tests:
+
+- cross-org denial (app + DB FK)
+- non-admin denial
+- public endpoint never returns internal notes/evidence/admin identities
+- aggregates include PRIVATE VERIFIED without leaking detail fields
+- material / stale / UNAVAILABLE / MISMATCH reconciliation forces Breath pending
+- impossible kind/direction/cash-effect combinations rejected before VERIFIED
+- commitments reduce `budget.remaining` without being recorded as spent
+- internal transfer coalescing: two observations → one semantic tx → cash effect 0
+- inception + opening balance cannot double-count historical transfers
 
 ---
 
@@ -834,19 +1052,19 @@ Human CONFIRM after Architect corrections → `state.status=approved`. No code.
 
 ### WP-1 — Migration preflight + schema
 
-§13 allocation; tables/enums including commitments, fund bucket registry, runway snapshots, balance reconciliations; RLS. No watcher enablement.
+§13 allocation; tables/enums including ledger inceptions, observation links, commitments, fund bucket registry `(organization_id, code)`, runway snapshots, balance reconciliations; composite same-org FKs; kind/direction CHECKs; RLS. No watcher enablement.
 
 ### WP-2 — Domain services
 
-FSM with orthogonal detail publication; VERIFIED watcher precondition; cash-effect engine; commitment lifecycle; contribution share; audit.
+FSM with orthogonal detail publication; VERIFIED watcher precondition (all linked observations); cash-effect engine; commitment lifecycle; contribution share; inception approval; audit.
 
 ### WP-3 — Treasury watcher (DARK)
 
-Watched addresses; checkpoint; inbound+outbound; idempotency; confirmation; never verify.
+Inception-seeded checkpoint; watched addresses; inbound+outbound; address-relative observation idempotency; semantic Transfer coalescing (esp. internal A→B); confirmation; temporally exact balance reconciliation emission; never verify; never assign governance meaning.
 
 ### WP-4 — Admin backend HTTP contracts
 
-Permissions + mutation APIs for DEE-607; no UI.
+Permissions + mutation APIs for DEE-607 (incl. inception); no UI.
 
 ### WP-5 — Evidence storage adapter
 
@@ -854,15 +1072,15 @@ Implement only after HD-3 storage path approval; interface ready earlier.
 
 ### WP-6 — Breath read model + runway snapshots
 
-§9 formulas; fail-closed reconciliation; as-of runway tests.
+§9 formulas (`entered`/`spent`/`remaining` identity; budget.remaining with commitments); fail-closed reconciliation freshness; as-of runway tests; complete `lastUpdatedAt` inputs.
 
 ### WP-7 — Contribution share engine
 
-VERIFIED-only; unmatched in denominator; expenses do not dilute; nominal policy tests.
+VERIFIED-only; unmatched in denominator; expenses do not dilute; nominal policy tests. Unchanged share semantics.
 
 ### WP-8 — Isolation + R5-safe Postgres tests
 
-Including verify-precondition, aggregate-vs-detail separation, commitment derivation, balance recon mismatch fail-closed.
+Verify-precondition; aggregate-vs-detail separation; commitment derivation; budget.remaining; internal-transfer coalescing; inception double-count prevention; same-org FK isolation; recon as-of / stale / UNAVAILABLE fail-closed.
 
 ### WP-9 — PR readiness
 
@@ -876,8 +1094,8 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 |------|-------|------|
 | Architect review + Human architecture approval | T3 gates | before implement |
 | lint / typecheck / build | pnpm | PR readiness |
-| Unit: FSM, verify precondition, cash equation, commitments, runway as-of, share, fail-closed recon | targeted | WP-2/6/7/8 |
-| Postgres isolation on :54339 | dedicated compose | WP-8 |
+| Unit: FSM, verify precondition, cash equation, resource identity, budget.remaining, commitments, runway as-of, share, recon as-of/freshness, internal coalescing, inception | targeted | WP-2/3/6/7/8 |
+| Postgres isolation + same-org FK on :54339 | dedicated compose | WP-8 |
 | Empty-DB migration apply main+DEE-606 | §13 | PR readiness |
 | Merge-order gate vs DEE-518 | §13 | before Human merge |
 | E2E | DEE-607 owns admin e2e | — |
@@ -896,9 +1114,11 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 | Audit + isolation tests | §§14–15,17 |
 | Domain ownership before migration | §1 |
 | Schema + state machines | §§4–5 |
-| Watcher idempotency + verify precondition | §7 |
+| Watcher idempotency + verify precondition + internal coalescing + inception | §§5.1c,5.5b,7 |
 | Contribution map data truth | §6 |
 | Migration + merge-order safety | §13 |
+| Temporally exact recon + freshness | §5.15 |
+| Resource entered/spent/remaining identity | §9.3 |
 
 ---
 
@@ -935,18 +1155,18 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 
 1. Domain ownership: **Core Treasury domain (A)** — §1  
 2. Payment/watcher reuse: patterns yes; billing tables/checkpoint/flag no — §2  
-3. Schema/dictionary: §5 (incl. commitments, snapshots, recon, fund registry)  
+3. Schema/dictionary: §5 (incl. inception, observation links, commitments, snapshots, recon, fund registry, same-org FKs)  
 4. State machines: accounting FSM + detail publication — §4  
 5. Contribution share: VERIFIED + nominal policy — §6  
-6. Watcher + VERIFIED precondition — §7  
+6. Watcher + VERIFIED precondition + coalescing + inception — §7  
 7. Evidence — §8  
-8. Breath + accounting formulas — §9  
+8. Breath + accounting formulas (resource identity; budget.remaining) — §9  
 9. Ideal annual budget — §10  
 10. Runway as-of — §11  
 11. Admin/audit — §12  
 12. Privacy/publication — §§4.2,6,9  
 13. Migration + merge-order — §13  
-14. RLS/security — §14  
+14. RLS/security + same-org integrity — §14  
 15. R5-safe DB — §15  
 16. Work packages — §16  
 17. Validation — §17  
@@ -958,6 +1178,8 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 
 **Markers**
 
-- Prior draft commit: `a95b9c1c27b9d98df66cfb944c292dd1967e5f5e`
-- `state.status`: **draft** (Architect corrections complete; awaiting Human review)
-- `DEE_606_CORRECTED_CANONICAL_PLAN_READY_FOR_SECOND_HUMAN_REVIEW`
+- First draft commit: `a95b9c1c27b9d98df66cfb944c292dd1967e5f5e`
+- Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
+- `state.status`: **draft** (final integrity corrections complete; awaits Human architecture approval)
+- Prior Architect decisions remain intact: T3; Core Treasury domain; accounting/detail separation; VERIFIED accounting truth; contribution share; commitment facts; deterministic runway snapshots; migration merge-order gate; dark watcher; no DEE-612/613 hard-coded doctrine
+- `DEE_606_FINAL_CANONICAL_PLAN_READY_FOR_HUMAN_ARCHITECTURE_APPROVAL`
