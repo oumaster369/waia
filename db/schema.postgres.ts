@@ -11,6 +11,8 @@
 import {
   bigint,
   boolean,
+  check,
+  date,
   foreignKey,
   index,
   integer,
@@ -18,6 +20,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
@@ -41,6 +44,24 @@ import {
   paymentWalletKindEnum,
   platformRoleEnum,
   subscriptionStatusEnum,
+  treasuryAddressDirectionScopeEnum,
+  treasuryAttributionStatusEnum,
+  treasuryBalanceReconStatusEnum,
+  treasuryBudgetStatusEnum,
+  treasuryCommitmentStatusEnum,
+  treasuryDetailPublicationEnum,
+  treasuryEvidenceKindEnum,
+  treasuryEvidenceVisibilityEnum,
+  treasuryFundingNeedStatusEnum,
+  treasuryIdealBudgetPublicationEnum,
+  treasuryIdealBudgetStatusEnum,
+  treasuryInceptionStatusEnum,
+  treasuryObservationStatusEnum,
+  treasuryProvenanceEnum,
+  treasuryRunwayPlanStatusEnum,
+  treasuryTxDirectionEnum,
+  treasuryTxKindEnum,
+  treasuryTxStatusEnum,
   waiaModuleEnum,
 } from "@/db/core-enums";
 
@@ -81,6 +102,62 @@ export const paymentAddressEventTypeEnumPg = pgEnum("payment_address_event_type"
 export const paymentAddressStatusEnumPg = pgEnum("payment_address_status", [
   ...paymentAddressStatusEnum,
 ]);
+
+/** DEE-606 Core Treasury / Transparency enums. */
+export const treasuryTxStatusPgEnum = pgEnum("treasury_tx_status", [...treasuryTxStatusEnum]);
+export const treasuryDetailPublicationPgEnum = pgEnum(
+  "treasury_detail_publication",
+  [...treasuryDetailPublicationEnum],
+);
+export const treasuryTxDirectionPgEnum = pgEnum("treasury_tx_direction", [...treasuryTxDirectionEnum]);
+export const treasuryTxKindPgEnum = pgEnum("treasury_tx_kind", [...treasuryTxKindEnum]);
+export const treasuryProvenancePgEnum = pgEnum("treasury_provenance", [...treasuryProvenanceEnum]);
+export const treasuryBudgetStatusPgEnum = pgEnum("treasury_budget_status", [...treasuryBudgetStatusEnum]);
+export const treasuryFundingNeedStatusPgEnum = pgEnum(
+  "treasury_funding_need_status",
+  [...treasuryFundingNeedStatusEnum],
+);
+export const treasuryCommitmentStatusPgEnum = pgEnum(
+  "treasury_commitment_status",
+  [...treasuryCommitmentStatusEnum],
+);
+export const treasuryEvidenceKindPgEnum = pgEnum("treasury_evidence_kind", [...treasuryEvidenceKindEnum]);
+export const treasuryEvidenceVisibilityPgEnum = pgEnum(
+  "treasury_evidence_visibility",
+  [...treasuryEvidenceVisibilityEnum],
+);
+export const treasuryAttributionStatusPgEnum = pgEnum(
+  "treasury_attribution_status",
+  [...treasuryAttributionStatusEnum],
+);
+export const treasuryAddressDirectionScopePgEnum = pgEnum(
+  "treasury_address_direction_scope",
+  [...treasuryAddressDirectionScopeEnum],
+);
+export const treasuryBalanceReconStatusPgEnum = pgEnum(
+  "treasury_balance_recon_status",
+  [...treasuryBalanceReconStatusEnum],
+);
+export const treasuryInceptionStatusPgEnum = pgEnum(
+  "treasury_inception_status",
+  [...treasuryInceptionStatusEnum],
+);
+export const treasuryIdealBudgetStatusPgEnum = pgEnum(
+  "treasury_ideal_budget_status",
+  [...treasuryIdealBudgetStatusEnum],
+);
+export const treasuryIdealBudgetPublicationPgEnum = pgEnum(
+  "treasury_ideal_budget_publication",
+  [...treasuryIdealBudgetPublicationEnum],
+);
+export const treasuryRunwayPlanStatusPgEnum = pgEnum(
+  "treasury_runway_plan_status",
+  [...treasuryRunwayPlanStatusEnum],
+);
+export const treasuryObservationStatusPgEnum = pgEnum(
+  "treasury_observation_status",
+  [...treasuryObservationStatusEnum],
+);
 
 /**
  * Application user row in `public.users`.
@@ -3822,6 +3899,735 @@ export const traderKnowledgeConfidenceUpdateRecord = pgTable(
     uniqueIndex("tkcur_org_idempotency_key_uq").on(t.organizationId, t.idempotencyKey),
   ],
 );
+
+/**
+ * DEE-606 Core Treasury / Transparency persistence (WP-1 schema mirror).
+ * SQL authority: 0148_treasury_transparency_ledger_foundation.sql + 0149 RLS.
+ * Circular FKs (transactions ↔ ledger_inceptions; latest_revision pointer) are enforced in SQL.
+ */
+
+export const treasuryFundBuckets = pgTable(
+  "treasury_fund_buckets",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    title: text("title").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ name: "treasury_fund_buckets_pk", columns: [t.organizationId, t.code] })],
+);
+
+export const treasuryWatchedAddresses = pgTable(
+  "treasury_watched_addresses",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    network: text("network").notNull(),
+    address: text("address").notNull(),
+    tokenContract: text("token_contract").notNull(),
+    assetCode: text("asset_code").notNull(),
+    directionScope: treasuryAddressDirectionScopePgEnum("direction_scope").notNull(),
+    includeInBalanceRecon: boolean("include_in_balance_recon").notNull().default(true),
+    label: text("label").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_watched_addresses_id_org_unique_fk_source").on(t.id, t.organizationId),
+    uniqueIndex("treasury_watched_addresses_network_address_contract_unique").on(
+      t.network,
+      t.address,
+      t.tokenContract,
+    ),
+    index("treasury_watched_addresses_org_active_idx").on(t.organizationId, t.isActive),
+  ],
+);
+
+export const treasuryWatcherCheckpoints = pgTable("treasury_watcher_checkpoints", {
+  checkpointKey: text("checkpoint_key").primaryKey(),
+  lastScannedBlock: text("last_scanned_block").notNull(),
+  lastScannedAt: timestamp("last_scanned_at", { withTimezone: true, mode: "date" }).notNull(),
+  leaseUntil: timestamp("lease_until", { withTimezone: true, mode: "date" }),
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true, mode: "date" }),
+  cycleCount: integer("cycle_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
+
+export const treasuryEvidenceObjects = pgTable(
+  "treasury_evidence_objects",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    storageBackend: text("storage_backend").notNull(),
+    objectKey: text("object_key").notNull(),
+    mediaType: text("media_type").notNull(),
+    byteSize: bigint("byte_size", { mode: "bigint" }).notNull(),
+    sha256: text("sha256").notNull(),
+    kind: treasuryEvidenceKindPgEnum("kind").notNull(),
+    visibility: treasuryEvidenceVisibilityPgEnum("visibility").notNull().default("ADMIN_ONLY"),
+    source: text("source").notNull(),
+    uploadedByUserId: uuid("uploaded_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    observedAt: timestamp("observed_at", { withTimezone: true, mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [unique("treasury_evidence_objects_id_org_unique_fk_source").on(t.id, t.organizationId)],
+);
+
+export const treasuryBudgets = pgTable(
+  "treasury_budgets",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    title: text("title").notNull(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    currency: text("currency").notNull(),
+    plannedAmountMicros: bigint("planned_amount_micros", { mode: "bigint" }).notNull(),
+    status: treasuryBudgetStatusPgEnum("status").notNull(),
+    isPublic: boolean("is_public").notNull().default(false),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_budgets_id_org_unique_fk_source").on(t.id, t.organizationId),
+    uniqueIndex("treasury_budgets_org_code_unique").on(t.organizationId, t.code),
+    check("treasury_budgets_planned_positive", sql`"planned_amount_micros" > 0`),
+  ],
+);
+
+export const treasuryFundingNeeds = pgTable(
+  "treasury_funding_needs",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    publicExplanation: text("public_explanation"),
+    targetStage: text("target_stage"),
+    requiredAmountMicros: bigint("required_amount_micros", { mode: "bigint" }).notNull(),
+    currency: text("currency").notNull(),
+    status: treasuryFundingNeedStatusPgEnum("status").notNull(),
+    isPublic: boolean("is_public").notNull().default(false),
+    budgetId: uuid("budget_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_funding_needs_id_org_unique_fk_source").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.budgetId, t.organizationId],
+      foreignColumns: [treasuryBudgets.id, treasuryBudgets.organizationId],
+      name: "treasury_funding_needs_budget_same_org_fk",
+    }).onDelete("set null"),
+    check("treasury_funding_needs_required_positive", sql`"required_amount_micros" > 0`),
+  ],
+);
+
+export const treasuryRunwayPlans = pgTable(
+  "treasury_runway_plans",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    method: text("method").notNull().default("APPROVED_PLANNED_BURN"),
+    currency: text("currency").notNull(),
+    dailyBurnMicros: bigint("daily_burn_micros", { mode: "bigint" }).notNull(),
+    effectiveFrom: timestamp("effective_from", { withTimezone: true, mode: "date" }).notNull(),
+    effectiveTo: timestamp("effective_to", { withTimezone: true, mode: "date" }),
+    status: treasuryRunwayPlanStatusPgEnum("status").notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_runway_plans_id_org_unique_fk_source").on(t.id, t.organizationId),
+    check("treasury_runway_plans_burn_positive", sql`"daily_burn_micros" > 0`),
+  ],
+);
+
+export const treasuryPublicationSettings = pgTable(
+  "treasury_publication_settings",
+  {
+    organizationId: uuid("organization_id")
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    breathEnabled: boolean("breath_enabled").notNull().default(false),
+    stageLabel: text("stage_label"),
+    workSummary: text("work_summary"),
+    methodologyNote: text("methodology_note").notNull(),
+    recentActivityLimit: integer("recent_activity_limit").notNull().default(5),
+    updatedByUserId: uuid("updated_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("treasury_publication_settings_recent_limit_positive", sql`"recent_activity_limit" > 0`),
+  ],
+);
+
+export const treasuryIdealAnnualBudgets = pgTable(
+  "treasury_ideal_annual_budgets",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    periodYear: integer("period_year").notNull(),
+    currency: text("currency").notNull(),
+    amountMicros: bigint("amount_micros", { mode: "bigint" }).notNull(),
+    effectiveFrom: timestamp("effective_from", { withTimezone: true, mode: "date" }).notNull(),
+    effectiveTo: timestamp("effective_to", { withTimezone: true, mode: "date" }),
+    status: treasuryIdealBudgetStatusPgEnum("status").notNull(),
+    publicationState: treasuryIdealBudgetPublicationPgEnum("publication_state").notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("treasury_ideal_annual_budgets_active_public_unique")
+      .on(t.organizationId, t.periodYear)
+      .where(sql`"status" = 'ACTIVE' AND "publication_state" = 'PUBLIC'`),
+    check("treasury_ideal_annual_budgets_amount_positive", sql`"amount_micros" > 0`),
+  ],
+);
+
+export const treasuryChainObservations = pgTable(
+  "treasury_chain_observations",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    watchedAddressId: uuid("watched_address_id").notNull(),
+    network: text("network").notNull(),
+    tokenContract: text("token_contract").notNull(),
+    assetCode: text("asset_code").notNull(),
+    txHash: text("tx_hash").notNull(),
+    transferIndex: integer("transfer_index").notNull(),
+    fromAddress: text("from_address").notNull(),
+    toAddress: text("to_address").notNull(),
+    direction: treasuryTxDirectionPgEnum("direction").notNull(),
+    nativeAmountAtomic: bigint("native_amount_atomic", { mode: "bigint" }).notNull(),
+    nativeDecimals: smallint("native_decimals").notNull(),
+    blockHeight: text("block_height").notNull(),
+    blockTimestamp: timestamp("block_timestamp", { withTimezone: true, mode: "date" }),
+    observedAt: timestamp("observed_at", { withTimezone: true, mode: "date" }).notNull(),
+    confirmationsObserved: integer("confirmations_observed").notNull(),
+    confirmationsRequired: integer("confirmations_required").notNull(),
+    observationStatus: treasuryObservationStatusPgEnum("observation_status").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    ingestionSource: text("ingestion_source").notNull(),
+    rawEventDigest: text("raw_event_digest").notNull(),
+    relatedPaymentId: uuid("related_payment_id").references(() => payments.paymentId, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_chain_observations_id_org_unique_fk_source").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.watchedAddressId, t.organizationId],
+      foreignColumns: [treasuryWatchedAddresses.id, treasuryWatchedAddresses.organizationId],
+      name: "treasury_chain_observations_watched_address_same_org_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("treasury_chain_observations_idempotency_unique").on(t.idempotencyKey),
+    uniqueIndex("treasury_chain_observations_transfer_address_unique").on(
+      t.network,
+      t.txHash,
+      t.transferIndex,
+      t.watchedAddressId,
+    ),
+    index("treasury_chain_observations_org_observed_idx").on(t.organizationId, t.observedAt),
+    check("treasury_chain_observations_direction_scope", sql`"direction" IN ('INFLOW', 'OUTFLOW')`),
+    check("treasury_chain_observations_native_nonneg", sql`"native_amount_atomic" >= 0`),
+    check("treasury_chain_observations_decimals_nonneg", sql`"native_decimals" >= 0`),
+    check(
+      "treasury_chain_observations_confirmations_nonneg",
+      sql`"confirmations_observed" >= 0 AND "confirmations_required" > 0`,
+    ),
+  ],
+);
+
+export const treasuryTransactions = pgTable(
+  "treasury_transactions",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    status: treasuryTxStatusPgEnum("status").notNull(),
+    detailPublication: treasuryDetailPublicationPgEnum("detail_publication")
+      .notNull()
+      .default("PRIVATE"),
+    provenance: treasuryProvenancePgEnum("provenance").notNull(),
+    canonicalNetwork: text("canonical_network"),
+    canonicalTokenContract: text("canonical_token_contract"),
+    canonicalTxHash: text("canonical_tx_hash"),
+    canonicalTransferIndex: integer("canonical_transfer_index"),
+    direction: treasuryTxDirectionPgEnum("direction").notNull(),
+    kind: treasuryTxKindPgEnum("kind"),
+    fundBucketCode: text("fund_bucket_code").notNull().default("UNASSIGNED"),
+    nativeAmountAtomic: bigint("native_amount_atomic", { mode: "bigint" }).notNull(),
+    nativeDecimals: smallint("native_decimals").notNull(),
+    nativeAsset: text("native_asset").notNull(),
+    nativeContract: text("native_contract"),
+    accountingAmountMicros: bigint("accounting_amount_micros", { mode: "bigint" }),
+    accountingDenominationPolicy: text("accounting_denomination_policy"),
+    cashEffectMicros: bigint("cash_effect_micros", { mode: "bigint" }),
+    counterpartyIsInternal: boolean("counterparty_is_internal").notNull().default(false),
+    occurredAt: timestamp("occurred_at", { withTimezone: true, mode: "date" }).notNull(),
+    purpose: text("purpose"),
+    category: text("category"),
+    counterpartyDisplay: text("counterparty_display"),
+    publishCounterparty: boolean("publish_counterparty").notNull().default(false),
+    projectModule: text("project_module"),
+    milestoneStage: text("milestone_stage"),
+    budgetId: uuid("budget_id"),
+    fundingNeedId: uuid("funding_need_id"),
+    description: text("description"),
+    internalNotes: text("internal_notes"),
+    publicDescription: text("public_description"),
+    txHash: text("tx_hash"),
+    correctsTransactionId: uuid("corrects_transaction_id"),
+    duplicateOfTransactionId: uuid("duplicate_of_transaction_id"),
+    detailSupersededById: uuid("detail_superseded_by_id"),
+    ledgerInceptionId: uuid("ledger_inception_id"), // composite FK in SQL (circular with treasury_ledger_inceptions)
+    verifiedAt: timestamp("verified_at", { withTimezone: true, mode: "date" }),
+    verifiedByUserId: uuid("verified_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    detailPublishedAt: timestamp("detail_published_at", { withTimezone: true, mode: "date" }),
+    detailPublishedByUserId: uuid("detail_published_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    latestRevisionId: uuid("latest_revision_id"), // pointer; FK not modeled (circular)
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_transactions_id_org_unique_fk_source").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.organizationId, t.fundBucketCode],
+      foreignColumns: [treasuryFundBuckets.organizationId, treasuryFundBuckets.code],
+      name: "treasury_transactions_fund_bucket_same_org_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.budgetId, t.organizationId],
+      foreignColumns: [treasuryBudgets.id, treasuryBudgets.organizationId],
+      name: "treasury_transactions_budget_same_org_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [t.fundingNeedId, t.organizationId],
+      foreignColumns: [treasuryFundingNeeds.id, treasuryFundingNeeds.organizationId],
+      name: "treasury_transactions_funding_need_same_org_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [t.correctsTransactionId, t.organizationId],
+      foreignColumns: [t.id, t.organizationId],
+      name: "treasury_transactions_corrects_same_org_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [t.duplicateOfTransactionId, t.organizationId],
+      foreignColumns: [t.id, t.organizationId],
+      name: "treasury_transactions_duplicate_of_same_org_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [t.detailSupersededById, t.organizationId],
+      foreignColumns: [t.id, t.organizationId],
+      name: "treasury_transactions_detail_superseded_same_org_fk",
+    }).onDelete("set null"),
+    uniqueIndex("treasury_transactions_canonical_transfer_unique")
+      .on(
+        t.organizationId,
+        t.canonicalNetwork,
+        t.canonicalTokenContract,
+        t.canonicalTxHash,
+        t.canonicalTransferIndex,
+      )
+      .where(sql`"canonical_tx_hash" IS NOT NULL`),
+    index("treasury_transactions_org_status_idx").on(t.organizationId, t.status),
+    index("treasury_transactions_org_detail_pub_idx").on(t.organizationId, t.detailPublication),
+    index("treasury_transactions_org_occurred_idx").on(t.organizationId, t.occurredAt),
+    index("treasury_transactions_budget_idx").on(t.budgetId),
+    index("treasury_transactions_kind_status_idx").on(t.kind, t.status),
+    check("treasury_transactions_native_nonneg", sql`"native_amount_atomic" >= 0`),
+    check("treasury_transactions_decimals_nonneg", sql`"native_decimals" >= 0`),
+    check(
+      "treasury_transactions_accounting_nonneg",
+      sql`"accounting_amount_micros" IS NULL OR "accounting_amount_micros" >= 0`,
+    ),
+    check(
+      "treasury_transactions_kind_direction",
+      sql`"kind" IS NULL OR (
+			("kind" = 'OPENING_BALANCE' AND "direction" = 'INFLOW') OR
+			("kind" = 'CONTRIBUTION' AND "direction" = 'INFLOW') OR
+			("kind" = 'EXTERNAL_INFLOW' AND "direction" = 'INFLOW') OR
+			("kind" = 'EXPENSE' AND "direction" = 'OUTFLOW') OR
+			("kind" = 'EXTERNAL_OUTFLOW' AND "direction" = 'OUTFLOW') OR
+			("kind" = 'INTERNAL_TRANSFER' AND "direction" = 'INTERNAL') OR
+			("kind" = 'REFUND' AND "direction" IN ('INFLOW', 'OUTFLOW')) OR
+			("kind" = 'CORRECTION' AND "direction" IN ('INFLOW', 'OUTFLOW')) OR
+			("kind" = 'BALANCE_ADJUSTMENT' AND "direction" IN ('INFLOW', 'OUTFLOW'))
+		)`,
+    ),
+    check(
+      "treasury_transactions_cash_effect_consistency",
+      sql`"kind" IS NULL OR "cash_effect_micros" IS NULL OR "accounting_amount_micros" IS NULL OR (
+			("kind" = 'INTERNAL_TRANSFER' AND "cash_effect_micros" = 0) OR
+			("kind" IN ('OPENING_BALANCE', 'CONTRIBUTION', 'EXTERNAL_INFLOW') AND "cash_effect_micros" = "accounting_amount_micros" AND "accounting_amount_micros" > 0) OR
+			("kind" IN ('EXPENSE', 'EXTERNAL_OUTFLOW') AND "cash_effect_micros" = -"accounting_amount_micros" AND "accounting_amount_micros" > 0) OR
+			("kind" = 'REFUND' AND (
+				("direction" = 'INFLOW' AND "cash_effect_micros" = "accounting_amount_micros" AND "accounting_amount_micros" > 0) OR
+				("direction" = 'OUTFLOW' AND "cash_effect_micros" = -"accounting_amount_micros" AND "accounting_amount_micros" > 0)
+			)) OR
+			("kind" IN ('CORRECTION', 'BALANCE_ADJUSTMENT') AND "cash_effect_micros" <> 0 AND (
+				("cash_effect_micros" > 0 AND "direction" = 'INFLOW') OR
+				("cash_effect_micros" < 0 AND "direction" = 'OUTFLOW')
+			))
+		)`,
+    ),
+    check(
+      "treasury_transactions_canonical_tuple_complete",
+      sql`("canonical_network" IS NULL AND "canonical_token_contract" IS NULL AND "canonical_tx_hash" IS NULL AND "canonical_transfer_index" IS NULL)
+		OR
+		("canonical_network" IS NOT NULL AND "canonical_token_contract" IS NOT NULL AND "canonical_tx_hash" IS NOT NULL AND "canonical_transfer_index" IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const treasuryLedgerInceptions = pgTable(
+  "treasury_ledger_inceptions",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    network: text("network").notNull(),
+    tokenContract: text("token_contract").notNull(),
+    assetCode: text("asset_code").notNull(),
+    inceptionBlock: text("inception_block").notNull(),
+    inceptionBlockHash: text("inception_block_hash"),
+    inceptionTime: timestamp("inception_time", { withTimezone: true, mode: "date" }).notNull(),
+    openingBalanceTransactionId: uuid("opening_balance_transaction_id").notNull(),
+    watcherStartBlock: text("watcher_start_block").notNull(),
+    evidenceObjectId: uuid("evidence_object_id"),
+    status: treasuryInceptionStatusPgEnum("status").notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    approvedByUserId: uuid("approved_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_ledger_inceptions_id_org_unique_fk_source").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.openingBalanceTransactionId, t.organizationId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.organizationId],
+      name: "treasury_ledger_inceptions_opening_balance_same_org_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.evidenceObjectId, t.organizationId],
+      foreignColumns: [treasuryEvidenceObjects.id, treasuryEvidenceObjects.organizationId],
+      name: "treasury_ledger_inceptions_evidence_same_org_fk",
+    }).onDelete("set null"),
+    uniqueIndex("treasury_ledger_inceptions_active_unique")
+      .on(t.organizationId, t.network, t.tokenContract)
+      .where(sql`"status" = 'ACTIVE'`),
+  ],
+);
+
+export const treasuryTransactionObservationLinks = pgTable(
+  "treasury_transaction_observation_links",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    transactionId: uuid("transaction_id").notNull(),
+    observationId: uuid("observation_id").notNull(),
+    observationRole: text("observation_role").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.transactionId, t.organizationId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.organizationId],
+      name: "treasury_tx_obs_links_tx_same_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.observationId, t.organizationId],
+      foreignColumns: [treasuryChainObservations.id, treasuryChainObservations.organizationId],
+      name: "treasury_tx_obs_links_obs_same_org_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("treasury_tx_obs_links_tx_obs_unique").on(t.transactionId, t.observationId),
+    uniqueIndex("treasury_tx_obs_links_observation_unique").on(t.observationId),
+    check(
+      "treasury_tx_obs_links_role_check",
+      sql`"observation_role" IN ('PRIMARY', 'INTERNAL_COUNTERPARTY', 'SECONDARY')`,
+    ),
+  ],
+);
+
+export const treasuryTransactionRevisions = pgTable(
+  "treasury_transaction_revisions",
+  {
+    id: uuid("id").primaryKey(),
+    transactionId: uuid("transaction_id").notNull(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    patchJson: jsonb("patch_json").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorType: text("actor_type").notNull(),
+    reason: text("reason"),
+    contentDigest: text("content_digest").notNull(),
+    prevRevisionDigest: text("prev_revision_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.transactionId, t.organizationId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.organizationId],
+      name: "treasury_transaction_revisions_tx_same_org_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("treasury_transaction_revisions_tx_seq_unique").on(t.transactionId, t.seq),
+  ],
+);
+
+export const treasuryEvidenceLinks = pgTable(
+  "treasury_evidence_links",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    transactionId: uuid("transaction_id").notNull(),
+    evidenceObjectId: uuid("evidence_object_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.transactionId, t.organizationId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.organizationId],
+      name: "treasury_evidence_links_tx_same_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.evidenceObjectId, t.organizationId],
+      foreignColumns: [treasuryEvidenceObjects.id, treasuryEvidenceObjects.organizationId],
+      name: "treasury_evidence_links_evidence_same_org_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("treasury_evidence_links_tx_evidence_unique").on(t.transactionId, t.evidenceObjectId),
+  ],
+);
+
+export const treasuryContributionAttributions = pgTable(
+  "treasury_contribution_attributions",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    transactionId: uuid("transaction_id").notNull(),
+    status: treasuryAttributionStatusPgEnum("status").notNull(),
+    contributorUserId: uuid("contributor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    attributionMethod: text("attribution_method").notNull(),
+    consentPublicIdentity: boolean("consent_public_identity").notNull().default(false),
+    note: text("note"),
+    attributedByUserId: uuid("attributed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    attributedAt: timestamp("attributed_at", { withTimezone: true, mode: "date" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.transactionId, t.organizationId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.organizationId],
+      name: "treasury_contribution_attributions_tx_same_org_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("treasury_contribution_attributions_open_tx_unique")
+      .on(t.transactionId)
+      .where(sql`"revoked_at" IS NULL`),
+  ],
+);
+
+export const treasuryCommitments = pgTable(
+  "treasury_commitments",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    budgetId: uuid("budget_id"),
+    amountMicros: bigint("amount_micros", { mode: "bigint" }).notNull(),
+    currency: text("currency").notNull(),
+    purpose: text("purpose").notNull(),
+    counterpartyDisplay: text("counterparty_display"),
+    publishCounterparty: boolean("publish_counterparty").notNull().default(false),
+    detailPublication: treasuryDetailPublicationPgEnum("detail_publication")
+      .notNull()
+      .default("PRIVATE"),
+    expectedAt: date("expected_at"),
+    effectiveFrom: timestamp("effective_from", { withTimezone: true, mode: "date" }).notNull(),
+    status: treasuryCommitmentStatusPgEnum("status").notNull(),
+    evidenceObjectId: uuid("evidence_object_id"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true, mode: "date" }),
+    releasedByUserId: uuid("released_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    releasedAt: timestamp("released_at", { withTimezone: true, mode: "date" }),
+    fulfilledByUserId: uuid("fulfilled_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    fulfilledAt: timestamp("fulfilled_at", { withTimezone: true, mode: "date" }),
+    cancelledByUserId: uuid("cancelled_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true, mode: "date" }),
+    fulfillsTransactionId: uuid("fulfills_transaction_id"),
+    recordContentDigest: text("record_content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_commitments_id_org_unique_fk_source").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.budgetId, t.organizationId],
+      foreignColumns: [treasuryBudgets.id, treasuryBudgets.organizationId],
+      name: "treasury_commitments_budget_same_org_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [t.evidenceObjectId, t.organizationId],
+      foreignColumns: [treasuryEvidenceObjects.id, treasuryEvidenceObjects.organizationId],
+      name: "treasury_commitments_evidence_same_org_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [t.fulfillsTransactionId, t.organizationId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.organizationId],
+      name: "treasury_commitments_fulfills_tx_same_org_fk",
+    }).onDelete("set null"),
+    check("treasury_commitments_amount_positive", sql`"amount_micros" > 0`),
+  ],
+);
+
+export const treasuryCommitmentRevisions = pgTable(
+  "treasury_commitment_revisions",
+  {
+    id: uuid("id").primaryKey(),
+    commitmentId: uuid("commitment_id").notNull(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    patchJson: jsonb("patch_json").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorType: text("actor_type").notNull(),
+    reason: text("reason"),
+    contentDigest: text("content_digest").notNull(),
+    prevRevisionDigest: text("prev_revision_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.commitmentId, t.organizationId],
+      foreignColumns: [treasuryCommitments.id, treasuryCommitments.organizationId],
+      name: "treasury_commitment_revisions_commitment_same_org_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("treasury_commitment_revisions_commitment_seq_unique").on(t.commitmentId, t.seq),
+  ],
+);
+
+export const treasuryRunwaySnapshots = pgTable(
+  "treasury_runway_snapshots",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runwayPlanId: uuid("runway_plan_id").notNull(),
+    runwayAsOf: timestamp("runway_as_of", { withTimezone: true, mode: "date" }).notNull(),
+    freeFundsAtAsOfMicros: bigint("free_funds_at_as_of_micros", { mode: "bigint" }).notNull(),
+    approvedDailyBurnMicros: bigint("approved_daily_burn_micros", { mode: "bigint" }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true, mode: "date" }).notNull(),
+    inputDigest: text("input_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.runwayPlanId, t.organizationId],
+      foreignColumns: [treasuryRunwayPlans.id, treasuryRunwayPlans.organizationId],
+      name: "treasury_runway_snapshots_plan_same_org_fk",
+    }).onDelete("cascade"),
+    check("treasury_runway_snapshots_burn_positive", sql`"approved_daily_burn_micros" > 0`),
+    check("treasury_runway_snapshots_free_nonneg", sql`"free_funds_at_as_of_micros" >= 0`),
+  ],
+);
+
+export const treasuryBalanceReconciliations = pgTable(
+  "treasury_balance_reconciliations",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    ledgerInceptionId: uuid("ledger_inception_id"),
+    asOfBlock: text("as_of_block").notNull(),
+    asOfTime: timestamp("as_of_time", { withTimezone: true, mode: "date" }).notNull(),
+    observedOnchainBalanceAtomic: bigint("observed_onchain_balance_atomic", { mode: "bigint" }),
+    accountingCashBalanceMicros: bigint("accounting_cash_balance_micros", { mode: "bigint" }),
+    deltaMicros: bigint("delta_micros", { mode: "bigint" }),
+    explainedPendingMicros: bigint("explained_pending_micros", { mode: "bigint" }).notNull().default(0),
+    unexplainedResidualMicros: bigint("unexplained_residual_micros", { mode: "bigint" }),
+    status: treasuryBalanceReconStatusPgEnum("status").notNull(),
+    toleranceMicros: bigint("tolerance_micros", { mode: "bigint" }).notNull().default(0),
+    evidenceObjectId: uuid("evidence_object_id"),
+    notes: text("notes"),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.ledgerInceptionId, t.organizationId],
+      foreignColumns: [treasuryLedgerInceptions.id, treasuryLedgerInceptions.organizationId],
+      name: "treasury_balance_reconciliations_inception_same_org_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [t.evidenceObjectId, t.organizationId],
+      foreignColumns: [treasuryEvidenceObjects.id, treasuryEvidenceObjects.organizationId],
+      name: "treasury_balance_reconciliations_evidence_same_org_fk",
+    }).onDelete("set null"),
+    index("treasury_balance_reconciliations_org_created_idx").on(t.organizationId, t.createdAt),
+    check("treasury_balance_recon_tolerance_nonneg", sql`"tolerance_micros" >= 0`),
+  ],
+);
+
 
 /**
  * Postgres transaction integration validation table (DEE-64 D6-core).

@@ -109,6 +109,77 @@ export const settlementReconciliationResolutionTypeEnum = [
   "CLOSE_DUPLICATE",
 ] as const;
 
+
+/** DEE-606 Core Treasury / Transparency — accounting review status. */
+export const treasuryTxStatusEnum = [
+  "DETECTED",
+  "MANUAL_DRAFT",
+  "NEEDS_REVIEW",
+  "CLASSIFIED",
+  "VERIFIED",
+  "RECONCILIATION_REQUIRED",
+  "REJECTED",
+  "DUPLICATE",
+] as const;
+
+/** DEE-606 orthogonal detail publication state. */
+export const treasuryDetailPublicationEnum = ["PRIVATE", "DETAIL_PUBLIC", "SUPERSEDED"] as const;
+
+/** DEE-606 treasury cash direction. */
+export const treasuryTxDirectionEnum = ["INFLOW", "OUTFLOW", "INTERNAL"] as const;
+
+/** DEE-606 treasury transaction kind. */
+export const treasuryTxKindEnum = [
+  "OPENING_BALANCE",
+  "CONTRIBUTION",
+  "EXPENSE",
+  "EXTERNAL_INFLOW",
+  "EXTERNAL_OUTFLOW",
+  "INTERNAL_TRANSFER",
+  "REFUND",
+  "CORRECTION",
+  "BALANCE_ADJUSTMENT",
+] as const;
+
+export const treasuryProvenanceEnum = ["WATCHER", "MANUAL"] as const;
+export const treasuryBudgetStatusEnum = ["DRAFT", "ACTIVE", "SUPERSEDED", "ARCHIVED"] as const;
+export const treasuryFundingNeedStatusEnum = [
+  "OPEN",
+  "PARTIALLY_FUNDED",
+  "FUNDED",
+  "CLOSED",
+  "CANCELLED",
+] as const;
+export const treasuryCommitmentStatusEnum = [
+  "DRAFT",
+  "APPROVED",
+  "RELEASED",
+  "FULFILLED",
+  "CANCELLED",
+] as const;
+export const treasuryEvidenceKindEnum = [
+  "RECEIPT",
+  "INVOICE",
+  "CONFIRMATION",
+  "SCREENSHOT",
+  "DOCUMENT",
+  "CHAIN_PROVENANCE",
+] as const;
+export const treasuryEvidenceVisibilityEnum = ["ADMIN_ONLY", "PUBLIC"] as const;
+export const treasuryAttributionStatusEnum = ["UNMATCHED", "ATTRIBUTED", "ANONYMOUS", "REVOKED"] as const;
+export const treasuryAddressDirectionScopeEnum = ["INBOUND", "OUTBOUND", "BOTH"] as const;
+export const treasuryBalanceReconStatusEnum = [
+  "MATCHED",
+  "PENDING_CONFIRMATIONS",
+  "MISMATCH",
+  "UNAVAILABLE",
+] as const;
+export const treasuryInceptionStatusEnum = ["ACTIVE", "SUPERSEDED"] as const;
+export const treasuryIdealBudgetStatusEnum = ["DRAFT", "ACTIVE", "SUPERSEDED"] as const;
+export const treasuryIdealBudgetPublicationEnum = ["PRIVATE", "PUBLIC"] as const;
+export const treasuryRunwayPlanStatusEnum = ["DRAFT", "ACTIVE", "SUPERSEDED"] as const;
+export const treasuryObservationStatusEnum = ["OBSERVED", "CONFIRMED", "DROPPED"] as const;
+
 /**
  * CANCELLED in settlementReconciliationCaseStatusEnum is reserved-forbidden:
  * the S3-C-B FSM never produces it (single terminal = RESOLVED).

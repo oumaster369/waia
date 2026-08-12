@@ -31,7 +31,12 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Run WP-1 implementation preflight under all migration/R5 safety gates (collision-free migration allocation; DEE-518 merge-order gate; dedicated Postgres on port 54339 — never 54329 while R5 active). Do not mark any implementation WP complete until executed."
+  nextAction: "After R5 completion/adjudication, run WP-1 validation on the dedicated DEE-606 Postgres topology at 127.0.0.1:54339, then complete WP-1 only if all schema, migration, RLS and same-org integrity checks pass. Do not start WP-2 until WP-1 is COMPLETE."
+  wp1Authoring:
+    status: AUTHORED_AWAITING_POST_R5_DEDICATED_POSTGRES_VALIDATION
+    authoredAt: "2026-08-12"
+    validation: AWAITING_POST_R5_DEDICATED_POSTGRES_VALIDATION
+    note: "WP-1 implementation artifacts authored (schema + migrations + journal). WP-1 is NOT COMPLETE until dedicated Postgres validation on :54339 passes after R5."
   humanArchitectureApproval:
     status: COMPLETE
     approvedAt: "2026-08-12"
@@ -47,14 +52,18 @@ state:
     HD-5: APPROVED_DEFAULT_PENDING
     HD-7: APPROVED_DARK
   migrationIdentity:
-    disposition: DEFERRED_TO_IMPLEMENTATION_PREFLIGHT
-    frozenTag: null
+    disposition: ALLOCATED_BRANCH_RESERVATION
+    mainTipAtAllocation: "0109"
+    dee518ReservationThrough: "0147"
+    allocatedTags:
+      - 0148_treasury_transparency_ledger_foundation
+      - 0149_treasury_transparency_ledger_rls
     mergeOrderGate: BLOCK_MIGRATION_BEARING_MERGE_WHILE_DEE_518_JOURNAL_UNMERGED
-    note: "Cannot safely freeze 0110+ while DEE-518 reserves 0110–0147. Filename collision avoidance alone is insufficient — see §13 merge-order gate. Binding: a migration-bearing DEE-606 PR cannot Human-merge while journal predecessor assumptions remain only on unmerged DEE-518 work."
+    note: "Branch reservation after max(main tip 0109, DEE-518 reservation 0147). Allocation is NOT permission to Human-merge before DEE-518 journal predecessors exist on main. See §13."
   r5SafePostgres:
     requiredPort: 54339
     forbiddenPortWhileR5Active: 54329
-    note: "Dedicated treasury validate topology only; never stop/recreate waia-postgres-validate-1."
+    note: "Dedicated treasury validate topology only; never stop/recreate waia-postgres-validate-1. WP-1 authoring intentionally skipped apply/validation while R5 authority work was active."
   correctionPass:
     afterSha: a95b9c1c27b9d98df66cfb944c292dd1967e5f5e
     reason: "Independent Architect review corrections (T3, accounting vs detail publication, cash equation, commitments, runway as-of, reconciliation, fund-bucket deferral)."
@@ -1070,7 +1079,7 @@ Dedicated compose `docker-compose.postgres-treasury-validate.yml`; project `waia
 
 ### WP-1 — Migration preflight + schema
 
-§13 allocation; tables/enums including ledger inceptions, observation links, commitments, fund bucket registry `(organization_id, code)`, runway snapshots, balance reconciliations; composite same-org FKs; kind/direction CHECKs; RLS. No watcher enablement.
+**AUTHORED — NOT COMPLETE.** Implementation artifacts authored on branch (`0148` foundation + `0149` RLS/immutability; `db/schema.postgres.ts` + `db/core-enums.ts`; journal idx 110–111). Allocation: after main tip `0109` and DEE-518 reservation through `0147`. Merge-order gate remains binding. **WP-1 validation = `AWAITING_POST_R5_DEDICATED_POSTGRES_VALIDATION`** on `127.0.0.1:54339`. Do not mark COMPLETE until schema/migration/RLS/same-org integrity checks pass. No watcher enablement. HD-3 remains DEFERRED (evidence metadata only).
 
 ### WP-2 — Domain services
 
@@ -1177,8 +1186,9 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 | Human architecture approval | COMPLETE |
 | Plan `state.status` | `approved` |
 | WP-0 | COMPLETE |
-| Current work package | WP-1 |
-| Implementation authorization | AUTHORIZED for WP-1 onward under this canonical plan and remaining gates (migration merge-order; R5-safe port 54339) |
+| Current work package | WP-1 (**AUTHORED**, validation awaiting post-R5 dedicated Postgres on `:54339` — **NOT COMPLETE**) |
+| Migration identities | `0148_treasury_transparency_ledger_foundation`, `0149_treasury_transparency_ledger_rls` (branch reservation; merge-order gate binding) |
+| Implementation authorization | WP-1 artifacts authored; WP-1 COMPLETE only after dedicated validation; WP-2 not authorized yet |
 
 ---
 
@@ -1213,7 +1223,9 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
 - Final integrity / Human-approved architecture source SHA: `82377e4f4869b9bf64f26a9578c2335cdbcb8b15`
 - Approval token: `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`
-- `state.status`: **approved** (Architect review COMPLETE; Human architecture approval COMPLETE; WP-0 COMPLETE; currentWorkPackage WP-1)
-- Binding gates preserved: DEE-518 migration merge-order; R5-safe Postgres port **54339** (never 54329 while R5 active); watcher ships DARK
+- `state.status`: **approved** (Architect review COMPLETE; Human architecture approval COMPLETE; WP-0 COMPLETE; currentWorkPackage WP-1 — **AUTHORED / NOT COMPLETE**)
+- WP-1 validation: **AWAITING_POST_R5_DEDICATED_POSTGRES_VALIDATION** (`127.0.0.1:54339`)
+- Migration reservation: **0148** foundation + **0149** RLS (after main `0109` / DEE-518 through `0147`); merge-order gate binding
+- Binding gates preserved: DEE-518 migration merge-order; R5-safe Postgres port **54339** (never 54329 while R5 active); watcher ships DARK; HD-3 DEFERRED
 - Prior Architect decisions remain intact: T3; Core Treasury domain; accounting/detail separation; VERIFIED accounting truth; contribution share; commitment facts; deterministic runway snapshots; no DEE-612/613 hard-coded doctrine
-- `DEE_606_HUMAN_ARCHITECTURE_APPROVAL_RECORDED_READY_FOR_WP1`
+- `DEE_606_WP1_AUTHORED_AWAITING_POST_R5_VALIDATION`

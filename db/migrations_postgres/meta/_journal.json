@@ -771,6 +771,20 @@
       "when": 1780000000079,
       "tag": "0109_trader_knowledge_confidence_update_record_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1780000000148,
+      "tag": "0148_treasury_transparency_ledger_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1780000000149,
+      "tag": "0149_treasury_transparency_ledger_rls",
+      "breakpoints": true
     }
   ]
 }
