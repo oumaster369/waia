@@ -1,0 +1,60 @@
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.baseline {
+  fill: none;
+  stroke: rgba(140, 185, 200, 0.2);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+}
+
+.wave {
+  fill: none;
+  stroke: rgba(186, 222, 230, 0.82);
+  stroke-width: 1.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wavePending {
+  stroke: rgba(160, 200, 210, 0.48);
+  stroke-width: 1.55;
+}
+
+.waveTrack {
+  transform-box: fill-box;
+  transform-origin: 0 0;
+  transform: translateX(0);
+}
+
+.waveTrackLive {
+  animation: breath-runway-travel 7s linear infinite;
+}
+
+.waveTrackPending {
+  animation: breath-runway-travel 8s linear infinite;
+  opacity: 0.7;
+}
+
+/* One pulse cell of twelve → seamless travel; decorative, not % consumed. */
+@keyframes breath-runway-travel {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-100% / 12));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waveTrackLive,
+  .waveTrackPending {
+    animation: none !important;
+    transform: none !important;
+    opacity: 0.9;
+  }
+}

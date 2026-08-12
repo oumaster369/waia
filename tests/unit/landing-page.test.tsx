@@ -1,8 +1,15 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { AuthBlock } from "@/components/landing/AuthBlock";
+import { BreathSupportCta } from "@/components/landing/BreathSupportCta";
 import { LandingPageContent } from "@/components/landing/landing-page-content";
+import { BreathFundingGauge } from "@/components/landing/visuals/breath-runway-pulse";
+import { getBreathPublicSnapshot } from "@/lib/landing/breath-public";
+import { LEGCO_RESEARCH_URL, WAIA_PUBLIC_GITHUB_URL } from "@/lib/landing/homepage-links";
+import { getModuleReadiness } from "@/lib/landing/module-readiness";
 
 const { mockReplace, mockLocationAssign, routerStub } = vi.hoisted(() => {
   const mockReplace = vi.fn();
@@ -70,13 +77,21 @@ describe("LandingPage", () => {
     });
   }
 
-  it("renders all five blocks in order", async () => {
+  it("renders hero definition, auth, Breath, and core narrative sections", async () => {
     await renderLandingPage();
     expect(screen.getByTestId("landing-hero")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-hero-definition-text")).toHaveTextContent(
+      /human-centered AI environment/i,
+    );
     expect(screen.getByTestId("landing-auth")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-context")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-modules")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-closing")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-ai-twin")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-living-legacy")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-society")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-ai-trader")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-epistemic")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-how-built")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-final-cta")).toBeInTheDocument();
   });
 
   it("loads prepared hero web assets (desktop fallback + mobile source)", async () => {
@@ -85,47 +100,335 @@ describe("LandingPage", () => {
     expect(img).toHaveAttribute("src", "/brand/heap_comp_1.webp");
     const mobileSource = screen.getByTestId("landing-hero-source-mobile");
     expect(mobileSource).toHaveAttribute("srcset", "/brand/head_mobile_1.webp");
-    expect(screen.queryByTestId("landing-hero-logo")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("landing-hero-tagline")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("landing-hero-positioning")).not.toBeInTheDocument();
   });
 
-  it("renders the canonical Context copy", async () => {
+  it("exposes Breath pending contract without invented financial figures", async () => {
     await renderLandingPage();
-    expect(screen.getByTestId("landing-context-anchor")).toHaveTextContent(
-      "You're in the WAIA space.",
+    const snapshot = getBreathPublicSnapshot();
+    expect(snapshot.status).toBe("pending");
+    expect(snapshot.resources.entered).toBeNull();
+    expect(snapshot.idealAnnualBudget.amount).toBeNull();
+    expect(snapshot.currentFreeFunds.amount).toBeNull();
+    expect(snapshot.runway.endsAt).toBeNull();
+    expect(screen.getByTestId("landing-breath-stage")).toHaveAttribute(
+      "data-publication-status",
+      "pending",
     );
-    expect(screen.getByTestId("landing-context-description")).toHaveTextContent(/modular AI ecosystem/i);
-  });
-
-  it("renders the canonical Closing copy", async () => {
-    await renderLandingPage();
-    expect(screen.getByTestId("landing-closing-anchor")).toHaveTextContent("Stay aligned.");
-    expect(screen.getByTestId("landing-closing-narrative")).toHaveTextContent(
-      /First with yourself/i,
+    expect(screen.queryByTestId("landing-breath-status")).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-resource-entered")).toHaveTextContent(
+      /Not yet published/i,
     );
-  });
-
-  it("renders all three module cards in fixed order with canonical copy", async () => {
-    await renderLandingPage();
-    const aiTwin = screen.getByTestId("landing-module-ai-twin");
-    const business = screen.getByTestId("landing-module-3p-business");
-    const marketplace = screen.getByTestId("landing-module-ai-marketplace");
-    expect(aiTwin).toBeInTheDocument();
-    expect(business).toBeInTheDocument();
-    expect(marketplace).toBeInTheDocument();
-    expect(screen.getByTestId("landing-module-ai-twin-description")).toHaveTextContent(/personal digital twin/i);
-    expect(screen.getByTestId("landing-module-3p-business-description")).toHaveTextContent(
-      /Provision, Promotion, and Production/i,
+    expect(screen.getByTestId("landing-breath-github-primary")).toHaveAttribute(
+      "href",
+      WAIA_PUBLIC_GITHUB_URL,
     );
-    expect(screen.getByTestId("landing-module-ai-marketplace-description")).toHaveTextContent(
-      /economic and marketplace/i,
+    expect(screen.getByTestId("landing-breath-github-secondary")).toHaveAttribute(
+      "href",
+      WAIA_PUBLIC_GITHUB_URL,
     );
   });
 
-  it("never renders an AI-Trader card per DEE-8 §9.4", async () => {
+  it("links LEGCO research and GitHub from How WAIA Is Built and final CTA", async () => {
     await renderLandingPage();
-    expect(screen.queryByText(/AI-Trader/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-how-built-legco-cta")).toHaveAttribute(
+      "href",
+      LEGCO_RESEARCH_URL,
+    );
+    expect(screen.getByTestId("landing-how-built-github-cta")).toHaveAttribute(
+      "href",
+      WAIA_PUBLIC_GITHUB_URL,
+    );
+    expect(screen.getByTestId("landing-final-cta-register")).toHaveAttribute("href", "#register");
+    expect(screen.getByTestId("landing-final-cta-breath")).toHaveAttribute(
+      "href",
+      "#breath-of-waia",
+    );
+    expect(screen.getByTestId("landing-breath-interstitial-cta")).toHaveAttribute(
+      "href",
+      "#breath-of-waia",
+    );
+  });
+
+  it("renders AI-TRADER with Product Constitution claim discipline", async () => {
+    await renderLandingPage();
+    expect(screen.getByTestId("landing-ai-trader-identity")).toHaveTextContent(
+      /knowledge|observation becomes hypothesis/i,
+    );
+    expect(screen.getByTestId("landing-ai-trader-restraint")).toHaveTextContent(
+      /not trading is the correct outcome/i,
+    );
+    expect(screen.getByTestId("landing-ai-trader-boundary")).toHaveTextContent(
+      /No promise of profit/i,
+    );
+    expect(screen.queryByTestId("landing-ai-trader-readiness-percent")).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-ai-trader-readiness-scale")).toBeInTheDocument();
+  });
+
+  it("does not render fabricated readiness percentages anywhere on the homepage", async () => {
+    await renderLandingPage();
+    expect(document.body.textContent || "").not.toMatch(/\d+%/);
+    expect(screen.queryByTestId("landing-ai-twin-readiness-percent")).not.toBeInTheDocument();
+  });
+
+  it("renders qualitative maturity facets for AI-TWIN", async () => {
+    await renderLandingPage();
+    expect(screen.getByTestId("landing-ai-twin-readiness-label")).toHaveTextContent(/Operational/i);
+    expect(screen.getByTestId("landing-ai-twin-progression")).toHaveTextContent(
+      /Mirror → Model → Observer → Co-Researcher/,
+    );
+    expect(screen.getByTestId("landing-ai-twin-purpose")).toHaveTextContent(/co-researcher/i);
+  });
+
+  it("renders corrected 3P, Marketplace, and Breath contract surfaces", async () => {
+    await renderLandingPage();
+    expect(screen.getByTestId("landing-business-3p-provision")).toHaveTextContent(
+      /Market research/i,
+    );
+    expect(screen.getByTestId("landing-business-3p-promotion")).toHaveTextContent(
+      /Marketing strategy/i,
+    );
+    expect(screen.getByTestId("landing-business-3p-production")).toHaveTextContent(
+      /Product and service creation/i,
+    );
+    expect(screen.getByTestId("landing-ai-marketplace-waia-path")).toHaveTextContent(/Need →/i);
+    expect(screen.getByTestId("landing-breath-stage")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-stage")).toHaveAttribute(
+      "data-publication-status",
+      "pending",
+    );
+    expect(screen.queryByTestId("landing-breath-status")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Treasury figures pending publication/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-budget")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway")).toHaveAttribute(
+      "data-runway-state",
+      "pending",
+    );
+    expect(screen.getByTestId("landing-breath-runway-now")).toHaveTextContent(/^0$/);
+    expect(screen.getByTestId("landing-breath-runway-end")).toHaveTextContent(
+      /Ideal annual budget/i,
+    );
+    expect(screen.getByTestId("landing-breath-ideal-budget-value")).toHaveTextContent(
+      /Not yet published/i,
+    );
+    expect(screen.getByTestId("landing-breath-runway-pulse")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway-svg")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway-wave")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway-wave").getAttribute("d")).toMatch(/c /i);
+    expect(screen.getByTestId("landing-breath-runway-wave").getAttribute("d")).toContain(
+      "c 20 0 28 -7 40 -7",
+    );
+    expect(screen.queryByTestId("landing-breath-funding-marker")).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-funding-pending")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
+      "data-countdown-region",
+      "pending-lower",
+    );
+    expect(screen.getByTestId("landing-breath-runway-pulse")).toContainElement(
+      screen.getByTestId("landing-breath-countdown"),
+    );
+    const label = screen.getByTestId("landing-breath-runway-label");
+    const countdown = screen.getByTestId("landing-breath-countdown");
+    expect(
+      label.compareDocumentPosition(countdown) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId("landing-breath-runway-svg").compareDocumentPosition(countdown) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByTestId("landing-breath-countdown")).toHaveAttribute(
+      "data-countdown-state",
+      "pending",
+    );
+    expect(screen.getByTestId("landing-breath-countdown-value")).toHaveTextContent(
+      /Awaiting first ledger publication/i,
+    );
+    expect(screen.getByTestId("landing-breath-updated-value")).toHaveTextContent(
+      /Awaiting first ledger publication/i,
+    );
+    expect(screen.getByTestId("landing-breath-methodology").textContent ?? "").not.toMatch(
+      /DEE-\d+/i,
+    );
+    expect(screen.getByTestId("landing-breath").textContent ?? "").not.toMatch(/DEE-\d+/i);
+    expect(screen.getByTestId("landing-breath-support-cta")).toHaveTextContent(
+      "KEEP WAIA BREATHING",
+    );
+    expect(screen.getByTestId("landing-breath-support-cta")).toBeDisabled();
+    expect(screen.getByTestId("landing-breath-support")).toHaveAttribute(
+      "data-support-status",
+      "pending",
+    );
+    expect(screen.getByTestId("landing-breath-support")).toHaveAttribute(
+      "data-support-clickable",
+      "false",
+    );
+    expect(screen.getByTestId("landing-breath-support-pending")).toHaveTextContent(
+      /Support channel will open/i,
+    );
+    expect(screen.getByTestId("landing-breath-github-primary").className).toContain("rounded-xl");
+    expect(screen.getByTestId("landing-breath-github-primary").className).toContain("dcc065");
+    expect(screen.getByTestId("landing-final-cta-register").className).toContain("dcc065");
+    expect(screen.getByTestId("landing-final-cta-research").className).not.toContain("dcc065");
+    expect(screen.getByTestId("landing-breath-inflows-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-outflows-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-living-legacy-example")).toHaveTextContent(/grandchild/i);
+  });
+
+  it("renders published funding marker and fully-funded CTA from authoritative values only", () => {
+    const { unmount: unmountGauge } = render(
+      <BreathFundingGauge
+        status="published"
+        idealAnnualBudget={{ amount: 100_000, currency: "USD" }}
+        currentFreeFunds={{ amount: 42_000, currency: "USD" }}
+        runway={{
+          value: null,
+          unit: null,
+          periodLabel: null,
+          endsAt: "2099-01-01T00:00:00.000Z",
+        }}
+      />,
+    );
+    expect(screen.getByTestId("landing-breath-funding-marker")).toHaveAttribute(
+      "data-marker-ratio",
+      "0.4200",
+    );
+    expect(screen.getByTestId("landing-breath-free-funds-value")).toHaveTextContent("$42,000");
+    expect(screen.getByTestId("landing-breath-ideal-budget-value")).toHaveTextContent("$100,000");
+    expect(screen.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
+      "data-countdown-region",
+      "funded-interval",
+    );
+    expect(screen.getByTestId("landing-breath-runway-pulse")).toContainElement(
+      screen.getByTestId("landing-breath-countdown"),
+    );
+    expect(
+      screen
+        .getByTestId("landing-breath-runway-svg")
+        .compareDocumentPosition(screen.getByTestId("landing-breath-countdown")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByTestId("landing-breath-countdown")).toHaveAttribute(
+      "data-countdown-state",
+      "live",
+    );
+    expect(screen.getByTestId("landing-breath-runway-wave").getAttribute("d")).toContain(
+      "c 20 0 28 -7 40 -7",
+    );
+    unmountGauge();
+
+    render(
+      <BreathSupportCta
+        currentFreeFunds={{ amount: 100_000, currency: "USD" }}
+        idealAnnualBudget={{ amount: 100_000, currency: "USD" }}
+      />,
+    );
+    expect(screen.getByTestId("landing-breath-support")).toHaveAttribute(
+      "data-support-status",
+      "fully-funded",
+    );
+    expect(screen.getByTestId("landing-breath-support-cta")).toHaveTextContent(
+      "WAIA IS FULLY FUNDED",
+    );
+    expect(screen.getByTestId("landing-breath-support-cta")).toBeDisabled();
+    expect(screen.getByTestId("landing-breath-support")).toHaveAttribute(
+      "data-support-clickable",
+      "false",
+    );
+  });
+
+  it("keeps free-funds labels readable at 0 / midpoint / 1 marker fixtures", () => {
+    const fixtures = [
+      { free: 0, ratio: "0.0000" },
+      { free: 50_000, ratio: "0.5000" },
+      { free: 100_000, ratio: "1.0000" },
+    ] as const;
+
+    for (const fixture of fixtures) {
+      const { unmount } = render(
+        <BreathFundingGauge
+          status="published"
+          idealAnnualBudget={{ amount: 100_000, currency: "USD" }}
+          currentFreeFunds={{ amount: fixture.free, currency: "USD" }}
+          runway={{ value: null, unit: null, periodLabel: null, endsAt: null }}
+        />,
+      );
+      const marker = screen.getByTestId("landing-breath-funding-marker");
+      expect(marker).toHaveAttribute("data-marker-ratio", fixture.ratio);
+      const funds = screen.getByTestId("landing-breath-free-funds");
+      expect(funds.textContent).toMatch(/Current free funds/i);
+      expect(funds.getBoundingClientRect().width).toBeGreaterThanOrEqual(0);
+      expect(screen.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
+        "data-countdown-region",
+        "funded-interval",
+      );
+      unmount();
+    }
+  });
+
+  it("contains no arbitrary pre-target CTA visual threshold", () => {
+    const text = readFileSync(
+      join(process.cwd(), "components/landing/BreathSupportCta.tsx"),
+      "utf8",
+    );
+    expect(text).not.toMatch(/0\.92|0\.95|90%|92%|95%|nearFull/);
+  });
+
+  it("renders B1 diagrams and B2 Twin/Legacy final artwork without scaffold language", async () => {
+    await renderLandingPage();
+
+    expect(screen.getByTestId("landing-breath-media")).toHaveAttribute(
+      "data-media-slot",
+      "diagram",
+    );
+    expect(screen.getByTestId("landing-society-media")).toHaveAttribute(
+      "data-media-slot",
+      "diagram",
+    );
+    expect(screen.getByTestId("landing-ai-trader-media")).toHaveAttribute(
+      "data-media-slot",
+      "diagram",
+    );
+    expect(screen.getByTestId("landing-how-built-media")).toHaveAttribute(
+      "data-media-slot",
+      "diagram",
+    );
+    expect(screen.getByTestId("landing-ai-marketplace-diagram")).toHaveAttribute(
+      "data-media-slot",
+      "diagram-inline",
+    );
+    expect(document.getElementById("mkt-arrow-dim")).not.toBeNull();
+    expect(document.getElementById("mkt-arrow-gold")).not.toBeNull();
+
+    const twin = screen.getByTestId("landing-ai-twin-media");
+    expect(twin).toHaveAttribute("data-media-slot", "final-art");
+    const twinImg = screen.getByTestId("landing-ai-twin-media-image");
+    expect(twinImg).toHaveAttribute("src", "/landing/visuals/ai-twin.webp");
+    expect(twinImg).toHaveAttribute(
+      "alt",
+      "A human presence and a related digital presence meet at a soft threshold, suggesting AI-TWIN as a co-researcher.",
+    );
+    expect(twinImg).toHaveAttribute("width", "1120");
+    expect(twinImg).toHaveAttribute("height", "1400");
+
+    const legacy = screen.getByTestId("landing-living-legacy-media");
+    expect(legacy).toHaveAttribute("data-media-slot", "final-art");
+    const legacyImg = screen.getByTestId("landing-living-legacy-media-image");
+    expect(legacyImg).toHaveAttribute("src", "/landing/visuals/living-legacy.webp");
+    expect(legacyImg).toHaveAttribute(
+      "alt",
+      "A present human, a preserved layer of lived experience, and a later generation connected through continuity of meaning.",
+    );
+
+    expect(screen.queryByTestId("landing-human-bridge-media")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("landing-business-3p-media")).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-business-3p-pillars")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-epistemic-method-steps")).toHaveTextContent(/Observation/);
+    expect(screen.getByTestId("landing-ai-trader-media")).toHaveTextContent(/NO TRADE/);
+
+    const main = screen.getByTestId("landing");
+    expect(main.textContent).not.toMatch(
+      /Human-approved production|Final artwork reserved|DEE-608/i,
+    );
+    expect(main.querySelector('[data-media-slot="final-art-ready"]')).toBeNull();
   });
 
   it("renders Create Twin as default email CTA plus OAuth when availability returns providers", async () => {
@@ -135,6 +438,16 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("landing-auth-provider-google")).toBeInTheDocument();
     expect(screen.getByTestId("landing-auth-provider-apple")).toBeInTheDocument();
     expect(screen.getByTestId("landing-auth-provider-telegram")).toBeInTheDocument();
+  });
+});
+
+describe("module readiness methodology", () => {
+  it("uses qualitative primary labels without invented percentages", () => {
+    expect(getModuleReadiness("business-3p").primaryLabel).toBe("Concept");
+    expect(getModuleReadiness("ai-marketplace").primaryLabel).toBe("Concept");
+    expect(getModuleReadiness("waia-dev-os").primaryLabel).toBe("Operational");
+    expect(getModuleReadiness("ai-twin").primaryLabel).toBe("Operational");
+    expect(getModuleReadiness("ai-twin")).not.toHaveProperty("percent");
   });
 });
 
@@ -157,7 +470,10 @@ describe("AuthBlock state machine", () => {
   });
 
   it("starts in VisitorIdle with empty fields and no error", async () => {
-    vi.stubGlobal("fetch", fetchWithOauthAvailability(() => oauthAvailableResponse()));
+    vi.stubGlobal(
+      "fetch",
+      fetchWithOauthAvailability(() => oauthAvailableResponse()),
+    );
 
     render(<AuthBlock />);
     await waitFor(() => {
@@ -206,7 +522,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       fetchWithOauthAvailability((input) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/sign-up")) {
           return jsonResponse({ error: { code: "WEAK_PASSWORD" } }, 400);
         }
@@ -249,7 +566,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       fetchWithOauthAvailability((input) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/sign-up")) {
           return jsonResponse({ ok: true, redirect: "/dashboard" }, 201);
         }
@@ -287,7 +605,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       fetchWithOauthAvailability((input) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/sign-in")) {
           return jsonResponse({ ok: true, redirect: "/dashboard" }, 200);
         }
@@ -358,7 +677,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       fetchWithOauthAvailability((input) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/sign-up")) {
           return jsonResponse(
             { ok: true, needsEmailConfirmation: true, redirect: "/dashboard" },
@@ -395,13 +715,18 @@ describe("AuthBlock state machine", () => {
   });
 
   it("shows password policy hint only in Create Twin mode", async () => {
-    vi.stubGlobal("fetch", fetchWithOauthAvailability(() => oauthAvailableResponse()));
+    vi.stubGlobal(
+      "fetch",
+      fetchWithOauthAvailability(() => oauthAvailableResponse()),
+    );
 
     render(<AuthBlock />);
     await waitFor(() => {
       expect(screen.getByTestId("landing-auth-provider-google")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("landing-auth-password-policy-hint")).toHaveTextContent(/8 characters/);
+    expect(screen.getByTestId("landing-auth-password-policy-hint")).toHaveTextContent(
+      /8 characters/,
+    );
     fireEvent.click(screen.getByTestId("landing-auth-mode-sign-in"));
     await waitFor(() => {
       expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Sign in");
@@ -413,7 +738,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/oauth/availability")) {
           return Promise.reject(new Error("network"));
         }
@@ -435,7 +761,8 @@ describe("AuthBlock state machine", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/api/auth/oauth/availability")) {
           return Promise.resolve(
             jsonResponse({ google: false, apple: false, telegram: false }, 200),
@@ -455,7 +782,10 @@ describe("AuthBlock state machine", () => {
   describe("OAuth start navigation", () => {
     beforeEach(() => {
       mockLocationAssign.mockClear();
-      vi.stubGlobal("fetch", fetchWithOauthAvailability(() => oauthAvailableResponse()));
+      vi.stubGlobal(
+        "fetch",
+        fetchWithOauthAvailability(() => oauthAvailableResponse()),
+      );
       vi.stubGlobal("location", {
         assign: mockLocationAssign,
         replace: vi.fn(),

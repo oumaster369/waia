@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LANDING_PRIMARY_CTA_CLASS } from "@/components/landing/landing-primary-cta";
 import { PASSWORD_MIN_LENGTH } from "@/lib/auth/constants";
 import { isLikelyEmail, normalizeEmail } from "@/lib/auth/email";
 import {
@@ -401,12 +402,7 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
           size="lg"
           disabled={interactionLocked}
           aria-disabled={interactionLocked || undefined}
-          className={cn(
-            "mt-1 h-12 min-h-12 w-full rounded-xl border border-[rgba(200,170,95,0.5)] text-base font-semibold tracking-tight shadow-none",
-            "bg-[linear-gradient(180deg,#dcc065_0%,#b8942e_98%)] text-[#0b1018] hover:brightness-[1.06]",
-            "focus-visible:border-[rgba(224,198,130,0.7)] focus-visible:ring-2 focus-visible:ring-[rgba(212,184,122,0.35)]",
-            isLoading && "cursor-progress",
-          )}
+          className={cn(LANDING_PRIMARY_CTA_CLASS, "mt-1 w-full", isLoading && "cursor-progress")}
         >
           {primaryCtaLabel}
         </Button>
