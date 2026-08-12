@@ -6,23 +6,29 @@ riskTier: T2
 prPolicy: one-integration-pr
 executionSurfaces: [local]
 requiredValidation: [lint, typecheck, build, unit-targeted, e2e]
-approvalGates: [plan-approved, integration-ready, human-merge, visual-direction-approval]
+approvalGates: [plan-approved, integration-ready, human-merge]
 includedIssues: [DEE-608]
+deferredIssues: [DEE-606, DEE-607]
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-review
-  currentWorkPackage: WP-6
-  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5-A, WP-5-B1, WP-5-B2]
-  remainingWorkPackages: [WP-6]
+  status: ready-for-human-squash-merge
+  currentWorkPackage: null
+  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5-A, WP-5-B1, WP-5-B2, WP-6, Breath-visual, Breath-funding-gauge]
+  remainingWorkPackages: []
   prNumber: 457
   prUrl: "https://github.com/oumaster369/waia/pull/457"
-  lastValidatedGitSha: 72fe83727b56ee987ab3cfed922661488b623ee1
-  lastValidationAt: "2026-08-11T16:42:00Z"
-  blockedReason: "READY_FOR_HUMAN_DEE_605_VISUAL_RHYTHM_REVIEW — spacing/rhythm corrective pending Human accept"
-  nextAction: "Human inspects visual rhythm on PR #457; do not merge until accepted."
+  humanVisualReview:
+    status: ACCEPTED
+    reviewedGitSha: d330fcda6595d636949cebafc68b2ff3225b233c
+    acceptedAt: "2026-08-12"
+    note: "Human Architect completed final local visual review and accepted DEE-605 homepage + included DEE-608 visual package."
+  lastValidatedGitSha: d330fcda6595d636949cebafc68b2ff3225b233c
+  lastValidationAt: "2026-08-12T09:00:00Z"
+  blockedReason: null
+  nextAction: "Human squash-merges PR #457 to main when still green; agents never merge. Next integration after merge: DEE-606 (DEE-607 remains blocked by DEE-606)."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -716,3 +722,25 @@ Two Human-exact fixes on `b28499e`:
 Waveform, contracts, and CTA unification unchanged.
 
 Gate: `READY_FOR_HUMAN_FINAL_BREATH_GAUGE_REVIEW`
+
+---
+
+## Final Human visual acceptance + PR-readiness closeout
+
+**Decision:** The Human Architect completed the final local visual review and **ACCEPTED** the DEE-605 homepage and included DEE-608 visual package at reviewed HEAD `d330fcda6595d636949cebafc68b2ff3225b233c`.
+
+This closes the visual Human gate. Do not invent another design-review gate. Do not reopen accepted visual decisions.
+
+### Closeout truth
+
+| Item | State |
+|------|--------|
+| Implementation | Complete for DEE-605 + included DEE-608 |
+| Human final visual review | **ACCEPTED** at `d330fcd…` |
+| Local targeted validation | Passed (lint / typecheck / build / landing unit / landing E2E) |
+| Authoritative GitHub CI | Green at exact reviewed HEAD `d330fcd…` (ci, pr-governance ×2, cloudflare-preview, unit, e2e, etc.) |
+| Integration boundary | Sole PR [#457](https://github.com/oumaster369/waia/pull/457) → `main` |
+| Deferred | **DEE-606**, **DEE-607** (DEE-607 remains blocked by DEE-606) |
+| Next after Human squash-merge | **DEE-606** |
+
+**READY FOR HUMAN SQUASH MERGE** — agents never merge.
