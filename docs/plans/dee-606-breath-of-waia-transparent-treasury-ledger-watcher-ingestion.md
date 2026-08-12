@@ -22,21 +22,39 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: draft
-  currentWorkPackage: null
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4, WP-5, WP-6, WP-7, WP-8, WP-9]
+  status: approved
+  currentWorkPackage: WP-1
+  completedWorkPackages: [WP-0]
+  remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5, WP-6, WP-7, WP-8, WP-9]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Final integrity corrections complete; revised plan awaits Human architecture approval. Do not implement production schema/code until Human architecture approval. Migration identity remains deferred; migration-bearing merge blocked while DEE-518 journal predecessors remain unmerged."
+  nextAction: "Run WP-1 implementation preflight under all migration/R5 safety gates (collision-free migration allocation; DEE-518 merge-order gate; dedicated Postgres on port 54339 — never 54329 while R5 active). Do not mark any implementation WP complete until executed."
+  humanArchitectureApproval:
+    status: COMPLETE
+    approvedAt: "2026-08-12"
+    approvedArchitectureSourceSha: 82377e4f4869b9bf64f26a9578c2335cdbcb8b15
+    approvalToken: CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F
+    architectReview: COMPLETE
+    humanArchitectureApproval: COMPLETE
+  humanDecisionDispositions:
+    HD-1: APPROVED
+    HD-2: APPROVED
+    HD-3: DEFERRED
+    HD-4: DEFERRED
+    HD-5: APPROVED_DEFAULT_PENDING
+    HD-7: APPROVED_DARK
   migrationIdentity:
     disposition: DEFERRED_TO_IMPLEMENTATION_PREFLIGHT
     frozenTag: null
     mergeOrderGate: BLOCK_MIGRATION_BEARING_MERGE_WHILE_DEE_518_JOURNAL_UNMERGED
-    note: "Cannot safely freeze 0110+ while DEE-518 reserves 0110–0147. Filename collision avoidance alone is insufficient — see §13 merge-order gate."
+    note: "Cannot safely freeze 0110+ while DEE-518 reserves 0110–0147. Filename collision avoidance alone is insufficient — see §13 merge-order gate. Binding: a migration-bearing DEE-606 PR cannot Human-merge while journal predecessor assumptions remain only on unmerged DEE-518 work."
+  r5SafePostgres:
+    requiredPort: 54339
+    forbiddenPortWhileR5Active: 54329
+    note: "Dedicated treasury validate topology only; never stop/recreate waia-postgres-validate-1."
   correctionPass:
     afterSha: a95b9c1c27b9d98df66cfb944c292dd1967e5f5e
     reason: "Independent Architect review corrections (T3, accounting vs detail publication, cash equation, commitments, runway as-of, reconciliation, fund-bucket deferral)."
@@ -1048,7 +1066,7 @@ Dedicated compose `docker-compose.postgres-treasury-validate.yml`; project `waia
 
 ### WP-0 — Human architecture approval gate (T3)
 
-Human CONFIRM after Architect corrections → `state.status=approved`. No code.
+**COMPLETE.** Human Architect approved architecture source SHA `82377e4f4869b9bf64f26a9578c2335cdbcb8b15` with token `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`. Architect review complete. Human architecture approval complete. `state.status=approved`. Implementation WPs remain incomplete until executed.
 
 ### WP-1 — Migration preflight + schema
 
@@ -1139,15 +1157,28 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 
 ## 20. Human decisions (revised)
 
-| ID | Decision | Frozen recommendation / disposition | Blocks |
-|----|----------|--------------------------------------|--------|
-| **HD-1** | Platform treasury tenant | **Architecture recommendation:** create/use a **dedicated Core organization** for **WAIA Platform Treasury** — do **not** silently reuse AI-Trader Org-0. Exact org creation/ID resolution is an implementation prerequisite unless later canon proves otherwise. | WP-1 seed |
-| **HD-2** | Public contribution disclosure | **v1 default:** aggregate-only; no public identity list; authenticated self-only share optional | DEE-611 honesty |
-| **HD-3** | Evidence object storage | **No approved existing durable object-storage path found** in repo (`wrangler`/env/Core docs). Technical preference if adopting: **Cloudflare R2**. **Escalate to Human** because a new production storage service must be approved. | WP-5 production uploads |
-| **HD-4** | Initial ideal annual budget amount/year | Human data decision | Breath published status |
-| **HD-5** | Initial ACTIVE runway daily burn | Default: **runway pending** until Human approves burn | runway fields |
+| ID | Decision | Disposition (Human 2026-08-12) | Blocks |
+|----|----------|--------------------------------|--------|
+| **HD-1** | Platform treasury tenant | **APPROVED.** Use/create a dedicated Core organization for **WAIA Platform Treasury**. Do **not** reuse AI-Trader Org-0. Exact org creation/ID resolution remains WP-1 implementation precondition. | WP-1 seed |
+| **HD-2** | Public contribution disclosure | **APPROVED.** v1: aggregate-only; no public contributor identity list; authenticated self-only contribution share may be supported; contributor identity remains private unless separately approved later. | DEE-611 honesty |
+| **HD-3** | Evidence object storage | **DEFERRED.** Production evidence object storage is **not** yet approved. Cloudflare R2 remains the architecture recommendation (no approved durable object-store binding exists). No new production storage service may be provisioned until HD-3 is resolved. Must be resolved before WP-5 production evidence storage implementation. | WP-5 production uploads |
+| **HD-4** | Initial ideal annual budget amount/year | **DEFERRED.** Intentionally not chosen yet. Do not invent a value. Does not block schema/domain implementation. Blocks Breath pending→published financial figures if ideal budget is required by the publication contract. | Breath published status |
+| **HD-5** | Initial ACTIVE runway daily burn | **APPROVED DEFAULT.** Runway remains pending until the Human explicitly approves an ACTIVE planned daily burn. Do not infer burn from historical expenses. | runway fields |
 | ~~HD-6~~ | ~~manual committed scalar~~ | **REMOVED.** Commitment facts + derived totals are mandatory. | — |
-| **HD-7** | Production watcher enablement | **Architecture ships DARK:** `TREASURY_WATCHER_ENABLED=false`. Production enablement is a **later Human operational gate**, not required to approve this architecture plan. | ops after merge |
+| **HD-7** | Production watcher enablement | **APPROVED.** Architecture and code ship with `TREASURY_WATCHER_ENABLED=false` (DARK). Production enablement requires a separate explicit Human operational gate after implementation/merge/readiness. | ops after merge |
+
+### Human architecture approval record
+
+| Field | Value |
+|-------|--------|
+| Approval token | `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F` |
+| Approved architecture source SHA | `82377e4f4869b9bf64f26a9578c2335cdbcb8b15` |
+| Architect review | COMPLETE |
+| Human architecture approval | COMPLETE |
+| Plan `state.status` | `approved` |
+| WP-0 | COMPLETE |
+| Current work package | WP-1 |
+| Implementation authorization | AUTHORIZED for WP-1 onward under this canonical plan and remaining gates (migration merge-order; R5-safe port 54339) |
 
 ---
 
@@ -1180,6 +1211,9 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 
 - First draft commit: `a95b9c1c27b9d98df66cfb944c292dd1967e5f5e`
 - Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
-- `state.status`: **draft** (final integrity corrections complete; awaits Human architecture approval)
-- Prior Architect decisions remain intact: T3; Core Treasury domain; accounting/detail separation; VERIFIED accounting truth; contribution share; commitment facts; deterministic runway snapshots; migration merge-order gate; dark watcher; no DEE-612/613 hard-coded doctrine
-- `DEE_606_FINAL_CANONICAL_PLAN_READY_FOR_HUMAN_ARCHITECTURE_APPROVAL`
+- Final integrity / Human-approved architecture source SHA: `82377e4f4869b9bf64f26a9578c2335cdbcb8b15`
+- Approval token: `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`
+- `state.status`: **approved** (Architect review COMPLETE; Human architecture approval COMPLETE; WP-0 COMPLETE; currentWorkPackage WP-1)
+- Binding gates preserved: DEE-518 migration merge-order; R5-safe Postgres port **54339** (never 54329 while R5 active); watcher ships DARK
+- Prior Architect decisions remain intact: T3; Core Treasury domain; accounting/detail separation; VERIFIED accounting truth; contribution share; commitment facts; deterministic runway snapshots; no DEE-612/613 hard-coded doctrine
+- `DEE_606_HUMAN_ARCHITECTURE_APPROVAL_RECORDED_READY_FOR_WP1`
