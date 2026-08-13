@@ -23,15 +23,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: approved
-  currentWorkPackage: WP-6
-  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4, WP-5]
-  remainingWorkPackages: [WP-6, WP-7, WP-8, WP-9]
+  currentWorkPackage: WP-7
+  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4, WP-5, WP-6]
+  remainingWorkPackages: [WP-7, WP-8, WP-9]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 233db89040481ac9cd4d2ba29eb060918f4748ca
+  lastValidatedGitSha: 01fa23cea4596dba45707d74b30bb78c76f7f429
   lastValidationAt: "2026-08-13"
   blockedReason: null
-  nextAction: "WP-6 Breath read model + runway snapshots may be prepared next. Production R2 provisioning remains separately NOT AUTHORIZED."
+  nextAction: "WP-7 Contribution Share Engine may be prepared next. Do not start WP-7 in this closeout. Production R2 provisioning remains separately NOT AUTHORIZED."
   wp5:
     status: COMPLETE
     blockedBy: PRODUCTION_R2_PROVISIONING_NOT_AUTHORIZED
@@ -56,6 +56,44 @@ state:
     presignedUrls: false
     directBrowserR2: false
   wp6:
+    status: COMPLETE
+    startingSha: 2ec87b739e3f3949d52def1ea68a9a35f0ccefcf
+    implementationShas:
+      - a719d2624d1958bc65bf60d550c8e97d3cbea66b
+      - 8086c749f0763122766bc2254a36e871a39c7ba9
+    testSha: 01fa23cea4596dba45707d74b30bb78c76f7f429
+    moduleLayout: lib/waia-core/treasury/breath/**
+    dedicatedNonPaginatedRepository: true
+    listTransactionsQueryForbiddenAsFinancialTruth: true
+    completeVerifiedSet: true
+    moneyAuthority: canonical decimal string bigint
+    noJsNumberMoney: true
+    publicHttpRouteAdded: false
+    uiChanged: false
+    wp7ShareEngineImplemented: false
+    r2Dependency: false
+    productionR2Provisioning: NOT_AUTHORIZED
+    wranglerJsoncChanged: false
+    watcherDark: true
+    schemaChanged: false
+    migrationsChanged: false
+    journalChanged: false
+    dbGenerate: false
+    productionStateMutated: false
+    prOpened: false
+    wp7Started: false
+    targetedTests: "9 grouped tests covering numbered invariants 1-115"
+    wp6TestsPass: true
+    wp5Regression: 11/11
+    wp4Regression: 27/27
+    wp3Regression: 36/36
+    wp2Regression: 138/138
+    typecheck: PASS
+    lint: PASS
+    gitDiffCheck: clean
+    migrationMergeOrderGate: binding
+    wp9FinalMigrationReconciliation: retained
+  wp7:
     status: NOT_STARTED
   wp4:
     status: COMPLETE
@@ -1405,9 +1443,7 @@ Dedicated compose `docker-compose.postgres-treasury-validate.yml`; project `waia
 
 Core-owned admin HTTP root is `/api/admin/treasury/**` (not `/api/trader/admin/**`). Generic admin primitives live in `lib/waia-core/permissions/admin-http.ts` with compatibility re-exports from `lib/trader/admin-route-*`. Frozen permissions `admin.treasury.read` / `admin.treasury.mutate` / `admin.treasury.publish` are granted to platform `admin` only. Every operation requires explicit `organization_id` (never personal org / Trader Org-0 / watcher config / hard-coded UUID). SQLite production runtime fails closed `503 TREASURY_BACKEND_UNAVAILABLE`. Authoritative money is decimal-string bigint on the wire; serializers never use `Number(bigint)`. Transaction/commitment/inception HTTP handlers call existing domain services (no FSM reimplementation). `setDetailPublication` and other public-exposure mutations require `admin.treasury.publish`. WATCHER verify preconditions survive HTTP (no force/skip flags). Creating watched addresses does not enable the watcher; there is no `TREASURY_WATCHER_ENABLED` API. Budgets/funding needs reject caller-maintained funded/committed/spent/remaining aggregates. Ideal amount and runway daily burn require explicit Human input; WP-4 creates no runway snapshots and no `endsAt` formula. Evidence upload/create-object fails closed `EVIDENCE_STORAGE_NOT_CONFIGURED` (HD-3 still DEFERRED). Admin Breath preview fails closed `TREASURY_BREATH_READ_MODEL_NOT_READY` with no invented numeric fields; `getBreathPublicSnapshot` computation is **not** implemented; no public Treasury HTTP endpoint; no UI. Shared `audit_logs` preserved. Targeted WP-4 tests **27/27 PASS**; WP-3 regression **36/36 PASS**; WP-2 regression **138/138 PASS**; permission/admin-route regression PASS; typecheck PASS; lint PASS; `git diff --check` clean; schema/migration/journal unchanged; `db:generate` not run; watcher remains DARK. Merge-order gate remains binding; WP-9 final migration reconciliation retained.
 
-**WP-6 boundary (intentional):** typed `TreasuryBreathReadModelPort` exists; production preview is unready; Breath formulas and public snapshot belong to WP-6.
-
-**nextAction:** WP-6 Breath read model + runway snapshots may be prepared next. Production R2 provisioning remains separately **NOT AUTHORIZED**. Do not start WP-6 in this closeout.
+**WP-6 boundary (historical):** WP-4 left `TreasuryBreathReadModelPort` unready. WP-6 replaced that placeholder with the live read model. `WP4_BREATH_PUBLIC_SNAPSHOT_IMPLEMENTED` remains `false` as a historical flag.
 
 ### WP-5 — Evidence storage adapter
 
@@ -1425,7 +1461,35 @@ WP-5 targeted tests **11/11 PASS**. WP-4 regression **27/27 PASS**. WP-3 regress
 
 ### WP-6 — Breath read model + runway snapshots
 
-§9 formulas (`entered`/`spent`/`remaining` identity; budget.remaining with commitments); fail-closed reconciliation freshness; as-of runway tests; complete `lastUpdatedAt` inputs.
+**COMPLETE.** Starting SHA `2ec87b739e3f3949d52def1ea68a9a35f0ccefcf`. Implementation SHAs `a719d2624d1958bc65bf60d550c8e97d3cbea66b` (canonical read model + unpaginated facts repository + deterministic runway snapshots) and `8086c749f0763122766bc2254a36e871a39c7ba9` (admin Breath preview + `refresh_snapshot` + server-side `getBreathPublicSnapshot`). Tests SHA `01fa23cea4596dba45707d74b30bb78c76f7f429`.
+
+Module: `lib/waia-core/treasury/breath/**` (`types`, `repository.types`, `memory-repository`, `postgres-repository`, `accounting`, `publication-gates`, `runway`, `read-model`, `public-snapshot`, `index`). Dedicated Breath facts repository loads complete org-scoped sets. `TreasuryRepository.listTransactions(context, query)` remains an admin listing primitive (default 50) and is **not** used as financial truth. Memory loads via `listTransactions(context)` with no query; Postgres Breath queries have no hidden `LIMIT 50`.
+
+Canonical accounting (exact BigInt, VERIFIED set `V` complete): `accountingCashBalance = Σ cashEffectMicros(t)`; `entered = Σ max(effect, 0)`; `spent = Σ max(-effect, 0)`; `remaining = entered - spent` with identity `remaining === accountingCashBalance`. INTERNAL_TRANSFER contributes 0/0; OPENING_BALANCE is entered; signed adjustments/refunds follow cash-effect sign. PRIVATE+VERIFIED counts in aggregates; DETAIL_PUBLIC does not change totals; non-VERIFIED excluded. Null/incomplete VERIFIED `cashEffectMicros` fails closed (`VERIFIED_FINANCIAL_ROW_INCOMPLETE`); missing cash effect is never treated as zero. Values above `Number.MAX_SAFE_INTEGER` remain exact bigint.
+
+Active committed funds = Σ `amountMicros` for `APPROVED`/`RELEASED` only (DRAFT/FULFILLED/CANCELLED excluded). `resources.allocated = activeCommittedFunds`. `currentFreeFunds = max(0, accountingCashBalance - activeCommittedFunds)`. No mutable committed scalar.
+
+Budget candidate: `ACTIVE` + `isPublic` + current date in `periodStart..periodEnd`. Zero → budget null; one → derive; multiple → do not choose arbitrarily (`ACTIVE_PUBLIC_BUDGET_AMBIGUOUS`, not a global publication gate). Formulas: `planned = plannedAmountMicros`; `funded = Σ VERIFIED CONTRIBUTION accountingAmountMicros` assigned to the budget (PRIVATE VERIFIED still funds); `committed = APPROVED+RELEASED` for the budget; `spent = magnitude of negative VERIFIED cash effects assigned to the budget` (not only `EXPENSE`); `remaining = planned - spent - committed` (signed, not clamped); `fillRatio = clamp(funded/planned, 0, 1)` via `BREATH_FILL_RATIO_SCALE = 1_000_000n` (6 decimal display places) then convert only the bounded 0..1 display number. Display-only; never accounting authority.
+
+Funding need: eligible public `OPEN`/`PARTIALLY_FUNDED`. Exactly one → `neededNext = requiredAmountMicros - Σ VERIFIED CONTRIBUTION accountingAmountMicros` for that need. None or multiple → `neededNext = null` (multiple also `PUBLIC_FUNDING_NEED_AMBIGUOUS`). No caller-maintained funded scalar. No invented priority. WP-7 contribution-share engine not consumed.
+
+Material unresolved reconciliation: any `RECONCILIATION_REQUIRED` row with known non-zero cash effect, or whose cash impact cannot be proven zero, is material. Proven cash-neutral INTERNAL_TRANSFER (`cashEffectMicros === 0n`) is non-material. Material → global pending, financial numerics null.
+
+Balance reconciliation: latest by `createdAt` DESC then id (newer bad recon cannot be bypassed by older good). Scope: latest recon `ledgerInceptionId` must equal the org’s unique ACTIVE inception; otherwise `BALANCE_RECONCILIATION_SCOPE_INVALID`. Stale iff age **> 10 minutes**; exactly 10 minutes is not stale (`BREATH_RECON_MAX_AGE_MS = 600_000`). MATCHED accepted only when internally consistent (`toleranceMicros === 0n`, `deltaMicros === 0n`, `unexplainedResidualMicros === 0n`, amounts present, `delta === observed - accounting`). PENDING_CONFIRMATIONS accepted only when residual is 0, `deltaMicros === explainedPendingMicros`, and `toleranceMicros === 0n`. Always pending: UNAVAILABLE, MISMATCH, missing, stale, scope-invalid. Breath does not RPC for a fresher balance.
+
+Global published iff: `breath_enabled`; exactly one currently applicable ACTIVE+PUBLIC ideal annual budget; no material unresolved tx reconciliation; latest balance recon passes the freshness/control gate. Otherwise `status = pending` and financial numeric fields null. Runway availability is **not** a global gate. HD-4 remains DEFERRED; WP-6 invents no ideal amount/year and creates no production data.
+
+`lastUpdatedAt` is the max of authoritative inputs actually used (VERIFIED `verifiedAt`/`updatedAt`, active commitment `updatedAt`, latest recon `createdAt`, ideal `createdAt` plus ideal create/publish audit times, used public budget `updatedAt`, used funding need `updatedAt`, settings `updatedAt`, runway snapshot `createdAt`). Never `now()`. Null if no timestamp exists.
+
+recentActivity: VERIFIED + DETAIL_PUBLIC, SUPERSEDED excluded, `occurredAt DESC` then id, honor `recentActivityLimit`. Public whitelist only (no internalNotes, actor IDs, evidence keys, attribution identity). `counterpartyDisplay` only if `publishCounterparty`. Pending financial snapshot may still expose independent public detail. Public DTO never includes privileged DB/internal fields. Admin preview (`admin.treasury.read`) adds `pendingReasons` / `componentStatus` / `reconciliationGate` / `runwayStatus` and does not mutate facts.
+
+Runway: eligible ACTIVE plan with `dailyBurnMicros > 0` currently effective. None → runway pending, no snapshot. Multiple → pending + `ACTIVE_RUNWAY_PLAN_AMBIGUOUS`. Snapshot table `treasury_runway_snapshots` (no migration). `inputDigest` is SHA-256 of the sorted VERIFIED cash set, active commitments, ACTIVE plan, and derived freeFunds (not request time). Unchanged reads return the same snapshot id / `runwayAsOf` / `endsAt`. Integer-ms floor: `durationMs = (freeFunds * DAY_MS) / burn` with `DAY_MS = 86_400_000n`; Date overflow → `RUNWAY_DATE_OUT_OF_RANGE`. Memory per-org mutex and Postgres `pg_advisory_xact_lock` + re-read before insert. Explicit `POST .../runway-plans/commands` `refresh_snapshot` requires `admin.treasury.publish`, Human actor, reason; rejects caller freeFunds/burn/endsAt/inputDigest; may create a fresh snapshot with unchanged digest; audited `treasury.runway.snapshot_refresh`. Auto-materialization is derived, not Human approval.
+
+`getBreathPublicSnapshot(context, readModel)` is server-side under Core Treasury; requires explicit OrgContext; no anonymous `/api/treasury`, `/api/public/treasury`, or `/api/breath` route; no UI; no browser DB; no R2 dependency; production evidence storage can remain `EVIDENCE_STORAGE_NOT_CONFIGURED`. Unexpected control failure returns pending, never hardcoded financial fallbacks.
+
+WP-6 targeted tests **9/9 PASS** (grouped coverage of numbered invariants 1–115). WP-5 regression **11/11 PASS**. WP-4 regression **27/27 PASS**. WP-3 regression **36/36 PASS**. WP-2 regression **138/138 PASS**. Admin/permission regression PASS. typecheck PASS. lint PASS. `git diff --check` clean. Schema/migrations/journal unchanged; `db:generate` not run; production state not mutated; `wrangler.jsonc` unchanged; production R2 provisioning still **NOT AUTHORIZED**; watcher DARK. Merge-order gate remains binding; WP-9 final migration reconciliation retained. PR not opened. WP-7 not started.
+
+**nextAction:** WP-7 Contribution Share Engine may be prepared next. Do not start WP-7 in this closeout.
 
 ### WP-7 — Contribution share engine
 
@@ -1514,7 +1578,8 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 | WP-0 | COMPLETE |
 | WP-1 | COMPLETE (`DEDICATED_POSTGRES_VALIDATION_PASS` on `:54339`) |
 | WP-2 | COMPLETE (domain services; implementation SHA `44c06089cb01eab95ce1b1f118f6a15bef853f35`; 138 targeted tests) |
-| Current work package | WP-6 **NOT STARTED** (WP-5 COMPLETE; HD-3 architecture-only; production R2 provisioning still blocked; watcher DARK; no PR) |
+| Current work package | WP-7 **NOT STARTED** (WP-6 COMPLETE; HD-3 architecture-only; production R2 provisioning still blocked; watcher DARK; no PR) |
+| WP-6 | COMPLETE (Breath read model + deterministic runway snapshots; starting SHA `2ec87b739e3f3949d52def1ea68a9a35f0ccefcf`; implementation SHAs `a719d2624d1958bc65bf60d550c8e97d3cbea66b`, `8086c749f0763122766bc2254a36e871a39c7ba9`; tests `01fa23cea4596dba45707d74b30bb78c76f7f429`; 9/9 WP-6 grouped invariants + 11/11 WP-5 + 27/27 WP-4 + 36/36 WP-3 + 138/138 WP-2; no public HTTP; no UI; no R2; schema unchanged) |
 | WP-5 | COMPLETE (private R2 adapter code; starting SHA `6fcbe1faece1b3812ce9d9e03b22ef3f99fe5d79`; HD-3 recording `bf42267ae41cf50758010585ef6b96bb0ed85df5`; implementation SHAs `c4cfcb05bb109fb8e8452bb03f425355d075eef0`, `ec318601068d9a6b3d143d4da6c609245907ad4c`; tests `233db89040481ac9cd4d2ba29eb060918f4748ca`; 11/11 WP-5 + 27/27 WP-4 + 36/36 WP-3 + 138/138 WP-2; wrangler.jsonc unchanged; production storage unavailable; no bucket/binding/deploy) |
 | WP-4 | COMPLETE (Core `/api/admin/treasury/**`; starting SHA `6f3c8b2bd457706f33afd7466dc54907ee649e75`; implementation SHAs `f7fcace832be58b012bbfa2f94497b044f4ebec4`, `095f35a6d2873c597e9e8de60f373e1d1575030c`; tests `0e97dd134ceb5fc76e16975492ad3c5ed2a3581a`; 27/27 WP-4 + 36/36 WP-3 + 138/138 WP-2; no UI; no public Breath; HD-3 DEFERRED; schema unchanged) |
 | WP-3 | COMPLETE (DARK watcher; implementation SHAs `7f0315c4ec7345cad8fd38496521238e9456b9db`, `3ba3d9597ecb632776eb8b36c7594b750d8c2ff5`; tests `e611808b6844675756c695c1b0c59c006604c9fb`; 36/36 WP-3 + 138/138 WP-2; schema unchanged) |
@@ -1597,7 +1662,8 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
 - Final integrity / Human-approved architecture source SHA: `82377e4f4869b9bf64f26a9578c2335cdbcb8b15`
 - Approval token: `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`
-- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2/WP-3/WP-4/WP-5 COMPLETE; currentWorkPackage WP-6 **NOT STARTED**; HD-3 `APPROVED_ARCHITECTURE_ONLY`; production R2 provisioning still blocked; observation-guard correction PASS; watcher DARK; no PR)
+- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2/WP-3/WP-4/WP-5/WP-6 COMPLETE; currentWorkPackage WP-7 **NOT STARTED**; HD-3 `APPROVED_ARCHITECTURE_ONLY`; production R2 provisioning still blocked; observation-guard correction PASS; watcher DARK; no PR)
+- WP-6: **COMPLETE**; Breath read model + deterministic runway snapshots; starting SHA `2ec87b739e3f3949d52def1ea68a9a35f0ccefcf`; implementation SHAs `a719d2624d1958bc65bf60d550c8e97d3cbea66b`, `8086c749f0763122766bc2254a36e871a39c7ba9`; tests `01fa23cea4596dba45707d74b30bb78c76f7f429`; production R2 provisioning **NOT AUTHORIZED**; watcher DARK; no public HTTP; no UI; WP-7 not started
 - WP-5: **COMPLETE**; private R2 evidence adapter (code only); starting SHA `6fcbe1faece1b3812ce9d9e03b22ef3f99fe5d79`; approval-recording SHA `bf42267ae41cf50758010585ef6b96bb0ed85df5`; implementation SHAs `c4cfcb05bb109fb8e8452bb03f425355d075eef0`, `ec318601068d9a6b3d143d4da6c609245907ad4c`; tests `233db89040481ac9cd4d2ba29eb060918f4748ca`; production R2 provisioning **NOT AUTHORIZED**
 - WP-4: **COMPLETE**; Core admin HTTP contracts; starting SHA `6f3c8b2bd457706f33afd7466dc54907ee649e75`
 - HD-3: **APPROVED_ARCHITECTURE_ONLY**; token `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING`; private R2 architecture/code authorized; production provisioning **NOT AUTHORIZED**
@@ -1613,4 +1679,5 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - `DEE_606_WP3_TREASURY_WATCHER_DARK_PASS_WP3_COMPLETE_READY_FOR_WP4`
 - `DEE_606_WP4_ADMIN_BACKEND_CONTRACTS_PASS_WP4_COMPLETE`
 - `DEE_606_WP5_R2_EVIDENCE_ADAPTER_PASS_WP5_COMPLETE_READY_FOR_WP6`
+- `DEE_606_WP6_BREATH_READ_MODEL_RUNWAY_PASS_WP6_COMPLETE_READY_FOR_WP7`
 - `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING`
