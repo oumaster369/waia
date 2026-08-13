@@ -187,8 +187,35 @@ export function createPostgresTreasuryRepository(ex: PgExecutor): TreasuryReposi
       wp3Only("insertObservation");
     },
 
-    async insertObservationLink() {
-      wp3Only("insertObservationLink");
+    async updateObservationLifecycle(context, observationId, patch) {
+      const org = scoped(context);
+      const rows = await ex
+        .update(pgSchema.treasuryChainObservations)
+        .set({
+          confirmationsObserved: patch.confirmationsObserved,
+          observationStatus: patch.observationStatus,
+        })
+        .where(
+          and(
+            eq(pgSchema.treasuryChainObservations.id, observationId),
+            orgScopedWhere(pgSchema.treasuryChainObservations.organizationId, org),
+          ),
+        )
+        .returning({ id: pgSchema.treasuryChainObservations.id });
+      if (!rows[0]) {
+        throw new TreasuryNotFoundError("observation", observationId);
+      }
+    },
+
+    async insertObservationLink(input) {
+      requireOrgContext(input.organizationId);
+      await ex.insert(pgSchema.treasuryTransactionObservationLinks).values({
+        id: input.id,
+        organizationId: input.organizationId,
+        transactionId: input.transactionId,
+        observationId: input.observationId,
+        observationRole: input.observationRole,
+      });
     },
 
     async listRevisions(context, transactionId) {
@@ -375,6 +402,33 @@ export function createPostgresTreasuryRepository(ex: PgExecutor): TreasuryReposi
         attributionMethod: "WP2_DOMAIN",
         revokedAt: record.revokedAt,
       });
+    },
+
+    async listTransactions(context) {
+      const org = scoped(context);
+      const rows = await ex
+        .select()
+        .from(pgSchema.treasuryTransactions)
+        .where(orgScopedWhere(pgSchema.treasuryTransactions.organizationId, org));
+      return rows.map(mapTx);
+    },
+
+    async getTransactionByCanonicalTransfer(context, query) {
+      const org = scoped(context);
+      const rows = await ex
+        .select()
+        .from(pgSchema.treasuryTransactions)
+        .where(
+          and(
+            orgScopedWhere(pgSchema.treasuryTransactions.organizationId, org),
+            eq(pgSchema.treasuryTransactions.canonicalNetwork, query.network),
+            eq(pgSchema.treasuryTransactions.canonicalTokenContract, query.tokenContract),
+            eq(pgSchema.treasuryTransactions.canonicalTxHash, query.txHash),
+            eq(pgSchema.treasuryTransactions.canonicalTransferIndex, query.transferIndex),
+          ),
+        )
+        .limit(1);
+      return rows[0] ? mapTx(rows[0]) : null;
     },
   };
 }

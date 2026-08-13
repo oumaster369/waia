@@ -28,6 +28,7 @@ export function createMemoryTreasuryRepository(): TreasuryRepository {
     organizationId: string;
     transactionId: string;
     observationId: string;
+    observationRole: "PRIMARY" | "INTERNAL_COUNTERPARTY" | "SECONDARY";
   }> = [];
   const evidenceLinks: TreasuryEvidenceLinkRecord[] = [];
   const revisions: TreasuryRevisionRecord[] = [];
@@ -103,6 +104,20 @@ export function createMemoryTreasuryRepository(): TreasuryRepository {
     async insertObservation(record) {
       requireOrgContext(record.organizationId);
       observations.set(scopedId(record.organizationId, record.id), clone(record));
+    },
+
+    async updateObservationLifecycle(context, observationId, patch) {
+      const scoped = requireScope(context);
+      const key = scopedId(scoped.organizationId, observationId);
+      const existing = observations.get(key);
+      if (!existing) {
+        throw new TreasuryNotFoundError("observation", observationId);
+      }
+      observations.set(key, {
+        ...existing,
+        observationStatus: patch.observationStatus,
+        confirmationsObserved: patch.confirmationsObserved,
+      });
     },
 
     async insertObservationLink(input) {
@@ -242,6 +257,26 @@ export function createMemoryTreasuryRepository(): TreasuryRepository {
     async insertAttribution(record) {
       requireOrgContext(record.organizationId);
       attributions.push(clone(record));
+    },
+
+    async listTransactions(context) {
+      const scoped = requireScope(context);
+      return [...transactions.values()]
+        .filter((row) => row.organizationId === scoped.organizationId)
+        .map(clone);
+    },
+
+    async getTransactionByCanonicalTransfer(context, query) {
+      const scoped = requireScope(context);
+      const row = [...transactions.values()].find(
+        (item) =>
+          item.organizationId === scoped.organizationId &&
+          item.canonicalNetwork === query.network &&
+          item.canonicalTokenContract === query.tokenContract &&
+          item.canonicalTxHash === query.txHash &&
+          item.canonicalTransferIndex === query.transferIndex,
+      );
+      return row ? clone(row) : null;
     },
   };
 }

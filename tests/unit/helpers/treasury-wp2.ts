@@ -123,5 +123,6 @@ export async function seedObservation(
     organizationId: input.organizationId,
     transactionId: input.transactionId,
     observationId: input.id,
+    observationRole: "PRIMARY",
   });
 }

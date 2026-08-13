@@ -31,11 +31,20 @@ export type TreasuryRepository = {
   ): Promise<TreasuryEvidenceLinkRecord[]>;
   insertEvidenceLink(record: TreasuryEvidenceLinkRecord): Promise<void>;
   insertObservation(record: TreasuryObservationRecord): Promise<void>;
+  updateObservationLifecycle(
+    context: OrgContext,
+    observationId: string,
+    patch: {
+      observationStatus: TreasuryObservationRecord["observationStatus"];
+      confirmationsObserved: number;
+    },
+  ): Promise<void>;
   insertObservationLink(input: {
     id: string;
     organizationId: string;
     transactionId: string;
     observationId: string;
+    observationRole: "PRIMARY" | "INTERNAL_COUNTERPARTY" | "SECONDARY";
   }): Promise<void>;
   listRevisions(context: OrgContext, transactionId: string): Promise<TreasuryRevisionRecord[]>;
   insertRevision(record: TreasuryRevisionRecord): Promise<void>;
@@ -80,4 +89,14 @@ export type TreasuryRepository = {
     transactionId: string,
   ): Promise<TreasuryAttributionRecord[]>;
   insertAttribution(record: TreasuryAttributionRecord): Promise<void>;
+  listTransactions(context: OrgContext): Promise<TreasuryTransactionRecord[]>;
+  getTransactionByCanonicalTransfer(
+    context: OrgContext,
+    query: {
+      network: string;
+      tokenContract: string;
+      txHash: string;
+      transferIndex: number;
+    },
+  ): Promise<TreasuryTransactionRecord | null>;
 };
