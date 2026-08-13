@@ -32,7 +32,15 @@ describe("Forecast V2 applied migration identity", () => {
     expect(identity.bindings.some((b) => b.tag.startsWith("0146_"))).toBe(true);
     expect(identity.bindings.some((b) => b.tag.startsWith("0147_"))).toBe(true);
     expect(identity.bindings.some((b) => b.tag.startsWith("0148_"))).toBe(true);
-    expect(identity.extraAppliedBeyondExpectedMax).toEqual([]);
+    // Forecast V2 surface remains 0148; DEE-606 Treasury migrations are extras, not V2 identity.
+    expect(identity.extraAppliedBeyondExpectedMax.map((b) => b.tag)).toEqual([
+      "0149_treasury_transparency_ledger_foundation",
+      "0150_treasury_transparency_ledger_rls",
+      "0151_treasury_chain_observations_lifecycle_guard",
+    ]);
+    expect(
+      identity.extraAppliedBeyondExpectedMax.every((b) => !b.tag.includes("trader_forecast_v2")),
+    ).toBe(true);
     expect(hashFile("0146_trader_forecast_v2_a3_storage_representation_v1")).toBe(
       identity.bindings.find((b) => b.tag.startsWith("0146_"))!.contentHash,
     );
@@ -136,10 +144,11 @@ describe("Forecast V2 applied migration identity", () => {
       journalEntries.map((e) => [e.contentHash, { createdAt: String(e.when) }]),
     );
     const identity = bindForecastV2AppliedMigrations({ journalEntries, appliedByHash });
-    expect(identity.max).toBe(149);
-    // Unexpected migration beyond the ratified surface max=148 MUST be surfaced.
-    expect(identity.extraAppliedBeyondExpectedMax.map((b) => b.tag)).toEqual([
+    expect(identity.max).toBe(FORECAST_V2_STORAGE_MIGRATION_MAX_EXPECTED);
+    // Unexpected migration beyond the ratified surface max=148 MUST be surfaced,
+    // alongside any already-present post-0148 Core/Treasury extras.
+    expect(identity.extraAppliedBeyondExpectedMax.map((b) => b.tag)).toContain(
       "0149_synthetic_extra_migration_v1",
-    ]);
+    );
   });
 });
