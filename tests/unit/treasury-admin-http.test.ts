@@ -1045,11 +1045,15 @@ describe("DEE-606 WP-4 recon and Breath boundary", () => {
       getRequest(`/api/admin/treasury/breath-preview?organization_id=${ORG_A}`),
       all,
     );
-    expect(preview.status).toBe(503);
-    expect(errorCode(preview)).toBe("TREASURY_BREATH_READ_MODEL_NOT_READY");
-    expect(JSON.stringify(preview.body)).not.toMatch(/\d{4,}/);
+    expect(preview.status).toBe(200);
+    const previewBody = preview.body as {
+      preview: { status: string; resources: unknown; currentFreeFunds: unknown };
+    };
+    expect(previewBody.preview.status).toBe("pending");
+    expect(previewBody.preview.resources).toBeNull();
+    expect(previewBody.preview.currentFreeFunds).toBeNull();
     expect(WP4_BREATH_PUBLIC_SNAPSHOT_IMPLEMENTED).toBe(false);
-    expect("getBreathPublicSnapshot" in treasury).toBe(false);
+    expect("getBreathPublicSnapshot" in treasury).toBe(true);
     const root = process.cwd();
     expect(existsSync(path.join(root, "app/api/treasury"))).toBe(false);
     expect(existsSync(path.join(root, "app/api/public/treasury"))).toBe(false);
