@@ -23,20 +23,78 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: approved
-  currentWorkPackage: WP-3
-  completedWorkPackages: [WP-0, WP-1, WP-2]
-  remainingWorkPackages: [WP-3, WP-4, WP-5, WP-6, WP-7, WP-8, WP-9]
+  currentWorkPackage: WP-4
+  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3]
+  remainingWorkPackages: [WP-4, WP-5, WP-6, WP-7, WP-8, WP-9]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 11028f59c8b083069ee4c6909ca57828a231d9d5
+  lastValidatedGitSha: e611808b6844675756c695c1b0c59c006604c9fb
   lastValidationAt: "2026-08-13"
   blockedReason: null
-  nextAction: "Resume WP-3 Treasury Watcher (DARK) implementation under the approved plan from the validated observation lifecycle persistence contract."
-  wp3:
+  nextAction: "Prepare/execute WP-4 Admin Backend HTTP Contracts under the approved plan."
+  wp4:
     status: NOT_STARTED
+  wp3:
+    status: COMPLETE
     blocked: false
-    implementationStarted: false
+    implementationStarted: true
     watcherDark: true
+    startingSha: afc0b9b270ed104173d84741b7bdcdfdc969f142
+    implementationShas:
+      - 7f0315c4ec7345cad8fd38496521238e9456b9db
+      - 3ba3d9597ecb632776eb8b36c7594b750d8c2ff5
+    testSha: e611808b6844675756c695c1b0c59c006604c9fb
+    moduleLayout: lib/waia-core/treasury/watcher/**
+    envNames:
+      - TREASURY_WATCHER_ENABLED
+      - TREASURY_WATCHER_CONFIRMATIONS_REQUIRED
+      - TREASURY_WATCHER_RESCAN_WINDOW
+      - TREASURY_WATCHER_MAX_BLOCKS_PER_CYCLE
+      - TREASURY_WATCHER_LEASE_TTL_SECONDS
+      - TREASURY_WATCHER_STALE_THRESHOLD_SECONDS
+      - TREASURY_WATCHER_RPC_MAX_RETRIES
+      - TREASURY_WATCHER_REORG_AGEOUT_MINUTES
+      - TREASURY_WATCHER_MAX_PAGES_PER_BLOCK
+      - TREASURY_WATCHER_USDT_CONTRACT
+      - TREASURY_WATCHER_TRON_PRIMARY_URL
+      - TREASURY_WATCHER_TRON_SECONDARY_URL
+      - TREASURY_WATCHER_TRONGRID_API_KEY
+      - TREASURY_WATCHER_TRON_SECONDARY_API_KEY
+    darkDefaultProof: "loadTreasuryWatcherConfig({}).enabled === false; WATCHER_ENABLED does not enable Treasury watcher"
+    orgScopedCycle: "runTreasuryWatcherCycle(context, deps) requires explicit OrgContext"
+    inceptionCheckpointProof: "ACTIVE inception required; seed last_scanned_block = watcher_start_block - 1; key TRC-20:treasury org-scoped"
+    eventPagination: "TronGrid v1 /v1/contracts/{}/events with event_name, block_number, limit, fingerprint; no min/max_block_number; no only_confirmed=true"
+    inboundOutboundProof: "direction_scope INBOUND/OUTBOUND/BOTH; external->managed INFLOW; managed->external OUTFLOW; A->B two observations"
+    observationPersistenceType: TreasuryChainObservationRecord
+    observationIdempotency: "${network}:${txHash}:${transferIndex}:${watchedAddressId}"
+    observationRoleLinkage: "external PRIMARY; internal OUTFLOW PRIMARY + INFLOW INTERNAL_COUNTERPARTY"
+    confirmationsLifecycle: "depth<=0 skip; 1<=depth<required OBSERVED; depth>=required CONFIRMED"
+    lifecycle0150Usage: "UPDATE confirmations_observed + observation_status only; related_payment_id untouched"
+    semanticCoalescing: "(organization_id, network, token_contract, tx_hash, transfer_index)"
+    internalABProof: "two observations, one WATCHER NEEDS_REVIEW tx, direction INTERNAL, kind null"
+    noBusinessMeaning: true
+    noVerify: true
+    reorgDroppedProof: "provider error != drop; age-out + canonical absence -> DROPPED + RECONCILIATION_REQUIRED"
+    cursorAtomicityProof: "no advance on provider/pagination/persist failure; advance after durable ingest"
+    reconAsOfProof: "asOfBlock/asOfTime captured; VERIFIED-only accounting; watcher later blocks excluded"
+    historicalBalanceCapability: "Tron adapter getConsolidatedBalanceAtBlock returns supported:false"
+    unavailableFailClosed: true
+    bigintProof: true
+    wp3TestCommand: "pnpm exec vitest run tests/unit/treasury-watcher-dark.test.ts tests/unit/treasury-watcher-rules.test.ts tests/unit/treasury-watcher-adapter.test.ts tests/unit/treasury-watcher-cycle.test.ts"
+    wp3TestCount: 36
+    wp3TestResult: 36/36 PASS
+    wp2Regression: 138/138 PASS
+    typecheck: PASS
+    lint: PASS
+    gitDiffCheck: clean
+    schemaMigrationChanges: false
+    dbGenerate: false
+    productionWatcherEnabled: false
+    paymentWatcherIndependent: true
+    paymentWatcherModified: false
+    mergeOrderGate: BLOCK_MIGRATION_BEARING_MERGE_WHILE_DEE_518_JOURNAL_UNMERGED
+    finalMigrationReconciliation: WP9_REQUIRED
+    prOpened: false
   observationGuardAmendment:
     status: APPROVED_IMPLEMENTED_VALIDATED
     discoveredAt: "2026-08-13"
@@ -60,7 +118,8 @@ state:
     finalMigrationReconciliation: WP9_REQUIRED
     mergeOrderGate: BLOCK_MIGRATION_BEARING_MERGE_WHILE_DEE_518_JOURNAL_UNMERGED
     watcherDark: true
-    wp3ImplementationStarted: false
+    wp3ImplementationStarted: true
+    wp3Status: COMPLETE
     architectureAmendmentSourceSha: 668f159f2c98c7fbd17b577a7de082ff12b0a5d6
     approvalToken: CONFIRM-DEE-606-OBSERVATION-GUARD-668F159F
     approvedAt: "2026-08-13"
@@ -600,7 +659,7 @@ Unknown future columns remain in the jsonb comparison and are therefore immutabl
 
 **Dedicated Postgres validation PASS** (`docker-compose.postgres-treasury-validate.yml`, project `waia-postgres-treasury-validate`, `127.0.0.1:54339`; Postgres 16.14; empty-DB apply 113 migrations ending `0150`; evidence sha256 `fb2e5bd321f9a47519be92251e7d37864fb4c19368b7ee42a540f8b03688f6c2`). Implementation SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`. typecheck PASS. WP-2 138/138 PASS.
 
-WP-3 watcher implementation may now resume under this validated persistence contract. Watcher remains DARK. WP-3 is still **NOT STARTED**.
+WP-3 watcher implementation resumed under this validated persistence contract and is now **COMPLETE**. Watcher remains DARK.
 
 ### 5.5 `treasury_transactions`
 
@@ -1242,11 +1301,11 @@ Dedicated compose `docker-compose.postgres-treasury-validate.yml`; project `waia
 
 ### WP-3 — Treasury watcher (DARK)
 
-**NOT STARTED.** Observation lifecycle guard correction is **APPROVED, IMPLEMENTED, and VALIDATED**. Blocker cleared. Watcher remains DARK. Do **not** start WP-3 in the correction task; next authorized task may resume WP-3 from the validated persistence contract (`0150`).
-
-Intended WP-3: inception-seeded checkpoint; watched addresses; inbound+outbound; address-relative observation idempotency; semantic Transfer coalescing (esp. internal A→B); confirmation; temporally exact balance reconciliation emission; never verify; never assign governance meaning. Watcher remains DARK.
+**COMPLETE.** Starting SHA `afc0b9b270ed104173d84741b7bdcdfdc969f142`. Implementation SHAs `7f0315c4ec7345cad8fd38496521238e9456b9db` (persistence/adapter) and `3ba3d9597ecb632776eb8b36c7594b750d8c2ff5` (cycle/reconciliation). Tests SHA `e611808b6844675756c695c1b0c59c006604c9fb`. Module: `lib/waia-core/treasury/watcher/**` with dedicated `TreasuryWatcherRepository` beside WP-2 `TreasuryRepository`. `TREASURY_WATCHER_ENABLED` defaults **false** and is independent of payment `WATCHER_ENABLED`. Org-scoped `runTreasuryWatcherCycle(context, deps)` requires explicit `OrgContext` and an ACTIVE inception; checkpoint key `TRC-20:treasury` seeds `last_scanned_block = watcher_start_block - 1` once. TronGrid v1 contract-events scanned per `block_number` with fingerprint pagination (no undocumented min/max range; no `only_confirmed=true`). Address-relative observations use frozen idempotency `${network}:${txHash}:${transferIndex}:${watchedAddressId}`; lifecycle UPDATE uses 0150 fields `confirmations_observed` + `observation_status` only. Watcher-origin semantic txs are `WATCHER` / `PRIVATE` / `NEEDS_REVIEW` with kind null; internal A→B is two observations + one semantic INTERNAL tx with deterministic PRIMARY / INTERNAL_COUNTERPARTY roles. Reorg age-out DROPPED reopens linked txs to `RECONCILIATION_REQUIRED`. Historical chain balance is **unsupported** on the Tron adapter → reconciliation `UNAVAILABLE` unless a test adapter proves block-bound balances. Targeted WP-3 tests **36/36 PASS**; WP-2 regression **138/138 PASS**; typecheck PASS; lint PASS; `git diff --check` clean; schema/migration/journal unchanged; `db:generate` not run; production watcher not enabled; payment-watcher files unmodified. Merge-order gate remains binding; WP-9 final migration reconciliation retained. Watcher remains DARK.
 
 ### WP-4 — Admin backend HTTP contracts
+
+**NOT STARTED.**
 
 Permissions + mutation APIs for DEE-607 (incl. inception); no UI.
 
@@ -1345,7 +1404,8 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 | WP-0 | COMPLETE |
 | WP-1 | COMPLETE (`DEDICATED_POSTGRES_VALIDATION_PASS` on `:54339`) |
 | WP-2 | COMPLETE (domain services; implementation SHA `44c06089cb01eab95ce1b1f118f6a15bef853f35`; 138 targeted tests) |
-| Current work package | WP-3 **NOT STARTED** (blocker cleared after observation-guard correction PASS; watcher DARK) |
+| Current work package | WP-4 **NOT STARTED** (WP-3 COMPLETE; watcher DARK; no PR) |
+| WP-3 | COMPLETE (DARK watcher; implementation SHAs `7f0315c4ec7345cad8fd38496521238e9456b9db`, `3ba3d9597ecb632776eb8b36c7594b750d8c2ff5`; tests `e611808b6844675756c695c1b0c59c006604c9fb`; 36/36 WP-3 + 138/138 WP-2; schema unchanged) |
 | Observation guard amendment | **APPROVED + IMPLEMENTED + VALIDATED** — token `CONFIRM-DEE-606-OBSERVATION-GUARD-668F159F`; amendment SHA `668f159f2c98c7fbd17b577a7de082ff12b0a5d6`; approval-recording SHA `04b28dfcb3d0741aee355f31c53887177e378e07`; correction SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`; tag `0150_treasury_chain_observations_lifecycle_guard`; `:54339` PASS |
 | Migration identities | `0148_treasury_transparency_ledger_foundation`, `0149_treasury_transparency_ledger_rls`, `0150_treasury_chain_observations_lifecycle_guard` (branch reservation; merge-order gate still binding; WP-9 final reconciliation) |
 
@@ -1364,7 +1424,7 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 | Approval-recording commit | `04b28dfcb3d0741aee355f31c53887177e378e07` |
 | Correction implementation SHA | `11028f59c8b083069ee4c6909ca57828a231d9d5` |
 | Correction migration tag | `0150_treasury_chain_observations_lifecycle_guard` |
-| Correction validation | **PASS** — `0150_treasury_chain_observations_lifecycle_guard`; implementation SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`; dedicated `:54339` empty-DB apply 113 migrations; evidence sha256 `fb2e5bd321f9a47519be92251e7d37864fb4c19368b7ee42a540f8b03688f6c2`; WP-3 remains NOT_STARTED |
+| Correction validation | **PASS** — `0150_treasury_chain_observations_lifecycle_guard`; implementation SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`; dedicated `:54339` empty-DB apply 113 migrations; evidence sha256 `fb2e5bd321f9a47519be92251e7d37864fb4c19368b7ee42a540f8b03688f6c2`; WP-3 now COMPLETE on this validated contract |
 
 ---
 
@@ -1399,8 +1459,8 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
 - Final integrity / Human-approved architecture source SHA: `82377e4f4869b9bf64f26a9578c2335cdbcb8b15`
 - Approval token: `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`
-- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2 COMPLETE; currentWorkPackage WP-3 **NOT STARTED**; observation-guard correction PASS; blocker cleared)
-- WP-3: **NOT STARTED**; ready to resume; watcher DARK
+- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2/WP-3 COMPLETE; currentWorkPackage WP-4 **NOT STARTED**; observation-guard correction PASS; watcher DARK; no PR)
+- WP-3: **COMPLETE**; DARK Treasury watcher; starting SHA `afc0b9b270ed104173d84741b7bdcdfdc969f142`; ready for WP-4
 - Observation guard amendment: **APPROVED_IMPLEMENTED_VALIDATED** (§5.4a); token `CONFIRM-DEE-606-OBSERVATION-GUARD-668F159F`; amendment SHA `668f159f2c98c7fbd17b577a7de082ff12b0a5d6`; approval-recording SHA `04b28dfcb3d0741aee355f31c53887177e378e07`; correction SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`; tag `0150_treasury_chain_observations_lifecycle_guard`; 0148/0149 unchanged
 - Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 DEFERRED
 - WP-1 validation: **DEDICATED_POSTGRES_VALIDATION_PASS** (`127.0.0.1:54339`; SHA `0df1b9698f1af27222c60bfb11191f0cf3f85676`)
@@ -1409,3 +1469,4 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 DEFERRED
 - Prior Architect decisions remain intact: T3; Core Treasury domain; accounting/detail separation; VERIFIED accounting truth; contribution share; commitment facts; deterministic runway snapshots; no DEE-612/613 hard-coded doctrine
 - `DEE_606_OBSERVATION_GUARD_CORRECTION_PASS_READY_TO_RESUME_WP3`
+- `DEE_606_WP3_TREASURY_WATCHER_DARK_PASS_WP3_COMPLETE_READY_FOR_WP4`
