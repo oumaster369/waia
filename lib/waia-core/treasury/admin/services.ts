@@ -20,6 +20,8 @@ import {
   createPostgresTreasuryWatcherRepository,
 } from "@/lib/waia-core/treasury/watcher";
 import type { TreasuryWatcherRepository } from "@/lib/waia-core/treasury/watcher/repository.types";
+import { resolveTreasuryEvidenceStorage } from "@/lib/waia-core/treasury/evidence/resolve";
+import type { TreasuryEvidenceStorage } from "@/lib/waia-core/treasury/evidence/types";
 
 export type TreasuryAdminServices = {
   domain: TreasuryDomainServices;
@@ -27,6 +29,7 @@ export type TreasuryAdminServices = {
   catalogRepo: TreasuryCatalogRepository;
   watcher: TreasuryWatcherRepository;
   breath: TreasuryBreathReadModelPort;
+  evidenceStorage: TreasuryEvidenceStorage | null;
 };
 
 export function openProductionTreasuryAdmin(
@@ -48,11 +51,13 @@ export function openProductionTreasuryAdmin(
     catalogRepo,
     watcher: createPostgresTreasuryWatcherRepository(runtime.db),
     breath: createUnreadyTreasuryBreathReadModel(),
+    evidenceStorage: resolveTreasuryEvidenceStorage(),
   };
 }
 
 export function createMemoryTreasuryAdminServices(
   writeAudit: (input: AuditLogInput) => string | Promise<string> = async () => "audit-id",
+  options?: { evidenceStorage?: TreasuryEvidenceStorage | null },
 ): TreasuryAdminServices {
   const domain = createMemoryTreasuryDomainServices(writeAudit);
   const catalogRepo = createMemoryTreasuryCatalogRepository();
@@ -67,5 +72,6 @@ export function createMemoryTreasuryAdminServices(
     catalogRepo,
     watcher: createMemoryTreasuryWatcherRepository(domain.repository),
     breath: createUnreadyTreasuryBreathReadModel(),
+    evidenceStorage: options?.evidenceStorage ?? null,
   };
 }

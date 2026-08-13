@@ -32,6 +32,7 @@ export const treasuryAuditActions = {
   evidenceLink: "treasury.evidence.link",
   evidenceUnlink: "treasury.evidence.unlink",
   evidenceVisibility: "treasury.evidence.visibility",
+  evidenceUpload: "treasury.evidence.upload",
 } as const;
 
 export type TreasuryAuditAction = (typeof treasuryAuditActions)[keyof typeof treasuryAuditActions];

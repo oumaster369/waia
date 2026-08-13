@@ -269,6 +269,9 @@ export function serializeEvidenceObject(
     byteSize: serializeDecimalBigint(row.byteSize),
     sha256: row.sha256,
     source: row.source,
+    storageBackend: row.storageBackend,
+    objectKey: row.objectKey,
+    uploadedByUserId: row.uploadedByUserId,
     createdAt: iso(row.createdAt),
   };
 }

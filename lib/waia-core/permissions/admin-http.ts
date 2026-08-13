@@ -21,6 +21,7 @@ export type AdminRouteHandlerResult = {
   errorClass?: string;
   waiaDbBackend?: "sqlite" | "postgres";
   responseHeaders?: Record<string, string>;
+  binaryBody?: Uint8Array;
 };
 
 export type AdminRouteHandlerDeps = {
@@ -54,6 +55,21 @@ export function adminSuccess(
     body,
     outcome: "success",
     waiaDbBackend,
+  };
+}
+
+export function adminSuccessBinary(
+  binaryBody: Uint8Array,
+  responseHeaders: Record<string, string>,
+  waiaDbBackend?: "sqlite" | "postgres",
+): AdminRouteHandlerResult {
+  return {
+    status: 200,
+    body: {},
+    binaryBody,
+    outcome: "success",
+    waiaDbBackend,
+    responseHeaders,
   };
 }
 

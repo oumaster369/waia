@@ -9,6 +9,7 @@ import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import {
   adminClientError,
   adminSuccess,
+  adminSuccessBinary,
   authorizeAdminRoute,
   parseOrganizationId,
   parseOrganizationIdFromUnknown,
@@ -27,6 +28,8 @@ import {
   parseBoundedOffset,
   parseBudgetStatus,
   parseDetailPublication,
+  parseEvidenceKind,
+  parseEvidenceVisibility,
   parseFundingNeedStatus,
   parseSemanticPatch,
   parseTxDirection,
@@ -35,6 +38,7 @@ import {
   parsePositiveDecimalBigint,
   rejectBudgetAggregates,
   rejectCustodyMaterial,
+  rejectEvidenceClientStorageAuthority,
   rejectFundedAmount,
   rejectWatchedImmutableIdentity,
   rejectWatcherEnablement,
@@ -66,6 +70,11 @@ import {
   type TreasuryAdminServices,
 } from "@/lib/waia-core/treasury/admin/services";
 import type { TreasuryActorContext } from "@/lib/waia-core/treasury/types";
+import {
+  TREASURY_EVIDENCE_DEFAULT_SOURCE,
+  TREASURY_EVIDENCE_MAX_UPLOAD_BYTES,
+  uploadTreasuryEvidenceObject,
+} from "@/lib/waia-core/treasury/evidence";
 
 export type TreasuryAdminHandlerDeps = AdminRouteHandlerDeps & {
   openTreasuryServices?: (
@@ -1150,6 +1159,36 @@ export async function handleTreasuryAttributionsPost(
   }
 }
 
+function isMultipartRequest(request: Request): boolean {
+  const contentType = request.headers.get("content-type") ?? "";
+  return contentType.toLowerCase().includes("multipart/form-data");
+}
+
+function formFieldsObject(form: FormData): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of form.entries()) {
+    if (typeof value === "string") out[key] = value;
+  }
+  return out;
+}
+
+const MEDIA_TYPE_RE = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i;
+const EVIDENCE_SOURCE_RE = /^[A-Za-z][A-Za-z0-9._-]{0,63}$/;
+
+function safeEvidenceMediaType(raw: string | undefined): string {
+  if (raw && MEDIA_TYPE_RE.test(raw) && raw.length <= 127) return raw.toLowerCase();
+  return "application/octet-stream";
+}
+
+function parseEvidenceSource(raw: unknown): string {
+  if (raw === undefined || raw === null || raw === "") return TREASURY_EVIDENCE_DEFAULT_SOURCE;
+  const value = requireString(raw, "source");
+  if (!EVIDENCE_SOURCE_RE.test(value)) {
+    throw new TreasuryValidationError("INVALID_BODY", "source is not a permitted identifier");
+  }
+  return value;
+}
+
 export async function handleTreasuryEvidenceGet(
   request: Request,
   deps: TreasuryAdminHandlerDeps,
@@ -1179,6 +1218,9 @@ export async function handleTreasuryEvidencePost(
   request: Request,
   deps: TreasuryAdminHandlerDeps,
 ): Promise<AdminRouteHandlerResult> {
+  if (isMultipartRequest(request)) {
+    return handleTreasuryEvidenceUpload(request, deps);
+  }
   try {
     const body = await readJsonObject(request);
     const organizationId = parseOrganizationIdFromUnknown(body.organization_id);
@@ -1218,6 +1260,126 @@ export async function handleTreasuryEvidencePost(
     }
     return mapTreasuryHttpError(err);
   }
+}
+
+export async function handleTreasuryEvidenceUpload(
+  request: Request,
+  deps: TreasuryAdminHandlerDeps,
+): Promise<AdminRouteHandlerResult> {
+  try {
+    const form = await request.formData();
+    const fields = formFieldsObject(form);
+    rejectWatcherEnablement(fields);
+    rejectCustodyMaterial(fields);
+    rejectEvidenceClientStorageAuthority(fields);
+    const organizationId = parseOrganizationIdFromUnknown(fields.organization_id);
+    if (typeof organizationId !== "string") return organizationId;
+    const visibilityRaw = fields.visibility;
+    const visibility =
+      visibilityRaw === undefined || visibilityRaw === null || visibilityRaw === ""
+        ? "ADMIN_ONLY"
+        : parseEvidenceVisibility(visibilityRaw);
+    const permission: TreasuryAdminPermission =
+      visibility === "PUBLIC" ? "admin.treasury.publish" : "admin.treasury.mutate";
+    const file = form.get("file");
+    if (typeof file === "string" || file === null) {
+      throw new TreasuryValidationError("INVALID_BODY", "file is required");
+    }
+    if (typeof file.size === "number" && file.size > TREASURY_EVIDENCE_MAX_UPLOAD_BYTES) {
+      throw new TreasuryValidationError(
+        "EVIDENCE_TOO_LARGE",
+        "Evidence upload exceeds the WP-5 safety size limit",
+      );
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.byteLength > TREASURY_EVIDENCE_MAX_UPLOAD_BYTES) {
+      throw new TreasuryValidationError(
+        "EVIDENCE_TOO_LARGE",
+        "Evidence upload exceeds the WP-5 safety size limit",
+      );
+    }
+    const expectedSha256 =
+      typeof fields.expected_sha256 === "string"
+        ? fields.expected_sha256
+        : typeof fields.sha256 === "string"
+          ? fields.sha256
+          : undefined;
+    const observedAt =
+      fields.observed_at === undefined || fields.observed_at === null || fields.observed_at === ""
+        ? new Date()
+        : requireIsoDate(fields.observed_at, "observed_at");
+    return withTreasuryAdmin({
+      deps,
+      organizationId,
+      permission,
+      fn: async ({ userId, services }) => {
+        const context = requireOrgContext(organizationId);
+        const admin = actor(userId);
+        const reason = requireString(fields.reason, "reason");
+        const record = await uploadTreasuryEvidenceObject({
+          storage: services.evidenceStorage,
+          register: async (row) => {
+            await services.catalog.registerEvidenceObject(admin, row, reason);
+          },
+          lookup: (id) => services.catalog.getEvidence(context, id),
+          payload: {
+            organizationId,
+            bytes,
+            mediaType: safeEvidenceMediaType("type" in file ? file.type : undefined),
+            kind: parseEvidenceKind(fields.kind),
+            visibility,
+            source: parseEvidenceSource(fields.source),
+            observedAt,
+            uploadedByUserId: userId,
+            expectedSha256Hex: expectedSha256,
+          },
+        });
+        return adminSuccess({ evidence: serializeEvidenceObject(record) });
+      },
+    });
+  } catch (err) {
+    return mapTreasuryHttpError(err);
+  }
+}
+
+export async function handleTreasuryEvidenceContentGet(
+  request: Request,
+  deps: TreasuryAdminHandlerDeps,
+  evidenceObjectId: string,
+): Promise<AdminRouteHandlerResult> {
+  const organizationId = orgFromQuery(request);
+  if (typeof organizationId !== "string") return organizationId;
+  return withTreasuryAdmin({
+    deps,
+    organizationId,
+    permission: "admin.treasury.read",
+    fn: async ({ services }) => {
+      const row = await services.catalog.getEvidence(
+        requireOrgContext(organizationId),
+        evidenceObjectId,
+      );
+      if (!row) return adminClientError(404, "TREASURY_NOT_FOUND", "evidence not found");
+      if (!services.evidenceStorage) {
+        throw new TreasuryValidationError(
+          "EVIDENCE_STORAGE_NOT_CONFIGURED",
+          "Evidence object storage is not configured",
+        );
+      }
+      const stored = await services.evidenceStorage.get(row.objectKey);
+      if (!stored) {
+        throw new TreasuryValidationError(
+          "EVIDENCE_CONTENT_UNAVAILABLE",
+          "Evidence object content is unavailable",
+        );
+      }
+      return adminSuccessBinary(stored.body, {
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": `attachment; filename="treasury-evidence-${row.id}.bin"`,
+        "Content-Type": row.mediaType,
+      });
+    },
+  });
 }
 
 export async function handleTreasuryEvidenceLinksPost(

@@ -18,6 +18,14 @@ export function jsonFromAdminResult(result: AdminRouteHandlerResult): NextRespon
       headers.set(key, value);
     }
   }
+  if (result.binaryBody) {
+    const copy = new Uint8Array(result.binaryBody.byteLength);
+    copy.set(result.binaryBody);
+    return new NextResponse(copy.buffer, {
+      status: result.status,
+      headers,
+    });
+  }
   return NextResponse.json(result.body, {
     status: result.status,
     headers,

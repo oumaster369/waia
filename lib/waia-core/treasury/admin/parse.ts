@@ -1,5 +1,7 @@
 import {
   treasuryBudgetStatusEnum,
+  treasuryEvidenceKindEnum,
+  treasuryEvidenceVisibilityEnum,
   treasuryFundingNeedStatusEnum,
   treasuryTxDirectionEnum,
   treasuryTxKindEnum,
@@ -61,6 +63,20 @@ const CUSTODY_KEYS = [
   "seed",
   "signing_key",
   "signingKey",
+] as const;
+
+const EVIDENCE_CLIENT_STORAGE_AUTHORITY_KEYS = [
+  "object_key",
+  "objectKey",
+  "storage_backend",
+  "storageBackend",
+  "byte_size",
+  "byteSize",
+  "public_url",
+  "publicUrl",
+  "url",
+  "r2_url",
+  "r2Url",
 ] as const;
 
 export function asObject(value: unknown, label = "body"): Record<string, unknown> {
@@ -157,6 +173,10 @@ export function rejectCustodyMaterial(body: Record<string, unknown>) {
   rejectKeys(body, CUSTODY_KEYS, "CUSTODY_MATERIAL_FORBIDDEN");
 }
 
+export function rejectEvidenceClientStorageAuthority(body: Record<string, unknown>) {
+  rejectKeys(body, EVIDENCE_CLIENT_STORAGE_AUTHORITY_KEYS, "EVIDENCE_CLIENT_STORAGE_AUTHORITY");
+}
+
 export function parseEnum<T extends string>(
   value: unknown,
   allowed: readonly T[],
@@ -190,6 +210,14 @@ export function parseBudgetStatus(value: unknown) {
 
 export function parseFundingNeedStatus(value: unknown) {
   return parseEnum(value, treasuryFundingNeedStatusEnum, "status");
+}
+
+export function parseEvidenceKind(value: unknown) {
+  return parseEnum(value, treasuryEvidenceKindEnum, "kind");
+}
+
+export function parseEvidenceVisibility(value: unknown) {
+  return parseEnum(value, treasuryEvidenceVisibilityEnum, "visibility");
 }
 
 export function parseSemanticPatch(raw: unknown): TreasurySemanticPatch {

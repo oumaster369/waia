@@ -20,6 +20,7 @@ const CONFLICT_REASON_CODES = new Set([
   "FULFILLMENT_NOT_VERIFIED",
   "FULFILLMENT_KIND",
   "CANCEL_REASON_REQUIRED",
+  "EVIDENCE_OBJECT_EXISTS",
 ]);
 
 export function mapTreasuryHttpError(err: unknown): AdminRouteHandlerResult {
@@ -43,6 +44,15 @@ export function mapTreasuryHttpError(err: unknown): AdminRouteHandlerResult {
     }
     if (err.reasonCode === "EVIDENCE_STORAGE_NOT_CONFIGURED") {
       return adminClientError(503, err.reasonCode, "Evidence object storage is not configured");
+    }
+    if (err.reasonCode === "EVIDENCE_CONTENT_UNAVAILABLE") {
+      return adminClientError(503, err.reasonCode, "Evidence object content is unavailable");
+    }
+    if (err.reasonCode === "EVIDENCE_INTEGRITY_MISMATCH") {
+      return adminClientError(503, err.reasonCode, "Evidence object integrity check failed");
+    }
+    if (err.reasonCode === "EVIDENCE_TOO_LARGE") {
+      return adminClientError(413, err.reasonCode, "Evidence upload exceeds the safety size limit");
     }
     const status = CONFLICT_REASON_CODES.has(err.reasonCode) ? 409 : 400;
     return adminClientError(status, err.reasonCode, "Treasury request rejected");

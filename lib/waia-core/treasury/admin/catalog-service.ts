@@ -587,8 +587,31 @@ export function createTreasuryCatalogService(deps: {
     refuseCreateEvidenceObject(): never {
       throw new TreasuryValidationError(
         "EVIDENCE_STORAGE_NOT_CONFIGURED",
-        "HD-3 storage path is not approved; WP-4 cannot create evidence objects",
+        "Evidence object storage is not configured",
       );
+    },
+    async registerEvidenceObject(
+      actor: TreasuryActorContext,
+      record: TreasuryEvidenceObjectRecord,
+      reason: string,
+    ): Promise<TreasuryEvidenceObjectRecord> {
+      await deps.catalog.insertEvidenceObject(record);
+      await audit(
+        actor,
+        treasuryAuditActions.evidenceUpload,
+        treasuryEntityTypes.evidence,
+        record.id,
+        record.organizationId,
+        reason,
+        {
+          kind: record.kind,
+          visibility: record.visibility,
+          objectKey: record.objectKey,
+          sha256: record.sha256,
+          storageBackend: record.storageBackend,
+        },
+      );
+      return record;
     },
     async linkEvidence(
       context: OrgContext,

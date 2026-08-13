@@ -73,6 +73,7 @@ export type WaiaRuntimeRouteKey =
   | "admin_treasury_runway_plan_commands"
   | "admin_treasury_attributions"
   | "admin_treasury_evidence"
+  | "admin_treasury_evidence_content"
   | "admin_treasury_evidence_links"
   | "admin_treasury_inceptions"
   | "admin_treasury_reconciliations"
