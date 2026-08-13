@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   USDT_NOMINAL_USD_POLICY_V1,
+  TREASURY_USDT_V1_TOKEN_CONTRACT,
   accountingMicrosFromUsdtNominal,
   computeContributionShareTotals,
   contributionShareOrZero,
   isQualifyingContribution,
+  netQualifyingMicros,
   type TreasuryAttributionRecord,
   type TreasuryTransactionRecord,
 } from "@/lib/waia-core/treasury";
@@ -27,7 +29,7 @@ function tx(
     nativeAmountAtomic: 1_000_000n,
     nativeDecimals: 6,
     nativeAsset: "USDT",
-    nativeContract: null,
+    nativeContract: TREASURY_USDT_V1_TOKEN_CONTRACT,
     accountingAmountMicros: 1_000_000n,
     accountingDenominationPolicy: USDT_NOMINAL_USD_POLICY_V1,
     cashEffectMicros: 1_000_000n,
@@ -177,5 +179,68 @@ describe("treasury contribution-share WP-2 foundation (DEE-606)", () => {
         nativeAsset: "USDT",
       }),
     ).toBe(7n);
+  });
+
+  it("does not treat BALANCE_ADJUSTMENT as a contribution-share netting adjustment", () => {
+    const contribution = tx({ id: "c-adj", kind: "CONTRIBUTION", status: "VERIFIED" });
+    const adjustment = tx({
+      id: "bal-adj",
+      kind: "BALANCE_ADJUSTMENT",
+      status: "VERIFIED",
+      direction: "OUTFLOW",
+      correctsTransactionId: "c-adj",
+      cashEffectMicros: -500_000n,
+      accountingAmountMicros: 500_000n,
+    });
+    expect(
+      netQualifyingMicros({
+        contribution,
+        linkedVerifiedAdjustments: [adjustment],
+      }),
+    ).toBe(1_000_000n);
+    const totals = computeContributionShareTotals({
+      contributions: [contribution],
+      adjustments: [adjustment],
+      attributionsByTransactionId: new Map([
+        [
+          contribution.id,
+          [
+            attr({
+              transactionId: contribution.id,
+              status: "ATTRIBUTED",
+              contributorUserId: "user-1",
+            }),
+          ],
+        ],
+      ]),
+      contributorUserId: "user-1",
+    });
+    expect(totals.numeratorMicros).toBe(1_000_000n);
+    expect(totals.denominatorMicros).toBe(1_000_000n);
+  });
+
+  it("does not infer TRC-20 qualification from the USDT asset string alone", () => {
+    expect(
+      isQualifyingContribution(
+        tx({
+          id: "eth-usdt",
+          kind: "CONTRIBUTION",
+          status: "VERIFIED",
+          nativeContract: "0xethusdt",
+          canonicalNetwork: "ERC-20",
+          canonicalTokenContract: "0xethusdt",
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isQualifyingContribution(
+        tx({
+          id: "usdt-no-contract",
+          kind: "CONTRIBUTION",
+          status: "VERIFIED",
+          nativeContract: null,
+        }),
+      ),
+    ).toBe(false);
   });
 });
