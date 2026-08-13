@@ -1,15 +1,21 @@
+import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
+
 const HERO_DESKTOP = "/brand/heap_comp_1.webp";
 const HERO_MOBILE = "/brand/head_mobile_1.webp";
 
 /**
- * Single prepared hero — responsive art via `<picture>`.
- * Wordmark and slogan live in the artwork only (no duplicate HTML copy).
+ * Brand art (existing assets — no new artwork) + English “What is WAIA?” definition.
+ *
+ * Human visual-rhythm corrective: normal document flow only.
+ * No negative margin under the hero image — ~40–48px clear air on large displays.
  */
 export function HeroBlock() {
+  const copy = HOMEPAGE_COPY.hero;
+
   return (
     <section
       data-testid="landing-hero"
-      aria-label="WAIA hero"
+      aria-label="WAIA — What is WAIA?"
       className="w-full bg-[#030813] pt-0 pb-0"
     >
       <div className="relative mx-auto w-full max-w-[1600px]">
@@ -22,11 +28,29 @@ export function HeroBlock() {
           <img
             data-testid="landing-hero-image"
             src={HERO_DESKTOP}
-            alt="WAIA hero artwork including wordmark and tagline."
+            alt="WAIA brand artwork including wordmark and tagline."
             className="mx-auto block h-auto w-full max-w-[1600px] object-contain object-bottom select-none"
             draggable={false}
           />
         </picture>
+      </div>
+
+      <div
+        data-testid="landing-hero-definition"
+        className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 px-4 pt-10 pb-0 text-center sm:gap-4 sm:px-8 sm:pt-11 lg:pt-12"
+      >
+        <p
+          data-testid="landing-hero-eyebrow"
+          className="text-xs font-semibold tracking-[0.18em] text-[#c9a96e] uppercase"
+        >
+          {copy.eyebrow}
+        </p>
+        <h1
+          data-testid="landing-hero-definition-text"
+          className="font-waia-serif text-[clamp(1.35rem,3.2vw,1.85rem)] leading-snug font-medium text-balance text-[#e8dcc4]"
+        >
+          {copy.definition}
+        </h1>
       </div>
     </section>
   );
