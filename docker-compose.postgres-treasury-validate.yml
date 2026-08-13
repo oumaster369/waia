@@ -1,0 +1,30 @@
+# Ephemeral Postgres for DEE-606 WP-1 Treasury schema validation only.
+# Local disposable topology — do not use for production, staging, or Supabase.
+# Never bind or reuse port 54329 / project `waia` / container `waia-postgres-validate-1`.
+#
+# Invoke:
+#   docker compose -f docker-compose.postgres-treasury-validate.yml up -d --wait
+# Project name is frozen via top-level `name:` (waia-postgres-treasury-validate).
+
+name: waia-postgres-treasury-validate
+
+services:
+  postgres-validate:
+    image: postgres:16-alpine
+    ports:
+      - "127.0.0.1:54339:5432"
+    environment:
+      POSTGRES_USER: waia_treasury_validate
+      POSTGRES_PASSWORD: waia_treasury_validate_local_only
+      POSTGRES_DB: waia_treasury_validate
+    volumes:
+      - waia_postgres_treasury_validate_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  waia_postgres_treasury_validate_data:
+    name: waia_postgres_treasury_validate_data
