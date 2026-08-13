@@ -105,59 +105,53 @@ export const paymentAddressStatusEnumPg = pgEnum("payment_address_status", [
 
 /** DEE-606 Core Treasury / Transparency enums. */
 export const treasuryTxStatusPgEnum = pgEnum("treasury_tx_status", [...treasuryTxStatusEnum]);
-export const treasuryDetailPublicationPgEnum = pgEnum(
-  "treasury_detail_publication",
-  [...treasuryDetailPublicationEnum],
-);
-export const treasuryTxDirectionPgEnum = pgEnum("treasury_tx_direction", [...treasuryTxDirectionEnum]);
+export const treasuryDetailPublicationPgEnum = pgEnum("treasury_detail_publication", [
+  ...treasuryDetailPublicationEnum,
+]);
+export const treasuryTxDirectionPgEnum = pgEnum("treasury_tx_direction", [
+  ...treasuryTxDirectionEnum,
+]);
 export const treasuryTxKindPgEnum = pgEnum("treasury_tx_kind", [...treasuryTxKindEnum]);
 export const treasuryProvenancePgEnum = pgEnum("treasury_provenance", [...treasuryProvenanceEnum]);
-export const treasuryBudgetStatusPgEnum = pgEnum("treasury_budget_status", [...treasuryBudgetStatusEnum]);
-export const treasuryFundingNeedStatusPgEnum = pgEnum(
-  "treasury_funding_need_status",
-  [...treasuryFundingNeedStatusEnum],
-);
-export const treasuryCommitmentStatusPgEnum = pgEnum(
-  "treasury_commitment_status",
-  [...treasuryCommitmentStatusEnum],
-);
-export const treasuryEvidenceKindPgEnum = pgEnum("treasury_evidence_kind", [...treasuryEvidenceKindEnum]);
-export const treasuryEvidenceVisibilityPgEnum = pgEnum(
-  "treasury_evidence_visibility",
-  [...treasuryEvidenceVisibilityEnum],
-);
-export const treasuryAttributionStatusPgEnum = pgEnum(
-  "treasury_attribution_status",
-  [...treasuryAttributionStatusEnum],
-);
-export const treasuryAddressDirectionScopePgEnum = pgEnum(
-  "treasury_address_direction_scope",
-  [...treasuryAddressDirectionScopeEnum],
-);
-export const treasuryBalanceReconStatusPgEnum = pgEnum(
-  "treasury_balance_recon_status",
-  [...treasuryBalanceReconStatusEnum],
-);
-export const treasuryInceptionStatusPgEnum = pgEnum(
-  "treasury_inception_status",
-  [...treasuryInceptionStatusEnum],
-);
-export const treasuryIdealBudgetStatusPgEnum = pgEnum(
-  "treasury_ideal_budget_status",
-  [...treasuryIdealBudgetStatusEnum],
-);
-export const treasuryIdealBudgetPublicationPgEnum = pgEnum(
-  "treasury_ideal_budget_publication",
-  [...treasuryIdealBudgetPublicationEnum],
-);
-export const treasuryRunwayPlanStatusPgEnum = pgEnum(
-  "treasury_runway_plan_status",
-  [...treasuryRunwayPlanStatusEnum],
-);
-export const treasuryObservationStatusPgEnum = pgEnum(
-  "treasury_observation_status",
-  [...treasuryObservationStatusEnum],
-);
+export const treasuryBudgetStatusPgEnum = pgEnum("treasury_budget_status", [
+  ...treasuryBudgetStatusEnum,
+]);
+export const treasuryFundingNeedStatusPgEnum = pgEnum("treasury_funding_need_status", [
+  ...treasuryFundingNeedStatusEnum,
+]);
+export const treasuryCommitmentStatusPgEnum = pgEnum("treasury_commitment_status", [
+  ...treasuryCommitmentStatusEnum,
+]);
+export const treasuryEvidenceKindPgEnum = pgEnum("treasury_evidence_kind", [
+  ...treasuryEvidenceKindEnum,
+]);
+export const treasuryEvidenceVisibilityPgEnum = pgEnum("treasury_evidence_visibility", [
+  ...treasuryEvidenceVisibilityEnum,
+]);
+export const treasuryAttributionStatusPgEnum = pgEnum("treasury_attribution_status", [
+  ...treasuryAttributionStatusEnum,
+]);
+export const treasuryAddressDirectionScopePgEnum = pgEnum("treasury_address_direction_scope", [
+  ...treasuryAddressDirectionScopeEnum,
+]);
+export const treasuryBalanceReconStatusPgEnum = pgEnum("treasury_balance_recon_status", [
+  ...treasuryBalanceReconStatusEnum,
+]);
+export const treasuryInceptionStatusPgEnum = pgEnum("treasury_inception_status", [
+  ...treasuryInceptionStatusEnum,
+]);
+export const treasuryIdealBudgetStatusPgEnum = pgEnum("treasury_ideal_budget_status", [
+  ...treasuryIdealBudgetStatusEnum,
+]);
+export const treasuryIdealBudgetPublicationPgEnum = pgEnum("treasury_ideal_budget_publication", [
+  ...treasuryIdealBudgetPublicationEnum,
+]);
+export const treasuryRunwayPlanStatusPgEnum = pgEnum("treasury_runway_plan_status", [
+  ...treasuryRunwayPlanStatusEnum,
+]);
+export const treasuryObservationStatusPgEnum = pgEnum("treasury_observation_status", [
+  ...treasuryObservationStatusEnum,
+]);
 
 /**
  * Application user row in `public.users`.
@@ -3902,7 +3896,7 @@ export const traderKnowledgeConfidenceUpdateRecord = pgTable(
 
 /**
  * DEE-606 Core Treasury / Transparency persistence (WP-1 schema mirror).
- * SQL authority: 0148_treasury_transparency_ledger_foundation.sql + 0149 RLS.
+ * SQL authority: 0149_treasury_transparency_ledger_foundation.sql + 0150 RLS + 0151 observation lifecycle guard.
  * Circular FKs (transactions ↔ ledger_inceptions; latest_revision pointer) are enforced in SQL.
  */
 
@@ -3988,7 +3982,9 @@ export const treasuryEvidenceObjects = pgTable(
     kind: treasuryEvidenceKindPgEnum("kind").notNull(),
     visibility: treasuryEvidenceVisibilityPgEnum("visibility").notNull().default("ADMIN_ONLY"),
     source: text("source").notNull(),
-    uploadedByUserId: uuid("uploaded_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    uploadedByUserId: uuid("uploaded_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     observedAt: timestamp("observed_at", { withTimezone: true, mode: "date" }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
@@ -4066,7 +4062,9 @@ export const treasuryRunwayPlans = pgTable(
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
@@ -4086,7 +4084,9 @@ export const treasuryPublicationSettings = pgTable(
     workSummary: text("work_summary"),
     methodologyNote: text("methodology_note").notNull(),
     recentActivityLimit: integer("recent_activity_limit").notNull().default(5),
-    updatedByUserId: uuid("updated_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    updatedByUserId: uuid("updated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
@@ -4111,7 +4111,9 @@ export const treasuryIdealAnnualBudgets = pgTable(
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
@@ -4224,14 +4226,18 @@ export const treasuryTransactions = pgTable(
     detailSupersededById: uuid("detail_superseded_by_id"),
     ledgerInceptionId: uuid("ledger_inception_id"), // composite FK in SQL (circular with treasury_ledger_inceptions)
     verifiedAt: timestamp("verified_at", { withTimezone: true, mode: "date" }),
-    verifiedByUserId: uuid("verified_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    verifiedByUserId: uuid("verified_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     detailPublishedAt: timestamp("detail_published_at", { withTimezone: true, mode: "date" }),
     detailPublishedByUserId: uuid("detail_published_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
     latestRevisionId: uuid("latest_revision_id"), // pointer; FK not modeled (circular)
     recordContentDigest: text("record_content_digest").notNull(),
-    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
@@ -4450,7 +4456,10 @@ export const treasuryEvidenceLinks = pgTable(
       foreignColumns: [treasuryEvidenceObjects.id, treasuryEvidenceObjects.organizationId],
       name: "treasury_evidence_links_evidence_same_org_fk",
     }).onDelete("cascade"),
-    uniqueIndex("treasury_evidence_links_tx_evidence_unique").on(t.transactionId, t.evidenceObjectId),
+    uniqueIndex("treasury_evidence_links_tx_evidence_unique").on(
+      t.transactionId,
+      t.evidenceObjectId,
+    ),
   ],
 );
 
@@ -4511,9 +4520,13 @@ export const treasuryCommitments = pgTable(
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     approvedAt: timestamp("approved_at", { withTimezone: true, mode: "date" }),
-    releasedByUserId: uuid("released_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    releasedByUserId: uuid("released_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     releasedAt: timestamp("released_at", { withTimezone: true, mode: "date" }),
     fulfilledByUserId: uuid("fulfilled_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -4615,7 +4628,9 @@ export const treasuryBalanceReconciliations = pgTable(
     observedOnchainBalanceAtomic: bigint("observed_onchain_balance_atomic", { mode: "bigint" }),
     accountingCashBalanceMicros: bigint("accounting_cash_balance_micros", { mode: "bigint" }),
     deltaMicros: bigint("delta_micros", { mode: "bigint" }),
-    explainedPendingMicros: bigint("explained_pending_micros", { mode: "bigint" }).notNull().default(0n),
+    explainedPendingMicros: bigint("explained_pending_micros", { mode: "bigint" })
+      .notNull()
+      .default(0n),
     unexplainedResidualMicros: bigint("unexplained_residual_micros", { mode: "bigint" }),
     status: treasuryBalanceReconStatusPgEnum("status").notNull(),
     toleranceMicros: bigint("tolerance_micros", { mode: "bigint" }).notNull().default(0n),
@@ -4639,7 +4654,6 @@ export const treasuryBalanceReconciliations = pgTable(
     check("treasury_balance_recon_tolerance_nonneg", sql`"tolerance_micros" >= 0`),
   ],
 );
-
 
 /**
  * Postgres transaction integration validation table (DEE-64 D6-core).
