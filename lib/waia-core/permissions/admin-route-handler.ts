@@ -14,7 +14,7 @@ import {
   assertAdminPermission,
   type AdminRouteHandlerDeps,
   type AdminRouteHandlerResult,
-} from "@/lib/trader/admin-route-shared";
+} from "@/lib/waia-core/permissions/admin-http";
 
 export async function handleAdminOrganizationsList(
   deps: AdminRouteHandlerDeps,

@@ -11,11 +11,20 @@ import type { PermissionCheckInput, PlatformRole, WaiaModule } from "@/lib/waia-
 
 type PgReadExecutor = Pick<WaiaPostgresDb, "select">;
 
+export const TREASURY_ADMIN_PERMISSIONS = [
+  "admin.treasury.read",
+  "admin.treasury.mutate",
+  "admin.treasury.publish",
+] as const;
+
+export type TreasuryAdminPermission = (typeof TREASURY_ADMIN_PERMISSIONS)[number];
+
 const ADMIN_PERMISSIONS = new Set([
   "admin.audit.read",
   "admin.org.read",
   "admin.entitlement.manage",
   "admin.trader.operations.mutate",
+  ...TREASURY_ADMIN_PERMISSIONS,
 ]);
 
 const USER_PERMISSIONS = new Set(["org.member.read", "org.subscription.read"]);
@@ -26,6 +35,10 @@ const ROLE_PERMISSIONS: Record<PlatformRole, ReadonlySet<string>> = {
   agent: new Set(["service.automation.run"]),
   service: new Set(["service.backend.run", "audit.write"]),
 };
+
+export function permissionsForPlatformRole(role: PlatformRole): ReadonlySet<string> {
+  return ROLE_PERMISSIONS[role];
+}
 
 export type PermissionCheckResult = {
   allowed: boolean;

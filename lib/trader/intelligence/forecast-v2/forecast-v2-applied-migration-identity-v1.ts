@@ -155,7 +155,14 @@ export function bindForecastV2AppliedMigrations(input: {
     }
   }
 
-  const nums = bindings.map((b) => Number(b.tag.slice(0, 4)));
+  const extraAppliedBeyondExpectedMax = bindings.filter(
+    (b) => Number(b.tag.slice(0, 4)) > expectedMax,
+  );
+  // Forecast V2 storage surface is sealed at 0148. Later Core/Treasury journal
+  // entries are extras, not a Forecast V2 identity bump (DEE-606 0149–0151).
+  const surfaceBindings = bindings.filter((b) => Number(b.tag.slice(0, 4)) <= expectedMax);
+
+  const nums = surfaceBindings.map((b) => Number(b.tag.slice(0, 4)));
   const min = Math.min(...nums);
   const max = Math.max(...nums);
   if (max < expectedMax) {
@@ -164,15 +171,11 @@ export function bindForecastV2AppliedMigrations(input: {
     );
   }
 
-  const extraAppliedBeyondExpectedMax = bindings.filter(
-    (b) => Number(b.tag.slice(0, 4)) > expectedMax,
-  );
-
   return {
     schemaVersion: "forecast-v2-applied-migration-identity/v1",
     min,
     max,
-    count: bindings.length,
+    count: surfaceBindings.length,
     requiredClosureViTags,
     bindings,
     extraAppliedBeyondExpectedMax,

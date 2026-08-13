@@ -17,7 +17,7 @@ import {
   parseOrganizationId,
   type AdminRouteHandlerDeps,
   type AdminRouteHandlerResult,
-} from "@/lib/trader/admin-route-shared";
+} from "@/lib/waia-core/permissions/admin-http";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 function serializeAuditRow(row: {
