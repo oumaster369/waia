@@ -31,10 +31,12 @@ state:
   lastValidatedGitSha: 0e97dd134ceb5fc76e16975492ad3c5ed2a3581a
   lastValidationAt: "2026-08-13"
   blockedReason: null
-  nextAction: "WP-5 Evidence Storage Adapter remains gated on HD-3 Human storage-path approval. Do not start WP-5 until HD-3 is resolved."
+  nextAction: "WP-5 Evidence Storage Adapter code is authorized under HD-3 APPROVED_ARCHITECTURE_ONLY. Production R2 provisioning remains separately blocked. Do not provision buckets, bindings, or wrangler.jsonc R2."
   wp5:
     status: NOT_STARTED
-    blockedBy: HD-3
+    blockedBy: PRODUCTION_R2_PROVISIONING_NOT_AUTHORIZED
+    hd3Architecture: APPROVED_ARCHITECTURE_ONLY
+    productionR2Provisioning: NOT_AUTHORIZED
   wp6:
     status: NOT_STARTED
   wp4:
@@ -290,7 +292,7 @@ state:
   humanDecisionDispositions:
     HD-1: APPROVED
     HD-2: APPROVED
-    HD-3: DEFERRED
+    HD-3: APPROVED_ARCHITECTURE_ONLY
     HD-4: DEFERRED
     HD-5: APPROVED_DEFAULT_PENDING
     HD-7: APPROVED_DARK
@@ -865,7 +867,7 @@ As before: required amount + status + public explanation; funded amount **derive
 
 Reference contract unchanged: storage backend + object key + media type + byte size + sha256 + kind + visibility default `ADMIN_ONLY`. No large binary in financial rows. Breath never lists admin-only evidence.
 
-**HD-3 storage backend:** repository inspection (`wrangler.jsonc`, `.env.example`, Core docs) finds **no approved existing durable object-storage binding** (no R2 bucket binding, no Supabase Storage config). Technical preference if adopting one: **Cloudflare R2** (same Workers/OpenNext production plane). Escalate to Human because adopting a new production storage service is required — not an arbitrary executor menu between equally approved backends.
+**HD-3 storage backend:** **APPROVED_ARCHITECTURE_ONLY** (Human 2026-08-13, token `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING`). Private Cloudflare R2, Worker-side access only, intended binding `TREASURY_EVIDENCE_R2`. Production bucket/binding/wrangler.jsonc mutation/deploy remain **NOT AUTHORIZED**.
 
 ### 5.11 `treasury_contribution_attributions`
 
@@ -1387,11 +1389,11 @@ Core-owned admin HTTP root is `/api/admin/treasury/**` (not `/api/trader/admin/*
 
 **WP-6 boundary (intentional):** typed `TreasuryBreathReadModelPort` exists; production preview is unready; Breath formulas and public snapshot belong to WP-6.
 
-**nextAction:** WP-5 Evidence Storage Adapter remains gated on HD-3 Human storage-path approval. Do **not** start WP-5 until HD-3 is resolved.
+**nextAction:** WP-5 Evidence Storage Adapter **code** is authorized under HD-3 `APPROVED_ARCHITECTURE_ONLY`. Production R2 provisioning remains separately **NOT AUTHORIZED**.
 
 ### WP-5 — Evidence storage adapter
 
-Implement only after HD-3 storage path approval; interface ready earlier.
+**NOT STARTED.** HD-3 architecture is `APPROVED_ARCHITECTURE_ONLY`. WP-5 code/tests are authorized. Production R2 bucket/binding/wrangler.jsonc mutation/deploy remain separately blocked.
 
 ### WP-6 — Breath read model + runway snapshots
 
@@ -1466,7 +1468,7 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 |----|----------|--------------------------------|--------|
 | **HD-1** | Platform treasury tenant | **APPROVED.** Use/create a dedicated Core organization for **WAIA Platform Treasury**. Do **not** reuse AI-Trader Org-0. Exact org creation/ID resolution remains WP-1 implementation precondition. | WP-1 seed |
 | **HD-2** | Public contribution disclosure | **APPROVED.** v1: aggregate-only; no public contributor identity list; authenticated self-only contribution share may be supported; contributor identity remains private unless separately approved later. | DEE-611 honesty |
-| **HD-3** | Evidence object storage | **DEFERRED.** Production evidence object storage is **not** yet approved. Cloudflare R2 remains the architecture recommendation (no approved durable object-store binding exists). No new production storage service may be provisioned until HD-3 is resolved. Must be resolved before WP-5 production evidence storage implementation. | WP-5 production uploads |
+| **HD-3** | Evidence object storage | **APPROVED_ARCHITECTURE_ONLY** (Human 2026-08-13). Token `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING`. Architecture: private Cloudflare R2, Worker-side access only, intended binding `TREASURY_EVIDENCE_R2`, no S3 credentials, no presigned URLs, no r2.dev, no custom-domain exposure, server-mediated admin upload/download only, deterministic opaque object keys, immutable after successful registration. Production bucket creation, wrangler.jsonc R2 binding, Cloudflare control-plane mutation, and deploy remain **NOT AUTHORIZED**. | WP-5 production uploads remain ops-gated; WP-5 **code** is now authorized |
 | **HD-4** | Initial ideal annual budget amount/year | **DEFERRED.** Intentionally not chosen yet. Do not invent a value. Does not block schema/domain implementation. Blocks Breath pending→published financial figures if ideal budget is required by the publication contract. | Breath published status |
 | **HD-5** | Initial ACTIVE runway daily burn | **APPROVED DEFAULT.** Runway remains pending until the Human explicitly approves an ACTIVE planned daily burn. Do not infer burn from historical expenses. | runway fields |
 | ~~HD-6~~ | ~~manual committed scalar~~ | **REMOVED.** Commitment facts + derived totals are mandatory. | — |
@@ -1484,11 +1486,37 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 | WP-0 | COMPLETE |
 | WP-1 | COMPLETE (`DEDICATED_POSTGRES_VALIDATION_PASS` on `:54339`) |
 | WP-2 | COMPLETE (domain services; implementation SHA `44c06089cb01eab95ce1b1f118f6a15bef853f35`; 138 targeted tests) |
-| Current work package | WP-5 **NOT STARTED** (HD-3 gated; WP-4 COMPLETE; watcher DARK; no PR) |
+| Current work package | WP-5 **NOT STARTED** (HD-3 architecture approved; production R2 provisioning still blocked; WP-4 COMPLETE; watcher DARK; no PR) |
 | WP-4 | COMPLETE (Core `/api/admin/treasury/**`; starting SHA `6f3c8b2bd457706f33afd7466dc54907ee649e75`; implementation SHAs `f7fcace832be58b012bbfa2f94497b044f4ebec4`, `095f35a6d2873c597e9e8de60f373e1d1575030c`; tests `0e97dd134ceb5fc76e16975492ad3c5ed2a3581a`; 27/27 WP-4 + 36/36 WP-3 + 138/138 WP-2; no UI; no public Breath; HD-3 DEFERRED; schema unchanged) |
 | WP-3 | COMPLETE (DARK watcher; implementation SHAs `7f0315c4ec7345cad8fd38496521238e9456b9db`, `3ba3d9597ecb632776eb8b36c7594b750d8c2ff5`; tests `e611808b6844675756c695c1b0c59c006604c9fb`; 36/36 WP-3 + 138/138 WP-2; schema unchanged) |
 | Observation guard amendment | **APPROVED + IMPLEMENTED + VALIDATED** — token `CONFIRM-DEE-606-OBSERVATION-GUARD-668F159F`; amendment SHA `668f159f2c98c7fbd17b577a7de082ff12b0a5d6`; approval-recording SHA `04b28dfcb3d0741aee355f31c53887177e378e07`; correction SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`; tag `0150_treasury_chain_observations_lifecycle_guard`; `:54339` PASS |
 | Migration identities | `0148_treasury_transparency_ledger_foundation`, `0149_treasury_transparency_ledger_rls`, `0150_treasury_chain_observations_lifecycle_guard` (branch reservation; merge-order gate still binding; WP-9 final reconciliation) |
+
+### HD-3 evidence storage — Human architecture-only approval record
+
+| Field | Value |
+|-------|--------|
+| Status | **APPROVED_ARCHITECTURE_ONLY** |
+| Human token | `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING` |
+| approvedAt | 2026-08-13 |
+| approvedBy | HUMAN |
+| Backend | Cloudflare R2 |
+| Bucket posture | PRIVATE |
+| Access | Worker-side only; server-mediated admin upload/download |
+| Intended future binding | `TREASURY_EVIDENCE_R2` |
+| Object key | `treasury-evidence/v1/{organizationId}/{evidenceObjectId}` |
+| Immutability | no overwrite after successful registration; conditional PUT `If-None-Match: *` |
+| S3 credentials in WAIA runtime | not used |
+| Presigned URLs | not approved |
+| r2.dev | not approved |
+| Custom-domain exposure | not approved |
+| Direct browser-to-R2 | not approved |
+| Public evidence metadata | does **not** make the R2 object public |
+| Production bucket creation | **NOT AUTHORIZED** |
+| Production R2 binding / wrangler.jsonc mutation | **NOT AUTHORIZED** |
+| Cloudflare control-plane mutation / deploy | **NOT AUTHORIZED** |
+| WP-5 code | authorized |
+| WP-5 implementation status | **NOT_STARTED** (this recording commit only) |
 
 ### Observation lifecycle guard amendment — Human approval record
 
@@ -1540,16 +1568,18 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
 - Final integrity / Human-approved architecture source SHA: `82377e4f4869b9bf64f26a9578c2335cdbcb8b15`
 - Approval token: `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`
-- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2/WP-3/WP-4 COMPLETE; currentWorkPackage WP-5 **NOT STARTED** (HD-3 gated); observation-guard correction PASS; watcher DARK; no PR)
+- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2/WP-3/WP-4 COMPLETE; currentWorkPackage WP-5 **NOT STARTED**; HD-3 `APPROVED_ARCHITECTURE_ONLY`; production R2 provisioning still blocked; observation-guard correction PASS; watcher DARK; no PR)
 - WP-4: **COMPLETE**; Core admin HTTP contracts; starting SHA `6f3c8b2bd457706f33afd7466dc54907ee649e75`; WP-5 not started
+- HD-3: **APPROVED_ARCHITECTURE_ONLY**; token `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING`; private R2 architecture/code authorized; production provisioning **NOT AUTHORIZED**
 - WP-3: **COMPLETE**; DARK Treasury watcher; starting SHA `afc0b9b270ed104173d84741b7bdcdfdc969f142`
 - Observation guard amendment: **APPROVED_IMPLEMENTED_VALIDATED** (§5.4a); token `CONFIRM-DEE-606-OBSERVATION-GUARD-668F159F`; amendment SHA `668f159f2c98c7fbd17b577a7de082ff12b0a5d6`; approval-recording SHA `04b28dfcb3d0741aee355f31c53887177e378e07`; correction SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`; tag `0150_treasury_chain_observations_lifecycle_guard`; 0148/0149 unchanged
-- Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 DEFERRED
+- Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 architecture-only (no production R2 provisioning)
 - WP-1 validation: **DEDICATED_POSTGRES_VALIDATION_PASS** (`127.0.0.1:54339`; SHA `0df1b9698f1af27222c60bfb11191f0cf3f85676`)
 - Observation-guard correction validation: **DEDICATED_POSTGRES_VALIDATION_PASS** (`127.0.0.1:54339`; evidence sha256 `fb2e5bd321f9a47519be92251e7d37864fb4c19368b7ee42a540f8b03688f6c2`)
 - Migration reservation: **0148** foundation + **0149** RLS + **0150** observation lifecycle guard; merge-order gate still binding; DEE-518 local tip observed `0148_trader_forecast_v2_open_tail_null_bounds_v1`
-- Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 DEFERRED
+- Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 architecture-only (no production R2 provisioning)
 - Prior Architect decisions remain intact: T3; Core Treasury domain; accounting/detail separation; VERIFIED accounting truth; contribution share; commitment facts; deterministic runway snapshots; no DEE-612/613 hard-coded doctrine
 - `DEE_606_OBSERVATION_GUARD_CORRECTION_PASS_READY_TO_RESUME_WP3`
 - `DEE_606_WP3_TREASURY_WATCHER_DARK_PASS_WP3_COMPLETE_READY_FOR_WP4`
 - `DEE_606_WP4_ADMIN_BACKEND_CONTRACTS_PASS_WP4_COMPLETE`
+- `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING`
