@@ -755,6 +755,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
               replayNowMs: new Date(snapshot.evaluatedAt).getTime(),
               htxVolumeAuthorityReceipt: requireProfileHtxVolumeAuthority(
                 input.historicalExecutionProfile,
+                closedBar.symbol,
               ),
               htxVolumeRaw: htxVolumeRawFromClosedBar(closedBar),
               resolveLatestOrder: (orderId) =>

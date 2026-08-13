@@ -23,6 +23,12 @@ The vNext master Build program remains **program architecture**; these files hol
 
 Archived plans: `docs/plans/archive/dee-<NN>-<slug>.md` when superseded or abandoned.
 
+Human ratification addenda and plan amendments are **not** integration plans. They live beside the parent plan as:
+
+`docs/plans/dee-<NN>-<slug>-(addendum|amendment)-vN.md`
+
+They must not carry the full integration-plan frontmatter/`state` schema. Canonical-doc validation classifies this filename pattern as an addendum: require a `##` body heading; if YAML frontmatter is present, `kind` must be `ratification-addendum` or `plan-amendment`. Do not treat an addendum as a second integration batch.
+
 ---
 
 ## Frontmatter schema

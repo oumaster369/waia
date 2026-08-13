@@ -141,6 +141,7 @@ export type HistoricalExecutionCheckpointSlice = {
     acceptedAtTs: number;
     firstEligibleTs: number;
     windowEndBarIndex: number;
+    sameSymbolEligibleBarsSeen?: number;
     remainingQty: string;
     filledQty: string;
     fillSequence: number;

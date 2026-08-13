@@ -179,7 +179,7 @@ async function runHtrWp22MultiPositionReplay(input: {
         model: profile.model,
         persistence,
         replayNowMs: new Date(snapshot.evaluatedAt).getTime(),
-        htxVolumeAuthorityReceipt: requireProfileHtxVolumeAuthority(profile),
+        htxVolumeAuthorityReceipt: requireProfileHtxVolumeAuthority(profile, closedBar.symbol),
         htxVolumeRaw: htxVolumeRawFromClosedBar(closedBar),
         refreshAccountState: async () => createHtrInitialAccountRiskState(),
         reconcileOrder: async () => undefined,

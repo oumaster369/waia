@@ -5,6 +5,7 @@ import {
   type HistoricalSimulatedExchange,
 } from "@/lib/trader/execution/historical-simulated-exchange";
 import type { Bar } from "@/lib/trader/intelligence/types";
+import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/execution/historical-execution-symbol";
 import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 import { HtxVolumeCapitalAuthorityError } from "@/lib/trader/market-data/volume-qualification/htx-volume-authority-capital-v1";
 
@@ -19,10 +20,20 @@ export type HistoricalExecutionProfileV1 = {
    * Do not fabricate QUALIFIED here — attach a real dataset/CLI qualification receipt.
    */
   htxVolumeAuthorityReceipt?: HtxVolumeQualificationReceiptV1;
+  /**
+   * Per-instrument QUALIFIED receipts. Required when the replay is multi-symbol:
+   * a BTC receipt must not authorize ETH capacity (DEE-526).
+   */
+  htxVolumeAuthorityByInstrument?: Readonly<
+    Partial<Record<"BTCUSDT" | "ETHUSDT", HtxVolumeQualificationReceiptV1>>
+  >;
 };
 
 export function bindHistoricalExecutionModelToSession(options?: {
   htxVolumeAuthorityReceipt?: HtxVolumeQualificationReceiptV1;
+  htxVolumeAuthorityByInstrument?: Readonly<
+    Partial<Record<"BTCUSDT" | "ETHUSDT", HtxVolumeQualificationReceiptV1>>
+  >;
 }): HistoricalExecutionProfileV1 {
   const model = createHistoricalExecutionModelV1();
   return {
@@ -30,6 +41,7 @@ export function bindHistoricalExecutionModelToSession(options?: {
     model,
     exchange: bindHistoricalSimulatedExchange(model),
     htxVolumeAuthorityReceipt: options?.htxVolumeAuthorityReceipt,
+    htxVolumeAuthorityByInstrument: options?.htxVolumeAuthorityByInstrument,
   };
 }
 
@@ -48,23 +60,39 @@ export function htxVolumeRawFromClosedBar(closedBar: Bar): { amount: number; vol
 
 export function requireProfileHtxVolumeAuthority(
   profile: HistoricalExecutionProfileV1,
+  closedBarSymbol?: string,
 ): HtxVolumeQualificationReceiptV1 {
+  if (closedBarSymbol !== undefined) {
+    const instrument = normalizeSymbolForHistoricalExecution(closedBarSymbol);
+    const fromInstrumentMap = profile.htxVolumeAuthorityByInstrument?.[instrument];
+    if (fromInstrumentMap) {
+      const receiptInstrument = normalizeSymbolForHistoricalExecution(fromInstrumentMap.symbol);
+      if (receiptInstrument !== instrument) {
+        throw new HtxVolumeCapitalAuthorityError(
+          "HTX_VOLUME_AUTHORITY_SYMBOL_MISMATCH",
+          `HTX volume qualification receipt symbol=${receiptInstrument} cannot authorize closed bar ${instrument}`,
+        );
+      }
+      return fromInstrumentMap;
+    }
+  }
   if (!profile.htxVolumeAuthorityReceipt) {
     throw new HtxVolumeCapitalAuthorityError(
       "HTX_VOLUME_AUTHORITY_MISSING",
       "historical execution profile missing HTX volume qualification receipt",
     );
   }
+  if (closedBarSymbol !== undefined) {
+    const want = normalizeSymbolForHistoricalExecution(closedBarSymbol);
+    const got = normalizeSymbolForHistoricalExecution(profile.htxVolumeAuthorityReceipt.symbol);
+    if (want !== got) {
+      throw new HtxVolumeCapitalAuthorityError(
+        "HTX_VOLUME_AUTHORITY_SYMBOL_MISMATCH",
+        `HTX volume qualification receipt symbol=${got} cannot authorize closed bar ${want}`,
+      );
+    }
+  }
   return profile.htxVolumeAuthorityReceipt;
 }
 
-const HISTORICAL_EXECUTION_SYMBOLS = new Set(["BTCUSDT", "ETHUSDT"]);
-
-/** Maps canonical research instrument ids to WP17 execution symbols. */
-export function normalizeSymbolForHistoricalExecution(symbol: string): "BTCUSDT" | "ETHUSDT" {
-  const normalized = symbol.includes("/") ? symbol.replace("/", "") : symbol;
-  if (HISTORICAL_EXECUTION_SYMBOLS.has(normalized)) {
-    return normalized as "BTCUSDT" | "ETHUSDT";
-  }
-  throw new Error(`[htr/wp17] unsupported historical execution symbol: ${symbol}`);
-}
+export { normalizeSymbolForHistoricalExecution };

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { SymbolMismatchFillRejectedError } from "@/lib/trader/execution/historical-simulated-exchange";
 import {
   createAcceptedMarketOrder,
   createWp17PersistencePort,
@@ -53,7 +52,7 @@ describe("DEE-520 execution multi-slice fill invariant", () => {
     expect(lastOrder.state).toBe("FILLED");
   });
 
-  it("rejects fill when bar symbol mismatches order symbol", async () => {
+  it("skips fill when a different-symbol bar arrives while the order remains open", async () => {
     const session = createWp17SqliteSession();
     sessions.push(session);
     const order = await createAcceptedMarketOrder(session.repo, session.context);
@@ -62,18 +61,22 @@ describe("DEE-520 execution multi-slice fill invariant", () => {
     const closedBar = makeWp17Bar(1, { volume: "10", symbol: "ETHUSDT" });
     const persistence = createWp17PersistencePort(session.repo, session.model);
 
-    await expect(
-      session.exchange.advanceOnClosedBar({
-        context: session.context,
-        closedBar,
-        barIndex: 1,
-        model: session.model,
-        persistence,
-        replayNowMs: Date.parse(closedBar.barCloseTime),
-        ...makeWp17QualifiedHtxVolumeAuthority(closedBar),
-        refreshAccountState: () => refreshWp17AccountState(session.repo, session.context),
-        reconcileOrder: async () => undefined,
-      }),
-    ).rejects.toThrow(SymbolMismatchFillRejectedError);
+    const result = await session.exchange.advanceOnClosedBar({
+      context: session.context,
+      closedBar,
+      barIndex: 1,
+      model: session.model,
+      persistence,
+      replayNowMs: Date.parse(closedBar.barCloseTime),
+      ...makeWp17QualifiedHtxVolumeAuthority(closedBar),
+      refreshAccountState: () => refreshWp17AccountState(session.repo, session.context),
+      reconcileOrder: async () => undefined,
+    });
+    expect(result.fillEvents).toHaveLength(0);
+    expect(session.exchange.listOpenOrders()).toHaveLength(1);
+    expect(session.exchange.listOpenOrders()[0]?.filledQty).toBe("0");
+    const unchanged = (await session.repo.getOrderById(session.context, order.id))!;
+    expect(unchanged.filledQuantity).toBe("0");
+    expect(unchanged.state).toBe("ACCEPTED");
   });
 });

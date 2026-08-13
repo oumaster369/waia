@@ -21,7 +21,7 @@ import type { OrderRepository } from "@/lib/trader/execution/order-repository.ty
 import { createLifecycleRecorder, createSqliteLifecycleRepository } from "@/lib/trader/lifecycle";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import { bindHistoricalExecutionModelToSession } from "@/lib/trader/backtest/historical-execution-profile";
-import { buildResearchSessionHtxVolumeQualificationReceipt } from "@/lib/trader/market-data/volume-qualification/research-session-htx-volume-authority-v1";
+import { buildResearchSessionHtxVolumeAuthorityByInstrument } from "@/lib/trader/market-data/volume-qualification/research-session-htx-volume-authority-v1";
 import type { HistoricalExecutionRuntime } from "@/lib/trader/execution/execution-service.types";
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import { createManualReplayClock } from "@/lib/trader/research/deterministic-replay-clock";
@@ -132,7 +132,7 @@ export async function createInMemoryResearchBacktestSession(
     ...(options.telemetrySink ? { riskTelemetrySink: options.telemetrySink } : {}),
   });
   const historicalExecutionProfile = bindHistoricalExecutionModelToSession({
-    htxVolumeAuthorityReceipt: buildResearchSessionHtxVolumeQualificationReceipt(),
+    htxVolumeAuthorityByInstrument: buildResearchSessionHtxVolumeAuthorityByInstrument(),
   });
   const decisionBarIndex = { value: 0 };
   const historicalExecution: HistoricalExecutionRuntime = {

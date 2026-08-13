@@ -25,6 +25,10 @@ import {
 } from "@/lib/trader/market-data/volume-qualification/htx-volume-authority-capital-v1";
 import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 import {
+  historicalExecutionInstrumentsMatch,
+  tryNormalizeSymbolForHistoricalExecution,
+} from "@/lib/trader/execution/historical-execution-symbol";
+import {
   addDecimal,
   compareDecimal,
   formatDecimal,
@@ -61,6 +65,30 @@ export class SymbolMismatchFillRejectedError extends Error {
   constructor(orderSymbol: string, barSymbol: string) {
     super(`[trader] symbol mismatch fill rejected: order=${orderSymbol} bar=${barSymbol}`);
     this.name = "SymbolMismatchFillRejectedError";
+  }
+}
+
+/**
+ * Fail-closed invariant for a true cross-symbol fill/capacity attempt.
+ * Same-instrument compact vs slash forms (`ETHUSDT` vs `ETH/USDT`) match.
+ */
+export function assertHistoricalFillInstrumentMatch(orderSymbol: string, barSymbol: string): void {
+  if (!historicalExecutionInstrumentsMatch(orderSymbol, barSymbol)) {
+    throw new SymbolMismatchFillRejectedError(orderSymbol, barSymbol);
+  }
+}
+
+function assertVolumeAuthorityInstrumentMatchesFill(input: {
+  receipt: HtxVolumeQualificationReceiptV1;
+  orderSymbol: string;
+  barSymbol: string;
+}): void {
+  assertHistoricalFillInstrumentMatch(input.orderSymbol, input.barSymbol);
+  if (
+    !historicalExecutionInstrumentsMatch(input.receipt.symbol, input.orderSymbol) ||
+    !historicalExecutionInstrumentsMatch(input.receipt.symbol, input.barSymbol)
+  ) {
+    throw new SymbolMismatchFillRejectedError(input.receipt.symbol, input.barSymbol);
   }
 }
 
@@ -125,6 +153,7 @@ type OpenHistoricalOrder = {
   decisionBarIndex: number;
   firstEligibleBarIndex: number;
   windowEndBarIndex: number;
+  sameSymbolEligibleBarsSeen: number;
   remainingQty: string;
   filledQty: string;
   fillSequence: number;
@@ -201,6 +230,7 @@ export function createHistoricalSimulatedExchange(
       remainingQty: order.quantity,
       filledQty: "0",
       fillSequence: 0,
+      sameSymbolEligibleBarsSeen: 0,
     });
   }
 
@@ -227,6 +257,7 @@ export function createHistoricalSimulatedExchange(
         acceptedAtTs: entry.acceptedAtTs,
         firstEligibleTs: entry.acceptedAtTs,
         windowEndBarIndex: entry.windowEndBarIndex,
+        sameSymbolEligibleBarsSeen: entry.sameSymbolEligibleBarsSeen,
         remainingQty: entry.remainingQty,
         filledQty: entry.filledQty,
         fillSequence: entry.fillSequence,
@@ -250,6 +281,7 @@ export function createHistoricalSimulatedExchange(
         decisionBarIndex: row.windowEndBarIndex - model.maxEligibleClosedBars,
         firstEligibleBarIndex: row.windowEndBarIndex - model.maxEligibleClosedBars + 1,
         windowEndBarIndex: row.windowEndBarIndex,
+        sameSymbolEligibleBarsSeen: row.sameSymbolEligibleBarsSeen ?? 0,
         remainingQty: row.remainingQty,
         filledQty: row.filledQty,
         fillSequence: row.fillSequence,
@@ -293,16 +325,29 @@ export function createHistoricalSimulatedExchange(
         });
       }
 
+      const barInstrument = tryNormalizeSymbolForHistoricalExecution(closedBar.symbol);
+      const orderInstrument = tryNormalizeSymbolForHistoricalExecution(entry.order.symbol);
+      if (barInstrument === null || orderInstrument === null || barInstrument !== orderInstrument) {
+        continue;
+      }
+
+      if (barIndex <= entry.decisionBarIndex) {
+        continue;
+      }
+
+      entry.sameSymbolEligibleBarsSeen += 1;
+
       const eligible =
-        barIndex >= entry.firstEligibleBarIndex &&
-        barIndex <= entry.windowEndBarIndex &&
-        barIndex > entry.decisionBarIndex &&
+        entry.sameSymbolEligibleBarsSeen >= 1 &&
+        entry.sameSymbolEligibleBarsSeen <= model.maxEligibleClosedBars &&
         !entry.pendingCancel;
 
       if (eligible && compareDecimal(entry.remainingQty, "0") > 0) {
-        if (closedBar.symbol !== entry.order.symbol) {
-          throw new SymbolMismatchFillRejectedError(entry.order.symbol, closedBar.symbol);
-        }
+        assertVolumeAuthorityInstrumentMatchesFill({
+          receipt: input.htxVolumeAuthorityReceipt,
+          orderSymbol: entry.order.symbol,
+          barSymbol: closedBar.symbol,
+        });
         assertHtxVolumeCapitalAuthorityPermitsCapacity(input.htxVolumeAuthorityReceipt);
         const authoritativeBase = resolveAuthoritativeHtxBaseVolumeForCapital({
           receipt: input.htxVolumeAuthorityReceipt,
@@ -375,7 +420,7 @@ export function createHistoricalSimulatedExchange(
       }
 
       if (
-        barIndex === entry.windowEndBarIndex &&
+        entry.sameSymbolEligibleBarsSeen === model.maxEligibleClosedBars &&
         compareDecimal(entry.remainingQty, "0") > 0 &&
         !entry.pendingCancel
       ) {

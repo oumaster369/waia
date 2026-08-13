@@ -42,3 +42,12 @@ export function buildResearchSessionHtxVolumeQualificationReceipt(input?: {
   }
   return receipt;
 }
+
+export function buildResearchSessionHtxVolumeAuthorityByInstrument(): Readonly<
+  Record<"BTCUSDT" | "ETHUSDT", HtxVolumeQualificationReceiptV1>
+> {
+  return {
+    BTCUSDT: buildResearchSessionHtxVolumeQualificationReceipt({ symbol: "BTCUSDT" }),
+    ETHUSDT: buildResearchSessionHtxVolumeQualificationReceipt({ symbol: "ETHUSDT" }),
+  };
+}

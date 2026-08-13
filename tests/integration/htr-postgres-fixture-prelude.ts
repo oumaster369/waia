@@ -6,7 +6,7 @@ import postgres from "postgres";
 import { eq } from "drizzle-orm";
 
 import { bindHistoricalExecutionModelToSession } from "@/lib/trader/backtest/historical-execution-profile";
-import { buildResearchSessionHtxVolumeQualificationReceipt } from "@/lib/trader/market-data/volume-qualification/research-session-htx-volume-authority-v1";
+import { buildResearchSessionHtxVolumeAuthorityByInstrument } from "@/lib/trader/market-data/volume-qualification/research-session-htx-volume-authority-v1";
 import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
 import { getPostgresDrizzle } from "@/db/postgres-client";
 import * as pgSchema from "@/db/schema.postgres";
@@ -213,7 +213,7 @@ export async function buildHtrPostgresResearchSession(
   });
 
   const historicalExecutionProfile = bindHistoricalExecutionModelToSession({
-    htxVolumeAuthorityReceipt: buildResearchSessionHtxVolumeQualificationReceipt(),
+    htxVolumeAuthorityByInstrument: buildResearchSessionHtxVolumeAuthorityByInstrument(),
   });
   const decisionBarIndex = { value: 0 };
   const historicalExecution: HistoricalExecutionRuntime = {

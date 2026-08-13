@@ -82,14 +82,45 @@ require_sections() {
   done
 }
 
+# Integration plans may use either:
+#   - ## Acceptance
+#   - ## WP-* (top-level work packages)
+#   - ### WP-* (nested work packages under a Gate / program heading, e.g. DEE-518)
+plan_has_wp_structure() {
+  local file="$1"
+  grep -Eq '^## WP-' "$file" || grep -Eq '^### WP-' "$file"
+}
+
 validate_plan() {
   local file="$1"
   CHECKED=$((CHECKED + 1))
   require_fm_keys "$file" "plan" \
     integrationIssue integrationTitle branch riskTier prPolicy executionSurfaces \
     requiredValidation approvalGates state provenance
-  if ! body_has_section "$file" "Acceptance" && ! grep -Eq '^## WP-' "$file"; then
-    fail "plan $file — missing ## Acceptance or ## WP-* section"
+  if ! body_has_section "$file" "Acceptance" && ! plan_has_wp_structure "$file"; then
+    fail "plan $file — missing ## Acceptance or ## WP-* / ### WP-* section"
+  fi
+}
+
+# Human ratification addenda / plan amendments are NOT integration plans.
+# Narrow filename class only: dee-<NN>-<slug>-(addendum|amendment)-vN.md
+# Do not require full integration-plan frontmatter or WP structure.
+validate_plan_addendum() {
+  local file="$1"
+  CHECKED=$((CHECKED + 1))
+  if ! grep -Eq '^## ' "$file"; then
+    fail "plan-addendum $file — missing ## heading (ratification/amendment body required)"
+  fi
+  local fm
+  fm="$(extract_frontmatter "$file")"
+  if [[ -n "$fm" ]]; then
+    if ! fm_has_key "$fm" "kind"; then
+      fail "plan-addendum $file — frontmatter present but missing key: kind"
+      return
+    fi
+    if ! grep -Eq '^kind:[[:space:]]*(ratification-addendum|plan-amendment)[[:space:]]*$' <<<"$fm"; then
+      fail "plan-addendum $file — kind must be ratification-addendum or plan-amendment"
+    fi
   fi
 }
 
@@ -123,14 +154,29 @@ validate_roadmap() {
 classify_and_validate() {
   local file="$1"
   local rel="${file#"$ROOT"/}"
+  local base
+  base="$(basename "$file")"
 
   case "$rel" in
     docs/plans/archive/* | docs/plans/README.md)
       return 0
       ;;
-    docs/plans/dee-*.md)
-      validate_plan "$file"
+  esac
+
+  # Filename class is checked before the general dee-*.md integration-plan class.
+  # Basename matching lets the regression harness pass fixtures outside docs/plans/.
+  case "$base" in
+    dee-*-addendum-*.md | dee-*-amendment-*.md)
+      validate_plan_addendum "$file"
+      return 0
       ;;
+    dee-*.md)
+      validate_plan "$file"
+      return 0
+      ;;
+  esac
+
+  case "$rel" in
     docs/product-specs/README.md)
       return 0
       ;;
