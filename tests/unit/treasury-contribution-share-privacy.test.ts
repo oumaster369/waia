@@ -6,10 +6,12 @@ import { USDT_TRC20_CONTRACT } from "@/lib/waia-core/payment-watcher/watcher-con
 import * as treasury from "@/lib/waia-core/treasury";
 import {
   TREASURY_USDT_V1_TOKEN_CONTRACT,
+  createContributionShareEngine,
   getBreathPublicSnapshot,
   getPublicContributionAggregate,
   getSelfContributionShare,
 } from "@/lib/waia-core/treasury";
+import type { ContributionShareFactsRepository } from "@/lib/waia-core/treasury/share/repository.types";
 import { resolveTreasuryEvidenceStorage } from "@/lib/waia-core/treasury/evidence/resolve";
 import { loadTreasuryWatcherConfig } from "@/lib/waia-core/treasury/watcher";
 import {
@@ -223,5 +225,249 @@ describe("DEE-606 WP-7 aggregate/self privacy and isolation", () => {
     expect(paymentWatcher).not.toContain("getSelfContributionShare");
 
     expect(publicA.lastUpdatedAt).toBe("2026-08-13T12:00:00.000Z");
+  });
+});
+
+const ATTR_LATER = new Date("2026-08-13T18:00:00.000Z");
+const TX_LATER = new Date("2026-08-13T19:00:00.000Z");
+
+function instrumentFacts(inner: ContributionShareFactsRepository) {
+  const calls = { contribution: 0, attribution: 0 };
+  const facts: ContributionShareFactsRepository = {
+    async loadContributionFacts(context) {
+      calls.contribution += 1;
+      return inner.loadContributionFacts(context);
+    },
+    async loadAttributionFacts(context) {
+      calls.attribution += 1;
+      return inner.loadAttributionFacts(context);
+    },
+  };
+  return { facts, calls };
+}
+
+describe("DEE-606 WP-7 public-aggregate privacy / timestamp correction", () => {
+  it("attribution-only changes do not alter public totals, count, or lastUpdatedAt", async () => {
+    const { services, engine, facts } = createWp7Bundle();
+    await seedQualifyingContribution(services, {
+      id: "pub-c",
+      accountingAmountMicros: 4_000_000n,
+    });
+    const before = await getPublicContributionAggregate(ctxA, engine);
+    expect(before).toEqual({
+      totalNetContributionMicros: "4000000",
+      qualifyingContributionCount: 1,
+      lastUpdatedAt: "2026-08-13T12:00:00.000Z",
+    });
+
+    await seedOpenAttribution(services, {
+      id: "attr-create",
+      transactionId: "pub-c",
+      status: "UNMATCHED",
+      createdAt: ATTR_LATER,
+    });
+    expect(await getPublicContributionAggregate(ctxA, engine)).toEqual(before);
+
+    await services.catalogRepo.updateAdminAttribution(ctxA, "attr-create", {
+      status: "ATTRIBUTED",
+      contributorUserId: USER_A,
+      attributedAt: ATTR_LATER,
+    });
+    expect(await getPublicContributionAggregate(ctxA, engine)).toEqual(before);
+
+    await services.catalogRepo.updateAdminAttribution(ctxA, "attr-create", {
+      status: "ATTRIBUTED",
+      contributorUserId: USER_B,
+      attributedAt: ATTR_LATER,
+    });
+    expect(await getPublicContributionAggregate(ctxA, engine)).toEqual(before);
+
+    await services.catalogRepo.updateAdminAttribution(ctxA, "attr-create", {
+      revokedAt: ATTR_LATER,
+    });
+    await seedOpenAttribution(services, {
+      id: "attr-reassign",
+      transactionId: "pub-c",
+      status: "ATTRIBUTED",
+      contributorUserId: USER_A,
+      createdAt: ATTR_LATER,
+      attributedAt: ATTR_LATER,
+    });
+    expect(await getPublicContributionAggregate(ctxA, engine)).toEqual(before);
+
+    await seedQualifyingContribution(services, {
+      id: "pub-anon",
+      accountingAmountMicros: 1_000_000n,
+    });
+    const withSecond = await getPublicContributionAggregate(ctxA, engine);
+    await seedOpenAttribution(services, {
+      id: "attr-anon",
+      transactionId: "pub-anon",
+      status: "ANONYMOUS",
+      createdAt: ATTR_LATER,
+    });
+    expect(await getPublicContributionAggregate(ctxA, engine)).toEqual(withSecond);
+    await services.catalogRepo.updateAdminAttribution(ctxA, "attr-anon", {
+      status: "ATTRIBUTED",
+      contributorUserId: USER_A,
+      attributedAt: ATTR_LATER,
+    });
+    expect(await getPublicContributionAggregate(ctxA, engine)).toEqual(withSecond);
+
+    await services.catalogRepo.updateAdminAttribution(ctxA, "attr-reassign", {
+      consentPublicIdentity: true,
+      note: "public name please",
+      attributedByUserId: USER_B,
+    });
+    expect(await getPublicContributionAggregate(ctxA, engine)).toEqual(withSecond);
+
+    const selfAfter = await getSelfContributionShare(ctxA, USER_A, engine);
+    expect(selfAfter.numeratorMicros).toBe("5000000");
+    expect(selfAfter.lastUpdatedAt).toBe(ATTR_LATER.toISOString());
+    expect(JSON.stringify(selfAfter)).not.toContain(USER_B);
+    expect(JSON.stringify(await getPublicContributionAggregate(ctxA, engine))).not.toContain(
+      USER_A,
+    );
+
+    const instrumented = instrumentFacts(facts);
+    const isolated = createContributionShareEngine(instrumented.facts);
+    await getPublicContributionAggregate(ctxA, isolated);
+    expect(instrumented.calls.contribution).toBe(1);
+    expect(instrumented.calls.attribution).toBe(0);
+    await getSelfContributionShare(ctxA, USER_A, isolated);
+    expect(instrumented.calls.attribution).toBe(1);
+
+    const engineSrc = readFileSync(
+      path.join(process.cwd(), "lib/waia-core/treasury/share/engine.ts"),
+      "utf8",
+    );
+    const publicFn = engineSrc.slice(engineSrc.indexOf("async computePublicAggregate"));
+    expect(publicFn).not.toContain("loadAttributionFacts");
+    expect(publicFn).not.toContain("contributorUserId");
+    const postgresSrc = readFileSync(
+      path.join(process.cwd(), "lib/waia-core/treasury/share/postgres-repository.ts"),
+      "utf8",
+    );
+    const contribFn = postgresSrc.slice(
+      postgresSrc.indexOf("async loadContributionFacts"),
+      postgresSrc.indexOf("async loadAttributionFacts"),
+    );
+    expect(contribFn).not.toContain("treasuryContributionAttributions");
+    expect(contribFn).not.toContain("contributorUserId");
+    expect(contribFn).not.toContain("consentPublicIdentity");
+  });
+
+  it("public lastUpdatedAt changes when Q or used netting facts change; self-share follows attribution", async () => {
+    const { services, engine } = createWp7Bundle();
+    await seedQualifyingContribution(services, {
+      id: "q-early",
+      accountingAmountMicros: 1_000_000n,
+    });
+    const baseline = await getPublicContributionAggregate(ctxA, engine);
+    expect(baseline.lastUpdatedAt).toBe("2026-08-13T12:00:00.000Z");
+
+    await services.domain.repository.updateTransaction(ctxA, "q-early", {
+      accountingAmountMicros: 2_000_000n,
+      cashEffectMicros: 2_000_000n,
+      nativeAmountAtomic: 2_000_000n,
+      updatedAt: TX_LATER,
+    });
+    const afterAmount = await getPublicContributionAggregate(ctxA, engine);
+    expect(afterAmount.totalNetContributionMicros).toBe("2000000");
+    expect(afterAmount.lastUpdatedAt).toBe(TX_LATER.toISOString());
+
+    await seedQualifyingContribution(services, {
+      id: "q-enter",
+      status: "CLASSIFIED",
+      accountingAmountMicros: 3_000_000n,
+      updatedAt: ATTR_LATER,
+    });
+    expect((await getPublicContributionAggregate(ctxA, engine)).qualifyingContributionCount).toBe(
+      1,
+    );
+    await services.domain.repository.updateTransaction(ctxA, "q-enter", {
+      status: "VERIFIED",
+      verifiedAt: TX_LATER,
+      updatedAt: TX_LATER,
+    });
+    const afterEnter = await getPublicContributionAggregate(ctxA, engine);
+    expect(afterEnter.qualifyingContributionCount).toBe(2);
+    expect(afterEnter.lastUpdatedAt).toBe(TX_LATER.toISOString());
+
+    await services.domain.repository.updateTransaction(ctxA, "q-enter", {
+      status: "RECONCILIATION_REQUIRED",
+      updatedAt: new Date("2026-08-13T21:00:00.000Z"),
+    });
+    const afterExit = await getPublicContributionAggregate(ctxA, engine);
+    expect(afterExit.qualifyingContributionCount).toBe(1);
+    expect(afterExit.lastUpdatedAt).toBe(TX_LATER.toISOString());
+    expect(afterExit.lastUpdatedAt).not.toBe("2026-08-13T21:00:00.000Z");
+
+    await seedTx(services, {
+      id: "refund-used",
+      status: "VERIFIED",
+      direction: "OUTFLOW",
+      kind: "REFUND",
+      nativeContract: TREASURY_USDT_V1_TOKEN_CONTRACT,
+      accountingAmountMicros: 100_000n,
+      cashEffectMicros: -100_000n,
+      correctsTransactionId: "q-early",
+      verifiedAt: new Date("2026-08-13T22:00:00.000Z"),
+      updatedAt: new Date("2026-08-13T22:00:00.000Z"),
+    });
+    const afterRefund = await getPublicContributionAggregate(ctxA, engine);
+    expect(afterRefund.totalNetContributionMicros).toBe("1900000");
+    expect(afterRefund.lastUpdatedAt).toBe("2026-08-13T22:00:00.000Z");
+
+    await seedTx(services, {
+      id: "corr-used",
+      status: "VERIFIED",
+      direction: "INFLOW",
+      kind: "CORRECTION",
+      nativeContract: TREASURY_USDT_V1_TOKEN_CONTRACT,
+      accountingAmountMicros: 50_000n,
+      cashEffectMicros: 50_000n,
+      correctsTransactionId: "q-early",
+      verifiedAt: new Date("2026-08-13T23:00:00.000Z"),
+      updatedAt: new Date("2026-08-13T23:00:00.000Z"),
+    });
+    const afterCorr = await getPublicContributionAggregate(ctxA, engine);
+    expect(afterCorr.totalNetContributionMicros).toBe("1950000");
+    expect(afterCorr.lastUpdatedAt).toBe("2026-08-13T23:00:00.000Z");
+
+    const selfBefore = await getSelfContributionShare(ctxA, USER_A, engine);
+    expect(selfBefore.numeratorMicros).toBe("0");
+    await seedOpenAttribution(services, {
+      id: "self-attr",
+      transactionId: "q-early",
+      status: "ATTRIBUTED",
+      contributorUserId: USER_B,
+      createdAt: ATTR_LATER,
+      attributedAt: ATTR_LATER,
+    });
+    expect((await getSelfContributionShare(ctxA, USER_A, engine)).numeratorMicros).toBe("0");
+    await services.catalogRepo.updateAdminAttribution(ctxA, "self-attr", {
+      revokedAt: ATTR_LATER,
+    });
+    await seedOpenAttribution(services, {
+      id: "self-attr-2",
+      transactionId: "q-early",
+      status: "ATTRIBUTED",
+      contributorUserId: USER_A,
+      createdAt: ATTR_LATER,
+      attributedAt: ATTR_LATER,
+    });
+    const selfMine = await getSelfContributionShare(ctxA, USER_A, engine);
+    expect(selfMine.numeratorMicros).toBe("1950000");
+    expect(selfMine.lastUpdatedAt).toBe("2026-08-13T23:00:00.000Z");
+    await services.catalogRepo.updateAdminAttribution(ctxA, "self-attr-2", {
+      attributedAt: new Date("2026-08-14T01:00:00.000Z"),
+    });
+    const selfTimed = await getSelfContributionShare(ctxA, USER_A, engine);
+    expect(selfTimed.numeratorMicros).toBe("1950000");
+    expect(selfTimed.lastUpdatedAt).toBe("2026-08-14T01:00:00.000Z");
+    expect((await getPublicContributionAggregate(ctxA, engine)).lastUpdatedAt).toBe(
+      "2026-08-13T23:00:00.000Z",
+    );
   });
 });

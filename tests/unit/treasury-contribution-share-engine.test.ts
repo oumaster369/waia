@@ -494,8 +494,8 @@ describe("DEE-606 WP-7 contribution share engine", () => {
       kind: "CONTRIBUTION",
     });
     expect(paginated.length).toBe(50);
-    const loaded = await facts.loadFacts(ctxA);
-    expect(loaded.transactions.filter((row) => row.kind === "CONTRIBUTION").length).toBe(55);
+    const loaded = await facts.loadContributionFacts(ctxA);
+    expect(loaded.filter((row) => row.kind === "CONTRIBUTION").length).toBe(55);
     const agg = await getPublicContributionAggregate(ctxA, engine);
     expect(agg.qualifyingContributionCount).toBe(55);
     expect(agg.totalNetContributionMicros).toBe("55000000");

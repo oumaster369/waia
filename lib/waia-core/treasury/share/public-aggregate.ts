@@ -9,6 +9,7 @@ import type { PublicContributionAggregate } from "@/lib/waia-core/treasury/share
 /**
  * Aggregate-only public contribution contract. Server-side; not an HTTP route.
  * Never includes contributor identity, transaction ids, or ranked contributor lists.
+ * Does not load attribution facts. lastUpdatedAt is independent of attribution.
  */
 export async function getPublicContributionAggregate(
   context: OrgContext,
