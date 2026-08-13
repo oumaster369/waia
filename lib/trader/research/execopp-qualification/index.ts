@@ -30,3 +30,18 @@ export type {
   KmConvergenceReceipt,
   KmEligibleAnchor,
 } from "./km-convergence-gate-v1";
+export {
+  assertScientificAdmissionDoesNotAuthorizeCapital,
+  buildScientificAdmissionReceiptRecordV1,
+  persistScientificAdmissionReceiptV1,
+  readScientificAdmissionReceiptV1,
+  requireScientificAdmissionReceiptForOrganization,
+  ScientificAdmissionReceiptConflictError,
+  ScientificAdmissionReceiptTenantIsolationError,
+} from "./scientific-admission-receipt-service-v1";
+export type {
+  BuildScientificAdmissionReceiptRecordInput,
+  PersistScientificAdmissionReceiptResult,
+  ScientificAdmissionReceiptRecord,
+  ScientificAdmissionWfPartition,
+} from "./scientific-admission-receipt-service-v1";

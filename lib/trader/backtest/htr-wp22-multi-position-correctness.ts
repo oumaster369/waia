@@ -22,6 +22,10 @@ import {
 import type { HtrAccountingCycleBridge } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import type { ReplayAccountingFrontierState } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import { advanceHistoricalExecutionOnClosedBar } from "@/lib/trader/execution/historical-simulated-exchange";
+import {
+  htxVolumeRawFromClosedBar,
+  requireProfileHtxVolumeAuthority,
+} from "@/lib/trader/backtest/historical-execution-profile";
 import { applyHistoricalExecutionEconomics } from "@/lib/trader/execution/fill-economics";
 import { historicalFillId } from "@/lib/trader/execution/deterministic-execution-id";
 import type { HistoricalExecutionPersistencePort } from "@/lib/trader/execution/historical-simulated-exchange";
@@ -175,6 +179,8 @@ async function runHtrWp22MultiPositionReplay(input: {
         model: profile.model,
         persistence,
         replayNowMs: new Date(snapshot.evaluatedAt).getTime(),
+        htxVolumeAuthorityReceipt: requireProfileHtxVolumeAuthority(profile),
+        htxVolumeRaw: htxVolumeRawFromClosedBar(closedBar),
         refreshAccountState: async () => createHtrInitialAccountRiskState(),
         reconcileOrder: async () => undefined,
       });

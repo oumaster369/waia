@@ -62,6 +62,35 @@ export function assertAuthorityChainStageOrdering(
   }
 }
 
+/**
+ * V2 ceremony completeness: every mandatory stage must be present (membership),
+ * not merely an ordered subsequence (§ Closure V / DEE-518 §1.23).
+ */
+export function assertAuthorityChainStageCompleteness(
+  completedStages: readonly AuthorityChainStage[],
+  requiredStages: readonly AuthorityChainStage[] = AUTHORITY_CHAIN_STAGES,
+): void {
+  assertAuthorityChainStageOrdering(completedStages);
+  const present = new Set(completedStages);
+  for (const stage of requiredStages) {
+    if (!present.has(stage)) {
+      throw new AuthorityChainViolationError(`mandatory authority stage missing: ${stage}`);
+    }
+  }
+  if (completedStages.length !== requiredStages.length) {
+    throw new AuthorityChainViolationError(
+      `authority chain membership mismatch: completed=${completedStages.join(",")} required=${requiredStages.join(",")}`,
+    );
+  }
+  for (let i = 0; i < requiredStages.length; i += 1) {
+    if (completedStages[i] !== requiredStages[i]) {
+      throw new AuthorityChainViolationError(
+        `authority chain order mismatch at index ${i}: got ${completedStages[i]} expected ${requiredStages[i]}`,
+      );
+    }
+  }
+}
+
 /** True when the V2 capital path quarantines legacy strategy sizing/EV fields (§1.20). */
 export function isV2CapitalAuthorityPath(path: CapitalAuthorityPath | undefined): boolean {
   return path === V2_CAPITAL_AUTHORITY_PATH;
@@ -86,12 +115,48 @@ export function extractLegacyStrategyDiagnostics(
 
 /**
  * Heuristic hypothesis confidence MUST NOT drive Forecast probability or Decision EV (§1.21).
- * Retained as eligibility context only; this guard documents the non-authoritative contract.
+ * Fail-closed when a caller attempts to bind conviction into probability/capital authority.
+ * Presence as eligibility/diagnostic context alone is permitted.
  */
 export function assertHypothesisConfidenceNonAuthoritative(input: {
   convictionValue?: number | string | null;
+  /** True when caller attempted to use conviction as probability, EV, or sizing authority. */
+  usedAsProbabilityOrCapitalAuthority?: boolean;
 }): void {
-  void input;
+  if (input.usedAsProbabilityOrCapitalAuthority === true) {
+    throw new AuthorityChainViolationError(
+      "hypothesis/MSV conviction must not drive Forecast probability or V2 capital sizing/EV",
+    );
+  }
+}
+
+/**
+ * V2 capital path: StrategySignal confidence/expectedEdge/maxRisk have zero sizing/actionability
+ * authority. Callers that attempt to size from those fields under V2 must fail closed.
+ */
+export function assertV2StrategySignalFieldsNonAuthoritative(input: {
+  capitalAuthorityPath: CapitalAuthorityPath | undefined;
+  attemptedLegacySizingOrEvAuthority: boolean;
+}): void {
+  if (
+    isV2CapitalAuthorityPath(input.capitalAuthorityPath) &&
+    input.attemptedLegacySizingOrEvAuthority
+  ) {
+    throw new AuthorityChainViolationError(
+      "StrategySignal confidence/expectedEdge/maxRisk have zero V2 capital authority",
+    );
+  }
+}
+
+/** Live/paper mapSignal paths are legacy V1 only — cannot claim V2 capital authority. */
+export function assertLegacySignalMappingNotV2CapitalAuthority(
+  capitalAuthorityPath: CapitalAuthorityPath | undefined,
+): void {
+  if (isV2CapitalAuthorityPath(capitalAuthorityPath)) {
+    throw new AuthorityChainViolationError(
+      "legacy signal-to-order/live mapping cannot claim V2 capital authority",
+    );
+  }
 }
 
 /**

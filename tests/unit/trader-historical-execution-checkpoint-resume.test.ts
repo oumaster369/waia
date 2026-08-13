@@ -10,6 +10,7 @@ import {
   createWp17SqliteSession,
   makeWp17Bar,
   refreshWp17AccountState,
+  makeWp17QualifiedHtxVolumeAuthority,
 } from "@/tests/unit/helpers/wp17-execution-fixtures";
 
 describe("HTR-WP17 execution checkpoint resume", () => {
@@ -71,13 +72,15 @@ describe("HTR-WP17 execution checkpoint resume", () => {
     resumedExchange.restoreFromCheckpointSlice(slice, new Map([[order.id, restoredOrder]]));
 
     for (let barIndex = 2; barIndex <= 2; barIndex += 1) {
+      const closedBar = makeWp17Bar(barIndex, { volume: "1.0" });
       await resumedExchange.advanceOnClosedBar({
         context: session.context,
-        closedBar: makeWp17Bar(barIndex, { volume: "1.0" }),
+        closedBar,
         barIndex,
         model: session.model,
         persistence: createWp17PersistencePort(session.repo, session.model),
-        replayNowMs: Date.parse(makeWp17Bar(barIndex).barCloseTime),
+        replayNowMs: Date.parse(closedBar.barCloseTime),
+        ...makeWp17QualifiedHtxVolumeAuthority(closedBar),
         refreshAccountState: () => refreshWp17AccountState(session.repo, session.context),
         reconcileOrder: async () => undefined,
       });

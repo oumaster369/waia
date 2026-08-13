@@ -2,15 +2,25 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  assertChallengerExecutable,
   assertSourceCorpusUnique,
   assertTerminalMarginalCoherenceV1,
   assignRvStateTertileV1,
   challengerModelRegistryV1,
   CHALLENGER_EXECUTOR_READY_STATUS,
   fitRvStateConditionalReplicaV1,
+  isRvStateConditionalExecutorReady,
+  RESEARCH_ONLY_UNIMPLEMENTED_FEATURE_SET_NOT_PINNED,
+  RESEARCH_ONLY_UNIMPLEMENTED_NONLINEAR_OPTIMIZER_NOT_FROZEN,
   terminalMarginalFromJointSamplesV1,
 } from "@/lib/trader/research/challengers/rv-state-conditional-challenger-v1";
-import type { SourceAnchor } from "@/lib/trader/intelligence/forecast-v2/rv-state-conditional-empirical-joint-v1";
+import {
+  computeTerminalTargetGridIdentityDigestHex,
+  type SourceAnchor,
+} from "@/lib/trader/intelligence/forecast-v2/rv-state-conditional-empirical-joint-v1";
+import { computeTerminalTargetGridFromDevelopmentReturns } from "@/lib/trader/research/benchmark/target-grid-ceremony-v1";
+import { terminalRhFromOutcome13dV1 } from "@/lib/trader/intelligence/forecast-v2/exec-opp-outcome-materializer-v1";
+import { MODEL_TRANSFORM_VERSION } from "@/lib/trader/intelligence/forecast-v2/constants";
 
 function anchor(i: number, rv: number, rH: number): SourceAnchor {
   return {
@@ -29,6 +39,33 @@ describe("DEE-535 rv-state-conditional-empirical-joint/v1 challenger", () => {
   const corpus = Array.from({ length: 90 }, (_, i) =>
     anchor(i, 0.01 + (i % 10) * 0.002, 0.001 * (i % 5)),
   );
+
+  it("registry exact §4 inventory + reason codes", () => {
+    const registry = challengerModelRegistryV1();
+    expect(registry.map((r) => r.modelTransformVersion)).toEqual([
+      MODEL_TRANSFORM_VERSION,
+      "har-rv-terminal/v1",
+      "garch11-terminal/v1",
+      "ordinal-ridge-terminal/v1",
+      "joint-locscale-execopp/v1",
+      "dynamical-state-ablation/v1",
+    ]);
+    expect(registry.find((r) => r.modelTransformVersion === "garch11-terminal/v1")?.status).toBe(
+      RESEARCH_ONLY_UNIMPLEMENTED_NONLINEAR_OPTIMIZER_NOT_FROZEN,
+    );
+    expect(
+      registry.find((r) => r.modelTransformVersion === "ordinal-ridge-terminal/v1")?.status,
+    ).toBe(RESEARCH_ONLY_UNIMPLEMENTED_FEATURE_SET_NOT_PINNED);
+    expect(isRvStateConditionalExecutorReady()).toBe(true);
+  });
+
+  it("UNIMPLEMENTED challengers cannot execute; RESEARCH_ONLY has no capital authority", () => {
+    expect(() => assertChallengerExecutable("garch11-terminal/v1")).toThrow(/not EXECUTOR_READY/);
+    expect(() => assertChallengerExecutable("ordinal-ridge-terminal/v1")).toThrow(
+      /not EXECUTOR_READY/,
+    );
+    expect(() => assertChallengerExecutable(MODEL_TRANSFORM_VERSION)).not.toThrow();
+  });
 
   it("registry marks EXECUTOR_READY challenger", () => {
     const registry = challengerModelRegistryV1();
@@ -58,15 +95,19 @@ describe("DEE-535 rv-state-conditional-empirical-joint/v1 challenger", () => {
     expect(r1.q1).toBeLessThan(r1.q2);
   });
 
-  it("terminal marginal equals R_h marginal of joint samples", () => {
+  it("terminal marginal equals R_h marginal of joint samples on fixed 7-bucket grid", () => {
     const fit = fitRvStateConditionalReplicaV1({
       sourceCorpus: corpus,
       replicaRootFamilyIdentityDigest: familyDigest,
       replicaOrdinal: 0,
     });
     const pool = [...fit.pools.S0, ...fit.pools.S1, ...fit.pools.S2];
-    const marginal = terminalMarginalFromJointSamplesV1(pool);
-    assertTerminalMarginalCoherenceV1({ jointSamples: pool, terminalBucketMasses: marginal });
+    const returns = pool.map((a) => terminalRhFromOutcome13dV1(a.outcome13d));
+    const grid = computeTerminalTargetGridFromDevelopmentReturns(returns);
+    const digest = computeTerminalTargetGridIdentityDigestHex(grid);
+    const marginal = terminalMarginalFromJointSamplesV1(pool, grid, digest);
+    expect(marginal.probabilities).toHaveLength(7);
+    assertTerminalMarginalCoherenceV1({ jointSamples: pool, terminalScenarioMasses: marginal });
   });
 
   it("rejects duplicate SOURCE anchors", () => {

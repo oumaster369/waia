@@ -1,5 +1,9 @@
 import type { SubmitOrderInput } from "@/lib/trader/execution/execution-service.types";
 import type { StrategySignal, TradingPermission } from "@/lib/trader/intelligence/types";
+import {
+  assertLegacySignalMappingNotV2CapitalAuthority,
+  type CapitalAuthorityPath,
+} from "@/lib/trader/risk/authority-chain";
 import { compareDecimal, divideDecimal, minDecimal } from "@/lib/trader/risk/numeric";
 
 const BLOCKED_PERMISSIONS: readonly TradingPermission[] = [
@@ -20,6 +24,8 @@ export type MapSignalToSubmitOrderInput = {
   tradingPermission?: TradingPermission;
   clientOrderId?: string;
   idempotencyKey?: string;
+  /** Legacy V1 paper/mock mapping — V2 capital authority path fails closed. */
+  capitalAuthorityPath?: CapitalAuthorityPath;
 };
 
 function allocateQuantity(
@@ -40,10 +46,13 @@ function allocateQuantity(
 /**
  * Maps an approved strategy signal to a risk/execution order request.
  * Returns null when the signal cannot become an order.
+ * LEGACY V1 maxRisk sizing only — cannot claim V2 capital authority.
  */
 export function mapSignalToSubmitOrder(
   input: MapSignalToSubmitOrderInput,
 ): SubmitOrderInput | null {
+  assertLegacySignalMappingNotV2CapitalAuthority(input.capitalAuthorityPath);
+
   const { signal } = input;
   if (signal.outcome !== "SIGNAL" || !signal.side) {
     return null;

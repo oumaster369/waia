@@ -76,11 +76,29 @@ export function produceFhvTradingSimulationCounts(input: {
 
 export function produceFhvEvidenceEventSequence(input: {
   checkpoint?: ReplayCheckpointRecord | null;
+  /** Authoritative measured sequence when a real evidence-stream producer exists. */
+  authoritativeEventSequence?: number;
 }): FhvOperatorStatusProducerValue<number> {
-  if (!input.checkpoint) {
-    return fhvProducerUnavailable();
+  if (typeof input.authoritativeEventSequence === "number") {
+    return fhvProducerValue(input.authoritativeEventSequence);
   }
-  return fhvProducerValue(0);
+  // Checkpoint presence alone is not an evidence-event sequence producer.
+  // Fabricating 0 is forbidden (DEE-525): missing producer => UNAVAILABLE.
+  void input.checkpoint;
+  return fhvProducerUnavailable();
+}
+
+export function produceFhvEvidenceHealth(input: {
+  evidenceHealth?: "ok" | "degraded" | "failed" | "UNAVAILABLE";
+}): FhvOperatorStatusProducerValue<"ok" | "degraded" | "failed"> {
+  if (
+    input.evidenceHealth === "ok" ||
+    input.evidenceHealth === "degraded" ||
+    input.evidenceHealth === "failed"
+  ) {
+    return fhvProducerValue(input.evidenceHealth);
+  }
+  return fhvProducerUnavailable();
 }
 
 export function produceFhvHostStringStatus(

@@ -13,3 +13,24 @@ export type {
   PatternDefinitionInput,
   PatternOccurrenceInput,
 } from "./pattern-research-v1";
+export {
+  assertPatternNotCapitalAuthority,
+  buildPatternDefinitionRecord,
+  buildPatternOccurrenceRecord,
+  PATTERN_OCCURRENCE_CONTENT_VERSION,
+  PatternDefinitionConflictError,
+  PatternOccurrenceConflictError,
+  PatternOccurrenceTenantIsolationError,
+  PatternOccurrencePitViolationError,
+  persistPatternDefinitionV1,
+  persistPatternOccurrenceV1,
+  readPatternDefinitionV1,
+  readPatternOccurrenceV1,
+} from "./pattern-research-persistence-v1";
+export type {
+  BuildPatternOccurrenceInput,
+  PatternDefinitionRecord,
+  PatternOccurrenceRecord,
+  PersistPatternDefinitionResult,
+  PersistPatternOccurrenceResult,
+} from "./pattern-research-persistence-v1";

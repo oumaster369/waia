@@ -18,6 +18,24 @@ export type WaiaCbrngAddress = {
   retryU32: number;
 };
 
+export class CbrngModuloRejectionError extends Error {
+  readonly code = "CBRNG_MODULO_REJECTION" as const;
+
+  constructor() {
+    super("[forecast-v2/cbrng] rejection required — increment retry_u32 and redraw");
+    this.name = "CbrngModuloRejectionError";
+  }
+}
+
+export class CbrngRetryOverflowError extends Error {
+  readonly code = "CBRNG_RETRY_OVERFLOW" as const;
+
+  constructor() {
+    super("[forecast-v2/cbrng] retry_u32 overflow — fail closed");
+    this.name = "CbrngRetryOverflowError";
+  }
+}
+
 function assertDomainLength(domain: string): void {
   if (Buffer.byteLength(domain, "ascii") !== 8) {
     throw new Error(`[forecast-v2/cbrng] domain must be exactly 8 ASCII bytes: ${domain}`);
@@ -71,19 +89,36 @@ export function unbiasedIntFromBlock(block: Buffer, n: number): number {
   const limit = (1n << 64n) - ((1n << 64n) % bigN);
   const word = block.readBigUInt64BE(0);
   if (word >= limit) {
-    throw new Error("[forecast-v2/cbrng] rejection required — increment retry_u32 and redraw");
+    throw new CbrngModuloRejectionError();
   }
   return Number(word % bigN);
 }
 
 export function waiaUnbiasedInt(address: WaiaCbrngAddress, n: number): number {
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`[forecast-v2/cbrng] UNBIASED_INT requires N > 0, got ${n}`);
+  }
+  assertDomainLength(address.domain);
+  assertRootSeed(address.rootSeed);
+  assertU32("replicaU32", address.replicaU32);
+  assertU32("sampleU32", address.sampleU32);
+  assertU32("drawU32", address.drawU32);
+  assertU32("retryU32", address.retryU32);
+
   let retry = address.retryU32;
+  if (retry === 0xffff_ffff) {
+    throw new CbrngRetryOverflowError();
+  }
   for (;;) {
     const block = waiaRandomBlockV1({ ...address, retryU32: retry });
     try {
       return unbiasedIntFromBlock(block, n);
-    } catch {
-      retry += 1;
+    } catch (error) {
+      if (error instanceof CbrngModuloRejectionError) {
+        retry += 1;
+        continue;
+      }
+      throw error;
     }
   }
 }

@@ -33,8 +33,56 @@ import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
+import {
+  qualifyHtxKlineVolumeAuthority,
+  type HtxVolumeQualificationReceiptV1,
+} from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 
 export const WP17_USER_ID = "00000000-0000-4000-8000-0000000417u1";
+
+/** DEE-526: QUALIFIED HTX volume authority for fixture bars (vol=base, amount=vol*close). */
+export function makeWp17QualifiedHtxVolumeAuthority(bar: Bar): {
+  htxVolumeAuthorityReceipt: HtxVolumeQualificationReceiptV1;
+  htxVolumeRaw: { amount: number; vol: number };
+} {
+  const vol = Number(bar.volume);
+  const close = Number(bar.close);
+  const amount = vol * close;
+  const receipt = qualifyHtxKlineVolumeAuthority({
+    symbol: bar.symbol.replace("/", ""),
+    rows: [
+      {
+        id: Math.floor(Date.parse(bar.barOpenTime) / 1000),
+        open: close,
+        high: close,
+        low: close,
+        close,
+        amount,
+        vol,
+        count: 1,
+      },
+      {
+        // Second sample with different close so amount≠vol (avoids AMBIGUOUS_FIELDS).
+        id: Math.floor(Date.parse(bar.barOpenTime) / 1000) + 60,
+        open: close * 0.5,
+        high: close * 0.5,
+        low: close * 0.5,
+        close: close * 0.5,
+        amount: vol * close * 0.5,
+        vol,
+        count: 1,
+      },
+    ],
+    qualifiedAtUtc: bar.barCloseTime,
+  });
+  if (receipt.verdict !== "HTX_VOLUME_AUTHORITY_QUALIFIED") {
+    throw new Error(`wp17 fixture volume qualification failed: ${receipt.verdict}`);
+  }
+  return {
+    htxVolumeAuthorityReceipt: receipt,
+    htxVolumeRaw: { amount, vol },
+  };
+}
 
 let wp17SessionCounter = 0;
 
@@ -271,6 +319,7 @@ export async function advanceWp17Bar(
     model: session.model,
     persistence,
     replayNowMs,
+    ...makeWp17QualifiedHtxVolumeAuthority(closedBar),
     refreshAccountState: () => refreshWp17AccountState(session.repo, session.context),
     reconcileOrder: async () => undefined,
   });

@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
 
 import { ENERGY_MC_VERSION, QUANTIZER_VERSION, SAMPLER_CONTRACT_VERSION } from "./constants";
+import {
+  assertAsciiLine,
+  assertCanonicalIntegerLine,
+  assertCodeReleaseSha,
+  assertDigestHex64,
+  assertScale8Canonical,
+  assertUuidRfc4122,
+} from "./scientific-identity-validators-v1";
 
 function line(value: string): Buffer {
   return Buffer.from(`${value}\n`, "utf8");
@@ -27,6 +35,11 @@ export type RuntimeContractInput = {
 };
 
 export function computeRuntimeContractDigest(input: RuntimeContractInput): Buffer {
+  assertAsciiLine(input.osClass, "osClass");
+  assertAsciiLine(input.arch, "arch");
+  assertAsciiLine(input.nodeVersionExact, "nodeVersionExact");
+  assertCodeReleaseSha(input.codeReleaseSha, "codeReleaseSha");
+  assertAsciiLine(input.modelTransformVersion, "modelTransformVersion");
   return sha256Buffer([
     line("runtime-contract/v1"),
     line(input.osClass),
@@ -58,14 +71,29 @@ export type ReplicaRootFamilyInput = {
 };
 
 export function computeReplicaRootFamilyIdentityDigest(input: ReplicaRootFamilyInput): Buffer {
+  assertUuidRfc4122(input.organizationId, "organizationId");
+  assertAsciiLine(input.venue, "venue");
+  assertAsciiLine(input.market, "market");
+  assertAsciiLine(input.symbol, "symbol");
+  assertDigestHex64(input.terminalTargetDefinitionDigestHex, "terminalTargetDefinitionDigestHex");
+  assertDigestHex64(
+    input.executionOpportunityTargetDefinitionDigestHex,
+    "executionOpportunityTargetDefinitionDigestHex",
+  );
+  assertAsciiLine(input.modelTransformVersion, "modelTransformVersion");
+  assertDigestHex64(input.developmentDatasetDigestHex, "developmentDatasetDigestHex");
+  assertAsciiLine(input.featureVersion, "featureVersion");
+  assertDigestHex64(input.normalizationVersionDigestHex, "normalizationVersionDigestHex");
+  assertCodeReleaseSha(input.codeReleaseSha, "codeReleaseSha");
+  assertAsciiLine(input.packageSubjectVersion, "packageSubjectVersion");
   return sha256Buffer([
     line("replica-root-family/v1"),
     line(input.organizationId),
     line(input.venue),
     line(input.market),
     line(input.symbol),
-    line(String(input.primaryHorizonMinutes)),
-    line(String(input.executionHorizonMinutes)),
+    line(assertCanonicalIntegerLine(input.primaryHorizonMinutes, "primaryHorizonMinutes")),
+    line(assertCanonicalIntegerLine(input.executionHorizonMinutes, "executionHorizonMinutes")),
     line(input.packageSubjectVersion),
     line(input.terminalTargetDefinitionDigestHex),
     line(input.executionOpportunityTargetDefinitionDigestHex),
@@ -87,11 +115,13 @@ export type PkgGenIdV2Input = {
 };
 
 export function computePredictivePackageGenerationIdentityDigest(input: PkgGenIdV2Input): Buffer {
+  assertDigestHex64(input.replicaRootFamilyIdentityDigestHex, "replicaRootFamilyIdentityDigestHex");
+  assertScale8Canonical(input.alphaEpiConfigScale8, "alphaEpiConfigScale8");
   return sha256Buffer([
     line("pkg-gen-id/v2"),
     line(input.replicaRootFamilyIdentityDigestHex),
-    line(String(input.kConfigDec)),
-    line(String(input.mConfigDec)),
+    line(assertCanonicalIntegerLine(input.kConfigDec, "kConfigDec", { allowZero: false })),
+    line(assertCanonicalIntegerLine(input.mConfigDec, "mConfigDec", { allowZero: false })),
     line(input.alphaEpiConfigScale8),
   ]);
 }
@@ -111,6 +141,12 @@ export type ForecastSamplingFamilyInput = {
 export function computeForecastSamplingFamilyIdentityDigest(
   input: ForecastSamplingFamilyInput,
 ): Buffer {
+  assertDigestHex64(input.replicaRootFamilyIdentityDigestHex, "replicaRootFamilyIdentityDigestHex");
+  assertUuidRfc4122(input.organizationId, "organizationId");
+  assertAsciiLine(input.venue, "venue");
+  assertAsciiLine(input.market, "market");
+  assertAsciiLine(input.symbol, "symbol");
+  assertDigestHex64(input.runtimeContractDigestHex, "runtimeContractDigestHex");
   return sha256Buffer([
     line("forecast-sampling-family/v1"),
     line(input.replicaRootFamilyIdentityDigestHex),
@@ -118,9 +154,9 @@ export function computeForecastSamplingFamilyIdentityDigest(
     line(input.venue),
     line(input.market),
     line(input.symbol),
-    line(String(input.anchorClosedBarEpochMs)),
-    line(String(input.primaryHorizonMinutes)),
-    line(String(input.executionHorizonMinutes)),
+    line(assertCanonicalIntegerLine(input.anchorClosedBarEpochMs, "anchorClosedBarEpochMs")),
+    line(assertCanonicalIntegerLine(input.primaryHorizonMinutes, "primaryHorizonMinutes")),
+    line(assertCanonicalIntegerLine(input.executionHorizonMinutes, "executionHorizonMinutes")),
     line(input.runtimeContractDigestHex),
   ]);
 }
@@ -140,6 +176,14 @@ export type FcstGenIdV1Input = {
 };
 
 export function computeForecastGenerationIdentityDigest(input: FcstGenIdV1Input): Buffer {
+  assertDigestHex64(input.predictivePackageContentDigestHex, "predictivePackageContentDigestHex");
+  assertUuidRfc4122(input.organizationId, "organizationId");
+  assertAsciiLine(input.venue, "venue");
+  assertAsciiLine(input.market, "market");
+  assertAsciiLine(input.symbol, "symbol");
+  assertAsciiLine(input.terminalTargetRoleId, "terminalTargetRoleId");
+  assertAsciiLine(input.executionTargetRoleId, "executionTargetRoleId");
+  assertDigestHex64(input.runtimeContractDigestHex, "runtimeContractDigestHex");
   return sha256Buffer([
     line("fcst-gen-id/v1"),
     line(input.predictivePackageContentDigestHex),
@@ -147,9 +191,9 @@ export function computeForecastGenerationIdentityDigest(input: FcstGenIdV1Input)
     line(input.venue),
     line(input.market),
     line(input.symbol),
-    line(String(input.anchorClosedBarEpochMs)),
-    line(String(input.primaryHorizonMinutes)),
-    line(String(input.executionHorizonMinutes)),
+    line(assertCanonicalIntegerLine(input.anchorClosedBarEpochMs, "anchorClosedBarEpochMs")),
+    line(assertCanonicalIntegerLine(input.primaryHorizonMinutes, "primaryHorizonMinutes")),
+    line(assertCanonicalIntegerLine(input.executionHorizonMinutes, "executionHorizonMinutes")),
     line(input.terminalTargetRoleId),
     line(input.executionTargetRoleId),
     line(input.runtimeContractDigestHex),

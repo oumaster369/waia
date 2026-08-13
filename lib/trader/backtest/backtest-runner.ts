@@ -13,7 +13,11 @@ import {
   type HistoricalExecutionPersistencePort,
 } from "@/lib/trader/execution/historical-simulated-exchange";
 import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
-import { HTR_HISTORICAL_EXECUTION_PROFILE_V1 } from "@/lib/trader/backtest/historical-execution-profile";
+import {
+  HTR_HISTORICAL_EXECUTION_PROFILE_V1,
+  htxVolumeRawFromClosedBar,
+  requireProfileHtxVolumeAuthority,
+} from "@/lib/trader/backtest/historical-execution-profile";
 import { assertHtrHistoricalExecutionSessionConfiguration } from "@/lib/trader/research/htr-historical-execution-configuration";
 import {
   buildBacktestEvaluationExport,
@@ -749,6 +753,10 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
               model: input.historicalExecutionProfile.model,
               persistence,
               replayNowMs: new Date(snapshot.evaluatedAt).getTime(),
+              htxVolumeAuthorityReceipt: requireProfileHtxVolumeAuthority(
+                input.historicalExecutionProfile,
+              ),
+              htxVolumeRaw: htxVolumeRawFromClosedBar(closedBar),
               resolveLatestOrder: (orderId) =>
                 costAwareRepository.getOrderById(input.context, orderId),
               // Caller rebuilds accountState after fills/marks; avoid duplicate O(positions)

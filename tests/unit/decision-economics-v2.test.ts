@@ -36,12 +36,16 @@ describe("DEE-528 decision economics v2", () => {
         [sample13d(0.015), sample13d(0.011)],
       ],
     });
-    const ev = computeDecisionEvRangeV1({ muBaseReplicas, muLowerReplicas });
+    const ev = computeDecisionEvRangeV1({
+      muBaseReplicas,
+      muLowerReplicas,
+      scientificAdmissionVerified: true,
+    });
     expect(ev.evLower).toBeLessThanOrEqual(ev.evBase);
     expect(ev.evBase).toBeLessThanOrEqual(ev.evUpper);
   });
 
-  it("DECISION_ACTIONABLE iff EV_lower > 0 with admission receipt", () => {
+  it("DECISION_ACTIONABLE requires verified admission AND EV_lower > 0", () => {
     const positiveReplicas = computeReplicaPayoffMeans({
       notionalUsdt: 100_000,
       costRate: 0.0001,
@@ -50,17 +54,31 @@ describe("DEE-528 decision economics v2", () => {
     });
     const actionable = computeDecisionEvRangeV1({
       ...positiveReplicas,
-      scientificAdmissionReceiptDigest: "abc123",
-      requireScientificAdmission: true,
+      scientificAdmissionVerified: true,
     });
     expect(actionable.decisionActionable).toBe(true);
     expect(actionable.evLower).toBeGreaterThan(0);
 
-    const withoutReceipt = computeDecisionEvRangeV1({
+    const withoutVerification = computeDecisionEvRangeV1({
       ...positiveReplicas,
-      requireScientificAdmission: true,
+      scientificAdmissionVerified: false,
     });
-    expect(withoutReceipt.decisionActionable).toBe(false);
+    expect(withoutVerification.decisionActionable).toBe(false);
+    expect(withoutVerification.reasonCodes).toContain("SCIENTIFIC_ADMISSION_RECEIPT_REQUIRED");
+
+    // Arbitrary non-empty digest is irrelevant — only boolean verified authority counts.
+    const negativeEv = computeDecisionEvRangeV1({
+      ...computeReplicaPayoffMeans({
+        notionalUsdt: 10_000,
+        costRate: 0.001,
+        slippageBufferUsdt: 5,
+        replicaSamples: Array.from({ length: 10 }, () => [sample13d(-0.001)]),
+      }),
+      scientificAdmissionVerified: true,
+    });
+    expect(negativeEv.decisionActionable).toBe(false);
+    expect(negativeEv.evLower).toBeLessThanOrEqual(0);
+    expect(negativeEv.reasonCodes).toContain("DECISION_NON_ACTIONABLE");
   });
 
   it("legacy strategy fields do not change Pi_base", () => {

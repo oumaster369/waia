@@ -94,9 +94,12 @@ export {
   type KillSwitchEnforcementResult,
 } from "@/lib/trader/risk/kill-switch-enforcement";
 export {
+  assertAuthorityChainStageCompleteness,
   assertAuthorityChainStageOrdering,
   assertExecutionWithinRiskAuthority,
   assertHypothesisConfidenceNonAuthoritative,
+  assertLegacySignalMappingNotV2CapitalAuthority,
+  assertV2StrategySignalFieldsNonAuthoritative,
   AUTHORITY_CHAIN_STAGES,
   AuthorityChainViolationError,
   CAPITAL_AUTHORITY_CHAIN_VERSION,

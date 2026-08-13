@@ -4,6 +4,7 @@ import {
   createHtrHistoricalCostModelAuthorityV1,
 } from "@/lib/trader/execution/cost-model";
 import type { DecisionEvRange } from "@/lib/trader/intelligence/decision-economics/decision-economics-v2";
+import { buildV2WhyNotCashJson } from "@/lib/trader/intelligence/decision-economics/decision-economics-v2-service";
 import { addDecimal, multiplyDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import {
   assertHypothesisConfidenceNonAuthoritative,
@@ -43,6 +44,11 @@ export type BuildDecisionRecordInput = Readonly<{
   capitalAuthorityPath?: CapitalAuthorityPath;
   /** Forecast-owned EV range for V2 actionability (§1.23). */
   decisionEvRange?: DecisionEvRange;
+  /** V2 forecast/package binding for economics-owned whyNotCashJson. */
+  forecastId?: string;
+  packageContentDigestHex?: string;
+  packageGenerationDigestHex?: string;
+  scientificAdmissionReceiptDigest?: string | null;
 }>;
 
 type CostEvidenceResolution = Readonly<{
@@ -242,6 +248,19 @@ function buildWhyNotCashJson(
   }
 
   const legacyDiagnostics = extractLegacyStrategyDiagnostics(input.signal);
+
+  if (isV2CapitalAuthorityPath(input.capitalAuthorityPath) && input.decisionEvRange) {
+    if (!input.forecastId || !input.packageContentDigestHex || !input.packageGenerationDigestHex) {
+      throw new Error("[decision-record] V2 TRADE requires forecast/package economics binding");
+    }
+    return buildV2WhyNotCashJson({
+      forecastId: input.forecastId,
+      packageContentDigestHex: input.packageContentDigestHex,
+      packageGenerationDigestHex: input.packageGenerationDigestHex,
+      evRange: input.decisionEvRange,
+      admissionReceiptDigest: input.scientificAdmissionReceiptDigest,
+    });
+  }
 
   return canonicalizeSemanticJsonString({
     active_hypothesis_type: input.decisionChain.activeHypothesisType,

@@ -7,6 +7,7 @@ import {
   createWp17SqliteSession,
   makeWp17Bar,
   refreshWp17AccountState,
+  makeWp17QualifiedHtxVolumeAuthority,
 } from "@/tests/unit/helpers/wp17-execution-fixtures";
 
 describe("DEE-520 execution multi-slice fill invariant", () => {
@@ -40,6 +41,7 @@ describe("DEE-520 execution multi-slice fill invariant", () => {
         model: session.model,
         persistence,
         replayNowMs: Date.parse(closedBar.barCloseTime),
+        ...makeWp17QualifiedHtxVolumeAuthority(closedBar),
         refreshAccountState: () => refreshWp17AccountState(session.repo, session.context),
         reconcileOrder: async () => undefined,
       });
@@ -68,6 +70,7 @@ describe("DEE-520 execution multi-slice fill invariant", () => {
         model: session.model,
         persistence,
         replayNowMs: Date.parse(closedBar.barCloseTime),
+        ...makeWp17QualifiedHtxVolumeAuthority(closedBar),
         refreshAccountState: () => refreshWp17AccountState(session.repo, session.context),
         reconcileOrder: async () => undefined,
       }),

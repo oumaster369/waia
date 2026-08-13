@@ -35,7 +35,7 @@ function decodeIeee754Binary64(value: number): Ieee754Parts {
     if (fractionBits === 0n) {
       return { sign, mantissa: 0n, exponent: 0 };
     }
-    return { sign, mantissa: fractionBits, exponent: -1022 - 51 };
+    return { sign, mantissa: fractionBits, exponent: -1074 };
   }
 
   return {

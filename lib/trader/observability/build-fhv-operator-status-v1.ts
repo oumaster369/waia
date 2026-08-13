@@ -20,6 +20,7 @@ import {
 import {
   produceFhvBarsProcessed,
   produceFhvEvidenceEventSequence,
+  produceFhvEvidenceHealth,
   produceFhvHostStringStatus,
   produceFhvThroughputCyclesPerMinute,
   produceFhvTradingSimulationCounts,
@@ -69,7 +70,9 @@ export type BuildFhvOperatorStatusInput = Readonly<{
   hostTelemetry?: Partial<FhvOperatorStatusV1["host"]>;
   holdoutDatasetDigest?: string;
   recentAlerts?: readonly FhvBoundedSummaryItem[];
-  evidenceHealth?: "ok" | "degraded" | "failed";
+  evidenceHealth?: "ok" | "degraded" | "failed" | "UNAVAILABLE";
+  /** Authoritative evidence-stream sequence when a real producer exists. */
+  authoritativeEvidenceEventSequence?: number;
 }>;
 
 export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): FhvOperatorStatusV1 {
@@ -105,8 +108,17 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
   const throughputCurrent = resolveFhvProducerNumber(throughputProducer);
   const tradingCounts = produceFhvTradingSimulationCounts({ checkpoint: input.checkpoint });
   const eventSequence = resolveFhvProducerNumber(
-    produceFhvEvidenceEventSequence({ checkpoint: input.checkpoint }),
+    produceFhvEvidenceEventSequence({
+      checkpoint: input.checkpoint,
+      authoritativeEventSequence: input.authoritativeEvidenceEventSequence,
+    }),
   );
+  const evidenceHealthProducer = produceFhvEvidenceHealth({
+    evidenceHealth: input.evidenceHealth,
+  });
+  const evidenceHealthValue = evidenceHealthProducer.available
+    ? evidenceHealthProducer.value
+    : ("UNAVAILABLE" as const);
 
   const accounting = input.checkpoint?.accountingFrontierState;
 
@@ -224,8 +236,8 @@ export function buildFhvOperatorStatusV1(input: BuildFhvOperatorStatusInput): Fh
       lastSealedArtifactRef: input.checkpoint?.evidenceChainDigest
         ? `fhv-artifact/v1/evidence-chunk/${input.runId}/manifest#0`
         : null,
-      artifactWriteHealth: input.evidenceHealth ?? "ok",
-      evidenceHealth: input.evidenceHealth ?? "ok",
+      artifactWriteHealth: evidenceHealthValue,
+      evidenceHealth: evidenceHealthValue,
       digestState: input.checkpoint?.checkpointDigest ?? "unknown",
       reportGenerationState: "pending",
       checkpointIntegrity: input.checkpoint ? "ok" : "degraded",

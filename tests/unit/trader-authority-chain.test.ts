@@ -18,6 +18,7 @@ import { computeStopBasedQuantity } from "@/lib/trader/portfolio/stop-based-sizi
 import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
 import {
   assertAuthorityChainStageOrdering,
+  assertHypothesisConfidenceNonAuthoritative,
   AUTHORITY_CHAIN_STAGES,
   AuthorityChainViolationError,
   clampRiskProposalDownwardOnly,
@@ -84,6 +85,7 @@ function buildV2DecisionInput(
   const decisionEvRange = computeDecisionEvRangeV1({
     muBaseReplicas: means.muBaseReplicas,
     muLowerReplicas: means.muLowerReplicas,
+    scientificAdmissionVerified: true,
   });
 
   return {
@@ -226,6 +228,7 @@ describe("trader authority chain (DEE-521)", () => {
       const decisionEvRange = computeDecisionEvRangeV1({
         muBaseReplicas: means.muBaseReplicas,
         muLowerReplicas: means.muLowerReplicas,
+        scientificAdmissionVerified: true,
       });
 
       const baselineDecision = buildDecisionRecord(buildV2DecisionInput({ decisionEvRange }));
@@ -257,6 +260,44 @@ describe("trader authority chain (DEE-521)", () => {
       expect(mutatedDecision.decisionClass).toBe(baselineDecision.decisionClass);
       expect(mutatedDecision.costEvidenceState).toBe(baselineDecision.costEvidenceState);
       expect(mutatedDecision.grossExpectedReward).toBe(baselineDecision.grossExpectedReward);
+    });
+
+    it("fails closed when hypothesis confidence is used as capital authority", () => {
+      expect(() =>
+        assertHypothesisConfidenceNonAuthoritative({
+          convictionValue: 0.9,
+          usedAsProbabilityOrCapitalAuthority: true,
+        }),
+      ).toThrow(AuthorityChainViolationError);
+    });
+  });
+
+  describe("scientific admission fail-closed for V2 economics", () => {
+    it("missing verified admission yields non-actionable EV", () => {
+      const means = sampleReplicaMeans();
+      const ev = computeDecisionEvRangeV1({
+        muBaseReplicas: means.muBaseReplicas,
+        muLowerReplicas: means.muLowerReplicas,
+        scientificAdmissionVerified: false,
+      });
+      expect(ev.decisionActionable).toBe(false);
+      expect(ev.reasonCodes).toContain("SCIENTIFIC_ADMISSION_RECEIPT_REQUIRED");
+    });
+
+    it("verified admission still requires EV_lower > 0", () => {
+      const means = sampleReplicaMeans();
+      // Force non-positive EV_lower via heavily negative returns path is covered elsewhere;
+      // verified=true alone is not capital authorization.
+      const ev = computeDecisionEvRangeV1({
+        muBaseReplicas: means.muBaseReplicas,
+        muLowerReplicas: means.muLowerReplicas,
+        scientificAdmissionVerified: true,
+      });
+      if (ev.evLower > 0) {
+        expect(ev.decisionActionable).toBe(true);
+      } else {
+        expect(ev.decisionActionable).toBe(false);
+      }
     });
   });
 

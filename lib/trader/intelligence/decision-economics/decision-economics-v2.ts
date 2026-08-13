@@ -104,12 +104,24 @@ export class EvRangeInvalidError extends Error {
   }
 }
 
-/** Type-7 epistemic quantiles: Q_0.10(mu_lower), Q_0.50(mu_base), Q_0.90(mu_base). */
+/**
+ * Type-7 epistemic quantiles: Q_0.10(mu_lower), Q_0.50(mu_base), Q_0.90(mu_base).
+ *
+ * Pure math kernel — does not perform DB I/O.
+ * `scientificAdmissionVerified` MUST be true only after an organization-bound
+ * scientific-admission receipt was validated outside this kernel.
+ * A raw digest string is never sufficient authority.
+ *
+ * DECISION_ACTIONABLE requires EV_lower > 0 AND verified admission AND valid EV range.
+ */
 export function computeDecisionEvRangeV1(input: {
   muBaseReplicas: readonly number[];
   muLowerReplicas: readonly number[];
-  scientificAdmissionReceiptDigest?: string | null;
-  requireScientificAdmission?: boolean;
+  /**
+   * True only after verified org-bound scientific admission (service/TEST_ONLY ceremony).
+   * Diagnostic research paths MUST pass false — EV numbers may still be computed.
+   */
+  scientificAdmissionVerified: boolean;
 }): DecisionEvRange {
   if (input.muBaseReplicas.length === 0 || input.muLowerReplicas.length === 0) {
     throw new EvRangeInvalidError("empty replica means");
@@ -135,14 +147,12 @@ export function computeDecisionEvRangeV1(input: {
     };
   }
 
-  if (input.requireScientificAdmission && !input.scientificAdmissionReceiptDigest) {
+  if (!input.scientificAdmissionVerified) {
     reasonCodes.push("SCIENTIFIC_ADMISSION_RECEIPT_REQUIRED");
   }
 
   const decisionActionable =
-    evLower > 0 &&
-    reasonCodes.length === 0 &&
-    (!input.requireScientificAdmission || Boolean(input.scientificAdmissionReceiptDigest));
+    evLower > 0 && reasonCodes.length === 0 && input.scientificAdmissionVerified;
 
   if (!decisionActionable && evLower <= 0) {
     reasonCodes.push("EV_LOWER_NON_POSITIVE");
@@ -160,6 +170,27 @@ export function computeDecisionEvRangeV1(input: {
     evUpperScale8: quantizeScale8HalfUp(evUpper),
     decisionActionable,
     reasonCodes,
+  };
+}
+
+/**
+ * Diagnostic EV only — never claims DECISION_ACTIONABLE.
+ * Used by KM convergence / research harness math that must not authorize capital.
+ */
+export function computeDecisionEvRangeDiagnosticV1(input: {
+  muBaseReplicas: readonly number[];
+  muLowerReplicas: readonly number[];
+}): DecisionEvRange {
+  const range = computeDecisionEvRangeV1({
+    ...input,
+    scientificAdmissionVerified: false,
+  });
+  return {
+    ...range,
+    decisionActionable: false,
+    reasonCodes: range.reasonCodes.includes("DECISION_NON_ACTIONABLE")
+      ? range.reasonCodes
+      : [...range.reasonCodes, "DECISION_NON_ACTIONABLE"],
   };
 }
 

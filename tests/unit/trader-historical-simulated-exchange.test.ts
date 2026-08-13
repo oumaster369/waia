@@ -9,6 +9,7 @@ import {
   createWp17PersistencePort,
   createWp17SqliteSession,
   makeWp17Bar,
+  makeWp17QualifiedHtxVolumeAuthority
 } from "@/tests/unit/helpers/wp17-execution-fixtures";
 
 describe("HTR-WP17 historical simulated exchange", () => {
@@ -80,6 +81,7 @@ describe("HTR-WP17 historical simulated exchange", () => {
       model: session.model,
       persistence,
       replayNowMs,
+      ...makeWp17QualifiedHtxVolumeAuthority(closedBar),
       refreshAccountState: async () => ({
         positions: [],
         openOrderCount: 0,
@@ -103,13 +105,15 @@ describe("HTR-WP17 historical simulated exchange", () => {
     });
 
     profile.exchange.registerOrder(order, 0, Date.parse("2026-01-01T00:00:59.999Z"));
+    const closedBar = makeWp17Bar(1, { volume: "2" });
     const result = await profile.exchange.advanceOnClosedBar({
       context: session.context,
-      closedBar: makeWp17Bar(1, { volume: "2" }),
+      closedBar,
       barIndex: 1,
       model: profile.model,
       persistence: createWp17PersistencePort(session.repo, profile.model),
-      replayNowMs: Date.parse(makeWp17Bar(1).barCloseTime),
+      replayNowMs: Date.parse(closedBar.barCloseTime),
+      ...makeWp17QualifiedHtxVolumeAuthority(closedBar),
       refreshAccountState: async () => ({
         positions: [],
         openOrderCount: 0,

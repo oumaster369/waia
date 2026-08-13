@@ -13,6 +13,16 @@ import {
 
 export const VALIDATION_BOOTSTRAP_B = 10_000 as const;
 export const VALIDATION_BOOTSTRAP_VERSION = "validation-bootstrap/v1" as const;
+export const VALIDATION_BOOTSTRAP_MONTE_CARLO_DENOMINATOR = VALIDATION_BOOTSTRAP_B + 1;
+
+export type ValidationBootstrapNullCenteredResultV1 = {
+  pRaw: number;
+  dBar: number;
+  tObs: number;
+  extremeCount: number;
+  centeredMean: number;
+  n: number;
+};
 
 export function deriveValidationBootstrapRoot(trialIdentityDigest32: Buffer): Buffer {
   if (trialIdentityDigest32.length !== 32) {
@@ -79,26 +89,63 @@ export function validationBootstrapResampleV1<T>(input: {
   };
 }
 
-/** Significance bootstrap p-value: fraction of B resamples with statistic >= observed. */
+/** Null-center paired differentials: c_i = d_i - d_bar (Human-ratified DEE-531). */
+export function nullCenterPairedDifferentials(source: readonly number[]): {
+  n: number;
+  dBar: number;
+  centered: number[];
+} {
+  const n = source.length;
+  if (n === 0) {
+    throw new Error("[validation-bootstrap] differentials must be non-empty");
+  }
+  const dBar = source.reduce((acc, value) => acc + value, 0) / n;
+  const centered = source.map((value) => value - dBar);
+  return { n, dBar, centered };
+}
+
+/** Observed test statistic T_obs = sqrt(n) * d_bar. */
+export function observedNullCenteredBootstrapStatistic(differentials: readonly number[]): number {
+  const { n, dBar } = nullCenterPairedDifferentials(differentials);
+  return Math.sqrt(n) * dBar;
+}
+
+/**
+ * Raw one-sided WF_PREDICTIVE admission p-value (Human-ratified DEE-531):
+ * bootstrap null-centered c; T*_b = sqrt(n)*mean(c*_b); p = (|{T*_b >= T_obs}| + 1)/(B+1).
+ */
 export function validationBootstrapPValueV1(input: {
-  source: readonly number[];
+  differentials: readonly number[];
   trialIdentityDigest32: Buffer;
-  statistic: (sample: readonly number[]) => number;
-}): number {
-  const observed = input.statistic(input.source);
+}): ValidationBootstrapNullCenteredResultV1 {
+  const { n, dBar, centered } = nullCenterPairedDifferentials(input.differentials);
+  const tObs = Math.sqrt(n) * dBar;
+  const centeredMean = centered.reduce((acc, value) => acc + value, 0) / n;
   const root = deriveValidationBootstrapRoot(input.trialIdentityDigest32);
-  let exceed = 0;
+
+  let extremeCount = 0;
   for (let b = 0; b < VALIDATION_BOOTSTRAP_B; b += 1) {
     const resampled = validationBootstrapResampleV1({
-      source: input.source,
+      source: centered,
       validationBootstrapRoot: root,
       resampleOrdinal: b,
     }).resampled;
-    if (input.statistic(resampled) >= observed) {
-      exceed += 1;
+    const tStar = Math.sqrt(n) * (resampled.reduce((acc, value) => acc + value, 0) / n);
+    if (tStar >= tObs) {
+      extremeCount += 1;
     }
   }
-  return (exceed + 1) / (VALIDATION_BOOTSTRAP_B + 1);
+
+  const pRaw = (extremeCount + 1) / VALIDATION_BOOTSTRAP_MONTE_CARLO_DENOMINATOR;
+
+  return {
+    pRaw,
+    dBar,
+    tObs,
+    extremeCount,
+    centeredMean,
+    n,
+  };
 }
 
 /** Epistemic bootstrap alias for harness tests. */

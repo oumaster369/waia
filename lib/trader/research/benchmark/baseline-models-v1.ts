@@ -1,120 +1,129 @@
 import { ENERGY_MC_VERSION } from "@/lib/trader/intelligence/forecast-v2/constants";
 import { normalCdfCody715V1 } from "./cdf-erf-cody715-v1";
-import { studentT5CdfBetaincV1, studentT5BaselineScaleV1 } from "./student-t5-cdf-betainc-v1";
+import { studentT5BaselineScaleV1, studentT5CdfBetaincV1 } from "./student-t5-cdf-betainc-v1";
+import {
+  computeTerminalTargetGridFromDevelopmentReturns,
+  empiricalBucketProbabilities,
+  multiclassLogScore,
+  populationStdDevN,
+  type TerminalTargetGrid,
+} from "./target-grid-ceremony-v1";
 
 export { ENERGY_MC_VERSION };
 
-export type BaselineForecast = {
-  baselineId: string;
-  logScore: (observed: number, context: BaselineContext) => number;
-};
+export type BaselineForecastResult =
+  | {
+      status: "AVAILABLE";
+      probabilities: readonly number[];
+      logScore: (observed: number) => number;
+    }
+  | { status: "UNAVAILABLE"; reason: string };
 
 export type BaselineContext = {
+  developmentReturns: readonly number[];
+  grid: TerminalTargetGrid;
   history: readonly number[];
-  sigmaDev?: number;
+  primaryHorizonMinutes?: 30 | 60;
 };
 
-function gaussianLogScore(observed: number, mu: number, sigma: number): number {
-  const z = (observed - mu) / sigma;
-  return -0.5 * Math.log(2 * Math.PI) - Math.log(sigma) - 0.5 * z * z;
-}
+const ROLLING_WINDOW = 2000 as const;
+const EWMA_LAMBDA = 0.94 as const;
+const EWMA_WARMUP = 2000 as const;
 
-function populationStdDev(values: readonly number[]): number {
-  if (values.length === 0) {
-    return 0;
+function gaussianBucketProbabilities(grid: TerminalTargetGrid, sigma: number): number[] {
+  const s = Math.max(sigma, 1e-12);
+  const probs: number[] = [];
+  let prevCdf = 0;
+  for (let i = 0; i < grid.edges.length; i += 1) {
+    const cdf = normalCdfCody715V1(grid.edges[i]! / s);
+    probs.push(Math.max(0, cdf - prevCdf));
+    prevCdf = cdf;
   }
-  const mean = values.reduce((a, b) => a + b, 0) / values.length;
-  const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length;
-  return Math.sqrt(variance);
+  const tailCdf = normalCdfCody715V1(grid.edges[grid.edges.length - 1]! / s);
+  probs.push(Math.max(0, 1 - tailCdf));
+  return probs;
 }
 
-/** Frozen terminal baselines (§WP-RESEARCH-HARNESS). */
-export const MANDATORY_BASELINES_V1: readonly BaselineForecast[] = [
-  {
-    baselineId: "climatology/v1",
-    logScore: (observed, ctx) => {
-      const mu = ctx.history.length
-        ? ctx.history.reduce((a, b) => a + b, 0) / ctx.history.length
-        : 0;
-      const sigma = Math.max(populationStdDev(ctx.history), 1e-8);
-      return gaussianLogScore(observed, mu, sigma);
-    },
-  },
-  {
-    baselineId: "gaussian-pop-std/v1",
-    logScore: (observed, ctx) => {
-      const sigma = Math.max(populationStdDev(ctx.history), 1e-8);
-      return gaussianLogScore(observed, 0, sigma);
-    },
-  },
-  {
-    baselineId: "student-t5-nu5/v1",
-    logScore: (observed, ctx) => {
-      const sigma = Math.max(populationStdDev(ctx.history), 1e-8);
-      const s = studentT5BaselineScaleV1(sigma);
-      const density = approximateStudentT5Pdf(observed / s, s);
-      return Math.log(Math.max(density, 1e-300));
-    },
-  },
-  {
-    baselineId: "rolling-w2000/v1",
-    logScore: (observed, ctx) => {
-      const window = ctx.history.slice(-2000);
-      const mu = window.length ? window.reduce((a, b) => a + b, 0) / window.length : 0;
-      const sigma = Math.max(populationStdDev(window), 1e-8);
-      return gaussianLogScore(observed, mu, sigma);
-    },
-  },
-  {
-    baselineId: "ewma-lambda094/v1",
-    logScore: (observed, ctx) => {
-      const lambda = 0.94;
-      const warmup = 2000;
-      const hist = ctx.history.slice(-Math.max(warmup, 1));
-      if (hist.length === 0) {
-        return gaussianLogScore(observed, 0, 1e-8);
+function studentT5BucketProbabilities(grid: TerminalTargetGrid, sigmaDev: number): number[] {
+  const scale = studentT5BaselineScaleV1(Math.max(sigmaDev, 1e-12));
+  const probs: number[] = [];
+  let prevCdf = 0;
+  for (const edge of grid.edges) {
+    const cdf = studentT5CdfBetaincV1(edge, scale);
+    probs.push(Math.max(0, cdf - prevCdf));
+    prevCdf = cdf;
+  }
+  const tailCdf = studentT5CdfBetaincV1(grid.edges[grid.edges.length - 1]!, scale);
+  probs.push(Math.max(0, 1 - tailCdf));
+  return probs;
+}
+
+function ewmaVarianceReturns(history: readonly number[]): number | null {
+  if (history.length < EWMA_WARMUP) {
+    return null;
+  }
+  const series = history.slice(-EWMA_WARMUP);
+  let varEwma = 0;
+  for (let i = 1; i < series.length; i += 1) {
+    const diff = series[i]! - series[i - 1]!;
+    varEwma = EWMA_LAMBDA * varEwma + (1 - EWMA_LAMBDA) * diff * diff;
+  }
+  return varEwma;
+}
+
+function makeAvailable(
+  probabilities: readonly number[],
+  grid: TerminalTargetGrid,
+): BaselineForecastResult {
+  return {
+    status: "AVAILABLE",
+    probabilities,
+    logScore: (observed) => multiclassLogScore(observed, probabilities, grid),
+  };
+}
+
+/** Frozen terminal baselines — multiclass log score over 7-bucket grid (§WP-RESEARCH-HARNESS). */
+export const MANDATORY_BASELINE_IDS = [
+  "climatology/v1",
+  "gaussian-pop-std/v1",
+  "student-t5-nu5/v1",
+  "rolling-w2000/v1",
+  "ewma-lambda094/v1",
+] as const;
+
+export function evaluateMandatoryBaselineV1(
+  baselineId: (typeof MANDATORY_BASELINE_IDS)[number],
+  context: BaselineContext,
+): BaselineForecastResult {
+  const { grid, developmentReturns, history } = context;
+  const sigmaDev = populationStdDevN(developmentReturns);
+
+  switch (baselineId) {
+    case "climatology/v1":
+      return makeAvailable(empiricalBucketProbabilities(developmentReturns, grid), grid);
+    case "gaussian-pop-std/v1":
+      return makeAvailable(gaussianBucketProbabilities(grid, sigmaDev), grid);
+    case "student-t5-nu5/v1":
+      return makeAvailable(studentT5BucketProbabilities(grid, sigmaDev), grid);
+    case "rolling-w2000/v1": {
+      const window = history.slice(-ROLLING_WINDOW);
+      if (window.length < ROLLING_WINDOW) {
+        return { status: "UNAVAILABLE", reason: "ROLLING_WARMUP_INSUFFICIENT" };
       }
-      let mean = hist[0]!;
-      let varEwma = 1e-8;
-      for (let i = 1; i < hist.length; i += 1) {
-        const diff = hist[i]! - mean;
-        mean = lambda * mean + (1 - lambda) * hist[i]!;
-        varEwma = lambda * varEwma + (1 - lambda) * diff * diff;
+      return makeAvailable(empiricalBucketProbabilities(window, grid), grid);
+    }
+    case "ewma-lambda094/v1": {
+      const varEwma = ewmaVarianceReturns(history);
+      if (varEwma === null) {
+        return { status: "UNAVAILABLE", reason: "EWMA_WARMUP_INSUFFICIENT" };
       }
-      const sigma = Math.max(Math.sqrt(varEwma), 1e-8);
-      return gaussianLogScore(observed, mean, sigma);
-    },
-  },
-];
-
-function approximateStudentT5Pdf(x: number, s: number): number {
-  const z = x / s;
-  const nu = 5;
-  const coef =
-    Math.exp(
-      logGamma((nu + 1) / 2) - logGamma(nu / 2) - 0.5 * Math.log(nu * Math.PI) - Math.log(s),
-    ) *
-    (1 + (z * z) / nu) ** (-(nu + 1) / 2);
-  return coef;
-}
-
-function logGamma(z: number): number {
-  const g = 7;
-  const coef = [
-    0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
-    -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6,
-    1.5056327351493116e-7,
-  ];
-  if (z < 0.5) {
-    return Math.log(Math.PI / Math.sin(Math.PI * z)) - logGamma(1 - z);
+      const h = context.primaryHorizonMinutes ?? 30;
+      const sigma = Math.sqrt(varEwma) * Math.sqrt(h);
+      return makeAvailable(gaussianBucketProbabilities(grid, sigma), grid);
+    }
+    default:
+      return { status: "UNAVAILABLE", reason: "UNKNOWN_BASELINE" };
   }
-  z -= 1;
-  let x = coef[0]!;
-  for (let i = 1; i < g + 2; i += 1) {
-    x += coef[i]! / (z + i);
-  }
-  const t = z + g + 0.5;
-  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
 }
 
 export function beatAllMandatoryBaselinesV1(
@@ -122,10 +131,39 @@ export function beatAllMandatoryBaselinesV1(
   observed: number,
   context: BaselineContext,
 ): boolean {
-  return MANDATORY_BASELINES_V1.every(
-    (baseline) => challengerLogScore > baseline.logScore(observed, context),
-  );
+  return MANDATORY_BASELINE_IDS.every((baselineId) => {
+    const baseline = evaluateMandatoryBaselineV1(baselineId, context);
+    if (baseline.status === "UNAVAILABLE") {
+      return false;
+    }
+    return challengerLogScore > baseline.logScore(observed);
+  });
 }
+
+export function buildBaselineContextFromDevelopment(input: {
+  developmentReturns: readonly number[];
+  history: readonly number[];
+  primaryHorizonMinutes?: 30 | 60;
+}): BaselineContext {
+  return {
+    developmentReturns: input.developmentReturns,
+    history: input.history,
+    primaryHorizonMinutes: input.primaryHorizonMinutes,
+    grid: computeTerminalTargetGridFromDevelopmentReturns(input.developmentReturns),
+  };
+}
+
+/** @deprecated use evaluateMandatoryBaselineV1 */
+export const MANDATORY_BASELINES_V1 = MANDATORY_BASELINE_IDS.map((baselineId) => ({
+  baselineId,
+  logScore: (observed: number, context: BaselineContext) => {
+    const result = evaluateMandatoryBaselineV1(baselineId, context);
+    if (result.status === "UNAVAILABLE") {
+      return Number.NEGATIVE_INFINITY;
+    }
+    return result.logScore(observed);
+  },
+}));
 
 export function gaussianCdfBaselineV1(z: number, sigma: number): number {
   return normalCdfCody715V1(z / Math.max(sigma, 1e-8));

@@ -3,7 +3,10 @@ export {
   gaussianCdfBaselineV1,
   MANDATORY_BASELINES_V1,
 } from "./baseline-models-v1";
-export type { BaselineContext, BaselineForecast } from "./baseline-models-v1";
+export type {
+  BaselineContext,
+  BaselineForecastResult as BaselineForecast,
+} from "./baseline-models-v1";
 export {
   BetaincDomainError,
   BetaincNonConvergentError,
@@ -38,11 +41,15 @@ export type { TrialIdentityInput } from "./trial-identity-v2";
 export {
   deriveValidationBootstrapRoot,
   epistemicBootstrapResampleV1,
+  nullCenterPairedDifferentials,
+  observedNullCenteredBootstrapStatistic,
   VALIDATION_BOOTSTRAP_B,
+  VALIDATION_BOOTSTRAP_MONTE_CARLO_DENOMINATOR,
   VALIDATION_BOOTSTRAP_VERSION,
   validationBootstrapPValueV1,
   validationBootstrapResampleV1,
 } from "./validation-bootstrap-v1";
+export type { ValidationBootstrapNullCenteredResultV1 } from "./validation-bootstrap-v1";
 
 export const RESEARCH_HARNESS_VERSION = "research-harness/v1" as const;
 
@@ -54,4 +61,26 @@ export const FORBIDDEN_RESEARCH_BASELINES = [
 
 export const TARGET_GRID_QUANTILES_V1 = [0.05, 0.2, 0.4, 0.6, 0.8, 0.95] as const;
 
-export const RESEARCH_AUTHORITY_STATUS = "RESEARCH_ONLY" as const;
+export {
+  runResearchHarnessAdmissionV1,
+  RESEARCH_HARNESS_ADMISSION_VERSION,
+} from "./research-harness-admission-orchestrator-v1";
+export type {
+  ResearchHarnessAdmissionInputV1,
+  ResearchHarnessAdmissionResultV1,
+  ResearchHarnessAnchorV1,
+} from "./research-harness-admission-orchestrator-v1";
+export {
+  assertResearchTrialRegistrationNonCapitalAuthority,
+  buildResearchTrialRegistrationRecord,
+  readResearchTrialRegistrationV1,
+  registerResearchTrialV1,
+  ResearchTrialRegistrationConflictError,
+  RESEARCH_TRIAL_REGISTRATION_AUTHORITY_STATUS,
+  RESEARCH_TRIAL_REGISTRATION_SCHEMA_VERSION,
+} from "./research-trial-registration-service-v1";
+export type {
+  RegisterResearchTrialResult,
+  ResearchTrialRegistrationInput,
+  ResearchTrialRegistrationRecord,
+} from "./research-trial-registration-service-v1";

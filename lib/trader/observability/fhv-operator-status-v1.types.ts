@@ -119,8 +119,8 @@ export type FhvOperatorStatusV1 = Readonly<{
     eventSequence: number | null;
     eventStreamLagMs: number | null;
     lastSealedArtifactRef: string | null;
-    artifactWriteHealth: "ok" | "degraded" | "failed";
-    evidenceHealth: "ok" | "degraded" | "failed";
+    artifactWriteHealth: "ok" | "degraded" | "failed" | "UNAVAILABLE";
+    evidenceHealth: "ok" | "degraded" | "failed" | "UNAVAILABLE";
     digestState: string;
     reportGenerationState: string;
     checkpointIntegrity: "ok" | "degraded" | "failed";

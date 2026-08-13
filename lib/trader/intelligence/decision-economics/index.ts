@@ -1,6 +1,7 @@
 export {
   assertLegacyStrategyFieldsNonAuthoritative,
   computeDecisionEconomicsContentDigest,
+  computeDecisionEvRangeDiagnosticV1,
   computeDecisionEvRangeV1,
   computeReplicaPayoffMeans,
   DECISION_ECONOMIC_PAYOFF_POLICY_VERSION,
@@ -17,3 +18,15 @@ export type {
   ExecOppSample13D,
   ReplicaPayoffMeans,
 } from "./decision-economics-v2";
+export {
+  buildCapitalDecisionEconomicsV2Record,
+  buildDecisionEconomicsV2Record,
+  buildV2WhyNotCashJson,
+  decisionEvRangeFromRecord,
+  persistDecisionEconomicsV2,
+  readDecisionEconomicsV2ByForecastId,
+} from "./decision-economics-v2-service";
+export type {
+  DecisionEconomicsV2Record,
+  PersistDecisionEconomicsV2Input,
+} from "./decision-economics-v2-service";

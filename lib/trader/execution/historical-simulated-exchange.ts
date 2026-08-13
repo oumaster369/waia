@@ -20,6 +20,11 @@ import {
 } from "@/lib/trader/execution/historical-execution-model.types";
 import { fillExecutionEconomicsRowId } from "@/lib/trader/execution/deterministic-execution-id";
 import {
+  assertHtxVolumeCapitalAuthorityPermitsCapacity,
+  resolveAuthoritativeHtxBaseVolumeForCapital,
+} from "@/lib/trader/market-data/volume-qualification/htx-volume-authority-capital-v1";
+import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
+import {
   addDecimal,
   compareDecimal,
   formatDecimal,
@@ -88,6 +93,16 @@ export type AdvanceHistoricalExecutionInput = {
   model: HistoricalExecutionModelV1;
   persistence: HistoricalExecutionPersistencePort;
   replayNowMs: number;
+  /**
+   * DEE-526: participation capacity requires QUALIFIED HTX volume authority.
+   * Missing/BLOCKED fails closed — no replacement capacity model.
+   */
+  htxVolumeAuthorityReceipt: HtxVolumeQualificationReceiptV1;
+  /**
+   * Raw HTX amount/vol for the closed bar. Required so capacity does not trust
+   * non-authoritative `Bar.volume` from mapper fallback.
+   */
+  htxVolumeRaw: { amount: number; vol: number };
   /** Refresh repository order row before cancel persistence (breach path may advance state). */
   resolveLatestOrder?: (orderId: string) => Promise<OrderRow | null>;
   refreshAccountState: () => Promise<AccountRiskState>;
@@ -288,7 +303,16 @@ export function createHistoricalSimulatedExchange(
         if (closedBar.symbol !== entry.order.symbol) {
           throw new SymbolMismatchFillRejectedError(entry.order.symbol, closedBar.symbol);
         }
-        const volume = requireFiniteNonNegativeVolume(closedBar.volume, closedBar.symbol);
+        assertHtxVolumeCapitalAuthorityPermitsCapacity(input.htxVolumeAuthorityReceipt);
+        const authoritativeBase = resolveAuthoritativeHtxBaseVolumeForCapital({
+          receipt: input.htxVolumeAuthorityReceipt,
+          amount: input.htxVolumeRaw.amount,
+          vol: input.htxVolumeRaw.vol,
+        });
+        const volume = requireFiniteNonNegativeVolume(
+          authoritativeBase.toFixed(8).replace(/\.?0+$/, "") || "0",
+          closedBar.symbol,
+        );
         const rawCapacity = multiplyDecimal(volume, model.participationCapFraction);
         const roundedCapacity = floorToQuantityStep(rawCapacity, model.quantityStep);
         const candidateSlice = minDecimal(entry.remainingQty, roundedCapacity);

@@ -42,6 +42,7 @@ import {
   validateFhvFullHistoricalLaunchInput,
 } from "@/lib/trader/observability/fhv-full-historical-launch";
 import * as fhvFullHistoricalEngine from "@/lib/trader/observability/fhv-full-historical-engine";
+import * as controlReplayScientificV2 from "@/lib/trader/observability/control-replay-scientific-v2-driver-v1";
 import {
   buildFhvSyntheticScaleAuthority,
   FHV_SYNTHETIC_SCALE_AUTHORITY_FILENAME,
@@ -160,10 +161,14 @@ describe("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
     }
   }, 120_000);
 
-  it("M2 OFFICIAL_CONTROL_REPLAY_DOUBLE_EAGER_CORPUS_RED: control replay v2 uses datasetRoot not Bar[]", async () => {
+  it("M2 OFFICIAL_CONTROL_REPLAY_DOUBLE_EAGER_CORPUS_RED: control replay uses scientific V2 authority not V1 backtest", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-m2-"));
     const runId = `fhv-v2-control-replay-1-${FHV_OFFICIAL_V2_SCALE_RELEASE_SHA.slice(0, 8)}`;
     const backtestSpy = vi.spyOn(fhvFullHistoricalEngine, "runFullHistoricalBacktest");
+    const scientificSpy = vi.spyOn(
+      controlReplayScientificV2,
+      "runScientificControlReplayV2Ceremony",
+    );
     try {
       const prep = setupFhvOfficialV2ControlReplayArtifacts({
         artifactRoot: root,
@@ -202,13 +207,11 @@ describe("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
         syntheticScaleAuthorityPath,
       });
 
-      expect(backtestSpy).toHaveBeenCalled();
-      const call = backtestSpy.mock.calls.at(-1)?.[0];
-      expect(call?.qualificationMode).toBe("OFFICIAL_MULTI_YEAR");
-      expect(call?.datasetRoot).toBe(v2DatasetRoot);
-      expect(call?.bars).toBeUndefined();
-      expect(call?.controlReplay).toBe(true);
+      expect(backtestSpy).not.toHaveBeenCalled();
+      expect(scientificSpy).toHaveBeenCalled();
+      expect(scientificSpy.mock.calls.at(-1)?.[0]?.organizationId).toBe(FHV_TEST_ORG_ID);
     } finally {
+      scientificSpy.mockRestore();
       backtestSpy.mockRestore();
       rmSync(root, { recursive: true, force: true });
     }

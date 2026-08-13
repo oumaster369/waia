@@ -41,6 +41,23 @@ describe("quantizeScale8HalfUp/v1", () => {
     expect(() => quantizeScale8HalfUp(Number.NEGATIVE_INFINITY)).toThrow(NonFiniteQuantizeError);
   });
 
+  it("decodes binary64 subnormals with exponent -1074", () => {
+    const smallestSubnormal = Number.MIN_VALUE;
+    expect(quantizeScale8HalfUp(smallestSubnormal)).toBe("0.00000000");
+    expect(quantizeScale8HalfUp(-smallestSubnormal)).toBe("0.00000000");
+    const largestSubnormal = Number.MIN_VALUE * 2;
+    expect(quantizeScale8HalfUp(largestSubnormal)).toMatch(/^0\.0+/);
+    const normalBoundary = Number.MIN_VALUE * 2;
+    expect(quantizeScale8HalfUp(normalBoundary)).toMatch(/^0\.0+/);
+  });
+
+  it("handles normal/subnormal boundary and tie cases", () => {
+    expect(quantizeScale8HalfUp(5e-9)).toBe("0.00000001");
+    expect(quantizeScale8HalfUp(-5e-9)).toBe("-0.00000001");
+    expect(quantizeScale8HalfUp(0)).toBe("0.00000000");
+    expect(quantizeScale8HalfUp(-0)).toBe("0.00000000");
+  });
+
   it("matches frozen alpha_epi configuration scale-8 string", () => {
     expect(quantizeScale8HalfUp(0.1)).toBe("0.10000000");
   });
