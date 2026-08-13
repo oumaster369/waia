@@ -212,6 +212,13 @@ export function createMemoryTreasuryRepository(): TreasuryRepository {
       return existing.reduce((max, row) => Math.max(max, row.seq), 0) + 1;
     },
 
+    async listInceptions(context) {
+      const scoped = requireScope(context);
+      return [...inceptions.values()]
+        .filter((row) => row.organizationId === scoped.organizationId)
+        .map(clone);
+    },
+
     async getInception(context, inceptionId) {
       const scoped = requireScope(context);
       const row = inceptions.get(scopedId(scoped.organizationId, inceptionId));

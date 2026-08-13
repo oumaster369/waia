@@ -72,6 +72,7 @@ export type TreasuryRepository = {
   insertCommitmentRevision(record: TreasuryCommitmentRevisionRecord): Promise<void>;
   getNextCommitmentRevisionSeq(context: OrgContext, commitmentId: string): Promise<number>;
 
+  listInceptions(context: OrgContext): Promise<TreasuryInceptionRecord[]>;
   getInception(context: OrgContext, inceptionId: string): Promise<TreasuryInceptionRecord | null>;
   getActiveInception(
     context: OrgContext,

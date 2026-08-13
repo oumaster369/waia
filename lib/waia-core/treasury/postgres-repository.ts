@@ -334,6 +334,15 @@ export function createPostgresTreasuryRepository(ex: PgExecutor): TreasuryReposi
       return existing.reduce((max, row) => Math.max(max, row.seq), 0) + 1;
     },
 
+    async listInceptions(context) {
+      const org = scoped(context);
+      const rows = await ex
+        .select()
+        .from(pgSchema.treasuryLedgerInceptions)
+        .where(orgScopedWhere(pgSchema.treasuryLedgerInceptions.organizationId, org));
+      return rows.map(mapInception);
+    },
+
     async getInception(context, inceptionId) {
       const org = scoped(context);
       const rows = await ex
