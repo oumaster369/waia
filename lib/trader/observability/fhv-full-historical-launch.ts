@@ -154,7 +154,12 @@ export type FhvFullHistoricalLaunchResult = Readonly<{
   receiptPath: string;
   runDir: string;
   semanticReproDigest?: string;
-  backtest?: RunBacktestResult;
+  /**
+   * Full-historical launches return the complete `RunBacktestResult`.
+   * Control Replay plumbs the already-computed cycleCount (and optional
+   * accounting slices) without fabricating a paper-path backtest.
+   */
+  backtest?: Pick<RunBacktestResult, "cycleCount"> & Partial<RunBacktestResult>;
   /** Pure `runBacktest` wall (excludes seed/receipt I/O) for official-scale cps feasibility. */
   hotPathWallTimeMs?: number;
 }>;

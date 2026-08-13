@@ -146,6 +146,9 @@ async function runFhvControlReplayLaunchBacktest(input: {
     receiptPath: join(input.runDir, "fhv-full-launch-receipt.v1.json"),
     runDir: input.runDir,
     semanticReproDigest,
+    backtest: {
+      cycleCount: launchResult.cycleCount,
+    },
   };
 }
 

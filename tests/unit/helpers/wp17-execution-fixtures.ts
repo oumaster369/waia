@@ -40,7 +40,13 @@ import {
 
 export const WP17_USER_ID = "00000000-0000-4000-8000-0000000417u1";
 
-/** DEE-526: QUALIFIED HTX volume authority for fixture bars (vol=base, amount=vol*close). */
+/**
+ * DEE-526: QUALIFIED HTX volume authority for the bar's canonical instrument.
+ *
+ * Qualification uses an independently valid same-instrument sample so an
+ * intentionally invalid test bar (volume 0 / negative) still reaches exchange
+ * validation. Capacity raw fields remain the actual bar's amount/vol.
+ */
 export function makeWp17QualifiedHtxVolumeAuthority(bar: Bar): {
   htxVolumeAuthorityReceipt: HtxVolumeQualificationReceiptV1;
   htxVolumeRaw: { amount: number; vol: number };
@@ -48,28 +54,30 @@ export function makeWp17QualifiedHtxVolumeAuthority(bar: Bar): {
   const vol = Number(bar.volume);
   const close = Number(bar.close);
   const amount = vol * close;
+  const qualifiedVol = 1;
+  const qualifiedClose = Number.isFinite(close) && close > 0 ? close : 50_000;
   const receipt = qualifyHtxKlineVolumeAuthority({
     symbol: bar.symbol.replace("/", ""),
     rows: [
       {
         id: Math.floor(Date.parse(bar.barOpenTime) / 1000),
-        open: close,
-        high: close,
-        low: close,
-        close,
-        amount,
-        vol,
+        open: qualifiedClose,
+        high: qualifiedClose,
+        low: qualifiedClose,
+        close: qualifiedClose,
+        amount: qualifiedVol * qualifiedClose,
+        vol: qualifiedVol,
         count: 1,
       },
       {
         // Second sample with different close so amount≠vol (avoids AMBIGUOUS_FIELDS).
         id: Math.floor(Date.parse(bar.barOpenTime) / 1000) + 60,
-        open: close * 0.5,
-        high: close * 0.5,
-        low: close * 0.5,
-        close: close * 0.5,
-        amount: vol * close * 0.5,
-        vol,
+        open: qualifiedClose * 0.5,
+        high: qualifiedClose * 0.5,
+        low: qualifiedClose * 0.5,
+        close: qualifiedClose * 0.5,
+        amount: qualifiedVol * qualifiedClose * 0.5,
+        vol: qualifiedVol,
         count: 1,
       },
     ],

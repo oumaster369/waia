@@ -52,7 +52,48 @@ describe("DEE-525 FHV operator status producers", () => {
     expect(status.tradingSimulation.ordersCount).toBe(1);
     expect(status.tradingSimulation.fillsCount).toBe(1);
     expect(status.tradingSimulation.openPositionsCount).toBe(1);
-    expect(status.evidence.eventSequence).toBe(0);
+    // Checkpoint presence is not an evidence-event sequence producer (DEE-525).
+    expect(status.evidence.eventSequence).toBeNull();
     expect(status.campaign.processRestartCount).toBe(1);
+  });
+
+  it("returns 0 for trading counts when checkpoint observations are empty", () => {
+    const status = buildFhvOperatorStatusV1({
+      ...BASE_INPUT,
+      checkpoint: {
+        evidenceDurableThroughCycleIndex: 1,
+        executionState: { openOrders: [] },
+        accountingFrontierState: {
+          consumedFillIds: [],
+          positionsJson: {},
+          accountingSequence: 0,
+        },
+      } as never,
+    });
+    expect(status.tradingSimulation.ordersCount).toBe(0);
+    expect(status.tradingSimulation.fillsCount).toBe(0);
+    expect(status.tradingSimulation.openPositionsCount).toBe(0);
+    expect(status.evidence.eventSequence).toBeNull();
+  });
+
+  it("returns the authoritative evidence sequence when a producer supplies it", () => {
+    const zero = buildFhvOperatorStatusV1({
+      ...BASE_INPUT,
+      checkpoint: {
+        evidenceDurableThroughCycleIndex: 1,
+        executionState: { openOrders: [] },
+      } as never,
+      authoritativeEvidenceEventSequence: 0,
+    });
+    expect(zero.evidence.eventSequence).toBe(0);
+    const positive = buildFhvOperatorStatusV1({
+      ...BASE_INPUT,
+      checkpoint: {
+        evidenceDurableThroughCycleIndex: 1,
+        executionState: { openOrders: [] },
+      } as never,
+      authoritativeEvidenceEventSequence: 7,
+    });
+    expect(positive.evidence.eventSequence).toBe(7);
   });
 });

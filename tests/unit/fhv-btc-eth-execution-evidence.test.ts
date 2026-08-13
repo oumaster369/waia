@@ -131,15 +131,15 @@ describe("DEE-436 FHV BTC/ETH execution evidence", () => {
         expect(bucket?.simulatedFillCount, `${symbol} simulated fills`).toBeGreaterThan(0);
       }
 
-      expect(result.backtest!.exportBundle.historicalExecutionCost?.fills.length).toBeGreaterThan(
+      expect(result.backtest?.exportBundle?.historicalExecutionCost?.fills.length).toBeGreaterThan(
         0,
       );
       expect(result.backtest!.accountingState?.cash).not.toBe(
         HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
       );
 
-      expect(result.backtest!.exportBundle.cycleCount).toBeGreaterThan(0);
-      expect(result.backtest!.exportBundle.strategyEvaluations.length).toBeGreaterThan(0);
+      expect(result.backtest?.exportBundle?.cycleCount).toBeGreaterThan(0);
+      expect(result.backtest?.exportBundle?.strategyEvaluations.length).toBeGreaterThan(0);
 
       const reconciliation = reconcileAccountingInvariants({
         state: result.backtest!.accountingState!,

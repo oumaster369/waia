@@ -304,6 +304,10 @@ export function createHistoricalSimulatedExchange(
       };
     }
 
+    // Canonical volume field is `bar.volume` (execution model). Qualify HTX
+    // authority independently; never let an invalid bar skip this check.
+    requireFiniteNonNegativeVolume(closedBar.volume, closedBar.symbol);
+
     for (const entry of openOrders.values()) {
       if (entry.pendingCancel && entry.pendingCancel.cancelEffectiveTs <= replayNowMs) {
         scheduled.push({

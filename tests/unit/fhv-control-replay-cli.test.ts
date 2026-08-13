@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  classifyFhvControlReplayPair,
   resolveFhvControlReplayCliConfig,
   runFhvControlReplay,
 } from "@/scripts/trader/fhv-control-replay-cli";
@@ -109,5 +110,39 @@ describe("DEE-436 FHV control-replay CLI", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("fails closed on missing or unequal cycle counts without changing digest criteria", () => {
+    const digest = "a".repeat(64);
+    expect(
+      classifyFhvControlReplayPair({
+        runOneDigest: digest,
+        runTwoDigest: digest,
+        runOneCycleCount: 1,
+        runTwoCycleCount: 1,
+      }),
+    ).toMatchObject({ classification: "CONTROL_REPLAY=PASS", digestsMatch: true });
+    expect(
+      classifyFhvControlReplayPair({
+        runOneDigest: digest,
+        runTwoDigest: digest,
+      }).failureReason,
+    ).toBe("CYCLE_COUNT_MISMATCH");
+    expect(
+      classifyFhvControlReplayPair({
+        runOneDigest: digest,
+        runTwoDigest: digest,
+        runOneCycleCount: 1,
+        runTwoCycleCount: 2,
+      }).failureReason,
+    ).toBe("CYCLE_COUNT_MISMATCH");
+    expect(
+      classifyFhvControlReplayPair({
+        runOneDigest: digest,
+        runTwoDigest: "b".repeat(64),
+        runOneCycleCount: 1,
+        runTwoCycleCount: 1,
+      }).failureReason,
+    ).toBe("SEMANTIC_REPRO_DIGEST_MISMATCH");
   });
 });
