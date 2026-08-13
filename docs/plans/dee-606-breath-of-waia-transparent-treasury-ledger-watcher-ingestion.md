@@ -14,24 +14,22 @@ approvalGates:
   - human-merge
 includedIssues: []
 deferredIssues: [DEE-607, DEE-611, DEE-612, DEE-613]
-blockedByActiveWork:
-  - id: DEE-518
-    reason: "Unmerged Postgres migration reservation 0110–0147 (0146/0147 uncommitted in DEE-518 worktree). DEE-606 must not allocate migration identities until implementation preflight, and must not Human-merge migration-bearing PRs that assume unmerged DEE-518 journal predecessors."
+blockedByActiveWork: []
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
   onMerge: Done
 state:
   status: approved
-  currentWorkPackage: WP-9
-  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4, WP-5, WP-6, WP-7, WP-8]
-  remainingWorkPackages: [WP-9]
+  currentWorkPackage: null
+  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4, WP-5, WP-6, WP-7, WP-8, WP-9]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: a91ec2c0e8cb87ffa3896064f2416177b0e0f47b
+  lastValidatedGitSha: 4a0eeb1d439f696f9d9805060fed6cefc0a308fc
   lastValidationAt: "2026-08-13"
   blockedReason: null
-  nextAction: "WP-9 PR Readiness may be prepared next. Do not start WP-9 in this closeout. Production R2 provisioning remains separately NOT AUTHORIZED. Migration merge-order gate remains BINDING."
+  nextAction: "Open the single DEE-606 PR to main (this WP), then Human squash-merge only. Do not merge from the agent. Production R2 provisioning remains NOT AUTHORIZED. Watcher remains DARK."
   wp5:
     status: COMPLETE
     blockedBy: PRODUCTION_R2_PROVISIONING_NOT_AUTHORIZED
@@ -261,6 +259,87 @@ state:
       fix: drizzle timestamp comparison instead of Date interpolation in sql template
       schemaChangeRequired: false
     successMarker: DEE_606_WP8_R5_SAFE_POSTGRES_ISOLATION_PASS_WP8_COMPLETE_READY_FOR_WP9
+  wp9:
+    status: COMPLETE
+    startingBranchSha: 86cead6f7a31363b4d6b15c705fd1d54141b062a
+    mergedMainSha: 7c8cf38f118d852d6e766ec23ea92322bedee2d4
+    dee518Pr458: MERGED
+    dee518PreviousHead: 1230c7d7962b560678cea08cd9eae01609c551f4
+    dee518SquashSha: 7c8cf38f118d852d6e766ec23ea92322bedee2d4
+    branchSyncMethod: merge
+    branchSyncMergeSha: 5f3cd44dab845dbd1805bdba66d9a3f603d6ec6a
+    rebase: false
+    forcePush: false
+    preSyncMainJournalCount: 149
+    preSyncMainJournalTip: 0148_trader_forecast_v2_open_tail_null_bounds_v1
+    preReconciliationIdentities:
+      - 0148_treasury_transparency_ledger_foundation
+      - 0149_treasury_transparency_ledger_rls
+      - 0150_treasury_chain_observations_lifecycle_guard
+    mergedMainPredecessorTip: 0148_trader_forecast_v2_open_tail_null_bounds_v1
+    finalIdentities:
+      - 0149_treasury_transparency_ledger_foundation
+      - 0150_treasury_transparency_ledger_rls
+      - 0151_treasury_chain_observations_lifecycle_guard
+    sqlSha256Before:
+      foundation: 31f3a80e7e3b90db10795147a49e5e3f32bde89bbb96b464380a8dd7b34bbb58
+      rls: e5edb01a2b95c6a1a3696974f3d94ae6769333585ee8a4a9d31b196880fdedf0
+      observationGuard: 94ec107fe156de9efd8a87a9ba6fdab4476ce4b566970c9df9b3d58c5932fd1b
+    sqlSha256After:
+      foundation: 31f3a80e7e3b90db10795147a49e5e3f32bde89bbb96b464380a8dd7b34bbb58
+      rls: e5edb01a2b95c6a1a3696974f3d94ae6769333585ee8a4a9d31b196880fdedf0
+      observationGuard: 94ec107fe156de9efd8a87a9ba6fdab4476ce4b566970c9df9b3d58c5932fd1b
+    sqlByteIdentity: PASS
+    renameCommitSha: 7e6b152dd228d0b4d7932c8b8549056969ab606c
+    journalCommitSha: d83caae99769227222be940684622bdbd1ce623f
+    testCommitSha: 4a0eeb1d439f696f9d9805060fed6cefc0a308fc
+    validatedSha: 4a0eeb1d439f696f9d9805060fed6cefc0a308fc
+    finalJournalCount: 152
+    finalJournalTip: 0151_treasury_chain_observations_lifecycle_guard
+    journalMonotonic: PASS
+    openMigrationBearingPrs: none
+    migrationCollision: none
+    migrationMergeOrderGate: RESOLVED
+    emptyDbPass: true
+    postgresVersion: "16.14"
+    appliedMigrationCount: 152
+    treasuryTables: 20
+    treasuryEnums: 18
+    rlsTables: 20
+    rlsPolicies: 80
+    sameOrgFks: 24
+    checks: 20
+    triggers: 6
+    dee518ObjectsPresent: true
+    dedicatedComposeFile: docker-compose.postgres-treasury-validate.yml
+    projectName: waia-postgres-treasury-validate
+    hostPort: 127.0.0.1:54339
+    port54329Untouched: true
+    genericValidationContainerUntouched: true
+    wp8Rerun: 16/16 PASS
+    wp7Regression: 9/9
+    wp6Regression: 9/9
+    wp5Regression: 11/11
+    wp4Regression: 27/27
+    wp3Regression: 36/36
+    wp2Regression: 140/140
+    lint: PASS
+    typecheck: PASS
+    build: PASS
+    gitDiffCheck: clean
+    evidencePath: /tmp/dee606-wp9-postgres-reconciliation-4a0eeb1d439f696f9d9805060fed6cefc0a308fc.log
+    evidenceSha256: 9d9a89a8689708f1096c5156a5d054e7601d189875d97f1221b62f34be781904
+    productionR2: NOT_AUTHORIZED
+    watcherDark: true
+    executionServerUntouched: true
+    productionStateMutated: false
+    dbGenerate: false
+    newSchemaSemantics: false
+    prReadiness: PASS
+    historicalWp1Wp8EvidencePreserved: true
+    successMarkers:
+      - DEE_606_WP9_MIGRATION_RECONCILIATION_PASS
+      - DEE_606_WP9_LOCAL_PR_READINESS_PASS
   wp4:
     status: COMPLETE
     startingSha: 6f3c8b2bd457706f33afd7466dc54907ee649e75
@@ -1701,9 +1780,33 @@ WP-8 dedicated Postgres suite **16/16 PASS**. WP-7 **9/9**. WP-6 **9/9**. WP-5 *
 
 Success marker: `DEE_606_WP8_R5_SAFE_POSTGRES_ISOLATION_PASS_WP8_COMPLETE_READY_FOR_WP9`
 
-### WP-9 — PR readiness
+Historical note: WP-8 validated **pre-reconciliation** identities `0148`/`0149`/`0150` Treasury (113 migrations on this branch before DEE-518 landed on main). Do not rewrite that evidence as if it used `0149`/`0150`/`0151`.
 
-**NOT_STARTED.** lint/typecheck/build; targeted tests; migration merge-order proof vs origin/main + DEE-518; prepare-pr later — not in this closeout.
+### WP-9 — Final migration reconciliation + PR readiness
+
+**COMPLETE.** Starting branch SHA `86cead6f7a31363b4d6b15c705fd1d54141b062a`. Merged `origin/main` `7c8cf38f118d852d6e766ec23ea92322bedee2d4` (DEE-518 PR #458 Human squash). Branch sync: **`git merge --no-edit origin/main`** (not rebase) → merge SHA `5f3cd44dab845dbd1805bdba66d9a3f603d6ec6a`.
+
+Main predecessor tip at reconciliation: idx 148 / `0148_trader_forecast_v2_open_tail_null_bounds_v1` (149 journal entries, idx 0..148). No other open migration-bearing PRs.
+
+Identity mapping (executable SQL bytes identical):
+
+| Pre-reconciliation (WP-1/WP-8 historical) | Final (WP-9) | SHA-256 |
+|---|---|---|
+| `0148_treasury_transparency_ledger_foundation` | `0149_treasury_transparency_ledger_foundation` | `31f3a80e7e3b90db10795147a49e5e3f32bde89bbb96b464380a8dd7b34bbb58` |
+| `0149_treasury_transparency_ledger_rls` | `0150_treasury_transparency_ledger_rls` | `e5edb01a2b95c6a1a3696974f3d94ae6769333585ee8a4a9d31b196880fdedf0` |
+| `0150_treasury_chain_observations_lifecycle_guard` | `0151_treasury_chain_observations_lifecycle_guard` | `94ec107fe156de9efd8a87a9ba6fdab4476ce4b566970c9df9b3d58c5932fd1b` |
+
+Final journal: **152** entries, idx 0..151, tip `0151_treasury_chain_observations_lifecycle_guard`, `when` 1780000000149..0151 after main 0148. First 149 entries identical to merged main. `migrationMergeOrderGate` = **RESOLVED**.
+
+Dedicated empty-DB apply PASS (`docker-compose.postgres-treasury-validate.yml`, `127.0.0.1:54339`, Postgres 16.14): 152 applied; Treasury 20 tables / 18 enums / RLS 20/80 / 24 same-org FKs / 20 CHECKs / 6 triggers; DEE-518 forecast/pattern tables present. 54329 / `waia-postgres-validate-1` untouched.
+
+WP-8 rerun **16/16 PASS**. WP-7 **9/9**. WP-6 **9/9**. WP-5 **11/11**. WP-4 **27/27**. WP-3 **36/36**. WP-2 **140/140**. lint PASS. typecheck PASS. build PASS. `git diff --check` clean. Watcher DARK. Production R2 **NOT AUTHORIZED**. `db:generate` not run. No new Treasury schema semantics. Evidence: `/tmp/dee606-wp9-postgres-reconciliation-4a0eeb1d439f696f9d9805060fed6cefc0a308fc.log` sha256 `9d9a89a8689708f1096c5156a5d054e7601d189875d97f1221b62f34be781904`.
+
+Validated SHA `4a0eeb1d439f696f9d9805060fed6cefc0a308fc`. Rename SHA `7e6b152dd228d0b4d7932c8b8549056969ab606c`. Journal SHA `d83caae99769227222be940684622bdbd1ce623f`.
+
+**nextAction:** Open exactly one PR to `main`. Human squash-merge only. Agent must not merge.
+
+Markers: `DEE_606_WP9_MIGRATION_RECONCILIATION_PASS` · `DEE_606_WP9_LOCAL_PR_READINESS_PASS`
 
 ---
 
@@ -1715,8 +1818,8 @@ Success marker: `DEE_606_WP8_R5_SAFE_POSTGRES_ISOLATION_PASS_WP8_COMPLETE_READY_
 | lint / typecheck / build | pnpm | PR readiness |
 | Unit: FSM, verify precondition, cash equation, resource identity, budget.remaining, commitments, runway as-of, share, recon as-of/freshness, internal coalescing, inception | targeted | WP-2/3/6/7/8 |
 | Postgres isolation + same-org FK on :54339 | dedicated compose | WP-8 |
-| Empty-DB migration apply main+DEE-606 | §13 | PR readiness |
-| Merge-order gate vs DEE-518 | §13 | before Human merge |
+| Empty-DB migration apply main+DEE-606 | §13 | WP-9 PASS (152 / tip 0151) |
+| Merge-order gate vs DEE-518 | §13 | WP-9 **RESOLVED** (PR #458 squash `7c8cf38`) |
 | E2E | DEE-607 owns admin e2e | — |
 | Governance preflight | prepare-pr | later |
 
@@ -1780,16 +1883,16 @@ Success marker: `DEE_606_WP8_R5_SAFE_POSTGRES_ISOLATION_PASS_WP8_COMPLETE_READY_
 | WP-0 | COMPLETE |
 | WP-1 | COMPLETE (`DEDICATED_POSTGRES_VALIDATION_PASS` on `:54339`) |
 | WP-2 | COMPLETE (domain services; implementation SHA `44c06089cb01eab95ce1b1f118f6a15bef853f35`; 138 targeted tests) |
-| Current work package | WP-9 **NOT STARTED** (WP-8 COMPLETE; HD-3 architecture-only; production R2 provisioning still blocked; watcher DARK; merge-order gate BINDING; no PR) |
-| WP-8 | COMPLETE (R5-safe dedicated Postgres isolation on `:54339`; starting SHA `3728aea04ba70f59ffd0441944c4fb657d282d6e`; tests `ca8227fce3b588e6aae48e6d7367922ac20adeae`; bounded correction / validated SHA `a91ec2c0e8cb87ffa3896064f2416177b0e0f47b`; 16/16 WP-8 + 9/9 WP-7 + 9/9 WP-6 + 11/11 WP-5 + 27/27 WP-4 + 36/36 WP-3 + 140/140 WP-2; 113 migrations / tip 0150; evidence sha256 `8fa2783b912942d3c82c6419a9ae410411c31b0dfb40234576bffa69956de3df`; schema/migrations/journal unchanged; merge-order BINDING; no PR; WP-9 not started) |
-| WP-9 | **NOT_STARTED** |
+| Current work package | none — WP-0..WP-9 COMPLETE; Human squash-merge of the DEE-606 PR remains |
+| WP-8 | COMPLETE (historical pre-reconciliation identities 0148/0149/0150 Treasury; 113 migrations / tip 0150; 16/16; merge-order was BINDING at WP-8 closeout) |
+| WP-9 | COMPLETE (merge `origin/main` `7c8cf38`; Treasury identities 0149/0150/0151; 152 migrations / tip 0151; SQL bytes identical; WP-8 rerun 16/16; lint/typecheck/build PASS; merge-order **RESOLVED**) |
 | WP-7 | COMPLETE (exact contribution share engine; starting SHA `aa08798c0c7b2d1d627c228eb750b0f91cf0c540`; implementation SHAs `6408e8dfbf4e079671d762ac4830bd74ccc9f5c7`, `05d39d0d3d5fbd9091d6c1018f05ca3442b6c7d0`; tests `ea4c489416af417446ea0269ae91ba00e2945880`; 7/7 WP-7 grouped invariants + 9/9 WP-6 + 11/11 WP-5 + 27/27 WP-4 + 36/36 WP-3 + 140/140 WP-2; aggregate-only public; self-only; no HTTP; no UI; no R2; schema unchanged) |
 | WP-6 | COMPLETE (Breath read model + deterministic runway snapshots; starting SHA `2ec87b739e3f3949d52def1ea68a9a35f0ccefcf`; implementation SHAs `a719d2624d1958bc65bf60d550c8e97d3cbea66b`, `8086c749f0763122766bc2254a36e871a39c7ba9`; tests `01fa23cea4596dba45707d74b30bb78c76f7f429`; 9/9 WP-6 grouped invariants + 11/11 WP-5 + 27/27 WP-4 + 36/36 WP-3 + 138/138 WP-2; no public HTTP; no UI; no R2; schema unchanged) |
 | WP-5 | COMPLETE (private R2 adapter code; starting SHA `6fcbe1faece1b3812ce9d9e03b22ef3f99fe5d79`; HD-3 recording `bf42267ae41cf50758010585ef6b96bb0ed85df5`; implementation SHAs `c4cfcb05bb109fb8e8452bb03f425355d075eef0`, `ec318601068d9a6b3d143d4da6c609245907ad4c`; tests `233db89040481ac9cd4d2ba29eb060918f4748ca`; 11/11 WP-5 + 27/27 WP-4 + 36/36 WP-3 + 138/138 WP-2; wrangler.jsonc unchanged; production storage unavailable; no bucket/binding/deploy) |
 | WP-4 | COMPLETE (Core `/api/admin/treasury/**`; starting SHA `6f3c8b2bd457706f33afd7466dc54907ee649e75`; implementation SHAs `f7fcace832be58b012bbfa2f94497b044f4ebec4`, `095f35a6d2873c597e9e8de60f373e1d1575030c`; tests `0e97dd134ceb5fc76e16975492ad3c5ed2a3581a`; 27/27 WP-4 + 36/36 WP-3 + 138/138 WP-2; no UI; no public Breath; HD-3 DEFERRED; schema unchanged) |
 | WP-3 | COMPLETE (DARK watcher; implementation SHAs `7f0315c4ec7345cad8fd38496521238e9456b9db`, `3ba3d9597ecb632776eb8b36c7594b750d8c2ff5`; tests `e611808b6844675756c695c1b0c59c006604c9fb`; 36/36 WP-3 + 138/138 WP-2; schema unchanged) |
 | Observation guard amendment | **APPROVED + IMPLEMENTED + VALIDATED** — token `CONFIRM-DEE-606-OBSERVATION-GUARD-668F159F`; amendment SHA `668f159f2c98c7fbd17b577a7de082ff12b0a5d6`; approval-recording SHA `04b28dfcb3d0741aee355f31c53887177e378e07`; correction SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`; tag `0150_treasury_chain_observations_lifecycle_guard`; `:54339` PASS |
-| Migration identities | `0148_treasury_transparency_ledger_foundation`, `0149_treasury_transparency_ledger_rls`, `0150_treasury_chain_observations_lifecycle_guard` (branch reservation; merge-order gate still binding; WP-9 final reconciliation) |
+| Migration identities | **Final (WP-9):** `0149_treasury_transparency_ledger_foundation`, `0150_treasury_transparency_ledger_rls`, `0151_treasury_chain_observations_lifecycle_guard` after merged main `0148_trader_forecast_v2_open_tail_null_bounds_v1`. Historical WP-1/WP-8 used pre-reconciliation `0148`/`0149`/`0150` Treasury. Merge-order gate **RESOLVED**. |
 
 ### HD-3 evidence storage — Human architecture-only approval record
 
@@ -1867,21 +1970,22 @@ Success marker: `DEE_606_WP8_R5_SAFE_POSTGRES_ISOLATION_PASS_WP8_COMPLETE_READY_
 - Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
 - Final integrity / Human-approved architecture source SHA: `82377e4f4869b9bf64f26a9578c2335cdbcb8b15`
 - Approval token: `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`
-- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2/WP-3/WP-4/WP-5/WP-6/WP-7/WP-8 COMPLETE; currentWorkPackage WP-9 **NOT STARTED**; HD-3 `APPROVED_ARCHITECTURE_ONLY`; production R2 provisioning still blocked; observation-guard correction PASS; watcher DARK; merge-order gate BINDING; no PR)
-- WP-8: **COMPLETE**; R5-safe dedicated Postgres isolation (`127.0.0.1:54339`); starting SHA `3728aea04ba70f59ffd0441944c4fb657d282d6e`; tests `ca8227fce3b588e6aae48e6d7367922ac20adeae`; bounded lease Date mapping fix / validated SHA `a91ec2c0e8cb87ffa3896064f2416177b0e0f47b`; 16/16 WP-8 + 9/9 WP-7 + 9/9 WP-6 + 11/11 WP-5 + 27/27 WP-4 + 36/36 WP-3 + 140/140 WP-2; 113 migrations / tip 0150; evidence sha256 `8fa2783b912942d3c82c6419a9ae410411c31b0dfb40234576bffa69956de3df`; schema/migrations/journal unchanged; 54329 untouched; DEE-518 untouched; PR not opened; WP-9 not started
+- `state.status`: **approved** (WP-0..WP-9 COMPLETE; HD-3 `APPROVED_ARCHITECTURE_ONLY`; production R2 provisioning still blocked; watcher DARK; merge-order gate **RESOLVED**; Human squash-merge of DEE-606 PR remains)
+- WP-9: **COMPLETE**; merge `origin/main` `7c8cf38f118d852d6e766ec23ea92322bedee2d4` (DEE-518 #458 squash); merge commit `5f3cd44dab845dbd1805bdba66d9a3f603d6ec6a`; Treasury identities 0149/0150/0151; SQL byte identity PASS; 152 migrations / tip 0151; WP-8 rerun 16/16; lint/typecheck/build PASS; evidence sha256 `9d9a89a8689708f1096c5156a5d054e7601d189875d97f1221b62f34be781904`; agent must not merge
+- WP-8: **COMPLETE** (historical pre-reconciliation); R5-safe dedicated Postgres isolation (`127.0.0.1:54339`); starting SHA `3728aea04ba70f59ffd0441944c4fb657d282d6e`; tests `ca8227fce3b588e6aae48e6d7367922ac20adeae`; bounded lease Date mapping fix / validated SHA `a91ec2c0e8cb87ffa3896064f2416177b0e0f47b`; 16/16 WP-8 + 9/9 WP-7 + 9/9 WP-6 + 11/11 WP-5 + 27/27 WP-4 + 36/36 WP-3 + 140/140 WP-2; **pre-reconciliation** 113 migrations / tip 0150; evidence sha256 `8fa2783b912942d3c82c6419a9ae410411c31b0dfb40234576bffa69956de3df`
 - WP-7: **COMPLETE**; exact contribution share engine + aggregate-only/self-only contracts; starting SHA `aa08798c0c7b2d1d627c228eb750b0f91cf0c540`; implementation SHAs `6408e8dfbf4e079671d762ac4830bd74ccc9f5c7`, `05d39d0d3d5fbd9091d6c1018f05ca3442b6c7d0`; tests `ea4c489416af417446ea0269ae91ba00e2945880`; production R2 provisioning **NOT AUTHORIZED**; watcher DARK; no public HTTP; no UI
 - WP-6: **COMPLETE**; Breath read model + deterministic runway snapshots; starting SHA `2ec87b739e3f3949d52def1ea68a9a35f0ccefcf`; implementation SHAs `a719d2624d1958bc65bf60d550c8e97d3cbea66b`, `8086c749f0763122766bc2254a36e871a39c7ba9`; tests `01fa23cea4596dba45707d74b30bb78c76f7f429`; production R2 provisioning **NOT AUTHORIZED**; watcher DARK; no public HTTP; no UI
 - WP-5: **COMPLETE**; private R2 evidence adapter (code only); starting SHA `6fcbe1faece1b3812ce9d9e03b22ef3f99fe5d79`; approval-recording SHA `bf42267ae41cf50758010585ef6b96bb0ed85df5`; implementation SHAs `c4cfcb05bb109fb8e8452bb03f425355d075eef0`, `ec318601068d9a6b3d143d4da6c609245907ad4c`; tests `233db89040481ac9cd4d2ba29eb060918f4748ca`; production R2 provisioning **NOT AUTHORIZED**
 - WP-4: **COMPLETE**; Core admin HTTP contracts; starting SHA `6f3c8b2bd457706f33afd7466dc54907ee649e75`
 - HD-3: **APPROVED_ARCHITECTURE_ONLY**; token `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING`; private R2 architecture/code authorized; production provisioning **NOT AUTHORIZED**
 - WP-3: **COMPLETE**; DARK Treasury watcher; starting SHA `afc0b9b270ed104173d84741b7bdcdfdc969f142`
-- Observation guard amendment: **APPROVED_IMPLEMENTED_VALIDATED** (§5.4a); token `CONFIRM-DEE-606-OBSERVATION-GUARD-668F159F`; amendment SHA `668f159f2c98c7fbd17b577a7de082ff12b0a5d6`; approval-recording SHA `04b28dfcb3d0741aee355f31c53887177e378e07`; correction SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`; tag `0150_treasury_chain_observations_lifecycle_guard`; 0148/0149 unchanged
-- Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 architecture-only (no production R2 provisioning)
-- WP-1 validation: **DEDICATED_POSTGRES_VALIDATION_PASS** (`127.0.0.1:54339`; SHA `0df1b9698f1af27222c60bfb11191f0cf3f85676`)
-- Observation-guard correction validation: **DEDICATED_POSTGRES_VALIDATION_PASS** (`127.0.0.1:54339`; evidence sha256 `fb2e5bd321f9a47519be92251e7d37864fb4c19368b7ee42a540f8b03688f6c2`)
-- Migration reservation: **0148** foundation + **0149** RLS + **0150** observation lifecycle guard; merge-order gate still binding; DEE-518 local tip observed `0148_trader_forecast_v2_open_tail_null_bounds_v1`
-- Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 architecture-only (no production R2 provisioning)
+- Observation guard amendment: **APPROVED_IMPLEMENTED_VALIDATED** (§5.4a); token `CONFIRM-DEE-606-OBSERVATION-GUARD-668F159F`; amendment SHA `668f159f2c98c7fbd17b577a7de082ff12b0a5d6`; approval-recording SHA `04b28dfcb3d0741aee355f31c53887177e378e07`; correction SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`; historical tag `0150_treasury_chain_observations_lifecycle_guard` (final identity `0151`)
 - Prior Architect decisions remain intact: T3; Core Treasury domain; accounting/detail separation; VERIFIED accounting truth; contribution share; commitment facts; deterministic runway snapshots; no DEE-612/613 hard-coded doctrine
+- Binding gates preserved: watcher ships DARK; HD-3 architecture-only (no production R2 provisioning). DEE-518 migration merge-order **RESOLVED** on WP-9 after PR #458 squash `7c8cf38`.
+- Binding gates preserved: watcher ships DARK; HD-3 architecture-only (no production R2 provisioning). DEE-518 migration merge-order **RESOLVED** on WP-9 after PR #458 squash `7c8cf38`.
+- WP-1 validation: **DEDICATED_POSTGRES_VALIDATION_PASS** (`127.0.0.1:54339`; SHA `0df1b9698f1af27222c60bfb11191f0cf3f85676`) — historical pre-reconciliation identities
+- Observation-guard correction validation: **DEDICATED_POSTGRES_VALIDATION_PASS** (`127.0.0.1:54339`; evidence sha256 `fb2e5bd321f9a47519be92251e7d37864fb4c19368b7ee42a540f8b03688f6c2`) — historical tag `0150` pre-reconciliation
+- Migration reservation **final:** **0149** foundation + **0150** RLS + **0151** observation lifecycle guard after merged main **0148** trader forecast open-tail
 - `DEE_606_OBSERVATION_GUARD_CORRECTION_PASS_READY_TO_RESUME_WP3`
 - `DEE_606_WP3_TREASURY_WATCHER_DARK_PASS_WP3_COMPLETE_READY_FOR_WP4`
 - `DEE_606_WP4_ADMIN_BACKEND_CONTRACTS_PASS_WP4_COMPLETE`
@@ -1890,4 +1994,6 @@ Success marker: `DEE_606_WP8_R5_SAFE_POSTGRES_ISOLATION_PASS_WP8_COMPLETE_READY_
 - `DEE_606_WP7_CONTRIBUTION_SHARE_PASS_WP7_COMPLETE_READY_FOR_WP8`
 - `DEE_606_WP7_PUBLIC_AGGREGATE_PRIVACY_CORRECTION_PASS_READY_FOR_WP8`
 - `DEE_606_WP8_R5_SAFE_POSTGRES_ISOLATION_PASS_WP8_COMPLETE_READY_FOR_WP9`
+- `DEE_606_WP9_MIGRATION_RECONCILIATION_PASS`
+- `DEE_606_WP9_LOCAL_PR_READINESS_PASS`
 - `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING`
