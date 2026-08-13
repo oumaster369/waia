@@ -51,6 +51,21 @@ export type CreateManualDraftInput = {
   reason?: string | null;
 };
 
+export type CreateWatcherDetectedInput = {
+  direction: TreasuryTxDirection;
+  nativeAmountAtomic: bigint;
+  nativeDecimals: number;
+  nativeAsset: string;
+  nativeContract: string;
+  canonicalNetwork: string;
+  canonicalTokenContract: string;
+  canonicalTxHash: string;
+  canonicalTransferIndex: number;
+  occurredAt: Date;
+  counterpartyIsInternal: boolean;
+  ledgerInceptionId?: string | null;
+};
+
 function jsonSafe(value: unknown): unknown {
   if (typeof value === "bigint") return serializeMicros(value);
   if (value instanceof Date) return value.toISOString();
@@ -214,6 +229,93 @@ export function createTreasuryTransactionService(deps: TreasuryTransactionServic
   return {
     async getTransaction(context: OrgContext, transactionId: string) {
       return requireTransaction(context, transactionId);
+    },
+
+    async ensureWatcherDetected(
+      context: OrgContext,
+      actor: TreasuryActorContext,
+      input: CreateWatcherDetectedInput,
+    ) {
+      const scoped = requireOrgContext(context.organizationId);
+      const existing = await bound.repository.getTransactionByCanonicalTransfer(scoped, {
+        network: input.canonicalNetwork,
+        tokenContract: input.canonicalTokenContract,
+        txHash: input.canonicalTxHash,
+        transferIndex: input.canonicalTransferIndex,
+      });
+      if (existing) {
+        return existing;
+      }
+      const createdAt = now();
+      const record: TreasuryTransactionRecord = {
+        id: newId(),
+        organizationId: scoped.organizationId,
+        status: "DETECTED",
+        detailPublication: "PRIVATE",
+        provenance: "WATCHER",
+        canonicalNetwork: input.canonicalNetwork,
+        canonicalTokenContract: input.canonicalTokenContract,
+        canonicalTxHash: input.canonicalTxHash,
+        canonicalTransferIndex: input.canonicalTransferIndex,
+        direction: input.direction,
+        kind: null,
+        fundBucketCode: "UNASSIGNED",
+        nativeAmountAtomic: input.nativeAmountAtomic,
+        nativeDecimals: input.nativeDecimals,
+        nativeAsset: input.nativeAsset,
+        nativeContract: input.nativeContract,
+        accountingAmountMicros: null,
+        accountingDenominationPolicy: null,
+        cashEffectMicros: null,
+        counterpartyIsInternal: input.counterpartyIsInternal,
+        occurredAt: input.occurredAt,
+        purpose: null,
+        category: null,
+        counterpartyDisplay: null,
+        publishCounterparty: false,
+        projectModule: null,
+        milestoneStage: null,
+        budgetId: null,
+        fundingNeedId: null,
+        description: null,
+        internalNotes: null,
+        publicDescription: null,
+        txHash: input.canonicalTxHash,
+        correctsTransactionId: null,
+        duplicateOfTransactionId: null,
+        detailSupersededById: null,
+        ledgerInceptionId: input.ledgerInceptionId ?? null,
+        verifiedAt: null,
+        verifiedByUserId: null,
+        detailPublishedAt: null,
+        detailPublishedByUserId: null,
+        latestRevisionId: null,
+        recordContentDigest: "",
+        createdByUserId: null,
+        createdAt,
+        updatedAt: createdAt,
+      };
+      record.recordContentDigest = digestTransaction(record);
+
+      return runAtomic(async () => {
+        await bound.repository.insertTransaction(record);
+        const withCreate = await writeRevisionAndAudit({
+          context: scoped,
+          actor,
+          tx: record,
+          action: treasuryAuditActions.transactionWatcherCreate,
+          reason: "watcher ingest DETECTED",
+          patch: { create: "DETECTED" },
+          after: { status: "DETECTED", id: record.id },
+        });
+        return applyStatus(
+          scoped,
+          actor,
+          withCreate,
+          "NEEDS_REVIEW",
+          "watcher ingest DETECTED -> NEEDS_REVIEW",
+        );
+      });
     },
 
     async createManualDraft(

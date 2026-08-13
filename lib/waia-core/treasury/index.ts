@@ -79,6 +79,12 @@ export {
 export { createTreasuryInceptionService } from "@/lib/waia-core/treasury/inception-service";
 export { createMemoryTreasuryRepository } from "@/lib/waia-core/treasury/memory-repository";
 export { createPostgresTreasuryRepository } from "@/lib/waia-core/treasury/postgres-repository";
+export {
+  loadTreasuryWatcherConfig,
+  runTreasuryWatcherCycle,
+  createMemoryTreasuryWatcherRepository,
+  TREASURY_WATCHER_CHECKPOINT_KEY,
+} from "@/lib/waia-core/treasury/watcher";
 
 export type TreasuryDomainServices = {
   transactions: ReturnType<typeof createTreasuryTransactionService>;

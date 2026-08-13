@@ -1,5 +1,6 @@
 export const treasuryAuditActions = {
   transactionManualCreate: "treasury.transaction.manual_create",
+  transactionWatcherCreate: "treasury.transaction.watcher_create",
   transactionClassify: "treasury.transaction.classify",
   transactionStatusTransition: "treasury.transaction.status_transition",
   transactionVerify: "treasury.transaction.verify",
