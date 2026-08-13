@@ -1,6 +1,7 @@
 # AI-TRADER — Target Runtime Architecture (Completed System)
 
 > **Status:** Target architecture — **READY_FOR_HUMAN_REVIEW** (not yet ratified canon).
+> **DEE-518 re-ratification note (2026-08-10):** Gate-D scientific contracts (Forecast V2, conservative Decision economics, kill fold, FHV-v1 Guardian disposition, PRE-HOLDOUT Position Reassessment topology) are recorded in [`docs/plans/dee-518-ai-trader-correctness-mathematical-intelligence-fhv-v1.md`](../plans/dee-518-ai-trader-correctness-mathematical-intelligence-fhv-v1.md) and LD-6/7/8 amendments under `docs/ai-trader/amendments/`. This target doc remains descriptive; plan §1.22–§1.25 govern DEE-518 implementation boundaries.
 > **Class:** Runtime architecture + end-to-end algorithm for the *completed / mature* AI-TRADER.
 > **Scope:** How the finished AI-TRADER must run end-to-end — topology, the full algorithm from first market contact to closed, reconciled trades, and the invariants that keep the capital path deterministic and safe. It is **not** a roadmap, an implementation plan, an MVP scope, or a governance override.
 

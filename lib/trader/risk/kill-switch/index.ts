@@ -18,6 +18,19 @@ export {
   isCoolingOffNotElapsedError,
 } from "@/lib/trader/risk/kill-switch/errors";
 export {
+  advanceKillFold,
+  assertKillFoldStageOrdering,
+  createKillFoldState,
+  isKillFoldHaltActive,
+  killFoldEnforcementModeForStage,
+  KILL_FOLD_STAGES,
+  KILL_FOLD_VERSION,
+  runKillFoldToHalt,
+  type KillFoldAdvanceInput,
+  type KillFoldStage,
+  type KillFoldState,
+} from "@/lib/trader/risk/kill-switch/kill-fold";
+export {
   createAutomaticTriggerDispatcher,
   createPostgresAutomaticTriggerDispatcher,
   createSqliteAutomaticTriggerDispatcher,

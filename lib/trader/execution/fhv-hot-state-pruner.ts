@@ -238,3 +238,66 @@ export function pruneFhvSealedEconomicRows(
   run(orderIds);
   return { deletedOrders, deletedEvents, deletedFills };
 }
+
+/**
+ * Collect the append-only lifecycle audit rows currently resident in bounded hot state.
+ *
+ * FHV lifecycle events (e.g. `SIGNAL_ACCEPTED`) are write-only provenance: nothing in the
+ * replay/resume/reconciliation/result path reads them back from `session.sqlite` (the only
+ * readers of this table are unit tests and the unrelated MI hypothesis/pattern tables). They
+ * are not attributable to a sealed order, so — unlike economic rows — they are sealed and
+ * pruned by epoch window rather than by order id. Every row present at an epoch commit belongs
+ * to an already-committed cycle, so the whole resident set is sealable. Left unpruned the table
+ * grows monotonically and, once the checkpoint freelist is exhausted, forces the checkpointed
+ * database to grow (ADR-0025 AD-2 bounded hot state).
+ */
+export function collectFhvLifecycleAuditRows(sqlite: Database.Database): {
+  rows: FhvEconomicLedgerRow[];
+  ids: string[];
+} {
+  const tableExists = sqlite
+    .prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'trader_lifecycle_events'",
+    )
+    .get();
+  if (!tableExists) {
+    return { rows: [], ids: [] };
+  }
+  const events = sqlite
+    .prepare("SELECT rowid AS __rowid, * FROM trader_lifecycle_events")
+    .all() as OrderRecord[];
+  return {
+    rows: events.map((row) => ({ kind: "trader_lifecycle_events" as const, row })),
+    ids: events.map((row) => String(row.id)),
+  };
+}
+
+/**
+ * Delete the supplied lifecycle audit rows.
+ *
+ * MUST run only after the rows are durably sealed in the economic ledger (same fail-closed
+ * ordering as {@link pruneFhvSealedEconomicRows}: a crash between seal and prune leaves the rows
+ * in both places, which is recoverable; the reverse order would lose history). Chunked to stay
+ * within SQLite's bound-parameter limit for high-density epochs.
+ */
+export function pruneFhvSealedLifecycleAuditRows(
+  sqlite: Database.Database,
+  ids: readonly string[],
+): number {
+  if (ids.length === 0) {
+    return 0;
+  }
+  const CHUNK = 500;
+  let deleted = 0;
+  const run = sqlite.transaction((all: readonly string[]) => {
+    for (let index = 0; index < all.length; index += CHUNK) {
+      const chunk = all.slice(index, index + CHUNK);
+      const placeholders = chunk.map(() => "?").join(",");
+      deleted += sqlite
+        .prepare(`DELETE FROM trader_lifecycle_events WHERE id IN (${placeholders})`)
+        .run(...chunk).changes;
+    }
+  });
+  run(ids);
+  return deleted;
+}

@@ -13,9 +13,11 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  collectFhvLifecycleAuditRows,
   collectFhvSealCandidates,
   collectFhvSealedEconomicRows,
   pruneFhvSealedEconomicRows,
+  pruneFhvSealedLifecycleAuditRows,
 } from "@/lib/trader/execution/fhv-hot-state-pruner";
 import {
   openFhvVerifiedEconomicLedgerSnapshot,
@@ -84,6 +86,41 @@ function makeDb(): Database.Database {
     );
   `);
   return sqlite;
+}
+
+function makeLifecycleDb(): Database.Database {
+  const sqlite = makeDb();
+  sqlite.exec(`
+    CREATE TABLE trader_lifecycle_events (
+      id TEXT PRIMARY KEY, organization_id TEXT NOT NULL, entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL, phase TEXT NOT NULL, payload TEXT,
+      occurred_at INTEGER NOT NULL, research_run_id TEXT, created_at INTEGER NOT NULL
+    );
+  `);
+  return sqlite;
+}
+
+function insertSignalAcceptedEvent(
+  sqlite: Database.Database,
+  input: { id: string; occurredAt?: number },
+): void {
+  const occurredAt = input.occurredAt ?? T0;
+  sqlite
+    .prepare(
+      `INSERT INTO trader_lifecycle_events (id, organization_id, entity_type, entity_id, phase,
+        payload, occurred_at, research_run_id, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+    )
+    .run(
+      input.id,
+      ORG,
+      "STRATEGY_SIGNAL",
+      `signal-${input.id}`,
+      "SIGNAL_ACCEPTED",
+      JSON.stringify({ strategyId: "mean_reversion_v0", regime: "RANGE" }),
+      occurredAt,
+      null,
+      occurredAt,
+    );
 }
 
 function insertOrder(
@@ -447,6 +484,67 @@ describe("WP-6A boundedness", () => {
       withFill: false,
     });
     expect(eligibleOrderIds(sqlite, CLEAN)).toEqual([]);
+    sqlite.close();
+  });
+
+  it("lifecycle audit rows are sealed durably before they leave bounded hot state", () => {
+    // Regression for the WP-7B growth defect: SIGNAL_ACCEPTED lifecycle audit accumulated
+    // monotonically in session.sqlite because it was never sealed or pruned, eventually forcing
+    // the checkpointed database to grow past the bounded ceiling (197.647 > 160 b/cycle).
+    const runDir = makeRunDir();
+    const sqlite = makeLifecycleDb();
+
+    // Pre-repair defect shape: the audit table grows unbounded across epochs.
+    for (let epoch = 0; epoch < 4; epoch += 1) {
+      for (let index = 0; index < 100; index += 1) {
+        insertSignalAcceptedEvent(sqlite, { id: `sig-${epoch}-${index}`, occurredAt: T0 + epoch });
+      }
+
+      const lifecycle = collectFhvLifecycleAuditRows(sqlite);
+      expect(lifecycle.rows.length).toBe(100);
+      // Fail-closed ordering: seal + verify BEFORE the destructive delete.
+      sealFhvEconomicLedgerEpoch({ runDir, epochId: epoch, rows: lifecycle.rows });
+      expect(verifyFhvEconomicLedger(runDir).ok).toBe(true);
+      const deleted = pruneFhvSealedLifecycleAuditRows(sqlite, lifecycle.ids);
+      expect(deleted).toBe(100);
+
+      // Bounded: the resident audit table returns to empty every epoch instead of accumulating.
+      expect(
+        (sqlite.prepare("SELECT COUNT(*) c FROM trader_lifecycle_events").get() as { c: number }).c,
+      ).toBe(0);
+    }
+
+    // Nothing lost: every pruned audit row is durably reconstructable from the verified ledger.
+    const sealed = readFhvEconomicLedgerRows(runDir).filter(
+      (entry) => entry.kind === "trader_lifecycle_events",
+    );
+    expect(sealed).toHaveLength(400);
+    // The ledger snapshot ignores lifecycle rows for order reconstruction and must never throw.
+    expect(() => openFhvVerifiedEconomicLedgerSnapshot(runDir)).not.toThrow();
+    sqlite.close();
+  });
+
+  it("lifecycle prune stays within SQLite bound-parameter limits for high-density epochs", () => {
+    const sqlite = makeLifecycleDb();
+    for (let index = 0; index < 1_500; index += 1) {
+      insertSignalAcceptedEvent(sqlite, { id: `sig-${index}`, occurredAt: T0 + index });
+    }
+    const lifecycle = collectFhvLifecycleAuditRows(sqlite);
+    expect(lifecycle.ids.length).toBe(1_500);
+    // 1,500 > the 999 legacy bound-parameter ceiling — chunked deletion must still remove all.
+    const deleted = pruneFhvSealedLifecycleAuditRows(sqlite, lifecycle.ids);
+    expect(deleted).toBe(1_500);
+    expect(
+      (sqlite.prepare("SELECT COUNT(*) c FROM trader_lifecycle_events").get() as { c: number }).c,
+    ).toBe(0);
+    sqlite.close();
+  });
+
+  it("lifecycle collection is a safe no-op when the audit table is absent", () => {
+    const sqlite = makeDb();
+    const lifecycle = collectFhvLifecycleAuditRows(sqlite);
+    expect(lifecycle.rows).toHaveLength(0);
+    expect(pruneFhvSealedLifecycleAuditRows(sqlite, [])).toBe(0);
     sqlite.close();
   });
 

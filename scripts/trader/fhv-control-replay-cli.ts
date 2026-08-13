@@ -35,6 +35,45 @@ export type FhvControlReplayResult = Readonly<{
   failureReason?: string;
 }>;
 
+/**
+ * Existing two-run Control Replay comparison (data plumbing only).
+ * Does not invent cycle counts; missing/unequal counts fail closed.
+ */
+export function classifyFhvControlReplayPair(input: {
+  runOneDigest?: string;
+  runTwoDigest?: string;
+  runOneCycleCount?: number;
+  runTwoCycleCount?: number;
+}): Pick<
+  FhvControlReplayResult,
+  "classification" | "digestsMatch" | "failureReason" | "runOneDigest" | "runTwoDigest"
+> {
+  const cycleCountsMatch =
+    input.runOneCycleCount != null &&
+    input.runTwoCycleCount != null &&
+    input.runOneCycleCount === input.runTwoCycleCount;
+  const digestsMatch =
+    input.runOneDigest != null &&
+    input.runTwoDigest != null &&
+    input.runOneDigest === input.runTwoDigest &&
+    cycleCountsMatch;
+  if (!digestsMatch) {
+    return {
+      classification: "CONTROL_REPLAY=FAIL",
+      runOneDigest: input.runOneDigest,
+      runTwoDigest: input.runTwoDigest,
+      digestsMatch: false,
+      failureReason: cycleCountsMatch ? "SEMANTIC_REPRO_DIGEST_MISMATCH" : "CYCLE_COUNT_MISMATCH",
+    };
+  }
+  return {
+    classification: "CONTROL_REPLAY=PASS",
+    runOneDigest: input.runOneDigest,
+    runTwoDigest: input.runTwoDigest,
+    digestsMatch: true,
+  };
+}
+
 function parseArgv(argv: readonly string[]): Map<string, string | true> {
   const parsed = new Map<string, string | true>();
   const tokens = argv[0] === "--" ? argv.slice(1) : argv;
@@ -404,24 +443,17 @@ export async function runFhvControlReplay(input: {
 
     const runOneDigest = resultOne.semanticReproDigest;
     const runTwoDigest = resultTwo.semanticReproDigest;
-    const cycleCountsMatch =
-      resultOne.backtest?.cycleCount != null &&
-      resultTwo.backtest?.cycleCount != null &&
-      resultOne.backtest.cycleCount === resultTwo.backtest.cycleCount;
-    const digestsMatch =
-      runOneDigest != null &&
-      runTwoDigest != null &&
-      runOneDigest === runTwoDigest &&
-      cycleCountsMatch;
+    const classified = classifyFhvControlReplayPair({
+      runOneDigest,
+      runTwoDigest,
+      runOneCycleCount: resultOne.backtest?.cycleCount,
+      runTwoCycleCount: resultTwo.backtest?.cycleCount,
+    });
 
-    if (!digestsMatch) {
+    if (classified.classification !== "CONTROL_REPLAY=PASS") {
       return {
         schemaVersion: "fhv-control-replay/v1",
-        classification: "CONTROL_REPLAY=FAIL",
-        runOneDigest,
-        runTwoDigest,
-        digestsMatch: false,
-        failureReason: cycleCountsMatch ? "SEMANTIC_REPRO_DIGEST_MISMATCH" : "CYCLE_COUNT_MISMATCH",
+        ...classified,
       };
     }
 

@@ -25,6 +25,7 @@ import {
   createWp17PersistencePort,
   createWp17SqliteSession,
   type Wp17SqliteSession,
+  makeWp17QualifiedHtxVolumeAuthority,
 } from "@/tests/unit/helpers/wp17-execution-fixtures";
 import type { HistoricalExecutionPersistencePort } from "@/lib/trader/execution/historical-simulated-exchange";
 
@@ -124,23 +125,25 @@ describe("trader corrective A3 partial entry breach integration", () => {
           toState: "CANCELLED",
         }),
     };
+    const closedBar = {
+      symbol: "BTCUSDT",
+      interval: "1m" as const,
+      open: "50000",
+      high: "50100",
+      low: "49900",
+      close: "50000",
+      volume: "1.0",
+      barOpenTime: "2026-01-01T00:02:00.000Z",
+      barCloseTime: "2026-01-01T00:02:59.999Z",
+    };
     await session.exchange.advanceOnClosedBar({
       context: session.context,
-      closedBar: {
-        symbol: "BTCUSDT",
-        interval: "1m",
-        open: "50000",
-        high: "50100",
-        low: "49900",
-        close: "50000",
-        volume: "1.0",
-        barOpenTime: "2026-01-01T00:02:00.000Z",
-        barCloseTime: "2026-01-01T00:02:59.999Z",
-      },
+      closedBar,
       barIndex: 2,
       model: session.model,
       persistence,
       replayNowMs: Date.parse("2026-01-01T00:02:59.999Z") + session.model.cancelLatencyMs,
+      ...makeWp17QualifiedHtxVolumeAuthority(closedBar),
       resolveLatestOrder: (orderId) => session.repo.getOrderById(session.context, orderId),
       refreshAccountState: async () => ({
         positions: [],

@@ -3,6 +3,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 enforceServerOnly();
 
 import { and, eq, type Column, type SQL } from "drizzle-orm";
+import type postgres from "postgres";
 
 import type { WaiaDb } from "@/db/types";
 import { organizationMembers } from "@/db/schema";
@@ -40,6 +41,37 @@ export function requireOrgContext(organizationId: string | null | undefined): Or
  */
 export function orgScopedWhere(organizationIdColumn: Column, context: OrgContext): SQL {
   return eq(organizationIdColumn, context.organizationId);
+}
+
+/** Canonical organization-scope column for raw postgres.js template queries. */
+export const ORGANIZATION_SCOPE_COLUMN = "organization_id" as const;
+
+/**
+ * Mandatory org-scoping predicate for raw `postgres.js` tagged-template queries (ADR-0007).
+ *
+ * New/DEE-518-era Postgres services build queries with `postgres.Sql` template literals
+ * rather than Drizzle, so {@link orgScopedWhere} (Drizzle `SQL`) does not apply. This helper
+ * is the postgres.js parity: it returns a composable `<column> = <uuid>` fragment scoped to a
+ * validated organization and must be embedded in every organization-scoped `WHERE`.
+ *
+ * Fail-closed guarantees (there is no unscoped mode):
+ * - missing/empty `organizationId` throws {@link OrgScopeError} (`ORG_CONTEXT_REQUIRED`) via
+ *   {@link requireOrgContext} before any SQL is produced;
+ * - the fragment always contains the organization equality predicate, so callers cannot emit
+ *   an unscoped organization query by accidentally dropping a `WHERE` clause;
+ * - invalid UUID identity is rejected at the database by the `::uuid` cast.
+ *
+ * Business-id uniqueness is NOT a substitute for this predicate; it must always be ANDed with
+ * the caller's natural-key predicates, never replace them.
+ */
+export function orgScopedPostgresPredicate(
+  sql: postgres.Sql,
+  organizationId: string | null | undefined,
+  options?: { column?: string },
+): postgres.Fragment {
+  const scoped = requireOrgContext(organizationId);
+  const column = options?.column ?? ORGANIZATION_SCOPE_COLUMN;
+  return sql`${sql(column)} = ${scoped.organizationId}::uuid`;
 }
 
 export function assertOrgMembershipSqlite(

@@ -41,6 +41,11 @@ import {
   effectiveCoolingOffMs,
   toKillSwitchView,
 } from "@/lib/trader/risk/kill-switch/types";
+import {
+  advanceKillFold,
+  createKillFoldState,
+  type KillFoldState,
+} from "@/lib/trader/risk/kill-switch/kill-fold";
 import { traderAuditActions, traderEntityTypes } from "@/lib/trader/types";
 import {
   assertOrgMembershipPostgres,
@@ -101,6 +106,7 @@ function buildAuditMetadata(
     confirmedAt?: string;
     recoveryActor?: KillSwitchActor;
     eligibleAt?: string | null;
+    killFold?: KillFoldState;
   },
 ): Record<string, unknown> {
   const effectiveMs = effectiveCoolingOffMs(row.coolingOffMs);
@@ -133,7 +139,33 @@ function buildAuditMetadata(
     clearedAt: row.clearedAt?.toISOString() ?? null,
     confirmedAt: options?.confirmedAt ?? null,
     recoveryActor: options?.recoveryActor ?? null,
+    killFold: options?.killFold
+      ? {
+          version: options.killFold.version,
+          stage: options.killFold.stage,
+          trippedAt: options.killFold.trippedAt,
+          completedStages: options.killFold.completedStages,
+          haltActive: options.killFold.haltActive,
+        }
+      : null,
   };
+}
+
+function initiateKillFoldOnTrip(trippedAtIso: string): KillFoldState {
+  let fold = createKillFoldState(trippedAtIso);
+  fold = advanceKillFold(fold);
+  fold = advanceKillFold(fold);
+  fold = advanceKillFold(fold, { pendingEntriesCancelled: true });
+  return fold;
+}
+
+function resolveTripEnforcementMode(
+  requested: KillSwitchTransitionPatch["enforcementMode"],
+): NonNullable<KillSwitchTransitionPatch["enforcementMode"]> {
+  if (requested === "STOP_ACCOUNT") {
+    return "STOP_ACCOUNT";
+  }
+  return "CLOSE_ONLY";
 }
 
 function auditActionForTransition(from: KillSwitchRow["state"] | null, to: KillSwitchRow["state"]) {
@@ -172,6 +204,7 @@ export function createKillSwitchService(deps: KillSwitchServiceDeps): KillSwitch
       confirmedAt?: string;
       recoveryActor?: KillSwitchActor;
       eligibleAt?: string | null;
+      killFold?: KillFoldState;
     },
   ): Promise<KillSwitchTransitionResult> {
     assertV0WritableTarget(target);
@@ -270,18 +303,29 @@ export function createKillSwitchService(deps: KillSwitchServiceDeps): KillSwitch
       const writeContext = resolveWriteContext(target, context);
       const existing = await deps.repository.getRowForScope(target, key);
       const now = new Date(deps.nowMs());
+      const trippedAtIso = now.toISOString();
+      const killFold = initiateKillFoldOnTrip(trippedAtIso);
+      const enforcementMode = resolveTripEnforcementMode(input.enforcementMode);
 
       if (!existing) {
-        return applyTransition(actor, target, key, writeContext, null, {
-          state: "ACTIVE",
-          enforcementMode: input.enforcementMode,
-          origin: input.origin,
-          reason: input.reason ?? "",
-          coolingOffMs: input.coolingOffMs ?? null,
-          trippedAt: now,
-          clearedAt: null,
-          clearingStartedAt: null,
-        });
+        return applyTransition(
+          actor,
+          target,
+          key,
+          writeContext,
+          null,
+          {
+            state: "ACTIVE",
+            enforcementMode,
+            origin: input.origin,
+            reason: input.reason ?? "",
+            coolingOffMs: input.coolingOffMs ?? null,
+            trippedAt: now,
+            clearedAt: null,
+            clearingStartedAt: null,
+          },
+          { killFold },
+        );
       }
 
       if (existing.state === "ACTIVE") {
@@ -295,16 +339,24 @@ export function createKillSwitchService(deps: KillSwitchServiceDeps): KillSwitch
         throw new KillSwitchConcurrencyError();
       }
 
-      return applyTransition(actor, target, key, writeContext, existing, {
-        state: "ACTIVE",
-        enforcementMode: input.enforcementMode,
-        origin: input.origin,
-        reason: input.reason ?? existing.reason,
-        coolingOffMs: input.coolingOffMs ?? existing.coolingOffMs,
-        trippedAt: now,
-        clearedAt: null,
-        clearingStartedAt: null,
-      });
+      return applyTransition(
+        actor,
+        target,
+        key,
+        writeContext,
+        existing,
+        {
+          state: "ACTIVE",
+          enforcementMode,
+          origin: input.origin,
+          reason: input.reason ?? existing.reason,
+          coolingOffMs: input.coolingOffMs ?? existing.coolingOffMs,
+          trippedAt: now,
+          clearedAt: null,
+          clearingStartedAt: null,
+        },
+        { killFold },
+      );
     },
 
     async escalate(actor, context, target, key, input) {

@@ -44,7 +44,7 @@ type PathOutcome = {
   snapshot: FhvOfficialScaleParitySnapshot;
   runDir: string;
   sessionBytes: number;
-  economicRowCount: number;
+  residentHotRowCount: number;
   ledgerRowCount: number;
 };
 
@@ -62,12 +62,23 @@ function resolveSessionDbPath(runDir: string): string | null {
   return null;
 }
 
-/** Count the economic rows still resident in the snapshotted hot-state database. */
-function countResidentEconomicRows(sessionPath: string): number {
+/**
+ * Count the bounded-hot-state rows still resident in the snapshotted database.
+ *
+ * Includes `trader_lifecycle_events`: like orders/events/fills it is append-only history that the
+ * bounded path seals into the economic ledger and prunes, so the nothing-lost invariant must span
+ * every table the ledger can absorb.
+ */
+function countResidentHotStateRows(sessionPath: string): number {
   const db = new Database(sessionPath, { readonly: true });
   try {
     let total = 0;
-    for (const table of ["trader_orders", "trader_order_events", "trader_fills"]) {
+    for (const table of [
+      "trader_orders",
+      "trader_order_events",
+      "trader_fills",
+      "trader_lifecycle_events",
+    ]) {
       total += (db.prepare(`SELECT COUNT(*) c FROM ${table}`).get() as { c: number }).c;
     }
     return total;
@@ -137,7 +148,7 @@ describe("WP-6A bounded hot state dual-path parity", () => {
         snapshot,
         runDir: result.runDir,
         sessionBytes: statSync(sessionPath as string).size,
-        economicRowCount: countResidentEconomicRows(sessionPath as string),
+        residentHotRowCount: countResidentHotStateRows(sessionPath as string),
         ledgerRowCount: readFhvEconomicLedgerManifest(result.runDir).totalRowCount,
       };
     } finally {
@@ -209,8 +220,12 @@ describe("WP-6A bounded hot state dual-path parity", () => {
     expect(verification.ok).toBe(true);
     expect(verification.segmentCount).toBeGreaterThan(0);
 
-    // Nothing may be lost: rows are either still resident or sealed into the ledger.
-    expect(bounded.economicRowCount + bounded.ledgerRowCount).toBe(legacy.economicRowCount);
+    // Nothing may be lost: every hot-state row is either still resident or sealed into the ledger.
+    // Legacy keeps them all resident (ledger empty); bounded splits them between resident and
+    // ledger, so the totals must match across both paths.
+    expect(bounded.residentHotRowCount + bounded.ledgerRowCount).toBe(
+      legacy.residentHotRowCount + legacy.ledgerRowCount,
+    );
 
     const rows = readFhvEconomicLedgerRows(bounded.runDir);
     expect(rows.length).toBe(bounded.ledgerRowCount);
@@ -223,11 +238,11 @@ describe("WP-6A bounded hot state dual-path parity", () => {
     const bounded = outcomes.get("bounded")!;
 
     // The whole point of ADR-0025: less data is copied and hashed at every epoch.
-    expect(bounded.economicRowCount).toBeLessThan(legacy.economicRowCount);
+    expect(bounded.residentHotRowCount).toBeLessThan(legacy.residentHotRowCount);
     expect(bounded.sessionBytes).toBeLessThanOrEqual(legacy.sessionBytes);
 
     process.stderr.write(
-      `[fhv-bounded-hot-state] legacy_rows=${legacy.economicRowCount} bounded_rows=${bounded.economicRowCount} ` +
+      `[fhv-bounded-hot-state] legacy_rows=${legacy.residentHotRowCount} bounded_rows=${bounded.residentHotRowCount} ` +
         `ledger_rows=${bounded.ledgerRowCount} legacy_bytes=${legacy.sessionBytes} ` +
         `bounded_bytes=${bounded.sessionBytes}\n`,
     );

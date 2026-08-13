@@ -1,16 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { computeAccountingSemanticDigest } from "@/lib/trader/accounting";
-import { loadApprovedBenchmarkFixture } from "@/lib/trader/backtest/replay-benchmark-harness";
-import type { RunBacktestResult } from "@/lib/trader/backtest/backtest-runner";
 import { getFullHistoryRescanCount } from "@/lib/trader/backtest/replay-runtime-metrics";
 import {
   writeFileAtomicCompareAndReplace,
   writeFileAtomicExclusive,
 } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
-import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
-import type { Bar } from "@/lib/trader/intelligence/types";
 import { assertFhvOfficialV2DatasetArtifactsPresent } from "@/lib/trader/market-data/fhv-official-v2-required";
 import type { FhvConfigurationFreezeV1 } from "@/lib/trader/observability/fhv-configuration-freeze";
 import {
@@ -28,21 +23,23 @@ import {
   takeoverFhvAuthorizationRunning,
   resolveFhvAuthorizationClaimPath,
 } from "@/lib/trader/observability/fhv-authorization-claim";
-import { resolveFhvGenerationSessionDbPath } from "@/lib/trader/observability/fhv-generation-session-path";
-import { runFullHistoricalBacktest } from "@/lib/trader/observability/fhv-full-historical-engine";
+import {
+  CONTROL_REPLAY_SCIENTIFIC_V2_DRIVER_VERSION,
+  runScientificControlReplayV2Ceremony,
+  type ScientificControlReplayV2Result,
+} from "@/lib/trader/observability/control-replay-scientific-v2-driver-v1";
 import {
   assertCheckoutIdentity,
   FhvFullHistoricalLaunchError,
   readFhvFullLaunchReceipt,
   resolveFhvFullLaunchRunDirectory,
-  stripRunIdentityForControlReplay,
   validateFhvFullHistoricalLaunchInput,
   writeFhvFullLaunchReceipt,
   type FhvFullHistoricalLaunchInput,
   type FhvFullHistoricalLaunchResult,
 } from "@/lib/trader/observability/fhv-full-historical-launch";
 import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
-import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
+import { CONTROL_REPLAY_AUTHORITY_IDENTITY } from "@/lib/trader/observability/control-replay-test-authority";
 
 export const FHV_CONTROL_REPLAY_EXECUTION_PURPOSE = "CONTROL_REPLAY" as const;
 
@@ -50,6 +47,13 @@ export type FhvControlReplayLaunchInput = FhvFullHistoricalLaunchInput & {
   executionPurpose: typeof FHV_CONTROL_REPLAY_EXECUTION_PURPOSE;
 };
 
+/**
+ * Authoritative Control Replay economic path (DEE-518 Closure V):
+ * Forecast V2 → Decision V2 → desired-size → Portfolio → Risk → Execution
+ * under CONTROL_REPLAY_TEST_ONLY_AUTHORITY_V1.
+ *
+ * Does NOT invoke runFullHistoricalBacktest / StrategySignal V1 paper path.
+ */
 async function runFhvControlReplayLaunchBacktest(input: {
   launchInput: FhvControlReplayLaunchInput;
   runDir: string;
@@ -60,22 +64,19 @@ async function runFhvControlReplayLaunchBacktest(input: {
   launchReceiptDigest: string;
   replaceLaunchResult?: boolean;
 }): Promise<FhvFullHistoricalLaunchResult> {
-  let bars: readonly Bar[] | undefined;
-  let datasetRoot: string | undefined;
-  const includeHoldout = false;
-
+  // Preserve launch-shell dataset presence gates (no holdout; no FULL_HISTORICAL economics).
   if (input.launchInput.boundedFixture) {
-    bars = loadApprovedBenchmarkFixture().bars;
+    // bounded fixture: launch shell only — economic authority is scientific V2 below
   } else if (input.qualificationReceipt.qualificationMode === "OFFICIAL_MULTI_YEAR") {
     assertFhvOfficialV2DatasetArtifactsPresent({
       datasetRoot: input.launchInput.datasetRoot!,
       qualificationMode: input.qualificationReceipt.qualificationMode,
     });
-    datasetRoot = input.launchInput.datasetRoot!;
   } else if (input.qualificationReceipt.qualificationMode === "SCHEMA_INTEGRATION_FIXTURE") {
-    bars = loadOfficialSharedPortfolioBars({
+    // Touch official shared bars only to prove dataset root is readable — not as V1 economic input.
+    void loadOfficialSharedPortfolioBars({
       datasetRoot: input.launchInput.datasetRoot!,
-      includeHoldout,
+      includeHoldout: false,
     });
   } else {
     throw new FhvFullHistoricalLaunchError(
@@ -84,36 +85,34 @@ async function runFhvControlReplayLaunchBacktest(input: {
     );
   }
 
-  const sessionDbPath = resolveFhvGenerationSessionDbPath(
-    input.runDir,
-    input.launchExecution.authorizationClaim.fencingGeneration,
-  );
+  void input.launchExecution;
 
-  const backtest = await runFullHistoricalBacktest({
-    runDir: input.runDir,
-    runId: input.launchInput.runId,
-    releaseSha: input.launchInput.releaseSha,
+  const scientific = await runScientificControlReplayV2Ceremony({
     organizationId: input.launchInput.organizationId,
-    operatorId: input.launchInput.operatorId,
-    configurationFreeze: input.configurationFreeze,
-    bars,
-    datasetRoot,
-    qualificationMode: input.qualificationReceipt.qualificationMode,
-    boundedFixture: input.launchInput.boundedFixture === true,
-    includeHoldout,
-    controlReplay: true,
-    maxCycles: input.launchInput.maxCycles,
-    sessionDbPath,
-    walWriter: input.launchExecution.walWriter,
-    authorizationClaim: input.launchExecution.authorizationClaim,
-    claimPath: input.launchExecution.claimPath,
-    checkpointConfig: input.launchExecution.checkpointConfig,
-    resumeFromCycle: input.launchExecution.resumeFromCycle,
   });
 
-  const semanticReproDigest = computeReplayReproContentDigest(
-    stripRunIdentityForControlReplay(backtest.exportDocument),
-  );
+  const scientificEvidencePath = join(input.runDir, "control-replay-scientific-v2-result.v1.json");
+  const scientificJson = `${JSON.stringify(
+    {
+      schemaVersion: "control-replay-scientific-v2-result/v1",
+      driverVersion: CONTROL_REPLAY_SCIENTIFIC_V2_DRIVER_VERSION,
+      authority: CONTROL_REPLAY_AUTHORITY_IDENTITY,
+      scientific,
+    },
+    null,
+    2,
+  )}\n`;
+  if (existsSync(scientificEvidencePath)) {
+    writeFileAtomicCompareAndReplace({
+      finalPath: scientificEvidencePath,
+      expectedContent: readFileSync(scientificEvidencePath, "utf8"),
+      nextContent: scientificJson,
+    });
+  } else {
+    writeFileAtomicExclusive(scientificEvidencePath, scientificJson);
+  }
+
+  const semanticReproDigest = scientific.parityDigest;
 
   const classification = input.launchInput.boundedFixture
     ? ("BOUNDED_FULL_HISTORICAL_END_TO_END_PASS" as const)
@@ -122,7 +121,7 @@ async function runFhvControlReplayLaunchBacktest(input: {
   const launchResult = buildControlReplayLaunchResult({
     classification,
     semanticReproDigest,
-    backtest,
+    scientific,
     qualificationReceiptDigest: input.qualificationReceiptDigest,
     configurationFreeze: input.configurationFreeze,
     authorizationReceiptDigest: input.launchInput.authorizationReceiptDigest,
@@ -147,7 +146,9 @@ async function runFhvControlReplayLaunchBacktest(input: {
     receiptPath: join(input.runDir, "fhv-full-launch-receipt.v1.json"),
     runDir: input.runDir,
     semanticReproDigest,
-    backtest,
+    backtest: {
+      cycleCount: launchResult.cycleCount,
+    },
   };
 }
 
@@ -321,7 +322,7 @@ export async function resumeFhvControlReplayLaunch(
 function buildControlReplayLaunchResult(input: {
   classification: "BOUNDED_FULL_HISTORICAL_END_TO_END_PASS" | "FHV_CONTROL_REPLAY_CEREMONY_PASS";
   semanticReproDigest: string;
-  backtest: RunBacktestResult;
+  scientific: ScientificControlReplayV2Result;
   qualificationReceiptDigest: string;
   configurationFreeze: {
     configurationFreezeDigest: string;
@@ -336,8 +337,13 @@ function buildControlReplayLaunchResult(input: {
     schemaVersion: "fhv-full-launch-result/v1",
     classification: input.classification,
     executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
+    authorityClass: CONTROL_REPLAY_AUTHORITY_IDENTITY.authorityClass,
+    capitalEligible: CONTROL_REPLAY_AUTHORITY_IDENTITY.capitalEligible,
+    capitalAuthorityPath: input.scientific.capitalAuthorityPath,
+    driverVersion: CONTROL_REPLAY_SCIENTIFIC_V2_DRIVER_VERSION,
+    completedStages: input.scientific.completedStages,
     semanticReproDigest: input.semanticReproDigest,
-    cycleCount: input.backtest.cycleCount,
+    cycleCount: 1,
     evidenceChain: {
       qualificationReceiptDigest: input.qualificationReceiptDigest,
       configurationFreezeDigest: input.configurationFreeze.configurationFreezeDigest,
@@ -345,19 +351,17 @@ function buildControlReplayLaunchResult(input: {
       launchReceiptDigest: input.launchReceiptDigest,
       datasetContentDigest: input.configurationFreeze.datasetDigest,
       manifestSemanticDigest: input.configurationFreeze.manifestDigest,
-      accountingStateDigest: input.backtest.accountingState
-        ? computeAccountingSemanticDigest(input.backtest.accountingState)
-        : undefined,
-      htrPnlReportDigest: input.backtest.htrPnlReportV1
-        ? computePayloadDigest(input.backtest.htrPnlReportV1 as unknown as Record<string, unknown>)
-        : undefined,
-      drawdownHwm: input.backtest.drawdownHwmState,
-      checkpointRef: input.backtest.streamingManifestRef,
+      accountingStateDigest: input.scientific.accountingSemanticDigest,
+      scientificParityDigest: input.scientific.parityDigest,
+      packageContentDigestHex: input.scientific.packageContentDigestHex,
+      scientificAdmissionReceiptDigest: input.scientific.scientificAdmissionReceiptDigest,
+      executablePolicyDigest: input.scientific.executablePolicyDigest,
       fullHistoryRescanCount: getFullHistoryRescanCount(),
       holdoutStatus: "SEALED_NOT_ACCESSED" as const,
+      runDir: input.runDir,
     },
-    accountingFrontierState: input.backtest.accountingFrontierState,
-    htrPnlReportV1: input.backtest.htrPnlReportV1,
+    accountingFrontierState: undefined,
+    htrPnlReportV1: undefined,
   };
 }
 

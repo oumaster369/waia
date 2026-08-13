@@ -4,6 +4,7 @@
 services:
   postgres-validate:
     image: postgres:16-alpine
+    shm_size: "2gb"
     ports:
       - "54329:5432"
     environment:

@@ -50,6 +50,10 @@ import {
   mapEffectiveStateToDecision,
 } from "@/lib/trader/risk/kill-switch-enforcement";
 import {
+  clampRiskProposalDownwardOnly,
+  RiskImprovementForbiddenError,
+} from "@/lib/trader/risk/authority-chain";
+import {
   createKillSwitchResolver,
   createPostgresKillSwitchRepository,
   createSqliteKillSwitchRepository,
@@ -149,6 +153,44 @@ function failClosedDecision(
   return rejectDecision([code], buildRiskSnapshot({ order, checksApplied: [] }), evaluatedAt);
 }
 
+function applyDownwardOnlyRiskOutcome(
+  order: EvaluateOrderRequestInput["order"],
+  decision: RiskDecision,
+  evaluatedAt: string,
+): RiskDecision {
+  if (decision.outcome !== "RESIZE" || !decision.resize) {
+    return decision;
+  }
+
+  try {
+    const clampedQuantity = clampRiskProposalDownwardOnly({
+      proposedQuantity: order.quantity,
+      riskApprovedQuantity: decision.resize.quantity,
+    });
+    if (clampedQuantity === decision.resize.quantity) {
+      return decision;
+    }
+    return resizeDecision(
+      decision.reasonCodes,
+      decision.snapshot,
+      {
+        quantity: clampedQuantity,
+        notional: decision.resize.notional,
+      },
+      evaluatedAt,
+    );
+  } catch (error) {
+    if (error instanceof RiskImprovementForbiddenError) {
+      return rejectDecision(
+        mergeReasonCodes(decision.reasonCodes, [engineReasonCodes.evaluationError]),
+        decision.snapshot,
+        evaluatedAt,
+      );
+    }
+    throw error;
+  }
+}
+
 export function createRiskEngineService(deps: RiskEngineServiceDeps): RiskEngineService {
   const telemetrySink = deps.riskTelemetrySink;
 
@@ -243,6 +285,8 @@ export function createRiskEngineService(deps: RiskEngineServiceDeps): RiskEngine
           );
         }
       }
+
+      decision = applyDownwardOnlyRiskOutcome(input.order, decision, evaluatedAt);
 
       const auditMetadata: Record<string, unknown> = {
         riskDecisionId,

@@ -1,6 +1,10 @@
 import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
 import { applyCostToFill } from "@/lib/trader/execution/cost-model";
 import type { StrategySignal } from "@/lib/trader/intelligence/types";
+import {
+  isV2CapitalAuthorityPath,
+  type CapitalAuthorityPath,
+} from "@/lib/trader/risk/authority-chain";
 import type {
   PortfolioAccountState,
   PortfolioSizingLimits,
@@ -51,6 +55,8 @@ export type ComputeStopBasedQuantityInput = {
   stopDistanceProvider: StopDistanceProvider;
   runConfig: PortfolioRunConfig;
   costModel: CostModelV1;
+  /** V2 path quarantines StrategySignal.maxRisk (§1.20). */
+  capitalAuthorityPath?: CapitalAuthorityPath;
 };
 
 function resolveMinOrderQty(runConfig: PortfolioRunConfig): string {
@@ -181,7 +187,11 @@ export function computeStopBasedQuantity(
   let qty = minDecimal(qtyByRisk, qtyByPortfolio);
   qty = minDecimal(qty, input.defaultQuantity);
 
-  if (input.signal.maxRisk && compareDecimal(input.entryPrice, "0") > 0) {
+  if (
+    !isV2CapitalAuthorityPath(input.capitalAuthorityPath) &&
+    input.signal.maxRisk &&
+    compareDecimal(input.entryPrice, "0") > 0
+  ) {
     qty = minDecimal(qty, divideDecimal(input.signal.maxRisk, input.entryPrice));
   }
 
