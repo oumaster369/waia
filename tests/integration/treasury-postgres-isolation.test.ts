@@ -60,7 +60,7 @@ describeWp8("DEE-606 WP-8 Postgres isolation + structural proof", () => {
     const applied = await handle.sql<{ count: string }[]>`
       SELECT count(*)::text AS count FROM drizzle.__drizzle_migrations
     `;
-    expect(Number(applied[0]?.count)).toBe(113);
+    expect(Number(applied[0]?.count)).toBe(152);
 
     const tip = await handle.sql<{ hash: string; created_at: string }[]>`
       SELECT hash, created_at::text FROM drizzle.__drizzle_migrations
@@ -68,6 +68,7 @@ describeWp8("DEE-606 WP-8 Postgres isolation + structural proof", () => {
       LIMIT 1
     `;
     expect(tip[0]?.hash).toBeTruthy();
+    expect(tip[0]?.created_at).toBe("1780000000151");
 
     const monotonic = await handle.sql<{ created_at: string }[]>`
       SELECT created_at::text FROM drizzle.__drizzle_migrations ORDER BY id
