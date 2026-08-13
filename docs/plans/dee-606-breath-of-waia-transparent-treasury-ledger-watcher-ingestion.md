@@ -23,17 +23,93 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: approved
-  currentWorkPackage: WP-4
-  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3]
-  remainingWorkPackages: [WP-4, WP-5, WP-6, WP-7, WP-8, WP-9]
+  currentWorkPackage: WP-5
+  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4]
+  remainingWorkPackages: [WP-5, WP-6, WP-7, WP-8, WP-9]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: e611808b6844675756c695c1b0c59c006604c9fb
+  lastValidatedGitSha: 0e97dd134ceb5fc76e16975492ad3c5ed2a3581a
   lastValidationAt: "2026-08-13"
   blockedReason: null
-  nextAction: "Prepare/execute WP-4 Admin Backend HTTP Contracts under the approved plan."
-  wp4:
+  nextAction: "WP-5 Evidence Storage Adapter remains gated on HD-3 Human storage-path approval. Do not start WP-5 until HD-3 is resolved."
+  wp5:
     status: NOT_STARTED
+    blockedBy: HD-3
+  wp6:
+    status: NOT_STARTED
+  wp4:
+    status: COMPLETE
+    startingSha: 6f3c8b2bd457706f33afd7466dc54907ee649e75
+    implementationShas:
+      - f7fcace832be58b012bbfa2f94497b044f4ebec4
+      - 095f35a6d2873c597e9e8de60f373e1d1575030c
+    testSha: 0e97dd134ceb5fc76e16975492ad3c5ed2a3581a
+    coreOwnership: "/api/admin/treasury/** (WAIA Core; not /api/trader/admin/**)"
+    genericAdminExtraction: "lib/waia-core/permissions/admin-http.ts with Trader re-exports"
+    explicitOrgScope: true
+    postgresOnlyFailClosed: true
+    sqliteStatus: 503
+    sqliteCode: TREASURY_BACKEND_UNAVAILABLE
+    moneyRequest: canonical decimal string bigint
+    moneyResponse: canonical base-10 string
+    noNumberAuthority: true
+    permissionMapping:
+      read: admin.treasury.read
+      mutate: admin.treasury.mutate
+      publish: admin.treasury.publish
+    adminRoleHasAllThree: true
+    userAgentServiceHaveNone: true
+    routeTable:
+      - "GET/POST /api/admin/treasury/transactions"
+      - "GET /api/admin/treasury/transactions/[id]"
+      - "POST /api/admin/treasury/transactions/commands"
+      - "GET/POST /api/admin/treasury/commitments"
+      - "POST /api/admin/treasury/commitments/commands"
+      - "GET/POST/PATCH /api/admin/treasury/watched-addresses"
+      - "GET/POST/PATCH /api/admin/treasury/budgets"
+      - "GET/POST/PATCH /api/admin/treasury/funding-needs"
+      - "GET/POST /api/admin/treasury/ideal-budgets"
+      - "POST /api/admin/treasury/ideal-budgets/commands"
+      - "GET/POST /api/admin/treasury/runway-plans"
+      - "POST /api/admin/treasury/runway-plans/commands"
+      - "GET/POST /api/admin/treasury/attributions"
+      - "GET/POST /api/admin/treasury/evidence"
+      - "POST /api/admin/treasury/evidence/links"
+      - "GET/POST /api/admin/treasury/inceptions"
+      - "GET /api/admin/treasury/reconciliations (PATCH 405)"
+      - "GET/PATCH /api/admin/treasury/settings"
+      - "GET /api/admin/treasury/breath-preview (503 TREASURY_BREATH_READ_MODEL_NOT_READY)"
+    noPublicEndpoint: true
+    noUi: true
+    watcherDark: true
+    noWatcherEnableApi: true
+    hd3: DEFERRED
+    evidenceStorage: EVIDENCE_STORAGE_NOT_CONFIGURED
+    breathPreview: TREASURY_BREATH_READ_MODEL_NOT_READY
+    getBreathPublicSnapshotImplemented: false
+    noRunwaySnapshots: true
+    noEndsAtFormula: true
+    noIdealAmountInvention: true
+    noBurnInference: true
+    contributorIdentityNotPublicByDefault: true
+    sharedAuditLogs: true
+    wp4TestFiles:
+      - tests/unit/treasury-admin-permissions.test.ts
+      - tests/unit/treasury-admin-http.test.ts
+    wp4TestCount: 27
+    wp4TestResult: 27/27 PASS
+    wp3Regression: 36/36 PASS
+    wp2Regression: 138/138 PASS
+    permissionAdminRegression: PASS
+    typecheck: PASS
+    lint: PASS
+    gitDiffCheck: clean
+    schemaMigrationChanges: false
+    dbGenerate: false
+    productionStateMutated: false
+    prOpened: false
+    mergeOrderGate: BLOCK_MIGRATION_BEARING_MERGE_WHILE_DEE_518_JOURNAL_UNMERGED
+    finalMigrationReconciliation: WP9_REQUIRED
   wp3:
     status: COMPLETE
     blocked: false
@@ -1305,9 +1381,13 @@ Dedicated compose `docker-compose.postgres-treasury-validate.yml`; project `waia
 
 ### WP-4 — Admin backend HTTP contracts
 
-**NOT STARTED.**
+**COMPLETE.** Starting SHA `6f3c8b2bd457706f33afd7466dc54907ee649e75`. Implementation SHAs `f7fcace832be58b012bbfa2f94497b044f4ebec4` (permissions + generic admin HTTP extraction + money/error/Breath port) and `095f35a6d2873c597e9e8de60f373e1d1575030c` (Core `/api/admin/treasury/**` resource/mutation contracts). Tests SHA `0e97dd134ceb5fc76e16975492ad3c5ed2a3581a`.
 
-Permissions + mutation APIs for DEE-607 (incl. inception); no UI.
+Core-owned admin HTTP root is `/api/admin/treasury/**` (not `/api/trader/admin/**`). Generic admin primitives live in `lib/waia-core/permissions/admin-http.ts` with compatibility re-exports from `lib/trader/admin-route-*`. Frozen permissions `admin.treasury.read` / `admin.treasury.mutate` / `admin.treasury.publish` are granted to platform `admin` only. Every operation requires explicit `organization_id` (never personal org / Trader Org-0 / watcher config / hard-coded UUID). SQLite production runtime fails closed `503 TREASURY_BACKEND_UNAVAILABLE`. Authoritative money is decimal-string bigint on the wire; serializers never use `Number(bigint)`. Transaction/commitment/inception HTTP handlers call existing domain services (no FSM reimplementation). `setDetailPublication` and other public-exposure mutations require `admin.treasury.publish`. WATCHER verify preconditions survive HTTP (no force/skip flags). Creating watched addresses does not enable the watcher; there is no `TREASURY_WATCHER_ENABLED` API. Budgets/funding needs reject caller-maintained funded/committed/spent/remaining aggregates. Ideal amount and runway daily burn require explicit Human input; WP-4 creates no runway snapshots and no `endsAt` formula. Evidence upload/create-object fails closed `EVIDENCE_STORAGE_NOT_CONFIGURED` (HD-3 still DEFERRED). Admin Breath preview fails closed `TREASURY_BREATH_READ_MODEL_NOT_READY` with no invented numeric fields; `getBreathPublicSnapshot` computation is **not** implemented; no public Treasury HTTP endpoint; no UI. Shared `audit_logs` preserved. Targeted WP-4 tests **27/27 PASS**; WP-3 regression **36/36 PASS**; WP-2 regression **138/138 PASS**; permission/admin-route regression PASS; typecheck PASS; lint PASS; `git diff --check` clean; schema/migration/journal unchanged; `db:generate` not run; watcher remains DARK. Merge-order gate remains binding; WP-9 final migration reconciliation retained.
+
+**WP-6 boundary (intentional):** typed `TreasuryBreathReadModelPort` exists; production preview is unready; Breath formulas and public snapshot belong to WP-6.
+
+**nextAction:** WP-5 Evidence Storage Adapter remains gated on HD-3 Human storage-path approval. Do **not** start WP-5 until HD-3 is resolved.
 
 ### WP-5 — Evidence storage adapter
 
@@ -1404,7 +1484,8 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 | WP-0 | COMPLETE |
 | WP-1 | COMPLETE (`DEDICATED_POSTGRES_VALIDATION_PASS` on `:54339`) |
 | WP-2 | COMPLETE (domain services; implementation SHA `44c06089cb01eab95ce1b1f118f6a15bef853f35`; 138 targeted tests) |
-| Current work package | WP-4 **NOT STARTED** (WP-3 COMPLETE; watcher DARK; no PR) |
+| Current work package | WP-5 **NOT STARTED** (HD-3 gated; WP-4 COMPLETE; watcher DARK; no PR) |
+| WP-4 | COMPLETE (Core `/api/admin/treasury/**`; starting SHA `6f3c8b2bd457706f33afd7466dc54907ee649e75`; implementation SHAs `f7fcace832be58b012bbfa2f94497b044f4ebec4`, `095f35a6d2873c597e9e8de60f373e1d1575030c`; tests `0e97dd134ceb5fc76e16975492ad3c5ed2a3581a`; 27/27 WP-4 + 36/36 WP-3 + 138/138 WP-2; no UI; no public Breath; HD-3 DEFERRED; schema unchanged) |
 | WP-3 | COMPLETE (DARK watcher; implementation SHAs `7f0315c4ec7345cad8fd38496521238e9456b9db`, `3ba3d9597ecb632776eb8b36c7594b750d8c2ff5`; tests `e611808b6844675756c695c1b0c59c006604c9fb`; 36/36 WP-3 + 138/138 WP-2; schema unchanged) |
 | Observation guard amendment | **APPROVED + IMPLEMENTED + VALIDATED** — token `CONFIRM-DEE-606-OBSERVATION-GUARD-668F159F`; amendment SHA `668f159f2c98c7fbd17b577a7de082ff12b0a5d6`; approval-recording SHA `04b28dfcb3d0741aee355f31c53887177e378e07`; correction SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`; tag `0150_treasury_chain_observations_lifecycle_guard`; `:54339` PASS |
 | Migration identities | `0148_treasury_transparency_ledger_foundation`, `0149_treasury_transparency_ledger_rls`, `0150_treasury_chain_observations_lifecycle_guard` (branch reservation; merge-order gate still binding; WP-9 final reconciliation) |
@@ -1459,8 +1540,9 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
 - Final integrity / Human-approved architecture source SHA: `82377e4f4869b9bf64f26a9578c2335cdbcb8b15`
 - Approval token: `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`
-- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2/WP-3 COMPLETE; currentWorkPackage WP-4 **NOT STARTED**; observation-guard correction PASS; watcher DARK; no PR)
-- WP-3: **COMPLETE**; DARK Treasury watcher; starting SHA `afc0b9b270ed104173d84741b7bdcdfdc969f142`; ready for WP-4
+- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2/WP-3/WP-4 COMPLETE; currentWorkPackage WP-5 **NOT STARTED** (HD-3 gated); observation-guard correction PASS; watcher DARK; no PR)
+- WP-4: **COMPLETE**; Core admin HTTP contracts; starting SHA `6f3c8b2bd457706f33afd7466dc54907ee649e75`; WP-5 not started
+- WP-3: **COMPLETE**; DARK Treasury watcher; starting SHA `afc0b9b270ed104173d84741b7bdcdfdc969f142`
 - Observation guard amendment: **APPROVED_IMPLEMENTED_VALIDATED** (§5.4a); token `CONFIRM-DEE-606-OBSERVATION-GUARD-668F159F`; amendment SHA `668f159f2c98c7fbd17b577a7de082ff12b0a5d6`; approval-recording SHA `04b28dfcb3d0741aee355f31c53887177e378e07`; correction SHA `11028f59c8b083069ee4c6909ca57828a231d9d5`; tag `0150_treasury_chain_observations_lifecycle_guard`; 0148/0149 unchanged
 - Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 DEFERRED
 - WP-1 validation: **DEDICATED_POSTGRES_VALIDATION_PASS** (`127.0.0.1:54339`; SHA `0df1b9698f1af27222c60bfb11191f0cf3f85676`)
@@ -1470,3 +1552,4 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - Prior Architect decisions remain intact: T3; Core Treasury domain; accounting/detail separation; VERIFIED accounting truth; contribution share; commitment facts; deterministic runway snapshots; no DEE-612/613 hard-coded doctrine
 - `DEE_606_OBSERVATION_GUARD_CORRECTION_PASS_READY_TO_RESUME_WP3`
 - `DEE_606_WP3_TREASURY_WATCHER_DARK_PASS_WP3_COMPLETE_READY_FOR_WP4`
+- `DEE_606_WP4_ADMIN_BACKEND_CONTRACTS_PASS_WP4_COMPLETE`
