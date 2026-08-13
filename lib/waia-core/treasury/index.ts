@@ -80,8 +80,14 @@ export {
 } from "@/lib/waia-core/treasury/commitment-service";
 export { createTreasuryInceptionService } from "@/lib/waia-core/treasury/inception-service";
 export { getBreathPublicSnapshot } from "@/lib/waia-core/treasury/breath/public-snapshot";
+export { getPublicContributionAggregate } from "@/lib/waia-core/treasury/share/public-aggregate";
+export { getSelfContributionShare } from "@/lib/waia-core/treasury/share/self-share";
 export { createContributionShareEngine } from "@/lib/waia-core/treasury/share/engine";
 export { createMemoryContributionShareFactsRepository } from "@/lib/waia-core/treasury/share/memory-repository";
+export type {
+  PublicContributionAggregate,
+  SelfContributionShare,
+} from "@/lib/waia-core/treasury/share/types";
 export type {
   BreathPublicSnapshot,
   BreathAdminPreview,
