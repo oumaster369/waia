@@ -23,15 +23,45 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: approved
-  currentWorkPackage: WP-2
-  completedWorkPackages: [WP-0, WP-1]
-  remainingWorkPackages: [WP-2, WP-3, WP-4, WP-5, WP-6, WP-7, WP-8, WP-9]
+  currentWorkPackage: WP-3
+  completedWorkPackages: [WP-0, WP-1, WP-2]
+  remainingWorkPackages: [WP-3, WP-4, WP-5, WP-6, WP-7, WP-8, WP-9]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 0df1b9698f1af27222c60bfb11191f0cf3f85676
+  lastValidatedGitSha: 44c06089cb01eab95ce1b1f118f6a15bef853f35
   lastValidationAt: "2026-08-13"
   blockedReason: null
-  nextAction: "prepare/execute WP-2 Domain Services under the approved plan."
+  nextAction: "prepare/execute WP-3 Treasury Watcher (DARK) under the approved plan."
+  wp2:
+    status: COMPLETE
+    startingSha: 7ac23d999278e366a0df428445ec8191a589cbda
+    implementationSha: 44c06089cb01eab95ce1b1f118f6a15bef853f35
+    validatedAt: "2026-08-13"
+    filesCreated:
+      - lib/waia-core/treasury/**
+      - tests/unit/treasury-*.test.ts
+      - tests/unit/helpers/treasury-wp2.ts
+    targetedTestCommand: "pnpm exec vitest run tests/unit/treasury-transaction-fsm.test.ts tests/unit/treasury-cash-effect.test.ts tests/unit/treasury-watcher-verify.test.ts tests/unit/treasury-publication.test.ts tests/unit/treasury-commitment-lifecycle.test.ts tests/unit/treasury-contribution-share.test.ts tests/unit/treasury-inception.test.ts tests/unit/treasury-service-audit-scope.test.ts"
+    targetedTestFiles: 8
+    targetedTestCount: 138
+    lint: PASS
+    typecheck: "WP-2 modules clean; repository tsc still reports pre-existing WP-1 drizzle bigint default(0) errors in db/schema.postgres.ts:4618 and :4621 (unchanged; no schema edit in WP-2)"
+    gitDiffCheck: clean
+    provedInvariants:
+      - transaction-fsm-allowed-and-forbidden
+      - cash-effect-matrix
+      - watcher-verified-precondition
+      - publication-orthogonality
+      - commitment-lifecycle-and-active-derivation
+      - contribution-share-primitives-wp2-only
+      - inception-without-checkpoint-seed
+      - audit-revision-org-scope
+    watcherDark: true
+    httpUi: none
+    schemaMigrationChanges: false
+    dbGenerateRun: false
+    wp7ScopeConsumed: false
+    mergeOrderGate: BLOCK_MIGRATION_BEARING_MERGE_WHILE_DEE_518_JOURNAL_UNMERGED
   wp1Authoring:
     status: COMPLETE
     authoredAt: "2026-08-12"
@@ -1112,7 +1142,7 @@ Dedicated compose `docker-compose.postgres-treasury-validate.yml`; project `waia
 
 ### WP-2 — Domain services
 
-FSM with orthogonal detail publication; VERIFIED watcher precondition (all linked observations); cash-effect engine; commitment lifecycle; contribution share; inception approval; audit.
+**COMPLETE.** Core-owned `lib/waia-core/treasury/**` domain/services over the validated WP-1 schema. Implementation SHA `44c06089cb01eab95ce1b1f118f6a15bef853f35`. Targeted unit tests **138/138 PASS**. Watcher remains DARK. No HTTP/UI. No schema/migration edits. No `db:generate`. WP-7 contribution engine not consumed (WP-2 primitives only). Inception does **not** seed watcher checkpoints. Merge-order gate remains binding.
 
 ### WP-3 — Treasury watcher (DARK)
 
@@ -1216,7 +1246,8 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 | Plan `state.status` | `approved` |
 | WP-0 | COMPLETE |
 | WP-1 | COMPLETE (`DEDICATED_POSTGRES_VALIDATION_PASS` on `:54339`) |
-| Current work package | WP-2 (authorized to prepare/execute; not started in the WP-1 closeout task) |
+| WP-2 | COMPLETE (domain services; implementation SHA `44c06089cb01eab95ce1b1f118f6a15bef853f35`; 138 targeted tests) |
+| Current work package | WP-3 (watcher DARK; not started in the WP-2 closeout task) |
 | Migration identities | `0148_treasury_transparency_ledger_foundation`, `0149_treasury_transparency_ledger_rls` (branch reservation; merge-order gate still binding) |
 
 ---
@@ -1252,7 +1283,7 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
 - Final integrity / Human-approved architecture source SHA: `82377e4f4869b9bf64f26a9578c2335cdbcb8b15`
 - Approval token: `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`
-- `state.status`: **approved** (Architect review COMPLETE; Human architecture approval COMPLETE; WP-0 COMPLETE; WP-1 COMPLETE; currentWorkPackage WP-2)
+- `state.status`: **approved** (Architect review COMPLETE; Human architecture approval COMPLETE; WP-0 COMPLETE; WP-1 COMPLETE; WP-2 COMPLETE; currentWorkPackage WP-3)
 - WP-1 validation: **DEDICATED_POSTGRES_VALIDATION_PASS** (`127.0.0.1:54339`; SHA `0df1b9698f1af27222c60bfb11191f0cf3f85676`)
 - Migration reservation: **0148** foundation + **0149** RLS; merge-order gate still binding; DEE-518 local tip observed `0148_trader_forecast_v2_open_tail_null_bounds_v1`
 - Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 DEFERRED
