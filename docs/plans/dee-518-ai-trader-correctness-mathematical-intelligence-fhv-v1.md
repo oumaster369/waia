@@ -2,7 +2,7 @@
 integrationIssue: DEE-518
 integrationTitle: "AI-TRADER Correctness + Mathematical Intelligence + FHV v1 — Implementation Integration"
 branch: dee-518-ai-trader-correctness-mathematical-intelligence-fhv-v1
-riskTier: T1
+riskTier: T2
 prPolicy: one-integration-pr
 executionSurfaces: [local, cursor-agent, github-actions]
 requiredValidation: [lint, typecheck, build, targeted-unit, storage-scale-integration, validate-pr-governance]
@@ -13,87 +13,87 @@ includedIssues:
     role: work-package
     slug: WP-CANON
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: completed
   - id: DEE-520
     role: work-package
     slug: WP-EXEC-ACCT
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: completed
   - id: DEE-521
     role: work-package
     slug: WP-AUTHORITY
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: completed
   - id: DEE-522
     role: work-package
     slug: WP-FEATURE-RV
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: completed
   - id: DEE-523
     role: work-package
     slug: WP-FHV-STORAGE
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: completed
   - id: DEE-524
     role: work-package
     slug: WP-FHV-SERVICE
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: completed
   - id: DEE-525
     role: work-package
     slug: WP-OBSERVABILITY
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: completed
   - id: DEE-526
     role: work-package
     slug: WP-VOLUME-QUAL
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: completed
   - id: DEE-527
     role: work-package
     slug: WP-FORECAST-V2
     completionPolicy: manual-at-integration-ready
-    status: in-progress-adversarial-repair
+    status: completed
   - id: DEE-528
     role: work-package
     slug: WP-DECISION-ECON
     completionPolicy: manual-at-integration-ready
-    status: in-progress-adversarial-repair
+    status: completed
   - id: DEE-529
     role: work-package
     slug: WP-CONTROL-REPLAY-AUTH
     completionPolicy: manual-at-integration-ready
-    status: in-progress-adversarial-repair
+    status: completed
   - id: DEE-530
     role: work-package
     slug: WP-DATASET-QUAL
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: completed
   - id: DEE-531
     role: work-package
     slug: WP-RESEARCH-HARNESS
     completionPolicy: manual-at-integration-ready
-    status: in-progress-adversarial-repair
+    status: completed
   - id: DEE-532
     role: work-package
     slug: WP-EXECOPP-QUAL
     completionPolicy: manual-at-integration-ready
-    status: in-progress-adversarial-repair
+    status: completed
   - id: DEE-533
     role: work-package
     slug: WP-PATTERN-RESEARCH
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: completed
   - id: DEE-534
     role: work-package
     slug: WP-KNOWLEDGE-STATE
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: completed
   - id: DEE-535
     role: work-package
     slug: WP-CHALLENGER-TRIALS
     completionPolicy: manual-at-integration-ready
-    status: in-progress-adversarial-repair
+    status: completed
 postMergeGates:
   - id: DEE-536
     slug: OG-HOST-QUAL
@@ -118,8 +118,8 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: ADVERSARIAL_IMPLEMENTATION_REPAIR_A0_A11
+  status: integration-ready
+  currentWorkPackage: null
   completedWorkPackages:
     - WP-CANON
     - WP-EXEC-ACCT
@@ -129,22 +129,22 @@ state:
     - WP-FHV-SERVICE
     - WP-OBSERVABILITY
     - WP-VOLUME-QUAL
-    - WP-DATASET-QUAL
-    - WP-PATTERN-RESEARCH
-    - WP-KNOWLEDGE-STATE
-  remainingWorkPackages:
     - WP-FORECAST-V2
     - WP-DECISION-ECON
     - WP-CONTROL-REPLAY-AUTH
+    - WP-DATASET-QUAL
     - WP-RESEARCH-HARNESS
     - WP-EXECOPP-QUAL
+    - WP-PATTERN-RESEARCH
+    - WP-KNOWLEDGE-STATE
     - WP-CHALLENGER-TRIALS
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: ffc0876ade1ea8de77971b5b0d8f002c6d90dafc
-  lastValidationAt: "2026-08-10"
-  blockedReason: ADVERSARIAL_IMPLEMENTATION_REPAIR_A0_A11
-  nextAction: "Close adversarial Code↔Canon gaps A0–A11; restore measured storage IC-4 before second code review"
+  lastValidatedGitSha: 99dfce461396b5271c2f0b65643750bfa0937983
+  lastValidationAt: "2026-08-13"
+  blockedReason: null
+  nextAction: "Open one PR to main; Human squash-merge. Post-merge DEE-536..541 remain open."
   adversarialReviewCommentId: cbedeb8b-4d13-4def-a3e0-bca5d40654ba
   priorFalseClassification: DEE_518_IMPLEMENTATION_COMPLETE_READY_FOR_ADVERSARIAL_CODE_REVIEW
 provenance:
