@@ -23,15 +23,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: approved
-  currentWorkPackage: WP-7
-  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4, WP-5, WP-6]
-  remainingWorkPackages: [WP-7, WP-8, WP-9]
+  currentWorkPackage: WP-8
+  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4, WP-5, WP-6, WP-7]
+  remainingWorkPackages: [WP-8, WP-9]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 01fa23cea4596dba45707d74b30bb78c76f7f429
+  lastValidatedGitSha: ea4c489416af417446ea0269ae91ba00e2945880
   lastValidationAt: "2026-08-13"
   blockedReason: null
-  nextAction: "WP-7 Contribution Share Engine may be prepared next. Do not start WP-7 in this closeout. Production R2 provisioning remains separately NOT AUTHORIZED."
+  nextAction: "WP-8 Isolation + R5-safe Postgres Tests may be prepared next. Do not start WP-8 in this closeout. Production R2 provisioning remains separately NOT AUTHORIZED."
   wp5:
     status: COMPLETE
     blockedBy: PRODUCTION_R2_PROVISIONING_NOT_AUTHORIZED
@@ -94,6 +94,63 @@ state:
     migrationMergeOrderGate: binding
     wp9FinalMigrationReconciliation: retained
   wp7:
+    status: COMPLETE
+    startingSha: aa08798c0c7b2d1d627c228eb750b0f91cf0c540
+    implementationShas:
+      - 6408e8dfbf4e079671d762ac4830bd74ccc9f5c7
+      - 05d39d0d3d5fbd9091d6c1018f05ca3442b6c7d0
+    testSha: ea4c489416af417446ea0269ae91ba00e2945880
+    moduleLayout: lib/waia-core/treasury/share/**
+    factsRepository: lib/waia-core/treasury/share/{repository.types,memory-repository,postgres-repository}.ts
+    completeUnpaginatedFacts: true
+    exactQQualification: true
+    trc20NetworkContractProof: true
+    usdtNominalPolicyProof: true
+    directRefundCorrectionNetting: true
+    balanceAdjustmentExcluded: true
+    unresolvedReconciliationHandling: exclude-from-Q
+    currentOpenAttributionSemantics: true
+    unmatchedInDenominator: true
+    anonymousInDenominator: true
+    unattributedInDenominator: true
+    expensesOutflowsCommitmentsNonDilution: true
+    exactNumeratorDenominatorBigint: true
+    denominatorNonPositiveZeroShare: true
+    aggregateOnlyPublicServerContract: true
+    authenticatedSelfOnlyServerContract: true
+    noContributorIdentityList: true
+    consentFlagDoesNotPublishIdentity: true
+    noEquityGovernanceSemantics: true
+    noPublicHttpRoute: true
+    noUi: true
+    noBreathFormulaChanges: true
+    noR2Dependency: true
+    watcherDark: true
+    productionR2Provisioning: NOT_AUTHORIZED
+    wp7TestFiles:
+      - tests/unit/treasury-contribution-share-engine.test.ts
+      - tests/unit/treasury-contribution-share-privacy.test.ts
+    wp7TestCount: 7
+    wp7TestResult: 7/7 PASS
+    wp6Regression: 9/9 PASS
+    wp5Regression: 11/11 PASS
+    wp4Regression: 27/27 PASS
+    wp3Regression: 36/36 PASS
+    wp2Regression: 140/140 PASS
+    wp2ContributionShareCount: 7
+    typecheck: PASS
+    lint: PASS
+    gitDiffCheck: clean
+    schemaChanged: false
+    migrationsChanged: false
+    journalChanged: false
+    dbGenerate: false
+    productionStateMutated: false
+    prOpened: false
+    wp8Started: false
+    migrationMergeOrderGate: binding
+    wp9FinalMigrationReconciliation: retained
+  wp8:
     status: NOT_STARTED
   wp4:
     status: COMPLETE
@@ -1493,7 +1550,21 @@ WP-6 targeted tests **9/9 PASS** (grouped coverage of numbered invariants 1–11
 
 ### WP-7 — Contribution share engine
 
-VERIFIED-only; unmatched in denominator; expenses do not dilute; nominal policy tests. Unchanged share semantics.
+**COMPLETE.** Starting SHA `aa08798c0c7b2d1d627c228eb750b0f91cf0c540`. Implementation SHAs `6408e8dfbf4e079671d762ac4830bd74ccc9f5c7` (exact §6 engine + unpaginated facts repository + WP-2 primitive correction) and `05d39d0d3d5fbd9091d6c1018f05ca3442b6c7d0` (aggregate-only public + authenticated self-only server contracts). Tests SHA `ea4c489416af417446ea0269ae91ba00e2945880`.
+
+Module: `lib/waia-core/treasury/share/**` (`types`, `repository.types`, `memory-repository`, `postgres-repository`, `engine`, `public-aggregate`, `self-share`, `index`). Corrected primitives remain in `lib/waia-core/treasury/contribution-share.ts`. Dedicated contribution-share facts repository loads the complete org-scoped transaction set plus current attributions. `TreasuryRepository.listTransactions(context, query)` remains an admin listing primitive (default 50) and is **not** used as share truth. Memory loads via `listTransactions(context)` with no query; Postgres share queries have no hidden `LIMIT`.
+
+Qualifying set **Q** requires all of: `kind = CONTRIBUTION`, `direction = INFLOW`, `status = VERIFIED`, not under a material unresolved reconciliation that invalidates the contribution, approved v1 asset = **USDT TRC-20**, `accountingAmountMicros IS NOT NULL`, `accountingDenominationPolicy = USDT_NOMINAL_USD_POLICY_V1`. WATCHER rows require `canonicalNetwork = TREASURY_USDT_V1_NETWORK` and `canonicalTokenContract = TREASURY_USDT_V1_TOKEN_CONTRACT` (`TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`, same identity as `USDT_TRC20_CONTRACT`). MANUAL rows require `nativeContract` equal to that canonical contract. USDT + 6 decimals + policy is necessary but not sufficient; Ethereum/other-network USDT does not qualify.
+
+Net contribution = base qualifying `accountingAmountMicros` + direct linked **VERIFIED** `REFUND`/`CORRECTION` `cashEffectMicros` via `correctsTransactionId`. Direct linkage only (no recursive graphs). `BALANCE_ADJUSTMENT` does **not** alter historical contribution share. VERIFIED linked refund/correction with `cashEffectMicros = null` fails closed (`SHARE_ADJUSTMENT_INCOMPLETE`). Contribution `RECONCILIATION_REQUIRED` is outside Q. A directly-linked `RECONCILIATION_REQUIRED` refund/correction excludes that contribution from Q (does not silently keep unadjusted net).
+
+Share: `numerator(user) = Σ netMicros(c)` for `c` in Q with current open `ATTRIBUTED` attribution to that authenticated user; `denominator = Σ netMicros(c)` for **all** `c` in Q. Denominator includes ATTRIBUTED, UNMATCHED, ANONYMOUS, and unattributed qualifying rows. Only the current open attribution (`revoked_at IS NULL`) counts; historical revoked rows do not win; reassignment moves numerator to the current ATTRIBUTED user; multiple open rows fail closed (`ATTRIBUTION_OPEN_AMBIGUOUS`). `consentPublicIdentity` does not affect math and does not publish identity. Expenses, ordinary outflows, commitments, runway, budget, Breath cash, and detail publication do not dilute. PRIVATE+VERIFIED still qualifies. Exact BigInt numerator/denominator as decimal strings; `denominator <= 0` → zero share. No persisted percentage scalar. No equity/ownership/governance field names.
+
+`getPublicContributionAggregate(context, engine)` is aggregate-only (HD-2): `totalNetContributionMicros`, `qualifyingContributionCount`, `lastUpdatedAt` derived from used facts (never `now()`). No user ids, names, emails, transaction ids, attribution ids, contributor lists, or leaderboards. `getSelfContributionShare(context, authenticatedUserId, engine)` returns only that user's numerator over the global denominator. No anonymous HTTP route. No UI. No Breath formula changes. No R2 dependency. Watcher remains DARK. Production R2 provisioning still **NOT AUTHORIZED**. Schema/migrations/journal unchanged; `db:generate` not run.
+
+WP-7 targeted tests **7/7 PASS** (grouped coverage of numbered invariants 1–85). WP-6 regression **9/9 PASS**. WP-5 regression **11/11 PASS**. WP-4 regression **27/27 PASS**. WP-3 regression **36/36 PASS**. WP-2 regression **140/140 PASS** (`treasury-contribution-share` 7 tests, was 5; +2 frozen-contract regressions for `BALANCE_ADJUSTMENT` exclusion and TRC-20 identity). typecheck PASS. lint PASS. `git diff --check` clean. Production state not mutated. PR not opened. Merge-order gate remains binding; WP-9 final migration reconciliation retained. WP-8 not started.
+
+**nextAction:** WP-8 Isolation + R5-safe Postgres Tests may be prepared next. Do not start WP-8 in this closeout.
 
 ### WP-8 — Isolation + R5-safe Postgres tests
 
@@ -1578,7 +1649,8 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 | WP-0 | COMPLETE |
 | WP-1 | COMPLETE (`DEDICATED_POSTGRES_VALIDATION_PASS` on `:54339`) |
 | WP-2 | COMPLETE (domain services; implementation SHA `44c06089cb01eab95ce1b1f118f6a15bef853f35`; 138 targeted tests) |
-| Current work package | WP-7 **NOT STARTED** (WP-6 COMPLETE; HD-3 architecture-only; production R2 provisioning still blocked; watcher DARK; no PR) |
+| Current work package | WP-8 **NOT STARTED** (WP-7 COMPLETE; HD-3 architecture-only; production R2 provisioning still blocked; watcher DARK; no PR) |
+| WP-7 | COMPLETE (exact contribution share engine; starting SHA `aa08798c0c7b2d1d627c228eb750b0f91cf0c540`; implementation SHAs `6408e8dfbf4e079671d762ac4830bd74ccc9f5c7`, `05d39d0d3d5fbd9091d6c1018f05ca3442b6c7d0`; tests `ea4c489416af417446ea0269ae91ba00e2945880`; 7/7 WP-7 grouped invariants + 9/9 WP-6 + 11/11 WP-5 + 27/27 WP-4 + 36/36 WP-3 + 140/140 WP-2; aggregate-only public; self-only; no HTTP; no UI; no R2; schema unchanged) |
 | WP-6 | COMPLETE (Breath read model + deterministic runway snapshots; starting SHA `2ec87b739e3f3949d52def1ea68a9a35f0ccefcf`; implementation SHAs `a719d2624d1958bc65bf60d550c8e97d3cbea66b`, `8086c749f0763122766bc2254a36e871a39c7ba9`; tests `01fa23cea4596dba45707d74b30bb78c76f7f429`; 9/9 WP-6 grouped invariants + 11/11 WP-5 + 27/27 WP-4 + 36/36 WP-3 + 138/138 WP-2; no public HTTP; no UI; no R2; schema unchanged) |
 | WP-5 | COMPLETE (private R2 adapter code; starting SHA `6fcbe1faece1b3812ce9d9e03b22ef3f99fe5d79`; HD-3 recording `bf42267ae41cf50758010585ef6b96bb0ed85df5`; implementation SHAs `c4cfcb05bb109fb8e8452bb03f425355d075eef0`, `ec318601068d9a6b3d143d4da6c609245907ad4c`; tests `233db89040481ac9cd4d2ba29eb060918f4748ca`; 11/11 WP-5 + 27/27 WP-4 + 36/36 WP-3 + 138/138 WP-2; wrangler.jsonc unchanged; production storage unavailable; no bucket/binding/deploy) |
 | WP-4 | COMPLETE (Core `/api/admin/treasury/**`; starting SHA `6f3c8b2bd457706f33afd7466dc54907ee649e75`; implementation SHAs `f7fcace832be58b012bbfa2f94497b044f4ebec4`, `095f35a6d2873c597e9e8de60f373e1d1575030c`; tests `0e97dd134ceb5fc76e16975492ad3c5ed2a3581a`; 27/27 WP-4 + 36/36 WP-3 + 138/138 WP-2; no UI; no public Breath; HD-3 DEFERRED; schema unchanged) |
@@ -1662,8 +1734,9 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
 - Final integrity / Human-approved architecture source SHA: `82377e4f4869b9bf64f26a9578c2335cdbcb8b15`
 - Approval token: `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`
-- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2/WP-3/WP-4/WP-5/WP-6 COMPLETE; currentWorkPackage WP-7 **NOT STARTED**; HD-3 `APPROVED_ARCHITECTURE_ONLY`; production R2 provisioning still blocked; observation-guard correction PASS; watcher DARK; no PR)
-- WP-6: **COMPLETE**; Breath read model + deterministic runway snapshots; starting SHA `2ec87b739e3f3949d52def1ea68a9a35f0ccefcf`; implementation SHAs `a719d2624d1958bc65bf60d550c8e97d3cbea66b`, `8086c749f0763122766bc2254a36e871a39c7ba9`; tests `01fa23cea4596dba45707d74b30bb78c76f7f429`; production R2 provisioning **NOT AUTHORIZED**; watcher DARK; no public HTTP; no UI; WP-7 not started
+- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2/WP-3/WP-4/WP-5/WP-6/WP-7 COMPLETE; currentWorkPackage WP-8 **NOT STARTED**; HD-3 `APPROVED_ARCHITECTURE_ONLY`; production R2 provisioning still blocked; observation-guard correction PASS; watcher DARK; no PR)
+- WP-7: **COMPLETE**; exact contribution share engine + aggregate-only/self-only contracts; starting SHA `aa08798c0c7b2d1d627c228eb750b0f91cf0c540`; implementation SHAs `6408e8dfbf4e079671d762ac4830bd74ccc9f5c7`, `05d39d0d3d5fbd9091d6c1018f05ca3442b6c7d0`; tests `ea4c489416af417446ea0269ae91ba00e2945880`; production R2 provisioning **NOT AUTHORIZED**; watcher DARK; no public HTTP; no UI; WP-8 not started
+- WP-6: **COMPLETE**; Breath read model + deterministic runway snapshots; starting SHA `2ec87b739e3f3949d52def1ea68a9a35f0ccefcf`; implementation SHAs `a719d2624d1958bc65bf60d550c8e97d3cbea66b`, `8086c749f0763122766bc2254a36e871a39c7ba9`; tests `01fa23cea4596dba45707d74b30bb78c76f7f429`; production R2 provisioning **NOT AUTHORIZED**; watcher DARK; no public HTTP; no UI
 - WP-5: **COMPLETE**; private R2 evidence adapter (code only); starting SHA `6fcbe1faece1b3812ce9d9e03b22ef3f99fe5d79`; approval-recording SHA `bf42267ae41cf50758010585ef6b96bb0ed85df5`; implementation SHAs `c4cfcb05bb109fb8e8452bb03f425355d075eef0`, `ec318601068d9a6b3d143d4da6c609245907ad4c`; tests `233db89040481ac9cd4d2ba29eb060918f4748ca`; production R2 provisioning **NOT AUTHORIZED**
 - WP-4: **COMPLETE**; Core admin HTTP contracts; starting SHA `6f3c8b2bd457706f33afd7466dc54907ee649e75`
 - HD-3: **APPROVED_ARCHITECTURE_ONLY**; token `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING`; private R2 architecture/code authorized; production provisioning **NOT AUTHORIZED**
@@ -1680,4 +1753,5 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - `DEE_606_WP4_ADMIN_BACKEND_CONTRACTS_PASS_WP4_COMPLETE`
 - `DEE_606_WP5_R2_EVIDENCE_ADAPTER_PASS_WP5_COMPLETE_READY_FOR_WP6`
 - `DEE_606_WP6_BREATH_READ_MODEL_RUNWAY_PASS_WP6_COMPLETE_READY_FOR_WP7`
+- `DEE_606_WP7_CONTRIBUTION_SHARE_PASS_WP7_COMPLETE_READY_FOR_WP8`
 - `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING`
