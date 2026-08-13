@@ -26,10 +26,12 @@ import { pruneFhvCheckpointBundlesToTwoNewest } from "@/lib/trader/observability
 import { copyAndDigestSync } from "@/lib/trader/observability/fhv-checkpoint-cost-model";
 import { tryNativeCloneFile } from "@/lib/trader/observability/fhv-native-clone";
 import {
+  collectFhvLifecycleAuditRows,
   collectFhvSealCandidates,
   collectFhvSealedEconomicRows,
   isFhvBoundedHotStateEnabled,
   pruneFhvSealedEconomicRows,
+  pruneFhvSealedLifecycleAuditRows,
 } from "@/lib/trader/execution/fhv-hot-state-pruner";
 import { setIdhpsSealedAuthority } from "@/lib/trader/execution/idhps-session-registry";
 import {
@@ -45,6 +47,7 @@ import {
 } from "@/lib/trader/observability/fhv-economic-seal";
 import {
   evaluateFhvEconomicSealEligibility,
+  evaluateFhvSealBoundary,
   type FhvSealBoundaryProof,
   type FhvSealCandidateOrder,
 } from "@/lib/trader/observability/fhv-economic-seal-eligibility";
@@ -386,6 +389,9 @@ function applyFhvBoundedHotState(input: {
     .filter((result) => result.eligible)
     .map((result) => result.orderId);
   if (eligible.length === 0) {
+    // No economic orders to seal this epoch, but append-only lifecycle audit still accumulates
+    // and must be bounded every epoch.
+    sealAndPruneFhvLifecycleAudit(sqlite, input);
     return;
   }
 
@@ -464,6 +470,43 @@ function applyFhvBoundedHotState(input: {
     }),
     snapshot: openFhvVerifiedEconomicLedgerSnapshot(input.runDir),
   });
+
+  // Lifecycle audit is sealed AFTER the economic seal so the order-path ledger digests are
+  // unchanged from the pre-repair baseline; it runs every epoch regardless of order eligibility.
+  sealAndPruneFhvLifecycleAudit(sqlite, input);
+}
+
+/**
+ * Seal + prune append-only lifecycle audit rows for a committed epoch (ADR-0025 AD-2).
+ *
+ * Lifecycle events are write-only provenance in the FHV path, so once durably sealed into the
+ * economic ledger they may leave bounded hot state. Same fail-closed ordering as the economic
+ * seal — seal + verify BEFORE the destructive delete — and the same durable-boundary gate, so a
+ * dirty/uncommitted boundary prunes nothing.
+ */
+function sealAndPruneFhvLifecycleAudit(
+  sqlite: ReturnType<typeof getRawSqliteDatabase>,
+  input: { runDir: string; epochId: number; boundaryProof: FhvSealBoundaryProof },
+): void {
+  if (evaluateFhvSealBoundary(input.boundaryProof) !== null) {
+    return;
+  }
+  const lifecycle = collectFhvLifecycleAuditRows(sqlite);
+  if (lifecycle.rows.length === 0) {
+    return;
+  }
+  sealFhvEconomicLedgerEpoch({
+    runDir: input.runDir,
+    epochId: input.epochId,
+    rows: lifecycle.rows,
+  });
+  const verification = verifyFhvEconomicLedger(input.runDir);
+  if (!verification.ok) {
+    throw new Error(
+      `FHV_SEALED_LEDGER_DIGEST_MISMATCH: ${verification.failures.join(",")} epoch=${input.epochId} kind=lifecycle`,
+    );
+  }
+  pruneFhvSealedLifecycleAuditRows(sqlite, lifecycle.ids);
 }
 
 export async function commitFhvExecutionEpoch(input: {
