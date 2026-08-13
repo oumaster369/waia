@@ -30,8 +30,40 @@ state:
   prUrl: null
   lastValidatedGitSha: 44c06089cb01eab95ce1b1f118f6a15bef853f35
   lastValidationAt: "2026-08-13"
-  blockedReason: null
-  nextAction: "prepare/execute WP-3 Treasury Watcher (DARK) under the approved plan."
+  blockedReason: WP3_BLOCKED_BY_OBSERVATION_LIFECYCLE_GUARD_MISMATCH_AWAITING_HUMAN_APPROVAL
+  nextAction: "Await Human approval of the observation lifecycle guard amendment. After approval, implement and validate the additive guard correction on the dedicated :54339 topology. Resume WP-3 only after that correction PASS."
+  wp3:
+    status: NOT_STARTED
+    blocked: true
+    implementationStarted: false
+    watcherDark: true
+  observationGuardAmendment:
+    status: AWAITING_HUMAN_APPROVAL
+    discoveredAt: "2026-08-13"
+    classification: WP1_SECURITY_GUARD_CONTRADICTS_APPROVED_OBSERVATION_MUTABILITY
+    blockerMarker: DEE_606_WP3_BLOCKED_BY_OBSERVATION_SCHEMA_CONTRACT_MISMATCH
+    affectedTable: treasury_chain_observations
+    affectedMigration: 0149_treasury_transparency_ledger_rls
+    immutableFactsStillProtected: true
+    deleteStillBlocked: true
+    proposedMutableColumns:
+      - confirmations_observed
+      - observation_status
+      - related_payment_id
+    watcherAuthorityColumns:
+      - confirmations_observed
+      - observation_status
+    adminAuthorityColumns:
+      - related_payment_id
+    correctionDisposition: ADDITIVE_FORWARD_FIX_MIGRATION_AFTER_HUMAN_APPROVAL
+    migrationIdentity: ALLOCATE_AT_CORRECTION_IMPLEMENTATION_PREFLIGHT
+    finalMigrationReconciliation: WP9_REQUIRED
+    mergeOrderGate: BLOCK_MIGRATION_BEARING_MERGE_WHILE_DEE_518_JOURNAL_UNMERGED
+    watcherDark: true
+    wp3ImplementationStarted: false
+    architectureAmendmentSourceSha: THIS_COMMIT
+    approvalTokenFormula: CONFIRM-DEE-606-OBSERVATION-GUARD-<FIRST_8_HEX_OF_THIS_COMMIT_UPPERCASE>
+    approvalTokenStatus: AWAITING_HUMAN_APPROVAL
   wp2:
     status: COMPLETE
     startingSha: 7ac23d999278e366a0df428445ec8191a589cbda
@@ -512,6 +544,46 @@ Cross-organization references must be impossible even through privileged app bug
 ```
 
 Address-relative observations may be multiple for the same Transfer; semantic ledger coalesces to one transaction (§5.5b, §7).
+
+### 5.4a Observation lifecycle DB guard amendment (AWAITING HUMAN APPROVAL)
+
+**Classification:** bounded security/persistence correction. **Not** a redesign of Treasury observation truth. **Not** new product semantics.
+
+The Human-approved §5.4 mutability model already permits watcher evolution of `confirmations_observed` and `observation_status`, and later admin assignment of `related_payment_id`. Canonical §7 requires those lifecycle fields to be **persisted** (`OBSERVED` → `CONFIRMED` → `DROPPED`). WP-2 VERIFY reads that persisted state.
+
+**Validated contradiction:** `0149_treasury_transparency_ledger_rls.sql` installs `waia_treasury_chain_observations_block_mutation()` as a `BEFORE UPDATE` trigger that unconditionally raises `check_violation` for every `UPDATE`. WP-1 dedicated Postgres validation proved owner-role UPDATE fails. There is no observation revision/event table. Unique `idempotency_key` / `(network, tx_hash, transfer_index, watched_address_id)` forbid replacement rows. Therefore the WP-1 guard currently makes the already-approved lifecycle unpersistable.
+
+```
+DEE_606_WP3_BLOCKED_BY_OBSERVATION_SCHEMA_CONTRACT_MISMATCH
+```
+
+**Corrected DB UPDATE allowlist (only these columns):**
+
+| Column | DB guard | Application authority |
+|--------|----------|------------------------|
+| `confirmations_observed` | permitted UPDATE | **WATCHER SERVICE only** |
+| `observation_status` | permitted UPDATE | **WATCHER SERVICE only** (`OBSERVED` \| `CONFIRMED` \| `DROPPED`) |
+| `related_payment_id` | permitted UPDATE | **ADMIN mutation path only** |
+
+The watcher **MUST NOT** alter `related_payment_id`. Admin **MUST NOT** rewrite watcher lifecycle/source facts merely because the DB trigger allows those columns. Application-layer authority remains primary; the DB guard is defense-in-depth for immutable facts.
+
+**Immutable after INSERT (UPDATE must raise `check_violation`):** `id`, `organization_id`, `watched_address_id`, `network`, `token_contract`, `asset_code`, `tx_hash`, `transfer_index`, `from_address`, `to_address`, `direction`, `native_amount_atomic`, `native_decimals`, `block_height`, `block_timestamp`, `observed_at`, `confirmations_required`, `idempotency_key`, `ingestion_source`, `raw_event_digest`, `created_at`. Mixed allowed+immutable UPDATE is rejected atomically. **DELETE remains ALWAYS forbidden.**
+
+**Do not introduce:** observation revision table; observation event-sourcing; replacement observation rows; destructive mutation; weakened immutable chain-fact protection; new observation states (`PENDING` / `REORGED` / `FINALIZED` / `VERIFIED`). Treasury transaction `VERIFIED` remains Human/domain authority and is **not** an observation state. `CONFIRMED` does **not** make the linked semantic transaction `VERIFIED`. Watcher still cannot VERIFY. Transaction FSM, cash-effect, contribution, publication, internal-transfer coalescing, reconciliation, and accounting membership are unchanged.
+
+**Intended later implementation (NOT in this amendment task):** a **new additive forward-fix migration** after Human approval. Do **not** rewrite `0148` or `0149`. Replace the *behavior* of `public.waia_treasury_chain_observations_block_mutation()`:
+
+- `TG_OP = DELETE` → always `check_violation`
+- `TG_OP = UPDATE` → permit only when no field outside the three-column allowlist changed; otherwise `check_violation`; `RETURN NEW` for permitted UPDATE
+- comparison MUST fail closed for unknown future columns (explicit field-by-field immutable comparison, or equivalent that cannot silently permit new columns)
+- do not remove RLS; do not change service-role / `authenticated` / `anon` policy posture
+- do not weaken DELETE; do not weaken transaction-revision or commitment-revision append-only guards
+
+**Migration identity:** do **not** preselect a number in this plan-only amendment. Allocate a collision-free branch-local identity during the **correction implementation preflight after Human approval** by inspecting `origin/main` journal, open migration-bearing branches, and read-only DEE-518 local tip (§13). That reservation is **not** merge authority. Final identity reconciliation/renumbering remains **WP-9 / PR readiness**. Existing merge-order gate remains binding: `BLOCK_MIGRATION_BEARING_MERGE_WHILE_DEE_518_JOURNAL_UNMERGED`.
+
+**Required dedicated Postgres validation after Human approval** (`docker-compose.postgres-treasury-validate.yml`, project `waia-postgres-treasury-validate`, `127.0.0.1:54339` only; never 54329): empty-DB apply of full current DEE-606 history; UPDATE `confirmations_observed` only PASS; UPDATE `observation_status` only PASS; UPDATE both lifecycle fields PASS; UPDATE `related_payment_id` only permitted by DB guard; UPDATE of `tx_hash` / `native_amount_atomic` / `watched_address_id` / `block_height` / `raw_event_digest` / `confirmations_required` / `idempotency_key` / `organization_id` / `created_at` rejected; mixed allowed+immutable rejected atomically; DELETE rejected; anon/authenticated RLS denial unchanged; service/owner can perform allowed lifecycle UPDATE; transaction-revision and commitment-revision append-only guards unchanged; same-org/FK constraints intact; journal monotonic; typecheck PASS; targeted Treasury regression PASS; `git diff --check` clean. Capture dedicated evidence with sha256.
+
+Resume WP-3 watcher implementation **only after** that correction PASS.
 
 ### 5.5 `treasury_transactions`
 
@@ -1153,7 +1225,9 @@ Dedicated compose `docker-compose.postgres-treasury-validate.yml`; project `waia
 
 ### WP-3 — Treasury watcher (DARK)
 
-Inception-seeded checkpoint; watched addresses; inbound+outbound; address-relative observation idempotency; semantic Transfer coalescing (esp. internal A→B); confirmation; temporally exact balance reconciliation emission; never verify; never assign governance meaning.
+**NOT STARTED. BLOCKED.** Marker `DEE_606_WP3_BLOCKED_BY_OBSERVATION_SCHEMA_CONTRACT_MISMATCH`. Validated WP-1 `BEFORE UPDATE` trigger on `treasury_chain_observations` rejects every UPDATE, contradicting already-approved §5.4 / §7 persisted observation lifecycle. See §5.4a. Awaiting Human approval of the observation lifecycle guard amendment. Do **not** implement WP-3 watcher code, and do **not** implement the additive migration, until the Human returns the exact approval token for this amendment commit.
+
+Intended after correction PASS: inception-seeded checkpoint; watched addresses; inbound+outbound; address-relative observation idempotency; semantic Transfer coalescing (esp. internal A→B); confirmation; temporally exact balance reconciliation emission; never verify; never assign governance meaning. Watcher remains DARK.
 
 ### WP-4 — Admin backend HTTP contracts
 
@@ -1254,8 +1328,22 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 | WP-0 | COMPLETE |
 | WP-1 | COMPLETE (`DEDICATED_POSTGRES_VALIDATION_PASS` on `:54339`) |
 | WP-2 | COMPLETE (domain services; implementation SHA `44c06089cb01eab95ce1b1f118f6a15bef853f35`; 138 targeted tests) |
-| Current work package | WP-3 (watcher DARK; not started in the WP-2 closeout task) |
-| Migration identities | `0148_treasury_transparency_ledger_foundation`, `0149_treasury_transparency_ledger_rls` (branch reservation; merge-order gate still binding) |
+| Current work package | WP-3 **BLOCKED** (`WP3_BLOCKED_BY_OBSERVATION_LIFECYCLE_GUARD_MISMATCH_AWAITING_HUMAN_APPROVAL`; watcher DARK; WP-3 implementation not started) |
+| Observation guard amendment | **AWAITING_HUMAN_APPROVAL** — §5.4a; additive forward-fix after approval; do not rewrite 0148/0149; allocate migration identity at correction implementation preflight; WP-9 final reconciliation |
+| Migration identities | `0148_treasury_transparency_ledger_foundation`, `0149_treasury_transparency_ledger_rls` (branch reservation; merge-order gate still binding; no new number allocated in this amendment) |
+
+### Observation lifecycle guard amendment — Human approval record
+
+| Field | Value |
+|-------|--------|
+| Status | **AWAITING_HUMAN_APPROVAL** |
+| Discovered | 2026-08-13 |
+| Classification | WP-1 security guard contradicts approved observation mutability |
+| Original architecture source SHA | `82377e4f4869b9bf64f26a9578c2335cdbcb8b15` (unchanged; still approved) |
+| Architecture amendment source SHA | the git commit that introduces this section |
+| Required Human token | `CONFIRM-DEE-606-OBSERVATION-GUARD-` + first 8 hex of that amendment commit, uppercase |
+| Concrete token | reported by the amendment task after push; Human must return that exact token |
+| Do not implement | additive migration, WP-3 watcher code, schema/SQL/journal edits until the exact token is returned |
 
 ---
 
@@ -1290,7 +1378,10 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
 - Final integrity / Human-approved architecture source SHA: `82377e4f4869b9bf64f26a9578c2335cdbcb8b15`
 - Approval token: `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`
-- `state.status`: **approved** (Architect review COMPLETE; Human architecture approval COMPLETE; WP-0 COMPLETE; WP-1 COMPLETE; WP-2 COMPLETE; currentWorkPackage WP-3)
+- `state.status`: **approved** (original architecture remains approved; WP-0/WP-1/WP-2 COMPLETE; currentWorkPackage WP-3 **BLOCKED** awaiting Human observation-guard amendment approval)
+- WP-3: **NOT STARTED**; blocked by `DEE_606_WP3_BLOCKED_BY_OBSERVATION_SCHEMA_CONTRACT_MISMATCH`
+- Observation guard amendment: **AWAITING_HUMAN_APPROVAL** (§5.4a); additive forward-fix after approval; 0148/0149 not rewritten; migration number not preselected
+- Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 DEFERRED
 - WP-1 validation: **DEDICATED_POSTGRES_VALIDATION_PASS** (`127.0.0.1:54339`; SHA `0df1b9698f1af27222c60bfb11191f0cf3f85676`)
 - Migration reservation: **0148** foundation + **0149** RLS; merge-order gate still binding; DEE-518 local tip observed `0148_trader_forecast_v2_open_tail_null_bounds_v1`
 - Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 DEFERRED
