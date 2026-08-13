@@ -27,6 +27,8 @@ export type UsdtNominalUsdPolicyV1 = typeof USDT_NOMINAL_USD_POLICY_V1;
 export const TREASURY_USDT_V1_ASSET = "USDT" as const;
 export const TREASURY_USDT_V1_NETWORK = "TRC-20" as const;
 export const TREASURY_USDT_V1_DECIMALS = 6 as const;
+/** Canonical USDT TRC-20 mainnet contract; same identity as `USDT_TRC20_CONTRACT`. */
+export const TREASURY_USDT_V1_TOKEN_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" as const;
 
 export type TreasuryActorContext = {
   actorType: AuditActorType;

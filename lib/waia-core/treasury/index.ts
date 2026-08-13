@@ -18,6 +18,7 @@ export {
   TREASURY_USDT_V1_ASSET,
   TREASURY_USDT_V1_DECIMALS,
   TREASURY_USDT_V1_NETWORK,
+  TREASURY_USDT_V1_TOKEN_CONTRACT,
 } from "@/lib/waia-core/treasury/types";
 export type {
   TreasuryActorContext,
@@ -65,6 +66,7 @@ export {
 } from "@/lib/waia-core/treasury/watcher-verify-precondition";
 export {
   isQualifyingContribution,
+  isApprovedV1UsdtTrc20ContributionAsset,
   netQualifyingMicros,
   computeContributionShareTotals,
   contributionShareOrZero,
@@ -78,6 +80,8 @@ export {
 } from "@/lib/waia-core/treasury/commitment-service";
 export { createTreasuryInceptionService } from "@/lib/waia-core/treasury/inception-service";
 export { getBreathPublicSnapshot } from "@/lib/waia-core/treasury/breath/public-snapshot";
+export { createContributionShareEngine } from "@/lib/waia-core/treasury/share/engine";
+export { createMemoryContributionShareFactsRepository } from "@/lib/waia-core/treasury/share/memory-repository";
 export type {
   BreathPublicSnapshot,
   BreathAdminPreview,
