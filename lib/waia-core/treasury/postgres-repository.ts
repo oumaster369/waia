@@ -24,7 +24,7 @@ import type {
   TreasuryTransactionRecord,
 } from "@/lib/waia-core/treasury/types";
 
-type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
+type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete">;
 
 function scoped(context: OrgContext): OrgContext {
   return requireOrgContext(context.organizationId);
@@ -181,6 +181,18 @@ export function createPostgresTreasuryRepository(ex: PgExecutor): TreasuryReposi
     async insertEvidenceLink(record) {
       requireOrgContext(record.organizationId);
       await ex.insert(pgSchema.treasuryEvidenceLinks).values(record);
+    },
+
+    async deleteEvidenceLink(context, linkId) {
+      const org = scoped(context);
+      await ex
+        .delete(pgSchema.treasuryEvidenceLinks)
+        .where(
+          and(
+            eq(pgSchema.treasuryEvidenceLinks.id, linkId),
+            orgScopedWhere(pgSchema.treasuryEvidenceLinks.organizationId, org),
+          ),
+        );
     },
 
     async insertObservation() {
@@ -404,13 +416,23 @@ export function createPostgresTreasuryRepository(ex: PgExecutor): TreasuryReposi
       });
     },
 
-    async listTransactions(context) {
+    async listTransactions(context, query) {
       const org = scoped(context);
+      const filters = [orgScopedWhere(pgSchema.treasuryTransactions.organizationId, org)];
+      if (query?.status) filters.push(eq(pgSchema.treasuryTransactions.status, query.status));
+      if (query?.detailPublication) {
+        filters.push(eq(pgSchema.treasuryTransactions.detailPublication, query.detailPublication));
+      }
+      if (query?.kind) filters.push(eq(pgSchema.treasuryTransactions.kind, query.kind));
       const rows = await ex
         .select()
         .from(pgSchema.treasuryTransactions)
-        .where(orgScopedWhere(pgSchema.treasuryTransactions.organizationId, org));
-      return rows.map(mapTx);
+        .where(and(...filters));
+      const sorted = rows.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+      if (!query) return sorted.map(mapTx);
+      const offset = Math.max(0, query.offset ?? 0);
+      const limit = Math.min(100, Math.max(1, query.limit ?? 50));
+      return sorted.slice(offset, offset + limit).map(mapTx);
     },
 
     async getTransactionByCanonicalTransfer(context, query) {

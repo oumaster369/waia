@@ -101,6 +101,14 @@ export function createMemoryTreasuryRepository(): TreasuryRepository {
       evidenceLinks.push(clone(record));
     },
 
+    async deleteEvidenceLink(context, linkId) {
+      const scoped = requireScope(context);
+      const index = evidenceLinks.findIndex(
+        (row) => row.organizationId === scoped.organizationId && row.id === linkId,
+      );
+      if (index >= 0) evidenceLinks.splice(index, 1);
+    },
+
     async insertObservation(record) {
       requireOrgContext(record.organizationId);
       observations.set(scopedId(record.organizationId, record.id), clone(record));
@@ -259,11 +267,21 @@ export function createMemoryTreasuryRepository(): TreasuryRepository {
       attributions.push(clone(record));
     },
 
-    async listTransactions(context) {
+    async listTransactions(context, query) {
       const scoped = requireScope(context);
-      return [...transactions.values()]
-        .filter((row) => row.organizationId === scoped.organizationId)
-        .map(clone);
+      let rows = [...transactions.values()].filter(
+        (row) => row.organizationId === scoped.organizationId,
+      );
+      if (query?.status) rows = rows.filter((row) => row.status === query.status);
+      if (query?.detailPublication) {
+        rows = rows.filter((row) => row.detailPublication === query.detailPublication);
+      }
+      if (query?.kind) rows = rows.filter((row) => row.kind === query.kind);
+      rows.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+      if (!query) return rows.map(clone);
+      const offset = Math.max(0, query.offset ?? 0);
+      const limit = Math.min(100, Math.max(1, query.limit ?? 50));
+      return rows.slice(offset, offset + limit).map(clone);
     },
 
     async getTransactionByCanonicalTransfer(context, query) {

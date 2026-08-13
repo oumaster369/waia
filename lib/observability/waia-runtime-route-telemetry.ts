@@ -59,7 +59,25 @@ export type WaiaRuntimeRouteKey =
   | "trader_admin_exchange_credentials"
   | "trader_admin_fhv_operations_status"
   | "trader_admin_fhv_operations_commands"
-  | "trader_admin_fhv_operations_detail";
+  | "trader_admin_fhv_operations_detail"
+  | "admin_treasury_transactions"
+  | "admin_treasury_transaction_commands"
+  | "admin_treasury_commitments"
+  | "admin_treasury_commitment_commands"
+  | "admin_treasury_watched_addresses"
+  | "admin_treasury_budgets"
+  | "admin_treasury_funding_needs"
+  | "admin_treasury_ideal_budgets"
+  | "admin_treasury_ideal_budget_commands"
+  | "admin_treasury_runway_plans"
+  | "admin_treasury_runway_plan_commands"
+  | "admin_treasury_attributions"
+  | "admin_treasury_evidence"
+  | "admin_treasury_evidence_links"
+  | "admin_treasury_inceptions"
+  | "admin_treasury_reconciliations"
+  | "admin_treasury_settings"
+  | "admin_treasury_breath_preview";
 
 export type WaiaRuntimeRouteOutcome =
   | "success"

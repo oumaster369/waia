@@ -30,6 +30,7 @@ export type TreasuryRepository = {
     transactionId: string,
   ): Promise<TreasuryEvidenceLinkRecord[]>;
   insertEvidenceLink(record: TreasuryEvidenceLinkRecord): Promise<void>;
+  deleteEvidenceLink(context: OrgContext, linkId: string): Promise<void>;
   insertObservation(record: TreasuryObservationRecord): Promise<void>;
   updateObservationLifecycle(
     context: OrgContext,
@@ -89,7 +90,16 @@ export type TreasuryRepository = {
     transactionId: string,
   ): Promise<TreasuryAttributionRecord[]>;
   insertAttribution(record: TreasuryAttributionRecord): Promise<void>;
-  listTransactions(context: OrgContext): Promise<TreasuryTransactionRecord[]>;
+  listTransactions(
+    context: OrgContext,
+    query?: {
+      status?: TreasuryTransactionRecord["status"];
+      detailPublication?: TreasuryTransactionRecord["detailPublication"];
+      kind?: TreasuryTransactionRecord["kind"];
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<TreasuryTransactionRecord[]>;
   getTransactionByCanonicalTransfer(
     context: OrgContext,
     query: {
