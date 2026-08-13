@@ -23,25 +23,45 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: approved
-  currentWorkPackage: WP-1
-  completedWorkPackages: [WP-0]
-  remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5, WP-6, WP-7, WP-8, WP-9]
+  currentWorkPackage: WP-2
+  completedWorkPackages: [WP-0, WP-1]
+  remainingWorkPackages: [WP-2, WP-3, WP-4, WP-5, WP-6, WP-7, WP-8, WP-9]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 0df1b9698f1af27222c60bfb11191f0cf3f85676
+  lastValidationAt: "2026-08-13"
   blockedReason: null
-  nextAction: "After R5 completion/adjudication, run WP-1 validation on the dedicated DEE-606 Postgres topology at 127.0.0.1:54339, then complete WP-1 only if all schema, migration, RLS and same-org integrity checks pass. Do not start WP-2 until WP-1 is COMPLETE."
+  nextAction: "prepare/execute WP-2 Domain Services under the approved plan."
   wp1Authoring:
-    status: AUTHORED_AWAITING_POST_R5_DEDICATED_POSTGRES_VALIDATION
+    status: COMPLETE
     authoredAt: "2026-08-12"
-    validation: AWAITING_POST_R5_DEDICATED_POSTGRES_VALIDATION
-    note: "WP-1 implementation artifacts authored (schema + migrations + journal). WP-1 is NOT COMPLETE until dedicated Postgres validation on :54339 passes after R5."
+    validation: DEDICATED_POSTGRES_VALIDATION_PASS
+    note: "WP-1 COMPLETE after dedicated Postgres validation on 127.0.0.1:54339."
   wp1BoundedCorrection:
     status: CHECKPOINT_ORG_SCOPE_CORRECTED
-    afterSha: d7c77cbcc26d4958b76d555dd68c6c7fe9346f9c
+    afterSha: c26ebad5731be312489c6f72b576827dc1245ed2
     correctedAt: "2026-08-13"
-    reason: "treasury_watcher_checkpoints was keyed only by checkpoint_key; approved invariant requires all Treasury entities org-scoped. Composite PK (organization_id, checkpoint_key) + organizations FK. 0148/0149 identities unchanged. WP-1 remains NOT COMPLETE."
+    reason: "treasury_watcher_checkpoints was keyed only by checkpoint_key; approved invariant requires all Treasury entities org-scoped. Composite PK (organization_id, checkpoint_key) + organizations FK. 0148/0149 identities unchanged."
+  wp1Validation:
+    status: DEDICATED_POSTGRES_VALIDATION_PASS
+    validatedImplementationSha: 0df1b9698f1af27222c60bfb11191f0cf3f85676
+    validatedAt: "2026-08-13"
+    port: 54339
+    evidencePath: /tmp/dee606-wp1-postgres-validation-0df1b9698f1af27222c60bfb11191f0cf3f85676.log
+    evidenceSha256: 462bf9d40ae72e425cbec39a70aa93bf1c9ef94623a1b5184eac06eb4bf2ab07
+    passCategories:
+      - empty-db-apply
+      - catalog
+      - enums
+      - organization_id
+      - watcher-checkpoint-composite-pk
+      - rls
+      - append-only
+      - same-org-composite-fks
+      - check-constraints
+      - journal-monotonicity
+    dee518LocalJournalTipObserved: 0148_trader_forecast_v2_open_tail_null_bounds_v1
+    mergeOrderGate: BLOCK_MIGRATION_BEARING_MERGE_WHILE_DEE_518_JOURNAL_UNMERGED
   humanArchitectureApproval:
     status: COMPLETE
     approvedAt: "2026-08-12"
@@ -60,11 +80,12 @@ state:
     disposition: ALLOCATED_BRANCH_RESERVATION
     mainTipAtAllocation: "0109"
     dee518ReservationThrough: "0147"
+    dee518LocalJournalTipObservedReadOnly: 0148_trader_forecast_v2_open_tail_null_bounds_v1
     allocatedTags:
       - 0148_treasury_transparency_ledger_foundation
       - 0149_treasury_transparency_ledger_rls
     mergeOrderGate: BLOCK_MIGRATION_BEARING_MERGE_WHILE_DEE_518_JOURNAL_UNMERGED
-    note: "Branch reservation after max(main tip 0109, DEE-518 reservation 0147). Allocation is NOT permission to Human-merge before DEE-518 journal predecessors exist on main. See §13."
+    note: "Branch reservation after max(main tip 0109, DEE-518 reservation 0147). DEE-518 local worktree now also contains 0148_trader_forecast_v2_open_tail_null_bounds_v1. Final identity reconciliation/renumbering is WP-9 / PR readiness. Allocation is NOT permission to Human-merge. See §13."
   r5SafePostgres:
     requiredPort: 54339
     forbiddenPortWhileR5Active: 54329
@@ -1087,7 +1108,7 @@ Dedicated compose `docker-compose.postgres-treasury-validate.yml`; project `waia
 
 ### WP-1 — Migration preflight + schema
 
-**AUTHORED — NOT COMPLETE.** Implementation artifacts authored on branch (`0148` foundation + `0149` RLS/immutability; `db/schema.postgres.ts` + `db/core-enums.ts`; journal idx 110–111). Bounded correction: `treasury_watcher_checkpoints` is organization-scoped via composite PK `(organization_id, checkpoint_key)`. Allocation: after main tip `0109` and DEE-518 reservation through `0147`. Merge-order gate remains binding. **WP-1 validation = `AWAITING_POST_R5_DEDICATED_POSTGRES_VALIDATION`** on `127.0.0.1:54339`. Do not mark COMPLETE until schema/migration/RLS/same-org integrity checks pass. No watcher enablement. HD-3 remains DEFERRED (evidence metadata only).
+**COMPLETE.** Dedicated Postgres validation **PASS** on `127.0.0.1:54339` (compose project `waia-postgres-treasury-validate`). Validated implementation SHA `0df1b9698f1af27222c60bfb11191f0cf3f85676`. Evidence sha256 `462bf9d40ae72e425cbec39a70aa93bf1c9ef94623a1b5184eac06eb4bf2ab07`. Empty-DB apply of full branch history (112 migrations, final `0149_treasury_transparency_ledger_rls`); 20 `treasury_*` tables all org-scoped; 18 Treasury enums; watcher checkpoint PK `(organization_id, checkpoint_key)`; RLS 20/80; append-only triggers; 24 same-org composite FKs; 20 CHECKs. Merge-order gate remains **binding** (DEE-518 local journal tip observed `0148_trader_forecast_v2_open_tail_null_bounds_v1`; not merged to main). No watcher enablement. HD-3 remains DEFERRED.
 
 ### WP-2 — Domain services
 
@@ -1194,9 +1215,9 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 | Human architecture approval | COMPLETE |
 | Plan `state.status` | `approved` |
 | WP-0 | COMPLETE |
-| Current work package | WP-1 (**AUTHORED**, validation awaiting post-R5 dedicated Postgres on `:54339` — **NOT COMPLETE**) |
-| Migration identities | `0148_treasury_transparency_ledger_foundation`, `0149_treasury_transparency_ledger_rls` (branch reservation; merge-order gate binding) |
-| Implementation authorization | WP-1 artifacts authored; WP-1 COMPLETE only after dedicated validation; WP-2 not authorized yet |
+| WP-1 | COMPLETE (`DEDICATED_POSTGRES_VALIDATION_PASS` on `:54339`) |
+| Current work package | WP-2 (authorized to prepare/execute; not started in the WP-1 closeout task) |
+| Migration identities | `0148_treasury_transparency_ledger_foundation`, `0149_treasury_transparency_ledger_rls` (branch reservation; merge-order gate still binding) |
 
 ---
 
@@ -1231,9 +1252,9 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - Architect correction commit: `a0f00846b55a53f1f9ecb2db8c9e6bef82a156e0`
 - Final integrity / Human-approved architecture source SHA: `82377e4f4869b9bf64f26a9578c2335cdbcb8b15`
 - Approval token: `CONFIRM-DEE-606-ARCHITECTURE-PLAN-82377E4F`
-- `state.status`: **approved** (Architect review COMPLETE; Human architecture approval COMPLETE; WP-0 COMPLETE; currentWorkPackage WP-1 — **AUTHORED / NOT COMPLETE**)
-- WP-1 validation: **AWAITING_POST_R5_DEDICATED_POSTGRES_VALIDATION** (`127.0.0.1:54339`)
-- Migration reservation: **0148** foundation + **0149** RLS (after main `0109` / DEE-518 through `0147`); merge-order gate binding
-- Binding gates preserved: DEE-518 migration merge-order; R5-safe Postgres port **54339** (never 54329 while R5 active); watcher ships DARK; HD-3 DEFERRED
+- `state.status`: **approved** (Architect review COMPLETE; Human architecture approval COMPLETE; WP-0 COMPLETE; WP-1 COMPLETE; currentWorkPackage WP-2)
+- WP-1 validation: **DEDICATED_POSTGRES_VALIDATION_PASS** (`127.0.0.1:54339`; SHA `0df1b9698f1af27222c60bfb11191f0cf3f85676`)
+- Migration reservation: **0148** foundation + **0149** RLS; merge-order gate still binding; DEE-518 local tip observed `0148_trader_forecast_v2_open_tail_null_bounds_v1`
+- Binding gates preserved: DEE-518 migration merge-order; watcher ships DARK; HD-3 DEFERRED
 - Prior Architect decisions remain intact: T3; Core Treasury domain; accounting/detail separation; VERIFIED accounting truth; contribution share; commitment facts; deterministic runway snapshots; no DEE-612/613 hard-coded doctrine
-- `DEE_606_WP1_AUTHORED_AWAITING_POST_R5_VALIDATION`
+- `DEE_606_WP1_DEDICATED_POSTGRES_VALIDATION_PASS_WP1_COMPLETE_READY_FOR_WP2`
