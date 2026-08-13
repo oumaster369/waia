@@ -150,6 +150,31 @@ state:
     wp8Started: false
     migrationMergeOrderGate: binding
     wp9FinalMigrationReconciliation: retained
+    privacyCorrection:
+      classification: PUBLIC_AGGREGATE_ATTRIBUTION_TIMESTAMP_AND_READ_LEAKAGE
+      startingSha: 5b9fc773e1408a2137cf6c5e7392fe9793590d22
+      correctionSha: 3fb6c4ac03f478bc47f6840b4df1238accd1ef97
+      status: COMPLETE
+      publicAggregateAttributionDependency: false
+      publicAggregateAttributionDbRead: false
+      publicAggregateLastUpdatedAtInputs:
+        - qualifying.verifiedAt
+        - qualifying.updatedAt
+        - includedVerifiedRefundCorrection.verifiedAt
+        - includedVerifiedRefundCorrection.updatedAt
+      selfShareAttributionDependency: true
+      selfShareAttributionTimingRetained: true
+      frozenSection6MathUnchanged: true
+      schemaChanged: false
+      migrationsChanged: false
+      productionUnchanged: true
+      wp8Started: false
+      wp7TestResult: 9/9 PASS
+      wp6Regression: 9/9 PASS
+      wp5Regression: 11/11 PASS
+      wp4Regression: 27/27 PASS
+      wp3Regression: 36/36 PASS
+      wp2Regression: 140/140 PASS
   wp8:
     status: NOT_STARTED
   wp4:
@@ -1566,6 +1591,14 @@ WP-7 targeted tests **7/7 PASS** (grouped coverage of numbered invariants 1–85
 
 **nextAction:** WP-8 Isolation + R5-safe Postgres Tests may be prepared next. Do not start WP-8 in this closeout.
 
+#### WP-7 post-closeout correction — public aggregate privacy / timestamp
+
+**COMPLETE.** Defect `PUBLIC_AGGREGATE_ATTRIBUTION_TIMESTAMP_AND_READ_LEAKAGE`. Starting SHA `5b9fc773e1408a2137cf6c5e7392fe9793590d22`. Correction SHA `3fb6c4ac03f478bc47f6840b4df1238accd1ef97`. Frozen §6 mathematics unchanged.
+
+Public aggregate `lastUpdatedAt` is now derived only from qualifying contribution `verifiedAt`/`updatedAt` and included VERIFIED REFUND/CORRECTION `verifiedAt`/`updatedAt`. Attribution create/reassign/revoke/`consentPublicIdentity` cannot change public totals, count, or timestamp. `computePublicAggregate` loads `loadContributionFacts` only and does not query `treasury_contribution_attributions` or read `contributorUserId`. Self-share still loads current-open attribution and retains attribution lifecycle timestamps. Facts port split: `loadContributionFacts` / `loadAttributionFacts`. Schema/migrations unchanged. Production unchanged. WP-8 still **NOT_STARTED**.
+
+WP-7 targeted tests **9/9 PASS** (was 7/7; +2 public-aggregate privacy/timestamp regressions). WP-6 **9/9**. WP-5 **11/11**. WP-4 **27/27**. WP-3 **36/36**. WP-2 **140/140**. typecheck PASS. lint PASS. `git diff --check` clean. PR not opened.
+
 ### WP-8 — Isolation + R5-safe Postgres tests
 
 Verify-precondition; aggregate-vs-detail separation; commitment derivation; budget.remaining; internal-transfer coalescing; inception double-count prevention; same-org FK isolation; recon as-of / stale / UNAVAILABLE fail-closed.
@@ -1754,4 +1787,5 @@ lint/typecheck/build; targeted tests; migration merge-order proof; prepare-pr la
 - `DEE_606_WP5_R2_EVIDENCE_ADAPTER_PASS_WP5_COMPLETE_READY_FOR_WP6`
 - `DEE_606_WP6_BREATH_READ_MODEL_RUNWAY_PASS_WP6_COMPLETE_READY_FOR_WP7`
 - `DEE_606_WP7_CONTRIBUTION_SHARE_PASS_WP7_COMPLETE_READY_FOR_WP8`
+- `DEE_606_WP7_PUBLIC_AGGREGATE_PRIVACY_CORRECTION_PASS_READY_FOR_WP8`
 - `CONFIRM-DEE-606-HD3-R2-ARCHITECTURE-ONLY-NO-PRODUCTION-PROVISIONING`
