@@ -118,7 +118,7 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
+  status: in-review
   currentWorkPackage: null
   completedWorkPackages:
     - WP-CANON
@@ -139,12 +139,12 @@ state:
     - WP-KNOWLEDGE-STATE
     - WP-CHALLENGER-TRIALS
   remainingWorkPackages: []
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: 99dfce461396b5271c2f0b65643750bfa0937983
+  prNumber: 458
+  prUrl: https://github.com/oumaster369/waia/pull/458
+  lastValidatedGitSha: 3be720fc92e59d49feb1cb6098014469c56f10d1
   lastValidationAt: "2026-08-13"
   blockedReason: null
-  nextAction: "Open one PR to main; Human squash-merge. Post-merge DEE-536..541 remain open."
+  nextAction: "Authoritative GitHub PR CI + Human squash-merge to main. Post-merge DEE-536..541 remain open."
   adversarialReviewCommentId: cbedeb8b-4d13-4def-a3e0-bca5d40654ba
   priorFalseClassification: DEE_518_IMPLEMENTATION_COMPLETE_READY_FOR_ADVERSARIAL_CODE_REVIEW
 provenance:
