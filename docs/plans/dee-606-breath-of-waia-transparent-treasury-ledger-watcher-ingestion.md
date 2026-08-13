@@ -72,6 +72,13 @@ state:
     afterSha: c26ebad5731be312489c6f72b576827dc1245ed2
     correctedAt: "2026-08-13"
     reason: "treasury_watcher_checkpoints was keyed only by checkpoint_key; approved invariant requires all Treasury entities org-scoped. Composite PK (organization_id, checkpoint_key) + organizations FK. 0148/0149 identities unchanged."
+  wp1TypeCorrection:
+    status: COMPLETE
+    correctedAt: "2026-08-13"
+    reason: "Drizzle bigint(mode=bigint) defaults for treasury_balance_reconciliations.explained_pending_micros and tolerance_micros used number literal 0; corrected to bigint literal 0n. SQL migrations and validated Postgres semantics unchanged."
+    typecheck: PASS
+    postgresRevalidationRequired: false
+    wp1ValidatedImplementationShaUnchanged: 0df1b9698f1af27222c60bfb11191f0cf3f85676
   wp1Validation:
     status: DEDICATED_POSTGRES_VALIDATION_PASS
     validatedImplementationSha: 0df1b9698f1af27222c60bfb11191f0cf3f85676
