@@ -2,7 +2,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -201,10 +201,14 @@ export function createPostgresTreasuryWatcherRepository(ex: PgExecutor): Treasur
           updatedAt: now,
         })
         .where(
-          sql`${pgSchema.treasuryWatcherCheckpoints.organizationId} = ${org.organizationId}
-            AND ${pgSchema.treasuryWatcherCheckpoints.checkpointKey} = ${checkpointKey}
-            AND (${pgSchema.treasuryWatcherCheckpoints.leaseUntil} IS NULL
-              OR ${pgSchema.treasuryWatcherCheckpoints.leaseUntil} < ${now})`,
+          and(
+            orgScopedWhere(pgSchema.treasuryWatcherCheckpoints.organizationId, org),
+            eq(pgSchema.treasuryWatcherCheckpoints.checkpointKey, checkpointKey),
+            or(
+              isNull(pgSchema.treasuryWatcherCheckpoints.leaseUntil),
+              lt(pgSchema.treasuryWatcherCheckpoints.leaseUntil, now),
+            ),
+          ),
         )
         .returning({ checkpointKey: pgSchema.treasuryWatcherCheckpoints.checkpointKey });
       return rows.length > 0;
