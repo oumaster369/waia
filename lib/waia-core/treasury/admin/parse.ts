@@ -65,6 +65,23 @@ const CUSTODY_KEYS = [
   "signingKey",
 ] as const;
 
+const RUNWAY_SNAPSHOT_INJECTION_KEYS = [
+  "free_funds",
+  "freeFunds",
+  "free_funds_at_as_of_micros",
+  "freeFundsAtAsOfMicros",
+  "approved_daily_burn",
+  "approvedDailyBurn",
+  "approved_daily_burn_micros",
+  "approvedDailyBurnMicros",
+  "ends_at",
+  "endsAt",
+  "input_digest",
+  "inputDigest",
+  "runway_as_of",
+  "runwayAsOf",
+] as const;
+
 const EVIDENCE_CLIENT_STORAGE_AUTHORITY_KEYS = [
   "object_key",
   "objectKey",
@@ -175,6 +192,10 @@ export function rejectCustodyMaterial(body: Record<string, unknown>) {
 
 export function rejectEvidenceClientStorageAuthority(body: Record<string, unknown>) {
   rejectKeys(body, EVIDENCE_CLIENT_STORAGE_AUTHORITY_KEYS, "EVIDENCE_CLIENT_STORAGE_AUTHORITY");
+}
+
+export function rejectRunwaySnapshotInjection(body: Record<string, unknown>) {
+  rejectKeys(body, RUNWAY_SNAPSHOT_INJECTION_KEYS, "RUNWAY_SNAPSHOT_INPUT_NOT_AUTHORITY");
 }
 
 export function parseEnum<T extends string>(

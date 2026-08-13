@@ -40,6 +40,7 @@ import {
   rejectCustodyMaterial,
   rejectEvidenceClientStorageAuthority,
   rejectFundedAmount,
+  rejectRunwaySnapshotInjection,
   rejectWatchedImmutableIdentity,
   rejectWatcherEnablement,
   requireBoolean,
@@ -60,6 +61,7 @@ import {
   serializeInception,
   serializeReconciliation,
   serializeRunwayPlan,
+  serializeRunwaySnapshot,
   serializeSettings,
   serializeTransaction,
   serializeTransactionDetail,
@@ -1074,14 +1076,24 @@ export async function handleTreasuryRunwayPlanCommandsPost(
     const body = await readJsonObject(request);
     const organizationId = parseOrganizationIdFromUnknown(body.organization_id);
     if (typeof organizationId !== "string") return organizationId;
-    if (requireString(body.command, "command") !== "activate") {
+    const command = requireString(body.command, "command");
+    if (command !== "activate" && command !== "refresh_snapshot") {
       return adminClientError(400, "UNKNOWN_COMMAND", "Unknown runway-plan command");
     }
+    rejectRunwaySnapshotInjection(body);
     return withTreasuryAdmin({
       deps,
       organizationId,
       permission: "admin.treasury.publish",
       fn: async ({ userId, services }) => {
+        if (command === "refresh_snapshot") {
+          const snapshot = await services.breath.refreshRunwaySnapshot(
+            requireOrgContext(organizationId),
+            actor(userId),
+            requireString(body.reason, "reason"),
+          );
+          return adminSuccess({ snapshot: serializeRunwaySnapshot(snapshot) });
+        }
         const updated = await services.catalog.activateRunwayPlan(
           requireOrgContext(organizationId),
           actor(userId),
@@ -1649,8 +1661,8 @@ export async function handleTreasuryBreathPreviewGet(
     organizationId,
     permission: "admin.treasury.read",
     fn: async ({ services }) => {
-      await services.breath.getAdminPreview(requireOrgContext(organizationId));
-      return adminSuccess({ preview: null });
+      const preview = await services.breath.getAdminPreview(requireOrgContext(organizationId));
+      return adminSuccess({ preview });
     },
   });
 }

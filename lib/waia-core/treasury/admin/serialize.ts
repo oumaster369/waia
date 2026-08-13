@@ -291,6 +291,30 @@ export function serializeInception(row: TreasuryInceptionRecord): Record<string,
   };
 }
 
+export function serializeRunwaySnapshot(row: {
+  id: string;
+  organizationId: string;
+  runwayPlanId: string;
+  runwayAsOf: Date;
+  freeFundsAtAsOfMicros: bigint;
+  approvedDailyBurnMicros: bigint;
+  endsAt: Date;
+  inputDigest: string;
+  createdAt: Date;
+}): Record<string, unknown> {
+  return {
+    id: row.id,
+    organizationId: row.organizationId,
+    runwayPlanId: row.runwayPlanId,
+    runwayAsOf: iso(row.runwayAsOf),
+    freeFundsAtAsOfMicros: serializeDecimalBigint(row.freeFundsAtAsOfMicros),
+    approvedDailyBurnMicros: serializeDecimalBigint(row.approvedDailyBurnMicros),
+    endsAt: iso(row.endsAt),
+    inputDigest: row.inputDigest,
+    createdAt: iso(row.createdAt),
+  };
+}
+
 export function serializeReconciliation(
   row: TreasuryBalanceReconciliationRecord,
 ): Record<string, unknown> {

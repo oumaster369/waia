@@ -77,6 +77,11 @@ export {
   deriveActiveCommittedFundsMicros,
 } from "@/lib/waia-core/treasury/commitment-service";
 export { createTreasuryInceptionService } from "@/lib/waia-core/treasury/inception-service";
+export { getBreathPublicSnapshot } from "@/lib/waia-core/treasury/breath/public-snapshot";
+export type {
+  BreathPublicSnapshot,
+  BreathAdminPreview,
+} from "@/lib/waia-core/treasury/breath/types";
 export { createMemoryTreasuryRepository } from "@/lib/waia-core/treasury/memory-repository";
 export { createPostgresTreasuryRepository } from "@/lib/waia-core/treasury/postgres-repository";
 export {
