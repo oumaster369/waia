@@ -785,6 +785,13 @@
       "when": 1780000000149,
       "tag": "0149_treasury_transparency_ledger_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1780000000150,
+      "tag": "0150_treasury_chain_observations_lifecycle_guard",
+      "breakpoints": true
     }
   ]
 }
