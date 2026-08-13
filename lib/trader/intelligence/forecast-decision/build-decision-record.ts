@@ -3,7 +3,15 @@ import {
   costModelV1FromAuthority,
   createHtrHistoricalCostModelAuthorityV1,
 } from "@/lib/trader/execution/cost-model";
+import type { DecisionEvRange } from "@/lib/trader/intelligence/decision-economics/decision-economics-v2";
+import { buildV2WhyNotCashJson } from "@/lib/trader/intelligence/decision-economics/decision-economics-v2-service";
 import { addDecimal, multiplyDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
+import {
+  assertHypothesisConfidenceNonAuthoritative,
+  extractLegacyStrategyDiagnostics,
+  isV2CapitalAuthorityPath,
+  type CapitalAuthorityPath,
+} from "@/lib/trader/risk/authority-chain";
 import type { DecisionChain } from "@/lib/trader/intelligence/mi-core.types";
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { deriveDecisionRecordId } from "@/lib/trader/intelligence/forecast-decision/derive-forecast-decision-ids";
@@ -32,6 +40,15 @@ export type BuildDecisionRecordInput = Readonly<{
   msv: MsvEnvelope;
   signal: StrategySignal;
   costModel?: CostModelV1;
+  /** V2 capital path quarantines legacy strategy EV/sizing fields (§1.20). */
+  capitalAuthorityPath?: CapitalAuthorityPath;
+  /** Forecast-owned EV range for V2 actionability (§1.23). */
+  decisionEvRange?: DecisionEvRange;
+  /** V2 forecast/package binding for economics-owned whyNotCashJson. */
+  forecastId?: string;
+  packageContentDigestHex?: string;
+  packageGenerationDigestHex?: string;
+  scientificAdmissionReceiptDigest?: string | null;
 }>;
 
 type CostEvidenceResolution = Readonly<{
@@ -63,7 +80,21 @@ function buildCdeMsvPermissionSnapshot(msv: MsvEnvelope): string {
 function resolveCostEvidence(
   signal: StrategySignal,
   costModel?: CostModelV1,
+  capitalAuthorityPath?: CapitalAuthorityPath,
 ): CostEvidenceResolution {
+  if (isV2CapitalAuthorityPath(capitalAuthorityPath)) {
+    return {
+      state: "NOT_APPLICABLE",
+      grossExpectedReward: null,
+      expectedFees: null,
+      expectedSlippage: null,
+      expectedOtherCosts: null,
+      expectedRewardAfterCosts: null,
+      costModelId: null,
+      costModelVersion: null,
+    };
+  }
+
   if (!costModel) {
     return {
       state: "UNAVAILABLE",
@@ -142,7 +173,41 @@ function resolveDecisionClass(input: {
   decisionChain: DecisionChain;
   signal: StrategySignal;
   costEvidence: CostEvidenceResolution;
+  capitalAuthorityPath?: CapitalAuthorityPath;
+  decisionEvRange?: DecisionEvRange;
 }): DecisionClass {
+  if (isV2CapitalAuthorityPath(input.capitalAuthorityPath)) {
+    assertHypothesisConfidenceNonAuthoritative({
+      convictionValue: undefined,
+    });
+
+    const tradeEligible =
+      input.signal.tradeEligible === true ||
+      (input.signal.outcome === "SIGNAL" && input.signal.tradeEligible !== false);
+
+    if (
+      input.decisionEvRange?.decisionActionable === true &&
+      input.decisionChain.opportunityAuthorized &&
+      input.decisionChain.tradingPermission === "ALLOW_TRADING" &&
+      tradeEligible &&
+      input.signal.outcome === "SIGNAL"
+    ) {
+      return "TRADE";
+    }
+
+    if (
+      input.decisionEvRange?.decisionActionable === true &&
+      input.decisionChain.opportunityAuthorized &&
+      input.decisionChain.tradingPermission === "ALLOW_REDUCED_RISK" &&
+      tradeEligible &&
+      input.signal.outcome === "SIGNAL"
+    ) {
+      return "REDUCED_RISK";
+    }
+
+    return "NO_TRADE";
+  }
+
   if (input.costEvidence.state === "UNAVAILABLE") {
     return "NO_TRADE";
   }
@@ -182,6 +247,21 @@ function buildWhyNotCashJson(
     return null;
   }
 
+  const legacyDiagnostics = extractLegacyStrategyDiagnostics(input.signal);
+
+  if (isV2CapitalAuthorityPath(input.capitalAuthorityPath) && input.decisionEvRange) {
+    if (!input.forecastId || !input.packageContentDigestHex || !input.packageGenerationDigestHex) {
+      throw new Error("[decision-record] V2 TRADE requires forecast/package economics binding");
+    }
+    return buildV2WhyNotCashJson({
+      forecastId: input.forecastId,
+      packageContentDigestHex: input.packageContentDigestHex,
+      packageGenerationDigestHex: input.packageGenerationDigestHex,
+      evRange: input.decisionEvRange,
+      admissionReceiptDigest: input.scientificAdmissionReceiptDigest,
+    });
+  }
+
   return canonicalizeSemanticJsonString({
     active_hypothesis_type: input.decisionChain.activeHypothesisType,
     conviction_value: input.intelligenceCycleBundle.conviction.convictionValue,
@@ -190,6 +270,9 @@ function buildWhyNotCashJson(
     strategy_id: input.signal.strategyId,
     strategy_version: input.signal.strategyVersion,
     lane_influence_codes: input.msv.derived.reasonCodes,
+    legacy_strategy_diagnostics: isV2CapitalAuthorityPath(input.capitalAuthorityPath)
+      ? legacyDiagnostics
+      : undefined,
     risk_beats_cash_rationale:
       "Active hypothesis conviction and trade-eligible strategy signal justify risk over cash preservation.",
   });
@@ -226,11 +309,20 @@ export function buildDecisionRecord(
 ): TraderIntelligenceDecisionRecord {
   const envelope = input.intelligenceCycleBundle.envelope;
   const conviction = input.intelligenceCycleBundle.conviction;
-  const costEvidence = resolveCostEvidence(input.signal, input.costModel);
+  assertHypothesisConfidenceNonAuthoritative({
+    convictionValue: conviction.convictionValue,
+  });
+  const costEvidence = resolveCostEvidence(
+    input.signal,
+    input.costModel,
+    input.capitalAuthorityPath,
+  );
   const decisionClass = resolveDecisionClass({
     decisionChain: input.decisionChain,
     signal: input.signal,
     costEvidence,
+    capitalAuthorityPath: input.capitalAuthorityPath,
+    decisionEvRange: input.decisionEvRange,
   });
 
   const reasonCodes = [

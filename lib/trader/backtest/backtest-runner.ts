@@ -13,7 +13,11 @@ import {
   type HistoricalExecutionPersistencePort,
 } from "@/lib/trader/execution/historical-simulated-exchange";
 import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
-import { HTR_HISTORICAL_EXECUTION_PROFILE_V1 } from "@/lib/trader/backtest/historical-execution-profile";
+import {
+  HTR_HISTORICAL_EXECUTION_PROFILE_V1,
+  htxVolumeRawFromClosedBar,
+  requireProfileHtxVolumeAuthority,
+} from "@/lib/trader/backtest/historical-execution-profile";
 import { assertHtrHistoricalExecutionSessionConfiguration } from "@/lib/trader/research/htr-historical-execution-configuration";
 import {
   buildBacktestEvaluationExport,
@@ -732,9 +736,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         if (historicalOpenCount > 0) {
           const persistence: HistoricalExecutionPersistencePort = {
             recordSimulatedFill: (context, order, event, isFirstSlice) =>
-              input.deps.execution.recordSimulatedFill!(context, order, event, isFirstSlice).then(
-                () => undefined,
-              ),
+              input.deps.execution.recordSimulatedFill!(context, order, event, isFirstSlice),
             transitionOrderExpired: (context, order) =>
               input.deps.execution.transitionOrderExpired!(context, order),
             transitionOrderCancelled: (context, order) =>
@@ -751,6 +753,11 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
               model: input.historicalExecutionProfile.model,
               persistence,
               replayNowMs: new Date(snapshot.evaluatedAt).getTime(),
+              htxVolumeAuthorityReceipt: requireProfileHtxVolumeAuthority(
+                input.historicalExecutionProfile,
+                closedBar.symbol,
+              ),
+              htxVolumeRaw: htxVolumeRawFromClosedBar(closedBar),
               resolveLatestOrder: (orderId) =>
                 costAwareRepository.getOrderById(input.context, orderId),
               // Caller rebuilds accountState after fills/marks; avoid duplicate O(positions)

@@ -13,6 +13,7 @@ import type { FhvOfficialDatasetCursorV2 } from "@/lib/trader/market-data/fhv-of
 import { computeFhvOfficialDatasetCursorDigest } from "@/lib/trader/market-data/fhv-official-dataset-cursor";
 import type { FhvOfficialDatasetReader } from "@/lib/trader/market-data/fhv-official-dataset-reader";
 import type { FhvEpochCommitSnapshotDigests } from "@/lib/trader/observability/fhv-execution-checkpoint";
+import { computeOrderFillFrontierDigest } from "@/lib/trader/observability/fhv-execution-checkpoint";
 import { readFhvExecutionCheckpointFile } from "@/lib/trader/observability/fhv-execution-checkpoint-bundle";
 import type { InMemoryResearchBacktestSession } from "@/lib/trader/research/create-in-memory-research-backtest-session";
 import {
@@ -191,7 +192,27 @@ export function computeFhvCheckpointSnapshotDigests(input: {
     executionStateDigest: digestForFile(FHV_CHECKPOINT_MOCK_EXCHANGE),
     accountingFrontierDigest: digestForFile(FHV_CHECKPOINT_EXECUTION_FRONTIER),
     identityFrontierDigest: digestForFile(FHV_CHECKPOINT_IDENTITY_FRONTIERS),
+    orderFillFrontierDigest: resolveOrderFillFrontierDigestFromCheckpointFiles(
+      input.checkpointFiles,
+    ),
   };
+}
+
+function resolveOrderFillFrontierDigestFromCheckpointFiles(
+  checkpointFiles: Readonly<Record<string, Buffer | string>>,
+): string {
+  const content = checkpointFiles[FHV_CHECKPOINT_EXECUTION_FRONTIER];
+  if (content === undefined) {
+    return computeOrderFillFrontierDigest([]);
+  }
+  try {
+    const parsed = JSON.parse(typeof content === "string" ? content : content.toString("utf8")) as {
+      accountingFrontierState?: { consumedFillIds?: string[] };
+    };
+    return computeOrderFillFrontierDigest(parsed.accountingFrontierState?.consumedFillIds ?? []);
+  } catch {
+    return computeOrderFillFrontierDigest([]);
+  }
 }
 
 export function restoreFhvCheckpointSessionDatabase(input: {

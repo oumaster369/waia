@@ -53,20 +53,20 @@ function render(status: FhvOperatorStatusV1): string {
     lines.push(`  terminal reason: ${campaign.terminalReason}`);
   }
   lines.push(
-    `  progress ${campaign.barsProcessed.toLocaleString()}` +
+    `  progress ${campaign.barsProcessed == null ? "UNAVAILABLE" : campaign.barsProcessed.toLocaleString()}` +
       `${campaign.barsTotal ? ` / ${campaign.barsTotal.toLocaleString()}` : ""} bars` +
       `${campaign.completionPct == null ? "" : `  (${campaign.completionPct.toFixed(2)}%)`}`,
   );
   lines.push(
-    `  throughput ${campaign.throughputRolling.toFixed(1)} cps rolling` +
-      ` (${campaign.throughputCurrent.toFixed(1)} instant)` +
+    `  throughput ${campaign.throughputRolling == null ? "UNAVAILABLE" : `${campaign.throughputRolling.toFixed(1)} cps rolling`}` +
+      `${campaign.throughputCurrent == null ? "" : ` (${campaign.throughputCurrent.toFixed(1)} instant)`}` +
       `  elapsed ${formatDuration(campaign.elapsedMs)}` +
       `  eta ${campaign.etaUtc ?? "unknown"}`,
   );
   lines.push(
     `  heartbeat ${campaign.heartbeatState} (${formatDuration(campaign.heartbeatAgeMs)} ago)` +
       `  last checkpoint ${formatDuration(campaign.checkpointAgeMs)} ago` +
-      `  restarts ${campaign.processRestartCount}`,
+      `  restarts ${campaign.processRestartCount ?? "UNAVAILABLE"}`,
   );
   lines.push(
     `  host cpu ${formatPct(host.cpuPct)}  ram ${formatPct(host.ramUsedPct)}` +

@@ -49,6 +49,8 @@ export const engineReasonCodes = {
 export const killSwitchReasonCodes = {
   killSwitchActive: "RISK_KILL_SWITCH_ACTIVE",
   killSwitchUnavailable: "RISK_KILL_SWITCH_UNAVAILABLE",
+  killFoldActive: "RISK_KILL_FOLD_ACTIVE",
+  killFoldHaltActive: "RISK_KILL_FOLD_HALT_ACTIVE",
 } as const;
 
 export const riskReasonCodes = {

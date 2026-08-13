@@ -8,6 +8,7 @@ import {
   type Quote,
 } from "@/lib/trader/intelligence/types";
 import { intervalDurationMs } from "@/lib/trader/market-data/mtf/mtf-bar-aggregator";
+import { HTX_MAPPED_VOLUME_AUTHORITY } from "@/lib/trader/market-data/volume-qualification/htx-volume-authority-capital-v1";
 
 function formatDecimal(value: number): string {
   return value.toFixed(8).replace(/\.?0+$/, "") || "0";
@@ -26,16 +27,26 @@ function barTimesFromOpenSeconds(
   return { barOpenTime, barCloseTime };
 }
 
+/**
+ * Raw HTX → Bar ingestion for provenance/display.
+ *
+ * `Bar.volume` is **NON_AUTHORITATIVE_RAW_INGESTION** (DEE-526). Prefer `vol` (base-candidate)
+ * when present; never treat `amount ?? vol` as capital-authoritative base volume.
+ * Capital/capacity paths MUST call `resolveAuthoritativeHtxBaseVolumeForCapital` with a
+ * QUALIFIED receipt — mapper output alone never implies qualification.
+ */
 export function mapHtxKlinesToBars(
   internalSymbol: InstrumentId,
   klines: readonly HtxKlineRow[],
   interval: BarInterval = "1m",
 ): Bar[] {
+  void HTX_MAPPED_VOLUME_AUTHORITY;
   const sorted = [...klines].sort((left, right) => left.id - right.id);
 
   return sorted.map((row) => {
     const { barOpenTime, barCloseTime } = barTimesFromOpenSeconds(row.id, interval);
-    const volume = row.amount ?? row.vol;
+    // Prefer base-candidate `vol` for raw ingestion. Do NOT fall back amount→vol as authority.
+    const nonAuthoritativeVolume = Number.isFinite(row.vol) ? row.vol : 0;
 
     return {
       symbol: internalSymbol,
@@ -44,11 +55,16 @@ export function mapHtxKlinesToBars(
       high: formatDecimal(row.high),
       low: formatDecimal(row.low),
       close: formatDecimal(row.close),
-      volume: formatDecimal(volume),
+      volume: formatDecimal(nonAuthoritativeVolume),
       barOpenTime,
       barCloseTime,
     };
   });
+}
+
+/** Explicit non-authority marker for callers that must not confuse raw bars with QUALIFIED volume. */
+export function htxMappedVolumeAuthorityStatus(): typeof HTX_MAPPED_VOLUME_AUTHORITY {
+  return HTX_MAPPED_VOLUME_AUTHORITY;
 }
 
 export function mapHtxMergedToQuote(

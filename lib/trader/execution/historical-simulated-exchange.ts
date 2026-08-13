@@ -20,6 +20,15 @@ import {
 } from "@/lib/trader/execution/historical-execution-model.types";
 import { fillExecutionEconomicsRowId } from "@/lib/trader/execution/deterministic-execution-id";
 import {
+  assertHtxVolumeCapitalAuthorityPermitsCapacity,
+  resolveAuthoritativeHtxBaseVolumeForCapital,
+} from "@/lib/trader/market-data/volume-qualification/htx-volume-authority-capital-v1";
+import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
+import {
+  historicalExecutionInstrumentsMatch,
+  tryNormalizeSymbolForHistoricalExecution,
+} from "@/lib/trader/execution/historical-execution-symbol";
+import {
   addDecimal,
   compareDecimal,
   formatDecimal,
@@ -50,13 +59,55 @@ export class InvalidBarVolumeError extends Error {
   }
 }
 
+export class SymbolMismatchFillRejectedError extends Error {
+  readonly code = "SYMBOL_MISMATCH_FILL_REJECTED" as const;
+
+  constructor(orderSymbol: string, barSymbol: string) {
+    super(`[trader] symbol mismatch fill rejected: order=${orderSymbol} bar=${barSymbol}`);
+    this.name = "SymbolMismatchFillRejectedError";
+  }
+}
+
+/**
+ * Fail-closed invariant for a true cross-symbol fill/capacity attempt.
+ * Same-instrument compact vs slash forms (`ETHUSDT` vs `ETH/USDT`) match.
+ */
+export function assertHistoricalFillInstrumentMatch(orderSymbol: string, barSymbol: string): void {
+  if (!historicalExecutionInstrumentsMatch(orderSymbol, barSymbol)) {
+    throw new SymbolMismatchFillRejectedError(orderSymbol, barSymbol);
+  }
+}
+
+function assertVolumeAuthorityInstrumentMatchesFill(input: {
+  receipt: HtxVolumeQualificationReceiptV1;
+  orderSymbol: string;
+  barSymbol: string;
+}): void {
+  assertHistoricalFillInstrumentMatch(input.orderSymbol, input.barSymbol);
+  if (
+    !historicalExecutionInstrumentsMatch(input.receipt.symbol, input.orderSymbol) ||
+    !historicalExecutionInstrumentsMatch(input.receipt.symbol, input.barSymbol)
+  ) {
+    throw new SymbolMismatchFillRejectedError(input.receipt.symbol, input.barSymbol);
+  }
+}
+
+export class FillQuantityInvariantBreachError extends Error {
+  readonly code = "FILL_QUANTITY_INVARIANT_BREACH" as const;
+
+  constructor(orderId: string, message: string) {
+    super(`[trader] fill quantity invariant breach for order ${orderId}: ${message}`);
+    this.name = "FillQuantityInvariantBreachError";
+  }
+}
+
 export type HistoricalExecutionPersistencePort = {
   recordSimulatedFill(
     context: OrgContext,
     order: OrderRow,
     event: SimulatedFillEvent,
     isFirstSlice: boolean,
-  ): Promise<void>;
+  ): Promise<OrderRow>;
   transitionOrderExpired(context: OrgContext, order: OrderRow): Promise<OrderRow>;
   transitionOrderCancelled(context: OrgContext, order: OrderRow): Promise<OrderRow>;
   /** Finalize CANCELLED when repository row is already CANCEL_REQUESTED (breach cancel path). */
@@ -70,6 +121,16 @@ export type AdvanceHistoricalExecutionInput = {
   model: HistoricalExecutionModelV1;
   persistence: HistoricalExecutionPersistencePort;
   replayNowMs: number;
+  /**
+   * DEE-526: participation capacity requires QUALIFIED HTX volume authority.
+   * Missing/BLOCKED fails closed — no replacement capacity model.
+   */
+  htxVolumeAuthorityReceipt: HtxVolumeQualificationReceiptV1;
+  /**
+   * Raw HTX amount/vol for the closed bar. Required so capacity does not trust
+   * non-authoritative `Bar.volume` from mapper fallback.
+   */
+  htxVolumeRaw: { amount: number; vol: number };
   /** Refresh repository order row before cancel persistence (breach path may advance state). */
   resolveLatestOrder?: (orderId: string) => Promise<OrderRow | null>;
   refreshAccountState: () => Promise<AccountRiskState>;
@@ -92,6 +153,7 @@ type OpenHistoricalOrder = {
   decisionBarIndex: number;
   firstEligibleBarIndex: number;
   windowEndBarIndex: number;
+  sameSymbolEligibleBarsSeen: number;
   remainingQty: string;
   filledQty: string;
   fillSequence: number;
@@ -168,6 +230,7 @@ export function createHistoricalSimulatedExchange(
       remainingQty: order.quantity,
       filledQty: "0",
       fillSequence: 0,
+      sameSymbolEligibleBarsSeen: 0,
     });
   }
 
@@ -194,6 +257,7 @@ export function createHistoricalSimulatedExchange(
         acceptedAtTs: entry.acceptedAtTs,
         firstEligibleTs: entry.acceptedAtTs,
         windowEndBarIndex: entry.windowEndBarIndex,
+        sameSymbolEligibleBarsSeen: entry.sameSymbolEligibleBarsSeen,
         remainingQty: entry.remainingQty,
         filledQty: entry.filledQty,
         fillSequence: entry.fillSequence,
@@ -217,6 +281,7 @@ export function createHistoricalSimulatedExchange(
         decisionBarIndex: row.windowEndBarIndex - model.maxEligibleClosedBars,
         firstEligibleBarIndex: row.windowEndBarIndex - model.maxEligibleClosedBars + 1,
         windowEndBarIndex: row.windowEndBarIndex,
+        sameSymbolEligibleBarsSeen: row.sameSymbolEligibleBarsSeen ?? 0,
         remainingQty: row.remainingQty,
         filledQty: row.filledQty,
         fillSequence: row.fillSequence,
@@ -239,6 +304,10 @@ export function createHistoricalSimulatedExchange(
       };
     }
 
+    // Canonical volume field is `bar.volume` (execution model). Qualify HTX
+    // authority independently; never let an invalid bar skip this check.
+    requireFiniteNonNegativeVolume(closedBar.volume, closedBar.symbol);
+
     for (const entry of openOrders.values()) {
       if (entry.pendingCancel && entry.pendingCancel.cancelEffectiveTs <= replayNowMs) {
         scheduled.push({
@@ -260,14 +329,39 @@ export function createHistoricalSimulatedExchange(
         });
       }
 
+      const barInstrument = tryNormalizeSymbolForHistoricalExecution(closedBar.symbol);
+      const orderInstrument = tryNormalizeSymbolForHistoricalExecution(entry.order.symbol);
+      if (barInstrument === null || orderInstrument === null || barInstrument !== orderInstrument) {
+        continue;
+      }
+
+      if (barIndex <= entry.decisionBarIndex) {
+        continue;
+      }
+
+      entry.sameSymbolEligibleBarsSeen += 1;
+
       const eligible =
-        barIndex >= entry.firstEligibleBarIndex &&
-        barIndex <= entry.windowEndBarIndex &&
-        barIndex > entry.decisionBarIndex &&
+        entry.sameSymbolEligibleBarsSeen >= 1 &&
+        entry.sameSymbolEligibleBarsSeen <= model.maxEligibleClosedBars &&
         !entry.pendingCancel;
 
       if (eligible && compareDecimal(entry.remainingQty, "0") > 0) {
-        const volume = requireFiniteNonNegativeVolume(closedBar.volume, closedBar.symbol);
+        assertVolumeAuthorityInstrumentMatchesFill({
+          receipt: input.htxVolumeAuthorityReceipt,
+          orderSymbol: entry.order.symbol,
+          barSymbol: closedBar.symbol,
+        });
+        assertHtxVolumeCapitalAuthorityPermitsCapacity(input.htxVolumeAuthorityReceipt);
+        const authoritativeBase = resolveAuthoritativeHtxBaseVolumeForCapital({
+          receipt: input.htxVolumeAuthorityReceipt,
+          amount: input.htxVolumeRaw.amount,
+          vol: input.htxVolumeRaw.vol,
+        });
+        const volume = requireFiniteNonNegativeVolume(
+          authoritativeBase.toFixed(8).replace(/\.?0+$/, "") || "0",
+          closedBar.symbol,
+        );
         const rawCapacity = multiplyDecimal(volume, model.participationCapFraction);
         const roundedCapacity = floorToQuantityStep(rawCapacity, model.quantityStep);
         const candidateSlice = minDecimal(entry.remainingQty, roundedCapacity);
@@ -299,9 +393,26 @@ export function createHistoricalSimulatedExchange(
               };
               fillEvents.push(event);
               const isFirstSlice = entry.fillSequence === 0;
-              await persistence.recordSimulatedFill(context, entry.order, event, isFirstSlice);
+              const freshOrder = await persistence.recordSimulatedFill(
+                context,
+                entry.order,
+                event,
+                isFirstSlice,
+              );
+              entry.order = freshOrder;
+              if (
+                compareDecimal(
+                  freshOrder.filledQuantity,
+                  addDecimal(entry.filledQty, candidateSlice),
+                ) !== 0
+              ) {
+                throw new FillQuantityInvariantBreachError(
+                  entry.order.id,
+                  `filledQuantity=${freshOrder.filledQuantity} expected=${addDecimal(entry.filledQty, candidateSlice)}`,
+                );
+              }
               entry.fillSequence = nextSequence;
-              entry.filledQty = addDecimal(entry.filledQty, candidateSlice);
+              entry.filledQty = freshOrder.filledQuantity;
               entry.remainingQty = remainingAfter;
               if (compareDecimal(entry.remainingQty, "0") === 0) {
                 openOrders.delete(entry.order.id);
@@ -313,7 +424,7 @@ export function createHistoricalSimulatedExchange(
       }
 
       if (
-        barIndex === entry.windowEndBarIndex &&
+        entry.sameSymbolEligibleBarsSeen === model.maxEligibleClosedBars &&
         compareDecimal(entry.remainingQty, "0") > 0 &&
         !entry.pendingCancel
       ) {
@@ -323,6 +434,9 @@ export function createHistoricalSimulatedExchange(
           orderId: entry.order.id,
           fillSequence: entry.fillSequence,
           run: async () => {
+            if (!openOrders.has(entry.order.id)) {
+              return;
+            }
             const updated = await persistence.transitionOrderExpired(context, entry.order);
             entry.order = updated;
             openOrders.delete(entry.order.id);

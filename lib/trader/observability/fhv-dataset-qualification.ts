@@ -35,6 +35,11 @@ import {
   validateFhvV2DatasetReadOnly,
 } from "@/lib/trader/market-data/fhv-dataset-seal";
 import {
+  buildFhvScientificPartitionReceiptSet,
+  computeFhvScientificPartitionsDigest,
+  type FhvPartitionReceiptSymbolEvidenceV1,
+} from "@/lib/trader/observability/fhv-partition-receipt";
+import {
   assertImmutableArtifactExactMatch,
   FhvImmutableArtifactCollisionError,
 } from "@/lib/trader/observability/fhv-immutable-artifact-guard";
@@ -91,6 +96,15 @@ export type FhvDatasetQualificationReceiptV1 = Readonly<{
   partitionEvidence?: readonly FhvPartitionBarEvidenceV1[];
   symbolDigests?: Readonly<Record<(typeof FHV_OFFICIAL_SYMBOLS)[number], string>>;
   holdoutSealDigest?: string;
+  partitionReceipts?: Readonly<
+    Partial<
+      Record<
+        import("@/lib/trader/observability/fhv-partition-receipt").FhvScientificPartitionName,
+        import("@/lib/trader/observability/fhv-partition-receipt").FhvPartitionReceiptV1
+      >
+    >
+  >;
+  scientificPartitionsDigest?: string;
   failureReason?: string;
 }>;
 
@@ -102,6 +116,98 @@ export class FhvDatasetQualificationError extends Error {
     super(message);
     this.name = "FhvDatasetQualificationError";
   }
+}
+
+function buildPartitionSymbolEvidenceFromManifestEntries(input: {
+  entries: readonly {
+    partition: (typeof FHV_OFFICIAL_PARTITION_NAMES)[number];
+    symbol: (typeof FHV_OFFICIAL_SYMBOLS)[number];
+    rawSha256: string;
+    actualBarCount: number;
+    firstBarOpen: string;
+    lastBarClose: string;
+  }[];
+  targetPartition: (typeof FHV_OFFICIAL_PARTITION_NAMES)[number];
+}): FhvPartitionReceiptSymbolEvidenceV1[] {
+  return FHV_OFFICIAL_SYMBOLS.flatMap((symbol) => {
+    const entry = input.entries.find(
+      (candidate) => candidate.partition === input.targetPartition && candidate.symbol === symbol,
+    );
+    if (!entry) {
+      return [];
+    }
+    return [
+      {
+        symbol,
+        barCount: entry.actualBarCount,
+        contentDigest: entry.rawSha256,
+        firstBarOpenTime: entry.firstBarOpen,
+        lastBarCloseTime: entry.lastBarClose,
+        dataAccess: "READ" as const,
+      },
+    ];
+  });
+}
+
+function buildScientificPartitionReceipts(input: {
+  datasetContentDigest: string;
+  manifestSemanticDigest: string;
+  partitionsDigest: string;
+  holdoutSealDigest: string;
+  developmentEvidence: readonly FhvPartitionReceiptSymbolEvidenceV1[];
+  wfPredictiveEvidence: readonly FhvPartitionReceiptSymbolEvidenceV1[];
+  wfEconomicEvidence: readonly FhvPartitionReceiptSymbolEvidenceV1[];
+}) {
+  return buildFhvScientificPartitionReceiptSet({
+    datasetContentDigest: input.datasetContentDigest,
+    manifestSemanticDigest: input.manifestSemanticDigest,
+    partitionsDigest: input.partitionsDigest,
+    developmentEvidence: input.developmentEvidence,
+    wfPredictiveEvidence: input.wfPredictiveEvidence,
+    wfEconomicEvidence: input.wfEconomicEvidence,
+    holdoutSealDigest: input.holdoutSealDigest,
+  });
+}
+
+function buildPartitionReceiptsFromV1Evidence(input: {
+  partitionEvidence: readonly FhvPartitionBarEvidenceV1[];
+  datasetContentDigest: string;
+  manifestSemanticDigest: string;
+  partitionsDigest: string;
+  holdoutSealDigest: string;
+}) {
+  const toSymbolEvidence = (
+    partition: (typeof FHV_OFFICIAL_PARTITION_NAMES)[number],
+  ): FhvPartitionReceiptSymbolEvidenceV1[] =>
+    FHV_OFFICIAL_SYMBOLS.flatMap((symbol) => {
+      const entry = input.partitionEvidence.find(
+        (candidate) => candidate.partition === partition && candidate.symbol === symbol,
+      );
+      if (!entry) {
+        return [];
+      }
+      return [
+        {
+          symbol,
+          barCount: entry.barCount,
+          contentDigest: entry.fileContentDigest,
+          firstBarOpenTime: entry.firstBarOpenTime,
+          lastBarCloseTime: entry.lastBarOpenTime,
+          dataAccess: "READ" as const,
+        },
+      ];
+    });
+
+  const walkForward = toSymbolEvidence("walk-forward");
+  return buildScientificPartitionReceipts({
+    datasetContentDigest: input.datasetContentDigest,
+    manifestSemanticDigest: input.manifestSemanticDigest,
+    partitionsDigest: input.partitionsDigest,
+    holdoutSealDigest: input.holdoutSealDigest,
+    developmentEvidence: toSymbolEvidence("development"),
+    wfPredictiveEvidence: walkForward,
+    wfEconomicEvidence: walkForward,
+  });
 }
 
 function computeQualificationReceiptDigest(
@@ -496,6 +602,13 @@ function qualifyFhvOfficialDatasetV1IntegrationFixture(input: {
     ETHUSDT: finalizeBarSetDigestFromBarDigests(ethBarDigests),
   } as const;
   const holdoutSealDigest = computeStableJsonDigest(manifest.holdoutSeal);
+  const partitionReceipts = buildPartitionReceiptsFromV1Evidence({
+    partitionEvidence,
+    datasetContentDigest,
+    manifestSemanticDigest,
+    partitionsDigest,
+    holdoutSealDigest,
+  });
 
   if (manifest.barSetDigest !== datasetContentDigest) {
     throw new FhvDatasetQualificationError(
@@ -522,6 +635,8 @@ function qualifyFhvOfficialDatasetV1IntegrationFixture(input: {
     partitionEvidence,
     symbolDigests,
     holdoutSealDigest,
+    partitionReceipts,
+    scientificPartitionsDigest: computeFhvScientificPartitionsDigest(),
   };
 }
 
@@ -574,6 +689,25 @@ export function qualifyFhvOfficialV2DatasetStreaming(input: {
     assertOfficialMultiYearPartitionEntryCoverage(entry);
   }
 
+  const partitionsDigest = computeStableJsonDigest(FHV_DATASET_PARTITIONS_V1);
+  const developmentEvidence = buildPartitionSymbolEvidenceFromManifestEntries({
+    entries: manifest.partitions,
+    targetPartition: "development",
+  });
+  const walkForwardEvidence = buildPartitionSymbolEvidenceFromManifestEntries({
+    entries: manifest.partitions,
+    targetPartition: "walk-forward",
+  });
+  const partitionReceipts = buildScientificPartitionReceipts({
+    datasetContentDigest: manifest.datasetContentDigest,
+    manifestSemanticDigest: manifest.manifestSemanticDigest,
+    partitionsDigest,
+    holdoutSealDigest: manifest.holdoutSealDigest,
+    developmentEvidence,
+    wfPredictiveEvidence: walkForwardEvidence,
+    wfEconomicEvidence: walkForwardEvidence,
+  });
+
   return {
     schemaVersion: FHV_DATASET_QUALIFICATION_RECEIPT_SCHEMA_VERSION,
     classification: "DATASET_QUALIFICATION=PASS",
@@ -582,7 +716,7 @@ export function qualifyFhvOfficialV2DatasetStreaming(input: {
     manifestPath,
     datasetContentDigest: manifest.datasetContentDigest,
     manifestSemanticDigest: manifest.manifestSemanticDigest,
-    partitionsDigest: computeStableJsonDigest(FHV_DATASET_PARTITIONS_V1),
+    partitionsDigest,
     gapPolicyId: FHV_GAP_POLICY_V1.policyId,
     ...(input.releaseSha ? { releaseSha: input.releaseSha.trim().toLowerCase() } : {}),
     ...(input.releaseTag ? { releaseTag: input.releaseTag.trim() } : {}),
@@ -591,6 +725,8 @@ export function qualifyFhvOfficialV2DatasetStreaming(input: {
     partitionEvidence,
     symbolDigests: manifest.symbolDigests,
     holdoutSealDigest: manifest.holdoutSealDigest,
+    partitionReceipts,
+    scientificPartitionsDigest: computeFhvScientificPartitionsDigest(),
   };
 }
 
@@ -728,6 +864,8 @@ const DATASET_QUALIFICATION_RECEIPT_COMPARE_KEYS = [
   "partitionEvidence",
   "symbolDigests",
   "holdoutSealDigest",
+  "partitionReceipts",
+  "scientificPartitionsDigest",
 ] as const satisfies readonly (keyof FhvDatasetQualificationReceiptV1)[];
 
 export function writeFhvDatasetQualificationReceiptAtomic(input: {

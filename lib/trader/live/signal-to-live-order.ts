@@ -1,5 +1,9 @@
 import type { SubmitOrderInput } from "@/lib/trader/execution/execution-service.types";
 import type { StrategySignal, TradingPermission } from "@/lib/trader/intelligence/types";
+import {
+  assertLegacySignalMappingNotV2CapitalAuthority,
+  type CapitalAuthorityPath,
+} from "@/lib/trader/risk/authority-chain";
 import { compareDecimal, divideDecimal, minDecimal } from "@/lib/trader/risk/numeric";
 
 const BLOCKED_PERMISSIONS: readonly TradingPermission[] = [
@@ -20,6 +24,11 @@ export type MapSignalToLiveSubmitOrderInput = {
   clientOrderId?: string;
   idempotencyKey?: string;
   notionalCap?: string;
+  /**
+   * Legacy V1 live mapping only. Passing V2 fails closed — maxRisk must not satisfy
+   * a V2 capital-authority claim via this seam (DEE-521/528).
+   */
+  capitalAuthorityPath?: CapitalAuthorityPath;
 };
 
 function allocateQuantity(
@@ -41,10 +50,15 @@ function allocateQuantity(
   return quantity;
 }
 
-/** Maps an approved strategy signal to a live order request (BP-7 bounded cycle). */
+/**
+ * Maps an approved strategy signal to a live order request (BP-7 bounded cycle).
+ * LEGACY V1 sizing only (`maxRisk`). Cannot be reached as a V2 capital path.
+ */
 export function mapSignalToLiveSubmitOrder(
   input: MapSignalToLiveSubmitOrderInput,
 ): SubmitOrderInput | null {
+  assertLegacySignalMappingNotV2CapitalAuthority(input.capitalAuthorityPath);
+
   const { signal } = input;
   if (signal.outcome !== "SIGNAL" || !signal.side) {
     return null;

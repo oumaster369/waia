@@ -33,8 +33,64 @@ import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
+import {
+  qualifyHtxKlineVolumeAuthority,
+  type HtxVolumeQualificationReceiptV1,
+} from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 
 export const WP17_USER_ID = "00000000-0000-4000-8000-0000000417u1";
+
+/**
+ * DEE-526: QUALIFIED HTX volume authority for the bar's canonical instrument.
+ *
+ * Qualification uses an independently valid same-instrument sample so an
+ * intentionally invalid test bar (volume 0 / negative) still reaches exchange
+ * validation. Capacity raw fields remain the actual bar's amount/vol.
+ */
+export function makeWp17QualifiedHtxVolumeAuthority(bar: Bar): {
+  htxVolumeAuthorityReceipt: HtxVolumeQualificationReceiptV1;
+  htxVolumeRaw: { amount: number; vol: number };
+} {
+  const vol = Number(bar.volume);
+  const close = Number(bar.close);
+  const amount = vol * close;
+  const qualifiedVol = 1;
+  const qualifiedClose = Number.isFinite(close) && close > 0 ? close : 50_000;
+  const receipt = qualifyHtxKlineVolumeAuthority({
+    symbol: bar.symbol.replace("/", ""),
+    rows: [
+      {
+        id: Math.floor(Date.parse(bar.barOpenTime) / 1000),
+        open: qualifiedClose,
+        high: qualifiedClose,
+        low: qualifiedClose,
+        close: qualifiedClose,
+        amount: qualifiedVol * qualifiedClose,
+        vol: qualifiedVol,
+        count: 1,
+      },
+      {
+        // Second sample with different close so amount≠vol (avoids AMBIGUOUS_FIELDS).
+        id: Math.floor(Date.parse(bar.barOpenTime) / 1000) + 60,
+        open: qualifiedClose * 0.5,
+        high: qualifiedClose * 0.5,
+        low: qualifiedClose * 0.5,
+        close: qualifiedClose * 0.5,
+        amount: qualifiedVol * qualifiedClose * 0.5,
+        vol: qualifiedVol,
+        count: 1,
+      },
+    ],
+    qualifiedAtUtc: bar.barCloseTime,
+  });
+  if (receipt.verdict !== "HTX_VOLUME_AUTHORITY_QUALIFIED") {
+    throw new Error(`wp17 fixture volume qualification failed: ${receipt.verdict}`);
+  }
+  return {
+    htxVolumeAuthorityReceipt: receipt,
+    htxVolumeRaw: { amount, vol },
+  };
+}
 
 let wp17SessionCounter = 0;
 
@@ -201,7 +257,7 @@ export function createWp17PersistencePort(
       if (isFirstSlice) {
         const fillTarget =
           compareDecimal(event.remainingQuantityAfter, "0") === 0 ? "FILLED" : "PARTIALLY_FILLED";
-        await repo.transitionOrder(context, {
+        const transitioned = await repo.transitionOrder(context, {
           orderId: current.id,
           expectedStateVersion: current.stateVersion,
           toState: fillTarget,
@@ -209,13 +265,13 @@ export function createWp17PersistencePort(
           avgFillPrice,
         });
         await repo.recordFill(context, payload);
-        return;
+        return transitioned;
       }
 
       await repo.recordFillProgress(context, payload as RecordFillProgressInput);
+      const updated = await latestOrder(context, current.id);
       if (compareDecimal(event.remainingQuantityAfter, "0") === 0) {
-        const updated = await latestOrder(context, current.id);
-        await repo.transitionOrder(context, {
+        return repo.transitionOrder(context, {
           orderId: updated.id,
           expectedStateVersion: updated.stateVersion,
           toState: "FILLED",
@@ -223,6 +279,7 @@ export function createWp17PersistencePort(
           avgFillPrice,
         });
       }
+      return updated;
     },
     async transitionOrderExpired(context, order) {
       const current = await latestOrder(context, order.id);
@@ -270,6 +327,7 @@ export async function advanceWp17Bar(
     model: session.model,
     persistence,
     replayNowMs,
+    ...makeWp17QualifiedHtxVolumeAuthority(closedBar),
     refreshAccountState: () => refreshWp17AccountState(session.repo, session.context),
     reconcileOrder: async () => undefined,
   });

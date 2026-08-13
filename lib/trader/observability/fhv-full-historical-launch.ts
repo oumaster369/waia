@@ -53,6 +53,12 @@ import {
   type FhvExecutionPurpose,
 } from "@/lib/trader/observability/fhv-execution-purpose";
 import {
+  assertControlReplayTestOnlyAuthorityV1,
+  CONTROL_REPLAY_AUTHORITY_CLASS,
+  CONTROL_REPLAY_EXECUTION_MODE,
+  type ControlReplayAuthorityIdentity,
+} from "@/lib/trader/observability/control-replay-test-authority";
+import {
   resolveFhvAuthorizationClaimPath,
   takeoverFhvAuthorizationRunning,
 } from "@/lib/trader/observability/fhv-authorization-claim";
@@ -123,6 +129,9 @@ export type FhvFullHistoricalLaunchInput = Readonly<{
   boundedFixture?: boolean;
   maxCycles?: number;
   executionPurpose?: FhvExecutionPurpose;
+  authorityClass?: string;
+  executionMode?: string;
+  capitalEligible?: boolean;
   syntheticScaleAuthorityPath?: string;
   runDir?: string;
   /** Path to the Execution Server throughput host-qualification receipt (ADR-0025 AD-6b). */
@@ -145,7 +154,12 @@ export type FhvFullHistoricalLaunchResult = Readonly<{
   receiptPath: string;
   runDir: string;
   semanticReproDigest?: string;
-  backtest?: RunBacktestResult;
+  /**
+   * Full-historical launches return the complete `RunBacktestResult`.
+   * Control Replay plumbs the already-computed cycleCount (and optional
+   * accounting slices) without fabricating a paper-path backtest.
+   */
+  backtest?: Pick<RunBacktestResult, "cycleCount"> & Partial<RunBacktestResult>;
   /** Pure `runBacktest` wall (excludes seed/receipt I/O) for official-scale cps feasibility. */
   hotPathWallTimeMs?: number;
 }>;
@@ -560,7 +574,26 @@ export function validateFhvFullHistoricalLaunchInput(
 } {
   assertFhvRunContractIntervalsMatchPartitions();
 
-  resolveFhvLaunchExecutionPurpose(input);
+  const resolvedExecutionPurpose = resolveFhvLaunchExecutionPurpose(input);
+
+  if (input.authorityClass === CONTROL_REPLAY_AUTHORITY_CLASS) {
+    const authority: ControlReplayAuthorityIdentity = {
+      executionPurpose: "CONTROL_REPLAY",
+      executionMode: CONTROL_REPLAY_EXECUTION_MODE,
+      authorityClass: CONTROL_REPLAY_AUTHORITY_CLASS,
+      capitalEligible: (input.capitalEligible ?? false) as false,
+    };
+    assertControlReplayTestOnlyAuthorityV1({
+      surface: resolvedExecutionPurpose === "CONTROL_REPLAY" ? "CONTROL_REPLAY" : "FULL_HISTORICAL",
+      authority,
+    });
+    if (resolvedExecutionPurpose === "FULL_HISTORICAL") {
+      throw new FhvFullHistoricalLaunchError(
+        "TEST_ONLY_AUTHORITY_REJECTED",
+        "TEST_ONLY authority forbidden on FULL_HISTORICAL surface.",
+      );
+    }
+  }
 
   if (input.rehearsalMode === true) {
     throw new FhvFullHistoricalLaunchError(
@@ -677,7 +710,6 @@ export function validateFhvFullHistoricalLaunchInput(
   });
   const configurationFreeze = freezeArtifact.configurationFreeze;
 
-  const resolvedExecutionPurpose = resolveFhvLaunchExecutionPurpose(input);
   const expectedExecutionPurpose = resolvedExecutionPurpose;
   const authorizationReceipt = assertFhvAuthorizationReceiptForExecution({
     receiptPath: input.authorizationReceiptPath,

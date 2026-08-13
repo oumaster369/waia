@@ -22,6 +22,10 @@ import {
 import type { HtrAccountingCycleBridge } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import type { ReplayAccountingFrontierState } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import { advanceHistoricalExecutionOnClosedBar } from "@/lib/trader/execution/historical-simulated-exchange";
+import {
+  htxVolumeRawFromClosedBar,
+  requireProfileHtxVolumeAuthority,
+} from "@/lib/trader/backtest/historical-execution-profile";
 import { applyHistoricalExecutionEconomics } from "@/lib/trader/execution/fill-economics";
 import { historicalFillId } from "@/lib/trader/execution/deterministic-execution-id";
 import type { HistoricalExecutionPersistencePort } from "@/lib/trader/execution/historical-simulated-exchange";
@@ -77,17 +81,17 @@ export const HTR_WP22_MULTI_POSITION_INTENT_SEAM =
 export const HTR_WP22_MULTI_POSITION_MARK_MERGE_SEAM =
   "HTR_WP22_TEST_ONLY_MERGED_MARK_ATTACHMENT" as const;
 
-const wp22MarkCache: MarksJsonV1 = {};
-
-function resetHtrWp22MarkCache(): void {
-  for (const key of Object.keys(wp22MarkCache)) {
-    delete wp22MarkCache[key];
-  }
-}
-
+/**
+ * Record this closed bar's own canonical instrument mark, then attach marks for
+ * every open position from the durable per-instrument map (`lastMarkBySymbol`).
+ *
+ * A BTC bar must still deposit a BTC mark even when it is not eligible to fill
+ * an ETH order (and vice versa). Checkpoint restore copies `lastMarkBySymbol`
+ * from sealed marks, so resume must not depend on a process-global cache.
+ */
 function attachHtrWp22MergedMarkToBridge(bridge: HtrAccountingCycleBridge, closedBar: Bar): void {
   const symbol = normalizeSymbolForHistoricalExecution(closedBar.symbol);
-  wp22MarkCache[symbol] = {
+  bridge.lastMarkBySymbol[symbol] = {
     price: closedBar.close,
     barCloseTime: closedBar.barCloseTime,
   };
@@ -96,14 +100,14 @@ function attachHtrWp22MergedMarkToBridge(bridge: HtrAccountingCycleBridge, close
     if (compareDecimal(position.quantity, "0") <= 0) {
       continue;
     }
-    const mark = wp22MarkCache[openSymbol] ?? bridge.state.marks[openSymbol];
+    const mark = bridge.lastMarkBySymbol[openSymbol] ?? bridge.state.marks[openSymbol];
     if (!mark) {
       throw new Error(`HTR_WP22_MULTI_POSITION:MISSING_CACHED_MARK:${openSymbol}`);
     }
     mergedMarks[openSymbol] = mark;
   }
   if (Object.keys(mergedMarks).length === 0) {
-    mergedMarks[symbol] = wp22MarkCache[symbol]!;
+    mergedMarks[symbol] = bridge.lastMarkBySymbol[symbol]!;
   }
   bridge.state = advanceAccountingFrontier({
     state: bridge.state,
@@ -121,7 +125,6 @@ async function runHtrWp22MultiPositionReplay(input: {
   initialAccountingFrontierState?: ReplayAccountingFrontierState;
   resumeCycleStartIndex?: number;
 }): Promise<HtrWp22ReplayResult> {
-  resetHtrWp22MarkCache();
   const fillLedger: FillLedgerEntry[] = [];
   const barSource = new HtrWp22InterleavedBarReplaySource(input.bars);
   const window = {
@@ -162,12 +165,7 @@ async function runHtrWp22MultiPositionReplay(input: {
     if (closedBar) {
       const persistence: HistoricalExecutionPersistencePort = {
         recordSimulatedFill: (context, order, event, isFirstSlice) =>
-          input.session.deps.execution.recordSimulatedFill!(
-            context,
-            order,
-            event,
-            isFirstSlice,
-          ).then(() => undefined),
+          input.session.deps.execution.recordSimulatedFill!(context, order, event, isFirstSlice),
         transitionOrderExpired: (context, order) =>
           input.session.deps.execution.transitionOrderExpired!(context, order),
         transitionOrderCancelled: (context, order) =>
@@ -180,6 +178,8 @@ async function runHtrWp22MultiPositionReplay(input: {
         model: profile.model,
         persistence,
         replayNowMs: new Date(snapshot.evaluatedAt).getTime(),
+        htxVolumeAuthorityReceipt: requireProfileHtxVolumeAuthority(profile, closedBar.symbol),
+        htxVolumeRaw: htxVolumeRawFromClosedBar(closedBar),
         refreshAccountState: async () => createHtrInitialAccountRiskState(),
         reconcileOrder: async () => undefined,
       });
