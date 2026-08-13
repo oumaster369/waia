@@ -3949,17 +3949,29 @@ export const treasuryWatchedAddresses = pgTable(
   ],
 );
 
-export const treasuryWatcherCheckpoints = pgTable("treasury_watcher_checkpoints", {
-  checkpointKey: text("checkpoint_key").primaryKey(),
-  lastScannedBlock: text("last_scanned_block").notNull(),
-  lastScannedAt: timestamp("last_scanned_at", { withTimezone: true, mode: "date" }).notNull(),
-  leaseUntil: timestamp("lease_until", { withTimezone: true, mode: "date" }),
-  lastError: text("last_error"),
-  lastErrorAt: timestamp("last_error_at", { withTimezone: true, mode: "date" }),
-  cycleCount: integer("cycle_count").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-});
+export const treasuryWatcherCheckpoints = pgTable(
+  "treasury_watcher_checkpoints",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    checkpointKey: text("checkpoint_key").notNull(),
+    lastScannedBlock: text("last_scanned_block").notNull(),
+    lastScannedAt: timestamp("last_scanned_at", { withTimezone: true, mode: "date" }).notNull(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true, mode: "date" }),
+    lastError: text("last_error"),
+    lastErrorAt: timestamp("last_error_at", { withTimezone: true, mode: "date" }),
+    cycleCount: integer("cycle_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: "treasury_watcher_checkpoints_pk",
+      columns: [t.organizationId, t.checkpointKey],
+    }),
+  ],
+);
 
 export const treasuryEvidenceObjects = pgTable(
   "treasury_evidence_objects",

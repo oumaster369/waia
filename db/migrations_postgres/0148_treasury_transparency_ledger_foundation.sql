@@ -63,7 +63,8 @@ CREATE TABLE "treasury_watched_addresses" (
 );
 --> statement-breakpoint
 CREATE TABLE "treasury_watcher_checkpoints" (
-	"checkpoint_key" text PRIMARY KEY NOT NULL,
+	"organization_id" uuid NOT NULL,
+	"checkpoint_key" text NOT NULL,
 	"last_scanned_block" text NOT NULL,
 	"last_scanned_at" timestamp with time zone NOT NULL,
 	"lease_until" timestamp with time zone,
@@ -71,7 +72,8 @@ CREATE TABLE "treasury_watcher_checkpoints" (
 	"last_error_at" timestamp with time zone,
 	"cycle_count" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "treasury_watcher_checkpoints_pk" PRIMARY KEY("organization_id","checkpoint_key")
 );
 --> statement-breakpoint
 CREATE TABLE "treasury_evidence_objects" (
@@ -430,6 +432,8 @@ CREATE TABLE "treasury_balance_reconciliations" (
 ALTER TABLE "treasury_fund_buckets" ADD CONSTRAINT "treasury_fund_buckets_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "treasury_watched_addresses" ADD CONSTRAINT "treasury_watched_addresses_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "treasury_watcher_checkpoints" ADD CONSTRAINT "treasury_watcher_checkpoints_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "treasury_evidence_objects" ADD CONSTRAINT "treasury_evidence_objects_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint

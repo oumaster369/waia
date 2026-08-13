@@ -37,6 +37,11 @@ state:
     authoredAt: "2026-08-12"
     validation: AWAITING_POST_R5_DEDICATED_POSTGRES_VALIDATION
     note: "WP-1 implementation artifacts authored (schema + migrations + journal). WP-1 is NOT COMPLETE until dedicated Postgres validation on :54339 passes after R5."
+  wp1BoundedCorrection:
+    status: CHECKPOINT_ORG_SCOPE_CORRECTED
+    afterSha: d7c77cbcc26d4958b76d555dd68c6c7fe9346f9c
+    correctedAt: "2026-08-13"
+    reason: "treasury_watcher_checkpoints was keyed only by checkpoint_key; approved invariant requires all Treasury entities org-scoped. Composite PK (organization_id, checkpoint_key) + organizations FK. 0148/0149 identities unchanged. WP-1 remains NOT COMPLETE."
   humanArchitectureApproval:
     status: COMPLETE
     approvedAt: "2026-08-12"
@@ -404,13 +409,16 @@ Cross-organization references must be impossible even through privileged app bug
 
 | Field | Type | Null | Meaning |
 |-------|------|------|---------|
-| `checkpoint_key` | text PK | NO | e.g. `TRC-20:treasury` — **not** bare `TRC-20` |
+| `organization_id` | uuid FK | NO | part of PK — **not** encoded in `checkpoint_key` |
+| `checkpoint_key` | text | NO | e.g. `TRC-20:treasury` — **not** bare `TRC-20`; org-local, not globally unique |
 | `last_scanned_block` | text | NO | |
 | `last_scanned_at` | timestamptz | NO | |
 | `lease_until` | timestamptz | YES | |
 | `last_error` / `last_error_at` | text/timestamptz | YES | |
 | `cycle_count` | int | NO | default 0 |
 | `created_at` / `updated_at` | timestamptz | NO | |
+
+**Primary key:** `(organization_id, checkpoint_key)`. Database-enforced org-scoped identity. Do **not** rely on organization encoded inside `checkpoint_key`.
 
 ### 5.4 `treasury_chain_observations`
 
@@ -1079,7 +1087,7 @@ Dedicated compose `docker-compose.postgres-treasury-validate.yml`; project `waia
 
 ### WP-1 — Migration preflight + schema
 
-**AUTHORED — NOT COMPLETE.** Implementation artifacts authored on branch (`0148` foundation + `0149` RLS/immutability; `db/schema.postgres.ts` + `db/core-enums.ts`; journal idx 110–111). Allocation: after main tip `0109` and DEE-518 reservation through `0147`. Merge-order gate remains binding. **WP-1 validation = `AWAITING_POST_R5_DEDICATED_POSTGRES_VALIDATION`** on `127.0.0.1:54339`. Do not mark COMPLETE until schema/migration/RLS/same-org integrity checks pass. No watcher enablement. HD-3 remains DEFERRED (evidence metadata only).
+**AUTHORED — NOT COMPLETE.** Implementation artifacts authored on branch (`0148` foundation + `0149` RLS/immutability; `db/schema.postgres.ts` + `db/core-enums.ts`; journal idx 110–111). Bounded correction: `treasury_watcher_checkpoints` is organization-scoped via composite PK `(organization_id, checkpoint_key)`. Allocation: after main tip `0109` and DEE-518 reservation through `0147`. Merge-order gate remains binding. **WP-1 validation = `AWAITING_POST_R5_DEDICATED_POSTGRES_VALIDATION`** on `127.0.0.1:54339`. Do not mark COMPLETE until schema/migration/RLS/same-org integrity checks pass. No watcher enablement. HD-3 remains DEFERRED (evidence metadata only).
 
 ### WP-2 — Domain services
 
