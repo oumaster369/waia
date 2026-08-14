@@ -1,6 +1,7 @@
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import { TreasuryNotFoundError, TreasuryOrgScopeError } from "@/lib/waia-core/treasury/errors";
 import type { TreasuryRepository } from "@/lib/waia-core/treasury/repository.types";
+import { finalizeTransactionList } from "@/lib/waia-core/treasury/transaction-list-query";
 import type {
   TreasuryAttributionRecord,
   TreasuryCommitmentRecord,
@@ -276,19 +277,10 @@ export function createMemoryTreasuryRepository(): TreasuryRepository {
 
     async listTransactions(context, query) {
       const scoped = requireScope(context);
-      let rows = [...transactions.values()].filter(
+      const rows = [...transactions.values()].filter(
         (row) => row.organizationId === scoped.organizationId,
       );
-      if (query?.status) rows = rows.filter((row) => row.status === query.status);
-      if (query?.detailPublication) {
-        rows = rows.filter((row) => row.detailPublication === query.detailPublication);
-      }
-      if (query?.kind) rows = rows.filter((row) => row.kind === query.kind);
-      rows.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
-      if (!query) return rows.map(clone);
-      const offset = Math.max(0, query.offset ?? 0);
-      const limit = Math.min(100, Math.max(1, query.limit ?? 50));
-      return rows.slice(offset, offset + limit).map(clone);
+      return finalizeTransactionList(rows, query).map(clone);
     },
 
     async getTransactionByCanonicalTransfer(context, query) {

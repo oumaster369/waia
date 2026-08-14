@@ -78,7 +78,9 @@ export type WaiaRuntimeRouteKey =
   | "admin_treasury_inceptions"
   | "admin_treasury_reconciliations"
   | "admin_treasury_settings"
-  | "admin_treasury_breath_preview";
+  | "admin_treasury_breath_preview"
+  | "admin_treasury_overview_counts"
+  | "admin_treasury_organizations";
 
 export type WaiaRuntimeRouteOutcome =
   | "success"

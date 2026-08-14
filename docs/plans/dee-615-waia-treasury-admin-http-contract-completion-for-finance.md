@@ -21,16 +21,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: approved
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5]
+  status: integration-ready
+  currentWorkPackage: WP-5
+  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4]
+  remainingWorkPackages: [WP-5]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidationAt: "2026-08-14"
   blockedReason: null
-  nextAction: "Implement WP-1 serializers/parse; then WP-2 filters/counts, WP-3 derived reads, WP-4 org list, WP-5 PR. Do not implement DEE-607."
+  nextAction: "Open one PR to main; Linear In Review; wait for required CI; Human squash-merge only. Do not implement DEE-607."
 provenance:
   createdFrom: chat
   gapRegistry: null

@@ -43,6 +43,7 @@ export function createWp4Deps(input: {
   services?: TreasuryAdminServices;
   runtimeKind?: "sqlite" | "postgres";
   authorizedOrgs?: string[];
+  listOrganizations?: { id: string; name: string; kind: string }[];
 }): TreasuryAdminHandlerDeps & { authorizedOrgsSeen: string[] } {
   const authorizedOrgsSeen: string[] = [];
   const permissions = input.permissions ?? "all";
@@ -64,6 +65,9 @@ export function createWp4Deps(input: {
       if (permissions === "none") return false;
       return permissions.includes(permission);
     },
+    testListOrganizations: input.listOrganizations
+      ? async () => input.listOrganizations ?? []
+      : undefined,
   };
 }
 

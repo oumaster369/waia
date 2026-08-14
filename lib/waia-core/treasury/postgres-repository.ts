@@ -13,6 +13,7 @@ import {
 } from "@/lib/waia-core/scope/org-context";
 import { TreasuryNotFoundError, TreasuryValidationError } from "@/lib/waia-core/treasury/errors";
 import type { TreasuryRepository } from "@/lib/waia-core/treasury/repository.types";
+import { finalizeTransactionList } from "@/lib/waia-core/treasury/transaction-list-query";
 import type {
   TreasuryAttributionRecord,
   TreasuryCommitmentRecord,
@@ -427,21 +428,11 @@ export function createPostgresTreasuryRepository(ex: PgExecutor): TreasuryReposi
 
     async listTransactions(context, query) {
       const org = scoped(context);
-      const filters = [orgScopedWhere(pgSchema.treasuryTransactions.organizationId, org)];
-      if (query?.status) filters.push(eq(pgSchema.treasuryTransactions.status, query.status));
-      if (query?.detailPublication) {
-        filters.push(eq(pgSchema.treasuryTransactions.detailPublication, query.detailPublication));
-      }
-      if (query?.kind) filters.push(eq(pgSchema.treasuryTransactions.kind, query.kind));
       const rows = await ex
         .select()
         .from(pgSchema.treasuryTransactions)
-        .where(and(...filters));
-      const sorted = rows.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
-      if (!query) return sorted.map(mapTx);
-      const offset = Math.max(0, query.offset ?? 0);
-      const limit = Math.min(100, Math.max(1, query.limit ?? 50));
-      return sorted.slice(offset, offset + limit).map(mapTx);
+        .where(orgScopedWhere(pgSchema.treasuryTransactions.organizationId, org));
+      return finalizeTransactionList(rows.map(mapTx), query);
     },
 
     async getTransactionByCanonicalTransfer(context, query) {
