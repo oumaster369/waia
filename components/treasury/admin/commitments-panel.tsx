@@ -15,19 +15,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WaiaSurface } from "@/components/waia/waia-surface";
-import { treasuryGet, treasuryJson } from "@/lib/treasury-admin/api";
+import { missingOrganizationResult, treasuryGet, treasuryJson } from "@/lib/treasury-admin/api";
 import {
   commitmentActionAffordances,
   isActiveCommittedStatus,
   type CommitmentCommand,
 } from "@/lib/treasury-admin/commitment-actions";
-import type { TreasuryCommitmentDto } from "@/lib/treasury-admin/types";
+import { useTreasuryQuery } from "@/lib/treasury-admin/use-treasury-query";
+import type { TreasuryApiResult, TreasuryCommitmentDto } from "@/lib/treasury-admin/types";
 
 function CommitmentsInner() {
   const { organizationId } = useFinanceOrg();
-  const [rows, setRows] = React.useState<TreasuryCommitmentDto[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<{ code?: string; message: string } | null>(null);
   const [amount, setAmount] = React.useState("");
   const [purpose, setPurpose] = React.useState("");
   const [budgetId, setBudgetId] = React.useState("");
@@ -38,28 +36,27 @@ function CommitmentsInner() {
   );
   const [createOpen, setCreateOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  const [commandError, setCommandError] = React.useState<{
+    code?: string;
+    message: string;
+  } | null>(null);
 
-  const load = React.useCallback(async () => {
-    if (!organizationId) return;
-    setLoading(true);
-    const result = await treasuryGet<{ commitments: TreasuryCommitmentDto[] }>(
+  const query = React.useCallback((): Promise<
+    TreasuryApiResult<{ commitments: TreasuryCommitmentDto[] }>
+  > => {
+    if (!organizationId) return Promise.resolve(missingOrganizationResult());
+    return treasuryGet<{ commitments: TreasuryCommitmentDto[] }>(
       "/api/admin/treasury/commitments",
       organizationId,
     );
-    if (!result.ok) {
-      setError({ code: result.code, message: result.message });
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    setError(null);
-    setRows(result.data.commitments ?? []);
-    setLoading(false);
   }, [organizationId]);
-
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  const { data, error, loading, reload } = useTreasuryQuery(
+    Boolean(organizationId),
+    `commitments:${organizationId ?? ""}`,
+    query,
+  );
+  const rows = data?.commitments ?? [];
+  const displayError = commandError ?? error;
 
   async function create() {
     if (!organizationId) return;
@@ -75,11 +72,12 @@ function CommitmentsInner() {
     setBusy(false);
     setCreateOpen(false);
     if (!result.ok) {
-      setError({ code: result.code, message: result.message });
+      setCommandError({ code: result.code, message: result.message });
       return;
     }
+    setCommandError(null);
     setReason("");
-    await load();
+    reload();
   }
 
   async function runCommand() {
@@ -96,17 +94,25 @@ function CommitmentsInner() {
     setBusy(false);
     setPending(null);
     if (!result.ok) {
-      setError({ code: result.code, message: result.message });
+      setCommandError({ code: result.code, message: result.message });
       return;
     }
+    setCommandError(null);
     setReason("");
-    await load();
+    reload();
   }
 
   if (loading) return <LoadingState />;
-  if (error)
+  if (displayError)
     return (
-      <UnavailableState code={error.code} message={error.message} onRetry={() => void load()} />
+      <UnavailableState
+        code={displayError.code}
+        message={displayError.message}
+        onRetry={() => {
+          setCommandError(null);
+          reload();
+        }}
+      />
     );
 
   return (

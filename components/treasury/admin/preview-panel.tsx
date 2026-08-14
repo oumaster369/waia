@@ -8,43 +8,31 @@ import { useFinanceOrg } from "@/components/treasury/admin/finance-org-context";
 import { FactValue } from "@/components/treasury/admin/fact-value";
 import { LoadingState, UnavailableState } from "@/components/treasury/admin/unavailable-state";
 import { WaiaSurface } from "@/components/waia/waia-surface";
-import { treasuryGet } from "@/lib/treasury-admin/api";
+import { missingOrganizationResult, treasuryGet } from "@/lib/treasury-admin/api";
 import { operatorPreviewDiagnostics, publicPreviewFields } from "@/lib/treasury-admin/preview";
-import type { BreathAdminPreviewDto } from "@/lib/treasury-admin/types";
+import { useTreasuryQuery } from "@/lib/treasury-admin/use-treasury-query";
+import type { BreathAdminPreviewDto, TreasuryApiResult } from "@/lib/treasury-admin/types";
 
 function PreviewInner() {
   const { organizationId } = useFinanceOrg();
-  const [preview, setPreview] = React.useState<BreathAdminPreviewDto | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<{ code?: string; message: string } | null>(null);
-
-  const load = React.useCallback(async () => {
-    if (!organizationId) return;
-    setLoading(true);
-    const result = await treasuryGet<{ preview: BreathAdminPreviewDto }>(
+  const query = React.useCallback((): Promise<
+    TreasuryApiResult<{ preview: BreathAdminPreviewDto }>
+  > => {
+    if (!organizationId) return Promise.resolve(missingOrganizationResult());
+    return treasuryGet<{ preview: BreathAdminPreviewDto }>(
       "/api/admin/treasury/breath-preview",
       organizationId,
     );
-    if (!result.ok) {
-      setError({ code: result.code, message: result.message });
-      setPreview(null);
-      setLoading(false);
-      return;
-    }
-    setError(null);
-    setPreview(result.data.preview);
-    setLoading(false);
   }, [organizationId]);
-
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  const { data, error, loading, reload } = useTreasuryQuery(
+    Boolean(organizationId),
+    `preview:${organizationId ?? ""}`,
+    query,
+  );
+  const preview = data?.preview ?? null;
 
   if (loading) return <LoadingState />;
-  if (error)
-    return (
-      <UnavailableState code={error.code} message={error.message} onRetry={() => void load()} />
-    );
+  if (error) return <UnavailableState code={error.code} message={error.message} onRetry={reload} />;
   if (!preview) return <UnavailableState message="Preview is not available." />;
 
   const publicView = publicPreviewFields(preview);
@@ -53,7 +41,7 @@ function PreviewInner() {
   return (
     <div className="space-y-4" data-testid="finance-preview">
       <WaiaSurface variant="elevated" className="space-y-3 p-4" data-testid="public-view">
-        <p className="text-xs uppercase tracking-wide">Public view</p>
+        <p className="text-xs tracking-wide uppercase">Public view</p>
         <h2 className="text-lg font-medium">Breath of WAIA preview</h2>
         <p className="text-sm">Publication status: {publicView.status}</p>
         <p className="text-sm">Stage: {publicView.stageLabel ?? "Pending"}</p>
@@ -142,7 +130,7 @@ function PreviewInner() {
       </WaiaSurface>
 
       <WaiaSurface variant="raised" className="space-y-3 p-4" data-testid="operator-diagnostics">
-        <p className="text-xs uppercase tracking-wide">Operator diagnostics</p>
+        <p className="text-xs tracking-wide uppercase">Operator diagnostics</p>
         <p className="text-sm">These fields are not the public Breath view.</p>
         <ul className="list-disc pl-5 text-xs">
           {diagnostics.pendingReasons.map((reason) => (

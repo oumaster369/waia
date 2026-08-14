@@ -15,8 +15,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { financeHref } from "@/lib/treasury-admin/org";
-import { treasuryGet } from "@/lib/treasury-admin/api";
-import type { TreasuryTransactionDto } from "@/lib/treasury-admin/types";
+import { missingOrganizationResult, treasuryGet } from "@/lib/treasury-admin/api";
+import { useTreasuryQuery } from "@/lib/treasury-admin/use-treasury-query";
+import type { TreasuryApiResult, TreasuryTransactionDto } from "@/lib/treasury-admin/types";
 
 const FILTER_KEYS = [
   "status",
@@ -44,37 +45,29 @@ function TransactionTableInner() {
   );
   const [applied, setApplied] = React.useState(filters);
   const [offset, setOffset] = React.useState(0);
-  const [rows, setRows] = React.useState<TreasuryTransactionDto[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<{ code?: string; message: string } | null>(null);
   const limit = 50;
 
-  const load = React.useCallback(async () => {
-    if (!organizationId) return;
-    setLoading(true);
-    setError(null);
+  const query = React.useCallback((): Promise<
+    TreasuryApiResult<{ transactions: TreasuryTransactionDto[] }>
+  > => {
+    if (!organizationId) return Promise.resolve(missingOrganizationResult());
     const extra: Record<string, string> = { limit: String(limit), offset: String(offset) };
     for (const key of FILTER_KEYS) {
       if (applied[key]) extra[key] = applied[key];
     }
-    const result = await treasuryGet<{ transactions: TreasuryTransactionDto[] }>(
+    return treasuryGet<{ transactions: TreasuryTransactionDto[] }>(
       "/api/admin/treasury/transactions",
       organizationId,
       extra,
     );
-    if (!result.ok) {
-      setError({ code: result.code, message: result.message });
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    setRows(result.data.transactions ?? []);
-    setLoading(false);
   }, [applied, offset, organizationId]);
 
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  const { data, error, loading, reload } = useTreasuryQuery(
+    Boolean(organizationId),
+    `tx-list:${organizationId ?? ""}:${offset}:${JSON.stringify(applied)}`,
+    query,
+  );
+  const rows = data?.transactions ?? [];
 
   return (
     <div className="space-y-4" data-testid="finance-transaction-table">
@@ -117,7 +110,7 @@ function TransactionTableInner() {
       </p>
       {loading ? <LoadingState /> : null}
       {error ? (
-        <UnavailableState code={error.code} message={error.message} onRetry={() => void load()} />
+        <UnavailableState code={error.code} message={error.message} onRetry={reload} />
       ) : null}
       {!loading && !error && rows.length === 0 ? (
         <EmptyState label="No transactions match these server filters." />

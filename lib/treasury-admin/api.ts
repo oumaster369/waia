@@ -1,4 +1,4 @@
-import type { TreasuryApiResult } from "@/lib/treasury-admin/types";
+import type { TreasuryApiError, TreasuryApiResult } from "@/lib/treasury-admin/types";
 
 function errorFromBody(
   status: number,
@@ -48,6 +48,15 @@ export function requireOrganizationId(organizationId: string | null | undefined)
     throw new Error("organization_id is required");
   }
   return id;
+}
+
+export function missingOrganizationResult(): TreasuryApiError {
+  return {
+    ok: false,
+    status: 400,
+    code: "ORGANIZATION_ID_REQUIRED",
+    message: "organization_id is required.",
+  };
 }
 
 export function withOrganizationQuery(

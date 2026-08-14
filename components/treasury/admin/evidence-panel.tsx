@@ -11,38 +11,33 @@ import {
 } from "@/components/treasury/admin/unavailable-state";
 import { Button } from "@/components/ui/button";
 import { WaiaSurface } from "@/components/waia/waia-surface";
-import { treasuryGet, withOrganizationQuery } from "@/lib/treasury-admin/api";
+import {
+  missingOrganizationResult,
+  treasuryGet,
+  withOrganizationQuery,
+} from "@/lib/treasury-admin/api";
 import { backendUnavailableLabel } from "@/lib/treasury-admin/facts";
-import type { TreasuryEvidenceObjectDto } from "@/lib/treasury-admin/types";
+import { useTreasuryQuery } from "@/lib/treasury-admin/use-treasury-query";
+import type { TreasuryApiResult, TreasuryEvidenceObjectDto } from "@/lib/treasury-admin/types";
 
 function EvidenceInner() {
   const { organizationId } = useFinanceOrg();
-  const [rows, setRows] = React.useState<TreasuryEvidenceObjectDto[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<{ code?: string; message: string } | null>(null);
   const [contentError, setContentError] = React.useState<string | null>(null);
-
-  const load = React.useCallback(async () => {
-    if (!organizationId) return;
-    setLoading(true);
-    const result = await treasuryGet<{ evidence: TreasuryEvidenceObjectDto[] }>(
+  const query = React.useCallback((): Promise<
+    TreasuryApiResult<{ evidence: TreasuryEvidenceObjectDto[] }>
+  > => {
+    if (!organizationId) return Promise.resolve(missingOrganizationResult());
+    return treasuryGet<{ evidence: TreasuryEvidenceObjectDto[] }>(
       "/api/admin/treasury/evidence",
       organizationId,
     );
-    if (!result.ok) {
-      setError({ code: result.code, message: result.message });
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    setError(null);
-    setRows(result.data.evidence ?? []);
-    setLoading(false);
   }, [organizationId]);
-
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  const { data, error, loading, reload } = useTreasuryQuery(
+    Boolean(organizationId),
+    `evidence:${organizationId ?? ""}`,
+    query,
+  );
+  const rows = data?.evidence ?? [];
 
   async function openContent(id: string) {
     if (!organizationId) return;
@@ -65,10 +60,7 @@ function EvidenceInner() {
   }
 
   if (loading) return <LoadingState />;
-  if (error)
-    return (
-      <UnavailableState code={error.code} message={error.message} onRetry={() => void load()} />
-    );
+  if (error) return <UnavailableState code={error.code} message={error.message} onRetry={reload} />;
 
   return (
     <div className="space-y-4" data-testid="finance-evidence">
@@ -93,7 +85,7 @@ function EvidenceInner() {
             <dt>Byte size</dt>
             <dd className="font-mono">{row.byteSize ?? "None"}</dd>
             <dt>Digest</dt>
-            <dd className="break-all font-mono">{row.sha256 ?? "None"}</dd>
+            <dd className="font-mono break-all">{row.sha256 ?? "None"}</dd>
             <dt>Source</dt>
             <dd>{row.source ?? "None"}</dd>
             <dt>Storage backend</dt>

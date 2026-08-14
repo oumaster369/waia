@@ -23,8 +23,12 @@ async function installFinanceFixtures(page: Page) {
   await page.route("**/api/admin/treasury/**", async (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
-    const org = url.searchParams.get("organization_id");
     const pathname = url.pathname;
+    let org = url.searchParams.get("organization_id");
+    if (!org && (method === "POST" || method === "PATCH")) {
+      const body = route.request().postDataJSON() as { organization_id?: string } | null;
+      org = body?.organization_id ?? null;
+    }
 
     if (pathname.endsWith("/organizations") && method === "GET") {
       await json(route, {

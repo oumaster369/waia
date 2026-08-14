@@ -6,7 +6,11 @@ import { PublicationPill } from "@/components/treasury/admin/status-pills";
 import { FactValue } from "@/components/treasury/admin/fact-value";
 import { UnavailableState } from "@/components/treasury/admin/unavailable-state";
 import { publicPreviewFields, operatorPreviewDiagnostics } from "@/lib/treasury-admin/preview";
-import { requireOrganizationId, withOrganizationQuery } from "@/lib/treasury-admin/api";
+import {
+  requireOrganizationId,
+  withOrganizationQuery,
+  missingOrganizationResult,
+} from "@/lib/treasury-admin/api";
 import { classifyMoneyFact } from "@/lib/treasury-admin/facts";
 import type { BreathAdminPreviewDto } from "@/lib/treasury-admin/types";
 
@@ -90,5 +94,7 @@ describe("treasury-admin organization scoping", () => {
     expect(withOrganizationQuery("/api/admin/treasury/transactions", "org-a")).toContain(
       "organization_id=org-a",
     );
+    expect(missingOrganizationResult().ok).toBe(false);
+    expect(missingOrganizationResult().code).toBe("ORGANIZATION_ID_REQUIRED");
   });
 });

@@ -12,7 +12,7 @@ import { LoadingState, UnavailableState } from "@/components/treasury/admin/unav
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WaiaSurface } from "@/components/waia/waia-surface";
-import { treasuryGet, treasuryJson } from "@/lib/treasury-admin/api";
+import { missingOrganizationResult, treasuryGet, treasuryJson } from "@/lib/treasury-admin/api";
 import { financeHref } from "@/lib/treasury-admin/org";
 import { backendUnavailableLabel } from "@/lib/treasury-admin/facts";
 import {
@@ -22,10 +22,39 @@ import {
   type TreasuryTxCommand,
 } from "@/lib/treasury-admin/tx-actions";
 import { canExposeDetailPublicAction } from "@/lib/treasury-admin/publication";
+import { useTreasuryQuery } from "@/lib/treasury-admin/use-treasury-query";
 import type {
+  TreasuryApiResult,
   TreasuryEvidenceObjectDto,
   TreasuryTransactionDetailDto,
 } from "@/lib/treasury-admin/types";
+
+type ReviewBundle = {
+  detail: TreasuryTransactionDetailDto;
+  evidence: TreasuryEvidenceObjectDto[];
+  evidenceError: string | null;
+};
+
+function patchFromDetail(detail: TreasuryTransactionDetailDto) {
+  const tx = detail.transaction;
+  return {
+    kind: tx.kind ?? "",
+    direction: tx.direction,
+    fundBucketCode: tx.fundBucketCode,
+    purpose: tx.purpose ?? "",
+    category: tx.category ?? "",
+    projectModule: tx.projectModule ?? "",
+    milestoneStage: tx.milestoneStage ?? "",
+    budgetId: tx.budgetId ?? "",
+    fundingNeedId: tx.fundingNeedId ?? "",
+    accountingAmountMicros: tx.accountingAmountMicros ?? "",
+    description: tx.description ?? "",
+    internalNotes: tx.internalNotes ?? "",
+    publicDescription: tx.publicDescription ?? "",
+    counterpartyDisplay: tx.counterpartyDisplay ?? "",
+    publishCounterparty: tx.publishCounterparty,
+  };
+}
 
 function Zone({
   title,
@@ -52,11 +81,60 @@ function Zone({
 
 function TransactionReviewInner({ transactionId }: { transactionId: string }) {
   const { organizationId } = useFinanceOrg();
-  const [detail, setDetail] = React.useState<TreasuryTransactionDetailDto | null>(null);
-  const [evidence, setEvidence] = React.useState<TreasuryEvidenceObjectDto[]>([]);
-  const [evidenceError, setEvidenceError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<{ code?: string; message: string } | null>(null);
+  const query = React.useCallback(async (): Promise<TreasuryApiResult<ReviewBundle>> => {
+    if (!organizationId) return missingOrganizationResult();
+    const result = await treasuryGet<TreasuryTransactionDetailDto>(
+      `/api/admin/treasury/transactions/${transactionId}`,
+      organizationId,
+      { id: transactionId },
+    );
+    if (!result.ok) return result;
+    const evidenceResult = await treasuryGet<{ evidence: TreasuryEvidenceObjectDto[] }>(
+      "/api/admin/treasury/evidence",
+      organizationId,
+    );
+    return {
+      ok: true,
+      data: {
+        detail: result.data,
+        evidence: evidenceResult.ok ? (evidenceResult.data.evidence ?? []) : [],
+        evidenceError: evidenceResult.ok ? null : evidenceResult.code,
+      },
+    };
+  }, [organizationId, transactionId]);
+  const { data, error, loading, reload } = useTreasuryQuery(
+    Boolean(organizationId),
+    `tx-review:${organizationId ?? ""}:${transactionId}`,
+    query,
+  );
+
+  if (loading) return <LoadingState label="Loading transaction…" />;
+  if (error) return <UnavailableState code={error.code} message={error.message} onRetry={reload} />;
+  if (!data || !organizationId) return <UnavailableState message="Transaction was not found." />;
+
+  const tx = data.detail.transaction;
+  return (
+    <TransactionReviewLoaded
+      key={`${tx.id}:${tx.status}:${tx.detailPublication}:${tx.updatedAt ?? ""}`}
+      organizationId={organizationId}
+      bundle={data}
+      onReload={reload}
+    />
+  );
+}
+
+function TransactionReviewLoaded({
+  organizationId,
+  bundle,
+  onReload,
+}: {
+  organizationId: string;
+  bundle: ReviewBundle;
+  onReload: () => void;
+}) {
+  const detail = bundle.detail;
+  const evidence = bundle.evidence;
+  const evidenceError = bundle.evidenceError;
   const [reason, setReason] = React.useState("");
   const [pending, setPending] = React.useState<TreasuryTxCommand | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -66,77 +144,10 @@ function TransactionReviewInner({ transactionId }: { transactionId: string }) {
   const [returnStatus, setReturnStatus] = React.useState("NEEDS_REVIEW");
   const [publicationTarget, setPublicationTarget] = React.useState("DETAIL_PUBLIC");
   const [supersededBy, setSupersededBy] = React.useState("");
-  const [patch, setPatch] = React.useState({
-    kind: "",
-    direction: "",
-    fundBucketCode: "",
-    purpose: "",
-    category: "",
-    projectModule: "",
-    milestoneStage: "",
-    budgetId: "",
-    fundingNeedId: "",
-    accountingAmountMicros: "",
-    description: "",
-    internalNotes: "",
-    publicDescription: "",
-    counterpartyDisplay: "",
-    publishCounterparty: false,
-  });
-
-  const load = React.useCallback(async () => {
-    if (!organizationId) return;
-    setLoading(true);
-    setError(null);
-    const result = await treasuryGet<TreasuryTransactionDetailDto>(
-      `/api/admin/treasury/transactions/${transactionId}`,
-      organizationId,
-      { id: transactionId },
-    );
-    if (!result.ok) {
-      setError({ code: result.code, message: result.message });
-      setDetail(null);
-      setLoading(false);
-      return;
-    }
-    const tx = result.data.transaction;
-    setDetail(result.data);
-    setPatch({
-      kind: tx.kind ?? "",
-      direction: tx.direction,
-      fundBucketCode: tx.fundBucketCode,
-      purpose: tx.purpose ?? "",
-      category: tx.category ?? "",
-      projectModule: tx.projectModule ?? "",
-      milestoneStage: tx.milestoneStage ?? "",
-      budgetId: tx.budgetId ?? "",
-      fundingNeedId: tx.fundingNeedId ?? "",
-      accountingAmountMicros: tx.accountingAmountMicros ?? "",
-      description: tx.description ?? "",
-      internalNotes: tx.internalNotes ?? "",
-      publicDescription: tx.publicDescription ?? "",
-      counterpartyDisplay: tx.counterpartyDisplay ?? "",
-      publishCounterparty: tx.publishCounterparty,
-    });
-    const evidenceResult = await treasuryGet<{ evidence: TreasuryEvidenceObjectDto[] }>(
-      "/api/admin/treasury/evidence",
-      organizationId,
-    );
-    if (!evidenceResult.ok) {
-      setEvidenceError(evidenceResult.code);
-    } else {
-      setEvidence(evidenceResult.data.evidence ?? []);
-      setEvidenceError(null);
-    }
-    setLoading(false);
-  }, [organizationId, transactionId]);
-
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  const [patch, setPatch] = React.useState(() => patchFromDetail(detail));
 
   async function runCommand(command: TreasuryTxCommand) {
-    if (!organizationId || !detail) return;
+    if (!detail) return;
     setBusy(true);
     setCommandError(null);
     const body: Record<string, unknown> = {
@@ -146,7 +157,7 @@ function TransactionReviewInner({ transactionId }: { transactionId: string }) {
       reason,
     };
     if (command === "classify") {
-      body.patch = {
+      const classifyPatch: Record<string, unknown> = {
         kind: patch.kind || null,
         direction: patch.direction,
         fundBucketCode: patch.fundBucketCode,
@@ -156,13 +167,16 @@ function TransactionReviewInner({ transactionId }: { transactionId: string }) {
         milestoneStage: patch.milestoneStage || null,
         budgetId: patch.budgetId || null,
         fundingNeedId: patch.fundingNeedId || null,
-        accountingAmountMicros: patch.accountingAmountMicros || null,
         description: patch.description || null,
         internalNotes: patch.internalNotes || null,
         publicDescription: patch.publicDescription || null,
         counterpartyDisplay: patch.counterpartyDisplay || null,
         publishCounterparty: patch.publishCounterparty,
       };
+      if (patch.accountingAmountMicros) {
+        classifyPatch.accountingAmountMicros = patch.accountingAmountMicros;
+      }
+      body.patch = classifyPatch;
     }
     if (command === "confirm_duplicate") body.duplicate_of_transaction_id = duplicateOf;
     if (command === "return_from_reconciliation") body.to_status = returnStatus;
@@ -182,15 +196,8 @@ function TransactionReviewInner({ transactionId }: { transactionId: string }) {
       return;
     }
     setReason("");
-    await load();
+    onReload();
   }
-
-  if (loading) return <LoadingState label="Loading transaction…" />;
-  if (error)
-    return (
-      <UnavailableState code={error.code} message={error.message} onRetry={() => void load()} />
-    );
-  if (!detail) return <UnavailableState message="Transaction was not found." />;
 
   const tx = detail.transaction;
   const actions = transactionActionAffordances(tx.status);
@@ -249,6 +256,9 @@ function TransactionReviewInner({ transactionId }: { transactionId: string }) {
             Finalized financial truth is locked. Use a correcting MANUAL draft and link_correction.
           </p>
         ) : null}
+        <p className="text-sm">
+          Current accounting amount: <MoneyText micros={tx.accountingAmountMicros} />
+        </p>
         <div className="grid gap-3 md:grid-cols-2">
           {(
             [

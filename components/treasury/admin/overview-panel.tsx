@@ -10,13 +10,21 @@ import { ConfirmDialog } from "@/components/treasury/admin/confirm-dialog";
 import { LoadingState, UnavailableState } from "@/components/treasury/admin/unavailable-state";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { Button } from "@/components/ui/button";
-import { treasuryGet, treasuryJson } from "@/lib/treasury-admin/api";
+import { missingOrganizationResult, treasuryGet, treasuryJson } from "@/lib/treasury-admin/api";
 import { WATCHER_DARK_COPY } from "@/lib/treasury-admin/facts";
+import { useTreasuryQuery } from "@/lib/treasury-admin/use-treasury-query";
 import type {
   BreathAdminPreviewDto,
+  TreasuryApiResult,
   TreasuryOverviewCountsDto,
   TreasurySettingsDto,
 } from "@/lib/treasury-admin/types";
+
+type OverviewBundle = {
+  preview: BreathAdminPreviewDto;
+  counts: TreasuryOverviewCountsDto;
+  settings: TreasurySettingsDto | null;
+};
 
 function PreviewCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -29,19 +37,16 @@ function PreviewCard({ title, children }: { title: string; children: React.React
 
 function OverviewInner() {
   const { organizationId } = useFinanceOrg();
-  const [preview, setPreview] = React.useState<BreathAdminPreviewDto | null>(null);
-  const [counts, setCounts] = React.useState<TreasuryOverviewCountsDto | null>(null);
-  const [settings, setSettings] = React.useState<TreasurySettingsDto | null>(null);
-  const [error, setError] = React.useState<{ code?: string; message: string } | null>(null);
-  const [loading, setLoading] = React.useState(true);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [reason, setReason] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [commandError, setCommandError] = React.useState<{
+    code?: string;
+    message: string;
+  } | null>(null);
 
-  const load = React.useCallback(async () => {
-    if (!organizationId) return;
-    setLoading(true);
-    setError(null);
+  const query = React.useCallback(async (): Promise<TreasuryApiResult<OverviewBundle>> => {
+    if (!organizationId) return missingOrganizationResult();
     const [previewResult, countsResult, settingsResult] = await Promise.all([
       treasuryGet<{ preview: BreathAdminPreviewDto }>(
         "/api/admin/treasury/breath-preview",
@@ -53,27 +58,27 @@ function OverviewInner() {
         organizationId,
       ),
     ]);
-    if (!previewResult.ok) {
-      setError({ code: previewResult.code, message: previewResult.message });
-      setPreview(null);
-      setCounts(null);
-      setLoading(false);
-      return;
-    }
-    if (!countsResult.ok) {
-      setError({ code: countsResult.code, message: countsResult.message });
-      setLoading(false);
-      return;
-    }
-    setPreview(previewResult.data.preview);
-    setCounts(countsResult.data);
-    setSettings(settingsResult.ok ? (settingsResult.data.settings ?? null) : null);
-    setLoading(false);
+    if (!previewResult.ok) return previewResult;
+    if (!countsResult.ok) return countsResult;
+    return {
+      ok: true,
+      data: {
+        preview: previewResult.data.preview,
+        counts: countsResult.data,
+        settings: settingsResult.ok ? (settingsResult.data.settings ?? null) : null,
+      },
+    };
   }, [organizationId]);
 
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  const { data, error, loading, reload } = useTreasuryQuery(
+    Boolean(organizationId),
+    `overview:${organizationId ?? ""}`,
+    query,
+  );
+  const preview = data?.preview ?? null;
+  const counts = data?.counts ?? null;
+  const settings = data?.settings ?? null;
+  const displayError = commandError ?? error;
 
   async function confirmBreathToggle() {
     if (!organizationId || !settings) return;
@@ -91,16 +96,24 @@ function OverviewInner() {
     setConfirmOpen(false);
     setReason("");
     if (!result.ok) {
-      setError({ code: result.code, message: result.message });
+      setCommandError({ code: result.code, message: result.message });
       return;
     }
-    await load();
+    setCommandError(null);
+    reload();
   }
 
   if (loading) return <LoadingState label="Loading overview…" />;
-  if (error)
+  if (displayError)
     return (
-      <UnavailableState code={error.code} message={error.message} onRetry={() => void load()} />
+      <UnavailableState
+        code={displayError.code}
+        message={displayError.message}
+        onRetry={() => {
+          setCommandError(null);
+          reload();
+        }}
+      />
     );
   if (!preview || !counts) return <UnavailableState message="Overview facts are not available." />;
 
@@ -134,6 +147,15 @@ function OverviewInner() {
             <dt>Allocated / active commitments</dt>
             <dd>
               <MoneyText micros={resources?.allocated ?? null} />
+            </dd>
+            <dt>Needed next (server)</dt>
+            <dd>
+              <FactValue
+                kind={resources?.neededNext ? "value" : "pending"}
+                reason="No funding-gap total"
+              >
+                <MoneyText micros={resources?.neededNext ?? null} />
+              </FactValue>
             </dd>
             <dt>Current free funds</dt>
             <dd>
