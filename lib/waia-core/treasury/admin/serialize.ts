@@ -5,6 +5,10 @@ import type {
 } from "@/lib/waia-core/treasury/types";
 import type { TreasuryChainObservationRecord } from "@/lib/waia-core/treasury/watcher/types";
 import type {
+  TreasuryBudgetDerivedTotals,
+  TreasuryFundingNeedDerivedTotals,
+} from "@/lib/waia-core/treasury/admin/derived-reads";
+import type {
   TreasuryAdminAttribution,
   TreasuryBudgetRecord,
   TreasuryEvidenceObjectRecord,
@@ -33,6 +37,7 @@ export function serializeTransaction(tx: TreasuryTransactionRecord): Record<stri
     provenance: tx.provenance,
     direction: tx.direction,
     kind: tx.kind,
+    fundBucketCode: tx.fundBucketCode,
     nativeAmountAtomic: serializeDecimalBigint(tx.nativeAmountAtomic),
     nativeDecimals: tx.nativeDecimals,
     nativeAsset: tx.nativeAsset,
@@ -43,8 +48,14 @@ export function serializeTransaction(tx: TreasuryTransactionRecord): Record<stri
     counterpartyIsInternal: tx.counterpartyIsInternal,
     occurredAt: iso(tx.occurredAt),
     purpose: tx.purpose,
+    category: tx.category,
+    counterpartyDisplay: tx.counterpartyDisplay,
+    publishCounterparty: tx.publishCounterparty,
+    projectModule: tx.projectModule,
+    milestoneStage: tx.milestoneStage,
     budgetId: tx.budgetId,
     fundingNeedId: tx.fundingNeedId,
+    description: tx.description,
     publicDescription: tx.publicDescription,
     internalNotes: tx.internalNotes,
     txHash: tx.txHash,
@@ -54,9 +65,12 @@ export function serializeTransaction(tx: TreasuryTransactionRecord): Record<stri
     canonicalTransferIndex: tx.canonicalTransferIndex,
     correctsTransactionId: tx.correctsTransactionId,
     duplicateOfTransactionId: tx.duplicateOfTransactionId,
+    detailSupersededById: tx.detailSupersededById,
     ledgerInceptionId: tx.ledgerInceptionId,
     verifiedAt: iso(tx.verifiedAt),
+    verifiedByUserId: tx.verifiedByUserId,
     detailPublishedAt: iso(tx.detailPublishedAt),
+    detailPublishedByUserId: tx.detailPublishedByUserId,
     createdByUserId: tx.createdByUserId,
     createdAt: iso(tx.createdAt),
     updatedAt: iso(tx.updatedAt),
@@ -145,6 +159,21 @@ export function serializeCommitment(row: TreasuryCommitmentRecord): Record<strin
     purpose: row.purpose,
     budgetId: row.budgetId,
     detailPublication: row.detailPublication,
+    counterpartyDisplay: row.counterpartyDisplay,
+    publishCounterparty: row.publishCounterparty,
+    expectedAt: row.expectedAt,
+    effectiveFrom: iso(row.effectiveFrom),
+    evidenceObjectId: row.evidenceObjectId,
+    createdByUserId: row.createdByUserId,
+    approvedByUserId: row.approvedByUserId,
+    approvedAt: iso(row.approvedAt),
+    releasedByUserId: row.releasedByUserId,
+    releasedAt: iso(row.releasedAt),
+    fulfilledByUserId: row.fulfilledByUserId,
+    fulfilledAt: iso(row.fulfilledAt),
+    cancelledByUserId: row.cancelledByUserId,
+    cancelledAt: iso(row.cancelledAt),
+    fulfillsTransactionId: row.fulfillsTransactionId,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   };
@@ -169,7 +198,10 @@ export function serializeWatchedAddress(
   };
 }
 
-export function serializeBudget(row: TreasuryBudgetRecord): Record<string, unknown> {
+export function serializeBudget(
+  row: TreasuryBudgetRecord,
+  derived?: TreasuryBudgetDerivedTotals,
+): Record<string, unknown> {
   return {
     id: row.id,
     organizationId: row.organizationId,
@@ -184,15 +216,27 @@ export function serializeBudget(row: TreasuryBudgetRecord): Record<string, unkno
     notes: row.notes,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
+    ...(derived
+      ? {
+          funded: serializeDecimalBigint(derived.funded),
+          committed: serializeDecimalBigint(derived.committed),
+          spent: serializeDecimalBigint(derived.spent),
+          remaining: serializeDecimalBigint(derived.remaining),
+        }
+      : {}),
   };
 }
 
-export function serializeFundingNeed(row: TreasuryFundingNeedRecord): Record<string, unknown> {
+export function serializeFundingNeed(
+  row: TreasuryFundingNeedRecord,
+  derived?: TreasuryFundingNeedDerivedTotals,
+): Record<string, unknown> {
   return {
     id: row.id,
     organizationId: row.organizationId,
     title: row.title,
     publicExplanation: row.publicExplanation,
+    targetStage: row.targetStage,
     requiredAmountMicros: serializeDecimalBigint(row.requiredAmountMicros),
     currency: row.currency,
     status: row.status,
@@ -200,6 +244,12 @@ export function serializeFundingNeed(row: TreasuryFundingNeedRecord): Record<str
     budgetId: row.budgetId,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
+    ...(derived
+      ? {
+          funded: serializeDecimalBigint(derived.funded),
+          remaining: serializeDecimalBigint(derived.remaining),
+        }
+      : {}),
   };
 }
 

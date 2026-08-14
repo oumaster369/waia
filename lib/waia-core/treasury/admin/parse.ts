@@ -3,6 +3,7 @@ import {
   treasuryEvidenceKindEnum,
   treasuryEvidenceVisibilityEnum,
   treasuryFundingNeedStatusEnum,
+  treasuryProvenanceEnum,
   treasuryTxDirectionEnum,
   treasuryTxKindEnum,
   treasuryTxStatusEnum,
@@ -13,6 +14,7 @@ import {
   parseDecimalBigint,
   parsePositiveDecimalBigint,
 } from "@/lib/waia-core/treasury/admin/money";
+import type { TreasuryTransactionListQuery } from "@/lib/waia-core/treasury/transaction-list-query";
 import type { TreasurySemanticPatch } from "@/lib/waia-core/treasury/types";
 
 const WATCHER_ENABLE_KEYS = [
@@ -225,6 +227,82 @@ export function parseDetailPublication(value: unknown) {
   return parseEnum(value, treasuryDetailPublicationEnum, "detail_publication");
 }
 
+export function parseProvenance(value: unknown) {
+  return parseEnum(value, treasuryProvenanceEnum, "provenance");
+}
+
+function queryValue(search: URLSearchParams, snake: string, camel: string): string | null {
+  const snakeValue = search.get(snake);
+  if (snakeValue !== null) return snakeValue;
+  return search.get(camel);
+}
+
+export function parseTreasuryTransactionListQuery(
+  search: URLSearchParams,
+): TreasuryTransactionListQuery {
+  const query: TreasuryTransactionListQuery = {
+    limit: parseBoundedLimit(queryValue(search, "limit", "limit"), 50, 100),
+    offset: parseBoundedOffset(queryValue(search, "offset", "offset")),
+  };
+
+  const statusRaw = queryValue(search, "status", "status");
+  const needsReconciliation = queryValue(search, "needs_reconciliation", "needsReconciliation");
+  if (needsReconciliation !== null && needsReconciliation !== "") {
+    if (needsReconciliation !== "true" && needsReconciliation !== "false") {
+      throw new TreasuryValidationError(
+        "INVALID_BODY",
+        "needs_reconciliation must be true or false",
+      );
+    }
+  }
+  if (statusRaw) query.status = parseTxStatus(statusRaw);
+  if (needsReconciliation === "true") {
+    if (query.status !== undefined && query.status !== "RECONCILIATION_REQUIRED") {
+      throw new TreasuryValidationError(
+        "INVALID_BODY",
+        "needs_reconciliation=true maps only to status=RECONCILIATION_REQUIRED",
+      );
+    }
+    query.status = "RECONCILIATION_REQUIRED";
+  }
+
+  const detailPublication = queryValue(search, "detail_publication", "detailPublication");
+  if (detailPublication) query.detailPublication = parseDetailPublication(detailPublication);
+  const kind = queryValue(search, "kind", "kind");
+  if (kind) query.kind = parseTxKind(kind);
+  const direction = queryValue(search, "direction", "direction");
+  if (direction) query.direction = parseTxDirection(direction);
+  const network = queryValue(search, "network", "canonicalNetwork");
+  if (network) query.canonicalNetwork = requireString(network, "network");
+  const tokenContract = queryValue(search, "token_contract", "canonicalTokenContract");
+  if (tokenContract) query.canonicalTokenContract = requireString(tokenContract, "token_contract");
+  const projectModule = queryValue(search, "project_module", "projectModule");
+  if (projectModule) query.projectModule = requireString(projectModule, "project_module");
+  const budgetId = queryValue(search, "budget_id", "budgetId");
+  if (budgetId) query.budgetId = requireString(budgetId, "budget_id");
+  const category = queryValue(search, "category", "category");
+  if (category) query.category = requireString(category, "category");
+  const provenance = queryValue(search, "provenance", "provenance");
+  if (provenance) query.provenance = parseProvenance(provenance);
+  const nativeAsset = queryValue(search, "asset", "nativeAsset");
+  if (nativeAsset) query.nativeAsset = requireString(nativeAsset, "asset");
+  const occurredAtFrom = queryValue(search, "occurred_at_from", "occurredAtFrom");
+  if (occurredAtFrom) query.occurredAtFrom = requireIsoDate(occurredAtFrom, "occurred_at_from");
+  const occurredAtTo = queryValue(search, "occurred_at_to", "occurredAtTo");
+  if (occurredAtTo) query.occurredAtTo = requireIsoDate(occurredAtTo, "occurred_at_to");
+  if (
+    query.occurredAtFrom &&
+    query.occurredAtTo &&
+    query.occurredAtFrom.getTime() > query.occurredAtTo.getTime()
+  ) {
+    throw new TreasuryValidationError(
+      "INVALID_BODY",
+      "occurred_at_from must be less than or equal to occurred_at_to",
+    );
+  }
+  return query;
+}
+
 export function parseBudgetStatus(value: unknown) {
   return parseEnum(value, treasuryBudgetStatusEnum, "status");
 }
@@ -294,6 +372,21 @@ export function parseSemanticPatch(raw: unknown): TreasurySemanticPatch {
       patch.counterparty_display ?? patch.counterpartyDisplay,
       "counterparty_display",
     );
+  }
+  if (patch.project_module !== undefined || patch.projectModule !== undefined) {
+    out.projectModule = optionalString(
+      patch.project_module ?? patch.projectModule,
+      "project_module",
+    );
+  }
+  if (patch.milestone_stage !== undefined || patch.milestoneStage !== undefined) {
+    out.milestoneStage = optionalString(
+      patch.milestone_stage ?? patch.milestoneStage,
+      "milestone_stage",
+    );
+  }
+  if (patch.description !== undefined) {
+    out.description = optionalString(patch.description, "description");
   }
   if (patch.corrects_transaction_id !== undefined || patch.correctsTransactionId !== undefined) {
     const id = patch.corrects_transaction_id ?? patch.correctsTransactionId;

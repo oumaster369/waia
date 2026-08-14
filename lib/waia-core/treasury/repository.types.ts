@@ -1,4 +1,5 @@
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import type { TreasuryTransactionListQuery } from "@/lib/waia-core/treasury/transaction-list-query";
 import type {
   TreasuryAttributionRecord,
   TreasuryCommitmentRecord,
@@ -93,13 +94,7 @@ export type TreasuryRepository = {
   insertAttribution(record: TreasuryAttributionRecord): Promise<void>;
   listTransactions(
     context: OrgContext,
-    query?: {
-      status?: TreasuryTransactionRecord["status"];
-      detailPublication?: TreasuryTransactionRecord["detailPublication"];
-      kind?: TreasuryTransactionRecord["kind"];
-      limit?: number;
-      offset?: number;
-    },
+    query?: TreasuryTransactionListQuery,
   ): Promise<TreasuryTransactionRecord[]>;
   getTransactionByCanonicalTransfer(
     context: OrgContext,

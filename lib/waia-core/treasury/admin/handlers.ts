@@ -5,11 +5,14 @@ if (process.env.VITEST !== "true") {
   require("server-only");
 }
 
+import { organizations } from "@/db/schema";
+import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import {
   adminClientError,
   adminSuccess,
   adminSuccessBinary,
+  assertAdminPermission,
   authorizeAdminRoute,
   parseOrganizationId,
   parseOrganizationIdFromUnknown,
@@ -17,6 +20,7 @@ import {
   type AdminRouteHandlerResult,
 } from "@/lib/waia-core/permissions/admin-http";
 import type { TreasuryAdminPermission } from "@/lib/waia-core/permissions/resolve";
+import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import {
   mapTreasuryHttpError,
@@ -25,16 +29,15 @@ import {
 import {
   asObject,
   parseBoundedLimit,
-  parseBoundedOffset,
   parseBudgetStatus,
   parseDetailPublication,
   parseEvidenceKind,
   parseEvidenceVisibility,
   parseFundingNeedStatus,
   parseSemanticPatch,
+  parseTreasuryTransactionListQuery,
   parseTxDirection,
   parseTxKind,
-  parseTxStatus,
   parsePositiveDecimalBigint,
   rejectBudgetAggregates,
   rejectCustodyMaterial,
@@ -49,6 +52,10 @@ import {
   requireString,
   optionalString,
 } from "@/lib/waia-core/treasury/admin/parse";
+import {
+  deriveBudgetAdminTotals,
+  deriveFundingNeedAdminTotals,
+} from "@/lib/waia-core/treasury/admin/derived-reads";
 import { TreasuryValidationError } from "@/lib/waia-core/treasury/errors";
 import {
   serializeAttribution,
@@ -71,6 +78,7 @@ import {
   openProductionTreasuryAdmin,
   type TreasuryAdminServices,
 } from "@/lib/waia-core/treasury/admin/services";
+import { countTreasuryOverview } from "@/lib/waia-core/treasury/transaction-list-query";
 import type { TreasuryActorContext } from "@/lib/waia-core/treasury/types";
 import {
   TREASURY_EVIDENCE_DEFAULT_SOURCE,
@@ -90,6 +98,7 @@ export type TreasuryAdminHandlerDeps = AdminRouteHandlerDeps & {
     organizationId: string;
     permission: string;
   }) => boolean;
+  testListOrganizations?: () => Promise<{ id: string; name: string; kind: string }[]>;
 };
 
 function actor(userId: string): TreasuryActorContext {
@@ -164,6 +173,21 @@ function orgFromQuery(request: Request): string | AdminRouteHandlerResult {
   return parseOrganizationId(new URL(request.url));
 }
 
+async function loadTreasuryAdminFacts(services: TreasuryAdminServices, organizationId: string) {
+  const context = requireOrgContext(organizationId);
+  const [transactions, commitments] = await Promise.all([
+    services.domain.repository.listTransactions(context),
+    services.domain.repository.listCommitments(context),
+  ]);
+  return { transactions, commitments };
+}
+
+function compactDefined<T extends Record<string, unknown>>(patch: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(patch).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
+}
+
 export async function handleTreasuryTransactionsGet(
   request: Request,
   deps: TreasuryAdminHandlerDeps,
@@ -199,20 +223,91 @@ export async function handleTreasuryTransactionsGet(
           }),
         );
       }
-      const rows = await services.domain.repository.listTransactions(context, {
-        status: url.searchParams.get("status")
-          ? parseTxStatus(url.searchParams.get("status"))
-          : undefined,
-        detailPublication: url.searchParams.get("detail_publication")
-          ? parseDetailPublication(url.searchParams.get("detail_publication"))
-          : undefined,
-        kind: url.searchParams.get("kind") ? parseTxKind(url.searchParams.get("kind")) : undefined,
-        limit: parseBoundedLimit(url.searchParams.get("limit"), 50, 100),
-        offset: parseBoundedOffset(url.searchParams.get("offset")),
-      });
+      const rows = await services.domain.repository.listTransactions(
+        context,
+        parseTreasuryTransactionListQuery(url.searchParams),
+      );
       return adminSuccess({ transactions: rows.map(serializeTransaction) });
     },
   });
+}
+
+export async function handleTreasuryOverviewCountsGet(
+  request: Request,
+  deps: TreasuryAdminHandlerDeps,
+): Promise<AdminRouteHandlerResult> {
+  const organizationId = orgFromQuery(request);
+  if (typeof organizationId !== "string") return organizationId;
+  return withTreasuryAdmin({
+    deps,
+    organizationId,
+    permission: "admin.treasury.read",
+    fn: async ({ services }) => {
+      const rows = await services.domain.repository.listTransactions(
+        requireOrgContext(organizationId),
+      );
+      return adminSuccess(countTreasuryOverview(rows));
+    },
+  });
+}
+
+export async function handleTreasuryOrganizationsGet(
+  _request: Request,
+  deps: TreasuryAdminHandlerDeps,
+): Promise<AdminRouteHandlerResult> {
+  const userId = await deps.getUserId();
+  if (!userId) {
+    return adminClientError(401, "UNAUTHORIZED", "Sign in required.");
+  }
+
+  let runtime: WaiaRuntimeDb | undefined;
+  try {
+    runtime = await deps.getRuntimeDb();
+    const contextOrgId = personalOrganizationIdFromUserId(userId);
+    if (deps.testPermissionGate) {
+      const allowed = deps.testPermissionGate({
+        userId,
+        organizationId: contextOrgId,
+        permission: "admin.treasury.read",
+      });
+      if (!allowed) {
+        return adminClientError(403, "FORBIDDEN", "Admin permission required.");
+      }
+    } else {
+      const check = await assertAdminPermission(
+        runtime,
+        userId,
+        contextOrgId,
+        "admin.treasury.read",
+      );
+      if (!check.allowed) {
+        return adminClientError(403, "FORBIDDEN", "Admin permission required.");
+      }
+    }
+
+    if (deps.testListOrganizations) {
+      return adminSuccess({ organizations: await deps.testListOrganizations() });
+    }
+
+    if (runtime.kind === "sqlite") {
+      const rows = runtime.db
+        .select({ id: organizations.id, name: organizations.name, kind: organizations.kind })
+        .from(organizations)
+        .all();
+      return adminSuccess({ organizations: rows }, "sqlite");
+    }
+
+    const rows = await runtime.db
+      .select({
+        id: pgSchema.organizations.id,
+        name: pgSchema.organizations.name,
+        kind: pgSchema.organizations.kind,
+      })
+      .from(pgSchema.organizations);
+    return adminSuccess({ organizations: rows }, "postgres");
+  } finally {
+    await deps.disposeRuntimeDb(runtime);
+  }
 }
 
 export async function handleTreasuryTransactionByIdGet(
@@ -706,8 +801,15 @@ export async function handleTreasuryBudgetsGet(
     organizationId,
     permission: "admin.treasury.read",
     fn: async ({ services }) => {
-      const rows = await services.catalog.listBudgets(requireOrgContext(organizationId));
-      return adminSuccess({ budgets: rows.map(serializeBudget) });
+      const [rows, facts] = await Promise.all([
+        services.catalog.listBudgets(requireOrgContext(organizationId)),
+        loadTreasuryAdminFacts(services, organizationId),
+      ]);
+      return adminSuccess({
+        budgets: rows.map((row) =>
+          serializeBudget(row, deriveBudgetAdminTotals(row, facts.transactions, facts.commitments)),
+        ),
+      });
     },
   });
 }
@@ -745,7 +847,13 @@ export async function handleTreasuryBudgetsPost(
             reason: requireString(body.reason, "reason"),
           },
         );
-        return adminSuccess({ budget: serializeBudget(created) });
+        const facts = await loadTreasuryAdminFacts(services, organizationId);
+        return adminSuccess({
+          budget: serializeBudget(
+            created,
+            deriveBudgetAdminTotals(created, facts.transactions, facts.commitments),
+          ),
+        });
       },
     });
   } catch (err) {
@@ -775,7 +883,7 @@ export async function handleTreasuryBudgetsPatch(
           requireOrgContext(organizationId),
           actor(userId),
           requireString(body.id, "id"),
-          {
+          compactDefined({
             title: body.title !== undefined ? requireString(body.title, "title") : undefined,
             notes: body.notes !== undefined ? optionalString(body.notes, "notes") : undefined,
             status: body.status !== undefined ? parseBudgetStatus(body.status) : undefined,
@@ -789,11 +897,17 @@ export async function handleTreasuryBudgetsPatch(
             isPublic: publish
               ? requireBoolean(body.is_public ?? body.isPublic, "is_public")
               : undefined,
-          },
+          }),
           requireString(body.reason, "reason"),
           publish ? "publish" : "mutate",
         );
-        return adminSuccess({ budget: serializeBudget(updated) });
+        const facts = await loadTreasuryAdminFacts(services, organizationId);
+        return adminSuccess({
+          budget: serializeBudget(
+            updated,
+            deriveBudgetAdminTotals(updated, facts.transactions, facts.commitments),
+          ),
+        });
       },
     });
   } catch (err) {
@@ -815,8 +929,15 @@ export async function handleTreasuryFundingNeedsGet(
     organizationId,
     permission: "admin.treasury.read",
     fn: async ({ services }) => {
-      const rows = await services.catalog.listFundingNeeds(requireOrgContext(organizationId));
-      return adminSuccess({ fundingNeeds: rows.map(serializeFundingNeed) });
+      const [rows, facts] = await Promise.all([
+        services.catalog.listFundingNeeds(requireOrgContext(organizationId)),
+        loadTreasuryAdminFacts(services, organizationId),
+      ]);
+      return adminSuccess({
+        fundingNeeds: rows.map((row) =>
+          serializeFundingNeed(row, deriveFundingNeedAdminTotals(row, facts.transactions)),
+        ),
+      });
     },
   });
 }
@@ -856,7 +977,13 @@ export async function handleTreasuryFundingNeedsPost(
             reason: requireString(body.reason, "reason"),
           },
         );
-        return adminSuccess({ fundingNeed: serializeFundingNeed(created) });
+        const facts = await loadTreasuryAdminFacts(services, organizationId);
+        return adminSuccess({
+          fundingNeed: serializeFundingNeed(
+            created,
+            deriveFundingNeedAdminTotals(created, facts.transactions),
+          ),
+        });
       },
     });
   } catch (err) {
@@ -886,7 +1013,7 @@ export async function handleTreasuryFundingNeedsPatch(
           requireOrgContext(organizationId),
           actor(userId),
           requireString(body.id, "id"),
-          {
+          compactDefined({
             title: body.title !== undefined ? requireString(body.title, "title") : undefined,
             status: body.status !== undefined ? parseFundingNeedStatus(body.status) : undefined,
             requiredAmountMicros:
@@ -903,11 +1030,17 @@ export async function handleTreasuryFundingNeedsPatch(
               body.budget_id !== undefined || body.budgetId !== undefined
                 ? optionalString(body.budget_id ?? body.budgetId, "budget_id")
                 : undefined,
-          },
+          }),
           requireString(body.reason, "reason"),
           publish ? "publish" : "mutate",
         );
-        return adminSuccess({ fundingNeed: serializeFundingNeed(updated) });
+        const facts = await loadTreasuryAdminFacts(services, organizationId);
+        return adminSuccess({
+          fundingNeed: serializeFundingNeed(
+            updated,
+            deriveFundingNeedAdminTotals(updated, facts.transactions),
+          ),
+        });
       },
     });
   } catch (err) {
