@@ -21,16 +21,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: approved
-  currentWorkPackage: WP1
-  completedWorkPackages: [WP0]
-  remainingWorkPackages: [WP1, WP2, WP3, WP4, WP5, WP6, WP7, WP8, WP9, WP10]
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  status: in-review
+  currentWorkPackage: WP10
+  completedWorkPackages: [WP0, WP1, WP2, WP3, WP4, WP5, WP6, WP7, WP8, WP9]
+  remainingWorkPackages: [WP10]
+  prNumber: 461
+  prUrl: https://github.com/oumaster369/waia/pull/461
+  lastValidatedGitSha: c62561e5b2fc8e21b33a7019a8c4cc8e1b7be635
+  lastValidationAt: "2026-08-14"
   blockedReason: null
-  nextAction: "Implement Treasury-local /finance frontend against merged DEE-615 contracts; one PR to main; Human squash-merge only."
+  nextAction: "Watch required GitHub CI on PR #461 HEAD; Human squash-merge only when required checks are green."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -102,19 +102,39 @@ Wire format is canonical decimal integer strings. Format USD with BigInt micros 
 - Selected `organization_id` is explicit (URL). Never silent personal/Org-0/hardcoded/first-org
 - Browser never receives privileged tokens
 
+## Acceptance
+
+- Operator can take a newly detected transaction from `NEEDS_REVIEW` to a classified, evidenced, and intentionally published record.
+- Operator can enter a manual transaction with provenance and audit.
+- Budgets, funding needs, and commitments are managed against server-derived totals; React does not recompute free funds.
+- Public preview consumes `GET /api/admin/treasury/breath-preview` exactly; publication does not mutate accounting status; `DETAIL_PUBLIC` is offered only when `status === VERIFIED`.
+- Unauthenticated visitors redirect to `/`; authenticated users without `admin.treasury.read` see a fail-closed English 403.
+- Product UI copy is English. Exact money display uses canonical integer strings and BigInt micros.
+- Local PR readiness: `pnpm lint`, `pnpm typecheck`, `pnpm build`, targeted unit tests, `pnpm test:e2e`. Authoritative full unit suite runs in PR CI.
+
 ## Work packages
 
-- **WP0** — Human authorization + canonical plan promotion (this file)
-- **WP1** — `/finance` shell, auth, org context, nav
-- **WP2** — overview from breath-preview + overview-counts + recon; watcher DARK
-- **WP3** — transaction list + review zones A–E
-- **WP4** — command/correction workflow; FSM affordances; VERIFIED-only DETAIL_PUBLIC
-- **WP5** — manual transaction
-- **WP6** — budgets, funding needs, commitments
-- **WP7** — evidence metadata/viewer + R2-unavailable UX
-- **WP8** — publication preview + high-impact publication controls
-- **WP9** — targeted frontend tests + Playwright
-- **WP10** — local readiness, one PR to `main`, Linear In Review, required CI green
+### WP-0 — Human authorization + canonical plan promotion (this file)
+
+### WP-1 — `/finance` shell, auth, org context, nav
+
+### WP-2 — overview from breath-preview + overview-counts + recon; watcher DARK
+
+### WP-3 — transaction list + review zones A–E
+
+### WP-4 — command/correction workflow; FSM affordances; VERIFIED-only DETAIL_PUBLIC
+
+### WP-5 — manual transaction
+
+### WP-6 — budgets, funding needs, commitments
+
+### WP-7 — evidence metadata/viewer + R2-unavailable UX
+
+### WP-8 — publication preview + high-impact publication controls
+
+### WP-9 — targeted frontend tests + Playwright
+
+### WP-10 — local readiness, one PR to `main`, Linear In Review, required CI green
 
 ## E2E note
 
