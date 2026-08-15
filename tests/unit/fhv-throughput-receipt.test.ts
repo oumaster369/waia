@@ -54,6 +54,8 @@ function evidence(overrides: Record<string, unknown> = {}) {
     progressBytesSha256: "a".repeat(64),
     growthLawReportDigest: "b".repeat(64),
     checkoutHeadSha: "release-sha-under-test",
+    producerHeadSha: "release-sha-under-test",
+    producerBindingDigest: "c".repeat(64),
     ...overrides,
   };
 }
@@ -259,6 +261,48 @@ describe("FHV throughput host-qualification receipt", () => {
         }),
       ),
     ).toBe("FHV_THROUGHPUT_BOUNDEDNESS_NOT_BOUNDED");
+  });
+
+  it("fails closed when sampler contract fields are weakened", () => {
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            samplerContract: { ...samplerContract(), maxIntervalMs: 60_000 },
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_SAMPLER_MAX_INTERVAL_WEAKENED");
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            samplerContract: { ...samplerContract(), appliedIntervalMs: 1_000 },
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_SAMPLER_APPLIED_INTERVAL_OUT_OF_RANGE");
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            samplerContract: { ...samplerContract(), minCheckpointSamples: 1 },
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_SAMPLER_MIN_CHECKPOINT_WEAKENED");
+  });
+
+  it("fails closed when producer HEAD does not match the claimed release", () => {
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            evidence: evidence({ producerHeadSha: "a".repeat(40) }),
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_RECEIPT_PRODUCER_RELEASE_MISMATCH");
   });
 });
 

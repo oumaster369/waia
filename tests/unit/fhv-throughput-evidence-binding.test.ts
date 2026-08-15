@@ -19,6 +19,12 @@ import {
 } from "@/lib/trader/observability/fhv-throughput-receipt";
 import { FhvT4CheckoutIdentityError } from "@/lib/trader/observability/fhv-t4-release-checkout-identity";
 import type { FhvFullHistoricalProgressV1 } from "@/lib/trader/observability/fhv-full-historical-progress";
+import {
+  createFhvThroughputProducerBinding,
+  FhvThroughputProducerBindingError,
+  stampFhvProgressProducerIdentity,
+} from "@/lib/trader/observability/fhv-throughput-producer-binding";
+import { buildFhvThroughputQualifierSamplerContract } from "@/lib/trader/observability/fhv-throughput-sampler";
 
 const roots: string[] = [];
 
@@ -81,6 +87,7 @@ function progressLine(
 function writeProgress(
   runDir: string,
   points: readonly (readonly [number, number, number?])[],
+  stamp?: ReturnType<typeof stampFhvProgressProducerIdentity>,
 ): void {
   mkdirSync(runDir, { recursive: true });
   const lines = points.map(([cycle, bytes, hotCps], index) =>
@@ -93,10 +100,28 @@ function writeProgress(
         lastCheckpointDurationMs: index === 0 ? null : 5,
         lastCheckpointBytes: index === 0 ? null : bytes,
         checkpointCount: index === 0 ? 0 : Math.max(1, Math.floor(cycle / 1_000)),
+        ...(stamp ?? {}),
       }),
     ),
   );
   writeFileSync(join(runDir, FHV_FULL_HISTORICAL_PROGRESS_JSONL_FILENAME), `${lines.join("\n")}\n`);
+}
+
+function writeOfficialProgress(
+  repo: string,
+  runDir: string,
+  points: readonly (readonly [number, number, number?])[],
+  env: Readonly<Record<string, string | undefined>> = { FHV_IDHPS_PROGRESS_INTERVAL_MS: "0" },
+) {
+  mkdirSync(runDir, { recursive: true });
+  const binding = createFhvThroughputProducerBinding({
+    runDir,
+    repoPath: repo,
+    runId: "fhv-qual-test-run",
+    samplerContract: buildFhvThroughputQualifierSamplerContract(env),
+  });
+  writeProgress(runDir, points, stampFhvProgressProducerIdentity(binding));
+  return binding;
 }
 
 function boundedPoints(): (readonly [number, number, number?])[] {
@@ -116,7 +141,7 @@ describe("FHV growth-law report identity binding", () => {
   it("accepts an exact clean checkout", () => {
     const { repo, headSha } = makeRepo();
     const runDir = join(repo, "run");
-    writeProgress(runDir, boundedPoints());
+    writeOfficialProgress(repo, runDir, boundedPoints());
     const report = buildFhvGrowthLawReportV2({ runDir, repoPath: repo, expectedHeadSha: headSha });
     expect(report.checkout.headSha).toBe(headSha);
     expect(report.progressBytesSha256).toHaveLength(64);
@@ -128,7 +153,7 @@ describe("FHV growth-law report identity binding", () => {
   it("rejects a dirty tracked checkout for official evidence", () => {
     const { repo } = makeRepo();
     const runDir = join(repo, "run");
-    writeProgress(runDir, boundedPoints());
+    writeOfficialProgress(repo, runDir, boundedPoints());
     writeFileSync(join(repo, "README"), "dirty\n");
     expect(() => buildFhvGrowthLawReportV2({ runDir, repoPath: repo })).toThrow(
       FhvT4CheckoutIdentityError,
@@ -138,7 +163,7 @@ describe("FHV growth-law report identity binding", () => {
   it("rejects claimed release SHA != HEAD", () => {
     const { repo } = makeRepo();
     const runDir = join(repo, "run");
-    writeProgress(runDir, boundedPoints());
+    writeOfficialProgress(repo, runDir, boundedPoints());
     expect(() =>
       buildFhvGrowthLawReportV2({
         runDir,
@@ -151,7 +176,7 @@ describe("FHV growth-law report identity binding", () => {
   it("rejects progress byte mutation after report creation", () => {
     const { repo } = makeRepo();
     const runDir = join(repo, "run");
-    writeProgress(runDir, boundedPoints());
+    writeOfficialProgress(repo, runDir, boundedPoints());
     const report = buildFhvGrowthLawReportV2({ runDir, repoPath: repo });
     const reportPath = join(runDir, FHV_GROWTH_LAW_REPORT_FILENAME);
     writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
@@ -169,7 +194,7 @@ describe("FHV growth-law report identity binding", () => {
   it("rejects a mutated report self-digest", () => {
     const { repo } = makeRepo();
     const runDir = join(repo, "run");
-    writeProgress(runDir, boundedPoints());
+    writeOfficialProgress(repo, runDir, boundedPoints());
     const report = buildFhvGrowthLawReportV2({ runDir, repoPath: repo });
     const reportPath = join(runDir, FHV_GROWTH_LAW_REPORT_FILENAME);
     writeFileSync(
@@ -189,7 +214,7 @@ describe("FHV throughput qualification classification", () => {
   it("classifies insufficient stability evidence as EVIDENCE_INVALID, not host NOT_QUALIFIED", () => {
     const { repo } = makeRepo();
     const runDir = join(repo, "run");
-    writeProgress(runDir, [
+    writeOfficialProgress(repo, runDir, [
       [0, 2_662_400, 1_800],
       [1_000, 2_662_400, 1_800],
       [2_000, 2_662_400, 1_800],
@@ -211,7 +236,7 @@ describe("FHV throughput qualification classification", () => {
       const cycle = step * 500;
       return [cycle, 100_000 + 320 * cycle, 1_800] as const;
     });
-    writeProgress(runDir, points);
+    writeOfficialProgress(repo, runDir, points);
     const report = buildFhvGrowthLawReportV2({ runDir, repoPath: repo });
     writeFileSync(
       join(runDir, FHV_GROWTH_LAW_REPORT_FILENAME),
@@ -223,5 +248,56 @@ describe("FHV throughput qualification classification", () => {
     expect(receipt.evidence.checkpointSamples).not.toBe(receipt.evidence.progressSamples);
     expect(receipt.releaseSha).toBe(report.checkout.headSha);
     expect(receipt.evidence.checkoutHeadSha).toBe(receipt.releaseSha);
+    expect(receipt.evidence.producerHeadSha).toBe(receipt.releaseSha);
+  });
+});
+
+describe("FHV execution-time producer and sampler binding", () => {
+  it("fails closed when SHA-A progress is re-labelled under clean SHA-B", () => {
+    const { repo } = makeRepo();
+    const runDir = join(repo, "run");
+    writeOfficialProgress(repo, runDir, boundedPoints());
+    writeFileSync(join(repo, "README"), "sha-b\n");
+    git(repo, ["add", "README"]);
+    git(repo, ["commit", "-m", "sha-b"]);
+    try {
+      buildFhvGrowthLawReportV2({ runDir, repoPath: repo });
+      throw new Error("expected producer mismatch");
+    } catch (error) {
+      expect((error as FhvThroughputProducerBindingError).code).toBe(
+        "FHV_THROUGHPUT_PRODUCER_HEAD_MISMATCH",
+      );
+    }
+  });
+
+  it("records the execution-time sampler interval, not a later inherited env", () => {
+    const { repo } = makeRepo();
+    const runDir = join(repo, "run");
+    const binding = writeOfficialProgress(repo, runDir, boundedPoints(), {
+      FHV_IDHPS_PROGRESS_INTERVAL_MS: "0",
+    });
+    expect(binding.samplerContract.appliedIntervalMs).toBe(0);
+    const report = buildFhvGrowthLawReportV2({ runDir, repoPath: repo });
+    expect(report.samplerContract.appliedIntervalMs).toBe(0);
+    expect(report.producer.headSha).toBe(binding.producer.headSha);
+    const later = buildFhvThroughputQualifierSamplerContract({
+      FHV_IDHPS_PROGRESS_INTERVAL_MS: "60000",
+    });
+    expect(later.appliedIntervalMs).toBe(250);
+    expect(report.samplerContract.appliedIntervalMs).not.toBe(later.appliedIntervalMs);
+  });
+
+  it("cannot qualify legacy progress with no execution-time producer/sampler identity", () => {
+    const { repo } = makeRepo();
+    const runDir = join(repo, "run");
+    writeProgress(runDir, boundedPoints());
+    try {
+      buildFhvGrowthLawReportV2({ runDir, repoPath: repo });
+      throw new Error("expected missing producer binding");
+    } catch (error) {
+      expect((error as FhvThroughputProducerBindingError).code).toBe(
+        "FHV_THROUGHPUT_PRODUCER_BINDING_MISSING",
+      );
+    }
   });
 });

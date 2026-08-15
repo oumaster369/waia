@@ -290,11 +290,56 @@ export function rankFhvHotspots(
     .sort((a, b) => b.totalMs - a.totalMs);
 }
 
-/** Progress samples that actually carry last-checkpoint size and duration. */
+export class FhvCheckpointSampleError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "FhvCheckpointSampleError";
+  }
+}
+
+/**
+ * Count distinct committed checkpoints from progress `checkpointCount` progression.
+ *
+ * Last-checkpoint fields are sticky on later progress rows, so a non-null
+ * `lastCheckpointBytes`/`lastCheckpointDurationMs` pair is not an independent checkpoint.
+ * `checkpointCount === 0` is not a committed checkpoint. Non-monotonic or malformed counters
+ * fail closed.
+ */
+export function countFhvIndependentCheckpointObservations(
+  series: readonly FhvFullHistoricalProgressV1[],
+): number {
+  let lastCount = 0;
+  let independent = 0;
+  for (const entry of series) {
+    const raw = entry.checkpointCount;
+    if (!Number.isInteger(raw) || raw < 0) {
+      throw new FhvCheckpointSampleError(
+        "FHV_CHECKPOINT_SAMPLE_MALFORMED",
+        `checkpointCount=${String(raw)} is not a non-negative integer`,
+      );
+    }
+    if (raw < lastCount) {
+      throw new FhvCheckpointSampleError(
+        "FHV_CHECKPOINT_SAMPLE_NON_MONOTONIC",
+        `checkpointCount decreased from ${lastCount} to ${raw}`,
+      );
+    }
+    if (raw > lastCount) {
+      if (raw > 0) {
+        independent += 1;
+      }
+      lastCount = raw;
+    }
+  }
+  return independent;
+}
+
+/** @deprecated Use {@link countFhvIndependentCheckpointObservations}. */
 export function countFhvCheckpointBearingObservations(
   series: readonly FhvFullHistoricalProgressV1[],
 ): number {
-  return series.filter(
-    (entry) => entry.lastCheckpointBytes != null && entry.lastCheckpointDurationMs != null,
-  ).length;
+  return countFhvIndependentCheckpointObservations(series);
 }

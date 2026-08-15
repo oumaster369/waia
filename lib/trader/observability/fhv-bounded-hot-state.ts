@@ -12,21 +12,25 @@ enforceServerOnly();
  * Whole-series OLS remains a diagnostic/projection input elsewhere. It is not the verdict:
  * startup fill-up of a bounded database produces a steep whole-series slope that is not
  * persistent linear growth.
+ *
+ * BOUNDED requires a terminal/steady retained-state plateau. An earlier HWM plateau followed by
+ * resumed linear growth is UNBOUNDED even when the resumed slope is below the known ~320 B/cycle
+ * fast-failure signature.
  */
 
 /** Known AD-1 failure signature: append-only economic history (~321 B/cycle on PR452). */
 export const FHV_UNBOUNDED_SUSTAINED_BYTES_PER_CYCLE = 256;
 
 /**
- * SQLite page/WAL envelope around a high-water mark. Distinguishes a last-sample page bump
- * from resumed unbounded growth. Not a bytes/cycle pass ceiling.
+ * SQLite page/WAL envelope around a high-water mark. Distinguishes a single restabilizing page
+ * bump from resumed linear growth. Not a bytes/cycle pass ceiling.
  */
 export const FHV_BOUNDED_HOT_STATE_PAGE_ENVELOPE_BYTES = 65_536;
 
 export const FHV_BOUNDED_HOT_STATE_MIN_SIZE_SAMPLES = 4;
 export const FHV_BOUNDED_HOT_STATE_MIN_POST_SATURATION_SAMPLES = 3;
 
-export const FHV_BOUNDED_HOT_STATE_ASSESSOR_VERSION = "fhv-bounded-hot-state-assessor/v1" as const;
+export const FHV_BOUNDED_HOT_STATE_ASSESSOR_VERSION = "fhv-bounded-hot-state-assessor/v2" as const;
 
 export type FhvBoundednessClassification = "BOUNDED" | "UNBOUNDED" | "INSUFFICIENT_EVIDENCE";
 
@@ -42,10 +46,13 @@ export type FhvBoundedHotStateAssessment = Readonly<{
   saturationCycle: number | null;
   postSaturationSampleCount: number;
   longestHwmPlateauSampleCount: number;
+  terminalHwmPlateauSampleCount: number;
   postSaturationBytesPerCycle: number | null;
   lateWindowBytesPerCycle: number | null;
   reason: string;
 }>;
+
+type HwmRun = Readonly<{ start: number; end: number; value: number }>;
 
 function toSizeSamples(
   series: readonly Readonly<{
@@ -82,20 +89,20 @@ function slopeOf(samples: readonly FhvSizeSample[]): number | null {
   return sxy / sxx;
 }
 
-function longestHwmPlateau(hwm: readonly number[]): { start: number; end: number } {
-  let bestStart = 0;
-  let bestEnd = 0;
+function constantHwmRuns(hwm: readonly number[]): HwmRun[] {
+  const runs: HwmRun[] = [];
   let runStart = 0;
   for (let index = 1; index <= hwm.length; index += 1) {
     if (index === hwm.length || hwm[index] !== hwm[runStart]) {
-      if (index - 1 - runStart > bestEnd - bestStart) {
-        bestStart = runStart;
-        bestEnd = index - 1;
-      }
+      runs.push({ start: runStart, end: index - 1, value: hwm[runStart]! });
       runStart = index;
     }
   }
-  return { start: bestStart, end: bestEnd };
+  return runs;
+}
+
+function runLength(run: HwmRun): number {
+  return run.end - run.start + 1;
 }
 
 function assessment(input: {
@@ -104,6 +111,7 @@ function assessment(input: {
   saturationCycle: number | null;
   postSaturationSampleCount: number;
   longestHwmPlateauSampleCount: number;
+  terminalHwmPlateauSampleCount: number;
   postSaturationBytesPerCycle: number | null;
   lateWindowBytesPerCycle: number | null;
   reason: string;
@@ -117,10 +125,10 @@ function assessment(input: {
 /**
  * Classify whether session.sqlite retained size is bounded in run length.
  *
- * A. startup/fill-up then a stable HWM plateau → BOUNDED
- * B. persistent ~320 B/cycle growth → UNBOUNDED
- * C. plateau then resumed sustained growth → UNBOUNDED
- * D. not enough post-saturation observations → INSUFFICIENT_EVIDENCE
+ * A. startup/fill-up then a stable *terminal* HWM plateau → BOUNDED
+ * B. persistent ~320 B/cycle growth → UNBOUNDED (fast-failure signature)
+ * C. plateau then resumed linear growth, including slopes below 256 B/cycle → UNBOUNDED
+ * D. not enough terminal plateau observations → INSUFFICIENT_EVIDENCE
  */
 export function assessFhvBoundedHotState(
   series: readonly Readonly<{
@@ -130,15 +138,19 @@ export function assessFhvBoundedHotState(
 ): FhvBoundedHotStateAssessment {
   const samples = toSizeSamples(series);
   const sampleCount = samples.length;
+  const empty = {
+    saturationCycle: null as number | null,
+    postSaturationSampleCount: 0,
+    longestHwmPlateauSampleCount: 0,
+    terminalHwmPlateauSampleCount: 0,
+    postSaturationBytesPerCycle: null as number | null,
+    lateWindowBytesPerCycle: null as number | null,
+  };
   if (sampleCount < FHV_BOUNDED_HOT_STATE_MIN_SIZE_SAMPLES) {
     return assessment({
       classification: "INSUFFICIENT_EVIDENCE",
       sampleCount,
-      saturationCycle: null,
-      postSaturationSampleCount: 0,
-      longestHwmPlateauSampleCount: 0,
-      postSaturationBytesPerCycle: null,
-      lateWindowBytesPerCycle: null,
+      ...empty,
       reason: `size_samples=${sampleCount} < ${FHV_BOUNDED_HOT_STATE_MIN_SIZE_SAMPLES}`,
     });
   }
@@ -150,56 +162,27 @@ export function assessFhvBoundedHotState(
     hwm.push(runningMax);
   }
 
-  const plateau = longestHwmPlateau(hwm);
-  const longestHwmPlateauSampleCount = plateau.end - plateau.start + 1;
+  const runs = constantHwmRuns(hwm);
+  const terminal = runs[runs.length - 1]!;
+  const terminalHwmPlateauSampleCount = runLength(terminal);
+  const longestHwmPlateauSampleCount = Math.max(...runs.map(runLength));
   const lateStart = Math.floor(sampleCount / 2);
   const lateWindowBytesPerCycle = slopeOf(samples.slice(lateStart));
+  const last = samples[sampleCount - 1]!;
+  const first = samples[0]!;
 
-  if (longestHwmPlateauSampleCount >= FHV_BOUNDED_HOT_STATE_MIN_POST_SATURATION_SAMPLES) {
-    const saturationCycle = samples[plateau.start]!.cycle;
-    const after = samples.slice(plateau.end);
-    const afterExclusive = samples.slice(plateau.end + 1);
-    const postSaturationBytesPerCycle = slopeOf(afterExclusive) ?? slopeOf(after);
-    if ((postSaturationBytesPerCycle ?? 0) >= FHV_UNBOUNDED_SUSTAINED_BYTES_PER_CYCLE) {
-      return assessment({
-        classification: "UNBOUNDED",
-        sampleCount,
-        saturationCycle,
-        postSaturationSampleCount: afterExclusive.length,
-        longestHwmPlateauSampleCount,
-        postSaturationBytesPerCycle,
-        lateWindowBytesPerCycle,
-        reason: `resumed_growth_after_hwm_plateau slope=${postSaturationBytesPerCycle}`,
-      });
-    }
-    const last = samples[sampleCount - 1]!;
-    const plateauHwm = hwm[plateau.end]!;
-    const afterCycleSpan = last.cycle - samples[plateau.end]!.cycle;
-    const hwmDelta = last.bytes - plateauHwm;
-    if (afterCycleSpan > 0 && hwmDelta > FHV_BOUNDED_HOT_STATE_PAGE_ENVELOPE_BYTES) {
-      const afterNetRate = hwmDelta / afterCycleSpan;
-      if (afterNetRate >= FHV_UNBOUNDED_SUSTAINED_BYTES_PER_CYCLE) {
-        return assessment({
-          classification: "UNBOUNDED",
-          sampleCount,
-          saturationCycle,
-          postSaturationSampleCount: afterExclusive.length,
-          longestHwmPlateauSampleCount,
-          postSaturationBytesPerCycle: afterNetRate,
-          lateWindowBytesPerCycle,
-          reason: `resumed_net_growth_after_hwm_plateau rate=${afterNetRate}`,
-        });
-      }
-    }
+  if (terminalHwmPlateauSampleCount >= FHV_BOUNDED_HOT_STATE_MIN_POST_SATURATION_SAMPLES) {
+    const saturationCycle = samples[terminal.start]!.cycle;
     return assessment({
       classification: "BOUNDED",
       sampleCount,
       saturationCycle,
-      postSaturationSampleCount: sampleCount - plateau.start,
+      postSaturationSampleCount: terminalHwmPlateauSampleCount,
       longestHwmPlateauSampleCount,
-      postSaturationBytesPerCycle: postSaturationBytesPerCycle ?? 0,
+      terminalHwmPlateauSampleCount,
+      postSaturationBytesPerCycle: 0,
       lateWindowBytesPerCycle,
-      reason: "hwm_plateau_after_startup_or_flat_retained_state",
+      reason: "terminal_hwm_plateau_after_startup_or_restabilized_page_bump",
     });
   }
 
@@ -207,24 +190,75 @@ export function assessFhvBoundedHotState(
     return assessment({
       classification: "UNBOUNDED",
       sampleCount,
-      saturationCycle: null,
-      postSaturationSampleCount: 0,
+      ...empty,
       longestHwmPlateauSampleCount,
-      postSaturationBytesPerCycle: null,
+      terminalHwmPlateauSampleCount,
       lateWindowBytesPerCycle,
       reason: `persistent_linear_growth late_slope=${lateWindowBytesPerCycle}`,
+    });
+  }
+
+  const earlierAdequate = [...runs]
+    .slice(0, -1)
+    .reverse()
+    .find((run) => runLength(run) >= FHV_BOUNDED_HOT_STATE_MIN_POST_SATURATION_SAMPLES);
+  if (earlierAdequate) {
+    const after = samples.slice(earlierAdequate.end + 1);
+    const postSaturationBytesPerCycle = slopeOf(after);
+    const growthAfter = last.bytes - earlierAdequate.value;
+    const samplesAfter = after.length;
+    const resumedLinear =
+      (postSaturationBytesPerCycle ?? 0) > 0 &&
+      samplesAfter >= FHV_BOUNDED_HOT_STATE_MIN_POST_SATURATION_SAMPLES;
+    if (resumedLinear || growthAfter > FHV_BOUNDED_HOT_STATE_PAGE_ENVELOPE_BYTES) {
+      return assessment({
+        classification: "UNBOUNDED",
+        sampleCount,
+        saturationCycle: samples[earlierAdequate.start]!.cycle,
+        postSaturationSampleCount: samplesAfter,
+        longestHwmPlateauSampleCount,
+        terminalHwmPlateauSampleCount,
+        postSaturationBytesPerCycle: postSaturationBytesPerCycle ?? growthAfter,
+        lateWindowBytesPerCycle,
+        reason: resumedLinear
+          ? `resumed_linear_growth_after_hwm_plateau slope=${postSaturationBytesPerCycle}`
+          : `resumed_net_growth_after_hwm_plateau delta=${growthAfter}`,
+      });
+    }
+    return assessment({
+      classification: "INSUFFICIENT_EVIDENCE",
+      sampleCount,
+      saturationCycle: samples[earlierAdequate.start]!.cycle,
+      postSaturationSampleCount: samplesAfter,
+      longestHwmPlateauSampleCount,
+      terminalHwmPlateauSampleCount,
+      postSaturationBytesPerCycle,
+      lateWindowBytesPerCycle,
+      reason: `no_terminal_hwm_plateau_of_${FHV_BOUNDED_HOT_STATE_MIN_POST_SATURATION_SAMPLES}_samples`,
+    });
+  }
+
+  const netGrowth = last.bytes - first.bytes;
+  if (netGrowth > FHV_BOUNDED_HOT_STATE_PAGE_ENVELOPE_BYTES && (lateWindowBytesPerCycle ?? 0) > 0) {
+    return assessment({
+      classification: "UNBOUNDED",
+      sampleCount,
+      ...empty,
+      longestHwmPlateauSampleCount,
+      terminalHwmPlateauSampleCount,
+      lateWindowBytesPerCycle,
+      reason: `persistent_net_growth_without_terminal_plateau net=${netGrowth}`,
     });
   }
 
   return assessment({
     classification: "INSUFFICIENT_EVIDENCE",
     sampleCount,
-    saturationCycle: null,
-    postSaturationSampleCount: 0,
+    ...empty,
     longestHwmPlateauSampleCount,
-    postSaturationBytesPerCycle: null,
+    terminalHwmPlateauSampleCount,
     lateWindowBytesPerCycle,
-    reason: `no_hwm_plateau_of_${FHV_BOUNDED_HOT_STATE_MIN_POST_SATURATION_SAMPLES}_samples`,
+    reason: `no_terminal_hwm_plateau_of_${FHV_BOUNDED_HOT_STATE_MIN_POST_SATURATION_SAMPLES}_samples`,
   });
 }
 

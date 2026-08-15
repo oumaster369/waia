@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   assessFhvHotPathDecay,
   computeFhvThroughputWindows,
+  countFhvIndependentCheckpointObservations,
   FHV_CANONICAL_MAX_RUNTIME_S,
   FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S,
   fitFhvCheckpointDurationVsSize,
@@ -201,5 +202,36 @@ describe("WP-4 FHV growth law", () => {
     });
     expect(ranked.map((entry) => entry.stage)).toEqual(["features", "accounting", "evidence"]);
     expect(ranked[0]!.shareOfMeasuredMs).toBeCloseTo(0.6818, 3);
+  });
+});
+
+describe("FHV independent checkpoint sample counting", () => {
+  it("counts distinct checkpointCount values, not sticky lastCheckpoint fields", () => {
+    const series = [0, 1, 1, 1, 2, 2].map((checkpointCount, index) =>
+      sample({
+        globalEventSequence: index * 100,
+        checkpointCount,
+        lastCheckpointBytes: checkpointCount === 0 ? null : 1_000,
+        lastCheckpointDurationMs: checkpointCount === 0 ? null : 5,
+      }),
+    );
+    expect(countFhvIndependentCheckpointObservations(series)).toBe(2);
+    expect(countFhvIndependentCheckpointObservations(series)).not.toBe(5);
+  });
+
+  it("does not count checkpointCount 0 as a committed checkpoint", () => {
+    const series = [0, 0, 0].map((checkpointCount, index) =>
+      sample({ globalEventSequence: index, checkpointCount }),
+    );
+    expect(countFhvIndependentCheckpointObservations(series)).toBe(0);
+  });
+
+  it("fails closed on non-monotonic checkpointCount", () => {
+    const series = [0, 1, 2, 1].map((checkpointCount, index) =>
+      sample({ globalEventSequence: index, checkpointCount }),
+    );
+    expect(() => countFhvIndependentCheckpointObservations(series)).toThrow(
+      /checkpointCount decreased/,
+    );
   });
 });

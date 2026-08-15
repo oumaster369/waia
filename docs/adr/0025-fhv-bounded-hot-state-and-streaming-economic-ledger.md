@@ -59,8 +59,12 @@ OLS bytes/cycle ceiling. Startup fill-up of a bounded database is not steady-sta
 A conservative whole-series growth fit may remain available for projection/diagnostics; it is not
 the AD-1 verdict. WP-7B and target-host throughput qualification consume one production-owned
 assessor (`assessFhvBoundedHotState`) that classifies `BOUNDED`, `UNBOUNDED`, or
-`INSUFFICIENT_EVIDENCE`. Insufficient post-saturation evidence fails closed. Tests must not own a
-competing 160/280 structural threshold.
+`INSUFFICIENT_EVIDENCE`. **BOUNDED requires a terminal/steady retained-state plateau**, not merely
+any earlier high-water-mark plateau. Resumed linear growth after a plateau is `UNBOUNDED` even
+when slower than the known ~320 B/cycle fast-failure signature (`FHV_UNBOUNDED_SUSTAINED_BYTES_PER_CYCLE = 256`
+is a fast-fail detector, not a pass ceiling). A single SQLite page/envelope bump that then
+restabilizes may remain `BOUNDED`. Insufficient terminal-plateau evidence fails closed. Tests must
+not own a competing 160/280 structural threshold.
 
 **AD-2 — Streaming economic ledger**
 
@@ -368,17 +372,19 @@ fail-closed **post-release Execution Server preflight** that consumes the produc
 report (never a synthetic CPU microbenchmark) and emits an identity-bound receipt classified as
 `EXECUTION_SERVER_FHV_THROUGHPUT_QUALIFIED`, `EXECUTION_SERVER_FHV_THROUGHPUT_NOT_QUALIFIED`, or
 `EXECUTION_SERVER_FHV_THROUGHPUT_EVIDENCE_INVALID`. A QUALIFIED receipt requires, fail-closed: exact
-clean checkout HEAD (not `FHV_RELEASE_SHA` alone), target-host identity, qualifier-owned sampler
-contract, progress-JSONL byte digest, growth-law report self-digest, a representative segment
-actually executed, independently counted progress and checkpoint samples, production-owned
-`BOUNDED` hot-state classification (not whole-series OLS), a `FLAT` hot-path stability verdict from
+clean checkout HEAD (not `FHV_RELEASE_SHA` alone), an **execution-time producer binding** proving
+the code HEAD that generated the progress JSONL, target-host identity, the qualifier-owned sampler
+contract recorded at run start (not reconstructed at report time), progress-JSONL byte digest,
+growth-law report self-digest, a representative segment actually executed, independently counted
+progress samples and distinct `checkpointCount` observations, production-owned `BOUNDED` hot-state
+classification (terminal plateau; not whole-series OLS), a `FLAT` hot-path stability verdict from
 half-medians with insufficient windows failing closed, an available growth-aware projection, and
 that projection within **6,480 s**. Malformed or unbound evidence is `EVIDENCE_INVALID`; valid
 evidence that misses the performance/structure contract is `NOT_QUALIFIED`. The receipt embeds and
-validates the canonical 877/7200/6480 constants so a weaker contract cannot pass through a
-schema-consistent file. Unbound v1 receipts cannot qualify a new launch. No environment variable —
-`NODE_ENV`, `CI`, `GITHUB_ACTIONS`, `FHV_IDHPS_PROGRESS_INTERVAL_MS`, or any skip flag — can weaken
-it.
+validates the canonical 877/7200/6480 constants **and the full sampler contract fields** so a weaker
+contract cannot pass through a schema-consistent file. Unbound v1 receipts cannot qualify a new launch.
+No environment variable — `NODE_ENV`, `CI`, `GITHUB_ACTIONS`, `FHV_IDHPS_PROGRESS_INTERVAL_MS`, or any
+skip flag — can weaken it.
 
 **The official unbounded launch now requires both target-host receipts.** Alongside the WP-3B
 checkpoint receipt, the launch path requires a valid throughput receipt (`--throughput-host-

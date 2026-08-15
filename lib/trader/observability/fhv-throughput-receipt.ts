@@ -12,10 +12,11 @@ import {
 import type { FhvBoundednessClassification } from "@/lib/trader/observability/fhv-bounded-hot-state";
 import type { FhvThroughputQualifierSamplerContract } from "@/lib/trader/observability/fhv-throughput-sampler";
 import {
+  assertCanonicalFhvThroughputSamplerContract,
+  FhvThroughputSamplerContractError,
   FHV_THROUGHPUT_QUALIFIER_MIN_CHECKPOINT_SAMPLES,
   FHV_THROUGHPUT_QUALIFIER_MIN_HOT_WINDOWS,
   FHV_THROUGHPUT_QUALIFIER_MIN_PROGRESS_SAMPLES,
-  FHV_THROUGHPUT_QUALIFIER_SAMPLER_CONTRACT_VERSION,
 } from "@/lib/trader/observability/fhv-throughput-sampler";
 
 /**
@@ -79,6 +80,8 @@ export type FhvThroughputReceiptV2 = Readonly<{
     progressBytesSha256: string;
     growthLawReportDigest: string;
     checkoutHeadSha: string;
+    producerHeadSha: string;
+    producerBindingDigest: string;
   }>;
   classification:
     | typeof FHV_THROUGHPUT_QUALIFIED_CLASSIFICATION
@@ -164,6 +167,21 @@ export function assertFhvThroughputHostQualified(input: {
       `Throughput receipt checkoutHeadSha ${String(receipt.evidence?.checkoutHeadSha)} != releaseSha ${String(receipt.releaseSha)}`,
     );
   }
+  if (receipt.evidence?.producerHeadSha !== receipt.releaseSha) {
+    fail(
+      "FHV_THROUGHPUT_RECEIPT_PRODUCER_RELEASE_MISMATCH",
+      `Throughput receipt producerHeadSha ${String(receipt.evidence?.producerHeadSha)} != releaseSha ${String(receipt.releaseSha)}`,
+    );
+  }
+  if (
+    typeof receipt.evidence?.producerBindingDigest !== "string" ||
+    receipt.evidence.producerBindingDigest.length !== 64
+  ) {
+    fail(
+      "FHV_THROUGHPUT_RECEIPT_PRODUCER_BINDING_MISSING",
+      "Throughput receipt is missing producerBindingDigest",
+    );
+  }
   if (!receipt.host?.hostname?.trim()) {
     fail(
       "FHV_THROUGHPUT_RECEIPT_HOST_IDENTITY_MISSING",
@@ -182,11 +200,13 @@ export function assertFhvThroughputHostQualified(input: {
     );
   }
 
-  if (receipt.samplerContract?.version !== FHV_THROUGHPUT_QUALIFIER_SAMPLER_CONTRACT_VERSION) {
-    fail(
-      "FHV_THROUGHPUT_SAMPLER_CONTRACT_MISSING",
-      `Throughput receipt sampler contract ${String(receipt.samplerContract?.version)} != ${FHV_THROUGHPUT_QUALIFIER_SAMPLER_CONTRACT_VERSION}`,
-    );
+  try {
+    assertCanonicalFhvThroughputSamplerContract(receipt.samplerContract);
+  } catch (error) {
+    if (error instanceof FhvThroughputSamplerContractError) {
+      fail(error.code, error.message);
+    }
+    throw error;
   }
 
   const evidence = receipt.evidence;

@@ -44,6 +44,7 @@ import { getFhvSyntheticProfilingHooks } from "@/lib/trader/observability/fhv-sy
 import { createFhvFullHistoricalProgressReporter } from "@/lib/trader/observability/fhv-full-historical-progress";
 import {
   isFhvThroughputQualifierSamplingRequired,
+  buildFhvThroughputQualifierSamplerContract,
   resolveFhvThroughputQualifierProgressIntervalMs,
 } from "@/lib/trader/observability/fhv-throughput-sampler";
 
@@ -228,17 +229,30 @@ export async function runFullHistoricalBacktest(input: {
 
   // Opt-in observational progress (CI full-corpus/probe set FHV_IDHPS_PROGRESS=1).
   // Default off so unit/durability fixtures stay quiet and zero-overhead.
+  const qualifierSampling = isFhvThroughputQualifierSamplingRequired({
+    maxCycles: input.maxCycles,
+    boundedFixture: input.boundedFixture,
+  });
+  const qualifierSamplerContract = qualifierSampling
+    ? buildFhvThroughputQualifierSamplerContract()
+    : null;
   const progressReporter =
     input.boundedFixture !== true && process.env.FHV_IDHPS_PROGRESS === "1"
       ? createFhvFullHistoricalProgressReporter({
           runDir: input.runDir,
           ...(input.artifactRoot ? { artifactRoot: input.artifactRoot } : {}),
           targetCycleCount: input.targetCycleCount ?? input.maxCycles ?? null,
-          ...(isFhvThroughputQualifierSamplingRequired({
-            maxCycles: input.maxCycles,
-            boundedFixture: input.boundedFixture,
-          })
+          ...(qualifierSampling
             ? { intervalMs: resolveFhvThroughputQualifierProgressIntervalMs() }
+            : {}),
+          ...(qualifierSamplerContract
+            ? {
+                officialProducer: {
+                  repoPath: process.cwd(),
+                  runId: input.runId,
+                  samplerContract: qualifierSamplerContract,
+                },
+              }
             : {}),
         })
       : null;

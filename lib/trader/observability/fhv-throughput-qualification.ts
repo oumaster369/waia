@@ -77,6 +77,12 @@ export function qualifyFhvThroughputHost(input: {
       `growth-law checkout ${report.checkout.headSha} != writer HEAD ${checkout.headSha}`,
     );
   }
+  if (report.producer.headSha !== checkout.headSha) {
+    throw new FhvGrowthLawReportError(
+      "FHV_GROWTH_LAW_PRODUCER_HEAD_MISMATCH",
+      `growth-law producer ${report.producer.headSha} != writer HEAD ${checkout.headSha}`,
+    );
+  }
 
   const progressSamples = report.progressSamples;
   const checkpointSamples = report.checkpointSamples;
@@ -139,6 +145,8 @@ export function qualifyFhvThroughputHost(input: {
       progressBytesSha256: report.progressBytesSha256,
       growthLawReportDigest: report.reportDigest,
       checkoutHeadSha: checkout.headSha,
+      producerHeadSha: report.producer.headSha,
+      producerBindingDigest: report.producer.bindingDigest,
     },
     classification,
   };

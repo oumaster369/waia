@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assertCanonicalFhvThroughputSamplerContract,
   buildFhvThroughputQualifierSamplerContract,
   FHV_THROUGHPUT_QUALIFIER_MAX_INTERVAL_MS,
   FHV_THROUGHPUT_QUALIFIER_SAMPLER_CONTRACT_VERSION,
@@ -28,5 +29,18 @@ describe("FHV throughput qualifier sampler contract", () => {
     expect(resolveFhvThroughputQualifierProgressIntervalMs({})).toBe(
       FHV_THROUGHPUT_QUALIFIER_MAX_INTERVAL_MS,
     );
+  });
+
+  it("rejects a schema-consistent sampler block with weakened parameters", () => {
+    const canonical = buildFhvThroughputQualifierSamplerContract({
+      FHV_IDHPS_PROGRESS_INTERVAL_MS: "0",
+    });
+    expect(assertCanonicalFhvThroughputSamplerContract(canonical).appliedIntervalMs).toBe(0);
+    expect(() =>
+      assertCanonicalFhvThroughputSamplerContract({ ...canonical, maxIntervalMs: 60_000 }),
+    ).toThrow(/maxIntervalMs/);
+    expect(() =>
+      assertCanonicalFhvThroughputSamplerContract({ ...canonical, minProgressSamples: 2 }),
+    ).toThrow(/minProgressSamples/);
   });
 });

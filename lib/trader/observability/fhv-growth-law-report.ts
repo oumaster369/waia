@@ -14,7 +14,8 @@ import { FHV_DEFAULT_CHECKPOINT_EVERY_CYCLES } from "@/lib/trader/observability/
 import {
   assessFhvHotPathDecay,
   computeFhvThroughputWindows,
-  countFhvCheckpointBearingObservations,
+  countFhvIndependentCheckpointObservations,
+  FhvCheckpointSampleError,
   fitFhvCheckpointDurationVsSize,
   fitFhvSessionGrowthLaw,
   FHV_GROWTH_LAW_LEGACY_V1_FILENAME,
@@ -37,7 +38,12 @@ import {
   FhvT4CheckoutIdentityError,
 } from "@/lib/trader/observability/fhv-t4-release-checkout-identity";
 import {
-  buildFhvThroughputQualifierSamplerContract,
+  assertFhvThroughputProducerBinding,
+  assertProgressSeriesMatchesProducerBinding,
+  type FhvThroughputProducerBindingV1,
+} from "@/lib/trader/observability/fhv-throughput-producer-binding";
+import {
+  assertCanonicalFhvThroughputSamplerContract,
   type FhvThroughputQualifierSamplerContract,
 } from "@/lib/trader/observability/fhv-throughput-sampler";
 
@@ -59,6 +65,12 @@ export type FhvGrowthLawReportV2 = Readonly<{
   checkout: Readonly<{
     headSha: string;
     trackedTreeClean: true;
+  }>;
+  producer: Readonly<{
+    headSha: string;
+    trackedTreeClean: true;
+    runId: string;
+    bindingDigest: string;
   }>;
   samplerContract: FhvThroughputQualifierSamplerContract;
   progressJsonlFilename: typeof FHV_FULL_HISTORICAL_PROGRESS_JSONL_FILENAME;
@@ -160,6 +172,13 @@ export function buildFhvGrowthLawReportV2(input: {
     repoPath: input.repoPath,
     ...(input.expectedHeadSha ? { expectedHeadSha: input.expectedHeadSha } : {}),
   });
+  const producerBinding: FhvThroughputProducerBindingV1 = assertFhvThroughputProducerBinding({
+    runDir: input.runDir,
+    expectedProducerHeadSha: checkout.headSha,
+  });
+  const samplerContract = assertCanonicalFhvThroughputSamplerContract(
+    producerBinding.samplerContract,
+  );
   const { series, progressBytesSha256 } = readFhvProgressSeries(input.runDir);
   if (series.length < 2) {
     throw new FhvGrowthLawReportError(
@@ -167,14 +186,22 @@ export function buildFhvGrowthLawReportV2(input: {
       `${series.length} progress sample(s)`,
     );
   }
+  assertProgressSeriesMatchesProducerBinding({ series, binding: producerBinding });
 
   const growth: FhvLinearFit = fitFhvSessionGrowthLaw(series);
   const checkpointFromSeries = fitFhvCheckpointDurationVsSize(series);
-  const checkpointSamples = countFhvCheckpointBearingObservations(series);
+  let checkpointSamples: number;
+  try {
+    checkpointSamples = countFhvIndependentCheckpointObservations(series);
+  } catch (error) {
+    if (error instanceof FhvCheckpointSampleError) {
+      throw new FhvGrowthLawReportError(error.code, error.message);
+    }
+    throw error;
+  }
   const windows = computeFhvThroughputWindows(series);
   const decay = assessFhvHotPathDecay(windows);
   const boundedHotState = assessFhvBoundedHotState(series);
-  const samplerContract = buildFhvThroughputQualifierSamplerContract();
 
   const costModel: FhvCheckpointCostModelV1 | null =
     input.costModelPath && existsSync(input.costModelPath)
@@ -217,6 +244,12 @@ export function buildFhvGrowthLawReportV2(input: {
     checkout: {
       headSha: checkout.headSha,
       trackedTreeClean: true,
+    },
+    producer: {
+      headSha: producerBinding.producer.headSha,
+      trackedTreeClean: true,
+      runId: producerBinding.runId,
+      bindingDigest: producerBinding.bindingDigest,
     },
     samplerContract,
     progressJsonlFilename: FHV_FULL_HISTORICAL_PROGRESS_JSONL_FILENAME,
@@ -314,6 +347,17 @@ export function assertFhvGrowthLawReportV2(input: {
       `progress JSONL mutated after report creation: ${progressBytesSha256} != ${report.progressBytesSha256}`,
     );
   }
+  const producerBinding = assertFhvThroughputProducerBinding({
+    runDir: input.runDir,
+    expectedProducerHeadSha: report.producer.headSha,
+  });
+  if (producerBinding.bindingDigest !== report.producer.bindingDigest) {
+    throw new FhvGrowthLawReportError(
+      "FHV_GROWTH_LAW_PRODUCER_BINDING_MISMATCH",
+      "growth-law producer bindingDigest does not match execution-time sidecar",
+    );
+  }
+  assertCanonicalFhvThroughputSamplerContract(report.samplerContract);
   if (input.expectedHeadSha && report.checkout.headSha !== input.expectedHeadSha.toLowerCase()) {
     throw new FhvGrowthLawReportError(
       "FHV_GROWTH_LAW_CHECKOUT_MISMATCH",
