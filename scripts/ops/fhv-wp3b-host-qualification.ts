@@ -13,7 +13,15 @@
 
 import { execSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { arch, cpus, hostname, platform, tmpdir, totalmem } from "node:os";
 import { join } from "node:path";
 
@@ -32,9 +40,11 @@ import {
   probeFhvNativeCloneCapability,
   tryNativeCloneFile,
 } from "@/lib/trader/observability/fhv-native-clone";
+import { verifyFhvDestinationShaOffMainThread } from "@/lib/trader/observability/fhv-destination-sha-verifier";
+import { FHV_WP3B_GATE2_LIVENESS_MS } from "@/lib/trader/observability/fhv-wp3b-receipt";
 
 const MEASURED_ITERATIONS = 3;
-const RECEIPT_SCHEMA = "fhv-wp3b-host-qualification/v1" as const;
+const RECEIPT_SCHEMA = "fhv-wp3b-host-qualification/v2" as const;
 
 export type FhvHostQualificationClassification =
   | "EXECUTION_SERVER_WP3B_HOST_QUALIFIED"
@@ -95,7 +105,7 @@ function proveIdentityAndIsolation(root: string): {
   return { digestsMatch, mutationIsolated, cloneClaimTruthful };
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const root = join(tmpdir(), `fhv-wp3b-hostqual-${process.pid}`);
   mkdirSync(root, { recursive: true });
   const sessionPath = join(root, "session.sqlite");
@@ -148,6 +158,31 @@ function main(): void {
     );
   }
 
+  const gate2Measured: number[] = [];
+  let gate2DigestsMatch = true;
+  for (let iteration = 1; iteration <= MEASURED_ITERATIONS; iteration += 1) {
+    const destPath = join(root, `gate2-dest-${iteration}.sqlite`);
+    const clone = tryNativeCloneFile(sessionPath, destPath);
+    if (clone.status !== "NATIVE_CLONE_SUCCEEDED") {
+      copyFileSync(sessionPath, destPath);
+    }
+    const expectedBytes = statSync(destPath).size;
+    const startedAt = performance.now();
+    const verified = await verifyFhvDestinationShaOffMainThread({
+      runId: "wp3b-gate2",
+      epochId: iteration,
+      generation: 1,
+      destPath,
+      expectedBytes,
+      fencingGeneration: 1,
+    });
+    const elapsed = performance.now() - startedAt;
+    gate2Measured.push(elapsed);
+    if (verified.byteCount !== expectedBytes) gate2DigestsMatch = false;
+    rmSync(destPath, { force: true });
+    console.log(`[wp3b-hostqual] gate2_iteration=${iteration} dest_sha_ms=${elapsed.toFixed(3)}`);
+  }
+
   const filesystemAfter = describeFilesystem(root);
 
   // Negative control: the gate must be capable of turning RED on this host.
@@ -176,15 +211,20 @@ function main(): void {
       sample.manifestAttestationMs > 0,
   );
   const allClonesProven = samples.every((sample) => sample.ficloneSucceeded);
+  const gate1Pass = everyIterationWithinBudget;
+  const gate2Pass =
+    gate2DigestsMatch &&
+    gate2Measured.length >= MEASURED_ITERATIONS &&
+    gate2Measured.every((value) => value <= FHV_WP3B_GATE2_LIVENESS_MS);
 
-  // Evidence must be internally coherent before a verdict means anything.
   const evidenceValid =
     fixtureBytes >= FHV_CHECKPOINT_QUALIFICATION_DEPTH_BYTES &&
     samples.length >= MEASURED_ITERATIONS &&
     durabilityInsideTimer &&
     negativeTestDetectsBreach &&
     identity.cloneClaimTruthful &&
-    hostSha256BytesPerSecond > 0;
+    hostSha256BytesPerSecond > 0 &&
+    gate2Measured.length >= MEASURED_ITERATIONS;
 
   let classification: FhvHostQualificationClassification;
   if (!evidenceValid) {
@@ -194,7 +234,8 @@ function main(): void {
     allClonesProven &&
     identity.digestsMatch &&
     identity.mutationIsolated &&
-    everyIterationWithinBudget
+    gate1Pass &&
+    gate2Pass
   ) {
     classification = "EXECUTION_SERVER_WP3B_HOST_QUALIFIED";
   } else {
@@ -240,6 +281,16 @@ function main(): void {
       durabilityInsideTimer,
       negativeTestDetectsBreach,
     },
+    gate1BlockingCapture: {
+      status: gate1Pass ? "PASS" : "FAIL",
+      measuredMs: measured,
+      budgetMs: FHV_CHECKPOINT_BUDGET_MS_PER_10K,
+    },
+    gate2DestinationVerification: {
+      status: gate2Pass ? "PASS" : "FAIL",
+      measuredMs: gate2Measured.map((value) => Number(value.toFixed(3))),
+      budgetMs: FHV_WP3B_GATE2_LIVENESS_MS,
+    },
     classification,
   };
 
@@ -267,4 +318,7 @@ function main(): void {
   }
 }
 
-main();
+void main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -33,7 +33,7 @@ function writeReceipt(overrides: Record<string, unknown> = {}): string {
   const root = mkdtempSync(join(tmpdir(), "fhv-wp3b-receipt-"));
   roots.push(root);
   const body: Record<string, unknown> = {
-    schemaVersion: "fhv-wp3b-host-qualification/v1",
+    schemaVersion: "fhv-wp3b-host-qualification/v2",
     capturedAtUtc: new Date().toISOString(),
     releaseSha: "release-sha-under-test",
     host: { hostname: "test-host", platform: "darwin", sha256BytesPerSecond: 2_800_000_000 },
@@ -50,6 +50,16 @@ function writeReceipt(overrides: Record<string, unknown> = {}): string {
       everyIterationWithinBudget: true,
       durabilityInsideTimer: true,
       negativeTestDetectsBreach: true,
+    },
+    gate1BlockingCapture: {
+      status: "PASS",
+      measuredMs: [12.1, 13.0, 11.4],
+      budgetMs: 400,
+    },
+    gate2DestinationVerification: {
+      status: "PASS",
+      measuredMs: [390.0, 392.1, 394.0],
+      budgetMs: Math.ceil((10_000 / 877) * 1000),
     },
     classification: "EXECUTION_SERVER_WP3B_HOST_QUALIFIED",
     ...overrides,
@@ -233,5 +243,33 @@ describe("FHV WP-3B receipt validation", () => {
         }),
       ),
     ).toBe("FHV_WP3B_HOST_NOT_QUALIFIED");
+  });
+
+  it("fails closed when GATE 1 is not PASS", () => {
+    expect(
+      codeOf(() =>
+        assertFhvWp3bHostQualified({
+          receiptPath: writeReceipt({
+            gate1BlockingCapture: { status: "FAIL", measuredMs: [401, 402, 403], budgetMs: 400 },
+          }),
+        }),
+      ),
+    ).toBe("FHV_WP3B_GATE1_FAILED");
+  });
+
+  it("fails closed when GATE 2 is not PASS", () => {
+    expect(
+      codeOf(() =>
+        assertFhvWp3bHostQualified({
+          receiptPath: writeReceipt({
+            gate2DestinationVerification: {
+              status: "FAIL",
+              measuredMs: [1, 1, 1],
+              budgetMs: Math.ceil((10_000 / 877) * 1000),
+            },
+          }),
+        }),
+      ),
+    ).toBe("FHV_WP3B_GATE2_FAILED");
   });
 });

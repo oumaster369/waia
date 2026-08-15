@@ -375,6 +375,60 @@ official full corpus still has its **7,200 s** terminal acceptance; 6,480 s is t
 **The Execution Server has not been contacted and the throughput qualification has not run.** No
 official full corpus has run.
 
+## AD-6c — Two-phase checkpoint authority, and splitting blocking capture from destination verification
+
+*Human decision `APPROVE_DEE_536_TWO_PHASE_CHECKPOINT_AUTHORITY_IMPLEMENTATION` (DEE-536).*
+
+The AD-6 contract is unchanged: destination identity remains SHA-256 of the published destination
+`session.sqlite` bytes; qualification depth remains **1 GiB**; the blocking capture budget remains
+**≤ 400 ms** with engineering target **≤ 250 ms**; durability, atomicity, and crash safety are
+unchanged; `MIN_THROUGHPUT_CPS = 877`, terminal maximum **7,200 s**, pre-launch maximum **6,480 s**,
+and `MAX_BATCH_CYCLES = 32` are unchanged and must not be weakened. Source hashing remains forbidden
+as checkpoint identity.
+
+What changes is *when* destination SHA-256 runs relative to the blocking capture interval, and
+*what* may be treated as resume authority.
+
+**Two-phase checkpoint authority.** Boundary N produces `PROVISIONAL_DURABLE` state plus live
+speculative N+1 cycles. `PROVISIONAL_DURABLE` is never resume authority, journal authority, claim
+authority, or a retention/prune frontier. Authority requires destination SHA-256 of the exact
+provisional dest inode, valid fencing, sealed epoch-N evidence promoted to its canonical directory,
+a resume-complete post-commit IDHPS composite bound into the verified bundle, then
+`EXECUTION_CHECKPOINT` / `EPOCH_COMMIT` / launch journal / claim.
+
+**GATE 1 — blocking capture latency.** The ≤ 400 ms budget (≤ 250 ms target) at 1 GiB times the
+complete synchronous work required before cycle execution can continue: fail-closed WAL `TRUNCATE`,
+strict native FICLONE, provisional destination durability, sidecar capture, frozen IDHPS snapshot,
+live IDHPS working-set rotation, evidence N seal in place, opening the N+1 speculative evidence
+writer, canonical WAL freeze bookkeeping, and verifier submission. GATE 1 does not include
+off-main-thread destination file traversal.
+
+**GATE 2 — destination verification / authority liveness.** Destination SHA-256 of the cloned dest
+bytes runs on a Worker Thread. It remains a mandatory prerequisite to authority. A SHA mismatch
+never promotes. GATE 2 liveness is derived from canonical cadence / minimum throughput
+(`checkpointEveryCycles / 877 cps`). Runtime backlog ≤ 1 remains the safety mechanism.
+
+**One WP3B receipt, two mandatory axes.** Official launch still consumes a single identity-bound
+receipt (`fhv-wp3b-host-qualification/v2`). Classification is
+`EXECUTION_SERVER_WP3B_HOST_QUALIFIED` only if `gate1BlockingCapture` and
+`gate2DestinationVerification` both PASS. No environment variable may bypass either axis.
+
+Moving destination SHA outside GATE 1 does **not** weaken or remove SHA. A provisional checkpoint
+is never authority.
+
+**WAL.** Canonical `execution.wal.ndjson` freezes through `EPOCH_COMMIT` N. Recovery truncates to
+the physical end of the journal-authoritative `EPOCH_COMMIT` (not `payload.walEndOffset`).
+
+**IDHPS.** Frozen N is detached from live N+1. Durable Step 10 is not run on live at provisional
+freeze. The verified checkpoint binds the post-commit frozen-N composite before journal authority.
+
+**Evidence.** An active epoch evidence writer is never relocated. Active writers live at
+`evidence/.speculative/epoch-K/generation-G/` for their entire lifetime. Sealed inactive evidence N
+is promoted to `evidence/epoch-N/generation-G` before journal N.
+
+**Retention.** Only journal-authoritative canonical epochs count. Provisional and orphan
+`epoch-X` where X > journal last committed epoch never displace verified recovery points.
+
 ## Links
 
 - PR [#452](https://github.com/oumaster369/waia/pull/452) — DEE-436 / DEE-416

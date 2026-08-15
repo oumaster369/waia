@@ -21,17 +21,16 @@ import { join } from "node:path";
 import { tryNativeCloneFile } from "@/lib/trader/observability/fhv-native-clone";
 
 /**
- * FHV checkpoint cost model (WP-3A instrumentation, WP-3B gate).
+ * FHV checkpoint cost model (WP-3A instrumentation, WP-3B GATE 1).
  *
- * Per-epoch checkpoint cost is Theta(session database size): WAL truncate, a full copy into an
- * exclusive temp file, a streaming SHA-256 over every byte, a second copy into the epoch bundle,
- * and an fsync. Because the session database grows monotonically (~321 bytes/cycle measured on
- * PR452 run 31011816726), cumulative checkpoint I/O is quadratic in run length: 32 ms at 3.4 MB
- * versus 7,647 ms at 1.17 GB.
+ * Per-epoch *blocking capture* is WAL truncate, native FICLONE (or fallback copy), dest
+ * durability, and sidecar/freeze bookkeeping. Destination SHA-256 is GATE 2 and runs off the
+ * main thread; GATE 1 must not include dest file traversal. Because the session database grows
+ * monotonically (~321 bytes/cycle measured on PR452 run 31011816726), a blocking dest-SHA at
+ * 1 GiB is what previously made cumulative checkpoint I/O quadratic.
  *
- * This module measures that curve directly so a regression fails a ten-minute gate instead of a
- * two-hour full-corpus job. It reproduces the production snapshot sequence in
- * `captureSessionDatabaseBackup` and `copyFileExclusiveFsync` without running the engine.
+ * This module measures the GATE 1 blocking capture sequence so a regression fails a ten-minute
+ * gate instead of a two-hour full-corpus job.
  */
 
 export const FHV_CHECKPOINT_COST_MODEL_SCHEMA = "fhv-checkpoint-cost-model/v1" as const;
@@ -182,31 +181,9 @@ export function copyAndDigestSync(
   return { digest: hash.digest("hex"), ficloneSucceeded: false };
 }
 
-function sha256FileStreaming(path: string): string {
-  const hash = createHash("sha256");
-  const fd = openSync(path, "r");
-  try {
-    const buffer = Buffer.allocUnsafe(DIGEST_CHUNK_BYTES);
-    let offset = 0;
-    for (;;) {
-      const read = readSync(fd, buffer, 0, buffer.length, offset);
-      if (read <= 0) {
-        break;
-      }
-      hash.update(buffer.subarray(0, read));
-      ioAccounting.sourceBytesRead += read;
-      ioAccounting.digestBytesProcessed += read;
-      offset += read;
-    }
-    return hash.digest("hex");
-  } finally {
-    closeSync(fd);
-  }
-}
-
 /**
- * Measure one checkpoint snapshot against a real database file, reproducing the production
- * sequence: exclusive temp copy, streaming digest, bundle publish with fsync and atomic rename.
+ * Measure one GATE 1 blocking capture against a real database file: clone or fallback copy,
+ * dest durability, and atomic publish. Destination SHA-256 is excluded — it is GATE 2.
  */
 export function measureFhvCheckpointSnapshotCost(input: {
   sessionPath: string;
@@ -220,23 +197,16 @@ export function measureFhvCheckpointSnapshotCost(input: {
   const bundleTempPath = `${bundlePath}.tmp-${process.pid}`;
 
   /*
-   * Clone first when the host proves it can. A copy-on-write clone is O(1), leaving the mandatory
-   * SHA-256 identity pass as the only size-proportional blocking work. When the filesystem cannot
-   * reflink, fall back to the fused single-pass copy+digest, which reads the source once instead
-   * of copying and then re-reading to hash.
+   * Clone first when the host proves it can. GATE 1 is the blocking capture; destination SHA-256
+   * is submitted off-thread as GATE 2 and must not appear in this interval.
    */
   const snapshotStartedAt = performance.now();
   const clone = tryNativeCloneFile(input.sessionPath, tempBackupPath);
   const ficloneSucceeded = clone.status === "NATIVE_CLONE_SUCCEEDED";
-  let digestDurationMs = 0;
-  let digest: string;
+  const digestDurationMs = 0;
+  const digest = "gate1-no-dest-sha";
   if (ficloneSucceeded) {
     const snapshotDurationMs = performance.now() - snapshotStartedAt;
-    // The clone shares extents with the source but is an independent file; the identity digest
-    // must still cover the checkpoint bytes.
-    const digestStartedAt = performance.now();
-    digest = sha256FileStreaming(tempBackupPath);
-    digestDurationMs = performance.now() - digestStartedAt;
     return finishSample({
       sessionBytes,
       snapshotDurationMs,
@@ -250,14 +220,15 @@ export function measureFhvCheckpointSnapshotCost(input: {
       workDir: input.workDir,
     });
   }
-  digest = copyAndDigestSync(input.sessionPath, tempBackupPath).digest;
+  copyFileSync(input.sessionPath, tempBackupPath);
+  ioAccounting.sourceBytesRead += sessionBytes;
+  ioAccounting.destBytesWritten += sessionBytes;
   const snapshotDurationMs = performance.now() - snapshotStartedAt;
   return finishSample({
     sessionBytes,
     snapshotDurationMs,
     digestDurationMs,
-    // The fallback hashes while it copies, so the two costs share one measured pass.
-    digestFusedIntoSnapshot: true,
+    digestFusedIntoSnapshot: false,
     ficloneSucceeded,
     digest,
     tempBackupPath,

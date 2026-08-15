@@ -40,17 +40,38 @@ export function readSegmentProjections(runDir: string): ReplayCycleEvidenceProje
   if (direct.length > 0) {
     return direct;
   }
-  // FHV composite sink writes under evidence/epoch-{id}/generation-{gen}/.
+  // FHV composite sink: canonical evidence/epoch-{id}/generation-{gen}/ plus any still-speculative
+  // active epoch under evidence/.speculative/ (sealed in place, never relocated while active).
   const evidenceRoot = join(runDir, "evidence");
   if (!existsSync(evidenceRoot)) {
     return direct;
   }
-  const epochDirs = readdirSync(evidenceRoot)
-    .filter((name) => name.startsWith("epoch-"))
-    .sort((a, b) => Number(a.slice("epoch-".length)) - Number(b.slice("epoch-".length)));
+  const byEpoch = new Map<number, ReplayCycleEvidenceProjection[]>();
+  collectEpochGenerationProjections(evidenceRoot, byEpoch);
+  collectEpochGenerationProjections(join(evidenceRoot, ".speculative"), byEpoch);
   const projections: ReplayCycleEvidenceProjection[] = [];
+  for (const epochId of [...byEpoch.keys()].sort((a, b) => a - b)) {
+    projections.push(...(byEpoch.get(epochId) ?? []));
+  }
+  return projections;
+}
+
+function collectEpochGenerationProjections(
+  parent: string,
+  into: Map<number, ReplayCycleEvidenceProjection[]>,
+): void {
+  if (!existsSync(parent)) {
+    return;
+  }
+  const epochDirs = readdirSync(parent)
+    .filter((name) => /^epoch-\d+$/.test(name))
+    .sort((a, b) => Number(a.slice("epoch-".length)) - Number(b.slice("epoch-".length)));
   for (const epochDir of epochDirs) {
-    const epochPath = join(evidenceRoot, epochDir);
+    const epochId = Number(epochDir.slice("epoch-".length));
+    if (into.has(epochId)) {
+      continue;
+    }
+    const epochPath = join(parent, epochDir);
     if (!statSync(epochPath).isDirectory()) {
       continue;
     }
@@ -59,6 +80,7 @@ export function readSegmentProjections(runDir: string): ReplayCycleEvidenceProje
       .sort(
         (a, b) => Number(a.slice("generation-".length)) - Number(b.slice("generation-".length)),
       );
+    const projections: ReplayCycleEvidenceProjection[] = [];
     for (const generationDir of generationDirs) {
       const segmentDir = join(epochPath, generationDir);
       if (!statSync(segmentDir).isDirectory()) {
@@ -66,8 +88,8 @@ export function readSegmentProjections(runDir: string): ReplayCycleEvidenceProje
       }
       projections.push(...new StreamingEvidenceReader(segmentDir).iterateProjections());
     }
+    into.set(epochId, projections);
   }
-  return projections;
 }
 
 function verifySegmentLink(

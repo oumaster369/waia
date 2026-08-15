@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createFhvCompositeEvidenceSink,
   resolveFhvEpochEvidenceSegmentDir,
+  resolveFhvSpeculativeEpochEvidenceSegmentDir,
 } from "@/lib/trader/observability/fhv-composite-evidence-sink";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-contract";
@@ -89,9 +90,13 @@ describe("FHV epoch evidence segment (Phase 7)", () => {
     }
 
     const ref = await sink.commitEpochSegment(5);
-    const segmentDir = resolveFhvEpochEvidenceSegmentDir(runRoot, 0, 1);
-    expect(ref.runDir).toBe(segmentDir);
-    expect(existsSync(join(segmentDir, "manifest.json"))).toBe(true);
+    const speculativeDir = resolveFhvSpeculativeEpochEvidenceSegmentDir(runRoot, 0, 1);
+    expect(ref.runDir).toBe(speculativeDir);
+    expect(existsSync(join(speculativeDir, "manifest.json"))).toBe(true);
+    sink.beginNextEpochSegment({ epochId: 1, generation: 1 });
+    const canonical = sink.promoteSealedEpochEvidence({ epochId: 0, generation: 1 });
+    expect(canonical).toBe(resolveFhvEpochEvidenceSegmentDir(runRoot, 0, 1));
+    expect(existsSync(join(canonical, "manifest.json"))).toBe(true);
     expect(sink.getSegmentManifests()).toHaveLength(1);
   });
 
@@ -105,8 +110,9 @@ describe("FHV epoch evidence segment (Phase 7)", () => {
     await sink.commitEpochSegment(3);
 
     sink.beginNextEpochSegment({ epochId: 1, generation: 2 });
-    const resumedSegmentDir = resolveFhvEpochEvidenceSegmentDir(runRoot, 1, 2);
+    const resumedSegmentDir = resolveFhvSpeculativeEpochEvidenceSegmentDir(runRoot, 1, 2);
     expect(sink.currentSegmentDir).toBe(resumedSegmentDir);
+    sink.promoteSealedEpochEvidence({ epochId: 0, generation: 1 });
 
     for (let i = 3; i < 6; i += 1) {
       sink.onCycle(i, makeCycle());

@@ -360,6 +360,7 @@ export async function runFullHistoricalBacktest(input: {
         ? { sourceCursorDigestEveryCycles: checkpointEveryCycles }
         : {}),
     });
+    await epochController?.drainPendingVerification();
     const hotPathWallTimeMs = performance.now() - backtestStartedAt;
     mark("run_backtest", backtestStartedAt);
     progressReporter?.forceReport({

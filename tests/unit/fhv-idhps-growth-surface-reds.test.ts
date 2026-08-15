@@ -372,7 +372,7 @@ describe("H-ARCH-1 IDHPS growth-surface RED→GREEN GS-01..14", () => {
       join(process.cwd(), "lib/trader/observability/fhv-execution-checkpoint.ts"),
       "utf8",
     );
-    expect(source).toContain("wal_checkpoint(PASSIVE)");
+    expect(source).toContain("wal_checkpoint(TRUNCATE)");
     expect(source).toContain("walBytes");
   });
 
