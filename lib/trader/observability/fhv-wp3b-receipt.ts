@@ -19,9 +19,18 @@ import {
  * measurements exceed the budget, is not evidence.
  */
 
-export const FHV_WP3B_RECEIPT_SCHEMA = "fhv-wp3b-host-qualification/v1" as const;
+export const FHV_WP3B_RECEIPT_SCHEMA = "fhv-wp3b-host-qualification/v2" as const;
 export const FHV_WP3B_QUALIFIED_CLASSIFICATION = "EXECUTION_SERVER_WP3B_HOST_QUALIFIED" as const;
 export const FHV_WP3B_REQUIRED_MEASURED_ITERATIONS = 3;
+
+/** checkpointEveryCycles(10000) / MIN_THROUGHPUT_CPS(877) in milliseconds. */
+export const FHV_WP3B_GATE2_LIVENESS_MS = Math.ceil((10_000 / 877) * 1000);
+
+export type FhvWp3bGateAxisV1 = Readonly<{
+  status: "PASS" | "FAIL";
+  measuredMs: readonly number[];
+  budgetMs: number;
+}>;
 
 export class FhvWp3bReceiptError extends Error {
   constructor(
@@ -36,6 +45,7 @@ export class FhvWp3bReceiptError extends Error {
 export type FhvWp3bReceiptV1 = Readonly<{
   schemaVersion: string;
   capturedAtUtc: string;
+  releaseSha?: string;
   host: Readonly<{ hostname: string; platform: string; sha256BytesPerSecond: number }>;
   cloneCapability: Readonly<{ supported: boolean; status: string; mechanism: string }>;
   identityProofs: Readonly<{
@@ -51,6 +61,8 @@ export type FhvWp3bReceiptV1 = Readonly<{
     durabilityInsideTimer: boolean;
     negativeTestDetectsBreach: boolean;
   }>;
+  gate1BlockingCapture: FhvWp3bGateAxisV1;
+  gate2DestinationVerification: FhvWp3bGateAxisV1;
   classification: string;
   receiptDigest: string;
 }>;
@@ -176,6 +188,30 @@ export function assertFhvWp3bHostQualified(input: {
     fail(
       "FHV_WP3B_NEGATIVE_TEST_INVALID",
       "WP-3B receipt negative test did not prove the gate can turn RED",
+    );
+  }
+
+  const gate1 = receipt.gate1BlockingCapture;
+  const gate2 = receipt.gate2DestinationVerification;
+  if (!gate1 || gate1.status !== "PASS") {
+    fail(
+      "FHV_WP3B_GATE1_FAILED",
+      `WP-3B GATE 1 blocking capture is not PASS: ${String(gate1?.status)}`,
+    );
+  }
+  if (gate1.budgetMs !== FHV_CHECKPOINT_BUDGET_MS_PER_10K) {
+    fail("FHV_WP3B_BUDGET_MISMATCH", "WP-3B GATE 1 budget is not 400 ms");
+  }
+  if (!gate2 || gate2.status !== "PASS") {
+    fail(
+      "FHV_WP3B_GATE2_FAILED",
+      `WP-3B GATE 2 destination verification is not PASS: ${String(gate2?.status)}`,
+    );
+  }
+  if (gate2.budgetMs !== FHV_WP3B_GATE2_LIVENESS_MS) {
+    fail(
+      "FHV_WP3B_GATE2_LIVENESS_MISMATCH",
+      `WP-3B GATE 2 liveness ${String(gate2.budgetMs)} != ${FHV_WP3B_GATE2_LIVENESS_MS}`,
     );
   }
 

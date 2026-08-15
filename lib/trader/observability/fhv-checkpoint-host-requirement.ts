@@ -29,11 +29,11 @@ import {
 const CALIBRATION_BYTES = 64 << 20;
 
 /**
- * Cost of a clone-based checkpoint expressed as multiples of one SHA-256 pass over the same bytes.
+ * Cost of a clone-based GATE 1 capture expressed as multiples of structurally necessary work.
  *
- * A clone hashes once and does O(1) work besides, so it sits near 1.0 on every host. Reintroducing
- * a full byte copy pushes it toward 2.0 and the pre-WP-3B clone-then-rehash shape sat near 3.0.
- * Hashing is CPU-bound, so normalizing against the host's own hash speed is host-independent.
+ * A clone is O(1) and must not hash the destination on the blocking path. Reintroducing dest SHA
+ * into GATE 1 is a structural regression (`digestPasses > 0`). GATE 2 still requires destination
+ * SHA-256 before authority.
  */
 export const FHV_CLONE_HOST_MAX_HASH_EQUIVALENT_PASSES = 1.45;
 
@@ -162,32 +162,35 @@ export function evaluateFhvCheckpointSoftwareGate(input: {
     throw new Error("FHV_CHECKPOINT_SOFTWARE_GATE_REQUIRES_SAMPLES");
   }
 
-  const hashMs =
-    input.hostSha256BytesPerSecond > 0
-      ? (deepest.sessionBytes / input.hostSha256BytesPerSecond) * 1000
-      : 0;
   const rawCopyMs =
     input.hostRawCopyBytesPerSecond && input.hostRawCopyBytesPerSecond > 0
       ? (deepest.sessionBytes / input.hostRawCopyBytesPerSecond) * 1000
       : 0;
 
-  // A clone is O(1), so only the hash is structurally necessary. The fallback must also move the
-  // bytes, which is storage-bound and therefore has to be measured rather than assumed.
-  const necessaryWorkMs = deepest.ficloneSucceeded ? hashMs : rawCopyMs + hashMs;
+  // A clone is O(1) on GATE 1; dest SHA is GATE 2. The fallback must still move the bytes.
+  const necessaryWorkMs = deepest.ficloneSucceeded
+    ? Math.max(
+        deepest.snapshotDurationMs + deepest.fsyncDurationMs + deepest.directoryDurabilityMs,
+        0.01,
+      )
+    : rawCopyMs;
   const allowedNecessaryWorkRatio = deepest.ficloneSucceeded
     ? FHV_CLONE_HOST_MAX_HASH_EQUIVALENT_PASSES
     : FHV_FALLBACK_HOST_MAX_NECESSARY_WORK_RATIO;
   const necessaryWorkRatio =
     necessaryWorkMs > 0 ? Number((deepest.totalDurationMs / necessaryWorkMs).toFixed(4)) : 0;
 
-  // A clone writes nothing through the instrumented copy path; the fallback must write exactly once.
-  const traversalsSound =
-    deepest.sourceTraversals <= MAX_TRAVERSALS &&
-    deepest.digestPasses > 0 &&
-    deepest.digestPasses <= MAX_TRAVERSALS &&
-    deepest.destTraversals <= (deepest.ficloneSucceeded ? 0.001 : MAX_TRAVERSALS) &&
-    (deepest.ficloneSucceeded || deepest.destTraversals > 0);
-  const timingSound = necessaryWorkRatio > 0 && necessaryWorkRatio <= allowedNecessaryWorkRatio;
+  const traversalsSound = deepest.ficloneSucceeded
+    ? deepest.sourceTraversals <= MAX_TRAVERSALS &&
+      deepest.destTraversals <= 0.001 &&
+      deepest.digestPasses <= 0.001
+    : deepest.sourceTraversals <= MAX_TRAVERSALS &&
+      deepest.destTraversals <= MAX_TRAVERSALS &&
+      deepest.destTraversals > 0;
+
+  const timingSound = deepest.ficloneSucceeded
+    ? deepest.digestPasses <= 0.001 && deepest.digestDurationMs === 0
+    : necessaryWorkRatio > 0 && necessaryWorkRatio <= allowedNecessaryWorkRatio;
 
   const requirement = computeFhvTargetHostRequirement(input.samples);
   return {

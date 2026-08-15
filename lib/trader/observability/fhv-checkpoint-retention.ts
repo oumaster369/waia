@@ -6,26 +6,32 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { join } from "node:path";
 
 import { FHV_CHECKPOINT_MANIFEST_FILENAME } from "@/lib/trader/observability/fhv-execution-checkpoint-bundle";
+import { isCanonicalFhvEpochCheckpointDirName } from "@/lib/trader/observability/fhv-execution-checkpoint-bundle";
+import { readFhvLaunchJournal } from "@/lib/trader/observability/fhv-launch-journal";
 
 /**
- * Retain the two newest fully committed checkpoint bundles (session.sqlite + runtime).
- * Older epochs keep only immutable manifest/digest summaries under summaries/.
+ * Retain the two newest journal-authoritative checkpoint bundles.
+ * Provisional and orphan canonical dirs (epoch > journal) never count.
  */
 export function pruneFhvCheckpointBundlesToTwoNewest(runDir: string): {
   retainedEpochIds: number[];
   summarizedEpochIds: number[];
 } {
+  const journal = existsSync(join(runDir, "fhv-launch-journal.v1.json"))
+    ? readFhvLaunchJournal(runDir)
+    : null;
+  const lastCommittedEpoch = journal?.lastCommittedEpoch ?? -1;
   const checkpointsParent = join(runDir, "checkpoints");
-  if (!existsSync(checkpointsParent)) {
+  if (!existsSync(checkpointsParent) || lastCommittedEpoch < 0) {
     return { retainedEpochIds: [], summarizedEpochIds: [] };
   }
   const epochDirs = readdirSync(checkpointsParent, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && /^epoch-\d+$/.test(entry.name))
+    .filter((entry) => entry.isDirectory() && isCanonicalFhvEpochCheckpointDirName(entry.name))
     .map((entry) => ({
       name: entry.name,
       epochId: Number(entry.name.slice("epoch-".length)),
     }))
-    .filter((entry) => Number.isFinite(entry.epochId))
+    .filter((entry) => Number.isFinite(entry.epochId) && entry.epochId <= lastCommittedEpoch)
     .sort((a, b) => b.epochId - a.epochId);
 
   const retained = epochDirs.slice(0, 2);

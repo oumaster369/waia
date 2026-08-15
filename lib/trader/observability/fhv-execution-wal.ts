@@ -217,6 +217,8 @@ export class FhvExecutionWalWriter {
   private recordCount = 0;
   private bytesWritten = 0;
   private readonly fencingGeneration: number;
+  /** When set, only EXECUTION_CHECKPOINT / EPOCH_COMMIT for this epoch may append. */
+  private frozenUntilEpochCommit: number | null = null;
 
   constructor(
     private readonly runRoot: string,
@@ -290,6 +292,17 @@ export class FhvExecutionWalWriter {
     recordType: FhvExecutionWalRecordType;
     payload: unknown;
   }): FhvExecutionWalRecord {
+    if (this.frozenUntilEpochCommit !== null) {
+      const allowed =
+        input.epochId === this.frozenUntilEpochCommit &&
+        (input.recordType === "EXECUTION_CHECKPOINT" || input.recordType === "EPOCH_COMMIT");
+      if (!allowed) {
+        throw new FhvExecutionWalError(
+          "FHV_CANONICAL_WAL_APPEND_WHILE_FROZEN",
+          `canonical WAL frozen through EPOCH_COMMIT ${this.frozenUntilEpochCommit}; refused ${input.recordType} epoch=${input.epochId}`,
+        );
+      }
+    }
     const payloadDigest = computeStableJsonDigest(input.payload);
     const body = buildWalRecordChecksumBody({
       schemaVersion: FHV_EXECUTION_WAL_RECORD_SCHEMA_VERSION,
@@ -322,6 +335,9 @@ export class FhvExecutionWalWriter {
     this.previousRecordDigest = checksum;
     this.recordCount += 1;
     this.bytesWritten += Buffer.byteLength(serialized, "utf8");
+    if (input.recordType === "EPOCH_COMMIT" && input.epochId === this.frozenUntilEpochCommit) {
+      this.frozenUntilEpochCommit = null;
+    }
     return record;
   }
 
@@ -331,6 +347,14 @@ export class FhvExecutionWalWriter {
 
   get totalRecords(): number {
     return this.recordCount;
+  }
+
+  freezeUntilEpochCommit(epochId: number): void {
+    this.frozenUntilEpochCommit = epochId;
+  }
+
+  isFrozen(): boolean {
+    return this.frozenUntilEpochCommit !== null;
   }
 }
 
@@ -383,4 +407,63 @@ export function recoverFhvExecutionWalTail(
   const truncatedTailBytes =
     Buffer.byteLength(content, "utf8") - Buffer.byteLength(validContent, "utf8");
   return { validRecords, truncatedTailBytes, rejectedV1Records };
+}
+
+export type FhvJournalAuthoritativeWalPrefix = Readonly<{
+  records: FhvExecutionWalRecord[];
+  truncatedToBytes: number;
+  previousRecordDigest: string;
+}>;
+
+/**
+ * Truncate canonical WAL to the physical end of the unique journal-authoritative EPOCH_COMMIT.
+ * Do not use FhvEpochCommitRecord.walEndOffset — that offset excludes the EPOCH_COMMIT line.
+ */
+export function truncateFhvExecutionWalToJournalAuthoritativeCommit(input: {
+  walPath: string;
+  lastCommittedEpoch: number;
+  lastCommittedCycle: number;
+  lastEpochCommitDigest: string;
+}): FhvJournalAuthoritativeWalPrefix {
+  const recovery = recoverFhvExecutionWalTail(input.walPath, { rejectV1: true });
+  if (recovery.rejectedV1Records) {
+    throw new FhvExecutionWalError(
+      "WAL_SCHEMA_V1_UNSUPPORTED",
+      "FHV execution WAL v1 records are unsupported on the official recovery path",
+    );
+  }
+  if (input.lastCommittedEpoch < 0) {
+    writeFileSync(input.walPath, "", "utf8");
+    fsyncFhvExecutionWalFile(input.walPath);
+    return {
+      records: [],
+      truncatedToBytes: 0,
+      previousRecordDigest: "0".repeat(64),
+    };
+  }
+  const matches = recovery.validRecords
+    .map((record, index) => ({ record, index }))
+    .filter(({ record }) => {
+      if (record.recordType !== "EPOCH_COMMIT") return false;
+      if (record.epochId !== input.lastCommittedEpoch) return false;
+      if (record.cycleIndex !== input.lastCommittedCycle) return false;
+      const payload = record.payload as { epochCommitDigest?: string };
+      return payload.epochCommitDigest === input.lastEpochCommitDigest;
+    });
+  if (matches.length !== 1) {
+    throw new FhvExecutionWalError(
+      "FHV_WAL_JOURNAL_COMMIT_NOT_UNIQUE",
+      `journal-authoritative EPOCH_COMMIT not uniquely found (matches=${matches.length}) epoch=${input.lastCommittedEpoch}`,
+    );
+  }
+  const prefix = recovery.validRecords.slice(0, matches[0]!.index + 1);
+  const validContent = prefix.map((record) => `${JSON.stringify(record)}\n`).join("");
+  writeFileSync(input.walPath, validContent, "utf8");
+  fsyncFhvExecutionWalFile(input.walPath);
+  const last = prefix.at(-1)!;
+  return {
+    records: prefix,
+    truncatedToBytes: Buffer.byteLength(validContent, "utf8"),
+    previousRecordDigest: last.checksum,
+  };
 }

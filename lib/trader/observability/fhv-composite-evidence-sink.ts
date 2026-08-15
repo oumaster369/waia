@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { existsSync, mkdirSync, renameSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import {
   createFhvTraceEvidenceSink,
@@ -31,9 +32,20 @@ export type FhvCompositeEvidenceSink = ReplayEvidenceSink & {
   beginNextEpochSegment(input: { epochId: number; generation: number }): void;
   getTraceSink(): FhvTraceReplayEvidenceSink;
   getSegmentManifests(): readonly StreamingEvidenceManifestRef[];
+  promoteSealedEpochEvidence(input: { epochId: number; generation: number }): string;
 };
 
-/** Epoch-scoped streaming projection evidence directory (segment-local chunk seq starts at 0). */
+export class FhvEvidenceLifecycleError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "FhvEvidenceLifecycleError";
+  }
+}
+
+/** Canonical sealed evidence directory. Never used for an active writer. */
 export function resolveFhvEpochEvidenceSegmentDir(
   runDir: string,
   epochId: number,
@@ -42,11 +54,63 @@ export function resolveFhvEpochEvidenceSegmentDir(
   return join(runDir, "evidence", `epoch-${epochId}`, `generation-${generation}`);
 }
 
+/** Active epoch writers live here for their entire lifetime. Never relocated while active. */
+export function resolveFhvSpeculativeEpochEvidenceSegmentDir(
+  runDir: string,
+  epochId: number,
+  generation: number,
+): string {
+  return join(runDir, "evidence", ".speculative", `epoch-${epochId}`, `generation-${generation}`);
+}
+
+/**
+ * Promote a sealed, inactive speculative directory to the canonical path.
+ * Must not be called while the writer is still active.
+ */
+export function promoteSealedFhvEpochEvidenceDir(input: {
+  runDir: string;
+  epochId: number;
+  generation: number;
+}): string {
+  const speculative = resolveFhvSpeculativeEpochEvidenceSegmentDir(
+    input.runDir,
+    input.epochId,
+    input.generation,
+  );
+  const canonical = resolveFhvEpochEvidenceSegmentDir(
+    input.runDir,
+    input.epochId,
+    input.generation,
+  );
+  if (!existsSync(speculative)) {
+    throw new FhvEvidenceLifecycleError(
+      "FHV_EVIDENCE_PROMOTION_SOURCE_MISSING",
+      `sealed speculative evidence missing: ${speculative}`,
+    );
+  }
+  if (existsSync(canonical)) {
+    throw new FhvEvidenceLifecycleError(
+      "FHV_EVIDENCE_PROMOTION_TARGET_EXISTS",
+      `canonical evidence already exists: ${canonical}`,
+    );
+  }
+  mkdirSync(dirname(canonical), { recursive: true });
+  renameSync(speculative, canonical);
+  return canonical;
+}
+
 export function createFhvCompositeEvidenceSink(
   input: CreateFhvCompositeEvidenceSinkInput,
 ): FhvCompositeEvidenceSink {
   const segmentManifests: StreamingEvidenceManifestRef[] = [];
-  let segmentDir = resolveFhvEpochEvidenceSegmentDir(input.runDir, input.epochId, input.generation);
+  const sealedEpochs = new Set<string>();
+  let activeEpochId = input.epochId;
+  let activeGeneration = input.generation;
+  let segmentDir = resolveFhvSpeculativeEpochEvidenceSegmentDir(
+    input.runDir,
+    input.epochId,
+    input.generation,
+  );
 
   const enableTraceEvidence = input.enableTraceEvidence !== false;
   const traceSink = enableTraceEvidence
@@ -67,6 +131,8 @@ export function createFhvCompositeEvidenceSink(
     gitSha: input.gitSha,
     environment: input.environment,
   });
+
+  const epochKey = (epochId: number, generation: number): string => `${epochId}:${generation}`;
 
   const forwardOnCycle = (cycleIndex: number, result: PaperCycleResult): void => {
     streamingSink.onCycle(cycleIndex, result);
@@ -100,17 +166,61 @@ export function createFhvCompositeEvidenceSink(
     },
     async commitEpochSegment(expectedCycleCount) {
       const ref = await streamingSink.sealComplete(expectedCycleCount);
+      sealedEpochs.add(epochKey(activeEpochId, activeGeneration));
       segmentManifests.push(ref);
       return ref;
     },
     beginNextEpochSegment(next) {
-      segmentDir = resolveFhvEpochEvidenceSegmentDir(input.runDir, next.epochId, next.generation);
+      activeEpochId = next.epochId;
+      activeGeneration = next.generation;
+      segmentDir = resolveFhvSpeculativeEpochEvidenceSegmentDir(
+        input.runDir,
+        next.epochId,
+        next.generation,
+      );
       streamingSink = createStreamingEvidenceSink({
         runDir: segmentDir,
         runId: input.runId,
         gitSha: input.gitSha,
         environment: input.environment,
       });
+    },
+    promoteSealedEpochEvidence(next) {
+      const key = epochKey(next.epochId, next.generation);
+      const isActiveUnsealed =
+        next.epochId === activeEpochId &&
+        next.generation === activeGeneration &&
+        !sealedEpochs.has(key);
+      if (isActiveUnsealed) {
+        throw new FhvEvidenceLifecycleError(
+          "FHV_EVIDENCE_ACTIVE_WRITER_RELOCATE_FORBIDDEN",
+          `refusing to relocate active evidence writer epoch=${next.epochId}`,
+        );
+      }
+      if (!sealedEpochs.has(key)) {
+        throw new FhvEvidenceLifecycleError(
+          "FHV_EVIDENCE_PROMOTION_BEFORE_SEAL",
+          `refusing to promote unsealed evidence epoch=${next.epochId}`,
+        );
+      }
+      const speculative = resolveFhvSpeculativeEpochEvidenceSegmentDir(
+        input.runDir,
+        next.epochId,
+        next.generation,
+      );
+      const canonical = promoteSealedFhvEpochEvidenceDir({
+        runDir: input.runDir,
+        epochId: next.epochId,
+        generation: next.generation,
+      });
+      for (let index = 0; index < segmentManifests.length; index += 1) {
+        const ref = segmentManifests[index];
+        if (ref?.runDir === speculative) {
+          segmentManifests[index] = { ...ref, runDir: canonical };
+        }
+      }
+      sealedEpochs.delete(key);
+      return canonical;
     },
     getTraceSink() {
       if (!traceSink) {

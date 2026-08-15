@@ -50,11 +50,15 @@ const MIN_SEGMENT_CHECKPOINTS = 3;
 const SEGMENT_RUN_ID = "fhv-official-scale-deep-state-segment";
 
 /**
- * Half the pre-WP-6A unbounded baseline (~320 bytes/cycle). Bounded hot state measured 54-97 on
- * exact HEAD 29447a9, so this leaves ample room for legitimate variation while still failing if
- * unbounded economic history returns to the checkpointed database.
+ * Pre-WP-6A unbounded baseline was ~320 bytes/cycle. Bounded hot state measured 54-97 on
+ * exact HEAD 29447a9 / 156 on origin/main 3c45d5e (PASSIVE WAL checkpoint).
+ *
+ * Two-phase authority (DEE-536) fail-closed TRUNCATEs WAL into session.sqlite before clone,
+ * and defers economic prune until verified authority, so live db growth during the pending
+ * window is higher than the old blocking SHA+prune path. 280 still fails if unbounded
+ * economic history returns (~320) while leaving room for the required TRUNCATE/pending window.
  */
-export const FHV_BOUNDED_GROWTH_BYTES_PER_CYCLE_CEILING = 160;
+export const FHV_BOUNDED_GROWTH_BYTES_PER_CYCLE_CEILING = 280;
 
 /**
  * Launch receipts and configuration freezes are single-use by design, so a repeated local run
@@ -337,11 +341,10 @@ describe("FHV deep-state representative segment", () => {
   /**
    * WP-6B permanent regression gate.
    *
-   * The pre-WP-6A architecture grew the checkpointed database ~320 bytes per cycle, which is what
-   * made cumulative checkpoint I/O quadratic. Bounded hot state measured 54-97 bytes/cycle on
-   * exact HEAD 29447a9. This locks the structural property rather than an absolute throughput
-   * number, so it stays meaningful on a slower CI runner instead of turning into a flaky
-   * machine-speed assertion.
+   * Pre-WP-6A grew ~320 bytes/cycle. Bounded hot state measured 54-97 (HEAD 29447a9) and 156
+   * on origin/main 3c45d5e. Two-phase authority TRUNCATEs WAL into the measured db file and
+   * defers prune until verified authority, so live growth during the pending window is higher.
+   * The ceiling stays below the unbounded 320 baseline and is not a hosted-runner speed gate.
    */
   it("keeps session-database growth bounded when bounded hot state is enabled", () => {
     if (!isFhvBoundedHotStateEnabled()) {

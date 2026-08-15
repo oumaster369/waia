@@ -183,7 +183,8 @@ describe("FHV checkpoint cost model", () => {
     expect(gate.timingSound).toBe(true);
     expect(gate.structurallySound).toBe(true);
     expect(gate.sourceTraversals).toBeLessThanOrEqual(1.05);
-    expect(gate.digestPasses).toBeGreaterThan(0);
+    // GATE 1 must not include destination SHA traversal.
+    expect(gate.digestPasses).toBeLessThanOrEqual(0.001);
 
     /*
      * Cost must not grow faster than the data it moves. Traversal accounting proves that directly
@@ -193,8 +194,8 @@ describe("FHV checkpoint cost model", () => {
      */
     for (const sample of model.samples) {
       expect(sample.sourceTraversals).toBeLessThanOrEqual(1.05);
-      expect(sample.digestPasses).toBeLessThanOrEqual(1.05);
-      expect(sample.digestPasses).toBeGreaterThan(0);
+      expect(sample.digestPasses).toBeLessThanOrEqual(0.001);
+      expect(sample.digestDurationMs).toBe(0);
       expect(sample.destTraversals).toBeLessThanOrEqual(sample.ficloneSucceeded ? 0.001 : 1.05);
     }
     /*
@@ -257,16 +258,18 @@ describe("FHV checkpoint cost model", () => {
     const clone = (total: number) => ({
       ...baseSample(bytes, total),
       ficloneSucceeded: true,
-      sourceTraversals: 1,
+      digestDurationMs: 0,
+      sourceTraversals: 0,
       destTraversals: 0,
-      digestPasses: 1,
+      digestPasses: 0,
     });
     const fallback = (total: number) => ({
       ...baseSample(bytes, total),
       ficloneSucceeded: false,
+      digestDurationMs: 0,
       sourceTraversals: 1,
       destTraversals: 1,
-      digestPasses: 1,
+      digestPasses: 0,
     });
     const evaluate = (sample: FhvCheckpointCostSampleV1, hostHashBps = hashBps) =>
       evaluateFhvCheckpointSoftwareGate({
@@ -276,23 +279,23 @@ describe("FHV checkpoint cost model", () => {
       });
 
     expect(evaluate(clone(hashMs * 1.02)).structurallySound).toBe(true);
-    expect(evaluate(fallback(copyMs + hashMs)).structurallySound).toBe(true);
+    expect(evaluate(fallback(copyMs)).structurallySound).toBe(true);
 
-    // An extra full read: the clone path rehashes instead of hashing once.
+    // GATE 1 must not contain destination SHA traversal.
     const extraRead = evaluate({ ...clone(hashMs * 2.2), sourceTraversals: 2, digestPasses: 2 });
     expect(extraRead.traversalsSound).toBe(false);
     expect(extraRead.structurallySound).toBe(false);
 
     // An extra full copy: the fallback writes the destination twice.
-    const extraCopy = evaluate({ ...fallback(copyMs * 2 + hashMs), destTraversals: 2 });
+    const extraCopy = evaluate({ ...fallback(copyMs * 2), destTraversals: 2 });
     expect(extraCopy.traversalsSound).toBe(false);
 
-    // Copy-then-rehash: correct traversal counts are impossible, and the timing exceeds the
-    // necessary work on this host even though the host itself is unchanged.
-    expect(evaluate(fallback(copyMs + hashMs * 2 + copyMs * 0.5)).timingSound).toBe(false);
+    expect(evaluate(fallback(copyMs * 2 + hashMs)).timingSound).toBe(false);
 
-    // Omitted hashing must never look sound.
-    expect(evaluate({ ...clone(hashMs * 0.1), digestPasses: 0 }).structurallySound).toBe(false);
+    // Dest SHA leaked into GATE 1 must never look sound.
+    expect(
+      evaluate({ ...clone(hashMs * 0.1), digestPasses: 1, digestDurationMs: 12 }).structurallySound,
+    ).toBe(false);
 
     // False reflink reporting: claiming a clone while still writing the destination.
     expect(evaluate({ ...clone(hashMs * 1.02), destTraversals: 1 }).traversalsSound).toBe(false);

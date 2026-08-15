@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import {
   createFhvCompositeEvidenceSink,
-  resolveFhvEpochEvidenceSegmentDir,
+  resolveFhvSpeculativeEpochEvidenceSegmentDir,
 } from "@/lib/trader/observability/fhv-composite-evidence-sink";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import { HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT } from "@/lib/trader/research/htr-initial-portfolio-contract";
@@ -88,7 +88,7 @@ describe("FHV composite evidence sink (Phase 7)", () => {
       sink.onCycle(cycleIndex, makeCycle());
     }
 
-    const segmentDir = resolveFhvEpochEvidenceSegmentDir(runRoot, 0, 1);
+    const segmentDir = resolveFhvSpeculativeEpochEvidenceSegmentDir(runRoot, 0, 1);
     expect(sink.currentSegmentDir).toBe(segmentDir);
     expect(sink.peakBufferedProjections()).toBe(3);
 

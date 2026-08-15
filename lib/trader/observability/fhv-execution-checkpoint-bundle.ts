@@ -7,6 +7,7 @@ import {
   fsyncSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   readSync,
   renameSync,
@@ -24,6 +25,7 @@ export const FHV_EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_VERSION =
 
 export const FHV_CHECKPOINT_MANIFEST_FILENAME = "checkpoint-manifest.v1.json" as const;
 export const FHV_CHECKPOINT_READY_MARKER = ".ready" as const;
+export const FHV_PROVISIONAL_CHECKPOINTS_DIRNAME = ".provisional" as const;
 
 export type FhvExecutionCheckpointManifestFileEntry = Readonly<{
   relativePath: string;
@@ -194,6 +196,19 @@ function formatEpochCheckpointDirName(epochId: number): string {
 
 export function resolveFhvEpochCheckpointDir(runDir: string, epochId: number): string {
   return join(runDir, "checkpoints", formatEpochCheckpointDirName(epochId));
+}
+
+export function resolveFhvProvisionalEpochCheckpointDir(runDir: string, epochId: number): string {
+  return join(
+    runDir,
+    "checkpoints",
+    FHV_PROVISIONAL_CHECKPOINTS_DIRNAME,
+    formatEpochCheckpointDirName(epochId),
+  );
+}
+
+export function isCanonicalFhvEpochCheckpointDirName(name: string): boolean {
+  return /^epoch-\d+$/.test(name);
 }
 
 export function resolveFhvEpochCheckpointRelativePath(epochId: number): string {
@@ -386,6 +401,154 @@ export function publishFhvExecutionCheckpointBundle(input: {
     }
     throw error;
   }
+}
+
+export function fsyncFhvCheckpointPath(filePath: string): void {
+  const fd = openSync(filePath, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Promote a provisional checkpoint directory that already contains the verified
+ * destination session.sqlite inode. Does not clone or re-hash the 1 GiB dest file.
+ */
+export function finalizeFhvProvisionalCheckpointBundle(input: {
+  runDir: string;
+  runId: string;
+  epochId: number;
+  generation: number;
+  firstCycle: number;
+  lastCycle: number;
+  additionalFiles?: Readonly<Record<string, Buffer | string>>;
+  verifiedSessionDatabaseDigest: string;
+  verifiedSessionDatabaseBytes: number;
+  sourceCursorDigest: string;
+  executionStateDigest: string;
+  accountingFrontierDigest: string;
+  identityFrontierDigest: string;
+  evidenceFrontierDigest: string;
+  syntheticScaleAuthorityDigest?: string;
+  executionConfigurationDigest?: string;
+}): {
+  checkpointDir: string;
+  checkpointRelativePath: string;
+  manifest: FhvExecutionCheckpointManifestV1;
+} {
+  const provisionalDir = resolveFhvProvisionalEpochCheckpointDir(input.runDir, input.epochId);
+  const finalDir = resolveFhvEpochCheckpointDir(input.runDir, input.epochId);
+  if (!existsSync(provisionalDir)) {
+    throw new FhvExecutionCheckpointBundleError(
+      "CHECKPOINT_PROVISIONAL_MISSING",
+      `Provisional checkpoint missing: ${provisionalDir}`,
+    );
+  }
+  if (existsSync(finalDir)) {
+    throw new FhvExecutionCheckpointBundleError(
+      "CHECKPOINT_EPOCH_EXISTS",
+      `Refusing to overwrite existing epoch checkpoint directory: ${finalDir}`,
+    );
+  }
+  const sessionPath = join(provisionalDir, "session.sqlite");
+  if (!existsSync(sessionPath)) {
+    throw new FhvExecutionCheckpointBundleError(
+      "CHECKPOINT_FILE_MISSING",
+      `Provisional session.sqlite missing: ${sessionPath}`,
+    );
+  }
+  const sessionBytes = statSync(sessionPath).size;
+  if (sessionBytes !== input.verifiedSessionDatabaseBytes) {
+    throw new FhvExecutionCheckpointBundleError(
+      "CHECKPOINT_FILE_SIZE_MISMATCH",
+      `Provisional session.sqlite size ${sessionBytes} != verified ${input.verifiedSessionDatabaseBytes}`,
+    );
+  }
+  if (existsSync(join(provisionalDir, FHV_CHECKPOINT_READY_MARKER))) {
+    throw new FhvExecutionCheckpointBundleError(
+      "CHECKPOINT_PROVISIONAL_HAS_READY",
+      "Provisional checkpoint must not carry canonical .ready semantics",
+    );
+  }
+
+  for (const [relativePath, content] of Object.entries(input.additionalFiles ?? {})) {
+    if (relativePath.includes("..") || relativePath.startsWith("/")) {
+      throw new FhvExecutionCheckpointBundleError(
+        "CHECKPOINT_FILE_PATH_INVALID",
+        `Invalid checkpoint relative path: ${relativePath}`,
+      );
+    }
+    const destPath = join(provisionalDir, relativePath);
+    mkdirSync(dirname(destPath), { recursive: true });
+    const payload = typeof content === "string" ? Buffer.from(content, "utf8") : content;
+    writeFileExclusiveFsync(destPath, payload);
+  }
+
+  const fileEntries: FhvExecutionCheckpointManifestFileEntry[] = [];
+  for (const name of readdirSync(provisionalDir)) {
+    if (name === FHV_CHECKPOINT_READY_MARKER || name === FHV_CHECKPOINT_MANIFEST_FILENAME) {
+      continue;
+    }
+    const destPath = join(provisionalDir, name);
+    if (statSync(destPath).isDirectory()) {
+      continue;
+    }
+    if (name === "session.sqlite") {
+      fileEntries.push({
+        relativePath: name,
+        byteCount: sessionBytes,
+        sha256: input.verifiedSessionDatabaseDigest,
+      });
+      continue;
+    }
+    const hashed = sha256FileSync(destPath);
+    fileEntries.push({
+      relativePath: name,
+      byteCount: hashed.byteCount,
+      sha256: hashed.digest,
+    });
+  }
+  fileEntries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+
+  const manifest = buildManifest({
+    runId: input.runId,
+    epochId: input.epochId,
+    generation: input.generation,
+    firstCycle: input.firstCycle,
+    lastCycle: input.lastCycle,
+    files: fileEntries,
+    sourceCursorDigest: input.sourceCursorDigest,
+    executionStateDigest: input.executionStateDigest,
+    accountingFrontierDigest: input.accountingFrontierDigest,
+    identityFrontierDigest: input.identityFrontierDigest,
+    evidenceFrontierDigest: input.evidenceFrontierDigest,
+    sessionDatabaseDigest: input.verifiedSessionDatabaseDigest,
+    ...(input.syntheticScaleAuthorityDigest
+      ? { syntheticScaleAuthorityDigest: input.syntheticScaleAuthorityDigest }
+      : {}),
+    ...(input.executionConfigurationDigest
+      ? { executionConfigurationDigest: input.executionConfigurationDigest }
+      : {}),
+  });
+  writeFileExclusiveFsync(
+    join(provisionalDir, FHV_CHECKPOINT_MANIFEST_FILENAME),
+    Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"),
+  );
+  writeFileExclusiveFsync(
+    join(provisionalDir, FHV_CHECKPOINT_READY_MARKER),
+    Buffer.from("", "utf8"),
+  );
+  fsyncDirectoryStrict(provisionalDir);
+  mkdirSync(dirname(finalDir), { recursive: true });
+  renameSync(provisionalDir, finalDir);
+  fsyncDirectoryStrict(dirname(finalDir));
+  return {
+    checkpointDir: finalDir,
+    checkpointRelativePath: resolveFhvEpochCheckpointRelativePath(input.epochId),
+    manifest,
+  };
 }
 
 function readManifestFromCheckpointDir(checkpointDir: string): FhvExecutionCheckpointManifestV1 {

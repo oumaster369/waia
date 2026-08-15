@@ -1,29 +1,25 @@
-import { createHash } from "node:crypto";
 import {
+  chmodSync,
   closeSync,
-  constants as fsConstants,
-  copyFileSync,
   existsSync,
   mkdirSync,
   openSync,
-  readFileSync,
   readSync,
   rmSync,
   statSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
 import { getRawSqliteDatabase } from "@/db/client";
 import {
-  applyIdhpsDurableEpochStep10,
+  getIdhpsSession,
   recordIdhpsCheckpointMetrics,
   recordIdhpsCheckpointSnapshotCost,
-  writeIdhpsCompositeMirrorForCheckpoint,
+  setIdhpsSealedAuthority,
 } from "@/lib/trader/execution/idhps-session-registry";
 import { pruneFhvCheckpointBundlesToTwoNewest } from "@/lib/trader/observability/fhv-checkpoint-retention";
-import { copyAndDigestSync } from "@/lib/trader/observability/fhv-checkpoint-cost-model";
 import { tryNativeCloneFile } from "@/lib/trader/observability/fhv-native-clone";
 import {
   collectFhvLifecycleAuditRows,
@@ -33,7 +29,6 @@ import {
   pruneFhvSealedEconomicRows,
   pruneFhvSealedLifecycleAuditRows,
 } from "@/lib/trader/execution/fhv-hot-state-pruner";
-import { setIdhpsSealedAuthority } from "@/lib/trader/execution/idhps-session-registry";
 import {
   openFhvVerifiedEconomicLedgerSnapshot,
   sealFhvEconomicLedgerEpoch,
@@ -55,8 +50,26 @@ import type {
   BacktestCycleBoundaryDecision,
   FhvCycleBoundarySnapshot,
 } from "@/lib/trader/backtest/backtest-runner";
-import { resolveEvidenceFrontier } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
-import type { FhvCompositeEvidenceSink } from "@/lib/trader/observability/fhv-composite-evidence-sink";
+import {
+  resolveFhvEpochEvidenceSegmentDir,
+  type FhvCompositeEvidenceSink,
+} from "@/lib/trader/observability/fhv-composite-evidence-sink";
+import { verifyFhvDestinationShaOffMainThread } from "@/lib/trader/observability/fhv-destination-sha-verifier";
+import {
+  captureFrozenPendingIdhpsEpoch,
+  materializePostCommitIdhpsCompositeFromFrozen,
+  rotateIdhpsLiveEpochWorkingSetAfterProvisionalFreeze,
+  type FrozenPendingIdhpsEpochV1,
+} from "@/lib/trader/observability/fhv-idhps-epoch-rotation";
+import { assertSqliteWalTruncated } from "@/lib/trader/observability/fhv-sqlite-wal-truncate";
+import {
+  cleanupFhvEpochEvidenceGenerations,
+  cleanupFhvTwoPhaseResumeState,
+} from "@/lib/trader/observability/fhv-two-phase-recovery";
+import { IDHPS_COMPOSITE_MIRROR_FILENAME } from "@/lib/trader/observability/idhps-composite-mirror-snapshot";
+import { createEmptyIdhpsInventoryMirror } from "@/lib/trader/paper/idhps-inventory-mirror";
+import { createEmptyIdhpsAccountRiskMirror } from "@/lib/trader/paper/idhps-account-risk-mirror";
+import { createEmptyIdhpsSemanticDigestFrontier } from "@/lib/trader/backtest/streaming-evidence/idhps-semantic-digest-frontier";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import {
   assertFhvStaleProcessRejected,
@@ -70,7 +83,11 @@ import {
   type FhvAuthorizationClaimV2,
 } from "@/lib/trader/observability/fhv-authorization-claim";
 import {
-  publishFhvExecutionCheckpointBundle,
+  finalizeFhvProvisionalCheckpointBundle,
+  fsyncFhvCheckpointPath,
+  readFhvExecutionCheckpointBundle,
+  resolveFhvEpochCheckpointDir,
+  resolveFhvProvisionalEpochCheckpointDir,
   type FhvExecutionCheckpointManifestV1,
 } from "@/lib/trader/observability/fhv-execution-checkpoint-bundle";
 import { computeFhvCheckpointSnapshotDigests } from "@/lib/trader/observability/fhv-execution-checkpoint-runtime";
@@ -85,6 +102,7 @@ import {
   FhvExecutionWalWriter,
   fsyncFhvExecutionWalFile,
   recoverFhvExecutionWalTail,
+  truncateFhvExecutionWalToJournalAuthoritativeCommit,
   type FhvEpochCommitRecord,
 } from "@/lib/trader/observability/fhv-execution-wal";
 import {
@@ -202,6 +220,32 @@ export function prepareFhvOfficialLaunchExecution(input: {
         `[fhv] authorization claim must be RUNNING for resume, got ${authorizationClaim.state}`,
       );
     }
+    const recovered = cleanupFhvTwoPhaseResumeState(input.runDir);
+    const evidenceRoot = join(input.runDir, "evidence");
+    if (
+      recovered.lastCommittedEpoch >= 0 &&
+      recovered.committedGeneration != null &&
+      existsSync(evidenceRoot)
+    ) {
+      cleanupFhvEpochEvidenceGenerations({
+        runDir: input.runDir,
+        epochId: recovered.lastCommittedEpoch,
+        keepGeneration: recovered.committedGeneration,
+      });
+    }
+    if (recovered.lastCommittedEpoch > authorizationClaim.lastCommittedEpoch) {
+      reconcileFhvJournalClaimCatchUp({
+        runDir: input.runDir,
+        claimPath,
+        claim: authorizationClaim,
+        journalEpoch: recovered.lastCommittedEpoch,
+        journalCycle: recovered.lastCommittedCycle,
+        journalDigest: recovered.lastEpochCommitDigest,
+      });
+      authorizationClaim = readFhvAuthorizationClaim(claimPath);
+    } else if (authorizationClaim.lastCommittedEpoch > recovered.lastCommittedEpoch) {
+      throw new Error("FHV_CLAIM_AHEAD_OF_JOURNAL");
+    }
     walWriter = FhvExecutionWalWriter.openExisting({
       runRoot: input.runDir,
       runId: input.runId,
@@ -212,9 +256,8 @@ export function prepareFhvOfficialLaunchExecution(input: {
       claim: authorizationClaim,
       writerFencingGeneration: authorizationClaim.fencingGeneration,
     });
-    const journal = readFhvLaunchJournal(input.runDir);
     journalPath = join(input.runDir, "fhv-launch-journal.v1.json");
-    resumeFromCycle = journal.lastCommittedCycle + 1;
+    resumeFromCycle = recovered.lastCommittedCycle + 1;
   } else {
     const issued = buildFhvAuthorizationClaimIssued({
       authorizationReceiptDigest: input.authorizationReceiptDigest,
@@ -264,23 +307,78 @@ export function prepareFhvOfficialLaunchExecution(input: {
   };
 }
 
-function sha256FileSync(filePath: string): string {
-  const hash = createHash("sha256");
-  const fd = openSync(filePath, "r");
+function reconcileFhvJournalClaimCatchUp(input: {
+  runDir: string;
+  claimPath: string;
+  claim: FhvAuthorizationClaimV2;
+  journalEpoch: number;
+  journalCycle: number;
+  journalDigest: string;
+}): void {
+  if (input.claim.fencingGeneration < 1) {
+    throw new Error("FHV_STALE_FENCE_PROMOTION_FORBIDDEN");
+  }
+  const checkpointDir = resolveFhvEpochCheckpointDir(input.runDir, input.journalEpoch);
+  const bundle = readFhvExecutionCheckpointBundle(checkpointDir);
+  const hasComposite = bundle.manifest.files.some(
+    (file) => file.relativePath === IDHPS_COMPOSITE_MIRROR_FILENAME,
+  );
+  if (!hasComposite) {
+    throw new Error("FHV_IDHPS_COMPOSITE_REQUIRED_MISSING");
+  }
+  const prefix = truncateFhvExecutionWalToJournalAuthoritativeCommit({
+    walPath: join(input.runDir, "execution.wal.ndjson"),
+    lastCommittedEpoch: input.journalEpoch,
+    lastCommittedCycle: input.journalCycle,
+    lastEpochCommitDigest: input.journalDigest,
+  });
+  const commit = prefix.records.at(-1);
+  if (!commit || commit.recordType !== "EPOCH_COMMIT") {
+    throw new Error("FHV_WAL_JOURNAL_COMMIT_NOT_UNIQUE");
+  }
+  const payload = commit.payload as {
+    epochCommitDigest?: string;
+    executionCheckpointDigest?: string;
+  };
+  if (payload.epochCommitDigest !== input.journalDigest) {
+    throw new Error("FHV_WAL_JOURNAL_COMMIT_NOT_UNIQUE");
+  }
+  const evidenceRoot = join(input.runDir, "evidence");
+  if (existsSync(evidenceRoot)) {
+    const canonicalEvidence = resolveFhvEpochEvidenceSegmentDir(
+      input.runDir,
+      input.journalEpoch,
+      input.claim.fencingGeneration,
+    );
+    if (!existsSync(canonicalEvidence)) {
+      throw new Error("FHV_EVIDENCE_CLEANUP_REQUIRED_EPOCH_MISSING");
+    }
+  }
+  commitFhvAuthorizationEpoch({
+    claimPath: input.claimPath,
+    lastCommittedEpoch: input.journalEpoch,
+    lastCommittedCycle: input.journalCycle,
+    checkpointDigest: payload.executionCheckpointDigest ?? bundle.manifest.checkpointContentDigest,
+    walCommitDigest: input.journalDigest,
+    activeGeneration: input.claim.fencingGeneration,
+  });
+}
+
+function copyFileOnly(sourcePath: string, destPath: string): void {
+  const sourceFd = openSync(sourcePath, "r");
+  const destFd = openSync(destPath, "w");
   try {
-    const buf = Buffer.alloc(1024 * 1024);
+    const buffer = Buffer.allocUnsafe(1 << 20);
     let offset = 0;
     for (;;) {
-      const n = readSync(fd, buf, 0, buf.length, offset);
-      if (n <= 0) {
-        break;
-      }
-      hash.update(buf.subarray(0, n));
-      offset += n;
+      const read = readSync(sourceFd, buffer, 0, buffer.length, offset);
+      if (read <= 0) break;
+      writeSync(destFd, buffer, 0, read);
+      offset += read;
     }
-    return hash.digest("hex");
   } finally {
-    closeSync(fd);
+    closeSync(destFd);
+    closeSync(sourceFd);
   }
 }
 
@@ -292,60 +390,37 @@ function sha256FileSync(filePath: string): string {
  * Snapshot into an exclusive temp file before publish so the durable checkpoint copy never
  * reads the live SQLite path while the engine still holds it open (CI ARM probe sensitivity).
  */
-function captureSessionDatabaseBackup(input: {
-  skipSessionBackup?: boolean;
-  /** Staging directory on the checkpoint filesystem so publish can move instead of re-copy. */
-  stagingDir?: string;
-}): {
-  sessionFile: Buffer | { copyFromPath: string };
-  sessionDatabaseDigest: string;
-  cleanupTempPath?: string;
+function captureSessionDatabaseBackup(input: { skipSessionBackup?: boolean; destPath: string }): {
+  sessionDatabaseBytes: number;
+  ficloneSucceeded: boolean;
 } {
+  mkdirSync(dirname(input.destPath), { recursive: true });
   if (input.skipSessionBackup) {
     const placeholder = Buffer.from("fhv-session-backup-placeholder", "utf8");
-    return {
-      sessionFile: placeholder,
-      sessionDatabaseDigest: createHash("sha256").update(placeholder).digest("hex"),
-    };
+    writeFileSync(input.destPath, placeholder);
+    fsyncFhvCheckpointPath(input.destPath);
+    chmodSync(input.destPath, 0o444);
+    return { sessionDatabaseBytes: placeholder.length, ficloneSucceeded: false };
   }
 
   const sqlite = getRawSqliteDatabase();
-  // Single-writer FHV path: checkpoint then copy/clone is a consistent snapshot.
-  sqlite.pragma("wal_checkpoint(TRUNCATE)");
-  // Stage on the checkpoint filesystem when possible: publish then moves the file instead of
-  // paying a second full copy. Falls back to TMPDIR when no staging directory is supplied.
-  const stagingDir = input.stagingDir ?? tmpdir();
-  mkdirSync(stagingDir, { recursive: true });
-  const tempBackupPath = join(
-    stagingDir,
-    `.fhv-session-backup-${process.pid}-${Date.now()}.sqlite`,
-  );
-  /*
-   * The WAL truncate above leaves the main database file a transactionally consistent
-   * point-in-time snapshot, so clone and copy observe identical bytes. Clone first when the host
-   * proves capability — that reduces size-proportional blocking work to the mandatory SHA-256
-   * identity pass. Otherwise fall back to the fused single-pass copy+digest.
-   *
-   * Clone success is proven by the strict platform mechanism, never inferred from a
-   * fallback-capable API returning success.
-   */
-  const clone = tryNativeCloneFile(sqlite.name, tempBackupPath);
+  assertSqliteWalTruncated({
+    sqliteName: sqlite.name,
+    pragmaResult: sqlite.pragma("wal_checkpoint(TRUNCATE)"),
+  });
+  const clone = tryNativeCloneFile(sqlite.name, input.destPath);
   const ficloneSucceeded = clone.status === "NATIVE_CLONE_SUCCEEDED";
-  const sessionDatabaseDigest = ficloneSucceeded
-    ? sha256FileSync(tempBackupPath)
-    : copyAndDigestSync(sqlite.name, tempBackupPath).digest;
-  let checkpointSessionBytes: number | null = null;
-  try {
-    checkpointSessionBytes = statSync(tempBackupPath).size;
-  } catch {
-    checkpointSessionBytes = null;
+  if (!ficloneSucceeded) {
+    copyFileOnly(sqlite.name, input.destPath);
   }
-  recordIdhpsCheckpointSnapshotCost({ checkpointSessionBytes, ficloneSucceeded });
-  return {
-    sessionFile: { copyFromPath: tempBackupPath },
-    sessionDatabaseDigest,
-    cleanupTempPath: tempBackupPath,
-  };
+  fsyncFhvCheckpointPath(input.destPath);
+  chmodSync(input.destPath, 0o444);
+  const sessionDatabaseBytes = statSync(input.destPath).size;
+  recordIdhpsCheckpointSnapshotCost({
+    checkpointSessionBytes: sessionDatabaseBytes,
+    ficloneSucceeded,
+  });
+  return { sessionDatabaseBytes, ficloneSucceeded };
 }
 
 /**
@@ -509,6 +584,356 @@ function sealAndPruneFhvLifecycleAudit(
   pruneFhvSealedLifecycleAuditRows(sqlite, lifecycle.ids);
 }
 
+export type FhvProvisionalEpochCapture = Readonly<{
+  runDir: string;
+  runId: string;
+  claimPath: string;
+  walWriter: FhvExecutionWalWriter;
+  epochId: number;
+  epochFirstCycle: number;
+  lastCycle: number;
+  walStartOffset: number;
+  previousEpochCommitDigest: string;
+  snapshotDigests: FhvEpochCommitSnapshotDigests;
+  generation: number;
+  destPath: string;
+  destBytes: number;
+  destDev: number;
+  destIno: number;
+  fencingGeneration: number;
+  frozen: FrozenPendingIdhpsEpochV1 | null;
+  evidenceFrontier: string;
+  evidenceDurableThroughCycleIndex: number;
+  verifier: Promise<{
+    digest: string;
+    byteCount: number;
+    destPath: string;
+    fencingGeneration: number;
+    runId: string;
+    epochId: number;
+    generation: number;
+  }>;
+  compositeEvidenceSink?: FhvCompositeEvidenceSink;
+  boundedHotState?: {
+    organizationId: string;
+    sessionIdentity: string;
+    resolveSealedAtReplayMs: () => number;
+    isReconciliationClean: () => boolean;
+    resolveReconciliationProofIdentity: () => string;
+  };
+  onCheckpointMetrics?: (input: { epochId: number; checkpointBackupDurationMs: number }) => void;
+  checkpointBackupDurationMs: number;
+}>;
+
+function writeSidecarFiles(
+  destDir: string,
+  files: Readonly<Record<string, Buffer | string>>,
+): void {
+  mkdirSync(destDir, { recursive: true });
+  for (const [relativePath, content] of Object.entries(files)) {
+    if (relativePath.includes("..") || relativePath.startsWith("/")) {
+      throw new Error(`FHV_CHECKPOINT_FILE_PATH_INVALID: ${relativePath}`);
+    }
+    const destPath = join(destDir, relativePath);
+    mkdirSync(dirname(destPath), { recursive: true });
+    writeFileSync(destPath, typeof content === "string" ? content : content);
+  }
+}
+
+export async function captureFhvProvisionalExecutionEpoch(input: {
+  runDir: string;
+  runId: string;
+  claimPath: string;
+  walWriter: FhvExecutionWalWriter;
+  authorizationClaim: FhvAuthorizationClaimV2;
+  epochId: number;
+  epochFirstCycle: number;
+  lastCycle: number;
+  walStartOffset: number;
+  previousEpochCommitDigest: string;
+  snapshotDigests: FhvEpochCommitSnapshotDigests;
+  checkpointFiles?: Readonly<Record<string, Buffer | string>>;
+  skipSessionBackup?: boolean;
+  compositeEvidenceSink?: FhvCompositeEvidenceSink;
+  boundedHotState?: FhvProvisionalEpochCapture["boundedHotState"];
+  onCheckpointMetrics?: FhvProvisionalEpochCapture["onCheckpointMetrics"];
+  verifierDelayMs?: number;
+}): Promise<FhvProvisionalEpochCapture> {
+  const captureStartedAt = performance.now();
+  const generation = input.authorizationClaim.fencingGeneration;
+  let evidenceDurableThroughCycleIndex = -1;
+  let evidenceFrontier =
+    input.snapshotDigests.evidenceFrontierDigest ??
+    computeStableJsonDigest(String(evidenceDurableThroughCycleIndex));
+
+  if (input.compositeEvidenceSink) {
+    const sealed = await input.compositeEvidenceSink.commitEpochSegment(input.lastCycle + 1);
+    evidenceDurableThroughCycleIndex = sealed.manifest.sealedThroughCycleIndex;
+    evidenceFrontier = sealed.manifest.chainDigest;
+  }
+
+  const provisionalDir = resolveFhvProvisionalEpochCheckpointDir(input.runDir, input.epochId);
+  rmSync(provisionalDir, { recursive: true, force: true });
+  mkdirSync(provisionalDir, { recursive: true });
+  writeSidecarFiles(provisionalDir, input.checkpointFiles ?? {});
+
+  const frozen = getIdhpsSession() ? captureFrozenPendingIdhpsEpoch(input.epochId) : null;
+  if (frozen) {
+    rotateIdhpsLiveEpochWorkingSetAfterProvisionalFreeze(frozen);
+  }
+
+  const destPath = join(provisionalDir, "session.sqlite");
+  const backup = captureSessionDatabaseBackup({
+    skipSessionBackup: input.skipSessionBackup,
+    destPath,
+  });
+  const destStat = statSync(destPath);
+
+  input.walWriter.freezeUntilEpochCommit(input.epochId);
+
+  if (input.compositeEvidenceSink) {
+    input.compositeEvidenceSink.beginNextEpochSegment({
+      epochId: input.epochId + 1,
+      generation,
+    });
+  }
+
+  const verifier = verifyFhvDestinationShaOffMainThread({
+    runId: input.runId,
+    epochId: input.epochId,
+    generation,
+    destPath,
+    expectedBytes: backup.sessionDatabaseBytes,
+    fencingGeneration: generation,
+    delayMs: input.verifierDelayMs,
+  });
+
+  return {
+    runDir: input.runDir,
+    runId: input.runId,
+    claimPath: input.claimPath,
+    walWriter: input.walWriter,
+    epochId: input.epochId,
+    epochFirstCycle: input.epochFirstCycle,
+    lastCycle: input.lastCycle,
+    walStartOffset: input.walStartOffset,
+    previousEpochCommitDigest: input.previousEpochCommitDigest,
+    snapshotDigests: {
+      ...input.snapshotDigests,
+      evidenceFrontierDigest: evidenceFrontier,
+    },
+    generation,
+    destPath,
+    destBytes: backup.sessionDatabaseBytes,
+    destDev: destStat.dev,
+    destIno: destStat.ino,
+    fencingGeneration: generation,
+    frozen,
+    evidenceFrontier,
+    evidenceDurableThroughCycleIndex,
+    verifier,
+    ...(input.compositeEvidenceSink ? { compositeEvidenceSink: input.compositeEvidenceSink } : {}),
+    ...(input.boundedHotState ? { boundedHotState: input.boundedHotState } : {}),
+    ...(input.onCheckpointMetrics ? { onCheckpointMetrics: input.onCheckpointMetrics } : {}),
+    checkpointBackupDurationMs: performance.now() - captureStartedAt,
+  };
+}
+
+export async function promoteFhvVerifiedExecutionEpoch(
+  pending: FhvProvisionalEpochCapture,
+): Promise<FhvEpochCommitResult> {
+  const verified = await pending.verifier;
+  const liveClaim = readFhvAuthorizationClaim(pending.claimPath);
+  if (liveClaim.fencingGeneration !== pending.fencingGeneration) {
+    throw new Error("FHV_STALE_FENCE_PROMOTION_FORBIDDEN");
+  }
+  if (verified.fencingGeneration !== pending.fencingGeneration) {
+    throw new Error("FHV_STALE_FENCE_PROMOTION_FORBIDDEN");
+  }
+  if (verified.generation !== pending.generation) {
+    throw new Error("FHV_STALE_FENCE_PROMOTION_FORBIDDEN");
+  }
+  if (verified.destPath !== pending.destPath || verified.byteCount !== pending.destBytes) {
+    throw new Error("FHV_DEST_SHA_MISMATCH");
+  }
+  if (verified.runId !== pending.runId || verified.epochId !== pending.epochId) {
+    throw new Error("FHV_DEST_SHA_STALE_RESULT");
+  }
+  const destStat = statSync(pending.destPath);
+  if (destStat.size !== pending.destBytes) {
+    throw new Error("FHV_DEST_SHA_SIZE_MISMATCH");
+  }
+  if (destStat.dev !== pending.destDev || destStat.ino !== pending.destIno) {
+    throw new Error("FHV_DEST_INODE_CHANGED");
+  }
+
+  const composite = pending.frozen
+    ? materializePostCommitIdhpsCompositeFromFrozen(pending.frozen)
+    : materializePostCommitIdhpsCompositeFromFrozen({
+        epochId: pending.epochId,
+        inventory: createEmptyIdhpsInventoryMirror(),
+        accountRisk: createEmptyIdhpsAccountRiskMirror(),
+        semanticDigestFrontier: createEmptyIdhpsSemanticDigestFrontier(),
+        accounting: null,
+      });
+
+  if (pending.compositeEvidenceSink) {
+    pending.compositeEvidenceSink.promoteSealedEpochEvidence({
+      epochId: pending.epochId,
+      generation: pending.generation,
+    });
+  }
+
+  const bundle = finalizeFhvProvisionalCheckpointBundle({
+    runDir: pending.runDir,
+    runId: pending.runId,
+    epochId: pending.epochId,
+    generation: pending.generation,
+    firstCycle: pending.epochFirstCycle,
+    lastCycle: pending.lastCycle,
+    additionalFiles: {
+      [IDHPS_COMPOSITE_MIRROR_FILENAME]: `${JSON.stringify(composite, null, 2)}\n`,
+    },
+    verifiedSessionDatabaseDigest: verified.digest,
+    verifiedSessionDatabaseBytes: verified.byteCount,
+    sourceCursorDigest: pending.snapshotDigests.sourceCursorDigest,
+    executionStateDigest: pending.snapshotDigests.executionStateDigest ?? "0".repeat(64),
+    accountingFrontierDigest: pending.snapshotDigests.accountingFrontierDigest ?? "0".repeat(64),
+    identityFrontierDigest: pending.snapshotDigests.identityFrontierDigest ?? "0".repeat(64),
+    evidenceFrontierDigest: pending.evidenceFrontier,
+    ...(pending.snapshotDigests.syntheticScaleAuthorityDigest
+      ? { syntheticScaleAuthorityDigest: pending.snapshotDigests.syntheticScaleAuthorityDigest }
+      : {}),
+    ...(pending.snapshotDigests.executionConfigurationDigest
+      ? { executionConfigurationDigest: pending.snapshotDigests.executionConfigurationDigest }
+      : {}),
+  });
+
+  const sessionDatabaseDigest = verified.digest;
+  const executionCheckpointDigest = computeFhvExecutionCheckpointDigest({
+    epochId: pending.epochId,
+    lastCycle: pending.lastCycle,
+    evidenceFrontier: String(pending.evidenceDurableThroughCycleIndex),
+    authorizationClaimDigest: liveClaim.authorizationClaimDigest,
+    checkpointContentDigest: bundle.manifest.checkpointContentDigest,
+    sessionDatabaseDigest,
+  });
+
+  pending.walWriter.appendRecord({
+    epochId: pending.epochId,
+    cycleIndex: pending.lastCycle,
+    cycleCommitId: `${pending.runId}:${pending.epochId}:${pending.lastCycle}:checkpoint`,
+    recordType: "EXECUTION_CHECKPOINT",
+    payload: {
+      epochId: pending.epochId,
+      lastCycle: pending.lastCycle,
+      executionCheckpointDigest,
+      checkpointRelativePath: bundle.checkpointRelativePath,
+      checkpointContentDigest: bundle.manifest.checkpointContentDigest,
+      sessionDatabaseDigest,
+    },
+  });
+
+  const walEndOffset = pending.walWriter.walBytesWritten;
+  const commitBody: Omit<FhvEpochCommitRecord, "epochCommitDigest"> = {
+    firstCycle: pending.epochFirstCycle,
+    lastCycle: pending.lastCycle,
+    walStartOffset: pending.walStartOffset,
+    walEndOffset,
+    recordCount: pending.walWriter.totalRecords,
+    sourceCursorDigest: pending.snapshotDigests.sourceCursorDigest,
+    executionCheckpointDigest,
+    evidenceFrontier: String(pending.evidenceDurableThroughCycleIndex),
+    orderFillFrontier:
+      pending.snapshotDigests.orderFillFrontierDigest ?? computeOrderFillFrontierDigest([]),
+    authorizationClaimDigest: liveClaim.authorizationClaimDigest,
+    previousCommittedEpochDigest: pending.previousEpochCommitDigest,
+    checkpointRelativePath: bundle.checkpointRelativePath,
+    sessionDatabaseDigest,
+  };
+  const epochCommitDigest = computeEpochCommitDigest(commitBody);
+  pending.walWriter.appendRecord({
+    epochId: pending.epochId,
+    cycleIndex: pending.lastCycle,
+    cycleCommitId: `${pending.runId}:${pending.epochId}:${pending.lastCycle}:commit`,
+    recordType: "EPOCH_COMMIT",
+    payload: { ...commitBody, epochCommitDigest },
+  });
+
+  advanceFhvLaunchJournal({
+    runRoot: pending.runDir,
+    lastCommittedEpoch: pending.epochId,
+    lastCommittedCycle: pending.lastCycle,
+    lastEpochCommitDigest: epochCommitDigest,
+  });
+
+  const sessionDatabasePath = resolveFhvGenerationSessionDbPath(pending.runDir, pending.generation);
+  const authorizationClaim = commitFhvAuthorizationEpoch({
+    claimPath: pending.claimPath,
+    lastCommittedEpoch: pending.epochId,
+    lastCommittedCycle: pending.lastCycle,
+    checkpointDigest: executionCheckpointDigest,
+    walCommitDigest: epochCommitDigest,
+    sessionDatabasePath,
+    activeGeneration: pending.generation,
+  });
+
+  recordIdhpsCheckpointMetrics({
+    checkpointBackupDurationMs: pending.checkpointBackupDurationMs,
+    walBytes: null,
+  });
+  pending.onCheckpointMetrics?.({
+    epochId: pending.epochId,
+    checkpointBackupDurationMs: pending.checkpointBackupDurationMs,
+  });
+  writeFileSync(
+    join(bundle.checkpointDir, "idhps-checkpoint-metrics.v1.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: "idhps-checkpoint-metrics/v1",
+        epochId: pending.epochId,
+        checkpointBackupDurationMs: pending.checkpointBackupDurationMs,
+        walBytes: null,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  pruneFhvCheckpointBundlesToTwoNewest(pending.runDir);
+  if (pending.boundedHotState) {
+    applyFhvBoundedHotState({
+      runDir: pending.runDir,
+      runId: pending.runId,
+      epochId: pending.epochId,
+      epochLastCycle: pending.lastCycle,
+      organizationId: pending.boundedHotState.organizationId,
+      sessionIdentity: pending.boundedHotState.sessionIdentity,
+      boundaryProof: {
+        epochCommitted: true,
+        sourceFrontierProven: Boolean(pending.snapshotDigests.sourceCursorDigest),
+        reconciliationClean: pending.boundedHotState.isReconciliationClean(),
+        ledgerDurable: true,
+      },
+      sealedAtReplayMs: pending.boundedHotState.resolveSealedAtReplayMs(),
+      accountingFrontierSequence: -1,
+      sourceFrontierGlobalEventSequence: pending.lastCycle + 1,
+      reconciliationProofIdentity: pending.boundedHotState.resolveReconciliationProofIdentity(),
+    });
+  }
+
+  return {
+    epochId: pending.epochId,
+    lastCycle: pending.lastCycle,
+    checkpointDir: bundle.checkpointDir,
+    checkpointRelativePath: bundle.checkpointRelativePath,
+    manifest: bundle.manifest,
+    epochCommitDigest,
+    executionCheckpointDigest,
+    authorizationClaim,
+  };
+}
+
 export async function commitFhvExecutionEpoch(input: {
   runDir: string;
   runId: string;
@@ -523,136 +948,13 @@ export async function commitFhvExecutionEpoch(input: {
   snapshotDigests: FhvEpochCommitSnapshotDigests;
   checkpointFiles?: Readonly<Record<string, Buffer | string>>;
   skipSessionBackup?: boolean;
+  compositeEvidenceSink?: FhvCompositeEvidenceSink;
+  boundedHotState?: FhvProvisionalEpochCapture["boundedHotState"];
+  onCheckpointMetrics?: FhvProvisionalEpochCapture["onCheckpointMetrics"];
+  verifierDelayMs?: number;
 }): Promise<FhvEpochCommitResult> {
-  const evidence = resolveEvidenceFrontier(input.runDir);
-  const evidenceFrontier =
-    input.snapshotDigests.evidenceFrontierDigest ??
-    computeStableJsonDigest(String(evidence.evidenceDurableThroughCycleIndex));
-
-  const sessionBackup = captureSessionDatabaseBackup({
-    skipSessionBackup: input.skipSessionBackup,
-    stagingDir: join(input.runDir, "checkpoints"),
-  });
-  const { sessionFile, sessionDatabaseDigest } = sessionBackup;
-
-  const generation = input.authorizationClaim.fencingGeneration;
-  const sessionDatabasePath = resolveFhvGenerationSessionDbPath(input.runDir, generation);
-
-  let bundle: ReturnType<typeof publishFhvExecutionCheckpointBundle>;
-  try {
-    bundle = publishFhvExecutionCheckpointBundle({
-      runDir: input.runDir,
-      runId: input.runId,
-      epochId: input.epochId,
-      generation,
-      firstCycle: input.epochFirstCycle,
-      lastCycle: input.lastCycle,
-      files: {
-        ...(input.checkpointFiles ?? {}),
-        "session.sqlite": sessionFile,
-      },
-      sourceCursorDigest: input.snapshotDigests.sourceCursorDigest,
-      executionStateDigest: input.snapshotDigests.executionStateDigest ?? "0".repeat(64),
-      accountingFrontierDigest: input.snapshotDigests.accountingFrontierDigest ?? "0".repeat(64),
-      identityFrontierDigest: input.snapshotDigests.identityFrontierDigest ?? "0".repeat(64),
-      evidenceFrontierDigest: evidenceFrontier,
-      sessionDatabaseDigest,
-      ...(input.snapshotDigests.syntheticScaleAuthorityDigest
-        ? { syntheticScaleAuthorityDigest: input.snapshotDigests.syntheticScaleAuthorityDigest }
-        : {}),
-      ...(input.snapshotDigests.executionConfigurationDigest
-        ? { executionConfigurationDigest: input.snapshotDigests.executionConfigurationDigest }
-        : {}),
-    });
-  } finally {
-    if (sessionBackup.cleanupTempPath) {
-      try {
-        rmSync(sessionBackup.cleanupTempPath, { force: true });
-      } catch {
-        // best-effort temp cleanup
-      }
-    }
-  }
-
-  const executionCheckpointDigest = computeFhvExecutionCheckpointDigest({
-    epochId: input.epochId,
-    lastCycle: input.lastCycle,
-    evidenceFrontier: String(evidence.evidenceDurableThroughCycleIndex),
-    authorizationClaimDigest: input.authorizationClaim.authorizationClaimDigest,
-    checkpointContentDigest: bundle.manifest.checkpointContentDigest,
-    sessionDatabaseDigest,
-  });
-
-  input.walWriter.appendRecord({
-    epochId: input.epochId,
-    cycleIndex: input.lastCycle,
-    cycleCommitId: `${input.runId}:${input.epochId}:${input.lastCycle}:checkpoint`,
-    recordType: "EXECUTION_CHECKPOINT",
-    payload: {
-      epochId: input.epochId,
-      lastCycle: input.lastCycle,
-      executionCheckpointDigest,
-      checkpointRelativePath: bundle.checkpointRelativePath,
-      checkpointContentDigest: bundle.manifest.checkpointContentDigest,
-      sessionDatabaseDigest,
-    },
-  });
-
-  const walEndOffset = input.walWriter.walBytesWritten;
-  const commitBody: Omit<FhvEpochCommitRecord, "epochCommitDigest"> = {
-    firstCycle: input.epochFirstCycle,
-    lastCycle: input.lastCycle,
-    walStartOffset: input.walStartOffset,
-    walEndOffset,
-    recordCount: input.walWriter.totalRecords,
-    sourceCursorDigest: input.snapshotDigests.sourceCursorDigest,
-    executionCheckpointDigest,
-    evidenceFrontier: String(evidence.evidenceDurableThroughCycleIndex),
-    orderFillFrontier:
-      input.snapshotDigests.orderFillFrontierDigest ?? computeOrderFillFrontierDigest([]),
-    authorizationClaimDigest: input.authorizationClaim.authorizationClaimDigest,
-    previousCommittedEpochDigest: input.previousEpochCommitDigest,
-    checkpointRelativePath: bundle.checkpointRelativePath,
-    sessionDatabaseDigest,
-  };
-  const epochCommitDigest = computeEpochCommitDigest(commitBody);
-  const commitRecord: FhvEpochCommitRecord = { ...commitBody, epochCommitDigest };
-
-  input.walWriter.appendRecord({
-    epochId: input.epochId,
-    cycleIndex: input.lastCycle,
-    cycleCommitId: `${input.runId}:${input.epochId}:${input.lastCycle}:commit`,
-    recordType: "EPOCH_COMMIT",
-    payload: commitRecord,
-  });
-
-  advanceFhvLaunchJournal({
-    runRoot: input.runDir,
-    lastCommittedEpoch: input.epochId,
-    lastCommittedCycle: input.lastCycle,
-    lastEpochCommitDigest: epochCommitDigest,
-  });
-
-  const authorizationClaim = commitFhvAuthorizationEpoch({
-    claimPath: input.claimPath,
-    lastCommittedEpoch: input.epochId,
-    lastCommittedCycle: input.lastCycle,
-    checkpointDigest: executionCheckpointDigest,
-    walCommitDigest: epochCommitDigest,
-    sessionDatabasePath,
-    activeGeneration: generation,
-  });
-
-  return {
-    epochId: input.epochId,
-    lastCycle: input.lastCycle,
-    checkpointDir: bundle.checkpointDir,
-    checkpointRelativePath: bundle.checkpointRelativePath,
-    manifest: bundle.manifest,
-    epochCommitDigest,
-    executionCheckpointDigest,
-    authorizationClaim,
-  };
+  const pending = await captureFhvProvisionalExecutionEpoch(input);
+  return promoteFhvVerifiedExecutionEpoch(pending);
 }
 
 export function createFhvEpochBoundaryController(input: {
@@ -670,6 +972,8 @@ export function createFhvEpochBoundaryController(input: {
   skipSessionBackup?: boolean;
   snapshotDigests?: Partial<Omit<FhvEpochCommitSnapshotDigests, "sourceCursorDigest">>;
   compositeEvidenceSink?: FhvCompositeEvidenceSink;
+  /** Test-only: stall the destination verifier so callers can prove cycle-loop progress. */
+  verifierDelayMs?: number;
   /** Observational only — must not affect checkpoint authority or retention. */
   onCheckpointMetrics?: (input: { epochId: number; checkpointBackupDurationMs: number }) => void;
   /**
@@ -690,6 +994,7 @@ export function createFhvEpochBoundaryController(input: {
   beginInitialEpoch: () => void;
   getCurrentEpochId: () => number;
   commitFinalPartialEpoch: (lastCycle: number) => Promise<FhvEpochCommitResult>;
+  drainPendingVerification: () => Promise<FhvEpochCommitResult | null>;
 } {
   const journal = existsSync(join(input.runDir, "fhv-launch-journal.v1.json"))
     ? readFhvLaunchJournal(input.runDir)
@@ -700,6 +1005,8 @@ export function createFhvEpochBoundaryController(input: {
   let previousEpochCommitDigest = journal?.lastEpochCommitDigest ?? "0".repeat(64);
   let authorizationClaim = input.authorizationClaim;
   let lastBoundarySnapshot: FhvCycleBoundarySnapshot | undefined;
+  let pendingCapture: FhvProvisionalEpochCapture | null = null;
+  let pendingSettled = false;
 
   const staticSnapshotDigests = (): Partial<
     Omit<FhvEpochCommitSnapshotDigests, "sourceCursorDigest">
@@ -726,12 +1033,33 @@ export function createFhvEpochBoundaryController(input: {
     });
   };
 
-  const commitEpoch = async (
+  const applyPromoted = (result: FhvEpochCommitResult, lastCycle: number): void => {
+    authorizationClaim = result.authorizationClaim;
+    previousEpochCommitDigest = result.epochCommitDigest;
+    epochId = result.epochId + 1;
+    epochFirstCycle = lastCycle + 1;
+    walStartOffset = input.walWriter.walBytesWritten;
+    beginEpoch(lastCycle + 1);
+  };
+
+  const promotePending = async (): Promise<FhvEpochCommitResult> => {
+    if (!pendingCapture) {
+      throw new Error("FHV_CHECKPOINT_VERIFY_BACKLOG_EXCEEDED");
+    }
+    const pending = pendingCapture;
+    pendingCapture = null;
+    pendingSettled = false;
+    const result = await promoteFhvVerifiedExecutionEpoch(pending);
+    applyPromoted(result, pending.lastCycle);
+    return result;
+  };
+
+  const captureBoundary = async (
     lastCycle: number,
     boundary?: FhvCycleBoundarySnapshot,
-  ): Promise<FhvEpochCommitResult> => {
-    if (input.compositeEvidenceSink) {
-      await input.compositeEvidenceSink.commitEpochSegment(lastCycle + 1);
+  ): Promise<FhvProvisionalEpochCapture> => {
+    if (pendingCapture) {
+      throw new Error("FHV_CHECKPOINT_VERIFY_BACKLOG_EXCEEDED");
     }
     const capturedCheckpointFiles =
       boundary && input.captureCheckpointFiles ? await input.captureCheckpointFiles(boundary) : {};
@@ -740,8 +1068,7 @@ export function createFhvEpochBoundaryController(input: {
       fallbackSourceCursorDigest: input.sourceCursorDigest,
     });
     const staticDigests = staticSnapshotDigests();
-    const checkpointBackupStartedAt = performance.now();
-    const result = await commitFhvExecutionEpoch({
+    const pending = await captureFhvProvisionalExecutionEpoch({
       runDir: input.runDir,
       runId: input.runId,
       claimPath: input.claimPath,
@@ -767,77 +1094,35 @@ export function createFhvEpochBoundaryController(input: {
       },
       checkpointFiles: capturedCheckpointFiles,
       skipSessionBackup: input.skipSessionBackup,
+      ...(input.compositeEvidenceSink
+        ? { compositeEvidenceSink: input.compositeEvidenceSink }
+        : {}),
+      ...(input.boundedHotState ? { boundedHotState: input.boundedHotState } : {}),
+      ...(input.onCheckpointMetrics ? { onCheckpointMetrics: input.onCheckpointMetrics } : {}),
+      ...(input.verifierDelayMs !== undefined ? { verifierDelayMs: input.verifierDelayMs } : {}),
     });
-    const checkpointBackupDurationMs = performance.now() - checkpointBackupStartedAt;
-    // Durable authority step 10: clear epoch-scoped IDHPS mirrors only after claim.
-    applyIdhpsDurableEpochStep10();
-    // Persist post-step-10 mirrors for crash-resume parity (portfolio sizing / inventory).
-    writeIdhpsCompositeMirrorForCheckpoint(result.checkpointDir, result.epochId);
-    let walBytes: number | null = null;
-    try {
-      const sqlite = getRawSqliteDatabase();
-      // Metrics-only maintenance; never used as clear-mirror authority.
-      sqlite.pragma("wal_checkpoint(PASSIVE)");
-      const walPath = `${sqlite.name}-wal`;
-      walBytes = existsSync(walPath) ? statSync(walPath).size : 0;
-    } catch {
-      walBytes = null;
-    }
-    recordIdhpsCheckpointMetrics({ checkpointBackupDurationMs, walBytes });
-    input.onCheckpointMetrics?.({
-      epochId: result.epochId,
-      checkpointBackupDurationMs,
-    });
-    writeFileSync(
-      join(result.checkpointDir, "idhps-checkpoint-metrics.v1.json"),
-      `${JSON.stringify(
-        {
-          schemaVersion: "idhps-checkpoint-metrics/v1",
-          epochId: result.epochId,
-          checkpointBackupDurationMs,
-          walBytes,
-        },
-        null,
-        2,
-      )}\n`,
-      "utf8",
+    pendingCapture = pending;
+    pendingSettled = false;
+    void pending.verifier.then(
+      () => {
+        if (pendingCapture === pending) pendingSettled = true;
+      },
+      () => {
+        if (pendingCapture === pending) pendingSettled = true;
+      },
     );
-    pruneFhvCheckpointBundlesToTwoNewest(input.runDir);
-    if (input.boundedHotState) {
-      const accountingFrontier = boundary?.accountingFrontierState;
-      applyFhvBoundedHotState({
-        runDir: input.runDir,
-        runId: input.runId,
-        epochId: result.epochId,
-        epochLastCycle: lastCycle,
-        organizationId: input.boundedHotState.organizationId,
-        sessionIdentity: input.boundedHotState.sessionIdentity,
-        boundaryProof: {
-          // The epoch commit above succeeded and its checkpoint bundle is durable.
-          epochCommitted: true,
-          // The cycle boundary supplied a source cursor digest for the consumed frontier.
-          sourceFrontierProven: Boolean(capturedDigests.sourceCursorDigest),
-          reconciliationClean: input.boundedHotState.isReconciliationClean(),
-          ledgerDurable: true,
-        },
-        sealedAtReplayMs: input.boundedHotState.resolveSealedAtReplayMs(),
-        accountingFrontierSequence: accountingFrontier?.accountingSequence ?? -1,
-        sourceFrontierGlobalEventSequence: boundary?.cycleCount ?? lastCycle + 1,
-        reconciliationProofIdentity: input.boundedHotState.resolveReconciliationProofIdentity(),
-      });
+    return pending;
+  };
+
+  const commitEpoch = async (
+    lastCycle: number,
+    boundary?: FhvCycleBoundarySnapshot,
+  ): Promise<FhvEpochCommitResult> => {
+    if (pendingCapture) {
+      await promotePending();
     }
-    authorizationClaim = result.authorizationClaim;
-    previousEpochCommitDigest = result.epochCommitDigest;
-    epochId += 1;
-    epochFirstCycle = lastCycle + 1;
-    walStartOffset = input.walWriter.walBytesWritten;
-    if (input.compositeEvidenceSink) {
-      input.compositeEvidenceSink.beginNextEpochSegment({
-        epochId,
-        generation: authorizationClaim.fencingGeneration,
-      });
-    }
-    return result;
+    await captureBoundary(lastCycle, boundary);
+    return promotePending();
   };
 
   return {
@@ -847,17 +1132,36 @@ export function createFhvEpochBoundaryController(input: {
       }
     },
     getCurrentEpochId: () => epochId,
-    commitFinalPartialEpoch: (lastCycle: number) => commitEpoch(lastCycle, lastBoundarySnapshot),
+    commitFinalPartialEpoch: async (lastCycle: number) => {
+      if (pendingCapture) {
+        if (pendingCapture.lastCycle === lastCycle) {
+          return promotePending();
+        }
+        await promotePending();
+      }
+      return commitEpoch(lastCycle, lastBoundarySnapshot);
+    },
+    drainPendingVerification: async () => {
+      if (!pendingCapture) {
+        return null;
+      }
+      return promotePending();
+    },
     onCycleBoundary: async (boundary) => {
       lastBoundarySnapshot = boundary;
+      if (pendingCapture && pendingSettled) {
+        await promotePending();
+      }
       const { cycleCount } = boundary;
       if (cycleCount > 0 && cycleCount % input.checkpointConfig.checkpointEveryCycles === 0) {
         const lastCycle = cycleCount - 1;
-        await commitEpoch(lastCycle, boundary);
+        if (pendingCapture) {
+          await promotePending();
+        }
+        await captureBoundary(lastCycle, boundary);
         if (input.walWriter.walBytesWritten >= input.checkpointConfig.maxCheckpointWalBytes) {
           return "stop";
         }
-        beginEpoch(lastCycle + 1);
       }
       return "continue";
     },
@@ -868,14 +1172,31 @@ export function recoverFhvExecutionWalForResume(runDir: string): {
   validRecords: ReturnType<typeof recoverFhvExecutionWalTail>["validRecords"];
   truncatedTailBytes: number;
 } {
-  const walPath = join(runDir, "execution.wal.ndjson");
-  const recovery = recoverFhvExecutionWalTail(walPath);
-  if (recovery.truncatedTailBytes > 0) {
-    const validContent = recovery.validRecords
-      .map((record) => `${JSON.stringify(record)}\n`)
-      .join("");
-    writeFileSync(walPath, validContent, "utf8");
-    fsyncFhvExecutionWalFile(walPath);
+  const journal = existsSync(join(runDir, "fhv-launch-journal.v1.json"))
+    ? readFhvLaunchJournal(runDir)
+    : undefined;
+  if (!journal) {
+    const walPath = join(runDir, "execution.wal.ndjson");
+    const recovery = recoverFhvExecutionWalTail(walPath);
+    if (recovery.truncatedTailBytes > 0) {
+      const validContent = recovery.validRecords
+        .map((record) => `${JSON.stringify(record)}\n`)
+        .join("");
+      writeFileSync(walPath, validContent, "utf8");
+      fsyncFhvExecutionWalFile(walPath);
+    }
+    return recovery;
   }
-  return recovery;
+  const walPath = join(runDir, "execution.wal.ndjson");
+  const originalBytes = existsSync(walPath) ? statSync(walPath).size : 0;
+  const prefix = truncateFhvExecutionWalToJournalAuthoritativeCommit({
+    walPath,
+    lastCommittedEpoch: journal.lastCommittedEpoch,
+    lastCommittedCycle: journal.lastCommittedCycle,
+    lastEpochCommitDigest: journal.lastEpochCommitDigest,
+  });
+  return {
+    validRecords: prefix.records,
+    truncatedTailBytes: Math.max(0, originalBytes - prefix.truncatedToBytes),
+  };
 }

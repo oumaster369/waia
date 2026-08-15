@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { FhvCycleBoundarySnapshot } from "@/lib/trader/backtest/backtest-runner";
@@ -225,6 +225,8 @@ export function restoreFhvCheckpointSessionDatabase(input: {
   }
   mkdirSync(dirname(input.sessionDbPath), { recursive: true });
   copyFileSync(sourcePath, input.sessionDbPath);
+  // Checkpoint dest is chmod 0444 (immutable identity). Live resume must be writable.
+  chmodSync(input.sessionDbPath, 0o644);
 }
 
 function parseCheckpointJson<T>(checkpointDir: string, relativePath: string): T | undefined {
