@@ -54,6 +54,14 @@ current positions, frontiers (execution, accounting, identity, evidence), cursor
 generation, bounded reconciliation state, and any other state proven necessary. Its size must be
 bounded in run length.
 
+Boundedness is a structural property of retained hot state over run length, not a whole-series
+OLS bytes/cycle ceiling. Startup fill-up of a bounded database is not steady-state linear growth.
+A conservative whole-series growth fit may remain available for projection/diagnostics; it is not
+the AD-1 verdict. WP-7B and target-host throughput qualification consume one production-owned
+assessor (`assessFhvBoundedHotState`) that classifies `BOUNDED`, `UNBOUNDED`, or
+`INSUFFICIENT_EVIDENCE`. Insufficient post-saturation evidence fails closed. Tests must not own a
+competing 160/280 structural threshold.
+
 **AD-2 — Streaming economic ledger**
 
 Append-only historical economic records — the `trader_orders` historical ledger,
@@ -322,11 +330,13 @@ identity, proven native clone, 1-GiB depth, every measured iteration within 400 
 inside the timer, and negative-test validity — so a receipt that claims QUALIFIED while
 contradicting its own evidence fails closed.
 
-**The Execution Server has not been qualified.** It has not been contacted, and its filesystem
-remains unknown. Note that with all mandatory durability inside the timer the reference workstation
-measures 394.5–400.5 ms — at the contract boundary, not comfortably inside it — so a host slower
-than it will fail closed. Requalification is required whenever the host, filesystem, storage or
-Node version changes; rollback is to refuse launch, since the gate has no weaker passing state.
+**WP-3B v2 host qualification for release `b6ad57373c4c51152321f656ff814628212627e4`
+(`v2026.08.15.b6ad57373c4c`) was Human-run and classified
+`EXECUTION_SERVER_WP3B_HOST_QUALIFIED`.** That receipt is bound to that exact SHA. A later repair
+release is a different code identity and is not WP3B-qualified by the b6ad573 receipt. Throughput
+qualification remains unresolved. Requalification is required whenever the host, filesystem,
+storage, Node version, or code release SHA changes; rollback is to refuse launch, since the gate
+has no weaker passing state.
 
 ## AD-6b — Splitting throughput CI observation from absolute target-host performance qualification
 
@@ -358,12 +368,17 @@ fail-closed **post-release Execution Server preflight** that consumes the produc
 report (never a synthetic CPU microbenchmark) and emits an identity-bound receipt classified as
 `EXECUTION_SERVER_FHV_THROUGHPUT_QUALIFIED`, `EXECUTION_SERVER_FHV_THROUGHPUT_NOT_QUALIFIED`, or
 `EXECUTION_SERVER_FHV_THROUGHPUT_EVIDENCE_INVALID`. A QUALIFIED receipt requires, fail-closed: exact
-release-SHA binding, target-host identity, self-digest integrity, a representative segment actually
-executed, sufficient progress/checkpoint samples, bounded hot-state growth within the structural
-ceiling, a `FLAT` (not `DECAYING`) hot-path verdict, an available growth-aware projection, and that
-projection within **6,480 s**. The receipt embeds and validates the canonical 877/7200/6480 constants
-so a weaker contract cannot pass through a schema-consistent file. No environment variable —
-`NODE_ENV`, `CI`, `GITHUB_ACTIONS`, or any skip flag — can weaken it.
+clean checkout HEAD (not `FHV_RELEASE_SHA` alone), target-host identity, qualifier-owned sampler
+contract, progress-JSONL byte digest, growth-law report self-digest, a representative segment
+actually executed, independently counted progress and checkpoint samples, production-owned
+`BOUNDED` hot-state classification (not whole-series OLS), a `FLAT` hot-path stability verdict from
+half-medians with insufficient windows failing closed, an available growth-aware projection, and
+that projection within **6,480 s**. Malformed or unbound evidence is `EVIDENCE_INVALID`; valid
+evidence that misses the performance/structure contract is `NOT_QUALIFIED`. The receipt embeds and
+validates the canonical 877/7200/6480 constants so a weaker contract cannot pass through a
+schema-consistent file. Unbound v1 receipts cannot qualify a new launch. No environment variable —
+`NODE_ENV`, `CI`, `GITHUB_ACTIONS`, `FHV_IDHPS_PROGRESS_INTERVAL_MS`, or any skip flag — can weaken
+it.
 
 **The official unbounded launch now requires both target-host receipts.** Alongside the WP-3B
 checkpoint receipt, the launch path requires a valid throughput receipt (`--throughput-host-
@@ -372,8 +387,8 @@ the same `requiresWp3bTargetHostQualification` classification, so bounded fixtur
 probes, process-parity runs and PRE_AUTH bootstrap never require a receipt they cannot produce. The
 official full corpus still has its **7,200 s** terminal acceptance; 6,480 s is the pre-launch margin.
 
-**The Execution Server has not been contacted and the throughput qualification has not run.** No
-official full corpus has run.
+**Throughput qualification remains unresolved.** WP3B v2 PASS on `b6ad57373c4c51152321f656ff814628212627e4`
+does not close DEE-536 and does not qualify a later repair SHA. No official full corpus has run.
 
 ## AD-6c — Two-phase checkpoint authority, and splitting blocking capture from destination verification
 
@@ -439,6 +454,7 @@ is promoted to `evidence/epoch-N/generation-G` before journal N.
 - [`../ai-trader/AI-TRADER-TARGET-ARCHITECTURE.md`](../ai-trader/AI-TRADER-TARGET-ARCHITECTURE.md) — Execution Server owns long-running campaigns
 - [`../waia-governance/INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOUNDARY-POLICY.md) — HUMAN-ONLY operations
 - [`../../lib/trader/observability/fhv-checkpoint-cost-model.ts`](../../lib/trader/observability/fhv-checkpoint-cost-model.ts) — AD-6 enforcement
+- [`../../lib/trader/observability/fhv-bounded-hot-state.ts`](../../lib/trader/observability/fhv-bounded-hot-state.ts) — AD-1 production boundedness assessor
 - [`../../lib/trader/observability/fhv-throughput-receipt.ts`](../../lib/trader/observability/fhv-throughput-receipt.ts) — AD-6b throughput host-qualification receipt
 - [`../../scripts/ops/fhv-throughput-host-qualification.ts`](../../scripts/ops/fhv-throughput-host-qualification.ts) — AD-6b Execution Server throughput preflight
 - [`../../lib/trader/observability/fhv-growth-law.ts`](../../lib/trader/observability/fhv-growth-law.ts) — AD-7 projection

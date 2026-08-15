@@ -158,6 +158,73 @@ export function verifyFhvReleaseCheckoutIdentity(input: {
   };
 }
 
+/**
+ * Official throughput evidence identity: exact HEAD of a clean tracked checkout.
+ * Does not trust `FHV_RELEASE_SHA` and does not accept a dirty tree.
+ */
+export function assertFhvCleanTrackedHeadCheckout(input: {
+  repoPath: string;
+  expectedHeadSha?: string;
+}): { headSha: string; trackedTreeClean: true } {
+  const repoPath = input.repoPath.trim();
+  if (!repoPath) {
+    throw new FhvT4CheckoutIdentityError("FHV_T4_CHECKOUT_REPO_REQUIRED", "repo-path required.");
+  }
+  if (!gitOk(repoPath, ["rev-parse", "--is-inside-work-tree"])) {
+    throw new FhvT4CheckoutIdentityError(
+      "FHV_T4_CHECKOUT_NOT_GIT_WORKTREE",
+      `Not a git worktree: ${repoPath}`,
+    );
+  }
+  const headSha = git(repoPath, ["rev-parse", "HEAD"]).toLowerCase();
+  if (!FULL_SHA.test(headSha)) {
+    throw new FhvT4CheckoutIdentityError(
+      "FHV_T4_CHECKOUT_HEAD_INVALID",
+      `HEAD is not a 40-char SHA: ${headSha}`,
+    );
+  }
+  if (input.expectedHeadSha) {
+    const expected = input.expectedHeadSha.trim().toLowerCase();
+    if (!FULL_SHA.test(expected)) {
+      throw new FhvT4CheckoutIdentityError(
+        "FHV_T4_CHECKOUT_TARGET_SHA_INVALID",
+        "expected-head-sha must be a 40-char lowercase hex SHA.",
+      );
+    }
+    if (headSha !== expected) {
+      throw new FhvT4CheckoutIdentityError(
+        "FHV_T4_CHECKOUT_HEAD_MISMATCH",
+        `HEAD ${headSha} != expected ${expected}`,
+      );
+    }
+  }
+  const porcelain = git(repoPath, ["status", "--porcelain=v1", "-uno"]);
+  if (porcelain.length > 0) {
+    throw new FhvT4CheckoutIdentityError(
+      "FHV_T4_CHECKOUT_TREE_DIRTY",
+      "Tracked tree must be clean (no modified/deleted tracked files).",
+    );
+  }
+  const staged = git(repoPath, ["diff", "--cached", "--name-only"]);
+  if (staged.length > 0) {
+    throw new FhvT4CheckoutIdentityError(
+      "FHV_T4_CHECKOUT_STAGED_CHANGES",
+      "Staged changes are forbidden.",
+    );
+  }
+  if (
+    existsSync(join(repoPath, ".git", "MERGE_HEAD")) ||
+    existsSync(join(repoPath, ".git", "rebase-merge")) ||
+    existsSync(join(repoPath, ".git", "rebase-apply"))
+  ) {
+    throw new FhvT4CheckoutIdentityError(
+      "FHV_T4_CHECKOUT_MERGE_IN_PROGRESS",
+      "Unresolved merge/rebase state is forbidden.",
+    );
+  }
+  return { headSha, trackedTreeClean: true };
+}
+
 export function writeFhvT4CheckoutIdentityProofAtomic(input: {
   runRoot: string;
   repoPath: string;

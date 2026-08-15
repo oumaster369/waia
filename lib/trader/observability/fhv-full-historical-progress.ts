@@ -32,6 +32,9 @@ export const FHV_FULL_HISTORICAL_PROGRESS_INTERVAL_MS = 30_000;
 /** Samples retained for the rolling-rate window. */
 export const FHV_FULL_HISTORICAL_PROGRESS_ROLLING_SAMPLES = 5;
 
+/** Hot-path amortization: observational reports fire at most once per this many cycles. */
+export const FHV_FULL_HISTORICAL_PROGRESS_CYCLE_AMORTIZATION = 256;
+
 /**
  * Observational sampling interval override.
  *
@@ -414,7 +417,10 @@ export function createFhvFullHistoricalProgressReporter(input: {
     },
     maybeReport(sample) {
       // Amortize clock checks: only sample every 256 cycles on the hot path.
-      if (sample.cycleCount > 0 && sample.cycleCount % 256 !== 0) {
+      if (
+        sample.cycleCount > 0 &&
+        sample.cycleCount % FHV_FULL_HISTORICAL_PROGRESS_CYCLE_AMORTIZATION !== 0
+      ) {
         return null;
       }
       const now = performance.now();

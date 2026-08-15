@@ -15,8 +15,9 @@ import type { FhvFullHistoricalProgressV1 } from "@/lib/trader/observability/fhv
  * accounts for cost that grows with run length instead of assuming a constant cost per bar.
  */
 
-export const FHV_GROWTH_LAW_SCHEMA = "fhv-growth-law-report/v1" as const;
-export const FHV_GROWTH_LAW_REPORT_FILENAME = "fhv-growth-law-report.v1.json";
+export const FHV_GROWTH_LAW_SCHEMA = "fhv-growth-law-report/v2" as const;
+export const FHV_GROWTH_LAW_REPORT_FILENAME = "fhv-growth-law-report.v2.json";
+export const FHV_GROWTH_LAW_LEGACY_V1_FILENAME = "fhv-growth-law-report.v1.json";
 
 /** Human-approved pre-launch safety headroom (plan section A-3). */
 export const FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S = 6480;
@@ -39,6 +40,25 @@ export type FhvThroughputWindow = Readonly<{
   checkpointExcludedBarsPerSecond: number | null;
 }>;
 
+export const FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION =
+  "fhv-hot-path-stability-assessor/v1" as const;
+/** Minimum windows so a single first/last pair cannot decide sustained decay. */
+export const FHV_HOT_PATH_STABILITY_MIN_WINDOWS = 4;
+/** 10% mirrors the stability gate's decay cap. Unchanged. */
+export const FHV_HOT_PATH_STABILITY_DECAY_RATIO_CAP = 0.1;
+
+export type FhvHotPathStabilityAssessment = Readonly<{
+  assessorVersion: typeof FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION;
+  firstHotCps: number | null;
+  lastHotCps: number | null;
+  firstHalfMedianCps: number | null;
+  lastHalfMedianCps: number | null;
+  decayRatio: number | null;
+  windowCount: number;
+  minWindowsRequired: typeof FHV_HOT_PATH_STABILITY_MIN_WINDOWS;
+  verdict: "DECAYING" | "FLAT" | "INSUFFICIENT_SAMPLES";
+}>;
+
 export type FhvHotspot = Readonly<{
   stage: string;
   totalMs: number;
@@ -58,6 +78,10 @@ export type FhvGrowthAwareProjection = Readonly<{
   withinCanonicalLimit: boolean;
   withinPreLaunchHeadroom: boolean;
 }>;
+
+export function fitFhvLinearPoints(points: readonly (readonly [number, number])[]): FhvLinearFit {
+  return linearFit(points);
+}
 
 function linearFit(points: readonly (readonly [number, number])[]): FhvLinearFit {
   const n = points.length;
@@ -144,36 +168,54 @@ export function computeFhvThroughputWindows(
 /**
  * Does checkpoint-excluded throughput decline across the run?
  *
- * Separates genuine hot-path decay from probe-segment bias: a flat series means the probe simply
- * sampled an unrepresentative segment, a declining series means the hot path itself degrades.
+ * First-vs-last pair is retained as a diagnostic, not the verdict. Sustained decay is decided
+ * from equal-sized first/last half medians so a single noisy endpoint cannot fail a stationary
+ * series. Fewer than {@link FHV_HOT_PATH_STABILITY_MIN_WINDOWS} windows fail closed.
  */
-export function assessFhvHotPathDecay(windows: readonly FhvThroughputWindow[]): {
-  firstHotCps: number | null;
-  lastHotCps: number | null;
-  decayRatio: number | null;
-  verdict: "DECAYING" | "FLAT" | "INSUFFICIENT_SAMPLES";
-} {
+export function assessFhvHotPathDecay(
+  windows: readonly FhvThroughputWindow[],
+): FhvHotPathStabilityAssessment {
   const hot = windows
     .map((window) => window.checkpointExcludedBarsPerSecond)
     .filter((value): value is number => value != null && value > 0);
-  if (hot.length < 2) {
+  const windowCount = hot.length;
+  if (windowCount < FHV_HOT_PATH_STABILITY_MIN_WINDOWS) {
     return {
-      firstHotCps: null,
-      lastHotCps: null,
+      assessorVersion: FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION,
+      firstHotCps: hot[0] ?? null,
+      lastHotCps: hot[windowCount - 1] ?? null,
+      firstHalfMedianCps: null,
+      lastHalfMedianCps: null,
       decayRatio: null,
+      windowCount,
+      minWindowsRequired: FHV_HOT_PATH_STABILITY_MIN_WINDOWS,
       verdict: "INSUFFICIENT_SAMPLES",
     };
   }
-  const first = hot[0]!;
-  const last = hot[hot.length - 1]!;
-  const decayRatio = Number((1 - last / first).toFixed(4));
+  const half = Math.floor(windowCount / 2);
+  const firstHalfMedianCps = median(hot.slice(0, half));
+  const lastHalfMedianCps = median(hot.slice(windowCount - half));
+  const decayRatio = Number((1 - lastHalfMedianCps / firstHalfMedianCps).toFixed(4));
   return {
-    firstHotCps: first,
-    lastHotCps: last,
+    assessorVersion: FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION,
+    firstHotCps: hot[0]!,
+    lastHotCps: hot[windowCount - 1]!,
+    firstHalfMedianCps,
+    lastHalfMedianCps,
     decayRatio,
-    // 10% mirrors the stability gate's decay cap.
-    verdict: decayRatio > 0.1 ? "DECAYING" : "FLAT",
+    windowCount,
+    minWindowsRequired: FHV_HOT_PATH_STABILITY_MIN_WINDOWS,
+    verdict: decayRatio > FHV_HOT_PATH_STABILITY_DECAY_RATIO_CAP ? "DECAYING" : "FLAT",
   };
+}
+
+function median(values: readonly number[]): number {
+  const sorted = [...values].sort((left, right) => left - right);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[mid - 1]! + sorted[mid]!) / 2;
+  }
+  return sorted[mid]!;
 }
 
 /**
@@ -246,4 +288,13 @@ export function rankFhvHotspots(
       shareOfMeasuredMs: measuredMs > 0 ? Number((value.totalMs / measuredMs).toFixed(4)) : 0,
     }))
     .sort((a, b) => b.totalMs - a.totalMs);
+}
+
+/** Progress samples that actually carry last-checkpoint size and duration. */
+export function countFhvCheckpointBearingObservations(
+  series: readonly FhvFullHistoricalProgressV1[],
+): number {
+  return series.filter(
+    (entry) => entry.lastCheckpointBytes != null && entry.lastCheckpointDurationMs != null,
+  ).length;
 }

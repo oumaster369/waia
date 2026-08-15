@@ -251,6 +251,23 @@ run_linear_done_case "DEE-432 atomic governance issue auto-closes" 0 "" \
   "dee-432-linear-keep-open-lifecycle-governance" \
   "main" || fail=1
 
+DEE536_KEEP_OPEN_BODY='**Linear:** `DEE-536`
+**Linear completion:** keep-open
+**Linear completion reason:** DEE-536 remains an active post-merge host qualification gate until the repaired qualifier release is Human-qualified on the Execution Server and the final HOST_QUALIFIED or exact blocked receipt exists.
+**Tier:** T2'
+
+run_case "DEE-536 qualifier repair keep-open passes governance" 0 \
+  "DEE-536 fix(trader): repair throughput host qualification evidence" \
+  "$DEE536_KEEP_OPEN_BODY" \
+  "dee-536-throughput-qualifier-repair" \
+  "main" || fail=1
+
+run_linear_done_case "DEE-536 qualifier repair keep-open skips linear-done" 2 explicit_keep_open \
+  "DEE-536 fix(trader): repair throughput host qualification evidence" \
+  "$DEE536_KEEP_OPEN_BODY" \
+  "dee-536-throughput-qualifier-repair" \
+  "main" || fail=1
+
 if [[ "$fail" -ne 0 ]]; then
   echo "Some tests failed." >&2
   exit 1

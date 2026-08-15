@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { isFhvBoundedHotStateEnabled } from "@/lib/trader/execution/fhv-hot-state-pruner";
 import { getIdhpsHotPathCounters } from "@/lib/trader/execution/idhps-hot-path-counters";
+import { assessFhvBoundedHotState } from "@/lib/trader/observability/fhv-bounded-hot-state";
 import {
   executeFhvFullHistoricalLaunch,
   resolveFhvFullLaunchRunDirectory,
@@ -48,17 +49,6 @@ export const REPRESENTATIVE_SEGMENT_REPORT_FILENAME = "fhv-deep-state-segment-re
 const SEGMENT_CHECKPOINT_EVERY_CYCLES = 1_000;
 const MIN_SEGMENT_CHECKPOINTS = 3;
 const SEGMENT_RUN_ID = "fhv-official-scale-deep-state-segment";
-
-/**
- * Pre-WP-6A unbounded baseline was ~320 bytes/cycle. Bounded hot state measured 54-97 on
- * exact HEAD 29447a9 / 156 on origin/main 3c45d5e (PASSIVE WAL checkpoint).
- *
- * Two-phase authority (DEE-536) fail-closed TRUNCATEs WAL into session.sqlite before clone,
- * and defers economic prune until verified authority, so live db growth during the pending
- * window is higher than the old blocking SHA+prune path. 280 still fails if unbounded
- * economic history returns (~320) while leaving room for the required TRUNCATE/pending window.
- */
-export const FHV_BOUNDED_GROWTH_BYTES_PER_CYCLE_CEILING = 280;
 
 /**
  * Launch receipts and configuration freezes are single-use by design, so a repeated local run
@@ -339,21 +329,18 @@ describe("FHV deep-state representative segment", () => {
   });
 
   /**
-   * WP-6B permanent regression gate.
-   *
-   * Pre-WP-6A grew ~320 bytes/cycle. Bounded hot state measured 54-97 (HEAD 29447a9) and 156
-   * on origin/main 3c45d5e. Two-phase authority TRUNCATEs WAL into the measured db file and
-   * defers prune until verified authority, so live growth during the pending window is higher.
-   * The ceiling stays below the unbounded 320 baseline and is not a hosted-runner speed gate.
+   * WP-6B permanent regression gate. Consumes the production AD-1 boundedness assessor.
+   * Whole-series OLS is diagnostic only and is not the structural verdict.
    */
   it("keeps session-database growth bounded when bounded hot state is enabled", () => {
     if (!isFhvBoundedHotStateEnabled()) {
       expect(report?.growth.sessionDatabaseGrowthBytesPerCycle ?? 0).toBeGreaterThan(0);
       return;
     }
-    const growth = report?.growth.sessionDatabaseGrowthBytesPerCycle;
-    expect(growth).not.toBeNull();
-    expect(growth!).toBeLessThanOrEqual(FHV_BOUNDED_GROWTH_BYTES_PER_CYCLE_CEILING);
+    const runDir = resolveFhvFullLaunchRunDirectory(harness.artifactRoot, SEGMENT_RUN_ID);
+    const series = readProgressSeries(runDir);
+    const boundedness = assessFhvBoundedHotState(series);
+    expect(boundedness.classification).toBe("BOUNDED");
   });
 
   it("enforces the deep-state envelope only in blocking mode", () => {

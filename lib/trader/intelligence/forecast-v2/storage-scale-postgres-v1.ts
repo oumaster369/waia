@@ -10,7 +10,6 @@ import {
   FHV_CHECKPOINT_SUPPORTED_ENVELOPE_BYTES,
   measureFhvCheckpointSnapshotCost,
 } from "@/lib/trader/observability/fhv-checkpoint-cost-model";
-import { FHV_THROUGHPUT_MAX_GROWTH_BYTES_PER_CYCLE } from "@/lib/trader/observability/fhv-throughput-receipt";
 import {
   appendA3DiagnosticLog,
   assertA3Phase01StageHealthy,
@@ -71,6 +70,8 @@ export const DEE_518_BLOCKED_PACKAGE_FIXED_BYTE_IDENTITY_RECONCILIATION_REQUIRED
 
 export const A3_PHASE3_N1_BUNDLES = 1_000;
 export const A3_CANONICAL_N_BUNDLES = 200_000;
+/** Forecast bundle count must not grow FHV hot-checkpoint bytes. Owned here, not by throughput. */
+export const FORECAST_V2_FHV_CHECKPOINT_BYTES_GROWTH_VS_N = 0;
 const PHASE3_BOUNDED_FHV_SESSION_BYTES = 8 * 1024 * 1024;
 const DIGEST = "a".repeat(64);
 
@@ -480,7 +481,7 @@ function measurePhase3CheckpointNIndependenceProof(input: {
     input.checkpointBytesAtN1 === input.checkpointBytesAtN2 &&
     input.checkpointBytesAtN1 > 0 &&
     input.checkpointBytesAtN1 <= FHV_CHECKPOINT_SUPPORTED_ENVELOPE_BYTES &&
-    FHV_THROUGHPUT_MAX_GROWTH_BYTES_PER_CYCLE <= 160;
+    FORECAST_V2_FHV_CHECKPOINT_BYTES_GROWTH_VS_N === 0;
 
   const evidence = [
     `n1_bundles=${input.n1Bundles}`,
@@ -488,7 +489,7 @@ function measurePhase3CheckpointNIndependenceProof(input: {
     `checkpoint_bytes_at_n1=${input.checkpointBytesAtN1}`,
     `checkpoint_bytes_at_n2=${input.checkpointBytesAtN2}`,
     `checkpoint_session_bytes=${input.checkpointSessionBytes}`,
-    `max_growth_bytes_per_cycle=${FHV_THROUGHPUT_MAX_GROWTH_BYTES_PER_CYCLE}`,
+    `checkpoint_bytes_growth_vs_n=${FORECAST_V2_FHV_CHECKPOINT_BYTES_GROWTH_VS_N}`,
     `supported_checkpoint_envelope_bytes=${FHV_CHECKPOINT_SUPPORTED_ENVELOPE_BYTES}`,
     "forecast_v2_bundle_history_persisted_in_postgres_only",
     "fhv_hot_checkpoint_sqlite_independent_of_forecast_bundle_N",
@@ -500,7 +501,7 @@ function measurePhase3CheckpointNIndependenceProof(input: {
     checkpointBytesAtN1: input.checkpointBytesAtN1,
     checkpointBytesAtN2: input.checkpointBytesAtN2,
     checkpointSessionBytes: input.checkpointSessionBytes,
-    maxGrowthBytesPerCycle: FHV_THROUGHPUT_MAX_GROWTH_BYTES_PER_CYCLE,
+    maxGrowthBytesPerCycle: FORECAST_V2_FHV_CHECKPOINT_BYTES_GROWTH_VS_N,
     supportedCheckpointEnvelopeBytes: FHV_CHECKPOINT_SUPPORTED_ENVELOPE_BYTES,
     bundleHistoryInFhvHotCheckpointPath: false,
     bounded,

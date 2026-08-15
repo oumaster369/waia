@@ -75,14 +75,15 @@ pnpm trader:fhv:wp3b-host-qualification
 FHV_IDHPS_PROGRESS=1 pnpm trader:fhv:run -- --max-cycles <representative-cycles> ...  # representative segment
 pnpm trader:fhv:growth-law-report -- --run-dir "<representative-run-dir>"
 pnpm trader:fhv:throughput-host-qualification -- --run-dir "<representative-run-dir>"
-#   -> fhv-throughput-host-qualification.v1.json  (EXECUTION_SERVER_FHV_THROUGHPUT_QUALIFIED)
+#   -> fhv-throughput-host-qualification.v2.json  (EXECUTION_SERVER_FHV_THROUGHPUT_QUALIFIED)
 ```
 
 A throughput receipt is QUALIFIED only when the growth-aware projected official runtime is
-`<= 6480` s, the hot-path decay verdict is `FLAT`, bounded hot-state growth stays within the
-structural ceiling, and the embedded `877 / 7200 / 6480` constants validate. It binds the release
-SHA and target-host identity. The official unbounded launch requires **both** this receipt and the
-WP-3B checkpoint receipt.
+`<= 6480` s, the hot-path stability verdict is `FLAT`, the production-owned AD-1 bounded-hot-state
+assessor returns `BOUNDED`, sampling follows the qualifier-owned contract, progress bytes and the
+growth-law report are digest-bound to a clean checkout HEAD, and the embedded `877 / 7200 / 6480`
+constants validate. It binds the release SHA and target-host identity. The official unbounded launch
+requires **both** this receipt and the WP-3B checkpoint receipt. Unbound v1 receipts cannot qualify.
 
 ### Step 15 — Full Historical Validation run
 
@@ -110,7 +111,7 @@ pnpm trader:fhv:run -- \
   --dataset-root "/absolute/dataset/root" \
   --manifest-path "/absolute/manifest/fhv-dataset-manifest.v2.json" \
   --checkout-identity-proof-path "/path/to/fhv-t4-checkout-identity.v1.json" \
-  --throughput-host-qualification-receipt-path "/path/to/fhv-throughput-host-qualification.v1.json"
+  --throughput-host-qualification-receipt-path "/path/to/fhv-throughput-host-qualification.v2.json"
 
 # Resume after checkpoint pause or infrastructure interruption (same run-id, same artifacts):
 pnpm trader:fhv:run -- --resume \

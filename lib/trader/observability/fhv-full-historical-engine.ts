@@ -42,6 +42,10 @@ import { buildResearchV2PortfolioContext } from "@/lib/trader/research/research-
 import { readFhvLaunchJournal } from "@/lib/trader/observability/fhv-launch-journal";
 import { getFhvSyntheticProfilingHooks } from "@/lib/trader/observability/fhv-synthetic-profiling-hook";
 import { createFhvFullHistoricalProgressReporter } from "@/lib/trader/observability/fhv-full-historical-progress";
+import {
+  isFhvThroughputQualifierSamplingRequired,
+  resolveFhvThroughputQualifierProgressIntervalMs,
+} from "@/lib/trader/observability/fhv-throughput-sampler";
 
 function parseStrategyBinding(version: string): { strategyId: string; strategyVersion: string } {
   const at = version.lastIndexOf("@");
@@ -230,6 +234,12 @@ export async function runFullHistoricalBacktest(input: {
           runDir: input.runDir,
           ...(input.artifactRoot ? { artifactRoot: input.artifactRoot } : {}),
           targetCycleCount: input.targetCycleCount ?? input.maxCycles ?? null,
+          ...(isFhvThroughputQualifierSamplingRequired({
+            maxCycles: input.maxCycles,
+            boundedFixture: input.boundedFixture,
+          })
+            ? { intervalMs: resolveFhvThroughputQualifierProgressIntervalMs() }
+            : {}),
         })
       : null;
 
