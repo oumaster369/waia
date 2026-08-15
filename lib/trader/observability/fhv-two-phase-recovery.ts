@@ -41,6 +41,7 @@ export function cleanupFhvTwoPhaseResumeState(runDir: string): {
   lastCommittedEpoch: number;
   lastCommittedCycle: number;
   lastEpochCommitDigest: string;
+  committedGeneration: number | null;
 } {
   const journal = readFhvLaunchJournal(runDir);
   const lastCommittedEpoch = journal.lastCommittedEpoch;
@@ -58,6 +59,7 @@ export function cleanupFhvTwoPhaseResumeState(runDir: string): {
     }
   }
 
+  let committedGeneration: number | null = null;
   if (lastCommittedEpoch >= 0) {
     const canonical = resolveFhvEpochCheckpointDir(runDir, lastCommittedEpoch);
     if (!existsSync(join(canonical, FHV_CHECKPOINT_READY_MARKER))) {
@@ -76,6 +78,7 @@ export function cleanupFhvTwoPhaseResumeState(runDir: string): {
         `two-phase checkpoint epoch ${lastCommittedEpoch} is missing the required composite`,
       );
     }
+    committedGeneration = bundle.manifest.generation;
   }
 
   const evidenceRoot = join(runDir, "evidence");
@@ -102,6 +105,7 @@ export function cleanupFhvTwoPhaseResumeState(runDir: string): {
     lastCommittedEpoch: journal.lastCommittedEpoch,
     lastCommittedCycle: journal.lastCommittedCycle,
     lastEpochCommitDigest: journal.lastEpochCommitDigest,
+    committedGeneration,
   };
 }
 

@@ -222,11 +222,15 @@ export function prepareFhvOfficialLaunchExecution(input: {
     }
     const recovered = cleanupFhvTwoPhaseResumeState(input.runDir);
     const evidenceRoot = join(input.runDir, "evidence");
-    if (recovered.lastCommittedEpoch >= 0 && existsSync(evidenceRoot)) {
+    if (
+      recovered.lastCommittedEpoch >= 0 &&
+      recovered.committedGeneration != null &&
+      existsSync(evidenceRoot)
+    ) {
       cleanupFhvEpochEvidenceGenerations({
         runDir: input.runDir,
         epochId: recovered.lastCommittedEpoch,
-        keepGeneration: authorizationClaim.fencingGeneration,
+        keepGeneration: recovered.committedGeneration,
       });
     }
     if (recovered.lastCommittedEpoch > authorizationClaim.lastCommittedEpoch) {

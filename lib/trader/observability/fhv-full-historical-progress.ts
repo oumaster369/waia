@@ -138,7 +138,16 @@ function resolveSqliteBytes(): number | null {
     if (!sqlite?.name || !existsSync(sqlite.name)) {
       return null;
     }
-    return statSync(sqlite.name).size;
+    // Count the whole SQLite envelope. Fail-closed WAL TRUNCATE consolidates pages into
+    // session.sqlite; measuring the db file alone would treat that consolidation as growth.
+    let total = statSync(sqlite.name).size;
+    for (const suffix of ["-wal", "-shm"] as const) {
+      const sidecar = `${sqlite.name}${suffix}`;
+      if (existsSync(sidecar)) {
+        total += statSync(sidecar).size;
+      }
+    }
+    return total;
   } catch {
     return null;
   }

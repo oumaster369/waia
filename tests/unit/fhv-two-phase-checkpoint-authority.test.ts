@@ -25,6 +25,7 @@ import {
   claimFhvAuthorizationExclusive,
   readFhvAuthorizationClaim,
   resolveFhvAuthorizationClaimPath,
+  takeoverFhvAuthorizationRunning,
   writeFhvAuthorizationClaimAtomic,
 } from "@/lib/trader/observability/fhv-authorization-claim";
 import {
@@ -71,7 +72,10 @@ import {
   FHV_WP3B_GATE2_LIVENESS_MS,
   FhvWp3bReceiptError,
 } from "@/lib/trader/observability/fhv-wp3b-receipt";
-import { cleanupFhvTwoPhaseResumeState } from "@/lib/trader/observability/fhv-two-phase-recovery";
+import {
+  cleanupFhvEpochEvidenceGenerations,
+  cleanupFhvTwoPhaseResumeState,
+} from "@/lib/trader/observability/fhv-two-phase-recovery";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
 
 const RUN_ID = "fhv-two-phase";
@@ -448,6 +452,39 @@ describe("two-phase checkpoint authority", () => {
     await controller.onCycleBoundary({ cycleIndex: 3, cycleCount: 4 });
     expect(performance.now() - started).toBeGreaterThan(50);
     await controller.drainPendingVerification();
+  });
+
+  it("resume keeps journal-bound evidence generation, not live fencing", async () => {
+    const runRoot = tmp("fhv-evidence-gen-");
+    const { controller, claimPath } = bootstrap(runRoot);
+    await controller.commitFinalPartialEpoch(1);
+    const recovered = cleanupFhvTwoPhaseResumeState(runRoot);
+    const bundle = readFhvExecutionCheckpointBundle(resolveFhvEpochCheckpointDir(runRoot, 0));
+    expect(recovered.committedGeneration).toBe(bundle.manifest.generation);
+
+    const keep = join(runRoot, "evidence", "epoch-0", `generation-${bundle.manifest.generation}`);
+    const stale = join(
+      runRoot,
+      "evidence",
+      "epoch-0",
+      `generation-${bundle.manifest.generation + 1}`,
+    );
+    mkdirSync(keep, { recursive: true });
+    mkdirSync(stale, { recursive: true });
+    writeFileSync(join(keep, "ok"), "1");
+    writeFileSync(join(stale, "no"), "1");
+
+    takeoverFhvAuthorizationRunning({ claimPath, leaseOwner: "resume@test" });
+    const claim = readFhvAuthorizationClaim(claimPath);
+    expect(claim.fencingGeneration).not.toBe(bundle.manifest.generation);
+
+    cleanupFhvEpochEvidenceGenerations({
+      runDir: runRoot,
+      epochId: 0,
+      keepGeneration: recovered.committedGeneration!,
+    });
+    expect(existsSync(keep)).toBe(true);
+    expect(existsSync(stale)).toBe(false);
   });
 
   it("orphan provisional is cleaned on resume", async () => {
