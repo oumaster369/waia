@@ -68,4 +68,38 @@ describe("parseHumanDecimalToAtomic", () => {
     expect(formatAtomicToHumanDecimal("125500000", TREASURY_USDT_V1_DECIMALS)).toBe("125.5");
     expect(formatAtomicToHumanDecimal("1", TREASURY_USDT_V1_DECIMALS)).toBe("0.000001");
   });
+
+  it("normalizes leading and trailing zeros without rounding", () => {
+    expect(parseHumanDecimalToAtomic("001", TREASURY_USDT_V1_DECIMALS)).toEqual({
+      ok: true,
+      atomic: "1000000",
+    });
+    expect(parseHumanDecimalToAtomic("1.50", TREASURY_USDT_V1_DECIMALS)).toEqual({
+      ok: true,
+      atomic: "1500000",
+    });
+    expect(parseHumanDecimalToAtomic("1.500000", TREASURY_USDT_V1_DECIMALS)).toEqual({
+      ok: true,
+      atomic: "1500000",
+    });
+  });
+
+  it("keeps integers beyond Number.MAX_SAFE_INTEGER exact", () => {
+    const human = "9007199254740993";
+    expect(parseHumanDecimalToAtomic(human, TREASURY_USDT_V1_DECIMALS)).toEqual({
+      ok: true,
+      atomic: "9007199254740993000000",
+    });
+    expect(String(Math.round(Number(human) * 10 ** TREASURY_USDT_V1_DECIMALS))).not.toBe(
+      "9007199254740993000000",
+    );
+  });
+
+  it("rejects extra precision instead of using IEEE 2-decimal rounding drift", () => {
+    const result = parseHumanDecimalToAtomic("1.005", 2);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("PRECISION");
+    expect(parseHumanDecimalToAtomic("1.00", 2)).toEqual({ ok: true, atomic: "100" });
+    expect(Math.round(1.005 * 100)).toBe(100);
+  });
 });
