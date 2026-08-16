@@ -25,7 +25,7 @@ state:
   remainingWorkPackages: []
   prNumber: 464
   prUrl: https://github.com/oumaster369/waia/pull/464
-  lastValidatedGitSha: null
+  lastValidatedGitSha: 4864c455111bd0e37c23fbbf9a14fab854737e63
   lastValidationAt: "2026-08-16"
   blockedReason: null
   nextAction: "Push simplified UX to the same PR #464; Human visual review; required CI green on exact HEAD; Human squash-merge only."
