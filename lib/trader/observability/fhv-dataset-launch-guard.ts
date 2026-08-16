@@ -4,6 +4,10 @@ import { isAbsolute, join } from "node:path";
 
 import { assertFhvDatasetSealed } from "@/lib/trader/market-data/fhv-dataset-seal";
 import {
+  assertFhvPreHoldoutFilesMatchReceipt,
+  readFhvPreHoldoutQualificationReceipt,
+} from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
+import {
   readFhvDatasetQualificationReceipt,
   type FhvDatasetQualificationReceiptV1,
 } from "@/lib/trader/observability/fhv-dataset-qualification";
@@ -75,6 +79,27 @@ export function revalidateFhvDatasetAtLaunch(input: {
     receipt.qualificationMode === "BOUNDED_INGRESS_FIXTURE" ||
     receipt.qualificationMode === "SCHEMA_INTEGRATION_FIXTURE"
   ) {
+    return receipt;
+  }
+
+  if (receipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA") {
+    const preHoldout = readFhvPreHoldoutQualificationReceipt(input.manifestPath);
+    assertFhvPreHoldoutFilesMatchReceipt({
+      datasetRoot: input.datasetRoot,
+      receipt: preHoldout,
+    });
+    if (preHoldout.developmentWalkForwardContentDigest !== receipt.datasetContentDigest) {
+      throw new FhvDatasetLaunchGuardError(
+        "DATASET_CONTENT_DIGEST_MUTATION",
+        "Pre-holdout DEVELOPMENT+WALK_FORWARD digest changed since qualification (TOCTOU).",
+      );
+    }
+    if (preHoldout.qualificationReceiptDigest !== receipt.manifestSemanticDigest) {
+      throw new FhvDatasetLaunchGuardError(
+        "MANIFEST_SEMANTIC_DIGEST_MUTATION",
+        "Pre-holdout qualification digest changed since qualification (TOCTOU).",
+      );
+    }
     return receipt;
   }
 

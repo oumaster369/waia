@@ -80,6 +80,9 @@ export type ReplayAccountingFrontierState = {
   grossRealizedPnl: string;
   netRealizedPnl: string;
   semanticContentDigest: string;
+  /** Optional cumulative counters when the checkpoint is the authority for observer counts. */
+  cumulativeOrdersCount?: number;
+  cumulativeFillsCount?: number;
 };
 
 export function buildReplayAccountingFrontierState(input: {

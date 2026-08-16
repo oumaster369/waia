@@ -64,9 +64,22 @@ export function produceFhvTradingSimulationCounts(input: {
     };
   }
   const accounting = input.checkpoint.accountingFrontierState;
+  const ordersCount =
+    accounting?.cumulativeOrdersCount ?? input.checkpoint.executionState?.openOrders?.length;
+  const fillsCount = accounting?.cumulativeFillsCount ?? accounting?.consumedFillIds?.length;
+  if (ordersCount === undefined || fillsCount === undefined) {
+    return {
+      ordersCount: fhvProducerUnavailable(),
+      fillsCount: fhvProducerUnavailable(),
+      openPositionsCount: accounting?.positionsJson
+        ? fhvProducerValue(Object.keys(accounting.positionsJson).length)
+        : fhvProducerUnavailable(),
+      closedPositionsCount: fhvProducerUnavailable(),
+    };
+  }
   return {
-    ordersCount: fhvProducerValue(input.checkpoint.executionState?.openOrders?.length ?? 0),
-    fillsCount: fhvProducerValue(accounting?.consumedFillIds?.length ?? 0),
+    ordersCount: fhvProducerValue(ordersCount),
+    fillsCount: fhvProducerValue(fillsCount),
     openPositionsCount: fhvProducerValue(
       accounting?.positionsJson ? Object.keys(accounting.positionsJson).length : 0,
     ),

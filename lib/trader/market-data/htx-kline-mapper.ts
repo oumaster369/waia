@@ -30,10 +30,12 @@ function barTimesFromOpenSeconds(
 /**
  * Raw HTX → Bar ingestion for provenance/display.
  *
- * `Bar.volume` is **NON_AUTHORITATIVE_RAW_INGESTION** (DEE-526). Prefer `vol` (base-candidate)
- * when present; never treat `amount ?? vol` as capital-authoritative base volume.
- * Capital/capacity paths MUST call `resolveAuthoritativeHtxBaseVolumeForCapital` with a
- * QUALIFIED receipt — mapper output alone never implies qualification.
+ * Canonical HTX spot kline semantics (DEE-526 repair):
+ * - `amount` = traded BASE-ASSET quantity → `Bar.volume`
+ * - `vol` = traded QUOTE-CURRENCY turnover (not mapped onto Bar.volume)
+ *
+ * `Bar.volume` remains NON_AUTHORITATIVE_RAW_INGESTION. Capital/capacity paths MUST
+ * call `resolveAuthoritativeHtxBaseVolumeForCapital` with a QUALIFIED v2 receipt.
  */
 export function mapHtxKlinesToBars(
   internalSymbol: InstrumentId,
@@ -45,8 +47,7 @@ export function mapHtxKlinesToBars(
 
   return sorted.map((row) => {
     const { barOpenTime, barCloseTime } = barTimesFromOpenSeconds(row.id, interval);
-    // Prefer base-candidate `vol` for raw ingestion. Do NOT fall back amount→vol as authority.
-    const nonAuthoritativeVolume = Number.isFinite(row.vol) ? row.vol : 0;
+    const baseQuantity = Number.isFinite(row.amount) ? row.amount : 0;
 
     return {
       symbol: internalSymbol,
@@ -55,7 +56,7 @@ export function mapHtxKlinesToBars(
       high: formatDecimal(row.high),
       low: formatDecimal(row.low),
       close: formatDecimal(row.close),
-      volume: formatDecimal(nonAuthoritativeVolume),
+      volume: formatDecimal(baseQuantity),
       barOpenTime,
       barCloseTime,
     };

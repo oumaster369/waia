@@ -35,6 +35,12 @@ import {
   validateFhvV2DatasetReadOnly,
 } from "@/lib/trader/market-data/fhv-dataset-seal";
 import {
+  assertFhvPreHoldoutFilesMatchReceipt,
+  FhvPreHoldoutQualificationError,
+  FHV_PRE_HOLDOUT_QUALIFICATION_MODE,
+  readFhvPreHoldoutQualificationReceipt,
+} from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
+import {
   buildFhvScientificPartitionReceiptSet,
   computeFhvScientificPartitionsDigest,
   type FhvPartitionReceiptSymbolEvidenceV1,
@@ -63,6 +69,7 @@ export const FHV_SCHEMA_INTEGRATION_FIXTURE_ROOT = join(
 
 export type FhvQualificationMode =
   | "OFFICIAL_MULTI_YEAR"
+  | "OFFICIAL_PRE_HOLDOUT_REAL_DATA"
   | "SCHEMA_INTEGRATION_FIXTURE"
   | "BOUNDED_INGRESS_FIXTURE";
 
@@ -756,6 +763,67 @@ export function qualifyFhvOfficialDataset(input: {
       organizationId: input.organizationId,
       operatorId: input.operatorId,
     });
+  }
+
+  if (qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA") {
+    const preHoldoutPath =
+      input.manifestPath.trim() ||
+      join(datasetRoot, "control", "fhv-pre-holdout-qualification-receipt.v1.json");
+    let preHoldout;
+    try {
+      preHoldout = readFhvPreHoldoutQualificationReceipt(preHoldoutPath);
+      assertFhvPreHoldoutFilesMatchReceipt({
+        datasetRoot,
+        receipt: preHoldout,
+      });
+    } catch (error) {
+      if (error instanceof FhvPreHoldoutQualificationError) {
+        throw new FhvDatasetQualificationError(error.code, error.message);
+      }
+      throw error;
+    }
+    if (input.releaseSha && input.releaseSha.trim().toLowerCase() !== preHoldout.releaseSha) {
+      throw new FhvDatasetQualificationError(
+        "RELEASE_MISMATCH",
+        "pre-holdout qualification releaseSha mismatch",
+      );
+    }
+    if (input.organizationId && input.organizationId !== preHoldout.organizationId) {
+      throw new FhvDatasetQualificationError(
+        "ORGANIZATION_OPERATOR_MISMATCH",
+        "pre-holdout qualification organizationId mismatch",
+      );
+    }
+    if (input.operatorId && input.operatorId !== preHoldout.operatorId) {
+      throw new FhvDatasetQualificationError(
+        "ORGANIZATION_OPERATOR_MISMATCH",
+        "pre-holdout qualification operatorId mismatch",
+      );
+    }
+    return {
+      schemaVersion: FHV_DATASET_QUALIFICATION_RECEIPT_SCHEMA_VERSION,
+      classification: "DATASET_QUALIFICATION=PASS",
+      qualificationMode: FHV_PRE_HOLDOUT_QUALIFICATION_MODE,
+      datasetRoot,
+      manifestPath: preHoldoutPath,
+      datasetContentDigest: preHoldout.developmentWalkForwardContentDigest,
+      manifestSemanticDigest: preHoldout.qualificationReceiptDigest,
+      partitionsDigest: computeStableJsonDigest(preHoldout.canonicalBoundaries),
+      gapPolicyId: FHV_GAP_POLICY_V1.policyId,
+      ...(input.releaseSha ? { releaseSha: input.releaseSha.trim().toLowerCase() } : {}),
+      ...(input.releaseTag ? { releaseTag: input.releaseTag.trim() } : {}),
+      ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+      ...(input.operatorId ? { operatorId: input.operatorId } : {}),
+      partitionEvidence: preHoldout.partitions.map((entry) => ({
+        partition: entry.partition,
+        symbol: entry.symbol,
+        filePath: join(datasetRoot, "partitions", entry.partition, entry.symbol, "bars.v2.ndjson"),
+        fileContentDigest: entry.rawSha256,
+        barCount: entry.barCount,
+        firstBarOpenTime: entry.firstBarOpen,
+        lastBarOpenTime: entry.lastBarClose,
+      })),
+    };
   }
 
   if (qualificationMode === "OFFICIAL_MULTI_YEAR") {

@@ -45,17 +45,20 @@ export function bindHistoricalExecutionModelToSession(options?: {
   };
 }
 
-/** Derive amount/vol for the capital gate from a non-authoritative bar after QUALIFIED receipt. */
+/**
+ * Derive HTX raw fields from a mapped bar after QUALIFIED v2 receipt.
+ * `Bar.volume` is base-asset quantity (`amount`). Do not fabricate quote as base
+ * and do not reconstruct amount from quote turnover.
+ */
 export function htxVolumeRawFromClosedBar(closedBar: Bar): { amount: number; vol: number } {
-  const vol = Number(closedBar.volume);
-  const close = Number(closedBar.close);
-  if (!Number.isFinite(vol) || vol < 0 || !Number.isFinite(close) || close <= 0) {
+  const amount = Number(closedBar.volume);
+  if (!Number.isFinite(amount) || amount < 0) {
     throw new HtxVolumeCapitalAuthorityError(
       "HTX_VOLUME_BAR_RAW_INVALID",
-      "closed bar volume/close cannot supply HTX volume raw fields",
+      "closed bar volume cannot supply HTX base amount",
     );
   }
-  return { vol, amount: vol * close };
+  return { amount, vol: 0 };
 }
 
 export function requireProfileHtxVolumeAuthority(

@@ -7,6 +7,9 @@ import {
   writeFileAtomicExclusive,
 } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { assertFhvOfficialV2DatasetArtifactsPresent } from "@/lib/trader/market-data/fhv-official-v2-required";
+import { streamOfficialPreHoldoutWalkForwardBars } from "@/lib/trader/market-data/fhv-bounded-bar-stream";
+import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
+import { runChronologicalControlReplayV2 } from "@/lib/trader/observability/control-replay-chronological-v2-driver-v1";
 import type { FhvConfigurationFreezeV1 } from "@/lib/trader/observability/fhv-configuration-freeze";
 import {
   loadOfficialSharedPortfolioBars,
@@ -40,6 +43,7 @@ import {
 } from "@/lib/trader/observability/fhv-full-historical-launch";
 import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { CONTROL_REPLAY_AUTHORITY_IDENTITY } from "@/lib/trader/observability/control-replay-test-authority";
+import { V2_CAPITAL_AUTHORITY_PATH } from "@/lib/trader/risk/authority-chain";
 
 export const FHV_CONTROL_REPLAY_EXECUTION_PURPOSE = "CONTROL_REPLAY" as const;
 
@@ -63,6 +67,7 @@ async function runFhvControlReplayLaunchBacktest(input: {
   launchExecution: ReturnType<typeof prepareFhvOfficialLaunchExecution>;
   launchReceiptDigest: string;
   replaceLaunchResult?: boolean;
+  resumeFromCheckpoint?: boolean;
 }): Promise<FhvFullHistoricalLaunchResult> {
   // Preserve launch-shell dataset presence gates (no holdout; no FULL_HISTORICAL economics).
   if (input.launchInput.boundedFixture) {
@@ -72,6 +77,8 @@ async function runFhvControlReplayLaunchBacktest(input: {
       datasetRoot: input.launchInput.datasetRoot!,
       qualificationMode: input.qualificationReceipt.qualificationMode,
     });
+  } else if (input.qualificationReceipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA") {
+    // Dataset presence is the pre-holdout package; do not require full V2 seal or holdout bars.
   } else if (input.qualificationReceipt.qualificationMode === "SCHEMA_INTEGRATION_FIXTURE") {
     // Touch official shared bars only to prove dataset root is readable — not as V1 economic input.
     void loadOfficialSharedPortfolioBars({
@@ -86,6 +93,78 @@ async function runFhvControlReplayLaunchBacktest(input: {
   }
 
   void input.launchExecution;
+
+  if (input.qualificationReceipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA") {
+    const datasetRoot = input.launchInput.datasetRoot!;
+    const chronological = await runChronologicalControlReplayV2({
+      runId: input.launchInput.runId,
+      runDir: input.runDir,
+      organizationId: input.launchInput.organizationId,
+      releaseSha: input.launchInput.releaseSha.trim().toLowerCase(),
+      developmentWalkForwardContentDigest: input.qualificationReceipt.datasetContentDigest,
+      executionBarStream: streamOfficialPreHoldoutWalkForwardBars(datasetRoot),
+      economicReplayStartUtc: "2023-01-01T00:00:00.000Z",
+      resumeFromCheckpoint: input.resumeFromCheckpoint === true,
+      htxVolumeAuthorityByInstrument: {
+        BTCUSDT: readControlReplayVolumeReceipt(datasetRoot, "BTCUSDT"),
+        ETHUSDT: readControlReplayVolumeReceipt(datasetRoot, "ETHUSDT"),
+      },
+    });
+    const chronologicalEvidencePath = join(
+      input.runDir,
+      "control-replay-chronological-v2-result.v1.json",
+    );
+    void chronologicalEvidencePath;
+    const classification = "FHV_CONTROL_REPLAY_CEREMONY_PASS" as const;
+    const launchResult = {
+      schemaVersion: "fhv-full-launch-result/v1",
+      classification,
+      executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
+      authorityClass: CONTROL_REPLAY_AUTHORITY_IDENTITY.authorityClass,
+      capitalEligible: CONTROL_REPLAY_AUTHORITY_IDENTITY.capitalEligible,
+      capitalAuthorityPath: V2_CAPITAL_AUTHORITY_PATH,
+      driverVersion: chronological.driverVersion,
+      completedStages: ["FORECAST", "DECISION", "DESIRED_SIZE", "PORTFOLIO", "RISK", "EXECUTION"],
+      semanticReproDigest: chronological.normalizedParityDigest,
+      cycleCount: chronological.cycleCount,
+      evidenceChain: {
+        qualificationReceiptDigest: input.qualificationReceiptDigest,
+        configurationFreezeDigest: input.configurationFreeze.configurationFreezeDigest,
+        authorizationReceiptDigest: input.launchInput.authorizationReceiptDigest,
+        launchReceiptDigest: input.launchReceiptDigest,
+        datasetContentDigest: input.configurationFreeze.datasetDigest,
+        manifestSemanticDigest: input.configurationFreeze.manifestDigest,
+        accountingStateDigest: chronological.accountingSemanticDigest,
+        scientificParityDigest: chronological.parityDigest,
+        packageContentDigestHex: chronological.packageContentDigestHex,
+        scientificAdmissionReceiptDigest: chronological.scientificAdmissionReceiptDigest,
+        executablePolicyDigest: "UNAVAILABLE",
+        fullHistoryRescanCount: getFullHistoryRescanCount(),
+        holdoutStatus: "SEALED_NOT_ACCESSED" as const,
+        runDir: input.runDir,
+      },
+      accountingFrontierState: undefined,
+      htrPnlReportV1: undefined,
+    };
+    const launchResultPath = join(input.runDir, "fhv-full-launch-result.v1.json");
+    const launchResultJson = `${JSON.stringify(launchResult, null, 2)}\n`;
+    if (input.replaceLaunchResult && existsSync(launchResultPath)) {
+      writeFileAtomicCompareAndReplace({
+        finalPath: launchResultPath,
+        expectedContent: readFileSync(launchResultPath, "utf8"),
+        nextContent: launchResultJson,
+      });
+    } else {
+      writeFileAtomicExclusive(launchResultPath, launchResultJson);
+    }
+    return {
+      classification,
+      receiptPath: join(input.runDir, "fhv-full-launch-receipt.v1.json"),
+      runDir: input.runDir,
+      semanticReproDigest: chronological.normalizedParityDigest,
+      backtest: { cycleCount: chronological.cycleCount },
+    };
+  }
 
   const scientific = await runScientificControlReplayV2Ceremony({
     organizationId: input.launchInput.organizationId,
@@ -316,6 +395,7 @@ export async function resumeFhvControlReplayLaunch(
     launchExecution,
     launchReceiptDigest: existingReceipt.launchReceiptDigest,
     replaceLaunchResult: true,
+    resumeFromCheckpoint: true,
   });
 }
 
@@ -401,4 +481,18 @@ export function readFhvControlReplayLaunchFreezeDigest(freezePath: string): stri
     );
   }
   return digest;
+}
+
+function readControlReplayVolumeReceipt(
+  datasetRoot: string,
+  symbol: "BTCUSDT" | "ETHUSDT",
+): HtxVolumeQualificationReceiptV1 {
+  const path = join(datasetRoot, "control", "volume", `htx-volume-qualification.${symbol}.v1.json`);
+  if (!existsSync(path)) {
+    throw new FhvFullHistoricalLaunchError(
+      "HTX_VOLUME_AUTHORITY_MISSING",
+      `Control Replay requires QUALIFIED HTX volume receipts; missing ${path}`,
+    );
+  }
+  return JSON.parse(readFileSync(path, "utf8")) as HtxVolumeQualificationReceiptV1;
 }

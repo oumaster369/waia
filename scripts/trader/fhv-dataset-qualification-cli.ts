@@ -92,7 +92,7 @@ export function resolveFhvDatasetQualificationCliConfig(
       throw new Error("--dataset-root and --manifest-path are required.");
     }
     const mode = qualificationMode ?? "OFFICIAL_MULTI_YEAR";
-    if (mode === "OFFICIAL_MULTI_YEAR") {
+    if (mode === "OFFICIAL_MULTI_YEAR" || mode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA") {
       if (!releaseSha || !FULL_SHA.test(releaseSha)) {
         throw new Error("OFFICIAL_MULTI_YEAR requires --release-sha (full git SHA).");
       }
