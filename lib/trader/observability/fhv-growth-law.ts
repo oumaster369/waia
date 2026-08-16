@@ -41,7 +41,7 @@ export type FhvThroughputWindow = Readonly<{
 }>;
 
 export const FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION =
-  "fhv-hot-path-stability-assessor/v1" as const;
+  "fhv-hot-path-stability-assessor/v2" as const;
 /** Minimum windows so a single first/last pair cannot decide sustained decay. */
 export const FHV_HOT_PATH_STABILITY_MIN_WINDOWS = 4;
 /** 10% mirrors the stability gate's decay cap. Unchanged. */
@@ -53,6 +53,12 @@ export type FhvHotPathStabilityAssessment = Readonly<{
   lastHotCps: number | null;
   firstHalfMedianCps: number | null;
   lastHalfMedianCps: number | null;
+  earlyCps: number | null;
+  lateCps: number | null;
+  earlyWork: number | null;
+  lateWork: number | null;
+  earlyHotSeconds: number | null;
+  lateHotSeconds: number | null;
   decayRatio: number | null;
   windowCount: number;
   minWindowsRequired: typeof FHV_HOT_PATH_STABILITY_MIN_WINDOWS;
@@ -165,47 +171,174 @@ export function computeFhvThroughputWindows(
   return windows;
 }
 
-/**
- * Does checkpoint-excluded throughput decline across the run?
- *
- * First-vs-last pair is retained as a diagnostic, not the verdict. Sustained decay is decided
- * from equal-sized first/last half medians so a single noisy endpoint cannot fail a stationary
- * series. Fewer than {@link FHV_HOT_PATH_STABILITY_MIN_WINDOWS} windows fail closed.
- */
-export function assessFhvHotPathDecay(
+function insufficientHotPath(
   windows: readonly FhvThroughputWindow[],
 ): FhvHotPathStabilityAssessment {
   const hot = windows
     .map((window) => window.checkpointExcludedBarsPerSecond)
     .filter((value): value is number => value != null && value > 0);
-  const windowCount = hot.length;
-  if (windowCount < FHV_HOT_PATH_STABILITY_MIN_WINDOWS) {
-    return {
-      assessorVersion: FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION,
-      firstHotCps: hot[0] ?? null,
-      lastHotCps: hot[windowCount - 1] ?? null,
-      firstHalfMedianCps: null,
-      lastHalfMedianCps: null,
-      decayRatio: null,
-      windowCount,
-      minWindowsRequired: FHV_HOT_PATH_STABILITY_MIN_WINDOWS,
-      verdict: "INSUFFICIENT_SAMPLES",
-    };
-  }
-  const half = Math.floor(windowCount / 2);
-  const firstHalfMedianCps = median(hot.slice(0, half));
-  const lastHalfMedianCps = median(hot.slice(windowCount - half));
-  const decayRatio = Number((1 - lastHalfMedianCps / firstHalfMedianCps).toFixed(4));
   return {
     assessorVersion: FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION,
-    firstHotCps: hot[0]!,
-    lastHotCps: hot[windowCount - 1]!,
+    firstHotCps: hot[0] ?? null,
+    lastHotCps: hot.length > 0 ? hot[hot.length - 1]! : null,
+    firstHalfMedianCps: null,
+    lastHalfMedianCps: null,
+    earlyCps: null,
+    lateCps: null,
+    earlyWork: null,
+    lateWork: null,
+    earlyHotSeconds: null,
+    lateHotSeconds: null,
+    decayRatio: null,
+    windowCount: windows.length,
+    minWindowsRequired: FHV_HOT_PATH_STABILITY_MIN_WINDOWS,
+    verdict: "INSUFFICIENT_SAMPLES",
+  };
+}
+
+function cumulativeHotSeconds(entry: FhvFullHistoricalProgressV1): number {
+  return entry.elapsedSeconds - entry.cumulativeCheckpointDurationMs / 1000;
+}
+
+function interpolateHotSecondsAtSequence(
+  points: readonly Readonly<{ seq: number; hot: number }>[],
+  seq: number,
+): number | null {
+  if (points.length === 0) {
+    return null;
+  }
+  if (seq === points[0]!.seq) {
+    return points[0]!.hot;
+  }
+  const last = points[points.length - 1]!;
+  if (seq === last.seq) {
+    return last.hot;
+  }
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1]!;
+    const current = points[index]!;
+    if (seq >= previous.seq && seq <= current.seq) {
+      const span = current.seq - previous.seq;
+      if (span <= 0) {
+        return null;
+      }
+      const weight = (seq - previous.seq) / span;
+      return previous.hot + weight * (current.hot - previous.hot);
+    }
+  }
+  return null;
+}
+
+/**
+ * Does checkpoint-excluded throughput decline across the run?
+ *
+ * Authority is equal WORK MASS (cumulative `globalEventSequence` vs checkpoint-excluded hot
+ * time), not equal sampler-row count. Window CPS values remain diagnostic only. Sampling
+ * subdivision of the same cumulative curve must not change the FLAT/DECAYING verdict when both
+ * representations meet evidence minima. The 10% cap is unchanged.
+ */
+export function assessFhvHotPathDecay(
+  series: readonly FhvFullHistoricalProgressV1[],
+): FhvHotPathStabilityAssessment {
+  const windows = computeFhvThroughputWindows(series);
+  if (windows.length < FHV_HOT_PATH_STABILITY_MIN_WINDOWS) {
+    return insufficientHotPath(windows);
+  }
+
+  const points: { seq: number; hot: number }[] = [];
+  for (const entry of series) {
+    const seq = entry.globalEventSequence;
+    const elapsed = entry.elapsedSeconds;
+    const checkpointMs = entry.cumulativeCheckpointDurationMs;
+    if (
+      !Number.isFinite(seq) ||
+      !Number.isFinite(elapsed) ||
+      !Number.isFinite(checkpointMs) ||
+      checkpointMs < 0
+    ) {
+      return insufficientHotPath(windows);
+    }
+    const hot = cumulativeHotSeconds(entry);
+    if (!Number.isFinite(hot)) {
+      return insufficientHotPath(windows);
+    }
+    points.push({ seq, hot });
+  }
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1]!;
+    const current = points[index]!;
+    const previousEntry = series[index - 1]!;
+    const currentEntry = series[index]!;
+    if (current.seq <= previous.seq) {
+      return insufficientHotPath(windows);
+    }
+    if (currentEntry.elapsedSeconds <= previousEntry.elapsedSeconds) {
+      return insufficientHotPath(windows);
+    }
+    if (
+      currentEntry.cumulativeCheckpointDurationMs < previousEntry.cumulativeCheckpointDurationMs
+    ) {
+      return insufficientHotPath(windows);
+    }
+    const deltaWork = current.seq - previous.seq;
+    const deltaHot = current.hot - previous.hot;
+    if (deltaWork < 0) {
+      return insufficientHotPath(windows);
+    }
+    if (deltaWork > 0 && deltaHot <= 0) {
+      return insufficientHotPath(windows);
+    }
+  }
+
+  const start = points[0]!;
+  const end = points[points.length - 1]!;
+  const totalWork = end.seq - start.seq;
+  if (!(totalWork > 0)) {
+    return insufficientHotPath(windows);
+  }
+  const midSeq = start.seq + totalWork / 2;
+  const midHot = interpolateHotSecondsAtSequence(points, midSeq);
+  if (midHot == null || !Number.isFinite(midHot)) {
+    return insufficientHotPath(windows);
+  }
+  const earlyWork = midSeq - start.seq;
+  const lateWork = end.seq - midSeq;
+  const earlyHotSeconds = midHot - start.hot;
+  const lateHotSeconds = end.hot - midHot;
+  if (!(earlyWork > 0) || !(lateWork > 0) || !(earlyHotSeconds > 0) || !(lateHotSeconds > 0)) {
+    return insufficientHotPath(windows);
+  }
+  const earlyCps = earlyWork / earlyHotSeconds;
+  const lateCps = lateWork / lateHotSeconds;
+  if (!Number.isFinite(earlyCps) || !Number.isFinite(lateCps) || !(earlyCps > 0)) {
+    return insufficientHotPath(windows);
+  }
+  const degradationRatio = Math.max(0, (earlyCps - lateCps) / earlyCps);
+
+  const hot = windows
+    .map((window) => window.checkpointExcludedBarsPerSecond)
+    .filter((value): value is number => value != null && value > 0);
+  const half = Math.floor(hot.length / 2);
+  const firstHalfMedianCps = half > 0 ? median(hot.slice(0, half)) : null;
+  const lastHalfMedianCps = half > 0 ? median(hot.slice(hot.length - half)) : null;
+
+  return {
+    assessorVersion: FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION,
+    firstHotCps: hot[0] ?? null,
+    lastHotCps: hot.length > 0 ? hot[hot.length - 1]! : null,
     firstHalfMedianCps,
     lastHalfMedianCps,
-    decayRatio,
-    windowCount,
+    earlyCps: Number(earlyCps.toFixed(6)),
+    lateCps: Number(lateCps.toFixed(6)),
+    earlyWork,
+    lateWork,
+    earlyHotSeconds: Number(earlyHotSeconds.toFixed(6)),
+    lateHotSeconds: Number(lateHotSeconds.toFixed(6)),
+    decayRatio: Number(degradationRatio.toFixed(6)),
+    windowCount: windows.length,
     minWindowsRequired: FHV_HOT_PATH_STABILITY_MIN_WINDOWS,
-    verdict: decayRatio > FHV_HOT_PATH_STABILITY_DECAY_RATIO_CAP ? "DECAYING" : "FLAT",
+    verdict: degradationRatio > FHV_HOT_PATH_STABILITY_DECAY_RATIO_CAP ? "DECAYING" : "FLAT",
   };
 }
 

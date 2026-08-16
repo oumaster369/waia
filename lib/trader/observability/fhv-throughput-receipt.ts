@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 import {
   FHV_CANONICAL_MAX_RUNTIME_S,
+  FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION,
   FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S,
 } from "@/lib/trader/observability/fhv-growth-law";
 import type { FhvBoundednessClassification } from "@/lib/trader/observability/fhv-bounded-hot-state";
@@ -74,7 +75,11 @@ export type FhvThroughputReceiptV2 = Readonly<{
     checkpointSamples: number;
     boundednessClassification: FhvBoundednessClassification;
     diagnosticGrowthBytesPerCycle: number;
+    hotPathAssessorVersion: typeof FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION;
     hotPathDecayVerdict: "FLAT" | "DECAYING" | "INSUFFICIENT_SAMPLES";
+    hotPathEarlyCps: number | null;
+    hotPathLateCps: number | null;
+    hotPathDecayRatio: number | null;
     growthAwareProjectionAvailable: boolean;
     growthAwareProjectedRuntimeS: number;
     runId: string;
@@ -251,6 +256,12 @@ export function assertFhvThroughputHostQualified(input: {
     fail(
       "FHV_THROUGHPUT_BOUNDEDNESS_NOT_BOUNDED",
       `Throughput receipt boundedness ${String(evidence.boundednessClassification)} != BOUNDED`,
+    );
+  }
+  if (evidence.hotPathAssessorVersion !== FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION) {
+    fail(
+      "FHV_THROUGHPUT_HOT_PATH_ASSESSOR_UNSUPPORTED",
+      `Throughput receipt hot-path assessor ${String(evidence.hotPathAssessorVersion)} != ${FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION}`,
     );
   }
   if (evidence.hotPathDecayVerdict !== "FLAT") {

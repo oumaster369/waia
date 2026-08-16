@@ -67,7 +67,11 @@ function evidence(overrides: Record<string, unknown> = {}) {
     checkpointSamples: 4,
     boundednessClassification: "BOUNDED",
     diagnosticGrowthBytesPerCycle: 96.9,
+    hotPathAssessorVersion: "fhv-hot-path-stability-assessor/v2",
     hotPathDecayVerdict: "FLAT",
+    hotPathEarlyCps: 1800,
+    hotPathLateCps: 1800,
+    hotPathDecayRatio: 0,
     growthAwareProjectionAvailable: true,
     growthAwareProjectedRuntimeS: 6000.0,
     runId: "fhv-qual-test-run",
@@ -235,6 +239,20 @@ describe("FHV throughput host-qualification receipt", () => {
         }),
       ),
     ).toBe("FHV_THROUGHPUT_HOT_PATH_DECAYING");
+  });
+
+  it("fails closed on an unsupported hot-path assessor version", () => {
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            evidence: evidence({
+              hotPathAssessorVersion: "fhv-hot-path-stability-assessor/v1",
+            }),
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_HOT_PATH_ASSESSOR_UNSUPPORTED");
   });
 
   it("fails closed on a weakened embedded contract", () => {

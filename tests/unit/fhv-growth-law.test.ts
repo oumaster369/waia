@@ -9,7 +9,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   assessFhvHotPathDecay,
-  computeFhvThroughputWindows,
   countFhvIndependentCheckpointObservations,
   FHV_CANONICAL_MAX_RUNTIME_S,
   FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S,
@@ -78,50 +77,54 @@ describe("WP-4 FHV growth law", () => {
     expect(fit.intercept).toBeCloseTo(50, 3);
   });
 
-  it("separates hot-path decay from a flat series using half-medians, not first-vs-last", () => {
-    const decaying = computeFhvThroughputWindows(
-      [0, 1, 2, 3, 4].map((step) =>
-        sample({
-          elapsedSeconds: step * 10,
-          globalEventSequence: step * 10_000,
-          windowCheckpointExcludedBarsPerSecond: 1_000 - step * 150,
-        }),
-      ),
-    );
-    expect(assessFhvHotPathDecay(decaying).verdict).toBe("DECAYING");
+  it("uses equal work-mass cumulative hot time, not window-CPS medians", () => {
+    const decaying = [0, 1, 2, 3, 4].map((step) => {
+      const seq = step * 10_000;
+      const midSeq = 20_000;
+      const elapsed = seq <= midSeq ? seq / 1_000 : midSeq / 1_000 + (seq - midSeq) / 850;
+      return sample({
+        elapsedSeconds: elapsed,
+        globalEventSequence: seq,
+        windowCheckpointExcludedBarsPerSecond: 1_000,
+      });
+    });
+    const decayingAssessment = assessFhvHotPathDecay(decaying);
+    expect(decayingAssessment.verdict).toBe("DECAYING");
+    expect(decayingAssessment.assessorVersion).toBe("fhv-hot-path-stability-assessor/v2");
+    expect(decayingAssessment.decayRatio).toBeGreaterThan(0.1);
 
-    const flat = computeFhvThroughputWindows(
-      [0, 1, 2, 3, 4].map((step) =>
-        sample({
-          elapsedSeconds: step * 10,
-          globalEventSequence: step * 10_000,
-          windowCheckpointExcludedBarsPerSecond: 1_000 + (step % 2 === 0 ? 20 : -20),
-        }),
-      ),
-    );
-    expect(assessFhvHotPathDecay(flat).verdict).toBe("FLAT");
-  });
-
-  it("does not let first/last outliers decide a stationary series", () => {
-    const windows = computeFhvThroughputWindows(
-      [0, 1, 2, 3, 4, 5, 6].map((step, index) => {
-        const rates = [null, 2_000, 1_000, 1_010, 990, 1_005, 500];
-        return sample({
-          elapsedSeconds: step * 10,
-          globalEventSequence: step * 10_000,
-          windowCheckpointExcludedBarsPerSecond: rates[index],
-        });
+    const flat = [0, 1, 2, 3, 4].map((step) =>
+      sample({
+        elapsedSeconds: step * 10,
+        globalEventSequence: step * 10_000,
+        windowCheckpointExcludedBarsPerSecond: 1_000 - step * 150,
       }),
     );
-    const assessment = assessFhvHotPathDecay(windows);
+    const flatAssessment = assessFhvHotPathDecay(flat);
+    expect(flatAssessment.verdict).toBe("FLAT");
+    expect(flatAssessment.earlyCps).toBeCloseTo(1_000, 3);
+    expect(flatAssessment.lateCps).toBeCloseTo(1_000, 3);
+  });
+
+  it("does not let first/last window-CPS outliers decide a stationary series", () => {
+    const series = [0, 1, 2, 3, 4, 5, 6].map((step, index) => {
+      const rates = [null, 2_000, 1_000, 1_010, 990, 1_005, 500];
+      return sample({
+        elapsedSeconds: step * 10,
+        globalEventSequence: step * 10_000,
+        windowCheckpointExcludedBarsPerSecond: rates[index],
+      });
+    });
+    const assessment = assessFhvHotPathDecay(series);
     expect(assessment.windowCount).toBe(6);
     expect(assessment.verdict).toBe("FLAT");
     expect(assessment.firstHotCps).toBe(2_000);
     expect(assessment.lastHotCps).toBe(500);
+    expect(assessment.decayRatio).toBeCloseTo(0, 4);
   });
 
   it("fails closed on insufficient windows", () => {
-    const windows = computeFhvThroughputWindows([
+    const series = [
       sample({ elapsedSeconds: 0, globalEventSequence: 0 }),
       sample({
         elapsedSeconds: 10,
@@ -133,21 +136,19 @@ describe("WP-4 FHV growth law", () => {
         globalEventSequence: 20_000,
         windowCheckpointExcludedBarsPerSecond: 500,
       }),
-    ]);
-    expect(assessFhvHotPathDecay(windows).verdict).toBe("INSUFFICIENT_SAMPLES");
+    ];
+    expect(assessFhvHotPathDecay(series).verdict).toBe("INSUFFICIENT_SAMPLES");
   });
 
-  it("is deterministic for an identical window series", () => {
-    const windows = computeFhvThroughputWindows(
-      [0, 1, 2, 3, 4].map((step) =>
-        sample({
-          elapsedSeconds: step * 10,
-          globalEventSequence: step * 10_000,
-          windowCheckpointExcludedBarsPerSecond: 900,
-        }),
-      ),
+  it("is deterministic for an identical progress series", () => {
+    const series = [0, 1, 2, 3, 4].map((step) =>
+      sample({
+        elapsedSeconds: step * 10,
+        globalEventSequence: step * 10_000,
+        windowCheckpointExcludedBarsPerSecond: 900,
+      }),
     );
-    expect(assessFhvHotPathDecay(windows)).toEqual(assessFhvHotPathDecay(windows));
+    expect(assessFhvHotPathDecay(series)).toEqual(assessFhvHotPathDecay(series));
   });
 
   it("would have blocked PR452 run 31011816726 at the probe stage", () => {
