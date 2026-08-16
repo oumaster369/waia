@@ -9,12 +9,32 @@ import { OrgGate } from "@/components/treasury/admin/org-gate";
 import { useFinanceOrg } from "@/components/treasury/admin/finance-org-context";
 import { AccountingStatusPill, PublicationPill } from "@/components/treasury/admin/status-pills";
 import { LoadingState, UnavailableState } from "@/components/treasury/admin/unavailable-state";
+import { CanonicalSelect, FormField } from "@/components/treasury/admin/form-controls";
+import {
+  BudgetSelect,
+  CatalogStatus,
+  FundingNeedSelect,
+} from "@/components/treasury/admin/org-entity-select";
+import { useOrgBudgets, useOrgFundingNeeds } from "@/components/treasury/admin/use-org-catalog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { missingOrganizationResult, treasuryGet, treasuryJson } from "@/lib/treasury-admin/api";
+import {
+  TREASURY_DIRECTION_OPTIONS,
+  TREASURY_KIND_OPTIONS,
+  TREASURY_USDT_V1_DECIMALS,
+  treasuryTxDirectionEnum,
+  type TreasuryCanonicalDirection,
+} from "@/lib/treasury-admin/canonical";
+import { buildClassifyCommandPatch } from "@/lib/treasury-admin/manual-draft";
 import { financeHref } from "@/lib/treasury-admin/org";
 import { backendUnavailableLabel } from "@/lib/treasury-admin/facts";
+import {
+  formatAtomicToHumanDecimal,
+  parseHumanDecimalToAtomic,
+} from "@/lib/treasury-admin/parse-human-amount";
 import {
   canEditAccountingMeaning,
   isVerifiedFinancialLocked,
@@ -145,6 +165,20 @@ function TransactionReviewLoaded({
   const [publicationTarget, setPublicationTarget] = React.useState("DETAIL_PUBLIC");
   const [supersededBy, setSupersededBy] = React.useState("");
   const [patch, setPatch] = React.useState(() => patchFromDetail(detail));
+  const { budgets, loading: budgetsLoading, error: budgetsError } = useOrgBudgets(organizationId);
+  const {
+    fundingNeeds,
+    loading: needsLoading,
+    error: needsError,
+  } = useOrgFundingNeeds(organizationId);
+  const [accountingHuman, setAccountingHuman] = React.useState(() =>
+    detail.transaction.accountingAmountMicros
+      ? formatAtomicToHumanDecimal(
+          detail.transaction.accountingAmountMicros,
+          TREASURY_USDT_V1_DECIMALS,
+        )
+      : "",
+  );
 
   async function runCommand(command: TreasuryTxCommand) {
     if (!detail) return;
@@ -157,26 +191,7 @@ function TransactionReviewLoaded({
       reason,
     };
     if (command === "classify") {
-      const classifyPatch: Record<string, unknown> = {
-        kind: patch.kind || null,
-        direction: patch.direction,
-        fundBucketCode: patch.fundBucketCode,
-        purpose: patch.purpose || null,
-        category: patch.category || null,
-        projectModule: patch.projectModule || null,
-        milestoneStage: patch.milestoneStage || null,
-        budgetId: patch.budgetId || null,
-        fundingNeedId: patch.fundingNeedId || null,
-        description: patch.description || null,
-        internalNotes: patch.internalNotes || null,
-        publicDescription: patch.publicDescription || null,
-        counterpartyDisplay: patch.counterpartyDisplay || null,
-        publishCounterparty: patch.publishCounterparty,
-      };
-      if (patch.accountingAmountMicros) {
-        classifyPatch.accountingAmountMicros = patch.accountingAmountMicros;
-      }
-      body.patch = classifyPatch;
+      body.patch = buildClassifyCommandPatch(patch);
     }
     if (command === "confirm_duplicate") body.duplicate_of_transaction_id = duplicateOf;
     if (command === "return_from_reconciliation") body.to_status = returnStatus;
@@ -204,6 +219,9 @@ function TransactionReviewLoaded({
   const locked = isVerifiedFinancialLocked(tx.status);
   const meaningEditable = canEditAccountingMeaning(tx.status);
   const pendingAction = pending ? actions.find((item) => item.command === pending) : null;
+  const parsedAccounting = parseHumanDecimalToAtomic(accountingHuman, TREASURY_USDT_V1_DECIMALS, {
+    requirePositive: true,
+  });
 
   return (
     <div className="space-y-4" data-testid="finance-transaction-review">
@@ -260,34 +278,187 @@ function TransactionReviewLoaded({
           Current accounting amount: <MoneyText micros={tx.accountingAmountMicros} />
         </p>
         <div className="grid gap-3 md:grid-cols-2">
-          {(
-            [
-              ["kind", "Kind"],
-              ["direction", "Direction"],
-              ["fundBucketCode", "Fund bucket"],
-              ["purpose", "Purpose"],
-              ["category", "Category"],
-              ["projectModule", "Project / module"],
-              ["milestoneStage", "Milestone"],
-              ["budgetId", "Budget"],
-              ["fundingNeedId", "Funding need"],
-              ["accountingAmountMicros", "Accounting amount (micros string)"],
-              ["description", "Description"],
-              ["internalNotes", "Internal notes"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="space-y-1 text-sm">
-              <span>{label}</span>
-              <Input
-                value={patch[key]}
-                disabled={!meaningEditable}
-                onChange={(event) =>
-                  setPatch((current) => ({ ...current, [key]: event.target.value }))
+          <FormField
+            label="Kind"
+            htmlFor="classify-kind"
+            help="Canonical Treasury kind. Not classified yet submits null."
+          >
+            <CanonicalSelect
+              id="classify-kind"
+              testId="classify-kind"
+              value={patch.kind}
+              onChange={(value) => setPatch((current) => ({ ...current, kind: value }))}
+              options={TREASURY_KIND_OPTIONS}
+              blankLabel="Not classified yet"
+              disabled={!meaningEditable}
+            />
+          </FormField>
+          <FormField label="Direction" htmlFor="classify-direction">
+            <CanonicalSelect
+              id="classify-direction"
+              testId="classify-direction"
+              value={patch.direction}
+              onChange={(value) => {
+                if (treasuryTxDirectionEnum.includes(value as TreasuryCanonicalDirection)) {
+                  setPatch((current) => ({
+                    ...current,
+                    direction: value as TreasuryCanonicalDirection,
+                  }));
                 }
-              />
-            </label>
-          ))}
+              }}
+              options={TREASURY_DIRECTION_OPTIONS}
+              blankLabel="Select direction"
+              disabled={!meaningEditable}
+              required
+            />
+          </FormField>
+          <FormField label="Fund bucket" htmlFor="classify-fund-bucket">
+            <Input
+              id="classify-fund-bucket"
+              value={patch.fundBucketCode}
+              disabled={!meaningEditable}
+              onChange={(event) =>
+                setPatch((current) => ({ ...current, fundBucketCode: event.target.value }))
+              }
+            />
+          </FormField>
+          <FormField
+            label="Purpose"
+            htmlFor="classify-purpose"
+            help="Free-form Human semantic text. Not a closed taxonomy."
+          >
+            <Textarea
+              id="classify-purpose"
+              data-testid="classify-purpose"
+              value={patch.purpose}
+              disabled={!meaningEditable}
+              onChange={(event) =>
+                setPatch((current) => ({ ...current, purpose: event.target.value }))
+              }
+            />
+          </FormField>
+          <FormField
+            label="Category"
+            htmlFor="classify-category"
+            help="Free-form Human semantic text. Not a closed Category enum."
+          >
+            <Input
+              id="classify-category"
+              data-testid="classify-category"
+              value={patch.category}
+              disabled={!meaningEditable}
+              onChange={(event) =>
+                setPatch((current) => ({ ...current, category: event.target.value }))
+              }
+            />
+          </FormField>
+          <FormField
+            label="Project / module"
+            htmlFor="classify-project-module"
+            help="Free-form Human semantic text. Not a closed taxonomy."
+          >
+            <Input
+              id="classify-project-module"
+              data-testid="classify-project-module"
+              value={patch.projectModule}
+              disabled={!meaningEditable}
+              onChange={(event) =>
+                setPatch((current) => ({ ...current, projectModule: event.target.value }))
+              }
+            />
+          </FormField>
+          <FormField
+            label="Milestone"
+            htmlFor="classify-milestone"
+            help="Free-form Human semantic text. Not a closed taxonomy."
+          >
+            <Input
+              id="classify-milestone"
+              data-testid="classify-milestone"
+              value={patch.milestoneStage}
+              disabled={!meaningEditable}
+              onChange={(event) =>
+                setPatch((current) => ({ ...current, milestoneStage: event.target.value }))
+              }
+            />
+          </FormField>
+          <BudgetSelect
+            id="classify-budget"
+            testId="classify-budget"
+            value={patch.budgetId}
+            onChange={(value) => setPatch((current) => ({ ...current, budgetId: value }))}
+            budgets={budgets}
+            blankLabel="None"
+            disabled={!meaningEditable}
+            help="Organization-scoped. Submits budget_id."
+          />
+          <FundingNeedSelect
+            id="classify-funding-need"
+            testId="classify-funding-need"
+            value={patch.fundingNeedId}
+            onChange={(value) => setPatch((current) => ({ ...current, fundingNeedId: value }))}
+            fundingNeeds={fundingNeeds}
+            blankLabel="None"
+            disabled={!meaningEditable}
+            help="Organization-scoped. Submits funding_need_id."
+          />
+          <FormField
+            label="Accounting amount"
+            htmlFor="classify-accounting-amount"
+            help={
+              parsedAccounting.ok
+                ? `Stores as integer string ${parsedAccounting.atomic} (USD micros). React does not recompute ledger totals.`
+                : "Enter a normal exact decimal. Excess precision is rejected, not rounded."
+            }
+            error={!parsedAccounting.ok && accountingHuman.trim() ? parsedAccounting.message : null}
+          >
+            <Input
+              id="classify-accounting-amount"
+              data-testid="classify-accounting-amount"
+              inputMode="decimal"
+              value={accountingHuman}
+              disabled={!meaningEditable}
+              onChange={(event) => {
+                const next = event.target.value;
+                setAccountingHuman(next);
+                if (next.trim() === "") {
+                  setPatch((current) => ({ ...current, accountingAmountMicros: "" }));
+                  return;
+                }
+                const parsed = parseHumanDecimalToAtomic(next, TREASURY_USDT_V1_DECIMALS, {
+                  requirePositive: true,
+                });
+                if (parsed.ok) {
+                  setPatch((current) => ({ ...current, accountingAmountMicros: parsed.atomic }));
+                }
+              }}
+            />
+          </FormField>
+          <FormField label="Description" htmlFor="classify-description">
+            <Input
+              id="classify-description"
+              value={patch.description}
+              disabled={!meaningEditable}
+              onChange={(event) =>
+                setPatch((current) => ({ ...current, description: event.target.value }))
+              }
+            />
+          </FormField>
+          <FormField label="Internal notes" htmlFor="classify-internal-notes">
+            <Textarea
+              id="classify-internal-notes"
+              value={patch.internalNotes}
+              disabled={!meaningEditable}
+              onChange={(event) =>
+                setPatch((current) => ({ ...current, internalNotes: event.target.value }))
+              }
+            />
+          </FormField>
         </div>
+        <CatalogStatus
+          loading={budgetsLoading || needsLoading}
+          error={budgetsError ?? needsError}
+        />
       </Zone>
 
       <Zone title="C. Evidence" testId="zone-evidence">
