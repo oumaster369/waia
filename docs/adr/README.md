@@ -31,7 +31,7 @@ See policy: [`../waia-governance/ADR-POLICY.md`](../waia-governance/ADR-POLICY.m
 | [0021](0021-deterministic-research-replay-clock-and-state-isolation.md) | Deterministic Research Replay Clock & State Isolation | Accepted | DEE-397; Pre-Repeat-M9 Remediation PR1 |
 | [0022](0022-content-bound-operator-authorization-and-idempotent-dataset-lifecycle.md) | Content-Bound Operator Authorization & Idempotent Research Dataset Lifecycle | Accepted | DEE-398; Pre-Repeat-M9 Remediation PR2 |
 | [0023](0023-execution-server-ai-trader-only-execution-plane.md) | Execution Server as AI-TRADER-only execution plane | Accepted | DEE-406; vNext Slice D1 |
-| [0025](0025-fhv-bounded-hot-state-and-streaming-economic-ledger.md) | FHV bounded hot state, streaming economic ledger, and the CI/Execution Server full-corpus boundary | Accepted | DEE-436 / DEE-416; PR #452; AD-6c DEE-536 |
+| [0025](0025-fhv-bounded-hot-state-and-streaming-economic-ledger.md) | FHV bounded hot state, streaming economic ledger, and the CI/Execution Server full-corpus boundary | Accepted | DEE-436 / DEE-416; PR #452; AD-6c DEE-536; AD-6b qualifier repair DEE-536 |
 | [0029](0029-compact-forecast-v2-seal-and-bytea-artifacts.md) | Compact Forecast V2 seal and bytea replica artifacts (no per-sample rows) | Accepted | DEE-518 / DEE-527 |
 | [0030](0030-quantize-scale8-half-up-v1.md) | `quantizeScale8HalfUp/v1` — Forecast-only canonical quantizer | Accepted | DEE-518 / DEE-527 |
 | [0031](0031-waia-cbrng-sha256-ctr-v1.md) | `WAIA_RANDOM_BLOCK_V1` / `waia-cbrng/sha256-ctr/v1` deterministic RNG | Accepted | DEE-518 / DEE-527, DEE-531 |

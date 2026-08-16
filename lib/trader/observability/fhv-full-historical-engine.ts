@@ -42,6 +42,11 @@ import { buildResearchV2PortfolioContext } from "@/lib/trader/research/research-
 import { readFhvLaunchJournal } from "@/lib/trader/observability/fhv-launch-journal";
 import { getFhvSyntheticProfilingHooks } from "@/lib/trader/observability/fhv-synthetic-profiling-hook";
 import { createFhvFullHistoricalProgressReporter } from "@/lib/trader/observability/fhv-full-historical-progress";
+import {
+  isFhvThroughputQualifierSamplingRequired,
+  buildFhvThroughputQualifierSamplerContract,
+  resolveFhvThroughputQualifierProgressIntervalMs,
+} from "@/lib/trader/observability/fhv-throughput-sampler";
 
 function parseStrategyBinding(version: string): { strategyId: string; strategyVersion: string } {
   const at = version.lastIndexOf("@");
@@ -224,12 +229,31 @@ export async function runFullHistoricalBacktest(input: {
 
   // Opt-in observational progress (CI full-corpus/probe set FHV_IDHPS_PROGRESS=1).
   // Default off so unit/durability fixtures stay quiet and zero-overhead.
+  const qualifierSampling = isFhvThroughputQualifierSamplingRequired({
+    maxCycles: input.maxCycles,
+    boundedFixture: input.boundedFixture,
+  });
+  const qualifierSamplerContract = qualifierSampling
+    ? buildFhvThroughputQualifierSamplerContract()
+    : null;
   const progressReporter =
     input.boundedFixture !== true && process.env.FHV_IDHPS_PROGRESS === "1"
       ? createFhvFullHistoricalProgressReporter({
           runDir: input.runDir,
           ...(input.artifactRoot ? { artifactRoot: input.artifactRoot } : {}),
           targetCycleCount: input.targetCycleCount ?? input.maxCycles ?? null,
+          ...(qualifierSampling
+            ? { intervalMs: resolveFhvThroughputQualifierProgressIntervalMs() }
+            : {}),
+          ...(qualifierSamplerContract
+            ? {
+                officialProducer: {
+                  repoPath: process.cwd(),
+                  runId: input.runId,
+                  samplerContract: qualifierSamplerContract,
+                },
+              }
+            : {}),
         })
       : null;
 

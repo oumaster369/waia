@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   assessFhvHotPathDecay,
   computeFhvThroughputWindows,
+  countFhvIndependentCheckpointObservations,
   FHV_CANONICAL_MAX_RUNTIME_S,
   FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S,
   fitFhvCheckpointDurationVsSize,
@@ -77,23 +78,50 @@ describe("WP-4 FHV growth law", () => {
     expect(fit.intercept).toBeCloseTo(50, 3);
   });
 
-  it("separates hot-path decay from a flat series", () => {
-    const decaying = computeFhvThroughputWindows([
-      sample({ elapsedSeconds: 0, globalEventSequence: 0 }),
-      sample({
-        elapsedSeconds: 10,
-        globalEventSequence: 10_000,
-        windowCheckpointExcludedBarsPerSecond: 1_000,
-      }),
-      sample({
-        elapsedSeconds: 30,
-        globalEventSequence: 20_000,
-        windowCheckpointExcludedBarsPerSecond: 500,
-      }),
-    ]);
+  it("separates hot-path decay from a flat series using half-medians, not first-vs-last", () => {
+    const decaying = computeFhvThroughputWindows(
+      [0, 1, 2, 3, 4].map((step) =>
+        sample({
+          elapsedSeconds: step * 10,
+          globalEventSequence: step * 10_000,
+          windowCheckpointExcludedBarsPerSecond: 1_000 - step * 150,
+        }),
+      ),
+    );
     expect(assessFhvHotPathDecay(decaying).verdict).toBe("DECAYING");
 
-    const flat = computeFhvThroughputWindows([
+    const flat = computeFhvThroughputWindows(
+      [0, 1, 2, 3, 4].map((step) =>
+        sample({
+          elapsedSeconds: step * 10,
+          globalEventSequence: step * 10_000,
+          windowCheckpointExcludedBarsPerSecond: 1_000 + (step % 2 === 0 ? 20 : -20),
+        }),
+      ),
+    );
+    expect(assessFhvHotPathDecay(flat).verdict).toBe("FLAT");
+  });
+
+  it("does not let first/last outliers decide a stationary series", () => {
+    const windows = computeFhvThroughputWindows(
+      [0, 1, 2, 3, 4, 5, 6].map((step, index) => {
+        const rates = [null, 2_000, 1_000, 1_010, 990, 1_005, 500];
+        return sample({
+          elapsedSeconds: step * 10,
+          globalEventSequence: step * 10_000,
+          windowCheckpointExcludedBarsPerSecond: rates[index],
+        });
+      }),
+    );
+    const assessment = assessFhvHotPathDecay(windows);
+    expect(assessment.windowCount).toBe(6);
+    expect(assessment.verdict).toBe("FLAT");
+    expect(assessment.firstHotCps).toBe(2_000);
+    expect(assessment.lastHotCps).toBe(500);
+  });
+
+  it("fails closed on insufficient windows", () => {
+    const windows = computeFhvThroughputWindows([
       sample({ elapsedSeconds: 0, globalEventSequence: 0 }),
       sample({
         elapsedSeconds: 10,
@@ -103,10 +131,23 @@ describe("WP-4 FHV growth law", () => {
       sample({
         elapsedSeconds: 20,
         globalEventSequence: 20_000,
-        windowCheckpointExcludedBarsPerSecond: 980,
+        windowCheckpointExcludedBarsPerSecond: 500,
       }),
     ]);
-    expect(assessFhvHotPathDecay(flat).verdict).toBe("FLAT");
+    expect(assessFhvHotPathDecay(windows).verdict).toBe("INSUFFICIENT_SAMPLES");
+  });
+
+  it("is deterministic for an identical window series", () => {
+    const windows = computeFhvThroughputWindows(
+      [0, 1, 2, 3, 4].map((step) =>
+        sample({
+          elapsedSeconds: step * 10,
+          globalEventSequence: step * 10_000,
+          windowCheckpointExcludedBarsPerSecond: 900,
+        }),
+      ),
+    );
+    expect(assessFhvHotPathDecay(windows)).toEqual(assessFhvHotPathDecay(windows));
   });
 
   it("would have blocked PR452 run 31011816726 at the probe stage", () => {
@@ -161,5 +202,36 @@ describe("WP-4 FHV growth law", () => {
     });
     expect(ranked.map((entry) => entry.stage)).toEqual(["features", "accounting", "evidence"]);
     expect(ranked[0]!.shareOfMeasuredMs).toBeCloseTo(0.6818, 3);
+  });
+});
+
+describe("FHV independent checkpoint sample counting", () => {
+  it("counts distinct checkpointCount values, not sticky lastCheckpoint fields", () => {
+    const series = [0, 1, 1, 1, 2, 2].map((checkpointCount, index) =>
+      sample({
+        globalEventSequence: index * 100,
+        checkpointCount,
+        lastCheckpointBytes: checkpointCount === 0 ? null : 1_000,
+        lastCheckpointDurationMs: checkpointCount === 0 ? null : 5,
+      }),
+    );
+    expect(countFhvIndependentCheckpointObservations(series)).toBe(2);
+    expect(countFhvIndependentCheckpointObservations(series)).not.toBe(5);
+  });
+
+  it("does not count checkpointCount 0 as a committed checkpoint", () => {
+    const series = [0, 0, 0].map((checkpointCount, index) =>
+      sample({ globalEventSequence: index, checkpointCount }),
+    );
+    expect(countFhvIndependentCheckpointObservations(series)).toBe(0);
+  });
+
+  it("fails closed on non-monotonic checkpointCount", () => {
+    const series = [0, 1, 2, 1].map((checkpointCount, index) =>
+      sample({ globalEventSequence: index, checkpointCount }),
+    );
+    expect(() => countFhvIndependentCheckpointObservations(series)).toThrow(
+      /checkpointCount decreased/,
+    );
   });
 });

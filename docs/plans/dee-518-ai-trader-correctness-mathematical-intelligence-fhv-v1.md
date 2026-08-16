@@ -97,7 +97,11 @@ includedIssues:
 postMergeGates:
   - id: DEE-536
     slug: OG-HOST-QUAL
-    status: open-after-merge
+    status: in-progress-post-merge
+    implementationPr: 462
+    wp3b: "PASS bound to b6ad57373c4c51152321f656ff814628212627e4 only"
+    throughput: EXECUTION_SERVER_THROUGHPUT_QUALIFICATION_BLOCKED_BY_QUALIFIER_DEFECT
+    hostQualified: false
   - id: DEE-537
     slug: OG-DATA-RECEIPTS
     status: open-after-merge
@@ -118,7 +122,7 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-review
+  status: implementation-merged
   currentWorkPackage: null
   completedWorkPackages:
     - WP-CANON
@@ -141,10 +145,10 @@ state:
   remainingWorkPackages: []
   prNumber: 458
   prUrl: https://github.com/oumaster369/waia/pull/458
-  lastValidatedGitSha: 3be720fc92e59d49feb1cb6098014469c56f10d1
-  lastValidationAt: "2026-08-13"
-  blockedReason: null
-  nextAction: "Authoritative GitHub PR CI + Human squash-merge to main. Post-merge DEE-536..541 remain open."
+  lastValidatedGitSha: b6ad57373c4c51152321f656ff814628212627e4
+  lastValidationAt: "2026-08-15"
+  blockedReason: EXECUTION_SERVER_THROUGHPUT_QUALIFICATION_BLOCKED_BY_QUALIFIER_DEFECT
+  nextAction: "DEE-536 remains In Progress. Throughput qualifier repair PR; then Human merge, post-merge reconciliation, new release tag, fresh WP3B v2, repaired throughput qualification. DEE-537..541 stay open. Do not claim HOST_QUALIFIED."
   adversarialReviewCommentId: cbedeb8b-4d13-4def-a3e0-bca5d40654ba
   priorFalseClassification: DEE_518_IMPLEMENTATION_COMPLETE_READY_FOR_ADVERSARIAL_CODE_REVIEW
 provenance:
@@ -181,7 +185,7 @@ provenance:
 | Branch | `dee-518-ai-trader-correctness-mathematical-intelligence-fhv-v1` |
 | Delivery | ONE plan → ONE branch → ONE PR → `main` → Human squash merge |
 | Child WPs | DEE-519…DEE-535 implement sequentially on this branch; no child branches/PRs |
-| Post-merge gates | DEE-536…DEE-541 remain open after merge; not implementation completion |
+| Post-merge gates | DEE-536 remains In Progress (PR #462 two-phase merged; WP3B PASS on `b6ad573` only; throughput blocked by qualifier defect; not HOST_QUALIFIED). DEE-537…DEE-541 remain open. |
 
 ---
 

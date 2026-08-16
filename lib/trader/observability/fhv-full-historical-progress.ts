@@ -20,6 +20,13 @@ import { dirname, join } from "node:path";
 import { getIdhpsSession } from "@/lib/trader/execution/idhps-session-registry";
 import { getRawSqliteDatabase } from "@/db/client";
 import { resolveFhvEpochCheckpointDir } from "@/lib/trader/observability/fhv-execution-checkpoint-bundle";
+import {
+  createFhvThroughputProducerBinding,
+  stampFhvProgressProducerIdentity,
+  type FhvProgressProducerStampV1,
+} from "@/lib/trader/observability/fhv-throughput-producer-binding";
+import { FhvT4CheckoutIdentityError } from "@/lib/trader/observability/fhv-t4-release-checkout-identity";
+import type { FhvThroughputQualifierSamplerContract } from "@/lib/trader/observability/fhv-throughput-sampler";
 
 export const FHV_FULL_HISTORICAL_PROGRESS_SCHEMA = "fhv-full-historical-progress/v1" as const;
 export const FHV_FULL_HISTORICAL_PROGRESS_FILENAME = "fhv-full-historical-progress.v1.json";
@@ -31,6 +38,9 @@ export const FHV_FULL_HISTORICAL_PROGRESS_INTERVAL_MS = 30_000;
 
 /** Samples retained for the rolling-rate window. */
 export const FHV_FULL_HISTORICAL_PROGRESS_ROLLING_SAMPLES = 5;
+
+/** Hot-path amortization: observational reports fire at most once per this many cycles. */
+export const FHV_FULL_HISTORICAL_PROGRESS_CYCLE_AMORTIZATION = 256;
 
 /**
  * Observational sampling interval override.
@@ -96,6 +106,11 @@ export type FhvFullHistoricalProgressV1 = Readonly<{
   sessionDatabaseGrowthBytesPerCycle: number | null;
   /** Whether the last session snapshot used a copy-on-write reflink (APFS/XFS) or a full copy. */
   ficloneSucceeded: boolean | null;
+  /** Execution-time producer HEAD. Required on official qualifier progress rows. */
+  producerHeadSha?: string;
+  producerBindingDigest?: string;
+  samplerContractVersion?: string;
+  appliedIntervalMs?: number;
 }>;
 
 export type FhvFullHistoricalProgressReporter = {
@@ -208,9 +223,34 @@ export function createFhvFullHistoricalProgressReporter(input: {
   artifactRoot?: string;
   targetCycleCount?: number | null;
   intervalMs?: number;
+  officialProducer?: Readonly<{
+    repoPath: string;
+    runId: string;
+    samplerContract: FhvThroughputQualifierSamplerContract;
+    expectedHeadSha?: string;
+  }>;
 }): FhvFullHistoricalProgressReporter {
   const startedAt = performance.now();
   const intervalMs = input.intervalMs ?? resolveFhvFullHistoricalProgressIntervalMs();
+  let producerStamp: FhvProgressProducerStampV1 | null = null;
+  if (input.officialProducer) {
+    try {
+      const producerBinding = createFhvThroughputProducerBinding({
+        runDir: input.runDir,
+        repoPath: input.officialProducer.repoPath,
+        runId: input.officialProducer.runId,
+        samplerContract: input.officialProducer.samplerContract,
+        ...(input.officialProducer.expectedHeadSha
+          ? { expectedHeadSha: input.officialProducer.expectedHeadSha }
+          : {}),
+      });
+      producerStamp = stampFhvProgressProducerIdentity(producerBinding);
+    } catch (error) {
+      if (!(error instanceof FhvT4CheckoutIdentityError)) {
+        throw error;
+      }
+    }
+  }
   const progressPath = resolveFhvFullHistoricalProgressPath(input.runDir);
   const jsonlPath = resolveFhvFullHistoricalProgressJsonlPath(input.runDir);
   const artifactProgressPath = input.artifactRoot
@@ -377,6 +417,7 @@ export function createFhvFullHistoricalProgressReporter(input: {
       checkpointBytesPerSecond,
       sessionDatabaseGrowthBytesPerCycle,
       ficloneSucceeded: idhps?.checkpointFicloneSucceeded ?? null,
+      ...(producerStamp ?? {}),
     };
   };
 
@@ -414,7 +455,10 @@ export function createFhvFullHistoricalProgressReporter(input: {
     },
     maybeReport(sample) {
       // Amortize clock checks: only sample every 256 cycles on the hot path.
-      if (sample.cycleCount > 0 && sample.cycleCount % 256 !== 0) {
+      if (
+        sample.cycleCount > 0 &&
+        sample.cycleCount % FHV_FULL_HISTORICAL_PROGRESS_CYCLE_AMORTIZATION !== 0
+      ) {
         return null;
       }
       const now = performance.now();

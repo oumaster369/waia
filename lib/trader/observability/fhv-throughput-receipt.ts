@@ -9,29 +9,42 @@ import {
   FHV_CANONICAL_MAX_RUNTIME_S,
   FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S,
 } from "@/lib/trader/observability/fhv-growth-law";
+import type { FhvBoundednessClassification } from "@/lib/trader/observability/fhv-bounded-hot-state";
+import {
+  assertFhvThroughputProducerHostIdentity,
+  assertFhvThroughputProducerHostMatches,
+  FhvThroughputProducerBindingError,
+  type FhvThroughputProducerHostIdentityV1,
+} from "@/lib/trader/observability/fhv-throughput-producer-binding";
+import type { FhvThroughputQualifierSamplerContract } from "@/lib/trader/observability/fhv-throughput-sampler";
+import {
+  assertCanonicalFhvThroughputSamplerContract,
+  FhvThroughputSamplerContractError,
+  FHV_THROUGHPUT_QUALIFIER_MIN_CHECKPOINT_SAMPLES,
+  FHV_THROUGHPUT_QUALIFIER_MIN_HOT_WINDOWS,
+  FHV_THROUGHPUT_QUALIFIER_MIN_PROGRESS_SAMPLES,
+} from "@/lib/trader/observability/fhv-throughput-sampler";
 
 /**
  * Canonical reader for the Execution Server throughput host-qualification receipt (ADR-0025 AD-6b).
  *
- * The 877 cps / 7200 s terminal and 6480 s pre-launch contracts are unchanged. What changed is where
- * absolute wall speed is authoritative: a GitHub-hosted runner's clock proves software structure, not
- * that the target Execution Server can finish the corpus in time. That absolute proof moves here, as
- * an identity-bound, fail-closed target-host receipt — mirroring the WP-3B checkpoint receipt.
- *
- * Reading must be fail-closed on every axis the writer binds. A receipt that claims QUALIFIED while
- * its own growth-aware projection exceeds 6480 s, or whose digest disagrees, is not evidence.
+ * The 877 cps / 7200 s terminal and 6480 s pre-launch contracts are unchanged. Absolute wall speed
+ * is authoritative only on the target host. Reading is fail-closed on every axis the writer binds.
+ * Environment variables never enter this function. Unbound v1 receipts cannot qualify a new launch.
  */
 
-export const FHV_THROUGHPUT_RECEIPT_SCHEMA = "fhv-throughput-host-qualification/v1" as const;
+export const FHV_THROUGHPUT_RECEIPT_SCHEMA = "fhv-throughput-host-qualification/v2" as const;
 export const FHV_THROUGHPUT_QUALIFIED_CLASSIFICATION =
   "EXECUTION_SERVER_FHV_THROUGHPUT_QUALIFIED" as const;
-export const FHV_THROUGHPUT_RECEIPT_FILENAME = "fhv-throughput-host-qualification.v1.json" as const;
+export const FHV_THROUGHPUT_NOT_QUALIFIED_CLASSIFICATION =
+  "EXECUTION_SERVER_FHV_THROUGHPUT_NOT_QUALIFIED" as const;
+export const FHV_THROUGHPUT_EVIDENCE_INVALID_CLASSIFICATION =
+  "EXECUTION_SERVER_FHV_THROUGHPUT_EVIDENCE_INVALID" as const;
+export const FHV_THROUGHPUT_RECEIPT_FILENAME = "fhv-throughput-host-qualification.v2.json" as const;
+export const FHV_THROUGHPUT_RECEIPT_LEGACY_V1_FILENAME =
+  "fhv-throughput-host-qualification.v1.json" as const;
 /** Canonical absolute floor; embedded in and validated against every receipt. */
 export const FHV_THROUGHPUT_MIN_CPS = 877;
-/** Minimum progress/checkpoint samples a qualifying representative run must record. */
-export const FHV_THROUGHPUT_MIN_PROGRESS_SAMPLES = 2;
-/** Bounded hot-state structural growth ceiling (bytes/cycle), mirroring WP-7B. */
-export const FHV_THROUGHPUT_MAX_GROWTH_BYTES_PER_CYCLE = 160;
 
 export class FhvThroughputReceiptError extends Error {
   constructor(
@@ -43,26 +56,40 @@ export class FhvThroughputReceiptError extends Error {
   }
 }
 
-export type FhvThroughputReceiptV1 = Readonly<{
-  schemaVersion: string;
+export type FhvThroughputReceiptV2 = Readonly<{
+  schemaVersion: typeof FHV_THROUGHPUT_RECEIPT_SCHEMA;
   capturedAtUtc: string;
   releaseSha: string;
-  host: Readonly<{ hostname: string; platform: string; arch: string; cpuModel: string }>;
+  runId: string;
+  host: FhvThroughputProducerHostIdentityV1;
   contract: Readonly<{
     minThroughputCps: number;
     canonicalMaxRuntimeS: number;
     prelaunchMaxProjectedRuntimeS: number;
   }>;
+  samplerContract: FhvThroughputQualifierSamplerContract;
   evidence: Readonly<{
     representativeSegmentExecuted: boolean;
     progressSamples: number;
     checkpointSamples: number;
-    growthBytesPerCycle: number;
+    boundednessClassification: FhvBoundednessClassification;
+    diagnosticGrowthBytesPerCycle: number;
     hotPathDecayVerdict: "FLAT" | "DECAYING" | "INSUFFICIENT_SAMPLES";
     growthAwareProjectionAvailable: boolean;
     growthAwareProjectedRuntimeS: number;
+    runId: string;
+    runDir: string;
+    producerHost: FhvThroughputProducerHostIdentityV1;
+    progressBytesSha256: string;
+    growthLawReportDigest: string;
+    checkoutHeadSha: string;
+    producerHeadSha: string;
+    producerBindingDigest: string;
   }>;
-  classification: string;
+  classification:
+    | typeof FHV_THROUGHPUT_QUALIFIED_CLASSIFICATION
+    | typeof FHV_THROUGHPUT_NOT_QUALIFIED_CLASSIFICATION
+    | typeof FHV_THROUGHPUT_EVIDENCE_INVALID_CLASSIFICATION;
   receiptDigest: string;
 }>;
 
@@ -80,11 +107,17 @@ export function assertFhvThroughputHostQualified(input: {
   receiptPath: string;
   /** When supplied, the receipt must have been produced by this release. */
   expectedReleaseSha?: string;
-}): FhvThroughputReceiptV1 {
+}): FhvThroughputReceiptV2 {
   if (!existsSync(input.receiptPath)) {
     fail(
       "FHV_THROUGHPUT_RECEIPT_MISSING",
       `Throughput host qualification receipt missing at ${input.receiptPath}; run pnpm trader:fhv:throughput-host-qualification on the target host`,
+    );
+  }
+  if (input.receiptPath.endsWith(FHV_THROUGHPUT_RECEIPT_LEGACY_V1_FILENAME)) {
+    fail(
+      "FHV_THROUGHPUT_RECEIPT_SCHEMA_UNSUPPORTED",
+      `legacy ${FHV_THROUGHPUT_RECEIPT_LEGACY_V1_FILENAME} cannot qualify a new official launch`,
     );
   }
 
@@ -104,7 +137,7 @@ export function assertFhvThroughputHostQualified(input: {
       `Throughput receipt at ${input.receiptPath} is not an object`,
     );
   }
-  const receipt = parsed as Partial<FhvThroughputReceiptV1> & Record<string, unknown>;
+  const receipt = parsed as Partial<FhvThroughputReceiptV2> & Record<string, unknown>;
 
   if (receipt.schemaVersion !== FHV_THROUGHPUT_RECEIPT_SCHEMA) {
     fail(
@@ -113,8 +146,7 @@ export function assertFhvThroughputHostQualified(input: {
     );
   }
 
-  // Self-digest covers every field except itself, so an edited receipt cannot stay self-consistent.
-  const { receiptDigest, ...body } = receipt as FhvThroughputReceiptV1 & Record<string, unknown>;
+  const { receiptDigest, ...body } = receipt as FhvThroughputReceiptV2 & Record<string, unknown>;
   if (typeof receiptDigest !== "string" || receiptDigest.length !== 64) {
     fail("FHV_THROUGHPUT_RECEIPT_DIGEST_MISSING", "Throughput receipt has no valid receiptDigest");
   }
@@ -132,15 +164,50 @@ export function assertFhvThroughputHostQualified(input: {
       `Throughput receipt releaseSha ${String(receipt.releaseSha)} != launch release ${input.expectedReleaseSha}`,
     );
   }
-  if (!receipt.host?.hostname?.trim()) {
+  if (receipt.evidence?.checkoutHeadSha !== receipt.releaseSha) {
     fail(
-      "FHV_THROUGHPUT_RECEIPT_HOST_IDENTITY_MISSING",
-      "Throughput receipt has no host identity binding",
+      "FHV_THROUGHPUT_RECEIPT_CHECKOUT_RELEASE_MISMATCH",
+      `Throughput receipt checkoutHeadSha ${String(receipt.evidence?.checkoutHeadSha)} != releaseSha ${String(receipt.releaseSha)}`,
     );
   }
+  if (receipt.evidence?.producerHeadSha !== receipt.releaseSha) {
+    fail(
+      "FHV_THROUGHPUT_RECEIPT_PRODUCER_RELEASE_MISMATCH",
+      `Throughput receipt producerHeadSha ${String(receipt.evidence?.producerHeadSha)} != releaseSha ${String(receipt.releaseSha)}`,
+    );
+  }
+  if (
+    typeof receipt.evidence?.producerBindingDigest !== "string" ||
+    receipt.evidence.producerBindingDigest.length !== 64
+  ) {
+    fail(
+      "FHV_THROUGHPUT_RECEIPT_PRODUCER_BINDING_MISSING",
+      "Throughput receipt is missing producerBindingDigest",
+    );
+  }
+  if (!receipt.runId?.trim() || receipt.runId !== receipt.evidence?.runId) {
+    fail(
+      "FHV_THROUGHPUT_RECEIPT_RUN_ID_MISMATCH",
+      `Throughput receipt runId ${String(receipt.runId)} != evidence ${String(receipt.evidence?.runId)}`,
+    );
+  }
+  if (!receipt.evidence?.runDir?.trim()) {
+    fail(
+      "FHV_THROUGHPUT_RECEIPT_RUN_DIR_MISSING",
+      "Throughput receipt is missing execution-time runDir",
+    );
+  }
+  try {
+    const host = assertFhvThroughputProducerHostIdentity(receipt.host);
+    const producerHost = assertFhvThroughputProducerHostIdentity(receipt.evidence?.producerHost);
+    assertFhvThroughputProducerHostMatches({ producer: producerHost, current: host });
+  } catch (error) {
+    if (error instanceof FhvThroughputProducerBindingError) {
+      fail(error.code, error.message);
+    }
+    throw error;
+  }
 
-  // The canonical constants are validated, not merely echoed, so a receipt cannot smuggle a weaker
-  // contract through a schema-consistent file.
   if (
     receipt.contract?.minThroughputCps !== FHV_THROUGHPUT_MIN_CPS ||
     receipt.contract?.canonicalMaxRuntimeS !== FHV_CANONICAL_MAX_RUNTIME_S ||
@@ -150,6 +217,15 @@ export function assertFhvThroughputHostQualified(input: {
       "FHV_THROUGHPUT_CONTRACT_MISMATCH",
       `Throughput receipt contract ${JSON.stringify(receipt.contract)} does not match canonical 877/7200/6480`,
     );
+  }
+
+  try {
+    assertCanonicalFhvThroughputSamplerContract(receipt.samplerContract);
+  } catch (error) {
+    if (error instanceof FhvThroughputSamplerContractError) {
+      fail(error.code, error.message);
+    }
+    throw error;
   }
 
   const evidence = receipt.evidence;
@@ -163,18 +239,18 @@ export function assertFhvThroughputHostQualified(input: {
     );
   }
   if (
-    (evidence.progressSamples ?? 0) < FHV_THROUGHPUT_MIN_PROGRESS_SAMPLES ||
-    (evidence.checkpointSamples ?? 0) < FHV_THROUGHPUT_MIN_PROGRESS_SAMPLES
+    (evidence.progressSamples ?? 0) < FHV_THROUGHPUT_QUALIFIER_MIN_PROGRESS_SAMPLES ||
+    (evidence.checkpointSamples ?? 0) < FHV_THROUGHPUT_QUALIFIER_MIN_CHECKPOINT_SAMPLES
   ) {
     fail(
       "FHV_THROUGHPUT_INSUFFICIENT_EVIDENCE",
-      `Throughput receipt has progressSamples=${String(evidence.progressSamples)} checkpointSamples=${String(evidence.checkpointSamples)}, need >= ${FHV_THROUGHPUT_MIN_PROGRESS_SAMPLES}`,
+      `Throughput receipt has progressSamples=${String(evidence.progressSamples)} checkpointSamples=${String(evidence.checkpointSamples)}`,
     );
   }
-  if ((evidence.growthBytesPerCycle ?? Infinity) > FHV_THROUGHPUT_MAX_GROWTH_BYTES_PER_CYCLE) {
+  if (evidence.boundednessClassification !== "BOUNDED") {
     fail(
-      "FHV_THROUGHPUT_GROWTH_CEILING_EXCEEDED",
-      `Throughput receipt growthBytesPerCycle ${String(evidence.growthBytesPerCycle)} > ${FHV_THROUGHPUT_MAX_GROWTH_BYTES_PER_CYCLE} (bounded hot-state ceiling)`,
+      "FHV_THROUGHPUT_BOUNDEDNESS_NOT_BOUNDED",
+      `Throughput receipt boundedness ${String(evidence.boundednessClassification)} != BOUNDED`,
     );
   }
   if (evidence.hotPathDecayVerdict !== "FLAT") {
@@ -183,13 +259,23 @@ export function assertFhvThroughputHostQualified(input: {
       `Throughput receipt hot-path decay verdict ${String(evidence.hotPathDecayVerdict)} != FLAT`,
     );
   }
+  if (
+    typeof evidence.progressBytesSha256 !== "string" ||
+    evidence.progressBytesSha256.length !== 64 ||
+    typeof evidence.growthLawReportDigest !== "string" ||
+    evidence.growthLawReportDigest.length !== 64
+  ) {
+    fail(
+      "FHV_THROUGHPUT_EVIDENCE_DIGEST_MISSING",
+      "Throughput receipt is missing progress or growth-law report digests",
+    );
+  }
   if (!evidence.growthAwareProjectionAvailable) {
     fail(
       "FHV_THROUGHPUT_PROJECTION_UNAVAILABLE",
       "Throughput receipt has no growth-aware projection",
     );
   }
-  // Fail closed on any single breach, never an average that could hide it.
   if (
     !Number.isFinite(evidence.growthAwareProjectedRuntimeS) ||
     evidence.growthAwareProjectedRuntimeS > FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S
@@ -207,5 +293,11 @@ export function assertFhvThroughputHostQualified(input: {
     );
   }
 
-  return receipt as FhvThroughputReceiptV1;
+  return receipt as FhvThroughputReceiptV2;
 }
+
+export {
+  FHV_THROUGHPUT_QUALIFIER_MIN_CHECKPOINT_SAMPLES,
+  FHV_THROUGHPUT_QUALIFIER_MIN_HOT_WINDOWS,
+  FHV_THROUGHPUT_QUALIFIER_MIN_PROGRESS_SAMPLES,
+};

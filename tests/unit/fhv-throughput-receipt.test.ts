@@ -10,6 +10,7 @@ import {
   FhvThroughputReceiptError,
   FHV_THROUGHPUT_MIN_CPS,
   FHV_THROUGHPUT_QUALIFIED_CLASSIFICATION,
+  FHV_THROUGHPUT_RECEIPT_LEGACY_V1_FILENAME,
   FHV_THROUGHPUT_RECEIPT_SCHEMA,
 } from "@/lib/trader/observability/fhv-throughput-receipt";
 import { requiresWp3bTargetHostQualification } from "@/lib/trader/observability/fhv-launch-classification";
@@ -28,28 +29,76 @@ afterAll(() => {
   for (const root of roots) rmSync(root, { recursive: true, force: true });
 });
 
+function samplerContract() {
+  return {
+    version: "fhv-throughput-qualifier-sampler/v1",
+    maxIntervalMs: 250,
+    appliedIntervalMs: 250,
+    cycleAmortization: 256,
+    minProgressSamples: 6,
+    minHotWindows: 4,
+    minCheckpointSamples: 2,
+  };
+}
+
+function producerHost(
+  overrides: Partial<
+    import("@/lib/trader/observability/fhv-throughput-producer-binding").FhvThroughputProducerHostIdentityV1
+  > = {},
+) {
+  return {
+    hostname: "target-host",
+    platform: "linux",
+    arch: "x64",
+    cpuModel: "test-cpu",
+    cpuCount: 32,
+    nodeVersion: "v22.23.0",
+    machineIdSha256: "d".repeat(64),
+    bootId: "11111111-1111-1111-1111-111111111111",
+    ...overrides,
+  };
+}
+
+function evidence(overrides: Record<string, unknown> = {}) {
+  const host = producerHost();
+  return {
+    representativeSegmentExecuted: true,
+    progressSamples: 12,
+    checkpointSamples: 4,
+    boundednessClassification: "BOUNDED",
+    diagnosticGrowthBytesPerCycle: 96.9,
+    hotPathDecayVerdict: "FLAT",
+    growthAwareProjectionAvailable: true,
+    growthAwareProjectedRuntimeS: 6000.0,
+    runId: "fhv-qual-test-run",
+    runDir: "/tmp/fhv-run",
+    producerHost: host,
+    progressBytesSha256: "a".repeat(64),
+    growthLawReportDigest: "b".repeat(64),
+    checkoutHeadSha: "release-sha-under-test",
+    producerHeadSha: "release-sha-under-test",
+    producerBindingDigest: "c".repeat(64),
+    ...overrides,
+  };
+}
+
 function writeReceipt(overrides: Record<string, unknown> = {}): string {
   const root = mkdtempSync(join(tmpdir(), "fhv-throughput-receipt-"));
   roots.push(root);
+  const host = producerHost();
   const body: Record<string, unknown> = {
     schemaVersion: FHV_THROUGHPUT_RECEIPT_SCHEMA,
     capturedAtUtc: new Date().toISOString(),
     releaseSha: "release-sha-under-test",
-    host: { hostname: "target-host", platform: "linux", arch: "x64", cpuModel: "test-cpu" },
+    runId: "fhv-qual-test-run",
+    host,
     contract: {
       minThroughputCps: 877,
       canonicalMaxRuntimeS: 7200,
       prelaunchMaxProjectedRuntimeS: 6480,
     },
-    evidence: {
-      representativeSegmentExecuted: true,
-      progressSamples: 12,
-      checkpointSamples: 4,
-      growthBytesPerCycle: 96.9,
-      hotPathDecayVerdict: "FLAT",
-      growthAwareProjectionAvailable: true,
-      growthAwareProjectedRuntimeS: 6000.0,
-    },
+    samplerContract: samplerContract(),
+    evidence: evidence(),
     classification: FHV_THROUGHPUT_QUALIFIED_CLASSIFICATION,
     ...overrides,
   };
@@ -57,7 +106,7 @@ function writeReceipt(overrides: Record<string, unknown> = {}): string {
     ...body,
     receiptDigest: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
   };
-  const path = join(root, "fhv-throughput-host-qualification.v1.json");
+  const path = join(root, "fhv-throughput-host-qualification.v2.json");
   writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
   return path;
 }
@@ -89,15 +138,9 @@ describe("FHV throughput host-qualification receipt", () => {
       codeOf(() =>
         assertFhvThroughputHostQualified({
           receiptPath: writeReceipt({
-            evidence: {
-              representativeSegmentExecuted: true,
-              progressSamples: 12,
-              checkpointSamples: 4,
-              growthBytesPerCycle: 96.9,
-              hotPathDecayVerdict: "FLAT",
-              growthAwareProjectionAvailable: true,
+            evidence: evidence({
               growthAwareProjectedRuntimeS: 6480.1,
-            },
+            }),
           }),
         }),
       ),
@@ -150,7 +193,19 @@ describe("FHV throughput host-qualification receipt", () => {
           }),
         }),
       ),
-    ).toBe("FHV_THROUGHPUT_RECEIPT_HOST_IDENTITY_MISSING");
+    ).toBe("FHV_THROUGHPUT_PRODUCER_HOST_IDENTITY_MISSING");
+  });
+
+  it("fails closed when receipt host disagrees with execution-time producer host", () => {
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            host: producerHost({ hostname: "other-host" }),
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_PRODUCER_HOST_MISMATCH");
   });
 
   it("fails closed on insufficient progress/checkpoint evidence", () => {
@@ -158,15 +213,10 @@ describe("FHV throughput host-qualification receipt", () => {
       codeOf(() =>
         assertFhvThroughputHostQualified({
           receiptPath: writeReceipt({
-            evidence: {
-              representativeSegmentExecuted: true,
+            evidence: evidence({
               progressSamples: 1,
               checkpointSamples: 1,
-              growthBytesPerCycle: 96.9,
-              hotPathDecayVerdict: "FLAT",
-              growthAwareProjectionAvailable: true,
-              growthAwareProjectedRuntimeS: 6000,
-            },
+            }),
           }),
         }),
       ),
@@ -178,15 +228,9 @@ describe("FHV throughput host-qualification receipt", () => {
       codeOf(() =>
         assertFhvThroughputHostQualified({
           receiptPath: writeReceipt({
-            evidence: {
-              representativeSegmentExecuted: true,
-              progressSamples: 12,
-              checkpointSamples: 4,
-              growthBytesPerCycle: 96.9,
+            evidence: evidence({
               hotPathDecayVerdict: "DECAYING",
-              growthAwareProjectionAvailable: true,
-              growthAwareProjectedRuntimeS: 6000,
-            },
+            }),
           }),
         }),
       ),
@@ -219,6 +263,82 @@ describe("FHV throughput host-qualification receipt", () => {
         }),
       ),
     ).toBe("FHV_THROUGHPUT_NOT_QUALIFIED");
+  });
+
+  it("records checkpoint samples independently of progress samples", () => {
+    const receipt = assertFhvThroughputHostQualified({
+      receiptPath: writeReceipt({
+        evidence: evidence({ progressSamples: 12, checkpointSamples: 4 }),
+      }),
+      expectedReleaseSha: "release-sha-under-test",
+    });
+    expect(receipt.evidence.checkpointSamples).toBe(4);
+    expect(receipt.evidence.progressSamples).toBe(12);
+    expect(receipt.evidence.checkpointSamples).not.toBe(receipt.evidence.progressSamples);
+  });
+
+  it("rejects an unbound v1 receipt path", () => {
+    const root = mkdtempSync(join(tmpdir(), "fhv-throughput-v1-"));
+    roots.push(root);
+    const path = join(root, FHV_THROUGHPUT_RECEIPT_LEGACY_V1_FILENAME);
+    writeFileSync(path, "{}\n", "utf8");
+    expect(codeOf(() => assertFhvThroughputHostQualified({ receiptPath: path }))).toBe(
+      "FHV_THROUGHPUT_RECEIPT_SCHEMA_UNSUPPORTED",
+    );
+  });
+
+  it("fails closed when boundedness is not BOUNDED", () => {
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            evidence: evidence({ boundednessClassification: "UNBOUNDED" }),
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_BOUNDEDNESS_NOT_BOUNDED");
+  });
+
+  it("fails closed when sampler contract fields are weakened", () => {
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            samplerContract: { ...samplerContract(), maxIntervalMs: 60_000 },
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_SAMPLER_MAX_INTERVAL_WEAKENED");
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            samplerContract: { ...samplerContract(), appliedIntervalMs: 1_000 },
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_SAMPLER_APPLIED_INTERVAL_OUT_OF_RANGE");
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            samplerContract: { ...samplerContract(), minCheckpointSamples: 1 },
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_SAMPLER_MIN_CHECKPOINT_WEAKENED");
+  });
+
+  it("fails closed when producer HEAD does not match the claimed release", () => {
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            evidence: evidence({ producerHeadSha: "a".repeat(40) }),
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_RECEIPT_PRODUCER_RELEASE_MISMATCH");
   });
 });
 
