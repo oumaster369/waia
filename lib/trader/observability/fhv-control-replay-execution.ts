@@ -7,6 +7,7 @@ import {
   writeFileAtomicExclusive,
 } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { assertFhvOfficialV2DatasetArtifactsPresent } from "@/lib/trader/market-data/fhv-official-v2-required";
+import { loadFhvPreHoldoutPartitionBars } from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
 import type { FhvConfigurationFreezeV1 } from "@/lib/trader/observability/fhv-configuration-freeze";
 import {
   loadOfficialSharedPortfolioBars,
@@ -72,6 +73,8 @@ async function runFhvControlReplayLaunchBacktest(input: {
       datasetRoot: input.launchInput.datasetRoot!,
       qualificationMode: input.qualificationReceipt.qualificationMode,
     });
+  } else if (input.qualificationReceipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA") {
+    // Dataset presence is the pre-holdout package; do not require full V2 seal or holdout bars.
   } else if (input.qualificationReceipt.qualificationMode === "SCHEMA_INTEGRATION_FIXTURE") {
     // Touch official shared bars only to prove dataset root is readable — not as V1 economic input.
     void loadOfficialSharedPortfolioBars({
@@ -89,6 +92,20 @@ async function runFhvControlReplayLaunchBacktest(input: {
 
   const scientific = await runScientificControlReplayV2Ceremony({
     organizationId: input.launchInput.organizationId,
+    ...(input.qualificationReceipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA"
+      ? {
+          marketAuthority: {
+            class: "OFFICIAL_PRE_HOLDOUT_REAL_DATA" as const,
+            bars: loadFhvPreHoldoutPartitionBars({
+              datasetRoot: input.launchInput.datasetRoot!,
+              partition: "development",
+              symbol: "BTCUSDT",
+            }),
+            releaseSha: input.launchInput.releaseSha.trim().toLowerCase(),
+            developmentWalkForwardContentDigest: input.qualificationReceipt.datasetContentDigest,
+          },
+        }
+      : {}),
   });
 
   const scientificEvidencePath = join(input.runDir, "control-replay-scientific-v2-result.v1.json");

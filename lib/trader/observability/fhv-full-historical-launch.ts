@@ -536,6 +536,12 @@ export function resolveFhvFullHistoricalTerminalClassification(input: {
   if (input.boundedFixture) {
     return "BOUNDED_FULL_HISTORICAL_END_TO_END_PASS";
   }
+  if (input.qualificationReceipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA") {
+    throw new FhvFullHistoricalLaunchError(
+      "PRE_HOLDOUT_CANNOT_AUTHORIZE_FULL_HISTORICAL",
+      "OFFICIAL_PRE_HOLDOUT_REAL_DATA cannot authorize FULL_HISTORICAL.",
+    );
+  }
   if (input.qualificationReceipt.qualificationMode === "SCHEMA_INTEGRATION_FIXTURE") {
     return "FHV_SCHEMA_INTEGRATION_CEREMONY_PASS";
   }
@@ -649,6 +655,16 @@ export function validateFhvFullHistoricalLaunchInput(
     identity,
     requiredMode: input.boundedFixture ? undefined : undefined,
   });
+
+  if (
+    resolvedExecutionPurpose !== FHV_EXECUTION_PURPOSE_CONTROL_REPLAY &&
+    qualificationReceipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA"
+  ) {
+    throw new FhvFullHistoricalLaunchError(
+      "PRE_HOLDOUT_CANNOT_AUTHORIZE_FULL_HISTORICAL",
+      "OFFICIAL_PRE_HOLDOUT_REAL_DATA cannot authorize FULL_HISTORICAL.",
+    );
+  }
 
   assertFhvSyntheticScaleAuthorityRequired({
     qualificationReceipt,
@@ -893,6 +909,11 @@ async function runFhvFullHistoricalLaunchBacktest(input: {
 
   if (input.launchInput.boundedFixture) {
     bars = loadApprovedBenchmarkFixture().bars;
+  } else if (input.qualificationReceipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA") {
+    throw new FhvFullHistoricalLaunchError(
+      "PRE_HOLDOUT_CANNOT_AUTHORIZE_FULL_HISTORICAL",
+      "OFFICIAL_PRE_HOLDOUT_REAL_DATA cannot authorize FULL_HISTORICAL.",
+    );
   } else if (input.qualificationReceipt.qualificationMode === "OFFICIAL_MULTI_YEAR") {
     assertFhvOfficialV2DatasetArtifactsPresent({
       datasetRoot: input.launchInput.datasetRoot!,

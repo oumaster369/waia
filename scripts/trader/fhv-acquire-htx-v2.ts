@@ -10,6 +10,7 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   assertFhvPartitionBoundariesExact,
@@ -45,7 +46,7 @@ function parseArgv(argv: readonly string[]): Map<string, string | true> {
     if (!token.startsWith("--")) {
       throw new Error(`Unexpected positional argument: ${token}`);
     }
-    if (token === "--scale-corpus") {
+    if (token === "--scale-corpus" || token === "--real-htx") {
       parsed.set(token, true);
       continue;
     }
@@ -77,6 +78,7 @@ export function resolveFhvAcquireHtxV2CliConfig(
   const acquisitionRunId =
     (flags.get("--acquisition-run-id") as string | undefined) ?? env.FHV_ACQUISITION_RUN_ID?.trim();
   const scaleCorpus = flags.has("--scale-corpus");
+  const realHtx = flags.has("--real-htx");
   const startUtc = flags.get("--start-utc") as string | undefined;
   const endUtc = flags.get("--end-utc") as string | undefined;
   return {
@@ -88,9 +90,28 @@ export function resolveFhvAcquireHtxV2CliConfig(
     operatorId,
     acquisitionRunId,
     scaleCorpus,
+    realHtx,
     startUtc,
     endUtc,
   };
+}
+
+export function assertFhvAcquireHtxV2Mode(config: {
+  scaleCorpus: boolean;
+  realHtx: boolean;
+  partition?: FhvOfficialPartitionName;
+}): void {
+  if (config.scaleCorpus && config.realHtx) {
+    throw new Error("--scale-corpus and --real-htx are mutually exclusive");
+  }
+  if (!config.scaleCorpus && !config.realHtx) {
+    throw new Error(
+      "pass exactly one of --scale-corpus or --real-htx; network acquisition is never implicit",
+    );
+  }
+  if (config.realHtx && config.partition === "blind-holdout") {
+    throw new Error("FHV_REAL_BLIND_HOLDOUT_ACQUISITION_NOT_AUTHORIZED");
+  }
 }
 
 async function main(): Promise<void> {
@@ -116,11 +137,7 @@ async function main(): Promise<void> {
   if (!config.acquisitionRunId?.trim()) {
     throw new Error("--acquisition-run-id is required");
   }
-  if (!config.scaleCorpus) {
-    throw new Error(
-      "Real HTX acquisition is not enabled in this build; pass --scale-corpus for deterministic official-scale corpus",
-    );
-  }
+  assertFhvAcquireHtxV2Mode(config);
 
   const capability = assertHtxOfficialSourceCapabilityProven();
   const interval = resolveFhvCanonicalPartitionInterval(config.partition);
@@ -133,6 +150,52 @@ async function main(): Promise<void> {
   }
 
   mkdirSync(config.datasetRoot, { recursive: true });
+
+  if (config.realHtx) {
+    const { HtxRestClient } = await import("@/lib/trader/connectors/htx/client");
+    const { acquireFhvRealHtxPartition } =
+      await import("@/lib/trader/market-data/fhv-real-htx-acquisition");
+    const client = new HtxRestClient({
+      apiKey: process.env.HTX_ACCESS_KEY?.trim() || "public",
+      apiSecret: process.env.HTX_SECRET_KEY?.trim() || "public",
+    });
+    const acquired = await acquireFhvRealHtxPartition({
+      datasetRoot: config.datasetRoot,
+      partition: config.partition as "development" | "walk-forward",
+      symbol: config.symbol,
+      acquisitionRunId: config.acquisitionRunId,
+      releaseSha: config.releaseSha,
+      organizationId: config.organizationId,
+      operatorId: config.operatorId,
+      sourceCapabilityReceiptDigest: capability.sourceCapabilityEvidenceDigest,
+      fetchPage: (page) =>
+        client.getMarketHistoryCandles({
+          symbol: page.symbol,
+          period: page.period,
+          size: page.size,
+          from: page.from,
+          to: page.to,
+        }),
+    });
+    console.log(
+      JSON.stringify(
+        {
+          classification: "FHV_V2_REAL_HTX_PARTITION_ACQUISITION_PASS",
+          evidenceClass: "REAL_PROVIDER_DATA" as const,
+          partition: config.partition,
+          symbol: config.symbol,
+          barCount: acquired.receipt.actualBarCount,
+          rawSha256: acquired.receipt.rawSha256,
+          receiptPath: acquired.receiptPath,
+          fileRelativePath: acquired.fileRelativePath,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
   const relativePath = fhvOfficialPartitionFileRelativePath({
     partition: config.partition,
     symbol: config.symbol,
@@ -186,7 +249,9 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

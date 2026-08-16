@@ -32,7 +32,12 @@ import {
 import { MODEL_TRANSFORM_VERSION } from "@/lib/trader/intelligence/forecast-v2/constants";
 import type { ReplicaRootFamilyInput } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
 import type { SourceAnchor } from "@/lib/trader/intelligence/forecast-v2/rv-state-conditional-empirical-joint-v1";
-import type { StrategySignal } from "@/lib/trader/intelligence/types";
+import type { Bar, StrategySignal } from "@/lib/trader/intelligence/types";
+import {
+  buildControlReplaySourceAnchorsFromRealBars,
+  CONTROL_REPLAY_OFFICIAL_MARKET_AUTHORITY,
+  CONTROL_REPLAY_TEST_ONLY_DETERMINISTIC_CORPUS,
+} from "@/lib/trader/observability/control-replay-preholdout-source-corpus-v1";
 import { createLifecycleRecorder, createSqliteLifecycleRepository } from "@/lib/trader/lifecycle";
 import {
   CONTROL_REPLAY_AUTHORITY_IDENTITY,
@@ -103,6 +108,14 @@ export type ScientificControlReplayV2Result = {
   parityDigest: string;
   accountingSemanticDigest: string;
   executablePolicyDigest: typeof EXECUTABLE_POLICY_DIGEST_UNAVAILABLE;
+  marketAuthorityClass:
+    | typeof CONTROL_REPLAY_TEST_ONLY_DETERMINISTIC_CORPUS
+    | typeof CONTROL_REPLAY_OFFICIAL_MARKET_AUTHORITY;
+  codeReleaseSha: string;
+  developmentDatasetDigestHex: string;
+  sourceAnchorCount: number;
+  firstSourceAnchorClosedBarEpochMs: number;
+  lastSourceAnchorBarContentDigest: string;
   legacyStrategyDiagnostics: ReturnType<typeof extractLegacyStrategyDiagnostics>;
   whyNotCashJson: string;
 };
@@ -130,7 +143,11 @@ function buildDeterministicCorpus(symbol: string): SourceAnchor[] {
   }));
 }
 
-function buildFamily(organizationId: string, symbol: string): ReplicaRootFamilyInput {
+function buildFamily(
+  organizationId: string,
+  symbol: string,
+  identity?: { codeReleaseSha?: string; developmentDatasetDigestHex?: string },
+): ReplicaRootFamilyInput {
   return {
     organizationId,
     venue: "htx",
@@ -142,10 +159,12 @@ function buildFamily(organizationId: string, symbol: string): ReplicaRootFamilyI
     terminalTargetDefinitionDigestHex: sha256Hex(`terminal-target:${symbol}`),
     executionOpportunityTargetDefinitionDigestHex: sha256Hex(`execopp-target:${symbol}`),
     modelTransformVersion: MODEL_TRANSFORM_VERSION,
-    developmentDatasetDigestHex: sha256Hex("control-replay-scientific-v2-dev-dataset"),
+    developmentDatasetDigestHex:
+      identity?.developmentDatasetDigestHex ??
+      sha256Hex("control-replay-scientific-v2-dev-dataset"),
     featureVersion: "feature-engine/rv/v2",
     normalizationVersionDigestHex: sha256Hex("control-replay-scientific-v2-normalization"),
-    codeReleaseSha: "e".repeat(40),
+    codeReleaseSha: identity?.codeReleaseSha ?? "e".repeat(40),
   };
 }
 
@@ -308,9 +327,19 @@ async function createControlReplayMockExecutionSession(input: { organizationId: 
   };
 }
 
+export type ControlReplayMarketAuthorityV1 =
+  | { class: typeof CONTROL_REPLAY_TEST_ONLY_DETERMINISTIC_CORPUS }
+  | {
+      class: typeof CONTROL_REPLAY_OFFICIAL_MARKET_AUTHORITY;
+      bars: readonly Bar[];
+      releaseSha: string;
+      developmentWalkForwardContentDigest: string;
+    };
+
 export type RunScientificControlReplayV2Input = {
   organizationId?: string;
   symbol?: string;
+  marketAuthority?: ControlReplayMarketAuthorityV1;
   /** Override admission digest to force fail-closed paths in tests. */
   scientificAdmissionReceiptDigestOverride?: string | null;
   requireScientificAdmission?: boolean;
@@ -352,9 +381,38 @@ export async function runScientificControlReplayV2Ceremony(
   const symbol = input.symbol ?? "BTCUSDT";
   const completedStages: AuthorityChainStage[] = [];
   const omit = new Set(input.omitStages ?? []);
+  const marketAuthority = input.marketAuthority ?? {
+    class: CONTROL_REPLAY_TEST_ONLY_DETERMINISTIC_CORPUS,
+  };
 
-  const family = buildFamily(organizationId, symbol);
-  const corpus = buildDeterministicCorpus(symbol);
+  let corpus: readonly SourceAnchor[];
+  let family: ReplicaRootFamilyInput;
+  if (marketAuthority.class === CONTROL_REPLAY_OFFICIAL_MARKET_AUTHORITY) {
+    if (!/^[0-9a-f]{40}$/.test(marketAuthority.releaseSha)) {
+      throw new AuthorityChainViolationError("official Control Replay requires actual release SHA");
+    }
+    if (marketAuthority.bars.length === 0) {
+      throw new AuthorityChainViolationError(
+        "official Control Replay requires qualified real bars",
+      );
+    }
+    corpus = buildControlReplaySourceAnchorsFromRealBars({
+      bars: marketAuthority.bars,
+      symbol,
+    });
+    if (corpus.length < 30) {
+      throw new AuthorityChainViolationError(
+        "official Control Replay real-bar source corpus is below MIN_STATE_POOL_COUNT",
+      );
+    }
+    family = buildFamily(organizationId, symbol, {
+      codeReleaseSha: marketAuthority.releaseSha,
+      developmentDatasetDigestHex: marketAuthority.developmentWalkForwardContentDigest,
+    });
+  } else {
+    family = buildFamily(organizationId, symbol);
+    corpus = buildDeterministicCorpus(symbol);
+  }
   const { pkg, issuance } = runExecutorReadyEndToEndV1({
     family,
     sourceCorpus: corpus,
@@ -622,6 +680,12 @@ export async function runScientificControlReplayV2Ceremony(
       parityDigest,
       accountingSemanticDigest,
       executablePolicyDigest: resolveExecutablePolicyDigestOrUnavailable(),
+      marketAuthorityClass: marketAuthority.class,
+      codeReleaseSha: family.codeReleaseSha,
+      developmentDatasetDigestHex: family.developmentDatasetDigestHex,
+      sourceAnchorCount: corpus.length,
+      firstSourceAnchorClosedBarEpochMs: corpus[0]!.closedBarEpochMs,
+      lastSourceAnchorBarContentDigest: corpus[corpus.length - 1]!.barContentDigest,
       legacyStrategyDiagnostics,
       whyNotCashJson,
     };
