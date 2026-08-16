@@ -387,8 +387,15 @@ progress JSONL byte digest → growth-law report self-digest → throughput rece
 `runId` bound through the final receipt. Target-host identity, independently counted progress
 samples and distinct `checkpointCount` observations, production-owned `BOUNDED` hot-state
 classification (terminal plateau; not whole-series OLS), a `FLAT` hot-path stability verdict from
-half-medians with insufficient windows failing closed, an available growth-aware projection, and
-that projection within **6,480 s**. Malformed or unbound evidence is `EVIDENCE_INVALID`; valid
+equal work-mass cumulative `globalEventSequence` versus checkpoint-excluded hot time
+(`elapsedSeconds - cumulativeCheckpointDurationMs/1000`; assessor
+`fhv-hot-path-stability-assessor/v2`), invariant to legal evidence-window subdivision when both
+representations meet the canonical sampler minima, with insufficient or malformed cumulative
+evidence failing closed. The 10% degradation cap is unchanged. Per-sampler-window CPS remains
+diagnostic only and must not control the authoritative verdict. Readers fail closed on an
+unsupported assessor version. The Cherry host is not special-cased. Qualification also requires
+an available growth-aware projection within **6,480 s**. Malformed or unbound evidence is
+`EVIDENCE_INVALID`; valid
 evidence that misses the performance/structure contract is `NOT_QUALIFIED`. The receipt embeds and
 validates the canonical 877/7200/6480 constants **and the full sampler contract fields** so a weaker
 contract cannot pass through a schema-consistent file. Unbound v1 receipts cannot qualify a new launch.

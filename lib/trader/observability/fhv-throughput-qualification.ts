@@ -10,6 +10,7 @@ import {
   FHV_CANONICAL_MAX_RUNTIME_S,
   FHV_GROWTH_LAW_REPORT_FILENAME,
   FHV_GROWTH_LAW_LEGACY_V1_FILENAME,
+  FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION,
   FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S,
 } from "@/lib/trader/observability/fhv-growth-law";
 import {
@@ -99,6 +100,8 @@ export function qualifyFhvThroughputHost(input: {
   const decayVerdict = report.hotPath.verdict;
   const projectionSeconds = report.projection.projectedRuntimeSeconds;
   const projectionAvailable = Number.isFinite(projectionSeconds);
+  const hotPathAssessorSupported =
+    report.hotPath.assessorVersion === FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION;
 
   const evidencePacketValid =
     projectionAvailable &&
@@ -107,6 +110,7 @@ export function qualifyFhvThroughputHost(input: {
     report.hotPath.windowCount >= FHV_THROUGHPUT_QUALIFIER_MIN_HOT_WINDOWS &&
     boundedness !== "INSUFFICIENT_EVIDENCE" &&
     decayVerdict !== "INSUFFICIENT_SAMPLES" &&
+    hotPathAssessorSupported &&
     report.samplerContract.version.length > 0;
 
   const contractPass =
@@ -141,7 +145,11 @@ export function qualifyFhvThroughputHost(input: {
       checkpointSamples,
       boundednessClassification: boundedness,
       diagnosticGrowthBytesPerCycle: report.sessionGrowthDiagnostic.bytesPerCycle,
+      hotPathAssessorVersion: report.hotPath.assessorVersion,
       hotPathDecayVerdict: decayVerdict,
+      hotPathEarlyCps: report.hotPath.earlyCps,
+      hotPathLateCps: report.hotPath.lateCps,
+      hotPathDecayRatio: report.hotPath.decayRatio,
       growthAwareProjectionAvailable: projectionAvailable,
       growthAwareProjectedRuntimeS: Number(projectionSeconds.toFixed(1)),
       runId: report.producer.runId,
