@@ -10,6 +10,12 @@ import {
   FHV_PRELAUNCH_MAX_PROJECTED_RUNTIME_S,
 } from "@/lib/trader/observability/fhv-growth-law";
 import type { FhvBoundednessClassification } from "@/lib/trader/observability/fhv-bounded-hot-state";
+import {
+  assertFhvThroughputProducerHostIdentity,
+  assertFhvThroughputProducerHostMatches,
+  FhvThroughputProducerBindingError,
+  type FhvThroughputProducerHostIdentityV1,
+} from "@/lib/trader/observability/fhv-throughput-producer-binding";
 import type { FhvThroughputQualifierSamplerContract } from "@/lib/trader/observability/fhv-throughput-sampler";
 import {
   assertCanonicalFhvThroughputSamplerContract,
@@ -54,14 +60,8 @@ export type FhvThroughputReceiptV2 = Readonly<{
   schemaVersion: typeof FHV_THROUGHPUT_RECEIPT_SCHEMA;
   capturedAtUtc: string;
   releaseSha: string;
-  host: Readonly<{
-    hostname: string;
-    platform: string;
-    arch: string;
-    cpuModel: string;
-    cpuCount?: number;
-    nodeVersion?: string;
-  }>;
+  runId: string;
+  host: FhvThroughputProducerHostIdentityV1;
   contract: Readonly<{
     minThroughputCps: number;
     canonicalMaxRuntimeS: number;
@@ -77,6 +77,9 @@ export type FhvThroughputReceiptV2 = Readonly<{
     hotPathDecayVerdict: "FLAT" | "DECAYING" | "INSUFFICIENT_SAMPLES";
     growthAwareProjectionAvailable: boolean;
     growthAwareProjectedRuntimeS: number;
+    runId: string;
+    runDir: string;
+    producerHost: FhvThroughputProducerHostIdentityV1;
     progressBytesSha256: string;
     growthLawReportDigest: string;
     checkoutHeadSha: string;
@@ -182,11 +185,27 @@ export function assertFhvThroughputHostQualified(input: {
       "Throughput receipt is missing producerBindingDigest",
     );
   }
-  if (!receipt.host?.hostname?.trim()) {
+  if (!receipt.runId?.trim() || receipt.runId !== receipt.evidence?.runId) {
     fail(
-      "FHV_THROUGHPUT_RECEIPT_HOST_IDENTITY_MISSING",
-      "Throughput receipt has no host identity binding",
+      "FHV_THROUGHPUT_RECEIPT_RUN_ID_MISMATCH",
+      `Throughput receipt runId ${String(receipt.runId)} != evidence ${String(receipt.evidence?.runId)}`,
     );
+  }
+  if (!receipt.evidence?.runDir?.trim()) {
+    fail(
+      "FHV_THROUGHPUT_RECEIPT_RUN_DIR_MISSING",
+      "Throughput receipt is missing execution-time runDir",
+    );
+  }
+  try {
+    const host = assertFhvThroughputProducerHostIdentity(receipt.host);
+    const producerHost = assertFhvThroughputProducerHostIdentity(receipt.evidence?.producerHost);
+    assertFhvThroughputProducerHostMatches({ producer: producerHost, current: host });
+  } catch (error) {
+    if (error instanceof FhvThroughputProducerBindingError) {
+      fail(error.code, error.message);
+    }
+    throw error;
   }
 
   if (

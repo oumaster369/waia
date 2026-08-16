@@ -373,10 +373,19 @@ report (never a synthetic CPU microbenchmark) and emits an identity-bound receip
 `EXECUTION_SERVER_FHV_THROUGHPUT_QUALIFIED`, `EXECUTION_SERVER_FHV_THROUGHPUT_NOT_QUALIFIED`, or
 `EXECUTION_SERVER_FHV_THROUGHPUT_EVIDENCE_INVALID`. A QUALIFIED receipt requires, fail-closed: exact
 clean checkout HEAD (not `FHV_RELEASE_SHA` alone), an **execution-time producer binding** proving
-the code HEAD that generated the progress JSONL, target-host identity, the qualifier-owned sampler
-contract recorded at run start (not reconstructed at report time), progress-JSONL byte digest,
-growth-law report self-digest, a representative segment actually executed, independently counted
-progress samples and distinct `checkpointCount` observations, production-owned `BOUNDED` hot-state
+the code HEAD, physical/runtime host identity, run identity, and qualifier-owned sampler contract
+that generated the progress JSONL. The binding is captured when the representative run starts
+(`fhv-throughput-producer-binding/v2`): producer HEAD, tracked-tree clean, `runId`, resolved
+`runDir`, hostname/platform/arch/CPU model/logical CPU count/exact Node version, and — when the
+canonical Linux files are readable — SHA-256 of `/etc/machine-id` bytes (same as T4
+`sha256sum /etc/machine-id`) plus T4-normalized `/proc/sys/kernel/random/boot_id`. Receipt `host`
+is copied from that execution-time identity; live `os.hostname()` / `cpus()` / `process.version` at
+report time cannot re-label Host-A evidence as a Host-B receipt (`FHV_THROUGHPUT_PRODUCER_HOST_MISMATCH`
+/ `FHV_THROUGHPUT_PRODUCER_RUNTIME_MISMATCH`). Copied evidence trees cannot silently relabel
+`runDir` (`FHV_THROUGHPUT_PRODUCER_RUNDIR_MISMATCH`). The digest chain is producer-binding digest →
+progress JSONL byte digest → growth-law report self-digest → throughput receipt self-digest, with
+`runId` bound through the final receipt. Target-host identity, independently counted progress
+samples and distinct `checkpointCount` observations, production-owned `BOUNDED` hot-state
 classification (terminal plateau; not whole-series OLS), a `FLAT` hot-path stability verdict from
 half-medians with insufficient windows failing closed, an available growth-aware projection, and
 that projection within **6,480 s**. Malformed or unbound evidence is `EVIDENCE_INVALID`; valid

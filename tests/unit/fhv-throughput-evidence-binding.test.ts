@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import {
   assertFhvGrowthLawReportV2,
@@ -20,9 +20,12 @@ import {
 import { FhvT4CheckoutIdentityError } from "@/lib/trader/observability/fhv-t4-release-checkout-identity";
 import type { FhvFullHistoricalProgressV1 } from "@/lib/trader/observability/fhv-full-historical-progress";
 import {
+  assertFhvThroughputProducerBinding,
   createFhvThroughputProducerBinding,
   FhvThroughputProducerBindingError,
+  setFhvThroughputProducerHostIdentityForTests,
   stampFhvProgressProducerIdentity,
+  type FhvThroughputProducerHostIdentityV1,
 } from "@/lib/trader/observability/fhv-throughput-producer-binding";
 import { buildFhvThroughputQualifierSamplerContract } from "@/lib/trader/observability/fhv-throughput-sampler";
 
@@ -30,6 +33,10 @@ const roots: string[] = [];
 
 afterAll(() => {
   for (const root of roots) rmSync(root, { recursive: true, force: true });
+});
+
+afterEach(() => {
+  setFhvThroughputProducerHostIdentityForTests(null);
 });
 
 function git(repo: string, args: string[]): string {
@@ -249,6 +256,11 @@ describe("FHV throughput qualification classification", () => {
     expect(receipt.releaseSha).toBe(report.checkout.headSha);
     expect(receipt.evidence.checkoutHeadSha).toBe(receipt.releaseSha);
     expect(receipt.evidence.producerHeadSha).toBe(receipt.releaseSha);
+    expect(receipt.runId).toBe("fhv-qual-test-run");
+    expect(receipt.evidence.runId).toBe("fhv-qual-test-run");
+    expect(receipt.evidence.producerBindingDigest).toHaveLength(64);
+    expect(receipt.evidence.progressBytesSha256).toHaveLength(64);
+    expect(receipt.evidence.growthLawReportDigest).toHaveLength(64);
   });
 });
 
@@ -297,6 +309,156 @@ describe("FHV execution-time producer and sampler binding", () => {
     } catch (error) {
       expect((error as FhvThroughputProducerBindingError).code).toBe(
         "FHV_THROUGHPUT_PRODUCER_BINDING_MISSING",
+      );
+    }
+  });
+});
+
+function testHost(
+  overrides: Partial<FhvThroughputProducerHostIdentityV1> = {},
+): FhvThroughputProducerHostIdentityV1 {
+  return {
+    hostname: "host-a",
+    platform: "linux",
+    arch: "x64",
+    cpuModel: "Ryzen 9 9950X",
+    cpuCount: 32,
+    nodeVersion: "v22.23.0",
+    machineIdSha256: "a".repeat(64),
+    bootId: "11111111-1111-1111-1111-111111111111",
+    ...overrides,
+  };
+}
+
+function writeReport(repo: string, runDir: string) {
+  const report = buildFhvGrowthLawReportV2({ runDir, repoPath: repo });
+  writeFileSync(
+    join(runDir, FHV_GROWTH_LAW_REPORT_FILENAME),
+    `${JSON.stringify(report, null, 2)}\n`,
+  );
+  return report;
+}
+
+describe("FHV execution-time host and run identity", () => {
+  afterEach(() => {
+    setFhvThroughputProducerHostIdentityForTests(null);
+  });
+
+  it("cannot issue a Host-B qualified receipt over Host-A producer evidence", () => {
+    const { repo } = makeRepo();
+    const runDir = join(repo, "run");
+    setFhvThroughputProducerHostIdentityForTests(testHost({ hostname: "host-a" }));
+    writeOfficialProgress(repo, runDir, boundedPoints());
+    writeReport(repo, runDir);
+    setFhvThroughputProducerHostIdentityForTests(testHost({ hostname: "host-b" }));
+    try {
+      qualifyFhvThroughputHost({ runDir, repoPath: repo });
+      throw new Error("expected host mismatch");
+    } catch (error) {
+      expect((error as FhvThroughputProducerBindingError).code).toBe(
+        "FHV_THROUGHPUT_PRODUCER_HOST_MISMATCH",
+      );
+    }
+  });
+
+  it("cannot re-label producer Node version A as receipt runtime Node version B", () => {
+    const { repo } = makeRepo();
+    const runDir = join(repo, "run");
+    setFhvThroughputProducerHostIdentityForTests(testHost({ nodeVersion: "v22.23.0" }));
+    writeOfficialProgress(repo, runDir, boundedPoints());
+    writeReport(repo, runDir);
+    setFhvThroughputProducerHostIdentityForTests(testHost({ nodeVersion: "v22.24.0" }));
+    try {
+      qualifyFhvThroughputHost({ runDir, repoPath: repo });
+      throw new Error("expected runtime mismatch");
+    } catch (error) {
+      expect((error as FhvThroughputProducerBindingError).code).toBe(
+        "FHV_THROUGHPUT_PRODUCER_RUNTIME_MISMATCH",
+      );
+    }
+  });
+
+  it("cannot silently replace producer CPU/arch identity at receipt time", () => {
+    const { repo } = makeRepo();
+    const runDir = join(repo, "run");
+    setFhvThroughputProducerHostIdentityForTests(
+      testHost({ arch: "x64", cpuModel: "Ryzen 9 9950X" }),
+    );
+    writeOfficialProgress(repo, runDir, boundedPoints());
+    writeReport(repo, runDir);
+    setFhvThroughputProducerHostIdentityForTests(
+      testHost({ arch: "arm64", cpuModel: "Ampere Altra" }),
+    );
+    try {
+      qualifyFhvThroughputHost({ runDir, repoPath: repo });
+      throw new Error("expected host mismatch");
+    } catch (error) {
+      expect((error as FhvThroughputProducerBindingError).code).toBe(
+        "FHV_THROUGHPUT_PRODUCER_HOST_MISMATCH",
+      );
+    }
+  });
+
+  it("copies execution-time producer host identity into the receipt", () => {
+    const { repo } = makeRepo();
+    const runDir = join(repo, "run");
+    const host = testHost();
+    setFhvThroughputProducerHostIdentityForTests(host);
+    const binding = writeOfficialProgress(repo, runDir, boundedPoints());
+    writeReport(repo, runDir);
+    const receipt = qualifyFhvThroughputHost({ runDir, repoPath: repo });
+    expect(receipt.host).toEqual(host);
+    expect(receipt.host).toEqual(binding.host);
+    expect(receipt.evidence.producerHost).toEqual(binding.host);
+    expect(receipt.runId).toBe(binding.runId);
+    expect(receipt.evidence.runId).toBe(binding.runId);
+    expect(receipt.evidence.runDir).toBe(binding.runDir);
+    expect(receipt.evidence.producerBindingDigest).toBe(binding.bindingDigest);
+  });
+
+  it("fails closed when producer binding runDir is not the analyzed runDir", () => {
+    const { repo } = makeRepo();
+    const runA = join(repo, "run-a");
+    writeOfficialProgress(repo, runA, boundedPoints());
+    const copyRoot = mkdtempSync(join(tmpdir(), "fhv-copied-run-"));
+    roots.push(copyRoot);
+    const runB = join(copyRoot, "run-b");
+    cpSync(runA, runB, { recursive: true });
+    try {
+      assertFhvThroughputProducerBinding({ runDir: runB });
+      throw new Error("expected rundir mismatch");
+    } catch (error) {
+      expect((error as FhvThroughputProducerBindingError).code).toBe(
+        "FHV_THROUGHPUT_PRODUCER_RUNDIR_MISMATCH",
+      );
+    }
+  });
+
+  it("cannot silently relabel run identity by copying an intact evidence tree", () => {
+    const { repo } = makeRepo();
+    const runA = join(repo, "run-a");
+    const binding = writeOfficialProgress(repo, runA, boundedPoints());
+    const report = writeReport(repo, runA);
+    expect(report.runIdentity.runId).toBe(binding.runId);
+    expect(report.runIdentity.runDir).toBe(resolve(runA));
+    const copyRoot = mkdtempSync(join(tmpdir(), "fhv-copied-tree-"));
+    roots.push(copyRoot);
+    const runB = join(copyRoot, "run-b");
+    cpSync(runA, runB, { recursive: true });
+    try {
+      buildFhvGrowthLawReportV2({ runDir: runB, repoPath: repo });
+      throw new Error("expected copied rundir rejection");
+    } catch (error) {
+      expect((error as FhvThroughputProducerBindingError).code).toBe(
+        "FHV_THROUGHPUT_PRODUCER_RUNDIR_MISMATCH",
+      );
+    }
+    try {
+      qualifyFhvThroughputHost({ runDir: runB, repoPath: repo });
+      throw new Error("expected copied rundir qualification rejection");
+    } catch (error) {
+      expect((error as FhvThroughputProducerBindingError).code).toBe(
+        "FHV_THROUGHPUT_PRODUCER_RUNDIR_MISMATCH",
       );
     }
   });

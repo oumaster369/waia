@@ -4,7 +4,7 @@ enforceServerOnly();
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
   assessFhvBoundedHotState,
@@ -41,6 +41,7 @@ import {
   assertFhvThroughputProducerBinding,
   assertProgressSeriesMatchesProducerBinding,
   type FhvThroughputProducerBindingV1,
+  type FhvThroughputProducerHostIdentityV1,
 } from "@/lib/trader/observability/fhv-throughput-producer-binding";
 import {
   assertCanonicalFhvThroughputSamplerContract,
@@ -61,7 +62,7 @@ export type FhvGrowthLawReportV2 = Readonly<{
   schemaVersion: typeof FHV_GROWTH_LAW_SCHEMA;
   capturedAtUtc: string;
   runDir: string;
-  runIdentity: Readonly<{ runDir: string }>;
+  runIdentity: Readonly<{ runDir: string; runId: string }>;
   checkout: Readonly<{
     headSha: string;
     trackedTreeClean: true;
@@ -71,6 +72,7 @@ export type FhvGrowthLawReportV2 = Readonly<{
     trackedTreeClean: true;
     runId: string;
     bindingDigest: string;
+    host: FhvThroughputProducerHostIdentityV1;
   }>;
   samplerContract: FhvThroughputQualifierSamplerContract;
   progressJsonlFilename: typeof FHV_FULL_HISTORICAL_PROGRESS_JSONL_FILENAME;
@@ -239,8 +241,8 @@ export function buildFhvGrowthLawReportV2(input: {
   const body: Omit<FhvGrowthLawReportV2, "reportDigest"> = {
     schemaVersion: FHV_GROWTH_LAW_SCHEMA,
     capturedAtUtc: input.capturedAtUtc ?? new Date().toISOString(),
-    runDir: input.runDir,
-    runIdentity: { runDir: input.runDir },
+    runDir: producerBinding.runDir,
+    runIdentity: { runDir: producerBinding.runDir, runId: producerBinding.runId },
     checkout: {
       headSha: checkout.headSha,
       trackedTreeClean: true,
@@ -250,6 +252,7 @@ export function buildFhvGrowthLawReportV2(input: {
       trackedTreeClean: true,
       runId: producerBinding.runId,
       bindingDigest: producerBinding.bindingDigest,
+      host: producerBinding.host,
     },
     samplerContract,
     progressJsonlFilename: FHV_FULL_HISTORICAL_PROGRESS_JSONL_FILENAME,
@@ -355,6 +358,30 @@ export function assertFhvGrowthLawReportV2(input: {
     throw new FhvGrowthLawReportError(
       "FHV_GROWTH_LAW_PRODUCER_BINDING_MISMATCH",
       "growth-law producer bindingDigest does not match execution-time sidecar",
+    );
+  }
+  if (!report.producer.runId?.trim() || report.producer.runId !== producerBinding.runId) {
+    throw new FhvGrowthLawReportError(
+      "FHV_GROWTH_LAW_PRODUCER_RUN_ID_MISMATCH",
+      `growth-law producer runId ${String(report.producer.runId)} != sidecar ${producerBinding.runId}`,
+    );
+  }
+  if (report.runIdentity?.runId !== producerBinding.runId) {
+    throw new FhvGrowthLawReportError(
+      "FHV_GROWTH_LAW_RUN_IDENTITY_MISMATCH",
+      `growth-law runIdentity.runId ${String(report.runIdentity?.runId)} != sidecar ${producerBinding.runId}`,
+    );
+  }
+  if (resolve(report.runDir) !== producerBinding.runDir) {
+    throw new FhvGrowthLawReportError(
+      "FHV_GROWTH_LAW_RUNDIR_MISMATCH",
+      `growth-law runDir ${report.runDir} != producer binding ${producerBinding.runDir}`,
+    );
+  }
+  if (JSON.stringify(report.producer.host) !== JSON.stringify(producerBinding.host)) {
+    throw new FhvGrowthLawReportError(
+      "FHV_GROWTH_LAW_PRODUCER_HOST_MISMATCH",
+      "growth-law producer host does not match execution-time sidecar",
     );
   }
   assertCanonicalFhvThroughputSamplerContract(report.samplerContract);

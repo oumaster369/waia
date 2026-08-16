@@ -4,7 +4,6 @@ enforceServerOnly();
 
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { arch, cpus, hostname, platform } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
@@ -18,6 +17,10 @@ import {
   FhvGrowthLawReportError,
 } from "@/lib/trader/observability/fhv-growth-law-report";
 import { assertFhvCleanTrackedHeadCheckout } from "@/lib/trader/observability/fhv-t4-release-checkout-identity";
+import {
+  assertFhvThroughputProducerHostMatches,
+  captureFhvThroughputProducerHostIdentity,
+} from "@/lib/trader/observability/fhv-throughput-producer-binding";
 import {
   FHV_THROUGHPUT_EVIDENCE_INVALID_CLASSIFICATION,
   FHV_THROUGHPUT_MIN_CPS,
@@ -84,6 +87,12 @@ export function qualifyFhvThroughputHost(input: {
     );
   }
 
+  const producerHost = report.producer.host;
+  assertFhvThroughputProducerHostMatches({
+    producer: producerHost,
+    current: captureFhvThroughputProducerHostIdentity(),
+  });
+
   const progressSamples = report.progressSamples;
   const checkpointSamples = report.checkpointSamples;
   const boundedness = report.boundedHotState.classification;
@@ -114,19 +123,12 @@ export function qualifyFhvThroughputHost(input: {
     classification = FHV_THROUGHPUT_NOT_QUALIFIED_CLASSIFICATION;
   }
 
-  const cpuModel = cpus()[0]?.model ?? "unknown";
   const body: Omit<FhvThroughputReceiptV2, "receiptDigest"> = {
     schemaVersion: FHV_THROUGHPUT_RECEIPT_SCHEMA,
     capturedAtUtc: new Date().toISOString(),
     releaseSha: checkout.headSha,
-    host: {
-      hostname: hostname(),
-      platform: platform(),
-      arch: arch(),
-      cpuModel,
-      cpuCount: cpus().length,
-      nodeVersion: process.version,
-    },
+    runId: report.producer.runId,
+    host: producerHost,
     contract: {
       minThroughputCps: FHV_THROUGHPUT_MIN_CPS,
       canonicalMaxRuntimeS: FHV_CANONICAL_MAX_RUNTIME_S,
@@ -142,6 +144,9 @@ export function qualifyFhvThroughputHost(input: {
       hotPathDecayVerdict: decayVerdict,
       growthAwareProjectionAvailable: projectionAvailable,
       growthAwareProjectedRuntimeS: Number(projectionSeconds.toFixed(1)),
+      runId: report.producer.runId,
+      runDir: report.runIdentity.runDir,
+      producerHost,
       progressBytesSha256: report.progressBytesSha256,
       growthLawReportDigest: report.reportDigest,
       checkoutHeadSha: checkout.headSha,

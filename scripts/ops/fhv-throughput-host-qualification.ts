@@ -7,6 +7,7 @@
 import { qualifyFhvThroughputHost } from "@/lib/trader/observability/fhv-throughput-qualification";
 import { FhvGrowthLawReportError } from "@/lib/trader/observability/fhv-growth-law-report";
 import { FhvT4CheckoutIdentityError } from "@/lib/trader/observability/fhv-t4-release-checkout-identity";
+import { FhvThroughputProducerBindingError } from "@/lib/trader/observability/fhv-throughput-producer-binding";
 import { FHV_THROUGHPUT_QUALIFIED_CLASSIFICATION } from "@/lib/trader/observability/fhv-throughput-receipt";
 
 function parseArgs(argv: readonly string[]): {
@@ -66,7 +67,9 @@ if (invokedDirectly) {
     main();
   } catch (error: unknown) {
     const code =
-      error instanceof FhvGrowthLawReportError || error instanceof FhvT4CheckoutIdentityError
+      error instanceof FhvGrowthLawReportError ||
+      error instanceof FhvT4CheckoutIdentityError ||
+      error instanceof FhvThroughputProducerBindingError
         ? error.code
         : error instanceof Error && "code" in error
           ? String((error as { code?: string }).code)

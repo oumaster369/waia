@@ -41,7 +41,26 @@ function samplerContract() {
   };
 }
 
+function producerHost(
+  overrides: Partial<
+    import("@/lib/trader/observability/fhv-throughput-producer-binding").FhvThroughputProducerHostIdentityV1
+  > = {},
+) {
+  return {
+    hostname: "target-host",
+    platform: "linux",
+    arch: "x64",
+    cpuModel: "test-cpu",
+    cpuCount: 32,
+    nodeVersion: "v22.23.0",
+    machineIdSha256: "d".repeat(64),
+    bootId: "11111111-1111-1111-1111-111111111111",
+    ...overrides,
+  };
+}
+
 function evidence(overrides: Record<string, unknown> = {}) {
+  const host = producerHost();
   return {
     representativeSegmentExecuted: true,
     progressSamples: 12,
@@ -51,6 +70,9 @@ function evidence(overrides: Record<string, unknown> = {}) {
     hotPathDecayVerdict: "FLAT",
     growthAwareProjectionAvailable: true,
     growthAwareProjectedRuntimeS: 6000.0,
+    runId: "fhv-qual-test-run",
+    runDir: "/tmp/fhv-run",
+    producerHost: host,
     progressBytesSha256: "a".repeat(64),
     growthLawReportDigest: "b".repeat(64),
     checkoutHeadSha: "release-sha-under-test",
@@ -63,11 +85,13 @@ function evidence(overrides: Record<string, unknown> = {}) {
 function writeReceipt(overrides: Record<string, unknown> = {}): string {
   const root = mkdtempSync(join(tmpdir(), "fhv-throughput-receipt-"));
   roots.push(root);
+  const host = producerHost();
   const body: Record<string, unknown> = {
     schemaVersion: FHV_THROUGHPUT_RECEIPT_SCHEMA,
     capturedAtUtc: new Date().toISOString(),
     releaseSha: "release-sha-under-test",
-    host: { hostname: "target-host", platform: "linux", arch: "x64", cpuModel: "test-cpu" },
+    runId: "fhv-qual-test-run",
+    host,
     contract: {
       minThroughputCps: 877,
       canonicalMaxRuntimeS: 7200,
@@ -169,7 +193,19 @@ describe("FHV throughput host-qualification receipt", () => {
           }),
         }),
       ),
-    ).toBe("FHV_THROUGHPUT_RECEIPT_HOST_IDENTITY_MISSING");
+    ).toBe("FHV_THROUGHPUT_PRODUCER_HOST_IDENTITY_MISSING");
+  });
+
+  it("fails closed when receipt host disagrees with execution-time producer host", () => {
+    expect(
+      codeOf(() =>
+        assertFhvThroughputHostQualified({
+          receiptPath: writeReceipt({
+            host: producerHost({ hostname: "other-host" }),
+          }),
+        }),
+      ),
+    ).toBe("FHV_THROUGHPUT_PRODUCER_HOST_MISMATCH");
   });
 
   it("fails closed on insufficient progress/checkpoint evidence", () => {
