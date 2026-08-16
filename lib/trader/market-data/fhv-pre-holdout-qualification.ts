@@ -1,22 +1,32 @@
-import { createHash } from "node:crypto";
-import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import type { Bar } from "@/lib/trader/intelligence/types";
-import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
 import { assertRealProviderAcquisitionEvidenceClass } from "@/lib/trader/market-data/fhv-acquisition-evidence-class";
 import { assertPathDoesNotAccessBlindHoldoutPayload } from "@/lib/trader/market-data/fhv-blind-holdout-firewall";
 import {
   fhvBarsV2RecordToBar,
   parseFhvBarsV2Line,
 } from "@/lib/trader/market-data/fhv-bars-v2-ndjson";
+import {
+  FhvCanonicalCoverageError,
+  officialSymbolToInstrument,
+  proveFhvDevelopmentCoverage,
+  proveFhvWalkForwardScientificSplit,
+  type FhvCoverageProofV1,
+} from "@/lib/trader/market-data/fhv-canonical-coverage";
 import { FHV_DATASET_PARTITIONS_V1 } from "@/lib/trader/market-data/dataset/fhv-dataset-manifest";
 import {
   readFhvAcquisitionReceiptV2,
   type FhvAcquisitionReceiptV2,
 } from "@/lib/trader/market-data/fhv-real-htx-acquisition";
-import type { FhvRevisionRiskSampleEvidenceV1 } from "@/lib/trader/market-data/fhv-revision-risk-evidence";
+import {
+  assertCompletePreregisteredRevisionRiskEvidence,
+  FhvRevisionRiskError,
+  type FhvRevisionRiskSampleEvidenceV1,
+} from "@/lib/trader/market-data/fhv-revision-risk-evidence";
+import { FHV_SCIENTIFIC_PARTITIONS_V1 } from "@/lib/trader/observability/fhv-partition-receipt";
 import {
   FHV_OFFICIAL_SYMBOLS,
   fhvOfficialPartitionFileRelativePath,
@@ -50,6 +60,7 @@ export type FhvPreHoldoutPartitionEvidenceV1 = Readonly<{
   rawSha256: string;
   semanticContentDigest: string;
   barCount: number;
+  expectedBarCount: number;
   firstBarOpen: string;
   lastBarClose: string;
   gapDuplicateIntegrity: "PASS";
@@ -58,10 +69,27 @@ export type FhvPreHoldoutPartitionEvidenceV1 = Readonly<{
   retryCount: number;
 }>;
 
+export type FhvScientificSubpartitionEvidenceV1 = Readonly<{
+  scientificPartition: "DEVELOPMENT" | "WF_PREDICTIVE" | "WF_ECONOMIC";
+  symbol: FhvOfficialSymbolCode;
+  startUtc: string;
+  endUtc: string;
+  barCount: number;
+  expectedBarCount: number;
+  firstBarOpen: string;
+  lastBarClose: string;
+  semanticContentDigest: string;
+  gapDuplicateIntegrity: "PASS";
+}>;
+
+export type FhvPreHoldoutQualificationClassification =
+  | "PRE_HOLDOUT_QUALIFICATION=PASS"
+  | "PRE_HOLDOUT_QUALIFICATION=HUMAN_DECISION_REQUIRED";
+
 export type FhvPreHoldoutQualificationReceiptV1 = Readonly<{
   schemaVersion: typeof FHV_PRE_HOLDOUT_QUALIFICATION_SCHEMA;
   qualificationMode: FhvPreHoldoutQualificationMode;
-  classification: "PRE_HOLDOUT_QUALIFICATION=PASS";
+  classification: FhvPreHoldoutQualificationClassification;
   releaseSha: string;
   organizationId: string;
   operatorId: string;
@@ -69,18 +97,23 @@ export type FhvPreHoldoutQualificationReceiptV1 = Readonly<{
   canonicalBoundaries: Readonly<{
     development: { startUtc: string; endUtc: string };
     walkForward: { startUtc: string; endUtc: string };
+    wfPredictive: { startUtc: string; endUtc: string };
+    wfEconomic: { startUtc: string; endUtc: string };
   }>;
   interval: "1m";
   symbols: readonly FhvOfficialSymbolCode[];
   acquisitionReceiptDigests: readonly string[];
   partitions: readonly FhvPreHoldoutPartitionEvidenceV1[];
+  scientificSubpartitions: readonly FhvScientificSubpartitionEvidenceV1[];
   developmentWalkForwardContentDigest: string;
+  walkForwardUnionCompatibilityDigest: string;
   holdout: Readonly<{
     canonicalBoundary: { startUtc: string; endUtc: string };
     status: typeof FHV_PRE_HOLDOUT_HOLDOUT_STATUS;
     sourceCapabilityEvidenceDigest: string;
   }>;
   revisionRiskEvidence: readonly FhvRevisionRiskSampleEvidenceV1[];
+  revisionRiskDisposition: "SAME" | "HUMAN_DECISION_REQUIRED";
   qualifiedAtUtc: string;
   qualificationReceiptDigest: string;
 }>;
@@ -89,65 +122,32 @@ function fail(code: string, message: string): never {
   throw new FhvPreHoldoutQualificationError(code, message);
 }
 
-function scanV2File(filePath: string): {
-  rawSha256: string;
-  barCount: number;
-  firstBarOpen: string;
-  lastBarClose: string;
-  semanticContentDigest: string;
-} {
-  assertPathDoesNotAccessBlindHoldoutPayload(filePath);
-  const hash = createHash("sha256");
-  const fd = openSync(filePath, "r");
-  const digests: string[] = [];
-  let remainder = "";
-  const buffer = Buffer.alloc(65536);
-  let barCount = 0;
-  let firstBarOpen = "";
-  let lastBarClose = "";
-  let lineNumber = 0;
-  try {
-    while (true) {
-      const bytesRead = readSync(fd, buffer, 0, buffer.length, null);
-      if (bytesRead > 0) {
-        hash.update(buffer.subarray(0, bytesRead));
-        remainder += buffer.subarray(0, bytesRead).toString("utf8");
-      }
-      const parts = remainder.split("\n");
-      remainder = bytesRead > 0 ? (parts.pop() ?? "") : "";
-      const lines = bytesRead > 0 ? parts : [...parts, remainder].filter((line) => line.length > 0);
-      if (bytesRead <= 0 && remainder.length > 0) {
-        lines.push(remainder);
-        remainder = "";
-      }
-      for (const line of lines) {
-        if (line.length === 0) {
-          continue;
-        }
-        lineNumber += 1;
-        const record = parseFhvBarsV2Line(line, lineNumber);
-        const bar = fhvBarsV2RecordToBar(record);
-        if (barCount === 0) {
-          firstBarOpen = bar.barOpenTime;
-        }
-        lastBarClose = bar.barCloseTime;
-        digests.push(computeBarContentDigest(bar));
-        barCount += 1;
-      }
-      if (bytesRead <= 0) {
-        break;
-      }
-    }
-  } finally {
-    closeSync(fd);
+function rethrowCoverage(error: unknown): never {
+  if (error instanceof FhvCanonicalCoverageError) {
+    fail(error.code, error.message);
   }
-  void statSync(filePath);
+  if (error instanceof FhvRevisionRiskError) {
+    fail(error.code, error.message);
+  }
+  throw error;
+}
+
+function coverageToScientific(input: {
+  scientificPartition: FhvScientificSubpartitionEvidenceV1["scientificPartition"];
+  symbol: FhvOfficialSymbolCode;
+  proof: FhvCoverageProofV1;
+}): FhvScientificSubpartitionEvidenceV1 {
   return {
-    rawSha256: hash.digest("hex"),
-    barCount,
-    firstBarOpen,
-    lastBarClose,
-    semanticContentDigest: computeStableJsonDigest(digests),
+    scientificPartition: input.scientificPartition,
+    symbol: input.symbol,
+    startUtc: input.proof.expectedStartUtc,
+    endUtc: input.proof.expectedEndUtc,
+    barCount: input.proof.barCount,
+    expectedBarCount: input.proof.expectedBarCount,
+    firstBarOpen: input.proof.firstBarOpen,
+    lastBarClose: input.proof.lastBarClose,
+    semanticContentDigest: input.proof.semanticContentDigest,
+    gapDuplicateIntegrity: "PASS",
   };
 }
 
@@ -205,6 +205,7 @@ export function qualifyFhvPreHoldoutRealData(input: {
   );
   const seen = new Set<string>();
   const partitions: FhvPreHoldoutPartitionEvidenceV1[] = [];
+  const scientificSubpartitions: FhvScientificSubpartitionEvidenceV1[] = [];
   const receiptDigests: string[] = [];
 
   for (const receiptPath of input.acquisitionReceiptPaths) {
@@ -239,12 +240,55 @@ export function qualifyFhvPreHoldoutRealData(input: {
     if (!existsSync(filePath)) {
       fail("PARTITION_FILE_MISSING", `missing ${relativePath}`);
     }
-    const scanned = scanV2File(filePath);
-    if (scanned.rawSha256 !== receipt.rawSha256) {
+    const instrument = officialSymbolToInstrument(receipt.symbol);
+    let proof: FhvCoverageProofV1;
+    try {
+      if (partition === "development") {
+        proof = proveFhvDevelopmentCoverage({
+          filePath,
+          expectedSymbol: instrument,
+        });
+        scientificSubpartitions.push(
+          coverageToScientific({
+            scientificPartition: "DEVELOPMENT",
+            symbol: receipt.symbol,
+            proof,
+          }),
+        );
+      } else {
+        const split = proveFhvWalkForwardScientificSplit({
+          filePath,
+          expectedSymbol: instrument,
+        });
+        proof = split.union;
+        scientificSubpartitions.push(
+          coverageToScientific({
+            scientificPartition: "WF_PREDICTIVE",
+            symbol: receipt.symbol,
+            proof: split.wfPredictive,
+          }),
+          coverageToScientific({
+            scientificPartition: "WF_ECONOMIC",
+            symbol: receipt.symbol,
+            proof: split.wfEconomic,
+          }),
+        );
+      }
+    } catch (error) {
+      rethrowCoverage(error);
+    }
+    if (proof.rawSha256 !== receipt.rawSha256) {
       fail("ACQUISITION_OUTPUT_MUTATION", `raw digest mismatch for ${key}`);
     }
-    if (scanned.semanticContentDigest !== receipt.semanticContentDigest) {
+    if (proof.semanticContentDigest !== receipt.semanticContentDigest) {
       fail("ACQUISITION_OUTPUT_MUTATION", `semantic digest mismatch for ${key}`);
+    }
+    if (
+      proof.firstBarOpen !== receipt.firstBarOpen ||
+      proof.lastBarClose !== receipt.lastBarClose ||
+      proof.barCount !== receipt.actualBarCount
+    ) {
+      fail("ACQUISITION_OUTPUT_MUTATION", `first/last/count mismatch for ${key}`);
     }
     receiptDigests.push(receipt.acquisitionReceiptDigest);
     partitions.push({
@@ -253,9 +297,10 @@ export function qualifyFhvPreHoldoutRealData(input: {
       acquisitionReceiptDigest: receipt.acquisitionReceiptDigest,
       rawSha256: receipt.rawSha256,
       semanticContentDigest: receipt.semanticContentDigest,
-      barCount: scanned.barCount,
-      firstBarOpen: scanned.firstBarOpen,
-      lastBarClose: scanned.lastBarClose,
+      barCount: proof.barCount,
+      expectedBarCount: proof.expectedBarCount,
+      firstBarOpen: proof.firstBarOpen,
+      lastBarClose: proof.lastBarClose,
       gapDuplicateIntegrity: "PASS",
       normalizationIdentity: receipt.normalizationIdentity,
       pageCount: receipt.pageCount,
@@ -270,6 +315,21 @@ export function qualifyFhvPreHoldoutRealData(input: {
   partitions.sort((left, right) =>
     `${left.partition}:${left.symbol}`.localeCompare(`${right.partition}:${right.symbol}`),
   );
+  scientificSubpartitions.sort((left, right) =>
+    `${left.scientificPartition}:${left.symbol}`.localeCompare(
+      `${right.scientificPartition}:${right.symbol}`,
+    ),
+  );
+
+  let revisionRiskDisposition: "SAME" | "HUMAN_DECISION_REQUIRED";
+  try {
+    revisionRiskDisposition = assertCompletePreregisteredRevisionRiskEvidence({
+      datasetRoot: input.datasetRoot,
+      evidence: input.revisionRiskEvidence,
+    });
+  } catch (error) {
+    rethrowCoverage(error);
+  }
 
   const developmentWalkForwardContentDigest = computeStableJsonDigest(
     partitions.map((entry) => ({
@@ -278,11 +338,24 @@ export function qualifyFhvPreHoldoutRealData(input: {
       semanticContentDigest: entry.semanticContentDigest,
     })),
   );
+  const walkForwardUnionCompatibilityDigest = computeStableJsonDigest(
+    partitions
+      .filter((entry) => entry.partition === "walk-forward")
+      .map((entry) => ({
+        partition: entry.partition,
+        symbol: entry.symbol,
+        semanticContentDigest: entry.semanticContentDigest,
+      })),
+  );
+  const classification: FhvPreHoldoutQualificationClassification =
+    revisionRiskDisposition === "HUMAN_DECISION_REQUIRED"
+      ? "PRE_HOLDOUT_QUALIFICATION=HUMAN_DECISION_REQUIRED"
+      : "PRE_HOLDOUT_QUALIFICATION=PASS";
 
   const body = {
     schemaVersion: FHV_PRE_HOLDOUT_QUALIFICATION_SCHEMA,
     qualificationMode: FHV_PRE_HOLDOUT_QUALIFICATION_MODE,
-    classification: "PRE_HOLDOUT_QUALIFICATION=PASS" as const,
+    classification,
     releaseSha,
     organizationId: input.organizationId,
     operatorId: input.operatorId,
@@ -290,12 +363,22 @@ export function qualifyFhvPreHoldoutRealData(input: {
     canonicalBoundaries: {
       development: FHV_DATASET_PARTITIONS_V1.development,
       walkForward: FHV_DATASET_PARTITIONS_V1.walkForward,
+      wfPredictive: {
+        startUtc: FHV_SCIENTIFIC_PARTITIONS_V1.WF_PREDICTIVE.startUtc,
+        endUtc: FHV_SCIENTIFIC_PARTITIONS_V1.WF_PREDICTIVE.endUtc,
+      },
+      wfEconomic: {
+        startUtc: FHV_SCIENTIFIC_PARTITIONS_V1.WF_ECONOMIC.startUtc,
+        endUtc: FHV_SCIENTIFIC_PARTITIONS_V1.WF_ECONOMIC.endUtc,
+      },
     },
     interval: "1m" as const,
     symbols: FHV_OFFICIAL_SYMBOLS,
     acquisitionReceiptDigests: receiptDigests,
     partitions,
+    scientificSubpartitions,
     developmentWalkForwardContentDigest,
+    walkForwardUnionCompatibilityDigest,
     holdout: {
       canonicalBoundary: {
         startUtc: FHV_DATASET_PARTITIONS_V1.blindHoldout.startUtc,
@@ -305,6 +388,7 @@ export function qualifyFhvPreHoldoutRealData(input: {
       sourceCapabilityEvidenceDigest: input.sourceCapabilityEvidenceDigest,
     },
     revisionRiskEvidence: input.revisionRiskEvidence,
+    revisionRiskDisposition,
     qualifiedAtUtc: input.qualifiedAtUtc ?? new Date().toISOString(),
   };
   return {
@@ -349,6 +433,17 @@ export function readFhvPreHoldoutQualificationReceipt(
   return parsed;
 }
 
+export function assertFhvPreHoldoutQualificationPass(
+  receipt: FhvPreHoldoutQualificationReceiptV1,
+): void {
+  if (receipt.classification !== "PRE_HOLDOUT_QUALIFICATION=PASS") {
+    fail(
+      "QUALIFICATION_NOT_PASS",
+      `pre-holdout qualification is ${receipt.classification}; official gates require PASS`,
+    );
+  }
+}
+
 export function assertFhvPreHoldoutFilesMatchReceipt(input: {
   datasetRoot: string;
   receipt: FhvPreHoldoutQualificationReceiptV1;
@@ -364,7 +459,16 @@ export function assertFhvPreHoldoutFilesMatchReceipt(input: {
     if (!existsSync(filePath)) {
       fail("PARTITION_FILE_MISSING", `missing ${relativePath}`);
     }
-    const scanned = scanV2File(filePath);
+    const scanned =
+      entry.partition === "development"
+        ? proveFhvDevelopmentCoverage({
+            filePath,
+            expectedSymbol: officialSymbolToInstrument(entry.symbol),
+          })
+        : proveFhvWalkForwardScientificSplit({
+            filePath,
+            expectedSymbol: officialSymbolToInstrument(entry.symbol),
+          }).union;
     if (
       scanned.rawSha256 !== entry.rawSha256 ||
       scanned.semanticContentDigest !== entry.semanticContentDigest

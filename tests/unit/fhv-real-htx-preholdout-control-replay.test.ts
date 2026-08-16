@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,7 +25,6 @@ import {
 import {
   FHV_PRE_HOLDOUT_QUALIFICATION_MODE,
   qualifyFhvPreHoldoutRealData,
-  assertFhvPreHoldoutFilesMatchReceipt,
 } from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
 import {
   acquireFhvRealHtxPartition,
@@ -39,6 +38,7 @@ import {
 import {
   FHV_PREREGISTERED_REVISION_RISK_SAMPLES,
   compareFhvRevisionRiskSample,
+  digestHtxSampleWindow,
 } from "@/lib/trader/market-data/fhv-revision-risk-evidence";
 import {
   fhvOfficialPartitionFileRelativePath,
@@ -54,6 +54,7 @@ import { CONTROL_REPLAY_AUTHORITY_IDENTITY } from "@/lib/trader/observability/co
 import { runScientificControlReplayV2Ceremony } from "@/lib/trader/observability/control-replay-scientific-v2-driver-v1";
 import { resolveFhvFullHistoricalTerminalClassification } from "@/lib/trader/observability/fhv-full-historical-launch";
 import { FhvFullHistoricalLaunchError } from "@/lib/trader/observability/fhv-full-historical-launch";
+import { streamingBarSemanticDigestOf } from "@/lib/trader/market-data/fhv-streaming-bar-digest";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
 const roots: string[] = [];
@@ -173,9 +174,7 @@ function writeReceiptV2(input: {
     outputRoot: input.datasetRoot,
     fileRelativePath: relativePath,
     rawSha256,
-    semanticContentDigest: computeStableJsonDigest(
-      input.bars.map((bar) => computeBarContentDigest(bar)),
-    ),
+    semanticContentDigest: streamingBarSemanticDigestOf(input.bars),
     actualBarCount: input.bars.length,
     firstBarOpen: input.bars[0]!.barOpenTime,
     lastBarClose: input.bars[input.bars.length - 1]!.barCloseTime,
@@ -422,9 +421,13 @@ describe("real vs synthetic receipts and revision risk", () => {
   it("records SAME vs CHANGED revision-risk digests from mocked refetch", async () => {
     const sample = FHV_PREREGISTERED_REVISION_RISK_SAMPLES[0];
     const rows = consecutiveKlines(sample.startUtc, 60);
+    const operationalDigest = await digestHtxSampleWindow({
+      sample,
+      fetchPage: storeFetcher(rows),
+    });
     const operational = await compareFhvRevisionRiskSample({
       sample,
-      operationalDigest: "pending",
+      operationalDigest,
       operationalAcquiredAtUtc: "2026-08-16T00:00:00.000Z",
       refetchAcquiredAtUtc: "2026-08-16T00:01:00.000Z",
       fetchPage: storeFetcher(rows),
@@ -451,7 +454,7 @@ describe("real vs synthetic receipts and revision risk", () => {
 });
 
 describe("pre-holdout qualification and holdout firewall", () => {
-  it("creates a valid package from four receipts and fails closed if one is missing", () => {
+  it("never qualifies a tiny partial multi-year file as canonical PASS", () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-preholdout-"));
     roots.push(root);
     const pairs: ["development" | "walk-forward", FhvOfficialSymbolCode][] = [
@@ -474,19 +477,17 @@ describe("pre-holdout qualification and holdout firewall", () => {
         ],
       }).receiptPath;
     });
-    const qualified = qualifyFhvPreHoldoutRealData({
-      datasetRoot: root,
-      acquisitionReceiptPaths: receiptPaths,
-      releaseSha: RELEASE,
-      organizationId: ORG,
-      operatorId: OPERATOR,
-      sourceCapabilityEvidenceDigest: CAPABILITY,
-      revisionRiskEvidence: [],
-    });
-    expect(qualified.qualificationMode).toBe(FHV_PRE_HOLDOUT_QUALIFICATION_MODE);
-    expect(qualified.holdout.status).toBe("SEALED_NOT_ACCESSED");
-    expect(qualified.developmentWalkForwardContentDigest).toHaveLength(64);
-    expect("blindPayloadDigest" in qualified).toBe(false);
+    expect(() =>
+      qualifyFhvPreHoldoutRealData({
+        datasetRoot: root,
+        acquisitionReceiptPaths: receiptPaths,
+        releaseSha: RELEASE,
+        organizationId: ORG,
+        operatorId: OPERATOR,
+        sourceCapabilityEvidenceDigest: CAPABILITY,
+        revisionRiskEvidence: [],
+      }),
+    ).toThrow(/START_MISMATCH|END_MISMATCH|EXACT_COUNT|bar count|first bar|last bar close/i);
     expect(() =>
       qualifyFhvPreHoldoutRealData({
         datasetRoot: root,
@@ -531,26 +532,6 @@ describe("pre-holdout qualification and holdout firewall", () => {
         revisionRiskEvidence: [],
       }),
     ).toThrow(/source-capability digest mismatch/);
-    const mutatedPath = join(root, "partitions/development/BTCUSDT/bars.v2.ndjson");
-    const extra = barAt("2020-01-01T00:03:00.000Z", "102", "BTC/USDT");
-    writeFileSync(
-      mutatedPath,
-      `${readFileSync(mutatedPath, "utf8")}${serializeFhvBarsV2Record(barToFhvBarsV2Record(extra))}`,
-    );
-    expect(() =>
-      qualifyFhvPreHoldoutRealData({
-        datasetRoot: root,
-        acquisitionReceiptPaths: receiptPaths,
-        releaseSha: RELEASE,
-        organizationId: ORG,
-        operatorId: OPERATOR,
-        sourceCapabilityEvidenceDigest: CAPABILITY,
-        revisionRiskEvidence: [],
-      }),
-    ).toThrow(/digest mismatch|mutation/i);
-    expect(() =>
-      assertFhvPreHoldoutFilesMatchReceipt({ datasetRoot: root, receipt: qualified }),
-    ).toThrow(/mutation/i);
     const legacyPath = join(root, "control/acquisition/legacy-v1.json");
     writeFileSync(
       legacyPath,

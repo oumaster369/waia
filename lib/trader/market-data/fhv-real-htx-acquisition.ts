@@ -6,9 +6,6 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
-  statSync,
-  truncateSync,
-  writeSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -28,9 +25,20 @@ import {
 import { assertPathDoesNotAccessBlindHoldoutPayload } from "@/lib/trader/market-data/fhv-blind-holdout-firewall";
 import {
   barToFhvBarsV2Record,
+  fhvBarsV2RecordToBar,
+  parseFhvBarsV2Line,
   serializeFhvBarsV2Record,
 } from "@/lib/trader/market-data/fhv-bars-v2-ndjson";
-import { computeFhvFileRawSha256 } from "@/lib/trader/market-data/fhv-dataset-seal";
+import {
+  FhvCanonicalCoverageError,
+  proveFhvNdjsonIntervalCoverage,
+} from "@/lib/trader/market-data/fhv-canonical-coverage";
+import {
+  committedByteLengthOf,
+  FhvNdjsonBoundedIoError,
+  readLastNdjsonRecordAtByteLength,
+  truncateFileToCommittedByteLength,
+} from "@/lib/trader/market-data/fhv-ndjson-bounded-io";
 import { mapHtxKlinesToBars } from "@/lib/trader/market-data/htx-kline-mapper";
 import {
   fhvOfficialPartitionFileRelativePath,
@@ -42,7 +50,7 @@ import {
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import type { Bar } from "@/lib/trader/intelligence/types";
 
-export const FHV_REAL_HTX_ACQUISITION_CURSOR_SCHEMA = "fhv-real-htx-acquisition-cursor/v1" as const;
+export const FHV_REAL_HTX_ACQUISITION_CURSOR_SCHEMA = "fhv-real-htx-acquisition-cursor/v2" as const;
 export const FHV_REAL_BLIND_HOLDOUT_ACQUISITION_NOT_AUTHORIZED =
   "FHV_REAL_BLIND_HOLDOUT_ACQUISITION_NOT_AUTHORIZED" as const;
 export const FHV_REAL_HTX_PROVIDER_IDENTITY = "HTX" as const;
@@ -84,6 +92,7 @@ export type FhvRealHtxAcquisitionCursorV1 = Readonly<{
   pageCount: number;
   retryCount: number;
   committedBarCount: number;
+  committedByteLength: number;
   status: "IN_PROGRESS" | "COMPLETED" | "BLOCKED";
   blockedReason?: string;
 }>;
@@ -170,7 +179,17 @@ function readCursor(path: string): FhvRealHtxAcquisitionCursorV1 | null {
   if (!existsSync(path)) {
     return null;
   }
-  return JSON.parse(readFileSync(path, "utf8")) as FhvRealHtxAcquisitionCursorV1;
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as FhvRealHtxAcquisitionCursorV1;
+  if (parsed.schemaVersion !== FHV_REAL_HTX_ACQUISITION_CURSOR_SCHEMA) {
+    blocked(
+      "CURSOR_SCHEMA_UNSUPPORTED",
+      `resume requires ${FHV_REAL_HTX_ACQUISITION_CURSOR_SCHEMA}`,
+    );
+  }
+  if (typeof parsed.committedByteLength !== "number") {
+    blocked("CURSOR_SCHEMA_UNSUPPORTED", "resume cursor missing committedByteLength");
+  }
+  return parsed;
 }
 
 function fsyncFile(path: string): void {
@@ -182,42 +201,46 @@ function fsyncFile(path: string): void {
   }
 }
 
-function lastNdjsonLine(filePath: string): string | null {
-  if (!existsSync(filePath) || statSync(filePath).size === 0) {
-    return null;
+function lastNdjsonLineAtCursor(filePath: string, committedByteLength: number): string | null {
+  try {
+    return readLastNdjsonRecordAtByteLength(filePath, committedByteLength);
+  } catch (error) {
+    if (error instanceof FhvNdjsonBoundedIoError) {
+      blocked(error.code, error.message);
+    }
+    throw error;
   }
-  const raw = readFileSync(filePath, "utf8");
-  const lines = raw.split("\n").filter((line) => line.length > 0);
-  return lines[lines.length - 1] ?? null;
 }
 
-function truncateToCommittedBarCount(filePath: string, committedBarCount: number): void {
-  if (!existsSync(filePath) || committedBarCount === 0) {
-    if (existsSync(filePath) && committedBarCount === 0) {
-      truncateSync(filePath, 0);
+function restoreCommittedTail(filePath: string, cursor: FhvRealHtxAcquisitionCursorV1): void {
+  try {
+    truncateFileToCommittedByteLength(filePath, cursor.committedByteLength);
+  } catch (error) {
+    if (error instanceof FhvNdjsonBoundedIoError) {
+      blocked(error.code, error.message);
+    }
+    throw error;
+  }
+  if (cursor.committedBarCount === 0) {
+    if (cursor.committedByteLength !== 0) {
+      blocked("CURSOR_FILE_DIVERGENCE", "zero bars but non-zero committed byte length");
     }
     return;
   }
-  const raw = readFileSync(filePath, "utf8");
-  const lines = raw.split("\n").filter((line) => line.length > 0);
-  if (lines.length < committedBarCount) {
+  const lastLine = lastNdjsonLineAtCursor(filePath, cursor.committedByteLength);
+  if (!lastLine) {
+    blocked("CURSOR_FILE_DIVERGENCE", "committed tail is empty");
+  }
+  const bar = fhvBarsV2RecordToBar(parseFhvBarsV2Line(lastLine, cursor.committedBarCount));
+  const digest = computeBarContentDigest(bar);
+  if (bar.barOpenTime !== cursor.lastCommittedBarOpenTime) {
     blocked(
-      "CURSOR_FILE_DIVERGENCE",
-      `bars file has ${lines.length} lines but cursor committed ${committedBarCount}`,
+      "RESUME_TAIL_MISMATCH",
+      `durable tail open ${bar.barOpenTime} != cursor ${String(cursor.lastCommittedBarOpenTime)}`,
     );
   }
-  const kept = `${lines.slice(0, committedBarCount).join("\n")}\n`;
-  const fd = openSync(filePath, "w");
-  try {
-    const payload = Buffer.from(kept, "utf8");
-    let offset = 0;
-    while (offset < payload.length) {
-      const written = writeSync(fd, payload, offset, payload.length - offset);
-      offset += written;
-    }
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
+  if (digest !== cursor.lastCommittedBarContentDigest) {
+    blocked("RESUME_TAIL_MISMATCH", "durable tail content digest does not match cursor");
   }
 }
 
@@ -252,7 +275,8 @@ function mapAndFilterPage(input: {
   startMs: number;
   endMs: number;
 }): Bar[] {
-  const mapped = mapHtxKlinesToBars(input.instrument, input.rows, "1m");
+  const chronological = [...input.rows].sort((left, right) => left.id - right.id);
+  const mapped = mapHtxKlinesToBars(input.instrument, chronological, "1m");
   return mapped.filter((bar) => {
     const openMs = Date.parse(bar.barOpenTime);
     if (!Number.isFinite(openMs)) {
@@ -355,6 +379,7 @@ export async function acquireFhvRealHtxPartition(input: {
       pageCount: 0,
       retryCount: 0,
       committedBarCount: 0,
+      committedByteLength: 0,
       status: "IN_PROGRESS",
     };
     if (!existsSync(absolutePath)) {
@@ -362,7 +387,13 @@ export async function acquireFhvRealHtxPartition(input: {
     }
     writeCursorAtomic(cursorPath, cursor);
   } else {
-    truncateToCommittedBarCount(absolutePath, cursor.committedBarCount);
+    if (cursor.schemaVersion !== FHV_REAL_HTX_ACQUISITION_CURSOR_SCHEMA) {
+      blocked(
+        "CURSOR_SCHEMA_UNSUPPORTED",
+        `resume requires ${FHV_REAL_HTX_ACQUISITION_CURSOR_SCHEMA}`,
+      );
+    }
+    restoreCommittedTail(absolutePath, cursor);
   }
 
   const pageSize = Math.min(
@@ -371,10 +402,6 @@ export async function acquireFhvRealHtxPartition(input: {
   );
   let lastOpenMs =
     cursor.lastCommittedBarOpenTime != null ? Date.parse(cursor.lastCommittedBarOpenTime) : null;
-  const seenContentByOpen = new Map<string, string>();
-  if (cursor.lastCommittedBarOpenTime && cursor.lastCommittedBarContentDigest) {
-    seenContentByOpen.set(cursor.lastCommittedBarOpenTime, cursor.lastCommittedBarContentDigest);
-  }
 
   while (cursor.nextProviderTimestampSeconds < endSeconds) {
     if (input.interruptAfterPages != null && cursor.pageCount >= input.interruptAfterPages) {
@@ -448,23 +475,21 @@ export async function acquireFhvRealHtxPartition(input: {
         blocked("UTC_OPEN_CLOSE", "bar close must be open+60s");
       }
       const digest = computeBarContentDigest(bar);
-      const prior = seenContentByOpen.get(bar.barOpenTime);
-      if (prior) {
-        if (prior !== digest) {
-          blocked("CONFLICTING_DUPLICATE", `conflicting payload at ${bar.barOpenTime}`);
-        }
-        continue;
-      }
       if (lastOpenMs != null) {
         const delta = openMs - lastOpenMs;
-        if (delta <= 0) {
+        if (delta === 0) {
+          if (digest === cursor.lastCommittedBarContentDigest) {
+            continue;
+          }
+          blocked("CONFLICTING_DUPLICATE", `conflicting payload at ${bar.barOpenTime}`);
+        }
+        if (delta < 0) {
           blocked("NON_MONOTONIC_BARS", `bar open ${bar.barOpenTime} is not after last committed`);
         }
         if (delta !== ONE_MINUTE_MS) {
           blocked("GAP", `1m gap at ${bar.barOpenTime} (deltaMs=${delta})`);
         }
       }
-      seenContentByOpen.set(bar.barOpenTime, digest);
       committedLines.push(serializeFhvBarsV2Record(barToFhvBarsV2Record(bar)));
       lastOpenMs = openMs;
       cursor = {
@@ -478,6 +503,10 @@ export async function acquireFhvRealHtxPartition(input: {
     if (committedLines.length > 0) {
       appendFileSync(absolutePath, committedLines.join(""), "utf8");
       fsyncFile(absolutePath);
+      cursor = {
+        ...cursor,
+        committedByteLength: committedByteLengthOf(absolutePath),
+      };
     }
 
     const nextFrom = maxId + ONE_MINUTE_SECONDS;
@@ -502,25 +531,30 @@ export async function acquireFhvRealHtxPartition(input: {
     blocked("EMPTY_OUTPUT", "no bars committed for the requested interval");
   }
 
-  const lastLine = lastNdjsonLine(absolutePath);
-  if (!lastLine) {
-    blocked("EMPTY_OUTPUT", "bars file has no committed lines");
+  let coverage;
+  try {
+    coverage = proveFhvNdjsonIntervalCoverage({
+      filePath: absolutePath,
+      expectedStartUtc: interval.startUtc,
+      expectedEndUtc: interval.endUtc,
+      expectedSymbol: instrument,
+    });
+  } catch (error) {
+    if (error instanceof FhvCanonicalCoverageError) {
+      blocked(error.code, error.message);
+    }
+    throw error;
   }
-  const rawSha256 = computeFhvFileRawSha256(absolutePath);
-  const semanticHasherLines = readFileSync(absolutePath, "utf8")
-    .split("\n")
-    .filter((line) => line.length > 0);
-  const firstRecord = JSON.parse(semanticHasherLines[0]!) as {
-    barOpenTime: string;
-    barCloseTime: string;
-  };
-  const lastRecord = JSON.parse(semanticHasherLines[semanticHasherLines.length - 1]!) as {
-    barOpenTime: string;
-    barCloseTime: string;
-  };
-  const semanticContentDigest = computeStableJsonDigest(
-    semanticHasherLines.map((line) => computeBarContentDigest(JSON.parse(line) as Bar)),
-  );
+  if (coverage.barCount !== cursor.committedBarCount) {
+    blocked(
+      "EXACT_COUNT_MISMATCH",
+      `cursor committed ${cursor.committedBarCount} but file proved ${coverage.barCount}`,
+    );
+  }
+  const rawSha256 = coverage.rawSha256;
+  if (!rawSha256) {
+    blocked("EMPTY_OUTPUT", "raw digest missing after coverage proof");
+  }
 
   const body = {
     schemaVersion: FHV_ACQUISITION_RECEIPT_SCHEMA_V2,
@@ -538,10 +572,10 @@ export async function acquireFhvRealHtxPartition(input: {
     outputRoot: input.datasetRoot,
     fileRelativePath: relativePath,
     rawSha256,
-    semanticContentDigest,
-    actualBarCount: cursor.committedBarCount,
-    firstBarOpen: firstRecord.barOpenTime,
-    lastBarClose: lastRecord.barCloseTime,
+    semanticContentDigest: coverage.semanticContentDigest,
+    actualBarCount: coverage.barCount,
+    firstBarOpen: coverage.firstBarOpen,
+    lastBarClose: coverage.lastBarClose,
     gapDuplicateIntegrity: "PASS" as const,
     normalizationIdentity: FHV_REAL_HTX_NORMALIZATION_IDENTITY,
     pageCount: cursor.pageCount,

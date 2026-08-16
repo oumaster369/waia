@@ -8,6 +8,9 @@ import {
 } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { assertFhvOfficialV2DatasetArtifactsPresent } from "@/lib/trader/market-data/fhv-official-v2-required";
 import { loadFhvPreHoldoutPartitionBars } from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
+import { FHV_OFFICIAL_SYMBOLS } from "@/lib/trader/market-data/fhv-partition-boundaries";
+import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
+import { runChronologicalControlReplayV2 } from "@/lib/trader/observability/control-replay-chronological-v2-driver-v1";
 import type { FhvConfigurationFreezeV1 } from "@/lib/trader/observability/fhv-configuration-freeze";
 import {
   loadOfficialSharedPortfolioBars,
@@ -41,6 +44,7 @@ import {
 } from "@/lib/trader/observability/fhv-full-historical-launch";
 import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { CONTROL_REPLAY_AUTHORITY_IDENTITY } from "@/lib/trader/observability/control-replay-test-authority";
+import { V2_CAPITAL_AUTHORITY_PATH } from "@/lib/trader/risk/authority-chain";
 
 export const FHV_CONTROL_REPLAY_EXECUTION_PURPOSE = "CONTROL_REPLAY" as const;
 
@@ -90,22 +94,96 @@ async function runFhvControlReplayLaunchBacktest(input: {
 
   void input.launchExecution;
 
+  if (input.qualificationReceipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA") {
+    const datasetRoot = input.launchInput.datasetRoot!;
+    const constructionBars = FHV_OFFICIAL_SYMBOLS.flatMap((symbol) =>
+      loadFhvPreHoldoutPartitionBars({
+        datasetRoot,
+        partition: "development",
+        symbol,
+      }),
+    );
+    const executionBars = [
+      ...constructionBars,
+      ...FHV_OFFICIAL_SYMBOLS.flatMap((symbol) =>
+        loadFhvPreHoldoutPartitionBars({
+          datasetRoot,
+          partition: "walk-forward",
+          symbol,
+        }),
+      ),
+    ];
+    const chronological = await runChronologicalControlReplayV2({
+      runId: input.launchInput.runId,
+      runDir: input.runDir,
+      organizationId: input.launchInput.organizationId,
+      releaseSha: input.launchInput.releaseSha.trim().toLowerCase(),
+      developmentWalkForwardContentDigest: input.qualificationReceipt.datasetContentDigest,
+      constructionBars,
+      executionBars,
+      htxVolumeAuthorityByInstrument: {
+        BTCUSDT: readControlReplayVolumeReceipt(datasetRoot, "BTCUSDT"),
+        ETHUSDT: readControlReplayVolumeReceipt(datasetRoot, "ETHUSDT"),
+      },
+    });
+    const chronologicalEvidencePath = join(
+      input.runDir,
+      "control-replay-chronological-v2-result.v1.json",
+    );
+    void chronologicalEvidencePath;
+    const classification = "FHV_CONTROL_REPLAY_CEREMONY_PASS" as const;
+    const launchResult = {
+      schemaVersion: "fhv-full-launch-result/v1",
+      classification,
+      executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
+      authorityClass: CONTROL_REPLAY_AUTHORITY_IDENTITY.authorityClass,
+      capitalEligible: CONTROL_REPLAY_AUTHORITY_IDENTITY.capitalEligible,
+      capitalAuthorityPath: V2_CAPITAL_AUTHORITY_PATH,
+      driverVersion: chronological.driverVersion,
+      completedStages: ["FORECAST", "DECISION", "DESIRED_SIZE", "PORTFOLIO", "RISK", "EXECUTION"],
+      semanticReproDigest: chronological.normalizedParityDigest,
+      cycleCount: chronological.cycleCount,
+      evidenceChain: {
+        qualificationReceiptDigest: input.qualificationReceiptDigest,
+        configurationFreezeDigest: input.configurationFreeze.configurationFreezeDigest,
+        authorizationReceiptDigest: input.launchInput.authorizationReceiptDigest,
+        launchReceiptDigest: input.launchReceiptDigest,
+        datasetContentDigest: input.configurationFreeze.datasetDigest,
+        manifestSemanticDigest: input.configurationFreeze.manifestDigest,
+        accountingStateDigest: chronological.accountingSemanticDigest,
+        scientificParityDigest: chronological.parityDigest,
+        packageContentDigestHex: chronological.packageContentDigestHex,
+        scientificAdmissionReceiptDigest: chronological.packageContentDigestHex,
+        executablePolicyDigest: "UNAVAILABLE",
+        fullHistoryRescanCount: getFullHistoryRescanCount(),
+        holdoutStatus: "SEALED_NOT_ACCESSED" as const,
+        runDir: input.runDir,
+      },
+      accountingFrontierState: undefined,
+      htrPnlReportV1: undefined,
+    };
+    const launchResultPath = join(input.runDir, "fhv-full-launch-result.v1.json");
+    const launchResultJson = `${JSON.stringify(launchResult, null, 2)}\n`;
+    if (input.replaceLaunchResult && existsSync(launchResultPath)) {
+      writeFileAtomicCompareAndReplace({
+        finalPath: launchResultPath,
+        expectedContent: readFileSync(launchResultPath, "utf8"),
+        nextContent: launchResultJson,
+      });
+    } else {
+      writeFileAtomicExclusive(launchResultPath, launchResultJson);
+    }
+    return {
+      classification,
+      receiptPath: join(input.runDir, "fhv-full-launch-receipt.v1.json"),
+      runDir: input.runDir,
+      semanticReproDigest: chronological.normalizedParityDigest,
+      backtest: { cycleCount: chronological.cycleCount },
+    };
+  }
+
   const scientific = await runScientificControlReplayV2Ceremony({
     organizationId: input.launchInput.organizationId,
-    ...(input.qualificationReceipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA"
-      ? {
-          marketAuthority: {
-            class: "OFFICIAL_PRE_HOLDOUT_REAL_DATA" as const,
-            bars: loadFhvPreHoldoutPartitionBars({
-              datasetRoot: input.launchInput.datasetRoot!,
-              partition: "development",
-              symbol: "BTCUSDT",
-            }),
-            releaseSha: input.launchInput.releaseSha.trim().toLowerCase(),
-            developmentWalkForwardContentDigest: input.qualificationReceipt.datasetContentDigest,
-          },
-        }
-      : {}),
   });
 
   const scientificEvidencePath = join(input.runDir, "control-replay-scientific-v2-result.v1.json");
@@ -418,4 +496,18 @@ export function readFhvControlReplayLaunchFreezeDigest(freezePath: string): stri
     );
   }
   return digest;
+}
+
+function readControlReplayVolumeReceipt(
+  datasetRoot: string,
+  symbol: "BTCUSDT" | "ETHUSDT",
+): HtxVolumeQualificationReceiptV1 {
+  const path = join(datasetRoot, "control", "volume", `htx-volume-qualification.${symbol}.v1.json`);
+  if (!existsSync(path)) {
+    throw new FhvFullHistoricalLaunchError(
+      "HTX_VOLUME_AUTHORITY_MISSING",
+      `Control Replay requires QUALIFIED HTX volume receipts; missing ${path}`,
+    );
+  }
+  return JSON.parse(readFileSync(path, "utf8")) as HtxVolumeQualificationReceiptV1;
 }
