@@ -12,12 +12,11 @@ import {
   UnavailableState,
   EmptyState,
 } from "@/components/treasury/admin/unavailable-state";
-import { CanonicalSelect, FormField } from "@/components/treasury/admin/form-controls";
+import { CanonicalSelect, FormField, MoreDetails } from "@/components/treasury/admin/form-controls";
 import { BudgetSelect, CatalogStatus } from "@/components/treasury/admin/org-entity-select";
 import { useOrgBudgets } from "@/components/treasury/admin/use-org-catalog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { WaiaSurface } from "@/components/waia/waia-surface";
 import { cn } from "@/lib/utils";
 import { financeHref } from "@/lib/treasury-admin/org";
 import { missingOrganizationResult, treasuryGet } from "@/lib/treasury-admin/api";
@@ -29,7 +28,6 @@ import {
   TREASURY_PROVENANCE_OPTIONS,
   TREASURY_PUBLICATION_OPTIONS,
   TREASURY_STATUS_OPTIONS,
-  TREASURY_USDT_V1_ASSET,
   TREASURY_USDT_V1_ASSET_OPTIONS,
 } from "@/lib/treasury-admin/canonical";
 import {
@@ -44,8 +42,13 @@ function TransactionTableInner() {
   const [filters, setFilters] = React.useState<TransactionFilterState>(emptyTransactionFilters);
   const [applied, setApplied] = React.useState(filters);
   const [offset, setOffset] = React.useState(0);
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
   const limit = 50;
-  const { budgets, loading: budgetsLoading, error: budgetsError } = useOrgBudgets(organizationId);
+  const {
+    budgets,
+    loading: budgetsLoading,
+    error: budgetsError,
+  } = useOrgBudgets(advancedOpen ? organizationId : null);
 
   const query = React.useCallback((): Promise<
     TreasuryApiResult<{ transactions: TreasuryTransactionDto[] }>
@@ -78,13 +81,26 @@ function TransactionTableInner() {
     });
   }
 
+  function applyFilters(event: React.FormEvent) {
+    event.preventDefault();
+    setOffset(0);
+    setApplied({ ...filters });
+  }
+
+  function clearFilters() {
+    const empty = emptyTransactionFilters();
+    setFilters(empty);
+    setApplied(empty);
+    setOffset(0);
+  }
+
   return (
     <div className="space-y-4" data-testid="finance-transaction-table">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-medium">Transactions</h2>
           <p className="text-muted-foreground text-sm">
-            Ledger records for the selected organization. Filtering never creates a transaction.
+            Existing ledger records. Adding a transaction is a separate action.
           </p>
         </div>
         <Link
@@ -96,22 +112,13 @@ function TransactionTableInner() {
         </Link>
       </div>
 
-      <WaiaSurface variant="raised" className="p-3">
-        <details className="space-y-3" data-testid="tx-filter-panel" open>
-          <summary className="cursor-pointer text-sm font-medium">Filter transactions</summary>
-          <p className="text-muted-foreground text-xs">
-            These controls search existing ledger records on the server. They are not a transaction
-            entry form.
-          </p>
-          <form
-            className="grid gap-3 md:grid-cols-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setOffset(0);
-              setApplied({ ...filters });
-            }}
-          >
-            <FormField label="Accounting status" htmlFor="filter-status">
+      <form className="space-y-3" data-testid="tx-filter-panel" onSubmit={applyFilters}>
+        <p className="text-muted-foreground text-xs">
+          Filter transactions searches existing ledger records. It does not create a transaction.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[12rem] flex-1">
+            <FormField label="Status" htmlFor="filter-status">
               <CanonicalSelect
                 id="filter-status"
                 testId="tx-filter-status"
@@ -121,27 +128,23 @@ function TransactionTableInner() {
                 blankLabel="Any"
               />
             </FormField>
-            <FormField
-              label="Needs reconciliation"
-              htmlFor="filter-needs-reconciliation"
-              help="Submits the existing needs_reconciliation=true alias. Do not combine with a conflicting status."
-            >
+          </div>
+          <Button type="submit" variant="outline">
+            Apply
+          </Button>
+          <Button type="button" variant="ghost" onClick={clearFilters}>
+            Clear
+          </Button>
+        </div>
+        <MoreDetails summary="More filters" testId="tx-filter-advanced" onToggle={setAdvancedOpen}>
+          <div className="grid gap-3 md:grid-cols-3">
+            <FormField label="Direction" htmlFor="filter-direction">
               <CanonicalSelect
-                id="filter-needs-reconciliation"
-                testId="tx-filter-needs_reconciliation"
-                value={filters.needs_reconciliation}
-                onChange={(value) => setFilter("needs_reconciliation", value)}
-                options={[{ value: "true", label: "Needs reconciliation" }]}
-                blankLabel="Any"
-              />
-            </FormField>
-            <FormField label="Detail publication" htmlFor="filter-detail-publication">
-              <CanonicalSelect
-                id="filter-detail-publication"
-                testId="tx-filter-detail_publication"
-                value={filters.detail_publication}
-                onChange={(value) => setFilter("detail_publication", value)}
-                options={TREASURY_PUBLICATION_OPTIONS}
+                id="filter-direction"
+                testId="tx-filter-direction"
+                value={filters.direction}
+                onChange={(value) => setFilter("direction", value)}
+                options={TREASURY_DIRECTION_OPTIONS}
                 blankLabel="Any"
               />
             </FormField>
@@ -155,13 +158,13 @@ function TransactionTableInner() {
                 blankLabel="Any"
               />
             </FormField>
-            <FormField label="Direction" htmlFor="filter-direction">
+            <FormField label="Publication" htmlFor="filter-detail-publication">
               <CanonicalSelect
-                id="filter-direction"
-                testId="tx-filter-direction"
-                value={filters.direction}
-                onChange={(value) => setFilter("direction", value)}
-                options={TREASURY_DIRECTION_OPTIONS}
+                id="filter-detail-publication"
+                testId="tx-filter-detail_publication"
+                value={filters.detail_publication}
+                onChange={(value) => setFilter("detail_publication", value)}
+                options={TREASURY_PUBLICATION_OPTIONS}
                 blankLabel="Any"
               />
             </FormField>
@@ -175,6 +178,16 @@ function TransactionTableInner() {
                 blankLabel="Any"
               />
             </FormField>
+            <FormField label="Needs reconciliation" htmlFor="filter-needs-reconciliation">
+              <CanonicalSelect
+                id="filter-needs-reconciliation"
+                testId="tx-filter-needs_reconciliation"
+                value={filters.needs_reconciliation}
+                onChange={(value) => setFilter("needs_reconciliation", value)}
+                options={[{ value: "true", label: "Needs reconciliation" }]}
+                blankLabel="Any"
+              />
+            </FormField>
             <BudgetSelect
               id="filter-budget"
               testId="tx-filter-budget_id"
@@ -182,13 +195,8 @@ function TransactionTableInner() {
               onChange={(value) => setFilter("budget_id", value)}
               budgets={budgets}
               blankLabel="Any"
-              help="Organization-scoped. Submits budget_id, not the displayed title."
             />
-            <FormField
-              label="Category"
-              htmlFor="filter-category"
-              help="Free-form semantic text. This is not a closed WAIA taxonomy."
-            >
+            <FormField label="Category" htmlFor="filter-category">
               <Input
                 id="filter-category"
                 data-testid="tx-filter-category"
@@ -196,11 +204,7 @@ function TransactionTableInner() {
                 onChange={(event) => setFilter("category", event.target.value)}
               />
             </FormField>
-            <FormField
-              label="Project / module"
-              htmlFor="filter-project-module"
-              help="Free-form semantic text. This is not a closed WAIA taxonomy."
-            >
+            <FormField label="Project / module" htmlFor="filter-project-module">
               <Input
                 id="filter-project-module"
                 data-testid="tx-filter-project_module"
@@ -208,11 +212,7 @@ function TransactionTableInner() {
                 onChange={(event) => setFilter("project_module", event.target.value)}
               />
             </FormField>
-            <FormField
-              label="Asset"
-              htmlFor="filter-asset"
-              help={`Treasury V1 native asset is ${TREASURY_USDT_V1_ASSET}.`}
-            >
+            <FormField label="Asset" htmlFor="filter-asset">
               <CanonicalSelect
                 id="filter-asset"
                 testId="tx-filter-asset"
@@ -238,11 +238,7 @@ function TransactionTableInner() {
                 onChange={(event) => setFilter("token_contract", event.target.value)}
               />
             </FormField>
-            <FormField
-              label="Occurred from"
-              htmlFor="filter-occurred-from"
-              help="Date-only filters are sent as an exact ISO timestamp at local midnight."
-            >
+            <FormField label="Occurred from" htmlFor="filter-occurred-from">
               <Input
                 id="filter-occurred-from"
                 type="date"
@@ -260,30 +256,10 @@ function TransactionTableInner() {
                 onChange={(event) => setFilter("occurred_at_to", event.target.value)}
               />
             </FormField>
-            <div className="flex items-end gap-2">
-              <Button type="submit">Apply server filters</Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  const empty = emptyTransactionFilters();
-                  setFilters(empty);
-                  setApplied(empty);
-                  setOffset(0);
-                }}
-              >
-                Clear filters
-              </Button>
-            </div>
-          </form>
-          <CatalogStatus loading={budgetsLoading} error={budgetsError} />
-          <p className="text-muted-foreground text-xs">
-            Filters are sent to the server. This page does not treat one paginated result as the
-            full ledger. Funding-need list filtering is not offered because that query parameter is
-            not in the current Admin Treasury contract.
-          </p>
-        </details>
-      </WaiaSurface>
+            <CatalogStatus loading={budgetsLoading} error={budgetsError} />
+          </div>
+        </MoreDetails>
+      </form>
 
       {loading ? <LoadingState /> : null}
       {error ? (
@@ -294,19 +270,15 @@ function TransactionTableInner() {
       ) : null}
       {!loading && !error && rows.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[960px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b">
                 <th className="p-2">Occurred</th>
                 <th className="p-2">Direction</th>
                 <th className="p-2">Kind</th>
-                <th className="p-2">Accounting</th>
+                <th className="p-2">Amount</th>
                 <th className="p-2">Status</th>
                 <th className="p-2">Publication</th>
-                <th className="p-2">Provenance</th>
-                <th className="p-2">Network / token</th>
-                <th className="p-2">Hash</th>
-                <th className="p-2">Budget / category / module</th>
               </tr>
             </thead>
             <tbody>
@@ -330,17 +302,6 @@ function TransactionTableInner() {
                   </td>
                   <td className="p-2">
                     <PublicationPill state={row.detailPublication} />
-                  </td>
-                  <td className="p-2">{row.provenance}</td>
-                  <td className="p-2">
-                    {row.canonicalNetwork ?? "—"} /{" "}
-                    {row.canonicalTokenContract ?? row.nativeAsset ?? "—"}
-                  </td>
-                  <td className="p-2 font-mono text-xs">
-                    {row.canonicalTxHash ?? row.txHash ?? "—"}
-                  </td>
-                  <td className="p-2">
-                    {row.budgetId ?? "—"} / {row.category ?? "—"} / {row.projectModule ?? "—"}
                   </td>
                 </tr>
               ))}

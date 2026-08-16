@@ -20,15 +20,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-review
-  currentWorkPackage: WP6
-  completedWorkPackages: [WP0, WP1, WP2, WP3, WP4, WP5, WP6]
+  currentWorkPackage: WP7
+  completedWorkPackages: [WP0, WP1, WP2, WP3, WP4, WP5, WP6, WP7]
   remainingWorkPackages: []
   prNumber: 464
   prUrl: https://github.com/oumaster369/waia/pull/464
-  lastValidatedGitSha: a888f9820c98a41b58e82309df02b009cffcc5dc
+  lastValidatedGitSha: null
   lastValidationAt: "2026-08-16"
   blockedReason: null
-  nextAction: "Watch required GitHub CI on PR #464 HEAD; Human squash-merge only when required checks are green."
+  nextAction: "Push simplified UX to the same PR #464; Human visual review; required CI green on exact HEAD; Human squash-merge only."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -56,6 +56,27 @@ dependencyMemory:
 - Risk: **T3** — Human squash-merge only; agents never merge
 
 The Linear description may still cite the historical base `3c45d5e5…`. That line is provenance only. The refreshed Human comment supersedes the older base/token and does not change scope, risk, ownership, acceptance, or exclusions.
+
+## Human product correction — simplicity overrides feature density
+
+Live Linear comment `1467814d-9d58-439f-b1cd-76aba56728df` (2026-08-16) is an in-flight UX clarification, not a backend/domain expansion. It supersedes any reading of DEE-616 that would make the UI more feature-dense merely because the backend supports more fields.
+
+Governing principle: **Minimal, obvious, logical, operator-first.** Every screen exposes only the knowledge and actions needed at that moment.
+
+Objective: fewer decisions per screen + clear defaults + progressive disclosure + full Treasury truth underneath. Not more controls.
+
+Binding application in this issue:
+
+1. **Transactions** — primary action remains `Add manual transaction`. Filtering is secondary. Default filter surface is Status only. All other list-query fields live under collapsed `More filters`. The ledger table shows Occurred, Direction, Kind, Amount, Status, Publication. Hash / network / budget-category columns stay on review, not on the list.
+2. **Manual transaction** — primary path is Direction, optional Kind, Human-readable exact Amount, Occurred at, and optional Purpose. Asset fact, ISO preview, budget, funding need, and correction reference live under collapsed `More details`. Classification remains a later step.
+3. **Transaction review** — A–E order and semantics are preserved. The next Human action is visually first. Provenance technical identifiers, extra classification fields, public-disclosure text, and history are available but collapsed. Canonical finite values still use selects; free-form semantic values remain free-form text. No autocomplete systems.
+4. Exact-money, FSM, audit, tenant isolation, and VERIFIED-only `DETAIL_PUBLIC` are unchanged.
+5. **Do not redesign top-level Finance navigation.** DEE-619 owns the later Overview / Transactions / Budget simplification.
+6. **Do not touch homepage/Breath.** DEE-617 / DEE-618 / DEE-611 own that corrected public architecture.
+
+Test for every visible control: “Does the Human need this here, at this moment?” If no, remove it from the primary surface or move it behind progressive disclosure.
+
+Do not discard valid work already completed (canonical selects, exact-money parser, org-scoped selectors, truthful correction pagination). Adapt it to this simpler hierarchy on the same branch and the same PR #464.
 
 ## Isolation
 
@@ -117,13 +138,20 @@ Labels, keyboard, validation copy; unit coverage for parser, canonical options, 
 
 One PR to `main`; Linear In Review; required CI green on exact HEAD; Human squash-merge handoff only.
 
+### WP7 — Human simplicity correction
+
+Adapt the already-landed operator controls to progressive disclosure without discarding exact-money, canonical selects, org-scoped selectors, or A–E semantics. Re-run local validation and push to the existing PR #464. No second DEE-616 PR. No merge.
+
 ## Acceptance
 
 - Filtering is unmistakably filtering; `Add manual transaction` is the obvious primary action.
+- Default transaction filter surface is minimal (Status). Advanced list-query fields are collapsed.
 - Canonical enums are selected, not typed; no frontend-only enum invented.
-- Budget/funding/correction references stay organization-scoped; correction UX does not pretend a partial page is the complete ledger.
-- Category, Purpose, Project module, Milestone remain free-form.
-- Manual Kind may remain unclassified/null.
+- Budget/funding/correction references stay organization-scoped; correction UX does not pretend a partial page is the complete ledger; those selectors do not dominate the primary manual path.
+- Category, Purpose, Project module, Milestone remain free-form. No autocomplete systems.
+- Manual Kind may remain unclassified/null. Manual primary path asks only what is needed for a truthful MANUAL_DRAFT.
 - Human amount conversion is exact and BigInt-safe.
 - Manual creation remains MANUAL_DRAFT + PRIVATE; verification and publication remain separate; `DETAIL_PUBLIC` remains VERIFIED-only.
+- Review keeps A–E cognition; the next Human action is visually obvious; technical/history detail is secondary.
+- Top-level Finance navigation is unchanged (DEE-619). Homepage/Breath is untouched (DEE-617 / DEE-618 / DEE-611).
 - No backend, schema, FSM, watcher, R2, Breath, AI-TRADER, or production change.

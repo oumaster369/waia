@@ -89,3 +89,26 @@ export function CanonicalSelect({
     </select>
   );
 }
+
+export function MoreDetails({
+  summary,
+  testId,
+  children,
+  onToggle,
+}: {
+  summary: string;
+  testId?: string;
+  children: ReactNode;
+  onToggle?: (open: boolean) => void;
+}) {
+  return (
+    <details
+      className="border-border rounded-md border px-3 py-2"
+      data-testid={testId}
+      onToggle={(event) => onToggle?.(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer text-sm font-medium">{summary}</summary>
+      <div className="mt-3 space-y-3">{children}</div>
+    </details>
+  );
+}

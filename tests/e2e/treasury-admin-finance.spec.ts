@@ -395,8 +395,11 @@ test.describe("WAIA Admin Finance Console", () => {
     await expect(page.getByTestId("add-manual-transaction")).toBeVisible();
     await expect(page.getByTestId("tx-filter-panel")).toContainText("Filter transactions");
     await expect(page.getByTestId("tx-filter-panel")).toContainText("existing ledger records");
+    await expect(page.getByTestId("tx-filter-status")).toBeVisible();
+    await expect(page.getByTestId("tx-filter-direction")).toBeHidden();
+    await page.getByTestId("tx-filter-advanced").locator("summary").click();
     await page.getByTestId("tx-filter-direction").selectOption("INFLOW");
-    await page.getByRole("button", { name: "Apply server filters" }).click();
+    await page.getByTestId("tx-filter-panel").getByRole("button", { name: "Apply" }).click();
     await expect
       .poll(() => capture.txListUrls.some((url) => url.includes("direction=INFLOW")))
       .toBe(true);
@@ -405,9 +408,13 @@ test.describe("WAIA Admin Finance Console", () => {
       .toBe(true);
     await page.getByRole("link", { name: /2026-08-01/ }).click();
 
+    await expect(page.getByTestId("tx-next-action")).toBeVisible();
     await expect(page.getByTestId("zone-provenance")).toBeVisible();
     await expect(page.getByTestId("zone-accounting")).toBeVisible();
     await expect(page.getByTestId("detail-public-hidden")).toBeVisible();
+    await expect(page.getByTestId("classify-purpose")).toBeVisible();
+    await expect(page.getByTestId("classify-category")).toBeHidden();
+    await page.getByTestId("classify-advanced").locator("summary").click();
     await page.getByTestId("classify-category").fill("grant-custom");
     await page.getByTestId("classify-purpose").fill("custom purpose");
     await page.getByTestId("tx-action-classify").click();
@@ -438,6 +445,8 @@ test.describe("WAIA Admin Finance Console", () => {
     await page.getByTestId("manual-amount").fill("1");
     await page.getByTestId("manual-occurred-at").fill("2026-08-02T00:00");
     await page.getByTestId("manual-purpose").fill("Walkthrough purpose");
+    await expect(page.getByTestId("manual-budget")).toBeHidden();
+    await page.getByTestId("manual-more-details").locator("summary").click();
     await page.getByTestId("manual-budget").selectOption("b1");
     await page.getByTestId("manual-funding-need").selectOption("n1");
     await expect(page.getByTestId("transaction-ref-pagination-note")).toContainText("paginated");

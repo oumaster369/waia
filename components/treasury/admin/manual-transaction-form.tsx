@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/treasury/admin/confirm-dialog";
 import { OrgGate } from "@/components/treasury/admin/org-gate";
 import { useFinanceOrg } from "@/components/treasury/admin/finance-org-context";
 import { UnavailableState } from "@/components/treasury/admin/unavailable-state";
-import { CanonicalSelect, FormField } from "@/components/treasury/admin/form-controls";
+import { CanonicalSelect, FormField, MoreDetails } from "@/components/treasury/admin/form-controls";
 import {
   BudgetSelect,
   CatalogStatus,
@@ -24,7 +24,6 @@ import {
   TREASURY_DIRECTION_OPTIONS,
   TREASURY_KIND_OPTIONS,
   TREASURY_USDT_V1_ASSET,
-  TREASURY_USDT_V1_ASSET_OPTIONS,
   TREASURY_USDT_V1_DECIMALS,
 } from "@/lib/treasury-admin/canonical";
 import { datetimeLocalToIso } from "@/lib/treasury-admin/datetime-local";
@@ -38,12 +37,17 @@ import {
 function ManualInner() {
   const { organizationId } = useFinanceOrg();
   const router = useRouter();
-  const { budgets, loading: budgetsLoading, error: budgetsError } = useOrgBudgets(organizationId);
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  const {
+    budgets,
+    loading: budgetsLoading,
+    error: budgetsError,
+  } = useOrgBudgets(moreOpen ? organizationId : null);
   const {
     fundingNeeds,
     loading: needsLoading,
     error: needsError,
-  } = useOrgFundingNeeds(organizationId);
+  } = useOrgFundingNeeds(moreOpen ? organizationId : null);
 
   const [direction, setDirection] = React.useState("INFLOW");
   const [kind, setKind] = React.useState("");
@@ -63,11 +67,11 @@ function ManualInner() {
   const parsedAmount = parseHumanDecimalToAtomic(humanAmount, TREASURY_USDT_V1_DECIMALS, {
     requirePositive: true,
   });
-  const amountPreview = parsedAmount.ok
-    ? `Stores as native amount ${parsedAmount.atomic} (${formatAtomicToHumanDecimal(parsedAmount.atomic, TREASURY_USDT_V1_DECIMALS)} ${TREASURY_USDT_V1_ASSET}, ${String(TREASURY_USDT_V1_DECIMALS)} decimals).`
+  const amountHelp = parsedAmount.ok
+    ? `Exact ${TREASURY_USDT_V1_ASSET} amount. Treasury V1 uses ${String(TREASURY_USDT_V1_DECIMALS)} decimals.`
     : humanAmount.trim()
       ? parsedAmount.message
-      : `Enter a normal exact decimal such as 125.50. Treasury V1 stores ${TREASURY_USDT_V1_ASSET} with ${String(TREASURY_USDT_V1_DECIMALS)} decimals.`;
+      : `Exact ${TREASURY_USDT_V1_ASSET} amount. Treasury V1 uses ${String(TREASURY_USDT_V1_DECIMALS)} decimals. Excess precision is rejected, not rounded.`;
 
   function openConfirm() {
     if (!organizationId) return;
@@ -134,9 +138,8 @@ function ManualInner() {
       <div>
         <h2 className="text-lg font-medium">Add manual transaction</h2>
         <p className="text-muted-foreground text-sm">
-          Manual entry records an observation with provenance MANUAL. It starts as MANUAL_DRAFT and
-          PRIVATE. It cannot skip review, Human classification, evidence, verification, or a later
-          publication decision.
+          Records an observation as MANUAL_DRAFT and PRIVATE. Classification, verification, and
+          publication remain later steps.
         </p>
       </div>
       {error ? <UnavailableState code={error.code} message={error.message} /> : null}
@@ -146,11 +149,7 @@ function ManualInner() {
         </p>
       ) : null}
 
-      <FormField
-        label="Direction"
-        htmlFor="manual-direction"
-        help="Required canonical Treasury direction."
-      >
+      <FormField label="Direction" htmlFor="manual-direction">
         <CanonicalSelect
           id="manual-direction"
           testId="manual-direction"
@@ -165,7 +164,7 @@ function ManualInner() {
       <FormField
         label="Kind"
         htmlFor="manual-kind"
-        help="Optional. Leave unclassified to keep observation separate from accounting classification."
+        help="Optional. Leave unclassified if accounting meaning is not decided yet."
       >
         <CanonicalSelect
           id="manual-kind"
@@ -178,26 +177,9 @@ function ManualInner() {
       </FormField>
 
       <FormField
-        label="Asset"
-        htmlFor="manual-asset"
-        help={`Treasury V1 is ${TREASURY_USDT_V1_ASSET} with ${String(TREASURY_USDT_V1_DECIMALS)} native decimals. Decimals are not operator-editable.`}
-      >
-        <CanonicalSelect
-          id="manual-asset"
-          testId="manual-asset"
-          value={TREASURY_USDT_V1_ASSET}
-          onChange={() => undefined}
-          options={[...TREASURY_USDT_V1_ASSET_OPTIONS]}
-          blankLabel="Select asset"
-          disabled
-          required
-        />
-      </FormField>
-
-      <FormField
         label="Amount"
         htmlFor="manual-amount"
-        help={amountPreview}
+        help={amountHelp}
         error={!parsedAmount.ok && humanAmount.trim() ? parsedAmount.message : null}
       >
         <Input
@@ -215,7 +197,7 @@ function ManualInner() {
       <FormField
         label="Occurred at"
         htmlFor="manual-occurred-at"
-        help="Local date and time. The exact UTC ISO-8601 value below is what will be stored. Nothing is auto-filled."
+        help="Local date and time. Stored as an exact UTC timestamp."
       >
         <Input
           id="manual-occurred-at"
@@ -225,20 +207,11 @@ function ManualInner() {
           onChange={(event) => setOccurredLocal(event.target.value)}
         />
       </FormField>
-      <FormField label="Stored timestamp (ISO-8601 UTC)" htmlFor="manual-occurred-iso">
-        <Input
-          id="manual-occurred-iso"
-          data-testid="manual-occurred-iso"
-          readOnly
-          value={occurredAtIso ?? ""}
-          placeholder="Appears after you choose a local date and time"
-        />
-      </FormField>
 
       <FormField
         label="Purpose"
         htmlFor="manual-purpose"
-        help="Human semantic text. This is not a closed Purpose taxonomy."
+        help="Optional Human context for this observation. Not a closed taxonomy."
       >
         <Textarea
           id="manual-purpose"
@@ -248,34 +221,58 @@ function ManualInner() {
         />
       </FormField>
 
-      <BudgetSelect
-        id="manual-budget"
-        testId="manual-budget"
-        value={budgetId}
-        onChange={setBudgetId}
-        budgets={budgets}
-        blankLabel="None"
-        help="Organization-scoped. Submits budget_id, not the title."
-      />
-      <FundingNeedSelect
-        id="manual-funding-need"
-        testId="manual-funding-need"
-        value={fundingNeedId}
-        onChange={setFundingNeedId}
-        fundingNeeds={fundingNeeds}
-        blankLabel="None"
-        help="Organization-scoped. Submits funding_need_id, not the title."
-      />
-      <CatalogStatus loading={budgetsLoading || needsLoading} error={budgetsError ?? needsError} />
-
-      {organizationId ? (
-        <TransactionRefSelect
-          organizationId={organizationId}
-          value={correctsTransactionId}
-          onChange={setCorrectsTransactionId}
-          emphasizeCorrection={kind === "CORRECTION"}
+      <MoreDetails summary="More details" testId="manual-more-details" onToggle={setMoreOpen}>
+        <p className="text-muted-foreground text-sm" data-testid="manual-asset">
+          Asset is {TREASURY_USDT_V1_ASSET} with {String(TREASURY_USDT_V1_DECIMALS)} native
+          decimals. Decimals are not operator-editable.
+        </p>
+        <FormField label="Stored timestamp (ISO-8601 UTC)" htmlFor="manual-occurred-iso">
+          <Input
+            id="manual-occurred-iso"
+            data-testid="manual-occurred-iso"
+            readOnly
+            value={occurredAtIso ?? ""}
+            placeholder="Appears after you choose a local date and time"
+          />
+        </FormField>
+        {parsedAmount.ok ? (
+          <p className="text-muted-foreground text-xs">
+            Stores as native amount {parsedAmount.atomic} (
+            {formatAtomicToHumanDecimal(parsedAmount.atomic, TREASURY_USDT_V1_DECIMALS)}{" "}
+            {TREASURY_USDT_V1_ASSET}).
+          </p>
+        ) : null}
+        <BudgetSelect
+          id="manual-budget"
+          testId="manual-budget"
+          value={budgetId}
+          onChange={setBudgetId}
+          budgets={budgets}
+          blankLabel="None"
+          help="Optional. Submits budget_id, not the title."
         />
-      ) : null}
+        <FundingNeedSelect
+          id="manual-funding-need"
+          testId="manual-funding-need"
+          value={fundingNeedId}
+          onChange={setFundingNeedId}
+          fundingNeeds={fundingNeeds}
+          blankLabel="None"
+          help="Optional. Submits funding_need_id, not the title."
+        />
+        <CatalogStatus
+          loading={budgetsLoading || needsLoading}
+          error={budgetsError ?? needsError}
+        />
+        {moreOpen && organizationId ? (
+          <TransactionRefSelect
+            organizationId={organizationId}
+            value={correctsTransactionId}
+            onChange={setCorrectsTransactionId}
+            emphasizeCorrection={kind === "CORRECTION"}
+          />
+        ) : null}
+      </MoreDetails>
 
       <Button type="button" data-testid="manual-create-draft" onClick={openConfirm}>
         Create MANUAL draft
