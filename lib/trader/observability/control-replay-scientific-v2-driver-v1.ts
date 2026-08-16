@@ -333,7 +333,8 @@ export type ControlReplayMarketAuthorityV1 =
       class: typeof CONTROL_REPLAY_OFFICIAL_MARKET_AUTHORITY;
       bars: readonly Bar[];
       releaseSha: string;
-      developmentWalkForwardContentDigest: string;
+      developmentContentDigest: string;
+      developmentWalkForwardContentDigest?: string;
     };
 
 export type RunScientificControlReplayV2Input = {
@@ -405,9 +406,18 @@ export async function runScientificControlReplayV2Ceremony(
         "official Control Replay real-bar source corpus is below MIN_STATE_POOL_COUNT",
       );
     }
+    if (
+      marketAuthority.developmentWalkForwardContentDigest &&
+      marketAuthority.developmentContentDigest ===
+        marketAuthority.developmentWalkForwardContentDigest
+    ) {
+      throw new AuthorityChainViolationError(
+        "TYPED_DATASET_IDENTITY_SUBSTITUTION: developmentContentDigest must not equal developmentWalkForwardContentDigest",
+      );
+    }
     family = buildFamily(organizationId, symbol, {
       codeReleaseSha: marketAuthority.releaseSha,
-      developmentDatasetDigestHex: marketAuthority.developmentWalkForwardContentDigest,
+      developmentDatasetDigestHex: marketAuthority.developmentContentDigest,
     });
   } else {
     family = buildFamily(organizationId, symbol);

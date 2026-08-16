@@ -105,6 +105,9 @@ export type FhvPreHoldoutQualificationReceiptV1 = Readonly<{
   acquisitionReceiptDigests: readonly string[];
   partitions: readonly FhvPreHoldoutPartitionEvidenceV1[];
   scientificSubpartitions: readonly FhvScientificSubpartitionEvidenceV1[];
+  developmentContentDigest: string;
+  wfPredictiveContentDigest: string;
+  wfEconomicContentDigest: string;
   developmentWalkForwardContentDigest: string;
   walkForwardUnionCompatibilityDigest: string;
   holdout: Readonly<{
@@ -122,6 +125,52 @@ function fail(code: string, message: string): never {
   throw new FhvPreHoldoutQualificationError(code, message);
 }
 
+export function assertNoTypedDatasetDigestSubstitution(input: {
+  developmentContentDigest: string;
+  wfPredictiveContentDigest: string;
+  wfEconomicContentDigest: string;
+  developmentWalkForwardContentDigest: string;
+  walkForwardUnionCompatibilityDigest: string;
+}): void {
+  const pairs: ReadonlyArray<readonly [string, string, string, string]> = [
+    [
+      "developmentContentDigest",
+      input.developmentContentDigest,
+      "developmentWalkForwardContentDigest",
+      input.developmentWalkForwardContentDigest,
+    ],
+    [
+      "developmentContentDigest",
+      input.developmentContentDigest,
+      "walkForwardUnionCompatibilityDigest",
+      input.walkForwardUnionCompatibilityDigest,
+    ],
+    [
+      "wfPredictiveContentDigest",
+      input.wfPredictiveContentDigest,
+      "wfEconomicContentDigest",
+      input.wfEconomicContentDigest,
+    ],
+    [
+      "wfPredictiveContentDigest",
+      input.wfPredictiveContentDigest,
+      "developmentWalkForwardContentDigest",
+      input.developmentWalkForwardContentDigest,
+    ],
+    [
+      "wfEconomicContentDigest",
+      input.wfEconomicContentDigest,
+      "developmentWalkForwardContentDigest",
+      input.developmentWalkForwardContentDigest,
+    ],
+  ];
+  for (const [leftName, left, rightName, right] of pairs) {
+    if (left === right) {
+      fail("TYPED_DATASET_IDENTITY_SUBSTITUTION", `${leftName} must not equal ${rightName}`);
+    }
+  }
+}
+
 function rethrowCoverage(error: unknown): never {
   if (error instanceof FhvCanonicalCoverageError) {
     fail(error.code, error.message);
@@ -130,6 +179,26 @@ function rethrowCoverage(error: unknown): never {
     fail(error.code, error.message);
   }
   throw error;
+}
+
+function digestTypedScientificIdentity(
+  scientificSubpartitions: readonly FhvScientificSubpartitionEvidenceV1[],
+  scientificPartition: FhvScientificSubpartitionEvidenceV1["scientificPartition"],
+): string {
+  const rows = scientificSubpartitions
+    .filter((entry) => entry.scientificPartition === scientificPartition)
+    .map((entry) => ({
+      scientificPartition: entry.scientificPartition,
+      symbol: entry.symbol,
+      semanticContentDigest: entry.semanticContentDigest,
+    }));
+  if (rows.length !== 2) {
+    fail(
+      "TYPED_SCIENTIFIC_IDENTITY_INCOMPLETE",
+      `${scientificPartition} identity requires BTCUSDT and ETHUSDT sub-digests`,
+    );
+  }
+  return computeStableJsonDigest(rows);
 }
 
 function coverageToScientific(input: {
@@ -331,6 +400,18 @@ export function qualifyFhvPreHoldoutRealData(input: {
     rethrowCoverage(error);
   }
 
+  const developmentContentDigest = digestTypedScientificIdentity(
+    scientificSubpartitions,
+    "DEVELOPMENT",
+  );
+  const wfPredictiveContentDigest = digestTypedScientificIdentity(
+    scientificSubpartitions,
+    "WF_PREDICTIVE",
+  );
+  const wfEconomicContentDigest = digestTypedScientificIdentity(
+    scientificSubpartitions,
+    "WF_ECONOMIC",
+  );
   const developmentWalkForwardContentDigest = computeStableJsonDigest(
     partitions.map((entry) => ({
       partition: entry.partition,
@@ -347,6 +428,13 @@ export function qualifyFhvPreHoldoutRealData(input: {
         semanticContentDigest: entry.semanticContentDigest,
       })),
   );
+  assertNoTypedDatasetDigestSubstitution({
+    developmentContentDigest,
+    wfPredictiveContentDigest,
+    wfEconomicContentDigest,
+    developmentWalkForwardContentDigest,
+    walkForwardUnionCompatibilityDigest,
+  });
   const classification: FhvPreHoldoutQualificationClassification =
     revisionRiskDisposition === "HUMAN_DECISION_REQUIRED"
       ? "PRE_HOLDOUT_QUALIFICATION=HUMAN_DECISION_REQUIRED"
@@ -377,6 +465,9 @@ export function qualifyFhvPreHoldoutRealData(input: {
     acquisitionReceiptDigests: receiptDigests,
     partitions,
     scientificSubpartitions,
+    developmentContentDigest,
+    wfPredictiveContentDigest,
+    wfEconomicContentDigest,
     developmentWalkForwardContentDigest,
     walkForwardUnionCompatibilityDigest,
     holdout: {

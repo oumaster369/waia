@@ -2,9 +2,9 @@
  * Chronological Control Replay V2 driver (DEE-538 tooling).
  *
  * Walks qualified pre-holdout bars through historical time using the canonical
- * Forecast V2 → Decision Economics V2 → Portfolio/Risk sizing → historical
- * execution simulation (partial fills, fees, spread, impact) → accounting →
- * Guardian path. Does not call runFullHistoricalBacktest / StrategySignal V1.
+ * Decision Economics V2 (DEE-529 TEST_ONLY per-symbol intents) → Portfolio →
+ * Risk → historical execution → Accounting → Guardian path.
+ * Does not call runFullHistoricalBacktest / StrategySignal V1.
  *
  * CONTROL_REPLAY_TEST_ONLY_AUTHORITY_V1 remains capitalEligible=false.
  */
@@ -14,58 +14,66 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import os from "node:os";
 
+import {
+  advanceAccountingFrontier,
+  computeAccountingSemanticDigest,
+  createInitialAccountingState,
+} from "@/lib/trader/accounting";
+import type {
+  AccountingStateV1,
+  MarksJsonV1,
+} from "@/lib/trader/accounting/accounting-frontier.types";
+import { derivePortfolioFromAccountingState } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import {
-  ACCOUNTING_BASIS_METHOD,
-  ACCOUNTING_ENGINE_ID,
-  ACCOUNTING_FRONTIER_SCHEMA_VERSION,
-  computeAccountingSemanticDigest,
-} from "@/lib/trader/accounting";
-import type { ReplayCheckpointRecord } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
-import { applyHistoricalExecutionEconomics } from "@/lib/trader/execution/fill-economics";
-import type { HistoricalExecutionCheckpointSlice } from "@/lib/trader/execution/historical-execution-model.types";
-import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
-import type { HistoricalExecutionPersistencePort } from "@/lib/trader/execution/historical-simulated-exchange";
-import { tryNormalizeSymbolForHistoricalExecution } from "@/lib/trader/execution/historical-execution-symbol";
-import { decideGuardianAction } from "@/lib/trader/guardian/guardian-decision-model";
-import { MODEL_TRANSFORM_VERSION } from "@/lib/trader/intelligence/forecast-v2/constants";
-import {
-  buildDecisionEconomicsV2Record,
-  decisionEvRangeFromRecord,
-} from "@/lib/trader/intelligence/decision-economics/decision-economics-v2-service";
-import type { ReplicaRootFamilyInput } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
-import type { Bar, StrategySignal } from "@/lib/trader/intelligence/types";
-import { mergeFhvSharedPortfolioBarsChronologically } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
-import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
+  REPLAY_CHECKPOINT_SCHEMA_VERSION,
+  serializeCheckpoint,
+} from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
 import {
   bindHistoricalExecutionModelToSession,
   htxVolumeRawFromClosedBar,
   requireProfileHtxVolumeAuthority,
 } from "@/lib/trader/backtest/historical-execution-profile";
-import {
-  buildControlReplaySourceAnchorsFromRealBars,
-  CONTROL_REPLAY_OFFICIAL_MARKET_AUTHORITY,
-} from "@/lib/trader/observability/control-replay-preholdout-source-corpus-v1";
-import { buildControlReplayTestOnlyScientificAdmissionDigest } from "@/lib/trader/observability/control-replay-scientific-v2-driver-v1";
-import {
-  CONTROL_REPLAY_AUTHORITY_IDENTITY,
-  assertControlReplayTestOnlyAuthorityV1,
-} from "@/lib/trader/observability/control-replay-test-authority";
-import { computeControlReplayParityDigest } from "@/lib/trader/observability/fhv-control-replay-parity-digest";
-import { buildAndWriteFhvOperatorStatus } from "@/lib/trader/observability/fhv-status-writer";
-import { defaultStopDistanceProvider } from "@/lib/trader/portfolio/default-stop-distance-provider";
-import { createInitialPortfolioAccountState } from "@/lib/trader/portfolio/derive-portfolio-account-state";
-import { DEFAULT_PORTFOLIO_RUN_CONFIG } from "@/lib/trader/portfolio/portfolio-run-config.types";
-import { computeStopBasedQuantity } from "@/lib/trader/portfolio/stop-based-sizing";
+import { applyHistoricalExecutionEconomics } from "@/lib/trader/execution/fill-economics";
 import {
   COST_MODEL_VERSION_V1,
   costModelV1FromAuthority,
   createHtrHistoricalCostModelAuthorityV1,
 } from "@/lib/trader/execution/cost-model";
-import { runExecutorReadyEndToEndV1 } from "@/lib/trader/research/challengers/rv-state-conditional-challenger-v1";
+import type { HistoricalExecutionCheckpointSlice } from "@/lib/trader/execution/historical-execution-model.types";
+import type { SimulatedFillEvent } from "@/lib/trader/execution/historical-execution-model.types";
+import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
+import type { HistoricalExecutionPersistencePort } from "@/lib/trader/execution/historical-simulated-exchange";
+import { evaluateHtrGuardianCycle } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
+import {
+  buildDecisionEconomicsV2Record,
+  decisionEvRangeFromRecord,
+} from "@/lib/trader/intelligence/decision-economics/decision-economics-v2-service";
+import type { Bar, StrategySignal } from "@/lib/trader/intelligence/types";
+import { mergeFhvSharedPortfolioBarsChronologically } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
+import { FHV_SYMBOL_CODE_TO_INSTRUMENT } from "@/lib/trader/market-data/fhv-partition-boundaries";
+import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
+import { CONTROL_REPLAY_OFFICIAL_MARKET_AUTHORITY } from "@/lib/trader/observability/control-replay-preholdout-source-corpus-v1";
+import {
+  CONTROL_REPLAY_AUTHORITY_IDENTITY,
+  assertControlReplayTestOnlyAuthorityV1,
+} from "@/lib/trader/observability/control-replay-test-authority";
+import {
+  CONTROL_REPLAY_TEST_ONLY_INTENT_SCHEMA,
+  assertForecastSymbolMatchesMarket,
+  buildControlReplayTestOnlyIntent,
+  compactControlReplaySymbol,
+} from "@/lib/trader/observability/control-replay-test-only-intent-v1";
+import { createControlReplayTestOnlyRiskEngine } from "@/lib/trader/observability/control-replay-test-only-risk-engine-v1";
+import { computeControlReplayParityDigest } from "@/lib/trader/observability/fhv-control-replay-parity-digest";
+import { buildAndWriteFhvOperatorStatus } from "@/lib/trader/observability/fhv-status-writer";
+import { defaultStopDistanceProvider } from "@/lib/trader/portfolio/default-stop-distance-provider";
+import { DEFAULT_PORTFOLIO_RUN_CONFIG } from "@/lib/trader/portfolio/portfolio-run-config.types";
+import { computeStopBasedQuantity } from "@/lib/trader/portfolio/stop-based-sizing";
+import { toAccountRiskState } from "@/lib/trader/portfolio/to-account-risk-state";
 import { V2_CAPITAL_AUTHORITY_PATH } from "@/lib/trader/risk/authority-chain";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
-import { addDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
+import { addDecimal, compareDecimal } from "@/lib/trader/risk/numeric";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 export const CONTROL_REPLAY_CHRONOLOGICAL_V2_DRIVER_VERSION =
@@ -73,15 +81,30 @@ export const CONTROL_REPLAY_CHRONOLOGICAL_V2_DRIVER_VERSION =
 
 export const DEE_594_DOWNSTREAM_PREREQUISITE_STATUS = "NOT_SATISFIED_BY_DEE_537" as const;
 
+const TEST_ONLY_REPLICA_SAMPLES: ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>> = [
+  [
+    [0, 0, 0, 0.01, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0.02, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0.015, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0.012, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0.018, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0.011, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  ],
+];
+
 function sha256Hex(body: string): string {
   return createHash("sha256").update(body, "utf8").digest("hex");
 }
 
-function digestToHex(digest: Buffer | Uint8Array | string): string {
-  if (typeof digest === "string") {
-    return digest;
-  }
-  return Buffer.from(digest).toString("hex");
+function accountingParityDigest(state: AccountingStateV1): string {
+  return computeAccountingSemanticDigest({
+    ...state,
+    runId: "control-replay-normalized-parity",
+  });
 }
 
 export type ChronologicalControlReplayCheckpointV1 = Readonly<{
@@ -100,6 +123,8 @@ export type ChronologicalControlReplayCheckpointV1 = Readonly<{
   fillIds: readonly string[];
   orders: readonly OrderRow[];
   executionSlice: HistoricalExecutionCheckpointSlice;
+  accountingState: AccountingStateV1;
+  interrupted: boolean;
 }>;
 
 export type ChronologicalControlReplayV2Result = Readonly<{
@@ -117,36 +142,20 @@ export type ChronologicalControlReplayV2Result = Readonly<{
   parityDigest: string;
   normalizedParityDigest: string;
   packageContentDigestHex: string;
+  scientificAdmissionReceiptDigest: string;
   capitalEligible: false;
   executionScope: "PRE_HOLDOUT_SHARED_PORTFOLIO";
   constructionAuthority: "DEVELOPMENT";
+  interrupted: boolean;
   dee594Status: typeof DEE_594_DOWNSTREAM_PREREQUISITE_STATUS;
 }>;
 
-function buildFamily(
+function diagnosticSignal(
   organizationId: string,
   symbol: string,
-  identity: { codeReleaseSha: string; developmentDatasetDigestHex: string },
-): ReplicaRootFamilyInput {
-  return {
-    organizationId,
-    venue: "htx",
-    market: "spot",
-    symbol,
-    primaryHorizonMinutes: 30,
-    executionHorizonMinutes: 33,
-    packageSubjectVersion: "pkg-subject/v1",
-    terminalTargetDefinitionDigestHex: sha256Hex(`terminal-target:${symbol}`),
-    executionOpportunityTargetDefinitionDigestHex: sha256Hex(`execopp-target:${symbol}`),
-    modelTransformVersion: MODEL_TRANSFORM_VERSION,
-    developmentDatasetDigestHex: identity.developmentDatasetDigestHex,
-    featureVersion: "feature-engine/rv/v2",
-    normalizationVersionDigestHex: sha256Hex("control-replay-scientific-v2-normalization"),
-    codeReleaseSha: identity.codeReleaseSha,
-  };
-}
-
-function diagnosticSignal(organizationId: string, symbol: string): StrategySignal {
+  evaluatedAt: string,
+  side: "buy" | "sell",
+): StrategySignal {
   return {
     strategySignalId: "cr-chrono-diagnostic-signal",
     strategyId: "liquidity_sweep_reversal_v0",
@@ -154,23 +163,19 @@ function diagnosticSignal(organizationId: string, symbol: string): StrategySigna
     organizationId,
     symbol,
     outcome: "SIGNAL",
-    side: "buy",
+    side,
     confidence: "0.99",
     expectedEdge: "9999",
     maxRisk: "0.000001",
     reasonCodes: ["CONTROL_REPLAY_LEGACY_DIAGNOSTIC_ONLY"],
     msvId: "cr-chrono-msv",
     featureSetId: "cr-chrono-features",
-    evaluatedAt: "2024-01-01T00:00:00.000Z",
+    evaluatedAt,
   };
 }
 
 function compactSymbol(symbol: string): "BTCUSDT" | "ETHUSDT" {
-  const normalized = tryNormalizeSymbolForHistoricalExecution(symbol);
-  if (normalized !== "BTCUSDT" && normalized !== "ETHUSDT") {
-    throw new Error(`unsupported Control Replay symbol ${symbol}`);
-  }
-  return normalized;
+  return compactControlReplaySymbol(symbol);
 }
 
 function createInMemoryOrder(input: {
@@ -178,16 +183,18 @@ function createInMemoryOrder(input: {
   symbol: "BTCUSDT" | "ETHUSDT";
   quantity: string;
   cycleIndex: number;
+  createdAt: Date;
+  side?: "buy" | "sell";
 }): OrderRow {
-  const now = new Date("2020-01-01T00:00:00.000Z");
+  const now = input.createdAt;
   return {
-    id: `cr-chrono-order-${input.cycleIndex}-${input.symbol}`,
+    id: `cr-chrono-order-${input.cycleIndex}-${input.symbol}-${input.side ?? "buy"}`,
     organizationId: input.organizationId,
     credentialId: null,
     venue: "HTX",
     executionMode: "mock",
     symbol: input.symbol,
-    side: "buy",
+    side: input.side ?? "buy",
     type: "market",
     price: null,
     quantity: input.quantity,
@@ -197,7 +204,7 @@ function createInMemoryOrder(input: {
     stateVersion: 4,
     exchangeOrderId: null,
     clientOrderId: `cr-chrono-${input.cycleIndex}-${input.symbol}`,
-    idempotencyKey: `cr-chrono-idem-${input.cycleIndex}-${input.symbol}`,
+    idempotencyKey: `cr-chrono-idem-${input.cycleIndex}-${input.symbol}-${input.side ?? "buy"}`,
     riskDecisionId: `cr-chrono-risk-${input.cycleIndex}`,
     strategySignalId: null,
     allocationDecisionId: null,
@@ -231,20 +238,60 @@ export function normalizeChronologicalControlReplayParity(input: {
   );
 }
 
+function assertDevelopmentDigestNotCombined(input: {
+  developmentContentDigest?: string;
+  developmentWalkForwardContentDigest: string;
+}): void {
+  if (
+    input.developmentContentDigest &&
+    input.developmentContentDigest === input.developmentWalkForwardContentDigest
+  ) {
+    throw new Error(
+      "TYPED_DATASET_IDENTITY_SUBSTITUTION: developmentContentDigest must not equal developmentWalkForwardContentDigest",
+    );
+  }
+}
+
+async function* iterateExecutionBars(input: {
+  executionBars?: readonly Bar[];
+  executionBarStream?: AsyncIterable<Bar>;
+}): AsyncGenerator<Bar, void, void> {
+  if (input.executionBarStream && input.executionBars) {
+    throw new Error("CONTROL_REPLAY_BAR_SOURCE_AMBIGUOUS");
+  }
+  if (input.executionBarStream) {
+    for await (const bar of input.executionBarStream) {
+      yield bar;
+    }
+    return;
+  }
+  if (!input.executionBars) {
+    throw new Error("CONTROL_REPLAY_EXECUTION_BARS_REQUIRED");
+  }
+  for (const bar of mergeFhvSharedPortfolioBarsChronologically(input.executionBars)) {
+    yield bar;
+  }
+}
+
 export async function runChronologicalControlReplayV2(input: {
   runId: string;
   runDir: string;
   organizationId: string;
   releaseSha: string;
+  developmentContentDigest?: string;
   developmentWalkForwardContentDigest: string;
-  constructionBars: readonly Bar[];
-  executionBars: readonly Bar[];
+  constructionBars?: readonly Bar[];
+  executionBars?: readonly Bar[];
+  executionBarStream?: AsyncIterable<Bar>;
   htxVolumeAuthorityByInstrument: Readonly<
     Record<"BTCUSDT" | "ETHUSDT", HtxVolumeQualificationReceiptV1>
   >;
   maxCycles?: number;
   checkpointEveryCycles?: number;
   resumeFromCheckpoint?: boolean;
+  interruptAfterCycles?: number;
+  economicReplayStartUtc?: string;
+  riskScenario?: "allow" | "clamp" | "veto";
 }): Promise<ChronologicalControlReplayV2Result> {
   assertControlReplayTestOnlyAuthorityV1({
     surface: "CONTROL_REPLAY",
@@ -253,41 +300,27 @@ export async function runChronologicalControlReplayV2(input: {
   if (CONTROL_REPLAY_AUTHORITY_IDENTITY.capitalEligible !== false) {
     throw new Error("CONTROL_REPLAY capitalEligible must remain false");
   }
+  assertDevelopmentDigestNotCombined(input);
   mkdirSync(input.runDir, { recursive: true });
   const organizationId = input.organizationId;
-  const btcConstruction = input.constructionBars.filter((bar) => bar.symbol.startsWith("BTC"));
-  const corpus = buildControlReplaySourceAnchorsFromRealBars({
-    bars: btcConstruction.length > 0 ? btcConstruction : input.constructionBars,
-    symbol: "BTCUSDT",
-  });
-  if (corpus.length < 30) {
-    throw new Error(
-      "chronological Control Replay construction corpus is below MIN_STATE_POOL_COUNT",
-    );
-  }
-  const family = buildFamily(organizationId, "BTCUSDT", {
-    codeReleaseSha: input.releaseSha.trim().toLowerCase(),
-    developmentDatasetDigestHex: input.developmentWalkForwardContentDigest,
-  });
-  const { pkg, issuance } = runExecutorReadyEndToEndV1({
-    family,
-    sourceCorpus: corpus,
-    kConfigDec: 3,
-    mConfigDec: 4,
-    anchorClosedBarEpochMs: corpus[corpus.length - 1]!.closedBarEpochMs,
-    anchorRealizedVol20m_1m: corpus[corpus.length - 1]!.realizedVol20m_1m,
-    executionHorizonMinutes: 33,
-    normalizationVersionDigestHex: family.normalizationVersionDigestHex,
-  });
-  const packageContentDigestHex = digestToHex(pkg.predictivePackageContentDigest);
-  const packageGenerationDigestHex = digestToHex(pkg.predictivePackageGenerationIdentityDigest);
-  const distributionSemanticDigestExec = digestToHex(issuance.distributionSemanticDigestExec);
-  const admission = buildControlReplayTestOnlyScientificAdmissionDigest({
-    organizationId,
-    packageContentDigestHex,
-    packageGenerationDigestHex,
-    distributionSemanticDigestExec,
-  });
+  const btcIntent = buildControlReplayTestOnlyIntent({ symbol: "BTCUSDT" });
+  const ethIntent = buildControlReplayTestOnlyIntent({ symbol: "ETHUSDT" });
+  const intents = { BTCUSDT: btcIntent, ETHUSDT: ethIntent } as const;
+  const packageContentDigestHex = sha256Hex(
+    JSON.stringify({
+      schemaVersion: CONTROL_REPLAY_TEST_ONLY_INTENT_SCHEMA,
+      btc: btcIntent.identityDigest,
+      eth: ethIntent.identityDigest,
+    }),
+  );
+  const scientificAdmissionReceiptDigest = sha256Hex(
+    JSON.stringify({
+      schemaVersion: CONTROL_REPLAY_TEST_ONLY_INTENT_SCHEMA,
+      authorityClass: "TEST_ONLY",
+      capitalEligible: false,
+      packageContentDigestHex,
+    }),
+  );
   const profile = bindHistoricalExecutionModelToSession({
     htxVolumeAuthorityByInstrument: input.htxVolumeAuthorityByInstrument,
   });
@@ -323,22 +356,25 @@ export async function runChronologicalControlReplayV2(input: {
     maxConcurrentPositions: DEFAULT_ORG_RISK_LIMITS.maxConcurrentPositions,
     maxNotional: DEFAULT_ORG_RISK_LIMITS.maxNotional,
   };
-  const account = createInitialPortfolioAccountState({
-    runConfig: DEFAULT_PORTFOLIO_RUN_CONFIG,
-    limits: portfolioLimits,
-    stopDistanceProvider: defaultStopDistanceProvider,
-  });
   const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
-  const merged = mergeFhvSharedPortfolioBarsChronologically(input.executionBars);
   const checkpointPath = join(input.runDir, "control-replay-chronological-checkpoint.v1.json");
   let startIndex = 0;
   let orderCount = 0;
   let fillCount = 0;
-  let cash = account.availableBalanceUsdt;
-  let netPnl = "0";
-  let guardianState = "NONE";
   const fillIds: string[] = [];
-  let lastAccountingDigest = "";
+  let accounting = createInitialAccountingState({
+    organizationId,
+    accountKey: "default",
+    runId: input.runId,
+  });
+  let lastMarks: MarksJsonV1 = { ...accounting.marks };
+  let lastGuardian = "NONE";
+  let replayNowMs = 1_700_000_000_000;
+  const riskEngine = createControlReplayTestOnlyRiskEngine({
+    vetoAll: input.riskScenario === "veto",
+    clampMaxNotional: input.riskScenario === "clamp" ? "1.00" : undefined,
+    nowMs: () => replayNowMs,
+  });
   if (input.resumeFromCheckpoint && existsSync(checkpointPath)) {
     const checkpoint = JSON.parse(
       readFileSync(checkpointPath, "utf8"),
@@ -346,10 +382,10 @@ export async function runChronologicalControlReplayV2(input: {
     startIndex = checkpoint.cycleIndex + 1;
     orderCount = checkpoint.orderCount;
     fillCount = checkpoint.fillCount;
-    cash = checkpoint.cash;
-    netPnl = checkpoint.netPnl;
-    guardianState = checkpoint.guardianState;
+    lastGuardian = checkpoint.guardianState;
     fillIds.push(...checkpoint.fillIds);
+    accounting = checkpoint.accountingState;
+    lastMarks = { ...checkpoint.accountingState.marks };
     for (const order of checkpoint.orders) {
       orders.set(order.id, {
         ...order,
@@ -358,163 +394,91 @@ export async function runChronologicalControlReplayV2(input: {
       });
     }
     exchange.restoreFromCheckpointSlice(checkpoint.executionSlice, orders);
-    lastAccountingDigest = checkpoint.accountingSemanticDigest;
   }
-  const maxCycles = input.maxCycles ?? merged.length;
-  const barsTotal = Math.min(merged.length, maxCycles);
-  const startedAt = new Date().toISOString();
-  let lastGuardian = guardianState;
 
-  for (let cycleIndex = startIndex; cycleIndex < barsTotal; cycleIndex += 1) {
-    const bar = merged[cycleIndex]!;
-    const compact = compactSymbol(bar.symbol);
-    const forecastId = sha256Hex(
-      `cr-chrono:${organizationId}:${compact}:${packageContentDigestHex}:${cycleIndex}`,
-    ).slice(0, 36);
-    const economics = buildDecisionEconomicsV2Record({
-      organizationId,
-      forecastId,
-      notionalUsdt: 10_000,
-      costRate: 0.001,
-      slippageBufferUsdt: 5,
-      replicaSamples: issuance.samples,
-      scientificAdmissionReceiptDigest: admission.contentDigest,
-      scientificAdmissionVerified: true,
-    });
-    const evRange = decisionEvRangeFromRecord(economics);
-    const sizing = computeStopBasedQuantity({
-      side: "buy",
-      entryPrice: bar.close,
-      signal: diagnosticSignal(organizationId, bar.symbol),
-      account,
-      limits: portfolioLimits,
-      runConfig: DEFAULT_PORTFOLIO_RUN_CONFIG,
-      stopDistanceProvider: defaultStopDistanceProvider,
-      costModel: {
-        version: COST_MODEL_VERSION_V1,
-        feesBps: costModel.feesBps,
-        slippageBps: costModel.slippageBps,
-      },
-      defaultQuantity: "0.01",
-      capitalAuthorityPath: V2_CAPITAL_AUTHORITY_PATH,
-    });
-    if (sizing.ok && evRange.decisionActionable && exchange.listOpenOrders().length === 0) {
-      const order = createInMemoryOrder({
-        organizationId,
-        symbol: compact,
-        quantity: sizing.quantity,
-        cycleIndex,
-      });
-      orders.set(order.id, order);
-      exchange.registerOrder(order, cycleIndex, Date.parse(bar.barCloseTime));
-      orderCount += 1;
-    }
-    const volumeReceipt = requireProfileHtxVolumeAuthority(profile, bar.symbol);
-    const advance = await exchange.advanceOnClosedBar({
-      context,
-      closedBar: bar,
-      barIndex: cycleIndex,
-      model,
-      persistence,
-      replayNowMs: Date.parse(bar.barCloseTime),
-      htxVolumeAuthorityReceipt: volumeReceipt,
-      htxVolumeRaw: htxVolumeRawFromClosedBar(bar),
-      refreshAccountState: async () => ({
-        positions: [],
-        openOrderCount: exchange.listOpenOrders().length,
-        dailyPnl: netPnl,
-        drawdown: "0",
-        quoteExposureByCurrency: {},
-      }),
-      reconcileOrder: async () => undefined,
-    });
-    for (const event of advance.fillEvents) {
-      const costed = applyHistoricalExecutionEconomics(event, model);
-      cash = addDecimal(cash, costed.netCashEffect);
-      netPnl = subtractDecimal(netPnl, costed.totalExecutionCost);
-      fillCount += 1;
-      fillIds.push(`${event.orderId}:${event.fillSequence}`);
-    }
-    const guardian = decideGuardianAction({
-      tradingPermission: cycleIndex === barsTotal - 1 ? "ONLY_CLOSE_POSITIONS" : "ALLOW_TRADING",
-      allowedStrategyIds: ["liquidity_sweep_reversal_v0"],
-      tradeStrategyId: "liquidity_sweep_reversal_v0",
-      barsHeld: cycleIndex,
-    });
-    lastGuardian = guardian.decision;
-    lastAccountingDigest = computeAccountingSemanticDigest({
-      schemaVersion: ACCOUNTING_FRONTIER_SCHEMA_VERSION,
-      engineId: ACCOUNTING_ENGINE_ID,
-      basisMethod: ACCOUNTING_BASIS_METHOD,
-      organizationId,
-      accountKey: "default",
-      runId: "control-replay-chronological-semantic",
-      accountingSequence: cycleIndex + 1,
-      frontierAsOf: bar.barCloseTime,
-      monthKey: bar.barCloseTime.slice(0, 7),
-      cash,
-      positions: {},
-      grossRealizedPnl: netPnl,
-      netRealizedPnl: netPnl,
-      marks: { [bar.symbol]: { price: bar.close, barCloseTime: bar.barCloseTime } },
-      markedPositionValue: "0",
-      equity: cash,
-      equityHwm: cash,
-      accountDrawdownBps: 0,
-      consumedFillIds: fillIds.slice(-8),
-    });
+  const startedAt = new Date().toISOString();
+  const economicStartMs = input.economicReplayStartUtc
+    ? Date.parse(input.economicReplayStartUtc)
+    : null;
+  let cycleIndex = -1;
+  let lastProcessedIndex = startIndex - 1;
+  let lastBar: Bar | null = null;
+  let interrupted = false;
+  let lastAccountingDigest = computeAccountingSemanticDigest(accounting);
+
+  const writeObserver = (bar: Bar, processedCount: number, terminalState: string): void => {
     const ramUsedPct = 1 - os.freemem() / os.totalmem();
-    const observerCheckpoint = {
-      evidenceDurableThroughCycleIndex: cycleIndex,
+    const observerCheckpoint = serializeCheckpoint({
+      schemaVersion: REPLAY_CHECKPOINT_SCHEMA_VERSION,
+      backtestRunId: input.runId,
+      datasetContentDigest:
+        input.developmentContentDigest ?? input.developmentWalkForwardContentDigest,
+      datasetId: "control-replay-preholdout",
+      codeSha: input.releaseSha.trim().toLowerCase(),
+      activePhase: "none",
+      dbDurableThroughPhase: "none",
+      evidenceDurableThroughCycleIndex: processedCount - 1,
+      safeResumeThroughCycleIndex: processedCount - 1,
+      evidenceRunDir: input.runDir,
+      evidenceChainDigest: lastAccountingDigest,
+      evidenceTerminalState: interrupted
+        ? "STREAMING_EVIDENCE_SEALED_PARTIAL"
+        : "STREAMING_EVIDENCE_OK",
+      dbConnectionMode: null,
+      replayTerminalState:
+        terminalState === "COMPLETED" ? "REPLAY_RUN_OK" : "REPLAY_RUN_SEALED_PARTIAL_RESUMABLE",
+      executionState: exchange.buildCheckpointSlice(),
       accountingFrontierState: {
-        accountingSequence: cycleIndex + 1,
-        frontierAsOf: bar.barCloseTime,
-        cash,
-        equity: cash,
-        equityHwm: cash,
-        monthlyPeakHwm: cash,
-        monthKey: bar.barCloseTime.slice(0, 7),
-        accountDrawdownBps: 0,
-        monthlyDrawdownBps: 0,
-        strategyPeakHwmByKey: {},
-        strategyDrawdownBpsByKey: {},
-        marksJson: { [bar.symbol]: { price: bar.close, barCloseTime: bar.barCloseTime } },
-        positionsJson: {},
-        consumedFillIds: fillIds.slice(-8),
+        accountingSequence: accounting.accountingSequence,
+        frontierAsOf: accounting.frontierAsOf,
+        cash: accounting.cash,
+        equity: accounting.equity,
+        equityHwm: accounting.equityHwm,
+        monthlyPeakHwm: accounting.monthlyPeakHwm ?? accounting.equityHwm,
+        monthKey: accounting.monthKey,
+        accountDrawdownBps: accounting.accountDrawdownBps,
+        monthlyDrawdownBps: accounting.monthlyDrawdownBps ?? 0,
+        strategyPeakHwmByKey: accounting.strategyPeakHwmByKey ?? {},
+        strategyDrawdownBpsByKey: accounting.strategyDrawdownBpsByKey ?? {},
+        marksJson: accounting.marks,
+        positionsJson: accounting.positions,
+        consumedFillIds: accounting.consumedFillIds,
         cashEventsJson: [],
-        grossRealizedPnl: netPnl,
-        netRealizedPnl: netPnl,
+        grossRealizedPnl: accounting.grossRealizedPnl,
+        netRealizedPnl: accounting.netRealizedPnl,
         semanticContentDigest: lastAccountingDigest,
+        cumulativeOrdersCount: orderCount,
+        cumulativeFillsCount: fillCount,
       },
       drawdownHwmState: {
-        accountPeakHwm: cash,
-        monthlyPeakHwm: cash,
-        monthKey: bar.barCloseTime.slice(0, 7),
-        breachState: "NONE" as const,
+        accountPeakHwm: accounting.equityHwm,
+        monthlyPeakHwm: accounting.monthlyPeakHwm ?? accounting.equityHwm,
+        monthKey: accounting.monthKey,
+        breachState: lastGuardian as "NONE" | "CLOSE_ONLY" | "STOP_ACCOUNT",
         strategyPeaks: {},
-        strategyDrawdownBpsByKey: {},
-        monthlyDrawdownBps: 0,
-        accountDrawdownBps: 0,
+        strategyDrawdownBpsByKey: accounting.strategyDrawdownBpsByKey ?? {},
+        monthlyDrawdownBps: accounting.monthlyDrawdownBps ?? 0,
+        accountDrawdownBps: accounting.accountDrawdownBps,
       },
-    } as unknown as ReplayCheckpointRecord;
+    });
     buildAndWriteFhvOperatorStatus(input.runDir, {
       runId: input.runId,
       phase: "CONTROL_REPLAY",
       codeSha: input.releaseSha.trim().toLowerCase(),
       artifactDigest: lastAccountingDigest,
       datasetSeal: CONTROL_REPLAY_OFFICIAL_MARKET_AUTHORITY,
-      datasetDigest: input.developmentWalkForwardContentDigest,
+      datasetDigest: input.developmentContentDigest ?? input.developmentWalkForwardContentDigest,
       configurationDigest: packageContentDigestHex,
       organizationId,
       currentSymbol: bar.symbol,
       historicalCursor: bar.barOpenTime,
       partition: "PRE_HOLDOUT",
-      barsProcessed: cycleIndex + 1,
-      barsTotal,
+      barsProcessed: processedCount,
+      barsTotal: input.maxCycles,
       startedAt,
       heartbeatAt: new Date().toISOString(),
       heartbeatState: "OK",
-      terminalState: cycleIndex + 1 >= barsTotal ? "COMPLETED" : "RUNNING",
+      terminalState,
       lastCheckpointAt: new Date().toISOString(),
       checkpoint: observerCheckpoint,
       hostTelemetry: {
@@ -528,36 +492,265 @@ export async function runChronologicalControlReplayV2(input: {
       },
       evidenceHealth: "ok",
     });
-    const checkpointEvery = input.checkpointEveryCycles ?? Math.max(1, Math.floor(barsTotal / 2));
-    if ((cycleIndex + 1) % checkpointEvery === 0 || cycleIndex + 1 === barsTotal) {
-      const checkpoint: ChronologicalControlReplayCheckpointV1 = {
-        schemaVersion: "control-replay-chronological-checkpoint/v1",
-        runId: input.runId,
-        cycleIndex,
-        lastBarOpenTime: bar.barOpenTime,
-        orderCount,
-        fillCount,
-        cash,
-        equity: cash,
-        netPnl,
-        guardianState: lastGuardian,
-        accountingSemanticDigest: lastAccountingDigest,
-        semanticParityDigest: lastAccountingDigest,
-        fillIds,
-        orders: [...orders.values()],
-        executionSlice: exchange.buildCheckpointSlice(),
-      };
-      writeFileAtomic(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+  };
+
+  const persistDriverCheckpoint = (bar: Bar, processedIndex: number, isInterrupted: boolean) => {
+    const checkpoint: ChronologicalControlReplayCheckpointV1 = {
+      schemaVersion: "control-replay-chronological-checkpoint/v1",
+      runId: input.runId,
+      cycleIndex: processedIndex,
+      lastBarOpenTime: bar.barOpenTime,
+      orderCount,
+      fillCount,
+      cash: accounting.cash,
+      equity: accounting.equity,
+      netPnl: accounting.netRealizedPnl,
+      guardianState: lastGuardian,
+      accountingSemanticDigest: lastAccountingDigest,
+      semanticParityDigest: lastAccountingDigest,
+      fillIds,
+      orders: [...orders.values()],
+      executionSlice: exchange.buildCheckpointSlice(),
+      accountingState: accounting,
+      interrupted: isInterrupted,
+    };
+    writeFileAtomic(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+  };
+
+  for await (const bar of iterateExecutionBars(input)) {
+    if (economicStartMs !== null && Date.parse(bar.barOpenTime) < economicStartMs) {
+      continue;
+    }
+    cycleIndex += 1;
+    if (cycleIndex < startIndex) {
+      continue;
+    }
+    if (input.maxCycles !== undefined && cycleIndex >= input.maxCycles) {
+      break;
+    }
+    if (input.interruptAfterCycles !== undefined && cycleIndex >= input.interruptAfterCycles) {
+      interrupted = true;
+      break;
+    }
+
+    const compact = compactSymbol(bar.symbol);
+    replayNowMs = Date.parse(bar.barCloseTime);
+    const intent = intents[compact];
+    assertForecastSymbolMatchesMarket({
+      forecastSymbol: intent.symbol,
+      marketSymbol: bar.symbol,
+    });
+    const instrument = FHV_SYMBOL_CODE_TO_INSTRUMENT[compact];
+    const guardian = evaluateHtrGuardianCycle({
+      skipReconciliationAssert: true,
+      accountPeakHwm: accounting.equityHwm,
+      monthlyPeakHwm: accounting.monthlyPeakHwm ?? accounting.equityHwm,
+      equityUsdt: accounting.equity,
+    });
+    lastGuardian = guardian.breachState;
+    const portfolio = derivePortfolioFromAccountingState({
+      state: accounting,
+      runConfig: DEFAULT_PORTFOLIO_RUN_CONFIG,
+      limits: portfolioLimits,
+      stopDistanceProvider: defaultStopDistanceProvider,
+      markPrices: { [instrument]: bar.close, [compact]: bar.close },
+    });
+    const economics = buildDecisionEconomicsV2Record({
+      organizationId,
+      forecastId: intent.identityDigest,
+      notionalUsdt: 10_000,
+      costRate: 0.001,
+      slippageBufferUsdt: 5,
+      replicaSamples: TEST_ONLY_REPLICA_SAMPLES,
+      scientificAdmissionReceiptDigest,
+      scientificAdmissionVerified: false,
+    });
+    const evRange = decisionEvRangeFromRecord(economics);
+    void evRange;
+    const openCount = exchange.listOpenOrders().length;
+    if (guardian.allowNewExposure && openCount === 0) {
+      const sizing = computeStopBasedQuantity({
+        side: intent.side,
+        entryPrice: bar.close,
+        signal: diagnosticSignal(organizationId, instrument, bar.barCloseTime, intent.side),
+        account: portfolio,
+        limits: portfolioLimits,
+        runConfig: DEFAULT_PORTFOLIO_RUN_CONFIG,
+        stopDistanceProvider: defaultStopDistanceProvider,
+        costModel: {
+          version: COST_MODEL_VERSION_V1,
+          feesBps: costModel.feesBps,
+          slippageBps: costModel.slippageBps,
+        },
+        defaultQuantity: "0.01",
+        capitalAuthorityPath: V2_CAPITAL_AUTHORITY_PATH,
+      });
+      if (sizing.ok) {
+        const risk = await riskEngine.evaluateOrderRequest({
+          context,
+          order: {
+            clientOrderId: `cr-chrono-${cycleIndex}-${compact}`,
+            symbol: instrument,
+            side: intent.side,
+            type: "market",
+            quantity: sizing.quantity,
+          },
+          referencePrice: bar.close,
+          accountKey: "default",
+          accountState: toAccountRiskState({
+            portfolio,
+            openOrderCount: openCount,
+            accountPeakHwm: accounting.equityHwm,
+            monthlyPeakHwm: accounting.monthlyPeakHwm ?? accounting.equityHwm,
+          }),
+        });
+        const outcome = risk.decision.outcome;
+        if (outcome === "APPROVE" || outcome === "RESIZE") {
+          const quantity =
+            outcome === "RESIZE" && risk.decision.resize?.quantity
+              ? risk.decision.resize.quantity
+              : sizing.quantity;
+          const order = createInMemoryOrder({
+            organizationId,
+            symbol: compact,
+            quantity,
+            cycleIndex,
+            createdAt: new Date(bar.barCloseTime),
+            side: intent.side,
+          });
+          orders.set(order.id, order);
+          exchange.registerOrder(order, cycleIndex, Date.parse(bar.barCloseTime));
+          orderCount += 1;
+        }
+      }
+    }
+
+    const volumeReceipt = requireProfileHtxVolumeAuthority(profile, bar.symbol);
+    const accountRisk = toAccountRiskState({
+      portfolio,
+      openOrderCount: exchange.listOpenOrders().length,
+      accountPeakHwm: accounting.equityHwm,
+      monthlyPeakHwm: accounting.monthlyPeakHwm ?? accounting.equityHwm,
+    });
+    const advance = await exchange.advanceOnClosedBar({
+      context,
+      closedBar: bar,
+      barIndex: cycleIndex,
+      model,
+      persistence,
+      replayNowMs: Date.parse(bar.barCloseTime),
+      htxVolumeAuthorityReceipt: volumeReceipt,
+      htxVolumeRaw: htxVolumeRawFromClosedBar(bar),
+      refreshAccountState: async () => accountRisk,
+      reconcileOrder: async () => undefined,
+    });
+    for (const event of advance.fillEvents) {
+      const costed = applyHistoricalExecutionEconomics(event, model);
+      const fillId = `${event.orderId}:${event.fillSequence}`;
+      const frontier = advanceAccountingFrontier({
+        state: accounting,
+        fill: {
+          fillId,
+          economics: costed,
+          executedAt: bar.barCloseTime,
+        },
+        frontierAsOf: bar.barCloseTime,
+      });
+      accounting = frontier;
+      fillCount += 1;
+      fillIds.push(fillId);
+    }
+    lastMarks = {
+      ...lastMarks,
+      [compact]: { price: bar.close, barCloseTime: bar.barCloseTime },
+      [instrument]: { price: bar.close, barCloseTime: bar.barCloseTime },
+    };
+    const marked = advanceAccountingFrontier({
+      state: accounting,
+      marks: lastMarks,
+      frontierAsOf: bar.barCloseTime,
+    });
+    accounting = marked;
+    lastAccountingDigest = marked.semanticContentDigest;
+    lastProcessedIndex = cycleIndex;
+    lastBar = bar;
+    const processedCount = cycleIndex + 1;
+    const checkpointEvery = input.checkpointEveryCycles ?? 10;
+    const atCheckpoint = processedCount % checkpointEvery === 0;
+    writeObserver(bar, processedCount, "RUNNING");
+    if (atCheckpoint) {
+      persistDriverCheckpoint(bar, cycleIndex, false);
     }
   }
 
+  if (interrupted) {
+    if (!lastBar && startIndex > 0) {
+      throw new Error("CONTROL_REPLAY_INTERRUPT_WITHOUT_PROGRESS");
+    }
+    if (lastBar) {
+      persistDriverCheckpoint(lastBar, lastProcessedIndex, true);
+      writeObserver(lastBar, lastProcessedIndex + 1, "INTERRUPTED");
+    }
+  } else if (lastBar) {
+    for (const [symbol, position] of Object.entries(accounting.positions)) {
+      if (compareDecimal(position.quantity, "0") <= 0) {
+        continue;
+      }
+      const mark = accounting.marks[symbol];
+      if (!mark) {
+        throw new Error(`CONTROL_REPLAY_FLATTEN_MISSING_MARK:${symbol}`);
+      }
+      const flattenEvent: SimulatedFillEvent = {
+        orderId: `cr-chrono-flatten-${symbol}`,
+        organizationId,
+        symbol,
+        side: "sell",
+        fillSequence: fillCount + 1,
+        sourceBarIndex: lastProcessedIndex,
+        sourceBar: lastBar,
+        grossFillPrice: mark.price,
+        sliceQuantity: position.quantity,
+        remainingQuantityAfter: "0",
+        acceptedAt: new Date(lastBar.barCloseTime),
+        fillTimestamp: new Date(lastBar.barCloseTime),
+        submitLatencyMs: 0,
+        cancelLatencyMs: null,
+      };
+      const costed = applyHistoricalExecutionEconomics(flattenEvent, model);
+      const fillId = `${flattenEvent.orderId}:flatten`;
+      const frontier = advanceAccountingFrontier({
+        state: accounting,
+        fill: {
+          fillId,
+          economics: costed,
+          executedAt: lastBar.barCloseTime,
+        },
+        marks: accounting.marks,
+        frontierAsOf: lastBar.barCloseTime,
+      });
+      accounting = frontier;
+      fillCount += 1;
+      fillIds.push(fillId);
+      lastAccountingDigest = frontier.semanticContentDigest;
+    }
+    const residual = Object.values(accounting.positions).some(
+      (position) => compareDecimal(position.quantity, "0") > 0,
+    );
+    if (residual) {
+      throw new Error("CONTROL_REPLAY_RESIDUAL_INVENTORY");
+    }
+    persistDriverCheckpoint(lastBar, lastProcessedIndex, false);
+    writeObserver(lastBar, lastProcessedIndex + 1, "COMPLETED");
+  }
+
+  const cycleCount = lastProcessedIndex >= 0 ? lastProcessedIndex + 1 : 0;
   const normalizedParityDigest = normalizeChronologicalControlReplayParity({
     packageContentDigestHex,
-    accountingSemanticDigest: lastAccountingDigest,
+    accountingSemanticDigest: accountingParityDigest(accounting),
     orderCount,
     fillCount,
-    cycleCount: barsTotal,
-    netPnl,
+    cycleCount,
+    netPnl: accounting.netRealizedPnl,
     guardianState: lastGuardian,
   });
   const parityDigest = computeControlReplayParityDigest({
@@ -578,20 +771,22 @@ export async function runChronologicalControlReplayV2(input: {
     driverVersion: CONTROL_REPLAY_CHRONOLOGICAL_V2_DRIVER_VERSION,
     authority: CONTROL_REPLAY_AUTHORITY_IDENTITY,
     runId: input.runId,
-    cycleCount: barsTotal,
+    cycleCount,
     orderCount,
     fillCount,
-    cash,
-    equity: cash,
-    netPnl,
+    cash: accounting.cash,
+    equity: accounting.equity,
+    netPnl: accounting.netRealizedPnl,
     guardianState: lastGuardian,
     accountingSemanticDigest: lastAccountingDigest,
     parityDigest,
     normalizedParityDigest,
     packageContentDigestHex,
+    scientificAdmissionReceiptDigest,
     capitalEligible: false,
     executionScope: "PRE_HOLDOUT_SHARED_PORTFOLIO",
     constructionAuthority: "DEVELOPMENT",
+    interrupted,
     dee594Status: DEE_594_DOWNSTREAM_PREREQUISITE_STATUS,
   };
   writeFileAtomic(

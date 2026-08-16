@@ -22,11 +22,16 @@ import {
 import {
   assertCompletePreregisteredRevisionRiskEvidence,
   compareFhvRevisionRiskSample,
+  digestHtxSampleWindow,
   digestOperationalRevisionRiskFromAcquiredFile,
   FHV_PREREGISTERED_REVISION_RISK_SAMPLES,
   FhvRevisionRiskError,
 } from "@/lib/trader/market-data/fhv-revision-risk-evidence";
-import { qualifyFhvPreHoldoutRealData } from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
+import {
+  assertNoTypedDatasetDigestSubstitution,
+  FhvPreHoldoutQualificationError,
+  qualifyFhvPreHoldoutRealData,
+} from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { FHV_SCIENTIFIC_PARTITIONS_V1 } from "@/lib/trader/observability/fhv-partition-receipt";
 import { assertPreHoldoutNotFullHistorical } from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
@@ -35,7 +40,6 @@ import { resolveFhvFullHistoricalTerminalClassification } from "@/lib/trader/obs
 import { FhvFullHistoricalLaunchError } from "@/lib/trader/observability/fhv-full-historical-launch";
 import {
   DEE_594_DOWNSTREAM_PREREQUISITE_STATUS,
-  normalizeChronologicalControlReplayParity,
   runChronologicalControlReplayV2,
 } from "@/lib/trader/observability/control-replay-chronological-v2-driver-v1";
 import { CONTROL_REPLAY_AUTHORITY_IDENTITY } from "@/lib/trader/observability/control-replay-test-authority";
@@ -46,6 +50,10 @@ import { fhvOfficialPartitionFileRelativePath } from "@/lib/trader/market-data/f
 import { resolveFhvRevisionRiskCliConfig } from "@/scripts/trader/fhv-revision-risk-cli";
 import { resolveFhvPreHoldoutQualifyCliConfig } from "@/scripts/trader/fhv-pre-holdout-qualify-cli";
 import { resolveFhvPreHoldoutVerifyCliConfig } from "@/scripts/trader/fhv-pre-holdout-verify-cli";
+import { resolveFhvHostQualifyCliConfig } from "@/scripts/trader/fhv-host-qualify-cli";
+import { resolveFhvRealHtxPreflightCliConfig } from "@/scripts/trader/fhv-real-htx-preflight-cli";
+import { assertOfficialControlReplayDoesNotUseWholeCorpusLoader } from "@/lib/trader/market-data/fhv-bounded-bar-stream";
+import { runPrelaunchPublicEntrypointFixture } from "@/lib/trader/observability/fhv-prelaunch-fixture-e2e";
 
 const roots: string[] = [];
 afterAll(() => {
@@ -385,6 +393,36 @@ describe("mandatory revision-risk evidence", () => {
         evidence: [changed, wfEvidence],
       }),
     ).toBe("HUMAN_DECISION_REQUIRED");
+    try {
+      assertCompletePreregisteredRevisionRiskEvidence({
+        datasetRoot: root,
+        evidence: [
+          { ...refetchSame, comparison: "SAME", refetchDigest: "f".repeat(64) },
+          wfEvidence,
+        ],
+      });
+      throw new Error("expected forged SAME rejection");
+    } catch (error) {
+      expect(error).toMatchObject({ code: "REVISION_RISK_COMPARISON_FORGED_SAME" });
+    }
+    const forwardDigest = await digestHtxSampleWindow({
+      sample,
+      fetchPage: async () => sampleRows,
+    });
+    const reverseDigest = await digestHtxSampleWindow({
+      sample,
+      fetchPage: async () => [...sampleRows].reverse(),
+    });
+    expect(reverseDigest).toBe(forwardDigest);
+    try {
+      await digestHtxSampleWindow({
+        sample,
+        fetchPage: async () => [sampleRows[0]!, sampleRows[5]!],
+      });
+      throw new Error("expected gapped refetch rejection");
+    } catch (error) {
+      expect(error).toMatchObject({ code: "REVISION_RISK_REFETCH_INTEGRITY_BLOCKED_GAP" });
+    }
     expect(() =>
       qualifyFhvPreHoldoutRealData({
         datasetRoot: root,
@@ -408,6 +446,21 @@ describe("operator CLIs exist", () => {
     expect(
       resolveFhvPreHoldoutVerifyCliConfig(process.env, ["--receipt", "/tmp/r.json"]).receipt,
     ).toBe("/tmp/r.json");
+    expect(
+      resolveFhvHostQualifyCliConfig(process.env, [
+        "--release-sha",
+        "a".repeat(40),
+        "--wp3b-receipt",
+        "/tmp/wp3b.json",
+        "--throughput-receipt",
+        "/tmp/tp.json",
+        "--t4-preflight",
+        "/tmp/t4.json",
+        "--out",
+        "/tmp/host.json",
+      ]).out,
+    ).toBe("/tmp/host.json");
+    expect(resolveFhvRealHtxPreflightCliConfig(["--fixture"]).fixture).toBe(true);
   });
 });
 
@@ -465,8 +518,8 @@ describe("chronological V2 Control Replay", () => {
       runDir: join(root, "run-one"),
       organizationId: ORG,
       releaseSha: RELEASE,
+      developmentContentDigest: "c".repeat(64),
       developmentWalkForwardContentDigest: "d".repeat(64),
-      constructionBars: bars,
       executionBars: [...bars, ...eth],
       htxVolumeAuthorityByInstrument: {
         BTCUSDT: volumeBtc.htxVolumeAuthorityReceipt,
@@ -493,8 +546,8 @@ describe("chronological V2 Control Replay", () => {
       runDir: join(root, "run-two"),
       organizationId: ORG,
       releaseSha: RELEASE,
+      developmentContentDigest: "c".repeat(64),
       developmentWalkForwardContentDigest: "d".repeat(64),
-      constructionBars: bars,
       executionBars: [...bars, ...eth],
       htxVolumeAuthorityByInstrument: {
         BTCUSDT: volumeBtc.htxVolumeAuthorityReceipt,
@@ -507,28 +560,34 @@ describe("chronological V2 Control Replay", () => {
     expect(runTwo.runId).not.toBe(runOne.runId);
 
     const resumeDir = join(root, "resume");
-    await runChronologicalControlReplayV2({
+    const interrupted = await runChronologicalControlReplayV2({
       runId: "resume",
       runDir: resumeDir,
       organizationId: ORG,
       releaseSha: RELEASE,
+      developmentContentDigest: "c".repeat(64),
       developmentWalkForwardContentDigest: "d".repeat(64),
-      constructionBars: bars,
       executionBars: [...bars, ...eth],
       htxVolumeAuthorityByInstrument: {
         BTCUSDT: volumeBtc.htxVolumeAuthorityReceipt,
         ETHUSDT: volumeEth.htxVolumeAuthorityReceipt,
       },
-      maxCycles: 20,
+      interruptAfterCycles: 20,
       checkpointEveryCycles: 10,
     });
+    expect(interrupted.interrupted).toBe(true);
+    expect(interrupted.cycleCount).toBe(20);
+    const interruptedStatus = JSON.parse(
+      readFileSync(resolveFhvOperatorStatusPath(resumeDir), "utf8"),
+    );
+    expect(interruptedStatus.campaign.terminalState).not.toBe("COMPLETED");
     const resumed = await runChronologicalControlReplayV2({
       runId: "resume",
       runDir: resumeDir,
       organizationId: ORG,
       releaseSha: RELEASE,
+      developmentContentDigest: "c".repeat(64),
       developmentWalkForwardContentDigest: "d".repeat(64),
-      constructionBars: bars,
       executionBars: [...bars, ...eth],
       htxVolumeAuthorityByInstrument: {
         BTCUSDT: volumeBtc.htxVolumeAuthorityReceipt,
@@ -538,18 +597,19 @@ describe("chronological V2 Control Replay", () => {
       checkpointEveryCycles: 10,
       resumeFromCheckpoint: true,
     });
+    expect(resumed.interrupted).toBe(false);
     expect(resumed.normalizedParityDigest).toBe(runOne.normalizedParityDigest);
 
     const mutated = bars.map((bar, index) =>
-      index === 50 ? { ...bar, close: "99999", high: "99999" } : bar,
+      index === 5 ? { ...bar, close: "99999", high: "99999" } : bar,
     );
     const mutatedRun = await runChronologicalControlReplayV2({
       runId: "mutated",
       runDir: join(root, "mutated"),
       organizationId: ORG,
       releaseSha: RELEASE,
+      developmentContentDigest: "c".repeat(64),
       developmentWalkForwardContentDigest: "d".repeat(64),
-      constructionBars: mutated,
       executionBars: [...mutated, ...eth],
       htxVolumeAuthorityByInstrument: {
         BTCUSDT: volumeBtc.htxVolumeAuthorityReceipt,
@@ -558,16 +618,70 @@ describe("chronological V2 Control Replay", () => {
       maxCycles: 40,
     });
     expect(mutatedRun.normalizedParityDigest).not.toBe(runOne.normalizedParityDigest);
-    expect(
-      normalizeChronologicalControlReplayParity({
-        packageContentDigestHex: runOne.packageContentDigestHex,
-        accountingSemanticDigest: runOne.accountingSemanticDigest,
-        orderCount: runOne.orderCount,
-        fillCount: runOne.fillCount,
-        cycleCount: runOne.cycleCount,
-        netPnl: runOne.netPnl,
-        guardianState: runOne.guardianState,
+    expect(runOne.normalizedParityDigest).toHaveLength(64);
+    await expect(
+      runChronologicalControlReplayV2({
+        runId: "substituted",
+        runDir: join(root, "substituted"),
+        organizationId: ORG,
+        releaseSha: RELEASE,
+        developmentContentDigest: "d".repeat(64),
+        developmentWalkForwardContentDigest: "d".repeat(64),
+        executionBars: bars.slice(0, 40),
+        htxVolumeAuthorityByInstrument: {
+          BTCUSDT: volumeBtc.htxVolumeAuthorityReceipt,
+          ETHUSDT: volumeEth.htxVolumeAuthorityReceipt,
+        },
+        maxCycles: 5,
       }),
-    ).toBe(runOne.normalizedParityDigest);
+    ).rejects.toThrow(/TYPED_DATASET_IDENTITY_SUBSTITUTION/);
+    const vetoed = await runChronologicalControlReplayV2({
+      runId: "veto",
+      runDir: join(root, "veto"),
+      organizationId: ORG,
+      releaseSha: RELEASE,
+      developmentContentDigest: "c".repeat(64),
+      developmentWalkForwardContentDigest: "d".repeat(64),
+      executionBars: [...bars.slice(0, 30), ...eth.slice(0, 30)],
+      htxVolumeAuthorityByInstrument: {
+        BTCUSDT: volumeBtc.htxVolumeAuthorityReceipt,
+        ETHUSDT: volumeEth.htxVolumeAuthorityReceipt,
+      },
+      maxCycles: 20,
+      riskScenario: "veto",
+    });
+    expect(vetoed.orderCount).toBe(0);
   }, 180_000);
+});
+
+describe("typed dataset identity substitution", () => {
+  it("rejects combined digest in DEVELOPMENT-only or WF swap slots", () => {
+    expect(() =>
+      assertNoTypedDatasetDigestSubstitution({
+        developmentContentDigest: "a".repeat(64),
+        wfPredictiveContentDigest: "b".repeat(64),
+        wfEconomicContentDigest: "c".repeat(64),
+        developmentWalkForwardContentDigest: "a".repeat(64),
+        walkForwardUnionCompatibilityDigest: "e".repeat(64),
+      }),
+    ).toThrow(FhvPreHoldoutQualificationError);
+  });
+});
+
+describe("official Control Replay bounded entry", () => {
+  it("does not call the whole-corpus loader", () => {
+    const source = readFileSync(
+      join(process.cwd(), "lib/trader/observability/fhv-control-replay-execution.ts"),
+      "utf8",
+    );
+    expect(() => assertOfficialControlReplayDoesNotUseWholeCorpusLoader(source)).not.toThrow();
+  });
+});
+
+describe("prelaunch fixture public entrypoints", () => {
+  it("emits PRELAUNCH_FIXTURE_END_TO_END=PASS", async () => {
+    await expect(runPrelaunchPublicEntrypointFixture()).resolves.toBe(
+      "PRELAUNCH_FIXTURE_END_TO_END=PASS",
+    );
+  });
 });

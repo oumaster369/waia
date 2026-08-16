@@ -7,8 +7,7 @@ import {
   writeFileAtomicExclusive,
 } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { assertFhvOfficialV2DatasetArtifactsPresent } from "@/lib/trader/market-data/fhv-official-v2-required";
-import { loadFhvPreHoldoutPartitionBars } from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
-import { FHV_OFFICIAL_SYMBOLS } from "@/lib/trader/market-data/fhv-partition-boundaries";
+import { streamOfficialPreHoldoutWalkForwardBars } from "@/lib/trader/market-data/fhv-bounded-bar-stream";
 import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 import { runChronologicalControlReplayV2 } from "@/lib/trader/observability/control-replay-chronological-v2-driver-v1";
 import type { FhvConfigurationFreezeV1 } from "@/lib/trader/observability/fhv-configuration-freeze";
@@ -68,6 +67,7 @@ async function runFhvControlReplayLaunchBacktest(input: {
   launchExecution: ReturnType<typeof prepareFhvOfficialLaunchExecution>;
   launchReceiptDigest: string;
   replaceLaunchResult?: boolean;
+  resumeFromCheckpoint?: boolean;
 }): Promise<FhvFullHistoricalLaunchResult> {
   // Preserve launch-shell dataset presence gates (no holdout; no FULL_HISTORICAL economics).
   if (input.launchInput.boundedFixture) {
@@ -96,31 +96,15 @@ async function runFhvControlReplayLaunchBacktest(input: {
 
   if (input.qualificationReceipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA") {
     const datasetRoot = input.launchInput.datasetRoot!;
-    const constructionBars = FHV_OFFICIAL_SYMBOLS.flatMap((symbol) =>
-      loadFhvPreHoldoutPartitionBars({
-        datasetRoot,
-        partition: "development",
-        symbol,
-      }),
-    );
-    const executionBars = [
-      ...constructionBars,
-      ...FHV_OFFICIAL_SYMBOLS.flatMap((symbol) =>
-        loadFhvPreHoldoutPartitionBars({
-          datasetRoot,
-          partition: "walk-forward",
-          symbol,
-        }),
-      ),
-    ];
     const chronological = await runChronologicalControlReplayV2({
       runId: input.launchInput.runId,
       runDir: input.runDir,
       organizationId: input.launchInput.organizationId,
       releaseSha: input.launchInput.releaseSha.trim().toLowerCase(),
       developmentWalkForwardContentDigest: input.qualificationReceipt.datasetContentDigest,
-      constructionBars,
-      executionBars,
+      executionBarStream: streamOfficialPreHoldoutWalkForwardBars(datasetRoot),
+      economicReplayStartUtc: "2023-01-01T00:00:00.000Z",
+      resumeFromCheckpoint: input.resumeFromCheckpoint === true,
       htxVolumeAuthorityByInstrument: {
         BTCUSDT: readControlReplayVolumeReceipt(datasetRoot, "BTCUSDT"),
         ETHUSDT: readControlReplayVolumeReceipt(datasetRoot, "ETHUSDT"),
@@ -153,7 +137,7 @@ async function runFhvControlReplayLaunchBacktest(input: {
         accountingStateDigest: chronological.accountingSemanticDigest,
         scientificParityDigest: chronological.parityDigest,
         packageContentDigestHex: chronological.packageContentDigestHex,
-        scientificAdmissionReceiptDigest: chronological.packageContentDigestHex,
+        scientificAdmissionReceiptDigest: chronological.scientificAdmissionReceiptDigest,
         executablePolicyDigest: "UNAVAILABLE",
         fullHistoryRescanCount: getFullHistoryRescanCount(),
         holdoutStatus: "SEALED_NOT_ACCESSED" as const,
@@ -411,6 +395,7 @@ export async function resumeFhvControlReplayLaunch(
     launchExecution,
     launchReceiptDigest: existingReceipt.launchReceiptDigest,
     replaceLaunchResult: true,
+    resumeFromCheckpoint: true,
   });
 }
 

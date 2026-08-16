@@ -51,10 +51,9 @@ export function makeWp17QualifiedHtxVolumeAuthority(bar: Bar): {
   htxVolumeAuthorityReceipt: HtxVolumeQualificationReceiptV1;
   htxVolumeRaw: { amount: number; vol: number };
 } {
-  const vol = Number(bar.volume);
+  const amount = Number(bar.volume);
   const close = Number(bar.close);
-  const amount = vol * close;
-  const qualifiedVol = 1;
+  const qualifiedBase = 1;
   const qualifiedClose = Number.isFinite(close) && close > 0 ? close : 50_000;
   const receipt = qualifyHtxKlineVolumeAuthority({
     symbol: bar.symbol.replace("/", ""),
@@ -65,19 +64,18 @@ export function makeWp17QualifiedHtxVolumeAuthority(bar: Bar): {
         high: qualifiedClose,
         low: qualifiedClose,
         close: qualifiedClose,
-        amount: qualifiedVol * qualifiedClose,
-        vol: qualifiedVol,
+        amount: qualifiedBase,
+        vol: qualifiedBase * qualifiedClose,
         count: 1,
       },
       {
-        // Second sample with different close so amount≠vol (avoids AMBIGUOUS_FIELDS).
         id: Math.floor(Date.parse(bar.barOpenTime) / 1000) + 60,
         open: qualifiedClose * 0.5,
         high: qualifiedClose * 0.5,
         low: qualifiedClose * 0.5,
         close: qualifiedClose * 0.5,
-        amount: qualifiedVol * qualifiedClose * 0.5,
-        vol: qualifiedVol,
+        amount: qualifiedBase,
+        vol: qualifiedBase * qualifiedClose * 0.5,
         count: 1,
       },
     ],
@@ -88,7 +86,7 @@ export function makeWp17QualifiedHtxVolumeAuthority(bar: Bar): {
   }
   return {
     htxVolumeAuthorityReceipt: receipt,
-    htxVolumeRaw: { amount, vol },
+    htxVolumeRaw: { amount: Number.isFinite(amount) ? amount : 0, vol: 0 },
   };
 }
 

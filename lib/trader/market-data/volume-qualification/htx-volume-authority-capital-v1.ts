@@ -5,13 +5,15 @@ enforceServerOnly();
 import type { HtxKlineRow } from "@/lib/trader/connectors/htx/types";
 import {
   assertHtxVolumeAuthorityQualified,
+  HTX_BASE_VOLUME_FIELD,
+  HTX_VOLUME_QUALIFICATION_RECEIPT_SCHEMA_VERSION,
   HtxVolumeQualificationError,
   type HtxVolumeQualificationReceiptV1,
 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 
 /**
  * Mapper/raw ingestion may retain amount/vol for provenance, but that surface is NEVER
- * capital-authoritative without a QUALIFIED receipt (DEE-526).
+ * capital-authoritative without a QUALIFIED v2 receipt (DEE-526).
  */
 export const HTX_MAPPED_VOLUME_AUTHORITY = "NON_AUTHORITATIVE_RAW_INGESTION" as const;
 
@@ -28,10 +30,8 @@ export class HtxVolumeCapitalAuthorityError extends Error {
 /**
  * Resolve authoritative HTX **base** volume for capital/capacity/participation paths.
  *
- * Qualification proves amount ≈ vol·close (quote vs base). Capital participation uses
- * base units (`vol`), never the silent `amount ?? vol` mapper fallback.
- * Fail-closed on missing receipt, BLOCKED verdict, or missing base vol.
- * Never fabricates QUALIFIED. Never invents a replacement capacity model.
+ * v2 contract: base units are `amount`. Quote turnover `vol` must not become capacity.
+ * Fail-closed on missing/BLOCKED/retired-v1 receipts.
  */
 export function resolveAuthoritativeHtxBaseVolumeForCapital(input: {
   receipt: HtxVolumeQualificationReceiptV1 | null | undefined;
@@ -44,6 +44,12 @@ export function resolveAuthoritativeHtxBaseVolumeForCapital(input: {
       "HTX volume capital authority requires a qualification receipt",
     );
   }
+  if (input.receipt.schemaVersion !== HTX_VOLUME_QUALIFICATION_RECEIPT_SCHEMA_VERSION) {
+    throw new HtxVolumeCapitalAuthorityError(
+      "HTX_VOLUME_AUTHORITY_BLOCKED_RETIRED_SEMANTICS",
+      "old reversed HTX volume receipts cannot authorize the corrected execution path",
+    );
+  }
   try {
     assertHtxVolumeAuthorityQualified(input.receipt);
   } catch (err) {
@@ -52,7 +58,7 @@ export function resolveAuthoritativeHtxBaseVolumeForCapital(input: {
     }
     throw err;
   }
-  if (input.receipt.authorityField !== "amount") {
+  if (input.receipt.authorityField !== HTX_BASE_VOLUME_FIELD) {
     throw new HtxVolumeCapitalAuthorityError(
       "HTX_VOLUME_AUTHORITY_FIELD_UNSUPPORTED",
       `unsupported HTX volume authorityField=${String(input.receipt.authorityField)}`,
@@ -61,20 +67,29 @@ export function resolveAuthoritativeHtxBaseVolumeForCapital(input: {
   if (!Number.isFinite(input.amount) || (input.amount as number) < 0) {
     throw new HtxVolumeCapitalAuthorityError(
       "HTX_VOLUME_AUTHORITY_AMOUNT_INVALID",
-      "qualified HTX volume authority requires a finite non-negative amount",
+      "qualified HTX volume authority requires a finite non-negative base amount",
     );
   }
-  if (!Number.isFinite(input.vol) || (input.vol as number) < 0) {
-    throw new HtxVolumeCapitalAuthorityError(
-      "HTX_VOLUME_AUTHORITY_VOL_INVALID",
-      "qualified HTX base volume requires a finite non-negative vol",
-    );
+  const amount = input.amount as number;
+  const vol = input.vol;
+  if (vol !== null && vol !== undefined) {
+    if (!Number.isFinite(vol) || vol < 0) {
+      throw new HtxVolumeCapitalAuthorityError(
+        "HTX_VOLUME_AUTHORITY_VOL_INVALID",
+        "qualified HTX quote turnover requires a finite non-negative vol when supplied",
+      );
+    }
+    if (amount === 0 && vol > 0) {
+      throw new HtxVolumeCapitalAuthorityError(
+        "HTX_VOLUME_AUTHORITY_BLOCKED_ZERO_BASE_POSITIVE_QUOTE",
+        "quote turnover cannot create positive base participation capacity",
+      );
+    }
   }
-  // Do not fall back to amount as base — that is the mapper defect this gate closes.
-  return input.vol as number;
+  return amount;
 }
 
-/** Capital/capacity gate: QUALIFIED permits; BLOCKED/missing denies. */
+/** Capital/capacity gate: QUALIFIED v2 permits; BLOCKED/missing/retired denies. */
 export function assertHtxVolumeCapitalAuthorityPermitsCapacity(
   receipt: HtxVolumeQualificationReceiptV1 | null | undefined,
 ): asserts receipt is HtxVolumeQualificationReceiptV1 {
@@ -82,6 +97,12 @@ export function assertHtxVolumeCapitalAuthorityPermitsCapacity(
     throw new HtxVolumeCapitalAuthorityError(
       "HTX_VOLUME_AUTHORITY_MISSING",
       "capacity/participation requires HTX volume qualification receipt",
+    );
+  }
+  if (receipt.schemaVersion !== HTX_VOLUME_QUALIFICATION_RECEIPT_SCHEMA_VERSION) {
+    throw new HtxVolumeCapitalAuthorityError(
+      "HTX_VOLUME_AUTHORITY_BLOCKED_RETIRED_SEMANTICS",
+      "old reversed HTX volume receipts cannot authorize the corrected execution path",
     );
   }
   try {
@@ -96,16 +117,16 @@ export function assertHtxVolumeCapitalAuthorityPermitsCapacity(
 
 /**
  * Map a qualified HTX row to capital-authoritative base volume string.
- * Raw amount??vol fallback is forbidden on this path.
+ * Quote turnover is never treated as base quantity.
  */
 export function authoritativeBaseVolumeFromQualifiedHtxRow(
   row: Pick<HtxKlineRow, "amount" | "vol">,
   receipt: HtxVolumeQualificationReceiptV1,
 ): string {
-  const amount = resolveAuthoritativeHtxBaseVolumeForCapital({
+  const base = resolveAuthoritativeHtxBaseVolumeForCapital({
     receipt,
     amount: row.amount,
     vol: row.vol,
   });
-  return amount.toFixed(8).replace(/\.?0+$/, "") || "0";
+  return base.toFixed(8).replace(/\.?0+$/, "") || "0";
 }

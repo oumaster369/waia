@@ -120,6 +120,27 @@ export function digestOperationalRevisionRiskFromAcquiredFile(input: {
   });
 }
 
+function assertUtcTimestamp(value: string, field: string): void {
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) ||
+    Number.isNaN(Date.parse(value))
+  ) {
+    throw new FhvRevisionRiskError(
+      "REVISION_RISK_TIMESTAMP_INVALID",
+      `${field} must be a UTC ISO-8601 millisecond timestamp`,
+    );
+  }
+}
+
+function assertHex64(value: string, field: string): void {
+  if (!/^[a-f0-9]{64}$/.test(value)) {
+    throw new FhvRevisionRiskError(
+      "REVISION_RISK_DIGEST_INVALID",
+      `${field} must be a 64-char lowercase hex digest`,
+    );
+  }
+}
+
 export async function digestHtxSampleWindow(input: {
   sample: (typeof FHV_PREREGISTERED_REVISION_RISK_SAMPLES)[number];
   fetchPage: FhvRealHtxPageFetcher;
@@ -134,10 +155,28 @@ export async function digestHtxSampleWindow(input: {
   });
   const startMs = Date.parse(input.sample.startUtc);
   const endMs = Date.parse(input.sample.endUtc);
-  const bars = mapHtxKlinesToBars(instrument, rows, "1m").filter((bar) => {
-    const openMs = Date.parse(bar.barOpenTime);
-    return openMs >= startMs && openMs < endMs;
-  });
+  const bars = mapHtxKlinesToBars(instrument, rows, "1m")
+    .filter((bar) => {
+      const openMs = Date.parse(bar.barOpenTime);
+      return openMs >= startMs && openMs < endMs;
+    })
+    .slice()
+    .sort((left, right) => Date.parse(left.barOpenTime) - Date.parse(right.barOpenTime));
+  if (bars.length === 0) {
+    throw new FhvRevisionRiskError(
+      "REVISION_RISK_REFETCH_INTEGRITY_BLOCKED_EMPTY",
+      `${input.sample.sampleId} refetch returned no bars in the preregistered window`,
+    );
+  }
+  for (let index = 1; index < bars.length; index += 1) {
+    const delta = Date.parse(bars[index]!.barOpenTime) - Date.parse(bars[index - 1]!.barOpenTime);
+    if (delta !== 60_000) {
+      throw new FhvRevisionRiskError(
+        "REVISION_RISK_REFETCH_INTEGRITY_BLOCKED_GAP",
+        `${input.sample.sampleId} refetch is gapped at ${bars[index]!.barOpenTime}`,
+      );
+    }
+  }
   return streamingBarSemanticDigestOf(bars);
 }
 
@@ -148,12 +187,9 @@ export async function compareFhvRevisionRiskSample(input: {
   refetchAcquiredAtUtc: string;
   fetchPage: FhvRealHtxPageFetcher;
 }): Promise<FhvRevisionRiskSampleEvidenceV1> {
-  if (!/^[a-f0-9]{64}$/.test(input.operationalDigest)) {
-    throw new FhvRevisionRiskError(
-      "REVISION_RISK_OPERATIONAL_DIGEST_INVALID",
-      "operational digest must be a 64-char hex digest of acquired bytes",
-    );
-  }
+  assertHex64(input.operationalDigest, "operationalDigest");
+  assertUtcTimestamp(input.operationalAcquiredAtUtc, "operationalAcquiredAtUtc");
+  assertUtcTimestamp(input.refetchAcquiredAtUtc, "refetchAcquiredAtUtc");
   const refetchDigest = await digestHtxSampleWindow({
     sample: input.sample,
     fetchPage: input.fetchPage,
@@ -225,6 +261,33 @@ export function assertCompletePreregisteredRevisionRiskEvidence(input: {
       throw new FhvRevisionRiskError(
         "REVISION_RISK_OPERATIONAL_DIGEST_FORGED",
         `${row.sampleId} operational digest does not match acquired immutable bytes`,
+      );
+    }
+    if (!/^[a-f0-9]{64}$/.test(row.refetchDigest)) {
+      throw new FhvRevisionRiskError(
+        "REVISION_RISK_DIGEST_INVALID",
+        `${row.sampleId} refetchDigest must be a 64-char lowercase hex digest`,
+      );
+    }
+    if (
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(row.operationalAcquiredAtUtc) ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(row.refetchAcquiredAtUtc)
+    ) {
+      throw new FhvRevisionRiskError(
+        "REVISION_RISK_TIMESTAMP_INVALID",
+        `${row.sampleId} acquired-at timestamps must be UTC ISO-8601 milliseconds`,
+      );
+    }
+    if (row.comparison === "SAME" && row.operationalDigest !== row.refetchDigest) {
+      throw new FhvRevisionRiskError(
+        "REVISION_RISK_COMPARISON_FORGED_SAME",
+        `${row.sampleId} comparison SAME is forged against digest mismatch`,
+      );
+    }
+    if (row.comparison === "CHANGED" && row.operationalDigest === row.refetchDigest) {
+      throw new FhvRevisionRiskError(
+        "REVISION_RISK_COMPARISON_FORGED_CHANGED",
+        `${row.sampleId} comparison CHANGED is forged against identical digests`,
       );
     }
   }

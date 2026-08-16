@@ -5,7 +5,7 @@ import {
 
 /**
  * Research/backtest session volume authority for HTX historical participation.
- * Runs the real qualifier over a dimensionally consistent sample — does not fabricate QUALIFIED.
+ * Uses corrected amount=base / vol=quote fixtures — does not fabricate QUALIFIED.
  */
 export function buildResearchSessionHtxVolumeQualificationReceipt(input?: {
   symbol?: string;
@@ -21,8 +21,8 @@ export function buildResearchSessionHtxVolumeQualificationReceipt(input?: {
         high: 101,
         low: 99,
         close: 100,
-        amount: 1000,
-        vol: 10,
+        amount: 10,
+        vol: 1000,
         count: 1,
       },
       {
@@ -31,8 +31,8 @@ export function buildResearchSessionHtxVolumeQualificationReceipt(input?: {
         high: 51,
         low: 49,
         close: 50,
-        amount: 500,
-        vol: 10,
+        amount: 10,
+        vol: 500,
         count: 1,
       },
     ],

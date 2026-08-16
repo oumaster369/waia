@@ -52,6 +52,7 @@ import {
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { CONTROL_REPLAY_AUTHORITY_IDENTITY } from "@/lib/trader/observability/control-replay-test-authority";
 import { runScientificControlReplayV2Ceremony } from "@/lib/trader/observability/control-replay-scientific-v2-driver-v1";
+import { AuthorityChainViolationError } from "@/lib/trader/risk/authority-chain";
 import { resolveFhvFullHistoricalTerminalClassification } from "@/lib/trader/observability/fhv-full-historical-launch";
 import { FhvFullHistoricalLaunchError } from "@/lib/trader/observability/fhv-full-historical-launch";
 import { streamingBarSemanticDigestOf } from "@/lib/trader/market-data/fhv-streaming-bar-digest";
@@ -599,7 +600,7 @@ describe("official pre-holdout Control Replay vs FULL_HISTORICAL", () => {
         class: "OFFICIAL_PRE_HOLDOUT_REAL_DATA",
         bars,
         releaseSha: RELEASE,
-        developmentWalkForwardContentDigest: digest,
+        developmentContentDigest: digest,
       },
     });
     expect(official.marketAuthorityClass).toBe("OFFICIAL_PRE_HOLDOUT_REAL_DATA");
@@ -619,7 +620,7 @@ describe("official pre-holdout Control Replay vs FULL_HISTORICAL", () => {
         class: "OFFICIAL_PRE_HOLDOUT_REAL_DATA",
         bars: mutated,
         releaseSha: RELEASE,
-        developmentWalkForwardContentDigest: digest,
+        developmentContentDigest: digest,
       },
     });
     expect(mutatedRun.parityDigest).not.toBe(official.parityDigest);
@@ -628,9 +629,20 @@ describe("official pre-holdout Control Replay vs FULL_HISTORICAL", () => {
         class: "OFFICIAL_PRE_HOLDOUT_REAL_DATA",
         bars,
         releaseSha: RELEASE,
-        developmentWalkForwardContentDigest: digest,
+        developmentContentDigest: digest,
       },
     });
     expect(runTwo.parityDigest).toBe(official.parityDigest);
+    await expect(
+      runScientificControlReplayV2Ceremony({
+        marketAuthority: {
+          class: "OFFICIAL_PRE_HOLDOUT_REAL_DATA",
+          bars,
+          releaseSha: RELEASE,
+          developmentContentDigest: digest,
+          developmentWalkForwardContentDigest: digest,
+        },
+      }),
+    ).rejects.toBeInstanceOf(AuthorityChainViolationError);
   }, 180_000);
 });

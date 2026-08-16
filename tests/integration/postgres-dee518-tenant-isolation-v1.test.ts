@@ -72,8 +72,8 @@ function hex64(seed: string): string {
 
 function qualifiedHtxRows(): HtxKlineRow[] {
   return [
-    { id: 1, open: 100, high: 101, low: 99, close: 100, amount: 1000, vol: 10, count: 1 },
-    { id: 2, open: 50, high: 51, low: 49, close: 50, amount: 500, vol: 10, count: 1 },
+    { id: 1, open: 100, high: 101, low: 99, close: 100, amount: 10, vol: 1000, count: 1 },
+    { id: 2, open: 50, high: 51, low: 49, close: 50, amount: 10, vol: 500, count: 1 },
   ];
 }
 
