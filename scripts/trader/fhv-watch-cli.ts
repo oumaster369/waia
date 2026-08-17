@@ -75,6 +75,22 @@ function render(status: FhvOperatorStatusV1): string {
   );
   lines.push(`  process ${host.processStatus}  service ${host.serviceStatus}`);
 
+  const trading = status.tradingSimulation;
+  lines.push(
+    `  economics cash ${trading.cash ?? "UNAVAILABLE"}` +
+      `  equity ${trading.equity ?? "UNAVAILABLE"}` +
+      `  netPnl ${trading.netPnl ?? "UNAVAILABLE"}` +
+      `  realized ${trading.realizedPnl ?? "UNAVAILABLE"}` +
+      `  unrealized ${trading.unrealizedPnl ?? "UNAVAILABLE"}` +
+      `  drawdown ${trading.accountDrawdownBps == null ? "UNAVAILABLE" : `${trading.accountDrawdownBps} bps`}`,
+  );
+  lines.push(
+    `  guardian ${trading.guardianState ?? "UNAVAILABLE"}` +
+      `  orders ${trading.ordersCount ?? "UNAVAILABLE"}` +
+      `  fills ${trading.fillsCount ?? "UNAVAILABLE"}` +
+      `  openPos ${trading.openPositionsCount ?? "UNAVAILABLE"}`,
+  );
+
   if (status.recentAlerts.length > 0) {
     lines.push(`  alerts (${status.recentAlerts.length} recent):`);
     for (const alert of status.recentAlerts.slice(0, 5)) {

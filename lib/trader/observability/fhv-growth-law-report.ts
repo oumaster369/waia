@@ -15,6 +15,7 @@ import {
   assessFhvHotPathDecay,
   computeFhvThroughputWindows,
   countFhvIndependentCheckpointObservations,
+  FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION,
   FhvCheckpointSampleError,
   fitFhvCheckpointDurationVsSize,
   fitFhvSessionGrowthLaw,
@@ -202,7 +203,7 @@ export function buildFhvGrowthLawReportV2(input: {
     throw error;
   }
   const windows = computeFhvThroughputWindows(series);
-  const decay = assessFhvHotPathDecay(windows);
+  const decay = assessFhvHotPathDecay(series);
   const boundedHotState = assessFhvBoundedHotState(series);
 
   const costModel: FhvCheckpointCostModelV1 | null =
@@ -385,6 +386,12 @@ export function assertFhvGrowthLawReportV2(input: {
     );
   }
   assertCanonicalFhvThroughputSamplerContract(report.samplerContract);
+  if (report.hotPath?.assessorVersion !== FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION) {
+    throw new FhvGrowthLawReportError(
+      "FHV_GROWTH_LAW_HOT_PATH_ASSESSOR_UNSUPPORTED",
+      `hot-path assessor ${String(report.hotPath?.assessorVersion)} != ${FHV_HOT_PATH_STABILITY_ASSESSOR_VERSION}`,
+    );
+  }
   if (input.expectedHeadSha && report.checkout.headSha !== input.expectedHeadSha.toLowerCase()) {
     throw new FhvGrowthLawReportError(
       "FHV_GROWTH_LAW_CHECKOUT_MISMATCH",

@@ -41,7 +41,9 @@ describe("HTR-WP22 interleaved mark retention", () => {
     expect(makeWp17QualifiedHtxVolumeAuthority(negative).htxVolumeAuthorityReceipt.verdict).toBe(
       "HTX_VOLUME_AUTHORITY_QUALIFIED",
     );
+    expect(makeWp17QualifiedHtxVolumeAuthority(zero).htxVolumeRaw.amount).toBe(0);
     expect(makeWp17QualifiedHtxVolumeAuthority(zero).htxVolumeRaw.vol).toBe(0);
-    expect(makeWp17QualifiedHtxVolumeAuthority(negative).htxVolumeRaw.vol).toBe(-1);
+    expect(makeWp17QualifiedHtxVolumeAuthority(negative).htxVolumeRaw.amount).toBe(-1);
+    expect(makeWp17QualifiedHtxVolumeAuthority(negative).htxVolumeRaw.vol).toBe(0);
   });
 });
