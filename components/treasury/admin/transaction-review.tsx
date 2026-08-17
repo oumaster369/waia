@@ -9,12 +9,32 @@ import { OrgGate } from "@/components/treasury/admin/org-gate";
 import { useFinanceOrg } from "@/components/treasury/admin/finance-org-context";
 import { AccountingStatusPill, PublicationPill } from "@/components/treasury/admin/status-pills";
 import { LoadingState, UnavailableState } from "@/components/treasury/admin/unavailable-state";
+import { CanonicalSelect, FormField, MoreDetails } from "@/components/treasury/admin/form-controls";
+import {
+  BudgetSelect,
+  CatalogStatus,
+  FundingNeedSelect,
+} from "@/components/treasury/admin/org-entity-select";
+import { useOrgBudgets, useOrgFundingNeeds } from "@/components/treasury/admin/use-org-catalog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { missingOrganizationResult, treasuryGet, treasuryJson } from "@/lib/treasury-admin/api";
+import {
+  TREASURY_DIRECTION_OPTIONS,
+  TREASURY_KIND_OPTIONS,
+  TREASURY_USDT_V1_DECIMALS,
+  treasuryTxDirectionEnum,
+  type TreasuryCanonicalDirection,
+} from "@/lib/treasury-admin/canonical";
+import { buildClassifyCommandPatch } from "@/lib/treasury-admin/manual-draft";
 import { financeHref } from "@/lib/treasury-admin/org";
 import { backendUnavailableLabel } from "@/lib/treasury-admin/facts";
+import {
+  formatAtomicToHumanDecimal,
+  parseHumanDecimalToAtomic,
+} from "@/lib/treasury-admin/parse-human-amount";
 import {
   canEditAccountingMeaning,
   isVerifiedFinancialLocked,
@@ -54,6 +74,29 @@ function patchFromDetail(detail: TreasuryTransactionDetailDto) {
     counterpartyDisplay: tx.counterpartyDisplay ?? "",
     publishCounterparty: tx.publishCounterparty,
   };
+}
+
+function nextActionCopy(status: string, publication: string): string {
+  switch (status) {
+    case "MANUAL_DRAFT":
+      return "Next: submit this observation for review.";
+    case "NEEDS_REVIEW":
+      return "Next: classify the accounting meaning. Verification and publication stay later steps.";
+    case "CLASSIFIED":
+      return "Next: verify financial truth. Verification does not publish public detail.";
+    case "VERIFIED":
+      return publication === "PRIVATE"
+        ? "Verified + Private is valid. Publication is a separate optional decision."
+        : "Accounting is verified. Publication can still be changed without rewriting financial truth.";
+    case "NEEDS_RECONCILIATION":
+      return "Next: resolve reconciliation, then return this record to a governed status.";
+    case "REJECTED":
+      return "This record is rejected. Create a new observation if the economic event is still real.";
+    case "DUPLICATE":
+      return "This record is marked duplicate. No further classification is required.";
+    default:
+      return "Choose the next governed command for this record.";
+  }
 }
 
 function Zone({
@@ -145,6 +188,20 @@ function TransactionReviewLoaded({
   const [publicationTarget, setPublicationTarget] = React.useState("DETAIL_PUBLIC");
   const [supersededBy, setSupersededBy] = React.useState("");
   const [patch, setPatch] = React.useState(() => patchFromDetail(detail));
+  const { budgets, loading: budgetsLoading, error: budgetsError } = useOrgBudgets(organizationId);
+  const {
+    fundingNeeds,
+    loading: needsLoading,
+    error: needsError,
+  } = useOrgFundingNeeds(organizationId);
+  const [accountingHuman, setAccountingHuman] = React.useState(() =>
+    detail.transaction.accountingAmountMicros
+      ? formatAtomicToHumanDecimal(
+          detail.transaction.accountingAmountMicros,
+          TREASURY_USDT_V1_DECIMALS,
+        )
+      : "",
+  );
 
   async function runCommand(command: TreasuryTxCommand) {
     if (!detail) return;
@@ -157,26 +214,7 @@ function TransactionReviewLoaded({
       reason,
     };
     if (command === "classify") {
-      const classifyPatch: Record<string, unknown> = {
-        kind: patch.kind || null,
-        direction: patch.direction,
-        fundBucketCode: patch.fundBucketCode,
-        purpose: patch.purpose || null,
-        category: patch.category || null,
-        projectModule: patch.projectModule || null,
-        milestoneStage: patch.milestoneStage || null,
-        budgetId: patch.budgetId || null,
-        fundingNeedId: patch.fundingNeedId || null,
-        description: patch.description || null,
-        internalNotes: patch.internalNotes || null,
-        publicDescription: patch.publicDescription || null,
-        counterpartyDisplay: patch.counterpartyDisplay || null,
-        publishCounterparty: patch.publishCounterparty,
-      };
-      if (patch.accountingAmountMicros) {
-        classifyPatch.accountingAmountMicros = patch.accountingAmountMicros;
-      }
-      body.patch = classifyPatch;
+      body.patch = buildClassifyCommandPatch(patch);
     }
     if (command === "confirm_duplicate") body.duplicate_of_transaction_id = duplicateOf;
     if (command === "return_from_reconciliation") body.to_status = returnStatus;
@@ -204,6 +242,9 @@ function TransactionReviewLoaded({
   const locked = isVerifiedFinancialLocked(tx.status);
   const meaningEditable = canEditAccountingMeaning(tx.status);
   const pendingAction = pending ? actions.find((item) => item.command === pending) : null;
+  const parsedAccounting = parseHumanDecimalToAtomic(accountingHuman, TREASURY_USDT_V1_DECIMALS, {
+    requirePositive: true,
+  });
 
   return (
     <div className="space-y-4" data-testid="finance-transaction-review">
@@ -217,191 +258,9 @@ function TransactionReviewLoaded({
         ) : null}
       </div>
 
-      <Zone title="A. Provenance / observation" testId="zone-provenance">
-        <dl className="grid gap-2 text-sm md:grid-cols-2">
-          <dt>Provenance</dt>
-          <dd>{tx.provenance}</dd>
-          <dt>Canonical network</dt>
-          <dd>{tx.canonicalNetwork ?? "None"}</dd>
-          <dt>Canonical token</dt>
-          <dd>{tx.canonicalTokenContract ?? "None"}</dd>
-          <dt>Canonical tx hash</dt>
-          <dd className="font-mono text-xs">{tx.canonicalTxHash ?? tx.txHash ?? "None"}</dd>
-          <dt>Transfer index</dt>
-          <dd>{tx.canonicalTransferIndex ?? "None"}</dd>
-          <dt>Native amount</dt>
-          <dd className="font-mono">
-            {tx.nativeAmountAtomic ?? "None"} {tx.nativeAsset}
-          </dd>
-          <dt>Occurred at</dt>
-          <dd>{tx.occurredAt ?? "None"}</dd>
-        </dl>
-        {detail.observations.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No linked observations.</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {detail.observations.map((obs) => (
-              <li key={obs.id}>
-                {obs.observationStatus} · confirmations {obs.confirmationsObserved}/
-                {obs.confirmationsRequired}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Zone>
-
-      <Zone title="B. Accounting meaning" testId="zone-accounting">
-        {locked ? (
-          <p className="text-muted-foreground text-sm">
-            Finalized financial truth is locked. Use a correcting MANUAL draft and link_correction.
-          </p>
-        ) : null}
-        <p className="text-sm">
-          Current accounting amount: <MoneyText micros={tx.accountingAmountMicros} />
-        </p>
-        <div className="grid gap-3 md:grid-cols-2">
-          {(
-            [
-              ["kind", "Kind"],
-              ["direction", "Direction"],
-              ["fundBucketCode", "Fund bucket"],
-              ["purpose", "Purpose"],
-              ["category", "Category"],
-              ["projectModule", "Project / module"],
-              ["milestoneStage", "Milestone"],
-              ["budgetId", "Budget"],
-              ["fundingNeedId", "Funding need"],
-              ["accountingAmountMicros", "Accounting amount (micros string)"],
-              ["description", "Description"],
-              ["internalNotes", "Internal notes"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="space-y-1 text-sm">
-              <span>{label}</span>
-              <Input
-                value={patch[key]}
-                disabled={!meaningEditable}
-                onChange={(event) =>
-                  setPatch((current) => ({ ...current, [key]: event.target.value }))
-                }
-              />
-            </label>
-          ))}
-        </div>
-      </Zone>
-
-      <Zone title="C. Evidence" testId="zone-evidence">
-        {detail.evidenceLinks.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No evidence linked.</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {detail.evidenceLinks.map((link) => {
-              const object = evidence.find((row) => row.id === link.evidenceObjectId);
-              return (
-                <li key={link.id} className="border-border rounded-md border p-2">
-                  <p>Object {link.evidenceObjectId}</p>
-                  {object ? (
-                    <p className="text-muted-foreground text-xs">
-                      {object.kind} · {object.visibility} · {object.mediaType} · digest{" "}
-                      {object.sha256} · source {object.source}
-                    </p>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {evidenceError ? (
-          <p data-testid="evidence-unavailable" className="text-sm">
-            {backendUnavailableLabel(evidenceError)}
-          </p>
-        ) : null}
-      </Zone>
-
-      <Zone title="D. Public disclosure" testId="zone-public" publicZone>
-        <p className="text-muted-foreground text-xs">
-          Separate from internal accounting. Public recent activity requires VERIFIED + Public
-          detail + not superseded.
-        </p>
-        <label className="block space-y-1 text-sm">
-          Public description
-          <Input
-            value={patch.publicDescription}
-            disabled={!meaningEditable}
-            onChange={(event) =>
-              setPatch((current) => ({ ...current, publicDescription: event.target.value }))
-            }
-          />
-        </label>
-        <label className="block space-y-1 text-sm">
-          Counterparty display
-          <Input
-            value={patch.counterpartyDisplay}
-            disabled={!meaningEditable}
-            onChange={(event) =>
-              setPatch((current) => ({ ...current, counterpartyDisplay: event.target.value }))
-            }
-          />
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={patch.publishCounterparty}
-            disabled={!meaningEditable}
-            onChange={(event) =>
-              setPatch((current) => ({ ...current, publishCounterparty: event.target.checked }))
-            }
-          />
-          Publish counterparty
-        </label>
-        {canExposeDetailPublicAction(tx.status) ? (
-          <div className="space-y-2" data-testid="detail-public-controls">
-            <label className="block space-y-1 text-sm">
-              Publication target
-              <select
-                className="border-border bg-background w-full rounded-md border px-3 py-2 text-sm"
-                value={publicationTarget}
-                onChange={(event) => setPublicationTarget(event.target.value)}
-              >
-                <option value="PRIVATE">Private</option>
-                <option value="DETAIL_PUBLIC">Public detail</option>
-                <option value="SUPERSEDED">Superseded</option>
-              </select>
-            </label>
-            {publicationTarget === "SUPERSEDED" ? (
-              <Input
-                placeholder="detail superseded by id"
-                value={supersededBy}
-                onChange={(event) => setSupersededBy(event.target.value)}
-              />
-            ) : null}
-            <Button type="button" onClick={() => setPending("set_detail_publication")}>
-              Set publication
-            </Button>
-          </div>
-        ) : (
-          <p data-testid="detail-public-hidden" className="text-muted-foreground text-sm">
-            Public detail can be set only after accounting status is VERIFIED.
-          </p>
-        )}
-      </Zone>
-
-      <Zone title="E. History" testId="zone-history">
-        {detail.revisions.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No revisions yet.</p>
-        ) : (
-          <ol className="space-y-2 text-sm">
-            {detail.revisions.map((rev) => (
-              <li key={rev.id}>
-                #{rev.seq} · {rev.actorType} · {rev.reason ?? "no reason"} · {rev.createdAt}
-              </li>
-            ))}
-          </ol>
-        )}
-      </Zone>
-
-      <WaiaSurface variant="raised" className="space-y-3 p-4">
-        <h2 className="text-sm font-medium">Human commands</h2>
+      <WaiaSurface variant="elevated" className="space-y-3 p-4" data-testid="tx-next-action">
+        <h2 className="text-sm font-medium">Next action</h2>
+        <p className="text-sm">{nextActionCopy(tx.status, tx.detailPublication)}</p>
         {commandError ? <p className="text-destructive text-sm">{commandError}</p> : null}
         <div className="flex flex-wrap gap-2">
           {actions
@@ -438,7 +297,7 @@ function TransactionReviewLoaded({
           </select>
         ) : null}
         {tx.status === "VERIFIED" ? (
-          <div className="space-y-2" data-testid="correction-workflow">
+          <MoreDetails summary="Correction workflow" testId="correction-workflow">
             <p className="text-sm">
               Correction is append-only: create a MANUAL draft with corrects_transaction_id, then
               link it here. If public detail must be replaced, set SUPERSEDED with
@@ -455,9 +314,359 @@ function TransactionReviewLoaded({
               value={correctionId}
               onChange={(event) => setCorrectionId(event.target.value)}
             />
-          </div>
+          </MoreDetails>
         ) : null}
       </WaiaSurface>
+
+      <Zone title="A. Provenance / observation" testId="zone-provenance">
+        <dl className="grid gap-2 text-sm md:grid-cols-2">
+          <dt>Provenance</dt>
+          <dd>{tx.provenance}</dd>
+          <dt>Occurred at</dt>
+          <dd>{tx.occurredAt ?? "None"}</dd>
+          <dt>Native amount</dt>
+          <dd className="font-mono">
+            {tx.nativeAmountAtomic ?? "None"} {tx.nativeAsset}
+          </dd>
+        </dl>
+        <MoreDetails summary="Technical identifiers">
+          <dl className="grid gap-2 text-sm md:grid-cols-2">
+            <dt>Canonical network</dt>
+            <dd>{tx.canonicalNetwork ?? "None"}</dd>
+            <dt>Canonical token</dt>
+            <dd>{tx.canonicalTokenContract ?? "None"}</dd>
+            <dt>Canonical tx hash</dt>
+            <dd className="font-mono text-xs">{tx.canonicalTxHash ?? tx.txHash ?? "None"}</dd>
+            <dt>Transfer index</dt>
+            <dd>{tx.canonicalTransferIndex ?? "None"}</dd>
+          </dl>
+          {detail.observations.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No linked observations.</p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {detail.observations.map((obs) => (
+                <li key={obs.id}>
+                  {obs.observationStatus} · confirmations {obs.confirmationsObserved}/
+                  {obs.confirmationsRequired}
+                </li>
+              ))}
+            </ul>
+          )}
+        </MoreDetails>
+      </Zone>
+
+      <Zone title="B. Accounting meaning" testId="zone-accounting">
+        {locked ? (
+          <p className="text-muted-foreground text-sm">
+            Finalized financial truth is locked. Use a correcting MANUAL draft and link_correction.
+          </p>
+        ) : null}
+        <p className="text-sm">
+          Current accounting amount: <MoneyText micros={tx.accountingAmountMicros} />
+        </p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <FormField
+            label="Kind"
+            htmlFor="classify-kind"
+            help="Canonical Treasury kind. Not classified yet submits null."
+          >
+            <CanonicalSelect
+              id="classify-kind"
+              testId="classify-kind"
+              value={patch.kind}
+              onChange={(value) => setPatch((current) => ({ ...current, kind: value }))}
+              options={TREASURY_KIND_OPTIONS}
+              blankLabel="Not classified yet"
+              disabled={!meaningEditable}
+            />
+          </FormField>
+          <FormField label="Direction" htmlFor="classify-direction">
+            <CanonicalSelect
+              id="classify-direction"
+              testId="classify-direction"
+              value={patch.direction}
+              onChange={(value) => {
+                if (treasuryTxDirectionEnum.includes(value as TreasuryCanonicalDirection)) {
+                  setPatch((current) => ({
+                    ...current,
+                    direction: value as TreasuryCanonicalDirection,
+                  }));
+                }
+              }}
+              options={TREASURY_DIRECTION_OPTIONS}
+              blankLabel="Select direction"
+              disabled={!meaningEditable}
+              required
+            />
+          </FormField>
+          <FormField
+            label="Purpose"
+            htmlFor="classify-purpose"
+            help="Free-form Human semantic text. Not a closed taxonomy."
+          >
+            <Textarea
+              id="classify-purpose"
+              data-testid="classify-purpose"
+              value={patch.purpose}
+              disabled={!meaningEditable}
+              onChange={(event) =>
+                setPatch((current) => ({ ...current, purpose: event.target.value }))
+              }
+            />
+          </FormField>
+        </div>
+        <MoreDetails summary="More classification details" testId="classify-advanced">
+          <div className="grid gap-3 md:grid-cols-2">
+            <FormField
+              label="Category"
+              htmlFor="classify-category"
+              help="Free-form Human semantic text. Not a closed Category enum."
+            >
+              <Input
+                id="classify-category"
+                data-testid="classify-category"
+                value={patch.category}
+                disabled={!meaningEditable}
+                onChange={(event) =>
+                  setPatch((current) => ({ ...current, category: event.target.value }))
+                }
+              />
+            </FormField>
+            <FormField
+              label="Project / module"
+              htmlFor="classify-project-module"
+              help="Free-form Human semantic text. Not a closed taxonomy."
+            >
+              <Input
+                id="classify-project-module"
+                data-testid="classify-project-module"
+                value={patch.projectModule}
+                disabled={!meaningEditable}
+                onChange={(event) =>
+                  setPatch((current) => ({ ...current, projectModule: event.target.value }))
+                }
+              />
+            </FormField>
+            <FormField
+              label="Milestone"
+              htmlFor="classify-milestone"
+              help="Free-form Human semantic text. Not a closed taxonomy."
+            >
+              <Input
+                id="classify-milestone"
+                data-testid="classify-milestone"
+                value={patch.milestoneStage}
+                disabled={!meaningEditable}
+                onChange={(event) =>
+                  setPatch((current) => ({ ...current, milestoneStage: event.target.value }))
+                }
+              />
+            </FormField>
+            <FormField label="Fund bucket" htmlFor="classify-fund-bucket">
+              <Input
+                id="classify-fund-bucket"
+                value={patch.fundBucketCode}
+                disabled={!meaningEditable}
+                onChange={(event) =>
+                  setPatch((current) => ({ ...current, fundBucketCode: event.target.value }))
+                }
+              />
+            </FormField>
+            <BudgetSelect
+              id="classify-budget"
+              testId="classify-budget"
+              value={patch.budgetId}
+              onChange={(value) => setPatch((current) => ({ ...current, budgetId: value }))}
+              budgets={budgets}
+              blankLabel="None"
+              disabled={!meaningEditable}
+              help="Organization-scoped. Submits budget_id."
+            />
+            <FundingNeedSelect
+              id="classify-funding-need"
+              testId="classify-funding-need"
+              value={patch.fundingNeedId}
+              onChange={(value) => setPatch((current) => ({ ...current, fundingNeedId: value }))}
+              fundingNeeds={fundingNeeds}
+              blankLabel="None"
+              disabled={!meaningEditable}
+              help="Organization-scoped. Submits funding_need_id."
+            />
+            <FormField
+              label="Accounting amount"
+              htmlFor="classify-accounting-amount"
+              help={
+                parsedAccounting.ok
+                  ? `Stores as integer string ${parsedAccounting.atomic} (USD micros). React does not recompute ledger totals.`
+                  : "Enter a normal exact decimal. Excess precision is rejected, not rounded."
+              }
+              error={
+                !parsedAccounting.ok && accountingHuman.trim() ? parsedAccounting.message : null
+              }
+            >
+              <Input
+                id="classify-accounting-amount"
+                data-testid="classify-accounting-amount"
+                inputMode="decimal"
+                value={accountingHuman}
+                disabled={!meaningEditable}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setAccountingHuman(next);
+                  if (next.trim() === "") {
+                    setPatch((current) => ({ ...current, accountingAmountMicros: "" }));
+                    return;
+                  }
+                  const parsed = parseHumanDecimalToAtomic(next, TREASURY_USDT_V1_DECIMALS, {
+                    requirePositive: true,
+                  });
+                  if (parsed.ok) {
+                    setPatch((current) => ({ ...current, accountingAmountMicros: parsed.atomic }));
+                  }
+                }}
+              />
+            </FormField>
+            <FormField label="Description" htmlFor="classify-description">
+              <Input
+                id="classify-description"
+                value={patch.description}
+                disabled={!meaningEditable}
+                onChange={(event) =>
+                  setPatch((current) => ({ ...current, description: event.target.value }))
+                }
+              />
+            </FormField>
+            <FormField label="Internal notes" htmlFor="classify-internal-notes">
+              <Textarea
+                id="classify-internal-notes"
+                value={patch.internalNotes}
+                disabled={!meaningEditable}
+                onChange={(event) =>
+                  setPatch((current) => ({ ...current, internalNotes: event.target.value }))
+                }
+              />
+            </FormField>
+          </div>
+          <CatalogStatus
+            loading={budgetsLoading || needsLoading}
+            error={budgetsError ?? needsError}
+          />
+        </MoreDetails>
+      </Zone>
+
+      <Zone title="C. Evidence" testId="zone-evidence">
+        {detail.evidenceLinks.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No evidence linked.</p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {detail.evidenceLinks.map((link) => {
+              const object = evidence.find((row) => row.id === link.evidenceObjectId);
+              return (
+                <li key={link.id} className="border-border rounded-md border p-2">
+                  <p>Object {link.evidenceObjectId}</p>
+                  {object ? (
+                    <p className="text-muted-foreground text-xs">
+                      {object.kind} · {object.visibility} · {object.mediaType} · digest{" "}
+                      {object.sha256} · source {object.source}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {evidenceError ? (
+          <p data-testid="evidence-unavailable" className="text-sm">
+            {backendUnavailableLabel(evidenceError)}
+          </p>
+        ) : null}
+      </Zone>
+
+      <Zone title="D. Public disclosure" testId="zone-public" publicZone>
+        <p className="text-muted-foreground text-xs">
+          Separate from internal accounting. Public recent activity requires VERIFIED + Public
+          detail + not superseded.
+        </p>
+        {canExposeDetailPublicAction(tx.status) ? (
+          <div className="space-y-2" data-testid="detail-public-controls">
+            <label className="block space-y-1 text-sm">
+              Publication target
+              <select
+                className="border-border bg-background w-full rounded-md border px-3 py-2 text-sm"
+                value={publicationTarget}
+                onChange={(event) => setPublicationTarget(event.target.value)}
+              >
+                <option value="PRIVATE">Private</option>
+                <option value="DETAIL_PUBLIC">Public detail</option>
+                <option value="SUPERSEDED">Superseded</option>
+              </select>
+            </label>
+            {publicationTarget === "SUPERSEDED" ? (
+              <Input
+                placeholder="detail superseded by id"
+                value={supersededBy}
+                onChange={(event) => setSupersededBy(event.target.value)}
+              />
+            ) : null}
+            <Button type="button" onClick={() => setPending("set_detail_publication")}>
+              Set publication
+            </Button>
+          </div>
+        ) : (
+          <p data-testid="detail-public-hidden" className="text-muted-foreground text-sm">
+            Public detail can be set only after accounting status is VERIFIED.
+          </p>
+        )}
+        <MoreDetails summary="Public disclosure text">
+          <label className="block space-y-1 text-sm">
+            Public description
+            <Input
+              value={patch.publicDescription}
+              disabled={!meaningEditable}
+              onChange={(event) =>
+                setPatch((current) => ({ ...current, publicDescription: event.target.value }))
+              }
+            />
+          </label>
+          <label className="block space-y-1 text-sm">
+            Counterparty display
+            <Input
+              value={patch.counterpartyDisplay}
+              disabled={!meaningEditable}
+              onChange={(event) =>
+                setPatch((current) => ({ ...current, counterpartyDisplay: event.target.value }))
+              }
+            />
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={patch.publishCounterparty}
+              disabled={!meaningEditable}
+              onChange={(event) =>
+                setPatch((current) => ({ ...current, publishCounterparty: event.target.checked }))
+              }
+            />
+            Publish counterparty
+          </label>
+        </MoreDetails>
+      </Zone>
+
+      <Zone title="E. History" testId="zone-history">
+        <MoreDetails summary="Revision history">
+          {detail.revisions.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No revisions yet.</p>
+          ) : (
+            <ol className="space-y-2 text-sm">
+              {detail.revisions.map((rev) => (
+                <li key={rev.id}>
+                  #{rev.seq} · {rev.actorType} · {rev.reason ?? "no reason"} · {rev.createdAt}
+                </li>
+              ))}
+            </ol>
+          )}
+        </MoreDetails>
+      </Zone>
 
       <ConfirmDialog
         open={Boolean(pendingAction)}
