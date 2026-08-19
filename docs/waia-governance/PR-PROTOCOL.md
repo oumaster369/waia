@@ -21,7 +21,7 @@ Architect opens PR via GitHub UI: Compare → base `main` → branch `dee-…`; 
 
 ### Agent restrictions
 
-Agents must **not** `gh pr merge` by default workflow (see [.cursor/commands/prepare-pr](../../.cursor/commands/prepare-pr.md)).
+Agents must **not** `gh pr merge` by default workflow (see [.cursor/commands/prepare-pr](../../.cursor/commands/prepare-pr.md)). The only standing exception is the acting AI-TRADER Program Controller for an eligible Step 0–22 implementation PR after the DEE-653 amendment is Human-merged and every condition in [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](AI-TRADER-BOUNDED-MERGE-AUTHORITY.md) is freshly proven for the exact head SHA.
 
 ### Default PR readiness after implementation
 
@@ -37,7 +37,7 @@ After local PR-readiness validation succeeds, agents **normally** finish by sync
 |----------|---------------|--------------|
 | **Feature / fix / governance** | `dee-<NN>-<slug>` → `main` | **Squash and merge** |
 
-Full table: [`BRANCHING-STRATEGY.md`](BRANCHING-STRATEGY.md). Agents surface in the completion report: **Human squash-merges to `main`**. There is no active release-promotion or back-sync PR class.
+Full table: [`BRANCHING-STRATEGY.md`](BRANCHING-STRATEGY.md). Agents surface in the completion report: **Human squash-merges to `main`**, except for a DEE-653-eligible AI-TRADER implementation PR, where the Program Controller records and executes the bounded admission/merge/reconciliation receipt. There is no active release-promotion or back-sync PR class.
 
 A normal feature/governance PR to `main` uses squash and needs no special instruction beyond Human merge authority.
 

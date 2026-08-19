@@ -159,11 +159,10 @@ fi
 # 8. AGENTS / branching canon say PR → main
 assert_file_contains "AGENTS PR to main" "$ROOT/AGENTS.md" "PR to \`main\`"
 assert_file_contains "BRANCHING single trunk" "$ROOT/docs/waia-governance/BRANCHING-STRATEGY.md" "main-protection.json"
-if grep -q 'agents \*\*never\*\* `gh pr merge`' "$ROOT/AGENTS.md"; then
-  pass "AGENTS forbids agent merge"
-else
-  fail_msg "AGENTS missing agent merge forbid"
-fi
+assert_file_contains "AGENTS merge defaults to Human" "$ROOT/AGENTS.md" "Merge: Human by default"
+assert_file_contains "AGENTS routes bounded merge authority" "$ROOT/AGENTS.md" "AI-TRADER-BOUNDED-MERGE-AUTHORITY.md"
+assert_file_contains "bounded merge keeps Execution Server Human-only" "$ROOT/docs/waia-governance/AI-TRADER-BOUNDED-MERGE-AUTHORITY.md" "Execution Server sync, creation, build, deploy, rollback, SSH recovery, or live operation"
+assert_file_contains "bounded merge keeps holdout Human-only" "$ROOT/docs/waia-governance/AI-TRADER-BOUNDED-MERGE-AUTHORITY.md" "official one-shot blind-holdout authorization"
 
 # 9. prepare-pr / commands use origin/main
 assert_file_contains "prepare-pr base main" "$ROOT/.cursor/commands/prepare-pr.md" "--base main"

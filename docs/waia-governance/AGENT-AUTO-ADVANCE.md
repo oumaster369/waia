@@ -4,7 +4,7 @@ When `/test-and-fix` finishes successfully, agents **may** continue automaticall
 
 **Router:** [`AGENTS.md`](../../AGENTS.md) · **PR package:** [`.cursor/commands/prepare-pr.md`](../../.cursor/commands/prepare-pr.md) · **Protocol:** [`PR-PROTOCOL.md`](PR-PROTOCOL.md)
 
-This does **not** waive STOP conditions, risk tiers, merge authority, or governance escalation.
+This does **not** waive STOP conditions, risk tiers, merge authority, or governance escalation. The separate DEE-653 AI-TRADER exception applies only after ordinary PR readiness and exact-head admission are both complete.
 
 ## Preconditions (all required)
 
@@ -22,11 +22,11 @@ This does **not** waive STOP conditions, risk tiers, merge authority, or governa
 - Move Linear issue to **`In Review`** with compare URL comment.
 - Print compare URL (`main…branch`), PR create URL, paste-ready title/body targeting **`main`**, validation summary.
 - Close with the **agent completion protocol** report ([`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md)) including the exact human merge instruction (**Squash and merge** to `main`), and optionally **recommend** (never execute) an explicit Human release tag of the resulting `main` SHA when release-worthy.
-- **Stop.** Wait for human review/merge and explicit confirmation before starting the next task.
+- **Stop by default.** Wait for human review/merge and explicit confirmation before starting the next task. For a DEE-653-eligible AI-TRADER implementation PR only, continue through the independent-review and exact-head merge-admission contract, squash merge, post-merge verification, then select only the next dependency-unblocked Linear node.
 
 ## Never allowed
 
-- `gh pr merge` or any auto-merge.
+- `gh pr merge` or any auto-merge, except the explicit manual squash-merge action performed by the acting AI-TRADER Program Controller after [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](AI-TRADER-BOUNDED-MERGE-AUTHORITY.md) returns a complete exact-head admission proof.
 - Direct push to `main` / frozen `dev`.
 - Fabricated Linear IDs ([`FAILURE-PATTERNS.md`](FAILURE-PATTERNS.md) FP-005).
 - Out-of-scope commits or skipped validation (FP-002).

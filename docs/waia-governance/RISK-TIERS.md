@@ -10,7 +10,7 @@ Markdown under `docs/**` governance / ADRs.
 |-----------|-------------|
 | Autonomy | High for drafting |
 | Validation | Editorial accuracy + link checks |
-| Merge | Human merges (still PR) |
+| Merge | Human by default; bounded DEE-653 AI-TRADER exception may apply (still PR) |
 
 **T0 caveat:** Pure markdown can still exceed T0 **if** it **redefines** canonical product meaning—e.g. AI-Twin **behavior**, **readiness** semantics, **autonomy boundaries**, or Society **interaction** semantics. Label and review at **≥T1** (Architect visibility as needed); do not hide product-risk edits behind “docs only.”
 
@@ -38,7 +38,7 @@ Vendor integrations, Postgres broad enablement, CI deploy topology changes — *
 
 ## Merge authority (humans — optional auto-merge)
 
-**Not about agents:** [`AGENTS.md`](../../AGENTS.md) still applies—agents do **not** `gh pr merge` or treat merge as theirs. Below ties **human** use of GitHub **auto-merge** (or similar) to **tier and risk**, not to CI roadmaps or governance automation.
+**Default rule:** [`AGENTS.md`](../../AGENTS.md) still applies—agents do **not** `gh pr merge` or treat merge as theirs. The sole standing exception is the post-DEE-653 acting AI-TRADER Program Controller under [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](AI-TRADER-BOUNDED-MERGE-AUTHORITY.md). Below ties **human** use of GitHub **auto-merge** (or similar) to tier and risk.
 
 **`T0` / `T1` — may enable auto-merge** when **all** apply: required checks **green**; **no** `Human gate` / Architect hold; **no** semantic/product/governance meaning change ([`PR-PROTOCOL.md`](PR-PROTOCOL.md), including T0 meaning caveat); **no** runtime, migration, auth, or infra change in scope; **no** open STOP/escalation ([`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md)).
 
@@ -66,4 +66,4 @@ Role defaults: [`AGENT-ROLES.md`](AGENT-ROLES.md).
 
 [`PR-PROTOCOL.md`](PR-PROTOCOL.md), [`EXECUTION-CONTRACT.md`](EXECUTION-CONTRACT.md), [`MIGRATION-GOVERNANCE.md`](MIGRATION-GOVERNANCE.md), [`POST-MERGE-PROTOCOL.md`](POST-MERGE-PROTOCOL.md).
 
-**Agents never assume merge autonomy at any tier.**
+**Agents never assume merge autonomy at any tier.** The DEE-653 Program Controller exception must be proven per PR; it is not inferred from a tier label.

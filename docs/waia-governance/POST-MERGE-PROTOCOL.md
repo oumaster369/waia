@@ -47,16 +47,16 @@ Historical dual-branch promotion/back-sync ceremony is superseded (see [`FAILURE
 
 ## Agent completion protocol (every task)
 
-Cursor/agents close **every** task with a deterministic report and then **stop** — they never merge. The report must include:
+Cursor/agents close **every** task with a deterministic report and then **stop** by default. The acting AI-TRADER Program Controller may instead merge and continue only for a DEE-653-eligible Step 0–22 implementation PR and only after producing the exact-head admission and post-merge receipt required by [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](AI-TRADER-BOUNDED-MERGE-AUTHORITY.md). The report must include:
 
 1. Linear issue (`DEE-NN`) and status
 2. Branch name
 3. PR URL (base **`main`**)
 4. CI status
 5. Governance status
-6. **Exact human merge instruction** — **Squash and merge** to `main`
+6. **Merge disposition** — exact Human instruction (**Squash and merge** to `main`) by default; or, for an admitted DEE-653 exception, the controller's pre-merge head/base SHAs, admission result, resulting squash SHA, and post-merge containment proof
 7. Post-merge verification — sync `origin/main` (`git checkout main && git pull --ff-only origin main`)
 8. Whether an **explicit Human release tag** of the resulting `main` SHA is recommended (optional; never auto-executed)
-9. Recommended next task
+9. Recommended next task, or the next dependency-unblocked DAG node actually selected under the DEE-653 exception
 
-Agents may **recommend** the next implementation issue, an explicit release tag, a production SQL step, or a governance follow-up — but must **wait for explicit human confirmation** before starting the next task. Agents must never `gh pr merge` or auto-merge ([`AGENT-AUTO-ADVANCE.md`](AGENT-AUTO-ADVANCE.md)). Do **not** recommend release promotion or back-sync as routine workflow.
+Agents may **recommend** the next implementation issue, an explicit release tag, a production SQL step, or a governance follow-up, and must normally **wait for explicit human confirmation** before starting the next task. The sole exception is the acting AI-TRADER Program Controller after a complete DEE-653 merge/reconciliation receipt; it may select only the next dependency-unblocked Step 0–22 node. Production/release/Execution Server and all other Human-only gates still stop. Do **not** recommend release promotion or back-sync as routine workflow.

@@ -18,6 +18,7 @@ Repository-specific execution contract for AI coding agents. **Router only** —
 | Integration boundaries | [`docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md`](docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md) |
 | Execution label ownership | [`docs/waia-governance/AGENT-EXECUTION-LABELS.md`](docs/waia-governance/AGENT-EXECUTION-LABELS.md) |
 | Auto-advance preconditions | [`docs/waia-governance/AGENT-AUTO-ADVANCE.md`](docs/waia-governance/AGENT-AUTO-ADVANCE.md) |
+| AI-TRADER bounded merge authority | [`docs/waia-governance/AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](docs/waia-governance/AI-TRADER-BOUNDED-MERGE-AUTHORITY.md) |
 | Agent automation topology | [`docs/AGENT_AUTOMATION.md`](docs/AGENT_AUTOMATION.md) |
 | Governance index | [`docs/waia-governance/README.md`](docs/waia-governance/README.md) |
 | Canonical integration plans | [`docs/plans/README.md`](docs/plans/README.md) |
@@ -86,7 +87,7 @@ AI-Twin builds a structured digital personality via dialogue, diary, and behavio
 - **Single trunk:** **`main`** — protected (local hook + GitHub rulesets). `dev` is frozen/retired (not deleted in-repo yet); not an active PR base.
 - Branch from `origin/main`: `dee-<NN>-<slug>` · Commit: `DEE-NN type(scope): subject`
 - Reference `DEE-NN` in branch, commits, PR title/body.
-- Merge: human only; agents **never** `gh pr merge`. **Squash** feature/fix/governance PRs into `main`.
+- Merge: Human by default. After DEE-653 is Human-merged, the acting AI-TRADER Program Controller may **squash-merge only eligible Step 0–22 implementation PRs** under the exact fail-closed admission contract in [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](docs/waia-governance/AI-TRADER-BOUNDED-MERGE-AUTHORITY.md). Governance, semantic, live/capital, holdout, security, production, T4, and other reserved actions remain Human-only.
 - **Official release** = explicit Human tag/release of an exact `main` SHA — **not** `dev`→`main` promotion or `main`→`dev` back-sync (those are retired).
 - Details: [`BRANCHING-STRATEGY.md`](docs/waia-governance/BRANCHING-STRATEGY.md), [`PR-PROTOCOL.md`](docs/waia-governance/PR-PROTOCOL.md), [`POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md)
 
@@ -109,7 +110,7 @@ Canonical lifecycle: [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) · Inte
 | Diagnose deploy | `/diagnose` | Agent | Sonnet |
 | Parallel fan-out | `/parallel-implement` | Agent | Sonnet |
 
-**Default completion:** green `/test-and-fix` → PR readiness per [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md) → close with the **agent completion protocol** report ([`POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md): Linear, branch, PR URL to `main`, CI, governance, exact human squash-merge instruction, post-merge sync of `origin/main`, optional recommendation for an explicit Human release tag, next task) → stop. Humans review/merge; agents wait for explicit confirmation before the next task.
+**Default completion:** green `/test-and-fix` → PR readiness per [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md) → close with the **agent completion protocol** report ([`POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md): Linear, branch, PR URL to `main`, CI, governance, merge disposition, post-merge sync of `origin/main`, optional recommendation for an explicit Human release tag, next task) → stop. Humans review/merge by default; only an admitted DEE-653 AI-TRADER implementation PR follows the bounded controller merge path.
 
 **Auto-advance:** when all preconditions in [`AGENT-AUTO-ADVANCE.md`](docs/waia-governance/AGENT-AUTO-ADVANCE.md) hold, commit → push → Linear `In Review` → PR package without waiting.
 
