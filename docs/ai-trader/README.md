@@ -6,6 +6,8 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 
 > **Authority order:** [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md) wins over any module document. Within AI-TRADER, the [Product Constitution](../AI-TRADER-PRODUCT-CONSTITUTION.md) defines the *finished product* (what AI-TRADER must be); the [Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) is the governing technical specification; subject-owner docs (Security, Billing & HWM) are authoritative for their subject. Decisions are recorded as [ADRs](../adr/README.md) (AI-TRADER decisions span **ADR-0005 … ADR-0023**).
 
+> **Implementation orientation after the 2026-08-19 Human ratification:** read [AI-TRADER Canonical Algorithm — Autonomous Trader-Researcher V2](AI-TRADER-CANONICAL-ALGORITHM.md) before modifying Trader runtime behavior. It is the Human-ratified Step 0–22 target + Code↔Canon repair contract. It does **not** claim that current `main` already implements the target, and it does not override WAIA Core, the Product Constitution, subject-owner doctrine, or ratified ADR authority.
+
 ---
 
 ## Reading order
@@ -16,6 +18,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 | 1 | [AI-TRADER Vision](AI-TRADER-VISION.md) | Purpose, philosophy, long-term direction (no timelines/budgets). |
 | 2 | [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md) | Shared platform AI-TRADER depends on (read before the spec). |
 | 3 | [AI-TRADER Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) | **Governing technical specification** (architecture + contracts; no code). |
+| 3a | [AI-TRADER Canonical Algorithm — Autonomous Trader-Researcher V2](AI-TRADER-CANONICAL-ALGORITHM.md) | **Human-ratified Step 0–22 implementation orientation and Code↔Canon repair contract** — exact authority boundaries, recurring loops, known legacy gaps, dependency-ordered BUILD and Human stop gates. Current-vs-target truth is explicit. |
 | 3b | [AI-TRADER Target Runtime Architecture](AI-TRADER-TARGET-ARCHITECTURE.md) | Target runtime architecture for the completed / mature AI-TRADER: Cloudflare control plane, Execution Server execution plane, Market Canvas, MTF algorithm, Forecast → Decision → Risk → Execution → Reality chain, portfolio/guardian/reconciliation, AI boundary, and completion acceptance signs. Subordinate to Product Constitution and Master Spec; not a roadmap or implementation plan. |
 | 4 | [AI-TRADER MVP Scope v2](AI-TRADER-MVP-SCOPE-v2.md) | What is IN / OUT (HTX-only, spot-only, paper-first). |
 | 5 | [AI-TRADER Roadmap v2](AI-TRADER-ROADMAP-v2.md) | Governing build sequence (Core uplift first, safety spine pulled forward). |
@@ -42,6 +45,7 @@ AI-TRADER is a **module of WAIA** (market intelligence + managed trading) reacha
 
 - **Product canon (what the finished module is):** [AI-TRADER Product Constitution](../AI-TRADER-PRODUCT-CONSTITUTION.md).
 - **Governing technical spec:** [AI-TRADER Master Spec v2](AI-TRADER-MASTER-SPEC-v2.md) (Baseline v1.2).
+- **Human-ratified implementation orientation / repair contract:** [AI-TRADER Canonical Algorithm — Autonomous Trader-Researcher V2](AI-TRADER-CANONICAL-ALGORITHM.md) — Step 0–22 authority graph, recurring-runtime/research loops, current-vs-target ledger, dependency-ordered repair program, and explicit Human gates. Read before Trader runtime changes.
 - **Target runtime architecture:** [AI-TRADER Target Runtime Architecture](AI-TRADER-TARGET-ARCHITECTURE.md) — completed-system runtime topology and end-to-end algorithm; subordinate to Product Constitution and Master Spec; additive to ratified doctrines and ADRs.
 - **Platform foundation (wins on conflict):** [WAIA Core Architecture](../waia-core/WAIA-CORE-ARCHITECTURE.md).
 - **Execution blueprint:** [AI-TRADER Implementation Program v1.2](AI-TRADER-IMPLEMENTATION-PROGRAM.md).
