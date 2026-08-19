@@ -46,7 +46,8 @@ DEE-654 is `In Progress`, label `backend`; DEE-620 stays open. Canon: AI-TRADER 
 ## Exact file map
 - Contract: `lib/trader/mi/pit-chronology-v1.ts`, `lib/trader/mi/trust-as-of-v1.ts`.
 - Postgres: `lib/trader/mi/trust-as-of-repository-postgres.ts`, `db/schema.postgres.ts`, migration `0152` + journal.
-- Proof/memory: two focused tests, this plan, DEE-654 migration note, DEE-64 tracker, `db/AGENTS.md`.
+- Proof/memory: three focused tests (including applied-migration identity), this plan,
+  DEE-654 migration note, DEE-64 tracker, `db/AGENTS.md`.
 Target: 10–14 files / approximately 700–1,050 changed lines. Stop before PR if correct work
 materially exceeds it or exposes semantic/security ambiguity.
 ## Work packages

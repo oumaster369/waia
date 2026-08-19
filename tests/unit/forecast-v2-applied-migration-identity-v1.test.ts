@@ -32,11 +32,12 @@ describe("Forecast V2 applied migration identity", () => {
     expect(identity.bindings.some((b) => b.tag.startsWith("0146_"))).toBe(true);
     expect(identity.bindings.some((b) => b.tag.startsWith("0147_"))).toBe(true);
     expect(identity.bindings.some((b) => b.tag.startsWith("0148_"))).toBe(true);
-    // Forecast V2 surface remains 0148; DEE-606 Treasury migrations are extras, not V2 identity.
+    // Forecast V2 remains 0148; later Treasury/MI migrations are extras, not V2 identity.
     expect(identity.extraAppliedBeyondExpectedMax.map((b) => b.tag)).toEqual([
       "0149_treasury_transparency_ledger_foundation",
       "0150_treasury_transparency_ledger_rls",
       "0151_treasury_chain_observations_lifecycle_guard",
+      "0152_trader_mi_pit_trust_as_of_v1",
     ]);
     expect(
       identity.extraAppliedBeyondExpectedMax.every((b) => !b.tag.includes("trader_forecast_v2")),
