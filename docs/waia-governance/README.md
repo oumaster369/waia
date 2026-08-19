@@ -27,6 +27,7 @@ WAIA DEV OS operational layer:
 | [`EXECUTABLE-GOVERNANCE-HOOKS.md`](EXECUTABLE-GOVERNANCE-HOOKS.md) | CI/Cursor/GitHub hooks |
 | [`AGENT-EXECUTION-LABELS.md`](AGENT-EXECUTION-LABELS.md) | Label ownership matrix |
 | [`AGENT-AUTO-ADVANCE.md`](AGENT-AUTO-ADVANCE.md) | Safe auto-advance preconditions |
+| [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](AI-TRADER-BOUNDED-MERGE-AUTHORITY.md) | DEE-653 program-scoped exact-head merge admission; Human-only semantic/live/holdout/security/production gates preserved |
 | [`ROADMAP-AUTOPILOT.md`](ROADMAP-AUTOPILOT.md) | Roadmap autopilot preparation (read-only contract; no runtime) |
 | [`LINEAR-ID-COLLISION-RECOVERY.md`](LINEAR-ID-COLLISION-RECOVERY.md) | ID collision incident playbook |
 | [`GOVERNANCE-VERSIONING.md`](GOVERNANCE-VERSIONING.md) | Evolution log |

@@ -25,7 +25,7 @@ Agents **propose** changes; **Architect/operator** retains final say on:
 | **Product semantics** | MVP scope, unlock/readiness meaning, privacy guarantees, user journey — see product docs. |
 | **Architecture / infra** | New vendors, DB/topology, rollout/staging policy, telemetry semantics, migration doctrine deviation. |
 | **Roadmap autonomy** | Bulk reorder, delete parents, speculative future modules detached from MVP — see [`NON-GOALS.md`](NON-GOALS.md). |
-| **Merge** | Agents must not `gh pr merge`; especially for auth, runtime migration, prod config. |
+| **Merge** | Human by default. The acting AI-TRADER Program Controller has only the post-DEE-653, exact-head, fail-closed Step 0–22 implementation exception defined in [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](AI-TRADER-BOUNDED-MERGE-AUTHORITY.md); semantic, holdout, capital/live, security, production, Execution Server, T4, and unapproved T3 changes remain Human-only. |
 | **Governance mutation** | Rewriting this contract, branch policy, PR policy, Linear semantics. |
 | **Production rollout** | Broad Postgres enablement, env mass changes, rollback policy — see [`MIGRATION-GOVERNANCE.md`](MIGRATION-GOVERNANCE.md). |
 

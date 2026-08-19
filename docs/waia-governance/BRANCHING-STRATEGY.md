@@ -4,7 +4,7 @@
 
 **Single trunk:** **`main`** is the only long-lived integration and production branch.
 
-- Feature/fix/governance work lands via PR → **`main`** (Human **squash** merge).
+- Feature/fix/governance work lands via PR → **`main`** (**squash** merge; Human by default, with only the bounded AI-TRADER implementation exception in [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](AI-TRADER-BOUNDED-MERGE-AUTHORITY.md)).
 - Official release = explicit Human **workflow_dispatch** tag/release of an exact **`main` SHA** (not a branch-promotion ceremony).
 - **`dev` is retired/frozen** in this migration: still present on the remote for one successful single-trunk cycle, then Human retirement. **Not** an active integration base. Do not open new feature PRs to `dev`. Do not treat `dev` → `main` promotion or `main` → `dev` back-sync as active workflow.
 
@@ -58,7 +58,7 @@ Human cutover after DEE-511: [`docs/ops/SINGLE-TRUNK-CUTOVER.md`](../ops/SINGLE-
 |----------|---------------|--------------|-----|
 | **Feature / fix / governance** | `dee-<NN>-<slug>` → `main` | **Squash and merge** | One commit per integration batch on the trunk. |
 
-**Hard rule:** agents never merge. Humans squash-merge feature PRs to `main`. There is **no** active release-promotion or back-sync PR class.
+**Hard rule:** Human merge is the default. After DEE-653 is Human-merged, the acting AI-TRADER Program Controller may squash-merge only an exact-head-admitted Step 0–22 implementation PR under [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](AI-TRADER-BOUNDED-MERGE-AUTHORITY.md). All other agents and PRs remain no-merge. There is **no** active release-promotion or back-sync PR class.
 
 ### Historical note (dual-branch era)
 

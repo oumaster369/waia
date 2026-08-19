@@ -83,9 +83,11 @@ Repository inspection; safe read-only diagnostics; documentation/code on feature
 
 New Linear integration issue (unless pre-authorized); scope change; batch split/merge beyond approved plan; plan promotion to `state.status: approved`; ambiguous child completion; PR when criteria partially met; constitutional governance edits; branch-protection/CI changes; unapproved schema change.
 
-### HUMAN-ONLY — never perform
+### HUMAN-ONLY — never perform by default
 
 Merge; direct push to `main` (or frozen `dev`); production deploy; Execution Server sync/build/deploy/rollback; live trading; secret mutation; destructive data ops; weakening hooks, rulesets, tests, CI, tenant isolation, or security gates; creating production release tags.
+
+**Narrow merge exception:** after DEE-653 itself is Human-merged, the acting AI-TRADER Program Controller may squash-merge only a qualifying Step 0–22 implementation PR under [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](AI-TRADER-BOUNDED-MERGE-AUTHORITY.md). This exception does not authorize direct pushes or any other HUMAN-ONLY action above.
 
 ---
 

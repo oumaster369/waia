@@ -28,7 +28,7 @@ This document is the **one lifecycle** for WAIA work. Other docs (`AGENTS.md`, [
 | Diagnose | `/diagnose` | Agent | Workers deploy investigation |
 | Parallel | `/parallel-implement` | Agent | Independent issues in worktrees |
 
-**Default completion:** green `/test-and-fix` → PR readiness → agent completion report → **stop before merge**. Humans review and **squash-merge to `main`**; agents wait for explicit confirmation before the next integration batch.
+**Default completion:** green `/test-and-fix` → PR readiness → agent completion report → **stop before merge**. Humans review and **squash-merge to `main`**. Only an exact-head-admitted AI-TRADER Step 0–22 implementation PR may proceed through the bounded DEE-653 controller merge/reconciliation path.
 
 See [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) for when a PR opens (integration-ready contract) and [`AGENT-AUTO-ADVANCE.md`](AGENT-AUTO-ADVANCE.md) for safe auto-advance preconditions.
 
@@ -54,7 +54,7 @@ See [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) for when 
 4. **Synchronize** — merge `origin/main` into feature branch per [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) §Branch sync (never force-push a published branch).
 5. **Integration-ready** — all acceptance criteria met; PR body prepared; `preflight-pr-governance.sh` passes.
 6. **One PR** — agent opens exactly one PR to **`main`**; sets Linear `In Review`; **stops**.
-7. **Human merge** — squash to `main`; effective `merged` state is **derived** (PR merged + Linear `Done`); no status-only follow-up commit required ([`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) §Post-merge reconciliation). Sync local `origin/main`. Official release (if any) is a later explicit Human tag of that SHA — not branch promotion.
+7. **Merge** — Human squash-merge by default; bounded Program Controller squash-merge only when [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](AI-TRADER-BOUNDED-MERGE-AUTHORITY.md) admits the exact PR head. Effective `merged` state is **derived** (PR merged + Linear `Done`); no status-only follow-up commit required ([`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) §Post-merge reconciliation). Sync local `origin/main`. Official release (if any) is a later explicit Human tag of that SHA — not branch promotion.
 
 ---
 
