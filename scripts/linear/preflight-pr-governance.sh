@@ -10,6 +10,8 @@
 #   PR_BODY       PR body markdown (required unless --body-file)
 #   PR_BRANCH     head branch name (required)
 #   PR_BASE       base branch (default: main)
+#   PR_HEAD_SHA   exact head SHA (derived from local HEAD when omitted)
+#   PR_BASE_SHA   exact base SHA (derived from origin/main when omitted)
 #   LINEAR_API_KEY  optional; enables Linear API scope verification
 #
 # Exit codes:
@@ -60,6 +62,8 @@ PR_TITLE="${PR_TITLE:-}"
 PR_BODY="${PR_BODY:-}"
 PR_BRANCH="${PR_BRANCH:-}"
 PR_BASE="${PR_BASE:-main}"
+PR_HEAD_SHA="${PR_HEAD_SHA:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)}"
+PR_BASE_SHA="${PR_BASE_SHA:-$(git -C "$ROOT" rev-parse "origin/${PR_BASE}" 2>/dev/null || git -C "$ROOT" rev-parse "$PR_BASE" 2>/dev/null || true)}"
 
 if [[ -n "$BODY_FILE" ]]; then
   if [[ ! -f "$BODY_FILE" ]]; then
@@ -90,6 +94,8 @@ validator_err="$(
     PR_BODY="$PR_BODY" \
     PR_BRANCH="$PR_BRANCH" \
     PR_BASE="$PR_BASE" \
+    PR_HEAD_SHA="$PR_HEAD_SHA" \
+    PR_BASE_SHA="$PR_BASE_SHA" \
     "$VALIDATOR" 2>&1
 )"
 validator_code=$?

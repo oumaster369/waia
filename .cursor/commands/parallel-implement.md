@@ -2,6 +2,8 @@
 
 Fan out **independent** atomic Linear issues in parallel using **git worktrees**. Use **Agent Mode**.
 
+For an authorized AI-TRADER **Integration Train**, this command runs in train mode under [`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md): child branches feed one Integration Batch branch/PR and the stricter two-task limit below overrides the general fan-out rules.
+
 ## Preconditions
 
 - Each issue is atomic, single execution label, no shared file overlap in `Files` sections.
@@ -40,6 +42,15 @@ If two agents touch the same file → stop both, merge sequentially instead.
 - Each worktree uses its own `dee-*` branch; never share one branch across agents.
 
 - Each worktree = one integration batch = one PR ([`INTEGRATION-BOUNDARY-POLICY.md`](../../docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)).
+
+## Integration Train override
+
+- The valid admitted manifest must be committed before child implementation and name every child, dependency, expected surface, tier/gate, and contiguous ordered execution wave. One-child waves are serialized; only a two-child wave may declare one parallel group.
+- Maximum **two** child implementation tasks at once, each in an isolated worktree/branch. Child branches do not open their own PRs.
+- Never run dependent children or children with overlapping expected surfaces/actual files concurrently. Competing migrations, shared canonical identities, shared authority schemas, or mutual invalidation risk require serialization.
+- The integrator reviews each child commit/diff, admits it serially to the Integration Batch branch, records exact commit/file/test mapping, and runs cumulative targeted checks after every admission.
+- Every child file must stay inside its admitted expected surfaces. The final PR diff/commit range must contain only mapped child work plus the adjacent Integration Batch plan/manifest; unlisted implementation work is rejected.
+- The general `Max 5` rule above applies only to separate, independently reviewed integration batches; it never raises a train's two-task limit.
 
 ## Cleanup
 

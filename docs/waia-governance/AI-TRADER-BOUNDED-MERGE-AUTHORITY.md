@@ -10,8 +10,8 @@ The DEE-653 PR that creates this authority remains Human-merge-only. The delegat
 
 A Program Controller may squash-merge an AI-TRADER implementation PR only when every item below is true for the exact immutable PR head SHA:
 
-1. The work is an atomic node in the DEE-601 Step 0–22 DAG, its Human-ratified issue contract is complete, and all Linear blockers are Done.
-2. Branch, base, title, body, risk tier, one-issue/one-PR boundary, and PR-governance preflight are valid.
+1. The work is either one atomic node in the DEE-601 Step 0–22 DAG or one Human-ratified Integration Batch whose frozen manifest contains only atomic Step 0–22 child nodes. Every delivered issue contract is complete and all applicable Linear blockers are Done.
+2. Branch, base, title, body, risk tier, one-integration-issue/one-PR boundary, and PR-governance preflight are valid. A multi-issue PR additionally satisfies the full frozen Integration Train contract in [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md); an `Includes` list alone is ineligible.
 3. Required local validation and every required GitHub check, including tenant isolation and security checks when applicable, are green on that head.
 4. An independent adversarial reviewer has inspected the diff and evidence and reports no unresolved actionable finding, dissent, ambiguity, or acceptance-criteria shortfall. The implementer cannot self-attest this condition.
 5. The diff matches the approved issue scope, changes no Human-only surface below, weakens no test or gate, and has a bounded rollback (normally a revert PR).
@@ -19,6 +19,19 @@ A Program Controller may squash-merge an AI-TRADER implementation PR only when e
 7. Immediately before merge, the controller re-reads the head SHA, base SHA, mergeability, required checks, review state, and Linear blockers. Any change invalidates prior admission and requires a fresh proof.
 
 Missing, stale, contradictory, or unavailable evidence is a denial, never an inference. Green CI alone is insufficient authority.
+
+## Integration Train admission
+
+The Human-approved batching mechanism changes PR granularity only; it grants no new authority over the included work. For a train, all ordinary conditions above apply to the exact cumulative head and the controller must additionally prove:
+
+1. The manifest existed as an admitted pre-implementation inventory, is now frozen, passes machine validation, and its digest plus base/head/independent-review head match current PR state.
+2. Every included child is independently traceable to reviewed integrated commits, actual files, acceptance evidence, and tests. Every deferred/excluded child has `completionClaimed: false`.
+3. No more than two isolated child tasks ran concurrently. Parallel pairs were dependency-free and declared no overlap, competing migration, shared canonical identity, shared authority schema, or mutual invalidation risk; all other work was serialized.
+4. Cumulative targeted checks passed after each child admission. The complete diff was frozen before the final PR's authoritative governance, full unit, Postgres/integration, tenant-isolation, build, E2E, canon, FHV, and every other applicable exact-head gate, plus final adversarial review. A non-applicable gate needs an evidence-backed `n/a`; it is never silently omitted for speed.
+5. All included children share one coherent risk tier and Human-gate class. T4 or any reserved Human-only surface below denies train admission. T3 still requires the existing exact issue-level Human scope pre-authorization.
+6. Final integration and merge are serialized. Immediately before squash merge, a fresh `origin/main` fetch proves current base/head, manifest closure, zero findings, all child acceptance evidence, all required exact-head checks, and current Linear blockers.
+
+A material base, head, manifest, or included-child change invalidates affected CI/review/admission evidence. A blocked child may be removed only before PR publication by removing its diff, moving it to the deferred manifest with no completion claim, and repeating affected cumulative checks. If reviewability, risk/gate coherence, or rollback independence fails, split before PR.
 
 ## Risk envelope
 
@@ -39,6 +52,8 @@ The Program Controller must not merge a PR that changes or performs any of the f
 - Execution Server sync, creation, build, deploy, rollback, SSH recovery, or live operation;
 - branch protection, required-check, tenant-isolation, test, security, or evidence-gate weakening.
 
+No Integration Train declaration can convert any item in this list into controller authority. A governance amendment that changes this document cannot rely on its own unmerged text for admission and remains Human-merge-only under the current base policy.
+
 These remain explicit Human actions even when adjacent implementation code is eligible.
 
 ## Merge and reconciliation receipt
@@ -50,6 +65,7 @@ For an admitted PR, record in the PR or Linear closeout:
 - admission result and confirmation that no Human-only surface is present;
 - resulting squash/main SHA and rollback path;
 - post-merge proof that the resulting SHA is contained in `origin/main`;
-- Linear terminal state and the next dependency-unblocked DAG node.
+- Linear terminal state for the Integration Batch issue and, for a train, proof that only exact-head-delivered manifest children were closed while deferred/excluded children remained truthful;
+- the next dependency-unblocked DAG node.
 
 If merge or post-merge verification fails, stop, preserve evidence, and escalate. Do not start the next node on assumed integration.

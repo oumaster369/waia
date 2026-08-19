@@ -10,7 +10,7 @@ This document is the **one lifecycle** for WAIA work. Other docs (`AGENTS.md`, [
 
 **One integration Linear issue = one canonical plan = one primary branch = one PR = one merge event** to **`main`**.
 
-`linear-done.yml` closes only the explicit `**Linear:**` id on merge. Child issues listed under `**Includes:**` are never auto-closed. Multiple coherent work packages may land in the same integration batch when the integration-ready contract holds.
+`linear-done.yml` closes only the explicit `**Linear:**` id on merge. Child issues listed under `**Includes:**` are never auto-closed. Multiple coherent work packages may land in the same integration batch when the integration-ready contract holds. AI-TRADER multi-issue controller eligibility additionally requires the admitted→frozen Integration Train manifest; post-merge reconciliation closes only manifest-delivered children.
 
 ---
 
@@ -55,6 +55,10 @@ See [`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) for when 
 5. **Integration-ready** — all acceptance criteria met; PR body prepared; `preflight-pr-governance.sh` passes.
 6. **One PR** — agent opens exactly one PR to **`main`**; sets Linear `In Review`; **stops**.
 7. **Merge** — Human squash-merge by default; bounded Program Controller squash-merge only when [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](AI-TRADER-BOUNDED-MERGE-AUTHORITY.md) admits the exact PR head. Effective `merged` state is **derived** (PR merged + Linear `Done`); no status-only follow-up commit required ([`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md) §Post-merge reconciliation). Sync local `origin/main`. Official release (if any) is a later explicit Human tag of that SHA — not branch promotion.
+
+### Integration Train additions
+
+For an authorized AI-TRADER Integration Train, the Integration Batch lifecycle adds: pre-implementation admitted manifest → at most two isolated dependency-compatible child tasks → reviewed serialized child admission with cumulative checks → removal/defer of any blocked child → frozen complete manifest/diff → one final PR and all applicable exact-head gates → final independent adversarial review → fresh DEE-653 admission → serialized squash merge → exact-head child reconciliation. Single-issue batches skip these additions unchanged.
 
 ---
 

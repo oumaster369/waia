@@ -1,6 +1,7 @@
 name: pr-governance
 
-# Blocking P0 checks: explicit Linear field, ID consistency, disclaimer collision, scope match.
+# Blocking P0 checks: explicit Linear field, ID consistency, disclaimer collision, scope match,
+# and frozen manifest/digest/exact-SHA bindings when Integration Train mode is declared.
 
 on:
   pull_request:
@@ -17,6 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Train admission proves an earlier admitted manifest and child commits.
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
 
       - name: Validate Linear ID consistency (blocking)
         id: validate
@@ -26,6 +31,8 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
         run: |
           set -euo pipefail
@@ -87,7 +94,7 @@ jobs:
             let body = `${marker}\n### PR governance (P0 — blocking)\n\n`;
             if (passed) {
               body +=
-                "All checks passed: explicit **Linear:** field, title/branch ID alignment, no disclaimer collision";
+                "All checks passed: explicit **Linear:** field, title/branch ID alignment, no disclaimer collision, and any declared Integration Train manifest/exact-SHA contract";
               if (apiConfigured) {
                 body += ", Linear issue scope verified via API.";
               } else {

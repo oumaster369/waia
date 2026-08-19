@@ -122,6 +122,12 @@ kind: integration-plan
 EOF
 run_case "addendum invalid kind" 1 "$TMP/dee-999-bad-kind-addendum-v1.md" || fail=1
 
+# Extra: Integration Train JSON is classified and delegated to the fail-closed manifest validator.
+cat >"$TMP/dee-999-invalid.integration-train.json" <<'EOF'
+{}
+EOF
+run_case "invalid Integration Train manifest" 1 "$TMP/dee-999-invalid.integration-train.json" || fail=1
+
 if [[ "$fail" -ne 0 ]]; then
   echo "Some canonical-doc validator regression tests failed." >&2
   exit 1

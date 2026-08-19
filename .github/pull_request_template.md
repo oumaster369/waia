@@ -9,6 +9,8 @@
 
 **Linear:** `DEE-NN` <!-- REQUIRED — canonical issue id; must match PR title + branch `dee-NN-*` -->
 
+**Batch mode:** `single-issue` <!-- default; use `integration-train` only with a validated frozen AI-TRADER manifest -->
+
 <!-- Example: **Linear:** `DEE-153` https://linear.app/deepsense/issue/DEE-153/... -->
 
 <!-- Optional child issues: **Parent:** `DEE-NN` (same bold/backtick syntax; not required or validated) -->
@@ -20,6 +22,23 @@
 **Deferred:** <!-- optional: child work not delivered in this batch — Linear children stay open -->
 
 **Plan:** <!-- `docs/plans/dee-NN-slug.md` or `n/a` (Architect-approved bootstrap only) -->
+
+<!-- Integration Train only — uncomment and fill every line; Includes/Deferred must exactly match the frozen manifest.
+
+**Integration manifest:** `docs/plans/dee-NN-slug.integration-train.json`
+**Manifest digest:** `<sha256>`
+**Manifest status:** `frozen`
+**Manifest base SHA:** `<exact PR base SHA>`
+**Manifest head SHA:** `<exact PR head SHA>`
+**Concurrency limit:** `2`
+**Final integration:** `serialized`
+**Independent review:** `pass`
+**Independent review head:** `<same exact PR head SHA>`
+**Unresolved findings:** `0`
+**DEE-653 admission:** `required-before-merge`
+
+Child evidence lives in the manifest: dependencies, scope, expected/actual surfaces, tier/Human gate, integrated commits/files/tests, cumulative checks, and delivered/deferred disposition.
+-->
 
 ## Risk tier
 
