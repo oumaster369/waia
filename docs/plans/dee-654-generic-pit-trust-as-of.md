@@ -38,7 +38,7 @@ humanApproval:
 # DEE-654 — Generic three-time PIT and trust-as-of foundation
 Human-ratified Split A on clean `origin/main@5e5da47` containing DEE-653 / PR #468. Linear
 DEE-654 is `In Progress`, label `backend`; DEE-620 stays open. Canon: AI-TRADER Steps 1–2.
-## Contract
+## Acceptance
 - Keep three UTC instants separate, explicit, valid, and no later than the anchor; assume no universal ordering.
 - Resolve only an org/source-scoped complete visible prefix; every ambiguity returns typed `UNKNOWN`.
 - Persist content-addressed, append-only `TrustAsOfReceiptV1`; mutable status and downstream authority are excluded.
