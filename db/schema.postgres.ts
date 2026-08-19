@@ -753,6 +753,7 @@ export const traderMiSourceTrust = pgTable(
     rationale: text("rationale").notNull(),
     recordedBy: text("recorded_by").notNull(),
     eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    availableAt: timestamp("available_at", { withTimezone: true, mode: "date" }),
     ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
     revisionOf: uuid("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
     revisionSeq: integer("revision_seq").notNull(),
@@ -761,6 +762,9 @@ export const traderMiSourceTrust = pgTable(
   },
   (t) => [
     unique("trader_mi_source_trust_id_organization_unique").on(t.id, t.organizationId),
+    unique("trader_mi_source_trust_id_organization_source_unique").on(
+      t.id, t.organizationId, t.sourceId,
+    ),
     foreignKey({
       columns: [t.sourceId, t.organizationId],
       foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
@@ -783,6 +787,79 @@ export const traderMiSourceTrust = pgTable(
   ],
 );
 
+/** DEE-654 Split A: append-only content-addressed Source trust resolution receipt. */
+export const traderMiTrustAsOfReceiptV1 = pgTable(
+  "trader_mi_trust_as_of_receipt_v1",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sourceId: uuid("source_id").notNull(),
+    anchorTime: timestamp("anchor_time", { withTimezone: true, mode: "date" }).notNull(),
+    status: text("status").notNull(),
+    unknownReason: text("unknown_reason"),
+    selectedTrustRevisionId: uuid("selected_trust_revision_id"),
+    selectedRevisionSeq: integer("selected_revision_seq"),
+    selectedContentDigest: text("selected_content_digest"),
+    selectedTrustScore: text("selected_trust_score"),
+    visiblePrefixDigest: text("visible_prefix_digest").notNull(),
+    receiptJson: text("receipt_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.sourceId, t.organizationId],
+      foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.selectedTrustRevisionId, t.organizationId, t.sourceId],
+      foreignColumns: [
+        traderMiSourceTrust.id,
+        traderMiSourceTrust.organizationId,
+        traderMiSourceTrust.sourceId,
+      ],
+    }),
+    uniqueIndex("tmtaor_v1_org_source_anchor_digest_uq").on(
+      t.organizationId,
+      t.sourceId,
+      t.anchorTime,
+      t.contentDigest,
+    ),
+    index("tmtaor_v1_org_source_anchor_idx").on(t.organizationId, t.sourceId, t.anchorTime),
+    check("tmtaor_v1_id_is_digest_check", sql`${t.id} = ${t.contentDigest}`),
+    check("tmtaor_v1_id_hex_check", sql`${t.id} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "tmtaor_v1_visible_prefix_digest_check",
+      sql`${t.visiblePrefixDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "tmtaor_v1_selected_content_digest_check",
+      sql`${t.selectedContentDigest} IS NULL OR ${t.selectedContentDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "tmtaor_v1_status_coherence_check",
+      sql`(
+        ${t.status} = 'RESOLVED'
+        AND ${t.unknownReason} IS NULL
+        AND ${t.selectedTrustRevisionId} IS NOT NULL
+        AND ${t.selectedRevisionSeq} IS NOT NULL
+        AND ${t.selectedContentDigest} IS NOT NULL
+        AND ${t.selectedTrustScore} IS NOT NULL
+      ) OR (
+        ${t.status} = 'UNKNOWN'
+        AND ${t.unknownReason} IS NOT NULL
+        AND ${t.selectedTrustRevisionId} IS NULL
+        AND ${t.selectedRevisionSeq} IS NULL
+        AND ${t.selectedContentDigest} IS NULL
+        AND ${t.selectedTrustScore} IS NULL
+      )`,
+    ),
+  ],
+);
+
 export const miObservationKindEnumPg = pgEnum("mi_observation_kind", ["msv_envelope"]);
 
 /** AI-TRADER MI: append-only PIT observations (DEE-281 / LD-2b). */
@@ -800,6 +877,7 @@ export const traderMiObservation = pgTable(
     schemaVersion: text("schema_version").notNull(),
     payloadJson: text("payload_json").notNull(),
     eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    availableAt: timestamp("available_at", { withTimezone: true, mode: "date" }),
     ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
     observedBy: text("observed_by").notNull(),
     revisionOf: uuid("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)

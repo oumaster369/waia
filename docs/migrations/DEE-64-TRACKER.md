@@ -8,6 +8,13 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 ## Current Status
 
+**DEE-654 Split A** adds Postgres-only three-time PIT compatibility and trust-as-of receipts:
+nullable `available_at` on existing MI trust/Observation rows plus append-only,
+content-addressed `trader_mi_trust_as_of_receipt_v1` in migration `0152`. Existing rows remain
+unknown until truthful availability exists; V1 digests, SQLite paths, providers, Measurements,
+and runtime routing are unchanged. No production SQL was applied. See
+[`DEE-654-MI-PIT-TRUST-AS-OF.md`](DEE-654-MI-PIT-TRUST-AS-OF.md).
+
 **D1, D2, D3, D3b, D4, D5a, and D6-pre are complete and merged** on `dev`.
 
 **D6-core** adds **explicit Postgres transaction runner** (`db/waia-postgres-transaction.ts`, async-only callback, rollback integration tests). **Still no** `runWaiaTransaction`, **still no** production route migration to Postgres persistence.
