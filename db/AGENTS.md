@@ -90,6 +90,7 @@ Trader-owned tables use the `trader_*` prefix and **must** carry `organization_i
 | SQLite `0016_trader_mi_observation` | `trader_mi_observation` | MI Layer-1 PIT observations + MSV persistence (DEE-281) |
 | Postgres `0020_trader_mi_observation` | `trader_mi_observation` | Same |
 | Postgres `0021_trader_mi_observation_rls` | MI observation RLS | ADR-0007 deny authenticated/anon |
+| Postgres `0152_trader_mi_pit_trust_as_of_v1` | `trader_mi_source_trust`, `trader_mi_observation`, `trader_mi_trust_as_of_receipt_v1` | DEE-654 Split A: nullable three-time compatibility + append-only trust-as-of receipt; no SQLite counterpart |
 | SQLite `0017_trader_mi_measurement` | `trader_mi_measurement` | MI Layer-2 versioned transform-definition registry (DEE-282) |
 | Postgres `0022_trader_mi_measurement` | `trader_mi_measurement` | Same |
 | Postgres `0023_trader_mi_measurement_rls` | MI measurement RLS | ADR-0007 deny authenticated/anon |

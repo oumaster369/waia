@@ -1065,6 +1065,13 @@
       "when": 1780000000151,
       "tag": "0151_treasury_chain_observations_lifecycle_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1780000000152,
+      "tag": "0152_trader_mi_pit_trust_as_of_v1",
+      "breakpoints": true
     }
   ]
 }
