@@ -1,14 +1,25 @@
 import { quantizeScale8HalfUp } from "@/lib/trader/intelligence/forecast-v2/quantize-scale8-half-up-v1";
-import { parseDecimal } from "@/lib/trader/risk/numeric";
+import { distributionSemanticDigestHex } from "@/lib/trader/intelligence/forecast-v2/distribution-semantic-digest-v1";
+import {
+  COMPONENT_LAYOUT_VERSION,
+  MODEL_TRANSFORM_VERSION,
+  REPRESENTATION_SAMPLE_ENSEMBLE,
+  TARGET_ROLE_EXECUTION,
+} from "@/lib/trader/intelligence/forecast-v2/constants";
+import { OUTCOME_VERSION } from "@/lib/trader/intelligence/forecast-v2/source-anchor-v1";
+import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
 import {
   assertLegacyStrategyFieldsNonAuthoritative,
-  computeDecisionEvRangeV1,
   type DecisionEvRange,
 } from "./decision-economics-v2";
 import {
   DEE649_DECISION_ECONOMICS_CONTRACT_VERSION,
+  DEE649_EV_AGGREGATION_POLICY,
+  DEE649_INTERIM_POSITION_POLICY_ID,
+  computeDee649InstrumentIdentityDigestV1,
+  type Dee649AuthorityBindingV1,
   type Dee649ExecutablePolicyInstanceV1,
   type Dee649ReasonCode,
   type EconomicAdmissibleSizeSetV1,
@@ -27,31 +38,60 @@ import {
 
 export const WHY_NOT_CASH_RECEIPT_V2_SCHEMA_VERSION = "why-not-cash-receipt/v2" as const;
 
-export type ForecastEconomicAuthorityV1 = {
-  organizationId: string;
+export type ForecastEconomicAuthorityV1 = Dee649AuthorityBindingV1 & {
   forecastId: string;
-  venue: string;
-  market: "SPOT";
-  symbol: string;
   identity: ExecOpp13dForecastIdentityV1;
+  forecastAnchorClosedBarEpochMs: number;
+  anchorAuthorityContentDigestHex: string;
   predictivePackageContentDigestHex: string;
   predictivePackageGenerationIdentityDigestHex: string;
+  normalizationVersionDigestHex: string;
+  k: number;
+  m: number;
   distributionSemanticDigestHex: string;
+  forecastAuthorityReceiptDigestHex: string;
   replicaSamples: readonly (readonly (readonly number[])[])[];
+};
+
+export type CashEconomicAuthorityV1 = Dee649AuthorityBindingV1 & {
+  availableCashUsdt: string;
+  authorityReceiptDigestHex: string;
+};
+
+export type DecisionEconomicAuthorityVerificationV1 = {
+  /**
+   * A trusted admission boundary may set these flags only after validating the
+   * current org/account/instrument-bound object and its exact receipt/content
+   * digest. Constructors and raw digest strings never confer verification.
+   */
+  forecastAuthorityVerified: boolean;
+  anchorAuthorityVerified: boolean;
+  executablePolicyAuthorityVerified: boolean;
+  economicSizeAuthorityVerified: boolean;
+  cashAuthorityVerified: boolean;
 };
 
 export type WhyNotCashReceiptV2 = {
   schemaVersion: typeof WHY_NOT_CASH_RECEIPT_V2_SCHEMA_VERSION;
   decisionEconomicsContractVersion: typeof DEE649_DECISION_ECONOMICS_CONTRACT_VERSION;
   organizationId: string;
+  accountId: string;
   forecastId: string;
   venue: string;
   market: "SPOT";
   symbol: string;
+  baseAsset: string;
+  quoteAsset: "USDT";
+  instrumentIdentityDigestHex: string;
   forecastIdentity: ExecOpp13dForecastIdentityV1;
   predictivePackageContentDigestHex: string;
   predictivePackageGenerationIdentityDigestHex: string;
   distributionSemanticDigestHex: string;
+  normalizationVersionDigestHex: string;
+  k: number;
+  m: number;
+  forecastAnchorClosedBarEpochMs: number;
+  forecastAuthorityReceiptDigestHex: string;
   decisionEvaluationContractId: string | null;
   executionPayoffFunctionalVersion: typeof EXECUTION_PAYOFF_FUNCTIONAL_V2_VERSION;
   forecastComponentUse: {
@@ -76,6 +116,7 @@ export type WhyNotCashReceiptV2 = {
   availableCashUsdt: string;
   cashAuthorityReceiptDigestHex: string;
   cashBaselineUsdt: "0";
+  evAggregationPolicy: typeof DEE649_EV_AGGREGATION_POLICY;
   muBaseReplicasScale8: readonly string[];
   muLowerReplicasScale8: readonly string[];
   evLowerScale8: string | null;
@@ -85,6 +126,7 @@ export type WhyNotCashReceiptV2 = {
   scenarioResidualInventoryCount: number;
   scientificAdmissionVerified: boolean;
   scientificAdmissionReceiptDigestHex: string | null;
+  authorityVerification: DecisionEconomicAuthorityVerificationV1;
   actionCandidate: "ENTER_LONG";
   verdict: "DECISION_ACTIONABLE" | "DECISION_NON_ACTIONABLE";
   economicallyAdmissibleExactQuantities: readonly string[];
@@ -97,8 +139,8 @@ export type DecisionEconomicEvaluationInputV2 = {
   anchorAuthority: ForecastAnchorPriceAuthorityV1;
   policy: Dee649ExecutablePolicyInstanceV1;
   economicSizeSet: EconomicAdmissibleSizeSetV1;
-  availableCashUsdt: string;
-  cashAuthorityReceiptDigestHex: string;
+  cashAuthority: CashEconomicAuthorityV1;
+  authorityVerification: DecisionEconomicAuthorityVerificationV1;
   scientificAdmissionVerified: boolean;
   scientificAdmissionReceiptDigestHex?: string | null;
   legacyStrategyDiagnostics?: {
@@ -123,6 +165,53 @@ function isDigestHex(value: string | null | undefined): value is string {
 
 function uniqueReasons(reasons: readonly Dee649ReasonCode[]): Dee649ReasonCode[] {
   return [...new Set(reasons)];
+}
+
+function sameAuthorityBinding(
+  expected: Dee649AuthorityBindingV1,
+  actual: Dee649AuthorityBindingV1,
+): boolean {
+  return (
+    expected.organizationId === actual.organizationId &&
+    expected.accountId === actual.accountId &&
+    expected.venue === actual.venue &&
+    expected.market === actual.market &&
+    expected.symbol === actual.symbol &&
+    expected.baseAsset === actual.baseAsset &&
+    expected.quoteAsset === actual.quoteAsset &&
+    expected.instrumentIdentityDigestHex === actual.instrumentIdentityDigestHex
+  );
+}
+
+function canonicalForecastSamples(
+  forecast: ForecastEconomicAuthorityV1,
+): readonly (readonly (readonly number[])[])[] | null {
+  if (
+    !Number.isSafeInteger(forecast.k) ||
+    forecast.k <= 0 ||
+    !Number.isSafeInteger(forecast.m) ||
+    forecast.m <= 0 ||
+    !Array.isArray(forecast.replicaSamples) ||
+    forecast.replicaSamples.length !== forecast.k
+  ) {
+    return null;
+  }
+  const canonical: number[][][] = [];
+  for (const replica of forecast.replicaSamples) {
+    if (!Array.isArray(replica) || replica.length !== forecast.m) return null;
+    const canonicalReplica: number[][] = [];
+    for (const sample of replica) {
+      if (!Array.isArray(sample) || sample.length !== 13) return null;
+      const canonicalSample: number[] = [];
+      for (const component of sample) {
+        if (!Number.isFinite(component)) return null;
+        canonicalSample.push(Number(quantizeScale8HalfUp(component)));
+      }
+      canonicalReplica.push(canonicalSample);
+    }
+    canonical.push(canonicalReplica);
+  }
+  return canonical;
 }
 
 function forecastComponentUse(
@@ -160,28 +249,148 @@ function omitReceiptDigest(
   return payload;
 }
 
+function divideHalfUpSigned(numerator: bigint, denominator: bigint): bigint {
+  if (denominator <= 0n) throw new Error("FORECAST_SAMPLE_INVALID");
+  const negative = numerator < 0n;
+  const absolute = negative ? -numerator : numerator;
+  let quotient = absolute / denominator;
+  if ((absolute % denominator) * 2n >= denominator) quotient += 1n;
+  return negative ? -quotient : quotient;
+}
+
+function fixedScale8(value: bigint): string {
+  const negative = value < 0n;
+  const absolute = negative ? -value : value;
+  const whole = absolute / 100_000_000n;
+  const fraction = (absolute % 100_000_000n).toString().padStart(8, "0");
+  return `${negative ? "-" : ""}${whole}.${fraction}`;
+}
+
+function exactReplicaMeanScale8(payoffs: readonly string[]): bigint {
+  if (payoffs.length === 0) throw new Error("FORECAST_SAMPLE_INVALID");
+  return divideHalfUpSigned(
+    payoffs.reduce((sum, payoff) => sum + parseDecimal(payoff), 0n),
+    BigInt(payoffs.length),
+  );
+}
+
+function exactType7Scale8(
+  values: readonly bigint[],
+  probabilityNumerator: bigint,
+  probabilityDenominator: bigint,
+): bigint {
+  if (values.length === 0) throw new Error("EV_RANGE_INVALID");
+  const sorted = [...values].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+  if (sorted.length === 1) return sorted[0]!;
+  const positionNumerator = BigInt(sorted.length - 1) * probabilityNumerator;
+  const lowerIndex = positionNumerator / probabilityDenominator;
+  const remainder = positionNumerator % probabilityDenominator;
+  const lower = sorted[Number(lowerIndex)]!;
+  const upper = sorted[Math.min(sorted.length - 1, Number(lowerIndex) + 1)]!;
+  return divideHalfUpSigned(
+    lower * (probabilityDenominator - remainder) + upper * remainder,
+    probabilityDenominator,
+  );
+}
+
+function exactDecisionEvRange(input: {
+  muBaseScale8: readonly bigint[];
+  muLowerScale8: readonly bigint[];
+  scientificAdmissionVerified: boolean;
+}): DecisionEvRange {
+  const evLowerScaled = exactType7Scale8(input.muLowerScale8, 1n, 10n);
+  const evBaseScaled = exactType7Scale8(input.muBaseScale8, 1n, 2n);
+  const evUpperScaled = exactType7Scale8(input.muBaseScale8, 9n, 10n);
+  const reasons: string[] = [];
+  if (!(evLowerScaled <= evBaseScaled && evBaseScaled <= evUpperScaled)) {
+    reasons.push("EV_RANGE_INVALID");
+  }
+  if (!input.scientificAdmissionVerified) {
+    reasons.push("SCIENTIFIC_ADMISSION_RECEIPT_REQUIRED");
+  }
+  if (evLowerScaled <= 0n) reasons.push("EV_LOWER_NON_POSITIVE");
+  const decisionActionable = evLowerScaled > 0n && reasons.length === 0;
+  if (!decisionActionable) reasons.push("DECISION_NON_ACTIONABLE");
+  return {
+    evLower: Number(formatDecimal(evLowerScaled)),
+    evBase: Number(formatDecimal(evBaseScaled)),
+    evUpper: Number(formatDecimal(evUpperScaled)),
+    evLowerScale8: fixedScale8(evLowerScaled),
+    evBaseScale8: fixedScale8(evBaseScaled),
+    evUpperScale8: fixedScale8(evUpperScaled),
+    decisionActionable,
+    reasonCodes: reasons,
+  };
+}
+
+export function computeExactDecisionEvRangeFromPayoffsV1(input: {
+  baseReplicaPayoffsScale8: readonly (readonly string[])[];
+  lowerReplicaPayoffsScale8: readonly (readonly string[])[];
+  scientificAdmissionVerified: boolean;
+}): {
+  muBaseReplicasScale8: readonly string[];
+  muLowerReplicasScale8: readonly string[];
+  evRange: DecisionEvRange;
+} {
+  if (
+    input.baseReplicaPayoffsScale8.length === 0 ||
+    input.baseReplicaPayoffsScale8.length !== input.lowerReplicaPayoffsScale8.length
+  ) {
+    throw new Error("EV_RANGE_INVALID");
+  }
+  const muBase = input.baseReplicaPayoffsScale8.map(exactReplicaMeanScale8);
+  const muLower = input.lowerReplicaPayoffsScale8.map(exactReplicaMeanScale8);
+  return {
+    muBaseReplicasScale8: muBase.map(fixedScale8),
+    muLowerReplicasScale8: muLower.map(fixedScale8),
+    evRange: exactDecisionEvRange({
+      muBaseScale8: muBase,
+      muLowerScale8: muLower,
+      scientificAdmissionVerified: input.scientificAdmissionVerified,
+    }),
+  };
+}
+
 function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649ReasonCode[] {
   const reasons: Dee649ReasonCode[] = [];
+  const forecastIdentityDigest = computeDee649InstrumentIdentityDigestV1({
+    organizationId: input.forecast.organizationId,
+    accountId: input.forecast.accountId,
+    venue: input.forecast.venue,
+    market: input.forecast.market,
+    symbol: input.forecast.symbol,
+    baseAsset: input.forecast.baseAsset,
+    quoteAsset: input.forecast.quoteAsset,
+  });
   if (
     input.forecast.organizationId.trim() === "" ||
     input.forecast.forecastId.trim() === "" ||
     input.forecast.venue.trim() === "" ||
     input.forecast.market !== "SPOT" ||
     input.forecast.symbol.trim() === "" ||
+    input.forecast.baseAsset.trim() === "" ||
+    input.forecast.quoteAsset !== "USDT" ||
+    input.forecast.symbol !== `${input.forecast.baseAsset}${input.forecast.quoteAsset}` ||
+    !isDigestHex(input.forecast.instrumentIdentityDigestHex) ||
+    input.forecast.instrumentIdentityDigestHex !== forecastIdentityDigest ||
     !isDigestHex(input.forecast.predictivePackageContentDigestHex) ||
     !isDigestHex(input.forecast.predictivePackageGenerationIdentityDigestHex) ||
-    !isDigestHex(input.forecast.distributionSemanticDigestHex)
+    !isDigestHex(input.forecast.normalizationVersionDigestHex) ||
+    !isDigestHex(input.forecast.distributionSemanticDigestHex) ||
+    !isDigestHex(input.forecast.forecastAuthorityReceiptDigestHex) ||
+    !Number.isSafeInteger(input.forecast.forecastAnchorClosedBarEpochMs) ||
+    input.forecast.forecastAnchorClosedBarEpochMs <= 0
   ) {
     reasons.push("FORECAST_AUTHORITY_INVALID");
   }
+  if (!input.authorityVerification.forecastAuthorityVerified) {
+    reasons.push("FORECAST_AUTHORITY_NOT_VERIFIED");
+  }
   if (
-    input.forecast.venue !== input.anchorAuthority.venue ||
-    input.forecast.venue !== input.policy.venue ||
-    input.forecast.market !== input.anchorAuthority.market ||
-    input.forecast.market !== input.policy.market ||
-    input.forecast.symbol !== input.anchorAuthority.symbol ||
-    input.forecast.symbol !== input.policy.symbol ||
-    input.forecast.symbol !== input.economicSizeSet.symbol
+    !sameAuthorityBinding(input.forecast, input.anchorAuthority) ||
+    !sameAuthorityBinding(input.forecast, input.policy) ||
+    !sameAuthorityBinding(input.forecast, input.economicSizeSet) ||
+    !sameAuthorityBinding(input.forecast, input.cashAuthority)
   ) {
     reasons.push("INSTRUMENT_AUTHORITY_MISMATCH");
   }
@@ -192,6 +401,16 @@ function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649R
         ? "ANCHOR_AUTHORITY_MISMATCH"
         : "ANCHOR_AUTHORITY_INVALID",
     );
+  }
+  if (!input.authorityVerification.anchorAuthorityVerified) {
+    reasons.push("ANCHOR_AUTHORITY_NOT_VERIFIED");
+  }
+  if (
+    input.forecast.forecastAnchorClosedBarEpochMs !==
+      input.anchorAuthority.forecastAnchorClosedBarEpochMs ||
+    input.forecast.anchorAuthorityContentDigestHex !== input.anchorAuthority.contentDigestHex
+  ) {
+    reasons.push("ANCHOR_AUTHORITY_MISMATCH");
   }
   const policyErrors = validateDee649ExecutablePolicyInstanceV1(input.policy);
   let policySpecificReason = false;
@@ -216,19 +435,50 @@ function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649R
   if (policyErrors.length > 0 && !policySpecificReason) {
     reasons.push("EXECUTABLE_POLICY_INVALID");
   }
+  if (!input.authorityVerification.executablePolicyAuthorityVerified) {
+    reasons.push("EXECUTABLE_POLICY_AUTHORITY_NOT_VERIFIED");
+  }
   const sizeErrors = validateEconomicAdmissibleSizeSetV1(input.economicSizeSet);
   if (sizeErrors.includes("contentDigestHex:MISMATCH")) {
     reasons.push("SIZE_SET_DIGEST_MISMATCH");
   } else if (sizeErrors.length > 0) {
     reasons.push("ECONOMIC_SIZE_SET_INVALID");
   }
+  if (!input.authorityVerification.economicSizeAuthorityVerified) {
+    reasons.push("ECONOMIC_SIZE_AUTHORITY_NOT_VERIFIED");
+  }
   try {
-    const availableCash = parseDecimal(input.availableCashUsdt);
-    if (availableCash < 0n || !isDigestHex(input.cashAuthorityReceiptDigestHex)) {
+    const availableCash = parseDecimal(input.cashAuthority.availableCashUsdt);
+    if (availableCash < 0n || !isDigestHex(input.cashAuthority.authorityReceiptDigestHex)) {
       reasons.push("CASH_AUTHORITY_INVALID");
     }
   } catch {
     reasons.push("CASH_AUTHORITY_INVALID");
+  }
+  if (!input.authorityVerification.cashAuthorityVerified) {
+    reasons.push("CASH_AUTHORITY_NOT_VERIFIED");
+  }
+  const canonicalSamples = canonicalForecastSamples(input.forecast);
+  if (canonicalSamples === null) {
+    reasons.push("FORECAST_KM_MISMATCH");
+  } else {
+    try {
+      const recomputed = distributionSemanticDigestHex({
+        forecastGenerationIdentityDigestHex:
+          input.forecast.predictivePackageGenerationIdentityDigestHex,
+        predictivePackageContentDigestHex: input.forecast.predictivePackageContentDigestHex,
+        k: input.forecast.k,
+        m: input.forecast.m,
+        normalizationVersionDigestHex: input.forecast.normalizationVersionDigestHex,
+        targetRoleId: input.forecast.identity.targetRoleId,
+        samples: canonicalSamples,
+      });
+      if (recomputed !== input.forecast.distributionSemanticDigestHex) {
+        reasons.push("FORECAST_DISTRIBUTION_DIGEST_MISMATCH");
+      }
+    } catch {
+      reasons.push("FORECAST_AUTHORITY_INVALID");
+    }
   }
   if (
     !input.scientificAdmissionVerified ||
@@ -250,15 +500,24 @@ function emptyReceipt(input: {
     schemaVersion: WHY_NOT_CASH_RECEIPT_V2_SCHEMA_VERSION,
     decisionEconomicsContractVersion: DEE649_DECISION_ECONOMICS_CONTRACT_VERSION,
     organizationId: source.forecast.organizationId,
+    accountId: source.forecast.accountId,
     forecastId: source.forecast.forecastId,
     venue: source.forecast.venue,
     market: source.forecast.market,
     symbol: source.forecast.symbol,
+    baseAsset: source.forecast.baseAsset,
+    quoteAsset: source.forecast.quoteAsset,
+    instrumentIdentityDigestHex: source.forecast.instrumentIdentityDigestHex,
     forecastIdentity: source.forecast.identity,
     predictivePackageContentDigestHex: source.forecast.predictivePackageContentDigestHex,
     predictivePackageGenerationIdentityDigestHex:
       source.forecast.predictivePackageGenerationIdentityDigestHex,
     distributionSemanticDigestHex: source.forecast.distributionSemanticDigestHex,
+    normalizationVersionDigestHex: source.forecast.normalizationVersionDigestHex,
+    k: source.forecast.k,
+    m: source.forecast.m,
+    forecastAnchorClosedBarEpochMs: source.forecast.forecastAnchorClosedBarEpochMs,
+    forecastAuthorityReceiptDigestHex: source.forecast.forecastAuthorityReceiptDigestHex,
     decisionEvaluationContractId: input.evaluationContractId,
     executionPayoffFunctionalVersion: EXECUTION_PAYOFF_FUNCTIONAL_V2_VERSION,
     forecastComponentUse: forecastComponentUse(source.policy),
@@ -273,9 +532,10 @@ function emptyReceipt(input: {
     inputEconomicSizeSetId: source.economicSizeSet.sizeSetId,
     inputEconomicSizeSetDigestHex: source.economicSizeSet.contentDigestHex,
     evaluatedExactQuantity: input.evaluatedExactQuantity,
-    availableCashUsdt: source.availableCashUsdt,
-    cashAuthorityReceiptDigestHex: source.cashAuthorityReceiptDigestHex,
+    availableCashUsdt: source.cashAuthority.availableCashUsdt,
+    cashAuthorityReceiptDigestHex: source.cashAuthority.authorityReceiptDigestHex,
     cashBaselineUsdt: "0",
+    evAggregationPolicy: DEE649_EV_AGGREGATION_POLICY,
     muBaseReplicasScale8: [],
     muLowerReplicasScale8: [],
     evLowerScale8: null,
@@ -285,6 +545,7 @@ function emptyReceipt(input: {
     scenarioResidualInventoryCount: 0,
     scientificAdmissionVerified: source.scientificAdmissionVerified,
     scientificAdmissionReceiptDigestHex: source.scientificAdmissionReceiptDigestHex ?? null,
+    authorityVerification: source.authorityVerification,
     actionCandidate: "ENTER_LONG",
     verdict: "DECISION_NON_ACTIONABLE",
     economicallyAdmissibleExactQuantities: [],
@@ -296,7 +557,7 @@ function emptyReceipt(input: {
  * Closed-family Decision economics evaluator. Risk, Execution and Guardian permission
  * are intentionally absent from the input contract.
  */
-export function evaluateDecisionEconomicsV2(
+function evaluateDecisionEconomicsV2Internal(
   input: DecisionEconomicEvaluationInputV2,
 ): DecisionEconomicEvaluationResultV2 {
   assertLegacyStrategyFieldsNonAuthoritative(input.legacyStrategyDiagnostics ?? {});
@@ -341,10 +602,8 @@ export function evaluateDecisionEconomicsV2(
     };
   }
 
-  if (
-    input.forecast.replicaSamples.length === 0 ||
-    input.forecast.replicaSamples.some((samples) => samples.length === 0)
-  ) {
+  const canonicalSamples = canonicalForecastSamples(input.forecast);
+  if (canonicalSamples === null) {
     const receipt = emptyReceipt({
       evaluationInput: input,
       evaluationContractId: registry.contract.contractId,
@@ -361,7 +620,7 @@ export function evaluateDecisionEconomicsV2(
     };
   }
 
-  const scenarioResults = input.forecast.replicaSamples.map((samples) =>
+  const scenarioResults = canonicalSamples.map((samples) =>
     samples.map((sample13d) =>
       executionPayoffFunctionalV2({
         sample13d,
@@ -369,8 +628,8 @@ export function evaluateDecisionEconomicsV2(
         anchorAuthority: input.anchorAuthority,
         policy: input.policy,
         exactQuantity,
-        availableCashUsdt: input.availableCashUsdt,
-        cashAuthorityReceiptDigestHex: input.cashAuthorityReceiptDigestHex,
+        availableCashUsdt: input.cashAuthority.availableCashUsdt,
+        cashAuthorityReceiptDigestHex: input.cashAuthority.authorityReceiptDigestHex,
       }),
     ),
   );
@@ -405,17 +664,16 @@ export function evaluateDecisionEconomicsV2(
     };
   }
 
-  const muBaseReplicas = scenarioResults.map(
-    (replica) => replica.reduce((sum, scenario) => sum + scenario.basePayoff, 0) / replica.length,
-  );
-  const muLowerReplicas = scenarioResults.map(
-    (replica) => replica.reduce((sum, scenario) => sum + scenario.lowerPayoff, 0) / replica.length,
-  );
-  const evRange = computeDecisionEvRangeV1({
-    muBaseReplicas,
-    muLowerReplicas,
+  const exactRange = computeExactDecisionEvRangeFromPayoffsV1({
+    baseReplicaPayoffsScale8: scenarioResults.map((replica) =>
+      replica.map((scenario) => scenario.basePayoffUsdt),
+    ),
+    lowerReplicaPayoffsScale8: scenarioResults.map((replica) =>
+      replica.map((scenario) => scenario.lowerPayoffUsdt),
+    ),
     scientificAdmissionVerified: input.scientificAdmissionVerified,
   });
+  const evRange = exactRange.evRange;
   const rangeReasons = evRange.reasonCodes.filter(
     (reason): reason is Dee649ReasonCode =>
       reason === "EV_RANGE_INVALID" ||
@@ -433,15 +691,24 @@ export function evaluateDecisionEconomicsV2(
     schemaVersion: WHY_NOT_CASH_RECEIPT_V2_SCHEMA_VERSION,
     decisionEconomicsContractVersion: DEE649_DECISION_ECONOMICS_CONTRACT_VERSION,
     organizationId: input.forecast.organizationId,
+    accountId: input.forecast.accountId,
     forecastId: input.forecast.forecastId,
     venue: input.forecast.venue,
     market: input.forecast.market,
     symbol: input.forecast.symbol,
+    baseAsset: input.forecast.baseAsset,
+    quoteAsset: input.forecast.quoteAsset,
+    instrumentIdentityDigestHex: input.forecast.instrumentIdentityDigestHex,
     forecastIdentity: input.forecast.identity,
     predictivePackageContentDigestHex: input.forecast.predictivePackageContentDigestHex,
     predictivePackageGenerationIdentityDigestHex:
       input.forecast.predictivePackageGenerationIdentityDigestHex,
     distributionSemanticDigestHex: input.forecast.distributionSemanticDigestHex,
+    normalizationVersionDigestHex: input.forecast.normalizationVersionDigestHex,
+    k: input.forecast.k,
+    m: input.forecast.m,
+    forecastAnchorClosedBarEpochMs: input.forecast.forecastAnchorClosedBarEpochMs,
+    forecastAuthorityReceiptDigestHex: input.forecast.forecastAuthorityReceiptDigestHex,
     decisionEvaluationContractId: registry.contract.contractId,
     executionPayoffFunctionalVersion: EXECUTION_PAYOFF_FUNCTIONAL_V2_VERSION,
     forecastComponentUse: forecastComponentUse(input.policy),
@@ -456,11 +723,12 @@ export function evaluateDecisionEconomicsV2(
     inputEconomicSizeSetId: input.economicSizeSet.sizeSetId,
     inputEconomicSizeSetDigestHex: input.economicSizeSet.contentDigestHex,
     evaluatedExactQuantity: exactQuantity,
-    availableCashUsdt: input.availableCashUsdt,
-    cashAuthorityReceiptDigestHex: input.cashAuthorityReceiptDigestHex,
+    availableCashUsdt: input.cashAuthority.availableCashUsdt,
+    cashAuthorityReceiptDigestHex: input.cashAuthority.authorityReceiptDigestHex,
     cashBaselineUsdt: "0",
-    muBaseReplicasScale8: muBaseReplicas.map(quantizeScale8HalfUp),
-    muLowerReplicasScale8: muLowerReplicas.map(quantizeScale8HalfUp),
+    evAggregationPolicy: DEE649_EV_AGGREGATION_POLICY,
+    muBaseReplicasScale8: exactRange.muBaseReplicasScale8,
+    muLowerReplicasScale8: exactRange.muLowerReplicasScale8,
     evLowerScale8: evRange.evLowerScale8,
     evBaseScale8: evRange.evBaseScale8,
     evUpperScale8: evRange.evUpperScale8,
@@ -470,6 +738,7 @@ export function evaluateDecisionEconomicsV2(
     scenarioResidualInventoryCount: residualCount,
     scientificAdmissionVerified: input.scientificAdmissionVerified,
     scientificAdmissionReceiptDigestHex: input.scientificAdmissionReceiptDigestHex ?? null,
+    authorityVerification: input.authorityVerification,
     actionCandidate: "ENTER_LONG",
     verdict: decisionActionable ? "DECISION_ACTIONABLE" : "DECISION_NON_ACTIONABLE",
     economicallyAdmissibleExactQuantities: admissibleSizes,
@@ -484,4 +753,102 @@ export function evaluateDecisionEconomicsV2(
     scenarioResults,
     receipt,
   };
+}
+
+function malformedEvaluationResult(): DecisionEconomicEvaluationResultV2 {
+  const zeroDigest = "0".repeat(64);
+  const authorityVerification: DecisionEconomicAuthorityVerificationV1 = {
+    forecastAuthorityVerified: false,
+    anchorAuthorityVerified: false,
+    executablePolicyAuthorityVerified: false,
+    economicSizeAuthorityVerified: false,
+    cashAuthorityVerified: false,
+  };
+  const receipt = receiptWithDigest({
+    schemaVersion: WHY_NOT_CASH_RECEIPT_V2_SCHEMA_VERSION,
+    decisionEconomicsContractVersion: DEE649_DECISION_ECONOMICS_CONTRACT_VERSION,
+    organizationId: "",
+    accountId: "",
+    forecastId: "",
+    venue: "",
+    market: "SPOT",
+    symbol: "",
+    baseAsset: "",
+    quoteAsset: "USDT",
+    instrumentIdentityDigestHex: zeroDigest,
+    forecastIdentity: {
+      targetRoleId: TARGET_ROLE_EXECUTION,
+      representationKind: REPRESENTATION_SAMPLE_ENSEMBLE,
+      componentLayoutVersion: COMPONENT_LAYOUT_VERSION,
+      outcomeVersion: OUTCOME_VERSION,
+      modelTransformVersion: MODEL_TRANSFORM_VERSION,
+      primaryHorizonMinutes: 30,
+      interimPositionPolicyId: DEE649_INTERIM_POSITION_POLICY_ID,
+    },
+    predictivePackageContentDigestHex: zeroDigest,
+    predictivePackageGenerationIdentityDigestHex: zeroDigest,
+    distributionSemanticDigestHex: zeroDigest,
+    normalizationVersionDigestHex: zeroDigest,
+    k: 0,
+    m: 0,
+    forecastAnchorClosedBarEpochMs: 0,
+    forecastAuthorityReceiptDigestHex: zeroDigest,
+    decisionEvaluationContractId: null,
+    executionPayoffFunctionalVersion: EXECUTION_PAYOFF_FUNCTIONAL_V2_VERSION,
+    forecastComponentUse: {
+      executableEntryReturnIndices: [],
+      structuralHorizonTriggerReturnIndex: 3,
+      executableExitReturnIndices: [],
+      executableEntryVolumeIndices: [],
+      executableExitVolumeIndices: [],
+      unusedByPolicyIndices: Array.from({ length: 13 }, (_, index) => index),
+      horizonTriggerIsExecutableFillPrice: false,
+    },
+    payoffPolicyInstanceId: "",
+    payoffPolicyDigestHex: zeroDigest,
+    anchorAuthorityDigestHex: zeroDigest,
+    preregistrationReceiptDigestHex: zeroDigest,
+    costAuthorityReceiptDigestHex: zeroDigest,
+    liquidityCapacityAuthorityReceiptDigestHex: zeroDigest,
+    quantityRulesAuthorityReceiptDigestHex: zeroDigest,
+    inputEconomicSizeSetId: "",
+    inputEconomicSizeSetDigestHex: zeroDigest,
+    evaluatedExactQuantity: null,
+    availableCashUsdt: "0",
+    cashAuthorityReceiptDigestHex: zeroDigest,
+    cashBaselineUsdt: "0",
+    evAggregationPolicy: DEE649_EV_AGGREGATION_POLICY,
+    muBaseReplicasScale8: [],
+    muLowerReplicasScale8: [],
+    evLowerScale8: null,
+    evBaseScale8: null,
+    evUpperScale8: null,
+    scenarioContentDigests: [],
+    scenarioResidualInventoryCount: 0,
+    scientificAdmissionVerified: false,
+    scientificAdmissionReceiptDigestHex: null,
+    authorityVerification,
+    actionCandidate: "ENTER_LONG",
+    verdict: "DECISION_NON_ACTIONABLE",
+    economicallyAdmissibleExactQuantities: [],
+    reasonCodes: ["EVALUATION_INPUT_MALFORMED", "DECISION_NON_ACTIONABLE"],
+  });
+  return {
+    decisionActionable: false,
+    action: "CASH",
+    economicAdmissibleSizeSet: null,
+    evRange: null,
+    scenarioResults: [],
+    receipt,
+  };
+}
+
+export function evaluateDecisionEconomicsV2(
+  input: DecisionEconomicEvaluationInputV2,
+): DecisionEconomicEvaluationResultV2 {
+  try {
+    return evaluateDecisionEconomicsV2Internal(input);
+  } catch {
+    return malformedEvaluationResult();
+  }
 }

@@ -1,5 +1,6 @@
 import {
   createDee649ExecutablePolicyInstanceV1,
+  computeDee649InstrumentIdentityDigestV1,
   createForecastAnchorPriceAuthorityV1,
   DEE649_ANCHOR_AUTHORITY_SCHEMA_VERSION,
   DEE649_EXECUTABLE_POLICY_SCHEMA_VERSION,
@@ -9,18 +10,52 @@ import {
   type Dee649ExecutablePolicyDraftV1,
   type ForecastAnchorPriceAuthorityV1,
 } from "@/lib/trader/intelligence/decision-economics/dee649-contract-v1";
+import type { ForecastEconomicAuthorityV1 } from "@/lib/trader/intelligence/decision-economics/decision-economic-evaluator-v2";
+import {
+  COMPONENT_LAYOUT_VERSION,
+  MODEL_TRANSFORM_VERSION,
+  REPRESENTATION_SAMPLE_ENSEMBLE,
+  TARGET_ROLE_EXECUTION,
+} from "@/lib/trader/intelligence/forecast-v2/constants";
+import { distributionSemanticDigestHex } from "@/lib/trader/intelligence/forecast-v2/distribution-semantic-digest-v1";
+import { OUTCOME_VERSION } from "@/lib/trader/intelligence/forecast-v2/source-anchor-v1";
 
 export const DEE649_TEST_DIGEST_A = "a".repeat(64);
 export const DEE649_TEST_DIGEST_B = "b".repeat(64);
 export const DEE649_TEST_DIGEST_C = "c".repeat(64);
 export const DEE649_TEST_DIGEST_D = "d".repeat(64);
 
+export function dee649TestAuthorityBinding(
+  overrides: Partial<{
+    organizationId: string;
+    accountId: string;
+    venue: string;
+    market: "SPOT";
+    symbol: string;
+    baseAsset: string;
+    quoteAsset: "USDT";
+  }> = {},
+) {
+  const identity = {
+    organizationId: "00000000-0000-4000-8000-000000000001",
+    accountId: "00000000-0000-4000-8000-000000000003",
+    venue: "HTX",
+    market: "SPOT" as const,
+    symbol: "BTCUSDT",
+    baseAsset: "BTC",
+    quoteAsset: "USDT" as const,
+    ...overrides,
+  };
+  return {
+    ...identity,
+    instrumentIdentityDigestHex: computeDee649InstrumentIdentityDigestV1(identity),
+  };
+}
+
 export function dee649TestAnchor(closePrice = "100"): ForecastAnchorPriceAuthorityV1 {
   return createForecastAnchorPriceAuthorityV1({
+    ...dee649TestAuthorityBinding(),
     schemaVersion: DEE649_ANCHOR_AUTHORITY_SCHEMA_VERSION,
-    venue: "HTX",
-    market: "SPOT",
-    symbol: "BTCUSDT",
     forecastAnchorClosedBarEpochMs: 1_725_000_000_000,
     qualifiedAnchorClosedBarEpochMs: 1_725_000_000_000,
     forecastAnchorClosePrice: closePrice,
@@ -31,6 +66,7 @@ export function dee649TestAnchor(closePrice = "100"): ForecastAnchorPriceAuthori
 
 export function dee649TestPolicy(overrides: Partial<Dee649ExecutablePolicyDraftV1> = {}) {
   const draft: Dee649ExecutablePolicyDraftV1 = {
+    ...dee649TestAuthorityBinding(),
     schemaVersion: DEE649_EXECUTABLE_POLICY_SCHEMA_VERSION,
     policyInstanceId: "development-candidate/test-only",
     venue: "HTX",
@@ -73,6 +109,49 @@ export function dee649TestPolicy(overrides: Partial<Dee649ExecutablePolicyDraftV
     ...overrides,
   };
   return createDee649ExecutablePolicyInstanceV1(draft);
+}
+
+export function dee649TestForecast(
+  replicaSamples: readonly (readonly (readonly number[])[])[],
+  overrides: Partial<ForecastEconomicAuthorityV1> = {},
+): ForecastEconomicAuthorityV1 {
+  const binding = dee649TestAuthorityBinding();
+  const identity = {
+    targetRoleId: TARGET_ROLE_EXECUTION,
+    representationKind: REPRESENTATION_SAMPLE_ENSEMBLE,
+    componentLayoutVersion: COMPONENT_LAYOUT_VERSION,
+    outcomeVersion: OUTCOME_VERSION,
+    modelTransformVersion: MODEL_TRANSFORM_VERSION,
+    primaryHorizonMinutes: 30 as const,
+    interimPositionPolicyId: DEE649_INTERIM_POSITION_POLICY_ID,
+  };
+  const base = {
+    ...binding,
+    forecastId: "00000000-0000-4000-8000-000000000002",
+    identity,
+    forecastAnchorClosedBarEpochMs: 1_725_000_000_000,
+    anchorAuthorityContentDigestHex: dee649TestAnchor().contentDigestHex,
+    predictivePackageContentDigestHex: DEE649_TEST_DIGEST_A,
+    predictivePackageGenerationIdentityDigestHex: DEE649_TEST_DIGEST_B,
+    normalizationVersionDigestHex: DEE649_TEST_DIGEST_D,
+    k: replicaSamples.length,
+    m: replicaSamples[0]?.length ?? 0,
+    forecastAuthorityReceiptDigestHex: DEE649_TEST_DIGEST_A,
+    replicaSamples,
+  };
+  return {
+    ...base,
+    distributionSemanticDigestHex: distributionSemanticDigestHex({
+      forecastGenerationIdentityDigestHex: base.predictivePackageGenerationIdentityDigestHex,
+      predictivePackageContentDigestHex: base.predictivePackageContentDigestHex,
+      k: base.k,
+      m: base.m,
+      normalizationVersionDigestHex: base.normalizationVersionDigestHex,
+      targetRoleId: base.identity.targetRoleId,
+      samples: base.replicaSamples,
+    }),
+    ...overrides,
+  };
 }
 
 function logReturn(price: number, anchor: number): number {

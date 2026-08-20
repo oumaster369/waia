@@ -59,6 +59,36 @@ describe("DEE-649 C2 ExecutionPayoffFunctionalV2", () => {
     });
   });
 
+  it("rounds each per-side cost component HALF_UP at the exact scale-8 boundary", () => {
+    const oneBps = {
+      feeBps: "1",
+      spreadBps: "0",
+      impactBps: "0",
+      slippageBps: "0",
+      conservativeStressBps: "0",
+    };
+    const result = evaluate({
+      exactQuantity: "0.0000005",
+      availableCashUsdt: "1",
+      policy: dee649TestPolicy({
+        entrySliceOffsets: [1],
+        entrySliceWeights: ["1"],
+        exitSliceOffsetsAfterHorizon: [1],
+        exitSliceWeights: ["1"],
+        participationCapFraction: "1",
+        quantityStep: "0.00000001",
+        minimumQuantity: "0.00000001",
+        minimumNotionalUsdt: "0",
+        entryCosts: oneBps,
+        exitCosts: oneBps,
+      }),
+    });
+
+    expect(result.entrySlices[0]?.costs.feeUsdt).toBe("0.00000001");
+    expect(result.exitSlices[0]?.costs.feeUsdt).toBe("0.00000001");
+    expect(result.basePayoffUsdt).toBe("-0.00000002");
+  });
+
   it("keeps an underfilled entry remainder as CASH and never tops up a later slice", () => {
     const result = evaluate({
       sample13d: dee649Sample13d({ entryVolumes: [2, 100, 100] }),

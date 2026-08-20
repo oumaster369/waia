@@ -21,19 +21,29 @@ export const DEE649_INTERIM_POSITION_POLICY_ID =
 export const DEE649_SLICE_ALLOCATION_POLICY =
   "explicit-weights-last-slice-remainder-no-top-up/v1" as const;
 export const DEE649_ROUNDING_POLICY = "scale8-floor-step-truncate-half-up/v1" as const;
+export const DEE649_EV_AGGREGATION_POLICY =
+  "scale8-payoffs-half-up-mean-type7-rational-half-up/v1" as const;
 
 export type Dee649ReasonCode =
   | "ANCHOR_AUTHORITY_INVALID"
   | "ANCHOR_AUTHORITY_MISMATCH"
+  | "ANCHOR_AUTHORITY_NOT_VERIFIED"
   | "CASH_AUTHORITY_INVALID"
+  | "CASH_AUTHORITY_NOT_VERIFIED"
   | "COST_AUTHORITY_MISSING"
   | "DECISION_NON_ACTIONABLE"
   | "ECONOMIC_SIZE_SET_INVALID"
+  | "ECONOMIC_SIZE_AUTHORITY_NOT_VERIFIED"
+  | "EVALUATION_INPUT_MALFORMED"
   | "EV_LOWER_NON_POSITIVE"
   | "EV_RANGE_INVALID"
   | "EXECUTABLE_POLICY_INVALID"
+  | "EXECUTABLE_POLICY_AUTHORITY_NOT_VERIFIED"
   | "FORECAST_AUTHORITY_INVALID"
+  | "FORECAST_AUTHORITY_NOT_VERIFIED"
   | "FORECAST_CONTRACT_MISMATCH"
+  | "FORECAST_DISTRIBUTION_DIGEST_MISMATCH"
+  | "FORECAST_KM_MISMATCH"
   | "FORECAST_SAMPLE_INVALID"
   | "INSTRUMENT_AUTHORITY_MISMATCH"
   | "LIQUIDITY_CAPACITY_AUTHORITY_MISSING"
@@ -60,6 +70,7 @@ export type DecisionEvaluationContractV1 = {
   evaluationMethod: "TYPE7_Q10_LOWER_Q50_BASE_Q90_BASE";
   cashBaseline: "ZERO_INCREMENTAL_RETURN";
   sizeSetShape: "SINGLETON_EXACT_QUANTITY";
+  evAggregationPolicy: typeof DEE649_EV_AGGREGATION_POLICY;
   componentUsage: {
     entryFillReturnIndices: readonly [0, 1, 2];
     horizonTriggerReturnIndex: 3;
@@ -70,15 +81,23 @@ export type DecisionEvaluationContractV1 = {
   };
 };
 
+export type Dee649AuthorityBindingV1 = {
+  organizationId: string;
+  accountId: string;
+  venue: string;
+  market: "SPOT";
+  symbol: string;
+  baseAsset: string;
+  quoteAsset: "USDT";
+  instrumentIdentityDigestHex: string;
+};
+
 export type DecisionEvaluationRegistryResolution =
   | { ok: true; contract: DecisionEvaluationContractV1 }
   | { ok: false; reasonCode: "FORECAST_CONTRACT_MISMATCH" };
 
-export type ForecastAnchorPriceAuthorityV1 = {
+export type ForecastAnchorPriceAuthorityV1 = Dee649AuthorityBindingV1 & {
   schemaVersion: typeof DEE649_ANCHOR_AUTHORITY_SCHEMA_VERSION;
-  venue: string;
-  market: "SPOT";
-  symbol: string;
   forecastAnchorClosedBarEpochMs: number;
   qualifiedAnchorClosedBarEpochMs: number;
   forecastAnchorClosePrice: string;
@@ -95,14 +114,9 @@ export type PerSideEconomicCostComponentsV1 = {
   conservativeStressBps: string;
 };
 
-export type Dee649ExecutablePolicyInstanceV1 = {
+export type Dee649ExecutablePolicyInstanceV1 = Dee649AuthorityBindingV1 & {
   schemaVersion: typeof DEE649_EXECUTABLE_POLICY_SCHEMA_VERSION;
   policyInstanceId: string;
-  venue: string;
-  market: "SPOT";
-  symbol: string;
-  baseAsset: string;
-  quoteAsset: "USDT";
   interimPositionPolicyId: typeof DEE649_INTERIM_POSITION_POLICY_ID;
   sliceAllocationPolicy: typeof DEE649_SLICE_ALLOCATION_POLICY;
   roundingPolicy: typeof DEE649_ROUNDING_POLICY;
@@ -131,10 +145,9 @@ export type Dee649ExecutablePolicyDraftV1 = Omit<
   "contentDigestHex"
 >;
 
-export type EconomicAdmissibleSizeSetV1 = {
+export type EconomicAdmissibleSizeSetV1 = Dee649AuthorityBindingV1 & {
   schemaVersion: typeof DEE649_SIZE_SET_SCHEMA_VERSION;
   sizeSetId: string;
-  symbol: string;
   unit: "BASE_ASSET_QUANTITY";
   exactQuantities: readonly [string];
   authorityReceiptDigestHex: string;
@@ -143,6 +156,46 @@ export type EconomicAdmissibleSizeSetV1 = {
 
 function isDigestHex(value: string): boolean {
   return /^[0-9a-f]{64}$/.test(value);
+}
+
+export function computeDee649InstrumentIdentityDigestV1(
+  input: Omit<Dee649AuthorityBindingV1, "instrumentIdentityDigestHex">,
+): string {
+  return computeStableJsonDigest({ schemaVersion: "dee649-authority-binding/v1", ...input });
+}
+
+function authorityBindingIdentity(
+  input: Dee649AuthorityBindingV1,
+): Omit<Dee649AuthorityBindingV1, "instrumentIdentityDigestHex"> {
+  return {
+    organizationId: input.organizationId,
+    accountId: input.accountId,
+    venue: input.venue,
+    market: input.market,
+    symbol: input.symbol,
+    baseAsset: input.baseAsset,
+    quoteAsset: input.quoteAsset,
+  };
+}
+
+function validateAuthorityBinding(input: Dee649AuthorityBindingV1, errors: string[]): void {
+  requireNonEmpty(input.organizationId, "organizationId", errors);
+  requireNonEmpty(input.accountId, "accountId", errors);
+  requireNonEmpty(input.venue, "venue", errors);
+  if (input.market !== "SPOT") errors.push("market:MISMATCH");
+  requireNonEmpty(input.symbol, "symbol", errors);
+  requireNonEmpty(input.baseAsset, "baseAsset", errors);
+  if (input.quoteAsset !== "USDT") errors.push("quoteAsset:MISMATCH");
+  if (input.symbol !== `${input.baseAsset}${input.quoteAsset}`) {
+    errors.push("symbol:BASE_QUOTE_MISMATCH");
+  }
+  requireDigest(input.instrumentIdentityDigestHex, "instrumentIdentityDigestHex", errors);
+  if (
+    computeDee649InstrumentIdentityDigestV1(authorityBindingIdentity(input)) !==
+    input.instrumentIdentityDigestHex
+  ) {
+    errors.push("instrumentIdentityDigestHex:MISMATCH");
+  }
 }
 
 function normalizeScale8(value: string): string {
@@ -250,9 +303,7 @@ export function validateForecastAnchorPriceAuthorityV1(
   if (input.schemaVersion !== DEE649_ANCHOR_AUTHORITY_SCHEMA_VERSION) {
     errors.push("schemaVersion:MISMATCH");
   }
-  requireNonEmpty(input.venue, "venue", errors);
-  if (input.market !== "SPOT") errors.push("market:MISMATCH");
-  requireNonEmpty(input.symbol, "symbol", errors);
+  validateAuthorityBinding(input, errors);
   if (
     !Number.isSafeInteger(input.forecastAnchorClosedBarEpochMs) ||
     input.forecastAnchorClosedBarEpochMs <= 0
@@ -320,11 +371,7 @@ export function validateDee649ExecutablePolicyInstanceV1(
     errors.push("schemaVersion:MISMATCH");
   }
   requireNonEmpty(input.policyInstanceId, "policyInstanceId", errors);
-  requireNonEmpty(input.venue, "venue", errors);
-  if (input.market !== "SPOT") errors.push("market:MISMATCH");
-  requireNonEmpty(input.symbol, "symbol", errors);
-  requireNonEmpty(input.baseAsset, "baseAsset", errors);
-  if (input.quoteAsset !== "USDT") errors.push("quoteAsset:MISMATCH");
+  validateAuthorityBinding(input, errors);
   if (input.interimPositionPolicyId !== DEE649_INTERIM_POSITION_POLICY_ID) {
     errors.push("interimPositionPolicyId:MISMATCH");
   }
@@ -401,7 +448,14 @@ export function createSingletonEconomicSizeSetV1(
   const payload: Omit<EconomicAdmissibleSizeSetV1, "contentDigestHex"> = {
     schemaVersion: DEE649_SIZE_SET_SCHEMA_VERSION,
     sizeSetId: input.sizeSetId,
+    organizationId: input.organizationId,
+    accountId: input.accountId,
+    venue: input.venue,
+    market: input.market,
     symbol: input.symbol,
+    baseAsset: input.baseAsset,
+    quoteAsset: input.quoteAsset,
+    instrumentIdentityDigestHex: input.instrumentIdentityDigestHex,
     unit: input.unit,
     exactQuantities: [input.exactQuantity],
     authorityReceiptDigestHex: input.authorityReceiptDigestHex,
@@ -421,7 +475,7 @@ export function validateEconomicAdmissibleSizeSetV1(
   const errors: string[] = [];
   if (input.schemaVersion !== DEE649_SIZE_SET_SCHEMA_VERSION) errors.push("schemaVersion:MISMATCH");
   requireNonEmpty(input.sizeSetId, "sizeSetId", errors);
-  requireNonEmpty(input.symbol, "symbol", errors);
+  validateAuthorityBinding(input, errors);
   if (input.unit !== "BASE_ASSET_QUANTITY") errors.push("unit:MISMATCH");
   if (input.exactQuantities.length !== 1) errors.push("exactQuantities:NOT_SINGLETON");
   const quantity = input.exactQuantities[0];
@@ -445,6 +499,7 @@ const REGISTERED_CONTRACT: DecisionEvaluationContractV1 = {
   evaluationMethod: "TYPE7_Q10_LOWER_Q50_BASE_Q90_BASE",
   cashBaseline: "ZERO_INCREMENTAL_RETURN",
   sizeSetShape: "SINGLETON_EXACT_QUANTITY",
+  evAggregationPolicy: DEE649_EV_AGGREGATION_POLICY,
   componentUsage: {
     entryFillReturnIndices: [0, 1, 2],
     horizonTriggerReturnIndex: 3,

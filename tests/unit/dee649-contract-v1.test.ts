@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createDee649ExecutablePolicyInstanceV1,
+  computeDee649InstrumentIdentityDigestV1,
   createForecastAnchorPriceAuthorityV1,
   createSingletonEconomicSizeSetV1,
   DEE649_ANCHOR_AUTHORITY_SCHEMA_VERSION,
@@ -26,8 +27,25 @@ const DIGEST_B = "b".repeat(64);
 const DIGEST_C = "c".repeat(64);
 const DIGEST_D = "d".repeat(64);
 
+function authorityBinding() {
+  const identity = {
+    organizationId: "00000000-0000-4000-8000-000000000001",
+    accountId: "00000000-0000-4000-8000-000000000003",
+    venue: "HTX",
+    market: "SPOT" as const,
+    symbol: "BTCUSDT",
+    baseAsset: "BTC",
+    quoteAsset: "USDT" as const,
+  };
+  return {
+    ...identity,
+    instrumentIdentityDigestHex: computeDee649InstrumentIdentityDigestV1(identity),
+  };
+}
+
 function policyDraft() {
   return {
+    ...authorityBinding(),
     schemaVersion: DEE649_EXECUTABLE_POLICY_SCHEMA_VERSION,
     policyInstanceId: "development-candidate/test-only",
     venue: "HTX",
@@ -93,6 +111,7 @@ describe("DEE-649 C1 contract and closed registry", () => {
 
   it("seals an exact anchor authority and rejects a Forecast/qualified-close mismatch", () => {
     const authority = createForecastAnchorPriceAuthorityV1({
+      ...authorityBinding(),
       schemaVersion: DEE649_ANCHOR_AUTHORITY_SCHEMA_VERSION,
       venue: "HTX",
       market: "SPOT",
@@ -164,6 +183,7 @@ describe("DEE-649 C1 contract and closed registry", () => {
 
   it("seals exactly one Human-authorized quantity and rejects invented members", () => {
     const singleton = createSingletonEconomicSizeSetV1({
+      ...authorityBinding(),
       sizeSetId: "human-exact-size/test-only",
       symbol: "BTCUSDT",
       unit: "BASE_ASSET_QUANTITY",
