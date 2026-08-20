@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-656",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T2",
   "humanGatePolicy": "none",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-657",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Generic RawCapturePolicyV1, secret-scan-gated body-only capture, separate raw/capture/storage-binding identities, record-only VALID/REJECTED receipts, and test-only memory adapter.",
       "dependencies": [],
@@ -39,6 +39,26 @@
         "pnpm test --run tests/unit/trader-mi-raw-capture-v1.test.ts",
         "pnpm typecheck"
       ],
+      "actualFiles": [
+        "lib/trader/mi/raw-capture-memory-adapter-v1.ts",
+        "lib/trader/mi/raw-capture-v1.ts",
+        "tests/unit/trader-mi-raw-capture-v1.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Explicit policy and exact-body PASS scan gates fail closed; 5/5 focused tests pass.",
+        "Receipts preserve complete policy/scan proof while excluding transport envelope and raw body content.",
+        "Raw, storage-binding, capture, and validation identities are independently content-addressed.",
+        "VALID/REJECTED remain RECORD_ONLY with NONE Observation/Measurement authority."
+      ],
+      "integratedCommits": [
+        "c9e3001b1f3085e1573b754124b364c4b585c7cd",
+        "b491b2fe8abcb19bab389cc6be3049df9fbd427d"
+      ],
+      "tests": [
+        "pnpm test --run tests/unit/trader-mi-raw-capture-v1.test.ts (5/5 pass)",
+        "pnpm typecheck (pass)",
+        "scoped eslint (pass)"
+      ],
       "execution": {
         "wave": 1,
         "mode": "serialized"
@@ -46,7 +66,7 @@
     },
     {
       "issue": "DEE-658",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Postgres-only append-only raw capture, storage binding, and validation receipt persistence with transaction-authored knowledge time, org-scoped integrity, deny RLS, and applied-migration proof.",
       "dependencies": [
@@ -83,6 +103,33 @@
         "pnpm test --run tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
         "pnpm typecheck"
       ],
+      "actualFiles": [
+        "db/AGENTS.md",
+        "db/migrations_postgres/0153_trader_mi_raw_capture_v1.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "db/schema.postgres.ts",
+        "docs/migrations/DEE-64-TRACKER.md",
+        "docs/migrations/DEE-656-MI-RAW-CAPTURE.md",
+        "lib/trader/mi/raw-capture-repository-postgres.ts",
+        "tests/integration/postgres-mi-raw-capture-v1.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Migration 0153 applies from an empty local Postgres journal and the Drizzle smoke passes.",
+        "Postgres stores no raw body column; 4/4 integration tests prove tenant isolation and idempotency.",
+        "Transaction-time triggers reject caller-authored/backdated capture or validation knowledge time.",
+        "Append-only guards and authenticated/anon deny RLS are exercised on all three tables."
+      ],
+      "integratedCommits": [
+        "1bd5f963becbfea079c8b4c33cb0b96b6e434ede"
+      ],
+      "tests": [
+        "clean pnpm db:migrate:postgres (pass through 0153)",
+        "pnpm db:smoke:postgres (pass)",
+        "WAIA_PG_INTEGRATION=1 pnpm test --run tests/integration/postgres-mi-raw-capture-v1.test.ts (4/4 pass)",
+        "unit migration identity plus raw-capture tests (13/13 pass)",
+        "pnpm typecheck and pnpm validate:canon (pass)"
+      ],
       "execution": {
         "wave": 2,
         "mode": "serialized"
@@ -91,9 +138,70 @@
   ],
   "deferredChildren": [],
   "integrationEvidence": {
-    "admissionEvidence": {
+    "preImplementationAdmission": {
       "status": "pass",
+      "manifestDigest": "0e13204cdb7146331acf517fc1aad6416fefc26d9edfa6f12f9af3cc58d41119",
+      "manifestCommit": "21bbe3c338b89fb662dee96f4fa4047c3b0332e7",
+      "manifestPath": "docs/plans/dee-656-t2-raw-foundation-v1.integration-train.json",
       "reviewer": "Human Architect ratification 2026-08-20 plus adversarial DEE-620 boundary audit"
-    }
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-657",
+        "status": "pass",
+        "reviewedCommits": [
+          "c9e3001b1f3085e1573b754124b364c4b585c7cd",
+          "b491b2fe8abcb19bab389cc6be3049df9fbd427d"
+        ],
+        "reviewedFiles": [
+          "lib/trader/mi/raw-capture-memory-adapter-v1.ts",
+          "lib/trader/mi/raw-capture-v1.ts",
+          "tests/unit/trader-mi-raw-capture-v1.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-658",
+        "status": "pass",
+        "reviewedCommits": [
+          "1bd5f963becbfea079c8b4c33cb0b96b6e434ede"
+        ],
+        "reviewedFiles": [
+          "db/AGENTS.md",
+          "db/migrations_postgres/0153_trader_mi_raw_capture_v1.sql",
+          "db/migrations_postgres/meta/_journal.json",
+          "db/schema.postgres.ts",
+          "docs/migrations/DEE-64-TRACKER.md",
+          "docs/migrations/DEE-656-MI-RAW-CAPTURE.md",
+          "lib/trader/mi/raw-capture-repository-postgres.ts",
+          "tests/integration/postgres-mi-raw-capture-v1.test.ts",
+          "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts"
+        ]
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-657",
+        "status": "pass",
+        "commands": [
+          "pnpm test --run tests/unit/trader-mi-raw-capture-v1.test.ts",
+          "pnpm typecheck",
+          "scoped eslint"
+        ]
+      },
+      {
+        "afterIssue": "DEE-658",
+        "status": "pass",
+        "commands": [
+          "clean Postgres migration apply through 0153",
+          "pnpm db:smoke:postgres",
+          "WAIA_PG_INTEGRATION=1 raw-capture integration tests",
+          "targeted unit tests",
+          "pnpm typecheck",
+          "pnpm validate:canon"
+        ]
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   }
 }

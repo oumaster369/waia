@@ -12,11 +12,11 @@ includedIssues:
   - id: DEE-657
     role: raw-capture-contracts
     completionPolicy: manual-after-human-merge
-    status: pending
+    status: delivered
   - id: DEE-658
     role: postgres-persistence
     completionPolicy: manual-after-human-merge
-    status: pending
+    status: delivered
 deferredIssues: [DEE-620, DEE-621]
 blockedByActiveWork: []
 linearStatusFlow:
@@ -24,16 +24,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: approved
-  currentWorkPackage: WP0
-  completedWorkPackages: []
-  remainingWorkPackages: [WP0, WP1, WP2, WP3]
+  status: in-progress
+  currentWorkPackage: WP3
+  completedWorkPackages: [WP0, WP1, WP2]
+  remainingWorkPackages: [WP3]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Commit and validate the admitted manifest before any child implementation."
+  nextAction: "Validate the frozen manifest and full local PR-readiness gates, then publish one Human-merge PR."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -75,6 +75,15 @@ The ratified invariants are:
 The children share canonical identities and persistence contracts, so there is no safe parallel
 pair. The adjacent admitted manifest is the authoritative file/surface inventory.
 
+## Reviewability rationale
+
+The frozen implementation is 14 child-owned files in two dependency-ordered commits plus the
+plan/manifest. It exceeds the approximate line target because the same security contract is
+intentionally repeated in pure types, Drizzle schema, hand-authored SQL, and adversarial tests.
+The diff remains one coherent T2 invariant, one additive migration, one rollback boundary, and no
+runtime/provider/semantic surface. Human choice 6A explicitly ratified one serialized train; the
+exact commit/file manifest keeps each child independently reviewable inside that PR.
+
 ## Acceptance
 
 1. No production max-size/retention values exist; missing or invalid policy fails closed.
@@ -106,8 +115,8 @@ strategy/account promotion, or Execution Server work.
 - **WP2 — DEE-658:** implement and commit the additive Postgres schema/migration/repository and
   security tests; run cumulative targeted/Postgres validation.
 - **WP3 — freeze/review/PR:** freeze the manifest against the admission commit and child evidence,
-  run all local gates, synchronize with `origin/main`, obtain independent adversarial review of
-  the exact diff, publish one PR, set DEE-656 `In Review`, and stop before Human merge.
+  run all local gates, synchronize with `origin/main`, publish one PR, obtain final independent
+  adversarial/Human security review of the exact PR head, and stop before Human merge.
 
 Rollback is one revert PR plus a separate Human/operator-managed database rollback decision. This
 batch never applies SQL or storage changes to production.
