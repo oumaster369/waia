@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-656",
+  "status": "admitted",
+  "riskTier": "T2",
+  "humanGatePolicy": "none",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": null,
+  "includedChildren": [
+    {
+      "issue": "DEE-657",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Generic RawCapturePolicyV1, secret-scan-gated body-only capture, separate raw/capture/storage-binding identities, record-only VALID/REJECTED receipts, and test-only memory adapter.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "DEE-620 raw-storage/security/knowledge-time choices were Human-ratified on 2026-08-20.",
+        "DEE-654 and DEE-655 are Done on the verified origin/main base."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/mi/raw-capture-v1.ts",
+        "lib/trader/mi/raw-capture-memory-adapter-v1.ts",
+        "tests/unit/trader-mi-raw-capture-v1.test.ts"
+      ],
+      "riskTier": "T2",
+      "humanGate": {
+        "status": "none",
+        "evidence": "The only security architecture choices in this child were explicitly Human-ratified; no remaining child-owned Human gate or semantic authority is admitted."
+      },
+      "expectedAcceptanceEvidence": [
+        "Policy absence/invalidity and non-PASS secret scans fail closed.",
+        "Raw, capture, and storage-binding identities are deterministic and distinct.",
+        "Sensitive transport envelope fields are structurally absent.",
+        "REJECTED evidence is retained with zero Observation/Measurement authority."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-mi-raw-capture-v1.test.ts",
+        "pnpm typecheck"
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-658",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Postgres-only append-only raw capture, storage binding, and validation receipt persistence with transaction-authored knowledge time, org-scoped integrity, deny RLS, and applied-migration proof.",
+      "dependencies": [
+        "DEE-657"
+      ],
+      "dependencyEvidence": [
+        "DEE-658 imports the DEE-657 identities and receipt contracts.",
+        "The children share canonical identities and authority schema, so final implementation is serialized."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/mi/raw-capture-repository-postgres.ts",
+        "db/schema.postgres.ts",
+        "db/migrations_postgres/0153_trader_mi_raw_capture_v1.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "tests/integration/postgres-mi-raw-capture-v1.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "docs/migrations/DEE-656-MI-RAW-CAPTURE.md",
+        "docs/migrations/DEE-64-TRACKER.md",
+        "db/AGENTS.md"
+      ],
+      "riskTier": "T2",
+      "humanGate": {
+        "status": "none",
+        "evidence": "The additive Postgres design is inside the ratified T2 batch; production SQL apply, storage, security mutation, and merge remain explicitly outside child authority."
+      },
+      "expectedAcceptanceEvidence": [
+        "Postgres stores receipts/references but no raw body bytes.",
+        "Composite organization constraints reject cross-tenant references.",
+        "Validation knownAt is obtained inside the durable transaction and cannot be caller-backdated.",
+        "Append-only triggers and authenticated/anon deny RLS are proven."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/integration/postgres-mi-raw-capture-v1.test.ts",
+        "pnpm test --run tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "pnpm typecheck"
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Human Architect ratification 2026-08-20 plus adversarial DEE-620 boundary audit"
+    }
+  }
+}
