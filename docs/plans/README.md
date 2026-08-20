@@ -72,6 +72,25 @@ provenance:
 
 **Status rules:** `state.status` is the **only** status field (no top-level `status:`). Maximum pre-merge status: `in-review`. Effective `merged` is **derived** after human merge — see [`INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOUNDARY-POLICY.md) §Post-merge reconciliation.
 
+## Optional AI-TRADER Integration Train manifest
+
+Ordinary single-issue plans use no additional manifest. A multi-issue AI-TRADER train owns exactly one adjacent machine-verifiable file:
+
+`docs/plans/dee-<NN>-<slug>.integration-train.json`
+
+The file uses `schemaVersion: "waia-trader-integration-train/v1"` and the contract in [`INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOUNDARY-POLICY.md). It has two truthful lifecycle forms:
+
+1. **`status: "admitted"` before child implementation** — enumerates every planned child, dependency evidence, scope, expected file/schema surfaces, coherent tier/Human-gate status, expected acceptance/tests, and contiguous ordered execution waves. Unlisted work is not admitted. Commit this form before any child implementation.
+2. **`status: "frozen"` before PR publication** — contains only delivered children plus explicitly deferred/excluded children, retains each delivered child's admitted fields, and adds exact child→commit/file/test/acceptance mappings, cumulative checks after every admission, and complete-diff freeze/final-review requirements. `preImplementationAdmission` binds the predecessor manifest's Git commit, repository-relative path, and SHA-256 digest.
+
+Validate admission form with:
+
+```bash
+./scripts/linear/validate-integration-train-manifest.sh <path> DEE-NN admission
+```
+
+Validate frozen form with the default `frozen` phase. In branch/PR validation, the verifier loads the historical admitted file from Git, checks its digest/inventory, proves every delivered commit is after admission and within the exact head history, compares each child commit's changed files with `actualFiles`, requires those files to match admitted expected surfaces, and closes the complete PR diff/commit range over mapped children plus only the adjacent plan/manifest. `validate:canon` accepts either durable lifecycle schema after squash; PR governance performs the full history proof and also binds the frozen SHA-256 digest plus exact PR base/head/review head. The recommended delivered set is 2–5 children. More than five requires an explicit split rationale; this is reviewable, not a silent fixed cap.
+
 ---
 
 ## Promotion path

@@ -55,6 +55,7 @@ Canonical structure: [`.github/pull_request_template.md`](../../.github/pull_req
 | ADR | Link or **`n/a`** + rationale if Tier ≤ `T1` small change |
 | Human gate | `no`/`yes — reason` |
 | Migration impacted | `no`/`yes — tracker link sentence` |
+| Batch mode (optional) | `single-issue` (default when omitted) or `integration-train` |
 
 ### Linear completion lifecycle (default = auto-close)
 
@@ -79,7 +80,30 @@ Rules:
 
 ### Multi-work-package / Includes
 
-One integration batch may include multiple coherent work packages and list children under `**Includes:**` when the integration-ready contract holds ([`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md)). Preserve splitting criteria when batches are not coherent.
+One integration batch may include multiple coherent work packages and list children under `**Includes:**` when the integration-ready contract holds ([`INTEGRATION-BOUNDARY-POLICY.md`](INTEGRATION-BOUNDARY-POLICY.md)). Preserve splitting criteria when batches are not coherent. An unvalidated `Includes` list is descriptive and does not qualify a multi-issue PR for the DEE-653 controller exception.
+
+### AI-TRADER Integration Train fields
+
+Train mode must render every field below exactly once, including `Linear` and `Tier`; the PR tier must equal the manifest `riskTier`. Duplicate/conflicting fields fail closed. The governance check ignores HTML-comment examples, compares the exact child sets to the frozen JSON manifest, recomputes its digest from the checked-out exact PR head, validates the committed admitted predecessor, admitted-surface/delivered-file mapping, and complete PR diff/commit closure, and compares declared base/head/review head with the current PR event SHAs.
+
+```markdown
+**Batch mode:** `integration-train`
+**Includes:** `DEE-YYY`, `DEE-ZZZ`
+**Deferred:** `DEE-AAA` <!-- or `none` -->
+**Integration manifest:** `docs/plans/dee-NN-slug.integration-train.json`
+**Manifest digest:** `<64 lowercase hex>`
+**Manifest status:** `frozen`
+**Manifest base SHA:** `<40 lowercase hex>`
+**Manifest head SHA:** `<40 lowercase hex>`
+**Concurrency limit:** `2`
+**Final integration:** `serialized`
+**Independent review:** `pass`
+**Independent review head:** `<same exact head SHA>`
+**Unresolved findings:** `0`
+**DEE-653 admission:** `required-before-merge`
+```
+
+The final field is deliberately not `pass`: PR metadata cannot self-grant merge authority. Immediately before merge, the acting controller must freshly prove the complete DEE-653 admission against the unchanged base/head, required checks, frozen manifest, and Linear state. A governance-authority amendment remains Human-merge-only even if these train fields are valid.
 
 ### Semantic-impact signal **(when touched)**
 

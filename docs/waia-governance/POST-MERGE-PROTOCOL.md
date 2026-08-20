@@ -23,6 +23,8 @@ Link merged PR URL.
 
 **Automation:** when repository secret `LINEAR_API_KEY` is set, [`.github/workflows/linear-done.yml`](../../.github/workflows/linear-done.yml) transitions `DEE-NN` to **Done** on merge to `main` when the PR body declares the default auto-close lifecycle (explicit `**Linear:** \`DEE-NN\`` with no keep-open contract). Humans still paste five-memory closeout when semantics warrant it.
 
+**Integration Trains:** automation still closes only the explicit Integration Batch issue. After fetching `origin/main` and proving the exact squash SHA is contained, reconcile the frozen manifest one child at a time: mark Done only each `includedChildren` issue whose commits/files/tests/acceptance evidence are delivered by that merged head; link the merged PR/squash SHA. Never close `deferredChildren`, removed, blocked, failed, unlisted, or falsely claimed work. A manifest/Linear/head mismatch is a STOP.
+
 **Keep-open PRs:** when the merged PR body includes validated **`Linear completion: keep-open`** plus a non-empty **`Linear completion reason:`**, automation intentionally skips the Done transition. Verify the parent/integration issue remains **In Progress** during post-merge reconciliation — no manual Done transition is required for that skip.
 
 ## Tracker / docs
@@ -54,7 +56,7 @@ Cursor/agents close **every** task with a deterministic report and then **stop**
 3. PR URL (base **`main`**)
 4. CI status
 5. Governance status
-6. **Merge disposition** — exact Human instruction (**Squash and merge** to `main`) by default; or, for an admitted DEE-653 exception, the controller's pre-merge head/base SHAs, admission result, resulting squash SHA, and post-merge containment proof
+6. **Merge disposition** — exact Human instruction (**Squash and merge** to `main`) by default; or, for an admitted DEE-653 exception, the controller's pre-merge head/base SHAs, admission result, resulting squash SHA, and post-merge containment proof. Integration Trains also report the frozen manifest digest and delivered/deferred child reconciliation.
 7. Post-merge verification — sync `origin/main` (`git checkout main && git pull --ff-only origin main`)
 8. Whether an **explicit Human release tag** of the resulting `main` SHA is recommended (optional; never auto-executed)
 9. Recommended next task, or the next dependency-unblocked DAG node actually selected under the DEE-653 exception

@@ -1,6 +1,6 @@
 # /prepare-pr
 
-**PR readiness package:** push the current `dee-*` branch to `origin`, then supply compare/PR links and a paste-ready title and body targeting **`main`**. Human opens the PR, reviews CI/Bugbot, and squash-merges — **agents never merge**.
+**PR readiness package:** push the current `dee-*` branch to `origin`, then supply compare/PR links and a paste-ready title and body targeting **`main`**. Human opens/reviews/squash-merges by default. The only merge exception is a fresh exact-head DEE-653 admission for an eligible AI-TRADER implementation PR; governance amendments and all reserved surfaces remain Human-merge-only.
 
 Use this command **standalone** (e.g. retry after a rejected push) or rely on it implicitly: **`/test-and-fix` ends here by default** after gates are green (`AGENTS.md` workflow).
 
@@ -69,6 +69,8 @@ Optionally include `?expand=1` on the compare URL if you want the rich compare v
 
    Metadata belongs under `## Linked issue / plan` and `## Risk tier` — not a separate top-level block.
 
+   For `**Batch mode:** \`integration-train\``, also render every field in [`PR-PROTOCOL.md`](../../docs/waia-governance/PR-PROTOCOL.md) §AI-TRADER Integration Train fields. `**Includes:**` and `**Deferred:**` must exactly match the frozen manifest; the validator recomputes its digest and binds current base/head/independent-review head. Missing/stale evidence fails closed. Single-issue mode needs no train manifest.
+
 4. **Write** the rendered body to `.cursor/pr-body-DEE-NN.md` (gitignored temp path).
 5. **Preflight** (mandatory — do **not** hand off if this fails):
 
@@ -92,7 +94,7 @@ Echo the commands that were run for this task and their outcome (see [`AGENTS.md
 
 ### 8. Stop and wait
 
-Do **not** merge. Hand off to a human for PR open (if using links only), review, CI green, and squash-merge to `main`.
+Stop before merge by default. Hand off to a human for PR open (if using links only), review, CI green, and squash-merge to `main`. Only an eligible AI-TRADER implementation PR may continue into the separate DEE-653 exact-head admission; this command itself never treats PR preflight as merge authority.
 
 ---
 
@@ -114,6 +116,6 @@ Do **not** use `--fill` alone when a pre-rendered body file exists — it bypass
 
 ## Hard rules
 
-- Never `gh pr merge` from the agent — merging is the human’s call.
+- Never `gh pr merge` from the ordinary agent workflow. The acting AI-TRADER Program Controller may do so only after the separate current-base DEE-653 contract admits the exact immutable implementation head; governance amendments and reserved surfaces never qualify.
 - Never push to `main` (or frozen `dev`) directly.
 - Never enable or assume auto-merge in agent workflows ([`docs/waia-governance/PR-PROTOCOL.md`](../../docs/waia-governance/PR-PROTOCOL.md)).

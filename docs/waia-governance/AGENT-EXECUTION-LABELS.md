@@ -65,3 +65,5 @@ Exactly **one** execution label per issue: `frontend` | `backend` | `ai` | `infr
 ## Agent isolation
 
 If a task requires mixed ownership, split into multiple issues. Agents must not work outside their label, edit unrelated files, or expand scope without a new Linear issue.
+
+An authorized Integration Train does not weaken this rule: the Integration Batch issue has exactly one integrator execution label, and every included child retains exactly one label for its own atomic scope. Different child labels are coordinated through the frozen manifest and isolated branches; they are never collapsed into one unlabeled or multiply labeled task.

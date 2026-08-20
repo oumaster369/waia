@@ -11,6 +11,8 @@
 #   PR_BODY       PR body (markdown)
 #   PR_BRANCH     head branch name
 #   PR_BASE       base branch name (optional; must be main under single-trunk)
+#   PR_HEAD_SHA   exact PR head SHA (required for Integration Train mode)
+#   PR_BASE_SHA   exact PR base SHA (required for Integration Train mode)
 #   LINEAR_API_KEY  optional; enables Linear title/scope verification
 #
 # Exit codes (pr-governance):
@@ -28,7 +30,12 @@ PR_TITLE="${PR_TITLE:-}"
 PR_BODY="${PR_BODY:-}"
 PR_BRANCH="${PR_BRANCH:-}"
 PR_BASE="${PR_BASE:-}"
+PR_HEAD_SHA="${PR_HEAD_SHA:-}"
+PR_BASE_SHA="${PR_BASE_SHA:-}"
 LINEAR_API_KEY="${LINEAR_API_KEY:-}"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+MANIFEST_ROOT="${INTEGRATION_TRAIN_MANIFEST_ROOT:-$ROOT}"
+TRAIN_MANIFEST_VALIDATOR="${ROOT}/scripts/linear/validate-integration-train-manifest.sh"
 
 if [[ -z "$MODE" ]]; then
   echo "error: MODE must be pr-governance or linear-done" >&2
@@ -40,6 +47,36 @@ warnings=()
 
 add_failure() { failures+=("$1"); }
 add_warning() { warnings+=("$1"); }
+
+strip_html_comments() {
+  awk '
+    BEGIN { in_comment = 0 }
+    {
+      line = $0
+      out = ""
+      while (1) {
+        if (in_comment) {
+          end = index(line, "-->")
+          if (end == 0) {
+            line = ""
+            break
+          }
+          line = substr(line, end + 3)
+          in_comment = 0
+        }
+        start = index(line, "<!--")
+        if (start == 0) {
+          out = out line
+          break
+        }
+        out = out substr(line, 1, start - 1)
+        line = substr(line, start + 4)
+        in_comment = 1
+      }
+      print out
+    }
+  ' <<<"$1"
+}
 
 linear_graphql() {
   local query="$1"
@@ -110,6 +147,198 @@ extract_linear_completion_reason() {
       || true
   )"
   printf '%s' "$reason"
+}
+
+extract_metadata_value() {
+  local body="$1"
+  local label="$2"
+  printf '%s' "$body" \
+    | grep -iE "^\\*\\*${label}:\\*\\*" \
+    | head -1 \
+    | sed -E "s/^\\*\\*${label}:\\*\\*[[:space:]]*//I" \
+    | sed -E 's/^`([^`]*)`.*$/\1/; s/[[:space:]]+$//' \
+    || true
+}
+
+metadata_field_count() {
+  local body="$1"
+  local label="$2"
+  printf '%s' "$body" \
+    | grep -icE "^\\*\\*${label}:\\*\\*" \
+    || true
+}
+
+require_metadata_field_count() {
+  local body="$1"
+  local label="$2"
+  local expected="$3"
+  local count
+  count="$(metadata_field_count "$body" "$label")"
+  if [[ "$count" -ne "$expected" ]]; then
+    add_failure "PR body must contain exactly ${expected} **${label}:** field(s); found ${count}."
+    return 1
+  fi
+  return 0
+}
+
+extract_field_ids() {
+  local body="$1"
+  local label="$2"
+  printf '%s' "$body" \
+    | grep -iE "^\\*\\*${label}:\\*\\*" \
+    | head -1 \
+    | grep -oiE 'DEE-[0-9]+' \
+    | tr '[:lower:]' '[:upper:]' \
+    | sort -u \
+    || true
+}
+
+sha256_file() {
+  local file="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{print $1}'
+  else
+    return 1
+  fi
+}
+
+validate_integration_train_contract() {
+  local body="$1"
+  local explicit_id="$2"
+  local mode manifest_path manifest_plan_path manifest_path_id declared_digest declared_base declared_head review_head
+  local manifest_digest manifest_risk_tier body_risk_tier body_includes manifest_includes body_deferred manifest_deferred manifest_git_provenance
+
+  local mode_count train_field_count label
+
+  mode_count="$(metadata_field_count "$body" "Batch mode")"
+  if [[ "$mode_count" -gt 1 ]]; then
+    add_failure 'PR body contains duplicate or conflicting **Batch mode:** fields.'
+    return 1
+  fi
+
+  mode="$(extract_metadata_value "$body" "Batch mode")"
+  manifest_path="$(extract_metadata_value "$body" "Integration manifest")"
+
+  if [[ -z "$mode" ]]; then
+    train_field_count=0
+    for label in "Integration manifest" "Manifest digest" "Manifest status" "Manifest base SHA" "Manifest head SHA" "Concurrency limit" "Final integration" "Independent review" "Independent review head" "Unresolved findings" "DEE-653 admission"; do
+      train_field_count=$((train_field_count + $(metadata_field_count "$body" "$label")))
+    done
+    [[ "$train_field_count" -eq 0 ]] \
+      || add_failure 'Integration Train metadata requires **Batch mode:** `integration-train`.'
+    return 0
+  fi
+
+  if [[ "$mode" == "single-issue" ]]; then
+    train_field_count=0
+    for label in "Integration manifest" "Manifest digest" "Manifest status" "Manifest base SHA" "Manifest head SHA" "Concurrency limit" "Final integration" "Independent review" "Independent review head" "Unresolved findings" "DEE-653 admission"; do
+      train_field_count=$((train_field_count + $(metadata_field_count "$body" "$label")))
+    done
+    [[ "$train_field_count" -eq 0 ]] \
+      || add_failure 'Single-issue PRs must not declare Integration Train-only metadata.'
+    return 0
+  fi
+
+  if [[ "$mode" != "integration-train" ]]; then
+    add_failure '**Batch mode:** must be `single-issue` or `integration-train`.'
+    return 1
+  fi
+
+  for label in "Linear" "Tier" "Includes" "Deferred" "Integration manifest" "Manifest digest" "Manifest status" "Manifest base SHA" "Manifest head SHA" "Concurrency limit" "Final integration" "Independent review" "Independent review head" "Unresolved findings" "DEE-653 admission"; do
+    require_metadata_field_count "$body" "$label" 1 || true
+  done
+
+  if [[ -z "$manifest_path" ]]; then
+    add_failure 'Integration Train mode requires **Integration manifest:** `docs/plans/dee-NN-*.integration-train.json`.'
+    return 1
+  fi
+  if [[ "$manifest_path" == /* || "$manifest_path" == *".."* || ! "$manifest_path" =~ ^docs/plans/dee-[0-9]+-[a-z0-9-]+\.integration-train\.json$ ]]; then
+    add_failure 'Integration manifest path must be a repository-relative `docs/plans/dee-NN-*.integration-train.json` path.'
+    return 1
+  fi
+  if [[ ! -f "${MANIFEST_ROOT}/${manifest_path}" ]]; then
+    add_failure "Integration manifest file does not exist at ${manifest_path}."
+    return 1
+  fi
+  manifest_path_id="$(printf '%s' "$manifest_path" | grep -oiE 'dee-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')"
+  if ! dee_ids_equal "$manifest_path_id" "$explicit_id"; then
+    add_failure "Integration manifest filename implies ${manifest_path_id:-missing} but **Linear:** declares ${explicit_id:-missing}."
+  fi
+  manifest_plan_path="${manifest_path%.integration-train.json}.md"
+  if [[ ! -f "${MANIFEST_ROOT}/${manifest_plan_path}" ]]; then
+    add_failure "Integration Train manifest must be adjacent to its canonical plan at ${manifest_plan_path}."
+  fi
+
+  manifest_git_provenance=1
+  if [[ "$MODE" == "linear-done" ]]; then
+    # The source branch's pre-squash ancestry is authoritatively checked by PR
+    # governance. A fresh post-merge checkout retains the durable frozen schema
+    # but need not contain those source-branch commits.
+    manifest_git_provenance=0
+  fi
+  set +e
+  manifest_output="$(PR_HEAD_SHA="$PR_HEAD_SHA" PR_BASE_SHA="$PR_BASE_SHA" INTEGRATION_TRAIN_REQUIRE_GIT_PROVENANCE="$manifest_git_provenance" "$TRAIN_MANIFEST_VALIDATOR" "${MANIFEST_ROOT}/${manifest_path}" "$explicit_id" 2>&1)"
+  manifest_code=$?
+  set -e
+  if [[ "$manifest_code" -ne 0 ]]; then
+    add_failure "Integration manifest validation failed: ${manifest_output}"
+  fi
+
+  manifest_risk_tier="$(jq -r '.riskTier // empty' "${MANIFEST_ROOT}/${manifest_path}" 2>/dev/null || true)"
+  body_risk_tier="$(extract_metadata_value "$body" "Tier")"
+  if [[ ! "$body_risk_tier" =~ ^T[0-3]$ || "$body_risk_tier" != "$manifest_risk_tier" ]]; then
+    add_failure '**Tier:** must be exactly one T0–T3 value equal to the frozen Integration Train manifest riskTier.'
+  fi
+
+  declared_digest="$(extract_metadata_value "$body" "Manifest digest")"
+  manifest_digest="$(sha256_file "${MANIFEST_ROOT}/${manifest_path}" 2>/dev/null || true)"
+  if [[ ! "$declared_digest" =~ ^[0-9a-f]{64}$ || -z "$manifest_digest" || "$declared_digest" != "$manifest_digest" ]]; then
+    add_failure 'Manifest digest is missing, malformed, or stale relative to the frozen manifest file.'
+  fi
+  [[ "$(extract_metadata_value "$body" "Manifest status")" == "frozen" ]] \
+    || add_failure '**Manifest status:** must be `frozen`.'
+  [[ "$(extract_metadata_value "$body" "Concurrency limit")" == "2" ]] \
+    || add_failure '**Concurrency limit:** must be `2`.'
+  [[ "$(extract_metadata_value "$body" "Final integration")" == "serialized" ]] \
+    || add_failure '**Final integration:** must be `serialized`.'
+
+  declared_base="$(extract_metadata_value "$body" "Manifest base SHA")"
+  declared_head="$(extract_metadata_value "$body" "Manifest head SHA")"
+  review_head="$(extract_metadata_value "$body" "Independent review head")"
+  if [[ ! "$declared_base" =~ ^[0-9a-f]{40}$ || ! "$declared_head" =~ ^[0-9a-f]{40}$ ]]; then
+    add_failure 'Integration Train mode requires 40-character **Manifest base SHA:** and **Manifest head SHA:** fields.'
+  fi
+  if [[ -z "$PR_BASE_SHA" || -z "$PR_HEAD_SHA" ]]; then
+    add_failure 'Integration Train validation requires exact PR_BASE_SHA and PR_HEAD_SHA inputs.'
+  else
+    [[ "$declared_base" == "$PR_BASE_SHA" ]] \
+      || add_failure 'Declared Manifest base SHA is stale relative to the current PR base SHA.'
+    [[ "$declared_head" == "$PR_HEAD_SHA" ]] \
+      || add_failure 'Declared Manifest head SHA is stale relative to the current PR head SHA.'
+  fi
+  [[ "$(extract_metadata_value "$body" "Independent review")" == "pass" ]] \
+    || add_failure '**Independent review:** must be `pass` before Integration Train PR publication.'
+  [[ "$review_head" == "$declared_head" && "$review_head" =~ ^[0-9a-f]{40}$ ]] \
+    || add_failure 'Independent review head must equal the exact Manifest head SHA.'
+  [[ "$(extract_metadata_value "$body" "Unresolved findings")" == "0" ]] \
+    || add_failure '**Unresolved findings:** must be `0`.'
+  [[ "$(extract_metadata_value "$body" "DEE-653 admission")" == "required-before-merge" ]] \
+    || add_failure '**DEE-653 admission:** must be `required-before-merge`; PR governance does not self-grant merge authority.'
+
+  body_includes="$(extract_field_ids "$body" "Includes")"
+  manifest_includes="$(jq -r '.includedChildren[].issue' "${MANIFEST_ROOT}/${manifest_path}" 2>/dev/null | sort -u || true)"
+  if [[ -z "$body_includes" || "$body_includes" != "$manifest_includes" ]]; then
+    add_failure '**Includes:** must exactly equal the frozen manifest includedChildren set.'
+  fi
+  body_deferred="$(extract_field_ids "$body" "Deferred")"
+  manifest_deferred="$(jq -r '.deferredChildren[].issue' "${MANIFEST_ROOT}/${manifest_path}" 2>/dev/null | sort -u || true)"
+  if [[ "$body_deferred" != "$manifest_deferred" ]]; then
+    add_failure '**Deferred:** must exactly equal the frozen manifest deferredChildren set (use `none` for an empty set).'
+  fi
+
+  return 0
 }
 
 validate_linear_completion_contract() {
@@ -281,11 +510,13 @@ check_disclaimer_collision() {
 
 # --- validation ---
 
+VALIDATION_BODY="$(strip_html_comments "$PR_BODY")"
+
 if is_legacy_release_promotion_pr; then
   add_failure 'Legacy release-promotion PRs (head=dev → base=main) are retired. Use dee-<NN>-<slug> → main (squash). Official release is an explicit Human tag/release of a main SHA.'
 fi
 
-explicit_id="$(extract_explicit_linear "$PR_BODY")"
+explicit_id="$(extract_explicit_linear "$VALIDATION_BODY")"
 title_id="$(extract_first_dee "$PR_TITLE")"
 branch_id="$(extract_branch_nn "$PR_BRANCH")"
 
@@ -316,11 +547,12 @@ if [[ -n "$PR_BASE" && "$PR_BASE" != "main" ]]; then
   add_failure "PR base must be \`main\` (single-trunk). Got \`${PR_BASE}\`."
 fi
 
-check_disclaimer_collision "$PR_BODY" "$PR_TITLE" "$PR_BRANCH" || true
+check_disclaimer_collision "$VALIDATION_BODY" "$PR_TITLE" "$PR_BRANCH" || true
 
 linear_completion_mode="auto-close"
 linear_completion_reason=""
-validate_linear_completion_contract "$PR_BODY" "$explicit_id" || true
+validate_linear_completion_contract "$VALIDATION_BODY" "$explicit_id" || true
+validate_integration_train_contract "$VALIDATION_BODY" "$explicit_id" || true
 
 resolved_id="$explicit_id"
 

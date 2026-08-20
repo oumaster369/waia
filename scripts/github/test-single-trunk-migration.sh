@@ -64,10 +64,16 @@ assert_file_contains "ci keeps workflow_dispatch" "$ROOT/.github/workflows/ci.ym
 assert_file_contains "linear-done on main" "$ROOT/.github/workflows/linear-done.yml" "branches: [main]"
 assert_file_not_contains "linear-done not on dev" "$ROOT/.github/workflows/linear-done.yml" "branches: [dev]"
 assert_file_contains "linear-done blob/main link" "$ROOT/.github/workflows/linear-done.yml" "/blob/main/docs/waia-governance/POST-MERGE-PROTOCOL.md"
+assert_file_contains "linear-done binds exact train head" "$ROOT/.github/workflows/linear-done.yml" 'PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}'
+assert_file_contains "linear-done binds exact train base" "$ROOT/.github/workflows/linear-done.yml" 'PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}'
 
 # 3. pr-governance + cloudflare-preview on main
 assert_file_contains "pr-governance on main" "$ROOT/.github/workflows/pr-governance.yml" "branches: [main]"
 assert_file_contains "pr-governance blob/main link" "$ROOT/.github/workflows/pr-governance.yml" "/blob/main/docs/waia-governance/LINEAR-ID-COLLISION-RECOVERY.md"
+assert_file_contains "pr-governance binds exact train head" "$ROOT/.github/workflows/pr-governance.yml" 'PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}'
+assert_file_contains "pr-governance binds exact train base" "$ROOT/.github/workflows/pr-governance.yml" 'PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}'
+assert_file_contains "pr-governance fetches train provenance history" "$ROOT/.github/workflows/pr-governance.yml" 'fetch-depth: 0'
+assert_file_contains "pr-governance checks out exact train head" "$ROOT/.github/workflows/pr-governance.yml" 'ref: ${{ github.event.pull_request.head.sha }}'
 assert_file_contains "cloudflare-preview on main" "$ROOT/.github/workflows/cloudflare-preview.yml" "branches: [main]"
 assert_file_not_contains "cloudflare-preview not dual-branch" "$ROOT/.github/workflows/cloudflare-preview.yml" "branches: [dev, main]"
 

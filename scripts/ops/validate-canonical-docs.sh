@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Validate frontmatter and required sections for canonical doc types:
 #   - docs/plans/dee-*.md (excluding README and archive/)
+#   - docs/plans/dee-*.integration-train.json
 #   - docs/product-specs/*.md (excluding README)
 #   - docs/gaps/*.md (excluding README and *STANDARD*)
 #   - docs/roadmaps/*.md (excluding README and *STANDARD*)
@@ -14,6 +15,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+TRAIN_MANIFEST_VALIDATOR="${ROOT}/scripts/linear/validate-integration-train-manifest.sh"
 FAIL=0
 CHECKED=0
 
@@ -102,6 +104,17 @@ validate_plan() {
   fi
 }
 
+validate_train_manifest() {
+  local file="$1"
+  CHECKED=$((CHECKED + 1))
+  # Historical squash merges do not preserve source-branch commit ancestry in a
+  # fresh clone. Exact Git provenance is enforced by PR governance before merge;
+  # canonical validation keeps enforcing the durable manifest schema afterward.
+  if ! INTEGRATION_TRAIN_REQUIRE_GIT_PROVENANCE=0 "$TRAIN_MANIFEST_VALIDATOR" "$file" "" any >/dev/null 2>&1; then
+    fail "integration-train-manifest $file — admitted/frozen lifecycle contract is invalid"
+  fi
+}
+
 # Human ratification addenda / plan amendments are NOT integration plans.
 # Narrow filename class only: dee-<NN>-<slug>-(addendum|amendment)-vN.md
 # Do not require full integration-plan frontmatter or WP structure.
@@ -166,6 +179,10 @@ classify_and_validate() {
   # Filename class is checked before the general dee-*.md integration-plan class.
   # Basename matching lets the regression harness pass fixtures outside docs/plans/.
   case "$base" in
+    dee-*.integration-train.json)
+      validate_train_manifest "$file"
+      return 0
+      ;;
     dee-*-addendum-*.md | dee-*-amendment-*.md)
       validate_plan_addendum "$file"
       return 0
@@ -203,6 +220,7 @@ classify_and_validate() {
 
 collect_defaults() {
   find "$ROOT/docs/plans" -maxdepth 1 -name 'dee-*.md' -type f 2>/dev/null || true
+  find "$ROOT/docs/plans" -maxdepth 1 -name 'dee-*.integration-train.json' -type f 2>/dev/null || true
   find "$ROOT/docs/product-specs" -maxdepth 1 -name '*.md' -type f 2>/dev/null || true
   find "$ROOT/docs/gaps" -maxdepth 1 -name '*.md' -type f 2>/dev/null || true
   find "$ROOT/docs/roadmaps" -maxdepth 1 -name '*.md' -type f 2>/dev/null || true

@@ -65,7 +65,7 @@ Recovery order — then escalate per [`EXECUTION-CONTRACT.md`](docs/waia-governa
 1. Never push directly to `main` (frozen `dev` is not an active base — do not push there either).
 2. Work on **`dee-<NN>-<slug>`** branched from **`main`**, linked to Linear; open **one PR to `main`**.
 3. Never commit secrets.
-4. Follow the lifecycle in [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) without skipping steps; **PR = integration boundary** ([`INTEGRATION-BOUNDARY-POLICY.md`](docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)). Multiple coherent work packages / `**Includes:**` children may land in one integration batch.
+4. Follow the lifecycle in [`LIFECYCLE.md`](docs/waia-governance/LIFECYCLE.md) without skipping steps; **PR = integration boundary** ([`INTEGRATION-BOUNDARY-POLICY.md`](docs/waia-governance/INTEGRATION-BOUNDARY-POLICY.md)). Multiple coherent work packages may land in one batch. A multi-issue AI-TRADER **Integration Train** additionally requires the frozen, validated manifest contract; unvalidated `**Includes:**` never grants bounded autonomous merge eligibility.
 5. Linear project **WAIA** is the source of executable work.
 6. Only atomic issues with exactly one execution label.
 7. Missing detail blocks execution → STOP and ask.
@@ -87,7 +87,7 @@ AI-Twin builds a structured digital personality via dialogue, diary, and behavio
 - **Single trunk:** **`main`** — protected (local hook + GitHub rulesets). `dev` is frozen/retired (not deleted in-repo yet); not an active PR base.
 - Branch from `origin/main`: `dee-<NN>-<slug>` · Commit: `DEE-NN type(scope): subject`
 - Reference `DEE-NN` in branch, commits, PR title/body.
-- Merge: Human by default. After DEE-653 is Human-merged, the acting AI-TRADER Program Controller may **squash-merge only eligible Step 0–22 implementation PRs** under the exact fail-closed admission contract in [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](docs/waia-governance/AI-TRADER-BOUNDED-MERGE-AUTHORITY.md). Governance, semantic, live/capital, holdout, security, production, T4, and other reserved actions remain Human-only.
+- Merge: Human by default. After DEE-653 is Human-merged, the acting AI-TRADER Program Controller may **squash-merge only eligible Step 0–22 implementation PRs**, including a manifest-valid Integration Train, under the exact fail-closed admission contract in [`AI-TRADER-BOUNDED-MERGE-AUTHORITY.md`](docs/waia-governance/AI-TRADER-BOUNDED-MERGE-AUTHORITY.md). Governance, semantic, live/capital, holdout, security, production, T4, and other reserved actions remain Human-only.
 - **Official release** = explicit Human tag/release of an exact `main` SHA — **not** `dev`→`main` promotion or `main`→`dev` back-sync (those are retired).
 - Details: [`BRANCHING-STRATEGY.md`](docs/waia-governance/BRANCHING-STRATEGY.md), [`PR-PROTOCOL.md`](docs/waia-governance/PR-PROTOCOL.md), [`POST-MERGE-PROTOCOL.md`](docs/waia-governance/POST-MERGE-PROTOCOL.md)
 
@@ -145,4 +145,4 @@ Plus **targeted tests** for changed surfaces, and `pnpm test:e2e` when UI/user-v
 
 **Authoritative full unit suite** (`pnpm test --run` / CI `unit tests`) runs on **GitHub PR CI** against PR HEAD. Do not require a redundant full local unit suite solely to duplicate that gate. After merge, sync `origin/main` — do not re-run the full suite on push/merge to `main` solely because the PR already passed CI.
 
-Before PR readiness, run PR governance preflight on the rendered body: `./scripts/linear/preflight-pr-governance.sh` (see [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md)). Regression tests: `pnpm validate:pr-governance`.
+Before PR readiness, run PR governance preflight on the rendered body: `./scripts/linear/preflight-pr-governance.sh` (see [`.cursor/commands/prepare-pr.md`](.cursor/commands/prepare-pr.md)). Integration Train bodies are additionally bound to the frozen manifest digest and exact base/head/review head. Regression tests: `pnpm validate:pr-governance`.
