@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: integration-ready
   currentWorkPackage: null
   completedWorkPackages: [C1, C2, C3]
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 00372f67398245322e11ceb5b69ce6c3f07a04ce
-  lastValidationAt: 2026-08-20T10:57:00Z
+  lastValidatedGitSha: 3641bbe459b64bdd00830ba832697c5c2a39e20f
+  lastValidationAt: 2026-08-20T11:02:00Z
   blockedReason: null
-  nextAction: "Obtain a fresh independent exact-head adversarial review; publication remains withheld."
+  nextAction: "Publish one PR only after the plan-only final head is independently re-attested."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -109,8 +109,10 @@ corrective commit `7ce7e072…` therefore adds, without widening runtime scope:
   samples, stale anchor, cross-account/instrument substitution, sub-scale ambiguity,
   exact-zero EV and per-component HALF_UP boundaries.
 
-This corrective candidate is not integration-ready until a fresh independent review
-attests the exact plan-bearing head and all required validations remain green.
+Independent adversarial review attested exact clean head `3641bbe459b64bdd…` with
+zero unresolved actionable findings after all required local validations remained
+green. The subsequent plan-only state transition requires exact-head re-attestation
+before publication; no code or acceptance meaning changes in that transition.
 
 ## Compatibility and ownership
 
