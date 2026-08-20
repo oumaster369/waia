@@ -8,6 +8,13 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 ## Current Status
 
+**DEE-656** adds Postgres-only generic raw-capture and record-only validation receipts in migration
+`0153`: private-object references, separate content identities, transaction-authored capture/
+validation knowledge times, composite tenant integrity, append-only guards, and deny RLS. Raw body
+bytes, production policy defaults/storage/SQL apply, providers, Observation/Measurement semantics,
+runtime routing, and capital authority remain excluded. See
+[`DEE-656-MI-RAW-CAPTURE.md`](DEE-656-MI-RAW-CAPTURE.md).
+
 **DEE-654 Split A** adds Postgres-only three-time PIT compatibility and trust-as-of receipts:
 nullable `available_at` on existing MI trust/Observation rows plus append-only,
 content-addressed `trader_mi_trust_as_of_receipt_v1` in migration `0152`. Existing rows remain

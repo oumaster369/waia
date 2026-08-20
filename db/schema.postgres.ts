@@ -860,6 +860,167 @@ export const traderMiTrustAsOfReceiptV1 = pgTable(
   ],
 );
 
+/** DEE-656: append-only private-object reference; raw body bytes never enter Postgres. */
+export const traderMiRawStorageBindingV1 = pgTable(
+  "trader_mi_raw_storage_binding_v1",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sourceId: uuid("source_id").notNull(),
+    rawBytesDigest: text("raw_bytes_digest").notNull(),
+    storageBackendId: text("storage_backend_id").notNull(),
+    objectKey: text("object_key").notNull(),
+    objectVersion: text("object_version").notNull(),
+    encryptionRequirement: text("encryption_requirement").notNull(),
+    accessRequirement: text("access_requirement").notNull(),
+    storedAt: timestamp("stored_at", { withTimezone: true, mode: "date" }).notNull(),
+    bindingJson: text("binding_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("tmrsb_v1_id_org_source_raw_uq").on(
+      t.id, t.organizationId, t.sourceId, t.rawBytesDigest,
+    ),
+    foreignKey({
+      columns: [t.sourceId, t.organizationId],
+      foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
+    }).onDelete("cascade"),
+    index("tmrsb_v1_org_source_raw_idx").on(t.organizationId, t.sourceId, t.rawBytesDigest),
+    check("tmrsb_v1_id_is_digest_check", sql`${t.id} = ${t.contentDigest}`),
+    check("tmrsb_v1_id_hex_check", sql`${t.id} ~ '^[0-9a-f]{64}$'`),
+    check("tmrsb_v1_raw_digest_check", sql`${t.rawBytesDigest} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "tmrsb_v1_security_check",
+      sql`${t.encryptionRequirement} = 'PRIVATE_ENCRYPTED' AND ${t.accessRequirement} = 'SERVER_ONLY'`,
+    ),
+  ],
+);
+
+/** DEE-656: append-only raw capture receipt; raw body bytes remain in private object storage. */
+export const traderMiRawCaptureReceiptV1 = pgTable(
+  "trader_mi_raw_capture_receipt_v1",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sourceId: uuid("source_id").notNull(),
+    rawBytesDigest: text("raw_bytes_digest").notNull(),
+    payloadBytes: bigint("payload_bytes", { mode: "number" }).notNull(),
+    maxPayloadBytes: bigint("max_payload_bytes", { mode: "number" }).notNull(),
+    retentionSeconds: bigint("retention_seconds", { mode: "number" }).notNull(),
+    policyDigest: text("policy_digest").notNull(),
+    secretScanReceiptDigest: text("secret_scan_receipt_digest").notNull(),
+    storageBindingDigest: text("storage_binding_digest").notNull(),
+    capturedAt: timestamp("captured_at", { withTimezone: true, mode: "date" }).notNull(),
+    retentionUntil: timestamp("retention_until", { withTimezone: true, mode: "date" }).notNull(),
+    authority: text("authority").notNull(),
+    receiptJson: text("receipt_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("tmrcr_v1_id_org_source_uq").on(t.id, t.organizationId, t.sourceId),
+    uniqueIndex("tmrcr_v1_org_storage_binding_uq").on(t.organizationId, t.storageBindingDigest),
+    foreignKey({
+      columns: [t.sourceId, t.organizationId],
+      foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [
+        t.storageBindingDigest, t.organizationId, t.sourceId, t.rawBytesDigest,
+      ],
+      foreignColumns: [
+        traderMiRawStorageBindingV1.id,
+        traderMiRawStorageBindingV1.organizationId,
+        traderMiRawStorageBindingV1.sourceId,
+        traderMiRawStorageBindingV1.rawBytesDigest,
+      ],
+    }),
+    index("tmrcr_v1_org_source_captured_idx").on(t.organizationId, t.sourceId, t.capturedAt),
+    check("tmrcr_v1_id_is_digest_check", sql`${t.id} = ${t.contentDigest}`),
+    check("tmrcr_v1_id_hex_check", sql`${t.id} ~ '^[0-9a-f]{64}$'`),
+    check("tmrcr_v1_raw_digest_check", sql`${t.rawBytesDigest} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "tmrcr_v1_related_digests_check",
+      sql`${t.policyDigest} ~ '^[0-9a-f]{64}$'
+        AND ${t.secretScanReceiptDigest} ~ '^[0-9a-f]{64}$'
+        AND ${t.storageBindingDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "tmrcr_v1_payload_bytes_check",
+      sql`${t.payloadBytes} >= 0 AND ${t.maxPayloadBytes} > 0
+        AND ${t.payloadBytes} <= ${t.maxPayloadBytes} AND ${t.retentionSeconds} > 0`,
+    ),
+    check("tmrcr_v1_retention_check", sql`${t.retentionUntil} > ${t.capturedAt}`),
+    check("tmrcr_v1_authority_check", sql`${t.authority} = 'RECORD_ONLY'`),
+  ],
+);
+
+/** DEE-656: record-only validation result with database-authored knowledge time. */
+export const traderMiRawValidationReceiptV1 = pgTable(
+  "trader_mi_raw_validation_receipt_v1",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sourceId: uuid("source_id").notNull(),
+    captureReceiptDigest: text("capture_receipt_digest").notNull(),
+    validatorId: text("validator_id").notNull(),
+    validatorVersion: text("validator_version").notNull(),
+    status: text("status").notNull(),
+    reasonCodesJson: text("reason_codes_json").notNull(),
+    knownAt: timestamp("known_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .default(sql`date_trunc('milliseconds', transaction_timestamp())`),
+    authority: text("authority").notNull(),
+    observationAuthority: text("observation_authority").notNull(),
+    measurementAuthority: text("measurement_authority").notNull(),
+    receiptJson: text("receipt_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .default(sql`date_trunc('milliseconds', transaction_timestamp())`),
+  },
+  (t) => [
+    uniqueIndex("tmrvr_v1_org_capture_validator_uq").on(
+      t.organizationId, t.captureReceiptDigest, t.validatorId, t.validatorVersion,
+    ),
+    foreignKey({
+      columns: [t.captureReceiptDigest, t.organizationId, t.sourceId],
+      foreignColumns: [
+        traderMiRawCaptureReceiptV1.id,
+        traderMiRawCaptureReceiptV1.organizationId,
+        traderMiRawCaptureReceiptV1.sourceId,
+      ],
+    }),
+    index("tmrvr_v1_org_source_known_idx").on(t.organizationId, t.sourceId, t.knownAt),
+    check("tmrvr_v1_id_is_digest_check", sql`${t.id} = ${t.contentDigest}`),
+    check("tmrvr_v1_id_hex_check", sql`${t.id} ~ '^[0-9a-f]{64}$'`),
+    check("tmrvr_v1_capture_digest_check", sql`${t.captureReceiptDigest} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "tmrvr_v1_status_check",
+      sql`jsonb_typeof(${t.reasonCodesJson}::jsonb) = 'array' AND (
+        (${t.status} = 'VALID' AND jsonb_array_length(${t.reasonCodesJson}::jsonb) = 0)
+        OR (${t.status} = 'REJECTED' AND jsonb_array_length(${t.reasonCodesJson}::jsonb) > 0)
+      )`,
+    ),
+    check(
+      "tmrvr_v1_authority_check",
+      sql`${t.authority} = 'RECORD_ONLY'
+        AND ${t.observationAuthority} = 'NONE'
+        AND ${t.measurementAuthority} = 'NONE'`,
+    ),
+  ],
+);
+
 export const miObservationKindEnumPg = pgEnum("mi_observation_kind", ["msv_envelope"]);
 
 /** AI-TRADER MI: append-only PIT observations (DEE-281 / LD-2b). */
