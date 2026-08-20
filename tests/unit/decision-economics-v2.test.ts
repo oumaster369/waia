@@ -33,6 +33,34 @@ describe("DEE-528 decision economics v2", () => {
     );
   });
 
+  it("rejects negative or non-finite payoff parameters", () => {
+    const valid = {
+      notionalUsdt: 10_000,
+      sample: sample13d(0.01),
+      costRate: 0.001,
+      slippageBufferUsdt: 10,
+    };
+    for (const costRate of [-0.001, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => piBaseV1({ ...valid, costRate })).toThrow(/cost rate/);
+    }
+    for (const slippageBufferUsdt of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => piLowerV1({ ...valid, slippageBufferUsdt })).toThrow(/slippage buffer/);
+    }
+    expect(() => piBaseV1({ ...valid, notionalUsdt: Number.POSITIVE_INFINITY })).toThrow(
+      /notional/,
+    );
+    expect(() => piBaseV1({ ...valid, sample: sample13d(1_000) })).toThrow(/payoff/);
+    expect(() =>
+      piLowerV1({
+        ...valid,
+        notionalUsdt: Number.MAX_VALUE,
+        costRate: 1,
+        sample: sample13d(0),
+        slippageBufferUsdt: Number.MAX_VALUE,
+      }),
+    ).toThrow(/lower payoff/);
+  });
+
   it("EV ordering invariant EV_lower <= EV_base <= EV_upper", () => {
     const { muBaseReplicas, muLowerReplicas } = computeReplicaPayoffMeans({
       notionalUsdt: 100_000,

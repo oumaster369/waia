@@ -100,7 +100,9 @@ function priceFromReturn(anchorPrice: string, logReturn: number): bigint {
   if (!(reconstructed > 0) || !Number.isFinite(reconstructed)) {
     throw new Error("FORECAST_SAMPLE_INVALID");
   }
-  return parseDecimal(quantizeScale8HalfUp(reconstructed));
+  const quantized = parseDecimal(quantizeScale8HalfUp(reconstructed));
+  if (quantized <= 0n) throw new Error("FORECAST_SAMPLE_INVALID");
+  return quantized;
 }
 
 function volumeFromSample(value: number): bigint {
@@ -490,7 +492,15 @@ export function executionPayoffFunctionalV2(
 ): ExecutionPayoffScenarioV2 {
   try {
     return executionPayoffFunctionalV2Internal(input);
-  } catch {
-    return invalidScenario({ reasonCode: "FORECAST_SAMPLE_INVALID" });
+  } catch (error) {
+    const reasonCode =
+      error instanceof Error && error.message === "FORECAST_SAMPLE_INVALID"
+        ? "FORECAST_SAMPLE_INVALID"
+        : "EXECUTABLE_POLICY_INVALID";
+    return invalidScenario({
+      reasonCode,
+      requestedQuantity: input.economicSizeSet?.exactQuantities?.[0],
+      anchorPrice: input.anchorAuthority?.qualifiedAnchorClosePrice,
+    });
   }
 }

@@ -279,6 +279,18 @@ describe("DEE-659 ExecutionPayoffFunctionalV2", () => {
     expect(result.basePayoffUsdt).toBe("-0.00000002");
   });
 
+  it("rejects a positive reconstructed price that quantizes to zero", () => {
+    const sample13d = [...dee659Sample13d()];
+    sample13d[0] = Math.log(1e-12 / 100);
+    const result = evaluate({
+      policy: dee659TestPolicy({ minimumNotionalUsdt: "0" }),
+      sample13d,
+    });
+    expect(result.reasonCodes).toEqual(["FORECAST_SAMPLE_INVALID"]);
+    expect(result.entrySlices).toEqual([]);
+    expect(result.basePayoffUsdt).toBe("0");
+  });
+
   it("retains underfilled entry CASH and never tops up later slices", () => {
     const result = evaluate({
       sample13d: dee659Sample13d({ entryVolumes: [2, 100, 100] }),
@@ -319,20 +331,36 @@ describe("DEE-659 ExecutionPayoffFunctionalV2", () => {
   });
 
   it("uses selected price/capacity components while R_h remains only a trigger mark", () => {
-    const baseline = evaluate();
-    expect(
-      evaluate({ sample13d: dee659Sample13d({ exitPrices: [110, 100, 100] }) }).basePayoff,
-    ).not.toBe(baseline.basePayoff);
-    expect(
-      evaluate({ sample13d: dee659Sample13d({ entryPrices: [100, 110, 100] }) }).basePayoff,
-    ).not.toBe(baseline.basePayoff);
-    expect(
-      evaluate({ sample13d: dee659Sample13d({ entryVolumes: [2, 100, 100] }) }).filledEntryQuantity,
-    ).not.toBe(baseline.filledEntryQuantity);
-    expect(evaluate({ sample13d: dee659Sample13d({ exitVolumes: [100, 2, 100] }) }).status).toBe(
-      "ECONOMICALLY_INADMISSIBLE",
-    );
-    const differentMark = evaluate({ sample13d: dee659Sample13d({ horizonPrice: 80 }) });
+    const policy = dee659TestPolicy({
+      entrySliceOffsets: [1, 2, 3],
+      entrySliceWeights: ["0.3", "0.3", "0.4"],
+      exitSliceOffsetsAfterHorizon: [1, 2, 3],
+      exitSliceWeights: ["0.3", "0.3", "0.4"],
+    });
+    const baseline = evaluate({ policy });
+    for (const index of [0, 1, 2] as const) {
+      const entryPrices: [number, number, number] = [100, 100, 100];
+      entryPrices[index] = 110;
+      expect(evaluate({ policy, sample13d: dee659Sample13d({ entryPrices }) }).basePayoff).not.toBe(
+        baseline.basePayoff,
+      );
+      const exitPrices: [number, number, number] = [100, 100, 100];
+      exitPrices[index] = 110;
+      expect(evaluate({ policy, sample13d: dee659Sample13d({ exitPrices }) }).basePayoff).not.toBe(
+        baseline.basePayoff,
+      );
+      const entryVolumes: [number, number, number] = [100, 100, 100];
+      entryVolumes[index] = 2;
+      expect(
+        evaluate({ policy, sample13d: dee659Sample13d({ entryVolumes }) }).filledEntryQuantity,
+      ).not.toBe(baseline.filledEntryQuantity);
+      const exitVolumes: [number, number, number] = [100, 100, 100];
+      exitVolumes[index] = 2;
+      expect(evaluate({ policy, sample13d: dee659Sample13d({ exitVolumes }) }).status).toBe(
+        "ECONOMICALLY_INADMISSIBLE",
+      );
+    }
+    const differentMark = evaluate({ policy, sample13d: dee659Sample13d({ horizonPrice: 80 }) });
     expect(differentMark.basePayoff).toBe(baseline.basePayoff);
     expect(differentMark.horizonTriggerMarkPrice).toBe("80");
     expect(differentMark.contentDigestHex).not.toBe(baseline.contentDigestHex);
