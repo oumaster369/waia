@@ -3,12 +3,27 @@ import {
   buildRawStorageBindingAtDurableBoundaryV1,
   buildRawValidationReceiptAtDurableBoundaryV1,
   prepareRawCaptureV1,
+  serializeRawCaptureReceiptV1,
+  serializeRawStorageBindingV1,
+  serializeRawValidationReceiptV1,
   type RawCaptureCommandV1,
   type RawCaptureReceiptV1,
   type RawStorageBindingV1,
   type RawValidationOutcomeV1,
   type RawValidationReceiptV1,
 } from "@/lib/trader/mi/raw-capture-v1";
+
+function cloneCapture(value: RawCaptureReceiptV1): RawCaptureReceiptV1 {
+  return JSON.parse(serializeRawCaptureReceiptV1(value)) as RawCaptureReceiptV1;
+}
+
+function cloneBinding(value: RawStorageBindingV1): RawStorageBindingV1 {
+  return JSON.parse(serializeRawStorageBindingV1(value)) as RawStorageBindingV1;
+}
+
+function cloneValidation(value: RawValidationReceiptV1): RawValidationReceiptV1 {
+  return JSON.parse(serializeRawValidationReceiptV1(value)) as RawValidationReceiptV1;
+}
 
 /** Test double only. It is not encrypted storage and must never be runtime-wired. */
 export class TestOnlyRawCaptureMemoryAdapterV1 {
@@ -53,9 +68,9 @@ export class TestOnlyRawCaptureMemoryAdapterV1 {
       capturedAt,
     });
     this.objects.set(objectKey, Uint8Array.from(prepared.bodyBytes));
-    this.bindings.set(storageBinding.contentDigest, storageBinding);
-    this.captures.set(captureReceipt.contentDigest, captureReceipt);
-    return { captureReceipt, storageBinding };
+    this.bindings.set(storageBinding.contentDigest, cloneBinding(storageBinding));
+    this.captures.set(captureReceipt.contentDigest, cloneCapture(captureReceipt));
+    return { captureReceipt: cloneCapture(captureReceipt), storageBinding: cloneBinding(storageBinding) };
   }
 
   recordValidation(input: {
@@ -73,8 +88,8 @@ export class TestOnlyRawCaptureMemoryAdapterV1 {
       outcome: input.outcome,
       knownAt: this.requireNow(),
     });
-    this.validations.set(receipt.contentDigest, receipt);
-    return receipt;
+    this.validations.set(receipt.contentDigest, cloneValidation(receipt));
+    return cloneValidation(receipt);
   }
 
   readBody(storageBindingDigest: string): Uint8Array | null {
@@ -85,11 +100,13 @@ export class TestOnlyRawCaptureMemoryAdapterV1 {
   }
 
   readCapture(contentDigest: string): RawCaptureReceiptV1 | null {
-    return this.captures.get(contentDigest) ?? null;
+    const stored = this.captures.get(contentDigest);
+    return stored ? cloneCapture(stored) : null;
   }
 
   readValidation(contentDigest: string): RawValidationReceiptV1 | null {
-    return this.validations.get(contentDigest) ?? null;
+    const stored = this.validations.get(contentDigest);
+    return stored ? cloneValidation(stored) : null;
   }
 
   private requireNow(): Date {

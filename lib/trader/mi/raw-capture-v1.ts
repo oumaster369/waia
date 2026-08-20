@@ -12,6 +12,36 @@ const HEX_64 = /^[0-9a-f]{64}$/;
 const REASON_CODE = /^[A-Z][A-Z0-9_]{2,63}$/;
 const SAFE_OBJECT_KEY = /^[A-Za-z0-9._:/=-]+$/;
 
+const POLICY_KEYS = [
+  "schemaVersion", "maxPayloadBytes", "retentionSeconds", "storageClass", "accessClass",
+  "policyDigest",
+] as const;
+const SECRET_SCAN_KEYS = [
+  "schemaVersion", "status", "rawBytesDigest", "scannerId", "scannerVersion", "completedAtUtc",
+  "contentDigest",
+] as const;
+const OBJECT_REFERENCE_KEYS = [
+  "storageBackendId", "objectKey", "objectVersion", "encryptionRequirement", "accessRequirement",
+] as const;
+const STORAGE_BINDING_KEYS = [
+  "id", "schemaVersion", "organizationId", "sourceId", "rawBytesDigest", "objectReference",
+  "storedAtUtc", "contentDigest",
+] as const;
+const CAPTURE_RECEIPT_KEYS = [
+  "id", "schemaVersion", "organizationId", "sourceId", "rawBytesDigest", "payloadBytes", "policy",
+  "policyDigest", "secretScanReceipt", "secretScanReceiptDigest", "storageBindingDigest",
+  "capturedAtUtc", "retentionUntilUtc", "authority", "contentDigest",
+] as const;
+const VALIDATION_RECEIPT_KEYS = [
+  "id", "schemaVersion", "organizationId", "sourceId", "captureReceiptDigest", "validatorId",
+  "validatorVersion", "status", "reasonCodes", "knownAtUtc", "authority", "observationAuthority",
+  "measurementAuthority", "contentDigest",
+] as const;
+const PREPARED_CAPTURE_KEYS = [
+  "organizationId", "sourceId", "bodyBytes", "rawBytesDigest", "payloadBytes", "policy",
+  "secretScanReceipt",
+] as const;
+
 export type RawCapturePolicyV1 = {
   schemaVersion: typeof RAW_CAPTURE_POLICY_V1_SCHEMA_VERSION;
   maxPayloadBytes: number;
@@ -157,6 +187,13 @@ function hasCanonicalDigest(contentDigest: string, body: unknown): boolean {
   return HEX_64.test(contentDigest) && sha256Canonical(body) === contentDigest;
 }
 
+function hasExactOwnKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const actual = Object.keys(value).sort();
+  const required = [...expected].sort();
+  return actual.length === required.length && actual.every((key, index) => key === required[index]);
+}
+
 function isUint8Array(value: unknown): value is Uint8Array {
   return ArrayBuffer.isView(value) && Object.prototype.toString.call(value) === "[object Uint8Array]";
 }
@@ -182,7 +219,9 @@ export function defineRawCapturePolicyV1(input: {
 }
 
 export function isRawCapturePolicyV1(value: RawCapturePolicyV1): boolean {
-  if (!value || value.schemaVersion !== RAW_CAPTURE_POLICY_V1_SCHEMA_VERSION) return false;
+  if (!hasExactOwnKeys(value, POLICY_KEYS) || value.schemaVersion !== RAW_CAPTURE_POLICY_V1_SCHEMA_VERSION) {
+    return false;
+  }
   if (!Number.isSafeInteger(value.maxPayloadBytes) || value.maxPayloadBytes <= 0) return false;
   if (!Number.isSafeInteger(value.retentionSeconds) || value.retentionSeconds <= 0) return false;
   if (value.storageClass !== "PRIVATE_ENCRYPTED_OBJECT" || value.accessClass !== "SERVER_ONLY") return false;
@@ -213,9 +252,15 @@ export function attestRawSecretScanV1(input: {
 }
 
 export function isRawSecretScanReceiptV1(value: RawSecretScanReceiptV1): boolean {
-  if (!value || value.schemaVersion !== RAW_SECRET_SCAN_V1_SCHEMA_VERSION) return false;
+  if (!hasExactOwnKeys(value, SECRET_SCAN_KEYS) || value.schemaVersion !== RAW_SECRET_SCAN_V1_SCHEMA_VERSION) {
+    return false;
+  }
   if (value.status !== "PASS" && value.status !== "FAIL") return false;
-  if (!HEX_64.test(value.rawBytesDigest) || !value.scannerId || !value.scannerVersion) return false;
+  if (
+    !HEX_64.test(value.rawBytesDigest) || typeof value.scannerId !== "string" ||
+    value.scannerId.trim().length === 0 || typeof value.scannerVersion !== "string" ||
+    value.scannerVersion.trim().length === 0
+  ) return false;
   try { requireIso(value.completedAtUtc); } catch { return false; }
   const { contentDigest, ...body } = value;
   return hasCanonicalDigest(contentDigest, body);
@@ -247,9 +292,58 @@ export function prepareRawCaptureV1(command: RawCaptureCommandV1): PreparedRawCa
     bodyBytes,
     rawBytesDigest,
     payloadBytes: bodyBytes.byteLength,
-    policy: command.policy,
-    secretScanReceipt: command.secretScanReceipt,
+    policy: {
+      schemaVersion: command.policy.schemaVersion,
+      maxPayloadBytes: command.policy.maxPayloadBytes,
+      retentionSeconds: command.policy.retentionSeconds,
+      storageClass: command.policy.storageClass,
+      accessClass: command.policy.accessClass,
+      policyDigest: command.policy.policyDigest,
+    },
+    secretScanReceipt: {
+      schemaVersion: command.secretScanReceipt.schemaVersion,
+      status: command.secretScanReceipt.status,
+      rawBytesDigest: command.secretScanReceipt.rawBytesDigest,
+      scannerId: command.secretScanReceipt.scannerId,
+      scannerVersion: command.secretScanReceipt.scannerVersion,
+      completedAtUtc: command.secretScanReceipt.completedAtUtc,
+      contentDigest: command.secretScanReceipt.contentDigest,
+    },
   };
+}
+
+/** Revalidates the exact transient bytes and reconstructs a safe prepared value. */
+export function requirePreparedRawCaptureV1(value: PreparedRawCaptureV1): PreparedRawCaptureV1 {
+  if (
+    !hasExactOwnKeys(value, PREPARED_CAPTURE_KEYS) || !isUint8Array(value.bodyBytes) ||
+    !Number.isSafeInteger(value.payloadBytes) || value.payloadBytes < 0 ||
+    !HEX_64.test(value.rawBytesDigest) || !isRawCapturePolicyV1(value.policy) ||
+    !isRawSecretScanReceiptV1(value.secretScanReceipt) || value.secretScanReceipt.status !== "PASS"
+  ) throw new RawCaptureRejectedError("INVALID_BODY_BYTES");
+  const bodyBytes = Uint8Array.from(value.bodyBytes);
+  const rawBytesDigest = digestRawBytesV1(bodyBytes);
+  if (
+    bodyBytes.byteLength !== value.payloadBytes || bodyBytes.byteLength > value.policy.maxPayloadBytes ||
+    rawBytesDigest !== value.rawBytesDigest || value.secretScanReceipt.rawBytesDigest !== rawBytesDigest
+  ) throw new RawCaptureRejectedError("SECRET_SCAN_DIGEST_MISMATCH");
+  return prepareRawCaptureV1({
+    organizationId: requireNonEmpty(value.organizationId),
+    sourceId: requireNonEmpty(value.sourceId),
+    bodyBytes,
+    policy: value.policy,
+    secretScanReceipt: value.secretScanReceipt,
+  });
+}
+
+function isRawObjectReferenceV1(value: RawObjectReferenceV1): boolean {
+  return (
+    hasExactOwnKeys(value, OBJECT_REFERENCE_KEYS) &&
+    typeof value.storageBackendId === "string" && value.storageBackendId.trim().length > 0 &&
+    typeof value.objectKey === "string" && value.objectKey.length > 0 && SAFE_OBJECT_KEY.test(value.objectKey) &&
+    !value.objectKey.split("/").includes("..") &&
+    typeof value.objectVersion === "string" && value.objectVersion.trim().length > 0 &&
+    value.encryptionRequirement === "PRIVATE_ENCRYPTED" && value.accessRequirement === "SERVER_ONLY"
+  );
 }
 
 export function buildRawStorageBindingAtDurableBoundaryV1(input: {
@@ -261,17 +355,20 @@ export function buildRawStorageBindingAtDurableBoundaryV1(input: {
 }): RawStorageBindingV1 {
   const ref = input.objectReference;
   if (
-    !HEX_64.test(input.rawBytesDigest) || !ref ||
-    !ref.storageBackendId || !ref.objectKey || !SAFE_OBJECT_KEY.test(ref.objectKey) ||
-    ref.objectKey.split("/").includes("..") || !ref.objectVersion ||
-    ref.encryptionRequirement !== "PRIVATE_ENCRYPTED" || ref.accessRequirement !== "SERVER_ONLY"
+    !HEX_64.test(input.rawBytesDigest) || !isRawObjectReferenceV1(ref)
   ) throw new RawCaptureRejectedError("INVALID_STORAGE_BINDING");
   const body = {
     schemaVersion: RAW_STORAGE_BINDING_V1_SCHEMA_VERSION,
     organizationId: requireNonEmpty(input.organizationId),
     sourceId: requireNonEmpty(input.sourceId),
     rawBytesDigest: input.rawBytesDigest,
-    objectReference: { ...ref },
+    objectReference: {
+      storageBackendId: ref.storageBackendId,
+      objectKey: ref.objectKey,
+      objectVersion: ref.objectVersion,
+      encryptionRequirement: ref.encryptionRequirement,
+      accessRequirement: ref.accessRequirement,
+    },
     storedAtUtc: requireIso(input.storedAt),
   };
   const contentDigest = sha256Canonical(body);
@@ -279,15 +376,12 @@ export function buildRawStorageBindingAtDurableBoundaryV1(input: {
 }
 
 export function isRawStorageBindingV1(value: RawStorageBindingV1): boolean {
-  if (!value || value.schemaVersion !== RAW_STORAGE_BINDING_V1_SCHEMA_VERSION) return false;
+  if (!hasExactOwnKeys(value, STORAGE_BINDING_KEYS) || value.schemaVersion !== RAW_STORAGE_BINDING_V1_SCHEMA_VERSION) {
+    return false;
+  }
   if (!HEX_64.test(value.rawBytesDigest)) return false;
   if (
-    !value.organizationId || !value.sourceId || !value.objectReference?.storageBackendId ||
-    !value.objectReference.objectKey || !SAFE_OBJECT_KEY.test(value.objectReference.objectKey) ||
-    value.objectReference.objectKey.split("/").includes("..") ||
-    !value.objectReference.objectVersion ||
-    value.objectReference.encryptionRequirement !== "PRIVATE_ENCRYPTED" ||
-    value.objectReference.accessRequirement !== "SERVER_ONLY"
+    !value.organizationId || !value.sourceId || !isRawObjectReferenceV1(value.objectReference)
   ) return false;
   try { requireIso(value.storedAtUtc); } catch { return false; }
   const { id, contentDigest, ...body } = value;
@@ -299,7 +393,8 @@ export function buildRawCaptureReceiptAtDurableBoundaryV1(input: {
   storageBinding: RawStorageBindingV1;
   capturedAt: Date;
 }): RawCaptureReceiptV1 {
-  const { prepared, storageBinding } = input;
+  const prepared = requirePreparedRawCaptureV1(input.prepared);
+  const { storageBinding } = input;
   if (
     !isRawStorageBindingV1(storageBinding) ||
     storageBinding.organizationId !== prepared.organizationId ||
@@ -337,7 +432,9 @@ export function buildRawCaptureReceiptAtDurableBoundaryV1(input: {
 }
 
 export function isRawCaptureReceiptV1(value: RawCaptureReceiptV1): boolean {
-  if (!value || value.schemaVersion !== RAW_CAPTURE_RECEIPT_V1_SCHEMA_VERSION) return false;
+  if (!hasExactOwnKeys(value, CAPTURE_RECEIPT_KEYS) || value.schemaVersion !== RAW_CAPTURE_RECEIPT_V1_SCHEMA_VERSION) {
+    return false;
+  }
   if (
     !value.organizationId || !value.sourceId || !Number.isSafeInteger(value.payloadBytes) ||
     value.payloadBytes < 0 ||
@@ -354,16 +451,22 @@ export function isRawCaptureReceiptV1(value: RawCaptureReceiptV1): boolean {
   ) return false;
   const capturedAt = new Date(value.capturedAtUtc);
   const retentionUntil = new Date(value.retentionUntilUtc);
+  const scanCompletedAt = new Date(value.secretScanReceipt.completedAtUtc);
+  const expectedRetention = capturedAt.getTime() + value.policy.retentionSeconds * 1_000;
   if (
     !Number.isFinite(capturedAt.getTime()) || !Number.isFinite(retentionUntil.getTime()) ||
-    retentionUntil.getTime() <= capturedAt.getTime()
+    !Number.isFinite(scanCompletedAt.getTime()) || !Number.isSafeInteger(expectedRetention) ||
+    retentionUntil.getTime() !== expectedRetention || scanCompletedAt.getTime() > capturedAt.getTime()
   ) return false;
   const { id, contentDigest, ...body } = value;
   return id === contentDigest && value.authority === "RECORD_ONLY" && hasCanonicalDigest(contentDigest, body);
 }
 
 function normalizeOutcome(outcome: RawValidationOutcomeV1): RawValidationOutcomeV1 {
-  if (!outcome || (outcome.status !== "VALID" && outcome.status !== "REJECTED")) {
+  if (
+    !hasExactOwnKeys(outcome, ["status", "reasonCodes"]) ||
+    (outcome.status !== "VALID" && outcome.status !== "REJECTED") || !Array.isArray(outcome.reasonCodes)
+  ) {
     throw new RawCaptureRejectedError("INVALID_VALIDATION_OUTCOME");
   }
   const reasonCodes = [...outcome.reasonCodes];
@@ -416,12 +519,21 @@ export function buildRawValidationReceiptAtDurableBoundaryV1(input: {
 }
 
 export function isRawValidationReceiptV1(value: RawValidationReceiptV1): boolean {
-  if (!value || value.schemaVersion !== RAW_VALIDATION_RECEIPT_V1_SCHEMA_VERSION) return false;
-  if (!value.organizationId || !value.sourceId || !HEX_64.test(value.captureReceiptDigest)) return false;
+  if (
+    !hasExactOwnKeys(value, VALIDATION_RECEIPT_KEYS) ||
+    value.schemaVersion !== RAW_VALIDATION_RECEIPT_V1_SCHEMA_VERSION
+  ) return false;
+  if (
+    !value.organizationId || !value.sourceId || !HEX_64.test(value.captureReceiptDigest) ||
+    typeof value.validatorId !== "string" || value.validatorId.trim().length === 0 ||
+    typeof value.validatorVersion !== "string" || value.validatorVersion.trim().length === 0
+  ) return false;
+  let normalized: RawValidationOutcomeV1;
   try {
     requireIso(value.knownAtUtc);
-    normalizeOutcome({ status: value.status, reasonCodes: value.reasonCodes } as RawValidationOutcomeV1);
+    normalized = normalizeOutcome({ status: value.status, reasonCodes: value.reasonCodes } as RawValidationOutcomeV1);
   } catch { return false; }
+  if (canonicalJsonString(normalized.reasonCodes) !== canonicalJsonString(value.reasonCodes)) return false;
   const { id, contentDigest, ...body } = value;
   return (
     id === contentDigest && value.authority === "RECORD_ONLY" &&
