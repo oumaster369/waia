@@ -19,8 +19,8 @@ state:
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: a5687c5fe4fe631fb05eec082271bfdcdd75b674
-  lastValidationAt: 2026-08-20T10:49:00Z
+  lastValidatedGitSha: 00372f67398245322e11ceb5b69ce6c3f07a04ce
+  lastValidationAt: 2026-08-20T10:57:00Z
   blockedReason: null
   nextAction: "Obtain a fresh independent exact-head adversarial review; publication remains withheld."
 provenance:
@@ -94,6 +94,8 @@ corrective commit `7ce7e072…` therefore adds, without widening runtime scope:
 
 - verified authority receipts bound to exact schema/purpose, organization, account,
   instrument and subject content digest; raw receipts/constructors cannot confer them;
+- scientific admission bound to the same organization and exact selected predictive-
+  package generation/content plus K/M, preventing stale package qualification reuse;
 - one organization/account/venue/SPOT/symbol/base/quote identity digest across
   Forecast, anchor, policy, size and CASH authorities;
 - distinct predictive-package generation, Forecast generation and Forecast content
