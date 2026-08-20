@@ -19,8 +19,8 @@ state:
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 7ce7e0764aefa1de50677a7e7d49ceca4cc01ebe
-  lastValidationAt: 2026-08-20T10:37:00Z
+  lastValidatedGitSha: a5687c5fe4fe631fb05eec082271bfdcdd75b674
+  lastValidationAt: 2026-08-20T10:49:00Z
   blockedReason: null
   nextAction: "Obtain a fresh independent exact-head adversarial review; publication remains withheld."
 provenance:
@@ -92,14 +92,17 @@ manifest does not apply.
 Independent adversarial review denied the earlier `e8f5105c…` candidate. The
 corrective commit `7ce7e072…` therefore adds, without widening runtime scope:
 
-- verified-authority flags that raw receipt digests and constructors cannot confer;
+- verified authority receipts bound to exact schema/purpose, organization, account,
+  instrument and subject content digest; raw receipts/constructors cannot confer them;
 - one organization/account/venue/SPOT/symbol/base/quote identity digest across
   Forecast, anchor, policy, size and CASH authorities;
-- Forecast K/M, normalization, issuance receipt, anchor epoch/content binding and a
-  locally recomputed canonical distribution-semantic digest;
+- distinct predictive-package generation, Forecast generation and Forecast content
+  identities; Forecast K/M, normalization, issuance receipt, anchor epoch/content
+  binding and a locally recomputed canonical distribution-semantic digest;
 - canonical scale-8 Forecast components as the only payoff input representation;
-- exact scale-8 payoff means and rational Type-7 quantiles, with actionability gated
-  on the exact `EV_lower > 0` result rather than floating-point arithmetic;
+- exact rational payoff means and rational Type-7 quantiles, with actionability gated
+  on exact `EV_lower > 0`; scale-8 receipt fields truncate toward zero and retain exact
+  numerator/denominator proofs instead of introducing intermediate HALF_UP semantics;
 - deterministic malformed-input rejection and adversarial regressions for stale
   samples, stale anchor, cross-account/instrument substitution, sub-scale ambiguity,
   exact-zero EV and per-component HALF_UP boundaries.
