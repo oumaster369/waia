@@ -100,8 +100,26 @@ describe("Raw Capture V1 contracts (DEE-657)", () => {
       validatorVersion: "v1",
       outcome: { status: "REJECTED", reasonCodes: ["PAYLOAD_SCHEMA_UNKNOWN"] },
     });
-    expect(first.captureReceipt.rawBytesDigest).not.toBe(first.storageBinding.contentDigest);
-    expect(first.captureReceipt.contentDigest).not.toBe(first.storageBinding.contentDigest);
+    const captureAgain = buildRawCaptureReceiptAtDurableBoundaryV1({
+      prepared: prepareRawCaptureV1(command()),
+      storageBinding: first.storageBinding,
+      capturedAt: new Date("2026-08-20T09:05:00.000Z"),
+    });
+    const validationAgain = buildRawValidationReceiptAtDurableBoundaryV1({
+      captureReceipt: first.captureReceipt,
+      validatorId: "generic-record-only",
+      validatorVersion: "v1",
+      outcome: { status: "REJECTED", reasonCodes: ["PAYLOAD_SCHEMA_UNKNOWN"] },
+      knownAt: new Date("2026-08-20T09:06:00.000Z"),
+    });
+    expect(captureAgain).toEqual(first.captureReceipt);
+    expect(validationAgain).toEqual(validation);
+    expect(new Set([
+      first.captureReceipt.rawBytesDigest,
+      first.storageBinding.contentDigest,
+      first.captureReceipt.contentDigest,
+      validation.contentDigest,
+    ]).size).toBe(4);
     expect(isRawStorageBindingV1(first.storageBinding)).toBe(true);
     expect(isRawCaptureReceiptV1(first.captureReceipt)).toBe(true);
     expect(isRawValidationReceiptV1(validation)).toBe(true);
