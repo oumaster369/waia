@@ -380,22 +380,30 @@ describe.skipIf(!enabled || !url)("postgres MI Raw Capture V1 (DEE-658)", () => 
     `;
     expect(rlsMetadata).toHaveLength(3);
     expect(rlsMetadata.every((row) => row.relrowsecurity)).toBe(true);
-    const policies = await sqlClient<{ tablename: string; roles: string[]; cmd: string }[]>`
-      SELECT tablename, roles, cmd FROM pg_policies
+    const policies = await sqlClient<{
+      tablename: string; roles: string[]; cmd: string; qual: string; with_check: string;
+    }[]>`
+      SELECT tablename, roles, cmd, qual, with_check FROM pg_policies
       WHERE schemaname = 'public' AND tablename = ANY(${tableNames})
       ORDER BY tablename
     `;
     expect(policies).toHaveLength(3);
     expect(policies.every((policy) =>
-      policy.cmd === "ALL" && policy.roles.includes("authenticated") && policy.roles.includes("anon")
+      policy.cmd === "ALL" && policy.qual === "false" && policy.with_check === "false" &&
+      policy.roles.includes("authenticated") && policy.roles.includes("anon")
     )).toBe(true);
 
+    const deniedInsertIds: string[] = [];
     await sqlClient.unsafe(
       `GRANT SELECT, INSERT, UPDATE, DELETE ON ${tableNames.join(", ")} TO authenticated, anon`,
     );
     try {
       for (const role of ["authenticated", "anon"] as const) {
         const roleSql = postgres(url!, { max: 1 });
+        const bindingRlsId = hex64(`${role}-rls-insert`);
+        const captureRlsId = hex64(`${role}-rls-capture-insert`);
+        const validationRlsId = hex64(`${role}-rls-validation-insert`);
+        deniedInsertIds.push(bindingRlsId, captureRlsId, validationRlsId);
         try {
           await roleSql.unsafe(`SET ROLE ${role}`);
           for (const [table] of targets) {
@@ -410,11 +418,63 @@ describe.skipIf(!enabled || !url)("postgres MI Raw Capture V1 (DEE-658)", () => 
               object_version, encryption_requirement, access_requirement, stored_at, binding_json,
               content_digest, schema_version
             ) VALUES (
-              '${hex64(`${role}-rls-insert`)}', '${orgA}', '${SOURCE_A}', '${hex64("rls-raw")}',
+              '${bindingRlsId}', '${orgA}', '${SOURCE_A}', '${hex64("rls-raw")}',
               'rls', 'denied', '1', 'PRIVATE_ENCRYPTED', 'SERVER_ONLY', now(), '{}',
-              '${hex64(`${role}-rls-insert`)}', 'raw-storage-binding-v1'
+              '${bindingRlsId}', 'raw-storage-binding-v1'
             )
           `)).rejects.toThrow(/row-level security/);
+          await expect(roleSql.unsafe(`
+            INSERT INTO trader_mi_raw_capture_receipt_v1 (
+              id, organization_id, source_id, raw_bytes_digest, payload_bytes, max_payload_bytes,
+              retention_seconds, policy_digest, secret_scan_receipt_digest, storage_binding_digest,
+              captured_at, retention_until, authority, receipt_json, content_digest, schema_version
+            ) VALUES (
+              '${captureRlsId}', '${orgA}', '${SOURCE_A}',
+              '${admission.rawBytesDigest}', ${admission.payloadBytes}, ${admission.policy.maxPayloadBytes},
+              ${admission.policy.retentionSeconds}, '${admission.policy.policyDigest}',
+              '${admission.secretScanReceipt.contentDigest}', '${storeBinding.id}',
+              date_trunc('milliseconds', transaction_timestamp()),
+              date_trunc('milliseconds', transaction_timestamp()) + interval '1 hour',
+              'RECORD_ONLY', jsonb_build_object(
+                'capturedAtUtc', date_trunc('milliseconds', transaction_timestamp()),
+                'retentionUntilUtc', date_trunc('milliseconds', transaction_timestamp()) + interval '1 hour',
+                'policy', jsonb_build_object(
+                  'maxPayloadBytes', ${admission.policy.maxPayloadBytes},
+                  'retentionSeconds', ${admission.policy.retentionSeconds},
+                  'policyDigest', '${admission.policy.policyDigest}'
+                ),
+                'rawBytesDigest', '${admission.rawBytesDigest}',
+                'payloadBytes', ${admission.payloadBytes},
+                'policyDigest', '${admission.policy.policyDigest}',
+                'secretScanReceiptDigest', '${admission.secretScanReceipt.contentDigest}',
+                'secretScanReceipt', jsonb_build_object(
+                  'contentDigest', '${admission.secretScanReceipt.contentDigest}',
+                  'rawBytesDigest', '${admission.rawBytesDigest}', 'status', 'PASS',
+                  'completedAtUtc', date_trunc('milliseconds', transaction_timestamp()) - interval '1 second'
+                ),
+                'storageBindingDigest', '${storeBinding.id}', 'authority', 'RECORD_ONLY'
+              )::text, '${captureRlsId}', 'raw-capture-receipt-v1'
+            )
+          `)).rejects.toThrow(/row-level security/);
+          await expect(roleSql.unsafe(`
+            INSERT INTO trader_mi_raw_validation_receipt_v1 (
+              id, organization_id, source_id, capture_receipt_digest, validator_id,
+              validator_version, status, reason_codes_json, known_at, authority,
+              observation_authority, measurement_authority, receipt_json, content_digest,
+              schema_version
+            ) VALUES (
+              '${validationRlsId}', '${orgA}', '${SOURCE_A}', '${receipt.id}',
+              'rls-denied', 'v1', 'VALID', '[]',
+              date_trunc('milliseconds', transaction_timestamp()), 'RECORD_ONLY', 'NONE', 'NONE',
+              jsonb_build_object(
+                'knownAtUtc', date_trunc('milliseconds', transaction_timestamp()),
+                'captureReceiptDigest', '${receipt.id}', 'validatorId', 'rls-denied',
+                'validatorVersion', 'v1', 'status', 'VALID', 'reasonCodes', '[]'::jsonb,
+                'authority', 'RECORD_ONLY', 'observationAuthority', 'NONE',
+                'measurementAuthority', 'NONE'
+              )::text, '${validationRlsId}', 'raw-validation-receipt-v1'
+            )
+          `)).rejects.toThrow(/row-level security|scoped durable capture/);
         } finally {
           try { await roleSql.unsafe("RESET ROLE"); } catch {}
           await roleSql.end({ timeout: 5 });
@@ -425,5 +485,13 @@ describe.skipIf(!enabled || !url)("postgres MI Raw Capture V1 (DEE-658)", () => 
         `REVOKE SELECT, INSERT, UPDATE, DELETE ON ${tableNames.join(", ")} FROM authenticated, anon`,
       );
     }
+    const deniedRows = await sqlClient<{ id: string }[]>`
+      SELECT id FROM trader_mi_raw_storage_binding_v1 WHERE id = ANY(${deniedInsertIds})
+      UNION ALL
+      SELECT id FROM trader_mi_raw_capture_receipt_v1 WHERE id = ANY(${deniedInsertIds})
+      UNION ALL
+      SELECT id FROM trader_mi_raw_validation_receipt_v1 WHERE id = ANY(${deniedInsertIds})
+    `;
+    expect(deniedRows).toEqual([]);
   });
 });
