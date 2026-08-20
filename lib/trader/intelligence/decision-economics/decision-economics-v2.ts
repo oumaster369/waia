@@ -27,7 +27,7 @@ export type DecisionPayoffInput = {
 /**
  * Horizon liquidation payoff from R_h (§1.25 path B interim).
  * Pi_base = N * (exp(R_h) - 1) - N * cost_rate
- * Pi_lower = max(0, Pi_base - slippage_buffer)
+ * Pi_lower = Pi_base - slippage_buffer (losses remain losses).
  */
 export function piBaseV1(input: DecisionPayoffInput): number {
   if (!(input.notionalUsdt > 0)) {
@@ -44,7 +44,7 @@ export function piBaseV1(input: DecisionPayoffInput): number {
 
 export function piLowerV1(input: DecisionPayoffInput): number {
   const base = piBaseV1(input);
-  return Math.max(0, base - input.slippageBufferUsdt);
+  return base - input.slippageBufferUsdt;
 }
 
 export type ReplicaPayoffMeans = {
