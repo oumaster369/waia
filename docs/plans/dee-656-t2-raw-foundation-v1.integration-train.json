@@ -30,7 +30,7 @@
         "evidence": "The only security architecture choices in this child were explicitly Human-ratified; no remaining child-owned Human gate or semantic authority is admitted."
       },
       "expectedAcceptanceEvidence": [
-        "Policy absence/invalidity, mutable or forged prepared bytes, unknown nested keys, and non-PASS secret scans fail closed.",
+        "Policy absence/invalidity and non-PASS secret scans fail closed.",
         "Raw, capture, and storage-binding identities are deterministic and distinct.",
         "Sensitive transport envelope fields are structurally absent.",
         "REJECTED evidence is retained with zero Observation/Measurement authority."
