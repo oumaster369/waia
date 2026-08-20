@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: integration-ready
   currentWorkPackage: null
   completedWorkPackages: [C1, C2, C3]
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 3968fc4e804a5803ef1a6e31e16b43f3c6dfc0de
+  lastValidationAt: 2026-08-20T10:24:00Z
   blockedReason: null
-  nextAction: "Run full PR-readiness validation and independent adversarial review."
+  nextAction: "Obtain independent exact-head adversarial review, then publish one PR if authorized."
 provenance:
   createdFrom: chat
   gapRegistry: null
