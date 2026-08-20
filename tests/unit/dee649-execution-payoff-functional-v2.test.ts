@@ -48,6 +48,8 @@ describe("DEE-649 C2 ExecutionPayoffFunctionalV2", () => {
     expect(result.basePayoff).toBeLessThan(0);
     expect(result.lowerPayoff).toBeLessThan(result.basePayoff);
     expect(result.lowerPayoffUsdt).not.toBe("0");
+    expect(result.basePayoffUsdt).toBe("-10.37");
+    expect(result.lowerPayoffUsdt).toBe("-10.51");
     expect(result.entrySlices[0]?.costs).toMatchObject({
       feeUsdt: expect.any(String),
       spreadUsdt: expect.any(String),
@@ -70,6 +72,14 @@ describe("DEE-649 C2 ExecutionPayoffFunctionalV2", () => {
     expect(result.residualInventoryQuantity).toBe("0");
   });
 
+  it("limits entry by sealed available CASH without borrowing or later top-up", () => {
+    const result = evaluate({ availableCashUsdt: "60" });
+
+    expect(result.entrySlices.map((slice) => slice.filledQuantity)).toEqual(["0.5", "0.1"]);
+    expect(result.filledEntryQuantity).toBe("0.6");
+    expect(result.unfilledEntryQuantityRetainedAsCash).toBe("0.4");
+  });
+
   it("floors capacity and weighted slice quantities to the sealed quantity step", () => {
     const policy = dee649TestPolicy({
       entrySliceWeights: ["0.33", "0.67"],
@@ -86,6 +96,15 @@ describe("DEE-649 C2 ExecutionPayoffFunctionalV2", () => {
       filledQuantity: "0.3",
     });
     expect(result.filledEntryQuantity).toBe("1");
+  });
+
+  it("does not fabricate fills below sealed quantity/notional minimums", () => {
+    const policy = dee649TestPolicy({ minimumNotionalUsdt: "60" });
+    const result = evaluate({ policy });
+
+    expect(result.filledEntryQuantity).toBe("0");
+    expect(result.unfilledEntryQuantityRetainedAsCash).toBe("1");
+    expect(result.basePayoffUsdt).toBe("0");
   });
 
   it("makes a size inadmissible when mandatory post-horizon slices leave inventory", () => {
@@ -115,6 +134,42 @@ describe("DEE-649 C2 ExecutionPayoffFunctionalV2", () => {
     expect(differentHorizonMark.basePayoff).toBe(base.basePayoff);
     expect(differentHorizonMark.horizonTriggerMarkPrice).toBe("80");
     expect(differentHorizonMark.contentDigestHex).not.toBe(base.contentDigestHex);
+  });
+
+  it("makes every selected entry/exit return and volume component economically material", () => {
+    const baseline = evaluate();
+    for (const entryPrices of [
+      [110, 100, 100],
+      [100, 110, 100],
+    ] as const) {
+      expect(evaluate({ sample13d: dee649Sample13d({ entryPrices }) }).basePayoff).not.toBe(
+        baseline.basePayoff,
+      );
+    }
+    for (const exitPrices of [
+      [90, 100, 100],
+      [100, 90, 100],
+    ] as const) {
+      expect(evaluate({ sample13d: dee649Sample13d({ exitPrices }) }).basePayoff).not.toBe(
+        baseline.basePayoff,
+      );
+    }
+    for (const entryVolumes of [
+      [2, 100, 100],
+      [100, 2, 100],
+    ] as const) {
+      expect(
+        evaluate({ sample13d: dee649Sample13d({ entryVolumes }) }).filledEntryQuantity,
+      ).not.toBe(baseline.filledEntryQuantity);
+    }
+    for (const exitVolumes of [
+      [2, 100, 100],
+      [100, 2, 100],
+    ] as const) {
+      expect(evaluate({ sample13d: dee649Sample13d({ exitVolumes }) }).status).toBe(
+        "ECONOMICALLY_INADMISSIBLE",
+      );
+    }
   });
 
   it("fails closed on missing authority, anchor mismatch, malformed sample or off-step size", () => {

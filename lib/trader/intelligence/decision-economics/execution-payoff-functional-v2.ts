@@ -456,6 +456,11 @@ export function executionPayoffFunctionalV2(
 
     const basePayoff = cash - availableCash;
     const lowerPayoff = basePayoff - totalConservativeStress;
+    const basePayoffNumber = Number(formatDecimal(basePayoff));
+    const lowerPayoffNumber = Number(formatDecimal(lowerPayoff));
+    if (!Number.isFinite(basePayoffNumber) || !Number.isFinite(lowerPayoffNumber)) {
+      throw new Error("FORECAST_SAMPLE_INVALID");
+    }
     const reasonCodes: Dee649ReasonCode[] = [];
     if (residualInventory > 0n) reasonCodes.push("POST_EXIT_RESIDUAL_INVENTORY");
 
@@ -473,8 +478,8 @@ export function executionPayoffFunctionalV2(
       exitSlices,
       basePayoffUsdt: formatDecimal(basePayoff),
       lowerPayoffUsdt: formatDecimal(lowerPayoff),
-      basePayoff: Number(formatDecimal(basePayoff)),
-      lowerPayoff: Number(formatDecimal(lowerPayoff)),
+      basePayoff: basePayoffNumber,
+      lowerPayoff: lowerPayoffNumber,
     });
   } catch {
     return invalidScenario({

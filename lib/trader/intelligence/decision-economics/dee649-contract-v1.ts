@@ -32,8 +32,10 @@ export type Dee649ReasonCode =
   | "EV_LOWER_NON_POSITIVE"
   | "EV_RANGE_INVALID"
   | "EXECUTABLE_POLICY_INVALID"
+  | "FORECAST_AUTHORITY_INVALID"
   | "FORECAST_CONTRACT_MISMATCH"
   | "FORECAST_SAMPLE_INVALID"
+  | "INSTRUMENT_AUTHORITY_MISMATCH"
   | "LIQUIDITY_CAPACITY_AUTHORITY_MISSING"
   | "NO_ENTRY_FILL"
   | "POLICY_DIGEST_MISMATCH"
@@ -74,6 +76,9 @@ export type DecisionEvaluationRegistryResolution =
 
 export type ForecastAnchorPriceAuthorityV1 = {
   schemaVersion: typeof DEE649_ANCHOR_AUTHORITY_SCHEMA_VERSION;
+  venue: string;
+  market: "SPOT";
+  symbol: string;
   forecastAnchorClosedBarEpochMs: number;
   qualifiedAnchorClosedBarEpochMs: number;
   forecastAnchorClosePrice: string;
@@ -93,6 +98,11 @@ export type PerSideEconomicCostComponentsV1 = {
 export type Dee649ExecutablePolicyInstanceV1 = {
   schemaVersion: typeof DEE649_EXECUTABLE_POLICY_SCHEMA_VERSION;
   policyInstanceId: string;
+  venue: string;
+  market: "SPOT";
+  symbol: string;
+  baseAsset: string;
+  quoteAsset: "USDT";
   interimPositionPolicyId: typeof DEE649_INTERIM_POSITION_POLICY_ID;
   sliceAllocationPolicy: typeof DEE649_SLICE_ALLOCATION_POLICY;
   roundingPolicy: typeof DEE649_ROUNDING_POLICY;
@@ -124,6 +134,8 @@ export type Dee649ExecutablePolicyDraftV1 = Omit<
 export type EconomicAdmissibleSizeSetV1 = {
   schemaVersion: typeof DEE649_SIZE_SET_SCHEMA_VERSION;
   sizeSetId: string;
+  symbol: string;
+  unit: "BASE_ASSET_QUANTITY";
   exactQuantities: readonly [string];
   authorityReceiptDigestHex: string;
   contentDigestHex: string;
@@ -242,6 +254,9 @@ export function validateForecastAnchorPriceAuthorityV1(
   if (input.schemaVersion !== DEE649_ANCHOR_AUTHORITY_SCHEMA_VERSION) {
     errors.push("schemaVersion:MISMATCH");
   }
+  requireNonEmpty(input.venue, "venue", errors);
+  if (input.market !== "SPOT") errors.push("market:MISMATCH");
+  requireNonEmpty(input.symbol, "symbol", errors);
   if (
     !Number.isSafeInteger(input.forecastAnchorClosedBarEpochMs) ||
     input.forecastAnchorClosedBarEpochMs <= 0
@@ -309,6 +324,11 @@ export function validateDee649ExecutablePolicyInstanceV1(
     errors.push("schemaVersion:MISMATCH");
   }
   requireNonEmpty(input.policyInstanceId, "policyInstanceId", errors);
+  requireNonEmpty(input.venue, "venue", errors);
+  if (input.market !== "SPOT") errors.push("market:MISMATCH");
+  requireNonEmpty(input.symbol, "symbol", errors);
+  requireNonEmpty(input.baseAsset, "baseAsset", errors);
+  if (input.quoteAsset !== "USDT") errors.push("quoteAsset:MISMATCH");
   if (input.interimPositionPolicyId !== DEE649_INTERIM_POSITION_POLICY_ID) {
     errors.push("interimPositionPolicyId:MISMATCH");
   }
@@ -385,6 +405,8 @@ export function createSingletonEconomicSizeSetV1(
   const payload: Omit<EconomicAdmissibleSizeSetV1, "contentDigestHex"> = {
     schemaVersion: DEE649_SIZE_SET_SCHEMA_VERSION,
     sizeSetId: input.sizeSetId,
+    symbol: input.symbol,
+    unit: input.unit,
     exactQuantities: [input.exactQuantity],
     authorityReceiptDigestHex: input.authorityReceiptDigestHex,
   };
@@ -403,6 +425,8 @@ export function validateEconomicAdmissibleSizeSetV1(
   const errors: string[] = [];
   if (input.schemaVersion !== DEE649_SIZE_SET_SCHEMA_VERSION) errors.push("schemaVersion:MISMATCH");
   requireNonEmpty(input.sizeSetId, "sizeSetId", errors);
+  requireNonEmpty(input.symbol, "symbol", errors);
+  if (input.unit !== "BASE_ASSET_QUANTITY") errors.push("unit:MISMATCH");
   if (input.exactQuantities.length !== 1) errors.push("exactQuantities:NOT_SINGLETON");
   const quantity = input.exactQuantities[0];
   if (quantity === undefined) {

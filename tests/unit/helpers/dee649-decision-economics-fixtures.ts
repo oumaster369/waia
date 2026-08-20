@@ -18,6 +18,9 @@ export const DEE649_TEST_DIGEST_D = "d".repeat(64);
 export function dee649TestAnchor(closePrice = "100"): ForecastAnchorPriceAuthorityV1 {
   return createForecastAnchorPriceAuthorityV1({
     schemaVersion: DEE649_ANCHOR_AUTHORITY_SCHEMA_VERSION,
+    venue: "HTX",
+    market: "SPOT",
+    symbol: "BTCUSDT",
     forecastAnchorClosedBarEpochMs: 1_725_000_000_000,
     qualifiedAnchorClosedBarEpochMs: 1_725_000_000_000,
     forecastAnchorClosePrice: closePrice,
@@ -30,6 +33,11 @@ export function dee649TestPolicy(overrides: Partial<Dee649ExecutablePolicyDraftV
   const draft: Dee649ExecutablePolicyDraftV1 = {
     schemaVersion: DEE649_EXECUTABLE_POLICY_SCHEMA_VERSION,
     policyInstanceId: "development-candidate/test-only",
+    venue: "HTX",
+    market: "SPOT",
+    symbol: "BTCUSDT",
+    baseAsset: "BTC",
+    quoteAsset: "USDT",
     interimPositionPolicyId: DEE649_INTERIM_POSITION_POLICY_ID,
     sliceAllocationPolicy: DEE649_SLICE_ALLOCATION_POLICY,
     roundingPolicy: DEE649_ROUNDING_POLICY,

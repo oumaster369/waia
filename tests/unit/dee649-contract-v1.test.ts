@@ -30,6 +30,11 @@ function policyDraft() {
   return {
     schemaVersion: DEE649_EXECUTABLE_POLICY_SCHEMA_VERSION,
     policyInstanceId: "development-candidate/test-only",
+    venue: "HTX",
+    market: "SPOT" as const,
+    symbol: "BTCUSDT",
+    baseAsset: "BTC",
+    quoteAsset: "USDT" as const,
     interimPositionPolicyId: DEE649_INTERIM_POSITION_POLICY_ID,
     sliceAllocationPolicy: DEE649_SLICE_ALLOCATION_POLICY,
     roundingPolicy: DEE649_ROUNDING_POLICY,
@@ -89,6 +94,9 @@ describe("DEE-649 C1 contract and closed registry", () => {
   it("seals an exact anchor authority and rejects a Forecast/qualified-close mismatch", () => {
     const authority = createForecastAnchorPriceAuthorityV1({
       schemaVersion: DEE649_ANCHOR_AUTHORITY_SCHEMA_VERSION,
+      venue: "HTX",
+      market: "SPOT",
+      symbol: "BTCUSDT",
       forecastAnchorClosedBarEpochMs: 1_725_000_000_000,
       qualifiedAnchorClosedBarEpochMs: 1_725_000_000_000,
       forecastAnchorClosePrice: "50000",
@@ -146,6 +154,8 @@ describe("DEE-649 C1 contract and closed registry", () => {
   it("seals exactly one Human-authorized quantity and rejects invented members", () => {
     const singleton = createSingletonEconomicSizeSetV1({
       sizeSetId: "human-exact-size/test-only",
+      symbol: "BTCUSDT",
+      unit: "BASE_ASSET_QUANTITY",
       exactQuantity: "0.2",
       authorityReceiptDigestHex: DIGEST_A,
     });

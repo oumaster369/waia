@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C3
-  completedWorkPackages: [C1, C2]
-  remainingWorkPackages: [C3]
+  currentWorkPackage: null
+  completedWorkPackages: [C1, C2, C3]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement C3 evaluation receipts and complete proof suite."
+  nextAction: "Run full PR-readiness validation and independent adversarial review."
 provenance:
   createdFrom: chat
   gapRegistry: null
