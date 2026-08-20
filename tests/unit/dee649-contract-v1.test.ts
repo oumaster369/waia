@@ -82,7 +82,7 @@ describe("DEE-649 C1 contract and closed registry", () => {
     const mismatch = resolveDecisionEvaluationContractV1({
       ...identity,
       modelTransformVersion: "unregistered-family/v1",
-    } as typeof identity);
+    } as unknown as typeof identity);
     expect(mismatch).toEqual({ ok: false, reasonCode: "FORECAST_CONTRACT_MISMATCH" });
   });
 
