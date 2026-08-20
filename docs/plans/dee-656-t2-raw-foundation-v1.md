@@ -24,16 +24,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
-  currentWorkPackage: null
-  completedWorkPackages: [WP0, WP1, WP2, WP3]
-  remainingWorkPackages: []
+  status: in-progress
+  currentWorkPackage: WP3
+  completedWorkPackages: [WP0, WP1, WP2]
+  remainingWorkPackages: [WP3]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: 0a0428ec2e434afcd1d2b4e05a0f19153f981712
   lastValidationAt: "2026-08-20"
   blockedReason: null
-  nextAction: "Publish one PR to main, await authoritative CI and final independent/Human security review, then stop before merge."
+  nextAction: "Obtain an independent exact-head adversarial review, then receive explicit push and PR-create authorization."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -121,11 +121,12 @@ strategy/account promotion, or Execution Server work.
 Rollback is one revert PR plus a separate Human/operator-managed database rollback decision. This
 batch never applies SQL or storage changes to production.
 
-## Local integration-ready evidence
+## Local pre-PR evidence
 
 - clean Postgres migration apply through `0153`, Drizzle smoke, and DEE-658 integration tests 4/4;
 - focused raw-capture plus migration-identity unit tests 13/13;
 - `pnpm lint` (0 errors; repository baseline warnings only), `pnpm typecheck`, `pnpm build`, and
   `pnpm validate:canon` pass;
 - frozen Integration Train provenance validation passes against base `efe570f` and exact child
-  commits. Authoritative full unit/Postgres CI and final independent/Human review remain PR gates.
+  commits. Independent exact-head review, PR governance preflight, authoritative CI, and Human
+  merge remain open gates; no `Independent review: pass` claim has been made.
