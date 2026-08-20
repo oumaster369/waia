@@ -4,29 +4,34 @@ integrationTitle: "AI-TRADER — Seal Execution Payoff Contract Core + Determini
 branch: dee-659-execution-payoff-contract-core
 riskTier: T2
 prPolicy: one-integration-pr
-executionSurfaces: [local]
-requiredValidation: [lint, typecheck, unit, build]
-approvalGates: [human-ratified-executable-policy, independent-exact-head-review, human-merge]
+executionSurfaces: [local, github-actions, linear, github-pr]
+requiredValidation: [lint, typecheck, unit, build, canon, pr-governance, authoritative-pr-ci]
+approvalGates: [human-ratified-executable-policy, independent-exact-head-review, dee-653-exact-head-admission]
 includedIssues: []
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: PR-A
-  completedWorkPackages: []
-  remainingWorkPackages: [PR-A]
+  status: integration-ready
+  currentWorkPackage: null
+  completedWorkPackages: [PR-A]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: fa3fc5cd66fe32bb947b2e694ceb37aae554d204
+  lastValidationAt: "2026-08-20"
   blockedReason: null
-  nextAction: "Complete local validation and independent exact-head review; stop before push or PR."
+  nextAction: "Publish one PR; require exact-head CI and fresh DEE-653 admission before bounded squash merge."
 provenance:
   createdFrom: chat
   gapRegistry: null
   supersedes: null
+humanApproval:
+  authorizedAt: "2026-08-20"
+  authorizedBaseMain: 5da547f82c51a4f2448f8533b8834fa51cc864e6
+  authority: "Human directive authorizing DEE-659 publication and bounded autonomous squash merge serialized after DEE-656"
+  condition: "Exact-head DEE-653 admission remains fail-closed and required immediately before merge"
 ---
 
 ## Human-ratified boundary
@@ -50,6 +55,9 @@ reviewable prerequisite from the protected DEE-649 evidence branch:
 The protected evidence branch `dee-649-repair-decision-economics` at
 `15abc5e23b4db66d65b6cffa8ba13eaede82536f` is read-only evidence. This plan starts
 from authoritative `origin/main@efe570fda2eb1d6bc3fc4ce06837e50944b53c23`.
+Publication continuation on 2026-08-20 mechanically rebased the three patch-equivalent
+DEE-659 commits onto `origin/main@5da547f82c51a4f2448f8533b8834fa51cc864e6`
+after merged PR #471; the original baseline remains implementation provenance.
 
 ## PR-A contract
 
