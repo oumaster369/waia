@@ -323,12 +323,7 @@ export function executionPayoffFunctionalV2(
   try {
     requestedQuantity = parseDecimal(input.exactQuantity);
     availableCash = parseDecimal(input.availableCashUsdt);
-    if (
-      requestedQuantity <= 0n ||
-      availableCash < 0n ||
-      formatDecimal(requestedQuantity) !== input.exactQuantity ||
-      formatDecimal(availableCash) !== input.availableCashUsdt
-    ) {
+    if (requestedQuantity <= 0n || availableCash < 0n) {
       throw new Error("invalid size/cash");
     }
   } catch {

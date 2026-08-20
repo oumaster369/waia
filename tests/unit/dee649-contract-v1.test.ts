@@ -134,6 +134,17 @@ describe("DEE-649 C1 contract and closed registry", () => {
     ).toThrow(/costAuthorityReceiptDigestHex/);
   });
 
+  it("accepts both fixed-eight and trimmed scale-8 policy strings without changing math", () => {
+    expect(() =>
+      createDee649ExecutablePolicyInstanceV1({
+        ...policyDraft(),
+        participationCapFraction: "0.10000000",
+        quantityStep: "0.00010000",
+        entrySliceWeights: ["0.25000000", "0.25000000", "0.50000000"],
+      }),
+    ).not.toThrow();
+  });
+
   it("requires contiguous 1..3 slice prefixes with explicit weights summing to one", () => {
     expect(() =>
       createDee649ExecutablePolicyInstanceV1({

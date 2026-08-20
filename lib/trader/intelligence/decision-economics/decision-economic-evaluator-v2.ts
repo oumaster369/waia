@@ -1,5 +1,5 @@
 import { quantizeScale8HalfUp } from "@/lib/trader/intelligence/forecast-v2/quantize-scale8-half-up-v1";
-import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
+import { parseDecimal } from "@/lib/trader/risk/numeric";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
 import {
@@ -224,11 +224,7 @@ function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649R
   }
   try {
     const availableCash = parseDecimal(input.availableCashUsdt);
-    if (
-      availableCash < 0n ||
-      formatDecimal(availableCash) !== input.availableCashUsdt ||
-      !isDigestHex(input.cashAuthorityReceiptDigestHex)
-    ) {
+    if (availableCash < 0n || !isDigestHex(input.cashAuthorityReceiptDigestHex)) {
       reasons.push("CASH_AUTHORITY_INVALID");
     }
   } catch {

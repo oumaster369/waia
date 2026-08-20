@@ -174,7 +174,6 @@ function requireScale8(
   try {
     const scaled = parseDecimal(value);
     if (!predicate(scaled)) errors.push(`${field}:OUT_OF_RANGE`);
-    if (formatDecimal(scaled) !== value) errors.push(`${field}:NON_CANONICAL`);
   } catch {
     errors.push(`${field}:INVALID_SCALE8`);
   }
@@ -206,9 +205,6 @@ function validateSliceDefinition(input: {
     try {
       const scaled = parseDecimal(weight);
       if (scaled <= 0n) input.errors.push(`${input.field}.weights[${index}]:NON_POSITIVE`);
-      if (formatDecimal(scaled) !== weight) {
-        input.errors.push(`${input.field}.weights[${index}]:NON_CANONICAL`);
-      }
       sum += scaled;
     } catch {
       input.errors.push(`${input.field}.weights[${index}]:INVALID_SCALE8`);
