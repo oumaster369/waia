@@ -33,3 +33,8 @@ export type {
 export * from "./dee659-execution-payoff-authorities-v1";
 export * from "./dee659-execution-payoff-contract-v1";
 export * from "./execution-payoff-functional-v2";
+export * from "./dee660-decision-evaluation-contract-v1";
+export * from "./dee660-forecast-admission-v1";
+export * from "./dee660-replica-aggregation-v1";
+export * from "./dee660-why-not-cash-receipt-v2";
+export * from "./decision-economic-evaluator-v2";
