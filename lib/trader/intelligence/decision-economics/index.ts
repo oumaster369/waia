@@ -41,6 +41,7 @@ export type {
   CashEconomicAuthorityV1,
   ForecastEconomicAuthorityV1,
   ExactScaledRationalReceiptV1,
+  ScientificAdmissionVerificationV1,
   VerifiedDecisionEconomicAuthorityV1,
   WhyNotCashReceiptV2,
 } from "./decision-economic-evaluator-v2";

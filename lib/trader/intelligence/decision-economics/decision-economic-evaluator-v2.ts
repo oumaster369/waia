@@ -10,6 +10,7 @@ import { OUTCOME_VERSION } from "@/lib/trader/intelligence/forecast-v2/source-an
 import { computeForecastContentDigest } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
 import { parseDecimal } from "@/lib/trader/risk/numeric";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { SCIENTIFIC_ADMISSION_RECEIPT_VERSION } from "@/lib/trader/research/execopp-qualification/km-convergence-gate-v1";
 
 import {
   assertLegacyStrategyFieldsNonAuthoritative,
@@ -89,6 +90,18 @@ export type DecisionEconomicAuthorityVerificationV1 = {
   cash: VerifiedDecisionEconomicAuthorityV1;
 };
 
+export type ScientificAdmissionVerificationV1 = {
+  schemaVersion: typeof SCIENTIFIC_ADMISSION_RECEIPT_VERSION;
+  verified: boolean;
+  organizationId: string;
+  selectedPackageGenerationIdentityDigestHex: string;
+  selectedPackageContentDigestHex: string;
+  selectedKConfigDec: number;
+  selectedMConfigDec: number;
+  evidenceSemanticDigestHex: string;
+  receiptContentDigestHex: string;
+};
+
 export type WhyNotCashReceiptV2 = {
   schemaVersion: typeof WHY_NOT_CASH_RECEIPT_V2_SCHEMA_VERSION;
   decisionEconomicsContractVersion: typeof DEE649_DECISION_ECONOMICS_CONTRACT_VERSION;
@@ -150,8 +163,7 @@ export type WhyNotCashReceiptV2 = {
   evUpperExactScaledRational: ExactScaledRationalReceiptV1 | null;
   scenarioContentDigests: readonly (readonly string[])[];
   scenarioResidualInventoryCount: number;
-  scientificAdmissionVerified: boolean;
-  scientificAdmissionReceiptDigestHex: string | null;
+  scientificAdmission: ScientificAdmissionVerificationV1;
   authorityVerification: DecisionEconomicAuthorityVerificationV1;
   actionCandidate: "ENTER_LONG";
   verdict: "DECISION_ACTIONABLE" | "DECISION_NON_ACTIONABLE";
@@ -172,8 +184,7 @@ export type DecisionEconomicEvaluationInputV2 = {
   economicSizeSet: EconomicAdmissibleSizeSetV1;
   cashAuthority: CashEconomicAuthorityV1;
   authorityVerification: DecisionEconomicAuthorityVerificationV1;
-  scientificAdmissionVerified: boolean;
-  scientificAdmissionReceiptDigestHex?: string | null;
+  scientificAdmission: ScientificAdmissionVerificationV1;
   legacyStrategyDiagnostics?: {
     legacyDiagnosticConfidence?: number;
     legacyDiagnosticExpectedEdge?: number;
@@ -679,9 +690,19 @@ function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649R
       reasons.push("FORECAST_AUTHORITY_INVALID");
     }
   }
+  const admission = input.scientificAdmission;
   if (
-    !input.scientificAdmissionVerified ||
-    !isDigestHex(input.scientificAdmissionReceiptDigestHex)
+    admission.schemaVersion !== SCIENTIFIC_ADMISSION_RECEIPT_VERSION ||
+    !admission.verified ||
+    admission.organizationId !== input.forecast.organizationId ||
+    admission.selectedPackageGenerationIdentityDigestHex !==
+      input.forecast.predictivePackageGenerationIdentityDigestHex ||
+    admission.selectedPackageContentDigestHex !==
+      input.forecast.predictivePackageContentDigestHex ||
+    admission.selectedKConfigDec !== input.forecast.k ||
+    admission.selectedMConfigDec !== input.forecast.m ||
+    !isDigestHex(admission.evidenceSemanticDigestHex) ||
+    !isDigestHex(admission.receiptContentDigestHex)
   ) {
     reasons.push("SCIENTIFIC_ADMISSION_RECEIPT_REQUIRED");
   }
@@ -750,8 +771,7 @@ function emptyReceipt(input: {
     evUpperExactScaledRational: null,
     scenarioContentDigests: [],
     scenarioResidualInventoryCount: 0,
-    scientificAdmissionVerified: source.scientificAdmissionVerified,
-    scientificAdmissionReceiptDigestHex: source.scientificAdmissionReceiptDigestHex ?? null,
+    scientificAdmission: source.scientificAdmission,
     authorityVerification: source.authorityVerification,
     actionCandidate: "ENTER_LONG",
     verdict: "DECISION_NON_ACTIONABLE",
@@ -878,7 +898,7 @@ function evaluateDecisionEconomicsV2Internal(
     lowerReplicaPayoffsScale8: scenarioResults.map((replica) =>
       replica.map((scenario) => scenario.lowerPayoffUsdt),
     ),
-    scientificAdmissionVerified: input.scientificAdmissionVerified,
+    scientificAdmissionVerified: input.scientificAdmission.verified,
   });
   const evRange = exactRange.evRange;
   const rangeReasons = evRange.reasonCodes.filter(
@@ -951,8 +971,7 @@ function evaluateDecisionEconomicsV2Internal(
       replica.map((scenario) => scenario.contentDigestHex),
     ),
     scenarioResidualInventoryCount: residualCount,
-    scientificAdmissionVerified: input.scientificAdmissionVerified,
-    scientificAdmissionReceiptDigestHex: input.scientificAdmissionReceiptDigestHex ?? null,
+    scientificAdmission: input.scientificAdmission,
     authorityVerification: input.authorityVerification,
     actionCandidate: "ENTER_LONG",
     verdict: decisionActionable ? "DECISION_ACTIONABLE" : "DECISION_NON_ACTIONABLE",
@@ -1060,8 +1079,17 @@ function malformedEvaluationResult(): DecisionEconomicEvaluationResultV2 {
     evUpperExactScaledRational: null,
     scenarioContentDigests: [],
     scenarioResidualInventoryCount: 0,
-    scientificAdmissionVerified: false,
-    scientificAdmissionReceiptDigestHex: null,
+    scientificAdmission: {
+      schemaVersion: SCIENTIFIC_ADMISSION_RECEIPT_VERSION,
+      verified: false,
+      organizationId: "",
+      selectedPackageGenerationIdentityDigestHex: zeroDigest,
+      selectedPackageContentDigestHex: zeroDigest,
+      selectedKConfigDec: 0,
+      selectedMConfigDec: 0,
+      evidenceSemanticDigestHex: zeroDigest,
+      receiptContentDigestHex: zeroDigest,
+    },
     authorityVerification,
     actionCandidate: "ENTER_LONG",
     verdict: "DECISION_NON_ACTIONABLE",

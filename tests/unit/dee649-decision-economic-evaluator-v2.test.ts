@@ -89,8 +89,18 @@ function evaluationInput(
       economicSize: verified("ECONOMIC_SIZE_AUTHORIZATION", economicSizeSet.contentDigestHex),
       cash: verified("CASH_SNAPSHOT_AUTHORIZATION", cashAuthority.contentDigestHex),
     },
-    scientificAdmissionVerified: true,
-    scientificAdmissionReceiptDigestHex: DEE649_TEST_DIGEST_B,
+    scientificAdmission: {
+      schemaVersion: "scientific-admission-receipt/v1",
+      verified: true,
+      organizationId: forecast.organizationId,
+      selectedPackageGenerationIdentityDigestHex:
+        forecast.predictivePackageGenerationIdentityDigestHex,
+      selectedPackageContentDigestHex: forecast.predictivePackageContentDigestHex,
+      selectedKConfigDec: forecast.k,
+      selectedMConfigDec: forecast.m,
+      evidenceSemanticDigestHex: DEE649_TEST_DIGEST_D,
+      receiptContentDigestHex: DEE649_TEST_DIGEST_B,
+    },
     ...overrides,
   };
 }
@@ -111,6 +121,15 @@ function withVerifiedForecast(
         instrumentIdentityDigestHex: forecast.instrumentIdentityDigestHex,
         subjectContentDigestHex: forecast.economicAuthorityContentDigestHex,
       },
+    },
+    scientificAdmission: {
+      ...input.scientificAdmission,
+      organizationId: forecast.organizationId,
+      selectedPackageGenerationIdentityDigestHex:
+        forecast.predictivePackageGenerationIdentityDigestHex,
+      selectedPackageContentDigestHex: forecast.predictivePackageContentDigestHex,
+      selectedKConfigDec: forecast.k,
+      selectedMConfigDec: forecast.m,
     },
   };
 }
@@ -209,10 +228,30 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
 
     const unverified = evaluateDecisionEconomicsV2({
       ...base,
-      scientificAdmissionVerified: false,
-      scientificAdmissionReceiptDigestHex: null,
+      scientificAdmission: { ...base.scientificAdmission, verified: false },
     });
     expect(unverified.receipt.reasonCodes).toContain("SCIENTIFIC_ADMISSION_RECEIPT_REQUIRED");
+
+    for (const scientificAdmission of [
+      {
+        ...base.scientificAdmission,
+        organizationId: "00000000-0000-4000-8000-000000000099",
+      },
+      {
+        ...base.scientificAdmission,
+        selectedPackageGenerationIdentityDigestHex: DEE649_TEST_DIGEST_A,
+      },
+      {
+        ...base.scientificAdmission,
+        selectedPackageContentDigestHex: DEE649_TEST_DIGEST_B,
+      },
+      { ...base.scientificAdmission, selectedKConfigDec: base.forecast.k + 1 },
+      { ...base.scientificAdmission, selectedMConfigDec: base.forecast.m + 1 },
+    ]) {
+      const stale = evaluateDecisionEconomicsV2({ ...base, scientificAdmission });
+      expect(stale.decisionActionable).toBe(false);
+      expect(stale.receipt.reasonCodes).toContain("SCIENTIFIC_ADMISSION_RECEIPT_REQUIRED");
+    }
 
     for (const [field, reason] of [
       ["forecast", "FORECAST_AUTHORITY_NOT_VERIFIED"],
