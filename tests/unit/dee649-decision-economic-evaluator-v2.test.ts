@@ -88,11 +88,12 @@ function evaluationInput(
 
 describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
   it("qualifies only the exact singleton when conservative EV beats CASH", () => {
-    const result = evaluateDecisionEconomicsV2(evaluationInput());
+    const input = evaluationInput();
+    const result = evaluateDecisionEconomicsV2(input);
 
     expect(result.decisionActionable).toBe(true);
     expect(result.action).toBe("ENTER_LONG");
-    expect(result.economicAdmissibleSizeSet).toEqual(["1"]);
+    expect(result.economicAdmissibleSizeSet).toBe(input.economicSizeSet);
     expect(result.evRange?.evLower).toBeGreaterThan(0);
     expect(result.receipt).toMatchObject({
       cashBaselineUsdt: "0",
@@ -124,7 +125,7 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
 
     expect(result.decisionActionable).toBe(false);
     expect(result.action).toBe("CASH");
-    expect(result.economicAdmissibleSizeSet).toEqual([]);
+    expect(result.economicAdmissibleSizeSet).toBeNull();
     expect(result.evRange?.evBase).toBeLessThan(0);
     expect(result.evRange?.evLower).toBeLessThan(result.evRange!.evBase);
     expect(result.receipt.reasonCodes).toContain("EV_LOWER_NON_POSITIVE");
@@ -142,7 +143,7 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
     });
 
     expect(result.evRange).toBeNull();
-    expect(result.economicAdmissibleSizeSet).toEqual([]);
+    expect(result.economicAdmissibleSizeSet).toBeNull();
     expect(result.receipt.reasonCodes).toContain("POST_EXIT_RESIDUAL_INVENTORY");
     expect(result.receipt.scenarioResidualInventoryCount).toBe(1);
   });
@@ -199,7 +200,7 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
     const result = evaluateDecisionEconomicsV2({ ...base, economicSizeSet: mismatchedSizeSet });
 
     expect(result.receipt.reasonCodes).toContain("INSTRUMENT_AUTHORITY_MISMATCH");
-    expect(result.economicAdmissibleSizeSet).toEqual([]);
+    expect(result.economicAdmissibleSizeSet).toBeNull();
   });
 
   it("is deterministic, causally sensitive, and ignores legacy Strategy diagnostics", () => {

@@ -111,7 +111,7 @@ export type DecisionEconomicEvaluationInputV2 = {
 export type DecisionEconomicEvaluationResultV2 = {
   decisionActionable: boolean;
   action: "ENTER_LONG" | "CASH";
-  economicAdmissibleSizeSet: readonly string[];
+  economicAdmissibleSizeSet: EconomicAdmissibleSizeSetV1 | null;
   evRange: DecisionEvRange | null;
   scenarioResults: readonly (readonly ExecutionPayoffScenarioV2[])[];
   receipt: WhyNotCashReceiptV2;
@@ -313,7 +313,7 @@ export function evaluateDecisionEconomicsV2(
     return {
       decisionActionable: false,
       action: "CASH",
-      economicAdmissibleSizeSet: [],
+      economicAdmissibleSizeSet: null,
       evRange: null,
       scenarioResults: [],
       receipt,
@@ -334,7 +334,7 @@ export function evaluateDecisionEconomicsV2(
     return {
       decisionActionable: false,
       action: "CASH",
-      economicAdmissibleSizeSet: [],
+      economicAdmissibleSizeSet: null,
       evRange: null,
       scenarioResults: [],
       receipt,
@@ -354,7 +354,7 @@ export function evaluateDecisionEconomicsV2(
     return {
       decisionActionable: false,
       action: "CASH",
-      economicAdmissibleSizeSet: [],
+      economicAdmissibleSizeSet: null,
       evRange: null,
       scenarioResults: [],
       receipt,
@@ -398,7 +398,7 @@ export function evaluateDecisionEconomicsV2(
     return {
       decisionActionable: false,
       action: "CASH",
-      economicAdmissibleSizeSet: [],
+      economicAdmissibleSizeSet: null,
       evRange: null,
       scenarioResults,
       receipt,
@@ -479,7 +479,7 @@ export function evaluateDecisionEconomicsV2(
   return {
     decisionActionable,
     action: decisionActionable ? "ENTER_LONG" : "CASH",
-    economicAdmissibleSizeSet: admissibleSizes,
+    economicAdmissibleSizeSet: decisionActionable ? input.economicSizeSet : null,
     evRange,
     scenarioResults,
     receipt,
