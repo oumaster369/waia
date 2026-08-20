@@ -27,11 +27,14 @@ export type DecisionPayoffInput = {
 /**
  * Horizon liquidation payoff from R_h (§1.25 path B interim).
  * Pi_base = N * (exp(R_h) - 1) - N * cost_rate
- * Pi_lower = max(0, Pi_base - slippage_buffer)
+ * Pi_lower = Pi_base - slippage_buffer (losses remain losses).
  */
 export function piBaseV1(input: DecisionPayoffInput): number {
-  if (!(input.notionalUsdt > 0)) {
+  if (!Number.isFinite(input.notionalUsdt) || !(input.notionalUsdt > 0)) {
     throw new Error("[decision-economics] notional must be positive");
+  }
+  if (!Number.isFinite(input.costRate) || input.costRate < 0) {
+    throw new Error("[decision-economics] cost rate must be finite and non-negative");
   }
   const rH = input.sample[EXEC_OPP_R_H_INDEX];
   if (rH === undefined || !Number.isFinite(rH)) {
@@ -39,12 +42,23 @@ export function piBaseV1(input: DecisionPayoffInput): number {
   }
   const gross = input.notionalUsdt * (Math.exp(rH) - 1);
   const costs = input.notionalUsdt * input.costRate;
-  return gross - costs;
+  const payoff = gross - costs;
+  if (!Number.isFinite(payoff)) {
+    throw new Error("[decision-economics] payoff must be finite");
+  }
+  return payoff;
 }
 
 export function piLowerV1(input: DecisionPayoffInput): number {
+  if (!Number.isFinite(input.slippageBufferUsdt) || input.slippageBufferUsdt < 0) {
+    throw new Error("[decision-economics] slippage buffer must be finite and non-negative");
+  }
   const base = piBaseV1(input);
-  return Math.max(0, base - input.slippageBufferUsdt);
+  const payoff = base - input.slippageBufferUsdt;
+  if (!Number.isFinite(payoff)) {
+    throw new Error("[decision-economics] lower payoff must be finite");
+  }
+  return payoff;
 }
 
 export type ReplicaPayoffMeans = {

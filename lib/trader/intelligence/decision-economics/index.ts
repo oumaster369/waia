@@ -30,3 +30,6 @@ export type {
   DecisionEconomicsV2Record,
   PersistDecisionEconomicsV2Input,
 } from "./decision-economics-v2-service";
+export * from "./dee659-execution-payoff-authorities-v1";
+export * from "./dee659-execution-payoff-contract-v1";
+export * from "./execution-payoff-functional-v2";
