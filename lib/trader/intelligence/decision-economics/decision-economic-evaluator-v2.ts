@@ -7,6 +7,7 @@ import {
   TARGET_ROLE_EXECUTION,
 } from "@/lib/trader/intelligence/forecast-v2/constants";
 import { OUTCOME_VERSION } from "@/lib/trader/intelligence/forecast-v2/source-anchor-v1";
+import { computeForecastContentDigest } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
 import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
@@ -45,6 +46,8 @@ export type ForecastEconomicAuthorityV1 = Dee649AuthorityBindingV1 & {
   anchorAuthorityContentDigestHex: string;
   predictivePackageContentDigestHex: string;
   predictivePackageGenerationIdentityDigestHex: string;
+  forecastGenerationIdentityDigestHex: string;
+  forecastContentDigestHex: string;
   normalizationVersionDigestHex: string;
   k: number;
   m: number;
@@ -86,6 +89,8 @@ export type WhyNotCashReceiptV2 = {
   forecastIdentity: ExecOpp13dForecastIdentityV1;
   predictivePackageContentDigestHex: string;
   predictivePackageGenerationIdentityDigestHex: string;
+  forecastGenerationIdentityDigestHex: string;
+  forecastContentDigestHex: string;
   distributionSemanticDigestHex: string;
   normalizationVersionDigestHex: string;
   k: number;
@@ -375,6 +380,8 @@ function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649R
     input.forecast.instrumentIdentityDigestHex !== forecastIdentityDigest ||
     !isDigestHex(input.forecast.predictivePackageContentDigestHex) ||
     !isDigestHex(input.forecast.predictivePackageGenerationIdentityDigestHex) ||
+    !isDigestHex(input.forecast.forecastGenerationIdentityDigestHex) ||
+    !isDigestHex(input.forecast.forecastContentDigestHex) ||
     !isDigestHex(input.forecast.normalizationVersionDigestHex) ||
     !isDigestHex(input.forecast.distributionSemanticDigestHex) ||
     !isDigestHex(input.forecast.forecastAuthorityReceiptDigestHex) ||
@@ -464,8 +471,7 @@ function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649R
   } else {
     try {
       const recomputed = distributionSemanticDigestHex({
-        forecastGenerationIdentityDigestHex:
-          input.forecast.predictivePackageGenerationIdentityDigestHex,
+        forecastGenerationIdentityDigestHex: input.forecast.forecastGenerationIdentityDigestHex,
         predictivePackageContentDigestHex: input.forecast.predictivePackageContentDigestHex,
         k: input.forecast.k,
         m: input.forecast.m,
@@ -475,6 +481,13 @@ function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649R
       });
       if (recomputed !== input.forecast.distributionSemanticDigestHex) {
         reasons.push("FORECAST_DISTRIBUTION_DIGEST_MISMATCH");
+      }
+      const forecastContentDigestHex = computeForecastContentDigest(
+        Buffer.from(input.forecast.forecastGenerationIdentityDigestHex, "hex"),
+        Buffer.from(input.forecast.distributionSemanticDigestHex, "hex"),
+      ).toString("hex");
+      if (forecastContentDigestHex !== input.forecast.forecastContentDigestHex) {
+        reasons.push("FORECAST_CONTENT_DIGEST_MISMATCH");
       }
     } catch {
       reasons.push("FORECAST_AUTHORITY_INVALID");
@@ -512,6 +525,8 @@ function emptyReceipt(input: {
     predictivePackageContentDigestHex: source.forecast.predictivePackageContentDigestHex,
     predictivePackageGenerationIdentityDigestHex:
       source.forecast.predictivePackageGenerationIdentityDigestHex,
+    forecastGenerationIdentityDigestHex: source.forecast.forecastGenerationIdentityDigestHex,
+    forecastContentDigestHex: source.forecast.forecastContentDigestHex,
     distributionSemanticDigestHex: source.forecast.distributionSemanticDigestHex,
     normalizationVersionDigestHex: source.forecast.normalizationVersionDigestHex,
     k: source.forecast.k,
@@ -703,6 +718,8 @@ function evaluateDecisionEconomicsV2Internal(
     predictivePackageContentDigestHex: input.forecast.predictivePackageContentDigestHex,
     predictivePackageGenerationIdentityDigestHex:
       input.forecast.predictivePackageGenerationIdentityDigestHex,
+    forecastGenerationIdentityDigestHex: input.forecast.forecastGenerationIdentityDigestHex,
+    forecastContentDigestHex: input.forecast.forecastContentDigestHex,
     distributionSemanticDigestHex: input.forecast.distributionSemanticDigestHex,
     normalizationVersionDigestHex: input.forecast.normalizationVersionDigestHex,
     k: input.forecast.k,
@@ -787,6 +804,8 @@ function malformedEvaluationResult(): DecisionEconomicEvaluationResultV2 {
     },
     predictivePackageContentDigestHex: zeroDigest,
     predictivePackageGenerationIdentityDigestHex: zeroDigest,
+    forecastGenerationIdentityDigestHex: zeroDigest,
+    forecastContentDigestHex: zeroDigest,
     distributionSemanticDigestHex: zeroDigest,
     normalizationVersionDigestHex: zeroDigest,
     k: 0,

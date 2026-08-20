@@ -18,6 +18,7 @@ import {
   TARGET_ROLE_EXECUTION,
 } from "@/lib/trader/intelligence/forecast-v2/constants";
 import { distributionSemanticDigestHex } from "@/lib/trader/intelligence/forecast-v2/distribution-semantic-digest-v1";
+import { computeForecastContentDigest } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
 import { OUTCOME_VERSION } from "@/lib/trader/intelligence/forecast-v2/source-anchor-v1";
 
 export const DEE649_TEST_DIGEST_A = "a".repeat(64);
@@ -132,24 +133,30 @@ export function dee649TestForecast(
     forecastAnchorClosedBarEpochMs: 1_725_000_000_000,
     anchorAuthorityContentDigestHex: dee649TestAnchor().contentDigestHex,
     predictivePackageContentDigestHex: DEE649_TEST_DIGEST_A,
-    predictivePackageGenerationIdentityDigestHex: DEE649_TEST_DIGEST_B,
+    predictivePackageGenerationIdentityDigestHex: DEE649_TEST_DIGEST_C,
+    forecastGenerationIdentityDigestHex: DEE649_TEST_DIGEST_B,
     normalizationVersionDigestHex: DEE649_TEST_DIGEST_D,
     k: replicaSamples.length,
     m: replicaSamples[0]?.length ?? 0,
     forecastAuthorityReceiptDigestHex: DEE649_TEST_DIGEST_A,
     replicaSamples,
   };
+  const distributionDigest = distributionSemanticDigestHex({
+    forecastGenerationIdentityDigestHex: base.forecastGenerationIdentityDigestHex,
+    predictivePackageContentDigestHex: base.predictivePackageContentDigestHex,
+    k: base.k,
+    m: base.m,
+    normalizationVersionDigestHex: base.normalizationVersionDigestHex,
+    targetRoleId: base.identity.targetRoleId,
+    samples: base.replicaSamples,
+  });
   return {
     ...base,
-    distributionSemanticDigestHex: distributionSemanticDigestHex({
-      forecastGenerationIdentityDigestHex: base.predictivePackageGenerationIdentityDigestHex,
-      predictivePackageContentDigestHex: base.predictivePackageContentDigestHex,
-      k: base.k,
-      m: base.m,
-      normalizationVersionDigestHex: base.normalizationVersionDigestHex,
-      targetRoleId: base.identity.targetRoleId,
-      samples: base.replicaSamples,
-    }),
+    distributionSemanticDigestHex: distributionDigest,
+    forecastContentDigestHex: computeForecastContentDigest(
+      Buffer.from(base.forecastGenerationIdentityDigestHex, "hex"),
+      Buffer.from(distributionDigest, "hex"),
+    ).toString("hex"),
     ...overrides,
   };
 }

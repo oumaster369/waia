@@ -189,6 +189,9 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
 
   it("recomputes the sealed Forecast distribution and binds it to the issued anchor", () => {
     const base = evaluationInput();
+    expect(base.forecast.forecastGenerationIdentityDigestHex).not.toBe(
+      base.forecast.predictivePackageGenerationIdentityDigestHex,
+    );
     const tampered = base.forecast.replicaSamples.map((replica) =>
       replica.map((sample) => sample.map((value, index) => (index === 4 ? value + 0.01 : value))),
     );
@@ -197,6 +200,20 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
       forecast: { ...base.forecast, replicaSamples: tampered },
     });
     expect(sampleMismatch.receipt.reasonCodes).toContain("FORECAST_DISTRIBUTION_DIGEST_MISMATCH");
+
+    const generationMismatch = evaluateDecisionEconomicsV2({
+      ...base,
+      forecast: { ...base.forecast, forecastGenerationIdentityDigestHex: DEE649_TEST_DIGEST_A },
+    });
+    expect(generationMismatch.receipt.reasonCodes).toContain(
+      "FORECAST_DISTRIBUTION_DIGEST_MISMATCH",
+    );
+
+    const contentMismatch = evaluateDecisionEconomicsV2({
+      ...base,
+      forecast: { ...base.forecast, forecastContentDigestHex: DEE649_TEST_DIGEST_A },
+    });
+    expect(contentMismatch.receipt.reasonCodes).toContain("FORECAST_CONTENT_DIGEST_MISMATCH");
 
     const otherAnchor = dee649TestAnchor("101");
     const anchorMismatch = evaluateDecisionEconomicsV2({ ...base, anchorAuthority: otherAnchor });
