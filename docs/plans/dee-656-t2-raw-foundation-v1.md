@@ -30,7 +30,7 @@ state:
   remainingWorkPackages: [WP3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 0a0428ec2e434afcd1d2b4e05a0f19153f981712
+  lastValidatedGitSha: 5a9dadb632e357c80b41e5ca398eaeed556d10f5
   lastValidationAt: "2026-08-20"
   blockedReason: null
   nextAction: "Obtain an independent exact-head adversarial review, then receive explicit push and PR-create authorization."
@@ -77,9 +77,10 @@ pair. The adjacent admitted manifest is the authoritative file/surface inventory
 
 ## Reviewability rationale
 
-The frozen implementation is 14 child-owned files in two dependency-ordered commits plus the
-plan/manifest. It exceeds the approximate line target because the same security contract is
-intentionally repeated in pure types, Drizzle schema, hand-authored SQL, and adversarial tests.
+The frozen implementation is 12 child-owned files in five dependency-ordered child commits plus
+the plan/manifest (14 files total, approximately 2.6k changed lines). It exceeds the approximate
+line target because the same security contract is intentionally repeated in pure types, Drizzle
+schema, hand-authored SQL, and adversarial tests.
 The diff remains one coherent T2 invariant, one additive migration, one rollback boundary, and no
 runtime/provider/semantic surface. Human choice 6A explicitly ratified one serialized train; the
 exact commit/file manifest keeps each child independently reviewable inside that PR.
@@ -124,7 +125,11 @@ batch never applies SQL or storage changes to production.
 ## Local pre-PR evidence
 
 - clean Postgres migration apply through `0153`, Drizzle smoke, and DEE-658 integration tests 4/4;
-- focused raw-capture plus migration-identity unit tests 13/13;
+- focused raw-capture plus migration-identity unit tests 17/17;
+- focused raw-capture tests 9/9 include mutation, forgery, nested-secret smuggling, canonical
+  retention/reason-code, deterministic identity, and defensive test-adapter regressions;
+- Postgres tests prove RLS metadata and deny behavior after temporary CRUD grants rather than
+  relying on missing table privileges;
 - `pnpm lint` (0 errors; repository baseline warnings only), `pnpm typecheck`, `pnpm build`, and
   `pnpm validate:canon` pass;
 - frozen Integration Train provenance validation passes against base `efe570f` and exact child

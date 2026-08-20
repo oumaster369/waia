@@ -7,7 +7,7 @@
   "maxConcurrentImplementationTasks": 2,
   "finalIntegrationMode": "serialized",
   "mergeMode": "squash",
-  "splitRationale": null,
+  "splitRationale": "Human choice 6A explicitly ratified one serialized train. The approximately 2.6k-line diff exceeds the normal target but remains 12 child-owned files plus plan/manifest, one additive migration, one security invariant repeated across contracts/schema/SQL/tests, one rollback boundary, and five dependency-ordered child commits; splitting would separate the exact-byte contract from its durable enforcement and proof.",
   "includedChildren": [
     {
       "issue": "DEE-657",
@@ -30,7 +30,7 @@
         "evidence": "The only security architecture choices in this child were explicitly Human-ratified; no remaining child-owned Human gate or semantic authority is admitted."
       },
       "expectedAcceptanceEvidence": [
-        "Policy absence/invalidity and non-PASS secret scans fail closed.",
+        "Policy absence/invalidity, mutable or forged prepared bytes, unknown nested keys, and non-PASS secret scans fail closed.",
         "Raw, capture, and storage-binding identities are deterministic and distinct.",
         "Sensitive transport envelope fields are structurally absent.",
         "REJECTED evidence is retained with zero Observation/Measurement authority."
@@ -45,17 +45,18 @@
         "tests/unit/trader-mi-raw-capture-v1.test.ts"
       ],
       "acceptanceEvidence": [
-        "Explicit policy and exact-body PASS scan gates fail closed; 5/5 focused tests pass.",
-        "Receipts preserve complete policy/scan proof while excluding transport envelope and raw body content.",
+        "Explicit policy, exact-body PASS scan, mutation, and forged-prepared gates fail closed; 9/9 focused tests pass.",
+        "Exact-key reconstruction preserves complete policy/scan proof while excluding transport envelope, nested secret fields, signed URLs, and raw body content.",
         "Raw, storage-binding, capture, and validation identities are independently content-addressed.",
         "VALID/REJECTED remain RECORD_ONLY with NONE Observation/Measurement authority."
       ],
       "integratedCommits": [
         "c9e3001b1f3085e1573b754124b364c4b585c7cd",
-        "b491b2fe8abcb19bab389cc6be3049df9fbd427d"
+        "b491b2fe8abcb19bab389cc6be3049df9fbd427d",
+        "839557935381cdedcf5001b0788900476d892f19"
       ],
       "tests": [
-        "pnpm test --run tests/unit/trader-mi-raw-capture-v1.test.ts (5/5 pass)",
+        "pnpm test --run tests/unit/trader-mi-raw-capture-v1.test.ts (9/9 pass)",
         "pnpm typecheck (pass)",
         "scoped eslint (pass)"
       ],
@@ -118,10 +119,12 @@
         "Migration 0153 applies from an empty local Postgres journal and the Drizzle smoke passes.",
         "Postgres stores no raw body column; 4/4 integration tests prove tenant isolation and idempotency.",
         "Transaction-time triggers reject caller-authored/backdated capture or validation knowledge time.",
-        "Append-only guards and authenticated/anon deny RLS are exercised on all three tables."
+        "Append-only guards, RLS metadata, and temporary-grant authenticated/anon CRUD denial are exercised on all three tables.",
+        "Exact retention, scan ordering, canonical reason-code, validator identity, and backdating invariants fail closed in TypeScript and SQL."
       ],
       "integratedCommits": [
-        "1bd5f963becbfea079c8b4c33cb0b96b6e434ede"
+        "1bd5f963becbfea079c8b4c33cb0b96b6e434ede",
+        "5a9dadb632e357c80b41e5ca398eaeed556d10f5"
       ],
       "tests": [
         "clean pnpm db:migrate:postgres (pass through 0153)",
@@ -151,7 +154,8 @@
         "status": "pass",
         "reviewedCommits": [
           "c9e3001b1f3085e1573b754124b364c4b585c7cd",
-          "b491b2fe8abcb19bab389cc6be3049df9fbd427d"
+          "b491b2fe8abcb19bab389cc6be3049df9fbd427d",
+          "839557935381cdedcf5001b0788900476d892f19"
         ],
         "reviewedFiles": [
           "lib/trader/mi/raw-capture-memory-adapter-v1.ts",
@@ -163,7 +167,8 @@
         "issue": "DEE-658",
         "status": "pass",
         "reviewedCommits": [
-          "1bd5f963becbfea079c8b4c33cb0b96b6e434ede"
+          "1bd5f963becbfea079c8b4c33cb0b96b6e434ede",
+          "5a9dadb632e357c80b41e5ca398eaeed556d10f5"
         ],
         "reviewedFiles": [
           "db/AGENTS.md",
