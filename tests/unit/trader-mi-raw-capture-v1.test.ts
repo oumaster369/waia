@@ -92,6 +92,8 @@ describe("Raw Capture V1 contracts (DEE-657)", () => {
     expect(Array.from(adapter.readBody(first.storageBinding.contentDigest)!)).toEqual(Array.from(BODY));
     expect(first.captureReceipt).toMatchObject({
       payloadBytes: BODY.byteLength,
+      policy: { maxPayloadBytes: 64, retentionSeconds: 3_600 },
+      secretScanReceipt: { status: "PASS", scannerVersion: "test-v1" },
       authority: "RECORD_ONLY",
       capturedAtUtc: "2026-08-20T09:05:00.000Z",
       retentionUntilUtc: "2026-08-20T10:05:00.000Z",

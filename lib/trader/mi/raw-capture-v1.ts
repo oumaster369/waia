@@ -10,6 +10,7 @@ export const RAW_VALIDATION_RECEIPT_V1_SCHEMA_VERSION = "raw-validation-receipt-
 
 const HEX_64 = /^[0-9a-f]{64}$/;
 const REASON_CODE = /^[A-Z][A-Z0-9_]{2,63}$/;
+const SAFE_OBJECT_KEY = /^[A-Za-z0-9._:/=-]+$/;
 
 export type RawCapturePolicyV1 = {
   schemaVersion: typeof RAW_CAPTURE_POLICY_V1_SCHEMA_VERSION;
@@ -56,7 +57,9 @@ export type RawCaptureReceiptV1 = {
   sourceId: string;
   rawBytesDigest: string;
   payloadBytes: number;
+  policy: RawCapturePolicyV1;
   policyDigest: string;
+  secretScanReceipt: RawSecretScanReceiptV1;
   secretScanReceiptDigest: string;
   storageBindingDigest: string;
   capturedAtUtc: string;
@@ -259,7 +262,8 @@ export function buildRawStorageBindingAtDurableBoundaryV1(input: {
   const ref = input.objectReference;
   if (
     !HEX_64.test(input.rawBytesDigest) || !ref ||
-    !ref.storageBackendId || !ref.objectKey || !ref.objectVersion ||
+    !ref.storageBackendId || !ref.objectKey || !SAFE_OBJECT_KEY.test(ref.objectKey) ||
+    ref.objectKey.split("/").includes("..") || !ref.objectVersion ||
     ref.encryptionRequirement !== "PRIVATE_ENCRYPTED" || ref.accessRequirement !== "SERVER_ONLY"
   ) throw new RawCaptureRejectedError("INVALID_STORAGE_BINDING");
   const body = {
@@ -279,7 +283,9 @@ export function isRawStorageBindingV1(value: RawStorageBindingV1): boolean {
   if (!HEX_64.test(value.rawBytesDigest)) return false;
   if (
     !value.organizationId || !value.sourceId || !value.objectReference?.storageBackendId ||
-    !value.objectReference.objectKey || !value.objectReference.objectVersion ||
+    !value.objectReference.objectKey || !SAFE_OBJECT_KEY.test(value.objectReference.objectKey) ||
+    value.objectReference.objectKey.split("/").includes("..") ||
+    !value.objectReference.objectVersion ||
     value.objectReference.encryptionRequirement !== "PRIVATE_ENCRYPTED" ||
     value.objectReference.accessRequirement !== "SERVER_ONLY"
   ) return false;
@@ -317,7 +323,9 @@ export function buildRawCaptureReceiptAtDurableBoundaryV1(input: {
     sourceId: prepared.sourceId,
     rawBytesDigest: prepared.rawBytesDigest,
     payloadBytes: prepared.payloadBytes,
+    policy: { ...prepared.policy },
     policyDigest: prepared.policy.policyDigest,
+    secretScanReceipt: { ...prepared.secretScanReceipt },
     secretScanReceiptDigest: prepared.secretScanReceipt.contentDigest,
     storageBindingDigest: storageBinding.contentDigest,
     capturedAtUtc,
@@ -335,6 +343,14 @@ export function isRawCaptureReceiptV1(value: RawCaptureReceiptV1): boolean {
     value.payloadBytes < 0 ||
     ![value.rawBytesDigest, value.policyDigest, value.secretScanReceiptDigest, value.storageBindingDigest]
       .every((digest) => HEX_64.test(digest))
+  ) return false;
+  if (
+    !isRawCapturePolicyV1(value.policy) || value.policy.policyDigest !== value.policyDigest ||
+    !isRawSecretScanReceiptV1(value.secretScanReceipt) ||
+    value.secretScanReceipt.status !== "PASS" ||
+    value.secretScanReceipt.contentDigest !== value.secretScanReceiptDigest ||
+    value.secretScanReceipt.rawBytesDigest !== value.rawBytesDigest ||
+    value.payloadBytes > value.policy.maxPayloadBytes
   ) return false;
   const capturedAt = new Date(value.capturedAtUtc);
   const retentionUntil = new Date(value.retentionUntilUtc);
