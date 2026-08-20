@@ -15,14 +15,22 @@ function sample13d(rH: number): number[] {
 }
 
 describe("DEE-528 decision economics v2", () => {
-  it("Pi_lower floor is 0 USDT", () => {
+  it("Pi_lower preserves physical downside instead of flooring losses at zero", () => {
     const pi = piLowerV1({
       notionalUsdt: 10_000,
       sample: sample13d(-0.5),
       costRate: 0.001,
       slippageBufferUsdt: 100,
     });
-    expect(pi).toBe(0);
+    expect(pi).toBeLessThan(0);
+    expect(pi).toBeLessThan(
+      piBaseV1({
+        notionalUsdt: 10_000,
+        sample: sample13d(-0.5),
+        costRate: 0.001,
+        slippageBufferUsdt: 100,
+      }),
+    );
   });
 
   it("EV ordering invariant EV_lower <= EV_base <= EV_upper", () => {
