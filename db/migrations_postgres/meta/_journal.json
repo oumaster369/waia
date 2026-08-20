@@ -1072,6 +1072,13 @@
       "when": 1780000000152,
       "tag": "0152_trader_mi_pit_trust_as_of_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1780000000153,
+      "tag": "0153_trader_mi_raw_capture_v1",
+      "breakpoints": true
     }
   ]
 }

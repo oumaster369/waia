@@ -1,0 +1,217 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-656",
+  "status": "frozen",
+  "riskTier": "T2",
+  "humanGatePolicy": "none",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Human choice 6A explicitly ratified one serialized train. The approximately 2.7k-line diff exceeds the normal target but remains 12 child-owned files plus plan/manifest, one additive migration, one security invariant repeated across contracts/schema/SQL/tests, one rollback boundary, and seven dependency-ordered child commits; splitting would separate the exact-byte contract from its durable enforcement and proof.",
+  "includedChildren": [
+    {
+      "issue": "DEE-657",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Generic RawCapturePolicyV1, secret-scan-gated body-only capture, separate raw/capture/storage-binding identities, record-only VALID/REJECTED receipts, and test-only memory adapter.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "DEE-620 raw-storage/security/knowledge-time choices were Human-ratified on 2026-08-20.",
+        "DEE-654 and DEE-655 are Done on the verified origin/main base."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/mi/raw-capture-v1.ts",
+        "lib/trader/mi/raw-capture-memory-adapter-v1.ts",
+        "tests/unit/trader-mi-raw-capture-v1.test.ts"
+      ],
+      "riskTier": "T2",
+      "humanGate": {
+        "status": "none",
+        "evidence": "The only security architecture choices in this child were explicitly Human-ratified; no remaining child-owned Human gate or semantic authority is admitted."
+      },
+      "expectedAcceptanceEvidence": [
+        "Policy absence/invalidity and non-PASS secret scans fail closed.",
+        "Raw, capture, and storage-binding identities are deterministic and distinct.",
+        "Sensitive transport envelope fields are structurally absent.",
+        "REJECTED evidence is retained with zero Observation/Measurement authority."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-mi-raw-capture-v1.test.ts",
+        "pnpm typecheck"
+      ],
+      "actualFiles": [
+        "lib/trader/mi/raw-capture-memory-adapter-v1.ts",
+        "lib/trader/mi/raw-capture-v1.ts",
+        "tests/unit/trader-mi-raw-capture-v1.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Explicit policy, exact-body PASS scan, mutation, and forged-prepared gates fail closed; 9/9 focused tests pass.",
+        "Exact-key reconstruction preserves complete policy/scan proof while excluding transport envelope, nested secret fields, signed URLs, and raw body content.",
+        "Raw, storage-binding, capture, and validation identities are independently content-addressed.",
+        "Repeated exact inputs reproduce identical capture and validation receipts while all four content-addressed identities remain pairwise distinct.",
+        "VALID/REJECTED remain RECORD_ONLY with NONE Observation/Measurement authority."
+      ],
+      "integratedCommits": [
+        "c9e3001b1f3085e1573b754124b364c4b585c7cd",
+        "b491b2fe8abcb19bab389cc6be3049df9fbd427d",
+        "839557935381cdedcf5001b0788900476d892f19",
+        "6de72905277c282449a74e988b22a6d75e83b391"
+      ],
+      "tests": [
+        "pnpm test --run tests/unit/trader-mi-raw-capture-v1.test.ts (9/9 pass)",
+        "pnpm typecheck (pass)",
+        "scoped eslint (pass)"
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-658",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Postgres-only append-only raw capture, storage binding, and validation receipt persistence with transaction-authored knowledge time, org-scoped integrity, deny RLS, and applied-migration proof.",
+      "dependencies": [
+        "DEE-657"
+      ],
+      "dependencyEvidence": [
+        "DEE-658 imports the DEE-657 identities and receipt contracts.",
+        "The children share canonical identities and authority schema, so final implementation is serialized."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/mi/raw-capture-repository-postgres.ts",
+        "db/schema.postgres.ts",
+        "db/migrations_postgres/0153_trader_mi_raw_capture_v1.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "tests/integration/postgres-mi-raw-capture-v1.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "docs/migrations/DEE-656-MI-RAW-CAPTURE.md",
+        "docs/migrations/DEE-64-TRACKER.md",
+        "db/AGENTS.md"
+      ],
+      "riskTier": "T2",
+      "humanGate": {
+        "status": "none",
+        "evidence": "The additive Postgres design is inside the ratified T2 batch; production SQL apply, storage, security mutation, and merge remain explicitly outside child authority."
+      },
+      "expectedAcceptanceEvidence": [
+        "Postgres stores receipts/references but no raw body bytes.",
+        "Composite organization constraints reject cross-tenant references.",
+        "Validation knownAt is obtained inside the durable transaction and cannot be caller-backdated.",
+        "Append-only triggers and authenticated/anon deny RLS are proven."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/integration/postgres-mi-raw-capture-v1.test.ts",
+        "pnpm test --run tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "pnpm typecheck"
+      ],
+      "actualFiles": [
+        "db/AGENTS.md",
+        "db/migrations_postgres/0153_trader_mi_raw_capture_v1.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "db/schema.postgres.ts",
+        "docs/migrations/DEE-64-TRACKER.md",
+        "docs/migrations/DEE-656-MI-RAW-CAPTURE.md",
+        "lib/trader/mi/raw-capture-repository-postgres.ts",
+        "tests/integration/postgres-mi-raw-capture-v1.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Migration 0153 applies from an empty local Postgres journal and the Drizzle smoke passes.",
+        "Postgres stores no raw body column; 4/4 integration tests prove tenant isolation and idempotency.",
+        "Transaction-time triggers reject caller-authored/backdated capture or validation knowledge time.",
+        "Append-only guards, false qual/with-check RLS metadata, and temporary-grant authenticated/anon SELECT/INSERT/UPDATE/DELETE denial are exercised on all three tables.",
+        "Exact retention, scan ordering, canonical reason-code, validator identity, and backdating invariants fail closed in TypeScript and SQL."
+      ],
+      "integratedCommits": [
+        "1bd5f963becbfea079c8b4c33cb0b96b6e434ede",
+        "5a9dadb632e357c80b41e5ca398eaeed556d10f5",
+        "27739b237b3364efcaa65cbdc8a40155e76cd2c7"
+      ],
+      "tests": [
+        "clean pnpm db:migrate:postgres (pass through 0153)",
+        "pnpm db:smoke:postgres (pass)",
+        "WAIA_PG_INTEGRATION=1 pnpm test --run tests/integration/postgres-mi-raw-capture-v1.test.ts (4/4 pass)",
+        "unit migration identity plus raw-capture tests (13/13 pass)",
+        "pnpm typecheck and pnpm validate:canon (pass)"
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "0e13204cdb7146331acf517fc1aad6416fefc26d9edfa6f12f9af3cc58d41119",
+      "manifestCommit": "21bbe3c338b89fb662dee96f4fa4047c3b0332e7",
+      "manifestPath": "docs/plans/dee-656-t2-raw-foundation-v1.integration-train.json",
+      "reviewer": "Human Architect ratification 2026-08-20 plus adversarial DEE-620 boundary audit"
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-657",
+        "status": "pass",
+        "reviewedCommits": [
+          "c9e3001b1f3085e1573b754124b364c4b585c7cd",
+          "b491b2fe8abcb19bab389cc6be3049df9fbd427d",
+          "839557935381cdedcf5001b0788900476d892f19",
+          "6de72905277c282449a74e988b22a6d75e83b391"
+        ],
+        "reviewedFiles": [
+          "lib/trader/mi/raw-capture-memory-adapter-v1.ts",
+          "lib/trader/mi/raw-capture-v1.ts",
+          "tests/unit/trader-mi-raw-capture-v1.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-658",
+        "status": "pass",
+        "reviewedCommits": [
+          "1bd5f963becbfea079c8b4c33cb0b96b6e434ede",
+          "5a9dadb632e357c80b41e5ca398eaeed556d10f5",
+          "27739b237b3364efcaa65cbdc8a40155e76cd2c7"
+        ],
+        "reviewedFiles": [
+          "db/AGENTS.md",
+          "db/migrations_postgres/0153_trader_mi_raw_capture_v1.sql",
+          "db/migrations_postgres/meta/_journal.json",
+          "db/schema.postgres.ts",
+          "docs/migrations/DEE-64-TRACKER.md",
+          "docs/migrations/DEE-656-MI-RAW-CAPTURE.md",
+          "lib/trader/mi/raw-capture-repository-postgres.ts",
+          "tests/integration/postgres-mi-raw-capture-v1.test.ts",
+          "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts"
+        ]
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-657",
+        "status": "pass",
+        "commands": [
+          "pnpm test --run tests/unit/trader-mi-raw-capture-v1.test.ts",
+          "pnpm typecheck",
+          "scoped eslint"
+        ]
+      },
+      {
+        "afterIssue": "DEE-658",
+        "status": "pass",
+        "commands": [
+          "clean Postgres migration apply through 0153",
+          "pnpm db:smoke:postgres",
+          "WAIA_PG_INTEGRATION=1 raw-capture integration tests",
+          "targeted unit tests",
+          "pnpm typecheck",
+          "pnpm validate:canon"
+        ]
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
+  }
+}
