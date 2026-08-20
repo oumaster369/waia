@@ -22,7 +22,7 @@ export const DEE649_SLICE_ALLOCATION_POLICY =
   "explicit-weights-last-slice-remainder-no-top-up/v1" as const;
 export const DEE649_ROUNDING_POLICY = "scale8-floor-step-truncate-half-up/v1" as const;
 export const DEE649_EV_AGGREGATION_POLICY =
-  "scale8-payoffs-half-up-mean-type7-rational-half-up/v1" as const;
+  "scale8-payoffs-exact-rational-mean-type7-exact-gate-receipt-truncate/v1" as const;
 
 export type Dee649ReasonCode =
   | "ANCHOR_AUTHORITY_INVALID"

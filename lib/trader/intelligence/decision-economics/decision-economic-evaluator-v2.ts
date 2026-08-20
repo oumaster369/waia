@@ -8,7 +8,7 @@ import {
 } from "@/lib/trader/intelligence/forecast-v2/constants";
 import { OUTCOME_VERSION } from "@/lib/trader/intelligence/forecast-v2/source-anchor-v1";
 import { computeForecastContentDigest } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
-import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
+import { parseDecimal } from "@/lib/trader/risk/numeric";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
 import {
@@ -38,6 +38,8 @@ import {
 } from "./execution-payoff-functional-v2";
 
 export const WHY_NOT_CASH_RECEIPT_V2_SCHEMA_VERSION = "why-not-cash-receipt/v2" as const;
+export const DEE649_AUTHORITY_VERIFICATION_SCHEMA_VERSION =
+  "dee649-authority-verification/v1" as const;
 
 export type ForecastEconomicAuthorityV1 = Dee649AuthorityBindingV1 & {
   forecastId: string;
@@ -53,25 +55,38 @@ export type ForecastEconomicAuthorityV1 = Dee649AuthorityBindingV1 & {
   m: number;
   distributionSemanticDigestHex: string;
   forecastAuthorityReceiptDigestHex: string;
+  economicAuthorityContentDigestHex: string;
   replicaSamples: readonly (readonly (readonly number[])[])[];
 };
 
 export type CashEconomicAuthorityV1 = Dee649AuthorityBindingV1 & {
   availableCashUsdt: string;
   authorityReceiptDigestHex: string;
+  contentDigestHex: string;
+};
+
+export type VerifiedDecisionEconomicAuthorityV1 = {
+  schemaVersion: typeof DEE649_AUTHORITY_VERIFICATION_SCHEMA_VERSION;
+  verified: boolean;
+  purpose:
+    | "FORECAST_ISSUANCE"
+    | "ANCHOR_QUALIFICATION"
+    | "EXECUTABLE_POLICY_PREREGISTRATION"
+    | "ECONOMIC_SIZE_AUTHORIZATION"
+    | "CASH_SNAPSHOT_AUTHORIZATION";
+  organizationId: string;
+  accountId: string;
+  instrumentIdentityDigestHex: string;
+  subjectContentDigestHex: string;
+  verificationReceiptDigestHex: string;
 };
 
 export type DecisionEconomicAuthorityVerificationV1 = {
-  /**
-   * A trusted admission boundary may set these flags only after validating the
-   * current org/account/instrument-bound object and its exact receipt/content
-   * digest. Constructors and raw digest strings never confer verification.
-   */
-  forecastAuthorityVerified: boolean;
-  anchorAuthorityVerified: boolean;
-  executablePolicyAuthorityVerified: boolean;
-  economicSizeAuthorityVerified: boolean;
-  cashAuthorityVerified: boolean;
+  forecast: VerifiedDecisionEconomicAuthorityV1;
+  anchor: VerifiedDecisionEconomicAuthorityV1;
+  executablePolicy: VerifiedDecisionEconomicAuthorityV1;
+  economicSize: VerifiedDecisionEconomicAuthorityV1;
+  cash: VerifiedDecisionEconomicAuthorityV1;
 };
 
 export type WhyNotCashReceiptV2 = {
@@ -97,6 +112,7 @@ export type WhyNotCashReceiptV2 = {
   m: number;
   forecastAnchorClosedBarEpochMs: number;
   forecastAuthorityReceiptDigestHex: string;
+  forecastEconomicAuthorityContentDigestHex: string;
   decisionEvaluationContractId: string | null;
   executionPayoffFunctionalVersion: typeof EXECUTION_PAYOFF_FUNCTIONAL_V2_VERSION;
   forecastComponentUse: {
@@ -124,9 +140,14 @@ export type WhyNotCashReceiptV2 = {
   evAggregationPolicy: typeof DEE649_EV_AGGREGATION_POLICY;
   muBaseReplicasScale8: readonly string[];
   muLowerReplicasScale8: readonly string[];
+  muBaseReplicasExactScaledRational: readonly ExactScaledRationalReceiptV1[];
+  muLowerReplicasExactScaledRational: readonly ExactScaledRationalReceiptV1[];
   evLowerScale8: string | null;
   evBaseScale8: string | null;
   evUpperScale8: string | null;
+  evLowerExactScaledRational: ExactScaledRationalReceiptV1 | null;
+  evBaseExactScaledRational: ExactScaledRationalReceiptV1 | null;
+  evUpperExactScaledRational: ExactScaledRationalReceiptV1 | null;
   scenarioContentDigests: readonly (readonly string[])[];
   scenarioResidualInventoryCount: number;
   scientificAdmissionVerified: boolean;
@@ -137,6 +158,11 @@ export type WhyNotCashReceiptV2 = {
   economicallyAdmissibleExactQuantities: readonly string[];
   reasonCodes: readonly Dee649ReasonCode[];
   contentDigestHex: string;
+};
+
+export type ExactScaledRationalReceiptV1 = {
+  numeratorScale8: string;
+  denominator: string;
 };
 
 export type DecisionEconomicEvaluationInputV2 = {
@@ -168,6 +194,21 @@ function isDigestHex(value: string | null | undefined): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 }
 
+export function computeCashEconomicAuthorityContentDigestV1(
+  input: Omit<CashEconomicAuthorityV1, "contentDigestHex">,
+): string {
+  return computeStableJsonDigest({ schemaVersion: "dee649-cash-economic-authority/v1", ...input });
+}
+
+export function computeForecastEconomicAuthorityContentDigestV1(
+  input: Omit<ForecastEconomicAuthorityV1, "economicAuthorityContentDigestHex" | "replicaSamples">,
+): string {
+  return computeStableJsonDigest({
+    schemaVersion: "dee649-forecast-economic-authority/v1",
+    ...input,
+  });
+}
+
 function uniqueReasons(reasons: readonly Dee649ReasonCode[]): Dee649ReasonCode[] {
   return [...new Set(reasons)];
 }
@@ -185,6 +226,26 @@ function sameAuthorityBinding(
     expected.baseAsset === actual.baseAsset &&
     expected.quoteAsset === actual.quoteAsset &&
     expected.instrumentIdentityDigestHex === actual.instrumentIdentityDigestHex
+  );
+}
+
+function verifiedAuthorityMatches(input: {
+  verification: VerifiedDecisionEconomicAuthorityV1;
+  purpose: VerifiedDecisionEconomicAuthorityV1["purpose"];
+  subjectContentDigestHex: string;
+  authority: Dee649AuthorityBindingV1;
+}): boolean {
+  const verification = input.verification;
+  return (
+    verification.schemaVersion === DEE649_AUTHORITY_VERIFICATION_SCHEMA_VERSION &&
+    verification.verified &&
+    verification.purpose === input.purpose &&
+    verification.organizationId === input.authority.organizationId &&
+    verification.accountId === input.authority.accountId &&
+    verification.instrumentIdentityDigestHex === input.authority.instrumentIdentityDigestHex &&
+    verification.subjectContentDigestHex === input.subjectContentDigestHex &&
+    isDigestHex(verification.subjectContentDigestHex) &&
+    isDigestHex(verification.verificationReceiptDigestHex)
   );
 }
 
@@ -254,15 +315,6 @@ function omitReceiptDigest(
   return payload;
 }
 
-function divideHalfUpSigned(numerator: bigint, denominator: bigint): bigint {
-  if (denominator <= 0n) throw new Error("FORECAST_SAMPLE_INVALID");
-  const negative = numerator < 0n;
-  const absolute = negative ? -numerator : numerator;
-  let quotient = absolute / denominator;
-  if ((absolute % denominator) * 2n >= denominator) quotient += 1n;
-  return negative ? -quotient : quotient;
-}
-
 function fixedScale8(value: bigint): string {
   const negative = value < 0n;
   const absolute = negative ? -value : value;
@@ -271,71 +323,123 @@ function fixedScale8(value: bigint): string {
   return `${negative ? "-" : ""}${whole}.${fraction}`;
 }
 
-function exactReplicaMeanScale8(payoffs: readonly string[]): bigint {
+type ExactScaledRational = { numerator: bigint; denominator: bigint };
+
+function rationalReceipt(value: ExactScaledRational): ExactScaledRationalReceiptV1 {
+  return {
+    numeratorScale8: value.numerator.toString(),
+    denominator: value.denominator.toString(),
+  };
+}
+
+function greatestCommonDivisor(left: bigint, right: bigint): bigint {
+  let a = left < 0n ? -left : left;
+  let b = right < 0n ? -right : right;
+  while (b !== 0n) [a, b] = [b, a % b];
+  return a === 0n ? 1n : a;
+}
+
+function rational(numerator: bigint, denominator: bigint): ExactScaledRational {
+  if (denominator <= 0n) throw new Error("EV_RANGE_INVALID");
+  const divisor = greatestCommonDivisor(numerator, denominator);
+  return { numerator: numerator / divisor, denominator: denominator / divisor };
+}
+
+function compareRational(left: ExactScaledRational, right: ExactScaledRational): -1 | 0 | 1 {
+  const difference = left.numerator * right.denominator - right.numerator * left.denominator;
+  return difference < 0n ? -1 : difference > 0n ? 1 : 0;
+}
+
+function receiptScale8Truncate(value: ExactScaledRational): string {
+  return fixedScale8(value.numerator / value.denominator);
+}
+
+function exactReplicaMeanScale8(payoffs: readonly string[]): ExactScaledRational {
   if (payoffs.length === 0) throw new Error("FORECAST_SAMPLE_INVALID");
-  return divideHalfUpSigned(
+  return rational(
     payoffs.reduce((sum, payoff) => sum + parseDecimal(payoff), 0n),
     BigInt(payoffs.length),
   );
 }
 
 function exactType7Scale8(
-  values: readonly bigint[],
+  values: readonly ExactScaledRational[],
   probabilityNumerator: bigint,
   probabilityDenominator: bigint,
-): bigint {
+): ExactScaledRational {
   if (values.length === 0) throw new Error("EV_RANGE_INVALID");
-  const sorted = [...values].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+  const sorted = [...values].sort(compareRational);
   if (sorted.length === 1) return sorted[0]!;
   const positionNumerator = BigInt(sorted.length - 1) * probabilityNumerator;
   const lowerIndex = positionNumerator / probabilityDenominator;
   const remainder = positionNumerator % probabilityDenominator;
   const lower = sorted[Number(lowerIndex)]!;
   const upper = sorted[Math.min(sorted.length - 1, Number(lowerIndex) + 1)]!;
-  return divideHalfUpSigned(
-    lower * (probabilityDenominator - remainder) + upper * remainder,
-    probabilityDenominator,
+  return rational(
+    lower.numerator * (probabilityDenominator - remainder) * upper.denominator +
+      upper.numerator * remainder * lower.denominator,
+    lower.denominator * upper.denominator * probabilityDenominator,
   );
 }
 
 function exactDecisionEvRange(input: {
-  muBaseScale8: readonly bigint[];
-  muLowerScale8: readonly bigint[];
+  muBaseScale8: readonly ExactScaledRational[];
+  muLowerScale8: readonly ExactScaledRational[];
   scientificAdmissionVerified: boolean;
-}): DecisionEvRange {
+}): {
+  evRange: DecisionEvRange;
+  exact: {
+    evLower: ExactScaledRational;
+    evBase: ExactScaledRational;
+    evUpper: ExactScaledRational;
+  };
+} {
   const evLowerScaled = exactType7Scale8(input.muLowerScale8, 1n, 10n);
   const evBaseScaled = exactType7Scale8(input.muBaseScale8, 1n, 2n);
   const evUpperScaled = exactType7Scale8(input.muBaseScale8, 9n, 10n);
   const reasons: string[] = [];
-  if (!(evLowerScaled <= evBaseScaled && evBaseScaled <= evUpperScaled)) {
+  if (
+    compareRational(evLowerScaled, evBaseScaled) > 0 ||
+    compareRational(evBaseScaled, evUpperScaled) > 0
+  ) {
     reasons.push("EV_RANGE_INVALID");
   }
   if (!input.scientificAdmissionVerified) {
     reasons.push("SCIENTIFIC_ADMISSION_RECEIPT_REQUIRED");
   }
-  if (evLowerScaled <= 0n) reasons.push("EV_LOWER_NON_POSITIVE");
-  const decisionActionable = evLowerScaled > 0n && reasons.length === 0;
+  if (evLowerScaled.numerator <= 0n) reasons.push("EV_LOWER_NON_POSITIVE");
+  const decisionActionable = evLowerScaled.numerator > 0n && reasons.length === 0;
   if (!decisionActionable) reasons.push("DECISION_NON_ACTIONABLE");
   return {
-    evLower: Number(formatDecimal(evLowerScaled)),
-    evBase: Number(formatDecimal(evBaseScaled)),
-    evUpper: Number(formatDecimal(evUpperScaled)),
-    evLowerScale8: fixedScale8(evLowerScaled),
-    evBaseScale8: fixedScale8(evBaseScaled),
-    evUpperScale8: fixedScale8(evUpperScaled),
-    decisionActionable,
-    reasonCodes: reasons,
+    evRange: {
+      evLower: Number(receiptScale8Truncate(evLowerScaled)),
+      evBase: Number(receiptScale8Truncate(evBaseScaled)),
+      evUpper: Number(receiptScale8Truncate(evUpperScaled)),
+      evLowerScale8: receiptScale8Truncate(evLowerScaled),
+      evBaseScale8: receiptScale8Truncate(evBaseScaled),
+      evUpperScale8: receiptScale8Truncate(evUpperScaled),
+      decisionActionable,
+      reasonCodes: reasons,
+    },
+    exact: { evLower: evLowerScaled, evBase: evBaseScaled, evUpper: evUpperScaled },
   };
 }
 
-export function computeExactDecisionEvRangeFromPayoffsV1(input: {
+function computeExactDecisionEvRangeFromPayoffsV1(input: {
   baseReplicaPayoffsScale8: readonly (readonly string[])[];
   lowerReplicaPayoffsScale8: readonly (readonly string[])[];
   scientificAdmissionVerified: boolean;
 }): {
   muBaseReplicasScale8: readonly string[];
   muLowerReplicasScale8: readonly string[];
+  muBaseReplicasExactScaledRational: readonly ExactScaledRationalReceiptV1[];
+  muLowerReplicasExactScaledRational: readonly ExactScaledRationalReceiptV1[];
   evRange: DecisionEvRange;
+  evExactScaledRational: {
+    evLower: ExactScaledRationalReceiptV1;
+    evBase: ExactScaledRationalReceiptV1;
+    evUpper: ExactScaledRationalReceiptV1;
+  };
 } {
   if (
     input.baseReplicaPayoffsScale8.length === 0 ||
@@ -345,14 +449,42 @@ export function computeExactDecisionEvRangeFromPayoffsV1(input: {
   }
   const muBase = input.baseReplicaPayoffsScale8.map(exactReplicaMeanScale8);
   const muLower = input.lowerReplicaPayoffsScale8.map(exactReplicaMeanScale8);
+  const range = exactDecisionEvRange({
+    muBaseScale8: muBase,
+    muLowerScale8: muLower,
+    scientificAdmissionVerified: input.scientificAdmissionVerified,
+  });
   return {
-    muBaseReplicasScale8: muBase.map(fixedScale8),
-    muLowerReplicasScale8: muLower.map(fixedScale8),
-    evRange: exactDecisionEvRange({
-      muBaseScale8: muBase,
-      muLowerScale8: muLower,
-      scientificAdmissionVerified: input.scientificAdmissionVerified,
-    }),
+    muBaseReplicasScale8: muBase.map(receiptScale8Truncate),
+    muLowerReplicasScale8: muLower.map(receiptScale8Truncate),
+    muBaseReplicasExactScaledRational: muBase.map(rationalReceipt),
+    muLowerReplicasExactScaledRational: muLower.map(rationalReceipt),
+    evRange: range.evRange,
+    evExactScaledRational: {
+      evLower: rationalReceipt(range.exact.evLower),
+      evBase: rationalReceipt(range.exact.evBase),
+      evUpper: rationalReceipt(range.exact.evUpper),
+    },
+  };
+}
+
+export function computeExactDecisionEvRangeDiagnosticFromPayoffsV1(input: {
+  baseReplicaPayoffsScale8: readonly (readonly string[])[];
+  lowerReplicaPayoffsScale8: readonly (readonly string[])[];
+}): ReturnType<typeof computeExactDecisionEvRangeFromPayoffsV1> {
+  const result = computeExactDecisionEvRangeFromPayoffsV1({
+    ...input,
+    scientificAdmissionVerified: false,
+  });
+  return {
+    ...result,
+    evRange: {
+      ...result.evRange,
+      decisionActionable: false,
+      reasonCodes: result.evRange.reasonCodes.includes("DECISION_NON_ACTIONABLE")
+        ? result.evRange.reasonCodes
+        : [...result.evRange.reasonCodes, "DECISION_NON_ACTIONABLE"],
+    },
   };
 }
 
@@ -385,12 +517,32 @@ function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649R
     !isDigestHex(input.forecast.normalizationVersionDigestHex) ||
     !isDigestHex(input.forecast.distributionSemanticDigestHex) ||
     !isDigestHex(input.forecast.forecastAuthorityReceiptDigestHex) ||
+    !isDigestHex(input.forecast.economicAuthorityContentDigestHex) ||
     !Number.isSafeInteger(input.forecast.forecastAnchorClosedBarEpochMs) ||
     input.forecast.forecastAnchorClosedBarEpochMs <= 0
   ) {
     reasons.push("FORECAST_AUTHORITY_INVALID");
   }
-  if (!input.authorityVerification.forecastAuthorityVerified) {
+  const {
+    economicAuthorityContentDigestHex,
+    replicaSamples: _replicaSamples,
+    ...forecastSeal
+  } = input.forecast;
+  void _replicaSamples;
+  if (
+    computeForecastEconomicAuthorityContentDigestV1(forecastSeal) !==
+    economicAuthorityContentDigestHex
+  ) {
+    reasons.push("FORECAST_AUTHORITY_INVALID");
+  }
+  if (
+    !verifiedAuthorityMatches({
+      verification: input.authorityVerification.forecast,
+      purpose: "FORECAST_ISSUANCE",
+      subjectContentDigestHex: input.forecast.economicAuthorityContentDigestHex,
+      authority: input.forecast,
+    })
+  ) {
     reasons.push("FORECAST_AUTHORITY_NOT_VERIFIED");
   }
   if (
@@ -409,7 +561,14 @@ function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649R
         : "ANCHOR_AUTHORITY_INVALID",
     );
   }
-  if (!input.authorityVerification.anchorAuthorityVerified) {
+  if (
+    !verifiedAuthorityMatches({
+      verification: input.authorityVerification.anchor,
+      purpose: "ANCHOR_QUALIFICATION",
+      subjectContentDigestHex: input.anchorAuthority.contentDigestHex,
+      authority: input.anchorAuthority,
+    })
+  ) {
     reasons.push("ANCHOR_AUTHORITY_NOT_VERIFIED");
   }
   if (
@@ -442,7 +601,14 @@ function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649R
   if (policyErrors.length > 0 && !policySpecificReason) {
     reasons.push("EXECUTABLE_POLICY_INVALID");
   }
-  if (!input.authorityVerification.executablePolicyAuthorityVerified) {
+  if (
+    !verifiedAuthorityMatches({
+      verification: input.authorityVerification.executablePolicy,
+      purpose: "EXECUTABLE_POLICY_PREREGISTRATION",
+      subjectContentDigestHex: input.policy.contentDigestHex,
+      authority: input.policy,
+    })
+  ) {
     reasons.push("EXECUTABLE_POLICY_AUTHORITY_NOT_VERIFIED");
   }
   const sizeErrors = validateEconomicAdmissibleSizeSetV1(input.economicSizeSet);
@@ -451,18 +617,38 @@ function authorityReasonCodes(input: DecisionEconomicEvaluationInputV2): Dee649R
   } else if (sizeErrors.length > 0) {
     reasons.push("ECONOMIC_SIZE_SET_INVALID");
   }
-  if (!input.authorityVerification.economicSizeAuthorityVerified) {
+  if (
+    !verifiedAuthorityMatches({
+      verification: input.authorityVerification.economicSize,
+      purpose: "ECONOMIC_SIZE_AUTHORIZATION",
+      subjectContentDigestHex: input.economicSizeSet.contentDigestHex,
+      authority: input.economicSizeSet,
+    })
+  ) {
     reasons.push("ECONOMIC_SIZE_AUTHORITY_NOT_VERIFIED");
   }
   try {
     const availableCash = parseDecimal(input.cashAuthority.availableCashUsdt);
-    if (availableCash < 0n || !isDigestHex(input.cashAuthority.authorityReceiptDigestHex)) {
+    const { contentDigestHex, ...cashPayload } = input.cashAuthority;
+    if (
+      availableCash < 0n ||
+      !isDigestHex(input.cashAuthority.authorityReceiptDigestHex) ||
+      !isDigestHex(contentDigestHex) ||
+      computeCashEconomicAuthorityContentDigestV1(cashPayload) !== contentDigestHex
+    ) {
       reasons.push("CASH_AUTHORITY_INVALID");
     }
   } catch {
     reasons.push("CASH_AUTHORITY_INVALID");
   }
-  if (!input.authorityVerification.cashAuthorityVerified) {
+  if (
+    !verifiedAuthorityMatches({
+      verification: input.authorityVerification.cash,
+      purpose: "CASH_SNAPSHOT_AUTHORIZATION",
+      subjectContentDigestHex: input.cashAuthority.contentDigestHex,
+      authority: input.cashAuthority,
+    })
+  ) {
     reasons.push("CASH_AUTHORITY_NOT_VERIFIED");
   }
   const canonicalSamples = canonicalForecastSamples(input.forecast);
@@ -533,6 +719,7 @@ function emptyReceipt(input: {
     m: source.forecast.m,
     forecastAnchorClosedBarEpochMs: source.forecast.forecastAnchorClosedBarEpochMs,
     forecastAuthorityReceiptDigestHex: source.forecast.forecastAuthorityReceiptDigestHex,
+    forecastEconomicAuthorityContentDigestHex: source.forecast.economicAuthorityContentDigestHex,
     decisionEvaluationContractId: input.evaluationContractId,
     executionPayoffFunctionalVersion: EXECUTION_PAYOFF_FUNCTIONAL_V2_VERSION,
     forecastComponentUse: forecastComponentUse(source.policy),
@@ -553,9 +740,14 @@ function emptyReceipt(input: {
     evAggregationPolicy: DEE649_EV_AGGREGATION_POLICY,
     muBaseReplicasScale8: [],
     muLowerReplicasScale8: [],
+    muBaseReplicasExactScaledRational: [],
+    muLowerReplicasExactScaledRational: [],
     evLowerScale8: null,
     evBaseScale8: null,
     evUpperScale8: null,
+    evLowerExactScaledRational: null,
+    evBaseExactScaledRational: null,
+    evUpperExactScaledRational: null,
     scenarioContentDigests: [],
     scenarioResidualInventoryCount: 0,
     scientificAdmissionVerified: source.scientificAdmissionVerified,
@@ -726,6 +918,7 @@ function evaluateDecisionEconomicsV2Internal(
     m: input.forecast.m,
     forecastAnchorClosedBarEpochMs: input.forecast.forecastAnchorClosedBarEpochMs,
     forecastAuthorityReceiptDigestHex: input.forecast.forecastAuthorityReceiptDigestHex,
+    forecastEconomicAuthorityContentDigestHex: input.forecast.economicAuthorityContentDigestHex,
     decisionEvaluationContractId: registry.contract.contractId,
     executionPayoffFunctionalVersion: EXECUTION_PAYOFF_FUNCTIONAL_V2_VERSION,
     forecastComponentUse: forecastComponentUse(input.policy),
@@ -746,9 +939,14 @@ function evaluateDecisionEconomicsV2Internal(
     evAggregationPolicy: DEE649_EV_AGGREGATION_POLICY,
     muBaseReplicasScale8: exactRange.muBaseReplicasScale8,
     muLowerReplicasScale8: exactRange.muLowerReplicasScale8,
+    muBaseReplicasExactScaledRational: exactRange.muBaseReplicasExactScaledRational,
+    muLowerReplicasExactScaledRational: exactRange.muLowerReplicasExactScaledRational,
     evLowerScale8: evRange.evLowerScale8,
     evBaseScale8: evRange.evBaseScale8,
     evUpperScale8: evRange.evUpperScale8,
+    evLowerExactScaledRational: exactRange.evExactScaledRational.evLower,
+    evBaseExactScaledRational: exactRange.evExactScaledRational.evBase,
+    evUpperExactScaledRational: exactRange.evExactScaledRational.evUpper,
     scenarioContentDigests: scenarioResults.map((replica) =>
       replica.map((scenario) => scenario.contentDigestHex),
     ),
@@ -774,12 +972,24 @@ function evaluateDecisionEconomicsV2Internal(
 
 function malformedEvaluationResult(): DecisionEconomicEvaluationResultV2 {
   const zeroDigest = "0".repeat(64);
+  const unverified = (
+    purpose: VerifiedDecisionEconomicAuthorityV1["purpose"],
+  ): VerifiedDecisionEconomicAuthorityV1 => ({
+    schemaVersion: DEE649_AUTHORITY_VERIFICATION_SCHEMA_VERSION,
+    verified: false,
+    purpose,
+    organizationId: "",
+    accountId: "",
+    instrumentIdentityDigestHex: zeroDigest,
+    subjectContentDigestHex: zeroDigest,
+    verificationReceiptDigestHex: zeroDigest,
+  });
   const authorityVerification: DecisionEconomicAuthorityVerificationV1 = {
-    forecastAuthorityVerified: false,
-    anchorAuthorityVerified: false,
-    executablePolicyAuthorityVerified: false,
-    economicSizeAuthorityVerified: false,
-    cashAuthorityVerified: false,
+    forecast: unverified("FORECAST_ISSUANCE"),
+    anchor: unverified("ANCHOR_QUALIFICATION"),
+    executablePolicy: unverified("EXECUTABLE_POLICY_PREREGISTRATION"),
+    economicSize: unverified("ECONOMIC_SIZE_AUTHORIZATION"),
+    cash: unverified("CASH_SNAPSHOT_AUTHORIZATION"),
   };
   const receipt = receiptWithDigest({
     schemaVersion: WHY_NOT_CASH_RECEIPT_V2_SCHEMA_VERSION,
@@ -812,6 +1022,7 @@ function malformedEvaluationResult(): DecisionEconomicEvaluationResultV2 {
     m: 0,
     forecastAnchorClosedBarEpochMs: 0,
     forecastAuthorityReceiptDigestHex: zeroDigest,
+    forecastEconomicAuthorityContentDigestHex: zeroDigest,
     decisionEvaluationContractId: null,
     executionPayoffFunctionalVersion: EXECUTION_PAYOFF_FUNCTIONAL_V2_VERSION,
     forecastComponentUse: {
@@ -839,9 +1050,14 @@ function malformedEvaluationResult(): DecisionEconomicEvaluationResultV2 {
     evAggregationPolicy: DEE649_EV_AGGREGATION_POLICY,
     muBaseReplicasScale8: [],
     muLowerReplicasScale8: [],
+    muBaseReplicasExactScaledRational: [],
+    muLowerReplicasExactScaledRational: [],
     evLowerScale8: null,
     evBaseScale8: null,
     evUpperScale8: null,
+    evLowerExactScaledRational: null,
+    evBaseExactScaledRational: null,
+    evUpperExactScaledRational: null,
     scenarioContentDigests: [],
     scenarioResidualInventoryCount: 0,
     scientificAdmissionVerified: false,

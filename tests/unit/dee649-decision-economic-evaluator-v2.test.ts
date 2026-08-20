@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  computeExactDecisionEvRangeFromPayoffsV1,
+  computeCashEconomicAuthorityContentDigestV1,
+  computeExactDecisionEvRangeDiagnosticFromPayoffsV1,
+  DEE649_AUTHORITY_VERIFICATION_SCHEMA_VERSION,
   evaluateDecisionEconomicsV2,
   type DecisionEconomicEvaluationInputV2,
+  type VerifiedDecisionEconomicAuthorityV1,
 } from "@/lib/trader/intelligence/decision-economics/decision-economic-evaluator-v2";
 import { createSingletonEconomicSizeSetV1 } from "@/lib/trader/intelligence/decision-economics/dee649-contract-v1";
 import {
@@ -21,52 +24,94 @@ function evaluationInput(
   overrides: Partial<DecisionEconomicEvaluationInputV2> = {},
 ): DecisionEconomicEvaluationInputV2 {
   const positiveSample = dee649Sample13d({ exitPrices: [110, 110, 110] });
-  return {
-    forecast: dee649TestForecast([
-      [positiveSample, positiveSample],
-      [positiveSample, positiveSample],
-      [positiveSample, positiveSample],
-    ]),
-    anchorAuthority: dee649TestAnchor(),
-    policy: dee649TestPolicy({
-      entryCosts: {
-        feeBps: "1",
-        spreadBps: "1",
-        impactBps: "1",
-        slippageBps: "1",
-        conservativeStressBps: "2",
-      },
-      exitCosts: {
-        feeBps: "1",
-        spreadBps: "1",
-        impactBps: "1",
-        slippageBps: "1",
-        conservativeStressBps: "2",
-      },
-    }),
-    economicSizeSet: createSingletonEconomicSizeSetV1({
-      ...dee649TestAuthorityBinding(),
-      sizeSetId: "human-exact-size/test-only",
-      symbol: "BTCUSDT",
-      unit: "BASE_ASSET_QUANTITY",
-      exactQuantity: "1",
-      authorityReceiptDigestHex: DEE649_TEST_DIGEST_D,
-    }),
-    cashAuthority: {
-      ...dee649TestAuthorityBinding(),
-      availableCashUsdt: "200",
-      authorityReceiptDigestHex: DEE649_TEST_DIGEST_A,
+  const forecast = dee649TestForecast([
+    [positiveSample, positiveSample],
+    [positiveSample, positiveSample],
+    [positiveSample, positiveSample],
+  ]);
+  const anchorAuthority = dee649TestAnchor();
+  const policy = dee649TestPolicy({
+    entryCosts: {
+      feeBps: "1",
+      spreadBps: "1",
+      impactBps: "1",
+      slippageBps: "1",
+      conservativeStressBps: "2",
     },
+    exitCosts: {
+      feeBps: "1",
+      spreadBps: "1",
+      impactBps: "1",
+      slippageBps: "1",
+      conservativeStressBps: "2",
+    },
+  });
+  const economicSizeSet = createSingletonEconomicSizeSetV1({
+    ...dee649TestAuthorityBinding(),
+    sizeSetId: "human-exact-size/test-only",
+    symbol: "BTCUSDT",
+    unit: "BASE_ASSET_QUANTITY",
+    exactQuantity: "1",
+    authorityReceiptDigestHex: DEE649_TEST_DIGEST_D,
+  });
+  const cashPayload = {
+    ...dee649TestAuthorityBinding(),
+    availableCashUsdt: "200",
+    authorityReceiptDigestHex: DEE649_TEST_DIGEST_A,
+  };
+  const cashAuthority = {
+    ...cashPayload,
+    contentDigestHex: computeCashEconomicAuthorityContentDigestV1(cashPayload),
+  };
+  const verified = (
+    purpose: VerifiedDecisionEconomicAuthorityV1["purpose"],
+    subjectContentDigestHex: string,
+  ): VerifiedDecisionEconomicAuthorityV1 => ({
+    schemaVersion: DEE649_AUTHORITY_VERIFICATION_SCHEMA_VERSION,
+    verified: true,
+    purpose,
+    organizationId: forecast.organizationId,
+    accountId: forecast.accountId,
+    instrumentIdentityDigestHex: forecast.instrumentIdentityDigestHex,
+    subjectContentDigestHex,
+    verificationReceiptDigestHex: DEE649_TEST_DIGEST_B,
+  });
+  return {
+    forecast,
+    anchorAuthority,
+    policy,
+    economicSizeSet,
+    cashAuthority,
     authorityVerification: {
-      forecastAuthorityVerified: true,
-      anchorAuthorityVerified: true,
-      executablePolicyAuthorityVerified: true,
-      economicSizeAuthorityVerified: true,
-      cashAuthorityVerified: true,
+      forecast: verified("FORECAST_ISSUANCE", forecast.economicAuthorityContentDigestHex),
+      anchor: verified("ANCHOR_QUALIFICATION", anchorAuthority.contentDigestHex),
+      executablePolicy: verified("EXECUTABLE_POLICY_PREREGISTRATION", policy.contentDigestHex),
+      economicSize: verified("ECONOMIC_SIZE_AUTHORIZATION", economicSizeSet.contentDigestHex),
+      cash: verified("CASH_SNAPSHOT_AUTHORIZATION", cashAuthority.contentDigestHex),
     },
     scientificAdmissionVerified: true,
     scientificAdmissionReceiptDigestHex: DEE649_TEST_DIGEST_B,
     ...overrides,
+  };
+}
+
+function withVerifiedForecast(
+  input: DecisionEconomicEvaluationInputV2,
+  forecast: DecisionEconomicEvaluationInputV2["forecast"],
+): DecisionEconomicEvaluationInputV2 {
+  return {
+    ...input,
+    forecast,
+    authorityVerification: {
+      ...input.authorityVerification,
+      forecast: {
+        ...input.authorityVerification.forecast,
+        organizationId: forecast.organizationId,
+        accountId: forecast.accountId,
+        instrumentIdentityDigestHex: forecast.instrumentIdentityDigestHex,
+        subjectContentDigestHex: forecast.economicAuthorityContentDigestHex,
+      },
+    },
   };
 }
 
@@ -102,10 +147,9 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
   it("selects CASH and preserves negative lower/base economics", () => {
     const negative = dee649Sample13d({ exitPrices: [80, 80, 80] });
     const base = evaluationInput();
-    const result = evaluateDecisionEconomicsV2({
-      ...base,
-      forecast: dee649TestForecast([[[...negative]], [[...negative]]]),
-    });
+    const result = evaluateDecisionEconomicsV2(
+      withVerifiedForecast(base, dee649TestForecast([[[...negative]], [[...negative]]])),
+    );
 
     expect(result.decisionActionable).toBe(false);
     expect(result.action).toBe("CASH");
@@ -121,10 +165,9 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
       exitVolumes: [2, 2, 100],
     });
     const base = evaluationInput();
-    const result = evaluateDecisionEconomicsV2({
-      ...base,
-      forecast: dee649TestForecast([[residual]]),
-    });
+    const result = evaluateDecisionEconomicsV2(
+      withVerifiedForecast(base, dee649TestForecast([[residual]])),
+    );
 
     expect(result.evRange).toBeNull();
     expect(result.economicAdmissibleSizeSet).toBeNull();
@@ -172,18 +215,57 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
     expect(unverified.receipt.reasonCodes).toContain("SCIENTIFIC_ADMISSION_RECEIPT_REQUIRED");
 
     for (const [field, reason] of [
-      ["forecastAuthorityVerified", "FORECAST_AUTHORITY_NOT_VERIFIED"],
-      ["anchorAuthorityVerified", "ANCHOR_AUTHORITY_NOT_VERIFIED"],
-      ["executablePolicyAuthorityVerified", "EXECUTABLE_POLICY_AUTHORITY_NOT_VERIFIED"],
-      ["economicSizeAuthorityVerified", "ECONOMIC_SIZE_AUTHORITY_NOT_VERIFIED"],
-      ["cashAuthorityVerified", "CASH_AUTHORITY_NOT_VERIFIED"],
+      ["forecast", "FORECAST_AUTHORITY_NOT_VERIFIED"],
+      ["anchor", "ANCHOR_AUTHORITY_NOT_VERIFIED"],
+      ["executablePolicy", "EXECUTABLE_POLICY_AUTHORITY_NOT_VERIFIED"],
+      ["economicSize", "ECONOMIC_SIZE_AUTHORITY_NOT_VERIFIED"],
+      ["cash", "CASH_AUTHORITY_NOT_VERIFIED"],
     ] as const) {
       const result = evaluateDecisionEconomicsV2({
         ...base,
-        authorityVerification: { ...base.authorityVerification, [field]: false },
+        authorityVerification: {
+          ...base.authorityVerification,
+          [field]: { ...base.authorityVerification[field], verified: false },
+        },
       });
       expect(result.receipt.reasonCodes).toContain(reason);
       expect(result.decisionActionable).toBe(false);
+    }
+  });
+
+  it("rejects stale verified-receipt reuse after any authority subject substitution", () => {
+    const base = evaluationInput();
+    const replacementForecast = dee649TestForecast([[dee649Sample13d()]]);
+    const replacementAnchor = dee649TestAnchor("101");
+    const replacementPolicy = dee649TestPolicy({ participationCapFraction: "0.2" });
+    const replacementSize = createSingletonEconomicSizeSetV1({
+      ...dee649TestAuthorityBinding(),
+      sizeSetId: "human-exact-size/replacement-test-only",
+      symbol: "BTCUSDT",
+      unit: "BASE_ASSET_QUANTITY",
+      exactQuantity: "0.5",
+      authorityReceiptDigestHex: DEE649_TEST_DIGEST_D,
+    });
+    const cashPayload = {
+      ...dee649TestAuthorityBinding(),
+      availableCashUsdt: "100",
+      authorityReceiptDigestHex: DEE649_TEST_DIGEST_A,
+    };
+    const replacementCash = {
+      ...cashPayload,
+      contentDigestHex: computeCashEconomicAuthorityContentDigestV1(cashPayload),
+    };
+
+    for (const [override, reason] of [
+      [{ forecast: replacementForecast }, "FORECAST_AUTHORITY_NOT_VERIFIED"],
+      [{ anchorAuthority: replacementAnchor }, "ANCHOR_AUTHORITY_NOT_VERIFIED"],
+      [{ policy: replacementPolicy }, "EXECUTABLE_POLICY_AUTHORITY_NOT_VERIFIED"],
+      [{ economicSizeSet: replacementSize }, "ECONOMIC_SIZE_AUTHORITY_NOT_VERIFIED"],
+      [{ cashAuthority: replacementCash }, "CASH_AUTHORITY_NOT_VERIFIED"],
+    ] as const) {
+      const result = evaluateDecisionEconomicsV2({ ...base, ...override });
+      expect(result.decisionActionable).toBe(false);
+      expect(result.receipt.reasonCodes).toContain(reason);
     }
   });
 
@@ -230,14 +312,14 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
     );
 
     const base = evaluationInput();
-    const first = evaluateDecisionEconomicsV2({ ...base, forecast: baselineForecast });
-    const second = evaluateDecisionEconomicsV2({ ...base, forecast: subScaleForecast });
+    const first = evaluateDecisionEconomicsV2(withVerifiedForecast(base, baselineForecast));
+    const second = evaluateDecisionEconomicsV2(withVerifiedForecast(base, subScaleForecast));
     expect(second.scenarioResults).toEqual(first.scenarioResults);
     expect(second.receipt.evLowerScale8).toBe(first.receipt.evLowerScale8);
   });
 
   it("keeps the CASH threshold exact when decimal payoffs sum to zero", () => {
-    const exact = computeExactDecisionEvRangeFromPayoffsV1({
+    const exact = computeExactDecisionEvRangeDiagnosticFromPayoffsV1({
       baseReplicaPayoffsScale8: [
         ["0.1", "0.2", "-0.3"],
         ["0.1", "0.2", "-0.3"],
@@ -246,11 +328,21 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
         ["0.1", "0.2", "-0.3"],
         ["0.1", "0.2", "-0.3"],
       ],
-      scientificAdmissionVerified: true,
     });
     expect(exact.evRange.evLowerScale8).toBe("0.00000000");
     expect(exact.evRange.decisionActionable).toBe(false);
     expect(exact.evRange.reasonCodes).toContain("EV_LOWER_NON_POSITIVE");
+
+    const subScalePositive = computeExactDecisionEvRangeDiagnosticFromPayoffsV1({
+      baseReplicaPayoffsScale8: [["0.00000001", "0"]],
+      lowerReplicaPayoffsScale8: [["0.00000001", "0"]],
+    });
+    expect(subScalePositive.evRange.evLowerScale8).toBe("0.00000000");
+    expect(subScalePositive.evExactScaledRational.evLower).toEqual({
+      numeratorScale8: "1",
+      denominator: "2",
+    });
+    expect(subScalePositive.evRange.reasonCodes).not.toContain("EV_LOWER_NON_POSITIVE");
   });
 
   it("binds Forecast, anchor, policy and size authorities to one SPOT instrument", () => {
@@ -324,16 +416,17 @@ describe("DEE-649 C3 closed Decision evaluator and WhyNotCashReceiptV2", () => {
     expect(replay).toEqual(first);
     expect(withLegacyNoise).toEqual(first);
     expect(changedPolicy.receipt.contentDigestHex).not.toBe(first.receipt.contentDigestHex);
+    expect(changedPolicy.receipt.reasonCodes).toContain("EXECUTABLE_POLICY_AUTHORITY_NOT_VERIFIED");
+    expect(changedPolicy.decisionActionable).toBe(false);
   });
 
   it("property-checks scenario-wise lower <= base across gains and losses", () => {
     for (let price = 70; price <= 130; price += 3) {
       const sample = dee649Sample13d({ exitPrices: [price, price, price] });
       const base = evaluationInput();
-      const result = evaluateDecisionEconomicsV2({
-        ...base,
-        forecast: dee649TestForecast([[sample]]),
-      });
+      const result = evaluateDecisionEconomicsV2(
+        withVerifiedForecast(base, dee649TestForecast([[sample]])),
+      );
       for (const scenario of result.scenarioResults.flat()) {
         expect(scenario.lowerPayoff).toBeLessThanOrEqual(scenario.basePayoff);
       }

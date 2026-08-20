@@ -11,6 +11,7 @@ import {
   type ForecastAnchorPriceAuthorityV1,
 } from "@/lib/trader/intelligence/decision-economics/dee649-contract-v1";
 import type { ForecastEconomicAuthorityV1 } from "@/lib/trader/intelligence/decision-economics/decision-economic-evaluator-v2";
+import { computeForecastEconomicAuthorityContentDigestV1 } from "@/lib/trader/intelligence/decision-economics/decision-economic-evaluator-v2";
 import {
   COMPONENT_LAYOUT_VERSION,
   MODEL_TRANSFORM_VERSION,
@@ -150,13 +151,22 @@ export function dee649TestForecast(
     targetRoleId: base.identity.targetRoleId,
     samples: base.replicaSamples,
   });
+  const forecastContentDigestHex = computeForecastContentDigest(
+    Buffer.from(base.forecastGenerationIdentityDigestHex, "hex"),
+    Buffer.from(distributionDigest, "hex"),
+  ).toString("hex");
+  const { replicaSamples: _replicaSamples, ...forecastSeal } = {
+    ...base,
+    distributionSemanticDigestHex: distributionDigest,
+    forecastContentDigestHex,
+  };
+  void _replicaSamples;
   return {
     ...base,
     distributionSemanticDigestHex: distributionDigest,
-    forecastContentDigestHex: computeForecastContentDigest(
-      Buffer.from(base.forecastGenerationIdentityDigestHex, "hex"),
-      Buffer.from(distributionDigest, "hex"),
-    ).toString("hex"),
+    forecastContentDigestHex,
+    economicAuthorityContentDigestHex:
+      computeForecastEconomicAuthorityContentDigestV1(forecastSeal),
     ...overrides,
   };
 }

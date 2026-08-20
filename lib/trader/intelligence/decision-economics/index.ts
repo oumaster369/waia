@@ -27,7 +27,10 @@ export {
   readDecisionEconomicsV2ByForecastId,
 } from "./decision-economics-v2-service";
 export {
-  computeExactDecisionEvRangeFromPayoffsV1,
+  computeCashEconomicAuthorityContentDigestV1,
+  computeExactDecisionEvRangeDiagnosticFromPayoffsV1,
+  computeForecastEconomicAuthorityContentDigestV1,
+  DEE649_AUTHORITY_VERIFICATION_SCHEMA_VERSION,
   evaluateDecisionEconomicsV2,
   WHY_NOT_CASH_RECEIPT_V2_SCHEMA_VERSION,
 } from "./decision-economic-evaluator-v2";
@@ -37,6 +40,8 @@ export type {
   DecisionEconomicAuthorityVerificationV1,
   CashEconomicAuthorityV1,
   ForecastEconomicAuthorityV1,
+  ExactScaledRationalReceiptV1,
+  VerifiedDecisionEconomicAuthorityV1,
   WhyNotCashReceiptV2,
 } from "./decision-economic-evaluator-v2";
 export {
