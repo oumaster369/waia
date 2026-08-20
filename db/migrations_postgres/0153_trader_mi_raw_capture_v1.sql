@@ -68,7 +68,9 @@ CREATE TABLE public.trader_mi_raw_capture_receipt_v1 (
     payload_bytes >= 0 AND max_payload_bytes > 0
     AND payload_bytes <= max_payload_bytes AND retention_seconds > 0
   ),
-  CONSTRAINT tmrcr_v1_retention_check CHECK (retention_until > captured_at),
+  CONSTRAINT tmrcr_v1_retention_check CHECK (
+    retention_until = captured_at + (retention_seconds * interval '1 second')
+  ),
   CONSTRAINT tmrcr_v1_authority_check CHECK (authority = 'RECORD_ONLY'),
   CONSTRAINT tmrcr_v1_id_org_source_uq UNIQUE (id, organization_id, source_id)
 );
@@ -118,6 +120,9 @@ CREATE TABLE public.trader_mi_raw_validation_receipt_v1 (
   CONSTRAINT tmrvr_v1_id_hex_check CHECK (id ~ '^[0-9a-f]{64}$'),
   CONSTRAINT tmrvr_v1_capture_digest_check CHECK (
     capture_receipt_digest ~ '^[0-9a-f]{64}$'
+  ),
+  CONSTRAINT tmrvr_v1_validator_identity_check CHECK (
+    length(btrim(validator_id)) > 0 AND length(btrim(validator_version)) > 0
   ),
   CONSTRAINT tmrvr_v1_status_check CHECK (
     jsonb_typeof(reason_codes_json::jsonb) = 'array' AND (
@@ -170,6 +175,7 @@ RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   NEW.captured_at := date_trunc('milliseconds', transaction_timestamp());
   NEW.created_at := NEW.captured_at;
+  NEW.retention_until := NEW.captured_at + (NEW.retention_seconds * interval '1 second');
   IF (NEW.receipt_json::jsonb ->> 'capturedAtUtc')::timestamptz IS DISTINCT FROM NEW.captured_at
     OR (NEW.receipt_json::jsonb ->> 'retentionUntilUtc')::timestamptz
       IS DISTINCT FROM NEW.retention_until
@@ -177,6 +183,24 @@ BEGIN
       IS DISTINCT FROM NEW.max_payload_bytes
     OR (NEW.receipt_json::jsonb -> 'policy' ->> 'retentionSeconds')::bigint
       IS DISTINCT FROM NEW.retention_seconds
+    OR NEW.receipt_json::jsonb ->> 'rawBytesDigest' IS DISTINCT FROM NEW.raw_bytes_digest
+    OR (NEW.receipt_json::jsonb ->> 'payloadBytes')::bigint IS DISTINCT FROM NEW.payload_bytes
+    OR NEW.receipt_json::jsonb ->> 'policyDigest' IS DISTINCT FROM NEW.policy_digest
+    OR NEW.receipt_json::jsonb -> 'policy' ->> 'policyDigest' IS DISTINCT FROM NEW.policy_digest
+    OR NEW.receipt_json::jsonb ->> 'secretScanReceiptDigest'
+      IS DISTINCT FROM NEW.secret_scan_receipt_digest
+    OR NEW.receipt_json::jsonb -> 'secretScanReceipt' ->> 'contentDigest'
+      IS DISTINCT FROM NEW.secret_scan_receipt_digest
+    OR NEW.receipt_json::jsonb -> 'secretScanReceipt' ->> 'rawBytesDigest'
+      IS DISTINCT FROM NEW.raw_bytes_digest
+    OR NEW.receipt_json::jsonb -> 'secretScanReceipt' ->> 'status' IS DISTINCT FROM 'PASS'
+    OR (NEW.receipt_json::jsonb -> 'secretScanReceipt' ->> 'completedAtUtc')::timestamptz
+      IS NULL
+    OR (NEW.receipt_json::jsonb -> 'secretScanReceipt' ->> 'completedAtUtc')::timestamptz
+      > NEW.captured_at
+    OR NEW.receipt_json::jsonb ->> 'storageBindingDigest'
+      IS DISTINCT FROM NEW.storage_binding_digest
+    OR NEW.receipt_json::jsonb ->> 'authority' IS DISTINCT FROM 'RECORD_ONLY'
   THEN
     RAISE EXCEPTION 'raw capture receipt time/policy must match database-authored transaction data'
       USING ERRCODE = 'check_violation';
@@ -199,11 +223,39 @@ CREATE TRIGGER trader_mi_raw_capture_receipt_v1_block_delete
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.waia_mi_raw_validation_v1_author_time()
 RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  reason_codes jsonb;
+  normalized_reason_codes jsonb;
 BEGIN
   NEW.known_at := date_trunc('milliseconds', transaction_timestamp());
   NEW.created_at := NEW.known_at;
-  IF (NEW.receipt_json::jsonb ->> 'knownAtUtc')::timestamptz IS DISTINCT FROM NEW.known_at THEN
-    RAISE EXCEPTION 'raw validation known_at must match database-authored transaction time'
+  reason_codes := NEW.reason_codes_json::jsonb;
+  SELECT COALESCE(jsonb_agg(code ORDER BY code), '[]'::jsonb)
+    INTO normalized_reason_codes
+  FROM (
+    SELECT DISTINCT value AS code
+    FROM jsonb_array_elements_text(reason_codes) AS reason(value)
+  ) normalized;
+  IF (NEW.receipt_json::jsonb ->> 'knownAtUtc')::timestamptz IS DISTINCT FROM NEW.known_at
+    OR NEW.receipt_json::jsonb ->> 'captureReceiptDigest'
+      IS DISTINCT FROM NEW.capture_receipt_digest
+    OR NEW.receipt_json::jsonb ->> 'validatorId' IS DISTINCT FROM NEW.validator_id
+    OR NEW.receipt_json::jsonb ->> 'validatorVersion' IS DISTINCT FROM NEW.validator_version
+    OR NEW.receipt_json::jsonb ->> 'status' IS DISTINCT FROM NEW.status
+    OR NEW.receipt_json::jsonb -> 'reasonCodes' IS DISTINCT FROM reason_codes
+    OR NEW.receipt_json::jsonb ->> 'authority' IS DISTINCT FROM 'RECORD_ONLY'
+    OR NEW.receipt_json::jsonb ->> 'observationAuthority' IS DISTINCT FROM 'NONE'
+    OR NEW.receipt_json::jsonb ->> 'measurementAuthority' IS DISTINCT FROM 'NONE'
+  THEN
+    RAISE EXCEPTION 'raw validation receipt must match database-authored time and canonical row data'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(reason_codes) AS reason(value)
+    WHERE jsonb_typeof(reason.value) <> 'string'
+      OR (reason.value #>> '{}') !~ '^[A-Z][A-Z0-9_]{2,63}$'
+  ) OR normalized_reason_codes IS DISTINCT FROM reason_codes THEN
+    RAISE EXCEPTION 'raw validation reason codes must be canonical, unique, sorted codes'
       USING ERRCODE = 'check_violation';
   END IF;
   IF NOT EXISTS (

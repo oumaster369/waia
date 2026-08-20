@@ -7,9 +7,16 @@ import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   attestRawSecretScanV1,
+  buildRawCaptureReceiptAtDurableBoundaryV1,
   buildRawStorageBindingAtDurableBoundaryV1,
+  buildRawValidationReceiptAtDurableBoundaryV1,
   defineRawCapturePolicyV1,
   prepareRawCaptureV1,
+  RawCaptureRejectedError,
+  serializeRawCaptureReceiptV1,
+  serializeRawStorageBindingV1,
+  serializeRawValidationReceiptV1,
+  type RawValidationReceiptV1,
 } from "@/lib/trader/mi/raw-capture-v1";
 import {
   persistPreparedRawCaptureV1Postgres,
@@ -19,6 +26,7 @@ import {
   RawCaptureSourceNotFoundError,
 } from "@/lib/trader/mi/raw-capture-repository-postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
+import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
@@ -58,8 +66,12 @@ async function resetUser(userId: string) {
   await cleanupWp13Org(url!, userId);
 }
 
-function prepared(organizationId: string, sourceId: string, retentionSeconds = 3_600) {
-  const scanAt = new Date(Date.now() - 10_000);
+function prepared(
+  organizationId: string,
+  sourceId: string,
+  retentionSeconds = 3_600,
+  scanAt = new Date(Date.now() - 10_000),
+) {
   return prepareRawCaptureV1({
     organizationId,
     sourceId,
@@ -73,6 +85,13 @@ function prepared(organizationId: string, sourceId: string, retentionSeconds = 3
       completedAt: scanAt,
     }),
   });
+}
+
+function resealValidation(value: RawValidationReceiptV1): RawValidationReceiptV1 {
+  const { id: _id, contentDigest: _digest, ...body } = value;
+  void _id; void _digest;
+  const contentDigest = createHash("sha256").update(canonicalJsonString(body), "utf8").digest("hex");
+  return { ...body, id: contentDigest, contentDigest };
 }
 
 function binding(input: ReturnType<typeof prepared>, objectKey = "object-a") {
@@ -122,6 +141,14 @@ describe.skipIf(!enabled || !url)("postgres MI Raw Capture V1 (DEE-658)", () => 
   });
 
   it("persists no body bytes and records rejected validation idempotently", async () => {
+    const mutated = prepared(orgA, SOURCE_A);
+    const mutatedBinding = binding(mutated, "mutated-prepared");
+    mutated.bodyBytes[0] ^= 0xff;
+    await expect(persistPreparedRawCaptureV1Postgres(db, { organizationId: orgA }, {
+      prepared: mutated,
+      storageBinding: mutatedBinding,
+    })).rejects.toBeInstanceOf(RawCaptureRejectedError);
+
     const admission = prepared(orgA, SOURCE_A);
     const storeBinding = binding(admission);
     const stored = await persistPreparedRawCaptureV1Postgres(db, { organizationId: orgA }, {
@@ -192,18 +219,105 @@ describe.skipIf(!enabled || !url)("postgres MI Raw Capture V1 (DEE-658)", () => 
     expect(new Date(validationTimes[0]!.known_at).toISOString())
       .toBe(new Date(validationTimes[0]!.created_at).toISOString());
 
-    const directId = hex64("direct-known-at-overwrite");
+    const canonicalValidation = buildRawValidationReceiptAtDurableBoundaryV1({
+      captureReceipt: receipt,
+      validatorId: "trigger-proof",
+      validatorVersion: "v1",
+      outcome: { status: "VALID", reasonCodes: [] },
+      knownAt: new Date(receipt.capturedAtUtc),
+    });
+    const backdatedValidation = resealValidation({
+      ...canonicalValidation,
+      knownAtUtc: new Date(new Date(receipt.capturedAtUtc).getTime() - 1).toISOString(),
+    });
     await expect(sqlClient`
       INSERT INTO trader_mi_raw_validation_receipt_v1 (
         id, organization_id, source_id, capture_receipt_digest, validator_id, validator_version,
         status, reason_codes_json, known_at, authority, observation_authority,
         measurement_authority, receipt_json, content_digest, schema_version, created_at
       ) VALUES (
-        ${directId}, ${orgA}::uuid, ${SOURCE_A}::uuid, ${receipt.id}, 'trigger-proof', 'v1',
-        'VALID', '[]', '2000-01-01T00:00:00Z', 'RECORD_ONLY', 'NONE', 'NONE', '{}',
-        ${directId}, 'raw-validation-receipt-v1', '2000-01-01T00:00:00Z'
+        ${backdatedValidation.id}, ${orgA}::uuid, ${SOURCE_A}::uuid, ${receipt.id},
+        ${backdatedValidation.validatorId}, ${backdatedValidation.validatorVersion},
+        ${backdatedValidation.status}, ${canonicalJsonString(backdatedValidation.reasonCodes)},
+        ${backdatedValidation.knownAtUtc}, 'RECORD_ONLY', 'NONE', 'NONE',
+        ${serializeRawValidationReceiptV1(backdatedValidation)}, ${backdatedValidation.contentDigest},
+        ${backdatedValidation.schemaVersion}, ${backdatedValidation.knownAtUtc}
       )
-    `).rejects.toThrow(/database-authored transaction time/);
+    `).rejects.toThrow(/database-authored time/);
+
+    const nonCanonicalId = hex64("direct-non-canonical-reasons");
+    await expect(sqlClient`
+      INSERT INTO trader_mi_raw_validation_receipt_v1 (
+        id, organization_id, source_id, capture_receipt_digest, validator_id, validator_version,
+        status, reason_codes_json, known_at, authority, observation_authority,
+        measurement_authority, receipt_json, content_digest, schema_version, created_at
+      ) VALUES (
+        ${nonCanonicalId}, ${orgA}::uuid, ${SOURCE_A}::uuid, ${receipt.id},
+        'reason-proof', 'v1', 'REJECTED', '["Z_REASON","A_REASON","A_REASON"]',
+        date_trunc('milliseconds', transaction_timestamp()), 'RECORD_ONLY', 'NONE', 'NONE',
+        jsonb_build_object(
+          'id', ${nonCanonicalId}::text, 'schemaVersion', 'raw-validation-receipt-v1',
+          'organizationId', ${orgA}::text, 'sourceId', ${SOURCE_A}::text,
+          'captureReceiptDigest', ${receipt.id}::text, 'validatorId', 'reason-proof',
+          'validatorVersion', 'v1', 'status', 'REJECTED',
+          'reasonCodes', '["Z_REASON","A_REASON","A_REASON"]'::jsonb,
+          'knownAtUtc', date_trunc('milliseconds', transaction_timestamp()),
+          'authority', 'RECORD_ONLY', 'observationAuthority', 'NONE',
+          'measurementAuthority', 'NONE', 'contentDigest', ${nonCanonicalId}::text
+        )::text,
+        ${nonCanonicalId}, 'raw-validation-receipt-v1',
+        date_trunc('milliseconds', transaction_timestamp())
+      )
+    `).rejects.toThrow(/canonical, unique, sorted/);
+
+    const oldScanAt = new Date("2000-01-01T00:00:00.000Z");
+    const oldPrepared = prepared(orgA, SOURCE_A, 3_600, oldScanAt);
+    const oldBinding = buildRawStorageBindingAtDurableBoundaryV1({
+      organizationId: orgA,
+      sourceId: SOURCE_A,
+      rawBytesDigest: oldPrepared.rawBytesDigest,
+      objectReference: {
+        storageBackendId: "test-private-object-store",
+        objectKey: "backdated-capture",
+        objectVersion: "test-version-1",
+        encryptionRequirement: "PRIVATE_ENCRYPTED",
+        accessRequirement: "SERVER_ONLY",
+      },
+      storedAt: oldScanAt,
+    });
+    await sqlClient`
+      INSERT INTO trader_mi_raw_storage_binding_v1 (
+        id, organization_id, source_id, raw_bytes_digest, storage_backend_id, object_key,
+        object_version, encryption_requirement, access_requirement, stored_at, binding_json,
+        content_digest, schema_version
+      ) VALUES (
+        ${oldBinding.id}, ${orgA}::uuid, ${SOURCE_A}::uuid, ${oldBinding.rawBytesDigest},
+        ${oldBinding.objectReference.storageBackendId}, ${oldBinding.objectReference.objectKey},
+        ${oldBinding.objectReference.objectVersion}, ${oldBinding.objectReference.encryptionRequirement},
+        ${oldBinding.objectReference.accessRequirement}, ${oldBinding.storedAtUtc},
+        ${serializeRawStorageBindingV1(oldBinding)}, ${oldBinding.contentDigest}, ${oldBinding.schemaVersion}
+      )
+    `;
+    const backdatedCapture = buildRawCaptureReceiptAtDurableBoundaryV1({
+      prepared: oldPrepared,
+      storageBinding: oldBinding,
+      capturedAt: new Date("2000-01-01T00:00:01.000Z"),
+    });
+    await expect(sqlClient`
+      INSERT INTO trader_mi_raw_capture_receipt_v1 (
+        id, organization_id, source_id, raw_bytes_digest, payload_bytes, max_payload_bytes,
+        retention_seconds, policy_digest, secret_scan_receipt_digest, storage_binding_digest,
+        captured_at, retention_until, authority, receipt_json, content_digest, schema_version
+      ) VALUES (
+        ${backdatedCapture.id}, ${orgA}::uuid, ${SOURCE_A}::uuid, ${backdatedCapture.rawBytesDigest},
+        ${backdatedCapture.payloadBytes}, ${backdatedCapture.policy.maxPayloadBytes},
+        ${backdatedCapture.policy.retentionSeconds}, ${backdatedCapture.policyDigest},
+        ${backdatedCapture.secretScanReceiptDigest}, ${backdatedCapture.storageBindingDigest},
+        ${backdatedCapture.capturedAtUtc}, ${backdatedCapture.retentionUntilUtc},
+        ${backdatedCapture.authority}, ${serializeRawCaptureReceiptV1(backdatedCapture)},
+        ${backdatedCapture.contentDigest}, ${backdatedCapture.schemaVersion}
+      )
+    `).rejects.toThrow(/database-authored transaction data/);
   });
 
   it("fails closed across tenant/source scope and on idempotency conflicts", async () => {
@@ -255,18 +369,61 @@ describe.skipIf(!enabled || !url)("postgres MI Raw Capture V1 (DEE-658)", () => 
       await expect(sqlClient.unsafe(`DELETE FROM ${table} WHERE id = $1`, [id]))
         .rejects.toThrow(/append-only/);
     }
-    for (const role of ["authenticated", "anon"] as const) {
-      const roleSql = postgres(url!, { max: 1 });
-      try {
-        await roleSql.unsafe(`SET ROLE ${role}`);
-        for (const [table] of targets) {
-          await expect(roleSql.unsafe(`SELECT * FROM ${table} LIMIT 1`)).rejects.toThrow();
-          await expect(roleSql.unsafe(`DELETE FROM ${table} WHERE false`)).rejects.toThrow();
+    const tableNames = targets.map(([table]) => table);
+    const rlsMetadata = await sqlClient<{
+      relname: string; relrowsecurity: boolean;
+    }[]>`
+      SELECT c.relname, c.relrowsecurity
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relname = ANY(${tableNames})
+      ORDER BY c.relname
+    `;
+    expect(rlsMetadata).toHaveLength(3);
+    expect(rlsMetadata.every((row) => row.relrowsecurity)).toBe(true);
+    const policies = await sqlClient<{ tablename: string; roles: string[]; cmd: string }[]>`
+      SELECT tablename, roles, cmd FROM pg_policies
+      WHERE schemaname = 'public' AND tablename = ANY(${tableNames})
+      ORDER BY tablename
+    `;
+    expect(policies).toHaveLength(3);
+    expect(policies.every((policy) =>
+      policy.cmd === "ALL" && policy.roles.includes("authenticated") && policy.roles.includes("anon")
+    )).toBe(true);
+
+    await sqlClient.unsafe(
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON ${tableNames.join(", ")} TO authenticated, anon`,
+    );
+    try {
+      for (const role of ["authenticated", "anon"] as const) {
+        const roleSql = postgres(url!, { max: 1 });
+        try {
+          await roleSql.unsafe(`SET ROLE ${role}`);
+          for (const [table] of targets) {
+            await expect(roleSql.unsafe(`SELECT id FROM ${table} LIMIT 1`)).resolves.toEqual([]);
+            await expect(roleSql.unsafe(`UPDATE ${table} SET content_digest = content_digest RETURNING id`))
+              .resolves.toEqual([]);
+            await expect(roleSql.unsafe(`DELETE FROM ${table} RETURNING id`)).resolves.toEqual([]);
+          }
+          await expect(roleSql.unsafe(`
+            INSERT INTO trader_mi_raw_storage_binding_v1 (
+              id, organization_id, source_id, raw_bytes_digest, storage_backend_id, object_key,
+              object_version, encryption_requirement, access_requirement, stored_at, binding_json,
+              content_digest, schema_version
+            ) VALUES (
+              '${hex64(`${role}-rls-insert`)}', '${orgA}', '${SOURCE_A}', '${hex64("rls-raw")}',
+              'rls', 'denied', '1', 'PRIVATE_ENCRYPTED', 'SERVER_ONLY', now(), '{}',
+              '${hex64(`${role}-rls-insert`)}', 'raw-storage-binding-v1'
+            )
+          `)).rejects.toThrow(/row-level security/);
+        } finally {
+          try { await roleSql.unsafe("RESET ROLE"); } catch {}
+          await roleSql.end({ timeout: 5 });
         }
-      } finally {
-        try { await roleSql.unsafe("RESET ROLE"); } catch {}
-        await roleSql.end({ timeout: 5 });
       }
+    } finally {
+      await sqlClient.unsafe(
+        `REVOKE SELECT, INSERT, UPDATE, DELETE ON ${tableNames.join(", ")} FROM authenticated, anon`,
+      );
     }
   });
 });

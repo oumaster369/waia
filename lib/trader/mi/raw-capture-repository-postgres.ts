@@ -15,6 +15,7 @@ import {
   isRawCaptureReceiptV1,
   isRawStorageBindingV1,
   isRawValidationReceiptV1,
+  requirePreparedRawCaptureV1,
   serializeRawCaptureReceiptV1,
   serializeRawStorageBindingV1,
   serializeRawValidationReceiptV1,
@@ -225,25 +226,26 @@ export async function persistPreparedRawCaptureV1Postgres(
   input: { prepared: PreparedRawCaptureV1; storageBinding: RawStorageBindingV1 },
 ): Promise<{ receipt: RawCaptureReceiptV1; insertedNew: boolean }> {
   const scoped = requireOrgContext(context.organizationId);
+  const prepared = requirePreparedRawCaptureV1(input.prepared);
   if (
-    input.prepared.organizationId !== scoped.organizationId ||
+    prepared.organizationId !== scoped.organizationId ||
     input.storageBinding.organizationId !== scoped.organizationId ||
-    input.storageBinding.sourceId !== input.prepared.sourceId ||
-    input.storageBinding.rawBytesDigest !== input.prepared.rawBytesDigest ||
+    input.storageBinding.sourceId !== prepared.sourceId ||
+    input.storageBinding.rawBytesDigest !== prepared.rawBytesDigest ||
     !isRawStorageBindingV1(input.storageBinding)
   ) throw new RawCapturePersistenceConflictError();
 
   return runWaiaPostgresTransaction(db, async (tx) => {
-    await requireScopedSource(tx, scoped, input.prepared.sourceId);
+    await requireScopedSource(tx, scoped, prepared.sourceId);
     await persistBinding(tx, scoped, input.storageBinding);
     const existing = await readCaptureByBinding(tx, scoped, input.storageBinding.contentDigest);
     if (existing) {
-      requireCaptureMatchesPrepared(existing, input.prepared, input.storageBinding);
+      requireCaptureMatchesPrepared(existing, prepared, input.storageBinding);
       return { receipt: existing, insertedNew: false };
     }
 
     const receipt = buildRawCaptureReceiptAtDurableBoundaryV1({
-      prepared: input.prepared,
+      prepared,
       storageBinding: input.storageBinding,
       capturedAt: await durableTransactionTime(tx),
     });
@@ -267,7 +269,7 @@ export async function persistPreparedRawCaptureV1Postgres(
     }).onConflictDoNothing().returning({ id: pgSchema.traderMiRawCaptureReceiptV1.id });
     const stored = await readCaptureByBinding(tx, scoped, input.storageBinding.contentDigest);
     if (!stored) throw new RawCapturePersistenceConflictError();
-    requireCaptureMatchesPrepared(stored, input.prepared, input.storageBinding);
+    requireCaptureMatchesPrepared(stored, prepared, input.storageBinding);
     return { receipt: stored, insertedNew: inserted.length === 1 };
   });
 }

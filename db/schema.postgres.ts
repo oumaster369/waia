@@ -957,7 +957,10 @@ export const traderMiRawCaptureReceiptV1 = pgTable(
       sql`${t.payloadBytes} >= 0 AND ${t.maxPayloadBytes} > 0
         AND ${t.payloadBytes} <= ${t.maxPayloadBytes} AND ${t.retentionSeconds} > 0`,
     ),
-    check("tmrcr_v1_retention_check", sql`${t.retentionUntil} > ${t.capturedAt}`),
+    check(
+      "tmrcr_v1_retention_check",
+      sql`${t.retentionUntil} = ${t.capturedAt} + (${t.retentionSeconds} * interval '1 second')`,
+    ),
     check("tmrcr_v1_authority_check", sql`${t.authority} = 'RECORD_ONLY'`),
   ],
 );
@@ -1005,6 +1008,10 @@ export const traderMiRawValidationReceiptV1 = pgTable(
     check("tmrvr_v1_id_is_digest_check", sql`${t.id} = ${t.contentDigest}`),
     check("tmrvr_v1_id_hex_check", sql`${t.id} ~ '^[0-9a-f]{64}$'`),
     check("tmrvr_v1_capture_digest_check", sql`${t.captureReceiptDigest} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "tmrvr_v1_validator_identity_check",
+      sql`length(btrim(${t.validatorId})) > 0 AND length(btrim(${t.validatorVersion})) > 0`,
+    ),
     check(
       "tmrvr_v1_status_check",
       sql`jsonb_typeof(${t.reasonCodesJson}::jsonb) = 'array' AND (
