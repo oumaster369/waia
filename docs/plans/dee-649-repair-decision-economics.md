@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
+  status: in-progress
   currentWorkPackage: null
   completedWorkPackages: [C1, C2, C3]
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 3968fc4e804a5803ef1a6e31e16b43f3c6dfc0de
-  lastValidationAt: 2026-08-20T10:24:00Z
+  lastValidatedGitSha: 7ce7e0764aefa1de50677a7e7d49ceca4cc01ebe
+  lastValidationAt: 2026-08-20T10:37:00Z
   blockedReason: null
-  nextAction: "Obtain independent exact-head adversarial review, then publish one PR if authorized."
+  nextAction: "Obtain a fresh independent exact-head adversarial review; publication remains withheld."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -86,6 +86,26 @@ manifest does not apply.
 - Unit/property tests for component sensitivity, negative outcomes, partial fills,
   rounding, residuals, missing state, registry mismatch, deterministic replay and
   execution-surface-independent pure semantics.
+
+### Exact-head corrective admission
+
+Independent adversarial review denied the earlier `e8f5105c…` candidate. The
+corrective commit `7ce7e072…` therefore adds, without widening runtime scope:
+
+- verified-authority flags that raw receipt digests and constructors cannot confer;
+- one organization/account/venue/SPOT/symbol/base/quote identity digest across
+  Forecast, anchor, policy, size and CASH authorities;
+- Forecast K/M, normalization, issuance receipt, anchor epoch/content binding and a
+  locally recomputed canonical distribution-semantic digest;
+- canonical scale-8 Forecast components as the only payoff input representation;
+- exact scale-8 payoff means and rational Type-7 quantiles, with actionability gated
+  on the exact `EV_lower > 0` result rather than floating-point arithmetic;
+- deterministic malformed-input rejection and adversarial regressions for stale
+  samples, stale anchor, cross-account/instrument substitution, sub-scale ambiguity,
+  exact-zero EV and per-component HALF_UP boundaries.
+
+This corrective candidate is not integration-ready until a fresh independent review
+attests the exact plan-bearing head and all required validations remain green.
 
 ## Compatibility and ownership
 
