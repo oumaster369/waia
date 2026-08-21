@@ -177,9 +177,9 @@ describe("trader paper bar-close loop telemetry (AT-E9 S7)", () => {
       cycle_id: "test-telemetry-0",
       cycles_run: 1,
       state_refreshed: true,
-      execution_status: "submitted",
+      execution_status: "execution_v2_required",
     });
-    expect(cycleCompleteEvents[0]?.position_symbol_count).toBeGreaterThanOrEqual(1);
+    expect(cycleCompleteEvents[0]?.position_symbol_count).toBe(0);
 
     expect(cycleCompleteEvents[1]).toMatchObject({
       kind: "paper_loop",
@@ -187,8 +187,8 @@ describe("trader paper bar-close loop telemetry (AT-E9 S7)", () => {
       cycle_id: "test-telemetry-1",
       cycles_run: 2,
       state_refreshed: true,
-      execution_status: "risk_rejected",
+      execution_status: "execution_v2_required",
     });
-    expect(cycleCompleteEvents[1]?.position_symbol_count).toBeGreaterThanOrEqual(1);
+    expect(cycleCompleteEvents[1]?.position_symbol_count).toBe(0);
   });
 });

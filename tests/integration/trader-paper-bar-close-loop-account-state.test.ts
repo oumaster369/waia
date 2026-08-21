@@ -26,7 +26,6 @@ import {
 } from "@/lib/trader/risk/kill-switch";
 import type { RiskEngineService } from "@/lib/trader/risk/evaluate.types";
 import { createRiskEngineService } from "@/lib/trader/risk/risk-engine-service";
-import { capitalReasonCodes } from "@/lib/trader/risk/reason-codes";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import type { TraderAuditInput } from "@/lib/trader/types";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
@@ -163,23 +162,12 @@ describe("trader paper bar-close loop account state refresh (AT-E9 S6)", () => {
 
     expect(result).toEqual({ cyclesRun: 2, aborted: false });
     expect(submitSpy).toHaveBeenCalledTimes(2);
-    expect(evaluateSpy).toHaveBeenCalledTimes(2);
+    expect(evaluateSpy).not.toHaveBeenCalled();
 
     const firstSubmit = await submitSpy.mock.results[0]?.value;
     const secondSubmit = await submitSpy.mock.results[1]?.value;
-    expect(firstSubmit?.status).toBe("submitted");
-    expect(secondSubmit?.status).toBe("risk_rejected");
-
-    const secondEvaluationInput = evaluateSpy.mock.calls[1]?.[0];
-    expect(secondEvaluationInput?.accountState?.positions).toEqual([
-      { symbol: "BTC/USDT", quantity: "0.01" },
-    ]);
-
-    const secondDecision = await evaluateSpy.mock.results[1]?.value;
-    expect(secondDecision?.decision.outcome).toBe("CLOSE_ONLY");
-    expect(secondDecision?.decision.reasonCodes).toContain(
-      capitalReasonCodes.maxPositionPerSymbolExceeded,
-    );
+    expect(firstSubmit?.status).toBe("execution_v2_required");
+    expect(secondSubmit?.status).toBe("execution_v2_required");
   });
 
   it("submits twice without refresh when limits would allow both fills", async () => {

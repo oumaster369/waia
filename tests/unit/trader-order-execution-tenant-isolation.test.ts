@@ -116,15 +116,16 @@ describe("trader order execution tenant isolation (DEE-249 / ADR-0007)", () => {
       accountState: EMPTY_STATE,
     });
 
-    expect(result.status).toBe("submitted");
+    expect(result).toEqual({
+      status: "execution_v2_required",
+      order: null,
+      reason: "LEGACY_ORDER_SUBMISSION_DISABLED",
+    });
 
     const orderA = await repo.getOrderById(requireOrgContext(orgA), orgAOrderId);
     expect(orderA?.state).toBe("CREATED");
 
-    if (result.status === "submitted") {
-      expect(result.order.organizationId).toBe(orgB);
-      expect(result.order.id).not.toBe(orgAOrderId);
-    }
+    expect(await repo.listOrders(requireOrgContext(orgB))).toHaveLength(0);
 
     for (const line of telemetryLines) {
       const parsed = JSON.parse(line) as { organization_id?: string };

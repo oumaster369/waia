@@ -147,17 +147,9 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
     ).toEqual([...CANONICAL_MARKET_QUESTION_IDS].sort());
 
     expect(result.evaluation.signal.outcome).toBe("SIGNAL");
-    expect(result.submitBlocked).toBe(false);
-    expect(result.execution?.status).toBe("submitted");
-    if (result.execution?.status !== "submitted") {
-      return;
-    }
-
-    expect(result.execution.order.clientOrderId).toBe(
-      "client-paper-cycle-test-htx-poll-0-mean_reversion_v0",
-    );
-    expect(result.execution.order.state).toBe("FILLED");
-    expect(result.reconciliation?.outcomes[0]?.classification).toBe("IN_SYNC");
+    expect(result.submitBlocked).toBe(true);
+    expect(result.execution?.status).toBe("execution_v2_required");
+    expect(result.reconciliation).toBeNull();
   });
 
   it("runs 3 mocked HTX poll cycles via runPollPaperCycles with unique client order IDs", async () => {
@@ -183,7 +175,6 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
 
     expect(results).toHaveLength(3);
 
-    const idempotencyKeys = new Set<string>();
     for (const result of results) {
       expect(result.evaluation.understanding).toBeDefined();
       expect(result.evaluation.understanding!.questionEvaluations).toHaveLength(11);
@@ -192,25 +183,9 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
       ).toEqual([...CANONICAL_MARKET_QUESTION_IDS].sort());
 
       expect(result.evaluation.signal.outcome).toBe("SIGNAL");
-      expect(result.submitBlocked).toBe(false);
-      expect(result.execution?.status).toBe("submitted");
-      if (result.execution?.status !== "submitted") {
-        continue;
-      }
-      expect(result.execution.order.state).toBe("FILLED");
-      expect(result.reconciliation?.outcomes[0]?.classification).toBe("IN_SYNC");
-      idempotencyKeys.add(result.execution.order.clientOrderId);
+      expect(result.submitBlocked).toBe(true);
+      expect(result.execution?.status).toBe("execution_v2_required");
+      expect(result.reconciliation).toBeNull();
     }
-
-    expect(idempotencyKeys.size).toBe(3);
-    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-0-mean_reversion_v0")).toBe(
-      true,
-    );
-    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-1-mean_reversion_v0")).toBe(
-      true,
-    );
-    expect(idempotencyKeys.has("client-paper-cycle-test-htx-poll-multi-2-mean_reversion_v0")).toBe(
-      true,
-    );
   });
 });

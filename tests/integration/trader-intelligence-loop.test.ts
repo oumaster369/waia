@@ -127,14 +127,8 @@ describe("trader intelligence loop integration (DEE-257)", () => {
     });
 
     expect(result.evaluation.signal.outcome).toBe("SIGNAL");
-    expect(result.submitBlocked).toBe(false);
-    expect(result.execution?.status).toBe("submitted");
-    if (result.execution?.status !== "submitted") {
-      return;
-    }
-
-    expect(result.execution.order.strategySignalId).toBe(result.evaluation.signal.strategySignalId);
-    expect(result.execution.order.state).toBe("FILLED");
-    expect(result.reconciliation?.outcomes[0]?.classification).toBe("IN_SYNC");
+    expect(result.submitBlocked).toBe(true);
+    expect(result.execution?.status).toBe("execution_v2_required");
+    expect(result.reconciliation).toBeNull();
   });
 });

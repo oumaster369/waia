@@ -209,7 +209,7 @@ describe("M0 closed-trade attribution forensics (DEE-372 Phase 1)", () => {
     vi.restoreAllMocks();
   });
 
-  it("forensic regression: buy-only window yields zero closedTradeCount while submitted orders and open position exist", async () => {
+  it("forensic regression: legacy buy-only window fails closed without fabricated attribution", async () => {
     const context = requireOrgContext(orgId);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);
@@ -262,12 +262,12 @@ describe("M0 closed-trade attribution forensics (DEE-372 Phase 1)", () => {
     );
 
     expect(evaluationSpy.mock.calls.length).toBeGreaterThan(0);
-    expect(filledBuyOrders.length).toBeGreaterThan(0);
+    expect(filledBuyOrders).toHaveLength(0);
     expect(filledSellOrders).toHaveLength(0);
-    expect(book.positions.some((position) => position.quantity !== "0")).toBe(true);
+    expect(book.positions.some((position) => position.quantity !== "0")).toBe(false);
     expect(metrics.tradeCount).toBe(0);
-    expect(submittedOrderCount).toBeGreaterThan(0);
-    expect(metrics.tradeCount).not.toBe(submittedOrderCount);
+    expect(submittedOrderCount).toBe(0);
+    expect(metrics.tradeCount).toBe(submittedOrderCount);
     expect(metrics.schemaVersion).toBe("1.0.0");
   });
 });

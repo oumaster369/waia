@@ -172,11 +172,9 @@ describe("trader live cycle integration (DEE-212 / BP-7)", () => {
       return;
     }
 
-    expect(result.submitBlocked).toBe(false);
-    expect(result.execution?.status).toBe("submitted");
-    expect(result.reconciliation).not.toBeNull();
-    if (result.execution?.status === "submitted") {
-      expect(result.reporting?.reportingPeriodId).toBeTruthy();
-    }
+    expect(result.submitBlocked).toBe(true);
+    expect(result.execution?.status).toBe("execution_v2_required");
+    expect(result.reconciliation).toBeNull();
+    expect(result.reporting).toBeNull();
   });
 });

@@ -143,23 +143,12 @@ describe("trader paper cycle runner integration (DEE-260)", () => {
 
     expect(results).toHaveLength(3);
 
-    const idempotencyKeys = new Set<string>();
     for (const result of results) {
       expect(result.evaluation.signal.outcome).toBe("SIGNAL");
-      expect(result.submitBlocked).toBe(false);
-      expect(result.execution?.status).toBe("submitted");
-      if (result.execution?.status !== "submitted") {
-        continue;
-      }
-      expect(result.execution.order.state).toBe("FILLED");
-      expect(result.reconciliation?.outcomes[0]?.classification).toBe("IN_SYNC");
-      idempotencyKeys.add(result.execution.order.clientOrderId);
+      expect(result.submitBlocked).toBe(true);
+      expect(result.execution?.status).toBe("execution_v2_required");
+      expect(result.reconciliation).toBeNull();
     }
-
-    expect(idempotencyKeys.size).toBe(3);
-    expect(idempotencyKeys.has("client-paper-cycle-dee-260-0-mean_reversion_v0")).toBe(true);
-    expect(idempotencyKeys.has("client-paper-cycle-dee-260-1-mean_reversion_v0")).toBe(true);
-    expect(idempotencyKeys.has("client-paper-cycle-dee-260-2-mean_reversion_v0")).toBe(true);
 
     const intelligenceLines = lines.filter(isIntelligenceCounter);
     expect(intelligenceLines).toHaveLength(21);
