@@ -16,6 +16,15 @@
     "migrationReconciliation": "Preserve Treasury migrations 0154/0155 exactly and admit the additive Risk V2 migration as 0156.",
     "authority": "Explicit Human renewed exact-base admission for the existing DEE-650 train"
   },
+  "ratifiedScopeDecision": {
+    "authorizedAt": "2026-08-21",
+    "authority": "Explicit Human decision after the R650-D legacy-boundary audit",
+    "riskV2PathInvariant": "Every order entering through Risk V2 fails closed unless the exact RiskAllowanceV2 is validly claimed/consumed and bound before connector submission.",
+    "noWeakening": true,
+    "globalLegacyCutoverDelegatedTo": "DEE-651",
+    "delegatedAcceptance": "Migrate or fail-close every remaining legacy/non-V2 connector caller and prove final whole-repository static/runtime connector consumer-graph closure.",
+    "globalEnforcementClaimedByThisTrain": false
+  },
   "includedChildren": [
     {
       "issue": "DEE-663",
@@ -145,6 +154,14 @@
       "deliveryStatus": "planned",
       "blocked": false,
       "scope": "Consumption-time atomic allowance claim and exact order binding, current posture/kill/reconciliation TOCTOU recheck, same-bound-order uncertain continuation, partial-fill exhaustion, and static/runtime proof that connector submission is dominated by a consumed allowance guard.",
+      "scopeClarification": "The admitted consumer-proof wording applies to every order entering the Risk V2 branch. Global legacy connector-caller cutover is not claimed and is explicitly handed to DEE-651.",
+      "delegatedHandoffs": [
+        {
+          "issue": "DEE-651",
+          "scope": "Global legacy/non-V2 connector caller cutover and final whole-repository static/runtime consumer-graph closure.",
+          "completionClaimed": false
+        }
+      ],
       "dependencies": [
         "DEE-665"
       ],
@@ -172,6 +189,7 @@
         "Uncertain continuation is limited to the same bound order and partial fill leaves no residual authority.",
         "Static and runtime consumer proof establishes no valid current consumed allowance means no connector submission."
       ],
+      "expectedAcceptanceClarification": "The preceding consumer-proof sentence is scoped by the ratified Human decision to orders entering through Risk V2. DEE-651 owns global enforcement across legacy callers.",
       "expectedTests": [
         "pnpm test --run tests/unit/trader-risk-v2-execution-consumption.test.ts",
         "WAIA_PG_INTEGRATION=1 pnpm test --run tests/integration/postgres-risk-v2.test.ts",

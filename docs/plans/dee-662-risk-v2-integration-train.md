@@ -25,7 +25,7 @@ includedIssues:
     role: atomic-consumption-and-connector-guard
     completionPolicy: manual-after-exact-head-merge
     status: planned
-deferredIssues: []
+deferredIssues: [DEE-651-global-legacy-connector-cutover]
 blockedByActiveWork: []
 linearStatusFlow:
   onPlanApproved: In Progress
@@ -56,6 +56,11 @@ renewedAdmission:
   baseContainsPullRequest: 474
   priorReviewedHead: ec95408f5aa17d0beba2aa77f5abdaadd868b81a
   authority: "Explicit Human authorization to preserve Treasury 0154/0155 and renumber the additive Risk V2 migration to 0156"
+scopeReconciliation:
+  authorizedAt: "2026-08-21"
+  authority: "Explicit Human decision after R650-D boundary audit"
+  riskV2Boundary: "Every order entering Risk V2 fails closed without its exact consumed and bound RiskAllowanceV2."
+  delegatedToDEE651: "Global legacy connector-caller cutover and whole-repository consumer-graph closure."
 ---
 
 # DEE-662 — Risk V2 Integration Train
@@ -119,8 +124,10 @@ routing, slicing, or retry policy.
    residual authority.
 8. Postgres organization integrity, RLS metadata, real temporary-grant CRUD denial,
    append-only behavior, concurrency, and clean migration apply are proven.
-9. No valid current consumed allowance means no connector submission, with static and
-   runtime consumer proof.
+9. Every order entering through the Risk V2 path fails closed unless its exact current
+   allowance has been atomically consumed and bound. Static and runtime proof covers this
+   Risk V2 branch through the sole connector submission site without claiming that legacy
+   callers have already been cut over.
 10. Exactly one full local unit suite runs after the complete diff is frozen. Final lint,
     typecheck, build, canon, governance, Postgres, and exact-head adversarial review pass
     with zero unresolved P1/P2 before publication.
@@ -132,6 +139,15 @@ optimization, short/leverage/derivatives, Billing HWM merge, legacy rewrite, pro
 apply, credentials or security-policy mutation, live/capital/promotion, holdout, destructive
 operations, Human recovery decisions, Execution Server, or DEE-651 Execution V2 planning,
 routing, slicing, and retry design.
+
+## Explicit DEE-651 handoff
+
+DEE-651 owns the still-unsatisfied global legacy connector-caller cutover and final
+whole-repository static/runtime connector consumer-graph closure. It must migrate or
+fail-close every remaining legacy/non-V2 caller and prove that no such path can reach an
+external connector effect without exact consumed/bound RiskAllowanceV2 authority. This
+delegation does not weaken the complete fail-closed R650-D boundary for orders that enter
+Risk V2, and this train makes no global enforcement claim.
 
 ## Work packages
 
