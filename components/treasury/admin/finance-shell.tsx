@@ -11,11 +11,7 @@ import { FinanceOrgPicker } from "@/components/treasury/admin/org-picker";
 const NAV = [
   { href: "/finance", label: "Overview" },
   { href: "/finance/transactions", label: "Transactions" },
-  { href: "/finance/budgets", label: "Budgets" },
-  { href: "/finance/funding-needs", label: "Funding needs" },
-  { href: "/finance/commitments", label: "Commitments" },
-  { href: "/finance/evidence", label: "Evidence" },
-  { href: "/finance/preview", label: "Publication preview" },
+  { href: "/finance/budgets", label: "Budget" },
 ] as const;
 
 function FinanceNav() {
@@ -48,11 +44,10 @@ function FinanceShellInner({ children }: { children: React.ReactNode }) {
     <div className="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-4 py-8">
       <header className="space-y-4">
         <div>
-          <p className="text-muted-foreground text-xs uppercase tracking-wide">WAIA Treasury</p>
+          <p className="text-muted-foreground text-xs tracking-wide uppercase">WAIA Treasury</p>
           <h1 className="text-2xl font-medium">Finance</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Human review of provenance, accounting meaning, evidence, verification, and publication.
-            Public and private facts stay visually separate.
+            A clear view of WAIA’s money: what is available, what moved, and what is planned.
           </p>
         </div>
         <FinanceOrgPicker />

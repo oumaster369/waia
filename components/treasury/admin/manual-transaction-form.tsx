@@ -4,58 +4,34 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 
 import { ConfirmDialog } from "@/components/treasury/admin/confirm-dialog";
-import { OrgGate } from "@/components/treasury/admin/org-gate";
-import { useFinanceOrg } from "@/components/treasury/admin/finance-org-context";
-import { UnavailableState } from "@/components/treasury/admin/unavailable-state";
 import { CanonicalSelect, FormField, MoreDetails } from "@/components/treasury/admin/form-controls";
-import {
-  BudgetSelect,
-  CatalogStatus,
-  FundingNeedSelect,
-} from "@/components/treasury/admin/org-entity-select";
+import { useFinanceOrg } from "@/components/treasury/admin/finance-org-context";
+import { LedgerCatalogSelect } from "@/components/treasury/admin/ledger-catalog-select";
+import { OrgGate } from "@/components/treasury/admin/org-gate";
 import { TransactionRefSelect } from "@/components/treasury/admin/transaction-ref-select";
-import { useOrgBudgets, useOrgFundingNeeds } from "@/components/treasury/admin/use-org-catalog";
+import { UnavailableState } from "@/components/treasury/admin/unavailable-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { treasuryJson } from "@/lib/treasury-admin/api";
-import {
-  TREASURY_DIRECTION_OPTIONS,
-  TREASURY_KIND_OPTIONS,
-  TREASURY_USDT_V1_ASSET,
-  TREASURY_USDT_V1_DECIMALS,
-} from "@/lib/treasury-admin/canonical";
-import { datetimeLocalToIso } from "@/lib/treasury-admin/datetime-local";
-import { buildManualDraftPostBody } from "@/lib/treasury-admin/manual-draft";
+import { dateToDatetimeLocal, datetimeLocalToIso } from "@/lib/treasury-admin/datetime-local";
+import { parseHumanSignedAmount } from "@/lib/treasury-admin/ledger";
+import { buildCentralLedgerPostBody } from "@/lib/treasury-admin/manual-draft";
 import { financeHref } from "@/lib/treasury-admin/org";
-import {
-  formatAtomicToHumanDecimal,
-  parseHumanDecimalToAtomic,
-} from "@/lib/treasury-admin/parse-human-amount";
 
 function ManualInner() {
   const { organizationId } = useFinanceOrg();
   const router = useRouter();
-  const [moreOpen, setMoreOpen] = React.useState(false);
-  const {
-    budgets,
-    loading: budgetsLoading,
-    error: budgetsError,
-  } = useOrgBudgets(moreOpen ? organizationId : null);
-  const {
-    fundingNeeds,
-    loading: needsLoading,
-    error: needsError,
-  } = useOrgFundingNeeds(moreOpen ? organizationId : null);
-
-  const [direction, setDirection] = React.useState("INFLOW");
-  const [kind, setKind] = React.useState("");
+  const [status, setStatus] = React.useState<"NEEDS_REVIEW" | "PLANNED">("NEEDS_REVIEW");
   const [humanAmount, setHumanAmount] = React.useState("");
-  const [occurredLocal, setOccurredLocal] = React.useState("");
-  const [purpose, setPurpose] = React.useState("");
-  const [budgetId, setBudgetId] = React.useState("");
-  const [fundingNeedId, setFundingNeedId] = React.useState("");
+  const [occurredLocal, setOccurredLocal] = React.useState(() => dateToDatetimeLocal(new Date()));
+  const [counterpartyId, setCounterpartyId] = React.useState("");
+  const [accountId, setAccountId] = React.useState("");
+  const [accountCurrency, setAccountCurrency] = React.useState("");
+  const [categoryId, setCategoryId] = React.useState("");
+  const [projectId, setProjectId] = React.useState("");
+  const [notes, setNotes] = React.useState("");
   const [correctsTransactionId, setCorrectsTransactionId] = React.useState("");
   const [reason, setReason] = React.useState("");
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -64,34 +40,33 @@ function ManualInner() {
   const [busy, setBusy] = React.useState(false);
 
   const occurredAtIso = datetimeLocalToIso(occurredLocal);
-  const parsedAmount = parseHumanDecimalToAtomic(humanAmount, TREASURY_USDT_V1_DECIMALS, {
-    requirePositive: true,
-  });
-  const amountHelp = parsedAmount.ok
-    ? `Exact ${TREASURY_USDT_V1_ASSET} amount. Treasury V1 uses ${String(TREASURY_USDT_V1_DECIMALS)} decimals.`
-    : humanAmount.trim()
-      ? parsedAmount.message
-      : `Exact ${TREASURY_USDT_V1_ASSET} amount. Treasury V1 uses ${String(TREASURY_USDT_V1_DECIMALS)} decimals. Excess precision is rejected, not rounded.`;
+  const parsedAmount = parseHumanSignedAmount(humanAmount);
 
-  function openConfirm() {
-    if (!organizationId) return;
-    const built = buildManualDraftPostBody(
+  function build(requireReason: boolean) {
+    if (!organizationId) return { ok: false as const, message: "Select an organization first." };
+    return buildCentralLedgerPostBody(
       {
         organizationId,
-        direction,
-        kind,
+        status,
         humanAmount,
         occurredAtIso: occurredAtIso ?? "",
-        purpose,
-        budgetId,
-        fundingNeedId,
+        currency: accountCurrency,
+        counterpartyId,
+        accountId,
+        categoryId,
+        projectId,
+        notes,
         correctsTransactionId,
-        reason: "",
+        reason,
       },
-      { requireReason: false },
+      { requireReason },
     );
-    if (!built.ok) {
-      setFormError(built.message);
+  }
+
+  function openConfirm() {
+    const result = build(false);
+    if (!result.ok) {
+      setFormError(result.message);
       return;
     }
     setFormError(null);
@@ -99,23 +74,10 @@ function ManualInner() {
   }
 
   async function submit() {
-    if (!organizationId) return;
-    const built = buildManualDraftPostBody({
-      organizationId,
-      direction,
-      kind,
-      humanAmount,
-      occurredAtIso: occurredAtIso ?? "",
-      purpose,
-      budgetId,
-      fundingNeedId,
-      correctsTransactionId,
-      reason,
-    });
-    if (!built.ok) {
-      setBusy(false);
+    const built = build(true);
+    if (!built.ok || !organizationId) {
       setConfirmOpen(false);
-      setFormError(built.message);
+      setFormError(built.ok ? "Select an organization first." : built.message);
       return;
     }
     setBusy(true);
@@ -133,13 +95,15 @@ function ManualInner() {
     router.push(financeHref(`/finance/transactions/${result.data.transaction.id}`, organizationId));
   }
 
+  if (!organizationId) return null;
+
   return (
-    <WaiaSurface variant="raised" className="space-y-4 p-4" data-testid="manual-transaction-form">
+    <WaiaSurface variant="raised" className="space-y-5 p-5" data-testid="manual-transaction-form">
       <div>
-        <h2 className="text-lg font-medium">Add manual transaction</h2>
+        <h2 className="text-lg font-medium">Add transaction</h2>
         <p className="text-muted-foreground text-sm">
-          Records an observation as MANUAL_DRAFT and PRIVATE. Classification, verification, and
-          publication remain later steps.
+          Use a minus sign for money sent and a positive amount for money received. Every new entry
+          stays behind Human review; verification is a separate audited action.
         </p>
       </div>
       {error ? <UnavailableState code={error.code} message={error.message} /> : null}
@@ -149,37 +113,44 @@ function ManualInner() {
         </p>
       ) : null}
 
-      <FormField label="Direction" htmlFor="manual-direction">
-        <CanonicalSelect
-          id="manual-direction"
-          testId="manual-direction"
-          value={direction}
-          onChange={setDirection}
-          options={TREASURY_DIRECTION_OPTIONS}
-          blankLabel="Select direction"
-          required
-        />
-      </FormField>
-
-      <FormField
-        label="Kind"
-        htmlFor="manual-kind"
-        help="Optional. Leave unclassified if accounting meaning is not decided yet."
-      >
-        <CanonicalSelect
-          id="manual-kind"
-          testId="manual-kind"
-          value={kind}
-          onChange={setKind}
-          options={TREASURY_KIND_OPTIONS}
-          blankLabel="Not classified yet"
-        />
-      </FormField>
+      <div className="grid gap-4 md:grid-cols-2">
+        <FormField
+          label="Date and time"
+          htmlFor="manual-occurred-at"
+          help="Captured when this form opened. You can correct it before saving."
+        >
+          <Input
+            id="manual-occurred-at"
+            data-testid="manual-occurred-at"
+            type="datetime-local"
+            value={occurredLocal}
+            onChange={(event) => setOccurredLocal(event.target.value)}
+          />
+        </FormField>
+        <FormField
+          label="Status"
+          htmlFor="manual-status"
+          help="Planned is accepted only for a future date and time."
+        >
+          <CanonicalSelect
+            id="manual-status"
+            testId="manual-status"
+            value={status}
+            onChange={(value) => setStatus(value as "NEEDS_REVIEW" | "PLANNED")}
+            options={[
+              { value: "NEEDS_REVIEW", label: "Requires review" },
+              { value: "PLANNED", label: "Planned" },
+            ]}
+            blankLabel="Choose status"
+            required
+          />
+        </FormField>
+      </div>
 
       <FormField
         label="Amount"
         htmlFor="manual-amount"
-        help={amountHelp}
+        help="Positive = money received. Negative = money sent. Up to 6 decimal places; never rounded."
         error={!parsedAmount.ok && humanAmount.trim() ? parsedAmount.message : null}
       >
         <Input
@@ -187,101 +158,82 @@ function ManualInner() {
           data-testid="manual-amount"
           inputMode="decimal"
           autoComplete="off"
-          placeholder="125.50"
+          placeholder="125.50 or -40.00"
           value={humanAmount}
           aria-invalid={humanAmount.trim() !== "" && !parsedAmount.ok}
           onChange={(event) => setHumanAmount(event.target.value)}
         />
       </FormField>
 
-      <FormField
-        label="Occurred at"
-        htmlFor="manual-occurred-at"
-        help="Local date and time. Stored as an exact UTC timestamp."
-      >
-        <Input
-          id="manual-occurred-at"
-          data-testid="manual-occurred-at"
-          type="datetime-local"
-          value={occurredLocal}
-          onChange={(event) => setOccurredLocal(event.target.value)}
+      <div className="grid gap-4 md:grid-cols-2">
+        <LedgerCatalogSelect
+          id="manual-counterparty"
+          organizationId={organizationId}
+          kind="counterparties"
+          value={counterpartyId}
+          onChange={(id) => setCounterpartyId(id)}
         />
-      </FormField>
+        <LedgerCatalogSelect
+          id="manual-account"
+          organizationId={organizationId}
+          kind="accounts"
+          value={accountId}
+          required
+          onChange={(id, item) => {
+            setAccountId(id);
+            setAccountCurrency(item && "currency" in item ? item.currency : "");
+          }}
+        />
+        <LedgerCatalogSelect
+          id="manual-category"
+          organizationId={organizationId}
+          kind="categories"
+          value={categoryId}
+          onChange={(id) => setCategoryId(id)}
+        />
+        <LedgerCatalogSelect
+          id="manual-project"
+          organizationId={organizationId}
+          kind="projects"
+          value={projectId}
+          onChange={(id) => setProjectId(id)}
+        />
+      </div>
 
       <FormField
-        label="Purpose"
-        htmlFor="manual-purpose"
-        help="Optional Human context for this observation. Not a closed taxonomy."
+        label="Notes"
+        htmlFor="manual-notes"
+        help="Private operational context for this transaction."
       >
         <Textarea
-          id="manual-purpose"
-          data-testid="manual-purpose"
-          value={purpose}
-          onChange={(event) => setPurpose(event.target.value)}
+          id="manual-notes"
+          data-testid="manual-notes"
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
         />
       </FormField>
 
-      <MoreDetails summary="More details" testId="manual-more-details" onToggle={setMoreOpen}>
-        <p className="text-muted-foreground text-sm" data-testid="manual-asset">
-          Asset is {TREASURY_USDT_V1_ASSET} with {String(TREASURY_USDT_V1_DECIMALS)} native
-          decimals. Decimals are not operator-editable.
+      <MoreDetails summary="Correction" testId="manual-correction-details">
+        <p className="text-muted-foreground text-sm">
+          Use this only to append a correction to an existing transaction. Verified history is never
+          edited in place.
         </p>
-        <FormField label="Stored timestamp (ISO-8601 UTC)" htmlFor="manual-occurred-iso">
-          <Input
-            id="manual-occurred-iso"
-            data-testid="manual-occurred-iso"
-            readOnly
-            value={occurredAtIso ?? ""}
-            placeholder="Appears after you choose a local date and time"
-          />
-        </FormField>
-        {parsedAmount.ok ? (
-          <p className="text-muted-foreground text-xs">
-            Stores as native amount {parsedAmount.atomic} (
-            {formatAtomicToHumanDecimal(parsedAmount.atomic, TREASURY_USDT_V1_DECIMALS)}{" "}
-            {TREASURY_USDT_V1_ASSET}).
-          </p>
-        ) : null}
-        <BudgetSelect
-          id="manual-budget"
-          testId="manual-budget"
-          value={budgetId}
-          onChange={setBudgetId}
-          budgets={budgets}
-          blankLabel="None"
-          help="Optional. Submits budget_id, not the title."
+        <TransactionRefSelect
+          organizationId={organizationId}
+          value={correctsTransactionId}
+          onChange={setCorrectsTransactionId}
+          emphasizeCorrection
         />
-        <FundingNeedSelect
-          id="manual-funding-need"
-          testId="manual-funding-need"
-          value={fundingNeedId}
-          onChange={setFundingNeedId}
-          fundingNeeds={fundingNeeds}
-          blankLabel="None"
-          help="Optional. Submits funding_need_id, not the title."
-        />
-        <CatalogStatus
-          loading={budgetsLoading || needsLoading}
-          error={budgetsError ?? needsError}
-        />
-        {moreOpen && organizationId ? (
-          <TransactionRefSelect
-            organizationId={organizationId}
-            value={correctsTransactionId}
-            onChange={setCorrectsTransactionId}
-            emphasizeCorrection={kind === "CORRECTION"}
-          />
-        ) : null}
       </MoreDetails>
 
       <Button type="button" data-testid="manual-create-draft" onClick={openConfirm}>
-        Create MANUAL draft
+        Add transaction for review
       </Button>
       <ConfirmDialog
         open={confirmOpen}
-        title="Create manual draft"
-        impact="Creates a MANUAL_DRAFT with PRIVATE publication. Review, evidence, verify, and publication remain separate steps. Classification is not applied automatically."
-        confirmLabel="Create draft"
+        title="Add transaction"
+        impact={`Creates a ${status === "PLANNED" ? "planned" : "requires-review"} ledger row. It does not verify or publish financial truth.`}
+        confirmLabel="Add transaction"
         reason={reason}
         onReasonChange={setReason}
         onCancel={() => setConfirmOpen(false)}

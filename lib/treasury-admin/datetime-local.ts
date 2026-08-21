@@ -28,3 +28,8 @@ export function isoToDatetimeLocal(iso: string): string {
   if (Number.isNaN(parsed.getTime())) return "";
   return `${String(parsed.getFullYear())}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`;
 }
+
+/** Capture a browser-local form timestamp once; callers own when this function runs. */
+export function dateToDatetimeLocal(value: Date): string {
+  return `${String(value.getFullYear())}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+}

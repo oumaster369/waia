@@ -1,5 +1,5 @@
-import { BudgetsPanel } from "@/components/treasury/admin/budgets-panel";
+import { BudgetWorkspace } from "@/components/treasury/admin/budget-workspace";
 
 export default function FinanceBudgetsPage() {
-  return <BudgetsPanel />;
+  return <BudgetWorkspace />;
 }

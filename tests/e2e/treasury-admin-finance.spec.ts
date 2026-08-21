@@ -136,6 +136,82 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
       return;
     }
 
+    if (pathname.endsWith("/counterparties") && method === "GET") {
+      await json(route, {
+        counterparties: [
+          { id: "cp-1", displayName: "WAIA Patron", waiaUsername: "patron", isActive: true },
+        ],
+        next: null,
+      });
+      return;
+    }
+
+    if (pathname.endsWith("/accounts") && method === "GET") {
+      await json(route, {
+        accounts: [
+          {
+            id: "account-1",
+            displayName: "USDT TRC-20",
+            kind: "CRYPTO_WALLET",
+            currency: "USDT",
+            network: "TRC-20",
+            isActive: true,
+          },
+          {
+            id: "account-2",
+            displayName: "Visa debit",
+            kind: "BANK_CARD",
+            currency: "USD",
+            network: null,
+            isActive: true,
+          },
+        ],
+        next: null,
+      });
+      return;
+    }
+
+    if (pathname.endsWith("/categories") && method === "GET") {
+      await json(route, {
+        categories: [
+          {
+            id: "category-1",
+            organizationId: ORG_A,
+            code: "OPS",
+            name: "Operations",
+            description: null,
+            monthlyBudgetMicros: "5000000",
+            currency: "USD",
+            isActive: true,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            updatedAt: "2026-08-01T00:00:00.000Z",
+          },
+        ],
+        next: null,
+      });
+      return;
+    }
+
+    if (pathname.endsWith("/projects") && method === "GET") {
+      await json(route, {
+        projects: [
+          {
+            id: "project-1",
+            organizationId: ORG_A,
+            name: "WAIA Core",
+            description: "Core module",
+            startsOn: "2026-01-01",
+            endsOn: null,
+            isActive: true,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            updatedAt: "2026-08-01T00:00:00.000Z",
+          },
+        ],
+        next: null,
+      });
+      return;
+    }
+
     if (pathname.endsWith("/transactions") && method === "GET" && !url.searchParams.get("id")) {
       capture.txListUrls.push(url.toString());
       await json(route, {
@@ -154,6 +230,11 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
             nativeAsset: "USDT",
             accountingAmountMicros: "1000000",
             cashEffectMicros: "1000000",
+            signedAmountMicros: "1000000",
+            counterpartyId: "cp-1",
+            accountId: "account-1",
+            categoryId: "category-1",
+            projectId: "project-1",
             occurredAt: "2026-08-01T00:00:00.000Z",
             category: "grant",
             projectModule: "twin",
@@ -162,6 +243,7 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
             canonicalTxHash: "0xabc",
             txHash: "0xabc",
             publishCounterparty: false,
+            internalNotes: "Patron transfer",
           },
         ],
       });
@@ -189,6 +271,11 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
           nativeAsset: "USDT",
           accountingAmountMicros: "1000000",
           cashEffectMicros: "1000000",
+          signedAmountMicros: "1000000",
+          counterpartyId: "cp-1",
+          accountId: "account-1",
+          categoryId: "category-1",
+          projectId: "project-1",
           occurredAt: "2026-08-01T00:00:00.000Z",
           canonicalNetwork: "TRC-20",
           canonicalTokenContract: "TUSDT",
@@ -197,6 +284,7 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
           publishCounterparty: false,
           publicDescription: null,
           counterpartyDisplay: null,
+          internalNotes: "Patron transfer",
         },
         observations: [
           {
@@ -377,7 +465,7 @@ test.describe("WAIA Admin Finance Console", () => {
     await expect(page.getByTestId("finance-unavailable")).toContainText("Postgres");
   });
 
-  test("complete Human workflow against DEE-615 contracts", async ({ page }) => {
+  test("complete Human workflow against DEE-619 central-ledger contracts", async ({ page }) => {
     const email = `e2e-finance-flow-${Date.now()}@example.com`;
     await signUpAndOpenDashboard(page, email);
     grantPlatformAdminByUserEmail(email);
@@ -386,35 +474,46 @@ test.describe("WAIA Admin Finance Console", () => {
     await page.goto("/finance");
     await page.getByTestId("finance-org-select").selectOption(ORG_A);
     await expect(page.getByTestId("finance-overview")).toBeVisible();
-    await expect(page.getByTestId("review-required-count")).toContainText("1");
-    await expect(page.getByTestId("publication-pending-count")).toContainText("1");
+    await expect(page.getByTestId("review-required-count")).toContainText("1 transaction");
+    await expect(page.getByTestId("finance-overview")).toContainText("Available now");
+    await expect(page.getByTestId("finance-overview")).toContainText("Runway");
+    await expect(page.getByTestId("finance-overview")).toContainText("Annual budget");
+    await page.getByTestId("overview-operational-details").locator("summary").click();
     await expect(page.getByTestId("watcher-dark")).toBeVisible();
 
-    await page.getByRole("link", { name: "Transactions" }).click();
+    const financeNav = page.getByTestId("finance-nav");
+    await expect(financeNav.getByRole("link")).toHaveCount(3);
+    await expect(financeNav).toContainText("Overview");
+    await expect(financeNav).toContainText("Transactions");
+    await expect(financeNav).toContainText("Budget");
+
+    await page.getByRole("link", { name: "Transactions", exact: true }).click();
     await expect(page.getByTestId("finance-transaction-table")).toBeVisible();
     await expect(page.getByTestId("add-manual-transaction")).toBeVisible();
-    await expect(page.getByTestId("tx-filter-panel")).toContainText("Filter transactions");
-    await expect(page.getByTestId("tx-filter-panel")).toContainText("existing ledger records");
     await expect(page.getByTestId("tx-filter-status")).toBeVisible();
-    await expect(page.getByTestId("tx-filter-direction")).toBeHidden();
+    await expect(page.getByText("Direction", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("columnheader", { name: "Counterparty" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: /WAIA Patron/ })).toBeVisible();
+    await expect(page.getByRole("cell", { name: /USDT TRC-20/ })).toBeVisible();
     await page.getByTestId("tx-filter-advanced").locator("summary").click();
-    await page.getByTestId("tx-filter-direction").selectOption("INFLOW");
+    await page.getByTestId("tx-filter-status").selectOption("NEEDS_REVIEW");
     await page.getByTestId("tx-filter-panel").getByRole("button", { name: "Apply" }).click();
     await expect
-      .poll(() => capture.txListUrls.some((url) => url.includes("direction=INFLOW")))
+      .poll(() => capture.txListUrls.some((url) => url.includes("status=NEEDS_REVIEW")))
       .toBe(true);
     await expect
       .poll(() => capture.txListUrls.some((url) => url.includes(`organization_id=${ORG_A}`)))
       .toBe(true);
-    await page.getByRole("link", { name: /2026-08-01/ }).click();
+    await page.getByRole("link", { name: "Review" }).click();
 
     await expect(page.getByTestId("tx-next-action")).toBeVisible();
     await expect(page.getByTestId("zone-provenance")).toBeVisible();
     await expect(page.getByTestId("zone-accounting")).toBeVisible();
     await expect(page.getByTestId("detail-public-hidden")).toBeVisible();
-    await expect(page.getByTestId("classify-purpose")).toBeVisible();
+    await expect(page.getByTestId("classify-purpose")).toBeHidden();
     await expect(page.getByTestId("classify-category")).toBeHidden();
     await page.getByTestId("classify-advanced").locator("summary").click();
+    await expect(page.getByTestId("classify-purpose")).toBeVisible();
     await page.getByTestId("classify-category").fill("grant-custom");
     await page.getByTestId("classify-purpose").fill("custom purpose");
     await page.getByTestId("tx-action-classify").click();
@@ -432,52 +531,56 @@ test.describe("WAIA Admin Finance Console", () => {
     await page.getByTestId("finance-confirm-reason").fill("Publish public detail");
     await page.getByTestId("finance-confirm-submit").click();
 
-    await page.getByRole("link", { name: "Publication preview" }).click();
+    await page.goto(`/finance/preview?organization_id=${ORG_A}`);
     await expect(page.getByTestId("public-view")).toBeVisible();
     await expect(page.getByTestId("operator-diagnostics")).toBeVisible();
 
-    await page.getByRole("link", { name: "Transactions" }).click();
+    await page.getByRole("link", { name: "Transactions", exact: true }).click();
     await page.getByTestId("add-manual-transaction").click();
-    await expect(page.getByTestId("manual-transaction-form")).toContainText("MANUAL_DRAFT");
-    await expect(page.getByTestId("manual-transaction-form")).toContainText("PRIVATE");
-    await expect(page.getByTestId("manual-kind")).toHaveValue("");
-    await page.getByTestId("manual-direction").selectOption("INFLOW");
-    await page.getByTestId("manual-amount").fill("1");
+    await expect(page.getByTestId("manual-transaction-form")).toContainText("minus sign");
+    await expect(page.getByTestId("manual-occurred-at")).not.toHaveValue("");
+    await expect(page.getByText("Direction", { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId("manual-status")).toHaveValue("NEEDS_REVIEW");
+    await page.getByTestId("manual-amount").fill("-1");
     await page.getByTestId("manual-occurred-at").fill("2026-08-02T00:00");
-    await page.getByTestId("manual-purpose").fill("Walkthrough purpose");
-    await expect(page.getByTestId("manual-budget")).toBeHidden();
-    await page.getByTestId("manual-more-details").locator("summary").click();
-    await page.getByTestId("manual-budget").selectOption("b1");
-    await page.getByTestId("manual-funding-need").selectOption("n1");
-    await expect(page.getByTestId("transaction-ref-pagination-note")).toContainText("paginated");
+    await page.getByTestId("manual-counterparty").selectOption("cp-1");
+    await page.getByTestId("manual-account").selectOption("account-1");
+    await page.getByTestId("manual-category").selectOption("category-1");
+    await page.getByTestId("manual-project").selectOption("project-1");
+    await page.getByTestId("manual-notes").fill("Walkthrough note");
     await page.getByTestId("manual-create-draft").click();
-    await page.getByTestId("finance-confirm-reason").fill("Manual inflow");
+    await page.getByTestId("finance-confirm-reason").fill("Manual outflow");
     await page.getByTestId("finance-confirm-submit").click();
     await expect.poll(() => capture.txPosts.length).toBeGreaterThan(0);
     const created = capture.txPosts.at(-1);
     expect(created).toMatchObject({
       organization_id: ORG_A,
-      direction: "INFLOW",
-      kind: null,
+      status: "NEEDS_REVIEW",
+      signed_amount_micros: "-1000000",
       native_amount_atomic: "1000000",
       native_decimals: 6,
       native_asset: "USDT",
-      purpose: "Walkthrough purpose",
-      budget_id: "b1",
-      funding_need_id: "n1",
+      counterparty_id: "cp-1",
+      account_id: "account-1",
+      category_id: "category-1",
+      project_id: "project-1",
+      notes: "Walkthrough note",
     });
-    expect(created).not.toHaveProperty("category");
+    expect(created).not.toHaveProperty("direction");
     expect(String(created?.occurred_at ?? "")).toMatch(/Z$/);
 
-    await page.getByRole("link", { name: "Budgets" }).click();
+    await page.getByRole("link", { name: "Budget", exact: true }).click();
+    await expect(page.getByTestId("finance-category-budgets")).toContainText("Operations");
+    await page.getByRole("tab", { name: "Annual budget" }).click();
     await expect(page.getByTestId("money-negative")).toBeVisible();
-    await page.getByRole("link", { name: "Funding needs" }).click();
+    await page.getByRole("tab", { name: "Funding needs" }).click();
     await expect(page.getByTestId("finance-funding-needs")).toBeVisible();
-    await page.getByRole("link", { name: "Commitments" }).click();
+    await page.getByRole("tab", { name: "Commitments" }).click();
     await expect(page.getByTestId("finance-commitments")).toContainText(
       "Reduces current free funds",
     );
-    await page.getByRole("link", { name: "Evidence" }).click();
+    await page.getByText("Publication and evidence tools").click();
+    await page.getByRole("link", { name: "Evidence library" }).click();
     await page.getByRole("button", { name: "Open private content" }).click();
     await expect(page.getByTestId("evidence-storage-unavailable")).toBeVisible();
 
