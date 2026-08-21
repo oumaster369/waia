@@ -9,7 +9,7 @@ import {
   type WaiaPostgresDb,
 } from "@/db/waia-postgres-transaction";
 import type { Order, Trade } from "@/lib/trader/connectors/types";
-import { addDecimal, compareDecimal, multiplyDecimal } from "@/lib/trader/risk/numeric";
+import { addDecimal, compareDecimal } from "@/lib/trader/risk/numeric";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
   dispatchCommittedExecutionAttemptV2,
@@ -17,6 +17,7 @@ import {
 } from "./authority-postgres";
 import {
   deterministicExecutionUuidV2,
+  multiplyExecutionNotionalConservativelyV2,
   type ExecutionAttemptV2,
   type ExecutionPlanV2,
 } from "./contracts";
@@ -92,8 +93,16 @@ function exactOrderMechanicsMatch(attempt: ExecutionAttemptV2, order: Order): bo
       order.type === payload.type &&
       priceMatches &&
       compareDecimal(order.quantity, payload.quantity) === 0 &&
+      compareDecimal(order.filledQuantity, "0") >= 0 &&
+      compareDecimal(order.filledQuantity, payload.quantity) <= 0 &&
       (!(order.status === "open" || order.status === "rejected") ||
-        compareDecimal(order.filledQuantity, "0") === 0);
+        compareDecimal(order.filledQuantity, "0") === 0) &&
+      (order.status !== "filled" ||
+        compareDecimal(order.filledQuantity, payload.quantity) === 0) &&
+      (order.status !== "partially_filled" || (
+        compareDecimal(order.filledQuantity, "0") > 0 &&
+        compareDecimal(order.filledQuantity, payload.quantity) < 0
+      ));
   } catch {
     return false;
   }
@@ -129,7 +138,10 @@ function exactTradesForAttempt(
       }
       tradeIds.add(trade.tradeId);
       filledQuantity = addDecimal(filledQuantity, trade.quantity);
-      filledNotional = addDecimal(filledNotional, multiplyDecimal(trade.price, trade.quantity));
+      filledNotional = addDecimal(
+        filledNotional,
+        multiplyExecutionNotionalConservativelyV2(trade.quantity, trade.price),
+      );
     }
     if (compareDecimal(filledQuantity, order.filledQuantity) !== 0 ||
       compareDecimal(filledQuantity, attempt.exactRequestPayload.quantity) > 0 ||
@@ -357,32 +369,62 @@ export async function recordProtectiveCancelAcknowledgementV2Postgres(
   executionAttemptId: string,
   order: Order,
 ): Promise<ExecutionAttemptV2> {
-  if (order.status !== "canceled") throw new Error("cancel acknowledgement must be raw canceled status");
   const projection = await readExecutionAttemptProjectionV2Postgres(
     db,
     context,
     executionAttemptId,
   );
-  if (!projection || !exactOrderMechanicsMatch(projection.attempt, order)) {
-    throw new Error("cancel acknowledgement does not match the bound effect mechanics");
-  }
+  if (!projection) throw new Error("Execution V2 attempt not found for cancel acknowledgement");
   const reports = await listExecutionReportsV2Postgres(db, context, executionAttemptId);
   const observedVenueOrderIds = new Set(
     reports.flatMap((report) => report.venueOrderId === null ? [] : [report.venueOrderId]),
   );
-  if (observedVenueOrderIds.size !== 1 || !observedVenueOrderIds.has(order.orderId)) {
-    throw new Error("cancel acknowledgement does not match the bound venue order identity");
+  const lastFillReport = [...reports].reverse().find(
+    (report) => report.reportType === "FILL_REPORT_OBSERVED",
+  );
+  const lastFillOrder = lastFillReport?.rawObservation.order;
+  const previouslyObservedFilledQuantity = typeof lastFillOrder === "object" &&
+    lastFillOrder !== null && "filledQuantity" in lastFillOrder &&
+    typeof lastFillOrder.filledQuantity === "string"
+    ? lastFillOrder.filledQuantity
+    : "0";
+  const rawObservation = {
+    order: rawOrder(order),
+    ...(order.rawVenueObservation === undefined
+      ? {}
+      : { connector: order.rawVenueObservation }),
+    replacementAuthorized: false,
+  };
+  let mismatchCause: string | null = null;
+  if (order.status !== "canceled") {
+    mismatchCause = "CANCEL_STATUS_MISMATCH";
+  } else if (!exactOrderMechanicsMatch(projection.attempt, order)) {
+    mismatchCause = "CANCEL_MECHANICS_MISMATCH";
+  } else if (compareDecimal(order.filledQuantity, previouslyObservedFilledQuantity) !== 0) {
+    mismatchCause = "CANCEL_FILL_TOTAL_MISMATCH";
+  } else if (observedVenueOrderIds.size !== 1 || !observedVenueOrderIds.has(order.orderId)) {
+    mismatchCause = "CANCEL_VENUE_ORDER_IDENTITY_MISMATCH";
+  }
+  if (mismatchCause !== null) {
+    return appendReports(db, context, executionAttemptId, [
+      {
+        reportType: "VENUE_STATUS_OBSERVED",
+        source: "CONNECTOR",
+        rawObservation,
+        venueOrderId: order.orderId || null,
+      },
+      {
+        reportType: "RECONCILIATION_REQUIRED",
+        source: "EXECUTION",
+        rawObservation: { cause: mismatchCause },
+        venueOrderId: order.orderId || null,
+      },
+    ]);
   }
   return appendReports(db, context, executionAttemptId, [{
     reportType: "CANCEL_ACKNOWLEDGED",
     source: "CONNECTOR",
-    rawObservation: {
-      order: rawOrder(order),
-      ...(order.rawVenueObservation === undefined
-        ? {}
-        : { connector: order.rawVenueObservation }),
-      replacementAuthorized: false,
-    },
+    rawObservation,
     venueOrderId: order.orderId,
   }]);
 }

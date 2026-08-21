@@ -436,6 +436,62 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expect(projection?.lifecycleState).toBe("BOUND");
   });
 
+  it("refuses caller-labeled terminal reports without exact matching raw evidence", async () => {
+    const { accountId, attempt } = await persistAuthority();
+    await appendExecutionReportV2Postgres(db, { organizationId: orgA }, {
+      executionReportId: uuid(667_304),
+      accountId,
+      executionAttemptId: attempt.executionAttemptId,
+      reportType: "SUBMIT_STARTED",
+      source: "EXECUTION",
+      rawObservation: { effectIdentityDigestHex: attempt.effectIdentityDigestHex },
+      observedAtUtc: "2026-08-21T00:00:00.002Z",
+    });
+    const openOrder = {
+      orderId: "venue-order-forged-terminal",
+      clientOrderId: attempt.clientOrderId,
+      symbol: attempt.exactRequestPayload.symbol,
+      side: attempt.exactRequestPayload.side,
+      type: attempt.exactRequestPayload.type,
+      status: "open",
+      price: attempt.exactRequestPayload.price,
+      quantity: attempt.exactRequestPayload.quantity,
+      filledQuantity: "0",
+    };
+    await expect(appendExecutionReportV2Postgres(db, { organizationId: orgA }, {
+      executionReportId: uuid(667_305),
+      accountId,
+      executionAttemptId: attempt.executionAttemptId,
+      reportType: "VENUE_REJECTED",
+      source: "CONNECTOR",
+      rawObservation: { order: openOrder },
+      venueOrderId: openOrder.orderId,
+      observedAtUtc: "2026-08-21T00:00:00.003Z",
+    })).rejects.toThrow(/exact bound order evidence/);
+    await expect(appendExecutionReportV2Postgres(db, { organizationId: orgA }, {
+      executionReportId: uuid(667_306),
+      accountId,
+      executionAttemptId: attempt.executionAttemptId,
+      reportType: "FILL_REPORT_OBSERVED",
+      source: "CONNECTOR",
+      rawObservation: {
+        order: {
+          ...openOrder,
+          status: "filled",
+          filledQuantity: attempt.exactRequestPayload.quantity,
+        },
+      },
+      venueOrderId: openOrder.orderId,
+      observedAtUtc: "2026-08-21T00:00:00.004Z",
+    })).rejects.toThrow(/exact raw trade evidence/);
+    const projection = await readExecutionAttemptProjectionV2Postgres(
+      db,
+      { organizationId: orgA },
+      attempt.executionAttemptId,
+    );
+    expect(projection?.lifecycleState).toBe("SUBMIT_STARTED");
+  });
+
   it("enables service-only deny-by-default RLS for all four relations", async () => {
     await persistAuthority();
     const metadata = await sql<{ relname: string; relrowsecurity: boolean }[]>`
@@ -842,17 +898,6 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       bound.attempt.executionAttemptId,
       "protect residual exposure",
     );
-    await expect(recordProtectiveCancelAcknowledgementV2Postgres(
-      db,
-      { organizationId: orgA },
-      bound.attempt.executionAttemptId,
-      {
-        ...partialOrder,
-        orderId: "different-venue-order",
-        status: "canceled",
-        updatedAt: "2026-08-21T00:00:02.000Z",
-      },
-    )).rejects.toThrow(/venue order identity/);
     await recordProtectiveCancelAcknowledgementV2Postgres(
       db,
       { organizationId: orgA },
@@ -878,6 +923,66 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       "CANCEL_ACKNOWLEDGED",
     ]);
     expect(reports.at(-2)?.rawObservation).toMatchObject({ replacementAuthorized: false });
+  });
+
+  it("preserves mismatched cancel observations and requires reconciliation", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const openOrder = {
+      orderId: "htx-order-cancel-identity",
+      ...bound.attempt.exactRequestPayload,
+      status: "open" as const,
+      price: bound.attempt.exactRequestPayload.price ?? undefined,
+      quantity: bound.attempt.exactRequestPayload.quantity,
+      filledQuantity: "0",
+      createdAt: "2026-08-21T00:00:00.000Z",
+      updatedAt: "2026-08-21T00:00:01.000Z",
+    };
+    const accepted = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({ order: openOrder, trades: [], raw: { state: "submitted" } }),
+    );
+    expect(accepted.status).toBe("VENUE_ACCEPTED");
+    await requestProtectiveCancelV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      "protect pending exposure",
+    );
+    await recordProtectiveCancelAcknowledgementV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      {
+        ...openOrder,
+        orderId: "different-venue-order",
+        status: "canceled",
+        updatedAt: "2026-08-21T00:00:02.000Z",
+      },
+    );
+    const reports = await listExecutionReportsV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(reports.slice(-2)).toMatchObject([
+      {
+        reportType: "VENUE_STATUS_OBSERVED",
+        rawObservation: { order: { orderId: "different-venue-order" } },
+      },
+      {
+        reportType: "RECONCILIATION_REQUIRED",
+        rawObservation: { cause: "CANCEL_VENUE_ORDER_IDENTITY_MISMATCH" },
+      },
+    ]);
+    const projection = await readExecutionAttemptProjectionV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(projection?.lifecycleState).toBe("RECONCILIATION_REQUIRED");
   });
 
   it("terminally consumes a raw venue rejection", async () => {
