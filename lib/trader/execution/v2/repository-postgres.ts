@@ -19,6 +19,7 @@ import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-co
 import {
   createExecutionPolicyBindingV2,
   createExecutionReportV2,
+  createExecutionAttemptV2,
   multiplyExecutionNotionalConservativelyV2,
   validateExecutionAttemptV2,
   validateExecutionPlanV2,
@@ -496,6 +497,35 @@ export async function insertExecutionPlanV2Postgres(
   if (plan.organizationId !== scoped.organizationId || !validateExecutionPlanV2(plan)) {
     throw new ExecutionV2PersistenceConflictError("invalid tenant-scoped plan");
   }
+  const allowanceRows = await ex.select().from(pgSchema.traderRiskAllowancesV2).where(and(
+    eq(pgSchema.traderRiskAllowancesV2.id, plan.riskAllowanceId),
+    eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+    eq(pgSchema.traderRiskAllowancesV2.accountId, plan.accountId),
+  )).for("update");
+  const allowance = allowanceRows[0];
+  if (!allowance || !["ISSUED", "CONSUMED"].includes(allowance.lifecycleState) ||
+    allowance.contentDigest !== plan.riskAllowanceContentDigestHex ||
+    allowance.riskVerdictId !== plan.riskVerdictId ||
+    allowance.decisionId !== plan.decisionId ||
+    allowance.decisionContentDigest !== plan.decisionContentDigestHex ||
+    allowance.economicSizeSetDigest !== plan.economicSizeSetDigestHex ||
+    allowance.instrumentIdentityDigest !== plan.instrumentIdentityDigestHex ||
+    allowance.symbol !== plan.symbol || allowance.venue !== plan.venue ||
+    allowance.decisionAction !== plan.action ||
+    compareDecimal(plan.approvedQualifiedQuantityCeiling, allowance.exactQualifiedQuantity) > 0 ||
+    compareDecimal(plan.plannedQuantity, allowance.exactQualifiedQuantity) > 0 ||
+    compareDecimal(plan.approvedNotionalCeiling, allowance.reservedExposureNotional) > 0) {
+    throw new ExecutionV2PersistenceConflictError(
+      "plan exceeds or conflicts with its locked Risk allowance",
+    );
+  }
+  const policyRows = await ex.select().from(pgSchema.traderExecutionPoliciesV2).where(and(
+    eq(pgSchema.traderExecutionPoliciesV2.id, plan.executionPolicyId),
+    eq(pgSchema.traderExecutionPoliciesV2.organizationId, scoped.organizationId),
+  )).limit(1);
+  if (!policyRows[0] || policyRows[0].contentDigest !== plan.executionPolicyContentDigestHex) {
+    throw new ExecutionV2PersistenceConflictError("plan policy seal mismatch");
+  }
   await ex.insert(pgSchema.traderExecutionPlansV2).values({
     id: plan.executionPlanId,
     organizationId: plan.organizationId,
@@ -551,6 +581,58 @@ export async function insertExecutionAttemptV2Postgres(
   const scoped = requireOrgContext(context.organizationId);
   if (attempt.organizationId !== scoped.organizationId || !validateExecutionAttemptV2(attempt)) {
     throw new ExecutionV2PersistenceConflictError("invalid tenant-scoped attempt");
+  }
+  const planRows = await ex.select().from(pgSchema.traderExecutionPlansV2).where(and(
+    eq(pgSchema.traderExecutionPlansV2.id, attempt.executionPlanId),
+    eq(pgSchema.traderExecutionPlansV2.organizationId, scoped.organizationId),
+    eq(pgSchema.traderExecutionPlansV2.accountId, attempt.accountId),
+  )).limit(1);
+  if (!planRows[0]) throw new ExecutionV2PersistenceConflictError("attempt plan missing");
+  const plan = mapPlan(planRows[0]);
+  const expectedAttempt = createExecutionAttemptV2({
+    executionAttemptId: attempt.executionAttemptId,
+    orderId: attempt.orderId,
+    plan,
+    riskAllowanceContentDigestHex: attempt.riskAllowanceContentDigestHex,
+    boundAtUtc: attempt.boundAtUtc,
+  });
+  const allowanceRows = await ex.select().from(pgSchema.traderRiskAllowancesV2).where(and(
+    eq(pgSchema.traderRiskAllowancesV2.id, attempt.riskAllowanceId),
+    eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+    eq(pgSchema.traderRiskAllowancesV2.accountId, attempt.accountId),
+  )).for("update");
+  const allowance = allowanceRows[0];
+  const orderRows = await ex.select().from(pgSchema.traderOrders).where(and(
+    eq(pgSchema.traderOrders.id, attempt.orderId),
+    eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
+  )).for("update");
+  const order = orderRows[0];
+  const priceMatches = order && (
+    (order.price === null && attempt.exactRequestPayload.price === null) ||
+    (order.price !== null && attempt.exactRequestPayload.price !== null &&
+      compareDecimal(order.price, attempt.exactRequestPayload.price) === 0)
+  );
+  if (expectedAttempt.contentDigestHex !== attempt.contentDigestHex ||
+    expectedAttempt.effectIdentityDigestHex !== attempt.effectIdentityDigestHex ||
+    !allowance || allowance.lifecycleState !== "CONSUMED" ||
+    allowance.contentDigest !== attempt.riskAllowanceContentDigestHex ||
+    allowance.boundOrderId !== attempt.orderId ||
+    !order || !["CREATED", "RISK_APPROVED"].includes(order.state) ||
+    order.riskAllowanceId !== attempt.riskAllowanceId ||
+    order.riskAllowanceBindingDigest !== allowance.boundOrderDigest ||
+    order.riskDecisionId !== plan.riskVerdictId || order.venue !== attempt.venue ||
+    order.symbol !== attempt.exactRequestPayload.symbol ||
+    order.side !== attempt.exactRequestPayload.side || order.type !== attempt.exactRequestPayload.type ||
+    !priceMatches || compareDecimal(order.quantity, attempt.exactRequestPayload.quantity) !== 0 ||
+    order.clientOrderId !== attempt.clientOrderId ||
+    order.idempotencyKey !== `execution-v2-${plan.contentDigestHex}` ||
+    order.executionPlanId !== plan.executionPlanId ||
+    order.executionPlanDigest !== plan.contentDigestHex ||
+    order.executionAttemptId !== attempt.executionAttemptId ||
+    order.executionAttemptDigest !== attempt.contentDigestHex) {
+    throw new ExecutionV2PersistenceConflictError(
+      "attempt lacks exact consumed allowance/plan/order binding",
+    );
   }
   await ex.insert(pgSchema.traderExecutionAttemptsV2).values({
     id: attempt.executionAttemptId,
