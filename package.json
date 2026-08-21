@@ -104,6 +104,7 @@
     "start": "next start",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
+    "validate:execution-v2-consumer-graph": "node --import tsx scripts/trader/validate-execution-v2-consumer-graph.ts",
     "cloudflare:build": "opennextjs-cloudflare build",
     "cloudflare:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "cloudflare:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",

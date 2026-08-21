@@ -123,6 +123,15 @@ function placeOrderInputFromOrder(order: OrderRow): PlaceOrderInput {
   };
 }
 
+function legacyOrderSubmissionDisabled(): boolean {
+  return true;
+}
+
+async function refuseLegacyConnectorSubmission(input?: unknown): Promise<never> {
+  void input;
+  throw new Error("LEGACY_ORDER_SUBMISSION_DISABLED: Execution V2 authority is required");
+}
+
 function hasExactConsumedRiskV2Proof(
   context: OrgContext,
   input: SubmitOrderInput,
@@ -239,10 +248,7 @@ function lazyValidatedMockConnector(inner: MockExchangeConnector): ExchangeConne
       await ensureValidated();
       return inner.getOrder(orderId);
     },
-    placeOrder: async (input) => {
-      await ensureValidated();
-      return inner.placeOrder(input);
-    },
+    placeOrder: refuseLegacyConnectorSubmission,
     cancelOrder: async (orderId) => {
       await ensureValidated();
       return inner.cancelOrder(orderId);
@@ -255,7 +261,7 @@ function lazyValidatedMockConnector(inner: MockExchangeConnector): ExchangeConne
     streamUserData: () => inner.streamUserData(),
     getFuturesBalances: () => inner.getFuturesBalances(),
     getFuturesPositions: () => inner.getFuturesPositions(),
-    placeFuturesOrder: (input) => inner.placeFuturesOrder(input),
+    placeFuturesOrder: refuseLegacyConnectorSubmission,
   };
 }
 
@@ -507,7 +513,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
 
     let connectorOrder: Order;
     try {
-      connectorOrder = await connector.placeOrder(placeInput);
+      connectorOrder = await refuseLegacyConnectorSubmission(placeInput);
     } catch {
       const uncertain = await transitionOrConflict(context, sent.order, "RECONCILIATION_REQUIRED");
       if ("conflict" in uncertain) {
@@ -755,6 +761,14 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
         input.executionMode !== "live"
       ) {
         throw new UnsupportedExecutionModeError(input.executionMode);
+      }
+
+      if (legacyOrderSubmissionDisabled()) {
+        return finishSubmitOrder(orgContext, input, startedMs, {
+          status: "execution_v2_required",
+          order: null,
+          reason: "LEGACY_ORDER_SUBMISSION_DISABLED",
+        });
       }
 
       if (input.riskAllowanceV2) {

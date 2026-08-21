@@ -1,4 +1,5 @@
 export { mapConnectorStatusToOrderState } from "@/lib/trader/execution/connector-status-map";
+export * from "@/lib/trader/execution/v2";
 export {
   emitExecutionTerminalEvent,
   emitExecutionTransitionEvent,
