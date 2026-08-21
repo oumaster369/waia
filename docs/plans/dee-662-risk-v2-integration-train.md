@@ -32,16 +32,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: renewed-base-validating
+  status: renewed-base-review-pending
   currentWorkPackage: WP5
   completedWorkPackages: [WP0, WP1, WP2, WP3, WP4]
   remainingWorkPackages: [WP5]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: ae01ae86f5dc8b01aa71be7934fddcf0cb860644
+  lastValidatedGitSha: 802da6753e4bb282e820afbfcc1b92a34c9ecc9e
   lastValidationAt: "2026-08-21"
   blockedReason: null
-  nextAction: "Run renewed-base affected gates, freeze the exact head, and obtain a fresh independent adversarial review."
+  nextAction: "Freeze the exact renewed-base head and obtain the required fresh independent adversarial review."
 provenance:
   createdFrom: human-ratified-delegation
   gapRegistry: null
@@ -56,6 +56,7 @@ renewedAdmission:
   baseContainsPullRequest: 474
   priorReviewedHead: ec95408f5aa17d0beba2aa77f5abdaadd868b81a
   authority: "Explicit Human authorization to preserve Treasury 0154/0155 and renumber the additive Risk V2 migration to 0156"
+  affectedValidation: "PASS on rebased head: focused Risk V2 plus migration-identity tests, clean full-history Postgres apply through 0156 and smoke, 11 Risk V2 Postgres proofs, lint, typecheck, build, canon, and governance."
 scopeReconciliation:
   authorizedAt: "2026-08-21"
   authority: "Explicit Human decision after R650-D boundary audit"
@@ -71,6 +72,11 @@ The Human ratified exactly four DEE-650 children and renewed their exact-base ad
 `origin/main@3117675275c2f7b0f0cb0e4865ce2cfa656bb3a4`, which contains PRs #473 and #474.
 Treasury migrations 0154/0155 are preserved byte-for-byte and the additive Risk migration is
 admitted as 0156.
+Affected validation on the renewed base is green: the clean disposable Postgres history applies
+through Treasury 0154/0155 and Risk 0156, migration identity and 29 focused tests pass, all 11
+Risk V2 Postgres proofs pass, and lint/typecheck/build/canon/governance pass. The protected
+Treasury walkthrough database was not mutated. Per the Human instruction, the unchanged full
+local suite was not repeated; its one prior run remains the recorded full-suite evidence.
 DEE-649, DEE-660, and DEE-653 are Done; DEE-650 is Todo and dependency-ready. This
 batch is the only Integration Batch under DEE-650 and owns one branch, one manifest,
 one PR to `main`, one exact-head admission, and one squash merge.

@@ -16,6 +16,7 @@
     "migrationReconciliation": "Preserve Treasury migrations 0154/0155 exactly and admit the additive Risk V2 migration as 0156.",
     "authority": "Explicit Human renewed exact-base admission for the existing DEE-650 train",
     "rebasedCodeHead": "ae01ae86f5dc8b01aa71be7934fddcf0cb860644",
+    "affectedValidationHead": "802da6753e4bb282e820afbfcc1b92a34c9ecc9e",
     "treasuryPreservationEvidence": "db/core-enums.ts is byte-identical to base; schema.postgres.ts differs only by Risk V2 additions; journal and applied-migration identity append only 0156 after Treasury 0154/0155.",
     "semanticConflict": false
   },
@@ -387,6 +388,32 @@
         "commands": ["28 cumulative Risk V2 unit/static tests", "8 Risk V2 PostgreSQL TOCTOU/atomicity/RLS/concurrency tests", "pnpm lint", "pnpm typecheck", "pnpm build", "pnpm validate:canon", "pnpm validate:pr-governance"]
       }
     ],
+    "renewedBaseValidation": {
+      "status": "pass",
+      "baseMain": "3117675275c2f7b0f0cb0e4865ce2cfa656bb3a4",
+      "validatedHead": "802da6753e4bb282e820afbfcc1b92a34c9ecc9e",
+      "migrationOrder": [
+        "0154_treasury_central_ledger_catalogs",
+        "0155_treasury_central_ledger_catalogs_rls",
+        "0156_trader_risk_v2"
+      ],
+      "treasuryFilesPreservedByteForByte": true,
+      "semanticConflict": false,
+      "commands": [
+        "29 focused Risk V2 and applied-migration-identity tests",
+        "clean disposable PostgreSQL auth prelude/full-history migration apply through 0156/smoke",
+        "11 Risk V2 PostgreSQL RLS/tenant/append-only/concurrency/TOCTOU tests",
+        "pnpm lint (0 errors; 305 baseline warnings)",
+        "pnpm typecheck",
+        "pnpm build",
+        "pnpm validate:canon",
+        "pnpm validate:pr-governance"
+      ],
+      "fullSuiteRerun": false,
+      "fullSuiteRerunReason": "The Human explicitly prohibited repeating the unchanged full local suite; its single pre-rebase run remains recorded evidence and only renewed-base affected gates were rerun.",
+      "protectedTreasuryWalkthroughMutated": false,
+      "freshExactHeadReviewRequired": true
+    },
     "adversarialRemediation": {
       "reviewedHead": "98e45a65b1d528999aa51b1af16032d6f1cf8657",
       "status": "second-remediation-pending-exact-head-rereview",
