@@ -210,6 +210,67 @@ describe("Execution V2 immutable contracts (DEE-667)", () => {
     })).toThrow(/planned effect notional/);
   });
 
+  it("rounds notional authority checks upward instead of truncating sub-scale exposure", () => {
+    const baseAllowance = allowance();
+    const {
+      schemaVersion: _allowanceSchema,
+      semanticDigestHex: _allowanceSemantic,
+      contentDigestHex: _allowanceContent,
+      ...allowanceDraft
+    } = baseAllowance;
+    void _allowanceSchema;
+    void _allowanceSemantic;
+    void _allowanceContent;
+    const tinyAllowance = createRiskAllowanceV2({
+      ...allowanceDraft,
+      riskAllowanceId: "00000000-0000-4000-8000-000000066719",
+      exactQualifiedQuantity: "0.00000001",
+      reservedExposureNotional: "0.00000001",
+    });
+    const basePolicy = policy();
+    const {
+      schemaVersion: _policySchema,
+      semanticDigestHex: _policySemantic,
+      contentDigestHex: _policyContent,
+      ...policyDraft
+    } = basePolicy;
+    void _policySchema;
+    void _policySemantic;
+    void _policyContent;
+    const tinyPolicy = createExecutionPolicyBindingV2({
+      ...policyDraft,
+      executionPolicyId: "00000000-0000-4000-8000-000000066720",
+      priceCollar: {
+        minimumPrice: "1",
+        maximumPrice: "2",
+        authorityDigestHex: digest("b"),
+      },
+      quantityRules: {
+        minimumQuantity: "0.00000001",
+        quantityStep: "0.00000001",
+        roundingMode: "EXACT",
+        economicQualifiedQuantities: ["0.00000001"],
+      },
+    });
+    expect(() => createExecutionPlanV2({
+      executionPlanId: "00000000-0000-4000-8000-000000066721",
+      allowance: tinyAllowance,
+      policy: tinyPolicy,
+      approvedNotionalCeiling: "0.00000001",
+      plannedQuantity: "0.00000001",
+      orderType: "limit",
+      liquidityRole: "MAKER",
+      limitPrice: "1.5",
+      timeInForce: "GTC",
+      timingWindow: {
+        opensAtUtc: "2026-08-21T00:00:01.000Z",
+        closesAtUtc: "2026-08-21T00:00:20.000Z",
+      },
+      childSlices: [{ sequence: 1, quantity: "0.00000001", limitPrice: "1.5" }],
+      sealedAtUtc: "2026-08-21T00:00:00.500Z",
+    })).toThrow(/planned effect notional/);
+  });
+
   it("refuses venue, order type, TIF, policy digest, and price-chase mismatches", () => {
     const base = policy();
     const { schemaVersion: _s, semanticDigestHex: _sd, contentDigestHex: _cd, ...draft } = base;

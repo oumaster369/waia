@@ -2,8 +2,8 @@ import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import {
   addDecimal,
   compareDecimal,
+  DECIMAL_SCALE_FACTOR,
   formatDecimal,
-  multiplyDecimal,
   parseDecimal,
 } from "@/lib/trader/risk/numeric";
 import type { RiskAllowanceV2 } from "@/lib/trader/risk/v2/risk-allowance-v2";
@@ -33,6 +33,24 @@ export type ExecutionOrderTypeV2 = "market" | "limit";
 export type ExecutionTimeInForceV2 = "GTC" | "IOC" | "FOK";
 export type ExecutionSideV2 = "buy" | "sell";
 export type ExecutionActionV2 = "ENTER_LONG" | "REDUCE" | "CLOSE";
+
+export function multiplyExecutionNotionalConservativelyV2(
+  quantity: string,
+  price: string,
+): string {
+  const scaledQuantity = parseDecimal(quantity);
+  const scaledPrice = parseDecimal(price);
+  if (scaledQuantity < 0n || scaledPrice < 0n) {
+    throw new Error("Execution notional factors must be nonnegative");
+  }
+  const exactProduct = scaledQuantity * scaledPrice;
+  const scaledProduct = exactProduct / DECIMAL_SCALE_FACTOR;
+  return formatDecimal(
+    exactProduct % DECIMAL_SCALE_FACTOR === 0n
+      ? scaledProduct
+      : scaledProduct + 1n,
+  );
+}
 
 export type ExecutionQuantityRulesV2 = Readonly<{
   minimumQuantity: string;
@@ -435,12 +453,15 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
     sliceTotal = addDecimal(sliceTotal, quantity);
     sliceNotionalTotal = addDecimal(
       sliceNotionalTotal,
-      multiplyDecimal(quantity, price ?? input.policy.priceCollar.maximumPrice),
+      multiplyExecutionNotionalConservativelyV2(
+        quantity,
+        price ?? input.policy.priceCollar.maximumPrice,
+      ),
     );
     return Object.freeze({ sequence: slice.sequence, quantity, limitPrice: price });
   });
   if (compareDecimal(sliceTotal, plannedQuantity) !== 0) throw new Error("slice total mismatch");
-  const exactEffectNotional = multiplyDecimal(
+  const exactEffectNotional = multiplyExecutionNotionalConservativelyV2(
     plannedQuantity,
     limitPrice ?? input.policy.priceCollar.maximumPrice,
   );

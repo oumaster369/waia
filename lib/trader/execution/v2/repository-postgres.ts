@@ -9,11 +9,17 @@ import {
   runWaiaPostgresTransaction,
   type WaiaPostgresDb,
 } from "@/db/waia-postgres-transaction";
-import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
+import {
+  addDecimal,
+  compareDecimal,
+  formatDecimal,
+  parseDecimal,
+} from "@/lib/trader/risk/numeric";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
   createExecutionPolicyBindingV2,
   createExecutionReportV2,
+  multiplyExecutionNotionalConservativelyV2,
   validateExecutionAttemptV2,
   validateExecutionPlanV2,
   validateExecutionPolicyBindingV2,
@@ -90,10 +96,141 @@ const EXECUTION_ATTEMPT_TRANSITIONS_V2: Readonly<Record<
   RECONCILIATION_REQUIRED: ["RECONCILIATION_REQUIRED"],
 });
 
+type RawEvidence = Readonly<Record<string, unknown>>;
+
+function asEvidence(value: unknown): RawEvidence | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as RawEvidence
+    : null;
+}
+
+function exactBoundOrderEvidence(
+  attempt: ExecutionAttemptV2,
+  rawObservation: RawEvidence,
+  venueOrderId: string | null,
+  statuses: readonly string[],
+): RawEvidence {
+  const order = asEvidence(rawObservation.order);
+  if (!order || typeof order.orderId !== "string" || order.orderId.trim() === "" ||
+    venueOrderId !== order.orderId || order.clientOrderId !== attempt.clientOrderId ||
+    order.symbol !== attempt.exactRequestPayload.symbol ||
+    order.side !== attempt.exactRequestPayload.side ||
+    order.type !== attempt.exactRequestPayload.type ||
+    typeof order.status !== "string" || !statuses.includes(order.status) ||
+    typeof order.quantity !== "string" ||
+    compareDecimal(order.quantity, attempt.exactRequestPayload.quantity) !== 0 ||
+    typeof order.filledQuantity !== "string" ||
+    compareDecimal(order.filledQuantity, "0") < 0 ||
+    compareDecimal(order.filledQuantity, attempt.exactRequestPayload.quantity) > 0) {
+    throw new ExecutionV2PersistenceConflictError(
+      "venue report lacks exact bound order evidence",
+    );
+  }
+  const expectedPrice = attempt.exactRequestPayload.price;
+  const observedPrice = order.price;
+  if ((expectedPrice === null && observedPrice !== null) ||
+    (expectedPrice !== null && (
+      typeof observedPrice !== "string" ||
+      compareDecimal(observedPrice, expectedPrice) !== 0
+    ))) {
+    throw new ExecutionV2PersistenceConflictError(
+      "venue report price does not match the bound effect",
+    );
+  }
+  return order;
+}
+
+function validateFillEvidence(
+  attempt: ExecutionAttemptV2,
+  plan: ExecutionPlanV2,
+  rawObservation: RawEvidence,
+  order: RawEvidence,
+): ExecutionAttemptLifecycleStateV2 {
+  const trades = rawObservation.trades;
+  if (!Array.isArray(trades) || trades.length === 0) {
+    throw new ExecutionV2PersistenceConflictError(
+      "fill report requires exact raw trade evidence",
+    );
+  }
+  const tradeIds = new Set<string>();
+  let filledQuantity = "0";
+  let filledNotional = "0";
+  for (const value of trades) {
+    const trade = asEvidence(value);
+    if (!trade || typeof trade.tradeId !== "string" || trade.tradeId.trim() === "" ||
+      tradeIds.has(trade.tradeId) || trade.orderId !== order.orderId ||
+      trade.clientOrderId !== attempt.clientOrderId ||
+      trade.symbol !== attempt.exactRequestPayload.symbol ||
+      trade.side !== attempt.exactRequestPayload.side ||
+      typeof trade.price !== "string" || compareDecimal(trade.price, "0") <= 0 ||
+      typeof trade.quantity !== "string" || compareDecimal(trade.quantity, "0") <= 0 ||
+      typeof trade.fee !== "string" || compareDecimal(trade.fee, "0") < 0 ||
+      typeof trade.feeAsset !== "string" || trade.feeAsset.trim() === "" ||
+      typeof trade.executedAt !== "string" ||
+      !Number.isFinite(new Date(trade.executedAt).getTime()) ||
+      compareDecimal(trade.price, plan.priceCollar.minimumPrice) < 0 ||
+      compareDecimal(trade.price, plan.priceCollar.maximumPrice) > 0 ||
+      (plan.limitPrice !== null && plan.side === "buy" &&
+        compareDecimal(trade.price, plan.limitPrice) > 0) ||
+      (plan.limitPrice !== null && plan.side === "sell" &&
+        compareDecimal(trade.price, plan.limitPrice) < 0)) {
+      throw new ExecutionV2PersistenceConflictError(
+        "fill report trade evidence does not match the bound effect",
+      );
+    }
+    tradeIds.add(trade.tradeId);
+    filledQuantity = addDecimal(filledQuantity, trade.quantity);
+    filledNotional = addDecimal(
+      filledNotional,
+      multiplyExecutionNotionalConservativelyV2(trade.quantity, trade.price),
+    );
+  }
+  if (typeof order.filledQuantity !== "string" ||
+    compareDecimal(filledQuantity, order.filledQuantity) !== 0 ||
+    compareDecimal(filledQuantity, attempt.exactRequestPayload.quantity) > 0 ||
+    (plan.action === "ENTER_LONG" &&
+      compareDecimal(filledNotional, plan.approvedNotionalCeiling) > 0)) {
+    throw new ExecutionV2PersistenceConflictError(
+      "fill report totals exceed or differ from bound authority",
+    );
+  }
+  if (order.status === "filled" &&
+    compareDecimal(filledQuantity, attempt.exactRequestPayload.quantity) === 0) {
+    return "FILLED";
+  }
+  if (order.status === "partially_filled" &&
+    compareDecimal(filledQuantity, "0") > 0 &&
+    compareDecimal(filledQuantity, attempt.exactRequestPayload.quantity) < 0) {
+    return "PARTIALLY_FILLED";
+  }
+  throw new ExecutionV2PersistenceConflictError(
+    "fill report lifecycle differs from exact trade totals",
+  );
+}
+
 function lifecycleStateForReport(
   reportType: ExecutionReportTypeV2,
-  rawObservation: Readonly<Record<string, unknown>>,
+  source: ExecutionReportV2["source"],
+  rawObservation: RawEvidence,
+  venueOrderId: string | null,
+  attempt: ExecutionAttemptV2,
+  plan: ExecutionPlanV2,
+  priorReports: readonly ExecutionReportV2[],
 ): ExecutionAttemptLifecycleStateV2 {
+  const connectorReport = [
+    "VENUE_ACCEPTED",
+    "VENUE_REJECTED",
+    "VENUE_STATUS_OBSERVED",
+    "CANCEL_ACKNOWLEDGED",
+    "FILL_REPORT_OBSERVED",
+    "CONNECTOR_UNCERTAIN",
+  ].includes(reportType);
+  if ((connectorReport && source !== "CONNECTOR") ||
+    (!connectorReport && source !== "EXECUTION")) {
+    throw new ExecutionV2PersistenceConflictError(
+      "Execution report source does not match report type",
+    );
+  }
   switch (reportType) {
     case "PLAN_SEALED":
     case "ALLOWANCE_CLAIMED":
@@ -101,26 +238,75 @@ function lifecycleStateForReport(
       return "BOUND";
     case "SUBMIT_STARTED":
       return "SUBMIT_STARTED";
-    case "VENUE_ACCEPTED":
-      return "VENUE_ACCEPTED";
-    case "VENUE_REJECTED":
-      return "VENUE_REJECTED";
-    case "CANCEL_REQUESTED":
-      return "CANCEL_REQUESTED";
-    case "CANCEL_ACKNOWLEDGED":
-      return "CANCELLED";
-    case "FILL_REPORT_OBSERVED": {
-      const order = rawObservation.order;
-      if (typeof order !== "object" || order === null || !("status" in order)) {
+    case "VENUE_ACCEPTED": {
+      const order = exactBoundOrderEvidence(
+        attempt,
+        rawObservation,
+        venueOrderId,
+        ["open"],
+      );
+      if (compareDecimal(String(order.filledQuantity), "0") !== 0) {
         throw new ExecutionV2PersistenceConflictError(
-          "fill report requires a raw order status",
+          "accepted order cannot claim a fill",
         );
       }
-      if (order.status === "filled") return "FILLED";
-      if (order.status === "partially_filled") return "PARTIALLY_FILLED";
-      throw new ExecutionV2PersistenceConflictError(
-        "fill report status must be filled or partially_filled",
+      return "VENUE_ACCEPTED";
+    }
+    case "VENUE_REJECTED": {
+      const order = exactBoundOrderEvidence(
+        attempt,
+        rawObservation,
+        venueOrderId,
+        ["rejected"],
       );
+      if (compareDecimal(String(order.filledQuantity), "0") !== 0) {
+        throw new ExecutionV2PersistenceConflictError(
+          "rejected order cannot claim a fill",
+        );
+      }
+      return "VENUE_REJECTED";
+    }
+    case "CANCEL_REQUESTED":
+      return "CANCEL_REQUESTED";
+    case "CANCEL_ACKNOWLEDGED": {
+      const order = exactBoundOrderEvidence(
+        attempt,
+        rawObservation,
+        venueOrderId,
+        ["canceled"],
+      );
+      const priorVenueOrderIds = new Set(
+        priorReports.flatMap((report) => report.venueOrderId === null
+          ? []
+          : [report.venueOrderId]),
+      );
+      const lastFill = [...priorReports].reverse().find(
+        (report) => report.reportType === "FILL_REPORT_OBSERVED",
+      );
+      const lastFillOrder = lastFill ? asEvidence(lastFill.rawObservation.order) : null;
+      const previouslyObservedFilledQuantity = lastFillOrder &&
+        typeof lastFillOrder.filledQuantity === "string"
+        ? lastFillOrder.filledQuantity
+        : "0";
+      if (priorVenueOrderIds.size !== 1 || !priorVenueOrderIds.has(String(order.orderId)) ||
+        compareDecimal(
+          String(order.filledQuantity),
+          previouslyObservedFilledQuantity,
+        ) !== 0) {
+        throw new ExecutionV2PersistenceConflictError(
+          "cancel acknowledgement identity or fill total requires reconciliation",
+        );
+      }
+      return "CANCELLED";
+    }
+    case "FILL_REPORT_OBSERVED": {
+      const order = exactBoundOrderEvidence(
+        attempt,
+        rawObservation,
+        venueOrderId,
+        ["filled", "partially_filled"],
+      );
+      return validateFillEvidence(attempt, plan, rawObservation, order);
     }
     case "VENUE_STATUS_OBSERVED":
     case "CONNECTOR_UNCERTAIN":
@@ -483,8 +669,32 @@ export async function appendExecutionReportV2FromExecutor(
   )).for("update");
   const row = rows[0];
   if (!row) throw new ExecutionV2PersistenceConflictError("Execution attempt not found");
+  const attempt = mapAttempt(row);
+  const planRows = await ex.select().from(pgSchema.traderExecutionPlansV2).where(and(
+    eq(pgSchema.traderExecutionPlansV2.id, row.executionPlanId),
+    eq(pgSchema.traderExecutionPlansV2.organizationId, scoped.organizationId),
+    eq(pgSchema.traderExecutionPlansV2.accountId, row.accountId),
+  )).limit(1);
+  if (!planRows[0]) {
+    throw new ExecutionV2PersistenceConflictError("Execution plan not found for report");
+  }
+  const plan = mapPlan(planRows[0]);
+  const priorReportRows = await ex.select().from(pgSchema.traderExecutionReportsV2).where(and(
+    eq(pgSchema.traderExecutionReportsV2.executionAttemptId, row.id),
+    eq(pgSchema.traderExecutionReportsV2.organizationId, scoped.organizationId),
+    eq(pgSchema.traderExecutionReportsV2.accountId, row.accountId),
+  )).orderBy(asc(pgSchema.traderExecutionReportsV2.reportSequence));
+  const priorReports = priorReportRows.map(mapReport);
   const currentLifecycle = row.lifecycleState as ExecutionAttemptLifecycleStateV2;
-  const lifecycleState = lifecycleStateForReport(input.reportType, input.rawObservation);
+  const lifecycleState = lifecycleStateForReport(
+    input.reportType,
+    input.source,
+    input.rawObservation,
+    input.venueOrderId ?? null,
+    attempt,
+    plan,
+    priorReports,
+  );
   if (!EXECUTION_ATTEMPT_TRANSITIONS_V2[currentLifecycle].includes(lifecycleState)) {
     throw new ExecutionV2PersistenceConflictError(
       `invalid Execution attempt transition ${currentLifecycle}->${lifecycleState}`,
