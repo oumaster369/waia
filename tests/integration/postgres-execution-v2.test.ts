@@ -14,7 +14,9 @@ import {
   createExecutionAttemptV2,
   createExecutionPlanV2,
   createExecutionPolicyBindingV2,
+  type ExecutionPlanV2,
 } from "@/lib/trader/execution/v2/contracts";
+import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import {
   bindExecutionAuthorityV2Postgres,
   dispatchCommittedExecutionAttemptV2,
@@ -617,6 +619,41 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       { organizationId: orgA },
       forgedPlan,
     )).rejects.toThrow(/locked Risk allowance/);
+  });
+
+  it("refuses a self-consistent plan whose exact effect exceeds its claimed ceiling", async () => {
+    const input = await admittedBindInput();
+    await insertExecutionPolicyV2Postgres(db, { organizationId: orgA }, input.policy);
+    const validPlan = createExecutionPlanV2({
+      ...input.plan,
+      executionPlanId: uuid(667_507),
+      allowance: input.allowance,
+      policy: input.policy,
+    });
+    const {
+      semanticDigestHex: _semanticDigestHex,
+      contentDigestHex: _contentDigestHex,
+      ...validPayload
+    } = validPlan;
+    void _semanticDigestHex;
+    void _contentDigestHex;
+    const forgedPayload = {
+      ...validPayload,
+      limitPrice: "26000",
+      childSlices: [{ sequence: 1, quantity: "0.001", limitPrice: "26000" }],
+    };
+    const semanticDigestHex = computeStableJsonDigest(forgedPayload);
+    const forgedPlan = {
+      ...forgedPayload,
+      semanticDigestHex,
+      contentDigestHex: computeStableJsonDigest({ ...forgedPayload, semanticDigestHex }),
+    } as ExecutionPlanV2;
+
+    await expect(insertExecutionPlanV2Postgres(
+      db,
+      { organizationId: orgA },
+      forgedPlan,
+    )).rejects.toThrow(/stored Execution policy or notional authority/);
   });
 
   it("reconstructs the complete durable effect binding before any network call", async () => {

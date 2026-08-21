@@ -17,6 +17,7 @@ import {
 } from "@/lib/trader/risk/numeric";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
+  assertExecutionPlanPolicyMembershipV2,
   createExecutionPolicyBindingV2,
   createExecutionReportV2,
   createExecutionAttemptV2,
@@ -525,6 +526,13 @@ export async function insertExecutionPlanV2Postgres(
   )).limit(1);
   if (!policyRows[0] || policyRows[0].contentDigest !== plan.executionPolicyContentDigestHex) {
     throw new ExecutionV2PersistenceConflictError("plan policy seal mismatch");
+  }
+  try {
+    assertExecutionPlanPolicyMembershipV2(plan, mapPolicy(policyRows[0]));
+  } catch {
+    throw new ExecutionV2PersistenceConflictError(
+      "plan is outside its stored Execution policy or notional authority",
+    );
   }
   await ex.insert(pgSchema.traderExecutionPlansV2).values({
     id: plan.executionPlanId,
