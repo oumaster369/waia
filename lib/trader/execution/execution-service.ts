@@ -64,6 +64,12 @@ import {
   createPostgresKillSwitchRepository,
   createSqliteKillSwitchRepository,
 } from "@/lib/trader/risk/kill-switch";
+import {
+  consumeRiskAllowanceForOrderV2Postgres,
+  RiskV2AdmissionRefusedError,
+  type ConsumedRiskAllowanceForOrderV2,
+  type ConsumeRiskAllowanceForOrderV2Result,
+} from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 
 type PgExecutionExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
 
@@ -249,6 +255,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     assertLiveAuthorized,
     lifecycleRecorder,
     historicalExecution,
+    consumeRiskAllowanceV2,
   } = deps;
 
   function buildTradeLineageFromSubmit(
@@ -428,6 +435,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     input: SubmitOrderInput,
     riskDecision?: RiskEngineDecision,
     auditIds: SubmissionAuditIds = {},
+    consumedAllowance?: ConsumedRiskAllowanceForOrderV2,
   ): Promise<SubmitOrderResult> {
     if (!canDispatch(order)) {
       const resume = resumeResultForExistingOrder(order);
@@ -455,6 +463,21 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
       );
 
       return { status: "submit_blocked", order: blocked.order, reason: "kill_switch" };
+    }
+
+    if (
+      order.riskAllowanceId &&
+      (
+        !consumedAllowance ||
+        consumedAllowance.riskAllowanceId !== order.riskAllowanceId ||
+        consumedAllowance.orderBindingDigestHex !== order.riskAllowanceBindingDigest
+      )
+    ) {
+      return {
+        status: "risk_allowance_refused",
+        order: null,
+        reason: "CONSUMED_ALLOWANCE_PROOF_MISSING_OR_MISMATCHED",
+      };
     }
 
     const sent = await transitionOrConflict(context, order, "SENT_TO_EXCHANGE");
@@ -706,6 +729,95 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
         throw new UnsupportedExecutionModeError(input.executionMode);
       }
 
+      if (input.riskAllowanceV2) {
+        if (!consumeRiskAllowanceV2) {
+          return finishSubmitOrder(orgContext, input, startedMs, {
+            status: "risk_allowance_refused",
+            order: null,
+            reason: "RISK_ALLOWANCE_CONSUMER_UNAVAILABLE",
+          });
+        }
+        await authorizeLivePath(orgContext, input);
+        let claim: ConsumeRiskAllowanceForOrderV2Result;
+        try {
+          claim = await consumeRiskAllowanceV2(orgContext, {
+            accountId: input.riskAllowanceV2.accountId,
+            riskAllowanceId: input.riskAllowanceV2.riskAllowanceId,
+            nonce: input.riskAllowanceV2.nonce,
+            consumptionEventId: input.riskAllowanceV2.consumptionEventId,
+            order: {
+              id: input.riskAllowanceV2.orderId,
+              executionMode: input.executionMode,
+              symbol: input.symbol,
+              side: input.side,
+              type: input.type,
+              price: input.price ?? null,
+              quantity: input.quantity,
+              clientOrderId: input.clientOrderId,
+              idempotencyKey: input.idempotencyKey,
+              strategySignalId: input.strategySignalId ?? null,
+              allocationDecisionId: input.allocationDecisionId ?? null,
+              credentialId: input.credentialId ?? null,
+            },
+          });
+        } catch (error) {
+          return finishSubmitOrder(orgContext, input, startedMs, {
+            status: "risk_allowance_refused",
+            order: null,
+            reason:
+              error instanceof RiskV2AdmissionRefusedError
+                ? error.reason
+                : "RISK_ALLOWANCE_CLAIM_FAILED",
+          });
+        }
+        if (claim.status === "REFUSED") {
+          return finishSubmitOrder(orgContext, input, startedMs, {
+            status: "risk_allowance_refused",
+            order: null,
+            reason: claim.reason,
+          });
+        }
+        const consumed = claim;
+        const resume = resumeResultForExistingOrder(consumed.order);
+        if (resume) return finishSubmitOrder(orgContext, input, startedMs, resume);
+        const auditIds: SubmissionAuditIds = {};
+        if (consumed.consumedNow) {
+          auditIds.submissionStarted = await writeOrderAudit(
+            writeAudit,
+            orgContext,
+            consumed.order.id,
+            traderAuditActions.orderSubmissionStarted,
+            {
+              clientOrderId: input.clientOrderId,
+              executionMode: input.executionMode,
+              riskAllowanceId: consumed.riskAllowanceId,
+              orderBindingDigestHex: consumed.orderBindingDigestHex,
+            },
+            input,
+          );
+        }
+        const approved = await ensureRiskApproved(orgContext, consumed.order);
+        if ("conflict" in approved) {
+          return finishSubmitOrder(orgContext, input, startedMs, {
+            status: "conflict",
+            orderId: approved.orderId,
+          });
+        }
+        return finishSubmitOrder(
+          orgContext,
+          input,
+          startedMs,
+          await dispatchToConnector(
+            orgContext,
+            approved.order,
+            input,
+            undefined,
+            auditIds,
+            consumed,
+          ),
+        );
+      }
+
       const existingByClient = await orderRepository.findOrderByClientOrderId(
         orgContext,
         input.clientOrderId,
@@ -854,6 +966,9 @@ export function createPostgresOrderExecutionService(
     writeAudit:
       overrides.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogPostgres(db, input)),
     nowMs,
+    consumeRiskAllowanceV2:
+      overrides.consumeRiskAllowanceV2 ??
+      ((context, input) => consumeRiskAllowanceForOrderV2Postgres(db, context, input)),
   });
 }
 

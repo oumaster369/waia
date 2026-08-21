@@ -8,6 +8,7 @@ import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   admitRiskAllowanceV2Postgres,
+  consumeRiskAllowanceForOrderV2Postgres,
   initializeRiskAccountStateV2Postgres,
   readRiskAccountStateV2Postgres,
   revokeRiskAllowanceV2Postgres,
@@ -42,11 +43,14 @@ async function clearRisk(sqlClient: postgres.Sql, organizationId: string) {
     "ALTER TABLE trader_risk_verdicts_v2 DISABLE TRIGGER trader_risk_verdicts_v2_block_delete",
   );
   try {
-    await sqlClient`DELETE FROM trader_risk_enforcement_events_v2 WHERE organization_id = ${organizationId}::uuid`;
-    await sqlClient`DELETE FROM trader_orders WHERE organization_id = ${organizationId}::uuid AND risk_allowance_id IS NOT NULL`;
-    await sqlClient`DELETE FROM trader_risk_allowances_v2 WHERE organization_id = ${organizationId}::uuid`;
-    await sqlClient`DELETE FROM trader_risk_verdicts_v2 WHERE organization_id = ${organizationId}::uuid`;
-    await sqlClient`DELETE FROM trader_risk_account_state_v2 WHERE organization_id = ${organizationId}::uuid`;
+    await sqlClient.begin(async (tx) => {
+      await tx.unsafe("SET CONSTRAINTS ALL DEFERRED");
+      await tx`DELETE FROM trader_risk_enforcement_events_v2 WHERE organization_id = ${organizationId}::uuid`;
+      await tx`DELETE FROM trader_risk_allowances_v2 WHERE organization_id = ${organizationId}::uuid`;
+      await tx`DELETE FROM trader_orders WHERE organization_id = ${organizationId}::uuid AND risk_allowance_id IS NOT NULL`;
+      await tx`DELETE FROM trader_risk_verdicts_v2 WHERE organization_id = ${organizationId}::uuid`;
+      await tx`DELETE FROM trader_risk_account_state_v2 WHERE organization_id = ${organizationId}::uuid`;
+    });
   } finally {
     await sqlClient.unsafe(
       "ALTER TABLE trader_risk_verdicts_v2 ENABLE TRIGGER trader_risk_verdicts_v2_block_delete",
@@ -141,6 +145,29 @@ function admission(input: {
       approvedQualifiedQuantity: "0.001",
       bindingLayers: ["L2"],
       reasonCodes: ["POSITION_LIMIT_BINDING"],
+    },
+  };
+}
+
+function claim(input: AdmitRiskAllowanceV2Input, orderIdentity: number) {
+  return {
+    accountId: input.accountId,
+    riskAllowanceId: input.riskAllowanceId,
+    nonce: input.nonce,
+    consumptionEventId: uuid(658_000 + orderIdentity * 10),
+    order: {
+      id: uuid(658_001 + orderIdentity * 10),
+      executionMode: "paper" as const,
+      symbol: input.verdict.symbol,
+      side: "buy" as const,
+      type: "market" as const,
+      price: null,
+      quantity: input.verdict.approvedQualifiedQuantity!,
+      clientOrderId: `risk-v2-client-${orderIdentity}`,
+      idempotencyKey: `risk-v2-idempotency-${orderIdentity}`,
+      strategySignalId: null,
+      allocationDecisionId: null,
+      credentialId: null,
     },
   };
 }
@@ -286,6 +313,138 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
       UPDATE trader_risk_allowances_v2 SET exact_qualified_quantity = 1
       WHERE id = ${admitted.allowance.riskAllowanceId}::uuid
     `).rejects.toThrow(/immutable authority fields/);
+  });
+
+  it("atomically consumes once, binds the exact order, and leaves no residual authority", async () => {
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("claim"));
+    const authority = admission({ accountId: "claim", identity: 7, reservation: "25" });
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
+    const exactClaim = claim(authority, 1);
+    const consumed = await consumeRiskAllowanceForOrderV2Postgres(
+      db,
+      { organizationId: orgA },
+      exactClaim,
+    );
+    const continuation = await consumeRiskAllowanceForOrderV2Postgres(
+      db,
+      { organizationId: orgA },
+      exactClaim,
+    );
+    expect(consumed).toMatchObject({ status: "CONSUMED", consumedNow: true });
+    expect(continuation).toMatchObject({
+      status: "CONSUMED",
+      consumedNow: false,
+      order: { id: exactClaim.order.id, riskAllowanceId: authority.riskAllowanceId },
+    });
+    if (consumed.status !== "CONSUMED" || continuation.status !== "CONSUMED") {
+      throw new Error("expected consumed allowance and same-bound continuation");
+    }
+    expect(continuation.orderBindingDigestHex).toBe(consumed.orderBindingDigestHex);
+    const differentOrder = claim(authority, 2);
+    await expect(consumeRiskAllowanceForOrderV2Postgres(
+      db,
+      { organizationId: orgA },
+      differentOrder,
+    )).rejects.toMatchObject({ reason: "ALLOWANCE_ALREADY_CONSUMED_BY_DIFFERENT_ORDER" });
+    const state = await readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "claim");
+    expect(state).toMatchObject({
+      accounting: {
+        outstandingReservationNotional: "0",
+        worstCasePendingExposureNotional: "25",
+      },
+      nextEnforcementEventSequence: "3",
+    });
+    const allowanceRows = await sqlClient<{
+      lifecycle_state: string;
+      bound_order_id: string;
+      bound_order_digest: string;
+    }[]>`
+      SELECT lifecycle_state, bound_order_id, bound_order_digest
+      FROM trader_risk_allowances_v2
+      WHERE id = ${authority.riskAllowanceId}::uuid
+    `;
+    expect(allowanceRows[0]).toEqual({
+      lifecycle_state: "CONSUMED",
+      bound_order_id: exactClaim.order.id,
+      bound_order_digest: consumed.orderBindingDigestHex,
+    });
+  });
+
+  it("rechecks posture, kill, reconciliation, Reality, nonce, and exact order at claim time", async () => {
+    const cases = [
+      { accountId: "halted", identity: 8, set: "posture = 'HALT'", reason: "EXECUTION_FAIL_CLOSED" },
+      { accountId: "killed", identity: 9, set: "kill_state = 'TRIPPED'", reason: "CURRENT_AUTHORITY_BINDING_MISMATCH" },
+      { accountId: "stale", identity: 10, set: "reconciliation_status = 'STALE'", reason: "CURRENT_AUTHORITY_BINDING_MISMATCH" },
+      { accountId: "reality-drift", identity: 11, set: `reality_content_digest = '${hex64("changed-reality")}'`, reason: "CURRENT_AUTHORITY_BINDING_MISMATCH" },
+    ] as const;
+    for (const entry of cases) {
+      await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account(entry.accountId));
+      const authority = admission({ accountId: entry.accountId, identity: entry.identity, reservation: "10" });
+      await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
+      await sqlClient.unsafe(
+        `UPDATE trader_risk_account_state_v2 SET ${entry.set} WHERE organization_id = $1::uuid AND account_id = $2`,
+        [orgA, entry.accountId],
+      );
+      await expect(consumeRiskAllowanceForOrderV2Postgres(
+        db,
+        { organizationId: orgA },
+        claim(authority, entry.identity),
+      )).resolves.toMatchObject({ status: "REFUSED", reason: entry.reason });
+    }
+
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("exact"));
+    const exact = admission({ accountId: "exact", identity: 12, reservation: "10" });
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, exact);
+    const wrongQuantity = claim(exact, 12);
+    await expect(consumeRiskAllowanceForOrderV2Postgres(
+      db,
+      { organizationId: orgA },
+      { ...wrongQuantity, order: { ...wrongQuantity.order, quantity: "0.002" } },
+    )).resolves.toMatchObject({ status: "REFUSED", reason: "ORDER_DOES_NOT_MATCH_ALLOWANCE" });
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("nonce"));
+    const nonce = admission({ accountId: "nonce", identity: 13, reservation: "10" });
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, nonce);
+    await expect(consumeRiskAllowanceForOrderV2Postgres(
+      db,
+      { organizationId: orgA },
+      { ...claim(nonce, 13), nonce: uuid(999_999) },
+    )).resolves.toMatchObject({ status: "REFUSED", reason: "ALLOWANCE_NONCE_MISMATCH" });
+    const orderCount = await sqlClient<{ count: string }[]>`
+      SELECT count(*)::text AS count FROM trader_orders
+      WHERE organization_id = ${orgA}::uuid AND risk_allowance_id = ${exact.riskAllowanceId}::uuid
+    `;
+    expect(orderCount[0]!.count).toBe("0");
+  });
+
+  it("serializes competing claims so exactly one bound order consumes the allowance", async () => {
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("claim-race"));
+    const authority = admission({ accountId: "claim-race", identity: 14, reservation: "20" });
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
+    const outcomes = await Promise.allSettled([
+      consumeRiskAllowanceForOrderV2Postgres(
+        db,
+        { organizationId: orgA },
+        claim(authority, 14),
+      ),
+      consumeRiskAllowanceForOrderV2Postgres(
+        db,
+        { organizationId: orgA },
+        claim(authority, 15),
+      ),
+    ]);
+    expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const rows = await sqlClient<{ order_count: string; consume_event_count: string }[]>`
+      SELECT
+        (SELECT count(*)::text FROM trader_orders
+          WHERE organization_id = ${orgA}::uuid
+            AND risk_allowance_id = ${authority.riskAllowanceId}::uuid) AS order_count,
+        (SELECT count(*)::text FROM trader_risk_enforcement_events_v2
+          WHERE organization_id = ${orgA}::uuid
+            AND risk_allowance_id = ${authority.riskAllowanceId}::uuid
+            AND event_type = 'ALLOWANCE_CONSUMED') AS consume_event_count
+    `;
+    expect(rows[0]).toEqual({ order_count: "1", consume_event_count: "1" });
   });
 
   it("enables deny RLS and proves authenticated/anon CRUD denial after temporary grants", async () => {
