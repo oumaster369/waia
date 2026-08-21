@@ -152,6 +152,7 @@ function makeRiskEngine(
 function minimalConnectorStub(
   overrides: Partial<Pick<ExchangeConnector, "placeOrder" | "getTradeHistory">> = {},
 ): ExchangeConnector {
+  let lastPlaced: PlaceOrderInput | null = null;
   return {
     venueId: "mock",
     marketType: "spot",
@@ -167,23 +168,38 @@ function minimalConnectorStub(
     getFuturesBalances: vi.fn(),
     getFuturesPositions: vi.fn(),
     placeFuturesOrder: vi.fn(),
-    getTradeHistory: overrides.getTradeHistory ?? vi.fn().mockResolvedValue([]),
+    getTradeHistory: overrides.getTradeHistory ?? vi.fn().mockImplementation(async () =>
+      lastPlaced ? [{
+        tradeId: "exact-trade-1",
+        orderId: "ex-order-1",
+        clientOrderId: lastPlaced.clientOrderId,
+        symbol: lastPlaced.symbol,
+        side: lastPlaced.side,
+        price: lastPlaced.price ?? "65000",
+        quantity: lastPlaced.quantity,
+        fee: "0",
+        feeAsset: "USDT",
+        executedAt: new Date(NOW).toISOString(),
+      }] : []),
     placeOrder:
       overrides.placeOrder ??
       vi.fn().mockImplementation(
-        async (input: PlaceOrderInput): Promise<Order> => ({
-          orderId: "ex-order-1",
-          clientOrderId: input.clientOrderId,
-          symbol: input.symbol,
-          side: input.side,
-          type: input.type,
-          status: input.type === "market" ? "filled" : "open",
-          price: input.price,
-          quantity: input.quantity,
-          filledQuantity: input.type === "market" ? input.quantity : "0",
-          createdAt: new Date(NOW).toISOString(),
-          updatedAt: new Date(NOW).toISOString(),
-        }),
+        async (input: PlaceOrderInput): Promise<Order> => {
+          lastPlaced = input;
+          return {
+            orderId: "ex-order-1",
+            clientOrderId: input.clientOrderId,
+            symbol: input.symbol,
+            side: input.side,
+            type: input.type,
+            status: input.type === "market" ? "filled" : "open",
+            price: input.price,
+            quantity: input.quantity,
+            filledQuantity: input.type === "market" ? input.quantity : "0",
+            createdAt: new Date(NOW).toISOString(),
+            updatedAt: new Date(NOW).toISOString(),
+          };
+        },
       ),
   };
 }
@@ -547,6 +563,25 @@ describe("trader order execution service (DEE-249)", () => {
     if (result.status === "connector_uncertain") {
       expect(result.order.state).toBe("RECONCILIATION_REQUIRED");
     }
+  });
+
+  it("never fabricates a fill when connector status lacks exact trade evidence", async () => {
+    const context = requireOrgContext(orgA);
+    const connector = minimalConnectorStub({
+      getTradeHistory: vi.fn().mockResolvedValue([]),
+    });
+    const { service } = makeService(orgA, repo, { connector });
+    const result = await service.submitOrder(context, submitInput({
+      clientOrderId: "raw-status-only-651",
+      idempotencyKey: "idem-raw-status-only-651",
+      type: "market",
+    }));
+    expect(result.status).toBe("connector_uncertain");
+    if (result.status !== "connector_uncertain") return;
+    expect(result.order.state).toBe("RECONCILIATION_REQUIRED");
+    expect(result.order.filledQuantity).toBe("0");
+    expect(result.order.avgFillPrice).toBeNull();
+    expect(await repo.listFills(context, result.order.id)).toEqual([]);
   });
 
   it("OrderVersionConflictError returns conflict and never calls connector", async () => {

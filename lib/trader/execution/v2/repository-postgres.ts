@@ -57,6 +57,39 @@ export type ExecutionAttemptProjectionV2 = Readonly<{
   lastReportDigestHex: string | null;
 }>;
 
+const EXECUTION_ATTEMPT_TRANSITIONS_V2: Readonly<Record<
+  ExecutionAttemptLifecycleStateV2,
+  readonly ExecutionAttemptLifecycleStateV2[]
+>> = Object.freeze({
+  BOUND: ["BOUND", "SUBMIT_STARTED", "RECONCILIATION_REQUIRED"],
+  SUBMIT_STARTED: [
+    "VENUE_ACCEPTED",
+    "VENUE_REJECTED",
+    "PARTIALLY_FILLED",
+    "FILLED",
+    "CANCEL_REQUESTED",
+    "RECONCILIATION_REQUIRED",
+  ],
+  VENUE_ACCEPTED: [
+    "VENUE_ACCEPTED",
+    "PARTIALLY_FILLED",
+    "FILLED",
+    "CANCEL_REQUESTED",
+    "RECONCILIATION_REQUIRED",
+  ],
+  VENUE_REJECTED: [],
+  PARTIALLY_FILLED: [
+    "PARTIALLY_FILLED",
+    "FILLED",
+    "CANCEL_REQUESTED",
+    "RECONCILIATION_REQUIRED",
+  ],
+  FILLED: [],
+  CANCEL_REQUESTED: ["CANCELLED", "PARTIALLY_FILLED", "FILLED", "RECONCILIATION_REQUIRED"],
+  CANCELLED: [],
+  RECONCILIATION_REQUIRED: ["RECONCILIATION_REQUIRED"],
+});
+
 function mapPolicy(row: PolicyRow): ExecutionPolicyBindingV2 {
   const policy = createExecutionPolicyBindingV2({
     executionPolicyId: row.id,
@@ -412,6 +445,12 @@ export async function appendExecutionReportV2FromExecutor(
   )).for("update");
   const row = rows[0];
   if (!row) throw new ExecutionV2PersistenceConflictError("Execution attempt not found");
+  const currentLifecycle = row.lifecycleState as ExecutionAttemptLifecycleStateV2;
+  if (!EXECUTION_ATTEMPT_TRANSITIONS_V2[currentLifecycle].includes(input.lifecycleState)) {
+    throw new ExecutionV2PersistenceConflictError(
+      `invalid Execution attempt transition ${currentLifecycle}->${input.lifecycleState}`,
+    );
+  }
   const report = createExecutionReportV2({
     executionReportId: input.executionReportId,
     organizationId: scoped.organizationId,

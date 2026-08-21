@@ -446,21 +446,6 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
       return byOrder;
     }
 
-    if (connectorOrder.status === "filled" || connectorOrder.status === "partially_filled") {
-      return {
-        tradeId: `synthetic-${connectorOrder.orderId}`,
-        orderId: connectorOrder.orderId,
-        clientOrderId: connectorOrder.clientOrderId,
-        symbol: connectorOrder.symbol,
-        side: connectorOrder.side,
-        price: connectorOrder.price ?? "0",
-        quantity: connectorOrder.filledQuantity,
-        fee: "0",
-        feeAsset: "USDT",
-        executedAt: connectorOrder.updatedAt,
-      };
-    }
-
     return null;
   }
 
@@ -584,23 +569,34 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
 
     if (connectorOrder.status === "filled" || connectorOrder.status === "partially_filled") {
       const trade = await resolveTradeForOrder(connector, current, connectorOrder);
-      if (trade) {
-        const fillRow = await orderRepository.recordFill(context, {
-          orderId: current.id,
-          exchangeTradeId: trade.tradeId,
-          price: trade.price,
-          quantity: trade.quantity,
-          fee: trade.fee,
-          feeAsset: trade.feeAsset,
-          executedAt: new Date(trade.executedAt),
+      if (!trade) {
+        const uncertain = await transitionOrConflict(context, current, "RECONCILIATION_REQUIRED", {
+          eventPayload: JSON.stringify({
+            reason: "connector_status_without_exact_trade_evidence",
+            connectorStatus: connectorOrder.status,
+            exchangeOrderId: connectorOrder.orderId,
+          }),
         });
-        await recordLifecycleForFill(context, current, input, fillRow.id);
+        if ("conflict" in uncertain) {
+          return { status: "conflict", orderId: uncertain.orderId };
+        }
+        return { status: "connector_uncertain", order: uncertain.order };
       }
+      const fillRow = await orderRepository.recordFill(context, {
+        orderId: current.id,
+        exchangeTradeId: trade.tradeId,
+        price: trade.price,
+        quantity: trade.quantity,
+        fee: trade.fee,
+        feeAsset: trade.feeAsset,
+        executedAt: new Date(trade.executedAt),
+      });
+      await recordLifecycleForFill(context, current, input, fillRow.id);
 
       const fillTarget = mapConnectorStatusToOrderState(connectorOrder.status);
       const filled = await transitionOrConflict(context, current, fillTarget, {
-        filledQuantity: connectorOrder.filledQuantity,
-        avgFillPrice: trade?.price ?? connectorOrder.price ?? null,
+        filledQuantity: trade.quantity,
+        avgFillPrice: trade.price,
       });
       if ("conflict" in filled) {
         return { status: "conflict", orderId: filled.orderId };

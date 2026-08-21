@@ -26,8 +26,14 @@ import {
   insertExecutionPlanV2Postgres,
   insertExecutionPolicyV2Postgres,
   listExecutionReportsV2Postgres,
+  readExecutionAttemptProjectionV2Postgres,
   readExecutionAttemptV2Postgres,
 } from "@/lib/trader/execution/v2/repository-postgres";
+import {
+  dispatchAndRecordExecutionAttemptV2,
+  recordProtectiveCancelAcknowledgementV2Postgres,
+  requestProtectiveCancelV2Postgres,
+} from "@/lib/trader/execution/v2/recovery-postgres";
 import { divideDecimal } from "@/lib/trader/risk/numeric";
 import {
   admitRiskAllowanceV2Postgres,
@@ -574,5 +580,176 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       order_count: "0",
       attempt_count: "0",
     });
+  });
+
+  it("records timeout as raw fail-unknown reports and reconciliation-only state", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    let networkCalls = 0;
+    const result = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        networkCalls += 1;
+        throw new Error("HTX_TIMEOUT_UNKNOWN");
+      },
+    );
+    expect(result.status).toBe("RECONCILIATION_REQUIRED");
+    const reports = await listExecutionReportsV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(reports.slice(-2).map((report) => report.reportType)).toEqual([
+      "CONNECTOR_UNCERTAIN",
+      "RECONCILIATION_REQUIRED",
+    ]);
+    expect(reports.at(-2)?.rawObservation).toEqual({
+      error: { name: "Error", message: "HTX_TIMEOUT_UNKNOWN" },
+    });
+    const restart = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        networkCalls += 1;
+        throw new Error("BLIND_RESEND_FORBIDDEN");
+      },
+    );
+    expect(restart.status).toBe("REFUSED_ALREADY_TERMINAL");
+    expect(networkCalls).toBe(1);
+  });
+
+  it("refuses to promote filled status without exact trades or fabricate fills", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const rawOrder = {
+      orderId: "htx-order-status-only",
+      ...bound.attempt.exactRequestPayload,
+      status: "filled" as const,
+      price: bound.attempt.exactRequestPayload.price ?? undefined,
+      quantity: bound.attempt.exactRequestPayload.quantity,
+      filledQuantity: bound.attempt.exactRequestPayload.quantity,
+      createdAt: "2026-08-21T00:00:00.000Z",
+      updatedAt: "2026-08-21T00:00:01.000Z",
+    };
+    const result = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({ order: rawOrder, trades: [], raw: { htx: rawOrder } }),
+    );
+    expect(result.status).toBe("RECONCILIATION_REQUIRED");
+    const fillCount = await sql<{ count: string }[]>`
+      SELECT count(*)::text AS count FROM trader_fills
+      WHERE organization_id = ${orgA}::uuid AND order_id = ${bound.order.id}::uuid
+    `;
+    expect(fillCount[0]?.count).toBe("0");
+    const projection = await readExecutionAttemptProjectionV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(projection?.lifecycleState).toBe("RECONCILIATION_REQUIRED");
+  });
+
+  it("preserves partial/reject/cancel semantics without residual or replacement authority", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const partialOrder = {
+      orderId: "htx-order-partial",
+      ...bound.attempt.exactRequestPayload,
+      status: "partially_filled" as const,
+      price: bound.attempt.exactRequestPayload.price ?? undefined,
+      quantity: bound.attempt.exactRequestPayload.quantity,
+      filledQuantity: "0.0005",
+      createdAt: "2026-08-21T00:00:00.000Z",
+      updatedAt: "2026-08-21T00:00:01.000Z",
+    };
+    const partial = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({
+        order: partialOrder,
+        trades: [{
+          tradeId: "htx-trade-partial",
+          orderId: partialOrder.orderId,
+          clientOrderId: bound.attempt.clientOrderId,
+          symbol: bound.attempt.exactRequestPayload.symbol,
+          side: bound.attempt.exactRequestPayload.side,
+          price: "25000",
+          quantity: "0.0005",
+          fee: "0.01",
+          feeAsset: "USDT",
+          executedAt: "2026-08-21T00:00:01.000Z",
+        }],
+        raw: { status: "partial" },
+      }),
+    );
+    expect(partial.status).toBe("PARTIALLY_FILLED");
+    await requestProtectiveCancelV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      "protect residual exposure",
+    );
+    await recordProtectiveCancelAcknowledgementV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      { ...partialOrder, status: "canceled", updatedAt: "2026-08-21T00:00:02.000Z" },
+    );
+    const counts = await sql<{ attempts: string; orders: string }[]>`
+      SELECT
+        (SELECT count(*)::text FROM trader_execution_attempts_v2
+          WHERE organization_id = ${orgA}::uuid) AS attempts,
+        (SELECT count(*)::text FROM trader_orders
+          WHERE organization_id = ${orgA}::uuid) AS orders
+    `;
+    expect(counts[0]).toEqual({ attempts: "1", orders: "1" });
+    const reports = await listExecutionReportsV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(reports.slice(-3).map((report) => report.reportType)).toEqual([
+      "FILL_REPORT_OBSERVED",
+      "CANCEL_REQUESTED",
+      "CANCEL_ACKNOWLEDGED",
+    ]);
+    expect(reports.at(-2)?.rawObservation).toMatchObject({ replacementAuthorized: false });
+  });
+
+  it("terminally consumes a raw venue rejection", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const rejected = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({
+        order: {
+          orderId: "htx-order-rejected",
+          ...bound.attempt.exactRequestPayload,
+          status: "rejected",
+          price: bound.attempt.exactRequestPayload.price ?? undefined,
+          quantity: bound.attempt.exactRequestPayload.quantity,
+          filledQuantity: "0",
+          createdAt: "2026-08-21T00:00:00.000Z",
+          updatedAt: "2026-08-21T00:00:01.000Z",
+        },
+        trades: [],
+        raw: { code: "venue-reject" },
+      }),
+    );
+    expect(rejected.status).toBe("VENUE_REJECTED");
+    const projection = await readExecutionAttemptProjectionV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(projection?.lifecycleState).toBe("VENUE_REJECTED");
   });
 });
