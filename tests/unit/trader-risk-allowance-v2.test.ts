@@ -69,6 +69,17 @@ describe("RiskAllowanceV2", () => {
       postureAtIssuance: "CLOSE_ONLY",
       strictExposureReduction: false,
     })).toThrow();
+    expect(() => createRiskAllowanceV2({
+      ...draft,
+      strictExposureReduction: true,
+      reservedExposureNotional: "0",
+    })).toThrow(/reduction proof\/action mismatch/);
+    expect(() => createRiskAllowanceV2({
+      ...draft,
+      decision: { ...draft.decision, action: "REDUCE" },
+      strictExposureReduction: true,
+      reservedExposureNotional: "1",
+    })).toThrow(/must not reserve increasing exposure/);
   });
 
   it("accounts for reconciled, worst-case pending, and outstanding reservations", () => {

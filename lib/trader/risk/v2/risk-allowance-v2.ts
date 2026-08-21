@@ -142,6 +142,20 @@ export function createRiskAllowanceV2(draft: RiskAllowanceV2Draft): RiskAllowanc
   if (draft.postureAtIssuance === "CLOSE_ONLY" && !draft.strictExposureReduction) {
     throw new Error("CLOSE_ONLY allowance must be a strict exposure reduction");
   }
+  if (draft.decision.action === "HOLD") {
+    throw new Error("HOLD cannot produce an executable allowance");
+  }
+  const reductionAction =
+    draft.decision.action === "REDUCE" || draft.decision.action === "CLOSE";
+  if (reductionAction !== draft.strictExposureReduction) {
+    throw new Error("allowance reduction proof/action mismatch");
+  }
+  if (
+    draft.strictExposureReduction &&
+    canonicalNonnegative(draft.reservedExposureNotional) !== "0"
+  ) {
+    throw new Error("strict reduction allowance must not reserve increasing exposure");
+  }
   const withoutDigests = {
     ...draft,
     schemaVersion: RISK_ALLOWANCE_V2_SCHEMA_VERSION,

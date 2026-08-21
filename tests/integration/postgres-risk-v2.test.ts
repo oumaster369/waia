@@ -16,6 +16,7 @@ import {
   type AdmitRiskAllowanceV2Input,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
+import { divideDecimal } from "@/lib/trader/risk/numeric";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
@@ -77,15 +78,23 @@ async function resetUser(userId: string) {
   await cleanupWp13Org(url!, userId);
 }
 
-function account(accountId: string) {
+function account(
+  accountId: string,
+  options: { posture?: "NORMAL" | "CLOSE_ONLY"; btcBaseQuantity?: string } = {},
+) {
   return {
     accountId,
-    posture: "NORMAL" as const,
+    posture: options.posture ?? "NORMAL" as const,
     killState: "CLEAR" as const,
     reconciliationStatus: "RECONCILED" as const,
     realitySnapshotId: `reality-${accountId}`,
     realityContentDigestHex: hex64(`reality-${accountId}`),
     reconciliationAuthorityDigestHex: hex64(`reconciliation-${accountId}`),
+    reconciledInstrumentExposures: [{
+      instrumentIdentityDigestHex: hex64("BTCUSDT-SPOT"),
+      symbol: "BTCUSDT",
+      baseQuantity: options.btcBaseQuantity ?? "0",
+    }],
     accounting: {
       reconciledExposureNotional: "0",
       worstCasePendingExposureNotional: "0",
@@ -108,8 +117,6 @@ function admission(input: {
     issuanceEventId: uuid(657_102 + input.identity * 10),
     nonce: uuid(657_103 + input.identity * 10),
     validForMs: 30_000,
-    strictExposureReduction: false,
-    requestedReservationNotional: input.reservation,
     verdict: {
       venue: "HTX",
       market: "SPOT",
@@ -139,7 +146,7 @@ function admission(input: {
         authorityId: "test-median",
         authorityVersion: "v1",
         contentDigestHex: hex64("test-median-v1"),
-        price: "25000",
+        price: divideDecimal(input.reservation, "0.001"),
       },
       verdict: "APPROVE_CLAMPED",
       approvedQualifiedQuantity: "0.001",
@@ -159,7 +166,7 @@ function claim(input: AdmitRiskAllowanceV2Input, orderIdentity: number) {
       id: uuid(658_001 + orderIdentity * 10),
       executionMode: "paper" as const,
       symbol: input.verdict.symbol,
-      side: "buy" as const,
+      side: input.verdict.decision.action === "ENTER_LONG" ? "buy" as const : "sell" as const,
       type: "market" as const,
       price: null,
       quantity: input.verdict.approvedQualifiedQuantity!,
@@ -340,6 +347,15 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
       throw new Error("expected consumed allowance and same-bound continuation");
     }
     expect(continuation.orderBindingDigestHex).toBe(consumed.orderBindingDigestHex);
+    await sqlClient`
+      UPDATE trader_risk_account_state_v2 SET posture = 'HALT'
+      WHERE organization_id = ${orgA}::uuid AND account_id = 'claim'
+    `;
+    await expect(consumeRiskAllowanceForOrderV2Postgres(
+      db,
+      { organizationId: orgA },
+      exactClaim,
+    )).rejects.toMatchObject({ reason: "EXECUTION_FAIL_CLOSED" });
     const differentOrder = claim(authority, 2);
     await expect(consumeRiskAllowanceForOrderV2Postgres(
       db,
@@ -416,6 +432,86 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
     expect(orderCount[0]!.count).toBe("0");
   });
 
+  it("derives CLOSE_ONLY reduction proof and entry reservation from sealed current authority", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("close-only", { posture: "CLOSE_ONLY", btcBaseQuantity: "0.002" }),
+    );
+    const reduction = admission({ accountId: "close-only", identity: 16, reservation: "25" });
+    const reductionAuthority: AdmitRiskAllowanceV2Input = {
+      ...reduction,
+      verdict: {
+        ...reduction.verdict,
+        decision: { ...reduction.verdict.decision, action: "REDUCE" },
+        verdict: "CLOSE_ONLY",
+      },
+    };
+    expect(reductionAuthority).not.toHaveProperty("requestedReservationNotional");
+    const admitted = await admitRiskAllowanceV2Postgres(
+      db,
+      { organizationId: orgA },
+      reductionAuthority,
+    );
+    expect(admitted.allowance).toMatchObject({
+      strictExposureReduction: true,
+      reservedExposureNotional: "0",
+    });
+    await expect(consumeRiskAllowanceForOrderV2Postgres(
+      db,
+      { organizationId: orgA },
+      claim(reductionAuthority, 16),
+    )).resolves.toMatchObject({ status: "CONSUMED", consumedNow: true });
+
+    for (const [accountId, identity, baseQuantity, quantity, action] of [
+      ["close-entry", 17, "1", "0.001", "ENTER_LONG"],
+      ["close-empty", 18, "0", "0.001", "REDUCE"],
+      ["close-overshoot", 19, "0.0005", "0.001", "CLOSE"],
+    ] as const) {
+      await initializeRiskAccountStateV2Postgres(
+        db,
+        { organizationId: orgA },
+        account(accountId, { posture: "CLOSE_ONLY", btcBaseQuantity: baseQuantity }),
+      );
+      const invalid = admission({ accountId, identity, reservation: "25" });
+      const invalidAuthority: AdmitRiskAllowanceV2Input = {
+        ...invalid,
+        verdict: {
+          ...invalid.verdict,
+          approvedQualifiedQuantity: quantity,
+          decision: { ...invalid.verdict.decision, action },
+          verdict: "CLOSE_ONLY",
+        },
+      };
+      await expect(admitRiskAllowanceV2Postgres(
+        db,
+        { organizationId: orgA },
+        invalidAuthority,
+      )).rejects.toBeInstanceOf(RiskV2AdmissionRefusedError);
+    }
+  });
+
+  it("refuses an expired consumed order that never reached first dispatch", async () => {
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("replay-expiry"));
+    const authority = {
+      ...admission({ accountId: "replay-expiry", identity: 31, reservation: "25" }),
+      validForMs: 5,
+    };
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
+    const exactClaim = claim(authority, 31);
+    await expect(consumeRiskAllowanceForOrderV2Postgres(
+      db,
+      { organizationId: orgA },
+      exactClaim,
+    )).resolves.toMatchObject({ status: "CONSUMED", consumedNow: true });
+    await sqlClient`SELECT pg_sleep(0.02)`;
+    await expect(consumeRiskAllowanceForOrderV2Postgres(
+      db,
+      { organizationId: orgA },
+      exactClaim,
+    )).rejects.toMatchObject({ reason: "ALLOWANCE_EXPIRED" });
+  });
+
   it("serializes competing claims so exactly one bound order consumes the allowance", async () => {
     await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("claim-race"));
     const authority = admission({ accountId: "claim-race", identity: 14, reservation: "20" });
@@ -490,14 +586,16 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
             INSERT INTO trader_risk_account_state_v2 (
               organization_id, account_id, market, quote_asset, posture, kill_state,
               reconciliation_status, reality_snapshot_id, reality_content_digest,
-              reconciliation_authority_digest, reconciled_exposure_notional,
+              reconciliation_authority_digest, reconciled_instrument_exposures,
+              reconciled_exposure_notional,
               worst_case_pending_exposure_notional, outstanding_reservation_notional,
               exposure_limit_notional, next_admission_sequence,
               next_enforcement_event_sequence, state_version
             ) VALUES (
               '${orgA}', '${role}-denied', 'SPOT', 'USDT', 'NORMAL', 'CLEAR',
               'RECONCILED', 'denied', '${hex64(`${role}-reality`)}',
-              '${hex64(`${role}-reconciliation`)}', 0, 0, 0, 1, 1, 1, 1
+              '${hex64(`${role}-reconciliation`)}', '[]'::jsonb,
+              0, 0, 0, 1, 1, 1, 1
             )
           `)).rejects.toThrow(/row-level security/);
         } finally {

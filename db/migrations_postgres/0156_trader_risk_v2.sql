@@ -1,6 +1,27 @@
 -- DEE-665 / R650-C and DEE-666 / R650-D: Risk V2 durable authority boundary.
 -- Additive PostgreSQL only. This migration does not rewrite legacy Risk or order rows.
 
+CREATE OR REPLACE FUNCTION public.waia_risk_v2_valid_instrument_exposures(value jsonb)
+RETURNS boolean LANGUAGE sql IMMUTABLE AS $$
+  SELECT jsonb_typeof(value) = 'array'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(value) AS entry
+      WHERE jsonb_typeof(entry) <> 'object'
+        OR COALESCE(entry->>'instrumentIdentityDigestHex', '') !~ '^[0-9a-f]{64}$'
+        OR COALESCE(entry->>'symbol', '') = ''
+        OR CASE
+          WHEN COALESCE(entry->>'baseQuantity', '') ~ '^(0|[1-9][0-9]*)(\.[0-9]{1,8})?$'
+            THEN (entry->>'baseQuantity')::numeric < 0
+          ELSE true
+        END
+    )
+    AND (
+      SELECT count(*) = count(DISTINCT entry->>'instrumentIdentityDigestHex')
+      FROM jsonb_array_elements(value) AS entry
+    );
+$$;
+--> statement-breakpoint
 CREATE TABLE public.trader_risk_account_state_v2 (
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   account_id text NOT NULL,
@@ -12,6 +33,7 @@ CREATE TABLE public.trader_risk_account_state_v2 (
   reality_snapshot_id text NOT NULL,
   reality_content_digest text NOT NULL,
   reconciliation_authority_digest text NOT NULL,
+  reconciled_instrument_exposures jsonb NOT NULL,
   reconciled_exposure_notional numeric(38,8) NOT NULL,
   worst_case_pending_exposure_notional numeric(38,8) NOT NULL,
   outstanding_reservation_notional numeric(38,8) NOT NULL,
@@ -35,6 +57,9 @@ CREATE TABLE public.trader_risk_account_state_v2 (
     AND reconciliation_authority_digest ~ '^[0-9a-f]{64}$'
     AND (last_enforcement_event_digest IS NULL
       OR last_enforcement_event_digest ~ '^[0-9a-f]{64}$')
+  ),
+  CONSTRAINT trader_risk_account_state_v2_instrument_exposures CHECK (
+    public.waia_risk_v2_valid_instrument_exposures(reconciled_instrument_exposures)
   ),
   CONSTRAINT trader_risk_account_state_v2_nonnegative CHECK (
     reconciled_exposure_notional >= 0
@@ -104,7 +129,9 @@ CREATE TABLE public.trader_risk_verdicts_v2 (
   ),
   CONSTRAINT trader_risk_verdicts_v2_quantity CHECK (
     (verdict IN ('APPROVE', 'APPROVE_CLAMPED', 'CLOSE_ONLY')
-      AND approved_qualified_quantity > 0)
+      AND approved_qualified_quantity > 0
+      AND decision_action <> 'HOLD'
+      AND (verdict <> 'CLOSE_ONLY' OR decision_action IN ('REDUCE', 'CLOSE')))
     OR (verdict IN ('VETO', 'HALT') AND approved_qualified_quantity IS NULL)
   ),
   CONSTRAINT trader_risk_verdicts_v2_identity CHECK (
@@ -196,6 +223,10 @@ CREATE TABLE public.trader_risk_allowances_v2 (
   CONSTRAINT trader_risk_allowances_v2_posture CHECK (
     posture_at_issuance IN ('NORMAL', 'CLOSE_ONLY')
     AND (posture_at_issuance <> 'CLOSE_ONLY' OR strict_exposure_reduction)
+    AND (
+      (decision_action = 'ENTER_LONG' AND NOT strict_exposure_reduction)
+      OR (decision_action IN ('REDUCE', 'CLOSE') AND strict_exposure_reduction)
+    )
   ),
   CONSTRAINT trader_risk_allowances_v2_lifecycle CHECK (
     lifecycle_state IN ('ISSUED', 'CONSUMED', 'REVOKED', 'EXPIRED')
@@ -422,6 +453,15 @@ BEGIN
     OR verdict_row.reconciliation_authority_digest <> NEW.reconciliation_authority_digest
     OR verdict_row.approved_qualified_quantity IS DISTINCT FROM NEW.exact_qualified_quantity
     OR verdict_row.verdict NOT IN ('APPROVE', 'APPROVE_CLAMPED', 'CLOSE_ONLY')
+    OR (
+      NEW.decision_action = 'ENTER_LONG'
+      AND NEW.reserved_exposure_notional IS DISTINCT FROM
+        NEW.exact_qualified_quantity * verdict_row.reference_price
+    )
+    OR (
+      NEW.decision_action IN ('REDUCE', 'CLOSE')
+      AND NEW.reserved_exposure_notional <> 0
+    )
   THEN
     RAISE EXCEPTION 'Risk allowance does not exactly match its sealed verdict authority'
       USING ERRCODE = 'check_violation';

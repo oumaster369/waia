@@ -2474,6 +2474,13 @@ export const traderRiskAccountStateV2 = pgTable(
     realitySnapshotId: text("reality_snapshot_id").notNull(),
     realityContentDigest: text("reality_content_digest").notNull(),
     reconciliationAuthorityDigest: text("reconciliation_authority_digest").notNull(),
+    reconciledInstrumentExposures: jsonb("reconciled_instrument_exposures")
+      .$type<readonly Readonly<{
+        instrumentIdentityDigestHex: string;
+        symbol: string;
+        baseQuantity: string;
+      }>[]>()
+      .notNull(),
     reconciledExposureNotional: numeric("reconciled_exposure_notional", {
       precision: 38,
       scale: 8,

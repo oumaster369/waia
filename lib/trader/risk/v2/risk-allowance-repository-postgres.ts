@@ -15,7 +15,7 @@ import type {
   CreateOrderInput,
   OrderRow,
 } from "@/lib/trader/execution/order-repository.types";
-import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
+import { formatDecimal, multiplyDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import {
   calculateRiskAdmissionV2,
   type RiskAccountAccountingV2,
@@ -26,7 +26,10 @@ import {
   type RiskAllowanceV2,
 } from "./risk-allowance-v2";
 import type { ProtectivePostureV2 } from "./protective-posture-v2";
-import { evaluateProtectivePosturePermissionV2 } from "./protective-posture-v2";
+import {
+  evaluateLongOnlyExposureReductionV2,
+  evaluateProtectivePosturePermissionV2,
+} from "./protective-posture-v2";
 import { validateRiskReasonsForLayersV2 } from "./risk-reason-codes-v2";
 import {
   createRiskVerdictV2,
@@ -51,6 +54,11 @@ export type RiskAccountStateV2 = Readonly<{
   realitySnapshotId: string;
   realityContentDigestHex: string;
   reconciliationAuthorityDigestHex: string;
+  reconciledInstrumentExposures: readonly Readonly<{
+    instrumentIdentityDigestHex: string;
+    symbol: string;
+    baseQuantity: string;
+  }>[];
   accounting: RiskAccountAccountingV2;
   nextAdmissionSequence: string;
   nextEnforcementEventSequence: string;
@@ -74,8 +82,6 @@ export type AdmitRiskAllowanceV2Input = Readonly<{
   issuanceEventId: string;
   nonce: string;
   validForMs: number;
-  strictExposureReduction: boolean;
-  requestedReservationNotional: string;
   verdict: Omit<
     RiskVerdictV2Draft,
     "riskVerdictId" | "organizationId" | "accountId" | "admissionSequence" | "issuedAtUtc"
@@ -168,6 +174,79 @@ function canonicalNonnegative(value: string): string {
   return formatDecimal(parsed);
 }
 
+const DIGEST_HEX = /^[0-9a-f]{64}$/;
+
+function canonicalInstrumentExposures(
+  values: RiskAccountStateV2["reconciledInstrumentExposures"],
+): RiskAccountStateV2["reconciledInstrumentExposures"] {
+  const seen = new Set<string>();
+  const result = values.map((entry) => {
+    if (!DIGEST_HEX.test(entry.instrumentIdentityDigestHex)) {
+      throw new RiskV2PersistenceConflictError("invalid instrument exposure digest");
+    }
+    if (entry.symbol.trim() === "" || seen.has(entry.instrumentIdentityDigestHex)) {
+      throw new RiskV2PersistenceConflictError("invalid or duplicate instrument exposure");
+    }
+    seen.add(entry.instrumentIdentityDigestHex);
+    return Object.freeze({
+      instrumentIdentityDigestHex: entry.instrumentIdentityDigestHex,
+      symbol: entry.symbol,
+      baseQuantity: canonicalNonnegative(entry.baseQuantity),
+    });
+  });
+  result.sort((a, b) =>
+    a.instrumentIdentityDigestHex.localeCompare(b.instrumentIdentityDigestHex) ||
+    a.symbol.localeCompare(b.symbol));
+  return Object.freeze(result);
+}
+
+function deriveStrictExposureReductionV2(input: {
+  state: RiskAccountStateV2;
+  verdict: Pick<RiskVerdictV2Draft, "instrumentIdentityDigestHex" | "symbol" | "decision" | "approvedQualifiedQuantity">;
+}): boolean {
+  if (
+    input.verdict.decision.action !== "REDUCE" &&
+    input.verdict.decision.action !== "CLOSE"
+  ) {
+    return false;
+  }
+  if (input.verdict.approvedQualifiedQuantity === null) return false;
+  const exposure = input.state.reconciledInstrumentExposures.find(
+    (entry) =>
+      entry.instrumentIdentityDigestHex === input.verdict.instrumentIdentityDigestHex &&
+      entry.symbol === input.verdict.symbol,
+  );
+  if (!exposure) return false;
+  return evaluateLongOnlyExposureReductionV2({
+    side: "SELL",
+    currentBaseQuantity: exposure.baseQuantity,
+    requestedBaseQuantity: input.verdict.approvedQualifiedQuantity,
+  }).isStrictExposureReduction;
+}
+
+function deriveReservationNotionalV2(input: {
+  verdict: Pick<RiskVerdictV2Draft, "decision" | "approvedQualifiedQuantity" | "referencePrice">;
+  strictExposureReduction: boolean;
+}): string {
+  if (input.verdict.approvedQualifiedQuantity === null) {
+    throw new RiskV2AdmissionRefusedError("VERDICT_DOES_NOT_PERMIT_ALLOWANCE");
+  }
+  if (input.verdict.decision.action === "HOLD") {
+    throw new RiskV2AdmissionRefusedError("VERDICT_ACTION_DOES_NOT_PERMIT_ALLOWANCE");
+  }
+  const reductionAction =
+    input.verdict.decision.action === "REDUCE" ||
+    input.verdict.decision.action === "CLOSE";
+  if (reductionAction !== input.strictExposureReduction) {
+    throw new RiskV2AdmissionRefusedError("STRICT_REDUCTION_PROOF_INVALID");
+  }
+  if (input.strictExposureReduction) return "0";
+  return multiplyDecimal(
+    input.verdict.approvedQualifiedQuantity,
+    input.verdict.referencePrice.price,
+  );
+}
+
 function mapAccountState(row: AccountStateRow): RiskAccountStateV2 {
   return Object.freeze({
     organizationId: row.organizationId,
@@ -178,6 +257,9 @@ function mapAccountState(row: AccountStateRow): RiskAccountStateV2 {
     realitySnapshotId: row.realitySnapshotId,
     realityContentDigestHex: row.realityContentDigest,
     reconciliationAuthorityDigestHex: row.reconciliationAuthorityDigest,
+    reconciledInstrumentExposures: canonicalInstrumentExposures(
+      row.reconciledInstrumentExposures as RiskAccountStateV2["reconciledInstrumentExposures"],
+    ),
     accounting: Object.freeze({
       reconciledExposureNotional: formatDecimal(parseDecimal(row.reconciledExposureNotional)),
       worstCasePendingExposureNotional: formatDecimal(
@@ -364,6 +446,9 @@ export async function initializeRiskAccountStateV2Postgres(
     realitySnapshotId: input.realitySnapshotId,
     realityContentDigest: input.realityContentDigestHex,
     reconciliationAuthorityDigest: input.reconciliationAuthorityDigestHex,
+    reconciledInstrumentExposures: canonicalInstrumentExposures(
+      input.reconciledInstrumentExposures,
+    ),
     reconciledExposureNotional: canonicalNonnegative(input.accounting.reconciledExposureNotional),
     worstCasePendingExposureNotional: canonicalNonnegative(
       input.accounting.worstCasePendingExposureNotional,
@@ -419,6 +504,20 @@ export async function admitRiskAllowanceV2Postgres(
   }
   return runWaiaPostgresTransaction(db, async (tx) => {
     const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
+    const strictExposureReduction = deriveStrictExposureReductionV2({
+      state,
+      verdict: input.verdict,
+    });
+    const reservationNotional = deriveReservationNotionalV2({
+      verdict: input.verdict,
+      strictExposureReduction,
+    });
+    if (input.verdict.verdict === "CLOSE_ONLY" && !strictExposureReduction) {
+      throw new RiskV2AdmissionRefusedError("STRICT_REDUCTION_PROOF_INVALID");
+    }
+    if (state.posture === "CLOSE_ONLY" && input.verdict.verdict !== "CLOSE_ONLY") {
+      throw new RiskV2AdmissionRefusedError("CURRENT_POSTURE_RESTRICTED");
+    }
     const existingVerdicts = await tx.select().from(pgSchema.traderRiskVerdictsV2).where(and(
       eq(pgSchema.traderRiskVerdictsV2.organizationId, scoped.organizationId),
       eq(pgSchema.traderRiskVerdictsV2.accountId, input.accountId),
@@ -439,7 +538,8 @@ export async function admitRiskAllowanceV2Postgres(
         verdict.riskVerdictId !== input.riskVerdictId ||
         allowance.riskAllowanceId !== input.riskAllowanceId ||
         allowance.nonce !== input.nonce ||
-        allowance.reservedExposureNotional !== canonicalNonnegative(input.requestedReservationNotional)
+        allowance.strictExposureReduction !== strictExposureReduction ||
+        allowance.reservedExposureNotional !== reservationNotional
       ) {
         throw new RiskV2PersistenceConflictError("Risk admission idempotency key conflict");
       }
@@ -457,9 +557,9 @@ export async function admitRiskAllowanceV2Postgres(
     }
     const calculation = calculateRiskAdmissionV2({
       accounting: state.accounting,
-      requestedReservationNotional: input.requestedReservationNotional,
+      requestedReservationNotional: reservationNotional,
       posture: state.posture,
-      strictExposureReduction: input.strictExposureReduction,
+      strictExposureReduction,
       reconciliationStatus: state.reconciliationStatus,
     });
     if (calculation.status === "REFUSED") throw new RiskV2AdmissionRefusedError(calculation.reason);
@@ -482,7 +582,7 @@ export async function admitRiskAllowanceV2Postgres(
       riskAllowanceId: input.riskAllowanceId,
       verdict,
       postureAtIssuance: state.posture,
-      strictExposureReduction: input.strictExposureReduction,
+      strictExposureReduction,
       reservedExposureNotional: calculation.reservationNotional,
       nonce: input.nonce,
       validUntilUtc: new Date(durableAt.getTime() + input.validForMs).toISOString(),
@@ -827,9 +927,27 @@ function requireOrderMatchesAllowanceV2(input: {
   ) {
     throw new RiskV2AdmissionRefusedError("CURRENT_AUTHORITY_BINDING_MISMATCH");
   }
+  const exposure = input.state.reconciledInstrumentExposures.find(
+    (entry) =>
+      entry.instrumentIdentityDigestHex === input.allowance.instrumentIdentityDigestHex &&
+      entry.symbol === input.allowance.symbol,
+  );
+  const currentStrictExposureReduction =
+    (input.allowance.decision.action === "REDUCE" ||
+      input.allowance.decision.action === "CLOSE") &&
+    input.order.side === "sell" &&
+    exposure !== undefined &&
+    evaluateLongOnlyExposureReductionV2({
+      side: "SELL",
+      currentBaseQuantity: exposure.baseQuantity,
+      requestedBaseQuantity: input.order.quantity,
+    }).isStrictExposureReduction;
+  if (currentStrictExposureReduction !== input.allowance.strictExposureReduction) {
+    throw new RiskV2AdmissionRefusedError("STRICT_REDUCTION_PROOF_INVALID");
+  }
   const posture = evaluateProtectivePosturePermissionV2({
     posture: input.state.posture,
-    actionIsStrictExposureReduction: input.allowance.strictExposureReduction,
+    actionIsStrictExposureReduction: currentStrictExposureReduction,
   });
   if (posture.consumptionDisposition === "REFUSE") {
     throw new RiskV2AdmissionRefusedError(posture.refusalReasonCode ?? "CURRENT_POSTURE_RESTRICTED");
@@ -872,6 +990,7 @@ export async function consumeRiskAllowanceForOrderV2Postgres(
     if (!verdictRows[0]) throw new RiskV2PersistenceConflictError("allowance verdict missing");
     const verdict = verdictFromRow(verdictRows[0]);
     const allowance = allowanceAuthorityFromRow(row, verdict);
+    const durableAt = await durableTransactionTime(tx);
     if (row.lifecycleState === "CONSUMED") {
       let bindingDigest: string;
       try {
@@ -899,6 +1018,15 @@ export async function consumeRiskAllowanceForOrderV2Postgres(
       ) {
         throw new RiskV2PersistenceConflictError("consumed allowance order binding is missing");
       }
+      if (order.state === "CREATED" || order.state === "RISK_APPROVED") {
+        requireOrderMatchesAllowanceV2({
+          state,
+          allowance,
+          order: input.order,
+          nonce: input.nonce,
+          durableAt,
+        });
+      }
       return {
         status: "CONSUMED",
         order,
@@ -915,7 +1043,6 @@ export async function consumeRiskAllowanceForOrderV2Postgres(
         reason: `ALLOWANCE_${row.lifecycleState}`,
       };
     }
-    const durableAt = await durableTransactionTime(tx);
     let bindingDigest: string;
     try {
       requireOrderMatchesAllowanceV2({
