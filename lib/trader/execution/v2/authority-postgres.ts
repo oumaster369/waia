@@ -148,6 +148,8 @@ export async function bindExecutionAuthorityV2Postgres(
     const consumed = await consumeRiskAllowanceForOrderV2FromTransaction(tx, scoped, {
       accountId: input.allowance.accountId,
       riskAllowanceId: input.allowance.riskAllowanceId,
+      riskAllowanceContentDigestHex: storedPlan.riskAllowanceContentDigestHex,
+      effectNotionalCeiling: storedPlan.approvedNotionalCeiling,
       nonce: input.allowance.nonce,
       consumptionEventId,
       order: {
@@ -237,7 +239,6 @@ export async function bindExecutionAuthorityV2Postgres(
         source: "EXECUTION",
         rawObservation,
         observedAtUtc: durableAt.toISOString(),
-        lifecycleState: "BOUND",
       });
     }
     return Object.freeze({
@@ -300,7 +301,6 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
       source: "EXECUTION",
       rawObservation: { effectIdentityDigestHex: projection.attempt.effectIdentityDigestHex },
       observedAtUtc: durableAt.toISOString(),
-      lifecycleState: "SUBMIT_STARTED",
     });
     return { status: "READY" as const, attempt: projection.attempt };
   });
