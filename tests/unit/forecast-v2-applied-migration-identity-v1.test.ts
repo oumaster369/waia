@@ -41,6 +41,7 @@ describe("Forecast V2 applied migration identity", () => {
       "0153_trader_mi_raw_capture_v1",
       "0154_treasury_central_ledger_catalogs",
       "0155_treasury_central_ledger_catalogs_rls",
+      "0156_trader_risk_v2",
     ]);
     expect(
       identity.extraAppliedBeyondExpectedMax.every((b) => !b.tag.includes("trader_forecast_v2")),

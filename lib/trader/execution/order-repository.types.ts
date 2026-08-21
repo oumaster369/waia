@@ -31,6 +31,8 @@ export interface OrderRow {
   clientOrderId: string;
   idempotencyKey: string;
   riskDecisionId: string;
+  riskAllowanceId?: string | null;
+  riskAllowanceBindingDigest?: string | null;
   strategySignalId: string | null;
   allocationDecisionId: string | null;
   createdAt: Date;
@@ -64,6 +66,7 @@ export interface FillRow {
 }
 
 export interface CreateOrderInput {
+  id?: string;
   venue: string;
   executionMode: OrderExecutionMode;
   symbol: string;
@@ -74,6 +77,8 @@ export interface CreateOrderInput {
   clientOrderId: string;
   idempotencyKey: string;
   riskDecisionId: string;
+  riskAllowanceId?: string | null;
+  riskAllowanceBindingDigest?: string | null;
   strategySignalId?: string | null;
   allocationDecisionId?: string | null;
   credentialId?: string | null;
@@ -155,6 +160,8 @@ export function orderPayloadMatches(existing: OrderRow, input: CreateOrderInput)
     existing.executionMode === input.executionMode &&
     existing.venue === input.venue &&
     existing.riskDecisionId === input.riskDecisionId &&
+    nullableStringEqual(existing.riskAllowanceId, input.riskAllowanceId) &&
+    nullableStringEqual(existing.riskAllowanceBindingDigest, input.riskAllowanceBindingDigest) &&
     nullableStringEqual(existing.price, input.price) &&
     nullableStringEqual(existing.strategySignalId, input.strategySignalId) &&
     nullableStringEqual(existing.allocationDecisionId, input.allocationDecisionId)
