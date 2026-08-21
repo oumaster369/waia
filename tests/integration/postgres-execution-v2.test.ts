@@ -272,7 +272,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
         price: "25000",
         quantity: "0.001",
         clientOrderId: "legacy-placeholder",
-        idempotencyKey: "execution-v2-idempotency",
+        idempotencyKey: `execution-v2-${plan.contentDigestHex}`,
         strategySignalId: null,
         allocationDecisionId: null,
         credentialId: null,
@@ -602,6 +602,70 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expect(networkCalls).toBe(1);
   });
 
+  it("refuses a self-consistent plan whose claimed ceiling exceeds the locked allowance", async () => {
+    const input = await admittedBindInput();
+    await insertExecutionPolicyV2Postgres(db, { organizationId: orgA }, input.policy);
+    const forgedPlan = createExecutionPlanV2({
+      ...input.plan,
+      executionPlanId: uuid(667_506),
+      allowance: { ...input.allowance, reservedExposureNotional: "250" },
+      policy: input.policy,
+      approvedNotionalCeiling: "250",
+    });
+    await expect(insertExecutionPlanV2Postgres(
+      db,
+      { organizationId: orgA },
+      forgedPlan,
+    )).rejects.toThrow(/locked Risk allowance/);
+  });
+
+  it("reconstructs the complete durable effect binding before any network call", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    await sql`
+      UPDATE trader_orders SET idempotency_key = 'tampered-after-bind'
+      WHERE organization_id = ${orgA}::uuid AND id = ${bound.order.id}::uuid
+    `;
+    let networkCalls = 0;
+    await expect(dispatchCommittedExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        networkCalls += 1;
+        return { forbidden: true };
+      },
+    )).rejects.toThrow(/INCOMPLETE_DURABLE_EFFECT_BINDING/);
+    expect(networkCalls).toBe(0);
+  });
+
+  it("rechecks the sealed timing window immediately before submission", async () => {
+    const original = await admittedBindInput();
+    const input: BindExecutionAuthorityV2Input = {
+      ...original,
+      plan: {
+        ...original.plan,
+        timingWindow: {
+          ...original.plan.timingWindow,
+          closesAtUtc: new Date(Date.now() + 1_000).toISOString(),
+        },
+      },
+    };
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    await sql`select pg_sleep(1.2)`;
+    let networkCalls = 0;
+    await expect(dispatchCommittedExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        networkCalls += 1;
+        return { forbidden: true };
+      },
+    )).rejects.toThrow(/EXECUTION_WINDOW_CLOSED/);
+    expect(networkCalls).toBe(0);
+  });
+
   it("fails unknown after a network timeout and never blindly resends", async () => {
     const input = await admittedBindInput();
     const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
@@ -677,7 +741,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       db,
       { organizationId: orgA },
       forgedInput,
-    )).rejects.toThrow(/EFFECT_NOTIONAL_EXCEEDS_ALLOWANCE_RESERVATION/);
+    )).rejects.toThrow(/locked Risk allowance|EFFECT_NOTIONAL_EXCEEDS_ALLOWANCE_RESERVATION/);
     const counts = await sql<{ plans: string; orders: string; attempts: string }[]>`
       SELECT
         (SELECT count(*)::text FROM trader_execution_plans_v2

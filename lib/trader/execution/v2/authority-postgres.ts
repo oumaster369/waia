@@ -10,6 +10,7 @@ import {
   type WaiaPostgresDb,
 } from "@/db/waia-postgres-transaction";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
+import { compareDecimal } from "@/lib/trader/risk/numeric";
 import {
   consumeRiskAllowanceForOrderV2FromTransaction,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
@@ -32,6 +33,8 @@ import {
   insertExecutionPlanV2Postgres,
   insertExecutionPolicyV2Postgres,
   readExecutionAttemptProjectionV2Postgres,
+  readExecutionPlanV2Postgres,
+  readExecutionPolicyV2Postgres,
 } from "./repository-postgres";
 
 type PlanMechanicsV2 = Omit<
@@ -290,6 +293,65 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
       return { status: "REFUSED_ALREADY_STARTED" as const, lifecycleState: projection.lifecycleState };
     }
     const durableAt = await durableTransactionTime(tx);
+    const plan = await readExecutionPlanV2Postgres(
+      tx,
+      scoped,
+      projection.attempt.executionPlanId,
+    );
+    const policy = plan
+      ? await readExecutionPolicyV2Postgres(tx, scoped, plan.executionPolicyId)
+      : null;
+    const allowanceRows = await tx.select().from(pgSchema.traderRiskAllowancesV2).where(and(
+      eq(pgSchema.traderRiskAllowancesV2.id, projection.attempt.riskAllowanceId),
+      eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+      eq(pgSchema.traderRiskAllowancesV2.accountId, projection.attempt.accountId),
+    )).for("update");
+    const allowance = allowanceRows[0];
+    const orderRows = await tx.select().from(pgSchema.traderOrders).where(and(
+      eq(pgSchema.traderOrders.id, projection.attempt.orderId),
+      eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
+    )).for("update");
+    const order = orderRows[0];
+    if (!plan || !policy || !allowance || !order) {
+      throw new ExecutionV2AuthorityRefusedError("INCOMPLETE_DURABLE_EFFECT_BINDING");
+    }
+    const expectedAttempt = createExecutionAttemptV2({
+      executionAttemptId: projection.attempt.executionAttemptId,
+      orderId: projection.attempt.orderId,
+      plan,
+      riskAllowanceContentDigestHex: projection.attempt.riskAllowanceContentDigestHex,
+      boundAtUtc: projection.attempt.boundAtUtc,
+    });
+    const priceMatches =
+      (order.price === null && projection.attempt.exactRequestPayload.price === null) ||
+      (order.price !== null && projection.attempt.exactRequestPayload.price !== null &&
+        compareDecimal(order.price, projection.attempt.exactRequestPayload.price) === 0);
+    if (expectedAttempt.contentDigestHex !== projection.attempt.contentDigestHex ||
+      expectedAttempt.effectIdentityDigestHex !== projection.attempt.effectIdentityDigestHex ||
+      plan.contentDigestHex !== projection.attempt.executionPlanContentDigestHex ||
+      policy.contentDigestHex !== plan.executionPolicyContentDigestHex ||
+      allowance.lifecycleState !== "CONSUMED" ||
+      allowance.contentDigest !== projection.attempt.riskAllowanceContentDigestHex ||
+      allowance.boundOrderId !== order.id ||
+      allowance.boundOrderDigest !== order.riskAllowanceBindingDigest ||
+      compareDecimal(plan.approvedNotionalCeiling, allowance.reservedExposureNotional) > 0 ||
+      compareDecimal(plan.plannedQuantity, allowance.exactQualifiedQuantity) > 0 ||
+      !["CREATED", "RISK_APPROVED"].includes(order.state) ||
+      order.riskAllowanceId !== allowance.id ||
+      order.riskDecisionId !== allowance.riskVerdictId || order.venue !== plan.venue ||
+      order.symbol !== projection.attempt.exactRequestPayload.symbol ||
+      order.side !== projection.attempt.exactRequestPayload.side ||
+      order.type !== projection.attempt.exactRequestPayload.type || !priceMatches ||
+      compareDecimal(order.quantity, projection.attempt.exactRequestPayload.quantity) !== 0 ||
+      order.clientOrderId !== projection.attempt.clientOrderId ||
+      order.idempotencyKey !== `execution-v2-${plan.contentDigestHex}` ||
+      order.executionPlanId !== plan.executionPlanId ||
+      order.executionPlanDigest !== plan.contentDigestHex ||
+      order.executionAttemptId !== projection.attempt.executionAttemptId ||
+      order.executionAttemptDigest !== projection.attempt.contentDigestHex) {
+      throw new ExecutionV2AuthorityRefusedError("INCOMPLETE_DURABLE_EFFECT_BINDING");
+    }
+    requireCurrentWindow(plan, policy, durableAt);
     await appendExecutionReportV2FromExecutor(tx, scoped, {
       executionReportId: deterministicExecutionUuidV2("report", {
         executionAttemptContentDigestHex: projection.attempt.contentDigestHex,
