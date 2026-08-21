@@ -8,6 +8,11 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 ## Current Status
 
+**DEE-650 / R650-C+D** adds the Postgres-only Risk V2 verdict, allowance lifecycle,
+per-account reservation/accounting projection, and append-only digest-chained enforcement ledger
+in migration `0156`, plus the exact order-authority binding seam. It is additive: legacy Risk/order
+rows are not rewritten, and production/Supabase SQL apply remains explicitly excluded.
+
 **DEE-656** adds Postgres-only generic raw-capture and record-only validation receipts in migration
 `0153`: private-object references, separate content identities, transaction-authored capture/
 validation knowledge times, composite tenant integrity, append-only guards, and deny RLS. Raw body

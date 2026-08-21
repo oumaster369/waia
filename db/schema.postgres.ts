@@ -17,6 +17,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -2427,6 +2428,8 @@ export const traderOrders = pgTable(
     clientOrderId: text("client_order_id").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     riskDecisionId: text("risk_decision_id").notNull(),
+    riskAllowanceId: uuid("risk_allowance_id"),
+    riskAllowanceBindingDigest: text("risk_allowance_binding_digest"),
     strategySignalId: text("strategy_signal_id"),
     allocationDecisionId: text("allocation_decision_id"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
@@ -2444,6 +2447,306 @@ export const traderOrders = pgTable(
     ),
     index("trader_orders_org_venue_symbol_idx").on(t.organizationId, t.venue, t.symbol),
     index("trader_orders_exchange_order_id_idx").on(t.exchangeOrderId),
+    uniqueIndex("trader_orders_org_risk_allowance_unique")
+      .on(t.organizationId, t.riskAllowanceId)
+      .where(sql`"risk_allowance_id" IS NOT NULL`),
+    check(
+      "trader_orders_risk_allowance_binding_complete",
+      sql`("risk_allowance_id" IS NULL AND "risk_allowance_binding_digest" IS NULL)
+        OR ("risk_allowance_id" IS NOT NULL AND "risk_allowance_binding_digest" IS NOT NULL)`,
+    ),
+  ],
+);
+
+/** DEE-665 / R650-C: mutable per-account Risk accounting and sequencing projection. */
+export const traderRiskAccountStateV2 = pgTable(
+  "trader_risk_account_state_v2",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    market: text("market").notNull(),
+    quoteAsset: text("quote_asset").notNull(),
+    posture: text("posture").notNull(),
+    killState: text("kill_state").notNull(),
+    reconciliationStatus: text("reconciliation_status").notNull(),
+    realitySnapshotId: text("reality_snapshot_id").notNull(),
+    realityContentDigest: text("reality_content_digest").notNull(),
+    reconciliationAuthorityDigest: text("reconciliation_authority_digest").notNull(),
+    reconciledExposureNotional: numeric("reconciled_exposure_notional", {
+      precision: 38,
+      scale: 8,
+    }).notNull(),
+    worstCasePendingExposureNotional: numeric("worst_case_pending_exposure_notional", {
+      precision: 38,
+      scale: 8,
+    }).notNull(),
+    outstandingReservationNotional: numeric("outstanding_reservation_notional", {
+      precision: 38,
+      scale: 8,
+    }).notNull(),
+    exposureLimitNotional: numeric("exposure_limit_notional", { precision: 38, scale: 8 })
+      .notNull(),
+    nextAdmissionSequence: bigint("next_admission_sequence", { mode: "bigint" }).notNull(),
+    nextEnforcementEventSequence: bigint("next_enforcement_event_sequence", {
+      mode: "bigint",
+    }).notNull(),
+    lastEnforcementEventDigest: text("last_enforcement_event_digest"),
+    stateVersion: bigint("state_version", { mode: "bigint" }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.accountId] }),
+    check("trader_risk_account_state_v2_spot_usdt", sql`"market" = 'SPOT' AND "quote_asset" = 'USDT'`),
+    check(
+      "trader_risk_account_state_v2_posture",
+      sql`"posture" IN ('NORMAL', 'CLOSE_ONLY', 'HALT', 'KILLED')`,
+    ),
+    check(
+      "trader_risk_account_state_v2_kill",
+      sql`"kill_state" IN ('CLEAR', 'TRIPPED', 'UNKNOWN')`,
+    ),
+    check(
+      "trader_risk_account_state_v2_reconciliation",
+      sql`"reconciliation_status" IN ('RECONCILED', 'DIVERGENT', 'UNAVAILABLE', 'STALE')`,
+    ),
+    check(
+      "trader_risk_account_state_v2_nonnegative",
+      sql`"reconciled_exposure_notional" >= 0
+        AND "worst_case_pending_exposure_notional" >= 0
+        AND "outstanding_reservation_notional" >= 0
+        AND "exposure_limit_notional" >= 0
+        AND "next_admission_sequence" > 0
+        AND "next_enforcement_event_sequence" > 0
+        AND "state_version" > 0`,
+    ),
+    index("trader_risk_account_state_v2_org_posture_idx").on(t.organizationId, t.posture),
+  ],
+);
+
+/** DEE-665 / R650-C: immutable, digest-sealed Risk V2 verdicts. */
+export const traderRiskVerdictsV2 = pgTable(
+  "trader_risk_verdicts_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    admissionSequence: bigint("admission_sequence", { mode: "bigint" }).notNull(),
+    venue: text("venue").notNull(),
+    market: text("market").notNull(),
+    symbol: text("symbol").notNull(),
+    baseAsset: text("base_asset").notNull(),
+    quoteAsset: text("quote_asset").notNull(),
+    instrumentIdentityDigest: text("instrument_identity_digest").notNull(),
+    decisionId: text("decision_id").notNull(),
+    decisionSemanticDigest: text("decision_semantic_digest").notNull(),
+    decisionContentDigest: text("decision_content_digest").notNull(),
+    decisionAction: text("decision_action").notNull(),
+    economicSizeSetId: text("economic_size_set_id").notNull(),
+    economicSizeSetDigest: text("economic_size_set_digest").notNull(),
+    riskPolicyVersion: text("risk_policy_version").notNull(),
+    riskPolicyDigest: text("risk_policy_digest").notNull(),
+    limitVersions: jsonb("limit_versions").notNull(),
+    realitySnapshotId: text("reality_snapshot_id").notNull(),
+    realityContentDigest: text("reality_content_digest").notNull(),
+    realityAsOf: timestamp("reality_as_of", { withTimezone: true, mode: "date" }).notNull(),
+    reconciliationAuthorityDigest: text("reconciliation_authority_digest").notNull(),
+    referencePriceAuthorityId: text("reference_price_authority_id").notNull(),
+    referencePriceAuthorityVersion: text("reference_price_authority_version").notNull(),
+    referencePriceContentDigest: text("reference_price_content_digest").notNull(),
+    referencePrice: numeric("reference_price", { precision: 38, scale: 8 }).notNull(),
+    verdict: text("verdict").notNull(),
+    approvedQualifiedQuantity: numeric("approved_qualified_quantity", {
+      precision: 38,
+      scale: 8,
+    }),
+    bindingLayers: jsonb("binding_layers").notNull(),
+    reasonCodes: jsonb("reason_codes").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    semanticDigest: text("semantic_digest").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_risk_verdicts_v2_id_org_account_unique").on(
+      t.id,
+      t.organizationId,
+      t.accountId,
+    ),
+    uniqueIndex("trader_risk_verdicts_v2_org_account_sequence_unique").on(
+      t.organizationId,
+      t.accountId,
+      t.admissionSequence,
+    ),
+    uniqueIndex("trader_risk_verdicts_v2_org_account_decision_unique").on(
+      t.organizationId,
+      t.accountId,
+      t.decisionContentDigest,
+    ),
+    uniqueIndex("trader_risk_verdicts_v2_org_content_digest_unique").on(
+      t.organizationId,
+      t.contentDigest,
+    ),
+    index("trader_risk_verdicts_v2_org_account_issued_idx").on(
+      t.organizationId,
+      t.accountId,
+      t.issuedAt,
+    ),
+  ],
+);
+
+/** DEE-665 / R650-C: single-use allowance lifecycle projection. */
+export const traderRiskAllowancesV2 = pgTable(
+  "trader_risk_allowances_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    riskVerdictId: uuid("risk_verdict_id").notNull(),
+    riskVerdictContentDigest: text("risk_verdict_content_digest").notNull(),
+    admissionSequence: bigint("admission_sequence", { mode: "bigint" }).notNull(),
+    nonce: uuid("nonce").notNull(),
+    venue: text("venue").notNull(),
+    market: text("market").notNull(),
+    symbol: text("symbol").notNull(),
+    baseAsset: text("base_asset").notNull(),
+    quoteAsset: text("quote_asset").notNull(),
+    instrumentIdentityDigest: text("instrument_identity_digest").notNull(),
+    decisionId: text("decision_id").notNull(),
+    decisionSemanticDigest: text("decision_semantic_digest").notNull(),
+    decisionContentDigest: text("decision_content_digest").notNull(),
+    decisionAction: text("decision_action").notNull(),
+    economicSizeSetId: text("economic_size_set_id").notNull(),
+    economicSizeSetDigest: text("economic_size_set_digest").notNull(),
+    riskPolicyVersion: text("risk_policy_version").notNull(),
+    riskPolicyDigest: text("risk_policy_digest").notNull(),
+    realitySnapshotId: text("reality_snapshot_id").notNull(),
+    realityContentDigest: text("reality_content_digest").notNull(),
+    reconciliationAuthorityDigest: text("reconciliation_authority_digest").notNull(),
+    postureAtIssuance: text("posture_at_issuance").notNull(),
+    strictExposureReduction: boolean("strict_exposure_reduction").notNull(),
+    exactQualifiedQuantity: numeric("exact_qualified_quantity", { precision: 38, scale: 8 })
+      .notNull(),
+    reservedExposureNotional: numeric("reserved_exposure_notional", { precision: 38, scale: 8 })
+      .notNull(),
+    lifecycleState: text("lifecycle_state").notNull(),
+    boundOrderId: uuid("bound_order_id"),
+    boundOrderDigest: text("bound_order_digest"),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    validUntil: timestamp("valid_until", { withTimezone: true, mode: "date" }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true, mode: "date" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    expiredAt: timestamp("expired_at", { withTimezone: true, mode: "date" }),
+    terminalReasonCode: text("terminal_reason_code"),
+    lastEnforcementEventSequence: bigint("last_enforcement_event_sequence", {
+      mode: "bigint",
+    }).notNull(),
+    lastEnforcementEventDigest: text("last_enforcement_event_digest").notNull(),
+    semanticDigest: text("semantic_digest").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_risk_allowances_v2_id_org_account_unique").on(
+      t.id,
+      t.organizationId,
+      t.accountId,
+    ),
+    unique("trader_risk_allowances_v2_id_org_unique").on(t.id, t.organizationId),
+    foreignKey({
+      columns: [t.riskVerdictId, t.organizationId, t.accountId],
+      foreignColumns: [
+        traderRiskVerdictsV2.id,
+        traderRiskVerdictsV2.organizationId,
+        traderRiskVerdictsV2.accountId,
+      ],
+      name: "trader_risk_allowances_v2_verdict_scope_fk",
+    }),
+    foreignKey({
+      columns: [t.boundOrderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+      name: "trader_risk_allowances_v2_bound_order_scope_fk",
+    }),
+    uniqueIndex("trader_risk_allowances_v2_org_verdict_unique").on(
+      t.organizationId,
+      t.riskVerdictId,
+    ),
+    uniqueIndex("trader_risk_allowances_v2_org_account_nonce_unique").on(
+      t.organizationId,
+      t.accountId,
+      t.nonce,
+    ),
+    index("trader_risk_allowances_v2_org_account_state_expiry_idx").on(
+      t.organizationId,
+      t.accountId,
+      t.lifecycleState,
+      t.validUntil,
+    ),
+    check(
+      "trader_risk_allowances_v2_order_binding_complete",
+      sql`("bound_order_id" IS NULL AND "bound_order_digest" IS NULL)
+        OR ("bound_order_id" IS NOT NULL AND "bound_order_digest" IS NOT NULL)`,
+    ),
+  ],
+);
+
+/** DEE-665 / R650-C: append-only, per-account digest-chained enforcement ledger. */
+export const traderRiskEnforcementEventsV2 = pgTable(
+  "trader_risk_enforcement_events_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    eventSequence: bigint("event_sequence", { mode: "bigint" }).notNull(),
+    riskVerdictId: uuid("risk_verdict_id"),
+    riskAllowanceId: uuid("risk_allowance_id"),
+    eventType: text("event_type").notNull(),
+    fromState: text("from_state"),
+    toState: text("to_state"),
+    reasonCode: text("reason_code"),
+    boundOrderId: uuid("bound_order_id"),
+    boundOrderDigest: text("bound_order_digest"),
+    eventPayload: jsonb("event_payload").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true, mode: "date" }).notNull(),
+    previousEventDigest: text("previous_event_digest"),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_risk_enforcement_events_v2_org_account_sequence_unique").on(
+      t.organizationId,
+      t.accountId,
+      t.eventSequence,
+    ),
+    uniqueIndex("trader_risk_enforcement_events_v2_org_digest_unique").on(
+      t.organizationId,
+      t.contentDigest,
+    ),
+    foreignKey({
+      columns: [t.riskAllowanceId, t.organizationId, t.accountId],
+      foreignColumns: [
+        traderRiskAllowancesV2.id,
+        traderRiskAllowancesV2.organizationId,
+        traderRiskAllowancesV2.accountId,
+      ],
+      name: "trader_risk_enforcement_events_v2_allowance_scope_fk",
+    }),
+    index("trader_risk_enforcement_events_v2_org_allowance_idx").on(
+      t.organizationId,
+      t.riskAllowanceId,
+      t.eventSequence,
+    ),
   ],
 );
 
