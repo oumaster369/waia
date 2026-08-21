@@ -14,7 +14,10 @@
     "baseContainsPullRequest": 474,
     "priorReviewedHead": "ec95408f5aa17d0beba2aa77f5abdaadd868b81a",
     "migrationReconciliation": "Preserve Treasury migrations 0154/0155 exactly and admit the additive Risk V2 migration as 0156.",
-    "authority": "Explicit Human renewed exact-base admission for the existing DEE-650 train"
+    "authority": "Explicit Human renewed exact-base admission for the existing DEE-650 train",
+    "rebasedCodeHead": "ae01ae86f5dc8b01aa71be7934fddcf0cb860644",
+    "treasuryPreservationEvidence": "db/core-enums.ts is byte-identical to base; schema.postgres.ts differs only by Risk V2 additions; journal and applied-migration identity append only 0156 after Treasury 0154/0155.",
+    "semanticConflict": false
   },
   "ratifiedScopeDecision": {
     "authorizedAt": "2026-08-21",
@@ -68,8 +71,8 @@
         "Seven focused contract tests, including executable verdict/action compatibility, scoped lint, and typecheck passed."
       ],
       "integratedCommits": [
-        "aeb774f333ec74be8473f04863ce8538a5669610",
-        "60762871dedec36f4c29a6e08ac3de6f5a92e366"
+        "badf5d06e3d810fb3337e9639a3f5bb7812d9c8f",
+        "7f8ff46f8f3a660fb41c067902d1343baf1368fc"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-risk-v2-contract.test.ts",
@@ -126,7 +129,7 @@
         "Six focused posture tests, cumulative A tests, scoped lint, and typecheck passed."
       ],
       "integratedCommits": [
-        "18d01d3903190589dbba58d6d643bbca34ef0ea2"
+        "054d30ff1e1bb4c548629986b8960a55a968644a"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-risk-v2-protective-posture.test.ts tests/unit/trader-risk-v2-contract.test.ts",
@@ -199,9 +202,9 @@
         "Clean empty-database auth prelude/migration/smoke passed; 12 focused allowance/migration unit tests and 11 real PostgreSQL RLS/CRUD/append-only/atomicity/concurrency tests passed, including conservative scale-8 reservation rounding for a non-terminating product. No production or Supabase apply occurred."
       ],
       "integratedCommits": [
-        "5225012c9ecafa2dd04080754080ec22c7e2256f",
-        "e9c003d45b2fc1c696daa365be6beb902aec8927",
-        "4fb87a16b43c69254e95c740eaee71b2d58ee3f5"
+        "01fec62faef73a4b9cf0d706db1a6f7c19704787",
+        "2dfbc0eeeb85b7b8696a650d1981faa3dd7e9cfc",
+        "ae01ae86f5dc8b01aa71be7934fddcf0cb860644"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-risk-allowance-v2.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
@@ -279,9 +282,9 @@
         "Four Risk V2 consumer unit/static tests and 10 real PostgreSQL TOCTOU/atomicity/concurrency/RLS tests passed. Consumer output must match the requested order, allowance, payload, and durable bindings before any connector call. Global legacy caller cutover is not claimed and remains linked to DEE-651."
       ],
       "integratedCommits": [
-        "b26028f9b9115e9f588d8a14f99c0f038aa679fa",
-        "5db7ae4cbad0033c3370f715e973fae51f6242bd",
-        "d9476c8f5eb820c0e00d4f85b92c279a20c4aa70"
+        "4676bc974f2d2d824813bdb1cd0435da93b19b5a",
+        "09743189a2d7fbad3b725a8ab86fed43646bf4f2",
+        "85349ccb62c09de721057eb2b7c6e42376a59bb4"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-risk-v2-execution-consumption.test.ts",
@@ -300,8 +303,8 @@
   "integrationEvidence": {
     "preImplementationAdmission": {
       "status": "pass",
-      "manifestDigest": "0334ecd9dbb1c756dbf1571917a5d0b7b57908c95920bcaaa365d473d799a40c",
-      "manifestCommit": "033bf39dfb35d70f6d72e4b3870929716c429abf",
+      "manifestDigest": "14eafd55d37002b4e5571cd1063452191ea7b1780fed74aa6d6a16131322d51c",
+      "manifestCommit": "780a23c54d2ea39b0c5f3a7ed88bea80243f687a",
       "manifestPath": "docs/plans/dee-662-risk-v2-integration-train.integration-train.json",
       "reviewer": "Human-ratified integration owner"
     },
@@ -309,7 +312,7 @@
       {
         "issue": "DEE-663",
         "status": "pass",
-        "reviewedCommits": ["aeb774f333ec74be8473f04863ce8538a5669610", "60762871dedec36f4c29a6e08ac3de6f5a92e366"],
+        "reviewedCommits": ["badf5d06e3d810fb3337e9639a3f5bb7812d9c8f", "7f8ff46f8f3a660fb41c067902d1343baf1368fc"],
         "reviewedFiles": [
           "lib/trader/risk/v2/economic-size-intersection-v2.ts",
           "lib/trader/risk/v2/risk-verdict-contract-v2.ts",
@@ -319,7 +322,7 @@
       {
         "issue": "DEE-664",
         "status": "pass",
-        "reviewedCommits": ["18d01d3903190589dbba58d6d643bbca34ef0ea2"],
+        "reviewedCommits": ["054d30ff1e1bb4c548629986b8960a55a968644a"],
         "reviewedFiles": [
           "lib/trader/risk/v2/protective-posture-v2.ts",
           "lib/trader/risk/v2/risk-reason-codes-v2.ts",
@@ -329,7 +332,7 @@
       {
         "issue": "DEE-665",
         "status": "pass",
-        "reviewedCommits": ["5225012c9ecafa2dd04080754080ec22c7e2256f", "e9c003d45b2fc1c696daa365be6beb902aec8927", "4fb87a16b43c69254e95c740eaee71b2d58ee3f5"],
+        "reviewedCommits": ["01fec62faef73a4b9cf0d706db1a6f7c19704787", "2dfbc0eeeb85b7b8696a650d1981faa3dd7e9cfc", "ae01ae86f5dc8b01aa71be7934fddcf0cb860644"],
         "reviewedFiles": [
           "db/migrations_postgres/0156_trader_risk_v2.sql",
           "db/migrations_postgres/meta/_journal.json",
@@ -347,9 +350,9 @@
         "issue": "DEE-666",
         "status": "pass",
         "reviewedCommits": [
-          "b26028f9b9115e9f588d8a14f99c0f038aa679fa",
-          "5db7ae4cbad0033c3370f715e973fae51f6242bd",
-          "d9476c8f5eb820c0e00d4f85b92c279a20c4aa70"
+          "4676bc974f2d2d824813bdb1cd0435da93b19b5a",
+          "09743189a2d7fbad3b725a8ab86fed43646bf4f2",
+          "85349ccb62c09de721057eb2b7c6e42376a59bb4"
         ],
         "reviewedFiles": [
           "lib/trader/execution/execution-service.ts",
@@ -394,9 +397,9 @@
         "P2 Risk V2 connector guard did not validate the consumer result against the exact request and durable bindings"
       ],
       "remediationCommits": [
-        "60762871dedec36f4c29a6e08ac3de6f5a92e366",
-        "e9c003d45b2fc1c696daa365be6beb902aec8927",
-        "d9476c8f5eb820c0e00d4f85b92c279a20c4aa70"
+        "7f8ff46f8f3a660fb41c067902d1343baf1368fc",
+        "2dfbc0eeeb85b7b8696a650d1981faa3dd7e9cfc",
+        "85349ccb62c09de721057eb2b7c6e42376a59bb4"
       ],
       "affectedGates": {
         "status": "pass",
@@ -409,7 +412,7 @@
         "reviewedHead": "9c9328fbccecd25627fa70977523f06eb472b07d",
         "priorFindingsClosed": true,
         "newBlockingFinding": "P2 TypeScript truncated the scale-16 reservation product while PostgreSQL compared it unrounded, rejecting common valid inputs or risking under-reservation.",
-        "remediationCommit": "4fb87a16b43c69254e95c740eaee71b2d58ee3f5",
+        "remediationCommit": "ae01ae86f5dc8b01aa71be7934fddcf0cb860644",
         "canonicalRule": "Positive exact quantity multiplied by positive conservative reference price is rounded upward to scale 8 in both TypeScript admission and the PostgreSQL insert trigger.",
         "affectedGates": {
           "status": "pass",

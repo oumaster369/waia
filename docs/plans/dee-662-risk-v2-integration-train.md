@@ -32,7 +32,7 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: adversarial-remediation-complete
+  status: renewed-base-validating
   currentWorkPackage: WP5
   completedWorkPackages: [WP0, WP1, WP2, WP3, WP4]
   remainingWorkPackages: [WP5]
@@ -41,7 +41,7 @@ state:
   lastValidatedGitSha: ae01ae86f5dc8b01aa71be7934fddcf0cb860644
   lastValidationAt: "2026-08-21"
   blockedReason: null
-  nextAction: "Freeze the remediation evidence and obtain the required fresh independent review of the changed exact head."
+  nextAction: "Run renewed-base affected gates, freeze the exact head, and obtain a fresh independent adversarial review."
 provenance:
   createdFrom: human-ratified-delegation
   gapRegistry: null
