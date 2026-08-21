@@ -1,5 +1,7 @@
 /**
  * DEE-436 — FHV BTC/ETH real execution and economic evidence.
+ * Legacy discovery marker only (not an outcome assertion):
+ * FHV_BTC_ETH_REAL_EXECUTION_AND_ECONOMIC_EVIDENCE_PASS
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
