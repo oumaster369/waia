@@ -196,11 +196,12 @@
       "acceptanceEvidence": [
         "One additive PostgreSQL migration implements immutable verdicts, allowance projection, append-only digest-chained enforcement events, exact order bindings, composite organization integrity, RLS deny posture, and required indexes without legacy rewrites.",
         "Privileged repositories derive entry reservations from sealed quantity and conservative reference price, derive and revalidate strict reductions against current reconciled instrument exposure, and prove deterministic atomic admission, idempotency, tenant isolation, append-only enforcement, and serialized concurrency.",
-        "Clean empty-database auth prelude/migration/smoke passed; 12 focused allowance/migration unit tests and 10 real PostgreSQL RLS/CRUD/append-only/atomicity/concurrency tests passed. No production or Supabase apply occurred."
+        "Clean empty-database auth prelude/migration/smoke passed; 12 focused allowance/migration unit tests and 11 real PostgreSQL RLS/CRUD/append-only/atomicity/concurrency tests passed, including conservative scale-8 reservation rounding for a non-terminating product. No production or Supabase apply occurred."
       ],
       "integratedCommits": [
         "5225012c9ecafa2dd04080754080ec22c7e2256f",
-        "e9c003d45b2fc1c696daa365be6beb902aec8927"
+        "e9c003d45b2fc1c696daa365be6beb902aec8927",
+        "4fb87a16b43c69254e95c740eaee71b2d58ee3f5"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-risk-allowance-v2.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
@@ -328,7 +329,7 @@
       {
         "issue": "DEE-665",
         "status": "pass",
-        "reviewedCommits": ["5225012c9ecafa2dd04080754080ec22c7e2256f", "e9c003d45b2fc1c696daa365be6beb902aec8927"],
+        "reviewedCommits": ["5225012c9ecafa2dd04080754080ec22c7e2256f", "e9c003d45b2fc1c696daa365be6beb902aec8927", "4fb87a16b43c69254e95c740eaee71b2d58ee3f5"],
         "reviewedFiles": [
           "db/migrations_postgres/0156_trader_risk_v2.sql",
           "db/migrations_postgres/meta/_journal.json",
@@ -385,7 +386,7 @@
     ],
     "adversarialRemediation": {
       "reviewedHead": "98e45a65b1d528999aa51b1af16032d6f1cf8657",
-      "status": "remediated-pending-exact-head-rereview",
+      "status": "second-remediation-pending-exact-head-rereview",
       "blockingFindings": [
         "P1 dispatchable consumed replay did not recheck current authority and expiry before first send",
         "P1 CLOSE_ONLY reduction authority trusted a caller boolean and permitted incompatible entry authority",
@@ -403,7 +404,18 @@
       },
       "fullSuiteRerun": false,
       "fullSuiteRerunReason": "The Human required one full local suite only; review-driven head changes rerun affected gates and receive a fresh exact-head review.",
-      "freshExactHeadRereviewRequired": true
+      "freshExactHeadRereviewRequired": true,
+      "firstExactHeadRereview": {
+        "reviewedHead": "9c9328fbccecd25627fa70977523f06eb472b07d",
+        "priorFindingsClosed": true,
+        "newBlockingFinding": "P2 TypeScript truncated the scale-16 reservation product while PostgreSQL compared it unrounded, rejecting common valid inputs or risking under-reservation.",
+        "remediationCommit": "4fb87a16b43c69254e95c740eaee71b2d58ee3f5",
+        "canonicalRule": "Positive exact quantity multiplied by positive conservative reference price is rounded upward to scale 8 in both TypeScript admission and the PostgreSQL insert trigger.",
+        "affectedGates": {
+          "status": "pass",
+          "commands": ["12 focused allowance/migration unit tests", "11 Risk V2 PostgreSQL RLS/append-only/atomicity/concurrency tests", "clean PostgreSQL auth prelude/migration/smoke", "pnpm typecheck", "scoped eslint"]
+        }
+      }
     },
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true

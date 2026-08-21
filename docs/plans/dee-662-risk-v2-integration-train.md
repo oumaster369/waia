@@ -38,7 +38,7 @@ state:
   remainingWorkPackages: [WP5]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 85349ccb62c09de721057eb2b7c6e42376a59bb4
+  lastValidatedGitSha: ae01ae86f5dc8b01aa71be7934fddcf0cb860644
   lastValidationAt: "2026-08-21"
   blockedReason: null
   nextAction: "Freeze the remediation evidence and obtain the required fresh independent review of the changed exact head."
