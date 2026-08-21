@@ -90,6 +90,45 @@ const EXECUTION_ATTEMPT_TRANSITIONS_V2: Readonly<Record<
   RECONCILIATION_REQUIRED: ["RECONCILIATION_REQUIRED"],
 });
 
+function lifecycleStateForReport(
+  reportType: ExecutionReportTypeV2,
+  rawObservation: Readonly<Record<string, unknown>>,
+): ExecutionAttemptLifecycleStateV2 {
+  switch (reportType) {
+    case "PLAN_SEALED":
+    case "ALLOWANCE_CLAIMED":
+    case "ATTEMPT_BOUND":
+      return "BOUND";
+    case "SUBMIT_STARTED":
+      return "SUBMIT_STARTED";
+    case "VENUE_ACCEPTED":
+      return "VENUE_ACCEPTED";
+    case "VENUE_REJECTED":
+      return "VENUE_REJECTED";
+    case "CANCEL_REQUESTED":
+      return "CANCEL_REQUESTED";
+    case "CANCEL_ACKNOWLEDGED":
+      return "CANCELLED";
+    case "FILL_REPORT_OBSERVED": {
+      const order = rawObservation.order;
+      if (typeof order !== "object" || order === null || !("status" in order)) {
+        throw new ExecutionV2PersistenceConflictError(
+          "fill report requires a raw order status",
+        );
+      }
+      if (order.status === "filled") return "FILLED";
+      if (order.status === "partially_filled") return "PARTIALLY_FILLED";
+      throw new ExecutionV2PersistenceConflictError(
+        "fill report status must be filled or partially_filled",
+      );
+    }
+    case "VENUE_STATUS_OBSERVED":
+    case "CONNECTOR_UNCERTAIN":
+    case "RECONCILIATION_REQUIRED":
+      return "RECONCILIATION_REQUIRED";
+  }
+}
+
 function mapPolicy(row: PolicyRow): ExecutionPolicyBindingV2 {
   const policy = createExecutionPolicyBindingV2({
     executionPolicyId: row.id,
@@ -434,7 +473,6 @@ export async function appendExecutionReportV2FromExecutor(
     rawObservation: Readonly<Record<string, unknown>>;
     venueOrderId?: string | null;
     observedAtUtc: string;
-    lifecycleState: ExecutionAttemptLifecycleStateV2;
   }>,
 ): Promise<ExecutionReportV2> {
   const scoped = requireOrgContext(context.organizationId);
@@ -446,9 +484,10 @@ export async function appendExecutionReportV2FromExecutor(
   const row = rows[0];
   if (!row) throw new ExecutionV2PersistenceConflictError("Execution attempt not found");
   const currentLifecycle = row.lifecycleState as ExecutionAttemptLifecycleStateV2;
-  if (!EXECUTION_ATTEMPT_TRANSITIONS_V2[currentLifecycle].includes(input.lifecycleState)) {
+  const lifecycleState = lifecycleStateForReport(input.reportType, input.rawObservation);
+  if (!EXECUTION_ATTEMPT_TRANSITIONS_V2[currentLifecycle].includes(lifecycleState)) {
     throw new ExecutionV2PersistenceConflictError(
-      `invalid Execution attempt transition ${currentLifecycle}->${input.lifecycleState}`,
+      `invalid Execution attempt transition ${currentLifecycle}->${lifecycleState}`,
     );
   }
   const report = createExecutionReportV2({
@@ -482,7 +521,7 @@ export async function appendExecutionReportV2FromExecutor(
     schemaVersion: report.schemaVersion,
   });
   await ex.update(pgSchema.traderExecutionAttemptsV2).set({
-    lifecycleState: input.lifecycleState,
+    lifecycleState,
     nextReportSequence: row.nextReportSequence + 1n,
     lastReportDigest: report.contentDigestHex,
     updatedAt: new Date(report.observedAtUtc),
