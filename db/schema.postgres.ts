@@ -2430,6 +2430,10 @@ export const traderOrders = pgTable(
     riskDecisionId: text("risk_decision_id").notNull(),
     riskAllowanceId: uuid("risk_allowance_id"),
     riskAllowanceBindingDigest: text("risk_allowance_binding_digest"),
+    executionPlanId: uuid("execution_plan_id"),
+    executionPlanDigest: text("execution_plan_digest"),
+    executionAttemptId: uuid("execution_attempt_id"),
+    executionAttemptDigest: text("execution_attempt_digest"),
     strategySignalId: text("strategy_signal_id"),
     allocationDecisionId: text("allocation_decision_id"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
@@ -2454,6 +2458,13 @@ export const traderOrders = pgTable(
       "trader_orders_risk_allowance_binding_complete",
       sql`("risk_allowance_id" IS NULL AND "risk_allowance_binding_digest" IS NULL)
         OR ("risk_allowance_id" IS NOT NULL AND "risk_allowance_binding_digest" IS NOT NULL)`,
+    ),
+    check(
+      "trader_orders_execution_v2_binding_complete",
+      sql`("execution_plan_id" IS NULL AND "execution_plan_digest" IS NULL
+          AND "execution_attempt_id" IS NULL AND "execution_attempt_digest" IS NULL)
+        OR ("execution_plan_id" IS NOT NULL AND "execution_plan_digest" IS NOT NULL
+          AND "execution_attempt_id" IS NOT NULL AND "execution_attempt_digest" IS NOT NULL)`,
     ),
   ],
 );
@@ -2753,6 +2764,256 @@ export const traderRiskEnforcementEventsV2 = pgTable(
       t.organizationId,
       t.riskAllowanceId,
       t.eventSequence,
+    ),
+  ],
+);
+
+/** DEE-667 / E651-A: immutable Decision-qualified mechanical policy binding. */
+export const traderExecutionPoliciesV2 = pgTable(
+  "trader_execution_policies_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    policyVersion: text("policy_version").notNull(),
+    decisionId: text("decision_id").notNull(),
+    decisionContentDigest: text("decision_content_digest").notNull(),
+    decisionExecutionPolicyDigest: text("decision_execution_policy_digest").notNull(),
+    economicSizeSetDigest: text("economic_size_set_digest").notNull(),
+    venue: text("venue").notNull(),
+    market: text("market").notNull(),
+    instrumentIdentityDigest: text("instrument_identity_digest").notNull(),
+    allowedOrderTypes: jsonb("allowed_order_types").notNull(),
+    allowedTimeInForce: jsonb("allowed_time_in_force").notNull(),
+    allowedLiquidityRoles: jsonb("allowed_liquidity_roles").notNull(),
+    priceCollar: jsonb("price_collar").notNull(),
+    quantityRules: jsonb("quantity_rules").notNull(),
+    slicingPolicy: jsonb("slicing_policy").notNull(),
+    retryPolicy: jsonb("retry_policy").notNull(),
+    cancelPolicy: jsonb("cancel_policy").notNull(),
+    timeoutMs: integer("timeout_ms").notNull(),
+    uncertaintyHandling: text("uncertainty_handling").notNull(),
+    effectiveFrom: timestamp("effective_from", { withTimezone: true, mode: "date" }).notNull(),
+    effectiveUntil: timestamp("effective_until", { withTimezone: true, mode: "date" }).notNull(),
+    semanticDigest: text("semantic_digest").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_execution_policies_v2_id_org_unique").on(t.id, t.organizationId),
+    uniqueIndex("trader_execution_policies_v2_org_content_unique").on(
+      t.organizationId,
+      t.contentDigest,
+    ),
+    index("trader_execution_policies_v2_org_venue_instrument_idx").on(
+      t.organizationId,
+      t.venue,
+      t.instrumentIdentityDigest,
+    ),
+  ],
+);
+
+/** DEE-667 / E651-A: immutable exact mechanical plan bound to one allowance. */
+export const traderExecutionPlansV2 = pgTable(
+  "trader_execution_plans_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    riskAllowanceId: uuid("risk_allowance_id").notNull(),
+    riskAllowanceContentDigest: text("risk_allowance_content_digest").notNull(),
+    riskVerdictId: uuid("risk_verdict_id").notNull(),
+    decisionId: text("decision_id").notNull(),
+    decisionContentDigest: text("decision_content_digest").notNull(),
+    economicSizeSetDigest: text("economic_size_set_digest").notNull(),
+    instrumentIdentityDigest: text("instrument_identity_digest").notNull(),
+    symbol: text("symbol").notNull(),
+    action: text("action").notNull(),
+    side: text("side").notNull(),
+    approvedQualifiedQuantityCeiling: numeric("approved_qualified_quantity_ceiling", {
+      precision: 38,
+      scale: 8,
+    }).notNull(),
+    approvedNotionalCeiling: numeric("approved_notional_ceiling", {
+      precision: 38,
+      scale: 8,
+    }).notNull(),
+    plannedQuantity: numeric("planned_quantity", { precision: 38, scale: 8 }).notNull(),
+    venue: text("venue").notNull(),
+    orderType: text("order_type").notNull(),
+    liquidityRole: text("liquidity_role").notNull(),
+    limitPrice: numeric("limit_price", { precision: 38, scale: 8 }),
+    priceCollar: jsonb("price_collar").notNull(),
+    timeInForce: text("time_in_force").notNull(),
+    timingWindow: jsonb("timing_window").notNull(),
+    quantityRules: jsonb("quantity_rules").notNull(),
+    childSlices: jsonb("child_slices").notNull(),
+    retryPolicy: jsonb("retry_policy").notNull(),
+    cancelPolicy: jsonb("cancel_policy").notNull(),
+    executionPolicyId: uuid("execution_policy_id").notNull(),
+    executionPolicyContentDigest: text("execution_policy_content_digest").notNull(),
+    sealedAt: timestamp("sealed_at", { withTimezone: true, mode: "date" }).notNull(),
+    semanticDigest: text("semantic_digest").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_execution_plans_v2_id_org_unique").on(t.id, t.organizationId),
+    unique("trader_execution_plans_v2_id_org_account_unique").on(
+      t.id,
+      t.organizationId,
+      t.accountId,
+    ),
+    foreignKey({
+      columns: [t.riskAllowanceId, t.organizationId, t.accountId],
+      foreignColumns: [
+        traderRiskAllowancesV2.id,
+        traderRiskAllowancesV2.organizationId,
+        traderRiskAllowancesV2.accountId,
+      ],
+      name: "trader_execution_plans_v2_allowance_scope_fk",
+    }),
+    foreignKey({
+      columns: [t.executionPolicyId, t.organizationId],
+      foreignColumns: [traderExecutionPoliciesV2.id, traderExecutionPoliciesV2.organizationId],
+      name: "trader_execution_plans_v2_policy_scope_fk",
+    }),
+    uniqueIndex("trader_execution_plans_v2_org_allowance_unique").on(
+      t.organizationId,
+      t.riskAllowanceId,
+    ),
+    uniqueIndex("trader_execution_plans_v2_org_content_unique").on(
+      t.organizationId,
+      t.contentDigest,
+    ),
+  ],
+);
+
+/** DEE-667 / E651-A: one durable independent external-effect attempt. */
+export const traderExecutionAttemptsV2 = pgTable(
+  "trader_execution_attempts_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    executionPlanId: uuid("execution_plan_id").notNull(),
+    executionPlanContentDigest: text("execution_plan_content_digest").notNull(),
+    riskAllowanceId: uuid("risk_allowance_id").notNull(),
+    riskAllowanceContentDigest: text("risk_allowance_content_digest").notNull(),
+    orderId: uuid("order_id").notNull(),
+    attemptSequence: bigint("attempt_sequence", { mode: "bigint" }).notNull(),
+    effectIdentityDigest: text("effect_identity_digest").notNull(),
+    clientOrderId: text("client_order_id").notNull(),
+    venue: text("venue").notNull(),
+    exactRequestPayload: jsonb("exact_request_payload").notNull(),
+    lifecycleState: text("lifecycle_state").notNull(),
+    nextReportSequence: bigint("next_report_sequence", { mode: "bigint" }).notNull(),
+    lastReportDigest: text("last_report_digest"),
+    boundAt: timestamp("bound_at", { withTimezone: true, mode: "date" }).notNull(),
+    semanticDigest: text("semantic_digest").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_execution_attempts_v2_id_org_unique").on(t.id, t.organizationId),
+    unique("trader_execution_attempts_v2_id_org_account_unique").on(
+      t.id,
+      t.organizationId,
+      t.accountId,
+    ),
+    foreignKey({
+      columns: [t.executionPlanId, t.organizationId, t.accountId],
+      foreignColumns: [
+        traderExecutionPlansV2.id,
+        traderExecutionPlansV2.organizationId,
+        traderExecutionPlansV2.accountId,
+      ],
+      name: "trader_execution_attempts_v2_plan_scope_fk",
+    }),
+    foreignKey({
+      columns: [t.riskAllowanceId, t.organizationId, t.accountId],
+      foreignColumns: [
+        traderRiskAllowancesV2.id,
+        traderRiskAllowancesV2.organizationId,
+        traderRiskAllowancesV2.accountId,
+      ],
+      name: "trader_execution_attempts_v2_allowance_scope_fk",
+    }),
+    foreignKey({
+      columns: [t.orderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+      name: "trader_execution_attempts_v2_order_scope_fk",
+    }),
+    uniqueIndex("trader_execution_attempts_v2_org_allowance_unique").on(
+      t.organizationId,
+      t.riskAllowanceId,
+    ),
+    uniqueIndex("trader_execution_attempts_v2_org_order_unique").on(t.organizationId, t.orderId),
+    uniqueIndex("trader_execution_attempts_v2_org_effect_unique").on(
+      t.organizationId,
+      t.effectIdentityDigest,
+    ),
+    uniqueIndex("trader_execution_attempts_v2_org_client_order_unique").on(
+      t.organizationId,
+      t.clientOrderId,
+    ),
+  ],
+);
+
+/** DEE-667 / E651-A: append-only raw execution/venue observation ledger. */
+export const traderExecutionReportsV2 = pgTable(
+  "trader_execution_reports_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    executionAttemptId: uuid("execution_attempt_id").notNull(),
+    executionAttemptContentDigest: text("execution_attempt_content_digest").notNull(),
+    reportSequence: bigint("report_sequence", { mode: "bigint" }).notNull(),
+    reportType: text("report_type").notNull(),
+    source: text("source").notNull(),
+    rawObservation: jsonb("raw_observation").notNull(),
+    venueOrderId: text("venue_order_id"),
+    observedAt: timestamp("observed_at", { withTimezone: true, mode: "date" }).notNull(),
+    previousReportDigest: text("previous_report_digest"),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.executionAttemptId, t.organizationId, t.accountId],
+      foreignColumns: [
+        traderExecutionAttemptsV2.id,
+        traderExecutionAttemptsV2.organizationId,
+        traderExecutionAttemptsV2.accountId,
+      ],
+      name: "trader_execution_reports_v2_attempt_scope_fk",
+    }),
+    uniqueIndex("trader_execution_reports_v2_org_attempt_sequence_unique").on(
+      t.organizationId,
+      t.executionAttemptId,
+      t.reportSequence,
+    ),
+    uniqueIndex("trader_execution_reports_v2_org_content_unique").on(
+      t.organizationId,
+      t.contentDigest,
+    ),
+    index("trader_execution_reports_v2_org_attempt_type_idx").on(
+      t.organizationId,
+      t.executionAttemptId,
+      t.reportType,
     ),
   ],
 );
