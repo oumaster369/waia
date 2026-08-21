@@ -162,8 +162,18 @@ function parseHtxOrderSideAndType(htxType: string): { side: OrderSide; type: Ord
   return { side, type };
 }
 
-function mapHtxOrderStatus(state: string): OrderStatus {
-  switch (state) {
+class HtxUnknownOrderStateError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(row: HtxOrderRow) {
+    super(`[trader] HTX order state is fail-unknown: ${row.state}`);
+    this.name = "HtxUnknownOrderStateError";
+    this.rawVenueObservation = Object.freeze({ ...row });
+  }
+}
+
+function mapHtxOrderStatus(row: HtxOrderRow): OrderStatus {
+  switch (row.state) {
     case "submitted":
     case "created":
       return "open";
@@ -175,7 +185,7 @@ function mapHtxOrderStatus(state: string): OrderStatus {
     case "partial-canceled":
       return "canceled";
     default:
-      return "rejected";
+      throw new HtxUnknownOrderStateError(row);
   }
 }
 
@@ -198,12 +208,13 @@ export function mapHtxOrder(row: HtxOrderRow): Order {
     symbol: htxSymbolToInternal(row.symbol),
     side,
     type,
-    status: mapHtxOrderStatus(row.state),
+    status: mapHtxOrderStatus(row),
     price: row.price,
     quantity,
     filledQuantity,
     createdAt,
     updatedAt: createdAt,
+    rawVenueObservation: Object.freeze({ ...row }),
   };
 }
 

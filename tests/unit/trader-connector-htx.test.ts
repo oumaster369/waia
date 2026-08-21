@@ -343,6 +343,53 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
     expect(placed.symbol).toBe("BTC/USDT");
     expect(placed.clientOrderId).toBe("client-1");
     expect(placed.status).toBe("open");
+    expect(placed.rawVenueObservation).toEqual({
+      id: 357630527817872,
+      symbol: "btcusdt",
+      price: "65000",
+      amount: "0.01",
+      "created-at": 1630633835224,
+      type: "buy-limit",
+      "filled-amount": "0",
+      state: "submitted",
+      "client-order-id": "client-1",
+    });
+  });
+
+  it("fails unknown on an unrecognized HTX state and preserves the raw row", async () => {
+    const connector = await validatedHtx(defaultHandlers({
+      "/v1/order/orders/": (url) => {
+        const orderId = url.pathname.split("/").pop()!;
+        return jsonResponse({
+          status: "ok",
+          data: {
+            id: Number(orderId),
+            symbol: "btcusdt",
+            price: "65000",
+            amount: "0.01",
+            "created-at": 1630633835224,
+            type: "buy-limit",
+            "filled-amount": "0",
+            state: "venue-state-not-in-contract",
+            "client-order-id": "client-1",
+          },
+        });
+      },
+    }));
+    await expect(connector.placeOrder({
+      clientOrderId: "client-new-unknown",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "65000",
+      quantity: "0.01",
+    })).rejects.toMatchObject({
+      name: "HtxUnknownOrderStateError",
+      rawVenueObservation: {
+        state: "venue-state-not-in-contract",
+        id: 357630527817872,
+      },
+    });
   });
 
   it("cancels an order via signed POST", async () => {

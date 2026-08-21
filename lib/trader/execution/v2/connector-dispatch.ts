@@ -42,10 +42,13 @@ async function submitCommittedAttemptToConnectorV2(
     price: payload.price ?? undefined,
     quantity: payload.quantity,
   });
+  const { rawVenueObservation, ...normalizedOrder } = order;
   return Object.freeze({
     order,
     trades: Object.freeze([]),
-    raw: Object.freeze({ order: Object.freeze({ ...order }) }),
+    raw: Object.freeze({
+      order: rawVenueObservation ?? Object.freeze(normalizedOrder),
+    }),
   });
 }
 

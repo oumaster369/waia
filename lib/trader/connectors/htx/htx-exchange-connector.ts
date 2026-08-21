@@ -199,7 +199,11 @@ export class HtxExchangeConnector implements ExchangeConnector {
       price: input.price,
       clientOrderId: input.clientOrderId,
     });
-    return mapHtxOrder(row);
+    const order = mapHtxOrder(row);
+    if (!order.rawVenueObservation) {
+      throw new Error("[trader] HTX placeOrder raw venue observation is required");
+    }
+    return order;
   }
 
   async cancelOrder(orderId: string): Promise<Order> {

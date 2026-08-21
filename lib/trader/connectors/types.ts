@@ -55,6 +55,8 @@ export type Order = {
   filledQuantity: string;
   createdAt: string;
   updatedAt: string;
+  /** Immutable venue-native observation when the connector can preserve it. */
+  rawVenueObservation?: Readonly<Record<string, unknown>>;
 };
 
 export type PlaceOrderInput = {
