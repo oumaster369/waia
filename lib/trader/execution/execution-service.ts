@@ -123,6 +123,41 @@ function placeOrderInputFromOrder(order: OrderRow): PlaceOrderInput {
   };
 }
 
+function hasExactConsumedRiskV2Proof(
+  context: OrgContext,
+  input: SubmitOrderInput,
+  consumed: ConsumedRiskAllowanceForOrderV2 | undefined,
+): boolean {
+  const requested = input.riskAllowanceV2;
+  if (!requested || !consumed) return false;
+  const order = consumed.order;
+  try {
+    const priceMatches =
+      (order.price === null && input.price === undefined) ||
+      (order.price !== null && input.price !== undefined && compareDecimal(order.price, input.price) === 0);
+    return (
+      consumed.riskAllowanceId === requested.riskAllowanceId &&
+      order.id === requested.orderId &&
+      order.organizationId === context.organizationId &&
+      order.riskAllowanceId === requested.riskAllowanceId &&
+      order.riskAllowanceBindingDigest === consumed.orderBindingDigestHex &&
+      order.executionMode === input.executionMode &&
+      order.symbol === input.symbol &&
+      order.side === input.side &&
+      order.type === input.type &&
+      priceMatches &&
+      compareDecimal(order.quantity, input.quantity) === 0 &&
+      order.clientOrderId === input.clientOrderId &&
+      order.idempotencyKey === input.idempotencyKey &&
+      order.credentialId === (input.credentialId ?? null) &&
+      order.strategySignalId === (input.strategySignalId ?? null) &&
+      order.allocationDecisionId === (input.allocationDecisionId ?? null)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function isSubmittedState(state: OrderState): boolean {
   return state === "ACCEPTED" || state === "PARTIALLY_FILLED" || state === "FILLED";
 }
@@ -466,12 +501,9 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     }
 
     if (
-      order.riskAllowanceId &&
-      (
-        !consumedAllowance ||
-        consumedAllowance.riskAllowanceId !== order.riskAllowanceId ||
-        consumedAllowance.orderBindingDigestHex !== order.riskAllowanceBindingDigest
-      )
+      (input.riskAllowanceV2 &&
+        !hasExactConsumedRiskV2Proof(context, input, consumedAllowance)) ||
+      (!input.riskAllowanceV2 && order.riskAllowanceId)
     ) {
       return {
         status: "risk_allowance_refused",
@@ -778,6 +810,13 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
           });
         }
         const consumed = claim;
+        if (!hasExactConsumedRiskV2Proof(orgContext, input, consumed)) {
+          return finishSubmitOrder(orgContext, input, startedMs, {
+            status: "risk_allowance_refused",
+            order: null,
+            reason: "CONSUMED_ALLOWANCE_PROOF_MISSING_OR_MISMATCHED",
+          });
+        }
         const resume = resumeResultForExistingOrder(consumed.order);
         if (resume) return finishSubmitOrder(orgContext, input, startedMs, resume);
         const auditIds: SubmissionAuditIds = {};

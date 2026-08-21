@@ -192,6 +192,40 @@ describe("Risk V2 execution consumption boundary", () => {
         reason: "CONSUMED_ALLOWANCE_PROOF_MISSING_OR_MISMATCHED",
       });
     expect(mismatched.exchange.placeOrder).not.toHaveBeenCalled();
+
+    const unbound = harness({
+      consume: vi.fn().mockResolvedValue(consumed({
+        ...baseOrder(),
+        riskAllowanceId: null,
+        riskAllowanceBindingDigest: null,
+      })),
+    });
+    await expect(unbound.service.submitOrder({ organizationId: ORG }, input()))
+      .resolves.toMatchObject({
+        status: "risk_allowance_refused",
+        reason: "CONSUMED_ALLOWANCE_PROOF_MISSING_OR_MISMATCHED",
+      });
+    expect(unbound.exchange.placeOrder).not.toHaveBeenCalled();
+
+    const differentOrder = harness({
+      consume: vi.fn().mockResolvedValue(consumed({
+        ...baseOrder(),
+        id: "00000000-0000-4000-8000-000000066699",
+      })),
+    });
+    await expect(differentOrder.service.submitOrder({ organizationId: ORG }, input()))
+      .resolves.toMatchObject({ status: "risk_allowance_refused" });
+    expect(differentOrder.exchange.placeOrder).not.toHaveBeenCalled();
+
+    const differentAllowance = harness({
+      consume: vi.fn().mockResolvedValue({
+        ...consumed(),
+        riskAllowanceId: "00000000-0000-4000-8000-000000066698",
+      }),
+    });
+    await expect(differentAllowance.service.submitOrder({ organizationId: ORG }, input()))
+      .resolves.toMatchObject({ status: "risk_allowance_refused" });
+    expect(differentAllowance.exchange.placeOrder).not.toHaveBeenCalled();
   });
 
   it("does not resend an uncertain same-bound order and cannot create residual authority", async () => {
