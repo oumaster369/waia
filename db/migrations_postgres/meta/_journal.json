@@ -1093,6 +1093,13 @@
       "when": 1780000000155,
       "tag": "0155_treasury_central_ledger_catalogs_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 156,
+      "version": "7",
+      "when": 1780000000156,
+      "tag": "0156_trader_risk_v2",
+      "breakpoints": true
     }
   ]
 }

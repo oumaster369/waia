@@ -17,6 +17,10 @@ import type {
 } from "@/lib/trader/execution/historical-execution-model.types";
 import type { HistoricalSimulatedExchange } from "@/lib/trader/execution/historical-simulated-exchange";
 import type { BreachOrderCancelOutcome } from "@/lib/trader/guardian/htr-breach-partial-entry-cancellation";
+import type {
+  ConsumeRiskAllowanceForOrderV2Input,
+  ConsumeRiskAllowanceForOrderV2Result,
+} from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 
 export type BreachCancellationResultV1 = {
   cancelledOrderIds: string[];
@@ -66,6 +70,14 @@ export type SubmitOrderInput = {
   stopDistanceUsdt?: string;
   actorType?: TraderAuditInput["actorType"];
   actorId?: string | null;
+  /** Exact Risk V2 authority identity. Absence preserves the legacy V1 path only. */
+  riskAllowanceV2?: Readonly<{
+    accountId: string;
+    riskAllowanceId: string;
+    nonce: string;
+    orderId: string;
+    consumptionEventId: string;
+  }>;
 };
 
 export type SubmitOrderResult =
@@ -78,6 +90,7 @@ export type SubmitOrderResult =
     }
   | { status: "submit_blocked"; order: OrderRow; reason: "kill_switch" }
   | { status: "connector_uncertain"; order: OrderRow }
+  | { status: "risk_allowance_refused"; order: null; reason: string }
   | { status: "conflict"; orderId: string };
 
 export type OrderExecutionServiceDeps = {
@@ -92,6 +105,10 @@ export type OrderExecutionServiceDeps = {
   assertLiveAuthorized?: LivePathAuthorizationHook;
   lifecycleRecorder?: LifecycleRecorder;
   historicalExecution?: HistoricalExecutionRuntime;
+  consumeRiskAllowanceV2?: (
+    context: OrgContext,
+    input: ConsumeRiskAllowanceForOrderV2Input,
+  ) => Promise<ConsumeRiskAllowanceForOrderV2Result>;
 };
 
 export type OrderExecutionService = {

@@ -62,6 +62,8 @@ function mapOrderRow(row: typeof pgSchema.traderOrders.$inferSelect): OrderRow {
     clientOrderId: row.clientOrderId,
     idempotencyKey: row.idempotencyKey,
     riskDecisionId: row.riskDecisionId,
+    riskAllowanceId: row.riskAllowanceId,
+    riskAllowanceBindingDigest: row.riskAllowanceBindingDigest,
     strategySignalId: row.strategySignalId,
     allocationDecisionId: row.allocationDecisionId,
     createdAt: row.createdAt,
@@ -276,7 +278,7 @@ export async function createOrderPostgres(
     return resolveExistingOrderForCreate(byIdempotencyKey, input);
   }
 
-  const id = crypto.randomUUID();
+  const id = input.id ?? crypto.randomUUID();
   const now = new Date();
 
   try {
@@ -296,6 +298,8 @@ export async function createOrderPostgres(
       clientOrderId: input.clientOrderId,
       idempotencyKey: input.idempotencyKey,
       riskDecisionId: input.riskDecisionId,
+      riskAllowanceId: input.riskAllowanceId ?? null,
+      riskAllowanceBindingDigest: input.riskAllowanceBindingDigest ?? null,
       strategySignalId: input.strategySignalId ?? null,
       allocationDecisionId: input.allocationDecisionId ?? null,
       createdAt: now,
