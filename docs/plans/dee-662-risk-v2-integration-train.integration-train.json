@@ -1,0 +1,195 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-662",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Exactly four Human-ratified children form one Step-14 capital-permission invariant, one additive migration, one rollback boundary, and one atomic consumption boundary. The expected 23-file, approximately 2.8-3.6k-line diff is larger than the normal target because contracts, Drizzle schema, SQL, privileged repository, execution guard, and adversarial security/concurrency tests must agree. Each child remains separately committed, reviewed, and tested; D is capped to seven declared files and excludes DEE-651 mechanics.",
+  "renewedAdmission": {
+    "authorizedAt": "2026-08-21",
+    "authorizedBaseMain": "3117675275c2f7b0f0cb0e4865ce2cfa656bb3a4",
+    "baseContainsPullRequest": 474,
+    "priorReviewedHead": "ec95408f5aa17d0beba2aa77f5abdaadd868b81a",
+    "migrationReconciliation": "Preserve Treasury migrations 0154/0155 exactly and admit the additive Risk V2 migration as 0156.",
+    "authority": "Explicit Human renewed exact-base admission for the existing DEE-650 train"
+  },
+  "includedChildren": [
+    {
+      "issue": "DEE-663",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Pure Risk V2 contract: canonical verdict vocabulary, deterministic legacy mapping without history rewrite, sealed RiskVerdictV2 with exact Decision/economic authority bindings, and exact continuous/discrete EconomicAdmissibleSizeSet intersection.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "DEE-649 and DEE-660 are Done on the verified base; Decision V2 economics and exact singleton size authority are available for downstream binding.",
+        "The Human explicitly ratified R650-A and the exact no-economic-recomputation boundary on 2026-08-21."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/risk/v2/risk-verdict-contract-v2.ts",
+        "lib/trader/risk/v2/economic-size-intersection-v2.ts",
+        "tests/unit/trader-risk-v2-contract.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Explicit Human DEE-650 ratification dated 2026-08-21 authorizes this exact verdict, Decision-binding, and continuous/discrete intersection contract."
+      },
+      "expectedAcceptanceEvidence": [
+        "Canonical verdict and legacy mapping are exhaustive, deterministic, and non-mutating.",
+        "RiskVerdictV2 digest pins every causally material authority input and is immutable.",
+        "Exact continuous/discrete intersections clamp only within Decision-qualified membership and fail closed on empty/malformed input.",
+        "Risk enforcement inputs contain no EV, confidence, why-not-cash, or economic ranking authority."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-risk-v2-contract.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-664",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Protective Risk V2 posture semantics NORMAL/CLOSE_ONLY/HALT/KILLED, strict non-reversing long-only exposure reduction, revoke/refuse/cancel control actions, and canonical L0-L6 reason bindings without liquidation authority.",
+      "dependencies": [
+        "DEE-663"
+      ],
+      "dependencyEvidence": [
+        "R650-B consumes the closed action/verdict concepts established by R650-A but owns disjoint implementation files.",
+        "The Human explicitly ratified R650-B protective semantics on 2026-08-21."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/risk/v2/protective-posture-v2.ts",
+        "lib/trader/risk/v2/risk-reason-codes-v2.ts",
+        "tests/unit/trader-risk-v2-protective-posture.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Explicit Human DEE-650 ratification dated 2026-08-21 authorizes NORMAL/CLOSE_ONLY/HALT/KILLED and the no-liquidation-origin boundary."
+      },
+      "expectedAcceptanceEvidence": [
+        "CLOSE_ONLY admits only strict nonnegative post-action exposure reduction and rejects reversal, no-op, increase, ambiguity, and non-SPOT forms.",
+        "HALT/KILLED emit no trading permission or liquidation authority.",
+        "KILLED requires revoke-outstanding and refuse-new while Human recovery remains structurally absent.",
+        "L0-L6 reasons are canonical, unique, sorted, and replay-stable."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-risk-v2-protective-posture.test.ts",
+        "pnpm test --run tests/unit/trader-risk-v2-contract.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-665",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "RiskAllowanceV2, atomic Risk-sequenced admission and reservation accounting, immutable verdict table, allowance lifecycle projection, append-only digest-chained enforcement ledger, typed schema, privileged org-scoped Postgres repository, and RLS/tenant/concurrency proof.",
+      "dependencies": [
+        "DEE-664"
+      ],
+      "dependencyEvidence": [
+        "R650-C persists and composes the A verdict contract and B posture/reason semantics.",
+        "The Human explicitly ratified the additive PostgreSQL/RLS schema and no-production-apply boundary on 2026-08-21."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/risk/v2/risk-allowance-v2.ts",
+        "lib/trader/risk/v2/risk-admission-service-v2.ts",
+        "lib/trader/risk/v2/risk-allowance-repository-postgres.ts",
+        "db/schema.postgres.ts",
+        "db/migrations_postgres/0156_trader_risk_v2.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "tests/unit/trader-risk-allowance-v2.test.ts",
+        "tests/integration/postgres-risk-v2.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "docs/migrations/DEE-64-TRACKER.md"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Explicit Human DEE-650 ratification dated 2026-08-21 authorizes the exact additive verdict/allowance/event schema, RLS, repository, and tests without any production apply."
+      },
+      "expectedAcceptanceEvidence": [
+        "One additive Postgres migration creates immutable verdicts, allowance projection, append-only digest-chained events, and nullable exact order binding columns without rewriting legacy rows.",
+        "Atomic Risk-sequence admission and reservations cannot collectively overbook the envelope and transfer without under-count or double-count.",
+        "Repository is server-only, org-scoped, idempotent on exact replay, and fail-closed on conflict or cross-tenant input.",
+        "RLS metadata plus temporary-grant CRUD probes deny authenticated/anon and guaranteed revoke is verified."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-risk-allowance-v2.test.ts",
+        "WAIA_PG_INTEGRATION=1 pnpm test --run tests/integration/postgres-risk-v2.test.ts",
+        "pnpm test --run tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "clean pnpm db:migrate:postgres and pnpm db:smoke:postgres",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "execution": {
+        "wave": 3,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-666",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Consumption-time atomic allowance claim and exact order binding, current posture/kill/reconciliation TOCTOU recheck, same-bound-order uncertain continuation, partial-fill exhaustion, and static/runtime proof that connector submission is dominated by a consumed allowance guard.",
+      "dependencies": [
+        "DEE-665"
+      ],
+      "dependencyEvidence": [
+        "R650-D consumes the C allowance schema/repository and intentionally shares only the repository and Postgres integration test under serialized execution.",
+        "The Human explicitly ratified the Risk-side claim/bind gate while excluding DEE-651 planning/routing/retry design on 2026-08-21."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/risk/v2/risk-allowance-repository-postgres.ts",
+        "lib/trader/execution/execution-service.ts",
+        "lib/trader/execution/execution-service.types.ts",
+        "lib/trader/execution/order-repository.types.ts",
+        "lib/trader/execution/repository-postgres.ts",
+        "tests/unit/trader-risk-v2-execution-consumption.test.ts",
+        "tests/integration/postgres-risk-v2.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Explicit Human DEE-650 ratification dated 2026-08-21 authorizes the atomic claim/bind/TOCTOU/consumer-proof boundary and no DEE-651 mechanics."
+      },
+      "expectedAcceptanceEvidence": [
+        "Claim locks allowance and exact order, verifies every binding and current posture/kill/reconciliation authority, and atomically emits CONSUME_CLAIMED plus ORDER_BOUND.",
+        "TOCTOU degradation, mismatch, expiry, revocation, double claim, different-order retry, and cross-tenant claim refuse with zero connector calls.",
+        "Uncertain continuation is limited to the same bound order and partial fill leaves no residual authority.",
+        "Static and runtime consumer proof establishes no valid current consumed allowance means no connector submission."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-risk-v2-execution-consumption.test.ts",
+        "WAIA_PG_INTEGRATION=1 pnpm test --run tests/integration/postgres-risk-v2.test.ts",
+        "cumulative R650-A/B/C focused tests",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "execution": {
+        "wave": 4,
+        "mode": "serialized"
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Human ratification dated 2026-08-21 plus integration-owner verification of exact base, dependency state, unique issue/branch/PR inventory, frozen surfaces, and exclusions"
+    }
+  }
+}
