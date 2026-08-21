@@ -1,5 +1,11 @@
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
-import { addDecimal, compareDecimal, formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
+import {
+  addDecimal,
+  compareDecimal,
+  formatDecimal,
+  multiplyDecimal,
+  parseDecimal,
+} from "@/lib/trader/risk/numeric";
 import type { RiskAllowanceV2 } from "@/lib/trader/risk/v2/risk-allowance-v2";
 
 export const EXECUTION_POLICY_BINDING_V2_SCHEMA_VERSION = "execution-policy-binding/v2" as const;
@@ -377,6 +383,19 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
     input.allowance.exactQualifiedQuantity,
     "approvedQualifiedQuantityCeiling",
   );
+  const action = requiredAction(input.allowance);
+  const reservedExposureNotional = canonicalNonnegative(
+    input.allowance.reservedExposureNotional,
+    "reservedExposureNotional",
+  );
+  const approvedNotionalCeiling = canonicalNonnegative(
+    input.approvedNotionalCeiling,
+    "notional ceiling",
+  );
+  if (action === "ENTER_LONG" &&
+    compareDecimal(approvedNotionalCeiling, reservedExposureNotional) > 0) {
+    throw new Error("approved notional exceeds the Risk allowance reservation");
+  }
   const rules = canonicalQuantityRules(input.policy.quantityRules);
   if (compareDecimal(plannedQuantity, approvedQuantity) > 0 ||
     !rules.economicQualifiedQuantities.includes(plannedQuantity) ||
@@ -402,6 +421,7 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
     throw new Error("complete child slice plan is required");
   }
   let sliceTotal = "0";
+  let sliceNotionalTotal = "0";
   const childSlices = input.childSlices.map((slice, index) => {
     if (slice.sequence !== index + 1) throw new Error("slice sequence must be contiguous");
     const quantity = canonicalPositive(slice.quantity, "slice quantity");
@@ -413,10 +433,23 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
       throw new Error("slice price is outside sealed mechanics");
     }
     sliceTotal = addDecimal(sliceTotal, quantity);
+    sliceNotionalTotal = addDecimal(
+      sliceNotionalTotal,
+      multiplyDecimal(quantity, price ?? input.policy.priceCollar.maximumPrice),
+    );
     return Object.freeze({ sequence: slice.sequence, quantity, limitPrice: price });
   });
   if (compareDecimal(sliceTotal, plannedQuantity) !== 0) throw new Error("slice total mismatch");
-  const action = requiredAction(input.allowance);
+  const exactEffectNotional = multiplyDecimal(
+    plannedQuantity,
+    limitPrice ?? input.policy.priceCollar.maximumPrice,
+  );
+  if (action === "ENTER_LONG" && (
+    compareDecimal(exactEffectNotional, approvedNotionalCeiling) > 0 ||
+    compareDecimal(sliceNotionalTotal, approvedNotionalCeiling) > 0
+  )) {
+    throw new Error("planned effect notional exceeds the approved Risk reservation ceiling");
+  }
   const withoutDigests = {
     schemaVersion: EXECUTION_PLAN_V2_SCHEMA_VERSION,
     executionPlanId: input.executionPlanId,
@@ -433,7 +466,7 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
     action,
     side: requiredSide(action),
     approvedQualifiedQuantityCeiling: approvedQuantity,
-    approvedNotionalCeiling: canonicalNonnegative(input.approvedNotionalCeiling, "notional ceiling"),
+    approvedNotionalCeiling,
     plannedQuantity,
     venue: input.allowance.venue,
     orderType: input.orderType,
