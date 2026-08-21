@@ -65,7 +65,30 @@ const CUSTODY_KEYS = [
   "seed",
   "signing_key",
   "signingKey",
+  "password",
+  "passphrase",
+  "cvv",
+  "cvc",
+  "pin",
+  "full_pan",
+  "fullPan",
 ] as const;
+
+export function parseNonnegativeDecimalBigint(value: unknown, label: string): bigint {
+  const parsed = parseDecimalBigint(value, label);
+  if (parsed < 0n) {
+    throw new TreasuryValidationError("INVALID_MONEY", `${label} must be non-negative`);
+  }
+  return parsed;
+}
+
+export function parseNonzeroSignedDecimalBigint(value: unknown, label: string): bigint {
+  const parsed = parseDecimalBigint(value, label);
+  if (parsed === 0n) {
+    throw new TreasuryValidationError("INVALID_MONEY", `${label} must not be zero`);
+  }
+  return parsed;
+}
 
 const RUNWAY_SNAPSHOT_INJECTION_KEYS = [
   "free_funds",
@@ -340,6 +363,22 @@ export function parseSemanticPatch(raw: unknown): TreasurySemanticPatch {
   }
   if (patch.purpose !== undefined) out.purpose = optionalString(patch.purpose, "purpose");
   if (patch.category !== undefined) out.category = optionalString(patch.category, "category");
+  if (patch.counterparty_id !== undefined || patch.counterpartyId !== undefined) {
+    const id = patch.counterparty_id ?? patch.counterpartyId;
+    out.counterpartyId = id === null ? null : requireString(id, "counterparty_id");
+  }
+  if (patch.account_id !== undefined || patch.accountId !== undefined) {
+    const id = patch.account_id ?? patch.accountId;
+    out.accountId = id === null ? null : requireString(id, "account_id");
+  }
+  if (patch.category_id !== undefined || patch.categoryId !== undefined) {
+    const id = patch.category_id ?? patch.categoryId;
+    out.categoryId = id === null ? null : requireString(id, "category_id");
+  }
+  if (patch.project_id !== undefined || patch.projectId !== undefined) {
+    const id = patch.project_id ?? patch.projectId;
+    out.projectId = id === null ? null : requireString(id, "project_id");
+  }
   if (patch.internal_notes !== undefined || patch.internalNotes !== undefined) {
     out.internalNotes = optionalString(
       patch.internal_notes ?? patch.internalNotes,

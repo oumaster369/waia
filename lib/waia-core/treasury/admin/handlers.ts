@@ -7,6 +7,7 @@ if (process.env.VITEST !== "true") {
 
 import { organizations } from "@/db/schema";
 import * as pgSchema from "@/db/schema.postgres";
+import { treasuryAccountKindEnum } from "@/db/core-enums";
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import {
   adminClientError,
@@ -39,6 +40,9 @@ import {
   parseTxDirection,
   parseTxKind,
   parsePositiveDecimalBigint,
+  parseNonnegativeDecimalBigint,
+  parseNonzeroSignedDecimalBigint,
+  parseEnum,
   rejectBudgetAggregates,
   rejectCustodyMaterial,
   rejectEvidenceClientStorageAuthority,
@@ -52,6 +56,15 @@ import {
   requireString,
   optionalString,
 } from "@/lib/waia-core/treasury/admin/parse";
+import {
+  serializeAccountDetail,
+  serializeAccountSummary,
+  serializeCategory,
+  serializeCounterpartyDetail,
+  serializeCounterpartySummary,
+  serializeProject,
+} from "@/lib/waia-core/treasury/admin/ledger-catalog-serialize";
+import type { TreasuryLedgerCatalogQuery } from "@/lib/waia-core/treasury/admin/ledger-catalog-types";
 import {
   deriveBudgetAdminTotals,
   deriveFundingNeedAdminTotals,
@@ -186,6 +199,32 @@ function compactDefined<T extends Record<string, unknown>>(patch: T): Partial<T>
   return Object.fromEntries(
     Object.entries(patch).filter(([, value]) => value !== undefined),
   ) as Partial<T>;
+}
+
+async function assertActiveLedgerReferences(
+  services: TreasuryAdminServices,
+  context: ReturnType<typeof requireOrgContext>,
+  refs: {
+    counterpartyId?: string | null;
+    accountId?: string | null;
+    categoryId?: string | null;
+    projectId?: string | null;
+  },
+): Promise<void> {
+  const rows = await Promise.all([
+    refs.counterpartyId
+      ? services.ledgerCatalog.getCounterparty(context, refs.counterpartyId)
+      : Promise.resolve(null),
+    refs.accountId ? services.ledgerCatalog.getAccount(context, refs.accountId) : null,
+    refs.categoryId ? services.ledgerCatalog.getCategory(context, refs.categoryId) : null,
+    refs.projectId ? services.ledgerCatalog.getProject(context, refs.projectId) : null,
+  ]);
+  if (rows.some((row) => row !== null && !row.isActive)) {
+    throw new TreasuryValidationError(
+      "INACTIVE_REFERENCE",
+      "new transaction references must point to active catalog records",
+    );
+  }
 }
 
 export async function handleTreasuryTransactionsGet(
@@ -329,7 +368,10 @@ export async function handleTreasuryTransactionsPost(
   try {
     const body = await readJsonObject(request);
     rejectWatcherEnablement(body);
-    const organizationId = parseOrganizationIdFromUnknown(body.organization_id);
+    rejectCustodyMaterial(body);
+    const organizationId = parseOrganizationIdFromUnknown(
+      body.organization_id ?? body.organizationId,
+    );
     if (typeof organizationId !== "string") return organizationId;
     return withTreasuryAdmin({
       deps,
@@ -337,11 +379,74 @@ export async function handleTreasuryTransactionsPost(
       permission: "admin.treasury.mutate",
       fn: async ({ userId, services }) => {
         const context = requireOrgContext(organizationId);
+        const signedRaw = body.signed_amount_micros ?? body.signedAmountMicros;
+        const hasSignedAmount = signedRaw !== undefined && signedRaw !== null;
+        const signedAmount = hasSignedAmount
+          ? parseNonzeroSignedDecimalBigint(signedRaw, "signed_amount_micros")
+          : null;
+        const derivedDirection =
+          signedAmount === null
+            ? parseTxDirection(body.direction)
+            : signedAmount < 0n
+              ? "OUTFLOW"
+              : "INFLOW";
+        if (signedAmount !== null && body.direction !== undefined) {
+          const suppliedDirection = parseTxDirection(body.direction);
+          if (suppliedDirection !== derivedDirection) {
+            throw new TreasuryValidationError(
+              "SIGNED_DIRECTION_MISMATCH",
+              "direction must match the signed amount",
+            );
+          }
+        }
+        const absoluteSigned =
+          signedAmount === null ? null : signedAmount < 0n ? -signedAmount : signedAmount;
+        const suppliedAccounting =
+          body.accounting_amount_micros !== undefined || body.accountingAmountMicros !== undefined
+            ? parsePositiveDecimalBigint(
+                body.accounting_amount_micros ?? body.accountingAmountMicros,
+                "accounting_amount_micros",
+              )
+            : null;
+        if (
+          absoluteSigned !== null &&
+          suppliedAccounting !== null &&
+          suppliedAccounting !== absoluteSigned
+        ) {
+          throw new TreasuryValidationError(
+            "SIGNED_ACCOUNTING_AMOUNT_MISMATCH",
+            "signed amount magnitude must equal accounting_amount_micros",
+          );
+        }
+        const statusRaw = body.status;
+        let initialStatus: "PLANNED" | "NEEDS_REVIEW" | undefined;
+        if (statusRaw !== undefined) {
+          const requested = requireString(statusRaw, "status");
+          if (requested !== "PLANNED" && requested !== "NEEDS_REVIEW") {
+            throw new TreasuryValidationError(
+              "STATUS_GATE_REQUIRED",
+              "manual creation accepts only PLANNED or NEEDS_REVIEW; verification uses the audited command",
+            );
+          }
+          initialStatus = requested;
+        } else if (hasSignedAmount) {
+          initialStatus = "NEEDS_REVIEW";
+        }
+        const refs = {
+          counterpartyId: optionalString(
+            body.counterparty_id ?? body.counterpartyId,
+            "counterparty_id",
+          ),
+          accountId: optionalString(body.account_id ?? body.accountId, "account_id"),
+          categoryId: optionalString(body.category_id ?? body.categoryId, "category_id"),
+          projectId: optionalString(body.project_id ?? body.projectId, "project_id"),
+        };
+        await assertActiveLedgerReferences(services, context, refs);
         const created = await services.domain.transactions.createManualDraft(
           context,
           actor(userId),
           {
-            direction: parseTxDirection(body.direction),
+            direction: derivedDirection,
             kind: body.kind === undefined || body.kind === null ? null : parseTxKind(body.kind),
             nativeAmountAtomic: parsePositiveDecimalBigint(
               body.native_amount_atomic ?? body.nativeAmountAtomic,
@@ -356,14 +461,7 @@ export async function handleTreasuryTransactionsPost(
               body.native_contract ?? body.nativeContract,
               "native_contract",
             ),
-            accountingAmountMicros:
-              body.accounting_amount_micros !== undefined ||
-              body.accountingAmountMicros !== undefined
-                ? parsePositiveDecimalBigint(
-                    body.accounting_amount_micros ?? body.accountingAmountMicros,
-                    "accounting_amount_micros",
-                  )
-                : null,
+            accountingAmountMicros: absoluteSigned ?? suppliedAccounting,
             occurredAt: requireIsoDate(body.occurred_at ?? body.occurredAt, "occurred_at"),
             purpose: optionalString(body.purpose, "purpose"),
             budgetId:
@@ -381,6 +479,12 @@ export async function handleTreasuryTransactionsPost(
                     body.corrects_transaction_id ?? body.correctsTransactionId,
                     "corrects_transaction_id",
                   ),
+            ...refs,
+            internalNotes: optionalString(
+              body.notes ?? body.internal_notes ?? body.internalNotes,
+              "notes",
+            ),
+            initialStatus,
             reason: requireString(body.reason, "reason"),
           },
         );
@@ -429,6 +533,7 @@ export async function handleTreasuryTransactionCommandsPost(
             return adminSuccess({ transaction: serializeTransaction(tx) });
           }
           case "classify": {
+            await assertActiveLedgerReferences(services, context, patch ?? {});
             const tx = await services.domain.transactions.classify(context, admin, {
               transactionId: txId(),
               reason,
@@ -1117,8 +1222,38 @@ export async function handleTreasuryIdealBudgetCommandsPost(
     const organizationId = parseOrganizationIdFromUnknown(body.organization_id);
     if (typeof organizationId !== "string") return organizationId;
     const command = requireString(body.command, "command");
-    if (command !== "activate_public") {
+    if (command !== "activate_public" && command !== "refresh_from_categories") {
       return adminClientError(400, "UNKNOWN_COMMAND", "Unknown ideal-budget command");
+    }
+    if (command === "refresh_from_categories") {
+      return withTreasuryAdmin({
+        deps,
+        organizationId,
+        permission: "admin.treasury.mutate",
+        fn: async ({ userId, services }) => {
+          const context = requireOrgContext(organizationId);
+          const periodYear = requireInt(body.period_year ?? body.periodYear, "period_year");
+          const currency = requireString(body.currency, "currency");
+          const derived = await services.ledgerCatalog.deriveAnnualBudgetMicros(context, currency);
+          const created = await services.catalog.createIdealBudget(context, actor(userId), {
+            periodYear,
+            currency,
+            amountMicros: derived.amountMicros,
+            reason: requireString(body.reason, "reason"),
+            sourceMetadata: {
+              source: "TREASURY_CATEGORIES",
+              activeCategoryCount: derived.activeCategoryCount,
+            },
+          });
+          return adminSuccess({
+            idealBudget: serializeIdealBudget(created),
+            derivation: {
+              source: "TREASURY_CATEGORIES",
+              activeCategoryCount: derived.activeCategoryCount,
+            },
+          });
+        },
+      });
     }
     return withTreasuryAdmin({
       deps,
@@ -1798,6 +1933,355 @@ export async function handleTreasuryBreathPreviewGet(
       return adminSuccess({ preview });
     },
   });
+}
+
+export type TreasuryLedgerCatalogKind = "counterparties" | "accounts" | "categories" | "projects";
+
+function ledgerCatalogQuery(url: URL): TreasuryLedgerCatalogQuery {
+  const active = url.searchParams.get("active");
+  if (active !== null && active !== "true" && active !== "false") {
+    throw new TreasuryValidationError("INVALID_BODY", "active must be true or false");
+  }
+  return {
+    q: url.searchParams.get("q") ?? undefined,
+    active: active === null ? undefined : active === "true",
+    limit: parseBoundedLimit(url.searchParams.get("limit"), 50, 100),
+    afterName: url.searchParams.get("after_name") ?? url.searchParams.get("afterName") ?? undefined,
+    afterId: url.searchParams.get("after_id") ?? url.searchParams.get("afterId") ?? undefined,
+  };
+}
+
+export async function handleTreasuryLedgerCatalogGet(
+  request: Request,
+  deps: TreasuryAdminHandlerDeps,
+  kind: TreasuryLedgerCatalogKind,
+): Promise<AdminRouteHandlerResult> {
+  try {
+    const organizationId = orgFromQuery(request);
+    if (typeof organizationId !== "string") return organizationId;
+    const url = new URL(request.url);
+    return withTreasuryAdmin({
+      deps,
+      organizationId,
+      permission: "admin.treasury.read",
+      fn: async ({ services }) => {
+        const context = requireOrgContext(organizationId);
+        const id = url.searchParams.get("id")?.trim();
+        if (id) {
+          switch (kind) {
+            case "counterparties":
+              return adminSuccess({
+                counterparty: serializeCounterpartyDetail(
+                  await services.ledgerCatalog.getCounterparty(context, id),
+                ),
+              });
+            case "accounts":
+              return adminSuccess({
+                account: serializeAccountDetail(
+                  await services.ledgerCatalog.getAccount(context, id),
+                ),
+              });
+            case "categories":
+              return adminSuccess({
+                category: serializeCategory(await services.ledgerCatalog.getCategory(context, id)),
+              });
+            case "projects":
+              return adminSuccess({
+                project: serializeProject(await services.ledgerCatalog.getProject(context, id)),
+              });
+          }
+        }
+        const query = ledgerCatalogQuery(url);
+        switch (kind) {
+          case "counterparties": {
+            const page = await services.ledgerCatalog.listCounterparties(context, query);
+            return adminSuccess({
+              counterparties: page.items.map(serializeCounterpartySummary),
+              next: page.next,
+            });
+          }
+          case "accounts": {
+            const page = await services.ledgerCatalog.listAccounts(context, query);
+            return adminSuccess({
+              accounts: page.items.map(serializeAccountSummary),
+              next: page.next,
+            });
+          }
+          case "categories": {
+            const page = await services.ledgerCatalog.listCategories(context, query);
+            return adminSuccess({ categories: page.items.map(serializeCategory), next: page.next });
+          }
+          case "projects": {
+            const page = await services.ledgerCatalog.listProjects(context, query);
+            return adminSuccess({ projects: page.items.map(serializeProject), next: page.next });
+          }
+        }
+      },
+    });
+  } catch (err) {
+    return mapTreasuryHttpError(err);
+  }
+}
+
+export async function handleTreasuryLedgerCatalogPost(
+  request: Request,
+  deps: TreasuryAdminHandlerDeps,
+  kind: TreasuryLedgerCatalogKind,
+): Promise<AdminRouteHandlerResult> {
+  try {
+    const body = await readJsonObject(request);
+    rejectCustodyMaterial(body);
+    const organizationId = parseOrganizationIdFromUnknown(
+      body.organization_id ?? body.organizationId,
+    );
+    if (typeof organizationId !== "string") return organizationId;
+    return withTreasuryAdmin({
+      deps,
+      organizationId,
+      permission: "admin.treasury.mutate",
+      fn: async ({ userId, services }) => {
+        const context = requireOrgContext(organizationId);
+        const admin = actor(userId);
+        const reason = requireString(body.reason, "reason");
+        switch (kind) {
+          case "counterparties":
+            return adminSuccess({
+              counterparty: serializeCounterpartyDetail(
+                await services.ledgerCatalog.createCounterparty(context, admin, {
+                  displayName: requireString(body.display_name ?? body.displayName, "display_name"),
+                  websiteUrl: optionalString(body.website_url ?? body.websiteUrl, "website_url"),
+                  email: optionalString(body.email, "email"),
+                  phone: optionalString(body.phone, "phone"),
+                  paymentInstructions: optionalString(
+                    body.payment_instructions ?? body.paymentInstructions,
+                    "payment_instructions",
+                  ),
+                  waiaUsername: optionalString(
+                    body.waia_username ?? body.waiaUsername,
+                    "waia_username",
+                  ),
+                  reason,
+                }),
+              ),
+            });
+          case "accounts":
+            return adminSuccess({
+              account: serializeAccountDetail(
+                await services.ledgerCatalog.createAccount(context, admin, {
+                  displayName: requireString(body.display_name ?? body.displayName, "display_name"),
+                  kind: parseEnum(body.kind, treasuryAccountKindEnum, "kind"),
+                  currency: requireString(body.currency, "currency"),
+                  network: optionalString(body.network, "network"),
+                  address: optionalString(body.address, "address"),
+                  maskedRequisites: optionalString(
+                    body.masked_requisites ?? body.maskedRequisites,
+                    "masked_requisites",
+                  ),
+                  watchedAddressId: optionalString(
+                    body.watched_address_id ?? body.watchedAddressId,
+                    "watched_address_id",
+                  ),
+                  reason,
+                }),
+              ),
+            });
+          case "categories":
+            return adminSuccess({
+              category: serializeCategory(
+                await services.ledgerCatalog.createCategory(context, admin, {
+                  code: requireString(body.code, "code"),
+                  name: requireString(body.name, "name"),
+                  description: optionalString(body.description, "description"),
+                  monthlyBudgetMicros: parseNonnegativeDecimalBigint(
+                    body.monthly_budget_micros ?? body.monthlyBudgetMicros,
+                    "monthly_budget_micros",
+                  ),
+                  currency: requireString(body.currency, "currency"),
+                  reason,
+                }),
+              ),
+            });
+          case "projects":
+            return adminSuccess({
+              project: serializeProject(
+                await services.ledgerCatalog.createProject(context, admin, {
+                  name: requireString(body.name, "name"),
+                  description: optionalString(body.description, "description"),
+                  startsOn: optionalString(body.starts_on ?? body.startsOn, "starts_on"),
+                  endsOn: optionalString(body.ends_on ?? body.endsOn, "ends_on"),
+                  reason,
+                }),
+              ),
+            });
+        }
+      },
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "INVALID_JSON") {
+      return adminClientError(400, "INVALID_BODY", "JSON object required.");
+    }
+    return mapTreasuryHttpError(err);
+  }
+}
+
+export async function handleTreasuryLedgerCatalogPatch(
+  request: Request,
+  deps: TreasuryAdminHandlerDeps,
+  kind: TreasuryLedgerCatalogKind,
+): Promise<AdminRouteHandlerResult> {
+  try {
+    const body = await readJsonObject(request);
+    rejectCustodyMaterial(body);
+    const organizationId = parseOrganizationIdFromUnknown(
+      body.organization_id ?? body.organizationId,
+    );
+    if (typeof organizationId !== "string") return organizationId;
+    return withTreasuryAdmin({
+      deps,
+      organizationId,
+      permission: "admin.treasury.mutate",
+      fn: async ({ userId, services }) => {
+        const context = requireOrgContext(organizationId);
+        const admin = actor(userId);
+        const id = requireString(body.id, "id");
+        const reason = requireString(body.reason, "reason");
+        const active =
+          body.is_active === undefined && body.isActive === undefined
+            ? undefined
+            : requireBoolean(body.is_active ?? body.isActive, "is_active");
+        switch (kind) {
+          case "counterparties":
+            return adminSuccess({
+              counterparty: serializeCounterpartyDetail(
+                await services.ledgerCatalog.updateCounterparty(context, admin, id, {
+                  displayName:
+                    body.display_name === undefined && body.displayName === undefined
+                      ? undefined
+                      : requireString(body.display_name ?? body.displayName, "display_name"),
+                  websiteUrl:
+                    body.website_url === undefined && body.websiteUrl === undefined
+                      ? undefined
+                      : optionalString(body.website_url ?? body.websiteUrl, "website_url"),
+                  email: body.email === undefined ? undefined : optionalString(body.email, "email"),
+                  phone: body.phone === undefined ? undefined : optionalString(body.phone, "phone"),
+                  paymentInstructions:
+                    body.payment_instructions === undefined &&
+                    body.paymentInstructions === undefined
+                      ? undefined
+                      : optionalString(
+                          body.payment_instructions ?? body.paymentInstructions,
+                          "payment_instructions",
+                        ),
+                  waiaUsername:
+                    body.waia_username === undefined && body.waiaUsername === undefined
+                      ? undefined
+                      : optionalString(body.waia_username ?? body.waiaUsername, "waia_username"),
+                  isActive: active,
+                  reason,
+                }),
+              ),
+            });
+          case "accounts":
+            return adminSuccess({
+              account: serializeAccountDetail(
+                await services.ledgerCatalog.updateAccount(context, admin, id, {
+                  displayName:
+                    body.display_name === undefined && body.displayName === undefined
+                      ? undefined
+                      : requireString(body.display_name ?? body.displayName, "display_name"),
+                  kind:
+                    body.kind === undefined
+                      ? undefined
+                      : parseEnum(body.kind, treasuryAccountKindEnum, "kind"),
+                  currency:
+                    body.currency === undefined
+                      ? undefined
+                      : requireString(body.currency, "currency"),
+                  network:
+                    body.network === undefined
+                      ? undefined
+                      : optionalString(body.network, "network"),
+                  address:
+                    body.address === undefined
+                      ? undefined
+                      : optionalString(body.address, "address"),
+                  maskedRequisites:
+                    body.masked_requisites === undefined && body.maskedRequisites === undefined
+                      ? undefined
+                      : optionalString(
+                          body.masked_requisites ?? body.maskedRequisites,
+                          "masked_requisites",
+                        ),
+                  watchedAddressId:
+                    body.watched_address_id === undefined && body.watchedAddressId === undefined
+                      ? undefined
+                      : optionalString(
+                          body.watched_address_id ?? body.watchedAddressId,
+                          "watched_address_id",
+                        ),
+                  isActive: active,
+                  reason,
+                }),
+              ),
+            });
+          case "categories":
+            return adminSuccess({
+              category: serializeCategory(
+                await services.ledgerCatalog.updateCategory(context, admin, id, {
+                  code: body.code === undefined ? undefined : requireString(body.code, "code"),
+                  name: body.name === undefined ? undefined : requireString(body.name, "name"),
+                  description:
+                    body.description === undefined
+                      ? undefined
+                      : optionalString(body.description, "description"),
+                  monthlyBudgetMicros:
+                    body.monthly_budget_micros === undefined &&
+                    body.monthlyBudgetMicros === undefined
+                      ? undefined
+                      : parseNonnegativeDecimalBigint(
+                          body.monthly_budget_micros ?? body.monthlyBudgetMicros,
+                          "monthly_budget_micros",
+                        ),
+                  currency:
+                    body.currency === undefined
+                      ? undefined
+                      : requireString(body.currency, "currency"),
+                  isActive: active,
+                  reason,
+                }),
+              ),
+            });
+          case "projects":
+            return adminSuccess({
+              project: serializeProject(
+                await services.ledgerCatalog.updateProject(context, admin, id, {
+                  name: body.name === undefined ? undefined : requireString(body.name, "name"),
+                  description:
+                    body.description === undefined
+                      ? undefined
+                      : optionalString(body.description, "description"),
+                  startsOn:
+                    body.starts_on === undefined && body.startsOn === undefined
+                      ? undefined
+                      : optionalString(body.starts_on ?? body.startsOn, "starts_on"),
+                  endsOn:
+                    body.ends_on === undefined && body.endsOn === undefined
+                      ? undefined
+                      : optionalString(body.ends_on ?? body.endsOn, "ends_on"),
+                  isActive: active,
+                  reason,
+                }),
+              ),
+            });
+        }
+      },
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "INVALID_JSON") {
+      return adminClientError(400, "INVALID_BODY", "JSON object required.");
+    }
+    return mapTreasuryHttpError(err);
+  }
 }
 
 export { treasuryBackendUnavailable };

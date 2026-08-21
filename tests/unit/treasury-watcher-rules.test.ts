@@ -130,6 +130,10 @@ function verifiedTx(
     createdAt: now,
     updatedAt: now,
     ...overrides,
+    counterpartyId: overrides.counterpartyId ?? null,
+    accountId: overrides.accountId ?? null,
+    categoryId: overrides.categoryId ?? null,
+    projectId: overrides.projectId ?? null,
   };
 }
 

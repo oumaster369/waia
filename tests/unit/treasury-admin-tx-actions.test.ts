@@ -13,6 +13,7 @@ import type { AccountingStatus } from "@/lib/treasury-admin/publication";
 const STATUSES: AccountingStatus[] = [
   "DETECTED",
   "MANUAL_DRAFT",
+  "PLANNED",
   "NEEDS_REVIEW",
   "CLASSIFIED",
   "VERIFIED",

@@ -56,6 +56,10 @@ export type TreasuryTransactionRecord = {
   accountingDenominationPolicy: string | null;
   cashEffectMicros: bigint | null;
   counterpartyIsInternal: boolean;
+  counterpartyId: string | null;
+  accountId: string | null;
+  categoryId: string | null;
+  projectId: string | null;
   occurredAt: Date;
   purpose: string | null;
   category: string | null;
@@ -206,4 +210,8 @@ export type TreasurySemanticPatch = {
   detailSupersededById?: string | null;
   ledgerInceptionId?: string | null;
   counterpartyIsInternal?: boolean;
+  counterpartyId?: string | null;
+  accountId?: string | null;
+  categoryId?: string | null;
+  projectId?: string | null;
 };

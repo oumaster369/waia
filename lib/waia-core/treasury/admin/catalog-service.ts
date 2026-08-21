@@ -341,6 +341,7 @@ export function createTreasuryCatalogService(deps: {
         currency: string;
         amountMicros: bigint;
         reason: string;
+        sourceMetadata?: Record<string, unknown>;
       },
     ) {
       const scoped = requireOrgContext(context.organizationId);
@@ -369,6 +370,7 @@ export function createTreasuryCatalogService(deps: {
         record.id,
         scoped.organizationId,
         input.reason,
+        input.sourceMetadata,
       );
       return record;
     },

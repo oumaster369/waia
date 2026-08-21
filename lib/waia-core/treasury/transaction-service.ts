@@ -48,6 +48,12 @@ export type CreateManualDraftInput = {
   budgetId?: string | null;
   fundingNeedId?: string | null;
   correctsTransactionId?: string | null;
+  counterpartyId?: string | null;
+  accountId?: string | null;
+  categoryId?: string | null;
+  projectId?: string | null;
+  internalNotes?: string | null;
+  initialStatus?: Extract<TreasuryTxStatus, "PLANNED" | "NEEDS_REVIEW">;
   reason?: string | null;
 };
 
@@ -104,6 +110,10 @@ function digestTransaction(record: TreasuryTransactionRecord): string {
       accountingAmountMicros: record.accountingAmountMicros,
       cashEffectMicros: record.cashEffectMicros,
       accountingDenominationPolicy: record.accountingDenominationPolicy,
+      counterpartyId: record.counterpartyId,
+      accountId: record.accountId,
+      categoryId: record.categoryId,
+      projectId: record.projectId,
       correctsTransactionId: record.correctsTransactionId,
       duplicateOfTransactionId: record.duplicateOfTransactionId,
       detailSupersededById: record.detailSupersededById,
@@ -268,6 +278,10 @@ export function createTreasuryTransactionService(deps: TreasuryTransactionServic
         accountingDenominationPolicy: null,
         cashEffectMicros: null,
         counterpartyIsInternal: input.counterpartyIsInternal,
+        counterpartyId: null,
+        accountId: null,
+        categoryId: null,
+        projectId: null,
         occurredAt: input.occurredAt,
         purpose: null,
         category: null,
@@ -324,6 +338,12 @@ export function createTreasuryTransactionService(deps: TreasuryTransactionServic
       input: CreateManualDraftInput,
     ) {
       const scoped = requireOrgContext(context.organizationId);
+      if (input.initialStatus === "PLANNED" && input.occurredAt.getTime() <= now().getTime()) {
+        throw new TreasuryValidationError(
+          "PLANNED_TIME_REQUIRED",
+          "planned transactions must occur in the future",
+        );
+      }
       let cashEffectMicros: bigint | null = null;
       const accountingAmountMicros = input.accountingAmountMicros ?? null;
       if (input.kind && accountingAmountMicros !== null) {
@@ -356,6 +376,10 @@ export function createTreasuryTransactionService(deps: TreasuryTransactionServic
           input.accountingDenominationPolicy ?? USDT_NOMINAL_USD_POLICY_V1,
         cashEffectMicros,
         counterpartyIsInternal: false,
+        counterpartyId: input.counterpartyId ?? null,
+        accountId: input.accountId ?? null,
+        categoryId: input.categoryId ?? null,
+        projectId: input.projectId ?? null,
         occurredAt: input.occurredAt,
         purpose: input.purpose ?? null,
         category: null,
@@ -366,7 +390,7 @@ export function createTreasuryTransactionService(deps: TreasuryTransactionServic
         budgetId: input.budgetId ?? null,
         fundingNeedId: input.fundingNeedId ?? null,
         description: null,
-        internalNotes: null,
+        internalNotes: input.internalNotes ?? null,
         publicDescription: null,
         txHash: null,
         correctsTransactionId: input.correctsTransactionId ?? null,
@@ -387,7 +411,7 @@ export function createTreasuryTransactionService(deps: TreasuryTransactionServic
 
       return runAtomic(async () => {
         await bound.repository.insertTransaction(record);
-        return writeRevisionAndAudit({
+        const created = await writeRevisionAndAudit({
           context: scoped,
           actor,
           tx: record,
@@ -396,6 +420,15 @@ export function createTreasuryTransactionService(deps: TreasuryTransactionServic
           patch: { create: "MANUAL_DRAFT" },
           after: { status: record.status, id: record.id },
         });
+        return input.initialStatus
+          ? applyStatus(
+              scoped,
+              actor,
+              created,
+              input.initialStatus,
+              input.reason ?? `manual ${input.initialStatus.toLocaleLowerCase()}`,
+            )
+          : created;
       });
     },
 

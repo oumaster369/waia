@@ -20,7 +20,8 @@ export type TxActionAffordance = {
 
 const TRANSITIONS: Readonly<Record<AccountingStatus, readonly AccountingStatus[]>> = {
   DETECTED: ["NEEDS_REVIEW", "DUPLICATE", "RECONCILIATION_REQUIRED", "REJECTED"],
-  MANUAL_DRAFT: ["NEEDS_REVIEW", "REJECTED"],
+  MANUAL_DRAFT: ["PLANNED", "NEEDS_REVIEW", "REJECTED"],
+  PLANNED: ["NEEDS_REVIEW", "REJECTED"],
   NEEDS_REVIEW: ["CLASSIFIED", "REJECTED", "DUPLICATE", "RECONCILIATION_REQUIRED"],
   CLASSIFIED: ["VERIFIED", "NEEDS_REVIEW", "REJECTED", "RECONCILIATION_REQUIRED"],
   VERIFIED: ["RECONCILIATION_REQUIRED"],
@@ -50,7 +51,10 @@ export function isVerifiedFinancialLocked(status: AccountingStatus): boolean {
 /** Commands the operator may be offered. Impossible transitions are omitted. */
 export function transactionActionAffordances(status: AccountingStatus): TxActionAffordance[] {
   const actions: TxActionAffordance[] = [];
-  if (canGo(status, "NEEDS_REVIEW") && (status === "MANUAL_DRAFT" || status === "DETECTED")) {
+  if (
+    canGo(status, "NEEDS_REVIEW") &&
+    (status === "MANUAL_DRAFT" || status === "PLANNED" || status === "DETECTED")
+  ) {
     actions.push({ command: "submit_for_review", label: "Submit for review", impact: "medium" });
   }
   if (

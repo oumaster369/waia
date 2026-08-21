@@ -29,6 +29,14 @@ function iso(value: Date | null | undefined): string | null {
 }
 
 export function serializeTransaction(tx: TreasuryTransactionRecord): Record<string, unknown> {
+  const signedAmountMicros =
+    tx.accountingAmountMicros === null
+      ? null
+      : tx.direction === "OUTFLOW"
+        ? -tx.accountingAmountMicros
+        : tx.direction === "INTERNAL"
+          ? 0n
+          : tx.accountingAmountMicros;
   return {
     id: tx.id,
     organizationId: tx.organizationId,
@@ -45,7 +53,12 @@ export function serializeTransaction(tx: TreasuryTransactionRecord): Record<stri
     accountingAmountMicros: serializeDecimalBigint(tx.accountingAmountMicros),
     accountingDenominationPolicy: tx.accountingDenominationPolicy,
     cashEffectMicros: serializeDecimalBigint(tx.cashEffectMicros),
+    signedAmountMicros: serializeDecimalBigint(signedAmountMicros),
     counterpartyIsInternal: tx.counterpartyIsInternal,
+    counterpartyId: tx.counterpartyId,
+    accountId: tx.accountId,
+    categoryId: tx.categoryId,
+    projectId: tx.projectId,
     occurredAt: iso(tx.occurredAt),
     purpose: tx.purpose,
     category: tx.category,

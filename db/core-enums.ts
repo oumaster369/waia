@@ -109,11 +109,11 @@ export const settlementReconciliationResolutionTypeEnum = [
   "CLOSE_DUPLICATE",
 ] as const;
 
-
 /** DEE-606 Core Treasury / Transparency — accounting review status. */
 export const treasuryTxStatusEnum = [
   "DETECTED",
   "MANUAL_DRAFT",
+  "PLANNED",
   "NEEDS_REVIEW",
   "CLASSIFIED",
   "VERIFIED",
@@ -166,7 +166,12 @@ export const treasuryEvidenceKindEnum = [
   "CHAIN_PROVENANCE",
 ] as const;
 export const treasuryEvidenceVisibilityEnum = ["ADMIN_ONLY", "PUBLIC"] as const;
-export const treasuryAttributionStatusEnum = ["UNMATCHED", "ATTRIBUTED", "ANONYMOUS", "REVOKED"] as const;
+export const treasuryAttributionStatusEnum = [
+  "UNMATCHED",
+  "ATTRIBUTED",
+  "ANONYMOUS",
+  "REVOKED",
+] as const;
 export const treasuryAddressDirectionScopeEnum = ["INBOUND", "OUTBOUND", "BOTH"] as const;
 export const treasuryBalanceReconStatusEnum = [
   "MATCHED",
@@ -179,6 +184,15 @@ export const treasuryIdealBudgetStatusEnum = ["DRAFT", "ACTIVE", "SUPERSEDED"] a
 export const treasuryIdealBudgetPublicationEnum = ["PRIVATE", "PUBLIC"] as const;
 export const treasuryRunwayPlanStatusEnum = ["DRAFT", "ACTIVE", "SUPERSEDED"] as const;
 export const treasuryObservationStatusEnum = ["OBSERVED", "CONFIRMED", "DROPPED"] as const;
+
+/** DEE-661 organization-scoped Treasury account catalog kinds. */
+export const treasuryAccountKindEnum = [
+  "CRYPTO_WALLET",
+  "BANK_CARD",
+  "BANK_ACCOUNT",
+  "CASH",
+  "OTHER",
+] as const;
 
 /**
  * CANCELLED in settlementReconciliationCaseStatusEnum is reserved-forbidden:

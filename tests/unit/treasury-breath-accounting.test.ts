@@ -49,6 +49,14 @@ describe("DEE-606 WP-6 Breath accounting", () => {
       cashEffectMicros: 9_000_000n,
     });
     await seedTx(services, {
+      id: "planned-tx",
+      status: "PLANNED",
+      direction: "INFLOW",
+      kind: "CONTRIBUTION",
+      cashEffectMicros: 99_000_000n,
+      accountingAmountMicros: 99_000_000n,
+    });
+    await seedTx(services, {
       id: "opening",
       status: "VERIFIED",
       direction: "INFLOW",
