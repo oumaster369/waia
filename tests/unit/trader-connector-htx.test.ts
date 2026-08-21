@@ -392,6 +392,42 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
     });
   });
 
+  it("fails unknown on undocumented HTX order mechanics and preserves the raw row", async () => {
+    const connector = await validatedHtx(defaultHandlers({
+      "/v1/order/orders/": (url) => {
+        const orderId = url.pathname.split("/").pop()!;
+        return jsonResponse({
+          status: "ok",
+          data: {
+            id: Number(orderId),
+            symbol: "btcusdt",
+            price: "65000",
+            amount: "0.01",
+            "created-at": 1630633835224,
+            type: "buy-stop-limit",
+            "filled-amount": "0",
+            state: "submitted",
+            "client-order-id": "client-1",
+          },
+        });
+      },
+    }));
+    await expect(connector.placeOrder({
+      clientOrderId: "client-new-unknown-mechanics",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "65000",
+      quantity: "0.01",
+    })).rejects.toMatchObject({
+      name: "HtxUnknownOrderMechanicsError",
+      rawVenueObservation: {
+        type: "buy-stop-limit",
+        id: 357630527817872,
+      },
+    });
+  });
+
   it("cancels an order via signed POST", async () => {
     const connector = await validatedHtx(defaultHandlers());
     const canceled = await connector.cancelOrder("357630527817871");

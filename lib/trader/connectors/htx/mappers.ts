@@ -155,11 +155,33 @@ function formatDecimal(value: number): string {
   return value.toFixed(8).replace(/\.?0+$/, "") || "0";
 }
 
-function parseHtxOrderSideAndType(htxType: string): { side: OrderSide; type: OrderType } {
+class HtxUnknownOrderMechanicsError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(row: Readonly<Record<string, unknown>>) {
+    super(`[trader] HTX order mechanics are fail-unknown: ${String(row.type)}`);
+    this.name = "HtxUnknownOrderMechanicsError";
+    this.rawVenueObservation = Object.freeze({ ...row });
+  }
+}
+
+function parseHtxOrderSideAndType(
+  htxType: string,
+  row: Readonly<Record<string, unknown>>,
+): { side: OrderSide; type: OrderType } {
   const normalized = htxType.toLowerCase();
-  const side: OrderSide = normalized.startsWith("sell") ? "sell" : "buy";
-  const type: OrderType = normalized.includes("market") ? "market" : "limit";
-  return { side, type };
+  switch (normalized) {
+    case "buy-limit":
+      return { side: "buy", type: "limit" };
+    case "sell-limit":
+      return { side: "sell", type: "limit" };
+    case "buy-market":
+      return { side: "buy", type: "market" };
+    case "sell-market":
+      return { side: "sell", type: "market" };
+    default:
+      throw new HtxUnknownOrderMechanicsError(row);
+  }
 }
 
 class HtxUnknownOrderStateError extends Error {
@@ -197,7 +219,7 @@ function msToIso(ms?: number): string {
 }
 
 export function mapHtxOrder(row: HtxOrderRow): Order {
-  const { side, type } = parseHtxOrderSideAndType(row.type);
+  const { side, type } = parseHtxOrderSideAndType(row.type, row);
   const createdAt = msToIso(row["created-at"]);
   const quantity = row.amount ?? row["filled-amount"] ?? "0";
   const filledQuantity = row["filled-amount"] ?? "0";
@@ -219,7 +241,7 @@ export function mapHtxOrder(row: HtxOrderRow): Order {
 }
 
 export function mapHtxMatchResult(row: HtxMatchResultRow): Trade {
-  const { side } = parseHtxOrderSideAndType(row.type);
+  const { side } = parseHtxOrderSideAndType(row.type, row);
   return {
     tradeId: String(row["trade-id"]),
     orderId: String(row["order-id"]),
