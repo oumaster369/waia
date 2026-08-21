@@ -12,19 +12,19 @@ includedIssues:
   - id: DEE-663
     role: risk-verdict-and-economic-size-contract
     completionPolicy: manual-after-exact-head-merge
-    status: planned
+    status: delivered
   - id: DEE-664
     role: protective-posture-semantics
     completionPolicy: manual-after-exact-head-merge
-    status: planned
+    status: delivered
   - id: DEE-665
     role: allowance-admission-and-postgres-ledger
     completionPolicy: manual-after-exact-head-merge
-    status: planned
+    status: delivered
   - id: DEE-666
     role: atomic-consumption-and-connector-guard
     completionPolicy: manual-after-exact-head-merge
-    status: planned
+    status: delivered
 deferredIssues: [DEE-651-global-legacy-connector-cutover]
 blockedByActiveWork: []
 linearStatusFlow:
@@ -32,16 +32,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: WP0
-  completedWorkPackages: []
-  remainingWorkPackages: [WP0, WP1, WP2, WP3, WP4, WP5]
+  status: validating-frozen-head
+  currentWorkPackage: WP5
+  completedWorkPackages: [WP0, WP1, WP2, WP3, WP4]
+  remainingWorkPackages: [WP5]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 3117675275c2f7b0f0cb0e4865ce2cfa656bb3a4
+  lastValidatedGitSha: 09743189a2d7fbad3b725a8ab86fed43646bf4f2
   lastValidationAt: "2026-08-21"
   blockedReason: null
-  nextAction: "Commit the admitted manifest before implementing DEE-663."
+  nextAction: "Commit the frozen manifest, run the one full local suite, and obtain the fresh independent exact-head adversarial review."
 provenance:
   createdFrom: human-ratified-delegation
   gapRegistry: null

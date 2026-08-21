@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-662",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -28,7 +28,7 @@
   "includedChildren": [
     {
       "issue": "DEE-663",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Pure Risk V2 contract: canonical verdict vocabulary, deterministic legacy mapping without history rewrite, sealed RiskVerdictV2 with exact Decision/economic authority bindings, and exact continuous/discrete EconomicAdmissibleSizeSet intersection.",
       "dependencies": [],
@@ -39,6 +39,11 @@
       "expectedFileOrSchemaSurfaces": [
         "lib/trader/risk/v2/risk-verdict-contract-v2.ts",
         "lib/trader/risk/v2/economic-size-intersection-v2.ts",
+        "tests/unit/trader-risk-v2-contract.test.ts"
+      ],
+      "actualFiles": [
+        "lib/trader/risk/v2/economic-size-intersection-v2.ts",
+        "lib/trader/risk/v2/risk-verdict-contract-v2.ts",
         "tests/unit/trader-risk-v2-contract.test.ts"
       ],
       "riskTier": "T3",
@@ -57,6 +62,19 @@
         "pnpm typecheck",
         "scoped eslint"
       ],
+      "acceptanceEvidence": [
+        "Canonical verdicts and deterministic legacy mapping are sealed without historical rewrites.",
+        "Decision/economic authority digests are pinned and exact continuous/discrete intersections fail closed.",
+        "Six focused contract tests, scoped lint, and typecheck passed."
+      ],
+      "integratedCommits": [
+        "aeb774f333ec74be8473f04863ce8538a5669610"
+      ],
+      "tests": [
+        "pnpm test --run tests/unit/trader-risk-v2-contract.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
       "execution": {
         "wave": 1,
         "mode": "serialized"
@@ -64,7 +82,7 @@
     },
     {
       "issue": "DEE-664",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Protective Risk V2 posture semantics NORMAL/CLOSE_ONLY/HALT/KILLED, strict non-reversing long-only exposure reduction, revoke/refuse/cancel control actions, and canonical L0-L6 reason bindings without liquidation authority.",
       "dependencies": [
@@ -75,6 +93,11 @@
         "The Human explicitly ratified R650-B protective semantics on 2026-08-21."
       ],
       "expectedFileOrSchemaSurfaces": [
+        "lib/trader/risk/v2/protective-posture-v2.ts",
+        "lib/trader/risk/v2/risk-reason-codes-v2.ts",
+        "tests/unit/trader-risk-v2-protective-posture.test.ts"
+      ],
+      "actualFiles": [
         "lib/trader/risk/v2/protective-posture-v2.ts",
         "lib/trader/risk/v2/risk-reason-codes-v2.ts",
         "tests/unit/trader-risk-v2-protective-posture.test.ts"
@@ -96,6 +119,19 @@
         "pnpm typecheck",
         "scoped eslint"
       ],
+      "acceptanceEvidence": [
+        "NORMAL/CLOSE_ONLY/HALT/KILLED semantics are closed and CLOSE_ONLY permits only strict long-only exposure reduction.",
+        "HALT/KILLED cannot originate liquidation authority; revoke/refuse and L0-L6 reasons remain explicit.",
+        "Six focused posture tests, cumulative A tests, scoped lint, and typecheck passed."
+      ],
+      "integratedCommits": [
+        "18d01d3903190589dbba58d6d643bbca34ef0ea2"
+      ],
+      "tests": [
+        "pnpm test --run tests/unit/trader-risk-v2-protective-posture.test.ts tests/unit/trader-risk-v2-contract.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
       "execution": {
         "wave": 2,
         "mode": "serialized"
@@ -103,7 +139,7 @@
     },
     {
       "issue": "DEE-665",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "RiskAllowanceV2, atomic Risk-sequenced admission and reservation accounting, immutable verdict table, allowance lifecycle projection, append-only digest-chained enforcement ledger, typed schema, privileged org-scoped Postgres repository, and RLS/tenant/concurrency proof.",
       "dependencies": [
@@ -125,6 +161,18 @@
         "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
         "docs/migrations/DEE-64-TRACKER.md"
       ],
+      "actualFiles": [
+        "db/migrations_postgres/0156_trader_risk_v2.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "db/schema.postgres.ts",
+        "docs/migrations/DEE-64-TRACKER.md",
+        "lib/trader/risk/v2/risk-admission-service-v2.ts",
+        "lib/trader/risk/v2/risk-allowance-repository-postgres.ts",
+        "lib/trader/risk/v2/risk-allowance-v2.ts",
+        "tests/integration/postgres-risk-v2.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "tests/unit/trader-risk-allowance-v2.test.ts"
+      ],
       "riskTier": "T3",
       "humanGate": {
         "status": "t3-scope-preauthorized",
@@ -144,6 +192,21 @@
         "pnpm typecheck",
         "scoped eslint"
       ],
+      "acceptanceEvidence": [
+        "One additive PostgreSQL migration implements immutable verdicts, allowance projection, append-only digest-chained enforcement events, exact order bindings, composite organization integrity, RLS deny posture, and required indexes without legacy rewrites.",
+        "Privileged repositories prove deterministic atomic admission, reservation accounting, idempotency, tenant isolation, append-only enforcement, and serialized concurrency.",
+        "Clean empty-database auth prelude/migration/smoke passed; focused allowance/migration unit tests and real PostgreSQL RLS/CRUD/append-only/concurrency tests passed. No production or Supabase apply occurred."
+      ],
+      "integratedCommits": [
+        "5225012c9ecafa2dd04080754080ec22c7e2256f"
+      ],
+      "tests": [
+        "pnpm test --run tests/unit/trader-risk-allowance-v2.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "WAIA_PG_INTEGRATION=1 pnpm test --run tests/integration/postgres-risk-v2.test.ts",
+        "clean pnpm db:postgres:auth-prelude, pnpm db:migrate:postgres, and pnpm db:smoke:postgres",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
       "execution": {
         "wave": 3,
         "mode": "serialized"
@@ -151,7 +214,7 @@
     },
     {
       "issue": "DEE-666",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Consumption-time atomic allowance claim and exact order binding, current posture/kill/reconciliation TOCTOU recheck, same-bound-order uncertain continuation, partial-fill exhaustion, and static/runtime proof that connector submission is dominated by a consumed allowance guard.",
       "scopeClarification": "The admitted consumer-proof wording applies to every order entering the Risk V2 branch. Global legacy connector-caller cutover is not claimed and is explicitly handed to DEE-651.",
@@ -178,6 +241,15 @@
         "tests/unit/trader-risk-v2-execution-consumption.test.ts",
         "tests/integration/postgres-risk-v2.test.ts"
       ],
+      "actualFiles": [
+        "lib/trader/execution/execution-service.ts",
+        "lib/trader/execution/execution-service.types.ts",
+        "lib/trader/execution/order-repository.types.ts",
+        "lib/trader/execution/repository-postgres.ts",
+        "lib/trader/risk/v2/risk-allowance-repository-postgres.ts",
+        "tests/integration/postgres-risk-v2.test.ts",
+        "tests/unit/trader-risk-v2-execution-consumption.test.ts"
+      ],
       "riskTier": "T3",
       "humanGate": {
         "status": "t3-scope-preauthorized",
@@ -197,6 +269,23 @@
         "pnpm typecheck",
         "scoped eslint"
       ],
+      "acceptanceEvidence": [
+        "Every Risk V2 submission either atomically consumes and binds its exact allowance/order or returns refusal before connector submission; no Risk V2 fallthrough exists.",
+        "Consumption rechecks nonce, expiry, exact order, posture, kill, reconciliation, and Reality authority; refusal is terminal and ledger-backed.",
+        "Same-bound uncertain continuation does not resend, competing claims serialize to one order, and partial fills create no residual allowance authority.",
+        "Four Risk V2 consumer unit/static tests and eight real PostgreSQL TOCTOU/atomicity/concurrency/RLS tests passed. Global legacy caller cutover is not claimed and remains linked to DEE-651."
+      ],
+      "integratedCommits": [
+        "b26028f9b9115e9f588d8a14f99c0f038aa679fa",
+        "5db7ae4cbad0033c3370f715e973fae51f6242bd"
+      ],
+      "tests": [
+        "pnpm test --run tests/unit/trader-risk-v2-execution-consumption.test.ts",
+        "WAIA_PG_INTEGRATION=1 pnpm test --run tests/integration/postgres-risk-v2.test.ts",
+        "cumulative R650-A/B/C focused tests",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
       "execution": {
         "wave": 4,
         "mode": "serialized"
@@ -205,9 +294,92 @@
   ],
   "deferredChildren": [],
   "integrationEvidence": {
-    "admissionEvidence": {
+    "preImplementationAdmission": {
       "status": "pass",
-      "reviewer": "Human ratification dated 2026-08-21 plus integration-owner verification of exact base, dependency state, unique issue/branch/PR inventory, frozen surfaces, and exclusions"
-    }
+      "manifestDigest": "0334ecd9dbb1c756dbf1571917a5d0b7b57908c95920bcaaa365d473d799a40c",
+      "manifestCommit": "033bf39dfb35d70f6d72e4b3870929716c429abf",
+      "manifestPath": "docs/plans/dee-662-risk-v2-integration-train.integration-train.json",
+      "reviewer": "Human-ratified integration owner"
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-663",
+        "status": "pass",
+        "reviewedCommits": ["aeb774f333ec74be8473f04863ce8538a5669610"],
+        "reviewedFiles": [
+          "lib/trader/risk/v2/economic-size-intersection-v2.ts",
+          "lib/trader/risk/v2/risk-verdict-contract-v2.ts",
+          "tests/unit/trader-risk-v2-contract.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-664",
+        "status": "pass",
+        "reviewedCommits": ["18d01d3903190589dbba58d6d643bbca34ef0ea2"],
+        "reviewedFiles": [
+          "lib/trader/risk/v2/protective-posture-v2.ts",
+          "lib/trader/risk/v2/risk-reason-codes-v2.ts",
+          "tests/unit/trader-risk-v2-protective-posture.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-665",
+        "status": "pass",
+        "reviewedCommits": ["5225012c9ecafa2dd04080754080ec22c7e2256f"],
+        "reviewedFiles": [
+          "db/migrations_postgres/0156_trader_risk_v2.sql",
+          "db/migrations_postgres/meta/_journal.json",
+          "db/schema.postgres.ts",
+          "docs/migrations/DEE-64-TRACKER.md",
+          "lib/trader/risk/v2/risk-admission-service-v2.ts",
+          "lib/trader/risk/v2/risk-allowance-repository-postgres.ts",
+          "lib/trader/risk/v2/risk-allowance-v2.ts",
+          "tests/integration/postgres-risk-v2.test.ts",
+          "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+          "tests/unit/trader-risk-allowance-v2.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-666",
+        "status": "pass",
+        "reviewedCommits": [
+          "b26028f9b9115e9f588d8a14f99c0f038aa679fa",
+          "5db7ae4cbad0033c3370f715e973fae51f6242bd"
+        ],
+        "reviewedFiles": [
+          "lib/trader/execution/execution-service.ts",
+          "lib/trader/execution/execution-service.types.ts",
+          "lib/trader/execution/order-repository.types.ts",
+          "lib/trader/execution/repository-postgres.ts",
+          "lib/trader/risk/v2/risk-allowance-repository-postgres.ts",
+          "tests/integration/postgres-risk-v2.test.ts",
+          "tests/unit/trader-risk-v2-execution-consumption.test.ts"
+        ]
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-663",
+        "status": "pass",
+        "commands": ["pnpm test --run tests/unit/trader-risk-v2-contract.test.ts", "pnpm typecheck", "scoped eslint"]
+      },
+      {
+        "afterIssue": "DEE-664",
+        "status": "pass",
+        "commands": ["pnpm test --run tests/unit/trader-risk-v2-contract.test.ts tests/unit/trader-risk-v2-protective-posture.test.ts", "pnpm typecheck", "scoped eslint"]
+      },
+      {
+        "afterIssue": "DEE-665",
+        "status": "pass",
+        "commands": ["focused Risk V2 unit tests", "clean PostgreSQL migration/smoke", "Risk V2 PostgreSQL admission/RLS/append-only/concurrency tests", "pnpm typecheck", "scoped eslint"]
+      },
+      {
+        "afterIssue": "DEE-666",
+        "status": "pass",
+        "commands": ["28 cumulative Risk V2 unit/static tests", "8 Risk V2 PostgreSQL TOCTOU/atomicity/RLS/concurrency tests", "pnpm lint", "pnpm typecheck", "pnpm build", "pnpm validate:canon", "pnpm validate:pr-governance"]
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   }
 }
