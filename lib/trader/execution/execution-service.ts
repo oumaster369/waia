@@ -132,6 +132,11 @@ async function refuseLegacyConnectorSubmission(input?: unknown): Promise<never> 
   throw new Error("LEGACY_ORDER_SUBMISSION_DISABLED: Execution V2 authority is required");
 }
 
+async function refuseLegacyConnectorCancellation(orderId?: unknown): Promise<never> {
+  void orderId;
+  throw new Error("LEGACY_ORDER_CANCELLATION_DISABLED: Execution V2 evidence is required");
+}
+
 function hasExactConsumedRiskV2Proof(
   context: OrgContext,
   input: SubmitOrderInput,
@@ -249,10 +254,7 @@ function lazyValidatedMockConnector(inner: MockExchangeConnector): ExchangeConne
       return inner.getOrder(orderId);
     },
     placeOrder: refuseLegacyConnectorSubmission,
-    cancelOrder: async (orderId) => {
-      await ensureValidated();
-      return inner.cancelOrder(orderId);
-    },
+    cancelOrder: refuseLegacyConnectorCancellation,
     getTradeHistory: async (filter) => {
       await ensureValidated();
       return inner.getTradeHistory(filter);
@@ -706,6 +708,9 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     if ("conflict" in cancelRequested) {
       throw new OrderVersionConflictError(cancelRequested.orderId, order.stateVersion);
     }
+    if (!historicalExecution?.enabled || order.executionMode !== "mock") {
+      return cancelRequested.order;
+    }
     const cancelled = await transitionOrConflict(context, cancelRequested.order, "CANCELLED");
     if ("conflict" in cancelled) {
       throw new OrderVersionConflictError(cancelled.orderId, cancelRequested.order.stateVersion);
@@ -736,8 +741,10 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     }
 
     try {
-      const cancelled = await transitionOrderCancelled(context, order);
-      return { status: "cancelled", order: cancelled };
+      const cancellation = await transitionOrderCancelled(context, order);
+      return cancellation.state === "CANCELLED"
+        ? { status: "cancelled", order: cancellation }
+        : { status: "cancel_requested", order: cancellation };
     } catch {
       return { status: "failed", order };
     }

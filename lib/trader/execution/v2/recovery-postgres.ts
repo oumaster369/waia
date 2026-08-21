@@ -60,6 +60,8 @@ type ReportAppend = Readonly<{
   venueOrderId: string | null;
 }>;
 
+type ExecutionV2Transaction = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
+
 function rawOrder(order: Order): Readonly<Record<string, unknown>> {
   return Object.freeze({
     orderId: order.orderId,
@@ -172,6 +174,39 @@ function rawConnectorError(error: unknown): Readonly<Record<string, unknown>> {
   return Object.freeze({ error: identity });
 }
 
+async function appendReportsInTransaction(
+  tx: ExecutionV2Transaction,
+  context: OrgContext,
+  executionAttemptId: string,
+  reports: readonly ReportAppend[],
+): Promise<ExecutionAttemptV2> {
+  const initial = await readExecutionAttemptProjectionV2Postgres(
+    tx,
+    context,
+    executionAttemptId,
+    true,
+  );
+  if (!initial) throw new Error("Execution V2 attempt not found");
+  const timeRows = await tx.execute<{ durable_at: Date | string }>(
+    sql`select date_trunc('milliseconds', transaction_timestamp()) as durable_at`,
+  );
+  const observedAtUtc = new Date(timeRows[0]!.durable_at).toISOString();
+  for (const report of reports) {
+    await appendExecutionReportV2FromExecutor(tx, context, {
+      executionReportId: deterministicExecutionUuidV2("report", {
+        executionAttemptContentDigestHex: initial.attempt.contentDigestHex,
+        reportType: report.reportType,
+        rawObservation: report.rawObservation,
+      }),
+      accountId: initial.attempt.accountId,
+      executionAttemptId,
+      ...report,
+      observedAtUtc,
+    });
+  }
+  return initial.attempt;
+}
+
 async function appendReports(
   db: WaiaPostgresDb,
   context: OrgContext,
@@ -179,33 +214,8 @@ async function appendReports(
   reports: readonly ReportAppend[],
 ): Promise<ExecutionAttemptV2> {
   const scoped = requireOrgContext(context.organizationId);
-  return runWaiaPostgresTransaction(db, async (tx) => {
-    const initial = await readExecutionAttemptProjectionV2Postgres(
-      tx,
-      scoped,
-      executionAttemptId,
-      true,
-    );
-    if (!initial) throw new Error("Execution V2 attempt not found");
-    const timeRows = await tx.execute<{ durable_at: Date | string }>(
-      sql`select date_trunc('milliseconds', transaction_timestamp()) as durable_at`,
-    );
-    const observedAtUtc = new Date(timeRows[0]!.durable_at).toISOString();
-    for (const report of reports) {
-      await appendExecutionReportV2FromExecutor(tx, scoped, {
-        executionReportId: deterministicExecutionUuidV2("report", {
-          executionAttemptContentDigestHex: initial.attempt.contentDigestHex,
-          reportType: report.reportType,
-          rawObservation: report.rawObservation,
-        }),
-        accountId: initial.attempt.accountId,
-        executionAttemptId,
-        ...report,
-        observedAtUtc,
-      });
-    }
-    return initial.attempt;
-  });
+  return runWaiaPostgresTransaction(db, (tx) =>
+    appendReportsInTransaction(tx, scoped, executionAttemptId, reports));
 }
 
 export async function markExecutionAttemptReconciliationRequiredV2Postgres(
@@ -369,62 +379,66 @@ export async function recordProtectiveCancelAcknowledgementV2Postgres(
   executionAttemptId: string,
   order: Order,
 ): Promise<ExecutionAttemptV2> {
-  const projection = await readExecutionAttemptProjectionV2Postgres(
-    db,
-    context,
-    executionAttemptId,
-  );
-  if (!projection) throw new Error("Execution V2 attempt not found for cancel acknowledgement");
-  const reports = await listExecutionReportsV2Postgres(db, context, executionAttemptId);
-  const observedVenueOrderIds = new Set(
-    reports.flatMap((report) => report.venueOrderId === null ? [] : [report.venueOrderId]),
-  );
-  const lastFillReport = [...reports].reverse().find(
-    (report) => report.reportType === "FILL_REPORT_OBSERVED",
-  );
-  const lastFillOrder = lastFillReport?.rawObservation.order;
-  const previouslyObservedFilledQuantity = typeof lastFillOrder === "object" &&
-    lastFillOrder !== null && "filledQuantity" in lastFillOrder &&
-    typeof lastFillOrder.filledQuantity === "string"
-    ? lastFillOrder.filledQuantity
-    : "0";
-  const rawObservation = {
-    order: rawOrder(order),
-    ...(order.rawVenueObservation === undefined
-      ? {}
-      : { connector: order.rawVenueObservation }),
-    replacementAuthorized: false,
-  };
-  let mismatchCause: string | null = null;
-  if (order.status !== "canceled") {
-    mismatchCause = "CANCEL_STATUS_MISMATCH";
-  } else if (!exactOrderMechanicsMatch(projection.attempt, order)) {
-    mismatchCause = "CANCEL_MECHANICS_MISMATCH";
-  } else if (compareDecimal(order.filledQuantity, previouslyObservedFilledQuantity) !== 0) {
-    mismatchCause = "CANCEL_FILL_TOTAL_MISMATCH";
-  } else if (observedVenueOrderIds.size !== 1 || !observedVenueOrderIds.has(order.orderId)) {
-    mismatchCause = "CANCEL_VENUE_ORDER_IDENTITY_MISMATCH";
-  }
-  if (mismatchCause !== null) {
-    return appendReports(db, context, executionAttemptId, [
-      {
-        reportType: "VENUE_STATUS_OBSERVED",
-        source: "CONNECTOR",
-        rawObservation,
-        venueOrderId: order.orderId || null,
-      },
-      {
-        reportType: "RECONCILIATION_REQUIRED",
-        source: "EXECUTION",
-        rawObservation: { cause: mismatchCause },
-        venueOrderId: order.orderId || null,
-      },
-    ]);
-  }
-  return appendReports(db, context, executionAttemptId, [{
-    reportType: "CANCEL_ACKNOWLEDGED",
-    source: "CONNECTOR",
-    rawObservation,
-    venueOrderId: order.orderId,
-  }]);
+  const scoped = requireOrgContext(context.organizationId);
+  return runWaiaPostgresTransaction(db, async (tx) => {
+    const projection = await readExecutionAttemptProjectionV2Postgres(
+      tx,
+      scoped,
+      executionAttemptId,
+      true,
+    );
+    if (!projection) throw new Error("Execution V2 attempt not found for cancel acknowledgement");
+    const reports = await listExecutionReportsV2Postgres(tx, scoped, executionAttemptId);
+    const observedVenueOrderIds = new Set(
+      reports.flatMap((report) => report.venueOrderId === null ? [] : [report.venueOrderId]),
+    );
+    const lastFillReport = [...reports].reverse().find(
+      (report) => report.reportType === "FILL_REPORT_OBSERVED",
+    );
+    const lastFillOrder = lastFillReport?.rawObservation.order;
+    const previouslyObservedFilledQuantity = typeof lastFillOrder === "object" &&
+      lastFillOrder !== null && "filledQuantity" in lastFillOrder &&
+      typeof lastFillOrder.filledQuantity === "string"
+      ? lastFillOrder.filledQuantity
+      : "0";
+    const rawObservation = {
+      order: rawOrder(order),
+      ...(order.rawVenueObservation === undefined
+        ? {}
+        : { connector: order.rawVenueObservation }),
+      replacementAuthorized: false,
+    };
+    let mismatchCause: string | null = null;
+    if (order.status !== "canceled") {
+      mismatchCause = "CANCEL_STATUS_MISMATCH";
+    } else if (!exactOrderMechanicsMatch(projection.attempt, order)) {
+      mismatchCause = "CANCEL_MECHANICS_MISMATCH";
+    } else if (compareDecimal(order.filledQuantity, previouslyObservedFilledQuantity) !== 0) {
+      mismatchCause = "CANCEL_FILL_TOTAL_MISMATCH";
+    } else if (observedVenueOrderIds.size !== 1 || !observedVenueOrderIds.has(order.orderId)) {
+      mismatchCause = "CANCEL_VENUE_ORDER_IDENTITY_MISMATCH";
+    }
+    const nextReports: readonly ReportAppend[] = mismatchCause === null
+      ? [{
+          reportType: "CANCEL_ACKNOWLEDGED",
+          source: "CONNECTOR",
+          rawObservation,
+          venueOrderId: order.orderId,
+        }]
+      : [
+          {
+            reportType: "VENUE_STATUS_OBSERVED",
+            source: "CONNECTOR",
+            rawObservation,
+            venueOrderId: order.orderId || null,
+          },
+          {
+            reportType: "RECONCILIATION_REQUIRED",
+            source: "EXECUTION",
+            rawObservation: { cause: mismatchCause },
+            venueOrderId: order.orderId || null,
+          },
+        ];
+    return appendReportsInTransaction(tx, scoped, executionAttemptId, nextReports);
+  });
 }

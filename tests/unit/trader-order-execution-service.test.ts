@@ -74,4 +74,20 @@ describe("legacy order execution recovery boundary (DEE-669 / E651-C)", () => {
     expect(fillWrite).toBeGreaterThan(exactTradeGuard);
     expect(source.slice(exactTradeGuard, fillWrite)).toContain("connector_uncertain");
   });
+
+  it("never fabricates a terminal cancellation without V2 venue evidence", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "lib/trader/execution/execution-service.ts"),
+      "utf8",
+    );
+    expect(source).toContain("LEGACY_ORDER_CANCELLATION_DISABLED");
+    const cancelRequest = source.indexOf('"CANCEL_REQUESTED"', source.indexOf(
+      "async function transitionOrderCancelled",
+    ));
+    const historicalGate = source.indexOf("!historicalExecution?.enabled", cancelRequest);
+    const terminalCancel = source.indexOf('"CANCELLED"', historicalGate);
+    expect(cancelRequest).toBeGreaterThan(-1);
+    expect(historicalGate).toBeGreaterThan(cancelRequest);
+    expect(terminalCancel).toBeGreaterThan(historicalGate);
+  });
 });
