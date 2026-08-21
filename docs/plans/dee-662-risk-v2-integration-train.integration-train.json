@@ -68,7 +68,8 @@
         "Seven focused contract tests, including executable verdict/action compatibility, scoped lint, and typecheck passed."
       ],
       "integratedCommits": [
-        "aeb774f333ec74be8473f04863ce8538a5669610"
+        "aeb774f333ec74be8473f04863ce8538a5669610",
+        "60762871dedec36f4c29a6e08ac3de6f5a92e366"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-risk-v2-contract.test.ts",
@@ -198,7 +199,8 @@
         "Clean empty-database auth prelude/migration/smoke passed; 12 focused allowance/migration unit tests and 10 real PostgreSQL RLS/CRUD/append-only/atomicity/concurrency tests passed. No production or Supabase apply occurred."
       ],
       "integratedCommits": [
-        "5225012c9ecafa2dd04080754080ec22c7e2256f"
+        "5225012c9ecafa2dd04080754080ec22c7e2256f",
+        "e9c003d45b2fc1c696daa365be6beb902aec8927"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-risk-allowance-v2.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
@@ -277,7 +279,8 @@
       ],
       "integratedCommits": [
         "b26028f9b9115e9f588d8a14f99c0f038aa679fa",
-        "5db7ae4cbad0033c3370f715e973fae51f6242bd"
+        "5db7ae4cbad0033c3370f715e973fae51f6242bd",
+        "d9476c8f5eb820c0e00d4f85b92c279a20c4aa70"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-risk-v2-execution-consumption.test.ts",
@@ -305,7 +308,7 @@
       {
         "issue": "DEE-663",
         "status": "pass",
-        "reviewedCommits": ["aeb774f333ec74be8473f04863ce8538a5669610"],
+        "reviewedCommits": ["aeb774f333ec74be8473f04863ce8538a5669610", "60762871dedec36f4c29a6e08ac3de6f5a92e366"],
         "reviewedFiles": [
           "lib/trader/risk/v2/economic-size-intersection-v2.ts",
           "lib/trader/risk/v2/risk-verdict-contract-v2.ts",
@@ -325,7 +328,7 @@
       {
         "issue": "DEE-665",
         "status": "pass",
-        "reviewedCommits": ["5225012c9ecafa2dd04080754080ec22c7e2256f"],
+        "reviewedCommits": ["5225012c9ecafa2dd04080754080ec22c7e2256f", "e9c003d45b2fc1c696daa365be6beb902aec8927"],
         "reviewedFiles": [
           "db/migrations_postgres/0156_trader_risk_v2.sql",
           "db/migrations_postgres/meta/_journal.json",
@@ -344,7 +347,8 @@
         "status": "pass",
         "reviewedCommits": [
           "b26028f9b9115e9f588d8a14f99c0f038aa679fa",
-          "5db7ae4cbad0033c3370f715e973fae51f6242bd"
+          "5db7ae4cbad0033c3370f715e973fae51f6242bd",
+          "d9476c8f5eb820c0e00d4f85b92c279a20c4aa70"
         ],
         "reviewedFiles": [
           "lib/trader/execution/execution-service.ts",
@@ -388,7 +392,11 @@
         "P1 reservation accounting trusted caller notional instead of deriving exact sealed notional",
         "P2 Risk V2 connector guard did not validate the consumer result against the exact request and durable bindings"
       ],
-      "remediationCommit": "690212f768f29198b6ba08f76a0b8fe613551612",
+      "remediationCommits": [
+        "60762871dedec36f4c29a6e08ac3de6f5a92e366",
+        "e9c003d45b2fc1c696daa365be6beb902aec8927",
+        "d9476c8f5eb820c0e00d4f85b92c279a20c4aa70"
+      ],
       "affectedGates": {
         "status": "pass",
         "commands": ["29 cumulative Risk V2 unit/static tests", "10 Risk V2 PostgreSQL RLS/append-only/atomicity/concurrency tests", "clean PostgreSQL auth prelude/migration/smoke", "pnpm typecheck", "scoped eslint", "pnpm build", "pnpm validate:canon"]
