@@ -285,6 +285,10 @@ export function verifiedManualTx(
     createdAt: now,
     updatedAt: now,
     ...input,
+    counterpartyId: input.counterpartyId ?? null,
+    accountId: input.accountId ?? null,
+    categoryId: input.categoryId ?? null,
+    projectId: input.projectId ?? null,
   };
 }
 

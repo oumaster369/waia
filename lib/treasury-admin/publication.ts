@@ -3,6 +3,7 @@ export type DetailPublicationState = "PRIVATE" | "DETAIL_PUBLIC" | "SUPERSEDED";
 export type AccountingStatus =
   | "DETECTED"
   | "MANUAL_DRAFT"
+  | "PLANNED"
   | "NEEDS_REVIEW"
   | "CLASSIFIED"
   | "VERIFIED"

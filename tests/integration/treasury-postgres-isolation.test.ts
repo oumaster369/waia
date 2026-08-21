@@ -60,7 +60,7 @@ describeWp8("DEE-606 WP-8 Postgres isolation + structural proof", () => {
     const applied = await handle.sql<{ count: string }[]>`
       SELECT count(*)::text AS count FROM drizzle.__drizzle_migrations
     `;
-    expect(Number(applied[0]?.count)).toBe(152);
+    expect(Number(applied[0]?.count)).toBe(156);
 
     const tip = await handle.sql<{ hash: string; created_at: string }[]>`
       SELECT hash, created_at::text FROM drizzle.__drizzle_migrations
@@ -68,7 +68,7 @@ describeWp8("DEE-606 WP-8 Postgres isolation + structural proof", () => {
       LIMIT 1
     `;
     expect(tip[0]?.hash).toBeTruthy();
-    expect(tip[0]?.created_at).toBe("1780000000151");
+    expect(tip[0]?.created_at).toBe("1780000000155");
 
     const monotonic = await handle.sql<{ created_at: string }[]>`
       SELECT created_at::text FROM drizzle.__drizzle_migrations ORDER BY id
@@ -85,7 +85,7 @@ describeWp8("DEE-606 WP-8 Postgres isolation + structural proof", () => {
       WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname LIKE 'treasury_%'
       ORDER BY c.relname
     `;
-    expect(tables.length).toBeGreaterThanOrEqual(20);
+    expect(tables.length).toBeGreaterThanOrEqual(24);
     expect(tables.every((row) => row.relrowsecurity)).toBe(true);
 
     const missingOrg = await handle.sql<{ relname: string }[]>`
@@ -116,14 +116,14 @@ describeWp8("DEE-606 WP-8 Postgres isolation + structural proof", () => {
       JOIN pg_namespace n ON n.oid = t.typnamespace
       WHERE n.nspname = 'public' AND t.typtype = 'e' AND t.typname LIKE 'treasury_%'
     `;
-    expect(Number(enums[0]?.count)).toBeGreaterThanOrEqual(18);
+    expect(Number(enums[0]?.count)).toBeGreaterThanOrEqual(19);
 
     const policies = await handle.sql<{ count: string }[]>`
       SELECT count(*)::text AS count
       FROM pg_policies
       WHERE schemaname = 'public' AND tablename LIKE 'treasury_%'
     `;
-    expect(Number(policies[0]?.count)).toBeGreaterThanOrEqual(80);
+    expect(Number(policies[0]?.count)).toBeGreaterThanOrEqual(96);
 
     const sameOrgFks = await handle.sql<{ count: string }[]>`
       SELECT count(*)::text AS count
@@ -133,14 +133,14 @@ describeWp8("DEE-606 WP-8 Postgres isolation + structural proof", () => {
         AND pg_get_constraintdef(oid) LIKE '%organization_id%'
         AND cardinality(conkey) > 1
     `;
-    expect(Number(sameOrgFks[0]?.count)).toBeGreaterThanOrEqual(24);
+    expect(Number(sameOrgFks[0]?.count)).toBeGreaterThanOrEqual(29);
 
     const checks = await handle.sql<{ count: string }[]>`
       SELECT count(*)::text AS count
       FROM pg_constraint
       WHERE contype = 'c' AND conrelid::regclass::text LIKE 'treasury_%'
     `;
-    expect(Number(checks[0]?.count)).toBeGreaterThanOrEqual(20);
+    expect(Number(checks[0]?.count)).toBeGreaterThanOrEqual(27);
   });
 
   it("6-7 anon and authenticated cannot CRUD treasury tables", async () => {
@@ -398,7 +398,7 @@ describeWp8("DEE-606 WP-8 Postgres isolation + structural proof", () => {
         AND cardinality(conkey) > 1
       ORDER BY conname
     `;
-    expect(liveFks.length).toBeGreaterThanOrEqual(24);
+    expect(liveFks.length).toBeGreaterThanOrEqual(29);
     expect(liveFks.map((row) => row.conname)).toEqual(
       expect.arrayContaining([
         "treasury_transactions_budget_same_org_fk",
@@ -409,6 +409,11 @@ describeWp8("DEE-606 WP-8 Postgres isolation + structural proof", () => {
         "treasury_evidence_links_evidence_same_org_fk",
         "treasury_commitments_budget_same_org_fk",
         "treasury_runway_snapshots_plan_same_org_fk",
+        "treasury_accounts_watched_address_same_org_fk",
+        "treasury_transactions_counterparty_same_org_fk",
+        "treasury_transactions_account_same_org_fk",
+        "treasury_transactions_category_same_org_fk",
+        "treasury_transactions_project_same_org_fk",
       ]),
     );
 

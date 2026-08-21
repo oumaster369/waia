@@ -45,6 +45,7 @@ import {
   platformRoleEnum,
   subscriptionStatusEnum,
   treasuryAddressDirectionScopeEnum,
+  treasuryAccountKindEnum,
   treasuryAttributionStatusEnum,
   treasuryBalanceReconStatusEnum,
   treasuryBudgetStatusEnum,
@@ -151,6 +152,9 @@ export const treasuryRunwayPlanStatusPgEnum = pgEnum("treasury_runway_plan_statu
 ]);
 export const treasuryObservationStatusPgEnum = pgEnum("treasury_observation_status", [
   ...treasuryObservationStatusEnum,
+]);
+export const treasuryAccountKindPgEnum = pgEnum("treasury_account_kind", [
+  ...treasuryAccountKindEnum,
 ]);
 
 /**
@@ -763,7 +767,9 @@ export const traderMiSourceTrust = pgTable(
   (t) => [
     unique("trader_mi_source_trust_id_organization_unique").on(t.id, t.organizationId),
     unique("trader_mi_source_trust_id_organization_source_unique").on(
-      t.id, t.organizationId, t.sourceId,
+      t.id,
+      t.organizationId,
+      t.sourceId,
     ),
     foreignKey({
       columns: [t.sourceId, t.organizationId],
@@ -883,7 +889,10 @@ export const traderMiRawStorageBindingV1 = pgTable(
   },
   (t) => [
     unique("tmrsb_v1_id_org_source_raw_uq").on(
-      t.id, t.organizationId, t.sourceId, t.rawBytesDigest,
+      t.id,
+      t.organizationId,
+      t.sourceId,
+      t.rawBytesDigest,
     ),
     foreignKey({
       columns: [t.sourceId, t.organizationId],
@@ -932,9 +941,7 @@ export const traderMiRawCaptureReceiptV1 = pgTable(
       foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
     }).onDelete("cascade"),
     foreignKey({
-      columns: [
-        t.storageBindingDigest, t.organizationId, t.sourceId, t.rawBytesDigest,
-      ],
+      columns: [t.storageBindingDigest, t.organizationId, t.sourceId, t.rawBytesDigest],
       foreignColumns: [
         traderMiRawStorageBindingV1.id,
         traderMiRawStorageBindingV1.organizationId,
@@ -994,7 +1001,10 @@ export const traderMiRawValidationReceiptV1 = pgTable(
   },
   (t) => [
     uniqueIndex("tmrvr_v1_org_capture_validator_uq").on(
-      t.organizationId, t.captureReceiptDigest, t.validatorId, t.validatorVersion,
+      t.organizationId,
+      t.captureReceiptDigest,
+      t.validatorId,
+      t.validatorVersion,
     ),
     foreignKey({
       columns: [t.captureReceiptDigest, t.organizationId, t.sourceId],
@@ -4189,6 +4199,129 @@ export const treasuryWatchedAddresses = pgTable(
   ],
 );
 
+/** DEE-661 admin-only counterparty catalog. Public identity remains attribution-consent owned. */
+export const treasuryCounterparties = pgTable(
+  "treasury_counterparties",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull(),
+    websiteUrl: text("website_url"),
+    email: text("email"),
+    phone: text("phone"),
+    paymentInstructions: text("payment_instructions"),
+    waiaUserId: uuid("waia_user_id").references(() => users.id, { onDelete: "set null" }),
+    waiaUsername: text("waia_username"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_counterparties_id_org_unique_fk_source").on(t.id, t.organizationId),
+    uniqueIndex("treasury_counterparties_org_username_unique").on(t.organizationId, t.waiaUsername),
+    uniqueIndex("treasury_counterparties_org_waia_user_unique").on(t.organizationId, t.waiaUserId),
+    index("treasury_counterparties_org_active_name_idx").on(
+      t.organizationId,
+      t.isActive,
+      t.displayName,
+    ),
+    check("treasury_counterparties_display_name_nonempty", sql`length(btrim("display_name")) > 0`),
+  ],
+);
+
+/** DEE-661 safe display/accounting identities only; custody secrets are forbidden by service validation. */
+export const treasuryAccounts = pgTable(
+  "treasury_accounts",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull(),
+    kind: treasuryAccountKindPgEnum("kind").notNull(),
+    currency: text("currency").notNull(),
+    network: text("network"),
+    address: text("address"),
+    maskedRequisites: text("masked_requisites"),
+    watchedAddressId: uuid("watched_address_id"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_accounts_id_org_unique_fk_source").on(t.id, t.organizationId),
+    uniqueIndex("treasury_accounts_org_name_unique").on(t.organizationId, t.displayName),
+    foreignKey({
+      columns: [t.watchedAddressId, t.organizationId],
+      foreignColumns: [treasuryWatchedAddresses.id, treasuryWatchedAddresses.organizationId],
+      name: "treasury_accounts_watched_address_same_org_fk",
+    }).onDelete("restrict"),
+    index("treasury_accounts_org_active_name_idx").on(t.organizationId, t.isActive, t.displayName),
+    index("treasury_accounts_watched_address_idx").on(t.watchedAddressId),
+    check("treasury_accounts_display_name_nonempty", sql`length(btrim("display_name")) > 0`),
+    check("treasury_accounts_currency_nonempty", sql`length(btrim("currency")) > 0`),
+  ],
+);
+
+/** DEE-661 mutable granular budget inputs; annual publication remains snapshot-owned. */
+export const treasuryCategories = pgTable(
+  "treasury_categories",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    monthlyBudgetMicros: bigint("monthly_budget_micros", { mode: "bigint" }).notNull().default(0n),
+    currency: text("currency").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_categories_id_org_unique_fk_source").on(t.id, t.organizationId),
+    uniqueIndex("treasury_categories_org_code_unique").on(t.organizationId, t.code),
+    uniqueIndex("treasury_categories_org_name_unique").on(t.organizationId, t.name),
+    index("treasury_categories_org_active_name_idx").on(t.organizationId, t.isActive, t.name),
+    check("treasury_categories_code_nonempty", sql`length(btrim("code")) > 0`),
+    check("treasury_categories_name_nonempty", sql`length(btrim("name")) > 0`),
+    check("treasury_categories_monthly_budget_nonneg", sql`"monthly_budget_micros" >= 0`),
+    check("treasury_categories_currency_nonempty", sql`length(btrim("currency")) > 0`),
+  ],
+);
+
+/** DEE-661 organization-scoped project/module catalog. */
+export const treasuryProjects = pgTable(
+  "treasury_projects",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    startsOn: date("starts_on"),
+    endsOn: date("ends_on"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_projects_id_org_unique_fk_source").on(t.id, t.organizationId),
+    uniqueIndex("treasury_projects_org_name_unique").on(t.organizationId, t.name),
+    index("treasury_projects_org_active_name_idx").on(t.organizationId, t.isActive, t.name),
+    check("treasury_projects_name_nonempty", sql`length(btrim("name")) > 0`),
+    check(
+      "treasury_projects_date_order",
+      sql`"starts_on" IS NULL OR "ends_on" IS NULL OR "ends_on" >= "starts_on"`,
+    ),
+  ],
+);
+
 export const treasuryWatcherCheckpoints = pgTable(
   "treasury_watcher_checkpoints",
   {
@@ -4454,6 +4587,10 @@ export const treasuryTransactions = pgTable(
     accountingDenominationPolicy: text("accounting_denomination_policy"),
     cashEffectMicros: bigint("cash_effect_micros", { mode: "bigint" }),
     counterpartyIsInternal: boolean("counterparty_is_internal").notNull().default(false),
+    counterpartyId: uuid("counterparty_id"),
+    accountId: uuid("account_id"),
+    categoryId: uuid("category_id"),
+    projectId: uuid("project_id"),
     occurredAt: timestamp("occurred_at", { withTimezone: true, mode: "date" }).notNull(),
     purpose: text("purpose"),
     category: text("category"),
@@ -4505,6 +4642,26 @@ export const treasuryTransactions = pgTable(
       name: "treasury_transactions_funding_need_same_org_fk",
     }).onDelete("set null"),
     foreignKey({
+      columns: [t.counterpartyId, t.organizationId],
+      foreignColumns: [treasuryCounterparties.id, treasuryCounterparties.organizationId],
+      name: "treasury_transactions_counterparty_same_org_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.accountId, t.organizationId],
+      foreignColumns: [treasuryAccounts.id, treasuryAccounts.organizationId],
+      name: "treasury_transactions_account_same_org_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.categoryId, t.organizationId],
+      foreignColumns: [treasuryCategories.id, treasuryCategories.organizationId],
+      name: "treasury_transactions_category_same_org_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.projectId, t.organizationId],
+      foreignColumns: [treasuryProjects.id, treasuryProjects.organizationId],
+      name: "treasury_transactions_project_same_org_fk",
+    }).onDelete("restrict"),
+    foreignKey({
       columns: [t.correctsTransactionId, t.organizationId],
       foreignColumns: [t.id, t.organizationId],
       name: "treasury_transactions_corrects_same_org_fk",
@@ -4533,6 +4690,10 @@ export const treasuryTransactions = pgTable(
     index("treasury_transactions_org_occurred_idx").on(t.organizationId, t.occurredAt),
     index("treasury_transactions_budget_idx").on(t.budgetId),
     index("treasury_transactions_kind_status_idx").on(t.kind, t.status),
+    index("treasury_transactions_org_counterparty_idx").on(t.organizationId, t.counterpartyId),
+    index("treasury_transactions_org_account_idx").on(t.organizationId, t.accountId),
+    index("treasury_transactions_org_category_idx").on(t.organizationId, t.categoryId),
+    index("treasury_transactions_org_project_idx").on(t.organizationId, t.projectId),
     check("treasury_transactions_native_nonneg", sql`"native_amount_atomic" >= 0`),
     check("treasury_transactions_decimals_nonneg", sql`"native_decimals" >= 0`),
     check(

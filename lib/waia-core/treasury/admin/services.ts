@@ -4,6 +4,13 @@ import type { AdminRouteHandlerResult } from "@/lib/waia-core/permissions/admin-
 import { createTreasuryCatalogService } from "@/lib/waia-core/treasury/admin/catalog-service";
 import { createMemoryTreasuryCatalogRepository } from "@/lib/waia-core/treasury/admin/memory-catalog-repository";
 import { createPostgresTreasuryCatalogRepository } from "@/lib/waia-core/treasury/admin/postgres-catalog-repository";
+import {
+  createTreasuryLedgerCatalogService,
+  type TreasuryLedgerCatalogService,
+} from "@/lib/waia-core/treasury/admin/ledger-catalog-service";
+import type { TreasuryLedgerCatalogRepository } from "@/lib/waia-core/treasury/admin/ledger-catalog-repository.types";
+import { createMemoryTreasuryLedgerCatalogRepository } from "@/lib/waia-core/treasury/admin/memory-ledger-catalog-repository";
+import { createPostgresTreasuryLedgerCatalogRepository } from "@/lib/waia-core/treasury/admin/postgres-ledger-catalog-repository";
 import { treasuryBackendUnavailable } from "@/lib/waia-core/treasury/admin/errors";
 import {
   createMemoryTreasuryBreathFactsRepository,
@@ -31,6 +38,8 @@ export type TreasuryAdminServices = {
   domain: TreasuryDomainServices;
   catalog: TreasuryCatalogService;
   catalogRepo: TreasuryCatalogRepository;
+  ledgerCatalog: TreasuryLedgerCatalogService;
+  ledgerCatalogRepo: TreasuryLedgerCatalogRepository;
   watcher: TreasuryWatcherRepository;
   breath: TreasuryBreathReadModelPort;
   evidenceStorage: TreasuryEvidenceStorage | null;
@@ -49,10 +58,19 @@ export function openProductionTreasuryAdmin(
     treasury: domain.repository,
     writeAudit: (input) => writeAuditLogPostgres(runtime.db, input),
   });
+  const ledgerCatalogRepo = createPostgresTreasuryLedgerCatalogRepository(runtime.db);
+  const ledgerCatalog = createTreasuryLedgerCatalogService({
+    repository: ledgerCatalogRepo,
+    writeAudit: (input) => writeAuditLogPostgres(runtime.db, input),
+    watchedAddressExists: async (context, id) =>
+      (await catalogRepo.getWatchedAddress(context, id)) !== null,
+  });
   return {
     domain,
     catalog,
     catalogRepo,
+    ledgerCatalog,
+    ledgerCatalogRepo,
     watcher: createPostgresTreasuryWatcherRepository(runtime.db),
     breath: createTreasuryBreathReadModel({
       facts: createPostgresTreasuryBreathFactsRepository(runtime.db),
@@ -68,6 +86,7 @@ export function createMemoryTreasuryAdminServices(
 ): TreasuryAdminServices {
   const domain = createMemoryTreasuryDomainServices(writeAudit);
   const catalogRepo = createMemoryTreasuryCatalogRepository();
+  const ledgerCatalogRepo = createMemoryTreasuryLedgerCatalogRepository();
   const watcher = createMemoryTreasuryWatcherRepository(domain.repository);
   const facts = createMemoryTreasuryBreathFactsRepository({
     treasury: domain.repository,
@@ -91,10 +110,19 @@ export function createMemoryTreasuryAdminServices(
     treasury: domain.repository,
     writeAudit: writeAuditAndIndex,
   });
+  const ledgerCatalog = createTreasuryLedgerCatalogService({
+    repository: ledgerCatalogRepo,
+    writeAudit: writeAuditAndIndex,
+    watchedAddressExists: async (context, id) =>
+      (await catalogRepo.getWatchedAddress(context, id)) !== null,
+    now: options?.now,
+  });
   return {
     domain,
     catalog,
     catalogRepo,
+    ledgerCatalog,
+    ledgerCatalogRepo,
     watcher,
     breath: createTreasuryBreathReadModel({
       facts,

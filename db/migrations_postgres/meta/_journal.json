@@ -1079,6 +1079,20 @@
       "when": 1780000000153,
       "tag": "0153_trader_mi_raw_capture_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "7",
+      "when": 1780000000154,
+      "tag": "0154_treasury_central_ledger_catalogs",
+      "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "7",
+      "when": 1780000000155,
+      "tag": "0155_treasury_central_ledger_catalogs_rls",
+      "breakpoints": true
     }
   ]
 }

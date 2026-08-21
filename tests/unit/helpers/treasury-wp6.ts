@@ -83,6 +83,10 @@ export async function seedTx(
     cashEffectMicros:
       input.cashEffectMicros === undefined ? money.accountingAmountMicros : input.cashEffectMicros,
     counterpartyIsInternal: input.counterpartyIsInternal ?? input.direction === "INTERNAL",
+    counterpartyId: input.counterpartyId ?? null,
+    accountId: input.accountId ?? null,
+    categoryId: input.categoryId ?? null,
+    projectId: input.projectId ?? null,
     occurredAt,
     purpose: input.purpose ?? "seed",
     category: input.category ?? null,

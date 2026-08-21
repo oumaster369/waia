@@ -34,6 +34,14 @@ export const treasuryAuditActions = {
   evidenceUnlink: "treasury.evidence.unlink",
   evidenceVisibility: "treasury.evidence.visibility",
   evidenceUpload: "treasury.evidence.upload",
+  counterpartyCreate: "treasury.counterparty.create",
+  counterpartyUpdate: "treasury.counterparty.update",
+  accountCreate: "treasury.account.create",
+  accountUpdate: "treasury.account.update",
+  categoryCreate: "treasury.category.create",
+  categoryUpdate: "treasury.category.update",
+  projectCreate: "treasury.project.create",
+  projectUpdate: "treasury.project.update",
 } as const;
 
 export type TreasuryAuditAction = (typeof treasuryAuditActions)[keyof typeof treasuryAuditActions];
@@ -53,4 +61,8 @@ export const treasuryEntityTypes = {
   settings: "treasury_publication_settings",
   attribution: "treasury_contribution_attribution",
   evidence: "treasury_evidence_object",
+  counterparty: "treasury_counterparty",
+  account: "treasury_account",
+  category: "treasury_category",
+  project: "treasury_project",
 } as const;

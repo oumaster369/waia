@@ -61,6 +61,10 @@ function tx(
     createdAt: new Date(),
     updatedAt: new Date(),
     ...partial,
+    counterpartyId: partial.counterpartyId ?? null,
+    accountId: partial.accountId ?? null,
+    categoryId: partial.categoryId ?? null,
+    projectId: partial.projectId ?? null,
   };
 }
 
@@ -96,6 +100,7 @@ describe("treasury contribution-share WP-2 foundation (DEE-606)", () => {
     nativeAmountAtomic: 3_000_000n,
   });
   const unverified = tx({ id: "c-draft", kind: "CONTRIBUTION", status: "CLASSIFIED" });
+  const planned = tx({ id: "c-planned", kind: "CONTRIBUTION", status: "PLANNED" });
   const expense = tx({
     id: "exp",
     kind: "EXPENSE",
@@ -107,6 +112,7 @@ describe("treasury contribution-share WP-2 foundation (DEE-606)", () => {
   it("only VERIFIED CONTRIBUTION qualifies", () => {
     expect(isQualifyingContribution(attributed)).toBe(true);
     expect(isQualifyingContribution(unverified)).toBe(false);
+    expect(isQualifyingContribution(planned)).toBe(false);
     expect(isQualifyingContribution(expense)).toBe(false);
   });
 
@@ -120,7 +126,7 @@ describe("treasury contribution-share WP-2 foundation (DEE-606)", () => {
       [anonymous.id, [attr({ transactionId: anonymous.id, status: "ANONYMOUS" })]],
     ]);
     const totals = computeContributionShareTotals({
-      contributions: [attributed, unmatched, anonymous, unverified],
+      contributions: [attributed, unmatched, anonymous, unverified, planned],
       adjustments: [],
       attributionsByTransactionId: attributions,
       contributorUserId: "user-1",
