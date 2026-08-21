@@ -209,12 +209,20 @@ describe("Risk V2 execution consumption boundary", () => {
     expect(consume).toHaveBeenCalledTimes(2);
   });
 
-  it("has one connector submission site guarded by consumed allowance proof", () => {
+  it("proves the Risk V2 branch is consumed before the sole connector submission site", () => {
     const source = readFileSync(
       join(process.cwd(), "lib/trader/execution/execution-service.ts"),
       "utf8",
     );
     expect(source.match(/connector\.placeOrder\(/g)).toHaveLength(1);
+    const riskV2BranchAt = source.indexOf("if (input.riskAllowanceV2)");
+    const legacyBranchAt = source.indexOf("const existingByClient", riskV2BranchAt);
+    const riskV2Branch = source.slice(riskV2BranchAt, legacyBranchAt);
+    expect(riskV2BranchAt).toBeGreaterThan(-1);
+    expect(riskV2Branch).toContain("await consumeRiskAllowanceV2");
+    expect(riskV2Branch).toContain('claim.status === "REFUSED"');
+    expect(riskV2Branch).toMatch(/await dispatchToConnector\([\s\S]*consumed,[\s\S]*\)/);
+
     const callAt = source.indexOf("connector.placeOrder(");
     const guardAt = source.indexOf("CONSUMED_ALLOWANCE_PROOF_MISSING_OR_MISMATCHED");
     expect(guardAt).toBeGreaterThan(-1);
