@@ -703,6 +703,57 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expect(networkCalls).toBe(0);
   });
 
+  it("uses wall-clock time after an attempt-lock wait before submission", async () => {
+    const original = await admittedBindInput();
+    const input: BindExecutionAuthorityV2Input = {
+      ...original,
+      plan: {
+        ...original.plan,
+        timingWindow: {
+          ...original.plan.timingWindow,
+          closesAtUtc: new Date(Date.now() + 3_000).toISOString(),
+        },
+      },
+    };
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    let releaseAttemptLock!: () => void;
+    const releaseAttemptLockPromise = new Promise<void>((resolve) => {
+      releaseAttemptLock = resolve;
+    });
+    let markAttemptLocked!: () => void;
+    const attemptLocked = new Promise<void>((resolve) => {
+      markAttemptLocked = resolve;
+    });
+    const blocker = sql.begin(async (tx) => {
+      await tx`
+        SELECT id FROM trader_execution_attempts_v2
+        WHERE organization_id = ${orgA}::uuid
+          AND id = ${bound.attempt.executionAttemptId}::uuid
+        FOR UPDATE
+      `;
+      markAttemptLocked();
+      await releaseAttemptLockPromise;
+    });
+    await attemptLocked;
+
+    let networkCalls = 0;
+    const dispatch = dispatchCommittedExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        networkCalls += 1;
+        return { forbidden: true };
+      },
+    );
+    await sql`select pg_sleep(3.2)`;
+    releaseAttemptLock();
+    await blocker;
+
+    await expect(dispatch).rejects.toThrow(/EXECUTION_WINDOW_CLOSED/);
+    expect(networkCalls).toBe(0);
+  }, 15_000);
+
   it("fails unknown after a network timeout and never blindly resends", async () => {
     const input = await admittedBindInput();
     const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);

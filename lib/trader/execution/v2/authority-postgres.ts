@@ -17,6 +17,7 @@ import {
 import type { RiskAllowanceV2 } from "@/lib/trader/risk/v2/risk-allowance-v2";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
+  assertExecutionPlanPolicyMembershipV2,
   createExecutionAttemptV2,
   createExecutionPlanV2,
   deterministicExecutionClientOrderId,
@@ -85,7 +86,7 @@ async function durableTransactionTime(
   tx: Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0],
 ): Promise<Date> {
   const rows = await tx.execute<{ durable_at: Date | string }>(
-    sql`select date_trunc('milliseconds', transaction_timestamp()) as durable_at`,
+    sql`select date_trunc('milliseconds', clock_timestamp()) as durable_at`,
   );
   const value = new Date(rows[0]!.durable_at);
   if (!Number.isFinite(value.getTime())) {
@@ -292,7 +293,6 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
     if (projection.lifecycleState !== "BOUND") {
       return { status: "REFUSED_ALREADY_STARTED" as const, lifecycleState: projection.lifecycleState };
     }
-    const durableAt = await durableTransactionTime(tx);
     const plan = await readExecutionPlanV2Postgres(
       tx,
       scoped,
@@ -313,6 +313,11 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
     )).for("update");
     const order = orderRows[0];
     if (!plan || !policy || !allowance || !order) {
+      throw new ExecutionV2AuthorityRefusedError("INCOMPLETE_DURABLE_EFFECT_BINDING");
+    }
+    try {
+      assertExecutionPlanPolicyMembershipV2(plan, policy);
+    } catch {
       throw new ExecutionV2AuthorityRefusedError("INCOMPLETE_DURABLE_EFFECT_BINDING");
     }
     const expectedAttempt = createExecutionAttemptV2({
@@ -351,6 +356,7 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
       order.executionAttemptDigest !== projection.attempt.contentDigestHex) {
       throw new ExecutionV2AuthorityRefusedError("INCOMPLETE_DURABLE_EFFECT_BINDING");
     }
+    const durableAt = await durableTransactionTime(tx);
     requireCurrentWindow(plan, policy, durableAt);
     await appendExecutionReportV2FromExecutor(tx, scoped, {
       executionReportId: deterministicExecutionUuidV2("report", {
