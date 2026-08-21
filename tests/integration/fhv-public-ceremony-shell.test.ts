@@ -1,10 +1,10 @@
 /**
  * DEE-436 — FHV public ceremony shell integration (spawn CLIs on SCHEMA_INTEGRATION_FIXTURE).
- * Classification: PR452_PUBLIC_FHV_CEREMONY_END_TO_END_PASS
+ * Classification: DEE670_PUBLIC_FHV_CEREMONY_EXECUTION_V2_FAIL_CLOSED
  */
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -15,7 +15,6 @@ import {
   FHV_DATASET_QUALIFICATION_RECEIPT_FILENAME,
   FHV_SCHEMA_INTEGRATION_FIXTURE_ROOT,
 } from "@/lib/trader/observability/fhv-dataset-qualification";
-import { FHV_FULL_HISTORICAL_AUTHORIZATION_RECEIPT_FILENAME } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { FHV_T4_CHECKOUT_IDENTITY_FILENAME } from "@/lib/trader/observability/fhv-t4-release-checkout-identity";
 
 const ORG_ID = "00000000-0000-4000-8000-000000000436";
@@ -152,7 +151,7 @@ function parseAuthorizeReceiptPath(stdout: string): string {
 }
 
 describe("DEE-436 FHV public ceremony shell integration", () => {
-  it("runs complete public CLI chain: qualify → freeze → auth → control-replay → authorize-full → full-run", () => {
+  it("fails closed at Control Replay without injected TEST_ONLY Execution V2 authority", () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-shell-ceremony-"));
     try {
       const { repoPath, releaseSha } = initCeremonyGitRepo(root);
@@ -183,7 +182,6 @@ describe("DEE-436 FHV public ceremony shell integration", () => {
 
       const runOneId = `fhv-shell-replay-1-${releaseSha.slice(0, 8)}`;
       const runTwoId = `fhv-shell-replay-2-${releaseSha.slice(0, 8)}`;
-      const fullRunId = `fhv-shell-full-${releaseSha.slice(0, 8)}`;
 
       const freezeOne = runCli("scripts/trader/fhv-freeze-config-cli.ts", [
         "--release-sha",
@@ -334,110 +332,9 @@ describe("DEE-436 FHV public ceremony shell integration", () => {
         "--control-replay-receipt-output",
         controlReplayReceiptOutput,
       ]);
-      expect(controlReplay.status, `${controlReplay.stderr}\n${controlReplay.stdout}`).toBe(0);
-      expect(controlReplay.stdout).toContain("CONTROL_REPLAY=PASS");
-      const controlReplayReceipt = JSON.parse(readFileSync(controlReplayReceiptOutput, "utf8"));
-      expect(controlReplayReceipt.holdoutStatus).toBe("SEALED_NOT_ACCESSED");
-      expect(controlReplayReceipt.digestsMatch).toBe(true);
-
-      const finalFreeze = runCli("scripts/trader/fhv-freeze-config-cli.ts", [
-        "--release-sha",
-        releaseSha,
-        "--release-tag",
-        RELEASE_TAG,
-        "--run-id",
-        fullRunId,
-        "--organization-id",
-        ORG_ID,
-        "--operator-id",
-        OPERATOR_ID,
-        "--artifact-dir",
-        join(root, "freeze-final"),
-        "--qualification-receipt-path",
-        qualificationReceiptPath,
-      ]);
-      expect(finalFreeze.status, finalFreeze.stderr).toBe(0);
-      const finalFreezePath = parseFreezeArtifactPath(finalFreeze.stdout);
-
-      const authReceiptDir = join(root, "full-auth");
-      const authorizeFull = runCli(
-        "scripts/trader/fhv-authorize-full-cli.ts",
-        [
-          "--release-sha",
-          releaseSha,
-          "--release-tag",
-          RELEASE_TAG,
-          "--run-id",
-          fullRunId,
-          "--organization-id",
-          ORG_ID,
-          "--operator-id",
-          OPERATOR_ID,
-          "--receipt-dir",
-          authReceiptDir,
-          "--configuration-freeze-path",
-          finalFreezePath,
-          "--qualification-receipt-path",
-          qualificationReceiptPath,
-          "--control-replay-receipt-path",
-          controlReplayReceiptOutput,
-        ],
-        {
-          ...process.env,
-          FHV_FULL_HISTORICAL_AUTHORIZATION: "AUTHORIZE-FULL-HISTORICAL-VALIDATION",
-        },
-      );
-      expect(authorizeFull.status, authorizeFull.stderr).toBe(0);
-      const fullAuthReceiptPath = join(
-        authReceiptDir,
-        FHV_FULL_HISTORICAL_AUTHORIZATION_RECEIPT_FILENAME,
-      );
-      expect(readFileSync(fullAuthReceiptPath, "utf8")).toContain("controlReplayReceiptDigest");
-
-      const fullCheckout = recordCheckoutIdentity({
-        repoPath,
-        releaseSha,
-        runRoot: join(root, "checkout-full"),
-        runId: fullRunId,
-      });
-      const fullRunArtifactRoot = join(root, "full-run-artifacts");
-      const fullRun = runCli(
-        "scripts/trader/fhv-full-run-cli.ts",
-        [
-          "--release-sha",
-          releaseSha,
-          "--release-tag",
-          RELEASE_TAG,
-          "--run-id",
-          fullRunId,
-          "--organization-id",
-          ORG_ID,
-          "--operator-id",
-          OPERATOR_ID,
-          "--artifact-root",
-          fullRunArtifactRoot,
-          "--configuration-freeze-path",
-          finalFreezePath,
-          "--authorization-receipt-path",
-          fullAuthReceiptPath,
-          "--dataset-qualification-receipt-path",
-          qualificationReceiptPath,
-          "--dataset-root",
-          FHV_SCHEMA_INTEGRATION_FIXTURE_ROOT,
-          "--manifest-path",
-          manifestPath,
-          "--checkout-identity-proof-path",
-          fullCheckout,
-          "--control-replay-receipt-path",
-          controlReplayReceiptOutput,
-        ],
-        {
-          ...process.env,
-          FHV_FULL_HISTORICAL_AUTHORIZATION: "AUTHORIZE-FULL-HISTORICAL-VALIDATION",
-        },
-      );
-      expect(fullRun.status, `${fullRun.stderr}\n${fullRun.stdout}`).toBe(0);
-      expect(fullRun.stdout).toContain("FHV_SCHEMA_INTEGRATION_CEREMONY_PASS");
+      expect(controlReplay.status, `${controlReplay.stderr}\n${controlReplay.stdout}`).toBe(1);
+      expect(controlReplay.stdout).toContain("CONTROL_REPLAY=FAIL");
+      expect(controlReplay.stdout).toContain("TEST_ONLY_EXECUTION_V2_AUTHORITY_REQUIRED");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
