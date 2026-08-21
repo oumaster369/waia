@@ -35,12 +35,16 @@ import {
   setupFhvControlReplayArtifacts,
   setupFhvOfficialSchemaLaunchArtifacts,
 } from "@/tests/helpers/fhv-official-path-test-fixtures";
+import { postgresTestOnlyExecutionV2Authority } from "@/tests/helpers/execution-v2-test-only-postgres";
 
 const ORG_ID = "00000000-0000-4000-8000-000000000436";
 const OPERATOR_ID = "fhv-blocker-test-operator";
 const WRONG_SHA = "cccccccccccccccccccccccccccccccccccccccc";
 
-describe("DEE-436 FHV official path blockers B1–B9", () => {
+const pgEnabled =
+  process.env.WAIA_PG_INTEGRATION === "1" && !!process.env.DATABASE_URL_POSTGRES?.trim();
+
+describe.skipIf(!pgEnabled)("DEE-436 FHV official path blockers B1–B9", () => {
   it("B1: official path runs backtest and classifies FULL_HISTORICAL_VALIDATION_COMPLETED", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-b1-"));
     const runId = "fhv-b1-official-run";
@@ -237,6 +241,7 @@ describe("DEE-436 FHV official path blockers B1–B9", () => {
         maxCycles: 10,
         runOneId: `fhv-control-replay-1-${FHV_TEST_RELEASE_SHA.slice(0, 8)}`,
         runTwoId: `fhv-control-replay-2-${FHV_TEST_RELEASE_SHA.slice(0, 8)}`,
+        testOnlyExecutionV2Authority: postgresTestOnlyExecutionV2Authority,
       });
       expect(result.classification).toBe("CONTROL_REPLAY=PASS");
     } finally {

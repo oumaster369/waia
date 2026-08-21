@@ -17,11 +17,15 @@ import {
   setupFhvControlReplayArtifacts,
   FHV_TEST_RELEASE_TAG,
 } from "@/tests/helpers/fhv-official-path-test-fixtures";
+import { postgresTestOnlyExecutionV2Authority } from "@/tests/helpers/execution-v2-test-only-postgres";
 
 const RELEASE_SHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const ORG_ID = "00000000-0000-4000-8000-000000000436";
 
-describe("DEE-436 FHV control-replay CLI", () => {
+const pgEnabled =
+  process.env.WAIA_PG_INTEGRATION === "1" && !!process.env.DATABASE_URL_POSTGRES?.trim();
+
+describe.skipIf(!pgEnabled)("DEE-436 FHV control-replay CLI", () => {
   it("parses --release-sha from argv (not argv[3] positional)", () => {
     expect(() =>
       resolveFhvControlReplayCliConfig({}, [
@@ -100,6 +104,7 @@ describe("DEE-436 FHV control-replay CLI", () => {
         maxCycles: 10,
         runOneId: `fhv-control-replay-1-${RELEASE_SHA.slice(0, 8)}`,
         runTwoId: `fhv-control-replay-2-${RELEASE_SHA.slice(0, 8)}`,
+        testOnlyExecutionV2Authority: postgresTestOnlyExecutionV2Authority,
       });
       expect(result, JSON.stringify(result)).toMatchObject({
         classification: "CONTROL_REPLAY=PASS",

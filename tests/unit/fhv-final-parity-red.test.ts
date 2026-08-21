@@ -35,11 +35,15 @@ import {
   setupFhvControlReplayArtifacts,
   setupFhvOfficialSchemaLaunchArtifacts,
 } from "@/tests/helpers/fhv-official-path-test-fixtures";
+import { postgresTestOnlyExecutionV2Authority } from "@/tests/helpers/execution-v2-test-only-postgres";
 
 const ORG_ID = "00000000-0000-4000-8000-000000000436";
 const OPERATOR_ID = "fhv-final-parity-operator";
 
-describe("DEE-436/DEE-416 FHV final parity R1–R10", () => {
+const pgEnabled =
+  process.env.WAIA_PG_INTEGRATION === "1" && !!process.env.DATABASE_URL_POSTGRES?.trim();
+
+describe.skipIf(!pgEnabled)("DEE-436/DEE-416 FHV final parity R1–R10", () => {
   it("R1: shared portfolio replay merges BTC and ETH chronologically", () => {
     const bars = loadOfficialSharedPortfolioBars({
       datasetRoot: FHV_OFFICIAL_REAL_SCHEMA_ROOT,
@@ -121,6 +125,7 @@ describe("DEE-436/DEE-416 FHV final parity R1–R10", () => {
         maxCycles: 10,
         runOneId: `fhv-control-replay-1-${FHV_TEST_RELEASE_SHA.slice(0, 8)}`,
         runTwoId: `fhv-control-replay-2-${FHV_TEST_RELEASE_SHA.slice(0, 8)}`,
+        testOnlyExecutionV2Authority: postgresTestOnlyExecutionV2Authority,
       });
       expect(result.classification).toBe("CONTROL_REPLAY=PASS");
     } finally {

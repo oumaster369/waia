@@ -17,6 +17,7 @@ import {
   readFhvControlReplayLaunchFreezeDigest,
   resumeFhvControlReplayLaunch,
 } from "@/lib/trader/observability/fhv-control-replay-execution";
+import type { TestOnlyExecutionV2AuthorityPort } from "@/lib/trader/execution/v2/test-only-authority-port";
 import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { readFhvDatasetQualificationReceipt } from "@/lib/trader/observability/fhv-dataset-qualification";
 import { writeFhvControlReplayReceiptAtomic } from "@/lib/trader/observability/fhv-control-replay-receipt";
@@ -340,6 +341,8 @@ export async function runFhvControlReplay(input: {
   controlReplayReceiptOutput?: string;
   maxCycles?: number;
   resume?: boolean;
+  /** Human-authorized only for the nine admitted PostgreSQL test surfaces. */
+  testOnlyExecutionV2Authority?: TestOnlyExecutionV2AuthorityPort;
 }): Promise<FhvControlReplayResult> {
   if (!FULL_SHA.test(input.releaseSha)) {
     return {
@@ -411,6 +414,7 @@ export async function runFhvControlReplay(input: {
       datasetQualificationReceiptPath: input.datasetQualificationReceiptPath,
       boundedFixture,
       executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
+      testOnlyExecutionV2Authority: input.testOnlyExecutionV2Authority,
       ...(input.maxCycles != null ? { maxCycles: input.maxCycles } : {}),
       ...(boundedFixture
         ? {}

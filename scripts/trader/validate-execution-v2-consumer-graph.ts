@@ -16,7 +16,6 @@ const allowedOrderEffectCalls = new Map([
 ]);
 const expectedLegacyConsumers = new Set([
   "lib/trader/live/run-live-cycle.ts",
-  "lib/trader/observability/control-replay-scientific-v2-driver-v1.ts",
   "lib/trader/paper/paper-cycle-runner.ts",
   "lib/trader/research/capital-path-trace-harness.ts",
 ]);

@@ -43,7 +43,7 @@ export type BindExecutionAuthorityV2Input = Readonly<{
   allowance: RiskAllowanceV2;
   policy: ExecutionPolicyBindingV2;
   plan: PlanMechanicsV2;
-  executionMode: "paper" | "live";
+  executionMode: "mock" | "paper" | "live";
   credentialId: string | null;
   strategySignalId: string | null;
   allocationDecisionId: string | null;

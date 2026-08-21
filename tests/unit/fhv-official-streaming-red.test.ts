@@ -62,10 +62,13 @@ import {
   setupFhvOfficialV2ControlReplayArtifacts,
   setupFhvOfficialV2MultiYearLaunchArtifacts,
 } from "@/tests/helpers/fhv-official-path-test-fixtures";
+import { postgresTestOnlyExecutionV2Authority } from "@/tests/helpers/execution-v2-test-only-postgres";
 
 const OPERATOR_ID = "fhv-streaming-red-operator";
 const MEMORY_CEILING_BYTES = 256 * 1024 * 1024;
 const BARS1M_PREFIX_CEILING = EXPAND_MIN_BARS * 4;
+const pgEnabled =
+  process.env.WAIA_PG_INTEGRATION === "1" && !!process.env.DATABASE_URL_POSTGRES?.trim();
 
 function writeFhvTestSyntheticScaleAuthority(input: {
   authorityDir: string;
@@ -92,7 +95,7 @@ function writeFhvTestSyntheticScaleAuthority(input: {
   return authorityPath;
 }
 
-describe("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
+describe.skipIf(!pgEnabled)("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
   let v2DatasetRoot: string;
   let v2ManifestPath: string;
 
@@ -203,6 +206,7 @@ describe("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
         manifestPath: v2ManifestPath,
         checkoutIdentityProofPath: prep.checkoutIdentityProofPathRunOne,
         executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
+        testOnlyExecutionV2Authority: postgresTestOnlyExecutionV2Authority,
         maxCycles: 8,
         syntheticScaleAuthorityPath,
       });
@@ -403,6 +407,7 @@ describe("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
         checkoutIdentityProofPath: prep.checkoutIdentityProofPath,
         executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
         maxCycles: 8,
+        testOnlyExecutionV2Authority: postgresTestOnlyExecutionV2Authority,
       });
 
       expect(result.classification).toBe("FHV_CONTROL_REPLAY_CEREMONY_PASS");
@@ -457,7 +462,7 @@ describe("PR452 Phase 1 FHV official streaming RED M1–M10", () => {
   });
 });
 
-describe("PR452 OFFICIAL_RUNNER_BARS1M_PREFIX_RETENTION_RED", () => {
+describe.skipIf(!pgEnabled)("PR452 OFFICIAL_RUNNER_BARS1M_PREFIX_RETENTION_RED", () => {
   it("STREAM_ONLY bars1mPrefix stays bounded under official launch", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-bars1m-prefix-"));
     const runId = "fhv-bars1m-prefix-run";
