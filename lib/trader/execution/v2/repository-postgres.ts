@@ -50,6 +50,13 @@ export type ExecutionAttemptLifecycleStateV2 =
   | "CANCELLED"
   | "RECONCILIATION_REQUIRED";
 
+export type ExecutionAttemptProjectionV2 = Readonly<{
+  attempt: ExecutionAttemptV2;
+  lifecycleState: ExecutionAttemptLifecycleStateV2;
+  nextReportSequence: string;
+  lastReportDigestHex: string | null;
+}>;
+
 function mapPolicy(row: PolicyRow): ExecutionPolicyBindingV2 {
   const policy = createExecutionPolicyBindingV2({
     executionPolicyId: row.id,
@@ -333,6 +340,27 @@ export async function readExecutionAttemptV2Postgres(
     eq(pgSchema.traderExecutionAttemptsV2.organizationId, scoped.organizationId),
   )).limit(1);
   return rows[0] ? mapAttempt(rows[0]) : null;
+}
+
+export async function readExecutionAttemptProjectionV2Postgres(
+  ex: Pick<ExecutionV2Executor, "select">,
+  context: OrgContext,
+  executionAttemptId: string,
+  lockForUpdate = false,
+): Promise<ExecutionAttemptProjectionV2 | null> {
+  const scoped = requireOrgContext(context.organizationId);
+  const query = ex.select().from(pgSchema.traderExecutionAttemptsV2).where(and(
+    eq(pgSchema.traderExecutionAttemptsV2.id, executionAttemptId),
+    eq(pgSchema.traderExecutionAttemptsV2.organizationId, scoped.organizationId),
+  ));
+  const rows = lockForUpdate ? await query.for("update") : await query.limit(1);
+  const row = rows[0];
+  return row ? Object.freeze({
+    attempt: mapAttempt(row),
+    lifecycleState: row.lifecycleState as ExecutionAttemptLifecycleStateV2,
+    nextReportSequence: row.nextReportSequence.toString(),
+    lastReportDigestHex: row.lastReportDigest,
+  }) : null;
 }
 
 export async function readExecutionPolicyV2Postgres(

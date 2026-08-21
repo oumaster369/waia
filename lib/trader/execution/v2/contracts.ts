@@ -266,6 +266,22 @@ function exactMultiple(value: string, step: string): boolean {
   return parseDecimal(value) % parseDecimal(step) === 0n;
 }
 
+export function deterministicExecutionUuidV2(
+  kind: "plan" | "order" | "attempt" | "risk-event" | "report",
+  seed: Readonly<Record<string, unknown>>,
+): string {
+  const digest = computeStableJsonDigest({
+    schemaVersion: "execution-deterministic-identity/v2",
+    kind,
+    seed,
+  });
+  const chars = digest.slice(0, 32).split("");
+  chars[12] = "5";
+  chars[16] = "8";
+  const value = chars.join("");
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+}
+
 export function createExecutionPolicyBindingV2(
   draft: ExecutionPolicyBindingV2Draft,
 ): ExecutionPolicyBindingV2 {

@@ -16,6 +16,11 @@ import {
   createExecutionPolicyBindingV2,
 } from "@/lib/trader/execution/v2/contracts";
 import {
+  bindExecutionAuthorityV2Postgres,
+  dispatchCommittedExecutionAttemptV2,
+  type BindExecutionAuthorityV2Input,
+} from "@/lib/trader/execution/v2/authority-postgres";
+import {
   appendExecutionReportV2Postgres,
   insertExecutionAttemptV2Postgres,
   insertExecutionPlanV2Postgres,
@@ -293,6 +298,79 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     return { accountId, allowance, attempt, plan, policy };
   }
 
+  async function admittedBindInput(): Promise<BindExecutionAuthorityV2Input> {
+    const accountId = "atomic-bind";
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account(accountId));
+    const admitted = await admitRiskAllowanceV2Postgres(
+      db,
+      { organizationId: orgA },
+      admission(accountId),
+    );
+    const allowance = admitted.allowance;
+    const now = Date.now();
+    const opensAtUtc = new Date(now - 60_000).toISOString();
+    const closesAtUtc = new Date(now + 60_000).toISOString();
+    const policy = createExecutionPolicyBindingV2({
+      executionPolicyId: uuid(667_501),
+      organizationId: orgA,
+      policyVersion: "htx-atomic-bind-v1",
+      decisionId: allowance.decision.decisionId,
+      decisionContentDigestHex: allowance.decision.contentDigestHex,
+      decisionExecutionPolicyDigestHex: hex64("atomic-decision-execution-policy"),
+      economicSizeSetDigestHex: allowance.decision.economicSizeSetDigestHex,
+      venue: "HTX",
+      market: "SPOT",
+      instrumentIdentityDigestHex: allowance.instrumentIdentityDigestHex,
+      allowedOrderTypes: ["limit"],
+      allowedTimeInForce: ["GTC"],
+      allowedLiquidityRoles: ["MAKER"],
+      priceCollar: {
+        minimumPrice: "24000",
+        maximumPrice: "26000",
+        authorityDigestHex: hex64("atomic-collar"),
+      },
+      quantityRules: {
+        minimumQuantity: "0.001",
+        quantityStep: "0.001",
+        roundingMode: "EXACT",
+        economicQualifiedQuantities: ["0.001"],
+      },
+      slicingPolicy: { maximumSlices: 1, completePlanRequired: true },
+      retryPolicy: {
+        maximumNetworkSubmissions: 1,
+        sameIdentityRetryAllowed: false,
+        venueIdempotencyProven: false,
+      },
+      cancelPolicy: {
+        protectiveCancelAllowed: true,
+        replacementRequiresPresealedOrFreshAuthority: true,
+      },
+      timeoutMs: 5_000,
+      uncertaintyHandling: "RECONCILIATION_REQUIRED",
+      effectiveFromUtc: new Date(now - 120_000).toISOString(),
+      effectiveUntilUtc: new Date(now + 120_000).toISOString(),
+    });
+    return {
+      allowance,
+      policy,
+      plan: {
+        approvedNotionalCeiling: "25",
+        plannedQuantity: "0.001",
+        orderType: "limit",
+        liquidityRole: "MAKER",
+        limitPrice: "25000",
+        timeInForce: "GTC",
+        timingWindow: { opensAtUtc, closesAtUtc },
+        childSlices: [{ sequence: 1, quantity: "0.001", limitPrice: "25000" }],
+        sealedAtUtc: opensAtUtc,
+      },
+      executionMode: "paper",
+      credentialId: null,
+      strategySignalId: "signal-atomic-bind",
+      allocationDecisionId: "allocation-atomic-bind",
+    };
+  }
+
   it("persists tenant-scoped immutable authority and a raw append-only report chain", async () => {
     const { accountId, attempt } = await persistAuthority();
     expect(await readExecutionAttemptV2Postgres(db, { organizationId: orgA }, attempt.executionAttemptId))
@@ -380,5 +458,121 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
         `REVOKE SELECT, INSERT, UPDATE, DELETE ON ${executionTables.join(", ")} FROM authenticated, anon`,
       );
     }
+  });
+
+  it("atomically binds one allowance/plan/attempt under concurrency and dispatches once", async () => {
+    const input = await admittedBindInput();
+    const outcomes = await Promise.all([
+      bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input),
+      bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input),
+    ]);
+    expect(outcomes.filter((value) => value.consumedNow)).toHaveLength(1);
+    expect(outcomes[0]?.plan.contentDigestHex).toBe(outcomes[1]?.plan.contentDigestHex);
+    expect(outcomes[0]?.attempt).toEqual(outcomes[1]?.attempt);
+    const counts = await sql<{ order_count: string; attempt_count: string; report_count: string }[]>`
+      SELECT
+        (SELECT count(*)::text FROM trader_orders
+          WHERE organization_id = ${orgA}::uuid
+            AND risk_allowance_id = ${input.allowance.riskAllowanceId}::uuid) AS order_count,
+        (SELECT count(*)::text FROM trader_execution_attempts_v2
+          WHERE organization_id = ${orgA}::uuid
+            AND risk_allowance_id = ${input.allowance.riskAllowanceId}::uuid) AS attempt_count,
+        (SELECT count(*)::text FROM trader_execution_reports_v2
+          WHERE organization_id = ${orgA}::uuid) AS report_count
+    `;
+    expect(counts[0]).toEqual({ order_count: "1", attempt_count: "1", report_count: "3" });
+    const riskState = await sql<{
+      outstanding: string;
+      pending: string;
+    }[]>`
+      SELECT outstanding_reservation_notional::text AS outstanding,
+        worst_case_pending_exposure_notional::text AS pending
+      FROM trader_risk_account_state_v2
+      WHERE organization_id = ${orgA}::uuid AND account_id = ${input.allowance.accountId}
+    `;
+    expect(riskState[0]).toEqual({ outstanding: "0.00000000", pending: "25.00000000" });
+
+    let networkCalls = 0;
+    const firstDispatch = await dispatchCommittedExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      outcomes[0]!.attempt.executionAttemptId,
+      async (payload) => {
+        networkCalls += 1;
+        expect(payload).toEqual(outcomes[0]!.attempt.exactRequestPayload);
+        return { accepted: true };
+      },
+    );
+    expect(firstDispatch.status).toBe("SUBMITTED");
+    const restartDispatch = await dispatchCommittedExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      outcomes[0]!.attempt.executionAttemptId,
+      async () => {
+        networkCalls += 1;
+        return { accepted: true };
+      },
+    );
+    expect(restartDispatch.status).toBe("REFUSED_ALREADY_STARTED");
+    expect(networkCalls).toBe(1);
+  });
+
+  it("fails unknown after a network timeout and never blindly resends", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    let networkCalls = 0;
+    const timedOut = await dispatchCommittedExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        networkCalls += 1;
+        throw new Error("HTX_TIMEOUT_UNKNOWN");
+      },
+    );
+    expect(timedOut.status).toBe("FAIL_UNKNOWN");
+    const restarted = await dispatchCommittedExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        networkCalls += 1;
+        return { forbiddenResend: true };
+      },
+    );
+    expect(restarted.status).toBe("REFUSED_ALREADY_STARTED");
+    expect(networkCalls).toBe(1);
+  });
+
+  it("rechecks current Risk authority under lock and rolls back a TOCTOU bind", async () => {
+    const input = await admittedBindInput();
+    await sql`
+      UPDATE trader_risk_account_state_v2 SET kill_state = 'TRIPPED'
+      WHERE organization_id = ${orgA}::uuid AND account_id = ${input.allowance.accountId}
+    `;
+    await expect(bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input))
+      .rejects.toThrow(/CURRENT_AUTHORITY_BINDING_MISMATCH/);
+    const rows = await sql<{
+      lifecycle_state: string;
+      plan_count: string;
+      order_count: string;
+      attempt_count: string;
+    }[]>`
+      SELECT a.lifecycle_state,
+        (SELECT count(*)::text FROM trader_execution_plans_v2
+          WHERE organization_id = ${orgA}::uuid) AS plan_count,
+        (SELECT count(*)::text FROM trader_orders
+          WHERE organization_id = ${orgA}::uuid) AS order_count,
+        (SELECT count(*)::text FROM trader_execution_attempts_v2
+          WHERE organization_id = ${orgA}::uuid) AS attempt_count
+      FROM trader_risk_allowances_v2 a
+      WHERE a.organization_id = ${orgA}::uuid AND a.id = ${input.allowance.riskAllowanceId}::uuid
+    `;
+    expect(rows[0]).toEqual({
+      lifecycle_state: "ISSUED",
+      plan_count: "0",
+      order_count: "0",
+      attempt_count: "0",
+    });
   });
 });

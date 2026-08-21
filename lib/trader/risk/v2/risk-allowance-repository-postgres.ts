@@ -985,14 +985,13 @@ function requireOrderMatchesAllowanceV2(input: {
  * Consumption boundary: locks current Risk state + allowance, durably creates the exact order,
  * consumes the allowance, and moves reservation to worst-case pending exposure in one transaction.
  */
-export async function consumeRiskAllowanceForOrderV2Postgres(
-  db: WaiaPostgresDb,
+export async function consumeRiskAllowanceForOrderV2FromTransaction(
+  tx: RiskTx,
   context: OrgContext,
   input: ConsumeRiskAllowanceForOrderV2Input,
 ): Promise<ConsumeRiskAllowanceForOrderV2Result> {
   const scoped = requireOrgContext(context.organizationId);
-  return runWaiaPostgresTransaction(db, async (tx) => {
-    const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
+  const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
     const rows = await tx.select().from(pgSchema.traderRiskAllowancesV2).where(and(
       eq(pgSchema.traderRiskAllowancesV2.id, input.riskAllowanceId),
       eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
@@ -1146,12 +1145,21 @@ export async function consumeRiskAllowanceForOrderV2Postgres(
           parseDecimal(allowance.reservedExposureNotional),
       ),
     });
-    return {
-      status: "CONSUMED",
-      order,
-      riskAllowanceId: allowance.riskAllowanceId,
-      orderBindingDigestHex: bindingDigest,
-      consumedNow: true,
-    };
-  });
+  return {
+    status: "CONSUMED",
+    order,
+    riskAllowanceId: allowance.riskAllowanceId,
+    orderBindingDigestHex: bindingDigest,
+    consumedNow: true,
+  };
+}
+
+/** Backwards-compatible transaction-owning Risk V2 consumption boundary. */
+export async function consumeRiskAllowanceForOrderV2Postgres(
+  db: WaiaPostgresDb,
+  context: OrgContext,
+  input: ConsumeRiskAllowanceForOrderV2Input,
+): Promise<ConsumeRiskAllowanceForOrderV2Result> {
+  return runWaiaPostgresTransaction(db, (tx) =>
+    consumeRiskAllowanceForOrderV2FromTransaction(tx, context, input));
 }
