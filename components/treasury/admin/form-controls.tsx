@@ -80,7 +80,9 @@ export function CanonicalSelect({
       required={required}
       onChange={(event) => onChange(event.target.value)}
     >
-      {required ? null : <option value="">{blankLabel}</option>}
+      <option value="" disabled={required}>
+        {blankLabel}
+      </option>
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}

@@ -22,6 +22,11 @@ export type TreasuryTransactionDto = {
   nativeContract: string | null;
   accountingAmountMicros: string | null;
   cashEffectMicros: string | null;
+  signedAmountMicros: string | null;
+  counterpartyId: string | null;
+  accountId: string | null;
+  categoryId: string | null;
+  projectId: string | null;
   occurredAt: string | null;
   purpose: string | null;
   category: string | null;
@@ -50,6 +55,59 @@ export type TreasuryTransactionDto = {
   createdAt: string | null;
   updatedAt: string | null;
 };
+
+export type TreasuryCounterpartySummaryDto = {
+  id: string;
+  displayName: string;
+  waiaUsername: string | null;
+  isActive: boolean;
+};
+
+export type TreasuryAccountSummaryDto = {
+  id: string;
+  displayName: string;
+  kind: "CRYPTO_WALLET" | "BANK_CARD" | "BANK_ACCOUNT" | "CASH" | "OTHER";
+  currency: string;
+  network: string | null;
+  isActive: boolean;
+};
+
+export type TreasuryCategoryDto = {
+  id: string;
+  organizationId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  monthlyBudgetMicros: string;
+  currency: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TreasuryProjectDto = {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TreasuryLedgerCatalogKind = "counterparties" | "accounts" | "categories" | "projects";
+
+export type TreasuryLedgerCatalogItem =
+  | TreasuryCounterpartySummaryDto
+  | TreasuryAccountSummaryDto
+  | TreasuryCategoryDto
+  | TreasuryProjectDto;
+
+export type TreasuryLedgerCatalogPage<T extends TreasuryLedgerCatalogItem> = {
+  next: { afterName: string; afterId: string } | null;
+} & Partial<Record<TreasuryLedgerCatalogKind, T[]>>;
 
 export type TreasuryObservationDto = {
   id: string;

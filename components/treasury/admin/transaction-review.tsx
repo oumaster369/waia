@@ -9,6 +9,7 @@ import { OrgGate } from "@/components/treasury/admin/org-gate";
 import { useFinanceOrg } from "@/components/treasury/admin/finance-org-context";
 import { AccountingStatusPill, PublicationPill } from "@/components/treasury/admin/status-pills";
 import { LoadingState, UnavailableState } from "@/components/treasury/admin/unavailable-state";
+import { LedgerCatalogSelect } from "@/components/treasury/admin/ledger-catalog-select";
 import { CanonicalSelect, FormField, MoreDetails } from "@/components/treasury/admin/form-controls";
 import {
   BudgetSelect,
@@ -21,13 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { missingOrganizationResult, treasuryGet, treasuryJson } from "@/lib/treasury-admin/api";
-import {
-  TREASURY_DIRECTION_OPTIONS,
-  TREASURY_KIND_OPTIONS,
-  TREASURY_USDT_V1_DECIMALS,
-  treasuryTxDirectionEnum,
-  type TreasuryCanonicalDirection,
-} from "@/lib/treasury-admin/canonical";
+import { TREASURY_KIND_OPTIONS, TREASURY_USDT_V1_DECIMALS } from "@/lib/treasury-admin/canonical";
+import { signedAmountLabel } from "@/lib/treasury-admin/ledger";
 import { buildClassifyCommandPatch } from "@/lib/treasury-admin/manual-draft";
 import { financeHref } from "@/lib/treasury-admin/org";
 import { backendUnavailableLabel } from "@/lib/treasury-admin/facts";
@@ -73,6 +69,10 @@ function patchFromDetail(detail: TreasuryTransactionDetailDto) {
     publicDescription: tx.publicDescription ?? "",
     counterpartyDisplay: tx.counterpartyDisplay ?? "",
     publishCounterparty: tx.publishCounterparty,
+    counterpartyId: tx.counterpartyId ?? "",
+    accountId: tx.accountId ?? "",
+    categoryId: tx.categoryId ?? "",
+    projectId: tx.projectId ?? "",
   };
 }
 
@@ -80,6 +80,8 @@ function nextActionCopy(status: string, publication: string): string {
   switch (status) {
     case "MANUAL_DRAFT":
       return "Next: submit this observation for review.";
+    case "PLANNED":
+      return "Planned transaction. Submit it for review when the economic event is ready to be recorded.";
     case "NEEDS_REVIEW":
       return "Next: classify the accounting meaning. Verification and publication stay later steps.";
     case "CLASSIFIED":
@@ -88,7 +90,7 @@ function nextActionCopy(status: string, publication: string): string {
       return publication === "PRIVATE"
         ? "Verified + Private is valid. Publication is a separate optional decision."
         : "Accounting is verified. Publication can still be changed without rewriting financial truth.";
-    case "NEEDS_RECONCILIATION":
+    case "RECONCILIATION_REQUIRED":
       return "Next: resolve reconciliation, then return this record to a governed status.";
     case "REJECTED":
       return "This record is rejected. Create a new observation if the economic event is still real.";
@@ -258,6 +260,31 @@ function TransactionReviewLoaded({
         ) : null}
       </div>
 
+      <WaiaSurface
+        variant="raised"
+        className="grid gap-3 p-4 md:grid-cols-3"
+        data-testid="tx-ledger-summary"
+      >
+        <div>
+          <p className="text-muted-foreground text-xs">Date and time</p>
+          <p className="text-sm">
+            {tx.occurredAt ? new Date(tx.occurredAt).toLocaleString() : "Pending"}
+          </p>
+        </div>
+        <div>
+          <p className="text-muted-foreground text-xs">Signed amount</p>
+          <p className="font-mono text-sm tabular-nums">
+            {signedAmountLabel(tx.signedAmountMicros)} {tx.nativeAsset ?? ""}
+          </p>
+        </div>
+        <div>
+          <p className="text-muted-foreground text-xs">Source</p>
+          <p className="text-sm">
+            {tx.provenance === "WATCHER" ? "Automatic wallet entry" : "Manual entry"}
+          </p>
+        </div>
+      </WaiaSurface>
+
       <WaiaSurface variant="elevated" className="space-y-3 p-4" data-testid="tx-next-action">
         <h2 className="text-sm font-medium">Next action</h2>
         <p className="text-sm">{nextActionCopy(tx.status, tx.detailPublication)}</p>
@@ -339,6 +366,8 @@ function TransactionReviewLoaded({
             <dd className="font-mono text-xs">{tx.canonicalTxHash ?? tx.txHash ?? "None"}</dd>
             <dt>Transfer index</dt>
             <dd>{tx.canonicalTransferIndex ?? "None"}</dd>
+            <dt>Canonical direction</dt>
+            <dd>{tx.direction}</dd>
           </dl>
           {detail.observations.length === 0 ? (
             <p className="text-muted-foreground text-sm">No linked observations.</p>
@@ -365,58 +394,90 @@ function TransactionReviewLoaded({
           Current accounting amount: <MoneyText micros={tx.accountingAmountMicros} />
         </p>
         <div className="grid gap-3 md:grid-cols-2">
+          <LedgerCatalogSelect
+            id="classify-counterparty"
+            organizationId={organizationId}
+            kind="counterparties"
+            value={patch.counterpartyId}
+            disabled={!meaningEditable}
+            allowCreate={meaningEditable}
+            onChange={(value) => setPatch((current) => ({ ...current, counterpartyId: value }))}
+          />
+          <LedgerCatalogSelect
+            id="classify-account"
+            organizationId={organizationId}
+            kind="accounts"
+            value={patch.accountId}
+            disabled={!meaningEditable}
+            allowCreate={meaningEditable}
+            onChange={(value) => setPatch((current) => ({ ...current, accountId: value }))}
+          />
+          <LedgerCatalogSelect
+            id="classify-category-ref"
+            organizationId={organizationId}
+            kind="categories"
+            value={patch.categoryId}
+            disabled={!meaningEditable}
+            allowCreate={meaningEditable}
+            onChange={(value) => setPatch((current) => ({ ...current, categoryId: value }))}
+          />
+          <LedgerCatalogSelect
+            id="classify-project-ref"
+            organizationId={organizationId}
+            kind="projects"
+            value={patch.projectId}
+            disabled={!meaningEditable}
+            allowCreate={meaningEditable}
+            onChange={(value) => setPatch((current) => ({ ...current, projectId: value }))}
+          />
           <FormField
-            label="Kind"
-            htmlFor="classify-kind"
-            help="Canonical Treasury kind. Not classified yet submits null."
-          >
-            <CanonicalSelect
-              id="classify-kind"
-              testId="classify-kind"
-              value={patch.kind}
-              onChange={(value) => setPatch((current) => ({ ...current, kind: value }))}
-              options={TREASURY_KIND_OPTIONS}
-              blankLabel="Not classified yet"
-              disabled={!meaningEditable}
-            />
-          </FormField>
-          <FormField label="Direction" htmlFor="classify-direction">
-            <CanonicalSelect
-              id="classify-direction"
-              testId="classify-direction"
-              value={patch.direction}
-              onChange={(value) => {
-                if (treasuryTxDirectionEnum.includes(value as TreasuryCanonicalDirection)) {
-                  setPatch((current) => ({
-                    ...current,
-                    direction: value as TreasuryCanonicalDirection,
-                  }));
-                }
-              }}
-              options={TREASURY_DIRECTION_OPTIONS}
-              blankLabel="Select direction"
-              disabled={!meaningEditable}
-              required
-            />
-          </FormField>
-          <FormField
-            label="Purpose"
-            htmlFor="classify-purpose"
-            help="Free-form Human semantic text. Not a closed taxonomy."
+            label="Notes"
+            htmlFor="classify-notes"
+            help="Private operational notes for this transaction."
           >
             <Textarea
-              id="classify-purpose"
-              data-testid="classify-purpose"
-              value={patch.purpose}
+              id="classify-notes"
+              data-testid="classify-notes"
+              value={patch.internalNotes}
               disabled={!meaningEditable}
               onChange={(event) =>
-                setPatch((current) => ({ ...current, purpose: event.target.value }))
+                setPatch((current) => ({ ...current, internalNotes: event.target.value }))
               }
             />
           </FormField>
         </div>
         <MoreDetails summary="More classification details" testId="classify-advanced">
           <div className="grid gap-3 md:grid-cols-2">
+            <FormField
+              label="Kind"
+              htmlFor="classify-kind"
+              help="Internal canonical accounting meaning. Not classified yet submits null."
+            >
+              <CanonicalSelect
+                id="classify-kind"
+                testId="classify-kind"
+                value={patch.kind}
+                onChange={(value) => setPatch((current) => ({ ...current, kind: value }))}
+                options={TREASURY_KIND_OPTIONS}
+                blankLabel="Not classified yet"
+                disabled={!meaningEditable}
+              />
+            </FormField>
+            <FormField
+              label="Legacy purpose"
+              htmlFor="classify-purpose"
+              help="Compatibility field for existing rows; Notes is the primary Human field."
+            >
+              <Textarea
+                id="classify-purpose"
+                data-testid="classify-purpose"
+                value={patch.purpose}
+                disabled={!meaningEditable}
+                onChange={(event) =>
+                  setPatch((current) => ({ ...current, purpose: event.target.value }))
+                }
+              />
+            </FormField>
             <FormField
               label="Category"
               htmlFor="classify-category"
@@ -533,16 +594,6 @@ function TransactionReviewLoaded({
                 disabled={!meaningEditable}
                 onChange={(event) =>
                   setPatch((current) => ({ ...current, description: event.target.value }))
-                }
-              />
-            </FormField>
-            <FormField label="Internal notes" htmlFor="classify-internal-notes">
-              <Textarea
-                id="classify-internal-notes"
-                value={patch.internalNotes}
-                disabled={!meaningEditable}
-                onChange={(event) =>
-                  setPatch((current) => ({ ...current, internalNotes: event.target.value }))
                 }
               />
             </FormField>

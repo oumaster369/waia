@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { AccountingStatus, DetailPublicationState } from "@/lib/treasury-admin/publication";
 import { publicationLabel } from "@/lib/treasury-admin/publication";
+import { accountingStatusLabel } from "@/lib/treasury-admin/ledger";
 
 export function AccountingStatusPill({ status }: { status: AccountingStatus }) {
   return (
@@ -14,7 +15,7 @@ export function AccountingStatusPill({ status }: { status: AccountingStatus }) {
         (status === "REJECTED" || status === "DUPLICATE") && "border-border text-muted-foreground",
       )}
     >
-      {status.replaceAll("_", " ")}
+      {accountingStatusLabel(status)}
     </span>
   );
 }

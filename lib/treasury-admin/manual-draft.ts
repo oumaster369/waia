@@ -5,6 +5,91 @@ import {
   treasuryTxKindEnum,
 } from "@/lib/treasury-admin/canonical";
 import { parseHumanDecimalToAtomic } from "@/lib/treasury-admin/parse-human-amount";
+import { parseHumanSignedAmount } from "@/lib/treasury-admin/ledger";
+
+export type CentralLedgerFormValues = {
+  organizationId: string;
+  status: "NEEDS_REVIEW" | "PLANNED";
+  humanAmount: string;
+  occurredAtIso: string;
+  currency: string;
+  counterpartyId: string;
+  accountId: string;
+  categoryId: string;
+  projectId: string;
+  notes: string;
+  correctsTransactionId?: string;
+  reason: string;
+};
+
+export type CentralLedgerPostBody = {
+  organization_id: string;
+  status: "NEEDS_REVIEW" | "PLANNED";
+  signed_amount_micros: string;
+  native_amount_atomic: string;
+  native_decimals: 6;
+  native_asset: string;
+  occurred_at: string;
+  counterparty_id: string | null;
+  account_id: string | null;
+  category_id: string | null;
+  project_id: string | null;
+  notes: string | null;
+  kind?: "CORRECTION";
+  corrects_transaction_id?: string;
+  reason: string;
+};
+
+export function buildCentralLedgerPostBody(
+  values: CentralLedgerFormValues,
+  options?: { requireReason?: boolean; now?: Date },
+): { ok: true; body: CentralLedgerPostBody } | { ok: false; message: string } {
+  const organizationId = values.organizationId.trim();
+  if (!organizationId) return { ok: false, message: "Select an organization first." };
+  const amount = parseHumanSignedAmount(values.humanAmount);
+  if (!amount.ok) return amount;
+  const occurredAt = values.occurredAtIso.trim();
+  if (!occurredAt) return { ok: false, message: "Choose the transaction date and time." };
+  const occurred = new Date(occurredAt);
+  if (Number.isNaN(occurred.getTime())) {
+    return { ok: false, message: "Choose a valid transaction date and time." };
+  }
+  if (values.status === "PLANNED" && occurred <= (options?.now ?? new Date())) {
+    return { ok: false, message: "Planned transactions must have a future date and time." };
+  }
+  const currency = values.currency.trim();
+  if (!values.accountId.trim()) return { ok: false, message: "Choose an account." };
+  if (!currency) return { ok: false, message: "Choose an account with a currency." };
+  const reason = values.reason.trim();
+  if (options?.requireReason !== false && !reason) {
+    return { ok: false, message: "Add a reason for this audited change." };
+  }
+  const optionalId = (value: string) => (value.trim() ? value.trim() : null);
+  const correctsTransactionId = values.correctsTransactionId?.trim() ?? "";
+  const body: CentralLedgerPostBody = {
+    organization_id: organizationId,
+    status: values.status,
+    signed_amount_micros: amount.micros,
+    native_amount_atomic: amount.magnitudeMicros,
+    native_decimals: 6,
+    native_asset: currency,
+    occurred_at: occurredAt,
+    counterparty_id: optionalId(values.counterpartyId),
+    account_id: optionalId(values.accountId),
+    category_id: optionalId(values.categoryId),
+    project_id: optionalId(values.projectId),
+    notes: values.notes.trim() || null,
+    reason,
+  };
+  if (correctsTransactionId) {
+    body.kind = "CORRECTION";
+    body.corrects_transaction_id = correctsTransactionId;
+  }
+  return {
+    ok: true,
+    body,
+  };
+}
 
 export type ManualDraftFormValues = {
   organizationId: string;
@@ -123,6 +208,10 @@ export type ClassifyMeaningValues = {
   publicDescription: string;
   counterpartyDisplay: string;
   publishCounterparty: boolean;
+  counterpartyId?: string;
+  accountId?: string;
+  categoryId?: string;
+  projectId?: string;
 };
 
 export function buildClassifyCommandPatch(values: ClassifyMeaningValues): Record<string, unknown> {
@@ -142,6 +231,10 @@ export function buildClassifyCommandPatch(values: ClassifyMeaningValues): Record
     counterpartyDisplay:
       values.counterpartyDisplay.trim() === "" ? null : values.counterpartyDisplay,
     publishCounterparty: values.publishCounterparty,
+    counterpartyId: values.counterpartyId?.trim() || null,
+    accountId: values.accountId?.trim() || null,
+    categoryId: values.categoryId?.trim() || null,
+    projectId: values.projectId?.trim() || null,
   };
   if (values.accountingAmountMicros.trim() !== "") {
     patch.accountingAmountMicros = values.accountingAmountMicros.trim();

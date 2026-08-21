@@ -15,13 +15,13 @@ const PAGE_SIZE = 50;
 
 export function transactionRefLabel(tx: TreasuryTransactionDto): string {
   const occurred = tx.occurredAt ?? "unknown date";
-  const amountSource = tx.accountingAmountMicros ?? tx.nativeAmountAtomic;
+  const amountSource = tx.signedAmountMicros ?? tx.accountingAmountMicros ?? tx.nativeAmountAtomic;
   const decimals = tx.nativeDecimals > 0 ? tx.nativeDecimals : TREASURY_USDT_V1_DECIMALS;
   const amount = amountSource
     ? formatAtomicToHumanDecimal(amountSource, decimals)
     : "amount unknown";
   const shortId = tx.id.slice(0, 8);
-  return `${occurred} · ${tx.direction} · ${amount} · ${shortId}`;
+  return `${occurred} · ${amount} · ${shortId}`;
 }
 
 export function TransactionRefSelect(props: {
