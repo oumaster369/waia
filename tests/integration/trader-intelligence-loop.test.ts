@@ -105,7 +105,7 @@ describe("trader intelligence loop integration (DEE-257)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-intel-loop");
   });
 
-  it("runs fixture → intelligence → risk → mock execution → reconciliation", async () => {
+  it("fails the legacy intelligence loop closed before Risk V2 or reconciliation", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);

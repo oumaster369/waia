@@ -119,7 +119,7 @@ describe("P5 multi-strategy paper pipeline integration (DEE-334)", () => {
     deps = buildPaperCycleDeps(db, connector, writeAudit);
   });
 
-  it("produces round-trip closed trades for both registered strategies", async () => {
+  it("fails legacy multi-strategy submissions closed without fabricated trades", async () => {
     const context = requireOrgContext(orgA);
     const fixtureRuns = [
       {

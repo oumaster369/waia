@@ -118,7 +118,7 @@ describe("trader paper bar-close loop integration (AT-E9 S5)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-bar-close-264");
   });
 
-  it("runs one mocked HTX bar-close cycle via runPaperBarCloseLoop → SIGNAL → FILLED → IN_SYNC", async () => {
+  it("fails a legacy mocked HTX bar-close cycle closed before reconciliation", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);

@@ -119,7 +119,7 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-htx-poll-261");
   });
 
-  it("runs mocked HTX poll → runPaperCycleOnce → SIGNAL → FILLED → IN_SYNC", async () => {
+  it("fails the legacy mocked HTX poll cycle closed at the Execution V2 boundary", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);
@@ -152,7 +152,7 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
     expect(result.reconciliation).toBeNull();
   });
 
-  it("runs 3 mocked HTX poll cycles via runPollPaperCycles with unique client order IDs", async () => {
+  it("fails three legacy mocked HTX poll cycles closed without reconciliation", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);

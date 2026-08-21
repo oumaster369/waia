@@ -128,7 +128,7 @@ describe("trader paper bar-close loop account state refresh (AT-E9 S6)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-bar-close-265");
   });
 
-  it("blocks cycle 2 at risk when refreshed state carries cycle-1 position", async () => {
+  it("fails both legacy cycles closed before Risk V2 or account-state mutation", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const orderRepository = createSqliteOrderRepository(db);
@@ -170,7 +170,7 @@ describe("trader paper bar-close loop account state refresh (AT-E9 S6)", () => {
     expect(secondSubmit?.status).toBe("execution_v2_required");
   });
 
-  it("submits twice without refresh when limits would allow both fills", async () => {
+  it("fails both legacy cycles closed without a refresh callback", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const { deps } = buildPaperCycleDeps(db, connector, writeAudit);

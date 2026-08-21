@@ -119,7 +119,7 @@ describe("trader paper cycle runner integration (DEE-260)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-paper-cycle-260");
   });
 
-  it("runs 3 fixture cycles with unique idempotency keys and 15 intelligence telemetry lines", async () => {
+  it("fails three legacy fixture cycles closed while preserving intelligence telemetry", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);
