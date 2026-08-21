@@ -32,16 +32,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: validating-frozen-head
+  status: adversarial-remediation-complete
   currentWorkPackage: WP5
   completedWorkPackages: [WP0, WP1, WP2, WP3, WP4]
   remainingWorkPackages: [WP5]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 09743189a2d7fbad3b725a8ab86fed43646bf4f2
+  lastValidatedGitSha: 85349ccb62c09de721057eb2b7c6e42376a59bb4
   lastValidationAt: "2026-08-21"
   blockedReason: null
-  nextAction: "Commit the frozen manifest, run the one full local suite, and obtain the fresh independent exact-head adversarial review."
+  nextAction: "Freeze the remediation evidence and obtain the required fresh independent review of the changed exact head."
 provenance:
   createdFrom: human-ratified-delegation
   gapRegistry: null
@@ -102,9 +102,16 @@ changed lines. It exceeds the usual approximate 20-file/800-line target for one 
 the same capital-permission invariant must be explicit in pure types, typed Drizzle schema,
 one hand-authored migration, the privileged transactional repository, the sole connector
 guard, and adversarial unit/Postgres/RLS/concurrency proofs. It remains one additive
-migration, one rollback boundary, and four independently reviewable commits. R650-D is
+migration, one rollback boundary, and four independently reviewable child deliveries. R650-D is
 bounded to seven declared files and must stop if it would absorb DEE-651 planning,
 routing, slicing, or retry policy.
+
+The delivered candidate remains the same 23-file inventory and the same declared
+surfaces, but is approximately 5.2k changed lines after review-driven fail-closed
+hardening. The additional code derives reservation and reduction authority instead of
+trusting caller assertions, rechecks dispatchable consumed replays, and validates the
+consumer result before the connector boundary. It does not expand into the 26 legacy
+caller/test surfaces delegated to DEE-651.
 
 ## Acceptance
 
@@ -128,9 +135,11 @@ routing, slicing, or retry policy.
    allowance has been atomically consumed and bound. Static and runtime proof covers this
    Risk V2 branch through the sole connector submission site without claiming that legacy
    callers have already been cut over.
-10. Exactly one full local unit suite runs after the complete diff is frozen. Final lint,
-    typecheck, build, canon, governance, Postgres, and exact-head adversarial review pass
-    with zero unresolved P1/P2 before publication.
+10. Exactly one full local unit suite runs on the initially frozen publication candidate.
+    If independent review changes that head, only affected gates rerun, followed by a
+    fresh review of the changed exact head. Final lint, typecheck, build, canon,
+    governance, Postgres, and exact-head adversarial review pass with zero unresolved
+    P1/P2 before publication.
 
 ## Explicit exclusions
 

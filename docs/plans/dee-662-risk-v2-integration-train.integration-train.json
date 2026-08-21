@@ -65,7 +65,7 @@
       "acceptanceEvidence": [
         "Canonical verdicts and deterministic legacy mapping are sealed without historical rewrites.",
         "Decision/economic authority digests are pinned and exact continuous/discrete intersections fail closed.",
-        "Six focused contract tests, scoped lint, and typecheck passed."
+        "Seven focused contract tests, including executable verdict/action compatibility, scoped lint, and typecheck passed."
       ],
       "integratedCommits": [
         "aeb774f333ec74be8473f04863ce8538a5669610"
@@ -194,8 +194,8 @@
       ],
       "acceptanceEvidence": [
         "One additive PostgreSQL migration implements immutable verdicts, allowance projection, append-only digest-chained enforcement events, exact order bindings, composite organization integrity, RLS deny posture, and required indexes without legacy rewrites.",
-        "Privileged repositories prove deterministic atomic admission, reservation accounting, idempotency, tenant isolation, append-only enforcement, and serialized concurrency.",
-        "Clean empty-database auth prelude/migration/smoke passed; focused allowance/migration unit tests and real PostgreSQL RLS/CRUD/append-only/concurrency tests passed. No production or Supabase apply occurred."
+        "Privileged repositories derive entry reservations from sealed quantity and conservative reference price, derive and revalidate strict reductions against current reconciled instrument exposure, and prove deterministic atomic admission, idempotency, tenant isolation, append-only enforcement, and serialized concurrency.",
+        "Clean empty-database auth prelude/migration/smoke passed; 12 focused allowance/migration unit tests and 10 real PostgreSQL RLS/CRUD/append-only/atomicity/concurrency tests passed. No production or Supabase apply occurred."
       ],
       "integratedCommits": [
         "5225012c9ecafa2dd04080754080ec22c7e2256f"
@@ -271,9 +271,9 @@
       ],
       "acceptanceEvidence": [
         "Every Risk V2 submission either atomically consumes and binds its exact allowance/order or returns refusal before connector submission; no Risk V2 fallthrough exists.",
-        "Consumption rechecks nonce, expiry, exact order, posture, kill, reconciliation, and Reality authority; refusal is terminal and ledger-backed.",
+        "Consumption and dispatchable consumed replay recheck nonce, expiry, exact order, posture, kill, reconciliation, and Reality authority; refusal is terminal and ledger-backed.",
         "Same-bound uncertain continuation does not resend, competing claims serialize to one order, and partial fills create no residual allowance authority.",
-        "Four Risk V2 consumer unit/static tests and eight real PostgreSQL TOCTOU/atomicity/concurrency/RLS tests passed. Global legacy caller cutover is not claimed and remains linked to DEE-651."
+        "Four Risk V2 consumer unit/static tests and 10 real PostgreSQL TOCTOU/atomicity/concurrency/RLS tests passed. Consumer output must match the requested order, allowance, payload, and durable bindings before any connector call. Global legacy caller cutover is not claimed and remains linked to DEE-651."
       ],
       "integratedCommits": [
         "b26028f9b9115e9f588d8a14f99c0f038aa679fa",
@@ -379,6 +379,24 @@
         "commands": ["28 cumulative Risk V2 unit/static tests", "8 Risk V2 PostgreSQL TOCTOU/atomicity/RLS/concurrency tests", "pnpm lint", "pnpm typecheck", "pnpm build", "pnpm validate:canon", "pnpm validate:pr-governance"]
       }
     ],
+    "adversarialRemediation": {
+      "reviewedHead": "98e45a65b1d528999aa51b1af16032d6f1cf8657",
+      "status": "remediated-pending-exact-head-rereview",
+      "blockingFindings": [
+        "P1 dispatchable consumed replay did not recheck current authority and expiry before first send",
+        "P1 CLOSE_ONLY reduction authority trusted a caller boolean and permitted incompatible entry authority",
+        "P1 reservation accounting trusted caller notional instead of deriving exact sealed notional",
+        "P2 Risk V2 connector guard did not validate the consumer result against the exact request and durable bindings"
+      ],
+      "remediationCommit": "690212f768f29198b6ba08f76a0b8fe613551612",
+      "affectedGates": {
+        "status": "pass",
+        "commands": ["29 cumulative Risk V2 unit/static tests", "10 Risk V2 PostgreSQL RLS/append-only/atomicity/concurrency tests", "clean PostgreSQL auth prelude/migration/smoke", "pnpm typecheck", "scoped eslint", "pnpm build", "pnpm validate:canon"]
+      },
+      "fullSuiteRerun": false,
+      "fullSuiteRerunReason": "The Human required one full local suite only; review-driven head changes rerun affected gates and receive a fresh exact-head review.",
+      "freshExactHeadRereviewRequired": true
+    },
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
   }
