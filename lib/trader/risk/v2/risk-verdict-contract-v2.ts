@@ -172,6 +172,16 @@ function validateDraft(input: RiskVerdictV2Draft): void {
   if (permits !== (input.approvedQualifiedQuantity !== null)) {
     throw new Error("verdict/approved quantity mismatch");
   }
+  if (permits && input.decision.action === "HOLD") {
+    throw new Error("HOLD cannot carry executable Risk permission");
+  }
+  if (
+    input.verdict === "CLOSE_ONLY" &&
+    input.decision.action !== "REDUCE" &&
+    input.decision.action !== "CLOSE"
+  ) {
+    throw new Error("CLOSE_ONLY requires a Decision-owned reduction action");
+  }
   if (input.approvedQualifiedQuantity !== null) canonicalPositive(input.approvedQualifiedQuantity);
   if (input.verdict !== "APPROVE" && input.reasonCodes.length === 0) {
     throw new Error("non-APPROVE verdict requires reason codes");

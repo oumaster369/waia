@@ -160,4 +160,15 @@ describe("Risk V2 contract (DEE-663)", () => {
       ...authority, exactQuantities: ["1", "1.00000000"],
     })).toThrow(/unique/);
   });
+
+  it("rejects executable HOLD and CLOSE_ONLY entry authority", () => {
+    expect(() => createRiskVerdictV2(verdictDraft({
+      decision: { ...verdictDraft().decision, action: "HOLD" },
+    }))).toThrow(/HOLD cannot carry executable/);
+    expect(() => createRiskVerdictV2(verdictDraft({
+      verdict: "CLOSE_ONLY",
+      decision: { ...verdictDraft().decision, action: "ENTER_LONG" },
+      reasonCodes: ["POSITION_LIMIT_BINDING"],
+    }))).toThrow(/CLOSE_ONLY requires/);
+  });
 });
