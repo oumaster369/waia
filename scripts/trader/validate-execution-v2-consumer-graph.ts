@@ -14,6 +14,20 @@ const allowedOrderEffectCalls = new Map([
     ["this.client.placeOrder("],
   ],
 ]);
+const allowedCancelCalls = new Map([
+  [
+    "lib/trader/connectors/htx/client.ts",
+    ["HTX_ENDPOINTS.cancelOrder("],
+  ],
+  [
+    "lib/trader/connectors/htx/htx-exchange-connector.ts",
+    ["this.client.cancelOrder("],
+  ],
+  [
+    "lib/trader/guardian/htr-breach-partial-entry-cancellation.ts",
+    ["input.cancelOrder("],
+  ],
+]);
 const expectedLegacyConsumers = new Set([
   "lib/trader/live/run-live-cycle.ts",
   "lib/trader/paper/paper-cycle-runner.ts",
@@ -57,11 +71,21 @@ const futuresEffectCalls = matchingCalls(
   /[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.placeFuturesOrder\s*\(/g,
 );
 const legacyConsumers = matchingCalls(productionFiles, /\.submitOrder\s*\(/g);
+const cancelCalls = matchingCalls(
+  productionFiles,
+  /[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.cancelOrder\s*\(/g,
+);
 
 const violations = orderEffectCalls.filter((site) =>
   !(allowedOrderEffectCalls.get(site.file) ?? []).some((allowed) =>
     site.expression.replace(/\s/g, "").includes(allowed)));
 for (const site of futuresEffectCalls) violations.push(site);
+for (const site of cancelCalls) {
+  if (!(allowedCancelCalls.get(site.file) ?? []).some((allowed) =>
+    site.expression.replace(/\s/g, "").includes(allowed))) {
+    violations.push(site);
+  }
+}
 const missingLegacyConsumers = [...expectedLegacyConsumers].filter((file) =>
   !legacyConsumers.some((site) => site.file === file));
 const unknownLegacyConsumers = legacyConsumers.filter((site) =>
@@ -72,7 +96,8 @@ const legacyBoundary = readFileSync(
   "utf8",
 );
 const failClosed = legacyBoundary.includes("LEGACY_ORDER_SUBMISSION_DISABLED") &&
-  legacyBoundary.includes('status: "execution_v2_required"');
+  legacyBoundary.includes('status: "execution_v2_required"') &&
+  legacyBoundary.includes("LEGACY_ORDER_CANCELLATION_DISABLED");
 if (!failClosed) {
   violations.push({
     file: "lib/trader/execution/execution-service.ts",
@@ -97,6 +122,14 @@ const report = {
     disposition: "FAIL_CLOSED_AT_LEGACY_BOUNDARY",
   })),
   futuresEffectCalls,
+  cancelCalls: cancelCalls.map((site) => ({
+    ...site,
+    disposition: site.file === "lib/trader/connectors/htx/htx-exchange-connector.ts"
+      ? "V2_RECOVERY_ONLY_NETWORK_EFFECT"
+      : site.file === "lib/trader/connectors/htx/client.ts"
+        ? "TRANSPORT_ENDPOINT_CONSTRUCTION_ONLY"
+        : "FAIL_CLOSED_APPLICATION_COORDINATOR",
+  })),
   failClosedLegacyBoundary: failClosed,
   violations,
 };
