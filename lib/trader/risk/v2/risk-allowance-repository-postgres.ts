@@ -15,7 +15,11 @@ import type {
   CreateOrderInput,
   OrderRow,
 } from "@/lib/trader/execution/order-repository.types";
-import { formatDecimal, multiplyDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
+import {
+  DECIMAL_SCALE_FACTOR,
+  formatDecimal,
+  parseDecimal,
+} from "@/lib/trader/risk/numeric";
 import {
   calculateRiskAdmissionV2,
   type RiskAccountAccountingV2,
@@ -174,6 +178,20 @@ function canonicalNonnegative(value: string): string {
   return formatDecimal(parsed);
 }
 
+function multiplyPositiveDecimalConservatively(a: string, b: string): string {
+  const left = parseDecimal(a);
+  const right = parseDecimal(b);
+  if (left <= 0n || right <= 0n) {
+    throw new RiskV2AdmissionRefusedError("RESERVATION_AUTHORITY_INVALID");
+  }
+  const exactProduct = left * right;
+  const scaledProduct = exactProduct / DECIMAL_SCALE_FACTOR;
+  const conservativeProduct = exactProduct % DECIMAL_SCALE_FACTOR === 0n
+    ? scaledProduct
+    : scaledProduct + 1n;
+  return formatDecimal(conservativeProduct);
+}
+
 const DIGEST_HEX = /^[0-9a-f]{64}$/;
 
 function canonicalInstrumentExposures(
@@ -241,7 +259,7 @@ function deriveReservationNotionalV2(input: {
     throw new RiskV2AdmissionRefusedError("STRICT_REDUCTION_PROOF_INVALID");
   }
   if (input.strictExposureReduction) return "0";
-  return multiplyDecimal(
+  return multiplyPositiveDecimalConservatively(
     input.verdict.approvedQualifiedQuantity,
     input.verdict.referencePrice.price,
   );

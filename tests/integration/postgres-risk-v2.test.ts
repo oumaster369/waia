@@ -491,6 +491,44 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
     }
   });
 
+  it("rounds a non-terminating entry reservation conservatively at scale 8", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("conservative-reservation"),
+    );
+    const base = admission({
+      accountId: "conservative-reservation",
+      identity: 32,
+      reservation: "25",
+    });
+    const authority: AdmitRiskAllowanceV2Input = {
+      ...base,
+      verdict: {
+        ...base.verdict,
+        approvedQualifiedQuantity: "0.00123456",
+        referencePrice: {
+          ...base.verdict.referencePrice,
+          price: "25000.12345678",
+        },
+      },
+    };
+
+    const admitted = await admitRiskAllowanceV2Postgres(
+      db,
+      { organizationId: orgA },
+      authority,
+    );
+    expect(admitted.allowance.reservedExposureNotional).toBe("30.86415242");
+    await expect(readRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      "conservative-reservation",
+    )).resolves.toMatchObject({
+      accounting: { outstandingReservationNotional: "30.86415242" },
+    });
+  });
+
   it("refuses an expired consumed order that never reached first dispatch", async () => {
     await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("replay-expiry"));
     const authority = {

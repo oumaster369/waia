@@ -418,6 +418,15 @@ CREATE TRIGGER trader_risk_verdicts_v2_block_delete
   BEFORE DELETE ON public.trader_risk_verdicts_v2
   FOR EACH ROW EXECUTE FUNCTION public.waia_risk_v2_block_append_only_mutation();
 --> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.waia_risk_v2_conservative_notional(
+  exact_quantity numeric,
+  conservative_reference_price numeric
+)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
+  SELECT ceil(exact_quantity * conservative_reference_price * 100000000::numeric)
+    / 100000000::numeric
+$$;
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.waia_risk_v2_validate_allowance_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
@@ -456,7 +465,10 @@ BEGIN
     OR (
       NEW.decision_action = 'ENTER_LONG'
       AND NEW.reserved_exposure_notional IS DISTINCT FROM
-        NEW.exact_qualified_quantity * verdict_row.reference_price
+        public.waia_risk_v2_conservative_notional(
+          NEW.exact_qualified_quantity,
+          verdict_row.reference_price
+        )
     )
     OR (
       NEW.decision_action IN ('REDUCE', 'CLOSE')
