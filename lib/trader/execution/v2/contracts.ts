@@ -461,6 +461,12 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
     return Object.freeze({ sequence: slice.sequence, quantity, limitPrice: price });
   });
   if (compareDecimal(sliceTotal, plannedQuantity) !== 0) throw new Error("slice total mismatch");
+  if (childSlices.length === 1 && (
+    childSlices[0]!.quantity !== plannedQuantity ||
+    childSlices[0]!.limitPrice !== limitPrice
+  )) {
+    throw new Error("sole child slice must exactly match the venue request mechanics");
+  }
   const exactEffectNotional = multiplyExecutionNotionalConservativelyV2(
     plannedQuantity,
     limitPrice ?? input.policy.priceCollar.maximumPrice,
@@ -646,6 +652,12 @@ export function assertExecutionPlanPolicyMembershipV2(
   if (compareDecimal(sliceTotal, plannedQuantity) !== 0) {
     throw new Error("slice total does not match the sealed plan quantity");
   }
+  if (plan.childSlices.length === 1 && (
+    plan.childSlices[0]!.quantity !== plannedQuantity ||
+    plan.childSlices[0]!.limitPrice !== limitPrice
+  )) {
+    throw new Error("sole child slice does not match the sealed venue request mechanics");
+  }
   const exactEffectNotional = multiplyExecutionNotionalConservativelyV2(
     plannedQuantity,
     limitPrice ?? policy.priceCollar.maximumPrice,
@@ -675,14 +687,19 @@ export function createExecutionAttemptV2(
   if (input.plan.childSlices.length !== 1) {
     throw new Error("one attempt represents one pre-sealed venue order slice");
   }
+  const slice = input.plan.childSlices[0]!;
+  if (slice.quantity !== input.plan.plannedQuantity ||
+    slice.limitPrice !== input.plan.limitPrice) {
+    throw new Error("attempt mechanics must exactly match the sole pre-sealed child slice");
+  }
   const clientOrderId = deterministicExecutionClientOrderId(input.plan.contentDigestHex);
   const exactRequestPayload = Object.freeze({
     clientOrderId,
     symbol: input.plan.symbol,
     side: input.plan.side,
     type: input.plan.orderType,
-    price: input.plan.limitPrice,
-    quantity: input.plan.plannedQuantity,
+    price: slice.limitPrice,
+    quantity: slice.quantity,
     timeInForce: input.plan.timeInForce,
   });
   const boundAtUtc = canonicalTimestamp(input.boundAtUtc, "boundAtUtc");

@@ -175,6 +175,23 @@ describe("Execution V2 immutable contracts (DEE-667)", () => {
       sealedAtUtc: "2026-08-21T00:00:00.500Z",
     })).toThrow(/slice total mismatch/);
     expect(() => createExecutionPlanV2({
+      executionPlanId: "00000000-0000-4000-8000-000000066722",
+      allowance: allowance(),
+      policy: policy(),
+      approvedNotionalCeiling: "2500",
+      plannedQuantity: "0.08",
+      orderType: "limit",
+      liquidityRole: "MAKER",
+      limitPrice: "25000",
+      timeInForce: "GTC",
+      timingWindow: {
+        opensAtUtc: "2026-08-21T00:00:01.000Z",
+        closesAtUtc: "2026-08-21T00:00:20.000Z",
+      },
+      childSlices: [{ sequence: 1, quantity: "0.08", limitPrice: "24000" }],
+      sealedAtUtc: "2026-08-21T00:00:00.500Z",
+    })).toThrow(/sole child slice must exactly match/);
+    expect(() => createExecutionPlanV2({
       executionPlanId: "00000000-0000-4000-8000-000000066717",
       allowance: allowance(),
       policy: policy(),
