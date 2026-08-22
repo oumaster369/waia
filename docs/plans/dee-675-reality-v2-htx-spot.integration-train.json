@@ -124,7 +124,8 @@
         "cdb2f048336e543bb4425c7681ab5c80390f8139",
         "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67",
         "6aaa0af5b8c56f82434c420032a27e6d0879ad4c",
-        "91d424e8e00f6246cdfdf058334166444cb11a9b"
+        "91d424e8e00f6246cdfdf058334166444cb11a9b",
+        "2eb37ecba162251627046e19ebb26cb258334304"
       ],
       "acceptanceEvidence": [
         "A fresh empty PostgreSQL database applied exactly one next-numbered 0160 migration successfully.",
@@ -134,7 +135,7 @@
       ],
       "tests": [
         "migration bootstrap from empty database: pass",
-        "tests/integration/postgres-reality-v2.test.ts: 8/8 pass on a freshly migrated disposable database",
+        "tests/integration/postgres-reality-v2.test.ts: 9/9 pass on a freshly migrated disposable database",
         "Reality focused unit tests: 25/25 pass",
         "pnpm db:smoke:postgres: pass",
         "pnpm typecheck and scoped eslint: pass"
@@ -325,7 +326,8 @@
           "cdb2f048336e543bb4425c7681ab5c80390f8139",
           "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67",
           "6aaa0af5b8c56f82434c420032a27e6d0879ad4c",
-          "91d424e8e00f6246cdfdf058334166444cb11a9b"
+          "91d424e8e00f6246cdfdf058334166444cb11a9b",
+          "2eb37ecba162251627046e19ebb26cb258334304"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0160_trader_reality_v2.sql", "db/migrations_postgres/meta/_journal.json",
@@ -375,7 +377,7 @@
     ],
     "cumulativeChecks": [
       { "afterIssue": "DEE-676", "status": "pass", "commands": ["focused contracts 9/9 including typed metadata mutation cases", "typecheck", "scoped eslint"] },
-      { "afterIssue": "DEE-677", "status": "pass", "commands": ["fresh disposable database migration bootstrap through amended 0160", "PostgreSQL Reality adversarial 8/8", "repository/direct-SQL/serialized-race correction-target absence proofs", "PostgreSQL smoke", "migration identity 5/5", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-677", "status": "pass", "commands": ["fresh disposable database migration bootstrap through amended 0160", "PostgreSQL Reality adversarial 9/9", "repository/direct-SQL/serialized-race correction-target absence proofs", "reserved-reason unverifiable/non-correction/mixed rejection", "PostgreSQL smoke", "migration identity 5/5", "typecheck", "scoped eslint"] },
       { "afterIssue": "DEE-678", "status": "pass", "commands": ["Reality focused unit tests 25/25", "one exact event-ledger current-target predicate across ingest/repository/0160", "source-only missing correction target and superseded contradiction target PostgreSQL regressions", "exact as-of replay", "typecheck", "scoped eslint"] },
       { "afterIssue": "DEE-679", "status": "pass", "commands": ["AST source/consumer graph 149/115 and 25 connector references with path+content digests", "alias/bind/destructure/bracket/optional/direct-client/indirect negative fixtures", "D runtime and HTX FAIL-UNKNOWN tests 9/9", "typecheck", "scoped eslint"] }
     ],
@@ -457,6 +459,25 @@
         "fresh disposable PostgreSQL migration through amended 0160: pass",
         "tests/integration/postgres-reality-v2.test.ts: 8/8 pass",
         "same-revision/different-identity allowance plus repository, direct-SQL, and serialized-race existing-target rejection"
+      ]
+    },
+    "reservedMissingTargetReasonRemediation": {
+      "status": "sealed-focused-evidence-pass",
+      "authorizationDate": "2026-08-22",
+      "authorizedStartingHead": "b0e42eb4fe3839eb5d1d4a708b479fa737f828a1",
+      "authoritativeBase": "d45bb9b11b21c7217eed5957eecdb629d309f4c6",
+      "implementationHead": "2eb37ecba162251627046e19ebb26cb258334304",
+      "remediationCommits": [
+        "2eb37ecba162251627046e19ebb26cb258334304"
+      ],
+      "scope": "The single exact-head P2 was remediated only in the existing repository, unpublished-0160, focused-test, manifest, and provenance surfaces; no table, API, source class, migration number, task, branch, or PR was added.",
+      "canonicalPredicate": "CORRECTION_TARGET_NOT_FOUND is reserved to a singleton reason on a persisted VERIFIED and ATTRIBUTED source with complete native identity, native revision, supersedes revision, and the existing exact current-target absence predicate. The generic UNVERIFIABLE branch rejects any reason set containing the reserved code.",
+      "focusedEvidence": [
+        "Reality migration/contracts/projection focused unit files: 17/17 pass",
+        "pnpm typecheck and scoped eslint: pass",
+        "fresh disposable PostgreSQL migration through amended 0160: pass",
+        "tests/integration/postgres-reality-v2.test.ts: 9/9 pass",
+        "repository and direct-SQL negative proofs reject unverifiable, non-correction, and mixed reserved-reason attempts"
       ]
     },
     "fullDiffFrozen": true,
