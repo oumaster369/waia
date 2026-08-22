@@ -1002,11 +1002,33 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
           fee: "0.01",
           feeAsset: "USDT",
           executedAt: "2026-08-21T00:00:01.000Z",
+          rawVenueObservation: {
+            "trade-id": "htx-trade-over-notional",
+            "order-id": order.orderId,
+            price: "26000",
+            "filled-amount": bound.attempt.exactRequestPayload.quantity,
+            "filled-fees": "0.01",
+            "fee-currency": "usdt",
+          },
         }],
         raw: { state: "filled", price: "25000", filledAmount: "0.001" },
       }),
     );
     expect(result.status).toBe("RECONCILIATION_REQUIRED");
+    const reports = await listExecutionReportsV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(reports.at(-2)?.rawObservation).toMatchObject({
+      trades: [{
+        tradeId: "htx-trade-over-notional",
+        rawVenueObservation: {
+          "trade-id": "htx-trade-over-notional",
+          price: "26000",
+        },
+      }],
+    });
   });
 
   it("preserves partial/reject/cancel semantics without residual or replacement authority", async () => {

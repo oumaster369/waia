@@ -289,7 +289,11 @@ export async function dispatchAndRecordExecutionAttemptV2(
     attempt.executionPlanId,
   );
   const mechanicsMatch = plan !== null && exactOrderMechanicsMatch(attempt, order);
-  const observation = { connector: rawResult.raw, order: rawOrder(order) };
+  const observation = {
+    connector: rawResult.raw,
+    order: rawOrder(order),
+    trades: rawResult.trades.map(rawTrade),
+  };
   if (!mechanicsMatch) {
     const recovered = await appendReports(db, context, executionAttemptId, [
       {
