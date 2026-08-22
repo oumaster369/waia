@@ -36,22 +36,22 @@ includedIssues:
   - id: DEE-679
     role: D-consumer-cutover-closure
     completionPolicy: manual-at-integration-ready
-    status: in-progress
+    status: completed
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: DEE-679
-  completedWorkPackages: [DEE-676, DEE-677, DEE-678]
-  remainingWorkPackages: [DEE-679]
+  status: integration-validation
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-676, DEE-677, DEE-678, DEE-679]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Complete the pre-enumerated DEE-679 repository-wide source/consumer inventory, adapters, and closure proof."
+  nextAction: "Freeze exact-head integration evidence, run the single full suite and PR-readiness gates, then obtain independent adversarial review."
 provenance:
   createdFrom: chat
   gapRegistry: null

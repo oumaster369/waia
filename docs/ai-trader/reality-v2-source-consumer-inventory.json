@@ -1,0 +1,192 @@
+{
+  "schemaVersion": "reality-v2-source-consumer-inventory/v1",
+  "scope": "whole-repository production TypeScript connector/source and direct connector/ExecutionReport/raw-capture consumers",
+  "canonicalSourceKinds": [
+    "EXECUTION_REPORT_V2",
+    "HTX_SPOT_ORDER_REST",
+    "HTX_SPOT_FILL_REST",
+    "HTX_SPOT_BALANCE_REST",
+    "HTX_SPOT_ACCOUNT_REST"
+  ],
+  "admittedBoundaryFiles": [
+    "lib/trader/execution/v2/reality-adapter.ts",
+    "lib/trader/connectors/htx/reality-adapter.ts",
+    "lib/trader/reality/v2/ingress.ts",
+    "lib/trader/reality/v2/source-admission.ts"
+  ],
+  "sourceDiscovery": {
+    "roots": [
+      "lib/trader/connectors",
+      "lib/trader/market-data/adapters"
+    ],
+    "additionalFiles": [
+      "lib/trader/execution/v2/contracts.ts",
+      "lib/trader/execution/v2/repository-postgres.ts",
+      "lib/trader/execution/v2/recovery-postgres.ts",
+      "lib/trader/execution/v2/authority-postgres.ts",
+      "lib/trader/execution/v2/connector-dispatch.ts",
+      "lib/trader/execution/v2/reality-adapter.ts",
+      "lib/trader/mi/raw-capture-v1.ts",
+      "lib/trader/mi/raw-capture-repository-postgres.ts",
+      "lib/trader/balances/sync-handler.ts",
+      "lib/trader/trade-history/sync-handler.ts",
+      "lib/trader/positions/sync-handler.ts",
+      "lib/trader/market-brain/htx-ingestion.ts",
+      "lib/trader/live/live-connector.ts",
+      "lib/trader/market-data/htx-bar-poll-source.ts",
+      "lib/trader/market-data/fhv-real-htx-acquisition.ts",
+      "lib/trader/execution/historical-simulated-exchange.ts",
+      "lib/trader/connectors/mock-exchange-connector.ts"
+    ],
+    "expectedFileCount": 69,
+    "sortedPathDigestHex": "559d54ab82973a6fa34300db6d222ef537e394c628c6bb7ce95398206973951e"
+  },
+  "sourceRules": [
+    {
+      "id": "HTX_CONNECTOR_MODULES",
+      "pathPattern": "^lib/trader/connectors/htx/",
+      "disposition": "CONDITIONAL_ADMISSION",
+      "reason": "Only private HTX spot REST order/fill/balance/account output paired with an existing encrypted raw-capture receipt is admitted; public market calls and WebSocket are excluded."
+    },
+    {
+      "id": "NON_HTX_CONNECTORS",
+      "pathPattern": "^lib/trader/connectors/(?!htx/)",
+      "disposition": "EXCLUDED",
+      "reason": "Mock, synthetic, public-data, chain, news, macro, and other venue/source classes are not ratified."
+    },
+    {
+      "id": "MARKET_DATA_ADAPTERS",
+      "pathPattern": "^lib/trader/market-data/adapters/",
+      "disposition": "EXCLUDED",
+      "reason": "Public market, announcement, news, macro, and chain observations are excluded from canonical Reality V2."
+    },
+    {
+      "id": "EXECUTION_V2",
+      "pathPattern": "^lib/trader/execution/v2/",
+      "disposition": "ADMITTED_EXECUTION_REPORT_ONLY",
+      "reason": "Only immutable HTX-scoped ExecutionReportV2 lineage enters through the dedicated adapter; plan, attempt, risk, and expected state do not."
+    },
+    {
+      "id": "RAW_CAPTURE_BOUNDARY",
+      "pathPattern": "^lib/trader/mi/raw-capture",
+      "disposition": "LINEAGE_BOUNDARY_ONLY",
+      "reason": "Raw bytes remain encrypted under the unchanged capture retention/security policy; Reality stores receipts and digests only."
+    },
+    {
+      "id": "CURRENT_NORMALIZED_SYNC",
+      "pathPattern": "^lib/trader/(balances|trade-history|positions)/sync-handler\\.ts$",
+      "disposition": "EXCLUDED_FAIL_UNCERTAIN",
+      "reason": "Existing normalized snapshot handlers lack admitted raw-capture lineage; wiring remains DEE-620 and no output is silently promoted."
+    },
+    {
+      "id": "PUBLIC_OR_LIVE_SOURCE",
+      "pathPattern": "^lib/trader/(market-brain/htx-ingestion|live/live-connector|market-data/(htx-bar-poll-source|fhv-real-htx-acquisition))\\.ts$",
+      "disposition": "EXCLUDED",
+      "reason": "Public market data and live/capital surfaces are outside this canonical admission and remain unchanged."
+    },
+    {
+      "id": "HISTORICAL_SIMULATION",
+      "pathPattern": "^lib/trader/execution/historical-simulated-exchange\\.ts$",
+      "disposition": "EXCLUDED",
+      "reason": "Historical/modelled effects are not actual truth."
+    }
+  ],
+  "consumerDiscovery": {
+    "roots": ["lib", "app", "scripts"],
+    "importMarkers": [
+      "@/lib/trader/connectors",
+      "@/lib/trader/execution/v2/contracts",
+      "@/lib/trader/mi/raw-capture"
+    ],
+    "expectedFileCount": 109,
+    "sortedPathDigestHex": "ddd660e3341078ae27ca20bcd7e81d30e2202420c04304c880227816514a3923"
+  },
+  "consumerRules": [
+    {
+      "id": "REALITY_BOUNDARY",
+      "pathPattern": "^lib/trader/reality/",
+      "disposition": "CANONICAL_BOUNDARY"
+    },
+    {
+      "id": "CONNECTOR_IMPLEMENTATION",
+      "pathPattern": "^lib/trader/connectors/",
+      "disposition": "COMPATIBLE_UNCHANGED"
+    },
+    {
+      "id": "CURRENT_OPERATIONAL_CONSUMERS",
+      "pathPattern": "^lib/trader/(credentials|balances|trade-history|positions|execution|live|security|symbols)/",
+      "disposition": "COMPATIBLE_EXISTING_BEHAVIOR_PRESERVED"
+    },
+    {
+      "id": "SEPARATE_PRODUCT_CONSUMERS",
+      "pathPattern": "^lib/trader/(risk|guardian|billing|settlement|paper)/",
+      "disposition": "NOT_CUT_OVER_DEE_634_SEPARATE"
+    },
+    {
+      "id": "EXCLUDED_DATA_RESEARCH_CONSUMERS",
+      "pathPattern": "^lib/trader/(market-data|market-brain|backtest|research|observability|mi)/",
+      "disposition": "EXCLUDED_OR_LINEAGE_ONLY"
+    },
+    {
+      "id": "TRADER_BARREL",
+      "pathPattern": "^lib/trader/index\\.ts$",
+      "disposition": "COMPATIBLE_EXPORT_ONLY"
+    },
+    {
+      "id": "TRADER_SCRIPT",
+      "pathPattern": "^scripts/trader/",
+      "disposition": "EXCLUDED_RESEARCH_OR_OPERATOR_SURFACE"
+    },
+    {
+      "id": "APPLICATION_ROUTE",
+      "pathPattern": "^app/",
+      "disposition": "COMPATIBLE_HANDLER_ONLY"
+    }
+  ],
+  "explicitCompatibilityChecks": [
+    {
+      "file": "lib/trader/credentials/connect-handler.ts",
+      "expectedCall": "getAccountInfo()",
+      "disposition": "preserved; account output requires raw capture before Reality admission"
+    },
+    {
+      "file": "lib/trader/balances/sync-handler.ts",
+      "expectedCall": "getBalances()",
+      "disposition": "preserved; current snapshot is explicitly noncanonical until DEE-620 raw lineage exists"
+    },
+    {
+      "file": "lib/trader/trade-history/sync-handler.ts",
+      "expectedCall": "getTradeHistory(",
+      "disposition": "preserved; current snapshot is explicitly noncanonical until DEE-620 raw lineage exists"
+    },
+    {
+      "file": "lib/trader/execution/reconciliation-service.ts",
+      "expectedCall": "connector.getOrder(",
+      "disposition": "preserved; DEE-651 emits the only admitted ExecutionReportV2 lineage"
+    },
+    {
+      "file": "lib/trader/execution/v2/connector-dispatch.ts",
+      "expectedCall": "connector.placeOrder(",
+      "disposition": "preserved; connector effect itself is not Reality truth"
+    },
+    {
+      "file": "lib/trader/connectors/htx/htx-exchange-connector.ts",
+      "expectedCall": "streamUserData()",
+      "disposition": "private WebSocket remains intentionally empty and excluded"
+    }
+  ],
+  "forbiddenRealityImportSegments": [
+    "/market-data/",
+    "/market-brain/",
+    "/guardian/",
+    "/intelligence/",
+    "/paper/",
+    "/backtest/",
+    "/billing/",
+    "/settlement/"
+  ],
+  "separateIssues": {
+    "DEE-620": "external-source raw capture wiring remains Todo and is not implemented here",
+    "DEE-634": "Decision V2 consumer cutover remains Todo and is not implemented here"
+  }
+}

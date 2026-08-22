@@ -14,3 +14,10 @@ export {
   HtxExchangeConnector,
   type HtxExchangeConnectorConfig,
 } from "@/lib/trader/connectors/htx/htx-exchange-connector";
+export {
+  adaptHtxSpotAccountRealityV2,
+  adaptHtxSpotBalanceRealityV2,
+  adaptHtxSpotFillRealityV2,
+  adaptHtxSpotOrderRealityV2,
+  type RawHtxObservationContextV2,
+} from "@/lib/trader/connectors/htx/reality-adapter";
