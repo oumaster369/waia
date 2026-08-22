@@ -3018,6 +3018,253 @@ export const traderExecutionReportsV2 = pgTable(
   ],
 );
 
+/** DEE-677 / R675-B: immutable raw-reference Reality source reports; never raw bytes. */
+export const traderRealitySourceReportsV2 = pgTable(
+  "trader_reality_source_reports_v2",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    sourceKind: text("source_kind").notNull(),
+    sourceNativeIdentityKind: text("source_native_identity_kind"),
+    sourceNativeId: text("source_native_id"),
+    sourceNativeRevision: text("source_native_revision"),
+    supersedesNativeRevision: text("supersedes_native_revision"),
+    attributionStatus: text("attribution_status").notNull(),
+    subjectClass: text("subject_class").notNull(),
+    subjectKey: text("subject_key").notNull(),
+    primitiveAssertion: jsonb("primitive_assertion"),
+    lineageKind: text("lineage_kind").notNull(),
+    executionReportId: uuid("execution_report_id").references(() => traderExecutionReportsV2.id),
+    executionReportDigest: text("execution_report_digest"),
+    rawCaptureReceiptDigest: text("raw_capture_receipt_digest")
+      .references(() => traderMiRawCaptureReceiptV1.id),
+    rawBytesDigest: text("raw_bytes_digest"),
+    storageBindingDigest: text("storage_binding_digest"),
+    provenance: jsonb("provenance").notNull(),
+    structuralVerification: text("structural_verification").notNull(),
+    verificationReasonCodes: jsonb("verification_reason_codes").notNull(),
+    validAt: timestamp("valid_at", { withTimezone: true, mode: "date" }).notNull(),
+    knowledgeAt: timestamp("knowledge_at", { withTimezone: true, mode: "date" }).notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_reality_source_reports_v2_id_scope_unique").on(
+      t.id,
+      t.organizationId,
+      t.accountId,
+    ),
+    index("trader_reality_source_reports_v2_native_revision_idx")
+      .on(
+        t.organizationId,
+        t.accountId,
+        t.sourceKind,
+        t.sourceNativeIdentityKind,
+        t.sourceNativeId,
+        sql`COALESCE(${t.sourceNativeRevision}, '')`,
+        t.subjectClass,
+        t.subjectKey,
+      )
+      .where(sql`${t.sourceNativeId} IS NOT NULL`),
+    index("trader_reality_source_reports_v2_scope_knowledge_idx").on(
+      t.organizationId,
+      t.accountId,
+      t.knowledgeAt,
+      t.id,
+    ),
+    check("trader_reality_source_reports_v2_id_digest", sql`${t.id} = ${t.contentDigest}`),
+  ],
+);
+
+/** DEE-677 / R675-B: immutable candidate/canonical truth records with source lineage. */
+export const traderRealityTruthRecordsV2 = pgTable(
+  "trader_reality_truth_records_v2",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    sourceReportId: text("source_report_id").notNull(),
+    sourceReportDigest: text("source_report_digest").notNull(),
+    sourceKind: text("source_kind").notNull(),
+    sourceNativeIdentityKind: text("source_native_identity_kind"),
+    sourceNativeId: text("source_native_id"),
+    sourceNativeRevision: text("source_native_revision"),
+    supersedesNativeRevision: text("supersedes_native_revision"),
+    subjectClass: text("subject_class").notNull(),
+    subjectKey: text("subject_key").notNull(),
+    primitiveAssertion: jsonb("primitive_assertion").notNull(),
+    validAt: timestamp("valid_at", { withTimezone: true, mode: "date" }).notNull(),
+    knowledgeAt: timestamp("knowledge_at", { withTimezone: true, mode: "date" }).notNull(),
+    supersedesTruthRecordId: text("supersedes_truth_record_id"),
+    markers: jsonb("markers").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_reality_truth_records_v2_id_scope_unique").on(
+      t.id,
+      t.organizationId,
+      t.accountId,
+    ),
+    unique("trader_reality_truth_records_v2_source_unique").on(
+      t.organizationId,
+      t.accountId,
+      t.sourceReportId,
+    ),
+    foreignKey({
+      columns: [t.sourceReportId, t.organizationId, t.accountId],
+      foreignColumns: [
+        traderRealitySourceReportsV2.id,
+        traderRealitySourceReportsV2.organizationId,
+        traderRealitySourceReportsV2.accountId,
+      ],
+      name: "trader_reality_truth_records_v2_source_fk",
+    }),
+    foreignKey({
+      columns: [t.supersedesTruthRecordId, t.organizationId, t.accountId],
+      foreignColumns: [t.id, t.organizationId, t.accountId],
+      name: "trader_reality_truth_records_v2_supersedes_fk",
+    }),
+    index("trader_reality_truth_records_v2_subject_knowledge_idx").on(
+      t.organizationId,
+      t.accountId,
+      t.subjectClass,
+      t.subjectKey,
+      t.knowledgeAt,
+      t.id,
+    ),
+    check("trader_reality_truth_records_v2_id_digest", sql`${t.id} = ${t.contentDigest}`),
+  ],
+);
+
+/** DEE-677 / R675-B: append-only per-account Reality lifecycle digest chain. */
+export const traderRealityEventsV2 = pgTable(
+  "trader_reality_events_v2",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    eventSequence: bigint("event_sequence", { mode: "bigint" }).notNull(),
+    eventType: text("event_type").notNull(),
+    sourceReportId: text("source_report_id").notNull(),
+    truthRecordId: text("truth_record_id"),
+    relatedTruthRecordId: text("related_truth_record_id"),
+    reasonCodes: jsonb("reason_codes").notNull(),
+    knowledgeAt: timestamp("knowledge_at", { withTimezone: true, mode: "date" }).notNull(),
+    previousEventDigest: text("previous_event_digest"),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_reality_events_v2_id_scope_unique").on(t.id, t.organizationId, t.accountId),
+    unique("trader_reality_events_v2_scope_sequence_unique").on(
+      t.organizationId,
+      t.accountId,
+      t.eventSequence,
+    ),
+    foreignKey({
+      columns: [t.sourceReportId, t.organizationId, t.accountId],
+      foreignColumns: [
+        traderRealitySourceReportsV2.id,
+        traderRealitySourceReportsV2.organizationId,
+        traderRealitySourceReportsV2.accountId,
+      ],
+      name: "trader_reality_events_v2_source_fk",
+    }),
+    foreignKey({
+      columns: [t.truthRecordId, t.organizationId, t.accountId],
+      foreignColumns: [
+        traderRealityTruthRecordsV2.id,
+        traderRealityTruthRecordsV2.organizationId,
+        traderRealityTruthRecordsV2.accountId,
+      ],
+      name: "trader_reality_events_v2_truth_fk",
+    }),
+    foreignKey({
+      columns: [t.relatedTruthRecordId, t.organizationId, t.accountId],
+      foreignColumns: [
+        traderRealityTruthRecordsV2.id,
+        traderRealityTruthRecordsV2.organizationId,
+        traderRealityTruthRecordsV2.accountId,
+      ],
+      name: "trader_reality_events_v2_related_truth_fk",
+    }),
+    foreignKey({
+      columns: [t.previousEventDigest, t.organizationId, t.accountId],
+      foreignColumns: [t.id, t.organizationId, t.accountId],
+      name: "trader_reality_events_v2_previous_fk",
+    }),
+    index("trader_reality_events_v2_scope_knowledge_idx").on(
+      t.organizationId,
+      t.accountId,
+      t.knowledgeAt,
+      t.eventSequence,
+    ),
+    check("trader_reality_events_v2_id_digest", sql`${t.id} = ${t.contentDigest}`),
+  ],
+);
+
+/** DEE-677 / R675-B: immutable deterministic Reality read-model checkpoints. */
+export const traderRealityProjectionsV2 = pgTable(
+  "trader_reality_projections_v2",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    projectionPolicyVersion: text("projection_policy_version").notNull(),
+    knowledgeAsOf: timestamp("knowledge_as_of", { withTimezone: true, mode: "date" }).notNull(),
+    frontierSequence: bigint("frontier_sequence", { mode: "bigint" }).notNull(),
+    frontierEventDigest: text("frontier_event_digest"),
+    stableEntries: jsonb("stable_entries").notNull(),
+    uncertainties: jsonb("uncertainties").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_reality_projections_v2_id_scope_unique").on(
+      t.id,
+      t.organizationId,
+      t.accountId,
+    ),
+    foreignKey({
+      columns: [t.frontierEventDigest, t.organizationId, t.accountId],
+      foreignColumns: [
+        traderRealityEventsV2.id,
+        traderRealityEventsV2.organizationId,
+        traderRealityEventsV2.accountId,
+      ],
+      name: "trader_reality_projections_v2_frontier_fk",
+    }),
+    uniqueIndex("trader_reality_projections_v2_scope_asof_content_unique").on(
+      t.organizationId,
+      t.accountId,
+      t.projectionPolicyVersion,
+      t.knowledgeAsOf,
+      t.contentDigest,
+    ),
+    index("trader_reality_projections_v2_scope_frontier_idx").on(
+      t.organizationId,
+      t.accountId,
+      t.frontierSequence,
+      t.knowledgeAsOf,
+    ),
+    check("trader_reality_projections_v2_id_digest", sql`${t.id} = ${t.contentDigest}`),
+  ],
+);
+
 /** AI-TRADER: append-only order lifecycle events (DEE-247 / AT-E8 S1). */
 export const traderOrderEvents = pgTable(
   "trader_order_events",

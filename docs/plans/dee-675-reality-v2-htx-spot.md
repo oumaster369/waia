@@ -28,11 +28,11 @@ includedIssues:
   - id: DEE-677
     role: B-postgres-substrate-repository
     completionPolicy: manual-at-integration-ready
-    status: in-progress
+    status: completed
   - id: DEE-678
     role: C-ingest-projection-replay
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
   - id: DEE-679
     role: D-consumer-cutover-closure
     completionPolicy: manual-at-integration-ready
@@ -43,15 +43,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: DEE-677
-  completedWorkPackages: [DEE-676]
-  remainingWorkPackages: [DEE-677, DEE-678, DEE-679]
+  currentWorkPackage: DEE-678
+  completedWorkPackages: [DEE-676, DEE-677]
+  remainingWorkPackages: [DEE-678, DEE-679]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement the single DEE-677 PostgreSQL migration and repository on the frozen A API."
+  nextAction: "Implement deterministic DEE-678 ingest, contradiction semantics, projection, and replay on the frozen B substrate."
 provenance:
   createdFrom: chat
   gapRegistry: null
